@@ -388,13 +388,27 @@ function getPromptCachingThreshold(model: string, providerId?: string): number {
     lowerProvider.includes('google') ||
     lowerModel.includes('gemini')
   ) {
-    if (lowerModel.includes('gemini-3.1') || lowerModel.includes('gemini-3')) {
+    if (
+      lowerModel.includes('gemini-3.1-pro') ||
+      lowerModel.includes('gemini-3-pro') ||
+      lowerModel.includes('gemini-2.5-pro')
+    ) {
       return 4096;
     }
-    if (lowerModel.includes('gemini-2.5') || lowerModel.includes('gemini-2.0')) {
-      return 2048;
+    if (
+      lowerModel.includes('gemini-3-flash') ||
+      lowerModel.includes('gemini-2.5-flash') ||
+      lowerModel.includes('gemini-2.5-flash-lite')
+    ) {
+      return 1024;
     }
-    return 2048;
+    if (lowerModel.includes('pro')) {
+      return 4096;
+    }
+    if (lowerModel.includes('flash') || lowerModel.includes('lite')) {
+      return 1024;
+    }
+    return 1024;
   }
 
   if (lowerProvider.includes('anthropic') || lowerModel.includes('claude')) {
@@ -505,10 +519,10 @@ export function buildPromptCachingPlan(args: {
   }
 
   if (looksLikeGeminiProvider(args.provider, args.model)) {
-    // Native Gemini caching is implicit by default and explicit caching uses a
-    // dedicated cachedContents resource. Do not synthesize OpenAI-style keys.
+    // Native Gemini caching is provider-managed. Enable cache-aware request
+    // shaping without synthesizing OpenAI-style routing keys.
     return {
-      enablePromptCaching: false,
+      enablePromptCaching: true,
     };
   }
 

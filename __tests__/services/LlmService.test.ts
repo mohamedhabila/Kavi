@@ -1714,6 +1714,68 @@ describe('LlmService', () => {
       expect(body.cachedContent).toBeUndefined();
     });
 
+    it('keeps stable core tools at the front of cache-aware Gemini requests', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          candidates: [{
+            content: { parts: [{ text: 'ok' }] },
+            finishReason: 'STOP',
+          }],
+        }),
+      });
+
+      const service = new LlmService(makeConfig({
+        id: 'gemini',
+        name: 'Gemini',
+        baseUrl: 'https://generativelanguage.googleapis.com',
+        apiKey: 'AIza-test',
+        model: 'gemini-3-flash-preview',
+      }));
+
+      await service.sendMessage([
+        { role: 'system', content: 'You are helpful.' },
+        { role: 'user', content: 'Use the cache' },
+      ], {
+        enablePromptCaching: true,
+        tools: [
+          {
+            name: 'browser_navigate',
+            description: 'Navigate to a page.',
+            input_schema: {
+              type: 'object',
+              properties: { url: { type: 'string' } },
+              required: ['url'],
+            },
+          },
+          {
+            name: 'read_file',
+            description: 'Read a file.',
+            input_schema: {
+              type: 'object',
+              properties: { path: { type: 'string' } },
+              required: ['path'],
+            },
+          },
+          {
+            name: 'tool_catalog',
+            description: 'Inspect deferred tool categories.',
+            input_schema: {
+              type: 'object',
+              properties: {},
+            },
+          },
+        ],
+      });
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.tools[0].functionDeclarations.map((tool: any) => tool.name)).toEqual([
+        'read_file',
+        'tool_catalog',
+        'browser_navigate',
+      ]);
+    });
+
     it('forwards native Gemini cachedContents handles when explicitly provided', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -3331,6 +3393,61 @@ describe('LlmService', () => {
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(body.prompt_cache_key).toBe('cm:test:key');
       expect(body.prompt_cache_retention).toBe('in_memory');
+    });
+
+    it('keeps stable core tools at the front of cache-aware OpenAI requests', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(makeOpenAIResponsesPayload()),
+      });
+
+      const service = new LlmService(makeConfig({
+        id: 'openai',
+        name: 'OpenAI',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'sk-openai',
+        model: 'gpt-5.4',
+      }));
+
+      await service.sendMessage([{ role: 'user', content: 'Hello' }], {
+        enablePromptCaching: true,
+        promptCacheKey: 'cm:test:key',
+        tools: [
+          {
+            name: 'browser_navigate',
+            description: 'Navigate to a page.',
+            input_schema: {
+              type: 'object',
+              properties: { url: { type: 'string' } },
+              required: ['url'],
+            },
+          },
+          {
+            name: 'read_file',
+            description: 'Read a file.',
+            input_schema: {
+              type: 'object',
+              properties: { path: { type: 'string' } },
+              required: ['path'],
+            },
+          },
+          {
+            name: 'tool_catalog',
+            description: 'Inspect deferred tool categories.',
+            input_schema: {
+              type: 'object',
+              properties: {},
+            },
+          },
+        ],
+      });
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.tools.map((tool: any) => tool.name)).toEqual([
+        'read_file',
+        'tool_catalog',
+        'browser_navigate',
+      ]);
     });
 
     it('compacts oversized OpenAI prompt cache keys before serialization', async () => {

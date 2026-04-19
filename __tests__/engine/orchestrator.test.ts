@@ -497,7 +497,7 @@ describe('Orchestrator', () => {
       expect(streamOptions.maxTokens).toBe(8192);
     });
 
-    it('keeps Gemini on native implicit caching instead of synthesizing a generic cache key', async () => {
+    it('keeps Gemini on native provider caching instead of synthesizing a generic cache key', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
         createStreamGenerator([
           { type: 'token', content: 'Done' },
@@ -523,7 +523,7 @@ describe('Orchestrator', () => {
       await runOrchestrator(options, callbacks);
 
       const [, streamOptions] = mockStreamMessage.mock.calls[0];
-      expect(streamOptions.enablePromptCaching).toBe(false);
+      expect(streamOptions.enablePromptCaching).toBe(true);
       expect(streamOptions.promptCacheKey).toBeUndefined();
     });
 
@@ -559,8 +559,20 @@ describe('Orchestrator', () => {
       expect(apiMessages[1]?.content).toContain('<runtime_context>');
       expect(apiMessages[1]?.content).toContain('request_timestamp_utc:');
       expect(streamOptions.enablePromptCaching).toBe(true);
-      expect(streamOptions.systemPromptSections.some((section: { cacheable?: boolean }) => section.cacheable === true)).toBe(true);
-      expect(streamOptions.systemPromptSections.some((section: { cacheable?: boolean }) => section.cacheable !== true)).toBe(true);
+      const systemPromptSections = streamOptions.systemPromptSections as Array<{
+        cacheable?: boolean;
+      }>;
+      expect(systemPromptSections.some((section) => section.cacheable === true)).toBe(true);
+      expect(systemPromptSections.some((section) => section.cacheable !== true)).toBe(true);
+      let sawDynamicSection = false;
+      for (const section of systemPromptSections) {
+        if (section.cacheable === true) {
+          expect(sawDynamicSection).toBe(false);
+          continue;
+        }
+
+        sawDynamicSection = true;
+      }
       expect(callbacks.onUserMessageEnriched).not.toHaveBeenCalled();
     });
   });

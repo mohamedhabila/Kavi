@@ -120,11 +120,15 @@ describe('shouldEnablePromptCaching', () => {
     expect(shouldEnablePromptCaching('gpt-5.4', 1024, 'openai')).toBe(true);
   });
 
-  it('uses Vertex Gemini documented cache floors for implicit and explicit caching', () => {
-    expect(shouldEnablePromptCaching('gemini-3-flash-preview', 4095, 'gemini-vertex')).toBe(false);
-    expect(shouldEnablePromptCaching('gemini-3-flash-preview', 4096, 'gemini-vertex')).toBe(true);
-    expect(shouldEnablePromptCaching('gemini-2.5-pro', 2047, 'gemini-vertex')).toBe(false);
-    expect(shouldEnablePromptCaching('gemini-2.5-pro', 2048, 'gemini-vertex')).toBe(true);
+  it('uses Gemini documented minimum token floors for cache-aware prompt shaping', () => {
+    expect(shouldEnablePromptCaching('gemini-3-flash-preview', 1023, 'gemini-vertex')).toBe(false);
+    expect(shouldEnablePromptCaching('gemini-3-flash-preview', 1024, 'gemini-vertex')).toBe(true);
+    expect(shouldEnablePromptCaching('gemini-3.1-pro-preview', 4095, 'gemini-vertex')).toBe(false);
+    expect(shouldEnablePromptCaching('gemini-3.1-pro-preview', 4096, 'gemini-vertex')).toBe(true);
+    expect(shouldEnablePromptCaching('gemini-2.5-flash', 1023, 'gemini-vertex')).toBe(false);
+    expect(shouldEnablePromptCaching('gemini-2.5-flash', 1024, 'gemini-vertex')).toBe(true);
+    expect(shouldEnablePromptCaching('gemini-2.5-pro', 4095, 'gemini-vertex')).toBe(false);
+    expect(shouldEnablePromptCaching('gemini-2.5-pro', 4096, 'gemini-vertex')).toBe(true);
   });
 
   it('uses the Anthropic Sonnet 4.6 2048-token floor', () => {
@@ -178,7 +182,7 @@ describe('buildPromptCachingPlan', () => {
     expect(plan.promptCacheKey).toBeUndefined();
   });
 
-  it('disables synthesized prompt-cache hints for native Gemini transport', () => {
+  it('enables cache-aware Gemini prompt shaping without synthesizing a generic cache key', () => {
     const plan = buildPromptCachingPlan({
       provider: makeProvider({
         id: 'gemini',
@@ -194,11 +198,11 @@ describe('buildPromptCachingPlan', () => {
       tools: [],
     });
 
-    expect(plan.enablePromptCaching).toBe(false);
+    expect(plan.enablePromptCaching).toBe(true);
     expect(plan.promptCacheKey).toBeUndefined();
   });
 
-  it('disables synthesized prompt-cache hints for Vertex-native Gemini transport', () => {
+  it('enables cache-aware Vertex Gemini prompt shaping without synthesizing a generic cache key', () => {
     const plan = buildPromptCachingPlan({
       provider: makeProvider({
         id: 'gemini-vertex',
@@ -214,7 +218,7 @@ describe('buildPromptCachingPlan', () => {
       tools: [],
     });
 
-    expect(plan.enablePromptCaching).toBe(false);
+    expect(plan.enablePromptCaching).toBe(true);
     expect(plan.promptCacheKey).toBeUndefined();
   });
 });

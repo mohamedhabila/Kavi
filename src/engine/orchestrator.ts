@@ -421,6 +421,34 @@ function appendSystemPromptSection(
   });
 }
 
+function orderSystemPromptSectionsForCaching(
+  sections: SystemPromptSection[],
+): SystemPromptSection[] {
+  if (sections.length <= 1) {
+    return sections;
+  }
+
+  const cacheableSections: SystemPromptSection[] = [];
+  const dynamicSections: SystemPromptSection[] = [];
+
+  for (const section of sections) {
+    if (section.cacheable) {
+      cacheableSections.push(section);
+      continue;
+    }
+
+    dynamicSections.push(section);
+  }
+
+  if (cacheableSections.length === 0 || dynamicSections.length === 0) {
+    return sections;
+  }
+
+  // Keep the reusable prefix byte-stable across providers by moving all
+  // volatile sections behind the cacheable prefix boundary.
+  return [...cacheableSections, ...dynamicSections];
+}
+
 function joinSystemPromptSections(sections: SystemPromptSection[]): string {
   return sections.map((section) => section.text).join('\n\n');
 }
@@ -602,7 +630,7 @@ ${globalMemory}
   appendSystemPromptSection(sections, conversationMemorySection);
   appendSystemPromptSection(sections, globalMemorySection);
   appendSystemPromptSection(sections, deferredToolCatalog);
-  return sections;
+  return orderSystemPromptSectionsForCaching(sections);
 }
 
 function buildSystemPromptWithMemory(

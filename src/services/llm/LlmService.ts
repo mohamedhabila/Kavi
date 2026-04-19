@@ -164,6 +164,26 @@ function reorderAnthropicToolsForCaching(tools: ToolDefinition[]): {
   };
 }
 
+function reorderToolsForPromptCaching(tools: ToolDefinition[]): ToolDefinition[] {
+  const stablePrefixTools: ToolDefinition[] = [];
+  const dynamicTools: ToolDefinition[] = [];
+
+  for (const tool of tools) {
+    if (ANTHROPIC_CACHEABLE_TOOL_PREFIX_NAMES.has(tool.name)) {
+      stablePrefixTools.push(tool);
+      continue;
+    }
+
+    dynamicTools.push(tool);
+  }
+
+  if (stablePrefixTools.length === 0 || dynamicTools.length === 0) {
+    return tools;
+  }
+
+  return [...stablePrefixTools, ...dynamicTools];
+}
+
 /**
  * Preserve detailed Gemini tool descriptions.
  * Gemini function calling performs better when descriptions include purpose,
@@ -2005,8 +2025,12 @@ export class LlmService {
       };
     }
 
-    if (options.tools?.length) {
-      body.tools = options.tools.map((tool) => this.buildOpenAIResponsesToolDefinition(tool));
+    const requestTools = options.tools?.length && options.enablePromptCaching
+      ? reorderToolsForPromptCaching(options.tools)
+      : options.tools;
+
+    if (requestTools?.length) {
+      body.tools = requestTools.map((tool) => this.buildOpenAIResponsesToolDefinition(tool));
       const toolChoice = this.buildOpenAIToolChoice(options.toolChoice);
       if (toolChoice) {
         body.tool_choice = toolChoice;
@@ -4051,6 +4075,9 @@ export class LlmService {
     const structuredOutput = normalizeStructuredOutputOptions(options.structuredOutput);
     const canApplyStructuredOutput = structuredOutput
       && (!options.tools?.length || this.supportsGeminiStructuredOutputWithTools(model));
+    const requestTools = options.tools?.length && options.enablePromptCaching
+      ? reorderToolsForPromptCaching(options.tools)
+      : options.tools;
 
     if (options.maxTokens) {
       generationConfig.maxOutputTokens = options.maxTokens;
@@ -4074,9 +4101,9 @@ export class LlmService {
       body.generationConfig = generationConfig;
     }
 
-    if (options.tools?.length) {
+    if (requestTools?.length) {
       body.tools = [{
-        functionDeclarations: options.tools.map((tool) => {
+        functionDeclarations: requestTools.map((tool) => {
           const normalizedSchema = normalizeToolInputSchema(tool.input_schema);
           return {
             name: tool.name,
@@ -4299,6 +4326,9 @@ export class LlmService {
       messages,
       stream: options.stream ?? false,
     };
+    const requestTools = options.tools?.length && options.enablePromptCaching
+      ? reorderToolsForPromptCaching(options.tools)
+      : options.tools;
 
     if (options.stream && this.isGeminiModel(model)) {
       body.stream_options = { include_usage: true };
@@ -4317,8 +4347,8 @@ export class LlmService {
     if (structuredOutput) {
       body.response_format = this.buildCompatibleStructuredOutputFormat(structuredOutput);
     }
-    if (options.tools?.length) {
-      body.tools = options.tools.map((tool) => {
+    if (requestTools?.length) {
+      body.tools = requestTools.map((tool) => {
         const normalizedSchema = normalizeToolInputSchema(tool.input_schema);
         const useStrict = this.isOpenAIProvider() && tool.strict !== false && isStrictCompatibleSchema(normalizedSchema);
 
