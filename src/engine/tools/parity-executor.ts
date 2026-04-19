@@ -1875,12 +1875,13 @@ type ConversationAgentRunLike = {
 };
 
 const TERMINAL_SESSION_OUTPUT_GUIDANCE =
-  'Use sessions_output when you need the full final worker output only, sessions_surface_output when that terminal deliverable should become the visible user answer directly, or sessions_history when you need the transcript and reasoning trace. After you have the terminal deliverable you need, continue from it or finalize instead of polling sessions_status or sessions_list for the same completed session.';
-const BLOCKING_SESSION_RESULT_GUIDANCE =
-  'Use sessions_output when you need the full final worker output. If that deliverable should become the visible user answer directly, call sessions_surface_output instead of rewriting it. Blocking wait results may return previews for larger outputs, and sessions_history is for transcript and reasoning trace. After you have the deliverable you need, continue from it or finalize instead of re-polling the same completed session.';
+  'Use sessions_output when you need to fetch or recall the full final worker output from a terminal session without waiting again. If that deliverable should become the visible user answer directly, use sessions_surface_output. If you already received this deliverable from sessions_wait, do not call sessions_output again unless you need to recall it later. Use sessions_history only when you need the transcript and reasoning trace. After you have the terminal deliverable you need, continue from it or finalize instead of polling sessions_status or sessions_list for the same completed session.';
+const TERMINAL_SESSION_WAIT_RESULT_GUIDANCE =
+  'This result already includes the same full output that sessions_output would return. Continue from it or finalize now. Call sessions_output later only if you need to recall this terminal deliverable again without waiting. If that deliverable should become the visible user answer directly, use sessions_surface_output. Use sessions_history only when you need transcript and reasoning trace. After you have the deliverable you need, continue from it or finalize instead of re-polling the same completed session.';
+const COMPLETED_SESSIONS_WAIT_GUIDANCE =
+  'Completed session entries in this sessions_wait result already include the same full outputs that sessions_output would return. Continue from those outputs or finalize now. Call sessions_output later only if you need to recall a terminal deliverable again without waiting. If a deliverable should become the visible user answer directly, use sessions_surface_output. Use sessions_history only when you need transcript and reasoning trace. After you have the deliverable you need, continue from it or finalize instead of re-polling the same completed session.';
 const DEFAULT_WAIT_FOR_COMPLETION_TIMEOUT_MS = 15_000;
 const DEFAULT_SESSIONS_WAIT_TIMEOUT_MS = 3 * 60 * 1000;
-const INLINE_BLOCKING_SESSION_OUTPUT_CHARS = 1_200;
 const INLINE_BLOCKING_SESSION_OUTPUT_PREVIEW_CHARS = 600;
 const RUNNING_SESSION_OUTPUT_PREVIEW_CHARS = 320;
 
@@ -1961,32 +1962,31 @@ function serializeBlockingSessionOutput(output: string | undefined): Record<stri
     return { hasOutput: false };
   }
 
-  if (normalizedOutput.length <= INLINE_BLOCKING_SESSION_OUTPUT_CHARS) {
-    return {
-      hasOutput: true,
-      output: normalizedOutput,
-      outputChars: normalizedOutput.length,
-      outputTruncated: false,
-    };
-  }
-
   return {
     hasOutput: true,
-    outputPreview: normalizedOutput.slice(0, INLINE_BLOCKING_SESSION_OUTPUT_PREVIEW_CHARS),
+    output: normalizedOutput,
     outputChars: normalizedOutput.length,
-    outputTruncated: true,
+    ...(normalizedOutput.length > INLINE_BLOCKING_SESSION_OUTPUT_PREVIEW_CHARS
+      ? {
+          outputPreview: normalizedOutput.slice(0, INLINE_BLOCKING_SESSION_OUTPUT_PREVIEW_CHARS),
+        }
+      : {}),
   };
 }
 
-function serializeTerminalSessionResult(result: StartedSubAgentResult): Record<string, unknown> {
+function serializeTerminalSessionResult(
+  result: StartedSubAgentResult,
+  options?: { includeGuidance?: boolean },
+): Record<string, unknown> {
   const outputPayload = serializeBlockingSessionOutput(result.output);
+  const includeGuidance = options?.includeGuidance !== false;
 
   return {
     sessionId: result.sessionId,
     status: result.status,
     ...outputPayload,
-    ...(outputPayload.outputTruncated === true
-      ? { guidance: BLOCKING_SESSION_RESULT_GUIDANCE }
+    ...(includeGuidance && outputPayload.hasOutput === true
+      ? { guidance: TERMINAL_SESSION_WAIT_RESULT_GUIDANCE }
       : {}),
     toolsUsed: result.toolsUsed,
     iterations: result.iterations,
@@ -2315,7 +2315,7 @@ export async function executeSessionSpawn(
       ...(spawnGate.workstreamId ? { workstreamId: spawnGate.workstreamId } : {}),
       model: config.model || provider.model,
       guidance:
-        'The worker is now running in the background and will continue until completion. Use sessions_wait when you need the final worker output before proceeding. Use sessions_status when you need live currentActivity, activeToolName, recent verified findings, idleMs, or liveness while the worker is still running. If the worker drifts, call sessions_cancel and respawn it with corrected instructions. Do not assume sessions_yield auto-resumes the turn.',
+        'The worker is now running in the background and will continue until completion. Use sessions_wait when you need the final worker output before proceeding; completed wait results already include the same output that sessions_output would return. Use sessions_output later only if you need to recall a terminal deliverable without waiting again. Use sessions_status when you need live currentActivity, activeToolName, recent verified findings, idleMs, or liveness while the worker is still running. If the worker drifts, call sessions_cancel and respawn it with corrected instructions. Do not assume sessions_yield auto-resumes the turn.',
     });
   } catch (err: unknown) {
     let message: string;
@@ -2530,7 +2530,7 @@ export async function executeSessionSend(
       ...(followUpConfig.workstreamId ? { workstreamId: followUpConfig.workstreamId } : {}),
       model: followUpModel,
       guidance:
-        'The follow-up worker is now running in the background and will continue until completion. Use sessions_wait when you need the final worker output before proceeding. Use sessions_status when you need live currentActivity, activeToolName, recent verified findings, idleMs, or liveness while the worker is still running. If the worker drifts, call sessions_cancel and respawn it with corrected instructions.',
+        'The follow-up worker is now running in the background and will continue until completion. Use sessions_wait when you need the final worker output before proceeding; completed wait results already include the same output that sessions_output would return. Use sessions_output later only if you need to recall a terminal deliverable without waiting again. Use sessions_status when you need live currentActivity, activeToolName, recent verified findings, idleMs, or liveness while the worker is still running. If the worker drifts, call sessions_cancel and respawn it with corrected instructions.',
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -2894,7 +2894,7 @@ export async function executeSessionWait(
     if (waitResult) {
       resetCommandPollCount(sessionStatusPollState, sessionId);
       sessionStatusFingerprints.delete(sessionId);
-      sessions.push(serializeTerminalSessionResult(waitResult));
+      sessions.push(serializeTerminalSessionResult(waitResult, { includeGuidance: false }));
       completedCount += 1;
       continue;
     }
@@ -2905,7 +2905,7 @@ export async function executeSessionWait(
       if (terminalResult) {
         resetCommandPollCount(sessionStatusPollState, sessionId);
         sessionStatusFingerprints.delete(sessionId);
-        sessions.push(serializeTerminalSessionResult(terminalResult));
+        sessions.push(serializeTerminalSessionResult(terminalResult, { includeGuidance: false }));
         completedCount += 1;
         continue;
       }
@@ -2941,8 +2941,10 @@ export async function executeSessionWait(
     sessions,
     ...(pendingSessions.length > 0 ? { pendingSessions } : {}),
     guidance: completedAll
-      ? `All requested sub-agent sessions reached terminal states. Use their outputs to continue the workflow. ${BLOCKING_SESSION_RESULT_GUIDANCE}`
-      : 'The wait window ended while some requested sub-agent sessions are still running. Call sessions_wait again to keep blocking, or inspect sessions_status if you need to diagnose drift before cancelling.',
+      ? `All requested sub-agent sessions reached terminal states. ${COMPLETED_SESSIONS_WAIT_GUIDANCE}`
+      : completedCount > 0
+        ? 'The wait window ended while some requested sub-agent sessions are still running. Completed session entries already include the same full outputs that sessions_output would return, so continue from those outputs if they are sufficient. Call sessions_wait again to keep blocking, or inspect sessions_status if you need to diagnose drift before cancelling.'
+        : 'The wait window ended while some requested sub-agent sessions are still running. Call sessions_wait again to keep blocking, or inspect sessions_status if you need to diagnose drift before cancelling.',
   });
 }
 
@@ -3478,7 +3480,7 @@ const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> = {
     ],
     purpose: 'Manage sub-agents, background sessions, and waiting states.',
     guidance:
-      'Sub-agents and sessions_send follow-up workers run in the background by default and keep working until completion unless you set timeoutMs. Use sessions_wait when you need one or more worker outputs before proceeding, use sessions_output when you need the full final worker deliverable only, use sessions_surface_output when that deliverable should become the visible user answer directly, use sessions_history when you need transcript or reasoning trace, use sessions_status for live inspection or diagnosing drift, and reserve waitForCompletion for intentionally blocking the current spawn or send tool call.',
+      'Sub-agents and sessions_send follow-up workers run in the background by default and keep working until completion unless you set timeoutMs. Use sessions_wait when you need one or more worker outputs before proceeding; completed wait results already include the same outputs that sessions_output would return. Use sessions_output later only when you need to fetch or recall a terminal deliverable without waiting again. Use sessions_surface_output when that deliverable should become the visible user answer directly, use sessions_history when you need transcript or reasoning trace, use sessions_status for live inspection or diagnosing drift, and reserve waitForCompletion for intentionally blocking the current spawn or send tool call.',
   },
   agents: {
     tools: ['agents_list', 'agents_switch', 'agents_configure'],

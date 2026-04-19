@@ -58,6 +58,12 @@ describe('SUPER_AGENT_PERSONA', () => {
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('sessions_output');
   });
 
+  it('tells the supervisor not to re-fetch output immediately after sessions_wait', () => {
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
+      'Do not call sessions_output immediately afterward unless you need to recall a terminal deliverable later.',
+    );
+  });
+
   it('mentions sessions_surface_output for direct worker-deliverable surfacing', () => {
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('sessions_surface_output');
   });

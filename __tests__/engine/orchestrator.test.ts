@@ -1883,6 +1883,46 @@ describe('Orchestrator', () => {
       });
     });
 
+    it('injects super-agent guidance that sessions_wait already includes session output', async () => {
+      const registryModule = jest.requireMock('../../src/services/agents/registry') as {
+        getPersona: jest.Mock;
+      };
+      registryModule.getPersona.mockReturnValueOnce({
+        id: 'super-agent',
+        name: 'SuperAgent',
+        systemPrompt: 'You are the SuperAgent.',
+      });
+
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator([
+          { type: 'token', content: 'Planning the workflow.' },
+          { type: 'done', content: 'Planning the workflow.' },
+        ]),
+      );
+
+      const callbacks = makeCallbacks();
+      const options: OrchestratorOptions = {
+        provider: makeProvider(),
+        model: 'gpt-5.4',
+        conversationId: 'conv-super-agent-wait-guidance',
+        systemPrompt: 'You are helpful',
+        personaId: 'super-agent',
+        messages: [{
+          id: 'msg1',
+          role: 'user',
+          content: 'Coordinate workers to inspect the repository and synthesize the result.',
+          timestamp: Date.now(),
+        }],
+      };
+
+      await runOrchestrator(options, callbacks);
+
+      const systemPromptMessage = mockStreamMessage.mock.calls[0][0][0];
+      expect(systemPromptMessage.content).toContain(
+        'After sessions_wait returns completed sessions, use the outputs already in that result and do not call sessions_output immediately afterward unless you need to recall a terminal deliverable later.',
+      );
+    });
+
     it('forces SuperAgent to relaunch delegation when sessions_spawn failed before any worker actually started', async () => {
       const registryModule = jest.requireMock('../../src/services/agents/registry') as {
         getPersona: jest.Mock;

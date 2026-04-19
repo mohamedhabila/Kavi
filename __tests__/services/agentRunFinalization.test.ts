@@ -457,14 +457,14 @@ describe('agentRunFinalization', () => {
         sessionCount: 1,
         completedCount: 1,
         hasOutput: true,
-        outputTruncated: true,
         outputChars: 5200,
+        output: 'Patched the workflow and verified the fix.'.repeat(80),
         outputPreview: 'Patched the workflow and verified the fix.',
       }),
     );
 
     expect(preview).toBe(
-      '1/1 sessions completed; preview: Patched the workflow and verified the fix.; output captured (5200 chars; preview only)',
+      '1/1 sessions completed; preview: Patched the workflow and verified the fix.; output captured (5200 chars)',
     );
   });
 

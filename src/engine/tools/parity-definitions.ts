@@ -429,7 +429,7 @@ export const SESSION_OUTPUT_TOOL: ToolDefinition = {
   name: 'sessions_output',
   description:
     'Retrieve the full final output from a terminal sub-agent session without returning its transcript history. ' +
-    'Use this when the supervisor needs the worker deliverable itself. If that deliverable should become the visible user answer directly, prefer sessions_surface_output instead of restating it manually. After you have the needed terminal deliverable, continue from it or finalize instead of polling sessions_status or sessions_list for the same completed session. ' +
+    'Use this when the supervisor needs to fetch a terminal worker deliverable without waiting, or to recall it later after a prior sessions_wait result is no longer in working context. If you just received the same completed session from sessions_wait, do not call sessions_output again immediately unless you need to recall the deliverable later. If that deliverable should become the visible user answer directly, prefer sessions_surface_output instead of restating it manually. After you have the needed terminal deliverable, continue from it or finalize instead of polling sessions_status or sessions_list for the same completed session. ' +
     'Use sessions_history only when you need to trace the worker transcript, reasoning path, or tool-by-tool decisions.',
   input_schema: {
     type: 'object',
@@ -526,9 +526,9 @@ export const SESSION_WAIT_TOOL: ToolDefinition = {
   description:
     'Block until one or more sub-agent sessions reach terminal states and return their outputs. ' +
     'Prefer this when the supervisor cannot proceed until worker results are ready. ' +
-    'Use this instead of alternating sessions_status plus wait when you already need the final worker output to continue. ' +
+    'Use this instead of alternating sessions_status plus wait when you already need the final worker outputs to continue. ' +
     'Provide sessionId for one worker, sessionIds for several workers, or omit both to wait for all currently running child sessions in the current conversation. ' +
-    'If worker output is large, the wait result returns preview metadata and you should call sessions_output for the full deliverable. ' +
+    'Each completed session entry already includes the same output payload that sessions_output would return, including when you wait for several workers together, so only call sessions_output later if you need to recall a terminal deliverable without waiting. ' +
     'Optionally set waitTimeoutMs to override the 3-minute default wait window while unfinished workers continue in the background.',
   input_schema: {
     type: 'object',

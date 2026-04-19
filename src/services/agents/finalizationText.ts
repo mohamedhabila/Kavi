@@ -204,6 +204,8 @@ function summarizeStructuredFinalizationToolResult(
           ? `output captured (${rawOutputChars} chars; preview only)`
           : 'output captured (preview only)',
       );
+    } else if (preview && rawOutputChars != null) {
+      segments.push(`output captured (${rawOutputChars} chars)`);
     } else if (!preview) {
       const outputSummary = summarizeFinalizationStructuredText(rawOutput);
       if (outputSummary) {

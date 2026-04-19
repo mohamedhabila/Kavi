@@ -115,10 +115,12 @@ describe('Parity Tool Definitions', () => {
     expect(SESSION_SEND_TOOL.input_schema.properties).toHaveProperty('waitTimeoutMs');
   });
 
-  it('sessions_wait documents the bounded default wait window and preview-first large-output contract', () => {
+  it('sessions_wait documents returned-output reuse and the bounded default wait window', () => {
     const sessionsWait = ALL_PARITY_TOOL_DEFINITIONS.find((d) => d.name === 'sessions_wait');
 
-    expect(sessionsWait?.description).toContain('preview metadata');
+    expect(sessionsWait?.description).toContain(
+      'same output payload that sessions_output would return',
+    );
     expect(sessionsWait?.description).toContain('3-minute default wait window');
     expect(sessionsWait?.input_schema.properties.waitTimeoutMs.description).toContain(
       '3-minute default wait window',

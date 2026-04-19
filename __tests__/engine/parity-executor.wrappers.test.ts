@@ -405,7 +405,7 @@ describe('parity-executor wrapper coverage', () => {
       hasOutput: true,
       output: 'final worker deliverable',
       guidance:
-        'Use sessions_output when you need the full final worker output only, sessions_surface_output when that terminal deliverable should become the visible user answer directly, or sessions_history when you need the transcript and reasoning trace. After you have the terminal deliverable you need, continue from it or finalize instead of polling sessions_status or sessions_list for the same completed session.',
+        'Use sessions_output when you need to fetch or recall the full final worker output from a terminal session without waiting again. If that deliverable should become the visible user answer directly, use sessions_surface_output. If you already received this deliverable from sessions_wait, do not call sessions_output again unless you need to recall it later. Use sessions_history only when you need the transcript and reasoning trace. After you have the terminal deliverable you need, continue from it or finalize instead of polling sessions_status or sessions_list for the same completed session.',
     });
   });
 
@@ -533,7 +533,7 @@ describe('parity-executor wrapper coverage', () => {
     expect(mockResetCommandPollCount).toHaveBeenCalled();
   });
 
-  it('uses a bounded default wait window and returns preview-only output metadata for large session results', async () => {
+  it('uses a bounded default wait window and returns full output plus preview metadata for large session results', async () => {
     mockGetSubAgent.mockReturnValue({
       sessionId: 'session-1',
       status: 'running',
@@ -558,21 +558,79 @@ describe('parity-executor wrapper coverage', () => {
     expect(parsed.completedCount).toBe(1);
     expect(parsed.pendingCount).toBe(0);
     expect(parsed.guidance).toContain(
-      'Blocking wait results may return previews for larger outputs',
+      'already include the same full outputs that sessions_output would return',
     );
     expect(parsed.sessions[0]).toEqual(
       expect.objectContaining({
         sessionId: 'session-1',
         status: 'completed',
         hasOutput: true,
+        output: 'x'.repeat(5000),
         outputPreview: 'x'.repeat(600),
         outputChars: 5000,
-        outputTruncated: true,
-        guidance:
-          'Use sessions_output when you need the full final worker output. If that deliverable should become the visible user answer directly, call sessions_surface_output instead of rewriting it. Blocking wait results may return previews for larger outputs, and sessions_history is for transcript and reasoning trace. After you have the deliverable you need, continue from it or finalize instead of re-polling the same completed session.',
       }),
     );
-    expect(parsed.sessions[0].output).toBeUndefined();
+    expect(parsed.sessions[0].guidance).toBeUndefined();
+  });
+
+  it('returns full outputs for every completed session when waiting on multiple workers together', async () => {
+    mockGetSubAgent.mockImplementation((sessionId: string) => ({
+      sessionId,
+      status: 'running',
+      startedAt: 1000,
+      updatedAt: 2000,
+      depth: 1,
+    }));
+    mockWaitForSubAgentCompletion
+      .mockResolvedValueOnce({
+        sessionId: 'session-1',
+        status: 'completed',
+        output: 'first worker deliverable',
+        toolsUsed: ['read_file'],
+        iterations: 2,
+        depth: 1,
+        artifacts: [],
+      })
+      .mockResolvedValueOnce({
+        sessionId: 'session-2',
+        status: 'completed',
+        output: 'y'.repeat(1400),
+        toolsUsed: ['glob_search'],
+        iterations: 3,
+        depth: 1,
+        artifacts: [],
+      });
+
+    const parsed = JSON.parse(
+      await executeSessionWait({ sessionIds: ['session-1', 'session-2'] }, 'conv-1'),
+    );
+
+    expect(mockWaitForSubAgentCompletion).toHaveBeenNthCalledWith(1, 'session-1', 180000);
+    expect(mockWaitForSubAgentCompletion).toHaveBeenNthCalledWith(2, 'session-2', 180000);
+    expect(parsed.status).toBe('completed');
+    expect(parsed.sessionIds).toEqual(['session-1', 'session-2']);
+    expect(parsed.completedCount).toBe(2);
+    expect(parsed.pendingCount).toBe(0);
+    expect(parsed.guidance).toContain(
+      'already include the same full outputs that sessions_output would return',
+    );
+    expect(parsed.sessions).toEqual([
+      expect.objectContaining({
+        sessionId: 'session-1',
+        status: 'completed',
+        hasOutput: true,
+        output: 'first worker deliverable',
+        outputChars: 'first worker deliverable'.length,
+      }),
+      expect.objectContaining({
+        sessionId: 'session-2',
+        status: 'completed',
+        hasOutput: true,
+        output: 'y'.repeat(1400),
+        outputPreview: 'y'.repeat(600),
+        outputChars: 1400,
+      }),
+    ]);
   });
 
   it('surfaces default wait-window expiry when sessions remain running', async () => {
