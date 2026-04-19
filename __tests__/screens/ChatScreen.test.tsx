@@ -3202,6 +3202,123 @@ describe('ChatScreen', () => {
     expect(mockCompleteAgentRun).not.toHaveBeenCalled();
   });
 
+  it('finalizes a foreground structured run from persisted completed worker snapshots when live workers are absent', async () => {
+    mockStartAgentRun.mockImplementationOnce((conversationId: string, params: any) => {
+      updateMockConversation(conversationId, (conversation) => ({
+        ...conversation,
+        activeAgentRunId: 'run-1',
+        agentRuns: [
+          createRunningAgentRun({
+            userMessageId: params.userMessageId,
+            goal: params.goal,
+            plan: {
+              objective: 'Complete the current task.',
+              successCriteria: ['Deliver the result'],
+              stopConditions: ['Blocked'],
+              workstreams: [{ id: 'workstream-1', title: 'Implement the fix' }],
+            },
+          }),
+        ],
+      }));
+      return 'run-1';
+    });
+
+    mockEvaluateAgentRunWithPilot.mockResolvedValueOnce({
+      action: 'finalize',
+      outcome: {
+        status: 'completed',
+        summary: 'Pilot approved finalization from the completed worker output.',
+      },
+      checkpointTitle: 'Pilot approved finalization',
+      checkpointDetail: 'Pilot approved finalization from the completed worker output.',
+      evaluation: buildMockPilotEvaluation({
+        overallScore: 18,
+        approved: true,
+        recommendedAction: 'finalize',
+        controlAction: 'accept',
+        summary: 'The persisted completed worker already satisfies the structured plan.',
+        rationale:
+          'The only structured workstream already has a completed worker in the transcript, so Pilot should finalize instead of resuming the same work.',
+      }),
+    });
+
+    const { getByPlaceholderText, getByTestId } = render(<ChatScreen />);
+    fireEvent.changeText(getByPlaceholderText('Message...'), 'Finish the structured task');
+    fireEvent.press(getByTestId('icon-Send').parent || getByTestId('icon-Send'));
+
+    await waitFor(() => {
+      expect(mockRunOrchestrator).toHaveBeenCalledTimes(1);
+    });
+
+    updateMockConversation('conv1', (conversation) => ({
+      ...conversation,
+      messages: [
+        ...conversation.messages,
+        {
+          id: 'assistant-foreground-complete-worker',
+          role: 'assistant',
+          content: 'Worker completed successfully.',
+          timestamp: 1_700_000_200_250,
+          subAgentEvent: {
+            type: 'sub-agent',
+            event: 'completed',
+            snapshot: {
+              sessionId: 'sub-foreground-complete-1',
+              parentConversationId: 'conv1',
+              agentRunId: 'run-1',
+              workstreamId: 'workstream-1',
+              depth: 0,
+              startedAt: 1_700_000_200_050,
+              updatedAt: 1_700_000_200_250,
+              status: 'completed',
+              sandboxPolicy: 'inherit',
+              output: 'Worker finished with verified output.',
+            },
+          },
+        },
+      ],
+    }));
+    mockActiveSubAgents = [];
+
+    const [, callbacks] = mockRunOrchestrator.mock.calls[0];
+
+    act(() => {
+      callbacks.onAssistantMessage('The implementation is done.', [], undefined, {
+        kind: 'final',
+        completionStatus: 'complete',
+      });
+    });
+
+    await act(async () => {
+      callbacks.onDone();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockEvaluateAgentRunWithPilot).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workers: [
+            expect.objectContaining({
+              sessionId: 'sub-foreground-complete-1',
+              workstreamId: 'workstream-1',
+              status: 'completed',
+            }),
+          ],
+        }),
+      );
+    });
+
+    expect(mockRunOrchestrator).toHaveBeenCalledTimes(1);
+    expect(mockCompleteAgentRun).toHaveBeenCalledWith(
+      'conv1',
+      expect.objectContaining({
+        status: 'completed',
+        checkpointTitle: 'Pilot approved finalization',
+      }),
+      'run-1',
+    );
+  });
+
   it('keeps terminal worker lifecycle updates in the work phase while other delegated work is still running', async () => {
     render(<ChatScreen />);
 
@@ -6294,7 +6411,6 @@ describe('ChatScreen', () => {
         'run-1',
       );
     });
-
     const latestAssistantMessage = [...mockConversations[0].messages]
       .reverse()
       .find((message: any) => message.role === 'assistant');
@@ -6314,6 +6430,121 @@ describe('ChatScreen', () => {
         title: 'Final response delivered',
         detail: 'Synthesized final response',
       }),
+    );
+  });
+
+  it('recovers an interrupted structured run from persisted completed worker snapshots when live workers are absent', async () => {
+    mockStartAgentRun.mockImplementationOnce((conversationId: string, params: any) => {
+      updateMockConversation(conversationId, (conversation) => ({
+        ...conversation,
+        activeAgentRunId: 'run-1',
+        agentRuns: [
+          createRunningAgentRun({
+            id: 'run-1',
+            userMessageId: params.userMessageId,
+            goal: params.goal,
+            plan: {
+              objective: 'Complete the current task.',
+              successCriteria: ['Deliver the result'],
+              stopConditions: ['Blocked'],
+              workstreams: [{ id: 'workstream-1', title: 'Implement the fix' }],
+            },
+          }),
+        ],
+      }));
+      return 'run-1';
+    });
+    mockEvaluateAgentRunWithPilot.mockResolvedValueOnce({
+      action: 'finalize',
+      outcome: {
+        status: 'completed',
+        summary:
+          'Pilot approved finalization because the completed worker already satisfies the plan.',
+      },
+      checkpointTitle: 'Pilot approved finalization',
+      checkpointDetail:
+        'Pilot approved finalization because the completed worker already satisfies the plan.',
+      evaluation: buildMockPilotEvaluation({
+        overallScore: 18,
+        approved: true,
+        recommendedAction: 'finalize',
+        controlAction: 'accept',
+        summary: 'The interrupted run already has the completed structured deliverable.',
+        rationale:
+          'Recovery should finalize from the persisted completed worker snapshot instead of reopening the same workstream.',
+      }),
+    });
+
+    const { getByPlaceholderText, getByTestId } = render(<ChatScreen />);
+    const input = getByPlaceholderText('Message...');
+    fireEvent.changeText(input, 'Recover the interrupted structured task');
+    const sendIcon = getByTestId('icon-Send');
+    fireEvent.press(sendIcon.parent || sendIcon);
+
+    await waitFor(() => {
+      expect(mockRunOrchestrator).toHaveBeenCalledTimes(1);
+    });
+
+    updateMockConversation('conv1', (conversation) => ({
+      ...conversation,
+      messages: [
+        ...conversation.messages,
+        {
+          id: 'assistant-recovery-complete-worker',
+          role: 'assistant',
+          content: 'Worker completed successfully before the stream failed.',
+          timestamp: 1_700_000_300_250,
+          subAgentEvent: {
+            type: 'sub-agent',
+            event: 'completed',
+            snapshot: {
+              sessionId: 'sub-recovery-complete-1',
+              parentConversationId: 'conv1',
+              agentRunId: 'run-1',
+              workstreamId: 'workstream-1',
+              depth: 0,
+              startedAt: 1_700_000_300_050,
+              updatedAt: 1_700_000_300_250,
+              status: 'completed',
+              sandboxPolicy: 'inherit',
+              output: 'Worker finished with verified output before the interruption.',
+            },
+          },
+        },
+      ],
+    }));
+    mockActiveSubAgents = [];
+
+    const [, callbacks] = mockRunOrchestrator.mock.calls[0];
+
+    await act(async () => {
+      callbacks.onError(new Error('OpenAI streaming error'));
+      callbacks.onDone();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockEvaluateAgentRunWithPilot).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workers: [
+            expect.objectContaining({
+              sessionId: 'sub-recovery-complete-1',
+              workstreamId: 'workstream-1',
+              status: 'completed',
+            }),
+          ],
+        }),
+      );
+    });
+
+    expect(mockRunOrchestrator).toHaveBeenCalledTimes(1);
+    expect(mockCompleteAgentRun).toHaveBeenCalledWith(
+      'conv1',
+      expect.objectContaining({
+        status: 'completed',
+        checkpointTitle: 'Pilot approved finalization',
+      }),
+      'run-1',
     );
   });
 

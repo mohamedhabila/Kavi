@@ -579,7 +579,7 @@ function getRunningConversationRunsForCancellation(
   return activeRun ? [activeRun, ...remainingRuns] : remainingRuns;
 }
 
-function getBackgroundReviewSubAgentsForRun(
+function getReviewableSubAgentsForRun(
   conversation: Pick<Conversation, 'id' | 'activeAgentRunId' | 'agentRuns' | 'messages'>,
   run: AgentRun,
 ): {
@@ -1589,7 +1589,7 @@ export const ChatScreen: React.FC = () => {
             liveSnapshots: liveSubAgents,
             mergedSnapshots: reviewableSubAgents,
             hasOrphanedRunningSnapshots,
-          } = getBackgroundReviewSubAgentsForRun(latestConversation, targetRun);
+          } = getReviewableSubAgentsForRun(latestConversation, targetRun);
           if (liveSubAgents.some((snapshot) => snapshot.status === 'running')) {
             return;
           }
@@ -2993,7 +2993,7 @@ export const ChatScreen: React.FC = () => {
       }
 
       for (const run of awaitingRuns) {
-        const { liveSnapshots, mergedSnapshots } = getBackgroundReviewSubAgentsForRun(
+        const { liveSnapshots, mergedSnapshots } = getReviewableSubAgentsForRun(
           conversation,
           run,
         );
@@ -3648,20 +3648,27 @@ export const ChatScreen: React.FC = () => {
           };
         }
 
-        const liveSubAgents = getLiveSubAgentsForRun(latestConversation, trackedAgentRunId);
+        const {
+          liveSnapshots: liveSubAgents,
+          mergedSnapshots: reviewableSubAgents,
+          hasOrphanedRunningSnapshots,
+        } = getReviewableSubAgentsForRun(latestConversation, targetRun);
+        const effectiveSubAgents = hasOrphanedRunningSnapshots
+          ? reviewableSubAgents.filter((snapshot) => snapshot.status !== 'running')
+          : reviewableSubAgents;
         const runningBackgroundWorkerCount = liveSubAgents.filter(
           (snapshot) => snapshot.status === 'running',
         ).length;
         const pendingAsyncOperations = targetRun.pendingAsyncOperations ?? [];
         const planContinuation = evaluateWorkflowPlanContinuation({
           plan: targetRun.plan,
-          workers: liveSubAgents,
+          workers: effectiveSubAgents,
         });
         const evidence = collectAgentRunFinalizationEvidence(
           latestConversation.messages,
           targetRun.userMessageId,
           targetRun.summary.startedTools,
-          { liveSubAgentSnapshots: liveSubAgents },
+          { liveSubAgentSnapshots: effectiveSubAgents },
         );
 
         if (
@@ -3712,7 +3719,7 @@ export const ChatScreen: React.FC = () => {
         const pilotDecision = await evaluateAgentRunWithPilot({
           run: targetRun,
           evidence,
-          workers: liveSubAgents,
+          workers: effectiveSubAgents,
           candidateOutcome: {
             status: 'completed',
             summary:
@@ -4545,13 +4552,17 @@ export const ChatScreen: React.FC = () => {
                       );
                     }
 
-                    const liveSubAgents = getLiveSubAgentsForRun(
-                      latestConversation,
-                      trackedAgentRunId,
-                    );
+                    const {
+                      liveSnapshots: liveSubAgents,
+                      mergedSnapshots: reviewableSubAgents,
+                      hasOrphanedRunningSnapshots,
+                    } = getReviewableSubAgentsForRun(latestConversation, targetRun);
+                    const effectiveSubAgents = hasOrphanedRunningSnapshots
+                      ? reviewableSubAgents.filter((snapshot) => snapshot.status !== 'running')
+                      : reviewableSubAgents;
                     const planContinuation = evaluateWorkflowPlanContinuation({
                       plan: targetRun.plan,
-                      workers: liveSubAgents,
+                      workers: effectiveSubAgents,
                     });
                     if (planContinuation.status === 'continue') {
                       clearForegroundRequestIfCurrent();
@@ -4574,12 +4585,12 @@ export const ChatScreen: React.FC = () => {
                       latestConversation.messages,
                       targetRun.userMessageId,
                       targetRun.summary.startedTools,
-                      { liveSubAgentSnapshots: liveSubAgents },
+                      { liveSubAgentSnapshots: effectiveSubAgents },
                     );
                     const pilotDecision = await evaluateAgentRunWithPilot({
                       run: targetRun,
                       evidence,
-                      workers: liveSubAgents,
+                      workers: effectiveSubAgents,
                       candidateOutcome: {
                         status: 'completed',
                         summary: turnSummary,
