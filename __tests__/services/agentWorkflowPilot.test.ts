@@ -92,6 +92,7 @@ function makeEvidence(overrides: Partial<any> = {}) {
     resultPreviews: [{ sourceName: 'worker', preview: 'Verified implementation details.' }],
     toolsUsed: ['sessions_spawn'],
     iterations: 2,
+    hasIncompleteToolCalls: false,
     ...overrides,
   };
 }
@@ -1799,7 +1800,7 @@ describe('agentWorkflowPilot', () => {
     expect(decision.evaluation.controlAction).toBe('continue');
   });
 
-  it('blocks final delivery when live pilot evaluation remains unavailable after a strong heuristic review', async () => {
+  it('finalizes with heuristic approval when live pilot evaluation remains unavailable after a strong review', async () => {
     mockSendMessage.mockResolvedValue({
       choices: [{
         message: {
@@ -1821,15 +1822,15 @@ describe('agentWorkflowPilot', () => {
     });
 
     expect(decision.action).toBe('finalize');
-    expect(decision.outcome.status).toBe('cancelled');
-    expect(decision.checkpointTitle).toBe('Pilot blocked finalization');
-    expect(decision.evaluation.evaluatorVersion).toContain('unavailable');
-    expect(decision.evaluation.source).toBe('unavailable');
+    expect(decision.outcome.status).toBe('completed');
+    expect(decision.checkpointTitle).toBe('Pilot approved finalization');
+    expect(decision.evaluation.evaluatorVersion).toContain('heuristic');
+    expect(decision.evaluation.source).toBe('heuristic');
     expect(decision.evaluation.fallbackReason).toBe('response_unparseable');
-    expect(decision.evaluation.approved).toBe(false);
-    expect(decision.evaluation.controlAction).toBe('block');
+    expect(decision.evaluation.approved).toBe(true);
+    expect(decision.evaluation.controlAction).toBe('accept');
     expect(decision.evaluation.approvalThreshold).toBe(18);
-    expect(decision.evaluation.summary).toContain('live pilot approval is unavailable');
+    expect(decision.evaluation.summary).toContain('Heuristic fallback used because the live pilot assessment was unavailable');
   });
 
   it('keeps heuristic fallback in continue mode when provider-comparison claims are uncited', async () => {
@@ -1923,6 +1924,31 @@ describe('agentWorkflowPilot', () => {
     expect(decision.evaluation.fallbackReason).toBe('request_failed');
     expect(decision.evaluation.approved).toBe(false);
     expect(decision.evaluation.controlAction).toBe('continue');
+    expect(decision.evaluation.rationale).toContain('LLM API error 503');
+  });
+
+  it('finalizes with heuristic approval when the live pilot request fails after a strong review', async () => {
+    mockSendMessage.mockRejectedValue(new Error('LLM API error 503: upstream unavailable'));
+
+    const decision = await evaluateAgentRunWithPilot({
+      run: makeRun(),
+      workers: [makeWorker()],
+      evidence: makeEvidence(),
+      candidateOutcome: {
+        status: 'completed',
+        summary: 'Supervisor reached a completion candidate.',
+      },
+      providerContext: makeProviderContext(),
+    });
+
+    expect(decision.action).toBe('finalize');
+    expect(decision.outcome.status).toBe('completed');
+    expect(decision.checkpointTitle).toBe('Pilot approved finalization');
+    expect(decision.evaluation.evaluatorVersion).toContain('heuristic');
+    expect(decision.evaluation.source).toBe('heuristic');
+    expect(decision.evaluation.fallbackReason).toBe('request_failed');
+    expect(decision.evaluation.approved).toBe(true);
+    expect(decision.evaluation.controlAction).toBe('accept');
     expect(decision.evaluation.rationale).toContain('LLM API error 503');
   });
 
@@ -2373,7 +2399,7 @@ describe('agentWorkflowPilot', () => {
     expect(decision.evaluation.summary).toBe('The run is complete and verified.');
   });
 
-  it('re-runs structured pilot evaluation when the cached same-state review used an unavailable fallback', async () => {
+  it('re-runs structured pilot evaluation when the cached same-state review used a heuristic fallback', async () => {
     mockSendMessage.mockResolvedValueOnce({
       choices: [{
         message: {
@@ -2394,8 +2420,8 @@ describe('agentWorkflowPilot', () => {
       providerContext: makeProviderContext(),
     });
 
-    expect(fallbackDecision.evaluation.evaluatorVersion).toContain('unavailable');
-    expect(fallbackDecision.evaluation.source).toBe('unavailable');
+    expect(fallbackDecision.evaluation.evaluatorVersion).toContain('heuristic');
+    expect(fallbackDecision.evaluation.source).toBe('heuristic');
     expect(fallbackDecision.evaluation.fallbackReason).toBe('response_unparseable');
 
     mockSendMessage.mockReset();

@@ -2141,6 +2141,24 @@ export class LlmService {
     return normalized;
   }
 
+  private attachProviderResponse(
+    result: any,
+    provider: 'anthropic' | 'gemini' | 'openai-responses',
+    response: any,
+  ): any {
+    if (!isPlainRecord(result)) {
+      return result;
+    }
+
+    return {
+      ...result,
+      providerResponse: {
+        provider,
+        response,
+      },
+    };
+  }
+
   private normalizeOpenAIResponsesResult(json: any): any {
     const output = Array.isArray(json?.output)
       ? json.output.filter((item: unknown): item is Record<string, any> => isPlainRecord(item))
@@ -2246,7 +2264,7 @@ export class LlmService {
     }
 
     const json = await response.json();
-    return this.normalizeOpenAIResponsesResult(json);
+    return this.attachProviderResponse(this.normalizeOpenAIResponsesResult(json), 'openai-responses', json);
   }
 
   private supportsTemperature(model: string): boolean {
@@ -4266,7 +4284,7 @@ export class LlmService {
     }
 
     const json = await response.json();
-    return this.normalizeGeminiResponse(json);
+    return this.attachProviderResponse(this.normalizeGeminiResponse(json), 'gemini', json);
   }
 
   private async sendCompatibleChatCompletionsMessage(
@@ -5083,7 +5101,7 @@ export class LlmService {
       ? { anthropicBlocks: assistantBlocks }
       : undefined;
 
-    return {
+    const normalizedResponse = {
       choices: [{
         message: {
           role: 'assistant',
@@ -5115,6 +5133,8 @@ export class LlmService {
         cache_read_input_tokens: normalizedUsage?.cacheReadTokens ?? 0,
       },
     };
+
+    return this.attachProviderResponse(normalizedResponse, 'anthropic', json);
   }
 
   private safeJsonParse(value: unknown): unknown {

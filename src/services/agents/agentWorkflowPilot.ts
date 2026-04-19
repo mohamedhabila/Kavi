@@ -2250,50 +2250,6 @@ function buildHeuristicPilotFallbackEvaluation(
   };
 }
 
-function blockUnavailablePilotFinalization(
-  evaluation: AgentRunPilotEvaluation,
-  params: Pick<PilotDecisionParams, 'candidateOutcome'> & {
-    reason: AgentRunPilotFallbackReason;
-    providerContext?: AgentRunPilotProviderContext;
-    detail?: string;
-  },
-): AgentRunPilotEvaluation {
-  if (
-    !evaluation.approved
-    || evaluation.controlAction !== 'accept'
-    || evaluation.recommendedAction !== 'finalize'
-  ) {
-    return evaluation;
-  }
-
-  const unavailableRationale = buildPilotUnavailableRationale({
-    reason: params.reason,
-    providerContext: params.providerContext,
-    detail: params.detail,
-  });
-
-  return {
-    ...evaluation,
-    evaluatorVersion: `${PILOT_EVALUATOR_VERSION}-unavailable-after-heuristic`,
-    approved: false,
-    recommendedAction: 'blocked',
-    controlAction: params.candidateOutcome.status === 'cancelled' ? 'cancel' : 'block',
-    confidence: 'low',
-    summary: 'Heuristic review found the run complete, but live pilot approval is unavailable, so final delivery remains blocked.',
-    rationale: `${unavailableRationale} ${evaluation.rationale}`.trim(),
-    source: 'unavailable',
-    fallbackReason: params.reason,
-    gaps: mergeUniqueStringLists(
-      evaluation.gaps,
-      ['A real pilot assessment was not produced, so final delivery must remain blocked.'],
-    ),
-    nextActions: mergeUniqueStringLists(
-      evaluation.nextActions,
-      [buildPilotUnavailableNextAction(params.reason)],
-    ),
-  };
-}
-
 function buildLivePilotUnavailableFallbackEvaluation(
   params: Pick<PilotDecisionParams, 'run' | 'evidence' | 'candidateOutcome' | 'workers'> & {
     reason: AgentRunPilotFallbackReason;
@@ -2301,8 +2257,7 @@ function buildLivePilotUnavailableFallbackEvaluation(
     detail?: string;
   },
 ): AgentRunPilotEvaluation {
-  const heuristicEvaluation = buildHeuristicPilotFallbackEvaluation(params);
-  return blockUnavailablePilotFinalization(heuristicEvaluation, params);
+  return buildHeuristicPilotFallbackEvaluation(params);
 }
 
 function buildPilotUnavailableEvaluation(params: Pick<PilotDecisionParams, 'run' | 'evidence' | 'candidateOutcome' | 'workers'> & {

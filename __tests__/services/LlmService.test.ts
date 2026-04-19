@@ -417,6 +417,12 @@ describe('LlmService', () => {
       expect(result?.choices?.[0]?.message?.providerReplay).toEqual(expect.objectContaining({
         openaiResponseId: 'resp_test',
       }));
+      expect(result?.providerResponse).toEqual({
+        provider: 'openai-responses',
+        response: expect.objectContaining({
+          id: 'resp_test',
+        }),
+      });
     });
 
     it('uses previous_response_id for OpenAI continuations instead of replaying prior assistant artifacts', async () => {
@@ -985,7 +991,7 @@ describe('LlmService', () => {
         model: 'gpt-5.4',
       }));
 
-      await service.sendMessage([{ role: 'user', content: 'Return the pilot report.' }], {
+      const result = await service.sendMessage([{ role: 'user', content: 'Return the pilot report.' }], {
         tools: [{
           name: 'pilot_report',
           description: 'Return the pilot report',
@@ -1755,7 +1761,7 @@ describe('LlmService', () => {
         model: 'gemini-3-flash-preview',
       }));
 
-      await service.sendMessage([{ role: 'user', content: 'Return the pilot report.' }], {
+      const result = await service.sendMessage([{ role: 'user', content: 'Return the pilot report.' }], {
         tools: [{
           name: 'pilot_report',
           description: 'Return the pilot report',
@@ -1775,6 +1781,12 @@ describe('LlmService', () => {
           mode: 'ANY',
           allowedFunctionNames: ['pilot_report'],
         },
+      });
+      expect(result?.providerResponse).toEqual({
+        provider: 'gemini',
+        response: expect.objectContaining({
+          candidates: expect.any(Array),
+        }),
       });
     });
 
@@ -3521,7 +3533,7 @@ describe('LlmService', () => {
         model: 'claude-sonnet-4-6',
       }));
 
-      await service.sendMessage([{ role: 'user', content: 'Return the pilot report.' }], {
+      const result = await service.sendMessage([{ role: 'user', content: 'Return the pilot report.' }], {
         structuredOutput: {
           name: 'pilot_report',
           mimeType: 'application/json',
@@ -3551,6 +3563,12 @@ describe('LlmService', () => {
             },
           },
         },
+      });
+      expect(result?.providerResponse).toEqual({
+        provider: 'anthropic',
+        response: expect.objectContaining({
+          content: expect.any(Array),
+        }),
       });
     });
 
