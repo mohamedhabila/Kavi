@@ -1,94 +1,41 @@
 # Open Source Readiness Audit
 
-Date: 2026-04-18
+Date: 2026-04-19
 
-This document started as the initial audit baseline. The tracker below records the completed open-source-preparation passes so the remaining work stays visible.
+This file now serves two purposes: the opening section is the authoritative current readiness assessment after the recovery and consistency pass, and the remaining sections below are preserved as historical baseline notes from the earlier 2026-04-18 audit.
 
-## Progress Tracker
+## Current Verdict
 
-### First Pass Completed
+The repository is recovered, internally consistent with the latest readiness notes, and production-ready from the code and build surfaces audited here.
 
-- [x] Public-facing repository files added: `README.md`, `LICENSE`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, and `CHANGELOG.md`
-- [x] GitHub issue templates, pull request template, and a baseline CI workflow added
-- [x] `npm run verify` added as the default local verification command
-- [x] `.gitignore` expanded for caches, coverage, native build outputs, and private work products
-- [x] Maintainer-specific placeholder values removed from shipped locale files
-- [x] Source-provenance wording removed from contributor-facing code comments
-- [x] `Kavi` established as the public product name in the new contributor-facing documentation set
+The earlier 2026-04-18 verdict is now superseded. Its pre-Git caveats and older verification counts no longer describe the current state of the repository.
 
-### Second Pass Completed
+## Verified Gates
 
-- [x] Hardcoded Android release build paths replaced with an environment-driven wrapper and preflight check
-- [x] Node version pinning added through `.nvmrc`, `package.json` engines, and CI alignment
-- [x] Formal provenance inventory added in `THIRD_PARTY_PROVENANCE.md`
-- [x] Public architecture, setup, testing, privacy, and feature-matrix docs added
-- [x] Archive/export guardrails added in `.gitattributes` for `_research/` and local build artifacts
+- `npm run check:public-hygiene`: passed on 2026-04-19
+- `npm run verify`: passed on 2026-04-19
+- Test summary: 247 passed suites, 2 skipped suites, 4324 passed tests, 3 skipped tests
+- Test runtime: about 53 seconds on this machine
+- `npm run check:android:release-env`: passed on 2026-04-19
+- `npm run build:android:release`: passed on 2026-04-19
 
-### Third Pass Started
+## Consistency Updates Completed In This Refresh
 
-- [x] Extracted shared configuration draft factories and path parsing into `src/screens/configDrafts.ts` for `SettingsScreen` and `RemoteWorkScreen`
-- [x] Moved shared edit-draft normalization and Expo path/platform fallback logic into `src/screens/configDrafts.ts` with focused helper tests
-- [x] Extracted a shared secure-draft loading hook and a reusable Remote Work config editor modal shell to shrink repeated editor infrastructure
-- [x] Extracted `SettingsScreen` editor branches into `src/screens/components/settings/SettingsConfigEditors.tsx`
-- [x] Extracted `RemoteWorkScreen` editor modals into `src/screens/components/remoteWork/RemoteWorkConfigEditors.tsx`
+- Confirmed the repository is now under Git, so the earlier pre-Git limitation no longer applies
+- Confirmed `npm run check:public-hygiene` still passes with tracked-history enforcement enabled
+- Removed stale `ClawMobile` naming from live source headers and the SuperAgent prompt
+- Removed stale contributor-facing provenance wording from the live `LlmService` header
+- Revalidated the canonical verification gate after the readiness cleanup
 
-### Fourth Pass Completed
+## Current Release Assessment
 
-- [x] Added a baseline ESLint and Prettier contributor workflow with `npm run lint`, `npm run format`, `npm run format:check`, and `npm run test:watch`
-- [x] Added explicit opt-in live-provider Jest scripts for Anthropic and native-provider validation
-- [x] Expanded CI to run install, lint, typecheck, and tests as separate steps
-- [x] Documented the live-provider test gates and required environment variables
-- [x] Corrected the tooling audit baseline to reflect the existing `.editorconfig`
+- Recovery status: the repository is no longer in the partially reverted state that triggered the restoration work
+- Production readiness: the default verification gate is green, public-hygiene checks pass, and the Android release build succeeds on this machine
+- Release discipline: publish from a clean verified commit once any active feature work is finalized
 
-### Fifth Pass Completed
+## Historical Baseline (2026-04-18)
 
-- [x] Fixed the `McpStatusScreen` async install/auth test flows so the prior `act(...)` warnings no longer appear
-- [x] Removed the specific StrictMode wrappers in noisy screen tests that only surfaced React Native `findNodeHandle` deprecation output
-- [x] Suppressed known expected green-run warning/log chatter in `jest.setup.ts` so contributors do not have to parse simulated warning paths on passing runs
-- [x] Revalidated the default repo gate after the cleanup (`244` suites passed, `2` skipped; `4307` tests passed, `3` skipped)
-
-### Sixth Pass Completed
-
-- [x] Added a shared scoped logger utility for internal diagnostics instead of duplicating ad hoc `__DEV__` console gates
-- [x] Routed orchestrator and sub-agent internal warning/debug output through the shared logger so those diagnostics stay dev-only
-- [x] Removed the now-redundant Jest suppression for orchestrator/sub-agent logging noise because those code paths are gated before emission
-
-### Seventh Pass Completed
-
-- [x] Added `npm run check:public-hygiene` plus CI enforcement so `_research/` is rejected if it ever enters tracked public history
-- [x] Recorded maintainer-attested first-party lineage in `THIRD_PARTY_PROVENANCE.md` and removed the pending-license placeholders for historically carried-forward modules
-- [x] Split parity SSH and Expo / EAS execution into dedicated domain modules under `src/engine/tools`
-- [x] Split browser and workspace execution out of `src/engine/tools/index.ts`
-- [x] Documented contributor-facing boundaries for the remaining large non-screen modules in `ARCHITECTURE.md`
-
-### External Publish-Time Handoff
-
-- [ ] Rename or recreate the hosted repository around the `Kavi` identity before the first public push
-
-## Executive Verdict
-
-This codebase is now close to publication-ready as an open source project.
-
-The repository currently opens without editor diagnostics, the default verification gate passes, TypeScript is strict, contributor-facing docs are in place, provenance is formalized, and the worst public-history and tool-engine structure gaps have been addressed.
-
-The only remaining blocker is external to the checked-in code: the eventual hosted repository should be created or renamed around the `Kavi` identity before the first public push.
-
-## Audit Snapshot
-
-Observed during this audit:
-
-- TypeScript/JS files under src + **tests**: 518
-- Test files under **tests**: 246
-- Approximate total lines across src + **tests**: 224,596
-- `npm test -- --runInBand`: passed
-- Test summary: 244 passed suites, 2 skipped suites, 4307 passed tests, 3 skipped tests
-- Test runtime: about 54 seconds
-- Editor diagnostics: none
-- Android release build: current shell context shows `npm run build:android:release` exited successfully on this machine
-
-Important limitation:
-
-- This workspace does not currently contain a `.git` directory, so this audit could not verify which generated/internal files are actually tracked in version control versus just present locally.
+The remaining sections below are kept as historical audit context only. They are not the current authoritative release verdict.
 
 ## What Is Already Strong
 

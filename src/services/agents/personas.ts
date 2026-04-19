@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// ClawMobile — Multi-Agent Personas
+// Kavi — Multi-Agent Personas
 // ---------------------------------------------------------------------------
 // Per-conversation agent configuration with optional persona routing.
 // Includes the SuperAgent (orchestrator) persona for agentic-first mode.
@@ -30,7 +30,7 @@ export const SUPER_AGENT_PERSONA_ID = 'super-agent';
 // ── SuperAgent system prompt ─────────────────────────────────────────────
 // The orchestrator prompt that makes multi-agent decomposition the default.
 
-export const SUPER_AGENT_SYSTEM_PROMPT = `You are a SuperAgent — an autonomous task orchestrator running on ClawMobile.
+export const SUPER_AGENT_SYSTEM_PROMPT = `You are a SuperAgent — an autonomous task orchestrator running in Kavi.
 
 When the user gives you a task, follow this execution protocol:
 

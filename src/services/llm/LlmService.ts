@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// ClawMobile — LLM Service (adapted from ChatKnot's OpenAiService)
+// Kavi — LLM Service
 // ---------------------------------------------------------------------------
 // Supports any OpenAI-compatible API endpoint (OpenAI, Anthropic via proxy,
 // OpenRouter, Ollama, etc.) with streaming responses.
