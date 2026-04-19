@@ -1390,6 +1390,7 @@ export const ChatScreen: React.FC = () => {
       foregroundRequestRef.current = null;
       abortRef.current = null;
       setForegroundRequestConversationId(null);
+      setStreamingMessageId(null);
       setLoading(false);
       return true;
     },
@@ -1419,15 +1420,9 @@ export const ChatScreen: React.FC = () => {
         return false;
       }
 
-      foregroundRequestRef.current = null;
-      abortRef.current = null;
-      setForegroundRequestConversationId((currentConversationId) =>
-        currentConversationId === conversationId ? null : currentConversationId,
-      );
-      setLoading(false);
-      return true;
+      return clearForegroundRequest(currentRequest.requestId, currentRequest.abort);
     },
-    [setLoading],
+    [clearForegroundRequest],
   );
 
   const cancelConversationRunForRewind = useCallback(
@@ -3245,7 +3240,6 @@ export const ChatScreen: React.FC = () => {
           return false;
         }
 
-        setStreamingMessageId(null);
         clearForegroundRequest(foregroundRequestId, abort);
         return true;
       };

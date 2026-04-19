@@ -140,6 +140,20 @@ jest.mock('../../src/components/chat/MessageBubble', () => {
         )
       : undefined;
 
+    if (isStreaming) {
+      nodes.push(
+        React.createElement(
+          View,
+          {
+            key: 'streaming',
+            testID: 'message-bubble-streaming',
+            accessibilityLabel: 'Assistant is typing',
+          },
+          React.createElement(Text, null, 'Working on it'),
+        ),
+      );
+    }
+
     pushText(nodes, seen, message?.content, 'message');
 
     for (const segment of responseSegments ?? []) {
@@ -6426,6 +6440,46 @@ describe('ChatScreen', () => {
         detail: 'The current run was cancelled and 1 background worker was stopped.',
       }),
     );
+  });
+
+  it('clears the streaming indicator when stopping an in-flight response', async () => {
+    mockDefaultConversationMode = 'direct';
+    mockRunOrchestrator.mockImplementationOnce(
+      async (options: any) =>
+        await new Promise<void>((resolve) => {
+          options.signal.signal.addEventListener(
+            'abort',
+            () => resolve(),
+            { once: true },
+          );
+        }),
+    );
+
+    const screen = render(<ChatScreen />);
+    fireEvent.changeText(screen.getByPlaceholderText('Message...'), 'Explain the cleanup');
+    fireEvent.press(screen.getByTestId('icon-Send').parent || screen.getByTestId('icon-Send'));
+
+    await waitFor(() => {
+      expect(mockRunOrchestrator).toHaveBeenCalledTimes(1);
+    });
+
+    const [, callbacks] = mockRunOrchestrator.mock.calls[0];
+    act(() => {
+      callbacks.onToken('Draft answer');
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('message-bubble-streaming')).toBeTruthy();
+    });
+
+    const stopIcon = screen.getByTestId('icon-Square');
+    fireEvent.press(stopIcon.parent || stopIcon);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('message-bubble-streaming')).toBeNull();
+    });
+
+    expect(mockSetLoading).toHaveBeenCalledWith(false);
   });
 
   it('cancels a running pilot-stage workflow even when activeAgentRunId is missing', () => {
