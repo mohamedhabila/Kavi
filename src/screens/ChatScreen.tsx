@@ -151,8 +151,6 @@ const MAX_LOG_DETAIL_CHARS = 320;
 const FINAL_RESPONSE_CHECKPOINT_TITLE = 'Final response delivered';
 const FINAL_RESPONSE_SYNTHESIS_TITLE = 'Final response synthesis started';
 const FINAL_RESPONSE_SYNTHESIS_DETAIL = 'Synthesizing final response from verified results.';
-const STRUCTURED_PLAN_CONTINUATION_CHECKPOINT_TITLE = 'Structured plan continuation queued';
-const MAX_STRUCTURED_PLAN_PROMPT_WORKSTREAMS = 6;
 
 type ResolvedFinalizationProviderContext = {
   provider: LlmProviderConfig;
@@ -418,77 +416,78 @@ function formatStructuredPlanBlockedWorkstream(
   return `- ${label}: blocked on ${workstream.unmetDependencyIds.join(', ')}.`;
 }
 
-function buildStructuredPlanContinuationPrompt(
-  run: Pick<AgentRun, 'goal' | 'plan'>,
+function buildStructuredPlanContinuationActionLines(
   continuation: WorkflowPlanContinuationResult,
-): string {
-  const completedLines = continuation.completedWorkstreams
-    .slice(0, MAX_STRUCTURED_PLAN_PROMPT_WORKSTREAMS)
-    .map((workstream) => `- ${workstream.title} [${workstream.workstreamId}]`);
-  const readyLines = continuation.readyWorkstreams
-    .slice(0, MAX_STRUCTURED_PLAN_PROMPT_WORKSTREAMS)
-    .map(formatStructuredPlanReadyWorkstream);
-  const blockedLines = continuation.blockedWorkstreams
-    .slice(0, MAX_STRUCTURED_PLAN_PROMPT_WORKSTREAMS)
-    .map(formatStructuredPlanBlockedWorkstream);
-  const runningLines = continuation.runningWorkstreams
-    .slice(0, MAX_STRUCTURED_PLAN_PROMPT_WORKSTREAMS)
-    .map(
-      (workstream) =>
-        `- ${buildStructuredPlanWorkstreamLabel(workstream)}: still marked running; inspect its latest state before starting duplicate work.`,
-    );
+): string[] {
+  const primaryReadyWorkstream = continuation.readyWorkstreams[0];
+  if (primaryReadyWorkstream) {
+    const label = buildStructuredPlanWorkstreamLabel(primaryReadyWorkstream);
+    if (primaryReadyWorkstream.status === 'failed') {
+      return [
+        `Primary next workstream: ${label}.`,
+        `For this response only, advance ${label} before doing any broad workflow review.`,
+        primaryReadyWorkstream.failedSessionIds.length > 0
+          ? `If you need failure context, inspect one failed session (${primaryReadyWorkstream.failedSessionIds.join(', ')}) with sessions_output and then, in the same response, continue ${label} with sessions_send or sessions_spawn.`
+          : `Continue or repair ${label} now with sessions_send when an existing session still has the needed context, otherwise sessions_spawn.`,
+        'Do not end the response after inspection alone.',
+        'Do not call sessions_status, sessions_wait, sessions_history, or sessions_yield before you have taken that next work action.',
+      ];
+    }
+
+    return [
+      `Primary next workstream: ${label}.`,
+      `For this response only, start or continue ${label} before doing any broad workflow review.`,
+      `If there is no suitable existing session for ${label}, call sessions_spawn for workstreamId "${primaryReadyWorkstream.workstreamId}" now.`,
+      'Do not call sessions_output, sessions_status, sessions_wait, sessions_history, or sessions_yield before you have launched or resumed that workstream.',
+    ];
+  }
+
+  const primaryRunningWorkstream = continuation.runningWorkstreams[0];
+  if (primaryRunningWorkstream) {
+    const label = buildStructuredPlanWorkstreamLabel(primaryRunningWorkstream);
+    return [
+      `Primary running workstream: ${label}.`,
+      `For this response only, inspect ${label} rather than re-reviewing the entire workflow.`,
+      `Use sessions_status or sessions_wait for ${label} before deciding any next step.`,
+      'Do not spawn duplicate work for the same workstream while it is still running.',
+    ];
+  }
+
+  const primaryBlockedWorkstream = continuation.blockedWorkstreams[0];
+  if (primaryBlockedWorkstream) {
+    const label = buildStructuredPlanWorkstreamLabel(primaryBlockedWorkstream);
+    const blockers = primaryBlockedWorkstream.unmetDependencyIds.join(', ');
+    return [
+      `Primary blocker: ${label} is blocked on ${blockers}.`,
+      'For this response only, resolve the blocking prerequisite instead of re-reviewing the entire workflow.',
+      blockers
+        ? `Advance one unmet dependency workstream first: ${blockers}.`
+        : 'Identify the missing prerequisite work before considering Pilot.',
+      'Do not hand the run to Pilot while required workstreams remain blocked or incomplete.',
+    ];
+  }
 
   return [
-    '## Workflow Continuation',
-    'The structured plan is not complete yet, so do not hand this run to Pilot.',
-    'Continue this existing workflow run from its current state.',
-    'Treat this as follow-up continuation work, not a restart or redo.',
-    'Preserve completed workstreams and previously verified findings unless they are proven incorrect.',
-    run.plan?.objective ? `Plan objective: ${run.plan.objective}` : undefined,
-    run.goal?.trim() ? `User goal: ${run.goal.trim()}` : undefined,
-    `Current plan status: ${continuation.summary}`,
-    completedLines.length > 0
-      ? ['Completed workstreams:', ...completedLines].join('\n')
-      : undefined,
-    readyLines.length > 0 ? ['Ready remaining workstreams:', ...readyLines].join('\n') : undefined,
-    blockedLines.length > 0
-      ? ['Blocked remaining workstreams:', ...blockedLines].join('\n')
-      : undefined,
-    runningLines.length > 0 ? ['Running workstreams:', ...runningLines].join('\n') : undefined,
-    [
-      'Continuation rules:',
-      '- Do not respawn completed workstreams.',
-      '- When a ready workstream already has a failed session trail, inspect its output first and continue or repair that same workstream before inventing a replacement plan.',
-      '- Prefer sessions_output to inspect prior worker deliverables, sessions_surface_output when an existing worker deliverable should become the visible answer directly, and sessions_send for focused follow-up when the existing worker context is sufficient.',
-      '- Only hand the run to Pilot after every required structured workstream is complete and you have a real delivery candidate.',
-    ].join('\n'),
-  ]
-    .filter(Boolean)
-    .join('\n\n');
+    'For this response only, either advance the next remaining workstream or surface the concrete blocker from tool evidence before considering Pilot.',
+  ];
 }
 
-function buildStructuredPlanContinuationUserPrompt(
+function buildStructuredPlanPilotReviewPerspective(
+  continuation: WorkflowPlanContinuationResult,
+): { summary: string; nextActions: string[] } {
+  return {
+    summary: continuation.summary,
+    nextActions: buildStructuredPlanContinuationActionLines(continuation),
+  };
+}
+
+function buildStructuredPlanPilotCandidateOutcomeSummary(
+  summary: string,
   continuation: WorkflowPlanContinuationResult,
 ): string {
-  const readyLines = continuation.readyWorkstreams
-    .slice(0, MAX_STRUCTURED_PLAN_PROMPT_WORKSTREAMS)
-    .map(formatStructuredPlanReadyWorkstream);
-  const blockedLines = continuation.blockedWorkstreams
-    .slice(0, MAX_STRUCTURED_PLAN_PROMPT_WORKSTREAMS)
-    .map(formatStructuredPlanBlockedWorkstream);
-
-  return [
-    'Continue the same workflow run from the remaining structured plan work.',
-    'This is a follow-up continuation, not a redo.',
-    `Current plan status: ${continuation.summary}`,
-    readyLines.length > 0
-      ? ['Ready remaining workstreams:', ...readyLines].join('\n')
-      : 'No ready workstreams are currently unblocked; inspect the blockers and prior outputs before choosing the next repair step.',
-    blockedLines.length > 0 ? ['Blocked workstreams:', ...blockedLines].join('\n') : undefined,
-    'Do not restart completed workstreams. Prefer additive follow-up on the existing run and only go to Pilot after the full structured plan is complete.',
-  ]
-    .filter(Boolean)
-    .join('\n\n');
+  return [summary.trim(), `Structured plan review: ${continuation.summary}`]
+    .filter((section) => section.length > 0)
+    .join(' ');
 }
 
 function buildCancelledRunSummary(cancelledWorkerCount: number): string {
@@ -1447,111 +1446,6 @@ export const ChatScreen: React.FC = () => {
     [abortForegroundRequestForConversation],
   );
 
-  const queueStructuredPlanContinuation = useCallback(
-    async (params: {
-      conversation: Conversation;
-      run: AgentRun;
-      continuation: WorkflowPlanContinuationResult;
-      timestamp: number;
-      signal?: AbortSignal;
-      clearAwaitingBackgroundWorkers?: boolean;
-    }): Promise<boolean> => {
-      const resumeAgentRun = resumeAgentRunRef.current;
-      if (!resumeAgentRun) {
-        return false;
-      }
-
-      const resumableDraftMessageId = findLatestAgentRunAssistantMessageId(
-        params.conversation.messages,
-        params.run.userMessageId,
-      );
-      const resumableDraftMessage = resumableDraftMessageId
-        ? params.conversation.messages.find((candidate) => candidate.id === resumableDraftMessageId)
-        : undefined;
-
-      if (
-        resumableDraftMessageId &&
-        resumableDraftMessage &&
-        isReusableAgentRunAssistantMessage(resumableDraftMessage) &&
-        hasVisibleAssistantOutput(resumableDraftMessage) &&
-        resumableDraftMessage.assistantMetadata?.completionStatus !== 'incomplete'
-      ) {
-        updateMessageAssistantMetadata(
-          params.conversation.id,
-          resumableDraftMessageId,
-          buildAssistantMessageMetadata('final', {
-            completionStatus: 'incomplete',
-            finishReason: 'pilot_review_pending',
-          }),
-        );
-      }
-
-      if (params.clearAwaitingBackgroundWorkers) {
-        setAgentRunAwaitingBackgroundWorkers(
-          params.conversation.id,
-          false,
-          {
-            latestSummary: params.continuation.summary,
-            checkpointTitle: STRUCTURED_PLAN_CONTINUATION_CHECKPOINT_TITLE,
-            checkpointDetail: params.continuation.summary,
-            timestamp: params.timestamp,
-          },
-          params.run.id,
-        );
-      }
-
-      setAgentRunPhase(
-        params.conversation.id,
-        'work',
-        {
-          status: 'active',
-          detail: params.continuation.summary,
-          checkpointTitle: STRUCTURED_PLAN_CONTINUATION_CHECKPOINT_TITLE,
-          checkpointDetail: params.continuation.summary,
-          timestamp: params.timestamp,
-        },
-        params.run.id,
-      );
-      updateAgentRunSummary(
-        params.conversation.id,
-        {
-          latestSummary: params.continuation.summary,
-          timestamp: params.timestamp,
-        },
-        params.run.id,
-      );
-      appendConversationLog(params.conversation.id, {
-        kind: 'state',
-        level: 'warning',
-        title: STRUCTURED_PLAN_CONTINUATION_CHECKPOINT_TITLE,
-        detail: params.continuation.summary,
-        timestamp: params.timestamp,
-      });
-
-      throwIfAbortSignalTriggered(params.signal);
-
-      await resumeAgentRun({
-        conversationId: params.conversation.id,
-        runId: params.run.id,
-        additionalSystemPrompt: buildStructuredPlanContinuationPrompt(
-          params.run,
-          params.continuation,
-        ),
-        additionalUserPrompt: buildStructuredPlanContinuationUserPrompt(params.continuation),
-      });
-
-      throwIfAbortSignalTriggered(params.signal);
-      return true;
-    },
-    [
-      appendConversationLog,
-      setAgentRunAwaitingBackgroundWorkers,
-      setAgentRunPhase,
-      updateAgentRunSummary,
-      updateMessageAssistantMetadata,
-    ],
-  );
-
   const queueTerminalBackgroundReview = useCallback(
     (params: { conversationId: string; runId: string; timestamp?: number }): Promise<void> => {
       const inFlight = pendingAgentRunPilotResumesRef.current.get(params.runId);
@@ -1597,6 +1491,10 @@ export const ChatScreen: React.FC = () => {
           const effectiveSubAgents = hasOrphanedRunningSnapshots
             ? reviewableSubAgents.filter((snapshot) => snapshot.status !== 'running')
             : reviewableSubAgents;
+          const planContinuation = evaluateWorkflowPlanContinuation({
+            plan: targetRun.plan,
+            workers: effectiveSubAgents,
+          });
           const candidateOutcome =
             reviewableSubAgents.length === 0
               ? {
@@ -1610,24 +1508,10 @@ export const ChatScreen: React.FC = () => {
                       'Background worker state became orphaned before completion could be confirmed.',
                   }
                 : summarizeBackgroundWorkerSnapshots([...effectiveSubAgents]);
-
-          const planContinuation = evaluateWorkflowPlanContinuation({
-            plan: targetRun.plan,
-            workers: effectiveSubAgents,
-          });
-          if (planContinuation.status === 'continue') {
-            const resumed = await queueStructuredPlanContinuation({
-              conversation: latestConversation,
-              run: targetRun,
-              continuation: planContinuation,
-              timestamp: reviewTimestamp,
-              signal: operation.signal,
-              clearAwaitingBackgroundWorkers: true,
-            });
-            if (resumed) {
-              return;
-            }
-          }
+            const reviewPerspective =
+              planContinuation.status === 'continue'
+                ? buildStructuredPlanPilotReviewPerspective(planContinuation)
+                : undefined;
 
           const evidence = collectAgentRunFinalizationEvidence(
             latestConversation.messages,
@@ -1644,7 +1528,16 @@ export const ChatScreen: React.FC = () => {
             run: targetRun,
             workers: effectiveSubAgents,
             evidence,
-            candidateOutcome,
+            candidateOutcome: reviewPerspective
+              ? {
+                  ...candidateOutcome,
+                  summary: buildStructuredPlanPilotCandidateOutcomeSummary(
+                    candidateOutcome.summary,
+                    planContinuation,
+                  ),
+                }
+              : candidateOutcome,
+            reviewPerspective,
             providerContext,
             signal: operation.signal,
             onUsage: providerContext
@@ -1855,7 +1748,6 @@ export const ChatScreen: React.FC = () => {
     [
       appendConversationLog,
       completeAgentRun,
-      queueStructuredPlanContinuation,
       setAgentRunAwaitingBackgroundWorkers,
       setAgentRunPhase,
       updateAgentRunSummary,
@@ -2138,6 +2030,7 @@ export const ChatScreen: React.FC = () => {
           status: 'active',
           detail: update.detail,
           timestamp: update.timestamp,
+          allowRegression: true,
         },
         update.runId,
       );
@@ -2356,6 +2249,7 @@ export const ChatScreen: React.FC = () => {
             checkpointDetail: lifecycleSummary,
             checkpointKind: 'sub-agent',
             timestamp: event === 'started' ? agent.startedAt : agent.updatedAt,
+            allowRegression: lifecyclePhase === 'work',
           },
           targetAgentRunId,
         );
@@ -3481,6 +3375,7 @@ export const ChatScreen: React.FC = () => {
             detail: normalizedDetail,
             checkpointTitle: hasEnteredWorkPhase ? undefined : (checkpointTitle ?? 'Work started'),
             checkpointDetail: normalizedDetail,
+            allowRegression: true,
           },
           trackedAgentRunId,
         );
@@ -3705,16 +3600,10 @@ export const ChatScreen: React.FC = () => {
           };
         }
 
-        if (planContinuation.status === 'continue') {
-          return {
-            status: 'failed',
-            checkpointTitle: STRUCTURED_PLAN_CONTINUATION_CHECKPOINT_TITLE,
-            checkpointDetail: planContinuation.summary,
-            resumePrompt: buildStructuredPlanContinuationPrompt(targetRun, planContinuation),
-            resumeUserPrompt: buildStructuredPlanContinuationUserPrompt(planContinuation),
-            resumePhase: 'work',
-          };
-        }
+        const reviewPerspective =
+          planContinuation.status === 'continue'
+            ? buildStructuredPlanPilotReviewPerspective(planContinuation)
+            : undefined;
 
         const pilotDecision = await evaluateAgentRunWithPilot({
           run: targetRun,
@@ -3722,9 +3611,14 @@ export const ChatScreen: React.FC = () => {
           workers: effectiveSubAgents,
           candidateOutcome: {
             status: 'completed',
-            summary:
-              'The supervisor response stream was interrupted after the workflow gathered verified results. Decide whether the task is already complete from the current evidence or whether more work is still required.',
+            summary: reviewPerspective
+              ? buildStructuredPlanPilotCandidateOutcomeSummary(
+                  'The supervisor response stream was interrupted after the workflow gathered verified results. Decide whether the task is already complete from the current evidence or whether more work is still required.',
+                  planContinuation,
+                )
+              : 'The supervisor response stream was interrupted after the workflow gathered verified results. Decide whether the task is already complete from the current evidence or whether more work is still required.',
           },
+          reviewPerspective,
           providerContext: finalizationProviderContext,
           signal: abort.signal,
           onUsage: (usage) => {
@@ -4564,22 +4458,10 @@ export const ChatScreen: React.FC = () => {
                       plan: targetRun.plan,
                       workers: effectiveSubAgents,
                     });
-                    if (planContinuation.status === 'continue') {
-                      clearForegroundRequestIfCurrent();
-
-                      throwIfAbortSignalTriggered(abort.signal);
-
-                      const resumed = await queueStructuredPlanContinuation({
-                        conversation: latestConversation,
-                        run: targetRun,
-                        continuation: planContinuation,
-                        timestamp: Date.now(),
-                        signal: abort.signal,
-                      });
-                      if (resumed) {
-                        return;
-                      }
-                    }
+                    const reviewPerspective =
+                      planContinuation.status === 'continue'
+                        ? buildStructuredPlanPilotReviewPerspective(planContinuation)
+                        : undefined;
 
                     const evidence = collectAgentRunFinalizationEvidence(
                       latestConversation.messages,
@@ -4593,8 +4475,14 @@ export const ChatScreen: React.FC = () => {
                       workers: effectiveSubAgents,
                       candidateOutcome: {
                         status: 'completed',
-                        summary: turnSummary,
+                        summary: reviewPerspective
+                          ? buildStructuredPlanPilotCandidateOutcomeSummary(
+                              turnSummary,
+                              planContinuation,
+                            )
+                          : turnSummary,
                       },
+                      reviewPerspective,
                       providerContext: finalizationProviderContext,
                       signal: abort.signal,
                       onUsage: (usage) => {
@@ -4921,7 +4809,6 @@ export const ChatScreen: React.FC = () => {
       ensureAgentRunFinalResponse,
       clearStreamingDraft,
       mergeStreamingDraft,
-      queueStructuredPlanContinuation,
       registerForegroundRequest,
       isCurrentForegroundRequest,
       clearForegroundRequest,

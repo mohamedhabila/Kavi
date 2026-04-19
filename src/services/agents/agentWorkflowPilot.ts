@@ -865,11 +865,17 @@ export interface AgentRunPilotDecision {
   evaluation: AgentRunPilotEvaluation;
 }
 
+interface AgentRunPilotReviewPerspective {
+  summary: string;
+  nextActions?: string[];
+}
+
 interface PilotDecisionParams {
   run: Pick<AgentRun, 'goal' | 'plan' | 'checkpoints' | 'updatedAt' | 'summary' | 'latestPilotEvaluation' | 'evidence'>;
   evidence: AgentRunFinalizationEvidence;
   candidateOutcome: { status: Exclude<AgentRunStatus, 'running'>; summary: string };
   workers?: ReadonlyArray<SubAgentSnapshot>;
+  reviewPerspective?: AgentRunPilotReviewPerspective;
   providerContext?: AgentRunPilotProviderContext;
   signal?: AbortSignal;
   onUsage?: (usage: TokenUsage) => void;
@@ -895,6 +901,21 @@ function normalizeStringList(value: unknown): string[] {
 
   return value
     .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+    .filter(Boolean)
+    .slice(0, MAX_LIST_ITEMS);
+}
+
+function normalizeReviewPerspectiveSummary(
+  reviewPerspective: AgentRunPilotReviewPerspective | undefined,
+): string {
+  return reviewPerspective?.summary?.trim() || '';
+}
+
+function normalizeReviewPerspectiveNextActions(
+  reviewPerspective: AgentRunPilotReviewPerspective | undefined,
+): string[] {
+  return (reviewPerspective?.nextActions ?? [])
+    .map((entry) => entry.trim())
     .filter(Boolean)
     .slice(0, MAX_LIST_ITEMS);
 }
@@ -1274,6 +1295,7 @@ function buildPilotStateSignature(params: {
   evidence: AgentRunFinalizationEvidence;
   candidateOutcome: { status: Exclude<AgentRunStatus, 'running'>; summary: string };
   workers: ReadonlyArray<SubAgentSnapshot>;
+  reviewPerspective?: AgentRunPilotReviewPerspective;
 }): string {
   const previewEntries = new Map<string, string>();
   for (const entry of params.evidence.resultPreviews) {
@@ -1308,6 +1330,8 @@ function buildPilotStateSignature(params: {
     candidateStatus: params.candidateOutcome.status,
     workerState: buildWorkerStateSignature(params.workers),
     previewState: previewSignature,
+    reviewPerspective: normalizeReviewPerspectiveSummary(params.reviewPerspective),
+    reviewNextActions: normalizeReviewPerspectiveNextActions(params.reviewPerspective).join('|'),
     structuredEvidenceState: buildStructuredWorkflowEvidenceSignature(params.run),
     toolState: toolSignature,
     visibleDraftState: normalizePilotDraftSignatureText(params.evidence.lastNonEmptyAssistantContent),
@@ -1320,12 +1344,14 @@ function hasPilotReviewedCurrentState(
   workers: ReadonlyArray<SubAgentSnapshot>,
   evidence: AgentRunFinalizationEvidence,
   candidateOutcome: { status: Exclude<AgentRunStatus, 'running'>; summary: string },
+  reviewPerspective?: AgentRunPilotReviewPerspective,
 ): boolean {
   const currentStateSignature = buildPilotStateSignature({
     run,
     workers,
     evidence,
     candidateOutcome,
+    reviewPerspective,
   });
   const cachedStateSignature = run.latestPilotEvaluation?.stateSignature?.trim();
   if (cachedStateSignature) {
@@ -1571,6 +1597,26 @@ function buildSuccessCriteriaSection(run: Pick<AgentRun, 'goal' | 'plan'>): stri
   return lines.join('\n');
 }
 
+function buildReviewPerspectiveSection(
+  reviewPerspective: AgentRunPilotReviewPerspective | undefined,
+): string | undefined {
+  const summary = normalizeReviewPerspectiveSummary(reviewPerspective);
+  const nextActions = normalizeReviewPerspectiveNextActions(reviewPerspective);
+  if (!summary && nextActions.length === 0) {
+    return undefined;
+  }
+
+  return [
+    'Review perspective from the runtime:',
+    summary ? `- ${summary}` : undefined,
+    nextActions.length > 0
+      ? ['Review-recommended next actions:', ...nextActions.map((action) => `- ${action}`)].join('\n')
+      : undefined,
+  ]
+    .filter((section): section is string => Boolean(section))
+    .join('\n');
+}
+
 function buildProcessSummary(params: {
   run: Pick<AgentRun, 'goal' | 'plan' | 'summary' | 'evidence'>;
   workers: ReadonlyArray<SubAgentSnapshot>;
@@ -1665,6 +1711,7 @@ async function buildPilotEvaluationPrompt(params: PilotDecisionParams): Promise<
     includeContent: true,
     heading: 'Structured workflow evidence:',
   });
+  const reviewPerspectiveSection = buildReviewPerspectiveSection(params.reviewPerspective);
   const memoryContextSection = await buildPilotMemoryContextSection(params.providerContext);
   const requestGovernanceSection = buildRequestGovernancePromptSection(params);
   const baseSections = [
@@ -1688,6 +1735,7 @@ async function buildPilotEvaluationPrompt(params: PilotDecisionParams): Promise<
       delegationRequired,
       delegatedWorkObserved,
     }),
+    reviewPerspectiveSection,
     requestGovernanceSection,
     researchIntegrity.gaps.length > 0
       ? ['Current research integrity gaps:', ...researchIntegrity.gaps.map((gap) => `- ${gap}`)].join('\n')
@@ -1829,7 +1877,7 @@ function buildPilotEvaluatorFailure(
         return `${label} returned no schema-complete ${PILOT_TOOL_NAME} payload.`;
       }
 
-      const errorDetail = truncateText(attempt.detail?.trim(), 220);
+      const errorDetail = attempt.detail?.trim();
       return errorDetail
         ? `${label} failed: ${errorDetail}`
         : `${label} failed before returning a response.`;
@@ -1845,6 +1893,7 @@ function buildPilotEvaluatorFailure(
 
 async function invokePilotEvaluator(params: Required<Pick<PilotDecisionParams, 'run' | 'evidence' | 'candidateOutcome' | 'providerContext'>> & {
   workers: ReadonlyArray<SubAgentSnapshot>;
+  reviewPerspective?: AgentRunPilotReviewPerspective;
   signal?: AbortSignal;
   onUsage?: (usage: TokenUsage) => void;
 }): Promise<PilotEvaluatorInvocationResult> {
@@ -2014,7 +2063,7 @@ async function invokePilotEvaluator(params: Required<Pick<PilotDecisionParams, '
   return { failure: buildPilotEvaluatorFailure(attempts) };
 }
 
-function buildHeuristicCriterionEvaluations(params: Pick<PilotDecisionParams, 'run' | 'evidence' | 'candidateOutcome' | 'workers'>): AgentRunPilotCriterionEvaluation[] {
+function buildHeuristicCriterionEvaluations(params: Pick<PilotDecisionParams, 'run' | 'evidence' | 'candidateOutcome' | 'workers' | 'reviewPerspective'>): AgentRunPilotCriterionEvaluation[] {
   const successCriteria = getSuccessCriteria(params.run);
   const hasVerifiedEvidence = hasVerifiedFinalizationEvidence(params.evidence)
     || hasStructuredVerifiedWorkflowEvidence(params.run);
@@ -2024,8 +2073,10 @@ function buildHeuristicCriterionEvaluations(params: Pick<PilotDecisionParams, 'r
   });
   const hasResearchIntegrityGaps = researchIntegrity.gaps.length > 0;
   const hasPilotReadyEvidence = hasVerifiedEvidence && !hasResearchIntegrityGaps;
+  const reviewPerspectiveSummary = normalizeReviewPerspectiveSummary(params.reviewPerspective);
   const hasIncompleteReviewWork = params.evidence.hasIncompleteToolCalls
-    || (params.workers ?? []).some((worker) => worker.status === 'running');
+    || (params.workers ?? []).some((worker) => worker.status === 'running')
+    || reviewPerspectiveSummary.length > 0;
 
   return successCriteria.map((criterion) => {
     const score = params.candidateOutcome.status === 'completed'
@@ -2044,7 +2095,9 @@ function buildHeuristicCriterionEvaluations(params: Pick<PilotDecisionParams, 'r
       rationale: params.candidateOutcome.status === 'completed'
         ? hasPilotReadyEvidence
           ? hasIncompleteReviewWork
-            ? 'Verified evidence exists, but in-flight work still remains, so the run is not ready for final delivery.'
+            ? reviewPerspectiveSummary.length > 0
+              ? `Verified evidence exists, but the runtime review still reports unfinished work. ${reviewPerspectiveSummary}`
+              : 'Verified evidence exists, but in-flight work still remains, so the run is not ready for final delivery.'
             : 'Verified evidence exists and the run appears complete enough for heuristic approval.'
           : hasResearchIntegrityGaps
             ? 'The workflow produced a draft, but the user-visible answer still contains uncited or unsupported research claims.'
@@ -2054,7 +2107,7 @@ function buildHeuristicCriterionEvaluations(params: Pick<PilotDecisionParams, 'r
   });
 }
 
-function buildHeuristicPilotEvaluation(params: Pick<PilotDecisionParams, 'run' | 'evidence' | 'candidateOutcome' | 'workers'>): AgentRunPilotEvaluation {
+function buildHeuristicPilotEvaluation(params: Pick<PilotDecisionParams, 'run' | 'evidence' | 'candidateOutcome' | 'workers' | 'reviewPerspective'>): AgentRunPilotEvaluation {
   const hasVerifiedEvidence = hasVerifiedFinalizationEvidence(params.evidence)
     || hasStructuredVerifiedWorkflowEvidence(params.run);
   const researchIntegrity = buildResearchIntegrityAssessment({
@@ -2063,8 +2116,11 @@ function buildHeuristicPilotEvaluation(params: Pick<PilotDecisionParams, 'run' |
   });
   const hasResearchIntegrityGaps = researchIntegrity.gaps.length > 0;
   const hasPilotReadyEvidence = hasVerifiedEvidence && !hasResearchIntegrityGaps;
+  const reviewPerspectiveSummary = normalizeReviewPerspectiveSummary(params.reviewPerspective);
+  const reviewPerspectiveNextActions = normalizeReviewPerspectiveNextActions(params.reviewPerspective);
   const hasIncompleteReviewWork = params.evidence.hasIncompleteToolCalls
-    || (params.workers ?? []).some((worker) => worker.status === 'running');
+    || (params.workers ?? []).some((worker) => worker.status === 'running')
+    || reviewPerspectiveSummary.length > 0;
   const delegationRequired = requiresDelegationForPilotReview({
     run: params.run,
     evidence: params.evidence,
@@ -2114,7 +2170,11 @@ function buildHeuristicPilotEvaluation(params: Pick<PilotDecisionParams, 'run' |
     ? []
     : mergeUniqueStringLists(
         hasIncompleteReviewWork
-          ? ['In-flight work still remains, so final delivery would be premature.']
+          ? [
+              reviewPerspectiveSummary.length > 0
+                ? `Runtime review still sees unfinished work: ${reviewPerspectiveSummary}`
+                : 'In-flight work still remains, so final delivery would be premature.',
+            ]
           : [],
         missingDelegation
           ? ['Agent mode expected a focused worker for this non-trivial task before final delivery.']
@@ -2128,7 +2188,12 @@ function buildHeuristicPilotEvaluation(params: Pick<PilotDecisionParams, 'run' |
     ? []
     : mergeUniqueStringLists(
         hasIncompleteReviewWork
-          ? ['Preserve the current outputs and continue monitoring incomplete workers or tool activity until they reach a terminal state before finalizing.']
+          ? [
+              ...reviewPerspectiveNextActions,
+              reviewPerspectiveSummary.length > 0
+                ? 'Preserve the current outputs and continue the remaining structured workflow work before finalizing.'
+                : 'Preserve the current outputs and continue monitoring incomplete workers or tool activity until they reach a terminal state before finalizing.',
+            ]
           : [],
         missingDelegation
           ? ['Keep the current plan and verified findings, then delegate the remaining gap-closing work to a focused sub-agent instead of finishing solo.']
@@ -2170,7 +2235,9 @@ function buildHeuristicPilotEvaluation(params: Pick<PilotDecisionParams, 'run' |
       : missingDelegation
         ? 'Heuristic pilot review found a delegation gap before final delivery.'
       : params.candidateOutcome.status === 'completed' && hasIncompleteReviewWork
-        ? 'Heuristic pilot review found in-flight work, so final delivery is not ready yet.'
+        ? reviewPerspectiveSummary.length > 0
+          ? 'Heuristic pilot review found unfinished structured workflow work, so final delivery is not ready yet.'
+          : 'Heuristic pilot review found in-flight work, so final delivery is not ready yet.'
       : params.candidateOutcome.status === 'completed'
         ? 'Heuristic pilot review found remaining gaps before final delivery.'
         : 'Heuristic pilot review found a failed or cancelled outcome that needs recovery or a blocker report.',
@@ -2183,7 +2250,9 @@ function buildHeuristicPilotEvaluation(params: Pick<PilotDecisionParams, 'run' |
       : missingDelegation
         ? 'The workflow gathered evidence, but it stayed solo on a non-trivial Agent mode task that should have been delegated before approval.'
       : params.candidateOutcome.status === 'completed' && hasIncompleteReviewWork
-        ? 'Verified evidence exists, but Pilot should wait for the remaining in-flight work to reach a terminal state before approving final delivery.'
+        ? reviewPerspectiveSummary.length > 0
+          ? `Verified evidence exists, but Pilot should continue the unfinished structured workflow work before approving final delivery. ${reviewPerspectiveSummary}`
+          : 'Verified evidence exists, but Pilot should wait for the remaining in-flight work to reach a terminal state before approving final delivery.'
       : 'The heuristic fallback does not have enough verified evidence or a successful enough outcome to approve finalization.',
     source: 'heuristic',
     stateSignature: buildPilotStateSignature({
@@ -2191,6 +2260,7 @@ function buildHeuristicPilotEvaluation(params: Pick<PilotDecisionParams, 'run' |
       evidence: params.evidence,
       candidateOutcome: params.candidateOutcome,
       workers: params.workers ?? [],
+      reviewPerspective: params.reviewPerspective,
     }),
     strengths: approved ? ['Verified evidence was captured.', 'No in-flight work remained at review time.', 'Delegated worker activity supported the final result.'] : [],
     gaps,
@@ -2228,7 +2298,7 @@ function buildPilotUnavailableNextAction(reason: AgentRunPilotFallbackReason): s
 }
 
 function buildHeuristicPilotFallbackEvaluation(
-  params: Pick<PilotDecisionParams, 'run' | 'evidence' | 'candidateOutcome' | 'workers'> & {
+  params: Pick<PilotDecisionParams, 'run' | 'evidence' | 'candidateOutcome' | 'workers' | 'reviewPerspective'> & {
     reason: AgentRunPilotFallbackReason;
     providerContext?: AgentRunPilotProviderContext;
     detail?: string;
@@ -2247,11 +2317,12 @@ function buildHeuristicPilotFallbackEvaluation(
     summary: `Heuristic fallback used because the live pilot assessment was unavailable. ${heuristicEvaluation.summary}`,
     rationale: `${unavailableRationale} ${heuristicEvaluation.rationale}`,
     fallbackReason: params.reason,
+    fallbackDetail: params.detail?.trim() || undefined,
   };
 }
 
 function buildLivePilotUnavailableFallbackEvaluation(
-  params: Pick<PilotDecisionParams, 'run' | 'evidence' | 'candidateOutcome' | 'workers'> & {
+  params: Pick<PilotDecisionParams, 'run' | 'evidence' | 'candidateOutcome' | 'workers' | 'reviewPerspective'> & {
     reason: AgentRunPilotFallbackReason;
     providerContext?: AgentRunPilotProviderContext;
     detail?: string;
@@ -2260,7 +2331,7 @@ function buildLivePilotUnavailableFallbackEvaluation(
   return buildHeuristicPilotFallbackEvaluation(params);
 }
 
-function buildPilotUnavailableEvaluation(params: Pick<PilotDecisionParams, 'run' | 'evidence' | 'candidateOutcome' | 'workers'> & {
+function buildPilotUnavailableEvaluation(params: Pick<PilotDecisionParams, 'run' | 'evidence' | 'candidateOutcome' | 'workers' | 'reviewPerspective'> & {
   reason: AgentRunPilotFallbackReason;
   providerContext?: AgentRunPilotProviderContext;
   detail?: string;
@@ -2301,16 +2372,94 @@ function buildPilotUnavailableEvaluation(params: Pick<PilotDecisionParams, 'run'
     rationale,
     source: 'unavailable',
     fallbackReason: params.reason,
+    fallbackDetail: params.detail?.trim() || undefined,
     stateSignature: buildPilotStateSignature({
       run: params.run,
       evidence: params.evidence,
       candidateOutcome: params.candidateOutcome,
       workers: params.workers ?? [],
+      reviewPerspective: params.reviewPerspective,
     }),
     strengths: [],
     gaps: ['A real pilot assessment was not produced, so final delivery must remain blocked.'],
     nextActions: [nextAction],
     criterionEvaluations,
+  };
+}
+
+function applyReviewPerspectivePilotGuardrails(
+  evaluation: AgentRunPilotEvaluation,
+  params: Pick<PilotDecisionParams, 'candidateOutcome' | 'reviewPerspective'>,
+): AgentRunPilotEvaluation {
+  const reviewPerspectiveSummary = normalizeReviewPerspectiveSummary(params.reviewPerspective);
+  const reviewPerspectiveNextActions = normalizeReviewPerspectiveNextActions(
+    params.reviewPerspective,
+  );
+  if (!reviewPerspectiveSummary) {
+    return evaluation;
+  }
+
+  const mergedGaps = mergeUniqueStringLists(
+    [`Runtime review reported unfinished structured workflow work: ${reviewPerspectiveSummary}`],
+    evaluation.gaps,
+  ).slice(0, MAX_LIST_ITEMS);
+  const mergedNextActions = mergeUniqueStringLists(
+    reviewPerspectiveNextActions,
+    evaluation.nextActions,
+  ).slice(0, MAX_LIST_ITEMS);
+
+  if (
+    params.candidateOutcome.status !== 'cancelled'
+    && (evaluation.approved || evaluation.controlAction === 'accept')
+  ) {
+    const completionScore = Math.min(evaluation.completionScore, 3);
+    const adherenceScore = Math.min(evaluation.adherenceScore, 3);
+    const evidenceScore = Math.min(evaluation.evidenceScore, 4);
+    const processScore = Math.min(evaluation.processScore, 3);
+    const overallScore = completionScore + adherenceScore + evidenceScore + processScore;
+    const recommendedAction: AgentRunPilotRecommendedAction = 'continue';
+    const approved = false;
+
+    return {
+      ...evaluation,
+      completionScore,
+      adherenceScore,
+      evidenceScore,
+      processScore,
+      overallScore,
+      approved,
+      recommendedAction,
+      controlAction: derivePilotControlAction({
+        recommendedAction,
+        approved,
+        candidateStatus: params.candidateOutcome.status,
+      }),
+      confidence: evaluation.confidence === 'high' ? 'medium' : evaluation.confidence,
+      summary:
+        'Pilot found unfinished structured workflow work, so the run must continue before final delivery.',
+      rationale: `${evaluation.rationale} Runtime review perspective: ${reviewPerspectiveSummary}`.trim(),
+      gaps: mergedGaps,
+      nextActions:
+        mergedNextActions.length > 0
+          ? mergedNextActions
+          : ['Continue the remaining structured workflow work before attempting final delivery.'],
+      criterionEvaluations: evaluation.criterionEvaluations.map((criterion) => ({
+        ...criterion,
+        score: Math.min(criterion.score, 3),
+        status: criterion.score >= 4 ? 'partial' : criterion.status,
+        rationale:
+          criterion.score >= 4
+            ? `${criterion.rationale} Runtime review still shows unfinished structured workflow work.`
+            : criterion.rationale,
+      })),
+    };
+  }
+
+  return {
+    ...evaluation,
+    rationale: `${evaluation.rationale} Runtime review perspective: ${reviewPerspectiveSummary}`.trim(),
+    gaps: mergedGaps,
+    nextActions: mergedNextActions.length > 0 ? mergedNextActions : evaluation.nextActions,
   };
 }
 
@@ -2666,7 +2815,7 @@ function normalizeCriterionEvaluations(
 
 function normalizePilotEvaluation(
   raw: Record<string, unknown> | undefined,
-  params: Pick<PilotDecisionParams, 'run' | 'candidateOutcome' | 'evidence' | 'workers'>,
+  params: Pick<PilotDecisionParams, 'run' | 'candidateOutcome' | 'evidence' | 'workers' | 'reviewPerspective'>,
 ): AgentRunPilotEvaluation {
   if (!raw) {
     throw new Error('Missing pilot evaluation payload.');
@@ -2724,6 +2873,7 @@ function normalizePilotEvaluation(
       evidence: params.evidence,
       candidateOutcome: params.candidateOutcome,
       workers: params.workers ?? [],
+      reviewPerspective: params.reviewPerspective,
     }),
     strengths: normalizeStringList(raw.strengths),
     gaps: normalizeStringList(raw.gaps),
@@ -2822,6 +2972,7 @@ function buildPilotResumePrompt(params: {
   evidence: AgentRunFinalizationEvidence;
   candidateOutcome: { status: Exclude<AgentRunStatus, 'running'>; summary: string };
   evaluation: AgentRunPilotEvaluation;
+  reviewPerspective?: AgentRunPilotReviewPerspective;
   disableToolsOnResume?: boolean;
 }): string {
   const correctionCycle = countPilotReviewCheckpoints(params.run) + 1;
@@ -2837,6 +2988,7 @@ function buildPilotResumePrompt(params: {
     includeContent: true,
     heading: 'Structured workflow evidence:',
   });
+  const reviewPerspectiveSection = buildReviewPerspectiveSection(params.reviewPerspective);
   const workerLines = params.workers.length > 0 ? buildWorkerOutcomeLines(params.workers) : [];
   const existingDraftExcerpt = truncateText(
     params.evidence.lastNonEmptyAssistantContent,
@@ -2874,6 +3026,7 @@ function buildPilotResumePrompt(params: {
     ['Pilot criterion review:', ...criterionLines].join('\n'),
     params.evaluation.gaps.length > 0 ? ['Remaining gaps:', ...params.evaluation.gaps.map((gap) => `- ${gap}`)].join('\n') : undefined,
     params.evaluation.nextActions.length > 0 ? ['Required next actions:', ...params.evaluation.nextActions.map((action) => `- ${action}`)].join('\n') : undefined,
+    reviewPerspectiveSection,
     workerLines.length > 0 ? ['Latest worker outcomes:', ...workerLines].join('\n') : undefined,
     verifiedFindings.length > 0 ? ['Verified findings so far:', ...verifiedFindings].join('\n') : undefined,
     structuredEvidenceSection,
@@ -2885,6 +3038,7 @@ function buildPilotResumePrompt(params: {
 function buildPilotResumeUserPrompt(params: {
   evidence: AgentRunFinalizationEvidence;
   evaluation: AgentRunPilotEvaluation;
+  reviewPerspective?: AgentRunPilotReviewPerspective;
   disableToolsOnResume?: boolean;
 }): string {
   const existingDraftExcerpt = truncateText(
@@ -2894,6 +3048,8 @@ function buildPilotResumeUserPrompt(params: {
   const verifiedFindings = params.evidence.resultPreviews
     .slice(-Math.min(4, MAX_RESULT_PREVIEWS))
     .map((entry) => `- ${entry.sourceName}: ${truncateText(entry.preview, MAX_RESULT_PREVIEW_CHARS) || entry.preview}`);
+  const reviewPerspectiveSummary = normalizeReviewPerspectiveSummary(params.reviewPerspective);
+  const reviewPerspectiveNextActions = normalizeReviewPerspectiveNextActions(params.reviewPerspective);
 
   return [
     'Continue the already-visible answer for this same user turn.',
@@ -2917,6 +3073,15 @@ function buildPilotResumeUserPrompt(params: {
       ? [
           'Append only the material needed to satisfy these required next actions:',
           ...params.evaluation.nextActions.map((action) => `- ${action}`),
+        ].join('\n')
+      : undefined,
+    reviewPerspectiveSummary
+      ? ['Runtime review perspective for this continuation:', `- ${reviewPerspectiveSummary}`].join('\n')
+      : undefined,
+    reviewPerspectiveNextActions.length > 0
+      ? [
+          'Runtime review recommends prioritizing these actions:',
+          ...reviewPerspectiveNextActions.map((action) => `- ${action}`),
         ].join('\n')
       : undefined,
     verifiedFindings.length > 0
@@ -2952,7 +3117,11 @@ function resolveFinalOutcomeStatus(
 }
 
 function buildResumeCheckpointDetail(evaluation: AgentRunPilotEvaluation): string {
-  return `${buildPilotScorecard(evaluation)} ${evaluation.summary}`;
+  const fallbackDetail = evaluation.fallbackDetail?.trim();
+  return [
+    `${buildPilotScorecard(evaluation)} ${evaluation.summary}`,
+    fallbackDetail ? `Live pilot fallback detail: ${fallbackDetail}` : undefined,
+  ].filter((section): section is string => Boolean(section)).join('\n');
 }
 
 function buildFinalOutcomeSummary(
@@ -2960,15 +3129,17 @@ function buildFinalOutcomeSummary(
   evaluation: AgentRunPilotEvaluation,
   candidateOutcome: { status: Exclude<AgentRunStatus, 'running'>; summary: string },
 ): string {
-  if (finalStatus === 'completed') {
-    return `${buildPilotScorecard(evaluation)} ${evaluation.summary}`;
-  }
+  const baseSummary = finalStatus === 'completed'
+    ? `${buildPilotScorecard(evaluation)} ${evaluation.summary}`
+    : candidateOutcome.status === 'cancelled'
+      ? `${buildPilotScorecard(evaluation)} Workflow cancelled before pilot could approve final delivery.`
+      : `${buildPilotScorecard(evaluation)} ${evaluation.summary}`;
+  const fallbackDetail = evaluation.fallbackDetail?.trim();
 
-  if (candidateOutcome.status === 'cancelled') {
-    return `${buildPilotScorecard(evaluation)} Workflow cancelled before pilot could approve final delivery.`;
-  }
-
-  return `${buildPilotScorecard(evaluation)} ${evaluation.summary}`;
+  return [
+    baseSummary,
+    fallbackDetail ? `Live pilot fallback detail: ${fallbackDetail}` : undefined,
+  ].filter((section): section is string => Boolean(section)).join('\n');
 }
 
 function buildPilotDecision(
@@ -2995,6 +3166,7 @@ function buildPilotDecision(
     params.workers,
     params.evidence,
     params.candidateOutcome,
+    params.reviewPerspective,
   );
   const shouldResume = effectiveEvaluation.controlAction === 'continue'
     && !effectiveEvaluation.approved
@@ -3021,11 +3193,13 @@ function buildPilotDecision(
         evidence: params.evidence,
         candidateOutcome: params.candidateOutcome,
         evaluation: effectiveEvaluation,
+        reviewPerspective: params.reviewPerspective,
         disableToolsOnResume,
       }),
       reviewUserPrompt: buildPilotResumeUserPrompt({
         evidence: params.evidence,
         evaluation: effectiveEvaluation,
+        reviewPerspective: params.reviewPerspective,
         disableToolsOnResume,
       }),
       disableToolsOnResume,
@@ -3094,6 +3268,7 @@ export async function evaluateAgentRunWithPilot(
     workers,
     params.evidence,
     params.candidateOutcome,
+    params.reviewPerspective,
   );
 
   if (shouldReuseCachedPilotEvaluation({
@@ -3106,6 +3281,7 @@ export async function evaluateAgentRunWithPilot(
       workers,
       evidence: params.evidence,
       candidateOutcome: params.candidateOutcome,
+      reviewPerspective: params.reviewPerspective,
       evaluation: cachedPilotEvaluation!,
     });
   }
@@ -3123,6 +3299,7 @@ export async function evaluateAgentRunWithPilot(
         evidence: params.evidence,
         candidateOutcome: params.candidateOutcome,
         workers,
+        reviewPerspective: params.reviewPerspective,
         providerContext: params.providerContext,
         signal: params.signal,
         onUsage: params.onUsage,
@@ -3136,6 +3313,7 @@ export async function evaluateAgentRunWithPilot(
           candidateOutcome: params.candidateOutcome,
           evidence: params.evidence,
           workers,
+          reviewPerspective: params.reviewPerspective,
         });
       } else {
         unavailableReason = pilotResult.failure?.reason ?? 'response_unparseable';
@@ -3158,6 +3336,7 @@ export async function evaluateAgentRunWithPilot(
         workers,
         evidence: params.evidence,
         candidateOutcome: params.candidateOutcome,
+        reviewPerspective: params.reviewPerspective,
         reason: fallbackReason,
         providerContext: params.providerContext,
         detail: unavailableDetail,
@@ -3167,6 +3346,7 @@ export async function evaluateAgentRunWithPilot(
         workers,
         evidence: params.evidence,
         candidateOutcome: params.candidateOutcome,
+        reviewPerspective: params.reviewPerspective,
         reason: fallbackReason,
         providerContext: params.providerContext,
         detail: unavailableDetail,
@@ -3177,11 +3357,18 @@ export async function evaluateAgentRunWithPilot(
     workers,
     evidence: params.evidence,
     candidateOutcome: params.candidateOutcome,
-    evaluation: applyRequestAssessmentPilotGuardrails(evaluation ?? fallbackEvaluation, {
-      run: params.run,
-      workers,
-      evidence: params.evidence,
-      candidateOutcome: params.candidateOutcome,
-    }),
+    reviewPerspective: params.reviewPerspective,
+    evaluation: applyReviewPerspectivePilotGuardrails(
+      applyRequestAssessmentPilotGuardrails(evaluation ?? fallbackEvaluation, {
+        run: params.run,
+        workers,
+        evidence: params.evidence,
+        candidateOutcome: params.candidateOutcome,
+      }),
+      {
+        candidateOutcome: params.candidateOutcome,
+        reviewPerspective: params.reviewPerspective,
+      },
+    ),
   });
 }

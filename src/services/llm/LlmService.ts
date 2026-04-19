@@ -83,6 +83,22 @@ type SystemPromptSection = {
   cacheable?: boolean;
 };
 
+type GeminiPromptCacheEntry =
+  | {
+      status: 'ready';
+      cachedContent: string;
+      expireTimeMs?: number;
+    }
+  | {
+      status: 'failed';
+      retryAfter: number;
+    };
+
+const geminiPromptCacheEntries = new Map<string, GeminiPromptCacheEntry>();
+const GEMINI_PROMPT_CACHE_DEFAULT_TTL = '3600s';
+const GEMINI_PROMPT_CACHE_FAILURE_BACKOFF_MS = 10 * 60_000;
+const GEMINI_PROMPT_CACHE_REFRESH_WINDOW_MS = 30_000;
+
 function simplifyAnthropicToolDescription(description: string | undefined): string {
   // Anthropic best practice: "Provide extremely detailed descriptions.
   // This is by far the most important factor in tool performance."
@@ -114,6 +130,165 @@ function normalizeSystemPromptSections(
     .filter((section): section is SystemPromptSection => section !== null);
 
   return normalized.length > 0 ? normalized : undefined;
+}
+
+function splitCacheableSystemPromptSections(
+  sections: SystemPromptSection[] | undefined,
+): { cacheableText?: string; dynamicText?: string } {
+  const normalizedSections = normalizeSystemPromptSections(sections);
+  if (!normalizedSections?.length) {
+    return {};
+  }
+
+  const cacheableSections = normalizedSections
+    .filter((section) => section.cacheable)
+    .map((section) => section.text);
+  const dynamicSections = normalizedSections
+    .filter((section) => !section.cacheable)
+    .map((section) => section.text);
+
+  return {
+    ...(cacheableSections.length > 0 ? { cacheableText: cacheableSections.join('\n\n') } : {}),
+    ...(dynamicSections.length > 0 ? { dynamicText: dynamicSections.join('\n\n') } : {}),
+  };
+}
+
+function fnv1aHash(value: string, seed = 0x811c9dc5): string {
+  let hash = seed >>> 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, '0');
+}
+
+function buildGeminiPromptCacheEntryKey(args: {
+  conversationId?: string;
+  baseUrl: string;
+  model: string;
+  systemPrompt: string;
+}): string {
+  const scope = typeof args.conversationId === 'string' ? args.conversationId.trim() : '';
+  const material = JSON.stringify({
+    scope,
+    baseUrl: args.baseUrl,
+    model: args.model,
+    systemPrompt: args.systemPrompt,
+  });
+  return `${fnv1aHash(material)}:${fnv1aHash(`${material}\u0000${material.length}`, 0x9e3779b1)}`;
+}
+
+function parseGeminiPromptCacheExpireTime(expireTime: unknown): number | undefined {
+  if (typeof expireTime !== 'string' || expireTime.trim().length === 0) {
+    return undefined;
+  }
+
+  const timestamp = Date.parse(expireTime);
+  return Number.isFinite(timestamp) ? timestamp : undefined;
+}
+
+function buildGeminiPromptCacheModel(baseUrl: string, model: string): string {
+  const normalizedModel = model
+    .replace(/^models\//i, '')
+    .replace(/^publishers\/[^/]+\/models\//i, '')
+    .replace(/^projects\/[^/]+\/locations\/[^/]+\/publishers\/[^/]+\/models\//i, '')
+    .trim();
+
+  return isVertexNativeGeminiBaseUrl(baseUrl)
+    ? `publishers/google/models/${normalizedModel}`
+    : `models/${normalizedModel}`;
+}
+
+function resolveGeminiCachedContentHandle(rawValue: unknown): string | undefined {
+  if (typeof rawValue !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = rawValue.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  return /(^|\/)cachedContents\//.test(trimmed) ? trimmed : undefined;
+}
+
+async function ensureGeminiPromptCache(args: {
+  baseUrl: string;
+  model: string;
+  conversationId?: string;
+  systemPrompt: string;
+  headers: Record<string, string>;
+  signal?: AbortSignal;
+  fetchImpl: (url: string, init: RequestInit) => Promise<Response>;
+}): Promise<string | undefined> {
+  const systemPrompt = args.systemPrompt.trim();
+  if (!systemPrompt) {
+    return undefined;
+  }
+
+  const cacheKey = buildGeminiPromptCacheEntryKey({
+    conversationId: args.conversationId,
+    baseUrl: args.baseUrl,
+    model: args.model,
+    systemPrompt,
+  });
+  const now = Date.now();
+  const existingEntry = geminiPromptCacheEntries.get(cacheKey);
+
+  if (existingEntry?.status === 'failed' && existingEntry.retryAfter > now) {
+    return undefined;
+  }
+
+  if (existingEntry?.status === 'ready') {
+    if (!existingEntry.expireTimeMs || existingEntry.expireTimeMs - now > GEMINI_PROMPT_CACHE_REFRESH_WINDOW_MS) {
+      return existingEntry.cachedContent;
+    }
+  }
+
+  const response = await args.fetchImpl(`${args.baseUrl}/cachedContents`, {
+    method: 'POST',
+    headers: args.headers,
+    body: JSON.stringify({
+      model: buildGeminiPromptCacheModel(args.baseUrl, args.model),
+      ttl: GEMINI_PROMPT_CACHE_DEFAULT_TTL,
+      systemInstruction: {
+        parts: [{ text: systemPrompt }],
+      },
+    }),
+    signal: args.signal,
+  });
+
+  if (!response.ok) {
+    geminiPromptCacheEntries.set(cacheKey, {
+      status: 'failed',
+      retryAfter: now + GEMINI_PROMPT_CACHE_FAILURE_BACKOFF_MS,
+    });
+    return undefined;
+  }
+
+  const json = (await response.json()) as { name?: unknown; expireTime?: unknown };
+  const cachedContent = resolveGeminiCachedContentHandle(json.name);
+  if (!cachedContent) {
+    geminiPromptCacheEntries.set(cacheKey, {
+      status: 'failed',
+      retryAfter: now + GEMINI_PROMPT_CACHE_FAILURE_BACKOFF_MS,
+    });
+    return undefined;
+  }
+
+  const expireTimeMs = parseGeminiPromptCacheExpireTime(json.expireTime);
+
+  geminiPromptCacheEntries.set(cacheKey, {
+    status: 'ready',
+    cachedContent,
+    ...(expireTimeMs ? { expireTimeMs } : {}),
+  });
+
+  return cachedContent;
+}
+
+export function resetGeminiPromptCacheForTests(): void {
+  geminiPromptCacheEntries.clear();
 }
 
 function buildAnthropicSystemPromptContent(args: {
@@ -1194,6 +1369,7 @@ type StructuredOutputOptions = {
 };
 
 interface MessageRequestOptions extends PromptCachingOptions {
+  conversationId?: string;
   model?: string;
   tools?: ToolDefinition[];
   systemPromptSections?: SystemPromptSection[];
@@ -4121,12 +4297,9 @@ export class LlmService {
       }
     }
 
-    if (
-      options.enablePromptCaching
-      && typeof options.promptCacheKey === 'string'
-      && /^cachedContents\//.test(options.promptCacheKey)
-    ) {
-      body.cachedContent = options.promptCacheKey;
+    const explicitCachedContent = resolveGeminiCachedContentHandle(options.promptCacheKey);
+    if (options.enablePromptCaching && explicitCachedContent) {
+      body.cachedContent = explicitCachedContent;
     }
 
     return body;
@@ -4289,6 +4462,36 @@ export class LlmService {
   ): Promise<any> {
     const geminiModel = this.buildGeminiModelName(model);
     const body = this.buildGeminiRequestBody(geminiModel, messages, options);
+    let activeCachedContent = resolveGeminiCachedContentHandle(options.promptCacheKey);
+    const { cacheableText, dynamicText } = splitCacheableSystemPromptSections(options.systemPromptSections);
+
+    if (!activeCachedContent && options.enablePromptCaching && cacheableText) {
+      const managedCachedContent = await ensureGeminiPromptCache({
+        baseUrl,
+        model: geminiModel,
+        conversationId: options.conversationId,
+        systemPrompt: cacheableText,
+        headers,
+        signal: options.signal,
+        fetchImpl: (url, init) => this.performFetch(url, init, false),
+      });
+
+      if (managedCachedContent) {
+        activeCachedContent = managedCachedContent;
+        body.cachedContent = managedCachedContent;
+      }
+    }
+
+    if (activeCachedContent && cacheableText) {
+      if (dynamicText) {
+        body.systemInstruction = {
+          parts: [{ text: dynamicText }],
+        };
+      } else {
+        delete body.systemInstruction;
+      }
+    }
+
     const methodName = options.stream ? 'streamGenerateContent?alt=sse' : 'generateContent';
     const requestHeaders = options.stream
       ? { ...headers, Accept: 'text/event-stream' }

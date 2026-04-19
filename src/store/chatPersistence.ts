@@ -544,6 +544,13 @@ function sanitizeAgentRunPilotEvaluation(
       truncateText(evaluation.rationale, MAX_PERSISTED_LOG_DETAIL_CHARS) || evaluation.rationale,
     ...(evaluation.source ? { source: evaluation.source } : {}),
     ...(evaluation.fallbackReason ? { fallbackReason: evaluation.fallbackReason } : {}),
+    ...(evaluation.fallbackDetail
+      ? {
+          fallbackDetail:
+            truncateText(evaluation.fallbackDetail, MAX_PERSISTED_PLAN_RAW_CHARS)
+            || evaluation.fallbackDetail,
+        }
+      : {}),
     ...(evaluation.stateSignature
       ? { stateSignature: normalizeText(evaluation.stateSignature) }
       : {}),

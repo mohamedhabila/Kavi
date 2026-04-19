@@ -421,6 +421,7 @@ function normalizeAgentRunPilotEvaluation(
       evaluation.fallbackReason === 'response_unparseable'
         ? evaluation.fallbackReason
         : undefined,
+    fallbackDetail: evaluation.fallbackDetail?.trim() || undefined,
     stateSignature: evaluation.stateSignature?.trim() || undefined,
     progressSignature: evaluation.progressSignature?.trim() || undefined,
     strengths: normalizePilotTextList(evaluation.strengths),
@@ -756,6 +757,7 @@ function transitionAgentRunPhases(
   status: Exclude<AgentRunPhaseStatus, 'pending'>,
   timestamp: number,
   detail?: string,
+  options?: { allowRegression?: boolean },
 ): AgentRunPhase[] {
   const targetIndex = AGENT_RUN_PHASE_DEFINITIONS.findIndex((phase) => phase.key === targetPhase);
   if (targetIndex < 0) {
@@ -776,6 +778,14 @@ function transitionAgentRunPhases(
         ...phase,
         status,
         detail: detail ?? phase.detail,
+        updatedAt: timestamp,
+      };
+    }
+
+    if (options?.allowRegression && index > targetIndex && phase.status === 'active') {
+      return {
+        ...phase,
+        status: 'completed',
         updatedAt: timestamp,
       };
     }
@@ -1077,6 +1087,7 @@ interface ChatState {
       checkpointDetail?: string;
       checkpointKind?: AgentRunCheckpointKind;
       timestamp?: number;
+      allowRegression?: boolean;
     },
     runId?: string,
   ) => void;
@@ -1750,7 +1761,10 @@ export const useChatStore = create<ChatState>()(
               const nextPhaseIndex = getAgentRunPhaseIndex(phase);
               const currentPhaseIndex = getAgentRunPhaseIndex(run.currentPhase);
               const shouldPreserveCurrentPhase =
-                nextPhaseIndex >= 0 && currentPhaseIndex >= 0 && nextPhaseIndex < currentPhaseIndex;
+                !params?.allowRegression
+                && nextPhaseIndex >= 0
+                && currentPhaseIndex >= 0
+                && nextPhaseIndex < currentPhaseIndex;
               const nextPhases = shouldPreserveCurrentPhase
                 ? run.phases
                 : transitionAgentRunPhases(
@@ -1759,6 +1773,7 @@ export const useChatStore = create<ChatState>()(
                     params?.status ?? 'active',
                     timestamp,
                     params?.detail,
+                    { allowRegression: params?.allowRegression },
                   );
               const nextCurrentPhase = shouldPreserveCurrentPhase ? run.currentPhase : phase;
               if (

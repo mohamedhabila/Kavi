@@ -511,6 +511,28 @@ describe('MessageBubble', () => {
     expect(queryByTestId('agent-workflow-details')).toBeNull();
   });
 
+  it('renders pilot fallback detail in the expanded workflow widget', () => {
+    const msg = makeMessage({ role: 'assistant', content: 'Implemented the fix.' });
+    const { getByTestId, getByText } = render(
+      <MessageBubble
+        message={msg}
+        agentRun={makeAgentRun({
+          latestPilotEvaluation: {
+            ...makePilotEvaluation(),
+            fallbackReason: 'request_failed',
+            fallbackDetail: 'LLM API error 503: upstream unavailable',
+          },
+        })}
+      />,
+    );
+
+    fireEvent.press(getByTestId('agent-workflow-toggle'));
+
+    expect(
+      getByText('Fallback detail: LLM API error 503: upstream unavailable'),
+    ).toBeTruthy();
+  });
+
   it('should render structured sub-agent activity cards instead of raw lifecycle text', () => {
     const msg = makeMessage({
       role: 'assistant',

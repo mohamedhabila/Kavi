@@ -2,7 +2,7 @@
 // Tests — LLM Service
 // ---------------------------------------------------------------------------
 
-import { LlmService } from '../../src/services/llm/LlmService';
+import { LlmService, resetGeminiPromptCacheForTests } from '../../src/services/llm/LlmService';
 import {
   normalizeOpenAIPromptCacheKey,
   OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH,
@@ -103,6 +103,7 @@ global.fetch = mockFetch as any;
 
 beforeEach(() => {
   jest.clearAllMocks();
+  resetGeminiPromptCacheForTests();
   mockIsOnDeviceLlmProvider.mockImplementation((provider: LlmProviderConfig) => (
     provider.kind === 'on-device' || Boolean(provider.local?.runtime)
   ));
@@ -1796,15 +1797,105 @@ describe('LlmService', () => {
       }));
 
       await service.sendMessage([
-        { role: 'system', content: 'You are helpful.' },
+        { role: 'system', content: 'Stable instructions\n\nRuntime note' },
         { role: 'user', content: 'Use the cache' },
       ], {
         enablePromptCaching: true,
-        promptCacheKey: 'cachedContents/native-cache-123',
+        promptCacheKey: 'projects/test/locations/us-central1/cachedContents/native-cache-123',
+        systemPromptSections: [
+          { text: 'Stable instructions', cacheable: true },
+          { text: 'Runtime note' },
+        ],
       });
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(body.cachedContent).toBe('cachedContents/native-cache-123');
+      expect(body.cachedContent).toBe('projects/test/locations/us-central1/cachedContents/native-cache-123');
+      expect(body.systemInstruction).toEqual({
+        parts: [{ text: 'Runtime note' }],
+      });
+    });
+
+    it('creates and reuses explicit Gemini cachedContents resources for cacheable system sections', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({
+            name: 'projects/test/locations/us-central1/cachedContents/native-cache-123',
+            expireTime: '2099-01-01T00:00:00.000Z',
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({
+            candidates: [{
+              content: { parts: [{ text: 'ok' }] },
+              finishReason: 'STOP',
+            }],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({
+            candidates: [{
+              content: { parts: [{ text: 'ok again' }] },
+              finishReason: 'STOP',
+            }],
+          }),
+        });
+
+      const service = new LlmService(makeConfig({
+        id: 'gemini',
+        name: 'Gemini',
+        baseUrl: 'https://generativelanguage.googleapis.com',
+        apiKey: 'AIza-test',
+        model: 'gemini-3-flash-preview',
+      }));
+
+      const messages = [
+        { role: 'system', content: 'Stable instructions\n\nRuntime note' },
+        { role: 'user', content: 'Use the cache' },
+      ] as const;
+      const options = {
+        enablePromptCaching: true,
+        conversationId: 'conversation-1',
+        systemPromptSections: [
+          { text: 'Stable instructions', cacheable: true },
+          { text: 'Runtime note' },
+        ],
+      };
+
+      await service.sendMessage(messages as any, options);
+
+      expect(mockFetch.mock.calls[0][0]).toBe('https://generativelanguage.googleapis.com/v1beta/cachedContents');
+      const cacheBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(cacheBody).toEqual({
+        model: 'models/gemini-3-flash-preview',
+        ttl: '3600s',
+        systemInstruction: {
+          parts: [{ text: 'Stable instructions' }],
+        },
+      });
+
+      expect(mockFetch.mock.calls[1][0]).toBe(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent',
+      );
+      const firstBody = JSON.parse(mockFetch.mock.calls[1][1].body);
+      expect(firstBody.cachedContent).toBe('projects/test/locations/us-central1/cachedContents/native-cache-123');
+      expect(firstBody.systemInstruction).toEqual({
+        parts: [{ text: 'Runtime note' }],
+      });
+
+      await service.sendMessage(messages as any, options);
+
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+      expect(mockFetch.mock.calls[2][0]).toBe(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent',
+      );
+      const secondBody = JSON.parse(mockFetch.mock.calls[2][1].body);
+      expect(secondBody.cachedContent).toBe('projects/test/locations/us-central1/cachedContents/native-cache-123');
+      expect(secondBody.systemInstruction).toEqual({
+        parts: [{ text: 'Runtime note' }],
+      });
     });
 
     it('restricts Gemini native function calling to one exact tool when requested', async () => {

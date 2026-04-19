@@ -302,6 +302,18 @@ export const AgentWorkflowWidget: React.FC<AgentWorkflowWidgetProps> = ({ run })
     }
     return pilotSummary;
   }, [latestUpdate, objective, pilotSummary]);
+  const pilotFallbackText = useMemo(() => {
+    const fallbackDetail = pilotEvaluation?.fallbackDetail?.trim();
+    if (!fallbackDetail) {
+      return undefined;
+    }
+
+    return `${translateOrFallback(
+      t,
+      'chat.agentWorkflow.pilotFallbackDetailLabel',
+      'Fallback detail',
+    )}: ${fallbackDetail}`;
+  }, [pilotEvaluation, t]);
 
   const lastToolLabel = useMemo(() => {
     if (!lastToolCheckpoint) {
@@ -435,6 +447,9 @@ export const AgentWorkflowWidget: React.FC<AgentWorkflowWidgetProps> = ({ run })
                 </View>
               </View>
               {pilotInsight ? <Text style={styles.sectionBody}>{pilotInsight}</Text> : null}
+              {pilotFallbackText ? (
+                <Text style={styles.sectionBody}>{pilotFallbackText}</Text>
+              ) : null}
             </View>
           ) : null}
 

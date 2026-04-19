@@ -289,6 +289,7 @@ export interface AgentRunPilotEvaluation {
   rationale: string;
   source?: AgentRunPilotEvaluationSource;
   fallbackReason?: AgentRunPilotFallbackReason;
+  fallbackDetail?: string;
   stateSignature?: string;
   progressSignature?: string;
   strengths: string[];

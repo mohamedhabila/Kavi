@@ -1272,7 +1272,7 @@ describe('useChatStore', () => {
       );
     });
 
-    it('does not rewind the current phase when late worker updates target an earlier phase', () => {
+    it('preserves the current phase by default when late worker updates target an earlier phase', () => {
       const convId = useChatStore.getState().createConversation('p1', 's');
       const runId = useChatStore.getState().startAgentRun(convId, {
         userMessageId: 'msg-user-phase-regression',
@@ -1325,6 +1325,64 @@ describe('useChatStore', () => {
         expect.arrayContaining([
           expect.objectContaining({ title: 'Review started' }),
           expect.objectContaining({ title: 'Worker completed: Final verifier' }),
+        ]),
+      );
+    });
+
+    it('allows work to reclaim the current phase when regression is explicitly permitted', () => {
+      const convId = useChatStore.getState().createConversation('p1', 's');
+      const runId = useChatStore.getState().startAgentRun(convId, {
+        userMessageId: 'msg-user-phase-regression-allowed',
+        goal: 'Let resumed execution move back into work.',
+        timestamp: 1700000002400,
+      });
+
+      useChatStore.getState().setAgentRunPhase(
+        convId,
+        'review',
+        {
+          status: 'active',
+          detail: 'Review is inspecting the current output.',
+          checkpointTitle: 'Review started',
+          checkpointDetail: 'Review is inspecting the current output.',
+          timestamp: 1700000002500,
+        },
+        runId,
+      );
+
+      useChatStore.getState().setAgentRunPhase(
+        convId,
+        'work',
+        {
+          status: 'active',
+          detail: 'Execution resumed after pilot requested another work step.',
+          checkpointTitle: 'Work resumed',
+          checkpointDetail: 'Execution resumed after pilot requested another work step.',
+          timestamp: 1700000002600,
+          allowRegression: true,
+        },
+        runId,
+      );
+
+      const conv = useChatStore.getState().conversations.find((c) => c.id === convId)!;
+      const run = conv.agentRuns?.find((candidate) => candidate.id === runId)!;
+
+      expect(run.currentPhase).toBe('work');
+      expect(run.phases.find((phase) => phase.key === 'work')).toEqual(
+        expect.objectContaining({
+          status: 'active',
+          detail: 'Execution resumed after pilot requested another work step.',
+        }),
+      );
+      expect(run.phases.find((phase) => phase.key === 'review')).toEqual(
+        expect.objectContaining({
+          status: 'completed',
+        }),
+      );
+      expect(run.checkpoints).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ title: 'Review started' }),
+          expect.objectContaining({ title: 'Work resumed' }),
         ]),
       );
     });

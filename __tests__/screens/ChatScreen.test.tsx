@@ -2769,7 +2769,28 @@ describe('ChatScreen', () => {
     expect(mockCompleteAgentRun).not.toHaveBeenCalled();
   });
 
-  it('continues the structured plan instead of queuing pilot when background workers stop with unfinished work remaining', async () => {
+  it('queues pilot review with advisory structured-plan context when background workers stop with unfinished work remaining', async () => {
+    mockEvaluateAgentRunWithPilot.mockResolvedValueOnce({
+      action: 'resume',
+      outcome: {
+        status: 'completed',
+        summary: 'Pilot found remaining structured work before final delivery.',
+      },
+      checkpointTitle: 'Pilot review queued',
+      checkpointDetail: 'Pilot found remaining structured work before final delivery.',
+      reviewPrompt: '## Pilot Review\n\nContinue the next structured workstream before final delivery.',
+      evaluation: buildMockPilotEvaluation({
+        overallScore: 11,
+        approved: false,
+        recommendedAction: 'continue',
+        controlAction: 'continue',
+        summary: 'Pilot found remaining structured work before final delivery.',
+        rationale: 'The first workstream completed, but the structured plan still has another required step.',
+        gaps: ['Unfinished structured work remains.'],
+        nextActions: ['Continue the next structured workstream before final delivery.'],
+      }),
+    });
+
     render(<ChatScreen />);
 
     await act(async () => {
@@ -2841,36 +2862,50 @@ describe('ChatScreen', () => {
       expect(mockRunOrchestrator).toHaveBeenCalledTimes(1);
     });
 
-    expect(mockEvaluateAgentRunWithPilot).not.toHaveBeenCalled();
+    expect(mockEvaluateAgentRunWithPilot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidateOutcome: expect.objectContaining({
+          summary: expect.stringContaining(
+            'Structured plan review: Structured plan still has remaining work',
+          ),
+        }),
+        reviewPerspective: expect.objectContaining({
+          summary: expect.stringContaining('Structured plan still has remaining work'),
+          nextActions: expect.arrayContaining([
+            'Primary next workstream: Verify the fix [workstream-2].',
+          ]),
+        }),
+      }),
+    );
     expect(mockSetAgentRunAwaitingBackgroundWorkers).toHaveBeenCalledWith(
       'conv1',
       false,
       expect.objectContaining({
-        checkpointTitle: 'Structured plan continuation queued',
-        latestSummary: expect.stringContaining('Structured plan still has remaining work'),
+        checkpointTitle: 'Pilot review queued',
+        latestSummary: 'Pilot found remaining structured work before final delivery.',
       }),
       'run-1',
     );
     expect(mockSetAgentRunPhase).toHaveBeenCalledWith(
       'conv1',
-      'work',
+      'pilot',
       expect.objectContaining({
-        checkpointTitle: 'Structured plan continuation queued',
+        checkpointTitle: 'Pilot review queued',
       }),
       'run-1',
     );
-    expect(mockRunOrchestrator.mock.calls[0][0]).toEqual(
-      expect.objectContaining({
-        conversationId: 'conv1',
-        systemPrompt: expect.stringContaining('## Workflow Continuation'),
-      }),
+    expect(mockRunOrchestrator.mock.calls[0][0].conversationId).toBe('conv1');
+    expect(mockRunOrchestrator.mock.calls[0][0].systemPrompt).toContain(
+      '## Pilot Review\n\nContinue the next structured workstream before final delivery.',
     );
-    expect(mockRunOrchestrator.mock.calls[0][0].messages.at(-1)).toEqual(
-      expect.objectContaining({
-        role: 'user',
-        content: expect.stringContaining('This is a follow-up continuation, not a redo.'),
-      }),
+    expect(mockRunOrchestrator.mock.calls[0][0].systemPrompt).not.toContain(
+      '## Workflow Continuation',
     );
+    expect(
+      mockRunOrchestrator.mock.calls[0][0].messages.some(
+        (message: any) => message.content?.includes('This is a follow-up continuation, not a redo.'),
+      ),
+    ).toBe(false);
     expect(mockCompleteAgentRun).not.toHaveBeenCalled();
   });
 
@@ -3133,7 +3168,7 @@ describe('ChatScreen', () => {
     expect(mockCompleteAgentRun).not.toHaveBeenCalled();
   });
 
-  it('continues the structured plan instead of queuing pilot when a foreground turn ends before all workstreams are complete', async () => {
+  it('routes unfinished foreground structured work through pilot review instead of resuming directly from review', async () => {
     mockStartAgentRun.mockImplementationOnce((conversationId: string, params: any) => {
       updateMockConversation(conversationId, (conversation) => ({
         ...conversation,
@@ -3147,6 +3182,27 @@ describe('ChatScreen', () => {
         ],
       }));
       return 'run-1';
+    });
+
+    mockEvaluateAgentRunWithPilot.mockResolvedValueOnce({
+      action: 'resume',
+      outcome: {
+        status: 'completed',
+        summary: 'Pilot queued a continuation for the unfinished structured plan.',
+      },
+      checkpointTitle: 'Pilot review queued',
+      checkpointDetail: 'Pilot queued a continuation for the unfinished structured plan.',
+      reviewPrompt: '## Pilot Review\n\nContinue the first unfinished structured workstream before final delivery.',
+      evaluation: buildMockPilotEvaluation({
+        overallScore: 10,
+        approved: false,
+        recommendedAction: 'continue',
+        controlAction: 'continue',
+        summary: 'Pilot found unfinished structured work.',
+        rationale: 'The foreground turn ended after a draft answer even though the structured plan still has required work.',
+        gaps: ['The structured plan is incomplete.'],
+        nextActions: ['Continue the first unfinished structured workstream before final delivery.'],
+      }),
     });
 
     const { getByPlaceholderText, getByTestId } = render(<ChatScreen />);
@@ -3178,27 +3234,41 @@ describe('ChatScreen', () => {
       expect(mockRunOrchestrator).toHaveBeenCalledTimes(2);
     });
 
-    expect(mockEvaluateAgentRunWithPilot).not.toHaveBeenCalled();
+    expect(mockEvaluateAgentRunWithPilot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidateOutcome: expect.objectContaining({
+          summary: expect.stringContaining(
+            'Structured plan review: Structured plan still has remaining work',
+          ),
+        }),
+        reviewPerspective: expect.objectContaining({
+          summary: expect.stringContaining('Structured plan still has remaining work'),
+          nextActions: expect.arrayContaining([
+            'Primary next workstream: Implement the fix [workstream-1].',
+          ]),
+        }),
+      }),
+    );
     expect(mockSetAgentRunPhase).toHaveBeenCalledWith(
       'conv1',
-      'work',
+      'pilot',
       expect.objectContaining({
-        checkpointTitle: 'Structured plan continuation queued',
+        checkpointTitle: 'Pilot review queued',
       }),
       'run-1',
     );
-    expect(mockRunOrchestrator.mock.calls[1][0]).toEqual(
-      expect.objectContaining({
-        conversationId: 'conv1',
-        systemPrompt: expect.stringContaining('## Workflow Continuation'),
-      }),
+    expect(mockRunOrchestrator.mock.calls[1][0].conversationId).toBe('conv1');
+    expect(mockRunOrchestrator.mock.calls[1][0].systemPrompt).toContain(
+      '## Pilot Review\n\nContinue the first unfinished structured workstream before final delivery.',
     );
-    expect(mockRunOrchestrator.mock.calls[1][0].messages.at(-1)).toEqual(
-      expect.objectContaining({
-        role: 'user',
-        content: expect.stringContaining('This is a follow-up continuation, not a redo.'),
-      }),
+    expect(mockRunOrchestrator.mock.calls[1][0].systemPrompt).not.toContain(
+      '## Workflow Continuation',
     );
+    expect(
+      mockRunOrchestrator.mock.calls[1][0].messages.some(
+        (message: any) => message.content?.includes('This is a follow-up continuation, not a redo.'),
+      ),
+    ).toBe(false);
     expect(mockCompleteAgentRun).not.toHaveBeenCalled();
   });
 
