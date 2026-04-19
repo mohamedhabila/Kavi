@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Kavi Code Editor</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #0b1020; }
+#editor { width: 100%; height: 100%; }
+.fallback-shell {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  background: #0b1020;
+}
+.fallback-gutter {
+  width: 52px;
+  flex: 0 0 52px;
+  padding: 14px 8px 24px 0;
+  border-right: 1px solid #1f2937;
+  background: #0f172a;
+  color: #64748b;
+  font: 12px/1.6 Menlo, Monaco, 'Courier New', monospace;
+  text-align: right;
+  overflow: hidden;
+  user-select: none;
+}
+.fallback-main {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  background: #0b1020;
+}
+.editor-highlight,
+.editor-fallback {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border: 0;
+  outline: none;
+  resize: none;
+  overflow: auto;
+  padding: 14px 12px 24px;
+  white-space: pre;
+  word-wrap: normal;
+  font: 14px/1.6 Menlo, Monaco, 'Courier New', monospace;
+  tab-size: 2;
+}
+.editor-highlight {
+  pointer-events: none;
+  background: #0b1020;
+  color: #e5e7eb;
+}
+.editor-fallback {
+  background: transparent;
+  color: transparent;
+  caret-color: #10b981;
+}
+.editor-fallback::selection {
+  background: rgba(16, 185, 129, 0.24);
+}
+.editor-fallback[readonly] {
+  caret-color: transparent;
+}
+.token-keyword { color: #f97316; }
+.token-string { color: #22c55e; }
+.token-number { color: #38bdf8; }
+.token-comment { color: #64748b; }
+.token-heading { color: #f59e0b; font-weight: 700; }
+.token-markup { color: #60a5fa; }
+.token-link { color: #a78bfa; }
+.token-strong { color: #fda4af; }
+.cm-editor { height: 100%; }
+.cm-scroller { overflow: auto !important; }
+.cm-content { caret-color: #10b981 !important; }
+.cm-editor .cm-line { padding: 0 4px; min-height: 22px; }
+.cm-gutters { min-width: 40px; }
+</style>
+</head>
+<body>
+<div id="editor"></div>
+<script>
+/* __INLINE_CODEMIRROR_BUNDLE__ */
+</script>
+<script>
+function sendToRN(type, payload) {
+  if (window.ReactNativeWebView) {
+    window.ReactNativeWebView.postMessage(JSON.stringify({ type: type, payload: payload }));
+  }
+}
+
+function countLines(content) {
+  if (!content) return 1;
+  return content.split('\n').length;
+}
+
+const languageMap = {
+  javascript: function(modules) { return modules.javascript(); },
+  typescript: function(modules) { return modules.javascript({ typescript: true }); },
+  jsx: function(modules) { return modules.javascript({ jsx: true }); },
+  tsx: function(modules) { return modules.javascript({ jsx: true, typescript: true }); },
+  python: function(modules) { return modules.python(); },
+  json: function(modules) { return modules.json(); },
+  markdown: function(modules) { return modules.markdown(); },
+  html: function(modules) { return modules.html(); },
+  css: function(modules) { return modules.css(); },
+  yaml: function(modules) { return modules.yaml(); },
+  xml: function(modules) { return modules.xml(); },
+  sql: function(modules) { return modules.sql(); },
+  rust: function(modules) { return modules.rust(); }
+};
+
+const extMap = {
+  js: 'javascript', mjs: 'javascript', cjs: 'javascript',
+  ts: 'typescript', mts: 'typescript', cts: 'typescript',
+  jsx: 'jsx', tsx: 'tsx',
+  py: 'python',
+  json: 'json', jsonc: 'json',
+  md: 'markdown', mdx: 'markdown',
+  html: 'html', htm: 'html',
+  css: 'css', scss: 'css', less: 'css',
+  yaml: 'yaml', yml: 'yaml',
+  xml: 'xml', svg: 'xml', plist: 'xml',
+  sql: 'sql',
+  rs: 'rust',
+  txt: null, log: null, env: null, gitignore: null
+};
+
+function detectLanguage(filename) {
+  if (!filename) return null;
+  const ext = filename.split('.').pop()?.toLowerCase();
+  return extMap[ext] ?? null;
+}
+
+function getLanguageExtension(lang, modules) {
+  const factory = languageMap[lang];
+  if (!factory) return [];
+  const extension = factory(modules);
+  if (!extension) return [];
+  return Array.isArray(extension) ? extension : [extension];
+}
+
+let view = null;
+let isDirty = false;
+let originalContent = '';
+let readySent = false;
+let currentLanguage = null;
+let isReadOnly = false;
+let fallbackTextarea = null;
+let fallbackGutter = null;
+let fallbackHighlight = null;
+let editorMode = 'fallback';
+let codeMirrorModules = null;
+let langCompartment = null;
+let readOnlyCompartment = null;
+let themeCompartment = null;
+
+const keywordMap = {
+  javascript: ['const', 'let', 'var', 'function', 'return', 'async', 'await', 'if', 'else', 'switch', 'case', 'for', 'while', 'break', 'continue', 'new', 'class', 'extends', 'import', 'from', 'export', 'default', 'try', 'catch', 'finally', 'throw', 'true', 'false', 'null', 'undefined'],
+  typescript: ['const', 'let', 'var', 'function', 'return', 'async', 'await', 'if', 'else', 'switch', 'case', 'for', 'while', 'break', 'continue', 'new', 'class', 'extends', 'implements', 'interface', 'type', 'enum', 'import', 'from', 'export', 'default', 'try', 'catch', 'finally', 'throw', 'public', 'private', 'protected', 'readonly', 'true', 'false', 'null', 'undefined'],
+  jsx: ['const', 'let', 'var', 'function', 'return', 'async', 'await', 'if', 'else', 'switch', 'case', 'for', 'while', 'break', 'continue', 'new', 'class', 'extends', 'import', 'from', 'export', 'default', 'try', 'catch', 'finally', 'throw', 'true', 'false', 'null', 'undefined'],
+  tsx: ['const', 'let', 'var', 'function', 'return', 'async', 'await', 'if', 'else', 'switch', 'case', 'for', 'while', 'break', 'continue', 'new', 'class', 'extends', 'implements', 'interface', 'type', 'enum', 'import', 'from', 'export', 'default', 'try', 'catch', 'finally', 'throw', 'true', 'false', 'null', 'undefined'],
+  python: ['def', 'class', 'return', 'async', 'await', 'if', 'elif', 'else', 'for', 'while', 'break', 'continue', 'import', 'from', 'as', 'try', 'except', 'finally', 'raise', 'True', 'False', 'None', 'with', 'yield', 'lambda'],
+  css: ['display', 'position', 'color', 'background', 'padding', 'margin', 'border', 'font', 'grid', 'flex', 'absolute', 'relative', 'fixed', 'var'],
+  sql: ['select', 'from', 'where', 'insert', 'into', 'update', 'delete', 'join', 'left', 'right', 'inner', 'outer', 'group', 'by', 'order', 'limit', 'values', 'set', 'create', 'table', 'alter', 'drop'],
+  rust: ['fn', 'let', 'mut', 'pub', 'impl', 'struct', 'enum', 'match', 'if', 'else', 'loop', 'while', 'for', 'return', 'async', 'await', 'trait', 'use', 'mod', 'crate', 'Self', 'self'],
+  json: [],
+  yaml: [],
+  markdown: [],
+  html: [],
+  xml: [],
+};
+
+function notifyReady(lines) {
+  if (readySent) return;
+  readySent = true;
+  sendToRN('ready', { lines: lines });
+}
+
+function updateDirtyState(content) {
+  var newDirty = content !== originalContent;
+  if (newDirty !== isDirty) {
+    isDirty = newDirty;
+    sendToRN('dirty', { isDirty: isDirty });
+  }
+}
+
+function ensureFallbackEditor(config) {
+  if (fallbackTextarea && fallbackGutter && fallbackHighlight) {
+    return fallbackTextarea;
+  }
+
+  var root = document.getElementById('editor');
+  if (!root) {
+    throw new Error('editor-root-missing');
+  }
+
+  var shell = document.createElement('div');
+  shell.className = 'fallback-shell';
+
+  fallbackGutter = document.createElement('div');
+  fallbackGutter.className = 'fallback-gutter';
+
+  var main = document.createElement('div');
+  main.className = 'fallback-main';
+
+  fallbackHighlight = document.createElement('pre');
+  fallbackHighlight.className = 'editor-highlight';
+  fallbackHighlight.setAttribute('aria-hidden', 'true');
+
+  fallbackTextarea = document.createElement('textarea');
+  fallbackTextarea.className = 'editor-fallback';
+  fallbackTextarea.spellcheck = false;
+  fallbackTextarea.autocapitalize = 'off';
+  fallbackTextarea.autocomplete = 'off';
+  fallbackTextarea.autocorrect = 'off';
+  fallbackTextarea.value = config && config.content ? config.content : '';
+  fallbackTextarea.readOnly = !!(config && config.readOnly);
+  fallbackTextarea.addEventListener('input', function() {
+    updateDirtyState(fallbackTextarea.value);
+    refreshFallbackPresentation();
+  });
+  fallbackTextarea.addEventListener('scroll', syncFallbackScroll);
+
+  main.appendChild(fallbackHighlight);
+  main.appendChild(fallbackTextarea);
+  shell.appendChild(fallbackGutter);
+  shell.appendChild(main);
+  root.appendChild(shell);
+  refreshFallbackPresentation();
+  return fallbackTextarea;
+}
+
+function escapeHtml(value) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function wrapToken(className, value) {
+  return '<span class="' + className + '">' + escapeHtml(value) + '</span>';
+}
+
+function getKeywordMatcher(language) {
+  var keywords = keywordMap[language] || [];
+  if (!keywords.length) {
+    return null;
+  }
+  return new RegExp('^(?:' + keywords.join('|') + ')\\b', language === 'sql' ? 'i' : '');
+}
+
+function highlightMarkdown(content) {
+  return content.split('\n').map(function(line) {
+    if (/^#{1,6}\s/.test(line)) {
+      return wrapToken('token-heading', line);
+    }
+    if (/^```/.test(line)) {
+      return wrapToken('token-markup', line);
+    }
+    var escaped = escapeHtml(line)
+      .replace(/(\[[^\]]+\]\([^\)]+\))/g, '<span class="token-link">$1</span>')
+      .replace(/(`[^`]+`)/g, '<span class="token-string">$1</span>')
+      .replace(/(\*\*[^*]+\*\*)/g, '<span class="token-strong">$1</span>');
+    return escaped;
+  }).join('\n');
+}
+
+function highlightMarkup(content) {
+  return escapeHtml(content)
+    .replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span class="token-comment">$1</span>')
+    .replace(/(&lt;\/?[A-Za-z][^&]*?&gt;)/g, '<span class="token-markup">$1</span>');
+}
+
+function highlightGeneric(content, language) {
+  if (content.length > 60000) {
+    return escapeHtml(content);
+  }
+
+  var keywordMatcher = getKeywordMatcher(language);
+  var hashComment = language === 'python' || language === 'yaml';
+  var result = '';
+  var index = 0;
+
+  while (index < content.length) {
+    var chunk = content.slice(index);
+    var token = null;
+
+    if (!token) {
+      token = chunk.match(/^\/\*[\s\S]*?\*\//);
+      if (token) {
+        result += wrapToken('token-comment', token[0]);
+        index += token[0].length;
+        continue;
+      }
+    }
+    if (!token) {
+      token = chunk.match(/^\/\/[^\n]*/);
+      if (token) {
+        result += wrapToken('token-comment', token[0]);
+        index += token[0].length;
+        continue;
+      }
+    }
+    if (!token && hashComment) {
+      token = chunk.match(/^#[^\n]*/);
+      if (token) {
+        result += wrapToken('token-comment', token[0]);
+        index += token[0].length;
+        continue;
+      }
+    }
+    if (!token) {
+      token = chunk.match(/^"(?:\\.|[^"\\])*"?/);
+      if (token) {
+        result += wrapToken('token-string', token[0]);
+        index += token[0].length;
+        continue;
+      }
+    }
+    if (!token) {
+      token = chunk.match(/^'(?:\\.|[^'\\])*'?/);
+      if (token) {
+        result += wrapToken('token-string', token[0]);
+        index += token[0].length;
+        continue;
+      }
+    }
+    if (!token) {
+      token = chunk.match(/^`(?:\\.|[^`\\])*`?/);
+      if (token) {
+        result += wrapToken('token-string', token[0]);
+        index += token[0].length;
+        continue;
+      }
+    }
+    if (!token) {
+      token = chunk.match(/^-?\b\d+(?:\.\d+)?\b/);
+      if (token) {
+        result += wrapToken('token-number', token[0]);
+        index += token[0].length;
+        continue;
+      }
+    }
+    if (!token && keywordMatcher) {
+      token = chunk.match(keywordMatcher);
+      if (token) {
+        result += wrapToken('token-keyword', token[0]);
+        index += token[0].length;
+        continue;
+      }
+    }
+
+    result += escapeHtml(content[index]);
+    index += 1;
+  }
+
+  return result;
+}
+
+function highlightContent(content) {
+  if (!currentLanguage) {
+    return escapeHtml(content);
+  }
+  if (currentLanguage === 'markdown') {
+    return highlightMarkdown(content);
+  }
+  if (currentLanguage === 'html' || currentLanguage === 'xml') {
+    return highlightMarkup(content);
+  }
+  return highlightGeneric(content, currentLanguage);
+}
+
+function refreshFallbackPresentation() {
+  if (!fallbackTextarea || !fallbackGutter || !fallbackHighlight) {
+    return;
+  }
+  var content = fallbackTextarea.value || '';
+  var lineCount = countLines(content);
+  var gutterText = '';
+  for (var lineIndex = 1; lineIndex <= lineCount; lineIndex += 1) {
+    gutterText += lineIndex + (lineIndex < lineCount ? '\n' : '');
+  }
+  fallbackGutter.textContent = gutterText;
+  fallbackHighlight.innerHTML = highlightContent(content) || '&nbsp;';
+  syncFallbackScroll();
+}
+
+function syncFallbackScroll() {
+  if (!fallbackTextarea || !fallbackHighlight || !fallbackGutter) {
+    return;
+  }
+  fallbackHighlight.scrollTop = fallbackTextarea.scrollTop;
+  fallbackHighlight.scrollLeft = fallbackTextarea.scrollLeft;
+  fallbackGutter.scrollTop = fallbackTextarea.scrollTop;
+}
+
+function setFallbackContent(content) {
+  var editor = ensureFallbackEditor({});
+  editor.value = content;
+  refreshFallbackPresentation();
+  updateDirtyState(content);
+}
+
+function getCurrentContent() {
+  if (view) {
+    return view.state.doc.toString();
+  }
+  return ensureFallbackEditor({}).value;
+}
+
+function setCurrentContent(content) {
+  if (view) {
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: content }
+    });
+    updateDirtyState(content);
+    return;
+  }
+
+  setFallbackContent(content);
+}
+
+function setCurrentReadOnly(readOnly) {
+  isReadOnly = !!readOnly;
+  if (view && readOnlyCompartment && codeMirrorModules) {
+    view.dispatch({
+      effects: readOnlyCompartment.reconfigure(codeMirrorModules.EditorState.readOnly.of(isReadOnly))
+    });
+    return;
+  }
+
+  ensureFallbackEditor({}).readOnly = isReadOnly;
+  refreshFallbackPresentation();
+}
+
+function setCurrentLanguage(lang) {
+  currentLanguage = lang || null;
+  if (view && langCompartment && codeMirrorModules) {
+    view.dispatch({
+      effects: langCompartment.reconfigure(getLanguageExtension(currentLanguage, codeMirrorModules))
+    });
+  }
+  refreshFallbackPresentation();
+}
+
+function focusEditor() {
+  if (view) {
+    view.focus();
+    return;
+  }
+  ensureFallbackEditor({}).focus();
+}
+
+function scrollTextareaToLine(editor, lineNumber) {
+  var safeLine = Math.max(1, lineNumber || 1);
+  var content = editor.value || '';
+  var lines = content.split('\n');
+  var offset = 0;
+  for (var index = 0; index < safeLine - 1 && index < lines.length; index += 1) {
+    offset += lines[index].length + 1;
+  }
+  editor.focus();
+  editor.selectionStart = offset;
+  editor.selectionEnd = offset;
+  var lineHeight = 23;
+  editor.scrollTop = Math.max(0, (safeLine - 2) * lineHeight);
+}
+
+function scrollToLine(lineNumber) {
+  if (view) {
+    var line = Math.max(1, Math.min(lineNumber || 1, view.state.doc.lines));
+    var lineInfo = view.state.doc.line(line);
+    view.dispatch({
+      selection: { anchor: lineInfo.from },
+      scrollIntoView: true
+    });
+    return;
+  }
+
+  scrollTextareaToLine(ensureFallbackEditor({}), lineNumber);
+}
+
+function markClean() {
+  originalContent = getCurrentContent();
+  isDirty = false;
+  sendToRN('dirty', { isDirty: false });
+  refreshFallbackPresentation();
+}
+
+function sendMode(mode, reason) {
+  sendToRN('mode', { mode: mode, reason: reason || null });
+}
+
+function logCodeMirrorFailure(error) {
+  var message = error && error.message ? error.message : String(error || 'unknown error');
+  console.warn('[CodeEditor] Local CodeMirror bundle failed: ' + message);
+}
+
+function invalidateCodeMirrorState() {
+  view = null;
+  codeMirrorModules = null;
+  langCompartment = null;
+  readOnlyCompartment = null;
+  themeCompartment = null;
+  editorMode = 'fallback';
+}
+
+function clearFallbackReferences() {
+  fallbackTextarea = null;
+  fallbackGutter = null;
+  fallbackHighlight = null;
+}
+
+function validateCodeMirrorBundle(modules) {
+  return !!(
+    modules &&
+    modules.Compartment &&
+    modules.EditorState &&
+    modules.EditorView &&
+    typeof modules.basicSetup !== 'undefined' &&
+    modules.keymap &&
+    typeof modules.indentWithTab !== 'undefined' &&
+    modules.oneDark &&
+    typeof modules.javascript === 'function' &&
+    typeof modules.markdown === 'function' &&
+    typeof modules.html === 'function'
+  );
+}
+
+function tryUpgradeToCodeMirror() {
+  var bundledModules = window.__KAVI_CODEMIRROR__;
+  if (!validateCodeMirrorBundle(bundledModules)) {
+    sendMode('fallback', 'codemirror-bundle-unavailable');
+    return;
+  }
+
+  var editorRoot = document.getElementById('editor');
+  if (!editorRoot) {
+    sendMode('fallback', 'editor-root-missing');
+    return;
+  }
+
+  var startingContent = getCurrentContent();
+  var nextLangCompartment = null;
+  var nextReadOnlyCompartment = null;
+  var nextThemeCompartment = null;
+  var host = document.createElement('div');
+  host.style.height = '100%';
+  var nextView = null;
+
+  try {
+    codeMirrorModules = bundledModules;
+    nextLangCompartment = new codeMirrorModules.Compartment();
+    nextReadOnlyCompartment = new codeMirrorModules.Compartment();
+    nextThemeCompartment = new codeMirrorModules.Compartment();
+
+    var extensions = [
+      codeMirrorModules.basicSetup,
+      codeMirrorModules.keymap.of([codeMirrorModules.indentWithTab]),
+      nextThemeCompartment.of(codeMirrorModules.oneDark),
+      nextLangCompartment.of(getLanguageExtension(currentLanguage, codeMirrorModules)),
+      nextReadOnlyCompartment.of(codeMirrorModules.EditorState.readOnly.of(isReadOnly)),
+      codeMirrorModules.EditorView.updateListener.of(function(update) {
+        if (update.docChanged) {
+          updateDirtyState(update.state.doc.toString());
+        }
+      }),
+      codeMirrorModules.EditorView.theme({
+        '&': { height: '100%' },
+        '.cm-scroller': { overflow: 'auto' }
+      })
+    ];
+
+    nextView = new codeMirrorModules.EditorView({
+      state: codeMirrorModules.EditorState.create({ doc: startingContent, extensions: extensions }),
+      parent: host
+    });
+
+    editorRoot.innerHTML = '';
+    editorRoot.appendChild(host);
+    view = nextView;
+    langCompartment = nextLangCompartment;
+    readOnlyCompartment = nextReadOnlyCompartment;
+    themeCompartment = nextThemeCompartment;
+    clearFallbackReferences();
+    editorMode = 'codemirror';
+    sendMode('codemirror');
+  } catch (error) {
+    if (nextView) {
+      nextView.destroy();
+    }
+    invalidateCodeMirrorState();
+    logCodeMirrorFailure(error);
+    sendMode('fallback', error && error.message ? error.message : 'codemirror-init-failed');
+  }
+}
+
+function createEditor(config) {
+  const lang = config?.language || null;
+  const readOnly = config?.readOnly || false;
+  const content = config?.content || '';
+  originalContent = content;
+  currentLanguage = lang;
+  isReadOnly = !!readOnly;
+  ensureFallbackEditor(config);
+  notifyReady(countLines(content));
+  tryUpgradeToCodeMirror();
+}
+
+window.handleMessage = function(msg) {
+  try {
+    const data = typeof msg === 'string' ? JSON.parse(msg) : msg;
+    switch (data.type) {
+      case 'setContent': {
+        const content = data.payload?.content ?? '';
+        originalContent = content;
+        isDirty = false;
+        setCurrentContent(content);
+        sendToRN('dirty', { isDirty: false });
+        break;
+      }
+      case 'getContent': {
+        sendToRN('content', { content: getCurrentContent() });
+        break;
+      }
+      case 'setLanguage': {
+        setCurrentLanguage(data.payload?.language ?? null);
+        break;
+      }
+      case 'setReadOnly': {
+        setCurrentReadOnly(!!data.payload?.readOnly);
+        break;
+      }
+      case 'focus': {
+        focusEditor();
+        break;
+      }
+      case 'scrollToLine': {
+        scrollToLine(data.payload?.line ?? 1);
+        break;
+      }
+      case 'markClean': {
+        markClean();
+        break;
+      }
+    }
+  } catch (error) {
+    sendToRN('error', { message: error.message });
+  }
+};
+
+createEditor(window._pendingConfig || {});
+</script>
+</body>
+</html>

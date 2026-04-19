@@ -1,0 +1,578 @@
+diff --git a/node_modules/@dylankenneally/react-native-ssh-sftp/android/src/main/java/me/keeex/rnssh/RNSshClientModule.java b/node_modules/@dylankenneally/react-native-ssh-sftp/android/src/main/java/me/keeex/rnssh/RNSshClientModule.java
+index 89a0053..839277f 100644
+--- a/node_modules/@dylankenneally/react-native-ssh-sftp/android/src/main/java/me/keeex/rnssh/RNSshClientModule.java
++++ b/node_modules/@dylankenneally/react-native-ssh-sftp/android/src/main/java/me/keeex/rnssh/RNSshClientModule.java
+@@ -21,11 +21,14 @@ import com.jcraft.jsch.ChannelExec;
+ import com.jcraft.jsch.ChannelSftp;
+ import com.jcraft.jsch.ChannelSftp.LsEntry;
+ import com.jcraft.jsch.ChannelShell;
++import com.jcraft.jsch.HostKey;
++import com.jcraft.jsch.HostKeyRepository;
+ import com.jcraft.jsch.JSch;
+ import com.jcraft.jsch.JSchException;
+ import com.jcraft.jsch.Session;
+ import com.jcraft.jsch.SftpException;
+ import com.jcraft.jsch.SftpProgressMonitor;
++import com.jcraft.jsch.UserInfo;
+ 
+ import java.io.BufferedReader;
+ import java.io.DataOutputStream;
+@@ -39,18 +42,11 @@ import java.util.Map;
+ import java.util.Properties;
+ import java.util.Vector;
+ 
+-import okhttp3.internal.Util;
+-
+ import com.facebook.react.bridge.Promise;
+-import com.facebook.react.bridge.ReactMethod;
+-import com.facebook.react.bridge.WritableMap;
+-import com.facebook.react.bridge.Arguments;
+ 
+ import com.jcraft.jsch.KeyPair;
+ 
+-import java.io.File;
+ import java.io.FileWriter;
+-import java.io.IOException;
+ import java.io.ByteArrayOutputStream;
+ 
+ public class RNSshClientModule extends ReactContextBaseJavaModule {
+@@ -67,8 +63,111 @@ public class RNSshClientModule extends ReactContextBaseJavaModule {
+ 
+   private final ReactApplicationContext reactContext;
+   private static final String LOGTAG = "RNSSHClient";
++  private static final int SSH_CONNECT_TIMEOUT_MS = 15000;
+   private static final String DOWNLOAD_PATH = Environment.getExternalStorageDirectory().getPath();
+ 
++  private abstract static class CapturingHostKeyRepository implements HostKeyRepository {
++    protected final JSch jsch;
++    @Nullable protected HostKey lastHostKey;
++    @Nullable protected String lastFingerprint;
++
++    CapturingHostKeyRepository(JSch jsch) {
++      this.jsch = jsch;
++    }
++
++    protected final void captureHostKey(String host, byte[] key) throws JSchException {
++      HostKey hostKey = new HostKey(host, key);
++      lastHostKey = hostKey;
++      lastFingerprint = normalizeFingerprint(hostKey.getFingerPrint(jsch));
++    }
++
++    @Nullable
++    public final String getLastFingerprint() {
++      return lastFingerprint;
++    }
++
++    @Override
++    public void add(HostKey hostkey, UserInfo userinfo) {
++      lastHostKey = hostkey;
++      lastFingerprint = normalizeFingerprint(hostkey.getFingerPrint(jsch));
++    }
++
++    @Override
++    public void remove(String host, String type) {}
++
++    @Override
++    public void remove(String host, String type, byte[] key) {}
++
++    @Override
++    public String getKnownHostsRepositoryID() {
++      return "kavi-runtime";
++    }
++
++    @Override
++    public HostKey[] getHostKey() {
++      return lastHostKey == null ? new HostKey[0] : new HostKey[] { lastHostKey };
++    }
++
++    @Override
++    public HostKey[] getHostKey(String host, String type) {
++      if (lastHostKey == null) {
++        return new HostKey[0];
++      }
++      if (host != null && !lastHostKey.getHost().equals(host)) {
++        return new HostKey[0];
++      }
++      return new HostKey[] { lastHostKey };
++    }
++  }
++
++  private static final class FingerprintCaptureHostKeyRepository extends CapturingHostKeyRepository {
++    FingerprintCaptureHostKeyRepository(JSch jsch) {
++      super(jsch);
++    }
++
++    @Override
++    public int check(String host, byte[] key) {
++      try {
++        captureHostKey(host, key);
++        return OK;
++      } catch (JSchException error) {
++        return CHANGED;
++      }
++    }
++  }
++
++  private static final class ExpectedFingerprintHostKeyRepository extends CapturingHostKeyRepository {
++    private final String expectedFingerprint;
++    private boolean mismatch;
++
++    ExpectedFingerprintHostKeyRepository(JSch jsch, String expectedFingerprint) {
++      super(jsch);
++      this.expectedFingerprint = expectedFingerprint;
++    }
++
++    @Override
++    public int check(String host, byte[] key) {
++      try {
++        captureHostKey(host, key);
++        mismatch = lastFingerprint == null || !expectedFingerprint.equals(lastFingerprint);
++        return mismatch ? CHANGED : OK;
++      } catch (JSchException error) {
++        mismatch = true;
++        lastHostKey = null;
++        lastFingerprint = null;
++        return CHANGED;
++      }
++    }
++
++    public boolean hasMismatch() {
++      return mismatch;
++    }
++
++    public String getExpectedFingerprint() {
++      return expectedFingerprint;
++    }
++  }
++
+   Map<String, SSHClient> clientPool = new HashMap<>();
+ 
+   public RNSshClientModule(ReactApplicationContext reactContext) {
+@@ -91,12 +190,87 @@ public class RNSshClientModule extends ReactContextBaseJavaModule {
+ 
+   @ReactMethod
+   private void connectToHostByPassword(final String host, final Integer port, final String username, final String passwordOrKey, final String key, final Callback callback) {
+-    connectToHost(host, port, username, passwordOrKey, null, key, callback);
++    connectToHost(host, port, username, passwordOrKey, null, null, key, callback);
+   }
+ 
+   @ReactMethod
+   private void connectToHostByKey(final String host, final Integer port, final String username, final ReadableMap passwordOrKey, final String key, final Callback callback) {
+-    connectToHost(host, port, username, null, passwordOrKey, key, callback);
++    connectToHost(host, port, username, null, passwordOrKey, null, key, callback);
++  }
++
++  @ReactMethod
++  private void connectToHostByPasswordVerified(final String host, final Integer port, final String username, final String passwordOrKey, final String expectedFingerprint, final String key, final Callback callback) {
++    connectToHost(host, port, username, passwordOrKey, null, expectedFingerprint, key, callback);
++  }
++
++  @ReactMethod
++  private void connectToHostByKeyVerified(final String host, final Integer port, final String username, final ReadableMap passwordOrKey, final String expectedFingerprint, final String key, final Callback callback) {
++    connectToHost(host, port, username, null, passwordOrKey, expectedFingerprint, key, callback);
++  }
++
++  private static String normalizeFingerprint(@Nullable String fingerprint) {
++    if (fingerprint == null) {
++      return null;
++    }
++    return fingerprint.trim().replace('-', ':').toUpperCase(Locale.US);
++  }
++
++  private static String buildHostKeyMismatchMessage(String expectedFingerprint, @Nullable String actualFingerprint) {
++    return "SSH host key mismatch. Expected " + expectedFingerprint + " but received "
++      + (actualFingerprint != null ? actualFingerprint : "an unknown fingerprint");
++  }
++
++  private String resolveHostFingerprint(Session session, JSch jsch) throws JSchException {
++    HostKey hostKey = session.getHostKey();
++    if (hostKey == null) {
++      throw new JSchException("Unable to resolve SSH host fingerprint");
++    }
++    return normalizeFingerprint(hostKey.getFingerPrint(jsch));
++  }
++
++  @ReactMethod
++  public void getHostFingerprint(final String host, final Integer port, final String username, final Callback callback) {
++    new Thread(new Runnable() {
++      public void run() {
++        Session session = null;
++        try {
++          JSch jsch = new JSch();
++          FingerprintCaptureHostKeyRepository hostKeyRepository = new FingerprintCaptureHostKeyRepository(jsch);
++          session = jsch.getSession(username, host, port);
++          session.setHostKeyRepository(hostKeyRepository);
++
++          Properties properties = new Properties();
++          properties.setProperty("StrictHostKeyChecking", "yes");
++          properties.setProperty("PreferredAuthentications", "none");
++          session.setConfig(properties);
++
++          String fingerprint = null;
++          try {
++            session.connect(SSH_CONNECT_TIMEOUT_MS);
++          } catch (JSchException error) {
++            fingerprint = hostKeyRepository.getLastFingerprint();
++            if (fingerprint == null) {
++              throw error;
++            }
++          }
++
++          if (fingerprint == null) {
++            fingerprint = hostKeyRepository.getLastFingerprint();
++          }
++          if (fingerprint == null) {
++            fingerprint = resolveHostFingerprint(session, jsch);
++          }
++          callback.invoke(null, fingerprint);
++        } catch (Exception error) {
++          Log.e(LOGTAG, "Failed to resolve host fingerprint: " + error.getMessage());
++          callback.invoke(error.getMessage());
++        } finally {
++          if (session != null && session.isConnected()) {
++            session.disconnect();
++          }
++        }
++      }
++    }).start();
+   }
+   private int getKeyTypeFromString(String type) throws IllegalArgumentException {
+     if (type == null) {
+@@ -130,7 +304,7 @@ public class RNSshClientModule extends ReactContextBaseJavaModule {
+                 // callback.invoke("Finger print: " + kpair.getFingerPrint());
+                 ByteArrayOutputStream privateKeyOut = new ByteArrayOutputStream();
+                 ByteArrayOutputStream publicKeyOut = new ByteArrayOutputStream();
+-                kpair.writePrivateKey(privateKeyOut, passphrase.isEmpty() ? null : passphrase.getBytes());
++                kpair.writePrivateKey(privateKeyOut, passphrase == null || passphrase.isEmpty() ? null : passphrase.getBytes());
+                 kpair.writePublicKey(publicKeyOut, comment);
+                 String privateKeyString = privateKeyOut.toString("UTF-8");
+                 String publicKeyString = publicKeyOut.toString("UTF-8");
+@@ -200,9 +374,10 @@ public class RNSshClientModule extends ReactContextBaseJavaModule {
+ }
+ 
+ 
+-  private void connectToHost(final String host, final Integer port, final String username,final String password, final ReadableMap keyPairs, final String key, final Callback callback) {
++  private void connectToHost(final String host, final Integer port, final String username,final String password, final ReadableMap keyPairs, final String expectedFingerprint, final String key, final Callback callback) {
+     new Thread(new Runnable()  {
+       public void run() {
++        ExpectedFingerprintHostKeyRepository hostKeyRepository = null;
+         try {
+           JSch jsch = new JSch();
+ 
+@@ -218,10 +393,17 @@ public class RNSshClientModule extends ReactContextBaseJavaModule {
+           if (password != null)
+             session.setPassword(password);
+ 
++          String normalizedExpectedFingerprint = normalizeFingerprint(expectedFingerprint);
++          if (normalizedExpectedFingerprint != null) {
++            hostKeyRepository = new ExpectedFingerprintHostKeyRepository(jsch, normalizedExpectedFingerprint);
++            session.setHostKeyRepository(hostKeyRepository);
++          }
++
+           Properties properties = new Properties();
+-          properties.setProperty("StrictHostKeyChecking", "no");
++          properties.setProperty("StrictHostKeyChecking", hostKeyRepository != null ? "yes" : "no");
++          properties.setProperty("PreferredAuthentications", password != null ? "password,keyboard-interactive" : "publickey");
+           session.setConfig(properties);
+-          session.connect();
++          session.connect(SSH_CONNECT_TIMEOUT_MS);
+ 
+           if (session.isConnected()) {
+             SSHClient client = new SSHClient();
+@@ -233,8 +415,12 @@ public class RNSshClientModule extends ReactContextBaseJavaModule {
+             callback.invoke();
+           }
+         } catch (JSchException error) {
+-          Log.e(LOGTAG, "Connection failed: " + error.getMessage());
+-          callback.invoke(error.getMessage());
++          String errorMessage = error.getMessage();
++          if (hostKeyRepository != null && hostKeyRepository.hasMismatch()) {
++            errorMessage = buildHostKeyMismatchMessage(hostKeyRepository.getExpectedFingerprint(), hostKeyRepository.getLastFingerprint());
++          }
++          Log.e(LOGTAG, "Connection failed: " + errorMessage);
++          callback.invoke(errorMessage);
+         } catch (Exception error) {
+           Log.e(LOGTAG, "Connection failed: " + error.getMessage());
+           callback.invoke(error.getMessage());
+@@ -300,14 +486,16 @@ public class RNSshClientModule extends ReactContextBaseJavaModule {
+ 
+           callback.invoke();
+ 
+-//        int charVal;
+-          String line;
+-          while (client._bufferedReader != null && (line = client._bufferedReader.readLine()) != null) {
++          char[] shellBuffer = new char[1024];
++          int charCount;
++          while (client._bufferedReader != null && (charCount = client._bufferedReader.read(shellBuffer, 0, shellBuffer.length)) != -1) {
++            if (charCount == 0) {
++              continue;
++            }
+             WritableMap map = Arguments.createMap();
+             map.putString("name", "Shell");
+             map.putString("key", key);
+-            map.putString("value", line + '\n');
+-//          map.putString("value", String.valueOf(charVal));
++            map.putString("value", new String(shellBuffer, 0, charCount));
+             sendEvent(reactContext, "Shell", map);
+           }
+ 
+diff --git a/node_modules/@dylankenneally/react-native-ssh-sftp/ios/RNSSHClient.m b/node_modules/@dylankenneally/react-native-ssh-sftp/ios/RNSSHClient.m
+index 069031e..d9a6823 100644
+--- a/node_modules/@dylankenneally/react-native-ssh-sftp/ios/RNSSHClient.m
++++ b/node_modules/@dylankenneally/react-native-ssh-sftp/ios/RNSSHClient.m
+@@ -29,6 +29,39 @@ - (SSHClient*) clientForKey:(nonnull NSString*)key {
+     return [[self clientPool] objectForKey:key];
+ }
+ 
++- (NSString *)normalizeFingerprint:(NSString *)fingerprint {
++    return [[[fingerprint ?: @"" stringByReplacingOccurrencesOfString:@"-" withString:@":"]
++        uppercaseString] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
++}
++
++- (NSString *)resolvedFingerprintForSession:(NMSSHSession *)session {
++    return [self normalizeFingerprint:[session fingerprint:NMSSHSessionHashMD5]];
++}
++
++- (BOOL)verifyExpectedFingerprint:(NSString *)expectedFingerprint
++                       forSession:(NMSSHSession *)session
++                         callback:(RCTResponseSenderBlock)callback {
++    NSString *normalizedExpected = [self normalizeFingerprint:expectedFingerprint];
++    if (!normalizedExpected.length) {
++        return YES;
++    }
++
++    NSString *actualFingerprint = [self resolvedFingerprintForSession:session];
++    if (!actualFingerprint.length) {
++        [session disconnect];
++        callback(@[@"Unable to resolve SSH host fingerprint"]);
++        return NO;
++    }
++
++    if (![actualFingerprint isEqualToString:normalizedExpected]) {
++        [session disconnect];
++        callback(@[[NSString stringWithFormat:@"SSH host key mismatch. Expected %@ but received %@", normalizedExpected, actualFingerprint]]);
++        return NO;
++    }
++
++    return YES;
++}
++
+ - (BOOL)isConnected:(NMSSHSession *)session
+        withCallback:(RCTResponseSenderBlock)callback {
+     if (session && session.isConnected && session.isAuthorized) {
+@@ -57,11 +90,46 @@ - (BOOL)isSFTPConnected:(NMSFTP *)sftpSesion
+                   passwordOrKey:(id) passwordOrKey // password or {privateKey: value, [publicKey: value, passphrase: value]}
+                   withKey:(nonnull NSString*)key
+                   withCallback:(RCTResponseSenderBlock)callback){
++    [self connectToHost:host
++                  port:port
++          withUsername:username
++          passwordOrKey:passwordOrKey
++    expectedFingerprint:nil
++                withKey:key
++           withCallback:callback];
++}
++
++RCT_EXPORT_METHOD(connectToHostVerified:(NSString *)host
++                  port:(NSInteger)port
++                  withUsername:(NSString *)username
++                  passwordOrKey:(id)passwordOrKey
++                  expectedFingerprint:(NSString *)expectedFingerprint
++                  withKey:(nonnull NSString*)key
++                  withCallback:(RCTResponseSenderBlock)callback){
++    [self connectToHost:host
++                  port:port
++          withUsername:username
++          passwordOrKey:passwordOrKey
++    expectedFingerprint:expectedFingerprint
++                withKey:key
++           withCallback:callback];
++}
++
++- (void)connectToHost:(NSString *)host
++                  port:(NSInteger)port
++          withUsername:(NSString *)username
++          passwordOrKey:(id)passwordOrKey
++    expectedFingerprint:(NSString *)expectedFingerprint
++                withKey:(nonnull NSString *)key
++           withCallback:(RCTResponseSenderBlock)callback {
+     NMSSHSession* session = [NMSSHSession connectToHost:host
+                                                    port:port
+                                            withUsername:username];
+     if (session && session.isConnected) {
+         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
++        if (![self verifyExpectedFingerprint:expectedFingerprint forSession:session callback:callback]) {
++            return;
++        }
+         if ([passwordOrKey isKindOfClass:[NSString class]])
+             [session authenticateByPassword:passwordOrKey];
+         else
+@@ -92,6 +160,29 @@ - (BOOL)isSFTPConnected:(NMSFTP *)sftpSesion
+     }
+ }
+ 
++RCT_EXPORT_METHOD(getHostFingerprint:(NSString *)host
++                  port:(NSInteger)port
++                  withUsername:(NSString *)username
++                  withCallback:(RCTResponseSenderBlock)callback) {
++    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
++        NMSSHSession *session = [NMSSHSession connectToHost:host port:port withUsername:username];
++        if (!(session && session.isConnected)) {
++            NSString *message = session.lastError.localizedDescription ?: [NSString stringWithFormat:@"Connection to host %@ failed", host];
++            callback(@[message]);
++            return;
++        }
++
++        NSString *fingerprint = [self resolvedFingerprintForSession:session];
++        [session disconnect];
++        if (!fingerprint.length) {
++            callback(@[@"Unable to resolve SSH host fingerprint"]);
++            return;
++        }
++
++        callback(@[[NSNull null], fingerprint]);
++    });
++}
++
+ RCT_EXPORT_METHOD(execute:(NSString *)command
+                   withKey:(nonnull NSString*)key
+                   withCallback:(RCTResponseSenderBlock)callback) {
+diff --git a/node_modules/@dylankenneally/react-native-ssh-sftp/lib/sshclient.js b/node_modules/@dylankenneally/react-native-ssh-sftp/lib/sshclient.js
+index b25813c..429bed9 100644
+--- a/node_modules/@dylankenneally/react-native-ssh-sftp/lib/sshclient.js
++++ b/node_modules/@dylankenneally/react-native-ssh-sftp/lib/sshclient.js
+@@ -75,7 +75,7 @@ export default class SSHClient {
+      */
+     static connectWithKey(host, port, username, privateKey, passphrase, callback) {
+         return new Promise((resolve, reject) => {
+-            const result = new SSHClient(host, port, username, { privateKey, passphrase }, (error) => {
++            const result = new SSHClient(host, port, username, { privateKey, passphrase }, undefined, (error) => {
+                 if (callback) {
+                     callback(error);
+                 }
+@@ -99,7 +99,7 @@ export default class SSHClient {
+      */
+     static connectWithPassword(host, port, username, password, callback) {
+         return new Promise((resolve, reject) => {
+-            const result = new SSHClient(host, port, username, password, (error) => {
++            const result = new SSHClient(host, port, username, password, undefined, (error) => {
+                 if (callback) {
+                     callback(error);
+                 }
+@@ -110,6 +110,45 @@ export default class SSHClient {
+             });
+         });
+     }
++    static connectWithVerifiedKey(host, port, username, privateKey, passphrase, expectedFingerprint, callback) {
++        return new Promise((resolve, reject) => {
++            const result = new SSHClient(host, port, username, { privateKey, passphrase }, { expectedFingerprint }, (error) => {
++                if (callback) {
++                    callback(error);
++                }
++                if (error) {
++                    return reject(error);
++                }
++                resolve(result);
++            });
++        });
++    }
++    static connectWithVerifiedPassword(host, port, username, password, expectedFingerprint, callback) {
++        return new Promise((resolve, reject) => {
++            const result = new SSHClient(host, port, username, password, { expectedFingerprint }, (error) => {
++                if (callback) {
++                    callback(error);
++                }
++                if (error) {
++                    return reject(error);
++                }
++                resolve(result);
++            });
++        });
++    }
++    static getHostFingerprint(host, port, username, callback) {
++        return new Promise((resolve, reject) => {
++            RNSSHClient.getHostFingerprint(host, port, username, (error, fingerprint) => {
++                if (callback) {
++                    callback(error, fingerprint);
++                }
++                if (error) {
++                    return reject(error);
++                }
++                resolve(fingerprint);
++            });
++        });
++    }
+     /**
+      * Creates a new SSHClient instance.
+      * Should not be called directly; use the `connectWithKey` or `connectWithPassword` factory functions instead.
+@@ -119,7 +158,7 @@ export default class SSHClient {
+      * @param passwordOrKey The password or private key for authentication.
+      * @param callback The callback function to be called after the connection is established.
+      */
+-    constructor(host, port, username, passwordOrKey, callback) {
++    constructor(host, port, username, passwordOrKey, connectionOptionsOrCallback, maybeCallback) {
+         this._key = SSHClient.getRandomClientKey();
+         this._listeners = {};
+         this._counters = {
+@@ -134,7 +173,13 @@ export default class SSHClient {
+         this.host = host;
+         this.port = port;
+         this.username = username;
+-        this.connect(passwordOrKey, callback);
++        const connectionOptions = typeof connectionOptionsOrCallback === 'function' || !connectionOptionsOrCallback
++            ? {}
++            : connectionOptionsOrCallback;
++        const callback = typeof connectionOptionsOrCallback === 'function'
++            ? connectionOptionsOrCallback
++            : maybeCallback;
++        this.connect(passwordOrKey, connectionOptions, callback);
+     }
+     /**
+      * Generates a random client key, used to identify which callback match with which instance.
+@@ -142,7 +187,6 @@ export default class SSHClient {
+      * @returns A string representing the random client key.
+      */
+     static getRandomClientKey() {
+-        // TODO This should be returned by the native code...
+         // There's no need for actual randomness, just uniqueness.
+         return Math.floor((1 + Math.random()) * 0x10000)
+             .toString(16)
+@@ -193,18 +237,34 @@ export default class SSHClient {
+      * @param passwordOrKey - The password or key to authenticate with the server.
+      * @param callback - The callback function to be called after the connection attempt.
+      */
+-    connect(passwordOrKey, callback) {
++    connect(passwordOrKey, connectionOptions, callback) {
++        const expectedFingerprint = connectionOptions === null || connectionOptions === void 0 ? void 0 : connectionOptions.expectedFingerprint;
+         if (Platform.OS === 'android') {
+             if (typeof passwordOrKey === 'string') {
+-                RNSSHClient.connectToHostByPassword(this.host, this.port, this.username, passwordOrKey, this._key, (error) => { callback(error); });
++                if (expectedFingerprint) {
++                    RNSSHClient.connectToHostByPasswordVerified(this.host, this.port, this.username, passwordOrKey, expectedFingerprint, this._key, (error) => { callback(error); });
++                }
++                else {
++                    RNSSHClient.connectToHostByPassword(this.host, this.port, this.username, passwordOrKey, this._key, (error) => { callback(error); });
++                }
+             }
+             else {
+-                RNSSHClient.connectToHostByKey(this.host, this.port, this.username, passwordOrKey, this._key, (error) => { callback(error); });
++                if (expectedFingerprint) {
++                    RNSSHClient.connectToHostByKeyVerified(this.host, this.port, this.username, passwordOrKey, expectedFingerprint, this._key, (error) => { callback(error); });
++                }
++                else {
++                    RNSSHClient.connectToHostByKey(this.host, this.port, this.username, passwordOrKey, this._key, (error) => { callback(error); });
++                }
+             }
+             return;
+         }
+         // iOS...
+-        RNSSHClient.connectToHost(this.host, this.port, this.username, passwordOrKey, this._key, (error) => { callback(error); });
++        if (expectedFingerprint) {
++            RNSSHClient.connectToHostVerified(this.host, this.port, this.username, passwordOrKey, expectedFingerprint, this._key, (error) => { callback(error); });
++        }
++        else {
++            RNSSHClient.connectToHost(this.host, this.port, this.username, passwordOrKey, this._key, (error) => { callback(error); });
++        }
+     }
+     /**
+      * Executes a command on the SSH server.

@@ -1,0 +1,376 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
+    <title>Kavi Terminal</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0a0a0c;
+      }
+      #terminal {
+        width: 100%;
+        height: 100%;
+      }
+      /* xterm.css inlined from @xterm/xterm 5.5.0 */
+      .xterm {
+        cursor: text;
+        position: relative;
+        user-select: none;
+        -ms-user-select: none;
+        -webkit-user-select: none;
+      }
+      .xterm.focus,
+      .xterm:focus {
+        outline: none;
+      }
+      .xterm .xterm-helpers {
+        position: absolute;
+        top: 0;
+        z-index: 5;
+      }
+      .xterm .xterm-helper-textarea {
+        padding: 0;
+        border: 0;
+        margin: 0;
+        position: absolute;
+        opacity: 0;
+        left: -9999em;
+        top: 0;
+        width: 0;
+        height: 0;
+        z-index: -5;
+        white-space: nowrap;
+        overflow: hidden;
+        resize: none;
+      }
+      .xterm .composition-view {
+        background: #000;
+        color: #fff;
+        display: none;
+        position: absolute;
+        white-space: nowrap;
+        z-index: 1;
+      }
+      .xterm .composition-view.active {
+        display: block;
+      }
+      .xterm .xterm-viewport {
+        background-color: #000;
+        overflow-y: scroll;
+        cursor: default;
+        position: absolute;
+        right: 0;
+        left: 0;
+        top: 0;
+        bottom: 0;
+      }
+      .xterm .xterm-screen {
+        position: relative;
+      }
+      .xterm .xterm-screen canvas {
+        position: absolute;
+        left: 0;
+        top: 0;
+      }
+      .xterm .xterm-scroll-area {
+        visibility: hidden;
+      }
+      .xterm-char-measure-element {
+        display: inline-block;
+        visibility: hidden;
+        position: absolute;
+        top: 0;
+        left: -9999em;
+        line-height: normal;
+      }
+      .xterm.enable-mouse-events {
+        cursor: default;
+      }
+      .xterm .xterm-cursor-pointer,
+      .xterm.xterm-cursor-pointer {
+        cursor: pointer;
+      }
+      .xterm.column-select.focus {
+        cursor: crosshair;
+      }
+      .xterm .xterm-accessibility:not(.debug),
+      .xterm .xterm-message {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        right: 0;
+        z-index: 10;
+        color: transparent;
+        pointer-events: none;
+      }
+      .xterm .xterm-accessibility-tree:not(.debug) *::selection {
+        color: transparent;
+      }
+      .xterm .xterm-accessibility-tree {
+        user-select: text;
+        white-space: pre;
+      }
+      .xterm .live-region {
+        position: absolute;
+        left: -9999px;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+      }
+      .xterm-dim {
+        opacity: 0.5;
+      }
+      .xterm-underline-1 {
+        text-decoration: underline;
+      }
+      .xterm-underline-2 {
+        text-decoration: double underline;
+      }
+      .xterm-underline-3 {
+        text-decoration: wavy underline;
+      }
+      .xterm-underline-4 {
+        text-decoration: dotted underline;
+      }
+      .xterm-underline-5 {
+        text-decoration: dashed underline;
+      }
+      .xterm-overline {
+        text-decoration: overline;
+      }
+      .xterm-strikethrough {
+        text-decoration: line-through;
+      }
+      .xterm-screen .xterm-decoration-container .xterm-decoration {
+        z-index: 6;
+        position: absolute;
+      }
+      .xterm-screen .xterm-decoration-container .xterm-decoration.xterm-decoration-top-layer {
+        z-index: 7;
+      }
+      .xterm-decoration-overview-ruler {
+        z-index: 8;
+        position: absolute;
+        top: 0;
+        right: 0;
+        pointer-events: none;
+      }
+      .xterm-decoration-top {
+        z-index: 2;
+        position: relative;
+      }
+    </style>
+    <!-- xterm.js will be loaded from CDN at runtime, with fallback to bundled -->
+  </head>
+  <body>
+    <div id="terminal"></div>
+    <script>
+      // ---------------------------------------------------------------------------
+      // Kavi xterm.js Terminal Bridge
+      // ---------------------------------------------------------------------------
+      // Communicates with React Native via window.ReactNativeWebView.postMessage()
+      // and receives messages via the injectedJavaScript onMessage bridge.
+
+      var XTERM_CDN = 'https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js';
+      var FIT_CDN = 'https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js';
+      var WEBLINKS_CDN =
+        'https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js';
+      var SEARCH_CDN =
+        'https://cdn.jsdelivr.net/npm/@xterm/addon-search@0.15.0/lib/addon-search.min.js';
+
+      var terminal = null;
+      var fitAddon = null;
+
+      function sendToRN(type, payload) {
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: type, payload: payload }));
+        }
+      }
+
+      function loadScript(url) {
+        return new Promise(function (resolve, reject) {
+          var s = document.createElement('script');
+          s.src = url;
+          s.onload = resolve;
+          s.onerror = reject;
+          document.head.appendChild(s);
+        });
+      }
+
+      function applyTheme(theme) {
+        if (!terminal) return;
+        terminal.options.theme = theme;
+      }
+
+      function initTerminal(config) {
+        var theme =
+          config && config.theme
+            ? config.theme
+            : {
+                background: '#0a0a0c',
+                foreground: '#f0f0f2',
+                cursor: '#10b981',
+                cursorAccent: '#0a0a0c',
+                selectionBackground: '#10b98144',
+                selectionForeground: '#f0f0f2',
+                black: '#0a0a0c',
+                red: '#f87171',
+                green: '#34d399',
+                yellow: '#fbbf24',
+                blue: '#60a5fa',
+                magenta: '#c084fc',
+                cyan: '#22d3ee',
+                white: '#f0f0f2',
+                brightBlack: '#70707a',
+                brightRed: '#fca5a5',
+                brightGreen: '#6ee7b7',
+                brightYellow: '#fde68a',
+                brightBlue: '#93c5fd',
+                brightMagenta: '#d8b4fe',
+                brightCyan: '#67e8f9',
+                brightWhite: '#ffffff',
+              };
+
+        terminal = new Terminal({
+          theme: theme,
+          fontSize: config && config.fontSize ? config.fontSize : 14,
+          fontFamily:
+            config && config.fontFamily ? config.fontFamily : "'Menlo', 'Courier New', monospace",
+          cursorBlink: true,
+          cursorStyle: 'block',
+          scrollback: 5000,
+          allowProposedApi: true,
+          convertEol: true,
+        });
+
+        fitAddon = new FitAddon.FitAddon();
+        terminal.loadAddon(fitAddon);
+
+        try {
+          var webLinksAddon = new WebLinksAddon.WebLinksAddon(function (event, uri) {
+            sendToRN('link', { uri: uri });
+          });
+          terminal.loadAddon(webLinksAddon);
+        } catch (e) {
+          /* web links addon optional */
+        }
+
+        try {
+          var searchAddon = new SearchAddon.SearchAddon();
+          terminal.loadAddon(searchAddon);
+          window._searchAddon = searchAddon;
+        } catch (e) {
+          /* search addon optional */
+        }
+
+        terminal.open(document.getElementById('terminal'));
+        fitAddon.fit();
+
+        terminal.onData(function (data) {
+          sendToRN('input', { data: data });
+        });
+
+        terminal.onTitleChange(function (title) {
+          sendToRN('title', { title: title });
+        });
+
+        terminal.onResize(function (size) {
+          sendToRN('resize', { cols: size.cols, rows: size.rows });
+        });
+
+        window.addEventListener('resize', function () {
+          if (fitAddon) fitAddon.fit();
+        });
+
+        sendToRN('ready', { cols: terminal.cols, rows: terminal.rows });
+      }
+
+      // Message handler from React Native
+      window.handleMessage = function (msg) {
+        try {
+          var data = typeof msg === 'string' ? JSON.parse(msg) : msg;
+          switch (data.type) {
+            case 'output':
+              if (terminal) terminal.write(data.payload.data);
+              break;
+            case 'clear':
+              if (terminal) terminal.clear();
+              break;
+            case 'reset':
+              if (terminal) terminal.reset();
+              break;
+            case 'theme':
+              applyTheme(data.payload);
+              break;
+            case 'focus':
+              if (terminal) terminal.focus();
+              break;
+            case 'blur':
+              if (terminal) terminal.blur();
+              break;
+            case 'resize':
+              if (fitAddon) fitAddon.fit();
+              break;
+            case 'scrollToBottom':
+              if (terminal) terminal.scrollToBottom();
+              break;
+            case 'search':
+              if (window._searchAddon && data.payload && data.payload.query) {
+                var found = window._searchAddon.findNext(data.payload.query);
+                sendToRN('searchResult', { found: found });
+              }
+              break;
+            case 'paste':
+              if (terminal && data.payload && data.payload.text) {
+                terminal.paste(data.payload.text);
+              }
+              break;
+            case 'writeln':
+              if (terminal) terminal.writeln(data.payload.data || '');
+              break;
+            case 'config':
+              // Dynamic config update
+              if (terminal && data.payload) {
+                if (data.payload.fontSize) terminal.options.fontSize = data.payload.fontSize;
+                if (data.payload.fontFamily) terminal.options.fontFamily = data.payload.fontFamily;
+                if (data.payload.scrollback !== undefined)
+                  terminal.options.scrollback = data.payload.scrollback;
+                if (fitAddon) fitAddon.fit();
+              }
+              break;
+          }
+        } catch (e) {
+          sendToRN('error', { message: e.message });
+        }
+      };
+
+      // Load xterm.js from CDN and initialize
+      Promise.all([
+        loadScript(XTERM_CDN),
+        loadScript(FIT_CDN),
+        loadScript(WEBLINKS_CDN).catch(function () {}),
+        loadScript(SEARCH_CDN).catch(function () {}),
+      ])
+        .then(function () {
+          initTerminal(window._pendingConfig || null);
+        })
+        .catch(function (err) {
+          sendToRN('error', { message: 'Failed to load xterm.js: ' + err.message });
+        });
+    </script>
+  </body>
+</html>

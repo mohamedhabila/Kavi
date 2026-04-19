@@ -1,0 +1,172 @@
+import {
+  applyTrackedAsyncToolResult,
+  buildPendingAsyncOperationJoinNote,
+  getPendingTrackedAsyncOperationToolNames,
+  getPendingTrackedAsyncOperations,
+  type TrackedAsyncOperation,
+} from '../../src/engine/pendingAsyncOperations';
+
+describe('pendingAsyncOperations', () => {
+  let trackedOperations: Map<string, TrackedAsyncOperation>;
+
+  beforeEach(() => {
+    trackedOperations = new Map<string, TrackedAsyncOperation>();
+  });
+
+  it('tracks session workers until they reach a terminal state', () => {
+    applyTrackedAsyncToolResult(
+      trackedOperations,
+      'sessions_spawn',
+      '{"prompt":"research"}',
+      JSON.stringify({ status: 'running', sessionId: 'sub-1' }),
+    );
+
+    expect(getPendingTrackedAsyncOperations(trackedOperations)).toHaveLength(1);
+    expect(getPendingTrackedAsyncOperationToolNames(trackedOperations).sort()).toEqual([
+      'sessions_cancel',
+      'sessions_status',
+      'sessions_wait',
+    ]);
+    expect(buildPendingAsyncOperationJoinNote(trackedOperations)).toContain(
+      'Primary next step when you need worker outputs: call sessions_wait with {"sessionId":"sub-1"}.',
+    );
+
+    applyTrackedAsyncToolResult(
+      trackedOperations,
+      'sessions_status',
+      '{"sessionId":"sub-1"}',
+      JSON.stringify({ status: 'completed', sessionId: 'sub-1' }),
+    );
+
+    expect(getPendingTrackedAsyncOperations(trackedOperations)).toHaveLength(0);
+  });
+
+  it('clears stale tracked session workers when sessions_yield confirms none remain', () => {
+    applyTrackedAsyncToolResult(
+      trackedOperations,
+      'sessions_spawn',
+      '{"prompt":"research"}',
+      JSON.stringify({ status: 'running', sessionId: 'sub-1' }),
+    );
+
+    expect(getPendingTrackedAsyncOperations(trackedOperations)).toHaveLength(1);
+
+    applyTrackedAsyncToolResult(
+      trackedOperations,
+      'sessions_yield',
+      '{"message":"checkpoint"}',
+      JSON.stringify({
+        status: 'completed',
+        message: 'checkpoint',
+        finalizeSupervisor: true,
+        pendingSessions: [],
+      }),
+    );
+
+    expect(getPendingTrackedAsyncOperations(trackedOperations)).toHaveLength(0);
+  });
+
+  it('tracks expo workflows by run id once a run is known', () => {
+    applyTrackedAsyncToolResult(
+      trackedOperations,
+      'expo_eas_build',
+      '{"projectId":"proj-1"}',
+      JSON.stringify({
+        projectId: 'proj-1',
+        projectName: 'Kavi',
+        mode: 'github-workflow',
+        workflowRun: {
+          id: 123,
+          status: 'queued',
+          conclusion: null,
+        },
+      }),
+    );
+
+    expect(getPendingTrackedAsyncOperationToolNames(trackedOperations).sort()).toEqual([
+      'expo_eas_workflow_status',
+      'expo_eas_workflow_wait',
+    ]);
+    expect(buildPendingAsyncOperationJoinNote(trackedOperations)).toContain('Expo workflow 123');
+
+    applyTrackedAsyncToolResult(
+      trackedOperations,
+      'expo_eas_workflow_wait',
+      '{"projectId":"proj-1","workflowRunId":"123"}',
+      JSON.stringify({
+        projectId: 'proj-1',
+        projectName: 'Kavi',
+        mode: 'github-workflow',
+        workflowRun: {
+          id: 123,
+          status: 'completed',
+          conclusion: 'success',
+        },
+      }),
+    );
+
+    expect(getPendingTrackedAsyncOperations(trackedOperations)).toHaveLength(0);
+  });
+
+  it('prefers the newest active expo workflow from runs payloads', () => {
+    applyTrackedAsyncToolResult(
+      trackedOperations,
+      'expo_eas_workflow_runs',
+      '{"projectId":"proj-1"}',
+      JSON.stringify({
+        projectId: 'proj-1',
+        projectName: 'Kavi',
+        mode: 'github-workflow',
+        runs: [
+          {
+            id: 122,
+            status: 'completed',
+            conclusion: 'success',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+          {
+            id: 123,
+            status: 'queued',
+            conclusion: null,
+            updatedAt: '2026-01-02T00:00:00.000Z',
+          },
+        ],
+      }),
+    );
+
+    expect(getPendingTrackedAsyncOperations(trackedOperations)).toEqual([
+      expect.objectContaining({
+        kind: 'expo-workflow',
+        resourceId: '123',
+        status: 'running',
+      }),
+    ]);
+    expect(buildPendingAsyncOperationJoinNote(trackedOperations)).toContain('Expo workflow 123');
+  });
+
+  it('tracks SSH background jobs until they complete', () => {
+    applyTrackedAsyncToolResult(
+      trackedOperations,
+      'ssh_exec',
+      '{"command":"npm run build","background":true}',
+      JSON.stringify({ status: 'started', jobId: 'bg-1' }),
+    );
+
+    expect(getPendingTrackedAsyncOperationToolNames(trackedOperations).sort()).toEqual([
+      'ssh_background_job_status',
+      'ssh_background_job_wait',
+    ]);
+    expect(buildPendingAsyncOperationJoinNote(trackedOperations)).toContain(
+      'SSH background job bg-1',
+    );
+
+    applyTrackedAsyncToolResult(
+      trackedOperations,
+      'ssh_background_job_status',
+      '{"jobId":"bg-1"}',
+      JSON.stringify({ status: 'completed', jobId: 'bg-1' }),
+    );
+
+    expect(getPendingTrackedAsyncOperations(trackedOperations)).toHaveLength(0);
+  });
+});

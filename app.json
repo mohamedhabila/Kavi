@@ -1,0 +1,103 @@
+{
+  "expo": {
+    "name": "Kavi",
+    "slug": "kavi",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "scheme": "kavi",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0f172a"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kavi.app",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSCalendarsFullAccessUsageDescription": "Kavi accesses your calendars only when you ask it to read events or create, update, or delete a calendar entry on your behalf.",
+        "NSMicrophoneUsageDescription": "Kavi uses the microphone only for voice input, voice notes, and audio captured during a user-requested recording.",
+        "NSCameraUsageDescription": "Kavi uses the camera only when you capture an image or short video clip for a conversation or tool action.",
+        "NSPhotoLibraryUsageDescription": "Kavi accesses your photo library only when you choose images to attach to a conversation or use a photo-aware tool.",
+        "NSLocationWhenInUseUsageDescription": "Kavi uses your location only when you ask the assistant to open maps or run a location-aware action.",
+        "NSContactsUsageDescription": "Kavi accesses contacts only for actions you request, such as picking a contact or an explicitly approved contact search, view, edit, create, or share action.",
+        "NSCalendarsUsageDescription": "Kavi accesses your calendar only when you ask the assistant to view events or create a calendar entry."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0f172a"
+      },
+      "package": "com.kavi.app",
+      "versionCode": 1,
+      "softwareKeyboardLayoutMode": "resize",
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
+      "permissions": [
+        "INTERNET",
+        "RECORD_AUDIO",
+        "CAMERA",
+        "READ_CONTACTS",
+        "WRITE_CONTACTS",
+        "READ_CALENDAR",
+        "WRITE_CALENDAR",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "VIBRATE",
+        "READ_EXTERNAL_STORAGE",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
+            "buildToolsVersion": "36.0.0",
+            "kotlinVersion": "2.3.0",
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true
+          },
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
+        }
+      ],
+      "expo-sharing",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Kavi accesses contacts only for actions you request, such as picking a contact or an explicitly approved contact search, view, edit, create, or share action."
+        }
+      ],
+      "expo-notifications",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Kavi uses the microphone only for voice input, voice notes, and audio captured during a user-requested recording."
+        }
+      ],
+      "./plugins/withReleaseOptimizations",
+      "./plugins/withIosSimulatorArch",
+      "./plugins/withAndroidHtmlAssets",
+      "expo-asset",
+      "expo-web-browser",
+      "expo-sqlite",
+      "expo-font",
+      "expo-mail-composer"
+    ]
+  }
+}

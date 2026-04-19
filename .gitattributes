@@ -1,0 +1,10 @@
+_research export-ignore
+coverage export-ignore
+dist export-ignore
+node_modules export-ignore
+.venv export-ignore
+.vscode export-ignore
+node-compile-cache export-ignore
+android/build export-ignore
+android/app/build export-ignore
+ios/build export-ignore
