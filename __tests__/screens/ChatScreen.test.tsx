@@ -2489,6 +2489,149 @@ describe('ChatScreen', () => {
     jest.useRealTimers();
   });
 
+  it('keeps async operation monitoring in the work phase while the operation is still pending', async () => {
+    mockStartAgentRun.mockImplementationOnce((conversationId: string, params: any) => {
+      updateMockConversation(conversationId, (conversation) => ({
+        ...conversation,
+        activeAgentRunId: 'run-1',
+        agentRuns: [
+          createRunningAgentRun({
+            id: 'run-1',
+            userMessageId: params.userMessageId,
+            goal: params.goal,
+          }),
+        ],
+      }));
+      return 'run-1';
+    });
+
+    const { getByPlaceholderText, getByTestId } = render(<ChatScreen />);
+    fireEvent.changeText(
+      getByPlaceholderText('Message...'),
+      'Keep monitoring the async workflow before final review',
+    );
+    fireEvent.press(getByTestId('icon-Send').parent || getByTestId('icon-Send'));
+
+    await waitFor(() => {
+      expect(mockRunOrchestrator).toHaveBeenCalledTimes(1);
+    });
+
+    const [, callbacks] = mockRunOrchestrator.mock.calls[0];
+    const pendingOperation = {
+      key: 'expo-workflow:workflow-101',
+      kind: 'expo-workflow',
+      resourceId: 'workflow-101',
+      displayName: 'Expo workflow 101',
+      status: 'running',
+      lastUpdatedByTool: 'expo_eas_build',
+      updatedAt: Date.now(),
+      monitorToolNames: ['expo_eas_workflow_status', 'expo_eas_workflow_wait'],
+      statusArgs: { projectId: 'proj-1', workflowRunId: '101' },
+      waitToolName: 'expo_eas_workflow_wait',
+      waitArgs: { projectId: 'proj-1', workflowRunId: '101' },
+    };
+
+    mockSetAgentRunPhase.mockClear();
+
+    act(() => {
+      callbacks.onPendingAsyncOperationsChange([pendingOperation]);
+      callbacks.onAssistantMessage('Checking the Expo workflow status.', [
+        {
+          id: 'tc-expo-status',
+          name: 'expo_eas_workflow_status',
+          arguments: '{"projectId":"proj-1","workflowRunId":"101"}',
+          status: 'pending',
+        },
+      ]);
+      callbacks.onToolCallStart({
+        id: 'tc-expo-status',
+        name: 'expo_eas_workflow_status',
+        arguments: '{"projectId":"proj-1","workflowRunId":"101"}',
+        status: 'running',
+      });
+      callbacks.onToolCallComplete({
+        id: 'tc-expo-status',
+        name: 'expo_eas_workflow_status',
+        arguments: '{"projectId":"proj-1","workflowRunId":"101"}',
+        status: 'completed',
+        result: JSON.stringify({
+          projectId: 'proj-1',
+          mode: 'github-workflow',
+          workflowRun: {
+            id: 101,
+            status: 'in_progress',
+          },
+        }),
+      });
+    });
+
+    expect(mockUpdateAgentRunPendingAsyncOperations).toHaveBeenCalledWith(
+      'conv1',
+      [pendingOperation],
+      expect.objectContaining({ latestSummary: expect.any(String) }),
+      'run-1',
+    );
+    expect(mockSetAgentRunPhase.mock.calls.some(([, phase]) => phase === 'work')).toBe(true);
+    expect(mockSetAgentRunPhase.mock.calls.filter(([, phase]) => phase === 'review')).toHaveLength(
+      0,
+    );
+  });
+
+  it('recovers a running async-monitoring run back into work instead of review', async () => {
+    const pendingOperation = {
+      key: 'expo-workflow:workflow-101',
+      kind: 'expo-workflow',
+      resourceId: 'workflow-101',
+      displayName: 'Expo workflow 101',
+      status: 'running',
+      lastUpdatedByTool: 'expo_eas_build',
+      updatedAt: Date.now(),
+      monitorToolNames: ['expo_eas_workflow_status', 'expo_eas_workflow_wait'],
+      statusArgs: { projectId: 'proj-1', workflowRunId: '101' },
+      waitToolName: 'expo_eas_workflow_wait',
+      waitArgs: { projectId: 'proj-1', workflowRunId: '101' },
+    };
+
+    mockConversations = [
+      {
+        ...createDefaultConversations()[0],
+        activeAgentRunId: 'run-async-1',
+        agentRuns: [
+          createRunningAgentRun({
+            id: 'run-async-1',
+            userMessageId: 'msg1',
+            currentPhase: 'review',
+            latestSummary: 'Async monitoring was interrupted.',
+            pendingAsyncOperations: [pendingOperation],
+          }),
+        ],
+      },
+    ];
+
+    render(<ChatScreen />);
+
+    await waitFor(() => {
+      expect(mockSetAgentRunPhase).toHaveBeenCalledWith(
+        'conv1',
+        'work',
+        expect.objectContaining({
+          checkpointTitle: 'Recovered async workflow monitoring',
+          allowRegression: true,
+        }),
+        'run-async-1',
+      );
+    });
+
+    expect(
+      mockSetAgentRunPhase.mock.calls.some(
+        ([, phase, params, runId]) =>
+          phase === 'review'
+          && params?.checkpointTitle === 'Recovered async workflow monitoring'
+          && runId === 'run-async-1',
+      ),
+    ).toBe(false);
+  });
+
   it('keeps the run open when the supervisor stream fails while background workers are still running', async () => {
     jest.useFakeTimers();
 

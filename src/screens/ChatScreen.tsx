@@ -1808,13 +1808,14 @@ export const ChatScreen: React.FC = () => {
             'Resuming asynchronous workflow monitoring.';
           setAgentRunPhase(
             params.conversationId,
-            'review',
+            'work',
             {
               status: 'active',
               detail: summary,
               checkpointTitle: 'Recovered async workflow monitoring',
               checkpointDetail: summary,
               timestamp: resumeTimestamp,
+              allowRegression: true,
             },
             params.runId,
           );
@@ -3266,6 +3267,29 @@ export const ChatScreen: React.FC = () => {
 
         return getRunningLiveSubAgentsForRun(latestConversation, trackedAgentRunId).length;
       };
+      const getPendingAsyncMonitoringToolNames = () => {
+        if (!trackedAgentRunId) {
+          return new Set<string>();
+        }
+
+        const latestConversation = useChatStore
+          .getState()
+          .conversations.find((candidate) => candidate.id === convId);
+        const targetRun = latestConversation?.agentRuns?.find(
+          (candidate) => candidate.id === trackedAgentRunId,
+        );
+        if (!targetRun?.pendingAsyncOperations?.length) {
+          return new Set<string>();
+        }
+
+        return new Set(
+          targetRun.pendingAsyncOperations.flatMap((operation) =>
+            operation.waitToolName
+              ? [...operation.monitorToolNames, operation.waitToolName]
+              : operation.monitorToolNames,
+          ),
+        );
+      };
       const shouldEnterReviewPhaseForTool = (toolName: string) => {
         if (!isAgentReviewToolName(toolName)) {
           return false;
@@ -3275,6 +3299,10 @@ export const ChatScreen: React.FC = () => {
           isBackgroundWorkerMonitoringToolName(toolName) &&
           getRunningBackgroundWorkerCount() > 0
         ) {
+          return false;
+        }
+
+        if (getPendingAsyncMonitoringToolNames().has(toolName)) {
           return false;
         }
 
@@ -4031,7 +4059,7 @@ export const ChatScreen: React.FC = () => {
           );
 
           if (pendingSummary) {
-            enterReviewPhase(pendingSummary, 'Async monitoring active');
+            enterWorkPhase(pendingSummary, 'Async monitoring active');
           }
         },
         onAssistantMessage: (content, toolCalls, providerReplay, assistantMetadata) => {
@@ -4233,13 +4261,14 @@ export const ChatScreen: React.FC = () => {
               const reviewTimestamp = Date.now();
               setAgentRunPhase(
                 convId,
-                'review',
+                'work',
                 {
                   status: 'active',
                   detail: interruptedOutcome.checkpointDetail,
                   checkpointTitle: interruptedOutcome.checkpointTitle,
                   checkpointDetail: interruptedOutcome.checkpointDetail,
                   timestamp: reviewTimestamp,
+                  allowRegression: true,
                 },
                 trackedAgentRunId,
               );
