@@ -99,6 +99,8 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     openMenu: '打开菜单',
     assistantTyping: '助手正在输入',
     workingOnIt: '正在处理',
+    reviewingWork: '正在审查这项工作',
+    pilotReviewingWork: '试点正在审查这项工作',
     showCode: '显示代码',
     hideCode: '隐藏代码',
     plainTextFallback: '较大的响应会以纯文本显示以保证稳定性。',

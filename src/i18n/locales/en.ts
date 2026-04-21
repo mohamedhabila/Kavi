@@ -114,6 +114,8 @@ export const en: TranslationMap = {
     openMenu: 'Open menu',
     assistantTyping: 'Assistant is typing',
     workingOnIt: 'Working on it',
+    reviewingWork: 'Reviewing the work',
+    pilotReviewingWork: 'Pilot is reviewing the work',
     showCode: 'Show code',
     hideCode: 'Hide code',
     plainTextFallback: 'Large response shown as plain text for stability.',

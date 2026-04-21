@@ -82,6 +82,26 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
 
       return t('chat.workingOnIt');
     }, [bubbleModel.activeToolCall, isStreaming, t]);
+    const reviewStatusText = useMemo(() => {
+      if (isStreaming || !agentRun || agentRun.status !== 'running') {
+        return null;
+      }
+
+      const activePhase = agentRun.phases.find((phase) => phase.key === agentRun.currentPhase);
+      if (activePhase && activePhase.status !== 'active') {
+        return null;
+      }
+
+      if (agentRun.currentPhase === 'review') {
+        return t('chat.reviewingWork');
+      }
+
+      if (agentRun.currentPhase === 'pilot') {
+        return t('chat.pilotReviewingWork');
+      }
+
+      return null;
+    }, [agentRun, isStreaming, t]);
 
     useEffect(() => {
       if (!message.effectId) {
@@ -371,6 +391,14 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
             ) : null}
           </View>
           {bubbleMainContent}
+          {reviewStatusText ? (
+            <View style={styles.reviewFooter}>
+              <View style={styles.reviewPill} testID="assistant-bubble-review-indicator">
+                <ActivityIndicator size="small" color={colors.info ?? colors.primary} />
+                <Text style={styles.reviewPillText}>{reviewStatusText}</Text>
+              </View>
+            </View>
+          ) : null}
         </Animated.View>
 
         {!isStreaming ? (
@@ -537,6 +565,31 @@ const createStyles = (colors: AppPalette) =>
       color: colors.textSecondary,
       fontSize: 13,
       lineHeight: 18,
+    },
+    reviewFooter: {
+      marginTop: 12,
+      paddingTop: 10,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.subtleBorder,
+    },
+    reviewPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: 8,
+      minWidth: 0,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.subtleBorder,
+      backgroundColor: colors.surfaceAlt,
+    },
+    reviewPillText: {
+      flexShrink: 1,
+      color: colors.textSecondary,
+      fontSize: 12,
+      fontWeight: '600',
     },
     effectDot: {
       position: 'absolute',

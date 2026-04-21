@@ -99,6 +99,8 @@ export const ja: TranslationMap = mergeTranslations(en, {
     openMenu: 'メニューを開く',
     assistantTyping: 'アシスタントが入力中',
     workingOnIt: '対応中です',
+    reviewingWork: '作業をレビュー中',
+    pilotReviewingWork: 'パイロットが作業をレビュー中',
     showCode: 'コードを表示',
     hideCode: 'コードを隠す',
     plainTextFallback: '大きな応答は安定性のためプレーンテキストで表示されています。',

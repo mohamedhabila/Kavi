@@ -100,6 +100,8 @@ export const es: TranslationMap = mergeTranslations(en, {
     openMenu: 'Abrir menú',
     assistantTyping: 'El asistente está escribiendo',
     workingOnIt: 'Estoy trabajando en ello',
+    reviewingWork: 'Revisando el trabajo',
+    pilotReviewingWork: 'Piloto está revisando el trabajo',
     showCode: 'Mostrar código',
     hideCode: 'Ocultar código',
     plainTextFallback: 'La respuesta grande se muestra como texto sin formato por estabilidad.',

@@ -100,6 +100,8 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     openMenu: 'Abrir menu',
     assistantTyping: 'O assistente está digitando',
     workingOnIt: 'Estou trabalhando nisso',
+    reviewingWork: 'Revisando o trabalho',
+    pilotReviewingWork: 'O piloto está revisando o trabalho',
     showCode: 'Mostrar código',
     hideCode: 'Ocultar código',
     plainTextFallback: 'A resposta grande está sendo exibida como texto simples por estabilidade.',

@@ -99,6 +99,8 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     openMenu: '開啟選單',
     assistantTyping: '助手正在輸入',
     workingOnIt: '正在處理',
+    reviewingWork: '正在審查這項工作',
+    pilotReviewingWork: '試點正在審查這項工作',
     showCode: '顯示程式碼',
     hideCode: '隱藏程式碼',
     plainTextFallback: '較大的回應會以純文字顯示以確保穩定性。',

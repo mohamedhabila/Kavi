@@ -100,6 +100,8 @@ export const fr: TranslationMap = mergeTranslations(en, {
     openMenu: 'Ouvrir le menu',
     assistantTyping: "L'assistant écrit",
     workingOnIt: "J'y travaille",
+    reviewingWork: 'Vérification du travail en cours',
+    pilotReviewingWork: 'Le pilote vérifie le travail',
     showCode: 'Afficher le code',
     hideCode: 'Masquer le code',
     plainTextFallback: 'La réponse volumineuse est affichée en texte brut pour plus de stabilité.',

@@ -472,6 +472,78 @@ describe('MessageBubble', () => {
     expect(getByText('Styled answer')).toBeTruthy();
   });
 
+  it('shows a review footer while the run is being reviewed', () => {
+    const msg = makeMessage({ role: 'assistant', content: 'Implemented the fix.' });
+    const { getByTestId, getByText } = render(
+      <MessageBubble message={msg} agentRun={makeAgentRun()} />,
+    );
+
+    expect(getByTestId('assistant-bubble-review-indicator')).toBeTruthy();
+    expect(getByText('Reviewing the work')).toBeTruthy();
+  });
+
+  it('shows a review footer while pilot is reviewing the run', () => {
+    const msg = makeMessage({ role: 'assistant', content: 'Implemented the fix.' });
+    const { getByTestId, getByText } = render(
+      <MessageBubble
+        message={msg}
+        agentRun={makeAgentRun({
+          currentPhase: 'pilot',
+          latestPilotEvaluation: makePilotEvaluation(),
+          phases: [
+            { key: 'assess', title: 'Assess', status: 'completed', updatedAt: 1_700_000_000_100 },
+            {
+              key: 'plan',
+              title: 'Plan',
+              status: 'completed',
+              detail: 'Inspect, patch, and verify.',
+              updatedAt: 1_700_000_000_150,
+            },
+            { key: 'work', title: 'Work', status: 'completed', updatedAt: 1_700_000_000_200 },
+            {
+              key: 'review',
+              title: 'Review',
+              status: 'completed',
+              updatedAt: 1_700_000_000_400,
+            },
+            { key: 'pilot', title: 'Pilot', status: 'active', updatedAt: 1_700_000_000_450 },
+            { key: 'deliver', title: 'Deliver', status: 'pending', updatedAt: 1_700_000_000_500 },
+          ],
+        })}
+      />,
+    );
+
+    expect(getByTestId('assistant-bubble-review-indicator')).toBeTruthy();
+    expect(getByText('Pilot is reviewing the work')).toBeTruthy();
+  });
+
+  it('hides the review footer while the run is still in the work stage', () => {
+    const msg = makeMessage({ role: 'assistant', content: 'Implemented the fix.' });
+    const { queryByTestId } = render(
+      <MessageBubble
+        message={msg}
+        agentRun={makeAgentRun({
+          currentPhase: 'work',
+          phases: [
+            { key: 'assess', title: 'Assess', status: 'completed', updatedAt: 1_700_000_000_100 },
+            {
+              key: 'plan',
+              title: 'Plan',
+              status: 'completed',
+              detail: 'Inspect, patch, and verify.',
+              updatedAt: 1_700_000_000_150,
+            },
+            { key: 'work', title: 'Work', status: 'active', updatedAt: 1_700_000_000_200 },
+            { key: 'review', title: 'Review', status: 'pending', updatedAt: 1_700_000_000_400 },
+            { key: 'deliver', title: 'Deliver', status: 'pending', updatedAt: 1_700_000_000_500 },
+          ],
+        })}
+      />,
+    );
+
+    expect(queryByTestId('assistant-bubble-review-indicator')).toBeNull();
+  });
+
   it('should render a compact workflow widget and toggle its details', () => {
     const msg = makeMessage({ role: 'assistant', content: 'Implemented the fix.' });
     const { getByTestId, getByText, queryByTestId, queryByText } = render(

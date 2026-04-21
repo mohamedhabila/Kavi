@@ -107,6 +107,8 @@ export const ar: TranslationMap = mergeTranslations(en, {
     openMenu: 'فتح القائمة',
     assistantTyping: 'المساعد يكتب',
     workingOnIt: 'أعمل على ذلك',
+    reviewingWork: 'تجري مراجعة العمل',
+    pilotReviewingWork: 'المرحلة التجريبية تراجع العمل',
     showCode: 'إظهار الكود',
     plainTextFallback: 'يتم عرض الاستجابة الكبيرة كنص عادي للحفاظ على الاستقرار.',
     responseTruncated: 'تم اقتطاع الاستجابة الطويلة جدًا للحفاظ على الاستقرار.',
