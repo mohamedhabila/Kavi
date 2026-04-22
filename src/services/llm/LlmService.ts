@@ -4693,7 +4693,7 @@ export class LlmService {
   }): Promise<GeneratedImagePayload> {
     const baseUrl = this.getBaseUrl();
     const headers = this.getHeaders();
-    const model = options.model || this.config.model || 'gpt-image-1.5';
+    const model = options.model || this.config.model || 'gpt-image-2';
     const body: Record<string, any> = {
       prompt: options.prompt,
       model,
@@ -4755,7 +4755,7 @@ export class LlmService {
   }): Promise<GeneratedImagePayload> {
     const baseUrl = this.getBaseUrl();
     const headers = this.getMultipartHeaders();
-    const model = options.model || this.config.model || 'gpt-image-1.5';
+    const model = options.model || this.config.model || 'gpt-image-2';
     const isGptImageModel = /^gpt-image/i.test(model) || /^chatgpt-image-latest$/i.test(model);
     const formData = new FormData();
 

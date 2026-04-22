@@ -369,7 +369,7 @@ describe('chatScreenDisplayState', () => {
               result: JSON.stringify({
                 status: 'generated',
                 providerId: 'openai',
-                model: 'gpt-image-1.5',
+                model: 'gpt-image-2',
                 mimeType: 'image/png',
                 fileUri: 'file:///mock/documents/workspace/conv-1/generated-image.png',
               }),

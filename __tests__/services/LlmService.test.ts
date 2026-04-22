@@ -4607,7 +4607,7 @@ describe('LlmService', () => {
         id: 'openai',
         name: 'OpenAI',
         baseUrl: 'https://api.openai.com/v1',
-        model: 'gpt-image-1.5',
+        model: 'gpt-image-2',
       }));
 
       const result = await service.generateImage({
@@ -4626,7 +4626,7 @@ describe('LlmService', () => {
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(body.prompt).toBe('A retro robot poster');
-      expect(body.model).toBe('gpt-image-1.5');
+      expect(body.model).toBe('gpt-image-2');
       expect(body.output_format).toBe('png');
       expect(body.quality).toBe('high');
     });
@@ -4658,7 +4658,7 @@ describe('LlmService', () => {
         id: 'openai',
         name: 'OpenAI',
         baseUrl: 'https://api.openai.com/v1',
-        model: 'gpt-image-1.5',
+        model: 'gpt-image-2',
       }));
 
       const result = await service.generateImage({
@@ -4668,7 +4668,7 @@ describe('LlmService', () => {
 
       expect(result.usage).toEqual(
         expect.objectContaining({
-          model: 'gpt-image-1.5',
+          model: 'gpt-image-2',
           inputTokens: 120,
           outputTokens: 480,
           totalTokens: 600,
@@ -4852,7 +4852,7 @@ describe('LlmService', () => {
           name: 'OpenAI',
           baseUrl: 'https://api.openai.com/v1',
           apiKey: 'sk-openai',
-          model: 'gpt-image-1.5',
+          model: 'gpt-image-2',
         }));
 
         const result = await service.editImage({
@@ -4897,7 +4897,7 @@ describe('LlmService', () => {
             revisedPrompt: 'edited prompt',
             outputFormat: 'webp',
             usage: expect.objectContaining({
-              model: 'gpt-image-1.5',
+              model: 'gpt-image-2',
               inputTokens: 80,
               outputTokens: 320,
               totalTokens: 400,

@@ -751,7 +751,7 @@ describe('useChatStore', () => {
         result: JSON.stringify({
           status: 'generated',
           providerId: 'openai',
-          model: 'gpt-image-1.5',
+          model: 'gpt-image-2',
           mimeType: 'image/png',
           fileUri: 'file:///mock/documents/workspace/conv-1/generated-image-test.png',
           fileName: 'generated-image-test.png',
@@ -794,7 +794,7 @@ describe('useChatStore', () => {
         result: JSON.stringify({
           status: 'edited',
           providerId: 'openai',
-          model: 'gpt-image-1.5',
+          model: 'gpt-image-2',
           mimeType: 'image/png',
           fileUri: 'file:///mock/documents/workspace/conv-1/edited-image-test.png',
           fileName: 'edited-image-test.png',
@@ -976,7 +976,7 @@ describe('useChatStore', () => {
       const convId = useChatStore.getState().createConversation('p1', 's');
 
       useChatStore.getState().recordConversationUsage(convId, {
-        model: 'gpt-image-1.5',
+        model: 'gpt-image-2',
         providerId: 'openai',
         modality: 'image',
         toolCallId: 'tool-image-1',
@@ -987,7 +987,7 @@ describe('useChatStore', () => {
       });
 
       useChatStore.getState().recordConversationUsage(convId, {
-        model: 'gpt-image-1.5',
+        model: 'gpt-image-2',
         providerId: 'openai',
         modality: 'image',
         toolCallId: 'tool-image-1',

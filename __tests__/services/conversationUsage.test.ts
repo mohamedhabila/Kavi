@@ -43,7 +43,7 @@ describe('conversationUsage', () => {
   it('formats image usage log details with modality metadata', () => {
     const detail = buildUsageLogDetail(
       {
-        model: 'gpt-image-1.5',
+        model: 'gpt-image-2',
         inputTokens: 320,
         outputTokens: 960,
         tokenDetails: {
@@ -56,7 +56,7 @@ describe('conversationUsage', () => {
       'primary',
     );
 
-    expect(detail).toContain('gpt-image-1.5');
+    expect(detail).toContain('gpt-image-2');
     expect(detail).toContain('img in 200');
     expect(detail).toContain('img out 960');
     expect(detail).toContain('thinking 12');
@@ -193,13 +193,13 @@ describe('conversationUsage', () => {
       result: JSON.stringify({
         status: 'generated',
         providerId: 'openai',
-        model: 'gpt-image-1.5',
+        model: 'gpt-image-2',
         mimeType: 'image/png',
         fileUri: 'file:///mock/document/workspace/conv-1/generated.png',
         fileName: 'generated.png',
         size: 1024,
         usage: {
-          model: 'gpt-image-1.5',
+          model: 'gpt-image-2',
           inputTokens: 320,
           outputTokens: 960,
           totalTokens: 1280,
@@ -237,7 +237,7 @@ describe('conversationUsage', () => {
         totalOutput: 960,
         totalTokens: 1280,
         totalCalls: 1,
-        lastModel: 'gpt-image-1.5',
+        lastModel: 'gpt-image-2',
         lastProviderId: 'openai',
       }),
     );

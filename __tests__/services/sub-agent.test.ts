@@ -347,7 +347,7 @@ describe('Sub-Agent Service', () => {
       const generatedImageResult = JSON.stringify({
         status: 'generated',
         providerId: 'openai',
-        model: 'gpt-image-1.5',
+        model: 'gpt-image-2',
         mimeType: 'image/png',
         fileUri: 'file:///mock/documents/workspace/parent-conversation/images/generated-worker.png',
         fileName: 'generated-worker.png',

@@ -35,7 +35,7 @@ describe('imageGeneration service', () => {
 
   it('persists base64 image output to the conversation workspace when a conversation is provided', async () => {
     MockedLlmService.prototype.generateImage.mockResolvedValue({
-      model: 'gpt-image-1.5',
+      model: 'gpt-image-2',
       b64_json: 'YmFzZTY0',
       outputFormat: 'png',
       revisedPrompt: 'revised',
@@ -47,7 +47,7 @@ describe('imageGeneration service', () => {
         name: 'OpenAI',
         baseUrl: 'https://api.openai.com/v1',
         apiKey: 'sk-test',
-        model: 'gpt-image-1.5',
+        model: 'gpt-image-2',
         enabled: true,
       },
       {
@@ -73,7 +73,7 @@ describe('imageGeneration service', () => {
       JSON.stringify({
         status: 'generated',
         providerId: 'openai',
-        model: 'gpt-image-1.5',
+        model: 'gpt-image-2',
         mimeType: 'image/png',
         fileUri: 'file:///mock/document/workspace/conv-123/images/generated-image.png',
         fileName: 'generated-image.png',
@@ -94,7 +94,7 @@ describe('imageGeneration service', () => {
       JSON.stringify({
         status: 'edited',
         providerId: 'openai',
-        model: 'gpt-image-1.5',
+        model: 'gpt-image-2',
         mimeType: 'image/png',
         fileUri: 'file:///mock/documents/workspace/conv-123/edited-image.png',
         fileName: 'edited-image.png',
@@ -119,13 +119,13 @@ describe('imageGeneration service', () => {
       JSON.stringify({
         status: 'generated',
         providerId: 'openai',
-        model: 'gpt-image-1.5',
+        model: 'gpt-image-2',
         mimeType: 'image/png',
         fileUri: 'file:///mock/document/workspace/conv-123/generated-image.png',
         fileName: 'generated-image.png',
         size: 2048,
         usage: {
-          model: 'gpt-image-1.5',
+          model: 'gpt-image-2',
           inputTokens: 320,
           outputTokens: 960,
           totalTokens: 1280,
@@ -140,7 +140,7 @@ describe('imageGeneration service', () => {
 
     expect(parsed?.usage).toEqual(
       expect.objectContaining({
-        model: 'gpt-image-1.5',
+        model: 'gpt-image-2',
         inputTokens: 320,
         outputTokens: 960,
         totalTokens: 1280,
@@ -154,7 +154,7 @@ describe('imageGeneration service', () => {
 
   it('persists base64 image output to cache when no conversation is provided', async () => {
     MockedLlmService.prototype.generateImage.mockResolvedValue({
-      model: 'gpt-image-1.5',
+      model: 'gpt-image-2',
       b64_json: 'YmFzZTY0',
       outputFormat: 'png',
     });
@@ -165,7 +165,7 @@ describe('imageGeneration service', () => {
         name: 'OpenAI',
         baseUrl: 'https://api.openai.com/v1',
         apiKey: 'sk-test',
-        model: 'gpt-image-1.5',
+        model: 'gpt-image-2',
         enabled: true,
       },
       {
@@ -179,7 +179,7 @@ describe('imageGeneration service', () => {
 
   it('downloads remote image output into the conversation workspace', async () => {
     MockedLlmService.prototype.generateImage.mockResolvedValue({
-      model: 'gpt-image-1.5',
+      model: 'gpt-image-2',
       url: 'https://example.com/generated.png',
     });
     mockExpoFetch.mockResolvedValue({
@@ -198,7 +198,7 @@ describe('imageGeneration service', () => {
         name: 'OpenAI',
         baseUrl: 'https://api.openai.com/v1',
         apiKey: 'sk-test',
-        model: 'gpt-image-1.5',
+        model: 'gpt-image-2',
         enabled: true,
       },
       {
@@ -218,7 +218,7 @@ describe('imageGeneration service', () => {
 
   it('rejects non-image downloads returned by remote image URLs', async () => {
     MockedLlmService.prototype.generateImage.mockResolvedValue({
-      model: 'gpt-image-1.5',
+      model: 'gpt-image-2',
       url: 'https://example.com/generated.png',
     });
     mockExpoFetch.mockResolvedValue({
@@ -243,7 +243,7 @@ describe('imageGeneration service', () => {
           name: 'OpenAI',
           baseUrl: 'https://api.openai.com/v1',
           apiKey: 'sk-test',
-          model: 'gpt-image-1.5',
+          model: 'gpt-image-2',
           enabled: true,
         },
         {
@@ -256,7 +256,7 @@ describe('imageGeneration service', () => {
 
   it('fails fast when generated image bytes are not persisted', async () => {
     MockedLlmService.prototype.generateImage.mockResolvedValue({
-      model: 'gpt-image-1.5',
+      model: 'gpt-image-2',
       b64_json: 'YmFzZTY0',
       outputFormat: 'png',
     });
@@ -271,7 +271,7 @@ describe('imageGeneration service', () => {
           name: 'OpenAI',
           baseUrl: 'https://api.openai.com/v1',
           apiKey: 'sk-test',
-          model: 'gpt-image-1.5',
+          model: 'gpt-image-2',
           enabled: true,
         },
         {
@@ -290,7 +290,7 @@ describe('imageGeneration service', () => {
     maskFile.write(new Uint8Array([5, 6, 7, 8]));
 
     MockedLlmService.prototype.editImage.mockResolvedValue({
-      model: 'gpt-image-1.5',
+      model: 'gpt-image-2',
       b64_json: 'RURJVA==',
       outputFormat: 'png',
       revisedPrompt: 'edited prompt',
@@ -302,7 +302,7 @@ describe('imageGeneration service', () => {
         name: 'OpenAI',
         baseUrl: 'https://api.openai.com/v1',
         apiKey: 'sk-test',
-        model: 'gpt-image-1.5',
+        model: 'gpt-image-2',
         enabled: true,
       },
       {
@@ -374,7 +374,7 @@ describe('imageGeneration service', () => {
           name: 'OpenAI',
           baseUrl: 'https://api.openai.com/v1',
           apiKey: 'sk-test',
-          model: 'gpt-image-1.5',
+          model: 'gpt-image-2',
           enabled: true,
         },
         {
@@ -400,7 +400,7 @@ describe('imageGeneration service', () => {
           name: 'OpenAI',
           baseUrl: 'https://api.openai.com/v1',
           apiKey: 'sk-test',
-          model: 'gpt-image-1.5',
+          model: 'gpt-image-2',
           enabled: true,
         },
         {

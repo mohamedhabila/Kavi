@@ -362,7 +362,7 @@ export const IMAGE_GEN_TOOL: ToolDefinition = {
       model: {
         type: 'string',
         description:
-          'Optional image model override, e.g. gpt-image-1.5 or gemini-3.1-flash-image-preview',
+          'Optional image model override, e.g. gpt-image-2 or gemini-3.1-flash-image-preview',
       },
       size: {
         type: 'string',
@@ -416,7 +416,7 @@ export const IMAGE_EDIT_TOOL: ToolDefinition = {
       model: {
         type: 'string',
         description:
-          'Optional image model override, e.g. gpt-image-1.5 or gemini-3.1-flash-image-preview',
+          'Optional image model override, e.g. gpt-image-2 or gemini-3.1-flash-image-preview',
       },
       size: {
         type: 'string',

@@ -83,7 +83,7 @@ const MODALITY_COST_TABLE: Array<{ match: string; rates: ModalityCostRates }> = 
     },
   },
   {
-    match: 'gpt-image-1.5',
+    match: 'gpt-image-2',
     rates: {
       inputText: 5,
       outputText: 10,

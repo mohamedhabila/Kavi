@@ -118,14 +118,14 @@ function inferImageModel(provider: LlmProviderConfig, requestedModel?: string): 
   if (/gpt-image|dall-e/i.test(configured)) return configured;
   if (/gemini-.*image|imagen/i.test(configured)) return configured;
   const base = (provider.baseUrl || '').toLowerCase();
-  if (base.includes('openai.com')) return 'gpt-image-1.5';
+  if (base.includes('openai.com')) return 'gpt-image-2';
   if (
     base.includes('generativelanguage.googleapis.com') ||
     isVertexNativeGeminiBaseUrl(provider.baseUrl)
   ) {
     return 'gemini-3.1-flash-image-preview';
   }
-  return configured || 'gpt-image-1.5';
+  return configured || 'gpt-image-2';
 }
 
 function guessMimeType(format?: string): string {

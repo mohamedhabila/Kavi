@@ -223,7 +223,7 @@ describe('Usage Tracker', () => {
     });
 
     it('uses OpenAI GPT Image modality pricing when token details are available', () => {
-      const cost = estimateCost('gpt-image-1.5', 320, 960, {
+      const cost = estimateCost('gpt-image-2', 320, 960, {
         tokenDetails: {
           inputTextTokens: 120,
           inputImageTokens: 200,
