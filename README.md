@@ -116,6 +116,7 @@ The app is mobile-first by design. Some features rely on remote services or exte
 - [docs/setup/development.md](docs/setup/development.md)
 - [docs/testing.md](docs/testing.md)
 - [docs/feature-matrix.md](docs/feature-matrix.md)
+- [docs/privacy-policy.md](docs/privacy-policy.md)
 - [docs/privacy-and-permissions.md](docs/privacy-and-permissions.md)
 - [THIRD_PARTY_PROVENANCE.md](THIRD_PARTY_PROVENANCE.md)
 
