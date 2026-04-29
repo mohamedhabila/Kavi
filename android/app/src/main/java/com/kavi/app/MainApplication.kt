@@ -1,4 +1,4 @@
-package com.kavi.app
+package com.kavi.mobile
 
 import android.app.Application
 import android.content.res.Configuration

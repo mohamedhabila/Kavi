@@ -31,7 +31,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0f172a"
       },
-      "package": "com.kavi.app",
+      "package": "com.kavi.mobile",
       "versionCode": 1,
       "softwareKeyboardLayoutMode": "resize",
       "blockedPermissions": [

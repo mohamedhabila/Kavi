@@ -31,6 +31,8 @@
     "prebuild:android:release": "npm run build:editor-assets",
     "check:android:release-env": "node ./scripts/build-android-release.js --check",
     "build:android:release": "node ./scripts/build-android-release.js",
+    "prebuild:android:aab": "npm run build:editor-assets",
+    "build:android:aab": "node ./scripts/build-android-release.js --bundle",
     "prebuild:ios:release-sim": "npm run build:editor-assets",
     "build:ios:release-sim": "mkdir -p ios/build/generated/autolinking ios/build/xcode-release-sim && node --no-warnings --eval \"require('expo/bin/autolinking')\" expo-modules-autolinking react-native-config --json --platform ios > ios/build/generated/autolinking/autolinking.json && node node_modules/react-native/scripts/generate-codegen-artifacts.js --path . --outputPath ios --targetPlatform ios && cd ios && NODE_ENV=production xcodebuild -workspace Kavi.xcworkspace -scheme Kavi -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/xcode-release-sim clean build",
     "web": "expo start --web",

@@ -97,8 +97,34 @@ function fail(message) {
   process.exitCode = 1;
 }
 
+function ensureDirectory(targetPath) {
+  fs.mkdirSync(targetPath, { recursive: true });
+}
+
+function exportArtifact({ buildBundle }) {
+  const sourceArtifact = buildBundle
+    ? path.join(androidDir, 'app', 'build', 'outputs', 'bundle', 'release', 'app-release.aab')
+    : path.join(androidDir, 'app', 'build', 'outputs', 'apk', 'release', 'app-release.apk');
+  const artifactName = buildBundle ? 'kavi-release.aab' : 'kavi-release.apk';
+  const exportedArtifact = path.join(projectRoot, 'release-artifacts', 'android', artifactName);
+
+  if (!exists(sourceArtifact)) {
+    fail(`Expected build artifact was not found at ${sourceArtifact}`);
+    return false;
+  }
+
+  ensureDirectory(path.dirname(exportedArtifact));
+  fs.copyFileSync(sourceArtifact, exportedArtifact);
+
+  const stats = fs.statSync(exportedArtifact);
+  console.log(`[build-android-release] exported artifact: ${exportedArtifact}`);
+  console.log(`[build-android-release] size: ${stats.size} bytes`);
+  return true;
+}
+
 function main() {
   const checkOnly = process.argv.includes('--check');
+  const buildBundle = process.argv.includes('--bundle');
   const gradleWrapper = path.join(androidDir, isWindows ? 'gradlew.bat' : 'gradlew');
 
   if (!exists(gradleWrapper)) {
@@ -149,7 +175,8 @@ function main() {
     env.ANDROID_SDK_ROOT = env.ANDROID_SDK_ROOT || androidSdkRoot;
   }
 
-  const result = spawnSync(gradleWrapper, ['assembleRelease'], {
+  const gradleTask = buildBundle ? 'bundleRelease' : 'assembleRelease';
+  const result = spawnSync(gradleWrapper, [gradleTask], {
     cwd: androidDir,
     env,
     stdio: 'inherit',
@@ -157,6 +184,11 @@ function main() {
   });
 
   if (typeof result.status === 'number') {
+    if (result.status === 0) {
+      process.exitCode = exportArtifact({ buildBundle }) ? 0 : 1;
+      return;
+    }
+
     process.exitCode = result.status;
     return;
   }

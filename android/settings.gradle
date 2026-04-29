@@ -23,10 +23,27 @@ plugins {
 }
 
 extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
+  def autolinkingCacheInputs = files(
+    '../yarn.lock',
+    '../package-lock.json',
+    '../package.json',
+    '../react-native.config.js',
+    '../app.json',
+    'app/build.gradle'
+  )
+
   if (System.getenv('EXPO_USE_COMMUNITY_AUTOLINKING') == '1') {
-    ex.autolinkLibrariesFromCommand()
+    ex.autolinkLibrariesFromCommand(
+      ex.defaultConfigCommand,
+      file('../'),
+      autolinkingCacheInputs
+    )
   } else {
-    ex.autolinkLibrariesFromCommand(expoAutolinking.rnConfigCommand)
+    ex.autolinkLibrariesFromCommand(
+      expoAutolinking.rnConfigCommand,
+      file('../'),
+      autolinkingCacheInputs
+    )
   }
 }
 expoAutolinking.useExpoModules()

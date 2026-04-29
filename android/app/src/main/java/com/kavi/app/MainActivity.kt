@@ -1,4 +1,4 @@
-package com.kavi.app
+package com.kavi.mobile
 
 import android.os.Build
 import android.os.Bundle
