@@ -18,7 +18,6 @@ import { AppPalette } from '../theme/useAppTheme';
 
 function safeListStates(): { pending: number; total: number } {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { listMigrationStates } = require('../services/memory/migrationSeedPass');
     const rows = listMigrationStates();
     let pending = 0;

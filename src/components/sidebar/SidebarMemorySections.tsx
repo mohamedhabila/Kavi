@@ -33,7 +33,6 @@ function safeGetBlock(label: string): MemoryBlock | null {
   try {
     // Lazy require so test harnesses that don't mock SQLite still load the
     // sidebar module without crashing at import time.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getBlock } = require('../../services/memory/blocks');
     return getBlock(label) ?? null;
   } catch {
@@ -43,7 +42,6 @@ function safeGetBlock(label: string): MemoryBlock | null {
 
 function safeListPinnedFacts(limit: number): MemoryFact[] {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { listFacts } = require('../../services/memory/facts');
     return listFacts({ pinnedOnly: true, limit });
   } catch {

@@ -22,6 +22,7 @@
 import {
   upsertEntity,
   findEntityByName,
+  getEntityById,
   type EntityType,
 } from './entities';
 import {
@@ -66,9 +67,26 @@ function trimNonEmpty(value: unknown, max = 200): string | null {
   return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
 }
 
-function serializeFact(fact: MemoryFact): Record<string, unknown> {
+export interface SerializedMemoryFact {
+  id: string;
+  subject: string;
+  subjectId: string;
+  predicate: string;
+  value: string;
+  confidence: number;
+  pinned: boolean;
+  validAt: number;
+  invalidAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt: number | null;
+}
+
+function serializeFact(fact: MemoryFact): SerializedMemoryFact {
+  const subject = getEntityById(fact.subjectId)?.canonicalName ?? fact.subjectId;
   return {
     id: fact.id,
+    subject,
     subjectId: fact.subjectId,
     predicate: fact.predicate,
     value: fact.objectText,
@@ -77,6 +95,7 @@ function serializeFact(fact: MemoryFact): Record<string, unknown> {
     validAt: fact.validAt,
     invalidAt: fact.invalidAt,
     createdAt: fact.createdAt,
+    updatedAt: fact.updatedAt,
     deletedAt: fact.deletedAt,
   };
 }

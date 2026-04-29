@@ -510,10 +510,8 @@ function normalizePersistedConversation(conversation: Conversation): Conversatio
     ? conversation.activeAgentRunId
     : undefined;
 
-  const normalizedMode =
-    (conversation as Conversation & { mode?: string }).mode === 'direct'
-      ? 'chitchat'
-      : conversation.mode;
+  const rawMode = (conversation as { mode?: string }).mode;
+  const normalizedMode = rawMode === 'direct' ? 'chitchat' : conversation.mode;
 
   return sanitizeConversationForPersistence({
     ...conversation,
