@@ -175,17 +175,12 @@ describe('Sidebar', () => {
     expect(getByText('Kavi')).toBeTruthy();
   });
 
-  it('should render conversation list', () => {
-    const { getByText } = render(<Sidebar {...defaultProps} />);
-    expect(getByText('First Chat')).toBeTruthy();
-    expect(getByText('Second Chat')).toBeTruthy();
-  });
-
-  it('should render usage summaries for conversations', () => {
-    const { getByText } = render(<Sidebar {...defaultProps} />);
-
-    expect(getByText('1.2K tok · $0.0042')).toBeTruthy();
-    expect(getByText('0 tok · $0.0000')).toBeTruthy();
+  it('should not render the legacy conversation list UX', () => {
+    const { queryByText, queryByTestId } = render(<Sidebar {...defaultProps} />);
+    expect(queryByText('First Chat')).toBeNull();
+    expect(queryByText('Second Chat')).toBeNull();
+    expect(queryByTestId('sidebar-time-buckets')).toBeNull();
+    expect(queryByTestId('sidebar-archived-section')).toBeNull();
   });
 
   it('should open the thread-options sheet and start a side thread', () => {
@@ -202,6 +197,46 @@ describe('Sidebar', () => {
     });
     expect(mockNavigation.navigate).toHaveBeenCalledWith('Chat');
     expect(mockNavigation.closeDrawer).toHaveBeenCalled();
+  });
+
+  it('should materialize the canonical thread before starting a side thread when none is active', () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_title, _msg, buttons) => {
+      const start = (buttons || []).find((b) => b.text === 'Start a side thread');
+      start?.onPress?.();
+    });
+    const originalActiveConversationId = 'conv1';
+    const useChatStoreModule = jest.requireMock('../../src/store/useChatStore') as {
+      useChatStore: (selector: (s: any) => any) => any;
+    };
+    const originalUseChatStore = useChatStoreModule.useChatStore;
+    useChatStoreModule.useChatStore = (selector: (s: any) => any) =>
+      selector({
+        conversations: mockConversations,
+        activeConversationId: null,
+        createConversation: mockCreateConversation,
+        getOrCreateCanonicalThread: mockGetOrCreateCanonicalThread,
+        createSideThread: mockCreateSideThread,
+        setActiveConversation: mockSetActiveConversation,
+        deleteConversation: mockDeleteConversation,
+      });
+
+    try {
+      const { getByTestId } = render(<Sidebar {...defaultProps} />);
+      fireEvent.press(getByTestId('sidebar-thread-options'));
+      expect(alertSpy).toHaveBeenCalled();
+      expect(mockGetOrCreateCanonicalThread).toHaveBeenCalledWith(
+        'openai',
+        'You are helpful',
+        'gpt-5.4',
+      );
+      expect(mockCreateSideThread).toHaveBeenCalledWith('canonical-openai', {
+        providerId: 'openai',
+        modelOverride: 'gpt-5.4',
+      });
+    } finally {
+      useChatStoreModule.useChatStore = originalUseChatStore;
+      mockActiveConversationId = originalActiveConversationId;
+    }
   });
 
   it('should route users to settings instead of starting a side thread without a provider', () => {
@@ -225,13 +260,6 @@ describe('Sidebar', () => {
     expect(mockNavigation.navigate).toHaveBeenCalledWith('Settings');
   });
 
-  it('should select conversation on press', () => {
-    const { getByText } = render(<Sidebar {...defaultProps} />);
-    fireEvent.press(getByText('Second Chat'));
-    expect(mockSetActiveConversation).toHaveBeenCalledWith('conv2');
-    expect(mockNavigation.navigate).toHaveBeenCalledWith('Chat');
-  });
-
   it('should navigate to settings', () => {
     const { getByText } = render(<Sidebar {...defaultProps} />);
     fireEvent.press(getByText('Settings'));
@@ -244,118 +272,16 @@ describe('Sidebar', () => {
     expect(mockNavigation.navigate).toHaveBeenCalledWith('RemoteWork');
   });
 
-  it('should show delete confirmation on long press', () => {
-    jest.spyOn(Alert, 'alert');
-    const { getByText } = render(<Sidebar {...defaultProps} />);
-    fireEvent(getByText('First Chat'), 'onLongPress');
-    expect(Alert.alert).toHaveBeenCalledWith(
-      'Delete Chat',
-      'Delete "First Chat"?',
-      expect.any(Array),
-    );
-  });
-
-  it('hides side-thread conversations from the main list', () => {
-    mockConversations.push({
-      id: 'side-1',
-      title: 'Tangent off First Chat',
-      messages: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      providerId: 'openai',
-      // @ts-expect-error model field on test fixture for legacy parity
-      model: 'gpt-5.4',
-      isSideThread: true,
-      parentConversationId: 'conv1',
-      usage: {
-        entries: [],
-        totalInput: 0,
-        totalOutput: 0,
-        totalCacheRead: 0,
-        totalCacheWrite: 0,
-        totalTokens: 0,
-        totalCost: 0,
-        totalCalls: 0,
-      },
-    } as any);
-
-    try {
-      const { queryByText, getByText } = render(<Sidebar {...defaultProps} />);
-      // Main conversations still visible.
-      expect(getByText('First Chat')).toBeTruthy();
-      expect(getByText('Second Chat')).toBeTruthy();
-      // Side thread filtered out.
-      expect(queryByText('Tangent off First Chat')).toBeNull();
-    } finally {
-      mockConversations.pop();
-    }
-  });
-
-  it('hides archived conversations from the main list and exposes them under the Archived section', () => {
-    mockConversations.push({
-      id: 'archived-1',
-      title: 'Pre-collapse Chat',
-      messages: [],
-      createdAt: Date.now() - 1000,
-      updatedAt: Date.now() - 1000,
-      providerId: 'openai',
-      // @ts-expect-error legacy fixture shape
-      model: 'gpt-5.4',
-      archivedFromMigration: true,
-      usage: {
-        entries: [],
-        totalInput: 0,
-        totalOutput: 0,
-        totalCacheRead: 0,
-        totalCacheWrite: 0,
-        totalTokens: 0,
-        totalCost: 0,
-        totalCalls: 0,
-      },
-    } as any);
-
-    try {
-      const { queryByText, getByTestId } = render(<Sidebar {...defaultProps} />);
-      // Hidden from main list by default.
-      expect(queryByText('Pre-collapse Chat')).toBeNull();
-      // Archived header is rendered with the count.
-      const toggle = getByTestId('sidebar-archived-toggle');
-      expect(toggle).toBeTruthy();
-      // Expand and verify the archived row appears.
-      fireEvent.press(toggle);
-      expect(getByTestId('sidebar-archived-item-archived-1')).toBeTruthy();
-      expect(queryByText('Pre-collapse Chat')).toBeTruthy();
-    } finally {
-      mockConversations.pop();
-    }
-  });
-
-  // Phase 161 §4.8 — Chunk L: new memory-driven IA above the conversation list.
+  // Phase 161 §4.8 — Chunk L: memory-driven IA above the single-thread shell.
   describe('memory IA sections (Chunk L)', () => {
-    it("renders the Today's focus tile, recall input, and time-bucket container", () => {
-      const { getByTestId } = render(<Sidebar {...defaultProps} />);
+    it("renders the Today's focus tile and memory IA without the legacy chat list", () => {
+      const { getByTestId, queryByTestId } = render(<Sidebar {...defaultProps} />);
       expect(getByTestId('sidebar-todays-focus')).toBeTruthy();
       expect(getByTestId('sidebar-open-threads')).toBeTruthy();
       expect(getByTestId('sidebar-recall-input')).toBeTruthy();
       expect(getByTestId('sidebar-pinned-moments')).toBeTruthy();
-      expect(getByTestId('sidebar-time-buckets')).toBeTruthy();
-    });
-
-    it('groups conversations into Today and Yesterday time buckets', () => {
-      const { getByTestId, queryByTestId } = render(<Sidebar {...defaultProps} />);
-      // First Chat (now) → today; Second Chat (now-86400000) → yesterday.
-      expect(getByTestId('sidebar-time-bucket-today')).toBeTruthy();
-      expect(getByTestId('sidebar-time-bucket-yesterday')).toBeTruthy();
-      expect(queryByTestId('sidebar-time-bucket-thisWeek')).toBeNull();
-    });
-
-    it('collapses a time bucket on header press and hides its rows', () => {
-      const { getByTestId, queryByText } = render(<Sidebar {...defaultProps} />);
-      expect(queryByText('First Chat')).toBeTruthy();
-      fireEvent.press(getByTestId('sidebar-time-bucket-toggle-today'));
-      expect(queryByText('First Chat')).toBeNull();
-      // Yesterday bucket is unaffected.
-      expect(queryByText('Second Chat')).toBeTruthy();
+      expect(queryByTestId('sidebar-time-buckets')).toBeNull();
+      expect(queryByTestId('sidebar-archived-section')).toBeNull();
     });
 
     it('opens the Memory screen when the recall input is submitted', () => {

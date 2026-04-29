@@ -27,6 +27,7 @@ const mockChatStoreState = {
   conversations: [] as any[],
   activeConversationId: 'active-conversation',
   createConversation: jest.fn(),
+  getOrCreateCanonicalThread: jest.fn(),
   updateModelInConversation: jest.fn(),
   addMessage: jest.fn(),
   updateMessage: jest.fn(),
@@ -131,6 +132,7 @@ jest.mock('../../src/store/useSettingsStore', () => ({
       activeModel: 'gpt-5.4',
       providers: [mockProvider],
       systemPrompt: 'You are helpful.',
+      defaultConversationMode: 'agentic',
       thinkingLevel: 'medium',
       linkUnderstandingEnabled: true,
       mediaUnderstandingEnabled: true,
@@ -184,6 +186,29 @@ beforeEach(() => {
       if (options?.activate !== false) {
         mockChatStoreState.activeConversationId = id;
       }
+      return id;
+    },
+  );
+  mockChatStoreState.getOrCreateCanonicalThread.mockImplementation(
+    (providerId, systemPrompt, modelOverride) => {
+      const existing = mockChatStoreState.conversations.find(
+        (conversation) =>
+          conversation.providerId === providerId &&
+          conversation.systemPrompt === systemPrompt &&
+          conversation.modelOverride === modelOverride,
+      );
+      if (existing) {
+        return existing.id;
+      }
+
+      const id = `canonical-${mockChatStoreState.conversations.length + 1}`;
+      mockChatStoreState.conversations.unshift({
+        id,
+        providerId,
+        systemPrompt,
+        modelOverride,
+        messages: [],
+      });
       return id;
     },
   );
@@ -352,7 +377,11 @@ describe('initializeServices', () => {
       'openai',
       'You are helpful.',
       'gpt-5.4',
-      { activate: false },
+      {
+        activate: false,
+        personaId: 'super-agent',
+        mode: 'agentic',
+      },
     );
     expect(mockSendLocalNotification).toHaveBeenCalledWith({
       title: 'Test Job',
@@ -608,6 +637,36 @@ describe('initializeServices', () => {
     expect(mockChatStoreState.createConversation).not.toHaveBeenCalled();
     expect(mockChatStoreState.updateModelInConversation).toHaveBeenCalledWith(
       'active-conversation',
+      'openai',
+      'gpt-5.4',
+    );
+  });
+
+  it('executor materializes the canonical conversation for main/new jobs', async () => {
+    const { initializeServices } = require('../../src/services/startup');
+    initializeServices();
+
+    const executor = mockSetSchedulerExecutor.mock.calls[0][0];
+    await executor.execute({
+      name: 'Main Job',
+      payload: { prompt: 'Use the main thread' },
+      sessionTarget: 'main',
+      wakeMode: 'new',
+    });
+
+    expect(mockChatStoreState.getOrCreateCanonicalThread).toHaveBeenCalledWith(
+      'openai',
+      'You are helpful.',
+      'gpt-5.4',
+      {
+        activate: false,
+        personaId: 'super-agent',
+        mode: 'agentic',
+      },
+    );
+    expect(mockChatStoreState.createConversation).not.toHaveBeenCalled();
+    expect(mockChatStoreState.updateModelInConversation).toHaveBeenCalledWith(
+      'canonical-1',
       'openai',
       'gpt-5.4',
     );

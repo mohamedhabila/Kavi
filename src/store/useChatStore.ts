@@ -526,14 +526,37 @@ function normalizePersistedConversation(conversation: Conversation): Conversatio
 function normalizePersistedChatState(
   state: Partial<ChatState> | undefined,
 ): Pick<ChatState, 'conversations' | 'activeConversationId'> {
-  const conversations = (state?.conversations ?? []).map((conversation) =>
-    normalizePersistedConversation(conversation as Conversation),
+  const conversations = collapseConversationsToCanonical(
+    (state?.conversations ?? []).map((conversation) =>
+      normalizePersistedConversation(conversation as Conversation),
+    ),
   );
-  const activeConversationId =
+  let activeConversationId =
     typeof state?.activeConversationId === 'string' &&
     conversations.some((conversation) => conversation.id === state.activeConversationId)
       ? state.activeConversationId
       : null;
+
+  const activeConversation = activeConversationId
+    ? conversations.find((conversation) => conversation.id === activeConversationId)
+    : undefined;
+  if (activeConversation?.archivedFromMigration) {
+    const groupKey =
+      activeConversation.personaId && activeConversation.personaId.length > 0
+        ? activeConversation.personaId
+        : '__default__';
+    const canonicalConversation = conversations.find((conversation) => {
+      if (conversation.isSideThread || conversation.archivedFromMigration || !conversation.isCanonical) {
+        return false;
+      }
+      const conversationGroupKey =
+        conversation.personaId && conversation.personaId.length > 0
+          ? conversation.personaId
+          : '__default__';
+      return conversationGroupKey === groupKey;
+    });
+    activeConversationId = canonicalConversation?.id ?? activeConversationId;
+  }
 
   return {
     conversations,
@@ -2619,9 +2642,6 @@ export const useChatStore = create<ChatState>()(
         const normalized = normalizePersistedChatState(
           persistedState as Partial<ChatState> | undefined,
         );
-        if (typeof fromVersion === 'number' && fromVersion < 7) {
-          normalized.conversations = collapseConversationsToCanonical(normalized.conversations);
-        }
         return partializeChatPersistState(normalized);
       },
       merge: (persistedState, currentState) => ({

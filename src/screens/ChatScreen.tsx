@@ -990,7 +990,7 @@ export const ChatScreen: React.FC = () => {
     activeConversation,
     activeConversationId,
     isLoading,
-    createConversation,
+    getOrCreateCanonicalThread,
     addMessage,
     updateMessage,
     updateMessageEnrichedContent,
@@ -2463,6 +2463,52 @@ export const ChatScreen: React.FC = () => {
     () => resolveConversationStartSelection(providers, activeProviderId, activeModel),
     [activeModel, activeProviderId, providers],
   );
+
+  const ensureCanonicalConversation = useCallback(
+    (options?: {
+      providerId?: string;
+      model?: string;
+      personaId?: string;
+      mode?: 'agentic' | 'chitchat';
+      activate?: boolean;
+      reportMissingProvider?: boolean;
+    }) => {
+      const selection = resolveConversationStartDefaults();
+      const providerId = options?.providerId ?? selection?.providerId;
+      if (!providerId) {
+        if (options?.reportMissingProvider) {
+          setChatError(t('chat.noProvider'));
+        }
+        return null;
+      }
+
+      const model = options?.model ?? selection?.model ?? undefined;
+
+      return getOrCreateCanonicalThread(
+        providerId,
+        systemPrompt,
+        model,
+        {
+          activate: options?.activate,
+          personaId: options?.personaId,
+          mode: options?.mode,
+        },
+      );
+    },
+    [getOrCreateCanonicalThread, resolveConversationStartDefaults, systemPrompt, t],
+  );
+
+  useEffect(() => {
+    if (activeConversationId) {
+      return;
+    }
+
+    ensureCanonicalConversation({
+      personaId: effectivePersonaId,
+      mode: effectiveMode,
+      reportMissingProvider: false,
+    });
+  }, [activeConversationId, effectiveMode, effectivePersonaId, ensureCanonicalConversation]);
 
   const resolveConversationFinalizationContext = useCallback(
     async (
@@ -4708,12 +4754,11 @@ export const ChatScreen: React.FC = () => {
             detail: result.response,
           });
           if (result.action === 'new_conversation') {
-            const selection = resolveConversationStartDefaults();
-            if (!selection) {
-              setChatError(t('chat.noProvider'));
-              return;
-            }
-            createConversation(selection.providerId, systemPrompt, selection.model || undefined);
+            ensureCanonicalConversation({
+              personaId: effectivePersonaId,
+              mode: effectiveMode,
+              reportMissingProvider: true,
+            });
           }
           if (result.action === 'export') {
             const conv = useChatStore.getState().conversations.find((c) => c.id === convId);
@@ -4821,7 +4866,7 @@ export const ChatScreen: React.FC = () => {
       providers,
       systemPrompt,
       t,
-      createConversation,
+      ensureCanonicalConversation,
       addMessage,
       updateMessage,
       updateMessageEnrichedContent,
@@ -4836,6 +4881,7 @@ export const ChatScreen: React.FC = () => {
       mediaUnderstandingEnabled,
       maxLinks,
       defaultConversationMode,
+      effectiveMode,
       effectivePersonaId,
       thinkingLevel,
       startAgentRun,
@@ -4853,7 +4899,6 @@ export const ChatScreen: React.FC = () => {
       registerForegroundRequest,
       isCurrentForegroundRequest,
       clearForegroundRequest,
-      resolveConversationStartDefaults,
       updateStreamingDraft,
     ],
   );
@@ -4905,20 +4950,14 @@ export const ChatScreen: React.FC = () => {
 
       let convId = activeConversationId;
       if (!convId) {
-        const selection = resolveConversationStartDefaults();
-        if (!selection) {
-          setChatError(t('chat.noProvider'));
+        convId = ensureCanonicalConversation({
+          personaId: isAgenticMode ? SUPER_AGENT_PERSONA_ID : undefined,
+          mode: defaultConversationMode,
+          reportMissingProvider: true,
+        });
+        if (!convId) {
           return;
         }
-        convId = createConversation(
-          selection.providerId,
-          systemPrompt,
-          selection.model || undefined,
-          {
-            personaId: isAgenticMode ? SUPER_AGENT_PERSONA_ID : undefined,
-            mode: defaultConversationMode,
-          },
-        );
       }
 
       let preparedAttachments = attachments;
@@ -4951,13 +4990,11 @@ export const ChatScreen: React.FC = () => {
     },
     [
       activeConversationId,
-      systemPrompt,
       isAgenticMode,
       defaultConversationMode,
-      createConversation,
+      ensureCanonicalConversation,
       addMessage,
       clearComposerDraft,
-      resolveConversationStartDefaults,
       runChat,
       t,
     ],
@@ -5102,20 +5139,14 @@ export const ChatScreen: React.FC = () => {
     (personaId: string) => {
       let convId = activeConversationId;
       if (!convId) {
-        const selection = resolveConversationStartDefaults();
-        if (!selection) {
-          setChatError(t('chat.noProvider'));
+        convId = ensureCanonicalConversation({
+          personaId,
+          mode: personaId === SUPER_AGENT_PERSONA_ID ? 'agentic' : 'chitchat',
+          reportMissingProvider: true,
+        });
+        if (!convId) {
           return;
         }
-        convId = createConversation(
-          selection.providerId,
-          systemPrompt,
-          selection.model || undefined,
-          {
-            personaId,
-            mode: personaId === SUPER_AGENT_PERSONA_ID ? 'agentic' : 'chitchat',
-          },
-        );
       }
 
       if (convId) {
@@ -5129,12 +5160,9 @@ export const ChatScreen: React.FC = () => {
     },
     [
       activeConversationId,
-      createConversation,
-      resolveConversationStartDefaults,
-      systemPrompt,
+      ensureCanonicalConversation,
       updatePersonaInConversation,
       updateModeInConversation,
-      t,
     ],
   );
 
@@ -5142,20 +5170,14 @@ export const ChatScreen: React.FC = () => {
     const nextMode = isAgenticMode ? 'chitchat' : 'agentic';
     let convId = activeConversationId;
     if (!convId) {
-      const selection = resolveConversationStartDefaults();
-      if (!selection) {
-        setChatError(t('chat.noProvider'));
+      convId = ensureCanonicalConversation({
+        personaId: nextMode === 'agentic' ? SUPER_AGENT_PERSONA_ID : 'default',
+        mode: nextMode,
+        reportMissingProvider: true,
+      });
+      if (!convId) {
         return;
       }
-      convId = createConversation(
-        selection.providerId,
-        systemPrompt,
-        selection.model || undefined,
-        {
-          personaId: nextMode === 'agentic' ? SUPER_AGENT_PERSONA_ID : 'default',
-          mode: nextMode,
-        },
-      );
     }
     if (convId) {
       // Atomic update: mode + persona together to prevent partial state.
@@ -5174,10 +5196,7 @@ export const ChatScreen: React.FC = () => {
   }, [
     isAgenticMode,
     activeConversationId,
-    createConversation,
-    resolveConversationStartDefaults,
-    systemPrompt,
-    t,
+    ensureCanonicalConversation,
     updateModeInConversation,
     updatePersonaInConversation,
   ]);
@@ -5748,7 +5767,6 @@ export const ChatScreen: React.FC = () => {
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Text style={styles.emptyTitle}>{t('common.appName')}</Text>
-              <Text style={styles.emptySubtitle}>{t('chat.emptyState')}</Text>
               <Text style={styles.emptyHint}>{t('chat.emptyStateHint')}</Text>
             </View>
           }

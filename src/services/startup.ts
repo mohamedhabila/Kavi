@@ -41,6 +41,7 @@ import {
   resolveEnabledProvider,
   resolveProviderApiKey,
 } from './llm/providerSupport';
+import { SUPER_AGENT_PERSONA_ID } from './agents/personas';
 
 function shouldDeliverNotification(job: CronJob): boolean {
   const mode = job.delivery?.mode || 'both';
@@ -276,14 +277,37 @@ async function executeScheduledJob(job: CronJob): Promise<string> {
         ? chatState.activeConversationId || undefined
         : undefined);
 
-    const conversationId =
-      existingConversationId ||
-      chatState.createConversation(
-        provider.id,
-        settings.systemPrompt || 'You are a helpful personal AI assistant with access to tools.',
-        model,
-        { activate: false },
-      );
+    const conversationId = existingConversationId
+      ? existingConversationId
+      : job.sessionTarget === 'main'
+        ? chatState.getOrCreateCanonicalThread(
+            provider.id,
+            settings.systemPrompt ||
+              'You are a helpful personal AI assistant with access to tools.',
+            model,
+            {
+              activate: false,
+              personaId:
+                settings.defaultConversationMode === 'agentic'
+                  ? SUPER_AGENT_PERSONA_ID
+                  : undefined,
+              mode: settings.defaultConversationMode,
+            },
+          )
+        : chatState.createConversation(
+            provider.id,
+            settings.systemPrompt ||
+              'You are a helpful personal AI assistant with access to tools.',
+            model,
+            {
+              activate: false,
+              personaId:
+                settings.defaultConversationMode === 'agentic'
+                  ? SUPER_AGENT_PERSONA_ID
+                  : undefined,
+              mode: settings.defaultConversationMode,
+            },
+          );
     notificationConversationId = conversationId;
 
     chatState.updateModelInConversation(conversationId, provider.id, model);

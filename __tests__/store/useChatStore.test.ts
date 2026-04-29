@@ -1189,6 +1189,44 @@ describe('useChatStore', () => {
       });
       expect(merged.activeConversationId).toBe('conv-merge');
     });
+
+    it('collapses same-version persisted conversations during merge', () => {
+      const persistOptions = (useChatStore as any).persist.getOptions();
+      const merged = persistOptions.merge(
+        {
+          conversations: [
+            {
+              id: 'r-old',
+              title: 'Old',
+              messages: [],
+              providerId: 'openai',
+              systemPrompt: 'sys',
+              personaId: 'researcher',
+              createdAt: 1,
+              updatedAt: 100,
+            },
+            {
+              id: 'r-new',
+              title: 'Newer',
+              messages: [],
+              providerId: 'openai',
+              systemPrompt: 'sys',
+              personaId: 'researcher',
+              createdAt: 2,
+              updatedAt: 300,
+            },
+          ],
+          activeConversationId: 'r-old',
+        },
+        useChatStore.getState(),
+      );
+
+      const byId = Object.fromEntries(merged.conversations.map((c: any) => [c.id, c]));
+      expect(byId['r-new'].isCanonical).toBe(true);
+      expect(byId['r-old'].archivedFromMigration).toBe(true);
+      expect(byId['r-old'].isCanonical).not.toBe(true);
+      expect(merged.activeConversationId).toBe('r-new');
+    });
   });
 
   describe('agent run tracking', () => {

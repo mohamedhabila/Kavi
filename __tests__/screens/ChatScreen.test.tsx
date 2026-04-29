@@ -428,6 +428,7 @@ const mockAddMessage = jest.fn();
 const mockUpdateMessage = jest.fn();
 const mockUpdateMessageEnrichedContent = jest.fn();
 const mockCreateConversation = jest.fn().mockReturnValue('new-conv');
+const mockGetOrCreateCanonicalThread = jest.fn().mockReturnValue('new-conv');
 const mockSetLoading = jest.fn();
 const mockEditMessage = jest.fn();
 const mockUpdateModelInConversation = jest.fn();
@@ -634,6 +635,7 @@ jest.mock('../../src/store/useChatStore', () => {
     activeConversationId: mockActiveConvId,
     isLoading: mockLoadingState,
     createConversation: mockCreateConversation,
+    getOrCreateCanonicalThread: mockGetOrCreateCanonicalThread,
     addMessage: mockAddMessage,
     updateMessage: mockUpdateMessage,
     updateMessageEnrichedContent: mockUpdateMessageEnrichedContent,
@@ -1235,11 +1237,19 @@ describe('ChatScreen', () => {
     expect(getByText('Hi there!')).toBeTruthy();
   });
 
-  it('should show empty state when no conversation active', () => {
+  it('should bootstrap the canonical conversation when no conversation is active', () => {
     mockActiveConvId = null;
-    const { getByText } = render(<ChatScreen />);
-    expect(getByText('Kavi')).toBeTruthy();
-    expect(getByText('Start a new conversation')).toBeTruthy();
+    render(<ChatScreen />);
+    expect(mockGetOrCreateCanonicalThread).toHaveBeenCalledWith(
+      'openai',
+      'You are helpful',
+      'gpt-5.4',
+      {
+        activate: undefined,
+        personaId: 'super-agent',
+        mode: 'agentic',
+      },
+    );
   });
 
   it('should open drawer when menu is pressed', () => {
@@ -1468,7 +1478,7 @@ describe('ChatScreen', () => {
 
   it('should toggle conversation mode with mode badge', () => {
     mockActiveConvId = null;
-    mockCreateConversation.mockReturnValueOnce('new-conv');
+    mockGetOrCreateCanonicalThread.mockReturnValueOnce('new-conv');
 
     const { getByLabelText } = render(<ChatScreen />);
 
@@ -1476,10 +1486,16 @@ describe('ChatScreen', () => {
     // Accessibility label now includes current mode description
     fireEvent.press(getByLabelText(/Switch to chitchat mode/));
 
-    expect(mockCreateConversation).toHaveBeenCalledWith('openai', 'You are helpful', 'gpt-5.4', {
-      personaId: 'default',
-      mode: 'chitchat',
-    });
+    expect(mockGetOrCreateCanonicalThread).toHaveBeenCalledWith(
+      'openai',
+      'You are helpful',
+      'gpt-5.4',
+      {
+        activate: undefined,
+        personaId: 'default',
+        mode: 'chitchat',
+      },
+    );
     // For new conversations (no existing convId), handleToggleMode creates the conversation
     // then uses atomic setState on the new convId
   });
@@ -1497,7 +1513,7 @@ describe('ChatScreen', () => {
     expect(UNSAFE_getByType(FlatList).props.keyboardDismissMode).toBeUndefined();
   });
 
-  it('should render empty state hint text', () => {
+  it('should render the startup hint while the canonical conversation is being materialized', () => {
     mockActiveConvId = null;
     const { getByText } = render(<ChatScreen />);
     expect(getByText(/Send a message to get started/)).toBeTruthy();
@@ -1594,10 +1610,9 @@ describe('ChatScreen', () => {
     ).toBeTruthy();
   });
 
-  it('should create a new conversation when none is active', async () => {
+  it('should use the canonical conversation when none is active', async () => {
     mockActiveConvId = null;
-    // Return existing conv id so the full handleSend flow works after creation
-    mockCreateConversation.mockReturnValueOnce('conv1');
+    mockGetOrCreateCanonicalThread.mockReturnValueOnce('conv1');
     const { getByPlaceholderText, getByTestId } = render(<ChatScreen />);
     const input = getByPlaceholderText('Message...');
     fireEvent.changeText(input, 'Hello');
@@ -1605,10 +1620,16 @@ describe('ChatScreen', () => {
     fireEvent.press(sendIcon.parent || sendIcon);
 
     await waitFor(() => {
-      expect(mockCreateConversation).toHaveBeenCalledWith('openai', 'You are helpful', 'gpt-5.4', {
-        personaId: 'super-agent',
-        mode: 'agentic',
-      });
+      expect(mockGetOrCreateCanonicalThread).toHaveBeenCalledWith(
+        'openai',
+        'You are helpful',
+        'gpt-5.4',
+        {
+          activate: undefined,
+          personaId: 'super-agent',
+          mode: 'agentic',
+        },
+      );
       expect(mockAddMessage).toHaveBeenCalled();
       expect(mockRunOrchestrator).toHaveBeenCalled();
     });
@@ -1673,7 +1694,7 @@ describe('ChatScreen', () => {
         model: 'gemma-3-1b-it',
       },
     ];
-    mockCreateConversation.mockReturnValueOnce('conv1');
+    mockGetOrCreateCanonicalThread.mockReturnValueOnce('conv1');
     mockGetProviderApiKey.mockResolvedValue('');
 
     const { getByPlaceholderText, getByTestId } = render(<ChatScreen />);
@@ -1682,11 +1703,12 @@ describe('ChatScreen', () => {
     fireEvent.press(sendIcon.parent || sendIcon);
 
     await waitFor(() => {
-      expect(mockCreateConversation).toHaveBeenCalledWith(
+      expect(mockGetOrCreateCanonicalThread).toHaveBeenCalledWith(
         'local-gemma',
         'You are helpful',
         'gemma-3-1b-it',
         {
+          activate: undefined,
           personaId: 'super-agent',
           mode: 'agentic',
         },
