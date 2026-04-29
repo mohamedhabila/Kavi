@@ -8,6 +8,7 @@ import {
   Alert,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -15,7 +16,18 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { ArrowLeft, Save, Trash2, FileText, Calendar, RefreshCw } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  Save,
+  Trash2,
+  FileText,
+  Calendar,
+  RefreshCw,
+  Brain,
+  Layers,
+  Pin,
+  PinOff,
+} from 'lucide-react-native';
 import {
   getMemoryLastUpdatedAt,
   readGlobalMemory,
@@ -25,11 +37,24 @@ import {
   clearAllMemory,
   subscribeToMemoryChanges,
 } from '../services/memory/store';
+import {
+  executeMemoryRecall,
+  executeMemoryForget,
+  executeMemoryPin,
+  executeMemoryUnpin,
+  executeMemoryBlockRead,
+  executeMemoryBlockEdit,
+  type MemoryRecallResult,
+  type MemoryBlockReadResult,
+} from '../services/memory/memoryTools';
 import { useAppTheme, AppPalette } from '../theme/useAppTheme';
 import { useTranslation } from '../i18n';
 import { useBackToChat } from '../navigation/useBackToChat';
 
-type Tab = 'global' | 'daily';
+type Tab = 'global' | 'daily' | 'facts' | 'blocks';
+
+type FactRow = MemoryRecallResult['facts'][number];
+type BlockRow = MemoryBlockReadResult['blocks'][number];
 
 export const MemoryScreen: React.FC = () => {
   const { colors } = useAppTheme();
@@ -47,6 +72,15 @@ export const MemoryScreen: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(() => getMemoryLastUpdatedAt());
   const [hasExternalGlobalUpdate, setHasExternalGlobalUpdate] = useState(false);
+
+  // Facts tab state.
+  const [facts, setFacts] = useState<FactRow[]>([]);
+  const [factsFilter, setFactsFilter] = useState('');
+  const [factsPinnedOnly, setFactsPinnedOnly] = useState(false);
+
+  // Blocks tab state.
+  const [blocks, setBlocks] = useState<BlockRow[]>([]);
+  const [blockDrafts, setBlockDrafts] = useState<Record<string, string>>({});
 
   const dirtyRef = useRef(false);
   const selectedDateRef = useRef<string | null>(null);
@@ -102,17 +136,55 @@ export const MemoryScreen: React.FC = () => {
     [loadDailyContent],
   );
 
+  const loadFacts = useCallback(() => {
+    const subject = factsFilter.trim();
+    const result = executeMemoryRecall({
+      ...(subject ? { subject } : {}),
+      ...(factsPinnedOnly ? { pinnedOnly: true } : {}),
+      // When neither filter nor pinnedOnly is set, recall requires *some* hint.
+      // Fall back to listing all pinned facts as a safe default.
+      ...(subject || factsPinnedOnly ? {} : { pinnedOnly: true }),
+      limit: 100,
+    });
+    if ('ok' in result && result.ok) {
+      setFacts(result.facts);
+    } else {
+      setFacts([]);
+    }
+  }, [factsFilter, factsPinnedOnly]);
+
+  const loadBlocks = useCallback(() => {
+    const result = executeMemoryBlockRead({});
+    if ('ok' in result && result.ok) {
+      setBlocks(result.blocks);
+      setBlockDrafts((prev) => {
+        // Preserve in-flight edits; only seed labels we don't yet have a draft for.
+        const next = { ...prev };
+        for (const block of result.blocks) {
+          if (next[block.label] === undefined) {
+            next[block.label] = block.content;
+          }
+        }
+        return next;
+      });
+    } else {
+      setBlocks([]);
+    }
+  }, []);
+
   const refreshMemory = useCallback(
     async (preserveDirty = true) => {
       setIsRefreshing(true);
       try {
         await Promise.all([loadGlobalMemory(preserveDirty), loadDailyList()]);
+        loadFacts();
+        loadBlocks();
         setLastSyncedAt(Date.now());
       } finally {
         setIsRefreshing(false);
       }
     },
-    [loadDailyList, loadGlobalMemory],
+    [loadDailyList, loadGlobalMemory, loadFacts, loadBlocks],
   );
 
   useEffect(() => {
@@ -182,6 +254,49 @@ export const MemoryScreen: React.FC = () => {
     [originalContent],
   );
 
+  // Re-query when facts filter / pinned toggle changes.
+  useEffect(() => {
+    if (tab !== 'facts') return;
+    loadFacts();
+  }, [tab, loadFacts]);
+
+  const handleFactToggleStar = useCallback(
+    (fact: FactRow) => {
+      const result = fact.pinned
+        ? executeMemoryUnpin({ factId: fact.id })
+        : executeMemoryPin({ factId: fact.id });
+      if ('ok' in result && result.ok) {
+        loadFacts();
+      }
+    },
+    [loadFacts],
+  );
+
+  const handleFactForget = useCallback(
+    (fact: FactRow) => {
+      const result = executeMemoryForget({ factId: fact.id, mode: 'invalidate' });
+      if ('ok' in result && result.ok) {
+        loadFacts();
+      }
+    },
+    [loadFacts],
+  );
+
+  const handleBlockDraftChange = useCallback((label: string, content: string) => {
+    setBlockDrafts((prev) => ({ ...prev, [label]: content }));
+  }, []);
+
+  const handleBlockSave = useCallback(
+    (label: string) => {
+      const draft = blockDrafts[label] ?? '';
+      const result = executeMemoryBlockEdit({ label, content: draft, replace: true });
+      if ('ok' in result && result.ok) {
+        loadBlocks();
+      }
+    },
+    [blockDrafts, loadBlocks],
+  );
+
   const charCount = globalContent.length;
   const lineCount = globalContent ? globalContent.split('\n').length : 0;
   const memoryStatus = isRefreshing
@@ -243,6 +358,32 @@ export const MemoryScreen: React.FC = () => {
             {t('memory.dailyTab')} ({dailyFiles.length})
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, tab === 'facts' && styles.tabActive]}
+          onPress={() => {
+            setTab('facts');
+            loadFacts();
+          }}
+          accessibilityLabel={t('memory.factsTab')}
+        >
+          <Brain size={16} color={tab === 'facts' ? colors.primary : colors.textSecondary} />
+          <Text style={[styles.tabText, tab === 'facts' && styles.tabTextActive]}>
+            {t('memory.factsTab')}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, tab === 'blocks' && styles.tabActive]}
+          onPress={() => {
+            setTab('blocks');
+            loadBlocks();
+          }}
+          accessibilityLabel={t('memory.blocksTab')}
+        >
+          <Layers size={16} color={tab === 'blocks' ? colors.primary : colors.textSecondary} />
+          <Text style={[styles.tabText, tab === 'blocks' && styles.tabTextActive]}>
+            {t('memory.blocksTab')}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Content */}
@@ -276,7 +417,7 @@ export const MemoryScreen: React.FC = () => {
             />
           </ScrollView>
         </View>
-      ) : (
+      ) : tab === 'daily' ? (
         <ScrollView style={styles.dailyContainer}>
           <Text style={styles.statusLine}>{memoryStatus}</Text>
           {dailyFiles.length === 0 ? (
@@ -312,7 +453,117 @@ export const MemoryScreen: React.FC = () => {
             </>
           )}
         </ScrollView>
+      ) : tab === 'facts' ? (
+        <View style={styles.editorContainer} testID="memory-facts-tab">
+          <View style={styles.factsToolbar}>
+            <TextInput
+              style={styles.factsSearch}
+              value={factsFilter}
+              onChangeText={setFactsFilter}
+              placeholder={t('memory.factsSearchPlaceholder')}
+              placeholderTextColor={colors.placeholder}
+              autoCapitalize="none"
+              autoCorrect={false}
+              testID="memory-facts-search"
+            />
+            <View style={styles.factsToggleRow}>
+              <Text style={styles.statusLine}>{t('memory.factsPinnedOnly')}</Text>
+              <Switch
+                value={factsPinnedOnly}
+                onValueChange={setFactsPinnedOnly}
+                testID="memory-facts-pinned-toggle"
+              />
+            </View>
+            <Text style={styles.statusLine}>
+              {t('memory.factsCount', { count: facts.length })}
+            </Text>
+          </View>
+          <ScrollView style={styles.editorScroll}>
+            {facts.length === 0 ? (
+              <Text style={styles.emptyText}>{t('memory.factsEmpty')}</Text>
+            ) : (
+              facts.map((fact) => (
+                <View key={fact.id} style={styles.factRow} testID={`memory-fact-${fact.id}`}>
+                  <Text style={styles.factSubject}>
+                    {fact.subject} · {fact.predicate}
+                  </Text>
+                  <Text style={styles.factValue}>{fact.value}</Text>
+                  <View style={styles.factActions}>
+                    <TouchableOpacity
+                      onPress={() => handleFactToggleStar(fact)}
+                      accessibilityLabel={
+                        fact.pinned ? t('memory.factUnpin') : t('memory.factPin')
+                      }
+                      testID={`memory-fact-pin-${fact.id}`}
+                    >
+                      {fact.pinned ? (
+                        <PinOff size={16} color={colors.primary} />
+                      ) : (
+                        <Pin size={16} color={colors.textSecondary} />
+                      )}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleFactForget(fact)}
+                      accessibilityLabel={t('memory.factForget')}
+                      testID={`memory-fact-forget-${fact.id}`}
+                    >
+                      <Trash2 size={16} color={colors.danger} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))
+            )}
+          </ScrollView>
+        </View>
+      ) : (
+        <ScrollView style={styles.editorContainer} testID="memory-blocks-tab">
+          {blocks.length === 0 ? (
+            <Text style={styles.emptyText}>{t('memory.blocksEmpty')}</Text>
+          ) : (
+            blocks.map((block) => {
+              const draft = blockDrafts[block.label] ?? block.content;
+              return (
+                <View
+                  key={block.label}
+                  style={styles.blockCard}
+                  testID={`memory-block-${block.label}`}
+                >
+                  <Text style={styles.factSubject}>{block.label}</Text>
+                  <Text style={styles.statusLine}>{block.description}</Text>
+                  <TextInput
+                    style={[styles.editor, styles.blockEditor]}
+                    value={draft}
+                    onChangeText={(text) => handleBlockDraftChange(block.label, text)}
+                    multiline
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    testID={`memory-block-editor-${block.label}`}
+                  />
+                  <View style={styles.factActions}>
+                    <Text style={styles.statusLine}>
+                      {t('memory.blockChars', {
+                        used: draft.length,
+                        limit: block.charLimit,
+                      })}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => handleBlockSave(block.label)}
+                      accessibilityLabel={t('memory.blockSave')}
+                      testID={`memory-block-save-${block.label}`}
+                    >
+                      <Save size={18} color={colors.primary} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })
+          )}
+        </ScrollView>
       )}
+
+      <Text style={styles.attributionFooter} testID="memory-attribution-footer">
+        {t('memory.attribution')}
+      </Text>
     </SafeAreaView>
   );
 };
@@ -349,6 +600,14 @@ function createStyles(colors: AppPalette) {
     tabText: { fontSize: 14, color: colors.textSecondary },
     tabTextActive: { color: colors.primary, fontWeight: '600' },
     editorContainer: { flex: 1, paddingHorizontal: 16, paddingTop: 8 },
+    attributionFooter: {
+      fontSize: 11,
+      color: colors.textTertiary,
+      textAlign: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      backgroundColor: colors.background,
+    },
     statsLine: {
       fontSize: 12,
       color: colors.textSecondary,
@@ -429,6 +688,58 @@ function createStyles(colors: AppPalette) {
       color: colors.textSecondary,
       textAlign: 'center',
       marginTop: 40,
+    },
+    factsToolbar: {
+      gap: 8,
+      marginBottom: 8,
+    },
+    factsSearch: {
+      fontSize: 14,
+      color: colors.text,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      backgroundColor: colors.surface,
+      borderRadius: 8,
+    },
+    factsToggleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 4,
+    },
+    factRow: {
+      backgroundColor: colors.surface,
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 8,
+      gap: 4,
+    },
+    factSubject: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.text,
+    },
+    factValue: {
+      fontSize: 14,
+      color: colors.text,
+    },
+    factActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      gap: 16,
+      marginTop: 6,
+    },
+    blockCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 12,
+      gap: 6,
+    },
+    blockEditor: {
+      minHeight: 120,
+      marginTop: 4,
     },
   });
 }

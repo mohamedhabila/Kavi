@@ -362,7 +362,10 @@ export interface ConversationLogEntry {
   detail?: string;
 }
 
-export type ConversationMode = 'agentic' | 'direct';
+// 'chitchat' is the canonical value (renamed from 'direct' on 2026-04-29).
+// Persisted state migration v8→v9 in useSettingsStore upgrades old 'direct'
+// values; chatPersistence sanitizers do the same for `Conversation.mode`.
+export type ConversationMode = 'agentic' | 'chitchat';
 
 export type LlmProviderKind = 'remote' | 'on-device';
 
@@ -433,6 +436,22 @@ export interface Conversation {
   logs?: ConversationLogEntry[];
   agentRuns?: AgentRun[];
   activeAgentRunId?: string;
+
+  parentConversationId?: string;
+  isSideThread?: boolean;
+  isCanonical?: boolean;
+  archivedFromMigration?: boolean;
+  personaEvents?: PersonaSwitchEvent[];
+}
+
+export interface PersonaSwitchEvent {
+  id: string;
+  /** Wall-clock timestamp (ms) when the switch happened. */
+  at: number;
+  /** Persona id active before the switch. Omitted on the very first switch from an undefined persona. */
+  from?: string;
+  /** Persona id active after the switch. */
+  to: string;
 }
 
 export interface LlmProviderConfig {
@@ -657,6 +676,13 @@ export interface AppSettings {
   theme: 'light' | 'dark' | 'system';
   systemPrompt: string;
   defaultConversationMode?: ConversationMode;
+  /**
+   * Identifier of the LLM provider used for background memory consolidation.
+   * When `null` / empty, the consolidator scheduler is a no-op
+   * (on-device users opt-in by leaving this unset).
+   */
+  consolidationProvider?: string | null;
+  disableLongTermMemory?: boolean;
 }
 
 export type RemoteTargetKind =

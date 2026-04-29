@@ -131,6 +131,28 @@ npm run verify
 
 See [docs/testing.md](docs/testing.md) for the opt-in live-provider scripts and required API keys.
 
+## Privacy & Long-term Memory
+
+Kavi maintains an on-device single-thread memory store (facts, entities,
+focus blocks, and a recall index) so the assistant can refer back to
+durable details across conversations. Everything is stored locally in
+the app's SQLite database; nothing is uploaded.
+
+You can fully disable long-term memory in **Settings → Data →
+"Disable long-term memory"**. When the toggle is on:
+
+- Living-memory bridge skips block reads and recall.
+- The consolidator scheduler short-circuits before any extractor call.
+- The migration backfill (v6→v7 archived threads) is a no-op.
+- Every `memory_*` engine tool returns
+  `{ ok: false, code: 'permission_denied' }` so the agent reacts
+  gracefully instead of failing opaquely.
+
+The optional consolidation extractor is configured via
+`Settings → Models → Consolidation provider` and uses an
+OpenAI-compatible `/v1/chat/completions` call. Misconfigured providers
+no-op cleanly.
+
 ## Contributing
 
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) before starting work. It covers setup expectations, generated assets, patches, testing, and pull request standards.

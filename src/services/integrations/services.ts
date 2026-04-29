@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Kavi — Service Integration Skills (Phase 8)
+// Kavi — Service Integration Skills
 // ---------------------------------------------------------------------------
 // Each service is a skill that registers tools. API keys stored securely.
 

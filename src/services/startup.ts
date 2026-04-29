@@ -28,6 +28,10 @@ import { unrefTimerIfSupported } from '../utils/timers';
 import { initSubAgentRegistry, listActiveSubAgents } from './agents/subAgent';
 import { repairTerminalAgentRunsMissingFinalResponses } from './agents/agentRunRepair';
 import {
+  runMemoryMigrationTick,
+  runMemoryBackgroundFlush,
+} from './memory/lifecycle';
+import {
   buildSurfacedSubAgentOutputToolResultSummary,
   parseSurfacedSubAgentOutputResult,
 } from './agents/surfacedSubAgentOutput';
@@ -219,6 +223,9 @@ function initializeDeferredStartupServices(): void {
     );
     void runStartupHooksAndEmitLaunchEvent();
     void runBootOnLaunchIfPresent();
+    void runMemoryMigrationTick().catch((e) =>
+      console.warn('[startup] runMemoryMigrationTick failed:', e),
+    );
   });
 }
 
@@ -579,4 +586,25 @@ export function initializeServices(): void {
   unrefTimerIfSupported(approvalSweepInterval);
 
   initializeDeferredStartupServices();
+}
+
+/**
+ * Lifecycle hook called when the app moves from background → foreground.
+ * Currently used to throttle-tick the memory migration seed runner so the
+ * v6→v7 archived-thread backlog drains across sessions.
+ */
+export function handleAppForeground(): void {
+  void runMemoryMigrationTick().catch((e) =>
+    console.warn('[startup] foreground memory tick failed:', e),
+  );
+}
+
+/**
+ * Lifecycle hook called when the app moves to background. Flushes dirty
+ * consolidator threads via the configured `consolidationProvider`.
+ */
+export function handleAppBackground(): void {
+  void runMemoryBackgroundFlush().catch((e) =>
+    console.warn('[startup] background memory flush failed:', e),
+  );
 }

@@ -750,7 +750,7 @@ describe('Sub-Agent Service', () => {
     });
   });
 
-  describe('spawnSubAgent — sandbox enforcement (Phase 26)', () => {
+  describe('spawnSubAgent — sandbox enforcement', () => {
     it('passes toolFilter for safe-only sandbox policy', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
       let capturedOptions: any = null;

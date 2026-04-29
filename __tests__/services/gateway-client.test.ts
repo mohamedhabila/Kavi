@@ -433,7 +433,7 @@ describe('Gateway Client', () => {
     });
   });
 
-  describe('handleClose — pending request rejection (Phase 26)', () => {
+  describe('handleClose — pending request rejection', () => {
     function connectAndAuth(client: GatewayClient) {
       client.connect();
       mockOnOpen?.();

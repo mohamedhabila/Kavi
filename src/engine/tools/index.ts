@@ -32,6 +32,13 @@ import {
   executeCameraSnap,
   executeAudioTranscribe,
   executeMemorySearch,
+  executeMemoryRecall,
+  executeMemoryRemember,
+  executeMemoryPin,
+  executeMemoryUnpin,
+  executeMemoryForget,
+  executeMemoryBlockRead,
+  executeMemoryBlockEdit,
   executeSshDeletePath,
   executeSshExec,
   executeSshBackgroundJobStatus,
@@ -336,6 +343,13 @@ const PARITY_TOOL_NAMES = new Set([
   'camera_snap',
   'audio_transcribe',
   'memory_search',
+  'memory_recall',
+  'memory_remember',
+  'memory_pin',
+  'memory_unpin',
+  'memory_forget',
+  'memory_block_read',
+  'memory_block_edit',
   'ssh_exec',
   'ssh_background_job_status',
   'ssh_background_job_wait',
@@ -2325,11 +2339,40 @@ async function executeToolInner(
         return executeCameraSnap(args);
       case 'audio_transcribe':
         return executeAudioTranscribe(args);
-      case 'memory_search': {
-        const memorySearchProvider = await resolveActiveProvider(context);
-        return executeMemorySearch(args, resolveMemorySearchEmbeddingConfig(memorySearchProvider), {
-          conversationId: workspaceConversationId,
-        });
+      case 'memory_search':
+      case 'memory_recall':
+      case 'memory_remember':
+      case 'memory_pin':
+      case 'memory_unpin':
+      case 'memory_forget':
+      case 'memory_block_read':
+      case 'memory_block_edit': {
+        // Privacy opt-out. When the user has disabled long-term
+        // memory, every memory_* tool returns a uniform "permission_denied"
+        // payload so the agent can react gracefully and the SQLite layer is
+        // not touched.
+        if (useSettingsStore.getState().disableLongTermMemory) {
+          return JSON.stringify({
+            ok: false,
+            code: 'permission_denied',
+            error: 'Long-term memory is disabled in settings.',
+          });
+        }
+        if (name === 'memory_search') {
+          const memorySearchProvider = await resolveActiveProvider(context);
+          return executeMemorySearch(
+            args,
+            resolveMemorySearchEmbeddingConfig(memorySearchProvider),
+            { conversationId: workspaceConversationId },
+          );
+        }
+        if (name === 'memory_recall') return executeMemoryRecall(args);
+        if (name === 'memory_remember') return executeMemoryRemember(args);
+        if (name === 'memory_pin') return executeMemoryPin(args);
+        if (name === 'memory_unpin') return executeMemoryUnpin(args);
+        if (name === 'memory_forget') return executeMemoryForget(args);
+        if (name === 'memory_block_read') return executeMemoryBlockRead(args);
+        return executeMemoryBlockEdit(args);
       }
       case 'ssh_exec':
         return executeSshExec(args);

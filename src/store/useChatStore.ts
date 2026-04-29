@@ -510,12 +510,18 @@ function normalizePersistedConversation(conversation: Conversation): Conversatio
     ? conversation.activeAgentRunId
     : undefined;
 
+  const normalizedMode =
+    (conversation as Conversation & { mode?: string }).mode === 'direct'
+      ? 'chitchat'
+      : conversation.mode;
+
   return sanitizeConversationForPersistence({
     ...conversation,
     messages: capMessages(normalizePersistedMessages(conversation.messages)),
     logs: conversation.logs ?? [],
     agentRuns: normalizedRuns,
     activeAgentRunId,
+    ...(normalizedMode !== undefined ? { mode: normalizedMode as ConversationMode } : {}),
   });
 }
 
@@ -535,6 +541,49 @@ function normalizePersistedChatState(
     conversations,
     activeConversationId,
   };
+}
+
+export function collapseConversationsToCanonical(
+  conversations: Conversation[],
+): Conversation[] {
+  if (!Array.isArray(conversations) || conversations.length === 0) {
+    return conversations ?? [];
+  }
+  const groups = new Map<string, Conversation[]>();
+  for (const conv of conversations) {
+    if (conv.isSideThread || conv.archivedFromMigration) {
+      continue;
+    }
+    const key = conv.personaId && conv.personaId.length > 0 ? conv.personaId : '__default__';
+    const list = groups.get(key);
+    if (list) list.push(conv);
+    else groups.set(key, [conv]);
+  }
+  const canonicalIds = new Set<string>();
+  const archivedIds = new Set<string>();
+  for (const list of groups.values()) {
+    if (list.length === 0) continue;
+    const existingCanonical = list.find((c) => c.isCanonical);
+    const winner =
+      existingCanonical ??
+      list.reduce((best, c) => (c.updatedAt > best.updatedAt ? c : best), list[0]);
+    canonicalIds.add(winner.id);
+    for (const c of list) {
+      if (c.id !== winner.id) {
+        archivedIds.add(c.id);
+      }
+    }
+  }
+  return conversations.map((conv) => {
+    if (conv.isSideThread) return conv;
+    if (canonicalIds.has(conv.id) && !conv.isCanonical) {
+      return { ...conv, isCanonical: true };
+    }
+    if (archivedIds.has(conv.id) && !conv.archivedFromMigration) {
+      return { ...conv, archivedFromMigration: true, isCanonical: false };
+    }
+    return conv;
+  });
 }
 
 function isAppRestartInterruptedWorker(
@@ -1001,6 +1050,44 @@ interface ChatState {
     modelOverride?: string,
     options?: { activate?: boolean; personaId?: string; mode?: ConversationMode },
   ) => string;
+  /**
+   * Single-thread collapse. Returns the id of the
+   * canonical conversation for the supplied `personaId` (or `'__default__'`
+   * group when omitted). If a canonical conversation does not yet exist for
+   * that persona group, one is created with the supplied provider/system
+   * prompt/model and marked `isCanonical: true`. Activates the conversation
+   * unless `options.activate === false`.
+   */
+  getOrCreateCanonicalThread: (
+    providerId: string,
+    systemPrompt: string,
+    modelOverride?: string,
+    options?: { activate?: boolean; personaId?: string; mode?: ConversationMode },
+  ) => string;
+  /**
+   * Create an ephemeral side thread branched off `parentConversationId`. Side
+   * threads inherit provider/model/persona/system-prompt from the parent unless
+   * explicitly overridden, are not surfaced in the default sidebar listing, and
+   * are intended to be discarded when the user is done exploring the tangent.
+   * The active conversation is switched to the side thread by default.
+   */
+  createSideThread: (
+    parentConversationId: string,
+    options?: {
+      title?: string;
+      systemPrompt?: string;
+      providerId?: string;
+      modelOverride?: string;
+      personaId?: string;
+      mode?: ConversationMode;
+      activate?: boolean;
+    },
+  ) => string | null;
+  /**
+   * Discard a side thread permanently. Returns true if the thread was removed.
+   * Refuses to delete a non-side-thread; for those, use `deleteConversation`.
+   */
+  discardSideThread: (id: string) => boolean;
   setActiveConversation: (id: string | null) => void;
   deleteConversation: (id: string) => void;
   clearAllConversations: () => void;
@@ -1201,6 +1288,120 @@ export const useChatStore = create<ChatState>()(
         return id;
       },
 
+      getOrCreateCanonicalThread: (providerId, systemPrompt, modelOverride, options) => {
+        const groupKey =
+          options?.personaId && options.personaId.length > 0
+            ? options.personaId
+            : '__default__';
+        const { conversations } = _get();
+        const existing = conversations.find((c) => {
+          if (c.isSideThread || c.archivedFromMigration) return false;
+          if (!c.isCanonical) return false;
+          const ownKey = c.personaId && c.personaId.length > 0 ? c.personaId : '__default__';
+          return ownKey === groupKey;
+        });
+        if (existing) {
+          if (options?.activate !== false) {
+            set({ activeConversationId: existing.id });
+            requestChatStorePersistenceCheckpoint();
+          }
+          return existing.id;
+        }
+        const now = Date.now();
+        const id = generateId();
+        const newConversation: Conversation = {
+          id,
+          title: getDefaultConversationTitle(),
+          messages: [],
+          providerId,
+          modelOverride,
+          systemPrompt,
+          createdAt: now,
+          updatedAt: now,
+          personaId: options?.personaId,
+          mode: options?.mode,
+          isCanonical: true,
+          usage: {
+            entries: [],
+            totalInput: 0,
+            totalOutput: 0,
+            totalCacheRead: 0,
+            totalCacheWrite: 0,
+            totalTokens: 0,
+            totalCost: 0,
+            totalCalls: 0,
+          },
+          logs: [],
+          agentRuns: [],
+        };
+        set((state) => ({
+          conversations: [newConversation, ...state.conversations],
+          activeConversationId:
+            options?.activate === false ? state.activeConversationId : id,
+        }));
+        requestChatStorePersistenceCheckpoint();
+        return id;
+      },
+
+      createSideThread: (parentConversationId, options) => {
+        const { conversations } = _get();
+        const parent = conversations.find((c) => c.id === parentConversationId);
+        if (!parent) return null;
+        // Refuse to nest side threads — keep the model flat (parent → many leaves).
+        if (parent.isSideThread) return null;
+
+        const now = Date.now();
+        const id = generateId();
+        const sideThread: Conversation = {
+          id,
+          title: options?.title ?? `↳ ${parent.title}`,
+          messages: [],
+          providerId: options?.providerId ?? parent.providerId,
+          modelOverride: options?.modelOverride ?? parent.modelOverride,
+          systemPrompt: options?.systemPrompt ?? parent.systemPrompt,
+          createdAt: now,
+          updatedAt: now,
+          personaId: options?.personaId ?? parent.personaId,
+          mode: options?.mode ?? parent.mode,
+          parentConversationId,
+          isSideThread: true,
+          usage: {
+            entries: [],
+            totalInput: 0,
+            totalOutput: 0,
+            totalCacheRead: 0,
+            totalCacheWrite: 0,
+            totalTokens: 0,
+            totalCost: 0,
+            totalCalls: 0,
+          },
+          logs: [],
+          agentRuns: [],
+        };
+        set((state) => ({
+          conversations: [sideThread, ...state.conversations],
+          activeConversationId:
+            options?.activate === false ? state.activeConversationId : id,
+        }));
+        requestChatStorePersistenceCheckpoint();
+        return id;
+      },
+
+      discardSideThread: (id) => {
+        const { conversations } = _get();
+        const target = conversations.find((c) => c.id === id);
+        if (!target || !target.isSideThread) return false;
+        set((state) => ({
+          conversations: state.conversations.filter((c) => c.id !== id),
+          activeConversationId:
+            state.activeConversationId === id
+              ? target.parentConversationId ?? null
+              : state.activeConversationId,
+        }));
+        requestChatStorePersistenceCheckpoint();
+        return true;
+      },
+
       setActiveConversation: (id) => {
         set({ activeConversationId: id });
         requestChatStorePersistenceCheckpoint();
@@ -1227,12 +1428,32 @@ export const useChatStore = create<ChatState>()(
           ),
         })),
 
-      updatePersonaInConversation: (conversationId, personaId) =>
+      updatePersonaInConversation: (conversationId, personaId) => {
         set((state) => ({
-          conversations: state.conversations.map((c) =>
-            c.id === conversationId ? { ...c, personaId } : c,
-          ),
-        })),
+          conversations: state.conversations.map((c) => {
+            if (c.id !== conversationId) return c;
+            const previousPersonaId = c.personaId;
+            // Only record an inline event when the persona actually changes
+            // and the conversation already has at least one message — empty
+            // threads have nothing for the marker to anchor against.
+            const shouldRecordEvent =
+              previousPersonaId !== personaId && c.messages.length > 0;
+            const personaEvents = shouldRecordEvent
+              ? [
+                  ...(c.personaEvents ?? []),
+                  {
+                    id: generateId(),
+                    at: Date.now(),
+                    from: previousPersonaId,
+                    to: personaId,
+                  },
+                ]
+              : c.personaEvents;
+            return { ...c, personaId, personaEvents };
+          }),
+        }));
+        requestChatStorePersistenceCheckpoint();
+      },
 
       updateModeInConversation: (conversationId, mode) =>
         set((state) => ({
@@ -2395,11 +2616,15 @@ export const useChatStore = create<ChatState>()(
     {
       name: STORAGE_KEYS.CONVERSATIONS,
       storage: createThrottledJSONStorage(),
-      version: 5,
-      migrate: (persistedState: any) => {
-        return partializeChatPersistState(
-          normalizePersistedChatState(persistedState as Partial<ChatState> | undefined),
+      version: 7,
+      migrate: (persistedState: any, fromVersion: number) => {
+        const normalized = normalizePersistedChatState(
+          persistedState as Partial<ChatState> | undefined,
         );
+        if (typeof fromVersion === 'number' && fromVersion < 7) {
+          normalized.conversations = collapseConversationsToCanonical(normalized.conversations);
+        }
+        return partializeChatPersistState(normalized);
       },
       merge: (persistedState, currentState) => ({
         ...currentState,

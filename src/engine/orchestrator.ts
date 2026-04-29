@@ -106,6 +106,11 @@ import {
   getConversationMemoryForSystemPrompt,
   getMemoryForSystemPrompt,
 } from '../services/memory/store';
+import {
+  buildLivingMemorySections,
+  type LivingMemoryBridgeOutput,
+} from '../services/memory/livingMemoryBridge';
+import { useSettingsStore } from '../store/useSettingsStore';
 import { mcpManager } from '../services/mcp/manager';
 import {
   getAllLoadedSkills,
@@ -2172,6 +2177,26 @@ export async function runOrchestrator(
     }
   }
 
+  // ── Living memory bridge ───────────────
+  // Builds memory blocks (L2) + focus block + recall facts (L3) once per
+  // request and reuses across orchestrator iterations. The result is
+  // appended to each iteration's system-prompt sections.
+  let livingMemory: LivingMemoryBridgeOutput | null = null;
+  try {
+    livingMemory = await buildLivingMemorySections({
+      messages: workingMessages,
+      disableLongTermMemory: useSettingsStore.getState().disableLongTermMemory === true,
+    });
+  } catch (livingMemoryError: unknown) {
+    logger.devWarn(
+      'Living memory bridge unavailable for this request:',
+      livingMemoryError instanceof Error
+        ? livingMemoryError.message
+        : String(livingMemoryError),
+    );
+    livingMemory = null;
+  }
+
   callbacks.onStateChange('thinking');
   await emitSessionEvent('start', { conversationId });
 
@@ -2343,6 +2368,15 @@ export async function runOrchestrator(
         toolingEnabledForProvider,
       );
       appendSystemPromptSection(baseSystemPromptSections, requestGovernancePromptSection);
+      // Append living-memory sections (L2 blocks cacheable, L3 focus/facts dynamic).
+      // Computed once per request; reused across iterations of the same user turn.
+      if (livingMemory && livingMemory.sections.length > 0) {
+        for (const memorySection of livingMemory.sections) {
+          appendSystemPromptSection(baseSystemPromptSections, memorySection.text, {
+            cacheable: memorySection.cacheable === true,
+          });
+        }
+      }
       const baseSystemPrompt = joinSystemPromptSections(baseSystemPromptSections);
       const enrichedSystemPromptSections = effectiveForceTextThisTurn
         ? [
@@ -2396,6 +2430,16 @@ export async function runOrchestrator(
               : {}),
             ...(params.tokenBudget != null ? { tokenBudget: params.tokenBudget } : {}),
             ...(params.forceTier ? { forceTier: params.forceTier } : {}),
+            // Propagate living-memory context into the summary.
+            ...(livingMemory && typeof livingMemory.idleSinceLastTurnMs === 'number'
+              ? { idleSinceLastTurnMs: livingMemory.idleSinceLastTurnMs }
+              : {}),
+            ...(livingMemory && livingMemory.focusBlockText
+              ? { focusBlock: livingMemory.focusBlockText }
+              : {}),
+            ...(livingMemory && livingMemory.openThreadLabels.length > 0
+              ? { openThreads: livingMemory.openThreadLabels }
+              : {}),
           });
           if (!compactResult.compacted || !compactResult.result) {
             return { messages: currentMessages, compacted: false };

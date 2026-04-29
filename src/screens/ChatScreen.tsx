@@ -15,11 +15,19 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { useShallow } from 'zustand/react/shallow';
-import { Menu, AlertTriangle, FolderOpen, Terminal, Cpu } from 'lucide-react-native';
+import { Menu, AlertTriangle, FolderOpen, Terminal, Cpu, GitBranch, X } from 'lucide-react-native';
 import { requestChatStorePersistenceCheckpoint } from '../store/chatStorePersistence';
 import { useChatStore } from '../store/useChatStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { MessageBubble } from '../components/chat/MessageBubble';
+import {
+  computeTemporalMarkers,
+  type TemporalMarker,
+} from '../components/chat/temporalMarkers';
+import {
+  computePersonaSwitchMarkers,
+  type PersonaSwitchMarker,
+} from '../components/chat/personaSwitchMarkers';
 import { ChatInput } from '../components/chat/ChatInput';
 import { ModelSelector } from '../components/chat/ModelSelector';
 import { PersonaSelector } from '../components/chat/PersonaSelector';
@@ -43,6 +51,8 @@ import {
   ToolCall,
 } from '../types';
 import { SUPER_AGENT_PERSONA_ID } from '../services/agents/personas';
+import { getAvailablePersonasForConfig } from '../services/agents/registry';
+import { usePersonaConfigStore } from '../services/agents/store';
 import { buildAutomaticSubAgentEvidenceEntries } from '../services/agents/automaticEvidence';
 import { generateId } from '../utils/id';
 import { exportConversationAsMarkdown } from '../services/session/manager';
@@ -1006,6 +1016,8 @@ export const ChatScreen: React.FC = () => {
     updatePersonaInConversation,
     updateModeInConversation,
   } = chatSlice;
+  const createSideThread = chatSlice.createSideThread;
+  const discardSideThread = chatSlice.discardSideThread;
 
   const settingsSlice = useSettingsStore(useShallow(selectChatScreenSettingsSlice));
   const {
@@ -5101,17 +5113,17 @@ export const ChatScreen: React.FC = () => {
           selection.model || undefined,
           {
             personaId,
-            mode: personaId === SUPER_AGENT_PERSONA_ID ? 'agentic' : 'direct',
+            mode: personaId === SUPER_AGENT_PERSONA_ID ? 'agentic' : 'chitchat',
           },
         );
       }
 
       if (convId) {
         updatePersonaInConversation(convId, personaId);
-        // Manually selecting a persona implies direct mode (unless it's super-agent)
+        // Manually selecting a persona implies chitchat mode (unless it's super-agent)
         updateModeInConversation(
           convId,
-          personaId === SUPER_AGENT_PERSONA_ID ? 'agentic' : 'direct',
+          personaId === SUPER_AGENT_PERSONA_ID ? 'agentic' : 'chitchat',
         );
       }
     },
@@ -5127,7 +5139,7 @@ export const ChatScreen: React.FC = () => {
   );
 
   const handleToggleMode = useCallback(() => {
-    const nextMode = isAgenticMode ? 'direct' : 'agentic';
+    const nextMode = isAgenticMode ? 'chitchat' : 'agentic';
     let convId = activeConversationId;
     if (!convId) {
       const selection = resolveConversationStartDefaults();
@@ -5146,7 +5158,9 @@ export const ChatScreen: React.FC = () => {
       );
     }
     if (convId) {
-      // Atomic update: mode + persona together to prevent partial state
+      // Atomic update: mode + persona together to prevent partial state.
+      // Use updatePersonaInConversation so persona-switch inline events are
+      // recorded for the transcript marker.
       const conv = useChatStore.getState().conversations.find((c) => c.id === convId);
       const nextPersonaId =
         nextMode === 'agentic'
@@ -5154,11 +5168,8 @@ export const ChatScreen: React.FC = () => {
           : conv?.personaId && conv.personaId !== SUPER_AGENT_PERSONA_ID
             ? conv.personaId
             : 'default';
-      useChatStore.setState((state) => ({
-        conversations: state.conversations.map((c) =>
-          c.id === convId ? { ...c, mode: nextMode, personaId: nextPersonaId } : c,
-        ),
-      }));
+      updateModeInConversation(convId, nextMode);
+      updatePersonaInConversation(convId, nextPersonaId);
     }
   }, [
     isAgenticMode,
@@ -5167,6 +5178,8 @@ export const ChatScreen: React.FC = () => {
     resolveConversationStartDefaults,
     systemPrompt,
     t,
+    updateModeInConversation,
+    updatePersonaInConversation,
   ]);
 
   const messages = useMemo(
@@ -5226,6 +5239,44 @@ export const ChatScreen: React.FC = () => {
     streamingDraftState,
     streamingMessageId,
   ]);
+
+  // Phase 161 §4.9: derived temporal markers (day separators, "later that day",
+  // soft inline timestamps, cold-start cue). Pure derivation — never persisted.
+  // Keyed by the message ID the marker should appear *before* in the FlatList.
+  const temporalMarkersByMessageId = useMemo(() => {
+    const messages = resolvedDisplayMessages.map((item) => item.resolvedMessage);
+    const markers = computeTemporalMarkers(messages);
+    const map = new Map<string, TemporalMarker>();
+    for (const marker of markers) {
+      map.set(marker.beforeMessageId, marker);
+    }
+    return map;
+  }, [resolvedDisplayMessages]);
+
+  // Phase 161 §4.1: derived persona-switch inline events. Each entry in the
+  // active conversation's `personaEvents` log is anchored before the first
+  // message whose timestamp falls on/after the switch time, so the timeline
+  // stays coherent when the user swaps persona without spawning a new thread.
+  const personaCustomList = usePersonaConfigStore((state) => state.customPersonas);
+  const personaOverrides = usePersonaConfigStore((state) => state.overrides);
+  const personaDisplayResolver = useMemo(() => {
+    const personas = getAvailablePersonasForConfig(personaOverrides, personaCustomList);
+    const byId = new Map(personas.map((p) => [p.id, p.name] as const));
+    return (id: string) => byId.get(id);
+  }, [personaCustomList, personaOverrides]);
+  const personaSwitchMarkersByMessageId = useMemo(() => {
+    const events = activeConversation?.personaEvents;
+    if (!events || events.length === 0) return new Map<string, PersonaSwitchMarker>();
+    const messages = resolvedDisplayMessages.map((item) => item.resolvedMessage);
+    const markers = computePersonaSwitchMarkers(messages, events, {
+      resolveDisplayName: personaDisplayResolver,
+    });
+    const map = new Map<string, PersonaSwitchMarker>();
+    for (const marker of markers) {
+      map.set(marker.beforeMessageId, marker);
+    }
+    return map;
+  }, [activeConversation?.personaEvents, personaDisplayResolver, resolvedDisplayMessages]);
 
   const usageSummary = activeConversation?.usage;
   const usageTotals = {
@@ -5289,6 +5340,21 @@ export const ChatScreen: React.FC = () => {
     },
     [activeConversationId, navigation],
   );
+  // Phase 161 §4.5: side-thread overflow. Toggles between starting a new
+  // ephemeral branch off the active main conversation and discarding the
+  // current side thread (returning the user to the parent timeline).
+  const handleToggleSideThread = useCallback(() => {
+    if (!activeConversation) return;
+    if (activeConversation.isSideThread) {
+      if (typeof discardSideThread === 'function') {
+        discardSideThread(activeConversation.id);
+      }
+      return;
+    }
+    if (typeof createSideThread === 'function') {
+      createSideThread(activeConversation.id);
+    }
+  }, [activeConversation, createSideThread, discardSideThread]);
   const handleShareWorkspaceFile = useCallback(
     async (attachment: Attachment) => {
       if (!activeConversationId || !attachment.workspacePath) {
@@ -5318,22 +5384,70 @@ export const ChatScreen: React.FC = () => {
   );
   const renderMessageItem = useCallback(
     ({ item }: { item: ResolvedDisplayMessageItem }) => {
+      const marker = temporalMarkersByMessageId.get(item.resolvedMessage.id);
+      const personaMarker = personaSwitchMarkersByMessageId.get(item.resolvedMessage.id);
+      const personaMarkerText = personaMarker
+        ? personaMarker.fromName
+          ? t('chat.personaSwitchEvent', {
+              from: personaMarker.fromName,
+              to: personaMarker.toName,
+            })
+          : t('chat.personaSwitchEventInitial', { to: personaMarker.toName })
+        : null;
       return (
-        <MessageBubble
-          message={item.resolvedMessage}
-          agentRun={item.agentRun}
-          isStreaming={item.isStreaming}
-          responseSegments={item.resolvedResponseSegments}
-          onEdit={handleEdit}
-          onRetry={handleRetry}
-          onViewFile={handleViewFiles}
-          onShareWorkspaceFile={handleShareWorkspaceFile}
-          onOpenSubAgentDetails={handleOpenSubAgentDetails}
-          retryMessageId={item.retryMessageId}
-        />
+        <View>
+          {marker ? (
+            <View
+              style={styles.temporalMarkerRow}
+              testID={`temporal-marker-${marker.kind}-${marker.beforeMessageId}`}
+              accessibilityRole="text"
+              accessibilityLabel={marker.text}
+            >
+              <View style={styles.temporalMarkerLine} />
+              <Text style={styles.temporalMarkerText}>{marker.text}</Text>
+              <View style={styles.temporalMarkerLine} />
+            </View>
+          ) : null}
+          {personaMarker && personaMarkerText ? (
+            <View
+              style={styles.temporalMarkerRow}
+              testID={`persona-switch-marker-${personaMarker.id}`}
+              accessibilityRole="text"
+              accessibilityLabel={personaMarkerText}
+            >
+              <View style={styles.temporalMarkerLine} />
+              <Text style={styles.temporalMarkerText}>{personaMarkerText}</Text>
+              <View style={styles.temporalMarkerLine} />
+            </View>
+          ) : null}
+          <MessageBubble
+            message={item.resolvedMessage}
+            agentRun={item.agentRun}
+            isStreaming={item.isStreaming}
+            responseSegments={item.resolvedResponseSegments}
+            onEdit={handleEdit}
+            onRetry={handleRetry}
+            onViewFile={handleViewFiles}
+            onShareWorkspaceFile={handleShareWorkspaceFile}
+            onOpenSubAgentDetails={handleOpenSubAgentDetails}
+            retryMessageId={item.retryMessageId}
+          />
+        </View>
       );
     },
-    [handleEdit, handleOpenSubAgentDetails, handleRetry, handleShareWorkspaceFile, handleViewFiles],
+    [
+      handleEdit,
+      handleOpenSubAgentDetails,
+      handleRetry,
+      handleShareWorkspaceFile,
+      handleViewFiles,
+      personaSwitchMarkersByMessageId,
+      styles.temporalMarkerLine,
+      styles.temporalMarkerRow,
+      styles.temporalMarkerText,
+      t,
+      temporalMarkersByMessageId,
+    ],
   );
 
   return (
@@ -5370,8 +5484,8 @@ export const ChatScreen: React.FC = () => {
               accessibilityRole="switch"
               accessibilityState={{ checked: isAgenticMode }}
               accessibilityLabel={t('chat.conversationModeAccessibility', {
-                current: isAgenticMode ? t('chat.agenticModeLabel') : t('chat.directModeLabel'),
-                next: isAgenticMode ? t('chat.directModeLabel') : t('chat.agenticModeLabel'),
+                current: isAgenticMode ? t('chat.agenticModeLabel') : t('chat.chitchatModeLabel'),
+                next: isAgenticMode ? t('chat.chitchatModeLabel') : t('chat.agenticModeLabel'),
               })}
               accessibilityHint={t('chat.conversationModeSwitchHint')}
             >
@@ -5382,7 +5496,7 @@ export const ChatScreen: React.FC = () => {
                 ]}
                 numberOfLines={1}
               >
-                {isAgenticMode ? t('chat.agenticModeChip') : t('chat.directModeChip')}
+                {isAgenticMode ? t('chat.agenticModeChip') : t('chat.chitchatModeChip')}
               </Text>
             </TouchableOpacity>
             {!isAgenticMode && (
@@ -5449,6 +5563,29 @@ export const ChatScreen: React.FC = () => {
           >
             <Terminal size={20} color={colors.textSecondary} />
           </TouchableOpacity>
+          {activeConversation ? (
+            <TouchableOpacity
+              onPress={handleToggleSideThread}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={
+                activeConversation.isSideThread
+                  ? t('chat.discardSideThread')
+                  : t('chat.startSideThread')
+              }
+              testID={
+                activeConversation.isSideThread
+                  ? 'chat-discard-side-thread'
+                  : 'chat-start-side-thread'
+              }
+            >
+              {activeConversation.isSideThread ? (
+                <X size={20} color={colors.textSecondary} />
+              ) : (
+                <GitBranch size={20} color={colors.textSecondary} />
+              )}
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
 
@@ -5943,6 +6080,25 @@ const createStyles = (colors: AppPalette) =>
     messageListEmpty: {
       flexGrow: 1,
       justifyContent: 'center',
+    },
+    temporalMarkerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      marginVertical: 12,
+      gap: 8,
+    },
+    temporalMarkerLine: {
+      flex: 1,
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: colors.subtleBorder ?? colors.border,
+    },
+    temporalMarkerText: {
+      fontSize: 11,
+      color: colors.textTertiary ?? colors.textSecondary,
+      fontWeight: '500',
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
     },
     emptyState: {
       flex: 1,

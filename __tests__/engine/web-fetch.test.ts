@@ -267,7 +267,7 @@ describe('executeWebFetch', () => {
     expect(parsed.error).toContain('Firecrawl');
   });
 
-  it('firecrawl gets its own signal when direct fetch times out (Phase 26)', async () => {
+  it('firecrawl gets its own signal when direct fetch times out', async () => {
     // Direct fetch aborts (both header profiles fail)
     const abortError = new DOMException('The operation was aborted', 'AbortError');
     mockFetch.mockRejectedValueOnce(abortError); // profile 1

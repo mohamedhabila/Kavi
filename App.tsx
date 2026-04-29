@@ -11,7 +11,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { useAppTheme } from './src/theme/useAppTheme';
-import { initializeServices } from './src/services/startup';
+import { initializeServices, handleAppForeground, handleAppBackground } from './src/services/startup';
 import { flushPendingStorageWrites } from './src/store/throttledStorage';
 import { i18n } from './src/i18n';
 import { PyodideWebView } from './src/components/python/PyodideWebView';
@@ -27,12 +27,14 @@ const AppContent: React.FC = () => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
         void emitAppEvent('foreground');
+        handleAppForeground();
       } else {
         void flushPendingStorageWrites().catch(() => undefined);
       }
 
       if (nextState === 'background') {
         void emitAppEvent('background');
+        handleAppBackground();
       }
     });
 

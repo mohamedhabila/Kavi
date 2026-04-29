@@ -43,3 +43,13 @@ If this patch is ever upstreamed or replaced, update this file and `CONTRIBUTING
 1. Add a new entry before merging any future dependency patch or historical carry-forward module that changes attribution or license obligations.
 2. If an entry comes from outside the Kavi / OpenClaw first-party lineage, record the upstream repository and license before it lands on the default branch.
 3. Re-check the dependency patch against the exact version in `package-lock.json` after every dependency upgrade.
+
+## Concept Attribution
+
+The living-memory subsystem (`src/services/memory/factStore.ts`, `consolidator.ts`, `focus.ts`, `promptAssembly.ts`, `memoryTools.ts`, `evidenceBridge.ts`) was designed with reference to publicly published architectural patterns from the agent-memory research community. **No source code was copied from these projects** — only the architectural concepts informed our independent implementation. The relevant influences are:
+
+- **Letta / MemGPT** (Apache-2.0) — concept of explicit memory blocks with editable / read-only segments and a recall-vs-archival split between a small in-context working set and a larger searchable corpus.
+- **mem0** (Apache-2.0) — concept of structured fact extraction into typed atomic units, with deduplication / supersession at write time rather than retrieval time.
+- **Graphiti / Zep** (Apache-2.0) — concept of deriving a small "focus" header from the broader memory store on each turn, refreshed deterministically rather than via every-turn LLM summarization.
+
+Our Kavi implementation is an independent design that combines these patterns with our own three-tier (core / recall / episodic) layout, our own consolidation policy, and our own provider-cache marker discipline.

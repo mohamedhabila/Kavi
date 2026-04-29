@@ -1043,6 +1043,59 @@ describe('useChatStore', () => {
   });
 
   describe('Persist Configuration', () => {
+    it('collapses pre-v7 conversations into one canonical thread per persona', async () => {
+      const persistOptions = (useChatStore as any).persist.getOptions();
+      const migrated = await persistOptions.migrate(
+        {
+          conversations: [
+            {
+              id: 'r-old',
+              title: 'Old',
+              messages: [],
+              providerId: 'openai',
+              systemPrompt: 'sys',
+              personaId: 'researcher',
+              createdAt: 1,
+              updatedAt: 100,
+            },
+            {
+              id: 'r-new',
+              title: 'Newer',
+              messages: [],
+              providerId: 'openai',
+              systemPrompt: 'sys',
+              personaId: 'researcher',
+              createdAt: 2,
+              updatedAt: 300,
+            },
+            {
+              id: 'side',
+              title: 'Side',
+              messages: [],
+              providerId: 'openai',
+              systemPrompt: 'sys',
+              personaId: 'researcher',
+              parentConversationId: 'r-old',
+              isSideThread: true,
+              createdAt: 3,
+              updatedAt: 400,
+            },
+          ],
+          activeConversationId: 'r-new',
+        },
+        6,
+      );
+
+      const byId = Object.fromEntries(
+        migrated.conversations.map((c: any) => [c.id, c]),
+      );
+      expect(byId['r-new'].isCanonical).toBe(true);
+      expect(byId['r-old'].archivedFromMigration).toBe(true);
+      expect(byId['r-old'].isCanonical).not.toBe(true);
+      expect(byId['side'].isSideThread).toBe(true);
+      expect(byId['side'].archivedFromMigration).not.toBe(true);
+    });
+
     it('migrates legacy assistant messages to explicit assistant metadata', async () => {
       const persistOptions = (useChatStore as any).persist.getOptions();
       const migrated = await persistOptions.migrate(

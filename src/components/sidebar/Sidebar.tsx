@@ -2,12 +2,11 @@
 // Kavi — Sidebar (Conversation List)
 // ---------------------------------------------------------------------------
 
-import React, { useMemo } from 'react';
-import { FlatList, StyleSheet, Text, TouchableOpacity, View, Alert } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Alert } from 'react-native';
 import { DrawerContentComponentProps } from '@react-navigation/drawer';
 import {
-  Plus,
-  Trash2,
+  MoreVertical,
   Settings,
   MessageSquare,
   Clock,
@@ -22,7 +21,19 @@ import {
   FileCode,
   Globe,
   Users,
+  Archive,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react-native';
+import {
+  TodaysFocusTile,
+  OpenThreadsChips,
+  RecallSearchInput,
+  PinnedMoments,
+  bucketConversationsByTime,
+  type TimeBucket,
+} from './SidebarMemorySections';
+import MigrationProgressBanner from '../MigrationProgressBanner';
 import { useChatStore } from '../../store/useChatStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
@@ -66,8 +77,29 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation }) =
   const conversations = useChatStore((s) => s.conversations);
   const activeId = useChatStore((s) => s.activeConversationId);
   const createConversation = useChatStore((s) => s.createConversation);
+  const getOrCreateCanonicalThread = useChatStore((s) => s.getOrCreateCanonicalThread);
+  const createSideThread = useChatStore((s) => s.createSideThread);
   const setActiveConversation = useChatStore((s) => s.setActiveConversation);
   const deleteConversation = useChatStore((s) => s.deleteConversation);
+  const [archivedExpanded, setArchivedExpanded] = useState(false);
+  // Phase 161 §4.8 — Chunk L: collapsible time buckets. Default expanded so the
+  // user lands on the same conversation list they had before the IA refactor.
+  const [timeBucketCollapsed, setTimeBucketCollapsed] = useState<
+    Record<TimeBucket, boolean>
+  >({ today: false, yesterday: false, thisWeek: false, earlier: false });
+
+  // Phase 161 §4.5: hide ephemeral side threads from the main sidebar list.
+  // Phase 161 §4.1/§5: archived-from-migration conversations are hidden from
+  // the main list and surfaced under a collapsed "Archived" section below.
+  // The sidebar shows only canonical (or pre-migration) main-thread chats.
+  const visibleConversations = useMemo(
+    () => conversations.filter((c) => !c.isSideThread && !c.archivedFromMigration),
+    [conversations],
+  );
+  const archivedConversations = useMemo(
+    () => conversations.filter((c) => !c.isSideThread && c.archivedFromMigration),
+    [conversations],
+  );
   const providers = useSettingsStore((s) => s.providers);
   const systemPrompt = useSettingsStore((s) => s.systemPrompt);
   const activeProviderId = useSettingsStore((s) => s.activeProviderId);
@@ -81,8 +113,64 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation }) =
       return;
     }
 
-    createConversation(selection.providerId, systemPrompt, selection.model || undefined);
+    // Phase 161 §4.8: side-thread sandbox lives in an overflow menu, not a
+    // primary "+" button. We branch off the active main thread; if no active
+    // conversation exists yet, materialise the canonical one first so the side
+    // thread always has a valid parent.
+    let parentId: string | null = activeId;
+    if (!parentId) {
+      if (typeof getOrCreateCanonicalThread === 'function') {
+        parentId = getOrCreateCanonicalThread(
+          selection.providerId,
+          systemPrompt,
+          selection.model || undefined,
+        );
+      } else {
+        parentId = createConversation(
+          selection.providerId,
+          systemPrompt,
+          selection.model || undefined,
+        );
+      }
+    } else {
+      // Avoid nesting: if we're already inside a side thread, branch off its parent.
+      const current = conversations.find((c) => c.id === parentId);
+      if (current?.isSideThread) {
+        parentId = current.parentConversationId ?? parentId;
+      }
+    }
+
+    if (typeof createSideThread === 'function' && parentId) {
+      const sideId = createSideThread(parentId, {
+        providerId: selection.providerId,
+        modelOverride: selection.model || undefined,
+      });
+      if (sideId) {
+        navigation.navigate('Chat');
+        navigation.closeDrawer();
+        return;
+      }
+    }
+
+    // Fallback (older test stores): preserve legacy canonical-thread behaviour
+    // so we never strand the user when the side-thread API is unavailable.
+    if (typeof getOrCreateCanonicalThread === 'function') {
+      getOrCreateCanonicalThread(
+        selection.providerId,
+        systemPrompt,
+        selection.model || undefined,
+      );
+    } else {
+      createConversation(selection.providerId, systemPrompt, selection.model || undefined);
+    }
     navigation.closeDrawer();
+  };
+
+  const handleOpenThreadOptions = () => {
+    Alert.alert(t('nav.threadOptions'), t('nav.startSideThreadHint'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('nav.startSideThread'), onPress: handleNew },
+    ]);
   };
 
   const handleSelect = (id: string) => {
@@ -111,66 +199,184 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation }) =
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
+  const buckets = useMemo(
+    () => bucketConversationsByTime(visibleConversations),
+    [visibleConversations],
+  );
+
+  const toggleTimeBucket = useCallback((bucket: TimeBucket) => {
+    setTimeBucketCollapsed((prev) => ({ ...prev, [bucket]: !prev[bucket] }));
+  }, []);
+
+  const handleOpenMemory = useCallback(
+    (_query?: string) => {
+      navigation.navigate('Memory');
+      navigation.closeDrawer();
+    },
+    [navigation],
+  );
+
+  const handleOpenChat = useCallback(() => {
+    navigation.navigate('Chat');
+    navigation.closeDrawer();
+  }, [navigation]);
+
+  const renderConversationRow = (item: Conversation) => {
+    const isActive = item.id === activeId;
+    return (
+      <TouchableOpacity
+        key={item.id}
+        style={[styles.item, isActive && styles.itemActive]}
+        onPress={() => handleSelect(item.id)}
+        onLongPress={() => handleDelete(item.id, item.title)}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.title}, ${formatDate(item.updatedAt)}, ${buildUsageSummary(item)}`}
+        accessibilityHint={t('common.longPressToDelete')}
+      >
+        <MessageSquare size={16} color={isActive ? colors.primary : colors.textSecondary} />
+        <View style={styles.itemContent}>
+          <Text
+            style={[styles.itemTitle, isActive && styles.itemTitleActive]}
+            numberOfLines={1}
+          >
+            {item.title}
+          </Text>
+          <Text style={styles.itemDate}>{formatDate(item.updatedAt)}</Text>
+          <Text
+            style={styles.itemUsage}
+            testID={`sidebar-usage-summary-${item.id}`}
+            numberOfLines={1}
+          >
+            {buildUsageSummary(item)}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderTimeBucket = (bucket: TimeBucket, items: Conversation[], labelKey: string) => {
+    if (items.length === 0) return null;
+    const collapsed = timeBucketCollapsed[bucket];
+    return (
+      <View key={bucket} testID={`sidebar-time-bucket-${bucket}`}>
+        <TouchableOpacity
+          style={styles.bucketHeader}
+          onPress={() => toggleTimeBucket(bucket)}
+          accessibilityRole="button"
+          accessibilityLabel={t(labelKey)}
+          accessibilityState={{ expanded: !collapsed }}
+          testID={`sidebar-time-bucket-toggle-${bucket}`}
+        >
+          {collapsed ? (
+            <ChevronRight size={12} color={colors.textSecondary} />
+          ) : (
+            <ChevronDown size={12} color={colors.textSecondary} />
+          )}
+          <Text style={styles.bucketHeaderText}>
+            {`${t(labelKey)} (${items.length})`}
+          </Text>
+        </TouchableOpacity>
+        {!collapsed && items.map((item) => renderConversationRow(item))}
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <Text style={styles.title}>{t('common.appName')}</Text>
         <TouchableOpacity
           style={styles.newBtn}
-          onPress={handleNew}
+          onPress={handleOpenThreadOptions}
           accessibilityRole="button"
-          accessibilityLabel={t('nav.newConversation')}
+          accessibilityLabel={t('nav.threadOptions')}
+          testID="sidebar-thread-options"
         >
-          <Plus size={20} color={colors.onPrimary} />
+          <MoreVertical size={20} color={colors.onPrimary} />
         </TouchableOpacity>
       </View>
 
-      <FlatList
-        data={conversations}
-        keyExtractor={(c) => c.id}
-        style={styles.list}
-        maxToRenderPerBatch={10}
-        updateCellsBatchingPeriod={50}
-        initialNumToRender={15}
-        windowSize={7}
-        renderItem={({ item }) => {
-          const isActive = item.id === activeId;
-          return (
-            <TouchableOpacity
-              style={[styles.item, isActive && styles.itemActive]}
-              onPress={() => handleSelect(item.id)}
-              onLongPress={() => handleDelete(item.id, item.title)}
-              accessibilityRole="button"
-              accessibilityLabel={`${item.title}, ${formatDate(item.updatedAt)}, ${buildUsageSummary(item)}`}
-              accessibilityHint={t('common.longPressToDelete')}
-            >
-              <MessageSquare size={16} color={isActive ? colors.primary : colors.textSecondary} />
-              <View style={styles.itemContent}>
-                <Text
-                  style={[styles.itemTitle, isActive && styles.itemTitleActive]}
-                  numberOfLines={1}
-                >
-                  {item.title}
-                </Text>
-                <Text style={styles.itemDate}>{formatDate(item.updatedAt)}</Text>
-                <Text
-                  style={styles.itemUsage}
-                  testID={`sidebar-usage-summary-${item.id}`}
-                  numberOfLines={1}
-                >
-                  {buildUsageSummary(item)}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          );
-        }}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyText}>{t('nav.noConversations')}</Text>
-            <Text style={styles.emptySubtext}>{t('nav.noConversationsHint')}</Text>
-          </View>
-        }
-      />
+      <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+        <MigrationProgressBanner colors={colors} />
+        <TodaysFocusTile colors={colors} onPress={handleOpenChat} />
+        <OpenThreadsChips colors={colors} onSelect={handleOpenChat} />
+        <RecallSearchInput colors={colors} onSubmit={handleOpenMemory} />
+        <PinnedMoments colors={colors} onSelect={() => handleOpenMemory()} />
+
+        <View testID="sidebar-time-buckets">
+          {visibleConversations.length === 0 ? (
+            <View style={styles.empty}>
+              <Text style={styles.emptyText}>{t('nav.noConversations')}</Text>
+              <Text style={styles.emptySubtext}>{t('nav.noConversationsHint')}</Text>
+            </View>
+          ) : (
+            <>
+              {renderTimeBucket('today', buckets.today, 'nav.byTimeToday')}
+              {renderTimeBucket('yesterday', buckets.yesterday, 'nav.byTimeYesterday')}
+              {renderTimeBucket('thisWeek', buckets.thisWeek, 'nav.byTimeThisWeek')}
+              {renderTimeBucket('earlier', buckets.earlier, 'nav.byTimeEarlier')}
+            </>
+          )}
+        </View>
+      </ScrollView>
+
+      {archivedConversations.length > 0 && (
+        <View testID="sidebar-archived-section">
+          <TouchableOpacity
+            style={styles.archivedHeader}
+            onPress={() => setArchivedExpanded((v) => !v)}
+            accessibilityRole="button"
+            accessibilityLabel={t('nav.archivedSectionLabel', {
+              count: archivedConversations.length,
+            })}
+            accessibilityState={{ expanded: archivedExpanded }}
+            testID="sidebar-archived-toggle"
+          >
+            {archivedExpanded ? (
+              <ChevronDown size={14} color={colors.textSecondary} />
+            ) : (
+              <ChevronRight size={14} color={colors.textSecondary} />
+            )}
+            <Archive size={14} color={colors.textSecondary} />
+            <Text style={styles.archivedHeaderText}>
+              {t('nav.archivedSectionLabel', { count: archivedConversations.length })}
+            </Text>
+          </TouchableOpacity>
+          {archivedExpanded && (
+            <View testID="sidebar-archived-list">
+              {archivedConversations.map((item) => {
+                const isActive = item.id === activeId;
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[styles.item, isActive && styles.itemActive]}
+                    onPress={() => handleSelect(item.id)}
+                    onLongPress={() => handleDelete(item.id, item.title)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${item.title}, ${formatDate(item.updatedAt)}, ${buildUsageSummary(item)}`}
+                    accessibilityHint={t('common.longPressToDelete')}
+                    testID={`sidebar-archived-item-${item.id}`}
+                  >
+                    <Archive
+                      size={16}
+                      color={isActive ? colors.primary : colors.textSecondary}
+                    />
+                    <View style={styles.itemContent}>
+                      <Text
+                        style={[styles.itemTitle, isActive && styles.itemTitleActive]}
+                        numberOfLines={1}
+                      >
+                        {item.title}
+                      </Text>
+                      <Text style={styles.itemDate}>{formatDate(item.updatedAt)}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+        </View>
+      )}
 
       <TouchableOpacity
         style={styles.settingsBtn}
@@ -375,6 +581,24 @@ const createStyles = (colors: AppPalette) =>
     list: {
       flex: 1,
     },
+    listContent: {
+      paddingBottom: 8,
+    },
+    bucketHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 16,
+      paddingTop: 10,
+      paddingBottom: 4,
+    },
+    bucketHeaderText: {
+      fontSize: 11,
+      color: colors.textSecondary,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+    },
     item: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -434,5 +658,21 @@ const createStyles = (colors: AppPalette) =>
     settingsText: {
       fontSize: 15,
       color: colors.textSecondary,
+    },
+    archivedHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    archivedHeaderText: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
     },
   });

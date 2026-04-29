@@ -78,6 +78,8 @@ interface SettingsState extends AppSettings {
   setMediaUnderstandingEnabled: (enabled: boolean) => void;
   setMaxLinks: (max: number) => void;
   setDefaultConversationMode: (mode: ConversationMode) => void;
+  setConsolidationProvider: (providerId: string | null) => void;
+  setDisableLongTermMemory: (disabled: boolean) => void;
   replaceAllSettings: (settings: Partial<AppSettings>) => void;
 }
 
@@ -153,6 +155,8 @@ export const useSettingsStore = create<SettingsState>()(
       mediaUnderstandingEnabled: true,
       maxLinks: 3,
       defaultConversationMode: 'agentic' as ConversationMode,
+      consolidationProvider: null,
+      disableLongTermMemory: false,
 
       addProvider: (provider) =>
         set((state) => {
@@ -383,6 +387,17 @@ export const useSettingsStore = create<SettingsState>()(
 
       setDefaultConversationMode: (mode) => set({ defaultConversationMode: mode }),
 
+      setConsolidationProvider: (providerId) =>
+        set({
+          consolidationProvider:
+            typeof providerId === 'string' && providerId.trim().length > 0
+              ? providerId.trim()
+              : null,
+        }),
+
+      setDisableLongTermMemory: (disabled) =>
+        set({ disableLongTermMemory: Boolean(disabled) }),
+
       replaceAllSettings: (settings) =>
         set((state) => {
           const sshTargets = settings.sshTargets ?? state.sshTargets;
@@ -428,13 +443,19 @@ export const useSettingsStore = create<SettingsState>()(
                 : state.maxLinks,
             defaultConversationMode:
               settings.defaultConversationMode ?? state.defaultConversationMode,
+            consolidationProvider: hasOwnSetting(settings, 'consolidationProvider')
+              ? (settings.consolidationProvider ?? null)
+              : state.consolidationProvider,
+            disableLongTermMemory: hasOwnSetting(settings, 'disableLongTermMemory')
+              ? Boolean(settings.disableLongTermMemory)
+              : state.disableLongTermMemory,
           };
         }),
     }),
     {
       name: STORAGE_KEYS.SETTINGS,
       storage: createJSONStorage(() => AsyncStorage),
-      version: 8,
+      version: 11,
       migrate: (persistedState: any, version) => {
         if (!persistedState) return persistedState;
         if (version < 2) {
@@ -490,6 +511,31 @@ export const useSettingsStore = create<SettingsState>()(
             ),
           };
         }
+        if (version < 9) {
+          // 'direct' conversation mode renamed to 'chitchat' on 2026-04-29.
+          if (persistedState.defaultConversationMode === 'direct') {
+            persistedState = {
+              ...persistedState,
+              defaultConversationMode: 'chitchat',
+            };
+          }
+        }
+        if (version < 10) {
+          if (persistedState.consolidationProvider === undefined) {
+            persistedState = {
+              ...persistedState,
+              consolidationProvider: null,
+            };
+          }
+        }
+        if (version < 11) {
+          if (persistedState.disableLongTermMemory === undefined) {
+            persistedState = {
+              ...persistedState,
+              disableLongTermMemory: false,
+            };
+          }
+        }
         return persistedState;
       },
       partialize: (state) => ({
@@ -512,6 +558,8 @@ export const useSettingsStore = create<SettingsState>()(
         mediaUnderstandingEnabled: state.mediaUnderstandingEnabled,
         maxLinks: state.maxLinks,
         defaultConversationMode: state.defaultConversationMode,
+        consolidationProvider: state.consolidationProvider,
+        disableLongTermMemory: state.disableLongTermMemory,
       }),
     },
   ),

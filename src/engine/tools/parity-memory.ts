@@ -1,5 +1,20 @@
 import { hybridSearch } from '../../services/memory/embeddings';
 import { searchMemory } from '../../services/memory/store';
+import {
+  executeMemoryRecall as recallFacts,
+  executeMemoryRemember as rememberFact,
+  executeMemoryPin as pinFact,
+  executeMemoryUnpin as unpinFact,
+  executeMemoryForget as forgetFact,
+  executeMemoryBlockRead as readMemoryBlock,
+  executeMemoryBlockEdit as editMemoryBlock,
+  type MemoryRecallArgs,
+  type MemoryRememberArgs,
+  type MemoryPinArgs,
+  type MemoryForgetArgs,
+  type MemoryBlockReadArgs,
+  type MemoryBlockEditArgs,
+} from '../../services/memory/memoryTools';
 import type { EmbeddingConfig } from '../../types';
 
 export async function executeMemorySearch(
@@ -65,4 +80,45 @@ export async function executeMemorySearch(
     });
     return formatWithCitations(results, 'text_fallback');
   }
+}
+
+// ---------------------------------------------------------------------------
+// Living-memory fact/block tool wrappers.
+//
+// These are thin adapters over `services/memory/memoryTools.ts` that:
+//   • return JSON strings (matching the rest of the parity executor convention)
+//   • surface MemoryToolError as `{ ok: false, error, message }` JSON instead
+//     of throwing, so the agent runtime can format them as tool-call errors
+// ---------------------------------------------------------------------------
+
+function wrapMemoryToolResult(result: unknown): string {
+  return JSON.stringify(result);
+}
+
+export function executeMemoryRecall(args: MemoryRecallArgs): string {
+  return wrapMemoryToolResult(recallFacts(args));
+}
+
+export function executeMemoryRemember(args: MemoryRememberArgs): string {
+  return wrapMemoryToolResult(rememberFact(args));
+}
+
+export function executeMemoryPin(args: MemoryPinArgs): string {
+  return wrapMemoryToolResult(pinFact(args));
+}
+
+export function executeMemoryUnpin(args: MemoryPinArgs): string {
+  return wrapMemoryToolResult(unpinFact(args));
+}
+
+export function executeMemoryForget(args: MemoryForgetArgs): string {
+  return wrapMemoryToolResult(forgetFact(args));
+}
+
+export function executeMemoryBlockRead(args: MemoryBlockReadArgs = {}): string {
+  return wrapMemoryToolResult(readMemoryBlock(args));
+}
+
+export function executeMemoryBlockEdit(args: MemoryBlockEditArgs): string {
+  return wrapMemoryToolResult(editMemoryBlock(args));
 }

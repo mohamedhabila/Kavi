@@ -147,11 +147,11 @@ describe('resolvePersonaModel with super-agent', () => {
 // ── ConversationMode type ────────────────────────────────────────────────
 
 describe('ConversationMode type', () => {
-  it('accepts agentic and direct as valid modes', () => {
+  it('accepts agentic and chitchat as valid modes', () => {
     const agentic: ConversationMode = 'agentic';
-    const direct: ConversationMode = 'direct';
+    const chitchat: ConversationMode = 'chitchat';
     expect(agentic).toBe('agentic');
-    expect(direct).toBe('direct');
+    expect(chitchat).toBe('chitchat');
   });
 });
 

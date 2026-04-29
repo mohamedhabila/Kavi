@@ -685,6 +685,113 @@ export const MEMORY_SEARCH_TOOL: ToolDefinition = {
   },
 };
 
+// ── Living-memory fact/block tools ──────────────────────────
+
+export const MEMORY_RECALL_TOOL: ToolDefinition = {
+  name: 'memory_recall',
+  description:
+    'Recall structured facts from the living-memory fact store. Filter by subject (entity name), predicate (relation), or pinnedOnly. ' +
+    'Returns the current set of valid facts plus optionally invalidated/historical rows when includeHistory is true. ' +
+    'Use this when you need exact, structured recall of what is known about a subject — for fuzzy or unstructured search across notes/messages, prefer memory_search.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      subject: { type: 'string', description: 'Entity name to filter by (e.g. "user", "project-x").' },
+      predicate: { type: 'string', description: 'Relation/predicate to filter by (e.g. "prefers", "deadline").' },
+      pinnedOnly: { type: 'boolean', description: 'Return only pinned facts.' },
+      limit: { type: 'number', description: 'Max facts to return (default 50, hard cap 100).' },
+      includeHistory: { type: 'boolean', description: 'Include invalidated/superseded facts.' },
+    },
+    required: [],
+  },
+};
+
+export const MEMORY_REMEMBER_TOOL: ToolDefinition = {
+  name: 'memory_remember',
+  description:
+    'Record a structured fact (subject, predicate, value) in the living-memory fact store. ' +
+    'Set supersedePrior=true to invalidate any currently-valid fact for the same (subject, predicate) before writing the new one — use this when you are correcting or updating a value rather than adding a parallel fact. ' +
+    'Use a high confidence (≥ 0.85) only when you have direct user confirmation; otherwise leave confidence at the default to mark the fact as a candidate.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      subject: { type: 'string', description: 'Entity name (e.g. "user", "project-x").' },
+      subjectType: {
+        type: 'string',
+        enum: ['self', 'person', 'project', 'concept', 'system'],
+        description: 'Defaults to "self" when subject is "user", otherwise "concept".',
+      },
+      predicate: { type: 'string', description: 'Relation name.' },
+      value: { type: 'string', description: 'Object text (≤ 200 chars).' },
+      confidence: { type: 'number', description: '0..1; ≥ 0.85 marks a verified fact.' },
+      supersedePrior: { type: 'boolean', description: 'Invalidate any prior valid fact for (subject, predicate) first.' },
+      pinned: { type: 'boolean', description: 'Pin the new fact so it always appears in the focus header.' },
+    },
+    required: ['subject', 'predicate', 'value'],
+  },
+};
+
+export const MEMORY_PIN_TOOL: ToolDefinition = {
+  name: 'memory_pin',
+  description: 'Pin a fact by id so it is always included in the focus header surfaced to the model.',
+  input_schema: {
+    type: 'object',
+    properties: { factId: { type: 'string', description: 'ID returned by memory_recall or memory_remember.' } },
+    required: ['factId'],
+  },
+};
+
+export const MEMORY_UNPIN_TOOL: ToolDefinition = {
+  name: 'memory_unpin',
+  description: 'Remove a pin from a fact so it competes with other facts for focus-header inclusion.',
+  input_schema: {
+    type: 'object',
+    properties: { factId: { type: 'string' } },
+    required: ['factId'],
+  },
+};
+
+export const MEMORY_FORGET_TOOL: ToolDefinition = {
+  name: 'memory_forget',
+  description:
+    'Forget a fact. mode="invalidate" (default behaviour for corrections) closes the fact at now without removing the row, preserving the audit trail. mode="delete" soft-deletes the fact entirely. ' +
+    'Prefer "invalidate" when the user contradicts a previous fact; reserve "delete" for facts the user explicitly asks to be removed.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      factId: { type: 'string' },
+      mode: { type: 'string', enum: ['invalidate', 'delete'], description: 'Default "delete".' },
+    },
+    required: ['factId'],
+  },
+};
+
+export const MEMORY_BLOCK_READ_TOOL: ToolDefinition = {
+  name: 'memory_block_read',
+  description:
+    'Read one or all editable memory blocks. Blocks are short, model-editable scratch surfaces (persona, scratchpad, etc.) that always appear in the focus header. Omit label to list all blocks.',
+  input_schema: {
+    type: 'object',
+    properties: { label: { type: 'string', description: 'Block label (e.g. "persona", "scratchpad"). Omit to list all blocks.' } },
+    required: [],
+  },
+};
+
+export const MEMORY_BLOCK_EDIT_TOOL: ToolDefinition = {
+  name: 'memory_block_edit',
+  description:
+    'Edit a memory block. With replace=true (default) the block content is overwritten; with replace=false the new content is appended on a new line. Block content is truncated at the block char limit.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      label: { type: 'string' },
+      content: { type: 'string' },
+      replace: { type: 'boolean', description: 'Default true (overwrite).' },
+    },
+    required: ['label', 'content'],
+  },
+};
+
 // ── SSH Remote Tools ────────────────────────────────────────────────────
 
 export const SSH_EXEC_TOOL: ToolDefinition = {
@@ -1320,6 +1427,13 @@ export const ALL_PARITY_TOOL_DEFINITIONS: ToolDefinition[] = [
   CAMERA_SNAP_TOOL,
   AUDIO_TRANSCRIBE_TOOL,
   MEMORY_SEARCH_TOOL,
+  MEMORY_RECALL_TOOL,
+  MEMORY_REMEMBER_TOOL,
+  MEMORY_PIN_TOOL,
+  MEMORY_UNPIN_TOOL,
+  MEMORY_FORGET_TOOL,
+  MEMORY_BLOCK_READ_TOOL,
+  MEMORY_BLOCK_EDIT_TOOL,
   SSH_EXEC_TOOL,
   SSH_BACKGROUND_JOB_STATUS_TOOL,
   SSH_BACKGROUND_JOB_WAIT_TOOL,

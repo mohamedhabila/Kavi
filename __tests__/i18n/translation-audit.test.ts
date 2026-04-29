@@ -87,6 +87,13 @@ const ALLOWED_UNUSED_KEYS = new Set([
   ]),
   ...namespacedKeys('gateway', ['authenticating', 'listNodes', 'pairingCode']),
   ...namespacedKeys('mcpStatus', ['connected', 'connecting', 'disconnected', 'error']),
+  ...namespacedKeys('memory', [
+    'disableLongTermMemory',
+    'disableLongTermMemoryHint',
+    'migrationSeedComplete',
+    'migrationSeedProgress',
+    'migrationSeedTitle',
+  ]),
   ...namespacedKeys('nav', ['chat']),
   ...namespacedKeys('onboarding', ['customProvider', 'enterApiKey', 'serviceIntro']),
   ...namespacedKeys('remoteWork', [

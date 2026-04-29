@@ -332,6 +332,10 @@ export const SettingsScreen: React.FC = () => {
   const setMediaUnderstandingEnabled = useSettingsStore((s) => s.setMediaUnderstandingEnabled);
   const setMaxLinks = useSettingsStore((s) => s.setMaxLinks);
   const setDefaultConversationMode = useSettingsStore((s) => s.setDefaultConversationMode);
+  const disableLongTermMemory = useSettingsStore((s) => s.disableLongTermMemory === true);
+  const setDisableLongTermMemory = useSettingsStore((s) => s.setDisableLongTermMemory);
+  const consolidationProviderId = useSettingsStore((s) => s.consolidationProvider ?? null);
+  const setConsolidationProvider = useSettingsStore((s) => s.setConsolidationProvider);
   const clearAllConversations = useChatStore((s) => s.clearAllConversations);
   const permissions = useToolPermissionsStore((s) => s.permissions);
   const setToolPermission = useToolPermissionsStore((s) => s.setPermission);
@@ -2443,20 +2447,20 @@ export const SettingsScreen: React.FC = () => {
             <TouchableOpacity
               style={[
                 styles.presetChip,
-                defaultConversationMode === 'direct' && styles.presetChipActive,
+                defaultConversationMode === 'chitchat' && styles.presetChipActive,
               ]}
-              onPress={() => setDefaultConversationMode('direct')}
+              onPress={() => setDefaultConversationMode('chitchat')}
               accessibilityRole="button"
-              accessibilityLabel={t('settings.defaultConversationModeDirectAccessibility')}
-              accessibilityState={{ selected: defaultConversationMode === 'direct' }}
+              accessibilityLabel={t('settings.defaultConversationModeChitchatAccessibility')}
+              accessibilityState={{ selected: defaultConversationMode === 'chitchat' }}
             >
               <Text
                 style={[
                   styles.presetChipText,
-                  defaultConversationMode === 'direct' && styles.presetChipTextActive,
+                  defaultConversationMode === 'chitchat' && styles.presetChipTextActive,
                 ]}
               >
-                {t('settings.defaultConversationModeDirect')}
+                {t('settings.defaultConversationModeChitchat')}
               </Text>
             </TouchableOpacity>
           </ScrollView>
@@ -3304,6 +3308,84 @@ export const SettingsScreen: React.FC = () => {
             <Text style={styles.sectionCardTitle}>{t('settings.mainSections.data.title')}</Text>
             <Text style={styles.sectionCardHint}>{t('settings.mainSections.data.hint')}</Text>
           </View>
+
+          {/* Privacy — long-term memory opt-out */}
+          <View style={styles.featureRow}>
+            <Brain size={18} color={colors.primary} />
+            <View style={styles.featureContent}>
+              <Text style={styles.switchLabel}>{t('memory.disableLongTermMemory')}</Text>
+              <Text style={styles.featureHint}>{t('memory.disableLongTermMemoryHint')}</Text>
+            </View>
+            <Switch
+              value={disableLongTermMemory}
+              onValueChange={setDisableLongTermMemory}
+              trackColor={{ true: colors.primary }}
+              accessibilityLabel={t('memory.disableLongTermMemory')}
+            />
+          </View>
+
+          {/* Consolidation provider selector */}
+          {!disableLongTermMemory && (
+            <View style={{ marginTop: 8 }}>
+              <Text style={styles.label}>{t('memory.consolidationProvider')}</Text>
+              <Text style={styles.listItemSubtitle}>
+                {t('memory.consolidationProviderHint')}
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={[styles.presetRow, { flexGrow: 0, flexShrink: 0 }]}
+              >
+                <TouchableOpacity
+                  key="__off__"
+                  style={[
+                    styles.presetChip,
+                    consolidationProviderId === null && styles.presetChipActive,
+                  ]}
+                  onPress={() => setConsolidationProvider(null)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('memory.consolidationProviderOff')}
+                  accessibilityState={{ selected: consolidationProviderId === null }}
+                  testID="consolidation-provider-chip-off"
+                >
+                  <Text
+                    style={[
+                      styles.presetChipText,
+                      consolidationProviderId === null && styles.presetChipTextActive,
+                    ]}
+                  >
+                    {t('memory.consolidationProviderOff')}
+                  </Text>
+                </TouchableOpacity>
+                {providers
+                  .filter((p) => p.enabled)
+                  .map((p) => {
+                    const selected = consolidationProviderId === p.id;
+                    return (
+                      <TouchableOpacity
+                        key={p.id}
+                        style={[styles.presetChip, selected && styles.presetChipActive]}
+                        onPress={() => setConsolidationProvider(p.id)}
+                        accessibilityRole="button"
+                        accessibilityLabel={p.name}
+                        accessibilityState={{ selected }}
+                        testID={`consolidation-provider-chip-${p.id}`}
+                      >
+                        <Text
+                          style={[
+                            styles.presetChipText,
+                            selected && styles.presetChipTextActive,
+                          ]}
+                        >
+                          {p.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+              </ScrollView>
+            </View>
+          )}
+
           <Text style={[styles.sectionTitle, { marginTop: 24 }]}>{t('settings.data')}</Text>
 
           <TouchableOpacity

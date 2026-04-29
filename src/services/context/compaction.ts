@@ -74,6 +74,13 @@ export const COMPACTION_SUMMARY_MARKER = '[Conversation Summary]';
 /** Prefix used to identify cleared tool results (Tier 1). */
 export const TOOL_CLEARED_PLACEHOLDER = '[cleared:';
 
+/**
+ * Idle window required to trigger compaction during a non-forced, non-pressure
+ * call. "avoid running compaction mid-burst by gating it on
+ * idleSinceLastTurn > 90s unless the budget is genuinely exceeded."
+ */
+export const COMPACTION_IDLE_GUARD_MS = 90_000;
+
 // ── Helpers ──────────────────────────────────────────────────────────────
 
 export function getMessageContentForContext(message: Message): string {
@@ -184,10 +191,23 @@ export function clearOldToolResults(
  *   4. Next Steps — what was in progress
  *   5. Context to Preserve — file paths, identifiers, key details
  */
+/**
+ * Optional memory-aware inputs for `buildStructuredSummary`.
+ * The summary should consult `active_focus` and `open_threads` so it aligns
+ * with long-term state instead of drifting on the most recent tool churn.
+ */
+export interface StructuredSummaryMemoryHints {
+  /** Rendered focus block (e.g. from `renderFocusBlock`). */
+  focusBlock?: string;
+  /** Open thread / pending decision labels to surface in the summary. */
+  openThreads?: string[];
+}
+
 export function buildStructuredSummary(
   messages: Message[],
   tier: 'selective' | 'aggressive',
   priorContext?: string,
+  hints?: StructuredSummaryMemoryHints,
 ): string {
   const userRequests: string[] = [];
   const assistantConclusions: string[] = [];
@@ -313,6 +333,19 @@ export function buildStructuredSummary(
     sections.push(`## Context to Preserve\nFiles: ${files.join(', ')}`);
   }
 
+  // 5. Active Focus / Open Threads (memory-aware)
+  const focusText = (hints?.focusBlock ?? '').trim();
+  if (focusText) {
+    sections.push(`## Active Focus\n${focusText}`);
+  }
+  const openThreads = (hints?.openThreads ?? [])
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0);
+  if (openThreads.length > 0) {
+    const limit = tier === 'aggressive' ? 4 : 8;
+    sections.push(`## Open Threads\n- ${openThreads.slice(0, limit).join('\n- ')}`);
+  }
+
   return sections.join('\n\n');
 }
 
@@ -376,6 +409,15 @@ export class DefaultContextEngine implements ContextEngine {
     force?: boolean;
     forceTier?: ForcedCompactionTier;
     currentTokenCount?: number;
+    /**
+     * Milliseconds since the last user turn ended. When the call is not
+     * forced and the conversation is still actively bursting (idle below
+     * `COMPACTION_IDLE_GUARD_MS`), tier-2/tier-3 compaction is skipped
+     * unless the budget is genuinely exceeded.
+     */
+    idleSinceLastTurnMs?: number;
+    focusBlock?: string;
+    openThreads?: string[];
   }): Promise<CompactResult> {
     const tokenCount =
       params.currentTokenCount ??
@@ -444,10 +486,35 @@ export class DefaultContextEngine implements ContextEngine {
       messages: Message[];
       tokenBudget?: number;
       currentTokenCount?: number;
+      force?: boolean;
+      forceTier?: ForcedCompactionTier;
+      idleSinceLastTurnMs?: number;
+      focusBlock?: string;
+      openThreads?: string[];
     },
     tokenCount: number,
     tier: 'selective' | 'aggressive',
   ): Promise<CompactResult> {
+    // Idle gate: skip mid-burst compaction unless explicitly
+    // forced or the budget is genuinely exceeded.
+    const budget = params.tokenBudget ?? 128000;
+    const overBudget = tokenCount > budget;
+    const explicitlyForced = params.force === true || params.forceTier !== undefined;
+    const idleMs = params.idleSinceLastTurnMs;
+    if (
+      !explicitlyForced &&
+      !overBudget &&
+      typeof idleMs === 'number' &&
+      idleMs < COMPACTION_IDLE_GUARD_MS
+    ) {
+      return {
+        ok: true,
+        compacted: false,
+        tier,
+        reason: `Skipped: mid-burst (idle ${idleMs}ms < ${COMPACTION_IDLE_GUARD_MS}ms guard)`,
+      };
+    }
+
     // Extract prior compaction summaries from system messages before filtering.
     // These would otherwise be silently dropped because buildStructuredSummary
     // only processes non-system messages.  Feeding them as priorContext ensures
@@ -475,7 +542,11 @@ export class DefaultContextEngine implements ContextEngine {
     }
 
     // Build structured summary (Anthropic-style), incorporating prior context
-    const summary = buildStructuredSummary(toSummarize, tier, priorSummaryContent || undefined);
+    // and memory-aware hints.
+    const summary = buildStructuredSummary(toSummarize, tier, priorSummaryContent || undefined, {
+      focusBlock: params.focusBlock,
+      openThreads: params.openThreads,
+    });
     const tokensAfter =
       estimateTokens(summary) +
       estimateMessageTokens(

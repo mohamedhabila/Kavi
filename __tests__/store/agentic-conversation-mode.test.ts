@@ -13,12 +13,12 @@ describe('Conversation type with mode', () => {
     expect(conv.mode).toBe('agentic');
   });
 
-  it('accepts mode field as direct', () => {
+  it('accepts mode field as chitchat', () => {
     const conv: Partial<Conversation> = {
       id: 'test-2',
-      mode: 'direct',
+      mode: 'chitchat',
     };
-    expect(conv.mode).toBe('direct');
+    expect(conv.mode).toBe('chitchat');
   });
 
   it('mode is optional (undefined for legacy conversations)', () => {

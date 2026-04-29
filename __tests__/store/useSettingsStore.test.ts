@@ -556,7 +556,7 @@ describe('useSettingsStore', () => {
         linkUnderstandingEnabled: false,
         mediaUnderstandingEnabled: false,
         maxLinks: 7,
-        defaultConversationMode: 'direct',
+        defaultConversationMode: 'chitchat',
       } as any);
 
       const state = useSettingsStore.getState();
@@ -568,7 +568,7 @@ describe('useSettingsStore', () => {
       expect(state.linkUnderstandingEnabled).toBe(false);
       expect(state.mediaUnderstandingEnabled).toBe(false);
       expect(state.maxLinks).toBe(7);
-      expect(state.defaultConversationMode).toBe('direct');
+      expect(state.defaultConversationMode).toBe('chitchat');
     });
 
     it('should clear nullable selections when explicitly set to null', () => {
@@ -624,8 +624,17 @@ describe('useSettingsStore', () => {
 
   describe('Conversation Mode', () => {
     it('should update the default conversation mode', () => {
-      useSettingsStore.getState().setDefaultConversationMode('direct');
-      expect(useSettingsStore.getState().defaultConversationMode).toBe('direct');
+      useSettingsStore.getState().setDefaultConversationMode('chitchat');
+      expect(useSettingsStore.getState().defaultConversationMode).toBe('chitchat');
+    });
+
+    it('should normalize the legacy direct→chitchat alias when migrating', async () => {
+      const persistOptions = (useSettingsStore as any).persist.getOptions();
+      const migrated = await persistOptions.migrate(
+        { defaultConversationMode: 'direct' },
+        8,
+      );
+      expect(migrated.defaultConversationMode).toBe('chitchat');
     });
   });
 
@@ -704,7 +713,7 @@ describe('useSettingsStore', () => {
         browserProviders: [makeBrowserProvider()],
         expoAccounts: [makeExpoAccount()],
         expoProjects: [makeExpoProject()],
-        defaultConversationMode: 'direct',
+        defaultConversationMode: 'chitchat',
       });
 
       expect(partialized).toEqual(
@@ -713,7 +722,7 @@ describe('useSettingsStore', () => {
           browserProviders: [expect.objectContaining({ id: 'browser-1' })],
           expoAccounts: [expect.objectContaining({ id: 'expo-account-1' })],
           expoProjects: [expect.objectContaining({ id: 'expo-project-1' })],
-          defaultConversationMode: 'direct',
+          defaultConversationMode: 'chitchat',
         }),
       );
     });

@@ -438,7 +438,7 @@ describe('Settings Import/Export', () => {
     });
   });
 
-  describe('importSettings — array validation (Phase 26)', () => {
+  describe('importSettings — array validation', () => {
     it('ignores non-array providers', () => {
       const result = importSettings({
         version: 1,
@@ -536,7 +536,8 @@ describe('Settings Import/Export', () => {
       expect(arg.linkUnderstandingEnabled).toBe(false);
       expect(arg.mediaUnderstandingEnabled).toBe(true);
       expect(arg.maxLinks).toBe(10);
-      expect(arg.defaultConversationMode).toBe('direct');
+      // Legacy 'direct' import is normalized to canonical 'chitchat'.
+      expect(arg.defaultConversationMode).toBe('chitchat');
       expect(mockSetLocale).toHaveBeenCalledWith('ja');
     });
 

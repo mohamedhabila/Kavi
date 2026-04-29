@@ -570,7 +570,7 @@ let mockLoadingState = false;
 let mockActiveProviderId: string | null = 'openai';
 let mockActiveModel: string | null = 'gpt-5.4';
 let mockThinkingLevel: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' = 'medium';
-let mockDefaultConversationMode: 'agentic' | 'direct' = 'agentic';
+let mockDefaultConversationMode: 'agentic' | 'chitchat' = 'agentic';
 let mockProvidersList: any[] = [
   {
     id: 'openai',
@@ -1474,11 +1474,11 @@ describe('ChatScreen', () => {
 
     // Default is agentic mode — toggle to direct
     // Accessibility label now includes current mode description
-    fireEvent.press(getByLabelText(/Switch to direct mode/));
+    fireEvent.press(getByLabelText(/Switch to chitchat mode/));
 
     expect(mockCreateConversation).toHaveBeenCalledWith('openai', 'You are helpful', 'gpt-5.4', {
       personaId: 'default',
-      mode: 'direct',
+      mode: 'chitchat',
     });
     // For new conversations (no existing convId), handleToggleMode creates the conversation
     // then uses atomic setState on the new convId
@@ -1784,7 +1784,7 @@ describe('ChatScreen', () => {
   });
 
   it('passes the selected thinking level into the orchestrator request', async () => {
-    mockDefaultConversationMode = 'direct';
+    mockDefaultConversationMode = 'chitchat';
     mockThinkingLevel = 'high';
 
     const { getByPlaceholderText, getByTestId } = render(<ChatScreen />);
@@ -6887,7 +6887,7 @@ describe('ChatScreen', () => {
   });
 
   it('clears the streaming indicator when stopping an in-flight response', async () => {
-    mockDefaultConversationMode = 'direct';
+    mockDefaultConversationMode = 'chitchat';
     mockRunOrchestrator.mockImplementationOnce(
       async (options: any) =>
         await new Promise<void>((resolve) => {

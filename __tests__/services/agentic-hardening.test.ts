@@ -43,10 +43,10 @@ describe('ConversationMode fallback chain', () => {
   });
 
   it('conversation.mode takes priority over default', () => {
-    const conversationMode: ConversationMode = 'direct';
+    const conversationMode: ConversationMode = 'chitchat';
     const defaultMode: ConversationMode = 'agentic';
     const effective = conversationMode ?? defaultMode ?? 'agentic';
-    expect(effective).toBe('direct');
+    expect(effective).toBe('chitchat');
   });
 
   it('falls back to hardcoded agentic when all undefined', () => {

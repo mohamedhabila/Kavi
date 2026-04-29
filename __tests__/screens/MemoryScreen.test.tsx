@@ -79,6 +79,20 @@ jest.mock('../../src/services/memory/store', () => ({
   getMemoryLastUpdatedAt: (...args: any[]) => mockGetMemoryLastUpdatedAt(...args),
 }));
 
+// MemoryScreen now reads from the structured fact store.
+// These tests focus on the file-backed global/daily tabs, so we stub the
+// memoryTools executors to return empty result sets — the dedicated facts/blocks
+// tab tests live in MemoryScreen.facts.test.tsx.
+jest.mock('../../src/services/memory/memoryTools', () => ({
+  executeMemoryRecall: () => ({ ok: true, subject: null, facts: [] }),
+  executeMemoryRemember: () => ({ ok: true, fact: null, status: 'created', superseded: [] }),
+  executeMemoryPin: () => ({ ok: true, fact: null }),
+  executeMemoryUnpin: () => ({ ok: true, fact: null }),
+  executeMemoryForget: () => ({ ok: true, fact: null, mode: 'invalidate' }),
+  executeMemoryBlockRead: () => ({ ok: true, blocks: [] }),
+  executeMemoryBlockEdit: () => ({ ok: true, block: null }),
+}));
+
 let memoryListener:
   | ((event: { scope: 'global' | 'daily' | 'all'; updatedAt: number }) => void)
   | null = null;

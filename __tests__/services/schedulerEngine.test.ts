@@ -140,7 +140,7 @@ describe('Scheduler Engine', () => {
     });
   });
 
-  describe('retry state garbage collection (Phase 26)', () => {
+  describe('retry state garbage collection', () => {
     it('does not crash when no retry state exists', async () => {
       setSchedulerExecutor({ execute: async () => 'ok' });
       await expect(evaluateJobsOnce()).resolves.toBeUndefined();

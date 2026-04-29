@@ -110,6 +110,15 @@ export {
 export { executeWait, executePdfRead } from './parity-utility';
 export { executeCameraSnap, executeAudioTranscribe, executeSpeak } from './parity-media';
 export { executeMemorySearch } from './parity-memory';
+export {
+  executeMemoryRecall,
+  executeMemoryRemember,
+  executeMemoryPin,
+  executeMemoryUnpin,
+  executeMemoryForget,
+  executeMemoryBlockRead,
+  executeMemoryBlockEdit,
+} from './parity-memory';
 export { executePollCreate, executeMessageEffect } from './parity-interaction';
 export {
   executeAgentsList,

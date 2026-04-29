@@ -766,7 +766,7 @@ describe('Canvas Renderer', () => {
       resolveCanvasSnapshot('unknown-surface', { dataUri: 'data:x' });
     });
 
-    it('truncates at valid base64 boundary (Phase 26)', async () => {
+    it('truncates at valid base64 boundary', async () => {
       jest.useFakeTimers();
       processCanvasMessage({
         type: 'createSurface',
@@ -800,7 +800,7 @@ describe('Canvas Renderer', () => {
       setHandler({});
     });
 
-    it('does not truncate when data URI fits within limit (Phase 26)', async () => {
+    it('does not truncate when data URI fits within limit', async () => {
       jest.useFakeTimers();
       processCanvasMessage({
         type: 'createSurface',

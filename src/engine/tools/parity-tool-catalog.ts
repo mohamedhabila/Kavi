@@ -314,10 +314,19 @@ const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> = {
       'read_workflow_evidence',
       'record_workflow_evidence',
       'memory_search',
+      'memory_recall',
+      'memory_remember',
+      'memory_pin',
+      'memory_unpin',
+      'memory_forget',
+      'memory_block_read',
+      'memory_block_edit',
     ],
-    purpose: 'Read, write, and search persisted memory plus structured workflow evidence.',
+    purpose:
+      'Read, write, and search persisted memory plus structured workflow evidence and the living-memory fact/block store.',
     guidance:
-      'Use workflow evidence for run-scoped facts, verification notes, risks, decisions, and artifacts that should stay attached to the current agent run. Use conversation memory for broader task-local state shared across this conversation, and global memory only for durable facts that should persist across future conversations.',
+      'Use workflow evidence for run-scoped facts, verification notes, risks, decisions, and artifacts that should stay attached to the current agent run. Use conversation memory for broader task-local state shared across this conversation, and global memory only for durable facts that should persist across future conversations. ' +
+      'Prefer memory_recall + memory_remember for structured atomic facts about the user/project/concepts (subject + predicate + value); they support pinning, supersession, and history. Use memory_search when you need fuzzy or unstructured search instead. memory_block_read/edit operate on short editable scratch surfaces (persona, scratchpad) that always appear in the focus header.',
   },
   automation: {
     tools: ['create_task', 'cron', 'notify', 'notification_send', 'notification_schedule'],
