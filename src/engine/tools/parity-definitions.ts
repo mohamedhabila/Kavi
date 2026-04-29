@@ -766,6 +766,31 @@ export const MEMORY_FORGET_TOOL: ToolDefinition = {
   },
 };
 
+export const MEMORY_MANAGE_TOOL: ToolDefinition = {
+  name: 'memory_manage',
+  description:
+    'Manage a fact by id. ' +
+    'Use action=pin to keep a fact in the focus header, action=unpin to release it, ' +
+    'or action=forget to invalidate (default for corrections, preserves audit trail) or delete it.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      action: {
+        type: 'string',
+        enum: ['pin', 'unpin', 'forget'],
+        description: 'Operation to perform.',
+      },
+      factId: { type: 'string', description: 'ID returned by memory_recall or memory_remember.' },
+      mode: {
+        type: 'string',
+        enum: ['invalidate', 'delete'],
+        description: 'For action=forget: "invalidate" (default) closes the fact, "delete" soft-deletes it.',
+      },
+    },
+    required: ['action', 'factId'],
+  },
+};
+
 export const MEMORY_BLOCK_READ_TOOL: ToolDefinition = {
   name: 'memory_block_read',
   description:
@@ -789,6 +814,31 @@ export const MEMORY_BLOCK_EDIT_TOOL: ToolDefinition = {
       replace: { type: 'boolean', description: 'Default true (overwrite).' },
     },
     required: ['label', 'content'],
+  },
+};
+
+export const MEMORY_BLOCK_TOOL: ToolDefinition = {
+  name: 'memory_block',
+  description:
+    'Read or edit an editable memory block. ' +
+    'Use action=read (omit label to list all blocks) to fetch block contents, ' +
+    'or action=edit to overwrite (replace=true, default) or append (replace=false) content.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      action: {
+        type: 'string',
+        enum: ['read', 'edit'],
+        description: 'Operation to perform.',
+      },
+      label: {
+        type: 'string',
+        description: 'Block label (e.g. "persona", "scratchpad"). Required for action=edit; optional for action=read.',
+      },
+      content: { type: 'string', description: 'New content. Required for action=edit.' },
+      replace: { type: 'boolean', description: 'For action=edit: true (default) overwrites, false appends on a new line.' },
+    },
+    required: ['action'],
   },
 };
 
@@ -856,13 +906,20 @@ export const SSH_BACKGROUND_JOB_WAIT_TOOL: ToolDefinition = {
   },
 };
 
-export const SSH_LIST_DIRECTORY_TOOL: ToolDefinition = {
-  name: 'ssh_list_directory',
+export const SSH_FS_TOOL: ToolDefinition = {
+  name: 'ssh_fs',
   description:
-    'List files and directories on a configured SSH target using SFTP. Returns entry names, sizes, and directory flags.',
+    'Perform a remote filesystem operation on a configured SSH target via SFTP. ' +
+    'Use action to choose the operation: list a directory, read a file, write a file (parent directories are created), rename/move a path, delete a path (set recursive=true for directories), or create a directory (mkdir). ' +
+    'Use this for remote file inspection and editing without a terminal-only workflow.',
   input_schema: {
     type: 'object',
     properties: {
+      action: {
+        type: 'string',
+        enum: ['list', 'read', 'write', 'rename', 'delete', 'mkdir'],
+        description: 'Filesystem operation to perform.',
+      },
       targetId: {
         type: 'string',
         description:
@@ -870,104 +927,27 @@ export const SSH_LIST_DIRECTORY_TOOL: ToolDefinition = {
       },
       path: {
         type: 'string',
-        description: 'Remote directory path to list. Defaults to the SSH target root.',
-      },
-    },
-    required: [],
-  },
-};
-
-export const SSH_READ_FILE_TOOL: ToolDefinition = {
-  name: 'ssh_read_file',
-  description:
-    'Read a text file from a configured SSH target using SFTP download. Use this for remote file inspection without a terminal-only workflow.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      targetId: {
-        type: 'string',
         description:
-          'SSH target ID from Settings. Optional when exactly one SSH target is enabled.',
+          'Remote path. Required for list/read/write/delete/mkdir. Defaults to the SSH target root for list.',
       },
-      path: { type: 'string', description: 'Remote file path to read.' },
-    },
-    required: ['path'],
-  },
-};
-
-export const SSH_WRITE_FILE_TOOL: ToolDefinition = {
-  name: 'ssh_write_file',
-  description:
-    'Write text content to a remote file on a configured SSH target using SFTP. Parent directories are created when needed.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      targetId: {
+      content: {
         type: 'string',
-        description:
-          'SSH target ID from Settings. Optional when exactly one SSH target is enabled.',
+        description: 'Text content to upload. Required for action=write.',
       },
-      path: { type: 'string', description: 'Remote file path to write.' },
-      content: { type: 'string', description: 'Text content to upload.' },
-    },
-    required: ['path', 'content'],
-  },
-};
-
-export const SSH_RENAME_PATH_TOOL: ToolDefinition = {
-  name: 'ssh_rename_path',
-  description: 'Rename or move a remote file or directory on a configured SSH target using SFTP.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      targetId: {
+      oldPath: {
         type: 'string',
-        description:
-          'SSH target ID from Settings. Optional when exactly one SSH target is enabled.',
+        description: 'Existing remote path. Required for action=rename.',
       },
-      oldPath: { type: 'string', description: 'Existing remote path.' },
-      newPath: { type: 'string', description: 'New remote path.' },
-    },
-    required: ['oldPath', 'newPath'],
-  },
-};
-
-export const SSH_DELETE_PATH_TOOL: ToolDefinition = {
-  name: 'ssh_delete_path',
-  description:
-    'Delete a remote file or directory on a configured SSH target. When recursive is true, directories are removed recursively using the remote shell.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      targetId: {
+      newPath: {
         type: 'string',
-        description:
-          'SSH target ID from Settings. Optional when exactly one SSH target is enabled.',
+        description: 'New remote path. Required for action=rename.',
       },
-      path: { type: 'string', description: 'Remote path to delete.' },
       recursive: {
         type: 'boolean',
-        description: 'Recursively delete a directory tree when needed.',
+        description: 'Recursively delete a directory tree. Used by action=delete.',
       },
     },
-    required: ['path'],
-  },
-};
-
-export const SSH_MAKE_DIRECTORY_TOOL: ToolDefinition = {
-  name: 'ssh_make_directory',
-  description: 'Create a directory on a configured SSH target using SFTP.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      targetId: {
-        type: 'string',
-        description:
-          'SSH target ID from Settings. Optional when exactly one SSH target is enabled.',
-      },
-      path: { type: 'string', description: 'Remote directory path to create.' },
-    },
-    required: ['path'],
+    required: ['action'],
   },
 };
 
@@ -1319,22 +1299,6 @@ export const POLL_CREATE_TOOL: ToolDefinition = {
   },
 };
 
-export const MESSAGE_EFFECT_TOOL: ToolDefinition = {
-  name: 'message_effect',
-  description:
-    'Apply a lightweight visual effect to the current assistant message bubble. Supported effects: confetti, balloons, spotlight.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      effectId: {
-        type: 'string',
-        description: 'Effect name: confetti, balloons, or spotlight',
-      },
-    },
-    required: ['effectId'],
-  },
-};
-
 // ── Text-to-Speech Tool ──────────────────────────────────────────────────
 
 export const SPEAK_TOOL: ToolDefinition = {
@@ -1401,6 +1365,39 @@ export const AGENTS_CONFIGURE_TOOL: ToolDefinition = {
   },
 };
 
+export const AGENTS_TOOL: ToolDefinition = {
+  name: 'agents',
+  description:
+    'Manage agent personas. ' +
+    'Use action=list to enumerate available personas, action=switch to activate a persona by id, ' +
+    'or action=configure to update name/model/systemPrompt/temperature/thinkingLevel.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      action: {
+        type: 'string',
+        enum: ['list', 'switch', 'configure'],
+        description: 'Operation to perform.',
+      },
+      personaId: {
+        type: 'string',
+        description: 'Persona id. Required for action=switch and action=configure.',
+      },
+      name: { type: 'string', description: 'New display name (action=configure).' },
+      description: { type: 'string', description: 'New description (action=configure).' },
+      model: { type: 'string', description: 'Model override (action=configure).' },
+      providerId: { type: 'string', description: 'Provider override (action=configure).' },
+      systemPrompt: { type: 'string', description: 'Custom system prompt (action=configure).' },
+      temperature: { type: 'number', description: 'Temperature 0-2 (action=configure).' },
+      thinkingLevel: {
+        type: 'string',
+        description: 'Thinking level override: off, low, medium, or high (action=configure).',
+      },
+    },
+    required: ['action'],
+  },
+};
+
 // ── All parity tools ─────────────────────────────────────────────────────
 
 export const ALL_PARITY_TOOL_DEFINITIONS: ToolDefinition[] = [
@@ -1429,20 +1426,12 @@ export const ALL_PARITY_TOOL_DEFINITIONS: ToolDefinition[] = [
   MEMORY_SEARCH_TOOL,
   MEMORY_RECALL_TOOL,
   MEMORY_REMEMBER_TOOL,
-  MEMORY_PIN_TOOL,
-  MEMORY_UNPIN_TOOL,
-  MEMORY_FORGET_TOOL,
-  MEMORY_BLOCK_READ_TOOL,
-  MEMORY_BLOCK_EDIT_TOOL,
+  MEMORY_MANAGE_TOOL,
+  MEMORY_BLOCK_TOOL,
   SSH_EXEC_TOOL,
   SSH_BACKGROUND_JOB_STATUS_TOOL,
   SSH_BACKGROUND_JOB_WAIT_TOOL,
-  SSH_LIST_DIRECTORY_TOOL,
-  SSH_READ_FILE_TOOL,
-  SSH_WRITE_FILE_TOOL,
-  SSH_RENAME_PATH_TOOL,
-  SSH_DELETE_PATH_TOOL,
-  SSH_MAKE_DIRECTORY_TOOL,
+  SSH_FS_TOOL,
   EXPO_EAS_CREATE_PROJECT_TOOL,
   EXPO_EAS_LIST_PROJECTS_TOOL,
   EXPO_EAS_STATUS_TOOL,
@@ -1457,9 +1446,6 @@ export const ALL_PARITY_TOOL_DEFINITIONS: ToolDefinition[] = [
   EXPO_EAS_GRAPHQL_TOOL,
   TOOL_CATALOG_TOOL,
   POLL_CREATE_TOOL,
-  MESSAGE_EFFECT_TOOL,
   SPEAK_TOOL,
-  AGENTS_LIST_TOOL,
-  AGENTS_SWITCH_TOOL,
-  AGENTS_CONFIGURE_TOOL,
+  AGENTS_TOOL,
 ];

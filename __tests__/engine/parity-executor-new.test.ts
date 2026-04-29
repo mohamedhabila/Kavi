@@ -97,7 +97,6 @@ jest.mock('../../src/engine/tools/definitions', () => ({
     { name: 'file_edit', description: 'Edit file' },
     { name: 'glob_search', description: 'Glob search files' },
     { name: 'text_search', description: 'Search text in files' },
-    { name: 'fetch_url', description: 'Fetch URL content' },
     { name: 'web_search', description: 'Search the web' },
     { name: 'web_fetch', description: 'Fetch a web page as clean text' },
     { name: 'javascript', description: 'Run JavaScript' },

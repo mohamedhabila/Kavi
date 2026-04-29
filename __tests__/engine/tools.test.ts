@@ -511,98 +511,6 @@ describe('executeTool', () => {
     });
   });
 
-  describe('fetch_url', () => {
-    const originalFetch = global.fetch;
-
-    beforeEach(() => {
-      global.fetch = jest.fn();
-    });
-
-    afterAll(() => {
-      global.fetch = originalFetch;
-    });
-
-    it('should fetch URL and return response', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        status: 200,
-        text: () => Promise.resolve('<html>Hello</html>'),
-      });
-
-      const result = await executeTool(
-        'fetch_url',
-        JSON.stringify({ url: 'https://example.com' }),
-        CONV_ID,
-      );
-      expect(result).toContain('HTTP 200');
-      expect(result).toContain('Hello');
-      expect((global.fetch as jest.Mock).mock.calls[0][1].credentials).toBe('omit');
-    });
-
-    it('should reject non-http(s) URLs', async () => {
-      const result = await executeTool(
-        'fetch_url',
-        JSON.stringify({ url: 'ftp://example.com' }),
-        CONV_ID,
-      );
-      expect(result).toContain('Error');
-      expect(result).toContain('http');
-    });
-
-    it('should truncate large responses', async () => {
-      const largeContent = 'x'.repeat(200 * 1024);
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        status: 200,
-        text: () => Promise.resolve(largeContent),
-      });
-
-      const result = await executeTool(
-        'fetch_url',
-        JSON.stringify({ url: 'https://example.com/large' }),
-        CONV_ID,
-      );
-      expect(result).toContain('Truncated');
-      expect(result.length).toBeLessThan(200 * 1024);
-    });
-
-    it('should handle fetch errors', async () => {
-      (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Network error'));
-
-      const result = await executeTool(
-        'fetch_url',
-        JSON.stringify({ url: 'https://example.com/failing' }),
-        CONV_ID,
-      );
-      expect(result).toContain('Error');
-      expect(result).toContain('Network error');
-    });
-  });
-
-  describe('update_memory', () => {
-    it('should write memory file', async () => {
-      const result = await executeTool(
-        'update_memory',
-        JSON.stringify({ content: 'User prefers dark mode' }),
-        CONV_ID,
-      );
-      expect(result).toContain('Conversation memory updated');
-      expect(result).toContain('22 chars');
-    });
-  });
-
-  describe('create_task', () => {
-    it('should return task creation info', async () => {
-      const result = await executeTool(
-        'create_task',
-        JSON.stringify({ schedule: '0 9 * * *', prompt: 'Morning briefing' }),
-        CONV_ID,
-      );
-      const parsed = JSON.parse(result);
-      expect(parsed.status).toBe('task_created');
-      expect(parsed.schedule).toBe('0 9 * * *');
-      expect(parsed.prompt).toBe('Morning briefing');
-    });
-  });
-
   describe('javascript', () => {
     it('should execute simple JavaScript', async () => {
       const result = await executeTool(
@@ -1126,17 +1034,6 @@ describe('loadMemory', () => {
     const result = await loadMemory('nonexistent');
     expect(result).toBeNull();
   });
-
-  it('should return memory content when it exists', async () => {
-    // loadMemory now reads the shared conversation memory store for the conversation id.
-    await executeTool(
-      'update_memory',
-      JSON.stringify({ content: 'Test memory', mode: 'replace' }),
-      'mem-test',
-    );
-    const result = await loadMemory('mem-test');
-    expect(result).toBe('Test memory');
-  });
 });
 
 describe('executeTool — additional routes', () => {
@@ -1405,62 +1302,6 @@ describe('executeTool — additional routes', () => {
       const result = await executeTool('clipboard_read', '{}', CONV_ID);
       // Will execute via native executor — clipboard mock returns empty
       expect(typeof result).toBe('string');
-    });
-  });
-
-  describe('fetch_url with custom method and headers', () => {
-    const originalFetch = global.fetch;
-    beforeEach(() => {
-      global.fetch = jest.fn();
-    });
-    afterEach(() => {
-      global.fetch = originalFetch;
-    });
-
-    it('passes custom method and headers', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        status: 200,
-        text: () => Promise.resolve('response'),
-      });
-
-      const result = await executeTool(
-        'fetch_url',
-        JSON.stringify({
-          url: 'https://api.example.com',
-          method: 'post',
-          headers: { 'Content-Type': 'application/json' },
-          body: '{"key":"value"}',
-        }),
-        CONV_ID,
-      );
-      expect(result).toContain('HTTP 200');
-      expect((global.fetch as jest.Mock).mock.calls[0][1].method).toBe('POST');
-      expect((global.fetch as jest.Mock).mock.calls[0][1].credentials).toBe('omit');
-      expect((global.fetch as jest.Mock).mock.calls[0][1].headers).toEqual({
-        'Content-Type': 'application/json',
-      });
-      expect((global.fetch as jest.Mock).mock.calls[0][1].body).toBe('{"key":"value"}');
-    });
-
-    it('stringifies non-string header values', async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        status: 200,
-        text: () => Promise.resolve('response'),
-      });
-
-      await executeTool(
-        'fetch_url',
-        JSON.stringify({
-          url: 'https://api.example.com',
-          headers: { 'X-Retry-Count': 3, Authorization: 'Bearer token' },
-        }),
-        CONV_ID,
-      );
-
-      expect((global.fetch as jest.Mock).mock.calls[0][1].headers).toEqual({
-        'X-Retry-Count': '3',
-        Authorization: 'Bearer token',
-      });
     });
   });
 

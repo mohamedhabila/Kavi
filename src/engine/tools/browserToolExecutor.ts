@@ -95,6 +95,8 @@ function buildBrowserTraceDescription(name: string, args: any): string {
       return 'Read page errors';
     case 'browser_network':
       return 'Read network requests';
+    case 'browser_inspect':
+      return `Inspect ${args.kind || 'console'}`;
     case 'browser_cookies':
       return `Cookies: ${args.action || 'get'}`;
     case 'browser_storage':
@@ -211,6 +213,26 @@ async function executeBrowserToolInner(name: string, args: any): Promise<string>
     case 'browser_snapshot': {
       const result = await browserSnapshot(args.sessionId, { maxChars: args.maxChars });
       return JSON.stringify(result);
+    }
+    case 'browser_inspect': {
+      const kind = typeof args.kind === 'string' ? args.kind.toLowerCase() : '';
+      if (kind === 'console') {
+        return JSON.stringify(
+          await browserConsoleMessages(args.sessionId, { level: args.level }),
+        );
+      }
+      if (kind === 'errors') {
+        return JSON.stringify(await browserPageErrors(args.sessionId, { clear: args.clear }));
+      }
+      if (kind === 'network') {
+        return JSON.stringify(
+          await browserNetworkRequests(args.sessionId, {
+            filter: args.filter,
+            clear: args.clear,
+          }),
+        );
+      }
+      return 'Error: browser_inspect requires kind ∈ {console, errors, network}';
     }
     case 'browser_console': {
       const result = await browserConsoleMessages(args.sessionId, { level: args.level });

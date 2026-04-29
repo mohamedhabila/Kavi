@@ -236,6 +236,29 @@ export const CONTACTS_CREATE_TOOL: ToolDefinition = {
   },
 };
 
+export const CONTACTS_FORM_TOOL: ToolDefinition = {
+  name: 'contacts_form',
+  description:
+    'Open the native contacts UI for a single contact. ' +
+    'Use action to choose: view (read-only), edit (modify an existing contact, optionally prefilled), or create (new contact form, optionally prefilled).',
+  input_schema: {
+    type: 'object',
+    properties: {
+      action: {
+        type: 'string',
+        enum: ['view', 'edit', 'create'],
+        description: 'Form action to launch.',
+      },
+      id: {
+        type: 'string',
+        description: 'Contact id. Required for action=view and action=edit.',
+      },
+      ...CONTACT_MUTATION_PROPERTIES,
+    },
+    required: ['action'],
+  },
+};
+
 export const CONTACTS_SHARE_TOOL: ToolDefinition = {
   name: 'contacts_share',
   description: 'Share a contact using the native contact share flow.',
@@ -278,32 +301,6 @@ export const CONTACTS_GET_FULL_TOOL: ToolDefinition = {
   },
 };
 
-export const CONTACTS_SEARCH_TOOL: ToolDefinition = {
-  name: 'contacts_search',
-  description:
-    'Legacy alias for full contact search by name. Prefer contacts_pick or contacts_search_full.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      query: { type: 'string', description: 'Name search query' },
-      limit: { type: 'number', description: 'Max results (default: 10, max: 25)' },
-    },
-    required: ['query'],
-  },
-};
-
-export const CONTACTS_GET_TOOL: ToolDefinition = {
-  name: 'contacts_get',
-  description: 'Legacy alias for contacts_get_full.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      id: { type: 'string', description: 'Contact ID' },
-    },
-    required: ['id'],
-  },
-};
-
 export const LOCATION_CURRENT_TOOL: ToolDefinition = {
   name: 'location_current',
   description: 'Get the current GPS location (latitude, longitude, altitude).',
@@ -328,16 +325,23 @@ export const CLIPBOARD_WRITE_TOOL: ToolDefinition = {
   },
 };
 
-export const SHARE_TOOL: ToolDefinition = {
-  name: 'share',
-  description:
-    'Legacy compatibility share tool for text or URLs. Prefer share_text, share_url, share_file, or contacts_share.',
+export const CLIPBOARD_TOOL: ToolDefinition = {
+  name: 'clipboard',
+  description: 'Read text from or write text to the system clipboard.',
   input_schema: {
     type: 'object',
     properties: {
-      text: { type: 'string', description: 'Text to share' },
-      url: { type: 'string', description: 'URL to share' },
+      action: {
+        type: 'string',
+        enum: ['read', 'write'],
+        description: 'Clipboard action to perform.',
+      },
+      text: {
+        type: 'string',
+        description: 'Text to copy to the clipboard. Required for action=write.',
+      },
     },
+    required: ['action'],
   },
 };
 
@@ -393,6 +397,45 @@ export const SHARE_CONTACT_TOOL: ToolDefinition = {
       message: { type: 'string', description: 'Optional share message' },
     },
     required: ['id'],
+  },
+};
+
+export const SHARE_TOOL: ToolDefinition = {
+  name: 'share',
+  description:
+    'Share content using the native share sheet. ' +
+    'Use kind to choose what to share: text, url (http/https URL), file (local file:// URI), or contact (a contact id).',
+  input_schema: {
+    type: 'object',
+    properties: {
+      kind: {
+        type: 'string',
+        enum: ['text', 'url', 'file', 'contact'],
+        description: 'Type of content to share.',
+      },
+      text: {
+        type: 'string',
+        description: 'Plain text payload. Required for kind=text; optional message for url/contact.',
+      },
+      url: {
+        type: 'string',
+        description: 'HTTP or HTTPS URL. Required for kind=url.',
+      },
+      message: {
+        type: 'string',
+        description: 'Optional message accompanying url or contact share.',
+      },
+      title: {
+        type: 'string',
+        description: 'Optional share-sheet title (kind=text or kind=url).',
+      },
+      fileUri: { type: 'string', description: 'Local file:// URI. Required for kind=file.' },
+      mimeType: { type: 'string', description: 'Optional MIME type for kind=file.' },
+      dialogTitle: { type: 'string', description: 'Optional Android/web dialog title for kind=file.' },
+      uti: { type: 'string', description: 'Optional iOS Uniform Type Identifier for kind=file.' },
+      id: { type: 'string', description: 'Contact id. Required for kind=contact.' },
+    },
+    required: ['kind'],
   },
 };
 
@@ -468,6 +511,27 @@ export const DEVICE_HEALTH_TOOL: ToolDefinition = {
   input_schema: { type: 'object', properties: {} },
 };
 
+export const DEVICE_QUERY_TOOL: ToolDefinition = {
+  name: 'device_query',
+  description:
+    'Query device state. Use kind to choose what to read: ' +
+    'status (battery, network, brightness, volume), ' +
+    'info (hardware/software model, OS, memory, storage, screen), ' +
+    'permissions (app permission grants), or ' +
+    'health (memory/storage usage, thermal state, uptime).',
+  input_schema: {
+    type: 'object',
+    properties: {
+      kind: {
+        type: 'string',
+        enum: ['status', 'info', 'permissions', 'health'],
+        description: 'Which device facet to query.',
+      },
+    },
+    required: ['kind'],
+  },
+};
+
 // ── Media Tools ──────────────────────────────────────────────────────────
 
 export const PHOTOS_LATEST_TOOL: ToolDefinition = {
@@ -536,26 +600,17 @@ export const ALL_NATIVE_TOOL_DEFINITIONS: ToolDefinition[] = [
   MAPS_OPEN_TOOL,
   CONTACTS_PICK_TOOL,
   CONTACTS_MANAGE_ACCESS_TOOL,
-  CONTACTS_VIEW_TOOL,
-  CONTACTS_EDIT_TOOL,
-  CONTACTS_CREATE_TOOL,
+  CONTACTS_FORM_TOOL,
   CONTACTS_SHARE_TOOL,
   CONTACTS_SEARCH_FULL_TOOL,
   CONTACTS_GET_FULL_TOOL,
   LOCATION_CURRENT_TOOL,
-  CLIPBOARD_READ_TOOL,
-  CLIPBOARD_WRITE_TOOL,
-  SHARE_TEXT_TOOL,
-  SHARE_URL_TOOL,
-  SHARE_FILE_TOOL,
-  SHARE_CONTACT_TOOL,
+  CLIPBOARD_TOOL,
+  SHARE_TOOL,
   OPEN_URL_TOOL,
   NOTIFICATION_SEND_TOOL,
   NOTIFICATION_SCHEDULE_TOOL,
-  DEVICE_STATUS_TOOL,
-  DEVICE_INFO_TOOL,
-  DEVICE_PERMISSIONS_TOOL,
-  DEVICE_HEALTH_TOOL,
+  DEVICE_QUERY_TOOL,
   PHOTOS_LATEST_TOOL,
   CAMERA_CLIP_TOOL,
   SCREEN_RECORD_TOOL,

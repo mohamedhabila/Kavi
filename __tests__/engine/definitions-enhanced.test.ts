@@ -12,9 +12,6 @@ describe('TOOL_DEFINITIONS — full set', () => {
     expect(n).toContain('read_file');
     expect(n).toContain('write_file');
     expect(n).toContain('list_files');
-    expect(n).toContain('fetch_url');
-    expect(n).toContain('update_memory');
-    expect(n).toContain('create_task');
     expect(n).toContain('javascript');
     expect(n).toContain('python');
   });
@@ -25,7 +22,6 @@ describe('TOOL_DEFINITIONS — full set', () => {
     expect(n).toContain('glob_search');
     expect(n).toContain('text_search');
     expect(n).toContain('cron');
-    expect(n).toContain('notify');
     expect(n).toContain('image_generate');
     expect(n).toContain('image_edit');
   });
@@ -42,9 +38,8 @@ describe('TOOL_DEFINITIONS — full set', () => {
     expect(n).toContain('email_compose');
     expect(n).toContain('contacts_pick');
     expect(n).toContain('contacts_manage_access');
-    expect(n).toContain('clipboard_read');
-    expect(n).toContain('clipboard_write');
-    expect(n).toContain('share_text');
+    expect(n).toContain('clipboard');
+    expect(n).toContain('share');
     expect(n).toContain('open_url');
   });
 

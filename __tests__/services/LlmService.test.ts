@@ -873,7 +873,7 @@ describe('LlmService', () => {
       await service.sendMessage([{ role: 'user', content: 'Fetch a URL' }], {
         tools: [
           {
-            name: 'fetch_url',
+            name: 'web_fetch',
             description: 'Fetch a URL',
             input_schema: {
               type: 'object',

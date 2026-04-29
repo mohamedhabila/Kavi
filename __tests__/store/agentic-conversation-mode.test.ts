@@ -52,9 +52,9 @@ describe('SubAgentConfig enhanced fields', () => {
     const config: SubAgentConfig = {
       parentConversationId: 'conv-1',
       prompt: 'Research',
-      tools: ['web_search', 'fetch_url'],
+      tools: ['web_search', 'web_fetch'],
     };
-    expect(config.tools).toEqual(['web_search', 'fetch_url']);
+    expect(config.tools).toEqual(['web_search', 'web_fetch']);
   });
 
   it('all new fields are optional', () => {

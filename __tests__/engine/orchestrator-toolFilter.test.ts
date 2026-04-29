@@ -169,13 +169,13 @@ describe('Orchestrator — toolFilter', () => {
       conversationId: 'conv-filter-tools',
       systemPrompt: 'Test',
       messages: [makeMsg('user', 'Search the documentation and fetch the page')],
-      toolFilter: (name) => name === 'web_search' || name === 'fetch_url',
+      toolFilter: (name) => name === 'web_search' || name === 'web_fetch',
     };
 
     await runOrchestrator(options, callbacks);
 
     const [, streamOptions] = mockStreamMessage.mock.calls[0];
-    expect(streamOptions.tools.map((tool: any) => tool.name)).toEqual(['fetch_url', 'web_search']);
+    expect(streamOptions.tools.map((tool: any) => tool.name)).toEqual(['web_search', 'web_fetch']);
   });
 
   it('passes the filtered callable tool inventory into executeTool context', async () => {

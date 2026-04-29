@@ -10,11 +10,12 @@ describe('TOOL_DEFINITIONS', () => {
     expect(names).toContain('read_file');
     expect(names).toContain('write_file');
     expect(names).toContain('list_files');
-    expect(names).toContain('fetch_url');
-    expect(names).toContain('update_memory');
-    expect(names).toContain('create_task');
     expect(names).toContain('javascript');
     expect(names).toContain('python');
+    expect(names).not.toContain('fetch_url');
+    expect(names).not.toContain('update_memory');
+    expect(names).not.toContain('read_memory');
+    expect(names).not.toContain('create_task');
   });
 
   it('should have at least 7 tools', () => {
@@ -41,23 +42,6 @@ describe('TOOL_DEFINITIONS', () => {
     const writeFile = TOOL_DEFINITIONS.find((t) => t.name === 'write_file')!;
     expect(writeFile.input_schema.required).toContain('path');
     expect(writeFile.input_schema.required).toContain('content');
-  });
-
-  it('fetch_url should require url param', () => {
-    const fetchUrl = TOOL_DEFINITIONS.find((t) => t.name === 'fetch_url')!;
-    expect(fetchUrl.input_schema.required).toContain('url');
-    expect(fetchUrl.input_schema.properties.headers.additionalProperties.type).toBe('string');
-  });
-
-  it('update_memory should require content', () => {
-    const updateMemory = TOOL_DEFINITIONS.find((t) => t.name === 'update_memory')!;
-    expect(updateMemory.input_schema.required).toContain('content');
-  });
-
-  it('create_task should require schedule and prompt', () => {
-    const createTask = TOOL_DEFINITIONS.find((t) => t.name === 'create_task')!;
-    expect(createTask.input_schema.required).toContain('schedule');
-    expect(createTask.input_schema.required).toContain('prompt');
   });
 
   it('javascript should require either inline code or a workspace path', () => {

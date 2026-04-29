@@ -205,44 +205,34 @@ export const BROWSER_SNAPSHOT_TOOL: ToolDefinition = {
 // Observation
 // ---------------------------------------------------------------------------
 
-export const BROWSER_CONSOLE_TOOL: ToolDefinition = {
-  name: 'browser_console',
-  description: 'Get console messages from the remote browser page. Useful for debugging.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      sessionId: { type: 'string', description: 'Active browser session ID' },
-      level: { type: 'string', description: 'Filter by level: log, warn, error, info' },
-    },
-    required: ['sessionId'],
-  },
-};
-
-export const BROWSER_ERRORS_TOOL: ToolDefinition = {
-  name: 'browser_errors',
-  description: 'Get page errors (uncaught exceptions) from the remote browser.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      sessionId: { type: 'string', description: 'Active browser session ID' },
-      clear: { type: 'boolean', description: 'Clear errors after reading' },
-    },
-    required: ['sessionId'],
-  },
-};
-
-export const BROWSER_NETWORK_TOOL: ToolDefinition = {
-  name: 'browser_network',
+export const BROWSER_INSPECT_TOOL: ToolDefinition = {
+  name: 'browser_inspect',
   description:
-    'Get network requests made by the remote browser page. Useful for debugging API calls.',
+    'Inspect runtime diagnostics from a remote browser session. ' +
+    'Use kind to choose: console (console messages, optional level filter), errors (uncaught exceptions, optional clear), or network (XHR/fetch requests, optional substring filter and clear).',
   input_schema: {
     type: 'object',
     properties: {
       sessionId: { type: 'string', description: 'Active browser session ID' },
-      filter: { type: 'string', description: 'URL pattern filter (substring match)' },
-      clear: { type: 'boolean', description: 'Clear request log after reading' },
+      kind: {
+        type: 'string',
+        enum: ['console', 'errors', 'network'],
+        description: 'Diagnostic kind to fetch.',
+      },
+      level: {
+        type: 'string',
+        description: 'Console level filter (log, warn, error, info). Used when kind=console.',
+      },
+      filter: {
+        type: 'string',
+        description: 'URL substring filter. Used when kind=network.',
+      },
+      clear: {
+        type: 'boolean',
+        description: 'Clear the buffer after reading. Used when kind=errors or kind=network.',
+      },
     },
-    required: ['sessionId'],
+    required: ['sessionId', 'kind'],
   },
 };
 
@@ -524,9 +514,7 @@ export const ALL_BROWSER_TOOL_DEFINITIONS: ToolDefinition[] = [
   BROWSER_WAIT_TOOL,
   BROWSER_SCREENSHOT_TOOL,
   BROWSER_SNAPSHOT_TOOL,
-  BROWSER_CONSOLE_TOOL,
-  BROWSER_ERRORS_TOOL,
-  BROWSER_NETWORK_TOOL,
+  BROWSER_INSPECT_TOOL,
   BROWSER_COOKIES_TOOL,
   BROWSER_STORAGE_TOOL,
   BROWSER_EVALUATE_TOOL,

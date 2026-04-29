@@ -616,7 +616,6 @@ describe('executeTool — parity routing', () => {
     ['expo_eas_graphql', '{"query":"query { __typename }"}', 'executeExpoEasGraphql'],
     ['tool_catalog', '{}', 'executeToolCatalog'],
     ['poll_create', '{"question":"Pick one","options":["A","B"]}', 'executePollCreate'],
-    ['message_effect', '{"effectId":"confetti"}', 'executeMessageEffect'],
     ['speak', '{"text":"hello"}', 'executeSpeak'],
     ['agents_list', '{}', 'executeAgentsList'],
     ['agents_switch', '{"personaId":"p1"}', 'executeAgentsSwitch'],
@@ -656,36 +655,6 @@ describe('executeTool — parity routing', () => {
 });
 
 describe('executeTool — core tools routing', () => {
-  it('routes update_memory to conversation scope by default', async () => {
-    const result = await executeTool('update_memory', '{"content":"note"}', CONV_ID);
-    expect(result).toContain('Conversation memory updated');
-    expect(memoryStore.appendConversationMemory).toHaveBeenCalledWith(CONV_ID, 'note');
-    expect(memoryStore.appendGlobalMemory).not.toHaveBeenCalled();
-  });
-
-  it('routes update_memory to global scope when requested', async () => {
-    const result = await executeTool(
-      'update_memory',
-      '{"content":"note","scope":"global"}',
-      CONV_ID,
-    );
-
-    expect(result).toContain('Global memory updated');
-    expect(memoryStore.appendGlobalMemory).toHaveBeenCalledWith('note');
-  });
-
-  it('reads both conversation and global memory by default', async () => {
-    memoryStore.readConversationMemory.mockResolvedValueOnce('Conversation state');
-    memoryStore.readGlobalMemory.mockResolvedValueOnce('Global preference');
-
-    const result = await executeTool('read_memory', '{}', CONV_ID);
-
-    expect(result).toContain('## Conversation Memory');
-    expect(result).toContain('Conversation state');
-    expect(result).toContain('## Global Memory');
-    expect(result).toContain('Global preference');
-  });
-
   it('routes memory_search with the shared conversation scope', async () => {
     const result = await executeTool('memory_search', '{"query":"state"}', CONV_ID);
 
@@ -931,16 +900,6 @@ describe('executeTool — core tools routing', () => {
     );
 
     expect(result).toBe('42');
-  });
-
-  it('routes create_task', async () => {
-    const result = await executeTool(
-      'create_task',
-      '{"schedule":"0 * * * *","prompt":"hourly check"}',
-      CONV_ID,
-    );
-    const parsed = JSON.parse(result);
-    expect(parsed.status).toBe('task_created');
   });
 
   it('handles invalid JSON args gracefully', async () => {

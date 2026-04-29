@@ -28,7 +28,6 @@ describe('setup catalog', () => {
     const mediaGroup = grouped.find((group) => group.id === 'media');
 
     expect(mediaGroup?.definitions.map((definition) => definition.name)).toEqual([
-      'notify',
       'image_generate',
       'image_edit',
       'audio_transcribe',

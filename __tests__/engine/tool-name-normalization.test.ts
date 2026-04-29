@@ -21,7 +21,6 @@ describe('normalizeToolName', () => {
 
   it('preserves existing alias resolution', () => {
     expect(normalizeToolName('search_web')).toBe('web_search');
-    expect(normalizeToolName('schedule_task')).toBe('create_task');
     expect(normalizeToolName('record_evidence')).toBe('record_workflow_evidence');
     expect(normalizeToolName('workflow_evidence_read')).toBe('read_workflow_evidence');
     expect(normalizeToolName('send_email')).toBe('email_compose');

@@ -69,11 +69,9 @@ const ANTHROPIC_CACHEABLE_TOOL_PREFIX_NAMES = new Set([
   'write_file',
   'list_files',
   'javascript',
-  'update_memory',
-  'read_memory',
+  'python',
   'record_workflow_evidence',
   'read_workflow_evidence',
-  'create_task',
   'file_edit',
   'tool_catalog',
 ]);

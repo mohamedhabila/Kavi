@@ -177,10 +177,10 @@ const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> = {
       'Inspect the target first with workspace_list_files or workspace_read_file, then make focused changes with workspace_write_file or workspace_rename.',
   },
   web: {
-    tools: ['fetch_url', 'web_search', 'web_fetch'],
+    tools: ['web_search', 'web_fetch'],
     purpose: 'Search the web and fetch online documentation or pages.',
     guidance:
-      'Use web_search for discovery, then web_fetch or fetch_url to read the exact page you need.',
+      'Use web_search for discovery, then web_fetch to read the exact page you need.',
   },
   canvas: {
     tools: [
@@ -251,7 +251,7 @@ const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> = {
       'Sub-agents and sessions_send follow-up workers run in the background by default and keep working until completion unless you set timeoutMs. Use sessions_wait when you need one or more worker outputs before proceeding; completed wait results already include the same outputs that sessions_output would return. Use sessions_output later only when you need to fetch or recall a terminal deliverable without waiting again. Use sessions_surface_output when that deliverable should become the visible user answer directly, use sessions_history when you need transcript or reasoning trace, use sessions_status for live inspection or diagnosing drift, and reserve waitForCompletion for intentionally blocking the current spawn or send tool call.',
   },
   agents: {
-    tools: ['agents_list', 'agents_switch', 'agents_configure'],
+    tools: ['agents'],
     purpose: 'Inspect, switch, or configure agent/persona behavior.',
   },
   calendar: {
@@ -264,9 +264,7 @@ const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> = {
     tools: [
       'contacts_pick',
       'contacts_manage_access',
-      'contacts_view',
-      'contacts_edit',
-      'contacts_create',
+      'contacts_form',
       'contacts_share',
       'contacts_search_full',
       'contacts_get_full',
@@ -281,23 +279,15 @@ const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> = {
       'phone_call',
       'maps_open',
       'location_current',
-      'clipboard_read',
-      'clipboard_write',
-      'share_text',
-      'share_url',
-      'share_file',
-      'share_contact',
+      'clipboard',
+      'share',
       'open_url',
       'notification_send',
       'notification_schedule',
-      'device_status',
-      'device_info',
-      'device_permissions',
-      'device_health',
+      'device_query',
       'photos_latest',
       'camera_clip',
       'screen_record',
-      'haptic_feedback',
     ],
     purpose: 'Device, clipboard, notifications, location, sharing, and other mobile utility tools.',
   },
@@ -309,27 +299,22 @@ const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> = {
   },
   memory: {
     tools: [
-      'read_memory',
-      'update_memory',
       'read_workflow_evidence',
       'record_workflow_evidence',
       'memory_search',
       'memory_recall',
       'memory_remember',
-      'memory_pin',
-      'memory_unpin',
-      'memory_forget',
-      'memory_block_read',
-      'memory_block_edit',
+      'memory_manage',
+      'memory_block',
     ],
     purpose:
       'Read, write, and search persisted memory plus structured workflow evidence and the living-memory fact/block store.',
     guidance:
-      'Use workflow evidence for run-scoped facts, verification notes, risks, decisions, and artifacts that should stay attached to the current agent run. Use conversation memory for broader task-local state shared across this conversation, and global memory only for durable facts that should persist across future conversations. ' +
-      'Prefer memory_recall + memory_remember for structured atomic facts about the user/project/concepts (subject + predicate + value); they support pinning, supersession, and history. Use memory_search when you need fuzzy or unstructured search instead. memory_block_read/edit operate on short editable scratch surfaces (persona, scratchpad) that always appear in the focus header.',
+      'Use workflow evidence for run-scoped facts, verification notes, risks, decisions, and artifacts that should stay attached to the current agent run. ' +
+      'Prefer memory_recall + memory_remember for structured atomic facts about the user/project/concepts (subject + predicate + value); memory_manage covers pin/unpin/forget. Use memory_search when you need fuzzy or unstructured search instead. memory_block (action=read|edit) operates on short editable scratch surfaces (persona, scratchpad) that always appear in the focus header.',
   },
   automation: {
-    tools: ['create_task', 'cron', 'notify', 'notification_send', 'notification_schedule'],
+    tools: ['cron', 'notification_send', 'notification_schedule'],
     purpose: 'Create scheduled tasks, cron jobs, and user alerts.',
   },
   code: {
@@ -343,8 +328,8 @@ const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> = {
     purpose: 'Read and extract content from PDF documents.',
   },
   interaction: {
-    tools: ['poll_create', 'message_effect'],
-    purpose: 'Interactive response helpers such as polls and message effects.',
+    tools: ['poll_create'],
+    purpose: 'Interactive response helpers such as polls.',
   },
 };
 

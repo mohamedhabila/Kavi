@@ -352,6 +352,7 @@ const DEFAULT_POLICY: ApprovalPolicy = {
     'contacts_view',
     'contacts_edit',
     'contacts_create',
+    'contacts_form',
     'contacts_share',
     'contacts_search_full',
     'contacts_get_full',
@@ -362,6 +363,7 @@ const DEFAULT_POLICY: ApprovalPolicy = {
     'share_file',
     'share_contact',
     'clipboard_write',
+    'clipboard',
     'share',
   ],
   autoApproveTools: [

@@ -11,7 +11,6 @@ import {
   GLOB_SEARCH_TOOL,
   TEXT_SEARCH_TOOL,
   CRON_TOOL,
-  NOTIFICATION_TOOL,
   IMAGE_GEN_TOOL,
   IMAGE_EDIT_TOOL,
 } from './extended';
@@ -83,82 +82,6 @@ const CORE_TOOLS: ToolDefinition[] = [
         path: {
           type: 'string',
           description: 'Directory path relative to workspace root (default: root)',
-        },
-      },
-      required: [],
-    },
-  },
-  {
-    name: 'fetch_url',
-    description:
-      'Fetch a URL via HTTP and return the response body. Response is truncated to 100KB.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        url: {
-          type: 'string',
-          description: 'The URL to fetch',
-        },
-        method: {
-          type: 'string',
-          description: 'HTTP method (default: GET)',
-        },
-        headers: {
-          type: 'object',
-          description: 'Request headers as key-value pairs',
-          additionalProperties: {
-            type: 'string',
-          },
-        },
-        body: {
-          type: 'string',
-          description: 'Request body (for POST/PUT/PATCH)',
-        },
-      },
-      required: ['url'],
-    },
-  },
-  {
-    name: 'update_memory',
-    description:
-      'Update persisted memory. Conversation memory is shared only inside the current conversation across the supervisor, sub-agents, and pilot. ' +
-      'Global memory persists across future conversations. Default to scope "conversation" unless the fact is clearly durable beyond this conversation. ' +
-      'Use mode "append" (default) to add to existing memory, or "replace" to overwrite the entire target scope.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        content: {
-          type: 'string',
-          description: 'Content to write to the persistent memory',
-        },
-        scope: {
-          type: 'string',
-          enum: ['conversation', 'global'],
-          description:
-            'Memory scope. Default: "conversation". Use "global" only for durable facts that should persist across future conversations.',
-        },
-        mode: {
-          type: 'string',
-          enum: ['append', 'replace'],
-          description:
-            '"append" (default) adds to existing memory. "replace" overwrites the entire selected scope with this content. Use replace carefully — read_memory first to avoid losing data.',
-        },
-      },
-      required: ['content'],
-    },
-  },
-  {
-    name: 'read_memory',
-    description:
-      'Read persisted memory. By default this returns both conversation memory and global memory in separate sections so you can compare scopes before writing. ' +
-      'Use scope "conversation" or "global" when you only need one layer.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        scope: {
-          type: 'string',
-          enum: ['all', 'conversation', 'global'],
-          description: 'Which memory scope to read. Default: "all".',
         },
       },
       required: [],
@@ -300,27 +223,6 @@ const CORE_TOOLS: ToolDefinition[] = [
     strict: true,
   },
   {
-    name: 'create_task',
-    description:
-      'Create a scheduled recurring task. The task will run automatically on the ' +
-      'specified schedule and save the result into the app conversation history. Uses cron expressions.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        schedule: {
-          type: 'string',
-          description: 'Cron expression, e.g. "0 9 * * 1-5" for 9am weekdays',
-        },
-        prompt: {
-          type: 'string',
-          description: 'The prompt/instruction to execute on each run',
-        },
-      },
-      required: ['schedule', 'prompt'],
-    },
-    strict: true,
-  },
-  {
     name: 'javascript',
     description:
       'Execute synchronous JavaScript inline or from a workspace entry file and return the result. ' +
@@ -439,7 +341,6 @@ const EXTENDED_TOOLS: ToolDefinition[] = [
   GLOB_SEARCH_TOOL,
   TEXT_SEARCH_TOOL,
   CRON_TOOL,
-  NOTIFICATION_TOOL,
   IMAGE_GEN_TOOL,
   IMAGE_EDIT_TOOL,
 ];

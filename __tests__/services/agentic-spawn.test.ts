@@ -135,7 +135,7 @@ describe('spawnSubAgent with tools whitelist', () => {
       {
         parentConversationId: 'conv-1',
         prompt: 'Research task',
-        tools: ['web_search', 'read_file', 'fetch_url'],
+        tools: ['web_search', 'read_file', 'web_fetch'],
       },
       mockProvider,
     );
@@ -144,7 +144,7 @@ describe('spawnSubAgent with tools whitelist', () => {
     const filter = capturedOrchestratorOptions.toolFilter!;
     expect(filter('web_search')).toBe(true);
     expect(filter('read_file')).toBe(true);
-    expect(filter('fetch_url')).toBe(true);
+    expect(filter('web_fetch')).toBe(true);
     expect(filter('ssh_exec')).toBe(false);
     expect(filter('canvas_create')).toBe(false);
   });

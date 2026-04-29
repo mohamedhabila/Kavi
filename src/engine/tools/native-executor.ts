@@ -676,6 +676,13 @@ export async function executeNativeTool(name: string, argsString: string): Promi
       return executeContactsEdit(args);
     case 'contacts_create':
       return executeContactsCreate(args);
+    case 'contacts_form': {
+      const action = typeof args?.action === 'string' ? args.action.toLowerCase() : '';
+      if (action === 'view') return executeContactsView(args);
+      if (action === 'edit') return executeContactsEdit(args);
+      if (action === 'create') return executeContactsCreate(args);
+      return 'Error: contacts_form requires action ∈ {view, edit, create}';
+    }
     case 'contacts_share':
       return executeContactsShare(args);
     case 'contacts_search_full':
@@ -692,6 +699,12 @@ export async function executeNativeTool(name: string, argsString: string): Promi
       return executeClipboardRead();
     case 'clipboard_write':
       return executeClipboardWrite(args);
+    case 'clipboard': {
+      const action = typeof args?.action === 'string' ? args.action.toLowerCase() : '';
+      if (action === 'read') return executeClipboardRead();
+      if (action === 'write') return executeClipboardWrite(args);
+      return 'Error: clipboard requires action ∈ {read, write}';
+    }
     case 'share_text':
       return executeShareText(args);
     case 'share_url':
@@ -700,8 +713,15 @@ export async function executeNativeTool(name: string, argsString: string): Promi
       return executeShareFile(args);
     case 'share_contact':
       return executeShareContact(args);
-    case 'share':
+    case 'share': {
+      const kind = typeof args?.kind === 'string' ? args.kind.toLowerCase() : '';
+      if (kind === 'text') return executeShareText(args);
+      if (kind === 'url') return executeShareUrl(args);
+      if (kind === 'file') return executeShareFile(args);
+      if (kind === 'contact') return executeShareContact(args);
+      // Legacy back-compat: bare share() with no kind delegates to existing executor.
       return executeShare(args);
+    }
     case 'open_url':
       return executeOpenUrl(args);
     case 'notification_send':
@@ -716,6 +736,14 @@ export async function executeNativeTool(name: string, argsString: string): Promi
       return executeDevicePermissions();
     case 'device_health':
       return executeDeviceHealth();
+    case 'device_query': {
+      const kind = typeof args?.kind === 'string' ? args.kind.toLowerCase() : '';
+      if (kind === 'status') return executeDeviceStatus();
+      if (kind === 'info') return executeDeviceInfo();
+      if (kind === 'permissions') return executeDevicePermissions();
+      if (kind === 'health') return executeDeviceHealth();
+      return 'Error: device_query requires kind ∈ {status, info, permissions, health}';
+    }
     case 'photos_latest':
       return executePhotosLatest(args);
     case 'camera_clip':

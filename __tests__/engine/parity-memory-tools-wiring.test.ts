@@ -7,6 +7,8 @@ import {
   MEMORY_FORGET_TOOL,
   MEMORY_BLOCK_READ_TOOL,
   MEMORY_BLOCK_EDIT_TOOL,
+  MEMORY_MANAGE_TOOL,
+  MEMORY_BLOCK_TOOL,
 } from '../../src/engine/tools/parity-definitions';
 import {
   executeMemoryRecall,
@@ -43,6 +45,13 @@ const NEW_MEMORY_TOOL_NAMES = [
   'memory_block_edit',
 ];
 
+const REGISTERED_MEMORY_TOOL_NAMES = [
+  'memory_recall',
+  'memory_remember',
+  'memory_manage',
+  'memory_block',
+];
+
 describe('living-memory tool wiring', () => {
   beforeEach(() => {
     closeMemoryDb();
@@ -66,8 +75,11 @@ describe('living-memory tool wiring', () => {
       MEMORY_FORGET_TOOL,
       MEMORY_BLOCK_READ_TOOL,
       MEMORY_BLOCK_EDIT_TOOL,
+      MEMORY_MANAGE_TOOL,
+      MEMORY_BLOCK_TOOL,
     ];
-    expect(defs.map((d) => d.name).sort()).toEqual([...NEW_MEMORY_TOOL_NAMES].sort());
+    const expected = [...NEW_MEMORY_TOOL_NAMES, 'memory_manage', 'memory_block'].sort();
+    expect(defs.map((d) => d.name).sort()).toEqual(expected);
     for (const def of defs) {
       expect(typeof def.description).toBe('string');
       expect(def.input_schema.type).toBe('object');
@@ -76,7 +88,7 @@ describe('living-memory tool wiring', () => {
 
   it('registers all new memory tools in ALL_PARITY_TOOL_DEFINITIONS', () => {
     const names = new Set(ALL_PARITY_TOOL_DEFINITIONS.map((t) => t.name));
-    for (const name of NEW_MEMORY_TOOL_NAMES) {
+    for (const name of REGISTERED_MEMORY_TOOL_NAMES) {
       expect(names.has(name)).toBe(true);
     }
   });
@@ -85,7 +97,7 @@ describe('living-memory tool wiring', () => {
     const raw = await executeToolCatalog({ category: 'memory' });
     const result = JSON.parse(raw);
     const seen = JSON.stringify(result);
-    for (const name of NEW_MEMORY_TOOL_NAMES) {
+    for (const name of REGISTERED_MEMORY_TOOL_NAMES) {
       expect(seen).toContain(name);
     }
   });

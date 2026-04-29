@@ -7,8 +7,8 @@ import { ALL_WORKSPACE_FILE_TOOL_DEFINITIONS } from '../../src/engine/tools/work
 import { TOOL_DEFINITIONS } from '../../src/engine/tools/definitions';
 
 describe('ALL_BROWSER_TOOL_DEFINITIONS', () => {
-  it('exports exactly 24 browser tools', () => {
-    expect(ALL_BROWSER_TOOL_DEFINITIONS).toHaveLength(24);
+  it('exports exactly 22 browser tools', () => {
+    expect(ALL_BROWSER_TOOL_DEFINITIONS).toHaveLength(22);
   });
 
   const expectedNames = [
@@ -25,9 +25,7 @@ describe('ALL_BROWSER_TOOL_DEFINITIONS', () => {
     'browser_wait',
     'browser_screenshot',
     'browser_snapshot',
-    'browser_console',
-    'browser_errors',
-    'browser_network',
+    'browser_inspect',
     'browser_cookies',
     'browser_storage',
     'browser_evaluate',
@@ -70,9 +68,7 @@ describe('ALL_BROWSER_TOOL_DEFINITIONS', () => {
       'browser_wait',
       'browser_screenshot',
       'browser_snapshot',
-      'browser_console',
-      'browser_errors',
-      'browser_network',
+      'browser_inspect',
       'browser_cookies',
       'browser_storage',
       'browser_evaluate',
@@ -118,17 +114,12 @@ describe('ALL_BROWSER_TOOL_DEFINITIONS', () => {
 });
 
 describe('ALL_WORKSPACE_FILE_TOOL_DEFINITIONS', () => {
-  it('exports exactly 9 workspace tools', () => {
-    expect(ALL_WORKSPACE_FILE_TOOL_DEFINITIONS).toHaveLength(9);
+  it('exports exactly 4 workspace tools', () => {
+    expect(ALL_WORKSPACE_FILE_TOOL_DEFINITIONS).toHaveLength(4);
   });
 
   const expectedNames = [
-    'workspace_read_file',
-    'workspace_write_file',
-    'workspace_list_files',
-    'workspace_mkdir',
-    'workspace_rename',
-    'workspace_delete',
+    'workspace_fs',
     'workspace_status',
     'workspace_launch_browser',
     'workspace_delegate_task',
@@ -159,23 +150,10 @@ describe('ALL_WORKSPACE_FILE_TOOL_DEFINITIONS', () => {
     }
   });
 
-  it('workspace_read_file requires path', () => {
-    const tool = ALL_WORKSPACE_FILE_TOOL_DEFINITIONS.find((t) => t.name === 'workspace_read_file')!;
-    expect(tool.input_schema.required).toContain('path');
-  });
-
-  it('workspace_write_file requires path and content', () => {
-    const tool = ALL_WORKSPACE_FILE_TOOL_DEFINITIONS.find(
-      (t) => t.name === 'workspace_write_file',
-    )!;
-    expect(tool.input_schema.required).toContain('path');
-    expect(tool.input_schema.required).toContain('content');
-  });
-
-  it('workspace_rename requires oldPath and newPath', () => {
-    const tool = ALL_WORKSPACE_FILE_TOOL_DEFINITIONS.find((t) => t.name === 'workspace_rename')!;
-    expect(tool.input_schema.required).toContain('oldPath');
-    expect(tool.input_schema.required).toContain('newPath');
+  it('workspace_fs requires action and targetId', () => {
+    const tool = ALL_WORKSPACE_FILE_TOOL_DEFINITIONS.find((t) => t.name === 'workspace_fs')!;
+    expect(tool.input_schema.required).toContain('action');
+    expect(tool.input_schema.required).toContain('targetId');
   });
 
   it('workspace_delegate_task requires prompt', () => {

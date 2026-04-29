@@ -331,24 +331,6 @@ export const CRON_TOOL: ToolDefinition = {
   },
 };
 
-// ── Notification Tool ────────────────────────────────────────────────────
-
-export const NOTIFICATION_TOOL: ToolDefinition = {
-  name: 'notify',
-  description:
-    'Send a local notification to the user immediately. Use for reminders, task completions, or alerts.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      title: { type: 'string', description: 'Notification title' },
-      body: { type: 'string', description: 'Notification body text' },
-      delay: { type: 'number', description: 'Delay in seconds before showing (default: 0)' },
-    },
-    required: ['title', 'body'],
-  },
-  strict: true,
-};
-
 // ── Image Generation Tool ────────────────────────────────────────────────
 
 export const IMAGE_GEN_TOOL: ToolDefinition = {

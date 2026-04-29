@@ -570,7 +570,7 @@ Do not delegate merely for ceremony. If direct tool work already completed the s
 CRITICAL: Apply this protocol to EVERY new user message in this conversation, not just the first one.
 Do NOT shortcut the agentic flow just because you handled previous requests with sub-agents.
 Each new user request deserves its own Assess → Plan → Spawn → Monitor → Synthesize cycle.
-When spawning sub-agents, pass a focused 'tools' array in sessions_spawn so the sub-agent has access to the specific tools it needs for its task (e.g., ['web_search', 'fetch_url'] for research, ['ssh_exec', 'ssh_read_file'] for server work, ['read_file', 'file_edit', 'write_file', 'list_files', 'glob_search', 'text_search'] for repo coding, ['workspace_status', 'workspace_list_files', 'workspace_read_file', 'workspace_write_file'] only for explicit external workspace targets).
+When spawning sub-agents, pass a focused 'tools' array in sessions_spawn so the sub-agent has access to the specific tools it needs for its task (e.g., ['web_search', 'web_fetch'] for research, ['ssh_exec', 'ssh_read_file'] for server work, ['read_file', 'file_edit', 'write_file', 'list_files', 'glob_search', 'text_search'] for repo coding, ['workspace_status', 'workspace_list_files', 'workspace_read_file', 'workspace_write_file'] only for explicit external workspace targets).
 If a workstream has dependencies, wait for the prerequisite workstreams to complete and inspect their outputs before spawning the dependent worker.
 Do not micromanage sub-agent maxIterations from the supervisor. Workers already carry a generous internal iteration budget suitable for modern reasoning models.
 Do not impose hard time limits on sub-agents. Let workers keep running while they are still making progress toward the objective, and cancel plus respawn them only when they drift or become redundant. Prefer background sessions_spawn, use sessions_wait when you need worker outputs before proceeding, remember that completed sessions_wait results already include the same outputs that sessions_output would return, use sessions_output later only when you need to fetch or recall a terminal deliverable without waiting again, use sessions_surface_output when that deliverable should be surfaced directly to the user without rewriting it, use sessions_history when you need transcript or reasoning trace, use sessions_status when you need live inspection, and reserve waitForCompletion for intentionally blocking the current spawn or send call.
@@ -591,7 +591,7 @@ Do not manipulate or persuade anyone to expand access or disable safeguards.`;
   const skillsSection = normalizedSkillsPrompt.trim()
     ? `## Skills (mandatory)
 Before replying: scan <available_skills>. If one clearly applies, read its SKILL.md with read_file then follow it. If the catalog lists bundle_root or python_scripts, use those exact workspace paths when reading sidecars or running the python tool. If none apply, skip.
-On mobile, translate curl/shell commands to existing tools (web_fetch, fetch_url).
+On mobile, translate curl/shell commands to existing tools (web_fetch).
 ${normalizedSkillsPrompt}`
     : '';
 
@@ -1619,7 +1619,7 @@ function isParallelizableToolName(name: string): boolean {
 
   // Dynamic MCP and skill tools stay sequential until they advertise a
   // concrete read-only contract. Prefix-only parallelism is unsafe.
-  return /^(read_file|list_files|glob_search|text_search|javascript|python|tool_catalog|web_search|web_fetch|fetch_url|memory_search|read_workflow_evidence|pdf_read|canvas_list|workspace_status|workspace_read_file|workspace_list_files|ssh_read_file|ssh_list_directory|ssh_background_job_(status|wait)|sessions_list|sessions_status|sessions_history|sessions_output|wait|expo_eas_(status|probe|workflow_status|workflow_runs|workflow_wait)|browser_(status|snapshot|screenshot|console|errors|network|cookies|pdf))$/.test(
+  return /^(read_file|list_files|glob_search|text_search|javascript|python|tool_catalog|web_search|web_fetch|memory_search|read_workflow_evidence|pdf_read|canvas_list|workspace_status|workspace_read_file|workspace_list_files|ssh_read_file|ssh_list_directory|ssh_background_job_(status|wait)|sessions_list|sessions_status|sessions_history|sessions_output|wait|expo_eas_(status|probe|workflow_status|workflow_runs|workflow_wait)|browser_(status|snapshot|screenshot|console|errors|network|cookies|pdf))$/.test(
     name,
   );
 }

@@ -122,7 +122,7 @@ describe('isToolAllowedBySandbox', () => {
 
   it('allows safe tools in "safe-only" mode', () => {
     expect(isToolAllowedBySandbox('read_file', 'safe-only')).toBe(true);
-    expect(isToolAllowedBySandbox('update_memory', 'safe-only')).toBe(true);
+    expect(isToolAllowedBySandbox('memory_search', 'safe-only')).toBe(true);
     expect(isToolAllowedBySandbox('web_search', 'safe-only')).toBe(true);
     expect(isToolAllowedBySandbox('browser_navigate', 'safe-only')).toBe(true);
     expect(isToolAllowedBySandbox('browser_snapshot', 'safe-only')).toBe(true);
@@ -559,7 +559,7 @@ describe('persistence', () => {
       {
         parentConversationId: 'conv-1',
         prompt: 'research with constrained tools',
-        tools: 'web_search, fetch_url' as any,
+        tools: 'web_search, web_fetch' as any,
       },
       mockProvider,
     );
@@ -567,7 +567,7 @@ describe('persistence', () => {
     expect(result.status).toBe('completed');
     expect(runOrchestrator).toHaveBeenCalledWith(
       expect.objectContaining({
-        preferredTools: ['web_search', 'fetch_url'],
+        preferredTools: ['web_search', 'web_fetch'],
       }),
       expect.anything(),
     );
@@ -578,14 +578,14 @@ describe('persistence', () => {
     ).toEqual(
       expect.objectContaining({
         config: expect.objectContaining({
-          tools: ['web_search', 'fetch_url'],
+          tools: ['web_search', 'web_fetch'],
         }),
       }),
     );
     expect(getSessionContext(result.sessionId)).toEqual(
       expect.objectContaining({
         config: expect.objectContaining({
-          tools: ['web_search', 'fetch_url'],
+          tools: ['web_search', 'web_fetch'],
         }),
       }),
     );
@@ -1038,14 +1038,14 @@ describe('sub-agent preferredTools pass-through', () => {
       {
         parentConversationId: 'conv-1',
         prompt: 'Research API endpoints',
-        tools: ['web_search', 'fetch_url', 'read_file'],
+        tools: ['web_search', 'web_fetch', 'read_file'],
       },
       mockProvider,
     );
 
     expect(runOrchestrator).toHaveBeenCalledWith(
       expect.objectContaining({
-        preferredTools: ['web_search', 'fetch_url', 'read_file'],
+        preferredTools: ['web_search', 'web_fetch', 'read_file'],
       }),
       expect.any(Object),
     );

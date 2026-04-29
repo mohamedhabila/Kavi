@@ -69,17 +69,9 @@ import {
   executeAgentsConfigure,
 } from './parity-executor';
 import { parseMcpToolName, executeMcpTool } from '../../services/mcp/bridge';
-import { isAllowedUrl } from '../../services/security/ssrf';
 import { mcpManager } from '../../services/mcp/manager';
 import { parseSkillToolName, executeSkillTool } from '../../services/skills/manager';
-import {
-  appendConversationMemory,
-  appendGlobalMemory,
-  readConversationMemory,
-  readGlobalMemory,
-  writeConversationMemory,
-  writeGlobalMemory,
-} from '../../services/memory/store';
+import { readConversationMemory } from '../../services/memory/store';
 import { getSubAgent } from '../../services/agents/subAgent';
 import { buildAutomaticPythonEvidenceEntries } from '../../services/agents/automaticEvidence';
 import {
@@ -139,7 +131,6 @@ import type {
 } from '../../types';
 import { normalizeToolName } from './toolNameNormalization';
 
-const MAX_FETCH_SIZE = 100 * 1024; // 100KB
 const PYTHON_WORKSPACE_MAX_FILES = 128;
 const PYTHON_WORKSPACE_MAX_BYTES = 8 * 1024 * 1024;
 const JAVASCRIPT_WORKSPACE_MAX_FILES = 128;
@@ -298,9 +289,11 @@ const NATIVE_TOOL_NAMES = new Set([
   'contacts_get_full',
   'contacts_search',
   'contacts_get',
+  'contacts_form',
   'location_current',
   'clipboard_read',
   'clipboard_write',
+  'clipboard',
   'share_text',
   'share_url',
   'share_file',
@@ -313,6 +306,7 @@ const NATIVE_TOOL_NAMES = new Set([
   'device_info',
   'device_permissions',
   'device_health',
+  'device_query',
   'photos_latest',
   'camera_clip',
   'screen_record',
@@ -350,6 +344,8 @@ const PARITY_TOOL_NAMES = new Set([
   'memory_forget',
   'memory_block_read',
   'memory_block_edit',
+  'memory_manage',
+  'memory_block',
   'ssh_exec',
   'ssh_background_job_status',
   'ssh_background_job_wait',
@@ -359,6 +355,7 @@ const PARITY_TOOL_NAMES = new Set([
   'ssh_rename_path',
   'ssh_delete_path',
   'ssh_make_directory',
+  'ssh_fs',
   'expo_eas_create_project',
   'expo_eas_list_projects',
   'expo_eas_status',
@@ -378,6 +375,7 @@ const PARITY_TOOL_NAMES = new Set([
   'agents_list',
   'agents_switch',
   'agents_configure',
+  'agents',
 ]);
 
 const BROWSER_TOOL_NAMES = new Set([
@@ -397,6 +395,7 @@ const BROWSER_TOOL_NAMES = new Set([
   'browser_console',
   'browser_errors',
   'browser_network',
+  'browser_inspect',
   'browser_cookies',
   'browser_storage',
   'browser_evaluate',
@@ -408,6 +407,7 @@ const BROWSER_TOOL_NAMES = new Set([
 ]);
 
 const WORKSPACE_TOOL_NAMES = new Set([
+  'workspace_fs',
   'workspace_read_file',
   'workspace_write_file',
   'workspace_list_files',
@@ -574,161 +574,6 @@ async function executeListFiles(args: { path?: string }, conversationId: string)
     .sort();
 
   return result.length > 0 ? result.join('\n') : '(empty directory)';
-}
-
-async function executeFetchUrl(args: {
-  url: string;
-  method?: string;
-  headers?: Record<string, unknown>;
-  body?: string;
-}): Promise<string> {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const url = new URL(args.url);
-    if (!['http:', 'https:'].includes(url.protocol)) {
-      return `Error: only http and https URLs are allowed`;
-    }
-
-    // SSRF protection — block private/internal addresses
-    if (!isAllowedUrl(args.url)) {
-      return `Error: URL blocked by security policy (private/internal address)`;
-    }
-
-    const controller = new AbortController();
-    timeout = setTimeout(() => controller.abort(), 30000);
-    const normalizedHeaders = Object.fromEntries(
-      Object.entries(args.headers || {}).map(([key, value]) => [key, String(value)]),
-    );
-
-    const response = await fetch(args.url, {
-      method: (args.method || 'GET').toUpperCase(),
-      headers: normalizedHeaders,
-      body: args.body,
-      credentials: 'omit',
-      signal: controller.signal,
-    });
-
-    const text = await response.text();
-    const truncated =
-      text.length > MAX_FETCH_SIZE
-        ? text.slice(0, MAX_FETCH_SIZE) + '\n\n[Truncated — response exceeded 100KB]'
-        : text;
-
-    return `HTTP ${response.status}\n\n${truncated}`;
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return `Error fetching URL: ${message}`;
-  } finally {
-    if (timeout) {
-      clearTimeout(timeout);
-    }
-  }
-}
-
-type ReadMemoryScope = 'all' | 'conversation' | 'global';
-type WriteMemoryScope = 'conversation' | 'global';
-
-function resolveReadMemoryScope(
-  args: Record<string, unknown>,
-): { value: ReadMemoryScope } | { error: string } {
-  const scopeArg = getOptionalToolStringArg(args, 'scope', 'read_memory');
-  if (scopeArg.error) {
-    return { error: scopeArg.error };
-  }
-
-  const normalized = (scopeArg.value || 'all').trim().toLowerCase();
-  if (normalized === 'all' || normalized === 'conversation' || normalized === 'global') {
-    return { value: normalized };
-  }
-
-  return { error: 'Error: "scope" for read_memory must be one of: all, conversation, global' };
-}
-
-function resolveWriteMemoryScope(
-  args: Record<string, unknown>,
-): { value: WriteMemoryScope } | { error: string } {
-  const scopeArg = getOptionalToolStringArg(args, 'scope', 'update_memory');
-  if (scopeArg.error) {
-    return { error: scopeArg.error };
-  }
-
-  const normalized = (scopeArg.value || 'conversation').trim().toLowerCase();
-  if (normalized === 'conversation' || normalized === 'global') {
-    return { value: normalized };
-  }
-
-  return { error: 'Error: "scope" for update_memory must be one of: conversation, global' };
-}
-
-function formatMemorySection(title: string, content: string | null): string {
-  return `## ${title}\n${content || `(${title} is empty)`}`;
-}
-
-async function executeUpdateMemory(
-  args: Record<string, unknown>,
-  conversationMemoryId: string,
-): Promise<string> {
-  const contentArg = requireToolStringArg(args, 'content', 'update_memory', { allowEmpty: true });
-  if (contentArg.error) {
-    return contentArg.error;
-  }
-
-  const modeValue = typeof args.mode === 'string' ? args.mode.trim().toLowerCase() : 'append';
-  if (modeValue !== 'append' && modeValue !== 'replace') {
-    return 'Error: "mode" for update_memory must be one of: append, replace';
-  }
-
-  const scope = resolveWriteMemoryScope(args);
-  if ('error' in scope) {
-    return scope.error;
-  }
-
-  const content = contentArg.value || '';
-  const targetLabel = scope.value === 'conversation' ? 'Conversation memory' : 'Global memory';
-
-  if (scope.value === 'global') {
-    if (modeValue === 'replace') {
-      writeGlobalMemory(content);
-      return `${targetLabel} replaced (${content.length} chars written)`;
-    }
-    await appendGlobalMemory(content);
-    return `${targetLabel} updated (${content.length} chars appended)`;
-  }
-
-  if (modeValue === 'replace') {
-    writeConversationMemory(conversationMemoryId, content);
-    return `${targetLabel} replaced (${content.length} chars written)`;
-  }
-
-  await appendConversationMemory(conversationMemoryId, content);
-  return `${targetLabel} updated (${content.length} chars appended)`;
-}
-
-async function executeReadMemory(
-  args: Record<string, unknown>,
-  conversationMemoryId: string,
-): Promise<string> {
-  const scope = resolveReadMemoryScope(args);
-  if ('error' in scope) {
-    return scope.error;
-  }
-
-  const conversationContent =
-    scope.value === 'global' ? null : await readConversationMemory(conversationMemoryId);
-  const globalContent = scope.value === 'conversation' ? null : await readGlobalMemory();
-
-  if (scope.value === 'conversation') {
-    return conversationContent || '(Conversation memory is empty)';
-  }
-
-  if (scope.value === 'global') {
-    return globalContent || '(Global memory is empty)';
-  }
-
-  return [
-    formatMemorySection('Conversation Memory', conversationContent),
-    formatMemorySection('Global Memory', globalContent),
-  ].join('\n\n');
 }
 
 type WorkflowEvidenceTarget = {
@@ -2346,7 +2191,9 @@ async function executeToolInner(
       case 'memory_unpin':
       case 'memory_forget':
       case 'memory_block_read':
-      case 'memory_block_edit': {
+      case 'memory_block_edit':
+      case 'memory_manage':
+      case 'memory_block': {
         // Privacy opt-out. When the user has disabled long-term
         // memory, every memory_* tool returns a uniform "permission_denied"
         // payload so the agent can react gracefully and the SQLite layer is
@@ -2372,7 +2219,41 @@ async function executeToolInner(
         if (name === 'memory_unpin') return executeMemoryUnpin(args);
         if (name === 'memory_forget') return executeMemoryForget(args);
         if (name === 'memory_block_read') return executeMemoryBlockRead(args);
-        return executeMemoryBlockEdit(args);
+        if (name === 'memory_block_edit') return executeMemoryBlockEdit(args);
+        if (name === 'memory_manage') {
+          const action =
+            args && typeof args.action === 'string' ? String(args.action).toLowerCase() : '';
+          if (action === 'pin') return executeMemoryPin({ factId: args?.factId as string });
+          if (action === 'unpin') return executeMemoryUnpin({ factId: args?.factId as string });
+          if (action === 'forget')
+            return executeMemoryForget({
+              factId: args?.factId as string,
+              mode: args?.mode as 'invalidate' | 'delete' | undefined,
+            });
+          return JSON.stringify({
+            ok: false,
+            error: 'memory_manage: action must be one of pin, unpin, forget.',
+          });
+        }
+        if (name === 'memory_block') {
+          const blockAction =
+            args && typeof args.action === 'string' ? String(args.action).toLowerCase() : '';
+          if (blockAction === 'read') {
+            return executeMemoryBlockRead({ label: args?.label });
+          }
+          if (blockAction === 'edit') {
+            return executeMemoryBlockEdit({
+              label: args?.label as string,
+              content: args?.content as string,
+              replace: args?.replace,
+            });
+          }
+          return JSON.stringify({
+            ok: false,
+            error: 'memory_block: action must be one of read, edit.',
+          });
+        }
+        return `Error: unknown memory_* tool "${name}"`;
       }
       case 'ssh_exec':
         return executeSshExec(args);
@@ -2380,6 +2261,31 @@ async function executeToolInner(
         return executeSshBackgroundJobStatus(args);
       case 'ssh_background_job_wait':
         return executeSshBackgroundJobWait(args);
+      case 'ssh_fs': {
+        const action =
+          args && typeof args.action === 'string' ? String(args.action).toLowerCase() : '';
+        switch (action) {
+          case 'list':
+          case 'ls':
+            return executeSshListDirectory(args);
+          case 'read':
+            return executeSshReadFile(args);
+          case 'write':
+            return executeSshWriteFile(args);
+          case 'rename':
+          case 'move':
+            return executeSshRenamePath(args);
+          case 'delete':
+          case 'remove':
+          case 'rm':
+            return executeSshDeletePath(args);
+          case 'mkdir':
+          case 'make_directory':
+            return executeSshMakeDirectory(args);
+          default:
+            return `Error: ssh_fs requires action ∈ {list, read, write, rename, delete, mkdir}`;
+        }
+      }
       case 'ssh_list_directory':
         return executeSshListDirectory(args);
       case 'ssh_read_file':
@@ -2434,6 +2340,13 @@ async function executeToolInner(
         return executeAgentsSwitch(args, conversationId);
       case 'agents_configure':
         return executeAgentsConfigure(args);
+      case 'agents': {
+        const action = typeof args?.action === 'string' ? args.action.toLowerCase() : '';
+        if (action === 'list') return executeAgentsList();
+        if (action === 'switch') return executeAgentsSwitch(args, conversationId);
+        if (action === 'configure') return executeAgentsConfigure(args);
+        return 'Error: agents requires action ∈ {list, switch, configure}';
+      }
       default:
         return `Error: unhandled parity tool "${name}"`;
     }
@@ -2457,18 +2370,10 @@ async function executeToolInner(
       return executeWriteFile(args, workspaceConversationId);
     case 'list_files':
       return executeListFiles(args, workspaceConversationId);
-    case 'fetch_url':
-      return executeFetchUrl(args);
-    case 'update_memory':
-      return executeUpdateMemory(args, workspaceConversationId);
-    case 'read_memory':
-      return executeReadMemory(args, workspaceConversationId);
     case 'record_workflow_evidence':
       return executeRecordWorkflowEvidence(args, conversationId, context);
     case 'read_workflow_evidence':
       return executeReadWorkflowEvidence(args, conversationId, context);
-    case 'create_task':
-      return executeCreateTask(args);
     case 'javascript':
       return executeJavascript(args, workspaceConversationId, workspaceReadFallbackConversationId);
     case 'python':
@@ -2531,10 +2436,6 @@ async function executeToolInner(
       }
     }
 
-    // Notification — sends a local notification message to the user
-    case 'notify':
-      return executeNativeTool('notification_send', argsString);
-
     // Image generation — uses configured provider or reports inability
     case 'image_generate':
       return executeImageGenerate(args, workspaceConversationId);
@@ -2544,7 +2445,7 @@ async function executeToolInner(
       return executeImageEdit(args, workspaceConversationId);
 
     default:
-      return `Error: unknown tool "${name}". Available tools include: read_file, write_file, list_files, fetch_url, update_memory, read_memory, record_workflow_evidence, read_workflow_evidence, create_task, javascript, python, web_search, web_fetch, file_edit, glob_search, text_search, canvas_list, canvas_read, canvas_create, canvas_update, canvas_eval, canvas_snapshot, notify, image_generate, image_edit. Tool names are case-sensitive.`;
+      return `Error: unknown tool "${name}". Available tools include: read_file, write_file, list_files, record_workflow_evidence, read_workflow_evidence, javascript, python, web_search, web_fetch, file_edit, glob_search, text_search, cron, canvas_list, canvas_read, canvas_create, canvas_update, canvas_eval, canvas_snapshot, image_generate, image_edit. Tool names are case-sensitive.`;
   }
 }
 

@@ -417,7 +417,7 @@ function adaptSkillPromptForMobile(body: string): string {
   if (usesShellCmds) {
     adapted =
       `> **Mobile adaptation**: This skill was designed for desktop CLI. ` +
-      `On mobile, translate \`curl\` commands to the \`web_fetch\` or \`fetch_url\` tool. ` +
+      `On mobile, translate \`curl\` commands to the \`web_fetch\` tool. ` +
       `Pass the URL, method, headers, and body as tool arguments instead of running shell commands.\n\n` +
       adapted;
   }
@@ -428,7 +428,7 @@ function adaptSkillPromptForMobile(body: string): string {
 /**
  * Activate a skill entry — on mobile, skills are prompt-based instructions
  * injected into the system prompt. They guide the LLM to use existing tools
- * (web_fetch, fetch_url, etc.) rather than creating separate tool handlers.
+ * (web_fetch, etc.) rather than creating separate tool handlers.
  *
  * Kavi skills are SKILL.md files whose body IS the system prompt.
  * The LLM reads the instructions and uses its available tools accordingly.

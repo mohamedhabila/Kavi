@@ -248,9 +248,6 @@ const TRANSLATION_GUIDES: Record<SkillPattern, string> = {
     '',
     '**Example**: `curl -s -H "Authorization: Bearer $TOKEN" https://api.example.com/data`',
     '→ `web_fetch({ url: "https://api.example.com/data", headers: { "Authorization": "Bearer <token>" } })`',
-    '',
-    '**Alternative**: For simple GET requests without custom headers, `fetch_url` is also available:',
-    '`fetch_url({ url: "https://api.example.com/data" })`',
   ].join('\n'),
 
   'curl-jq': [

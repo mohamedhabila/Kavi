@@ -88,10 +88,7 @@ describe('Parity Tool Definitions', () => {
     expect(names).toContain('ssh_exec');
     expect(names).toContain('ssh_background_job_status');
     expect(names).toContain('ssh_background_job_wait');
-    expect(names).toContain('ssh_list_directory');
-    expect(names).toContain('ssh_read_file');
-    expect(names).toContain('ssh_write_file');
-    expect(names).toContain('ssh_delete_path');
+    expect(names).toContain('ssh_fs');
   });
 
   it('has unique tool names', () => {

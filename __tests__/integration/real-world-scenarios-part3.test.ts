@@ -645,7 +645,6 @@ gh issue list --repo owner/repo
     const skill = activateSkill(entry);
     expect(skill.systemPrompt).toContain('Mobile adaptation');
     expect(skill.systemPrompt).toContain('web_fetch');
-    expect(skill.systemPrompt).toContain('fetch_url');
 
     unregisterSkill(entry.id);
   });
@@ -1311,7 +1310,7 @@ describe('Tool executor routing completeness', () => {
       'share_text', 'share_url', 'share_file', 'share_contact', 'open_url',
       'notification_send', 'notification_schedule',
       'device_status', 'device_info', 'device_permissions', 'device_health',
-      'photos_latest', 'camera_clip', 'screen_record', 'haptic_feedback',
+      'photos_latest', 'camera_clip', 'screen_record',
     ];
 
     // Import the NATIVE_TOOL_NAMES set indirectly by checking they'd be dispatched
@@ -1361,7 +1360,7 @@ describe('Tool executor routing completeness', () => {
       'pdf_read', 'camera_snap', 'audio_transcribe', 'memory_search',
       'ssh_exec', 'ssh_list_directory', 'ssh_read_file', 'ssh_write_file',
       'ssh_rename_path', 'ssh_delete_path', 'ssh_make_directory',
-      'tool_catalog', 'poll_create', 'message_effect', 'speak',
+      'tool_catalog', 'poll_create', 'speak',
       'agents_list', 'agents_switch', 'agents_configure',
     ];
 
@@ -1373,12 +1372,10 @@ describe('Tool executor routing completeness', () => {
 
   it('core tool names are complete', () => {
     const coreTools = [
-      'read_file', 'write_file', 'list_files',
-      'fetch_url', 'update_memory', 'read_memory',
-      'create_task', 'javascript',
+      'read_file', 'write_file', 'list_files', 'javascript',
     ];
     const extendedTools = ['web_search', 'web_fetch', 'file_edit', 'glob_search', 'text_search'];
-    const misc = ['cron', 'notify', 'image_generate'];
+    const misc = ['cron', 'image_generate'];
 
     const allTools = [...coreTools, ...extendedTools, ...misc];
     for (const tool of allTools) {

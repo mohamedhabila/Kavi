@@ -282,7 +282,6 @@ describe('selectToolsForRequest', () => {
     expect(selectedNames.has('glob_search')).toBe(true);
     expect(selectedNames.has('text_search')).toBe(true);
     expect(selectedNames.has('web_search')).toBe(true);
-    expect(selectedNames.has('read_memory')).toBe(false);
     expect(selected.length).toBeLessThanOrEqual(PROVIDER_TOOL_LIMITS.gemini);
   });
 
@@ -352,7 +351,6 @@ describe('selectToolsForRequest', () => {
         'read_file',
         'write_file',
         'list_files',
-        'fetch_url',
         'record_workflow_evidence',
         'read_workflow_evidence',
         'file_edit',
@@ -380,7 +378,6 @@ describe('selectToolsForRequest', () => {
         'read_file',
         'write_file',
         'list_files',
-        'fetch_url',
         'record_workflow_evidence',
         'read_workflow_evidence',
         'file_edit',
@@ -529,11 +526,9 @@ describe('selectToolsForRequest', () => {
         'write_file',
         'list_files',
         'javascript',
-        'update_memory',
-        'read_memory',
+        'python',
         'record_workflow_evidence',
         'read_workflow_evidence',
-        'create_task',
         'file_edit',
         'tool_catalog',
       ]),
@@ -550,7 +545,6 @@ describe('selectToolsForRequest', () => {
 
     expect(selectedNames.has('web_search')).toBe(true);
     expect(selectedNames.has('web_fetch')).toBe(true);
-    expect(selectedNames.has('fetch_url')).toBe(true);
   });
 
   it('loads workspace search tools for Anthropic when the prompt is codebase-oriented', () => {
@@ -794,9 +788,7 @@ describe('selectToolsForRequest — isSuperAgent', () => {
     );
     const selectedNames = new Set(selected.map((t) => t.name));
 
-    expect(selectedNames.has('agents_list')).toBe(true);
-    expect(selectedNames.has('agents_switch')).toBe(true);
-    expect(selectedNames.has('agents_configure')).toBe(true);
+    expect(selectedNames.has('agents')).toBe(true);
   });
 
   it('does NOT include session tools when isSuperAgent is false or absent', () => {
@@ -833,7 +825,7 @@ describe('selectToolsForRequest — isSuperAgent', () => {
       undefined,
       {
         isSuperAgent: true,
-        preferredToolNames: ['web_search', 'fetch_url'],
+        preferredToolNames: ['web_search', 'web_fetch'],
         restrictToPreferredTools: true,
       },
     );

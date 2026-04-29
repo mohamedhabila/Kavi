@@ -31,6 +31,8 @@ const MEMORY_TOOLS = [
   'memory_forget',
   'memory_block_read',
   'memory_block_edit',
+  'memory_manage',
+  'memory_block',
 ];
 
 beforeEach(() => {
