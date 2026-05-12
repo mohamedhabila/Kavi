@@ -25,18 +25,21 @@ export type ResolvedDisplayMessageItem = DisplayMessageItem & {
 
 type StableDisplayMessageCacheEntry = {
   item: DisplayMessageItem;
-  sourceMessages: Message[];
+  sourceSignatures: string[];
 };
 
 type ResolvedDisplayMessageCacheEntry = {
   item: ResolvedDisplayMessageItem;
-  sourceMessages: Message[];
+  sourceSignatures: string[];
   draftSignature: string;
   isStreaming: boolean;
   retryMessageId?: string;
   agentRunSignature: string;
   liveSubAgentSignature: string;
 };
+
+export const INITIAL_CHAT_SOURCE_MESSAGE_LIMIT = 80;
+export const CHAT_SOURCE_MESSAGE_PAGE_SIZE = 80;
 
 export interface ChatDisplayStateCache {
   stableDisplayMessages: Map<string, StableDisplayMessageCacheEntry>;
@@ -208,6 +211,150 @@ function buildSourceMessages(
     .filter((message): message is Message => !!message);
 }
 
+function hashText(value: string | undefined): string {
+  if (!value) {
+    return '0:0';
+  }
+
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  return `${value.length}:${(hash >>> 0).toString(36)}`;
+}
+
+function buildAttachmentDisplaySignature(
+  attachment: NonNullable<Message['attachments']>[number],
+): string {
+  return [
+    attachment.id,
+    attachment.type,
+    attachment.uri,
+    attachment.name,
+    attachment.mimeType,
+    attachment.size,
+    attachment.workspacePath ?? '',
+    attachment.durationMs ?? '',
+    hashText(attachment.transcript),
+    attachment.waveformLevels?.join(',') ?? '',
+  ].join('\u0006');
+}
+
+function buildToolCallDisplaySignature(toolCall: ToolCall): string {
+  return [
+    toolCall.id,
+    toolCall.name,
+    hashText(toolCall.arguments),
+    toolCall.status,
+    toolCall.startedAt ?? '',
+    toolCall.updatedAt ?? '',
+    toolCall.completedAt ?? '',
+    hashText(toolCall.progressText),
+    hashText(toolCall.result),
+    hashText(toolCall.error),
+  ].join('\u0006');
+}
+
+function buildSubAgentEventDisplaySignature(message: Message): string {
+  const event = message.subAgentEvent;
+  if (!event) {
+    return '';
+  }
+
+  const snapshot = event.snapshot;
+  return [
+    event.type,
+    event.event,
+    snapshot.sessionId,
+    snapshot.parentConversationId,
+    snapshot.parentSessionId ?? '',
+    snapshot.agentRunId ?? '',
+    snapshot.workstreamId ?? '',
+    snapshot.name ?? '',
+    snapshot.depth,
+    snapshot.startedAt,
+    snapshot.updatedAt,
+    snapshot.deadlineAt ?? '',
+    snapshot.status,
+    snapshot.sandboxPolicy,
+    snapshot.launchState ?? '',
+    hashText(snapshot.output),
+    snapshot.toolsUsed?.join('\u0007') ?? '',
+    snapshot.iterations ?? '',
+    snapshot.lastProgressAt ?? '',
+    snapshot.modelResponsePendingSince ?? '',
+    hashText(snapshot.currentActivity),
+    snapshot.activeToolName ?? '',
+    snapshot.activeToolStartedAt ?? '',
+    hashText(snapshot.lastToolResultPreview),
+    snapshot.activityLog
+      ?.map((entry) => [entry.timestamp, entry.kind, hashText(entry.text)].join('\u0008'))
+      .join('\u0009') ?? '',
+    snapshot.artifacts?.map(buildAttachmentDisplaySignature).join('\u0009') ?? '',
+  ].join('\u0006');
+}
+
+function buildMessageDisplaySignature(message: Message): string {
+  return [
+    message.id,
+    message.role,
+    message.timestamp,
+    message.toolCallId ?? '',
+    message.isError ? '1' : '0',
+    hashText(message.content),
+    hashText(message.enrichedContent),
+    hashText(message.reasoning),
+    message.assistantMetadata
+      ? [
+          message.assistantMetadata.kind,
+          message.assistantMetadata.completionStatus,
+          message.assistantMetadata.finishReason ?? '',
+        ].join('\u0007')
+      : '',
+    message.effectId ?? '',
+    message.attachments?.map(buildAttachmentDisplaySignature).join('\u0007') ?? '',
+    message.toolCalls?.map(buildToolCallDisplaySignature).join('\u0007') ?? '',
+    buildSubAgentEventDisplaySignature(message),
+  ].join('\u0005');
+}
+
+function buildSourceSignatures(messages: Message[]): string[] {
+  return messages.map(buildMessageDisplaySignature);
+}
+
+function areSignatureListsEqual(left: string[], right: string[]): boolean {
+  return (
+    left.length === right.length && left.every((signature, index) => signature === right[index])
+  );
+}
+
+function getVisibleSourceMessageStartIndex(messages: Message[], limit: number): number {
+  const normalizedLimit = Math.max(1, Math.floor(limit));
+  if (messages.length <= normalizedLimit) {
+    return 0;
+  }
+
+  let startIndex = messages.length - normalizedLimit;
+  while (startIndex > 0 && messages[startIndex]?.role !== 'user') {
+    startIndex -= 1;
+  }
+
+  return startIndex;
+}
+
+export function getVisibleSourceMessageWindow(
+  messages: Message[],
+  limit: number,
+): { visibleMessages: Message[]; hiddenSourceMessageCount: number } {
+  const startIndex = getVisibleSourceMessageStartIndex(messages, limit);
+  return {
+    visibleMessages: startIndex === 0 ? messages : messages.slice(startIndex),
+    hiddenSourceMessageCount: startIndex,
+  };
+}
+
 function findAgentRunAnchorMessageId(messages: Message[], run: AgentRun): string | undefined {
   const userMessageIndex = messages.findIndex((message) => message.id === run.userMessageId);
   if (userMessageIndex < 0) {
@@ -334,19 +481,19 @@ export function getStableDisplayMessages(
 
   const stableItems = rawItems.map((item) => {
     const sourceMessages = buildSourceMessages(messageById, item.sourceMessageIds);
+    const sourceSignatures = buildSourceSignatures(sourceMessages);
     const cached = cache.stableDisplayMessages.get(item.id);
 
     if (
       cached &&
       cached.item.retryMessageId === item.retryMessageId &&
-      cached.sourceMessages.length === sourceMessages.length &&
-      cached.sourceMessages.every((message, index) => message === sourceMessages[index])
+      areSignatureListsEqual(cached.sourceSignatures, sourceSignatures)
     ) {
       nextCache.set(item.id, cached);
       return cached.item;
     }
 
-    const nextEntry = { item, sourceMessages };
+    const nextEntry = { item, sourceSignatures };
     nextCache.set(item.id, nextEntry);
     return item;
   });
@@ -377,6 +524,7 @@ export function resolveDisplayMessages(params: {
 
   const resolvedItems = displayMessages.map((item) => {
     const sourceMessages = buildSourceMessages(messageById, item.sourceMessageIds);
+    const sourceSignatures = buildSourceSignatures(sourceMessages);
     const agentRun = agentRunByDisplayItemId.get(item.id);
     const isStreaming = !!streamingMessageId && item.sourceMessageIds.includes(streamingMessageId);
     const draftSignature = isStreaming
@@ -398,8 +546,7 @@ export function resolveDisplayMessages(params: {
       cached.draftSignature === draftSignature &&
       cached.agentRunSignature === agentRunSignature &&
       cached.liveSubAgentSignature === liveSubAgentSignature &&
-      cached.sourceMessages.length === sourceMessages.length &&
-      cached.sourceMessages.every((message, index) => message === sourceMessages[index])
+      areSignatureListsEqual(cached.sourceSignatures, sourceSignatures)
     ) {
       nextCache.set(item.id, cached);
       return cached.item;
@@ -488,7 +635,7 @@ export function resolveDisplayMessages(params: {
 
     nextCache.set(item.id, {
       item: resolvedItem,
-      sourceMessages,
+      sourceSignatures,
       draftSignature,
       isStreaming,
       retryMessageId: item.retryMessageId,

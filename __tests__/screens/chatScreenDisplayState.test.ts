@@ -3,6 +3,7 @@ import {
   buildStreamingDraftSignature,
   createChatDisplayStateCache,
   getStableDisplayMessages,
+  getVisibleSourceMessageWindow,
   mergeStreamingToolCall,
   normalizeStreamingDraft,
   resolveDisplayMessages,
@@ -67,6 +68,178 @@ describe('chatScreenDisplayState', () => {
 
     expect(second[0]).toBe(first[0]);
     expect(second[1]).toBe(first[1]);
+  });
+
+  it('reuses stable display items when hydration recreates equivalent message objects', () => {
+    const cache = createChatDisplayStateCache();
+    const messages = [
+      makeMessage('user-1', { role: 'user', content: 'Hello' }),
+      makeMessage('assistant-1', {
+        content: 'Hi there',
+        reasoning: 'Greeting the user',
+        toolCalls: [
+          {
+            id: 'tool-1',
+            name: 'read_file',
+            arguments: '{"path":"notes.md"}',
+            status: 'completed',
+            result: 'Done',
+          },
+        ],
+      }),
+    ];
+
+    const first = getStableDisplayMessages(messages, cache);
+    const hydratedMessages = messages.map((message) => ({
+      ...message,
+      toolCalls: message.toolCalls?.map((toolCall) => ({ ...toolCall })),
+    }));
+    const second = getStableDisplayMessages(hydratedMessages, cache);
+
+    expect(second[0]).toBe(first[0]);
+    expect(second[1]).toBe(first[1]);
+  });
+
+  it('invalidates stable display items when hydrated message content changes', () => {
+    const cache = createChatDisplayStateCache();
+    const messages = [
+      makeMessage('user-1', { role: 'user', content: 'Hello' }),
+      makeMessage('assistant-1', { content: 'Hi there' }),
+    ];
+
+    const first = getStableDisplayMessages(messages, cache);
+    const changedMessages = messages.map((message) =>
+      message.id === 'assistant-1' ? { ...message, content: 'Changed answer' } : { ...message },
+    );
+    const second = getStableDisplayMessages(changedMessages, cache);
+
+    expect(second[0]).toBe(first[0]);
+    expect(second[1]).not.toBe(first[1]);
+    expect(second[1].message.content).toBe('Changed answer');
+  });
+
+  it('reuses resolved display items when hydration recreates equivalent message objects', () => {
+    const cache = createChatDisplayStateCache();
+    const messages = [
+      makeMessage('user-1', { role: 'user', content: 'Hello' }),
+      makeMessage('assistant-1', { content: 'Hi there' }),
+    ];
+    const displayMessages = getStableDisplayMessages(messages, cache);
+    const first = resolveDisplayMessages({
+      displayMessages,
+      messageById: new Map(messages.map((message) => [message.id, message])),
+      cache,
+      streamingDrafts: {},
+      streamingMessageId: null,
+      liveSubAgentSnapshotsById: new Map(),
+      agentRunByDisplayItemId: new Map(),
+    });
+
+    const hydratedMessages = messages.map((message) => ({ ...message }));
+    const hydratedDisplayMessages = getStableDisplayMessages(hydratedMessages, cache);
+    const second = resolveDisplayMessages({
+      displayMessages: hydratedDisplayMessages,
+      messageById: new Map(hydratedMessages.map((message) => [message.id, message])),
+      cache,
+      streamingDrafts: {},
+      streamingMessageId: null,
+      liveSubAgentSnapshotsById: new Map(),
+      agentRunByDisplayItemId: new Map(),
+    });
+
+    expect(second[0]).toBe(first[0]);
+    expect(second[1]).toBe(first[1]);
+  });
+
+  it('invalidates resolved display items when tool-call display state changes', () => {
+    const cache = createChatDisplayStateCache();
+    const messages = [
+      makeMessage('assistant-1', {
+        content: 'Using a tool',
+        toolCalls: [
+          {
+            id: 'tool-1',
+            name: 'read_file',
+            arguments: '{}',
+            status: 'running',
+          },
+        ],
+      }),
+    ];
+    const displayMessages = getStableDisplayMessages(messages, cache);
+    const first = resolveDisplayMessages({
+      displayMessages,
+      messageById: new Map(messages.map((message) => [message.id, message])),
+      cache,
+      streamingDrafts: {},
+      streamingMessageId: null,
+      liveSubAgentSnapshotsById: new Map(),
+      agentRunByDisplayItemId: new Map(),
+    });
+
+    const changedMessages = [
+      {
+        ...messages[0],
+        toolCalls: [
+          {
+            ...messages[0].toolCalls![0],
+            status: 'completed' as const,
+            result: 'Done',
+          },
+        ],
+      },
+    ];
+    const changedDisplayMessages = getStableDisplayMessages(changedMessages, cache);
+    const second = resolveDisplayMessages({
+      displayMessages: changedDisplayMessages,
+      messageById: new Map(changedMessages.map((message) => [message.id, message])),
+      cache,
+      streamingDrafts: {},
+      streamingMessageId: null,
+      liveSubAgentSnapshotsById: new Map(),
+      agentRunByDisplayItemId: new Map(),
+    });
+
+    expect(second[0]).not.toBe(first[0]);
+    expect(second[0].resolvedMessage.toolCalls?.[0].status).toBe('completed');
+  });
+
+  it('windows long transcripts from the source-message tail without splitting the latest user turn', () => {
+    const messages = [
+      makeMessage('user-1', { role: 'user', content: 'First', timestamp: 1 }),
+      makeMessage('assistant-1', { content: 'First answer', timestamp: 2 }),
+      makeMessage('user-2', { role: 'user', content: 'Second', timestamp: 3 }),
+      makeMessage('assistant-2', { content: 'Second answer', timestamp: 4 }),
+      makeMessage('user-3', { role: 'user', content: 'Third', timestamp: 5 }),
+      makeMessage('assistant-3', { content: 'Third answer', timestamp: 6 }),
+    ];
+
+    const visible = getVisibleSourceMessageWindow(messages, 1);
+
+    expect(visible.visibleMessages.map((message) => message.id)).toEqual(['user-3', 'assistant-3']);
+    expect(visible.hiddenSourceMessageCount).toBe(4);
+    expect(getVisibleSourceMessageWindow(messages, 100).visibleMessages).toBe(messages);
+  });
+
+  it('keeps a tool-heavy assistant turn intact when the source window starts inside it', () => {
+    const messages = [
+      makeMessage('user-1', { role: 'user', content: 'First', timestamp: 1 }),
+      makeMessage('assistant-1', { content: 'First answer', timestamp: 2 }),
+      makeMessage('user-2', { role: 'user', content: 'Second', timestamp: 3 }),
+      makeMessage('assistant-2a', { content: 'Running a tool', timestamp: 4 }),
+      makeMessage('tool-2', { role: 'tool', content: 'Tool result', timestamp: 5 }),
+      makeMessage('assistant-2b', { content: 'Second answer', timestamp: 6 }),
+    ];
+
+    const visible = getVisibleSourceMessageWindow(messages, 2);
+
+    expect(visible.visibleMessages.map((message) => message.id)).toEqual([
+      'user-2',
+      'assistant-2a',
+      'tool-2',
+      'assistant-2b',
+    ]);
+    expect(visible.hiddenSourceMessageCount).toBe(2);
   });
 
   it('resolves streaming drafts and live worker snapshots into display items', () => {

@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   FlatList,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -20,10 +21,7 @@ import { requestChatStorePersistenceCheckpoint } from '../store/chatStorePersist
 import { useChatStore } from '../store/useChatStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { MessageBubble } from '../components/chat/MessageBubble';
-import {
-  computeTemporalMarkers,
-  type TemporalMarker,
-} from '../components/chat/temporalMarkers';
+import { computeTemporalMarkers, type TemporalMarker } from '../components/chat/temporalMarkers';
 import {
   computePersonaSwitchMarkers,
   type PersonaSwitchMarker,
@@ -70,9 +68,12 @@ import { selectChatScreenChatSlice, selectChatScreenSettingsSlice } from './chat
 import {
   buildAgentRunDisplayItemMap,
   buildStreamingDraftSignature,
+  CHAT_SOURCE_MESSAGE_PAGE_SIZE,
   clearChatDisplayStateCache,
   createChatDisplayStateCache,
   getStableDisplayMessages,
+  getVisibleSourceMessageWindow,
+  INITIAL_CHAT_SOURCE_MESSAGE_LIMIT,
   mergeStreamingToolCall,
   mergeStreamingToolCalls,
   normalizeStreamingDraft,
@@ -482,9 +483,10 @@ function buildStructuredPlanContinuationActionLines(
   ];
 }
 
-function buildStructuredPlanPilotReviewPerspective(
-  continuation: WorkflowPlanContinuationResult,
-): { summary: string; nextActions: string[] } {
+function buildStructuredPlanPilotReviewPerspective(continuation: WorkflowPlanContinuationResult): {
+  summary: string;
+  nextActions: string[];
+} {
   return {
     summary: continuation.summary,
     nextActions: buildStructuredPlanContinuationActionLines(continuation),
@@ -976,9 +978,11 @@ export const ChatScreen: React.FC = () => {
   const isFocused = useIsFocused();
   const flatListRef = useRef<FlatList>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const foregroundRequestRef = useRef<
-    { requestId: string; conversationId: string; abort: AbortController } | null
-  >(null);
+  const foregroundRequestRef = useRef<{
+    requestId: string;
+    conversationId: string;
+    abort: AbortController;
+  } | null>(null);
   const { colors } = useAppTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -1039,6 +1043,9 @@ export const ChatScreen: React.FC = () => {
   const [editingContent, setEditingContent] = useState<string | undefined>(undefined);
   const [composerDrafts, setComposerDrafts] = useState<Record<string, ComposerDraftState>>({});
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const [visibleSourceMessageLimit, setVisibleSourceMessageLimit] = useState(
+    INITIAL_CHAT_SOURCE_MESSAGE_LIMIT,
+  );
   const [showLogs, setShowLogs] = useState(false);
   const [selectedSubAgentSnapshot, setSelectedSubAgentSnapshot] = useState<
     NonNullable<Message['subAgentEvent']>['snapshot'] | null
@@ -1068,6 +1075,7 @@ export const ChatScreen: React.FC = () => {
   const scrollFrameRef = useRef<number | null>(null);
   const scrollFollowUpFrameRef = useRef<number | null>(null);
   const previousVisibleCountRef = useRef(0);
+  const previousSourceMessageCountRef = useRef(0);
   const displayStateCacheRef = useRef(createChatDisplayStateCache());
   const lastLoggedStateRef = useRef<string | null>(null);
   const initializedLocalModelKeysRef = useRef(new Set<string>());
@@ -1520,10 +1528,10 @@ export const ChatScreen: React.FC = () => {
                       'Background worker state became orphaned before completion could be confirmed.',
                   }
                 : summarizeBackgroundWorkerSnapshots([...effectiveSubAgents]);
-            const reviewPerspective =
-              planContinuation.status === 'continue'
-                ? buildStructuredPlanPilotReviewPerspective(planContinuation)
-                : undefined;
+          const reviewPerspective =
+            planContinuation.status === 'continue'
+              ? buildStructuredPlanPilotReviewPerspective(planContinuation)
+              : undefined;
 
           const evidence = collectAgentRunFinalizationEvidence(
             latestConversation.messages,
@@ -2150,6 +2158,7 @@ export const ChatScreen: React.FC = () => {
     setShowLogs(false);
     setSelectedSubAgentSnapshot(null);
     previousVisibleCountRef.current = 0;
+    previousSourceMessageCountRef.current = 0;
     listMetricsRef.current = { contentHeight: 0, layoutHeight: 0, offsetY: 0 };
     shouldAutoFollowRef.current = true;
     forceNextScrollRef.current = true;
@@ -2164,6 +2173,7 @@ export const ChatScreen: React.FC = () => {
     setEditingContent(undefined);
     setStreamingDraftVersion(0);
     setSubAgentActivityVersion(0);
+    setVisibleSourceMessageLimit(INITIAL_CHAT_SOURCE_MESSAGE_LIMIT);
   }, [activeConversationId, clearInteractionReleaseTimer, clearPendingScrollFrames]);
 
   useEffect(
@@ -2484,16 +2494,11 @@ export const ChatScreen: React.FC = () => {
 
       const model = options?.model ?? selection?.model ?? undefined;
 
-      return getOrCreateCanonicalThread(
-        providerId,
-        systemPrompt,
-        model,
-        {
-          activate: options?.activate,
-          personaId: options?.personaId,
-          mode: options?.mode,
-        },
-      );
+      return getOrCreateCanonicalThread(providerId, systemPrompt, model, {
+        activate: options?.activate,
+        personaId: options?.personaId,
+        mode: options?.mode,
+      });
     },
     [getOrCreateCanonicalThread, resolveConversationStartDefaults, systemPrompt, t],
   );
@@ -2806,7 +2811,10 @@ export const ChatScreen: React.FC = () => {
               )
             : undefined;
           const incompleteVisibleDraft = latestConversation
-            ? findLatestIncompleteAgentRunAssistantMessage(latestConversation.messages, run.userMessageId)
+            ? findLatestIncompleteAgentRunAssistantMessage(
+                latestConversation.messages,
+                run.userMessageId,
+              )
             : undefined;
           const shouldPreserveIncompleteVisibleDraft =
             synthesized.source === 'fallback' &&
@@ -2840,7 +2848,7 @@ export const ChatScreen: React.FC = () => {
           throwIfAbortSignalTriggered(operation.signal);
 
           const writeTargetMessageId = shouldPreserveIncompleteVisibleDraft
-            ? incompleteVisibleDraft?.id ?? targetMessageId
+            ? (incompleteVisibleDraft?.id ?? targetMessageId)
             : targetMessageId;
 
           if (writeTargetMessageId) {
@@ -2857,11 +2865,7 @@ export const ChatScreen: React.FC = () => {
                 synthesized.providerReplay,
               );
             } else {
-              updateMessageProviderReplay(
-                params.conversationId,
-                writeTargetMessageId,
-                undefined,
-              );
+              updateMessageProviderReplay(params.conversationId, writeTargetMessageId, undefined);
             }
           } else {
             addMessage(params.conversationId, {
@@ -2946,10 +2950,7 @@ export const ChatScreen: React.FC = () => {
       }
 
       for (const run of awaitingRuns) {
-        const { liveSnapshots, mergedSnapshots } = getReviewableSubAgentsForRun(
-          conversation,
-          run,
-        );
+        const { liveSnapshots, mergedSnapshots } = getReviewableSubAgentsForRun(conversation, run);
         if (liveSnapshots.some((agent) => agent.status === 'running')) {
           continue;
         }
@@ -5228,13 +5229,25 @@ export const ChatScreen: React.FC = () => {
     () => new Map(messages.map((message) => [message.id, message])),
     [messages],
   );
-  const displayMessages = useMemo(() => {
-    return getStableDisplayMessages(messages, displayStateCacheRef.current);
-  }, [messages]);
+  const visibleMessageWindow = useMemo(
+    () => getVisibleSourceMessageWindow(messages, visibleSourceMessageLimit),
+    [messages, visibleSourceMessageLimit],
+  );
+  const visibleSourceMessages = visibleMessageWindow.visibleMessages;
+  const hiddenSourceMessageCount = visibleMessageWindow.hiddenSourceMessageCount;
+
+  const visibleDisplayMessages = useMemo(() => {
+    return getStableDisplayMessages(visibleSourceMessages, displayStateCacheRef.current);
+  }, [visibleSourceMessages]);
+
   const agentRunByDisplayItemId = useMemo(
     () =>
-      buildAgentRunDisplayItemMap(messages, displayMessages, activeConversation?.agentRuns ?? []),
-    [activeConversation?.agentRuns, displayMessages, messages],
+      buildAgentRunDisplayItemMap(
+        messages,
+        visibleDisplayMessages,
+        activeConversation?.agentRuns ?? [],
+      ),
+    [activeConversation?.agentRuns, messages, visibleDisplayMessages],
   );
   const streamingDraftState = useMemo(
     () => ({ version: streamingDraftVersion, drafts: streamingDraftsRef.current }),
@@ -5242,7 +5255,7 @@ export const ChatScreen: React.FC = () => {
   );
   const resolvedDisplayMessages = useMemo(() => {
     return resolveDisplayMessages({
-      displayMessages,
+      displayMessages: visibleDisplayMessages,
       messageById,
       cache: displayStateCacheRef.current,
       streamingDrafts: streamingDraftState.drafts,
@@ -5252,11 +5265,11 @@ export const ChatScreen: React.FC = () => {
     });
   }, [
     agentRunByDisplayItemId,
-    displayMessages,
     liveSubAgentSnapshotsById,
     messageById,
     streamingDraftState,
     streamingMessageId,
+    visibleDisplayMessages,
   ]);
 
   // Phase 161 §4.9: derived temporal markers (day separators, "later that day",
@@ -5323,12 +5336,17 @@ export const ChatScreen: React.FC = () => {
       : t('chat.noUsageYet');
 
   useEffect(() => {
-    if (resolvedDisplayMessages.length > previousVisibleCountRef.current) {
+    const sourceMessageCount = messages.length;
+    if (
+      sourceMessageCount > previousSourceMessageCountRef.current &&
+      resolvedDisplayMessages.length > previousVisibleCountRef.current
+    ) {
       maybeScrollToBottom(!streamingMessageId);
     }
 
     previousVisibleCountRef.current = resolvedDisplayMessages.length;
-  }, [maybeScrollToBottom, resolvedDisplayMessages.length, streamingMessageId]);
+    previousSourceMessageCountRef.current = sourceMessageCount;
+  }, [maybeScrollToBottom, messages.length, resolvedDisplayMessages.length, streamingMessageId]);
 
   const workspaceFallbackConversationIds = useMemo(
     () =>
@@ -5401,6 +5419,11 @@ export const ChatScreen: React.FC = () => {
     },
     [],
   );
+
+  const handleShowEarlierMessages = useCallback(() => {
+    setVisibleSourceMessageLimit((currentLimit) => currentLimit + CHAT_SOURCE_MESSAGE_PAGE_SIZE);
+  }, []);
+
   const renderMessageItem = useCallback(
     ({ item }: { item: ResolvedDisplayMessageItem }) => {
       const marker = temporalMarkersByMessageId.get(item.resolvedMessage.id);
@@ -5720,11 +5743,12 @@ export const ChatScreen: React.FC = () => {
             styles.messageList,
             resolvedDisplayMessages.length === 0 ? styles.messageListEmpty : null,
           ]}
-          maxToRenderPerBatch={15}
-          updateCellsBatchingPeriod={50}
-          initialNumToRender={20}
-          windowSize={10}
-          removeClippedSubviews={false}
+          maxToRenderPerBatch={8}
+          updateCellsBatchingPeriod={32}
+          initialNumToRender={10}
+          windowSize={7}
+          removeClippedSubviews={Platform.OS === 'android'}
+          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           onLayout={(event) => {
             listMetricsRef.current.layoutHeight = event.nativeEvent.layout.height;
             updateAutoFollowState();
@@ -5764,6 +5788,25 @@ export const ChatScreen: React.FC = () => {
           }}
           scrollEventThrottle={16}
           renderItem={renderMessageItem}
+          ListHeaderComponent={
+            hiddenSourceMessageCount > 0 ? (
+              <View style={styles.historyWindowHeader}>
+                <TouchableOpacity
+                  style={styles.historyWindowButton}
+                  onPress={handleShowEarlierMessages}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('chat.showEarlierMessages', {
+                    count: hiddenSourceMessageCount,
+                  })}
+                  testID="chat-show-earlier-messages"
+                >
+                  <Text style={styles.historyWindowButtonText} numberOfLines={1}>
+                    {t('chat.showEarlierMessages', { count: hiddenSourceMessageCount })}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : null
+          }
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Text style={styles.emptyTitle}>{t('common.appName')}</Text>
@@ -6098,6 +6141,30 @@ const createStyles = (colors: AppPalette) =>
     messageListEmpty: {
       flexGrow: 1,
       justifyContent: 'center',
+    },
+    historyWindowHeader: {
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingTop: 6,
+      paddingBottom: 8,
+    },
+    historyWindowButton: {
+      minHeight: 34,
+      maxWidth: '100%',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+    },
+    historyWindowButtonText: {
+      maxWidth: '100%',
+      color: colors.primary,
+      fontSize: 12,
+      fontWeight: '700',
     },
     temporalMarkerRow: {
       flexDirection: 'row',

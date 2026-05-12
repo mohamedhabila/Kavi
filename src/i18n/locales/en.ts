@@ -157,6 +157,7 @@ export const en: TranslationMap = {
     hideLogs: 'Hide logs',
     latestLogs: 'Latest logs',
     logsEmpty: 'No logs yet.',
+    showEarlierMessages: 'Show earlier messages ({count})',
     subAgentLabel: 'Sub-agent',
     subAgentSession: 'Session {id}',
     subAgentDepth: 'Depth {depth}',

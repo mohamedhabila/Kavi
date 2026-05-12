@@ -994,7 +994,9 @@ describe('ChatScreen', () => {
     mockBuildAgentRunVisibleDraftRecoveryText.mockImplementation(
       ({ visibleDraft, status, evidence }: any) => {
         const fallback = mockBuildAgentRunToolResultFallback({ status, evidence });
-        if (visibleDraft.includes('Note: the response stream failed before the answer could finish.')) {
+        if (
+          visibleDraft.includes('Note: the response stream failed before the answer could finish.')
+        ) {
           return visibleDraft;
         }
         return fallback
@@ -1511,6 +1513,56 @@ describe('ChatScreen', () => {
     expect(queryByTestId('chat-composer-keyboard-avoider')).toBeNull();
     expect(UNSAFE_getByType(FlatList).props.keyboardShouldPersistTaps).toBeUndefined();
     expect(UNSAFE_getByType(FlatList).props.keyboardDismissMode).toBeUndefined();
+  });
+
+  it('mounts only the recent transcript window and expands earlier history on demand', () => {
+    const longMessages = Array.from({ length: 60 }, (_, index) => {
+      const turn = index + 1;
+      return [
+        {
+          id: `user-${turn}`,
+          role: 'user',
+          content: `Question ${turn}`,
+          timestamp: 1_700_000_000_000 + turn * 2,
+        },
+        {
+          id: `assistant-${turn}`,
+          role: 'assistant',
+          content: `Answer ${turn}`,
+          timestamp: 1_700_000_000_001 + turn * 2,
+        },
+      ];
+    }).flat();
+    mockConversations = [
+      {
+        ...createDefaultConversations()[0],
+        messages: longMessages,
+      },
+    ];
+    const scrollToEndSpy = jest
+      .spyOn((FlatList as any).prototype, 'scrollToEnd')
+      .mockImplementation(() => {});
+
+    try {
+      const { UNSAFE_getByType, getByTestId, queryByTestId } = render(<ChatScreen />);
+      const messageList = UNSAFE_getByType(FlatList);
+
+      expect(messageList.props.data).toHaveLength(80);
+      expect(messageList.props.data[0].resolvedMessage.content).toBe('Question 21');
+      expect(messageList.props.data.at(-1).resolvedMessage.content).toBe('Answer 60');
+      expect(getByTestId('chat-show-earlier-messages')).toBeTruthy();
+
+      scrollToEndSpy.mockClear();
+      fireEvent.press(getByTestId('chat-show-earlier-messages'));
+
+      const expandedMessageList = UNSAFE_getByType(FlatList);
+      expect(expandedMessageList.props.data).toHaveLength(120);
+      expect(expandedMessageList.props.data[0].resolvedMessage.content).toBe('Question 1');
+      expect(queryByTestId('chat-show-earlier-messages')).toBeNull();
+      expect(scrollToEndSpy).not.toHaveBeenCalled();
+    } finally {
+      scrollToEndSpy.mockRestore();
+    }
   });
 
   it('should render the startup hint while the canonical conversation is being materialized', () => {
@@ -2647,9 +2699,9 @@ describe('ChatScreen', () => {
     expect(
       mockSetAgentRunPhase.mock.calls.some(
         ([, phase, params, runId]) =>
-          phase === 'review'
-          && params?.checkpointTitle === 'Recovered async workflow monitoring'
-          && runId === 'run-async-1',
+          phase === 'review' &&
+          params?.checkpointTitle === 'Recovered async workflow monitoring' &&
+          runId === 'run-async-1',
       ),
     ).toBe(false);
   });
@@ -2943,14 +2995,16 @@ describe('ChatScreen', () => {
       },
       checkpointTitle: 'Pilot review queued',
       checkpointDetail: 'Pilot found remaining structured work before final delivery.',
-      reviewPrompt: '## Pilot Review\n\nContinue the next structured workstream before final delivery.',
+      reviewPrompt:
+        '## Pilot Review\n\nContinue the next structured workstream before final delivery.',
       evaluation: buildMockPilotEvaluation({
         overallScore: 11,
         approved: false,
         recommendedAction: 'continue',
         controlAction: 'continue',
         summary: 'Pilot found remaining structured work before final delivery.',
-        rationale: 'The first workstream completed, but the structured plan still has another required step.',
+        rationale:
+          'The first workstream completed, but the structured plan still has another required step.',
         gaps: ['Unfinished structured work remains.'],
         nextActions: ['Continue the next structured workstream before final delivery.'],
       }),
@@ -3067,8 +3121,8 @@ describe('ChatScreen', () => {
       '## Workflow Continuation',
     );
     expect(
-      mockRunOrchestrator.mock.calls[0][0].messages.some(
-        (message: any) => message.content?.includes('This is a follow-up continuation, not a redo.'),
+      mockRunOrchestrator.mock.calls[0][0].messages.some((message: any) =>
+        message.content?.includes('This is a follow-up continuation, not a redo.'),
       ),
     ).toBe(false);
     expect(mockCompleteAgentRun).not.toHaveBeenCalled();
@@ -3357,14 +3411,16 @@ describe('ChatScreen', () => {
       },
       checkpointTitle: 'Pilot review queued',
       checkpointDetail: 'Pilot queued a continuation for the unfinished structured plan.',
-      reviewPrompt: '## Pilot Review\n\nContinue the first unfinished structured workstream before final delivery.',
+      reviewPrompt:
+        '## Pilot Review\n\nContinue the first unfinished structured workstream before final delivery.',
       evaluation: buildMockPilotEvaluation({
         overallScore: 10,
         approved: false,
         recommendedAction: 'continue',
         controlAction: 'continue',
         summary: 'Pilot found unfinished structured work.',
-        rationale: 'The foreground turn ended after a draft answer even though the structured plan still has required work.',
+        rationale:
+          'The foreground turn ended after a draft answer even though the structured plan still has required work.',
         gaps: ['The structured plan is incomplete.'],
         nextActions: ['Continue the first unfinished structured workstream before final delivery.'],
       }),
@@ -3430,8 +3486,8 @@ describe('ChatScreen', () => {
       '## Workflow Continuation',
     );
     expect(
-      mockRunOrchestrator.mock.calls[1][0].messages.some(
-        (message: any) => message.content?.includes('This is a follow-up continuation, not a redo.'),
+      mockRunOrchestrator.mock.calls[1][0].messages.some((message: any) =>
+        message.content?.includes('This is a follow-up continuation, not a redo.'),
       ),
     ).toBe(false);
     expect(mockCompleteAgentRun).not.toHaveBeenCalled();
@@ -4182,8 +4238,7 @@ describe('ChatScreen', () => {
           summary: 'Pilot requested a failure-safe note for the visible draft.',
         },
         checkpointTitle: 'Pilot review queued',
-        checkpointDetail:
-          'Pilot score 9/20. Continue the visible draft with a failure-safe note.',
+        checkpointDetail: 'Pilot score 9/20. Continue the visible draft with a failure-safe note.',
         reviewPrompt: `## Pilot Review\n\nContinue the current draft with a failure-safe note.\n\nExisting user-visible draft/output to continue:\n${initialDraft}`,
         reviewUserPrompt: `Continue the already-visible answer. Write only the net-new text that should be appended to the visible draft.\n\nVisible answer already shown to the user (do not repeat it verbatim):\n${initialDraft}`,
         evaluation: buildMockPilotEvaluation({
@@ -4197,7 +4252,8 @@ describe('ChatScreen', () => {
           confidence: 'medium',
           summary:
             'The failure-safe note should preserve the visible draft and only append net-new information.',
-          rationale: 'The visible draft already contains user-visible work and should not be discarded.',
+          rationale:
+            'The visible draft already contains user-visible work and should not be discarded.',
           strengths: ['The draft preserves the latest verified findings.'],
           gaps: ['The visible draft still needs a concise failure note.'],
           nextActions: ['Append a concise failure note without deleting the visible draft.'],
@@ -4233,7 +4289,8 @@ describe('ChatScreen', () => {
           recommendedAction: 'finalize',
           controlAction: 'accept',
           summary: 'The appended failure note is ready to deliver.',
-          rationale: 'The visible draft was preserved and the failure context was appended cleanly.',
+          rationale:
+            'The visible draft was preserved and the failure context was appended cleanly.',
           strengths: ['The visible answer preserves previously streamed content.'],
           gaps: [],
           nextActions: [],
@@ -4288,7 +4345,9 @@ describe('ChatScreen', () => {
       const continuedAssistantMessages = mockConversations[0].messages.filter(
         (message: any) =>
           message.role === 'assistant' &&
-          message.content.includes('Note: the response stream failed before the answer could finish.'),
+          message.content.includes(
+            'Note: the response stream failed before the answer could finish.',
+          ),
       );
 
       expect(continuedAssistantMessages).toHaveLength(1);
@@ -6913,11 +6972,7 @@ describe('ChatScreen', () => {
     mockRunOrchestrator.mockImplementationOnce(
       async (options: any) =>
         await new Promise<void>((resolve) => {
-          options.signal.signal.addEventListener(
-            'abort',
-            () => resolve(),
-            { once: true },
-          );
+          options.signal.signal.addEventListener('abort', () => resolve(), { once: true });
         }),
     );
 
@@ -7332,19 +7387,25 @@ describe('ChatScreen', () => {
           status: 'running',
         },
       ];
-      mockEditMessage.mockImplementation((conversationId: string, messageId: string, content: string) => {
-        updateMockConversation(conversationId, (conversation) => {
-          const messageIndex = conversation.messages.findIndex((message: any) => message.id === messageId);
-          return {
-            ...conversation,
-            messages: conversation.messages.slice(0, messageIndex + 1).map((message: any) =>
-              message.id === messageId ? { ...message, content } : message,
-            ),
-            agentRuns: [],
-            activeAgentRunId: undefined,
-          };
-        });
-      });
+      mockEditMessage.mockImplementation(
+        (conversationId: string, messageId: string, content: string) => {
+          updateMockConversation(conversationId, (conversation) => {
+            const messageIndex = conversation.messages.findIndex(
+              (message: any) => message.id === messageId,
+            );
+            return {
+              ...conversation,
+              messages: conversation.messages
+                .slice(0, messageIndex + 1)
+                .map((message: any) =>
+                  message.id === messageId ? { ...message, content } : message,
+                ),
+              agentRuns: [],
+              activeAgentRunId: undefined,
+            };
+          });
+        },
+      );
 
       const screen = render(<ChatScreen />);
       const retryIcons = screen.getAllByTestId('icon-RotateCcw');
