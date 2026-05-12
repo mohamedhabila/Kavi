@@ -28,6 +28,10 @@
 import type { Message } from '../../types';
 import { createLogger } from '../../utils/logger';
 import {
+  isAssistantFinalResponsePlaceholder,
+  isFinalAssistantMessage,
+} from '../../utils/assistantMessageMetadata';
+import {
   consolidateTurn,
   type ConsolidatorExtractor,
   type ConsolidatorOptions,
@@ -169,9 +173,17 @@ function findIndexById(messages: Message[], id: string | null | undefined): numb
 
 function lastAssistantMessage(messages: Message[]): Message | undefined {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
-    if (messages[i]?.role === 'assistant') return messages[i];
+    if (isConsolidatableAssistantMessage(messages[i])) return messages[i];
   }
   return undefined;
+}
+
+function isConsolidatableAssistantMessage(message: Message | undefined): message is Message {
+  if (!message || !isFinalAssistantMessage(message)) return false;
+  if (isAssistantFinalResponsePlaceholder(message)) return false;
+  const metadata = message.assistantMetadata;
+  if (!metadata) return true;
+  return metadata.kind === 'final' && metadata.completionStatus === 'complete';
 }
 
 function lastUserMessage(messages: Message[]): Message | undefined {
@@ -191,10 +203,21 @@ export function countNewTurns(input: CountableTurnsInput): number {
   const idx = findIndexById(input.messages, input.lastConsolidatedMessageId);
   let count = 0;
   for (let i = idx + 1; i < input.messages.length; i += 1) {
-    const role = input.messages[i]?.role;
-    if (role === 'user' || role === 'assistant') count += 1;
+    const message = input.messages[i];
+    if (message?.role === 'user' || isConsolidatableAssistantMessage(message)) count += 1;
   }
   return count;
+}
+
+function unconsolidatedWindow(
+  messages: Message[],
+  lastConsolidatedMessageId: string | null | undefined,
+  anchorMessageId: string | null | undefined,
+): Message[] {
+  const start = findIndexById(messages, lastConsolidatedMessageId) + 1;
+  const anchorIndex = findIndexById(messages, anchorMessageId);
+  const end = anchorIndex >= 0 ? anchorIndex + 1 : messages.length;
+  return messages.slice(Math.max(start, 0), Math.max(end, start));
 }
 
 export interface EvaluateTriggerInput {
@@ -273,7 +296,50 @@ export function evaluateTrigger(input: EvaluateTriggerInput): EvaluateTriggerRes
     };
   }
 
-  return { shouldRun: false, newTurns, idleMs };
+  return { shouldRun: false, newTurns, idleMs, anchorMessageId: lastAssistant.id };
+}
+
+export interface MarkThreadDirtyInput {
+  threadId: string;
+  messages: Message[];
+  disableLongTermMemory?: boolean;
+  now?: number;
+}
+
+export interface MarkThreadDirtyResult {
+  marked: boolean;
+  newTurns: number;
+  anchorMessageId?: string;
+  skipped?: 'opt_out' | 'no_closed_turn' | 'no_new_turns';
+}
+
+export function markThreadDirtyForMemory(
+  input: MarkThreadDirtyInput,
+): MarkThreadDirtyResult {
+  if (input.disableLongTermMemory) {
+    return { marked: false, newTurns: 0, skipped: 'opt_out' };
+  }
+  const evaluation = evaluateTrigger({
+    threadId: input.threadId,
+    messages: input.messages,
+    ...(typeof input.now === 'number' ? { now: input.now } : {}),
+  });
+  if (!evaluation.anchorMessageId) {
+    return { marked: false, newTurns: 0, skipped: 'no_closed_turn' };
+  }
+  if (evaluation.newTurns === 0) {
+    return { marked: false, newTurns: 0, skipped: 'no_new_turns' };
+  }
+  upsertState({
+    threadId: input.threadId,
+    turnsSinceLast: evaluation.newTurns,
+    ...(typeof input.now === 'number' ? { now: input.now } : {}),
+  });
+  return {
+    marked: true,
+    newTurns: evaluation.newTurns,
+    anchorMessageId: evaluation.anchorMessageId,
+  };
 }
 
 // ── Run pipeline ─────────────────────────────────────────────────────────
@@ -333,9 +399,11 @@ export async function maybeRunConsolidation(
     return { ran: false, skipped: 'opt_out', newTurns: 0, idleMs: 0 };
   }
   const provider = (input.consolidationProvider ?? '').trim();
+  const state = getConsolidationState(input.threadId);
   const evaluation = evaluateTrigger({
     threadId: input.threadId,
     messages: input.messages,
+    state,
     ...(typeof input.now === 'number' ? { now: input.now } : {}),
     ...(typeof input.turnThreshold === 'number' ? { turnThreshold: input.turnThreshold } : {}),
     ...(typeof input.idleThresholdMs === 'number'
@@ -394,9 +462,20 @@ export async function maybeRunConsolidation(
     };
   }
 
+  const messageWindow = unconsolidatedWindow(
+    input.messages,
+    state?.lastConsolidatedMessageId ?? null,
+    evaluation.anchorMessageId ?? lastAssistant.id,
+  );
+
   const turnInput: ConsolidatorTurnInput = {
     userMessage: lastUser.content ?? '',
     assistantMessage: lastAssistant.content ?? '',
+    conversationId: input.threadId,
+    threadId: input.threadId,
+    sourceUserMessageId: lastUser.id,
+    sourceAssistantMessageId: lastAssistant.id,
+    messages: messageWindow,
     ...(input.threadTitle ? { threadTitle: input.threadTitle } : {}),
     ...(input.personaSummary ? { personaSummary: input.personaSummary } : {}),
     ...(typeof input.now === 'number' ? { now: input.now } : {}),

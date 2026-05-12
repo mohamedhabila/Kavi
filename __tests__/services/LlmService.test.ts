@@ -93,7 +93,7 @@ const makeExpoFailureToolResult = () => ({
   }],
   failureLogs: [{
     source: 'Build / Install Dependencies',
-    excerpt: 'npm ERR! code E404\nnpm ERR! 404 @openclaw/private-package not found',
+    excerpt: 'npm ERR! code E404\nnpm ERR! 404 @kavi/private-package not found',
   }],
   note: 'Fix the missing private package or registry access before retrying.',
 });

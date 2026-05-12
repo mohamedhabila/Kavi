@@ -194,6 +194,8 @@ function makeMcpServer(overrides: Partial<McpServerConfig> = {}): McpServerConfi
     name: 'Test MCP',
     url: 'https://mcp.example.com/sse',
     enabled: true,
+    tools: [],
+    allowedTools: [],
     ...overrides,
   };
 }
@@ -541,7 +543,7 @@ tags:
 primaryEnv: desktop
 invocationPolicy: auto
 metadata:
-  openclaw:
+  kavi:
     requires:
       env:
         - GITHUB_TOKEN
@@ -705,7 +707,7 @@ describe('SSH connector with realistic configs', () => {
     mockSecureStore.set('pwd-ref', 'secret123');
     expect(getSshTargetReadiness(passwordTarget).launchable).toBe(true);
 
-    const keyTarget = makeSshTarget({ authMode: 'key', privateKeyRef: 'key-ref' });
+    const keyTarget = makeSshTarget({ authMode: 'private-key', privateKeyRef: 'key-ref' });
     mockSecureStore.set('key-ref', 'ssh-rsa AAAA...');
     expect(getSshTargetReadiness(keyTarget)).toBeDefined();
 
@@ -742,8 +744,8 @@ describe('SSH connector with realistic configs', () => {
     const configs: SshTargetConfig[] = [
       makeSshTarget({
         id: 'prod-1', name: 'Production Web', host: 'web1.prod.example.com',
-        port: 22, username: 'deploy', authMode: 'key', privateKeyRef: 'prod-key',
-        hostKeyPolicy: 'strict', trustedFingerprint: 'SHA256:abc123...',
+        port: 22, username: 'deploy', authMode: 'private-key', privateKeyRef: 'prod-key',
+        hostKeyPolicy: 'strict', trustedHostFingerprint: 'SHA256:abc123...',
       }),
       makeSshTarget({
         id: 'dev-1', name: 'Dev Server', host: '192.168.1.100',
@@ -752,8 +754,8 @@ describe('SSH connector with realistic configs', () => {
       }),
       makeSshTarget({
         id: 'bastion', name: 'Bastion Host', host: 'bastion.corp.com',
-        port: 22, username: 'admin', authMode: 'key', privateKeyRef: 'bastion-key',
-        hostKeyPolicy: 'strict', trustedFingerprint: 'SHA256:xyz789...',
+        port: 22, username: 'admin', authMode: 'private-key', privateKeyRef: 'bastion-key',
+        hostKeyPolicy: 'strict', trustedHostFingerprint: 'SHA256:xyz789...',
       }),
     ];
 
@@ -1241,6 +1243,7 @@ describe('Command center snapshot with realistic mixed configs', () => {
       kind: 'mcp-operation-stream',
       status: 'connected',
       summary: 'Tool executing',
+      reconnectable: false,
     });
 
     const settings = {
@@ -1413,13 +1416,14 @@ describe('Skill eligibility with realistic surface combinations', () => {
       browserProviders: [makeBrowserProvider({ provider: 'custom', authMode: 'none', baseUrl: 'https://custom.example.com' })],
     });
 
-    expect(ctx.availableSurfaces).toContain('local-mobile');
-    expect(ctx.availableSurfaces).toContain('local-js');
-    expect(ctx.availableSurfaces).toContain('mcp');
-    expect(ctx.availableSurfaces).toContain('ssh');
-    expect(ctx.availableSurfaces).toContain('workspace');
-    expect(ctx.availableSurfaces).toContain('browser-job');
-    expect(ctx.availableSurfaces.length).toBe(6);
+    const surfaces = ctx.availableSurfaces ?? [];
+    expect(surfaces).toContain('local-mobile');
+    expect(surfaces).toContain('local-js');
+    expect(surfaces).toContain('mcp');
+    expect(surfaces).toContain('ssh');
+    expect(surfaces).toContain('workspace');
+    expect(surfaces).toContain('browser-job');
+    expect(surfaces.length).toBe(6);
   });
 
   it('surfaces are in priority order', () => {
@@ -1432,7 +1436,7 @@ describe('Skill eligibility with realistic surface combinations', () => {
 
     const order = ['local-mobile', 'local-js', 'mcp', 'ssh', 'workspace', 'browser-job'];
     let lastIndex = -1;
-    for (const surface of ctx.availableSurfaces) {
+    for (const surface of ctx.availableSurfaces ?? []) {
       const idx = order.indexOf(surface);
       expect(idx).toBeGreaterThan(lastIndex);
       lastIndex = idx;
@@ -1530,6 +1534,7 @@ describe('Remote store edge cases', () => {
       kind: 'mcp-operation-stream',
       status: 'connected',
       summary: 'Test session',
+      reconnectable: false,
     });
 
     let session = useRemoteStore.getState().sessions[sessionId];
@@ -1564,7 +1569,7 @@ describe('End-to-end MCP flow with real fetched data', () => {
     }
   }, 30000);
 
-  it('full lifecycle: fetch → draft → config → definition → parse', () => {
+  it('full lifecycle: fetch → draft → config → definition → parse', async () => {
     if (!realEntry) return; // Skip if network unavailable
 
     // 1. Build install draft
@@ -1604,10 +1609,9 @@ describe('End-to-end MCP flow with real fetched data', () => {
 
     // 5. Try to execute (should fail gracefully — no real server)
     const clients = new Map();
-    return executeMcpTool(clients, toolDef.name, '{"query":"test"}').then((result) => {
-      expect(result).toContain('Error');
-      expect(result).toContain('not connected');
-    });
+    const result = await executeMcpTool(clients, toolDef.name, '{"query":"test"}');
+    expect(result).toContain('Error');
+    expect(result).toContain('not connected');
   });
 });
 

@@ -787,7 +787,7 @@ describe('SettingsScreen', () => {
         tools: [],
         allowedTools: [],
         oauth: { clientId: 'mobile-client' },
-      },
+      } as any,
     ];
     jest.spyOn(Alert, 'alert').mockImplementation((title, msg, buttons: any) => {
       const destructive = buttons?.find((button: any) => button.style === 'destructive');
@@ -1030,7 +1030,9 @@ describe('SettingsScreen', () => {
       expect(getByText('50% complete')).toBeTruthy();
     });
 
-    resolveDownload?.(buildInstalledLocalProvider(pendingProvider));
+    (resolveDownload as ((value: any) => void) | null)?.(
+      buildInstalledLocalProvider(pendingProvider),
+    );
 
     await waitFor(() => {
       expect(getByText('Download complete. You can save this provider now.')).toBeTruthy();
@@ -1308,15 +1310,15 @@ describe('SettingsScreen', () => {
 
     fireEvent.press(getAllByLabelText('Add Expo account')[0]);
     fireEvent.changeText(getByDisplayValue('New Expo Account'), '');
-    fireEvent.changeText(getByPlaceholderText('my-org'), 'openclaw');
+    fireEvent.changeText(getByPlaceholderText('my-org'), 'kavi');
     fireEvent.changeText(getByPlaceholderText('eas_xxx'), 'eas_live_token');
     fireEvent.press(getByText('Save'));
 
     await waitFor(() => {
       expect(mockSaveSecure).toHaveBeenCalledWith(expect.stringContaining('expo_account_token_'), 'eas_live_token');
       expect(mockAddExpoAccount).toHaveBeenCalledWith(expect.objectContaining({
-        owner: 'openclaw',
-        name: 'openclaw',
+        owner: 'kavi',
+        name: 'kavi',
         accountType: 'personal',
         tokenRef: expect.stringContaining('expo_account_token_'),
       }));
@@ -1344,7 +1346,7 @@ describe('SettingsScreen', () => {
       {
         id: 'expo-account-1',
         name: 'Expo Production',
-        owner: 'openclaw',
+        owner: 'kavi',
         accountType: 'robot',
         enabled: true,
         tokenRef: 'expo_account_token_expo-account-1',
@@ -1367,7 +1369,7 @@ describe('SettingsScreen', () => {
       expect(mockDeleteSecure).toHaveBeenCalledWith('expo_account_token_expo-account-1');
       expect(mockUpdateExpoAccount).toHaveBeenCalledWith(expect.objectContaining({
         id: 'expo-account-1',
-        owner: 'openclaw',
+        owner: 'kavi',
         accountType: 'robot',
         tokenRef: undefined,
       }));
@@ -1381,7 +1383,7 @@ describe('SettingsScreen', () => {
       {
         id: 'expo-account-1',
         name: 'Expo Production',
-        owner: 'openclaw',
+        owner: 'kavi',
         accountType: 'personal',
         enabled: true,
       },
@@ -1401,7 +1403,7 @@ describe('SettingsScreen', () => {
       {
         id: 'expo-account-1',
         name: 'Expo Production',
-        owner: 'openclaw',
+        owner: 'kavi',
         accountType: 'personal',
         enabled: true,
       },
@@ -1429,7 +1431,7 @@ describe('SettingsScreen', () => {
       {
         id: 'expo-account-1',
         name: 'Expo Production',
-        owner: 'openclaw',
+        owner: 'kavi',
         accountType: 'personal',
         enabled: true,
       },
@@ -1451,7 +1453,7 @@ describe('SettingsScreen', () => {
         id: 'expo-project-1',
         name: 'Client App',
         accountId: 'expo-account-1',
-        owner: 'openclaw',
+        owner: 'kavi',
         slug: 'client-app',
         enabled: true,
         mode: 'direct-ssh',
@@ -1485,7 +1487,7 @@ describe('SettingsScreen', () => {
       {
         id: 'expo-account-1',
         name: 'Expo Production',
-        owner: 'openclaw',
+        owner: 'kavi',
         accountType: 'personal',
         enabled: true,
       },
@@ -1495,7 +1497,7 @@ describe('SettingsScreen', () => {
         id: 'expo-project-1',
         name: 'Client App',
         accountId: 'expo-account-1',
-        owner: 'openclaw',
+        owner: 'kavi',
         slug: 'client-app',
         enabled: true,
         mode: 'github-workflow',
@@ -1529,7 +1531,7 @@ describe('SettingsScreen', () => {
       {
         id: 'expo-account-1',
         name: 'Expo Production',
-        owner: 'openclaw',
+        owner: 'kavi',
         accountType: 'personal',
         enabled: true,
       },
@@ -1539,11 +1541,11 @@ describe('SettingsScreen', () => {
         id: 'expo-project-1',
         name: 'Client App',
         accountId: 'expo-account-1',
-        owner: 'openclaw',
+        owner: 'kavi',
         slug: 'client-app',
         enabled: true,
         mode: 'github-workflow',
-        repoFullName: 'openclaw/client-app',
+        repoFullName: 'kavi/client-app',
         workflowFile: '',
         defaultBuildProfile: 'production',
         defaultUpdateBranch: 'production',
@@ -1572,7 +1574,7 @@ describe('SettingsScreen', () => {
       {
         id: 'expo-account-1',
         name: 'Expo Production',
-        owner: 'openclaw',
+        owner: 'kavi',
         accountType: 'personal',
         enabled: true,
       },
@@ -1582,11 +1584,11 @@ describe('SettingsScreen', () => {
         id: 'expo-project-1',
         name: 'Client App',
         accountId: 'expo-account-1',
-        owner: 'openclaw',
+        owner: 'kavi',
         slug: 'client-app',
         enabled: true,
         mode: 'github-workflow',
-        repoFullName: 'openclaw/client-app',
+        repoFullName: 'kavi/client-app',
         workflowFile: '.github/workflows/deploy.yml',
         workflowRef: 'main',
         defaultBuildProfile: 'production',
@@ -1607,7 +1609,7 @@ describe('SettingsScreen', () => {
     });
 
     fireEvent.changeText(getByDisplayValue('Client App'), '  Mobile Client  ');
-    fireEvent.changeText(getByDisplayValue('openclaw'), '  openclaw-team  ');
+    fireEvent.changeText(getByDisplayValue('kavi'), '  kavi-team  ');
     fireEvent.changeText(getByDisplayValue('client-app'), '  mobile-client  ');
     fireEvent.changeText(getByDisplayValue('https://preview.example.com'), '');
     fireEvent.changeText(getByDisplayValue('app.example.com'), '');
@@ -1617,11 +1619,11 @@ describe('SettingsScreen', () => {
       expect(mockUpdateExpoProject).toHaveBeenCalledWith(expect.objectContaining({
         id: 'expo-project-1',
         name: 'Mobile Client',
-        owner: 'openclaw-team',
+        owner: 'kavi-team',
         slug: 'mobile-client',
         previewUrl: undefined,
         customDomain: undefined,
-        repoFullName: 'openclaw/client-app',
+        repoFullName: 'kavi/client-app',
         workflowFile: '.github/workflows/deploy.yml',
         platforms: ['android', 'ios'],
       }));
@@ -1633,7 +1635,7 @@ describe('SettingsScreen', () => {
       {
         id: 'expo-account-1',
         name: 'Expo Production',
-        owner: 'openclaw',
+        owner: 'kavi',
         accountType: 'personal',
         enabled: true,
       },
@@ -1643,7 +1645,7 @@ describe('SettingsScreen', () => {
         id: 'expo-project-1',
         name: 'Client App',
         accountId: 'expo-account-1',
-        owner: 'openclaw',
+        owner: 'kavi',
         slug: 'client-app',
         enabled: true,
         mode: 'eas-workflow',

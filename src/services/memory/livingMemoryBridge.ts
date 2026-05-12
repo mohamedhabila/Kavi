@@ -42,6 +42,9 @@ export interface BuildLivingMemorySectionsOptions {
   messages: Message[];
   /** Thread/conversation creation timestamp (ms). Falls back to first message timestamp or now. */
   threadCreatedAt?: number;
+  /** Conversation/task hints used to boost scoped recall. */
+  conversationId?: string;
+  taskId?: string;
   /** Now (ms). Defaults to `Date.now()`. Test seam. */
   now?: number;
   /** Optional embedding config — when omitted, recall uses lexical scoring only. */
@@ -154,6 +157,8 @@ export async function buildLivingMemorySections(
     disableRecall = false,
     disableLongTermMemory = false,
     threadCreatedAt,
+    conversationId,
+    taskId,
     readBlocks,
   } = options;
 
@@ -197,6 +202,8 @@ export async function buildLivingMemorySections(
       recalledFacts = await recallFactsForQuery(query, {
         limit: recallLimit,
         ...(embeddingConfig ? { embeddingConfig } : {}),
+        ...(conversationId ? { conversationId } : {}),
+        ...(taskId ? { taskId } : {}),
       });
     } catch (error) {
       logger.devWarn(

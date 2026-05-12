@@ -22,9 +22,12 @@ import type { EmbeddingConfig } from '../../types';
 import { cosineSimilarity, getEmbeddingCached } from './embeddings';
 import {
   listFacts,
+  markFactsRecalled,
   setFactEmbedding,
   type MemoryFact,
+  type MemoryFactScope,
 } from './facts';
+import { calculateTemporalDecayMultiplier } from './temporal-decay';
 
 const DEFAULT_LIMIT = 8;
 const DEFAULT_SIMILARITY_THRESHOLD = 0.45;
@@ -61,6 +64,11 @@ export interface RecallFactsOptions {
   textWeight?: number;
   /** Bi-temporal anchor — facts valid at this ms timestamp. */
   asOf?: number;
+  includeHistorical?: boolean;
+  scopeHints?: MemoryFactScope[];
+  conversationId?: string;
+  taskId?: string;
+  now?: number;
   /**
    * When true (default), pinned facts are always returned regardless of
    * threshold and consume `limit` slots first.
@@ -79,6 +87,10 @@ export interface ScoredFact {
   vectorScore: number;
   textScore: number;
   pinnedBoost: number;
+  decayMultiplier: number;
+  scopeBoost: number;
+  reinforcementBoost: number;
+  importanceScore: number;
 }
 
 const TOKEN_SPLIT = /[^a-z0-9]+/i;
@@ -103,8 +115,87 @@ function lexicalOverlap(queryTokens: Set<string>, factText: string): number {
   return hits / queryTokens.size;
 }
 
+function tokenJaccard(left: Set<string>, right: Set<string>): number {
+  if (left.size === 0 || right.size === 0) return 0;
+  let intersection = 0;
+  for (const token of left) {
+    if (right.has(token)) intersection += 1;
+  }
+  return intersection / (left.size + right.size - intersection);
+}
+
 function factHaystack(fact: MemoryFact): string {
-  return `${fact.subjectId} ${fact.predicate} ${fact.objectText}`;
+  return `${fact.subjectId} ${fact.predicate} ${fact.objectText} ${fact.sourceSummary ?? ''}`;
+}
+
+function diversifyScoredFacts(scored: ScoredFact[], limit: number): ScoredFact[] {
+  const remaining = [...scored];
+  const selected: ScoredFact[] = [];
+  const selectedTokens: Array<Set<string>> = [];
+  while (remaining.length > 0 && selected.length < Math.max(limit * 2, limit)) {
+    let bestIndex = 0;
+    let bestScore = Number.NEGATIVE_INFINITY;
+    for (let index = 0; index < remaining.length; index += 1) {
+      const candidate = remaining[index];
+      const candidateTokens = tokenize(factHaystack(candidate.fact));
+      const redundancy = selectedTokens.length
+        ? Math.max(...selectedTokens.map((tokens) => tokenJaccard(candidateTokens, tokens)))
+        : 0;
+      const mmrScore = candidate.score * 0.82 - redundancy * 0.18;
+      if (mmrScore > bestScore) {
+        bestScore = mmrScore;
+        bestIndex = index;
+      }
+    }
+    const [picked] = remaining.splice(bestIndex, 1);
+    selected.push(picked);
+    selectedTokens.push(tokenize(factHaystack(picked.fact)));
+  }
+  return [...selected, ...remaining];
+}
+
+function getCandidateScopes(options: RecallFactsOptions): MemoryFactScope[] | undefined {
+  if (!options.scopeHints?.length && !options.conversationId && !options.taskId) {
+    return undefined;
+  }
+  const scopes = new Set<MemoryFactScope>(options.scopeHints ?? []);
+  if (options.conversationId) scopes.add('conversation');
+  if (options.taskId) scopes.add('session');
+  scopes.add('global');
+  scopes.add('project');
+  return scopes.size > 0 ? Array.from(scopes) : undefined;
+}
+
+function scoreScope(fact: MemoryFact, options: RecallFactsOptions): number {
+  if (fact.scope === 'conversation' && fact.originConversationId === options.conversationId) {
+    return 0.18;
+  }
+  if (fact.scope === 'session' && fact.originTaskId === options.taskId) {
+    return 0.16;
+  }
+  if (options.scopeHints?.includes(fact.scope)) return 0.1;
+  if (fact.scope === 'global') return 0.04;
+  return 0;
+}
+
+function decayHalfLifeDays(fact: MemoryFact): number {
+  if (fact.pinned || fact.decayPolicy === 'pinned') return Number.POSITIVE_INFINITY;
+  if (fact.decayPolicy === 'slow') return 180;
+  if (fact.decayPolicy === 'fast') return 7;
+  if (fact.decayPolicy === 'ephemeral') return 2;
+  return 30 + fact.importance * 90 + Math.log1p(fact.accessCount) * 12;
+}
+
+function scoreDecay(fact: MemoryFact, now: number): number {
+  const halfLifeDays = decayHalfLifeDays(fact);
+  if (!Number.isFinite(halfLifeDays)) return 1;
+  const lastStrengthAt = fact.lastReinforcedAt ?? fact.lastRecalledAt ?? fact.updatedAt;
+  const ageDays = Math.max(0, now - lastStrengthAt) / (24 * 60 * 60 * 1000);
+  return calculateTemporalDecayMultiplier({ ageInDays: ageDays, halfLifeDays });
+}
+
+function scoreReinforcement(fact: MemoryFact): number {
+  return Math.min(0.12, Math.log1p(fact.accessCount + fact.repeatedMentionCount) * 0.035);
 }
 
 async function maybeEmbedQuery(
@@ -184,16 +275,22 @@ export async function recallFactsForQuery(
   );
   const alwaysIncludePinned = options.alwaysIncludePinned !== false;
   const trimmedQuery = query.trim();
+  const now = options.now ?? options.asOf ?? Date.now();
+  const candidateScopes = getCandidateScopes(options);
 
   const candidates = listFacts({
     limit: candidatePool,
+    ...(candidateScopes ? { scope: candidateScopes } : {}),
+    ...(options.includeHistorical ? { includeInvalidated: true } : {}),
     ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
   });
 
   // Pinned-only fast path: empty query, just return the pinned set.
   if (!trimmedQuery) {
     if (!alwaysIncludePinned) return [];
-    return candidates.filter((fact) => fact.pinned).slice(0, limit);
+    const pinned = candidates.filter((fact) => fact.pinned).slice(0, limit);
+    markFactsRecalled(pinned.map((fact) => fact.id), now);
+    return pinned;
   }
 
   const queryTokens = tokenize(trimmedQuery);
@@ -215,8 +312,28 @@ export async function recallFactsForQuery(
         ? Math.max(0, cosineSimilarity(queryEmbedding, fact.embedding))
         : 0;
     const pinnedBoost = alwaysIncludePinned && fact.pinned ? PINNED_BOOST : 0;
-    const score = vectorWeight * vectorScore + textWeight * textScore + pinnedBoost;
-    scored.push({ fact, score, vectorScore, textScore, pinnedBoost });
+    const decayMultiplier = scoreDecay(fact, now);
+    const scopeBoost = scoreScope(fact, options);
+    const reinforcementBoost = scoreReinforcement(fact);
+    const importanceScore = fact.importance * 0.1;
+    const retrievalScore = vectorWeight * vectorScore + textWeight * textScore;
+    const score =
+      retrievalScore * fact.confidence * decayMultiplier +
+      pinnedBoost +
+      scopeBoost +
+      reinforcementBoost +
+      importanceScore;
+    scored.push({
+      fact,
+      score,
+      vectorScore,
+      textScore,
+      pinnedBoost,
+      decayMultiplier,
+      scopeBoost,
+      reinforcementBoost,
+      importanceScore,
+    });
   }
 
   scored.sort((a, b) => {
@@ -224,21 +341,25 @@ export async function recallFactsForQuery(
     // Tie-break: more recent fact wins.
     return b.fact.updatedAt - a.fact.updatedAt;
   });
+  const diversified = diversifyScoredFacts(scored, limit);
 
   const selected: MemoryFact[] = [];
   const seen = new Set<string>();
 
   if (alwaysIncludePinned) {
-    for (const entry of scored) {
+    for (const entry of diversified) {
       if (!entry.fact.pinned) continue;
       if (seen.has(entry.fact.id)) continue;
       selected.push(entry.fact);
       seen.add(entry.fact.id);
-      if (selected.length >= limit) return selected;
+      if (selected.length >= limit) {
+        markFactsRecalled(selected.map((fact) => fact.id), now);
+        return selected;
+      }
     }
   }
 
-  for (const entry of scored) {
+  for (const entry of diversified) {
     if (seen.has(entry.fact.id)) continue;
     if (entry.score < threshold) continue;
     selected.push(entry.fact);
@@ -246,6 +367,7 @@ export async function recallFactsForQuery(
     if (selected.length >= limit) break;
   }
 
+  markFactsRecalled(selected.map((fact) => fact.id), now);
   return selected;
 }
 
@@ -276,12 +398,27 @@ export async function recallScoredFactsForQuery(
         ? Math.max(0, cosineSimilarity(queryEmbedding, fact.embedding))
         : 0;
     const pinnedBoost = alwaysIncludePinned && fact.pinned ? PINNED_BOOST : 0;
+    const now = options.now ?? options.asOf ?? Date.now();
+    const decayMultiplier = scoreDecay(fact, now);
+    const scopeBoost = scoreScope(fact, options);
+    const reinforcementBoost = scoreReinforcement(fact);
+    const importanceScore = fact.importance * 0.1;
+    const retrievalScore = vectorWeight * vectorScore + textWeight * textScore;
     return {
       fact,
       vectorScore,
       textScore,
       pinnedBoost,
-      score: vectorWeight * vectorScore + textWeight * textScore + pinnedBoost,
+      decayMultiplier,
+      scopeBoost,
+      reinforcementBoost,
+      importanceScore,
+      score:
+        retrievalScore * fact.confidence * decayMultiplier +
+        pinnedBoost +
+        scopeBoost +
+        reinforcementBoost +
+        importanceScore,
     };
   });
 }

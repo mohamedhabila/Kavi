@@ -92,8 +92,86 @@ export function ensureFactSchema(): void {
     );
     CREATE INDEX IF NOT EXISTS idx_migration_status
       ON memory_migration_state(status);
+
+    CREATE TABLE IF NOT EXISTS memory_episodes (
+      id TEXT PRIMARY KEY,
+      conversation_id TEXT,
+      thread_id TEXT,
+      task_id TEXT,
+      started_at INTEGER NOT NULL,
+      ended_at INTEGER NOT NULL,
+      summary TEXT NOT NULL,
+      entities_json TEXT NOT NULL DEFAULT '[]',
+      message_ids_json TEXT NOT NULL DEFAULT '[]',
+      tool_names_json TEXT NOT NULL DEFAULT '[]',
+      importance REAL NOT NULL DEFAULT 0.5,
+      embedding TEXT,
+      created_at INTEGER NOT NULL,
+      deleted_at INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_episodes_conversation
+      ON memory_episodes(conversation_id, deleted_at);
+    CREATE INDEX IF NOT EXISTS idx_episodes_task
+      ON memory_episodes(task_id, deleted_at);
+    CREATE INDEX IF NOT EXISTS idx_episodes_ended
+      ON memory_episodes(ended_at);
+
+    CREATE TABLE IF NOT EXISTS memory_fact_evidence (
+      id TEXT PRIMARY KEY,
+      fact_id TEXT NOT NULL,
+      episode_id TEXT,
+      message_id TEXT,
+      role TEXT,
+      quote TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_fact_evidence_fact
+      ON memory_fact_evidence(fact_id);
+    CREATE INDEX IF NOT EXISTS idx_fact_evidence_episode
+      ON memory_fact_evidence(episode_id);
+  `);
+  ensureFactColumns(db);
+  db.execSync(`
+    CREATE INDEX IF NOT EXISTS idx_facts_scope_origin
+      ON memory_facts(scope, origin_conversation_id, deleted_at, invalid_at);
+    CREATE INDEX IF NOT EXISTS idx_facts_scope_task
+      ON memory_facts(scope, origin_task_id, deleted_at, invalid_at);
+    CREATE INDEX IF NOT EXISTS idx_facts_subject_predicate_scope
+      ON memory_facts(subject_id, predicate, scope);
+    CREATE INDEX IF NOT EXISTS idx_facts_last_recalled
+      ON memory_facts(last_recalled_at);
+    CREATE INDEX IF NOT EXISTS idx_facts_importance
+      ON memory_facts(importance);
   `);
   schemaReady = true;
+}
+
+function ensureColumn(
+  db: ReturnType<typeof getMemoryDb>,
+  table: string,
+  column: string,
+  definition: string,
+): void {
+  const rows = db.getAllSync<{ name: string }>(`PRAGMA table_info(${table})`);
+  if (rows.some((row) => row.name === column)) return;
+  db.execSync(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
+}
+
+function ensureFactColumns(db: ReturnType<typeof getMemoryDb>): void {
+  ensureColumn(db, 'memory_facts', 'scope', "scope TEXT NOT NULL DEFAULT 'global'");
+  ensureColumn(db, 'memory_facts', 'origin_conversation_id', 'origin_conversation_id TEXT');
+  ensureColumn(db, 'memory_facts', 'origin_thread_id', 'origin_thread_id TEXT');
+  ensureColumn(db, 'memory_facts', 'origin_task_id', 'origin_task_id TEXT');
+  ensureColumn(db, 'memory_facts', 'source_turn_id', 'source_turn_id TEXT');
+  ensureColumn(db, 'memory_facts', 'source_summary', 'source_summary TEXT');
+  ensureColumn(db, 'memory_facts', 'importance', 'importance REAL NOT NULL DEFAULT 0.5');
+  ensureColumn(db, 'memory_facts', 'access_count', 'access_count INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(db, 'memory_facts', 'repeated_mention_count', 'repeated_mention_count INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(db, 'memory_facts', 'last_recalled_at', 'last_recalled_at INTEGER');
+  ensureColumn(db, 'memory_facts', 'last_reinforced_at', 'last_reinforced_at INTEGER');
+  ensureColumn(db, 'memory_facts', 'last_accessed_at', 'last_accessed_at INTEGER');
+  ensureColumn(db, 'memory_facts', 'decay_policy', "decay_policy TEXT NOT NULL DEFAULT 'normal'");
+  ensureColumn(db, 'memory_facts', 'expires_at', 'expires_at INTEGER');
 }
 
 export function resetFactSchemaCacheForTests(): void {

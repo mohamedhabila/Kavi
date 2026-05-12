@@ -19,6 +19,7 @@ import {
   flushAllDirtyThreads,
   getConsolidationState,
   listDirtyThreadIds,
+  markThreadDirtyForMemory,
   maybeRunConsolidation,
   DEFAULT_TURN_THRESHOLD,
   DEFAULT_IDLE_THRESHOLD_MS,
@@ -191,6 +192,42 @@ describe('evaluateTrigger', () => {
 });
 
 describe('maybeRunConsolidation gating', () => {
+  it('marks a single completed chitchat turn dirty without a provider', () => {
+    const messages = [
+      userMsg('u-live', 1, 'Remember that I like concise plans.'),
+      {
+        ...asstMsg('a-live', 2, 'Got it.'),
+        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+      },
+    ] as Message[];
+
+    const result = markThreadDirtyForMemory({ threadId: THREAD, messages, now: 3 });
+
+    expect(result.marked).toBe(true);
+    expect(result.newTurns).toBe(2);
+    expect(getConsolidationState(THREAD)?.turnsSinceLast).toBe(2);
+  });
+
+  it('does not mark incomplete assistant turns dirty', () => {
+    const messages = [
+      userMsg('u-stop', 1, 'Start this but I will stop it.'),
+      {
+        ...asstMsg('a-stop', 2, 'Partial draft'),
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'incomplete',
+          finishReason: 'response_failed',
+        },
+      },
+    ] as Message[];
+
+    const result = markThreadDirtyForMemory({ threadId: THREAD, messages, now: 3 });
+
+    expect(result.marked).toBe(false);
+    expect(result.skipped).toBe('no_closed_turn');
+    expect(getConsolidationState(THREAD)).toBeNull();
+  });
+
   it('is a no-op when consolidationProvider is null/empty', async () => {
     const messages = buildTranscript(DEFAULT_TURN_THRESHOLD);
     const extractor = jest.fn(STUB_EXTRACTOR);

@@ -141,9 +141,7 @@ export const MemoryScreen: React.FC = () => {
     const result = executeMemoryRecall({
       ...(subject ? { subject } : {}),
       ...(factsPinnedOnly ? { pinnedOnly: true } : {}),
-      // When neither filter nor pinnedOnly is set, recall requires *some* hint.
-      // Fall back to listing all pinned facts as a safe default.
-      ...(subject || factsPinnedOnly ? {} : { pinnedOnly: true }),
+      ...(!subject && !factsPinnedOnly ? { all: true } : {}),
       limit: 100,
     });
     if ('ok' in result && result.ok) {
@@ -488,6 +486,23 @@ export const MemoryScreen: React.FC = () => {
                     {fact.subject} · {fact.predicate}
                   </Text>
                   <Text style={styles.factValue}>{fact.value}</Text>
+                  <Text style={styles.factMeta}>
+                    {t('memory.factMetaPrimary', {
+                      scope: fact.scope,
+                      confidence: Math.round(fact.confidence * 100),
+                      importance: Math.round(fact.importance * 100),
+                    })}
+                  </Text>
+                  <Text style={styles.factMeta}>
+                    {fact.originConversationId
+                      ? t('memory.factSourceConversation', { id: fact.originConversationId })
+                      : t('memory.factSourceGlobal')}
+                    {fact.lastRecalledAt
+                      ? ` ${t('memory.factLastRecalled', {
+                          date: new Date(fact.lastRecalledAt).toLocaleDateString(),
+                        })}`
+                      : ''}
+                  </Text>
                   <View style={styles.factActions}>
                     <TouchableOpacity
                       onPress={() => handleFactToggleStar(fact)}
@@ -722,6 +737,10 @@ function createStyles(colors: AppPalette) {
     factValue: {
       fontSize: 14,
       color: colors.text,
+    },
+    factMeta: {
+      fontSize: 12,
+      color: colors.textTertiary,
     },
     factActions: {
       flexDirection: 'row',

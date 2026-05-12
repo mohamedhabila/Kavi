@@ -16,6 +16,7 @@ import {
   listFacts,
   findEntityByName,
 } from '../../src/services/memory/factStore';
+import { listEpisodes, listFactEvidence } from '../../src/services/memory/episodes';
 import {
   buildConsolidatorPrompt,
   parseConsolidatorOutput,
@@ -95,7 +96,9 @@ describe('parseConsolidatorOutput', () => {
   it('returns an empty result on malformed JSON', () => {
     const result = parseConsolidatorOutput('not json at all');
     expect(result).toEqual({
+      episodeSummary: null,
       newFacts: [],
+      invalidatedFacts: [],
       activeFocus: null,
       openThreads: [],
       notable: [],
@@ -146,31 +149,82 @@ describe('applyConsolidatorResult', () => {
   it('records new facts and updates the active_focus block', () => {
     const result = applyConsolidatorResult(
       {
+        episodeSummary: null,
         newFacts: [
-          { subject: 'user', predicate: 'lives_in', value: 'Berlin', confidence: 'high' },
+          {
+            subject: 'user',
+            predicate: 'lives_in',
+            value: 'Berlin',
+            confidence: 'high',
+            scope: 'global',
+            importance: 0.8,
+            evidenceMessageIds: ['u-1'],
+            reason: 'The user stated this directly.',
+          },
         ],
+        invalidatedFacts: [],
         activeFocus: 'Settling into Berlin.',
-        openThreads: [],
+        openThreads: ['Suggest a SIM card provider'],
         notable: [],
       },
-      { now: 1_700_000_000_000 },
+      {
+        now: 1_700_000_000_000,
+        conversationId: 'conv-1',
+        threadId: 'conv-1',
+        sourceUserMessageId: 'u-1',
+        sourceAssistantMessageId: 'a-1',
+      },
     );
     expect(result.recordedFactIds).toHaveLength(1);
     expect(result.activeFocusUpdated).toBe(true);
+    expect(result.openThreadsUpdated).toBe(true);
 
     const userEntity = findEntityByName('user');
     expect(userEntity).not.toBeNull();
     const facts = listFacts({ subjectId: userEntity!.id });
     expect(facts).toHaveLength(1);
     expect(facts[0].objectText).toBe('Berlin');
+    expect(facts[0].scope).toBe('global');
+    expect(facts[0].originConversationId).toBe('conv-1');
+    expect(facts[0].importance).toBe(0.8);
+    expect(listFactEvidence(facts[0].id)).toHaveLength(1);
 
     const block = getBlock('active_focus');
     expect(block?.content).toBe('Settling into Berlin.');
+    expect(getBlock('open_threads')?.content).toContain('Suggest a SIM card provider');
+  });
+
+  it('persists episode summaries as searchable episodic memory', () => {
+    const result = applyConsolidatorResult(
+      {
+        episodeSummary: 'The user compared local model runtime options.',
+        newFacts: [],
+        invalidatedFacts: [],
+        activeFocus: null,
+        openThreads: [],
+        notable: [],
+      },
+      {
+        now: 10_000,
+        conversationId: 'conv-episode',
+        messages: [
+          { id: 'u-episode', role: 'user', content: 'Compare runtimes', timestamp: 9_000 },
+          { id: 'a-episode', role: 'assistant', content: 'Done', timestamp: 10_000 },
+        ] as any,
+      },
+    );
+
+    expect(result.episodeId).toEqual(expect.any(String));
+    expect(listEpisodes({ conversationId: 'conv-episode' })[0]?.summary).toContain(
+      'runtime options',
+    );
   });
 
   it('is idempotent: re-applying the same result records no duplicates', () => {
     const result = {
+      episodeSummary: null,
       newFacts: [{ subject: 'user', predicate: 'lives_in', value: 'Berlin' as const }],
+      invalidatedFacts: [],
       activeFocus: null,
       openThreads: [],
       notable: [],
@@ -196,7 +250,9 @@ describe('applyConsolidatorResult', () => {
     expect(() =>
       applyConsolidatorResult(
         {
+          episodeSummary: null,
           newFacts: [],
+          invalidatedFacts: [],
           // 600 chars max enforced at parse, but applyConsolidatorResult must
           // also tolerate a caller that hands it raw oversize content.
           activeFocus: 'x'.repeat(5_000),
@@ -256,7 +312,9 @@ describe('consolidateTurn', () => {
       { extractor },
     );
     expect(result).toEqual({
+      episodeSummary: null,
       newFacts: [],
+      invalidatedFacts: [],
       activeFocus: null,
       openThreads: [],
       notable: [],

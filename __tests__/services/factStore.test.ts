@@ -70,8 +70,8 @@ describe('upsertEntity', () => {
   });
 
   it('finds an existing entity via alias match', () => {
-    const created = upsertEntity({ name: 'OpenClaw', type: 'project', aliases: ['openclaw mobile'] });
-    const looked = upsertEntity({ name: 'OpenClaw Mobile', type: 'project' });
+    const created = upsertEntity({ name: 'Kavi', type: 'project', aliases: ['kavi mobile'] });
+    const looked = upsertEntity({ name: 'Kavi Mobile', type: 'project' });
     expect(looked.id).toBe(created.id);
   });
 

@@ -323,7 +323,7 @@ export async function sqliteHybridSearch(
   const scored: MemorySearchResult[] = [];
 
   for (const chunk of chunks) {
-    const isConversationChunk = chunk.source === 'conversation/MEMORY.md';
+    const isConversationChunk = chunk.source.startsWith('conversation/');
     const isDailyChunk = chunk.source.startsWith('daily/');
     if (requestedScope === 'global' && isConversationChunk) {
       continue;

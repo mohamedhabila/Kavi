@@ -137,8 +137,8 @@ describe('buildLivingMemorySections', () => {
       predicate: 'lives_in',
       objectText: 'Berlin Berlin Berlin',
     });
-    setFactPinned(fact.id, true);
-    recordFact({ subjectId: me.id, predicate: 'works_on', objectText: 'OpenClaw mobile' });
+    setFactPinned(fact.fact.id, true);
+    recordFact({ subjectId: me.id, predicate: 'works_on', objectText: 'Kavi mobile' });
 
     const out = await buildLivingMemorySections({
       messages: [userMessage('Berlin Berlin', 1_000)],
@@ -238,7 +238,7 @@ describe('buildLivingMemorySections', () => {
       predicate: 'lives_in',
       objectText: 'Berlin',
     });
-    setFactPinned(fact.id, true);
+    setFactPinned(fact.fact.id, true);
 
     const out = await buildLivingMemorySections({
       messages: [userMessage('hello sam Berlin', 1_000)],

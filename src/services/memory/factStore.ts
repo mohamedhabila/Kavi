@@ -22,6 +22,8 @@ export {
 } from './entities';
 export {
   type MemoryFact,
+  type MemoryFactScope,
+  type MemoryDecayPolicy,
   type RecordFactInput,
   type RecordFactResult,
   type ListFactsOptions,
@@ -32,6 +34,8 @@ export {
   softDeleteFact,
   setFactPinned,
   setFactEmbedding,
+  markFactsRecalled,
+  normalizeScope,
 } from './facts';
 export {
   type MemoryBlock,

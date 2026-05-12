@@ -2195,7 +2195,7 @@ describe('Orchestrator', () => {
       (executeTool as jest.Mock)
         .mockResolvedValueOnce(JSON.stringify({
           projectId: 'proj-1',
-          projectName: 'OpenClaw',
+          projectName: 'Kavi',
           mode: 'github-workflow',
           workflowRun: {
             id: 101,
@@ -2205,7 +2205,7 @@ describe('Orchestrator', () => {
         }))
         .mockResolvedValueOnce(JSON.stringify({
           projectId: 'proj-1',
-          projectName: 'OpenClaw',
+          projectName: 'Kavi',
           mode: 'github-workflow',
           workflowRun: {
             id: 101,

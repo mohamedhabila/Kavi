@@ -13,7 +13,14 @@
 // ---------------------------------------------------------------------------
 
 import type { ConsolidatorExtractor } from './consolidator';
-import { flushAllDirtyThreads } from './consolidatorScheduler';
+import { applyHeuristicTurnMemory } from './consolidator';
+import {
+  flushAllDirtyThreads,
+  markThreadDirtyForMemory,
+  maybeRunConsolidation,
+  type MarkThreadDirtyResult,
+  type RunConsolidationResult,
+} from './consolidatorScheduler';
 import { runMigrationSeedPass, type RunSeedPassResult } from './migrationSeedPass';
 import { useChatStore } from '../../store/useChatStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
@@ -176,6 +183,102 @@ export async function runMemoryBackgroundFlush(): Promise<void> {
       error instanceof Error ? error.message : String(error),
     );
   }
+}
+
+function findLastAssistant(messages: Message[]): Message | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === 'assistant') return messages[index];
+  }
+  return undefined;
+}
+
+function findLastUserBefore(messages: Message[], messageId: string | undefined): Message | undefined {
+  const anchorIndex = messageId
+    ? messages.findIndex((message) => message.id === messageId)
+    : messages.length - 1;
+  for (let index = Math.max(anchorIndex, 0); index >= 0; index -= 1) {
+    if (messages[index]?.role === 'user') return messages[index];
+  }
+  return undefined;
+}
+
+export interface RecordCompletedTurnForMemoryInput {
+  threadId: string;
+  messages: Message[];
+  threadTitle?: string;
+  personaSummary?: string;
+  now?: number;
+  turnThreshold?: number;
+  idleThresholdMs?: number;
+}
+
+export interface RecordCompletedTurnForMemoryResult {
+  dirty: MarkThreadDirtyResult;
+  consolidation?: RunConsolidationResult;
+  heuristicFocusUpdated?: boolean;
+  heuristicOpenThreadsUpdated?: boolean;
+  skipped?: 'opt_out' | 'no_closed_turn' | 'no_new_turns' | 'no_provider';
+}
+
+export async function recordCompletedTurnForMemory(
+  input: RecordCompletedTurnForMemoryInput,
+): Promise<RecordCompletedTurnForMemoryResult> {
+  const settings = useSettingsStore.getState();
+  const dirty = markThreadDirtyForMemory({
+    threadId: input.threadId,
+    messages: input.messages,
+    disableLongTermMemory: settings.disableLongTermMemory === true,
+    ...(typeof input.now === 'number' ? { now: input.now } : {}),
+  });
+
+  if (!dirty.marked) {
+    return { dirty, skipped: dirty.skipped };
+  }
+
+  const resolved = await resolveConsolidator();
+  if (!resolved) {
+    const assistant = findLastAssistant(input.messages);
+    const user = findLastUserBefore(input.messages, assistant?.id);
+    const heuristic = user && assistant
+      ? applyHeuristicTurnMemory(
+          {
+            userMessage: user.content ?? '',
+            assistantMessage: assistant.content ?? '',
+            conversationId: input.threadId,
+            threadId: input.threadId,
+            sourceUserMessageId: user.id,
+            sourceAssistantMessageId: assistant.id,
+            messages: input.messages,
+            ...(input.threadTitle ? { threadTitle: input.threadTitle } : {}),
+            ...(typeof input.now === 'number' ? { now: input.now } : {}),
+          },
+          { ...(typeof input.now === 'number' ? { now: input.now } : {}) },
+        )
+      : { activeFocusUpdated: false, openThreadsUpdated: false };
+    logger.devWarn('recordCompletedTurnForMemory skipped consolidation: no provider configured');
+    return {
+      dirty,
+      heuristicFocusUpdated: heuristic.activeFocusUpdated,
+      heuristicOpenThreadsUpdated: heuristic.openThreadsUpdated,
+      skipped: 'no_provider',
+    };
+  }
+
+  const consolidation = await maybeRunConsolidation({
+    threadId: input.threadId,
+    messages: input.messages,
+    consolidationProvider: resolved.provider.id,
+    extractor: resolved.extractor,
+    ...(input.threadTitle ? { threadTitle: input.threadTitle } : {}),
+    ...(input.personaSummary ? { personaSummary: input.personaSummary } : {}),
+    ...(typeof input.now === 'number' ? { now: input.now } : {}),
+    ...(typeof input.turnThreshold === 'number' ? { turnThreshold: input.turnThreshold } : {}),
+    ...(typeof input.idleThresholdMs === 'number'
+      ? { idleThresholdMs: input.idleThresholdMs }
+      : {}),
+  });
+
+  return { dirty, consolidation };
 }
 
 /** Test seam — reset throttle so unit tests don't depend on real-time. */

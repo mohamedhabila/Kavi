@@ -152,6 +152,7 @@ import {
   summarizeBackgroundWorkerRunOutcome as summarizeBackgroundWorkerSnapshots,
 } from '../services/agents/workflowState';
 import { hasModelVisibleAttachments } from '../utils/messageAttachments';
+import { recordCompletedTurnForMemory } from '../services/memory/lifecycle';
 
 const STREAM_STORE_CHECKPOINT_INTERVAL_MS = 240;
 const SUB_AGENT_PROGRESS_REFRESH_INTERVAL_MS = 400;
@@ -4741,6 +4742,17 @@ export const ChatScreen: React.FC = () => {
                   title: completionLogTitle,
                   detail: completionLogDetail,
                 });
+
+                const latestConversationForMemory = useChatStore
+                  .getState()
+                  .conversations.find((candidate) => candidate.id === convId);
+                if (latestConversationForMemory) {
+                  void recordCompletedTurnForMemory({
+                    threadId: convId,
+                    messages: latestConversationForMemory.messages,
+                    threadTitle: latestConversationForMemory.title,
+                  }).catch(() => undefined);
+                }
               }
             }
             clearForegroundRequestIfCurrent();

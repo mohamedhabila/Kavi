@@ -33,6 +33,7 @@ import {
   setFactPinned,
   getFactById,
   type MemoryFact,
+  type MemoryFactScope,
 } from './facts';
 import {
   editBlock,
@@ -80,6 +81,17 @@ export interface SerializedMemoryFact {
   createdAt: number;
   updatedAt: number;
   deletedAt: number | null;
+  scope: MemoryFactScope;
+  originConversationId: string | null;
+  originTaskId: string | null;
+  sourceMessageId: string | null;
+  sourceTurnId: string | null;
+  sourceSummary: string | null;
+  importance: number;
+  accessCount: number;
+  lastRecalledAt: number | null;
+  lastAccessedAt: number | null;
+  decayPolicy: string;
 }
 
 function serializeFact(fact: MemoryFact): SerializedMemoryFact {
@@ -97,6 +109,17 @@ function serializeFact(fact: MemoryFact): SerializedMemoryFact {
     createdAt: fact.createdAt,
     updatedAt: fact.updatedAt,
     deletedAt: fact.deletedAt,
+    scope: fact.scope,
+    originConversationId: fact.originConversationId,
+    originTaskId: fact.originTaskId,
+    sourceMessageId: fact.sourceMessageId,
+    sourceTurnId: fact.sourceTurnId,
+    sourceSummary: fact.sourceSummary,
+    importance: fact.importance,
+    accessCount: fact.accessCount,
+    lastRecalledAt: fact.lastRecalledAt,
+    lastAccessedAt: fact.lastAccessedAt,
+    decayPolicy: fact.decayPolicy,
   };
 }
 
@@ -105,6 +128,10 @@ function serializeFact(fact: MemoryFact): SerializedMemoryFact {
 export interface MemoryRecallArgs {
   subject?: string;
   predicate?: string;
+  scope?: MemoryFactScope;
+  originConversationId?: string;
+  originTaskId?: string;
+  all?: boolean;
   pinnedOnly?: boolean;
   limit?: number;
   /** When true, include invalidated/historical rows. */
@@ -124,8 +151,16 @@ export function executeMemoryRecall(
   const subject = trimNonEmpty(args.subject, 80);
   const predicate = trimNonEmpty(args.predicate, 80);
 
-  if (!subject && !predicate && !args.pinnedOnly) {
-    return err('invalid_args', 'Provide at least one of: subject, predicate, pinnedOnly.');
+  if (
+    !subject &&
+    !predicate &&
+    !args.scope &&
+    !args.originConversationId &&
+    !args.originTaskId &&
+    !args.pinnedOnly &&
+    args.all !== true
+  ) {
+    return err('invalid_args', 'Provide a filter or set all=true to list all facts.');
   }
 
   let subjectId: string | undefined;
@@ -140,6 +175,9 @@ export function executeMemoryRecall(
   const facts = listFacts({
     ...(subjectId ? { subjectId } : {}),
     ...(predicate ? { predicate } : {}),
+    ...(args.scope ? { scope: args.scope } : {}),
+    ...(args.originConversationId ? { originConversationId: args.originConversationId } : {}),
+    ...(args.originTaskId ? { originTaskId: args.originTaskId } : {}),
     ...(args.pinnedOnly ? { pinnedOnly: true } : {}),
     ...(typeof args.limit === 'number' && args.limit > 0
       ? { limit: Math.min(args.limit, 100) }
@@ -166,6 +204,12 @@ export interface MemoryRememberArgs {
   /** When true, any currently-valid fact for (subject, predicate) is invalidated first. */
   supersedePrior?: boolean;
   pinned?: boolean;
+  scope?: MemoryFactScope;
+  originConversationId?: string | null;
+  originTaskId?: string | null;
+  sourceMessageId?: string | null;
+  sourceSummary?: string | null;
+  importance?: number;
 }
 
 export interface MemoryRememberResult {
@@ -198,6 +242,14 @@ export function executeMemoryRemember(
       confidence: typeof args.confidence === 'number' ? args.confidence : undefined,
       supersedePrior: args.supersedePrior === true,
       pinned: args.pinned === true,
+      ...(args.scope ? { scope: args.scope } : {}),
+      ...(args.originConversationId !== undefined
+        ? { originConversationId: args.originConversationId }
+        : {}),
+      ...(args.originTaskId !== undefined ? { originTaskId: args.originTaskId } : {}),
+      ...(args.sourceMessageId !== undefined ? { sourceMessageId: args.sourceMessageId } : {}),
+      ...(args.sourceSummary !== undefined ? { sourceSummary: args.sourceSummary } : {}),
+      ...(typeof args.importance === 'number' ? { importance: args.importance } : {}),
     });
     return {
       ok: true,

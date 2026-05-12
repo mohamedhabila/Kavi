@@ -2185,6 +2185,7 @@ export async function runOrchestrator(
   try {
     livingMemory = await buildLivingMemorySections({
       messages: workingMessages,
+      conversationId,
       disableLongTermMemory: useSettingsStore.getState().disableLongTermMemory === true,
     });
   } catch (livingMemoryError: unknown) {

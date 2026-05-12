@@ -299,9 +299,85 @@ describe('recallScoredFactsForQuery', () => {
     expect(scored[0].fact.id).toBe(fact.fact.id);
     expect(scored[0].pinnedBoost).toBeGreaterThan(0);
     expect(scored[0].textScore).toBeGreaterThan(0);
-    // Combined score must include the pinned boost on top of the weighted text
-    // score (weighted text alone would be 0.4 * textScore).
+    // Combined score includes weighted text, confidence/decay, pinned,
+    // importance, and reinforcement components.
     expect(scored[0].score).toBeGreaterThan(scored[0].pinnedBoost);
-    expect(scored[0].score).toBeCloseTo(0.4 * scored[0].textScore + scored[0].pinnedBoost, 5);
+    expect(scored[0].importanceScore).toBeGreaterThan(0);
+    expect(scored[0].decayMultiplier).toBeGreaterThan(0);
+  });
+});
+
+describe('recallFactsForQuery — scoped decay and reinforcement', () => {
+  it('boosts facts from the active conversation over similarly matching global facts', async () => {
+    const user = upsertEntity({ name: 'project alpha', type: 'project' });
+    const scoped = recordFact({
+      subjectId: user.id,
+      predicate: 'decision',
+      objectText: 'Use the LiteRT backend for alpha',
+      scope: 'conversation',
+      originConversationId: 'conv-alpha',
+      importance: 0.7,
+      now: 10_000,
+    });
+    const global = recordFact({
+      subjectId: user.id,
+      predicate: 'decision',
+      objectText: 'Use the remote backend for alpha',
+      scope: 'global',
+      importance: 0.7,
+      now: 10_000,
+    });
+
+    const facts = await recallFactsForQuery('alpha backend decision', {
+      conversationId: 'conv-alpha',
+      now: 20_000,
+      limit: 2,
+    });
+
+    expect(facts[0].id).toBe(scoped.fact.id);
+    expect(facts.map((fact) => fact.id)).toContain(global.fact.id);
+  });
+
+  it('demotes stale low-importance facts behind recent important facts', async () => {
+    const user = upsertEntity({ name: 'user', type: 'self' });
+    const now = 200 * 24 * 60 * 60 * 1000;
+    const stale = recordFact({
+      subjectId: user.id,
+      predicate: 'prefers_editor',
+      objectText: 'Vim for coding',
+      importance: 0.1,
+      decayPolicy: 'fast',
+      now: 1,
+    });
+    const recent = recordFact({
+      subjectId: user.id,
+      predicate: 'prefers_editor',
+      objectText: 'VS Code for coding',
+      importance: 0.9,
+      now: now - 1_000,
+    });
+
+    const facts = await recallFactsForQuery('coding editor preference', {
+      now,
+      limit: 2,
+    });
+
+    expect(facts[0].id).toBe(recent.fact.id);
+    expect(facts.map((fact) => fact.id)[0]).not.toBe(stale.fact.id);
+  });
+
+  it('updates access counters for facts returned to the prompt', async () => {
+    const user = upsertEntity({ name: 'user', type: 'self' });
+    const recorded = recordFact({
+      subjectId: user.id,
+      predicate: 'prefers_tone',
+      objectText: 'concise implementation notes',
+    });
+
+    await recallFactsForQuery('concise implementation notes', { now: 123_000 });
+    const refreshed = getFactById(recorded.fact.id);
+
+    expect(refreshed?.accessCount).toBe(1);
+    expect(refreshed?.lastRecalledAt).toBe(123_000);
   });
 });

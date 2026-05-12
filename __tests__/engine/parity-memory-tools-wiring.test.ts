@@ -109,15 +109,31 @@ describe('living-memory tool wiring', () => {
         predicate: 'prefers',
         value: 'dark mode',
         confidence: 0.9,
+        scope: 'global',
+        importance: 0.8,
+        sourceSummary: 'User confirmed directly.',
       }),
     );
     expect(remembered.ok).toBe(true);
     expect(remembered.fact.predicate).toBe('prefers');
+    expect(remembered.fact.scope).toBe('global');
+    expect(remembered.fact.importance).toBe(0.8);
 
     const recalled = JSON.parse(executeMemoryRecall({ subject: 'user', predicate: 'prefers' }));
     expect(recalled.ok).toBe(true);
     expect(recalled.facts).toHaveLength(1);
     expect(recalled.facts[0].value).toBe('dark mode');
+    expect(recalled.facts[0].sourceSummary).toBe('User confirmed directly.');
+  });
+
+  it('memory_recall can list all valid facts without a subject hint', () => {
+    JSON.parse(executeMemoryRemember({ subject: 'user', predicate: 'tz', value: 'UTC+1' }));
+    JSON.parse(executeMemoryRemember({ subject: 'project', predicate: 'name', value: 'Kavi' }));
+
+    const recalled = JSON.parse(executeMemoryRecall({ all: true, limit: 10 }));
+
+    expect(recalled.ok).toBe(true);
+    expect(recalled.facts).toHaveLength(2);
   });
 
   it('memory_pin / memory_unpin flip the pinned flag', () => {

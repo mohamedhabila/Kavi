@@ -17,13 +17,17 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/factStore';
 import { ensureDefaultBlocks } from '../../../src/services/memory/blocks';
+import { getBlock } from '../../../src/services/memory/factStore';
+import { getConsolidationState } from '../../../src/services/memory/consolidatorScheduler';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import { useChatStore } from '../../../src/store/useChatStore';
 import {
+  recordCompletedTurnForMemory,
   runMemoryMigrationTick,
   runMemoryBackgroundFlush,
   __resetMemoryLifecycleForTests,
 } from '../../../src/services/memory/lifecycle';
+import type { Message } from '../../../src/types';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -72,5 +76,48 @@ describe('runMemoryBackgroundFlush', () => {
 
   it('no-ops when no provider is configured', async () => {
     await expect(runMemoryBackgroundFlush()).resolves.toBeUndefined();
+  });
+});
+
+describe('recordCompletedTurnForMemory', () => {
+  const messages: Message[] = [
+    { id: 'u-1', role: 'user', content: 'Please remember the release follow-up.', timestamp: 1 },
+    {
+      id: 'a-1',
+      role: 'assistant',
+      content: 'Done. Next: validate the Android release build.',
+      timestamp: 2,
+      assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+    },
+  ];
+
+  it('marks completed turns dirty and updates heuristic focus when no provider exists', async () => {
+    const result = await recordCompletedTurnForMemory({
+      threadId: 'conv-live',
+      threadTitle: 'Release hardening',
+      messages,
+      now: 10,
+    });
+
+    expect(result.dirty.marked).toBe(true);
+    expect(result.skipped).toBe('no_provider');
+    expect(getConsolidationState('conv-live')?.turnsSinceLast).toBe(2);
+    expect(getBlock('active_focus')?.content).toContain('Release hardening');
+    expect(getBlock('open_threads')?.content).toContain('validate the Android release build');
+  });
+
+  it('creates no dirty state or block writes when long-term memory is disabled', async () => {
+    useSettingsStore.setState({ disableLongTermMemory: true } as any);
+
+    const result = await recordCompletedTurnForMemory({
+      threadId: 'conv-disabled',
+      messages,
+      now: 10,
+    });
+
+    expect(result.dirty.marked).toBe(false);
+    expect(result.skipped).toBe('opt_out');
+    expect(getConsolidationState('conv-disabled')).toBeNull();
+    expect(getBlock('active_focus')?.content).toBe('');
   });
 });

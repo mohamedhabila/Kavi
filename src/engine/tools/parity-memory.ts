@@ -1,5 +1,9 @@
-import { hybridSearch } from '../../services/memory/embeddings';
 import { searchMemory } from '../../services/memory/store';
+import { hybridSearch } from '../../services/memory/embeddings';
+import {
+  indexMemoryToSqlite,
+  sqliteHybridSearch,
+} from '../../services/memory/sqlite-store';
 import {
   executeMemoryRecall as recallFacts,
   executeMemoryRemember as rememberFact,
@@ -52,6 +56,40 @@ export async function executeMemorySearch(
   }
 
   try {
+    await indexMemoryToSqlite(embeddingConfig, undefined, {
+      scope: requestedScope,
+      conversationId: options?.conversationId,
+    });
+    const persistentResults = await sqliteHybridSearch(
+      args.query,
+      {
+        embedding: embeddingConfig,
+        maxResults,
+      },
+      {
+        scope: requestedScope,
+        conversationId: options?.conversationId,
+      },
+    );
+    if (persistentResults.length > 0) {
+      return JSON.stringify({
+        results: persistentResults.map((result: any, index: number) => ({
+          ...result,
+          citation: `[${index + 1}] ${result.source || 'memory'}`,
+          relevance: result.score != null ? Math.round(result.score * 100) + '%' : undefined,
+        })),
+        method: 'hybrid',
+        index: 'sqlite',
+        totalFound: persistentResults.length,
+        scope: requestedScope,
+      });
+    }
+  } catch {
+    // Fall through to the legacy hybrid path below. Some Jest tests mock only
+    // the embedding module; production still prefers the persistent index.
+  }
+
+  try {
     const results = await hybridSearch(
       args.query,
       {
@@ -70,6 +108,7 @@ export async function executeMemorySearch(
         relevance: result.score != null ? Math.round(result.score * 100) + '%' : undefined,
       })),
       method: 'hybrid',
+      index: 'legacy',
       totalFound: results.length,
       scope: requestedScope,
     });
