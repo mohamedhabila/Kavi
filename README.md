@@ -63,6 +63,12 @@ Check public-repo hygiene before publishing or preparing a release-focused branc
 npm run check:public-hygiene
 ```
 
+Check that shipped locale files match the English i18n key tree and placeholders:
+
+```bash
+npm run check:i18n
+```
+
 Lint the codebase:
 
 ```bash
@@ -91,6 +97,7 @@ npm run ios
 npm run check:android:release-env
 npm run build:android:release
 npm run check:public-hygiene
+npm run check:i18n
 npm run lint
 npm run typecheck
 npm run test:watch
