@@ -51,9 +51,13 @@ import {
 } from '../../src/services/memory/sqlite-store';
 
 beforeEach(() => {
-  jest.clearAllMocks();
   // Reset the db singleton by closing it
   closeMemoryDb();
+  mockRunSync.mockReset();
+  mockGetFirstSync.mockReset();
+  mockGetAllSync.mockReset();
+  mockExecSync.mockReset();
+  mockCloseSync.mockReset();
   mockGetFirstSync.mockReturnValue(null);
   mockGetAllSync.mockReturnValue([]);
   mockRunSync.mockReturnValue({ changes: 0 });
@@ -75,10 +79,10 @@ describe('getMemoryDb', () => {
 
   it('reuses same instance on subsequent calls', () => {
     const db1 = getMemoryDb();
+    const schemaCallCount = mockExecSync.mock.calls.length;
     const db2 = getMemoryDb();
     expect(db1).toBe(db2);
-    // execSync called only once for schema
-    expect(mockExecSync).toHaveBeenCalledTimes(1);
+    expect(mockExecSync).toHaveBeenCalledTimes(schemaCallCount);
   });
 });
 
@@ -94,6 +98,13 @@ describe('insertChunk', () => {
       null, // embedding
       expect.any(Number), // timestamp
       expect.any(Number), // indexed_at
+      'global',
+      null,
+      null,
+      null,
+      'global:test-source',
+      'memory_file',
+      1,
     );
   });
 
@@ -249,19 +260,25 @@ describe('indexMemoryToSqlite', () => {
     expect(count).toBeGreaterThan(0);
     expect(mockRunSync).toHaveBeenCalledWith(
       expect.stringContaining('INSERT'),
-      'conversation/MEMORY.md',
+      'conversation/conv-1/MEMORY.md',
       '# Conversation\nScoped note',
       expect.any(String),
       null,
       expect.any(Number),
       expect.any(Number),
+      'conversation',
+      'conv-1',
+      null,
+      null,
+      'conversation:conv-1:MEMORY.md',
+      'memory_file',
+      1,
     );
   });
 });
 
 describe('sqliteHybridSearch', () => {
   it('returns scored results', async () => {
-    mockGetAllSync.mockReturnValueOnce([]); // getChunksWithoutEmbeddings calls
     mockGetAllSync.mockReturnValueOnce([
       {
         id: 1,
@@ -278,16 +295,6 @@ describe('sqliteHybridSearch', () => {
     expect(Array.isArray(results)).toBe(true);
   });
 
-  it('falls back to text search when no chunks exist', async () => {
-    mockGetAllSync.mockReturnValue([]);
-
-    const { searchMemory } = require('../../src/services/memory/store');
-    searchMemory.mockResolvedValueOnce([{ source: 'file.md', snippet: 'text result', score: 0.8 }]);
-
-    const results = await sqliteHybridSearch('query', {});
-    expect(Array.isArray(results)).toBe(true);
-  });
-
   it('filters sqlite search results to conversation scope when requested', async () => {
     mockGetAllSync.mockReturnValueOnce([
       {
@@ -298,6 +305,12 @@ describe('sqliteHybridSearch', () => {
         embedding: '[0.1,0.2]',
         timestamp: Date.now(),
         indexed_at: Date.now(),
+        scope: 'conversation',
+        conversation_id: 'conv-1',
+        source_key: 'conversation:conv-1:MEMORY.md',
+        source_kind: 'memory_file',
+        version: 1,
+        deleted_at: null,
       },
       {
         id: 2,
@@ -307,16 +320,27 @@ describe('sqliteHybridSearch', () => {
         embedding: '[0.2,0.3]',
         timestamp: Date.now(),
         indexed_at: Date.now(),
+        scope: 'global',
+        conversation_id: null,
+        source_key: 'global:MEMORY.md',
+        source_kind: 'memory_file',
+        version: 1,
+        deleted_at: null,
       },
-    ]);
-
-    const { searchMemory } = require('../../src/services/memory/store');
-    searchMemory.mockResolvedValueOnce([
       {
+        id: 3,
+        source: 'conversation/conv-2/MEMORY.md',
+        content: 'other conversation scoped note',
+        content_hash: 'h3',
+        embedding: '[0.2,0.4]',
+        timestamp: Date.now(),
+        indexed_at: Date.now(),
         scope: 'conversation',
-        source: 'conversation/MEMORY.md',
-        snippet: 'conversation scoped note',
-        score: 1,
+        conversation_id: 'conv-2',
+        source_key: 'conversation:conv-2:MEMORY.md',
+        source_kind: 'memory_file',
+        version: 1,
+        deleted_at: null,
       },
     ]);
 
@@ -332,5 +356,17 @@ describe('sqliteHybridSearch', () => {
     expect(results).toHaveLength(1);
     expect(results[0].scope).toBe('conversation');
     expect(results[0].source).toBe('conversation/MEMORY.md');
+  });
+
+  it('returns an empty result instead of legacy text fallback when no chunks exist', async () => {
+    mockGetAllSync.mockReturnValue([]);
+
+    const { searchMemory } = require('../../src/services/memory/store');
+    searchMemory.mockResolvedValueOnce([{ source: 'file.md', snippet: 'text result', score: 0.8 }]);
+
+    const results = await sqliteHybridSearch('query', {});
+
+    expect(results).toEqual([]);
+    expect(searchMemory).not.toHaveBeenCalled();
   });
 });

@@ -103,13 +103,10 @@ import {
   resolveSubAgentMaxTokens,
 } from '../services/context/tokenOptimization';
 import {
-  getConversationMemoryForSystemPrompt,
-  getMemoryForSystemPrompt,
-} from '../services/memory/store';
-import {
   buildLivingMemorySections,
   type LivingMemoryBridgeOutput,
 } from '../services/memory/livingMemoryBridge';
+import { canReadLongTermMemory } from '../services/memory/policy';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { mcpManager } from '../services/mcp/manager';
 import {
@@ -2101,8 +2098,9 @@ export async function runOrchestrator(
 
   // ── Memory ─────────────────────────────────────────────────────────
   const sharedConversationId = options.workspaceConversationId?.trim() || conversationId;
-  const conversationMemory = await getConversationMemoryForSystemPrompt(sharedConversationId);
-  const globalMemory = await getMemoryForSystemPrompt();
+  const longTermMemoryEnabled = canReadLongTermMemory();
+  const conversationMemory = null;
+  const globalMemory = null;
   const runtimeContextNote = buildRuntimeContextNote();
 
   // Working message list that includes tool results as we iterate
@@ -2184,9 +2182,9 @@ export async function runOrchestrator(
   let livingMemory: LivingMemoryBridgeOutput | null = null;
   try {
     livingMemory = await buildLivingMemorySections({
-      messages: workingMessages,
-      conversationId,
-      disableLongTermMemory: useSettingsStore.getState().disableLongTermMemory === true,
+      messages,
+      conversationId: sharedConversationId,
+      disableLongTermMemory: !longTermMemoryEnabled,
     });
   } catch (livingMemoryError: unknown) {
     logger.devWarn(

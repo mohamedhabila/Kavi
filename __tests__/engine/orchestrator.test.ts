@@ -54,6 +54,15 @@ jest.mock('../../src/services/memory/store', () => ({
   getMemoryForSystemPrompt: jest.fn().mockReturnValue(null),
   appendGlobalMemory: jest.fn(),
 }));
+jest.mock('../../src/services/memory/livingMemoryBridge', () => ({
+  buildLivingMemorySections: jest.fn().mockResolvedValue({
+    sections: [],
+    cacheableSignature: '00000000',
+    focusBlockText: '',
+    openThreadLabels: [],
+    recalledFactCount: 0,
+  }),
+}));
 jest.mock('../../src/services/commands/parser', () => ({
   isSlashCommand: jest.fn().mockReturnValue(false),
   parseCommand: jest.fn().mockReturnValue(null),
@@ -80,6 +89,7 @@ import { LlmService } from '../../src/services/llm/LlmService';
 import { executeTool } from '../../src/engine/tools/index';
 import { getSkillSystemPrompts } from '../../src/services/skills/manager';
 import { getConversationMemoryForSystemPrompt } from '../../src/services/memory/store';
+import { buildLivingMemorySections } from '../../src/services/memory/livingMemoryBridge';
 import { getProviderApiKey } from '../../src/services/storage/SecureStorage';
 
 const legacyFileSystem = jest.requireMock('expo-file-system/legacy') as {
@@ -162,6 +172,14 @@ beforeEach(() => {
   }));
   (getConversationMemoryForSystemPrompt as jest.Mock).mockReset();
   (getConversationMemoryForSystemPrompt as jest.Mock).mockResolvedValue(null);
+  (buildLivingMemorySections as jest.Mock).mockReset();
+  (buildLivingMemorySections as jest.Mock).mockResolvedValue({
+    sections: [],
+    cacheableSignature: '00000000',
+    focusBlockText: '',
+    openThreadLabels: [],
+    recalledFactCount: 0,
+  });
   (getSkillSystemPrompts as jest.Mock).mockReset();
   (getSkillSystemPrompts as jest.Mock).mockResolvedValue('');
   (executeTool as jest.Mock).mockReset();
@@ -2635,7 +2653,7 @@ describe('Orchestrator', () => {
   });
 
   describe('Memory loading', () => {
-    it('should load memory and include in system prompt', async () => {
+    it('does not inject legacy file memory and delegates to the canonical memory bridge', async () => {
       (getConversationMemoryForSystemPrompt as jest.Mock).mockResolvedValueOnce('User is named John');
 
       mockStreamMessage.mockImplementationOnce((...args: any[]) => {
@@ -2656,15 +2674,19 @@ describe('Orchestrator', () => {
 
       await runOrchestrator(options, callbacks);
 
-      expect(getConversationMemoryForSystemPrompt).toHaveBeenCalledWith('conv1');
+      expect(getConversationMemoryForSystemPrompt).not.toHaveBeenCalled();
+      expect(buildLivingMemorySections).toHaveBeenCalledWith(expect.objectContaining({
+        conversationId: 'conv1',
+        disableLongTermMemory: false,
+      }));
       const apiMessages = mockStreamMessage.mock.calls[0]?.[0] as Array<{ role: string; content: string }>;
       expect(apiMessages[0]?.content).toContain('## Memory Scopes');
-      expect(apiMessages[0]?.content).toContain('<conversation_memory>');
-      expect(apiMessages[0]?.content).toContain('User is named John');
+      expect(apiMessages[0]?.content).not.toContain('<conversation_memory>');
+      expect(apiMessages[0]?.content).not.toContain('User is named John');
       expect(callbacks.onDone).toHaveBeenCalled();
     });
 
-    it('uses the shared workspace conversation id for conversation memory', async () => {
+    it('uses the shared workspace conversation id for canonical memory recall', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
         createStreamGenerator([
           { type: 'token', content: 'Shared memory works' },
@@ -2684,7 +2706,10 @@ describe('Orchestrator', () => {
 
       await runOrchestrator(options, callbacks);
 
-      expect(getConversationMemoryForSystemPrompt).toHaveBeenCalledWith('parent-conv-7');
+      expect(getConversationMemoryForSystemPrompt).not.toHaveBeenCalled();
+      expect(buildLivingMemorySections).toHaveBeenCalledWith(expect.objectContaining({
+        conversationId: 'parent-conv-7',
+      }));
     });
 
     it('uses an economy model on tool-follow-up iterations when explicitly allowed', async () => {

@@ -214,6 +214,11 @@ jest.mock('../../src/services/memory/embeddings', () => ({
   hybridSearch: jest.fn().mockResolvedValue([]),
 }));
 
+jest.mock('../../src/services/memory/sqlite-store', () => ({
+  indexMemoryToSqlite: jest.fn().mockResolvedValue(0),
+  sqliteHybridSearch: jest.fn().mockResolvedValue([]),
+}));
+
 jest.mock('../../src/engine/tools/native-executor', () => ({
   executeNativeTool: jest.fn().mockImplementation((name: string) => {
     if (name === 'notification_send') {
@@ -263,6 +268,8 @@ let executeNativeTool: jest.Mock;
 let generateImage: jest.Mock;
 let editImage: jest.Mock;
 let hybridSearch: jest.Mock;
+let indexMemoryToSqlite: jest.Mock;
+let sqliteHybridSearch: jest.Mock;
 let registerSkill: (skill: Skill) => void;
 let unregisterSkill: (id: string) => void;
 let clearAllSurfaces: () => void;
@@ -275,6 +282,7 @@ function loadTestModules() {
   ({ executeNativeTool } = require('../../src/engine/tools/native-executor'));
   ({ generateImage, editImage } = require('../../src/services/media/imageGeneration'));
   ({ hybridSearch } = require('../../src/services/memory/embeddings'));
+  ({ indexMemoryToSqlite, sqliteHybridSearch } = require('../../src/services/memory/sqlite-store'));
   ({ registerSkill, unregisterSkill } = require('../../src/services/skills/manager'));
   ({ clearAllSurfaces, getSurface } = require('../../src/services/canvas/renderer'));
   ({ executePython } = require('../../src/services/python/pyodideBridge'));
@@ -288,6 +296,10 @@ beforeEach(() => {
   executePython.mockResolvedValue({ success: true, output: '42' });
   hybridSearch.mockReset();
   hybridSearch.mockResolvedValue([]);
+  indexMemoryToSqlite.mockReset();
+  indexMemoryToSqlite.mockResolvedValue(0);
+  sqliteHybridSearch.mockReset();
+  sqliteHybridSearch.mockResolvedValue([]);
   mockPermissionOverrides.clear();
   clearAllSurfaces();
   // Clear scheduler store so cron tests start fresh
@@ -299,7 +311,7 @@ describe('executeTool', () => {
   const CONV_ID = 'test-conversation';
 
   it('derives hybrid memory search from the active provider when embeddings are supported', async () => {
-    hybridSearch.mockResolvedValueOnce([
+    sqliteHybridSearch.mockResolvedValueOnce([
       { source: 'MEMORY.md', snippet: 'remember this detail', score: 0.92, scope: 'global' },
     ]);
 
@@ -311,7 +323,18 @@ describe('executeTool', () => {
     const parsed = JSON.parse(result);
 
     expect(parsed.method).toBe('hybrid');
-    expect(hybridSearch).toHaveBeenCalledWith(
+    expect(indexMemoryToSqlite).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'openai',
+        apiKey: 'sk-image',
+        baseUrl: 'https://api.openai.com/v1',
+      }),
+      undefined,
+      expect.objectContaining({
+        scope: 'all',
+      }),
+    );
+    expect(sqliteHybridSearch).toHaveBeenCalledWith(
       'remember this detail',
       expect.objectContaining({
         embedding: expect.objectContaining({

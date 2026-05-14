@@ -19,6 +19,7 @@ import { createLogger } from '../../utils/logger';
 import { listBlocks, type MemoryBlock } from './blocks';
 import { recallFactsForQuery } from './factRecall';
 import { renderFocusBlock, type FocusGap } from './focus';
+import { getWorkingBlock, type WorkingMemoryBlock } from './workingBlocks';
 import {
   assemblePrompt,
   type SystemPromptSection,
@@ -62,6 +63,8 @@ export interface BuildLivingMemorySectionsOptions {
   disableLongTermMemory?: boolean;
   /** Override block reader (test seam). */
   readBlocks?: () => MemoryBlock[];
+  /** Override scoped working block reader (test seam). */
+  readWorkingBlock?: (label: 'active_focus' | 'open_threads') => WorkingMemoryBlock | null;
 }
 
 export interface LivingMemoryBridgeOutput {
@@ -105,6 +108,27 @@ function findBlock(blocks: MemoryBlock[], label: string): MemoryBlock | undefine
   return blocks.find((b) => b.label === label);
 }
 
+function safeGetWorkingBlock(
+  label: 'active_focus' | 'open_threads',
+  options: Pick<BuildLivingMemorySectionsOptions, 'conversationId' | 'taskId' | 'readWorkingBlock'>,
+): WorkingMemoryBlock | null {
+  try {
+    if (options.readWorkingBlock) return options.readWorkingBlock(label);
+    if (!options.conversationId && !options.taskId) return null;
+    return getWorkingBlock(label, {
+      conversationId: options.conversationId,
+      threadId: options.conversationId,
+      taskId: options.taskId,
+    });
+  } catch (error) {
+    logger.devWarn(
+      `livingMemoryBridge.getWorkingBlock(${label}) failed:`,
+      error instanceof Error ? error.message : String(error),
+    );
+    return null;
+  }
+}
+
 function lastTimestamp(messages: Message[], role: Message['role']): number | undefined {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
@@ -128,7 +152,7 @@ function latestUserText(messages: Message[]): string {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
     if (message.role !== 'user') continue;
-    const candidate = (message.enrichedContent ?? message.content ?? '').trim();
+    const candidate = (message.content ?? message.enrichedContent ?? '').trim();
     if (candidate.length > 0) return candidate;
   }
   return '';
@@ -160,6 +184,7 @@ export async function buildLivingMemorySections(
     conversationId,
     taskId,
     readBlocks,
+    readWorkingBlock,
   } = options;
 
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -175,10 +200,20 @@ export async function buildLivingMemorySections(
   const blocks = safeListBlocks(readBlocks);
   const promptBlocks = blocks.filter((block) => SAFE_BLOCK_LABELS_FOR_PROMPT.has(block.label));
 
-  const focusBlockSource = findBlock(blocks, FOCUS_BLOCK_LABEL);
+  const scopedFocusBlock = safeGetWorkingBlock(FOCUS_BLOCK_LABEL, {
+    conversationId,
+    taskId,
+    readWorkingBlock,
+  });
+  const focusBlockSource = scopedFocusBlock ?? (!conversationId ? findBlock(blocks, FOCUS_BLOCK_LABEL) : null);
   const focusBlockText = (focusBlockSource?.content ?? '').trim();
 
-  const openThreadsSource = findBlock(blocks, OPEN_THREADS_LABEL);
+  const scopedOpenThreads = safeGetWorkingBlock(OPEN_THREADS_LABEL, {
+    conversationId,
+    taskId,
+    readWorkingBlock,
+  });
+  const openThreadsSource = scopedOpenThreads ?? (!conversationId ? findBlock(blocks, OPEN_THREADS_LABEL) : null);
   const openThreadLabels = splitThreadLabels(openThreadsSource?.content ?? '');
 
   const lastAssistantAt = lastTimestamp(messages, 'assistant');

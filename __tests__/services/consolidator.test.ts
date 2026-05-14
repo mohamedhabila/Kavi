@@ -13,6 +13,7 @@ import {
   resetFactSchemaCacheForTests,
   ensureDefaultBlocks,
   getBlock,
+  getWorkingBlock,
   listFacts,
   findEntityByName,
 } from '../../src/services/memory/factStore';
@@ -189,9 +190,48 @@ describe('applyConsolidatorResult', () => {
     expect(facts[0].importance).toBe(0.8);
     expect(listFactEvidence(facts[0].id)).toHaveLength(1);
 
-    const block = getBlock('active_focus');
-    expect(block?.content).toBe('Settling into Berlin.');
-    expect(getBlock('open_threads')?.content).toContain('Suggest a SIM card provider');
+    expect(getBlock('active_focus')?.content).toBe('');
+    const focusBlock = getWorkingBlock('active_focus', {
+      conversationId: 'conv-1',
+      threadId: 'conv-1',
+    });
+    expect(focusBlock?.content).toBe('Settling into Berlin.');
+    expect(getWorkingBlock('open_threads', {
+      conversationId: 'conv-1',
+      threadId: 'conv-1',
+    })?.content).toContain('Suggest a SIM card provider');
+  });
+
+  it('clears scoped open_threads when the consolidator returns an empty list', () => {
+    applyConsolidatorResult(
+      {
+        episodeSummary: null,
+        newFacts: [],
+        invalidatedFacts: [],
+        activeFocus: null,
+        openThreads: ['Old follow-up'],
+        notable: [],
+      },
+      { now: 1, conversationId: 'conv-clear', threadId: 'conv-clear' },
+    );
+
+    const result = applyConsolidatorResult(
+      {
+        episodeSummary: null,
+        newFacts: [],
+        invalidatedFacts: [],
+        activeFocus: null,
+        openThreads: [],
+        notable: [],
+      },
+      { now: 2, conversationId: 'conv-clear', threadId: 'conv-clear' },
+    );
+
+    expect(result.openThreadsUpdated).toBe(true);
+    expect(getWorkingBlock('open_threads', {
+      conversationId: 'conv-clear',
+      threadId: 'conv-clear',
+    })?.content).toBe('');
   });
 
   it('persists episode summaries as searchable episodic memory', () => {

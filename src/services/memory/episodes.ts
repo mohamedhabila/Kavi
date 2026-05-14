@@ -171,10 +171,21 @@ export function recordEpisode(input: RecordEpisodeInput): MemoryEpisode | null {
     episode.createdAt,
   );
   insertChunk(
-    episode.conversationId ? `conversation/episode/${episode.id}` : `episode/${episode.id}`,
+    episode.conversationId
+      ? `conversation/${episode.conversationId}/episode/${episode.id}`
+      : `episode/${episode.id}`,
     episode.summary,
     episode.endedAt,
     episode.embedding ?? undefined,
+    {
+      scope: episode.conversationId ? 'conversation' : 'global',
+      conversationId: episode.conversationId,
+      taskId: episode.taskId,
+      sourceKey: episode.conversationId
+        ? `conversation:${episode.conversationId}:episode:${episode.id}`
+        : `global:episode:${episode.id}`,
+      sourceKind: 'episode',
+    },
   );
   return episode;
 }

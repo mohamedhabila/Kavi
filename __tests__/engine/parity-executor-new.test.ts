@@ -71,6 +71,11 @@ jest.mock('../../src/services/memory/embeddings', () => ({
   hybridSearch: jest.fn().mockResolvedValue([]),
 }));
 
+jest.mock('../../src/services/memory/sqlite-store', () => ({
+  indexMemoryToSqlite: jest.fn().mockResolvedValue(0),
+  sqliteHybridSearch: jest.fn().mockResolvedValue([]),
+}));
+
 jest.mock('../../src/services/memory/store', () => ({
   searchMemory: jest.fn().mockReturnValue([]),
 }));
@@ -210,6 +215,11 @@ describe('New Parity Tool Executors', () => {
     getSkillToolDefinitions.mockReturnValue([]);
 
     jest.clearAllMocks();
+    const sqliteStore = require('../../src/services/memory/sqlite-store');
+    sqliteStore.indexMemoryToSqlite.mockReset();
+    sqliteStore.indexMemoryToSqlite.mockResolvedValue(0);
+    sqliteStore.sqliteHybridSearch.mockReset();
+    sqliteStore.sqliteHybridSearch.mockResolvedValue([]);
   });
 
   // ── Canvas Navigate ──────────────────────────────────────────────
@@ -1165,8 +1175,8 @@ describe('New Parity Tool Executors', () => {
 
   describe('executeMemorySearch (with citations)', () => {
     it('returns citation-formatted results', async () => {
-      const { searchMemory } = require('../../src/services/memory/store');
-      searchMemory.mockReturnValueOnce([
+      const { sqliteHybridSearch } = require('../../src/services/memory/sqlite-store');
+      sqliteHybridSearch.mockResolvedValueOnce([
         { source: 'MEMORY.md', snippet: 'User prefers dark mode', score: 0.9 },
         { source: 'daily/2024-01-15.md', snippet: 'Discussed project setup', score: 0.6 },
       ]);

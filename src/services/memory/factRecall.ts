@@ -31,7 +31,7 @@ import { calculateTemporalDecayMultiplier } from './temporal-decay';
 
 const DEFAULT_LIMIT = 8;
 const DEFAULT_SIMILARITY_THRESHOLD = 0.45;
-const DEFAULT_TEXT_THRESHOLD = 0.1
+const DEFAULT_TEXT_THRESHOLD = 0.1;
 const DEFAULT_VECTOR_WEIGHT = 0.6;
 const DEFAULT_TEXT_WEIGHT = 0.4;
 const PINNED_BOOST = 0.25;
@@ -166,6 +166,16 @@ function getCandidateScopes(options: RecallFactsOptions): MemoryFactScope[] | un
   return scopes.size > 0 ? Array.from(scopes) : undefined;
 }
 
+function isFactEligibleForRecall(fact: MemoryFact, options: RecallFactsOptions): boolean {
+  if (fact.scope === 'conversation') {
+    return Boolean(options.conversationId && fact.originConversationId === options.conversationId);
+  }
+  if (fact.scope === 'session') {
+    return Boolean(options.taskId && fact.originTaskId === options.taskId);
+  }
+  return true;
+}
+
 function scoreScope(fact: MemoryFact, options: RecallFactsOptions): number {
   if (fact.scope === 'conversation' && fact.originConversationId === options.conversationId) {
     return 0.18;
@@ -283,7 +293,7 @@ export async function recallFactsForQuery(
     ...(candidateScopes ? { scope: candidateScopes } : {}),
     ...(options.includeHistorical ? { includeInvalidated: true } : {}),
     ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
-  });
+  }).filter((fact) => isFactEligibleForRecall(fact, options));
 
   // Pinned-only fast path: empty query, just return the pinned set.
   if (!trimmedQuery) {

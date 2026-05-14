@@ -32,7 +32,8 @@ import {
   listFacts,
   getFactById,
 } from '../../src/services/memory/factStore';
-import { ensureDefaultBlocks, getBlock } from '../../src/services/memory/blocks';
+import { ensureDefaultBlocks } from '../../src/services/memory/blocks';
+import { getWorkingBlock } from '../../src/services/memory/workingBlocks';
 import {
   DEFAULT_TURN_THRESHOLD,
   DEFAULT_IDLE_THRESHOLD_MS,
@@ -163,8 +164,11 @@ describe('integration §7.1 — 200-message thread', () => {
       expect(deployFacts).toHaveLength(1);
       expect(deployFacts[0].objectText).toBe('acme-prod-cluster');
 
-      // active_focus block should have been written by the consolidator.
-      const focus = getBlock('active_focus');
+      // active_focus should be scoped to this thread, not written globally.
+      const focus = getWorkingBlock('active_focus', {
+        conversationId: THREAD,
+        threadId: THREAD,
+      });
       expect(focus?.content?.trim().length ?? 0).toBeGreaterThan(0);
 
       // Recall at "turn 250" — query 50 turns after the thread ends should
@@ -174,7 +178,7 @@ describe('integration §7.1 — 200-message thread', () => {
       // exists for prompt-budget reasons, not correctness).
       const recalled = await recallFactsForQuery(
         'Where do I deploy the dashboard service to acme-prod-cluster?',
-        { threshold: 0 },
+        { threshold: 0, conversationId: THREAD },
       );
       const objects = recalled.map((f) => f.objectText);
       expect(objects).toContain('acme-prod-cluster');
@@ -192,7 +196,7 @@ describe('integration §7.1 — 200-message thread', () => {
       });
       const assembled = assemblePrompt({
         basePrompt: 'You are Kavi, the user\'s personal assistant.',
-        blocks: [focus!].filter(Boolean),
+        blocks: [],
         focusBlock: focusOut.text,
         retrievedFacts: recalled,
       });
@@ -232,7 +236,10 @@ describe('integration §7.2 — returning user after 8-hour gap', () => {
     const eightHoursMs = 8 * 60 * 60 * 1000;
     const returnTs = lastTs + eightHoursMs;
 
-    const focusBlock = getBlock('active_focus');
+    const focusBlock = getWorkingBlock('active_focus', {
+      conversationId: THREAD,
+      threadId: THREAD,
+    });
     const focusOut = renderFocusBlock({
       now: returnTs,
       lastAssistantAt: lastTs,
@@ -254,7 +261,7 @@ describe('integration §7.2 — returning user after 8-hour gap', () => {
     // Recall against the returning-user query also surfaces the prior fact.
     const recalled = await recallFactsForQuery(
       'any update on the acme-prod-cluster deploy?',
-      { threshold: 0 },
+      { threshold: 0, conversationId: THREAD },
     );
     expect(recalled.map((f) => f.objectText)).toContain('acme-prod-cluster');
   });

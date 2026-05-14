@@ -338,6 +338,67 @@ describe('recallFactsForQuery — scoped decay and reinforcement', () => {
     expect(facts.map((fact) => fact.id)).toContain(global.fact.id);
   });
 
+  it('excludes facts from other conversations before scoring, even when pinned', async () => {
+    const project = upsertEntity({ name: 'project beta', type: 'project' });
+    const active = recordFact({
+      subjectId: project.id,
+      predicate: 'decision',
+      objectText: 'Use the local LiteRT backend for beta',
+      scope: 'conversation',
+      originConversationId: 'conv-active',
+      importance: 0.4,
+      now: 10_000,
+    });
+    const other = recordFact({
+      subjectId: project.id,
+      predicate: 'decision',
+      objectText: 'Use the remote cloud backend for beta',
+      scope: 'conversation',
+      originConversationId: 'conv-other',
+      importance: 1,
+      now: 20_000,
+    });
+    setFactPinned(other.fact.id, true);
+
+    const facts = await recallFactsForQuery('beta backend decision', {
+      conversationId: 'conv-active',
+      now: 30_000,
+      limit: 5,
+    });
+
+    expect(facts.map((fact) => fact.id)).toContain(active.fact.id);
+    expect(facts.map((fact) => fact.id)).not.toContain(other.fact.id);
+  });
+
+  it('excludes session facts from other tasks before scoring', async () => {
+    const task = upsertEntity({ name: 'release task', type: 'task' });
+    const active = recordFact({
+      subjectId: task.id,
+      predicate: 'next_step',
+      objectText: 'Run the Android release validation',
+      scope: 'session',
+      originTaskId: 'task-active',
+      importance: 0.5,
+    });
+    const other = recordFact({
+      subjectId: task.id,
+      predicate: 'next_step',
+      objectText: 'Skip validation and deploy directly',
+      scope: 'session',
+      originTaskId: 'task-other',
+      importance: 1,
+    });
+    setFactPinned(other.fact.id, true);
+
+    const facts = await recallFactsForQuery('release validation next step', {
+      taskId: 'task-active',
+      limit: 5,
+    });
+
+    expect(facts.map((fact) => fact.id)).toContain(active.fact.id);
+    expect(facts.map((fact) => fact.id)).not.toContain(other.fact.id);
+  });
+
   it('demotes stale low-importance facts behind recent important facts', async () => {
     const user = upsertEntity({ name: 'user', type: 'self' });
     const now = 200 * 24 * 60 * 60 * 1000;

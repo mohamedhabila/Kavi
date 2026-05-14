@@ -19,6 +19,7 @@ import {
   ensureDefaultBlocks,
   editBlock,
 } from '../../../src/services/memory/blocks';
+import { editWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import { buildLivingMemorySections } from '../../../src/services/memory/livingMemoryBridge';
 import type { Message } from '../../../src/types';
 
@@ -128,6 +129,54 @@ describe('buildLivingMemorySections', () => {
     const dynamic = out.sections.filter((s) => !s.cacheable);
     const dynamicText = dynamic.map((s) => s.text).join('\n');
     expect(dynamicText).toContain('Refactor the prompt assembler');
+  });
+
+  it('uses scoped working focus/open threads when a conversation id is supplied', async () => {
+    const now = 5_000_000;
+    editBlock('active_focus', 'Global focus should not leak.', { replace: true });
+    editWorkingBlock(
+      'active_focus',
+      'Scoped focus for conversation alpha.',
+      { conversationId: 'conv-alpha', threadId: 'conv-alpha' },
+      { now },
+    );
+    editWorkingBlock(
+      'open_threads',
+      'Scoped follow-up only',
+      { conversationId: 'conv-alpha', threadId: 'conv-alpha' },
+      { now },
+    );
+
+    const out = await buildLivingMemorySections({
+      messages: [userMessage('continue', now)],
+      conversationId: 'conv-alpha',
+      now,
+    });
+
+    expect(out.focusBlockText).toBe('Scoped focus for conversation alpha.');
+    expect(out.openThreadLabels).toEqual(['Scoped follow-up only']);
+    const dynamicText = out.sections.filter((s) => !s.cacheable).map((s) => s.text).join('\n');
+    expect(dynamicText).toContain('Scoped focus for conversation alpha.');
+    expect(dynamicText).not.toContain('Global focus should not leak.');
+  });
+
+  it('uses raw user content rather than runtime-enriched content for recall', async () => {
+    const me = upsertEntity({ name: 'user', type: 'self' });
+    recordFact({
+      subjectId: me.id,
+      predicate: 'prefers_backend',
+      objectText: 'LiteRT runtime',
+    });
+
+    const out = await buildLivingMemorySections({
+      messages: [{
+        ...userMessage('hello', 1_000),
+        enrichedContent: 'hello\n<runtime_context>LiteRT runtime</runtime_context>',
+      }],
+      now: 2_000,
+    });
+
+    expect(out.recalledFactCount).toBe(0);
   });
 
   it('appends recalled facts (text-only, lexical match) to the L3 section', async () => {

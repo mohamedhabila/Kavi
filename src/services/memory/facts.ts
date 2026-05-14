@@ -259,12 +259,16 @@ export function recordFact(input: RecordFactInput): RecordFactResult {
            AND predicate = ?
            AND scope = ?
            AND COALESCE(origin_conversation_id, '') = COALESCE(?, '')
+           AND COALESCE(origin_thread_id, '') = COALESCE(?, '')
+           AND COALESCE(origin_task_id, '') = COALESCE(?, '')
            AND invalid_at IS NULL
            AND deleted_at IS NULL`,
       input.subjectId,
       input.predicate,
       scope,
       input.originConversationId ?? null,
+      input.originThreadId ?? input.originConversationId ?? null,
+      input.originTaskId ?? null,
     );
     for (const prior of priors) {
       db.runSync(

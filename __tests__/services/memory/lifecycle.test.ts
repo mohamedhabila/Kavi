@@ -18,6 +18,7 @@ import {
 } from '../../../src/services/memory/factStore';
 import { ensureDefaultBlocks } from '../../../src/services/memory/blocks';
 import { getBlock } from '../../../src/services/memory/factStore';
+import { getWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import { getConsolidationState } from '../../../src/services/memory/consolidatorScheduler';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import { useChatStore } from '../../../src/store/useChatStore';
@@ -102,8 +103,14 @@ describe('recordCompletedTurnForMemory', () => {
     expect(result.dirty.marked).toBe(true);
     expect(result.skipped).toBe('no_provider');
     expect(getConsolidationState('conv-live')?.turnsSinceLast).toBe(2);
-    expect(getBlock('active_focus')?.content).toContain('Release hardening');
-    expect(getBlock('open_threads')?.content).toContain('validate the Android release build');
+    expect(getWorkingBlock('active_focus', {
+      conversationId: 'conv-live',
+      threadId: 'conv-live',
+    })?.content).toContain('Release hardening');
+    expect(getWorkingBlock('open_threads', {
+      conversationId: 'conv-live',
+      threadId: 'conv-live',
+    })?.content).toContain('validate the Android release build');
   });
 
   it('creates no dirty state or block writes when long-term memory is disabled', async () => {
@@ -119,5 +126,9 @@ describe('recordCompletedTurnForMemory', () => {
     expect(result.skipped).toBe('opt_out');
     expect(getConsolidationState('conv-disabled')).toBeNull();
     expect(getBlock('active_focus')?.content).toBe('');
+    expect(getWorkingBlock('active_focus', {
+      conversationId: 'conv-disabled',
+      threadId: 'conv-disabled',
+    })).toBeNull();
   });
 });

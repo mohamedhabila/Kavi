@@ -142,9 +142,11 @@ See [docs/testing.md](docs/testing.md) for the opt-in live-provider scripts and 
 ## Privacy & Long-term Memory
 
 Kavi maintains an on-device single-thread memory store (facts, entities,
-focus blocks, and a recall index) so the assistant can refer back to
-durable details across conversations. Everything is stored locally in
-the app's SQLite database; nothing is uploaded.
+scoped focus blocks, episodes, and a recall index) so the assistant can
+refer back to durable details across conversations. Durable memory is
+stored locally in the app's SQLite database. Optional consolidation or
+embedding providers can send selected turn windows or memory snippets to
+the user-configured provider when those features are enabled.
 
 You can fully disable long-term memory in **Settings → Data →
 "Disable long-term memory"**. When the toggle is on:
@@ -152,6 +154,7 @@ You can fully disable long-term memory in **Settings → Data →
 - Living-memory bridge skips block reads and recall.
 - The consolidator scheduler short-circuits before any extractor call.
 - The migration backfill (v6→v7 archived threads) is a no-op.
+- Legacy file-backed memory is not injected into prompts.
 - Every `memory_*` engine tool returns
   `{ ok: false, code: 'permission_denied' }` so the agent reacts
   gracefully instead of failing opaquely.

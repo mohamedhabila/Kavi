@@ -32,6 +32,7 @@ import { upsertEntity } from './entities';
 import { editBlock, ensureDefaultBlocks } from './blocks';
 import { ensureFactSchema } from './schema';
 import { addFactEvidence, recordEpisode } from './episodes';
+import { editWorkingBlock } from './workingBlocks';
 
 export interface ConsolidatorTurnInput {
   /** Most recent user message that led to this assistant turn. */
@@ -444,7 +445,7 @@ export function applyConsolidatorResult(
   let activeFocusUpdated = false;
   if (result.activeFocus !== null) {
     try {
-      editBlock('active_focus', result.activeFocus, { replace: true, now });
+      writeWorkingOrLegacyBlock('active_focus', result.activeFocus, options, now);
       activeFocusUpdated = true;
     } catch {
       // BlockOverflowError or unknown block — never throw out of the chat path.
@@ -452,13 +453,11 @@ export function applyConsolidatorResult(
   }
 
   let openThreadsUpdated = false;
-  if (result.openThreads.length > 0) {
-    try {
-      editBlock('open_threads', fitBlockLines(result.openThreads, 800), { replace: true, now });
-      openThreadsUpdated = true;
-    } catch {
-      // BlockOverflowError or unknown block - never throw out of the chat path.
-    }
+  try {
+    writeWorkingOrLegacyBlock('open_threads', fitBlockLines(result.openThreads, 800), options, now);
+    openThreadsUpdated = true;
+  } catch {
+    // BlockOverflowError or unknown block - never throw out of the chat path.
   }
 
   return {
@@ -468,6 +467,28 @@ export function applyConsolidatorResult(
     openThreadsUpdated,
     episodeId: episode?.id ?? null,
   };
+}
+
+function writeWorkingOrLegacyBlock(
+  label: 'active_focus' | 'open_threads',
+  content: string,
+  options: { conversationId?: string; threadId?: string; taskId?: string },
+  now: number,
+): void {
+  if (options.conversationId || options.threadId || options.taskId) {
+    editWorkingBlock(
+      label,
+      content,
+      {
+        conversationId: options.conversationId,
+        threadId: options.threadId ?? options.conversationId,
+        taskId: options.taskId,
+      },
+      { now },
+    );
+    return;
+  }
+  editBlock(label, content, { replace: true, now });
 }
 
 function clamp01(value: number): number {
@@ -529,7 +550,7 @@ export function applyHeuristicTurnMemory(
       .join('\n')
       .slice(0, 800);
     try {
-      editBlock('active_focus', focus, { replace: true, now });
+      writeWorkingOrLegacyBlock('active_focus', focus, input, now);
       activeFocusUpdated = true;
     } catch {
       activeFocusUpdated = false;
@@ -539,13 +560,11 @@ export function applyHeuristicTurnMemory(
   const threadCandidates = extractOpenThreadCandidates(
     `${input.userMessage}\n${input.assistantMessage}`,
   );
-  if (threadCandidates.length > 0) {
-    try {
-      editBlock('open_threads', fitBlockLines(threadCandidates, 800), { replace: true, now });
-      openThreadsUpdated = true;
-    } catch {
-      openThreadsUpdated = false;
-    }
+  try {
+    writeWorkingOrLegacyBlock('open_threads', fitBlockLines(threadCandidates, 800), input, now);
+    openThreadsUpdated = true;
+  } catch {
+    openThreadsUpdated = false;
   }
 
   return { activeFocusUpdated, openThreadsUpdated };

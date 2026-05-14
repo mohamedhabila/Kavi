@@ -27,10 +27,7 @@ import {
 } from './evidence';
 import { hasObservedDelegatedWork } from './delegationEvidence';
 import { summarizeBackgroundWorkerRunOutcome } from './workflowState';
-import {
-  getConversationMemoryForSystemPrompt,
-  getMemoryForSystemPrompt,
-} from '../memory/store';
+import { canReadLongTermMemory } from '../memory/policy';
 import {
   assessUserRequest,
   evaluateResponseAgainstRequestAssessment,
@@ -1669,25 +1666,8 @@ function buildProcessSummary(params: {
 async function buildPilotMemoryContextSection(
   providerContext?: AgentRunPilotProviderContext,
 ): Promise<string | undefined> {
-  const [conversationMemory, globalMemory] = await Promise.all([
-    providerContext?.conversationId
-      ? getConversationMemoryForSystemPrompt(providerContext.conversationId, 80)
-      : Promise.resolve(null),
-    getMemoryForSystemPrompt(80),
-  ]);
-
-  if (!conversationMemory && !globalMemory) {
-    return undefined;
-  }
-
-  const sections = ['Shared memory context:'];
-  if (conversationMemory) {
-    sections.push(`Conversation memory (shared only within this conversation):\n${conversationMemory}`);
-  }
-  if (globalMemory) {
-    sections.push(`Global memory (durable across conversations):\n${globalMemory}`);
-  }
-  return sections.join('\n\n');
+  if (!providerContext || !canReadLongTermMemory()) return undefined;
+  return undefined;
 }
 
 async function buildPilotEvaluationPrompt(params: PilotDecisionParams): Promise<string> {

@@ -74,6 +74,25 @@ export function ensureFactSchema(): void {
     CREATE INDEX IF NOT EXISTS idx_blocks_persona
       ON memory_blocks(persona_id);
 
+    CREATE TABLE IF NOT EXISTS memory_working_blocks (
+      label TEXT NOT NULL,
+      scope_key TEXT NOT NULL,
+      conversation_id TEXT,
+      thread_id TEXT,
+      task_id TEXT,
+      content TEXT NOT NULL DEFAULT '',
+      char_limit INTEGER NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (label, scope_key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_working_blocks_conversation
+      ON memory_working_blocks(conversation_id, label, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_working_blocks_thread
+      ON memory_working_blocks(thread_id, label, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_working_blocks_recent
+      ON memory_working_blocks(label, updated_at);
+
     CREATE TABLE IF NOT EXISTS memory_consolidation_state (
       thread_id TEXT PRIMARY KEY,
       last_consolidated_message_id TEXT,

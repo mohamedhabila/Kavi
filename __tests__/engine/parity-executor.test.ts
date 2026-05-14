@@ -88,6 +88,11 @@ jest.mock('../../src/services/memory/embeddings', () => ({
   hybridSearch: jest.fn().mockResolvedValue([]),
 }));
 
+jest.mock('../../src/services/memory/sqlite-store', () => ({
+  indexMemoryToSqlite: jest.fn().mockResolvedValue(0),
+  sqliteHybridSearch: jest.fn().mockResolvedValue([]),
+}));
+
 // Mock expo-image-picker
 jest.mock('expo-image-picker', () => ({
   launchCameraAsync: jest.fn().mockResolvedValue({
@@ -168,6 +173,11 @@ describe('Parity Tool Executor', () => {
     mockHydrateProviderForRequest.mockImplementation(async (provider) => provider);
 
     jest.clearAllMocks();
+    const sqliteStore = require('../../src/services/memory/sqlite-store');
+    sqliteStore.indexMemoryToSqlite.mockReset();
+    sqliteStore.indexMemoryToSqlite.mockResolvedValue(0);
+    sqliteStore.sqliteHybridSearch.mockReset();
+    sqliteStore.sqliteHybridSearch.mockResolvedValue([]);
   });
 
   describe('executeCanvasCreate', () => {
@@ -2668,8 +2678,8 @@ describe('Parity Tool Executor', () => {
     });
 
     it('uses hybrid search when embedding config provided', async () => {
-      const { hybridSearch } = require('../../src/services/memory/embeddings');
-      hybridSearch.mockResolvedValueOnce([{ source: 'MEMORY.md', snippet: 'result', score: 0.9 }]);
+      const { sqliteHybridSearch } = require('../../src/services/memory/sqlite-store');
+      sqliteHybridSearch.mockResolvedValueOnce([{ source: 'MEMORY.md', snippet: 'result', score: 0.9 }]);
       const result = await executeMemorySearch(
         { query: 'search test', maxResults: 5 },
         { provider: 'openai', apiKey: 'k' },
@@ -2678,15 +2688,17 @@ describe('Parity Tool Executor', () => {
       expect(parsed.method).toBe('hybrid');
     });
 
-    it('falls back to text on hybrid error', async () => {
-      const { hybridSearch } = require('../../src/services/memory/embeddings');
-      hybridSearch.mockRejectedValueOnce(new Error('embed fail'));
+    it('returns a degraded sqlite result on hybrid error', async () => {
+      const { sqliteHybridSearch } = require('../../src/services/memory/sqlite-store');
+      sqliteHybridSearch.mockRejectedValueOnce(new Error('embed fail'));
       const result = await executeMemorySearch(
         { query: 'fallback', maxResults: 5 },
         { provider: 'openai', apiKey: 'k' },
       );
       const parsed = JSON.parse(result);
-      expect(parsed.method).toBe('text_fallback');
+      expect(parsed.method).toBe('hybrid');
+      expect(parsed.index).toBe('sqlite');
+      expect(parsed.degraded).toBe(true);
     });
   });
 

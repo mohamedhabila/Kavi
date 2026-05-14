@@ -1,5 +1,3 @@
-import { searchMemory } from '../../services/memory/store';
-import { hybridSearch } from '../../services/memory/embeddings';
 import {
   indexMemoryToSqlite,
   sqliteHybridSearch,
@@ -47,14 +45,6 @@ export async function executeMemorySearch(
     });
   };
 
-  if (!embeddingConfig) {
-    const results = await searchMemory(args.query, {
-      scope: requestedScope,
-      conversationId: options?.conversationId,
-    });
-    return formatWithCitations(results, 'text');
-  }
-
   try {
     await indexMemoryToSqlite(embeddingConfig, undefined, {
       scope: requestedScope,
@@ -63,7 +53,7 @@ export async function executeMemorySearch(
     const persistentResults = await sqliteHybridSearch(
       args.query,
       {
-        embedding: embeddingConfig,
+        ...(embeddingConfig ? { embedding: embeddingConfig } : {}),
         maxResults,
       },
       {
@@ -78,47 +68,25 @@ export async function executeMemorySearch(
           citation: `[${index + 1}] ${result.source || 'memory'}`,
           relevance: result.score != null ? Math.round(result.score * 100) + '%' : undefined,
         })),
-        method: 'hybrid',
+        method: embeddingConfig ? 'hybrid' : 'text',
         index: 'sqlite',
         totalFound: persistentResults.length,
         scope: requestedScope,
       });
     }
-  } catch {
-    // Fall through to the legacy hybrid path below. Some Jest tests mock only
-    // the embedding module; production still prefers the persistent index.
+  } catch (error) {
+    return JSON.stringify({
+      results: [],
+      method: embeddingConfig ? 'hybrid' : 'text',
+      index: 'sqlite',
+      totalFound: 0,
+      scope: requestedScope,
+      degraded: true,
+      error: error instanceof Error ? error.message : 'memory search unavailable',
+    });
   }
 
-  try {
-    const results = await hybridSearch(
-      args.query,
-      {
-        embedding: embeddingConfig,
-        maxResults,
-      },
-      {
-        scope: requestedScope,
-        conversationId: options?.conversationId,
-      },
-    );
-    return JSON.stringify({
-      results: results.map((result: any, index: number) => ({
-        ...result,
-        citation: `[${index + 1}] ${result.source || 'memory'}`,
-        relevance: result.score != null ? Math.round(result.score * 100) + '%' : undefined,
-      })),
-      method: 'hybrid',
-      index: 'legacy',
-      totalFound: results.length,
-      scope: requestedScope,
-    });
-  } catch {
-    const results = await searchMemory(args.query, {
-      scope: requestedScope,
-      conversationId: options?.conversationId,
-    });
-    return formatWithCitations(results, 'text_fallback');
-  }
+  return formatWithCitations([], embeddingConfig ? 'hybrid' : 'text');
 }
 
 // ---------------------------------------------------------------------------

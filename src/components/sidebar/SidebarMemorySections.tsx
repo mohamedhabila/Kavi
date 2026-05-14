@@ -3,8 +3,8 @@
 // ---------------------------------------------------------------------------
 // Renders the four memory-driven IA sections that sit above the conversation
 // list:
-//   1. Today's focus tile — current `active_focus` block.
-//   2. Open threads chips — items parsed from the `open_threads` block.
+//   1. Today's focus tile — most recent scoped `active_focus` working block.
+//   2. Open threads chips — items parsed from scoped `open_threads` working blocks.
 //   3. Recall search input — opens the Memory screen with the query.
 //   4. Pinned moments — top user-pinned facts.
 // All memory reads are guarded so a missing/uninitialised SQLite store
@@ -38,6 +38,17 @@ function safeGetBlock(label: string): MemoryBlock | null {
   } catch {
     return null;
   }
+}
+
+function safeGetWorkingBlockContent(label: 'active_focus' | 'open_threads'): string | null {
+  try {
+    const { listRecentWorkingBlocks } = require('../../services/memory/workingBlocks');
+    const block = listRecentWorkingBlocks(label, 1)?.[0];
+    if (block?.content) return block.content;
+  } catch {
+    // fall back below
+  }
+  return safeGetBlock(label)?.content ?? null;
 }
 
 function safeListPinnedFacts(limit: number): MemoryFact[] {
@@ -113,8 +124,7 @@ interface TodaysFocusTileProps {
 export const TodaysFocusTile: React.FC<TodaysFocusTileProps> = ({ colors, onPress }) => {
   const { t } = useTranslation();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const block = useMemo(() => safeGetBlock('active_focus'), []);
-  const focus = (block?.content ?? '').trim();
+  const focus = (useMemo(() => safeGetWorkingBlockContent('active_focus'), []) ?? '').trim();
   const isEmpty = focus.length === 0;
 
   return (
@@ -149,8 +159,8 @@ interface OpenThreadsChipsProps {
 export const OpenThreadsChips: React.FC<OpenThreadsChipsProps> = ({ colors, onSelect }) => {
   const { t } = useTranslation();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const block = useMemo(() => safeGetBlock('open_threads'), []);
-  const labels = useMemo(() => parseOpenThreads(block?.content), [block]);
+  const content = useMemo(() => safeGetWorkingBlockContent('open_threads'), []);
+  const labels = useMemo(() => parseOpenThreads(content), [content]);
 
   return (
     <View style={styles.section} testID="sidebar-open-threads">

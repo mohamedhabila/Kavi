@@ -3729,10 +3729,10 @@ ${JSON.stringify({
     expect(prompt).toContain('draft-end');
     expect(prompt).toContain('result-end');
     expect(prompt).toContain('tool-output-end');
-    expect(prompt).toContain('Conversation memory (shared only within this conversation):');
-    expect(prompt).toContain('Conversation memory: pending validation notes.');
-    expect(prompt).toContain('Global memory (durable across conversations):');
-    expect(prompt).toContain('Global memory: prefer production-ready verification.');
+    expect(prompt).not.toContain('Conversation memory (shared only within this conversation):');
+    expect(prompt).not.toContain('Conversation memory: pending validation notes.');
+    expect(prompt).not.toContain('Global memory (durable across conversations):');
+    expect(prompt).not.toContain('Global memory: prefer production-ready verification.');
   });
 
   it('treats draft-only churn as a new reviewed state so the pilot reassesses the continuation', () => {

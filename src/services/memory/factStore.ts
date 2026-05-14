@@ -49,3 +49,13 @@ export {
   upsertBlock,
   clearBlock,
 } from './blocks';
+export {
+  type WorkingBlockLabel,
+  type WorkingBlockScope,
+  type WorkingMemoryBlock,
+  buildWorkingBlockScopeKey,
+  getWorkingBlock,
+  listRecentWorkingBlocks,
+  editWorkingBlock,
+  clearWorkingBlock,
+} from './workingBlocks';
