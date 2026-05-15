@@ -2,6 +2,11 @@
 // Tests — Memory Store
 // ---------------------------------------------------------------------------
 
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
+});
+
 import {
   appendConversationMemory,
   readGlobalMemory,

@@ -25,46 +25,55 @@ import { runMigrationSeedPass, type RunSeedPassResult } from './migrationSeedPas
 import { useChatStore } from '../../store/useChatStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { resolveProviderApiKey } from '../llm/providerSupport';
+import { LlmService } from '../llm/LlmService';
 import { createLogger } from '../../utils/logger';
+import { createTimeoutSignal } from '../../utils/runtime';
 import type { LlmProviderConfig, Conversation, Message } from '../../types';
 
 const logger = createLogger('memory.lifecycle');
+const MEMORY_EXTRACTOR_TIMEOUT_MS = 30_000;
 
-// ── Default extractor backed by an OpenAI-compatible chat completion ──────
-//
-// When the user picks a `consolidationProvider`, we call its OpenAI-style
-// `/v1/chat/completions` endpoint with the consolidator prompt and return
-// the raw assistant text. The consolidator parser is tolerant — non-JSON
-// or empty strings degrade to `{ newFacts: [], ... }` so a misconfigured
-// endpoint never poisons memory.
-function buildOpenAICompatibleExtractor(
+function extractAssistantText(response: unknown): string {
+  if (typeof response === 'string') return response;
+  if (!response || typeof response !== 'object') return '';
+  const value = response as Record<string, any>;
+  const choiceContent = value.choices?.[0]?.message?.content;
+  if (typeof choiceContent === 'string') return choiceContent;
+  if (Array.isArray(choiceContent)) {
+    return choiceContent
+      .map((part) => (typeof part === 'string' ? part : part?.text ?? part?.output_text ?? ''))
+      .join('');
+  }
+  if (typeof value.output_text === 'string') return value.output_text;
+  if (Array.isArray(value.content)) {
+    return value.content
+      .map((part) => (typeof part === 'string' ? part : part?.text ?? ''))
+      .join('');
+  }
+  if (Array.isArray(value.candidates)) {
+    return value.candidates
+      .flatMap((candidate) => candidate?.content?.parts ?? [])
+      .map((part) => part?.text ?? '')
+      .join('');
+  }
+  return '';
+}
+
+function buildProviderExtractor(
   provider: LlmProviderConfig,
   apiKey: string | null,
 ): ConsolidatorExtractor {
+  const llm = new LlmService(apiKey ? { ...provider, apiKey } : provider);
   return async (prompt: string) => {
-    const baseUrl = (provider.baseUrl ?? '').replace(/\/+$/, '');
-    if (!baseUrl) return '';
-    const url = `${baseUrl}/chat/completions`;
     try {
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-        },
-        body: JSON.stringify({
-          model: provider.model,
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0,
-          max_tokens: 800,
-        }),
+      const response = await llm.sendMessage([{ role: 'user', content: prompt }] as any, {
+        maxTokens: 1600,
+        signal: createTimeoutSignal(MEMORY_EXTRACTOR_TIMEOUT_MS),
       });
-      if (!resp.ok) return '';
-      const data: any = await resp.json();
-      return String(data?.choices?.[0]?.message?.content ?? '');
+      return extractAssistantText(response);
     } catch (error) {
       logger.devWarn(
-        'Default extractor failed:',
+        'Memory extractor failed:',
         error instanceof Error ? error.message : String(error),
       );
       return '';
@@ -87,7 +96,7 @@ async function resolveConsolidator(): Promise<ResolvedConsolidator | null> {
   const apiKey = await resolveProviderApiKey(provider);
   return {
     provider,
-    extractor: buildOpenAICompatibleExtractor(provider, apiKey ?? null),
+    extractor: buildProviderExtractor(provider, apiKey ?? null),
   };
 }
 
@@ -192,6 +201,11 @@ function findLastAssistant(messages: Message[]): Message | undefined {
   return undefined;
 }
 
+function findAssistantById(messages: Message[], messageId: string | undefined): Message | undefined {
+  if (!messageId) return undefined;
+  return messages.find((message) => message.id === messageId && message.role === 'assistant');
+}
+
 function findLastUserBefore(messages: Message[], messageId: string | undefined): Message | undefined {
   const anchorIndex = messageId
     ? messages.findIndex((message) => message.id === messageId)
@@ -235,26 +249,27 @@ export async function recordCompletedTurnForMemory(
     return { dirty, skipped: dirty.skipped };
   }
 
+  const assistant = findAssistantById(input.messages, dirty.anchorMessageId) ?? findLastAssistant(input.messages);
+  const user = findLastUserBefore(input.messages, assistant?.id);
+  const heuristic = user && assistant
+    ? applyHeuristicTurnMemory(
+        {
+          userMessage: user.content ?? '',
+          assistantMessage: assistant.content ?? '',
+          conversationId: input.threadId,
+          threadId: input.threadId,
+          sourceUserMessageId: user.id,
+          sourceAssistantMessageId: assistant.id,
+          messages: input.messages,
+          ...(input.threadTitle ? { threadTitle: input.threadTitle } : {}),
+          ...(typeof input.now === 'number' ? { now: input.now } : {}),
+        },
+        { ...(typeof input.now === 'number' ? { now: input.now } : {}) },
+      )
+    : { activeFocusUpdated: false, openThreadsUpdated: false, recordedFactIds: [] };
+
   const resolved = await resolveConsolidator();
   if (!resolved) {
-    const assistant = findLastAssistant(input.messages);
-    const user = findLastUserBefore(input.messages, assistant?.id);
-    const heuristic = user && assistant
-      ? applyHeuristicTurnMemory(
-          {
-            userMessage: user.content ?? '',
-            assistantMessage: assistant.content ?? '',
-            conversationId: input.threadId,
-            threadId: input.threadId,
-            sourceUserMessageId: user.id,
-            sourceAssistantMessageId: assistant.id,
-            messages: input.messages,
-            ...(input.threadTitle ? { threadTitle: input.threadTitle } : {}),
-            ...(typeof input.now === 'number' ? { now: input.now } : {}),
-          },
-          { ...(typeof input.now === 'number' ? { now: input.now } : {}) },
-        )
-      : { activeFocusUpdated: false, openThreadsUpdated: false };
     logger.devWarn('recordCompletedTurnForMemory skipped consolidation: no provider configured');
     return {
       dirty,
@@ -272,13 +287,18 @@ export async function recordCompletedTurnForMemory(
     ...(input.threadTitle ? { threadTitle: input.threadTitle } : {}),
     ...(input.personaSummary ? { personaSummary: input.personaSummary } : {}),
     ...(typeof input.now === 'number' ? { now: input.now } : {}),
-    ...(typeof input.turnThreshold === 'number' ? { turnThreshold: input.turnThreshold } : {}),
+    turnThreshold: input.turnThreshold ?? 1,
     ...(typeof input.idleThresholdMs === 'number'
       ? { idleThresholdMs: input.idleThresholdMs }
       : {}),
   });
 
-  return { dirty, consolidation };
+  return {
+    dirty,
+    consolidation,
+    heuristicFocusUpdated: heuristic.activeFocusUpdated,
+    heuristicOpenThreadsUpdated: heuristic.openThreadsUpdated,
+  };
 }
 
 /** Test seam — reset throttle so unit tests don't depend on real-time. */

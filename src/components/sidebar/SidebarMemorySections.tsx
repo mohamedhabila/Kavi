@@ -11,7 +11,7 @@
 // degrades gracefully (the section simply renders empty).
 // ---------------------------------------------------------------------------
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -26,6 +26,7 @@ import { useTranslation } from '../../i18n';
 import type { Conversation } from '../../types';
 import type { MemoryBlock } from '../../services/memory/blocks';
 import { MemoryFact } from '@/services/memory/factStore';
+import { subscribeToMemoryChanges } from '../../services/memory/store';
 
 // ── Memory readers (guarded) ────────────────────────────────────────────────
 
@@ -58,6 +59,24 @@ function safeListPinnedFacts(limit: number): MemoryFact[] {
   } catch {
     return [];
   }
+}
+
+function useMemoryVersion(): number {
+  const [version, setVersion] = useState(0);
+  useEffect(
+    () =>
+      subscribeToMemoryChanges((event) => {
+        if (
+          event.scope === 'structured' ||
+          event.scope === 'conversation' ||
+          event.scope === 'all'
+        ) {
+          setVersion((current) => current + 1);
+        }
+      }),
+    [],
+  );
+  return version;
 }
 
 // ── Open-threads parser ─────────────────────────────────────────────────────
@@ -124,7 +143,8 @@ interface TodaysFocusTileProps {
 export const TodaysFocusTile: React.FC<TodaysFocusTileProps> = ({ colors, onPress }) => {
   const { t } = useTranslation();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const focus = (useMemo(() => safeGetWorkingBlockContent('active_focus'), []) ?? '').trim();
+  useMemoryVersion();
+  const focus = (safeGetWorkingBlockContent('active_focus') ?? '').trim();
   const isEmpty = focus.length === 0;
 
   return (
@@ -159,7 +179,8 @@ interface OpenThreadsChipsProps {
 export const OpenThreadsChips: React.FC<OpenThreadsChipsProps> = ({ colors, onSelect }) => {
   const { t } = useTranslation();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const content = useMemo(() => safeGetWorkingBlockContent('open_threads'), []);
+  useMemoryVersion();
+  const content = safeGetWorkingBlockContent('open_threads');
   const labels = useMemo(() => parseOpenThreads(content), [content]);
 
   return (
@@ -249,7 +270,8 @@ export const PinnedMoments: React.FC<PinnedMomentsProps> = ({
 }) => {
   const { t } = useTranslation();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const facts = useMemo(() => safeListPinnedFacts(limit), [limit]);
+  useMemoryVersion();
+  const facts = safeListPinnedFacts(limit);
 
   return (
     <View style={styles.section} testID="sidebar-pinned-moments">

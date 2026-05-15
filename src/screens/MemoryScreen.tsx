@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useRoute } from '@react-navigation/native';
 import {
   ArrowLeft,
   Save,
@@ -59,10 +59,13 @@ type BlockRow = MemoryBlockReadResult['blocks'][number];
 export const MemoryScreen: React.FC = () => {
   const { colors } = useAppTheme();
   const { t } = useTranslation();
+  const route = useRoute<any>();
   const handleBack = useBackToChat();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const routeQuery = typeof route.params?.query === 'string' ? route.params.query.trim() : '';
+  const routeTab = route.params?.tab === 'blocks' ? 'blocks' : 'facts';
 
-  const [tab, setTab] = useState<Tab>('global');
+  const [tab, setTab] = useState<Tab>(routeTab);
   const [globalContent, setGlobalContent] = useState('');
   const [originalContent, setOriginalContent] = useState('');
   const [dailyFiles, setDailyFiles] = useState<string[]>([]);
@@ -75,7 +78,7 @@ export const MemoryScreen: React.FC = () => {
 
   // Facts tab state.
   const [facts, setFacts] = useState<FactRow[]>([]);
-  const [factsFilter, setFactsFilter] = useState('');
+  const [factsFilter, setFactsFilter] = useState(routeQuery);
   const [factsPinnedOnly, setFactsPinnedOnly] = useState(false);
 
   // Blocks tab state.
@@ -92,6 +95,16 @@ export const MemoryScreen: React.FC = () => {
   useEffect(() => {
     selectedDateRef.current = selectedDate;
   }, [selectedDate]);
+
+  useEffect(() => {
+    if (!route.params?.tab && !routeQuery) return;
+    if (route.params?.tab === 'blocks') {
+      setTab('blocks');
+      return;
+    }
+    setTab('facts');
+    if (routeQuery) setFactsFilter(routeQuery);
+  }, [route.params?.tab, routeQuery]);
 
   const loadGlobalMemory = useCallback(async (preserveDirty = false) => {
     if (preserveDirty && dirtyRef.current) {
@@ -209,10 +222,16 @@ export const MemoryScreen: React.FC = () => {
           setLastSyncedAt(event.updatedAt);
         });
       }
+
+      if (event.scope === 'structured' || event.scope === 'conversation' || event.scope === 'all') {
+        loadFacts();
+        loadBlocks();
+        setLastSyncedAt(event.updatedAt);
+      }
     });
 
     return unsubscribe;
-  }, [loadDailyList, loadGlobalMemory]);
+  }, [loadDailyList, loadGlobalMemory, loadFacts, loadBlocks]);
 
   const handleSave = useCallback(() => {
     writeGlobalMemory(globalContent);

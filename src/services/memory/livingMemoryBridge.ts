@@ -17,11 +17,13 @@ import type { Message } from '../../types';
 import type { EmbeddingConfig } from '../../types';
 import { createLogger } from '../../utils/logger';
 import { listBlocks, type MemoryBlock } from './blocks';
+import { getEntityById } from './entities';
 import { recallFactsForQuery } from './factRecall';
 import { renderFocusBlock, type FocusGap } from './focus';
 import { getWorkingBlock, type WorkingMemoryBlock } from './workingBlocks';
 import {
   assemblePrompt,
+  type PromptMemoryFact,
   type SystemPromptSection,
 } from './promptAssembly';
 
@@ -165,6 +167,21 @@ function splitThreadLabels(content: string): string[] {
     .filter((line) => line.length > 0);
 }
 
+function getFactSubjectLabel(subjectId: string): string {
+  try {
+    return getEntityById(subjectId)?.canonicalName ?? subjectId;
+  } catch {
+    return subjectId;
+  }
+}
+
+function withFactSubjectLabels(facts: Awaited<ReturnType<typeof recallFactsForQuery>>): PromptMemoryFact[] {
+  return facts.map((fact) => ({
+    ...fact,
+    subjectLabel: getFactSubjectLabel(fact.subjectId),
+  }));
+}
+
 /**
  * Build the per-request memory-aware sections + the inputs the compaction
  * engine needs (focus / open threads / idle gap). Safe to call once per
@@ -253,7 +270,7 @@ export async function buildLivingMemorySections(
     basePrompt: '',
     blocks: promptBlocks,
     focusBlock: focusRendered.text,
-    retrievedFacts: recalledFacts,
+    retrievedFacts: withFactSubjectLabels(recalledFacts),
   });
 
   const idleAnchor = lastAssistantAt ?? lastUserAt;

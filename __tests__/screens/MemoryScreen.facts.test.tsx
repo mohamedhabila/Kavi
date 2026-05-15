@@ -8,7 +8,7 @@
 // ---------------------------------------------------------------------------
 
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { MemoryScreen } from '../../src/screens/MemoryScreen';
 
 const mockExecuteMemoryRecall = jest.fn();
@@ -17,6 +17,11 @@ const mockExecuteMemoryUnpin = jest.fn();
 const mockExecuteMemoryForget = jest.fn();
 const mockExecuteMemoryBlockRead = jest.fn();
 const mockExecuteMemoryBlockEdit = jest.fn();
+const mockSubscribeToMemoryChanges = jest.fn();
+let mockRouteParams: Record<string, unknown> = {};
+let memoryListener:
+  | ((event: { scope: 'global' | 'conversation' | 'daily' | 'structured' | 'all'; updatedAt: number }) => void)
+  | null = null;
 
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: ({ children, ...props }: any) => {
@@ -28,6 +33,7 @@ jest.mock('react-native-safe-area-context', () => ({
 
 jest.mock('@react-navigation/native', () => ({
   useFocusEffect: () => undefined,
+  useRoute: () => ({ params: mockRouteParams }),
 }));
 
 jest.mock('../../src/navigation/useBackToChat', () => ({
@@ -62,7 +68,7 @@ jest.mock('../../src/services/memory/store', () => ({
   listDailyMemoryFiles: jest.fn().mockReturnValue([]),
   readDailyMemory: jest.fn().mockResolvedValue(''),
   clearAllMemory: jest.fn(),
-  subscribeToMemoryChanges: jest.fn().mockReturnValue(() => undefined),
+  subscribeToMemoryChanges: (...args: any[]) => mockSubscribeToMemoryChanges(...args),
   getMemoryLastUpdatedAt: jest.fn().mockReturnValue(null),
 }));
 
@@ -100,6 +106,12 @@ const sampleBlock = (overrides: Partial<any> = {}) => ({
 describe('MemoryScreen — Facts & Blocks tabs', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockRouteParams = {};
+    memoryListener = null;
+    mockSubscribeToMemoryChanges.mockImplementation((listener: typeof memoryListener) => {
+      memoryListener = listener;
+      return jest.fn();
+    });
     mockExecuteMemoryRecall.mockReturnValue({ ok: true, subject: null, facts: [] });
     mockExecuteMemoryBlockRead.mockReturnValue({ ok: true, blocks: [] });
     mockExecuteMemoryPin.mockReturnValue({ ok: true, fact: sampleFact({ pinned: true }) });
@@ -211,6 +223,38 @@ describe('MemoryScreen — Facts & Blocks tabs', () => {
     });
     const lastCall = mockExecuteMemoryRecall.mock.calls.at(-1)?.[0];
     expect(lastCall?.subject).toBe('mo');
+  });
+
+  it('seeds facts search from route params', async () => {
+    mockRouteParams = { tab: 'facts', query: 'release target' };
+
+    const { getByTestId } = render(<MemoryScreen />);
+
+    await waitFor(() => {
+      expect(getByTestId('memory-facts-search').props.value).toBe('release target');
+    });
+    const calls = mockExecuteMemoryRecall.mock.calls.map((call) => call[0]);
+    expect(calls.some((args) => args?.subject === 'release target')).toBe(true);
+  });
+
+  it('reloads facts when structured memory changes', async () => {
+    mockExecuteMemoryRecall
+      .mockReturnValueOnce({ ok: true, subject: null, facts: [] })
+      .mockReturnValue({ ok: true, subject: null, facts: [sampleFact({ value: 'Fresh fact' })] });
+
+    const { getByText } = render(<MemoryScreen />);
+
+    await waitFor(() => {
+      expect(getByText('No facts recorded yet. The AI will remember structured facts here.')).toBeTruthy();
+    });
+
+    await act(async () => {
+      memoryListener?.({ scope: 'structured', updatedAt: 100 });
+    });
+
+    await waitFor(() => {
+      expect(getByText('Fresh fact')).toBeTruthy();
+    });
   });
 
   it('renders the Blocks tab and lists blocks returned by executeMemoryBlockRead', async () => {

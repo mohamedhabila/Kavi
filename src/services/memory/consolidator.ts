@@ -531,7 +531,7 @@ function fitBlockLines(lines: string[], maxChars: number): string {
 export function applyHeuristicTurnMemory(
   input: ConsolidatorTurnInput,
   options: { now?: number } = {},
-): { activeFocusUpdated: boolean; openThreadsUpdated: boolean } {
+): { activeFocusUpdated: boolean; openThreadsUpdated: boolean; recordedFactIds: string[] } {
   ensureFactSchema();
   ensureDefaultBlocks();
   const now = options.now ?? input.now ?? Date.now();
@@ -539,6 +539,7 @@ export function applyHeuristicTurnMemory(
   const assistant = truncateForPrompt(input.assistantMessage, 220);
   let activeFocusUpdated = false;
   let openThreadsUpdated = false;
+  const recordedFactIds: string[] = [];
 
   if (user || assistant) {
     const focus = [
@@ -567,7 +568,95 @@ export function applyHeuristicTurnMemory(
     openThreadsUpdated = false;
   }
 
-  return { activeFocusUpdated, openThreadsUpdated };
+  for (const fact of extractHeuristicFacts(input.userMessage)) {
+    const subject = upsertEntity({ type: 'self', name: 'user', now });
+    const recorded = recordFact({
+      subjectId: subject.id,
+      predicate: fact.predicate,
+      objectText: fact.value,
+      confidence: fact.confidence,
+      scope: fact.scope,
+      originConversationId: input.conversationId ?? null,
+      originThreadId: input.threadId ?? input.conversationId ?? null,
+      originTaskId: input.taskId ?? null,
+      sourceMessageId: input.sourceUserMessageId ?? null,
+      sourceTurnId: input.sourceAssistantMessageId ?? input.sourceUserMessageId ?? null,
+      sourceSummary: fact.reason,
+      importance: fact.importance,
+      attributes: { heuristic: true, reason: fact.reason },
+      now,
+    });
+    if (recorded.status === 'created') recordedFactIds.push(recorded.fact.id);
+  }
+
+  return { activeFocusUpdated, openThreadsUpdated, recordedFactIds };
+}
+
+function extractHeuristicFacts(userMessage: string): Array<{
+  predicate: string;
+  value: string;
+  confidence: number;
+  scope: MemoryFactScope;
+  importance: number;
+  reason: string;
+}> {
+  const text = userMessage.trim();
+  if (!text) return [];
+  const facts: Array<{
+    predicate: string;
+    value: string;
+    confidence: number;
+    scope: MemoryFactScope;
+    importance: number;
+    reason: string;
+  }> = [];
+
+  const remember = text.match(/\b(?:please\s+)?remember(?:\s+that|:)?\s+([^\n.?!]{3,200})/i)?.[1];
+  if (remember) {
+    facts.push({
+      predicate: 'asked_to_remember',
+      value: cleanHeuristicFactValue(remember, 200),
+      confidence: 0.85,
+      scope: 'global',
+      importance: 0.72,
+      reason: 'User explicitly asked Kavi to remember this.',
+    });
+  }
+
+  const name = text.match(/\b(?:my name is|call me)\s+([A-Za-z][A-Za-z .'-]{0,60})/i)?.[1];
+  if (name) {
+    facts.push({
+      predicate: 'has_name',
+      value: cleanHeuristicFactValue(name, 80),
+      confidence: 0.9,
+      scope: 'global',
+      importance: 0.8,
+      reason: 'User stated their name.',
+    });
+  }
+
+  const preference = text.match(/\bI\s+prefer\s+([^\n.?!]{3,160})/i)?.[1];
+  if (preference) {
+    facts.push({
+      predicate: 'prefers',
+      value: cleanHeuristicFactValue(preference, 160),
+      confidence: 0.75,
+      scope: 'global',
+      importance: 0.68,
+      reason: 'User stated a preference.',
+    });
+  }
+
+  return facts.filter((fact) => fact.value.length > 0).slice(0, 3);
+}
+
+function cleanHeuristicFactValue(value: string, maxLength: number): string {
+  return value
+    .trim()
+    .replace(/^['"]+|['".:,;]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .slice(0, maxLength)
+    .trim();
 }
 
 function extractOpenThreadCandidates(text: string): string[] {

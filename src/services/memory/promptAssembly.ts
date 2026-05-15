@@ -24,6 +24,8 @@
 import type { MemoryBlock } from './blocks';
 import type { MemoryFact } from './facts';
 
+export type PromptMemoryFact = MemoryFact & { subjectLabel?: string };
+
 export interface SystemPromptSection {
   text: string;
   /** When true, the section is part of the cacheable prefix (L1 + L2). */
@@ -56,7 +58,7 @@ export interface AssemblePromptInput {
    * L3 — facts retrieved for THIS turn. Caller is responsible for ranking
    * and capping. Listed in caller-provided order.
    */
-  retrievedFacts?: MemoryFact[];
+  retrievedFacts?: PromptMemoryFact[];
   /**
    * L3 — additional dynamic context the orchestrator wants to inject
    * (e.g. workflow status, tool catalog notes that change per turn).
@@ -118,13 +120,14 @@ function renderL2(input: AssemblePromptInput): string {
   return sections.join('\n\n');
 }
 
-function renderFact(fact: MemoryFact): string {
+function renderFact(fact: PromptMemoryFact): string {
   // Compact one-liner. Confidence rendered only when meaningfully low.
   const conf =
     typeof fact.confidence === 'number' && fact.confidence < 0.6
       ? ` (confidence ${fact.confidence.toFixed(2)})`
       : '';
-  return `- ${fact.subjectId} ${fact.predicate}: ${fact.objectText}${conf}`;
+  const subject = fact.subjectLabel?.trim() || fact.subjectId;
+  return `- ${subject} ${fact.predicate}: ${fact.objectText}${conf}`;
 }
 
 function renderL3(input: AssemblePromptInput): string {

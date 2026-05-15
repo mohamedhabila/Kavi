@@ -197,6 +197,22 @@ export function resetFactSchemaCacheForTests(): void {
   schemaReady = false;
 }
 
+export function clearStructuredMemory(): void {
+  ensureFactSchema();
+  const db = getMemoryDb();
+  db.execSync(`
+    DELETE FROM memory_fact_evidence;
+    DELETE FROM memory_episodes;
+    DELETE FROM memory_facts;
+    DELETE FROM memory_entities;
+    DELETE FROM memory_blocks;
+    DELETE FROM memory_working_blocks;
+    DELETE FROM memory_consolidation_state;
+    DELETE FROM memory_migration_state;
+    DELETE FROM memory_chunks;
+  `);
+}
+
 // ── Shared internal helpers ──────────────────────────────────────────────
 
 export function fnv1aHash(str: string): string {

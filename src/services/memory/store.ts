@@ -14,7 +14,7 @@ const DAILY_DIR = 'daily';
 export type MemoryScope = 'global' | 'conversation';
 export type MemoryReadScope = MemoryScope | 'all';
 export type MemorySearchScope = MemoryReadScope;
-export type MemoryChangeScope = MemoryScope | 'daily' | 'all';
+export type MemoryChangeScope = MemoryScope | 'daily' | 'structured' | 'all';
 
 export interface MemoryChangeEvent {
   scope: MemoryChangeScope;
@@ -93,6 +93,10 @@ function notifyMemorySubscribers(scope: MemoryChangeScope, conversationId?: stri
   };
   lastMemoryUpdatedAt = event.updatedAt;
   memorySubscribers.forEach((listener) => listener(event));
+}
+
+export function notifyStructuredMemoryChanged(conversationId?: string | null): void {
+  notifyMemorySubscribers('structured', conversationId ?? undefined);
 }
 
 export function subscribeToMemoryChanges(listener: (event: MemoryChangeEvent) => void): () => void {
@@ -310,6 +314,8 @@ export async function flushToMemory(facts: string[]): Promise<void> {
 // ── Clear all memory (dangerous) ─────────────────────────────────────────
 
 export function clearAllMemory(): void {
+  const { clearStructuredMemory } = require('./schema') as typeof import('./schema');
+  clearStructuredMemory();
   const dirs = [getMemoryDir(), getConversationMemoryRootDir()];
   for (const dir of dirs) {
     if (dir.exists) {

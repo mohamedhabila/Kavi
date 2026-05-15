@@ -15,6 +15,7 @@ import {
   safeParseArray,
   safeParseObject,
 } from './schema';
+import { notifyStructuredMemoryChanged } from './store';
 
 export type MemoryFactScope = 'global' | 'project' | 'conversation' | 'session' | 'persona';
 
@@ -235,6 +236,7 @@ export function recordFact(input: RecordFactInput): RecordFactResult {
       now,
       existing.id,
     );
+    notifyStructuredMemoryChanged(existing.origin_conversation_id);
     return {
       fact: rowToFact({
         ...existing,
@@ -351,6 +353,7 @@ export function recordFact(input: RecordFactInput): RecordFactResult {
     fact.updatedAt,
     fact.pinned ? 1 : 0,
   );
+  notifyStructuredMemoryChanged(fact.originConversationId);
   return { fact, status: 'created', superseded };
 }
 
@@ -462,7 +465,9 @@ export function invalidateFact(id: string, now = Date.now()): boolean {
     now,
     id,
   );
-  return (result.changes ?? 0) > 0;
+  const changed = (result.changes ?? 0) > 0;
+  if (changed) notifyStructuredMemoryChanged();
+  return changed;
 }
 
 export function softDeleteFact(id: string, now = Date.now()): boolean {
@@ -475,7 +480,9 @@ export function softDeleteFact(id: string, now = Date.now()): boolean {
     now,
     id,
   );
-  return (result.changes ?? 0) > 0;
+  const changed = (result.changes ?? 0) > 0;
+  if (changed) notifyStructuredMemoryChanged();
+  return changed;
 }
 
 export function setFactPinned(id: string, pinned: boolean, now = Date.now()): boolean {
@@ -488,7 +495,9 @@ export function setFactPinned(id: string, pinned: boolean, now = Date.now()): bo
     now,
     id,
   );
-  return (result.changes ?? 0) > 0;
+  const changed = (result.changes ?? 0) > 0;
+  if (changed) notifyStructuredMemoryChanged();
+  return changed;
 }
 
 /**
@@ -512,5 +521,7 @@ export function setFactEmbedding(
     now,
     id,
   );
-  return (result.changes ?? 0) > 0;
+  const changed = (result.changes ?? 0) > 0;
+  if (changed) notifyStructuredMemoryChanged();
+  return changed;
 }

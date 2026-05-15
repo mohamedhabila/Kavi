@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { act, render, fireEvent } from '@testing-library/react-native';
 import {
   TodaysFocusTile,
   OpenThreadsChips,
@@ -28,9 +28,30 @@ jest.mock('../../src/services/memory/facts', () => ({
     return fn(opts);
   },
 }));
+jest.mock('../../src/services/memory/workingBlocks', () => ({
+  __mockListRecentWorkingBlocks: jest.fn(() => []),
+  listRecentWorkingBlocks: (label: string, limit: number) => {
+    const fn = require('../../src/services/memory/workingBlocks').__mockListRecentWorkingBlocks;
+    return fn(label, limit);
+  },
+}));
+
+let memoryListener:
+  | ((event: { scope: 'global' | 'conversation' | 'daily' | 'structured' | 'all'; updatedAt: number }) => void)
+  | null = null;
+
+jest.mock('../../src/services/memory/store', () => ({
+  __mockSubscribeToMemoryChanges: jest.fn(),
+  subscribeToMemoryChanges: (listener: typeof memoryListener) => {
+    const fn = require('../../src/services/memory/store').__mockSubscribeToMemoryChanges;
+    return fn(listener);
+  },
+}));
 
 const blocksMock = require('../../src/services/memory/blocks');
 const factsMock = require('../../src/services/memory/facts');
+const workingBlocksMock = require('../../src/services/memory/workingBlocks');
+const memoryStoreMock = require('../../src/services/memory/store');
 
 jest.mock('../../src/i18n', () => ({
   useTranslation: () => ({
@@ -65,10 +86,18 @@ const colors = {
 } as any;
 
 beforeEach(() => {
+  memoryListener = null;
   blocksMock.__mockGetBlock.mockReset();
   blocksMock.__mockGetBlock.mockReturnValue(null);
   factsMock.__mockListFacts.mockReset();
   factsMock.__mockListFacts.mockReturnValue([]);
+  workingBlocksMock.__mockListRecentWorkingBlocks.mockReset();
+  workingBlocksMock.__mockListRecentWorkingBlocks.mockReturnValue([]);
+  memoryStoreMock.__mockSubscribeToMemoryChanges.mockReset();
+  memoryStoreMock.__mockSubscribeToMemoryChanges.mockImplementation((listener: typeof memoryListener) => {
+    memoryListener = listener;
+    return jest.fn();
+  });
 });
 
 // ── parseOpenThreads ────────────────────────────────────────────────────────
@@ -147,6 +176,25 @@ describe('TodaysFocusTile', () => {
     const { getByTestId } = render(<TodaysFocusTile colors={colors} />);
     expect(getByTestId('sidebar-todays-focus-body').props.children).toBe(
       'Ship Chunk L tonight.',
+    );
+  });
+
+  it('refreshes when structured memory changes', () => {
+    workingBlocksMock.__mockListRecentWorkingBlocks.mockReturnValueOnce([]);
+    const { getByTestId } = render(<TodaysFocusTile colors={colors} />);
+    expect(getByTestId('sidebar-todays-focus-body').props.children).toBe(
+      'Nothing in focus yet.',
+    );
+
+    workingBlocksMock.__mockListRecentWorkingBlocks.mockReturnValue([
+      { content: 'Fresh focus from the completed turn.' },
+    ]);
+    act(() => {
+      memoryListener?.({ scope: 'structured', updatedAt: 100 });
+    });
+
+    expect(getByTestId('sidebar-todays-focus-body').props.children).toBe(
+      'Fresh focus from the completed turn.',
     );
   });
 

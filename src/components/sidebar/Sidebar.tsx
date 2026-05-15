@@ -96,8 +96,8 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation }) =
   };
 
   const handleOpenMemory = useCallback(
-    (_query?: string) => {
-      navigation.navigate('Memory');
+    (query?: string) => {
+      navigation.navigate('Memory', query ? { tab: 'facts', query } : { tab: 'facts' });
       navigation.closeDrawer();
     },
     [navigation],

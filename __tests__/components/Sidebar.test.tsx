@@ -289,7 +289,10 @@ describe('Sidebar', () => {
       const input = getByTestId('sidebar-recall-input');
       fireEvent.changeText(input, 'beach trip');
       fireEvent(input, 'submitEditing');
-      expect(mockNavigation.navigate).toHaveBeenCalledWith('Memory');
+      expect(mockNavigation.navigate).toHaveBeenCalledWith('Memory', {
+        tab: 'facts',
+        query: 'beach trip',
+      });
       expect(mockNavigation.closeDrawer).toHaveBeenCalled();
     });
   });

@@ -2,6 +2,8 @@
 
 Status: production hardening validation green as of 2026-05-14.
 
+Follow-up design: [memory-sota-architecture-plan.md](memory-sota-architecture-plan.md) documents the 2026 research review, current under-utilization findings, and implementation-ready plan for the next memory iteration.
+
 This document records the implemented fixes from the living-memory audit and the validation gates used before commit. The deeper research notes and local experiment artifacts remain in `_research/`, which is intentionally ignored by the public repository.
 
 ## Implemented Fixes

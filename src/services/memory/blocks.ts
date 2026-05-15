@@ -8,6 +8,7 @@
 
 import { getMemoryDb } from './sqlite-store';
 import { ensureFactSchema } from './schema';
+import { notifyStructuredMemoryChanged } from './store';
 
 export interface MemoryBlock {
   label: string;
@@ -169,7 +170,9 @@ export function editBlock(
     now,
     label,
   );
-  return rowToBlock({ ...existing, content: merged, updated_at: now });
+  const block = rowToBlock({ ...existing, content: merged, updated_at: now });
+  notifyStructuredMemoryChanged();
+  return block;
 }
 
 export function upsertBlock(
@@ -212,7 +215,7 @@ export function upsertBlock(
       now,
     );
   }
-  return {
+  const saved = {
     label: block.label,
     content: block.content,
     charLimit: block.charLimit,
@@ -221,6 +224,8 @@ export function upsertBlock(
     personaId: block.personaId,
     updatedAt: now,
   };
+  notifyStructuredMemoryChanged();
+  return saved;
 }
 
 export function clearBlock(label: string, now = Date.now()): boolean {
@@ -230,5 +235,7 @@ export function clearBlock(label: string, now = Date.now()): boolean {
     now,
     label,
   );
-  return (result.changes ?? 0) > 0;
+  const changed = (result.changes ?? 0) > 0;
+  if (changed) notifyStructuredMemoryChanged();
+  return changed;
 }

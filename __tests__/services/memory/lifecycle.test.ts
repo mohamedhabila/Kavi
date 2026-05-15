@@ -11,9 +11,19 @@ jest.mock('../../../src/services/llm/providerSupport', () => ({
   resolveProviderApiKey: jest.fn(async () => 'test-key'),
 }));
 
+const mockSendMessage = jest.fn();
+
+jest.mock('../../../src/services/llm/LlmService', () => ({
+  LlmService: jest.fn().mockImplementation(() => ({
+    sendMessage: mockSendMessage,
+  })),
+}));
+
 import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
 import {
+  findEntityByName,
   ensureFactSchema,
+  listFacts,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/factStore';
 import { ensureDefaultBlocks } from '../../../src/services/memory/blocks';
@@ -39,6 +49,7 @@ beforeEach(() => {
   ensureFactSchema();
   ensureDefaultBlocks();
   __resetMemoryLifecycleForTests();
+  mockSendMessage.mockReset();
   useSettingsStore.setState({
     disableLongTermMemory: false,
     consolidationProvider: '',
@@ -111,6 +122,144 @@ describe('recordCompletedTurnForMemory', () => {
       conversationId: 'conv-live',
       threadId: 'conv-live',
     })?.content).toContain('validate the Android release build');
+    const userEntity = findEntityByName('user');
+    expect(
+      listFacts({ subjectId: userEntity!.id }).some(
+        (fact) => fact.predicate === 'asked_to_remember',
+      ),
+    ).toBe(true);
+  });
+
+  it('runs configured provider consolidation on the first completed live turn', async () => {
+    useSettingsStore.setState({
+      consolidationProvider: 'provider-1',
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          baseUrl: 'https://api.openai.com/v1',
+          apiKey: '',
+          model: 'gpt-4o-mini',
+          enabled: true,
+        },
+      ],
+    } as any);
+    mockSendMessage.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              new_facts: [
+                {
+                  subject: 'user',
+                  predicate: 'release_target',
+                  value: 'Android release build validation',
+                  scope: 'conversation',
+                  confidence: 0.9,
+                  importance: 0.7,
+                  evidence_message_ids: ['u-1'],
+                },
+              ],
+              active_focus: 'Validating the Android release build.',
+              open_threads: ['Validate the Android release build'],
+              notable: [],
+            }),
+          },
+        },
+      ],
+    });
+
+    const result = await recordCompletedTurnForMemory({
+      threadId: 'conv-provider',
+      threadTitle: 'Release hardening',
+      messages,
+      now: 10,
+    });
+
+    expect(result.dirty.marked).toBe(true);
+    expect(result.consolidation?.ran).toBe(true);
+    expect(result.consolidation?.reason).toBe('turn_threshold');
+    expect(mockSendMessage).toHaveBeenCalledTimes(1);
+    expect(mockSendMessage.mock.calls[0][1]).toMatchObject({
+      maxTokens: 1600,
+      signal: expect.any(Object),
+    });
+
+    const userEntity = findEntityByName('user');
+    const facts = listFacts({ subjectId: userEntity!.id, limit: 20 });
+    expect(facts.some((fact) => fact.predicate === 'release_target')).toBe(true);
+    expect(getWorkingBlock('active_focus', {
+      conversationId: 'conv-provider',
+      threadId: 'conv-provider',
+    })?.content).toBe('Validating the Android release build.');
+  });
+
+  it('keeps chat-safe heuristic memory and advances the cursor when provider extraction fails', async () => {
+    useSettingsStore.setState({
+      consolidationProvider: 'provider-1',
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'OpenAI',
+          baseUrl: 'https://api.openai.com/v1',
+          apiKey: '',
+          model: 'gpt-4o-mini',
+          enabled: true,
+        },
+      ],
+    } as any);
+    mockSendMessage.mockRejectedValue(new Error('timeout'));
+
+    const result = await recordCompletedTurnForMemory({
+      threadId: 'conv-provider-fail',
+      threadTitle: 'Release hardening',
+      messages,
+      now: 10,
+    });
+
+    expect(result.dirty.marked).toBe(true);
+    expect(result.consolidation?.ran).toBe(true);
+    expect(result.consolidation?.result?.newFacts).toEqual([]);
+    expect(getConsolidationState('conv-provider-fail')?.lastConsolidatedMessageId).toBe('a-1');
+    expect(getWorkingBlock('active_focus', {
+      conversationId: 'conv-provider-fail',
+      threadId: 'conv-provider-fail',
+    })?.content).toContain('Release hardening');
+  });
+
+  it('anchors heuristic focus to the completed final assistant turn when placeholders trail it', async () => {
+    const messagesWithTrailingPlaceholder: Message[] = [
+      { id: 'u-1', role: 'user', content: 'Please remember the launch checklist.', timestamp: 1 },
+      {
+        id: 'a-final',
+        role: 'assistant',
+        content: 'The launch checklist is captured. Next: validate signing.',
+        timestamp: 2,
+        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+      },
+      {
+        id: 'a-placeholder',
+        role: 'assistant',
+        content: 'Waiting for background worker results.',
+        timestamp: 3,
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'yielded' },
+      },
+    ];
+
+    const result = await recordCompletedTurnForMemory({
+      threadId: 'conv-placeholder',
+      threadTitle: 'Launch prep',
+      messages: messagesWithTrailingPlaceholder,
+      now: 10,
+    });
+
+    expect(result.dirty.anchorMessageId).toBe('a-final');
+    const focus = getWorkingBlock('active_focus', {
+      conversationId: 'conv-placeholder',
+      threadId: 'conv-placeholder',
+    })?.content;
+    expect(focus).toContain('The launch checklist is captured');
+    expect(focus).not.toContain('Waiting for background worker results');
   });
 
   it('creates no dirty state or block writes when long-term memory is disabled', async () => {

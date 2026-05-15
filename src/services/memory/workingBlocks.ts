@@ -8,6 +8,7 @@
 
 import { getMemoryDb } from './sqlite-store';
 import { ensureFactSchema } from './schema';
+import { notifyStructuredMemoryChanged } from './store';
 
 export type WorkingBlockLabel = 'active_focus' | 'open_threads';
 
@@ -171,7 +172,7 @@ export function editWorkingBlock(
       now,
     );
   }
-  return {
+  const block = {
     label,
     scopeKey,
     conversationId,
@@ -182,6 +183,8 @@ export function editWorkingBlock(
     description: def.description,
     updatedAt: now,
   };
+  notifyStructuredMemoryChanged(conversationId);
+  return block;
 }
 
 export function clearWorkingBlock(
@@ -197,5 +200,7 @@ export function clearWorkingBlock(
     label,
     scopeKey,
   );
-  return (result.changes ?? 0) > 0;
+  const changed = (result.changes ?? 0) > 0;
+  if (changed) notifyStructuredMemoryChanged(scope.conversationId ?? scope.threadId ?? null);
+  return changed;
 }

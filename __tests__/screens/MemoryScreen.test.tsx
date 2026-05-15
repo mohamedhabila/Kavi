@@ -11,6 +11,7 @@ const mockReadDailyMemory = jest.fn();
 const mockClearAllMemory = jest.fn();
 const mockSubscribeToMemoryChanges = jest.fn();
 const mockGetMemoryLastUpdatedAt = jest.fn();
+let mockRouteParams: Record<string, unknown> = {};
 
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: ({ children, ...props }: any) => {
@@ -22,6 +23,7 @@ jest.mock('react-native-safe-area-context', () => ({
 
 jest.mock('@react-navigation/native', () => ({
   useFocusEffect: (callback: () => void | (() => void)) => mockUseFocusEffect(callback),
+  useRoute: () => ({ params: mockRouteParams }),
 }));
 
 jest.mock('../../src/navigation/useBackToChat', () => ({
@@ -94,7 +96,7 @@ jest.mock('../../src/services/memory/memoryTools', () => ({
 }));
 
 let memoryListener:
-  | ((event: { scope: 'global' | 'daily' | 'all'; updatedAt: number }) => void)
+  | ((event: { scope: 'global' | 'conversation' | 'daily' | 'structured' | 'all'; updatedAt: number }) => void)
   | null = null;
 let focusEffectCallback: (() => void | (() => void)) | null = null;
 let currentGlobalMemory = 'First memory';
@@ -104,6 +106,7 @@ describe('MemoryScreen', () => {
     jest.resetAllMocks();
     memoryListener = null;
     focusEffectCallback = null;
+    mockRouteParams = {};
     currentGlobalMemory = 'First memory';
     mockWriteGlobalMemory.mockReset();
     mockClearAllMemory.mockReset();
@@ -121,7 +124,8 @@ describe('MemoryScreen', () => {
   });
 
   it('loads global memory on mount', async () => {
-    const { getByDisplayValue } = render(<MemoryScreen />);
+    const { getByDisplayValue, getByText } = render(<MemoryScreen />);
+    fireEvent.press(getByText('Global'));
 
     await waitFor(() => {
       expect(getByDisplayValue('First memory')).toBeTruthy();
@@ -131,7 +135,8 @@ describe('MemoryScreen', () => {
   it('refreshes immediately when global memory changes elsewhere', async () => {
     currentGlobalMemory = 'Initial memory';
 
-    const { getByDisplayValue, queryByDisplayValue } = render(<MemoryScreen />);
+    const { getByDisplayValue, getByText, queryByDisplayValue } = render(<MemoryScreen />);
+    fireEvent.press(getByText('Global'));
 
     await waitFor(() => {
       expect(getByDisplayValue('Initial memory')).toBeTruthy();
@@ -153,7 +158,8 @@ describe('MemoryScreen', () => {
   it('refreshes when the screen regains focus', async () => {
     currentGlobalMemory = 'Initial memory';
 
-    const { getByDisplayValue } = render(<MemoryScreen />);
+    const { getByDisplayValue, getByText } = render(<MemoryScreen />);
+    fireEvent.press(getByText('Global'));
 
     await waitFor(() => {
       expect(getByDisplayValue('Initial memory')).toBeTruthy();
@@ -174,6 +180,7 @@ describe('MemoryScreen', () => {
     currentGlobalMemory = 'Saved memory';
 
     const { getByDisplayValue, getByText } = render(<MemoryScreen />);
+    fireEvent.press(getByText('Global'));
 
     await waitFor(() => {
       expect(getByDisplayValue('Saved memory')).toBeTruthy();
@@ -200,7 +207,8 @@ describe('MemoryScreen', () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     currentGlobalMemory = 'Saved memory';
 
-    const { getByDisplayValue, getByLabelText, queryByLabelText } = render(<MemoryScreen />);
+    const { getByDisplayValue, getByLabelText, getByText, queryByLabelText } = render(<MemoryScreen />);
+    fireEvent.press(getByText('Global'));
 
     await waitFor(() => {
       expect(getByDisplayValue('Saved memory')).toBeTruthy();
@@ -221,6 +229,7 @@ describe('MemoryScreen', () => {
     const { getByDisplayValue, getByText, queryByText, queryByDisplayValue } = render(
       <MemoryScreen />,
     );
+    fireEvent.press(getByText('Global'));
 
     await waitFor(() => {
       expect(getByDisplayValue('Saved memory')).toBeTruthy();
@@ -321,6 +330,7 @@ describe('MemoryScreen', () => {
     mockReadDailyMemory.mockResolvedValue('Daily note');
 
     const { getByDisplayValue, getByLabelText, getByText, queryByText } = render(<MemoryScreen />);
+    fireEvent.press(getByText('Global'));
 
     await waitFor(() => {
       expect(getByDisplayValue('Saved memory')).toBeTruthy();

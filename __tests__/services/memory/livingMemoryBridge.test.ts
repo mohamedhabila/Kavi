@@ -201,6 +201,8 @@ describe('buildLivingMemorySections', () => {
       .join('\n');
     expect(dynamicText).toContain('### Retrieved Memory');
     expect(dynamicText).toContain('Berlin');
+    expect(dynamicText).toContain('user lives_in');
+    expect(dynamicText).not.toContain(fact.fact.subjectId);
   });
 
   it('skips fact recall entirely when disableRecall is true', async () => {
