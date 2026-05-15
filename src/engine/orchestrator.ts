@@ -19,6 +19,8 @@ import {
   compressToolDescription,
   resolveToolProviderFamily,
   ON_DEVICE_TOOL_TOKEN_BUDGET,
+  formatToolCategoryLabel,
+  getToolManagerCategoryForToolName,
 } from './tools/toolManager';
 import {
   filterToolsByRuntimeAvailability,
@@ -567,7 +569,7 @@ Do not delegate merely for ceremony. If direct tool work already completed the s
 CRITICAL: Apply this protocol to EVERY new user message in this conversation, not just the first one.
 Do NOT shortcut the agentic flow just because you handled previous requests with sub-agents.
 Each new user request deserves its own Assess → Plan → Spawn → Monitor → Synthesize cycle.
-When spawning sub-agents, pass a focused 'tools' array in sessions_spawn so the sub-agent has access to the specific tools it needs for its task (e.g., ['web_search', 'web_fetch'] for research, ['ssh_exec', 'ssh_read_file'] for server work, ['read_file', 'file_edit', 'write_file', 'list_files', 'glob_search', 'text_search'] for repo coding, ['workspace_status', 'workspace_list_files', 'workspace_read_file', 'workspace_write_file'] only for explicit external workspace targets).
+When spawning sub-agents, pass a focused 'tools' array in sessions_spawn so the sub-agent has access to the specific tools it needs for its task (e.g., ['web_search', 'web_fetch'] for research, ['ssh_exec', 'ssh_read_file'] for server work, ['read_file', 'file_edit', 'write_file', 'list_files', 'glob_search', 'text_search', 'python', 'tool_catalog'] for repo coding/data/artifact tasks, ['workspace_status', 'workspace_list_files', 'workspace_read_file', 'workspace_write_file'] only for explicit external workspace targets).
 If a workstream has dependencies, wait for the prerequisite workstreams to complete and inspect their outputs before spawning the dependent worker.
 Do not micromanage sub-agent maxIterations from the supervisor. Workers already carry a generous internal iteration budget suitable for modern reasoning models.
 Do not impose hard time limits on sub-agents. Let workers keep running while they are still making progress toward the objective, and cancel plus respawn them only when they drift or become redundant. Prefer background sessions_spawn, use sessions_wait when you need worker outputs before proceeding, remember that completed sessions_wait results already include the same outputs that sessions_output would return, use sessions_output later only when you need to fetch or recall a terminal deliverable without waiting again, use sessions_surface_output when that deliverable should be surfaced directly to the user without rewriting it, use sessions_history when you need transcript or reasoning trace, use sessions_status when you need live inspection, and reserve waitForCompletion for intentionally blocking the current spawn or send call.
@@ -1154,6 +1156,26 @@ function buildToolSummaryLine(tool: ToolDefinition): string {
   return compressedDescription ? `- ${tool.name}: ${compressedDescription}` : `- ${tool.name}`;
 }
 
+function buildLoadedToolNameDirectory(selectedTools: ToolDefinition[]): string {
+  if (selectedTools.length === 0) {
+    return '';
+  }
+
+  const grouped = new Map<string, string[]>();
+  for (const tool of selectedTools) {
+    const category = getToolManagerCategoryForToolName(tool.name);
+    const names = grouped.get(category) || [];
+    names.push(tool.name);
+    grouped.set(category, names);
+  }
+
+  const groupLines = Array.from(grouped.entries()).map(
+    ([category, names]) => `- ${formatToolCategoryLabel(category)}: ${names.join(', ')}`,
+  );
+
+  return ['Loaded callable tool names by category (complete):', ...groupLines].join('\n');
+}
+
 type ToolDiscoveryState = {
   discoveredToolNames: Set<string>;
   focusedToolNames: Set<string>;
@@ -1316,6 +1338,9 @@ function buildLoadedToolSummary(
 ): string {
   const summaryAnchorNames = new Set([
     'tool_catalog',
+    'javascript',
+    'python',
+    'web_fetch',
     'canvas_list',
     'canvas_read',
     'canvas_create',
@@ -1340,9 +1365,17 @@ function buildLoadedToolSummary(
   }
 
   const summaryTools = narrowToolTarget ? selectedTools : Array.from(summaryToolMap.values());
+  const detailLines = summaryTools.map((tool) => buildToolSummaryLine(tool)).join('\n');
+  const directory = buildLoadedToolNameDirectory(selectedTools);
   return selectedTools.length <= summaryTools.length
-    ? summaryTools.map((tool) => buildToolSummaryLine(tool)).join('\n')
-    : `${summaryTools.map((tool) => buildToolSummaryLine(tool)).join('\n')}\n- ...and ${selectedTools.length - summaryTools.length} more loaded tools. Use tool_catalog if you need a loaded capability that is not listed above.`;
+    ? [detailLines, directory].filter(Boolean).join('\n')
+    : [
+        detailLines,
+        `- ...and ${selectedTools.length - summaryTools.length} more loaded tools. The complete loaded tool directory is below.`,
+        directory,
+      ]
+        .filter(Boolean)
+        .join('\n');
 }
 
 function buildCapabilityDiscoveryPrompt(params: {
@@ -2189,9 +2222,7 @@ export async function runOrchestrator(
   } catch (livingMemoryError: unknown) {
     logger.devWarn(
       'Living memory bridge unavailable for this request:',
-      livingMemoryError instanceof Error
-        ? livingMemoryError.message
-        : String(livingMemoryError),
+      livingMemoryError instanceof Error ? livingMemoryError.message : String(livingMemoryError),
     );
     livingMemory = null;
   }

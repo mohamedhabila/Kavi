@@ -162,6 +162,13 @@ describe('detectRelevantCategories', () => {
     expect(result.has('code')).toBe(true);
   });
 
+  it('detects spreadsheet, chart, and data-analysis requests as code work', () => {
+    const result = detectRelevantCategories([
+      'Analyze this CSV, create an Excel workbook, and add a chart of the results',
+    ]);
+    expect(result.has('code')).toBe(true);
+  });
+
   it('detects media requests that describe editing an image', () => {
     const result = detectRelevantCategories([
       'Edit the image to remove the background and keep the subject intact',
@@ -351,6 +358,7 @@ describe('selectToolsForRequest', () => {
         'read_file',
         'write_file',
         'list_files',
+        'python',
         'record_workflow_evidence',
         'read_workflow_evidence',
         'file_edit',
@@ -378,6 +386,7 @@ describe('selectToolsForRequest', () => {
         'read_file',
         'write_file',
         'list_files',
+        'python',
         'record_workflow_evidence',
         'read_workflow_evidence',
         'file_edit',
@@ -454,6 +463,22 @@ describe('selectToolsForRequest', () => {
   it('does not backfill unrelated deferred tools for OpenAI by default', () => {
     const selected = selectToolsForRequest(tools, ['tell me a joke'], 'openai');
     expect(new Set(selected.map((tool) => tool.name))).toEqual(TIER1_TOOL_NAMES);
+  });
+
+  it('keeps python visible in Gemini baseline requests without broad backfill', () => {
+    const selected = selectToolsForRequest(
+      tools,
+      ['tell me a joke'],
+      'gemini',
+      'https://generativelanguage.googleapis.com/v1beta/openai',
+      undefined,
+      { model: 'gemini-2.5-pro' },
+    );
+    const selectedNames = new Set(selected.map((tool) => tool.name));
+
+    expect(selectedNames.has('python')).toBe(true);
+    expect(selectedNames.has('javascript')).toBe(false);
+    expect(selected.length).toBeLessThanOrEqual(PROVIDER_TOOL_LIMITS.gemini);
   });
 
   it('loads both python and javascript when the request explicitly asks for Python execution', () => {
@@ -741,6 +766,29 @@ describe('buildDeferredToolCatalog', () => {
     expect(catalog).toContain(
       '- Media tools: image_generate, image_edit. Inspect with tool_catalog category="media".',
     );
+  });
+
+  it('lists every deferred capability group instead of hiding later groups', () => {
+    const allTools = [
+      makeTool('browser_navigate'),
+      makeTool('calendar_list'),
+      makeTool('contacts_pick'),
+      makeTool('cron'),
+      makeTool('javascript'),
+      makeTool('memory_search'),
+      makeTool('pdf_read'),
+      makeTool('web_search'),
+      makeTool('camera_snap'),
+    ];
+    const catalog = buildDeferredToolCatalog(allTools, []);
+
+    expect(catalog).toContain(
+      '- Code / computation: javascript. Inspect with tool_catalog category="code".',
+    );
+    expect(catalog).toContain(
+      '- Media tools: camera_snap. Inspect with tool_catalog category="media".',
+    );
+    expect(catalog).not.toContain('Additional capability groups');
   });
 });
 

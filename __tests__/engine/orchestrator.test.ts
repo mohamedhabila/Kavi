@@ -2370,12 +2370,16 @@ describe('Orchestrator', () => {
       expect(selectedToolNames.has('text_search')).toBe(true);
       expect(selectedToolNames.has('web_search')).toBe(true);
       expect(selectedToolNames.has('web_fetch')).toBe(true);
+      expect(selectedToolNames.has('python')).toBe(true);
       expect(selectedToolNames.has('tool_catalog')).toBe(true);
       expect(selectedToolNames.has('read_memory')).toBe(false);
 
       const systemPromptMessage = mockStreamMessage.mock.calls[0][0][0];
       expect(systemPromptMessage).toMatchObject({ role: 'system' });
       expect(systemPromptMessage.content).toContain('- read_file:');
+      expect(systemPromptMessage.content).toContain('Loaded callable tool names by category (complete):');
+      expect(systemPromptMessage.content).toContain('Code / computation: python');
+      expect(systemPromptMessage.content).toContain('Web research: web_search, web_fetch');
       expect(systemPromptMessage.content).toContain('Likely tool_catalog categories for this request');
       expect(systemPromptMessage.content).toContain('files (repo search/read/edit)');
       expect(systemPromptMessage.content).toContain('web (online docs/research)');

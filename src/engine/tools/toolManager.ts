@@ -171,6 +171,7 @@ const GEMINI_ALWAYS_LOADED_TOOL_NAMES = new Set([
   'read_file',
   'write_file',
   'list_files',
+  'python',
   'record_workflow_evidence',
   'read_workflow_evidence',
   'file_edit',
@@ -262,7 +263,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
     name: 'code',
     toolNames: ['javascript', 'python'],
     keywords:
-      /\b(python|pyodide|micropip|numpy|pandas|scipy|regex|encode|decode|calculate|compute|docx|xlsx|pptx|csv|xml|json|yaml|zip|archive)\b|regular expression|(?:run|execute)\s+(?:code|script|python|javascript)|(?:generate|create|convert|export|assemble)\s+(?:a\s+|an\s+|this\s+|the\s+)?(?:docx|xlsx|pptx|csv|json|xml|yaml|report|artifact|archive|zip)(?:\b|\s)|(?:transform|parse|sort|convert|export|generate|assemble)\s+(?:this\s+)?(?:json|csv|xml|yaml|data|text|array|list|table|report|docx|xlsx|pptx|archive|zip)/i,
+      /\b(python|pyodide|micropip|numpy|pandas|scipy|regex|encode|decode|calculate|compute|math|statistics|statistical|spreadsheet|excel|workbook|dataframe|plot|chart|graph|docx|xlsx|pptx|csv|xml|json|yaml|zip|archive)\b|data\s+analysis|analy[sz]e\s+(?:this\s+)?data|regular expression|markdown table|(?:run|execute)\s+(?:code|script|python|javascript)|(?:generate|create|convert|export|assemble)\s+(?:a\s+|an\s+|this\s+|the\s+)?(?:docx|xlsx|pptx|csv|json|xml|yaml|report|artifact|archive|zip|spreadsheet|workbook|table|chart|plot)(?:\b|\s)|(?:transform|parse|sort|convert|export|generate|assemble|dedupe|deduplicate|merge|pivot)\s+(?:this\s+)?(?:json|csv|xml|yaml|data|text|array|list|table|report|docx|xlsx|pptx|archive|zip|spreadsheet|workbook)/i,
   },
   {
     name: 'web_research',
@@ -400,10 +401,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
   },
   {
     name: 'device',
-    toolNames: [
-      'device_query',
-      'location_current',
-    ],
+    toolNames: ['device_query', 'location_current'],
     keywords: /device|battery|storage|permission|location|gps/i,
   },
   {
@@ -794,7 +792,7 @@ export function compressToolDefinitions(tools: ToolDefinition[]): ToolDefinition
   });
 }
 
-function formatDeferredCategoryLabel(category: string): string {
+export function formatToolCategoryLabel(category: string): string {
   const labels: Record<string, string> = {
     workspace_search: 'Workspace search',
     code: 'Code / computation',
@@ -823,6 +821,24 @@ function formatDeferredCategoryLabel(category: string): string {
   return (
     labels[category] ?? category.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
   );
+}
+
+export function getToolManagerCategoryForToolName(toolName: string): string {
+  if (toolName.startsWith('mcp__')) {
+    return 'mcp';
+  }
+
+  if (toolName.startsWith('skill__')) {
+    return 'skills';
+  }
+
+  for (const category of TOOL_CATEGORIES) {
+    if (category.toolNames.includes(toolName)) {
+      return category.name;
+    }
+  }
+
+  return 'other';
 }
 
 function mapDeferredCategoryToToolCatalogCategory(category: string): string | null {
@@ -874,20 +890,9 @@ export function buildDeferredToolCatalog(
 
   if (deferred.length === 0) return '';
 
-  const toolToCategory = new Map<string, string>();
-  for (const category of TOOL_CATEGORIES) {
-    for (const toolName of category.toolNames) {
-      toolToCategory.set(toolName, category.name);
-    }
-  }
-
   const grouped = new Map<string, string[]>();
   for (const tool of deferred) {
-    const category = tool.name.startsWith('mcp__')
-      ? 'mcp'
-      : tool.name.startsWith('skill__')
-        ? 'skills'
-        : toolToCategory.get(tool.name) || 'other';
+    const category = getToolManagerCategoryForToolName(tool.name);
     const names = grouped.get(category) || [];
     names.push(tool.name);
     grouped.set(category, names);
@@ -898,20 +903,14 @@ export function buildDeferredToolCatalog(
       const countDiff = right[1].length - left[1].length;
       return countDiff !== 0 ? countDiff : left[0].localeCompare(right[0]);
     })
-    .slice(0, 8)
     .map(([category, names]) => {
       const visible = names.slice(0, 3);
       const hiddenCount = names.length - visible.length;
       const hint = buildDeferredCategoryDiscoveryHint(category);
       return hiddenCount > 0
-        ? `- ${formatDeferredCategoryLabel(category)}: ${visible.join(', ')}, and ${hiddenCount} more.${hint}`
-        : `- ${formatDeferredCategoryLabel(category)}: ${visible.join(', ')}.${hint}`;
+        ? `- ${formatToolCategoryLabel(category)}: ${visible.join(', ')}, and ${hiddenCount} more.${hint}`
+        : `- ${formatToolCategoryLabel(category)}: ${visible.join(', ')}.${hint}`;
     });
-
-  const hiddenGroupCount = grouped.size - Math.min(grouped.size, 8);
-  if (hiddenGroupCount > 0) {
-    groupLines.push(`- Additional capability groups: ${hiddenGroupCount} more.`);
-  }
 
   return [
     `\n<deferred_tools count="${deferred.length}">`,

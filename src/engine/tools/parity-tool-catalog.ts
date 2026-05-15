@@ -42,6 +42,7 @@ type ToolCatalogCategoryConfig = {
   tools: string[];
   purpose: string;
   guidance?: string;
+  aliases?: string[];
 };
 
 type ToolCatalogSearchToolEntry = {
@@ -51,6 +52,7 @@ type ToolCatalogSearchToolEntry = {
   source: 'built-in' | 'mcp' | 'skill';
   purpose?: string;
   guidance?: string;
+  aliases?: string[];
   serverName?: string;
   skillName?: string;
 };
@@ -130,6 +132,7 @@ const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> = {
   files: {
     tools: ['read_file', 'write_file', 'list_files', 'file_edit', 'glob_search', 'text_search'],
     purpose: 'Search, read, create, and edit files in the conversation workspace.',
+    aliases: ['repo search', 'repository search', 'codebase search', 'grep files'],
     guidance:
       'For codebase investigation, prefer glob_search or text_search first, then read_file. When changing an existing file, prefer file_edit with ordered edits after inspecting the target; reserve write_file for new files or intentional full rewrites.',
   },
@@ -160,6 +163,7 @@ const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> = {
       'browser_dialog',
     ],
     purpose: 'Launch and control websites interactively.',
+    aliases: ['website automation', 'click page', 'navigate page', 'inspect webpage'],
     guidance:
       'For website automation, start with browser_launch or browser_navigate, inspect with browser_snapshot or browser_screenshot, then click, type, or evaluate as needed.',
   },
@@ -173,14 +177,15 @@ const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> = {
       'workspace_delete',
     ],
     purpose: 'Read and modify files in configured external workspace targets.',
+    aliases: ['external workspace', 'remote ide', 'code-server', 'cursor ide'],
     guidance:
       'Inspect the target first with workspace_list_files or workspace_read_file, then make focused changes with workspace_write_file or workspace_rename.',
   },
   web: {
     tools: ['web_search', 'web_fetch'],
     purpose: 'Search the web and fetch online documentation or pages.',
-    guidance:
-      'Use web_search for discovery, then web_fetch to read the exact page you need.',
+    aliases: ['online docs', 'latest documentation', 'current information', 'fetch url'],
+    guidance: 'Use web_search for discovery, then web_fetch to read the exact page you need.',
   },
   canvas: {
     tools: [
@@ -194,6 +199,7 @@ const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> = {
       'canvas_snapshot',
     ],
     purpose: 'Create, inspect, read, update, evaluate, and capture session canvas previews.',
+    aliases: ['preview surface', 'interactive preview', 'rendered app'],
     guidance:
       'Call canvas_list first to inspect existing session surfaces, use canvas_read to inspect stored content or live DOM, prefer canvas_update over canvas_create when editing, use directoryPath for multi-file HTML/CSS/JS apps, use filePath for a single local HTML entry file, use contentEdits for focused HTML/source patches and componentOperations or dataOperations for structured updates, use canvas_eval for JavaScript execution or DOM changes, and reserve workspace file tools for explicit persistence or export requests.',
   },
@@ -210,6 +216,7 @@ const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> = {
       'ssh_make_directory',
     ],
     purpose: 'Execute commands and work with files on configured SSH targets.',
+    aliases: ['remote shell', 'remote server', 'sftp', 'deploy server'],
     guidance:
       'Prefer ssh_list_directory or ssh_read_file before ssh_write_file or ssh_delete_path when you are still inspecting a remote server. If you start a background SSH command, continue with ssh_background_job_status or ssh_background_job_wait using the returned jobId until it reaches a terminal state.',
   },
@@ -229,6 +236,7 @@ const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> = {
       'expo_eas_graphql',
     ],
     purpose: 'Inspect or operate Expo and EAS projects, builds, updates, and workflows.',
+    aliases: ['eas workflow', 'expo deployment', 'mobile build status'],
     guidance:
       'Use expo_eas_list_projects to discover project ids, expo_eas_status or expo_eas_probe for readiness checks, and workflow_* tools to monitor runs.',
   },
@@ -247,6 +255,7 @@ const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> = {
       'wait',
     ],
     purpose: 'Manage sub-agents, background sessions, and waiting states.',
+    aliases: ['sub-agent', 'worker', 'background session'],
     guidance:
       'Sub-agents and sessions_send follow-up workers run in the background by default and keep working until completion unless you set timeoutMs. Use sessions_wait when you need one or more worker outputs before proceeding; completed wait results already include the same outputs that sessions_output would return. Use sessions_output later only when you need to fetch or recall a terminal deliverable without waiting again. Use sessions_surface_output when that deliverable should become the visible user answer directly, use sessions_history when you need transcript or reasoning trace, use sessions_status for live inspection or diagnosing drift, and reserve waitForCompletion for intentionally blocking the current spawn or send tool call.',
   },
@@ -321,7 +330,25 @@ const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> = {
     tools: ['javascript', 'python'],
     purpose:
       'Run sandboxed JavaScript or Python for calculations, data transformation, script execution, and capability-extension workflows.',
-    guidance: `Use javascript for lightweight synchronous calculations or text transformations. Use python for Pyodide-compatible scripts, data/science libraries, or when the task explicitly requires Python. ${PYTHON_EXTENSION_WHEN_NEEDED} ${PYTHON_EXTENSION_EXAMPLES} ${PYTHON_EXTENSION_POLICY}`,
+    aliases: [
+      'python',
+      'pyodide',
+      'code interpreter',
+      'spreadsheet',
+      'excel',
+      'workbook',
+      'xlsx',
+      'data analysis',
+      'dataframe',
+      'statistics',
+      'plot',
+      'chart',
+      'graph',
+      'table generation',
+      'artifact generation',
+      'file conversion',
+    ],
+    guidance: `Use javascript for lightweight synchronous calculations or text transformations. Use python for Pyodide-compatible scripts, data/science libraries, data analysis, spreadsheet/workbook generation, charting/plots, artifact conversion, or when the task explicitly requires Python. ${PYTHON_EXTENSION_WHEN_NEEDED} ${PYTHON_EXTENSION_EXAMPLES} ${PYTHON_EXTENSION_POLICY}`,
   },
   pdf: {
     tools: ['pdf_read'],
@@ -429,6 +456,20 @@ function scoreToolCatalogSearchCandidate(params: {
       matchedFields.add('name');
     }
 
+    if (descriptionTokens.has(token) || extraTokens.has(token)) {
+      score += 8;
+      matchedFields.add('description');
+      continue;
+    }
+    if (
+      hasToolCatalogPrefixMatch(descriptionTokens, token) ||
+      hasToolCatalogPrefixMatch(extraTokens, token)
+    ) {
+      score += 4;
+      matchedFields.add('description');
+      continue;
+    }
+
     if (categoryTokens.has(token)) {
       score += 16;
       matchedFields.add('category');
@@ -443,19 +484,6 @@ function scoreToolCatalogSearchCandidate(params: {
       score += 8;
       matchedFields.add('guidance');
       continue;
-    }
-    if (descriptionTokens.has(token) || extraTokens.has(token)) {
-      score += 8;
-      matchedFields.add('description');
-      continue;
-    }
-    if (
-      hasToolCatalogPrefixMatch(descriptionTokens, token) ||
-      hasToolCatalogPrefixMatch(purposeTokens, token) ||
-      hasToolCatalogPrefixMatch(extraTokens, token)
-    ) {
-      score += 4;
-      matchedFields.add('description');
     }
   }
 
@@ -667,6 +695,7 @@ export async function executeToolCatalog(
           source: 'built-in',
           purpose: config.purpose,
           guidance: config.guidance,
+          aliases: config.aliases,
         });
       }
     }
@@ -714,7 +743,11 @@ export async function executeToolCatalog(
           categoryLabel: candidate.category,
           purpose: candidate.purpose,
           guidance: candidate.guidance,
-          extraTexts: [candidate.serverName || '', candidate.skillName || ''],
+          extraTexts: [
+            candidate.serverName || '',
+            candidate.skillName || '',
+            ...(candidate.aliases || []),
+          ],
         });
 
         return {
@@ -780,7 +813,12 @@ export async function executeToolCatalog(
                     }
                   : {
                       purpose: TOOL_CATALOG_CATEGORIES[category].purpose,
-                      guidance: TOOL_CATALOG_CATEGORIES[category].guidance,
+                      guidance: [
+                        TOOL_CATALOG_CATEGORIES[category].guidance,
+                        ...(TOOL_CATALOG_CATEGORIES[category].aliases || []),
+                      ]
+                        .filter(Boolean)
+                        .join(' '),
                     };
             const scored = scoreToolCatalogSearchCandidate({
               query: requestedQuery,

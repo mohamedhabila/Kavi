@@ -789,14 +789,33 @@ describe('New Parity Tool Executors', () => {
           expect.objectContaining({ name: 'browser_snapshot', category: 'browser' }),
         ]),
       );
+      const activatedToolNames = [
+        ...parsed.activation.recommendedToolNames,
+        ...(parsed.activation.supportingToolNames || []),
+      ];
+      expect(parsed.activation.callableNextTurn).toBe(true);
+      expect(activatedToolNames).toEqual(
+        expect.arrayContaining(['browser_snapshot', 'browser_navigate']),
+      );
+      expect(parsed.guidance).toContain('matched tools next');
+    });
+
+    it('matches Python-backed code tools for spreadsheet and chart requests', async () => {
+      const result = await executeToolCatalog({
+        query: 'analyze a CSV, create an Excel workbook, and add a chart',
+      });
+      const parsed = JSON.parse(result);
+
+      expect(parsed.mode).toBe('search');
+      expect(parsed.matches).toEqual(
+        expect.arrayContaining([expect.objectContaining({ name: 'python', category: 'code' })]),
+      );
       expect(parsed.activation).toEqual(
         expect.objectContaining({
           callableNextTurn: true,
-          recommendedToolNames: expect.arrayContaining(['browser_snapshot']),
-          supportingToolNames: expect.arrayContaining(['browser_navigate']),
+          recommendedToolNames: expect.arrayContaining(['python']),
         }),
       );
-      expect(parsed.guidance).toContain('matched tools next');
     });
 
     it('returns a structured error for unknown categories', async () => {
