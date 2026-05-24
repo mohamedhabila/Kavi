@@ -1857,6 +1857,41 @@ describe('ChatScreen', () => {
     expect(options.model).toBe('gpt-4o-mini');
   });
 
+  it('keeps the active selected model when provider availableModels is stale', async () => {
+    mockActiveModel = 'gpt-5.5';
+    mockProvidersList = [
+      {
+        id: 'openai',
+        name: 'OpenAI',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'sk-test',
+        model: 'gpt-5.4',
+        enabled: true,
+        availableModels: ['gpt-5.4', 'gpt-5-mini'],
+      },
+    ];
+    mockConversations = [
+      {
+        ...createDefaultConversations()[0],
+        providerId: 'openai',
+        modelOverride: undefined,
+      },
+    ];
+
+    const { getByPlaceholderText, getByTestId } = render(<ChatScreen />);
+    const input = getByPlaceholderText('Message...');
+    fireEvent.changeText(input, 'Use latest selected model');
+    const sendIcon = getByTestId('icon-Send');
+    fireEvent.press(sendIcon.parent || sendIcon);
+
+    await waitFor(() => {
+      expect(mockRunOrchestrator).toHaveBeenCalledTimes(1);
+    });
+
+    const [options] = mockRunOrchestrator.mock.calls[0];
+    expect(options.model).toBe('gpt-5.5');
+  });
+
   it('passes the selected thinking level into the orchestrator request', async () => {
     mockDefaultConversationMode = 'chitchat';
     mockThinkingLevel = 'high';

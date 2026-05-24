@@ -109,17 +109,13 @@ export function isProviderModelSupported(
     return true;
   }
 
-  if (supportedModels.size > 1) {
-    return false;
-  }
-
   const providerFamily = resolveProviderFamily(provider);
-  if (!providerFamily) {
-    return true;
+  const requestedFamily = resolveModelFamily(normalizedModel);
+  if (providerFamily && requestedFamily) {
+    return providerFamily === requestedFamily;
   }
 
-  const requestedFamily = resolveModelFamily(normalizedModel);
-  return !!providerFamily && providerFamily === requestedFamily;
+  return false;
 }
 
 export function resolveProviderModelSelection(

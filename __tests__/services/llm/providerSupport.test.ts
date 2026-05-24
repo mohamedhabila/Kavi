@@ -39,12 +39,34 @@ describe('resolveConversationStartSelection', () => {
         } as any,
       ],
       'gemini',
-      'retired-gemini-model',
+      'retired-legacy-model',
     );
 
     expect(selection).toMatchObject({
       providerId: 'gemini',
       model: 'gemini-3.1-pro-preview',
+    });
+  });
+
+  it('keeps a newer same-family preferred model when provider catalogs are stale', () => {
+    const selection = resolveConversationStartSelection(
+      [
+        {
+          id: 'openai',
+          name: 'OpenAI',
+          baseUrl: 'https://api.openai.com/v1',
+          model: 'gpt-5.4',
+          availableModels: ['gpt-5.4', 'gpt-5-mini'],
+          enabled: true,
+        } as any,
+      ],
+      'openai',
+      'gpt-5.5',
+    );
+
+    expect(selection).toMatchObject({
+      providerId: 'openai',
+      model: 'gpt-5.5',
     });
   });
 });
@@ -108,12 +130,30 @@ describe('resolveConversationModel', () => {
           availableModels: ['claude-sonnet-4-6', 'claude-haiku-4-5'],
         },
         {
-          conversationModel: 'claude-legacy',
+          conversationModel: 'legacy-archived-model',
           activeProviderId: 'anthropic',
           activeModel: 'claude-haiku-4-5',
         },
       ),
     ).toBe('claude-sonnet-4-6');
+  });
+
+  it('keeps selected newer same-family models when the provider list is stale', () => {
+    expect(
+      resolveConversationModel(
+        {
+          id: 'gemini',
+          name: 'Gemini',
+          baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+          model: 'gemini-3.1-pro-preview',
+          availableModels: ['gemini-3.1-pro-preview', 'gemini-3.1-flash-lite'],
+        },
+        {
+          activeProviderId: 'gemini',
+          activeModel: 'gemini-3.5-flash',
+        },
+      ),
+    ).toBe('gemini-3.5-flash');
   });
 
   it('accepts hidden models when restoring a conversation selection', () => {
