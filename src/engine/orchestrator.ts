@@ -96,6 +96,7 @@ import {
   getCompactionThresholds,
   getWorkingContextWindow,
 } from '../services/context/tokenCounter';
+import { excludeTrailingInternalUserMessages } from '../services/context/messageScoping';
 import {
   buildPromptCachingPlan,
   getEscalatedFinalizationMaxTokens,
@@ -105,11 +106,10 @@ import {
   resolveSubAgentMaxTokens,
 } from '../services/context/tokenOptimization';
 import {
-  buildLivingMemorySections,
   type LivingMemoryBridgeOutput,
 } from '../services/memory/livingMemoryBridge';
-import { canReadLongTermMemory } from '../services/memory/policy';
-import { useSettingsStore } from '../store/useSettingsStore';
+import { buildUnifiedMemoryAccessContext } from '../services/memory/memoryAccessGateway';
+import { selectContextStartIndex } from '../services/context/contextStartSelector';
 import { mcpManager } from '../services/mcp/manager';
 import {
   getAllLoadedSkills,
@@ -229,23 +229,42 @@ export interface OrchestratorOptions {
   initialPendingAsyncOperations?: AgentRunAsyncOperation[];
 }
 
-function getRequestContextUserMessages(
-  messages: Message[],
-  internalUserMessageCount = 0,
-): Message[] {
-  const userMessages = messages.filter((message) => message.role === 'user');
-  const normalizedInternalUserMessageCount = Number.isFinite(internalUserMessageCount)
-    ? Math.max(0, Math.floor(internalUserMessageCount))
-    : 0;
+function getRequestContextUserMessages(messages: Message[]): Message[] {
+  return messages.filter((message) => message.role === 'user');
+}
 
-  if (
-    normalizedInternalUserMessageCount <= 0 ||
-    userMessages.length <= normalizedInternalUserMessageCount
-  ) {
-    return userMessages;
-  }
+function buildScopedFallbackMemoryAccessContext(options: {
+  messages: Message[];
+  personaId?: string;
+  mode: 'chat' | 'agentic';
+  internalUserMessageCount: number;
+}): {
+  boundary: {
+    startIndex: number;
+    reason: 'full_history' | 'single_user_turn' | 'topic_shift_boundary' | 'carryover_limit';
+    similarityScore: number;
+    idleGapMs: number;
+    droppedMessageCount: number;
+  };
+  scopedMessages: Message[];
+  livingMemory: null;
+} {
+  const normalizedMessages = excludeTrailingInternalUserMessages(
+    options.messages,
+    options.internalUserMessageCount,
+  );
+  const boundary = selectContextStartIndex(normalizedMessages, {
+    personaId: options.personaId,
+    mode: options.mode,
+  });
+  const scopedMessages =
+    boundary.startIndex > 0 ? normalizedMessages.slice(boundary.startIndex) : normalizedMessages;
 
-  return userMessages.slice(0, userMessages.length - normalizedInternalUserMessageCount);
+  return {
+    boundary,
+    scopedMessages,
+    livingMemory: null,
+  };
 }
 
 function upsertPendingToolCall(
@@ -1922,15 +1941,20 @@ export async function runOrchestrator(
   } = options;
 
   // ── Slash command interception ─────────────────────────────────────
+  const slashCommandMessages = excludeTrailingInternalUserMessages(
+    messages,
+    internalUserMessageCount,
+  );
   let lastUserMessageIndex = -1;
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (messages[index].role === 'user') {
+  for (let index = slashCommandMessages.length - 1; index >= 0; index -= 1) {
+    if (slashCommandMessages[index].role === 'user') {
       lastUserMessageIndex = index;
       break;
     }
   }
 
-  const lastUserMsg = lastUserMessageIndex >= 0 ? messages[lastUserMessageIndex] : undefined;
+  const lastUserMsg =
+    lastUserMessageIndex >= 0 ? slashCommandMessages[lastUserMessageIndex] : undefined;
   if (lastUserMsg && isSlashCommand(lastUserMsg.content)) {
     const parsed = parseCommand(lastUserMsg.content);
     if (parsed) {
@@ -2024,39 +2048,6 @@ export async function runOrchestrator(
     ? allToolsUnfiltered.filter((tool) => options.toolFilter?.(tool.name) !== false)
     : allToolsUnfiltered;
   const availableToolNames = new Set(allTools.map((tool) => tool.name));
-  const requestContextUserMessages = getRequestContextUserMessages(
-    messages,
-    internalUserMessageCount,
-  );
-  const requestContextLastUserMsg =
-    requestContextUserMessages[requestContextUserMessages.length - 1];
-  const requestContextUserTexts = requestContextUserMessages.map((message) =>
-    getUserMessagePromptContent(message),
-  );
-
-  // ── Skill system prompts ───────────────────────────────────────────
-  const requestedSkillsContext = requestContextUserMessages
-    .map((message) => getUserMessagePromptContent(message))
-    .join('\n');
-  const skillPrompts = await getSkillSystemPrompts(conversationId, requestedSkillsContext);
-
-  // ── Tool selection (provider-aware pruning) ────────────────────────
-  // Select tools based on relevance to user messages and enforce provider limits.
-  const userMessageTexts = requestContextUserTexts;
-  const lastUserMessageText =
-    userMessageTexts[userMessageTexts.length - 1] ||
-    (lastUserMsg ? getUserMessagePromptContent(lastUserMsg) : '');
-  const requestAssessment = assessUserRequest(lastUserMessageText, {
-    hasAttachments: hasModelVisibleAttachments(requestContextLastUserMsg?.attachments),
-    hasPriorContext: requestContextUserMessages.length > 1,
-  });
-  const requestGovernancePromptSection = buildRequestGovernancePromptSection(requestAssessment);
-  const actionableRequest =
-    requestAssessment.action === 'clarify'
-      ? false
-      : requestAssessment.action === 'direct'
-        ? true
-        : shouldRequireToolUse(lastUserMessageText, allTools);
 
   // ── LLM + state ───────────────────────────────────────────────────
   let llm = new LlmService(activeProvider);
@@ -2131,13 +2122,77 @@ export async function runOrchestrator(
 
   // ── Memory ─────────────────────────────────────────────────────────
   const sharedConversationId = options.workspaceConversationId?.trim() || conversationId;
-  const longTermMemoryEnabled = canReadLongTermMemory();
   const conversationMemory = null;
   const globalMemory = null;
   const runtimeContextNote = buildRuntimeContextNote();
 
+  const memoryAccessMode = isSuperAgent ? 'agentic' : 'chat';
+  let memoryAccessContext: Awaited<ReturnType<typeof buildUnifiedMemoryAccessContext>>;
+  try {
+    memoryAccessContext = await buildUnifiedMemoryAccessContext({
+      messages,
+      conversationId: sharedConversationId,
+      personaId,
+      mode: memoryAccessMode,
+      internalUserMessageCount,
+    });
+  } catch (memoryAccessError: unknown) {
+    logger.devWarn(
+      'Unified memory access unavailable for this request:',
+      memoryAccessError instanceof Error ? memoryAccessError.message : String(memoryAccessError),
+    );
+    memoryAccessContext = buildScopedFallbackMemoryAccessContext({
+      messages,
+      personaId,
+      mode: memoryAccessMode,
+      internalUserMessageCount,
+    });
+  }
+
+  if (memoryAccessContext.boundary.startIndex > 0) {
+    logger.devLog(
+      'Scoped context boundary:',
+      JSON.stringify({
+        startIndex: memoryAccessContext.boundary.startIndex,
+        reason: memoryAccessContext.boundary.reason,
+        idleGapMs: memoryAccessContext.boundary.idleGapMs,
+        droppedMessages: memoryAccessContext.boundary.droppedMessageCount,
+      }),
+    );
+  }
+
+  // ── Request context (scoped by unified boundary) ───────────────────
+  const requestContextUserMessages = getRequestContextUserMessages(memoryAccessContext.scopedMessages);
+  const requestContextLastUserMsg =
+    requestContextUserMessages[requestContextUserMessages.length - 1];
+  const requestContextUserTexts = requestContextUserMessages.map((message) =>
+    getUserMessagePromptContent(message),
+  );
+
+  // ── Skill system prompts ───────────────────────────────────────────
+  const requestedSkillsContext = requestContextUserTexts.join('\n');
+  const skillPrompts = await getSkillSystemPrompts(conversationId, requestedSkillsContext);
+
+  // ── Tool selection (provider-aware pruning) ────────────────────────
+  // Select tools based on scoped user messages and enforce provider limits.
+  const userMessageTexts = requestContextUserTexts;
+  const lastUserMessageText =
+    userMessageTexts[userMessageTexts.length - 1] ||
+    (requestContextLastUserMsg ? getUserMessagePromptContent(requestContextLastUserMsg) : '');
+  const requestAssessment = assessUserRequest(lastUserMessageText, {
+    hasAttachments: hasModelVisibleAttachments(requestContextLastUserMsg?.attachments),
+    hasPriorContext: requestContextUserMessages.length > 1,
+  });
+  const requestGovernancePromptSection = buildRequestGovernancePromptSection(requestAssessment);
+  const actionableRequest =
+    requestAssessment.action === 'clarify'
+      ? false
+      : requestAssessment.action === 'direct'
+        ? true
+        : shouldRequireToolUse(lastUserMessageText, allTools);
+
   // Working message list that includes tool results as we iterate
-  let workingMessages = messages.map((message) => {
+  let workingMessages = memoryAccessContext.scopedMessages.map((message) => {
     if (message.role !== 'user' || !message.enrichedContent) {
       return message;
     }
@@ -2212,20 +2267,7 @@ export async function runOrchestrator(
   // Builds memory blocks (L2) + focus block + recall facts (L3) once per
   // request and reuses across orchestrator iterations. The result is
   // appended to each iteration's system-prompt sections.
-  let livingMemory: LivingMemoryBridgeOutput | null = null;
-  try {
-    livingMemory = await buildLivingMemorySections({
-      messages,
-      conversationId: sharedConversationId,
-      disableLongTermMemory: !longTermMemoryEnabled,
-    });
-  } catch (livingMemoryError: unknown) {
-    logger.devWarn(
-      'Living memory bridge unavailable for this request:',
-      livingMemoryError instanceof Error ? livingMemoryError.message : String(livingMemoryError),
-    );
-    livingMemory = null;
-  }
+  const livingMemory: LivingMemoryBridgeOutput | null = memoryAccessContext.livingMemory;
 
   callbacks.onStateChange('thinking');
   await emitSessionEvent('start', { conversationId });

@@ -206,6 +206,39 @@ describe('agentWorkflowPilot', () => {
     expect(decision.reviewUserPrompt).toContain('I have a final draft answer.');
   });
 
+  it('uses internalUserMessageCount in heuristic mode to ignore trailing control prompts during request assessment', () => {
+    const directPrompt = 'Is it cold outside in Cairo right now?';
+    const controlPrompt = 'Continue the already-visible answer. Close pilot gaps using verified findings.';
+    const evidence = makeEvidence({
+      originalPrompt: directPrompt,
+      transcriptMessages: [
+        makeMessage({ id: 'msg-user-direct', role: 'user', content: directPrompt, timestamp: 10 }),
+        makeMessage({ id: 'msg-assistant-draft', role: 'assistant', content: 'Draft answer pending stronger verification.', timestamp: 20 }),
+        makeMessage({ id: 'msg-user-control', role: 'user', content: controlPrompt, timestamp: 30 }),
+      ],
+      lastNonEmptyAssistantContent: 'It is about 14 C and clear in Cairo.',
+      lastSubstantiveResult: 'Weather tool returned 14 C and clear in Cairo.',
+      resultPreviews: [{ sourceName: 'weather_current', preview: 'Cairo weather: 14 C and clear.' }],
+      toolsUsed: ['weather_current'],
+    });
+
+    const withoutInternalCount = decideAgentRunPilotAfterBackgroundWorkers({
+      run: makeRun(),
+      workers: [makeWorker({ status: 'error', output: 'worker failed', updatedAt: 40 })],
+      evidence,
+    });
+
+    const withInternalCount = decideAgentRunPilotAfterBackgroundWorkers({
+      run: makeRun(),
+      workers: [makeWorker({ status: 'error', output: 'worker failed', updatedAt: 40 })],
+      evidence,
+      internalUserMessageCount: 1,
+    });
+
+    expect(withInternalCount.evaluation.summary.toLowerCase()).toContain('direct lookup');
+    expect(withoutInternalCount.evaluation.summary).not.toBe(withInternalCount.evaluation.summary);
+  });
+
   it('carries prior pilot correction history into the next continuation prompt', () => {
     const decision = decideAgentRunPilotAfterBackgroundWorkers({
       run: makeRun({
@@ -1092,6 +1125,125 @@ describe('agentWorkflowPilot', () => {
     expect(decision.evaluation.nextActions).toEqual(expect.arrayContaining([
       'Stop the workflow now and ask the user for the concrete task or missing details instead of continuing autonomously.',
     ]));
+  });
+
+  it('bases governance assessment on the latest scoped user turn for pilot prompts', async () => {
+    mockSendMessage.mockResolvedValue({
+      choices: [{
+        message: {
+          role: 'assistant',
+          content: JSON.stringify(makePilotPayload(DEFAULT_SUCCESS_CRITERIA, {
+            recommendedAction: 'continue',
+            controlAction: 'continue',
+            approved: false,
+            confidence: 'medium',
+            summary: 'The run should ask for clarification before continuing.',
+            rationale: 'Latest scoped turn is low-signal and underspecified.',
+            gaps: ['Clarification question was not asked for the latest turn.'],
+            nextActions: ['Ask the user for the missing details before resuming heavy workflow steps.'],
+          })),
+        },
+      }],
+    });
+
+    await evaluateAgentRunWithPilot({
+      run: makeRun({ goal: 'Ship a production-ready migration fix.' }),
+      workers: [makeWorker()],
+      evidence: makeEvidence({
+        originalPrompt: 'Ship a production-ready migration fix.',
+        transcriptMessages: [
+          makeMessage({
+            id: 'msg-user-old',
+            role: 'user',
+            content: 'Ship a production-ready migration fix.',
+            timestamp: 1_000,
+          }),
+          makeMessage({
+            id: 'msg-assistant-old',
+            role: 'assistant',
+            content: 'Starting migration validation workflow.',
+            timestamp: 2_000,
+          }),
+          makeMessage({
+            id: 'msg-user-new',
+            role: 'user',
+            content: '---',
+            timestamp: 40_000_000,
+          }),
+        ],
+        lastNonEmptyAssistantContent: 'Starting migration validation workflow.',
+      }),
+      candidateOutcome: {
+        status: 'completed',
+        summary: 'The run returned a candidate completion.',
+      },
+      providerContext: makeProviderContext(),
+    });
+
+    const requestMessages = mockSendMessage.mock.calls[0]?.[0] as Array<{ role: string; content: string }>;
+    expect(requestMessages[1]?.content).toContain('Request governance assessment:');
+    expect(requestMessages[1]?.content).toContain('Approve only if the workflow stopped early and asked the user for the missing details');
+  });
+
+  it('ignores trailing internal control prompts for pilot assessment and finalization guardrails', async () => {
+    mockSendMessage.mockResolvedValue({
+      choices: [{
+        message: {
+          role: 'assistant',
+          content: JSON.stringify(makePilotPayload(DEFAULT_SUCCESS_CRITERIA, {
+            recommendedAction: 'finalize',
+            controlAction: 'accept',
+            approved: true,
+            summary: 'The direct lookup answer is complete and verified.',
+            rationale: 'The visible assistant answer already addressed the user question directly.',
+          })),
+        },
+      }],
+    });
+
+    const decision = await evaluateAgentRunWithPilot({
+      run: makeRun({ goal: 'Answer the weather question directly.' }),
+      workers: [],
+      evidence: makeEvidence({
+        originalPrompt: 'Is it cold outside in Cairo right now?',
+        transcriptMessages: [
+          makeMessage({
+            id: 'msg-user-direct',
+            role: 'user',
+            content: 'Is it cold outside in Cairo right now?',
+            timestamp: 1_000,
+          }),
+          makeMessage({
+            id: 'msg-assistant-direct',
+            role: 'assistant',
+            content: 'It is around 14 C and clear in Cairo, so it is cool rather than very cold.',
+            timestamp: 2_000,
+          }),
+          makeMessage({
+            id: 'msg-user-control',
+            role: 'user',
+            content: 'Continue the already-visible answer. Close pilot gaps without restarting.',
+            timestamp: 3_000,
+          }),
+        ],
+        lastNonEmptyAssistantContent: 'It is around 14 C and clear in Cairo, so it is cool rather than very cold.',
+        lastSubstantiveResult: 'It is around 14 C and clear in Cairo, so it is cool rather than very cold.',
+        toolsUsed: [],
+      }),
+      candidateOutcome: {
+        status: 'completed',
+        summary: 'Supervisor produced a direct weather answer.',
+      },
+      providerContext: {
+        ...makeProviderContext(),
+        internalUserMessageCount: 1,
+      },
+    });
+
+    const requestMessages = mockSendMessage.mock.calls[0]?.[0] as Array<{ role: string; content: string }>;
+    expect(requestMessages[1]?.content).not.toContain('Continue the already-visible answer. Close pilot gaps without restarting.');
+    expect(decision.action).toBe('finalize');
+    expect(decision.evaluation.approved).toBe(true);
   });
 
   it('approves a verified direct lookup answer even if the provider asks for more work', async () => {
@@ -3781,5 +3933,61 @@ ${JSON.stringify({
     expect(firstDecision.action).toBe('resume');
     expect(secondDecision.action).toBe('resume');
     expect(secondDecision.evaluation.stateSignature).not.toBe(firstDecision.evaluation.stateSignature);
+  });
+  it('scopes pilot transcript to the latest relevant topic boundary', async () => {
+    mockSendMessage.mockResolvedValue({
+      choices: [{
+        message: {
+          role: 'assistant',
+          parsed: makePilotPayload(),
+        },
+      }],
+    });
+
+    await evaluateAgentRunWithPilot({
+      run: makeRun(),
+      workers: [makeWorker()],
+      evidence: makeEvidence({
+        transcriptMessages: [
+          makeMessage({
+            id: 'msg-user-old',
+            role: 'user',
+            content: 'Plan my summer beach vacation and hotel itinerary.',
+            timestamp: 1_000,
+          }),
+          makeMessage({
+            id: 'msg-assistant-old',
+            role: 'assistant',
+            content: 'Here is a beach travel plan.',
+            timestamp: 2_000,
+          }),
+          makeMessage({
+            id: 'msg-user-new',
+            role: 'user',
+            content: 'Fix the production migration mismatch in the release workflow.',
+            timestamp: 40_000_000,
+          }),
+          makeMessage({
+            id: 'msg-assistant-new',
+            role: 'assistant',
+            content: 'I investigated migration mismatch causes.',
+            timestamp: 40_000_100,
+          }),
+        ],
+      }),
+      candidateOutcome: {
+        status: 'completed',
+        summary: 'Supervisor reached a completion candidate.',
+      },
+      providerContext: makeProviderContext(),
+    });
+
+    expect(mockSendMessage).toHaveBeenCalledTimes(1);
+    const requestMessages = mockSendMessage.mock.calls[0]?.[0] as Array<{ role: string; content: string }>;
+    const pilotPrompt = requestMessages.find((message) => message.role === 'user')?.content ?? '';
+
+    expect(pilotPrompt).toContain('Fix the production migration mismatch in the release workflow.');
+    expect(pilotPrompt).toContain('Transcript was scoped to the latest relevant boundary');
+    expect(pilotPrompt).not.toContain('summer beach vacation and hotel itinerary');
   });
 });

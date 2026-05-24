@@ -105,6 +105,7 @@ import {
   throwIfAbortSignalTriggered,
 } from '../services/agents/agentRunCancellation';
 import {
+  decideAgentRunPilotAfterBackgroundWorkers,
   evaluateAgentRunWithPilot,
   PILOT_REVIEW_CHECKPOINT_TITLE,
 } from '@/services/agents/agentWorkflowPilot';
@@ -169,6 +170,8 @@ type ResolvedFinalizationProviderContext = {
   model: string;
   systemPromptText: string;
   conversationId: string;
+  personaId?: string;
+  internalUserMessageCount?: number;
 };
 
 type RunChatOptions = {
@@ -1555,24 +1558,25 @@ export const ChatScreen: React.FC = () => {
             : undefined;
           throwIfAbortSignalTriggered(operation.signal);
 
-          const pilotDecision = await evaluateAgentRunWithPilot({
-            run: targetRun,
-            workers: effectiveSubAgents,
-            evidence,
-            candidateOutcome: reviewPerspective
-              ? {
-                  ...candidateOutcome,
-                  summary: buildStructuredPlanPilotCandidateOutcomeSummary(
-                    candidateOutcome.summary,
-                    planContinuation,
-                  ),
-                }
-              : candidateOutcome,
-            reviewPerspective,
-            providerContext,
-            signal: operation.signal,
-            onUsage: providerContext
-              ? (usage) => {
+          const resolvedCandidateOutcome = reviewPerspective
+            ? {
+                ...candidateOutcome,
+                summary: buildStructuredPlanPilotCandidateOutcomeSummary(
+                  candidateOutcome.summary,
+                  planContinuation,
+                ),
+              }
+            : candidateOutcome;
+          const pilotDecision = providerContext
+            ? await evaluateAgentRunWithPilot({
+                run: targetRun,
+                workers: effectiveSubAgents,
+                evidence,
+                candidateOutcome: resolvedCandidateOutcome,
+                reviewPerspective,
+                providerContext,
+                signal: operation.signal,
+                onUsage: (usage) => {
                   recordConversationUsageEvent({
                     conversationId: params.conversationId,
                     usage,
@@ -1582,9 +1586,14 @@ export const ChatScreen: React.FC = () => {
                     recordSessionUsage: true,
                     emitLog: true,
                   });
-                }
-              : undefined,
-          });
+                },
+              })
+            : decideAgentRunPilotAfterBackgroundWorkers({
+                run: targetRun,
+                workers: effectiveSubAgents,
+                evidence,
+                internalUserMessageCount: 0,
+              });
           throwIfAbortSignalTriggered(operation.signal);
 
           updateAgentRunPilotEvaluation(
@@ -2571,6 +2580,8 @@ export const ChatScreen: React.FC = () => {
         model,
         systemPromptText: conversation.systemPrompt || systemPrompt,
         conversationId: conversation.id,
+        personaId: conversation.personaId,
+        internalUserMessageCount: 0,
       };
     },
     [activeModel, activeProviderId, providers, systemPrompt],
@@ -3134,6 +3145,7 @@ export const ChatScreen: React.FC = () => {
         model,
         systemPromptText: conv?.systemPrompt || systemPrompt,
         conversationId: convId,
+        internalUserMessageCount: options?.additionalUserPrompt?.trim() ? 1 : 0,
       };
 
       const latestUserMessage = [...(conv?.messages ?? [])]

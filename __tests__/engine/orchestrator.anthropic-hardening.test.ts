@@ -56,6 +56,20 @@ jest.mock('../../src/services/memory/store', () => ({
   appendGlobalMemory: jest.fn(),
 }));
 
+jest.mock('../../src/services/memory/livingMemoryBridge', () => ({
+  buildLivingMemorySections: jest.fn().mockResolvedValue({
+    sections: [],
+    cacheableSignature: '00000000',
+    focusBlockText: '',
+    openThreadLabels: [],
+    recalledFactCount: 0,
+  }),
+}));
+
+jest.mock('../../src/services/memory/policy', () => ({
+  canReadLongTermMemory: jest.fn().mockReturnValue(true),
+}));
+
 jest.mock('../../src/services/commands/parser', () => ({
   isSlashCommand: jest.fn().mockReturnValue(false),
   parseCommand: jest.fn().mockReturnValue(null),

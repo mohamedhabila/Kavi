@@ -63,6 +63,32 @@ describe('buildConsolidatorPrompt', () => {
     expect(prompt.length).toBeLessThan(12_000);
     expect(prompt).toMatch(/\u2026/);
   });
+
+  it('prefers enriched user content in message windows', () => {
+    const prompt = buildConsolidatorPrompt({
+      userMessage: 'ignored',
+      assistantMessage: 'ignored',
+      messages: [
+        {
+          id: 'u1',
+          role: 'user',
+          content: 'raw user text',
+          enrichedContent: 'enriched user text with context',
+          timestamp: 1,
+        },
+        {
+          id: 'a1',
+          role: 'assistant',
+          content: 'assistant reply',
+          timestamp: 2,
+        },
+      ],
+    });
+
+    expect(prompt).toContain('enriched user text with context');
+    expect(prompt).not.toContain('raw user text');
+    expect(prompt).toContain('assistant reply');
+  });
 });
 
 describe('parseConsolidatorOutput', () => {

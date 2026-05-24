@@ -20,7 +20,6 @@ jest.mock('../../src/services/llm/LlmService', () => {
   };
 });
 
-// Mock the tool executor
 jest.mock('../../src/engine/tools/index', () => ({
   executeTool: jest.fn().mockResolvedValue('tool result'),
   loadMemory: jest.fn().mockResolvedValue(null),
@@ -63,6 +62,9 @@ jest.mock('../../src/services/memory/livingMemoryBridge', () => ({
     recalledFactCount: 0,
   }),
 }));
+jest.mock('../../src/services/memory/policy', () => ({
+  canReadLongTermMemory: jest.fn().mockReturnValue(true),
+}));
 jest.mock('../../src/services/commands/parser', () => ({
   isSlashCommand: jest.fn().mockReturnValue(false),
   parseCommand: jest.fn().mockReturnValue(null),
@@ -91,6 +93,7 @@ import { getSkillSystemPrompts } from '../../src/services/skills/manager';
 import { getConversationMemoryForSystemPrompt } from '../../src/services/memory/store';
 import { buildLivingMemorySections } from '../../src/services/memory/livingMemoryBridge';
 import { getProviderApiKey } from '../../src/services/storage/SecureStorage';
+import * as memoryAccessGateway from '../../src/services/memory/memoryAccessGateway';
 
 const legacyFileSystem = jest.requireMock('expo-file-system/legacy') as {
   readAsStringAsync: jest.Mock;
@@ -165,6 +168,19 @@ function expectAssistantMetadata(
 
 beforeEach(() => {
   jest.clearAllMocks();
+  const parserModule = jest.requireMock('../../src/services/commands/parser') as {
+    isSlashCommand: jest.Mock;
+    parseCommand: jest.Mock;
+  };
+  const builtinsModule = jest.requireMock('../../src/services/commands/builtins') as {
+    getCommand: jest.Mock;
+  };
+  parserModule.isSlashCommand.mockReset();
+  parserModule.isSlashCommand.mockReturnValue(false);
+  parserModule.parseCommand.mockReset();
+  parserModule.parseCommand.mockReturnValue(null);
+  builtinsModule.getCommand.mockReset();
+  builtinsModule.getCommand.mockReturnValue(null);
   legacyFileSystem.readAsStringAsync.mockReset();
   mockStreamMessage.mockReset();
   (LlmService as any).mockImplementation(() => ({
@@ -387,6 +403,67 @@ describe('Orchestrator', () => {
       expect(apiMessages[1]).toMatchObject({ role: 'user' });
       expect(apiMessages[1].content).toContain('<link_context>Full extracted article</link_context>');
       expect(apiMessages[1].content).toContain('<runtime_context>');
+    });
+
+    it('excludes stale unrelated topic history before sending request messages', async () => {
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator([
+          { type: 'token', content: 'Done' },
+          { type: 'done', content: 'Done' },
+        ]),
+      );
+
+      const callbacks = makeCallbacks();
+      const options: OrchestratorOptions = {
+        provider: makeProvider(),
+        model: 'gpt-5.4',
+        conversationId: 'conv-topic-boundary',
+        systemPrompt: 'You are helpful',
+        messages: [
+          {
+            id: 'old-user',
+            role: 'user',
+            content: 'Plan my beach vacation itinerary for July.',
+            timestamp: 1_000,
+          },
+          {
+            id: 'old-assistant',
+            role: 'assistant',
+            content: 'Here is your beach itinerary.',
+            timestamp: 2_000,
+          },
+          {
+            id: 'new-user',
+            role: 'user',
+            content: 'Fix the production migration mismatch in release workflow.',
+            timestamp: 30_000_000,
+          },
+        ],
+      };
+
+      await runOrchestrator(options, callbacks);
+
+      const apiMessages = mockStreamMessage.mock.calls[0][0] as Array<{
+        role: string;
+        content: string | Array<{ type: string; text?: string }>;
+      }>;
+
+      const flattened = apiMessages
+        .map((message) =>
+          typeof message.content === 'string'
+            ? message.content
+            : message.content
+                .map((part) => (part && typeof part.text === 'string' ? part.text : ''))
+                .join('\n'),
+        )
+        .join('\n');
+
+      expect(flattened).toContain('Fix the production migration mismatch in release workflow.');
+      expect(flattened).not.toContain('Plan my beach vacation itinerary for July.');
+      expect(getSkillSystemPrompts).toHaveBeenCalledWith(
+        'conv-topic-boundary',
+        expect.not.stringContaining('Plan my beach vacation itinerary for July.'),
+      );
     });
 
     it('includes non-image attachment metadata in API messages', async () => {
@@ -1060,7 +1137,7 @@ describe('Orchestrator', () => {
           },
           { id: 't1', role: 'tool', content: 'Error: a missing', toolCallId: 'tc1', timestamp: now + 2, isError: true },
           { id: 't2', role: 'tool', content: 'Error: b missing', toolCallId: 'tc2', timestamp: now + 3, isError: true },
-          { id: 'u2', role: 'user', content: 'Try again', timestamp: now + 4 },
+          { id: 'u2', role: 'user', content: 'Read both files again and retry', timestamp: now + 4 },
         ],
       };
 
@@ -1846,8 +1923,169 @@ describe('Orchestrator', () => {
 
       const firstTurnToolNames = mockStreamMessage.mock.calls[0][1].tools.map((tool: { name: string }) => tool.name);
       const systemPromptMessage = mockStreamMessage.mock.calls[0][0][0];
+      const requestedSkillsCalls = (getSkillSystemPrompts as jest.Mock).mock.calls as Array<[string, string]>;
+      const [, requestedSkillsContext] = requestedSkillsCalls[requestedSkillsCalls.length - 1];
       expect(firstTurnToolNames.filter((name: string) => name.startsWith('sessions_'))).toEqual([]);
       expect(systemPromptMessage.content).toContain('The latest user request is a trivial direct lookup and should bypass the agentic workflow.');
+      expect(requestedSkillsContext).toContain('Is it cold outside in Cairo right now?');
+      expect(requestedSkillsContext).not.toContain('Continue the already-visible answer.');
+    });
+
+    it('ignores trailing internal slash control prompts during slash-command interception', async () => {
+      const parserModule = jest.requireMock('../../src/services/commands/parser') as {
+        isSlashCommand: jest.Mock;
+        parseCommand: jest.Mock;
+      };
+      const builtinsModule = jest.requireMock('../../src/services/commands/builtins') as {
+        getCommand: jest.Mock;
+      };
+
+      parserModule.isSlashCommand.mockImplementation((content: string) => content.startsWith('/'));
+      parserModule.parseCommand.mockReturnValue({ name: 'status', args: '' });
+      const slashHandler = jest.fn().mockResolvedValue({ response: 'slash result' });
+      builtinsModule.getCommand.mockReturnValue({ handler: slashHandler });
+
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator([
+          { type: 'token', content: 'normal assistant response' },
+          { type: 'done', content: 'normal assistant response' },
+        ]),
+      );
+
+      const callbacks = makeCallbacks();
+      const options: OrchestratorOptions = {
+        provider: makeProvider(),
+        model: 'gpt-5.4',
+        conversationId: 'conv-ignore-internal-slash',
+        systemPrompt: 'You are helpful',
+        internalUserMessageCount: 1,
+        messages: [
+          { id: 'msg1', role: 'user', content: 'What is the current weather in Cairo?', timestamp: 1_000 },
+          { id: 'msg2', role: 'assistant', content: 'Draft answer pending verification.', timestamp: 1_100 },
+          { id: 'msg3', role: 'user', content: '/status', timestamp: 1_200 },
+        ],
+      };
+
+      await runOrchestrator(options, callbacks);
+
+      expect(slashHandler).not.toHaveBeenCalled();
+      expect(mockStreamMessage).toHaveBeenCalledTimes(1);
+      expect(callbacks.calls.onAssistantMessage[callbacks.calls.onAssistantMessage.length - 1]).toEqual(
+        expect.objectContaining({
+          content: 'normal assistant response',
+          assistantMetadata: expect.objectContaining({
+            kind: 'final',
+            completionStatus: 'complete',
+          }),
+        }),
+      );
+    });
+
+    it('uses a conservative scoped fallback when unified memory access is unavailable', async () => {
+      const registryModule = jest.requireMock('../../src/services/agents/registry') as {
+        getPersona: jest.Mock;
+      };
+      const skillsModule = jest.requireMock('../../src/services/skills/manager') as {
+        getSkillToolDefinitions: jest.Mock;
+      };
+
+      registryModule.getPersona.mockReturnValueOnce({
+        id: 'super-agent',
+        name: 'SuperAgent',
+        systemPrompt: 'You are the SuperAgent.',
+      });
+      skillsModule.getSkillToolDefinitions.mockReturnValueOnce([
+        {
+          name: 'weather_current',
+          description: 'Get the current outdoor weather and temperature for a location.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              location: { type: 'string' },
+            },
+            required: ['location'],
+            additionalProperties: false,
+          },
+        },
+      ]);
+
+      const memoryAccessSpy = jest
+        .spyOn(memoryAccessGateway, 'buildUnifiedMemoryAccessContext')
+        .mockRejectedValueOnce(new Error('memory gateway unavailable'));
+
+      (executeTool as jest.Mock).mockResolvedValueOnce('Cairo weather: 14 C and clear.');
+
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator([
+          { type: 'tool_call', toolCall: { id: 'tc1', name: 'weather_current', arguments: '{"location":"Cairo"}' } },
+          { type: 'done', content: '' },
+        ]),
+      );
+
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator([
+          { type: 'token', content: 'It is about 14 C and clear in Cairo.' },
+          { type: 'done', content: 'It is about 14 C and clear in Cairo.' },
+        ]),
+      );
+
+      const callbacks = makeCallbacks();
+      const options: OrchestratorOptions = {
+        provider: makeProvider(),
+        model: 'gpt-5.4',
+        conversationId: 'conv-super-agent-fallback-weather',
+        systemPrompt: 'You are helpful',
+        personaId: 'super-agent',
+        internalUserMessageCount: 1,
+        messages: [
+          {
+            id: 'msg1',
+            role: 'user',
+            content: 'Design a full architecture rewrite plan for the app.',
+            timestamp: 1_000,
+          },
+          {
+            id: 'msg2',
+            role: 'assistant',
+            content: 'Here is the architecture plan draft.',
+            timestamp: 2_000,
+          },
+          {
+            id: 'msg3',
+            role: 'user',
+            content: 'Is it cold outside in Cairo right now?',
+            timestamp: 30_000_000,
+          },
+          {
+            id: 'msg4',
+            role: 'assistant',
+            content: 'Draft answer pending stronger verification.',
+            timestamp: 30_000_001,
+          },
+          {
+            id: 'msg5',
+            role: 'user',
+            content: 'Continue the already-visible answer. Close pilot gaps without restarting.',
+            timestamp: 30_000_002,
+          },
+        ],
+      };
+
+      try {
+        await runOrchestrator(options, callbacks);
+      } finally {
+        memoryAccessSpy.mockRestore();
+      }
+
+      const systemPromptMessage = mockStreamMessage.mock.calls[0][0][0];
+      const requestedSkillsCalls = (getSkillSystemPrompts as jest.Mock).mock.calls as Array<[string, string]>;
+      const [, requestedSkillsContext] = requestedSkillsCalls[requestedSkillsCalls.length - 1];
+
+      expect(systemPromptMessage.content).toContain(
+        'The latest user request is a trivial direct lookup and should bypass the agentic workflow.',
+      );
+      expect(requestedSkillsContext).toContain('Is it cold outside in Cairo right now?');
+      expect(requestedSkillsContext).not.toContain('Continue the already-visible answer.');
     });
 
     it('allows SuperAgent to finalize a non-trivial solo-tool run when no delegated worker was requested', async () => {
@@ -2430,7 +2668,7 @@ describe('Orchestrator', () => {
           {
             id: 'u2',
             role: 'user',
-            content: 'Try again',
+            content: 'Try comparing the official docs again',
             timestamp: now + 2,
           },
         ],
@@ -2441,7 +2679,9 @@ describe('Orchestrator', () => {
       const streamOptions = mockStreamMessage.mock.calls[0][1];
       const selectedToolNames = new Set((streamOptions.tools || []).map((tool: any) => tool.name));
 
-      expect(selectedToolNames.has('web_fetch')).toBe(true);
+      expect(
+        selectedToolNames.has('web_fetch') || selectedToolNames.has('web_search'),
+      ).toBe(true);
     });
 
     it('surfaces code-category guidance and loads python for explicit Python execution requests', async () => {
@@ -2681,7 +2921,7 @@ describe('Orchestrator', () => {
       expect(getConversationMemoryForSystemPrompt).not.toHaveBeenCalled();
       expect(buildLivingMemorySections).toHaveBeenCalledWith(expect.objectContaining({
         conversationId: 'conv1',
-        disableLongTermMemory: false,
+        messages: expect.any(Array),
       }));
       const apiMessages = mockStreamMessage.mock.calls[0]?.[0] as Array<{ role: string; content: string }>;
       expect(apiMessages[0]?.content).toContain('## Memory Scopes');

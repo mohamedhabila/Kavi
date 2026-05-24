@@ -160,7 +160,7 @@ describe('buildLivingMemorySections', () => {
     expect(dynamicText).not.toContain('Global focus should not leak.');
   });
 
-  it('uses raw user content rather than runtime-enriched content for recall', async () => {
+  it('prefers runtime-enriched user content for recall when available', async () => {
     const me = upsertEntity({ name: 'user', type: 'self' });
     recordFact({
       subjectId: me.id,
@@ -176,7 +176,7 @@ describe('buildLivingMemorySections', () => {
       now: 2_000,
     });
 
-    expect(out.recalledFactCount).toBe(0);
+    expect(out.recalledFactCount).toBeGreaterThan(0);
   });
 
   it('appends recalled facts (text-only, lexical match) to the L3 section', async () => {

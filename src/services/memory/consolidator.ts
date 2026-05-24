@@ -156,7 +156,10 @@ function formatMessageWindow(messages: Message[]): string {
   return messages
     .slice(-24)
     .map((message) => {
-      const content = truncateForPrompt(String(message.content ?? ''), 1200);
+      const messageText = message.role === 'user'
+        ? message.enrichedContent ?? message.content ?? ''
+        : message.content ?? '';
+      const content = truncateForPrompt(String(messageText), 1200);
       const toolNames = message.toolCalls?.map((toolCall) => toolCall.name).filter(Boolean);
       const toolLabel = toolNames?.length ? ` tools=${toolNames.join(',')}` : '';
       return `<message id="${message.id}" role="${message.role}"${toolLabel}>\n${content}\n</message>`;

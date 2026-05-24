@@ -29,6 +29,12 @@ import { hasObservedDelegatedWork } from './delegationEvidence';
 import { summarizeBackgroundWorkerRunOutcome } from './workflowState';
 import { canReadLongTermMemory } from '../memory/policy';
 import {
+  buildUnifiedMemoryAccessContext,
+  type UnifiedMemoryAccessResult,
+} from '../memory/memoryAccessGateway';
+import { selectContextStartIndex } from '../context/contextStartSelector';
+import { excludeTrailingInternalUserMessages } from '../context/messageScoping';
+import {
   assessUserRequest,
   evaluateResponseAgainstRequestAssessment,
 } from './requestAssessment';
@@ -85,15 +91,54 @@ type ResearchIntegrityAssessment = {
   gaps: string[];
 };
 
-function getPilotRequestAssessment(params: Pick<PilotDecisionParams, 'run' | 'evidence'>) {
-  const originalUserMessage = params.evidence.transcriptMessages.find((message) => message.role === 'user');
-  return assessUserRequest(params.evidence.originalPrompt || params.run.goal, {
-    hasAttachments: Boolean(originalUserMessage?.attachments?.length),
+function scopePilotTranscriptForAssessment(
+  messages: Message[],
+  internalUserMessageCount = 0,
+  scopedTranscriptMessages?: Message[],
+): Message[] {
+  if (scopedTranscriptMessages) {
+    return scopedTranscriptMessages;
+  }
+
+  const normalizedMessages = excludeTrailingInternalUserMessages(
+    messages,
+    internalUserMessageCount,
+  );
+  const boundary = selectContextStartIndex(normalizedMessages, { mode: 'pilot' });
+  return boundary.startIndex > 0
+    ? normalizedMessages.slice(boundary.startIndex)
+    : normalizedMessages;
+}
+
+function getPilotRequestAssessment(
+  params: Pick<PilotDecisionParams, 'run' | 'evidence' | 'providerContext'>,
+  scopedTranscriptMessages?: Message[],
+  internalUserMessageCountOverride?: number,
+) {
+  const internalUserMessageCount = typeof internalUserMessageCountOverride === 'number'
+    ? internalUserMessageCountOverride
+    : params.providerContext?.internalUserMessageCount ?? 0;
+  const transcript = scopePilotTranscriptForAssessment(
+    params.evidence.transcriptMessages,
+    internalUserMessageCount,
+    scopedTranscriptMessages,
+  );
+  const latestUserMessage = [...transcript].reverse().find((message) => message.role === 'user');
+  const userTurns = transcript.filter((message) => message.role === 'user').length;
+  const assessmentText =
+    latestUserMessage?.content?.trim() || params.evidence.originalPrompt || params.run.goal;
+
+  return assessUserRequest(assessmentText, {
+    hasAttachments: Boolean(latestUserMessage?.attachments?.length),
+    hasPriorContext: userTurns > 1,
   });
 }
 
-function buildRequestGovernancePromptSection(params: Pick<PilotDecisionParams, 'run' | 'evidence'>): string | undefined {
-  const assessment = getPilotRequestAssessment(params);
+function buildRequestGovernancePromptSection(
+  params: Pick<PilotDecisionParams, 'run' | 'evidence' | 'providerContext'>,
+  scopedTranscriptMessages?: Message[],
+): string | undefined {
+  const assessment = getPilotRequestAssessment(params, scopedTranscriptMessages);
   if (assessment.action === 'proceed') {
     return undefined;
   }
@@ -849,6 +894,8 @@ export interface AgentRunPilotProviderContext {
   model: string;
   systemPromptText: string;
   conversationId?: string;
+  personaId?: string;
+  internalUserMessageCount?: number;
 }
 
 export interface AgentRunPilotDecision {
@@ -1663,11 +1710,33 @@ function buildProcessSummary(params: {
   ].join('\n');
 }
 
-async function buildPilotMemoryContextSection(
-  providerContext?: AgentRunPilotProviderContext,
-): Promise<string | undefined> {
-  if (!providerContext || !canReadLongTermMemory()) return undefined;
-  return undefined;
+function buildPilotMemoryContextSection(
+  memoryAccessContext?: UnifiedMemoryAccessResult,
+): string | undefined {
+  if (!memoryAccessContext || !memoryAccessContext.livingMemory) {
+    return undefined;
+  }
+
+  const lines: string[] = ['Shared memory context:'];
+  const { boundary, livingMemory } = memoryAccessContext;
+
+  if (boundary.startIndex > 0) {
+    lines.push(
+      `- Transcript was scoped to the latest relevant boundary (${boundary.reason}); dropped ${boundary.droppedMessageCount} older message(s).`,
+    );
+  }
+
+  if (livingMemory.focusBlockText) {
+    lines.push(`- Active focus: ${livingMemory.focusBlockText}`);
+  }
+
+  if (livingMemory.openThreadLabels.length > 0) {
+    lines.push(`- Open threads: ${livingMemory.openThreadLabels.slice(0, 4).join('; ')}`);
+  }
+
+  lines.push(`- Recalled facts: ${livingMemory.recalledFactCount}`);
+
+  return lines.join('\n');
 }
 
 async function buildPilotEvaluationPrompt(params: PilotDecisionParams): Promise<string> {
@@ -1684,6 +1753,16 @@ async function buildPilotEvaluationPrompt(params: PilotDecisionParams): Promise<
     evidence: params.evidence,
   });
   const promptTokenBudget = resolvePilotPromptTokenBudget(params.providerContext?.model);
+  const memoryAccessContext = params.providerContext && canReadLongTermMemory()
+    ? await buildUnifiedMemoryAccessContext({
+        messages: params.evidence.transcriptMessages,
+        conversationId: params.providerContext.conversationId,
+        personaId: params.providerContext.personaId,
+        mode: 'pilot',
+        internalUserMessageCount: params.providerContext.internalUserMessageCount,
+      })
+    : undefined;
+  const scopedTranscriptMessages = memoryAccessContext?.scopedMessages ?? params.evidence.transcriptMessages;
   const candidateDraft = params.evidence.lastNonEmptyAssistantContent.trim();
   const detailedResult = params.evidence.lastSubstantiveResult.trim();
   const structuredEvidenceSection = buildAgentRunEvidencePromptSection(params.run.evidence, {
@@ -1692,8 +1771,11 @@ async function buildPilotEvaluationPrompt(params: PilotDecisionParams): Promise<
     heading: 'Structured workflow evidence:',
   });
   const reviewPerspectiveSection = buildReviewPerspectiveSection(params.reviewPerspective);
-  const memoryContextSection = await buildPilotMemoryContextSection(params.providerContext);
-  const requestGovernanceSection = buildRequestGovernancePromptSection(params);
+  const memoryContextSection = buildPilotMemoryContextSection(memoryAccessContext);
+  const requestGovernanceSection = buildRequestGovernancePromptSection(
+    params,
+    scopedTranscriptMessages,
+  );
   const baseSections = [
     'Score this run using the following rubric:',
     '- 0: absent, wrong, or contradicted by evidence.',
@@ -1770,7 +1852,7 @@ async function buildPilotEvaluationPrompt(params: PilotDecisionParams): Promise<
   );
   appendBudgetedPromptSection(
     sections,
-    buildBudgetedTranscriptSection(params.evidence.transcriptMessages, remainingTokens.value),
+    buildBudgetedTranscriptSection(scopedTranscriptMessages, remainingTokens.value),
     remainingTokens,
   );
   appendBudgetedPromptSection(
@@ -2505,9 +2587,10 @@ function applyResearchIntegrityPilotGuardrails(
 
 function applyRequestAssessmentPilotGuardrails(
   evaluation: AgentRunPilotEvaluation,
-  params: Pick<PilotDecisionParams, 'run' | 'evidence' | 'candidateOutcome' | 'workers'>,
+  params: Pick<PilotDecisionParams, 'run' | 'evidence' | 'candidateOutcome' | 'workers' | 'providerContext'>,
+  internalUserMessageCountOverride?: number,
 ): AgentRunPilotEvaluation {
-  const assessment = getPilotRequestAssessment(params);
+  const assessment = getPilotRequestAssessment(params, undefined, internalUserMessageCountOverride);
   if (assessment.action === 'proceed') {
     return evaluation;
   }
@@ -2892,7 +2975,7 @@ function hasMaterialPilotImprovement(
 }
 
 function resolvePilotContinueCycleBudget(
-  params: Pick<PilotDecisionParams, 'run' | 'evidence'>,
+  params: Pick<PilotDecisionParams, 'run' | 'evidence' | 'providerContext'>,
 ): number {
   const assessment = getPilotRequestAssessment(params);
   if (assessment.action === 'direct') {
@@ -3123,7 +3206,7 @@ function buildFinalOutcomeSummary(
 }
 
 function buildPilotDecision(
-  params: Omit<PilotDecisionParams, 'providerContext' | 'signal'> & {
+  params: Omit<PilotDecisionParams, 'signal'> & {
     workers: ReadonlyArray<SubAgentSnapshot>;
     evaluation: AgentRunPilotEvaluation;
   },
@@ -3215,6 +3298,7 @@ export function decideAgentRunPilotAfterBackgroundWorkers(params: {
   run: Pick<AgentRun, 'goal' | 'plan' | 'checkpoints' | 'updatedAt' | 'summary' | 'latestPilotEvaluation' | 'evidence'>;
   workers: ReadonlyArray<SubAgentSnapshot>;
   evidence: AgentRunFinalizationEvidence;
+  internalUserMessageCount?: number;
 }): AgentRunPilotDecision {
   const candidateOutcome = summarizeBackgroundWorkerRunOutcome([...params.workers]);
   const evaluation = applyRequestAssessmentPilotGuardrails(buildHeuristicPilotEvaluation({
@@ -3227,7 +3311,8 @@ export function decideAgentRunPilotAfterBackgroundWorkers(params: {
     workers: params.workers,
     evidence: params.evidence,
     candidateOutcome,
-  });
+    providerContext: undefined,
+  }, params.internalUserMessageCount);
 
   return buildPilotDecision({
     run: params.run,
@@ -3235,6 +3320,7 @@ export function decideAgentRunPilotAfterBackgroundWorkers(params: {
     evidence: params.evidence,
     candidateOutcome,
     evaluation,
+    providerContext: undefined,
   });
 }
 
@@ -3263,6 +3349,7 @@ export async function evaluateAgentRunWithPilot(
       candidateOutcome: params.candidateOutcome,
       reviewPerspective: params.reviewPerspective,
       evaluation: cachedPilotEvaluation!,
+      providerContext: params.providerContext,
     });
   }
 
@@ -3344,11 +3431,13 @@ export async function evaluateAgentRunWithPilot(
         workers,
         evidence: params.evidence,
         candidateOutcome: params.candidateOutcome,
+        providerContext: params.providerContext,
       }),
       {
         candidateOutcome: params.candidateOutcome,
         reviewPerspective: params.reviewPerspective,
       },
     ),
+    providerContext: params.providerContext,
   });
 }
