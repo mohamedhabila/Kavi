@@ -2614,8 +2614,9 @@ describe('Orchestrator', () => {
 
       const systemPromptMessage = mockStreamMessage.mock.calls[0][0][0];
       expect(systemPromptMessage).toMatchObject({ role: 'system' });
-      expect(systemPromptMessage.content).toContain('- read_file:');
+      expect(systemPromptMessage.content).not.toContain('- read_file:');
       expect(systemPromptMessage.content).toContain('Loaded callable tool names by category (complete):');
+      expect(systemPromptMessage.content).toContain('Other: read_file, write_file, list_files');
       expect(systemPromptMessage.content).toContain('Code / computation: python');
       expect(systemPromptMessage.content).toContain('Web research: web_search, web_fetch');
       expect(systemPromptMessage.content).toContain('Likely tool_catalog categories for this request');

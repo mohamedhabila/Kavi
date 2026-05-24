@@ -302,6 +302,31 @@ describe('selectToolsForRequest', () => {
     expect(selectedNames.has('skill__weather__forecast')).toBe(true);
   });
 
+  it('treats soft limits as advisory when many discovered tools are required', () => {
+    const discovered = Array.from({ length: 14 }, (_, index) =>
+      makeTool(`mcp__bulk__tool_${index}`, `Discovered MCP tool ${index}.`),
+    );
+    const withDiscovered = [...tools, ...discovered];
+
+    const selected = selectToolsForRequest(
+      withDiscovered,
+      ['continue with discovered tools'],
+      'openai',
+      undefined,
+      undefined,
+      {
+        discoveredToolNames: discovered.map((tool) => tool.name),
+      },
+    );
+    const selectedNames = new Set(selected.map((tool) => tool.name));
+
+    for (const tool of discovered) {
+      expect(selectedNames.has(tool.name)).toBe(true);
+    }
+    expect(selected.length).toBeGreaterThan(20);
+    expect(selected.length).toBeLessThanOrEqual(PROVIDER_TOOL_LIMITS.openai);
+  });
+
   it('can narrow the active set to focused discovered tools for the next turn', () => {
     const selected = selectToolsForRequest(
       tools,

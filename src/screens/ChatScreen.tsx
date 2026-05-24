@@ -5049,6 +5049,7 @@ export const ChatScreen: React.FC = () => {
       setAgentRunAwaitingBackgroundWorkers,
       completeAgentRun,
       ensureAgentRunFinalResponse,
+      recordConversationTurnMemory,
       clearStreamingDraft,
       mergeStreamingDraft,
       registerForegroundRequest,

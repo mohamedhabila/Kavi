@@ -773,17 +773,18 @@ const RemoteWorkScreenInner: React.FC = () => {
       const pendingKey = `${project.id}:${action}`;
       setPendingExpoActions((current) => ({ ...current, [pendingKey]: true }));
       try {
-        await runExpoProjectAction(
-          project.id,
-          action,
+        const actionArgs =
           action === 'build'
             ? { platform: overrides?.platform || 'android' }
             : action === 'submit'
               ? { platform: overrides?.platform || 'ios' }
               : action === 'deploy-web'
                 ? { alias: 'production' }
-                : { message: `Triggered from Remote Work for ${project.name}` },
-            ...(workflowRef ? { workflowRef } : {}),
+                : { message: `Triggered from Remote Work for ${project.name}` };
+        await runExpoProjectAction(
+          project.id,
+          action,
+          workflowRef ? { ...actionArgs, workflowRef } : actionArgs,
         );
       } catch (error) {
         Alert.alert(

@@ -27,6 +27,20 @@ export const PROVIDER_TOOL_LIMITS: Record<string, number> = {
   default: 128,
 };
 
+// Provider docs recommend keeping the initially active tool set small for
+// better tool selection quality and lower prompt overhead. We keep this as a
+// soft cap (below the hard provider max) so discovery can still load more when
+// needed across turns.
+const PROVIDER_INITIAL_TOOL_SOFT_LIMITS: Record<ToolProviderFamily, number> = {
+  openai: 20,
+  anthropic: 16,
+  gemini: 12,
+  ollama: 12,
+  openrouter: 20,
+  'on-device': 8,
+  default: 20,
+};
+
 export const ON_DEVICE_TOOL_TOKEN_BUDGET = 1800;
 
 export type ToolProviderFamily =
@@ -233,12 +247,14 @@ function getAlwaysLoadedToolNames(
 const SUPER_AGENT_CORE_TOOL_NAMES = new Set([
   'sessions_spawn',
   'sessions_list',
+  'sessions_send',
   'sessions_output',
   'sessions_surface_output',
   'sessions_status',
   'sessions_wait',
   'sessions_cancel',
   'sessions_yield',
+  'agents',
   'wait',
 ]);
 
@@ -504,7 +520,7 @@ export function selectToolsForRequest(
   options?: ToolSelectionOptions,
 ): ToolDefinition[] {
   const dedupedTools = Array.from(new Map(allTools.map((tool) => [tool.name, tool])).values());
-  const limit = getProviderToolLimit(
+  const hardLimit = getProviderToolLimit(
     providerName,
     providerBaseUrl,
     options?.model,
@@ -516,7 +532,9 @@ export function selectToolsForRequest(
     options?.model,
     options?.providerKind,
   );
-  const geminiTarget = providerFamily === 'gemini';
+  const softLimit =
+    PROVIDER_INITIAL_TOOL_SOFT_LIMITS[providerFamily] ?? PROVIDER_INITIAL_TOOL_SOFT_LIMITS.default;
+  let limit = Math.min(hardLimit, softLimit);
   const onDeviceTarget = providerFamily === 'on-device';
   const relevantCategories = new Set(detectRelevantCategories(userMessages));
   const discoveredToolNames = new Set(
@@ -612,6 +630,25 @@ export function selectToolsForRequest(
     deferred.push(tool);
   }
 
+  // Soft limit is advisory: keep a lean default, but do not drop tools that are
+  // required for continuity in this turn (always-loaded base, super-agent core,
+  // and explicit discovered/preferred/recent focus sets).
+  const minimumRequiredCount = included.filter((tool) => {
+    const category = toolToCategory.get(tool.name);
+    const isCategoryMatched = Boolean(category && relevantCategories.has(category));
+    return (
+      alwaysLoadedToolNames.has(tool.name)
+      || superAgentForceInclude.has(tool.name)
+      || preferredToolNames.has(tool.name)
+      || discoveredToolNames.has(tool.name)
+      || recentToolNames.has(tool.name)
+      || isCategoryMatched
+    );
+  }).length;
+  if (minimumRequiredCount > limit) {
+    limit = Math.min(hardLimit, minimumRequiredCount);
+  }
+
   // Anthropic renders tool definitions into the system-prompt prefix and has a
   // much tighter strict-schema budget. Avoid backfilling unrelated tools just
   // because spare capacity exists; let tool_catalog advertise the rest.
@@ -644,14 +681,13 @@ export function selectToolsForRequest(
     included.sort((a, b) => {
       const wDiff = weight(a) - weight(b);
       if (wDiff !== 0) return wDiff;
-      if (geminiTarget || onDeviceTarget) {
-        return (
-          (originalOrder.get(a.name) ?? Number.MAX_SAFE_INTEGER) -
-          (originalOrder.get(b.name) ?? Number.MAX_SAFE_INTEGER)
-        );
-      }
-      // Same weight → prefer smaller token footprint
-      return estimateToolTokens(a) - estimateToolTokens(b);
+      // Keep same-weight tools in stable registry order. This preserves
+      // expected discovery/category behavior (e.g. browser_navigate first)
+      // while still allowing explicit priority tiers above.
+      return (
+        (originalOrder.get(a.name) ?? Number.MAX_SAFE_INTEGER) -
+        (originalOrder.get(b.name) ?? Number.MAX_SAFE_INTEGER)
+      );
     });
 
     included.length = limit;

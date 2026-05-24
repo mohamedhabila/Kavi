@@ -1355,6 +1355,16 @@ function buildLoadedToolSummary(
   selectedTools: ToolDefinition[],
   narrowToolTarget: boolean,
 ): string {
+  if (selectedTools.length === 0) {
+    return '';
+  }
+
+  // Lean path for narrow providers: names-only directory avoids repeating both
+  // descriptions and directory payload in the same prompt section.
+  if (narrowToolTarget) {
+    return buildLoadedToolNameDirectory(selectedTools);
+  }
+
   const summaryAnchorNames = new Set([
     'tool_catalog',
     'javascript',
@@ -1383,7 +1393,7 @@ function buildLoadedToolSummary(
     }
   }
 
-  const summaryTools = narrowToolTarget ? selectedTools : Array.from(summaryToolMap.values());
+  const summaryTools = Array.from(summaryToolMap.values());
   const detailLines = summaryTools.map((tool) => buildToolSummaryLine(tool)).join('\n');
   const directory = buildLoadedToolNameDirectory(selectedTools);
   return selectedTools.length <= summaryTools.length
@@ -1473,16 +1483,10 @@ function buildCapabilityDiscoveryPrompt(params: {
 
   if (params.narrowToolTarget) {
     lines.push(
-      'This model works best with a narrow active tool set. The loaded tools listed above are the only tools you can call immediately.',
+      'This model works best with a narrow active tool set. Only the loaded tools are callable right now.',
     );
     lines.push(
-      'If the next step needs a different capability, call tool_catalog with a short query or the most relevant category instead of guessing or retrying the wrong tool.',
-    );
-    lines.push(
-      'After tool_catalog, start with the recommended discovered tools and use the supporting discovered tools when the workflow naturally expands. Do not repeat tool_catalog for the same discovery result unless the plan changed or the earlier result was incomplete.',
-    );
-    lines.push(
-      'For investigation work, prefer inspect -> compare -> act -> verify. Search before reading, read before editing, and stop calling tools once you have enough evidence to answer.',
+      'If you need another capability, call tool_catalog with a short query, then switch to the discovered tools. Avoid repeating tool_catalog for the same result unless the plan changes.',
     );
   }
 

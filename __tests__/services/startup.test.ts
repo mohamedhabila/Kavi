@@ -823,7 +823,7 @@ describe('initializeServices', () => {
   });
 
   it('hooks callback does nothing without api key', async () => {
-    mockGetProviderApiKey.mockResolvedValueOnce('');
+    mockGetProviderApiKey.mockResolvedValue('');
     jest.doMock('../../src/store/useSettingsStore', () => ({
       useSettingsStore: {
         getState: () => ({
