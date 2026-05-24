@@ -90,8 +90,10 @@ async function resolveConsolidator(): Promise<ResolvedConsolidator | null> {
   const settings = useSettingsStore.getState();
   if (settings.disableLongTermMemory) return null;
   const providerId = (settings.consolidationProvider ?? '').trim();
-  if (!providerId) return null;
-  const provider = settings.providers.find((p) => p.id === providerId && p.enabled);
+  const activeProviderId = (settings.activeProviderId ?? '').trim();
+  const provider = providerId
+    ? settings.providers.find((p) => p.id === providerId && p.enabled)
+    : settings.providers.find((p) => p.id === activeProviderId && p.enabled);
   if (!provider) return null;
   const apiKey = await resolveProviderApiKey(provider);
   return {

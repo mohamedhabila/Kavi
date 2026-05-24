@@ -194,6 +194,48 @@ describe('recordCompletedTurnForMemory', () => {
     })?.content).toBe('Validating the Android release build.');
   });
 
+  it('falls back to the active enabled provider when consolidationProvider is unset', async () => {
+    useSettingsStore.setState({
+      consolidationProvider: '',
+      activeProviderId: 'provider-active',
+      providers: [
+        {
+          id: 'provider-active',
+          name: 'OpenAI',
+          baseUrl: 'https://api.openai.com/v1',
+          apiKey: '',
+          model: 'gpt-4o-mini',
+          enabled: true,
+        },
+      ],
+    } as any);
+    mockSendMessage.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              new_facts: [],
+              active_focus: 'Validating the Android release build.',
+              open_threads: ['Validate the Android release build'],
+              notable: [],
+            }),
+          },
+        },
+      ],
+    });
+
+    const result = await recordCompletedTurnForMemory({
+      threadId: 'conv-provider-fallback',
+      threadTitle: 'Release hardening',
+      messages,
+      now: 10,
+    });
+
+    expect(result.dirty.marked).toBe(true);
+    expect(result.consolidation?.ran).toBe(true);
+    expect(mockSendMessage).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps chat-safe heuristic memory and advances the cursor when provider extraction fails', async () => {
     useSettingsStore.setState({
       consolidationProvider: 'provider-1',

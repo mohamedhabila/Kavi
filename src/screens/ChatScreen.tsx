@@ -2504,6 +2504,21 @@ export const ChatScreen: React.FC = () => {
     [getOrCreateCanonicalThread, resolveConversationStartDefaults, systemPrompt, t],
   );
 
+  const recordConversationTurnMemory = useCallback((conversationId: string) => {
+    const latestConversation = useChatStore
+      .getState()
+      .conversations.find((candidate) => candidate.id === conversationId);
+    if (!latestConversation) {
+      return;
+    }
+
+    void recordCompletedTurnForMemory({
+      threadId: conversationId,
+      messages: latestConversation.messages,
+      threadTitle: latestConversation.title,
+    }).catch(() => undefined);
+  }, []);
+
   useEffect(() => {
     if (activeConversationId) {
       return;
@@ -2688,6 +2703,7 @@ export const ChatScreen: React.FC = () => {
             run.userMessageId,
           );
           if (hasDeliveredFinalAssistantResponse(conversation.messages, run.userMessageId)) {
+            recordConversationTurnMemory(params.conversationId);
             return existingPreview;
           }
 
@@ -2748,6 +2764,8 @@ export const ChatScreen: React.FC = () => {
                 detail: preview,
                 timestamp: deliveredTimestamp,
               });
+
+              recordConversationTurnMemory(params.conversationId);
 
               return preview;
             }
@@ -2912,6 +2930,8 @@ export const ChatScreen: React.FC = () => {
             timestamp: deliveredTimestamp,
           });
 
+          recordConversationTurnMemory(params.conversationId);
+
           return preview;
         } finally {
           operation.dispose();
@@ -2932,6 +2952,7 @@ export const ChatScreen: React.FC = () => {
       updateMessage,
       updateMessageAssistantMetadata,
       updateMessageProviderReplay,
+      recordConversationTurnMemory,
     ],
   );
 
@@ -4747,11 +4768,7 @@ export const ChatScreen: React.FC = () => {
                   .getState()
                   .conversations.find((candidate) => candidate.id === convId);
                 if (latestConversationForMemory) {
-                  void recordCompletedTurnForMemory({
-                    threadId: convId,
-                    messages: latestConversationForMemory.messages,
-                    threadTitle: latestConversationForMemory.title,
-                  }).catch(() => undefined);
+                  recordConversationTurnMemory(convId);
                 }
               }
             }
