@@ -278,7 +278,7 @@ export const en: TranslationMap = {
     apiKey: 'API Key',
     apiKeyPlaceholder: 'sk-…',
     defaultModel: 'Default Model',
-    defaultModelPlaceholder: 'gpt-5.4',
+    defaultModelPlaceholder: 'gpt-5.5',
     onDeviceProviderTitle: 'On-device Gemma',
     onDeviceProviderHint:
       'Download a supported on-device Gemma model to this device before saving the provider. Kavi then uses the native runtime instead of a remote HTTP API.',
@@ -1381,7 +1381,7 @@ export const en: TranslationMap = {
     enterApiKey: 'Enter {provider} API Key',
     providerNamePlaceholder: 'Provider name (e.g. My OpenAI)',
     baseUrlPlaceholder: 'Base URL (e.g. https://api.openai.com/v1)',
-    modelPlaceholder: 'Model (e.g. gpt-5.4)',
+    modelPlaceholder: 'Model (e.g. gpt-5.5)',
     apiKeyPlaceholder: 'sk-...',
     saveFailed: 'Failed to save securely. Please try again.',
     saving: 'Saving...',

@@ -271,7 +271,7 @@ export const ar: TranslationMap = mergeTranslations(en, {
     apiKey: 'مفتاح API',
     apiKeyPlaceholder: 'sk-…',
     defaultModel: 'النموذج الافتراضي',
-    defaultModelPlaceholder: 'gpt-5.4',
+    defaultModelPlaceholder: 'gpt-5.5',
     onDeviceProviderTitle: 'Gemma على الجهاز',
     onDeviceProviderHint:
       'نزّل نموذج Gemma متوافقاً إلى هذا الجهاز قبل حفظ المزود. بعد ذلك سيستخدم Kavi المحرك الأصلي بدلاً من واجهة HTTP بعيدة.',
@@ -1328,7 +1328,7 @@ export const ar: TranslationMap = mergeTranslations(en, {
     enterApiKey: 'أدخل مفتاح API لـ {provider}',
     providerNamePlaceholder: 'اسم المزود (مثلاً My OpenAI)',
     baseUrlPlaceholder: 'الرابط الأساسي (مثلاً https://api.openai.com/v1)',
-    modelPlaceholder: 'النموذج (مثلاً gpt-5.4)',
+    modelPlaceholder: 'النموذج (مثلاً gpt-5.5)',
     apiKeyPlaceholder: 'sk-...',
     saveFailed: 'فشل الحفظ بشكل آمن. يرجى المحاولة مرة أخرى.',
     saving: 'جارٍ الحفظ…',

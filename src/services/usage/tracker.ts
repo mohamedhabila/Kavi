@@ -42,8 +42,9 @@ type CacheUsageSummary = {
 };
 
 const COST_TABLE: Record<string, ModelCostRates> = {
+  'gpt-5.5': { input: 5, output: 30, cacheRead: 0.5 },
   'gpt-5.4': { input: 2.5, output: 15 },
-  'gpt-5.4-mini': { input: 0.75, output: 4.5 },
+  'gpt-5.4-mini': { input: 0.75, output: 4.5, cacheRead: 0.075 },
   'gpt-5-mini': { input: 0.25, output: 2 },
   'o1': { input: 15, output: 60 },
   'o3': { input: 2, output: 8 },
@@ -51,11 +52,13 @@ const COST_TABLE: Record<string, ModelCostRates> = {
   'claude-opus-4-7': { input: 5, output: 25 },
   'claude-sonnet-4-6': { input: 3, output: 15 },
   'claude-haiku-4-5': { input: 1, output: 5 },
+  'gemini-3.5-flash': { input: 1.5, output: 9, cacheRead: 0.15 },
   'gemini-3.1-pro-preview': {
     promptThreshold: 200_000,
     standard: { input: 2, output: 12, cacheRead: 0.2 },
     largePrompt: { input: 4, output: 18, cacheRead: 0.4 },
   },
+  'gemini-3.1-flash-lite': { input: 0.25, output: 1.5, cacheRead: 0.025 },
   'gemini-3-flash-preview': { input: 0.5, output: 3, cacheRead: 0.05 },
   'gemini-2.5-pro': {
     promptThreshold: 200_000,
@@ -466,6 +469,64 @@ function resolveCostRates(model: string, inputTokens: number): FlatCostRates | u
     }
 
     return rates;
+  }
+
+  // Keep cost estimates stable for unseen model revisions by falling back
+  // to family-level rates when an exact table entry is missing.
+  if (lower.includes('gpt-5')) {
+    if (lower.includes('mini') || lower.includes('nano')) {
+      return COST_TABLE['gpt-5.4-mini'] as FlatCostRates;
+    }
+    if (lower.includes('5.5')) {
+      return COST_TABLE['gpt-5.5'] as FlatCostRates;
+    }
+    return COST_TABLE['gpt-5.4'] as FlatCostRates;
+  }
+
+  if (lower === 'o4' || lower.startsWith('o4-')) {
+    return COST_TABLE['o4-mini'] as FlatCostRates;
+  }
+
+  if (lower.includes('claude-opus-4')) {
+    return COST_TABLE['claude-opus-4-7'] as FlatCostRates;
+  }
+
+  if (lower.includes('claude-sonnet-4')) {
+    return COST_TABLE['claude-sonnet-4-6'] as FlatCostRates;
+  }
+
+  if (lower.includes('claude-haiku-4')) {
+    return COST_TABLE['claude-haiku-4-5'] as FlatCostRates;
+  }
+
+  if (lower.includes('gemini-3.5-flash')) {
+    return COST_TABLE['gemini-3.5-flash'] as FlatCostRates;
+  }
+
+  if (lower.includes('gemini-3') && lower.includes('pro')) {
+    const rates = COST_TABLE['gemini-3.1-pro-preview'] as TieredCostRates;
+    return inputTokens > rates.promptThreshold ? rates.largePrompt : rates.standard;
+  }
+
+  if (lower.includes('gemini-3.1-flash-lite')) {
+    return COST_TABLE['gemini-3.1-flash-lite'] as FlatCostRates;
+  }
+
+  if (lower.includes('gemini-3') && lower.includes('flash')) {
+    return COST_TABLE['gemini-3-flash-preview'] as FlatCostRates;
+  }
+
+  if (lower.includes('gemini-2.5-pro')) {
+    const rates = COST_TABLE['gemini-2.5-pro'] as TieredCostRates;
+    return inputTokens > rates.promptThreshold ? rates.largePrompt : rates.standard;
+  }
+
+  if (lower.includes('gemini-2.5-flash-lite')) {
+    return COST_TABLE['gemini-2.5-flash-lite'] as FlatCostRates;
+  }
+
+  if (lower.includes('gemini-2.5-flash')) {
+    return COST_TABLE['gemini-2.5-flash'] as FlatCostRates;
   }
 
   return undefined;

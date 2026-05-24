@@ -271,7 +271,7 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     apiKey: 'API 密钥',
     apiKeyPlaceholder: 'sk-…',
     defaultModel: '默认模型',
-    defaultModelPlaceholder: 'gpt-5.4',
+    defaultModelPlaceholder: 'gpt-5.5',
     onDeviceProviderTitle: '设备端 Gemma',
     onDeviceProviderHint:
       '请先将兼容的 Gemma 模型下载到此设备，再保存该提供商。之后 Kavi 会使用原生运行时，而不是远程 HTTP API。',
@@ -1313,7 +1313,7 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     enterApiKey: '输入 {provider} API 密钥',
     providerNamePlaceholder: '提供商名称（例如 My OpenAI）',
     baseUrlPlaceholder: '基础 URL（例如 https://api.openai.com/v1）',
-    modelPlaceholder: '模型（例如 gpt-5.4）',
+    modelPlaceholder: '模型（例如 gpt-5.5）',
     apiKeyPlaceholder: 'sk-...',
     saveFailed: '安全保存失败，请重试。',
     saving: '保存中…',

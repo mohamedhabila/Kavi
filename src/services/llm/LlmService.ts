@@ -2913,7 +2913,7 @@ export class LlmService {
       ? thinking.type.toLowerCase()
       : '';
 
-    if (lower.includes('claude-opus-4-6')) {
+    if (/claude-opus-4(?:[.-]|$)/.test(lower)) {
       return false;
     }
 
@@ -3626,7 +3626,11 @@ export class LlmService {
 
     // Anthropic doesn't have a /models list endpoint — return known models
     if (this.isAnthropicProvider()) {
-      const models = ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5'];
+      const models = [
+        'claude-opus-4-7',
+        'claude-sonnet-4-6',
+        'claude-haiku-4-5',
+      ];
       for (const model of models) {
         capabilities[model] = { vision: true, tools: true, fileInput: true };
       }

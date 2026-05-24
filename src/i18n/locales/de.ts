@@ -274,7 +274,7 @@ export const de: TranslationMap = mergeTranslations(en, {
     apiKey: 'API-Schlüssel',
     apiKeyPlaceholder: 'sk-…',
     defaultModel: 'Standardmodell',
-    defaultModelPlaceholder: 'gpt-5.4',
+    defaultModelPlaceholder: 'gpt-5.5',
     onDeviceProviderTitle: 'Gemma auf dem Gerät',
     onDeviceProviderHint:
       'Laden Sie ein unterstütztes Gemma-Modell auf dieses Gerät herunter, bevor Sie den Anbieter speichern. Anschließend verwendet Kavi die native Laufzeit statt einer entfernten HTTP-API.',
@@ -1365,7 +1365,7 @@ export const de: TranslationMap = mergeTranslations(en, {
     enterApiKey: '{provider} API-Schlüssel eingeben',
     providerNamePlaceholder: 'Anbietername (z.B. My OpenAI)',
     baseUrlPlaceholder: 'Basis-URL (z.B. https://api.openai.com/v1)',
-    modelPlaceholder: 'Modell (z.B. gpt-5.4)',
+    modelPlaceholder: 'Modell (z.B. gpt-5.5)',
     apiKeyPlaceholder: 'sk-...',
     saveFailed: 'Sicheres Speichern fehlgeschlagen. Bitte versuchen Sie es erneut.',
     saving: 'Speichern…',

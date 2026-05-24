@@ -136,6 +136,11 @@ describe('shouldEnablePromptCaching', () => {
     expect(shouldEnablePromptCaching('claude-sonnet-4-6', 2048, 'anthropic')).toBe(true);
   });
 
+  it('uses the Anthropic Sonnet 4.x 2048-token floor for Sonnet aliases', () => {
+    expect(shouldEnablePromptCaching('claude-sonnet-4-6-latest', 2047, 'anthropic')).toBe(false);
+    expect(shouldEnablePromptCaching('claude-sonnet-4-6-latest', 2048, 'anthropic')).toBe(true);
+  });
+
   it('uses the Anthropic Opus 4.6 and Haiku 4.5 4096-token floor', () => {
     expect(shouldEnablePromptCaching('claude-opus-4-6', 4095, 'anthropic')).toBe(false);
     expect(shouldEnablePromptCaching('claude-opus-4-6', 4096, 'anthropic')).toBe(true);

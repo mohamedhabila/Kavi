@@ -201,6 +201,13 @@ describe('Usage Tracker', () => {
       expect(cost).toBeGreaterThan(0);
     });
 
+    it('estimates cost for newly listed model revisions', () => {
+      const openAiCost = estimateCost('gpt-5.5', 1000, 500);
+      const anthropicCost = estimateCost('claude-opus-4-7', 1000, 500);
+      expect(openAiCost).toBeGreaterThan(0);
+      expect(anthropicCost).toBeGreaterThan(0);
+    });
+
     it('uses Gemini 2.5 Pro standard pricing for prompts at or below 200k tokens', () => {
       const cost = estimateCost('gemini-2.5-pro', 1000, 500);
       expect(cost).toBeCloseTo((1000 * 1.25 + 500 * 10) / 1_000_000, 10);
@@ -209,6 +216,11 @@ describe('Usage Tracker', () => {
     it('uses Gemini 3.1 Pro large-prompt pricing above 200k tokens', () => {
       const cost = estimateCost('google/gemini-3.1-pro-preview', 250_000, 10_000);
       expect(cost).toBeCloseTo((250_000 * 4 + 10_000 * 18) / 1_000_000, 10);
+    });
+
+    it('uses Gemini 3.5 Flash pricing for current stable flash model', () => {
+      const cost = estimateCost('google/gemini-3.5-flash', 250_000, 10_000);
+      expect(cost).toBeCloseTo((250_000 * 1.5 + 10_000 * 9) / 1_000_000, 10);
     });
 
     it('discounts Gemini cached tokens instead of billing them at the full input rate', () => {

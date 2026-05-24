@@ -75,14 +75,16 @@ const PROMPT_CACHE_KEY_LABEL_MAX_LENGTH = 24;
 const PROMPT_CACHE_KEY_PREFIX = 'cm';
 
 const ECONOMY_MODEL_CANDIDATES: Record<string, string[]> = {
+  'gpt-5.5': ['gpt-5.4-mini', 'gpt-5-mini'],
   'gpt-5.4': ['gpt-5.4-mini', 'gpt-5-mini'],
   'gpt-5.2': ['gpt-5-mini'],
   'gpt-5.1': ['gpt-5.1-codex-mini', 'gpt-5-mini'],
   'claude-opus-4-7': ['claude-sonnet-4-6', 'claude-haiku-4-5'],
   'claude-sonnet-4-6': ['claude-haiku-4-5'],
   'claude-sonnet-4-5': ['claude-haiku-4-5'],
+  'gemini-3.5-flash': ['gemini-3.1-flash-lite', 'gemini-2.5-flash-lite'],
   'gemini-2.5-pro': ['gemini-2.5-flash', 'gemini-2.5-flash-lite'],
-  'gemini-3.1-pro-preview': ['gemini-3-flash-preview', 'gemini-2.5-flash'],
+  'gemini-3.1-pro-preview': ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'],
   'o3': ['o4-mini'],
 };
 
@@ -396,6 +398,8 @@ function getPromptCachingThreshold(model: string, providerId?: string): number {
       return 4096;
     }
     if (
+      lowerModel.includes('gemini-3.5-flash') ||
+      lowerModel.includes('gemini-3.1-flash-lite') ||
       lowerModel.includes('gemini-3-flash') ||
       lowerModel.includes('gemini-2.5-flash') ||
       lowerModel.includes('gemini-2.5-flash-lite')
@@ -412,13 +416,13 @@ function getPromptCachingThreshold(model: string, providerId?: string): number {
   }
 
   if (lowerProvider.includes('anthropic') || lowerModel.includes('claude')) {
-    if (lowerModel.includes('claude-opus-4-7') || lowerModel.includes('claude-opus-4-6')) {
+    if (lowerModel.includes('claude-opus-4')) {
       return 4096;
     }
-    if (lowerModel.includes('claude-haiku-4-5')) {
+    if (lowerModel.includes('claude-haiku-4')) {
       return 4096;
     }
-    if (lowerModel.includes('claude-sonnet-4-6')) {
+    if (lowerModel.includes('claude-sonnet-4')) {
       return 2048;
     }
     if (lowerModel.includes('claude-haiku-3')) {

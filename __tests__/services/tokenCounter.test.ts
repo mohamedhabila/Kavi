@@ -75,6 +75,12 @@ describe('getContextWindow', () => {
     expect(getContextWindow('gpt-5.4')).toBe(1000000);
   });
 
+  it('resolves newer family revisions through fallback heuristics', () => {
+    expect(getContextWindow('gpt-5.5')).toBe(1000000);
+    expect(getContextWindow('claude-sonnet-4-6-latest')).toBe(1000000);
+    expect(getContextWindow('gemini-3.5-flash')).toBe(1000000);
+  });
+
   it('returns prefix match', () => {
     expect(getContextWindow('claude-sonnet-4-6-latest')).toBe(1000000);
   });

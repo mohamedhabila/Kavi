@@ -272,7 +272,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
     apiKey: 'API キー',
     apiKeyPlaceholder: 'sk-…',
     defaultModel: 'デフォルトモデル',
-    defaultModelPlaceholder: 'gpt-5.4',
+    defaultModelPlaceholder: 'gpt-5.5',
     onDeviceProviderTitle: 'オンデバイス Gemma',
     onDeviceProviderHint:
       'このプロバイダーを保存する前に、対応する Gemma モデルをこの端末へダウンロードしてください。その後、Kavi はリモート HTTP API ではなくネイティブランタイムを使用します。',
@@ -1346,7 +1346,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
     enterApiKey: '{provider} API キーを入力',
     providerNamePlaceholder: 'プロバイダー名（例：My OpenAI）',
     baseUrlPlaceholder: 'ベース URL（例：https://api.openai.com/v1）',
-    modelPlaceholder: 'モデル（例：gpt-5.4）',
+    modelPlaceholder: 'モデル（例：gpt-5.5）',
     apiKeyPlaceholder: 'sk-...',
     saveFailed: '安全な保存に失敗しました。もう一度お試しください。',
     saving: '保存中…',

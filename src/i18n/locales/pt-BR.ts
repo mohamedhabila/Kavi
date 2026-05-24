@@ -273,7 +273,7 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     apiKey: 'Chave API',
     apiKeyPlaceholder: 'sk-…',
     defaultModel: 'Modelo padrão',
-    defaultModelPlaceholder: 'gpt-5.4',
+    defaultModelPlaceholder: 'gpt-5.5',
     onDeviceProviderTitle: 'Gemma no dispositivo',
     onDeviceProviderHint:
       'Baixe um modelo Gemma compatível para este dispositivo antes de salvar o provedor. Depois disso, o Kavi usará o runtime nativo em vez de uma API HTTP remota.',
@@ -1359,7 +1359,7 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     enterApiKey: 'Insira a chave API do {provider}',
     providerNamePlaceholder: 'Nome do provedor (ex. My OpenAI)',
     baseUrlPlaceholder: 'URL base (ex. https://api.openai.com/v1)',
-    modelPlaceholder: 'Modelo (ex. gpt-5.4)',
+    modelPlaceholder: 'Modelo (ex. gpt-5.5)',
     apiKeyPlaceholder: 'sk-...',
     saveFailed: 'Falha ao salvar com segurança. Tente novamente.',
     saving: 'Salvando…',

@@ -48,6 +48,7 @@ export function estimateMessageTokens(messages: Array<{ role: string; content: s
 
 // Model context window sizes (in tokens)
 export const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
+  'gpt-5.5': 1000000,
   'gpt-5.4': 1000000,
   'gpt-5.4-mini': 400000,
   'gpt-5-mini': 400000,
@@ -56,10 +57,13 @@ export const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
   'claude-opus-4-7': 1000000,
   'claude-sonnet-4-6': 1000000,
   'claude-haiku-4-5': 200000,
+  'gemini-3.5-flash': 1000000,
   'gemini-3.1-pro-preview': 1000000,
+  'gemini-3.1-flash-lite': 1000000,
   'gemini-3-flash-preview': 1000000,
   'gemini-2.5-pro': 1000000,
   'gemini-2.5-flash': 1000000,
+  'gemini-2.5-flash-lite': 1000000,
   'llama4': 256000,
   'qwen3': 128000,
   'mistral-large-3': 128000,
@@ -75,6 +79,27 @@ export function getContextWindow(model: string): number {
   const lower = model.toLowerCase();
   for (const [key, window] of Object.entries(MODEL_CONTEXT_WINDOWS)) {
     if (lower.includes(key.toLowerCase())) return window;
+  }
+
+  // Family-level fallback so newer minor revisions inherit safe defaults.
+  if (lower.includes('gpt-5')) {
+    return lower.includes('mini') ? 400000 : 1000000;
+  }
+
+  if (lower === 'o3' || lower.startsWith('o3-') || lower.includes('o4')) {
+    return 200000;
+  }
+
+  if (lower.includes('claude-opus-4') || lower.includes('claude-sonnet-4')) {
+    return 1000000;
+  }
+
+  if (lower.includes('claude-haiku-4')) {
+    return 200000;
+  }
+
+  if (lower.includes('gemini') && (lower.includes('pro') || lower.includes('flash') || lower.includes('lite'))) {
+    return 1000000;
   }
 
   // Default
