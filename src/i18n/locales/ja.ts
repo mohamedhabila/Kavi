@@ -1211,6 +1211,13 @@ export const ja: TranslationMap = mergeTranslations(en, {
     expoSubmitIos: 'iOS を提出',
     expoDeployWeb: 'Web をデプロイ',
     expoPublishUpdate: 'アップデートを公開',
+    expoWorkflowBranchPromptTitle: 'ワークフローブランチを選択',
+    expoWorkflowBranchPromptBody:
+      '{actionLabel} を実行する前に、.eas/workflows ファイルを含むブランチを選択してください。',
+    expoWorkflowBranchLabel: 'ワークフローブランチ',
+    expoWorkflowBranchPlaceholder: 'main',
+    expoWorkflowBranchRequired: 'ワークフローブランチは必須です。',
+    expoWorkflowRunAction: 'アクションを実行',
     expoCheckSetup: '設定を確認',
     jobStatusWaitingApproval: '承認待ち',
     webviewUnavailableTitle: 'WebView を利用できません',

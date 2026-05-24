@@ -96,6 +96,7 @@ import {
   getExpoProjectExecutionMode,
   getExpoProjectReadiness,
   getExpoProjectReadinessLabel,
+  getExpoRecommendedWorkflowBranch,
   probeExpoProject,
   runExpoProjectAction,
   syncExpoAccountProjects,
@@ -146,6 +147,7 @@ type BrowserProbeMap = Record<string, BrowserProviderProbeResult | undefined>;
 type ExpoProbeMap = Record<string, { ok: boolean; message: string; checkedAt: number } | undefined>;
 type PendingMap = Record<string, boolean | undefined>;
 type ConfigSurface = 'workspace' | 'ssh' | 'browser' | 'expo' | 'mcp';
+type ExpoActionType = 'build' | 'update' | 'submit' | 'deploy-web';
 
 const EMPTY_WORKSPACE_TARGETS: WorkspaceTargetConfig[] = [];
 const EMPTY_SSH_TARGETS: SshTargetConfig[] = [];
@@ -242,6 +244,14 @@ const RemoteWorkScreenInner: React.FC = () => {
   const [pendingExpoChecks, setPendingExpoChecks] = useState<PendingMap>({});
   const [pendingBrowserLaunches, setPendingBrowserLaunches] = useState<PendingMap>({});
   const [pendingExpoActions, setPendingExpoActions] = useState<PendingMap>({});
+  const [expoWorkflowPrompt, setExpoWorkflowPrompt] = useState<null | {
+    projectId: string;
+    action: ExpoActionType;
+    overrides?: {
+      platform?: 'android' | 'ios' | 'all';
+    };
+    workflowRef: string;
+  }>(null);
   const [openingShellTargetId, setOpeningShellTargetId] = useState<string | null>(null);
   const [workspaceSessionError, setWorkspaceSessionError] = useState<string | null>(null);
   const [mcpStatuses, setMcpStatuses] = useState<McpServerStatus[]>(() =>
@@ -751,13 +761,14 @@ const RemoteWorkScreenInner: React.FC = () => {
     setPendingExpoChecks((current) => ({ ...current, [project.id]: false }));
   }, []);
 
-  const handleRunExpoAction = useCallback(
+  const runExpoActionNow = useCallback(
     async (
       project: ExpoProjectConfig,
-      action: 'build' | 'update' | 'submit' | 'deploy-web',
+      action: ExpoActionType,
       overrides?: {
         platform?: 'android' | 'ios' | 'all';
       },
+      workflowRef?: string,
     ) => {
       const pendingKey = `${project.id}:${action}`;
       setPendingExpoActions((current) => ({ ...current, [pendingKey]: true }));
@@ -772,6 +783,7 @@ const RemoteWorkScreenInner: React.FC = () => {
               : action === 'deploy-web'
                 ? { alias: 'production' }
                 : { message: `Triggered from Remote Work for ${project.name}` },
+            ...(workflowRef ? { workflowRef } : {}),
         );
       } catch (error) {
         Alert.alert(
@@ -784,6 +796,80 @@ const RemoteWorkScreenInner: React.FC = () => {
     },
     [t],
   );
+
+  const getExpoActionLabel = useCallback(
+    (
+      action: ExpoActionType,
+      overrides?: {
+        platform?: 'android' | 'ios' | 'all';
+      },
+    ) => {
+      if (action === 'build') {
+        if (overrides?.platform === 'ios') {
+          return t('remoteWork.expoBuildIos');
+        }
+        return t('remoteWork.expoBuildAndroid');
+      }
+      if (action === 'submit') {
+        return t('remoteWork.expoSubmitIos');
+      }
+      if (action === 'deploy-web') {
+        return t('remoteWork.expoDeployWeb');
+      }
+      return t('remoteWork.expoPublishUpdate');
+    },
+    [t],
+  );
+
+  const handleRunExpoAction = useCallback(
+    (
+      project: ExpoProjectConfig,
+      action: ExpoActionType,
+      overrides?: {
+        platform?: 'android' | 'ios' | 'all';
+      },
+    ) => {
+      const account = expoAccounts.find((entry) => entry.id === project.accountId);
+      const mode = getExpoProjectExecutionMode(project, account);
+      if (mode !== 'direct-ssh') {
+        setExpoWorkflowPrompt({
+          projectId: project.id,
+          action,
+          overrides,
+          workflowRef: getExpoRecommendedWorkflowBranch(project),
+        });
+        return;
+      }
+      void runExpoActionNow(project, action, overrides);
+    },
+    [expoAccounts, runExpoActionNow],
+  );
+
+  const handleConfirmExpoWorkflowPrompt = useCallback(() => {
+    if (!expoWorkflowPrompt) {
+      return;
+    }
+    const project = expoProjects.find((entry) => entry.id === expoWorkflowPrompt.projectId);
+    if (!project) {
+      setExpoWorkflowPrompt(null);
+      Alert.alert(t('common.error'), t('remoteWork.expoActionFailed'));
+      return;
+    }
+
+    const workflowRef = expoWorkflowPrompt.workflowRef
+      .trim()
+      .replace(/^refs\/heads\//i, '')
+      .replace(/^heads\//i, '')
+      .replace(/^origin\//i, '');
+    if (!workflowRef) {
+      Alert.alert(t('common.error'), t('remoteWork.expoWorkflowBranchRequired'));
+      return;
+    }
+
+    const { action, overrides } = expoWorkflowPrompt;
+    setExpoWorkflowPrompt(null);
+    void runExpoActionNow(project, action, overrides, workflowRef);
+  }, [expoProjects, expoWorkflowPrompt, runExpoActionNow, t]);
 
   const handleStopBrowser = useCallback(
     async (session: RemoteSessionRecord) => {
@@ -3056,6 +3142,58 @@ const RemoteWorkScreenInner: React.FC = () => {
       />
 
       <Modal
+        visible={Boolean(expoWorkflowPrompt)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setExpoWorkflowPrompt(null)}
+      >
+        <View style={styles.promptBackdrop}>
+          <View style={styles.promptCard}>
+            <Text style={styles.promptTitle}>{t('remoteWork.expoWorkflowBranchPromptTitle')}</Text>
+            <Text style={styles.promptBody}>
+              {t('remoteWork.expoWorkflowBranchPromptBody', {
+                actionLabel: expoWorkflowPrompt
+                  ? getExpoActionLabel(expoWorkflowPrompt.action, expoWorkflowPrompt.overrides)
+                  : t('remoteWork.expoBuildAndroid'),
+              })}
+            </Text>
+            <Text style={styles.detailLabel}>{t('remoteWork.expoWorkflowBranchLabel')}</Text>
+            <TextInput
+              value={expoWorkflowPrompt?.workflowRef || ''}
+              onChangeText={(value) =>
+                setExpoWorkflowPrompt((current) =>
+                  current ? { ...current, workflowRef: value } : current,
+                )
+              }
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder={t('remoteWork.expoWorkflowBranchPlaceholder')}
+              placeholderTextColor={colors.textTertiary}
+              style={styles.promptInput}
+            />
+            <View style={styles.promptActions}>
+              <TouchableOpacity
+                style={styles.secondaryBtn}
+                onPress={() => setExpoWorkflowPrompt(null)}
+                accessibilityRole="button"
+                accessibilityLabel={t('common.cancel')}
+              >
+                <Text style={styles.secondaryBtnText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                onPress={handleConfirmExpoWorkflowPrompt}
+                accessibilityRole="button"
+                accessibilityLabel={t('remoteWork.expoWorkflowRunAction')}
+              >
+                <Text style={styles.primaryBtnText}>{t('remoteWork.expoWorkflowRunAction')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
         visible={Boolean(activeWorkspaceSession)}
         animationType="slide"
         onRequestClose={() => setActiveWorkspaceSession(null)}
@@ -3883,6 +4021,44 @@ const createStyles = (colors: AppPalette) =>
     sessionHint: {
       fontSize: 12,
       color: colors.textSecondary,
+    },
+    promptBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.45)',
+      justifyContent: 'center',
+      padding: 20,
+    },
+    promptCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 16,
+      gap: 12,
+    },
+    promptTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: colors.text,
+    },
+    promptBody: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      lineHeight: 18,
+    },
+    promptInput: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      color: colors.text,
+      backgroundColor: colors.panel,
+    },
+    promptActions: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      gap: 10,
     },
     configDivider: {
       height: 1,

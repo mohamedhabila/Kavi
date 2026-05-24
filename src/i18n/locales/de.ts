@@ -1230,6 +1230,13 @@ export const de: TranslationMap = mergeTranslations(en, {
     expoSubmitIos: 'iOS einreichen',
     expoDeployWeb: 'Web deployen',
     expoPublishUpdate: 'Update veroeffentlichen',
+    expoWorkflowBranchPromptTitle: 'Workflow-Branch waehlen',
+    expoWorkflowBranchPromptBody:
+      'Waehle den Branch mit deinen .eas/workflows-Dateien, bevor du {actionLabel} startest.',
+    expoWorkflowBranchLabel: 'Workflow-Branch',
+    expoWorkflowBranchPlaceholder: 'main',
+    expoWorkflowBranchRequired: 'Workflow-Branch ist erforderlich.',
+    expoWorkflowRunAction: 'Aktion ausfuehren',
     expoCheckSetup: 'Setup pruefen',
     jobStatusWaitingApproval: 'Wartet auf Freigabe',
     webviewUnavailableTitle: 'WebView nicht verfuegbar',

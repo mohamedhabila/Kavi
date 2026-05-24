@@ -1181,6 +1181,13 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     expoSubmitIos: '提交 iOS',
     expoDeployWeb: '部署 Web',
     expoPublishUpdate: '发布更新',
+    expoWorkflowBranchPromptTitle: '选择工作流分支',
+    expoWorkflowBranchPromptBody:
+      '运行 {actionLabel} 之前，请选择包含 .eas/workflows 文件的分支。',
+    expoWorkflowBranchLabel: '工作流分支',
+    expoWorkflowBranchPlaceholder: 'main',
+    expoWorkflowBranchRequired: '必须填写工作流分支。',
+    expoWorkflowRunAction: '运行操作',
     expoCheckSetup: '检查配置',
     jobStatusWaitingApproval: '等待批准',
     webviewUnavailableTitle: 'WebView 不可用',

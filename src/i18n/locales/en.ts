@@ -1237,6 +1237,13 @@ export const en: TranslationMap = {
     expoSubmitIos: 'Submit iOS',
     expoDeployWeb: 'Deploy Web',
     expoPublishUpdate: 'Publish Update',
+    expoWorkflowBranchPromptTitle: 'Choose workflow branch',
+    expoWorkflowBranchPromptBody:
+      'Select the branch that contains your .eas/workflows files before running {actionLabel}.',
+    expoWorkflowBranchLabel: 'Workflow branch',
+    expoWorkflowBranchPlaceholder: 'main',
+    expoWorkflowBranchRequired: 'Workflow branch is required.',
+    expoWorkflowRunAction: 'Run action',
     expoCheckSetup: 'Check setup',
     jobStatusWaitingApproval: 'Waiting approval',
     webviewUnavailableTitle: 'WebView unavailable',

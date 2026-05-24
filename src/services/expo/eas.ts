@@ -2131,6 +2131,14 @@ function getExpoWorkflowDispatchInputs(
   };
 }
 
+function normalizeExpoWorkflowGitRef(value: string | undefined): string | undefined {
+  const normalized = trimToUndefined(value)
+    ?.replace(/^refs\/heads\//i, '')
+    .replace(/^heads\//i, '')
+    .replace(/^origin\//i, '');
+  return normalized || undefined;
+}
+
 function normalizeWorkflowConclusion(value?: string | null): string | undefined {
   const normalized = trimToUndefined(value)?.toLowerCase();
   if (!normalized) {
@@ -3297,6 +3305,7 @@ async function dispatchGitHubWorkflow(
     platform?: 'android' | 'ios' | 'all';
     profile?: string;
     branch?: string;
+    workflowRef?: string;
     message?: string;
     alias?: string;
     waitForCompletion?: boolean;
@@ -3306,7 +3315,8 @@ async function dispatchGitHubWorkflow(
   const repo = requireGitHubWorkflowRepo(project);
   const workflowFile = requireGitHubWorkflowFile(project);
   const refResolution = await resolveExpoProjectGitRefAsync(project, githubToken);
-  let ref = refResolution.ref;
+  const explicitWorkflowRef = normalizeExpoWorkflowGitRef(args.workflowRef);
+  let ref = explicitWorkflowRef || refResolution.ref;
   const startedAt = Date.now();
 
   let dispatched = false;
@@ -3404,6 +3414,7 @@ async function dispatchExpoWorkflow(
     platform?: 'android' | 'ios' | 'all';
     profile?: string;
     branch?: string;
+    workflowRef?: string;
     message?: string;
     alias?: string;
     waitForCompletion?: boolean;
@@ -3424,12 +3435,13 @@ async function dispatchExpoWorkflow(
 
   const githubToken = await tryResolveProjectGithubToken(hydratedProject);
   const refResolution = await resolveExpoProjectGitRefAsync(hydratedProject, githubToken);
+  const explicitWorkflowRef = normalizeExpoWorkflowGitRef(args.workflowRef);
   const { workflowRevisionId, gitRef } = await resolveExpoWorkflowRevisionFromGitRefsAsync(
     token,
     appId,
     workflowFile,
     getExpoGitRefCandidates({
-      workflowRef: refResolution.ref,
+      workflowRef: explicitWorkflowRef || refResolution.ref,
       repoDefaultBranch: refResolution.repoDefaultBranch,
     }),
   );
@@ -4036,6 +4048,7 @@ export async function runExpoProjectAction(
     platform?: 'android' | 'ios' | 'all';
     profile?: string;
     branch?: string;
+    workflowRef?: string;
     message?: string;
     alias?: string;
     waitForCompletion?: boolean;

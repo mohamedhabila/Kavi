@@ -1179,6 +1179,13 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     expoSubmitIos: '提交 iOS',
     expoDeployWeb: '部署 Web',
     expoPublishUpdate: '發佈更新',
+    expoWorkflowBranchPromptTitle: '選擇工作流程分支',
+    expoWorkflowBranchPromptBody:
+      '執行 {actionLabel} 前，請先選擇包含 .eas/workflows 檔案的分支。',
+    expoWorkflowBranchLabel: '工作流程分支',
+    expoWorkflowBranchPlaceholder: 'main',
+    expoWorkflowBranchRequired: '工作流程分支為必填。',
+    expoWorkflowRunAction: '執行動作',
     expoCheckSetup: '檢查設定',
     jobStatusWaitingApproval: '等待核准',
     webviewUnavailableTitle: 'WebView 無法使用',

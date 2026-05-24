@@ -1196,6 +1196,13 @@ export const ar: TranslationMap = mergeTranslations(en, {
     expoSubmitIos: 'إرسال iOS',
     expoDeployWeb: 'نشر الويب',
     expoPublishUpdate: 'نشر التحديث',
+    expoWorkflowBranchPromptTitle: 'اختر فرع سير العمل',
+    expoWorkflowBranchPromptBody:
+      'حدد الفرع الذي يحتوي على ملفات .eas/workflows قبل تشغيل {actionLabel}.',
+    expoWorkflowBranchLabel: 'فرع سير العمل',
+    expoWorkflowBranchPlaceholder: 'main',
+    expoWorkflowBranchRequired: 'فرع سير العمل مطلوب.',
+    expoWorkflowRunAction: 'تشغيل الإجراء',
     expoCheckSetup: 'التحقق من الإعداد',
     jobStatusWaitingApproval: 'بانتظار الموافقة',
     webviewUnavailableTitle: 'WebView غير متاح',
