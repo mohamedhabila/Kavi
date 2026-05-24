@@ -378,6 +378,16 @@ function isBackgroundWorkerMonitoringToolName(toolName: string): boolean {
   );
 }
 
+function isAsyncOperationMonitoringToolName(toolName: string): boolean {
+  return (
+    toolName === 'expo_eas_workflow_status' ||
+    toolName === 'expo_eas_workflow_wait' ||
+    toolName === 'ssh_background_job_status' ||
+    toolName === 'ssh_background_job_wait' ||
+    toolName === 'wait'
+  );
+}
+
 function getAgentRunPhaseForSubAgentEvent(
   event: 'started' | 'completed' | 'error' | 'cancelled' | 'progress' | 'timeout',
 ): AgentRun['currentPhase'] {
@@ -1805,9 +1815,7 @@ export const ChatScreen: React.FC = () => {
           const targetRun = latestConversation?.agentRuns?.find(
             (candidate) => candidate.id === params.runId,
           );
-          const effectivePendingOperations = targetRun?.pendingAsyncOperations?.length
-            ? targetRun.pendingAsyncOperations
-            : params.pendingOperations;
+          const effectivePendingOperations = targetRun?.pendingAsyncOperations ?? [];
           if (
             !latestConversation ||
             !targetRun ||
@@ -2972,8 +2980,24 @@ export const ChatScreen: React.FC = () => {
       }
 
       for (const run of awaitingRuns) {
-        const { liveSnapshots, mergedSnapshots } = getReviewableSubAgentsForRun(conversation, run);
+        const { liveSnapshots, mergedSnapshots, hasOrphanedRunningSnapshots } =
+          getReviewableSubAgentsForRun(conversation, run);
         if (liveSnapshots.some((agent) => agent.status === 'running')) {
+          continue;
+        }
+
+        if (hasOrphanedRunningSnapshots) {
+          continue;
+        }
+
+        const terminalSnapshotCount = mergedSnapshots.filter(
+          (snapshot) => snapshot.status !== 'running',
+        ).length;
+        const outstandingSpawnedCount = Math.max(
+          0,
+          (run.summary?.spawnedSubAgents ?? 0) - terminalSnapshotCount,
+        );
+        if (outstandingSpawnedCount > 0) {
           continue;
         }
 
@@ -3013,7 +3037,6 @@ export const ChatScreen: React.FC = () => {
           pendingOperations: run.pendingAsyncOperations ?? [],
           timestamp: run.updatedAt,
         });
-        return;
       }
     }
   }, [conversations, isLoading, queueRecoveredAsyncRunResume]);
@@ -3254,6 +3277,8 @@ export const ChatScreen: React.FC = () => {
       let completedToolCount = existingRun?.summary.completedTools ?? 0;
       let failedToolCount = existingRun?.summary.failedTools ?? 0;
       let spawnedSubAgentCount = existingRun?.summary.spawnedSubAgents ?? 0;
+      let latestPendingAsyncOperations: AgentRunAsyncOperation[] =
+        options?.initialPendingAsyncOperations ?? existingRun?.pendingAsyncOperations ?? [];
       const pendingSurfacedSubAgentOutputs = new Map<
         string,
         NonNullable<ReturnType<typeof parseSurfacedSubAgentOutputResult>>
@@ -3334,23 +3359,13 @@ export const ChatScreen: React.FC = () => {
       const clearSurfacedSubAgentOutputLock = () => {
         surfacedSubAgentOutputLock = null;
       };
-      const getRunningBackgroundWorkerCount = () => {
+      const getBackgroundWorkerTrackingState = () => {
         if (!trackedAgentRunId) {
-          return 0;
-        }
-
-        const latestConversation = useChatStore
-          .getState()
-          .conversations.find((candidate) => candidate.id === convId);
-        if (!latestConversation) {
-          return 0;
-        }
-
-        return getRunningLiveSubAgentsForRun(latestConversation, trackedAgentRunId).length;
-      };
-      const getPendingAsyncMonitoringToolNames = () => {
-        if (!trackedAgentRunId) {
-          return new Set<string>();
+          return {
+            runningLiveCount: 0,
+            orphanedRunningCount: 0,
+            outstandingSpawnedCount: Math.max(0, spawnedSubAgentCount),
+          };
         }
 
         const latestConversation = useChatStore
@@ -3359,12 +3374,66 @@ export const ChatScreen: React.FC = () => {
         const targetRun = latestConversation?.agentRuns?.find(
           (candidate) => candidate.id === trackedAgentRunId,
         );
-        if (!targetRun?.pendingAsyncOperations?.length) {
+
+        if (!latestConversation) {
+          return {
+            runningLiveCount: 0,
+            orphanedRunningCount: 0,
+            outstandingSpawnedCount: Math.max(0, spawnedSubAgentCount),
+          };
+        }
+
+        if (!targetRun) {
+          return {
+            runningLiveCount: getRunningLiveSubAgentsForRun(latestConversation, trackedAgentRunId)
+              .length,
+            orphanedRunningCount: 0,
+            outstandingSpawnedCount: Math.max(0, spawnedSubAgentCount),
+          };
+        }
+
+        const { liveSnapshots, mergedSnapshots, hasOrphanedRunningSnapshots } =
+          getReviewableSubAgentsForRun(latestConversation, targetRun);
+        const runningLiveCount = liveSnapshots.filter((snapshot) => snapshot.status === 'running').length;
+        const orphanedRunningCount = hasOrphanedRunningSnapshots
+          ? mergedSnapshots.filter((snapshot) => snapshot.status === 'running').length
+          : 0;
+        const terminalSnapshotCount = mergedSnapshots.filter(
+          (snapshot) => snapshot.status !== 'running',
+        ).length;
+
+        return {
+          runningLiveCount,
+          orphanedRunningCount,
+          outstandingSpawnedCount: Math.max(0, spawnedSubAgentCount - terminalSnapshotCount),
+        };
+      };
+      const getPendingAsyncOperationsForTrackedRun = () => {
+        if (!trackedAgentRunId) {
+          return latestPendingAsyncOperations;
+        }
+
+        const latestConversation = useChatStore
+          .getState()
+          .conversations.find((candidate) => candidate.id === convId);
+        const targetRun = latestConversation?.agentRuns?.find(
+          (candidate) => candidate.id === trackedAgentRunId,
+        );
+
+        if (targetRun?.pendingAsyncOperations?.length) {
+          return targetRun.pendingAsyncOperations;
+        }
+
+        return latestPendingAsyncOperations;
+      };
+      const getPendingAsyncMonitoringToolNames = () => {
+        const pendingOperations = getPendingAsyncOperationsForTrackedRun();
+        if (!pendingOperations.length) {
           return new Set<string>();
         }
 
         return new Set(
-          targetRun.pendingAsyncOperations.flatMap((operation) =>
+          pendingOperations.flatMap((operation) =>
             operation.waitToolName
               ? [...operation.monitorToolNames, operation.waitToolName]
               : operation.monitorToolNames,
@@ -3376,10 +3445,11 @@ export const ChatScreen: React.FC = () => {
           return false;
         }
 
-        if (
-          isBackgroundWorkerMonitoringToolName(toolName) &&
-          getRunningBackgroundWorkerCount() > 0
-        ) {
+        if (isBackgroundWorkerMonitoringToolName(toolName)) {
+          return false;
+        }
+
+        if (isAsyncOperationMonitoringToolName(toolName)) {
           return false;
         }
 
@@ -4123,8 +4193,11 @@ export const ChatScreen: React.FC = () => {
         },
         onPendingAsyncOperationsChange: (operations) => {
           if (!trackedAgentRunId) {
+            latestPendingAsyncOperations = operations;
             return;
           }
+
+          latestPendingAsyncOperations = operations;
 
           const timestamp = Date.now();
           const pendingSummary =
@@ -4467,9 +4540,15 @@ export const ChatScreen: React.FC = () => {
                 failedTools: failedToolCount,
                 spawnedSubAgents: spawnedSubAgentCount,
               });
-              const runningBackgroundWorkerCount = getRunningBackgroundWorkerCount();
+              const workerTrackingState = getBackgroundWorkerTrackingState();
+              const waitingBackgroundWorkerCount = Math.max(
+                workerTrackingState.runningLiveCount,
+                workerTrackingState.orphanedRunningCount,
+                workerTrackingState.outstandingSpawnedCount,
+              );
+              const pendingAsyncOperations = getPendingAsyncOperationsForTrackedRun();
 
-              if (trackedAgentRunId && runningBackgroundWorkerCount > 0) {
+              if (trackedAgentRunId && waitingBackgroundWorkerCount > 0) {
                 const latestConversation = useChatStore
                   .getState()
                   .conversations.find((candidate) => candidate.id === convId);
@@ -4493,7 +4572,11 @@ export const ChatScreen: React.FC = () => {
                   );
                 }
 
-                const waitSummary = buildBackgroundWorkerWaitSummary(runningBackgroundWorkerCount);
+                const waitSummaryBase = buildBackgroundWorkerWaitSummary(waitingBackgroundWorkerCount);
+                const waitSummary =
+                  workerTrackingState.runningLiveCount === 0
+                    ? `${waitSummaryBase} Worker status updates are still propagating.`
+                    : waitSummaryBase;
                 setAgentRunAwaitingBackgroundWorkers(
                   convId,
                   true,
@@ -4509,6 +4592,36 @@ export const ChatScreen: React.FC = () => {
                   level: 'warning',
                   title: 'Background workers still running',
                   detail: `${turnSummary} · ${waitSummary}`,
+                });
+              } else if (trackedAgentRunId && pendingAsyncOperations.length > 0) {
+                const pendingSummary =
+                  buildPendingAsyncOperationSummary(pendingAsyncOperations) ||
+                  'Resuming asynchronous workflow monitoring.';
+
+                setAgentRunPhase(
+                  convId,
+                  'work',
+                  {
+                    status: 'active',
+                    detail: pendingSummary,
+                    checkpointTitle: 'Async monitoring active',
+                    checkpointDetail: pendingSummary,
+                    allowRegression: true,
+                  },
+                  trackedAgentRunId,
+                );
+                updateAgentRunSummary(
+                  convId,
+                  {
+                    latestSummary: pendingSummary,
+                  },
+                  trackedAgentRunId,
+                );
+                appendConversationLog(convId, {
+                  kind: 'state',
+                  level: 'warning',
+                  title: 'Async monitoring still active',
+                  detail: `${turnSummary} · ${pendingSummary}`,
                 });
               } else {
                 let completionStatus: Exclude<AgentRun['status'], 'running'> = 'completed';

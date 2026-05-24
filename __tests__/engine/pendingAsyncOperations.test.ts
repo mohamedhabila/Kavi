@@ -41,6 +41,45 @@ describe('pendingAsyncOperations', () => {
     expect(getPendingTrackedAsyncOperations(trackedOperations)).toHaveLength(0);
   });
 
+  it('starts tracking from sessions_status when no prior spawn event was seen', () => {
+    applyTrackedAsyncToolResult(
+      trackedOperations,
+      'sessions_status',
+      '{"sessionId":"sub-status-first"}',
+      JSON.stringify({ status: 'running', sessionId: 'sub-status-first' }),
+    );
+
+    expect(getPendingTrackedAsyncOperations(trackedOperations)).toEqual([
+      expect.objectContaining({
+        kind: 'session',
+        resourceId: 'sub-status-first',
+        status: 'running',
+      }),
+    ]);
+  });
+
+  it('starts tracking running sessions surfaced by sessions_list without prior entries', () => {
+    applyTrackedAsyncToolResult(
+      trackedOperations,
+      'sessions_list',
+      '{}',
+      JSON.stringify({
+        sessions: [
+          { sessionId: 'sub-list-running', status: 'running' },
+          { sessionId: 'sub-list-complete', status: 'completed' },
+        ],
+      }),
+    );
+
+    expect(getPendingTrackedAsyncOperations(trackedOperations)).toEqual([
+      expect.objectContaining({
+        kind: 'session',
+        resourceId: 'sub-list-running',
+        status: 'running',
+      }),
+    ]);
+  });
+
   it('clears stale tracked session workers when sessions_yield confirms none remain', () => {
     applyTrackedAsyncToolResult(
       trackedOperations,

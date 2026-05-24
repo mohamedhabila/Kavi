@@ -606,21 +606,17 @@ export function applyTrackedAsyncToolResult(
             : fallbackSessionId;
         const status = normalizeSessionStatus(parsedResult?.status);
         if (sessionId && status) {
-          upsertTrackedAsyncOperation(
-            trackedOperations,
-            {
-              kind: 'session',
-              resourceId: sessionId,
-              displayName: `Session ${sessionId}`,
-              status,
-              lastUpdatedByTool: toolName,
-              monitorToolNames: ['sessions_status', 'sessions_wait', 'sessions_cancel'],
-              statusArgs: { sessionId },
-              waitToolName: 'sessions_wait',
-              waitArgs: { sessionId },
-            },
-            { onlyUpdateExisting: true },
-          );
+          upsertTrackedAsyncOperation(trackedOperations, {
+            kind: 'session',
+            resourceId: sessionId,
+            displayName: `Session ${sessionId}`,
+            status,
+            lastUpdatedByTool: toolName,
+            monitorToolNames: ['sessions_status', 'sessions_wait', 'sessions_cancel'],
+            statusArgs: { sessionId },
+            waitToolName: 'sessions_wait',
+            waitArgs: { sessionId },
+          });
         }
         markMissingTrackedSessionFailed(trackedOperations, toolName, toolArguments, toolResult);
         return;
@@ -664,12 +660,7 @@ export function applyTrackedAsyncToolResult(
       }
 
       case 'sessions_list': {
-        updateTrackedSessionsFromSessionCollection(
-          trackedOperations,
-          parsedResult?.sessions,
-          toolName,
-          { onlyUpdateExisting: true },
-        );
+        updateTrackedSessionsFromSessionCollection(trackedOperations, parsedResult?.sessions, toolName);
         return;
       }
     }
