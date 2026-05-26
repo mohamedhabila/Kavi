@@ -6,6 +6,7 @@ import {
   buildInitialWorkflowRouteState,
   resolveWorkflowRouteActivation,
   selectToolNamesForWorkflowRoutePhase,
+  selectToolNamesForWorkflowRouteTurn,
   shouldHoldWorkflowRouteFinalization,
 } from '../../src/engine/routes/agentRoutes';
 import { inferToolCapabilityDescriptor } from '../../src/engine/tools/capabilityRegistry';
@@ -24,6 +25,22 @@ const tools = [
   { name: 'expo_eas_workflow_runs', description: 'List Expo workflow runs.' },
   { name: 'expo_eas_workflow_wait', description: 'Wait for an external workflow run.' },
 ];
+
+function workflowRequirementKey(requirement: {
+  category?: string;
+  capability?: string;
+  resourceKind?: string;
+  evidenceKind?: string;
+  workflowStage?: string;
+}): string {
+  return JSON.stringify({
+    category: requirement.category,
+    capability: requirement.capability,
+    resourceKind: requirement.resourceKind,
+    evidenceKind: requirement.evidenceKind,
+    workflowStage: requirement.workflowStage,
+  });
+}
 
 describe('capability workflow routing', () => {
   it('describes tool adapters with generic workflow stages', () => {
@@ -226,6 +243,60 @@ describe('capability workflow routing', () => {
     expect(selectToolNamesForWorkflowRoutePhase(activation, state, tools)).toEqual([
       'expo_eas_list_projects',
     ]);
+  });
+
+  it('keeps completed mutation tools out of later evidence-gathering turns', () => {
+    const activation = resolveWorkflowRouteActivation({
+      routeMode: 'execution',
+      requiredToolCategories: new Set(['workspace_files', 'github', 'expo']),
+      requiredCapabilities: new Set(),
+      plannedToolNames: new Set(['write_file', 'skill__github__commit_files', 'expo_eas_workflow_wait']),
+      tools,
+    });
+    expect(activation).toBeDefined();
+
+    const state = buildInitialWorkflowRouteState(activation!, 1000);
+    const monitorState = {
+      ...state,
+      currentPhaseId: 'monitor_external_execution',
+      phases: state.phases.map((phase) =>
+        phase.id === 'monitor_external_execution'
+          ? { ...phase, status: 'active' as const }
+          : phase.id === 'await_external_execution' || phase.id === 'verify_evidence'
+            ? { ...phase, status: 'pending' as const }
+            : { ...phase, status: 'completed' as const },
+      ),
+      facts: {
+        completedWorkflowRequirementKeys: activation!.phases
+          .filter((phase) =>
+            [
+              'discover_resource',
+              'inspect_resource',
+              'prepare_artifact',
+              'persist_artifact',
+              'mutate_remote_state',
+            ].includes(phase.id),
+          )
+          .flatMap((phase) => phase.requiredCapabilities.map(workflowRequirementKey)),
+      },
+    };
+
+    const turnTools = selectToolNamesForWorkflowRouteTurn(
+      activation,
+      monitorState,
+      tools,
+      [
+        'write_file',
+        'skill__github__repos',
+        'skill__github__commit_files',
+        'expo_eas_list_projects',
+        'expo_eas_status',
+      ],
+    );
+
+    expect(turnTools).toEqual(expect.arrayContaining(['expo_eas_workflow_runs']));
+    expect(turnTools).not.toContain('skill__github__commit_files');
+    expect(turnTools).not.toContain('write_file');
   });
 
   it('holds finalization while a workflow route still has incomplete phases', () => {

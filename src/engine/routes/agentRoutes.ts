@@ -839,18 +839,77 @@ export function selectToolNamesForWorkflowRoutePhase(
   }
 
   const registry = buildToolCapabilityRegistry(tools);
+  const completedRequirementKeys = readCompletedWorkflowRequirementKeys(state);
+  const outstandingRequirements = currentPhase.requiredCapabilities.filter(
+    (requirement) => !completedRequirementKeys.has(workflowRequirementKey(requirement)),
+  );
   const phaseToolNames = activation.requiredToolNames.filter((toolName) => {
     const descriptor = registry.get(normalizeToolName(toolName));
-    return descriptor?.workflowStages.includes(currentPhase.stage) ?? false;
+    if (!descriptor?.workflowStages.includes(currentPhase.stage)) {
+      return false;
+    }
+
+    if (currentPhase.requiredCapabilities.length === 0) {
+      return true;
+    }
+
+    return outstandingRequirements.some((requirement) =>
+      descriptorSatisfiesRequirement(descriptor, requirement),
+    );
   });
 
   const requirementToolNames = selectToolNamesForCapabilityRequirements(
     tools,
-    currentPhase.requiredCapabilities,
+    outstandingRequirements,
   );
 
   const selected = uniqueStrings([...phaseToolNames, ...requirementToolNames]);
-  return selected.length > 0 ? selected : activation.requiredToolNames;
+  return selected.length > 0 ? selected : [];
+}
+
+export function selectToolNamesForWorkflowRouteTurn(
+  activation: WorkflowRouteActivation | undefined,
+  state: AgentRunRouteState | undefined,
+  tools: ReadonlyArray<Pick<ToolDefinition, 'name' | 'description'>>,
+  observedToolNames?: Iterable<string>,
+): string[] {
+  if (!activation || !state || state.routeId !== activation.routeId || state.status !== 'active') {
+    return [];
+  }
+
+  const phaseToolNames = selectToolNamesForWorkflowRoutePhase(activation, state, tools);
+  if (phaseToolNames.length > 0) {
+    return phaseToolNames;
+  }
+
+  const observed = new Set(
+    Array.from(observedToolNames ?? [])
+      .map((toolName) => normalizeToolName(toolName))
+      .filter(Boolean),
+  );
+  const completedRequirementKeys = readCompletedWorkflowRequirementKeys(state);
+  const outstandingRequirements = activation.phases
+    .filter((phase) => {
+      const routePhase = state.phases.find((candidate) => candidate.id === phase.id);
+      return routePhase?.status === 'active' || routePhase?.status === 'pending';
+    })
+    .flatMap((phase) => phase.requiredCapabilities)
+    .filter((requirement) => !completedRequirementKeys.has(workflowRequirementKey(requirement)));
+  const fallbackToolNames = activation.requiredToolNames.filter((toolName) => {
+    const normalizedToolName = normalizeToolName(toolName);
+    if (!normalizedToolName || observed.has(normalizedToolName)) {
+      return false;
+    }
+    const descriptor = getDescriptorForTool(normalizedToolName, tools);
+    return (
+      descriptorRequiresObservedToolUse(descriptor) &&
+      outstandingRequirements.some((requirement) =>
+        descriptorSatisfiesRequirement(descriptor, requirement),
+      )
+    );
+  });
+
+  return uniqueStrings(fallbackToolNames);
 }
 
 export function buildWorkflowRouteRuntimeGuidance(

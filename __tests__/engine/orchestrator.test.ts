@@ -383,7 +383,7 @@ describe('Orchestrator', () => {
         'Execution-lane guardrails: avoid wildcard or exploratory probes such as text_search("*") and repeated broad list/search loops once execution intent is clear.',
       );
       expect(firstTurnTools.has('expo_eas_list_projects')).toBe(true);
-      expect(firstTurnTools.has('expo_eas_status')).toBe(true);
+      expect(firstTurnTools.has('expo_eas_status')).toBe(false);
       expect(firstTurnTools.has('expo_eas_workflow_status')).toBe(false);
       expect(firstTurnTools.has('file_edit')).toBe(true);
       expect(firstTurnTools.has('text_search')).toBe(false);
@@ -626,9 +626,9 @@ describe('Orchestrator', () => {
 
       expect(systemPromptMessage.content).toContain('## Execution Tool Discipline');
       expect(firstTurnTools.has('expo_eas_list_projects')).toBe(true);
-      expect(firstTurnTools.has('skill__github__commit_files')).toBe(true);
+      expect(firstTurnTools.has('skill__github__commit_files')).toBe(false);
       expect(firstTurnTools.has('expo_eas_deploy_web')).toBe(false);
-      expect(firstTurnTools.has('expo_eas_workflow_wait')).toBe(true);
+      expect(firstTurnTools.has('expo_eas_workflow_wait')).toBe(false);
       expect(firstTurnTools.has('file_edit')).toBe(true);
       expect(firstTurnTools.has('tool_catalog')).toBe(false);
       expect(firstTurnTools.has('web_search')).toBe(false);
@@ -726,9 +726,10 @@ describe('Orchestrator', () => {
       );
 
       expect(firstTurnTools.has('expo_eas_list_projects')).toBe(true);
-      expect(firstTurnTools.has('skill__github__commit_files')).toBe(true);
+      expect(firstTurnTools.has('skill__github__list_files')).toBe(true);
+      expect(firstTurnTools.has('skill__github__commit_files')).toBe(false);
       expect(firstTurnTools.has('expo_eas_deploy_web')).toBe(false);
-      expect(firstTurnTools.has('expo_eas_workflow_wait')).toBe(true);
+      expect(firstTurnTools.has('expo_eas_workflow_wait')).toBe(false);
       expect(firstTurnTools.has('file_edit')).toBe(true);
       expect(firstTurnTools.has('tool_catalog')).toBe(false);
       expect(firstTurnTools.has('web_search')).toBe(false);
@@ -818,9 +819,10 @@ describe('Orchestrator', () => {
 
       expect(systemPromptMessage.content).toContain('## Execution Tool Discipline');
       expect(firstTurnTools.has('expo_eas_list_projects')).toBe(true);
-      expect(firstTurnTools.has('skill__github__commit_files')).toBe(true);
+      expect(firstTurnTools.has('skill__github__list_files')).toBe(true);
+      expect(firstTurnTools.has('skill__github__commit_files')).toBe(false);
       expect(firstTurnTools.has('expo_eas_deploy_web')).toBe(false);
-      expect(firstTurnTools.has('expo_eas_workflow_wait')).toBe(true);
+      expect(firstTurnTools.has('expo_eas_workflow_wait')).toBe(false);
       expect(firstTurnTools.has('web_search')).toBe(false);
       expect(firstTurnTools.has('tool_catalog')).toBe(false);
     });
@@ -1049,9 +1051,9 @@ describe('Orchestrator', () => {
       );
 
       expect(firstTurnTools.has('expo_eas_list_projects')).toBe(true);
-      expect(firstTurnTools.has('skill__github__commit_files')).toBe(true);
+      expect(firstTurnTools.has('skill__github__commit_files')).toBe(false);
       expect(firstTurnTools.has('expo_eas_deploy_web')).toBe(false);
-      expect(firstTurnTools.has('expo_eas_workflow_wait')).toBe(true);
+      expect(firstTurnTools.has('expo_eas_workflow_wait')).toBe(false);
       expect(firstTurnTools.has('web_search')).toBe(false);
       expect(firstTurnTools.has('tool_catalog')).toBe(false);
     });

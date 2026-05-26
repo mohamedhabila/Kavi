@@ -159,7 +159,7 @@ import {
   getMissingRequiredWorkflowToolNames,
   buildInitialWorkflowRouteState,
   resolveWorkflowRouteActivation,
-  selectToolNamesForWorkflowRoutePhase,
+  selectToolNamesForWorkflowRouteTurn,
   shouldHoldWorkflowRouteFinalization,
   type WorkflowRouteActivation,
 } from './routes/agentRoutes';
@@ -3055,24 +3055,14 @@ export async function runOrchestrator(
         );
         callbacks.onAgentRouteStateChange?.(activeWorkflowRouteState);
       }
-      const routePhaseToolNames = new Set(
-        selectToolNamesForWorkflowRoutePhase(
+      const routeRequiredToolNames = new Set(
+        selectToolNamesForWorkflowRouteTurn(
           activeWorkflowRouteActivation ?? workflowRouteActivation,
           activeWorkflowRouteState,
           requestScopedTools,
+          completedWorkflowToolNames,
         ),
       );
-      const workflowRouteExecutionToolNames = new Set(
-        (activeWorkflowRouteActivation ?? workflowRouteActivation)?.requiredToolNames
-          .filter((toolName) => isExecutionAdvancingToolName(toolName)) ?? [],
-      );
-      const routeRequiredToolNames =
-        routePhaseToolNames.size > 0 || workflowRouteExecutionToolNames.size > 0
-          ? new Set([
-              ...routePhaseToolNames,
-              ...workflowRouteExecutionToolNames,
-            ])
-          : new Set(workflowRouteActivation?.requiredToolNames ?? []);
       const safeFocusedToolNames = effectiveRouteMode === 'execution'
         ? new Set(filterExecutionLaneToolNames(discoveryState.focusedToolNames))
         : discoveryState.focusedToolNames;
