@@ -1063,5 +1063,201 @@ describe('Sub-Agent Service', () => {
       expect(result.status).toBe('completed');
       expect(result.output).toBe('Final answer: all checks passed.');
     });
+
+    it('blocks success claims for execution tasks when no commit/push/deploy evidence exists', async () => {
+      const { runOrchestrator } = require('../../src/engine/orchestrator');
+      streamMessageSpy.mockImplementationOnce(
+        () =>
+          makeStream(
+            {
+              type: 'token',
+              content: 'completion_state: verified_success\nتم النشر بنجاح.',
+            },
+            {
+              type: 'done',
+              content: 'completion_state: verified_success\nتم النشر بنجاح.',
+            },
+          ) as any,
+      );
+      runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
+        callbacks.onAssistantMessage?.('Investigating files only');
+        callbacks.onToolCallStart?.({ name: 'read_file' });
+        callbacks.onToolCallComplete?.();
+        callbacks.onDone?.();
+        return Promise.resolve();
+      });
+
+      const result = await spawnSubAgent(
+        {
+          parentConversationId: 'p',
+          agentRunId: 'run-exec-no-evidence',
+          workstreamId: 'deploy',
+          prompt: 'Create app, commit, push, and deploy until green.',
+        },
+        mockProvider,
+      );
+
+      expect(result.status).toBe('completed');
+      expect(result.output).toContain('completion_state: blocked');
+      expect(result.output).toContain('unverified_claims: ["Worker output declared verified_success without matching operational evidence."]');
+    });
+
+    it('adds verified_success completion_state when execution evidence exists and output omits completion_state', async () => {
+      const { runOrchestrator } = require('../../src/engine/orchestrator');
+      streamMessageSpy.mockImplementationOnce(
+        () =>
+          makeStream(
+            { type: 'token', content: 'Deployment succeeded on workflow run 101.' },
+            { type: 'done', content: 'Deployment succeeded on workflow run 101.' },
+          ) as any,
+      );
+      runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
+        callbacks.onAssistantMessage?.('Monitoring workflow');
+        callbacks.onToolCallStart?.({ name: 'expo_eas_workflow_status' });
+        callbacks.onToolCallComplete?.({
+          name: 'expo_eas_workflow_status',
+          result: 'workflow run 101 completed with success',
+        });
+        callbacks.onDone?.();
+        return Promise.resolve();
+      });
+
+      const result = await spawnSubAgent(
+        {
+          parentConversationId: 'p',
+          agentRunId: 'run-expo-evidence',
+          workstreamId: 'deploy',
+          prompt: 'Create app, commit, push, and deploy until green.',
+        },
+        mockProvider,
+      );
+
+      expect(result.status).toBe('completed');
+      expect(result.output.startsWith('completion_state: verified_success\n')).toBe(true);
+      expect(result.output).toContain('actions_taken: ["tool:expo_eas_workflow_status"]');
+      expect(result.output).toContain('external_runs_verified: ["workflow run 101 completed with success"]');
+      expect(result.output).toContain('Deployment succeeded on workflow run 101.');
+    });
+
+    it('adds verified_success completion_state for generic artifact mutation evidence', async () => {
+      const { runOrchestrator } = require('../../src/engine/orchestrator');
+      streamMessageSpy.mockImplementationOnce(
+        () =>
+          makeStream(
+            { type: 'token', content: 'Updated the requested app shell file.' },
+            { type: 'done', content: 'Updated the requested app shell file.' },
+          ) as any,
+      );
+      runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
+        callbacks.onAssistantMessage?.('Applying the requested code change');
+        callbacks.onToolCallStart?.({ name: 'file_edit' });
+        callbacks.onToolCallComplete?.({
+          name: 'file_edit',
+          result: 'Updated src/App.tsx and saved changes.',
+        });
+        callbacks.onDone?.();
+        return Promise.resolve();
+      });
+
+      const result = await spawnSubAgent(
+        {
+          parentConversationId: 'p',
+          agentRunId: 'run-artifact-evidence',
+          workstreamId: 'edit',
+          prompt: 'Update src/App.tsx and save the fix.',
+        },
+        mockProvider,
+      );
+
+      expect(result.status).toBe('completed');
+      expect(result.output.startsWith('completion_state: verified_success\n')).toBe(true);
+      expect(result.output).toContain('actions_taken: ["tool:file_edit"]');
+      expect(result.output).toContain('artifacts_verified: ["Updated src/App.tsx and saved changes."]');
+      expect(result.output).toContain('Updated the requested app shell file.');
+    });
+
+    it('accepts dynamic skill execution evidence without vendor-specific allowlists', async () => {
+      const { runOrchestrator } = require('../../src/engine/orchestrator');
+      streamMessageSpy.mockImplementationOnce(
+        () =>
+          makeStream(
+            { type: 'token', content: 'Release finished successfully.' },
+            { type: 'done', content: 'Release finished successfully.' },
+          ) as any,
+      );
+      runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
+        callbacks.onAssistantMessage?.('Running the release workflow');
+        callbacks.onToolCallStart?.({ name: 'skill__acme_ops__release_delivery' });
+        callbacks.onToolCallComplete?.({
+          name: 'skill__acme_ops__release_delivery',
+          result: 'Release deployment completed successfully.',
+        });
+        callbacks.onDone?.();
+        return Promise.resolve();
+      });
+
+      const result = await spawnSubAgent(
+        {
+          parentConversationId: 'p',
+          agentRunId: 'run-dynamic-release',
+          workstreamId: 'release',
+          prompt: 'Run the release workflow and verify the deployment completed.',
+        },
+        mockProvider,
+      );
+
+      expect(result.status).toBe('completed');
+      expect(result.output.startsWith('completion_state: verified_success\n')).toBe(true);
+      expect(result.output).toContain('actions_taken: ["tool:skill__acme_ops__release_delivery"]');
+      expect(result.output).toContain(
+        'external_runs_verified: ["Release deployment completed successfully."]',
+      );
+      expect(result.output).toContain('Release finished successfully.');
+    });
+
+    it('downgrades verified_success worker reports that still carry unverified_claims', async () => {
+      const { runOrchestrator } = require('../../src/engine/orchestrator');
+      streamMessageSpy.mockImplementationOnce(
+        () =>
+          makeStream(
+            {
+              type: 'token',
+              content:
+                'completion_state: verified_success\nunverified_claims: ["Blocage environnemental"]\nResultat final en attente.',
+            },
+            {
+              type: 'done',
+              content:
+                'completion_state: verified_success\nunverified_claims: ["Blocage environnemental"]\nResultat final en attente.',
+            },
+          ) as any,
+      );
+      runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
+        callbacks.onAssistantMessage?.('Monitoring workflow');
+        callbacks.onToolCallStart?.({ name: 'expo_eas_workflow_status' });
+        callbacks.onToolCallComplete?.({
+          name: 'expo_eas_workflow_status',
+          result: 'workflow run 101 failed with environment constraints',
+        });
+        callbacks.onDone?.();
+        return Promise.resolve();
+      });
+
+      const result = await spawnSubAgent(
+        {
+          parentConversationId: 'p',
+          agentRunId: 'run-expo-contradiction',
+          workstreamId: 'deploy',
+          prompt: 'Create app, commit, push, and deploy until green.',
+        },
+        mockProvider,
+      );
+
+      expect(result.status).toBe('completed');
+      expect(result.output).toContain('completion_state: blocked');
+      expect(result.output).toContain(
+        'Worker output declared verified_success while still reporting unverified_claims.',
+      );
+    });
   });
 });

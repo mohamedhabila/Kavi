@@ -50,6 +50,12 @@ import { createLogger } from '../../utils/logger';
 import { buildStreamingPreview } from '../../utils/streamingPreview';
 import { assertProviderReadyForRequest, hydrateProviderForRequest } from '../llm/providerSupport';
 import { PYTHON_EXTENSION_WHEN_NEEDED } from '../python/guidance';
+import {
+  hasOperationalEvidenceFromSources,
+  isArtifactEvidenceSourceName,
+  isExternalRunEvidenceSourceName,
+  isOperationalEvidenceSourceName,
+} from './approvalSignals';
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -1318,6 +1324,8 @@ function buildSubAgentFinalizationPrompt(params: {
     detailedResult ? `Detailed result excerpt:\n${detailedResult}` : undefined,
     [
       'Write the final worker report now.',
+      '- Include a completion_state field in plain text with one of: verified_success, blocked, incomplete.',
+      '- For execution tasks, explicitly list actions_taken, artifacts_verified, external_runs_verified, and unverified_claims in concise bullets.',
       '- Start with the concrete outcome.',
       '- Include the key verified findings.',
       '- Mention any remaining blocker or uncertainty only if it still matters.',
@@ -1327,6 +1335,187 @@ function buildSubAgentFinalizationPrompt(params: {
   ]
     .filter((section): section is string => Boolean(section))
     .join('\n\n');
+}
+
+function extractWorkerCompletionState(
+  output: string,
+): 'verified_success' | 'blocked' | 'incomplete' | undefined {
+  const match = output.match(/completion_state\s*:\s*(verified_success|blocked|incomplete)\b/i);
+  if (!match?.[1]) {
+    return undefined;
+  }
+
+  const normalized = match[1].trim().toLowerCase();
+  return normalized === 'verified_success' || normalized === 'blocked' || normalized === 'incomplete'
+    ? normalized
+    : undefined;
+}
+
+function extractStructuredWorkerField(output: string, fieldName: string): string | undefined {
+  const match = output.match(new RegExp(`^${fieldName}\\s*:\\s*(.+)$`, 'im'));
+  return match?.[1]?.trim() || undefined;
+}
+
+function hasNonEmptyStructuredWorkerField(output: string, fieldName: string): boolean {
+  const value = extractStructuredWorkerField(output, fieldName);
+  return !!value && value !== '[]';
+}
+
+function getUniqueNonEmptyLines(values: ReadonlyArray<string>): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function buildStructuredWorkerEvidenceLists(params: {
+  toolsUsed: string[];
+  toolResultPreviews: Array<{ toolName: string; preview: string }>;
+}): {
+  actionsTaken: string[];
+  artifactsVerified: string[];
+  externalRunsVerified: string[];
+} {
+  const operationalActionToolNames = new Set(
+    params.toolsUsed.filter((toolName) => isOperationalEvidenceSourceName(toolName)),
+  );
+  for (const entry of params.toolResultPreviews) {
+    if (
+      isOperationalEvidenceSourceName(entry.toolName, entry.preview, {
+        includeOpaqueDynamicToolResults: true,
+      })
+    ) {
+      operationalActionToolNames.add(entry.toolName);
+    }
+  }
+
+  const actionsTaken = getUniqueNonEmptyLines(
+    Array.from(operationalActionToolNames).map((toolName) => `tool:${toolName}`),
+  );
+  const artifactsVerified = getUniqueNonEmptyLines(
+    params.toolResultPreviews
+      .filter((entry) =>
+        isArtifactEvidenceSourceName(entry.toolName, entry.preview, {
+          includeOpaqueDynamicToolResults: true,
+        }),
+      )
+      .map((entry) => entry.preview),
+  );
+  const externalRunsVerified = getUniqueNonEmptyLines(
+    params.toolResultPreviews
+      .filter((entry) =>
+        isExternalRunEvidenceSourceName(entry.toolName, entry.preview, {
+          includeOpaqueDynamicToolResults: true,
+        }),
+      )
+      .map((entry) => entry.preview),
+  );
+
+  return {
+    actionsTaken,
+    artifactsVerified,
+    externalRunsVerified,
+  };
+}
+
+function upsertStructuredWorkerField(output: string, fieldName: string, fieldValue: string): string {
+  const pattern = new RegExp(`^${fieldName}\\s*:\\s*.*$`, 'im');
+  const nextLine = `${fieldName}: ${fieldValue}`;
+  if (pattern.test(output)) {
+    return output.replace(pattern, nextLine);
+  }
+
+  return `${nextLine}\n${output}`;
+}
+
+function applyStructuredWorkerEvidenceEnvelope(params: {
+  output: string;
+  completionState: 'verified_success' | 'blocked' | 'incomplete';
+  actionsTaken: string[];
+  artifactsVerified: string[];
+  externalRunsVerified: string[];
+  unverifiedClaims: string[];
+}): string {
+  let nextOutput = params.output;
+  nextOutput = upsertStructuredWorkerField(nextOutput, 'unverified_claims', JSON.stringify(params.unverifiedClaims));
+  nextOutput = upsertStructuredWorkerField(nextOutput, 'external_runs_verified', JSON.stringify(params.externalRunsVerified));
+  nextOutput = upsertStructuredWorkerField(nextOutput, 'artifacts_verified', JSON.stringify(params.artifactsVerified));
+  nextOutput = upsertStructuredWorkerField(nextOutput, 'actions_taken', JSON.stringify(params.actionsTaken));
+  nextOutput = upsertStructuredWorkerField(nextOutput, 'completion_state', params.completionState);
+  return nextOutput;
+}
+
+function enforceExecutionWorkerOutputContract(params: {
+  output: string;
+  originalPrompt: string;
+  toolsUsed: string[];
+  toolResultPreviews: Array<{ toolName: string; preview: string }>;
+  requireStructuredExecutionEvidence: boolean;
+}): string {
+  const normalizedOutput = normalizeFinalizationOutputText(params.output, OUTPUT_TRUNCATION);
+  if (!normalizedOutput) {
+    return params.output;
+  }
+
+  if (!params.requireStructuredExecutionEvidence) {
+    return normalizedOutput;
+  }
+
+  const hasExecutionEvidence = hasOperationalEvidenceFromSources({
+    toolsUsed: params.toolsUsed,
+    resultPreviewEntries: params.toolResultPreviews.map((entry) => ({
+      sourceName: entry.toolName,
+      preview: entry.preview,
+    })),
+    resultPreviewSourceNames: params.toolResultPreviews.map((entry) => entry.toolName),
+    includeOpaqueDynamicToolResults: true,
+  });
+  const structuredEvidenceLists = buildStructuredWorkerEvidenceLists(params);
+  const completionState = extractWorkerCompletionState(normalizedOutput);
+  const hasStructuredVerifiedEvidence =
+    hasNonEmptyStructuredWorkerField(normalizedOutput, 'actions_taken') ||
+    hasNonEmptyStructuredWorkerField(normalizedOutput, 'artifacts_verified') ||
+    hasNonEmptyStructuredWorkerField(normalizedOutput, 'external_runs_verified');
+  const hasStructuredUnverifiedClaims = hasNonEmptyStructuredWorkerField(normalizedOutput, 'unverified_claims');
+
+  if (completionState === 'verified_success' && (!hasExecutionEvidence || hasStructuredUnverifiedClaims)) {
+    return applyStructuredWorkerEvidenceEnvelope({
+      output:
+        !hasExecutionEvidence
+          ? 'Blocker: verified_success requires matching operational evidence captured from internal tools or structured workflow evidence.'
+          : 'Blocker: verified_success cannot coexist with non-empty unverified_claims.',
+      completionState: 'blocked',
+      actionsTaken: [],
+      artifactsVerified: [],
+      externalRunsVerified: [],
+      unverifiedClaims: [
+        !hasExecutionEvidence
+          ? 'Worker output declared verified_success without matching operational evidence.'
+          : 'Worker output declared verified_success while still reporting unverified_claims.',
+      ],
+    });
+  }
+
+  if (completionState === 'verified_success' && !hasStructuredVerifiedEvidence && hasExecutionEvidence) {
+    return applyStructuredWorkerEvidenceEnvelope({
+      output: normalizedOutput,
+      completionState: 'verified_success',
+      actionsTaken: structuredEvidenceLists.actionsTaken,
+      artifactsVerified: structuredEvidenceLists.artifactsVerified,
+      externalRunsVerified: structuredEvidenceLists.externalRunsVerified,
+      unverifiedClaims: [],
+    });
+  }
+
+  if (!completionState && hasExecutionEvidence) {
+    return applyStructuredWorkerEvidenceEnvelope({
+      output: normalizedOutput,
+      completionState: 'verified_success',
+      actionsTaken: structuredEvidenceLists.actionsTaken,
+      artifactsVerified: structuredEvidenceLists.artifactsVerified,
+      externalRunsVerified: structuredEvidenceLists.externalRunsVerified,
+      unverifiedClaims: [],
+    });
+  }
+
+  return normalizedOutput;
 }
 
 async function synthesizeSubAgentFinalAnswer(params: {
@@ -1842,6 +2031,7 @@ async function runPreparedSubAgent(
   let finalNonEmptyContent = '';
   const toolsUsed: string[] = [];
   const toolResultPreviews: Array<{ toolName: string; preview: string }> = [];
+  const requireStructuredExecutionEvidence = Boolean(config.agentRunId || config.workstreamId);
   // Track the last substantive tool result so tool-only sub-agents (e.g.
   // Claude tool_use with no text) can still produce meaningful output.
   let lastSubstantiveToolResult = '';
@@ -1956,34 +2146,58 @@ async function runPreparedSubAgent(
       });
 
       if (finalizedOutput) {
+        const contractSafeOutput = enforceExecutionWorkerOutputContract({
+          output: finalizedOutput,
+          originalPrompt: currentTaskPrompt,
+          toolsUsed,
+          toolResultPreviews,
+          requireStructuredExecutionEvidence,
+        });
         appendTranscriptMessage(transcriptMessages, {
           id: generateId(),
           role: 'assistant',
-          content: finalizedOutput,
+          content: contractSafeOutput,
           timestamp: Date.now(),
         });
-        appendActivity(subAgent, 'message', finalizedOutput);
-        return finalizedOutput;
+        appendActivity(subAgent, 'message', contractSafeOutput);
+        return contractSafeOutput;
       }
     }
 
     if (lastNonEmptyContent) {
-      return lastNonEmptyContent;
+      return enforceExecutionWorkerOutputContract({
+        output: lastNonEmptyContent,
+        originalPrompt: currentTaskPrompt,
+        toolsUsed,
+        toolResultPreviews,
+        requireStructuredExecutionEvidence,
+      });
     }
 
     if (lastSubstantiveToolResult && !outputText.trim()) {
-      return lastSubstantiveToolResult;
+      return enforceExecutionWorkerOutputContract({
+        output: lastSubstantiveToolResult,
+        originalPrompt: currentTaskPrompt,
+        toolsUsed,
+        toolResultPreviews,
+        requireStructuredExecutionEvidence,
+      });
     }
 
-    return (
-      buildToolResultFallback({
+    return enforceExecutionWorkerOutputContract({
+      output:
+        buildToolResultFallback({
         status,
         lastNonEmptyContent,
         toolResultPreviews,
         toolsUsed,
         iterations,
-      }) || ''
-    );
+      }) || '',
+      originalPrompt: currentTaskPrompt,
+      toolsUsed,
+      toolResultPreviews,
+      requireStructuredExecutionEvidence,
+    });
   };
 
   // Build tool filter: config.tools whitelist takes priority, then sandbox policy

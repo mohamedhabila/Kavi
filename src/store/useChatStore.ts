@@ -20,8 +20,10 @@ import {
   AgentRunPlan,
   AgentRunPhaseKey,
   AgentRunPhaseStatus,
+  AgentRunRouteState,
   AgentRunSummary,
   AgentRunStatus,
+  AgentRunTerminalReason,
   AgentRunWorkstream,
   Message,
   Conversation,
@@ -323,6 +325,49 @@ function areAgentRunAsyncOperationsEqual(
   });
 }
 
+function normalizeAgentRunRouteState(
+  routeState: AgentRunRouteState | undefined,
+): AgentRunRouteState | undefined {
+  if (!routeState?.routeId || !routeState.title || !routeState.phases?.length) {
+    return undefined;
+  }
+
+  const timestamp = routeState.updatedAt ?? Date.now();
+  const phases = routeState.phases.map((phase, index) => ({
+    id: phase.id || `phase_${index + 1}`,
+    title: phase.title || phase.id || `Phase ${index + 1}`,
+    status: phase.status || (index === 0 ? 'active' : 'pending'),
+    ...(phase.detail ? { detail: phase.detail } : {}),
+    updatedAt: phase.updatedAt ?? timestamp,
+  }));
+  const currentPhaseId = phases.some((phase) => phase.id === routeState.currentPhaseId)
+    ? routeState.currentPhaseId
+    : phases.find((phase) => phase.status === 'active')?.id ?? phases[0].id;
+
+  return {
+    routeId: routeState.routeId,
+    title: routeState.title,
+    status: routeState.status || 'active',
+    currentPhaseId,
+    phases,
+    ...(routeState.requiredToolNames?.length
+      ? { requiredToolNames: Array.from(new Set(routeState.requiredToolNames)) }
+      : {}),
+    ...(routeState.facts ? { facts: { ...routeState.facts } } : {}),
+    ...(routeState.blockers?.length ? { blockers: [...routeState.blockers] } : {}),
+    updatedAt: timestamp,
+  };
+}
+
+function areAgentRunRouteStatesEqual(
+  left: AgentRunRouteState | undefined,
+  right: AgentRunRouteState | undefined,
+): boolean {
+  const normalizedLeft = normalizeAgentRunRouteState(left);
+  const normalizedRight = normalizeAgentRunRouteState(right);
+  return JSON.stringify(normalizedLeft ?? null) === JSON.stringify(normalizedRight ?? null);
+}
+
 function normalizeAgentRunPilotEvaluation(
   evaluation: AgentRunPilotEvaluation | undefined,
   fallbackObjective: string,
@@ -489,6 +534,8 @@ function normalizePersistedAgentRun(run: AgentRun): AgentRun {
       plan.objective,
       plan.successCriteria,
     ),
+    routeState: normalizeAgentRunRouteState(run.routeState),
+    terminalReason: run.terminalReason,
     pendingAsyncOperations:
       run.status === 'running'
         ? normalizeAgentRunAsyncOperations(run.pendingAsyncOperations)
@@ -905,7 +952,8 @@ function areAssistantMessageMetadataEqual(
   return (
     left.kind === right.kind &&
     left.completionStatus === right.completionStatus &&
-    left.finishReason === right.finishReason
+    left.finishReason === right.finishReason &&
+    left.terminalReason === right.terminalReason
   );
 }
 
@@ -1220,6 +1268,11 @@ interface ChatState {
     params?: { latestSummary?: string; timestamp?: number },
     runId?: string,
   ) => void;
+  updateAgentRunRouteState: (
+    conversationId: string,
+    routeState: AgentRunRouteState | undefined,
+    runId?: string,
+  ) => void;
   updateAgentRunPlan: (
     conversationId: string,
     patch: Partial<AgentRunPlan> & { timestamp?: number },
@@ -1244,6 +1297,7 @@ interface ChatState {
       checkpointTitle?: string;
       checkpointDetail?: string;
       checkpointKind?: AgentRunCheckpointKind;
+      terminalReason?: AgentRunTerminalReason;
       timestamp?: number;
     },
     runId?: string,
@@ -1257,6 +1311,7 @@ interface ChatState {
       checkpointTitle?: string;
       checkpointDetail?: string;
       checkpointKind?: AgentRunCheckpointKind;
+      terminalReason?: AgentRunTerminalReason;
       timestamp?: number;
     },
     runId?: string,
@@ -2208,6 +2263,57 @@ export const useChatStore = create<ChatState>()(
         requestChatStorePersistenceCheckpoint();
       },
 
+      updateAgentRunRouteState: (conversationId, routeState, runId) => {
+        set((state) => {
+          let didUpdateState = false;
+          const normalizedRouteState = normalizeAgentRunRouteState(routeState);
+          const timestamp = normalizedRouteState?.updatedAt ?? Date.now();
+
+          const nextConversations = state.conversations.map((conversation) => {
+            if (conversation.id !== conversationId) {
+              return conversation;
+            }
+
+            const targetRunId = resolveTargetAgentRunId(conversation, runId);
+            if (!targetRunId) {
+              return conversation;
+            }
+
+            let didUpdate = false;
+            const nextRuns = (conversation.agentRuns ?? []).map((run) => {
+              if (!isTargetAgentRun(run, targetRunId, true)) {
+                return run;
+              }
+
+              if (areAgentRunRouteStatesEqual(run.routeState, normalizedRouteState)) {
+                return run;
+              }
+
+              didUpdate = true;
+              return {
+                ...run,
+                updatedAt: Math.max(run.updatedAt, timestamp),
+                routeState: normalizedRouteState,
+              };
+            });
+
+            if (!didUpdate) {
+              return conversation;
+            }
+
+            didUpdateState = true;
+            return {
+              ...conversation,
+              updatedAt: Math.max(conversation.updatedAt, timestamp),
+              agentRuns: nextRuns,
+            };
+          });
+
+          return didUpdateState ? { conversations: nextConversations } : state;
+        });
+        requestChatStorePersistenceCheckpoint();
+      },
+
       updateAgentRunPlan: (conversationId, patch, runId) => {
         set((state) => ({
           conversations: state.conversations.map((conversation) => {
@@ -2435,6 +2541,7 @@ export const useChatStore = create<ChatState>()(
                 completedAt: timestamp,
                 updatedAt: Math.max(run.updatedAt, timestamp),
                 latestSummary: params?.latestSummary ?? run.latestSummary,
+                terminalReason: params?.terminalReason ?? run.terminalReason,
                 summary: mergeAgentRunSummary(run.summary, params?.summary),
                 phases: transitionAgentRunPhases(
                   run.phases,

@@ -34,9 +34,14 @@ export const FILE_EDIT_TOOL: ToolDefinition = {
   input_schema: {
     type: 'object',
     properties: {
-      path: { type: 'string', description: 'File path relative to workspace root' },
+      path: {
+        type: 'string',
+        minLength: 1,
+        description: 'File path relative to workspace root',
+      },
       oldText: {
         type: 'string',
+        minLength: 1,
         description:
           'Legacy exact text to find and replace (must match uniquely). Prefer edits[].oldText for new calls.',
       },
@@ -46,6 +51,7 @@ export const FILE_EDIT_TOOL: ToolDefinition = {
       },
       edits: {
         type: 'array',
+        minItems: 1,
         description:
           'Ordered focused edits. Prefer this over oldText/newText for multiple changes or insert/delete operations.',
         items: {
@@ -58,6 +64,7 @@ export const FILE_EDIT_TOOL: ToolDefinition = {
             },
             oldText: {
               type: 'string',
+              minLength: 1,
               description:
                 'Exact anchor or target text. It must match uniquely in the latest file content.',
             },

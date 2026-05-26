@@ -24,6 +24,10 @@ import {
   isResumableIncompleteTextCompletion,
   MAX_RESUMABLE_INCOMPLETE_TEXT_RECOVERIES,
 } from '../llm/completionRecovery';
+import {
+  isApprovalGradeSourceName,
+  isSessionCoordinationSourceName,
+} from './approvalSignals';
 
 const OUTPUT_TRUNCATION = FINALIZATION_OUTPUT_TRUNCATION;
 const MAX_RESULT_PREVIEW_CHARS = FINALIZATION_RESULT_PREVIEW_CHARS;
@@ -61,12 +65,6 @@ function getToolNameForMessage(message: Message): string {
 
   const toolCallId = message.toolCallId?.trim();
   return toolCallId || 'tool';
-}
-
-function isSessionCoordinationSourceName(sourceName: string | undefined): boolean {
-  return /^(sessions_(spawn|send|status|history|output|surface_output|list|wait|cancel|yield)|wait)$/i.test(
-    sourceName?.trim() || '',
-  );
 }
 
 function updateLastSubstantiveResult(
@@ -225,13 +223,18 @@ export function collectAgentRunFinalizationEvidence(
 }
 
 export function hasVerifiedFinalizationEvidence(evidence: AgentRunFinalizationEvidence): boolean {
-  if (normalizeFinalizationOutputText(evidence.lastSubstantiveResult, OUTPUT_TRUNCATION)) {
+  if (
+    normalizeFinalizationOutputText(evidence.lastSubstantiveResult, OUTPUT_TRUNCATION) &&
+    isApprovalGradeSourceName(evidence.lastSubstantiveResultSourceName)
+  ) {
     return true;
   }
 
   if (
     evidence.resultPreviews.some(
-      (entry) => !!normalizeFinalizationPreviewText(entry.preview, MAX_RESULT_PREVIEW_CHARS),
+      (entry) =>
+        isApprovalGradeSourceName(entry.sourceName) &&
+        !!normalizeFinalizationPreviewText(entry.preview, MAX_RESULT_PREVIEW_CHARS),
     )
   ) {
     return true;

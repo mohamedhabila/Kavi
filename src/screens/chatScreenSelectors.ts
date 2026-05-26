@@ -33,6 +33,7 @@ export function selectChatScreenChatSlice(state: ChatState) {
     appendAgentRunCheckpoint: state.appendAgentRunCheckpoint,
     updateAgentRunSummary: state.updateAgentRunSummary,
     updateAgentRunPendingAsyncOperations: state.updateAgentRunPendingAsyncOperations,
+    updateAgentRunRouteState: state.updateAgentRunRouteState,
     updateAgentRunPlan: state.updateAgentRunPlan,
     updateAgentRunPilotEvaluation: state.updateAgentRunPilotEvaluation,
     setAgentRunAwaitingBackgroundWorkers: state.setAgentRunAwaitingBackgroundWorkers,

@@ -176,6 +176,67 @@ describe('findOrphanedToolCalls', () => {
     expect(orphans[0].isError).toBe(true);
   });
 
+  it('recovers an orphaned result from completed assistant tool-call metadata', () => {
+    const messages = [
+      {
+        ...makeAssistantMsg('a1', '', [
+          { id: 'tc_1', name: 'read_file', arguments: '{"path":"a.txt"}' },
+        ]),
+        toolCalls: [
+          {
+            id: 'tc_1',
+            name: 'read_file',
+            arguments: '{"path":"a.txt"}',
+            status: 'completed' as const,
+            result: 'file contents from persisted tool call',
+          },
+        ],
+      },
+    ];
+    const orphans = findOrphanedToolCalls(messages);
+    expect(orphans).toHaveLength(1);
+    expect(orphans[0]).toEqual(
+      expect.objectContaining({
+        role: 'tool',
+        toolCallId: 'tc_1',
+        content: 'file contents from persisted tool call',
+      }),
+    );
+    expect(orphans[0].isError).toBeUndefined();
+  });
+
+  it('repairs running orphaned tool calls with an in-progress result instead of a failed error', () => {
+    const messages: Message[] = [
+      {
+        ...makeAssistantMsg('a1', '', [
+          { id: 'tc_1', name: 'slow_tool', arguments: '{"id":"job-1"}' },
+        ]),
+        toolCalls: [
+          {
+            id: 'tc_1',
+            name: 'slow_tool',
+            arguments: '{"id":"job-1"}',
+            status: 'running' as const,
+          },
+        ],
+      },
+    ];
+
+    const result = ensureToolResultPairing(messages);
+    const synthetic = result.find(
+      (message) => message.role === 'tool' && message.toolCallId === 'tc_1',
+    );
+
+    expect(synthetic?.isError).toBeUndefined();
+    expect(JSON.parse(synthetic?.content || '{}')).toEqual(
+      expect.objectContaining({
+        status: 'running',
+        toolCallId: 'tc_1',
+        toolName: 'slow_tool',
+      }),
+    );
+  });
+
   it('detects all orphans when no results exist', () => {
     const messages = [
       makeAssistantMsg('a1', '', [
@@ -290,6 +351,24 @@ describe('ensureToolResultPairing', () => {
     expect(synthetics).toHaveLength(2);
     expect(synthetics.map((s) => s.toolCallId).sort()).toEqual(['tc_1', 'tc_2']);
   });
+
+  it('does not attach an orphan from a repeated provider-local id to an earlier paired turn', () => {
+    const messages = [
+      makeAssistantMsg('a1', '', [{ id: 'gemini-call-0', name: 'read_file', arguments: '{}' }]),
+      makeToolMsg('t1', 'gemini-call-0', 'first result'),
+      makeAssistantMsg('a2', '', [{ id: 'gemini-call-0', name: 'read_file', arguments: '{}' }]),
+    ];
+    const result = ensureToolResultPairing(messages);
+    const syntheticResults = result.filter(
+      (message) => message.role === 'tool' && message.id.startsWith('msg_synthetic'),
+    );
+
+    expect(syntheticResults).toHaveLength(1);
+    expect(result.indexOf(syntheticResults[0])).toBeGreaterThan(
+      result.findIndex((message) => message.id === 'a2'),
+    );
+    expect(result.filter((message) => message.content === 'first result')).toHaveLength(1);
+  });
 });
 
 // ── deduplicateToolResults ───────────────────────────────────────────────
@@ -342,5 +421,20 @@ describe('deduplicateToolResults', () => {
     const result = deduplicateToolResults(messages);
     expect(result).toHaveLength(1);
     expect(result[0].content).toBe('third');
+  });
+
+  it('preserves repeated provider-local tool ids across separate assistant turns', () => {
+    const messages = [
+      makeAssistantMsg('a1', '', [{ id: 'gemini-call-0', name: 'read_file', arguments: '{}' }]),
+      makeToolMsg('t1', 'gemini-call-0', 'first turn result'),
+      makeAssistantMsg('a2', '', [{ id: 'gemini-call-0', name: 'text_search', arguments: '{}' }]),
+      makeToolMsg('t2', 'gemini-call-0', 'second turn result'),
+    ];
+
+    const result = deduplicateToolResults(messages);
+
+    expect(result).toHaveLength(4);
+    expect(result.filter((message) => message.role === 'tool').map((message) => message.content))
+      .toEqual(['first turn result', 'second turn result']);
   });
 });

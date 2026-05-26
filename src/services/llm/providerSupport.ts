@@ -124,11 +124,22 @@ export function resolveProviderModelSelection(
   fallbackModel?: string | null,
 ): string {
   const normalizedPreferredModel = normalizeModelId(preferredModel);
+  const normalizedFallbackModel = normalizeModelId(fallbackModel);
+
+  // Preserve explicit model locks requested by the caller even when the
+  // provider advertises a narrower model list.
+  if (
+    normalizedPreferredModel &&
+    normalizedFallbackModel &&
+    normalizedPreferredModel === normalizedFallbackModel
+  ) {
+    return normalizedPreferredModel;
+  }
+
   if (normalizedPreferredModel && isProviderModelSupported(provider, normalizedPreferredModel)) {
     return normalizedPreferredModel;
   }
 
-  const normalizedFallbackModel = normalizeModelId(fallbackModel);
   if (normalizedFallbackModel && isProviderModelSupported(provider, normalizedFallbackModel)) {
     return normalizedFallbackModel;
   }

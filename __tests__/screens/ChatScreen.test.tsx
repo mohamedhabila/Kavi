@@ -5230,6 +5230,9 @@ describe('ChatScreen', () => {
         message.toolCalls.some((toolCall: any) => toolCall.id === 'tc-read'),
     );
     const finalAssistantMessage = assistantMessages[assistantMessages.length - 1];
+    const toolResultMessage = mockConversations[0].messages.find(
+      (message: any) => message.role === 'tool' && message.toolCallId === 'tc-read',
+    );
 
     expect(assistantMessages).toHaveLength(3);
     expect(toolTurnMessage).toEqual(
@@ -5248,6 +5251,21 @@ describe('ChatScreen', () => {
           kind: 'final',
           completionStatus: 'complete',
         }),
+      }),
+    );
+    expect(toolResultMessage).toEqual(
+      expect.objectContaining({
+        role: 'tool',
+        content: 'file contents',
+        toolCallId: 'tc-read',
+        toolCalls: [
+          expect.objectContaining({
+            id: 'tc-read',
+            name: 'read_file',
+            status: 'completed',
+            result: 'file contents',
+          }),
+        ],
       }),
     );
   });

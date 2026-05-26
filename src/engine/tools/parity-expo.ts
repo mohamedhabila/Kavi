@@ -10,6 +10,7 @@ import {
   listExpoWorkflowRuns,
   listExpoProjects,
   probeExpoProject,
+  resolveExpoProjectForExecutionTask,
   runExpoGraphqlQuery,
   resolveExpoAccount,
   resolveExpoProject,
@@ -517,7 +518,14 @@ function buildExpoResultSummary<T extends object>(toolName: string, value: T): s
   const failureSummary = summarizeExpoFailureLogs(failureLogs);
   const workflowRun = compactExpoWorkflowRun(payload.workflowRun);
 
-  if ((payload.status === 'unsupported' || payload.status === 'not_found') && note) {
+  if (
+    (payload.status === 'unsupported' ||
+      payload.status === 'not_found' ||
+      payload.status === 'missing_project_reference' ||
+      payload.status === 'invalid_project_reference' ||
+      payload.status === 'ambiguous_project_reference') &&
+    note
+  ) {
     return note;
   }
 
@@ -540,6 +548,19 @@ function buildExpoResultSummary<T extends object>(toolName: string, value: T): s
     }
 
     case 'expo_eas_create_project': {
+      if (payload.status === 'redirected_existing_project') {
+        const project = compactExpoProjectListing(payload.project);
+        const name =
+          typeof project?.fullName === 'string'
+            ? project.fullName
+            : typeof project?.name === 'string'
+              ? project.name
+              : 'Existing Expo project';
+        return guidance
+          ? `Using existing project ${name}. ${guidance}`
+          : `Using existing project ${name}.`;
+      }
+
       const project = compactExpoProjectListing(payload.project);
       const name =
         typeof project?.fullName === 'string'
@@ -671,6 +692,14 @@ function normalizeExpoToolPayload<T extends object>(
   if (typeof payload.count === 'number') normalized.count = payload.count;
   if (typeof payload.projectId === 'string' && payload.projectId.trim())
     normalized.projectId = payload.projectId.trim();
+  if (typeof payload.suppliedProjectId === 'string' && payload.suppliedProjectId.trim())
+    normalized.suppliedProjectId = payload.suppliedProjectId.trim();
+  if (typeof payload.argumentName === 'string' && payload.argumentName.trim())
+    normalized.argumentName = payload.argumentName.trim();
+  if (typeof payload.resourceKind === 'string' && payload.resourceKind.trim())
+    normalized.resourceKind = payload.resourceKind.trim();
+  if (typeof payload.reason === 'string' && payload.reason.trim())
+    normalized.reason = payload.reason.trim();
   if (typeof payload.projectName === 'string' && payload.projectName.trim())
     normalized.projectName = payload.projectName.trim();
   if (typeof payload.mode === 'string' && payload.mode.trim())
@@ -729,6 +758,12 @@ function normalizeExpoToolPayload<T extends object>(
   if (typeof payload.waitedMs === 'number') normalized.waitedMs = payload.waitedMs;
   if (typeof payload.timedOut === 'boolean') normalized.timedOut = payload.timedOut;
   if (typeof payload.partial === 'boolean') normalized.partial = payload.partial;
+  if (typeof payload.nextSuggestedTool === 'string' && payload.nextSuggestedTool.trim()) {
+    normalized.nextSuggestedTool = payload.nextSuggestedTool.trim();
+  }
+  if (isRecord(payload.nextSuggestedArgs) && Object.keys(payload.nextSuggestedArgs).length > 0) {
+    normalized.nextSuggestedArgs = payload.nextSuggestedArgs;
+  }
 
   const graphqlErrors = compactExpoGraphqlErrors(payload.errors);
   if (graphqlErrors) normalized.errors = graphqlErrors;
@@ -772,6 +807,107 @@ function buildExpoListProjectsSelection(projects: ExpoListedProject[]) {
   };
 }
 
+type ExpoProjectReferenceStatus =
+  | 'missing_project_reference'
+  | 'invalid_project_reference'
+  | 'ambiguous_project_reference';
+
+async function buildExpoProjectReferenceCorrection(params: {
+  toolName: string;
+  projectRef?: unknown;
+  status: ExpoProjectReferenceStatus;
+  reason?: string;
+  candidates?: ExpoListedProject[];
+}): Promise<string> {
+  let candidates = params.candidates;
+  if (!candidates) {
+    try {
+      candidates = await listExpoProjects({});
+    } catch {
+      candidates = [];
+    }
+  }
+
+  const selection = buildExpoListProjectsSelection(candidates);
+  const nextSuggestedArgs = selection.defaultProjectId
+    ? { projectId: selection.defaultProjectId }
+    : undefined;
+  const suppliedProjectId =
+    typeof params.projectRef === 'string' && params.projectRef.trim()
+      ? params.projectRef.trim()
+      : undefined;
+  const note =
+    params.status === 'missing_project_reference'
+      ? selection.defaultProjectId
+        ? `The projectId argument is required. Use the exact projectId "${selection.defaultProjectId}" returned in this payload.`
+        : 'The projectId argument is required, but no synced Expo project is available to select.'
+      : params.status === 'ambiguous_project_reference'
+        ? 'The supplied projectId matches more than one synced Expo project. Choose one exact project id from the returned candidates.'
+        : selection.defaultProjectId
+          ? `The supplied projectId "${suppliedProjectId || ''}" does not identify a synced Expo project. Use the exact projectId "${selection.defaultProjectId}" returned in this payload.`
+          : `The supplied projectId "${suppliedProjectId || ''}" does not identify a synced Expo project, and no synced candidates are available.`;
+  const guidance = selection.defaultProjectId
+    ? `Call ${params.toolName} again with nextSuggestedArgs exactly as returned. Do not invent project ids or reuse a repository name as projectId.`
+    : 'Call expo_eas_list_projects with refresh=true after linking or syncing an Expo project, then retry with an exact returned projectId.';
+
+  return JSON.stringify(
+    normalizeExpoToolPayload('expo_eas_list_projects', {
+      status: params.status,
+      argumentName: 'projectId',
+      resourceKind: 'expo_project',
+      ...(suppliedProjectId ? { suppliedProjectId } : {}),
+      ...(params.reason ? { reason: params.reason } : {}),
+      count: candidates.length,
+      projects: candidates,
+      ...(candidates.length > 0 ? { selection } : {}),
+      nextSuggestedTool: selection.defaultProjectId ? params.toolName : 'expo_eas_list_projects',
+      ...(nextSuggestedArgs ? { nextSuggestedArgs } : { nextSuggestedArgs: { refresh: true } }),
+      note,
+      guidance,
+    }),
+  );
+}
+
+async function resolveExpoProjectForToolCall(
+  toolName: string,
+  projectRef: unknown,
+): Promise<{ project: ReturnType<typeof resolveExpoProject> } | { response: string }> {
+  const trimmedRef = typeof projectRef === 'string' ? projectRef.trim() : '';
+  if (!trimmedRef) {
+    return {
+      response: await buildExpoProjectReferenceCorrection({
+        toolName,
+        projectRef,
+        status: 'missing_project_reference',
+        reason: 'missing-project-ref',
+      }),
+    };
+  }
+
+  const resolution = await resolveExpoProjectForExecutionTask({
+    projectRef: trimmedRef,
+    allowSync: true,
+  });
+  if (resolution.status === 'resolved') {
+    return {
+      project: resolveExpoProject(resolution.project.id, useSettingsStore.getState()),
+    };
+  }
+
+  return {
+    response: await buildExpoProjectReferenceCorrection({
+      toolName,
+      projectRef: trimmedRef,
+      status:
+        resolution.status === 'ambiguous'
+          ? 'ambiguous_project_reference'
+          : 'invalid_project_reference',
+      reason: resolution.reason,
+      candidates: resolution.candidates,
+    }),
+  };
+}
+
 export async function executeExpoEasListProjects(args: {
   accountId?: string;
   refresh?: boolean;
@@ -807,7 +943,50 @@ export async function executeExpoEasCreateProject(args: {
   accountId?: string;
   name: string;
   slug?: string;
+  confirmedCreateNewProject?: boolean;
 }): Promise<string> {
+  if (!args.confirmedCreateNewProject) {
+    const resolution = await resolveExpoProjectForExecutionTask({
+      accountId: args.accountId,
+      allowSync: true,
+    });
+    const linkedCandidates =
+      resolution.status === 'resolved'
+        ? [resolution.project]
+        : resolution.status === 'ambiguous'
+          ? resolution.candidates.filter(
+              (project) => project.repoFullName || project.readiness.launchable,
+            )
+          : [];
+
+    if (linkedCandidates.length > 0) {
+      const project = linkedCandidates[0];
+      const automation = getExpoProjectAutomationContext(project.id).automation;
+      const guidance =
+        resolution.status === 'ambiguous'
+          ? 'Multiple existing Expo projects are available. Choose one explicitly with expo_eas_status before creating a new project.'
+          : 'Existing linked Expo project found. Use expo_eas_status, expo_eas_probe, and expo_eas_workflow_* monitoring with this project instead of creating another project.';
+
+      return JSON.stringify(
+        normalizeExpoToolPayload(
+          'expo_eas_create_project',
+          {
+            status: 'redirected_existing_project',
+            project,
+            candidates: linkedCandidates,
+            reason: resolution.reason,
+            nextSuggestedTool: 'expo_eas_status',
+            nextSuggestedArgs: { projectId: project.id },
+            guidance,
+          },
+          {
+            preferredFlow: automation.preferredFlow,
+          },
+        ),
+      );
+    }
+  }
+
   const project = await createExpoProject(args);
   const automation = getExpoProjectAutomationContext(project.id).automation;
 
@@ -829,8 +1008,12 @@ export async function executeExpoEasCreateProject(args: {
 }
 
 export async function executeExpoEasStatus(args: { projectId: string }): Promise<string> {
+  const resolved = await resolveExpoProjectForToolCall('expo_eas_status', args.projectId);
+  if ('response' in resolved) {
+    return resolved.response;
+  }
   const settings = useSettingsStore.getState();
-  const project = resolveExpoProject(args.projectId, settings);
+  const project = resolved.project;
   const account = resolveExpoAccount(project.accountId, settings);
   const readiness = getExpoProjectReadiness(project, account, settings);
   const automation = getExpoAutomationSummary(project, account);
@@ -880,17 +1063,22 @@ export async function executeExpoEasStatus(args: { projectId: string }): Promise
 }
 
 export async function executeExpoEasProbe(args: { projectId: string }): Promise<string> {
+  const resolved = await resolveExpoProjectForToolCall('expo_eas_probe', args.projectId);
+  if ('response' in resolved) {
+    return resolved.response;
+  }
+  const projectId = resolved.project.id;
+  const automation = getExpoProjectAutomationContext(projectId).automation;
+
   return JSON.stringify(
     normalizeExpoToolPayload(
       'expo_eas_probe',
-      withExpoAutomation(args.projectId, {
-        ...(await probeExpoProject(args.projectId)),
-        guidance: getExpoAutomationGuidance(
-          getExpoProjectAutomationContext(args.projectId).automation,
-        ),
+      withExpoAutomation(projectId, {
+        ...(await probeExpoProject(projectId)),
+        guidance: getExpoAutomationGuidance(automation),
       }),
       {
-        preferredFlow: getExpoProjectAutomationContext(args.projectId).automation.preferredFlow,
+        preferredFlow: automation.preferredFlow,
       },
     ),
   );
@@ -903,11 +1091,18 @@ export async function executeExpoEasBuild(args: {
   waitForCompletion?: boolean;
   waitTimeoutMs?: number;
 }): Promise<string> {
+  const resolved = await resolveExpoProjectForToolCall('expo_eas_build', args.projectId);
+  if ('response' in resolved) {
+    return resolved.response;
+  }
+  const projectId = resolved.project.id;
+  const automation = getExpoProjectAutomationContext(projectId).automation;
+
   return JSON.stringify(
     normalizeExpoToolPayload(
       'expo_eas_build',
-      withExpoAutomation(args.projectId, await runExpoProjectAction(args.projectId, 'build', args)),
-      { preferredFlow: getExpoProjectAutomationContext(args.projectId).automation.preferredFlow },
+      withExpoAutomation(projectId, await runExpoProjectAction(projectId, 'build', args)),
+      { preferredFlow: automation.preferredFlow },
     ),
   );
 }
@@ -919,14 +1114,21 @@ export async function executeExpoEasUpdate(args: {
   waitForCompletion?: boolean;
   waitTimeoutMs?: number;
 }): Promise<string> {
+  const resolved = await resolveExpoProjectForToolCall('expo_eas_update', args.projectId);
+  if ('response' in resolved) {
+    return resolved.response;
+  }
+  const projectId = resolved.project.id;
+  const automation = getExpoProjectAutomationContext(projectId).automation;
+
   return JSON.stringify(
     normalizeExpoToolPayload(
       'expo_eas_update',
       withExpoAutomation(
-        args.projectId,
-        await runExpoProjectAction(args.projectId, 'update', args),
+        projectId,
+        await runExpoProjectAction(projectId, 'update', args),
       ),
-      { preferredFlow: getExpoProjectAutomationContext(args.projectId).automation.preferredFlow },
+      { preferredFlow: automation.preferredFlow },
     ),
   );
 }
@@ -938,14 +1140,21 @@ export async function executeExpoEasSubmit(args: {
   waitForCompletion?: boolean;
   waitTimeoutMs?: number;
 }): Promise<string> {
+  const resolved = await resolveExpoProjectForToolCall('expo_eas_submit', args.projectId);
+  if ('response' in resolved) {
+    return resolved.response;
+  }
+  const projectId = resolved.project.id;
+  const automation = getExpoProjectAutomationContext(projectId).automation;
+
   return JSON.stringify(
     normalizeExpoToolPayload(
       'expo_eas_submit',
       withExpoAutomation(
-        args.projectId,
-        await runExpoProjectAction(args.projectId, 'submit', args),
+        projectId,
+        await runExpoProjectAction(projectId, 'submit', args),
       ),
-      { preferredFlow: getExpoProjectAutomationContext(args.projectId).automation.preferredFlow },
+      { preferredFlow: automation.preferredFlow },
     ),
   );
 }
@@ -956,14 +1165,21 @@ export async function executeExpoEasDeployWeb(args: {
   waitForCompletion?: boolean;
   waitTimeoutMs?: number;
 }): Promise<string> {
+  const resolved = await resolveExpoProjectForToolCall('expo_eas_deploy_web', args.projectId);
+  if ('response' in resolved) {
+    return resolved.response;
+  }
+  const projectId = resolved.project.id;
+  const automation = getExpoProjectAutomationContext(projectId).automation;
+
   return JSON.stringify(
     normalizeExpoToolPayload(
       'expo_eas_deploy_web',
       withExpoAutomation(
-        args.projectId,
-        await runExpoProjectAction(args.projectId, 'deploy-web', args),
+        projectId,
+        await runExpoProjectAction(projectId, 'deploy-web', args),
       ),
-      { preferredFlow: getExpoProjectAutomationContext(args.projectId).automation.preferredFlow },
+      { preferredFlow: automation.preferredFlow },
     ),
   );
 }
@@ -972,11 +1188,18 @@ export async function executeExpoEasWorkflowRuns(args: {
   projectId: string;
   limit?: number;
 }): Promise<string> {
+  const resolved = await resolveExpoProjectForToolCall('expo_eas_workflow_runs', args.projectId);
+  if ('response' in resolved) {
+    return resolved.response;
+  }
+  const projectId = resolved.project.id;
+  const automation = getExpoProjectAutomationContext(projectId).automation;
+
   return JSON.stringify(
     normalizeExpoToolPayload(
       'expo_eas_workflow_runs',
-      withExpoAutomation(args.projectId, await listExpoWorkflowRuns(args.projectId, args)),
-      { preferredFlow: getExpoProjectAutomationContext(args.projectId).automation.preferredFlow },
+      withExpoAutomation(projectId, await listExpoWorkflowRuns(projectId, args)),
+      { preferredFlow: automation.preferredFlow },
     ),
   );
 }
@@ -987,11 +1210,18 @@ export async function executeExpoEasWorkflowStatus(args: {
   includeJobs?: boolean;
   includeLogs?: boolean;
 }): Promise<string> {
+  const resolved = await resolveExpoProjectForToolCall('expo_eas_workflow_status', args.projectId);
+  if ('response' in resolved) {
+    return resolved.response;
+  }
+  const projectId = resolved.project.id;
+  const automation = getExpoProjectAutomationContext(projectId).automation;
+
   return JSON.stringify(
     normalizeExpoToolPayload(
       'expo_eas_workflow_status',
-      withExpoAutomation(args.projectId, await inspectExpoWorkflowRun(args.projectId, args)),
-      { preferredFlow: getExpoProjectAutomationContext(args.projectId).automation.preferredFlow },
+      withExpoAutomation(projectId, await inspectExpoWorkflowRun(projectId, args)),
+      { preferredFlow: automation.preferredFlow },
     ),
   );
 }
@@ -1004,11 +1234,18 @@ export async function executeExpoEasWorkflowWait(args: {
   includeJobs?: boolean;
   includeLogs?: boolean;
 }): Promise<string> {
+  const resolved = await resolveExpoProjectForToolCall('expo_eas_workflow_wait', args.projectId);
+  if ('response' in resolved) {
+    return resolved.response;
+  }
+  const projectId = resolved.project.id;
+  const automation = getExpoProjectAutomationContext(projectId).automation;
+
   return JSON.stringify(
     normalizeExpoToolPayload(
       'expo_eas_workflow_wait',
-      withExpoAutomation(args.projectId, await waitForExpoWorkflowRun(args.projectId, args)),
-      { preferredFlow: getExpoProjectAutomationContext(args.projectId).automation.preferredFlow },
+      withExpoAutomation(projectId, await waitForExpoWorkflowRun(projectId, args)),
+      { preferredFlow: automation.preferredFlow },
     ),
   );
 }
@@ -1019,18 +1256,37 @@ export async function executeExpoEasGraphql(args: {
   projectId?: string;
   accountId?: string;
 }): Promise<string> {
-  const result = await runExpoGraphqlQuery(args);
-  const automationProjectId = args.projectId || result.projectId;
-  return JSON.stringify(
-    automationProjectId
-      ? normalizeExpoToolPayload(
+  let resolvedProjectId: string | undefined;
+  if (args.projectId !== undefined) {
+    const resolved = await resolveExpoProjectForToolCall('expo_eas_graphql', args.projectId);
+    if ('response' in resolved) {
+      return resolved.response;
+    }
+    resolvedProjectId = resolved.project.id;
+  }
+
+  const result = await runExpoGraphqlQuery(
+    resolvedProjectId ? { ...args, projectId: resolvedProjectId } : args,
+  );
+  const automationProjectId = resolvedProjectId || result.projectId;
+  if (automationProjectId) {
+    try {
+      const automation = getExpoProjectAutomationContext(automationProjectId).automation;
+      return JSON.stringify(
+        normalizeExpoToolPayload(
           'expo_eas_graphql',
           withExpoAutomation(automationProjectId, result),
           {
-            preferredFlow:
-              getExpoProjectAutomationContext(automationProjectId).automation.preferredFlow,
+            preferredFlow: automation.preferredFlow,
           },
-        )
-      : normalizeExpoToolPayload('expo_eas_graphql', result),
+        ),
+      );
+    } catch {
+      return JSON.stringify(normalizeExpoToolPayload('expo_eas_graphql', result));
+    }
+  }
+
+  return JSON.stringify(
+    normalizeExpoToolPayload('expo_eas_graphql', result),
   );
 }

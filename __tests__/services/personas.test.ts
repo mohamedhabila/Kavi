@@ -59,6 +59,7 @@ describe('BUILT_IN_PERSONAS', () => {
   it('requires the SuperAgent to emit a parseable semantic plan before tool calls', () => {
     const superAgent = BUILT_IN_PERSONAS.find((persona) => persona.id === 'super-agent');
 
+    expect(superAgent?.systemPrompt).not.toContain('running in Kavi');
     expect(superAgent?.systemPrompt).toContain('Objective: one concise sentence');
     expect(superAgent?.systemPrompt).toContain('Success Criteria:');
     expect(superAgent?.systemPrompt).toContain('Stop Conditions:');
@@ -78,6 +79,20 @@ describe('BUILT_IN_PERSONAS', () => {
     );
     expect(superAgent?.systemPrompt).toContain(
       'unsupported quantitative, pricing, latency, or superlative claims',
+    );
+  });
+
+  it('keeps ordinary repo worker tool bundles narrow by default', () => {
+    const superAgent = BUILT_IN_PERSONAS.find((persona) => persona.id === 'super-agent');
+
+    expect(superAgent?.systemPrompt).toContain(
+      "tools: ['read_file', 'file_edit', 'write_file', 'list_files', 'glob_search', 'text_search'] for ordinary repo coding and verification tasks",
+    );
+    expect(superAgent?.systemPrompt).toContain(
+      "add 'python' only when the delegated gap specifically requires code execution, data analysis, or artifact generation",
+    );
+    expect(superAgent?.systemPrompt).toContain(
+      "add 'tool_catalog' only when the delegated gap is explicit capability discovery rather than direct execution",
     );
   });
 });

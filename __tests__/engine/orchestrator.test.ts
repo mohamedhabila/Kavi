@@ -89,7 +89,7 @@ jest.mock('../../src/services/storage/SecureStorage', () => ({
 
 import { LlmService } from '../../src/services/llm/LlmService';
 import { executeTool } from '../../src/engine/tools/index';
-import { getSkillSystemPrompts } from '../../src/services/skills/manager';
+import { getSkillSystemPrompts, getSkillToolDefinitions } from '../../src/services/skills/manager';
 import { getConversationMemoryForSystemPrompt } from '../../src/services/memory/store';
 import { buildLivingMemorySections } from '../../src/services/memory/livingMemoryBridge';
 import { getProviderApiKey } from '../../src/services/storage/SecureStorage';
@@ -198,6 +198,8 @@ beforeEach(() => {
   });
   (getSkillSystemPrompts as jest.Mock).mockReset();
   (getSkillSystemPrompts as jest.Mock).mockResolvedValue('');
+  (getSkillToolDefinitions as jest.Mock).mockReset();
+  (getSkillToolDefinitions as jest.Mock).mockReturnValue([]);
   (executeTool as jest.Mock).mockReset();
   (executeTool as jest.Mock).mockResolvedValue('tool result');
   (getProviderApiKey as jest.Mock).mockReset();
@@ -253,6 +255,954 @@ describe('Orchestrator', () => {
       expect(mockStreamMessage).toHaveBeenCalledTimes(2);
       expect(mockStreamMessage.mock.calls[0][1]).toEqual(expect.objectContaining({ model: 'gpt-5.4' }));
       expect(mockStreamMessage.mock.calls[1][1]).toEqual(expect.objectContaining({ model: 'gpt-5.4' }));
+    });
+
+    it('repairs missing persisted tool-result messages before a resumed model request', async () => {
+      mockStreamMessage.mockReturnValue(
+        createStreamGenerator([
+          { type: 'token', content: 'done' },
+          { type: 'done' },
+        ]),
+      );
+
+      const callbacks = makeCallbacks();
+      const options: OrchestratorOptions = {
+        provider: makeProvider(),
+        model: 'gpt-5.4',
+        conversationId: 'conv-repair-tool-results',
+        systemPrompt: 'You are helpful',
+        messages: [
+          { id: 'u1', role: 'user', content: 'Continue', timestamp: Date.now() },
+          {
+            id: 'a1',
+            role: 'assistant',
+            content: '',
+            timestamp: Date.now(),
+            toolCalls: [
+              {
+                id: 'gemini-call-0',
+                name: 'read_file',
+                arguments: '{"path":"a.txt"}',
+                status: 'completed',
+                result: 'first result',
+              },
+            ],
+          },
+          {
+            id: 'a2',
+            role: 'assistant',
+            content: '',
+            timestamp: Date.now(),
+            toolCalls: [
+              {
+                id: 'gemini-call-0',
+                name: 'text_search',
+                arguments: '{"query":"needle"}',
+                status: 'completed',
+                result: 'second result',
+              },
+            ],
+          },
+        ],
+      };
+
+      await runOrchestrator(options, callbacks);
+
+      const requestMessages = mockStreamMessage.mock.calls[0][0];
+      const toolMessages = requestMessages.filter((message: any) => message.role === 'tool');
+      expect(toolMessages.map((message: any) => message.content)).toEqual([
+        'first result',
+        'second result',
+      ]);
+      expect(toolMessages.map((message: any) => message.name)).toEqual([
+        'read_file',
+        'text_search',
+      ]);
+    });
+  });
+
+  describe('LLM tool planner routing', () => {
+    it('uses planner routeMode=execution to enable execution-lane guardrails for non-lexical prompts', async () => {
+      const mockSendMessage = jest.fn().mockResolvedValue({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                routeMode: 'execution',
+                recommendedTools: ['expo_eas_status', 'expo_eas_workflow_status', 'file_edit'],
+                reason: 'Execution workflow request',
+              }),
+            },
+          },
+        ],
+      });
+
+      (LlmService as any).mockImplementation(() => ({
+        streamMessage: mockStreamMessage,
+        sendMessage: mockSendMessage,
+      }));
+
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator([
+          { type: 'token', content: 'I will execute the required workflow now.' },
+          { type: 'done', content: 'I will execute the required workflow now.' },
+        ]),
+      );
+
+      const callbacks = makeCallbacks();
+      const options: OrchestratorOptions = {
+        provider: makeProvider({
+          name: 'Gemini',
+          model: 'gemini-2.5-pro',
+          baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        }),
+        model: 'gemini-2.5-pro',
+        conversationId: 'conv-planner-route-mode',
+        systemPrompt: 'You are helpful',
+        messages: [
+          {
+            id: 'msg1',
+            role: 'user',
+            content: 'أنشئ المشروع وادفع التغييرات وانشره وراقب النتيجة حتى النجاح',
+            timestamp: Date.now(),
+          },
+        ],
+      };
+
+      await runOrchestrator(options, callbacks);
+
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      const plannerMessages = mockSendMessage.mock.calls[0][0] as Array<{ role: string; content: string }>;
+      expect(plannerMessages[1]?.content).toContain('The task may be written in any language.');
+
+      const systemPromptMessage = mockStreamMessage.mock.calls[0][0][0];
+      const firstTurnTools = new Set(
+        (mockStreamMessage.mock.calls[0][1].tools || []).map((tool: { name: string }) => tool.name),
+      );
+      expect(systemPromptMessage.content).toContain(
+        'Execution-lane guardrails: avoid wildcard or exploratory probes such as text_search("*") and repeated broad list/search loops once execution intent is clear.',
+      );
+      expect(firstTurnTools.has('expo_eas_list_projects')).toBe(true);
+      expect(firstTurnTools.has('expo_eas_status')).toBe(true);
+      expect(firstTurnTools.has('expo_eas_workflow_status')).toBe(false);
+      expect(firstTurnTools.has('file_edit')).toBe(true);
+      expect(firstTurnTools.has('text_search')).toBe(false);
+      expect(firstTurnTools.has('web_search')).toBe(false);
+      expect(firstTurnTools.has('python')).toBe(false);
+      expect(firstTurnTools.has('tool_catalog')).toBe(false);
+    });
+
+    it('sanitizes planner-suggested discovery and session-inspection tools on execution routes', async () => {
+      const mockSendMessage = jest.fn().mockResolvedValue({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                routeMode: 'execution',
+                recommendedTools: [
+                  'list_files',
+                  'web_search',
+                  'glob_search',
+                  'sessions_list',
+                  'record_workflow_evidence',
+                  'expo_eas_workflow_status',
+                  'file_edit',
+                ],
+                reason: 'Execution workflow request',
+              }),
+            },
+          },
+        ],
+      });
+
+      (LlmService as any).mockImplementation(() => ({
+        streamMessage: mockStreamMessage,
+        sendMessage: mockSendMessage,
+      }));
+
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator([
+          { type: 'token', content: 'I will execute the required workflow now.' },
+          { type: 'done', content: 'I will execute the required workflow now.' },
+        ]),
+      );
+
+      const callbacks = makeCallbacks();
+      const options: OrchestratorOptions = {
+        provider: makeProvider({
+          name: 'Gemini',
+          model: 'gemini-2.5-pro',
+          baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        }),
+        model: 'gemini-2.5-pro',
+        conversationId: 'conv-planner-route-mode-sanitized',
+        systemPrompt: 'You are helpful',
+        messages: [
+          {
+            id: 'msg1',
+            role: 'user',
+            content: 'Create the project, push the changes, deploy it, and keep monitoring until the workflow finishes.',
+            timestamp: Date.now(),
+          },
+        ],
+      };
+
+      await runOrchestrator(options, callbacks);
+
+      const systemPromptMessage = mockStreamMessage.mock.calls[0][0][0];
+      const firstTurnTools = new Set(
+        (mockStreamMessage.mock.calls[0][1].tools || []).map((tool: { name: string }) => tool.name),
+      );
+
+      expect(firstTurnTools.has('expo_eas_list_projects')).toBe(true);
+      expect(firstTurnTools.has('expo_eas_workflow_status')).toBe(false);
+      expect(firstTurnTools.has('file_edit')).toBe(true);
+      expect(firstTurnTools.has('web_search')).toBe(false);
+      expect(firstTurnTools.has('glob_search')).toBe(false);
+      expect(firstTurnTools.has('sessions_list')).toBe(false);
+      expect(firstTurnTools.has('record_workflow_evidence')).toBe(false);
+      expect(systemPromptMessage.content).toContain('## Execution Tool Discipline');
+      expect(systemPromptMessage.content).not.toContain('If you are not sure which tool, skill, or MCP capability fits');
+    });
+
+    it('does not override a planner discovery route based on execution wording alone', async () => {
+      const discoveryPlan = {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                routeMode: 'discovery',
+                recommendedTools: ['list_files', 'web_search', 'glob_search'],
+                reason: 'Inspect the repo first.',
+              }),
+            },
+          },
+        ],
+      };
+      const mockSendMessage = jest
+        .fn()
+        .mockResolvedValueOnce(discoveryPlan)
+        .mockResolvedValueOnce(discoveryPlan);
+
+      (LlmService as any).mockImplementation(() => ({
+        streamMessage: mockStreamMessage,
+        sendMessage: mockSendMessage,
+      }));
+
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator([
+          { type: 'token', content: 'I will execute the required workflow now.' },
+          { type: 'done', content: 'I will execute the required workflow now.' },
+        ]),
+      );
+
+      const callbacks = makeCallbacks();
+      const options: OrchestratorOptions = {
+        provider: makeProvider({
+          name: 'Gemini',
+          model: 'gemini-2.5-pro',
+          baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        }),
+        model: 'gemini-2.5-pro',
+        conversationId: 'conv-planner-route-mode-override',
+        systemPrompt: 'You are helpful',
+        messages: [
+          {
+            id: 'msg1',
+            role: 'user',
+            content:
+              'Create a simple web app in the linked repo, commit the changes, push to main, deploy it, and monitor until the deployment succeeds.',
+            timestamp: Date.now(),
+          },
+        ],
+      };
+
+      await runOrchestrator(options, callbacks);
+
+      expect(mockSendMessage).toHaveBeenCalledTimes(2);
+
+      const systemPromptMessage = mockStreamMessage.mock.calls[0][0][0];
+      const firstTurnTools = new Set(
+        (mockStreamMessage.mock.calls[0][1].tools || []).map((tool: { name: string }) => tool.name),
+      );
+
+      expect(firstTurnTools.has('list_files')).toBe(true);
+      expect(firstTurnTools.has('web_search')).toBe(true);
+      expect(firstTurnTools.has('glob_search')).toBe(true);
+      expect(systemPromptMessage.content).not.toContain('## Execution Tool Discipline');
+      expect(systemPromptMessage.content).toContain(
+        'If you are not sure which tool, skill, or MCP capability fits',
+      );
+    });
+
+    it('replans a discovery-only shortlist before execution requests enter catalog/search loops', async () => {
+      (getSkillToolDefinitions as jest.Mock).mockReturnValue([
+        {
+          name: 'skill__github__commit_files',
+          description: '[GitHub] Create a single atomic commit on a branch with changed repository files.',
+          input_schema: { type: 'object', properties: {} },
+        },
+      ]);
+
+      const mockSendMessage = jest
+        .fn()
+        .mockResolvedValueOnce({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  routeMode: 'discovery',
+                  recommendedTools: ['tool_catalog', 'web_search'],
+                  reason: 'Find the relevant tools first.',
+                }),
+              },
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  routeMode: 'execution',
+                  recommendedTools: [
+                    'skill__github__commit_files',
+                    'expo_eas_deploy_web',
+                    'expo_eas_workflow_wait',
+                    'file_edit',
+                  ],
+                  reason: 'Direct repo and deploy tools are available.',
+                }),
+              },
+            },
+          ],
+        });
+
+      (LlmService as any).mockImplementation(() => ({
+        streamMessage: mockStreamMessage,
+        sendMessage: mockSendMessage,
+      }));
+
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator([
+          { type: 'token', content: 'I will execute the workflow directly.' },
+          { type: 'done', content: 'I will execute the workflow directly.' },
+        ]),
+      );
+
+      const callbacks = makeCallbacks();
+      const options: OrchestratorOptions = {
+        provider: makeProvider({
+          name: 'Gemini',
+          model: 'gemini-2.5-pro',
+          baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        }),
+        model: 'gemini-2.5-pro',
+        conversationId: 'conv-planner-discovery-only-replan',
+        systemPrompt: 'You are helpful',
+        messages: [
+          {
+            id: 'msg1',
+            role: 'user',
+            content:
+              'Create a simple web app in the linked repo, commit the changes, push to main with GitHub tools, deploy with Expo EAS tools, and monitor until success.',
+            timestamp: Date.now(),
+          },
+        ],
+      };
+
+      await runOrchestrator(options, callbacks);
+
+      expect(mockSendMessage).toHaveBeenCalledTimes(2);
+      const correctionPrompt = mockSendMessage.mock.calls[1][0][1].content as string;
+      expect(correctionPrompt).toContain(
+        'Previous routeMode was discovery with non-advancing, incomplete, or missing tools',
+      );
+
+      const systemPromptMessage = mockStreamMessage.mock.calls[0][0][0];
+      const firstTurnTools = new Set(
+        (mockStreamMessage.mock.calls[0][1].tools || []).map((tool: { name: string }) => tool.name),
+      );
+
+      expect(systemPromptMessage.content).toContain('## Execution Tool Discipline');
+      expect(firstTurnTools.has('expo_eas_list_projects')).toBe(true);
+      expect(firstTurnTools.has('skill__github__commit_files')).toBe(true);
+      expect(firstTurnTools.has('expo_eas_deploy_web')).toBe(false);
+      expect(firstTurnTools.has('expo_eas_workflow_wait')).toBe(true);
+      expect(firstTurnTools.has('file_edit')).toBe(true);
+      expect(firstTurnTools.has('tool_catalog')).toBe(false);
+      expect(firstTurnTools.has('web_search')).toBe(false);
+    });
+
+    it('replans namespaced GitHub list/catalog shortlists before execution', async () => {
+      (getSkillToolDefinitions as jest.Mock).mockReturnValue([
+        {
+          name: 'skill__github__list_files',
+          description: '[GitHub] List files in a repository tree.',
+          input_schema: { type: 'object', properties: {} },
+        },
+        {
+          name: 'skill__github__commit_files',
+          description: '[GitHub] Commit changed files to a repository branch.',
+          input_schema: { type: 'object', properties: {} },
+        },
+      ]);
+
+      const mockSendMessage = jest
+        .fn()
+        .mockResolvedValueOnce({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  routeMode: 'discovery',
+                  recommendedTools: ['skill__github__list_files', 'tool_catalog'],
+                  reason: 'Inspect the repository tools first.',
+                }),
+              },
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  routeMode: 'execution',
+                  recommendedTools: [
+                    'skill__github__commit_files',
+                    'expo_eas_deploy_web',
+                    'expo_eas_workflow_wait',
+                    'file_edit',
+                  ],
+                  reason: 'Commit and deployment tools directly advance the requested workflow.',
+                }),
+              },
+            },
+          ],
+        });
+
+      (LlmService as any).mockImplementation(() => ({
+        streamMessage: mockStreamMessage,
+        sendMessage: mockSendMessage,
+      }));
+
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator([
+          { type: 'token', content: 'I will execute the workflow directly.' },
+          { type: 'done', content: 'I will execute the workflow directly.' },
+        ]),
+      );
+
+      const callbacks = makeCallbacks();
+      const options: OrchestratorOptions = {
+        provider: makeProvider({
+          name: 'Gemini',
+          model: 'gemini-2.5-pro',
+          baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        }),
+        model: 'gemini-2.5-pro',
+        conversationId: 'conv-planner-github-list-replan',
+        systemPrompt: 'You are helpful',
+        messages: [
+          {
+            id: 'msg1',
+            role: 'user',
+            content:
+              'Create a simple web app in mohamedhabila/expo, commit the changes, push to main with GitHub tools, deploy with Expo EAS tools, and monitor until success.',
+            timestamp: Date.now(),
+          },
+        ],
+      };
+
+      await runOrchestrator(options, callbacks);
+
+      expect(mockSendMessage).toHaveBeenCalledTimes(2);
+      const correctionPrompt = mockSendMessage.mock.calls[1][0][1].content as string;
+      expect(correctionPrompt).toContain('skill__github__list_files, tool_catalog');
+
+      const firstTurnTools = new Set(
+        (mockStreamMessage.mock.calls[0][1].tools || []).map((tool: { name: string }) => tool.name),
+      );
+
+      expect(firstTurnTools.has('expo_eas_list_projects')).toBe(true);
+      expect(firstTurnTools.has('skill__github__commit_files')).toBe(true);
+      expect(firstTurnTools.has('expo_eas_deploy_web')).toBe(false);
+      expect(firstTurnTools.has('expo_eas_workflow_wait')).toBe(true);
+      expect(firstTurnTools.has('file_edit')).toBe(true);
+      expect(firstTurnTools.has('tool_catalog')).toBe(false);
+      expect(firstTurnTools.has('web_search')).toBe(false);
+    });
+
+    it('fails closed to execution tools for repeated SuperAgent read/search plans', async () => {
+      const registryModule = jest.requireMock('../../src/services/agents/registry') as {
+        getPersona: jest.Mock;
+      };
+      registryModule.getPersona.mockReturnValueOnce({
+        id: 'super-agent',
+        name: 'SuperAgent',
+        systemPrompt: 'You are the SuperAgent.',
+      });
+      (getSkillToolDefinitions as jest.Mock).mockReturnValue([
+        {
+          name: 'skill__github__list_files',
+          description: '[GitHub] List files in a repository tree.',
+          input_schema: { type: 'object', properties: {} },
+        },
+        {
+          name: 'skill__github__commit_files',
+          description: '[GitHub] Commit changed files to a repository branch.',
+          input_schema: { type: 'object', properties: {} },
+        },
+      ]);
+
+      const repeatedDiscoveryPlan = {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                routeMode: 'discovery',
+                recommendedTools: ['list_files', 'web_search', 'tool_catalog'],
+                reason: 'Inspect first.',
+              }),
+            },
+          },
+        ],
+      };
+      const mockSendMessage = jest
+        .fn()
+        .mockResolvedValueOnce(repeatedDiscoveryPlan)
+        .mockResolvedValueOnce(repeatedDiscoveryPlan);
+
+      (LlmService as any).mockImplementation(() => ({
+        streamMessage: mockStreamMessage,
+        sendMessage: mockSendMessage,
+      }));
+
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator([
+          { type: 'token', content: 'I will execute the workflow directly.' },
+          { type: 'done', content: 'I will execute the workflow directly.' },
+        ]),
+      );
+
+      const callbacks = makeCallbacks();
+      const options: OrchestratorOptions = {
+        provider: makeProvider({
+          name: 'Gemini',
+          model: 'gemini-2.5-pro',
+          baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        }),
+        model: 'gemini-2.5-pro',
+        conversationId: 'conv-superagent-planner-fail-closed',
+        systemPrompt: 'You are helpful',
+        personaId: 'super-agent',
+        messages: [
+          {
+            id: 'msg1',
+            role: 'user',
+            content:
+              'Create a simple web app in mohamedhabila/expo, commit the changes, push to main with GitHub tools, deploy with Expo EAS tools, and monitor until success.',
+            timestamp: Date.now(),
+          },
+        ],
+      };
+
+      await runOrchestrator(options, callbacks);
+
+      expect(mockSendMessage).toHaveBeenCalledTimes(2);
+      const systemPromptMessage = mockStreamMessage.mock.calls[0][0][0];
+      const firstTurnTools = new Set(
+        (mockStreamMessage.mock.calls[0][1].tools || []).map((tool: { name: string }) => tool.name),
+      );
+
+      expect(systemPromptMessage.content).toContain('## Execution Tool Discipline');
+      expect(firstTurnTools.has('expo_eas_list_projects')).toBe(true);
+      expect(firstTurnTools.has('skill__github__commit_files')).toBe(true);
+      expect(firstTurnTools.has('expo_eas_deploy_web')).toBe(false);
+      expect(firstTurnTools.has('expo_eas_workflow_wait')).toBe(true);
+      expect(firstTurnTools.has('web_search')).toBe(false);
+      expect(firstTurnTools.has('tool_catalog')).toBe(false);
+    });
+
+    it('holds premature final text while capability workflow phases are incomplete', async () => {
+      (getSkillToolDefinitions as jest.Mock).mockReturnValue([
+        {
+          name: 'skill__github__repos',
+          description: '[GitHub] List repositories available to the token.',
+          input_schema: { type: 'object', properties: {} },
+        },
+        {
+          name: 'skill__github__commit_files',
+          description: '[GitHub] Commit changed files to a repository branch.',
+          input_schema: { type: 'object', properties: {} },
+        },
+        {
+          name: 'skill__github__create_issue',
+          description: '[GitHub] Create an issue in a repository.',
+          input_schema: { type: 'object', properties: {} },
+        },
+      ]);
+
+      const executionPlan = {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                routeMode: 'execution',
+                requiredToolCategories: ['workspace_files', 'github'],
+                requiredCapabilities: ['write', 'commit', 'push', 'verify'],
+                recommendedTools: ['write_file', 'skill__github__commit_files'],
+                reason: 'Create files locally and commit them to the matching repository.',
+              }),
+            },
+          },
+        ],
+      };
+      const mockSendMessage = jest.fn().mockResolvedValue(executionPlan);
+
+      (LlmService as any).mockImplementation(() => ({
+        streamMessage: mockStreamMessage,
+        sendMessage: mockSendMessage,
+      }));
+
+      mockStreamMessage
+        .mockImplementationOnce(() =>
+          createStreamGenerator([
+            { type: 'token', content: 'I cannot continue because repository setup is unclear.' },
+            { type: 'done', content: 'I cannot continue because repository setup is unclear.' },
+          ]),
+        )
+        .mockImplementationOnce(() =>
+          createStreamGenerator([
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc-repos', name: 'skill__github__repos', arguments: '{}' },
+            },
+            { type: 'done', content: '' },
+          ]),
+        )
+        .mockImplementationOnce(() =>
+          createStreamGenerator([
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc-list-files', name: 'list_files', arguments: '{}' },
+            },
+            { type: 'done', content: '' },
+          ]),
+        )
+        .mockImplementationOnce(() =>
+          createStreamGenerator([
+            {
+              type: 'tool_call',
+              toolCall: {
+                id: 'tc-write',
+                name: 'write_file',
+                arguments: '{"path":"package.json","content":"{}"}',
+              },
+            },
+            { type: 'done', content: '' },
+          ]),
+        )
+        .mockImplementationOnce(() =>
+          createStreamGenerator([
+            {
+              type: 'tool_call',
+              toolCall: {
+                id: 'tc-commit',
+                name: 'skill__github__commit_files',
+                arguments: '{"repo":"mohamedhabila/Expo","branch":"main","message":"Add web app","changes":[]}',
+              },
+            },
+            { type: 'done', content: '' },
+          ]),
+        )
+        .mockImplementationOnce(() =>
+          createStreamGenerator([
+            { type: 'token', content: 'Done with verified commit evidence.' },
+            { type: 'done', content: 'Done with verified commit evidence.' },
+          ]),
+        );
+
+      (executeTool as jest.Mock)
+        .mockResolvedValueOnce(JSON.stringify([{ full_name: 'mohamedhabila/Expo' }]))
+        .mockResolvedValueOnce(JSON.stringify([]))
+        .mockResolvedValueOnce(JSON.stringify({ path: 'package.json' }))
+        .mockResolvedValueOnce(JSON.stringify({ status: 'ok', commitSha: 'abc123' }));
+
+      const callbacks = makeCallbacks();
+      const options: OrchestratorOptions = {
+        provider: makeProvider({
+          name: 'Gemini',
+          model: 'gemini-2.5-pro',
+          baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        }),
+        model: 'gemini-2.5-pro',
+        conversationId: 'conv-workflow-hold-final-text',
+        systemPrompt: 'You are helpful',
+        messages: [
+          {
+            id: 'msg1',
+            role: 'user',
+            content: 'Create a simple web app in the GitHub repo named Expo, commit and push it.',
+            timestamp: Date.now(),
+          },
+        ],
+      };
+
+      await runOrchestrator(options, callbacks);
+
+      expect(mockStreamMessage.mock.calls.length).toBeGreaterThanOrEqual(5);
+      expect(mockStreamMessage.mock.calls[1][1].toolChoice).toBe('required');
+      expect(callbacks.calls.onAssistantMessage[0].content).toBe('');
+      expect(callbacks.calls.onAssistantMessage[0].toolCalls[0].name).toBe(
+        'skill__github__repos',
+      );
+      expect(
+        callbacks.calls.onAssistantMessage.some((message) =>
+          message.content.includes('repository setup is unclear'),
+        ),
+      ).toBe(false);
+      expect(callbacks.calls.onAssistantMessage.at(-1)?.content).toBe(
+        'Done with verified commit evidence.',
+      );
+    });
+
+    it('corrects SuperAgent execution plans that miss LLM-declared required tool categories', async () => {
+      const registryModule = jest.requireMock('../../src/services/agents/registry') as {
+        getPersona: jest.Mock;
+      };
+      registryModule.getPersona.mockReturnValueOnce({
+        id: 'super-agent',
+        name: 'SuperAgent',
+        systemPrompt: 'You are the SuperAgent.',
+      });
+      (getSkillToolDefinitions as jest.Mock).mockReturnValue([
+        {
+          name: 'skill__github__commit_files',
+          description: '[GitHub] Commit changed files to a repository branch.',
+          input_schema: { type: 'object', properties: {} },
+        },
+      ]);
+
+      const localOnlyPlan = {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                routeMode: 'execution',
+                requiredToolCategories: ['github', 'expo'],
+                recommendedTools: ['read_file', 'write_file', 'expo_eas_create_project'],
+                reason: 'Create local files before deployment.',
+              }),
+            },
+          },
+        ],
+      };
+      const mockSendMessage = jest
+        .fn()
+        .mockResolvedValueOnce(localOnlyPlan)
+        .mockResolvedValueOnce(localOnlyPlan);
+
+      (LlmService as any).mockImplementation(() => ({
+        streamMessage: mockStreamMessage,
+        sendMessage: mockSendMessage,
+      }));
+
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator([
+          { type: 'token', content: 'I will execute the workflow directly.' },
+          { type: 'done', content: 'I will execute the workflow directly.' },
+        ]),
+      );
+
+      const callbacks = makeCallbacks();
+      const options: OrchestratorOptions = {
+        provider: makeProvider({
+          name: 'Gemini',
+          model: 'gemini-2.5-pro',
+          baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        }),
+        model: 'gemini-2.5-pro',
+        conversationId: 'conv-superagent-planner-category-coverage',
+        systemPrompt: 'You are helpful',
+        personaId: 'super-agent',
+        messages: [
+          {
+            id: 'msg1',
+            role: 'user',
+            content:
+              'Create a simple web app in mohamedhabila/expo, commit the changes, push to main with GitHub tools, deploy with Expo EAS tools, and monitor until success.',
+            timestamp: Date.now(),
+          },
+        ],
+      };
+
+      await runOrchestrator(options, callbacks);
+
+      expect(mockSendMessage).toHaveBeenCalledTimes(2);
+      const correctionPrompt = mockSendMessage.mock.calls[1][0][1].content as string;
+      expect(correctionPrompt).toContain('Previous requiredToolCategories: github, expo');
+
+      const firstTurnTools = new Set(
+        (mockStreamMessage.mock.calls[0][1].tools || []).map((tool: { name: string }) => tool.name),
+      );
+
+      expect(firstTurnTools.has('expo_eas_list_projects')).toBe(true);
+      expect(firstTurnTools.has('skill__github__commit_files')).toBe(true);
+      expect(firstTurnTools.has('expo_eas_deploy_web')).toBe(false);
+      expect(firstTurnTools.has('expo_eas_workflow_wait')).toBe(true);
+      expect(firstTurnTools.has('web_search')).toBe(false);
+      expect(firstTurnTools.has('tool_catalog')).toBe(false);
+    });
+
+    it('keeps SuperAgent execution requests direct-first unless workers are explicitly required', async () => {
+      const registryModule = jest.requireMock('../../src/services/agents/registry') as {
+        getPersona: jest.Mock;
+      };
+      registryModule.getPersona.mockReturnValueOnce({
+        id: 'super-agent',
+        name: 'SuperAgent',
+        systemPrompt: 'You are the SuperAgent.',
+      });
+
+      const mockSendMessage = jest.fn().mockResolvedValue({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                routeMode: 'execution',
+                recommendedTools: ['file_edit', 'expo_eas_workflow_status'],
+                reason: 'Direct execution path is clear.',
+              }),
+            },
+          },
+        ],
+      });
+
+      (LlmService as any).mockImplementation(() => ({
+        streamMessage: mockStreamMessage,
+        sendMessage: mockSendMessage,
+      }));
+
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator([
+          { type: 'token', content: 'I will execute the required workflow now.' },
+          { type: 'done', content: 'I will execute the required workflow now.' },
+        ]),
+      );
+
+      const callbacks = makeCallbacks();
+      const options: OrchestratorOptions = {
+        provider: makeProvider({
+          name: 'Gemini',
+          model: 'gemini-2.5-pro',
+          baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        }),
+        model: 'gemini-2.5-pro',
+        conversationId: 'conv-superagent-execution-direct-first',
+        systemPrompt: 'You are helpful',
+        personaId: 'super-agent',
+        messages: [
+          {
+            id: 'msg1',
+            role: 'user',
+            content:
+              'Create a simple web app in the linked repo, commit the changes, push to main, deploy it, and monitor until the deployment succeeds.',
+            timestamp: Date.now(),
+          },
+        ],
+      };
+
+      await runOrchestrator(options, callbacks);
+
+      const systemPromptMessage = mockStreamMessage.mock.calls[0][0][0];
+      const firstTurnTools = new Set(
+        (mockStreamMessage.mock.calls[0][1].tools || []).map((tool: { name: string }) => tool.name),
+      );
+
+      expect(systemPromptMessage.content).toContain(
+        'This request is a clear execution task. Prefer direct supervisor execution first',
+      );
+      expect(systemPromptMessage.content).toContain(
+        'Do not treat sessions_spawn or sessions_send as the default first step for an execution request.',
+      );
+      expect(systemPromptMessage.content).toContain(
+        'Assess → Plan → Execute or Delegate → Monitor → Synthesize cycle.',
+      );
+      expect(systemPromptMessage.content).not.toContain(
+        'present your plan → use sessions_spawn to delegate',
+      );
+      expect(systemPromptMessage.content).not.toContain('running in Kavi');
+      expect(firstTurnTools.has('sessions_spawn')).toBe(false);
+      expect(firstTurnTools.has('sessions_wait')).toBe(true);
+    });
+
+    it('keeps sessions_spawn available for SuperAgent execution requests that explicitly require workers', async () => {
+      const registryModule = jest.requireMock('../../src/services/agents/registry') as {
+        getPersona: jest.Mock;
+      };
+      registryModule.getPersona.mockReturnValueOnce({
+        id: 'super-agent',
+        name: 'SuperAgent',
+        systemPrompt: 'You are the SuperAgent.',
+      });
+
+      const mockSendMessage = jest.fn().mockResolvedValue({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                routeMode: 'execution',
+                recommendedTools: ['sessions_spawn', 'file_edit', 'expo_eas_workflow_status'],
+                reason: 'Delegated worker execution is required for this plan.',
+              }),
+            },
+          },
+        ],
+      });
+
+      (LlmService as any).mockImplementation(() => ({
+        streamMessage: mockStreamMessage,
+        sendMessage: mockSendMessage,
+      }));
+
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator([
+          { type: 'token', content: 'I will execute the required workflow now.' },
+          { type: 'done', content: 'I will execute the required workflow now.' },
+        ]),
+      );
+
+      const callbacks = makeCallbacks();
+      const options: OrchestratorOptions = {
+        provider: makeProvider({
+          name: 'Gemini',
+          model: 'gemini-2.5-pro',
+          baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        }),
+        model: 'gemini-2.5-pro',
+        conversationId: 'conv-superagent-execution-explicit-worker',
+        systemPrompt: 'You are helpful',
+        personaId: 'super-agent',
+        messages: [
+          {
+            id: 'msg1',
+            role: 'user',
+            content:
+              'Use a worker to create a simple web app in the linked repo, commit the changes, push to main, deploy it, and monitor until the deployment succeeds.',
+            timestamp: Date.now(),
+          },
+        ],
+      };
+
+      await runOrchestrator(options, callbacks);
+
+      const firstTurnTools = new Set(
+        (mockStreamMessage.mock.calls[0][1].tools || []).map((tool: { name: string }) => tool.name),
+      );
+
+      expect(firstTurnTools.has('sessions_spawn')).toBe(true);
     });
   });
 
@@ -802,6 +1752,63 @@ describe('Orchestrator', () => {
       expect(callbacks.calls.onToolMessage).toEqual([
         expect.objectContaining({ id: 'call_1', result: 'tool result' }),
       ]);
+    });
+
+    it('waits for tool-result persistence before the next model request', async () => {
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator([
+          {
+            type: 'tool_call',
+            toolCall: {
+              id: 'call_1',
+              name: 'read_file',
+              arguments: '{"path":"test.txt"}',
+            },
+          },
+          { type: 'done', content: '' },
+        ]),
+      );
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator([
+          { type: 'token', content: 'The file says: tool result' },
+          { type: 'done', content: 'The file says: tool result' },
+        ]),
+      );
+
+      let releaseToolPersistence: (() => void) | undefined;
+      const toolPersistenceReleased = new Promise<void>((resolve) => {
+        releaseToolPersistence = resolve;
+      });
+      let markToolMessageStarted: (() => void) | undefined;
+      const toolMessageStarted = new Promise<void>((resolve) => {
+        markToolMessageStarted = resolve;
+      });
+
+      const callbacks = makeCallbacks();
+      callbacks.onToolMessage = jest.fn(async (id, result) => {
+        callbacks.calls.onToolMessage.push({ id, result });
+        markToolMessageStarted?.();
+        await toolPersistenceReleased;
+      });
+
+      const options: OrchestratorOptions = {
+        provider: makeProvider(),
+        model: 'gpt-5.4',
+        conversationId: 'conv-tool-result-barrier',
+        systemPrompt: 'You are helpful',
+        messages: [{ id: 'msg1', role: 'user', content: 'Read file', timestamp: Date.now() }],
+      };
+
+      const runPromise = runOrchestrator(options, callbacks);
+      await toolMessageStarted;
+
+      expect(mockStreamMessage).toHaveBeenCalledTimes(1);
+      releaseToolPersistence?.();
+      await runPromise;
+
+      expect(mockStreamMessage).toHaveBeenCalledTimes(2);
+      const secondRequestMessages = mockStreamMessage.mock.calls[1][0];
+      expect(secondRequestMessages.some((message: any) => message.role === 'tool')).toBe(true);
     });
 
     it('streams direct text before a tool-capable turn completes', async () => {
@@ -2447,6 +3454,90 @@ describe('Orchestrator', () => {
       expect(callbacks.onDone).toHaveBeenCalled();
     });
 
+    it('injects a stalled-work correction after repeated no-tool turns while background sessions are pending', async () => {
+      (executeTool as jest.Mock)
+        .mockResolvedValueOnce(JSON.stringify({
+          status: 'running',
+          sessionId: 'sub-1',
+          guidance: 'Poll sessions_wait until the session reaches a terminal state.',
+        }))
+        .mockResolvedValueOnce(JSON.stringify({
+          status: 'completed',
+          sessionCount: 1,
+          sessions: [{
+            sessionId: 'sub-1',
+            status: 'completed',
+            outputPreview: 'Worker finished the repository audit.',
+            hasOutput: true,
+          }],
+          pendingSessions: [],
+        }));
+
+      mockStreamMessage
+        .mockImplementationOnce(() =>
+          createStreamGenerator([
+            { type: 'tool_call', toolCall: { id: 'tc1', name: 'sessions_spawn', arguments: '{"prompt":"Research this"}' } },
+            { type: 'done', content: '' },
+          ]),
+        )
+        .mockImplementationOnce(() =>
+          createStreamGenerator([
+            { type: 'token', content: 'I can summarize the plan now.' },
+            { type: 'done', content: 'I can summarize the plan now.' },
+          ]),
+        )
+        .mockImplementationOnce(() =>
+          createStreamGenerator([
+            { type: 'token', content: 'Still summarizing instead of monitoring.' },
+            { type: 'done', content: 'Still summarizing instead of monitoring.' },
+          ]),
+        )
+        .mockImplementationOnce(() =>
+          createStreamGenerator([
+            { type: 'tool_call', toolCall: { id: 'tc2', name: 'sessions_wait', arguments: '{"sessionId":"sub-1","waitTimeoutMs":5000}' } },
+            { type: 'done', content: '' },
+          ]),
+        )
+        .mockImplementationOnce(() =>
+          createStreamGenerator([
+            { type: 'token', content: 'Worker completed successfully.' },
+            { type: 'done', content: 'Worker completed successfully.' },
+          ]),
+        );
+
+      const callbacks = makeCallbacks();
+      const options: OrchestratorOptions = {
+        provider: makeProvider(),
+        model: 'gpt-5.4',
+        conversationId: 'conv-background-hold-stall',
+        systemPrompt: 'You are helpful',
+        messages: [{
+          id: 'msg1',
+          role: 'user',
+          content: 'Launch a worker and keep monitoring it until it finishes.',
+          timestamp: Date.now(),
+        }],
+      };
+
+      await runOrchestrator(options, callbacks);
+
+      expect(mockStreamMessage).toHaveBeenCalledTimes(5);
+      expect(mockStreamMessage.mock.calls[3][1]).toEqual(expect.objectContaining({ toolChoice: 'required' }));
+      expect(JSON.stringify(mockStreamMessage.mock.calls[3][0])).toContain(
+        '[SYSTEM WORKFLOW CORRECTION - PENDING WORK STALLED',
+      );
+      expect(callbacks.calls.onAssistantMessage[callbacks.calls.onAssistantMessage.length - 1]).toEqual({
+        content: 'Worker completed successfully.',
+        toolCalls: [],
+        providerReplay: undefined,
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'complete',
+        },
+      });
+      expect(callbacks.onDone).toHaveBeenCalled();
+    });
+
     it('restricts pending expo workflows to workflow monitoring tools until the run is terminal', async () => {
       (executeTool as jest.Mock)
         .mockResolvedValueOnce(JSON.stringify({
@@ -2616,7 +3707,9 @@ describe('Orchestrator', () => {
       expect(systemPromptMessage).toMatchObject({ role: 'system' });
       expect(systemPromptMessage.content).not.toContain('- read_file:');
       expect(systemPromptMessage.content).toContain('Loaded callable tool names by category (complete):');
-      expect(systemPromptMessage.content).toContain('Other: read_file, write_file, list_files');
+      expect(systemPromptMessage.content).toContain(
+        'Workspace files: read_file, list_files, write_file',
+      );
       expect(systemPromptMessage.content).toContain('Code / computation: python');
       expect(systemPromptMessage.content).toContain('Web research: web_search, web_fetch');
       expect(systemPromptMessage.content).toContain('Likely tool_catalog categories for this request');
@@ -2990,6 +4083,69 @@ describe('Orchestrator', () => {
   });
 
   describe('Skill system prompt injection', () => {
+    it('keeps the default runtime system prompt product-neutral', async () => {
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator([
+          { type: 'token', content: 'OK' },
+          { type: 'done', content: 'OK' },
+        ]),
+      );
+
+      const callbacks = makeCallbacks();
+      const options: OrchestratorOptions = {
+        provider: makeProvider(),
+        model: 'gpt-5.4',
+        conversationId: 'conv-generic-runtime-prompt',
+        systemPrompt: '',
+        messages: [
+          { id: 'msg1', role: 'user', content: 'Create a file and commit it', timestamp: Date.now() },
+        ],
+      };
+
+      await runOrchestrator(options, callbacks);
+
+      const apiMessages = mockStreamMessage.mock.calls[0][0];
+      expect(apiMessages[0].role).toBe('system');
+      expect(apiMessages[0].content).toContain('mobile workspace');
+      expect(apiMessages[0].content).not.toContain('Kavi');
+    });
+
+    it('keeps the SuperAgent runtime system prompt product-neutral', async () => {
+      const registryModule = jest.requireMock('../../src/services/agents/registry') as {
+        getPersona: jest.Mock;
+      };
+      registryModule.getPersona.mockReturnValueOnce({
+        id: 'super-agent',
+        name: 'SuperAgent',
+        systemPrompt: 'You are the SuperAgent.',
+      });
+
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator([
+          { type: 'token', content: 'OK' },
+          { type: 'done', content: 'OK' },
+        ]),
+      );
+
+      const callbacks = makeCallbacks();
+      const options: OrchestratorOptions = {
+        provider: makeProvider(),
+        model: 'gpt-5.4',
+        conversationId: 'conv-superagent-runtime-prompt',
+        systemPrompt: '',
+        personaId: 'super-agent',
+        messages: [
+          { id: 'msg1', role: 'user', content: 'Create a file and commit it', timestamp: Date.now() },
+        ],
+      };
+
+      await runOrchestrator(options, callbacks);
+
+      const apiMessages = mockStreamMessage.mock.calls[0][0];
+      expect(apiMessages[0].role).toBe('system');
+      expect(apiMessages[0].content).not.toContain('Kavi');
+    });
+
     it('should include skill prompts in the system prompt sent to LLM', async () => {
       (getSkillSystemPrompts as jest.Mock).mockResolvedValueOnce(
         '<available_skills>\n  <skill>\n    <name>Weather</name>\n    <description>Check weather for user.</description>\n    <location>skills/managed/weather/SKILL.md</location>\n  </skill>\n</available_skills>',
@@ -3105,8 +4261,8 @@ describe('Orchestrator', () => {
     });
   });
 
-  describe('Expo workflow guidance', () => {
-    it('injects repo-first Expo workflow guidance when Expo tools are relevant', async () => {
+  describe('external workflow guidance', () => {
+    it('does not inject provider-specific workflow guidance for broad relevant categories', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
         createStreamGenerator([
           { type: 'token', content: 'OK' },
@@ -3131,11 +4287,9 @@ describe('Orchestrator', () => {
       await runOrchestrator(options, callbacks);
 
       const apiMessages = mockStreamMessage.mock.calls[0][0];
-      expect(apiMessages[0].content).toContain('## Expo / EAS');
-      expect(apiMessages[0].content).toContain('default to repository-driven EAS Workflows');
-      expect(apiMessages[0].content).toContain('.eas/workflows/deploy.yml');
-      expect(apiMessages[0].content).toContain('push a commit');
-      expect(apiMessages[0].content).toContain('Reserve expo_eas_build, expo_eas_update, expo_eas_submit, and expo_eas_deploy_web for explicit manual reruns');
+      expect(apiMessages[0].content).not.toContain('default to repository-driven EAS Workflows');
+      expect(apiMessages[0].content).not.toContain('## Expo / EAS');
+      expect(apiMessages[0].content).toContain('## Capability Discovery');
     });
   });
 

@@ -10,6 +10,10 @@ import {
   useSkillsStore,
 } from '../../services/skills/manager';
 import type { SkillEntry } from '../../services/skills/types';
+import {
+  inferToolCapabilityDescriptor,
+  scoreToolLifecyclePriority,
+} from './capabilityRegistry';
 import { TOOL_DEFINITIONS } from './definitions';
 
 function slugifyCatalogValue(value: string | undefined): string {
@@ -55,6 +59,13 @@ type ToolCatalogSearchToolEntry = {
   aliases?: string[];
   serverName?: string;
   skillName?: string;
+  capabilitySummary?: {
+    capabilities: string[];
+    resourceKinds: string[];
+    sideEffects: string[];
+    providesEvidence: string[];
+    workflowStages: string[];
+  };
 };
 
 type ToolCatalogSearchSkillEntry = {
@@ -240,6 +251,13 @@ const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> = {
     guidance:
       'Use expo_eas_list_projects to discover project ids, expo_eas_status or expo_eas_probe for readiness checks, and workflow_* tools to monitor runs.',
   },
+  github: {
+    tools: [],
+    purpose: 'Commit, inspect, and monitor GitHub repositories through installed skill or MCP tools.',
+    aliases: ['git commit', 'repository push', 'pull request', 'github actions', 'checks'],
+    guidance:
+      'Use GitHub commit tools for repository side effects. When local conversation workspace files were created first, prefer commit tools that accept filePath inputs so the local artifacts are pushed to the repo.',
+  },
   sessions: {
     tools: [
       'sessions_spawn',
@@ -384,6 +402,95 @@ function tokenizeToolCatalogSearchText(value: string | undefined): string[] {
         .filter((token) => !TOOL_CATALOG_STOP_WORDS.has(token)),
     ),
   );
+}
+
+function buildCapabilitySummary(tool: { name: string; description: string }) {
+  const descriptor = inferToolCapabilityDescriptor(tool);
+  return {
+    capabilities: descriptor.capabilities,
+    resourceKinds: descriptor.resourceKinds,
+    sideEffects: descriptor.sideEffects,
+    providesEvidence: descriptor.providesEvidence,
+    workflowStages: descriptor.workflowStages,
+  };
+}
+
+function orderToolCatalogEntriesByContract<T extends { name: string; description: string }>(
+  tools: T[],
+): T[] {
+  return tools
+    .map((tool, index) => ({
+      tool,
+      index,
+      priority: scoreToolLifecyclePriority(inferToolCapabilityDescriptor(tool)),
+    }))
+    .sort((left, right) => {
+      const priorityDiff = left.priority - right.priority;
+      return priorityDiff !== 0 ? priorityDiff : left.index - right.index;
+    })
+    .map((entry) => entry.tool);
+}
+
+function orderToolCatalogNamesByContract(
+  toolNames: string[],
+  toolMap?: ReadonlyMap<string, { name: string; description?: string }>,
+): string[] {
+  return toolNames
+    .map((name, index) => {
+      const tool = toolMap?.get(name) ?? { name, description: name };
+      return {
+        name,
+        index,
+        priority: scoreToolLifecyclePriority(
+          inferToolCapabilityDescriptor({
+            name: tool.name,
+            description: tool.description || tool.name,
+          }),
+        ),
+      };
+    })
+    .sort((left, right) => {
+      const priorityDiff = left.priority - right.priority;
+      return priorityDiff !== 0 ? priorityDiff : left.index - right.index;
+    })
+    .map((entry) => entry.name);
+}
+
+function isGithubCapabilityTool(tool: { name: string; description: string }): boolean {
+  return inferToolCapabilityDescriptor(tool).category === 'github';
+}
+
+function getGithubCapabilityTools(options: {
+  mcpCatalog: ReturnType<typeof getDynamicMcpCatalog>;
+  skillCatalog: ReturnType<typeof getDynamicSkillCatalog>;
+}): ToolCatalogSearchToolEntry[] {
+  const githubMcpTools = options.mcpCatalog.tools
+    .filter((tool) => isGithubCapabilityTool(tool))
+    .map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      category: 'github',
+      source: 'mcp' as const,
+      purpose: TOOL_CATALOG_CATEGORIES.github.purpose,
+      guidance: TOOL_CATALOG_CATEGORIES.github.guidance,
+      serverName: tool.serverName,
+      capabilitySummary: buildCapabilitySummary(tool),
+    }));
+
+  const githubSkillTools = options.skillCatalog.tools
+    .filter((tool) => isGithubCapabilityTool(tool))
+    .map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      category: 'github',
+      source: 'skill' as const,
+      purpose: TOOL_CATALOG_CATEGORIES.github.purpose,
+      guidance: TOOL_CATALOG_CATEGORIES.github.guidance,
+      skillName: tool.name.replace(/^skill__/, '').split('__')[0] || undefined,
+      capabilitySummary: buildCapabilitySummary(tool),
+    }));
+
+  return orderToolCatalogEntriesByContract([...githubMcpTools, ...githubSkillTools]);
 }
 
 function buildToolCatalogQueryPhrases(tokens: string[]): string[] {
@@ -634,7 +741,11 @@ export async function executeToolCatalog(
     ...(activationOptions?.category ? { category: activationOptions.category } : {}),
     ...(activationOptions?.rationale ? { rationale: activationOptions.rationale } : {}),
   });
-  const sampleTools = (toolNames: string[], max = 4) => toolNames.slice(0, max);
+  const sampleTools = (
+    toolNames: string[],
+    max = 4,
+    toolMap?: ReadonlyMap<string, { name: string; description?: string }>,
+  ) => orderToolCatalogNamesByContract(toolNames, toolMap).slice(0, max);
   const filterToolNames = (toolNames: string[]) =>
     availableToolNames
       ? toolNames.filter((toolName) => availableToolNames.has(toolName))
@@ -650,6 +761,7 @@ export async function executeToolCatalog(
   const maxResults = clampToolCatalogMaxResults(args.maxResults);
   const availableCategories = [...Object.keys(TOOL_CATALOG_CATEGORIES), 'mcp', 'skills'];
   const staticToolMap = new Map(staticVisibleTools.map((tool) => [tool.name, tool]));
+  const githubCapabilityTools = getGithubCapabilityTools({ mcpCatalog, skillCatalog });
 
   if (
     requestedCategory &&
@@ -696,40 +808,63 @@ export async function executeToolCatalog(
           purpose: config.purpose,
           guidance: config.guidance,
           aliases: config.aliases,
+          capabilitySummary: buildCapabilitySummary(tool),
         });
       }
     }
 
-    if (!requestedCategory || requestedCategory === 'mcp') {
+    if (!requestedCategory || requestedCategory === 'mcp' || requestedCategory === 'github') {
       for (const tool of mcpCatalog.tools) {
+        const capabilitySummary = buildCapabilitySummary(tool);
+        if (requestedCategory === 'github' && !isGithubCapabilityTool(tool)) {
+          continue;
+        }
         toolCandidates.push({
           name: tool.name,
           description: tool.description,
-          category: 'mcp',
+          category: requestedCategory === 'github' ? 'github' : 'mcp',
           source: 'mcp',
-          purpose: 'Connected external MCP server tools.',
+          purpose:
+            requestedCategory === 'github'
+              ? TOOL_CATALOG_CATEGORIES.github.purpose
+              : 'Connected external MCP server tools.',
           guidance:
-            'Connected MCP tools are callable directly with the exact tool name shown here, including the mcp__serverId__toolName prefix.',
+            requestedCategory === 'github'
+              ? TOOL_CATALOG_CATEGORIES.github.guidance
+              : 'Connected MCP tools are callable directly with the exact tool name shown here, including the mcp__serverId__toolName prefix.',
           serverName: tool.serverName,
+          capabilitySummary,
         });
       }
     }
 
-    if (!requestedCategory || requestedCategory === 'skills') {
+    if (!requestedCategory || requestedCategory === 'skills' || requestedCategory === 'github') {
       for (const tool of skillCatalog.tools) {
+        const capabilitySummary = buildCapabilitySummary(tool);
+        if (requestedCategory === 'github' && !isGithubCapabilityTool(tool)) {
+          continue;
+        }
         toolCandidates.push({
           name: tool.name,
           description: tool.description,
-          category: 'skills',
+          category: requestedCategory === 'github' ? 'github' : 'skills',
           source: 'skill',
-          purpose: 'Installed instruction skills plus any callable skill tools.',
+          purpose:
+            requestedCategory === 'github'
+              ? TOOL_CATALOG_CATEGORIES.github.purpose
+              : 'Installed instruction skills plus any callable skill tools.',
           guidance:
-            'Read the SKILL.md location before following a skill, and then use one of the listed skill__... tools on the next turn.',
+            requestedCategory === 'github'
+              ? TOOL_CATALOG_CATEGORIES.github.guidance
+              : 'Read the SKILL.md location before following a skill, and then use one of the listed skill__... tools on the next turn.',
           skillName: tool.name.replace(/^skill__/, '').split('__')[0] || undefined,
+          capabilitySummary,
         });
       }
 
-      skillEntries.push(...skillCatalog.skills);
+      if (requestedCategory !== 'github') {
+        skillEntries.push(...skillCatalog.skills);
+      }
     }
 
     const scoredToolMatches = toolCandidates
@@ -747,6 +882,10 @@ export async function executeToolCatalog(
             candidate.serverName || '',
             candidate.skillName || '',
             ...(candidate.aliases || []),
+            ...(candidate.capabilitySummary?.capabilities || []),
+            ...(candidate.capabilitySummary?.resourceKinds || []),
+            ...(candidate.capabilitySummary?.providesEvidence || []),
+            ...(candidate.capabilitySummary?.workflowStages || []),
           ],
         });
 
@@ -754,12 +893,17 @@ export async function executeToolCatalog(
           ...candidate,
           score: scored.score,
           matchedFields: scored.matchedFields,
+          contractPriority: scoreToolLifecyclePriority(inferToolCapabilityDescriptor(candidate)),
         };
       })
       .filter((candidate) => candidate.score > 0)
       .sort((left, right) => {
         const scoreDiff = right.score - left.score;
-        return scoreDiff !== 0 ? scoreDiff : left.name.localeCompare(right.name);
+        if (scoreDiff !== 0) {
+          return scoreDiff;
+        }
+        const contractDiff = left.contractPriority - right.contractPriority;
+        return contractDiff !== 0 ? contractDiff : left.name.localeCompare(right.name);
       })
       .slice(0, maxResults);
 
@@ -876,6 +1020,7 @@ export async function executeToolCatalog(
         source: tool.source,
         ...(tool.serverName ? { serverName: tool.serverName } : {}),
         ...(tool.skillName ? { skillName: tool.skillName } : {}),
+        ...(tool.capabilitySummary ? { capabilitySummary: tool.capabilitySummary } : {}),
         ...(describeToolCatalogSearchMatch(tool.matchedFields)
           ? { matchReason: describeToolCatalogSearchMatch(tool.matchedFields) }
           : {}),
@@ -902,7 +1047,8 @@ export async function executeToolCatalog(
   }
 
   if (requestedCategory === 'mcp') {
-    const toolNames = mcpCatalog.tools.map((tool) => tool.name);
+    const orderedTools = orderToolCatalogEntriesByContract(mcpCatalog.tools);
+    const toolNames = orderedTools.map((tool) => tool.name);
     const recommendedToolNames = toolNames.slice(0, Math.min(4, toolNames.length));
     const supportingToolNames = toolNames.slice(recommendedToolNames.length);
     const guidance =
@@ -914,7 +1060,7 @@ export async function executeToolCatalog(
       category: 'mcp',
       servers: mcpCatalog.servers,
       pendingServers: mcpCatalog.pendingServers,
-      tools: mcpCatalog.tools,
+      tools: orderedTools,
       activation: buildActivation(recommendedToolNames, {
         category: 'mcp',
         supportingToolNames,
@@ -925,7 +1071,8 @@ export async function executeToolCatalog(
   }
 
   if (requestedCategory === 'skills') {
-    const toolNames = skillCatalog.tools.map((tool) => tool.name);
+    const orderedTools = orderToolCatalogEntriesByContract(skillCatalog.tools);
+    const toolNames = orderedTools.map((tool) => tool.name);
     const recommendedToolNames = toolNames.slice(0, Math.min(4, toolNames.length));
     const supportingToolNames = toolNames.slice(recommendedToolNames.length);
     const guidance =
@@ -936,9 +1083,38 @@ export async function executeToolCatalog(
       mode: 'category',
       category: 'skills',
       skills: skillCatalog.skills,
-      tools: skillCatalog.tools,
+      tools: orderedTools,
       activation: buildActivation(recommendedToolNames, {
         category: 'skills',
+        supportingToolNames,
+        rationale: guidance,
+      }),
+      guidance,
+    });
+  }
+
+  if (requestedCategory === 'github') {
+    const toolNames = githubCapabilityTools.map((tool) => tool.name);
+    const recommendedToolNames = toolNames.slice(0, Math.min(4, toolNames.length));
+    const supportingToolNames = toolNames.slice(recommendedToolNames.length);
+    const guidance =
+      toolNames.length > 0
+        ? `${TOOL_CATALOG_CATEGORIES.github.guidance} Do not repeat tool_catalog for the same category unless the plan changed or the earlier result was incomplete.`
+        : 'No callable GitHub tools are available under the current tool policy. If a GitHub skill or MCP server is enabled, inspect category="skills" or category="mcp" to diagnose visibility.';
+    return JSON.stringify({
+      mode: 'category',
+      category: 'github',
+      purpose: TOOL_CATALOG_CATEGORIES.github.purpose,
+      tools: githubCapabilityTools.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        source: tool.source,
+        ...(tool.serverName ? { serverName: tool.serverName } : {}),
+        ...(tool.skillName ? { skillName: tool.skillName } : {}),
+        capabilitySummary: tool.capabilitySummary,
+      })),
+      activation: buildActivation(recommendedToolNames, {
+        category: 'github',
         supportingToolNames,
         rationale: guidance,
       }),
@@ -949,8 +1125,13 @@ export async function executeToolCatalog(
   if (requestedCategory) {
     const selectedCategory = TOOL_CATALOG_CATEGORIES[requestedCategory];
 
-    const names = filterToolNames(selectedCategory.tools);
-    const tools = staticVisibleTools.filter((t) => names.includes(t.name));
+    const names = orderToolCatalogNamesByContract(
+      filterToolNames(selectedCategory.tools),
+      staticToolMap,
+    );
+    const tools = names
+      .map((name) => staticToolMap.get(name))
+      .filter((tool): tool is (typeof staticVisibleTools)[number] => Boolean(tool));
     const recommendedToolNames = tools.slice(0, Math.min(4, tools.length)).map((tool) => tool.name);
     const supportingToolNames = tools.slice(recommendedToolNames.length).map((tool) => tool.name);
     const guidance =
@@ -961,7 +1142,11 @@ export async function executeToolCatalog(
       mode: 'category',
       category: requestedCategory,
       purpose: selectedCategory.purpose,
-      tools: tools.map((t) => ({ name: t.name, description: t.description })),
+      tools: tools.map((t) => ({
+        name: t.name,
+        description: t.description,
+        capabilitySummary: buildCapabilitySummary(t),
+      })),
       activation: buildActivation(recommendedToolNames, {
         category: requestedCategory,
         supportingToolNames,
@@ -982,8 +1167,11 @@ export async function executeToolCatalog(
     .map(([cat, config]) => ({
       category: cat,
       purpose: config.purpose,
-      count: filterToolNames(config.tools).length,
-      sampleTools: sampleTools(filterToolNames(config.tools)),
+      count: cat === 'github' ? githubCapabilityTools.length : filterToolNames(config.tools).length,
+      sampleTools:
+        cat === 'github'
+          ? sampleTools(githubCapabilityTools.map((tool) => tool.name))
+          : sampleTools(filterToolNames(config.tools), 4, staticToolMap),
       inspectWith: `tool_catalog category="${cat}"`,
     }))
     .filter((entry) => entry.count > 0);

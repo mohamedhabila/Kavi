@@ -26,6 +26,31 @@ function hasDelegationToolResult(toolCall: Pick<ToolCall, 'name' | 'result'>): b
   return isDelegationToolName(toolCall.name) && !!extractDelegatedSessionId(toolCall.result);
 }
 
+function hasDelegationToolAttempt(toolCall: Pick<ToolCall, 'name'>): boolean {
+  return isDelegationToolName(toolCall.name);
+}
+
+export function hasAttemptedDelegatedWork(params: {
+  messages?: ReadonlyArray<Pick<Message, 'role' | 'content' | 'toolCalls' | 'subAgentEvent'>>;
+  workers?: ReadonlyArray<Pick<SubAgentSnapshot, 'sessionId'>>;
+}): boolean {
+  if (hasObservedDelegatedWork(params)) {
+    return true;
+  }
+
+  return (params.messages ?? []).some((message) => {
+    if ((message.toolCalls ?? []).some((toolCall) => hasDelegationToolAttempt(toolCall))) {
+      return true;
+    }
+
+    if (message.role !== 'tool') {
+      return false;
+    }
+
+    return (message.toolCalls ?? []).some((toolCall) => isDelegationToolName(toolCall.name));
+  });
+}
+
 export function hasObservedDelegatedWork(params: {
   messages?: ReadonlyArray<Pick<Message, 'role' | 'content' | 'toolCalls' | 'subAgentEvent'>>;
   workers?: ReadonlyArray<Pick<SubAgentSnapshot, 'sessionId'>>;

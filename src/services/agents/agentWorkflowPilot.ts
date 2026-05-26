@@ -7,6 +7,7 @@ import type {
   AgentRunPilotFallbackReason,
   AgentRunPilotRecommendedAction,
   AgentRunStatus,
+  AgentRunTerminalReason,
   LlmProviderConfig,
   Message,
   SubAgentSnapshot,
@@ -38,6 +39,8 @@ import {
   assessUserRequest,
   evaluateResponseAgainstRequestAssessment,
 } from './requestAssessment';
+import { hasOperationalEvidenceFromSources } from './approvalSignals';
+import { isExecutionDiscoveryOrMetaToolName, listExecutionDiscoveryOrMetaToolNames } from '../../utils/executionLanePolicy';
 
 export const PILOT_REVIEW_CHECKPOINT_TITLE = 'Pilot review queued';
 export const PILOT_EVALUATOR_VERSION = 'pilot-v2';
@@ -66,11 +69,11 @@ const PILOT_FINDINGS_SECTION_SHARE = 0.2;
 const PILOT_STRUCTURED_EVIDENCE_SECTION_SHARE = 0.25;
 const PILOT_MEMORY_SECTION_SHARE = 0.12;
 const PILOT_SUPERVISOR_SECTION_SHARE = 0.12;
-const PILOT_RESPONSE_BASE_MAX_TOKENS = 1_200;
-const PILOT_RESPONSE_PER_EXTRA_CRITERION_TOKENS = 160;
-const PILOT_RESPONSE_RETRY_MIN_TOKENS = 1_000;
+const PILOT_RESPONSE_BASE_MAX_TOKENS = 1_800;
+const PILOT_RESPONSE_PER_EXTRA_CRITERION_TOKENS = 220;
+const PILOT_RESPONSE_RETRY_MIN_TOKENS = 1_500;
 const PILOT_RESPONSE_RETRY_TOKEN_REDUCTION = 120;
-const PILOT_RESPONSE_MAX_TOKENS_CAP = 3_000;
+const PILOT_RESPONSE_MAX_TOKENS_CAP = 4_000;
 const MAX_STRUCTURED_EVIDENCE_SIGNATURE_ENTRIES = 16;
 const PILOT_POLICY_SIGNATURE_VERSION = 'research-integrity-v1';
 const PILOT_SESSION_ID_PATTERN = /\bsub-\d{4,}\b/gi;
@@ -207,6 +210,22 @@ const PILOT_TOOL_CALL_SYSTEM_PROMPT = [
 const PILOT_EVALUATION_SCHEMA: ToolDefinition['input_schema'] = {
   type: 'object',
   additionalProperties: false,
+  propertyOrdering: [
+    'controlAction',
+    'recommendedAction',
+    'completionScore',
+    'adherenceScore',
+    'evidenceScore',
+    'processScore',
+    'approved',
+    'confidence',
+    'summary',
+    'rationale',
+    'strengths',
+    'gaps',
+    'nextActions',
+    'criterionEvaluations',
+  ],
   properties: {
     controlAction: {
       type: 'string',
@@ -249,10 +268,12 @@ const PILOT_EVALUATION_SCHEMA: ToolDefinition['input_schema'] = {
     },
     summary: {
       type: 'string',
+      minLength: 1,
       description: 'One concise sentence describing the pilot conclusion.',
     },
     rationale: {
       type: 'string',
+      minLength: 1,
       description: 'Short explanation of why the decision was reached.',
     },
     strengths: {
@@ -272,15 +293,17 @@ const PILOT_EVALUATION_SCHEMA: ToolDefinition['input_schema'] = {
     },
     criterionEvaluations: {
       type: 'array',
+      minItems: 1,
       description: 'One entry per success criterion.',
       items: {
         type: 'object',
         additionalProperties: false,
+        propertyOrdering: ['criterion', 'score', 'status', 'rationale'],
         properties: {
-          criterion: { type: 'string' },
+          criterion: { type: 'string', minLength: 1 },
           score: { type: 'integer', enum: [0, 1, 2, 3, 4, 5] },
           status: { type: 'string', enum: ['met', 'partial', 'unmet', 'blocked'] },
-          rationale: { type: 'string' },
+          rationale: { type: 'string', minLength: 1 },
         },
         required: ['criterion', 'score', 'status', 'rationale'],
       },
@@ -404,6 +427,213 @@ function hasPilotEvaluationShape(record: Record<string, unknown>): boolean {
     || 'summary' in record;
 }
 
+function normalizePilotSchemaKey(value: string): string {
+  return value.replace(/[^a-z0-9]/gi, '').toLowerCase();
+}
+
+function readPilotAlias(
+  record: Record<string, unknown>,
+  canonicalKey: string,
+  aliases: string[] = [],
+): unknown {
+  if (Object.prototype.hasOwnProperty.call(record, canonicalKey)) {
+    return record[canonicalKey];
+  }
+
+  const acceptedKeys = new Set(
+    [canonicalKey, ...aliases].map((key) => normalizePilotSchemaKey(key)),
+  );
+  for (const [key, value] of Object.entries(record)) {
+    if (acceptedKeys.has(normalizePilotSchemaKey(key))) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function coercePilotScore(value: unknown): unknown {
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) ? parsed : value;
+  }
+
+  return value;
+}
+
+function coercePilotBoolean(value: unknown): unknown {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+  }
+
+  return value;
+}
+
+function coercePilotStringArray(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => (typeof entry === 'string' ? entry.trim() : entry)).filter(Boolean);
+  }
+
+  return typeof value === 'string' && value.trim().length > 0 ? [value.trim()] : value;
+}
+
+function coercePilotControlAction(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'accepted' || normalized === 'approve' || normalized === 'approved') {
+    return 'accept';
+  }
+  if (normalized === 'blocked') {
+    return 'block';
+  }
+
+  return normalized;
+}
+
+function coercePilotRecommendedAction(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'accept' || normalized === 'approved' || normalized === 'complete') {
+    return 'finalize';
+  }
+  if (normalized === 'block' || normalized === 'blocked') {
+    return 'blocked';
+  }
+
+  return normalized;
+}
+
+function coercePilotCriterionStatus(value: unknown, score: unknown): unknown {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'passed' || normalized === 'pass' || normalized === 'complete') {
+      return 'met';
+    }
+    if (normalized === 'incomplete') {
+      return 'partial';
+    }
+    if (normalized === 'met' || normalized === 'partial' || normalized === 'unmet' || normalized === 'blocked') {
+      return normalized;
+    }
+  }
+
+  return isPilotScoreValue(score) ? (score >= 4 ? 'met' : score >= 2 ? 'partial' : 'unmet') : value;
+}
+
+function normalizePilotCriterionPayload(value: unknown): unknown {
+  const record = asRecord(value);
+  if (!record) {
+    return value;
+  }
+
+  const score = coercePilotScore(readPilotAlias(record, 'score', ['rating']));
+  const criterion =
+    readPilotAlias(record, 'criterion', ['name', 'successCriterion', 'success_criterion']) ??
+    '';
+  const rationale = readPilotAlias(record, 'rationale', ['reason', 'explanation']) ?? '';
+  const status = coercePilotCriterionStatus(
+    readPilotAlias(record, 'status', ['state']),
+    score,
+  );
+
+  return {
+    criterion,
+    score,
+    status,
+    rationale,
+  };
+}
+
+function normalizePilotEvaluationPayloadRecord(
+  record: Record<string, unknown>,
+): Record<string, unknown> {
+  const normalized: Record<string, unknown> = { ...record };
+  const setIfDefined = (key: string, value: unknown): void => {
+    if (value !== undefined) {
+      normalized[key] = value;
+    }
+  };
+  const criterionEvaluations = readPilotAlias(record, 'criterionEvaluations', [
+    'criterion_evaluations',
+    'criteriaEvaluations',
+    'criteria',
+    'successCriteria',
+    'success_criteria',
+    'criterionScores',
+    'criterion_scores',
+  ]);
+
+  setIfDefined(
+    'controlAction',
+    coercePilotControlAction(readPilotAlias(record, 'controlAction', ['control_action', 'control'])),
+  );
+  setIfDefined(
+    'recommendedAction',
+    coercePilotRecommendedAction(
+      readPilotAlias(record, 'recommendedAction', [
+        'recommended_action',
+        'recommendation',
+        'decision',
+      ]),
+    ),
+  );
+  setIfDefined(
+    'completionScore',
+    coercePilotScore(
+      readPilotAlias(record, 'completionScore', ['completion_score', 'taskCompletionScore']),
+    ),
+  );
+  setIfDefined(
+    'adherenceScore',
+    coercePilotScore(readPilotAlias(record, 'adherenceScore', ['adherence_score'])),
+  );
+  setIfDefined(
+    'evidenceScore',
+    coercePilotScore(readPilotAlias(record, 'evidenceScore', ['evidence_score'])),
+  );
+  setIfDefined(
+    'processScore',
+    coercePilotScore(readPilotAlias(record, 'processScore', ['process_score'])),
+  );
+  setIfDefined('approved', coercePilotBoolean(readPilotAlias(record, 'approved', ['isApproved'])));
+  setIfDefined('confidence', readPilotAlias(record, 'confidence'));
+  setIfDefined('summary', readPilotAlias(record, 'summary'));
+  setIfDefined(
+    'rationale',
+    readPilotAlias(record, 'rationale', ['reason', 'explanation']),
+  );
+  setIfDefined('strengths', coercePilotStringArray(readPilotAlias(record, 'strengths')));
+  setIfDefined('gaps', coercePilotStringArray(readPilotAlias(record, 'gaps', ['issues'])));
+  setIfDefined(
+    'nextActions',
+    coercePilotStringArray(readPilotAlias(record, 'nextActions', ['next_actions', 'actions'])),
+  );
+  setIfDefined(
+    'criterionEvaluations',
+    Array.isArray(criterionEvaluations)
+      ? criterionEvaluations.map(normalizePilotCriterionPayload)
+      : criterionEvaluations,
+  );
+
+  return normalized;
+}
+
 function tryParsePilotEvaluationPayload(value: unknown): Record<string, unknown> | undefined {
   if (!value) {
     return undefined;
@@ -431,8 +661,21 @@ function tryParsePilotEvaluationPayload(value: unknown): Record<string, unknown>
       }
     }
 
-    if (hasPilotEvaluationShape(record)) {
-      return record;
+    const wrappedPayload =
+      record[PILOT_TOOL_NAME] ??
+      record.pilotReport ??
+      record.report ??
+      record.evaluation;
+    if (wrappedPayload) {
+      const nested = tryParsePilotEvaluationPayload(wrappedPayload);
+      if (nested) {
+        return nested;
+      }
+    }
+
+    const normalizedRecord = normalizePilotEvaluationPayloadRecord(record);
+    if (hasPilotEvaluationShape(normalizedRecord)) {
+      return normalizedRecord;
     }
 
     const extractedText = extractPilotTextValue(record);
@@ -474,7 +717,22 @@ function tryParsePilotEvaluationPayload(value: unknown): Record<string, unknown>
           }
         }
 
-        return record;
+        const wrappedPayload =
+          record[PILOT_TOOL_NAME] ??
+          record.pilotReport ??
+          record.report ??
+          record.evaluation;
+        if (wrappedPayload) {
+          const nested = tryParsePilotEvaluationPayload(wrappedPayload);
+          if (nested) {
+            return nested;
+          }
+        }
+
+        const normalizedRecord = normalizePilotEvaluationPayloadRecord(record);
+        if (hasPilotEvaluationShape(normalizedRecord)) {
+          return normalizedRecord;
+        }
       }
     } catch {
       // Ignore malformed candidates and continue.
@@ -865,6 +1123,41 @@ function isRecoverablePilotEvaluationPayload(
   return hasDecisionSignal && hasCoreScores && hasSummaryText;
 }
 
+function hasPartialCriterionEvaluationSignal(value: unknown): boolean {
+  const record = asRecord(value);
+  if (!record) {
+    return false;
+  }
+
+  return hasNonEmptyPilotString(record.criterion)
+    || isPilotScoreValue(record.score)
+    || isPilotCriterionStatusValue(record.status)
+    || hasNonEmptyPilotString(record.rationale);
+}
+
+function isUsablePartialPilotEvaluationPayload(
+  raw: Record<string, unknown> | undefined,
+): raw is Record<string, unknown> {
+  if (!raw || !hasPilotEvaluationShape(raw)) {
+    return false;
+  }
+
+  const hasDecisionSignal = parseRecommendedAction(raw.recommendedAction) !== undefined
+    || isPilotControlActionValue(raw.controlAction)
+    || typeof raw.approved === 'boolean';
+  const hasAnyScore = [
+    raw.completionScore,
+    raw.adherenceScore,
+    raw.evidenceScore,
+    raw.processScore,
+  ].some((score) => isPilotScoreValue(score));
+  const hasCriterionSignal = Array.isArray(raw.criterionEvaluations)
+    && raw.criterionEvaluations.some((entry) => hasPartialCriterionEvaluationSignal(entry));
+  const hasSummaryText = hasNonEmptyPilotString(raw.summary) || hasNonEmptyPilotString(raw.rationale);
+
+  return hasSummaryText && (hasDecisionSignal || hasAnyScore || hasCriterionSignal);
+}
+
 function extractValidatedPilotEvaluationPayload(
   response: any,
   successCriteria: string[],
@@ -900,7 +1193,11 @@ export interface AgentRunPilotProviderContext {
 
 export interface AgentRunPilotDecision {
   action: 'resume' | 'finalize';
-  outcome: { status: Exclude<AgentRunStatus, 'running'>; summary: string };
+  outcome: {
+    status: Exclude<AgentRunStatus, 'running'>;
+    summary: string;
+    terminalReason?: AgentRunTerminalReason;
+  };
   checkpointTitle: string;
   checkpointDetail: string;
   reviewPrompt?: string;
@@ -2021,7 +2318,10 @@ async function invokePilotEvaluator(params: Required<Pick<PilotDecisionParams, '
     }
 
     const recoverable = extractPilotEvaluationPayload(response);
-    if (isRecoverablePilotEvaluationPayload(recoverable)) {
+    if (
+      isRecoverablePilotEvaluationPayload(recoverable) ||
+      isUsablePartialPilotEvaluationPayload(recoverable)
+    ) {
       recoverablePayload = recoverable;
     }
 
@@ -2359,6 +2659,84 @@ function buildPilotUnavailableNextAction(reason: AgentRunPilotFallbackReason): s
       : 'Retry the pilot review after confirming structured-output compatibility; do not treat this run as approved until the live pilot returns a structured report.';
 }
 
+function applyExecutionStallPilotGuardrail(
+  evaluation: AgentRunPilotEvaluation,
+  params: Pick<PilotDecisionParams, 'run' | 'evidence' | 'candidateOutcome'>,
+): AgentRunPilotEvaluation {
+  if (
+    evaluation.controlAction !== 'continue'
+    || evaluation.approved
+    || params.candidateOutcome.status === 'cancelled'
+  ) {
+    return evaluation;
+  }
+
+  const uniqueNonSessionToolNames = [...new Set(
+    params.evidence.toolsUsed
+      .map((toolName) => normalizePilotToolName(toolName))
+      .filter((toolName) => toolName.length > 0 && !isSessionCoordinationToolName(toolName)),
+  )];
+  const stalledToolNames = listExecutionDiscoveryOrMetaToolNames(uniqueNonSessionToolNames);
+  const hasOnlyDiscoveryOrMetaUsage = uniqueNonSessionToolNames.length > 0
+    && uniqueNonSessionToolNames.every((toolName) => isExecutionDiscoveryOrMetaToolName(toolName));
+
+  if (
+    !hasOnlyDiscoveryOrMetaUsage
+    || stalledToolNames.length < 3
+    || params.run.summary.startedTools < 6
+    || hasExecutionFallbackEvidence({ run: params.run, evidence: params.evidence })
+    || hasStructuredVerifiedWorkflowEvidence(params.run)
+  ) {
+    return evaluation;
+  }
+
+  const recommendedAction: AgentRunPilotRecommendedAction = 'blocked';
+  return {
+    ...evaluation,
+    approved: false,
+    recommendedAction,
+    controlAction: derivePilotControlAction({
+      recommendedAction,
+      approved: false,
+      candidateStatus: params.candidateOutcome.status,
+    }),
+    confidence: evaluation.confidence === 'high' ? 'medium' : 'low',
+    summary:
+      'Pilot blocked autonomous continuation because the workflow is still looping through discovery or workflow-monitoring tools without any verified operational progress.',
+    rationale:
+      `${evaluation.rationale} The run used ${stalledToolNames.join(', ')} across ${params.run.summary.startedTools} started tools, but still has no verified operational evidence or structured verified workflow evidence. Continuing would likely burn more tokens without producing the requested side effects.`,
+    gaps: mergeUniqueStringLists(
+      evaluation.gaps,
+      [
+        'Autonomous progress is stalled in discovery/session-inspection/workflow-evidence loops with no verified operational result.',
+      ],
+    ).slice(0, MAX_LIST_ITEMS),
+    nextActions: mergeUniqueStringLists(
+      [
+        'Stop autonomous continuation and surface the blocker instead of repeating discovery or workflow-monitoring steps.',
+        'Narrow the next execution attempt to concrete side-effect tools only, and resume only after a materially different execution path is available.',
+      ],
+      evaluation.nextActions,
+    ).slice(0, MAX_LIST_ITEMS),
+  };
+}
+
+function hasExecutionFallbackEvidence(params: {
+  run: Pick<AgentRun, 'evidence'>;
+  evidence: Pick<AgentRunFinalizationEvidence, 'toolsUsed' | 'resultPreviews' | 'lastSubstantiveResultSourceName'>;
+}): boolean {
+  return hasOperationalEvidenceFromSources({
+    toolsUsed: params.evidence.toolsUsed,
+    resultPreviewEntries: params.evidence.resultPreviews.map((entry) => ({
+      sourceName: entry.sourceName,
+      preview: entry.preview,
+    })),
+    resultPreviewSourceNames: params.evidence.resultPreviews.map((entry) => entry.sourceName),
+    lastSubstantiveResultSourceName: params.evidence.lastSubstantiveResultSourceName,
+    structuredEvidenceEntries: params.run.evidence,
+  });
+}
+
 function buildHeuristicPilotFallbackEvaluation(
   params: Pick<PilotDecisionParams, 'run' | 'evidence' | 'candidateOutcome' | 'workers' | 'reviewPerspective'> & {
     reason: AgentRunPilotFallbackReason;
@@ -2372,6 +2750,45 @@ function buildHeuristicPilotFallbackEvaluation(
     providerContext: params.providerContext,
     detail: params.detail,
   });
+
+  if (
+    params.candidateOutcome.status === 'completed' &&
+    hasExecutionFallbackEvidence({ run: params.run, evidence: params.evidence }) &&
+    !hasStructuredVerifiedWorkflowEvidence(params.run)
+  ) {
+    const recommendedAction: AgentRunPilotRecommendedAction = 'blocked';
+    return {
+      ...heuristicEvaluation,
+      evaluatorVersion: `${PILOT_EVALUATOR_VERSION}-heuristic-fallback`,
+      approved: false,
+      recommendedAction,
+      controlAction: derivePilotControlAction({
+        recommendedAction,
+        approved: false,
+        candidateStatus: params.candidateOutcome.status,
+      }),
+      confidence: 'low',
+      summary:
+        'Heuristic fallback used because the live pilot assessment was unavailable. Final approval is blocked for this execution task until a structured pilot report or strong structured workflow evidence is available.',
+      rationale:
+        `${unavailableRationale} This is an execution task, and heuristic fallback cannot approve final delivery without strong structured verified workflow evidence.`,
+      gaps: mergeUniqueStringLists(
+        heuristicEvaluation.gaps,
+        [
+          'Live pilot review is unavailable for an execution task, and no strong structured workflow evidence has been recorded yet.',
+        ],
+      ),
+      nextActions: mergeUniqueStringLists(
+        [
+          buildPilotUnavailableNextAction(params.reason),
+          'Record structured verified workflow evidence for the claimed side effects or rerun the live pilot review before final delivery.',
+        ],
+        heuristicEvaluation.nextActions,
+      ),
+      fallbackReason: params.reason,
+      fallbackDetail: params.detail?.trim() || undefined,
+    };
+  }
 
   return {
     ...heuristicEvaluation,
@@ -2390,7 +2807,7 @@ function buildLivePilotUnavailableFallbackEvaluation(
     detail?: string;
   },
 ): AgentRunPilotEvaluation {
-  return buildHeuristicPilotFallbackEvaluation(params);
+  return buildPilotUnavailableEvaluation(params);
 }
 
 function buildPilotUnavailableEvaluation(params: Pick<PilotDecisionParams, 'run' | 'evidence' | 'candidateOutcome' | 'workers' | 'reviewPerspective'> & {
@@ -2405,11 +2822,27 @@ function buildPilotUnavailableEvaluation(params: Pick<PilotDecisionParams, 'run'
     detail: params.detail,
   });
   const nextAction = buildPilotUnavailableNextAction(params.reason);
+  const hasRunningWorkers = (params.workers ?? []).some((worker) => worker.status === 'running');
+  const hasIncompleteToolCalls = params.evidence.hasIncompleteToolCalls === true;
+  const hasOperationalEvidence = hasExecutionFallbackEvidence({
+    run: params.run,
+    evidence: params.evidence,
+  });
+  const hasStructuredWorkflowEvidence = hasStructuredVerifiedWorkflowEvidence(params.run);
+  const shouldContinue =
+    params.reason !== 'no_provider_context' &&
+    params.candidateOutcome.status !== 'cancelled' &&
+    (
+      hasRunningWorkers ||
+      hasIncompleteToolCalls ||
+      (!hasOperationalEvidence && !hasStructuredWorkflowEvidence)
+    );
+  const recommendedAction: AgentRunPilotRecommendedAction = shouldContinue ? 'continue' : 'blocked';
   const criterionEvaluations = getSuccessCriteria(params.run).map((criterion) => ({
     criterion,
     score: 0,
     maxScore: PILOT_DIMENSION_MAX_SCORE,
-    status: 'blocked' as const,
+    status: shouldContinue ? ('partial' as const) : ('blocked' as const),
     rationale,
   }));
 
@@ -2425,12 +2858,18 @@ function buildPilotUnavailableEvaluation(params: Pick<PilotDecisionParams, 'run'
     maxOverallScore: PILOT_TOTAL_MAX_SCORE,
     approvalThreshold: PILOT_APPROVAL_SCORE_THRESHOLD,
     approved: false,
-    recommendedAction: 'blocked',
-    controlAction: params.candidateOutcome.status === 'cancelled' ? 'cancel' : 'block',
+    recommendedAction,
+    controlAction: derivePilotControlAction({
+      recommendedAction,
+      approved: false,
+      candidateStatus: params.candidateOutcome.status,
+    }),
     confidence: 'low',
-    summary: params.reason === 'no_provider_context'
-      ? 'Pilot evaluation unavailable because no live provider context was available.'
-      : 'Pilot evaluation unavailable because the live provider did not return a machine-readable assessment.',
+    summary: shouldContinue
+      ? 'Pilot evaluation unavailable because the live provider did not return a machine-readable assessment, and the workflow still needs more verified evidence before final review.'
+      : params.reason === 'no_provider_context'
+        ? 'Pilot evaluation unavailable because no live provider context was available.'
+        : 'Pilot evaluation unavailable because the live provider did not return a machine-readable assessment.',
     rationale,
     source: 'unavailable',
     fallbackReason: params.reason,
@@ -2443,8 +2882,15 @@ function buildPilotUnavailableEvaluation(params: Pick<PilotDecisionParams, 'run'
       reviewPerspective: params.reviewPerspective,
     }),
     strengths: [],
-    gaps: ['A real pilot assessment was not produced, so final delivery must remain blocked.'],
-    nextActions: [nextAction],
+    gaps: shouldContinue
+      ? ['A real pilot assessment was not produced, and the workflow has not yet collected enough verified evidence for final review.']
+      : ['A real pilot assessment was not produced, so final delivery must remain blocked.'],
+    nextActions: shouldContinue
+      ? [
+          'Continue the workflow with concrete tool actions and collect verified evidence before retrying Pilot review.',
+          nextAction,
+        ]
+      : [nextAction],
     criterionEvaluations,
   };
 }
@@ -2590,9 +3036,50 @@ function applyRequestAssessmentPilotGuardrails(
   params: Pick<PilotDecisionParams, 'run' | 'evidence' | 'candidateOutcome' | 'workers' | 'providerContext'>,
   internalUserMessageCountOverride?: number,
 ): AgentRunPilotEvaluation {
+  if (
+    evaluation.fallbackReason &&
+    params.candidateOutcome.status === 'completed' &&
+    hasExecutionFallbackEvidence({ run: params.run, evidence: params.evidence }) &&
+    !hasStructuredVerifiedWorkflowEvidence(params.run)
+  ) {
+    const recommendedAction: AgentRunPilotRecommendedAction = 'blocked';
+    return {
+      ...evaluation,
+      approved: false,
+      recommendedAction,
+      controlAction: derivePilotControlAction({
+        recommendedAction,
+        approved: false,
+        candidateStatus: params.candidateOutcome.status,
+      }),
+      confidence: 'low',
+      summary:
+        'Pilot evaluation unavailable because the live pilot assessment was not machine-readable. Final approval is blocked for this execution task until a structured pilot report or strong structured workflow evidence is available.',
+      rationale:
+        `${buildPilotUnavailableRationale({
+          reason: evaluation.fallbackReason,
+          providerContext: params.providerContext,
+          detail: evaluation.fallbackDetail,
+        })} This is an execution task, and final delivery cannot be approved without strong structured verified workflow evidence.`,
+      gaps: mergeUniqueStringLists(
+        evaluation.gaps,
+        [
+          'Live pilot review is unavailable for an execution task, and no strong structured workflow evidence has been recorded yet.',
+        ],
+      ),
+      nextActions: mergeUniqueStringLists(
+        [
+          buildPilotUnavailableNextAction(evaluation.fallbackReason),
+          'Record structured verified workflow evidence for the claimed side effects or rerun the live pilot review before final delivery.',
+        ],
+        evaluation.nextActions,
+      ),
+    };
+  }
+
   const assessment = getPilotRequestAssessment(params, undefined, internalUserMessageCountOverride);
   if (assessment.action === 'proceed') {
-    return evaluation;
+    return applyExecutionStallPilotGuardrail(evaluation, params);
   }
 
   const candidateText = assessment.action === 'direct'
@@ -3161,11 +3648,8 @@ function resolveFinalOutcomeStatus(
     return 'cancelled';
   }
 
-  // A Pilot block is a deliberate stop condition, not an execution failure.
-  // This repo has no dedicated "blocked" terminal status, so map it to the
-  // existing non-error stop state.
   if (evaluation.controlAction === 'block') {
-    return 'cancelled';
+    return 'failed';
   }
 
   if (evaluation.controlAction === 'accept' && evaluation.approved) {
@@ -3177,6 +3661,23 @@ function resolveFinalOutcomeStatus(
   }
 
   return evaluation.approved ? 'completed' : 'failed';
+}
+
+function resolvePilotTerminalReason(
+  candidateOutcome: { status: Exclude<AgentRunStatus, 'running'> },
+  evaluation: AgentRunPilotEvaluation,
+  finalStatus: Exclude<AgentRunStatus, 'running'>,
+): AgentRunTerminalReason | undefined {
+  if (evaluation.controlAction === 'block' || evaluation.recommendedAction === 'blocked') {
+    return evaluation.fallbackReason ? 'live_pilot_unavailable' : 'pilot_blocked';
+  }
+  if (evaluation.controlAction === 'cancel' || candidateOutcome.status === 'cancelled') {
+    return 'user_cancelled';
+  }
+  if (finalStatus === 'failed') {
+    return 'missing_required_side_effect';
+  }
+  return undefined;
 }
 
 function buildResumeCheckpointDetail(evaluation: AgentRunPilotEvaluation): string {
@@ -3271,6 +3772,11 @@ function buildPilotDecision(
   }
 
   const finalStatus = resolveFinalOutcomeStatus(params.candidateOutcome, effectiveEvaluation);
+  const terminalReason = resolvePilotTerminalReason(
+    params.candidateOutcome,
+    effectiveEvaluation,
+    finalStatus,
+  );
   const checkpointTitle = effectiveEvaluation.controlAction === 'block'
     ? 'Pilot blocked finalization'
     : finalStatus === 'completed'
@@ -3287,6 +3793,7 @@ function buildPilotDecision(
     outcome: {
       status: finalStatus,
       summary: checkpointDetail,
+      ...(terminalReason ? { terminalReason } : {}),
     },
     checkpointTitle,
     checkpointDetail,

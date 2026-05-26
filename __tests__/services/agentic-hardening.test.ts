@@ -184,15 +184,16 @@ describe('spawn error message mapping', () => {
 // ── SuperAgent prompt decision rules ─────────────────────────────────────
 
 describe('SuperAgent system prompt — decision rules', () => {
-  it('encourages sub-agent use explicitly', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('the user chose Agent mode for a reason');
+  it('treats delegation as deliberate rather than automatic', () => {
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Use delegation deliberately, not ceremonially');
   });
 
-  it('lowers the threshold — trivial is the only handle-directly tier', () => {
+  it('keeps direct execution available for simple work and execution asks', () => {
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Trivial tasks');
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('handle DIRECTLY');
-    // "Simple tasks" should now recommend spawning, not handling directly
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toMatch(/Simple tasks.*spawn 1 sub-agent/);
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Simple tasks');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('handle them directly');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('execute directly first');
   });
 
   it('mentions sessions_spawn in Phase 4', () => {

@@ -14,6 +14,17 @@
 
 import { LlmProviderKind, ToolDefinition } from '../../types';
 import { estimateTokens } from '../../services/context/tokenCounter';
+import {
+  EXECUTION_SUPER_AGENT_CORE_TOOL_NAMES,
+  filterExecutionLaneToolNames,
+  getExecutionLaneToolCapability,
+  isExecutionDefaultBlockedToolName,
+  isExecutionDiscoveryOrMetaToolName,
+} from '../../utils/executionLanePolicy';
+import {
+  inferToolCapabilityDescriptor,
+  scoreToolLifecyclePriority,
+} from './capabilityRegistry';
 
 // ── Provider tool limits ─────────────────────────────────────────────────
 
@@ -181,6 +192,12 @@ export const TIER1_TOOL_NAMES = new Set([
   'tool_catalog',
 ]);
 
+const EXECUTION_ALWAYS_LOADED_TOOL_NAMES = new Set([
+  'read_file',
+  'write_file',
+  'file_edit',
+]);
+
 const GEMINI_ALWAYS_LOADED_TOOL_NAMES = new Set([
   'read_file',
   'write_file',
@@ -217,12 +234,67 @@ const ANTHROPIC_ALWAYS_LOADED_TOOL_NAMES = new Set([
   'tool_catalog',
 ]);
 
+function getToolLifecycleSelectionPriority(
+  tool: ToolDefinition,
+  options?: { preferActionable?: boolean },
+): number {
+  return scoreToolLifecyclePriority(inferToolCapabilityDescriptor(tool), options);
+}
+
+function shouldBackfillDeferredTool(tool: ToolDefinition): boolean {
+  const descriptor = inferToolCapabilityDescriptor(tool);
+  const sideEffects = new Set(descriptor.sideEffects);
+  const riskHints = new Set(descriptor.riskHints);
+  const workflowStages = new Set(descriptor.workflowStages);
+
+  return (
+    !sideEffects.has('remote_mutation') &&
+    !sideEffects.has('external_run') &&
+    !sideEffects.has('destructive') &&
+    !riskHints.has('requires_approval') &&
+    !riskHints.has('destructive') &&
+    !workflowStages.has('guarded_resource_creation') &&
+    !workflowStages.has('mutate_remote_state') &&
+    !workflowStages.has('start_external_execution')
+  );
+}
+
+function orderToolNamesByLifecyclePriority(
+  names: string[],
+  toolMap: ReadonlyMap<string, ToolDefinition>,
+  options?: { preferActionable?: boolean },
+): string[] {
+  return names
+    .map((name, index) => ({
+      name,
+      index,
+      priority: getToolLifecycleSelectionPriority(
+        toolMap.get(name) ?? {
+          name,
+          description: name,
+          input_schema: { type: 'object', properties: {} },
+        },
+        options,
+      ),
+    }))
+    .sort((left, right) => {
+      const priorityDiff = left.priority - right.priority;
+      return priorityDiff !== 0 ? priorityDiff : left.index - right.index;
+    })
+    .map((entry) => entry.name);
+}
+
 function getAlwaysLoadedToolNames(
   providerName: string,
   baseUrl?: string,
   model?: string,
   providerKind?: LlmProviderKind,
+  routeMode?: 'execution' | 'discovery' | 'research',
 ): ReadonlySet<string> {
+  if (routeMode === 'execution') {
+    return EXECUTION_ALWAYS_LOADED_TOOL_NAMES;
+  }
+
   const family = resolveToolProviderFamily(providerName, baseUrl, model, providerKind);
 
   if (family === 'anthropic') {
@@ -255,7 +327,6 @@ const SUPER_AGENT_CORE_TOOL_NAMES = new Set([
   'sessions_cancel',
   'sessions_yield',
   'agents',
-  'wait',
 ]);
 
 /**
@@ -392,7 +463,6 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       'sessions_wait',
       'sessions_cancel',
       'sessions_yield',
-      'wait',
     ],
     keywords: /session|sub.?agent|parallel.*agent|spawn|multi.?agent/i,
   },
@@ -501,6 +571,7 @@ export function detectRelevantCategories(recentUserMessages: string[]): Set<stri
 export interface ToolSelectionOptions {
   model?: string;
   providerKind?: LlmProviderKind;
+  routeMode?: 'execution' | 'discovery' | 'research';
   discoveredCategories?: Iterable<string>;
   discoveredToolNames?: Iterable<string>;
   recentToolNames?: Iterable<string>;
@@ -537,11 +608,23 @@ export function selectToolsForRequest(
   let limit = Math.min(hardLimit, softLimit);
   const onDeviceTarget = providerFamily === 'on-device';
   const relevantCategories = new Set(detectRelevantCategories(userMessages));
-  const discoveredToolNames = new Set(
+  const executionRoute = options?.routeMode === 'execution';
+  if (executionRoute) {
+    // Execution lanes should not keep broad repo/web discovery categories alive
+    // by default once the request is already actionable.
+    relevantCategories.delete('web_research');
+    relevantCategories.delete('workspace_search');
+  }
+  let discoveredToolNames = new Set(
     Array.from(options?.discoveredToolNames ?? []).filter(Boolean),
   );
-  const recentToolNames = new Set(Array.from(options?.recentToolNames ?? []).filter(Boolean));
-  const preferredToolNames = new Set(Array.from(options?.preferredToolNames ?? []).filter(Boolean));
+  let recentToolNames = new Set(Array.from(options?.recentToolNames ?? []).filter(Boolean));
+  let preferredToolNames = new Set(Array.from(options?.preferredToolNames ?? []).filter(Boolean));
+  if (executionRoute) {
+    discoveredToolNames = new Set(filterExecutionLaneToolNames(discoveredToolNames));
+    recentToolNames = new Set(filterExecutionLaneToolNames(recentToolNames));
+    preferredToolNames = new Set(Array.from(preferredToolNames).filter(Boolean));
+  }
   const restrictToPreferredTools =
     preferredToolNames.size > 0 && options?.restrictToPreferredTools === true;
   for (const category of options?.discoveredCategories ?? []) {
@@ -551,7 +634,7 @@ export function selectToolsForRequest(
   }
   // SuperAgent mode: always include session orchestration tools so the LLM
   // can autonomously decide to spawn sub-agents without user keyword hints.
-  if (options?.isSuperAgent) {
+  if (options?.isSuperAgent && !executionRoute) {
     relevantCategories.add('sessions');
     relevantCategories.add('agents');
   }
@@ -559,7 +642,7 @@ export function selectToolsForRequest(
   // tool set is narrowed aggressively, but allow lower-priority session and
   // agent-management tools to be trimmed on constrained providers like Gemini.
   const superAgentForceInclude = options?.isSuperAgent
-    ? new Set(SUPER_AGENT_CORE_TOOL_NAMES)
+    ? new Set(executionRoute ? EXECUTION_SUPER_AGENT_CORE_TOOL_NAMES : SUPER_AGENT_CORE_TOOL_NAMES)
     : new Set<string>();
   const shouldBackfillDeferredTools = options?.allowDeferredBackfill === true;
   const alwaysLoadedToolNames = getAlwaysLoadedToolNames(
@@ -567,13 +650,8 @@ export function selectToolsForRequest(
     providerBaseUrl,
     options?.model,
     options?.providerKind,
+    options?.routeMode,
   );
-  const noBackfillToolNames = new Set([
-    'expo_eas_build',
-    'expo_eas_update',
-    'expo_eas_submit',
-    'expo_eas_deploy_web',
-  ]);
   const originalOrder = new Map(dedupedTools.map((tool, index) => [tool.name, index]));
 
   // Build category → toolNames lookup (inverted index)
@@ -590,17 +668,35 @@ export function selectToolsForRequest(
 
   for (const tool of dedupedTools) {
     const isTier1 = alwaysLoadedToolNames.has(tool.name);
+    const isPreferredTool = preferredToolNames.has(tool.name);
+    const descriptor = isPreferredTool ? inferToolCapabilityDescriptor(tool) : undefined;
+    const isPreferredWorkflowPrerequisite = descriptor?.workflowStages.some(
+      (stage) => stage === 'discover_resource' || stage === 'inspect_resource',
+    ) ?? false;
+    if (
+      executionRoute &&
+      isExecutionDiscoveryOrMetaToolName(tool.name) &&
+      !isTier1 &&
+      !isPreferredWorkflowPrerequisite
+    ) {
+      deferred.push(tool);
+      continue;
+    }
+
+    if (executionRoute && isExecutionDefaultBlockedToolName(tool.name) && !isPreferredTool) {
+      deferred.push(tool);
+      continue;
+    }
+
     const isDiscoveredTool = discoveredToolNames.has(tool.name);
     const isRecentTool = recentToolNames.has(tool.name);
-    const isPreferredTool = preferredToolNames.has(tool.name);
     const isSuperAgentEssential = superAgentForceInclude.has(tool.name);
-
     if (isTier1 || isPreferredTool || isSuperAgentEssential) {
       included.push(tool);
       continue;
     }
 
-    if (restrictToPreferredTools && isDiscoveredTool) {
+    if (restrictToPreferredTools && isDiscoveredTool && !executionRoute) {
       included.push(tool);
       continue;
     }
@@ -615,9 +711,9 @@ export function selectToolsForRequest(
       continue;
     }
 
-    const category = toolToCategory.get(tool.name);
+    const category = toolToCategory.get(tool.name) ?? getToolManagerCategoryForToolName(tool.name);
     if (category && relevantCategories.has(category)) {
-      if (onDeviceTarget) {
+      if (onDeviceTarget && !executionRoute) {
         deferred.push(tool);
         continue;
       }
@@ -634,7 +730,7 @@ export function selectToolsForRequest(
   // required for continuity in this turn (always-loaded base, super-agent core,
   // and explicit discovered/preferred/recent focus sets).
   const minimumRequiredCount = included.filter((tool) => {
-    const category = toolToCategory.get(tool.name);
+    const category = toolToCategory.get(tool.name) ?? getToolManagerCategoryForToolName(tool.name);
     const isCategoryMatched = Boolean(category && relevantCategories.has(category));
     return (
       alwaysLoadedToolNames.has(tool.name)
@@ -655,8 +751,13 @@ export function selectToolsForRequest(
   if (shouldBackfillDeferredTools && included.length < limit) {
     // Add deferred tools up to the limit, prioritising smaller ones
     const sorted = deferred
-      .filter((tool) => !noBackfillToolNames.has(tool.name))
-      .sort((a, b) => estimateToolTokens(a) - estimateToolTokens(b));
+      .filter((tool) => shouldBackfillDeferredTool(tool))
+      .sort((a, b) => {
+        const priorityDiff =
+          getToolLifecycleSelectionPriority(a, { preferActionable: executionRoute }) -
+          getToolLifecycleSelectionPriority(b, { preferActionable: executionRoute });
+        return priorityDiff !== 0 ? priorityDiff : estimateToolTokens(a) - estimateToolTokens(b);
+      });
     for (const tool of sorted) {
       if (included.length >= limit) break;
       included.push(tool);
@@ -673,7 +774,7 @@ export function selectToolsForRequest(
       if (preferredToolNames.has(t.name)) return 1;
       if (discoveredToolNames.has(t.name)) return 2;
       if (recentToolNames.has(t.name)) return 2;
-      const cat = toolToCategory.get(t.name);
+      const cat = toolToCategory.get(t.name) ?? getToolManagerCategoryForToolName(t.name);
       if (cat && relevantCategories.has(cat)) return 2;
       return 3;
     };
@@ -681,9 +782,10 @@ export function selectToolsForRequest(
     included.sort((a, b) => {
       const wDiff = weight(a) - weight(b);
       if (wDiff !== 0) return wDiff;
-      // Keep same-weight tools in stable registry order. This preserves
-      // expected discovery/category behavior (e.g. browser_navigate first)
-      // while still allowing explicit priority tiers above.
+      const lifecycleDiff =
+        getToolLifecycleSelectionPriority(a, { preferActionable: executionRoute }) -
+        getToolLifecycleSelectionPriority(b, { preferActionable: executionRoute });
+      if (lifecycleDiff !== 0) return lifecycleDiff;
       return (
         (originalOrder.get(a.name) ?? Number.MAX_SAFE_INTEGER) -
         (originalOrder.get(b.name) ?? Number.MAX_SAFE_INTEGER)
@@ -692,6 +794,29 @@ export function selectToolsForRequest(
 
     included.length = limit;
   }
+
+  included.sort((a, b) => {
+    const weight = (t: ToolDefinition): number => {
+      if (alwaysLoadedToolNames.has(t.name)) return 0;
+      if (superAgentForceInclude.has(t.name)) return 0;
+      if (preferredToolNames.has(t.name)) return 1;
+      if (discoveredToolNames.has(t.name)) return 2;
+      if (recentToolNames.has(t.name)) return 2;
+      const cat = toolToCategory.get(t.name) ?? getToolManagerCategoryForToolName(t.name);
+      if (cat && relevantCategories.has(cat)) return 2;
+      return 3;
+    };
+    const weightDiff = weight(a) - weight(b);
+    if (weightDiff !== 0) return weightDiff;
+    const lifecycleDiff =
+      getToolLifecycleSelectionPriority(a, { preferActionable: executionRoute }) -
+      getToolLifecycleSelectionPriority(b, { preferActionable: executionRoute });
+    if (lifecycleDiff !== 0) return lifecycleDiff;
+    return (
+      (originalOrder.get(a.name) ?? Number.MAX_SAFE_INTEGER) -
+      (originalOrder.get(b.name) ?? Number.MAX_SAFE_INTEGER)
+    );
+  });
 
   // Apply token budget if specified
   if (tokenBudget && tokenBudget > 0) {
@@ -849,6 +974,7 @@ export function formatToolCategoryLabel(category: string): string {
     pdf: 'PDF',
     cron: 'Automation',
     memory_search: 'Memory search',
+    github: 'GitHub',
     mcp: 'MCP tools',
     skills: 'Skills',
     other: 'Other',
@@ -860,18 +986,18 @@ export function formatToolCategoryLabel(category: string): string {
 }
 
 export function getToolManagerCategoryForToolName(toolName: string): string {
-  if (toolName.startsWith('mcp__')) {
-    return 'mcp';
-  }
-
-  if (toolName.startsWith('skill__')) {
-    return 'skills';
-  }
-
   for (const category of TOOL_CATEGORIES) {
     if (category.toolNames.includes(toolName)) {
       return category.name;
     }
+  }
+
+  const inferredCategory = inferToolCapabilityDescriptor({
+    name: toolName,
+    description: toolName,
+  }).category;
+  if (inferredCategory && inferredCategory !== 'other') {
+    return inferredCategory === 'workspace_files' ? 'workspace_files' : inferredCategory;
   }
 
   return 'other';
@@ -889,6 +1015,7 @@ function mapDeferredCategoryToToolCatalogCategory(category: string): string | nu
     contacts: 'contacts',
     expo: 'expo',
     expo_manual_actions: 'expo',
+    github: 'github',
     sessions: 'sessions',
     agents: 'agents',
     media: 'media',
@@ -910,6 +1037,117 @@ function buildDeferredCategoryDiscoveryHint(category: string): string {
   return toolCatalogCategory ? ` Inspect with tool_catalog category="${toolCatalogCategory}".` : '';
 }
 
+function scoreToolPlannerCandidate(tool: ToolDefinition): number {
+  const capability = getExecutionLaneToolCapability(tool.name);
+  const descriptor = inferToolCapabilityDescriptor(tool);
+  const capabilities = new Set(descriptor.capabilities);
+  const sideEffects = new Set(descriptor.sideEffects);
+  const riskHints = new Set(descriptor.riskHints);
+  const workflowStages = new Set(descriptor.workflowStages);
+  let score = 100;
+
+  if (workflowStages.has('prepare_artifact')) {
+    score -= 42;
+  }
+  if (workflowStages.has('discover_resource')) {
+    score -= 24;
+  }
+  if (workflowStages.has('persist_artifact')) {
+    score -= 38;
+  }
+  if (workflowStages.has('inspect_resource') || workflowStages.has('verify_evidence')) {
+    score -= 26;
+  }
+  if (workflowStages.has('monitor_external_execution') || workflowStages.has('await_external_execution')) {
+    score -= 22;
+  }
+  if (workflowStages.has('mutate_remote_state') || workflowStages.has('start_external_execution')) {
+    score -= 30;
+  }
+  if (workflowStages.has('guarded_resource_creation')) {
+    score += 140;
+  }
+
+  if (capabilities.has('write') || capabilities.has('commit') || capabilities.has('push')) {
+    score -= 36;
+  }
+  if (capabilities.has('deploy')) {
+    score -= 32;
+  }
+  if (capabilities.has('monitor') || capabilities.has('verify') || capabilities.has('wait')) {
+    score -= 20;
+  }
+  if (capabilities.has('read')) {
+    score -= 16;
+  }
+  if (capabilities.has('compute')) {
+    score -= 12;
+  }
+  if (
+    capabilities.has('discover') &&
+    !capabilities.has('read') &&
+    !workflowStages.has('inspect_resource') &&
+    !workflowStages.has('verify_evidence')
+  ) {
+    score += 34;
+  }
+
+  if (sideEffects.has('local_artifact')) {
+    score -= 18;
+  }
+  if (sideEffects.has('none')) {
+    score -= 8;
+  }
+  if (sideEffects.has('remote_mutation') || sideEffects.has('external_run')) {
+    score -= 12;
+  }
+  if (riskHints.has('read_only')) {
+    score -= 20;
+  }
+  if (riskHints.has('idempotent')) {
+    score -= 10;
+  }
+  if (sideEffects.has('destructive')) {
+    score += 72;
+  }
+  if (riskHints.has('requires_approval')) {
+    score += 18;
+  }
+  if (riskHints.has('destructive')) {
+    score += 72;
+  }
+
+  if (capability === 'mutation') {
+    score -= 45;
+  } else if (capability === 'monitoring') {
+    score -= 35;
+  } else if (capability === 'read_only' || capability === 'meta') {
+    score += 40;
+  } else if (capability === 'coordination' || capability === 'computation') {
+    score += 30;
+  }
+
+  if (isExecutionDefaultBlockedToolName(tool.name)) {
+    score += 45;
+  }
+
+  if (isExecutionDiscoveryOrMetaToolName(tool.name)) {
+    score += 70;
+  }
+
+  return score;
+}
+
+export function orderToolPlannerCandidateTools(tools: ToolDefinition[]): ToolDefinition[] {
+  return tools
+    .map((tool, index) => ({ tool, index, score: scoreToolPlannerCandidate(tool) }))
+    .sort((left, right) => {
+      const scoreDiff = left.score - right.score;
+      return scoreDiff !== 0 ? scoreDiff : left.index - right.index;
+    })
+    .map((entry) => entry.tool);
+}
+
 // ── Deferred tool catalog ────────────────────────────────────────────────
 
 /**
@@ -923,6 +1161,7 @@ export function buildDeferredToolCatalog(
 ): string {
   const loadedNames = new Set(loadedTools.map((t) => t.name));
   const deferred = allTools.filter((t) => !loadedNames.has(t.name));
+  const deferredToolMap = new Map(deferred.map((tool) => [tool.name, tool]));
 
   if (deferred.length === 0) return '';
 
@@ -940,8 +1179,9 @@ export function buildDeferredToolCatalog(
       return countDiff !== 0 ? countDiff : left[0].localeCompare(right[0]);
     })
     .map(([category, names]) => {
-      const visible = names.slice(0, 3);
-      const hiddenCount = names.length - visible.length;
+      const orderedNames = orderToolNamesByLifecyclePriority(names, deferredToolMap);
+      const visible = orderedNames.slice(0, 3);
+      const hiddenCount = orderedNames.length - visible.length;
       const hint = buildDeferredCategoryDiscoveryHint(category);
       return hiddenCount > 0
         ? `- ${formatToolCategoryLabel(category)}: ${visible.join(', ')}, and ${hiddenCount} more.${hint}`

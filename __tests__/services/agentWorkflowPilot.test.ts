@@ -747,7 +747,8 @@ describe('agentWorkflowPilot', () => {
     expect(firstDecision.action).toBe('resume');
     expect(secondDecision.action).toBe('finalize');
     expect(secondDecision.checkpointTitle).toBe('Pilot blocked finalization');
-    expect(secondDecision.outcome.status).toBe('cancelled');
+    expect(secondDecision.outcome.status).toBe('failed');
+    expect(secondDecision.outcome.terminalReason).toBe('pilot_blocked');
     expect(secondDecision.evaluation.recommendedAction).toBe('blocked');
     expect(secondDecision.evaluation.controlAction).toBe('block');
     expect(secondDecision.evaluation.summary).toContain('stopped autonomous correction');
@@ -835,7 +836,8 @@ describe('agentWorkflowPilot', () => {
 
     expect(decision.action).toBe('finalize');
     expect(decision.evaluation.approved).toBe(false);
-    expect(decision.outcome.status).toBe('cancelled');
+    expect(decision.outcome.status).toBe('failed');
+    expect(decision.outcome.terminalReason).toBe('live_pilot_unavailable');
     expect(decision.evaluation.source).toBe('unavailable');
     expect(decision.evaluation.fallbackReason).toBe('no_provider_context');
     expect(decision.checkpointTitle).toBe('Pilot blocked finalization');
@@ -888,7 +890,11 @@ describe('agentWorkflowPilot', () => {
     const decision = await evaluateAgentRunWithPilot({
       run: makeRun(),
       workers: [makeWorker()],
-      evidence: makeEvidence(),
+      evidence: makeEvidence({
+        lastSubstantiveResultSourceName: 'expo_eas_workflow_status',
+        resultPreviews: [{ sourceName: 'expo_eas_workflow_status', preview: 'workflow run 101 completed with success' }],
+        toolsUsed: ['expo_eas_workflow_status'],
+      }),
       candidateOutcome: {
         status: 'completed',
         summary: 'Supervisor reached a completion candidate.',
@@ -916,6 +922,164 @@ describe('agentWorkflowPilot', () => {
     expect(decision.evaluation.source).toBe('provider');
     expect(decision.evaluation.criterionEvaluations[0]?.score).toBe(5);
     expect(decision.checkpointTitle).toBe('Pilot approved finalization');
+  });
+
+  it('parses Gemini-style wrapped pilot report JSON without falling back to heuristics', async () => {
+    mockSendMessage.mockResolvedValue({
+      choices: [{
+        message: {
+          role: 'assistant',
+          content: JSON.stringify({
+            pilot_report: {
+              recommendedAction: 'continue',
+              controlAction: 'continue',
+              completionScore: 2,
+              adherenceScore: 3,
+              evidenceScore: 2,
+              processScore: 3,
+              approved: false,
+              confidence: 'medium',
+              summary: 'More execution work is needed.',
+              rationale: 'The run has not produced enough verified side-effect evidence yet.',
+              strengths: ['Some evidence was collected.'],
+              gaps: ['The deployment evidence is still missing.'],
+              nextActions: ['Continue from the current workflow state and gather deployment evidence.'],
+              criterionEvaluations: [
+                {
+                  criterion: 'Produce the requested deliverable.',
+                  score: 2,
+                  status: 'partial',
+                  rationale: 'The deliverable is incomplete.',
+                },
+                {
+                  criterion: 'Verify the result before finalizing.',
+                  score: 2,
+                  status: 'partial',
+                  rationale: 'Verification evidence is incomplete.',
+                },
+              ],
+            },
+          }),
+        },
+      }],
+    });
+
+    const decision = await evaluateAgentRunWithPilot({
+      run: makeRun(),
+      workers: [makeWorker()],
+      evidence: makeEvidence(),
+      candidateOutcome: {
+        status: 'completed',
+        summary: 'Supervisor reached a completion candidate.',
+      },
+      providerContext: makeGeminiProviderContext(),
+    });
+
+    expect(mockSendMessage).toHaveBeenCalledTimes(1);
+    expect(decision.action).toBe('resume');
+    expect(decision.evaluation.source).toBe('provider');
+    expect(decision.evaluation.fallbackReason).toBeUndefined();
+    expect(decision.evaluation.summary).toContain('More execution work');
+  });
+
+  it('normalizes schema-equivalent pilot JSON keys and scalar types from provider responses', async () => {
+    mockSendMessage.mockResolvedValue({
+      choices: [{
+        message: {
+          role: 'assistant',
+          content: JSON.stringify({
+            pilot_report: {
+              recommended_action: 'finalize',
+              control_action: 'accept',
+              completion_score: '5',
+              adherence_score: '4',
+              evidence_score: '5',
+              process_score: '4',
+              approved: 'true',
+              confidence: 'high',
+              summary: 'The run is complete and verified.',
+              rationale: 'All requested work is done and backed by verified evidence.',
+              strengths: 'Verified evidence captured.',
+              gaps: [],
+              next_actions: [],
+              criterion_evaluations: [
+                {
+                  success_criterion: 'Produce the requested deliverable.',
+                  score: '5',
+                  status: 'passed',
+                  reason: 'The deliverable exists.',
+                },
+                {
+                  success_criterion: 'Verify the result before finalizing.',
+                  score: '4',
+                  status: 'met',
+                  reason: 'The result is verified.',
+                },
+              ],
+            },
+          }),
+        },
+      }],
+    });
+
+    const decision = await evaluateAgentRunWithPilot({
+      run: makeRun(),
+      workers: [makeWorker()],
+      evidence: makeEvidence(),
+      candidateOutcome: {
+        status: 'completed',
+        summary: 'Supervisor reached a completion candidate.',
+      },
+      providerContext: makeGeminiProviderContext(),
+    });
+
+    expect(mockSendMessage).toHaveBeenCalledTimes(1);
+    expect(decision.evaluation.source).toBe('provider');
+    expect(decision.evaluation.approved).toBe(true);
+    expect(decision.evaluation.completionScore).toBe(5);
+    expect(decision.evaluation.strengths).toEqual(['Verified evidence captured.']);
+  });
+
+  it('uses partial but parseable pilot reports as provider evaluations instead of heuristic fallback', async () => {
+    mockSendMessage.mockResolvedValue({
+      choices: [{
+        message: {
+          role: 'assistant',
+          content: JSON.stringify({
+            report: {
+              controlAction: 'continue',
+              completionScore: 2,
+              adherenceScore: 2,
+              evidenceScore: 1,
+              processScore: 2,
+              approved: false,
+              summary: 'The workflow needs a corrected next action.',
+              rationale: 'The latest tool attempt failed, but the run can recover by resolving prerequisites.',
+            },
+          }),
+        },
+      }],
+    });
+
+    const decision = await evaluateAgentRunWithPilot({
+      run: makeRun(),
+      workers: [makeWorker()],
+      evidence: makeEvidence({
+        resultPreviews: [{ sourceName: 'file_edit', preview: 'Error: invalid edit arguments.' }],
+        toolsUsed: ['file_edit'],
+      }),
+      candidateOutcome: {
+        status: 'completed',
+        summary: 'Supervisor reached a completion candidate.',
+      },
+      providerContext: makeGeminiProviderContext(),
+    });
+
+    expect(mockSendMessage).toHaveBeenCalledTimes(4);
+    expect(decision.action).toBe('resume');
+    expect(decision.evaluation.source).toBe('provider');
+    expect(decision.evaluation.fallbackReason).toBeUndefined();
+    expect(decision.evaluation.criterionEvaluations).toHaveLength(2);
   });
 
   it('downgrades live pilot approval when provider-comparison claims are uncited and overconfident', async () => {
@@ -1505,7 +1669,8 @@ describe('agentWorkflowPilot', () => {
     expect(firstDecision.disableToolsOnResume).toBe(true);
     expect(secondDecision.action).toBe('finalize');
     expect(secondDecision.checkpointTitle).toBe('Pilot blocked finalization');
-    expect(secondDecision.outcome.status).toBe('cancelled');
+    expect(secondDecision.outcome.status).toBe('failed');
+    expect(secondDecision.outcome.terminalReason).toBe('pilot_blocked');
     expect(secondDecision.evaluation.recommendedAction).toBe('blocked');
     expect(secondDecision.evaluation.summary).toContain('stopped autonomous correction');
   });
@@ -2069,7 +2234,7 @@ describe('agentWorkflowPilot', () => {
     }));
   });
 
-  it('continues the workflow heuristically when the evaluator returns no structured result and evidence is still weak', async () => {
+  it('continues the workflow without heuristic assessment when the evaluator returns no structured result and evidence is still weak', async () => {
     mockSendMessage.mockResolvedValue({
       choices: [{
         message: {
@@ -2096,8 +2261,8 @@ describe('agentWorkflowPilot', () => {
 
     expect(decision.action).toBe('resume');
     expect(decision.checkpointTitle).toBe(PILOT_REVIEW_CHECKPOINT_TITLE);
-    expect(decision.evaluation.evaluatorVersion).toContain('heuristic');
-    expect(decision.evaluation.source).toBe('heuristic');
+    expect(decision.evaluation.evaluatorVersion).toContain('unavailable');
+    expect(decision.evaluation.source).toBe('unavailable');
     expect(decision.evaluation.fallbackReason).toBe('response_unparseable');
     expect(decision.evaluation.fallbackDetail).toContain(
       'structured-output attempt returned no schema-complete pilot_report payload.',
@@ -2110,7 +2275,7 @@ describe('agentWorkflowPilot', () => {
     );
   });
 
-  it('finalizes with heuristic approval when live pilot evaluation remains unavailable after a strong review', async () => {
+  it('blocks unavailable live pilot finalization for execution tasks without structured workflow evidence', async () => {
     mockSendMessage.mockResolvedValue({
       choices: [{
         message: {
@@ -2123,6 +2288,63 @@ describe('agentWorkflowPilot', () => {
     const decision = await evaluateAgentRunWithPilot({
       run: makeRun(),
       workers: [makeWorker()],
+      evidence: makeEvidence({
+        lastSubstantiveResultSourceName: 'expo_eas_workflow_status',
+        resultPreviews: [{ sourceName: 'expo_eas_workflow_status', preview: 'workflow run 101 completed with success' }],
+        toolsUsed: ['expo_eas_workflow_status'],
+      }),
+      candidateOutcome: {
+        status: 'completed',
+        summary: 'Supervisor reached a completion candidate.',
+      },
+      providerContext: makeProviderContext(),
+    });
+
+    expect(decision.action).toBe('finalize');
+    expect(decision.outcome.status).toBe('failed');
+    expect(decision.outcome.terminalReason).toBe('live_pilot_unavailable');
+    expect(decision.checkpointTitle).toBe('Pilot blocked finalization');
+    expect(decision.evaluation.evaluatorVersion).toContain('unavailable');
+    expect(decision.evaluation.source).toBe('unavailable');
+    expect(decision.evaluation.fallbackReason).toBe('response_unparseable');
+    expect(decision.evaluation.fallbackDetail).toContain(
+      'structured-output attempt returned no schema-complete pilot_report payload.',
+    );
+    expect(decision.evaluation.approved).toBe(false);
+    expect(decision.evaluation.controlAction).toBe('block');
+    expect(decision.evaluation.approvalThreshold).toBeGreaterThan(0);
+    expect(decision.evaluation.summary).toContain('Pilot evaluation unavailable');
+    expect(decision.checkpointDetail).toContain('Live pilot fallback detail:');
+  });
+
+  it('blocks unavailable live pilot finalization even with structured workflow evidence', async () => {
+    mockSendMessage.mockResolvedValue({
+      choices: [{
+        message: {
+          role: 'assistant',
+          content: '',
+        },
+      }],
+    });
+
+    const decision = await evaluateAgentRunWithPilot({
+      run: makeRun({
+        evidence: [
+          {
+            id: 'ev-verified-workflow',
+            kind: 'artifact',
+            status: 'verified',
+            recorder: 'worker',
+            title: 'Workflow verification',
+            content: 'Workflow run 101 completed successfully and matches the claimed deployment.',
+            sourceName: 'expo_eas_workflow_status',
+            toolName: 'expo_eas_workflow_status',
+            createdAt: 10,
+            updatedAt: 10,
+          },
+        ],
+      }),
+      workers: [makeWorker()],
       evidence: makeEvidence(),
       candidateOutcome: {
         status: 'completed',
@@ -2132,22 +2354,90 @@ describe('agentWorkflowPilot', () => {
     });
 
     expect(decision.action).toBe('finalize');
-    expect(decision.outcome.status).toBe('completed');
-    expect(decision.checkpointTitle).toBe('Pilot approved finalization');
-    expect(decision.evaluation.evaluatorVersion).toContain('heuristic');
-    expect(decision.evaluation.source).toBe('heuristic');
-    expect(decision.evaluation.fallbackReason).toBe('response_unparseable');
-    expect(decision.evaluation.fallbackDetail).toContain(
-      'structured-output attempt returned no schema-complete pilot_report payload.',
-    );
-    expect(decision.evaluation.approved).toBe(true);
-    expect(decision.evaluation.controlAction).toBe('accept');
-    expect(decision.evaluation.approvalThreshold).toBe(18);
-    expect(decision.evaluation.summary).toContain('Heuristic fallback used because the live pilot assessment was unavailable');
-    expect(decision.checkpointDetail).toContain('Live pilot fallback detail:');
+    expect(decision.outcome.status).toBe('failed');
+    expect(decision.outcome.terminalReason).toBe('live_pilot_unavailable');
+    expect(decision.checkpointTitle).toBe('Pilot blocked finalization');
+    expect(decision.evaluation.approved).toBe(false);
+    expect(decision.evaluation.controlAction).toBe('block');
+    expect(decision.evaluation.source).toBe('unavailable');
   });
 
-  it('keeps heuristic fallback in continue mode when provider-comparison claims are uncited', async () => {
+  it('blocks live pilot continuation when the run only churned through discovery and session-inspection tools', async () => {
+    mockSendMessage.mockResolvedValue({
+      choices: [{
+        message: {
+          role: 'assistant',
+          content: JSON.stringify(makePilotPayload(DEFAULT_SUCCESS_CRITERIA, {
+            recommendedAction: 'continue',
+            controlAction: 'continue',
+            approved: false,
+            confidence: 'medium',
+            completionScore: 2,
+            adherenceScore: 2,
+            evidenceScore: 1,
+            processScore: 2,
+            summary: 'The workflow should continue gathering more evidence.',
+            rationale: 'The run has not finished yet.',
+            gaps: ['Need stronger evidence before delivery.'],
+            nextActions: ['Continue investigating the repo and workflow state.'],
+          })),
+        },
+      }],
+    });
+
+    const decision = await evaluateAgentRunWithPilot({
+      run: makeRun({
+        summary: {
+          assistantTurns: 4,
+          startedTools: 7,
+          completedTools: 7,
+          failedTools: 0,
+          spawnedSubAgents: 0,
+        },
+      }),
+      workers: [],
+      evidence: makeEvidence({
+        originalPrompt: 'Create a simple web app in the linked repo, push it, deploy it, and monitor until success.',
+        transcriptMessages: [
+          makeMessage({
+            id: 'msg-user-stall',
+            role: 'user',
+            content: 'Create a simple web app in the linked repo, push it, deploy it, and monitor until success.',
+            timestamp: 10,
+          }),
+        ],
+        toolsUsed: [
+          'list_files',
+          'web_search',
+          'glob_search',
+          'sessions_list',
+          'record_workflow_evidence',
+        ],
+        resultPreviews: [],
+        lastSubstantiveResult: '',
+        lastNonEmptyAssistantContent: '',
+        lastSubstantiveResultSourceName: undefined,
+      }),
+      candidateOutcome: {
+        status: 'completed',
+        summary: 'Pilot review checkpoint reached after more discovery churn.',
+      },
+      providerContext: makeProviderContext(),
+    });
+
+    expect(decision.action).toBe('finalize');
+    expect(decision.outcome.status).toBe('failed');
+    expect(decision.outcome.terminalReason).toBe('pilot_blocked');
+    expect(decision.checkpointTitle).toBe('Pilot blocked finalization');
+    expect(decision.evaluation.controlAction).toBe('block');
+    expect(decision.evaluation.recommendedAction).toBe('blocked');
+    expect(decision.evaluation.summary).toContain('looping through discovery or workflow-monitoring tools');
+    expect(decision.evaluation.gaps).toEqual(expect.arrayContaining([
+      'Autonomous progress is stalled in discovery/session-inspection/workflow-evidence loops with no verified operational result.',
+    ]));
+  });
+
+  it('keeps unavailable live pilot results in continue mode when provider-comparison claims are uncited', async () => {
     mockSendMessage.mockResolvedValue({
       choices: [{
         message: {
@@ -2195,17 +2485,17 @@ describe('agentWorkflowPilot', () => {
 
     expect(decision.action).toBe('resume');
     expect(decision.checkpointTitle).toBe(PILOT_REVIEW_CHECKPOINT_TITLE);
-    expect(decision.evaluation.evaluatorVersion).toContain('heuristic');
-    expect(decision.evaluation.source).toBe('heuristic');
+    expect(decision.evaluation.evaluatorVersion).toContain('unavailable');
+    expect(decision.evaluation.source).toBe('unavailable');
     expect(decision.evaluation.approved).toBe(false);
     expect(decision.evaluation.controlAction).toBe('continue');
-    expect(decision.evaluation.summary).toContain('Heuristic pilot review found uncited or unsupported research claims before final delivery.');
+    expect(decision.evaluation.summary).toContain('Pilot evaluation unavailable');
     expect(decision.evaluation.gaps).toEqual(expect.arrayContaining([
-      'The user-visible answer makes provider-specific research claims without citing named sources or URLs.',
+      'A real pilot assessment was not produced, and the workflow has not yet collected enough verified evidence for final review.',
     ]));
   });
 
-  it('falls back to heuristic continuation when the live pilot request fails on a non-trivial solo run', async () => {
+  it('continues without heuristic assessment when the live pilot request fails on a non-trivial solo run', async () => {
     mockSendMessage.mockRejectedValue(new Error('LLM API error 503: upstream unavailable'));
 
     const decision = await evaluateAgentRunWithPilot({
@@ -2233,8 +2523,8 @@ describe('agentWorkflowPilot', () => {
 
     expect(decision.action).toBe('resume');
     expect(decision.checkpointTitle).toBe(PILOT_REVIEW_CHECKPOINT_TITLE);
-    expect(decision.evaluation.evaluatorVersion).toContain('heuristic');
-    expect(decision.evaluation.source).toBe('heuristic');
+    expect(decision.evaluation.evaluatorVersion).toContain('unavailable');
+    expect(decision.evaluation.source).toBe('unavailable');
     expect(decision.evaluation.fallbackReason).toBe('request_failed');
     expect(decision.evaluation.fallbackDetail).toContain('LLM API error 503: upstream unavailable');
     expect(decision.evaluation.approved).toBe(false);
@@ -2244,7 +2534,7 @@ describe('agentWorkflowPilot', () => {
     expect(decision.checkpointDetail).toContain('LLM API error 503: upstream unavailable');
   });
 
-  it('finalizes with heuristic approval when the live pilot request fails after a strong review', async () => {
+  it('continues without heuristic approval when the live pilot request fails after a strong review', async () => {
     mockSendMessage.mockRejectedValue(new Error('LLM API error 503: upstream unavailable'));
 
     const decision = await evaluateAgentRunWithPilot({
@@ -2258,15 +2548,14 @@ describe('agentWorkflowPilot', () => {
       providerContext: makeProviderContext(),
     });
 
-    expect(decision.action).toBe('finalize');
-    expect(decision.outcome.status).toBe('completed');
-    expect(decision.checkpointTitle).toBe('Pilot approved finalization');
-    expect(decision.evaluation.evaluatorVersion).toContain('heuristic');
-    expect(decision.evaluation.source).toBe('heuristic');
+    expect(decision.action).toBe('resume');
+    expect(decision.checkpointTitle).toBe(PILOT_REVIEW_CHECKPOINT_TITLE);
+    expect(decision.evaluation.evaluatorVersion).toContain('unavailable');
+    expect(decision.evaluation.source).toBe('unavailable');
     expect(decision.evaluation.fallbackReason).toBe('request_failed');
     expect(decision.evaluation.fallbackDetail).toContain('LLM API error 503: upstream unavailable');
-    expect(decision.evaluation.approved).toBe(true);
-    expect(decision.evaluation.controlAction).toBe('accept');
+    expect(decision.evaluation.approved).toBe(false);
+    expect(decision.evaluation.controlAction).toBe('continue');
     expect(decision.evaluation.rationale).toContain('LLM API error 503');
     expect(decision.checkpointDetail).toContain('Live pilot fallback detail:');
     expect(decision.checkpointDetail).toContain('LLM API error 503: upstream unavailable');
@@ -2356,14 +2645,14 @@ describe('agentWorkflowPilot', () => {
 
     expect(mockSendMessage).toHaveBeenCalledTimes(2);
     expect(mockSendMessage.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
-      maxTokens: 1200,
+      maxTokens: 1800,
       structuredOutput: expect.objectContaining({
         name: 'pilot_report',
         mimeType: 'application/json',
         strict: true,
       }),
     }));
-    expect(mockSendMessage.mock.calls[1]?.[1]?.maxTokens).toBe(1080);
+    expect(mockSendMessage.mock.calls[1]?.[1]?.maxTokens).toBe(1680);
     expect(mockSendMessage.mock.calls[1]?.[1]?.structuredOutput).toBeUndefined();
     expect(decision.action).toBe('finalize');
     expect(decision.evaluation.source).toBe('provider');
@@ -2410,7 +2699,7 @@ describe('agentWorkflowPilot', () => {
 
     expect(mockSendMessage).toHaveBeenCalledTimes(1);
     expect(mockSendMessage.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
-      maxTokens: 1840,
+      maxTokens: 2680,
       structuredOutput: expect.objectContaining({
         name: 'pilot_report',
       }),
@@ -2719,7 +3008,7 @@ describe('agentWorkflowPilot', () => {
     expect(decision.evaluation.summary).toBe('The run is complete and verified.');
   });
 
-  it('re-runs structured pilot evaluation when the cached same-state review used a heuristic fallback', async () => {
+  it('re-runs structured pilot evaluation when the cached same-state review found live Pilot unavailable', async () => {
     mockSendMessage.mockResolvedValueOnce({
       choices: [{
         message: {
@@ -2740,8 +3029,8 @@ describe('agentWorkflowPilot', () => {
       providerContext: makeProviderContext(),
     });
 
-    expect(fallbackDecision.evaluation.evaluatorVersion).toContain('heuristic');
-    expect(fallbackDecision.evaluation.source).toBe('heuristic');
+    expect(fallbackDecision.evaluation.evaluatorVersion).toContain('unavailable');
+    expect(fallbackDecision.evaluation.source).toBe('unavailable');
     expect(fallbackDecision.evaluation.fallbackReason).toBe('response_unparseable');
 
     mockSendMessage.mockReset();
@@ -2807,7 +3096,7 @@ describe('agentWorkflowPilot', () => {
     expect(structuredDecision.action).toBe('finalize');
   });
 
-  it('keeps the workflow running heuristically when live pilot evaluation is unavailable while work is still in flight', async () => {
+  it('keeps the workflow running without heuristic assessment when live pilot evaluation is unavailable while work is still in flight', async () => {
     mockSendMessage.mockResolvedValue({
       choices: [{
         message: {
@@ -2832,12 +3121,12 @@ describe('agentWorkflowPilot', () => {
 
     expect(decision.action).toBe('resume');
     expect(decision.checkpointTitle).toBe(PILOT_REVIEW_CHECKPOINT_TITLE);
-    expect(decision.evaluation.evaluatorVersion).toContain('heuristic');
-    expect(decision.evaluation.source).toBe('heuristic');
+    expect(decision.evaluation.evaluatorVersion).toContain('unavailable');
+    expect(decision.evaluation.source).toBe('unavailable');
     expect(decision.evaluation.fallbackReason).toBe('response_unparseable');
     expect(decision.evaluation.approved).toBe(false);
     expect(decision.evaluation.controlAction).toBe('continue');
-    expect(decision.evaluation.nextActions[0]).toContain('continue monitoring');
+    expect(decision.evaluation.nextActions[0]).toContain('Continue the workflow');
   });
 
   it('re-evaluates when the observed worker state changes even if timestamps still look reviewed', async () => {
@@ -2965,7 +3254,8 @@ describe('agentWorkflowPilot', () => {
     });
 
     expect(mockSendMessage).toHaveBeenCalledTimes(2);
-    expect(secondDecision.outcome.status).toBe('cancelled');
+    expect(secondDecision.outcome.status).toBe('failed');
+    expect(secondDecision.outcome.terminalReason).toBe('pilot_blocked');
     expect(secondDecision.checkpointTitle).toBe('Pilot blocked finalization');
     expect(secondDecision.evaluation.stateSignature).not.toBe(firstDecision.evaluation.stateSignature);
   });

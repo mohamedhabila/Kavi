@@ -19,6 +19,7 @@ const mockAsyncStorageGetItem = jest.fn();
 const mockAsyncStorageSetItem = jest.fn();
 const mockListExpoProjects = jest.fn();
 const mockCreateExpoProject = jest.fn();
+const mockResolveExpoProjectForExecutionTask = jest.fn();
 const mockResolveExpoProject = jest.fn();
 const mockResolveExpoAccount = jest.fn();
 const mockGetExpoAutomationSummary = jest.fn();
@@ -148,6 +149,8 @@ jest.mock('../../src/services/expo/eas', () => ({
   listExpoWorkflowRuns: (...args: any[]) => mockListExpoWorkflowRuns(...args),
   listExpoProjects: (...args: any[]) => mockListExpoProjects(...args),
   probeExpoProject: (...args: any[]) => mockProbeExpoProject(...args),
+  resolveExpoProjectForExecutionTask: (...args: any[]) =>
+    mockResolveExpoProjectForExecutionTask(...args),
   runExpoGraphqlQuery: (...args: any[]) => mockRunExpoGraphqlQuery(...args),
   resolveExpoAccount: (...args: any[]) => mockResolveExpoAccount(...args),
   resolveExpoProject: (...args: any[]) => mockResolveExpoProject(...args),
@@ -312,6 +315,24 @@ describe('parity-executor wrapper coverage', () => {
     mockGetExpoProjectExecutionMode.mockReturnValue('eas-workflow');
     mockGetExpoProjectDisplayOwner.mockReturnValue('kavi');
     mockListExpoProjects.mockResolvedValue([expoProject]);
+    mockResolveExpoProjectForExecutionTask.mockImplementation(({ projectRef }: any = {}) => {
+      if (projectRef === 'expo-1' || projectRef === 'eas-1' || projectRef === '@kavi/kavi-app') {
+        return Promise.resolve({
+          status: 'resolved',
+          project: expoProject,
+          candidates: [expoProject],
+          reason: 'project-ref',
+          synced: false,
+        });
+      }
+
+      return Promise.resolve({
+        status: 'not_found',
+        candidates: [],
+        reason: 'no-projects',
+        synced: false,
+      });
+    });
     mockCreateExpoProject.mockResolvedValue(expoProject);
     mockProbeExpoProject.mockResolvedValue({
       status: 'ok',

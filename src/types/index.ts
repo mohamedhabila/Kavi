@@ -57,6 +57,7 @@ export type AssistantCompletionStatus = 'complete' | 'incomplete';
 export interface AssistantCompletionMetadata {
   completionStatus: AssistantCompletionStatus;
   finishReason?: string;
+  terminalReason?: AgentRunTerminalReason | string;
 }
 
 export type AssistantMessageKind = 'intermediate' | 'final';
@@ -163,6 +164,14 @@ export interface ConversationUsageSummary {
 }
 
 export type AgentRunStatus = 'running' | 'completed' | 'failed' | 'cancelled';
+
+export type AgentRunTerminalReason =
+  | 'pilot_blocked'
+  | 'tool_failure'
+  | 'user_cancelled'
+  | 'missing_required_side_effect'
+  | 'live_pilot_unavailable'
+  | 'route_blocked';
 
 export type AgentRunPhaseKey = 'assess' | 'plan' | 'work' | 'review' | 'pilot' | 'deliver';
 
@@ -322,6 +331,28 @@ export interface AgentRunAsyncOperation {
   waitArgs?: Record<string, unknown>;
 }
 
+export type AgentRunRoutePhaseStatus = 'pending' | 'active' | 'completed' | 'blocked';
+
+export interface AgentRunRoutePhase {
+  id: string;
+  title: string;
+  status: AgentRunRoutePhaseStatus;
+  detail?: string;
+  updatedAt: number;
+}
+
+export interface AgentRunRouteState {
+  routeId: string;
+  title: string;
+  status: 'active' | 'blocked' | 'completed';
+  currentPhaseId: string;
+  phases: AgentRunRoutePhase[];
+  requiredToolNames?: string[];
+  facts?: Record<string, unknown>;
+  blockers?: string[];
+  updatedAt: number;
+}
+
 export interface AgentRun {
   id: string;
   userMessageId: string;
@@ -338,6 +369,8 @@ export interface AgentRun {
   evidence?: AgentRunEvidenceEntry[];
   latestPilotEvaluation?: AgentRunPilotEvaluation;
   pendingAsyncOperations?: AgentRunAsyncOperation[];
+  routeState?: AgentRunRouteState;
+  terminalReason?: AgentRunTerminalReason;
   latestSummary?: string;
   summary: AgentRunSummary;
 }

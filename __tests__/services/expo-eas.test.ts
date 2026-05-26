@@ -10,6 +10,7 @@ import {
   looksCompressed,
   probeExpoProject,
   resolveExpoProject,
+  resolveExpoProjectForExecutionTask,
   runExpoGraphqlQuery,
   runExpoProjectAction,
   stripAnsiAndControlChars,
@@ -1597,6 +1598,39 @@ describe('expo eas service', () => {
         String(url).includes('api.github.com'),
       ),
     ).toBe(false);
+  });
+
+  it('resolves an existing execution project by linked repository without creating a new project', async () => {
+    mockSettingsState = {
+      expoAccounts: [account],
+      expoProjects: [
+        {
+          id: 'expo-project-linked',
+          easProjectId: 'eas-project-linked',
+          name: 'Linked Workflow',
+          accountId: 'expo-account-1',
+          owner: 'kavi',
+          slug: 'linked-workflow',
+          enabled: true,
+          mode: 'eas-workflow',
+          repoFullName: 'kavi/mobile',
+          workflowFile: '.eas/workflows/deploy.yml',
+          platforms: ['web'],
+        },
+      ],
+      sshTargets: [],
+    };
+
+    const resolution = await resolveExpoProjectForExecutionTask({
+      repoFullName: 'KAVI/MOBILE',
+      allowSync: false,
+    });
+
+    expect(resolution.status).toBe('resolved');
+    expect(resolution.status === 'resolved' ? resolution.project.id : undefined).toBe(
+      'expo-project-linked',
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('keeps Expo sync pagination within the server limit', async () => {

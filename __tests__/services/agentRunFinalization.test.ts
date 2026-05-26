@@ -650,4 +650,76 @@ describe('agentRunFinalization', () => {
       'The run was cancelled before it generated a final response.',
     );
   });
+
+  it('fails verification when only session-coordination sources are present, regardless of answer language', () => {
+    const evidence = {
+      originalPrompt: 'Create app, commit, push, and deploy.',
+      transcriptMessages: [],
+      lastNonEmptyAssistantContent: 'تم النشر بنجاح.',
+      lastSubstantiveResult: 'تمت المراجعة.',
+      lastSubstantiveResultSourceName: 'sessions_output',
+      resultPreviews: [{ sourceName: 'sessions_output', preview: 'workflow run 101 completed with success' }],
+      toolsUsed: ['sessions_output'],
+      iterations: 1,
+      hasIncompleteToolCalls: false,
+    };
+
+    expect(hasVerifiedFinalizationEvidence(evidence)).toBe(false);
+  });
+
+  it('passes verification when approval-grade operational sources exist, regardless of answer language', () => {
+    const evidence = {
+      originalPrompt: 'Create app, commit, push, and deploy.',
+      transcriptMessages: [],
+      lastNonEmptyAssistantContent: 'Le deploiement a reussi.',
+      lastSubstantiveResult: 'workflow run 101 completed with success',
+      lastSubstantiveResultSourceName: 'expo_eas_workflow_status',
+      resultPreviews: [
+        { sourceName: 'expo_eas_workflow_status', preview: 'workflow run 101 completed with success' },
+      ],
+      toolsUsed: ['expo_eas_workflow_status'],
+      iterations: 2,
+      hasIncompleteToolCalls: false,
+    };
+
+    expect(hasVerifiedFinalizationEvidence(evidence)).toBe(true);
+  });
+
+  it('passes verification when commit/push/deploy claims have matching evidence', () => {
+    const evidence = {
+      originalPrompt: 'Create app, commit, push, and deploy.',
+      transcriptMessages: [],
+      lastNonEmptyAssistantContent:
+        'Committed, pushed, and deployed successfully. Workflow run passed.',
+      lastSubstantiveResult: 'expo workflow status: success; commit sha abc123',
+      lastSubstantiveResultSourceName: 'expo_eas_workflow_status',
+      resultPreviews: [
+        { sourceName: 'skill__github__commit_files', preview: 'commit sha abc123 pushed to main' },
+        { sourceName: 'expo_eas_workflow_status', preview: 'run status: success' },
+      ],
+      toolsUsed: ['skill__github__commit_files', 'expo_eas_workflow_status'],
+      iterations: 3,
+      hasIncompleteToolCalls: false,
+    };
+
+    expect(hasVerifiedFinalizationEvidence(evidence)).toBe(true);
+  });
+
+  it('fails verification when deployment success is supported only by sessions_output preview prose', () => {
+    const evidence = {
+      originalPrompt: 'Create app, commit, push, and deploy.',
+      transcriptMessages: [],
+      lastNonEmptyAssistantContent: 'Deployment succeeded and workflow run is green.',
+      lastSubstantiveResult: 'Deployment successful.',
+      lastSubstantiveResultSourceName: 'sessions_output',
+      resultPreviews: [
+        { sourceName: 'sessions_output', preview: 'workflow run 101 completed with success' },
+      ],
+      toolsUsed: ['sessions_output'],
+      iterations: 2,
+      hasIncompleteToolCalls: false,
+    };
+
+    expect(hasVerifiedFinalizationEvidence(evidence)).toBe(false);
+  });
 });

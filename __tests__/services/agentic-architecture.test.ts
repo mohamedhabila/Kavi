@@ -79,7 +79,9 @@ describe('SUPER_AGENT_PERSONA', () => {
   it('reserves direct handling for trivial tasks only', () => {
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Trivial tasks');
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('handle DIRECTLY');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toMatch(/Simple tasks.*spawn 1 sub-agent/);
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Simple tasks');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('handle them directly');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('execute directly first');
   });
 
   it('limits max simultaneous sub-agents to 5', () => {

@@ -13,6 +13,7 @@ export function buildAssistantMessageMetadata(
     kind,
     completionStatus: completion?.completionStatus ?? 'complete',
     ...(completion?.finishReason ? { finishReason: completion.finishReason } : {}),
+    ...(completion?.terminalReason ? { terminalReason: completion.terminalReason } : {}),
   };
 }
 

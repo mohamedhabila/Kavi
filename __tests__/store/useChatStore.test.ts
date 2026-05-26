@@ -1363,6 +1363,66 @@ describe('useChatStore', () => {
       );
     });
 
+    it('stores generic capability workflow state and terminal reasons on agent runs', () => {
+      const convId = useChatStore.getState().createConversation('p1', 's');
+      const runId = useChatStore.getState().startAgentRun(convId, {
+        userMessageId: 'msg-user-route-state',
+        goal: 'Complete a capability workflow.',
+        timestamp: 1700000002500,
+      });
+
+      useChatStore.getState().updateAgentRunRouteState(
+        convId,
+        {
+          routeId: 'capability-workflow',
+          title: 'Capability workflow',
+          status: 'active',
+          currentPhaseId: 'mutate_remote_state',
+          requiredToolNames: ['skill__github__commit_files'],
+          phases: [
+            {
+              id: 'prepare_artifact',
+              title: 'Prepare artifacts',
+              status: 'completed',
+              updatedAt: 1700000002600,
+            },
+            {
+              id: 'mutate_remote_state',
+              title: 'Apply remote side effects',
+              status: 'active',
+              updatedAt: 1700000002600,
+            },
+          ],
+          updatedAt: 1700000002600,
+        },
+        runId,
+      );
+      useChatStore.getState().completeAgentRun(
+        convId,
+        {
+          status: 'failed',
+          terminalReason: 'pilot_blocked',
+          checkpointTitle: 'Pilot blocked finalization',
+          latestSummary: 'Missing required remote evidence.',
+          timestamp: 1700000002700,
+        },
+        runId,
+      );
+
+      const conv = useChatStore.getState().conversations.find((c) => c.id === convId)!;
+      const run = conv.agentRuns?.find((candidate) => candidate.id === runId)!;
+
+      expect(run.routeState).toEqual(
+        expect.objectContaining({
+          routeId: 'capability-workflow',
+          currentPhaseId: 'mutate_remote_state',
+          requiredToolNames: ['skill__github__commit_files'],
+        }),
+      );
+      expect(run.terminalReason).toBe('pilot_blocked');
+      expect(run.status).toBe('failed');
+    });
+
     it('preserves the current phase by default when late worker updates target an earlier phase', () => {
       const convId = useChatStore.getState().createConversation('p1', 's');
       const runId = useChatStore.getState().startAgentRun(convId, {

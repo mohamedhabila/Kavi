@@ -92,6 +92,12 @@ const TOOL_SPECIFIC_NO_PROGRESS_THRESHOLDS: Record<
     guidance:
       'Reuse the returned session ids and switch to sessions_status or sessions_history instead of listing sessions again.',
   },
+  sessions_wait: {
+    warning: 2,
+    critical: 3,
+    guidance:
+      'Use the worker output already returned by sessions_wait. Call it again only when the prior result proves a worker is still running and the next step truly depends on that terminal output.',
+  },
 };
 
 const ASYNC_MONITOR_TOOL_NAMES = new Set([

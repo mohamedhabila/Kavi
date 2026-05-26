@@ -112,6 +112,14 @@ jest.mock('../../src/engine/tools/definitions', () => ({
     { name: 'canvas_list', description: 'List canvases' },
     { name: 'canvas_read', description: 'Read canvas' },
     { name: 'canvas_create', description: 'Create canvas' },
+    { name: 'expo_eas_create_project', description: 'Create a new Expo EAS project' },
+    { name: 'expo_eas_list_projects', description: 'List linked Expo EAS projects' },
+    { name: 'expo_eas_status', description: 'Inspect Expo EAS project status' },
+    { name: 'expo_eas_probe', description: 'Probe Expo EAS project readiness' },
+    { name: 'expo_eas_workflow_runs', description: 'List Expo EAS workflow runs' },
+    { name: 'expo_eas_workflow_status', description: 'Inspect Expo EAS workflow status' },
+    { name: 'expo_eas_workflow_wait', description: 'Wait for Expo EAS workflow completion' },
+    { name: 'expo_eas_graphql', description: 'Run an Expo GraphQL query' },
     { name: 'image_generate', description: 'Generate image' },
     { name: 'image_edit', description: 'Edit image' },
     { name: 'speak', description: 'Speak text' },
@@ -720,11 +728,11 @@ describe('New Parity Tool Executors', () => {
           callableNextTurn: true,
           recommendedToolNames: expect.arrayContaining([
             'read_file',
-            'write_file',
             'list_files',
-            'file_edit',
+            'glob_search',
+            'text_search',
           ]),
-          supportingToolNames: expect.arrayContaining(['glob_search', 'text_search']),
+          supportingToolNames: expect.arrayContaining(['write_file', 'file_edit']),
           category: 'files',
         }),
       );
@@ -773,6 +781,21 @@ describe('New Parity Tool Executors', () => {
         }),
       );
       expect(parsed.guidance).toContain('image_edit');
+    });
+
+    it('orders category activation by tool contract lifecycle instead of registry position', async () => {
+      const result = await executeToolCatalog({ category: 'expo' });
+      const parsed = JSON.parse(result);
+      const listedNames = parsed.tools.map((tool: any) => tool.name);
+
+      expect(listedNames.indexOf('expo_eas_list_projects')).toBeLessThan(
+        listedNames.indexOf('expo_eas_create_project'),
+      );
+      expect(listedNames.indexOf('expo_eas_status')).toBeLessThan(
+        listedNames.indexOf('expo_eas_create_project'),
+      );
+      expect(parsed.activation.recommendedToolNames).not.toContain('expo_eas_create_project');
+      expect(parsed.activation.supportingToolNames).toContain('expo_eas_create_project');
     });
 
     it('searches tools by natural-language query and recommends the best matches', async () => {

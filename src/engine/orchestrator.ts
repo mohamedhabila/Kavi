@@ -21,6 +21,7 @@ import {
   ON_DEVICE_TOOL_TOKEN_BUDGET,
   formatToolCategoryLabel,
   getToolManagerCategoryForToolName,
+  orderToolPlannerCandidateTools,
 } from './tools/toolManager';
 import {
   filterToolsByRuntimeAvailability,
@@ -41,6 +42,7 @@ import {
   AssistantCompletionMetadata,
   AssistantMessageMetadata,
   AgentRunAsyncOperation,
+  AgentRunRouteState,
   Message,
   MessageProviderReplay,
   ToolCall,
@@ -133,6 +135,7 @@ import { assessUserRequest, type RequestAssessment } from '../services/agents/re
 import { resolveProviderModelSelection } from '../services/llm/providerSupport';
 import { isContextOverflowProviderError } from '../services/llm/requestErrors';
 import { hasObservedDelegatedWork } from '../services/agents/delegationEvidence';
+import { hasAttemptedDelegatedWork } from '../services/agents/delegationEvidence';
 import {
   buildIncompleteTextContinuationNote,
   isResumableIncompleteTextCompletion,
@@ -144,6 +147,26 @@ import {
   filterModelVisibleAttachments,
   hasModelVisibleAttachments,
 } from '../utils/messageAttachments';
+import {
+  filterExecutionLaneToolNames,
+  isExecutionAdvancingToolName,
+  isExecutionDiscoveryOrMetaToolName,
+} from '../utils/executionLanePolicy';
+import {
+  advanceWorkflowRouteStateFromToolResult,
+  buildWorkflowRouteFinalizationHoldGuidance,
+  buildWorkflowRouteRuntimeGuidance,
+  getMissingRequiredWorkflowToolNames,
+  buildInitialWorkflowRouteState,
+  resolveWorkflowRouteActivation,
+  selectToolNamesForWorkflowRoutePhase,
+  shouldHoldWorkflowRouteFinalization,
+  type WorkflowRouteActivation,
+} from './routes/agentRoutes';
+import {
+  inferToolCapabilityDescriptor,
+  type ToolCapability,
+} from './tools/capabilityRegistry';
 
 export const MAX_TOOL_ITERATIONS = 25;
 export const MAX_TOOL_ITERATIONS_SUPERAGENT = 40;
@@ -154,6 +177,7 @@ const MIN_PROVIDER_OVERFLOW_RETRY_MAX_TOKENS = 1024;
 const logger = createLogger('Orchestrator');
 
 type ForcedTextTurnReason =
+  | 'execution_loop_recovery'
   | 'incomplete_delivery_continuation'
   | 'loop_recovery'
   | 'request_governance'
@@ -182,13 +206,14 @@ export interface OrchestratorCallbacks {
   onToolCallStart: (toolCall: ToolCall) => void;
   onToolCallComplete: (toolCall: ToolCall) => void;
   onPendingAsyncOperationsChange?: (operations: TrackedAsyncOperation[]) => void;
+  onAgentRouteStateChange?: (state: AgentRunRouteState) => void;
   onAssistantMessage: (
     content: string,
     toolCalls?: ToolCall[],
     providerReplay?: MessageProviderReplay,
     assistantCompletion?: AssistantMessageMetadata,
   ) => void;
-  onToolMessage: (toolCallId: string, result: string) => void;
+  onToolMessage: (toolCallId: string, result: string) => void | Promise<void>;
   onError: (error: Error) => void;
   onUsage?: (usage: TokenUsage) => void;
   onDone: () => void;
@@ -529,13 +554,15 @@ function buildSystemPromptSections(
   deferredToolCatalog?: string,
   toolSummaries?: string,
   canvasWorkflowPrompt?: string,
-  expoWorkflowPrompt?: string,
+  externalWorkflowPrompt?: string,
   capabilityDiscoveryPrompt?: string,
   isSuperAgent?: boolean,
+  executionIntent?: boolean,
+  plannerRequestedDelegation?: boolean,
   toolingEnabled = true,
 ): SystemPromptSection[] {
   const prompt =
-    systemPrompt || 'You are a personal AI assistant running inside Kavi on a mobile device.';
+    systemPrompt || 'You are a personal AI assistant operating in the user\'s current mobile workspace.';
   const normalizedSkillsPrompt = typeof skillsPrompt === 'string' ? skillsPrompt : '';
   const sections: SystemPromptSection[] = [];
 
@@ -572,13 +599,17 @@ If the user asks for file access, browsing, device actions, or any other tool-dr
 
   const agentModeSection = isSuperAgent
     ? `## Agent Mode (ACTIVE — applies to EVERY user message)
-You are operating in Agent mode. The user explicitly chose this mode to see multi-agent orchestration.
-OVERRIDE the "answer directly" guidance above — instead, follow the SuperAgent execution protocol at the top of this system prompt.
-Available orchestration tools: sessions_spawn, sessions_status, sessions_wait, sessions_output, sessions_surface_output, sessions_list, sessions_send, sessions_history, sessions_cancel, sessions_yield, wait.
-Workflow: present your plan → use sessions_spawn to delegate → use sessions_wait when you need worker output before proceeding and sessions_status when you need live inspection → treat completed sessions_wait results as already containing the same outputs that sessions_output would return, use sessions_output only when you need to fetch or recall a terminal worker deliverable without waiting, use sessions_surface_output when that deliverable should become the visible user answer directly, and use sessions_history only when you need transcript or reasoning trace → use sessions_cancel plus a refined re-spawn when a worker drifts → synthesize results.
+You are operating in Agent mode. Use the SuperAgent protocol to keep work structured, but do not add delegation or workflow ceremony unless it helps complete the actual task.
+OVERRIDE the generic "answer directly" guidance above only when structured workflow behavior materially helps this request.
+Available orchestration tools: sessions_spawn, sessions_status, sessions_wait, sessions_output, sessions_surface_output, sessions_list, sessions_send, sessions_history, sessions_cancel, sessions_yield.
+Workflow: present your plan → execute directly when the current tool set already covers the next concrete side effect or verification step → use sessions_spawn only when a named remaining gap truly benefits from worker execution → use sessions_wait when you need worker output before proceeding and sessions_status when you need live inspection → treat completed sessions_wait results as already containing the same outputs that sessions_output would return, use sessions_output only when you need to fetch or recall a terminal worker deliverable without waiting, use sessions_surface_output when that deliverable should become the visible user answer directly, and use sessions_history only when you need transcript or reasoning trace → use sessions_cancel plus a refined re-spawn when a worker drifts → synthesize results.
 Only launch multiple sessions_spawn calls together when every worker is independent at launch time. Never launch workers together when one depends on another worker in the same batch or on unfinished prerequisite work.
 When a structured plan exists, pass workstreamId on each plan-linked sessions_spawn call so the runtime can enforce dependency order. Use dependsOnWorkstreams only for ad hoc workers that must wait on prior work.
-For non-trivial tasks, prefer spawning at least 1 sub-agent rather than answering directly.
+${executionIntent
+  ? plannerRequestedDelegation
+    ? 'This request is a clear execution task and the current plan requires focused delegated worker execution. Launch only the worker that closes the named execution gap, and do not spawn exploratory repo or tool-discovery workers when the execution path is already clear.'
+    : 'This request is a clear execution task. Prefer direct supervisor execution first when the loaded tools already cover the required side effects and verification. Do not treat sessions_spawn or sessions_send as the default first step for an execution request. Do not spawn exploratory workers when the direct execution path is already clear. Delegate only when a named remaining gap benefits more from worker execution than direct supervisor work.'
+  : 'For non-trivial tasks, keep workflow structure available, but do not delegate by default. Spawn workers only when they close a named gap better than direct supervisor execution.'}
 Exception: trivial single-fact lookups and short live-information questions (for example time, weather, or a one-shot current-status check) should bypass delegation. Handle those directly, optionally with one focused tool call, and do not create a multi-agent plan.
 If the current user input is low-signal or underspecified, stop the workflow immediately, do not plan, do not delegate, and ask for clarification instead.
 If the user asks for unreasonable effort, worker count, or process for a simple task, criticize that mismatch explicitly and switch to the smallest reasonable scope instead of obeying it literally.
@@ -587,12 +618,12 @@ Do not delegate merely for ceremony. If direct tool work already completed the s
 
 CRITICAL: Apply this protocol to EVERY new user message in this conversation, not just the first one.
 Do NOT shortcut the agentic flow just because you handled previous requests with sub-agents.
-Each new user request deserves its own Assess → Plan → Spawn → Monitor → Synthesize cycle.
-When spawning sub-agents, pass a focused 'tools' array in sessions_spawn so the sub-agent has access to the specific tools it needs for its task (e.g., ['web_search', 'web_fetch'] for research, ['ssh_exec', 'ssh_read_file'] for server work, ['read_file', 'file_edit', 'write_file', 'list_files', 'glob_search', 'text_search', 'python', 'tool_catalog'] for repo coding/data/artifact tasks, ['workspace_status', 'workspace_list_files', 'workspace_read_file', 'workspace_write_file'] only for explicit external workspace targets).
+Each new user request deserves its own Assess → Plan → Execute or Delegate → Monitor → Synthesize cycle.
+When spawning sub-agents, pass a focused 'tools' array in sessions_spawn so the sub-agent has access to the specific tools it needs for its task (e.g., ['web_search', 'web_fetch'] for research, ['ssh_exec', 'ssh_read_file'] for server work, ['read_file', 'file_edit', 'write_file', 'list_files', 'glob_search', 'text_search'] for ordinary repo implementation and verification tasks, add 'python' only when the named gap specifically requires code execution or data/artifact generation, add 'tool_catalog' only for explicit capability-discovery gaps, ['workspace_status', 'workspace_list_files', 'workspace_read_file', 'workspace_write_file'] only for explicit external workspace targets).
 If a workstream has dependencies, wait for the prerequisite workstreams to complete and inspect their outputs before spawning the dependent worker.
 Do not micromanage sub-agent maxIterations from the supervisor. Workers already carry a generous internal iteration budget suitable for modern reasoning models.
 Do not impose hard time limits on sub-agents. Let workers keep running while they are still making progress toward the objective, and cancel plus respawn them only when they drift or become redundant. Prefer background sessions_spawn, use sessions_wait when you need worker outputs before proceeding, remember that completed sessions_wait results already include the same outputs that sessions_output would return, use sessions_output later only when you need to fetch or recall a terminal deliverable without waiting again, use sessions_surface_output when that deliverable should be surfaced directly to the user without rewriting it, use sessions_history when you need transcript or reasoning trace, use sessions_status when you need live inspection, and reserve waitForCompletion for intentionally blocking the current spawn or send call.
-If a background worker is open work and you are blocked on its deliverable, your next tool call should usually be sessions_wait rather than sessions_status plus wait polling.
+If a background worker is open work and you are blocked on its deliverable, your next tool call should usually be sessions_wait rather than repeated status polling.
 After sessions_wait returns completed sessions, use the outputs already in that result and do not call sessions_output immediately afterward unless you need to recall a terminal deliverable later.
 After sessions_output returns the terminal deliverable you need, continue from that result or finalize instead of re-polling sessions_status or sessions_list for the same completed session.
 When the worker already produced the exact user-facing answer, prefer sessions_surface_output over copying the same deliverable into assistant prose yourself.
@@ -644,7 +675,7 @@ ${globalMemory}
   );
   appendSystemPromptSection(sections, toolingEnabled ? agentModeSection : '', { cacheable: true });
   appendSystemPromptSection(sections, canvasWorkflowPrompt);
-  appendSystemPromptSection(sections, expoWorkflowPrompt);
+  appendSystemPromptSection(sections, externalWorkflowPrompt);
   appendSystemPromptSection(sections, capabilityDiscoveryPrompt);
   appendSystemPromptSection(sections, safetySection, { cacheable: true });
   appendSystemPromptSection(sections, toolingEnabled ? skillsSection : '');
@@ -665,7 +696,7 @@ function buildSystemPromptWithMemory(
   deferredToolCatalog?: string,
   toolSummaries?: string,
   canvasWorkflowPrompt?: string,
-  expoWorkflowPrompt?: string,
+  externalWorkflowPrompt?: string,
   capabilityDiscoveryPrompt?: string,
   isSuperAgent?: boolean,
 ): string {
@@ -678,34 +709,51 @@ function buildSystemPromptWithMemory(
       deferredToolCatalog,
       toolSummaries,
       canvasWorkflowPrompt,
-      expoWorkflowPrompt,
+      externalWorkflowPrompt,
       capabilityDiscoveryPrompt,
       isSuperAgent,
     ),
   );
 }
 
-function buildExpoWorkflowPrompt(
+function buildExternalWorkflowPrompt(
   selectedTools: ToolDefinition[],
-  relevantCategories: Set<string>,
+  executionIntent: boolean,
 ): string {
-  const hasLoadedExpoTools = selectedTools.some((tool) => tool.name.startsWith('expo_eas_'));
-  const hasRelevantExpoTools =
-    relevantCategories.has('expo') ||
-    relevantCategories.has('expo_manual_actions') ||
-    hasLoadedExpoTools;
+  const externalDescriptors = selectedTools
+    .map((tool) => inferToolCapabilityDescriptor(tool))
+    .filter((descriptor) =>
+      descriptor.sideEffects.some((sideEffect) =>
+        sideEffect === 'remote_mutation' || sideEffect === 'external_run',
+      ) ||
+      descriptor.capabilities.some((capability) =>
+        capability === 'commit' ||
+        capability === 'push' ||
+        capability === 'deploy' ||
+        capability === 'monitor' ||
+        capability === 'wait' ||
+        capability === 'verify',
+      ),
+    );
+  const shouldGuideExternalWorkflow = executionIntent && externalDescriptors.length > 0;
 
-  if (!hasRelevantExpoTools || !hasLoadedExpoTools) {
+  if (!shouldGuideExternalWorkflow) {
     return '';
   }
 
-  return `## Expo / EAS
-For GitHub-linked Expo projects, default to repository-driven EAS Workflows instead of manual Expo action tools.
-Preferred flow: inspect or edit the repository, ensure .eas/workflows/deploy.yml or another required .eas/workflows/*.yml file exists on the target branch, push a commit, then monitor the automatically triggered run with expo_eas_workflow_runs, expo_eas_workflow_status, or expo_eas_workflow_wait.
-Call expo_eas_list_projects once to discover project ids, then reuse the returned id/fullName in expo_eas_status or expo_eas_probe. Do not repeat expo_eas_list_projects with the same arguments unless you intentionally need refresh=true or switched accounts.
-Use expo_eas_status and expo_eas_probe to verify the repo link, workflow file, and branch readiness before waiting on runs.
-Reserve expo_eas_build, expo_eas_update, expo_eas_submit, and expo_eas_deploy_web for explicit manual reruns, backfills, or cases where commit-triggered automation is unavailable.
-When authoring custom EAS workflows, prefer the built-in EAS steps such as eas/checkout and eas/install_node_modules before build commands, and fix the repository or workflow so the next commit passes.`;
+  const descriptorLines = externalDescriptors.slice(0, 10).map((descriptor) => (
+    `- ${descriptor.name}: capabilities=${descriptor.capabilities.join(',') || 'unknown'}; resources=${descriptor.resourceKinds.join(',') || 'unknown'}; evidence=${descriptor.providesEvidence.join(',') || 'none'}`
+  ));
+
+  return [
+    '## External Workflow Contracts',
+    'Use the loaded tool contracts as the source of truth for side effects, resource prerequisites, and verification evidence.',
+    'Do not fabricate resource identifiers, branch names, file paths, run ids, or tool arguments. Use values supplied by the user or returned by prior discovery/read tools.',
+    'When a required resource is not fully identified but the user supplied a name, phrase, or other clue, use discovery/read tools to enumerate candidates and choose the best verified match; if the evidence is ambiguous, ask for clarification rather than inventing an identifier.',
+    'For execution work, proceed phase by phase: discover and inspect required resources, prepare artifacts, apply the requested mutations or external execution, then monitor or verify with evidence-producing tools.',
+    'If a tool returns a recoverable argument, lookup, or validation error, correct the prerequisite or arguments in the next step instead of ending the workflow or retrying the same call.',
+    descriptorLines.length > 0 ? ['Loaded external workflow tools:', ...descriptorLines].join('\n') : undefined,
+  ].filter((section): section is string => Boolean(section)).join('\n');
 }
 
 function buildCanvasWorkflowPrompt(
@@ -948,6 +996,10 @@ function estimateWorkingMessageTokens(messages: Message[]): number {
   );
 }
 
+function repairModelVisibleToolResultTranscript(messages: Message[]): Message[] {
+  return deduplicateToolResults(ensureToolResultPairing(messages));
+}
+
 function applyCompactionResultToWorkingMessages(
   messages: Message[],
   compactResult: CompactResult,
@@ -1040,23 +1092,6 @@ function shouldRequireToolUse(
   );
 }
 
-const EXPLICIT_WORKER_EXECUTION_NEGATION_PATTERN =
-  /\b(?:don't|do not|avoid|without|no)\b[\s\S]{0,18}\b(?:delegate|spawn|launch|use|run|start|assign)?\s*(?:sub-?agents?|workers?)\b/i;
-const EXPLICIT_WORKER_EXECUTION_PATTERN =
-  /\b(?:delegate|spawn|launch|use|run|start|assign|orchestrate)\b[\s\S]{0,24}\b(?:sub-?agents?|workers?)\b|\b(?:with|using|via)\s+(?:a|an|one)?\s*(?:sub-?agent|worker)\b|\bsessions_spawn\b/i;
-
-function explicitlyRequiresWorkerExecution(lastUserMessage: string | undefined): boolean {
-  if (typeof lastUserMessage !== 'string' || lastUserMessage.trim().length === 0) {
-    return false;
-  }
-
-  if (EXPLICIT_WORKER_EXECUTION_NEGATION_PATTERN.test(lastUserMessage)) {
-    return false;
-  }
-
-  return EXPLICIT_WORKER_EXECUTION_PATTERN.test(lastUserMessage);
-}
-
 function isSessionCoordinationToolCallName(name: string | undefined): boolean {
   const normalized = normalizeToolName(name || '')
     .trim()
@@ -1071,8 +1106,7 @@ function getDelegationEnforcementReason(params: {
   workingMessages: Message[];
   fullContent: string;
   forceTextThisTurn: boolean;
-  lastUserMessageText?: string;
-  requestAssessment?: RequestAssessment;
+  plannerRequestedDelegation?: boolean;
 }): 'explicit_worker_request' | undefined {
   if (!params.isSuperAgent || params.forceTextThisTurn || params.fullContent.trim().length === 0) {
     return undefined;
@@ -1085,7 +1119,14 @@ function getDelegationEnforcementReason(params: {
     return undefined;
   }
 
-  if (explicitlyRequiresWorkerExecution(params.lastUserMessageText)) {
+  const delegatedWorkAttempted = hasAttemptedDelegatedWork({
+    messages: params.workingMessages,
+  });
+  if (delegatedWorkAttempted) {
+    return 'explicit_worker_request';
+  }
+
+  if (params.plannerRequestedDelegation === true) {
     return 'explicit_worker_request';
   }
 
@@ -1173,6 +1214,470 @@ function buildToolSummaryLine(tool: ToolDefinition): string {
     .trim();
 
   return compressedDescription ? `- ${tool.name}: ${compressedDescription}` : `- ${tool.name}`;
+}
+
+function extractTextFromLlmResponse(response: any): string {
+  if (typeof response?.output_text === 'string' && response.output_text.trim()) {
+    return response.output_text.trim();
+  }
+
+  if (Array.isArray(response?.output)) {
+    const textFromOutput = response.output
+      .map((item: any) => {
+        if (typeof item?.text === 'string') {
+          return item.text;
+        }
+        if (Array.isArray(item?.content)) {
+          return item.content
+            .map((part: any) =>
+              typeof part?.text === 'string' ? part.text : typeof part?.output_text === 'string' ? part.output_text : '',
+            )
+            .join('\n');
+        }
+        return '';
+      })
+      .join('\n')
+      .trim();
+    if (textFromOutput) {
+      return textFromOutput;
+    }
+  }
+
+  if (typeof response?.choices?.[0]?.message?.content === 'string') {
+    return response.choices[0].message.content;
+  }
+
+  const contentParts = response?.content;
+  if (Array.isArray(contentParts)) {
+    const text = contentParts
+      .map((part: any) => (typeof part?.text === 'string' ? part.text : ''))
+      .join('\n')
+      .trim();
+    if (text) {
+      return text;
+    }
+  }
+
+  return '';
+}
+
+type ToolPlannerRouteMode = 'execution' | 'discovery' | 'research';
+
+type ToolPlannerSelection = {
+  tools: Set<string>;
+  routeMode?: ToolPlannerRouteMode;
+  reason?: string;
+  requiredToolCategories: Set<string>;
+  requiredCapabilities: Set<ToolCapability>;
+};
+
+const TOOL_PLANNER_CAPABILITIES = new Set<ToolCapability>([
+  'discover',
+  'read',
+  'write',
+  'commit',
+  'push',
+  'deploy',
+  'monitor',
+  'wait',
+  'verify',
+  'coordinate',
+  'compute',
+]);
+
+function normalizeToolPlannerCategory(value: string): string | undefined {
+  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (normalized === 'expo_eas' || normalized === 'eas' || normalized === 'expo') {
+    return 'expo';
+  }
+  if (normalized === 'github' || normalized === 'git_hub') {
+    return 'github';
+  }
+  if (normalized === 'files' || normalized === 'workspace') {
+    return 'workspace_files';
+  }
+
+  return normalized;
+}
+
+function normalizeToolPlannerCapability(value: string): ToolCapability | undefined {
+  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return TOOL_PLANNER_CAPABILITIES.has(normalized as ToolCapability)
+    ? (normalized as ToolCapability)
+    : undefined;
+}
+
+function normalizeToolPlannerCategoryFamily(category: string): string {
+  return category === 'expo_manual_actions' ? 'expo' : category;
+}
+
+function getToolPlannerCategoryFamilyForToolName(toolName: string): string {
+  return normalizeToolPlannerCategoryFamily(getToolManagerCategoryForToolName(toolName));
+}
+
+function parseToolPlannerSelection(
+  rawText: string,
+  availableToolNames: Set<string>,
+): ToolPlannerSelection {
+  const normalizedText = rawText.trim();
+  if (!normalizedText) {
+    return {
+      tools: new Set<string>(),
+      requiredToolCategories: new Set<string>(),
+      requiredCapabilities: new Set<ToolCapability>(),
+    };
+  }
+
+  const candidatePayloads = [normalizedText];
+  const fencedJsonMatch = normalizedText.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fencedJsonMatch?.[1]) {
+    candidatePayloads.push(fencedJsonMatch[1].trim());
+  }
+
+  for (const payload of candidatePayloads) {
+    try {
+      const parsed = JSON.parse(payload) as
+        | { recommendedTools?: unknown; tools?: unknown; names?: unknown; reason?: unknown }
+        | unknown;
+      const list: unknown[] =
+        Array.isArray((parsed as any)?.recommendedTools)
+          ? (parsed as any).recommendedTools
+          : Array.isArray((parsed as any)?.tools)
+            ? (parsed as any).tools
+            : Array.isArray((parsed as any)?.names)
+              ? (parsed as any).names
+              : [];
+      const picked = list
+        .filter((name): name is string => typeof name === 'string')
+        .map((name) => normalizeToolName(name).trim())
+        .filter((name) => name.length > 0 && availableToolNames.has(name));
+      const routeModeRaw =
+        typeof (parsed as any)?.routeMode === 'string'
+          ? (parsed as any).routeMode.trim().toLowerCase()
+          : typeof (parsed as any)?.mode === 'string'
+            ? (parsed as any).mode.trim().toLowerCase()
+            : undefined;
+      const routeMode: ToolPlannerRouteMode | undefined =
+        routeModeRaw === 'execution' || routeModeRaw === 'discovery' || routeModeRaw === 'research'
+          ? routeModeRaw
+          : undefined;
+      const reason = typeof (parsed as any)?.reason === 'string'
+        ? (parsed as any).reason.trim()
+        : undefined;
+      const requiredToolCategoryValues = [
+        ...(
+          Array.isArray((parsed as any)?.requiredToolCategories)
+            ? (parsed as any).requiredToolCategories
+            : []
+        ),
+        ...(
+          Array.isArray((parsed as any)?.requiredToolFamilies)
+            ? (parsed as any).requiredToolFamilies
+            : []
+        ),
+      ];
+      const requiredToolCategories = new Set(
+        requiredToolCategoryValues
+          .filter((category): category is string => typeof category === 'string')
+          .map((category) => normalizeToolPlannerCategory(category))
+          .filter((category): category is string => Boolean(category)),
+      );
+      const requiredCapabilityValues: unknown[] = Array.isArray((parsed as any)?.requiredCapabilities)
+        ? (parsed as any).requiredCapabilities
+        : [];
+      const requiredCapabilities = new Set<ToolCapability>(
+        requiredCapabilityValues
+          .filter((capability): capability is string => typeof capability === 'string')
+          .map((capability) => normalizeToolPlannerCapability(capability))
+          .filter((capability): capability is ToolCapability => Boolean(capability)),
+      );
+      if (picked.length > 0) {
+        return {
+          tools: new Set(picked),
+          routeMode,
+          reason,
+          requiredToolCategories,
+          requiredCapabilities,
+        };
+      }
+      if (routeMode) {
+        return {
+          tools: new Set<string>(),
+          routeMode,
+          reason,
+          requiredToolCategories,
+          requiredCapabilities,
+        };
+      }
+    } catch {
+      // Try next candidate payload.
+    }
+  }
+
+  return {
+    tools: new Set<string>(),
+    requiredToolCategories: new Set<string>(),
+    requiredCapabilities: new Set<ToolCapability>(),
+  };
+}
+
+function isDiscoveryOnlyToolPlannerSelection(selection: ToolPlannerSelection): boolean {
+  if (selection.routeMode === 'execution' || selection.tools.size === 0) {
+    return false;
+  }
+
+  return Array.from(selection.tools).every((toolName) =>
+    isExecutionDiscoveryOrMetaToolName(toolName),
+  );
+}
+
+function doesToolPlannerSelectionCoverRequiredCategories(selection: ToolPlannerSelection): boolean {
+  if (selection.requiredToolCategories.size === 0) {
+    return true;
+  }
+
+  const selectedAdvancingFamilies = new Set<string>();
+  for (const toolName of selection.tools) {
+    if (!isExecutionAdvancingToolName(toolName)) {
+      continue;
+    }
+    selectedAdvancingFamilies.add(getToolPlannerCategoryFamilyForToolName(toolName));
+  }
+
+  for (const requiredCategory of selection.requiredToolCategories) {
+    const requiredFamily = normalizeToolPlannerCategoryFamily(requiredCategory);
+    if (
+      requiredFamily === 'workspace_files' ||
+      requiredFamily === 'workspace_search' ||
+      requiredFamily === 'files'
+    ) {
+      continue;
+    }
+    if (!selectedAdvancingFamilies.has(requiredFamily)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function shouldRetryToolPlannerSelection(selection: ToolPlannerSelection): boolean {
+  if (selection.routeMode === 'execution') {
+    return !doesToolPlannerSelectionCoverRequiredCategories(selection);
+  }
+
+  if (!selection.routeMode) {
+    return true;
+  }
+
+  if (selection.routeMode === 'research') {
+    const selectedNames = Array.from(selection.tools);
+    const selectedOnlyWebResearch = selectedNames.length > 0 && selectedNames.every((toolName) => {
+      const normalized = normalizeToolName(toolName);
+      return normalized === 'web_search' || normalized === 'web_fetch';
+    });
+    if (selectedOnlyWebResearch) {
+      return false;
+    }
+  }
+
+  if (isDiscoveryOnlyToolPlannerSelection(selection)) {
+    return true;
+  }
+
+  const selectedToolNames = Array.from(selection.tools);
+  if (selectedToolNames.length === 0) {
+    return false;
+  }
+
+  return selectedToolNames.every((toolName) => !isExecutionAdvancingToolName(toolName));
+}
+
+function buildFailClosedExecutionToolPlan(
+  candidateTools: ToolDefinition[],
+  maxTools: number,
+  requiredToolCategories: Set<string> = new Set<string>(),
+): Set<string> {
+  const selectedToolNames: string[] = [];
+  const seenToolNames = new Set<string>();
+  const executionBaseToolNames = new Set(['read_file', 'write_file', 'file_edit']);
+
+  const orderedCandidateTools = orderToolPlannerCandidateTools(candidateTools);
+  const orderedRequiredTools = orderedCandidateTools.filter((tool) => {
+    const toolFamily = getToolPlannerCategoryFamilyForToolName(tool.name);
+    return Array.from(requiredToolCategories).some(
+      (category) => normalizeToolPlannerCategoryFamily(category) === toolFamily,
+    );
+  });
+
+  for (const tool of [...orderedRequiredTools, ...orderedCandidateTools]) {
+    const normalizedName = normalizeToolName(tool.name);
+    if (
+      !normalizedName ||
+      seenToolNames.has(normalizedName) ||
+      executionBaseToolNames.has(normalizedName)
+    ) {
+      continue;
+    }
+    seenToolNames.add(normalizedName);
+
+    if (!isExecutionAdvancingToolName(normalizedName)) {
+      continue;
+    }
+
+    selectedToolNames.push(normalizedName);
+    if (selectedToolNames.length >= maxTools) {
+      break;
+    }
+  }
+
+  return new Set(
+    filterExecutionLaneToolNames(selectedToolNames, { allowDefaultBlockedTools: true }).slice(
+      0,
+      Math.max(0, maxTools),
+    ),
+  );
+}
+
+async function planPreferredToolsWithLlm(params: {
+  provider: LlmProviderConfig;
+  model: string;
+  candidateTools: ToolDefinition[];
+  userMessageTexts: string[];
+  maxTools: number;
+  failClosedOnRepeatedNonAdvancingPlan?: boolean;
+}): Promise<ToolPlannerSelection> {
+  if (params.candidateTools.length === 0 || params.maxTools <= 0) {
+    return {
+      tools: new Set<string>(),
+      requiredToolCategories: new Set<string>(),
+      requiredCapabilities: new Set<ToolCapability>(),
+    };
+  }
+
+  const candidateTools = orderToolPlannerCandidateTools(params.candidateTools)
+    .slice(0, 120)
+    .map((tool) => {
+      const category = getToolManagerCategoryForToolName(tool.name);
+      const categoryLabel = formatToolCategoryLabel(category);
+      const description = compressToolDescription(tool.description || '').replace(/\s+/g, ' ').trim();
+      const descriptor = inferToolCapabilityDescriptor(tool);
+      return [
+        `${tool.name} | category=${category} (${categoryLabel})`,
+        `capabilities=${descriptor.capabilities.join(',') || 'discover'}`,
+        `resources=${descriptor.resourceKinds.join(',') || 'unknown'}`,
+        `sideEffects=${descriptor.sideEffects.join(',') || 'none'}`,
+        `evidence=${descriptor.providesEvidence.join(',') || 'none'}`,
+        description || 'No description provided.',
+      ].join(' | ');
+    });
+  const availableToolNames = new Set(params.candidateTools.map((tool) => normalizeToolName(tool.name)));
+
+  const buildPlannerPrompt = (correction?: string): string => [
+    'Select the smallest high-signal tool shortlist for the task.',
+    'The task may be written in any language. Infer intent semantically, not by keyword matching.',
+    'Return strict JSON only with this shape:',
+    '{"routeMode":"execution|discovery|research","requiredToolCategories":["category_value_from_tool_list"],"requiredCapabilities":["write|commit|push|deploy|monitor|wait|verify|..."],"recommendedTools":["tool_name"],"reason":"..."}',
+    `Select at most ${params.maxTools} tools.`,
+    'Route-mode contract:',
+    '- execution: the user wants concrete side effects or verification of side effects. A task remains execution even if a brief file/status read is useful before acting.',
+    '- discovery: the user wants to find tools, files, capabilities, or setup information before a separate execution decision.',
+    '- research: the user wants information or external facts, with no requested local/remote side effects.',
+    'Prioritize concrete execution-capable tools if the user asks to create/edit/commit/push/deploy/verify.',
+    'For execution routes, requiredToolCategories must list every external tool family whose side effects or verification are necessary. Use the category=... values shown in the tool list.',
+    'For execution routes, requiredCapabilities must list the actual capabilities needed to satisfy the user-visible side effects and verification, based on each tool capability contract.',
+    'recommendedTools must include at least one direct execution-capable or monitoring tool for each required external category when such tools are available.',
+    'Dynamic skill__... and mcp__... tools may carry concrete side-effect capabilities. Prefer those directly when their capability contract covers the requested mutation or evidence.',
+    'Local artifact tools can stage content, but they cannot by themselves satisfy a requested remote mutation, external execution, or verification unless their contract provides that evidence.',
+    'Recommend sessions_spawn only when the user or task truly requires delegated worker execution. For clear direct execution paths, do not recommend sessions_spawn.',
+    'Avoid broad discovery tools unless no concrete matching capability is present in the candidate list.',
+    'Do not choose broad research or discovery tools when concrete side-effect, monitoring, or verification tools are available for the requested outcome.',
+    correction ? `Correction note: ${correction}` : '',
+    '',
+    'Latest user request context:',
+    params.userMessageTexts.slice(-3).join('\n---\n') || '[none]',
+    '',
+    'Available tools:',
+    ...candidateTools,
+  ].filter((line) => line !== '').join('\n');
+
+  const requestPlan = async (correction?: string) => {
+    const plannerPrompt = buildPlannerPrompt(correction);
+    const llm = new LlmService(params.provider);
+    const response = await llm.sendMessage(
+      [
+        {
+          role: 'system',
+          content:
+            'You are a tool-routing planner. Return only strict JSON. Never include markdown or prose outside the JSON object.',
+        },
+        {
+          role: 'user',
+          content: plannerPrompt,
+        },
+      ] as any,
+      {
+        model: params.model,
+        maxTokens: 420,
+        temperature: 0,
+      },
+    );
+
+    const responseText = extractTextFromLlmResponse(response);
+    return parseToolPlannerSelection(responseText, availableToolNames);
+  };
+
+  try {
+    const initialPlan = await requestPlan();
+    if (!shouldRetryToolPlannerSelection(initialPlan)) {
+      return initialPlan;
+    }
+
+    const correctedPlan = await requestPlan(
+      [
+        `Previous routeMode was ${initialPlan.routeMode || 'unset'} with non-advancing, incomplete, or missing tools: ${Array.from(initialPlan.tools).join(', ') || 'none'}.`,
+        initialPlan.requiredToolCategories.size > 0
+          ? `Previous requiredToolCategories: ${Array.from(initialPlan.requiredToolCategories).join(', ')}.`
+          : undefined,
+        initialPlan.requiredCapabilities.size > 0
+          ? `Previous requiredCapabilities: ${Array.from(initialPlan.requiredCapabilities).join(', ')}.`
+          : undefined,
+        initialPlan.reason ? `Previous reason: ${initialPlan.reason}.` : undefined,
+        'Re-evaluate the same request against the candidate tools. If concrete write, remote mutation, external execution, status, wait, or verification tools can advance the requested side effects, return routeMode="execution", list every necessary external category in requiredToolCategories, list the required side-effect capabilities in requiredCapabilities, and recommend direct tools that cover each required category. Keep discovery/research only when the user is genuinely asking to inspect or research instead of act.',
+      ]
+        .filter((line): line is string => Boolean(line))
+        .join(' '),
+    );
+
+    if (
+      params.failClosedOnRepeatedNonAdvancingPlan === true &&
+      shouldRetryToolPlannerSelection(correctedPlan)
+    ) {
+      const failClosedPlan = {
+        tools: buildFailClosedExecutionToolPlan(
+          params.candidateTools,
+          params.maxTools,
+          correctedPlan.requiredToolCategories,
+        ),
+        routeMode: 'execution' as const,
+        requiredToolCategories: correctedPlan.requiredToolCategories,
+        requiredCapabilities: correctedPlan.requiredCapabilities,
+      };
+      return failClosedPlan;
+    }
+
+    return correctedPlan;
+  } catch {
+    return {
+      tools: new Set<string>(),
+      requiredToolCategories: new Set<string>(),
+      requiredCapabilities: new Set<ToolCapability>(),
+    };
+  }
 }
 
 function buildLoadedToolNameDirectory(selectedTools: ToolDefinition[]): string {
@@ -1418,11 +1923,57 @@ function buildCapabilityDiscoveryPrompt(params: {
   focusedGuidance?: string;
   focusedQuery?: string;
   narrowToolTarget: boolean;
+  executionIntent?: boolean;
 }): string {
   const focusedToolNames = Array.from(params.focusedToolNames ?? []).filter(Boolean);
   const supportingFocusedToolNames = Array.from(params.supportingFocusedToolNames ?? []).filter(
     Boolean,
   );
+  const likelyCatalogCategories = resolveLikelyToolCatalogCategories(params.relevantCategories);
+  if (params.executionIntent) {
+    const lines = [
+      '## Execution Tool Discipline',
+      'This is an execution request. Use concrete execution-capable tools to produce verified side effects or to verify an active background operation.',
+      'Do not call broad discovery, session-inspection, or workflow-evidence tools unless a concrete missing capability or active background operation requires them.',
+      'Execution-lane guardrails: avoid wildcard or exploratory probes such as text_search("*") and repeated broad list/search loops once execution intent is clear.',
+      'Prefer direct execution-capable tools (edit/commit/deploy/status/dedicated wait) and use discovery only to fill a concrete missing capability.',
+    ];
+
+    if (likelyCatalogCategories.length > 0) {
+      lines.push(
+        `Relevant capability families already loaded for this execution request: ${likelyCatalogCategories.map((category) => describeToolCatalogCategory(category)).join('; ')}.`,
+      );
+    }
+
+    if (focusedToolNames.length > 0) {
+      lines.push(
+        params.focusedQuery
+          ? `Focused execution tools for "${params.focusedQuery}": ${focusedToolNames.join(', ')}.`
+          : `Focused execution tools are already active: ${focusedToolNames.join(', ')}.`,
+      );
+    }
+
+    if (supportingFocusedToolNames.length > 0) {
+      const visibleSupportingTools = supportingFocusedToolNames.slice(0, 6);
+      const hiddenSupportCount = supportingFocusedToolNames.length - visibleSupportingTools.length;
+      lines.push(
+        hiddenSupportCount > 0
+          ? `Supporting execution tools remain available for follow-up steps: ${visibleSupportingTools.join(', ')}, and ${hiddenSupportCount} more.`
+          : `Supporting execution tools remain available for follow-up steps: ${visibleSupportingTools.join(', ')}.`,
+      );
+    }
+
+    if (params.focusedGuidance) {
+      lines.push(`Execution guidance: ${params.focusedGuidance}`);
+    }
+
+    if (params.narrowToolTarget) {
+      lines.push('Only the loaded execution tools are callable right now.');
+    }
+
+    return lines.join('\n');
+  }
+
   const lines = [
     '## Capability Discovery',
     'If you are not sure which tool, skill, or MCP capability fits, call tool_catalog with a short natural-language query describing the needed capability instead of guessing.',
@@ -1442,7 +1993,6 @@ function buildCapabilityDiscoveryPrompt(params: {
       : 'Connected MCP servers: none.',
   ];
 
-  const likelyCatalogCategories = resolveLikelyToolCatalogCategories(params.relevantCategories);
   if (likelyCatalogCategories.length > 0) {
     lines.push(
       `Likely tool_catalog categories for this request: ${likelyCatalogCategories.map((category) => describeToolCatalogCategory(category)).join('; ')}.`,
@@ -1487,6 +2037,15 @@ function buildCapabilityDiscoveryPrompt(params: {
     );
     lines.push(
       'If you need another capability, call tool_catalog with a short query, then switch to the discovered tools. Avoid repeating tool_catalog for the same result unless the plan changes.',
+    );
+  }
+
+  if (params.executionIntent) {
+    lines.push(
+      'Execution-lane guardrails: avoid wildcard or exploratory probes such as text_search("*") and repeated broad list/search loops once execution intent is clear.',
+    );
+    lines.push(
+      'Prefer direct execution-capable tools (edit/commit/deploy/status/dedicated wait) and use discovery only to fill a concrete missing capability.',
     );
   }
 
@@ -1540,6 +2099,31 @@ function buildSessionsYieldCompletionNote(message?: string): string {
   ]
     .filter(Boolean)
     .join('\n');
+}
+
+function buildPendingAsyncNoToolCorrectionNote(
+  pendingOperations: ReadonlyArray<TrackedAsyncOperation>,
+  attemptCount: number,
+): string {
+  const visibleLabels = pendingOperations
+    .slice(0, 2)
+    .map((operation) => operation.displayName || operation.resourceId)
+    .filter(Boolean);
+  const hiddenCount = pendingOperations.length - visibleLabels.length;
+  const operationSummary =
+    visibleLabels.length === 0
+      ? `${pendingOperations.length} pending asynchronous operation${pendingOperations.length === 1 ? '' : 's'}`
+      : hiddenCount > 0
+        ? `${visibleLabels.join(', ')}, and ${hiddenCount} more pending operation${hiddenCount === 1 ? '' : 's'}`
+        : visibleLabels.join(', ');
+
+  return [
+    `[SYSTEM WORKFLOW CORRECTION - PENDING WORK STALLED - Attempt ${attemptCount}]`,
+    'Asynchronous work is still pending, but your previous turn did not make forward progress.',
+    `Pending operation${pendingOperations.length === 1 ? '' : 's'}: ${operationSummary}.`,
+    'Your next response MUST be exactly one relevant monitor or wait tool call for the existing pending operation.',
+    'Do not produce draft prose, do not start unrelated tools, and do not relaunch exploratory workers.',
+  ].join('\n');
 }
 
 function trimPendingToolCallsAfterYield(
@@ -1607,6 +2191,26 @@ function getLastExecutedToolCall(messages: Message[]): ToolCall | undefined {
   return undefined;
 }
 
+function collectCompletedToolNames(messages: ReadonlyArray<Message>): Set<string> {
+  const completedToolNames = new Set<string>();
+  for (const message of messages) {
+    for (const toolCall of message.toolCalls ?? []) {
+      if (toolCall.status === 'completed' && toolCall.name?.trim()) {
+        completedToolNames.add(normalizeToolName(toolCall.name));
+      }
+    }
+
+    if (message.role === 'tool' && !message.isError) {
+      const toolName = message.toolCalls?.[0]?.name || message.toolCallId;
+      if (toolName?.trim()) {
+        completedToolNames.add(normalizeToolName(toolName));
+      }
+    }
+  }
+
+  return completedToolNames;
+}
+
 function collectRecentToolNames(messages: Message[], limit = 4): Set<string> {
   const recentToolNames = new Set<string>();
   let userBoundariesSeen = 0;
@@ -1662,7 +2266,7 @@ function shouldForceToolChoice(params: {
   // IMPORTANT: Do NOT use broad suffix patterns like /_status$/ or /_runs$/
   // because they match terminal tools (e.g. expo_eas_workflow_status) and
   // trap the model in an infinite loop where it can never respond with text.
-  return /^(tool_catalog|wait|sessions_(spawn|send|list|status|history))$/.test(toolName);
+  return /^(tool_catalog|sessions_(spawn|send|list|status|history))$/.test(toolName);
 }
 
 function isParallelizableToolName(name: string): boolean {
@@ -1670,10 +2274,37 @@ function isParallelizableToolName(name: string): boolean {
     return false;
   }
 
-  // Dynamic MCP and skill tools stay sequential until they advertise a
-  // concrete read-only contract. Prefix-only parallelism is unsafe.
-  return /^(read_file|list_files|glob_search|text_search|javascript|python|tool_catalog|web_search|web_fetch|memory_search|read_workflow_evidence|pdf_read|canvas_list|workspace_status|workspace_read_file|workspace_list_files|ssh_read_file|ssh_list_directory|ssh_background_job_(status|wait)|sessions_list|sessions_status|sessions_history|sessions_output|wait|expo_eas_(status|probe|workflow_status|workflow_runs|workflow_wait)|browser_(status|snapshot|screenshot|console|errors|network|cookies|pdf))$/.test(
+  const descriptor = inferToolCapabilityDescriptor({
     name,
+    description: name,
+  });
+  if (descriptor.category === 'other') {
+    return false;
+  }
+  if (descriptor.source !== 'built-in' && !descriptor.riskHints.includes('read_only')) {
+    return false;
+  }
+
+  const capabilities = new Set(descriptor.capabilities);
+  const hasMutationCapability =
+    capabilities.has('write') ||
+    capabilities.has('commit') ||
+    capabilities.has('push') ||
+    capabilities.has('deploy') ||
+    capabilities.has('coordinate');
+  const hasSideEffects = descriptor.sideEffects.some((sideEffect) => sideEffect !== 'none');
+  return (
+    !hasMutationCapability &&
+    !hasSideEffects &&
+    Array.from(capabilities).some(
+      (capability) =>
+        capability === 'discover' ||
+        capability === 'read' ||
+        capability === 'monitor' ||
+        capability === 'wait' ||
+        capability === 'verify' ||
+        capability === 'compute',
+    )
   );
 }
 
@@ -1887,6 +2518,8 @@ function buildForcedTextOnlyTurnPrompt(reason?: ForcedTextTurnReason): string {
       return '## Continue Final Answer\nTool use is disabled for this turn because the previous final answer was interrupted before completion. Continue the same answer from exactly where it stopped. Do not restart, do not repeat completed text, and finish cleanly.';
     case 'request_governance':
       return '## Clarify Request\nTool use is disabled for this turn because the latest user input is too low-signal or underspecified for safe execution. Do not plan, do not delegate, do not call tools, and do not invent missing details. Ask the user for the concrete information needed.';
+    case 'execution_loop_recovery':
+      return '## Execution Loop Recovery\nTool use is disabled for this turn because the previous execution strategy stalled. Do not claim the task is completed, do not summarize plans as results, and do not invent success. State the exact requested side effect that remains unverified, name the blocker or missing capability, and ask for the smallest missing user input only if autonomous progress is no longer possible.';
     case 'loop_recovery':
     default:
       return '## Loop Recovery\nTool use is disabled for this turn because the previous tool strategy stalled. Do not call any tools. Answer directly from the gathered evidence, or clearly explain the blocker and what is missing.';
@@ -2100,10 +2733,12 @@ export async function runOrchestrator(
   let forceFinalTextNextTurn = false;
   let forceFinalTextReasonNextTurn: ForcedTextTurnReason | undefined;
   let forceDelegationToolChoiceNextTurn = false;
+  let forceWorkflowToolChoiceNextTurn = false;
   let incompleteFinalTextRecoveryCount = 0;
   let incompleteFinalTextContinuationPrefix = '';
   let forceMaxTokensNextTurn: number | undefined;
   let lastPendingAsyncSignature = buildPendingAsyncOperationSignature(trackedAsyncOperations);
+  let consecutivePendingAsyncNoToolTurns = 0;
 
   // ── Failover chain ─────────────────────────────────────────────────
   let failoverState: FailoverState | null = null;
@@ -2196,20 +2831,22 @@ export async function runOrchestrator(
         : shouldRequireToolUse(lastUserMessageText, allTools);
 
   // Working message list that includes tool results as we iterate
-  let workingMessages = memoryAccessContext.scopedMessages.map((message) => {
-    if (message.role !== 'user' || !message.enrichedContent) {
-      return message;
-    }
+  let workingMessages = repairModelVisibleToolResultTranscript(
+    memoryAccessContext.scopedMessages.map((message) => {
+      if (message.role !== 'user' || !message.enrichedContent) {
+        return message;
+      }
 
-    const sanitizedEnrichedContent = stripRuntimeContextFromUserContent(message.enrichedContent);
-    if (sanitizedEnrichedContent === message.enrichedContent) {
-      return message;
-    }
+      const sanitizedEnrichedContent = stripRuntimeContextFromUserContent(message.enrichedContent);
+      if (sanitizedEnrichedContent === message.enrichedContent) {
+        return message;
+      }
 
-    return sanitizedEnrichedContent.length > 0 && sanitizedEnrichedContent !== message.content
-      ? { ...message, enrichedContent: sanitizedEnrichedContent }
-      : { ...message, enrichedContent: undefined };
-  });
+      return sanitizedEnrichedContent.length > 0 && sanitizedEnrichedContent !== message.content
+        ? { ...message, enrichedContent: sanitizedEnrichedContent }
+        : { ...message, enrichedContent: undefined };
+    }),
+  );
 
   // ── Link & Media Understanding (enrich last user message) ──────────
   const lastUserForEnrichment = workingMessages.findLast((m) => m.role === 'user');
@@ -2272,6 +2909,14 @@ export async function runOrchestrator(
   // request and reuses across orchestrator iterations. The result is
   // appended to each iteration's system-prompt sections.
   const livingMemory: LivingMemoryBridgeOutput | null = memoryAccessContext.livingMemory;
+  let llmPlannedPreferredToolNames = new Set<string>();
+  let llmPlannedRouteMode: 'execution' | 'discovery' | 'research' | undefined;
+  let llmPlannedRequiredToolCategories = new Set<string>();
+  let llmPlannedRequiredCapabilities = new Set<ToolCapability>();
+  let llmToolPlanFingerprint = '';
+  let activeWorkflowRouteActivation: WorkflowRouteActivation | undefined;
+  let activeWorkflowRouteState: AgentRunRouteState | undefined;
+  const completedWorkflowToolNames = collectCompletedToolNames(workingMessages);
 
   callbacks.onStateChange('thinking');
   await emitSessionEvent('start', { conversationId });
@@ -2318,6 +2963,8 @@ export async function runOrchestrator(
       forceFinalTextReasonNextTurn = undefined;
       const requireDelegationThisTurn = forceDelegationToolChoiceNextTurn;
       forceDelegationToolChoiceNextTurn = false;
+      const requireWorkflowToolThisTurn = forceWorkflowToolChoiceNextTurn;
+      forceWorkflowToolChoiceNextTurn = false;
       const toolingEnabledForProvider =
         !isOnDeviceLlmProvider(activeProvider) ||
         supportsOnDeviceLlmTools(activeProvider, requestModel);
@@ -2358,6 +3005,88 @@ export async function runOrchestrator(
         requestAssessment.action === 'direct'
           ? allTools.filter((tool) => !isSessionCoordinationToolCallName(tool.name))
           : allTools;
+      const requestScopedToolCountHint = requestScopedTools.length;
+      const toolPlannerFingerprint = `${requestModel}:${toolSelectionMessages.join('||')}:${requestScopedToolCountHint}`;
+      const shouldRunSemanticToolPlanner =
+        toolingEnabledForProvider &&
+        !effectiveForceTextThisTurn &&
+        requestScopedTools.length > 0 &&
+        (actionableRequest || isSuperAgent || narrowToolTarget);
+      if (
+        shouldRunSemanticToolPlanner &&
+        llmToolPlanFingerprint !== toolPlannerFingerprint &&
+        requestScopedTools.length > 0
+      ) {
+        llmToolPlanFingerprint = toolPlannerFingerprint;
+        const planned = await planPreferredToolsWithLlm({
+          provider: activeProvider,
+          model: requestModel,
+          candidateTools: requestScopedTools,
+          userMessageTexts: toolSelectionMessages,
+          maxTools: narrowToolTarget ? 12 : 20,
+          failClosedOnRepeatedNonAdvancingPlan: isSuperAgent && actionableRequest,
+        });
+        llmPlannedPreferredToolNames = planned.tools;
+        llmPlannedRouteMode = planned.routeMode;
+        llmPlannedRequiredToolCategories = planned.requiredToolCategories;
+        llmPlannedRequiredCapabilities = planned.requiredCapabilities;
+      }
+      const executionIntent = llmPlannedRouteMode === 'execution';
+      const effectiveRouteMode: 'execution' | 'discovery' | 'research' | undefined =
+        llmPlannedRouteMode;
+      const workflowRouteActivation =
+        toolingEnabledForProvider && !effectiveForceTextThisTurn
+          ? resolveWorkflowRouteActivation({
+              routeMode: effectiveRouteMode,
+              requiredToolCategories: llmPlannedRequiredToolCategories,
+              requiredCapabilities: llmPlannedRequiredCapabilities,
+              plannedToolNames: llmPlannedPreferredToolNames,
+              tools: requestScopedTools,
+            })
+          : undefined;
+      if (
+        workflowRouteActivation &&
+        activeWorkflowRouteActivation?.routeId !== workflowRouteActivation.routeId
+      ) {
+        activeWorkflowRouteActivation = workflowRouteActivation;
+        activeWorkflowRouteState = buildInitialWorkflowRouteState(
+          workflowRouteActivation,
+          Date.now(),
+        );
+        callbacks.onAgentRouteStateChange?.(activeWorkflowRouteState);
+      }
+      const routePhaseToolNames = new Set(
+        selectToolNamesForWorkflowRoutePhase(
+          activeWorkflowRouteActivation ?? workflowRouteActivation,
+          activeWorkflowRouteState,
+          requestScopedTools,
+        ),
+      );
+      const workflowRouteExecutionToolNames = new Set(
+        (activeWorkflowRouteActivation ?? workflowRouteActivation)?.requiredToolNames
+          .filter((toolName) => isExecutionAdvancingToolName(toolName)) ?? [],
+      );
+      const routeRequiredToolNames =
+        routePhaseToolNames.size > 0 || workflowRouteExecutionToolNames.size > 0
+          ? new Set([
+              ...routePhaseToolNames,
+              ...workflowRouteExecutionToolNames,
+            ])
+          : new Set(workflowRouteActivation?.requiredToolNames ?? []);
+      const safeFocusedToolNames = effectiveRouteMode === 'execution'
+        ? new Set(filterExecutionLaneToolNames(discoveryState.focusedToolNames))
+        : discoveryState.focusedToolNames;
+      const safeSupportingFocusedToolNames = effectiveRouteMode === 'execution'
+        ? new Set(filterExecutionLaneToolNames(discoveryState.supportingFocusedToolNames))
+        : discoveryState.supportingFocusedToolNames;
+      const safePlannedPreferredToolNames = effectiveRouteMode === 'execution'
+        ? new Set(
+            filterExecutionLaneToolNames(llmPlannedPreferredToolNames, {
+              allowDefaultBlockedTools: true,
+            }),
+          )
+        : llmPlannedPreferredToolNames;
+      const plannerRequestedDelegation = safePlannedPreferredToolNames.has('sessions_spawn');
       const candidateSelectedTools = toolingEnabledForProvider
         ? selectToolsForRequest(
             requestScopedTools,
@@ -2368,6 +3097,7 @@ export async function runOrchestrator(
             {
               model: requestModel,
               providerKind: activeProvider.kind,
+              routeMode: effectiveRouteMode,
               discoveredCategories,
               discoveredToolNames: mergedDiscoveredToolNames,
               recentToolNames: recentNarrowToolNames,
@@ -2375,11 +3105,21 @@ export async function runOrchestrator(
                 ? new Set(['sessions_spawn'])
                 : restrictToPendingAsyncMonitorTools
                   ? pendingAsyncMonitorToolNames
-                  : discoveryState.focusedToolNames,
+                  : routeRequiredToolNames.size > 0
+                    ? new Set([
+                        ...routeRequiredToolNames,
+                        ...(plannerRequestedDelegation ? ['sessions_spawn'] : []),
+                      ])
+                    : new Set([
+                        ...safeFocusedToolNames,
+                        ...safePlannedPreferredToolNames,
+                      ]),
               restrictToPreferredTools:
                 requireDelegationThisTurn ||
                 restrictToPendingAsyncMonitorTools ||
-                discoveryState.focusedToolNames.size > 0,
+                safeFocusedToolNames.size > 0 ||
+                routeRequiredToolNames.size > 0 ||
+                (effectiveRouteMode === 'execution' && safePlannedPreferredToolNames.size > 0),
               isSuperAgent,
             },
           )
@@ -2390,7 +3130,7 @@ export async function runOrchestrator(
           ? candidateSelectedTools.filter((tool) => pendingAsyncMonitorToolNames.has(tool.name))
           : candidateSelectedTools;
       const deferredCatalog = buildDeferredToolCatalog(requestScopedTools, selectedTools);
-      const capabilityDiscoveryPrompt = toolingEnabledForProvider
+      const baseCapabilityDiscoveryPrompt = toolingEnabledForProvider
         ? buildCapabilityDiscoveryPrompt({
             skillNames: loadedSkills.map((skill) => skill.name || skill.id),
             mcpConnected: mcpStatuses
@@ -2410,16 +3150,29 @@ export async function runOrchestrator(
               )
               .map((status) => status.name),
             relevantCategories,
-            focusedToolNames: discoveryState.focusedToolNames,
-            supportingFocusedToolNames: discoveryState.supportingFocusedToolNames,
+            focusedToolNames: safeFocusedToolNames,
+            supportingFocusedToolNames: safeSupportingFocusedToolNames,
             focusedCategory: discoveryState.focusedCategory,
             focusedGuidance: discoveryState.focusedGuidance,
             focusedQuery: discoveryState.focusedQuery,
             narrowToolTarget,
+            executionIntent: effectiveRouteMode === 'execution',
           })
         : '';
+      const capabilityDiscoveryPrompt = [
+        workflowRouteActivation?.guidance,
+        buildWorkflowRouteRuntimeGuidance(
+          activeWorkflowRouteActivation ?? workflowRouteActivation,
+          activeWorkflowRouteState,
+          requestScopedTools,
+        ),
+        baseCapabilityDiscoveryPrompt,
+      ].filter((section): section is string => Boolean(section)).join('\n\n');
       const canvasWorkflowPrompt = buildCanvasWorkflowPrompt(selectedTools, relevantCategories);
-      const expoWorkflowPrompt = buildExpoWorkflowPrompt(selectedTools, relevantCategories);
+      const externalWorkflowPrompt = buildExternalWorkflowPrompt(
+        selectedTools,
+        executionIntent,
+      );
       const toolsForIteration =
         toolingEnabledForProvider &&
         !effectiveForceTextThisTurn &&
@@ -2438,9 +3191,11 @@ export async function runOrchestrator(
           ? ''
           : buildLoadedToolSummary(selectedTools, narrowToolTarget),
         canvasWorkflowPrompt,
-        expoWorkflowPrompt,
+        externalWorkflowPrompt,
         effectiveForceTextThisTurn ? '' : capabilityDiscoveryPrompt,
         isSuperAgent,
+        executionIntent,
+        plannerRequestedDelegation,
         toolingEnabledForProvider,
       );
       appendSystemPromptSection(baseSystemPromptSections, requestGovernancePromptSection);
@@ -2538,7 +3293,10 @@ export async function runOrchestrator(
       attemptLoop: for (let toolPlanningRetryCount = 0; ; toolPlanningRetryCount += 1) {
         contextWindow = getWorkingContextWindow(requestModel);
         compactionContextWindow = getCompactionWorkingContextWindow(requestModel);
-        turnWorkingMessages = workingMessages;
+        turnWorkingMessages = repairModelVisibleToolResultTranscript(workingMessages);
+        if (turnWorkingMessages !== workingMessages) {
+          workingMessages = turnWorkingMessages;
+        }
 
         const previewRequestBudget = async (candidateMessages: Message[]) => {
           const candidateApiMessages = await formatMessagesForApi(
@@ -2579,7 +3337,10 @@ export async function runOrchestrator(
               currentTokenCount: tokenCount,
               failureLabel: 'Compaction failed, continuing without compaction',
             });
-            turnWorkingMessages = softCompaction.messages;
+            turnWorkingMessages = repairModelVisibleToolResultTranscript(softCompaction.messages);
+            if (turnWorkingMessages !== softCompaction.messages) {
+              workingMessages = turnWorkingMessages;
+            }
           }
         }
 
@@ -2603,7 +3364,10 @@ export async function runOrchestrator(
               continue;
             }
 
-            turnWorkingMessages = budgetCompaction.messages;
+            turnWorkingMessages = repairModelVisibleToolResultTranscript(budgetCompaction.messages);
+            if (turnWorkingMessages !== budgetCompaction.messages) {
+              workingMessages = turnWorkingMessages;
+            }
             budgetPreview = await previewRequestBudget(turnWorkingMessages);
           }
         }
@@ -2618,6 +3382,7 @@ export async function runOrchestrator(
           getPendingTrackedAsyncOperations(trackedAsyncOperations).length > 0;
         const forceToolChoiceCandidate = toolsForIteration
           ? requireDelegationThisTurn ||
+            requireWorkflowToolThisTurn ||
             hasPendingAsyncOperations ||
             shouldForceToolChoice({
               iteration,
@@ -2672,7 +3437,6 @@ export async function runOrchestrator(
         if (budgetResult.result.adjustments.length > 0) {
           logger.devLog('Budget adjustments:', budgetResult.result.adjustments.join('; '));
         }
-
         fullContent = '';
         reasoning = '';
         providerReplay = undefined;
@@ -2922,6 +3686,7 @@ export async function runOrchestrator(
       if (pendingToolCalls.length === 0) {
         const pendingAsyncOperations = getPendingTrackedAsyncOperations(trackedAsyncOperations);
         if (pendingAsyncOperations.length > 0) {
+          consecutivePendingAsyncNoToolTurns += 1;
           incompleteFinalTextRecoveryCount = 0;
           incompleteFinalTextContinuationPrefix = '';
           if (turnAssistantContent.trim().length > 0) {
@@ -2942,6 +3707,18 @@ export async function runOrchestrator(
             }
           }
 
+          if (consecutivePendingAsyncNoToolTurns >= 2) {
+            workingMessages.push({
+              id: `msg_${Date.now()}_background_hold_correction_${iteration}`,
+              role: 'system' as const,
+              content: buildPendingAsyncNoToolCorrectionNote(
+                pendingAsyncOperations,
+                consecutivePendingAsyncNoToolTurns,
+              ),
+              timestamp: Date.now(),
+            });
+          }
+
           const joinNote = buildPendingAsyncOperationJoinNote(trackedAsyncOperations);
           if (joinNote) {
             const previousMessage = workingMessages[workingMessages.length - 1];
@@ -2960,20 +3737,61 @@ export async function runOrchestrator(
           continue;
         }
 
+        consecutivePendingAsyncNoToolTurns = 0;
+
+        if (
+          toolingEnabledForProvider &&
+          selectedTools.length > 0 &&
+          !effectiveForceTextThisTurn &&
+          shouldHoldWorkflowRouteFinalization(activeWorkflowRouteState, completedWorkflowToolNames)
+        ) {
+          incompleteFinalTextRecoveryCount = 0;
+          incompleteFinalTextContinuationPrefix = '';
+          const missingRequiredWorkflowTools = getMissingRequiredWorkflowToolNames(
+            activeWorkflowRouteState,
+            completedWorkflowToolNames,
+          );
+          const workflowHold = [
+            buildWorkflowRouteFinalizationHoldGuidance(
+              activeWorkflowRouteActivation ?? workflowRouteActivation,
+              activeWorkflowRouteState,
+              requestScopedTools,
+            ),
+            missingRequiredWorkflowTools.length > 0
+              ? `Required contract-matched tools without completed evidence: ${missingRequiredWorkflowTools.join(', ')}.`
+              : undefined,
+            'A visible draft, example, checklist, or command for the user is not execution evidence. Do not repeat the withheld draft; make the next contract-matched tool call.',
+          ]
+            .filter((line): line is string => Boolean(line))
+            .join('\n');
+          const previousMessage = workingMessages[workingMessages.length - 1];
+          if (previousMessage?.role !== 'system' || previousMessage.content !== workflowHold) {
+            workingMessages.push({
+              id: `msg_${Date.now()}_workflow_hold_${iteration}`,
+              role: 'system' as const,
+              content: workflowHold,
+              timestamp: Date.now(),
+            });
+          }
+          forceWorkflowToolChoiceNextTurn = true;
+          callbacks.onStateChange('thinking');
+          await yieldToUiFrame();
+          continue;
+        }
+
         const delegationEnforcementReason = getDelegationEnforcementReason({
           isSuperAgent,
           workingMessages,
           fullContent: turnAssistantContent,
           forceTextThisTurn: effectiveForceTextThisTurn,
-          lastUserMessageText,
-          requestAssessment,
+          plannerRequestedDelegation,
         });
         if (delegationEnforcementReason) {
           incompleteFinalTextRecoveryCount = 0;
           incompleteFinalTextContinuationPrefix = '';
           const delegationCorrection = [
             '[SYSTEM AGENT MODE CORRECTION]',
-            'The user explicitly requested delegated worker execution for this task, but no worker was launched.',
+            'The current plan requires delegated worker execution for this task, but no worker was launched.',
             'Do not finalize yet.',
             'Keep the current plan and evidence, then call sessions_spawn or sessions_send to complete the requested delegated work before delivering the final answer.',
           ].join('\n');
@@ -3045,6 +3863,7 @@ export async function runOrchestrator(
         return;
       }
 
+      consecutivePendingAsyncNoToolTurns = 0;
       incompleteFinalTextRecoveryCount = 0;
       incompleteFinalTextContinuationPrefix = '';
 
@@ -3115,12 +3934,23 @@ export async function runOrchestrator(
       // else branch even when a loop WAS detected, causing warnings to appear
       // only every other turn and giving the model mixed signals.
       if (loopCheck.loopDetected && loopCheck.level === 'warning') {
+        const executionWorkflowLoopRecovery =
+          effectiveRouteMode === 'execution' && !!activeWorkflowRouteState;
         const recoveryHint =
           loopCheck.type === 'ping_pong'
-            ? 'You are alternating between two tools without progress. Stop both and give the user a direct answer with what you know so far.'
+            ? executionWorkflowLoopRecovery
+              ? 'You are alternating between tools without progress. Stop both and switch to the next missing contract-matched execution tool.'
+              : 'You are alternating between two tools without progress. Stop both and give the user a direct answer with what you know so far.'
             : loopCheck.type === 'known_poll_no_progress'
-              ? 'The tool keeps returning the same result. The data is not changing — report what you have to the user.'
-              : 'You are repeating the same action. STOP immediately. Either answer with what you already have, or ask the user for clarification.';
+              ? executionWorkflowLoopRecovery
+                ? 'The tool keeps returning the same result. Reuse that evidence and switch to the next missing contract-matched execution tool.'
+                : 'The tool keeps returning the same result. The data is not changing — report what you have to the user.'
+              : executionWorkflowLoopRecovery
+                ? 'You are repeating the same action. Stop the repeated action and make the next concrete tool call required by the workflow contract.'
+                : 'You are repeating the same action. STOP immediately. Either answer with what you already have, or ask the user for clarification.';
+        const nextStepInstruction = executionWorkflowLoopRecovery
+          ? 'Your next response MUST be one concrete non-discovery tool call that advances a missing workflow capability, not another catalog/read loop and not final prose.'
+          : 'Your next response MUST be a final text answer to the user, not another tool call.';
         // Inject on first detection; on subsequent detections escalate the message
         const repeatedWarning = warningInjectedThisRound;
         const warningPrefix = warningInjectedThisRound
@@ -3129,12 +3959,16 @@ export async function runOrchestrator(
         workingMessages.push({
           id: `msg_${Date.now()}_loop_warning_${iteration}`,
           role: 'system' as const,
-          content: `${warningPrefix} ${loopCheck.details}\n\n${recoveryHint}\n\nYour next response MUST be a final text answer to the user, not another tool call.`,
+          content: `${warningPrefix} ${loopCheck.details}\n\n${recoveryHint}\n\n${nextStepInstruction}`,
           timestamp: Date.now(),
         });
         if (repeatedWarning) {
-          forceFinalTextNextTurn = true;
-          forceFinalTextReasonNextTurn = 'loop_recovery';
+          if (executionWorkflowLoopRecovery) {
+            forceWorkflowToolChoiceNextTurn = true;
+          } else {
+            forceFinalTextNextTurn = true;
+            forceFinalTextReasonNextTurn = 'loop_recovery';
+          }
         }
         warningInjectedThisRound = true;
       } else if (!loopCheck.loopDetected) {
@@ -3436,9 +4270,30 @@ export async function runOrchestrator(
       let yieldCompletionNoteMessage: string | undefined;
       for (const outcome of toolExecutionOutcomes.sort((left, right) => left.index - right.index)) {
         workingMessages.push(outcome.toolMessage);
-        callbacks.onToolMessage(outcome.toolCallId, outcome.toolMessage.content);
+        await callbacks.onToolMessage(outcome.toolCallId, outcome.toolMessage.content);
         recordToolCatalogDiscovery(outcome.toolMessage, discoveryState);
+        const routeToolCall = outcome.toolMessage.toolCalls?.[0];
+        if (activeWorkflowRouteState && routeToolCall) {
+          const nextRouteState = advanceWorkflowRouteStateFromToolResult(
+            activeWorkflowRouteState,
+            {
+              toolName: routeToolCall.name,
+              result: outcome.toolMessage.content,
+              status: outcome.toolMessage.isError ? 'failed' : 'completed',
+              timestamp: outcome.toolMessage.timestamp,
+            },
+            requestScopedTools,
+            activeWorkflowRouteActivation,
+          );
+          if (nextRouteState && nextRouteState !== activeWorkflowRouteState) {
+            activeWorkflowRouteState = nextRouteState;
+            callbacks.onAgentRouteStateChange?.(nextRouteState);
+          }
+        }
         const executedToolName = outcome.toolMessage.toolCalls?.[0]?.name;
+        if (executedToolName && !outcome.toolMessage.isError) {
+          completedWorkflowToolNames.add(normalizeToolName(executedToolName));
+        }
         if (
           executedToolName &&
           executedToolName !== 'tool_catalog' &&
@@ -3456,6 +4311,7 @@ export async function runOrchestrator(
             outcome.yieldCompletionNoteMessage || yieldCompletionNoteMessage;
         }
       }
+      await yieldToUiFrame();
 
       if (forceFinalTextFromYieldThisTurn) {
         forceFinalTextNextTurn = true;
@@ -3486,14 +4342,14 @@ export async function runOrchestrator(
 
       // ── Post-execution: Tool result pairing guard ────
       // Ensure every tool_call in the assistant message has a matching
-      // tool_result. Create synthetic error results for orphaned tool calls
-      // that never received a response (race condition, crash, etc.).
-      workingMessages = ensureToolResultPairing(workingMessages);
-      workingMessages = deduplicateToolResults(workingMessages);
+      // tool_result before the next model turn.
+      workingMessages = repairModelVisibleToolResultTranscript(workingMessages);
 
       // ── Post-execution: context guard ───────────
       // 1. Compact old tool results to free context
-      workingMessages = compactToolResults(workingMessages, contextWindow);
+      workingMessages = repairModelVisibleToolResultTranscript(
+        compactToolResults(workingMessages, contextWindow),
+      );
 
       // 2. Preemptive overflow check — if context > 90% of window,
       //    force compaction on next iteration
@@ -3536,8 +4392,24 @@ export async function runOrchestrator(
     }
 
     // Hit max iterations — provide a useful summary
+    const missingRequiredWorkflowTools = getMissingRequiredWorkflowToolNames(
+      activeWorkflowRouteState,
+      completedWorkflowToolNames,
+    );
+    const maxIterationMessage =
+      activeWorkflowRouteState &&
+      shouldHoldWorkflowRouteFinalization(activeWorkflowRouteState, completedWorkflowToolNames)
+        ? [
+            "I've reached the maximum number of tool iterations before completing the required workflow side effects.",
+            missingRequiredWorkflowTools.length > 0
+              ? `Missing completed evidence from required tools: ${missingRequiredWorkflowTools.join(', ')}.`
+              : 'The capability workflow still has incomplete phases.',
+          ]
+            .filter((line): line is string => Boolean(line))
+            .join('\n')
+        : "I've reached the maximum number of tool iterations. Here's what I've accomplished so far with the tools I've used.";
     callbacks.onAssistantMessage(
-      "I've reached the maximum number of tool iterations. Here's what I've accomplished so far with the tools I've used.",
+      maxIterationMessage,
       [],
       undefined,
       buildAssistantMessageMetadata('final', {

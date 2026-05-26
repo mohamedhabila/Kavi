@@ -974,7 +974,7 @@ export const SSH_FS_TOOL: ToolDefinition = {
 export const EXPO_EAS_CREATE_PROJECT_TOOL: ToolDefinition = {
   name: 'expo_eas_create_project',
   description:
-    'Create an Expo/EAS project record in a linked Expo account. Use this when the account has no project yet. After creation, the default production path is to connect the GitHub repo, add .eas/workflows/*.yml on the target branch, push a commit, and monitor the auto-triggered workflow instead of manually dispatching Expo actions.',
+    'Create an Expo/EAS project record in a linked Expo account. This tool first resolves existing linked projects and redirects to them unless confirmedCreateNewProject is true. Use creation only when project resolution proves no suitable project exists or the user explicitly asks for a separate new Expo project. After creation, the default production path is to connect the GitHub repo, add .eas/workflows/*.yml on the target branch, push a commit, and monitor the auto-triggered workflow instead of manually dispatching Expo actions.',
   input_schema: {
     type: 'object',
     properties: {
@@ -988,6 +988,11 @@ export const EXPO_EAS_CREATE_PROJECT_TOOL: ToolDefinition = {
         type: 'string',
         description:
           'Optional Expo/EAS project slug. When omitted, a slug is derived from the name.',
+      },
+      confirmedCreateNewProject: {
+        type: 'boolean',
+        description:
+          'Set true only after confirming no suitable existing linked Expo project should be used, or when the user explicitly requested a separate new Expo project.',
       },
     },
     required: ['name'],

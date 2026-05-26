@@ -50,6 +50,23 @@ const mockProject = {
   platforms: ['android', 'ios', 'web'],
 };
 
+const mockProjectListing = {
+  id: 'expo-project-1',
+  easProjectId: 'eas-project-1',
+  name: 'Kavi',
+  fullName: '@kavi/kavi-app',
+  owner: 'kavi',
+  slug: 'kavi-app',
+  accountId: 'expo-account-1',
+  accountName: 'Expo Prod',
+  source: 'account-sync',
+  mode: 'eas-workflow',
+  repoFullName: 'kavi/mobile',
+  availableWorkflowFiles: ['.eas/workflows/deploy.yml'],
+  lastSyncedAt: 123,
+  readiness: { launchable: true, reason: 'ready', label: 'Ready' },
+};
+
 const mockAccount = {
   id: 'expo-account-1',
   name: 'Expo Prod',
@@ -148,6 +165,7 @@ jest.mock('../../src/services/expo/eas', () => ({
   listExpoWorkflowRuns: jest.fn(),
   listExpoProjects: jest.fn(),
   probeExpoProject: jest.fn(),
+  resolveExpoProjectForExecutionTask: jest.fn(),
   runExpoGraphqlQuery: jest.fn(),
   resolveExpoAccount: jest.fn().mockReturnValue(mockAccount),
   resolveExpoProject: jest.fn().mockReturnValue(mockProject),
@@ -177,6 +195,7 @@ jest.mock('expo-image-picker', () => ({
 
 import {
   executeExpoEasBuild,
+  executeExpoEasCreateProject,
   executeExpoEasListProjects,
   executeExpoEasProbe,
   executeExpoEasStatus,
@@ -197,6 +216,28 @@ describe('Parity Tool Executor Expo wrappers', () => {
     (expoEas.getExpoProjectReadinessLabel as jest.Mock).mockReturnValue('Ready');
     (expoEas.resolveExpoAccount as jest.Mock).mockReturnValue(mockAccount);
     (expoEas.resolveExpoProject as jest.Mock).mockReturnValue(mockProject);
+    (expoEas.listExpoProjects as jest.Mock).mockResolvedValue([mockProjectListing]);
+    (expoEas.resolveExpoProjectForExecutionTask as jest.Mock).mockImplementation(({ projectRef }) => {
+      if (
+        projectRef === 'expo-project-1' ||
+        projectRef === 'eas-project-1' ||
+        projectRef === '@kavi/kavi-app'
+      ) {
+        return Promise.resolve({
+          status: 'resolved',
+          project: mockProjectListing,
+          candidates: [mockProjectListing],
+          reason: 'project-ref',
+          synced: false,
+        });
+      }
+      return Promise.resolve({
+        status: 'not_found',
+        candidates: [mockProjectListing],
+        reason: 'no-matching-project',
+        synced: false,
+      });
+    });
   });
 
   it('returns lean project listings without repeated automation metadata', async () => {
@@ -257,6 +298,65 @@ describe('Parity Tool Executor Expo wrappers', () => {
         workflowFile: '.eas/workflows/deploy.yml',
       }),
     );
+  });
+
+  it('returns a structured correction for invalid Expo project references', async () => {
+    const parsed = JSON.parse(await executeExpoEasStatus({ projectId: 'Expo' }));
+
+    expect(parsed.status).toBe('invalid_project_reference');
+    expect(parsed.argumentName).toBe('projectId');
+    expect(parsed.resourceKind).toBe('expo_project');
+    expect(parsed.suppliedProjectId).toBe('Expo');
+    expect(parsed.selection).toEqual(
+      expect.objectContaining({
+        defaultProjectId: 'expo-project-1',
+        nextSuggestedArgs: { projectId: 'expo-project-1' },
+      }),
+    );
+    expect(parsed.nextSuggestedTool).toBe('expo_eas_status');
+    expect(parsed.nextSuggestedArgs).toEqual({ projectId: 'expo-project-1' });
+    expect(parsed.guidance).toContain('nextSuggestedArgs');
+  });
+
+  it('returns a structured correction for missing Expo project references', async () => {
+    const parsed = JSON.parse(await executeExpoEasWorkflowStatus({} as any));
+
+    expect(expoEas.inspectExpoWorkflowRun).not.toHaveBeenCalled();
+    expect(parsed.status).toBe('missing_project_reference');
+    expect(parsed.argumentName).toBe('projectId');
+    expect(parsed.selection.defaultProjectId).toBe('expo-project-1');
+    expect(parsed.nextSuggestedTool).toBe('expo_eas_workflow_status');
+    expect(parsed.nextSuggestedArgs).toEqual({ projectId: 'expo-project-1' });
+  });
+
+  it('redirects create-project calls to an existing resolved project unless creation is confirmed', async () => {
+    const existingProject = {
+      id: 'expo-project-1',
+      easProjectId: 'eas-project-1',
+      name: 'Kavi',
+      fullName: '@kavi/kavi-app',
+      owner: 'kavi',
+      slug: 'kavi-app',
+      accountId: 'expo-account-1',
+      accountName: 'Expo Prod',
+      mode: 'eas-workflow',
+      repoFullName: 'kavi/mobile',
+      readiness: { launchable: true, reason: 'ready', label: 'Ready' },
+    };
+    (expoEas.resolveExpoProjectForExecutionTask as jest.Mock).mockResolvedValue({
+      status: 'resolved',
+      project: existingProject,
+      candidates: [existingProject],
+      reason: 'single-launchable',
+      synced: false,
+    });
+
+    const parsed = JSON.parse(await executeExpoEasCreateProject({ name: 'Duplicate App' }));
+
+    expect(expoEas.createExpoProject).not.toHaveBeenCalled();
+    expect(parsed.status).toBe('redirected_existing_project');
+    expect(parsed.project.id).toBe('expo-project-1');
+    expect(parsed.nextSuggestedTool).toBe('expo_eas_status');
   });
 
   it('returns concise summaries for probe and manual action responses', async () => {

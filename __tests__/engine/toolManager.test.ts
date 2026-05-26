@@ -17,6 +17,7 @@ import {
   compressToolDescription,
   compressToolDefinitions,
   buildDeferredToolCatalog,
+  orderToolPlannerCandidateTools,
 } from '../../src/engine/tools/toolManager';
 import { ToolDefinition } from '../../src/types';
 
@@ -234,6 +235,23 @@ describe('selectToolsForRequest', () => {
     expect(selectedNames.has('workspace_read_file')).toBe(false);
     expect(selectedNames.has('workspace_write_file')).toBe(false);
     expect(selectedNames.has('workspace_list_files')).toBe(false);
+  });
+
+  it('does not infer execution routing from prompt verbs alone', () => {
+    const selected = selectToolsForRequest(
+      tools,
+      ['Create a web app, commit, push, and deploy to Expo. Monitor until successful.'],
+      'gemini',
+      'https://generativelanguage.googleapis.com/v1beta/openai',
+      undefined,
+      {
+        model: 'gemini-2.5-pro',
+      },
+    );
+    const selectedNames = new Set(selected.map((tool) => tool.name));
+
+    expect(selectedNames.has('tool_catalog')).toBe(true);
+    expect(selectedNames.has('web_fetch')).toBe(true);
   });
 
   it('never exceeds the OpenAI 128 tool limit', () => {
@@ -485,6 +503,249 @@ describe('selectToolsForRequest', () => {
     );
   });
 
+  it.each([
+    {
+      label: 'OpenAI',
+      providerName: 'openai',
+      providerBaseUrl: undefined,
+      model: 'gpt-5.4',
+      providerKind: undefined,
+    },
+    {
+      label: 'Anthropic',
+      providerName: 'anthropic',
+      providerBaseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-6',
+      providerKind: undefined,
+    },
+    {
+      label: 'Gemini',
+      providerName: 'gemini',
+      providerBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+      model: 'gemini-2.5-pro',
+      providerKind: undefined,
+    },
+    {
+      label: 'On-device',
+      providerName: 'Gemma (on-device)',
+      providerBaseUrl: '',
+      model: 'gemma-4-E2B-it',
+      providerKind: 'on-device' as const,
+    },
+  ])('uses an execution-first base for $label providers', ({ providerName, providerBaseUrl, model, providerKind }) => {
+    const selected = selectToolsForRequest(
+      tools,
+      ['Create a simple Expo web app, commit the changes, and deploy it through EAS workflows.'],
+      providerName,
+      providerBaseUrl,
+      undefined,
+      {
+        model,
+        providerKind,
+        routeMode: 'execution',
+        preferredToolNames: ['expo_eas_status', 'expo_eas_workflow_status', 'file_edit'],
+        restrictToPreferredTools: true,
+      },
+    );
+    const selectedNames = new Set(selected.map((tool) => tool.name));
+
+    expect(selectedNames.has('read_file')).toBe(true);
+    expect(selectedNames.has('file_edit')).toBe(true);
+    expect(selectedNames.has('write_file')).toBe(true);
+    expect(selectedNames.has('record_workflow_evidence')).toBe(false);
+    expect(selectedNames.has('read_workflow_evidence')).toBe(false);
+    expect(selectedNames.has('expo_eas_status')).toBe(true);
+    expect(selectedNames.has('expo_eas_workflow_status')).toBe(true);
+
+    expect(selectedNames.has('list_files')).toBe(false);
+    expect(selectedNames.has('glob_search')).toBe(false);
+    expect(selectedNames.has('text_search')).toBe(false);
+    expect(selectedNames.has('web_search')).toBe(false);
+    expect(selectedNames.has('python')).toBe(false);
+    expect(selectedNames.has('tool_catalog')).toBe(false);
+  });
+
+  it('keeps explicit workflow-prerequisite discovery tools in execution preferred sets', () => {
+    const selected = selectToolsForRequest(
+      tools,
+      ['Create a simple Expo web app, commit the changes, and deploy it through EAS workflows.'],
+      'openai',
+      undefined,
+      undefined,
+      {
+        routeMode: 'execution',
+        isSuperAgent: true,
+        preferredToolNames: [
+          'list_files',
+          'glob_search',
+          'web_search',
+          'sessions_list',
+          'record_workflow_evidence',
+          'expo_eas_status',
+          'sessions_spawn',
+          'sessions_wait',
+        ],
+        restrictToPreferredTools: true,
+      },
+    );
+    const selectedNames = new Set(selected.map((tool) => tool.name));
+
+    expect(selectedNames.has('expo_eas_status')).toBe(true);
+    expect(selectedNames.has('sessions_spawn')).toBe(true);
+    expect(selectedNames.has('sessions_wait')).toBe(true);
+    expect(selectedNames.has('list_files')).toBe(true);
+    expect(selectedNames.has('glob_search')).toBe(true);
+
+    expect(selectedNames.has('web_search')).toBe(false);
+    expect(selectedNames.has('sessions_list')).toBe(false);
+    expect(selectedNames.has('record_workflow_evidence')).toBe(false);
+  });
+
+  it('filters namespaced list/search skill tools out of execution preferred sets', () => {
+    const selected = selectToolsForRequest(
+      [
+        ...tools,
+        makeTool('skill__github__list_files'),
+        makeTool('skill__github__commit_files'),
+        makeTool('mcp__docs__search'),
+      ],
+      ['Create a simple Expo web app, commit the changes, and deploy it through EAS workflows.'],
+      'openai',
+      undefined,
+      undefined,
+      {
+        routeMode: 'execution',
+        preferredToolNames: [
+          'skill__github__list_files',
+          'skill__github__commit_files',
+          'mcp__docs__search',
+          'expo_eas_status',
+        ],
+        restrictToPreferredTools: true,
+      },
+    );
+    const selectedNames = new Set(selected.map((tool) => tool.name));
+
+    expect(selectedNames.has('skill__github__commit_files')).toBe(true);
+    expect(selectedNames.has('expo_eas_status')).toBe(true);
+    expect(selectedNames.has('skill__github__list_files')).toBe(true);
+    expect(selectedNames.has('mcp__docs__search')).toBe(false);
+  });
+
+  it('does not promote unrelated discovered tools into restricted execution phases', () => {
+    const selected = selectToolsForRequest(
+      [
+        ...tools,
+        makeTool('skill__github__repos', 'List repositories available to the GitHub token.'),
+        makeTool('skill__github__commit_files', 'Commit local files to a repository.'),
+        makeTool('skill__github__create_issue', 'Create an issue in a repository.'),
+      ],
+      ['Create a web app, commit it to the matching GitHub repository, and monitor deployment.'],
+      'gemini',
+      'https://generativelanguage.googleapis.com/v1beta/openai',
+      undefined,
+      {
+        model: 'gemini-3.5-flash',
+        routeMode: 'execution',
+        discoveredToolNames: [
+          'skill__github__repos',
+          'skill__github__commit_files',
+          'skill__github__create_issue',
+        ],
+        preferredToolNames: ['skill__github__repos'],
+        restrictToPreferredTools: true,
+      },
+    );
+    const selectedNames = new Set(selected.map((tool) => tool.name));
+
+    expect(selectedNames.has('skill__github__repos')).toBe(true);
+    expect(selectedNames.has('skill__github__commit_files')).toBe(false);
+    expect(selectedNames.has('skill__github__create_issue')).toBe(false);
+  });
+
+    it('does not force execution-lane delegation tools for SuperAgent without an explicit worker preference', () => {
+      const selected = selectToolsForRequest(
+        tools,
+        ['Create a simple Expo web app, commit the changes, and deploy it through EAS workflows.'],
+        'openai',
+        undefined,
+        undefined,
+        {
+          routeMode: 'execution',
+          isSuperAgent: true,
+        },
+      );
+      const selectedNames = new Set(selected.map((tool) => tool.name));
+
+      expect(selectedNames.has('sessions_spawn')).toBe(false);
+      expect(selectedNames.has('sessions_send')).toBe(false);
+      expect(selectedNames.has('sessions_wait')).toBe(true);
+      expect(selectedNames.has('sessions_cancel')).toBe(true);
+    });
+
+    it('blocks execution-continuity python and delegation tools unless they are explicitly preferred', () => {
+      const selected = selectToolsForRequest(
+        tools,
+        ['Create a simple Expo web app, commit the changes, and deploy it through EAS workflows.'],
+        'openai',
+        undefined,
+        undefined,
+        {
+          routeMode: 'execution',
+          isSuperAgent: true,
+          discoveredToolNames: ['python', 'sessions_spawn', 'expo_eas_status'],
+          recentToolNames: ['python', 'sessions_send'],
+        },
+      );
+      const selectedNames = new Set(selected.map((tool) => tool.name));
+
+      expect(selectedNames.has('expo_eas_status')).toBe(true);
+      expect(selectedNames.has('python')).toBe(false);
+      expect(selectedNames.has('sessions_spawn')).toBe(false);
+      expect(selectedNames.has('sessions_send')).toBe(false);
+      expect(selectedNames.has('sessions_wait')).toBe(true);
+    });
+
+    it('still includes execution-lane delegation tools when explicitly preferred', () => {
+      const selected = selectToolsForRequest(
+        tools,
+        ['Use a worker to create a simple Expo web app, commit the changes, and deploy it through EAS workflows.'],
+        'openai',
+        undefined,
+        undefined,
+        {
+          routeMode: 'execution',
+          isSuperAgent: true,
+          preferredToolNames: ['sessions_spawn'],
+          restrictToPreferredTools: true,
+        },
+      );
+      const selectedNames = new Set(selected.map((tool) => tool.name));
+
+      expect(selectedNames.has('sessions_spawn')).toBe(true);
+      expect(selectedNames.has('sessions_wait')).toBe(true);
+    });
+
+    it('still includes execution-lane computation tools when explicitly preferred', () => {
+      const selected = selectToolsForRequest(
+        tools,
+        ['Use Python to generate a deployment manifest and then commit it.'],
+        'openai',
+        undefined,
+        undefined,
+        {
+          routeMode: 'execution',
+          preferredToolNames: ['python', 'file_edit'],
+          restrictToPreferredTools: true,
+        },
+      );
+      const selectedNames = new Set(selected.map((tool) => tool.name));
+
+      expect(selectedNames.has('python')).toBe(true);
+      expect(selectedNames.has('file_edit')).toBe(true);
+      expect(selectedNames.has('web_search')).toBe(false);
+    });
+
   it('does not backfill unrelated deferred tools for OpenAI by default', () => {
     const selected = selectToolsForRequest(tools, ['tell me a joke'], 'openai');
     expect(new Set(selected.map((tool) => tool.name))).toEqual(TIER1_TOOL_NAMES);
@@ -550,6 +811,23 @@ describe('selectToolsForRequest', () => {
     expect(selectedNames.has('expo_eas_update')).toBe(false);
     expect(selectedNames.has('expo_eas_submit')).toBe(false);
     expect(selectedNames.has('expo_eas_deploy_web')).toBe(false);
+  });
+
+  it('orders matched Expo tools by lifecycle so project discovery precedes guarded creation', () => {
+    const selected = selectToolsForRequest(
+      tools,
+      ['check the expo deployment status and monitor the workflow'],
+      'openai',
+    ).map((tool) => tool.name);
+
+    expect(selected.indexOf('expo_eas_list_projects')).toBeGreaterThanOrEqual(0);
+    expect(selected.indexOf('expo_eas_create_project')).toBeGreaterThanOrEqual(0);
+    expect(selected.indexOf('expo_eas_list_projects')).toBeLessThan(
+      selected.indexOf('expo_eas_create_project'),
+    );
+    expect(selected.indexOf('expo_eas_status')).toBeLessThan(
+      selected.indexOf('expo_eas_create_project'),
+    );
   });
 
   it('includes manual Expo action tools when the user explicitly asks for a manual rerun', () => {
@@ -773,6 +1051,16 @@ describe('buildDeferredToolCatalog', () => {
     );
   });
 
+  it('groups deferred GitHub skill capabilities with the generic category discovery hint', () => {
+    const allTools = [makeTool('read_file'), makeTool('skill__github__commit_files')];
+    const loaded = [makeTool('read_file')];
+    const catalog = buildDeferredToolCatalog(allTools, loaded);
+
+    expect(catalog).toContain(
+      '- GitHub: skill__github__commit_files. Inspect with tool_catalog category="github".',
+    );
+  });
+
   it('groups deferred code tools under the code catalog category', () => {
     const allTools = [makeTool('read_file'), makeTool('javascript'), makeTool('python')];
     const loaded = [makeTool('read_file')];
@@ -817,6 +1105,38 @@ describe('buildDeferredToolCatalog', () => {
   });
 });
 
+describe('orderToolPlannerCandidateTools', () => {
+  it('surfaces concrete execution tools before broad discovery tools for planner prompts', () => {
+    const ordered = orderToolPlannerCandidateTools([
+      makeTool('tool_catalog', 'Search available tools.'),
+      makeTool('web_search', 'Search the web.'),
+      makeTool('list_files', 'List workspace files.'),
+      makeTool('skill__github__commit_files', 'Create a GitHub commit with changed repository files.'),
+      makeTool('expo_eas_deploy_web', 'Deploy a web app with Expo EAS.'),
+      makeTool('file_edit', 'Edit a local file.'),
+    ]).map((tool) => tool.name);
+
+    expect(ordered.indexOf('skill__github__commit_files')).toBeLessThan(ordered.indexOf('web_search'));
+    expect(ordered.indexOf('expo_eas_deploy_web')).toBeLessThan(ordered.indexOf('tool_catalog'));
+    expect(ordered.indexOf('file_edit')).toBeLessThan(ordered.indexOf('list_files'));
+  });
+
+  it('keeps guarded resource creation behind discovery and inspection candidates', () => {
+    const ordered = orderToolPlannerCandidateTools([
+      makeTool('expo_eas_create_project', 'Create a new Expo EAS project.'),
+      makeTool('expo_eas_list_projects', 'List linked Expo EAS projects.'),
+      makeTool('expo_eas_status', 'Inspect Expo EAS project status.'),
+    ]).map((tool) => tool.name);
+
+    expect(ordered.indexOf('expo_eas_list_projects')).toBeLessThan(
+      ordered.indexOf('expo_eas_create_project'),
+    );
+    expect(ordered.indexOf('expo_eas_status')).toBeLessThan(
+      ordered.indexOf('expo_eas_create_project'),
+    );
+  });
+});
+
 // ── SuperAgent tool injection ─────────────────────────────────────────
 
 describe('selectToolsForRequest — isSuperAgent', () => {
@@ -847,7 +1167,7 @@ describe('selectToolsForRequest — isSuperAgent', () => {
     expect(selectedNames.has('sessions_wait')).toBe(true);
     expect(selectedNames.has('sessions_cancel')).toBe(true);
     expect(selectedNames.has('sessions_yield')).toBe(true);
-    expect(selectedNames.has('wait')).toBe(true);
+    expect(selectedNames.has('wait')).toBe(false);
   });
 
   it('includes agents tools when isSuperAgent is true', () => {
@@ -915,6 +1235,34 @@ describe('selectToolsForRequest — isSuperAgent', () => {
     expect(selectedNames.has('sessions_wait')).toBe(true);
     expect(selectedNames.has('sessions_cancel')).toBe(true);
     expect(selectedNames.has('sessions_yield')).toBe(true);
+  });
+
+  it('keeps local execution tools callable when an execution route is focused on read prerequisites', () => {
+    const selected = selectToolsForRequest(
+      [
+        makeTool('read_file', 'Read a local file.'),
+        makeTool('write_file', 'Write a local file.'),
+        makeTool('file_edit', 'Edit a local file.'),
+        makeTool('skill__github__repos', 'List GitHub repositories.'),
+        makeTool('skill__github__commit_files', 'Commit local files to GitHub.'),
+      ],
+      ['Create files in a repo and push them'],
+      'gemini',
+      'https://generativelanguage.googleapis.com/v1beta/openai',
+      undefined,
+      {
+        model: 'gemini-3.5-flash',
+        routeMode: 'execution',
+        preferredToolNames: ['skill__github__repos'],
+        restrictToPreferredTools: true,
+        isSuperAgent: true,
+      },
+    );
+    const selectedNames = new Set(selected.map((tool) => tool.name));
+
+    expect(selectedNames.has('skill__github__repos')).toBe(true);
+    expect(selectedNames.has('write_file')).toBe(true);
+    expect(selectedNames.has('file_edit')).toBe(true);
   });
 
   it('carries recent Gemini workflow tools across vague follow-up turns', () => {
