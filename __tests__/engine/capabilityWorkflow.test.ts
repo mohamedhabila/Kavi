@@ -4,6 +4,7 @@ import {
   buildWorkflowRouteRuntimeGuidance,
   getMissingRequiredWorkflowToolNames,
   buildInitialWorkflowRouteState,
+  replayWorkflowRouteStateFromToolResults,
   resolveWorkflowRouteActivation,
   selectToolNamesForWorkflowRoutePhase,
   selectToolNamesForWorkflowRouteTurn,
@@ -17,6 +18,7 @@ const tools = [
   { name: 'write_file', description: 'Write a local workspace file.' },
   { name: 'wait', description: 'Wait for a short period.' },
   { name: 'skill__github__repos', description: 'List repositories available to the token.' },
+  { name: 'skill__github__list_files', description: 'List files in a repository tree.' },
   { name: 'skill__github__issues', description: 'List issues for a repository.' },
   { name: 'skill__github__commit_files', description: 'Commit workspace files to a repository.' },
   { name: 'skill__github__create_issue', description: 'Create a GitHub issue.' },
@@ -24,6 +26,9 @@ const tools = [
   { name: 'expo_eas_status', description: 'Inspect linked Expo EAS project status.' },
   { name: 'expo_eas_workflow_runs', description: 'List Expo workflow runs.' },
   { name: 'expo_eas_workflow_wait', description: 'Wait for an external workflow run.' },
+  { name: 'sessions_spawn', description: 'Start delegated worker execution.' },
+  { name: 'sessions_wait', description: 'Wait for delegated worker output.' },
+  { name: 'sessions_yield', description: 'Yield while delegated workers continue.' },
 ];
 
 function workflowRequirementKey(requirement: {
@@ -96,6 +101,7 @@ describe('capability workflow routing', () => {
       expect.arrayContaining([
         'write_file',
         'skill__github__repos',
+        'skill__github__list_files',
         'skill__github__commit_files',
         'expo_eas_list_projects',
         'expo_eas_workflow_runs',
@@ -106,6 +112,7 @@ describe('capability workflow routing', () => {
     expect(activation?.phases.map((phase) => phase.id)).toEqual(
       expect.arrayContaining([
         'discover_resource',
+        'inspect_resource',
         'prepare_artifact',
         'persist_artifact',
         'mutate_remote_state',
@@ -113,6 +120,60 @@ describe('capability workflow routing', () => {
         'verify_evidence',
       ]),
     );
+    expect(activation?.requiredWorkflowRequirementKeys.length).toBeGreaterThan(0);
+    expect(Object.values(activation?.workflowRequirementLabelsByKey ?? {})).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('Persist artifacts'),
+        expect.stringContaining('Inspect current state'),
+        expect.stringContaining('Apply remote side effects'),
+        expect.stringContaining('Monitor external execution'),
+        expect.stringContaining('Verify evidence'),
+      ]),
+    );
+  });
+
+  it('does not make passive conversation-scoped monitors workflow requirements without a planned producer', () => {
+    const activation = resolveWorkflowRouteActivation({
+      routeMode: 'execution',
+      requiredToolCategories: new Set(['github', 'sessions']),
+      requiredCapabilities: new Set(),
+      plannedToolNames: new Set(['skill__github__commit_files']),
+      tools,
+    });
+
+    expect(activation?.requiredToolNames).toEqual(
+      expect.arrayContaining(['skill__github__commit_files']),
+    );
+    expect(activation?.requiredToolNames).not.toContain('sessions_wait');
+    expect(activation?.requiredToolNames).not.toContain('sessions_yield');
+    expect(
+      activation?.phases
+        .flatMap((phase) => phase.requiredCapabilities)
+        .some((requirement) => requirement.category === 'sessions'),
+    ).toBe(false);
+  });
+
+  it('adds passive conversation-scoped monitors after a matching producer is planned', () => {
+    const activation = resolveWorkflowRouteActivation({
+      routeMode: 'execution',
+      requiredToolCategories: new Set(['sessions']),
+      requiredCapabilities: new Set(['wait', 'verify']),
+      plannedToolNames: new Set(['sessions_spawn']),
+      tools,
+    });
+
+    expect(activation?.requiredToolNames).toEqual(
+      expect.arrayContaining(['sessions_spawn', 'sessions_wait']),
+    );
+    expect(
+      activation?.phases
+        .flatMap((phase) => phase.requiredCapabilities)
+        .some(
+          (requirement) =>
+            requirement.category === 'sessions' &&
+            requirement.workflowStage === 'await_external_execution',
+        ),
+    ).toBe(true);
   });
 
   it('does not let one discovery result complete all resource discovery requirements', () => {
@@ -146,7 +207,7 @@ describe('capability workflow routing', () => {
     expect(shouldHoldWorkflowRouteFinalization(advanced)).toBe(true);
   });
 
-  it('prefers broad repository discovery tools over unrelated resource readers', () => {
+  it('requires repository content inspection before repository mutation can finalize', () => {
     const activation = resolveWorkflowRouteActivation({
       routeMode: 'execution',
       requiredToolCategories: new Set(['github']),
@@ -175,8 +236,47 @@ describe('capability workflow routing', () => {
       tools,
     );
 
-    expect(phaseTools).toContain('skill__github__repos');
+    expect(phaseTools).toContain('skill__github__list_files');
+    expect(phaseTools).not.toContain('skill__github__repos');
     expect(phaseTools).not.toContain('skill__github__issues');
+  });
+
+  it('does not let mutation evidence satisfy unresolved inspection requirements', () => {
+    const activation = resolveWorkflowRouteActivation({
+      routeMode: 'execution',
+      requiredToolCategories: new Set(['github']),
+      requiredCapabilities: new Set(['commit', 'push']),
+      plannedToolNames: new Set(['skill__github__commit_files']),
+      tools,
+    });
+    expect(activation).toBeDefined();
+
+    const state = buildInitialWorkflowRouteState(activation!, 1000);
+    const advanced = advanceWorkflowRouteStateFromToolResult(
+      state,
+      {
+        toolName: 'skill__github__commit_files',
+        result: JSON.stringify({ status: 'success', commitSha: 'abc123', pushed: true }),
+        status: 'completed',
+        timestamp: 2000,
+      },
+      tools,
+      activation,
+    );
+
+    expect(advanced?.status).toBe('active');
+    expect(advanced?.currentPhaseId).toBe('discover_resource');
+    expect(getMissingRequiredWorkflowToolNames(advanced)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('skill__github__repos'),
+        expect.stringContaining('skill__github__list_files'),
+      ]),
+    );
+    expect(shouldHoldWorkflowRouteFinalization(advanced, [
+      'skill__github__repos',
+      'skill__github__list_files',
+      'skill__github__commit_files',
+    ])).toBe(true);
   });
 
   it('does not treat the generic wait timer as workflow evidence', () => {
@@ -347,6 +447,118 @@ describe('capability workflow routing', () => {
       'expo_eas_list_projects',
       'expo_eas_status',
     ])).toBe(true);
+  });
+
+  it('replays durable tool evidence instead of requiring every candidate tool name', () => {
+    const activation = resolveWorkflowRouteActivation({
+      routeMode: 'execution',
+      requiredToolCategories: new Set(['workspace_files', 'github', 'expo']),
+      requiredCapabilities: new Set(['write', 'commit', 'push', 'monitor', 'wait', 'verify']),
+      plannedToolNames: new Set([
+        'write_file',
+        'skill__github__commit_files',
+        'expo_eas_workflow_runs',
+        'expo_eas_workflow_wait',
+      ]),
+      tools,
+    });
+    expect(activation).toBeDefined();
+
+    const state = replayWorkflowRouteStateFromToolResults(
+      activation!,
+      tools,
+      [
+        {
+          toolName: 'skill__github__repos',
+          result: JSON.stringify({ status: 'ok', repositories: [{ name: 'Expo' }] }),
+          status: 'completed',
+          timestamp: 1001,
+        },
+        {
+          toolName: 'skill__github__list_files',
+          result: JSON.stringify({ status: 'ok', files: ['package.json', 'App.tsx'] }),
+          status: 'completed',
+          timestamp: 1001.5,
+        },
+        {
+          toolName: 'expo_eas_list_projects',
+          result: JSON.stringify({ status: 'ok', projects: [{ id: 'project-1' }] }),
+          status: 'completed',
+          timestamp: 1002,
+        },
+        {
+          toolName: 'expo_eas_status',
+          result: JSON.stringify({ status: 'ok', projectId: 'project-1' }),
+          status: 'completed',
+          timestamp: 1003,
+        },
+        {
+          toolName: 'read_file',
+          result: JSON.stringify({ status: 'ok', path: 'package.json', content: '{}' }),
+          status: 'completed',
+          timestamp: 1003.5,
+        },
+        {
+          toolName: 'write_file',
+          result: JSON.stringify({ status: 'ok', path: 'App.js' }),
+          status: 'completed',
+          timestamp: 1004,
+        },
+        {
+          toolName: 'skill__github__commit_files',
+          result: JSON.stringify({ status: 'success', commitSha: 'abc123', pushed: true }),
+          status: 'completed',
+          timestamp: 1005,
+        },
+        {
+          toolName: 'expo_eas_workflow_runs',
+          result: JSON.stringify({ status: 'ok', workflowRuns: [{ id: 'run-1' }] }),
+          status: 'completed',
+          timestamp: 1006,
+        },
+        {
+          toolName: 'expo_eas_workflow_wait',
+          result: JSON.stringify({ status: 'completed', conclusion: 'success', id: 'run-1' }),
+          status: 'completed',
+          timestamp: 1007,
+        },
+      ],
+      {
+        seedState: {
+          ...buildInitialWorkflowRouteState(activation!, 999),
+          facts: {
+            finalizationHoldResumeCount: 2,
+          },
+        },
+        timestamp: 1000,
+      },
+    );
+
+    expect(state.status).not.toBe('blocked');
+    expect(state.facts?.finalizationHoldResumeCount).toBe(2);
+    expect(getMissingRequiredWorkflowToolNames(state, [
+      'skill__github__repos',
+      'skill__github__list_files',
+      'expo_eas_list_projects',
+      'expo_eas_status',
+      'read_file',
+      'write_file',
+      'skill__github__commit_files',
+      'expo_eas_workflow_runs',
+      'expo_eas_workflow_wait',
+    ])).toEqual([]);
+    expect(shouldHoldWorkflowRouteFinalization(state, [
+      'skill__github__repos',
+      'skill__github__list_files',
+      'expo_eas_list_projects',
+      'expo_eas_status',
+      'read_file',
+      'write_file',
+      'skill__github__commit_files',
+      'expo_eas_workflow_runs',
+      'expo_eas_workflow_wait',
+    ])).toBe(false);
+    expect(state.requiredToolNames).not.toContain('skill__github__create_issue');
   });
 
   it('treats ordinary tool argument and lookup errors as recoverable workflow feedback', () => {

@@ -1992,19 +1992,24 @@ describe('LlmService', () => {
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(body.generationConfig).toEqual(expect.objectContaining({
-        responseMimeType: 'application/json',
+        responseFormat: {
+          text: expect.objectContaining({
+            mimeType: 'application/json',
+          }),
+        },
       }));
-      expect(body.generationConfig.responseJsonSchema).toEqual(expect.objectContaining({
+      expect(body.generationConfig.responseFormat.text.schema).toEqual(expect.objectContaining({
         type: 'object',
+        additionalProperties: false,
         properties: expect.objectContaining({
           approved: expect.objectContaining({ type: 'boolean' }),
           completionScore: expect.objectContaining({
             type: 'integer',
-            description: expect.stringContaining('Allowed values: 0, 1, 2, 3, 4, 5.'),
+            enum: [0, 1, 2, 3, 4, 5],
+            description: 'Completion score.',
           }),
         }),
       }));
-      expect(body.generationConfig.responseJsonSchema.properties.completionScore.enum).toBeUndefined();
       expect(body.toolConfig).toEqual({
         functionCallingConfig: {
           mode: 'ANY',
@@ -2050,13 +2055,17 @@ describe('LlmService', () => {
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(body.generationConfig).toEqual(expect.objectContaining({
-        responseMimeType: 'application/json',
-        responseJsonSchema: expect.objectContaining({
-          type: 'object',
-          properties: expect.objectContaining({
-            approved: expect.objectContaining({ type: 'boolean' }),
+        responseFormat: {
+          text: expect.objectContaining({
+            mimeType: 'application/json',
+            schema: expect.objectContaining({
+              type: 'object',
+              properties: expect.objectContaining({
+                approved: expect.objectContaining({ type: 'boolean' }),
+              }),
+            }),
           }),
-        }),
+        },
       }));
       expect(body.response_format).toBeUndefined();
     });
@@ -2127,13 +2136,17 @@ describe('LlmService', () => {
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(body.generationConfig).toEqual(expect.objectContaining({
-        responseMimeType: 'application/json',
-        responseJsonSchema: expect.objectContaining({
-          type: 'object',
-          properties: expect.objectContaining({
-            approved: expect.objectContaining({ type: 'boolean' }),
+        responseFormat: {
+          text: expect.objectContaining({
+            mimeType: 'application/json',
+            schema: expect.objectContaining({
+              type: 'object',
+              properties: expect.objectContaining({
+                approved: expect.objectContaining({ type: 'boolean' }),
+              }),
+            }),
           }),
-        }),
+        },
       }));
       expect(body.tools).toBeUndefined();
       expect(body.toolConfig).toBeUndefined();

@@ -26,6 +26,9 @@ export interface WorkflowRouteActivation {
   title: string;
   phases: WorkflowRoutePhaseSpec[];
   requiredToolNames: string[];
+  requiredWorkflowRequirementKeys: string[];
+  workflowRequirementLabelsByKey: Record<string, string>;
+  workflowRequirementToolNamesByKey: Record<string, string[]>;
   guidance: string;
 }
 
@@ -87,6 +90,18 @@ const REQUIRED_OBSERVED_CAPABILITIES = new Set<ToolCapability>([
   'push',
   'deploy',
 ]);
+const EVIDENCE_REQUIRED_WORKFLOW_STAGES = new Set<ToolWorkflowStage>([
+  'discover_resource',
+  'inspect_resource',
+  'prepare_artifact',
+  'persist_artifact',
+  'mutate_remote_state',
+  'start_external_execution',
+  'monitor_external_execution',
+  'await_external_execution',
+  'verify_evidence',
+  'guarded_resource_creation',
+]);
 
 function uniqueStrings(values: Iterable<string>): string[] {
   return Array.from(new Set(Array.from(values).filter((value) => value.trim().length > 0)));
@@ -131,7 +146,8 @@ function addResourceResolutionRequirements(
         (candidate) =>
           candidate.category === descriptor.category &&
           candidate.resourceKinds.includes(resourceKind) &&
-          candidate.capabilities.includes('discover'),
+          candidate.capabilities.includes('discover') &&
+          candidate.workflowStages.includes('discover_resource'),
       );
     const canRead =
       !availableDescriptors ||
@@ -139,7 +155,8 @@ function addResourceResolutionRequirements(
         (candidate) =>
           candidate.category === descriptor.category &&
           candidate.resourceKinds.includes(resourceKind) &&
-          candidate.capabilities.includes('read'),
+          candidate.capabilities.includes('read') &&
+          candidate.workflowStages.includes('inspect_resource'),
       );
     if (canDiscover) {
       requirements.push({
@@ -198,6 +215,7 @@ function addCategoryExecutionLifecycleRequirements(
   requirements: ToolCapabilityRequirement[],
   categories: ReadonlyArray<string>,
   tools: ReadonlyArray<Pick<ToolDefinition, 'name' | 'description'>>,
+  plannedDescriptors: ReadonlyArray<ToolCapabilityDescriptor>,
 ): void {
   const registry = buildToolCapabilityRegistry(tools);
 
@@ -245,6 +263,11 @@ function addCategoryExecutionLifecycleRequirements(
     const externalEvidenceDescriptors = descriptors.filter(
       (descriptor) =>
         descriptor.sideEffects.includes('none') &&
+        shouldRequirePassiveExternalEvidenceDescriptor(
+          category,
+          descriptor,
+          plannedDescriptors,
+        ) &&
         descriptorProvidesSpecificEvidence(descriptor) &&
         descriptor.capabilities.some((capability) =>
           capability === 'monitor' || capability === 'wait' || capability === 'verify',
@@ -261,6 +284,38 @@ function addCategoryExecutionLifecycleRequirements(
       });
     }
   }
+}
+
+function descriptorHasExecutionProducerSideEffect(descriptor: ToolCapabilityDescriptor): boolean {
+  return descriptor.sideEffects.some(
+    (sideEffect) =>
+      sideEffect === 'local_artifact' ||
+      sideEffect === 'remote_mutation' ||
+      sideEffect === 'external_run',
+  );
+}
+
+function descriptorIsConversationScopedOnly(descriptor: ToolCapabilityDescriptor): boolean {
+  return descriptor.resourceKinds.every(
+    (resourceKind) => resourceKind === 'conversation_workspace' || resourceKind === 'unknown',
+  );
+}
+
+function shouldRequirePassiveExternalEvidenceDescriptor(
+  category: string,
+  descriptor: ToolCapabilityDescriptor,
+  plannedDescriptors: ReadonlyArray<ToolCapabilityDescriptor>,
+): boolean {
+  if (!descriptorIsConversationScopedOnly(descriptor)) {
+    return true;
+  }
+
+  return plannedDescriptors.some(
+    (plannedDescriptor) =>
+      normalizeCategory(plannedDescriptor.category) === category &&
+      descriptorHasExecutionProducerSideEffect(plannedDescriptor) &&
+      descriptorProvidesSpecificEvidence(plannedDescriptor),
+  );
 }
 
 function getPlannedToolDescriptors(signal: WorkflowRoutePlannerSignal): ToolCapabilityDescriptor[] {
@@ -291,14 +346,13 @@ function buildCapabilityRequirements(
     }
   }
 
-  for (const category of requiredCategories) {
-    if (category) {
-      requirements.push({ category });
-    }
-  }
-
   if (signal.routeMode === 'execution') {
-    addCategoryExecutionLifecycleRequirements(requirements, requiredCategories, signal.tools);
+    addCategoryExecutionLifecycleRequirements(
+      requirements,
+      requiredCategories,
+      signal.tools,
+      plannedDescriptors,
+    );
   }
 
   for (const descriptor of plannedDescriptors) {
@@ -438,6 +492,10 @@ export function resolveWorkflowRouteActivation(
   if (phases.length === 0) {
     return undefined;
   }
+  const requirementIndex = buildWorkflowRequirementIndex({
+    phases,
+    selectedDescriptors: allDescriptors,
+  });
 
   const requiredCategories = new Set(
     Array.from(signal.requiredToolCategories ?? [])
@@ -450,6 +508,7 @@ export function resolveWorkflowRouteActivation(
     title: 'Capability workflow',
     phases,
     requiredToolNames: selectedToolNames,
+    ...requirementIndex,
     guidance: buildGenericWorkflowGuidance({
       requiredCapabilities: signal.requiredCapabilities ?? new Set<ToolCapability>(),
       requiredCategories,
@@ -466,6 +525,7 @@ export function buildInitialWorkflowRouteState(
     id: phase.id,
     title: phase.title,
     status: index === 0 ? ('active' as const) : ('pending' as const),
+    requiredCapabilities: phase.requiredCapabilities.map((requirement) => ({ ...requirement })),
     updatedAt: timestamp,
   }));
 
@@ -476,6 +536,16 @@ export function buildInitialWorkflowRouteState(
     currentPhaseId: phases[0]?.id ?? 'capability-workflow',
     phases,
     requiredToolNames: activation.requiredToolNames,
+    facts: {
+      requiredWorkflowRequirementKeys: [...activation.requiredWorkflowRequirementKeys],
+      workflowRequirementLabelsByKey: { ...activation.workflowRequirementLabelsByKey },
+      workflowRequirementToolNamesByKey: Object.fromEntries(
+        Object.entries(activation.workflowRequirementToolNamesByKey).map(([key, value]) => [
+          key,
+          [...value],
+        ]),
+      ),
+    },
     updatedAt: timestamp,
   };
 }
@@ -608,6 +678,75 @@ function workflowRequirementKey(requirement: ToolCapabilityRequirement): string 
   });
 }
 
+function workflowRequirementRequiresCompletionEvidence(
+  requirement: ToolCapabilityRequirement,
+): boolean {
+  if (requirement.evidenceKind) {
+    return true;
+  }
+
+  if (requirement.capability && SIDE_EFFECT_CAPABILITIES.has(requirement.capability)) {
+    return true;
+  }
+
+  return requirement.workflowStage
+    ? EVIDENCE_REQUIRED_WORKFLOW_STAGES.has(requirement.workflowStage)
+    : false;
+}
+
+function formatWorkflowRequirementLabel(
+  requirement: ToolCapabilityRequirement,
+  phase?: WorkflowRoutePhaseSpec,
+): string {
+  return [
+    phase?.title,
+    requirement.category ? `category ${requirement.category}` : undefined,
+    requirement.capability ? `capability ${requirement.capability}` : undefined,
+    requirement.resourceKind ? `resource ${requirement.resourceKind}` : undefined,
+    requirement.evidenceKind ? `evidence ${requirement.evidenceKind}` : undefined,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join(' / ');
+}
+
+function buildWorkflowRequirementIndex(params: {
+  phases: ReadonlyArray<WorkflowRoutePhaseSpec>;
+  selectedDescriptors: ReadonlyArray<ToolCapabilityDescriptor>;
+}): {
+  requiredWorkflowRequirementKeys: string[];
+  workflowRequirementLabelsByKey: Record<string, string>;
+  workflowRequirementToolNamesByKey: Record<string, string[]>;
+} {
+  const keys: string[] = [];
+  const labelsByKey: Record<string, string> = {};
+  const toolNamesByKey: Record<string, string[]> = {};
+
+  for (const phase of params.phases) {
+    for (const requirement of phase.requiredCapabilities) {
+      if (!workflowRequirementRequiresCompletionEvidence(requirement)) {
+        continue;
+      }
+
+      const key = workflowRequirementKey(requirement);
+      if (!keys.includes(key)) {
+        keys.push(key);
+      }
+      labelsByKey[key] = labelsByKey[key] || formatWorkflowRequirementLabel(requirement, phase);
+      const matchingToolNames = params.selectedDescriptors
+        .filter((descriptor) => descriptorSatisfiesRequirement(descriptor, requirement))
+        .map((descriptor) => descriptor.name)
+        .filter(Boolean);
+      toolNamesByKey[key] = uniqueStrings([...(toolNamesByKey[key] ?? []), ...matchingToolNames]);
+    }
+  }
+
+  return {
+    requiredWorkflowRequirementKeys: keys,
+    workflowRequirementLabelsByKey: labelsByKey,
+    workflowRequirementToolNamesByKey: toolNamesByKey,
+  };
+}
+
 function readCompletedWorkflowRequirementKeys(state: AgentRunRouteState): Set<string> {
   const rawKeys = state.facts?.completedWorkflowRequirementKeys;
   return new Set(
@@ -615,6 +754,70 @@ function readCompletedWorkflowRequirementKeys(state: AgentRunRouteState): Set<st
       ? rawKeys.filter((key): key is string => typeof key === 'string' && key.length > 0)
       : [],
   );
+}
+
+function readRequiredWorkflowRequirementKeys(state: AgentRunRouteState): string[] {
+  const rawKeys = state.facts?.requiredWorkflowRequirementKeys;
+  return Array.isArray(rawKeys)
+    ? uniqueStrings(rawKeys.filter((key): key is string => typeof key === 'string'))
+    : [];
+}
+
+function readWorkflowRequirementLabelsByKey(state: AgentRunRouteState): Record<string, string> {
+  const rawLabels = state.facts?.workflowRequirementLabelsByKey;
+  if (!rawLabels || typeof rawLabels !== 'object' || Array.isArray(rawLabels)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(rawLabels).filter(
+      (entry): entry is [string, string] =>
+        typeof entry[0] === 'string' && typeof entry[1] === 'string',
+    ),
+  );
+}
+
+function readWorkflowRequirementToolNamesByKey(
+  state: AgentRunRouteState,
+): Record<string, string[]> {
+  const rawToolNames = state.facts?.workflowRequirementToolNamesByKey;
+  if (!rawToolNames || typeof rawToolNames !== 'object' || Array.isArray(rawToolNames)) {
+    return {};
+  }
+
+  const normalized: Record<string, string[]> = {};
+  for (const [key, value] of Object.entries(rawToolNames)) {
+    if (!Array.isArray(value)) {
+      continue;
+    }
+    normalized[key] = uniqueStrings(
+      value.filter((toolName): toolName is string => typeof toolName === 'string'),
+    );
+  }
+  return normalized;
+}
+
+function buildObservedToolNameSet(observedToolNames?: Iterable<string>): Set<string> {
+  return new Set(
+    Array.from(observedToolNames ?? [])
+      .map((toolName) => normalizeToolName(toolName))
+      .filter(Boolean),
+  );
+}
+
+function getMissingWorkflowRequirementKeys(
+  state: AgentRunRouteState,
+  _observedToolNames?: Iterable<string>,
+): string[] {
+  const requiredRequirementKeys = readRequiredWorkflowRequirementKeys(state);
+  if (requiredRequirementKeys.length === 0) {
+    return [];
+  }
+
+  const completedRequirementKeys = readCompletedWorkflowRequirementKeys(state);
+  return requiredRequirementKeys.filter((key) => {
+    return !completedRequirementKeys.has(key);
+  });
 }
 
 function canToolResultSatisfyWorkflowRequirement(
@@ -824,6 +1027,63 @@ export function advanceWorkflowRouteStateFromToolResult(
   };
 }
 
+function buildSeededWorkflowRouteState(
+  activation: WorkflowRouteActivation,
+  seedState: AgentRunRouteState | undefined,
+  timestamp: number,
+): AgentRunRouteState {
+  const initialState = buildInitialWorkflowRouteState(activation, timestamp);
+  if (!seedState || seedState.routeId !== activation.routeId) {
+    return initialState;
+  }
+
+  const seedCompletedRequirementKeys = Array.isArray(
+    seedState.facts?.completedWorkflowRequirementKeys,
+  )
+    ? { completedWorkflowRequirementKeys: [...seedState.facts.completedWorkflowRequirementKeys] }
+    : {};
+
+  return {
+    ...initialState,
+    blockers: seedState.blockers?.length ? [...seedState.blockers] : initialState.blockers,
+    facts: {
+      ...(seedState.facts ?? {}),
+      ...(initialState.facts ?? {}),
+      ...seedCompletedRequirementKeys,
+    },
+  };
+}
+
+export function replayWorkflowRouteStateFromToolResults(
+  activation: WorkflowRouteActivation,
+  tools: ReadonlyArray<Pick<ToolDefinition, 'name' | 'description'>>,
+  toolResults: ReadonlyArray<WorkflowRouteToolResult>,
+  options?: {
+    seedState?: AgentRunRouteState;
+    timestamp?: number;
+  },
+): AgentRunRouteState {
+  let state = buildSeededWorkflowRouteState(
+    activation,
+    options?.seedState,
+    options?.timestamp ?? Date.now(),
+  );
+
+  for (const toolResult of toolResults) {
+    const nextState = advanceWorkflowRouteStateFromToolResult(
+      state,
+      toolResult,
+      tools,
+      activation,
+    );
+    if (nextState) {
+      state = nextState;
+    }
+  }
+
+  return state;
+}
+
 export function selectToolNamesForWorkflowRoutePhase(
   activation: WorkflowRouteActivation | undefined,
   state: AgentRunRouteState | undefined,
@@ -961,6 +1221,11 @@ export function shouldHoldWorkflowRouteFinalization(
     return false;
   }
 
+  const requiredRequirementKeys = readRequiredWorkflowRequirementKeys(state);
+  if (requiredRequirementKeys.length > 0) {
+    return getMissingWorkflowRequirementKeys(state, observedToolNames).length > 0;
+  }
+
   const missingRequiredTools = getMissingRequiredWorkflowToolNames(state, observedToolNames);
   if (state.status !== 'active') {
     return missingRequiredTools.length > 0;
@@ -994,15 +1259,28 @@ export function getMissingRequiredWorkflowToolNames(
   state: AgentRunRouteState | undefined,
   observedToolNames?: Iterable<string>,
 ): string[] {
-  if (!state || state.routeId !== 'capability-workflow' || !observedToolNames) {
+  if (!state || state.routeId !== 'capability-workflow') {
     return [];
   }
 
-  const observed = new Set(
-    Array.from(observedToolNames)
-      .map((toolName) => normalizeToolName(toolName))
-      .filter(Boolean),
-  );
+  const requiredRequirementKeys = readRequiredWorkflowRequirementKeys(state);
+  if (requiredRequirementKeys.length > 0) {
+    const labelsByKey = readWorkflowRequirementLabelsByKey(state);
+    const toolNamesByKey = readWorkflowRequirementToolNamesByKey(state);
+    return getMissingWorkflowRequirementKeys(state, observedToolNames).map((key) => {
+      const candidateToolNames = toolNamesByKey[key] ?? [];
+      if (candidateToolNames.length > 0) {
+        return candidateToolNames.join(' or ');
+      }
+      return labelsByKey[key] || key;
+    });
+  }
+
+  if (!observedToolNames) {
+    return [];
+  }
+
+  const observed = buildObservedToolNameSet(observedToolNames);
   const missing: string[] = [];
   const seen = new Set<string>();
   for (const toolName of state.requiredToolNames ?? []) {

@@ -269,17 +269,59 @@ function inferGithubDescriptor(
     });
   }
 
-  if (leafName === 'repos' || leafName === 'branches' || leafName === 'list_files' || leafName === 'read_file') {
+  if (leafName === 'repos') {
     return baseDescriptor(tool, {
       category: 'github',
-      aliases: ['git read', 'repository inspect'],
-      capabilities: ['discover', 'read'],
+      aliases: ['git discovery', 'repository discovery'],
       resourceKinds: ['github_repo'],
       sideEffects: ['none'],
       riskHints: ['read_only'],
       prerequisites: ['github token with repository read access'],
       providesEvidence: ['verification'],
+      workflowStages: ['discover_resource'],
+      capabilities: ['discover'],
+    });
+  }
+
+  if (leafName === 'branches') {
+    return baseDescriptor(tool, {
+      category: 'github',
+      aliases: ['git branch read', 'repository branch inspect'],
+      capabilities: ['discover', 'read'],
+      resourceKinds: ['github_repo', 'github_branch'],
+      sideEffects: ['none'],
+      riskHints: ['read_only'],
+      prerequisites: ['github token with repository read access', 'repo full name'],
+      providesEvidence: ['verification'],
       workflowStages: ['discover_resource', 'inspect_resource'],
+    });
+  }
+
+  if (leafName === 'list_files') {
+    return baseDescriptor(tool, {
+      category: 'github',
+      aliases: ['git read', 'repository file discovery', 'repository file inspect'],
+      capabilities: ['discover', 'read'],
+      resourceKinds: ['github_repo'],
+      sideEffects: ['none'],
+      riskHints: ['read_only'],
+      prerequisites: ['github token with repository read access', 'repo full name'],
+      providesEvidence: ['verification'],
+      workflowStages: ['discover_resource', 'inspect_resource'],
+    });
+  }
+
+  if (leafName === 'read_file') {
+    return baseDescriptor(tool, {
+      category: 'github',
+      aliases: ['git read', 'repository file inspect'],
+      capabilities: ['read'],
+      resourceKinds: ['github_repo'],
+      sideEffects: ['none'],
+      riskHints: ['read_only'],
+      prerequisites: ['github token with repository read access', 'repo full name'],
+      providesEvidence: ['verification'],
+      workflowStages: ['inspect_resource'],
     });
   }
 

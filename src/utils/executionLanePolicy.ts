@@ -15,11 +15,7 @@ export function normalizeExecutionLaneToolName(toolName: string | undefined): st
     : '';
 }
 
-export const EXECUTION_SUPER_AGENT_CORE_TOOL_NAMES = new Set([
-  'sessions_wait',
-  'sessions_cancel',
-  'sessions_yield',
-]);
+export const EXECUTION_SUPER_AGENT_CORE_TOOL_NAMES = new Set<string>();
 
 export function getExecutionLaneToolCapability(
   toolName: string | undefined,

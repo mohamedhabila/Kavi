@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import {
+  collectWorkflowToolResults,
   runOrchestrator,
   OrchestratorCallbacks,
   OrchestratorOptions,
@@ -218,6 +219,47 @@ describe('Orchestrator', () => {
   });
 
   describe('Model selection', () => {
+    it('replays tool results by resolving prior tool-call ids when result messages omit embedded calls', () => {
+      const results = collectWorkflowToolResults([
+        {
+          id: 'u1',
+          role: 'user',
+          content: 'Continue',
+          timestamp: 1000,
+        },
+        {
+          id: 'a1',
+          role: 'assistant',
+          content: '',
+          timestamp: 1100,
+          toolCalls: [
+            {
+              id: 'call-1',
+              name: 'skill__remote__inspect',
+              arguments: '{"target":"service"}',
+              status: 'completed',
+            },
+          ],
+        },
+        {
+          id: 't1',
+          role: 'tool',
+          content: '{"status":"ok"}',
+          toolCallId: 'call-1',
+          timestamp: 1200,
+        },
+      ]);
+
+      expect(results).toEqual([
+        {
+          toolName: 'skill__remote__inspect',
+          result: '{"status":"ok"}',
+          status: 'completed',
+          timestamp: 1200,
+        },
+      ]);
+    });
+
     it('keeps the requested model on later tool-follow-up turns by default', async () => {
       let callCount = 0;
       mockStreamMessage.mockImplementation(() => {
@@ -385,7 +427,7 @@ describe('Orchestrator', () => {
       expect(firstTurnTools.has('expo_eas_list_projects')).toBe(true);
       expect(firstTurnTools.has('expo_eas_status')).toBe(false);
       expect(firstTurnTools.has('expo_eas_workflow_status')).toBe(false);
-      expect(firstTurnTools.has('file_edit')).toBe(true);
+      expect(firstTurnTools.has('file_edit')).toBe(false);
       expect(firstTurnTools.has('text_search')).toBe(false);
       expect(firstTurnTools.has('web_search')).toBe(false);
       expect(firstTurnTools.has('python')).toBe(false);
@@ -456,7 +498,7 @@ describe('Orchestrator', () => {
 
       expect(firstTurnTools.has('expo_eas_list_projects')).toBe(true);
       expect(firstTurnTools.has('expo_eas_workflow_status')).toBe(false);
-      expect(firstTurnTools.has('file_edit')).toBe(true);
+      expect(firstTurnTools.has('file_edit')).toBe(false);
       expect(firstTurnTools.has('web_search')).toBe(false);
       expect(firstTurnTools.has('glob_search')).toBe(false);
       expect(firstTurnTools.has('sessions_list')).toBe(false);
@@ -629,7 +671,7 @@ describe('Orchestrator', () => {
       expect(firstTurnTools.has('skill__github__commit_files')).toBe(false);
       expect(firstTurnTools.has('expo_eas_deploy_web')).toBe(false);
       expect(firstTurnTools.has('expo_eas_workflow_wait')).toBe(false);
-      expect(firstTurnTools.has('file_edit')).toBe(true);
+      expect(firstTurnTools.has('file_edit')).toBe(false);
       expect(firstTurnTools.has('tool_catalog')).toBe(false);
       expect(firstTurnTools.has('web_search')).toBe(false);
     });
@@ -730,7 +772,7 @@ describe('Orchestrator', () => {
       expect(firstTurnTools.has('skill__github__commit_files')).toBe(false);
       expect(firstTurnTools.has('expo_eas_deploy_web')).toBe(false);
       expect(firstTurnTools.has('expo_eas_workflow_wait')).toBe(false);
-      expect(firstTurnTools.has('file_edit')).toBe(true);
+      expect(firstTurnTools.has('file_edit')).toBe(false);
       expect(firstTurnTools.has('tool_catalog')).toBe(false);
       expect(firstTurnTools.has('web_search')).toBe(false);
     });
@@ -1137,7 +1179,7 @@ describe('Orchestrator', () => {
       );
       expect(systemPromptMessage.content).not.toContain('running in Kavi');
       expect(firstTurnTools.has('sessions_spawn')).toBe(false);
-      expect(firstTurnTools.has('sessions_wait')).toBe(true);
+      expect(firstTurnTools.has('sessions_wait')).toBe(false);
     });
 
     it('keeps sessions_spawn available for SuperAgent execution requests that explicitly require workers', async () => {

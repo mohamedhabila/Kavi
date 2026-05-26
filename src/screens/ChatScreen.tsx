@@ -5004,6 +5004,7 @@ export const ChatScreen: React.FC = () => {
                       targetRun.summary.startedTools,
                       { liveSubAgentSnapshots: effectiveSubAgents },
                     );
+                    enterReviewPhase('Reviewing completed workflow evidence', 'Review started');
                     const pilotDecision = await evaluateAgentRunWithPilot({
                       run: targetRun,
                       evidence: reviewEvidence,
@@ -5292,6 +5293,7 @@ export const ChatScreen: React.FC = () => {
             toolFilter: options?.disableTools ? () => false : undefined,
             internalUserMessageCount: options?.additionalUserPrompt?.trim() ? 1 : 0,
             initialPendingAsyncOperations: options?.initialPendingAsyncOperations,
+            initialWorkflowRouteState: existingRun?.routeState,
           },
           callbacks,
         );

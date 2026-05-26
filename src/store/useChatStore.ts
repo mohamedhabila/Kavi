@@ -338,6 +338,13 @@ function normalizeAgentRunRouteState(
     title: phase.title || phase.id || `Phase ${index + 1}`,
     status: phase.status || (index === 0 ? 'active' : 'pending'),
     ...(phase.detail ? { detail: phase.detail } : {}),
+    ...(Array.isArray(phase.requiredCapabilities)
+      ? {
+          requiredCapabilities: phase.requiredCapabilities.map((requirement) => ({
+            ...requirement,
+          })),
+        }
+      : {}),
     updatedAt: phase.updatedAt ?? timestamp,
   }));
   const currentPhaseId = phases.some((phase) => phase.id === routeState.currentPhaseId)

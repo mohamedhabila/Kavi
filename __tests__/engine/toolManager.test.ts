@@ -551,7 +551,7 @@ describe('selectToolsForRequest', () => {
 
     expect(selectedNames.has('read_file')).toBe(true);
     expect(selectedNames.has('file_edit')).toBe(true);
-    expect(selectedNames.has('write_file')).toBe(true);
+    expect(selectedNames.has('write_file')).toBe(false);
     expect(selectedNames.has('record_workflow_evidence')).toBe(false);
     expect(selectedNames.has('read_workflow_evidence')).toBe(false);
     expect(selectedNames.has('expo_eas_status')).toBe(true);
@@ -679,8 +679,8 @@ describe('selectToolsForRequest', () => {
 
       expect(selectedNames.has('sessions_spawn')).toBe(false);
       expect(selectedNames.has('sessions_send')).toBe(false);
-      expect(selectedNames.has('sessions_wait')).toBe(true);
-      expect(selectedNames.has('sessions_cancel')).toBe(true);
+      expect(selectedNames.has('sessions_wait')).toBe(false);
+      expect(selectedNames.has('sessions_cancel')).toBe(false);
     });
 
     it('blocks execution-continuity python and delegation tools unless they are explicitly preferred', () => {
@@ -703,7 +703,7 @@ describe('selectToolsForRequest', () => {
       expect(selectedNames.has('python')).toBe(false);
       expect(selectedNames.has('sessions_spawn')).toBe(false);
       expect(selectedNames.has('sessions_send')).toBe(false);
-      expect(selectedNames.has('sessions_wait')).toBe(true);
+      expect(selectedNames.has('sessions_wait')).toBe(false);
     });
 
     it('still includes execution-lane delegation tools when explicitly preferred', () => {
@@ -723,7 +723,7 @@ describe('selectToolsForRequest', () => {
       const selectedNames = new Set(selected.map((tool) => tool.name));
 
       expect(selectedNames.has('sessions_spawn')).toBe(true);
-      expect(selectedNames.has('sessions_wait')).toBe(true);
+      expect(selectedNames.has('sessions_wait')).toBe(false);
     });
 
     it('still includes execution-lane computation tools when explicitly preferred', () => {
@@ -1237,7 +1237,7 @@ describe('selectToolsForRequest — isSuperAgent', () => {
     expect(selectedNames.has('sessions_yield')).toBe(true);
   });
 
-  it('keeps local execution tools callable when an execution route is focused on read prerequisites', () => {
+  it('does not leak local mutating tools into a restricted remote execution phase', () => {
     const selected = selectToolsForRequest(
       [
         makeTool('read_file', 'Read a local file.'),
@@ -1261,8 +1261,9 @@ describe('selectToolsForRequest — isSuperAgent', () => {
     const selectedNames = new Set(selected.map((tool) => tool.name));
 
     expect(selectedNames.has('skill__github__repos')).toBe(true);
-    expect(selectedNames.has('write_file')).toBe(true);
-    expect(selectedNames.has('file_edit')).toBe(true);
+    expect(selectedNames.has('write_file')).toBe(false);
+    expect(selectedNames.has('file_edit')).toBe(false);
+    expect(selectedNames.has('skill__github__commit_files')).toBe(false);
   });
 
   it('carries recent Gemini workflow tools across vague follow-up turns', () => {

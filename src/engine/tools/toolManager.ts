@@ -194,8 +194,6 @@ export const TIER1_TOOL_NAMES = new Set([
 
 const EXECUTION_ALWAYS_LOADED_TOOL_NAMES = new Set([
   'read_file',
-  'write_file',
-  'file_edit',
 ]);
 
 const GEMINI_ALWAYS_LOADED_TOOL_NAMES = new Set([

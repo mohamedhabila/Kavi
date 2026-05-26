@@ -741,10 +741,15 @@ function isStrictCompatibleSchema(
   return true;
 }
 
-function cleanGeminiSchema(schema: Record<string, any>): Record<string, any> {
+function cleanGeminiSchema(
+  schema: Record<string, any>,
+  options: { target?: 'function_declaration' | 'structured_output' } = {},
+): Record<string, any> {
   if (!schema || typeof schema !== 'object') return schema;
 
   const result = { ...schema };
+  const target = options.target ?? 'function_declaration';
+  const preserveJsonSchemaConstraints = target === 'structured_output';
 
   // Strip fields that are noisy or unsupported by Gemini function declarations.
   delete result.default;
@@ -752,7 +757,9 @@ function cleanGeminiSchema(schema: Record<string, any>): Record<string, any> {
   delete result.$schema;
   delete result.$id;
   delete result.$ref;
-  delete result.additionalProperties;
+  if (!preserveJsonSchemaConstraints) {
+    delete result.additionalProperties;
+  }
 
   normalizeGeminiNullableType(result);
 
@@ -760,10 +767,9 @@ function cleanGeminiSchema(schema: Record<string, any>): Record<string, any> {
     const normalizedType = typeof result.type === 'string' ? result.type.toLowerCase() : '';
     const allStringEnumValues = result.enum.every((value: unknown) => typeof value === 'string');
 
-    // Gemini's native Schema proto only accepts string enums on STRING types.
-    // Preserve unsupported enum constraints as description hints instead of
-    // forwarding invalid parameter declarations that 400.
-    if (normalizedType !== 'string' || !allStringEnumValues) {
+    // Function declarations use Gemini's OpenAPI-like schema subset, while
+    // structured output uses JSON Schema and supports typed enums.
+    if (!preserveJsonSchemaConstraints && (normalizedType !== 'string' || !allStringEnumValues)) {
       const allowedValues = result.enum
         .map((value: unknown) => {
           if (typeof value === 'string') {
@@ -790,10 +796,10 @@ function cleanGeminiSchema(schema: Record<string, any>): Record<string, any> {
     if (!rawProperties || typeof rawProperties !== 'object' || Array.isArray(rawProperties)) {
       result.properties = {};
     } else {
-      result.properties = Object.fromEntries(
-        Object.entries(rawProperties as Record<string, any>).map(([key, value]) => [
-          key,
-          cleanGeminiSchema(value as Record<string, any>),
+        result.properties = Object.fromEntries(
+          Object.entries(rawProperties as Record<string, any>).map(([key, value]) => [
+            key,
+          cleanGeminiSchema(value as Record<string, any>, options),
         ]),
       );
     }
@@ -815,17 +821,17 @@ function cleanGeminiSchema(schema: Record<string, any>): Record<string, any> {
   }
 
   if (result.items && typeof result.items === 'object') {
-    result.items = cleanGeminiSchema(result.items as Record<string, any>);
+    result.items = cleanGeminiSchema(result.items as Record<string, any>, options);
   }
 
   if (Array.isArray(result.anyOf)) {
     result.anyOf = dedupeSchemaVariants(
-      result.anyOf.map((entry: Record<string, any>) => cleanGeminiSchema(entry)),
+      result.anyOf.map((entry: Record<string, any>) => cleanGeminiSchema(entry, options)),
     );
   }
 
   if (Array.isArray(result.oneOf)) {
-    const oneOfVariants = result.oneOf.map((entry: Record<string, any>) => cleanGeminiSchema(entry));
+    const oneOfVariants = result.oneOf.map((entry: Record<string, any>) => cleanGeminiSchema(entry, options));
     result.anyOf = dedupeSchemaVariants([
       ...(Array.isArray(result.anyOf) ? result.anyOf : []),
       ...oneOfVariants,
@@ -4271,8 +4277,12 @@ export class LlmService {
     }
 
     if (canApplyStructuredOutput && structuredOutput) {
-      generationConfig.responseMimeType = structuredOutput.mimeType;
-      generationConfig.responseJsonSchema = cleanGeminiSchema(structuredOutput.schema);
+      generationConfig.responseFormat = {
+        text: {
+          mimeType: structuredOutput.mimeType,
+          schema: cleanGeminiSchema(structuredOutput.schema, { target: 'structured_output' }),
+        },
+      };
     }
 
     if (Object.keys(generationConfig).length > 0) {
@@ -4286,7 +4296,7 @@ export class LlmService {
           return {
             name: tool.name,
             description: simplifyGeminiToolDescription(tool.description),
-            parameters: cleanGeminiSchema(normalizedSchema),
+            parameters: cleanGeminiSchema(normalizedSchema, { target: 'function_declaration' }),
           };
         }),
       }];

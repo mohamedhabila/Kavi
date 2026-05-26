@@ -449,6 +449,7 @@ const mockSetAgentRunPhase = jest.fn();
 const mockAppendAgentRunCheckpoint = jest.fn();
 const mockUpdateAgentRunSummary = jest.fn();
 const mockUpdateAgentRunPendingAsyncOperations = jest.fn();
+const mockUpdateAgentRunRouteState = jest.fn();
 const mockUpdateAgentRunPlan = jest.fn();
 const mockUpdateAgentRunPilotEvaluation = jest.fn();
 const mockSetAgentRunAwaitingBackgroundWorkers = jest.fn();
@@ -654,6 +655,7 @@ jest.mock('../../src/store/useChatStore', () => {
     appendAgentRunCheckpoint: mockAppendAgentRunCheckpoint,
     updateAgentRunSummary: mockUpdateAgentRunSummary,
     updateAgentRunPendingAsyncOperations: mockUpdateAgentRunPendingAsyncOperations,
+    updateAgentRunRouteState: mockUpdateAgentRunRouteState,
     updateAgentRunPlan: mockUpdateAgentRunPlan,
     updateAgentRunPilotEvaluation: mockUpdateAgentRunPilotEvaluation,
     setAgentRunAwaitingBackgroundWorkers: mockSetAgentRunAwaitingBackgroundWorkers,
@@ -2879,6 +2881,71 @@ describe('ChatScreen', () => {
     ).toBe(false);
   });
 
+  it('passes persisted capability route state into resumed supervisor runs', async () => {
+    const pendingOperation = {
+      key: 'expo-workflow:workflow-102',
+      kind: 'expo-workflow',
+      resourceId: 'workflow-102',
+      displayName: 'Expo workflow 102',
+      status: 'running',
+      lastUpdatedByTool: 'expo_eas_workflow_wait',
+      updatedAt: Date.now(),
+      monitorToolNames: ['expo_eas_workflow_wait'],
+      waitToolName: 'expo_eas_workflow_wait',
+      waitArgs: { projectId: 'proj-1', workflowRunId: '102' },
+    };
+    const routeState = {
+      routeId: 'capability-workflow',
+      title: 'Capability workflow',
+      status: 'active',
+      currentPhaseId: 'await_external_execution',
+      phases: [
+        {
+          id: 'await_external_execution',
+          title: 'Wait for external execution',
+          status: 'active',
+          updatedAt: Date.now(),
+        },
+      ],
+      requiredToolNames: ['expo_eas_workflow_wait'],
+      facts: {
+        finalizationHoldResumeCount: 2,
+        completedWorkflowRequirementKeys: ['already-completed'],
+      },
+      updatedAt: Date.now(),
+    };
+
+    mockConversations = [
+      {
+        ...createDefaultConversations()[0],
+        activeAgentRunId: 'run-async-route',
+        agentRuns: [
+          createRunningAgentRun({
+            id: 'run-async-route',
+            userMessageId: 'msg1',
+            pendingAsyncOperations: [pendingOperation],
+            awaitingBackgroundWorkers: false,
+            routeState,
+          }),
+        ],
+      },
+    ];
+
+    render(<ChatScreen />);
+
+    await waitFor(() => {
+      expect(mockRunOrchestrator).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockRunOrchestrator.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        conversationId: 'conv1',
+        initialPendingAsyncOperations: [pendingOperation],
+        initialWorkflowRouteState: routeState,
+      }),
+    );
+  });
+
   it('keeps the run open when a worker launch succeeds before live snapshots become visible', async () => {
     mockStartAgentRun.mockImplementationOnce((conversationId: string, params: any) => {
       updateMockConversation(conversationId, (conversation) => ({
@@ -3747,6 +3814,15 @@ describe('ChatScreen', () => {
         completionStatus: 'incomplete',
         finishReason: 'pilot_review_pending',
       }),
+    );
+    expect(mockSetAgentRunPhase).toHaveBeenCalledWith(
+      'conv1',
+      'review',
+      expect.objectContaining({
+        status: 'active',
+        checkpointTitle: 'Review started',
+      }),
+      'run-1',
     );
     expect(mockSetAgentRunPhase).toHaveBeenCalledWith(
       'conv1',

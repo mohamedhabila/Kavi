@@ -157,11 +157,12 @@ import {
   buildWorkflowRouteFinalizationHoldGuidance,
   buildWorkflowRouteRuntimeGuidance,
   getMissingRequiredWorkflowToolNames,
-  buildInitialWorkflowRouteState,
+  replayWorkflowRouteStateFromToolResults,
   resolveWorkflowRouteActivation,
   selectToolNamesForWorkflowRouteTurn,
   shouldHoldWorkflowRouteFinalization,
   type WorkflowRouteActivation,
+  type WorkflowRouteToolResult,
 } from './routes/agentRoutes';
 import {
   inferToolCapabilityDescriptor,
@@ -252,6 +253,7 @@ export interface OrchestratorOptions {
   /** Optional response-budget tuning for specialized agent flows such as sub-agents. */
   responseBudgetProfile?: ResponseBudgetProfile;
   initialPendingAsyncOperations?: AgentRunAsyncOperation[];
+  initialWorkflowRouteState?: AgentRunRouteState;
 }
 
 function getRequestContextUserMessages(messages: Message[]): Message[] {
@@ -2211,6 +2213,94 @@ function collectCompletedToolNames(messages: ReadonlyArray<Message>): Set<string
   return completedToolNames;
 }
 
+export function collectWorkflowToolResults(
+  messages: ReadonlyArray<Message>,
+): WorkflowRouteToolResult[] {
+  const results: WorkflowRouteToolResult[] = [];
+  const seen = new Set<string>();
+  const toolCallsById = new Map<string, ToolCall>();
+
+  for (const message of messages) {
+    for (const toolCall of message.toolCalls ?? []) {
+      if (toolCall.id?.trim()) {
+        toolCallsById.set(toolCall.id, toolCall);
+      }
+    }
+  }
+
+  const pushResult = (
+    toolCall: ToolCall | undefined,
+    result: string | undefined,
+    params: {
+      isError?: boolean;
+      timestamp?: number;
+      fallbackName?: string;
+      fallbackId?: string;
+    },
+  ) => {
+    const toolName = toolCall?.name || params.fallbackName;
+    if (!toolName?.trim() || !result?.trim()) {
+      return;
+    }
+
+    const normalizedName = normalizeToolName(toolName);
+    const resultHash = hashResult(result) || result.slice(0, 120);
+    const key = `${toolCall?.id || params.fallbackId || 'tool'}:${normalizedName}:${resultHash}`;
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    results.push({
+      toolName: normalizedName,
+      result,
+      status:
+        params.isError || toolCall?.status === 'failed' ? ('failed' as const) : ('completed' as const),
+      timestamp: toolCall?.completedAt ?? toolCall?.updatedAt ?? params.timestamp ?? Date.now(),
+    });
+  };
+
+  for (const message of messages) {
+    for (const toolCall of message.toolCalls ?? []) {
+      pushResult(toolCall, toolCall.result || toolCall.error, {
+        isError: toolCall.status === 'failed',
+        timestamp: message.timestamp,
+      });
+    }
+
+    if (message.role === 'tool') {
+      const resolvedToolCall =
+        message.toolCalls?.[0] ||
+        (message.toolCallId ? toolCallsById.get(message.toolCallId) : undefined);
+      pushResult(resolvedToolCall, message.content, {
+        isError: message.isError,
+        timestamp: message.timestamp,
+        fallbackName: resolvedToolCall?.name,
+        fallbackId: message.toolCallId,
+      });
+    }
+  }
+
+  return results;
+}
+
+function buildWorkflowRouteActivationSignature(
+  activation: WorkflowRouteActivation | undefined,
+): string {
+  if (!activation) {
+    return '';
+  }
+
+  return JSON.stringify({
+    routeId: activation.routeId,
+    phases: activation.phases.map((phase) => ({
+      id: phase.id,
+      requirements: phase.requiredCapabilities,
+    })),
+    requiredToolNames: [...activation.requiredToolNames].sort(),
+    requiredWorkflowRequirementKeys: [...activation.requiredWorkflowRequirementKeys].sort(),
+  });
+}
+
 function collectRecentToolNames(messages: Message[], limit = 4): Set<string> {
   const recentToolNames = new Set<string>();
   let userBoundariesSeen = 0;
@@ -2915,6 +3005,7 @@ export async function runOrchestrator(
   let llmPlannedRequiredCapabilities = new Set<ToolCapability>();
   let llmToolPlanFingerprint = '';
   let activeWorkflowRouteActivation: WorkflowRouteActivation | undefined;
+  let activeWorkflowRouteActivationSignature = '';
   let activeWorkflowRouteState: AgentRunRouteState | undefined;
   const completedWorkflowToolNames = collectCompletedToolNames(workingMessages);
 
@@ -3046,12 +3137,20 @@ export async function runOrchestrator(
           : undefined;
       if (
         workflowRouteActivation &&
-        activeWorkflowRouteActivation?.routeId !== workflowRouteActivation.routeId
+        activeWorkflowRouteActivationSignature !==
+          buildWorkflowRouteActivationSignature(workflowRouteActivation)
       ) {
+        activeWorkflowRouteActivationSignature =
+          buildWorkflowRouteActivationSignature(workflowRouteActivation);
         activeWorkflowRouteActivation = workflowRouteActivation;
-        activeWorkflowRouteState = buildInitialWorkflowRouteState(
+        activeWorkflowRouteState = replayWorkflowRouteStateFromToolResults(
           workflowRouteActivation,
-          Date.now(),
+          requestScopedTools,
+          collectWorkflowToolResults(workingMessages),
+          {
+            seedState: options.initialWorkflowRouteState,
+            timestamp: Date.now(),
+          },
         );
         callbacks.onAgentRouteStateChange?.(activeWorkflowRouteState);
       }

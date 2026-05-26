@@ -176,6 +176,26 @@ function main() {
   }
 
   const gradleTask = buildBundle ? 'bundleRelease' : 'assembleRelease';
+  const bundleTask = ':app:createBundleReleaseJsAndAssets';
+  const bundleResult = spawnSync(gradleWrapper, [bundleTask, '--rerun-tasks'], {
+    cwd: androidDir,
+    env,
+    stdio: 'inherit',
+    shell: isWindows,
+  });
+
+  if (typeof bundleResult.status === 'number') {
+    if (bundleResult.status !== 0) {
+      process.exitCode = bundleResult.status;
+      return;
+    }
+  } else if (bundleResult.error) {
+    throw bundleResult.error;
+  } else {
+    process.exitCode = 1;
+    return;
+  }
+
   const result = spawnSync(gradleWrapper, [gradleTask], {
     cwd: androidDir,
     env,

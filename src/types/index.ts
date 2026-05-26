@@ -338,6 +338,7 @@ export interface AgentRunRoutePhase {
   title: string;
   status: AgentRunRoutePhaseStatus;
   detail?: string;
+  requiredCapabilities?: Array<Record<string, unknown>>;
   updatedAt: number;
 }
 
