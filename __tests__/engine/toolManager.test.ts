@@ -1266,6 +1266,30 @@ describe('selectToolsForRequest — isSuperAgent', () => {
     expect(selectedNames.has('skill__github__commit_files')).toBe(false);
   });
 
+  it('can enforce a strict workflow phase shortlist without always-loaded local readers', () => {
+    const selected = selectToolsForRequest(
+      [
+        makeTool('read_file', 'Read a local file.'),
+        makeTool('tool_catalog', 'Search tool catalog.'),
+        makeTool('expo_eas_workflow_runs', 'Monitor external workflow runs.'),
+        makeTool('expo_eas_workflow_wait', 'Wait for an exact external workflow run.'),
+      ],
+      ['Monitor the current external workflow'],
+      'gemini',
+      'https://generativelanguage.googleapis.com/v1beta/openai',
+      undefined,
+      {
+        model: 'gemini-3.5-flash',
+        routeMode: 'execution',
+        preferredToolNames: ['expo_eas_workflow_runs'],
+        restrictToPreferredTools: true,
+        strictPreferredTools: true,
+      },
+    );
+
+    expect(selected.map((tool) => tool.name)).toEqual(['expo_eas_workflow_runs']);
+  });
+
   it('carries recent Gemini workflow tools across vague follow-up turns', () => {
     const selected = selectToolsForRequest(
       tools,

@@ -152,6 +152,7 @@ import {
   isExecutionAdvancingToolName,
   isExecutionDiscoveryOrMetaToolName,
 } from '../utils/executionLanePolicy';
+import { isToolResultErrorLike } from '../utils/toolResultErrors';
 import {
   advanceWorkflowRouteStateFromToolResult,
   buildWorkflowRouteFinalizationHoldGuidance,
@@ -161,6 +162,7 @@ import {
   resolveWorkflowRouteActivation,
   selectToolNamesForWorkflowRouteTurn,
   shouldHoldWorkflowRouteFinalization,
+  validateWorkflowRouteToolCallAgainstState,
   type WorkflowRouteActivation,
   type WorkflowRouteToolResult,
 } from './routes/agentRoutes';
@@ -254,6 +256,8 @@ export interface OrchestratorOptions {
   responseBudgetProfile?: ResponseBudgetProfile;
   initialPendingAsyncOperations?: AgentRunAsyncOperation[];
   initialWorkflowRouteState?: AgentRunRouteState;
+  /** User message that owns the active workflow run; prior tool results are context, not fresh evidence. */
+  workflowScopeUserMessageId?: string;
 }
 
 function getRequestContextUserMessages(messages: Message[]): Message[] {
@@ -395,7 +399,7 @@ function applyResolvedToolName(
 
 async function yieldToUiFrame(): Promise<void> {
   await new Promise<void>((resolve) => {
-    setTimeout(resolve, 0);
+    setTimeout(resolve, 16);
   });
 }
 
@@ -754,6 +758,7 @@ function buildExternalWorkflowPrompt(
     'When a required resource is not fully identified but the user supplied a name, phrase, or other clue, use discovery/read tools to enumerate candidates and choose the best verified match; if the evidence is ambiguous, ask for clarification rather than inventing an identifier.',
     'For execution work, proceed phase by phase: discover and inspect required resources, prepare artifacts, apply the requested mutations or external execution, then monitor or verify with evidence-producing tools.',
     'If a tool returns a recoverable argument, lookup, or validation error, correct the prerequisite or arguments in the next step instead of ending the workflow or retrying the same call.',
+    'Do not modify external execution configuration merely because deployment verification failed. First use the failure evidence to correct the requested artifact or prerequisite; change automation configuration only when the user explicitly requested that or a tool established that the configuration itself is missing or broken.',
     descriptorLines.length > 0 ? ['Loaded external workflow tools:', ...descriptorLines].join('\n') : undefined,
   ].filter((section): section is string => Boolean(section)).join('\n');
 }
@@ -1050,48 +1055,6 @@ function applyCompactionResultToWorkingMessages(
     tokensBefore: compactResult.result.tokensBefore,
     tokensAfter: compactResult.result.tokensAfter,
   };
-}
-
-function shouldRequireToolUse(
-  lastUserMessage: string | undefined,
-  tools: ToolDefinition[],
-): boolean {
-  if (!lastUserMessage || tools.length === 0) {
-    return false;
-  }
-
-  const normalized = lastUserMessage.trim().toLowerCase();
-  if (!normalized) {
-    return false;
-  }
-
-  if (/^(hi|hello|hey|thanks|thank you|good morning|good evening)\b/.test(normalized)) {
-    return false;
-  }
-
-  if (
-    /(fix|debug|investigate|inspect|check|review|analy[sz]e|search|find|read|open|list|show|trace|run|execute|test|build|fetch|browse|scan|edit|update|modify|change|create|add|remove|delete|rename|refactor|implement|write|compare)\b/.test(
-      normalized,
-    )
-  ) {
-    return true;
-  }
-
-  if (
-    /(repo|repository|workspace|project|branch|commit|pull request|pr|workflow|pipeline|test suite|codebase|file|directory|folder|screen|component|service)\b/.test(
-      normalized,
-    )
-  ) {
-    return true;
-  }
-
-  if (/(tool|tools|skill|skills|mcp|server|capabilit)/.test(normalized)) {
-    return true;
-  }
-
-  return /(^|\s)(src\/|app\/|ios\/|android\/|__tests__\/|[\w./-]+\.(ts|tsx|js|jsx|json|md|py|kt|swift|java|yml|yaml))\b/.test(
-    normalized,
-  );
 }
 
 function isSessionCoordinationToolCallName(name: string | undefined): boolean {
@@ -1497,6 +1460,18 @@ function shouldRetryToolPlannerSelection(selection: ToolPlannerSelection): boole
   }
 
   return selectedToolNames.every((toolName) => !isExecutionAdvancingToolName(toolName));
+}
+
+function toolHasActionableContract(tool: Pick<ToolDefinition, 'name' | 'description'>): boolean {
+  const descriptor = inferToolCapabilityDescriptor(tool);
+  return (
+    descriptor.workflowStages.length > 0 &&
+    (
+      descriptor.sideEffects.some((sideEffect) => sideEffect !== 'none') ||
+      descriptor.capabilities.some((capability) => capability !== 'discover') ||
+      descriptor.providesEvidence.length > 0
+    )
+  );
 }
 
 function buildFailClosedExecutionToolPlan(
@@ -2085,6 +2060,7 @@ function parseYieldToolResult(
         forceFinalTextNextTurn: true,
       };
     }
+
   } catch {
     return { yielded: false };
   }
@@ -2182,6 +2158,10 @@ function mergeAssistantContinuationText(existingText: string, incomingText: stri
   return `${existingText}${incomingText}`;
 }
 
+function textReferencesStructuredResource(text: string): boolean {
+  return /(?:^|\s)(?:\.{0,2}\/[^\s]+|[A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]+|[A-Za-z0-9_-]+\.[A-Za-z0-9]{1,16})(?=$|\s|[),;:!?])/u.test(text);
+}
+
 function getLastExecutedToolCall(messages: Message[]): ToolCall | undefined {
   for (let index = messages.length - 1; index >= 0; index--) {
     const message = messages[index];
@@ -2191,6 +2171,29 @@ function getLastExecutedToolCall(messages: Message[]): ToolCall | undefined {
     return message.toolCalls[message.toolCalls.length - 1];
   }
   return undefined;
+}
+
+export function selectWorkflowScopedMessagesForRun(
+  messages: ReadonlyArray<Message>,
+  workflowScopeUserMessageId?: string,
+): Message[] {
+  let scopeStartIndex = -1;
+  if (workflowScopeUserMessageId?.trim()) {
+    scopeStartIndex = messages.findIndex(
+      (message) => message.role === 'user' && message.id === workflowScopeUserMessageId,
+    );
+  }
+
+  if (scopeStartIndex < 0) {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      if (messages[index].role === 'user') {
+        scopeStartIndex = index;
+        break;
+      }
+    }
+  }
+
+  return scopeStartIndex >= 0 ? messages.slice(scopeStartIndex + 1) : [...messages];
 }
 
 function collectCompletedToolNames(messages: ReadonlyArray<Message>): Set<string> {
@@ -2301,6 +2304,21 @@ function buildWorkflowRouteActivationSignature(
   });
 }
 
+function buildBlockedWorkflowRouteMessage(
+  routeState: AgentRunRouteState | undefined,
+): string | undefined {
+  if (routeState?.status !== 'blocked') {
+    return undefined;
+  }
+
+  const activePhase = routeState.phases.find((phase) => phase.id === routeState.currentPhaseId);
+  const blocker =
+    routeState.blockers?.[routeState.blockers.length - 1] ||
+    activePhase?.detail ||
+    'Capability workflow reached a blocked state.';
+  return `Capability workflow blocked: ${blocker}`;
+}
+
 function collectRecentToolNames(messages: Message[], limit = 4): Set<string> {
   const recentToolNames = new Set<string>();
   let userBoundariesSeen = 0;
@@ -2332,31 +2350,6 @@ function collectRecentToolNames(messages: Message[], limit = 4): Set<string> {
   }
 
   return recentToolNames;
-}
-
-function shouldForceToolChoice(params: {
-  iteration: number;
-  actionableRequest: boolean;
-  lastExecutedTool?: ToolCall;
-}): boolean {
-  if (!params.actionableRequest) {
-    return false;
-  }
-
-  if (params.iteration === 1) {
-    return true;
-  }
-
-  const toolName = params.lastExecutedTool?.name?.trim().toLowerCase();
-  if (!toolName) {
-    return false;
-  }
-
-  // Only force tool choice after specific "inspection-then-act" tools.
-  // IMPORTANT: Do NOT use broad suffix patterns like /_status$/ or /_runs$/
-  // because they match terminal tools (e.g. expo_eas_workflow_status) and
-  // trap the model in an infinite loop where it can never respond with text.
-  return /^(tool_catalog|sessions_(spawn|send|list|status|history))$/.test(toolName);
 }
 
 function isParallelizableToolName(name: string): boolean {
@@ -2913,12 +2906,19 @@ export async function runOrchestrator(
     hasPriorContext: requestContextUserMessages.length > 1,
   });
   const requestGovernancePromptSection = buildRequestGovernancePromptSection(requestAssessment);
+  const workflowCandidateRequest =
+    requestAssessment.action !== 'clarify' && requestAssessment.action !== 'direct';
+  const requestToolSignalCategories = detectRelevantCategories(userMessageTexts);
+  const requestReferencesStructuredResource =
+    textReferencesStructuredResource(lastUserMessageText);
   const actionableRequest =
-    requestAssessment.action === 'clarify'
-      ? false
-      : requestAssessment.action === 'direct'
-        ? true
-        : shouldRequireToolUse(lastUserMessageText, allTools);
+    workflowCandidateRequest &&
+    (
+      requestAssessment.action === 'reframe' ||
+      requestToolSignalCategories.size > 0 ||
+      requestReferencesStructuredResource ||
+      hasModelVisibleAttachments(requestContextLastUserMsg?.attachments)
+    );
 
   // Working message list that includes tool results as we iterate
   let workingMessages = repairModelVisibleToolResultTranscript(
@@ -3007,7 +3007,32 @@ export async function runOrchestrator(
   let activeWorkflowRouteActivation: WorkflowRouteActivation | undefined;
   let activeWorkflowRouteActivationSignature = '';
   let activeWorkflowRouteState: AgentRunRouteState | undefined;
-  const completedWorkflowToolNames = collectCompletedToolNames(workingMessages);
+  const getWorkflowScopedWorkingMessages = () =>
+    selectWorkflowScopedMessagesForRun(workingMessages, options.workflowScopeUserMessageId);
+  const completedWorkflowToolNames = collectCompletedToolNames(getWorkflowScopedWorkingMessages());
+  const finishBlockedWorkflowRoute = async (
+    routeState: AgentRunRouteState | undefined,
+  ): Promise<boolean> => {
+    const blockedMessage = buildBlockedWorkflowRouteMessage(routeState);
+    if (!blockedMessage) {
+      return false;
+    }
+
+    callbacks.onAssistantMessage(
+      blockedMessage,
+      [],
+      undefined,
+      buildAssistantMessageMetadata('final', {
+        completionStatus: 'incomplete',
+        finishReason: 'route_blocked',
+        terminalReason: 'route_blocked',
+      }),
+    );
+    callbacks.onStateChange('idle');
+    await emitSessionEvent('end', { conversationId, reason: 'route_blocked' });
+    callbacks.onDone();
+    return true;
+  };
 
   callbacks.onStateChange('thinking');
   await emitSessionEvent('start', { conversationId });
@@ -3102,7 +3127,7 @@ export async function runOrchestrator(
         toolingEnabledForProvider &&
         !effectiveForceTextThisTurn &&
         requestScopedTools.length > 0 &&
-        (actionableRequest || isSuperAgent || narrowToolTarget);
+        (workflowCandidateRequest || isSuperAgent || narrowToolTarget);
       if (
         shouldRunSemanticToolPlanner &&
         llmToolPlanFingerprint !== toolPlannerFingerprint &&
@@ -3115,7 +3140,7 @@ export async function runOrchestrator(
           candidateTools: requestScopedTools,
           userMessageTexts: toolSelectionMessages,
           maxTools: narrowToolTarget ? 12 : 20,
-          failClosedOnRepeatedNonAdvancingPlan: isSuperAgent && actionableRequest,
+          failClosedOnRepeatedNonAdvancingPlan: isSuperAgent && workflowCandidateRequest,
         });
         llmPlannedPreferredToolNames = planned.tools;
         llmPlannedRouteMode = planned.routeMode;
@@ -3146,13 +3171,16 @@ export async function runOrchestrator(
         activeWorkflowRouteState = replayWorkflowRouteStateFromToolResults(
           workflowRouteActivation,
           requestScopedTools,
-          collectWorkflowToolResults(workingMessages),
+          collectWorkflowToolResults(getWorkflowScopedWorkingMessages()),
           {
             seedState: options.initialWorkflowRouteState,
             timestamp: Date.now(),
           },
         );
         callbacks.onAgentRouteStateChange?.(activeWorkflowRouteState);
+      }
+      if (await finishBlockedWorkflowRoute(activeWorkflowRouteState)) {
+        return;
       }
       const routeRequiredToolNames = new Set(
         selectToolNamesForWorkflowRouteTurn(
@@ -3209,6 +3237,10 @@ export async function runOrchestrator(
                 safeFocusedToolNames.size > 0 ||
                 routeRequiredToolNames.size > 0 ||
                 (effectiveRouteMode === 'execution' && safePlannedPreferredToolNames.size > 0),
+              strictPreferredTools:
+                requireDelegationThisTurn ||
+                restrictToPendingAsyncMonitorTools ||
+                routeRequiredToolNames.size > 0,
               isSuperAgent,
             },
           )
@@ -3469,15 +3501,20 @@ export async function runOrchestrator(
         const toolLoopInProgress = isToolLoopInProgress(turnWorkingMessages);
         const hasPendingAsyncOperations =
           getPendingTrackedAsyncOperations(trackedAsyncOperations).length > 0;
+        const shouldForceToolChoiceFromPlan =
+          workflowCandidateRequest &&
+          ((executionIntent && safePlannedPreferredToolNames.size > 0) ||
+            routeRequiredToolNames.size > 0);
+        const shouldForceToolChoiceFromContractSignal =
+          actionableRequest &&
+          (relevantCategories.size > 0 || requestReferencesStructuredResource) &&
+          selectedTools.some((tool) => toolHasActionableContract(tool));
         const forceToolChoiceCandidate = toolsForIteration
           ? requireDelegationThisTurn ||
             requireWorkflowToolThisTurn ||
             hasPendingAsyncOperations ||
-            shouldForceToolChoice({
-              iteration,
-              actionableRequest,
-              lastExecutedTool: getLastExecutedToolCall(turnWorkingMessages),
-            })
+            shouldForceToolChoiceFromPlan ||
+            shouldForceToolChoiceFromContractSignal
           : false;
         const requestedThinkingParams = getThinkingParams(
           iterationPlan.thinkingLevel,
@@ -4168,6 +4205,47 @@ export async function runOrchestrator(
           };
         }
 
+        const workflowToolCallBlocker = validateWorkflowRouteToolCallAgainstState(
+          activeWorkflowRouteState,
+          effectiveToolCall.name,
+          effectiveToolCall.arguments,
+          requestScopedTools,
+        );
+        if (workflowToolCallBlocker) {
+          const blockedCall: ToolCall = {
+            id: tc.id,
+            name: effectiveToolCall.name,
+            arguments: effectiveToolCall.arguments,
+            status: 'failed',
+            startedAt: Date.now(),
+            updatedAt: Date.now(),
+            completedAt: Date.now(),
+            error: workflowToolCallBlocker,
+          };
+          callbacks.onToolCallStart(blockedCall);
+          callbacks.onToolCallComplete(blockedCall);
+          recordToolCall(toolCallHistory, {
+            name: effectiveToolCall.name,
+            arguments: effectiveToolCall.arguments,
+            timestamp: Date.now(),
+            result: workflowToolCallBlocker,
+            resultHash: hashResult(workflowToolCallBlocker),
+          });
+          return {
+            index,
+            toolCallId: tc.id,
+            toolMessage: {
+              id: `msg_${Date.now()}_tool_workflow_guard_${tc.id}`,
+              role: 'tool',
+              content: workflowToolCallBlocker,
+              toolCallId: tc.id,
+              toolCalls: [{ ...blockedCall }],
+              timestamp: Date.now(),
+              isError: true,
+            },
+          };
+        }
+
         const toolCall: ToolCall = {
           id: tc.id,
           name: effectiveToolCall.name,
@@ -4229,10 +4307,14 @@ export async function runOrchestrator(
           );
           emitPendingAsyncOperationsChange();
 
-          toolCall.status = 'completed';
+          const toolResultIsError = isToolResultErrorLike(result);
+          toolCall.status = toolResultIsError ? 'failed' : 'completed';
           toolCall.updatedAt = Date.now();
           toolCall.completedAt = toolCall.updatedAt;
           toolCall.result = result;
+          if (toolResultIsError) {
+            toolCall.error = result;
+          }
           callbacks.onToolCallComplete(toolCall);
           await emitAgentEvent('tool_end', {
             conversationId,
@@ -4259,6 +4341,7 @@ export async function runOrchestrator(
               toolCallId: tc.id,
               toolCalls: [{ ...toolCall }],
               timestamp: Date.now(),
+              ...(toolResultIsError ? { isError: true } : {}),
             },
             yieldedMessage: yieldResult.yielded
               ? yieldResult.message || 'Waiting for background agent results.'
@@ -4401,6 +4484,10 @@ export async function runOrchestrator(
         }
       }
       await yieldToUiFrame();
+
+      if (await finishBlockedWorkflowRoute(activeWorkflowRouteState)) {
+        return;
+      }
 
       if (forceFinalTextFromYieldThisTurn) {
         forceFinalTextNextTurn = true;

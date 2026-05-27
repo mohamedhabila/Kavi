@@ -6865,6 +6865,104 @@ describe('ChatScreen', () => {
     });
   });
 
+  it('does not finalize the run multiple times when onDone is emitted twice', async () => {
+    mockStartAgentRun.mockImplementationOnce((conversationId: string, params: any) => {
+      updateMockConversation(conversationId, (conversation) => ({
+        ...conversation,
+        activeAgentRunId: 'run-1',
+        agentRuns: [
+          createRunningAgentRun({
+            id: 'run-1',
+            userMessageId: params.userMessageId,
+            goal: params.goal,
+            routeState: undefined,
+            currentPhase: 'work',
+          }),
+        ],
+      }));
+      return 'run-1';
+    });
+
+    mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
+      callbacks.onAssistantMessage('The task completed successfully.', [], undefined, {
+        kind: 'final',
+        completionStatus: 'complete',
+        finishReason: 'task_complete',
+      });
+      callbacks.onDone();
+      callbacks.onDone();
+    });
+
+    const { getByPlaceholderText, getByTestId } = render(<ChatScreen />);
+    const input = getByPlaceholderText('Message...');
+    fireEvent.changeText(input, 'Finalization duplicate callback test');
+    const sendIcon = getByTestId('icon-Send');
+    fireEvent.press(sendIcon.parent || sendIcon);
+
+    await waitFor(() => {
+      expect(mockCompleteAgentRun).toHaveBeenCalledTimes(1);
+    });
+    expect(mockCompleteAgentRun).toHaveBeenCalledWith(
+      'conv1',
+      expect.objectContaining({
+        status: 'completed',
+      }),
+      'run-1',
+    );
+  });
+
+  it('does not finalize a run multiple times when onError is emitted twice', async () => {
+    mockStartAgentRun.mockImplementationOnce((conversationId: string, params: any) => {
+      updateMockConversation(conversationId, (conversation) => ({
+        ...conversation,
+        activeAgentRunId: 'run-1',
+        agentRuns: [
+          createRunningAgentRun({
+            id: 'run-1',
+            userMessageId: params.userMessageId,
+            goal: params.goal,
+            routeState: undefined,
+            currentPhase: 'work',
+          }),
+        ],
+      }));
+      return 'run-1';
+    });
+
+    mockHasCompletedExecutionRecoveryEvidence.mockReturnValueOnce(false);
+    mockCollectAgentRunFinalizationEvidence.mockImplementation(() => ({
+      originalPrompt: 'Error duplicate callback test',
+      transcriptMessages: [],
+      lastNonEmptyAssistantContent: '',
+      lastSubstantiveResult: '',
+      resultPreviews: [],
+      toolsUsed: [],
+      iterations: 0,
+      hasIncompleteToolCalls: false,
+    }));
+    mockBuildAgentRunToolResultFallback.mockReturnValueOnce(undefined);
+
+    mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
+      callbacks.onError(new Error('Streaming interruption')); 
+      callbacks.onError(new Error('Streaming interruption'));
+    });
+
+    const { getByPlaceholderText, getByTestId } = render(<ChatScreen />);
+    const input = getByPlaceholderText('Message...');
+    fireEvent.changeText(input, 'Error duplicate callback test');
+    const sendIcon = getByTestId('icon-Send');
+    fireEvent.press(sendIcon.parent || sendIcon);
+
+    await waitFor(() => {
+      expect(mockCompleteAgentRun).toHaveBeenCalledTimes(1);
+    });
+    expect(mockUpdateMessage).toHaveBeenCalledWith(
+      'conv1',
+      expect.any(String),
+      expect.stringContaining('Error: Streaming interruption'),
+    );
+  });
+
   it('reuses the streamed draft when the API fails mid-stream', async () => {
     mockStartAgentRun.mockImplementationOnce((conversationId: string, params: any) => {
       updateMockConversation(conversationId, (conversation) => ({
@@ -7197,6 +7295,106 @@ describe('ChatScreen', () => {
       expect.objectContaining({
         title: 'Final response delivered',
         detail: 'Synthesized final response',
+      }),
+    );
+  });
+
+  it('marks a blocked capability workflow as failed without running Pilot final review', async () => {
+    mockStartAgentRun.mockImplementationOnce((conversationId: string, params: any) => {
+      updateMockConversation(conversationId, (conversation) => ({
+        ...conversation,
+        activeAgentRunId: 'run-1',
+        agentRuns: [
+          createRunningAgentRun({
+            id: 'run-1',
+            userMessageId: params.userMessageId,
+            goal: params.goal,
+            routeState: {
+              routeId: 'capability-workflow',
+              title: 'Capability workflow',
+              status: 'blocked',
+              currentPhaseId: 'monitor_external_execution',
+              phases: [
+                {
+                  id: 'monitor_external_execution',
+                  title: 'Monitor external execution',
+                  status: 'blocked',
+                  detail: 'External execution could not be correlated after repeated monitor observations.',
+                  updatedAt: 1_700_000_000_500,
+                },
+              ],
+              blockers: ['External execution could not be correlated after repeated monitor observations.'],
+              facts: {
+                latestExternalProducerId: 'commit-123',
+                uncorrelatedExternalMonitorCount: 3,
+                blockedWorkflowToolNames: ['external_workflow_runs'],
+              },
+              updatedAt: 1_700_000_000_500,
+            },
+            summary: {
+              assistantTurns: 1,
+              startedTools: 3,
+              completedTools: 2,
+              failedTools: 1,
+              spawnedSubAgents: 0,
+            },
+          }),
+        ],
+      }));
+      return 'run-1';
+    });
+    mockCollectAgentRunFinalizationEvidence.mockImplementation(() => ({
+      originalPrompt: 'Create and monitor the external deployment.',
+      transcriptMessages: [],
+      lastNonEmptyAssistantContent: 'Blocked report',
+      lastSubstantiveResult:
+        'External execution could not be correlated after repeated monitor observations.',
+      resultPreviews: [
+        {
+          sourceName: 'external_workflow_runs',
+          preview: 'No correlated external run was found for the current mutation.',
+        },
+      ],
+      toolsUsed: ['commit_files', 'external_workflow_runs'],
+      iterations: 3,
+      hasIncompleteToolCalls: false,
+    }));
+    mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
+      callbacks.onAssistantMessage('Blocked report', [], undefined, {
+        kind: 'final',
+        completionStatus: 'complete',
+        finishReason: 'STOP',
+      });
+      callbacks.onDone();
+    });
+
+    const { getByPlaceholderText, getByTestId } = render(<ChatScreen />);
+    const input = getByPlaceholderText('Message...');
+    fireEvent.changeText(input, 'Create and monitor the external deployment.');
+    const sendIcon = getByTestId('icon-Send');
+    fireEvent.press(sendIcon.parent || sendIcon);
+
+    await waitFor(() => {
+      expect(mockCompleteAgentRun).toHaveBeenCalledWith(
+        'conv1',
+        expect.objectContaining({
+          status: 'failed',
+          checkpointTitle: 'Workflow blocked',
+          checkpointDetail:
+            'Capability workflow blocked: External execution could not be correlated after repeated monitor observations.',
+          terminalReason: 'missing_required_side_effect',
+        }),
+        'run-1',
+      );
+    });
+    expect(mockEvaluateAgentRunWithPilot).not.toHaveBeenCalled();
+    expect(mockAddConversationLog).toHaveBeenCalledWith(
+      'conv1',
+      expect.objectContaining({
+        level: 'error',
+        title: 'Workflow blocked',
+        detail:
+          'Capability workflow blocked: External execution could not be correlated after repeated monitor observations.',
       }),
     );
   });

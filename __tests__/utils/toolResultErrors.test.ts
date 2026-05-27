@@ -3,6 +3,7 @@ import { isToolResultErrorLike } from '../../src/utils/toolResultErrors';
 describe('isToolResultErrorLike', () => {
   it('detects plain Error-prefixed results', () => {
     expect(isToolResultErrorLike('Error: ENOENT')).toBe(true);
+    expect(isToolResultErrorLike('Error executing github/workflow_runs: HTTP 403')).toBe(true);
   });
 
   it('detects JSON error payloads', () => {

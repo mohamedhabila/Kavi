@@ -1416,6 +1416,7 @@ type ToolChoiceMode = 'auto' | 'required' | {
 type ProviderTransport = 'anthropic' | 'gemini' | 'openai' | 'compatible' | 'local';
 
 type GeminiImageSizeValue = '512' | '1K' | '2K' | '4K';
+type GeminiStructuredOutputSyntax = 'responseFormat' | 'responseSchema';
 
 const GEMINI_IMAGE_ASPECT_RATIOS = new Set([
   '1:1',
@@ -4253,6 +4254,7 @@ export class LlmService {
     model: string,
     messages: ChatCompletionMessage[],
     options: MessageRequestOptions,
+    structuredOutputSyntax: GeminiStructuredOutputSyntax = 'responseFormat',
   ): Record<string, any> {
     const body: Record<string, any> = this.buildGeminiConversation(model, messages);
     const generationConfig: Record<string, any> = {};
@@ -4277,12 +4279,25 @@ export class LlmService {
     }
 
     if (canApplyStructuredOutput && structuredOutput) {
-      generationConfig.responseFormat = {
-        text: {
-          mimeType: structuredOutput.mimeType,
-          schema: cleanGeminiSchema(structuredOutput.schema, { target: 'structured_output' }),
-        },
-      };
+      const cleanedSchema =
+        structuredOutputSyntax === 'responseSchema'
+          ? cleanGeminiSchema(structuredOutput.schema, { target: 'function_declaration' })
+          : cleanGeminiSchema(structuredOutput.schema, { target: 'structured_output' });
+      if (structuredOutputSyntax === 'responseSchema') {
+        // Some Gemini endpoints still expose the legacy REST fields even when
+        // they reject the newer responseFormat envelope. Keep this as a
+        // transport fallback rather than making callers reason about API
+        // versions.
+        generationConfig.responseMimeType = structuredOutput.mimeType;
+        generationConfig.responseSchema = cleanedSchema;
+      } else {
+        generationConfig.responseFormat = {
+          text: {
+            mimeType: structuredOutput.mimeType,
+            schema: cleanedSchema,
+          },
+        };
+      }
     }
 
     if (Object.keys(generationConfig).length > 0) {
@@ -4315,6 +4330,18 @@ export class LlmService {
     }
 
     return body;
+  }
+
+  private shouldRetryGeminiStructuredOutputWithLegacySyntax(
+    status: number,
+    errorText: string,
+    body: Record<string, any>,
+  ): boolean {
+    if (status !== 400 || !body.generationConfig?.responseFormat) {
+      return false;
+    }
+
+    return /unknown name\s+["']?responseFormat["']?|cannot find field/i.test(errorText);
   }
 
   private normalizeGeminiFinishReason(finishReason: unknown): string {
@@ -4494,22 +4521,30 @@ export class LlmService {
       }
     }
 
-    if (activeCachedContent && cacheableText) {
-      if (dynamicText) {
-        body.systemInstruction = {
-          parts: [{ text: dynamicText }],
-        };
-      } else {
-        delete body.systemInstruction;
+    const applyGeminiCacheState = (targetBody: Record<string, any>) => {
+      if (activeCachedContent) {
+        targetBody.cachedContent = activeCachedContent;
       }
-    }
+
+      if (activeCachedContent && cacheableText) {
+        if (dynamicText) {
+          targetBody.systemInstruction = {
+            parts: [{ text: dynamicText }],
+          };
+        } else {
+          delete targetBody.systemInstruction;
+        }
+      }
+    };
+
+    applyGeminiCacheState(body);
 
     const methodName = options.stream ? 'streamGenerateContent?alt=sse' : 'generateContent';
     const requestHeaders = options.stream
       ? { ...headers, Accept: 'text/event-stream' }
       : headers;
 
-    const response = await this.performFetch(this.buildGeminiGenerateContentUrl(baseUrl, model, methodName), {
+    let response = await this.performFetch(this.buildGeminiGenerateContentUrl(baseUrl, model, methodName), {
       method: 'POST',
       headers: requestHeaders,
       body: JSON.stringify(body),
@@ -4518,6 +4553,31 @@ export class LlmService {
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => response.statusText);
+      if (
+        !options.stream &&
+        this.shouldRetryGeminiStructuredOutputWithLegacySyntax(response.status, errorText, body)
+      ) {
+        const retryBody = this.buildGeminiRequestBody(
+          geminiModel,
+          messages,
+          options,
+          'responseSchema',
+        );
+        applyGeminiCacheState(retryBody);
+        response = await this.performFetch(this.buildGeminiGenerateContentUrl(baseUrl, model, methodName), {
+          method: 'POST',
+          headers: requestHeaders,
+          body: JSON.stringify(retryBody),
+          signal: options.signal,
+        }, false);
+        if (response.ok) {
+          const json = await response.json();
+          return this.attachProviderResponse(this.normalizeGeminiResponse(json), 'gemini', json);
+        }
+
+        const retryErrorText = await response.text().catch(() => response.statusText);
+        throw new Error(`LLM API error ${response.status}: ${retryErrorText}`);
+      }
       throw new Error(`LLM API error ${response.status}: ${errorText}`);
     }
 

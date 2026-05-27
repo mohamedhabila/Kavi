@@ -5,6 +5,7 @@
 import {
   collectWorkflowToolResults,
   runOrchestrator,
+  selectWorkflowScopedMessagesForRun,
   OrchestratorCallbacks,
   OrchestratorOptions,
   MAX_TOOL_ITERATIONS,
@@ -1010,6 +1011,105 @@ describe('Orchestrator', () => {
       expect(callbacks.calls.onAssistantMessage.at(-1)?.content).toBe(
         'Done with verified commit evidence.',
       );
+    });
+
+    it('terminates the tool loop when the capability route becomes blocked', async () => {
+      (getSkillToolDefinitions as jest.Mock).mockReturnValue([
+        {
+          name: 'skill__github__workflow_runs',
+          description: '[GitHub] List GitHub Actions workflow runs.',
+          input_schema: { type: 'object', properties: {} },
+        },
+      ]);
+
+      const executionPlan = {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                routeMode: 'execution',
+                requiredToolCategories: ['github'],
+                requiredCapabilities: ['monitor', 'verify'],
+                recommendedTools: ['skill__github__workflow_runs'],
+                reason: 'Monitor the external workflow.',
+              }),
+            },
+          },
+        ],
+      };
+      const mockSendMessage = jest.fn().mockResolvedValue(executionPlan);
+
+      (LlmService as any).mockImplementation(() => ({
+        streamMessage: mockStreamMessage,
+        sendMessage: mockSendMessage,
+      }));
+
+      mockStreamMessage
+        .mockImplementationOnce(() =>
+          createStreamGenerator([
+            {
+              type: 'tool_call',
+              toolCall: {
+                id: 'tc-gh-workflow',
+                name: 'skill__github__workflow_runs',
+                arguments: '{"repo":"owner/repo"}',
+              },
+            },
+            { type: 'done', content: '' },
+          ]),
+        )
+        .mockImplementationOnce(() =>
+          createStreamGenerator([
+            {
+              type: 'tool_call',
+              toolCall: {
+                id: 'tc-should-not-run',
+                name: 'browser_launch',
+                arguments: '{}',
+              },
+            },
+            { type: 'done', content: '' },
+          ]),
+        );
+
+      (executeTool as jest.Mock).mockResolvedValueOnce(
+        'Error executing github/workflow_runs: GitHub API 403: Resource not accessible by personal access token.',
+      );
+
+      const callbacks = makeCallbacks();
+      const options: OrchestratorOptions = {
+        provider: makeProvider({
+          name: 'Gemini',
+          model: 'gemini-2.5-pro',
+          baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        }),
+        model: 'gemini-2.5-pro',
+        conversationId: 'conv-route-blocked-stops-tools',
+        systemPrompt: 'You are helpful',
+        messages: [
+          {
+            id: 'msg1',
+            role: 'user',
+            content: 'Monitor the required external workflow with tools.',
+            timestamp: Date.now(),
+          },
+        ],
+      };
+
+      await runOrchestrator(options, callbacks);
+
+      expect(executeTool).toHaveBeenCalledTimes(1);
+      expect(mockStreamMessage).toHaveBeenCalledTimes(1);
+      expect(callbacks.calls.onAssistantMessage.at(-1)?.content).toContain(
+        'Capability workflow blocked:',
+      );
+      expectAssistantMetadata(callbacks.calls.onAssistantMessage.at(-1)?.assistantMetadata, {
+        kind: 'final',
+        completionStatus: 'incomplete',
+        finishReason: 'route_blocked',
+        terminalReason: 'route_blocked',
+      });
+      expect(callbacks.calls.onDone).toHaveLength(1);
     });
 
     it('corrects SuperAgent execution plans that miss LLM-declared required tool categories', async () => {
@@ -2236,6 +2336,107 @@ describe('Orchestrator', () => {
       expect(callbacks.onDone).toHaveBeenCalled();
     });
 
+    it('treats error-like tool result strings as failed outcomes', async () => {
+      (executeTool as jest.Mock).mockResolvedValueOnce(
+        'Error: HTTP 403: access denied by the configured credential.',
+      );
+
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator([
+          { type: 'tool_call', toolCall: { id: 'tc1', name: 'read_file', arguments: '{}' } },
+          { type: 'done', content: '' },
+        ]),
+      );
+
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator([
+          { type: 'token', content: 'Blocked by credentials.' },
+          { type: 'done', content: 'Blocked by credentials.' },
+        ]),
+      );
+
+      const callbacks = makeCallbacks();
+      const options: OrchestratorOptions = {
+        provider: makeProvider(),
+        model: 'gpt-5.4',
+        conversationId: 'conv1',
+        systemPrompt: 'sys',
+        messages: [{ id: 'msg1', role: 'user', content: 'Read', timestamp: Date.now() }],
+      };
+
+      await runOrchestrator(options, callbacks);
+
+      const completedCall = callbacks.calls.onToolCallComplete[0];
+      expect(completedCall.status).toBe('failed');
+      expect(completedCall.error).toContain('HTTP 403');
+      expect(collectWorkflowToolResults([
+        {
+          id: 'tool-msg',
+          role: 'tool',
+          content: completedCall.result,
+          toolCallId: completedCall.id,
+          toolCalls: [completedCall],
+          isError: true,
+          timestamp: Date.now(),
+        },
+      ])).toEqual([
+        expect.objectContaining({
+          toolName: 'read_file',
+          status: 'failed',
+        }),
+      ]);
+    });
+
+    it('scopes workflow replay evidence to the active run user message', () => {
+      const messages: Message[] = [
+        { id: 'u1', role: 'user', content: 'Previous task', timestamp: 1 },
+        {
+          id: 'a1',
+          role: 'assistant',
+          content: '',
+          timestamp: 2,
+          toolCalls: [
+            {
+              id: 'old-tc',
+              name: 'skill__github__commit_files',
+              arguments: '{}',
+              status: 'completed',
+              result: '{"commitSha":"old"}',
+            },
+          ],
+        },
+        {
+          id: 'old-tool',
+          role: 'tool',
+          content: '{"commitSha":"old"}',
+          toolCallId: 'old-tc',
+          timestamp: 3,
+          toolCalls: [
+            {
+              id: 'old-tc',
+              name: 'skill__github__commit_files',
+              arguments: '{}',
+              status: 'completed',
+              result: '{"commitSha":"old"}',
+            },
+          ],
+        },
+        { id: 'u2', role: 'user', content: 'New task', timestamp: 4 },
+      ];
+
+      expect(
+        collectWorkflowToolResults(selectWorkflowScopedMessagesForRun(messages, 'u2')),
+      ).toEqual([]);
+      expect(
+        collectWorkflowToolResults(selectWorkflowScopedMessagesForRun(messages, 'u1')),
+      ).toEqual([
+        expect.objectContaining({
+          toolName: 'skill__github__commit_files',
+          status: 'completed',
+        }),
+      ]);
+    });
+
     it('runs eligible read-only tool batches in parallel', async () => {
       const resolvers: Array<(value: string) => void> = [];
       (executeTool as jest.Mock).mockImplementation(
@@ -2270,11 +2471,11 @@ describe('Orchestrator', () => {
 
       const runPromise = runOrchestrator(options, callbacks);
 
-      for (let attempt = 0; attempt < 4 && (executeTool as jest.Mock).mock.calls.length < 2; attempt += 1) {
+      for (let attempt = 0; attempt < 8 && (executeTool as jest.Mock).mock.calls.length < 2; attempt += 1) {
         // The orchestrator now yields once for assistant tool planning and once
         // again for each running tool so the mobile UI can paint pending/running
         // state before the tool work starts.
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await new Promise((resolve) => setTimeout(resolve, 16));
       }
 
       expect(executeTool).toHaveBeenCalledTimes(2);
@@ -2323,16 +2524,16 @@ describe('Orchestrator', () => {
 
       const runPromise = runOrchestrator(options, callbacks);
 
-      for (let attempt = 0; attempt < 4 && (executeTool as jest.Mock).mock.calls.length < 1; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 0));
+      for (let attempt = 0; attempt < 8 && (executeTool as jest.Mock).mock.calls.length < 1; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 16));
       }
 
       expect(executeTool).toHaveBeenCalledTimes(1);
 
       resolvers[0]('first result');
 
-      for (let attempt = 0; attempt < 4 && (executeTool as jest.Mock).mock.calls.length < 2; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 0));
+      for (let attempt = 0; attempt < 8 && (executeTool as jest.Mock).mock.calls.length < 2; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 16));
       }
 
       expect(executeTool).toHaveBeenCalledTimes(2);

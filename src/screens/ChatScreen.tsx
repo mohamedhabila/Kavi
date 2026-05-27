@@ -51,6 +51,7 @@ import { useAppTheme, AppPalette } from '../theme/useAppTheme';
 import {
   AgentRun,
   AgentRunAsyncOperation,
+  AgentRunRouteState,
   AgentRunTerminalReason,
   Attachment,
   Conversation,
@@ -196,6 +197,21 @@ function getAgentRunFinalReportTitle(
     return 'Blocker report delivered';
   }
   return 'Failure report delivered';
+}
+
+function buildBlockedWorkflowCheckpointDetail(
+  routeState: AgentRunRouteState | undefined,
+): string | undefined {
+  if (routeState?.status !== 'blocked') {
+    return undefined;
+  }
+
+  const activePhase = routeState.phases.find((phase) => phase.id === routeState.currentPhaseId);
+  const blocker =
+    routeState.blockers?.[routeState.blockers.length - 1] ||
+    activePhase?.detail ||
+    'Capability workflow reached a blocked state.';
+  return `Capability workflow blocked: ${blocker}`;
 }
 
 type ResolvedFinalizationProviderContext = {
@@ -1016,6 +1032,7 @@ export const ChatScreen: React.FC = () => {
   const isFocused = useIsFocused();
   const flatListRef = useRef<FlatList>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const runInvocationSequenceRef = useRef(0);
   const foregroundRequestRef = useRef<{
     requestId: string;
     conversationId: string;
@@ -3208,6 +3225,7 @@ export const ChatScreen: React.FC = () => {
   // ── Shared orchestrator runner ──────────────────────────────────────────
   const runChat = useCallback(
     async (convId: string, options?: RunChatOptions) => {
+      const runInvocationId = ++runInvocationSequenceRef.current;
       const conv = useChatStore.getState().conversations.find((c) => c.id === convId);
       const provider = resolveEnabledProvider(providers, conv?.providerId || activeProviderId);
       if (!provider) {
@@ -3245,6 +3263,10 @@ export const ChatScreen: React.FC = () => {
       const latestUserMessage = [...(conv?.messages ?? [])]
         .reverse()
         .find((message) => message.role === 'user');
+      if (!options?.reuseAgentRunId) {
+        abortForegroundRequestForConversation(convId, 'Superseded by a new user turn.');
+      }
+
       const latestUserRequestAssessment = assessUserRequest(latestUserMessage?.content, {
         hasAttachments: hasModelVisibleAttachments(latestUserMessage?.attachments),
         hasPriorContext: (conv?.messages?.length ?? 0) > 1,
@@ -3347,6 +3369,24 @@ export const ChatScreen: React.FC = () => {
 
         clearForegroundRequest(foregroundRequestId, abort);
         return true;
+      };
+      const isCurrentRunInvocation = () =>
+        runInvocationSequenceRef.current === runInvocationId &&
+        isCurrentForegroundRequest(foregroundRequestId, abort) &&
+        !abort.signal.aborted;
+      const guardRunCallback = () => {
+        if (!isCurrentRunInvocation()) {
+          return false;
+        }
+        return true;
+      };
+      let hasCompletedRunCallbacks = false;
+      const completeRunOnce = async (task: () => Promise<void> | void) => {
+        if (!isCurrentRunInvocation() || hasCompletedRunCallbacks) {
+          return;
+        }
+        hasCompletedRunCallbacks = true;
+        await task();
       };
 
       let currentAssistantMsgId = assistantMsgId;
@@ -4138,9 +4178,15 @@ export const ChatScreen: React.FC = () => {
 
       const callbacks: OrchestratorCallbacks = {
         onStateChange: (state) => {
+          if (!guardRunCallback()) {
+            return;
+          }
           logStateChange(String(state));
         },
         onToken: (token) => {
+          if (!guardRunCallback()) {
+            return;
+          }
           if (surfacedSubAgentOutputLock) {
             return;
           }
@@ -4150,6 +4196,9 @@ export const ChatScreen: React.FC = () => {
           scheduleAssistantCheckpoint();
         },
         onReasoning: (token) => {
+          if (!guardRunCallback()) {
+            return;
+          }
           if (surfacedSubAgentOutputLock) {
             return;
           }
@@ -4159,6 +4208,9 @@ export const ChatScreen: React.FC = () => {
           scheduleAssistantCheckpoint();
         },
         onAssistantStreamReset: () => {
+          if (!guardRunCallback()) {
+            return;
+          }
           if (checkpointTimer) {
             clearTimeout(checkpointTimer);
             checkpointTimer = null;
@@ -4197,9 +4249,15 @@ export const ChatScreen: React.FC = () => {
           }
         },
         onUserMessageEnriched: (messageId, enrichedContent) => {
+          if (!guardRunCallback()) {
+            return;
+          }
           updateMessageEnrichedContent(convId, messageId, enrichedContent);
         },
         onToolCallQueued: (toolCall) => {
+          if (!guardRunCallback()) {
+            return;
+          }
           const queuedToolCall: ToolCall = {
             ...toolCall,
             status: toolCall.status ?? 'pending',
@@ -4212,6 +4270,9 @@ export const ChatScreen: React.FC = () => {
           upsertLiveToolCall(currentAssistantMsgId, queuedToolCall);
         },
         onToolCallStart: (toolCall) => {
+          if (!guardRunCallback()) {
+            return;
+          }
           if (!toolCall.id?.trim() || !toolCall.name?.trim()) {
             return;
           }
@@ -4248,6 +4309,9 @@ export const ChatScreen: React.FC = () => {
           });
         },
         onToolCallComplete: (toolCall) => {
+          if (!guardRunCallback()) {
+            return;
+          }
           if (!toolCall.id?.trim() || !toolCall.name?.trim()) {
             return;
           }
@@ -4327,6 +4391,9 @@ export const ChatScreen: React.FC = () => {
           });
         },
         onPendingAsyncOperationsChange: (operations) => {
+          if (!guardRunCallback()) {
+            return;
+          }
           if (!trackedAgentRunId) {
             latestPendingAsyncOperations = operations;
             return;
@@ -4352,6 +4419,9 @@ export const ChatScreen: React.FC = () => {
           }
         },
         onAgentRouteStateChange: (routeState) => {
+          if (!guardRunCallback()) {
+            return;
+          }
           if (!trackedAgentRunId) {
             return;
           }
@@ -4383,6 +4453,9 @@ export const ChatScreen: React.FC = () => {
           }
         },
         onAssistantMessage: (content, toolCalls, providerReplay, assistantMetadata) => {
+          if (!guardRunCallback()) {
+            return;
+          }
           const incomingToolCalls =
             toolCalls?.filter((toolCall) => toolCall.id?.trim() && toolCall.name?.trim()) ?? [];
           if (surfacedSubAgentOutputLock && incomingToolCalls.length === 0) {
@@ -4478,6 +4551,9 @@ export const ChatScreen: React.FC = () => {
           }
         },
         onToolMessage: async (toolCallId, result) => {
+          if (!guardRunCallback()) {
+            return;
+          }
           const surfacedOutput = pendingSurfacedSubAgentOutputs.get(toolCallId);
           const content = surfacedOutput
             ? buildSurfacedSubAgentOutputToolResultSummary(surfacedOutput)
@@ -4495,184 +4571,192 @@ export const ChatScreen: React.FC = () => {
           await flushPendingStorageWrites(STORAGE_KEYS.CONVERSATIONS);
         },
         onError: (error) => {
+          if (!guardRunCallback()) {
+            return;
+          }
           didEncounterTerminalError = true;
-          completionPromise = (async () => {
-            flushPendingSurfacedSubAgentOutputs();
-            ensureAssistantTurn();
-            commitAssistantBuffers(true);
-            throwIfAbortSignalTriggered(abort.signal);
+          completionPromise = completionPromise
+            ? completionPromise
+            : completeRunOnce(async () => {
+                flushPendingSurfacedSubAgentOutputs();
+                ensureAssistantTurn();
+                commitAssistantBuffers(true);
+                throwIfAbortSignalTriggered(abort.signal);
 
-            const visibleContent = getVisibleAssistantContent();
-            markCurrentAssistantDraftIncomplete(visibleContent, 'response_failed');
-            const interruptedOutcome = await resolveInterruptedResponseOutcome(error);
-            throwIfAbortSignalTriggered(abort.signal);
+                const visibleContent = getVisibleAssistantContent();
+                markCurrentAssistantDraftIncomplete(visibleContent, 'response_failed');
+                const interruptedOutcome = await resolveInterruptedResponseOutcome(error);
+                throwIfAbortSignalTriggered(abort.signal);
 
-            if (interruptedOutcome.resumePrompt) {
-              const resumeAgentRun = resumeAgentRunRef.current;
-              if (trackedAgentRunId && resumeAgentRun) {
-                markCurrentAssistantDraftIncomplete(visibleContent, 'pilot_review_pending');
-                const resumePhase = interruptedOutcome.resumePhase ?? 'pilot';
-                setAgentRunPhase(
-                  convId,
-                  resumePhase,
-                  {
-                    status: 'active',
+                if (interruptedOutcome.resumePrompt) {
+                  const resumeAgentRun = resumeAgentRunRef.current;
+                  if (trackedAgentRunId && resumeAgentRun) {
+                    markCurrentAssistantDraftIncomplete(visibleContent, 'pilot_review_pending');
+                    const resumePhase = interruptedOutcome.resumePhase ?? 'pilot';
+                    setAgentRunPhase(
+                      convId,
+                      resumePhase,
+                      {
+                        status: 'active',
+                        detail: interruptedOutcome.checkpointDetail,
+                        checkpointTitle:
+                          resumePhase === 'pilot'
+                            ? PILOT_REVIEW_CHECKPOINT_TITLE
+                            : interruptedOutcome.checkpointTitle,
+                        checkpointDetail: interruptedOutcome.checkpointDetail,
+                      },
+                      trackedAgentRunId,
+                    );
+                    updateAgentRunSummary(
+                      convId,
+                      {
+                        latestSummary: interruptedOutcome.checkpointDetail,
+                      },
+                      trackedAgentRunId,
+                    );
+                    appendConversationLog(convId, {
+                      kind: 'state',
+                      level: 'warning',
+                      title: interruptedOutcome.checkpointTitle,
+                      detail: interruptedOutcome.checkpointDetail,
+                    });
+
+                    clearForegroundRequestIfCurrent();
+
+                    throwIfAbortSignalTriggered(abort.signal);
+
+                    await resumeAgentRun({
+                      conversationId: convId,
+                      runId: trackedAgentRunId,
+                      additionalSystemPrompt: interruptedOutcome.resumePrompt,
+                      additionalUserPrompt: interruptedOutcome.resumeUserPrompt,
+                    });
+
+                    throwIfAbortSignalTriggered(abort.signal);
+                    requestChatStorePersistenceCheckpoint();
+                    return;
+                  }
+                }
+
+                if (trackedAgentRunId && interruptedOutcome.keepRunOpen === 'background-workers') {
+                  const waitTimestamp = Date.now();
+                  setAgentRunAwaitingBackgroundWorkers(
+                    convId,
+                    true,
+                    {
+                      latestSummary: interruptedOutcome.checkpointDetail,
+                      checkpointTitle: interruptedOutcome.checkpointTitle,
+                      checkpointDetail: interruptedOutcome.checkpointDetail,
+                      timestamp: waitTimestamp,
+                    },
+                    trackedAgentRunId,
+                  );
+                  appendConversationLog(convId, {
+                    kind: 'state',
+                    level: 'warning',
+                    title: interruptedOutcome.checkpointTitle,
                     detail: interruptedOutcome.checkpointDetail,
-                    checkpointTitle:
-                      resumePhase === 'pilot'
-                        ? PILOT_REVIEW_CHECKPOINT_TITLE
-                        : interruptedOutcome.checkpointTitle,
-                    checkpointDetail: interruptedOutcome.checkpointDetail,
-                  },
-                  trackedAgentRunId,
+                    timestamp: waitTimestamp,
+                  });
+                  requestChatStorePersistenceCheckpoint();
+                  return;
+                }
+
+                if (trackedAgentRunId && interruptedOutcome.keepRunOpen === 'async-operations') {
+                  const reviewTimestamp = Date.now();
+                  setAgentRunPhase(
+                    convId,
+                    'work',
+                    {
+                      status: 'active',
+                      detail: interruptedOutcome.checkpointDetail,
+                      checkpointTitle: interruptedOutcome.checkpointTitle,
+                      checkpointDetail: interruptedOutcome.checkpointDetail,
+                      timestamp: reviewTimestamp,
+                      allowRegression: true,
+                    },
+                    trackedAgentRunId,
+                  );
+                  updateAgentRunSummary(
+                    convId,
+                    {
+                      latestSummary: interruptedOutcome.checkpointDetail,
+                      timestamp: reviewTimestamp,
+                    },
+                    trackedAgentRunId,
+                  );
+                  appendConversationLog(convId, {
+                    kind: 'state',
+                    level: 'warning',
+                    title: interruptedOutcome.checkpointTitle,
+                    detail: interruptedOutcome.checkpointDetail,
+                    timestamp: reviewTimestamp,
+                  });
+                  requestChatStorePersistenceCheckpoint();
+                  return;
+                }
+
+                const recoveredFinal = await recoverAgentRunFinalPreview(
+                  interruptedOutcome.status,
+                  undefined,
+                  undefined,
+                  abort.signal,
                 );
-                updateAgentRunSummary(
-                  convId,
-                  {
-                    latestSummary: interruptedOutcome.checkpointDetail,
-                  },
-                  trackedAgentRunId,
+                throwIfAbortSignalTriggered(abort.signal);
+                const latestSummary =
+                  recoveredFinal.preview || visibleContent || `Error: ${error.message}`;
+
+                finalizeTrackedRun(
+                  interruptedOutcome.status,
+                  latestSummary,
+                  interruptedOutcome.checkpointTitle,
+                  interruptedOutcome.checkpointDetail,
+                  interruptedOutcome.terminalReason,
                 );
+                if (!recoveredFinal.recovered && interruptedOutcome.status !== 'completed') {
+                  setChatError(error.message);
+                }
                 appendConversationLog(convId, {
-                  kind: 'state',
-                  level: 'warning',
-                  title: interruptedOutcome.checkpointTitle,
-                  detail: interruptedOutcome.checkpointDetail,
+                  kind: 'error',
+                  level:
+                    interruptedOutcome.status === 'completed' || recoveredFinal.recovered
+                      ? 'warning'
+                      : 'error',
+                  title:
+                    interruptedOutcome.status === 'completed'
+                      ? 'Response interrupted; recovered final answer'
+                      : recoveredFinal.recovered
+                        ? interruptedOutcome.checkpointTitle
+                        : 'Response failed',
+                  detail:
+                    interruptedOutcome.status === 'completed'
+                      ? error.message
+                      : interruptedOutcome.checkpointDetail,
                 });
 
-                clearForegroundRequestIfCurrent();
+                if (!recoveredFinal.recovered && interruptedOutcome.status !== 'completed') {
+                  updateMessage(
+                    convId,
+                    currentAssistantMsgId,
+                    visibleContent || `Error: ${error.message}`,
+                  );
+                  updateMessageAssistantMetadata(
+                    convId,
+                    currentAssistantMsgId,
+                    buildAssistantMessageMetadata('final', {
+                      completionStatus: 'incomplete',
+                      finishReason: 'response_failed',
+                    }),
+                  );
+                }
 
-                throwIfAbortSignalTriggered(abort.signal);
-
-                await resumeAgentRun({
-                  conversationId: convId,
-                  runId: trackedAgentRunId,
-                  additionalSystemPrompt: interruptedOutcome.resumePrompt,
-                  additionalUserPrompt: interruptedOutcome.resumeUserPrompt,
-                });
-
-                throwIfAbortSignalTriggered(abort.signal);
                 requestChatStorePersistenceCheckpoint();
-                return;
-              }
-            }
-
-            if (trackedAgentRunId && interruptedOutcome.keepRunOpen === 'background-workers') {
-              const waitTimestamp = Date.now();
-              setAgentRunAwaitingBackgroundWorkers(
-                convId,
-                true,
-                {
-                  latestSummary: interruptedOutcome.checkpointDetail,
-                  checkpointTitle: interruptedOutcome.checkpointTitle,
-                  checkpointDetail: interruptedOutcome.checkpointDetail,
-                  timestamp: waitTimestamp,
-                },
-                trackedAgentRunId,
-              );
-              appendConversationLog(convId, {
-                kind: 'state',
-                level: 'warning',
-                title: interruptedOutcome.checkpointTitle,
-                detail: interruptedOutcome.checkpointDetail,
-                timestamp: waitTimestamp,
               });
-              requestChatStorePersistenceCheckpoint();
-              return;
-            }
-
-            if (trackedAgentRunId && interruptedOutcome.keepRunOpen === 'async-operations') {
-              const reviewTimestamp = Date.now();
-              setAgentRunPhase(
-                convId,
-                'work',
-                {
-                  status: 'active',
-                  detail: interruptedOutcome.checkpointDetail,
-                  checkpointTitle: interruptedOutcome.checkpointTitle,
-                  checkpointDetail: interruptedOutcome.checkpointDetail,
-                  timestamp: reviewTimestamp,
-                  allowRegression: true,
-                },
-                trackedAgentRunId,
-              );
-              updateAgentRunSummary(
-                convId,
-                {
-                  latestSummary: interruptedOutcome.checkpointDetail,
-                  timestamp: reviewTimestamp,
-                },
-                trackedAgentRunId,
-              );
-              appendConversationLog(convId, {
-                kind: 'state',
-                level: 'warning',
-                title: interruptedOutcome.checkpointTitle,
-                detail: interruptedOutcome.checkpointDetail,
-                timestamp: reviewTimestamp,
-              });
-              requestChatStorePersistenceCheckpoint();
-              return;
-            }
-
-            const recoveredFinal = await recoverAgentRunFinalPreview(
-              interruptedOutcome.status,
-              undefined,
-              undefined,
-              abort.signal,
-            );
-            throwIfAbortSignalTriggered(abort.signal);
-            const latestSummary =
-              recoveredFinal.preview || visibleContent || `Error: ${error.message}`;
-
-            finalizeTrackedRun(
-              interruptedOutcome.status,
-              latestSummary,
-              interruptedOutcome.checkpointTitle,
-              interruptedOutcome.checkpointDetail,
-              interruptedOutcome.terminalReason,
-            );
-            if (!recoveredFinal.recovered && interruptedOutcome.status !== 'completed') {
-              setChatError(error.message);
-            }
-            appendConversationLog(convId, {
-              kind: 'error',
-              level:
-                interruptedOutcome.status === 'completed' || recoveredFinal.recovered
-                  ? 'warning'
-                  : 'error',
-              title:
-                interruptedOutcome.status === 'completed'
-                  ? 'Response interrupted; recovered final answer'
-                  : recoveredFinal.recovered
-                    ? interruptedOutcome.checkpointTitle
-                    : 'Response failed',
-              detail:
-                interruptedOutcome.status === 'completed'
-                  ? error.message
-                  : interruptedOutcome.checkpointDetail,
-            });
-
-            if (!recoveredFinal.recovered && interruptedOutcome.status !== 'completed') {
-              updateMessage(
-                convId,
-                currentAssistantMsgId,
-                visibleContent || `Error: ${error.message}`,
-              );
-              updateMessageAssistantMetadata(
-                convId,
-                currentAssistantMsgId,
-                buildAssistantMessageMetadata('final', {
-                  completionStatus: 'incomplete',
-                  finishReason: 'response_failed',
-                }),
-              );
-            }
-
-            requestChatStorePersistenceCheckpoint();
-          })();
         },
         onUsage: (usage) => {
+          if (!guardRunCallback()) {
+            return;
+          }
           recordConversationUsageEvent({
             conversationId: convId,
             usage: {
@@ -4690,6 +4774,9 @@ export const ChatScreen: React.FC = () => {
           });
         },
         onDone: () => {
+          if (!guardRunCallback()) {
+            return;
+          }
           if (didEncounterTerminalError) {
             const terminalRecovery = completionPromise ?? Promise.resolve();
             completionPromise = terminalRecovery.finally(() => {
@@ -4699,7 +4786,7 @@ export const ChatScreen: React.FC = () => {
             return;
           }
 
-          completionPromise = (async () => {
+          completionPromise = completeRunOnce(async () => {
             flushPendingSurfacedSubAgentOutputs();
             commitAssistantBuffers(true);
             if (!abort.signal.aborted) {
@@ -4981,6 +5068,34 @@ export const ChatScreen: React.FC = () => {
                       return;
                     }
 
+                    const prePilotBlockedWorkflowDetail = buildBlockedWorkflowCheckpointDetail(
+                      targetRun.routeState,
+                    );
+                    if (prePilotBlockedWorkflowDetail) {
+                      completionStatus = 'failed';
+                      latestSummary = prePilotBlockedWorkflowDetail;
+                      checkpointTitle = 'Workflow blocked';
+                      checkpointDetail = prePilotBlockedWorkflowDetail;
+                      completionTerminalReason = 'missing_required_side_effect';
+                      completionLogLevel = 'error';
+                      completionLogTitle = checkpointTitle;
+                      completionLogDetail = checkpointDetail;
+                      finalizeTrackedRun(
+                        completionStatus,
+                        latestSummary,
+                        checkpointTitle,
+                        checkpointDetail,
+                        completionTerminalReason,
+                      );
+                      appendConversationLog(convId, {
+                        kind: 'state',
+                        level: completionLogLevel,
+                        title: completionLogTitle,
+                        detail: completionLogDetail,
+                      });
+                      return;
+                    }
+
                     const {
                       liveSnapshots: liveSubAgents,
                       mergedSnapshots: reviewableSubAgents,
@@ -5109,6 +5224,19 @@ export const ChatScreen: React.FC = () => {
                       completionLogDetail = pilotDecision.checkpointDetail;
                     }
 
+                    const blockedWorkflowDetail = buildBlockedWorkflowCheckpointDetail(
+                      targetRun.routeState,
+                    );
+                    if (blockedWorkflowDetail) {
+                      completionStatus = 'failed';
+                      checkpointTitle = 'Workflow blocked';
+                      checkpointDetail = blockedWorkflowDetail;
+                      completionTerminalReason = 'missing_required_side_effect';
+                      completionLogLevel = 'error';
+                      completionLogTitle = checkpointTitle;
+                      completionLogDetail = checkpointDetail;
+                    }
+
                     const finalPreview = await recoverAgentRunFinalPreview(
                       completionStatus,
                       undefined,
@@ -5203,9 +5331,12 @@ export const ChatScreen: React.FC = () => {
               }
             }
             clearForegroundRequestIfCurrent();
-          })();
+          });
         },
         onCommandResult: (result) => {
+          if (!guardRunCallback()) {
+            return;
+          }
           if (result.response) updateMessage(convId, currentAssistantMsgId, result.response);
           appendConversationLog(convId, {
             kind: 'command',
@@ -5241,6 +5372,9 @@ export const ChatScreen: React.FC = () => {
           }
         },
         onCompaction: (event) => {
+          if (!guardRunCallback()) {
+            return;
+          }
           useChatStore.getState().applyConversationCompaction(convId, event.messages);
           appendConversationLog(convId, {
             kind: 'compaction',
@@ -5294,6 +5428,7 @@ export const ChatScreen: React.FC = () => {
             internalUserMessageCount: options?.additionalUserPrompt?.trim() ? 1 : 0,
             initialPendingAsyncOperations: options?.initialPendingAsyncOperations,
             initialWorkflowRouteState: existingRun?.routeState,
+            workflowScopeUserMessageId: existingRun?.userMessageId ?? latestUserMessage?.id,
           },
           callbacks,
         );
@@ -5501,6 +5636,24 @@ export const ChatScreen: React.FC = () => {
           },
           run.id,
         );
+        clearAgentRunCancellation(activeConversationId, run.id);
+        void ensureAgentRunFinalResponse({
+          conversationId: activeConversationId,
+          runId: run.id,
+          status: 'cancelled',
+          timestamp: Date.now(),
+        }).catch((error: unknown) => {
+          if (isAbortErrorLike(error)) {
+            return;
+          }
+          const detail = error instanceof Error ? error.message : String(error);
+          appendConversationLog(activeConversationId, {
+            kind: 'error',
+            level: 'error',
+            title: 'Cancellation report failed',
+            detail,
+          });
+        });
 
         if (conversation) {
           cancelRunningSubAgentsForRun(conversation, run.id, stopReason);
@@ -5533,6 +5686,7 @@ export const ChatScreen: React.FC = () => {
     appendConversationLog,
     clearForegroundRequestForConversation,
     completeAgentRun,
+    ensureAgentRunFinalResponse,
   ]);
 
   const handleEdit = useCallback((messageId: string, content: string) => {

@@ -223,6 +223,68 @@ describe('Bug 1: Gemini thought_signature handling', () => {
     // providerReplay takes priority → real signature
     expect(modelParts[0].thoughtSignature).toBe('crypto-real-sig');
   });
+
+  it('retries Gemini structured output with legacy responseSchema when responseFormat is unsupported', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              error: {
+                message:
+                  'Invalid JSON payload received. Unknown name "responseFormat" at \'generation_config\': Cannot find field.',
+              },
+            }),
+          ),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: JSON.stringify({ ok: true }),
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+      });
+
+    const service = new LlmService(makeGeminiConfig());
+    await service.sendMessage([{ role: 'user', content: 'Return JSON.' }], {
+      structuredOutput: {
+        name: 'pilot_report',
+        schema: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+          },
+          required: ['ok'],
+          additionalProperties: false,
+        },
+      },
+    } as any);
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    const firstBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const retryBody = JSON.parse(mockFetch.mock.calls[1][1].body);
+    expect(firstBody.generationConfig.responseFormat).toBeDefined();
+    expect(retryBody.generationConfig.responseFormat).toBeUndefined();
+    expect(retryBody.generationConfig.responseMimeType).toBe('application/json');
+    expect(retryBody.generationConfig.responseSchema).toEqual(
+      expect.objectContaining({
+        type: 'object',
+        properties: expect.objectContaining({ ok: expect.objectContaining({ type: 'boolean' }) }),
+      }),
+    );
+  });
 });
 
 // ── Bug 2: Claude subagent empty output ─────────────────────────────────

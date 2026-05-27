@@ -1190,7 +1190,7 @@ export const EXPO_EAS_WORKFLOW_STATUS_TOOL: ToolDefinition = {
       workflowRunId: {
         type: 'string',
         description:
-          'Optional workflow run id. When omitted, the latest relevant run is inspected.',
+          'Optional workflow run id. Include this when inspecting execution evidence for a specific mutation; otherwise first list runs and correlate the desired run.',
       },
       includeJobs: {
         type: 'boolean',
@@ -1220,7 +1220,8 @@ export const EXPO_EAS_WORKFLOW_WAIT_TOOL: ToolDefinition = {
       },
       workflowRunId: {
         type: 'string',
-        description: 'Optional workflow run id. When omitted, the latest relevant run is used.',
+        description:
+          'Workflow run id to wait on. Required for safe waits; list and correlate runs first instead of waiting on an ambiguous latest run.',
       },
       timeoutMs: {
         type: 'number',
@@ -1240,7 +1241,7 @@ export const EXPO_EAS_WORKFLOW_WAIT_TOOL: ToolDefinition = {
           'Whether to include failure log excerpts and attempt to resolve a log archive URL in the final snapshot (default: true). Keep this enabled so the final result includes build-stage evidence for agentic repair loops.',
       },
     },
-    required: ['projectId'],
+    required: ['projectId', 'workflowRunId'],
   },
 };
 

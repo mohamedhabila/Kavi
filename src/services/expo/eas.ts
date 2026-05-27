@@ -2977,7 +2977,7 @@ async function fetchExpoWorkflowRunsForFileAsync(
   appId: string,
   fileName: string,
   limit = 5,
-): Promise<Array<{ id: string; status: string; conclusion?: string | null }>> {
+): Promise<Array<{ id: string; status: string; conclusion?: string | null; createdAt?: string | null; updatedAt?: string | null }>> {
   const data = await expoGraphqlRequest<{
     workflows: {
       byAppIdAndFileName?: {
@@ -2986,6 +2986,8 @@ async function fetchExpoWorkflowRunsForFileAsync(
             node?: {
               id: string;
               status: string;
+              createdAt?: string | null;
+              updatedAt?: string | null;
               errors?: Array<{ title?: string | null; message?: string | null }>;
             } | null;
           }>;
@@ -3004,6 +3006,8 @@ async function fetchExpoWorkflowRunsForFileAsync(
               node {
                 id
                 status
+                createdAt
+                updatedAt
                 errors {
                   title
                   message
@@ -3026,6 +3030,8 @@ async function fetchExpoWorkflowRunsForFileAsync(
       ): node is {
         id: string;
         status: string;
+        createdAt?: string | null;
+        updatedAt?: string | null;
         errors?: Array<{ title?: string | null; message?: string | null }>;
       } => Boolean(node),
     )
@@ -3037,6 +3043,8 @@ async function fetchExpoWorkflowRunsForFileAsync(
           ?.map((entry) => entry.message || entry.title)
           .filter(Boolean)
           .join('; ') || null,
+      createdAt: node.createdAt || null,
+      updatedAt: node.updatedAt || null,
     }));
 }
 
@@ -3929,6 +3937,8 @@ export async function listExpoWorkflowRuns(
       url: getExpoWorkflowRunUrl(hydratedProject, account, run.id),
       status: run.status,
       conclusion: run.conclusion,
+      createdAt: run.createdAt || null,
+      updatedAt: run.updatedAt || null,
     })),
     publicUrls,
     note: 'Expo-hosted workflow listing is normalized here. Use it after pushing a commit to the branch that owns the .eas/workflows file, then inspect or wait on the newest run.',
@@ -4121,6 +4131,53 @@ export async function waitForExpoWorkflowRun(
     includeLogs?: boolean;
   } = {},
 ): Promise<ExpoWorkflowRunInspectionResult & { waitedMs: number; timedOut: boolean }> {
+  if (!trimToUndefined(args.workflowRunId)) {
+    const settings = useSettingsStore.getState();
+    const project = resolveExpoProject(projectId, settings);
+    const account = resolveExpoAccount(project.accountId, settings);
+    const mode = getExpoProjectExecutionMode(project, account);
+    const publicUrls = getExpoProjectPublicUrls(project);
+    const unavailableNote = getExpoWorkflowToolUnavailableNote(project, account, settings);
+    if (unavailableNote) {
+      return {
+        status: 'unsupported',
+        projectId: project.id,
+        projectName: project.name,
+        mode,
+        publicUrls,
+        note: unavailableNote,
+        waitedMs: 0,
+        timedOut: false,
+      };
+    }
+
+    if (mode === 'direct-ssh') {
+      return {
+        status: 'unsupported',
+        projectId: project.id,
+        projectName: project.name,
+        mode,
+        publicUrls,
+        note: 'Direct SSH mode does not create a separate cloud workflow run to wait on.',
+        waitedMs: 0,
+        timedOut: false,
+      };
+    }
+
+    return {
+      status: 'not_found',
+      projectId: project.id,
+      projectName: project.name,
+      mode,
+      publicUrls,
+      note: 'A workflowRunId is required before waiting so the agent does not accidentally wait on a stale latest run.',
+      guidance:
+        'Call the workflow run listing/status tool first, correlate a run to the current mutation, then call wait with that exact workflowRunId.',
+      waitedMs: 0,
+      timedOut: false,
+    };
+  }
+
   const timeoutMs = Math.max(1000, Math.min(args.timeoutMs || 10 * 60 * 1000, 60 * 60 * 1000));
   const pollIntervalMs = Math.max(1000, Math.min(args.pollIntervalMs || 5000, 60000));
   const startedAt = Date.now();

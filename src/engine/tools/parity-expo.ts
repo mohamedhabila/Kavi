@@ -705,6 +705,31 @@ function normalizeExpoToolPayload<T extends object>(
   if (typeof payload.mode === 'string' && payload.mode.trim())
     normalized.mode = payload.mode.trim();
   if (options?.preferredFlow) normalized.preferredFlow = options.preferredFlow;
+  if (isRecord(payload.automation)) {
+    const automation = payload.automation;
+    const configPaths =
+      typeof automation.workflowFile === 'string' && automation.workflowFile.trim()
+        ? [
+            automation.workflowFile.trim().includes('/')
+              ? automation.workflowFile.trim()
+              : `.eas/workflows/${automation.workflowFile.trim()}`,
+          ]
+        : [];
+    const trigger: Record<string, unknown> = {
+      source: 'remote_mutation',
+      expectedAfter: 'push',
+      ...(typeof automation.recommendedBranch === 'string' && automation.recommendedBranch.trim()
+        ? { branch: automation.recommendedBranch.trim() }
+        : {}),
+      ...(configPaths.length > 0 ? { configPaths } : {}),
+      ...(typeof automation.autoTriggerOnPush === 'boolean'
+        ? { autoTriggerOnSourceMutation: automation.autoTriggerOnPush }
+        : {}),
+    };
+    if (Object.keys(trigger).length > 2 || configPaths.length > 0) {
+      normalized.trigger = trigger;
+    }
+  }
   if (typeof payload.jobId === 'string' && payload.jobId.trim())
     normalized.jobId = payload.jobId.trim();
   if (typeof payload.command === 'string' && payload.command.trim()) {

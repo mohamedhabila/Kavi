@@ -570,6 +570,22 @@ describe('expo eas service', () => {
     );
   });
 
+  it('refuses to wait on an ambiguous latest workflow run without a run id', async () => {
+    const waited = await waitForExpoWorkflowRun('expo-project-2', {
+      timeoutMs: 1000,
+      pollIntervalMs: 1000,
+    });
+
+    expect(waited).toEqual(
+      expect.objectContaining({
+        status: 'not_found',
+        timedOut: false,
+        note: expect.stringContaining('workflowRunId is required'),
+      }),
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it('returns Expo-hosted build-stage logs for failed build jobs', async () => {
     mockSettingsState = {
       expoAccounts: [account],

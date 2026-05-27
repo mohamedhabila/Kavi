@@ -575,6 +575,8 @@ export interface ToolSelectionOptions {
   recentToolNames?: Iterable<string>;
   preferredToolNames?: Iterable<string>;
   restrictToPreferredTools?: boolean;
+  /** When true, do not keep always-loaded base tools unless they are explicitly preferred. */
+  strictPreferredTools?: boolean;
   allowDeferredBackfill?: boolean;
   /** When true, forces session/agent tool categories into the active set. */
   isSuperAgent?: boolean;
@@ -625,6 +627,8 @@ export function selectToolsForRequest(
   }
   const restrictToPreferredTools =
     preferredToolNames.size > 0 && options?.restrictToPreferredTools === true;
+  const strictPreferredTools =
+    restrictToPreferredTools && options?.strictPreferredTools === true;
   for (const category of options?.discoveredCategories ?? []) {
     if (category) {
       relevantCategories.add(category);
@@ -671,6 +675,15 @@ export function selectToolsForRequest(
     const isPreferredWorkflowPrerequisite = descriptor?.workflowStages.some(
       (stage) => stage === 'discover_resource' || stage === 'inspect_resource',
     ) ?? false;
+    const isDiscoveredTool = discoveredToolNames.has(tool.name);
+    const isRecentTool = recentToolNames.has(tool.name);
+    const isSuperAgentEssential = superAgentForceInclude.has(tool.name);
+
+    if (strictPreferredTools && !isPreferredTool && !isSuperAgentEssential) {
+      deferred.push(tool);
+      continue;
+    }
+
     if (
       executionRoute &&
       isExecutionDiscoveryOrMetaToolName(tool.name) &&
@@ -686,9 +699,6 @@ export function selectToolsForRequest(
       continue;
     }
 
-    const isDiscoveredTool = discoveredToolNames.has(tool.name);
-    const isRecentTool = recentToolNames.has(tool.name);
-    const isSuperAgentEssential = superAgentForceInclude.has(tool.name);
     if (isTier1 || isPreferredTool || isSuperAgentEssential) {
       included.push(tool);
       continue;
@@ -731,7 +741,7 @@ export function selectToolsForRequest(
     const category = toolToCategory.get(tool.name) ?? getToolManagerCategoryForToolName(tool.name);
     const isCategoryMatched = Boolean(category && relevantCategories.has(category));
     return (
-      alwaysLoadedToolNames.has(tool.name)
+      (!strictPreferredTools && alwaysLoadedToolNames.has(tool.name))
       || superAgentForceInclude.has(tool.name)
       || preferredToolNames.has(tool.name)
       || discoveredToolNames.has(tool.name)
@@ -767,7 +777,7 @@ export function selectToolsForRequest(
     // Sort by priority: Tier1 first (weight 0), exact discovered tools
     // second (weight 1), category-matched tools third (weight 2), others last.
     const weight = (t: ToolDefinition): number => {
-      if (alwaysLoadedToolNames.has(t.name)) return 0;
+      if (!strictPreferredTools && alwaysLoadedToolNames.has(t.name)) return 0;
       if (superAgentForceInclude.has(t.name)) return 0;
       if (preferredToolNames.has(t.name)) return 1;
       if (discoveredToolNames.has(t.name)) return 2;
@@ -795,7 +805,7 @@ export function selectToolsForRequest(
 
   included.sort((a, b) => {
     const weight = (t: ToolDefinition): number => {
-      if (alwaysLoadedToolNames.has(t.name)) return 0;
+      if (!strictPreferredTools && alwaysLoadedToolNames.has(t.name)) return 0;
       if (superAgentForceInclude.has(t.name)) return 0;
       if (preferredToolNames.has(t.name)) return 1;
       if (discoveredToolNames.has(t.name)) return 2;

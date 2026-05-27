@@ -16,7 +16,7 @@ export function isToolResultErrorLike(result: string | undefined): boolean {
     return false;
   }
 
-  if (/^(Error:|Blocked:)/i.test(trimmed)) {
+  if (/^(Error|Blocked)(?::|\s)/i.test(trimmed)) {
     return true;
   }
 
