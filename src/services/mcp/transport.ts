@@ -7,6 +7,22 @@ import { fetch as expoFetch } from 'expo/fetch';
 
 import { APP_DISPLAY_NAME, APP_VERSION } from '../../constants/appMetadata';
 import { unrefTimerIfSupported } from '../../utils/timers';
+import {
+  createMcpHttpError,
+  formatTransportError,
+  hasConfiguredMcpAuth,
+  McpTransportError,
+  shouldFallbackToLegacySse,
+} from './transportErrors';
+import {
+  parseSseStreamPayload,
+  readSseJsonRpcResponse,
+  type McpStreamMessage,
+} from './transportFraming';
+import { connectMcpSseTransport } from './transportSseConnection';
+
+export { McpTransportError } from './transportErrors';
+export { isSseTransportAvailable } from './transportSseConnection';
 
 export type TransportType = 'sse' | 'streamable-http';
 export type TransportPreference = 'auto' | TransportType;
@@ -41,31 +57,6 @@ export interface JsonRpcNotification {
 }
 
 const DEFAULT_MCP_PROTOCOL_VERSION = '2025-03-26';
-
-export function isSseTransportAvailable(): boolean {
-  return typeof EventSource === 'function';
-}
-
-export class McpTransportError extends Error {
-  statusCode?: number;
-  shouldFallbackToSse: boolean;
-  requiresAuthentication: boolean;
-
-  constructor(
-    message: string,
-    options: {
-      statusCode?: number;
-      shouldFallbackToSse?: boolean;
-      requiresAuthentication?: boolean;
-    } = {},
-  ) {
-    super(message);
-    this.name = 'McpTransportError';
-    this.statusCode = options.statusCode;
-    this.shouldFallbackToSse = options.shouldFallbackToSse ?? false;
-    this.requiresAuthentication = options.requiresAuthentication ?? false;
-  }
-}
 
 type MessageHandler = (msg: JsonRpcResponse | JsonRpcNotification) => void;
 type ErrorHandler = (error: Error) => void;
@@ -141,7 +132,7 @@ export class McpTransport {
       return;
     } catch (err) {
       streamableHttpError = err;
-      if (!this.shouldFallbackToLegacySse(err)) {
+      if (!shouldFallbackToLegacySse(err)) {
         throw err;
       }
     }
@@ -153,7 +144,7 @@ export class McpTransport {
       this.reconnectAttempt = 0;
     } catch (err) {
       throw new Error(
-        `Failed to connect via both streamable HTTP and SSE: HTTP=${this.formatError(streamableHttpError)}; SSE=${this.formatError(err)}`,
+        `Failed to connect via both streamable HTTP and SSE: HTTP=${formatTransportError(streamableHttpError)}; SSE=${formatTransportError(err)}`,
       );
     }
   }
@@ -189,89 +180,20 @@ export class McpTransport {
 
     const contentType = response.headers.get('content-type') ?? '';
     this.initializeResponse = contentType.includes('text/event-stream')
-      ? await this.readSseResponse(response)
+      ? await readSseJsonRpcResponse(response)
       : ((await response.json()) as JsonRpcResponse);
 
     this.captureProtocolVersion(this.initializeResponse);
   }
 
-  private connectSse(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!isSseTransportAvailable()) {
-        reject(new Error('SSE transport is not available in this runtime'));
-        return;
-      }
-
-      const baseUrl = this.config.url.replace(/\/$/, '');
-      const candidates = Array.from(
-        new Set(
-          [this.config.sseUrl?.trim(), baseUrl, `${baseUrl}/sse`].filter((value): value is string =>
-            Boolean(value),
-          ),
-        ),
-      );
-
-      let index = 0;
-
-      const tryNext = () => {
-        const sseUrl = candidates[index++];
-        if (!sseUrl) {
-          reject(new Error('SSE connection failed'));
-          return;
-        }
-
-        const es = new EventSource(sseUrl);
-        let resolved = false;
-        const connectTimeout = setTimeout(() => {
-          if (!resolved) {
-            es.close();
-            tryNext();
-          }
-        }, this.config.timeout ?? 10000);
-        unrefTimerIfSupported(connectTimeout);
-
-        const clearConnectTimeout = () => {
-          clearTimeout(connectTimeout);
-        };
-
-        es.addEventListener('endpoint', ((event: MessageEvent) => {
-          const endpointPath = event.data;
-          if (endpointPath.startsWith('http')) {
-            this.messageEndpoint = endpointPath;
-          } else {
-            const url = new URL(baseUrl);
-            this.messageEndpoint = `${url.origin}${endpointPath}`;
-          }
-          if (!resolved) {
-            resolved = true;
-            clearConnectTimeout();
-            this.eventSource = es;
-            resolve();
-          }
-        }) as EventListener);
-
-        es.addEventListener('message', ((event: MessageEvent) => {
-          try {
-            const data = JSON.parse(event.data);
-            this.onMessage?.(data);
-          } catch {
-            // skip malformed messages
-          }
-        }) as EventListener);
-
-        es.onerror = () => {
-          if (!resolved) {
-            clearConnectTimeout();
-            es.close();
-            tryNext();
-            return;
-          }
-          this.handleDisconnect();
-        };
-      };
-
-      tryNext();
+  private async connectSse(): Promise<void> {
+    const connection = await connectMcpSseTransport({
+      config: this.config,
+      onMessage: this.onMessage,
+      onDisconnect: () => this.handleDisconnect(),
     });
+    this.eventSource = connection.eventSource;
+    this.messageEndpoint = connection.messageEndpoint;
   }
 
   async send(
@@ -310,7 +232,7 @@ export class McpTransport {
     const contentType = response.headers.get('content-type') ?? '';
     if (contentType.includes('text/event-stream')) {
       // Handle SSE response for streamable HTTP
-      const parsed = await this.readSseResponse(response);
+      const parsed = await readSseJsonRpcResponse(response);
       this.captureProtocolVersion(parsed);
       return parsed;
     }
@@ -318,28 +240,6 @@ export class McpTransport {
     const parsed = (await response.json()) as JsonRpcResponse;
     this.captureProtocolVersion(parsed);
     return parsed;
-  }
-
-  private async readSseResponse(response: Response): Promise<JsonRpcResponse> {
-    const text = await response.text();
-    const blocks = text.split(/\n\n+/);
-
-    for (const block of blocks) {
-      const dataLines = block
-        .split('\n')
-        .filter((line) => line.startsWith('data:'))
-        .map((line) => line.slice(5).trimStart())
-        .filter(Boolean);
-
-      if (dataLines.length > 0) {
-        try {
-          return JSON.parse(dataLines.join('\n'));
-        } catch {
-          continue;
-        }
-      }
-    }
-    throw new Error('No valid JSON-RPC response in SSE stream');
   }
 
   private handleDisconnect(): void {
@@ -470,103 +370,10 @@ export class McpTransport {
     }
   }
 
-  private shouldFallbackToLegacySse(error: unknown): boolean {
-    if (error instanceof McpTransportError) {
-      return error.shouldFallbackToSse;
-    }
-
-    return true;
-  }
-
   private async createHttpError(prefix: string, response: Response): Promise<McpTransportError> {
-    const bodyText = await response.text().catch(() => response.statusText);
-    const serverMessage = this.extractServerErrorMessage(bodyText);
-    const hasConfiguredAuth = this.hasConfiguredAuth();
-
-    if (response.status === 401) {
-      return new McpTransportError(
-        hasConfiguredAuth
-          ? 'MCP authentication failed. Check the configured token or custom auth headers.'
-          : 'MCP authentication required. Edit this server to add a token or custom auth headers.',
-        { statusCode: 401, requiresAuthentication: true },
-      );
-    }
-
-    if (response.status === 403) {
-      return new McpTransportError(
-        'MCP access forbidden. Check the configured scopes, token, or custom auth headers.',
-        { statusCode: 403, requiresAuthentication: true },
-      );
-    }
-
-    const suffix = serverMessage ? ` - ${serverMessage}` : '';
-    return new McpTransportError(`${prefix}: HTTP ${response.status}${suffix}`, {
-      statusCode: response.status,
-      shouldFallbackToSse: response.status === 404 || response.status === 405,
+    return createMcpHttpError(prefix, response, {
+      hasConfiguredAuth: hasConfiguredMcpAuth(this.config.headers),
     });
-  }
-
-  private extractServerErrorMessage(bodyText: string): string | null {
-    const trimmed = bodyText.trim();
-    if (!trimmed) {
-      return null;
-    }
-
-    const parsed = this.parseJsonOrSse(trimmed);
-    if (!parsed) {
-      return trimmed;
-    }
-
-    if (typeof parsed === 'object' && parsed !== null) {
-      const errorMessage = (parsed as { error?: { message?: unknown } }).error?.message;
-      if (typeof errorMessage === 'string' && errorMessage.trim()) {
-        return errorMessage.trim();
-      }
-
-      const message = (parsed as { message?: unknown }).message;
-      if (typeof message === 'string' && message.trim()) {
-        return message.trim();
-      }
-
-      const error = (parsed as { error?: unknown }).error;
-      if (typeof error === 'string' && error.trim()) {
-        return error.trim();
-      }
-    }
-
-    return trimmed;
-  }
-
-  private parseJsonOrSse(text: string): unknown {
-    try {
-      return JSON.parse(text);
-    } catch {
-      const blocks = text.split(/\n\n+/);
-      for (const block of blocks) {
-        const dataLines = block
-          .split('\n')
-          .filter((line) => line.startsWith('data:'))
-          .map((line) => line.slice(5).trimStart())
-          .filter(Boolean);
-
-        if (dataLines.length === 0) {
-          continue;
-        }
-
-        try {
-          return JSON.parse(dataLines.join('\n'));
-        } catch {
-          // Try the next block.
-        }
-      }
-    }
-
-    return null;
-  }
-
-  private hasConfiguredAuth(): boolean {
-    const headers = this.config.headers || {};
-    return Object.keys(headers).some((key) => /authorization|api[-_]key|token|cookie/i.test(key));
   }
 
   private startStandaloneStreamIfSupported(): void {
@@ -666,18 +473,12 @@ export class McpTransport {
   }
 
   private handleStandaloneEventBlock(block: string): void {
-    const dataLines = block
-      .split('\n')
-      .filter((line) => line.startsWith('data:'))
-      .map((line) => line.slice(5).trimStart())
-      .filter(Boolean);
-
-    if (dataLines.length === 0) {
-      return;
-    }
-
     try {
-      const message = JSON.parse(dataLines.join('\n'));
+      const payload = parseSseStreamPayload(block);
+      if (!payload.parsed) {
+        return;
+      }
+      const message = payload.value as McpStreamMessage;
       this.onMessage?.(message);
     } catch {
       // Ignore malformed standalone stream messages.
@@ -702,13 +503,5 @@ export class McpTransport {
       signal: controller.signal,
       cleanup: () => clearTimeout(timer),
     };
-  }
-
-  private formatError(error: unknown): string {
-    if (error instanceof Error) {
-      return error.message;
-    }
-
-    return String(error);
   }
 }
