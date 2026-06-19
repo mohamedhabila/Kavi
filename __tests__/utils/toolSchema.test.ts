@@ -26,6 +26,30 @@ describe('normalizeToolInputSchema', () => {
     expect(schema.properties.headers.additionalProperties).toEqual({ type: 'string' });
   });
 
+  it('preserves required keys on object schemas nested inside array items', () => {
+    const schema = normalizeToolInputSchema({
+      type: 'object',
+      properties: {
+        goals: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string' },
+              status: { type: 'string' },
+            },
+            required: ['title'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['goals'],
+    });
+
+    expect(schema.required).toEqual(['goals']);
+    expect(schema.properties.goals.items.required).toEqual(['title']);
+  });
+
   it('flattens root oneOf object branches into a provider-safe object schema', () => {
     const schema = normalizeToolInputSchema({
       type: 'object',

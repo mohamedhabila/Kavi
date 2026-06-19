@@ -74,6 +74,8 @@ describe('python runtime bootstrap', () => {
     expect(runtimeHelpers).toContain('sys.modules["kavi.http"] = _kavi_http_module');
     expect(runtimeHelpers).toContain('sys.modules["kavi"] = _kavi_module');
     expect(runtimeHelpers).toContain('builtins.kavi = _kavi_module');
+    expect(runtimeHelpers).toContain('import warnings');
+    expect(runtimeHelpers).toContain('warnings.simplefilter("ignore", SyntaxWarning)');
     expect(findPythonSyntaxErrors(runtimeHelpers)).toEqual([]);
   });
 });

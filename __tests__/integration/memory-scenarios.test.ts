@@ -3,8 +3,8 @@
 // ---------------------------------------------------------------------------
 // These tests stitch together the memory subsystem end-to-end (fact store +
 // consolidator scheduler + recall + focus block + prompt assembly) using
-// deterministic fake LLM extractors. They cover the three scenarios called
-// out in `_research/SINGLE_THREAD_MEMORY_REDESIGN_20260429.md` §7:
+// deterministic fake LLM extractors. They cover the three core memory
+// scenarios:
 //
 //   1. 200-message simulated thread → consolidation runs at expected
 //      boundaries → prompt size stays under budget → recall returns the
@@ -24,14 +24,10 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
-import {
-  ensureFactSchema,
-  resetFactSchemaCacheForTests,
-  recordFact,
-  upsertEntity,
-  listFacts,
-  getFactById,
-} from '../../src/services/memory/factStore';
+import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
+import { recordFact } from '../../src/services/memory/facts/mutations';
+import { getFactById, listFacts } from '../../src/services/memory/facts/queries';
+import { upsertEntity } from '../../src/services/memory/entities';
 import { ensureDefaultBlocks } from '../../src/services/memory/blocks';
 import { getWorkingBlock } from '../../src/services/memory/workingBlocks';
 import {
@@ -45,7 +41,7 @@ import {
 import { recallFactsForQuery } from '../../src/services/memory/factRecall';
 import { renderFocusBlock } from '../../src/services/memory/focus';
 import { assemblePrompt } from '../../src/services/memory/promptAssembly';
-import type { Message } from '../../src/types';
+import type { Message } from '../../src/types/message';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -83,8 +79,18 @@ function buildLongThread(turnPairs: number, baseTs: number): Message[] {
       i === 7
         ? 'Acknowledged — noting acme-prod-cluster as your production target.'
         : `Answer ${i}: bump the turn threshold and watch idle gaps.`;
-    messages.push({ id: `u-${i}`, role: 'user', content: userContent, timestamp: userTs } as Message);
-    messages.push({ id: `a-${i}`, role: 'assistant', content: asstContent, timestamp: asstTs } as Message);
+    messages.push({
+      id: `u-${i}`,
+      role: 'user',
+      content: userContent,
+      timestamp: userTs,
+    } as Message);
+    messages.push({
+      id: `a-${i}`,
+      role: 'assistant',
+      content: asstContent,
+      timestamp: asstTs,
+    } as Message);
   }
   return messages;
 }
@@ -120,9 +126,9 @@ function makeExtractor(): jest.Mock {
   });
 }
 
-// ── 1. 200-message thread ───────────────────────────────────────────────────
+// -- 1. 200-message thread ---------------------------------------------------
 
-describe('integration §7.1 — 200-message thread', () => {
+describe('memory integration: 200-message thread', () => {
   it(
     'fires consolidation at the turn-threshold cadence, keeps the prompt under budget, and ' +
       'recalls the right fact at turn 250',
@@ -195,7 +201,7 @@ describe('integration §7.1 — 200-message thread', () => {
         openThreads: ['monitor acme-prod-cluster after deploy'],
       });
       const assembled = assemblePrompt({
-        basePrompt: 'You are Kavi, the user\'s personal assistant.',
+        basePrompt: "You are Kavi, the user's personal assistant.",
         blocks: [],
         focusBlock: focusOut.text,
         retrievedFacts: recalled,
@@ -208,9 +214,9 @@ describe('integration §7.1 — 200-message thread', () => {
   );
 });
 
-// ── 2. Returning-user / 8-hour gap ──────────────────────────────────────────
+// -- 2. Returning-user / 8-hour gap -----------------------------------------
 
-describe('integration §7.2 — returning user after 8-hour gap', () => {
+describe('memory integration: returning user after 8-hour gap', () => {
   it('focus header reflects the gap and recall surfaces the prior topic', async () => {
     const baseTs = 1_700_000_000_000;
     // 8 pairs so the deployment turn (i=7) is the LAST pair — the scheduler
@@ -259,17 +265,17 @@ describe('integration §7.2 — returning user after 8-hour gap', () => {
     expect(focusOut.text).toMatch(/acme-prod-cluster/i);
 
     // Recall against the returning-user query also surfaces the prior fact.
-    const recalled = await recallFactsForQuery(
-      'any update on the acme-prod-cluster deploy?',
-      { threshold: 0, conversationId: THREAD },
-    );
+    const recalled = await recallFactsForQuery('any update on the acme-prod-cluster deploy?', {
+      threshold: 0,
+      conversationId: THREAD,
+    });
     expect(recalled.map((f) => f.objectText)).toContain('acme-prod-cluster');
   });
 });
 
-// ── 3. Contradiction supersession ───────────────────────────────────────────
+// -- 3. Contradiction supersession ------------------------------------------
 
-describe('integration §7.3 — contradiction supersession', () => {
+describe('memory integration: contradiction supersession', () => {
   it('superseding a fact stamps invalid_at on the prior and recall returns the new value only', async () => {
     const t0 = 1_700_000_000_000;
     const user = upsertEntity({ name: 'user', type: 'self', now: t0 });
@@ -315,9 +321,7 @@ describe('integration §7.3 — contradiction supersession', () => {
       'what tone does the user prefer? casual or formal?',
       { threshold: 0 },
     );
-    const tones = recalled
-      .filter((f) => f.predicate === 'prefers_tone')
-      .map((f) => f.objectText);
+    const tones = recalled.filter((f) => f.predicate === 'prefers_tone').map((f) => f.objectText);
     expect(tones).toEqual(['casual']);
     expect(tones).not.toContain('formal');
 

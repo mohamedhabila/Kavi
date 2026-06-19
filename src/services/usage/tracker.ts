@@ -6,7 +6,12 @@ import { getLocalLlmCatalogEntry } from '../localLlm/catalog';
 // Normalizes token usage across 20+ provider naming variants.
 // Tracks cumulative session usage and provides cost estimates.
 
-import type { NormalizedUsage, SessionUsage, TokenUsage, UsageTokenDetails } from '../../types';
+import type {
+  NormalizedUsage,
+  SessionUsage,
+  TokenUsage,
+  UsageTokenDetails,
+} from '../../types/usage';
 
 // ── Cost per 1M tokens (approximate USD) ─────────────────────────────────
 
@@ -46,8 +51,8 @@ const COST_TABLE: Record<string, ModelCostRates> = {
   'gpt-5.4': { input: 2.5, output: 15 },
   'gpt-5.4-mini': { input: 0.75, output: 4.5, cacheRead: 0.075 },
   'gpt-5-mini': { input: 0.25, output: 2 },
-  'o1': { input: 15, output: 60 },
-  'o3': { input: 2, output: 8 },
+  o1: { input: 15, output: 60 },
+  o3: { input: 2, output: 8 },
   'o4-mini': { input: 1.1, output: 4.4 },
   'claude-opus-4-7': { input: 5, output: 25 },
   'claude-sonnet-4-6': { input: 3, output: 15 },
@@ -119,6 +124,16 @@ const MODALITY_COST_TABLE: Array<{ match: string; rates: ModalityCostRates }> = 
     },
   },
   {
+    match: 'gemini-3.1-flash-image',
+    rates: {
+      inputText: 0.5,
+      outputText: 3,
+      inputImage: 0.5,
+      outputImage: 60,
+      outputThinking: 3,
+    },
+  },
+  {
     match: 'gemini-3.1-flash-image-preview',
     rates: {
       inputText: 0.5,
@@ -126,6 +141,16 @@ const MODALITY_COST_TABLE: Array<{ match: string; rates: ModalityCostRates }> = 
       inputImage: 0.5,
       outputImage: 60,
       outputThinking: 3,
+    },
+  },
+  {
+    match: 'gemini-3-pro-image',
+    rates: {
+      inputText: 2,
+      outputText: 12,
+      inputImage: 2,
+      outputImage: 120,
+      outputThinking: 12,
     },
   },
   {
@@ -670,6 +695,8 @@ export function recordUsage(conversationId: string, usage: TokenUsage): void {
     outputTokens: usage.outputTokens,
     cacheReadTokens: usage.cacheReadTokens ?? 0,
     cacheWriteTokens: usage.cacheWriteTokens ?? 0,
+    ...(usage.tokenBuckets ? { tokenBuckets: usage.tokenBuckets } : {}),
+    ...(usage.promptCache ? { promptCache: usage.promptCache } : {}),
     timestamp: Date.now(),
     estimatedCost: cost,
   });

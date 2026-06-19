@@ -23,7 +23,7 @@
 // This module is intentionally side-effect-free; rendering is the caller's job.
 // ---------------------------------------------------------------------------
 
-import type { Message } from '../../types';
+import type { Message } from '../../types/message';
 
 export type TemporalMarkerKind =
   | 'thread-start'

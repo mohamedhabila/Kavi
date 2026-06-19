@@ -1,6 +1,10 @@
-import { Message } from '../../types';
+import { Message } from '../../types/message';
 import { mergeMatchingToolCalls } from '../../utils/toolCallMatching';
 import { resolveMessageAttachments } from '../../utils/messageAttachments';
+import {
+  buildDisplayProjectionSourceMessageIds,
+  reconcileAssistantMessagesWithToolResults,
+} from './messageProjectionReconciliation';
 
 export interface DisplayResponseSegment {
   id: string;
@@ -20,6 +24,7 @@ export interface DisplayMessageItem {
   id: string;
   message: Message;
   sourceMessageIds: string[];
+  projectionSourceMessageIds?: string[];
   retryMessageId?: string;
   responseSegments?: DisplayResponseSegment[];
 }
@@ -43,21 +48,29 @@ function buildResponseSegment(
   };
 }
 
-function buildAssistantDisplayItem(assistantMessages: Message[]): DisplayMessageItem {
+function buildAssistantDisplayItem(
+  assistantMessages: Message[],
+  sourceMessages: Message[],
+): DisplayMessageItem {
+  const reconciledAssistantMessages = reconcileAssistantMessagesWithToolResults(
+    assistantMessages,
+    sourceMessages,
+  );
   const mergedMessage =
-    assistantMessages.length === 1
+    reconciledAssistantMessages.length === 1
       ? {
-          ...assistantMessages[0],
-          attachments: getMessageDisplayAttachments(assistantMessages[0]),
+          ...reconciledAssistantMessages[0],
+          attachments: getMessageDisplayAttachments(reconciledAssistantMessages[0]),
         }
-      : mergeAssistantMessages(assistantMessages);
+      : mergeAssistantMessages(reconciledAssistantMessages);
 
   return {
     id: mergedMessage.id,
     message: mergedMessage,
     sourceMessageIds: assistantMessages.map((assistantMessage) => assistantMessage.id),
+    projectionSourceMessageIds: buildDisplayProjectionSourceMessageIds(sourceMessages),
     retryMessageId: assistantMessages[assistantMessages.length - 1]?.id,
-    responseSegments: buildResponseSegments(assistantMessages),
+    responseSegments: buildResponseSegments(reconciledAssistantMessages),
   };
 }
 
@@ -193,6 +206,7 @@ export function buildDisplayMessages(messages: Message[]): DisplayMessageItem[] 
     }
 
     const assistantMessages = [message];
+    const sourceMessages = [message];
     let cursor = index + 1;
 
     while (cursor < messages.length) {
@@ -202,18 +216,20 @@ export function buildDisplayMessages(messages: Message[]): DisplayMessageItem[] 
       }
 
       if (nextMessage.role === 'tool') {
+        sourceMessages.push(nextMessage);
         cursor += 1;
         continue;
       }
 
       if (nextMessage.role === 'assistant') {
         assistantMessages.push(nextMessage);
+        sourceMessages.push(nextMessage);
       }
 
       cursor += 1;
     }
 
-    displayItems.push(buildAssistantDisplayItem(assistantMessages));
+    displayItems.push(buildAssistantDisplayItem(assistantMessages, sourceMessages));
 
     index = cursor - 1;
   }

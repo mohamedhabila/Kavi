@@ -2,11 +2,9 @@
 // Tests — Remote Command Center (updated snapshot)
 // ---------------------------------------------------------------------------
 
-import {
-  buildRemoteCommandCenterSnapshot,
-  type RemoteCommandCenterSnapshot,
-} from '../../../src/services/remote/commandCenter';
-import type { AppSettings, RemoteJobRecord, RemoteSessionRecord } from '../../../src/types';
+import { buildRemoteCommandCenterSnapshot } from '../../../src/services/remote/commandCenter';
+import type { AppSettings } from '../../../src/types/settings';
+import type { RemoteJobRecord, RemoteSessionRecord } from '../../../src/types/remote';
 
 function makeSettings(
   overrides: Partial<AppSettings> = {},

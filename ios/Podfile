@@ -41,11 +41,11 @@ target 'Kavi' do
 
   config = use_native_modules!(config_command)
 
+  pod 'libssh2-iosx', :podspec => 'LocalPodspecs/libssh2-iosx.podspec'
+  pod 'NMSSH', :podspec => 'LocalPodspecs/NMSSH.podspec'
+
   use_frameworks! :linkage => podfile_properties['ios.useFrameworks'].to_sym if podfile_properties['ios.useFrameworks']
   use_frameworks! :linkage => ENV['USE_FRAMEWORKS'].to_sym if ENV['USE_FRAMEWORKS']
-
-  pod 'MediaPipeTasksGenAI'
-  pod 'MediaPipeTasksGenAIC'
 
   use_react_native!(
     :path => config[:reactNativePath],
@@ -63,14 +63,12 @@ target 'Kavi' do
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
 
-    # NMSSH pre-built static libs don't include arm64 simulator slices.
-    # Exclude arm64 from simulator builds so Rosetta (x86_64) is used.
     installer.pods_project.build_configurations.each do |build_config|
-      build_config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
+      build_config.build_settings.delete('EXCLUDED_ARCHS[sdk=iphonesimulator*]')
     end
     installer.pods_project.targets.each do |target|
       target.build_configurations.each do |build_config|
-        build_config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
+        build_config.build_settings.delete('EXCLUDED_ARCHS[sdk=iphonesimulator*]')
       end
     end
   end

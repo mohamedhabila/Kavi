@@ -7,7 +7,7 @@
 //   • Open threads (most recent unresolved follow-ups first).
 //   • Notable since last turn (only when the consolidator added new facts).
 //
-// Design rules (see _research/SINGLE_THREAD_MEMORY_REDESIGN_20260429.md §4.6):
+// Design rules:
 //   • The block sits AFTER the cache breakpoint — it is OK for it to vary.
 //   • We render BUCKETED phrases (not literal timestamps) so multi-turn bursts
 //     within one bucket are byte-identical and reuse the trailing tail bytes
@@ -152,6 +152,22 @@ export interface FocusBlockOutput {
 const MAX_OPEN_THREADS = 5;
 const MAX_NOTABLE_LINES = 2;
 const ACTIVE_FOCUS_MAX_CHARS = 600;
+export const ACTIVE_FOCUS_MEMORY_CHAR_LIMIT = 800;
+
+export function composeActiveFocusContent(params: {
+  threadTitle?: string | null;
+  activeFocus?: string | null;
+  maxChars?: number;
+}): string {
+  const maxChars = Math.max(0, params.maxChars ?? ACTIVE_FOCUS_MEMORY_CHAR_LIMIT);
+  const threadTitle = params.threadTitle?.trim() ?? '';
+  const activeFocus = params.activeFocus?.trim() ?? '';
+  const content =
+    threadTitle && activeFocus && !activeFocus.includes(threadTitle)
+      ? `${threadTitle}\n${activeFocus}`
+      : activeFocus || threadTitle;
+  return content.slice(0, maxChars).trim();
+}
 
 /**
  * Render the `<focus>` block. Returns an empty string when there is nothing

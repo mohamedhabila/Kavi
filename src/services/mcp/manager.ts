@@ -13,7 +13,8 @@ import {
   hasStoredMcpOAuth,
   McpOAuthError,
 } from './oauth';
-import type { McpServerConfig, ToolDefinition } from '../../types';
+import type { McpServerConfig } from '../../types/remote';
+import type { ToolDefinition } from '../../types/tool';
 
 export type McpServerState = 'disconnected' | 'connecting' | 'connected' | 'error';
 

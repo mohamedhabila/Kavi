@@ -343,7 +343,7 @@ describe('imageGeneration service', () => {
           name: 'Gemini',
           baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
           apiKey: 'gemini-key',
-          model: 'gemini-3.1-flash-image-preview',
+          model: 'gemini-3.1-flash-image',
           enabled: true,
         },
         {
@@ -425,7 +425,27 @@ describe('imageGeneration service', () => {
         {
           id: 'anthropic',
           name: 'Anthropic',
+          providerFamily: 'anthropic',
           baseUrl: 'https://api.anthropic.com/v1',
+          apiKey: 'sk-test',
+          model: 'claude-sonnet-4-6',
+          enabled: true,
+        },
+        {
+          prompt: 'A dragon',
+        },
+      ),
+    ).rejects.toThrow('Image generation is not supported by Anthropic');
+  });
+
+  it('rejects unsupported anthropic image generation from explicit provider family metadata', async () => {
+    await expect(
+      generateImage(
+        {
+          id: 'anthropic-proxy',
+          name: 'Proxy Provider',
+          providerFamily: 'anthropic',
+          baseUrl: 'https://proxy.example.com/v1',
           apiKey: 'sk-test',
           model: 'claude-sonnet-4-6',
           enabled: true,

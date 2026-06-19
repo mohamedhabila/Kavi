@@ -115,7 +115,6 @@ function recordTrace(
 async function executeJob(
   job: CronJob,
   nowMs: number,
-  trigger: 'scheduled' | 'missed-recovery',
 ): Promise<void> {
   const store = useSchedulerStore.getState();
   const maxRetries = job.failureAlert?.maxRetries ?? 2;
@@ -183,7 +182,7 @@ async function evaluateJobs(): Promise<void> {
   // Check for missed runs from app backgrounding
   const missedJobs = detectMissedRuns(enabledJobs, nowMs);
   for (const job of missedJobs) {
-    await executeJob(job, nowMs, 'missed-recovery');
+    await executeJob(job, nowMs);
   }
 
   // Regular evaluation
@@ -198,7 +197,7 @@ async function evaluateJobs(): Promise<void> {
     if (nextRun === undefined) continue;
     if (nextRun > nowMs) continue;
 
-    await executeJob(job, nowMs, 'scheduled');
+    await executeJob(job, nowMs);
   }
 
   lastEvaluationMs = nowMs;

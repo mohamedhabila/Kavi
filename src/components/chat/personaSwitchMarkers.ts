@@ -14,7 +14,8 @@
 // human-readable names without coupling the helper to the persona store.
 // ---------------------------------------------------------------------------
 
-import type { Message, PersonaSwitchEvent } from '../../types';
+import type { Message } from '../../types/message';
+import type { PersonaSwitchEvent } from '../../types/conversation';
 
 export interface PersonaSwitchMarker {
   /** Stable id from the underlying event. */
@@ -54,9 +55,7 @@ export function computePersonaSwitchMarkers(
   const markers: PersonaSwitchMarker[] = [];
 
   for (const event of sortedEvents) {
-    const anchor = messages.find(
-      (m) => typeof m.timestamp === 'number' && m.timestamp >= event.at,
-    );
+    const anchor = messages.find((m) => typeof m.timestamp === 'number' && m.timestamp >= event.at);
     if (!anchor) continue;
     markers.push({
       id: event.id,

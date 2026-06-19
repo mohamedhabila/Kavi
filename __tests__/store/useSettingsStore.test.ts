@@ -7,11 +7,11 @@ import {
   BrowserProviderConfig,
   ExpoAccountConfig,
   ExpoProjectConfig,
-  LlmProviderConfig,
   McpServerConfig,
   SshTargetConfig,
   WorkspaceTargetConfig,
-} from '../../src/types';
+} from '../../src/types/remote';
+import { LlmProviderConfig } from '../../src/types/provider';
 import { getLocalLlmCatalogEntry } from '../../src/services/localLlm/catalog';
 
 const makeProvider = (overrides: Partial<LlmProviderConfig> = {}): LlmProviderConfig => ({
@@ -113,6 +113,7 @@ beforeEach(() => {
     mediaUnderstandingEnabled: true,
     maxLinks: 3,
     defaultConversationMode: 'agentic',
+    defaultWorkspaceTargetId: null,
   });
 });
 
@@ -340,6 +341,40 @@ describe('useSettingsStore', () => {
       useSettingsStore.getState().removeWorkspaceTarget('workspace-1');
       expect(useSettingsStore.getState().workspaceTargets).toHaveLength(0);
     });
+
+    it('should auto-resolve the default workspace target when only one enabled target exists', () => {
+      useSettingsStore.getState().addWorkspaceTarget(makeWorkspaceTarget());
+
+      expect(useSettingsStore.getState().defaultWorkspaceTargetId).toBe('workspace-1');
+    });
+
+    it('should keep an explicit default workspace target when multiple enabled targets exist', () => {
+      useSettingsStore.getState().addWorkspaceTarget(makeWorkspaceTarget({ id: 'workspace-1' }));
+      useSettingsStore.getState().addWorkspaceTarget(makeWorkspaceTarget({ id: 'workspace-2' }));
+
+      useSettingsStore.getState().setDefaultWorkspaceTargetId('workspace-2');
+
+      expect(useSettingsStore.getState().defaultWorkspaceTargetId).toBe('workspace-2');
+    });
+
+    it('should clear an invalid default workspace target when multiple enabled targets exist', () => {
+      useSettingsStore.getState().addWorkspaceTarget(makeWorkspaceTarget({ id: 'workspace-1' }));
+      useSettingsStore.getState().addWorkspaceTarget(makeWorkspaceTarget({ id: 'workspace-2' }));
+
+      useSettingsStore.getState().setDefaultWorkspaceTargetId('missing');
+
+      expect(useSettingsStore.getState().defaultWorkspaceTargetId).toBeNull();
+    });
+
+    it('should fall back to the only remaining enabled workspace target when deleting the default', () => {
+      useSettingsStore.getState().addWorkspaceTarget(makeWorkspaceTarget({ id: 'workspace-1' }));
+      useSettingsStore.getState().addWorkspaceTarget(makeWorkspaceTarget({ id: 'workspace-2' }));
+      useSettingsStore.getState().setDefaultWorkspaceTargetId('workspace-1');
+
+      useSettingsStore.getState().removeWorkspaceTarget('workspace-1');
+
+      expect(useSettingsStore.getState().defaultWorkspaceTargetId).toBe('workspace-2');
+    });
   });
 
   describe('Browser Providers', () => {
@@ -552,7 +587,7 @@ describe('useSettingsStore', () => {
         systemPrompt: 'Custom prompt',
         thinkingLevel: 'high',
         locale: 'fr',
-        webSearchProvider: 'gemini',
+        webSearchProvider: 'kimi',
         linkUnderstandingEnabled: false,
         mediaUnderstandingEnabled: false,
         maxLinks: 7,
@@ -564,11 +599,19 @@ describe('useSettingsStore', () => {
       expect(state.systemPrompt).toBe('Custom prompt');
       expect(state.thinkingLevel).toBe('high');
       expect(state.locale).toBe('fr');
-      expect(state.webSearchProvider).toBe('gemini');
+      expect(state.webSearchProvider).toBe('kimi');
       expect(state.linkUnderstandingEnabled).toBe(false);
       expect(state.mediaUnderstandingEnabled).toBe(false);
       expect(state.maxLinks).toBe(7);
       expect(state.defaultConversationMode).toBe('chitchat');
+    });
+
+    it('should preserve gemini as a supported web search provider', () => {
+      useSettingsStore.getState().replaceAllSettings({
+        webSearchProvider: 'gemini',
+      } as any);
+
+      expect(useSettingsStore.getState().webSearchProvider).toBe('gemini');
     });
 
     it('should clear nullable selections when explicitly set to null', () => {
@@ -630,10 +673,7 @@ describe('useSettingsStore', () => {
 
     it('should normalize the legacy direct→chitchat alias when migrating', async () => {
       const persistOptions = (useSettingsStore as any).persist.getOptions();
-      const migrated = await persistOptions.migrate(
-        { defaultConversationMode: 'direct' },
-        8,
-      );
+      const migrated = await persistOptions.migrate({ defaultConversationMode: 'direct' }, 8);
       expect(migrated.defaultConversationMode).toBe('chitchat');
     });
   });

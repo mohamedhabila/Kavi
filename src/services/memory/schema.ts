@@ -7,7 +7,7 @@
 //   • memory_blocks    — Letta-style char-capped, agent-editable blocks
 //
 // These tables sit alongside the legacy `memory_chunks` table in the same
-// kavi-memory.db so the existing embedding retrieval path keeps working.
+// kavi-memory.db so older persisted memories remain readable during migration.
 // ---------------------------------------------------------------------------
 
 import { getMemoryDb } from './sqlite-store';
@@ -148,6 +148,66 @@ export function ensureFactSchema(): void {
       ON memory_fact_evidence(fact_id);
     CREATE INDEX IF NOT EXISTS idx_fact_evidence_episode
       ON memory_fact_evidence(episode_id);
+
+    CREATE TABLE IF NOT EXISTS memory_ingestion_jobs (
+      id TEXT PRIMARY KEY,
+      thread_id TEXT NOT NULL,
+      task_id TEXT,
+      source_start_message_id TEXT,
+      source_end_message_id TEXT NOT NULL,
+      reason TEXT NOT NULL DEFAULT 'turn_completed',
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempt_count INTEGER NOT NULL DEFAULT 0,
+      error TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      completed_at INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_ingestion_jobs_status
+      ON memory_ingestion_jobs(status, created_at);
+    CREATE INDEX IF NOT EXISTS idx_ingestion_jobs_thread
+      ON memory_ingestion_jobs(thread_id, source_end_message_id);
+
+    CREATE TABLE IF NOT EXISTS memory_tasks (
+      id TEXT PRIMARY KEY,
+      thread_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      state TEXT NOT NULL DEFAULT 'active',
+      started_at INTEGER NOT NULL,
+      last_active_at INTEGER NOT NULL,
+      ended_at INTEGER,
+      parent_task_id TEXT,
+      summary TEXT,
+      embedding TEXT,
+      confidence REAL NOT NULL DEFAULT 0.5,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      deleted_at INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_memory_tasks_thread
+      ON memory_tasks(thread_id, deleted_at, last_active_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_memory_tasks_state
+      ON memory_tasks(thread_id, state, deleted_at);
+
+    CREATE TABLE IF NOT EXISTS memory_reflections (
+      id TEXT PRIMARY KEY,
+      scope TEXT NOT NULL,
+      thread_id TEXT,
+      task_id TEXT,
+      period_start INTEGER NOT NULL,
+      period_end INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      content TEXT NOT NULL,
+      source_episode_ids_json TEXT NOT NULL DEFAULT '[]',
+      source_fact_ids_json TEXT NOT NULL DEFAULT '[]',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      deleted_at INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_memory_reflections_thread
+      ON memory_reflections(thread_id, kind, period_start DESC);
+    CREATE INDEX IF NOT EXISTS idx_memory_reflections_task
+      ON memory_reflections(task_id, deleted_at);
   `);
   ensureFactColumns(db);
   db.execSync(`
@@ -191,6 +251,19 @@ function ensureFactColumns(db: ReturnType<typeof getMemoryDb>): void {
   ensureColumn(db, 'memory_facts', 'last_accessed_at', 'last_accessed_at INTEGER');
   ensureColumn(db, 'memory_facts', 'decay_policy', "decay_policy TEXT NOT NULL DEFAULT 'normal'");
   ensureColumn(db, 'memory_facts', 'expires_at', 'expires_at INTEGER');
+  ensureColumn(db, 'memory_episodes', 'source_start_message_id', 'source_start_message_id TEXT');
+  ensureColumn(db, 'memory_episodes', 'source_end_message_id', 'source_end_message_id TEXT');
+  ensureColumn(db, 'memory_facts', 'source_actor_id', 'source_actor_id TEXT');
+  ensureColumn(db, 'memory_facts', 'task_id', 'task_id TEXT');
+  ensureColumn(db, 'memory_facts', 'retrievability', 'retrievability REAL NOT NULL DEFAULT 1.0');
+  ensureColumn(db, 'memory_facts', 'stability', 'stability REAL NOT NULL DEFAULT 0.5');
+  ensureColumn(db, 'memory_facts', 'decay_rate', 'decay_rate REAL NOT NULL DEFAULT 0.03');
+  ensureColumn(db, 'memory_facts', 'last_presented_at', 'last_presented_at INTEGER');
+  ensureColumn(db, 'memory_facts', 'last_confirmed_at', 'last_confirmed_at INTEGER');
+  ensureColumn(db, 'memory_facts', 'last_conflicted_at', 'last_conflicted_at INTEGER');
+  ensureColumn(db, 'memory_facts', 'review_state', "review_state TEXT NOT NULL DEFAULT 'auto'");
+  ensureColumn(db, 'memory_facts', 'sensitivity', "sensitivity TEXT NOT NULL DEFAULT 'normal'");
+  ensureColumn(db, 'memory_facts', 'memory_kind', "memory_kind TEXT NOT NULL DEFAULT 'semantic'");
 }
 
 export function resetFactSchemaCacheForTests(): void {
@@ -209,6 +282,9 @@ export function clearStructuredMemory(): void {
     DELETE FROM memory_working_blocks;
     DELETE FROM memory_consolidation_state;
     DELETE FROM memory_migration_state;
+    DELETE FROM memory_ingestion_jobs;
+    DELETE FROM memory_tasks;
+    DELETE FROM memory_reflections;
     DELETE FROM memory_chunks;
   `);
 }

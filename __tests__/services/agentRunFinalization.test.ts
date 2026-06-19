@@ -1,14 +1,14 @@
-import type { Message } from '../../src/types';
+import type { Message } from '../../src/types/message';
 import { summarizeFinalizationToolResultPreview } from '../../src/services/agents/finalizationText';
 import {
   buildAgentRunFinalizationPrompt,
-  buildAgentRunToolResultFallback,
-  buildAgentRunVisibleDraftRecoveryText,
+  buildAgentRunCompletionFallbackOutput,
   buildMissingFinalResponseFallback,
   canRecoverAgentRunFinalResponse,
   collectAgentRunFinalizationEvidence,
   hasVerifiedFinalizationEvidence,
-} from '../../src/services/agents/agentRunFinalization';
+  selectAgentRunDirectTerminalFinalOutput,
+} from '../../src/services/agents/lifecycle/finalizePhase';
 
 describe('agentRunFinalization', () => {
   it('collects evidence from the current run slice and summarizes tool results', () => {
@@ -62,7 +62,12 @@ describe('agentRunFinalization', () => {
             updatedAt: 5,
             status: 'completed',
             sandboxPolicy: 'inherit',
+            toolsUsed: ['read_file', 'write_file'],
             output: 'Repository audit complete. Patched the failing workflow.',
+            activityLog: [
+              { timestamp: 4, kind: 'tool', text: 'Using read_file: package.json' },
+              { timestamp: 5, kind: 'result', text: 'read_file: package.json verified.' },
+            ],
           },
         },
       },
@@ -103,13 +108,19 @@ describe('agentRunFinalization', () => {
           preview: 'Repository audit complete. Patched the failing workflow.',
         }),
         expect.objectContaining({
+          sourceName: 'sub-1',
+          preview: 'result: read_file: package.json verified.',
+        }),
+        expect.objectContaining({
           sourceName: 'run_tests',
           preview: 'Verified the patch and tests passed.',
         }),
       ]),
     );
     expect(evidence.lastSubstantiveResult).toContain('Verified the patch and tests passed.');
-    expect(evidence.toolsUsed).toEqual(expect.arrayContaining(['sessions_spawn', 'run_tests']));
+    expect(evidence.toolsUsed).toEqual(
+      expect.arrayContaining(['sessions_spawn', 'read_file', 'write_file', 'run_tests']),
+    );
     expect(evidence.hasIncompleteToolCalls).toBe(false);
   });
 
@@ -148,6 +159,7 @@ describe('agentRunFinalization', () => {
           updatedAt: 3,
           status: 'completed',
           sandboxPolicy: 'inherit',
+          toolsUsed: ['file_edit'],
           output: 'Repository audit complete. Patched the failing workflow.',
         },
       ],
@@ -164,6 +176,7 @@ describe('agentRunFinalization', () => {
     expect(evidence.lastSubstantiveResult).toContain(
       'Repository audit complete. Patched the failing workflow.',
     );
+    expect(evidence.toolsUsed).toEqual(expect.arrayContaining(['sessions_spawn', 'file_edit']));
   });
 
   it('preserves the full run transcript for downstream pilot review instead of tail-cropping it', () => {
@@ -247,7 +260,8 @@ describe('agentRunFinalization', () => {
             status: 'completed',
             sandboxPolicy: 'inherit',
             name: 'Verifier',
-            output: 'Root cause confirmed. The recovery path still fails with the same schema mismatch.',
+            output:
+              'Root cause confirmed. The recovery path still fails with the same schema mismatch.',
           },
         },
       },
@@ -285,7 +299,8 @@ describe('agentRunFinalization', () => {
       expect.arrayContaining([
         expect.objectContaining({
           sourceName: 'Verifier',
-          preview: 'Root cause confirmed. The recovery path still fails with the same schema mismatch.',
+          preview:
+            'Root cause confirmed. The recovery path still fails with the same schema mismatch.',
         }),
         expect.objectContaining({
           sourceName: 'sessions_output',
@@ -391,65 +406,6 @@ describe('agentRunFinalization', () => {
     expect(hasVerifiedFinalizationEvidence(evidence)).toBe(false);
   });
 
-  it('builds a deduped fallback summary from verified previews', () => {
-    const fallback = buildAgentRunToolResultFallback({
-      status: 'failed',
-      evidence: {
-        originalPrompt: 'Audit the repo',
-        transcriptMessages: [],
-        lastNonEmptyAssistantContent: '',
-        lastSubstantiveResult: '',
-        resultPreviews: [
-          { sourceName: 'worker-a', preview: 'Found the root cause.' },
-          { sourceName: 'worker-a', preview: 'Found the root cause.' },
-          { sourceName: 'worker-b', preview: 'Applied the fix.' },
-        ],
-        toolsUsed: ['sessions_spawn'],
-        iterations: 2,
-        hasIncompleteToolCalls: false,
-      },
-    });
-
-    expect(fallback).toBe(
-      [
-        'Latest verified findings before the failure:',
-        '- worker-a: Found the root cause.',
-        '- worker-b: Applied the fix.',
-      ].join('\n'),
-    );
-  });
-
-  it('limits fallback findings to the most recent compact preview lines', () => {
-    const fallback = buildAgentRunToolResultFallback({
-      status: 'failed',
-      evidence: {
-        originalPrompt: 'Audit the repo',
-        transcriptMessages: [],
-        lastNonEmptyAssistantContent: '',
-        lastSubstantiveResult: '',
-        resultPreviews: Array.from({ length: 8 }, (_, index) => ({
-          sourceName: `worker-${index + 1}`,
-          preview: `Finding ${index + 1}`,
-        })),
-        toolsUsed: ['sessions_spawn'],
-        iterations: 4,
-        hasIncompleteToolCalls: false,
-      },
-    });
-
-    expect(fallback).toBe(
-      [
-        'Latest verified findings before the failure:',
-        '- worker-3: Finding 3',
-        '- worker-4: Finding 4',
-        '- worker-5: Finding 5',
-        '- worker-6: Finding 6',
-        '- worker-7: Finding 7',
-        '- worker-8: Finding 8',
-      ].join('\n'),
-    );
-  });
-
   it('summarizes structured wait results without dumping raw output payloads', () => {
     const preview = summarizeFinalizationToolResultPreview(
       JSON.stringify({
@@ -468,6 +424,92 @@ describe('agentRunFinalization', () => {
     );
   });
 
+  it('promotes short terminal tool outputs to direct finalization deliverables', () => {
+    const messages: Message[] = [
+      {
+        id: 'user-1',
+        role: 'user',
+        content: 'Start background work, wait, then final exactly TOKEN42',
+        timestamp: 1,
+      },
+      {
+        id: 'tool-1',
+        role: 'tool',
+        content: JSON.stringify({
+          status: 'completed',
+          sessionCount: 1,
+          completedCount: 1,
+          sessions: [
+            {
+              sessionId: 'worker-1',
+              status: 'completed',
+              output: 'TOKEN42',
+            },
+          ],
+        }),
+        toolCallId: 'wait-1',
+        timestamp: 2,
+        toolCalls: [
+          {
+            id: 'wait-1',
+            name: 'sessions_wait',
+            arguments: '{}',
+            status: 'completed',
+          },
+        ],
+      },
+    ];
+
+    const evidence = collectAgentRunFinalizationEvidence(messages, 'user-1', 1);
+
+    expect(evidence.terminalDeliverables).toEqual([{ sourceName: 'worker-1', output: 'TOKEN42' }]);
+    expect(selectAgentRunDirectTerminalFinalOutput(evidence)).toBe('TOKEN42');
+  });
+
+  it('uses a single terminal deliverable as the completed-run fallback output', () => {
+    const output = buildAgentRunCompletionFallbackOutput({
+      status: 'completed',
+      evidence: {
+        originalPrompt: 'Return exactly TOKEN42',
+        transcriptMessages: [],
+        lastNonEmptyAssistantContent: 'Worker completed.\n\nTOKEN42',
+        lastSubstantiveResult: 'TOKEN42',
+        resultPreviews: [{ sourceName: 'worker-1', preview: 'TOKEN42' }],
+        terminalDeliverables: [{ sourceName: 'worker-1', output: 'TOKEN42' }],
+        toolsUsed: ['sessions_wait'],
+        iterations: 1,
+        hasIncompleteToolCalls: false,
+      },
+    });
+
+    expect(output).toBe('TOKEN42');
+  });
+
+  it('falls back to a synthesized summary when terminal deliverables differ', () => {
+    const output = buildAgentRunCompletionFallbackOutput({
+      status: 'completed',
+      evidence: {
+        originalPrompt: 'Return both TOKEN42 and TOKEN99',
+        transcriptMessages: [],
+        lastNonEmptyAssistantContent: 'Combined answer: TOKEN42 TOKEN99',
+        lastSubstantiveResult: 'TOKEN99',
+        resultPreviews: [
+          { sourceName: 'worker-1', preview: 'TOKEN42' },
+          { sourceName: 'worker-2', preview: 'TOKEN99' },
+        ],
+        terminalDeliverables: [
+          { sourceName: 'worker-1', output: 'TOKEN42' },
+          { sourceName: 'worker-2', output: 'TOKEN99' },
+        ],
+        toolsUsed: ['sessions_wait', 'python'],
+        iterations: 2,
+        hasIncompleteToolCalls: false,
+      },
+    });
+
+    expect(output).toBeUndefined();
+  });
+
   it('summarizes workflow evidence results instead of echoing structured entry payloads', () => {
     const preview = summarizeFinalizationToolResultPreview(
       JSON.stringify({
@@ -483,7 +525,19 @@ describe('agentRunFinalization', () => {
     expect(preview).toBe('2 evidence entries recorded');
   });
 
-  it('builds a finalization prompt with transcript, verified findings, and a detailed result excerpt', () => {
+  it('preserves short structured tool outputs alongside generic summaries', () => {
+    const preview = summarizeFinalizationToolResultPreview(
+      JSON.stringify({
+        summary: 'Python execution completed.',
+        status: 'completed',
+        output: 'C58P',
+      }),
+    );
+
+    expect(preview).toBe('Python execution completed.; output: C58P');
+  });
+
+  it('builds a finalization prompt from transcript evidence and terminal deliverables', () => {
     const prompt = buildAgentRunFinalizationPrompt({
       originalPrompt: 'Audit the repository',
       transcriptMessages: [
@@ -528,114 +582,36 @@ describe('agentRunFinalization', () => {
     expect(prompt).toContain('Original task:\nAudit the repository');
     expect(prompt).toContain('Execution transcript:');
     expect(prompt).toContain('Assistant (requested tools: run_tests):');
+    expect(prompt).not.toContain('Recent verified findings:');
     expect(prompt).toContain(
-      'Recent verified findings:\n- run_tests: All tests passed and the fix was verified.',
+      'Preserve exact or format-constrained final-output instructions from the original task.',
     );
     expect(prompt).toContain(
-      'Detailed result excerpt:\nAll tests passed and the fix was verified.',
+      'Do not claim any exact literal, identifier, token, filename content, result value, or worker output unless it appears in verified tool or worker evidence above.',
     );
+    expect(prompt).toContain(
+      'If a required exact value appears only in the user request or draft, report the missing evidence instead of fabricating completion.',
+    );
+    expect(prompt).not.toContain('Detailed result excerpt:');
+    expect(prompt).toContain('Tool result - tc-1:\nAll tests passed and the fix was verified.');
   });
 
-  it('adds source-attribution guidance when finalizing official-doc research answers', () => {
+  it('includes terminal deliverables in finalization prompts without status narration', () => {
     const prompt = buildAgentRunFinalizationPrompt({
-      originalPrompt: 'Compare OpenAI, Anthropic, and Gemini using official docs.',
-      transcriptMessages: [
-        {
-          id: 'user-1',
-          role: 'user',
-          content: 'Compare OpenAI, Anthropic, and Gemini using official docs.',
-          timestamp: 1,
-        },
-      ],
-      lastNonEmptyAssistantContent: 'OpenAI appears strongest for orchestration.',
-      lastSubstantiveResult: 'Verified provider findings.',
-      resultPreviews: [{ sourceName: 'worker', preview: 'Verified provider findings.' }],
-      toolsUsed: ['web_search'],
+      originalPrompt: 'Return exactly TOKEN42',
+      transcriptMessages: [],
+      lastNonEmptyAssistantContent: '',
+      lastSubstantiveResult: 'TOKEN42',
+      resultPreviews: [{ sourceName: 'worker-1', preview: 'TOKEN42' }],
+      terminalDeliverables: [{ sourceName: 'worker-1', output: 'TOKEN42' }],
+      toolsUsed: ['sessions_wait'],
       iterations: 1,
       hasIncompleteToolCalls: false,
     });
 
+    expect(prompt).toContain('Terminal deliverables:\n- worker-1: TOKEN42');
     expect(prompt).toContain(
-      'Attribute provider-specific research claims to named sources or URLs in the final answer.',
-    );
-    expect(prompt).toContain(
-      'Omit or clearly qualify any quantitative or superlative claim that is not directly supported by the verified evidence.',
-    );
-  });
-
-  it('does not reuse assistant draft text when a failed run is repaired', () => {
-    const fallback = buildAgentRunToolResultFallback({
-      status: 'failed',
-      evidence: {
-        originalPrompt: 'Audit the repo',
-        transcriptMessages: [],
-        lastNonEmptyAssistantContent: 'Draft answer that should not be promoted.',
-        lastSubstantiveResult: '',
-        resultPreviews: [],
-        toolsUsed: [],
-        iterations: 0,
-        hasIncompleteToolCalls: false,
-      },
-    });
-
-    expect(fallback).toBeUndefined();
-  });
-
-  it('preserves a visible failed draft and appends only the net-new verified findings', () => {
-    const recoveredText = buildAgentRunVisibleDraftRecoveryText({
-      status: 'failed',
-      visibleDraft: ['Draft answer.', 'Here are the latest verified findings before the failure:'].join(
-        '\n\n',
-      ),
-      evidence: {
-        originalPrompt: 'Audit the repo',
-        transcriptMessages: [],
-        lastNonEmptyAssistantContent: '',
-        lastSubstantiveResult: '',
-        resultPreviews: [
-          { sourceName: 'worker-a', preview: 'Draft answer.' },
-          { sourceName: 'worker-b', preview: 'Applied the fix.' },
-        ],
-        toolsUsed: ['sessions_spawn'],
-        iterations: 1,
-        hasIncompleteToolCalls: false,
-      },
-    });
-
-    expect(recoveredText).toBe(
-      [
-        'Draft answer.',
-        '',
-        'Here are the latest verified findings before the failure:',
-        '',
-        'Note: the response stream failed before the answer could finish.',
-        '- worker-b: Applied the fix.',
-      ].join('\n'),
-    );
-  });
-
-  it('appends a failure note even when there are no verified preview lines to add', () => {
-    const recoveredText = buildAgentRunVisibleDraftRecoveryText({
-      status: 'failed',
-      visibleDraft: 'Partial answer already shown to the user.',
-      evidence: {
-        originalPrompt: 'Audit the repo',
-        transcriptMessages: [],
-        lastNonEmptyAssistantContent: '',
-        lastSubstantiveResult: '',
-        resultPreviews: [],
-        toolsUsed: [],
-        iterations: 0,
-        hasIncompleteToolCalls: false,
-      },
-    });
-
-    expect(recoveredText).toBe(
-      [
-        'Partial answer already shown to the user.',
-        '',
-        'Note: the response stream failed before the answer could finish.',
-      ].join('\n'),
+      'If one terminal deliverable is itself the requested final answer, output that value without status narration.',
     );
   });
 
@@ -658,7 +634,9 @@ describe('agentRunFinalization', () => {
       lastNonEmptyAssistantContent: 'تم النشر بنجاح.',
       lastSubstantiveResult: 'تمت المراجعة.',
       lastSubstantiveResultSourceName: 'sessions_output',
-      resultPreviews: [{ sourceName: 'sessions_output', preview: 'workflow run 101 completed with success' }],
+      resultPreviews: [
+        { sourceName: 'sessions_output', preview: 'workflow run 101 completed with success' },
+      ],
       toolsUsed: ['sessions_output'],
       iterations: 1,
       hasIncompleteToolCalls: false,
@@ -675,7 +653,10 @@ describe('agentRunFinalization', () => {
       lastSubstantiveResult: 'workflow run 101 completed with success',
       lastSubstantiveResultSourceName: 'expo_eas_workflow_status',
       resultPreviews: [
-        { sourceName: 'expo_eas_workflow_status', preview: 'workflow run 101 completed with success' },
+        {
+          sourceName: 'expo_eas_workflow_status',
+          preview: 'workflow run 101 completed with success',
+        },
       ],
       toolsUsed: ['expo_eas_workflow_status'],
       iterations: 2,

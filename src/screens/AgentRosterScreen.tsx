@@ -20,7 +20,7 @@ import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { useNavigation } from '@react-navigation/native';
 import { Menu, Users, Plus, Edit3, Trash2, Bot, Cpu, X } from 'lucide-react-native';
 import { useAppTheme, AppPalette } from '../theme/useAppTheme';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../i18n/useTranslation';
 import { SubAgentActivityCard } from '../components/agents/SubAgentActivityCard';
 import { SubAgentDetailModal } from '../components/agents/SubAgentDetailModal';
 import { BUILT_IN_PERSONAS, type AgentPersona } from '../services/agents/personas';
@@ -29,7 +29,7 @@ import { listActiveSubAgents, onSubAgentEvent } from '../services/agents/subAgen
 import {
   buildSubAgentHierarchy,
   buildSubAgentRollupMap,
-} from '../services/agents/subAgentPresentation';
+} from '../services/agents/lifecycle/subAgentHierarchyPresentation';
 import { generateId } from '../utils/id';
 
 export const AgentRosterScreen: React.FC = () => {

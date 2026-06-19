@@ -2,9 +2,9 @@
 // Kavi — Typing Indicator (animated dots for streaming)
 // ---------------------------------------------------------------------------
 
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { View, Animated, StyleSheet } from 'react-native';
-import { useTranslation } from '../../i18n';
+import { useTranslation } from '../../i18n/useTranslation';
 
 interface TypingIndicatorProps {
   color?: string;

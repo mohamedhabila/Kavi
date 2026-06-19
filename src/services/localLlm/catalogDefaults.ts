@@ -1,0 +1,3 @@
+export const DEFAULT_LITERT_LM_TOP_K = 64;
+export const DEFAULT_LITERT_LM_TOP_P = 0.95;
+export const DEFAULT_LITERT_LM_TEMPERATURE = 1.0;

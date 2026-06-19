@@ -1,4 +1,5 @@
-import type { Attachment, Message, ToolCall } from '../types';
+import type { Attachment } from '../types/attachment';
+import type { Message, ToolCall } from '../types/message';
 import {
   buildGeneratedImageAttachment,
   parseGeneratedImageResult,

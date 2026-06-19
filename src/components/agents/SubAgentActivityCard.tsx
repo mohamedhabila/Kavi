@@ -8,17 +8,17 @@ import {
   ChevronRight,
   Clock,
 } from 'lucide-react-native';
-import { useTranslation } from '../../i18n';
+import { useTranslation } from '../../i18n/useTranslation';
 import { useAppTheme, type AppPalette } from '../../theme/useAppTheme';
-import type { SubAgentLifecycleEvent, SubAgentSnapshot } from '../../types';
+import type { SubAgentLifecycleEvent, SubAgentSnapshot } from '../../types/subAgent';
 import {
   formatCompactElapsed,
   getSubAgentDisplayName,
   getSubAgentElapsedMs,
   getSubAgentSessionLabel,
-  type SubAgentRollup,
   summarizeSubAgentVisibleActivity,
-} from '../../services/agents/subAgentPresentation';
+} from '../../services/agents/lifecycle/presentPhase';
+import type { SubAgentRollup } from '../../services/agents/lifecycle/subAgentHierarchyPresentation';
 
 type SubAgentActivityCardVariant = 'transcript' | 'queue' | 'detail';
 

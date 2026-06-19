@@ -6,14 +6,8 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type {
-  Skill,
-  SkillEntry,
-  SkillMetadata,
-  SkillToolDefinition,
-  SkillToolExecutionContext,
-} from './types';
-import type { ToolDefinition } from '../../types';
+import type { Skill, SkillEntry, SkillMetadata, SkillToolExecutionContext } from './types';
+import type { ToolDefinition } from '../../types/tool';
 import { generateId } from '../../utils/id';
 import { parseFrontmatterBlock } from '../markdown/frontmatter';
 import { buildSkillMetadataFromFrontmatter, getSkillCompatibility } from './manifest';
@@ -25,8 +19,7 @@ import {
 } from './storage';
 
 const DEFAULT_MAX_SKILLS_IN_PROMPT = 150;
-const DEFAULT_MAX_SKILLS_PROMPT_CHARS = 30000;
-const COMPACT_WARNING_OVERHEAD = 150;
+const DEFAULT_MAX_SKILLS_PROMPT_CHARS = 12000;
 
 // ── Store ────────────────────────────────────────────────────────────────
 
@@ -52,37 +45,9 @@ function syncSkillEntryRuntime(entry: SkillEntry): void {
   activateSkill(entry);
 }
 
-function normalizeSkillMatchValue(value: string | undefined): string {
-  return (value || '').toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function isManualSkillRequested(skill: Skill, requestText: string): boolean {
-  const haystack = normalizeSkillMatchValue(requestText);
-  if (!haystack) {
-    return false;
-  }
-
-  const candidates = [skill.id, skill.name].map(normalizeSkillMatchValue).filter(Boolean);
-
-  return candidates.some((candidate) => haystack.includes(candidate));
-}
-
-function escapeXml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
 type SkillPromptCatalogEntry = {
   name: string;
-  description: string;
   location: string;
-  bundleRoot?: string;
-  pythonScripts?: string[];
-  pythonPackages?: string[];
 };
 
 function sameManagedSource(left: SkillEntry['source'], right: SkillEntry['source']): boolean {
@@ -93,105 +58,29 @@ function sameManagedSource(left: SkillEntry['source'], right: SkillEntry['source
   );
 }
 
-function formatSkillCatalogEntry(
-  lines: string[],
-  skill: SkillPromptCatalogEntry,
-  options?: { compact?: boolean },
-): void {
-  lines.push('  <skill>');
-  lines.push(`    <name>${escapeXml(skill.name)}</name>`);
-  if (!options?.compact) {
-    lines.push(
-      `    <description>${escapeXml(skill.description || 'No description provided.')}</description>`,
-    );
-  }
-  lines.push(`    <location>${escapeXml(skill.location)}</location>`);
-  if (skill.bundleRoot) {
-    lines.push(`    <bundle_root>${escapeXml(skill.bundleRoot)}</bundle_root>`);
-  }
-  if (skill.pythonScripts?.length) {
-    lines.push('    <python_scripts>');
-    for (const scriptPath of skill.pythonScripts) {
-      lines.push(`      <path>${escapeXml(scriptPath)}</path>`);
-    }
-    lines.push('    </python_scripts>');
-  }
-  if (skill.pythonPackages?.length && !options?.compact) {
-    lines.push(
-      `    <python_packages>${escapeXml(skill.pythonPackages.join(', '))}</python_packages>`,
-    );
-  }
-  lines.push('  </skill>');
+function sanitizeSkillPromptText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
 }
 
-function formatSkillsForPrompt(skills: SkillPromptCatalogEntry[]): string {
+function buildSkillsPrompt(skills: SkillPromptCatalogEntry[]): string {
   if (skills.length === 0) {
     return '';
   }
 
-  const lines = ['<available_skills>'];
-  for (const skill of skills) {
-    formatSkillCatalogEntry(lines, skill);
-  }
-  lines.push('</available_skills>');
-
-  return lines.join('\n');
-}
-
-function formatSkillsCompact(skills: SkillPromptCatalogEntry[]): string {
-  if (skills.length === 0) {
-    return '';
-  }
-
-  const lines = ['<available_skills>'];
-  for (const skill of skills) {
-    formatSkillCatalogEntry(lines, skill, { compact: true });
-  }
-  lines.push('</available_skills>');
-
-  return lines.join('\n');
-}
-
-function applySkillsPromptLimits(skills: SkillPromptCatalogEntry[]): {
-  skillsForPrompt: SkillPromptCatalogEntry[];
-  truncated: boolean;
-  compact: boolean;
-} {
-  const total = skills.length;
-  let skillsForPrompt = skills.slice(0, DEFAULT_MAX_SKILLS_IN_PROMPT);
-  let truncated = total > skillsForPrompt.length;
-  let compact = false;
-
-  const fitsFull = (items: SkillPromptCatalogEntry[]) =>
-    formatSkillsForPrompt(items).length <= DEFAULT_MAX_SKILLS_PROMPT_CHARS;
-  const compactBudget = DEFAULT_MAX_SKILLS_PROMPT_CHARS - COMPACT_WARNING_OVERHEAD;
-  const fitsCompact = (items: SkillPromptCatalogEntry[]) =>
-    formatSkillsCompact(items).length <= compactBudget;
-
-  if (!fitsFull(skillsForPrompt)) {
-    if (fitsCompact(skillsForPrompt)) {
-      compact = true;
-    } else {
-      let lo = 0;
-      let hi = skillsForPrompt.length;
-      while (lo < hi) {
-        const mid = Math.ceil((lo + hi) / 2);
-        if (fitsCompact(skillsForPrompt.slice(0, mid))) {
-          lo = mid;
-        } else {
-          hi = mid - 1;
-        }
-      }
-      skillsForPrompt = skillsForPrompt.slice(0, lo);
-      truncated = true;
-      compact = true;
+  const lines = ['Available skills:'];
+  for (const skill of skills.slice(0, DEFAULT_MAX_SKILLS_IN_PROMPT)) {
+    const line = `- ${sanitizeSkillPromptText(skill.name)}: ${sanitizeSkillPromptText(skill.location)}`;
+    const next = [...lines, line].join('\n');
+    if (next.length > DEFAULT_MAX_SKILLS_PROMPT_CHARS) {
+      break;
     }
+    lines.push(line);
   }
 
-  return { skillsForPrompt, truncated, compact };
+  return lines.length > 1 ? lines.join('\n') : '';
 }
 
-function getPromptVisibleEntries(requestText = ''): SkillEntry[] {
+function getPromptVisibleEntries(): SkillEntry[] {
   const eligibilityContext = getSettingsSkillEligibilityContext();
   return useSkillsStore
     .getState()
@@ -205,34 +94,7 @@ function getPromptVisibleEntries(requestText = ''): SkillEntry[] {
         return false;
       }
 
-      if ((entry.metadata.invocationPolicy || 'auto') === 'manual') {
-        const candidateSkill: Skill = {
-          id: entry.id,
-          name: entry.metadata.name,
-          description: entry.metadata.description,
-          version: entry.metadata.version,
-          author: entry.metadata.author,
-          tools: [],
-          invocationPolicy: entry.metadata.invocationPolicy,
-        };
-        return isManualSkillRequested(candidateSkill, requestText);
-      }
-
-      return true;
-    });
-}
-
-function getCompatibleEnabledEntries(): SkillEntry[] {
-  const eligibilityContext = getSettingsSkillEligibilityContext();
-  return useSkillsStore
-    .getState()
-    .getEnabled()
-    .filter((entry) => {
-      if (!entry.metadata) {
-        return false;
-      }
-
-      return getSkillCompatibility(entry.metadata, eligibilityContext).compatible;
+      return (entry.metadata.invocationPolicy || 'auto') !== 'manual';
     });
 }
 
@@ -356,6 +218,7 @@ export function getSkillToolDefinitions(): ToolDefinition[] {
         description: `[${skill.name}] ${tool.description}`,
         input_schema: tool.input_schema,
         strict: tool.strict,
+        contract: tool.contract,
       });
     }
   }
@@ -503,23 +366,18 @@ export function activateEnabledSkills(
  * Gather system prompts from all active skills to inject into the
  * orchestrator's system prompt.
  */
-export async function getSkillSystemPrompts(
-  conversationId: string,
-  requestText = '',
-): Promise<string> {
-  const visibleEntries = getPromptVisibleEntries(requestText);
-  const compatibleEntries = getCompatibleEnabledEntries();
-  if (compatibleEntries.length === 0) {
+export async function getSkillSystemPrompts(conversationId: string): Promise<string> {
+  const visibleEntries = getPromptVisibleEntries();
+  if (visibleEntries.length === 0) {
     return '';
   }
 
   const syncedEntries = await syncSkillEntriesToConversationWorkspace(
-    compatibleEntries,
+    visibleEntries,
     conversationId,
   );
-  const visibleEntryIds = new Set(visibleEntries.map((entry) => entry.id));
   for (const { entry } of syncedEntries) {
-    const currentEntry = compatibleEntries.find((candidate) => candidate.id === entry.id);
+    const currentEntry = visibleEntries.find((candidate) => candidate.id === entry.id);
     if (!currentEntry) {
       continue;
     }
@@ -527,41 +385,16 @@ export async function getSkillSystemPrompts(
       useSkillsStore.getState().updateEntry(entry.id, { source: entry.source });
     }
   }
-  const materializedSkills = syncedEntries
-    .filter(({ entry }) => visibleEntryIds.has(entry.id))
-    .map(({ entry, location }) => {
-      const bundleRoot = location.replace(/\/SKILL\.md$/, '');
-      return {
-        name: entry.metadata.name,
-        description: entry.metadata.description || 'No description provided.',
-        location,
-        bundleRoot,
-        pythonScripts: entry.metadata.bundledPython?.scriptPaths?.length
-          ? entry.metadata.bundledPython.scriptPaths.map(
-              (scriptPath) => `${bundleRoot}/${scriptPath}`,
-            )
-          : undefined,
-        pythonPackages: entry.metadata.bundledPython?.dependencies?.length
-          ? entry.metadata.bundledPython.dependencies
-          : undefined,
-      };
-    });
+  const materializedSkills = syncedEntries.map(({ entry, location }) => {
+    return {
+      name: entry.metadata.name,
+      location,
+    };
+  });
   if (materializedSkills.length === 0) {
     return '';
   }
-  const { skillsForPrompt, truncated, compact } = applySkillsPromptLimits(materializedSkills);
-  const note = truncated
-    ? `⚠️ Skills truncated: included ${skillsForPrompt.length} of ${materializedSkills.length}${compact ? ' (compact format, descriptions omitted).' : '.'}`
-    : compact
-      ? '⚠️ Skills catalog using compact format (descriptions omitted).'
-      : '';
-
-  return [
-    note,
-    compact ? formatSkillsCompact(skillsForPrompt) : formatSkillsForPrompt(skillsForPrompt),
-  ]
-    .filter(Boolean)
-    .join('\n');
+  return buildSkillsPrompt(materializedSkills);
 }
 
 // ── Skill Eligibility ────────────────────────────────────────────────────
@@ -621,7 +454,7 @@ export async function discoverSkillsInDirectory(
   const discovered: SkillEntry[] = [];
 
   try {
-    const { Paths, Directory, File } = await import('expo-file-system');
+    const { Directory, File } = await import('expo-file-system');
     const dir = new Directory(dirPath);
     if (!dir.exists) return discovered;
 

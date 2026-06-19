@@ -10,7 +10,7 @@ import {
   ensureToolResultPairing,
   deduplicateToolResults,
 } from '../../src/engine/toolResultPairingGuard';
-import type { Message } from '../../src/types';
+import type { Message } from '../../src/types/message';
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -434,7 +434,8 @@ describe('deduplicateToolResults', () => {
     const result = deduplicateToolResults(messages);
 
     expect(result).toHaveLength(4);
-    expect(result.filter((message) => message.role === 'tool').map((message) => message.content))
-      .toEqual(['first turn result', 'second turn result']);
+    expect(
+      result.filter((message) => message.role === 'tool').map((message) => message.content),
+    ).toEqual(['first turn result', 'second turn result']);
   });
 });

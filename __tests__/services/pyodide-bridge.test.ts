@@ -5,6 +5,7 @@ import {
   isPyodideReady,
   registerPyodideWebView,
   reportPyodideRuntimeFailure,
+  subscribeToPyodideMountRequests,
   unregisterPyodideWebView,
 } from '../../src/services/python/pyodideBridge';
 
@@ -100,11 +101,37 @@ describe('pyodideBridge', () => {
     expect(isPyodideReady()).toBe(true);
   });
 
-  it('returns error when WebView is not mounted', async () => {
+  it('requests a lazy mount when execution starts before the WebView is mounted', async () => {
     unregisterPyodideWebView();
-    const result = await executePython({ code: 'print("hi")' });
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('not available');
+    const onMountRequest = jest.fn();
+    const unsubscribe = subscribeToPyodideMountRequests(onMountRequest);
+
+    const resultPromise = executePython({ code: 'print("hi")', timeoutMs: 200 });
+    await flushAsyncWork();
+
+    expect(onMountRequest).toHaveBeenCalledTimes(1);
+    expect(mockPostMessage).not.toHaveBeenCalled();
+
+    registerPyodideWebView({
+      injectJavaScript: mockInjectJavaScript,
+      postMessage: mockPostMessage,
+      reload: mockReload,
+    });
+    bootRuntime();
+    await flushAsyncWork();
+
+    expect(mockPostMessage).toHaveBeenCalledTimes(1);
+    const sent = getPostedPayload();
+    handlePyodideMessage(
+      JSON.stringify({ type: 'python-result', runtimeId: 'rt-1', id: sent.id, output: 'hi\n' }),
+    );
+
+    await expect(resultPromise).resolves.toMatchObject({
+      success: true,
+      output: 'hi\n',
+    });
+
+    unsubscribe();
   });
 
   it('rejects requests that omit both inline code and a script path', async () => {

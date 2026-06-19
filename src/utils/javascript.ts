@@ -71,6 +71,9 @@ export function executeJavaScriptWithResult(code: unknown): unknown {
 
   for (const candidate of buildJavaScriptCandidates(code)) {
     try {
+      // Dynamic execution is intentional for the local JavaScript utility surface.
+      // It runs explicit user/tool-provided snippets in the app JS runtime, not a
+      // security sandbox; callers must treat it as trusted-by-user code.
       const fn = new Function('console', candidate);
       const result = fn(fakeConsole);
       if (result !== undefined) {

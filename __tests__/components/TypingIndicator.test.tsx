@@ -2,7 +2,6 @@
 // Tests for TypingIndicator component
 // ---------------------------------------------------------------------------
 
-import React from 'react';
 import { render } from '@testing-library/react-native';
 import TypingIndicator from '../../src/components/chat/TypingIndicator';
 

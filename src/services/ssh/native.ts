@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import type { SshTargetConfig } from '../../types';
+import type { SshTargetConfig } from '../../types/remote';
 
 export interface NativeSftpListEntry {
   filename: string;

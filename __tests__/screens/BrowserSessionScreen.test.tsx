@@ -1,4 +1,3 @@
-import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Linking } from 'react-native';
 import { BrowserSessionScreen } from '../../src/screens/BrowserSessionScreen';
@@ -59,7 +58,7 @@ jest.mock('../../src/theme/useAppTheme', () => ({
   AppPalette: {},
 }));
 
-jest.mock('../../src/i18n', () => ({
+jest.mock('../../src/i18n/useTranslation', () => ({
   useTranslation: () => ({
     t: (key: string, params?: Record<string, any>) => {
       if (key === 'browserSessions.startedAt') {
@@ -85,7 +84,7 @@ jest.mock('../../src/store/useSettingsStore', () => ({
     selector(settingsStoreState),
 }));
 
-jest.mock('../../src/services/browser/providers', () => ({
+jest.mock('../../src/services/browser/providers/readiness', () => ({
   getBrowserProviderReadiness: (...args: any[]) => mockGetBrowserProviderReadiness(...args),
 }));
 

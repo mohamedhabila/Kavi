@@ -11,10 +11,10 @@ import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
-  recordFact,
-  upsertEntity,
-} from '../../../src/services/memory/factStore';
-import { recordEpisode, addFactEvidence } from '../../../src/services/memory/episodes';
+} from '../../../src/services/memory/schema';
+import { recordFact } from '../../../src/services/memory/facts/mutations';
+import { upsertEntity } from '../../../src/services/memory/entities';
+import { recordEpisode, addFactEvidence } from '../../../src/services/memory/episodes/mutations';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -29,7 +29,9 @@ afterEach(() => {
 });
 
 function columnNames(table: string): string[] {
-  return getMemoryDb().getAllSync<{ name: string }>(`PRAGMA table_info(${table})`).map((row) => row.name);
+  return getMemoryDb()
+    .getAllSync<{ name: string }>(`PRAGMA table_info(${table})`)
+    .map((row) => row.name);
 }
 
 describe('ensureFactSchema', () => {
@@ -74,9 +76,15 @@ describe('ensureFactSchema', () => {
     resetFactSchemaCacheForTests();
     expect(() => ensureFactSchema()).not.toThrow();
 
-    const factCount = getMemoryDb().getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM memory_facts');
-    const episodeCount = getMemoryDb().getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM memory_episodes');
-    const evidenceCount = getMemoryDb().getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM memory_fact_evidence');
+    const factCount = getMemoryDb().getFirstSync<{ count: number }>(
+      'SELECT COUNT(*) AS count FROM memory_facts',
+    );
+    const episodeCount = getMemoryDb().getFirstSync<{ count: number }>(
+      'SELECT COUNT(*) AS count FROM memory_episodes',
+    );
+    const evidenceCount = getMemoryDb().getFirstSync<{ count: number }>(
+      'SELECT COUNT(*) AS count FROM memory_fact_evidence',
+    );
     expect(factCount?.count).toBe(1);
     expect(episodeCount?.count).toBe(1);
     expect(evidenceCount?.count).toBe(1);

@@ -3,10 +3,10 @@ import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { ConversationFiles } from '../components/files/ConversationFiles';
 import { onSubAgentEvent, listActiveSubAgents } from '../services/agents/subAgent';
-import { resolveOwningConversationId } from '../services/agents/workflowState';
+import { resolveOwningConversationId } from '../services/agents/lifecycle/stateMachine';
 import { getConversationWorkspaceFallbackConversationIds } from '../services/conversationWorkspace/fallbacks';
 import { useBackToChat } from '../navigation/useBackToChat';
-import { normalizeConversationWorkspacePath } from '../services/conversationWorkspace/files';
+import { normalizeConversationWorkspacePath } from '../services/files/pathUtils';
 import { useChatStore } from '../store/useChatStore';
 
 type ConversationFilesRouteParams = {
@@ -81,12 +81,7 @@ export const ConversationFilesScreen: React.FC = () => {
         usageEntries: conversation?.usage?.entries,
         agentRuns: conversation?.agentRuns,
       }),
-    [
-      conversation?.agentRuns,
-      conversation?.messages,
-      conversation?.usage?.entries,
-      conversationId,
-    ],
+    [conversation?.agentRuns, conversation?.messages, conversation?.usage?.entries, conversationId],
   );
   const refreshToken = `${conversation?.updatedAt ?? 0}:${workspaceRefreshVersion}`;
 

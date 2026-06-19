@@ -9,7 +9,7 @@ import { AgentPersona } from '../../services/agents/personas';
 import { getAvailablePersonasForConfig } from '../../services/agents/registry';
 import { usePersonaConfigStore } from '../../services/agents/store';
 import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
-import { useTranslation } from '../../i18n';
+import { useTranslation } from '../../i18n/useTranslation';
 
 interface PersonaSelectorProps {
   selectedPersonaId: string | null;

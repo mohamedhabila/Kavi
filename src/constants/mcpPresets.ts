@@ -4,7 +4,7 @@
 // Pre-configured MCP server entries that users can one-tap install.
 // Covers popular community servers and common use cases.
 
-import type { McpServerConfig } from '../types';
+import type { McpServerConfig } from '../types/remote';
 
 export interface McpPreset {
   id: string;

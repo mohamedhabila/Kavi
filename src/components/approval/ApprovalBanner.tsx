@@ -9,8 +9,8 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ShieldCheck, ShieldX, Clock, ShieldAlert, CheckCheck } from 'lucide-react-native';
 import { useApprovalStore } from '../../services/remote/approvalStore';
 import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
-import { useTranslation } from '../../i18n';
-import type { RemoteApprovalRequest } from '../../types';
+import { useTranslation } from '../../i18n/useTranslation';
+import type { RemoteApprovalRequest } from '../../types/remote';
 
 const RISK_COLORS: Record<string, (colors: AppPalette) => string> = {
   low: (c) => c.success,

@@ -1,7 +1,5 @@
-import {
-  getBrowserProviderReadiness,
-  probeBrowserProvider,
-} from '../../src/services/browser/providers';
+import { probeBrowserProvider } from '../../src/services/browser/providers/probe';
+import { getBrowserProviderReadiness } from '../../src/services/browser/providers/readiness';
 
 const mockGetSecure = jest.fn();
 

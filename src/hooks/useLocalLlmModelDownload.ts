@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { LlmProviderConfig } from '../types';
-import {
-  getLocalLlmAvailability,
-  installLocalLlmModel,
-  type LocalLlmModelInstallProgress,
-} from '../services/localLlm/runtime';
+import type { LlmProviderConfig } from '../types/provider';
+import { getLocalLlmAvailability } from '../services/localLlm/availability';
+import { installLocalLlmModel } from '../services/localLlm/install';
+import type {
+  LocalLlmAvailability,
+  LocalLlmModelInstallProgress,
+} from '../services/localLlm/types';
 
-type DownloadStatus = 'idle' | 'blocked' | 'downloading' | 'ready' | 'failed';
+type DownloadStatus = 'idle' | 'validating' | 'blocked' | 'downloading' | 'ready' | 'failed';
 type DownloadSource = 'existing' | 'downloaded' | null;
 
 interface DownloadState {
@@ -15,6 +16,7 @@ interface DownloadState {
   source: DownloadSource;
   progress: LocalLlmModelInstallProgress | null;
   errorMessage: string | null;
+  availability: LocalLlmAvailability | null;
 }
 
 const INITIAL_STATE: DownloadState = {
@@ -23,6 +25,7 @@ const INITIAL_STATE: DownloadState = {
   source: null,
   progress: null,
   errorMessage: null,
+  availability: null,
 };
 
 export function useLocalLlmModelDownload(selectedModelId?: string, isSelectedInstalled = false) {
@@ -55,15 +58,17 @@ export function useLocalLlmModelDownload(selectedModelId?: string, isSelectedIns
           source: 'existing',
           progress: null,
           errorMessage: null,
+          availability: null,
         };
       }
 
       return {
         modelId: selectedModelId,
-        status: 'idle',
+        status: 'validating',
         source: null,
         progress: null,
         errorMessage: null,
+        availability: null,
       };
     });
 
@@ -99,6 +104,7 @@ export function useLocalLlmModelDownload(selectedModelId?: string, isSelectedIns
               source: null,
               progress: null,
               errorMessage: availability.warningReason || null,
+              availability,
             };
           }
 
@@ -108,6 +114,7 @@ export function useLocalLlmModelDownload(selectedModelId?: string, isSelectedIns
             source: null,
             progress: null,
             errorMessage: availability.reason || null,
+            availability,
           };
         });
       })
@@ -134,6 +141,7 @@ export function useLocalLlmModelDownload(selectedModelId?: string, isSelectedIns
           source: null,
           progress: null,
           errorMessage: availability.reason || null,
+          availability,
         });
         return null;
       }
@@ -149,6 +157,7 @@ export function useLocalLlmModelDownload(selectedModelId?: string, isSelectedIns
           fraction: 0,
         },
         errorMessage: null,
+        availability,
       });
 
       try {
@@ -164,6 +173,7 @@ export function useLocalLlmModelDownload(selectedModelId?: string, isSelectedIns
                 source: null,
                 progress,
                 errorMessage: null,
+                availability: current.availability,
               };
             });
           },
@@ -183,6 +193,7 @@ export function useLocalLlmModelDownload(selectedModelId?: string, isSelectedIns
                 }
               : null,
           errorMessage: null,
+          availability,
         });
 
         return updatedProvider;
@@ -196,6 +207,7 @@ export function useLocalLlmModelDownload(selectedModelId?: string, isSelectedIns
             error instanceof Error
               ? error.message
               : 'The model could not be downloaded. Check your connection and try again.',
+          availability,
         });
         return null;
       }

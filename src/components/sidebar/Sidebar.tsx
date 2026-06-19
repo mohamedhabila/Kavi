@@ -26,14 +26,17 @@ import {
   OpenThreadsChips,
   RecallSearchInput,
   PinnedMoments,
+  MemoryStats,
 } from './SidebarMemorySections';
 import MigrationProgressBanner from '../MigrationProgressBanner';
 import { useChatStore } from '../../store/useChatStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
-import { useTranslation } from '../../i18n';
+import { useTranslation } from '../../i18n/useTranslation';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { resolveConversationStartSelection } from '../../services/llm/providerSupport';
+import { resolveConversationStartSelection } from '../../services/llm/support/providerSupport';
+import { getConsolidationStatusSnapshot } from '../../services/memory/consolidationStatus';
+import { consolidationTierLabel } from '../../screens/memory/consolidationStatusLabel';
 
 export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation }) => {
   const { colors } = useAppTheme();
@@ -48,6 +51,13 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation }) =
   const systemPrompt = useSettingsStore((s) => s.systemPrompt);
   const activeProviderId = useSettingsStore((s) => s.activeProviderId);
   const activeModel = useSettingsStore((s) => s.activeModel);
+  const disableLongTermMemory = useSettingsStore((s) => s.disableLongTermMemory === true);
+  const memoryConsolidationTierLabel = useMemo(() => {
+    if (disableLongTermMemory) {
+      return null;
+    }
+    return consolidationTierLabel(getConsolidationStatusSnapshot(), t);
+  }, [disableLongTermMemory, t]);
 
   const handleNew = () => {
     const selection = resolveConversationStartSelection(providers, activeProviderId, activeModel);
@@ -97,7 +107,7 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation }) =
 
   const handleOpenMemory = useCallback(
     (query?: string) => {
-      navigation.navigate('Memory', query ? { tab: 'facts', query } : { tab: 'facts' });
+      navigation.navigate('Memory', query ? { tab: 'overview', query } : { tab: 'overview' });
       navigation.closeDrawer();
     },
     [navigation],
@@ -125,10 +135,24 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation }) =
 
       <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
         <MigrationProgressBanner colors={colors} />
-        <TodaysFocusTile colors={colors} onPress={handleOpenChat} />
-        <OpenThreadsChips colors={colors} onSelect={handleOpenChat} />
+        <TodaysFocusTile
+          colors={colors}
+          conversationId={activeId}
+          onPress={handleOpenChat}
+        />
+        <OpenThreadsChips
+          colors={colors}
+          conversationId={activeId}
+          onSelect={handleOpenChat}
+        />
         <RecallSearchInput colors={colors} onSubmit={handleOpenMemory} />
         <PinnedMoments colors={colors} onSelect={() => handleOpenMemory()} />
+        <MemoryStats
+          colors={colors}
+          conversationId={activeId}
+          consolidationTierLabel={memoryConsolidationTierLabel}
+          onPress={() => handleOpenMemory()}
+        />
       </ScrollView>
 
       <TouchableOpacity

@@ -10,7 +10,7 @@ import type {
   EmbeddingConfig,
   EmbeddingResult,
   MemorySearchResult,
-} from '../../types';
+} from '../../types/memory';
 import {
   DEFAULT_GEMINI_AI_STUDIO_BASE_URL,
   isVertexNativeGeminiBaseUrl,
@@ -25,39 +25,16 @@ import {
   readDailyMemory,
 } from './store';
 import { createTimeoutSignal } from '../../utils/runtime';
+import { createArrayChunkIndex, searchChunkIndex } from './ranking/chunkIndex';
 
 const EMBEDDING_TIMEOUT_MS = 30_000;
+
+export { cosineSimilarity } from './ranking/similarity';
+export { temporalDecay } from './ranking/scoring';
 
 /** Create an AbortSignal that fires after `ms` milliseconds. */
 function timeoutSignal(ms: number = EMBEDDING_TIMEOUT_MS): AbortSignal {
   return createTimeoutSignal(ms);
-}
-
-// ── Cosine similarity ────────────────────────────────────────────────────
-
-export function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length || a.length === 0) return 0;
-  let dot = 0,
-    normA = 0,
-    normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  const denom = Math.sqrt(normA) * Math.sqrt(normB);
-  return denom === 0 ? 0 : dot / denom;
-}
-
-// ── Temporal decay ───────────────────────────────────────────────────────
-
-export function temporalDecay(
-  entryTimestamp: number,
-  nowMs: number = Date.now(),
-  halfLifeDays: number = 14,
-): number {
-  const daysSince = (nowMs - entryTimestamp) / (1000 * 60 * 60 * 24);
-  return Math.pow(0.5, daysSince / halfLifeDays);
 }
 
 // ── Provider-specific embedding fetchers ─────────────────────────────────
@@ -337,19 +314,6 @@ function includesConversationMemory(scope: MemoryIndexOptions['scope'] | undefin
   return scope === 'conversation' || scope === 'all';
 }
 
-function indexMatchesScope(entry: IndexedMemoryEntry, options?: MemoryIndexOptions): boolean {
-  const scope = options?.scope;
-  if (!scope || scope === 'all') {
-    return true;
-  }
-
-  if (scope === 'global') {
-    return entry.scope === 'global' || entry.scope === 'daily';
-  }
-
-  return entry.scope === 'conversation';
-}
-
 /**
  * Index all memory entries with embeddings for semantic search
  */
@@ -478,43 +442,22 @@ export async function hybridSearch(
     textScoreMap.set(r.snippet.slice(0, 200), r.score);
   }
 
-  // Score all indexed entries
-  const scored: MemorySearchResult[] = [];
-
-  for (const entry of memoryIndex) {
-    if (!indexMatchesScope(entry, options)) {
-      continue;
-    }
-
-    let vectorScore = 0;
-    if (queryEmbedding && entry.embedding) {
-      vectorScore = cosineSimilarity(queryEmbedding, entry.embedding);
-    }
-
-    const textScore = textScoreMap.get(entry.content.slice(0, 200)) || 0;
-    const temporalScore = temporalDecay(entry.timestamp);
-
-    const combinedScore =
-      vectorWeight * vectorScore + textWeight * textScore + temporalWeight * temporalScore;
-
-    if (combinedScore > 0.01) {
-      scored.push({
-        source: entry.source,
-        scope: entry.scope,
-        snippet: entry.content.slice(0, 500),
-        score: combinedScore,
-        embedding: entry.embedding,
-      });
-    }
-  }
-
   // If no indexed entries, fall back to pure text search
   if (memoryIndex.length === 0) {
     return textResults.slice(0, maxResults);
   }
 
-  scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, maxResults);
+  return searchChunkIndex({
+    index: createArrayChunkIndex(memoryIndex),
+    queryEmbedding,
+    options: options?.scope ? { scope: options.scope } : undefined,
+    vectorWeight,
+    textWeight,
+    temporalWeight,
+    maxResults,
+    textScore: (entry) => textScoreMap.get(entry.content.slice(0, 200)) || 0,
+    includeEmbeddingInResult: true,
+  });
 }
 
 /**

@@ -5,7 +5,7 @@ import type {
   McpServerConfig,
   SshTargetConfig,
   WorkspaceTargetConfig,
-} from '../types';
+} from '../types/remote';
 import { generateId } from '../utils/id';
 
 export type ExpoProjectPlatform = 'android' | 'ios' | 'web';

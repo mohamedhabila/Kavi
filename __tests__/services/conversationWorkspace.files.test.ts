@@ -1,13 +1,14 @@
 import {
-  getConversationWorkspaceFileUri,
-  importConversationWorkspaceAttachment,
+  conversationWorkspaceDirectoryExists,
   inspectConversationWorkspaceFile,
   listConversationWorkspaceDirectory,
-  normalizeConversationWorkspacePath,
   readConversationWorkspaceTextFile,
   writeConversationWorkspaceBinaryFile,
   writeConversationWorkspaceTextFile,
 } from '../../src/services/conversationWorkspace/files';
+import { importConversationWorkspaceAttachment } from '../../src/services/conversationWorkspace/attachments';
+import { getConversationWorkspaceFileUri } from '../../src/services/conversationWorkspace/storage';
+import { normalizeConversationWorkspacePath } from '../../src/services/files/pathUtils';
 
 type MockDirectoryEntry = {
   name: string;
@@ -100,8 +101,33 @@ const mockFileBytes = jest.fn(async (path: string) => {
 const mockDirExists = (path: string) =>
   Object.prototype.hasOwnProperty.call(mockDirectoryEntriesByPath, path);
 
-const mockDirList = jest.fn((path: string) =>
-  (mockDirectoryEntriesByPath[path] || []).map((entry) => {
+const mockDirList = jest.fn((path: string) => {
+  const entriesByName = new Map<string, MockDirectoryEntry>();
+  for (const entry of mockDirectoryEntriesByPath[path] || []) {
+    entriesByName.set(entry.name, entry);
+  }
+
+  const prefix = `${path.replace(/\/+$/g, '')}/`;
+  for (const filePath of Object.keys(mockFileContentsByPath)) {
+    if (!filePath.startsWith(prefix)) {
+      continue;
+    }
+    const rest = filePath.slice(prefix.length);
+    if (!rest) {
+      continue;
+    }
+    const firstPart = rest.split('/')[0]!;
+    if (entriesByName.has(firstPart)) {
+      continue;
+    }
+    entriesByName.set(firstPart, {
+      name: firstPart,
+      type: rest.includes('/') ? 'directory' : 'file',
+      size: rest.includes('/') ? undefined : mockFileSize(filePath),
+    });
+  }
+
+  return Array.from(entriesByName.values()).map((entry) => {
     const entryPath = mockJoinPath(path, entry.name);
     if (entry.type === 'directory') {
       return {
@@ -133,8 +159,8 @@ const mockDirList = jest.fn((path: string) =>
         mockFileContentsByPath[entryPath] = content;
       },
     };
-  }),
-);
+  });
+});
 
 jest.mock('expo-file-system', () => ({
   Paths: { document: '/mock/document' },
@@ -247,6 +273,8 @@ describe('conversation workspace file service', () => {
 
   it('normalizes and reads text files from the conversation workspace', async () => {
     expect(normalizeConversationWorkspacePath('/src/App.tsx')).toBe('src/App.tsx');
+    expect(normalizeConversationWorkspacePath('.')).toBe('');
+    expect(normalizeConversationWorkspacePath('./src/App.tsx')).toBe('src/App.tsx');
 
     const result = await readConversationWorkspaceTextFile('conv1', '/src/App.tsx');
 
@@ -256,6 +284,38 @@ describe('conversation workspace file service', () => {
       content: 'const app = 1;',
       size: 14,
       uri: 'file:///mock/document/workspace/conv1/src/App.tsx',
+    });
+  });
+
+  it('lists and detects inferred directories from file-backed workspace entries', async () => {
+    mockFileContentsByPath[
+      '/mock/document/workspace/conv-inferred/inbox/untrusted_note.txt'
+    ] = 'safe';
+
+    expect(conversationWorkspaceDirectoryExists('conv-inferred', '.')).toBe(true);
+    expect(conversationWorkspaceDirectoryExists('conv-inferred', './inbox')).toBe(true);
+
+    await expect(listConversationWorkspaceDirectory('conv-inferred', '.')).resolves.toEqual({
+      path: '',
+      entries: [
+        {
+          name: 'inbox',
+          isDirectory: true,
+          size: undefined,
+          modifiedAt: undefined,
+        },
+      ],
+    });
+    await expect(listConversationWorkspaceDirectory('conv-inferred', './inbox')).resolves.toEqual({
+      path: 'inbox',
+      entries: [
+        {
+          name: 'untrusted_note.txt',
+          isDirectory: false,
+          size: 4,
+          modifiedAt: undefined,
+        },
+      ],
     });
   });
 
@@ -364,6 +424,11 @@ describe('conversation workspace file service', () => {
   });
 
   it('reads modificationTime metadata, returns file URIs, and validates write arguments', async () => {
+    Object.keys(mockFileContentsByPath).forEach((key) => {
+      if (key.startsWith('/mock/document/workspace/conv1/')) {
+        delete mockFileContentsByPath[key];
+      }
+    });
     mockDirectoryEntriesByPath['/mock/document/workspace/conv1'] = [
       { name: 'timed.txt', type: 'file', size: 4, modificationTime: 1712923200000 },
     ];

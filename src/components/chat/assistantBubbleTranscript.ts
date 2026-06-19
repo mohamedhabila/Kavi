@@ -1,4 +1,5 @@
-import { Attachment, Message, ToolCall } from '../../types';
+import { Attachment } from '../../types/attachment';
+import { Message, ToolCall } from '../../types/message';
 import { buildAssistantBubbleViewModel } from './assistantBubbleModel';
 import { getRenderableThinkingText } from './ThinkingBlock';
 import { summarizeToolCall } from './ToolCallDisplay';

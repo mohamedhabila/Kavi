@@ -10,9 +10,9 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { FileText } from 'lucide-react-native';
-import { Attachment } from '../../types';
+import { Attachment } from '../../types/attachment';
 import { AppPalette, useAppTheme } from '../../theme/useAppTheme';
-import { useTranslation } from '../../i18n';
+import { useTranslation } from '../../i18n/useTranslation';
 import { AudioAttachmentCard } from './AudioAttachmentCard';
 import { isAudioAttachment } from '../../utils/messageAttachments';
 

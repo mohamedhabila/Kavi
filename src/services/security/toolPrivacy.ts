@@ -1,6 +1,6 @@
 import { parse as shellParse } from 'shell-quote';
 
-import { i18n } from '../../i18n';
+import { i18n } from '../../i18n/manager';
 
 export type ToolTelemetryCategory = 'native' | 'ssh' | 'workspace' | 'browser' | 'expo' | 'other';
 
@@ -80,10 +80,16 @@ function getToolTelemetryCategory(toolName: string): ToolTelemetryCategory {
     toolName.startsWith('contacts_') ||
     toolName.startsWith('location_') ||
     toolName.startsWith('clipboard_') ||
+    toolName === 'clipboard' ||
+    toolName.startsWith('device_') ||
+    toolName.startsWith('photos_') ||
+    toolName.startsWith('camera_') ||
     toolName === 'email_compose' ||
     toolName === 'sms_compose' ||
     toolName === 'phone_call' ||
     toolName === 'maps_open' ||
+    toolName === 'screen_record' ||
+    toolName === 'haptic_feedback' ||
     toolName === 'open_url' ||
     toolName === 'share' ||
     toolName.startsWith('share_') ||
@@ -150,14 +156,6 @@ function getToolTitle(toolName: string): string {
       return i18n.t('toolApproval.actions.openUrlTitle');
     case 'ssh_exec':
       return i18n.t('toolApproval.actions.sshExecTitle');
-    case 'workspace_write_file':
-      return i18n.t('toolApproval.actions.workspaceWriteFileTitle');
-    case 'workspace_delete':
-      return i18n.t('toolApproval.actions.workspaceDeleteTitle');
-    case 'workspace_rename':
-      return i18n.t('toolApproval.actions.workspaceRenameTitle');
-    case 'workspace_mkdir':
-      return i18n.t('toolApproval.actions.workspaceMkdirTitle');
     case 'browser_navigate':
       return i18n.t('toolApproval.actions.browserNavigateTitle');
     case 'expo_eas_build':
@@ -175,6 +173,49 @@ function summarizeNativeTool(
   let redactedArguments: Record<string, unknown> = {};
 
   switch (toolName) {
+    case 'calendar_list': {
+      redactedArguments = {};
+      break;
+    }
+    case 'calendar_events': {
+      if (hasNonEmptyString(args.calendarId))
+        pushDetail(details, 'toolApproval.details.providedArguments');
+      redactedArguments = {
+        hasStartDate: hasNonEmptyString(args.startDate),
+        hasEndDate: hasNonEmptyString(args.endDate),
+        hasCalendarId: hasNonEmptyString(args.calendarId),
+      };
+      break;
+    }
+    case 'calendar_create_event': {
+      if (hasNonEmptyString(args.title)) pushDetail(details, 'toolApproval.details.titleIncluded');
+      if (hasNonEmptyString(args.location))
+        pushDetail(details, 'toolApproval.details.labelIncluded');
+      if (hasNonEmptyString(args.notes)) pushDetail(details, 'toolApproval.details.bodyIncluded');
+      redactedArguments = {
+        hasTitle: hasNonEmptyString(args.title),
+        hasStartDate: hasNonEmptyString(args.startDate),
+        hasEndDate: hasNonEmptyString(args.endDate),
+        hasLocation: hasNonEmptyString(args.location),
+        hasNotes: hasNonEmptyString(args.notes),
+        hasCalendarId: hasNonEmptyString(args.calendarId),
+        allDay: args.allDay === true,
+      };
+      break;
+    }
+    case 'calendar_update_event': {
+      pushDetail(details, 'toolApproval.details.providedArguments');
+      redactedArguments = {
+        hasId: hasNonEmptyString(args.id),
+        hasTitle: hasNonEmptyString(args.title),
+        hasStartDate: hasNonEmptyString(args.startDate),
+        hasEndDate: hasNonEmptyString(args.endDate),
+        hasLocation: hasNonEmptyString(args.location),
+        hasNotes: hasNonEmptyString(args.notes),
+        allDay: args.allDay === true,
+      };
+      break;
+    }
     case 'email_compose': {
       const recipientCount =
         countArray(args.recipients) +
@@ -317,6 +358,32 @@ function summarizeNativeTool(
       };
       break;
     }
+    case 'location_current': {
+      redactedArguments = {};
+      break;
+    }
+    case 'clipboard_read': {
+      redactedArguments = {};
+      break;
+    }
+    case 'clipboard_write': {
+      if (hasNonEmptyString(args.text))
+        pushDetail(details, 'toolApproval.details.textLength', { count: String(args.text).length });
+      redactedArguments = {
+        textLength: hasNonEmptyString(args.text) ? String(args.text).length : 0,
+      };
+      break;
+    }
+    case 'clipboard': {
+      const action = hasNonEmptyString(args.action) ? String(args.action).toLowerCase() : undefined;
+      if (hasNonEmptyString(args.text))
+        pushDetail(details, 'toolApproval.details.textLength', { count: String(args.text).length });
+      redactedArguments = {
+        action,
+        textLength: hasNonEmptyString(args.text) ? String(args.text).length : undefined,
+      };
+      break;
+    }
     case 'share_text': {
       if (hasNonEmptyString(args.text)) {
         pushDetail(details, 'toolApproval.details.textLength', { count: String(args.text).length });
@@ -372,6 +439,65 @@ function summarizeNativeTool(
       if (scheme) pushDetail(details, 'toolApproval.details.scheme', { scheme });
       pushDetail(details, 'toolApproval.details.reviewedLink');
       redactedArguments = { scheme };
+      break;
+    }
+    case 'notification_send':
+    case 'notification_schedule': {
+      if (hasNonEmptyString(args.title)) pushDetail(details, 'toolApproval.details.titleIncluded');
+      if (hasNonEmptyString(args.body)) pushDetail(details, 'toolApproval.details.bodyIncluded');
+      redactedArguments = {
+        hasTitle: hasNonEmptyString(args.title),
+        hasBody: hasNonEmptyString(args.body),
+        delaySeconds: typeof args.delaySeconds === 'number' ? args.delaySeconds : undefined,
+      };
+      break;
+    }
+    case 'notification_cancel': {
+      redactedArguments = {
+        hasId: hasNonEmptyString(args.id),
+      };
+      break;
+    }
+    case 'device_status':
+    case 'device_info':
+    case 'device_permissions':
+    case 'device_health': {
+      redactedArguments = {};
+      break;
+    }
+    case 'device_query': {
+      redactedArguments = {
+        kind: hasNonEmptyString(args.kind) ? String(args.kind).toLowerCase() : undefined,
+      };
+      break;
+    }
+    case 'photos_latest': {
+      if (typeof args.count === 'number')
+        pushDetail(details, 'toolApproval.details.limit', { count: args.count });
+      redactedArguments = {
+        count: typeof args.count === 'number' ? args.count : undefined,
+      };
+      break;
+    }
+    case 'camera_clip': {
+      redactedArguments = {
+        durationSeconds:
+          typeof args.durationSeconds === 'number' ? args.durationSeconds : undefined,
+        quality: hasNonEmptyString(args.quality) ? String(args.quality).toLowerCase() : undefined,
+        camera: hasNonEmptyString(args.camera) ? String(args.camera).toLowerCase() : undefined,
+      };
+      break;
+    }
+    case 'screen_record': {
+      redactedArguments = {
+        format: hasNonEmptyString(args.format) ? String(args.format).toLowerCase() : undefined,
+      };
+      break;
+    }
+    case 'haptic_feedback': {
+      redactedArguments = {
+        type: hasNonEmptyString(args.type) ? String(args.type).toLowerCase() : undefined,
+      };
       break;
     }
     default: {
@@ -433,15 +559,12 @@ function summarizeWorkspaceTool(
 ): Pick<ToolInvocationPresentation, 'title' | 'description' | 'redactedArguments' | 'piiRedacted'> {
   const details: string[] = [];
   switch (toolName) {
-    case 'workspace_write_file':
-      if (hasNonEmptyString(args.content))
-        pushDetail(details, 'toolApproval.details.contentIncluded');
+    case 'workspace_delegate_task':
+      if (hasNonEmptyString(args.prompt))
+        pushDetail(details, 'toolApproval.details.messageIncluded');
       break;
-    case 'workspace_rename':
-      pushDetail(details, 'toolApproval.details.renameOperation');
-      break;
-    case 'workspace_mkdir':
-      pushDetail(details, 'toolApproval.details.createDirectory');
+    case 'workspace_launch_browser':
+      pushDetail(details, 'toolApproval.details.providedArguments');
       break;
     default:
       pushDetail(details, 'toolApproval.details.providedArguments');
@@ -452,10 +575,10 @@ function summarizeWorkspaceTool(
     title: getToolTitle(toolName),
     description: `${details.join(' · ')}. ${i18n.t('toolApproval.redactedNotice')}`,
     redactedArguments: stringifyRedactedArguments({
-      hasPath: hasNonEmptyString(args.path),
-      hasOldPath: hasNonEmptyString(args.oldPath),
-      hasNewPath: hasNonEmptyString(args.newPath),
-      hasContent: hasNonEmptyString(args.content),
+      hasTargetId: hasNonEmptyString(args.targetId),
+      hasProviderId: hasNonEmptyString(args.providerId),
+      hasPrompt: hasNonEmptyString(args.prompt),
+      hasMode: hasNonEmptyString(args.mode),
     }),
     piiRedacted: true,
   };

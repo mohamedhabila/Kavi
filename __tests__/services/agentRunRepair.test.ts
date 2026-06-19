@@ -61,7 +61,6 @@ function createTerminalRun(overrides: Partial<any> = {}) {
     userMessageId: 'user-1',
     goal: 'Complete the task.',
     status: 'completed',
-    awaitingBackgroundWorkers: false,
     createdAt: 1,
     updatedAt: 3,
     currentPhase: 'deliver',
@@ -182,13 +181,12 @@ describe('repairTerminalAgentRunsMissingFinalResponses', () => {
     expect(mockUpdateMessage).toHaveBeenCalledWith(
       'conv-1',
       'assistant-partial',
-      expect.stringContaining('Latest verified findings:'),
+      'Repository audit complete after verifying the workflow repairs and passing the targeted tests.',
     );
     expect(mockChatStoreState.conversations[0].messages[1]).toEqual(
       expect.objectContaining({
-        content: expect.stringContaining(
-          'sub-1: Repository audit complete after verifying the workflow repairs and passing the targeted tests.',
-        ),
+        content:
+          'Repository audit complete after verifying the workflow repairs and passing the targeted tests.',
         assistantMetadata: expect.objectContaining({
           kind: 'final',
           completionStatus: 'complete',
@@ -246,23 +244,25 @@ describe('repairTerminalAgentRunsMissingFinalResponses', () => {
     });
 
     expect(repairedRunIds).toEqual(['run-1']);
-    expect(mockAddMessage).toHaveBeenCalledWith(
+    expect(mockUpdateMessage).toHaveBeenCalledWith(
       'conv-1',
+      'assistant-partial',
+      'The run completed, but no final response was generated.',
+    );
+    expect(mockUpdateMessageAssistantMetadata).toHaveBeenCalledWith(
+      'conv-1',
+      'assistant-partial',
       expect.objectContaining({
-        role: 'assistant',
-        content: 'Interrupted draft answer',
-        assistantMetadata: expect.objectContaining({
-          kind: 'final',
-          completionStatus: 'complete',
-        }),
+        kind: 'final',
+        completionStatus: 'complete',
       }),
     );
     expect(mockChatStoreState.conversations[0].messages[1]).toEqual(
       expect.objectContaining({
-        content: 'Interrupted draft answer',
+        content: 'The run completed, but no final response was generated.',
         assistantMetadata: expect.objectContaining({
           kind: 'final',
-          completionStatus: 'incomplete',
+          completionStatus: 'complete',
         }),
       }),
     );
@@ -305,12 +305,88 @@ describe('repairTerminalAgentRunsMissingFinalResponses', () => {
     });
 
     expect(repairedRunIds).toEqual(['run-1']);
-    expect(mockAddMessage).toHaveBeenCalledWith(
+    expect(mockUpdateMessage).toHaveBeenCalledWith(
       'conv-1',
+      'assistant-partial',
+      'The run failed before it generated a final response.',
+    );
+    expect(mockUpdateMessageAssistantMetadata).toHaveBeenCalledWith(
+      'conv-1',
+      'assistant-partial',
       expect.objectContaining({
-        role: 'assistant',
-        content: 'The run failed before it generated a final response.',
+        kind: 'final',
+        completionStatus: 'complete',
       }),
     );
+  });
+
+  it('does not repair an older terminal run while a newer run in the same conversation is still active', async () => {
+    mockChatStoreState.conversations = [
+      {
+        id: 'conv-1',
+        title: 'Research',
+        providerId: 'openai',
+        systemPrompt: 'You are helpful.',
+        createdAt: 1,
+        updatedAt: 6,
+        messages: [
+          {
+            id: 'user-1',
+            role: 'user',
+            content: 'Complete the first research task.',
+            timestamp: 1,
+          },
+          {
+            id: 'user-2',
+            role: 'user',
+            content: 'Continue with a second research task.',
+            timestamp: 5,
+          },
+          {
+            id: 'assistant-running',
+            role: 'assistant',
+            content: '',
+            timestamp: 6,
+            toolCalls: [
+              {
+                id: 'tool-running',
+                name: 'web_fetch',
+                arguments: '{"urls":["https://example.com"]}',
+                status: 'running',
+                createdAt: 6,
+                updatedAt: 6,
+              },
+            ],
+          },
+        ],
+        agentRuns: [
+          createTerminalRun({
+            id: 'run-terminal',
+            userMessageId: 'user-1',
+            createdAt: 1,
+            updatedAt: 4,
+          }),
+          {
+            ...createTerminalRun({
+              id: 'run-active',
+              userMessageId: 'user-2',
+              createdAt: 5,
+              updatedAt: 6,
+            }),
+            status: 'running',
+            currentPhase: 'work',
+          },
+        ],
+      },
+    ];
+
+    const repairedRunIds = await repairTerminalAgentRunsMissingFinalResponses({
+      activeSubAgents: [],
+    });
+
+    expect(repairedRunIds).toEqual([]);
+    expect(mockUpdateMessage).not.toHaveBeenCalled();
+    expect(mockAddMessage).not.toHaveBeenCalled();
+    expect(mockAppendAgentRunCheckpoint).not.toHaveBeenCalled();
   });
 });

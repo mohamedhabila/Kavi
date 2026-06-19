@@ -51,7 +51,8 @@ Run on iOS:
 npm run ios
 ```
 
-Run the local verification baseline:
+Run the local verification baseline. This is the same contributor gate used by
+pull request CI:
 
 ```bash
 npm run verify
@@ -63,9 +64,14 @@ Check public-repo hygiene before publishing or preparing a release-focused branc
 npm run check:public-hygiene
 ```
 
-Check that shipped locale files match the English i18n key tree and placeholders:
+Run focused repository-maintenance checks when the change is narrower than the
+full gate:
 
 ```bash
+npm run check:public-language
+npm run check:links
+npm run check:licenses
+npm run check:app-metadata
 npm run check:i18n
 ```
 
@@ -75,7 +81,7 @@ Lint the codebase:
 npm run lint
 ```
 
-Check Android release prerequisites:
+Run the public-safe Android release environment check:
 
 ```bash
 npm run check:android:release-env
@@ -85,8 +91,9 @@ Notes:
 
 - `npm install` runs `patch-package` and rebuilds the local editor assets automatically.
 - After changing native iOS dependencies, run `cd ios && pod install`.
-- The public repository intentionally excludes private research and store-submission working material.
-- `npm run check:public-hygiene` skips outside a git checkout and becomes an enforcement guard once a real public repository exists.
+- The public repository intentionally excludes maintainer-only working material and store-submission drafts.
+- `npm run check:public-hygiene` enforces public repository hygiene inside a git checkout.
+- Optional local environment overrides can be copied from `.env.local.example` to `.env.local`.
 
 ## Core Commands
 
@@ -97,12 +104,24 @@ npm run ios
 npm run check:android:release-env
 npm run build:android:release
 npm run check:public-hygiene
+npm run check:public-language
+npm run check:links
+npm run check:licenses
+npm run check:app-metadata
 npm run check:i18n
+npm run check:no-legacy-planning-imports
+npm run check:thin-e2e-harness
+npm run check:graph-owned-mutations
+npm run check:dead-exports
+npm run check:tool-contracts
 npm run lint
 npm run typecheck
 npm run test:watch
+npm run test:coverage
 npm test -- --runInBand
 npm run verify
+npm run verify:strict
+npm run verify:strict:e2e
 ```
 
 ## Architecture Overview
@@ -116,6 +135,7 @@ Kavi is organized around a few major subsystems:
 - `__tests__`: unit, integration, screen, and Android contract tests
 
 The app is mobile-first by design. Some features rely on remote services or external credentials, while others are intended to run locally on-device.
+MCP and Expo/EAS integrations are public runtime surfaces and should remain compatible when changing repository hygiene rules.
 
 ## Documentation
 
@@ -123,23 +143,42 @@ The app is mobile-first by design. Some features rely on remote services or exte
 - [docs/setup/development.md](docs/setup/development.md)
 - [docs/testing.md](docs/testing.md)
 - [docs/feature-matrix.md](docs/feature-matrix.md)
-- [docs/living-memory-implementation.md](docs/living-memory-implementation.md)
-- [docs/memory-sota-architecture-plan.md](docs/memory-sota-architecture-plan.md)
 - [docs/privacy-policy.md](docs/privacy-policy.md)
 - [docs/privacy-and-permissions.md](docs/privacy-and-permissions.md)
+- [docs/release.md](docs/release.md)
 - [THIRD_PARTY_PROVENANCE.md](THIRD_PARTY_PROVENANCE.md)
 
 ## Testing
 
 Kavi ships with a large Jest-based test suite. Most tests are local and deterministic. A small number of live-provider tests are opt-in and gated by environment variables so contributors do not accidentally hit paid or remote services.
 
-Use the default local verification path before opening a pull request:
+Use the default local verification path before opening a pull request. GitHub
+Actions installs with `npm ci` and then runs this same command:
 
 ```bash
 npm run verify
 ```
 
-See [docs/testing.md](docs/testing.md) for the opt-in live-provider scripts and required API keys.
+Maintainers validating agent/graph changes can run structural acceptance metrics:
+
+```bash
+npm run verify:strict
+```
+
+Run the deterministic coverage gate before release candidates or when a change
+meaningfully alters broad code paths:
+
+```bash
+npm run test:coverage
+```
+
+Selected-provider E2E (opt-in, requires matching provider credentials):
+
+```bash
+npm run verify:strict:e2e
+```
+
+See [docs/testing.md](docs/testing.md) for gate tiers, E2E setup, and opt-in live-provider scripts.
 
 ## Privacy & Long-term Memory
 

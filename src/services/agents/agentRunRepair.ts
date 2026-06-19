@@ -3,30 +3,26 @@ import { flushChatStorePersistenceNow } from '../../store/chatStorePersistence';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { generateId } from '../../utils/id';
 import { buildAssistantMessageMetadata } from '../../utils/assistantMessageMetadata';
-import type {
-  AgentRun,
-  Conversation,
-  LlmProviderConfig,
-  Message,
-  SubAgentSnapshot,
-} from '../../types';
+import type { AgentRun } from '../../types/agentRun';
+import type { Conversation } from '../../types/conversation';
+import type { LlmProviderConfig } from '../../types/provider';
+import type { Message } from '../../types/message';
+import type { SubAgentSnapshot } from '../../types/subAgent';
 import { listActiveSubAgents } from './subAgent';
+import { resolveConversationProviderContext } from '../llm/support/providerSupport';
 import {
-  providerRequiresApiKey,
-  resolveEnabledProvider,
-  resolveProviderApiKey,
-} from '../llm/providerSupport';
-import {
-  buildAgentRunToolResultFallback,
+  buildAgentRunCompletionFallbackOutput,
   buildMissingFinalResponseFallback,
   collectAgentRunFinalizationEvidence,
   synthesizeAgentRunFinalAnswer,
-} from './agentRunFinalization';
+} from './lifecycle/finalizePhase';
+import { getSubAgentsForAgentRun } from './lifecycle/stateMachine';
 import {
+  buildAgentRunMessageScope,
   getAgentRunMessageSlice,
-  getSubAgentsForAgentRun,
+  hasNewerRunningAgentRun,
   hasDeliveredFinalAssistantResponse,
-} from './workflowState';
+} from './lifecycle/agentRunStateMachine';
 
 const FINAL_RESPONSE_CHECKPOINT_TITLE = 'Final response delivered';
 const MAX_LOG_DETAIL_CHARS = 320;
@@ -58,9 +54,9 @@ function isPlainAgentRunAssistantMessage(message: Message): boolean {
 
 function findAgentRunReplaceableAssistantMessageId(
   messages: Message[],
-  userMessageId: string,
+  runScope: Parameters<typeof getAgentRunMessageSlice>[1],
 ): string | undefined {
-  const runMessages = getAgentRunMessageSlice(messages, userMessageId);
+  const runMessages = getAgentRunMessageSlice(messages, runScope);
 
   for (let index = runMessages.length - 1; index >= 0; index -= 1) {
     const message = runMessages[index];
@@ -69,12 +65,7 @@ function findAgentRunReplaceableAssistantMessageId(
     }
 
     if (isPlainAgentRunAssistantMessage(message)) {
-      const hasVisibleOutput =
-        message.content.trim().length > 0 ||
-        message.reasoning?.trim().length ||
-        (message.attachments?.length ?? 0) > 0 ||
-        !!message.effectId;
-      return hasVisibleOutput ? undefined : message.id;
+      return message.id;
     }
 
     return undefined;
@@ -87,33 +78,21 @@ async function resolveConversationFinalizationContext(
   conversation: Conversation,
 ): Promise<ResolvedFinalizationProviderContext | undefined> {
   const settings = useSettingsStore.getState();
-  const providerTemplate = resolveEnabledProvider(
-    settings.providers,
-    conversation.providerId || settings.activeProviderId,
-  );
-  const providerId = providerTemplate?.id || '';
-  const model =
-    conversation.modelOverride ||
-    (providerId === settings.activeProviderId ? settings.activeModel || '' : '') ||
-    providerTemplate?.model ||
-    '';
-
-  if (!providerId || !providerTemplate || !model) {
-    return undefined;
-  }
-
-  const apiKey = await resolveProviderApiKey(providerTemplate);
-  if (providerRequiresApiKey(providerTemplate) && !apiKey) {
+  const providerContext = await resolveConversationProviderContext({
+    activeModel: settings.activeModel,
+    activeProviderId: settings.activeProviderId,
+    conversation,
+    providers: settings.providers,
+    systemPrompt: settings.systemPrompt,
+  });
+  if (!providerContext) {
     return undefined;
   }
 
   return {
-    provider: {
-      ...providerTemplate,
-      apiKey,
-    },
-    model,
-    systemPromptText: conversation.systemPrompt || settings.systemPrompt,
+    provider: providerContext.provider,
+    model: providerContext.model,
+    systemPromptText: providerContext.systemPromptText,
   };
 }
 
@@ -129,12 +108,15 @@ async function synthesizeRecoveredAgentRunCompletion(params: {
 }> {
   const evidence = collectAgentRunFinalizationEvidence(
     params.conversation.messages,
-    params.run.userMessageId,
+    buildAgentRunMessageScope(params.run),
     params.run.summary.startedTools,
-    { liveSubAgentSnapshots: params.liveSubAgentSnapshots },
+    {
+      liveSubAgentSnapshots: params.liveSubAgentSnapshots,
+      originalPromptOverride: params.run.goal,
+    },
   );
   const fallbackOutput =
-    buildAgentRunToolResultFallback({
+    buildAgentRunCompletionFallbackOutput({
       status: params.run.status,
       evidence,
     }) || buildMissingFinalResponseFallback(params.run.status);
@@ -167,6 +149,7 @@ async function synthesizeRecoveredAgentRunCompletion(params: {
     };
   }
 
+  // Terminal repair recovery: graph did not supply a final response.
   const synthesized = await synthesizeAgentRunFinalAnswer({
     provider: providerContext.provider,
     model: providerContext.model,
@@ -210,8 +193,12 @@ export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
         continue;
       }
       const terminalRun = run as AgentRun & { status: Exclude<AgentRun['status'], 'running'> };
+      if (hasNewerRunningAgentRun(conversation, terminalRun)) {
+        continue;
+      }
 
-      if (hasDeliveredFinalAssistantResponse(conversation.messages, terminalRun.userMessageId)) {
+      const terminalRunMessageScope = buildAgentRunMessageScope(terminalRun);
+      if (hasDeliveredFinalAssistantResponse(conversation.messages, terminalRunMessageScope)) {
         continue;
       }
 
@@ -246,16 +233,18 @@ export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
       if (!latestConversation || !latestRun || latestRun.status === 'running') {
         continue;
       }
+      if (hasNewerRunningAgentRun(latestConversation, latestRun)) {
+        continue;
+      }
 
-      if (
-        hasDeliveredFinalAssistantResponse(latestConversation.messages, latestRun.userMessageId)
-      ) {
+      const latestRunMessageScope = buildAgentRunMessageScope(latestRun);
+      if (hasDeliveredFinalAssistantResponse(latestConversation.messages, latestRunMessageScope)) {
         continue;
       }
 
       const targetMessageId = findAgentRunReplaceableAssistantMessageId(
         latestConversation.messages,
-        latestRun.userMessageId,
+        latestRunMessageScope,
       );
       const finalAssistantMetadata = buildAssistantMessageMetadata('final', {
         completionStatus: 'complete',

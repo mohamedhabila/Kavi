@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { useNavigation } from '@react-navigation/native';
 import { Menu, Wifi } from 'lucide-react-native';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../i18n/useTranslation';
 import { useAppTheme, AppPalette } from '../theme/useAppTheme';
 import { executeJavaScriptWithResult, formatJavaScriptResult } from '../utils/javascript';
 import {
@@ -37,7 +37,7 @@ import {
   type ConnectedSshShell,
   type SshReadinessReason,
 } from '../services/ssh/connector';
-import type { SshTargetConfig } from '../types';
+import type { SshTargetConfig } from '../types/remote';
 
 type TerminalMode = TerminalRuntimeMode | 'ssh';
 type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
@@ -58,10 +58,6 @@ const DEFAULT_CAPABILITIES: LocalRuntimeCapabilities = {
       ? 'Install Termux to enable real local shell commands on Android.'
       : 'Real local shell is only available on Android. Use JavaScript mode or remote SSH.',
 };
-
-function getSshReadinessMessage(reason: SshReadinessReason): string {
-  return getSshReadinessMessageForLocale(reason, (key, params) => key);
-}
 
 function getSshReadinessMessageForLocale(reason: SshReadinessReason, t: TranslateFn): string {
   switch (reason) {

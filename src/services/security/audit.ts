@@ -7,7 +7,6 @@ import { Paths, File, Directory } from 'expo-file-system';
 
 import {
   describeToolInvocation,
-  getToolTelemetryCategory,
   type ToolTelemetryCategory,
 } from './toolPrivacy';
 

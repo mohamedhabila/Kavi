@@ -10,7 +10,7 @@ import {
   renameWorkspaceFile,
   deleteWorkspaceFile,
 } from '../../../src/services/workspaces/files';
-import type { WorkspaceTargetConfig } from '../../../src/types';
+import type { WorkspaceTargetConfig } from '../../../src/types/remote';
 
 const mockResolveWorkspaceTargetLaunch = jest.fn().mockResolvedValue({
   uri: 'https://code-server.example.com',

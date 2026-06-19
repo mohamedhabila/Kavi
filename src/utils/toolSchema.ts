@@ -1,4 +1,4 @@
-import type { ToolDefinition } from '../types';
+import type { ToolDefinition } from '../types/tool';
 
 const ROOT_TOOL_SCHEMA_PASSTHROUGH_KEYS = [
   'title',

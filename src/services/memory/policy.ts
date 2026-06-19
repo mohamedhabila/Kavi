@@ -7,7 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import { useSettingsStore } from '../../store/useSettingsStore';
-import type { MemoryFactScope } from './facts';
+import type { MemoryFactScope } from './facts/types';
 
 export interface MemoryPolicyContext {
   disableLongTermMemory?: boolean;

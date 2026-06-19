@@ -3,7 +3,7 @@ import {
   filterAgentRunEvidenceEntries,
   normalizeAgentRunEvidenceEntries,
   upsertAgentRunEvidenceEntries,
-} from '../../src/services/agents/evidence';
+} from '../../src/services/agents/lifecycle/evidence';
 
 describe('workflow evidence utilities', () => {
   it('normalizes, upserts by dedupe key, and preserves createdAt', () => {

@@ -1,0 +1,3 @@
+export const MAX_TOOL_ITERATIONS = 25;
+export const MAX_TOOL_ITERATIONS_SUPERAGENT = 40;
+export const MAX_IDENTICAL_TOOL_CALLS = 3;

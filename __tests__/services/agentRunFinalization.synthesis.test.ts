@@ -1,5 +1,5 @@
-import type { AgentRunFinalizationEvidence } from '../../src/services/agents/agentRunFinalization';
-import type { LlmProviderConfig } from '../../src/types';
+import type { AgentRunFinalizationEvidence } from '../../src/services/agents/lifecycle/finalizePhaseTypes';
+import type { LlmProviderConfig } from '../../src/types/provider';
 
 jest.mock('../../src/services/llm/LlmService', () => {
   return {
@@ -9,8 +9,8 @@ jest.mock('../../src/services/llm/LlmService', () => {
   };
 });
 
+import { synthesizeAgentRunFinalAnswer } from '../../src/services/agents/lifecycle/finalizePhase';
 import { LlmService } from '../../src/services/llm/LlmService';
-import { synthesizeAgentRunFinalAnswer } from '../../src/services/agents/agentRunFinalization';
 
 const mockStreamMessage = jest.fn();
 
@@ -108,9 +108,8 @@ describe('agentRunFinalization synthesis', () => {
     });
 
     expect(mockStreamMessage).toHaveBeenCalledTimes(2);
-    expect(mockStreamMessage.mock.calls[1][1].maxTokens).toBeGreaterThan(
-      mockStreamMessage.mock.calls[0][1].maxTokens,
-    );
+    expect(mockStreamMessage.mock.calls[0][1].maxTokens).toBe(32000);
+    expect(mockStreamMessage.mock.calls[1][1].maxTokens).toBe(32000);
     expect(mockStreamMessage.mock.calls[1][0]).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ role: 'assistant', content: 'Partial summary' }),

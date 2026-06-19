@@ -49,7 +49,6 @@ async function ensureChannelConfigured(): Promise<void> {
     importance: Notifications.AndroidImportance.DEFAULT,
     vibrationPattern: [0, 250, 250, 250],
     enableVibrate: true,
-    sound: 'default',
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
   });
 }
@@ -162,4 +161,11 @@ export async function sendLocalNotification(args: {
   });
 
   return { id, scheduled: seconds > 0 };
+}
+
+export async function cancelLocalNotification(
+  id: string,
+): Promise<{ id: string; cancelled: true }> {
+  await Notifications.cancelScheduledNotificationAsync(id);
+  return { id, cancelled: true };
 }

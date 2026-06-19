@@ -76,7 +76,7 @@ import {
   saveHookFile,
   deleteHookFile,
 } from '../../src/services/hooks/loader';
-import type { HookDefinition } from '../../src/types';
+import type { HookDefinition } from '../../src/types/hooks';
 
 describe('Hook Loader', () => {
   const mockExecutePrompt = jest.fn().mockResolvedValue(undefined);

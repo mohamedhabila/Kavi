@@ -1,7 +1,6 @@
-import React from 'react';
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { SubAgentActivityCard } from '../../src/components/agents/SubAgentActivityCard';
-import type { SubAgentSnapshot } from '../../src/types';
+import type { SubAgentSnapshot } from '../../src/types/subAgent';
 
 jest.mock('../../src/theme/useAppTheme', () => ({
   useAppTheme: () => ({

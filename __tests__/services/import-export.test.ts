@@ -89,7 +89,7 @@ const mockSettingsState = {
   lastUsedModel: { providerId: 'provider-1', model: 'gpt-4o' },
   thinkingLevel: 'high',
   locale: 'fr',
-  webSearchProvider: 'gemini',
+  webSearchProvider: 'kimi',
   linkUnderstandingEnabled: true,
   mediaUnderstandingEnabled: false,
   maxLinks: 5,
@@ -504,7 +504,7 @@ describe('Settings Import/Export', () => {
       expect(s.lastUsedModel).toEqual({ providerId: 'provider-1', model: 'gpt-4o' });
       expect(s.thinkingLevel).toBe('high');
       expect(s.locale).toBe('fr');
-      expect(s.webSearchProvider).toBe('gemini');
+      expect(s.webSearchProvider).toBe('kimi');
       expect(s.linkUnderstandingEnabled).toBe(true);
       expect(s.mediaUnderstandingEnabled).toBe(false);
       expect(s.maxLinks).toBe(5);
@@ -539,6 +539,20 @@ describe('Settings Import/Export', () => {
       // Legacy 'direct' import is normalized to canonical 'chitchat'.
       expect(arg.defaultConversationMode).toBe('chitchat');
       expect(mockSetLocale).toHaveBeenCalledWith('ja');
+    });
+
+    it('importSettings preserves gemini as a supported web search provider', () => {
+      const result = importSettings({
+        version: 1,
+        exportedAt: Date.now(),
+        settings: {
+          webSearchProvider: 'gemini',
+        },
+      } as any);
+
+      expect(result.success).toBe(true);
+      const arg = mockReplaceAllSettings.mock.calls.at(-1)?.[0];
+      expect(arg.webSearchProvider).toBe('gemini');
     });
 
     it('importSettings preserves explicit null selections', () => {

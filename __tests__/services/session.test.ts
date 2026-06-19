@@ -7,7 +7,8 @@ import {
   clearIdleTimer,
   exportConversationAsMarkdown,
 } from '../../src/services/session/manager';
-import type { Conversation, Message } from '../../src/types';
+import type { Conversation } from '../../src/types/conversation';
+import type { Message } from '../../src/types/message';
 
 const makeMsg = (role: 'user' | 'assistant', content: string, ts = Date.now()): Message => ({
   id: `msg-${Math.random()}`,

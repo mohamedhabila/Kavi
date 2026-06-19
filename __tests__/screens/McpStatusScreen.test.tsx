@@ -2,7 +2,6 @@
 // Tests — McpStatusScreen
 // ---------------------------------------------------------------------------
 
-import React from 'react';
 import { act, render, fireEvent, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import { McpStatusScreen } from '../../src/screens/McpStatusScreen';

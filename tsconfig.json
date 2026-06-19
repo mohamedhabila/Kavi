@@ -17,7 +17,7 @@
   "include": ["**/*.ts", "**/*.tsx"],
   "exclude": [
     "node_modules",
-    "_research",
+    ".private",
     "__tests__",
     "coverage",
     "android/build",

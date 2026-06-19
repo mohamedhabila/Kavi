@@ -4,7 +4,7 @@
 
 jest.mock('croner', () => {
   return {
-    Cron: jest.fn().mockImplementation((expr: string, opts: any) => {
+    Cron: jest.fn().mockImplementation((_expr: string, _opts: any) => {
       return {
         nextRun: jest.fn((date: Date) => {
           // Simple mock: return 1 minute after the given date for standard cron
@@ -185,6 +185,7 @@ describe('computeNextRunAtMs — cron edge cases (nextMs <= nowMs retry)', () =>
     const schedule: CronSchedule = { kind: 'cron', expr: '0 * * * *' } as any;
     const result = computeNextRunAtMs(schedule, now);
     // Should either find a future time or return undefined
+    expect(result === undefined || result > now).toBe(true);
     expect(callCount).toBeGreaterThan(1);
   });
 

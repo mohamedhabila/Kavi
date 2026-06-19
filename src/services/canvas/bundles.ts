@@ -1,5 +1,5 @@
 import { Paths, Directory, File } from 'expo-file-system';
-import type { CanvasSourceBundle } from '../../types';
+import type { CanvasSourceBundle } from '../../types/canvas';
 
 const CANVAS_BUNDLE_STORAGE_DIRECTORY = 'canvas-bundles-v1';
 

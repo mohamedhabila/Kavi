@@ -1,11 +1,12 @@
 import {
+  hasBrowserControllableWorkspaceTargets,
+  hasDelegableWorkspaceTargets,
+  filterRuntimeAvailableToolNames,
   filterToolsByRuntimeAvailability,
-  getRuntimeToolAvailabilityContext,
-  hasLaunchableWorkspaceTargets,
-  remapRuntimeUnavailableToolNames,
-  resolveRuntimeFallbackToolName,
 } from '../../src/engine/tools/runtimeAvailability';
-import type { ToolDefinition, WorkspaceTargetConfig } from '../../src/types';
+import { useSettingsStore } from '../../src/store/useSettingsStore';
+import type { ToolDefinition } from '../../src/types/tool';
+import type { WorkspaceTargetConfig } from '../../src/types/remote';
 
 function makeTool(name: string): ToolDefinition {
   return {
@@ -30,37 +31,71 @@ function makeWorkspaceTarget(
   };
 }
 
+beforeEach(() => {
+  useSettingsStore.setState({
+    browserProviders: [
+      {
+        id: 'browser-1',
+        name: 'Browser worker',
+        provider: 'custom',
+        baseUrl: 'https://browser.example.com',
+        authMode: 'none',
+        enabled: true,
+      },
+    ],
+    sshTargets: [
+      {
+        id: 'ssh-1',
+        name: 'Builder',
+        host: 'ssh.example.com',
+        port: 22,
+        username: 'dev',
+        passwordRef: 'ssh_password_ref',
+        enabled: true,
+      },
+    ],
+  });
+});
+
 describe('runtimeAvailability', () => {
-  it('detects when no launchable workspace targets exist', () => {
-    expect(hasLaunchableWorkspaceTargets([])).toBe(false);
-    expect(hasLaunchableWorkspaceTargets([makeWorkspaceTarget({ enabled: false })])).toBe(false);
+  it('detects when no browser-controllable workspace targets exist', () => {
+    expect(hasBrowserControllableWorkspaceTargets([])).toBe(false);
+    expect(hasBrowserControllableWorkspaceTargets([makeWorkspaceTarget({ enabled: false })])).toBe(
+      false,
+    );
   });
 
-  it('does not treat browser-only IDE targets as file-capable workspace targets', () => {
+  it('treats launchable browser-first IDE targets as browser-controllable', () => {
     expect(
-      hasLaunchableWorkspaceTargets([makeWorkspaceTarget({ provider: 'vscode-tunnel' })]),
+      hasBrowserControllableWorkspaceTargets([makeWorkspaceTarget({ provider: 'vscode-tunnel' })]),
+    ).toBe(true);
+  });
+
+  it('detects when a browser-controllable workspace target exists', () => {
+    expect(hasBrowserControllableWorkspaceTargets([makeWorkspaceTarget()])).toBe(true);
+  });
+
+  it('does not mark delegable workspace targets as available when SSH transport is unavailable in the current runtime', () => {
+    expect(
+      hasDelegableWorkspaceTargets([
+        makeWorkspaceTarget({ provider: 'cursor', sshTargetId: 'ssh-1' }),
+      ]),
     ).toBe(false);
   });
 
-  it('detects when a launchable workspace target exists', () => {
-    expect(hasLaunchableWorkspaceTargets([makeWorkspaceTarget()])).toBe(true);
-  });
-
-  it('filters remote workspace tools when no launchable workspace target exists', () => {
+  it('filters external workspace control tools when no workspace targets exist', () => {
     const tools = [
       makeTool('read_file'),
       makeTool('write_file'),
       makeTool('workspace_status'),
       makeTool('workspace_launch_browser'),
-      makeTool('workspace_read_file'),
-      makeTool('workspace_write_file'),
-      makeTool('workspace_list_files'),
+      makeTool('workspace_delegate_task'),
     ];
 
     const filtered = filterToolsByRuntimeAvailability(tools, {
       hasWorkspaceTargets: false,
-      hasLaunchableWorkspaceTargets: false,
-      hasControllableWorkspaceTargets: false,
+      hasBrowserControllableWorkspaceTargets: false,
+      hasDelegableWorkspaceTargets: false,
     });
     const filteredNames = new Set(filtered.map((tool) => tool.name));
 
@@ -68,22 +103,20 @@ describe('runtimeAvailability', () => {
     expect(filteredNames.has('write_file')).toBe(true);
     expect(filteredNames.has('workspace_status')).toBe(false);
     expect(filteredNames.has('workspace_launch_browser')).toBe(false);
-    expect(filteredNames.has('workspace_read_file')).toBe(false);
-    expect(filteredNames.has('workspace_write_file')).toBe(false);
-    expect(filteredNames.has('workspace_list_files')).toBe(false);
+    expect(filteredNames.has('workspace_delegate_task')).toBe(false);
   });
 
-  it('keeps workspace status when targets exist but only control paths are configured', () => {
+  it('keeps workspace status and only the matching control tool for available target capabilities', () => {
     const tools = [
       makeTool('workspace_status'),
       makeTool('workspace_launch_browser'),
-      makeTool('workspace_read_file'),
+      makeTool('workspace_delegate_task'),
     ];
 
     const filtered = filterToolsByRuntimeAvailability(tools, {
       hasWorkspaceTargets: true,
-      hasLaunchableWorkspaceTargets: false,
-      hasControllableWorkspaceTargets: true,
+      hasBrowserControllableWorkspaceTargets: true,
+      hasDelegableWorkspaceTargets: false,
     });
 
     expect(filtered.map((tool) => tool.name)).toEqual([
@@ -92,60 +125,49 @@ describe('runtimeAvailability', () => {
     ]);
   });
 
-  it('retains remote workspace tools when a launchable workspace target exists', () => {
-    const tools = [makeTool('read_file'), makeTool('workspace_write_file')];
+  it('retains the matching external workspace control tools when runtime capabilities exist', () => {
+    const tools = [
+      makeTool('read_file'),
+      makeTool('workspace_launch_browser'),
+      makeTool('workspace_delegate_task'),
+    ];
 
-    const filtered = filterToolsByRuntimeAvailability(
-      tools,
-      getRuntimeToolAvailabilityContext([makeWorkspaceTarget()]),
-    );
-
-    expect(filtered.map((tool) => tool.name)).toEqual(['read_file', 'workspace_write_file']);
-  });
-
-  it('falls back from remote workspace file tools to local workspace tools when unavailable', () => {
-    const resolved = resolveRuntimeFallbackToolName('workspace_write_file', {
-      availableToolNames: new Set(['read_file', 'write_file', 'list_files']),
-      context: {
-        hasWorkspaceTargets: false,
-        hasLaunchableWorkspaceTargets: false,
-        hasControllableWorkspaceTargets: false,
-      },
+    const filtered = filterToolsByRuntimeAvailability(tools, {
+      hasWorkspaceTargets: true,
+      hasBrowserControllableWorkspaceTargets: true,
+      hasDelegableWorkspaceTargets: true,
     });
 
-    expect(resolved).toBe('write_file');
+    expect(filtered.map((tool) => tool.name)).toEqual([
+      'read_file',
+      'workspace_launch_browser',
+      'workspace_delegate_task',
+    ]);
   });
 
-  it('does not fall back when a launchable workspace target exists', () => {
-    const resolved = resolveRuntimeFallbackToolName('workspace_write_file', {
-      availableToolNames: new Set(['read_file', 'write_file', 'workspace_write_file']),
-      context: {
-        hasWorkspaceTargets: true,
-        hasLaunchableWorkspaceTargets: true,
-        hasControllableWorkspaceTargets: false,
-      },
-    });
-
-    expect(resolved).toBe('workspace_write_file');
-  });
-
-  it('remaps and deduplicates stale workspace tool arrays', () => {
-    const remapped = remapRuntimeUnavailableToolNames(
-      [
-        'workspace_read_file',
-        'workspace_write_file',
-        'workspace_list_files',
-        'workspace_write_file',
-      ],
+  it('filters unavailable external workspace tools out of explicit tool selections', () => {
+    const filtered = filterRuntimeAvailableToolNames(
+      ['workspace_launch_browser', 'workspace_delegate_task', 'workspace_launch_browser'],
       {
-        context: {
-          hasWorkspaceTargets: false,
-          hasLaunchableWorkspaceTargets: false,
-          hasControllableWorkspaceTargets: false,
-        },
+        hasWorkspaceTargets: false,
+        hasBrowserControllableWorkspaceTargets: false,
+        hasDelegableWorkspaceTargets: false,
       },
     );
 
-    expect(remapped).toEqual(['read_file', 'write_file', 'list_files']);
+    expect(filtered).toBeUndefined();
+  });
+
+  it('preserves runtime-available external workspace tool selections', () => {
+    const filtered = filterRuntimeAvailableToolNames(
+      ['workspace_launch_browser', 'workspace_delegate_task'],
+      {
+        hasWorkspaceTargets: true,
+        hasBrowserControllableWorkspaceTargets: true,
+        hasDelegableWorkspaceTargets: true,
+      },
+    );
+
+    expect(filtered).toEqual(['workspace_launch_browser', 'workspace_delegate_task']);
   });
 });

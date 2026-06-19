@@ -8,16 +8,12 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
-import {
-  ensureFactSchema,
-  resetFactSchemaCacheForTests,
-  ensureDefaultBlocks,
-  getBlock,
-  getWorkingBlock,
-  listFacts,
-  findEntityByName,
-} from '../../src/services/memory/factStore';
-import { listEpisodes, listFactEvidence } from '../../src/services/memory/episodes';
+import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
+import { ensureDefaultBlocks, getBlock } from '../../src/services/memory/blocks';
+import { editWorkingBlock, getWorkingBlock } from '../../src/services/memory/workingBlocks';
+import { listFacts } from '../../src/services/memory/facts/queries';
+import { findEntityByName } from '../../src/services/memory/entities';
+import { listEpisodes, listFactEvidence } from '../../src/services/memory/episodes/queries';
 import {
   buildConsolidatorPrompt,
   parseConsolidatorOutput,
@@ -89,14 +85,134 @@ describe('buildConsolidatorPrompt', () => {
     expect(prompt).not.toContain('raw user text');
     expect(prompt).toContain('assistant reply');
   });
+
+  it('limits provider extraction prompts to the closed turn window when source ids are supplied', () => {
+    const prompt = buildConsolidatorPrompt({
+      userMessage: 'ignored',
+      assistantMessage: 'ignored',
+      sourceUserMessageId: 'u2',
+      sourceAssistantMessageId: 'a2',
+      messages: [
+        {
+          id: 'u1',
+          role: 'user',
+          content: 'older preference Morgan',
+          timestamp: 1,
+        },
+        {
+          id: 'a1',
+          role: 'assistant',
+          content: 'older acknowledgement',
+          timestamp: 2,
+        },
+        {
+          id: 'u2',
+          role: 'user',
+          content: 'updated preference Avery',
+          timestamp: 3,
+        },
+        {
+          id: 'a2',
+          role: 'assistant',
+          content: 'updated acknowledgement',
+          timestamp: 4,
+        },
+      ],
+    });
+
+    expect(prompt).toContain('updated preference Avery');
+    expect(prompt).toContain('updated acknowledgement');
+    expect(prompt).not.toContain('older preference Morgan');
+    expect(prompt).not.toContain('older acknowledgement');
+  });
+
+  it('summarizes tool results instead of exposing raw recalled memory payloads', () => {
+    const prompt = buildConsolidatorPrompt({
+      userMessage: 'ignored',
+      assistantMessage: 'ignored',
+      sourceUserMessageId: 'u1',
+      sourceAssistantMessageId: 'a2',
+      messages: [
+        {
+          id: 'u1',
+          role: 'user',
+          content: 'Verify current city.',
+          timestamp: 1,
+        },
+        {
+          id: 'a1',
+          role: 'assistant',
+          content: '',
+          timestamp: 2,
+          toolCalls: [
+            {
+              id: 'tc-recall',
+              name: 'memory_recall',
+              arguments: '{"subject":"locomo-user","includeHistory":true}',
+              status: 'completed',
+            },
+          ],
+          assistantMetadata: {
+            finishReason: 'stop',
+            kind: 'final',
+            completionStatus: 'complete',
+          },
+        },
+        {
+          id: 't1',
+          role: 'tool',
+          toolCallId: 'tc-recall',
+          toolCalls: [
+            {
+              id: 'tc-recall',
+              name: 'memory_recall',
+              arguments: '{}',
+              status: 'completed',
+            },
+          ],
+          content:
+            '{"ok":true,"facts":[{"predicate":"primary_city","value":"AMSTERDAM-E2E","invalidAt":10},{"predicate":"primary_city","value":"ROTTERDAM-E2E","invalidAt":null}]}',
+          timestamp: 3,
+        },
+        {
+          id: 'a2',
+          role: 'assistant',
+          content: 'Verified and wrote the summary.',
+          timestamp: 4,
+          assistantMetadata: {
+            finishReason: 'stop',
+            kind: 'final',
+            completionStatus: 'complete',
+          },
+        },
+      ],
+    });
+
+    expect(prompt).toContain('tools=memory_recall');
+    expect(prompt).toContain('[tool_result name=memory_recall status=completed]');
+    expect(prompt).not.toContain('AMSTERDAM-E2E');
+    expect(prompt).not.toContain('ROTTERDAM-E2E');
+    expect(prompt).not.toContain('primary_city');
+  });
+
+  it('instructs the extractor to retain explicit scoped memory writes', () => {
+    const prompt = buildConsolidatorPrompt({
+      userMessage: 'Remember this task-local verification token.',
+      assistantMessage: 'Done.',
+    });
+
+    expect(prompt).toContain('Memory is');
+    expect(prompt).toContain('active-task facts');
+    expect(prompt).toContain('Extract explicit user memory-write intents in any language');
+    expect(prompt).toContain('Preserve supplied');
+    expect(prompt).toContain('checksums, codes, and tokens');
+  });
 });
 
 describe('parseConsolidatorOutput', () => {
   it('parses a clean JSON payload', () => {
     const raw = JSON.stringify({
-      new_facts: [
-        { subject: 'user', predicate: 'lives_in', value: 'Berlin', confidence: 'high' },
-      ],
+      new_facts: [{ subject: 'user', predicate: 'lives_in', value: 'Berlin', confidence: 'high' }],
       active_focus: 'Setting up after relocating.',
       open_threads: ['Suggest a SIM card provider'],
       notable: ['User just moved to Berlin'],
@@ -115,7 +231,8 @@ describe('parseConsolidatorOutput', () => {
   });
 
   it('strips a ```json fence', () => {
-    const raw = '```json\n{"new_facts":[],"active_focus":"hello","open_threads":[],"notable":[]}\n```';
+    const raw =
+      '```json\n{"new_facts":[],"active_focus":"hello","open_threads":[],"notable":[]}\n```';
     const result = parseConsolidatorOutput(raw);
     expect(result.activeFocus).toBe('hello');
   });
@@ -163,9 +280,7 @@ describe('parseConsolidatorOutput', () => {
 
   it('coerces unknown confidence to undefined', () => {
     const raw = JSON.stringify({
-      new_facts: [
-        { subject: 'user', predicate: 'p', value: 'v', confidence: 'unsure' },
-      ],
+      new_facts: [{ subject: 'user', predicate: 'p', value: 'v', confidence: 'unsure' }],
     });
     const result = parseConsolidatorOutput(raw);
     expect(result.newFacts[0].confidence).toBeUndefined();
@@ -222,10 +337,192 @@ describe('applyConsolidatorResult', () => {
       threadId: 'conv-1',
     });
     expect(focusBlock?.content).toBe('Settling into Berlin.');
-    expect(getWorkingBlock('open_threads', {
-      conversationId: 'conv-1',
-      threadId: 'conv-1',
-    })?.content).toContain('Suggest a SIM card provider');
+    expect(
+      getWorkingBlock('open_threads', {
+        conversationId: 'conv-1',
+        threadId: 'conv-1',
+      })?.content,
+    ).toContain('Suggest a SIM card provider');
+  });
+
+  it('ignores automatic invalidation payloads and keeps existing facts current', () => {
+    applyConsolidatorResult(
+      {
+        episodeSummary: null,
+        newFacts: [
+          {
+            subject: 'user',
+            predicate: 'preferred_message_contact',
+            value: 'Morgan',
+            confidence: 'high',
+          },
+        ],
+        invalidatedFacts: [],
+        activeFocus: null,
+        openThreads: [],
+        notable: [],
+      },
+      { now: 1_700_000_000_000, conversationId: 'conv-memory', threadId: 'conv-memory' },
+    );
+
+    const result = applyConsolidatorResult(
+      {
+        episodeSummary: null,
+        newFacts: [],
+        invalidatedFacts: [
+          {
+            subject: 'user',
+            predicate: 'preferred_message_contact',
+            reason: 'provider guessed this changed',
+          },
+        ],
+        activeFocus: null,
+        openThreads: [],
+        notable: [],
+      },
+      { now: 1_700_000_001_000, conversationId: 'conv-memory', threadId: 'conv-memory' },
+    );
+
+    const userEntity = findEntityByName('user');
+    expect(userEntity).not.toBeNull();
+    expect(result.invalidatedFactIds).toEqual([]);
+    const currentFacts = listFacts({
+      subjectId: userEntity!.id,
+      predicate: 'preferred_message_contact',
+    });
+    expect(currentFacts).toHaveLength(1);
+    expect(currentFacts[0].objectText).toBe('Morgan');
+  });
+
+  it('preserves thread title metadata when provider focus omits it', () => {
+    const result = applyConsolidatorResult(
+      {
+        episodeSummary: null,
+        newFacts: [],
+        invalidatedFacts: [],
+        activeFocus: 'Running: memory_recall',
+        openThreads: [],
+        notable: [],
+      },
+      {
+        now: 1_700_000_000_001,
+        conversationId: 'conv-longmem',
+        threadId: 'conv-longmem',
+        threadTitle: 'longmem-delayed-thread',
+      },
+    );
+
+    expect(result.activeFocusUpdated).toBe(true);
+    expect(
+      getWorkingBlock('active_focus', {
+        conversationId: 'conv-longmem',
+        threadId: 'conv-longmem',
+      })?.content,
+    ).toBe('longmem-delayed-thread\nRunning: memory_recall');
+  });
+
+  it('skips active_focus writes when taskId is set (graph-owned task focus)', () => {
+    editWorkingBlock('active_focus', 'scope-b-planning', {
+      conversationId: 'conv-task',
+      threadId: 'conv-task',
+      taskId: 'scope-b',
+    });
+
+    const result = applyConsolidatorResult(
+      {
+        episodeSummary: null,
+        newFacts: [],
+        invalidatedFacts: [],
+        activeFocus: 'Running: update_goals',
+        openThreads: [],
+        notable: [],
+      },
+      {
+        now: 3,
+        conversationId: 'conv-task',
+        threadId: 'conv-task',
+        taskId: 'scope-b',
+      },
+    );
+
+    expect(result.activeFocusUpdated).toBe(false);
+    expect(
+      getWorkingBlock('active_focus', {
+        conversationId: 'conv-task',
+        threadId: 'conv-task',
+        taskId: 'scope-b',
+      })?.content,
+    ).toBe('scope-b-planning');
+  });
+
+  it('supersedes stale conversation facts across task scopes', () => {
+    applyConsolidatorResult(
+      {
+        episodeSummary: null,
+        newFacts: [
+          {
+            subject: 'direct-longmem-user',
+            predicate: 'preferred_message_contact',
+            value: 'Morgan',
+            scope: 'conversation',
+          },
+        ],
+        invalidatedFacts: [],
+        activeFocus: null,
+        openThreads: [],
+        notable: [],
+      },
+      {
+        now: 10,
+        conversationId: 'conv-longmem',
+        threadId: 'conv-longmem',
+        taskId: 'memory-goal-a',
+        sourceUserMessageId: 'u-1',
+        sourceAssistantMessageId: 'a-1',
+      },
+    );
+    applyConsolidatorResult(
+      {
+        episodeSummary: null,
+        newFacts: [
+          {
+            subject: 'direct-longmem-user',
+            predicate: 'preferred_message_contact',
+            value: 'Avery',
+            scope: 'conversation',
+          },
+        ],
+        invalidatedFacts: [],
+        activeFocus: null,
+        openThreads: [],
+        notable: [],
+      },
+      {
+        now: 20,
+        conversationId: 'conv-longmem',
+        threadId: 'conv-longmem',
+        taskId: 'memory-goal-b',
+        sourceUserMessageId: 'u-2',
+        sourceAssistantMessageId: 'a-2',
+      },
+    );
+
+    const subject = findEntityByName('direct-longmem-user');
+    expect(subject).not.toBeNull();
+    const currentFacts = listFacts({
+      subjectId: subject!.id,
+      predicate: 'preferred_message_contact',
+      includeInvalidated: false,
+    });
+    expect(currentFacts.map((fact) => fact.objectText)).toEqual(['Avery']);
+
+    const historicalFacts = listFacts({
+      subjectId: subject!.id,
+      predicate: 'preferred_message_contact',
+      includeInvalidated: true,
+    });
+    expect(historicalFacts.map((fact) => fact.objectText).sort()).toEqual(['Avery', 'Morgan']);
+    expect(historicalFacts.find((fact) => fact.objectText === 'Morgan')?.invalidAt).toBe(20);
   });
 
   it('clears scoped open_threads when the consolidator returns an empty list', () => {
@@ -254,10 +551,12 @@ describe('applyConsolidatorResult', () => {
     );
 
     expect(result.openThreadsUpdated).toBe(true);
-    expect(getWorkingBlock('open_threads', {
-      conversationId: 'conv-clear',
-      threadId: 'conv-clear',
-    })?.content).toBe('');
+    expect(
+      getWorkingBlock('open_threads', {
+        conversationId: 'conv-clear',
+        threadId: 'conv-clear',
+      })?.content,
+    ).toBe('');
   });
 
   it('persists episode summaries as searchable episodic memory', () => {

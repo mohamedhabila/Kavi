@@ -17,9 +17,10 @@ import { useSettingsStore } from '../../store/useSettingsStore';
 import { LlmService } from '../../services/llm/LlmService';
 import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
 import { getProviderApiKey } from '../../services/storage/SecureStorage';
-import { useTranslation } from '../../i18n';
+import { useTranslation } from '../../i18n/useTranslation';
 import { getKnownProviderFallbackModels } from '../../constants/api';
-import { isOnDeviceLlmProvider } from '../../services/localLlm/runtime';
+import { isOnDeviceLlmProvider } from '../../services/localLlm/provider';
+import { getLocalLlmModelDisplayName } from '../../services/localLlm/catalog';
 
 interface ModelSelectorProps {
   selectedProviderId: string | null;
@@ -43,6 +44,20 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
 
     const activeProvider = providers.find((p) => p.id === selectedProviderId) || providers[0];
     const viewProvider = providers.find((p) => p.id === viewProviderId) || activeProvider;
+    const getModelLabel = useCallback(
+      (provider: typeof activeProvider | undefined, model: string | null | undefined) => {
+        if (!model) {
+          return t('model.title');
+        }
+
+        if (provider && isOnDeviceLlmProvider(provider)) {
+          return getLocalLlmModelDisplayName(model);
+        }
+
+        return model;
+      },
+      [t],
+    );
 
     const fetchModels = useCallback(
       async (provider: typeof activeProvider) => {
@@ -126,7 +141,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
     const providerModels = viewProvider
       ? models[viewProvider.id] || viewProvider.availableModels || []
       : [];
-    const displayName = selectedModel || activeProvider?.model || t('model.title');
+    const displayName = getModelLabel(activeProvider, selectedModel || activeProvider?.model);
 
     return (
       <>
@@ -237,7 +252,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
                           style={[styles.modelName, isSelected && styles.modelNameSelected]}
                           numberOfLines={1}
                         >
-                          {item}
+                          {getModelLabel(viewProvider, item)}
                         </Text>
                         {isSelected && <Check size={16} color={colors.primary} />}
                       </TouchableOpacity>

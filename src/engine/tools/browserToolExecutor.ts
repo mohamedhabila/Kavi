@@ -4,26 +4,32 @@ import {
   browserAct,
   browserScreenshot,
   browserSnapshot,
-  browserConsoleMessages,
-  browserPageErrors,
-  browserNetworkRequests,
+  browserSessionStatus,
+  browserFillForm,
+} from '../../services/browser/automation/actions';
+import {
+  browserUpload,
+  browserDownload,
+  browserPdf,
+  browserDialog,
+} from '../../services/browser/automation/artifacts';
+import {
   browserSetCookies,
   browserClearCookies,
   browserGetCookies,
   browserStorageGet,
   browserStorageSet,
   browserStorageClear,
-  browserSessionStatus,
-  browserUpload,
-  browserDownload,
-  browserPdf,
-  browserFillForm,
-  browserDialog,
-} from '../../services/browser/automation';
+} from '../../services/browser/automation/state';
+import {
+  browserConsoleMessages,
+  browserPageErrors,
+  browserNetworkRequests,
+} from '../../services/browser/automation/trace';
 import { launchBrowserLiveSession, stopBrowserLiveSession } from '../../services/browser/jobs';
 import type { BrowserActRequest } from '../../services/browser/types';
 import { startBrowserTrace, completeBrowserTrace } from '../../services/browser/traceStore';
-import { normalizeBrowserToolResult } from './toolResultNormalization';
+import { normalizeBrowserToolResult } from './resultNormalization/browserResult';
 
 export async function executeBrowserTool(name: string, args: any): Promise<string> {
   const sessionId = args.sessionId || '';
@@ -217,9 +223,7 @@ async function executeBrowserToolInner(name: string, args: any): Promise<string>
     case 'browser_inspect': {
       const kind = typeof args.kind === 'string' ? args.kind.toLowerCase() : '';
       if (kind === 'console') {
-        return JSON.stringify(
-          await browserConsoleMessages(args.sessionId, { level: args.level }),
-        );
+        return JSON.stringify(await browserConsoleMessages(args.sessionId, { level: args.level }));
       }
       if (kind === 'errors') {
         return JSON.stringify(await browserPageErrors(args.sessionId, { clear: args.clear }));

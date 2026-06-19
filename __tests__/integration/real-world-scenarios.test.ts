@@ -1,5 +1,5 @@
 /**
- * Real-world integration scenarios for Phase 2 implementation.
+ * Real-world integration scenarios for runtime behavior.
  *
  * These tests exercise the actual production code paths with realistic
  * inputs and verify the full end-to-end behavior of:
@@ -101,17 +101,20 @@ import {
   mcpToolToDefinition,
 } from '../../src/services/mcp/bridge';
 import {
-  getBrowserProviderReadiness,
   isValidBrowserProviderBaseUrl,
+  applyBrowserProviderPreset,
+  BROWSER_PROVIDER_PRESETS,
+} from '../../src/services/browser/providers/registry';
+import {
+  resolveBrowserProviderConnection,
+  withBrowserProviderAuth,
+} from '../../src/services/browser/providers/connection';
+import { getBrowserProviderReadiness } from '../../src/services/browser/providers/readiness';
+import {
   getBrowserProviderLabel,
   getBrowserProviderAuthLabel,
   getBrowserProviderAuthHint,
-  applyBrowserProviderPreset,
-  BROWSER_PROVIDER_PRESETS,
-  resolveBrowserProviderConnection,
-  withBrowserProviderAuth,
-  probeBrowserProvider,
-} from '../../src/services/browser/providers';
+} from '../../src/services/browser/providers/labels';
 import {
   getSshTargetReadiness,
   getSshHostKeyPolicy,
@@ -125,8 +128,7 @@ import type {
   SshTargetConfig,
   BrowserProviderConfig,
   McpServerConfig,
-  RemoteJobRecord,
-} from '../../src/types';
+} from '../../src/types/remote';
 
 // ---- Helpers ----
 function makeSshTarget(overrides: Partial<SshTargetConfig> = {}): SshTargetConfig {

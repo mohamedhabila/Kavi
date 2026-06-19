@@ -6,7 +6,7 @@
 // calls that have already completed in persisted assistant metadata, or
 // synthetic errors when no real result is available.
 
-import type { Message, ToolCall } from '../types';
+import type { Message, ToolCall } from '../types/message';
 
 // ── Extraction helpers ───────────────────────────────────────────────────
 

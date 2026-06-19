@@ -1,4 +1,4 @@
-import type { Message } from '../../types';
+import type { Message } from '../../types/message';
 import {
   resolvePersonaContextPolicy,
   type ContextAccessMode,
@@ -20,45 +20,88 @@ export interface ContextStartSelectionOptions {
   policyOverride?: Partial<PersonaContextPolicy>;
 }
 
-const STOPWORDS = new Set([
-  'a',
-  'an',
-  'and',
-  'are',
-  'as',
-  'at',
-  'be',
-  'by',
-  'for',
-  'from',
-  'in',
-  'is',
-  'it',
-  'of',
-  'on',
-  'or',
-  'that',
-  'the',
-  'to',
-  'was',
-  'were',
-  'with',
-  'you',
-  'your',
-]);
+type WordSegment = {
+  segment: string;
+  isWordLike?: boolean;
+};
+
+type WordSegmenter = {
+  segment(input: string): Iterable<WordSegment>;
+};
+
+type WordSegmenterConstructor = new (
+  locales?: string | string[],
+  options?: { granularity?: 'word' },
+) => WordSegmenter;
+
+const WORD_LIKE_SEQUENCE_PATTERN = /[\p{L}\p{M}\p{N}]+/gu;
+const WORD_LIKE_CODE_POINT_PATTERN = /[\p{L}\p{N}]/u;
+const CONTINUOUS_WORD_SCRIPT_PATTERN =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
+
+let cachedWordSegmenter: WordSegmenter | null | undefined;
 
 function getMessageText(message: Message): string {
   const text = message.enrichedContent?.trim() || message.content?.trim() || '';
   return text;
 }
 
+function getWordSegmenter(): WordSegmenter | null {
+  if (cachedWordSegmenter !== undefined) return cachedWordSegmenter;
+  const segmenterCtor = (
+    Intl as typeof Intl & {
+      Segmenter?: WordSegmenterConstructor;
+    }
+  ).Segmenter;
+  cachedWordSegmenter =
+    typeof segmenterCtor === 'function'
+      ? new segmenterCtor(undefined, { granularity: 'word' })
+      : null;
+  return cachedWordSegmenter;
+}
+
+function normalizeLexicalText(value: string): string {
+  return value.normalize('NFKC').toLocaleLowerCase();
+}
+
+function hasWordLikeCodePoint(value: string): boolean {
+  return WORD_LIKE_CODE_POINT_PATTERN.test(value);
+}
+
+function addSegmentUnits(units: Set<string>, rawSegment: string): void {
+  const segment = normalizeLexicalText(rawSegment).trim();
+  if (!segment || !hasWordLikeCodePoint(segment)) return;
+  units.add(segment);
+
+  if (!CONTINUOUS_WORD_SCRIPT_PATTERN.test(segment)) return;
+  const codePoints = Array.from(segment);
+  for (const width of [2, 3]) {
+    if (codePoints.length < width) continue;
+    for (let index = 0; index <= codePoints.length - width; index += 1) {
+      units.add(`${width}:${codePoints.slice(index, index + width).join('')}`);
+    }
+  }
+}
+
+function addUnicodeSequenceUnits(units: Set<string>, value: string): void {
+  WORD_LIKE_SEQUENCE_PATTERN.lastIndex = 0;
+  for (const match of value.matchAll(WORD_LIKE_SEQUENCE_PATTERN)) {
+    addSegmentUnits(units, match[0]);
+  }
+}
+
 function tokenize(text: string): Set<string> {
-  const normalized = text.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
-  const tokens = normalized
-    .split(/\s+/)
-    .map((token) => token.trim())
-    .filter((token) => token.length >= 3 && !STOPWORDS.has(token));
-  return new Set(tokens);
+  const normalized = normalizeLexicalText(text);
+  const units = new Set<string>();
+  const segmenter = getWordSegmenter();
+  if (segmenter) {
+    for (const segment of segmenter.segment(normalized)) {
+      if (segment.isWordLike === false) continue;
+      addSegmentUnits(units, segment.segment);
+    }
+  }
+  addUnicodeSequenceUnits(units, normalized);
+  return units;
 }
 
 function jaccardSimilarity(left: string, right: string): number {
@@ -89,7 +132,21 @@ function getUserMessageIndices(messages: Message[]): number[] {
   return indices;
 }
 
-function getPreviousMessageTimestamp(messages: Message[], latestUserIndex: number): number | undefined {
+export function buildFullHistoryContextStartSelection(messages: Message[]): ContextStartSelection {
+  const userCount = getUserMessageIndices(messages).length;
+  return {
+    startIndex: 0,
+    reason: userCount === 1 ? 'single_user_turn' : 'full_history',
+    similarityScore: 1,
+    idleGapMs: 0,
+    droppedMessageCount: 0,
+  };
+}
+
+function getPreviousMessageTimestamp(
+  messages: Message[],
+  latestUserIndex: number,
+): number | undefined {
   for (let i = latestUserIndex - 1; i >= 0; i -= 1) {
     const timestamp = messages[i]?.timestamp;
     if (typeof timestamp === 'number' && Number.isFinite(timestamp)) {
@@ -119,13 +176,7 @@ export function selectContextStartIndex(
   options: ContextStartSelectionOptions,
 ): ContextStartSelection {
   if (!Array.isArray(messages) || messages.length === 0) {
-    return {
-      startIndex: 0,
-      reason: 'full_history',
-      similarityScore: 1,
-      idleGapMs: 0,
-      droppedMessageCount: 0,
-    };
+    return buildFullHistoryContextStartSelection(messages);
   }
 
   const basePolicy = resolvePersonaContextPolicy(options.personaId, options.mode);
@@ -136,13 +187,7 @@ export function selectContextStartIndex(
 
   const userIndices = getUserMessageIndices(messages);
   if (userIndices.length <= 1) {
-    return {
-      startIndex: 0,
-      reason: userIndices.length === 1 ? 'single_user_turn' : 'full_history',
-      similarityScore: 1,
-      idleGapMs: 0,
-      droppedMessageCount: 0,
-    };
+    return buildFullHistoryContextStartSelection(messages);
   }
 
   const latestUserIndex = userIndices[userIndices.length - 1];
@@ -157,8 +202,7 @@ export function selectContextStartIndex(
     typeof previousTimestamp === 'number' && Number.isFinite(previousTimestamp)
       ? Math.max(0, now - previousTimestamp)
       : 0;
-  const enforceTopicBoundary =
-    idleGapMs >= policy.hardIdleCutoffMs || options.mode === 'pilot';
+  const enforceTopicBoundary = idleGapMs >= policy.hardIdleCutoffMs || options.mode === 'pilot';
 
   let selectedUserPos = userIndices.length - 1;
   let includedCarryover = 0;

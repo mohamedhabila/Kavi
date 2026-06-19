@@ -7,7 +7,6 @@ import type {
   SkillExecutionSurface,
   SkillMetadata,
 } from './types';
-import { isHttpOnlyPythonSkill, isPyodideCompatibleSkill } from './mobileTranslator';
 
 type ManifestFallback = Partial<
   Pick<
@@ -62,13 +61,19 @@ const KNOWN_SECRET_FIELDS: Record<string, SkillSecretField> = {
     storageKey: 'ALPHA_VANTAGE_API_KEY',
     label: 'Alpha Vantage API Key',
     placeholder: 'alpha-vantage-key',
-    hint: 'Enables the built-in finance skill for stock quotes.',
+    hint: 'Enables the built-in finance skill for stock quotes and FX exchange-rate helpers.',
   },
   BRAVE_API_KEY: {
     storageKey: 'BRAVE_API_KEY',
     label: 'Brave Search API Key',
     placeholder: 'BSA...',
     hint: 'Used when web search runs through Brave.',
+  },
+  GOOGLE_API_KEY: {
+    storageKey: 'GOOGLE_API_KEY',
+    label: 'Gemini API Key',
+    placeholder: 'AIza...',
+    hint: 'Used for Gemini web search grounded with Google Search.',
   },
   FIRECRAWL_API_KEY: {
     storageKey: 'FIRECRAWL_API_KEY',
@@ -81,12 +86,6 @@ const KNOWN_SECRET_FIELDS: Record<string, SkillSecretField> = {
     label: 'GitHub Personal Access Token',
     placeholder: 'github_pat_...',
     hint: 'Enables the built-in GitHub repositories, files, branches, commits, issues, and pull requests skill.',
-  },
-  GOOGLE_API_KEY: {
-    storageKey: 'GOOGLE_API_KEY',
-    label: 'Google AI API Key',
-    placeholder: 'AIza...',
-    hint: 'Used for Gemini web search with Vertex AI or Google AI Studio.',
   },
   KIMI_API_KEY: {
     storageKey: 'KIMI_API_KEY',
@@ -119,12 +118,6 @@ const MOBILE_ALTERNATIVES: Record<string, keyof typeof KNOWN_SECRET_FIELDS> = {
   github: 'GITHUB_TOKEN',
   weather: 'OPENWEATHER_API_KEY',
 };
-
-const BROWSER_HINT_PATTERN =
-  /\b(browser|playwright|scrap|crawl|screenshot|pdf|captcha|automation)\b/i;
-const MCP_HINT_PATTERN = /\bmcp\b/i;
-const LOCAL_JS_HINT_PATTERN = /\b(local-js|local js|javascript helper|js helper)\b/i;
-const LOCAL_PYTHON_HINT_PATTERN = /\b(local-python|python helper|pyodide)\b/i;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -258,94 +251,30 @@ function defaultEligibilityContext(overrides?: SkillEligibilityContext): SkillEl
   };
 }
 
-function buildSkillHintText(metadata: SkillMetadata): string {
-  return [
-    metadata.name,
-    metadata.description,
-    metadata.skillKey,
-    ...(metadata.tags || []),
-    ...(metadata.tools || []),
-    ...(metadata.requiredSecrets || []),
-  ]
-    .filter(Boolean)
-    .join(' ');
-}
-
-function requiresRemoteExecution(metadata: SkillMetadata, skillBody?: string): boolean {
+function requiresRemoteExecution(metadata: SkillMetadata): boolean {
   const hasBins =
     (metadata.requires?.bins?.length || 0) > 0 || (metadata.requires?.anyBins?.length || 0) > 0;
   const hasConfig = (metadata.requires?.config?.length || 0) > 0;
   const hasInstall = (metadata.install?.length || 0) > 0;
 
-  if (!hasBins && !hasConfig && !hasInstall) return false;
-
-  // If the skill body is available, check if it's an HTTP-only Python skill.
-  // Skills that only use urllib.request / requests for HTTP calls can be fully
-  // served by web_fetch on mobile — no remote execution needed.
-  if (skillBody && hasBins && !hasConfig) {
-    const pythonBinsOnly = (metadata.requires?.bins || []).every((bin) =>
-      /^(python3?|curl|uv)$/i.test(bin),
-    );
-    if (pythonBinsOnly && isHttpOnlyPythonSkill(skillBody)) {
-      return false;
-    }
-  }
-
-  return true;
+  return hasBins || hasConfig || hasInstall;
 }
 
-function hasBrowserHint(metadata: SkillMetadata): boolean {
-  const hints = buildSkillHintText(metadata);
-  return BROWSER_HINT_PATTERN.test(hints);
-}
-
-function hasMcpHint(metadata: SkillMetadata): boolean {
-  const hints = buildSkillHintText(metadata);
-  return MCP_HINT_PATTERN.test(hints);
-}
-
-function hasLocalJsHint(metadata: SkillMetadata): boolean {
-  const hints = buildSkillHintText(metadata);
-  return LOCAL_JS_HINT_PATTERN.test(hints);
-}
-
-function hasLocalPythonHint(metadata: SkillMetadata): boolean {
-  const hints = buildSkillHintText(metadata);
-  return LOCAL_PYTHON_HINT_PATTERN.test(hints);
-}
-
-function inferSuggestedSurfaces(
-  metadata: SkillMetadata,
-  skillBody?: string,
-): SkillExecutionSurface[] {
+function inferSuggestedSurfaces(metadata: SkillMetadata): SkillExecutionSurface[] {
   const explicitSurfaces = metadata.surfaces || [];
   if (explicitSurfaces.length > 0) {
     return uniqueSurfaces([metadata.preferredSurface, ...explicitSurfaces]);
   }
 
-  const remoteExecution = requiresRemoteExecution(metadata, skillBody);
-  const browserJob = hasBrowserHint(metadata);
-  const hintedMcp = hasMcpHint(metadata);
-  const hintedLocalJs = hasLocalJsHint(metadata);
-  const hintedLocalPython = hasLocalPythonHint(metadata);
-  const localCandidate = metadata.always === true || (!remoteExecution && !browserJob);
-
-  // Skills that are HTTP-only Python can run on local-mobile via web_fetch
-  const httpOnlyPython = skillBody ? isHttpOnlyPythonSkill(skillBody) : false;
-  // Skills whose Python is Pyodide-compatible can run in the embedded sandbox
-  const pyodideCandidate =
-    !httpOnlyPython && skillBody ? isPyodideCompatibleSkill(skillBody) : false;
+  const remoteExecution = requiresRemoteExecution(metadata);
+  const localCandidate = metadata.always === true || !remoteExecution;
   const bundledPyodideCandidate = metadata.bundledPython?.pyodideCompatible === true;
 
   return uniqueSurfaces([
     metadata.preferredSurface,
-    localCandidate || httpOnlyPython ? 'local-mobile' : undefined,
-    hintedLocalJs ? 'local-js' : undefined,
-    hintedLocalPython || pyodideCandidate || bundledPyodideCandidate ? 'local-mobile' : undefined,
-    hintedMcp ? 'mcp' : undefined,
+    localCandidate || bundledPyodideCandidate ? 'local-mobile' : undefined,
     remoteExecution ? 'ssh' : undefined,
     remoteExecution ? 'workspace' : undefined,
-    browserJob ? 'browser-job' : undefined,
   ]);
 }
 
@@ -400,7 +329,6 @@ function buildCompatibilityReason(
   requiredSecrets: string[],
   context: SkillEligibilityContext,
   availableSurfaces: SkillExecutionSurface[],
-  skillBody?: string,
 ): { status: SkillCompatibilityResult['status']; reason?: string } {
   const restrictedOs = metadata.os || [];
   const requiresBins = uniqueStrings([
@@ -453,7 +381,7 @@ function buildCompatibilityReason(
     };
   }
 
-  if (metadata.always === true && requiresRemoteExecution(metadata, skillBody)) {
+  if (metadata.always === true && requiresRemoteExecution(metadata)) {
     return {
       status: 'ready',
       reason:
@@ -508,12 +436,7 @@ export function buildSkillMetadataFromFrontmatter(
   }
 
   const container = isRecord(metadata.metadata) ? metadata.metadata : undefined;
-  const kavi =
-    container && isRecord(container.kavi)
-      ? container.kavi
-      : container && isRecord(container.openclaw)
-        ? container.openclaw
-        : undefined;
+  const kavi = container && isRecord(container.kavi) ? container.kavi : undefined;
   const allowedTools = normalizeStringList(metadata['allowed-tools']);
   const tools = normalizeStringList(metadata.tools);
   const requires = normalizeRequirements(kavi?.requires);
@@ -565,7 +488,6 @@ export function buildSkillMetadataFromFrontmatter(
 export function getSkillCompatibility(
   metadata: SkillMetadata,
   contextOverrides?: SkillEligibilityContext,
-  skillBody?: string,
 ): SkillCompatibilityResult {
   const context = defaultEligibilityContext(contextOverrides);
   const normalizedName = normalizeSkillKey(metadata.skillKey || metadata.name);
@@ -575,7 +497,7 @@ export function getSkillCompatibility(
   const missingSecrets = context.hasSecret
     ? secrets.filter((secretName) => !context.hasSecret!(secretName))
     : secrets;
-  const suggestedSurfaces = inferSuggestedSurfaces(metadata, skillBody);
+  const suggestedSurfaces = inferSuggestedSurfaces(metadata);
   const preferredSurface = resolvePreferredSurface(metadata, suggestedSurfaces);
   const availableSurfaces = suggestedSurfaces.filter((surface) =>
     isSurfaceAvailableForSkill(surface, metadata, context),
@@ -589,7 +511,6 @@ export function getSkillCompatibility(
     missingSecrets,
     context,
     availableSurfaces,
-    skillBody,
   );
   const alternativeHint = alternative
     ? ` Use the built-in ${alternative.label} flow on mobile.`

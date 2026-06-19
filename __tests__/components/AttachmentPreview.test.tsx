@@ -2,10 +2,9 @@
 // Tests — AttachmentPreview Component
 // ---------------------------------------------------------------------------
 
-import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { AttachmentPreview } from '../../src/components/chat/AttachmentPreview';
-import { Attachment } from '../../src/types';
+import { Attachment } from '../../src/types/attachment';
 
 jest.mock('../../src/theme/useAppTheme', () => ({
   useAppTheme: () => ({

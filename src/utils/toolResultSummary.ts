@@ -83,7 +83,17 @@ export function extractToolResultSummary(
     const record = parsed as Record<string, unknown>;
     const structuredSummary = summarizeStructuredField(
       record,
-      ['summary', 'outputExcerpt', 'resultPreview', 'message', 'note', 'failureSummary', 'error'],
+      [
+        'summary',
+        'outputExcerpt',
+        'resultPreview',
+        'message',
+        'note',
+        'failureSummary',
+        'error',
+        'path',
+        'preview',
+      ],
       maxChars,
     );
     if (structuredSummary) {

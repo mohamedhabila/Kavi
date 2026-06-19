@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-nati
 import { ChevronDown, ChevronRight } from 'lucide-react-native';
 import { useMarkdown, type MarkedStyles } from 'react-native-marked';
 import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
-import { useTranslation } from '../../i18n';
+import { useTranslation } from '../../i18n/useTranslation';
 import {
   buildContentRenderPlan,
   buildStreamingPreview,

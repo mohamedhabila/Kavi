@@ -3,12 +3,10 @@
 // Productivity, Communication, Media, Knowledge
 // ---------------------------------------------------------------------------
 
-import {
-  createProductivitySkill,
-  createCommunicationSkill,
-  createMediaSkill,
-  createKnowledgeSkill,
-} from '../../src/services/integrations/services';
+import { createCommunicationSkill } from '../../src/services/integrations/communication/skill';
+import { createKnowledgeSkill } from '../../src/services/integrations/knowledge/skill';
+import { createMediaSkill } from '../../src/services/integrations/media/skill';
+import { createProductivitySkill } from '../../src/services/integrations/productivity/skill';
 
 describe('Productivity Skill', () => {
   const skill = createProductivitySkill();
@@ -87,6 +85,20 @@ describe('Productivity Skill', () => {
       const result = await calc.handler!({ expression: 'invalid()()' });
       const parsed = JSON.parse(result);
       expect(parsed.error).toBeDefined();
+    });
+
+    it('rejects unsupported characters before expression evaluation', async () => {
+      const calc = skill.tools.find((t) => t.name === 'calculate')!;
+      const result = await calc.handler!({ expression: '<script>alert(1)</script>' });
+      const parsed = JSON.parse(result);
+      expect(parsed.error).toBe('Expression contains unsupported characters');
+    });
+
+    it('rejects non-finite calculation results', async () => {
+      const calc = skill.tools.find((t) => t.name === 'calculate')!;
+      const result = await calc.handler!({ expression: '1 / 0' });
+      const parsed = JSON.parse(result);
+      expect(parsed.error).toBe('Expression did not produce a finite number');
     });
   });
 });

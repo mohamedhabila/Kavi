@@ -21,7 +21,7 @@ beforeEach(() => {
     },
     policy: {
       requireApproval: false,
-      alwaysApproveTools: ['ssh_exec', 'workspace_delete'],
+      alwaysApproveTools: ['ssh_exec', 'workspace_delegate_task'],
       autoApproveTools: ['web_search', 'read_file'],
       timeoutMs: 5 * 60 * 1000,
       expiryFallback: 'reject',
@@ -178,7 +178,7 @@ describe('analytics tracking', () => {
     const id = useApprovalStore.getState().createRequest({
       title: 'Test',
       description: 'test',
-      toolName: 'workspace_delete',
+      toolName: 'workspace_delegate_task',
     });
     useApprovalStore.getState().expireRequest(id);
 

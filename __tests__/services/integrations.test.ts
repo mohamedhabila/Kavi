@@ -15,13 +15,11 @@ const mockFetch = jest.fn();
 
 import { getSecure } from '../../src/services/storage/SecureStorage';
 import { registerSkill } from '../../src/services/skills/manager';
-import {
-  createWeatherSkill,
-  createGitHubSkill,
-  createFinanceSkill,
-  createKnowledgeSkill,
-  registerBuiltInServiceSkills,
-} from '../../src/services/integrations/services';
+import { createFinanceSkill } from '../../src/services/integrations/finance/skill';
+import { createGitHubSkill } from '../../src/services/integrations/github/skill';
+import { createKnowledgeSkill } from '../../src/services/integrations/knowledge/skill';
+import { registerBuiltInServiceSkills } from '../../src/services/integrations/registry';
+import { createWeatherSkill } from '../../src/services/integrations/weather/skill';
 
 const { File, Directory, Paths, __resetStore } = require('expo-file-system');
 
@@ -54,21 +52,30 @@ describe('Service Integrations', () => {
 
     it('current tool should return weather data', async () => {
       mockGetSecure.mockResolvedValue('weather-key');
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          name: 'London',
-          main: { temp: 15, feels_like: 14, humidity: 70 },
-          weather: [{ description: 'cloudy' }],
-          wind: { speed: 5 },
-        }),
-      });
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => [{ name: 'London', lat: 51.5072, lon: -0.1276, country: 'GB' }],
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            name: 'London',
+            sys: { country: 'GB' },
+            main: { temp: 15, feels_like: 14, humidity: 70 },
+            weather: [{ description: 'cloudy' }],
+            wind: { speed: 5 },
+          }),
+        });
 
       const skill = createWeatherSkill();
       const result = await skill.tools[0].handler!({ location: 'London' });
       const data = JSON.parse(result);
       expect(data.location).toBe('London');
       expect(data.temp).toBe(15);
+      expect(data.coordinates).toEqual({ lat: 51.5072, lon: -0.1276 });
+      expect(mockFetch.mock.calls[0][0]).toContain('/geo/1.0/direct');
+      expect(mockFetch.mock.calls[1][0]).toContain('/data/2.5/weather');
     });
 
     it('forecast tool should throw if no API key', async () => {
@@ -81,23 +88,52 @@ describe('Service Integrations', () => {
 
     it('forecast tool should return forecast data', async () => {
       mockGetSecure.mockResolvedValue('weather-key');
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          city: { name: 'London' },
-          list: Array.from({ length: 40 }, (_, i) => ({
-            dt_txt: `2025-01-0${Math.floor(i / 8) + 1}`,
-            main: { temp: 10 + i },
-            weather: [{ description: 'sunny' }],
-          })),
-        }),
-      });
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => [{ name: 'London', lat: 51.5072, lon: -0.1276, country: 'GB' }],
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            city: { name: 'London', country: 'GB' },
+            list: Array.from({ length: 40 }, (_, i) => ({
+              dt_txt: `2025-01-${String((i % 5) + 1).padStart(2, '0')} ${String((i % 8) * 3).padStart(2, '0')}:00:00`,
+              main: { temp: 10 + i },
+              weather: [{ description: 'sunny' }],
+            })),
+          }),
+        });
 
       const skill = createWeatherSkill();
       const result = await skill.tools[1].handler!({ location: 'London' });
       const data = JSON.parse(result);
       expect(data.location).toBe('London');
       expect(data.forecasts.length).toBe(5);
+      expect(mockFetch.mock.calls[0][0]).toContain('/geo/1.0/direct');
+      expect(mockFetch.mock.calls[1][0]).toContain('/data/2.5/forecast');
+    });
+
+    it('current tool should support exact coordinates without geocoding', async () => {
+      mockGetSecure.mockResolvedValue('weather-key');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          name: 'Cairo',
+          sys: { country: 'EG' },
+          main: { temp: 31, feels_like: 33, humidity: 40 },
+          weather: [{ description: 'clear sky' }],
+          wind: { speed: 3 },
+        }),
+      });
+
+      const skill = createWeatherSkill();
+      const result = await skill.tools[0].handler!({ lat: 30.0444, lon: 31.2357 });
+      const data = JSON.parse(result);
+      expect(data.location).toBe('Cairo');
+      expect(data.coordinates).toEqual({ lat: 30.0444, lon: 31.2357 });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch.mock.calls[0][0]).toContain('lat=30.0444');
     });
   });
 
@@ -521,7 +557,7 @@ describe('Service Integrations', () => {
       const result = await skill.tools.find((tool) => tool.name === 'commit_files')!.handler!({
         repo: 'user/repo',
         branch: 'feature/test',
-        base: 'main',
+        baseBranch: 'main',
         message: 'Update docs',
         changes: [{ path: 'README.md', content: 'Updated docs' }],
       });
@@ -581,7 +617,7 @@ describe('Service Integrations', () => {
         {
           repo: 'user/repo',
           branch: 'feature/test',
-          base: 'main',
+          baseBranch: 'main',
           message: 'Commit workspace file',
           changes: [{ path: 'README.md', filePath: '/drafts/README.md' }],
         },
@@ -697,7 +733,7 @@ describe('Service Integrations', () => {
         repo: 'user/repo',
         title: 'New Bug',
         body: 'Details',
-        labels: 'bug,urgent',
+        labels: ['bug', 'urgent'],
       });
       const data = JSON.parse(result);
       expect(data.number).toBe(42);
@@ -939,11 +975,15 @@ describe('Service Integrations', () => {
   });
 
   describe('createFinanceSkill', () => {
-    it('should create finance skill with 2 tools', () => {
+    it('should create finance skill with 3 tools', () => {
       const skill = createFinanceSkill();
       expect(skill.id).toBe('finance');
-      expect(skill.tools).toHaveLength(2);
-      expect(skill.tools.map((t) => t.name)).toEqual(['stock_quote', 'crypto_price']);
+      expect(skill.tools).toHaveLength(3);
+      expect(skill.tools.map((t) => t.name)).toEqual([
+        'stock_quote',
+        'crypto_price',
+        'exchange_rate',
+      ]);
     });
 
     it('stock_quote should return data', async () => {
@@ -980,9 +1020,10 @@ describe('Service Integrations', () => {
       });
 
       const skill = createFinanceSkill();
-      const result = await skill.tools[1].handler!({ symbol: 'bitcoin' });
+      const result = await skill.tools[1].handler!({ coinId: 'bitcoin' });
       const data = JSON.parse(result);
       expect(data).toBeDefined();
+      expect(data.coinId).toBe('bitcoin');
     });
 
     it('crypto_price should handle API error', async () => {
@@ -992,7 +1033,33 @@ describe('Service Integrations', () => {
         text: async () => 'Rate limited',
       });
       const skill = createFinanceSkill();
-      await expect(skill.tools[1].handler!({ symbol: 'bitcoin' })).rejects.toThrow();
+      await expect(skill.tools[1].handler!({ coinId: 'bitcoin' })).rejects.toThrow();
+    });
+
+    it('exchange_rate should return data', async () => {
+      mockGetSecure.mockResolvedValue('av-key');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          'Realtime Currency Exchange Rate': {
+            '1. From_Currency Code': 'USD',
+            '3. To_Currency Code': 'JPY',
+            '5. Exchange Rate': '157.42000000',
+            '6. Last Refreshed': '2026-06-03 10:15:00',
+            '7. Time Zone': 'UTC',
+          },
+        }),
+      });
+
+      const skill = createFinanceSkill();
+      const result = await skill.tools[2].handler!({
+        fromCurrency: 'USD',
+        toCurrency: 'JPY',
+      });
+      const data = JSON.parse(result);
+      expect(data.fromCurrency).toBe('USD');
+      expect(data.toCurrency).toBe('JPY');
+      expect(data.exchangeRate).toBe('157.42000000');
     });
   });
 

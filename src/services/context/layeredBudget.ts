@@ -25,8 +25,9 @@
 
 import { estimateTokens, getWorkingContextWindow } from './tokenCounter';
 import { MIN_OUTPUT_RESERVE } from './budgetManager';
+import { resolveModelOutputTokenBudget } from './outputTokenBudget';
 import type { MemoryBlock } from '../memory/blocks';
-import type { MemoryFact } from '../memory/facts';
+import type { MemoryFact } from '../memory/facts/types';
 
 // ── Layer shares (fractions of the working context window) ───────────────
 
@@ -115,14 +116,23 @@ export interface LayeredCascadeResult {
  * Compute per-layer budgets for the requested model. `maxTokens` is the
  * caller-supplied output budget — it sets the floor of the output reserve.
  */
-export function computeLayeredBudget(model: string, maxTokens: number = 16384): LayeredBudget {
+export function computeLayeredBudget(
+  model: string,
+  maxTokens: number = resolveModelOutputTokenBudget(model),
+): LayeredBudget {
   const contextWindow = getWorkingContextWindow(model);
   const outputReserve = Math.max(MIN_OUTPUT_RESERVE, maxTokens);
   const totalAvailable = Math.max(contextWindow - outputReserve, 0);
 
-  const l1Tools = Math.min(Math.floor(totalAvailable * LAYERED_L1_TOOLS_SHARE), LAYERED_L1_TOOLS_CAP);
+  const l1Tools = Math.min(
+    Math.floor(totalAvailable * LAYERED_L1_TOOLS_SHARE),
+    LAYERED_L1_TOOLS_CAP,
+  );
   const l2System = Math.floor(totalAvailable * LAYERED_L2_SYSTEM_SHARE);
-  const l3Focus = Math.min(Math.floor(totalAvailable * LAYERED_L3_FOCUS_SHARE), LAYERED_L3_FOCUS_CAP);
+  const l3Focus = Math.min(
+    Math.floor(totalAvailable * LAYERED_L3_FOCUS_SHARE),
+    LAYERED_L3_FOCUS_CAP,
+  );
   const l4UserTurn = Math.min(
     Math.floor(totalAvailable * LAYERED_L4_USER_TURN_SHARE),
     LAYERED_L4_USER_TURN_CAP,
@@ -201,7 +211,7 @@ export function selectFactsWithinBudget(
 // ── Cascade ──────────────────────────────────────────────────────────────
 
 /**
- * Apply the §6.5 cascade. The function inspects current per-layer usage and
+ * Apply the memory budget cascade. The function inspects current per-layer usage and
  * returns a list of recommended actions in the prescribed order. When the
  * caller supplies retrieved facts it also returns the trimmed-to-fit subset
  * (step 1 is the only one we can perform purely; the rest are actions the

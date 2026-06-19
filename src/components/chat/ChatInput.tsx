@@ -4,28 +4,25 @@
 
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
-  Alert,
-  FlatList,
   Platform,
   Pressable,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { Send, Square, Paperclip, X, Mic } from 'lucide-react-native';
-import * as ImagePicker from 'expo-image-picker';
-import * as DocumentPicker from 'expo-document-picker';
-import { Attachment } from '../../types';
-import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
-import { generateId } from '../../utils/id';
+import { Attachment } from '../../types/attachment';
+import { useAppTheme } from '../../theme/useAppTheme';
 import { AttachmentPreview } from './AttachmentPreview';
-import { useTranslation } from '../../i18n';
+import { useTranslation } from '../../i18n/useTranslation';
 import { getAllCommands } from '../../services/commands/builtins';
 import { useChatVoiceRecorder } from './useChatVoiceRecorder';
-import { VoiceRecorderOverlay } from './VoiceRecorderOverlay';
 import { CHAT_VOICE_PRESS_RETENTION_OFFSET } from './chatVoiceConstants';
+import { createChatInputStyles } from './ChatInput.styles';
+import { ChatInputCommandSuggestions } from './ChatInputCommandSuggestions';
+import { ChatInputVoiceOverlayLayer } from './ChatInputVoiceOverlayLayer';
+import { useChatInputAttachments } from './useChatInputAttachments';
 
 interface ChatInputProps {
   onSend: (text: string, attachments?: Attachment[]) => void;
@@ -59,7 +56,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
   }) => {
     const { colors } = useAppTheme();
     const { t } = useTranslation();
-    const styles = useMemo(() => createStyles(colors, bottomInset), [bottomInset, colors]);
+    const styles = useMemo(() => createChatInputStyles(colors, bottomInset), [bottomInset, colors]);
     const inputRef = useRef<TextInput>(null);
 
     const allCommands = useMemo(() => getAllCommands(), []);
@@ -98,93 +95,15 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
       onSend(trimmed, attachments.length > 0 ? attachments : undefined);
     }, [attachments, onSend, text, voiceRecorder]);
 
-    const handlePickImage = useCallback(async () => {
-      voiceRecorder.clearError();
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        quality: 0.8,
-      });
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        onChangeAttachments([
-          ...attachments,
-          {
-            id: generateId(),
-            type: 'image',
-            uri: asset.uri,
-            name: asset.fileName || 'image.jpg',
-            mimeType: asset.mimeType || 'image/jpeg',
-            size: asset.fileSize || 0,
-          },
-        ]);
-      }
-    }, [attachments, onChangeAttachments, voiceRecorder]);
-
-    const handlePickDocument = useCallback(async () => {
-      voiceRecorder.clearError();
-      const result = await DocumentPicker.getDocumentAsync({
-        type: '*/*',
-        copyToCacheDirectory: true,
-      });
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        onChangeAttachments([
-          ...attachments,
-          {
-            id: generateId(),
-            type: 'file',
-            uri: asset.uri,
-            name: asset.name,
-            mimeType: asset.mimeType || 'application/octet-stream',
-            size: asset.size || 0,
-          },
-        ]);
-      }
-    }, [attachments, onChangeAttachments, voiceRecorder]);
-
-    const handlePickAttachment = useCallback(() => {
-      if (voiceRecorder.isActive || isInputDisabled) {
-        return;
-      }
-
-      if (!supportsVision) {
-        void handlePickDocument();
-        return;
-      }
-
-      Alert.alert(t('chat.attach'), undefined, [
-        {
-          text: t('common.image'),
-          onPress: () => {
-            void handlePickImage();
-          },
-        },
-        {
-          text: t('common.file'),
-          onPress: () => {
-            void handlePickDocument();
-          },
-        },
-        {
-          text: t('common.cancel'),
-          style: 'cancel',
-        },
-      ]);
-    }, [
-      handlePickDocument,
-      handlePickImage,
+    const { handlePickAttachment, removeAttachment } = useChatInputAttachments({
+      attachments,
+      clearVoiceError: voiceRecorder.clearError,
       isInputDisabled,
+      isVoiceActive: voiceRecorder.isActive,
+      onChangeAttachments,
       supportsVision,
       t,
-      voiceRecorder.isActive,
-    ]);
-
-    const removeAttachment = useCallback(
-      (id: string) => {
-        onChangeAttachments(attachments.filter((attachment) => attachment.id !== id));
-      },
-      [attachments, onChangeAttachments],
-    );
+    });
 
     const handleTextChange = useCallback(
       (value: string) => {
@@ -194,6 +113,13 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
         onChangeText(value);
       },
       [onChangeText, voiceRecorder],
+    );
+    const handleCommandSuggestionSelect = useCallback(
+      (commandName: string) => {
+        onChangeText(`${commandName} `);
+        inputRef.current?.focus();
+      },
+      [onChangeText],
     );
 
     const composerDisabled = isInputDisabled || voiceRecorder.isActive;
@@ -223,68 +149,23 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
             <Text style={styles.voiceErrorText}>{voiceRecorder.errorMessage}</Text>
           </View>
         ) : null}
-        {commandSuggestions.length > 0 && (
-          <View style={styles.suggestionsContainer}>
-            <FlatList
-              data={commandSuggestions}
-              keyExtractor={(item) => item.name}
-              keyboardShouldPersistTaps="always"
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.suggestionItem}
-                  onPress={() => {
-                    onChangeText(item.name + ' ');
-                    inputRef.current?.focus();
-                  }}
-                  disabled={composerDisabled}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('chat.commandSuggestion', { name: item.name })}
-                >
-                  <Text style={styles.suggestionName}>{item.name}</Text>
-                  <Text style={styles.suggestionDesc} numberOfLines={1}>
-                    {item.description}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            />
-          </View>
-        )}
-        {voiceRecorder.isActive ? (
-          <View
-            pointerEvents="none"
-            style={styles.voiceOverlayLayer}
-            testID="chat-voice-overlay-layer"
-          >
-            <VoiceRecorderOverlay
-              elapsedMs={voiceRecorder.elapsedMs}
-              waveformLevels={voiceRecorder.waveformLevels}
-              isCancelling={voiceRecorder.isCancelling}
-              isTranscribing={voiceRecorder.isTranscribing}
-              title={
-                voiceRecorder.isTranscribing
-                  ? t('chat.voiceTranscribingTitle')
-                  : voiceRecorder.isCancelling
-                    ? t('chat.voiceReleaseToCancel')
-                    : t('chat.voiceSpeakNow')
-              }
-              subtitle={
-                voiceRecorder.isTranscribing ? t('voice.transcribing') : t('voice.listening')
-              }
-              primaryHint={
-                voiceRecorder.isTranscribing
-                  ? t('chat.voicePreparingTranscript')
-                  : t('chat.voiceReleaseToSend')
-              }
-              secondaryHint={
-                voiceRecorder.isTranscribing ? undefined : t('chat.voiceSlideUpToCancel')
-              }
-              pillLabel={
-                voiceRecorder.isTranscribing ? t('voice.transcribing') : t('voice.listening')
-              }
-            />
-          </View>
-        ) : null}
-        <View style={styles.inputRow}>
+        <ChatInputCommandSuggestions
+          disabled={composerDisabled}
+          onSelect={handleCommandSuggestionSelect}
+          styles={styles}
+          suggestions={commandSuggestions}
+          t={t}
+        />
+        <ChatInputVoiceOverlayLayer
+          elapsedMs={voiceRecorder.elapsedMs}
+          isActive={voiceRecorder.isActive}
+          isCancelling={voiceRecorder.isCancelling}
+          isTranscribing={voiceRecorder.isTranscribing}
+          styles={styles}
+          t={t}
+          waveformLevels={voiceRecorder.waveformLevels}
+        />
+        <View style={styles.inputRow} testID="chat-composer-row">
           <TouchableOpacity
             style={[styles.attachBtn, composerDisabled ? styles.attachBtnDisabled : null]}
             onPress={handlePickAttachment}
@@ -292,6 +173,8 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel={t('chat.attach')}
+            accessibilityState={{ disabled: composerDisabled }}
+            testID="chat-attach-button"
           >
             <Paperclip size={20} color={colors.textSecondary} />
           </TouchableOpacity>
@@ -310,6 +193,9 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
               accessibilityRole="button"
               accessibilityLabel={t('chat.voiceInput')}
               accessibilityHint={t('chat.voiceHoldHint')}
+              accessibilityState={{
+                disabled: isLoading || isInputDisabled || voiceRecorder.isTranscribing,
+              }}
               testID="chat-voice-button"
               {...voiceRecorder.pressableHandlers}
             >
@@ -322,6 +208,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
           <TextInput
             ref={inputRef}
             style={styles.input}
+            testID="chat-composer-input"
             value={text}
             onChangeText={handleTextChange}
             placeholder={t('chat.placeholder')}
@@ -339,6 +226,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
               onPress={onStop}
               accessibilityRole="button"
               accessibilityLabel={t('chat.stop')}
+              testID="chat-stop-button"
             >
               <Square size={20} color={colors.danger} fill={colors.danger} />
             </TouchableOpacity>
@@ -353,6 +241,8 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
               disabled={sendDisabled}
               accessibilityRole="button"
               accessibilityLabel={t('chat.send')}
+              accessibilityState={{ disabled: sendDisabled }}
+              testID="chat-send-button"
             >
               <Send
                 size={20}
@@ -365,124 +255,3 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
     );
   },
 );
-
-const createStyles = (colors: AppPalette, bottomInset: number) =>
-  StyleSheet.create({
-    container: {
-      position: 'relative',
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-      backgroundColor: colors.surface,
-      overflow: 'visible',
-      paddingBottom: Math.max(bottomInset, Platform.OS === 'ios' ? 6 : 8),
-      shadowColor: '#000',
-      shadowOpacity: Platform.OS === 'ios' ? 0.12 : 0,
-      shadowOffset: { width: 0, height: -4 },
-      shadowRadius: 12,
-      elevation: 10,
-    },
-    voiceOverlayLayer: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      bottom: Math.max(bottomInset, Platform.OS === 'ios' ? 6 : 8) + 56,
-      zIndex: 3,
-      elevation: 3,
-    },
-    editingBar: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      backgroundColor: colors.border,
-    },
-    editingLabel: {
-      fontSize: 12,
-      color: colors.textSecondary,
-    },
-    inputRow: {
-      flexDirection: 'row',
-      alignItems: 'flex-end',
-      paddingHorizontal: 8,
-      paddingTop: 8,
-      paddingBottom: 4,
-      gap: 6,
-    },
-    attachBtn: {
-      padding: 8,
-      justifyContent: 'center',
-    },
-    attachBtnDisabled: {
-      opacity: 0.45,
-    },
-    voiceBtnActive: {
-      backgroundColor: colors.primarySoft,
-      borderRadius: 999,
-    },
-    input: {
-      flex: 1,
-      backgroundColor: colors.inputBackground,
-      borderRadius: 20,
-      paddingHorizontal: 16,
-      paddingTop: 10,
-      paddingBottom: 10,
-      fontSize: 15,
-      lineHeight: 20,
-      color: colors.text,
-      maxHeight: 120,
-      minHeight: 44,
-      borderWidth: 1,
-      borderColor: colors.inputBorder,
-    },
-    sendBtn: {
-      padding: 8,
-      justifyContent: 'center',
-    },
-    sendBtnActive: {
-      opacity: 1,
-    },
-    sendBtnDisabled: {
-      opacity: 0.45,
-    },
-    suggestionsContainer: {
-      maxHeight: 200,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-      backgroundColor: colors.surface,
-    },
-    voiceErrorBanner: {
-      marginHorizontal: 12,
-      marginTop: 8,
-      borderRadius: 12,
-      backgroundColor: colors.dangerSoft,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-    },
-    voiceErrorText: {
-      color: colors.danger,
-      fontSize: 12,
-      fontWeight: '600',
-    },
-    suggestionItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      gap: 10,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.subtleBorder || colors.border,
-    },
-    suggestionName: {
-      fontSize: 14,
-      fontWeight: '600',
-      color: colors.primary,
-      fontFamily: 'monospace',
-      minWidth: 80,
-    },
-    suggestionDesc: {
-      flex: 1,
-      fontSize: 13,
-      color: colors.textSecondary,
-    },
-  });

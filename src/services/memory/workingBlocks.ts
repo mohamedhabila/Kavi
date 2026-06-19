@@ -6,11 +6,15 @@
 // so one thread cannot bleed into another thread's prompt.
 // ---------------------------------------------------------------------------
 
-import { getMemoryDb } from './sqlite-store';
-import { ensureFactSchema } from './schema';
+import { getMany, getOne, runMemoryStatement } from './access/crud';
+import { getSchemaReadyMemoryDb } from './access/schemaGuard';
 import { notifyStructuredMemoryChanged } from './store';
 
-export type WorkingBlockLabel = 'active_focus' | 'open_threads';
+export type WorkingBlockLabel =
+  | 'active_focus'
+  | 'open_threads'
+  | 'compaction_summary'
+  | 'task_stack';
 
 export interface WorkingBlockScope {
   conversationId?: string | null;
@@ -51,6 +55,14 @@ const WORKING_BLOCK_DEFS: Record<WorkingBlockLabel, { charLimit: number; descrip
     charLimit: 800,
     description: 'Scoped unresolved follow-ups for this conversation/task.',
   },
+  compaction_summary: {
+    charLimit: 2000,
+    description: 'Durable summary of the last context compaction for this conversation.',
+  },
+  task_stack: {
+    charLimit: 4000,
+    description: 'Stack of active, paused, and completed tasks for this conversation.',
+  },
 };
 
 function cleanId(value: string | null | undefined): string | null {
@@ -72,7 +84,7 @@ export function buildWorkingBlockScopeKey(scope: WorkingBlockScope = {}): string
 
 function rowToWorkingBlock(row: WorkingBlockRow): WorkingMemoryBlock {
   return {
-    label: row.label === 'open_threads' ? 'open_threads' : 'active_focus',
+    label: row.label as WorkingBlockLabel,
     scopeKey: row.scope_key,
     conversationId: row.conversation_id,
     threadId: row.thread_id,
@@ -92,9 +104,8 @@ export function getWorkingBlock(
   label: WorkingBlockLabel,
   scope: WorkingBlockScope = {},
 ): WorkingMemoryBlock | null {
-  ensureFactSchema();
   const scopeKey = buildWorkingBlockScopeKey(scope);
-  const row = getMemoryDb().getFirstSync<WorkingBlockRow>(
+  const row = getOne<WorkingBlockRow>(
     `SELECT * FROM memory_working_blocks WHERE label = ? AND scope_key = ? LIMIT 1`,
     label,
     scopeKey,
@@ -106,8 +117,7 @@ export function listRecentWorkingBlocks(
   label: WorkingBlockLabel,
   limit = 10,
 ): WorkingMemoryBlock[] {
-  ensureFactSchema();
-  const rows = getMemoryDb().getAllSync<WorkingBlockRow>(
+  const rows = getMany<WorkingBlockRow>(
     `SELECT * FROM memory_working_blocks
        WHERE label = ? AND content <> ''
        ORDER BY updated_at DESC
@@ -124,8 +134,7 @@ export function editWorkingBlock(
   scope: WorkingBlockScope = {},
   options: { now?: number } = {},
 ): WorkingMemoryBlock {
-  ensureFactSchema();
-  const db = getMemoryDb();
+  const db = getSchemaReadyMemoryDb();
   const now = options.now ?? Date.now();
   const def = definitionFor(label);
   const trimmed = content.trim();
@@ -192,9 +201,8 @@ export function clearWorkingBlock(
   scope: WorkingBlockScope = {},
   now = Date.now(),
 ): boolean {
-  ensureFactSchema();
   const scopeKey = buildWorkingBlockScopeKey(scope);
-  const result = getMemoryDb().runSync(
+  const result = runMemoryStatement(
     `UPDATE memory_working_blocks SET content = '', updated_at = ? WHERE label = ? AND scope_key = ?`,
     now,
     label,

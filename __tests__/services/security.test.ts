@@ -9,7 +9,6 @@ import {
   getRecentAuditEntries,
   getAuditStats,
   clearAuditLog,
-  logAuditEntry,
 } from '../../src/services/security/audit';
 
 describe('useToolPermissionsStore', () => {
@@ -52,10 +51,20 @@ describe('useToolPermissionsStore', () => {
     expect(useToolPermissionsStore.getState().requiresConfirmation('write_file')).toBe(true);
     expect(useToolPermissionsStore.getState().requiresConfirmation('file_edit')).toBe(true);
     expect(useToolPermissionsStore.getState().requiresConfirmation('email_compose')).toBe(true);
+    expect(useToolPermissionsStore.getState().requiresConfirmation('calendar_update_event')).toBe(
+      true,
+    );
     expect(useToolPermissionsStore.getState().requiresConfirmation('contacts_manage_access')).toBe(
       true,
     );
     expect(useToolPermissionsStore.getState().requiresConfirmation('contacts_search_full')).toBe(
+      true,
+    );
+    expect(useToolPermissionsStore.getState().requiresConfirmation('location_current')).toBe(true);
+    expect(useToolPermissionsStore.getState().requiresConfirmation('clipboard_read')).toBe(true);
+    expect(useToolPermissionsStore.getState().requiresConfirmation('photos_latest')).toBe(true);
+    expect(useToolPermissionsStore.getState().requiresConfirmation('screen_record')).toBe(true);
+    expect(useToolPermissionsStore.getState().requiresConfirmation('notification_cancel')).toBe(
       true,
     );
   });

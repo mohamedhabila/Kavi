@@ -6,7 +6,7 @@
 import { File } from 'expo-file-system';
 import { getSecure, getProviderApiKey } from '../storage/SecureStorage';
 import { DEFAULT_OPENAI_BASE_URL } from '../../constants/api';
-import type { LlmProviderConfig } from '../../types';
+import type { LlmProviderConfig } from '../../types/provider';
 import { unrefTimerIfSupported } from '../../utils/timers';
 
 interface SpeechBackendConfig {

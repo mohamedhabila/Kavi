@@ -1,4 +1,7 @@
 <resources>
   <string name="app_name">Kavi</string>
   <string name="expo_splash_screen_resize_mode" translatable="false">contain</string>
+  <string name="local_llm_notification_channel_name">On-device AI</string>
+  <string name="local_llm_notification_title">Kavi is thinking on this device</string>
+  <string name="local_llm_notification_body">On-device model generation is running.</string>
 </resources>

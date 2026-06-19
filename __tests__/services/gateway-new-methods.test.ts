@@ -6,8 +6,6 @@ jest.mock('../../src/utils/id', () => ({
   generateId: jest.fn().mockReturnValue('mock-gw-id'),
 }));
 
-const mockRequest = jest.fn();
-
 jest.mock('../../src/services/gateway/protocol', () => ({
   createRequest: jest.fn().mockImplementation((method: string, params?: any) => ({
     jsonrpc: '2.0',
@@ -45,7 +43,6 @@ jest.mock('../../src/services/gateway/protocol', () => ({
 const mockSend = jest.fn();
 const mockClose = jest.fn();
 let mockOnOpen: (() => void) | null = null;
-let mockOnMessage: ((e: { data: string }) => void) | null = null;
 
 class MockWebSocket {
   static OPEN = 1;
@@ -61,7 +58,7 @@ class MockWebSocket {
     mockOnOpen = fn;
   }
   set onmessage(fn: any) {
-    mockOnMessage = fn;
+    void fn;
   }
   set onclose(fn: any) {}
   set onerror(fn: any) {}
@@ -81,7 +78,6 @@ describe('Gateway Client — new control-plane methods', () => {
     jest.clearAllMocks();
     disconnectGateway();
     mockOnOpen = null;
-    mockOnMessage = null;
     client = new GatewayClient(defaultConfig);
   });
 

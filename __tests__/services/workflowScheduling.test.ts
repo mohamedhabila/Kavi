@@ -1,11 +1,13 @@
 import {
   evaluateWorkflowPlanContinuation,
   evaluateWorkflowSpawnGate,
-  getWorkflowExecutionStates,
+} from '../../src/services/agents/lifecycle/workflowSchedulingExecution';
+import { getWorkflowExecutionStates } from '../../src/services/agents/lifecycle/workflowExecutionState';
+import {
   inferWorkflowWorkstreamId,
   normalizeWorkflowWorkstreams,
   resolveWorkflowWorkstreamReference,
-} from '../../src/services/agents/workflowScheduling';
+} from '../../src/services/agents/workflowSchedulingReferences';
 
 describe('workflowScheduling', () => {
   it('canonicalizes dependency references to stable workstream ids', () => {
@@ -31,19 +33,24 @@ describe('workflowScheduling', () => {
     ]);
   });
 
-  it('drops independent dependency sentinels', () => {
+  it('preserves expected output contracts while normalizing workstreams', () => {
     const workstreams = normalizeWorkflowWorkstreams([
       {
         id: 'workstream-1',
-        title: 'Architecture',
-        dependencies: ['none', 'none.', 'no dependencies.'],
+        title: 'Delegated answer',
+        expectedOutput: 'C212W',
       },
     ]);
 
-    expect(workstreams[0].dependencies).toBeUndefined();
+    expect(workstreams[0]).toEqual(
+      expect.objectContaining({
+        id: 'workstream-1',
+        expectedOutput: 'C212W',
+      }),
+    );
   });
 
-  it('ignores punctuated independent dependency sentinels when gating ad hoc spawns', () => {
+  it('treats unmatched ad hoc dependency text as a blocking dependency', () => {
     const result = evaluateWorkflowSpawnGate({
       workers: [],
       dependsOnWorkstreams: ['none.'],
@@ -51,10 +58,15 @@ describe('workflowScheduling', () => {
 
     expect(result).toEqual(
       expect.objectContaining({
-        status: 'ready',
-        dependencyIds: [],
-        unmetDependencyIds: [],
-        blockingDependencies: [],
+        status: 'blocked',
+        dependencyIds: ['none.'],
+        unmetDependencyIds: ['none.'],
+        blockingDependencies: [
+          expect.objectContaining({
+            workstreamId: 'none.',
+            status: 'not-started',
+          }),
+        ],
       }),
     );
   });
@@ -69,36 +81,53 @@ describe('workflowScheduling', () => {
     expect(resolveWorkflowWorkstreamReference(workstreams, 'Implementation')).toBe('workstream-2');
   });
 
-  it('resolves noisy numbered references and markdown-decorated titles', () => {
+  it('resolves only exact workstream ids or exact normalized titles', () => {
     const workstreams = normalizeWorkflowWorkstreams([
       { id: 'workstream-1', title: '**Anthropic Research**' },
       { id: 'workstream-2', title: '**OpenAI Research**' },
       { id: 'workstream-3', title: '**Google Gemini Research**' },
     ]);
 
-    expect(resolveWorkflowWorkstreamReference(workstreams, 'workstreams 1')).toBe('workstream-1');
-    expect(
-      resolveWorkflowWorkstreamReference(
-        workstreams,
-        '3 --- Now spawning the research sub-agents in parallel:',
-      ),
-    ).toBe('workstream-3');
-    expect(resolveWorkflowWorkstreamReference(workstreams, 'Anthropic Research Agent')).toBe(
+    expect(resolveWorkflowWorkstreamReference(workstreams, 'workstreams 1')).toBeUndefined();
+    expect(resolveWorkflowWorkstreamReference(workstreams, 'Anthropic Research')).toBeUndefined();
+    expect(resolveWorkflowWorkstreamReference(workstreams, '**Anthropic Research**')).toBe(
       'workstream-1',
     );
   });
 
-  it('infers the only plan workstream when no explicit binding is supplied', () => {
+  it('does not infer a sole plan workstream without an explicit binding', () => {
     const workstreams = normalizeWorkflowWorkstreams([
       { id: 'workstream-1', title: 'Architecture' },
     ]);
 
-    expect(inferWorkflowWorkstreamId(workstreams, { prompt: 'Do the architecture work' })).toBe(
-      'workstream-1',
-    );
+    expect(
+      inferWorkflowWorkstreamId(workstreams, { prompt: 'Do the architecture work' }),
+    ).toBeUndefined();
   });
 
-  it('infers a unique Anthropic-style research worker from the worker name and prompt', () => {
+  it('requires an exact explicit workstream binding', () => {
+    const workstreams = normalizeWorkflowWorkstreams([
+      { id: 'execution-unit-1', title: 'Delegated worker answer' },
+    ]);
+
+    expect(
+      inferWorkflowWorkstreamId(workstreams, { prompt: 'Run an unrelated Python check.' }),
+    ).toBeUndefined();
+    expect(
+      inferWorkflowWorkstreamId(workstreams, {
+        workstreamId: 'execution-unit-2',
+        prompt: 'Run an unrelated Python check.',
+      }),
+    ).toBeUndefined();
+    expect(
+      inferWorkflowWorkstreamId(workstreams, {
+        workstreamId: 'execution-unit-1',
+        prompt: 'Run the delegated worker answer.',
+      }),
+    ).toBe('execution-unit-1');
+  });
+
+  it('does not infer a workstream from descriptive worker-name overlap alone', () => {
     const workstreams = normalizeWorkflowWorkstreams([
       { id: 'workstream-1', title: '**Anthropic Research**' },
       { id: 'workstream-2', title: '**OpenAI Research**' },
@@ -110,7 +139,7 @@ describe('workflowScheduling', () => {
         name: 'Anthropic Research Agent',
         prompt: 'Research Anthropic official docs, tool behavior, and orchestration guidance.',
       }),
-    ).toBe('workstream-1');
+    ).toBeUndefined();
   });
 
   it('summarizes execution state per workstream id', () => {
@@ -135,6 +164,64 @@ describe('workflowScheduling', () => {
       expect.objectContaining({
         status: 'running',
         runningSessionIds: ['sub-2'],
+      }),
+    );
+  });
+
+  it('treats completed workers with mismatched expected output as failed workstream attempts', () => {
+    const states = getWorkflowExecutionStates(
+      normalizeWorkflowWorkstreams([
+        {
+          id: 'workstream-1',
+          title: 'Worker answer',
+          expectedOutput: 'C212W',
+        },
+      ]),
+      [
+        {
+          sessionId: 'sub-1',
+          workstreamId: 'workstream-1',
+          status: 'completed',
+          output: 'KAVIASYNCOK',
+        },
+      ],
+    );
+
+    expect(states['workstream-1']).toEqual(
+      expect.objectContaining({
+        status: 'failed',
+        completedSessionIds: [],
+        failedSessionIds: ['sub-1'],
+      }),
+    );
+  });
+
+  it('allows a new spawn after a completed worker missed its expected output contract', () => {
+    const result = evaluateWorkflowSpawnGate({
+      plan: {
+        workstreams: normalizeWorkflowWorkstreams([
+          {
+            id: 'workstream-1',
+            title: 'Worker answer',
+            expectedOutput: 'C212W',
+          },
+        ]),
+      },
+      workers: [
+        {
+          sessionId: 'sub-1',
+          workstreamId: 'workstream-1',
+          status: 'completed',
+          output: 'KAVIASYNCOK',
+        },
+      ],
+      workstreamId: 'workstream-1',
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'ready',
+        duplicateCompletedSessionIds: [],
       }),
     );
   });
@@ -214,6 +301,54 @@ describe('workflowScheduling', () => {
       expect.objectContaining({
         status: 'blocked',
         duplicateCompletedSessionIds: ['sub-1'],
+      }),
+    );
+  });
+
+  it('uses graph-completed workstreams to satisfy dependencies without worker sessions', () => {
+    const plan = {
+      objective: 'Build the feature',
+      successCriteria: ['Ship it'],
+      stopConditions: ['Blocked'],
+      workstreams: normalizeWorkflowWorkstreams([
+        { id: 'execution-unit-1', title: 'Create file' },
+        {
+          id: 'execution-unit-2',
+          title: 'Launch worker',
+          dependencies: ['execution-unit-1'],
+        },
+      ]),
+      updatedAt: 1,
+    };
+
+    const result = evaluateWorkflowSpawnGate({
+      plan,
+      workers: [],
+      workstreamId: 'execution-unit-2',
+      completedWorkstreamIds: ['execution-unit-1'],
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'ready',
+        workstreamId: 'execution-unit-2',
+        unmetDependencyIds: [],
+        blockingDependencies: [],
+      }),
+    );
+  });
+
+  it('blocks re-spawning a graph-completed workstream even without a worker session id', () => {
+    const result = evaluateWorkflowSpawnGate({
+      workers: [],
+      workstreamId: 'execution-unit-1',
+      completedWorkstreamIds: ['execution-unit-1'],
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'blocked',
+        duplicateCompletedWorkstreamIds: ['execution-unit-1'],
       }),
     );
   });

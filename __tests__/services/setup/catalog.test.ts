@@ -1,5 +1,5 @@
 import { TOOL_PERMISSION_GROUPS, orderToolsByGroup } from '../../../src/services/setup/catalog';
-import type { ToolDefinition } from '../../../src/types';
+import type { ToolDefinition } from '../../../src/types/tool';
 
 function makeTool(name: string): ToolDefinition {
   return {

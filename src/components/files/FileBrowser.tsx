@@ -23,7 +23,7 @@ import {
   Home,
 } from 'lucide-react-native';
 import { useAppTheme, type AppPalette } from '../../theme/useAppTheme';
-import { useTranslation } from '../../i18n';
+import { useTranslation } from '../../i18n/useTranslation';
 
 // ── Types ────────────────────────────────────────────────────────────────
 

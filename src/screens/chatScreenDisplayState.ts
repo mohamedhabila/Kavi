@@ -5,9 +5,16 @@ import {
   type DisplayMessageItem,
   type DisplayResponseSegment,
 } from '../components/chat/messageGrouping';
-import { resolveDisplayedSubAgentSnapshot } from '../services/agents/workflowState';
-import { AgentRun, Message, ToolCall } from '../types';
+import { reconcileAssistantMessagesWithToolResults } from '../components/chat/messageProjectionReconciliation';
+import { resolveDisplayedSubAgentSnapshot } from '../services/agents/lifecycle/stateMachine';
+import { AgentRun } from '../types/agentRun';
+import { Message, ToolCall } from '../types/message';
 import { findMatchingToolCallIndexWithinMessage } from '../utils/toolCallMatching';
+import {
+  filterVisibleAssistantMessagesForAgentRun,
+  findAgentRunDisplayAnchorMessageId,
+  isRenderableDisplayMessage,
+} from './chatScreen/displayProjection';
 
 export type StreamingDraft = {
   content?: string;
@@ -211,6 +218,10 @@ function buildSourceMessages(
     .filter((message): message is Message => !!message);
 }
 
+function getProjectionSourceMessageIds(item: DisplayMessageItem): string[] {
+  return item.projectionSourceMessageIds ?? item.sourceMessageIds;
+}
+
 function hashText(value: string | undefined): string {
   if (!value) {
     return '0:0';
@@ -355,35 +366,6 @@ export function getVisibleSourceMessageWindow(
   };
 }
 
-function findAgentRunAnchorMessageId(messages: Message[], run: AgentRun): string | undefined {
-  const userMessageIndex = messages.findIndex((message) => message.id === run.userMessageId);
-  if (userMessageIndex < 0) {
-    return undefined;
-  }
-
-  const assistantMessages: Message[] = [];
-  for (let index = userMessageIndex + 1; index < messages.length; index += 1) {
-    const candidate = messages[index];
-    if (candidate.role === 'user') {
-      break;
-    }
-
-    if (candidate.role === 'assistant') {
-      assistantMessages.push(candidate);
-    }
-  }
-
-  if (!assistantMessages.length) {
-    return undefined;
-  }
-
-  const preferredMessage =
-    [...assistantMessages].reverse().find((message) => !message.subAgentEvent) ??
-    assistantMessages[assistantMessages.length - 1];
-
-  return preferredMessage?.id;
-}
-
 function buildAgentRunSignature(agentRun?: AgentRun): string {
   if (!agentRun) {
     return '';
@@ -452,7 +434,7 @@ export function buildAgentRunDisplayItemMap(
 
   const nextMap = new Map<string, AgentRun>();
   for (const run of agentRuns) {
-    const anchorMessageId = findAgentRunAnchorMessageId(messages, run);
+    const anchorMessageId = findAgentRunDisplayAnchorMessageId(messages, run);
     if (!anchorMessageId) {
       continue;
     }
@@ -475,12 +457,12 @@ export function getStableDisplayMessages(
   messages: Message[],
   cache: ChatDisplayStateCache,
 ): DisplayMessageItem[] {
-  const rawItems = buildDisplayMessages(messages);
+  const rawItems = buildDisplayMessages(messages.filter(isRenderableDisplayMessage));
   const messageById = new Map(messages.map((message) => [message.id, message]));
   const nextCache = new Map<string, StableDisplayMessageCacheEntry>();
 
   const stableItems = rawItems.map((item) => {
-    const sourceMessages = buildSourceMessages(messageById, item.sourceMessageIds);
+    const sourceMessages = buildSourceMessages(messageById, getProjectionSourceMessageIds(item));
     const sourceSignatures = buildSourceSignatures(sourceMessages);
     const cached = cache.stableDisplayMessages.get(item.id);
 
@@ -522,128 +504,154 @@ export function resolveDisplayMessages(params: {
   } = params;
   const nextCache = new Map<string, ResolvedDisplayMessageCacheEntry>();
 
-  const resolvedItems = displayMessages.map((item) => {
-    const sourceMessages = buildSourceMessages(messageById, item.sourceMessageIds);
-    const sourceSignatures = buildSourceSignatures(sourceMessages);
-    const agentRun = agentRunByDisplayItemId.get(item.id);
-    const isStreaming = !!streamingMessageId && item.sourceMessageIds.includes(streamingMessageId);
-    const draftSignature = isStreaming
-      ? item.sourceMessageIds
-          .map(
-            (sourceMessageId) =>
-              `${sourceMessageId}:${buildStreamingDraftSignature(streamingDrafts[sourceMessageId])}`,
-          )
-          .join('|')
-      : '';
-    const agentRunSignature = buildAgentRunSignature(agentRun);
-    const liveSubAgentSignature = buildLiveSubAgentSignature(item, liveSubAgentSnapshotsById);
-    const cached = cache.resolvedDisplayMessages.get(item.id);
+  const resolvedItems = displayMessages
+    .map((item) => {
+      const projectionSourceMessages = buildSourceMessages(
+        messageById,
+        getProjectionSourceMessageIds(item),
+      );
+      const sourceSignatures = buildSourceSignatures(projectionSourceMessages);
+      const sourceMessages = buildSourceMessages(messageById, item.sourceMessageIds);
+      const agentRun = agentRunByDisplayItemId.get(item.id);
+      const isStreaming =
+        !!streamingMessageId && item.sourceMessageIds.includes(streamingMessageId);
+      const draftSignature = isStreaming
+        ? item.sourceMessageIds
+            .map(
+              (sourceMessageId) =>
+                `${sourceMessageId}:${buildStreamingDraftSignature(
+                  streamingDrafts[sourceMessageId],
+                )}`,
+            )
+            .join('|')
+        : '';
+      const agentRunSignature = buildAgentRunSignature(agentRun);
+      const liveSubAgentSignature = buildLiveSubAgentSignature(item, liveSubAgentSnapshotsById);
+      const cached = cache.resolvedDisplayMessages.get(item.id);
 
-    if (
-      cached &&
-      cached.retryMessageId === item.retryMessageId &&
-      cached.isStreaming === isStreaming &&
-      cached.draftSignature === draftSignature &&
-      cached.agentRunSignature === agentRunSignature &&
-      cached.liveSubAgentSignature === liveSubAgentSignature &&
-      areSignatureListsEqual(cached.sourceSignatures, sourceSignatures)
-    ) {
-      nextCache.set(item.id, cached);
-      return cached.item;
-    }
-
-    let hasDraft = false;
-    const resolvedSourceMessages = sourceMessages.map((sourceMessage) => {
-      const draft = streamingDrafts[sourceMessage.id];
-      if (!draft) {
-        return sourceMessage;
+      if (
+        cached &&
+        cached.retryMessageId === item.retryMessageId &&
+        cached.isStreaming === isStreaming &&
+        cached.draftSignature === draftSignature &&
+        cached.agentRunSignature === agentRunSignature &&
+        cached.liveSubAgentSignature === liveSubAgentSignature &&
+        areSignatureListsEqual(cached.sourceSignatures, sourceSignatures)
+      ) {
+        nextCache.set(item.id, cached);
+        return cached.item;
       }
 
-      hasDraft = true;
-      return resolveStreamingDraftMessage(sourceMessage, draft);
-    });
-    const resolvedSourceMessageById = new Map(
-      resolvedSourceMessages.map((message) => [message.id, message]),
-    );
+      const resolvedSourceMessages = sourceMessages.map((sourceMessage) => {
+        const draft = streamingDrafts[sourceMessage.id];
+        if (!draft) {
+          return sourceMessage;
+        }
 
-    let resolvedMessage = item.message;
-    if (item.message.role === 'assistant' && hasDraft && resolvedSourceMessages.length > 0) {
-      resolvedMessage =
-        resolvedSourceMessages.length === 1
-          ? resolvedSourceMessages[0]
-          : mergeAssistantMessages(resolvedSourceMessages);
-    }
+        return resolveStreamingDraftMessage(sourceMessage, draft);
+      });
+      const resolvedProjectionSourceMessages = projectionSourceMessages.map((sourceMessage) => {
+        const draft = streamingDrafts[sourceMessage.id];
+        return draft ? resolveStreamingDraftMessage(sourceMessage, draft) : sourceMessage;
+      });
+      const resolvedAssistantMessages =
+        item.message.role === 'assistant'
+          ? reconcileAssistantMessagesWithToolResults(
+              resolvedSourceMessages,
+              resolvedProjectionSourceMessages,
+            )
+          : resolvedSourceMessages;
+      const visibleAssistantMessages =
+        item.message.role === 'assistant'
+          ? filterVisibleAssistantMessagesForAgentRun(resolvedAssistantMessages, agentRun)
+          : resolvedAssistantMessages;
+      const resolvedSourceMessageById = new Map(
+        visibleAssistantMessages.map((message) => [message.id, message]),
+      );
 
-    const latestSubAgentSegmentIndexBySessionId = new Map<string, number>();
-    item.responseSegments?.forEach((segment, index) => {
-      const sessionId = (
-        resolvedSourceMessageById.get(segment.messageId)?.subAgentEvent?.snapshot.sessionId ??
-        segment.subAgentEvent?.snapshot.sessionId
-      )?.trim();
-      if (sessionId) {
-        latestSubAgentSegmentIndexBySessionId.set(sessionId, index);
+      if (item.message.role === 'assistant' && visibleAssistantMessages.length === 0) {
+        return null;
       }
-    });
 
-    const resolvedResponseSegments = item.responseSegments?.map((segment, index) => {
-      const resolvedSourceMessage = resolvedSourceMessageById.get(segment.messageId);
-      const resolvedAttachments = resolvedSourceMessage
-        ? getMessageDisplayAttachments(resolvedSourceMessage)
-        : segment.attachments;
-      const persistedSubAgentSnapshot =
-        resolvedSourceMessage?.subAgentEvent?.snapshot ?? segment.subAgentEvent?.snapshot;
-      const shouldMergeLiveSubAgentSnapshot =
-        !!persistedSubAgentSnapshot &&
-        latestSubAgentSegmentIndexBySessionId.get(persistedSubAgentSnapshot.sessionId) === index;
-      const liveSubAgentSnapshot =
-        persistedSubAgentSnapshot && shouldMergeLiveSubAgentSnapshot
-          ? liveSubAgentSnapshotsById.get(persistedSubAgentSnapshot.sessionId)
-          : undefined;
-      const resolvedSubAgentEvent = segment.subAgentEvent
-        ? {
-            ...segment.subAgentEvent,
-            snapshot: persistedSubAgentSnapshot
-              ? resolveDisplayedSubAgentSnapshot(persistedSubAgentSnapshot, liveSubAgentSnapshot)
-              : segment.subAgentEvent.snapshot,
-          }
-        : (resolvedSourceMessage?.subAgentEvent ?? segment.subAgentEvent);
+      let resolvedMessage = item.message;
+      if (item.message.role === 'assistant' && visibleAssistantMessages.length > 0) {
+        resolvedMessage =
+          visibleAssistantMessages.length === 1
+            ? visibleAssistantMessages[0]
+            : mergeAssistantMessages(visibleAssistantMessages);
+      }
 
-      return {
-        ...segment,
-        content: resolvedSourceMessage?.content ?? segment.content,
-        attachments: resolvedAttachments?.length ? resolvedAttachments : undefined,
-        reasoning: resolvedSourceMessage?.reasoning ?? segment.reasoning,
-        toolCalls: resolvedSourceMessage?.toolCalls?.length
-          ? resolvedSourceMessage.toolCalls
-          : undefined,
-        assistantMetadata: resolvedSourceMessage?.assistantMetadata ?? segment.assistantMetadata,
-        timestamp: resolvedSourceMessage?.timestamp ?? segment.timestamp,
-        isError: resolvedSourceMessage?.isError ?? segment.isError,
-        effectId: resolvedSourceMessage?.effectId ?? segment.effectId,
-        subAgentEvent: resolvedSubAgentEvent,
-        isStreaming: resolvedSourceMessage?.id === streamingMessageId,
+      const latestSubAgentSegmentIndexBySessionId = new Map<string, number>();
+      item.responseSegments?.forEach((segment, index) => {
+        const sessionId = (
+          resolvedSourceMessageById.get(segment.messageId)?.subAgentEvent?.snapshot.sessionId ??
+          segment.subAgentEvent?.snapshot.sessionId
+        )?.trim();
+        if (sessionId) {
+          latestSubAgentSegmentIndexBySessionId.set(sessionId, index);
+        }
+      });
+
+      const resolvedResponseSegments = item.responseSegments?.map((segment, index) => {
+        const resolvedSourceMessage = resolvedSourceMessageById.get(segment.messageId);
+        const resolvedAttachments = resolvedSourceMessage
+          ? getMessageDisplayAttachments(resolvedSourceMessage)
+          : segment.attachments;
+        const persistedSubAgentSnapshot =
+          resolvedSourceMessage?.subAgentEvent?.snapshot ?? segment.subAgentEvent?.snapshot;
+        const shouldMergeLiveSubAgentSnapshot =
+          !!persistedSubAgentSnapshot &&
+          latestSubAgentSegmentIndexBySessionId.get(persistedSubAgentSnapshot.sessionId) === index;
+        const liveSubAgentSnapshot =
+          persistedSubAgentSnapshot && shouldMergeLiveSubAgentSnapshot
+            ? liveSubAgentSnapshotsById.get(persistedSubAgentSnapshot.sessionId)
+            : undefined;
+        const resolvedSubAgentEvent = segment.subAgentEvent
+          ? {
+              ...segment.subAgentEvent,
+              snapshot: persistedSubAgentSnapshot
+                ? resolveDisplayedSubAgentSnapshot(persistedSubAgentSnapshot, liveSubAgentSnapshot)
+                : segment.subAgentEvent.snapshot,
+            }
+          : (resolvedSourceMessage?.subAgentEvent ?? segment.subAgentEvent);
+
+        return {
+          ...segment,
+          content: resolvedSourceMessage?.content ?? segment.content,
+          attachments: resolvedAttachments?.length ? resolvedAttachments : undefined,
+          reasoning: resolvedSourceMessage?.reasoning ?? segment.reasoning,
+          toolCalls: resolvedSourceMessage?.toolCalls?.length
+            ? resolvedSourceMessage.toolCalls
+            : undefined,
+          assistantMetadata: resolvedSourceMessage?.assistantMetadata ?? segment.assistantMetadata,
+          timestamp: resolvedSourceMessage?.timestamp ?? segment.timestamp,
+          isError: resolvedSourceMessage?.isError ?? segment.isError,
+          effectId: resolvedSourceMessage?.effectId ?? segment.effectId,
+          subAgentEvent: resolvedSubAgentEvent,
+          isStreaming: resolvedSourceMessage?.id === streamingMessageId,
+        };
+      });
+
+      const resolvedItem: ResolvedDisplayMessageItem = {
+        ...item,
+        resolvedMessage,
+        resolvedResponseSegments,
+        isStreaming,
+        agentRun,
       };
-    });
 
-    const resolvedItem: ResolvedDisplayMessageItem = {
-      ...item,
-      resolvedMessage,
-      resolvedResponseSegments,
-      isStreaming,
-      agentRun,
-    };
-
-    nextCache.set(item.id, {
-      item: resolvedItem,
-      sourceSignatures,
-      draftSignature,
-      isStreaming,
-      retryMessageId: item.retryMessageId,
-      agentRunSignature,
-      liveSubAgentSignature,
-    });
-    return resolvedItem;
-  });
+      nextCache.set(item.id, {
+        item: resolvedItem,
+        sourceSignatures,
+        draftSignature,
+        isStreaming,
+        retryMessageId: item.retryMessageId,
+        agentRunSignature,
+        liveSubAgentSignature,
+      });
+      return resolvedItem;
+    })
+    .filter((item): item is ResolvedDisplayMessageItem => !!item);
 
   cache.resolvedDisplayMessages = nextCache;
   return resolvedItems;

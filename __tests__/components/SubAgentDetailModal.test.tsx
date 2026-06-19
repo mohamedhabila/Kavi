@@ -1,7 +1,6 @@
-import React from 'react';
 import { render } from '@testing-library/react-native';
 import { SubAgentDetailModal } from '../../src/components/agents/SubAgentDetailModal';
-import type { SubAgentSnapshot } from '../../src/types';
+import type { SubAgentSnapshot } from '../../src/types/subAgent';
 
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: ({ children, ...props }: any) => {

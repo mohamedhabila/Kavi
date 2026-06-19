@@ -3,7 +3,7 @@ import {
   findMatchingToolCallIndex,
   findMatchingToolCallIndexWithinMessage,
 } from '../../src/utils/toolCallMatching';
-import type { ToolCall } from '../../src/types';
+import type { ToolCall } from '../../src/types/message';
 
 function makeToolCall(overrides: Partial<ToolCall> = {}): ToolCall {
   return {
@@ -157,5 +157,68 @@ describe('toolCallMatching', () => {
 
     expect(areSameLogicalToolCall(existing, incoming)).toBe(false);
     expect(findMatchingToolCallIndexWithinMessage([existing], incoming)).toBe(0);
+  });
+
+  it('treats deterministic Gemini fallback ids as synthetic within one message update path', () => {
+    const existing = makeToolCall({
+      id: 'gemini-call-0-a1b2c3d4',
+      status: 'pending',
+      raw: {
+        id: 'gemini-call-0-a1b2c3d4',
+        type: 'function',
+        function: {
+          name: 'read_file',
+          arguments: '{"path":"README.md"}',
+        },
+      },
+    });
+
+    const incoming = makeToolCall({
+      id: 'gemini-call-0-a1b2c3d4',
+      status: 'running',
+      raw: {
+        id: 'gemini-call-0-a1b2c3d4',
+        type: 'function',
+        function: {
+          name: 'read_file',
+          arguments: '{"path":"README.md"}',
+        },
+      },
+    });
+
+    expect(areSameLogicalToolCall(existing, incoming)).toBe(false);
+    expect(findMatchingToolCallIndexWithinMessage([existing], incoming)).toBe(0);
+  });
+
+  it('does not merge distinct calls that reuse a synthetic placeholder id within one message', () => {
+    const existing = makeToolCall({
+      id: 'gemini-call-0',
+      name: 'tool_catalog',
+      arguments: '{"query":"agent"}',
+      raw: {
+        id: 'gemini-call-0',
+        type: 'function',
+        function: {
+          name: 'tool_catalog',
+          arguments: '{"query":"agent"}',
+        },
+      },
+    });
+
+    const incoming = makeToolCall({
+      id: 'gemini-call-0',
+      name: 'agents',
+      arguments: '{"action":"list"}',
+      raw: {
+        id: 'gemini-call-0',
+        type: 'function',
+        function: {
+          name: 'agents',
+          arguments: '{"action":"list"}',
+        },
+      },
+    });
+
+    expect(findMatchingToolCallIndexWithinMessage([existing], incoming)).toBe(-1);
   });
 });

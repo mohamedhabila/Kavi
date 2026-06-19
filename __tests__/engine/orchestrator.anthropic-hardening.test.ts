@@ -5,7 +5,8 @@ import {
   type OrchestratorCallbacks,
   type OrchestratorOptions,
 } from '../../src/engine/orchestrator';
-import type { AssistantMessageMetadata, LlmProviderConfig } from '../../src/types';
+import type { AssistantMessageMetadata } from '../../src/types/message';
+import type { LlmProviderConfig } from '../../src/types/provider';
 
 jest.mock('../../src/services/llm/LlmService', () => ({
   LlmService: jest.fn().mockImplementation(() => ({
@@ -371,7 +372,7 @@ describe('Orchestrator Anthropic hardening', () => {
     );
   });
 
-  it('forces single-tool Anthropic monitoring turns while worker sessions are pending', async () => {
+  it('re-prompts pending Anthropic sessions instead of auto-monitoring them', async () => {
     (executeTool as jest.Mock).mockResolvedValueOnce(
       JSON.stringify({
         status: 'completed',
@@ -383,22 +384,19 @@ describe('Orchestrator Anthropic hardening', () => {
       }),
     );
 
-    mockStreamMessage.mockImplementationOnce(() =>
-      createStreamGenerator([
-        {
-          type: 'tool_call',
-          toolCall: { id: 'tc1', name: 'sessions_wait', arguments: '{"sessionId":"sub-1"}' },
-        },
-        { type: 'done', content: '' },
-      ]),
-    );
-
-    mockStreamMessage.mockImplementationOnce(() =>
-      createStreamGenerator([
-        { type: 'token', content: 'Worker output integrated.' },
-        { type: 'done', content: 'Worker output integrated.' },
-      ]),
-    );
+    mockStreamMessage
+      .mockImplementationOnce(() =>
+        createStreamGenerator([
+          { type: 'token', content: 'Worker output integrated.' },
+          { type: 'done', content: 'Worker output integrated.' },
+        ]),
+      )
+      .mockImplementationOnce(() =>
+        createStreamGenerator([
+          { type: 'token', content: 'Waiting for the delegated worker to finish.' },
+          { type: 'done', content: 'Waiting for the delegated worker to finish.' },
+        ]),
+      );
 
     const callbacks = makeCallbacks();
     const options: OrchestratorOptions = {
@@ -438,14 +436,11 @@ describe('Orchestrator Anthropic hardening', () => {
 
     await runOrchestrator(options, callbacks);
 
-    expect(mockStreamMessage).toHaveBeenCalledTimes(2);
-    expect(mockStreamMessage.mock.calls[0][1]).toEqual(
-      expect.objectContaining({
-        toolChoice: { type: 'required', disableParallelToolUse: true },
-      }),
+    expect(executeTool).not.toHaveBeenCalled();
+    expect(mockStreamMessage.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(JSON.stringify(mockStreamMessage.mock.calls)).toContain('[SYSTEM ASYNC HOLD]');
+    expect(JSON.stringify(mockStreamMessage.mock.calls)).toContain(
+      '[SYSTEM WORKFLOW JOIN REQUIRED]',
     );
-    expect(
-      mockStreamMessage.mock.calls[0][1].tools.map((tool: { name: string }) => tool.name).sort(),
-    ).toEqual(['sessions_cancel', 'sessions_status', 'sessions_wait']);
   });
 });

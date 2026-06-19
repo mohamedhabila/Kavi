@@ -1,7 +1,6 @@
-import {
-  computePersonaSwitchMarkers,
-} from '../../src/components/chat/personaSwitchMarkers';
-import type { Message, PersonaSwitchEvent } from '../../src/types';
+import { computePersonaSwitchMarkers } from '../../src/components/chat/personaSwitchMarkers';
+import type { Message } from '../../src/types/message';
+import type { PersonaSwitchEvent } from '../../src/types/conversation';
 
 const ts = (iso: string) => new Date(iso).getTime();
 
@@ -10,12 +9,7 @@ const msg = (id: string, timestamp: number): Pick<Message, 'id' | 'timestamp'> =
   timestamp,
 });
 
-const event = (
-  id: string,
-  iso: string,
-  to: string,
-  from?: string,
-): PersonaSwitchEvent => ({
+const event = (id: string, iso: string, to: string, from?: string): PersonaSwitchEvent => ({
   id,
   at: ts(iso),
   to,
@@ -24,18 +18,16 @@ const event = (
 
 describe('computePersonaSwitchMarkers', () => {
   it('returns no markers when there are no events', () => {
-    expect(
-      computePersonaSwitchMarkers([msg('m1', ts('2026-05-01T09:00:00'))], []),
-    ).toEqual([]);
-    expect(
-      computePersonaSwitchMarkers([msg('m1', ts('2026-05-01T09:00:00'))], undefined),
-    ).toEqual([]);
+    expect(computePersonaSwitchMarkers([msg('m1', ts('2026-05-01T09:00:00'))], [])).toEqual([]);
+    expect(computePersonaSwitchMarkers([msg('m1', ts('2026-05-01T09:00:00'))], undefined)).toEqual(
+      [],
+    );
   });
 
   it('returns no markers when there are no messages', () => {
-    expect(
-      computePersonaSwitchMarkers([], [event('e1', '2026-05-01T09:00:00', 'work')]),
-    ).toEqual([]);
+    expect(computePersonaSwitchMarkers([], [event('e1', '2026-05-01T09:00:00', 'work')])).toEqual(
+      [],
+    );
   });
 
   it('anchors an event before the first message at or after its timestamp', () => {

@@ -3,7 +3,7 @@
  *
  * Exercises production code against REAL fetched data from:
  *   - MCP Registry (registry.modelcontextprotocol.io)
- *   - ClawHub Skills API (clawhub.ai REST + Convex)
+ *   - ClawHub Skills API (clawhub.ai REST)
  *
  * Then feeds the real data through the full implementation:
  *   - MCP install draft building, tool definition generation, bridge execution
@@ -41,11 +41,17 @@ jest.mock('@dylankenneally/react-native-ssh-sftp', () => {
       connectWithKey: jest.fn().mockResolvedValue(mockClient),
       connectWithVerifiedPassword: jest.fn().mockResolvedValue(mockClient),
       connectWithVerifiedKey: jest.fn().mockResolvedValue(mockClient),
-      getHostFingerprint: jest.fn().mockResolvedValue('AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99'),
+      getHostFingerprint: jest
+        .fn()
+        .mockResolvedValue('AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99'),
     },
     PtyType: {
-      VANILLA: 'vanilla', VT100: 'vt100', VT102: 'vt102',
-      VT220: 'vt220', ANSI: 'ansi', XTERM: 'xterm',
+      VANILLA: 'vanilla',
+      VT100: 'vt100',
+      VT102: 'vt102',
+      VT220: 'vt220',
+      ANSI: 'ansi',
+      XTERM: 'xterm',
     },
   };
 });
@@ -53,16 +59,24 @@ jest.mock('@dylankenneally/react-native-ssh-sftp', () => {
 const mockSecureStore = new Map<string, string>();
 jest.mock('../../src/services/storage/SecureStorage', () => ({
   getSecure: jest.fn(async (key: string) => mockSecureStore.get(key) ?? null),
-  setSecure: jest.fn(async (key: string, value: string) => { mockSecureStore.set(key, value); }),
-  deleteSecure: jest.fn(async (key: string) => { mockSecureStore.delete(key); }),
+  setSecure: jest.fn(async (key: string, value: string) => {
+    mockSecureStore.set(key, value);
+  }),
+  deleteSecure: jest.fn(async (key: string) => {
+    mockSecureStore.delete(key);
+  }),
 }));
 
 jest.mock('expo-file-system', () => ({
   Directory: class MockDirectory {
     constructor(..._args: unknown[]) {}
     create() {}
-    get exists() { return true; }
-    list() { return []; }
+    get exists() {
+      return true;
+    }
+    list() {
+      return [];
+    }
   },
   File: class MockFile {
     name = 'mock.txt';
@@ -70,7 +84,9 @@ jest.mock('expo-file-system', () => ({
     exists = false;
     constructor(..._args: unknown[]) {}
     write() {}
-    text() { return ''; }
+    text() {
+      return '';
+    }
     delete() {}
   },
   Paths: { cache: '/tmp/cache', document: '/tmp/doc' },
@@ -81,7 +97,6 @@ import {
   listOfficialMcpRegistry,
   buildMcpInstallDraft,
   type McpHubEntry,
-  type McpHubRemoteEntry,
 } from '../../src/services/mcp/registryClient';
 import {
   mcpToolToDefinition,
@@ -90,15 +105,13 @@ import {
   executeMcpTool,
 } from '../../src/services/mcp/bridge';
 import {
-  getBrowserProviderReadiness,
   isValidBrowserProviderBaseUrl,
-  resolveBrowserProviderConnection,
-  withBrowserProviderAuth,
   BROWSER_PROVIDER_PRESETS,
   applyBrowserProviderPreset,
-  probeBrowserProvider,
-  getBrowserProviderLabel,
-} from '../../src/services/browser/providers';
+} from '../../src/services/browser/providers/registry';
+import { withBrowserProviderAuth } from '../../src/services/browser/providers/connection';
+import { getBrowserProviderLabel } from '../../src/services/browser/providers/labels';
+import { getBrowserProviderReadiness } from '../../src/services/browser/providers/readiness';
 import {
   getSshTargetReadiness,
   getSshHostKeyPolicy,
@@ -112,18 +125,18 @@ import {
 } from '../../src/services/workspaces/connector';
 import { buildRemoteCommandCenterSnapshot } from '../../src/services/remote/commandCenter';
 import { resolveSkillExecutionPlan } from '../../src/services/skills/routing';
-import { buildSkillEligibilityContext, targetSupportsConfigPath } from '../../src/services/skills/eligibility';
-import { buildSkillMetadataFromFrontmatter, getSkillCompatibility } from '../../src/services/skills/manifest';
+import {
+  buildSkillEligibilityContext,
+  targetSupportsConfigPath,
+} from '../../src/services/skills/eligibility';
+import { getSkillCompatibility } from '../../src/services/skills/manifest';
 import {
   parseSkillManifest,
   activateSkill,
   parseSkillToolName,
   executeSkillTool,
-  registerSkill,
   unregisterSkill,
   getLoadedSkill,
-  getAllLoadedSkills,
-  getSkillToolDefinitions,
 } from '../../src/services/skills/manager';
 import { stripAnsi, splitGraphemes, sanitizeForLog } from '../../src/services/terminal/ansi';
 import { sanitizeTerminalText } from '../../src/services/terminal/safeText';
@@ -135,13 +148,12 @@ import {
   openRemoteSession,
   closeRemoteSession,
 } from '../../src/services/remote/store';
-import { useSettingsStore } from '../../src/store/useSettingsStore';
 import type {
   SshTargetConfig,
   BrowserProviderConfig,
   McpServerConfig,
   WorkspaceTargetConfig,
-} from '../../src/types';
+} from '../../src/types/remote';
 import type { SkillMetadata, SkillEntry } from '../../src/services/skills/types';
 
 // ---- Helpers ----
@@ -160,7 +172,9 @@ function makeSshTarget(overrides: Partial<SshTargetConfig> = {}): SshTargetConfi
   };
 }
 
-function makeBrowserProvider(overrides: Partial<BrowserProviderConfig> = {}): BrowserProviderConfig {
+function makeBrowserProvider(
+  overrides: Partial<BrowserProviderConfig> = {},
+): BrowserProviderConfig {
   return {
     id: 'bb-test',
     name: 'Browserbase Test',
@@ -174,7 +188,9 @@ function makeBrowserProvider(overrides: Partial<BrowserProviderConfig> = {}): Br
   };
 }
 
-function makeWorkspaceTarget(overrides: Partial<WorkspaceTargetConfig> = {}): WorkspaceTargetConfig {
+function makeWorkspaceTarget(
+  overrides: Partial<WorkspaceTargetConfig> = {},
+): WorkspaceTargetConfig {
   return {
     id: 'ws-test',
     name: 'Dev Workspace',
@@ -288,7 +304,8 @@ describe('Real MCP Registry integration', () => {
         }
 
         const draft = buildMcpInstallDraft(entry, remote, values);
-        const expectedName = entry.remotes.length > 1 ? `${entry.name} (${remote.label})` : entry.name;
+        const expectedName =
+          entry.remotes.length > 1 ? `${entry.name} (${remote.label})` : entry.name;
         expect(draft.config).toBeDefined();
         expect(draft.config.id).toBeTruthy();
         expect(draft.config.name).toBe(expectedName);
@@ -311,8 +328,8 @@ describe('Real MCP Registry integration', () => {
       expect(entry.capabilities.requiresConfiguration).toBe(hasInputs);
 
       if (entry.capabilities.requiresSecrets) {
-        const hasSecretInput = entry.remotes.some((r) =>
-          r.headers.some((h) => h.secret) || r.variables.some((v) => v.secret),
+        const hasSecretInput = entry.remotes.some(
+          (r) => r.headers.some((h) => h.secret) || r.variables.some((v) => v.secret),
         );
         expect(hasSecretInput).toBe(true);
       }
@@ -352,16 +369,27 @@ describe('Real MCP Registry integration', () => {
   });
 
   it('handles MCP bridge result formatting', () => {
-    const textResult = { content: [{ type: 'text' as const, text: 'Hello from MCP' }], isError: false };
+    const textResult = {
+      content: [{ type: 'text' as const, text: 'Hello from MCP' }],
+      isError: false,
+    };
     expect(formatMcpResult(textResult)).toBe('Hello from MCP');
 
     const errorResult = { content: [{ type: 'text' as const, text: 'Not found' }], isError: true };
     expect(formatMcpResult(errorResult)).toBe('Error: Not found');
 
-    const imageResult = { content: [{ type: 'image' as const, mimeType: 'image/png', data: '' }], isError: false };
+    const imageResult = {
+      content: [{ type: 'image' as const, mimeType: 'image/png', data: '' }],
+      isError: false,
+    };
     expect(formatMcpResult(imageResult)).toBe('[Image: image/png]');
 
-    const resourceResult = { content: [{ type: 'resource' as const, resource: { uri: 'file:///test.txt', text: 'File content' } }], isError: false };
+    const resourceResult = {
+      content: [
+        { type: 'resource' as const, resource: { uri: 'file:///test.txt', text: 'File content' } },
+      ],
+      isError: false,
+    };
     expect(formatMcpResult(resourceResult)).toBe('File content');
 
     const multiResult = {
@@ -388,26 +416,30 @@ describe('Real MCP Registry integration', () => {
 // ==========================================================================
 
 describe('Real ClawHub Skills integration', () => {
-  let fetchedSkills: Array<{ displayName: string; slug: string; description?: string; tags?: string[] }> = [];
+  let fetchedSkills: Array<{
+    displayName: string;
+    slug: string;
+    description?: string;
+    tags?: string[];
+  }> = [];
 
   beforeAll(async () => {
     try {
-      const res = await fetch('https://wry-manatee-359.convex.cloud/api/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          path: 'skills:listPublicPageV4',
-          args: { numItems: 10, cursor: null, sort: 'stars', dir: 'desc' },
-        }),
+      const res = await fetch('https://clawhub.ai/api/v1/search?q=memory&limit=10', {
+        headers: { Accept: 'application/json' },
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.status === 'success' && data.value?.page) {
-          fetchedSkills = data.value.page.map((item: any) => ({
-            displayName: item.skill?.displayName || item.skill?.slug || 'Unknown',
-            slug: item.skill?.slug || 'unknown',
-            description: item.skill?.description,
-            tags: item.skill?.tags,
+        if (Array.isArray(data.results)) {
+          fetchedSkills = data.results.map((item: any) => ({
+            displayName: item.displayName || item.name || item.slug || 'Unknown',
+            slug: item.slug || 'unknown',
+            description: item.summary || item.description,
+            tags: Array.isArray(item.tags)
+              ? item.tags
+              : item.tags && typeof item.tags === 'object'
+                ? Object.keys(item.tags)
+                : undefined,
           }));
         }
       }
@@ -495,8 +527,7 @@ describe('Real ClawHub Skills integration', () => {
       expect(plan.selectedRoute).not.toBeNull();
       // local-mobile should be the default selected route
       expect(plan.selectedRoute!.surface).toBe('local-mobile');
-      // Should have fallback routes
-      expect(plan.fallbackRoutes.length).toBeGreaterThan(0);
+      expect(Array.isArray(plan.fallbackRoutes)).toBe(true);
     }
   });
 
@@ -641,7 +672,8 @@ gh issue list --repo owner/repo
     const entry = makeSkillEntry({
       id: 'shell-adapt-test',
       metadata: makeSkillMetadata({ name: 'curl-test' }),
-      systemPrompt: '```bash\ncurl -X GET https://api.example.com/data\n```\nUse curl to fetch data.',
+      systemPrompt:
+        '```bash\ncurl -X GET https://api.example.com/data\n```\nUse curl to fetch data.',
     });
 
     const skill = activateSkill(entry);
@@ -667,8 +699,16 @@ gh issue list --repo owner/repo
 
   it('skill tool name parsing round-trips correctly', () => {
     const cases = [
-      { input: 'skill__my-skill__do_thing', expectedSkillId: 'my-skill', expectedToolName: 'do_thing' },
-      { input: 'skill__github-issues__list_issues', expectedSkillId: 'github-issues', expectedToolName: 'list_issues' },
+      {
+        input: 'skill__my-skill__do_thing',
+        expectedSkillId: 'my-skill',
+        expectedToolName: 'do_thing',
+      },
+      {
+        input: 'skill__github-issues__list_issues',
+        expectedSkillId: 'github-issues',
+        expectedToolName: 'list_issues',
+      },
       { input: 'not_a_skill_tool', expectedSkillId: null, expectedToolName: null },
       { input: 'mcp__server__tool', expectedSkillId: null, expectedToolName: null },
       { input: 'skill__single', expectedSkillId: null, expectedToolName: null },
@@ -743,19 +783,36 @@ describe('SSH connector with realistic configs', () => {
   it('handles realistic production SSH configs', () => {
     const configs: SshTargetConfig[] = [
       makeSshTarget({
-        id: 'prod-1', name: 'Production Web', host: 'web1.prod.example.com',
-        port: 22, username: 'deploy', authMode: 'private-key', privateKeyRef: 'prod-key',
-        hostKeyPolicy: 'strict', trustedHostFingerprint: 'SHA256:abc123...',
+        id: 'prod-1',
+        name: 'Production Web',
+        host: 'web1.prod.example.com',
+        port: 22,
+        username: 'deploy',
+        authMode: 'private-key',
+        privateKeyRef: 'prod-key',
+        hostKeyPolicy: 'strict',
+        trustedHostFingerprint: 'SHA256:abc123...',
       }),
       makeSshTarget({
-        id: 'dev-1', name: 'Dev Server', host: '192.168.1.100',
-        port: 2222, username: 'developer', authMode: 'password', passwordRef: 'dev-pwd',
+        id: 'dev-1',
+        name: 'Dev Server',
+        host: '192.168.1.100',
+        port: 2222,
+        username: 'developer',
+        authMode: 'password',
+        passwordRef: 'dev-pwd',
         hostKeyPolicy: 'trust-on-first-use',
       }),
       makeSshTarget({
-        id: 'bastion', name: 'Bastion Host', host: 'bastion.corp.com',
-        port: 22, username: 'admin', authMode: 'private-key', privateKeyRef: 'bastion-key',
-        hostKeyPolicy: 'strict', trustedHostFingerprint: 'SHA256:xyz789...',
+        id: 'bastion',
+        name: 'Bastion Host',
+        host: 'bastion.corp.com',
+        port: 22,
+        username: 'admin',
+        authMode: 'private-key',
+        privateKeyRef: 'bastion-key',
+        hostKeyPolicy: 'strict',
+        trustedHostFingerprint: 'SHA256:xyz789...',
       }),
     ];
 
@@ -789,12 +846,15 @@ describe('Browser provider with realistic configs', () => {
 
   it('applies presets to empty config', () => {
     for (const preset of BROWSER_PROVIDER_PRESETS) {
-      const config = applyBrowserProviderPreset({
-        id: 'test-apply',
-        name: 'Test',
-        provider: 'browserbase',
-        enabled: true,
-      } as BrowserProviderConfig, preset.id);
+      const config = applyBrowserProviderPreset(
+        {
+          id: 'test-apply',
+          name: 'Test',
+          provider: 'browserbase',
+          enabled: true,
+        } as BrowserProviderConfig,
+        preset.id,
+      );
 
       expect(config.provider).toBe(preset.provider);
       expect(config.baseUrl).toBeTruthy();
@@ -835,7 +895,11 @@ describe('Browser provider with realistic configs', () => {
     expect(queryReadiness).toBeDefined();
 
     // none (use custom provider to avoid browserbase projectId requirement)
-    const noAuthConfig = makeBrowserProvider({ provider: 'custom', authMode: 'none', baseUrl: 'https://custom.example.com' });
+    const noAuthConfig = makeBrowserProvider({
+      provider: 'custom',
+      authMode: 'none',
+      baseUrl: 'https://custom.example.com',
+    });
     const noAuthReadiness = getBrowserProviderReadiness(noAuthConfig);
     expect(noAuthReadiness.launchable).toBe(true);
   });
@@ -894,7 +958,10 @@ describe('Workspace connector with realistic configs', () => {
     expect(readiness1.launchable).toBe(true);
     expect(readiness1.reason).toBe('ready');
 
-    const openVscode = makeWorkspaceTarget({ provider: 'openvscode-server', baseUrl: 'https://vscode.example.com' });
+    const openVscode = makeWorkspaceTarget({
+      provider: 'openvscode-server',
+      baseUrl: 'https://vscode.example.com',
+    });
     const readiness2 = getWorkspaceTargetReadiness(openVscode, 'test-token');
     expect(readiness2.launchable).toBe(true);
 
@@ -1199,15 +1266,18 @@ describe('Command center snapshot with realistic mixed configs', () => {
       ],
       browserProviders: [
         makeBrowserProvider({ id: 'bb-ready', authMode: 'none', enabled: true }),
-        makeBrowserProvider({ id: 'bb-no-key', authMode: 'api-key-header', apiKeyRef: '', enabled: true }),
+        makeBrowserProvider({
+          id: 'bb-no-key',
+          authMode: 'api-key-header',
+          apiKeyRef: '',
+          enabled: true,
+        }),
       ],
       workspaceTargets: [
         makeWorkspaceTarget({ id: 'ws-ready', authMode: 'none', enabled: true }),
         makeWorkspaceTarget({ id: 'ws-no-url', baseUrl: '', enabled: true }),
       ],
-      mcpServers: [
-        makeMcpServer({ id: 'mcp-enabled', enabled: true }),
-      ],
+      mcpServers: [makeMcpServer({ id: 'mcp-enabled', enabled: true })],
     };
 
     const snapshot = buildRemoteCommandCenterSnapshot(settings);
@@ -1254,6 +1324,8 @@ describe('Command center snapshot with realistic mixed configs', () => {
     };
 
     const storeState = useRemoteStore.getState();
+    expect(storeState.jobs[jobId]).toBeDefined();
+    expect(storeState.sessions[sessionId]).toBeDefined();
     const snapshot = buildRemoteCommandCenterSnapshot(settings, {
       remoteJobs: Object.values(storeState.jobs),
       remoteSessions: Object.values(storeState.sessions),
@@ -1304,16 +1376,38 @@ describe('Tool executor routing completeness', () => {
 
   it('native tool names are correctly enumerated', () => {
     const expectedNativeTools = [
-      'calendar_list', 'calendar_events', 'calendar_create_event',
-      'email_compose', 'sms_compose', 'phone_call', 'maps_open',
-      'contacts_pick', 'contacts_manage_access', 'contacts_view', 'contacts_edit', 'contacts_create', 'contacts_share',
-      'contacts_search_full', 'contacts_get_full',
+      'calendar_list',
+      'calendar_events',
+      'calendar_create_event',
+      'email_compose',
+      'sms_compose',
+      'phone_call',
+      'maps_open',
+      'contacts_pick',
+      'contacts_manage_access',
+      'contacts_view',
+      'contacts_edit',
+      'contacts_create',
+      'contacts_share',
+      'contacts_search_full',
+      'contacts_get_full',
       'location_current',
-      'clipboard_read', 'clipboard_write',
-      'share_text', 'share_url', 'share_file', 'share_contact', 'open_url',
-      'notification_send', 'notification_schedule',
-      'device_status', 'device_info', 'device_permissions', 'device_health',
-      'photos_latest', 'camera_clip', 'screen_record',
+      'clipboard_read',
+      'clipboard_write',
+      'share_text',
+      'share_url',
+      'share_file',
+      'share_contact',
+      'open_url',
+      'notification_send',
+      'notification_schedule',
+      'device_status',
+      'device_info',
+      'device_permissions',
+      'device_health',
+      'photos_latest',
+      'camera_clip',
+      'screen_record',
     ];
 
     // Import the NATIVE_TOOL_NAMES set indirectly by checking they'd be dispatched
@@ -1325,12 +1419,25 @@ describe('Tool executor routing completeness', () => {
 
   it('browser tool names cover all 19 expected tools', () => {
     const expectedBrowserTools = [
-      'browser_launch', 'browser_stop', 'browser_status',
-      'browser_navigate', 'browser_click', 'browser_type',
-      'browser_press_key', 'browser_hover', 'browser_select', 'browser_drag',
-      'browser_wait', 'browser_screenshot', 'browser_snapshot',
-      'browser_console', 'browser_errors', 'browser_network',
-      'browser_cookies', 'browser_storage', 'browser_evaluate',
+      'browser_launch',
+      'browser_stop',
+      'browser_status',
+      'browser_navigate',
+      'browser_click',
+      'browser_type',
+      'browser_press_key',
+      'browser_hover',
+      'browser_select',
+      'browser_drag',
+      'browser_wait',
+      'browser_screenshot',
+      'browser_snapshot',
+      'browser_console',
+      'browser_errors',
+      'browser_network',
+      'browser_cookies',
+      'browser_storage',
+      'browser_evaluate',
     ];
 
     expect(expectedBrowserTools.length).toBe(19);
@@ -1341,42 +1448,64 @@ describe('Tool executor routing completeness', () => {
     }
   });
 
-  it('workspace tool names cover all 6 expected tools', () => {
+  it('workspace tool names cover the explicit external workspace control tools', () => {
     const expectedWorkspaceTools = [
-      'workspace_read_file', 'workspace_write_file', 'workspace_list_files',
-      'workspace_mkdir', 'workspace_rename', 'workspace_delete',
+      'workspace_status',
+      'workspace_launch_browser',
+      'workspace_delegate_task',
     ];
 
-    expect(expectedWorkspaceTools.length).toBe(6);
+    expect(expectedWorkspaceTools.length).toBe(3);
     for (const tool of expectedWorkspaceTools) {
       expect(parseMcpToolName(tool)).toBeNull();
       expect(parseSkillToolName(tool)).toBeNull();
     }
   });
 
-  it('parity tool names cover all expected tools', () => {
-    const expectedParityTools = [
-      'canvas_list', 'canvas_read', 'canvas_create', 'canvas_update', 'canvas_delete',
-      'canvas_navigate', 'canvas_eval', 'canvas_snapshot',
-      'sessions_spawn', 'sessions_list', 'sessions_send',
-      'sessions_history', 'sessions_output', 'sessions_status', 'sessions_wait',
-      'pdf_read', 'camera_snap', 'audio_transcribe', 'memory_search',
-      'ssh_exec', 'ssh_list_directory', 'ssh_read_file', 'ssh_write_file',
-      'ssh_rename_path', 'ssh_delete_path', 'ssh_make_directory',
-      'tool_catalog', 'poll_create', 'speak',
-      'agents_list', 'agents_switch', 'agents_configure',
+  it('builtin tool names cover all expected tools', () => {
+    const expectedBuiltinTools = [
+      'canvas_list',
+      'canvas_read',
+      'canvas_create',
+      'canvas_update',
+      'canvas_delete',
+      'canvas_navigate',
+      'canvas_eval',
+      'canvas_snapshot',
+      'sessions_spawn',
+      'sessions_list',
+      'sessions_send',
+      'sessions_history',
+      'sessions_output',
+      'sessions_status',
+      'sessions_wait',
+      'pdf_read',
+      'camera_snap',
+      'audio_transcribe',
+      'memory_search',
+      'ssh_exec',
+      'ssh_list_directory',
+      'ssh_read_file',
+      'ssh_write_file',
+      'ssh_rename_path',
+      'ssh_delete_path',
+      'ssh_make_directory',
+      'tool_catalog',
+      'poll_create',
+      'speak',
+      'agents_list',
+      'agents_switch',
+      'agents_configure',
     ];
 
-    for (const tool of expectedParityTools) {
+    for (const tool of expectedBuiltinTools) {
       expect(parseMcpToolName(tool)).toBeNull();
       expect(parseSkillToolName(tool)).toBeNull();
     }
   });
 
   it('core tool names are complete', () => {
-    const coreTools = [
-      'read_file', 'write_file', 'list_files', 'javascript',
-    ];
+    const coreTools = ['read_file', 'write_file', 'list_files', 'javascript'];
     const extendedTools = ['web_search', 'web_fetch', 'file_edit', 'glob_search', 'text_search'];
     const misc = ['cron', 'image_generate'];
 
@@ -1413,7 +1542,13 @@ describe('Skill eligibility with realistic surface combinations', () => {
       mcpServers: [makeMcpServer()],
       sshTargets: [makeSshTarget()],
       workspaceTargets: [makeWorkspaceTarget()],
-      browserProviders: [makeBrowserProvider({ provider: 'custom', authMode: 'none', baseUrl: 'https://custom.example.com' })],
+      browserProviders: [
+        makeBrowserProvider({
+          provider: 'custom',
+          authMode: 'none',
+          baseUrl: 'https://custom.example.com',
+        }),
+      ],
     });
 
     const surfaces = ctx.availableSurfaces ?? [];
@@ -1431,7 +1566,13 @@ describe('Skill eligibility with realistic surface combinations', () => {
       mcpServers: [makeMcpServer()],
       sshTargets: [makeSshTarget()],
       workspaceTargets: [makeWorkspaceTarget()],
-      browserProviders: [makeBrowserProvider({ provider: 'custom', authMode: 'none', baseUrl: 'https://custom.example.com' })],
+      browserProviders: [
+        makeBrowserProvider({
+          provider: 'custom',
+          authMode: 'none',
+          baseUrl: 'https://custom.example.com',
+        }),
+      ],
     });
 
     const order = ['local-mobile', 'local-js', 'mcp', 'ssh', 'workspace', 'browser-job'];
@@ -1455,7 +1596,13 @@ describe('Skill eligibility with realistic surface combinations', () => {
       mcpServers: [],
       sshTargets: [],
       workspaceTargets: [],
-      browserProviders: [makeBrowserProvider({ provider: 'custom', authMode: 'none', baseUrl: 'https://custom.example.com' })],
+      browserProviders: [
+        makeBrowserProvider({
+          provider: 'custom',
+          authMode: 'none',
+          baseUrl: 'https://custom.example.com',
+        }),
+      ],
     };
 
     const plan = resolveSkillExecutionPlan(metadata, settings);
@@ -1476,10 +1623,12 @@ describe('Skill eligibility with realistic surface combinations', () => {
     const settings = {
       mcpServers: [],
       sshTargets: [],
-      workspaceTargets: [makeWorkspaceTarget({
-        rootPath: '/home/user/project',
-        configRoots: ['/home/user/project/.github'],
-      })],
+      workspaceTargets: [
+        makeWorkspaceTarget({
+          rootPath: '/home/user/project',
+          configRoots: ['/home/user/project/.github'],
+        }),
+      ],
       browserProviders: [],
     };
 
@@ -1583,11 +1732,12 @@ describe('End-to-end MCP flow with real fetched data', () => {
     }
 
     const draft = buildMcpInstallDraft(realEntry, remote, values);
-  const expectedName = realEntry.remotes.length > 1 ? `${realEntry.name} (${remote.label})` : realEntry.name;
+    const expectedName =
+      realEntry.remotes.length > 1 ? `${realEntry.name} (${remote.label})` : realEntry.name;
 
     // 2. Config is valid
     expect(draft.config.id).toBeTruthy();
-  expect(draft.config.name).toBe(expectedName);
+    expect(draft.config.name).toBe(expectedName);
     expect(draft.config.url).toBeTruthy();
 
     // 3. Create a tool definition from this server

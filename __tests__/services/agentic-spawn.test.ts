@@ -29,10 +29,8 @@ jest.mock('../../src/utils/id', () => ({
 
 import {
   spawnSubAgent,
-  listActiveSubAgents,
   getSubAgent,
 } from '../../src/services/agents/subAgent';
-import { runOrchestrator } from '../../src/engine/orchestrator';
 
 const mockProvider = {
   id: 'test',
@@ -149,7 +147,7 @@ describe('spawnSubAgent with tools whitelist', () => {
     expect(filter('canvas_create')).toBe(false);
   });
 
-  it('has no toolFilter when tools array is empty', async () => {
+  it('treats an explicit empty tools array as a no-tools whitelist', async () => {
     await spawnSubAgent(
       {
         parentConversationId: 'conv-1',
@@ -159,7 +157,11 @@ describe('spawnSubAgent with tools whitelist', () => {
       mockProvider,
     );
 
-    expect(capturedOrchestratorOptions.toolFilter).toBeUndefined();
+    expect(capturedOrchestratorOptions.toolFilter).toBeDefined();
+    const filter = capturedOrchestratorOptions.toolFilter!;
+    expect(filter('web_search')).toBe(false);
+    expect(filter('read_file')).toBe(false);
+    expect(filter('record_workflow_evidence')).toBe(false);
   });
 
   it('has no toolFilter when tools is not provided', async () => {

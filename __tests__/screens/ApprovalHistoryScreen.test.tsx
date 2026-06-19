@@ -61,8 +61,10 @@ const translate = (key: string, params?: Record<string, any>) => {
   return map[key] || key;
 };
 
-jest.mock('../../src/i18n', () => ({
+jest.mock('../../src/i18n/manager', () => ({
   i18n: { t: translate },
+}));
+jest.mock('../../src/i18n/useTranslation', () => ({
   useTranslation: () => ({ t: translate }),
 }));
 

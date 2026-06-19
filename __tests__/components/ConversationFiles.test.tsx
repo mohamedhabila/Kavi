@@ -2,7 +2,6 @@
 // Tests for ConversationFiles component
 // ---------------------------------------------------------------------------
 
-import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Sharing from 'expo-sharing';
@@ -122,10 +121,12 @@ const mockTranslate = (key: string) =>
     'settings.defaultSystemPrompt': 'Default system prompt',
   })[key] ?? key;
 
-jest.mock('../../src/i18n', () => ({
+jest.mock('../../src/i18n/manager', () => ({
   i18n: {
     t: (key: string) => mockTranslate(key),
   },
+}));
+jest.mock('../../src/i18n/useTranslation', () => ({
   useTranslation: () => ({
     t: (key: string) => mockTranslate(key),
   }),

@@ -64,7 +64,7 @@ describe('localLlm native bridge', () => {
         available: false,
         linked: false,
         platform: 'ios',
-        runtime: 'mediapipe-genai',
+        runtime: 'litert-lm',
         supportsStreaming: false,
         lowMemoryDevice: false,
       }),
@@ -94,6 +94,8 @@ describe('localLlm native bridge', () => {
         topP: 0.95,
         temperature: 1,
         enableConstrainedDecoding: true,
+        visionBackend: 'gpu',
+        audioBackend: 'cpu',
       }),
     ).resolves.toEqual({ text: 'native reply' });
     expect(nativeModule.generate).toHaveBeenCalledWith(
@@ -105,6 +107,8 @@ describe('localLlm native bridge', () => {
         topP: 0.95,
         temperature: 1,
         enableConstrainedDecoding: true,
+        visionBackend: 'gpu',
+        audioBackend: 'cpu',
       }),
     );
   });
@@ -125,6 +129,8 @@ describe('localLlm native bridge', () => {
         topP: 0.95,
         temperature: 1,
         enableConstrainedDecoding: true,
+        visionBackend: 'gpu',
+        audioBackend: 'cpu',
       }),
     ).resolves.toBeUndefined();
     expect(nativeModule.warmup).toHaveBeenCalledWith(
@@ -137,6 +143,8 @@ describe('localLlm native bridge', () => {
         topP: 0.95,
         temperature: 1,
         enableConstrainedDecoding: true,
+        visionBackend: 'gpu',
+        audioBackend: 'cpu',
       }),
     );
   });

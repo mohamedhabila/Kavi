@@ -2,11 +2,7 @@
 // Tests — JS Bridge
 // ---------------------------------------------------------------------------
 
-import {
-  executeWithBridge,
-  buildFileCache,
-  executeWorkspaceJavaScript,
-} from '../../src/utils/jsBridge';
+import { buildFileCache, executeWithBridge, executeWorkspaceJavaScript } from '../../src/utils/jsBridgeExecution';
 
 describe('buildFileCache', () => {
   it('creates a Map from file array', () => {
@@ -77,10 +73,42 @@ describe('executeWithBridge', () => {
       expect(result).toBe('hello world');
     });
 
+    it('supports require("fs") with Node-style sync aliases', () => {
+      const cache = buildFileCache([{ path: 'test.txt', content: 'hello world' }]);
+      const result = executeWithBridge(
+        'const fs = require("fs"); return fs.readFileSync("test.txt", "utf8");',
+        { fileCache: cache },
+      );
+      expect(result).toBe('hello world');
+    });
+
+    it('exposes bridge globals through global/globalThis for runtime introspection', () => {
+      const cache = buildFileCache([{ path: 'test.txt', content: 'hello world' }]);
+      const result = executeWithBridge(
+        'return global === globalThis && global.fs === fs && global.require("node:fs").readFileSync("test.txt") === "hello world";',
+        { fileCache: cache },
+      );
+      expect(result).toBe(true);
+    });
+
     it('throws for non-existent file', () => {
       expect(() => {
         executeWithBridge('return fs.readFile("nope.txt");');
       }).toThrow(/not found/i);
+    });
+
+    it('rejects workspace path traversal through the bridge fs API', () => {
+      expect(() => {
+        executeWithBridge('return fs.readFile("../../secret.txt");', {
+          workingDirectory: 'tools',
+        });
+      }).toThrow(/escapes the conversation workspace/i);
+    });
+
+    it('does not resolve unsupported host modules', () => {
+      expect(() => {
+        executeWithBridge('return require("child_process");');
+      }).toThrow(/unable to resolve workspace module/i);
     });
 
     it('writes and reads back', () => {

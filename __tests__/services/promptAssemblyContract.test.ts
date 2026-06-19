@@ -5,9 +5,9 @@
 // `assemblePrompt()` produces the same shape, and LlmService's
 // `splitCacheableSystemPromptSections` collapses that array into
 // `{ cacheableText, dynamicText }` for provider-native cache emission:
-//   • Anthropic: `cache_control: {type:'ephemeral'}` on the last cacheable system block
+//   • Anthropic: `cache_control: {type:'ephemeral'}` on the last leading cacheable system block
 //   • OpenAI:    `prompt_cache_key` on the request body (relies on stable prefix)
-//   • Gemini:    `cachedContent` handle ensured from cacheableText
+//   • Gemini:    full stable prefix preserved for provider-managed implicit caching
 // This test verifies the boundary: whatever assemblePrompt emits remains
 // splittable into a stable cacheable prefix + a per-turn dynamic tail.
 // If anyone ever changes the field names or ordering, this test fails fast.
@@ -16,14 +16,24 @@ import {
   assemblePrompt,
   type SystemPromptSection,
 } from '../../src/services/memory/promptAssembly';
+import { splitCacheableSystemPromptSections } from '../../src/services/llm/core/systemPromptSections';
 
 // Structural mirror of LlmService's private splitter — kept tiny on purpose.
 function splitCacheable(sections: SystemPromptSection[]): {
   cacheableText: string;
   dynamicText: string;
 } {
-  const cacheable = sections.filter((s) => s.cacheable).map((s) => s.text);
-  const dynamic = sections.filter((s) => !s.cacheable).map((s) => s.text);
+  const cacheable: string[] = [];
+  const dynamic: string[] = [];
+  let prefixClosed = false;
+  for (const section of sections) {
+    if (section.cacheable && !prefixClosed) {
+      cacheable.push(section.text);
+      continue;
+    }
+    prefixClosed = true;
+    dynamic.push(section.text);
+  }
   return {
     cacheableText: cacheable.join('\n\n'),
     dynamicText: dynamic.join('\n\n'),
@@ -70,9 +80,23 @@ describe('promptAssembly ↔ LlmService contract', () => {
   it('split mirrors LlmService.splitCacheableSystemPromptSections shape', () => {
     const { sections } = assemblePrompt(baseInput);
     const split = splitCacheable(sections);
+    const serviceSplit = splitCacheableSystemPromptSections(sections);
     expect(split.cacheableText).toContain('You are Kavi');
-    expect(split.cacheableText).toContain('Name: Alice');
+    expect(split.cacheableText).not.toContain('Name: Alice');
+    expect(split.dynamicText).toContain('Name: Alice');
     expect(split.dynamicText).toContain('picking up the conversation');
+    expect(serviceSplit).toEqual(split);
+  });
+
+  it('treats cacheable sections after dynamic context as dynamic for prefix accounting', () => {
+    const split = splitCacheableSystemPromptSections([
+      { text: 'Stable A', cacheable: true },
+      { text: 'Dynamic B' },
+      { text: 'Late cacheable C', cacheable: true },
+    ]);
+
+    expect(split.cacheableText).toBe('Stable A');
+    expect(split.dynamicText).toBe('Dynamic B\n\nLate cacheable C');
   });
 
   it('cacheable prefix is byte-stable across changes to dynamic addenda', () => {

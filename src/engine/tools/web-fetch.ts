@@ -3,153 +3,74 @@
 // ---------------------------------------------------------------------------
 // Regex-based HTML→Markdown extraction + optional Firecrawl API fallback.
 
-import { fetch as expoFetch } from 'expo/fetch';
-
 import { getSecure } from '../../services/storage/SecureStorage';
-import { htmlToMarkdown, truncateText } from './web-fetch-utils';
+import { resolveGoogleGroundingRedirectUrl } from '../../services/browser/core/groundingRedirect';
 import {
   CacheEntry,
   DEFAULT_CACHE_TTL_MINUTES,
   DEFAULT_TIMEOUT_SECONDS,
   normalizeCacheKey,
   readCache,
-  readResponseText,
   resolveCacheTtlMs,
   resolveTimeoutSeconds,
   withTimeout,
   writeCache,
 } from './web-shared';
-import { ToolDefinition } from '../../types';
+import { ToolDefinition } from '../../types/tool';
 import { isAllowedUrl } from '../../services/security/ssrf';
+import {
+  describeFetchError,
+  directFetch,
+  firecrawlFetch,
+  type WebFetchEntry,
+} from './webFetchTransports';
 
-const DEFAULT_FETCH_MAX_CHARS = 50_000;
-const DEFAULT_FETCH_MAX_RESPONSE_BYTES = 2_000_000;
-const DEFAULT_FIRECRAWL_BASE_URL = 'https://api.firecrawl.dev';
-const DEFAULT_USER_AGENT =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
-const FALLBACK_USER_AGENT =
-  'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+const DEFAULT_FETCH_MAX_CHARS = 20_000;
 
 const FETCH_CACHE = new Map<string, CacheEntry<Record<string, unknown>>>();
 
-// ── Direct fetch with HTML→Markdown extraction ───────────────────────────
-
-async function directFetch(params: {
-  url: string;
-  extractMode: 'markdown' | 'text';
-  maxChars: number;
-  signal?: AbortSignal;
-}): Promise<{ content: string; title?: string; truncated: boolean }> {
-  const headerProfiles = [
-    {
-      'User-Agent': DEFAULT_USER_AGENT,
-      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    },
-    {
-      'User-Agent': FALLBACK_USER_AGENT,
-      Accept: 'text/html,text/plain,application/json;q=0.9,*/*;q=0.8',
-    },
-  ];
-
-  let lastError: Error | null = null;
-
-  for (const headers of headerProfiles) {
-    try {
-      const res = await expoFetch(params.url, {
-        credentials: 'omit',
-        headers,
-        redirect: 'follow',
-        signal: params.signal,
-      });
-
-      if (!res.ok) {
-        const detail = await res.text().catch(() => '');
-        throw new Error(
-          `HTTP ${res.status} ${res.statusText}${detail ? `: ${detail.slice(0, 160)}` : ''}`,
-        );
-      }
-
-      const contentType = res.headers.get('content-type') || '';
-      const { text: rawText } = await readResponseText(res, {
-        maxBytes: DEFAULT_FETCH_MAX_RESPONSE_BYTES,
-      });
-
-      if (contentType.includes('application/json')) {
-        const { text, truncated } = truncateText(rawText, params.maxChars);
-        return { content: text, truncated };
-      }
-
-      if (contentType.includes('text/plain') || contentType.includes('text/csv')) {
-        const { text, truncated } = truncateText(rawText, params.maxChars);
-        return { content: text, truncated };
-      }
-
-      const { text: markdown, title } = htmlToMarkdown(rawText);
-      const { text: truncatedMd, truncated } = truncateText(markdown, params.maxChars);
-      return { content: truncatedMd, title, truncated };
-    } catch (error: unknown) {
-      if (params.signal?.aborted) throw error;
-      lastError = error instanceof Error ? error : new Error(String(error));
-    }
-  }
-
-  throw lastError || new Error('Fetch failed');
+export function clearWebFetchCaches(): void {
+  FETCH_CACHE.clear();
 }
 
-// ── Firecrawl API fallback ───────────────────────────────────────────────
-
-async function firecrawlFetch(params: {
-  url: string;
-  apiKey: string;
-  maxChars: number;
-  signal?: AbortSignal;
-}): Promise<{ content: string; title?: string; truncated: boolean }> {
-  const res = await expoFetch(`${DEFAULT_FIRECRAWL_BASE_URL}/v1/scrape`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${params.apiKey}`,
-    },
-    body: JSON.stringify({
-      url: params.url,
-      formats: ['markdown'],
-      onlyMainContent: true,
-    }),
-    credentials: 'omit',
-    signal: params.signal,
-  });
-
-  if (!res.ok) throw new Error(`Firecrawl failed: HTTP ${res.status}`);
-  const data = await res.json();
-
-  const markdown = data?.data?.markdown || '';
-  const title = data?.data?.metadata?.title;
-  const { text, truncated } = truncateText(markdown, params.maxChars);
-  return { content: text, title, truncated };
-}
-
-// ── Main fetch dispatcher ────────────────────────────────────────────────
-
-export async function executeWebFetch(args: {
+async function executeSingleWebFetch(args: {
   url: string;
   extractMode?: string;
   maxChars?: number;
-}): Promise<string> {
+}): Promise<WebFetchEntry> {
   const urlString = args.url?.trim();
-  if (!urlString) return JSON.stringify({ error: 'URL is required' });
+  if (!urlString) {
+    return { error: 'URL is required' };
+  }
 
   // SSRF check
   if (!isAllowedUrl(urlString)) {
-    return JSON.stringify({ error: 'URL blocked by security policy (private/internal address)' });
+    return {
+      requestedUrl: urlString,
+      error: 'URL blocked by security policy (private/internal address)',
+    };
+  }
+
+  const requestedUrl = urlString;
+  const resolvedInputUrl = await resolveGoogleGroundingRedirectUrl(requestedUrl).catch(
+    () => requestedUrl,
+  );
+  if (resolvedInputUrl !== requestedUrl && !isAllowedUrl(resolvedInputUrl)) {
+    return {
+      requestedUrl,
+      error: 'URL blocked by security policy after redirect resolution (private/internal address)',
+    };
   }
 
   const extractMode = (args.extractMode === 'text' ? 'text' : 'markdown') as 'markdown' | 'text';
   const maxChars = Math.max(100, args.maxChars || DEFAULT_FETCH_MAX_CHARS);
 
   const cacheTtlMs = resolveCacheTtlMs(DEFAULT_CACHE_TTL_MINUTES, DEFAULT_CACHE_TTL_MINUTES);
-  const cacheKey = normalizeCacheKey(`${urlString}:${extractMode}:${maxChars}`);
+  const cacheKey = normalizeCacheKey(`${resolvedInputUrl}:${extractMode}:${maxChars}`);
   const cached = readCache(FETCH_CACHE, cacheKey);
-  if (cached) return JSON.stringify(cached.value);
+  if (cached) {
+    return cached.value as WebFetchEntry;
+  }
 
   const timeoutMs = resolveTimeoutSeconds(DEFAULT_TIMEOUT_SECONDS, DEFAULT_TIMEOUT_SECONDS) * 1000;
   const directTimeout = withTimeout(undefined, timeoutMs);
@@ -157,58 +78,102 @@ export async function executeWebFetch(args: {
   try {
     // Try direct fetch first
     const result = await directFetch({
-      url: urlString,
+      url: resolvedInputUrl,
       extractMode,
       maxChars,
       signal: directTimeout.signal,
     });
+    const finalUrl = result.resolvedUrl || resolvedInputUrl;
     const output: Record<string, unknown> = {
-      url: urlString,
+      url: finalUrl,
       content: result.content,
-      title: result.title,
+      ...(result.title ? { title: result.title } : {}),
+      ...(result.links ? { links: result.links } : {}),
       truncated: result.truncated,
-      charCount: result.content.length,
+      charCount: result.charCount,
     };
+    if (requestedUrl !== finalUrl) {
+      output.requestedUrl = requestedUrl;
+      output.resolvedUrl = finalUrl;
+    }
     writeCache(FETCH_CACHE, cacheKey, output, cacheTtlMs);
-    return JSON.stringify(output);
+    return output as WebFetchEntry;
   } catch (directError: unknown) {
-    const directMsg = directError instanceof Error ? directError.message : String(directError);
+    const directMsg = describeFetchError(directError);
     // Try Firecrawl fallback with a fresh signal (direct's signal may be aborted)
     const firecrawlKey = await getSecure('FIRECRAWL_API_KEY');
     if (firecrawlKey) {
       const firecrawlTimeout = withTimeout(undefined, timeoutMs);
       try {
         const result = await firecrawlFetch({
-          url: urlString,
+          url: resolvedInputUrl,
           apiKey: firecrawlKey,
           maxChars,
           signal: firecrawlTimeout.signal,
         });
+        const finalUrl = resolvedInputUrl;
         const output: Record<string, unknown> = {
-          url: urlString,
+          url: finalUrl,
           content: result.content,
-          title: result.title,
+          ...(result.title ? { title: result.title } : {}),
+          ...(result.links ? { links: result.links } : {}),
           truncated: result.truncated,
-          charCount: result.content.length,
+          charCount: result.charCount,
           source: 'firecrawl',
         };
+        if (requestedUrl !== finalUrl) {
+          output.requestedUrl = requestedUrl;
+          output.resolvedUrl = finalUrl;
+        }
         writeCache(FETCH_CACHE, cacheKey, output, cacheTtlMs);
-        return JSON.stringify(output);
+        return output as WebFetchEntry;
       } catch (firecrawlError: unknown) {
-        const firecrawlMsg =
-          firecrawlError instanceof Error ? firecrawlError.message : String(firecrawlError);
-        return JSON.stringify({
-          error: `Both direct fetch and Firecrawl failed. Direct: ${directMsg}. Firecrawl: ${firecrawlMsg}`,
-        });
+        const firecrawlMsg = describeFetchError(firecrawlError);
+        return {
+          requestedUrl,
+          url: resolvedInputUrl,
+          error: 'Fetch failed after direct and fallback attempts.',
+          directError: directMsg,
+          fallbackError: firecrawlMsg,
+        } as WebFetchEntry;
       } finally {
         firecrawlTimeout.dispose();
       }
     }
 
-    return JSON.stringify({ error: `Fetch failed: ${directMsg}` });
+    return {
+      requestedUrl,
+      url: resolvedInputUrl,
+      error: `Fetch failed: ${directMsg}`,
+    };
   } finally {
     directTimeout.dispose();
   }
+}
+
+export async function executeWebFetch(args: {
+  urls: string[];
+  extractMode?: string;
+  maxChars?: number;
+}): Promise<string> {
+  const urls = Array.isArray(args.urls)
+    ? args.urls.map((value) => (typeof value === 'string' ? value.trim() : '')).filter(Boolean)
+    : [];
+  if (urls.length === 0) {
+    return JSON.stringify({ error: 'At least one URL is required' });
+  }
+
+  const fetches = await Promise.all(
+    urls.map((url) =>
+      executeSingleWebFetch({
+        url,
+        extractMode: args.extractMode,
+        maxChars: args.maxChars,
+      }),
+    ),
+  );
+
+  return JSON.stringify({ fetches });
 }
 
 // ── Tool Definition ──────────────────────────────────────────────────────
@@ -216,17 +181,36 @@ export async function executeWebFetch(args: {
 export const WEB_FETCH_TOOL: ToolDefinition = {
   name: 'web_fetch',
   description:
-    'Fetch a web page and extract its content as clean markdown or plain text. ' +
-    'Uses HTML-to-Markdown conversion with optional Firecrawl API fallback for better extraction. ' +
-    'Response is truncated to maxChars (default: 50,000).',
+    'Fetch one or more web pages and extract their content as markdown or plain text. ' +
+    'Use this for any plausible HTTP or HTTPS pages you want to read, whether the URLs came from web_search, the user, or direct reasoning. ' +
+    'When multiple independent pages need to be read, pass them together in urls so they are fetched in parallel in one tool call. ' +
+    'Each page response is truncated to maxChars (default: 20,000). Increase maxChars only when more page content is necessary.',
   input_schema: {
     type: 'object',
     properties: {
-      url: { type: 'string', description: 'HTTP or HTTPS URL to fetch' },
+      urls: {
+        type: 'array',
+        items: { type: 'string' },
+        minItems: 1,
+        description: 'One or more HTTP or HTTPS URLs to fetch in parallel',
+      },
       extractMode: { type: 'string', description: '"markdown" (default) or "text"' },
-      maxChars: { type: 'number', description: 'Maximum characters to return (default: 50000)' },
+      maxChars: {
+        type: 'number',
+        description: 'Maximum characters to return per fetched page (default: 20000)',
+      },
     },
-    required: ['url'],
+    required: ['urls'],
+  },
+  contract: {
+    category: 'web',
+    capabilities: ['read', 'verify'],
+    resourceKinds: ['unknown'],
+    sideEffects: ['none'],
+    riskHints: ['read_only', 'open_world'],
+    providesEvidence: ['verification'],
+    workflowStages: ['inspect_resource', 'verify_evidence'],
+    consumes: [{ kind: 'url', field: 'search_result', required: false }],
   },
   strict: true,
 };

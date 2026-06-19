@@ -3,7 +3,7 @@ import {
   hasCompleteFinalAssistantMetadata,
   normalizeLegacyAssistantMessages,
 } from '../../src/utils/assistantMessageMetadata';
-import { Message } from '../../src/types';
+import { Message } from '../../src/types/message';
 
 const timestamp = 1_700_000_000_000;
 

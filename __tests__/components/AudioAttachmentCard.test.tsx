@@ -1,7 +1,6 @@
-import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
 import { AudioAttachmentCard } from '../../src/components/chat/AudioAttachmentCard';
-import type { Attachment } from '../../src/types';
+import type { Attachment } from '../../src/types/attachment';
 
 jest.mock('../../src/theme/useAppTheme', () => ({
   useAppTheme: () => ({

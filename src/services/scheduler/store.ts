@@ -9,8 +9,6 @@ import { generateId } from '../../utils/id';
 import type {
   CronJob,
   CronSchedule,
-  CronPayload,
-  CronDelivery,
   SessionTarget,
   WakeMode,
 } from '../cron/types';
@@ -93,7 +91,7 @@ export const useSchedulerStore = create<SchedulerState>()(
           ),
         })),
 
-      recordRun: (id, timestamp) =>
+      recordRun: (id, _timestamp) =>
         set((state) => ({
           jobs: state.jobs.map((j) => {
             if (j.id !== id) return j;

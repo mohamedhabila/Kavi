@@ -11,11 +11,12 @@
 //   Tier 3 — Aggressive compaction  (85% of working context)
 //            Full structured summary with minimal recent tail
 //
-// Summary format follows Anthropic's SDK compaction prompt structure:
-//   1. Task Overview     2. Current State     3. Important Discoveries
-//   4. Next Steps        5. Context to Preserve
+// Summary format follows Anthropic's SDK compaction prompt structure while the
+// deterministic fallback avoids language-specific keyword extraction:
+//   1. Task Overview     2. Current State     3. Context to Preserve
+//   4. Active Focus      5. Open Threads
 
-import type { Message } from '../../types';
+import type { Message } from '../../types/message';
 import type {
   ContextEngine,
   ContextEngineInfo,
@@ -30,12 +31,13 @@ import { registerContextEngine } from './registry';
 import {
   estimateTokens,
   estimateMessageTokens,
-  getCompactionThresholds,
   TOOL_CLEARING_THRESHOLD_SHARE,
   SELECTIVE_COMPACTION_THRESHOLD_SHARE,
   AGGRESSIVE_COMPACTION_THRESHOLD_SHARE,
 } from './tokenCounter';
 import { emitSessionEvent } from '../events/bus';
+import { buildCompactionSummary } from './compactionSummarizer';
+import { resolveCompactionSummarizerConfig } from './compactionModelResolver';
 import {
   buildToolResultPlaceholder,
   extractToolResultSummary,
@@ -79,7 +81,7 @@ export const TOOL_CLEARED_PLACEHOLDER = '[cleared:';
  * call. "avoid running compaction mid-burst by gating it on
  * idleSinceLastTurn > 90s unless the budget is genuinely exceeded."
  */
-export const COMPACTION_IDLE_GUARD_MS = 90_000;
+export const COMPACTION_IDLE_GUARD_MS = 45_000;
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -187,9 +189,8 @@ export function clearOldToolResults(
  * Build a structured summary following Anthropic's SDK compaction prompt format:
  *   1. Task Overview — user requests and goals
  *   2. Current State — what has been completed
- *   3. Important Discoveries — technical decisions, errors, constraints
- *   4. Next Steps — what was in progress
- *   5. Context to Preserve — file paths, identifiers, key details
+ *   3. Context to Preserve — file paths, identifiers, key details
+ *   4. Active Focus / Open Threads — memory-aware continuation state
  */
 /**
  * Optional memory-aware inputs for `buildStructuredSummary`.
@@ -213,8 +214,6 @@ export function buildStructuredSummary(
   const assistantConclusions: string[] = [];
   const toolSummaries: string[] = [];
   const filesModified = new Set<string>();
-  const errorsResolved: string[] = [];
-  const decisionsAndConstraints: string[] = [];
   let toolCallCount = 0;
 
   for (const msg of messages) {
@@ -229,27 +228,11 @@ export function buildStructuredSummary(
     } else if (msg.role === 'assistant' && msg.content) {
       const lines = msg.content.split('\n').filter((l) => l.trim());
 
-      // Extract conclusions and key decisions
+      // Preserve a bounded assistant trace without language-specific inference.
       const conclusion = lines.slice(0, 3).join(' ').slice(0, ASSISTANT_CONCLUSION_CHARS);
       if (conclusion) assistantConclusions.push(conclusion);
 
-      // Extract decisions and constraints
-      const decisionLines = lines.filter((l) =>
-        /(?:decided|chose|using|because|constraint|requirement|note:|important:)/i.test(l),
-      );
-      for (const d of decisionLines.slice(0, 3)) {
-        decisionsAndConstraints.push(d.trim().slice(0, 200));
-      }
-
-      // Extract error resolutions
-      const errorLines = lines.filter((l) =>
-        /(?:fixed|resolved|error was|bug was|issue was|workaround)/i.test(l),
-      );
-      for (const e of errorLines.slice(0, 3)) {
-        errorsResolved.push(e.trim().slice(0, 200));
-      }
-
-      // Extract file references
+      // Preserve structural references that can guide later continuation.
       const fileRefs = msg.content.match(
         /[\w/.-]+\.(ts|js|json|md|py|tsx|jsx|css|html|yaml|yml)\b/g,
       );
@@ -315,32 +298,18 @@ export function buildStructuredSummary(
     sections.push(`## Current State\n${stateLines.join('\n')}`);
   }
 
-  // 3. Important Discoveries
-  const discoveryLines: string[] = [];
-  if (errorsResolved.length > 0) {
-    discoveryLines.push(`Errors resolved: ${errorsResolved.slice(-3).join('; ')}`);
-  }
-  if (decisionsAndConstraints.length > 0) {
-    discoveryLines.push(`Decisions: ${decisionsAndConstraints.slice(-4).join('; ')}`);
-  }
-  if (discoveryLines.length > 0) {
-    sections.push(`## Important Discoveries\n${discoveryLines.join('\n')}`);
-  }
-
-  // 4. Context to Preserve
+  // 3. Context to Preserve
   if (filesModified.size > 0) {
     const files = Array.from(filesModified).slice(-15);
     sections.push(`## Context to Preserve\nFiles: ${files.join(', ')}`);
   }
 
-  // 5. Active Focus / Open Threads (memory-aware)
+  // 4. Active Focus / Open Threads (memory-aware)
   const focusText = (hints?.focusBlock ?? '').trim();
   if (focusText) {
     sections.push(`## Active Focus\n${focusText}`);
   }
-  const openThreads = (hints?.openThreads ?? [])
-    .map((t) => t.trim())
-    .filter((t) => t.length > 0);
+  const openThreads = (hints?.openThreads ?? []).map((t) => t.trim()).filter((t) => t.length > 0);
   if (openThreads.length > 0) {
     const limit = tier === 'aggressive' ? 4 : 8;
     sections.push(`## Open Threads\n- ${openThreads.slice(0, limit).join('\n- ')}`);
@@ -363,7 +332,7 @@ export class DefaultContextEngine implements ContextEngine {
     return { bootstrapped: true };
   }
 
-  async ingest(params: { sessionId: string; message: Message }): Promise<IngestResult> {
+  async ingest(_params: { sessionId: string; message: Message }): Promise<IngestResult> {
     return { ingested: true };
   }
 
@@ -541,11 +510,16 @@ export class DefaultContextEngine implements ContextEngine {
       return { ok: true, compacted: false, tier, reason: 'Nothing to compact' };
     }
 
-    // Build structured summary (Anthropic-style), incorporating prior context
-    // and memory-aware hints.
-    const summary = buildStructuredSummary(toSummarize, tier, priorSummaryContent || undefined, {
-      focusBlock: params.focusBlock,
-      openThreads: params.openThreads,
+    const summarizer = await resolveCompactionSummarizerConfig();
+    const summary = await buildCompactionSummary({
+      messages: toSummarize,
+      tier,
+      priorContext: priorSummaryContent || undefined,
+      hints: {
+        focusBlock: params.focusBlock,
+        openThreads: params.openThreads,
+      },
+      summarizer,
     });
     const tokensAfter =
       estimateTokens(summary) +

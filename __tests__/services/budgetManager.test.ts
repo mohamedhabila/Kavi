@@ -9,12 +9,10 @@ import {
   windowMessages,
   enforceContextBudget,
   removeOrphanedToolResults,
-  SYSTEM_PROMPT_SHARE,
-  TOOL_DEFINITIONS_SHARE,
   MAX_SYSTEM_PROMPT_TOKENS,
   MAX_TOOL_DEFINITION_TOKENS,
 } from '../../src/services/context/budgetManager';
-import { ToolDefinition } from '../../src/types';
+import { ToolDefinition } from '../../src/types/tool';
 
 function makeTool(name: string, description = 'Test tool.'): ToolDefinition {
   return {
@@ -250,6 +248,42 @@ describe('enforceContextBudget', () => {
     expect(result.result.adjustments.length).toBe(0);
     expect(result.tools.length).toBe(1);
     expect(result.messages.length).toBe(2);
+  });
+
+  it('uses compact tool payloads even when the request already fits budget', () => {
+    const prompt = 'You are helpful.';
+    const tools = [
+      makeTool(
+        'read_file',
+        'Read a file from the workspace. Use this when you need the full contents of a file.',
+      ),
+    ];
+    tools[0].input_schema = {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Workspace-relative path to the file to read.',
+        },
+      },
+      required: ['path'],
+    };
+    const messages = [makeMessage('system', prompt), makeMessage('user', 'Hello')];
+
+    const result = enforceContextBudget('gpt-5.4', prompt, tools, messages, 8192);
+
+    expect(result.tools[0].description).toBe(
+      'Read a file from the workspace. Use this when you need the full contents of a file.',
+    );
+    expect(result.tools[0].input_schema).toEqual({
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+        },
+      },
+      required: ['path'],
+    });
   });
 
   it('compresses tools when tool definitions are too large', () => {

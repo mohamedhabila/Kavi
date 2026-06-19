@@ -85,15 +85,29 @@ jest.mock('../../src/store/useChatStore', () => ({
 }));
 
 jest.mock('../../src/store/useSettingsStore', () => ({
-  useSettingsStore: (selector: (s: any) => any) => {
-    const state = {
-      providers: mockProviders,
-      systemPrompt: 'You are helpful',
-      activeProviderId: 'openai',
-      activeModel: 'gpt-5.4',
-    };
-    return selector(state);
-  },
+  useSettingsStore: Object.assign(
+    (selector: (s: any) => any) =>
+      selector({
+        providers: mockProviders,
+        systemPrompt: 'You are helpful',
+        activeProviderId: 'openai',
+        activeModel: 'gpt-5.4',
+        disableLongTermMemory: false,
+        memoryConsolidationMode: 'auto',
+        consolidationProvider: null,
+      }),
+    {
+      getState: () => ({
+        providers: mockProviders,
+        systemPrompt: 'You are helpful',
+        activeProviderId: 'openai',
+        activeModel: 'gpt-5.4',
+        disableLongTermMemory: false,
+        memoryConsolidationMode: 'auto',
+        consolidationProvider: null,
+      }),
+    },
+  ),
 }));
 
 jest.mock('../../src/theme/useAppTheme', () => ({
@@ -272,8 +286,8 @@ describe('Sidebar', () => {
     expect(mockNavigation.navigate).toHaveBeenCalledWith('RemoteWork');
   });
 
-  // Phase 161 §4.8 — Chunk L: memory-driven IA above the single-thread shell.
-  describe('memory IA sections (Chunk L)', () => {
+  // Memory-driven navigation sits above the single-thread shell.
+  describe('memory IA sections', () => {
     it("renders the Today's focus tile and memory IA without the legacy chat list", () => {
       const { getByTestId, queryByTestId } = render(<Sidebar {...defaultProps} />);
       expect(getByTestId('sidebar-todays-focus')).toBeTruthy();
@@ -290,7 +304,7 @@ describe('Sidebar', () => {
       fireEvent.changeText(input, 'beach trip');
       fireEvent(input, 'submitEditing');
       expect(mockNavigation.navigate).toHaveBeenCalledWith('Memory', {
-        tab: 'facts',
+        tab: 'overview',
         query: 'beach trip',
       });
       expect(mockNavigation.closeDrawer).toHaveBeenCalled();

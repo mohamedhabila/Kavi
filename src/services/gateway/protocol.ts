@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 // JSON-RPC 2.0 message framing for gateway communication.
 
-import type { GatewayMessage } from '../../types';
+import type { GatewayMessage } from '../../types/gateway';
 import { generateId } from '../../utils/id';
 
 /**

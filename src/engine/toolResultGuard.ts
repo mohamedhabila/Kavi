@@ -5,8 +5,7 @@
 // oldest-first compaction of large tool results in working messages,
 // and preemptive overflow detection for tool-driven context management.
 
-import { estimateTokens } from '../services/context/tokenCounter';
-import type { Message } from '../types';
+import type { Message } from '../types/message';
 import { buildToolResultPlaceholder, isToolResultPlaceholder } from '../utils/toolResultSummary';
 
 // ── Constants ──────────────────────────────────────────────────────────
@@ -43,42 +42,6 @@ function truncateScalar(value: string, maxChars = 400): string {
   return `${value.slice(0, maxChars)}… (${value.length - maxChars} chars omitted)`;
 }
 
-function summarizeExpoFailureLogs(value: unknown): string | undefined {
-  if (!Array.isArray(value) || value.length === 0) {
-    return undefined;
-  }
-
-  const first = value.find(
-    (entry) => Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry),
-  ) as Record<string, unknown> | undefined;
-  if (!first) {
-    return undefined;
-  }
-
-  const source = typeof first.source === 'string' ? first.source.trim() : '';
-  const excerpt = typeof first.excerpt === 'string' ? first.excerpt.trim() : '';
-  if (!excerpt) {
-    return undefined;
-  }
-
-  const relevantLines = excerpt
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter(
-      (line, index) =>
-        index < 3 || /(error|failed|failure|unable|not found|err!|exception|exit code)/i.test(line),
-    )
-    .slice(0, 3)
-    .join(' | ');
-
-  if (!relevantLines) {
-    return undefined;
-  }
-
-  return truncateScalar(source ? `${source}: ${relevantLines}` : relevantLines, 320);
-}
-
 function summarizeStructuredValue(value: unknown, depth = 0): unknown {
   if (value == null || typeof value === 'number' || typeof value === 'boolean') {
     return value;
@@ -106,9 +69,6 @@ function summarizeStructuredValue(value: unknown, depth = 0): unknown {
 
   if (typeof value === 'object') {
     const entries = Object.entries(value as Record<string, unknown>);
-    const expoFailureSummary = summarizeExpoFailureLogs(
-      (value as Record<string, unknown>).failureLogs,
-    );
     const priorityKeys = [
       'summary',
       'status',
@@ -151,9 +111,6 @@ function summarizeStructuredValue(value: unknown, depth = 0): unknown {
         summarizeStructuredValue(entryValue, depth + 1),
       ]),
     );
-    if (expoFailureSummary && !(summarized as Record<string, unknown>).failureSummary) {
-      (summarized as Record<string, unknown>).failureSummary = expoFailureSummary;
-    }
     if (entries.length > limitedEntries.length) {
       (summarized as Record<string, unknown>).omittedKeys = entries.length - limitedEntries.length;
     }

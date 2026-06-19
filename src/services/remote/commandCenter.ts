@@ -1,16 +1,13 @@
 import type { McpServerStatus } from '../mcp/manager';
-import { getBrowserProviderLabel, getBrowserProviderReadiness } from '../browser/providers';
-import {
-  getExpoProjectDisplayOwner,
-  getExpoProjectExecutionMode,
-  getExpoProjectReadiness,
-} from '../expo/eas';
+import { getBrowserProviderLabel } from '../browser/providers/labels';
+import { getBrowserProviderReadiness } from '../browser/providers/readiness';
+import { buildExpoProjectSnapshot, getExpoModeSummaryLabel } from '../expo/projectCatalog';
 import { getSshTargetLabel, getSshTargetReadiness } from '../ssh/connector';
 import type { SshShellSession } from '../ssh/sessionStore';
 import { getWorkspaceProviderLabel, getWorkspaceTargetReadiness } from '../workspaces/connector';
 import { getWorkspaceTargetControlStatus } from '../workspaces/control';
+import type { AppSettings } from '../../types/settings';
 import type {
-  AppSettings,
   ExpoAccountConfig,
   ExpoProjectConfig,
   McpServerConfig,
@@ -19,7 +16,7 @@ import type {
   RemoteTargetRecord,
   SshTargetConfig,
   WorkspaceTargetConfig,
-} from '../../types';
+} from '../../types/remote';
 
 export interface RemoteCommandCenterSnapshot {
   targets: RemoteTargetRecord[];
@@ -213,45 +210,38 @@ function getExpoRecord(
   account: ExpoAccountConfig | undefined,
   settings: Pick<AppSettings, 'sshTargets'>,
 ): RemoteTargetRecord {
-  const readiness = getExpoProjectReadiness(project, account, settings);
-  const owner = getExpoProjectDisplayOwner(project, account);
-  const mode = getExpoProjectExecutionMode(project, account);
-  const modeLabel =
-    mode === 'eas-workflow'
-      ? 'Expo workflow'
-      : mode === 'github-workflow'
-        ? 'GitHub workflow'
-        : 'Direct EAS CLI';
-  const detail = `${owner}/${project.slug} · ${modeLabel}`;
-  const platformLabel = project.platforms?.length
-    ? `${project.platforms.join(', ')} targets`
+  const snapshot = buildExpoProjectSnapshot(project, account, settings);
+  const detail = `${snapshot.owner}/${snapshot.slug} · ${getExpoModeSummaryLabel(snapshot.mode)}`;
+  const platformLabel = snapshot.platforms.length
+    ? `${snapshot.platforms.join(', ')} targets`
     : undefined;
 
   return {
-    id: project.id,
-    name: project.name,
+    id: snapshot.id,
+    name: snapshot.name,
     kind: 'expo-project',
     providerLabel: 'Expo EAS',
     authState: account?.tokenRef ? 'authenticated' : 'unauthenticated',
     readiness:
-      readiness.reason === 'ready'
+      snapshot.readiness.reason === 'ready'
         ? 'ready'
-        : readiness.reason === 'disabled'
+        : snapshot.readiness.reason === 'disabled'
           ? 'disabled'
           : 'setup-required',
-    launchable: readiness.launchable,
+    launchable: snapshot.readiness.launchable,
     statusLabel:
-      readiness.reason === 'ready'
+      snapshot.readiness.reason === 'ready'
         ? 'Ready'
-        : readiness.reason === 'disabled'
+        : snapshot.readiness.reason === 'disabled'
           ? 'Disabled'
           : 'Setup required',
     detail,
-    activitySummary: platformLabel || project.webUrl || project.previewUrl || project.customDomain,
+    activitySummary:
+      platformLabel || snapshot.webUrl || snapshot.previewUrl || snapshot.customDomain,
     error:
-      readiness.reason === 'ready' || readiness.reason === 'disabled'
+      snapshot.readiness.reason === 'ready' || snapshot.readiness.reason === 'disabled'
         ? undefined
-        : readiness.reason,
+        : snapshot.readiness.reason,
   };
 }
 

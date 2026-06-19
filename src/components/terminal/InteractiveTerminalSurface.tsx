@@ -1,8 +1,8 @@
-import React, { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from 'react';
 import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { Clipboard as ClipboardIcon, Search, Trash2, X } from 'lucide-react-native';
 import * as ExpoClipboard from 'expo-clipboard';
-import { useTranslation } from '../../i18n';
+import { useTranslation } from '../../i18n/useTranslation';
 import { useAppTheme, type AppPalette } from '../../theme/useAppTheme';
 import {
   TerminalWebView,

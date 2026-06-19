@@ -72,6 +72,10 @@ export const de: TranslationMap = mergeTranslations(en, {
     openThreadsEmpty: 'Keine offenen Themen.',
     pinnedMoments: 'Angeheftete Momente',
     pinnedMomentsEmpty: 'Hefte einen Fakt an, um ihn hier zu sehen.',
+    memoryStats: 'Memory',
+    memoryStatsFacts: '{count} facts',
+    memoryStatsEpisodes: '{count} episodes',
+    memoryStatsActiveTask: 'Active: {task}',
     recallPlaceholder: 'Moment abrufen…',
     recallSearch: 'Speicher durchsuchen',
   },
@@ -93,9 +97,6 @@ export const de: TranslationMap = mergeTranslations(en, {
     deleteConversation: 'Gespräch löschen',
     searchConversations: 'Gespräche durchsuchen…',
     emptyStateHint: 'Senden Sie eine Nachricht zum Starten. Ich bin bereit zu helfen!',
-    localModelInitializingTitle: 'Initializing model',
-    localModelInitializingBody: 'Sit tight, this can take up to 1 minute.',
-    localModelInitializeFailed: 'Failed to initialize the on-device model.',
     thinking: 'Denke…',
     toolCall: 'Tool verwenden: {name}',
     maxIterations: 'Maximale Anzahl an Tool-Iterationen erreicht.',
@@ -121,7 +122,6 @@ export const de: TranslationMap = mergeTranslations(en, {
     assistantTyping: 'Assistent schreibt',
     workingOnIt: 'Ich arbeite daran',
     reviewingWork: 'Arbeit wird geprüft',
-    pilotReviewingWork: 'Der Pilot prüft die Arbeit',
     showCode: 'Code anzeigen',
     hideCode: 'Code ausblenden',
     plainTextFallback: 'Große Antwort wird aus Stabilitätsgründen als Klartext angezeigt.',
@@ -154,6 +154,7 @@ export const de: TranslationMap = mergeTranslations(en, {
     showLogs: 'Protokolle anzeigen',
     hideLogs: 'Protokolle ausblenden',
     latestLogs: 'Neueste Protokolle',
+    jumpToLatest: 'Zum Neuesten springen',
     logsEmpty: 'Noch keine Protokolle.',
     showEarlierMessages: 'Show earlier messages ({count})',
     subAgentLabel: 'Sub-Agent',
@@ -189,64 +190,30 @@ export const de: TranslationMap = mergeTranslations(en, {
     subAgentRollupCompleted: '{count} abgeschlossen',
     subAgentRollupIssuesOne: '1 Problem',
     subAgentRollupIssues: '{count} Probleme',
-    agentWorkflow: {
-      title: 'Agenten-Workflow',
-      showDetails: 'Details anzeigen',
-      hideDetails: 'Details ausblenden',
-      showDetailsAccessibility: 'Details des Agenten-Workflows anzeigen',
-      hideDetailsAccessibility: 'Details des Agenten-Workflows ausblenden',
-      stageLabel: 'Phase: {stage}',
-      lastToolLabel: 'Letztes Werkzeug: {tool}',
-      noToolsYet: 'Noch keine Werkzeuge',
-      turnLabel: 'Runde {count}',
-      objective: 'Ziel',
-      latestUpdate: 'Letztes Update',
-      successCriteria: 'Erfolgskriterien',
-      stopConditions: 'Abbruchbedingungen',
-      workstreams: 'Arbeitsströme',
-      pilotTitle: 'Pilot',
-      pilotChip: 'Pilot: {action}',
-      pilotActionLabel: 'Aktion: {action}',
-      pilotConfidenceLabel: 'Vertrauen: {confidence}',
-      pilotScoreLabel: 'Ergebnis: {score}/{max}',
+    agentGoals: {
+      header: 'Ziele ({count})',
+      bootstrapPending: 'Ziele werden initialisiert',
+      evidenceCount: '{count} Belege',
       status: {
         running: 'Läuft',
         completed: 'Abgeschlossen',
         failed: 'Fehlgeschlagen',
         cancelled: 'Abgebrochen',
       },
-      phase: {
-        assess: 'Bewerten',
-        plan: 'Planen',
-        work: 'Arbeiten',
-        review: 'Überprüfen',
-        pilot: 'Pilot',
-        deliver: 'Liefern',
+      goalStatus: {
+        pending: 'Ausstehend',
+        active: 'Aktiv',
+        completed: 'Abgeschlossen',
+        blocked: 'Blockiert',
       },
-      checkpointKind: {
-        run: 'Ausführen',
-        phase: 'Phase',
-        tool: 'Werkzeug',
-        worker: 'Arbeiter',
-        note: 'Notiz',
-      },
-      controlAction: {
-        accept: 'Akzeptieren',
-        continue: 'Fortsetzen',
-        block: 'Blockieren',
-        cancel: 'Abbrechen',
-      },
-      confidence: {
-        low: 'Niedrig',
-        medium: 'Mittel',
-        high: 'Hoch',
-      },
-      summary: {
-        turns: 'Runden {count}',
-        tools: 'Werkzeuge {completed}/{started}',
-        failed: 'Fehlgeschlagen {count}',
-        workers: 'Arbeiter {count}',
-      },
+    },
+    agentRunTrace: {
+      header: 'Run trace',
+      preview: 'Iteration {iteration} · {count} events',
+      iteration: 'Iteration {iteration}',
+    },
+    agentWorkflow: {
+      currentWork: 'Aktuelle Arbeit',
     },
   },
   errorBoundary: {
@@ -275,9 +242,9 @@ export const de: TranslationMap = mergeTranslations(en, {
     apiKeyPlaceholder: 'sk-…',
     defaultModel: 'Standardmodell',
     defaultModelPlaceholder: 'gpt-5.5',
-    onDeviceProviderTitle: 'Gemma auf dem Gerät',
+    onDeviceProviderTitle: 'On-device models',
     onDeviceProviderHint:
-      'Laden Sie ein unterstütztes Gemma-Modell auf dieses Gerät herunter, bevor Sie den Anbieter speichern. Anschließend verwendet Kavi die native Laufzeit statt einer entfernten HTTP-API.',
+      'Laden Sie ein unterstütztes On-device-Modell auf dieses Gerät herunter, bevor Sie den Anbieter speichern. Anschließend verwendet Kavi die native Laufzeit statt einer entfernten HTTP-API.',
     selectOnDeviceModel: 'On-device-Modell {name} auswählen',
     onDeviceModelInstalled: 'Installiert',
     deleteProvider: 'Anbieter löschen',
@@ -341,10 +308,7 @@ export const de: TranslationMap = mergeTranslations(en, {
     mcpMetadata: 'Verbindungsmetadaten',
     mcpManualServerHint:
       'Manuelle Server werden vollständig von Ihnen verwaltet. Prüfen Sie URL, Header, Token und OAuth-Einstellungen vor dem Verbinden.',
-    mcpOfficialRegistryHint:
-      'Dieser Server stammt aus der offiziellen MCP-Registry. Prüfen Sie Registrierungseintrag und Website, bevor Sie Verbindungsdetails ändern.',
     mcpOAuthSessionSaved: 'OAuth-Sitzung gespeichert',
-    mcpOAuthSessionNotConnected: 'OAuth-Anmeldung erforderlich',
     mcpResetOAuthSession: 'OAuth-Sitzung zurücksetzen',
     mcpResetOAuthSessionConfirm: 'Gespeicherte OAuth-Tokens für diesen MCP-Server löschen?',
     mcpResetOAuthSessionSuccess: 'OAuth-Sitzung gelöscht.',
@@ -433,7 +397,6 @@ export const de: TranslationMap = mergeTranslations(en, {
     workspaceConfigRoots: 'Konfigurationswurzeln',
     workspaceConfigRootsHint:
       'Ein Pfad pro Zeile. Skills mit Konfigurationsdateien werden nur hierher geroutet, wenn diese Pfade abgedeckt sind.',
-    workspaceConfigRootsPlaceholder: '/Users/username/.config\n/Users/username/.ssh',
     workspaceConfigRootsCount: '{count} Konfigurationswurzeln',
     deleteWorkspaceTarget: 'Workspace-Ziel loeschen',
     deleteWorkspaceTargetConfirm: 'Dieses Workspace-Ziel entfernen?',
@@ -558,8 +521,6 @@ export const de: TranslationMap = mergeTranslations(en, {
     expoAccessTokenHint: 'Wird sicher gespeichert. Erforderlich fuer den direkten EAS-CLI-Modus.',
     expoAccessTokenPlaceholder: 'eas_xxx',
     deleteExpoAccount: 'Expo-Konto loeschen',
-    deleteExpoAccountConfirm:
-      'Dadurch werden auch verknuepfte Expo-Projekte aus den Kavi-Einstellungen entfernt.',
     deleteExpoAccountDetachConfirm:
       'Dieses Expo-Konto loeschen? Zugeordnete Projekte bleiben bestehen, verlieren aber ihre Kontoverknuepfung.',
     expoProjectsSyncedCount: 'Projects synced: {count}',
@@ -772,6 +733,15 @@ export const de: TranslationMap = mergeTranslations(en, {
   },
   memory: {
     title: 'Speicher',
+    overviewTab: 'Übersicht',
+    overviewFocusTitle: 'Fokus heute',
+    overviewFocusEmpty: 'Noch kein Fokus.',
+    overviewTaskTitle: 'Aktuelle Aufgabe',
+    overviewTaskEmpty: 'Kein aktives Aufgabensegment.',
+    overviewRecentFactsTitle: 'Aktuelle Fakten',
+    overviewSearchPlaceholder: 'Speicher durchsuchen…',
+    overviewConsolidationTitle: 'Konsolidierung',
+    overviewLoading: 'Speicherübersicht wird geladen…',
     globalTab: 'Global',
     dailyTab: 'Tägliche Notizen',
     factsTab: 'Fakten',
@@ -816,9 +786,39 @@ export const de: TranslationMap = mergeTranslations(en, {
     migrationSeedComplete: 'Alle archivierten Chats wurden organisiert.',
     consolidationProvider: 'Anbieter für Speicherkonsolidierung',
     consolidationProviderHint:
-      'Wählt einen konfigurierten Anbieter aus, der dauerhafte Fakten aus Chats extrahiert. Etwa ein zusätzlicher LLM-Aufruf pro 8 Züge.',
-    consolidationProviderOff: 'Aus',
+      'Legt fest, wie Kavi Speicher nach jedem Zug anreichert. Auto nutzt On-Device → aktiver Chat → strukturelle Extraktion. Nur strukturell speichert weiter Episoden und Fokus.',
+    consolidationModeAuto: 'Auto',
+    consolidationModeLocal: 'On-Device',
+    consolidationModeActiveProvider: 'Aktiver Chat',
+    consolidationModeOff: 'Nur strukturell',
+    compactionProvider: 'Anbieter für Kontextverdichtung',
+    compactionProviderHint:
+      'Optional günstigeres Modell für Stufe-2/3-Zusammenfassungen. Aus = deterministische strukturelle Verdichtung.',
+    compactionProviderOff: 'Aus',
+    compactionModelPlaceholder: 'Optionales Modell (z. B. gpt-5-mini)',
+    consolidationTierConfigured: 'Dedizierter Anbieter: {name}',
+    consolidationTierConfiguredGeneric: 'Dedizierter Konsolidierungsanbieter',
+    consolidationTierOnDevice: 'On-Device-Fallback: {name}',
+    consolidationTierOnDeviceGeneric: 'On-Device-Konsolidierungs-Fallback',
+    consolidationTierChat: 'Chat-Anbieter-Fallback: {name}',
+    consolidationTierChatGeneric: 'Fallback über aktiven Chat-Anbieter',
+    consolidationTierDeterministic: 'Nur strukturelle Extraktion (ohne LLM-Anreicherung)',
+    consolidationTierDisabled: 'Langzeitspeicher deaktiviert',
+    consolidationFallbackActive: 'Automatischer Fallback aktiv',
+    ingestionPendingJobs: '{count} Konsolidierungsaufträge in Warteschlange',
+    diagnosticsTitle: 'Diagnose',
+    diagnosticsBudgetTitle: 'Kontextbudget',
+    diagnosticsBudgetEmpty: 'Noch keine Budget-Audit-Einträge.',
+    diagnosticsBudgetEntry: 'iter {iteration} · {model} · {total}/{window}',
+    diagnosticsRetrievalTitle: 'Abrufprotokoll',
+    diagnosticsRetrievalEmpty: 'Noch keine Abrufereignisse für diese Unterhaltung.',
+    diagnosticsRetrievalEntry: '{factCount} Fakten · {episodeCount} Episoden · {tokenEstimate} tok',
+    diagnosticsRetrievalTask: 'Aufgabe {taskId}',
+    diagnosticsScopeActiveConversation: 'Aktive Unterhaltung',
     attribution: 'Inspiriert von MemGPT, Graphiti und mem0.',
+    episodesTitle: 'Episodes',
+    episodesEmpty: 'No episodes recorded yet. Episodes capture context from completed tasks.',
+    episodeSources: '{count} sources',
   },
   scheduler: {
     title: 'Planer',
@@ -1035,7 +1035,7 @@ export const de: TranslationMap = mergeTranslations(en, {
     infoText:
       'Das Gateway verbindet Ihre mobile App mit einem Kavi Gateway-Knoten und ermöglicht den Zugriff auf Remote-Tools, gemeinsame Sitzungen und Desktop-Integrationen. Verbinden Sie sich mit einer Gateway-URL, um Ihre KI mit Fähigkeiten über das Gerät hinaus zu erweitern.',
     url: 'Gateway-URL',
-    urlPlaceholder: 'wss://gateway.example.com',
+    urlPlaceholder: 'wss://gateway.example.invalid',
     token: 'Gateway-Token',
     tokenPlaceholder: 'Token',
     connected: 'Verbunden',
@@ -1211,7 +1211,6 @@ export const de: TranslationMap = mergeTranslations(en, {
     activeCount: '{count} aktiv',
     syncExpoProjects: 'Sync Expo projects',
     linkExpoAccount: 'Link Expo account',
-    workspaceNoSshTarget: 'No SSH target linked',
     expoEmptyHintWithAccounts:
       'Synchronisieren Sie Ihr verknuepftes Expo-Konto, um vorhandene Projekte zu importieren, und ergaenzen Sie danach optionale Workflow- oder SSH-Details.',
     expoEmptyHintNoAccounts:
@@ -1345,6 +1344,31 @@ export const de: TranslationMap = mergeTranslations(en, {
       'Das Modell konnte nicht heruntergeladen werden. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.',
     retryDownloadButton: 'Download erneut versuchen',
     downloadAccessibilityLabel: 'Modell {name} herunterladen',
+    validatingTitle: '{name} wird geprüft',
+    validatingBody: 'Kavi prüft die Modellkompatibilität und die lokalen Dateien.',
+    validatingButton: 'Prüfen…',
+    recoveryTitle: 'Modell benötigt Aufmerksamkeit',
+    invalidInstallUnknown: '{name} ist nicht mehr im lokalen Modellkatalog enthalten.',
+    invalidInstallFileName:
+      'Die installierte Datei für {name} stimmt nicht mehr mit dem Katalog überein.',
+    invalidInstallSource:
+      'Die installierte Quelle für {name} stimmt nicht mehr mit dem Katalog überein.',
+    invalidInstallRepository:
+      'Das installierte Repository für {name} stimmt nicht mehr mit dem Katalog überein.',
+    invalidInstallRevision:
+      'Für {name} ist eine neuere Katalogrevision verfügbar. Laden Sie das Modell erneut herunter.',
+    invalidInstallMissingFile: 'Die installierte Datei für {name} fehlt oder ist unvollständig.',
+    runtimeStatusLabel: 'Laufzeit',
+    runtimeWarming: '{backend} wird vorbereitet',
+    runtimeRunningOn: 'Läuft auf {backend}',
+    runtimeFallback:
+      'Läuft auf {backend}. {requested} wurde angefordert und die Laufzeit ist ausgewichen.',
+    runtimeLikely: 'Voraussichtlich {backend}',
+    runtimeConfiguredCpu: 'Voraussichtlich CPU. CPU ist konfiguriert.',
+    recoveryActionsLabel: 'Wiederherstellungsaktionen',
+    clearInvalidInstallButton: 'Lokale Datei löschen',
+    switchToCpuButton: 'CPU verwenden',
+    chooseSmallerModelButton: '{name} verwenden',
   },
   onboarding: {
     welcome: 'Willkommen bei Kavi',
@@ -1425,7 +1449,7 @@ export const de: TranslationMap = mergeTranslations(en, {
       'Wenn Ihr Telefon localhost nicht erreichen kann, ersetzen Sie ihn vor dem Fortfahren durch die IP Ihres Rechners, eine Reverse-Proxy-URL oder eine Tunnel-URL.',
     onDeviceNoteTitle: 'Hinweis für On-device-Nutzung',
     onDeviceNoteBody:
-      'Wählen Sie ein Gemma-Modell, laden Sie es auf Ihr Gerät herunter und speichern Sie dann den Anbieter. Das benötigt spürbar Speicherplatz und kann in langsamen Netzen Zeit brauchen.',
+      'Wählen Sie ein unterstütztes On-device-Modell, laden Sie es auf Ihr Gerät herunter und speichern Sie dann den Anbieter. Das benötigt spürbar Speicherplatz und kann in langsamen Netzen Zeit brauchen.',
     selectModel: 'Modell {name} auswählen',
     saveProvider: 'Anbieter speichern',
     skipProvider: 'Anbieter vorerst überspringen',
@@ -1506,11 +1530,11 @@ export const de: TranslationMap = mergeTranslations(en, {
           'Keine API-Abrechnung durch Kavi. Sie zahlen nur für Ihre eigene Hardware und Ihr Hosting.',
       },
       gemmaLocal: {
-        title: 'Gemma (on-device)',
+        title: 'On-device models',
         summary:
-          'Führt Gemma mit Googles On-device-Laufzeit direkt auf dem Telefon aus, statt einen entfernten Server aufzurufen.',
+          'Führt unterstützte Modelle mit Googles On-device-Laufzeit direkt auf dem Telefon aus, statt einen entfernten Server aufzurufen.',
         setup:
-          'Wählen Sie das für dieses Gerät unterstützte Gemma-Modell, laden Sie es herunter und speichern Sie dann den Anbieter. Kavi lädt das offizielle Google-AI-Edge-Modellpaket auf Ihr Gerät.',
+          'Wählen Sie das für dieses Gerät unterstützte On-device-Modell, laden Sie es herunter und speichern Sie dann den Anbieter. Kavi speichert das ausgewählte Modellpaket für lokale Inferenz auf dem Gerät.',
         freeAccess:
           'Keine API-Abrechnung pro Anfrage durch Kavi. Es wird nur genügend Gerätespeicher für das heruntergeladene Modell benötigt.',
       },
@@ -1533,6 +1557,11 @@ export const de: TranslationMap = mergeTranslations(en, {
         detail:
           'Unabhängiger Suchindex mit laut Brave-Search-API-Preisen 5 US-Dollar kostenlosen Monatsguthaben.',
       },
+      gemini: {
+        title: 'Gemini',
+        detail:
+          'Nutzt Gemini-Grounding mit Google Search über die offizielle Gemini-API und einen Google AI Studio-API-Schlüssel.',
+      },
       perplexity: {
         title: 'Perplexity',
         detail:
@@ -1547,11 +1576,6 @@ export const de: TranslationMap = mergeTranslations(en, {
         title: 'Kimi',
         detail: 'Moonshot-Kimi-Zugriff und Preise können je nach Region und Kontostatus variieren.',
       },
-      gemini: {
-        title: 'Gemini',
-        detail:
-          'Erstellen Sie einen Vertex-AI-Schlüssel für produktionsorientierte Google-Cloud-Nutzung; ältere Google-AI-Studio-Schlüssel funktionieren ebenfalls.',
-      },
     },
     services: {
       brave: {
@@ -1562,6 +1586,15 @@ export const de: TranslationMap = mergeTranslations(en, {
           'Erstellen Sie ein Brave-Search-API-Konto, öffnen Sie das Dashboard und kopieren Sie das Abonnement-Token.',
         freeAccess:
           'Laut aktuellem Brave-Preismodell sind jeden Monat 5 US-Dollar Freiguthaben enthalten.',
+      },
+      gemini: {
+        title: 'Gemini API',
+        category: 'Websuche',
+        unlocks: 'Gemini-gestützte Websuche mit Google Search-Grounding und Zitaten.',
+        setup:
+          'Erstellen und verwalten Sie einen Gemini-API-Schlüssel in Google AI Studio und fügen Sie ihn hier ein. Kavi verwendet das offizielle Gemini-API-Grounding-Tool von Google Search für diesen Anbieter.',
+        freeAccess:
+          'Google AI Studio ermöglicht die Erstellung eines Gemini-API-Schlüssels für erste Tests, aber in der Produktion sollten Sie mit Kontingentlimits und abgerechneter Nutzung rechnen.',
       },
       perplexity: {
         title: 'Perplexity API',
@@ -1589,15 +1622,6 @@ export const de: TranslationMap = mergeTranslations(en, {
         freeAccess:
           'Verfügbarkeit und Abrechnung können regional variieren; prüfen Sie den aktuellen Tarif in Ihrem Konto.',
       },
-      gemini: {
-        title: 'Gemini API',
-        category: 'Websuche',
-        unlocks: 'Gemini-basierte Suche und Google-AI-Integrationen.',
-        setup:
-          'Erstellen Sie in Vertex AI einen Gemini-fähigen API-Schlüssel für produktionsorientierte Google-Cloud-Nutzung, oder verwenden Sie einen älteren Google-AI-Studio-Schlüssel, falls Sie diesen bereits eingerichtet haben. Die Gemini-Websuche unterstützt beide Backends.',
-        freeAccess:
-          'Sowohl Vertex AI im Express-Modus als auch Google AI Studio erlauben erste Tests, für Produktion sollten Sie aber mit abgerechneten Limits und passend eingeschränkten Zugangsdaten planen.',
-      },
       firecrawl: {
         title: 'Firecrawl',
         category: 'Webextraktion',
@@ -1619,7 +1643,7 @@ export const de: TranslationMap = mergeTranslations(en, {
         title: 'GitHub Personal Access Token',
         category: 'Dienst-Skill',
         unlocks:
-          'Tools zum Auflisten von Repositories sowie zum Lesen und Erstellen von Issues auf GitHub.',
+          'Tools zum Auflisten von Repositories, Lesen von Dateien, Erstellen von Branches, API-Commits, Arbeiten mit Issues, Pull Requests und Workflow-Status auf GitHub.',
         setup:
           'Öffnen Sie in den GitHub-Einstellungen die Developer settings, erstellen Sie ein fein abgestuftes Personal Access Token und vergeben Sie nur die benötigten Repository-Berechtigungen.',
         freeAccess: 'Ein PAT zu erstellen ist mit einem GitHub-Konto kostenlos.',
@@ -1627,7 +1651,7 @@ export const de: TranslationMap = mergeTranslations(en, {
       alphaVantage: {
         title: 'Alpha Vantage',
         category: 'Dienst-Skill',
-        unlocks: 'Aktienkurs- und Finanz-Tools.',
+        unlocks: 'Tools fuer Aktienkurse und FX-Wechselkurse.',
         setup:
           'Fordern Sie bei Alpha Vantage einen kostenlosen API-Schlüssel an und fügen Sie ihn hier ein.',
         freeAccess:
@@ -1821,10 +1845,6 @@ export const de: TranslationMap = mergeTranslations(en, {
       shareFileTitle: 'Share file',
       openUrlTitle: 'Open reviewed link',
       sshExecTitle: 'Run SSH command',
-      workspaceWriteFileTitle: 'Write workspace file',
-      workspaceDeleteTitle: 'Delete workspace file',
-      workspaceRenameTitle: 'Rename workspace path',
-      workspaceMkdirTitle: 'Create workspace folder',
       browserNavigateTitle: 'Open browser destination',
       expoBuildTitle: 'Start Expo build',
     },
@@ -1848,9 +1868,6 @@ export const de: TranslationMap = mergeTranslations(en, {
       commandExecutable: '{executable} command',
       workingDirectory: 'working directory set',
       targetSelected: 'target selected',
-      contentIncluded: 'file content included',
-      renameOperation: 'rename operation',
-      createDirectory: 'directory path included',
       urlMessageIncluded: 'share message included',
       titleIncluded: 'title included',
       fallbackEnabled: 'fallback enabled',

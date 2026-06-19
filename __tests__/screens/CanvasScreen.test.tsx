@@ -2,7 +2,6 @@
 // Tests — CanvasScreen
 // ---------------------------------------------------------------------------
 
-import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { CanvasScreen } from '../../src/screens/CanvasScreen';
 
@@ -59,7 +58,6 @@ jest.mock('react-native-webview', () => {
 
 // Mock canvas renderer
 const mockGetActiveSurfaces = jest.fn().mockReturnValue([]);
-const mockRenderSurfaceToHtml = jest.fn().mockReturnValue(null);
 const mockDeleteSurface = jest.fn();
 const mockClearAllSurfaces = jest.fn();
 const mockGetAllSurfaces = jest.fn().mockReturnValue([]);

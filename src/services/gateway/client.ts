@@ -10,7 +10,7 @@ import type {
   GatewayConnectionState,
   GatewayCapability,
   GatewayMessage,
-} from '../../types';
+} from '../../types/gateway';
 import {
   createRequest,
   createResponse,
@@ -329,7 +329,7 @@ export class GatewayClient {
     }
   }
 
-  private handleClose(event: CloseEvent): void {
+  private handleClose(_event: CloseEvent): void {
     this.clearTimers();
     this.ws = null;
 
@@ -424,7 +424,7 @@ export class GatewayClient {
   }
 
   private rejectAllPending(error: Error): void {
-    for (const [id, pending] of this.pendingRequests) {
+    for (const pending of this.pendingRequests.values()) {
       clearTimeout(pending.timeout);
       pending.reject(error);
     }

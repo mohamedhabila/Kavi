@@ -1,0 +1,238 @@
+import type { AppPalette } from '../../theme/useAppTheme';
+
+export const createRemoteWorkScreenWorkspaceStyleFragments = (colors: AppPalette) => ({
+  workspaceSurfaceStats: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  workspaceSurfaceStatCard: {
+    flex: 1,
+    minWidth: 108,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 4,
+  },
+  workspaceSurfaceStatValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  workspaceSurfaceStatLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  workspaceSurfaceFocusCard: {
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 16,
+    padding: 14,
+    gap: 10,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingTop: 4,
+  },
+  switchLabelWrap: {
+    flex: 1,
+    gap: 3,
+  },
+  switchTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  switchHint: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 17,
+  },
+  configActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+    paddingTop: 4,
+  },
+  destructiveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.danger,
+  },
+  destructiveBtnText: {
+    color: colors.danger,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  inlineLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  inlineActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  formGrid: {
+    gap: 12,
+  },
+  formGridWide: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  formGridItem: {
+    flex: 1,
+    gap: 12,
+  },
+  formGridPortItem: {
+    maxWidth: 120,
+  },
+  emptyCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 16,
+    padding: 16,
+    gap: 10,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  workspaceHubCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 20,
+    padding: 16,
+    gap: 16,
+  },
+  workspaceHubTopRow: {
+    gap: 14,
+  },
+  workspaceHubTopRowWide: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  workspaceHubCopy: {
+    flex: 1,
+    gap: 8,
+  },
+  workspaceHubStats: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  workspaceHubStatCard: {
+    minWidth: 116,
+    flex: 1,
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  workspaceHubStatValue: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  workspaceHubStatLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 16,
+  },
+  workspaceSelectorRail: {
+    gap: 10,
+    paddingRight: 4,
+  },
+  workspaceSelectorCard: {
+    width: 236,
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 16,
+    padding: 14,
+    gap: 8,
+  },
+  workspaceSelectorCardActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+  workspaceSelectorPath: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  workspaceDetailCard: {
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 18,
+    padding: 16,
+    gap: 12,
+  },
+  workspaceDetailGrid: {
+    gap: 12,
+  },
+  workspaceDetailGridWide: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  workspaceDetailCell: {
+    flex: 1,
+    minWidth: 140,
+    gap: 6,
+  },
+  targetCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 16,
+    padding: 16,
+    gap: 10,
+    overflow: 'hidden',
+  },
+  targetHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  targetHeaderText: {
+    flex: 1,
+    gap: 4,
+  },
+  targetTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  targetSubtitle: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+});

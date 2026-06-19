@@ -5,9 +5,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ChevronDown, ChevronRight, Wrench, Check, X, Eye } from 'lucide-react-native';
-import { ToolCall } from '../../types';
+import { ToolCall } from '../../types/message';
 import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
-import { useTranslation } from '../../i18n';
+import { useTranslation } from '../../i18n/useTranslation';
 
 interface ToolCallDisplayProps {
   toolCall: ToolCall;

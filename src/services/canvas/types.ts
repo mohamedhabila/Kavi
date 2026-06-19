@@ -2,7 +2,7 @@
 // Kavi — Canvas / A2UI Types
 // ---------------------------------------------------------------------------
 
-import type { CanvasSurface, CanvasComponent, CanvasAction, CanvasSourceBundle } from '../../types';
+import type { CanvasSurface, CanvasComponent, CanvasSourceBundle } from '../../types/canvas';
 
 // ── Server → Client message types ────────────────────────────────────────
 

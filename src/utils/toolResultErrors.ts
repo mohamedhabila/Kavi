@@ -20,6 +20,10 @@ export function isToolResultErrorLike(result: string | undefined): boolean {
     return true;
   }
 
+  if (/^Tool\s+"[^"]+"\s+is not (allowed|registered)/i.test(trimmed)) {
+    return true;
+  }
+
   if (!trimmed.startsWith('{')) {
     return false;
   }

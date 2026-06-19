@@ -75,14 +75,36 @@ describe('TOOL_DEFINITIONS', () => {
     expect(python.description).toContain('get_json');
     expect(python.description).toContain('timeout=30');
     expect(python.description).toContain('pyfetch');
+    expect(python.description).not.toContain('workflow evidence');
+    expect(python.description).not.toContain('read_workflow_evidence');
     expect(python.description).not.toContain('requests via micropip');
   });
 
-  it('tool_catalog description points models to python-backed capability bridging', () => {
+  it('tool_catalog description exposes structural search and category browse', () => {
     const toolCatalog = TOOL_DEFINITIONS.find((t) => t.name === 'tool_catalog')!;
-    expect(toolCatalog.description).toContain(
-      'Python-backed export, conversion, or custom generation',
+    expect(toolCatalog.description).toContain('query and/or capabilities');
+    expect(toolCatalog.description).toContain('empty overview call');
+    expect(toolCatalog.input_schema.properties.query).toBeDefined();
+    expect(toolCatalog.input_schema.properties.capabilities).toBeDefined();
+  });
+
+  it('sessions_spawn exposes a compact delegated worker contract', () => {
+    const sessionsSpawn = TOOL_DEFINITIONS.find((t) => t.name === 'sessions_spawn')!;
+    expect(sessionsSpawn.input_schema.properties.prompt.description).toContain(
+      'Self-contained task instructions',
     );
+    expect(sessionsSpawn.input_schema.properties.name.type).toBe('string');
+    expect(sessionsSpawn.input_schema.properties.tools.type).toBe('array');
+    expect(sessionsSpawn.input_schema.properties.waitForCompletion.type).toBe('boolean');
+    expect(sessionsSpawn.input_schema.properties.objective).toBeUndefined();
+    expect(sessionsSpawn.input_schema.properties.systemPrompt).toBeUndefined();
+  });
+
+  it('agents is persona management, not delegated worker coordination', () => {
+    const agents = TOOL_DEFINITIONS.find((t) => t.name === 'agents')!;
+    expect(agents.description).toContain('does not delegate work');
+    expect(agents.contract?.capabilities).not.toContain('coordinate');
+    expect(agents.contract?.capabilities).toContain('discover');
   });
 
   it('list_files should not require path (optional)', () => {

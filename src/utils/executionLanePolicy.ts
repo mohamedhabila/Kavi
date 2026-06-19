@@ -49,10 +49,6 @@ export function getExecutionLaneToolCapability(
     return 'meta';
   }
 
-  if (capabilities.has('coordinate')) {
-    return 'coordination';
-  }
-
   if (
     sideEffects.has('destructive') ||
     sideEffects.has('remote_mutation') ||
@@ -66,25 +62,31 @@ export function getExecutionLaneToolCapability(
     return 'mutation';
   }
 
-  if (
+  if (capabilities.has('coordinate')) {
+    return 'coordination';
+  }
+
+  const monitorsExternalProgress =
     capabilities.has('monitor') ||
     capabilities.has('wait') ||
-    capabilities.has('verify') ||
     workflowStages.has('monitor_external_execution') ||
-    workflowStages.has('await_external_execution') ||
-    workflowStages.has('verify_evidence')
-  ) {
-    return 'monitoring';
-  }
+    workflowStages.has('await_external_execution');
 
   const isKnownReadOnlyDescriptor =
     descriptor.category !== 'other' &&
     descriptor.sideEffects.length > 0 &&
     Array.from(sideEffects).every((sideEffect) => sideEffect === 'none') &&
-    (capabilities.has('discover') || capabilities.has('read'));
+    (capabilities.has('discover') || capabilities.has('read') || capabilities.has('verify')) &&
+    !monitorsExternalProgress;
 
   if (isKnownReadOnlyDescriptor) {
     return 'read_only';
+  }
+
+  if (
+    monitorsExternalProgress
+  ) {
+    return 'monitoring';
   }
 
   return 'unknown';
@@ -92,7 +94,7 @@ export function getExecutionLaneToolCapability(
 
 export function isExecutionAdvancingToolName(toolName: string | undefined): boolean {
   const capability = getExecutionLaneToolCapability(toolName);
-  return capability === 'mutation' || capability === 'monitoring';
+  return capability === 'mutation' || capability === 'monitoring' || capability === 'computation';
 }
 
 export function isExecutionDefaultBlockedToolName(toolName: string | undefined): boolean {

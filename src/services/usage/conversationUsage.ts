@@ -1,5 +1,6 @@
 import { useChatStore } from '../../store/useChatStore';
-import type { ConversationUsageSource, TokenUsage, ToolCall } from '../../types';
+import type { ConversationUsageSource, TokenUsage } from '../../types/usage';
+import type { ToolCall } from '../../types/message';
 import {
   estimateCost,
   getUsageCacheSummary,
@@ -182,6 +183,8 @@ export function recordConversationUsageEvent(options: ConversationUsageRecordOpt
     cacheWriteTokens,
     totalTokens,
     ...(options.usage.tokenDetails ? { tokenDetails: options.usage.tokenDetails } : {}),
+    ...(options.usage.tokenBuckets ? { tokenBuckets: options.usage.tokenBuckets } : {}),
+    ...(options.usage.promptCache ? { promptCache: options.usage.promptCache } : {}),
   };
   const estimatedCost = isZeroCostModel(usage.model)
     ? 0

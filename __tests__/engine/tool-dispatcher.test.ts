@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Tests — Tool Executor Dispatcher (parity tools routing in index.ts)
+// Tests — Tool Executor Dispatcher (builtin tools routing in index.ts)
 // ---------------------------------------------------------------------------
 
 // Mock expo-file-system
@@ -177,6 +177,9 @@ const mockListWorkspaceDirectory = jest.fn();
 const mockMakeWorkspaceDirectory = jest.fn();
 const mockRenameWorkspaceFile = jest.fn();
 const mockDeleteWorkspaceFile = jest.fn();
+const mockGetWorkspaceTargetControlStatus = jest.fn();
+const mockLaunchWorkspaceBrowserSession = jest.fn();
+const mockDelegateWorkspaceTask = jest.fn();
 const mockBrowserNavigate = jest.fn();
 const mockBrowserAct = jest.fn();
 const mockBrowserScreenshot = jest.fn();
@@ -214,26 +217,41 @@ jest.mock('../../src/services/workspaces/files', () => ({
   deleteWorkspaceFile: (...args: any[]) => mockDeleteWorkspaceFile(...args),
 }));
 
-jest.mock('../../src/services/browser/automation', () => ({
+jest.mock('../../src/services/workspaces/control', () => ({
+  getWorkspaceTargetControlStatus: (...args: any[]) => mockGetWorkspaceTargetControlStatus(...args),
+  launchWorkspaceBrowserSession: (...args: any[]) => mockLaunchWorkspaceBrowserSession(...args),
+  delegateWorkspaceTask: (...args: any[]) => mockDelegateWorkspaceTask(...args),
+}));
+
+jest.mock('../../src/services/browser/automation/actions', () => ({
   browserNavigate: (...args: any[]) => mockBrowserNavigate(...args),
   browserAct: (...args: any[]) => mockBrowserAct(...args),
   browserScreenshot: (...args: any[]) => mockBrowserScreenshot(...args),
   browserSnapshot: (...args: any[]) => mockBrowserSnapshot(...args),
-  browserConsoleMessages: (...args: any[]) => mockBrowserConsoleMessages(...args),
-  browserPageErrors: (...args: any[]) => mockBrowserPageErrors(...args),
-  browserNetworkRequests: (...args: any[]) => mockBrowserNetworkRequests(...args),
+  browserSessionStatus: (...args: any[]) => mockBrowserSessionStatus(...args),
+  browserFillForm: (...args: any[]) => mockBrowserFillForm(...args),
+}));
+
+jest.mock('../../src/services/browser/automation/state', () => ({
   browserSetCookies: (...args: any[]) => mockBrowserSetCookies(...args),
   browserClearCookies: (...args: any[]) => mockBrowserClearCookies(...args),
   browserGetCookies: (...args: any[]) => mockBrowserGetCookies(...args),
   browserStorageGet: (...args: any[]) => mockBrowserStorageGet(...args),
   browserStorageSet: (...args: any[]) => mockBrowserStorageSet(...args),
   browserStorageClear: (...args: any[]) => mockBrowserStorageClear(...args),
-  browserSessionStatus: (...args: any[]) => mockBrowserSessionStatus(...args),
+}));
+
+jest.mock('../../src/services/browser/automation/artifacts', () => ({
   browserUpload: (...args: any[]) => mockBrowserUpload(...args),
   browserDownload: (...args: any[]) => mockBrowserDownload(...args),
   browserPdf: (...args: any[]) => mockBrowserPdf(...args),
-  browserFillForm: (...args: any[]) => mockBrowserFillForm(...args),
   browserDialog: (...args: any[]) => mockBrowserDialog(...args),
+}));
+
+jest.mock('../../src/services/browser/automation/trace', () => ({
+  browserConsoleMessages: (...args: any[]) => mockBrowserConsoleMessages(...args),
+  browserPageErrors: (...args: any[]) => mockBrowserPageErrors(...args),
+  browserNetworkRequests: (...args: any[]) => mockBrowserNetworkRequests(...args),
 }));
 
 jest.mock('../../src/services/browser/jobs', () => ({
@@ -255,8 +273,7 @@ jest.mock('../../src/services/agents/subAgent', () => ({
   getSubAgent: (...args: any[]) => mockGetSubAgent(...args),
 }));
 
-// Mock parity executors — inline factory to avoid hoisting issues
-jest.mock('../../src/engine/tools/parity-executor', () => ({
+const mockBuiltinToolFns = {
   executeCanvasList: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
   executeCanvasRead: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
   executeCanvasCreate: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
@@ -265,15 +282,6 @@ jest.mock('../../src/engine/tools/parity-executor', () => ({
   executeCanvasNavigate: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
   executeCanvasEval: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
   executeCanvasSnapshot: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSessionSpawn: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSessionList: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSessionSend: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSessionHistory: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSessionOutput: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSessionSurfaceOutput: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSessionStatus: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSessionWait: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
-  executeSessionCancel: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
   executeWait: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
   executePdfRead: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
   executeCameraSnap: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
@@ -300,16 +308,146 @@ jest.mock('../../src/engine/tools/parity-executor', () => ({
   executeExpoEasWorkflowWait: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
   executeExpoEasGraphql: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
   executeToolCatalog: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
+  executeToolDescribe: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
   executePollCreate: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
   executeMessageEffect: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
   executeSpeak: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
   executeAgentsList: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
   executeAgentsSwitch: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
   executeAgentsConfigure: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
+};
+
+const mockSessionLaunchFns = {
+  executeSessionSpawn: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
+  executeSessionSend: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
+};
+
+const mockSessionInspectionFns = {
+  executeSessionList: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
+  executeSessionHistory: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
+  executeSessionOutput: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
+  executeSessionSurfaceOutput: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
+  executeSessionStatus: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
+  executeSessionWait: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
+  executeSessionCancel: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
+  executeSessionYield: jest.fn().mockResolvedValue(JSON.stringify({ status: 'ok' })),
+};
+
+jest.mock('../../src/engine/tools/builtin-canvas-runtime', () => ({
+  executeCanvasList: (...args: any[]) => mockBuiltinToolFns.executeCanvasList(...args),
+  executeCanvasRead: (...args: any[]) => mockBuiltinToolFns.executeCanvasRead(...args),
+  executeCanvasNavigate: (...args: any[]) => mockBuiltinToolFns.executeCanvasNavigate(...args),
+  executeCanvasEval: (...args: any[]) => mockBuiltinToolFns.executeCanvasEval(...args),
+  executeCanvasSnapshot: (...args: any[]) => mockBuiltinToolFns.executeCanvasSnapshot(...args),
+}));
+
+jest.mock('../../src/engine/tools/builtin-canvas-mutationExecution', () => ({
+  executeCanvasCreate: (...args: any[]) => mockBuiltinToolFns.executeCanvasCreate(...args),
+  executeCanvasUpdate: (...args: any[]) => mockBuiltinToolFns.executeCanvasUpdate(...args),
+  executeCanvasDelete: (...args: any[]) => mockBuiltinToolFns.executeCanvasDelete(...args),
+}));
+
+jest.mock('../../src/engine/tools/builtin-utility', () => ({
+  executeWait: (...args: any[]) => mockBuiltinToolFns.executeWait(...args),
+  executePdfRead: (...args: any[]) => mockBuiltinToolFns.executePdfRead(...args),
+}));
+
+jest.mock('../../src/engine/tools/builtin-media', () => ({
+  executeCameraSnap: (...args: any[]) => mockBuiltinToolFns.executeCameraSnap(...args),
+  executeAudioTranscribe: (...args: any[]) => mockBuiltinToolFns.executeAudioTranscribe(...args),
+  executeSpeak: (...args: any[]) => mockBuiltinToolFns.executeSpeak(...args),
+}));
+
+jest.mock('../../src/engine/tools/builtin-memory', () => ({
+  executeMemorySearch: (...args: any[]) => mockBuiltinToolFns.executeMemorySearch(...args),
+}));
+
+jest.mock('../../src/engine/tools/builtin-ssh', () => ({
+  executeSshExec: (...args: any[]) => mockBuiltinToolFns.executeSshExec(...args),
+  executeSshBackgroundJobStatus: (...args: any[]) =>
+    mockBuiltinToolFns.executeSshBackgroundJobStatus(...args),
+  executeSshBackgroundJobWait: (...args: any[]) =>
+    mockBuiltinToolFns.executeSshBackgroundJobWait(...args),
+  executeSshListDirectory: (...args: any[]) => mockBuiltinToolFns.executeSshListDirectory(...args),
+  executeSshReadFile: (...args: any[]) => mockBuiltinToolFns.executeSshReadFile(...args),
+  executeSshWriteFile: (...args: any[]) => mockBuiltinToolFns.executeSshWriteFile(...args),
+  executeSshRenamePath: (...args: any[]) => mockBuiltinToolFns.executeSshRenamePath(...args),
+  executeSshDeletePath: (...args: any[]) => mockBuiltinToolFns.executeSshDeletePath(...args),
+  executeSshMakeDirectory: (...args: any[]) => mockBuiltinToolFns.executeSshMakeDirectory(...args),
+}));
+
+jest.mock('../../src/engine/tools/builtin-expoProjectExecution', () => ({
+  executeExpoEasCreateProject: (...args: any[]) =>
+    mockBuiltinToolFns.executeExpoEasCreateProject(...args),
+  executeExpoEasStatus: (...args: any[]) => mockBuiltinToolFns.executeExpoEasStatus(...args),
+  executeExpoEasProbe: (...args: any[]) => mockBuiltinToolFns.executeExpoEasProbe(...args),
+  executeExpoEasBuild: (...args: any[]) => mockBuiltinToolFns.executeExpoEasBuild(...args),
+  executeExpoEasUpdate: (...args: any[]) => mockBuiltinToolFns.executeExpoEasUpdate(...args),
+  executeExpoEasSubmit: (...args: any[]) => mockBuiltinToolFns.executeExpoEasSubmit(...args),
+  executeExpoEasDeployWeb: (...args: any[]) => mockBuiltinToolFns.executeExpoEasDeployWeb(...args),
+}));
+
+jest.mock('../../src/engine/tools/builtin-expoWorkflowExecution', () => ({
+  executeExpoEasWorkflowRuns: (...args: any[]) =>
+    mockBuiltinToolFns.executeExpoEasWorkflowRuns(...args),
+  executeExpoEasWorkflowStatus: (...args: any[]) =>
+    mockBuiltinToolFns.executeExpoEasWorkflowStatus(...args),
+  executeExpoEasWorkflowWait: (...args: any[]) =>
+    mockBuiltinToolFns.executeExpoEasWorkflowWait(...args),
+  executeExpoEasGraphql: (...args: any[]) => mockBuiltinToolFns.executeExpoEasGraphql(...args),
+}));
+
+jest.mock('../../src/engine/tools/builtin-tool-catalog', () => ({
+  executeToolCatalog: (...args: any[]) => mockBuiltinToolFns.executeToolCatalog(...args),
+}));
+
+jest.mock('../../src/engine/tools/builtin-tool-describe', () => ({
+  executeToolDescribe: (...args: any[]) => mockBuiltinToolFns.executeToolDescribe(...args),
+}));
+
+jest.mock('../../src/engine/tools/builtin-interaction', () => ({
+  executePollCreate: (...args: any[]) => mockBuiltinToolFns.executePollCreate(...args),
+  executeMessageEffect: (...args: any[]) => mockBuiltinToolFns.executeMessageEffect(...args),
+}));
+
+jest.mock('../../src/engine/tools/builtin-agents', () => ({
+  executeAgentsList: (...args: any[]) => mockBuiltinToolFns.executeAgentsList(...args),
+  executeAgentsSwitch: (...args: any[]) => mockBuiltinToolFns.executeAgentsSwitch(...args),
+  executeAgentsConfigure: (...args: any[]) => mockBuiltinToolFns.executeAgentsConfigure(...args),
+}));
+
+jest.mock('../../src/engine/tools/builtin-session-spawn', () => ({
+  executeSessionSpawn: (...args: any[]) => mockSessionLaunchFns.executeSessionSpawn(...args),
+}));
+
+jest.mock('../../src/engine/tools/builtin-session-send', () => ({
+  executeSessionSend: (...args: any[]) => mockSessionLaunchFns.executeSessionSend(...args),
+}));
+
+jest.mock('../../src/engine/tools/builtin-session-history', () => ({
+  executeSessionList: (...args: any[]) => mockSessionInspectionFns.executeSessionList(...args),
+  executeSessionHistory: (...args: any[]) =>
+    mockSessionInspectionFns.executeSessionHistory(...args),
+  executeSessionOutput: (...args: any[]) => mockSessionInspectionFns.executeSessionOutput(...args),
+  executeSessionSurfaceOutput: (...args: any[]) =>
+    mockSessionInspectionFns.executeSessionSurfaceOutput(...args),
+}));
+
+jest.mock('../../src/engine/tools/builtin-session-status', () => ({
+  executeSessionStatus: (...args: any[]) => mockSessionInspectionFns.executeSessionStatus(...args),
+}));
+
+jest.mock('../../src/engine/tools/builtin-session-wait', () => ({
+  executeSessionWait: (...args: any[]) => mockSessionInspectionFns.executeSessionWait(...args),
+}));
+
+jest.mock('../../src/engine/tools/builtin-session-control', () => ({
+  executeSessionCancel: (...args: any[]) => mockSessionInspectionFns.executeSessionCancel(...args),
+  executeSessionYield: (...args: any[]) => mockSessionInspectionFns.executeSessionYield(...args),
 }));
 
 // Mock native executor
-jest.mock('../../src/engine/tools/native-executor', () => ({
+jest.mock('../../src/engine/tools/native/executor', () => ({
   executeNativeTool: jest.fn().mockImplementation((name: string) => {
     if (name === 'notification_send') {
       return Promise.resolve(
@@ -345,6 +483,26 @@ jest.mock('../../src/store/useSettingsStore', () => ({
           name: 'Workspace A',
           rootPath: '/workspace/project',
           provider: 'code-server',
+          enabled: true,
+        },
+      ],
+      browserProviders: [
+        {
+          id: 'browser-1',
+          name: 'Browserbase',
+          provider: 'browserbase',
+          baseUrl: 'https://browser.example.com',
+          authMode: 'none',
+          enabled: true,
+        },
+      ],
+      sshTargets: [
+        {
+          id: 'ssh-1',
+          name: 'Builder',
+          host: 'ssh.example.com',
+          port: 22,
+          username: 'dev',
           enabled: true,
         },
       ],
@@ -455,7 +613,9 @@ jest.mock('../../src/utils/id', () => ({
 }));
 
 type ExecuteToolFn = typeof import('../../src/engine/tools/index').executeTool;
-type ParityModule = typeof import('../../src/engine/tools/parity-executor');
+type BuiltinToolModule = typeof mockBuiltinToolFns;
+type SessionLaunchModule = typeof mockSessionLaunchFns;
+type SessionInspectionModule = typeof mockSessionInspectionFns;
 type MemoryStoreModule = {
   appendConversationMemory: jest.Mock;
   appendGlobalMemory: jest.Mock;
@@ -467,7 +627,9 @@ type MemoryStoreModule = {
 };
 
 let executeTool: ExecuteToolFn;
-let parityMod: ParityModule;
+let builtinMod: BuiltinToolModule;
+let sessionLaunchMod: SessionLaunchModule;
+let sessionInspectionMod: SessionInspectionModule;
 let executeNativeTool: jest.Mock;
 let generateImage: jest.Mock;
 let editImage: jest.Mock;
@@ -476,8 +638,10 @@ let resetExpoFileStore: () => void;
 
 function loadTestModules() {
   ({ executeTool } = require('../../src/engine/tools/index'));
-  parityMod = require('../../src/engine/tools/parity-executor') as ParityModule;
-  ({ executeNativeTool } = require('../../src/engine/tools/native-executor'));
+  builtinMod = mockBuiltinToolFns;
+  sessionLaunchMod = mockSessionLaunchFns;
+  sessionInspectionMod = mockSessionInspectionFns;
+  ({ executeNativeTool } = require('../../src/engine/tools/native/executor'));
   ({ generateImage, editImage } = require('../../src/services/media/imageGeneration'));
   memoryStore = require('../../src/services/memory/store') as MemoryStoreModule;
   ({ __resetStore: resetExpoFileStore } = require('expo-file-system'));
@@ -516,6 +680,23 @@ beforeEach(() => {
   mockMakeWorkspaceDirectory.mockResolvedValue(undefined);
   mockRenameWorkspaceFile.mockResolvedValue(undefined);
   mockDeleteWorkspaceFile.mockResolvedValue(undefined);
+  mockGetWorkspaceTargetControlStatus.mockReturnValue({
+    targetId: 'ws-1',
+    summary: 'Workspace A is ready.',
+  });
+  mockLaunchWorkspaceBrowserSession.mockResolvedValue({
+    sessionId: 'workspace-browser-session-1',
+    providerId: 'browser-1',
+    url: 'https://workspace.example.com',
+  });
+  mockDelegateWorkspaceTask.mockResolvedValue({
+    providerLabel: 'Cursor CLI',
+    targetId: 'ws-1',
+    sshTargetId: 'ssh-1',
+    mode: 'agent',
+    command: 'cursor-agent --prompt',
+    output: 'Delegated task completed successfully.',
+  });
   mockBrowserNavigate.mockResolvedValue({
     ok: true,
     targetId: 'page-1',
@@ -572,59 +753,68 @@ beforeEach(() => {
   });
 });
 
-describe('executeTool — parity routing', () => {
-  const parityTools: Array<[string, string, keyof ParityModule]> = [
-    ['canvas_list', '{}', 'executeCanvasList'],
-    ['canvas_read', '{}', 'executeCanvasRead'],
-    ['canvas_create', '{"surface":"test"}', 'executeCanvasCreate'],
-    ['canvas_update', '{"surface":"test"}', 'executeCanvasUpdate'],
-    ['canvas_delete', '{"surface":"test"}', 'executeCanvasDelete'],
-    ['canvas_navigate', '{"surface":"test"}', 'executeCanvasNavigate'],
-    ['canvas_eval', '{"surface":"test"}', 'executeCanvasEval'],
-    ['canvas_snapshot', '{}', 'executeCanvasSnapshot'],
-    ['sessions_list', '{}', 'executeSessionList'],
-    ['sessions_history', '{"sessionId":"s1"}', 'executeSessionHistory'],
-    ['sessions_output', '{"sessionId":"s1"}', 'executeSessionOutput'],
-    ['sessions_surface_output', '{"sessionId":"s1"}', 'executeSessionSurfaceOutput'],
-    ['sessions_status', '{"sessionId":"s1"}', 'executeSessionStatus'],
-    ['sessions_wait', '{"sessionId":"s1"}', 'executeSessionWait'],
-    ['sessions_cancel', '{"sessionId":"s1"}', 'executeSessionCancel'],
-    ['wait', '{"ms":100}', 'executeWait'],
-    ['pdf_read', '{"path":"test.pdf"}', 'executePdfRead'],
-    ['camera_snap', '{}', 'executeCameraSnap'],
-    ['audio_transcribe', '{}', 'executeAudioTranscribe'],
-    ['memory_search', '{"query":"test"}', 'executeMemorySearch'],
-    ['ssh_exec', '{"command":"pwd"}', 'executeSshExec'],
-    ['ssh_background_job_status', '{"jobId":"bg-1"}', 'executeSshBackgroundJobStatus'],
-    ['ssh_background_job_wait', '{"jobId":"bg-1"}', 'executeSshBackgroundJobWait'],
-    ['ssh_list_directory', '{}', 'executeSshListDirectory'],
-    ['ssh_read_file', '{"path":"README.md"}', 'executeSshReadFile'],
-    ['ssh_write_file', '{"path":"README.md","content":"hello"}', 'executeSshWriteFile'],
-    ['ssh_rename_path', '{"oldPath":"a","newPath":"b"}', 'executeSshRenamePath'],
-    ['ssh_delete_path', '{"path":"a"}', 'executeSshDeletePath'],
-    ['ssh_make_directory', '{"path":"tmp"}', 'executeSshMakeDirectory'],
-    ['expo_eas_create_project', '{"name":"Expo App"}', 'executeExpoEasCreateProject'],
-    ['expo_eas_status', '{"projectId":"expo-1"}', 'executeExpoEasStatus'],
-    ['expo_eas_probe', '{"projectId":"expo-1"}', 'executeExpoEasProbe'],
-    ['expo_eas_build', '{"projectId":"expo-1"}', 'executeExpoEasBuild'],
-    ['expo_eas_update', '{"projectId":"expo-1"}', 'executeExpoEasUpdate'],
-    ['expo_eas_submit', '{"projectId":"expo-1"}', 'executeExpoEasSubmit'],
-    ['expo_eas_deploy_web', '{"projectId":"expo-1"}', 'executeExpoEasDeployWeb'],
-    ['expo_eas_workflow_runs', '{"projectId":"expo-1"}', 'executeExpoEasWorkflowRuns'],
-    ['expo_eas_workflow_status', '{"projectId":"expo-1"}', 'executeExpoEasWorkflowStatus'],
-    ['expo_eas_workflow_wait', '{"projectId":"expo-1"}', 'executeExpoEasWorkflowWait'],
-    ['expo_eas_graphql', '{"query":"query { __typename }"}', 'executeExpoEasGraphql'],
-    ['tool_catalog', '{}', 'executeToolCatalog'],
-    ['poll_create', '{"question":"Pick one","options":["A","B"]}', 'executePollCreate'],
-    ['speak', '{"text":"hello"}', 'executeSpeak'],
-    ['agents_list', '{}', 'executeAgentsList'],
-    ['agents_switch', '{"personaId":"p1"}', 'executeAgentsSwitch'],
-    ['agents_configure', '{"name":"test"}', 'executeAgentsConfigure'],
+describe('executeTool — builtin routing', () => {
+  const builtinTools: Array<
+    [string, string, 'builtin' | 'session', keyof BuiltinToolModule | keyof SessionInspectionModule]
+  > = [
+    ['canvas_list', '{}', 'builtin', 'executeCanvasList'],
+    ['canvas_read', '{}', 'builtin', 'executeCanvasRead'],
+    ['canvas_create', '{"surface":"test"}', 'builtin', 'executeCanvasCreate'],
+    ['canvas_update', '{"surface":"test"}', 'builtin', 'executeCanvasUpdate'],
+    ['canvas_delete', '{"surface":"test"}', 'builtin', 'executeCanvasDelete'],
+    ['canvas_navigate', '{"surface":"test"}', 'builtin', 'executeCanvasNavigate'],
+    ['canvas_eval', '{"surface":"test"}', 'builtin', 'executeCanvasEval'],
+    ['canvas_snapshot', '{}', 'builtin', 'executeCanvasSnapshot'],
+    ['sessions_list', '{}', 'session', 'executeSessionList'],
+    ['sessions_history', '{"sessionId":"s1"}', 'session', 'executeSessionHistory'],
+    ['sessions_output', '{"sessionId":"s1"}', 'session', 'executeSessionOutput'],
+    ['sessions_surface_output', '{"sessionId":"s1"}', 'session', 'executeSessionSurfaceOutput'],
+    ['sessions_status', '{"sessionId":"s1"}', 'session', 'executeSessionStatus'],
+    ['sessions_wait', '{"sessionId":"s1"}', 'session', 'executeSessionWait'],
+    ['sessions_cancel', '{"sessionId":"s1"}', 'session', 'executeSessionCancel'],
+    ['wait', '{"ms":100}', 'builtin', 'executeWait'],
+    ['pdf_read', '{"path":"test.pdf"}', 'builtin', 'executePdfRead'],
+    ['camera_snap', '{}', 'builtin', 'executeCameraSnap'],
+    ['audio_transcribe', '{}', 'builtin', 'executeAudioTranscribe'],
+    ['memory_search', '{"query":"test"}', 'builtin', 'executeMemorySearch'],
+    ['ssh_exec', '{"command":"pwd"}', 'builtin', 'executeSshExec'],
+    ['ssh_background_job_status', '{"jobId":"bg-1"}', 'builtin', 'executeSshBackgroundJobStatus'],
+    ['ssh_background_job_wait', '{"jobId":"bg-1"}', 'builtin', 'executeSshBackgroundJobWait'],
+    ['ssh_list_directory', '{}', 'builtin', 'executeSshListDirectory'],
+    ['ssh_read_file', '{"path":"README.md"}', 'builtin', 'executeSshReadFile'],
+    ['ssh_write_file', '{"path":"README.md","content":"hello"}', 'builtin', 'executeSshWriteFile'],
+    ['ssh_rename_path', '{"oldPath":"a","newPath":"b"}', 'builtin', 'executeSshRenamePath'],
+    ['ssh_delete_path', '{"path":"a"}', 'builtin', 'executeSshDeletePath'],
+    ['ssh_make_directory', '{"path":"tmp"}', 'builtin', 'executeSshMakeDirectory'],
+    ['expo_eas_create_project', '{"name":"Expo App"}', 'builtin', 'executeExpoEasCreateProject'],
+    ['expo_eas_status', '{"projectId":"expo-1"}', 'builtin', 'executeExpoEasStatus'],
+    ['expo_eas_probe', '{"projectId":"expo-1"}', 'builtin', 'executeExpoEasProbe'],
+    ['expo_eas_build', '{"projectId":"expo-1"}', 'builtin', 'executeExpoEasBuild'],
+    ['expo_eas_update', '{"projectId":"expo-1"}', 'builtin', 'executeExpoEasUpdate'],
+    ['expo_eas_submit', '{"projectId":"expo-1"}', 'builtin', 'executeExpoEasSubmit'],
+    ['expo_eas_deploy_web', '{"projectId":"expo-1"}', 'builtin', 'executeExpoEasDeployWeb'],
+    ['expo_eas_workflow_runs', '{"projectId":"expo-1"}', 'builtin', 'executeExpoEasWorkflowRuns'],
+    [
+      'expo_eas_workflow_status',
+      '{"projectId":"expo-1"}',
+      'builtin',
+      'executeExpoEasWorkflowStatus',
+    ],
+    ['expo_eas_workflow_wait', '{"projectId":"expo-1"}', 'builtin', 'executeExpoEasWorkflowWait'],
+    ['expo_eas_graphql', '{"query":"query { __typename }"}', 'builtin', 'executeExpoEasGraphql'],
+    ['tool_catalog', '{}', 'builtin', 'executeToolCatalog'],
+    ['tool_describe', '{"name":"read_file"}', 'builtin', 'executeToolDescribe'],
+    ['poll_create', '{"question":"Pick one","options":["A","B"]}', 'builtin', 'executePollCreate'],
+    ['speak', '{"text":"hello"}', 'builtin', 'executeSpeak'],
+    ['agents_list', '{}', 'builtin', 'executeAgentsList'],
+    ['agents_switch', '{"personaId":"p1"}', 'builtin', 'executeAgentsSwitch'],
+    ['agents_configure', '{"name":"test"}', 'builtin', 'executeAgentsConfigure'],
   ];
 
-  it.each(parityTools)('routes %s', async (toolName, args, fnName) => {
+  it.each(builtinTools)('routes %s', async (toolName, args, moduleName, fnName) => {
     await executeTool(toolName, args, CONV_ID);
-    expect(parityMod[fnName]).toHaveBeenCalled();
+    const moduleUnderTest = moduleName === 'session' ? sessionInspectionMod : builtinMod;
+    expect(moduleUnderTest[fnName as keyof typeof moduleUnderTest]).toHaveBeenCalled();
   });
 
   it('passes the current callable tool inventory into tool_catalog', async () => {
@@ -632,7 +822,7 @@ describe('executeTool — parity routing', () => {
       availableToolNames: ['tool_catalog', 'read_file', 'mcp__docs__search_docs'],
     });
 
-    expect(parityMod.executeToolCatalog).toHaveBeenCalledWith(
+    expect(builtinMod.executeToolCatalog).toHaveBeenCalledWith(
       {},
       expect.objectContaining({
         availableToolNames: new Set(['tool_catalog', 'read_file', 'mcp__docs__search_docs']),
@@ -643,7 +833,7 @@ describe('executeTool — parity routing', () => {
   it('passes conversation file context to canvas html tools', async () => {
     await executeTool('canvas_create', '{"filePath":"canvas/preview.html"}', CONV_ID);
 
-    expect(parityMod.executeCanvasCreate).toHaveBeenCalledWith(
+    expect(builtinMod.executeCanvasCreate).toHaveBeenCalledWith(
       { filePath: 'canvas/preview.html' },
       expect.objectContaining({
         conversationId: CONV_ID,
@@ -659,7 +849,7 @@ describe('executeTool — core tools routing', () => {
     const result = await executeTool('memory_search', '{"query":"state"}', CONV_ID);
 
     expect(result).toBe(JSON.stringify({ status: 'ok' }));
-    expect(parityMod.executeMemorySearch).toHaveBeenCalledWith(
+    expect(builtinMod.executeMemorySearch).toHaveBeenCalledWith(
       { query: 'state' },
       {
         provider: 'openai',
@@ -674,161 +864,11 @@ describe('executeTool — core tools routing', () => {
     });
   });
 
-  it('records workflow evidence on the active run', async () => {
-    mockRecordAgentRunEvidence.mockImplementation((_conversationId, entries, _params, runId) => {
-      expect(runId).toBe('run-1');
-      const storedEntries = entries.map((entry: any, index: number) => ({
-        id: `ev-${index + 1}`,
-        kind: entry.kind,
-        status: entry.status ?? 'candidate',
-        recorder: entry.recorder,
-        title: entry.title ?? 'Workflow evidence',
-        content: entry.content,
-        dedupeKey: entry.dedupeKey,
-        sourceName: entry.sourceName,
-        sourceUri: entry.sourceUri,
-        toolName: entry.toolName,
-        workerSessionId: entry.workerSessionId,
-        artifactWorkspacePath: entry.artifactWorkspacePath,
-        tags: entry.tags,
-        createdAt: 10,
-        updatedAt: 10,
-      }));
-      mockChatState.conversations[0].agentRuns[0].evidence = storedEntries;
-      return storedEntries;
-    });
-
-    const result = await executeTool(
-      'record_workflow_evidence',
-      JSON.stringify({
-        entries: [
-          {
-            kind: 'fact',
-            content: 'Verified repo state.',
-            dedupeKey: 'repo-state',
-            sourceName: 'glob_search',
-          },
-        ],
-      }),
-      CONV_ID,
-    );
-
-    expect(mockRecordAgentRunEvidence).toHaveBeenCalledWith(
-      CONV_ID,
-      [
-        expect.objectContaining({
-          kind: 'fact',
-          content: 'Verified repo state.',
-          recorder: 'supervisor',
-          dedupeKey: 'repo-state',
-          sourceName: 'glob_search',
-        }),
-      ],
-      expect.objectContaining({ timestamp: expect.any(Number) }),
-      'run-1',
-    );
-    expect(JSON.parse(result)).toEqual(
-      expect.objectContaining({
-        status: 'ok',
-        runId: 'run-1',
-        recorded: 1,
-        totalEntries: 1,
-      }),
-    );
-  });
-
-  it('reads workflow evidence from a worker session parent run', async () => {
-    mockGetSubAgent.mockReturnValue({
-      sessionId: 'worker-1',
-      parentConversationId: CONV_ID,
-      agentRunId: 'run-1',
-    });
-    mockChatState.conversations[0].agentRuns[0].evidence = [
-      {
-        id: 'ev-1',
-        kind: 'artifact',
-        status: 'verified',
-        recorder: 'worker',
-        title: 'Patched file',
-        content: 'Updated src/store/useChatStore.ts',
-        workerSessionId: 'worker-1',
-        artifactWorkspacePath: 'src/store/useChatStore.ts',
-        createdAt: 1,
-        updatedAt: 2,
-      },
-      {
-        id: 'ev-2',
-        kind: 'question',
-        status: 'open',
-        recorder: 'supervisor',
-        title: 'Need more verification',
-        content: 'Add a persistence test for evidence trimming.',
-        createdAt: 3,
-        updatedAt: 4,
-      },
-    ];
-
-    const result = await executeTool(
-      'read_workflow_evidence',
-      JSON.stringify({
-        statuses: ['verified'],
-        limit: 1,
-        includeContent: false,
-      }),
-      'worker-1',
-      {
-        workspaceConversationId: CONV_ID,
-      },
-    );
-
-    const parsed = JSON.parse(result);
-    expect(parsed).toEqual(
-      expect.objectContaining({
-        status: 'ok',
-        runId: 'run-1',
-        workerSessionId: 'worker-1',
-        returnedEntries: 1,
-      }),
-    );
-    expect(parsed.entries[0]).toEqual(
-      expect.objectContaining({
-        id: 'ev-1',
-        kind: 'artifact',
-        status: 'verified',
-        title: 'Patched file',
-        artifactWorkspacePath: 'src/store/useChatStore.ts',
-      }),
-    );
-    expect(parsed.entries[0].content).toBeUndefined();
-  });
-
-  it('passes workflow evidence into Python and records bridge-emitted evidence', async () => {
-    mockChatState.conversations[0].agentRuns[0].evidence = [
-      {
-        id: 'ev-1',
-        kind: 'fact',
-        status: 'verified',
-        recorder: 'supervisor',
-        title: 'Existing constraint',
-        content: 'Stay within the shared workspace snapshot.',
-        createdAt: 1,
-        updatedAt: 2,
-      },
-    ];
+  it('normalizes python file output without store evidence writes', async () => {
     mockExecutePython.mockResolvedValueOnce({
       success: true,
       output: 'analysis complete',
       files: [{ path: 'reports/analysis.json', contentBase64: 'e30=' }],
-      workflowBridge: {
-        emittedEvidence: [
-          {
-            kind: 'fact',
-            title: 'Python verification',
-            content: 'Validated the generated artifact.',
-            status: 'verified',
-          },
-        ],
-      },
     });
 
     const result = await executeTool(
@@ -843,63 +883,16 @@ describe('executeTool — core tools routing', () => {
     expect(mockExecutePython).toHaveBeenCalledWith(
       expect.objectContaining({
         code: 'print("analysis")',
-        workflowBridge: {
-          evidence: [
-            expect.objectContaining({
-              kind: 'fact',
-              title: 'Existing constraint',
-              content: 'Stay within the shared workspace snapshot.',
-            }),
-          ],
-        },
       }),
     );
-    expect(mockRecordAgentRunEvidence).toHaveBeenCalledWith(
-      CONV_ID,
-      expect.arrayContaining([
-        expect.objectContaining({
-          kind: 'fact',
-          title: 'Python verification',
-          content: 'Validated the generated artifact.',
-          recorder: 'python',
-        }),
-        expect.objectContaining({
-          kind: 'summary',
-          title: 'Python execution completed',
-          recorder: 'python',
-        }),
-        expect.objectContaining({
-          kind: 'artifact',
-          artifactWorkspacePath: 'reports/analysis.json',
-          recorder: 'python',
-        }),
-      ]),
-      expect.objectContaining({ timestamp: expect.any(Number) }),
-      'run-1',
-    );
+    expect(mockRecordAgentRunEvidence).not.toHaveBeenCalled();
 
     expect(JSON.parse(result)).toEqual(
       expect.objectContaining({
         status: 'completed',
-        workflowEvidenceCount: 3,
         fileCount: 1,
       }),
     );
-  });
-
-  it('does not claim workflow evidence was recorded when persistence fails', async () => {
-    mockRecordAgentRunEvidence.mockReturnValueOnce(undefined);
-
-    const result = await executeTool(
-      'python',
-      JSON.stringify({ code: 'print("analysis")' }),
-      CONV_ID,
-      {
-        workspaceConversationId: CONV_ID,
-      },
-    );
-
-    expect(result).toBe('42');
   });
 
   it('handles invalid JSON args gracefully', async () => {
@@ -955,7 +948,7 @@ describe('executeTool — core tools routing', () => {
   });
 
   it('routes notify', async () => {
-    const result = await executeTool('notify', '{"title":"hi","body":"there"}', CONV_ID);
+    const result = await executeTool('notification_send', '{"title":"hi","body":"there"}', CONV_ID);
     const parsed = JSON.parse(result);
     expect(parsed.status).toBe('notification_displayed');
     expect(executeNativeTool).toHaveBeenCalledWith(
@@ -1024,18 +1017,22 @@ describe('executeTool — core tools routing', () => {
 
   it('sessions_spawn passes resolved provider', async () => {
     await executeTool('sessions_spawn', '{"prompt":"hello"}', CONV_ID);
-    expect(parityMod.executeSessionSpawn).toHaveBeenCalledWith(
+    expect(sessionLaunchMod.executeSessionSpawn).toHaveBeenCalledWith(
       { prompt: 'hello' },
       CONV_ID,
       expect.objectContaining({ id: 'openai', apiKey: 'sk-image' }),
       expect.any(Array),
-      undefined,
+      'gpt-image-2',
+      {
+        controlGraphGoals: undefined,
+        agentRunId: undefined,
+      },
     );
   });
 
   it('sessions_send passes resolved provider', async () => {
     await executeTool('sessions_send', '{"sessionId":"s1","message":"hi"}', CONV_ID);
-    expect(parityMod.executeSessionSend).toHaveBeenCalledWith(
+    expect(sessionLaunchMod.executeSessionSend).toHaveBeenCalledWith(
       { sessionId: 's1', message: 'hi' },
       expect.objectContaining({ id: 'openai', apiKey: 'sk-image' }),
       undefined,
@@ -1065,12 +1062,24 @@ describe('executeTool — core tools routing', () => {
       model: 'claude-3-7-sonnet-20250219',
     });
 
-    expect(parityMod.executeSessionSpawn).toHaveBeenCalledWith(
+    expect(sessionLaunchMod.executeSessionSpawn).toHaveBeenCalledWith(
       { prompt: 'hello' },
       CONV_ID,
-      expect.objectContaining({ id: 'anthropic' }),
-      expect.arrayContaining([expect.objectContaining({ id: 'anthropic' })]),
+      expect.objectContaining({
+        id: 'anthropic',
+        model: 'claude-3-7-sonnet-20250219',
+      }),
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'anthropic',
+          model: 'claude-3-7-sonnet-20250219',
+        }),
+      ]),
       'claude-3-7-sonnet-20250219',
+      {
+        controlGraphGoals: undefined,
+        agentRunId: undefined,
+      },
     );
   });
 
@@ -1087,9 +1096,12 @@ describe('executeTool — core tools routing', () => {
       model: 'claude-3-7-sonnet-20250219',
     });
 
-    expect(parityMod.executeSessionSend).toHaveBeenCalledWith(
+    expect(sessionLaunchMod.executeSessionSend).toHaveBeenCalledWith(
       { sessionId: 's1', message: 'hi' },
-      expect.objectContaining({ id: 'anthropic' }),
+      expect.objectContaining({
+        id: 'anthropic',
+        model: 'claude-3-7-sonnet-20250219',
+      }),
       'claude-3-7-sonnet-20250219',
     );
   });
@@ -1110,20 +1122,14 @@ describe('executeTool — core tools routing', () => {
       '{"code":"print(40 + 2)","packages":["numpy"]}',
       CONV_ID,
     );
-    expect(JSON.parse(result)).toEqual(
-      expect.objectContaining({
-        summary: 'Python execution completed and recorded 1 workflow evidence entry.',
-        status: 'completed',
-        output: '42',
-        workflowEvidenceCount: 1,
-      }),
-    );
+    expect(result).toBe('42');
     expect(mockExecutePython).toHaveBeenCalledWith(
       expect.objectContaining({
         code: 'print(40 + 2)',
         packages: ['numpy'],
       }),
     );
+    expect(mockRecordAgentRunEvidence).not.toHaveBeenCalled();
   });
 
   it('routes python timeout overrides through the Pyodide bridge', async () => {
@@ -1132,14 +1138,7 @@ describe('executeTool — core tools routing', () => {
       '{"code":"print(40 + 2)","timeoutMs":120000}',
       CONV_ID,
     );
-    expect(JSON.parse(result)).toEqual(
-      expect.objectContaining({
-        summary: 'Python execution completed and recorded 1 workflow evidence entry.',
-        status: 'completed',
-        output: '42',
-        workflowEvidenceCount: 1,
-      }),
-    );
+    expect(result).toBe('42');
     expect(mockExecutePython).toHaveBeenCalledWith(
       expect.objectContaining({
         code: 'print(40 + 2)',
@@ -1155,14 +1154,7 @@ describe('executeTool — core tools routing', () => {
       CONV_ID,
     );
 
-    expect(JSON.parse(result)).toEqual(
-      expect.objectContaining({
-        summary: 'Python execution completed and recorded 1 workflow evidence entry.',
-        status: 'completed',
-        output: '42',
-        workflowEvidenceCount: 1,
-      }),
-    );
+    expect(result).toBe('42');
     expect(mockExecutePython).toHaveBeenCalledWith(
       expect.objectContaining({
         code: 'print(40 + 2)',
@@ -1170,47 +1162,50 @@ describe('executeTool — core tools routing', () => {
         indexUrls: ['https://packages.example/simple'],
       }),
     );
+    expect(mockRecordAgentRunEvidence).not.toHaveBeenCalled();
   });
 
-  it('routes workspace_write_file with validated args', async () => {
-    const result = await executeTool(
-      'workspace_write_file',
-      '{"targetId":"ws-1","path":"README.md","content":"hello"}',
-      CONV_ID,
-    );
+  it('routes workspace_status and summarizes configured targets', async () => {
+    const result = await executeTool('workspace_status', '{}', CONV_ID);
+
     expect(JSON.parse(result)).toMatchObject({
-      status: 'ok',
-      action: 'written',
-      path: '/workspace/project/README.md',
-      size: 5,
+      summary: 'Found 1 configured workspace targets.',
+      targets: [expect.objectContaining({ targetId: 'ws-1', summary: 'Workspace A is ready.' })],
     });
-    expect(mockWriteWorkspaceFile).toHaveBeenCalledWith(
+    expect(mockGetWorkspaceTargetControlStatus).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'ws-1' }),
-      'README.md',
-      'hello',
+      expect.objectContaining({
+        workspaceTargets: expect.any(Array),
+      }),
     );
   });
 
-  it('returns a friendly error when workspace_write_file content is missing', async () => {
+  it('routes workspace_launch_browser with validated args', async () => {
     const result = await executeTool(
-      'workspace_write_file',
-      '{"targetId":"ws-1","path":"README.md"}',
+      'workspace_launch_browser',
+      '{"targetId":"ws-1","providerId":"browser-1"}',
       CONV_ID,
     );
-    expect(result).toContain('Error');
-    expect(result).toContain('content');
-    expect(mockWriteWorkspaceFile).not.toHaveBeenCalled();
+
+    expect(JSON.parse(result)).toMatchObject({
+      summary: 'Workspace browser session launched for Workspace A.',
+      targetId: 'ws-1',
+      sessionId: 'workspace-browser-session-1',
+      providerId: 'browser-1',
+      url: 'https://workspace.example.com',
+    });
+    expect(mockLaunchWorkspaceBrowserSession).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'ws-1' }),
+      expect.objectContaining({ providerId: 'browser-1' }),
+    );
   });
 
-  it('returns a friendly error when workspace_list_files path is not a string', async () => {
-    const result = await executeTool(
-      'workspace_list_files',
-      '{"targetId":"ws-1","path":123}',
-      CONV_ID,
-    );
+  it('returns a friendly error when workspace_delegate_task prompt is missing', async () => {
+    const result = await executeTool('workspace_delegate_task', '{"targetId":"ws-1"}', CONV_ID);
+
     expect(result).toContain('Error');
-    expect(result).toContain('path');
-    expect(mockListWorkspaceDirectory).not.toHaveBeenCalled();
+    expect(result).toContain('prompt');
+    expect(mockDelegateWorkspaceTask).not.toHaveBeenCalled();
   });
 
   it('summarizes browser screenshots without returning base64 blobs', async () => {
@@ -1284,45 +1279,26 @@ describe('executeTool — core tools routing', () => {
     expect(parsed.requests[0].status).toBeGreaterThanOrEqual(400);
   });
 
-  it('trims oversized workspace_read_file results to an excerpt', async () => {
-    const largeContent = `first line\n${'x'.repeat(14000)}\nlast line`;
-    mockReadWorkspaceFile.mockResolvedValueOnce({
-      path: '/workspace/project/build.log',
-      content: largeContent,
-      size: largeContent.length,
-    });
-
+  it('routes workspace_delegate_task and returns the delegated output preview', async () => {
     const result = await executeTool(
-      'workspace_read_file',
-      '{"targetId":"ws-1","path":"build.log"}',
+      'workspace_delegate_task',
+      '{"targetId":"ws-1","prompt":"Investigate build failures","mode":"agent"}',
       CONV_ID,
     );
-    const parsed = JSON.parse(result);
 
-    expect(parsed.status).toBe('read');
-    expect(parsed.content).toBeUndefined();
-    expect(parsed.contentExcerpt).toContain('first line');
-    expect(parsed.contentExcerpt).toContain('last line');
-    expect(parsed.truncated).toBe(true);
-  });
-
-  it('caps long workspace directory listings and reports omitted entries', async () => {
-    mockListWorkspaceDirectory.mockResolvedValueOnce({
-      path: '/workspace/project',
-      entries: Array.from({ length: 55 }, (_, index) => ({
-        name: `file-${index}.ts`,
-        isDirectory: false,
-        size: index + 1,
-      })),
+    expect(JSON.parse(result)).toMatchObject({
+      summary: 'Delegated task to Workspace A via Cursor CLI.',
+      targetId: 'ws-1',
+      sshTargetId: 'ssh-1',
+      mode: 'agent',
+      output: 'Delegated task completed successfully.',
+      truncated: false,
     });
-
-    const result = await executeTool('workspace_list_files', '{"targetId":"ws-1"}', CONV_ID);
-    const parsed = JSON.parse(result);
-
-    expect(parsed.status).toBe('listed');
-    expect(parsed.count).toBe(55);
-    expect(parsed.entries).toHaveLength(40);
-    expect(parsed.omittedEntries).toBe(15);
+    expect(mockDelegateWorkspaceTask).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'ws-1' }),
+      'Investigate build failures',
+      expect.objectContaining({ mode: 'agent' }),
+    );
   });
 });
 

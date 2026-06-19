@@ -18,7 +18,7 @@ The main request lifecycle is:
 
 1. The user submits text, attachments, or voice input from the chat UI.
 2. Screen state flows into `useChatStore`, which owns persisted conversations, drafts, and message metadata.
-3. The orchestration layer in `src/engine/orchestrator.ts` decides whether the request should be direct, tool-assisted, or agentic.
+3. The orchestration shell in `src/engine/orchestrator.ts` delegates bootstrap and graph-session execution to `src/engine/orchestrator/*`, then runs the graph-owned agent loop.
 4. Provider execution routes through `src/services/llm/LlmService.ts` or the on-device runtime in `src/services/localLlm`.
 5. Tool calls are normalized and executed through `src/engine/tools/*` plus the relevant service modules.
 6. Results are compacted, guarded, paired, and persisted back into the conversation store.
@@ -28,7 +28,7 @@ The main request lifecycle is:
 
 ### Conversation State
 
-- `src/store/useChatStore.ts` owns conversations, messages, active drafts, attachments, workflow state, and persistence integration.
+- `src/store/useChatStore.ts` owns conversations, messages, active drafts, attachments, agent-run graph snapshots, and persistence integration.
 - `src/store/chatPersistence.ts` and related helpers handle durable storage and hydration.
 
 ### Settings And Secure Configuration
@@ -52,9 +52,10 @@ The main request lifecycle is:
 
 ### Tooling And Orchestration
 
-- `src/engine/orchestrator.ts` is the top-level coordinator for chat execution.
-- `src/engine/tools` contains tool definitions, dispatching, parity execution, native executors, and web/browser helpers.
-- Tool-execution seams now live in domain files such as `src/engine/tools/browserToolExecutor.ts`, `src/engine/tools/workspaceToolExecutor.ts`, `src/engine/tools/parity-ssh.ts`, and `src/engine/tools/parity-expo.ts` so contributors can change one execution surface without paging through the entire dispatcher.
+- `src/engine/orchestrator.ts` is the thin entry shell; `src/engine/orchestrator/bootstrap.ts` and `session.ts` own bootstrap and graph-session execution.
+- `src/engine/graph/*` is the graph-owned control plane (XState, goals, completion gate, tool turns, observability).
+- `src/engine/tools` contains tool definitions, dispatching, builtin execution, native executors, and web/browser helpers.
+- Tool-execution seams now live in domain files such as `src/engine/tools/browserToolExecutor.ts`, `src/engine/tools/workspaceToolExecutor.ts`, `src/engine/tools/builtin-ssh.ts`, and `src/engine/tools/builtin-expo.ts` so contributors can change one execution surface without paging through the entire dispatcher.
 - `src/engine/toolResultGuard.ts`, `src/engine/toolResultPairingGuard.ts`, and `src/engine/loopDetection.ts` protect the conversation context and workflow from runaway tool behavior.
 
 ### Remote Work Surfaces
@@ -89,7 +90,7 @@ These layers are powerful but also increase maintenance cost, especially when Ex
 
 ## Current Refactor Hotspots
 
-The largest contribution barriers are the monoliths already called out in the audit.
+The largest contribution barriers are the large modules listed below.
 
 Highest-value decomposition targets:
 
@@ -98,8 +99,7 @@ Highest-value decomposition targets:
 3. `src/screens/ChatScreen.tsx`
 4. `src/services/llm/LlmService.ts`
 5. `src/store/useChatStore.ts`
-6. `src/engine/orchestrator.ts`
-7. `src/services/agents/agentWorkflowPilot.ts`
+6. `src/screens/ChatScreen.tsx` (and related chat screen modules)
 
 ## Boundary Map For Remaining Large Modules
 
@@ -113,15 +113,15 @@ The tool-executor split removes one of the highest-churn monolith clusters. The 
 
 ### `src/store/useChatStore.ts`
 
-- Keep conversation and message CRUD separate from workflow and pilot run state.
+- Keep conversation and message CRUD separate from agent-run graph state and checkpoints.
 - Keep attachment and import/export behavior separate from persistence and hydration logic.
 - Keep UI-derived selectors and presentation helpers outside the core persisted store whenever possible.
 
-### `src/engine/orchestrator.ts` And `src/services/agents/agentWorkflowPilot.ts`
+### `src/engine/orchestrator/*` And `src/engine/graph/*`
 
-- Keep stage evaluation and continuation policy separate from provider execution and final response assembly.
-- Keep resume and recovery state persistence separate from planner heuristics and tool-result handling.
-- Keep telemetry, evidence recording, and debug logging in helpers so behavior changes do not require editing the whole run loop.
+- Keep bootstrap (providers, tools, failover) separate from graph-session execution and model turns.
+- Keep graph mutations inside `AgentControlGraphEvent` reducers; store code persists normalized snapshots only.
+- Keep observability, loop recovery, and completion-gate policy in graph modules rather than the orchestrator shell.
 
 ### `src/services/localLlm/runtime.ts`
 

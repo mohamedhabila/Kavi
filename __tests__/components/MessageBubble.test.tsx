@@ -2,11 +2,12 @@
 // Tests — MessageBubble Component
 // ---------------------------------------------------------------------------
 
-import React from 'react';
 import { render, fireEvent, waitFor, within } from '@testing-library/react-native';
 import { Dimensions, StyleSheet } from 'react-native';
 import { MessageBubble } from '../../src/components/chat/MessageBubble';
-import { AgentRun, Message } from '../../src/types';
+import { GRAPH_OBSERVABILITY_AUDIT_TYPES } from '../../src/engine/graph/graphObservability';
+import { AgentRun } from '../../src/types/agentRun';
+import { Message } from '../../src/types/message';
 import * as Clipboard from 'expo-clipboard';
 import { shareTextExport } from '../../src/services/share/localShare';
 
@@ -207,37 +208,6 @@ const makeAgentRun = (overrides: Partial<AgentRun> = {}): AgentRun => ({
   ...overrides,
 });
 
-const makePilotEvaluation = (): NonNullable<AgentRun['latestPilotEvaluation']> => ({
-  evaluatorVersion: 'pilot-v1',
-  evaluatedAt: 1_700_000_000_450,
-  objective: 'Audit the repository and apply the fix.',
-  completionScore: 4,
-  adherenceScore: 4,
-  evidenceScore: 3,
-  processScore: 4,
-  overallScore: 15,
-  maxOverallScore: 20,
-  approvalThreshold: 15,
-  approved: false,
-  recommendedAction: 'continue',
-  controlAction: 'continue',
-  confidence: 'medium',
-  summary: 'Continue autonomously while verifying the worker output.',
-  rationale: 'The workflow has strong progress, but the final verification is still pending.',
-  strengths: ['The repository state is already captured.'],
-  gaps: ['The final verification pass has not finished yet.'],
-  nextActions: ['Run the final verification pass.'],
-  criterionEvaluations: [
-    {
-      criterion: 'Verification',
-      score: 3,
-      maxScore: 5,
-      status: 'partial',
-      rationale: 'Verification is still in progress.',
-    },
-  ],
-});
-
 function joinMarkdownCalls() {
   const marked = require('react-native-marked');
   return marked.useMarkdown.mock.calls.map(([value]: [string]) => value).join('');
@@ -246,18 +216,6 @@ function joinMarkdownCalls() {
 function getMarkdownCalls(): string[] {
   const marked = require('react-native-marked');
   return marked.useMarkdown.mock.calls.map(([value]: [string]) => value);
-}
-
-function getTextContent(value: unknown): string {
-  if (Array.isArray(value)) {
-    return value.map(getTextContent).join('');
-  }
-
-  if (value === null || value === undefined) {
-    return '';
-  }
-
-  return String(value);
 }
 
 describe('MessageBubble', () => {
@@ -357,7 +315,7 @@ describe('MessageBubble', () => {
         },
       ],
     });
-    const { getByTestId, getByLabelText, UNSAFE_getByType } = render(
+    const { getByTestId, UNSAFE_getByType } = render(
       <MessageBubble
         message={msg}
         onViewFile={onViewFile}
@@ -482,41 +440,6 @@ describe('MessageBubble', () => {
     expect(getByText('Reviewing the work')).toBeTruthy();
   });
 
-  it('shows a review footer while pilot is reviewing the run', () => {
-    const msg = makeMessage({ role: 'assistant', content: 'Implemented the fix.' });
-    const { getByTestId, getByText } = render(
-      <MessageBubble
-        message={msg}
-        agentRun={makeAgentRun({
-          currentPhase: 'pilot',
-          latestPilotEvaluation: makePilotEvaluation(),
-          phases: [
-            { key: 'assess', title: 'Assess', status: 'completed', updatedAt: 1_700_000_000_100 },
-            {
-              key: 'plan',
-              title: 'Plan',
-              status: 'completed',
-              detail: 'Inspect, patch, and verify.',
-              updatedAt: 1_700_000_000_150,
-            },
-            { key: 'work', title: 'Work', status: 'completed', updatedAt: 1_700_000_000_200 },
-            {
-              key: 'review',
-              title: 'Review',
-              status: 'completed',
-              updatedAt: 1_700_000_000_400,
-            },
-            { key: 'pilot', title: 'Pilot', status: 'active', updatedAt: 1_700_000_000_450 },
-            { key: 'deliver', title: 'Deliver', status: 'pending', updatedAt: 1_700_000_000_500 },
-          ],
-        })}
-      />,
-    );
-
-    expect(getByTestId('assistant-bubble-review-indicator')).toBeTruthy();
-    expect(getByText('Pilot is reviewing the work')).toBeTruthy();
-  });
-
   it('hides the review footer while the run is still in the work stage', () => {
     const msg = makeMessage({ role: 'assistant', content: 'Implemented the fix.' });
     const { queryByTestId } = render(
@@ -544,65 +467,177 @@ describe('MessageBubble', () => {
     expect(queryByTestId('assistant-bubble-review-indicator')).toBeNull();
   });
 
-  it('should render a compact workflow widget and toggle its details', () => {
+  it('should render a compact goals widget and toggle its details', () => {
     const msg = makeMessage({ role: 'assistant', content: 'Implemented the fix.' });
-    const { getByTestId, getByText, queryByTestId, queryByText } = render(
-      <MessageBubble
-        message={msg}
-        agentRun={makeAgentRun({ latestPilotEvaluation: makePilotEvaluation() })}
-      />,
-    );
-
-    expect(getByTestId('agent-workflow-widget')).toBeTruthy();
-    expect(getByText('Agent workflow')).toBeTruthy();
-    expect(getByTestId('agent-workflow-pilot-chip')).toBeTruthy();
-    expect(getByText('Audit the repository and apply the fix.')).toBeTruthy();
-    expect(queryByText('Still verifying the worker output.')).toBeNull();
-    expect(getByText('Pilot: Continue')).toBeTruthy();
-    expect(getByText('Stage: Review')).toBeTruthy();
-    expect(getByText('Last tool: Read File')).toBeTruthy();
-    expect(getByText('Turn 2')).toBeTruthy();
-    expect(queryByTestId('agent-workflow-details')).toBeNull();
-    expect(queryByText('Success criteria')).toBeNull();
-
-    fireEvent.press(getByTestId('agent-workflow-toggle'));
-
-    expect(getByTestId('agent-workflow-details')).toBeTruthy();
-    expect(getByTestId('agent-workflow-pilot-section')).toBeTruthy();
-    expect(getByTestId('agent-workflow-phase-plan')).toBeTruthy();
-    expect(getByTestId('agent-workflow-timeline')).toBeTruthy();
-    expect(getByText('Confidence: Medium')).toBeTruthy();
-    expect(getByText('Score: 15/20')).toBeTruthy();
-    expect(getByText('Continue autonomously while verifying the worker output.')).toBeTruthy();
-    expect(getByText('Still verifying the worker output.')).toBeTruthy();
-    expect(getByText('Success criteria')).toBeTruthy();
-    expect(getByText(/The workflow state is persisted\./)).toBeTruthy();
-    expect(getByText('Tool started: read_file')).toBeTruthy();
-
-    fireEvent.press(getByTestId('agent-workflow-toggle'));
-    expect(queryByTestId('agent-workflow-details')).toBeNull();
-  });
-
-  it('renders pilot fallback detail in the expanded workflow widget', () => {
-    const msg = makeMessage({ role: 'assistant', content: 'Implemented the fix.' });
-    const { getByTestId, getByText } = render(
+    const { getByTestId, getByText, queryByTestId } = render(
       <MessageBubble
         message={msg}
         agentRun={makeAgentRun({
-          latestPilotEvaluation: {
-            ...makePilotEvaluation(),
-            fallbackReason: 'request_failed',
-            fallbackDetail: 'LLM API error 503: upstream unavailable',
+          controlGraph: {
+            version: 1,
+            status: 'ready',
+            iteration: 2,
+            goals: [
+              {
+                id: 'goal-audit',
+                title: 'Audit the repository',
+                status: 'active',
+                dependencies: [],
+                evidence: ['read_file'],
+                createdAt: 1,
+                updatedAt: 2,
+              },
+              {
+                id: 'goal-fix',
+                title: 'Apply the fix',
+                status: 'pending',
+                dependencies: ['goal-audit'],
+                evidence: [],
+                createdAt: 1,
+                updatedAt: 2,
+              },
+            ],
+            expectedToolCalls: [],
+            observedToolResults: [],
+            pendingAsyncCount: 0,
+            lastModelToolNames: [],
+            turnDirectives: {
+              forceFinalText: false,
+              requireDelegationTool: false,
+              requireWorkflowTool: false,
+              incompleteFinalTextRecoveryCount: 0,
+            },
+            audit: [],
+            updatedAt: 2,
+            asyncWork: {
+              awaitingBackgroundWorkers: false,
+              pendingOperations: [],
+              updatedAt: 2,
+            },
           },
         })}
       />,
     );
 
-    fireEvent.press(getByTestId('agent-workflow-toggle'));
+    expect(getByTestId('agent-goals-widget')).toBeTruthy();
+    expect(getByText('Goals (2)')).toBeTruthy();
+    expect(getByText('Audit the repository')).toBeTruthy();
+    expect(queryByTestId('agent-goals-details')).toBeNull();
 
-    expect(
-      getByText('Fallback detail: LLM API error 503: upstream unavailable'),
-    ).toBeTruthy();
+    fireEvent.press(getByTestId('agent-goals-toggle'));
+
+    expect(getByTestId('agent-goals-details')).toBeTruthy();
+    expect(getByTestId('agent-goals-item-goal-audit')).toBeTruthy();
+    expect(getByTestId('agent-goals-item-goal-fix')).toBeTruthy();
+    expect(getByText('Apply the fix')).toBeTruthy();
+
+    fireEvent.press(getByTestId('agent-goals-toggle'));
+    expect(queryByTestId('agent-goals-details')).toBeNull();
+  });
+
+  it('should render a compact run trace widget and toggle its details', () => {
+    const msg = makeMessage({ role: 'assistant', content: 'Implemented the fix.' });
+    const { getByTestId, getByText, queryByTestId } = render(
+      <MessageBubble
+        message={msg}
+        agentRun={makeAgentRun({
+          controlGraph: {
+            version: 1,
+            status: 'ready',
+            iteration: 2,
+            goals: [],
+            expectedToolCalls: [],
+            observedToolResults: [],
+            pendingAsyncCount: 0,
+            lastModelToolNames: [],
+            turnDirectives: {
+              forceFinalText: false,
+              requireDelegationTool: false,
+              requireWorkflowTool: false,
+              incompleteFinalTextRecoveryCount: 0,
+            },
+            audit: [
+              {
+                type: GRAPH_OBSERVABILITY_AUDIT_TYPES.TOOL_SURFACE_SELECTED,
+                iteration: 1,
+                timestamp: 100,
+                detail: 'count:2,tokens:100,tools:read_file,web_search',
+              },
+              {
+                type: GRAPH_OBSERVABILITY_AUDIT_TYPES.MEMORY_RETRIEVAL,
+                iteration: 1,
+                timestamp: 110,
+                detail: 'facts:2,episodes:1,sections:1',
+              },
+              {
+                type: GRAPH_OBSERVABILITY_AUDIT_TYPES.COMPLETION_GATE,
+                iteration: 2,
+                timestamp: 200,
+                detail: 'decision:hold,reason:goals_incomplete',
+              },
+            ],
+            updatedAt: 2,
+            asyncWork: {
+              awaitingBackgroundWorkers: false,
+              pendingOperations: [],
+              updatedAt: 2,
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(getByTestId('agent-run-trace-widget')).toBeTruthy();
+    expect(getByText('Run trace')).toBeTruthy();
+    expect(queryByTestId('agent-run-trace-details')).toBeNull();
+
+    fireEvent.press(getByTestId('agent-run-trace-toggle'));
+
+    expect(getByTestId('agent-run-trace-details')).toBeTruthy();
+    expect(getByTestId('agent-run-trace-iteration-1')).toBeTruthy();
+    expect(getByTestId('agent-run-trace-iteration-2')).toBeTruthy();
+    expect(getByText('TOOL_SURFACE_SELECTED')).toBeTruthy();
+    expect(getByText('MEMORY_RETRIEVAL')).toBeTruthy();
+    expect(getByText('COMPLETION_GATE')).toBeTruthy();
+
+    fireEvent.press(getByTestId('agent-run-trace-toggle'));
+    expect(queryByTestId('agent-run-trace-details')).toBeNull();
+  });
+
+  it('renders a bootstrap placeholder when the run has no goals yet', () => {
+    const msg = makeMessage({ role: 'assistant', content: 'Implemented the fix.' });
+    const { getByTestId, getByText } = render(
+      <MessageBubble
+        message={msg}
+        agentRun={makeAgentRun({
+          controlGraph: {
+            version: 1,
+            status: 'ready',
+            iteration: 0,
+            expectedToolCalls: [],
+            observedToolResults: [],
+            pendingAsyncCount: 0,
+            lastModelToolNames: [],
+            turnDirectives: {
+              forceFinalText: false,
+              requireDelegationTool: false,
+              requireWorkflowTool: false,
+              incompleteFinalTextRecoveryCount: 0,
+            },
+            audit: [],
+            updatedAt: 1,
+            asyncWork: {
+              awaitingBackgroundWorkers: false,
+              pendingOperations: [],
+              updatedAt: 1,
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(getByTestId('agent-goals-widget')).toBeTruthy();
+    expect(getByText('Goals pending bootstrap')).toBeTruthy();
   });
 
   it('should render structured sub-agent activity cards instead of raw lifecycle text', () => {
@@ -1295,7 +1330,7 @@ describe('MessageBubble', () => {
       assistantMetadata: {
         kind: 'final',
         completionStatus: 'complete',
-        finishReason: 'pilot_approved',
+        finishReason: 'graph_finalized',
       },
     });
     const { getByTestId, getByText, queryByText, queryByTestId } = render(

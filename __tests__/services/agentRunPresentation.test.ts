@@ -5,7 +5,7 @@ import {
   formatAgentRunStatusLabel,
   getAgentRunDisplayPhase,
   getLatestAgentRunToolCheckpoint,
-} from '../../src/services/agents/agentRunPresentation';
+} from '../../src/services/agents/lifecycle/agentRunPresentation';
 
 describe('agentRunPresentation', () => {
   it('formats agent run status labels', () => {

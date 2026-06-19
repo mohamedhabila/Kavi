@@ -7,12 +7,12 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { ensureDefaultBlocks } from '../../../src/services/memory/blocks';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
-} from '../../../src/services/memory/factStore';
-import { ensureDefaultBlocks } from '../../../src/services/memory/blocks';
+} from '../../../src/services/memory/schema';
+import { listFacts } from '../../../src/services/memory/facts/queries';
 import {
   clearMigrationState,
   extractSeedTurns,
@@ -21,8 +21,9 @@ import {
   runMigrationSeedPass,
   seedConversation,
 } from '../../../src/services/memory/migrationSeedPass';
-import { listFacts } from '../../../src/services/memory/factStore';
-import type { Conversation, Message } from '../../../src/types';
+import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
+import type { Conversation } from '../../../src/types/conversation';
+import type { Message } from '../../../src/types/message';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -48,6 +49,17 @@ function asstMsg(id: string, ts: number, content = `a-${id}`): Message {
 }
 function toolMsg(id: string, ts: number): Message {
   return { id, role: 'tool', content: 't', timestamp: ts } as Message;
+}
+
+async function withExpectedWarning<T>(action: () => Promise<T>, expectedCalls = 1): Promise<T> {
+  const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  try {
+    const result = await action();
+    expect(warnSpy).toHaveBeenCalledTimes(expectedCalls);
+    return result;
+  } finally {
+    warnSpy.mockRestore();
+  }
 }
 
 function buildConversation(
@@ -208,7 +220,9 @@ describe('seedConversation', () => {
     const failing = jest.fn(async () => {
       throw new Error('boom');
     });
-    const result = await seedConversation({ conversation: conv, extractor: failing });
+    const result = await withExpectedWarning(() =>
+      seedConversation({ conversation: conv, extractor: failing }),
+    );
     expect(result.status).toBe('error');
     expect(result.error).toBe('boom');
     const state = getMigrationState('c3');
@@ -222,7 +236,7 @@ describe('seedConversation', () => {
     const failing = jest.fn(async () => {
       throw new Error('first-time');
     });
-    await seedConversation({ conversation: conv, extractor: failing });
+    await withExpectedWarning(() => seedConversation({ conversation: conv, extractor: failing }));
     expect(getMigrationState('c4')?.status).toBe('error');
 
     const recovered = await seedConversation({
@@ -331,10 +345,12 @@ describe('runMigrationSeedPass', () => {
     // bad has older updatedAt
     bad.updatedAt = 1_000;
     ok.updatedAt = 5_000;
-    const result = await runMigrationSeedPass({
-      conversations: [ok, bad],
-      extractor: flaky,
-    });
+    const result = await withExpectedWarning(() =>
+      runMigrationSeedPass({
+        conversations: [ok, bad],
+        extractor: flaky,
+      }),
+    );
     expect(result.attempted).toBe(2);
     expect(result.errors).toBe(1);
     expect(result.completed).toBe(1);

@@ -5,8 +5,8 @@
 import React from 'react';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { FileText, Mic, X } from 'lucide-react-native';
-import { useTranslation } from '../../i18n';
-import { Attachment } from '../../types';
+import { useTranslation } from '../../i18n/useTranslation';
+import { Attachment } from '../../types/attachment';
 import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
 import { isAudioAttachment } from '../../utils/messageAttachments';
 

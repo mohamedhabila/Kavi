@@ -2,7 +2,7 @@
 // Kavi — Context Engine Types
 // ---------------------------------------------------------------------------
 
-import type { Message } from '../../types';
+import type { Message } from '../../types/message';
 
 // ── Compaction tiers (Anthropic-style graduated context management) ───────
 

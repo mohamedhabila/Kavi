@@ -12,7 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { parse as shellParse } from 'shell-quote';
 import { generateId } from '../../utils/id';
 import { describeToolInvocation } from '../security/toolPrivacy';
-import type { RemoteApprovalRequest } from '../../types';
+import type { RemoteApprovalRequest } from '../../types/remote';
 import { unrefTimerIfSupported } from '../../utils/timers';
 
 type ApprovalScope = NonNullable<RemoteApprovalRequest['scope']>;
@@ -321,10 +321,6 @@ const DEFAULT_POLICY: ApprovalPolicy = {
     'ssh_rename_path',
     'ssh_delete_path',
     'ssh_make_directory',
-    'workspace_write_file',
-    'workspace_rename',
-    'workspace_delete',
-    'workspace_mkdir',
     'workspace_launch_browser',
     'workspace_delegate_task',
     'browser_navigate',
@@ -343,10 +339,14 @@ const DEFAULT_POLICY: ApprovalPolicy = {
     'expo_eas_update',
     'expo_eas_submit',
     'expo_eas_deploy_web',
+    'calendar_list',
+    'calendar_events',
     'calendar_create_event',
+    'calendar_update_event',
     'email_compose',
     'sms_compose',
     'phone_call',
+    'maps_open',
     'contacts_pick',
     'contacts_manage_access',
     'contacts_view',
@@ -358,6 +358,8 @@ const DEFAULT_POLICY: ApprovalPolicy = {
     'contacts_get_full',
     'contacts_search',
     'contacts_get',
+    'location_current',
+    'clipboard_read',
     'share_text',
     'share_url',
     'share_file',
@@ -365,6 +367,14 @@ const DEFAULT_POLICY: ApprovalPolicy = {
     'clipboard_write',
     'clipboard',
     'share',
+    'notification_send',
+    'notification_schedule',
+    'notification_cancel',
+    'device_permissions',
+    'photos_latest',
+    'camera_clip',
+    'screen_record',
+    'haptic_feedback',
   ],
   autoApproveTools: [
     'web_search',
@@ -374,8 +384,6 @@ const DEFAULT_POLICY: ApprovalPolicy = {
     'ssh_list_directory',
     'ssh_read_file',
     'workspace_status',
-    'workspace_read_file',
-    'workspace_list_files',
     'browser_snapshot',
     'browser_screenshot',
     'browser_console',
@@ -422,10 +430,16 @@ function getApprovalScope(toolName: string): ApprovalScope {
     toolName.startsWith('contacts_') ||
     toolName.startsWith('location_') ||
     toolName.startsWith('clipboard_') ||
+    toolName === 'clipboard' ||
+    toolName.startsWith('device_') ||
+    toolName.startsWith('photos_') ||
+    toolName.startsWith('camera_') ||
     toolName === 'email_compose' ||
     toolName === 'sms_compose' ||
     toolName === 'phone_call' ||
     toolName === 'maps_open' ||
+    toolName === 'screen_record' ||
+    toolName === 'haptic_feedback' ||
     toolName === 'share' ||
     toolName.startsWith('share_') ||
     toolName === 'open_url' ||

@@ -2,7 +2,6 @@
 // Tests — FileBrowser Component
 // ---------------------------------------------------------------------------
 
-import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { FileBrowser, type FileEntry } from '../../src/components/files/FileBrowser';
 
@@ -28,7 +27,7 @@ jest.mock('../../src/theme/useAppTheme', () => ({
   AppPalette: {},
 }));
 
-jest.mock('../../src/i18n', () => ({
+jest.mock('../../src/i18n/useTranslation', () => ({
   useTranslation: () => ({
     t: (key: string) =>
       ({

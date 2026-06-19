@@ -6,7 +6,6 @@
 import {
   processCanvasMessage,
   clearAllSurfaces,
-  getSurface,
   renderSurfaceToHtml,
   setCanvasEventHandler,
 } from '../../src/services/canvas/renderer';

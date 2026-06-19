@@ -38,14 +38,15 @@ describe('skills manifest', () => {
     );
   });
 
-  it('accepts legacy OpenClaw manifest fields used for skill setup', () => {
+  it('ignores non-Kavi manifest containers when resolving skill setup fields', () => {
+    const privateMetadataKey = ['open', 'claw'].join('');
     const metadata = buildSkillMetadataFromFrontmatter({
       name: 'GitHub Skill',
       description: 'Manage repositories and issues',
       version: '1.0.0',
       tools: ['repos', 'issues'],
       metadata: {
-        openclaw: {
+        [privateMetadataKey]: {
           skillKey: 'github',
           primaryEnv: 'GITHUB_TOKEN',
           always: true,
@@ -61,12 +62,12 @@ describe('skills manifest', () => {
 
     expect(metadata).toEqual(
       expect.objectContaining({
-        skillKey: 'github',
-        always: true,
-        primaryEnv: 'GITHUB_TOKEN',
-        preferredSurface: 'mcp',
-        surfaces: ['local-mobile', 'mcp', 'ssh'],
-        requiredSecrets: ['GITHUB_TOKEN'],
+        skillKey: 'github-skill',
+        always: false,
+        primaryEnv: undefined,
+        preferredSurface: undefined,
+        surfaces: undefined,
+        requiredSecrets: [],
         tools: ['repos', 'issues'],
       }),
     );
@@ -139,6 +140,28 @@ describe('skills manifest', () => {
     expect(compatibility.unavailableSurfaces).toEqual([]);
   });
 
+  it('does not infer browser-job from English hint words without explicit surface metadata', () => {
+    const compatibility = getSkillCompatibility({
+      name: 'Browser Review Skill',
+      description: 'Uses browser automation, screenshots, and Playwright.',
+      version: '1.0.0',
+    });
+
+    expect(compatibility.suggestedSurfaces).toEqual(['local-mobile']);
+    expect(compatibility.preferredSurface).toBe('local-mobile');
+  });
+
+  it('does not infer MCP from English hint words without explicit surface metadata', () => {
+    const compatibility = getSkillCompatibility({
+      name: 'Registry Skill',
+      description: 'Acts like an MCP registry helper.',
+      version: '1.0.0',
+    });
+
+    expect(compatibility.suggestedSurfaces).toEqual(['local-mobile']);
+    expect(compatibility.preferredSurface).toBe('local-mobile');
+  });
+
   it('requires workspace config-path coverage before treating a workspace-routed skill as ready', () => {
     const metadata = {
       name: 'Workspace Skill',
@@ -200,7 +223,7 @@ describe('skills manifest', () => {
     ).toEqual(['FIRECRAWL_API_KEY', 'GITHUB_TOKEN', 'BRAVE_API_KEY']);
   });
 
-  it('treats HTTP-only Python skills as locally executable via skillBody analysis', () => {
+  it('keeps Python-bin skills on external surfaces without explicit mobile metadata', () => {
     const metadata = {
       name: 'Weather API Skill',
       description: 'Fetches weather data using Python requests',
@@ -210,74 +233,13 @@ describe('skills manifest', () => {
       },
     };
 
-    const skillBody = `
-\`\`\`python
-import requests
-import json
-response = requests.get("https://api.weather.com/current", params={"city": city})
-data = response.json()
-print(json.dumps(data, indent=2))
-\`\`\`
-`;
+    const result = getSkillCompatibility(metadata);
 
-    // Without skillBody — python bin required → needs SSH/workspace
-    const withoutBody = getSkillCompatibility(metadata);
-    expect(withoutBody.suggestedSurfaces).toContain('ssh');
-
-    // With skillBody — HTTP-only Python → can run locally
-    const withBody = getSkillCompatibility(metadata, undefined, skillBody);
-    expect(withBody.suggestedSurfaces).toContain('local-mobile');
-    expect(withBody.compatible).toBe(true);
+    expect(result.suggestedSurfaces).toEqual(['ssh', 'workspace']);
+    expect(result.preferredSurface).toBe('ssh');
   });
 
-  it('still routes non-HTTP Python skills to SSH even with skillBody', () => {
-    const metadata = {
-      name: 'File Processor Skill',
-      description: 'Processes files with Python',
-      version: '1.0.0',
-      requires: {
-        bins: ['python'],
-      },
-    };
-
-    const skillBody = `
-\`\`\`python
-import subprocess
-result = subprocess.run(["ls", "-la"], capture_output=True)
-print(result.stdout)
-\`\`\`
-`;
-
-    const result = getSkillCompatibility(metadata, undefined, skillBody);
-    // subprocess disqualifies it from local execution
-    expect(result.suggestedSurfaces).not.toContain('local-mobile');
-  });
-
-  it('keeps mixed sync-HTTP Python on external surfaces when it is not HTTP-only', () => {
-    const metadata = {
-      name: 'Sync HTTP Python Skill',
-      description: 'Fetches data then processes it locally.',
-      version: '1.0.0',
-      requires: {
-        bins: ['python'],
-      },
-    };
-
-    const skillBody = `
-\`\`\`python
-import requests
-response = requests.get("https://api.example.com/data")
-with open("output.txt", "w") as handle:
-    handle.write(response.text)
-\`\`\`
-`;
-
-    const result = getSkillCompatibility(metadata, undefined, skillBody);
-    expect(result.suggestedSurfaces).not.toContain('local-mobile');
-    expect(result.suggestedSurfaces).toContain('ssh');
-  });
-
-  it('treats async kavi.http Python as locally executable in Pyodide', () => {
+  it('does not treat python-bin skills as local-mobile without explicit bundled metadata', () => {
     const metadata = {
       name: 'Async HTTP Python Skill',
       description: 'Fetches data with the built-in async bridge.',
@@ -287,41 +249,10 @@ with open("output.txt", "w") as handle:
       },
     };
 
-    const skillBody = `
-\`\`\`python
-response = await kavi.http.get("https://api.example.com/data")
-print(await response.text())
-\`\`\`
-`;
-
-    const result = getSkillCompatibility(metadata, undefined, skillBody);
-    expect(result.compatible).toBe(true);
-    expect(result.suggestedSurfaces).toContain('local-mobile');
-    expect(result.preferredSurface).toBe('local-mobile');
-  });
-
-  it('treats kavi.http helper imports as local-mobile HTTP Python', () => {
-    const metadata = {
-      name: 'Convenience HTTP Python Skill',
-      description: 'Fetches JSON with direct kavi.http helpers.',
-      version: '1.0.0',
-      requires: {
-        bins: ['python'],
-      },
-    };
-
-    const skillBody = `
-\`\`\`python
-from kavi.http import get_json
-data = await get_json("https://api.example.com/data", params={"q": "cats"}, timeout=30)
-print(data)
-\`\`\`
-`;
-
-    const result = getSkillCompatibility(metadata, undefined, skillBody);
-    expect(result.compatible).toBe(true);
-    expect(result.suggestedSurfaces).toContain('local-mobile');
-    expect(result.preferredSurface).toBe('local-mobile');
+    const result = getSkillCompatibility(metadata);
+    expect(result.compatible).toBe(false);
+    expect(result.suggestedSurfaces).toEqual(['ssh', 'workspace']);
+    expect(result.preferredSurface).toBe('ssh');
   });
 
   it('treats bundled Python sidecars as locally executable when analysis marks them Pyodide-compatible', () => {

@@ -8,7 +8,9 @@ import {
   normalizeStreamingDraft,
   resolveDisplayMessages,
 } from '../../src/screens/chatScreenDisplayState';
-import type { AgentRun, Message, SubAgentSnapshot } from '../../src/types';
+import type { AgentRun } from '../../src/types/agentRun';
+import type { Message } from '../../src/types/message';
+import type { SubAgentSnapshot } from '../../src/types/subAgent';
 
 function makeMessage(id: string, overrides: Partial<Message> = {}): Message {
   return {
@@ -151,6 +153,24 @@ describe('chatScreenDisplayState', () => {
     expect(second[1]).toBe(first[1]);
   });
 
+  it('filters internal system transcript messages out of the visible display projection', () => {
+    const cache = createChatDisplayStateCache();
+    const messages = [
+      makeMessage('system-1', {
+        role: 'system',
+        content:
+          '[Conversation Summary]\n\n## Task Overview\nOriginal request\n\n<runtime_context>internal</runtime_context>',
+      }),
+      makeMessage('user-1', { role: 'user', content: 'Do the task' }),
+      makeMessage('assistant-1', { content: 'Working on it.' }),
+    ];
+
+    const displayMessages = getStableDisplayMessages(messages, cache);
+
+    expect(displayMessages.map((item) => item.message.id)).toEqual(['user-1', 'assistant-1']);
+    expect(displayMessages.some((item) => item.sourceMessageIds.includes('system-1'))).toBe(false);
+  });
+
   it('invalidates resolved display items when tool-call display state changes', () => {
     const cache = createChatDisplayStateCache();
     const messages = [
@@ -202,6 +222,81 @@ describe('chatScreenDisplayState', () => {
 
     expect(second[0]).not.toBe(first[0]);
     expect(second[0].resolvedMessage.toolCalls?.[0].status).toBe('completed');
+  });
+
+  it('invalidates assistant display projection when only a hidden tool-result message changes', () => {
+    const cache = createChatDisplayStateCache();
+    const messages = [
+      makeMessage('assistant-1', {
+        content: 'Using a tool',
+        toolCalls: [
+          {
+            id: 'tool-1',
+            name: 'read_file',
+            arguments: '{}',
+            status: 'running',
+          },
+        ],
+      }),
+      makeMessage('tool-1-msg', {
+        role: 'tool',
+        toolCallId: 'tool-1',
+        content: 'pending',
+        toolCalls: [
+          {
+            id: 'tool-1',
+            name: 'read_file',
+            arguments: '{}',
+            status: 'running',
+          },
+        ],
+      }),
+      makeMessage('assistant-2', { content: 'Waiting for the result' }),
+    ];
+
+    const firstDisplayMessages = getStableDisplayMessages(messages, cache);
+    const firstResolved = resolveDisplayMessages({
+      displayMessages: firstDisplayMessages,
+      messageById: new Map(messages.map((message) => [message.id, message])),
+      cache,
+      streamingDrafts: {},
+      streamingMessageId: null,
+      liveSubAgentSnapshotsById: new Map(),
+      agentRunByDisplayItemId: new Map(),
+    });
+
+    const changedMessages = messages.map((message) =>
+      message.id === 'tool-1-msg'
+        ? {
+            ...message,
+            content: 'done',
+            toolCalls: [
+              {
+                ...message.toolCalls![0],
+                status: 'completed' as const,
+                result: 'Done',
+              },
+            ],
+          }
+        : { ...message },
+    );
+    const secondDisplayMessages = getStableDisplayMessages(changedMessages, cache);
+    const secondResolved = resolveDisplayMessages({
+      displayMessages: secondDisplayMessages,
+      messageById: new Map(changedMessages.map((message) => [message.id, message])),
+      cache,
+      streamingDrafts: {},
+      streamingMessageId: null,
+      liveSubAgentSnapshotsById: new Map(),
+      agentRunByDisplayItemId: new Map(),
+    });
+
+    expect(secondDisplayMessages[0]).not.toBe(firstDisplayMessages[0]);
+    expect(secondResolved[0]).not.toBe(firstResolved[0]);
+    expect(secondResolved[0].resolvedMessage.toolCalls?.[0].status).toBe('completed');
+    expect(secondResolved[0].resolvedMessage.toolCalls?.[0].result).toBe('Done');
+    expect(secondResolved[0].resolvedResponseSegments?.[0].toolCalls?.[0].status).toBe('completed');
+    expect(secondResolved[0].resolvedResponseSegments?.[0].toolCalls?.[0].result).toBe('Done');
   });
 
   it('windows long transcripts from the source-message tail without splitting the latest user turn', () => {
@@ -594,5 +689,46 @@ describe('chatScreenDisplayState', () => {
     expect(secondRunDisplayItem).toBeDefined();
     expect(mappedRuns.get(firstRunDisplayItem!.id)?.id).toBe('run-1');
     expect(mappedRuns.get(secondRunDisplayItem!.id)?.id).toBe('run-2');
+  });
+
+  it('anchors workflow display items when compaction removed the original user message', () => {
+    const cache = createChatDisplayStateCache();
+    const workerSnapshot = makeSnapshot({ updatedAt: 25 });
+    const messages = [
+      makeMessage('system-1', {
+        role: 'system',
+        content: '[Conversation Summary]\n\n## Task Overview\nEarlier turns were compacted.',
+        timestamp: 20,
+      }),
+      makeMessage('assistant-worker', {
+        content: 'Worker started',
+        timestamp: 21,
+        subAgentEvent: {
+          type: 'sub-agent',
+          event: 'started',
+          snapshot: workerSnapshot,
+        },
+      }),
+      makeMessage('assistant-final', {
+        content: 'Task complete.',
+        timestamp: 22,
+      }),
+    ];
+    const displayMessages = getStableDisplayMessages(messages, cache);
+    const mappedRuns = buildAgentRunDisplayItemMap(messages, displayMessages, [
+      makeAgentRun({
+        id: 'run-compacted',
+        userMessageId: 'missing-user-message',
+        createdAt: 20,
+        updatedAt: 30,
+      }),
+    ]);
+
+    const finalDisplayItem = displayMessages.find((item) =>
+      item.sourceMessageIds.includes('assistant-final'),
+    );
+
+    expect(finalDisplayItem).toBeDefined();
+    expect(mappedRuns.get(finalDisplayItem!.id)?.id).toBe('run-compacted');
   });
 });

@@ -2,7 +2,7 @@
 // Kavi — Model Failover Chain
 // ---------------------------------------------------------------------------
 
-import { LlmProviderConfig } from '../types';
+import { LlmProviderConfig } from '../types/provider';
 
 export interface FailoverEntry {
   providerId: string;

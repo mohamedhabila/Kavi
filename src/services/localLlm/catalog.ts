@@ -1,112 +1,135 @@
 import { Platform } from 'react-native';
 import type {
-  LocalLlmBackend,
+  LocalLlmAccelerator,
   LocalLlmModelCatalogEntry,
+  LocalLlmModelFamily,
   LocalLlmPlatform,
   LlmProviderConfig,
-  ModelCapabilities,
-} from '../../types';
+} from '../../types/provider';
+import type { ModelCapabilities } from '../../types/tool';
+import {
+  RAW_LOCAL_MODEL_CATALOG,
+  type LocalLlmRawCatalogEntry,
+} from './catalogRaw';
 
-const ANDROID_LITERT_LOCAL_CAPABILITIES: ModelCapabilities = {
-  vision: false,
-  tools: true,
-  fileInput: false,
-};
+export {
+  DEFAULT_LITERT_LM_TEMPERATURE,
+  DEFAULT_LITERT_LM_TOP_K,
+  DEFAULT_LITERT_LM_TOP_P,
+} from './catalogDefaults';
 
-const TEXT_ONLY_LOCAL_CAPABILITIES: ModelCapabilities = {
-  vision: false,
-  tools: false,
-  fileInput: false,
-};
+export const DEFAULT_LOCAL_LLM_ACCELERATOR: LocalLlmAccelerator = 'cpu';
+export const ON_DEVICE_PROVIDER_NAME = 'On-device models';
 
-export const DEFAULT_LOCAL_LLM_BACKEND: LocalLlmBackend = 'cpu';
-export const DEFAULT_LITERT_LM_TOP_K = 64;
-export const DEFAULT_LITERT_LM_TOP_P = 0.95;
-export const DEFAULT_LITERT_LM_TEMPERATURE = 1.0;
+function formatCatalogSizeLabel(sizeBytes: number): string {
+  if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
+    return '0 B';
+  }
 
-export const GEMMA_LOCAL_PROVIDER_NAME = 'Gemma (on-device)';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = sizeBytes;
+  let unitIndex = 0;
 
-const ALL_LOCAL_MODEL_CATALOG: LocalLlmModelCatalogEntry[] = [
-  {
-    id: 'gemma-4-E2B-it',
-    name: 'Gemma 4 E2B',
-    runtime: 'litert-lm',
-    fileName: 'gemma-4-E2B-it.litertlm',
-    repositoryId: 'litert-community/gemma-4-E2B-it-litert-lm',
-    downloadUrl:
-      'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm?download=true',
-    sizeBytes: 2_583_085_056,
-    sizeLabel: '2.58 GB',
-    maxContextLength: 32_000,
-    defaultMaxTokens: 4_000,
-    defaultTopK: DEFAULT_LITERT_LM_TOP_K,
-    defaultTopP: DEFAULT_LITERT_LM_TOP_P,
-    defaultTemperature: DEFAULT_LITERT_LM_TEMPERATURE,
-    minDeviceMemoryGb: 8,
-    supportedPlatforms: ['android'],
-    capabilities: { ...ANDROID_LITERT_LOCAL_CAPABILITIES },
-    summary: 'Smaller Gemma 4 instruction model for phones and tablets.',
-  },
-  {
-    id: 'gemma-4-E4B-it',
-    name: 'Gemma 4 E4B',
-    runtime: 'litert-lm',
-    fileName: 'gemma-4-E4B-it.litertlm',
-    repositoryId: 'litert-community/gemma-4-E4B-it-litert-lm',
-    downloadUrl:
-      'https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm?download=true',
-    sizeBytes: 3_654_467_584,
-    sizeLabel: '3.65 GB',
-    maxContextLength: 32_000,
-    defaultMaxTokens: 4_000,
-    defaultTopK: DEFAULT_LITERT_LM_TOP_K,
-    defaultTopP: DEFAULT_LITERT_LM_TOP_P,
-    defaultTemperature: DEFAULT_LITERT_LM_TEMPERATURE,
-    minDeviceMemoryGb: 12,
-    supportedPlatforms: ['android'],
-    capabilities: { ...ANDROID_LITERT_LOCAL_CAPABILITIES },
-    summary: 'Larger Gemma 4 instruction model with higher quality at a higher storage cost.',
-  },
-  {
-    id: 'gemma-3-1b-it',
-    name: 'Gemma 3 1B',
-    runtime: 'mediapipe-genai',
-    fileName: 'gemma3-1b-it-int4.task',
-    repositoryId: 'litert-community/Gemma3-1B-IT',
-    downloadUrl:
-      'https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/gemma3-1b-it-int4.task?download=true',
-    sizeBytes: 700_000_000,
-    sizeLabel: '~0.7 GB',
-    defaultMaxTokens: 1_024,
-    supportedPlatforms: ['ios'],
-    capabilities: { ...TEXT_ONLY_LOCAL_CAPABILITIES },
-    summary:
-      'Compact Gemma 3 instruction model supported by the official iOS MediaPipe sample runtime.',
-  },
-];
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
 
-export const GEMMA_LOCAL_MODEL_CATALOG = ALL_LOCAL_MODEL_CATALOG;
+  const maximumFractionDigits = value >= 10 || unitIndex === 0 ? 0 : 2;
+  return `${new Intl.NumberFormat('en-US', { maximumFractionDigits }).format(value)} ${units[unitIndex]}`;
+}
+
+function buildHuggingFaceDownloadUrl(
+  repositoryId: string,
+  downloadRevision: string,
+  fileName: string,
+): string {
+  return `https://huggingface.co/${repositoryId}/resolve/${downloadRevision}/${fileName}?download=true`;
+}
+
+function buildLocalModelCapabilities(entry: LocalLlmRawCatalogEntry): ModelCapabilities {
+  return {
+    vision: entry.supportsVision,
+    tools: entry.supportsTools,
+    fileInput: entry.supportsFileInput,
+  };
+}
+
+function createCatalogEntry(entry: LocalLlmRawCatalogEntry): LocalLlmModelCatalogEntry {
+  return {
+    ...entry,
+    downloadUrl: buildHuggingFaceDownloadUrl(
+      entry.repositoryId,
+      entry.downloadRevision,
+      entry.fileName,
+    ),
+    sizeLabel: formatCatalogSizeLabel(entry.sizeBytes),
+    capabilities: buildLocalModelCapabilities(entry),
+  };
+}
+
+const ALL_LOCAL_MODEL_CATALOG = RAW_LOCAL_MODEL_CATALOG.map(createCatalogEntry);
+
+export const LOCAL_LLM_MODEL_CATALOG = ALL_LOCAL_MODEL_CATALOG;
+
+function compareLocalLlmCatalogEntriesForGeneralUse(
+  left: LocalLlmModelCatalogEntry,
+  right: LocalLlmModelCatalogEntry,
+): number {
+  const leftMemory = left.minDeviceMemoryGb ?? Number.MAX_SAFE_INTEGER;
+  const rightMemory = right.minDeviceMemoryGb ?? Number.MAX_SAFE_INTEGER;
+  if (leftMemory !== rightMemory) {
+    return leftMemory - rightMemory;
+  }
+
+  if (left.sizeBytes !== right.sizeBytes) {
+    return left.sizeBytes - right.sizeBytes;
+  }
+
+  const leftMultimodalPenalty = Number(
+    Boolean(left.capabilities.vision || left.supportsAudioInput),
+  );
+  const rightMultimodalPenalty = Number(
+    Boolean(right.capabilities.vision || right.supportsAudioInput),
+  );
+  if (leftMultimodalPenalty !== rightMultimodalPenalty) {
+    return leftMultimodalPenalty - rightMultimodalPenalty;
+  }
+
+  const leftToolPenalty = Number(Boolean(left.capabilities.tools));
+  const rightToolPenalty = Number(Boolean(right.capabilities.tools));
+  if (leftToolPenalty !== rightToolPenalty) {
+    return leftToolPenalty - rightToolPenalty;
+  }
+
+  return left.name.localeCompare(right.name);
+}
+
+function sortLocalLlmCatalogEntriesForGeneralUse(
+  entries: readonly LocalLlmModelCatalogEntry[],
+): LocalLlmModelCatalogEntry[] {
+  return entries.slice().sort(compareLocalLlmCatalogEntriesForGeneralUse);
+}
 
 export function getCurrentLocalLlmPlatform(): LocalLlmPlatform {
   return Platform.OS === 'ios' ? 'ios' : 'android';
 }
 
-export function getDefaultLocalLlmBackend(
+export function getDefaultLocalLlmAccelerator(
   modelId: string = DEFAULT_LOCAL_LLM_MODEL_ID,
-  platform: LocalLlmPlatform = getCurrentLocalLlmPlatform(),
-): LocalLlmBackend {
+): LocalLlmAccelerator {
   const catalogEntry = getLocalLlmCatalogEntry(modelId);
-  if (platform === 'android' && catalogEntry?.runtime === 'litert-lm') {
+  if (catalogEntry?.supportedBackends.includes('gpu')) {
     return 'gpu';
   }
-  return DEFAULT_LOCAL_LLM_BACKEND;
+  return DEFAULT_LOCAL_LLM_ACCELERATOR;
 }
 
 export function getSupportedLocalLlmCatalogEntries(
   platform: LocalLlmPlatform = getCurrentLocalLlmPlatform(),
 ): LocalLlmModelCatalogEntry[] {
-  const supportedEntries = ALL_LOCAL_MODEL_CATALOG.filter((entry) =>
-    entry.supportedPlatforms.includes(platform),
+  const supportedEntries = sortLocalLlmCatalogEntriesForGeneralUse(
+    ALL_LOCAL_MODEL_CATALOG.filter((entry) => entry.supportedPlatforms.includes(platform)),
   );
   return supportedEntries.length > 0 ? supportedEntries : ALL_LOCAL_MODEL_CATALOG;
 }
@@ -136,9 +159,23 @@ export function getLocalLlmCatalogEntriesForProvider(
 }
 
 export function getLocalLlmModelCapabilities(modelId: string): ModelCapabilities {
-  return getLocalLlmCatalogEntry(modelId)?.capabilities || { ...TEXT_ONLY_LOCAL_CAPABILITIES };
+  return (
+    getLocalLlmCatalogEntry(modelId)?.capabilities || {
+      vision: false,
+      tools: false,
+      fileInput: false,
+    }
+  );
 }
 
 export function getLocalLlmModelDisplayName(modelId: string): string {
   return getLocalLlmCatalogEntry(modelId)?.name || modelId;
+}
+
+export function getLocalLlmModelFamilies(
+  platform: LocalLlmPlatform = getCurrentLocalLlmPlatform(),
+): LocalLlmModelFamily[] {
+  return Array.from(
+    new Set(getSupportedLocalLlmCatalogEntries(platform).map((entry) => entry.family)),
+  );
 }

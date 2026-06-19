@@ -2,7 +2,6 @@
 // Tests — OnboardingWizard
 // ---------------------------------------------------------------------------
 
-import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { File } from 'expo-file-system';
 import { OnboardingWizard } from '../../src/components/onboarding/OnboardingWizard';
@@ -21,11 +20,25 @@ jest.mock('react-native-safe-area-context', () => ({
 jest.mock('../../src/theme/useAppTheme', () => ({
   useAppTheme: () => ({
     colors: {
-      background: '#000', surface: '#111', surfaceAlt: '#222', header: '#111',
-      border: '#333', subtleBorder: '#444', text: '#fff', textSecondary: '#aaa',
-      textTertiary: '#777', placeholder: '#555', primary: '#0f0', onPrimary: '#fff',
-      primarySoft: '#030', danger: '#f00', dangerSoft: '#300', success: '#0f0',
-      warning: '#ff0', inputBackground: '#222', inputBorder: '#444',
+      background: '#000',
+      surface: '#111',
+      surfaceAlt: '#222',
+      header: '#111',
+      border: '#333',
+      subtleBorder: '#444',
+      text: '#fff',
+      textSecondary: '#aaa',
+      textTertiary: '#777',
+      placeholder: '#555',
+      primary: '#0f0',
+      onPrimary: '#fff',
+      primarySoft: '#030',
+      danger: '#f00',
+      dangerSoft: '#300',
+      success: '#0f0',
+      warning: '#ff0',
+      inputBackground: '#222',
+      inputBorder: '#444',
     },
   }),
   AppPalette: {},
@@ -41,11 +54,18 @@ jest.mock('../../src/services/storage/SecureStorage', () => ({
   saveSecure: (...args: any[]) => mockSaveSecure(...args),
 }));
 
-jest.mock('../../src/services/localLlm/runtime', () => {
-  const actual = jest.requireActual('../../src/services/localLlm/runtime');
+jest.mock('../../src/services/localLlm/availability', () => {
+  const actual = jest.requireActual('../../src/services/localLlm/availability');
   return {
     ...actual,
     getLocalLlmAvailability: (...args: any[]) => mockGetLocalLlmAvailability(...args),
+  };
+});
+
+jest.mock('../../src/services/localLlm/install', () => {
+  const actual = jest.requireActual('../../src/services/localLlm/install');
+  return {
+    ...actual,
     installLocalLlmModel: (...args: any[]) => mockInstallLocalLlmModel(...args),
   };
 });
@@ -68,7 +88,7 @@ jest.mock('../../src/constants/api', () => {
   return {
     ...actual,
     KNOWN_PROVIDERS: actual.KNOWN_PROVIDERS.filter((provider: { name: string }) =>
-      ['OpenAI', 'Anthropic', 'Gemini', 'Gemma (on-device)'].includes(provider.name),
+      ['OpenAI', 'Anthropic', 'Gemini', 'On-device models'].includes(provider.name),
     ),
   };
 });
@@ -88,32 +108,41 @@ beforeEach(() => {
     warningReason: null,
   });
   mockInstallLocalLlmModel.mockReset();
-  mockInstallLocalLlmModel.mockImplementation(async (provider: any, _modelId?: string, options?: any) => {
-    const catalogEntry = getLocalLlmCatalogEntry(provider.model);
-    const localPath = `file:///mock/documents/local-llm/models/${catalogEntry?.fileName || provider.model}`;
-    new File(localPath).write('downloaded');
-    (jest.requireMock('expo-file-system') as any).__setFileSize?.(localPath, catalogEntry?.sizeBytes || 1);
-    options?.onProgress?.({
-      modelId: provider.model,
-      bytesWritten: catalogEntry?.sizeBytes || 1,
-      totalBytes: catalogEntry?.sizeBytes || 1,
-      fraction: 1,
-    });
-    return {
-      ...provider,
-      local: {
-        ...provider.local,
-        installedModels: [{
-          modelId: provider.model,
-          fileName: catalogEntry?.fileName || provider.model,
-          localPath,
-          installedAt: 1,
-          sizeBytes: catalogEntry?.sizeBytes || 1,
-          sourceUrl: catalogEntry?.downloadUrl || 'https://example.com/model',
-        }],
-      },
-    };
-  });
+  mockInstallLocalLlmModel.mockImplementation(
+    async (provider: any, _modelId?: string, options?: any) => {
+      const catalogEntry = getLocalLlmCatalogEntry(provider.model);
+      const localPath = `file:///mock/documents/local-llm/models/${catalogEntry?.fileName || provider.model}`;
+      new File(localPath).write('downloaded');
+      (jest.requireMock('expo-file-system') as any).__setFileSize?.(
+        localPath,
+        catalogEntry?.sizeBytes || 1,
+      );
+      options?.onProgress?.({
+        modelId: provider.model,
+        bytesWritten: catalogEntry?.sizeBytes || 1,
+        totalBytes: catalogEntry?.sizeBytes || 1,
+        fraction: 1,
+      });
+      return {
+        ...provider,
+        local: {
+          ...provider.local,
+          installedModels: [
+            {
+              modelId: provider.model,
+              fileName: catalogEntry?.fileName || provider.model,
+              localPath,
+              installedAt: 1,
+              sizeBytes: catalogEntry?.sizeBytes || 1,
+              sourceUrl: catalogEntry?.downloadUrl || 'https://example.com/model',
+              repositoryId: catalogEntry?.repositoryId || 'example/model',
+              downloadRevision: catalogEntry?.downloadRevision || 'main',
+            },
+          ],
+        },
+      };
+    },
+  );
 });
 
 describe('OnboardingWizard', () => {
@@ -165,11 +194,13 @@ describe('OnboardingWizard', () => {
     );
 
     fireEvent.press(getByText('Get Started'));
-    fireEvent.press(getByText('Gemma on-device'));
+    fireEvent.press(getByText('On-device models'));
 
     expect(getByText('On-device note')).toBeTruthy();
     expect(queryByPlaceholderText('sk-...')).toBeNull();
-    expect(getByText('Download the selected model')).toBeTruthy();
+    await waitFor(() => {
+      expect(getByText('Download the selected model')).toBeTruthy();
+    });
 
     fireEvent.press(getByText('Save provider'));
 
@@ -186,10 +217,12 @@ describe('OnboardingWizard', () => {
 
     await waitFor(() => {
       expect(mockInstallLocalLlmModel).toHaveBeenCalledTimes(1);
-      expect(mockAddProvider).toHaveBeenCalledWith(expect.objectContaining({
-        kind: 'on-device',
-        name: 'Gemma (on-device)',
-      }));
+      expect(mockAddProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'on-device',
+          name: 'On-device models',
+        }),
+      );
     });
 
     expect(mockSaveProviderApiKey).not.toHaveBeenCalled();
@@ -233,9 +266,7 @@ describe('OnboardingWizard', () => {
   it('shows error when secure storage fails', async () => {
     mockSaveProviderApiKey.mockRejectedValueOnce(new Error('Keychain unavailable'));
 
-    const { getByText, getByPlaceholderText } = render(
-      <OnboardingWizard onComplete={jest.fn()} />,
-    );
+    const { getByText, getByPlaceholderText } = render(<OnboardingWizard onComplete={jest.fn()} />);
 
     fireEvent.press(getByText('Get Started'));
     fireEvent.press(getByText('OpenAI'));
@@ -248,9 +279,7 @@ describe('OnboardingWizard', () => {
   });
 
   it('saves Gemini with the default Vertex base URL', async () => {
-    const { getByText, getByPlaceholderText } = render(
-      <OnboardingWizard onComplete={jest.fn()} />,
-    );
+    const { getByText, getByPlaceholderText } = render(<OnboardingWizard onComplete={jest.fn()} />);
 
     fireEvent.press(getByText('Get Started'));
     fireEvent.press(getByText('Gemini'));
@@ -258,11 +287,13 @@ describe('OnboardingWizard', () => {
     fireEvent.press(getByText('Save provider'));
 
     await waitFor(() => {
-      expect(mockAddProvider).toHaveBeenCalledWith(expect.objectContaining({
-        name: 'Gemini',
-        baseUrl: 'https://aiplatform.googleapis.com/v1',
-        model: 'gemini-3.1-pro-preview',
-      }));
+      expect(mockAddProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Gemini',
+          baseUrl: 'https://aiplatform.googleapis.com/v1',
+          model: 'gemini-3.1-pro-preview',
+        }),
+      );
     });
   });
 });

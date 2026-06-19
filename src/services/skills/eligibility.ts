@@ -1,13 +1,13 @@
+import type { AppSettings } from '../../types/settings';
 import type {
-  AppSettings,
   BrowserProviderConfig,
   SshTargetConfig,
   WorkspaceTargetConfig,
-} from '../../types';
+} from '../../types/remote';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import type { SkillEligibilityContext, SkillExecutionSurface } from './types';
-import { getBrowserProviderReadiness } from '../browser/providers';
-import { getExpoProjectReadiness } from '../expo/eas';
+import { getBrowserProviderReadiness } from '../browser/providers/readiness';
+import { getExpoProjectReadiness } from '../expo/projectAutomation';
 import { getSshTargetReadiness } from '../ssh/connector';
 import { getWorkspaceTargetReadiness, supportsWorkspaceFileAccess } from '../workspaces/connector';
 

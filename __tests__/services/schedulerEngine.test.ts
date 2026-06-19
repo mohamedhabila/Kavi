@@ -63,6 +63,7 @@ describe('Scheduler Engine', () => {
       const traces = useExecutionTraceStore.getState().traces;
       // May or may not have traces depending on whether the job was "due"
       // The important thing is it doesn't crash
+      expect(Array.isArray(traces)).toBe(true);
     });
   });
 

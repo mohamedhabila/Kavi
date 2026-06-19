@@ -3,8 +3,7 @@
 // ---------------------------------------------------------------------------
 // Idle reset, export, conversation search, folders/tags.
 
-import { useChatStore } from '../../store/useChatStore';
-import type { Conversation, Message } from '../../types';
+import type { Conversation } from '../../types/conversation';
 import { unrefTimerIfSupported } from '../../utils/timers';
 
 // ── Session Idle/Daily Reset ─────────────────────────────────────────────

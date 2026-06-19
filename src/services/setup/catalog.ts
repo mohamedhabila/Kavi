@@ -1,4 +1,4 @@
-import type { ToolDefinition } from '../../types';
+import type { ToolDefinition } from '../../types/tool';
 
 export interface ServiceSetupField {
   storageKey: string;
@@ -33,6 +33,20 @@ export const SERVICE_SETUP_FIELDS: ServiceSetupField[] = [
     freeAccess:
       'Brave Search pricing currently includes free $5 in credits every month, which is enough to test the integration without paying upfront.',
     docsUrl: 'https://api-dashboard.search.brave.com/app/documentation/web-search/get-started',
+    tools: ['web_search'],
+  },
+  {
+    storageKey: 'GOOGLE_API_KEY',
+    label: 'Gemini API Key',
+    placeholder: 'AIza...',
+    hint: 'Used for Gemini web search grounded with Google Search.',
+    category: 'Web search',
+    unlocks: 'Gemini-backed web search with grounded result links and citations.',
+    setup:
+      'Create and manage a Gemini API key in Google AI Studio, then paste it here. Kavi uses the official Gemini API Google Search grounding tool for this provider.',
+    freeAccess:
+      'Google AI Studio lets you create a Gemini API key for initial testing, but production usage should assume quota limits and billed usage.',
+    docsUrl: 'https://ai.google.dev/gemini-api/docs/api-key',
     tools: ['web_search'],
   },
   {
@@ -75,20 +89,6 @@ export const SERVICE_SETUP_FIELDS: ServiceSetupField[] = [
     tools: ['web_search'],
   },
   {
-    storageKey: 'GOOGLE_API_KEY',
-    label: 'Google AI API Key',
-    placeholder: 'AIza...',
-    hint: 'Used for Gemini web search with Vertex AI or Google AI Studio.',
-    category: 'Web search',
-    unlocks: 'Gemini-backed search and Google AI integrations.',
-    setup:
-      'Open Vertex AI in Google Cloud to create an API key for production-oriented Gemini access, or use Google AI Studio if you are keeping a legacy Developer API setup. The Gemini web search tool can use either key type.',
-    freeAccess:
-      'Vertex AI express mode and Google AI Studio both allow initial testing, but production usage should assume billed limits and restricted credentials.',
-    docsUrl: 'https://docs.cloud.google.com/vertex-ai/generative-ai/docs/start/api-keys',
-    tools: ['web_search'],
-  },
-  {
     storageKey: 'FIRECRAWL_API_KEY',
     label: 'Firecrawl API Key',
     placeholder: 'fc-...',
@@ -123,7 +123,7 @@ export const SERVICE_SETUP_FIELDS: ServiceSetupField[] = [
     hint: 'Enables the built-in GitHub repositories, files, branches, commits, issues, and pull requests skill.',
     category: 'Service skill',
     unlocks:
-      'GitHub repo listing, private repo file reads, branch creation, API-based commits, issue tools, and pull request creation.',
+      'GitHub repo listing, file reads, branch creation, API-based commits, issue tools, pull request creation, and workflow status tools.',
     setup:
       'In GitHub Settings, open Developer settings, create a fine-grained personal access token, select the smallest repository access you need, and grant repository contents, metadata, pull requests, and issues permissions only where your workflow needs them.',
     freeAccess:
@@ -140,21 +140,23 @@ export const SERVICE_SETUP_FIELDS: ServiceSetupField[] = [
       'skill__github__issues',
       'skill__github__create_issue',
       'skill__github__create_pull_request',
+      'skill__github__workflow_runs',
+      'skill__github__checks_status',
     ],
   },
   {
     storageKey: 'ALPHA_VANTAGE_API_KEY',
     label: 'Alpha Vantage API Key',
     placeholder: 'alpha-vantage-key',
-    hint: 'Enables the built-in finance skill for stock quotes.',
+    hint: 'Enables the built-in finance skill for Alpha Vantage stock quotes and FX rates.',
     category: 'Service skill',
-    unlocks: 'Stock quote and finance tools.',
+    unlocks: 'Alpha Vantage stock quote and FX exchange-rate tools.',
     setup:
       'Claim a free API key from Alpha Vantage support, verify your email if needed, then paste the key here.',
     freeAccess:
       'Alpha Vantage explicitly offers a free API key with lifetime access and up to 25 requests per day on the free tier.',
     docsUrl: 'https://www.alphavantage.co/support/#api-key',
-    tools: ['skill__finance__stock_quote'],
+    tools: ['skill__finance__stock_quote', 'skill__finance__exchange_rate'],
   },
 ];
 
@@ -168,8 +170,6 @@ export const TOOL_PERMISSION_GROUPS: ToolPermissionGroup[] = [
       'read_file',
       'write_file',
       'list_files',
-      'read_workflow_evidence',
-      'record_workflow_evidence',
       'javascript',
       'python',
       'file_edit',
@@ -188,13 +188,7 @@ export const TOOL_PERMISSION_GROUPS: ToolPermissionGroup[] = [
     id: 'media',
     title: 'Media & Output',
     description: 'Notifications, image generation and editing, audio transcription, and speech.',
-    tools: [
-      'image_generate',
-      'image_edit',
-      'audio_transcribe',
-      'speak',
-      'poll_create',
-    ],
+    tools: ['image_generate', 'image_edit', 'audio_transcribe', 'speak', 'poll_create'],
   },
   {
     id: 'device',

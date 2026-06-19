@@ -7,12 +7,10 @@ import {
   clearOldToolResults,
   determineCompactionTier,
   buildStructuredSummary,
-  alignCompactionTailStart,
-  getMessageContentForContext,
   TOOL_CLEARED_PLACEHOLDER,
   COMPACTION_SUMMARY_MARKER,
 } from '../../src/services/context/compaction';
-import type { Message } from '../../src/types';
+import type { Message } from '../../src/types/message';
 
 // Mock events bus
 jest.mock('../../src/services/events/bus', () => ({

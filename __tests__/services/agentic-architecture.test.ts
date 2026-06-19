@@ -5,7 +5,6 @@
 import {
   BUILT_IN_PERSONAS,
   SUPER_AGENT_PERSONA,
-  SUPER_AGENT_PERSONA_ID,
   SUPER_AGENT_SYSTEM_PROMPT,
   getPersona,
   resolvePersonaSystemPrompt,
@@ -31,23 +30,22 @@ describe('SUPER_AGENT_PERSONA', () => {
     expect(SUPER_AGENT_PERSONA.thinkingLevel).toBe('medium');
   });
 
-  it('has a substantial system prompt with all 7 phases', () => {
+  it('has a compact system prompt with the core graph contracts', () => {
     expect(SUPER_AGENT_SYSTEM_PROMPT.length).toBeGreaterThan(500);
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Phase 1');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Phase 2');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Phase 3');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Phase 4');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Phase 5');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Phase 6');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Phase 7');
+    expect(SUPER_AGENT_SYSTEM_PROMPT.length).toBeLessThan(3000);
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('## Agent Contract');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('do not emit a formal workstream plan before the first tool call');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('start acting and keep any short pre-tool explanation concise');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).not.toContain('Workstreams:');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).not.toContain(['Phase', '1'].join(' '));
   });
 
   it('mentions sessions_spawn for sub-agent delegation', () => {
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('sessions_spawn');
   });
 
-  it('mentions sessions_status for monitoring', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('sessions_status');
+  it('does not mention sessions_status in the default monitoring path', () => {
+    expect(SUPER_AGENT_SYSTEM_PROMPT).not.toContain('sessions_status');
   });
 
   it('mentions sessions_wait when worker output is required to proceed', () => {
@@ -60,42 +58,36 @@ describe('SUPER_AGENT_PERSONA', () => {
 
   it('tells the supervisor not to re-fetch output immediately after sessions_wait', () => {
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
-      'Do not call sessions_output immediately afterward unless you need to recall a terminal deliverable later.',
+      'sessions_output or sessions_history only when you need to recall a finished result or inspect a transcript later',
     );
-  });
-
-  it('mentions sessions_surface_output for direct worker-deliverable surfacing', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('sessions_surface_output');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).not.toContain('sessions_surface_output');
   });
 
   it('requires dependency-aware worker sequencing', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('workstreamId');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('dependsOnWorkstreams');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
-      'Never launch dependent workflows in the same turn',
-    );
+    expect(SUPER_AGENT_SYSTEM_PROMPT).not.toContain('workstreamId');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('self-contained');
   });
 
   it('reserves direct handling for trivial tasks only', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Trivial tasks');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('handle DIRECTLY');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Simple tasks');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('handle them directly');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('execute directly first');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Trivial Q&A and one-shot lookups');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('answer directly');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('highest-leverage tool that directly fits the next work unit');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('launch the worker directly instead of preflighting with supervisor tools');
   });
 
-  it('limits max simultaneous sub-agents to 5', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('5 sub-agents');
+  it('keeps delegation deliberate and gap-driven', () => {
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('delegate only for named gaps');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('workers only when they materially improve completion');
   });
 
-  it('caps orchestration re-plan cycles at 3', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('3 full orchestration');
+  it('discourages repeated unchanged calls', () => {
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Do not repeat unchanged discovery, status, list, or search calls');
   });
 
   it('requires current-time awareness for freshness-sensitive work', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('current time injected by the app runtime');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('freshness-sensitive');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('verify up-to-date facts with tools');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('runtime time context');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('freshness matters');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('verify with tools');
   });
 });
 
@@ -161,23 +153,27 @@ describe('ConversationMode type', () => {
 
 describe('SuperAgent prompt — sub-agent tool guidance', () => {
   it('instructs to pass a focused tools array in sessions_spawn', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain("pass a focused 'tools' array in sessions_spawn");
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('When using sessions_spawn');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain("omit tools unless you need to narrow the worker's scope");
   });
 
-  it('treats numbered workstreams as stable ids', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('item 1 is workstream-1');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Prefer referencing dependencies by workstream id');
+  it('keeps workstream binding optional without forcing a formal plan', () => {
+    expect(SUPER_AGENT_SYSTEM_PROMPT).not.toContain('workstreamId');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).not.toContain('Treat numbered workstreams as stable ids');
   });
 
-  it('provides concrete tool examples for different sub-agent roles', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('web_search');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('ssh_exec');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('read_file');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('file_edit');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('workspace_list_files');
+  it('keeps tool discovery and capability bridging narrow', () => {
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Use python as a capability bridge only when first-class tools are insufficient');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
+      'Use tool_catalog only when the exposed tool surface is insufficient for the next step',
+    );
   });
 
-  it('warns about consequences of not passing tools', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('only gets generic tools');
+  it('keeps worker/session output semantics visible', () => {
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
+      'sessions_output or sessions_history only when you need to recall a finished result or inspect a transcript later',
+    );
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('sessions_wait when blocked on worker output');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).not.toContain('sessions_surface_output');
   });
 });

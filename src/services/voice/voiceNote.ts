@@ -1,5 +1,5 @@
 import { Directory, File, Paths } from 'expo-file-system';
-import type { Attachment } from '../../types';
+import type { Attachment } from '../../types/attachment';
 import { generateId } from '../../utils/id';
 
 const AUDIO_MIME_BY_EXTENSION: Record<string, string> = {

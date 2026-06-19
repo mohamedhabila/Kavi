@@ -5,6 +5,7 @@ import {
   flushPendingStorageWrites,
   throttledAsyncStorage,
 } from '../../src/store/throttledStorage';
+import { CHAT_STORE_CHECKPOINT_DELAY_MS } from '../../src/store/chatStorePersistence';
 import { useChatStore } from '../../src/store/useChatStore';
 
 const expoFileSystemMock = jest.requireMock('expo-file-system') as {
@@ -21,6 +22,14 @@ function readPersistedChatState(): any {
 async function advanceAndSettle(ms: number): Promise<void> {
   jest.advanceTimersByTime(ms);
   await jest.advanceTimersByTimeAsync(0);
+}
+
+async function advanceBeforeCheckpoint(): Promise<void> {
+  await advanceAndSettle(CHAT_STORE_CHECKPOINT_DELAY_MS - 50);
+}
+
+async function advancePastCheckpoint(): Promise<void> {
+  await advanceAndSettle(CHAT_STORE_CHECKPOINT_DELAY_MS + 50);
 }
 
 beforeEach(async () => {
@@ -47,7 +56,7 @@ describe('useChatStore persistence checkpoints', () => {
   it('persists a new conversation before the normal throttle window', async () => {
     const id = useChatStore.getState().createConversation('provider1', 'System prompt');
 
-    await advanceAndSettle(100);
+    await advanceBeforeCheckpoint();
     expect(readPersistedChatState()?.state?.conversations ?? []).toHaveLength(0);
 
     await advanceAndSettle(100);
@@ -65,14 +74,14 @@ describe('useChatStore persistence checkpoints', () => {
 
   it('persists the latest user message on the fast checkpoint schedule', async () => {
     const id = useChatStore.getState().createConversation('provider1', 'System prompt');
-    await advanceAndSettle(200);
+    await advancePastCheckpoint();
 
     useChatStore.getState().addMessage(id, {
       role: 'user',
       content: 'Hello world',
     });
 
-    await advanceAndSettle(100);
+    await advanceBeforeCheckpoint();
     let persisted = readPersistedChatState();
     expect(persisted.state.conversations[0].messages).toHaveLength(0);
 
@@ -89,7 +98,7 @@ describe('useChatStore persistence checkpoints', () => {
 
   it('persists agent run plan updates on the checkpoint schedule', async () => {
     const id = useChatStore.getState().createConversation('provider1', 'System prompt');
-    await advanceAndSettle(200);
+    await advancePastCheckpoint();
 
     useChatStore.getState().addMessage(id, {
       id: 'msg-user-plan',
@@ -101,7 +110,7 @@ describe('useChatStore persistence checkpoints', () => {
       goal: 'Plan the work',
       timestamp: 1_700_000_000_000,
     });
-    await advanceAndSettle(200);
+    await advancePastCheckpoint();
 
     useChatStore.getState().updateAgentRunPlan(
       id,
@@ -115,7 +124,7 @@ describe('useChatStore persistence checkpoints', () => {
       runId,
     );
 
-    await advanceAndSettle(100);
+    await advanceBeforeCheckpoint();
     let persisted = readPersistedChatState();
     expect(persisted.state.conversations[0].agentRuns[0].plan.objective).not.toBe(
       'Ship a production-ready workflow plan',
@@ -136,7 +145,7 @@ describe('useChatStore persistence checkpoints', () => {
 
   it('persists bounded workflow evidence on the checkpoint schedule', async () => {
     const id = useChatStore.getState().createConversation('provider1', 'System prompt');
-    await advanceAndSettle(200);
+    await advancePastCheckpoint();
 
     useChatStore.getState().addMessage(id, {
       id: 'msg-user-evidence',
@@ -148,7 +157,7 @@ describe('useChatStore persistence checkpoints', () => {
       goal: 'Track workflow evidence',
       timestamp: 1_700_000_100_000,
     });
-    await advanceAndSettle(200);
+    await advancePastCheckpoint();
 
     for (let index = 0; index < 70; index += 1) {
       useChatStore.getState().recordAgentRunEvidence(
@@ -165,7 +174,7 @@ describe('useChatStore persistence checkpoints', () => {
       );
     }
 
-    await advanceAndSettle(200);
+    await advancePastCheckpoint();
 
     const persisted = readPersistedChatState();
     const evidence = persisted.state.conversations[0].agentRuns[0].evidence;

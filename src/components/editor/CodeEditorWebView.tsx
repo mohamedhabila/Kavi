@@ -4,7 +4,7 @@
 // Embeds CodeMirror 6 inside a WebView with PostMessage bridge for syntax
 // highlighting, multi-language support, and file editing integration.
 
-import React, { forwardRef, useCallback, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useCallback, useImperativeHandle, useRef } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import WebView, { WebViewMessageEvent } from 'react-native-webview';
 

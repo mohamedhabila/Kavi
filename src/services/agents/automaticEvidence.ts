@@ -1,5 +1,6 @@
-import type { AgentRunEvidenceDraft } from './evidence';
-import type { Attachment, SubAgentLifecycleEvent, SubAgentSnapshot } from '../../types';
+import type { AgentRunEvidenceDraft } from './lifecycle/evidenceTypes';
+import type { Attachment } from '../../types/attachment';
+import type { SubAgentLifecycleEvent, SubAgentSnapshot } from '../../types/subAgent';
 
 const MAX_AUTOMATIC_EVIDENCE_CONTENT_CHARS = 640;
 const MAX_AUTOMATIC_EVIDENCE_TITLE_CHARS = 120;

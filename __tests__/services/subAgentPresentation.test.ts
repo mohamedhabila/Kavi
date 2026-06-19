@@ -1,15 +1,17 @@
 import {
-  buildSubAgentHierarchy,
   buildSubAgentLifecycleMessage,
-  buildSubAgentRollupMap,
-  buildSubAgentSubtree,
   formatCompactElapsed,
   getSubAgentDisplayName,
   getSubAgentSessionLabel,
   summarizeSubAgentVisibleActivity,
   summarizeSubAgentOutput,
-} from '../../src/services/agents/subAgentPresentation';
-import type { SubAgentSnapshot } from '../../src/types';
+} from '../../src/services/agents/lifecycle/presentPhase';
+import {
+  buildSubAgentHierarchy,
+  buildSubAgentRollupMap,
+  buildSubAgentSubtree,
+} from '../../src/services/agents/lifecycle/subAgentHierarchyPresentation';
+import type { SubAgentSnapshot } from '../../src/types/subAgent';
 
 const now = 1_700_000_000_000;
 

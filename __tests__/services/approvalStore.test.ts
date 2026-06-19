@@ -24,7 +24,7 @@ beforeEach(() => {
     },
     policy: {
       requireApproval: false,
-      alwaysApproveTools: ['ssh_exec', 'workspace_delete', 'browser_navigate'],
+      alwaysApproveTools: ['ssh_exec', 'workspace_delegate_task', 'browser_navigate'],
       autoApproveTools: ['web_search', 'web_fetch', 'read_file', 'list_files'],
       timeoutMs: 5 * 60 * 1000,
     },
@@ -190,7 +190,7 @@ describe('useApprovalStore', () => {
 describe('needsApproval', () => {
   it('returns true for alwaysApproveTools even when global approval off', () => {
     expect(needsApproval('ssh_exec')).toBe(true);
-    expect(needsApproval('workspace_delete')).toBe(true);
+    expect(needsApproval('workspace_delegate_task')).toBe(true);
   });
 
   it('returns false for non-sensitive tools when global approval off', () => {
@@ -220,6 +220,13 @@ describe('needsApproval', () => {
     expect(needsApprovalWithContext('contacts_manage_access', {})).toBe(true);
     expect(needsApprovalWithContext('contacts_search_full', { query: 'Jane' })).toBe(true);
     expect(needsApprovalWithContext('phone_call', { number: '+12125550101' })).toBe(true);
+    expect(needsApprovalWithContext('calendar_events', {})).toBe(true);
+    expect(needsApprovalWithContext('calendar_update_event', { id: 'event-1' })).toBe(true);
+    expect(needsApprovalWithContext('location_current', {})).toBe(true);
+    expect(needsApprovalWithContext('clipboard_read', {})).toBe(true);
+    expect(needsApprovalWithContext('photos_latest', { count: 3 })).toBe(true);
+    expect(needsApprovalWithContext('screen_record', {})).toBe(true);
+    expect(needsApprovalWithContext('notification_cancel', { id: 'notification-id' })).toBe(true);
   });
 
   it('allows safe https open_url calls but blocks non-web schemes', () => {

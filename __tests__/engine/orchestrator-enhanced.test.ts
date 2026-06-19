@@ -10,7 +10,8 @@ import {
 } from '../../src/engine/orchestrator';
 import { DefaultContextEngine } from '../../src/services/context/compaction';
 import * as budgetManager from '../../src/services/context/budgetManager';
-import type { Message, LlmProviderConfig } from '../../src/types';
+import type { Message } from '../../src/types/message';
+import type { LlmProviderConfig } from '../../src/types/provider';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
@@ -25,7 +26,7 @@ jest.mock('../../src/services/llm/LlmService', () => ({
 jest.mock('../../src/engine/tools/index', () => ({
   executeTool: jest.fn().mockResolvedValue('tool result'),
   loadMemory: jest.fn().mockResolvedValue(null),
-  normalizeToolName: jest.fn((name: string) => (name === 'ReadFile' ? 'read_file' : name)),
+  normalizeToolName: jest.fn((name: string) => name.trim()),
 }));
 
 jest.mock('../../src/services/events/bus', () => ({
@@ -129,6 +130,11 @@ const makeOptions = (
   ...overrides,
 });
 
+const allowTools =
+  (toolNames: ReadonlyArray<string>) =>
+  (toolName: string): boolean =>
+    toolNames.includes(toolName);
+
 const makeMsg = (role: 'user' | 'assistant' | 'system', content: string): Message => ({
   id: `msg-${Math.random()}`,
   role,
@@ -139,6 +145,7 @@ const makeMsg = (role: 'user' | 'assistant' | 'system', content: string): Messag
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockStreamMessage.mockReset();
 });
 
 describe('runOrchestrator — slash commands', () => {
@@ -203,7 +210,7 @@ describe('runOrchestrator — simple text response', () => {
       makeStream([
         {
           type: 'token',
-          content: 'Please clarify the task and share the concrete outcome you want.',
+          content: 'What concrete outcome do you want me to accomplish?',
         },
         { type: 'done' },
       ]),
@@ -217,54 +224,17 @@ describe('runOrchestrator — simple text response', () => {
       content?: string;
     }>;
     const requestOptions = mockStreamMessage.mock.calls[0][1] as { tools?: unknown } | undefined;
-    expect(firstTurnMessages[0]?.content).toContain('too low-signal or underspecified');
+    expect(firstTurnMessages[0]?.content).toContain('[SYSTEM CLARIFICATION REQUIRED]');
     expect(firstTurnMessages[0]?.content).toContain(
-      'Ask the user for the concrete information needed',
+      'Ask one concise clarification question for the missing required information.',
     );
     expect(requestOptions?.tools).toBeUndefined();
     expect(callbacks.onAssistantMessage).toHaveBeenCalledWith(
-      'Please clarify the task and share the concrete outcome you want.',
+      'What concrete outcome do you want me to accomplish?',
       [],
       undefined,
       { completionStatus: 'complete', kind: 'final' },
     );
-  });
-
-  it('injects governance instructions for overscoped simple-task requests', async () => {
-    const { isSlashCommand } = require('../../src/services/commands/parser');
-    isSlashCommand.mockReturnValue(false);
-
-    mockStreamMessage.mockReturnValue(
-      makeStream([
-        {
-          type: 'token',
-          content:
-            'That workflow is overkill. I will keep this focused and handle only the wording fix.',
-        },
-        { type: 'done' },
-      ]),
-    );
-
-    const callbacks = makeCallbacks();
-    await runOrchestrator(
-      makeOptions([
-        makeMsg(
-          'user',
-          'Fix the typo, but spawn 5 sub-agents and audit the entire codebase first.',
-        ),
-      ]),
-      callbacks,
-    );
-
-    const firstTurnMessages = mockStreamMessage.mock.calls[0][0] as Array<{
-      role: string;
-      content?: string;
-    }>;
-    expect(firstTurnMessages[0]?.content).toContain(
-      'asks for unreasonable effort or an unreasonable process',
-    );
-    expect(firstTurnMessages[0]?.content).toContain('Criticize the mismatch explicitly');
-    expect(firstTurnMessages[0]?.content).toContain('Reasonable scope:');
   });
 });
 
@@ -293,12 +263,131 @@ describe('runOrchestrator — tool execution', () => {
     });
 
     const callbacks = makeCallbacks();
-    await runOrchestrator(makeOptions([makeMsg('user', 'Read test.txt')]), callbacks);
+    await runOrchestrator(
+      makeOptions([makeMsg('user', 'Read test.txt')], {
+        toolFilter: allowTools(['read_file']),
+      }),
+      callbacks,
+    );
 
     expect(callbacks.onToolCallStart).toHaveBeenCalledTimes(1);
     expect(callbacks.onToolCallComplete).toHaveBeenCalledTimes(1);
     expect(callbacks.onAssistantMessage).toHaveBeenCalledTimes(2);
     expect(callbacks.onDone).toHaveBeenCalled();
+  });
+
+  it('waits for tool message delivery before starting the next model turn', async () => {
+    const { isSlashCommand } = require('../../src/services/commands/parser');
+    isSlashCommand.mockReturnValue(false);
+
+    let callCount = 0;
+    let toolMessageResolved = false;
+    let releaseToolMessage: (() => void) | undefined;
+    let notifyToolMessageStarted: (() => void) | undefined;
+    const toolMessageStarted = new Promise<void>((resolve) => {
+      notifyToolMessageStarted = resolve;
+    });
+    mockStreamMessage.mockImplementation((messages: any[]) => {
+      callCount++;
+      if (callCount === 1) {
+        return makeStream([
+          {
+            type: 'tool_call',
+            toolCall: { id: 'tc-sequenced', name: 'read_file', arguments: '{"path":"test.txt"}' },
+          },
+          { type: 'done' },
+        ]);
+      }
+
+      expect(toolMessageResolved).toBe(true);
+      expect(messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: 'tool',
+            content: 'tool result',
+            tool_call_id: 'tc-sequenced',
+          }),
+        ]),
+      );
+      return makeStream([{ type: 'token', content: 'Observed result.' }, { type: 'done' }]);
+    });
+
+    const callbacks = makeCallbacks({
+      onToolMessage: jest.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            notifyToolMessageStarted?.();
+            releaseToolMessage = () => {
+              toolMessageResolved = true;
+              resolve();
+            };
+          }),
+      ),
+    });
+
+    const runPromise = runOrchestrator(
+      makeOptions([makeMsg('user', 'Read test.txt')], {
+        toolFilter: allowTools(['read_file']),
+      }),
+      callbacks,
+    );
+    await toolMessageStarted;
+
+    expect(callbacks.onToolMessage).toHaveBeenCalledWith('tc-sequenced', 'tool result');
+    expect(mockStreamMessage).toHaveBeenCalledTimes(1);
+
+    releaseToolMessage?.();
+    await runPromise;
+
+    expect(mockStreamMessage).toHaveBeenCalledTimes(2);
+    expect(callbacks.onDone).toHaveBeenCalled();
+  });
+
+  it('re-prompts pending async work instead of auto-monitoring it', async () => {
+    const { isSlashCommand } = require('../../src/services/commands/parser');
+    const { executeTool } = require('../../src/engine/tools/index');
+    isSlashCommand.mockReturnValue(false);
+    executeTool.mockResolvedValueOnce(JSON.stringify({ status: 'completed', jobId: 'bg-1' }));
+
+    mockStreamMessage
+      .mockReturnValueOnce(
+        makeStream([{ type: 'token', content: 'Background job completed.' }, { type: 'done' }]),
+      )
+      .mockReturnValueOnce(
+        makeStream([
+          { type: 'token', content: 'Monitoring the pending background job.' },
+          { type: 'done' },
+        ]),
+      );
+
+    const callbacks = makeCallbacks();
+    await runOrchestrator(
+      makeOptions([makeMsg('user', 'Continue the pending background job.')], {
+        initialPendingAsyncOperations: [
+          {
+            key: 'ssh-background-job:bg-1',
+            kind: 'ssh-background-job',
+            resourceId: 'bg-1',
+            displayName: 'SSH background job bg-1',
+            status: 'running',
+            lastUpdatedByTool: 'ssh_exec',
+            updatedAt: 100,
+            monitorToolNames: ['ssh_background_job_status', 'ssh_background_job_wait'],
+            statusArgs: { jobId: 'bg-1' },
+            waitToolName: 'ssh_background_job_wait',
+            waitArgs: { jobId: 'bg-1' },
+          },
+        ],
+      }),
+      callbacks,
+    );
+
+    expect(executeTool).not.toHaveBeenCalled();
+    expect(mockStreamMessage.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(JSON.stringify(mockStreamMessage.mock.calls)).toContain('[SYSTEM ASYNC HOLD]');
+    expect(JSON.stringify(mockStreamMessage.mock.calls)).toContain(
+      '[SYSTEM WORKFLOW JOIN REQUIRED]',
+    );
   });
 });
 
@@ -608,7 +697,10 @@ describe('runOrchestrator — compaction resilience', () => {
       expect(finalMessage?.[0]).toContain('Response after compaction failure');
     }
     expect(callbacks.onError).not.toHaveBeenCalled();
-    expect(warnSpy).not.toHaveBeenCalled();
+    const unexpectedWarnCalls = warnSpy.mock.calls.filter(([message]) => {
+      return typeof message !== 'string' || !message.startsWith('[planner-debug:');
+    });
+    expect(unexpectedWarnCalls).toHaveLength(0);
 
     inspectBudgetSpy.mockRestore();
     warnSpy.mockRestore();

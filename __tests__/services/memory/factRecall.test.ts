@@ -11,12 +11,14 @@ import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
-  upsertEntity,
+} from '../../../src/services/memory/schema';
+import { upsertEntity } from '../../../src/services/memory/entities';
+import {
   recordFact,
-  setFactPinned,
-  getFactById,
   setFactEmbedding,
-} from '../../../src/services/memory/factStore';
+  setFactPinned,
+} from '../../../src/services/memory/facts/mutations';
+import { getFactById } from '../../../src/services/memory/facts/queries';
 import {
   recallFactsForQuery,
   recallScoredFactsForQuery,
@@ -24,7 +26,7 @@ import {
   backfillFactEmbeddings,
 } from '../../../src/services/memory/factRecall';
 import * as embeddings from '../../../src/services/memory/embeddings';
-import type { EmbeddingConfig } from '../../../src/types';
+import type { EmbeddingConfig } from '../../../src/types/memory';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -89,6 +91,32 @@ describe('recallFactsForQuery — text-only (no embedding config)', () => {
     const facts = await recallFactsForQuery('coffee', { limit: 2 });
 
     expect(facts).toHaveLength(2);
+  });
+
+  it('recalls Arabic text without ASCII-only tokenization', async () => {
+    const user = upsertEntity({ name: 'المستخدم', type: 'self' });
+    recordFact({
+      subjectId: user.id,
+      predicate: 'مشروب',
+      objectText: 'القهوة السادة',
+    });
+
+    const facts = await recallFactsForQuery('أحتاج القهوة السادة');
+
+    expect(facts.map((f) => f.objectText)).toContain('القهوة السادة');
+  });
+
+  it('recalls segmented CJK text without whitespace delimiters', async () => {
+    const trip = upsertEntity({ name: '旅行', type: 'concept' });
+    recordFact({
+      subjectId: trip.id,
+      predicate: '会議場所',
+      objectText: '東京',
+    });
+
+    const facts = await recallFactsForQuery('東京の会議場所');
+
+    expect(facts.map((f) => f.objectText)).toContain('東京');
   });
 });
 
@@ -325,6 +353,7 @@ describe('recallFactsForQuery — scoped decay and reinforcement', () => {
       objectText: 'Use the remote backend for alpha',
       scope: 'global',
       importance: 0.7,
+      supersedePrior: false,
       now: 10_000,
     });
 
@@ -399,6 +428,71 @@ describe('recallFactsForQuery — scoped decay and reinforcement', () => {
     expect(facts.map((fact) => fact.id)).not.toContain(other.fact.id);
   });
 
+  it('keeps recent current conversation facts available for vague followups', async () => {
+    const user = upsertEntity({ name: 'beam-user', type: 'person' });
+    const team = upsertEntity({ name: 'beam-team', type: 'concept' });
+    const conversationId = 'conv-current-state';
+
+    recordFact({
+      subjectId: user.id,
+      predicate: 'route_code',
+      objectText: 'BEAM-ROUTE-A',
+      scope: 'conversation',
+      originConversationId: conversationId,
+      now: 1_000,
+    });
+    recordFact({
+      subjectId: user.id,
+      predicate: 'meal_preference',
+      objectText: 'BEAM-MEAL-OLD',
+      scope: 'conversation',
+      originConversationId: conversationId,
+      now: 2_000,
+    });
+    recordFact({
+      subjectId: team.id,
+      predicate: 'escalation_channel',
+      objectText: 'BEAM-CHANNEL-7',
+      scope: 'conversation',
+      originConversationId: conversationId,
+      now: 3_000,
+    });
+    recordFact({
+      subjectId: user.id,
+      predicate: 'meal_preference',
+      objectText: 'BEAM-MEAL-NEW',
+      scope: 'conversation',
+      originConversationId: conversationId,
+      supersedePrior: true,
+      now: 4_000,
+    });
+    recordFact({
+      subjectId: user.id,
+      predicate: 'reminder_window',
+      objectText: 'BEAM-WINDOW-9',
+      scope: 'conversation',
+      originConversationId: conversationId,
+      now: 5_000,
+    });
+
+    const facts = await recallFactsForQuery('continue with the current summary', {
+      conversationId,
+      limit: 6,
+      now: 6_000,
+    });
+    const values = facts.map((fact) => fact.objectText);
+
+    expect(values).toEqual(
+      expect.arrayContaining([
+        'BEAM-ROUTE-A',
+        'BEAM-MEAL-NEW',
+        'BEAM-WINDOW-9',
+        'BEAM-CHANNEL-7',
+      ]),
+    );
+    expect(values).not.toContain('BEAM-MEAL-OLD');
+  });
+
   it('demotes stale low-importance facts behind recent important facts', async () => {
     const user = upsertEntity({ name: 'user', type: 'self' });
     const now = 200 * 24 * 60 * 60 * 1000;
@@ -440,5 +534,90 @@ describe('recallFactsForQuery — scoped decay and reinforcement', () => {
 
     expect(refreshed?.accessCount).toBe(1);
     expect(refreshed?.lastRecalledAt).toBe(123_000);
+  });
+
+  it('does not update access counters when only scoring recall candidates', async () => {
+    const user = upsertEntity({ name: 'user', type: 'self' });
+    const recorded = recordFact({
+      subjectId: user.id,
+      predicate: 'prefers_tone',
+      objectText: 'concise implementation notes',
+    });
+
+    const scored = await recallScoredFactsForQuery('concise implementation notes', {
+      now: 123_000,
+    });
+    const refreshed = getFactById(recorded.fact.id);
+
+    expect(scored.length).toBeGreaterThan(0);
+    expect(refreshed?.accessCount).toBe(0);
+    expect(refreshed?.lastRecalledAt).toBeNull();
+  });
+});
+
+describe('recallFactsForQuery — temporal decay math', () => {
+  it('gives fresh facts a decay multiplier near 1.0', async () => {
+    const user = upsertEntity({ name: 'user', type: 'self' });
+    recordFact({ subjectId: user.id, predicate: 'lives_in', objectText: 'Berlin', now: 1_000_000 });
+
+    const scored = await recallScoredFactsForQuery('Berlin', { now: 1_000_000 + 60_000 });
+    expect(scored.length).toBeGreaterThan(0);
+    expect(scored[0].decayMultiplier).toBeGreaterThan(0.99);
+  });
+
+  it('gives old facts a lower decay multiplier', async () => {
+    const user = upsertEntity({ name: 'user', type: 'self' });
+    recordFact({ subjectId: user.id, predicate: 'lives_in', objectText: 'Berlin', now: 1_000_000 });
+
+    // 60 days later — with default half-life (~30-120 days), decay should be noticeable
+    const scored = await recallScoredFactsForQuery('Berlin', {
+      now: 1_000_000 + 60 * 24 * 60 * 60 * 1000,
+    });
+    expect(scored.length).toBeGreaterThan(0);
+    expect(scored[0].decayMultiplier).toBeLessThan(0.9);
+  });
+
+  it('gives pinned facts no decay (multiplier stays 1.0)', async () => {
+    const user = upsertEntity({ name: 'user', type: 'self' });
+    const fact = recordFact({
+      subjectId: user.id,
+      predicate: 'lives_in',
+      objectText: 'Berlin',
+      now: 1_000_000,
+    });
+    setFactPinned(fact.fact.id, true);
+
+    const scored = await recallScoredFactsForQuery('Berlin', {
+      now: 1_000_000 + 365 * 24 * 60 * 60 * 1000,
+    });
+    expect(scored.length).toBeGreaterThan(0);
+    expect(scored[0].decayMultiplier).toBe(1);
+  });
+
+  it('applies faster decay for fast decay policy', async () => {
+    const user = upsertEntity({ name: 'user', type: 'self' });
+    recordFact({
+      subjectId: user.id,
+      predicate: 'lives_in',
+      objectText: 'Berlin',
+      decayPolicy: 'fast',
+      now: 1_000_000,
+    });
+    recordFact({
+      subjectId: user.id,
+      predicate: 'works_on',
+      objectText: 'Kavi',
+      decayPolicy: 'normal',
+      now: 1_000_000,
+    });
+
+    // 14 days later — fast half-life is ~7 days, normal is ~30+ days
+    const now = 1_000_000 + 14 * 24 * 60 * 60 * 1000;
+    const scored = await recallScoredFactsForQuery('Berlin Kavi', { now });
+    const fastEntry = scored.find((s) => s.fact.predicate === 'lives_in');
+    const normalEntry = scored.find((s) => s.fact.predicate === 'works_on');
+    expect(fastEntry).toBeDefined();
+    expect(normalEntry).toBeDefined();
+    expect(fastEntry!.decayMultiplier).toBeLessThan(normalEntry!.decayMultiplier);
   });
 });

@@ -17,7 +17,7 @@ jest.mock('../../src/store/useSettingsStore', () => ({
   },
 }));
 
-jest.mock('../../src/services/browser/automation', () => ({
+jest.mock('../../src/services/browser/automation/actions', () => ({
   browserNavigate: (...args: any[]) => mockBrowserNavigate(...args),
 }));
 

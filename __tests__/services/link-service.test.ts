@@ -38,7 +38,9 @@ describe('runLinkUnderstanding', () => {
 
   it('extracts and enriches a single link', async () => {
     mockExecuteWebFetch.mockResolvedValue(
-      JSON.stringify({ title: 'Example', content: 'Page content here.' }),
+      JSON.stringify({
+        fetches: [{ requestedUrl: 'https://example.com', title: 'Example', content: 'Page content here.' }],
+      }),
     );
 
     const result = await runLinkUnderstanding('Check https://example.com', {
@@ -49,16 +51,21 @@ describe('runLinkUnderstanding', () => {
     expect(result.enrichedBody).toContain('<link_context>');
     expect(result.enrichedBody).toContain('Page content here.');
     expect(mockExecuteWebFetch).toHaveBeenCalledWith({
-      url: 'https://example.com',
+      urls: ['https://example.com'],
       extractMode: 'markdown',
       maxChars: 8000,
     });
   });
 
   it('handles multiple links in parallel', async () => {
-    mockExecuteWebFetch
-      .mockResolvedValueOnce(JSON.stringify({ content: 'First.' }))
-      .mockResolvedValueOnce(JSON.stringify({ content: 'Second.' }));
+    mockExecuteWebFetch.mockResolvedValue(
+      JSON.stringify({
+        fetches: [
+          { requestedUrl: 'https://a.com', content: 'First.' },
+          { requestedUrl: 'https://b.com', content: 'Second.' },
+        ],
+      }),
+    );
 
     const result = await runLinkUnderstanding('See https://a.com and https://b.com', {
       enabled: true,
@@ -67,10 +74,13 @@ describe('runLinkUnderstanding', () => {
     expect(result.extractedCount).toBe(2);
     expect(result.enrichedBody).toContain('First.');
     expect(result.enrichedBody).toContain('Second.');
+    expect(mockExecuteWebFetch).toHaveBeenCalledTimes(1);
   });
 
   it('respects maxLinks option', async () => {
-    mockExecuteWebFetch.mockResolvedValue(JSON.stringify({ content: 'Content.' }));
+    mockExecuteWebFetch.mockResolvedValue(
+      JSON.stringify({ fetches: [{ requestedUrl: 'https://a.com', content: 'Content.' }] }),
+    );
 
     await runLinkUnderstanding('https://a.com https://b.com https://c.com', {
       enabled: true,
@@ -104,7 +114,9 @@ describe('runLinkUnderstanding', () => {
 
   it('preserves original body prefix in enriched result', async () => {
     const body = 'Please analyze this: https://example.com';
-    mockExecuteWebFetch.mockResolvedValue(JSON.stringify({ content: 'Analyzed.' }));
+    mockExecuteWebFetch.mockResolvedValue(
+      JSON.stringify({ fetches: [{ requestedUrl: 'https://example.com', content: 'Analyzed.' }] }),
+    );
 
     const result = await runLinkUnderstanding(body, { enabled: true });
 

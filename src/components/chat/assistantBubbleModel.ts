@@ -1,4 +1,4 @@
-import { AgentRun, Message, ToolCall } from '../../types';
+import { Message, ToolCall } from '../../types/message';
 import { stripInternalAssistantTranscriptArtifacts } from '../../utils/assistantTextSanitizer';
 import { mergeAttachmentLists } from '../../utils/messageAttachments';
 import {

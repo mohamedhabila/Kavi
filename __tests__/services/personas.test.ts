@@ -56,43 +56,37 @@ describe('BUILT_IN_PERSONAS', () => {
     expect(writer?.systemPrompt).toContain('only create a canvas when the user explicitly wants');
   });
 
-  it('requires the SuperAgent to emit a parseable semantic plan before tool calls', () => {
+  it('keeps the SuperAgent action-oriented instead of requiring a formal pre-tool plan', () => {
     const superAgent = BUILT_IN_PERSONAS.find((persona) => persona.id === 'super-agent');
 
     expect(superAgent?.systemPrompt).not.toContain('running in Kavi');
-    expect(superAgent?.systemPrompt).toContain('Objective: one concise sentence');
-    expect(superAgent?.systemPrompt).toContain('Success Criteria:');
-    expect(superAgent?.systemPrompt).toContain('Stop Conditions:');
-    expect(superAgent?.systemPrompt).toContain('Workstreams:');
-    expect(superAgent?.systemPrompt).toContain('Goal: ... | Success: ... | Depends on: ...');
-    expect(superAgent?.systemPrompt).toContain('workstream-1');
+    expect(superAgent?.systemPrompt).toContain(
+      'do not emit a formal workstream plan before the first tool call unless the user explicitly asks for one',
+    );
+    expect(superAgent?.systemPrompt).toContain(
+      'If the next step is clear, start acting and keep any short pre-tool explanation concise.',
+    );
+    expect(superAgent?.systemPrompt).not.toContain('Workstreams:');
+    expect(superAgent?.systemPrompt).not.toContain('Stop Conditions:');
   });
 
   it('requires the SuperAgent to cite provider research claims and avoid unsupported comparisons', () => {
     const superAgent = BUILT_IN_PERSONAS.find((persona) => persona.id === 'super-agent');
 
-    expect(superAgent?.systemPrompt).toContain(
-      'prefer official documentation over secondary summaries',
-    );
-    expect(superAgent?.systemPrompt).toContain(
-      'attribute provider-specific claims to the supporting source names or URLs',
-    );
-    expect(superAgent?.systemPrompt).toContain(
-      'unsupported quantitative, pricing, latency, or superlative claims',
-    );
+    expect(superAgent?.systemPrompt).toContain('For live information and provider comparisons');
+    expect(superAgent?.systemPrompt).toContain('cite source names/URLs');
+    expect(superAgent?.systemPrompt).toContain('qualify unsupported metrics or superlatives');
   });
 
   it('keeps ordinary repo worker tool bundles narrow by default', () => {
     const superAgent = BUILT_IN_PERSONAS.find((persona) => persona.id === 'super-agent');
 
     expect(superAgent?.systemPrompt).toContain(
-      "tools: ['read_file', 'file_edit', 'write_file', 'list_files', 'glob_search', 'text_search'] for ordinary repo coding and verification tasks",
+      "omit tools unless you need to narrow the worker's scope",
     );
+    expect(superAgent?.systemPrompt).toContain('Use python as a capability bridge only when first-class tools are insufficient');
     expect(superAgent?.systemPrompt).toContain(
-      "add 'python' only when the delegated gap specifically requires code execution, data analysis, or artifact generation",
-    );
-    expect(superAgent?.systemPrompt).toContain(
-      "add 'tool_catalog' only when the delegated gap is explicit capability discovery rather than direct execution",
+      'Use tool_catalog only when the exposed tool surface is insufficient for the next step',
     );
   });
 });

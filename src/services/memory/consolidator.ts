@@ -9,7 +9,7 @@
 //   • open_threads     — short labels for unresolved follow-ups.
 //   • notable          — one-shot lines for the next turn's `<focus>` block.
 //
-// Design rules (see _research/SINGLE_THREAD_MEMORY_REDESIGN_20260429.md §5):
+// Design rules:
 //   • ADD-only: the consolidator NEVER mutates or invalidates existing facts.
 //     Supersession happens later, on-read, when a new fact lands with the
 //     same subject+predicate (handled by facts.recordFact).
@@ -21,18 +21,15 @@
 //     pollute memory with junk and never throw out of the chat path.
 // ---------------------------------------------------------------------------
 
-import type { Message } from '../../types';
-import {
-  invalidateFact,
-  listFacts,
-  recordFact,
-  type MemoryFactScope,
-} from './facts';
+import type { Message } from '../../types/message';
+import { recordFact } from './facts/mutations';
+import type { MemoryFactScope } from './facts/types';
 import { upsertEntity } from './entities';
 import { editBlock, ensureDefaultBlocks } from './blocks';
 import { ensureFactSchema } from './schema';
-import { addFactEvidence, recordEpisode } from './episodes';
+import { addFactEvidence, recordEpisode } from './episodes/mutations';
 import { editWorkingBlock } from './workingBlocks';
+import { composeActiveFocusContent } from './focus';
 
 export interface ConsolidatorTurnInput {
   /** Most recent user message that led to this assistant turn. */
@@ -97,9 +94,13 @@ export interface ConsolidatorOptions {
 }
 
 const PROMPT_HEADER = `You are the memory consolidator for an assistant chat app.
-Read the latest user message and the assistant reply, then extract ONLY information
-that is durably useful in future conversations with this user. Be conservative:
-prefer to extract nothing over guessing.
+Read the latest user message, assistant reply, and message window, then extract ONLY
+information that should remain available to the assistant after the turn. Memory is
+scoped: stable user profile and preferences are global, while active-task facts,
+workspace/project identifiers, decisions, constraints, and verification tokens can
+be conversation, project, or session memory. Be conservative: prefer to extract
+nothing over guessing, but do not drop facts the user explicitly asked the assistant
+to retain.
 
 Return STRICT JSON only — no prose, no markdown fences. Schema:
 {
@@ -115,9 +116,6 @@ Return STRICT JSON only — no prose, no markdown fences. Schema:
       "reason": "short grounding note"
     }
   ],
-  "invalidated_facts": [
-    { "fact_id": "existing fact id", "reason": "correction" }
-  ],
   "episode_summary": "short summary of this consolidated message window, or null",
   "active_focus": "1-3 sentence rolling summary of what the user is working on, or null",
   "open_threads": ["short label of an unresolved follow-up", ...],
@@ -127,10 +125,12 @@ Return STRICT JSON only — no prose, no markdown fences. Schema:
 Rules:
 - Skip ephemeral chit-chat. Do not extract greetings, jokes, or filler.
 - new_facts: only durable assertions. Reject opinions stated as facts.
+- Extract explicit user memory-write intents in any language. Preserve supplied
+  subject, predicate, and value labels when they are given, including opaque IDs,
+  checksums, codes, and tokens. The assistant does not need to restate the fact.
 - Up to 5 new_facts, 5 open_threads, 2 notable.
 - Use global scope only for stable user profile/preferences. Use conversation
   or session for active-task details. Use project for repo/workspace facts.
-- invalidated_facts only when the user explicitly corrects prior information.
 - value strings <= 200 chars. labels <= 80 chars. active_focus <= 600 chars.
 - If nothing is worth recording, return empty arrays and null active_focus.
 `;
@@ -144,7 +144,9 @@ export function buildConsolidatorPrompt(input: ConsolidatorTurnInput): string {
     lines.push(`<persona>${input.personaSummary.trim().slice(0, 400)}</persona>`);
   }
   if (input.messages && input.messages.length > 0) {
-    lines.push(`<message_window>\n${formatMessageWindow(input.messages)}\n</message_window>`);
+    lines.push(
+      `<message_window>\n${formatMessageWindow(selectPromptMessageWindow(input))}\n</message_window>`,
+    );
   } else {
     lines.push(`<user>\n${truncateForPrompt(input.userMessage, 4000)}\n</user>`);
     lines.push(`<assistant>\n${truncateForPrompt(input.assistantMessage, 4000)}\n</assistant>`);
@@ -152,19 +154,49 @@ export function buildConsolidatorPrompt(input: ConsolidatorTurnInput): string {
   return lines.join('\n\n');
 }
 
+function selectPromptMessageWindow(input: ConsolidatorTurnInput): Message[] {
+  const messages = input.messages ?? [];
+  if (!messages.length) return messages;
+  if (!input.sourceUserMessageId && !input.sourceAssistantMessageId) return messages;
+
+  const userIndex = input.sourceUserMessageId
+    ? messages.findIndex((message) => message.id === input.sourceUserMessageId)
+    : -1;
+  const assistantIndex = input.sourceAssistantMessageId
+    ? messages.findIndex((message) => message.id === input.sourceAssistantMessageId)
+    : -1;
+
+  if (userIndex < 0 && assistantIndex < 0) return messages;
+  const startIndex = userIndex >= 0 ? userIndex : 0;
+  const endIndex = assistantIndex >= 0 ? assistantIndex : messages.length - 1;
+  if (startIndex > endIndex) return messages;
+  return messages.slice(startIndex, endIndex + 1);
+}
+
 function formatMessageWindow(messages: Message[]): string {
   return messages
     .slice(-24)
     .map((message) => {
-      const messageText = message.role === 'user'
-        ? message.enrichedContent ?? message.content ?? ''
-        : message.content ?? '';
+      const messageText = getPromptVisibleMessageContent(message);
       const content = truncateForPrompt(String(messageText), 1200);
       const toolNames = message.toolCalls?.map((toolCall) => toolCall.name).filter(Boolean);
       const toolLabel = toolNames?.length ? ` tools=${toolNames.join(',')}` : '';
       return `<message id="${message.id}" role="${message.role}"${toolLabel}>\n${content}\n</message>`;
     })
     .join('\n');
+}
+
+function getPromptVisibleMessageContent(message: Message): string {
+  if (message.role === 'tool') {
+    const toolNames = message.toolCalls?.map((toolCall) => toolCall.name).filter(Boolean) ?? [];
+    const toolName = toolNames.join(',') || message.toolCallId || 'tool';
+    const status = message.isError ? 'error' : 'completed';
+    return `[tool_result name=${toolName} status=${status}]`;
+  }
+  if (message.role === 'user') {
+    return message.enrichedContent ?? message.content ?? '';
+  }
+  return message.content ?? '';
 }
 
 function truncateForPrompt(value: string, max: number): string {
@@ -231,19 +263,18 @@ function normalizeFacts(raw: unknown): ConsolidatorFact[] {
     const finalValue = value || objectValue;
     if (!subject || !predicate || !finalValue) continue;
     if (subject.length > 80 || predicate.length > 80 || finalValue.length > 200) continue;
-    const confidenceRaw = typeof candidate.confidence === 'string'
-      ? candidate.confidence.trim().toLowerCase()
-      : '';
+    const confidenceRaw =
+      typeof candidate.confidence === 'string' ? candidate.confidence.trim().toLowerCase() : '';
     const numericConfidence =
       typeof candidate.confidence === 'number' ? clamp01(candidate.confidence) : undefined;
-    const confidence: ConsolidatorFact['confidence'] = numericConfidence ??
+    const confidence: ConsolidatorFact['confidence'] =
+      numericConfidence ??
       (confidenceRaw === 'high' || confidenceRaw === 'medium' || confidenceRaw === 'low'
         ? (confidenceRaw as ConsolidatorFact['confidence'])
         : undefined);
     const scope = parseFactScope(candidate.scope);
-    const importance = typeof candidate.importance === 'number'
-      ? clamp01(candidate.importance)
-      : undefined;
+    const importance =
+      typeof candidate.importance === 'number' ? clamp01(candidate.importance) : undefined;
     const evidenceMessageIds = Array.isArray(candidate.evidence_message_ids)
       ? candidate.evidence_message_ids
           .filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
@@ -343,6 +374,7 @@ export function applyConsolidatorResult(
     conversationId?: string;
     threadId?: string;
     taskId?: string;
+    threadTitle?: string;
     sourceUserMessageId?: string;
     sourceAssistantMessageId?: string;
     messages?: Message[];
@@ -368,7 +400,6 @@ export function applyConsolidatorResult(
     .map((message) => message.timestamp)
     .filter((timestamp): timestamp is number => typeof timestamp === 'number');
   const episodeSummary = result.episodeSummary ?? null;
-  const invalidations = result.invalidatedFacts ?? [];
   const episode = episodeSummary
     ? recordEpisode({
         conversationId: options.conversationId,
@@ -384,42 +415,21 @@ export function applyConsolidatorResult(
       })
     : null;
 
-  const invalidatedFactIds: string[] = [];
-  for (const invalidation of invalidations) {
-    if (invalidation.factId) {
-      if (invalidateFact(invalidation.factId, now)) invalidatedFactIds.push(invalidation.factId);
-      continue;
-    }
-    if (!invalidation.subject || !invalidation.predicate) continue;
-    const subject = upsertEntity({
-      type: invalidation.subject.toLowerCase() === 'user' ? 'self' : 'concept',
-      name: invalidation.subject,
-      now,
-    });
-    for (const fact of listFacts({
-      subjectId: subject.id,
-      predicate: invalidation.predicate,
-      includeInvalidated: false,
-      limit: 20,
-    })) {
-      if (invalidateFact(fact.id, now)) invalidatedFactIds.push(fact.id);
-    }
-  }
-
   const recordedFactIds: string[] = [];
   for (const fact of result.newFacts) {
     const subjectType = fact.subject.toLowerCase() === 'user' ? 'self' : 'concept';
     const subject = upsertEntity({ type: subjectType, name: fact.subject, now });
-    const sourceMessageId = fact.evidenceMessageIds?.[0]
-      ?? options.sourceUserMessageId
-      ?? options.sourceAssistantMessageId
-      ?? null;
+    const sourceMessageId =
+      fact.evidenceMessageIds?.[0] ??
+      options.sourceUserMessageId ??
+      options.sourceAssistantMessageId ??
+      null;
     const recorded = recordFact({
       subjectId: subject.id,
       predicate: fact.predicate,
       objectText: fact.value,
       confidence: confidenceToScore(fact.confidence),
-      scope: fact.scope ?? inferFactScope(fact),
+      scope: fact.scope ?? 'conversation',
       originConversationId: options.conversationId ?? null,
       originThreadId: options.threadId ?? options.conversationId ?? null,
       originTaskId: options.taskId ?? null,
@@ -428,6 +438,7 @@ export function applyConsolidatorResult(
       sourceSummary: fact.reason ?? episodeSummary ?? null,
       importance: fact.importance ?? inferFactImportance(fact),
       attributes: fact.reason ? { reason: fact.reason } : undefined,
+      supersedePrior: true,
       now,
     });
     if (recorded.status === 'created') recordedFactIds.push(recorded.fact.id);
@@ -446,9 +457,14 @@ export function applyConsolidatorResult(
   }
 
   let activeFocusUpdated = false;
-  if (result.activeFocus !== null) {
+  const taskId = options.taskId?.trim();
+  if (result.activeFocus !== null && !taskId) {
     try {
-      writeWorkingOrLegacyBlock('active_focus', result.activeFocus, options, now);
+      const activeFocus = composeActiveFocusContent({
+        threadTitle: options.threadTitle,
+        activeFocus: result.activeFocus,
+      });
+      writeWorkingOrLegacyBlock('active_focus', activeFocus, options, now);
       activeFocusUpdated = true;
     } catch {
       // BlockOverflowError or unknown block — never throw out of the chat path.
@@ -465,7 +481,7 @@ export function applyConsolidatorResult(
 
   return {
     recordedFactIds,
-    invalidatedFactIds,
+    invalidatedFactIds: [],
     activeFocusUpdated,
     openThreadsUpdated,
     episodeId: episode?.id ?? null,
@@ -499,22 +515,6 @@ function clamp01(value: number): number {
   return Math.max(0, Math.min(value, 1));
 }
 
-function inferFactScope(fact: ConsolidatorFact): MemoryFactScope {
-  const subject = fact.subject.toLowerCase();
-  const predicate = fact.predicate.toLowerCase();
-  if (subject === 'user' && /pref|name|role|timezone|language|location|pronoun/.test(predicate)) {
-    return 'global';
-  }
-  if (
-    /project|repo|workspace|package|build|release/.test(
-      `${subject} ${predicate} ${fact.value}`,
-    )
-  ) {
-    return 'project';
-  }
-  return 'conversation';
-}
-
 function inferFactImportance(fact: ConsolidatorFact): number {
   if (fact.scope === 'global') return 0.75;
   if (fact.scope === 'project') return 0.65;
@@ -529,148 +529,6 @@ function fitBlockLines(lines: string[], maxChars: number): string {
     out.push(line);
   }
   return out.join('\n');
-}
-
-export function applyHeuristicTurnMemory(
-  input: ConsolidatorTurnInput,
-  options: { now?: number } = {},
-): { activeFocusUpdated: boolean; openThreadsUpdated: boolean; recordedFactIds: string[] } {
-  ensureFactSchema();
-  ensureDefaultBlocks();
-  const now = options.now ?? input.now ?? Date.now();
-  const user = truncateForPrompt(input.userMessage, 220);
-  const assistant = truncateForPrompt(input.assistantMessage, 220);
-  let activeFocusUpdated = false;
-  let openThreadsUpdated = false;
-  const recordedFactIds: string[] = [];
-
-  if (user || assistant) {
-    const focus = [
-      input.threadTitle ? `Thread: ${input.threadTitle.trim().slice(0, 120)}` : '',
-      user ? `Latest user focus: ${user}` : '',
-      assistant ? `Latest response: ${assistant}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n')
-      .slice(0, 800);
-    try {
-      writeWorkingOrLegacyBlock('active_focus', focus, input, now);
-      activeFocusUpdated = true;
-    } catch {
-      activeFocusUpdated = false;
-    }
-  }
-
-  const threadCandidates = extractOpenThreadCandidates(
-    `${input.userMessage}\n${input.assistantMessage}`,
-  );
-  try {
-    writeWorkingOrLegacyBlock('open_threads', fitBlockLines(threadCandidates, 800), input, now);
-    openThreadsUpdated = true;
-  } catch {
-    openThreadsUpdated = false;
-  }
-
-  for (const fact of extractHeuristicFacts(input.userMessage)) {
-    const subject = upsertEntity({ type: 'self', name: 'user', now });
-    const recorded = recordFact({
-      subjectId: subject.id,
-      predicate: fact.predicate,
-      objectText: fact.value,
-      confidence: fact.confidence,
-      scope: fact.scope,
-      originConversationId: input.conversationId ?? null,
-      originThreadId: input.threadId ?? input.conversationId ?? null,
-      originTaskId: input.taskId ?? null,
-      sourceMessageId: input.sourceUserMessageId ?? null,
-      sourceTurnId: input.sourceAssistantMessageId ?? input.sourceUserMessageId ?? null,
-      sourceSummary: fact.reason,
-      importance: fact.importance,
-      attributes: { heuristic: true, reason: fact.reason },
-      now,
-    });
-    if (recorded.status === 'created') recordedFactIds.push(recorded.fact.id);
-  }
-
-  return { activeFocusUpdated, openThreadsUpdated, recordedFactIds };
-}
-
-function extractHeuristicFacts(userMessage: string): Array<{
-  predicate: string;
-  value: string;
-  confidence: number;
-  scope: MemoryFactScope;
-  importance: number;
-  reason: string;
-}> {
-  const text = userMessage.trim();
-  if (!text) return [];
-  const facts: Array<{
-    predicate: string;
-    value: string;
-    confidence: number;
-    scope: MemoryFactScope;
-    importance: number;
-    reason: string;
-  }> = [];
-
-  const remember = text.match(/\b(?:please\s+)?remember(?:\s+that|:)?\s+([^\n.?!]{3,200})/i)?.[1];
-  if (remember) {
-    facts.push({
-      predicate: 'asked_to_remember',
-      value: cleanHeuristicFactValue(remember, 200),
-      confidence: 0.85,
-      scope: 'global',
-      importance: 0.72,
-      reason: 'User explicitly asked Kavi to remember this.',
-    });
-  }
-
-  const name = text.match(/\b(?:my name is|call me)\s+([A-Za-z][A-Za-z .'-]{0,60})/i)?.[1];
-  if (name) {
-    facts.push({
-      predicate: 'has_name',
-      value: cleanHeuristicFactValue(name, 80),
-      confidence: 0.9,
-      scope: 'global',
-      importance: 0.8,
-      reason: 'User stated their name.',
-    });
-  }
-
-  const preference = text.match(/\bI\s+prefer\s+([^\n.?!]{3,160})/i)?.[1];
-  if (preference) {
-    facts.push({
-      predicate: 'prefers',
-      value: cleanHeuristicFactValue(preference, 160),
-      confidence: 0.75,
-      scope: 'global',
-      importance: 0.68,
-      reason: 'User stated a preference.',
-    });
-  }
-
-  return facts.filter((fact) => fact.value.length > 0).slice(0, 3);
-}
-
-function cleanHeuristicFactValue(value: string, maxLength: number): string {
-  return value
-    .trim()
-    .replace(/^['"]+|['".:,;]+$/g, '')
-    .replace(/\s+/g, ' ')
-    .slice(0, maxLength)
-    .trim();
-}
-
-function extractOpenThreadCandidates(text: string): string[] {
-  return text
-    .split(/\n+/)
-    .map((line) => line.trim().replace(/^[-*]\s+/, ''))
-    .filter((line) =>
-      /\b(todo|next|follow up|follow-up|later|pending|remaining|need to)\b/i.test(line),
-    )
-    .map((line) => line.slice(0, 80))
-    .slice(0, 5);
 }
 
 /**
@@ -703,6 +561,7 @@ export async function consolidateTurn(
       conversationId: input.conversationId,
       threadId: input.threadId,
       taskId: input.taskId,
+      threadTitle: input.threadTitle,
       sourceUserMessageId: input.sourceUserMessageId,
       sourceAssistantMessageId: input.sourceAssistantMessageId,
       messages: input.messages,

@@ -2,7 +2,6 @@
 // Tests for TerminalScreen (xterm.js WebView-based)
 // ---------------------------------------------------------------------------
 
-import React from 'react';
 import { act, render, fireEvent, waitFor } from '@testing-library/react-native';
 import { Linking } from 'react-native';
 

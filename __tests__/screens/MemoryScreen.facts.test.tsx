@@ -7,7 +7,6 @@
 // mocked so the UI contract is exercised without spinning up the SQLite shim.
 // ---------------------------------------------------------------------------
 
-import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { MemoryScreen } from '../../src/screens/MemoryScreen';
 
@@ -72,6 +71,50 @@ jest.mock('../../src/services/memory/store', () => ({
   getMemoryLastUpdatedAt: jest.fn().mockReturnValue(null),
 }));
 
+const mockRecallRecentEpisodes = jest.fn();
+
+jest.mock('../../src/services/memory/episodeRecall', () => ({
+  recallRecentEpisodes: (...args: any[]) => mockRecallRecentEpisodes(...args),
+}));
+
+jest.mock('../../src/services/memory/memoryOverview', () => ({
+  loadMemoryOverviewSnapshot: () => ({
+    focus: null,
+    activeTask: null,
+    recentFacts: [],
+    consolidation: {
+      memoryDisabled: false,
+      tier: 'deterministic',
+      providerName: null,
+      explicitProviderSelected: false,
+      isFallback: true,
+    },
+    pendingIngestionJobs: 0,
+  }),
+}));
+
+jest.mock('../../src/services/memory/memoryDiagnostics', () => ({
+  loadMemoryDiagnosticsSnapshot: () => ({
+    threadId: null,
+    budgetEntries: [],
+    retrievalEntries: [],
+  }),
+}));
+
+jest.mock('../../src/components/memory/MemoryDiagnosticsPanel', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return {
+    MemoryDiagnosticsPanel: () => React.createElement(View, { testID: 'memory-diagnostics-panel' }),
+  };
+});
+
+jest.mock('../../src/store/useChatStore', () => ({
+  useChatStore: {
+    getState: () => ({ activeConversationId: null }),
+  },
+}));
+
 jest.mock('../../src/services/memory/memoryTools', () => ({
   executeMemoryRecall: (...args: any[]) => mockExecuteMemoryRecall(...args),
   executeMemoryRemember: jest.fn(),
@@ -108,6 +151,7 @@ describe('MemoryScreen — Facts & Blocks tabs', () => {
     jest.clearAllMocks();
     mockRouteParams = {};
     memoryListener = null;
+    mockRecallRecentEpisodes.mockReturnValue([]);
     mockSubscribeToMemoryChanges.mockImplementation((listener: typeof memoryListener) => {
       memoryListener = listener;
       return jest.fn();
@@ -300,5 +344,53 @@ describe('MemoryScreen — Facts & Blocks tabs', () => {
 
     await waitFor(() => expect(getByTestId('memory-blocks-tab')).toBeTruthy());
     expect(getByText('No memory blocks defined.')).toBeTruthy();
+  });
+
+  // ── Episodes section ──────────────────────────────────────────────────────
+
+  it('shows the episodes empty state when no episodes exist', async () => {
+    const { getByText, getByTestId } = render(<MemoryScreen />);
+    fireEvent.press(getByText('Facts'));
+
+    await waitFor(() => expect(getByTestId('memory-facts-tab')).toBeTruthy());
+    expect(getByText('Episodes')).toBeTruthy();
+    expect(getByText('No episodes recorded yet. Episodes capture context from completed tasks.')).toBeTruthy();
+  });
+
+  it('lists episodes returned by recallRecentEpisodes', async () => {
+    mockRecallRecentEpisodes.mockReturnValue([
+      { id: 'ep-1', summary: 'Deployed to staging', messageIds: ['m1', 'm2'], toolNames: ['deploy'] },
+      { id: 'ep-2', summary: 'Fixed auth bug', messageIds: ['m3'], toolNames: [] },
+    ]);
+
+    const { getByText, getByTestId } = render(<MemoryScreen />);
+    fireEvent.press(getByText('Facts'));
+
+    await waitFor(() => {
+      expect(getByTestId('memory-episode-ep-1')).toBeTruthy();
+      expect(getByText('Deployed to staging')).toBeTruthy();
+      expect(getByText('Fixed auth bug')).toBeTruthy();
+    });
+  });
+
+  it('reloads episodes when structured memory changes', async () => {
+    mockRecallRecentEpisodes
+      .mockReturnValueOnce([])
+      .mockReturnValue([{ id: 'ep-fresh', summary: 'Fresh episode', messageIds: [], toolNames: [] }]);
+
+    const { getByText } = render(<MemoryScreen />);
+    fireEvent.press(getByText('Facts'));
+
+    await waitFor(() => {
+      expect(getByText('No episodes recorded yet. Episodes capture context from completed tasks.')).toBeTruthy();
+    });
+
+    await act(async () => {
+      memoryListener?.({ scope: 'structured', updatedAt: 100 });
+    });
+
+    await waitFor(() => {
+      expect(getByText('Fresh episode')).toBeTruthy();
+    });
   });
 });

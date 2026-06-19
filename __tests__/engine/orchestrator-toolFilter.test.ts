@@ -7,7 +7,8 @@ import {
   OrchestratorCallbacks,
   OrchestratorOptions,
 } from '../../src/engine/orchestrator';
-import type { Message, LlmProviderConfig } from '../../src/types';
+import type { Message } from '../../src/types/message';
+import type { LlmProviderConfig } from '../../src/types/provider';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
@@ -24,7 +25,7 @@ const mockExecuteTool = jest.fn().mockResolvedValue('tool result');
 jest.mock('../../src/engine/tools/index', () => ({
   executeTool: (...args: any[]) => mockExecuteTool(...args),
   loadMemory: jest.fn().mockResolvedValue(null),
-  normalizeToolName: jest.fn((name: string) => (name === 'ReadFile' ? 'read_file' : name)),
+  normalizeToolName: jest.fn((name: string) => name.trim()),
 }));
 
 jest.mock('../../src/services/events/bus', () => ({
@@ -175,7 +176,10 @@ describe('Orchestrator — toolFilter', () => {
     await runOrchestrator(options, callbacks);
 
     const [, streamOptions] = mockStreamMessage.mock.calls[0];
-    expect(streamOptions.tools.map((tool: any) => tool.name)).toEqual(['web_search', 'web_fetch']);
+    expect(streamOptions.tools.map((tool: any) => tool.name).sort()).toEqual([
+      'web_fetch',
+      'web_search',
+    ]);
   });
 
   it('passes the filtered callable tool inventory into executeTool context', async () => {
@@ -225,7 +229,14 @@ describe('Orchestrator — toolFilter', () => {
       .mockReturnValueOnce(
         makeStream([
           { type: 'token', content: '' },
-          { type: 'tool_call', toolCall: { id: 'tc1', name: 'dangerous_tool', arguments: '{}' } },
+          {
+            type: 'tool_call',
+            toolCall: {
+              id: 'tc1',
+              name: 'write_file',
+              arguments: '{"path":"artifacts/blocked.txt","content":"x"}',
+            },
+          },
           { type: 'done', content: '' },
         ]),
       )
@@ -243,7 +254,7 @@ describe('Orchestrator — toolFilter', () => {
       conversationId: 'conv-filter',
       systemPrompt: 'Test',
       messages: [makeMsg('user', 'Do something')],
-      toolFilter: (name) => name !== 'dangerous_tool',
+      toolFilter: (name) => name !== 'write_file',
     };
 
     await runOrchestrator(options, callbacks);
@@ -251,13 +262,11 @@ describe('Orchestrator — toolFilter', () => {
     // The dangerous tool should NOT have been executed
     expect(mockExecuteTool).not.toHaveBeenCalled();
 
-    // The tool call should have been reported as failed
-    const completedCalls = callbacks.calls.onToolCallComplete;
-    const filtered = completedCalls.find(
-      (tc: any) => tc.name === 'dangerous_tool' && tc.status === 'failed',
-    );
-    expect(filtered).toBeDefined();
-    expect(filtered.error).toContain('not allowed');
+    // Preflight-blocked tools stay out of user-visible trace callbacks
+    expect(callbacks.calls.onToolCallStart).toHaveLength(0);
+    expect(callbacks.calls.onToolCallComplete).toHaveLength(0);
+    expect(callbacks.calls.onToolMessage).toHaveLength(1);
+    expect(callbacks.calls.onToolMessage[0]?.result).toContain('not allowed');
   });
 
   it('allows a tool call when toolFilter returns true', async () => {
@@ -265,7 +274,14 @@ describe('Orchestrator — toolFilter', () => {
       .mockReturnValueOnce(
         makeStream([
           { type: 'token', content: '' },
-          { type: 'tool_call', toolCall: { id: 'tc2', name: 'safe_tool', arguments: '{}' } },
+          {
+            type: 'tool_call',
+            toolCall: {
+              id: 'tc2',
+              name: 'read_file',
+              arguments: '{"path":"notes.txt"}',
+            },
+          },
           { type: 'done', content: '' },
         ]),
       )
@@ -283,20 +299,20 @@ describe('Orchestrator — toolFilter', () => {
       conversationId: 'conv-filter-pass',
       systemPrompt: 'Test',
       messages: [makeMsg('user', 'Do something safe')],
-      toolFilter: (name) => name === 'safe_tool',
+      toolFilter: (name) => name === 'read_file',
     };
 
     await runOrchestrator(options, callbacks);
 
     expect(mockExecuteTool).toHaveBeenCalledWith(
-      'safe_tool',
+      'read_file',
       expect.anything(),
       expect.anything(),
       expect.objectContaining({ model: 'gpt-test' }),
     );
   });
 
-  it('normalizes aliased tool names before applying toolFilter and execution', async () => {
+  it('treats toolFilter names as exact tool contract identifiers', async () => {
     mockStreamMessage
       .mockReturnValueOnce(
         makeStream([
@@ -327,72 +343,22 @@ describe('Orchestrator — toolFilter', () => {
 
     await runOrchestrator(options, callbacks);
 
-    expect(mockExecuteTool).toHaveBeenCalledWith(
-      'read_file',
-      '{"path":"notes.txt"}',
-      'conv-filter-alias',
-      expect.objectContaining({ model: 'gpt-test' }),
-    );
-    expect(callbacks.calls.onToolCallStart[0]).toMatchObject({ name: 'read_file' });
-    expect(callbacks.calls.onToolCallComplete[0]).toMatchObject({
-      name: 'read_file',
-      status: 'completed',
-    });
+    expect(mockExecuteTool).not.toHaveBeenCalled();
+    expect(callbacks.calls.onToolCallStart).toHaveLength(0);
+    expect(callbacks.calls.onToolCallComplete).toHaveLength(0);
+    expect(callbacks.calls.onToolMessage).toHaveLength(1);
+    expect(callbacks.calls.onToolMessage[0]?.result).toContain('not registered');
   });
 
-  it('falls back from remote workspace file tools to local file tools when no remote workspace target is available', async () => {
+  it('uses the graph-owned default tool surface when toolFilter is undefined', async () => {
     mockStreamMessage
       .mockReturnValueOnce(
         makeStream([
           { type: 'token', content: '' },
           {
             type: 'tool_call',
-            toolCall: {
-              id: 'tc-workspace-fallback',
-              name: 'workspace_write_file',
-              arguments: '{"path":"notes.txt","content":"hello"}',
-            },
+            toolCall: { id: 'tc3', name: 'read_file', arguments: '{"path":"notes.txt"}' },
           },
-          { type: 'done', content: '' },
-        ]),
-      )
-      .mockReturnValueOnce(
-        makeStream([
-          { type: 'token', content: 'Done' },
-          { type: 'done', content: 'Done' },
-        ]),
-      );
-
-    const callbacks = makeCallbacks();
-    const options: OrchestratorOptions = {
-      provider,
-      model: 'gpt-test',
-      conversationId: 'conv-workspace-fallback',
-      systemPrompt: 'Test',
-      messages: [makeMsg('user', 'Update notes.txt in this repo')],
-    };
-
-    await runOrchestrator(options, callbacks);
-
-    expect(mockExecuteTool).toHaveBeenCalledWith(
-      'write_file',
-      '{"path":"notes.txt","content":"hello"}',
-      'conv-workspace-fallback',
-      expect.objectContaining({ model: 'gpt-test' }),
-    );
-    expect(callbacks.calls.onToolCallStart[0]).toMatchObject({ name: 'write_file' });
-    expect(callbacks.calls.onToolCallComplete[0]).toMatchObject({
-      name: 'write_file',
-      status: 'completed',
-    });
-  });
-
-  it('does not filter when toolFilter is undefined', async () => {
-    mockStreamMessage
-      .mockReturnValueOnce(
-        makeStream([
-          { type: 'token', content: '' },
-          { type: 'tool_call', toolCall: { id: 'tc3', name: 'any_tool', arguments: '{}' } },
           { type: 'done', content: '' },
         ]),
       )
@@ -416,11 +382,13 @@ describe('Orchestrator — toolFilter', () => {
     await runOrchestrator(options, callbacks);
 
     expect(mockExecuteTool).toHaveBeenCalledWith(
-      'any_tool',
-      expect.anything(),
-      expect.anything(),
-      expect.objectContaining({ model: 'gpt-test' }),
+      'read_file',
+      '{"path":"notes.txt"}',
+      'conv-no-filter',
+      expect.any(Object),
     );
+    expect(callbacks.calls.onToolMessage).toHaveLength(1);
+    expect(callbacks.calls.onToolMessage[0]?.result).toBe('tool result');
   });
 
   it('blocks tool but continues orchestration with next text response', async () => {
@@ -428,7 +396,10 @@ describe('Orchestrator — toolFilter', () => {
       .mockReturnValueOnce(
         makeStream([
           { type: 'token', content: '' },
-          { type: 'tool_call', toolCall: { id: 'tc4', name: 'blocked_tool', arguments: '{}' } },
+          {
+            type: 'tool_call',
+            toolCall: { id: 'tc4', name: 'list_files', arguments: '{"path":"artifacts"}' },
+          },
           { type: 'done', content: '' },
         ]),
       )

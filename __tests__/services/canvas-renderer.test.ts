@@ -16,12 +16,9 @@ import {
   hydrateCanvasSurfaces,
   requestCanvasRead,
   resolveCanvasRead,
-  requestCanvasSnapshot,
-  resolveCanvasSnapshot,
   setCanvasEventHandler,
 } from '../../src/services/canvas/renderer';
 import type { ServerToClientMessage } from '../../src/services/canvas/types';
-import type { CanvasSurface } from '../../src/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 describe('Canvas Renderer', () => {

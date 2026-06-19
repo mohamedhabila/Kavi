@@ -3,7 +3,8 @@
 // ---------------------------------------------------------------------------
 
 import { runMediaUnderstanding } from '../../src/services/media/service';
-import type { Attachment, LlmProviderConfig } from '../../src/types';
+import type { Attachment } from '../../src/types/attachment';
+import type { LlmProviderConfig } from '../../src/types/provider';
 
 const legacyFileSystem = jest.requireMock('expo-file-system/legacy') as {
   readAsStringAsync: jest.Mock;

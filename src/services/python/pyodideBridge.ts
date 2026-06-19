@@ -13,7 +13,6 @@ import {
   PYODIDE_WEBVIEW_BASE_URL,
   PYODIDE_WEBVIEW_BRIDGE_NAME,
   type PythonBridgeMessage,
-  type PythonDispatchMessage,
   type PythonHttpAbortMessage,
   type PythonHttpRequestMessage,
   type PythonRuntimeMessage,
@@ -22,7 +21,6 @@ import type {
   NormalizedPythonExecutionRequest,
   PythonExecutionRequest,
   PythonExecutionResult,
-  PythonWorkspaceFile,
 } from './types';
 import { normalizePythonWorkflowBridgeResult } from './workflowBridge';
 
@@ -60,16 +58,20 @@ type PythonWebViewRef = {
   reload?: () => void;
 };
 
+type PyodideMountRequestListener = () => void;
+
 let webViewRef: PythonWebViewRef | null = null;
 let pyodideReady = false;
 let runtimeError: string | null = null;
 let runtimeInstanceId: string | null = null;
 let runtimeReadyDeferred: Deferred<void> | null = null;
+let mountReadyDeferred: Deferred<void> | null = null;
 const queuedExecutions: QueuedExecution[] = [];
 let activeExecution: ActiveExecution | null = null;
 let drainPromise: Promise<void> | null = null;
 let requestId = 0;
 const pendingHttpRequests = new Map<string, AbortController>();
+const mountRequestListeners = new Set<PyodideMountRequestListener>();
 
 function getPendingHttpRequestKey(runtimeId: string, requestIdValue: string): string {
   return `${runtimeId}:${requestIdValue}`;
@@ -151,6 +153,28 @@ function clearExecutionQueueWithError(error: string): void {
   }
 }
 
+function ensureMountReadyDeferred(): Deferred<void> {
+  if (!mountReadyDeferred || mountReadyDeferred.isSettled()) {
+    mountReadyDeferred = createDeferred<void>();
+  }
+  return mountReadyDeferred;
+}
+
+function requestPyodideWebViewMount(): void {
+  if (webViewRef) {
+    return;
+  }
+
+  if (mountReadyDeferred && !mountReadyDeferred.isSettled()) {
+    return;
+  }
+
+  ensureMountReadyDeferred();
+  for (const listener of mountRequestListeners) {
+    listener();
+  }
+}
+
 function reloadPyodideRuntime(): void {
   if (!webViewRef) {
     return;
@@ -225,7 +249,33 @@ export function reportPyodideRuntimeFailure(reason: string): void {
 
 async function waitForPyodideReady(): Promise<void> {
   if (!webViewRef) {
-    throw new Error('Python runtime is not available. The Pyodide WebView has not been mounted.');
+    requestPyodideWebViewMount();
+    const mountDeferred = ensureMountReadyDeferred();
+    let mountTimeout: ReturnType<typeof setTimeout> | null = null;
+    try {
+      await Promise.race([
+        mountDeferred.promise,
+        new Promise<never>((_, reject) => {
+        mountTimeout = setTimeout(() => {
+          mountReadyDeferred = null;
+          reject(
+            new Error(
+              `Python runtime mount timed out after ${DEFAULT_PYODIDE_STARTUP_TIMEOUT_MS}ms.`,
+            ),
+            );
+          }, DEFAULT_PYODIDE_STARTUP_TIMEOUT_MS);
+          unrefTimerIfSupported(mountTimeout);
+        }),
+      ]);
+    } finally {
+      if (mountTimeout) {
+        clearTimeout(mountTimeout);
+      }
+    }
+  }
+
+  if (!webViewRef) {
+    throw new Error('Python runtime is not available. The Pyodide WebView did not mount.');
   }
 
   if (pyodideReady) {
@@ -461,6 +511,7 @@ function handlePythonHttpAbort(message: PythonHttpAbortMessage): void {
 export function registerPyodideWebView(ref: PythonWebViewRef | null): void {
   webViewRef = ref;
   if (ref) {
+    ensureMountReadyDeferred().resolve();
     startRuntimeBoot();
   }
 }
@@ -488,6 +539,15 @@ export function unregisterPyodideWebView(): void {
   }
 
   clearExecutionQueueWithError('Pyodide WebView was unmounted.');
+}
+
+export function subscribeToPyodideMountRequests(
+  listener: PyodideMountRequestListener,
+): () => void {
+  mountRequestListeners.add(listener);
+  return () => {
+    mountRequestListeners.delete(listener);
+  };
 }
 
 export function isPyodideReady(): boolean {
@@ -587,14 +647,6 @@ export function handlePyodideMessage(data: string): void {
 export async function executePython(
   request: PythonExecutionRequest,
 ): Promise<PythonExecutionResult> {
-  if (!webViewRef) {
-    return {
-      success: false,
-      output: '',
-      error: 'Python runtime is not available. The Pyodide WebView has not been mounted.',
-    };
-  }
-
   const normalized = normalizePythonExecutionRequest(request);
   if (normalized.error || !normalized.request) {
     return {
@@ -609,6 +661,7 @@ export async function executePython(
   const id = `py-${++requestId}`;
 
   return new Promise<PythonExecutionResult>((resolve) => {
+    requestPyodideWebViewMount();
     queuedExecutions.push({
       id,
       request: normalizedRequest,

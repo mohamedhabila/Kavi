@@ -30,27 +30,27 @@ jest.mock('../../src/utils/id', () => ({
   generateId: jest.fn(() => `mock-id-${++mockIdCounter}`),
 }));
 
-import {
-  __resetSubAgentStateForTests,
-  MAX_SPAWN_DEPTH,
-  isToolAllowedBySandbox,
-  startSubAgent,
-  launchSubAgent,
-  spawnSubAgent,
-  getSessionContext,
-  listActiveSubAgents,
-  getSubAgent,
-  getSubAgentsByParent,
-  detectOrphans,
-  initSubAgentRegistry,
-  cleanupSubAgents,
-  onSubAgentEvent,
-  type ActiveSubAgent,
-} from '../../src/services/agents/subAgent';
-import { runOrchestrator } from '../../src/engine/orchestrator';
 import { File } from 'expo-file-system';
+import { runOrchestrator } from '../../src/engine/orchestrator';
+import {
+__resetSubAgentStateForTests,
+cleanupSubAgents,
+detectOrphans,
+getSessionContext,
+getSubAgent,
+getSubAgentsByParent,
+initSubAgentRegistry,
+isToolAllowedBySandbox,
+launchSubAgent,
+listActiveSubAgents,
+MAX_SPAWN_DEPTH,
+onSubAgentEvent,
+spawnSubAgent,
+startSubAgent,
+type ActiveSubAgent,
+} from '../../src/services/agents/subAgent';
 import * as throttledStorageModule from '../../src/store/throttledStorage';
-import { _getStorageFileUris, flushPendingStorageWrites } from '../../src/store/throttledStorage';
+import { _getStorageFileUris,flushPendingStorageWrites } from '../../src/store/throttledStorage';
 
 const expoFileSystemMock = jest.requireMock('expo-file-system') as {
   __resetStore: () => void;
@@ -108,15 +108,15 @@ afterEach(() => {
 });
 
 describe('MAX_SPAWN_DEPTH', () => {
-  it('is 5', () => {
-    expect(MAX_SPAWN_DEPTH).toBe(5);
+  it('is 2 for mobile-bounded spawning', () => {
+    expect(MAX_SPAWN_DEPTH).toBe(2);
   });
 });
 
 describe('isToolAllowedBySandbox', () => {
   it('allows everything in "full" mode', () => {
     expect(isToolAllowedBySandbox('ssh_exec', 'full')).toBe(true);
-    expect(isToolAllowedBySandbox('workspace_delete', 'full')).toBe(true);
+    expect(isToolAllowedBySandbox('workspace_delegate_task', 'full')).toBe(true);
     expect(isToolAllowedBySandbox('any_tool', 'full')).toBe(true);
   });
 
@@ -131,7 +131,7 @@ describe('isToolAllowedBySandbox', () => {
   it('blocks dangerous tools in "safe-only" mode', () => {
     expect(isToolAllowedBySandbox('ssh_exec', 'safe-only')).toBe(false);
     expect(isToolAllowedBySandbox('write_file', 'safe-only')).toBe(false);
-    expect(isToolAllowedBySandbox('workspace_delete', 'safe-only')).toBe(false);
+    expect(isToolAllowedBySandbox('workspace_delegate_task', 'safe-only')).toBe(false);
   });
 
   it('blocks dynamic MCP and skill tools in "safe-only" mode unless explicitly whitelisted', () => {
@@ -193,6 +193,47 @@ describe('spawnSubAgent — depth guard', () => {
     expect(result.status).toBe('completed');
     expect(result.depth).toBe(1);
     expect(result.output).toBe('hello');
+  });
+});
+
+describe('spawnSubAgent — concurrent guard', () => {
+  it('rejects a second concurrent worker for the same parent conversation', async () => {
+    (runOrchestrator as jest.Mock).mockImplementation(
+      (_cfg: any, callbacks: any) =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            callbacks.onDone();
+            resolve(undefined);
+          }, 50);
+        }),
+    );
+
+    const started = await startSubAgent(
+      {
+        parentConversationId: 'conv-1',
+        prompt: 'first worker',
+        depth: 0,
+        announce: false,
+      },
+      mockProvider,
+    );
+
+    expect(started.status).toBe('running');
+
+    const blocked = await spawnSubAgent(
+      {
+        parentConversationId: 'conv-1',
+        prompt: 'second worker',
+        depth: 0,
+        announce: false,
+      },
+      mockProvider,
+    );
+
+    expect(blocked.status).toBe('error');
+    expect(blocked.output).toContain('Only 1 concurrent sub-agent');
+
+    await started.resultPromise;
   });
 });
 
@@ -263,7 +304,7 @@ describe('announce system', () => {
     expect(listener).not.toHaveBeenCalled();
   });
 
-  it('coalesces rapid progress updates into a single announced snapshot', async () => {
+  it('coalesces rapid worker status updates into a single announced snapshot', async () => {
     jest.useFakeTimers();
 
     let orchestratorCallbacks: any;
@@ -567,10 +608,15 @@ describe('persistence', () => {
     expect(result.status).toBe('completed');
     expect(runOrchestrator).toHaveBeenCalledWith(
       expect.objectContaining({
-        preferredTools: ['web_search', 'web_fetch'],
+        toolFilter: expect.any(Function),
       }),
       expect.anything(),
     );
+
+    const callOptions = (runOrchestrator as jest.Mock).mock.calls[0][0];
+    expect(callOptions.toolFilter('web_search')).toBe(true);
+    expect(callOptions.toolFilter('web_fetch')).toBe(true);
+    expect(callOptions.toolFilter('read_file')).toBe(false);
 
     await flushPendingStorageWrites(REGISTRY_CONTEXTS_KEY);
     expect(
@@ -1022,13 +1068,13 @@ describe('output truncation', () => {
       mockProvider,
     );
 
-    expect(result.output.length).toBeLessThanOrEqual(8_000 + 25); // +25 for truncation notice
-    expect(result.output).toContain('[Output truncated]');
+    expect(result.output.length).toBeLessThanOrEqual(8_000);
+    expect(result.output).toBe('a'.repeat(8_000));
   });
 });
 
-describe('sub-agent preferredTools pass-through', () => {
-  it('passes config.tools as preferredTools to runOrchestrator', async () => {
+describe('sub-agent toolFilter pass-through', () => {
+  it('uses config.tools to build the worker tool surface passed to runOrchestrator', async () => {
     (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
       callbacks.onDone();
       return Promise.resolve();
@@ -1045,13 +1091,19 @@ describe('sub-agent preferredTools pass-through', () => {
 
     expect(runOrchestrator).toHaveBeenCalledWith(
       expect.objectContaining({
-        preferredTools: ['web_search', 'web_fetch', 'read_file'],
+        toolFilter: expect.any(Function),
       }),
       expect.any(Object),
     );
+
+    const callOptions = (runOrchestrator as jest.Mock).mock.calls[0][0];
+    expect(callOptions.toolFilter('web_search')).toBe(true);
+    expect(callOptions.toolFilter('web_fetch')).toBe(true);
+    expect(callOptions.toolFilter('read_file')).toBe(true);
+    expect(callOptions.toolFilter('write_file')).toBe(false);
   });
 
-  it('does not pass preferredTools when config.tools is empty', async () => {
+  it('treats an explicit empty config.tools list as a no-tools whitelist', async () => {
     (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
       callbacks.onDone();
       return Promise.resolve();
@@ -1068,13 +1120,17 @@ describe('sub-agent preferredTools pass-through', () => {
 
     expect(runOrchestrator).toHaveBeenCalledWith(
       expect.objectContaining({
-        preferredTools: undefined,
+        toolFilter: expect.any(Function),
       }),
       expect.any(Object),
     );
+
+    const callOptions = (runOrchestrator as jest.Mock).mock.calls[0][0];
+    expect(callOptions.toolFilter('web_search')).toBe(false);
+    expect(callOptions.toolFilter('record_workflow_evidence')).toBe(false);
   });
 
-  it('does not pass preferredTools when config.tools is not provided', async () => {
+  it('does not pass a worker toolFilter when config.tools is not provided', async () => {
     (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
       callbacks.onDone();
       return Promise.resolve();
@@ -1090,7 +1146,7 @@ describe('sub-agent preferredTools pass-through', () => {
 
     expect(runOrchestrator).toHaveBeenCalledWith(
       expect.objectContaining({
-        preferredTools: undefined,
+        toolFilter: undefined,
       }),
       expect.any(Object),
     );

@@ -1,5 +1,5 @@
 import { useSettingsStore } from '../../store/useSettingsStore';
-import type { BrowserProviderConfig } from '../../types';
+import type { BrowserProviderConfig } from '../../types/remote';
 import {
   addRemoteArtifact,
   closeRemoteSession,
@@ -11,13 +11,10 @@ import {
   updateRemoteSession,
   useRemoteStore,
 } from '../remote/store';
-import {
-  getBrowserProviderLabel,
-  getBrowserProviderReadiness,
-  resolveBrowserProviderConnection,
-  withBrowserProviderAuth,
-} from './providers';
-import { browserScreenshot } from './automation';
+import { resolveBrowserProviderConnection, withBrowserProviderAuth } from './providers/connection';
+import { getBrowserProviderLabel } from './providers/labels';
+import { getBrowserProviderReadiness } from './providers/readiness';
+import { browserScreenshot } from './automation/actions';
 
 interface BrowserLaunchResult {
   externalId: string;

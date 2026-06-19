@@ -44,7 +44,7 @@ import {
 } from '../../src/services/agents/subAgent';
 import { LlmService } from '../../src/services/llm/LlmService';
 import { useChatStore } from '../../src/store/useChatStore';
-import type { LlmProviderConfig } from '../../src/types';
+import type { LlmProviderConfig } from '../../src/types/provider';
 
 const mockProvider: LlmProviderConfig = {
   id: 'test',
@@ -65,8 +65,39 @@ function makeStream(...events: any[]) {
   })();
 }
 
+function makeStructuredFinalizerResponse(
+  report: string,
+  completionState: 'verified_success' | 'blocked' | 'incomplete',
+  usage?: Partial<{
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+    totalTokens: number;
+  }>,
+) {
+  return {
+    output_parsed: {
+      report,
+      completionState,
+    },
+    ...(usage
+      ? {
+          usage: {
+            inputTokens: usage.inputTokens ?? 0,
+            outputTokens: usage.outputTokens ?? 0,
+            cacheReadTokens: usage.cacheReadTokens ?? 0,
+            cacheWriteTokens: usage.cacheWriteTokens ?? 0,
+            totalTokens: usage.totalTokens ?? (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
+          },
+        }
+      : {}),
+  };
+}
+
 describe('Sub-Agent Service', () => {
   let streamMessageSpy: jest.SpyInstance;
+  let sendMessageSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     await __resetSubAgentStateForTests();
@@ -87,6 +118,7 @@ describe('Sub-Agent Service', () => {
     streamMessageSpy = jest
       .spyOn(LlmService.prototype, 'streamMessage')
       .mockImplementation(() => makeStream({ type: 'done', content: '' }) as any);
+    sendMessageSpy = jest.spyOn(LlmService.prototype, 'sendMessage').mockResolvedValue({});
     // Note: cleanupSubAgents only removes old non-running agents
     // We can't truly reset the map from outside, so tests should be independent
   });
@@ -94,6 +126,7 @@ describe('Sub-Agent Service', () => {
   afterEach(() => {
     jest.useRealTimers();
     streamMessageSpy.mockRestore();
+    sendMessageSpy.mockRestore();
   });
 
   describe('spawnSubAgent', () => {
@@ -138,6 +171,28 @@ describe('Sub-Agent Service', () => {
         mockProvider,
       );
       expect(result.output).toBeDefined();
+    });
+
+    it('does not expose internal workflow-evidence artifacts in the default worker prompt', async () => {
+      const { runOrchestrator } = require('../../src/engine/orchestrator');
+      let capturedOptions: any = null;
+      runOrchestrator.mockImplementationOnce((opts: any, callbacks: any) => {
+        capturedOptions = opts;
+        callbacks.onToken?.('worker output');
+        callbacks.onDone?.();
+        return Promise.resolve();
+      });
+
+      await spawnSubAgent(
+        {
+          parentConversationId: 'p',
+          prompt: "Please output 'C64A' and complete.",
+        },
+        mockProvider,
+      );
+
+      expect(capturedOptions.systemPrompt).not.toContain('workflow_evidence');
+      expect(capturedOptions.systemPrompt).not.toContain('structured workflow evidence');
     });
 
     it('rejects worker launches with an empty prompt before bootstrapping', async () => {
@@ -211,6 +266,30 @@ describe('Sub-Agent Service', () => {
       expect(capturedOptions.usageConversationId).toBe('parent-conversation');
     });
 
+    it('uses an explicit workspace read fallback when one is configured', async () => {
+      const { runOrchestrator } = require('../../src/engine/orchestrator');
+      let capturedOptions: any = null;
+      runOrchestrator.mockImplementationOnce((opts: any, callbacks: any) => {
+        capturedOptions = opts;
+        callbacks.onDone?.();
+        return Promise.resolve();
+      });
+
+      await spawnSubAgent(
+        {
+          parentConversationId: 'side-thread-1',
+          workspaceConversationId: 'parent-conversation',
+          workspaceReadFallbackConversationId: 'side-thread-1',
+          prompt: 'delegate work',
+        },
+        mockProvider,
+      );
+
+      expect(capturedOptions.workspaceConversationId).toBe('parent-conversation');
+      expect(capturedOptions.workspaceReadFallbackConversationId).toBe('side-thread-1');
+      expect(capturedOptions.usageConversationId).toBe('side-thread-1');
+    });
+
     it('records streamed worker usage on the parent conversation', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
       const parentConversationId = useChatStore.getState().createConversation('test', 'system');
@@ -260,22 +339,14 @@ describe('Sub-Agent Service', () => {
     it('records hidden worker-finalizer usage on the parent conversation', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
       const parentConversationId = useChatStore.getState().createConversation('test', 'system');
-      streamMessageSpy.mockImplementationOnce(
-        () =>
-          makeStream(
-            {
-              type: 'usage',
-              usage: {
-                inputTokens: 60,
-                outputTokens: 20,
-                cacheReadTokens: 5,
-                cacheWriteTokens: 0,
-                totalTokens: 80,
-              },
-            },
-            { type: 'token', content: 'Finalized worker summary.' },
-            { type: 'done', content: '' },
-          ) as any,
+      sendMessageSpy.mockResolvedValueOnce(
+        makeStructuredFinalizerResponse('Finalized worker summary.', 'incomplete', {
+          inputTokens: 60,
+          outputTokens: 20,
+          cacheReadTokens: 5,
+          cacheWriteTokens: 0,
+          totalTokens: 80,
+        }) as any,
       );
 
       runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
@@ -461,10 +532,27 @@ describe('Sub-Agent Service', () => {
       expect(agent?.agentRunId).toBe('run-42');
     });
 
-    it('uses the larger default iteration budget for delegated workers', async () => {
+    it('does not expose the execution-evidence contract for ad hoc workers tracked only by agentRunId', async () => {
+      const { runOrchestrator } = require('../../src/engine/orchestrator');
+      let capturedOptions: any = null;
+      runOrchestrator.mockImplementationOnce((opts: any, callbacks: any) => {
+        capturedOptions = opts;
+        callbacks.onDone?.();
+        return Promise.resolve();
+      });
+
+      await spawnSubAgent(
+        { parentConversationId: 'p', prompt: 'Inspect the workspace.', agentRunId: 'run-42' },
+        mockProvider,
+      );
+
+      expect(capturedOptions.systemPrompt).not.toContain('## Execution Evidence Contract');
+    });
+
+    it('uses the mobile-bounded default iteration cap for delegated workers', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
       runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
-        for (let index = 0; index < 30; index += 1) {
+        for (let index = 0; index < 25; index += 1) {
           callbacks.onToolCallStart?.({
             id: `tc-${index}`,
             name: 'read_file',
@@ -489,7 +577,7 @@ describe('Sub-Agent Service', () => {
       );
 
       expect(result.status).toBe('completed');
-      expect(result.iterations).toBe(30);
+      expect(result.iterations).toBe(25);
     });
 
     it('with allProviders parameter', async () => {
@@ -820,6 +908,133 @@ describe('Sub-Agent Service', () => {
       expect(capturedOptions.toolFilter).toBeUndefined();
     });
 
+    it('treats an explicit empty worker tools list as a no-tools whitelist', async () => {
+      const { runOrchestrator } = require('../../src/engine/orchestrator');
+      let capturedOptions: any = null;
+      runOrchestrator.mockImplementationOnce((opts: any, callbacks: any) => {
+        capturedOptions = opts;
+        callbacks.onToken?.('direct output');
+        callbacks.onDone?.();
+        return Promise.resolve();
+      });
+
+      const result = await spawnSubAgent(
+        {
+          parentConversationId: 'p',
+          prompt: 'return direct token',
+          tools: [],
+        },
+        mockProvider,
+      );
+
+      expect(result.status).toBe('completed');
+      expect(capturedOptions).toBeDefined();
+      expect(typeof capturedOptions.toolFilter).toBe('function');
+      expect(capturedOptions.toolFilter('read_workflow_evidence')).toBe(false);
+      expect(capturedOptions.toolFilter('record_workflow_evidence')).toBe(false);
+      expect(capturedOptions.toolFilter('python')).toBe(false);
+    });
+
+    it('requires scoped execution units for worker graph planning', async () => {
+      const { runOrchestrator } = require('../../src/engine/orchestrator');
+      let capturedOptions: any = null;
+      runOrchestrator.mockImplementationOnce((opts: any, callbacks: any) => {
+        capturedOptions = opts;
+        callbacks.onToken?.('worker output');
+        callbacks.onDone?.();
+        return Promise.resolve();
+      });
+
+      await spawnSubAgent(
+        {
+          parentConversationId: 'p',
+          prompt: 'Read a file and summarize it.',
+          tools: ['read_file'],
+        },
+        mockProvider,
+      );
+
+      expect(capturedOptions).toEqual(
+        expect.objectContaining({
+          toolFilter: expect.any(Function),
+        }),
+      );
+      expect(capturedOptions.toolFilter('read_file')).toBe(true);
+      expect(capturedOptions.toolFilter('write_file')).toBe(false);
+    });
+
+    it('stores a worker-owned task ledger from the worker graph state', async () => {
+      const { runOrchestrator } = require('../../src/engine/orchestrator');
+      const {
+        createInitialAgentControlGraphSnapshot,
+      } = require('../../src/engine/graph/agentControlGraph');
+      runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
+        callbacks.onAgentControlGraphStateChange?.(
+          createInitialAgentControlGraphSnapshot({
+            goals: [
+              {
+                id: 'worker-read',
+                title: 'Read scoped worker input',
+                status: 'active',
+                owner: 'worker',
+                dependencies: [],
+                evidence: [],
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+              },
+            ],
+          }),
+        );
+        callbacks.onToken?.('worker output');
+        callbacks.onDone?.();
+        return Promise.resolve();
+      });
+
+      const result = await spawnSubAgent(
+        {
+          parentConversationId: 'p',
+          prompt: 'Read the delegated input.',
+          tools: ['read_file'],
+        },
+        mockProvider,
+      );
+
+      const snapshot = getSubAgent(result.sessionId);
+      expect(snapshot?.taskLedger).toEqual([
+        expect.objectContaining({
+          id: 'worker-read',
+          status: 'active',
+          owner: 'worker',
+          title: 'Read scoped worker input',
+        }),
+      ]);
+    });
+
+    it('treats an explicit empty serialized worker tools list as a no-tools whitelist', async () => {
+      const { runOrchestrator } = require('../../src/engine/orchestrator');
+      let capturedOptions: any = null;
+      runOrchestrator.mockImplementationOnce((opts: any, callbacks: any) => {
+        capturedOptions = opts;
+        callbacks.onToken?.('direct output');
+        callbacks.onDone?.();
+        return Promise.resolve();
+      });
+
+      const result = await spawnSubAgent(
+        {
+          parentConversationId: 'p',
+          prompt: 'return direct token',
+          tools: '[]',
+        },
+        mockProvider,
+      );
+
+      expect(result.status).toBe('completed');
+      expect(capturedOptions).toBeDefined();
+      expect(typeof capturedOptions.toolFilter).toBe('function');
+      expect(capturedOptions.toolFilter('web_search')).toBe(false);
+    });
+
     it('safe-only toolFilter blocks non-safe tools', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
       let capturedFilter: ((name: string) => boolean) | undefined;
@@ -852,7 +1067,7 @@ describe('Sub-Agent Service', () => {
       expect(capturedFilter!('write_file')).toBe(false);
     });
 
-    it('normalizes and deduplicates configured worker tools before applying the sandbox filter', async () => {
+    it('treats configured worker tools as exact names before applying the sandbox filter', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
       let capturedOptions: any = null;
       runOrchestrator.mockImplementationOnce((opts: any, callbacks: any) => {
@@ -864,16 +1079,16 @@ describe('Sub-Agent Service', () => {
       await spawnSubAgent(
         {
           parentConversationId: 'p',
-          prompt: 'normalized tools',
-          tools: ['ReadFile', 'read-file', 'search_web'],
+          prompt: 'exact tools',
+          tools: ['read_file', 'web_search'],
           sandboxPolicy: 'safe-only',
         },
         mockProvider,
       );
 
-      expect(capturedOptions.preferredTools).toEqual(['read_file', 'web_search']);
-      expect(capturedOptions.toolFilter('ReadFile')).toBe(true);
+      expect(capturedOptions.toolFilter('read_file')).toBe(true);
       expect(capturedOptions.toolFilter('web_search')).toBe(true);
+      expect(capturedOptions.toolFilter('ReadFile')).toBe(false);
       expect(capturedOptions.toolFilter('write_file')).toBe(false);
     });
 
@@ -895,40 +1110,31 @@ describe('Sub-Agent Service', () => {
       expect(runOrchestrator).not.toHaveBeenCalled();
     });
 
-    it('remaps remote workspace file tools to local workspace tools when no launchable workspace target exists', async () => {
+    it('fails fast when explicit worker tools are currently unavailable at runtime', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
-      let capturedOptions: any = null;
-      runOrchestrator.mockImplementationOnce((opts: any, callbacks: any) => {
-        capturedOptions = opts;
-        callbacks.onDone?.();
-        return Promise.resolve();
-      });
-
-      await spawnSubAgent(
+      const result = await spawnSubAgent(
         {
           parentConversationId: 'p',
           prompt: 'fix the repo files',
-          tools: ['workspace_read_file', 'workspace_write_file', 'workspace_list_files'],
+          tools: ['workspace_launch_browser'],
         },
         mockProvider,
       );
 
-      expect(capturedOptions.preferredTools).toEqual(['read_file', 'write_file', 'list_files']);
-      expect(capturedOptions.toolFilter('read_file')).toBe(true);
-      expect(capturedOptions.toolFilter('write_file')).toBe(true);
-      expect(capturedOptions.toolFilter('workspace_write_file')).toBe(false);
+      expect(result.status).toBe('error');
+      expect(result.error).toContain('currently available');
+      expect(runOrchestrator).not.toHaveBeenCalled();
     });
   });
 
   describe('spawnSubAgent — output capture for tool-only responses', () => {
     it('synthesizes a final worker report when a tool phase ends without terminal text', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
-      streamMessageSpy.mockImplementationOnce(
-        () =>
-          makeStream(
-            { type: 'token', content: 'Final report: files reviewed and changes are ready.' },
-            { type: 'done', content: 'Final report: files reviewed and changes are ready.' },
-          ) as any,
+      sendMessageSpy.mockResolvedValueOnce(
+        makeStructuredFinalizerResponse(
+          'Final report: files reviewed and changes are ready.',
+          'incomplete',
+        ) as any,
       );
       runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
         // First iteration: assistant produces text + tool call
@@ -952,14 +1158,12 @@ describe('Sub-Agent Service', () => {
 
       expect(result.status).toBe('completed');
       expect(result.output).toBe('Final report: files reviewed and changes are ready.');
-      expect(streamMessageSpy).toHaveBeenCalledTimes(1);
+      expect(sendMessageSpy).toHaveBeenCalledTimes(1);
     });
 
     it('falls back to prior visible worker text if the finalization pass fails', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
-      streamMessageSpy.mockImplementationOnce(() => {
-        throw new Error('finalizer failed');
-      });
+      sendMessageSpy.mockRejectedValueOnce(new Error('finalizer failed'));
       runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
         callbacks.onAssistantMessage?.('Initial analysis: reviewing files');
         callbacks.onToolCallStart?.({ name: 'read_file' });
@@ -982,18 +1186,11 @@ describe('Sub-Agent Service', () => {
 
     it('synthesizes output from tool-only iterations', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
-      streamMessageSpy.mockImplementationOnce(
-        () =>
-          makeStream(
-            {
-              type: 'token',
-              content: 'Final report: repository scan completed and matching files were found.',
-            },
-            {
-              type: 'done',
-              content: 'Final report: repository scan completed and matching files were found.',
-            },
-          ) as any,
+      sendMessageSpy.mockResolvedValueOnce(
+        makeStructuredFinalizerResponse(
+          'Final report: repository scan completed and matching files were found.',
+          'incomplete',
+        ) as any,
       );
       runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
         // All iterations produce only tool calls — no text at all
@@ -1038,7 +1235,7 @@ describe('Sub-Agent Service', () => {
       expect(result.status).toBe('timeout');
       expect(result.output).toContain('Sub-agent timeout');
       expect(result.output).toContain('web_search');
-      expect(streamMessageSpy).not.toHaveBeenCalled();
+      expect(sendMessageSpy).not.toHaveBeenCalled();
     });
 
     it('prefers the terminal assistant answer over earlier planning text', async () => {
@@ -1064,20 +1261,45 @@ describe('Sub-Agent Service', () => {
       expect(result.output).toBe('Final answer: all checks passed.');
     });
 
+    it('marks terminal worker prose incomplete when execution-backed work omits completion_state', async () => {
+      const { runOrchestrator } = require('../../src/engine/orchestrator');
+      runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
+        callbacks.onAssistantMessage?.('Plan: update the artifact.', [
+          { id: 'tc1', name: 'file_edit', arguments: '{}', status: 'pending' },
+        ]);
+        callbacks.onToolCallStart?.({ name: 'file_edit' });
+        callbacks.onToolCallComplete?.({
+          id: 'tc1',
+          name: 'file_edit',
+          result: 'Updated src/App.tsx and saved changes.',
+          status: 'completed',
+        });
+        callbacks.onAssistantMessage?.('Final answer: artifact updated.', []);
+        callbacks.onDone?.();
+        return Promise.resolve();
+      });
+
+      const result = await spawnSubAgent(
+        {
+          parentConversationId: 'p',
+          agentRunId: 'run-terminal-evidence',
+          workstreamId: 'edit',
+          prompt: 'Update src/App.tsx and verify the artifact.',
+        },
+        mockProvider,
+      );
+
+      expect(result.status).toBe('completed');
+      expect(result.completionState).toBe('incomplete');
+      expect(result.output).toContain('Final answer: artifact updated.');
+      expect(result.output).not.toContain('completion_state:');
+      expect(sendMessageSpy).not.toHaveBeenCalled();
+    });
+
     it('blocks success claims for execution tasks when no commit/push/deploy evidence exists', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
-      streamMessageSpy.mockImplementationOnce(
-        () =>
-          makeStream(
-            {
-              type: 'token',
-              content: 'completion_state: verified_success\nتم النشر بنجاح.',
-            },
-            {
-              type: 'done',
-              content: 'completion_state: verified_success\nتم النشر بنجاح.',
-            },
-          ) as any,
+      sendMessageSpy.mockResolvedValueOnce(
+        makeStructuredFinalizerResponse('تم النشر بنجاح.', 'verified_success') as any,
       );
       runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
         callbacks.onAssistantMessage?.('Investigating files only');
@@ -1098,18 +1320,56 @@ describe('Sub-Agent Service', () => {
       );
 
       expect(result.status).toBe('completed');
-      expect(result.output).toContain('completion_state: blocked');
-      expect(result.output).toContain('unverified_claims: ["Worker output declared verified_success without matching operational evidence."]');
+      expect(result.completionState).toBe('blocked');
+      expect(result.output).toBe('تم النشر بنجاح.');
     });
 
-    it('adds verified_success completion_state when execution evidence exists and output omits completion_state', async () => {
+    it('preserves verified_success inspection output for ad hoc workers tracked only by agentRunId', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
-      streamMessageSpy.mockImplementationOnce(
-        () =>
-          makeStream(
-            { type: 'token', content: 'Deployment succeeded on workflow run 101.' },
-            { type: 'done', content: 'Deployment succeeded on workflow run 101.' },
-          ) as any,
+      sendMessageSpy.mockResolvedValueOnce(
+        makeStructuredFinalizerResponse(
+          '- package.json: missing\n- README.md: missing\n- workspace: empty',
+          'verified_success',
+        ) as any,
+      );
+      runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
+        callbacks.onAssistantMessage?.('Inspecting the workspace');
+        callbacks.onToolCallStart?.({ name: 'list_files' });
+        callbacks.onToolCallComplete?.({
+          name: 'list_files',
+          result: '(empty directory)',
+        });
+        callbacks.onToolCallStart?.({ name: 'glob_search', arguments: '{"pattern":"*"}' });
+        callbacks.onToolCallComplete?.({
+          name: 'glob_search',
+          result: 'No files matched "*" under .',
+        });
+        callbacks.onDone?.();
+        return Promise.resolve();
+      });
+
+      const result = await spawnSubAgent(
+        {
+          parentConversationId: 'p',
+          agentRunId: 'run-ad-hoc-inspection',
+          prompt: 'Inspect the workspace for package.json and README.md.',
+        },
+        mockProvider,
+      );
+
+      expect(result.status).toBe('completed');
+      expect(result.completionState).toBe('verified_success');
+      expect(result.output).toContain('- package.json: missing');
+      expect(result.output).not.toContain('completion_state:');
+    });
+
+    it('keeps execution-backed worker reports incomplete when finalization does not certify completion', async () => {
+      const { runOrchestrator } = require('../../src/engine/orchestrator');
+      sendMessageSpy.mockResolvedValueOnce(
+        makeStructuredFinalizerResponse(
+          'Deployment succeeded on workflow run 101.',
+          'incomplete',
+        ) as any,
       );
       runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
         callbacks.onAssistantMessage?.('Monitoring workflow');
@@ -1133,20 +1393,17 @@ describe('Sub-Agent Service', () => {
       );
 
       expect(result.status).toBe('completed');
-      expect(result.output.startsWith('completion_state: verified_success\n')).toBe(true);
-      expect(result.output).toContain('actions_taken: ["tool:expo_eas_workflow_status"]');
-      expect(result.output).toContain('external_runs_verified: ["workflow run 101 completed with success"]');
+      expect(result.completionState).toBe('incomplete');
       expect(result.output).toContain('Deployment succeeded on workflow run 101.');
     });
 
-    it('adds verified_success completion_state for generic artifact mutation evidence', async () => {
+    it('keeps artifact-edit worker reports incomplete when finalization does not certify completion', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
-      streamMessageSpy.mockImplementationOnce(
-        () =>
-          makeStream(
-            { type: 'token', content: 'Updated the requested app shell file.' },
-            { type: 'done', content: 'Updated the requested app shell file.' },
-          ) as any,
+      sendMessageSpy.mockResolvedValueOnce(
+        makeStructuredFinalizerResponse(
+          'Updated the requested app shell file.',
+          'incomplete',
+        ) as any,
       );
       runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
         callbacks.onAssistantMessage?.('Applying the requested code change');
@@ -1170,20 +1427,89 @@ describe('Sub-Agent Service', () => {
       );
 
       expect(result.status).toBe('completed');
-      expect(result.output.startsWith('completion_state: verified_success\n')).toBe(true);
-      expect(result.output).toContain('actions_taken: ["tool:file_edit"]');
-      expect(result.output).toContain('artifacts_verified: ["Updated src/App.tsx and saved changes."]');
+      expect(result.completionState).toBe('incomplete');
       expect(result.output).toContain('Updated the requested app shell file.');
     });
 
-    it('accepts dynamic skill execution evidence without vendor-specific allowlists', async () => {
+    it('uses the most conservative state when worker reports contain contradictory completion states', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
-      streamMessageSpy.mockImplementationOnce(
-        () =>
-          makeStream(
-            { type: 'token', content: 'Release finished successfully.' },
-            { type: 'done', content: 'Release finished successfully.' },
-          ) as any,
+      runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
+        callbacks.onAssistantMessage?.(
+          'completion_state: verified_success\nactions_taken: ["tool:file_edit"]\n\ncompletion_state: incomplete\n\nThe file changed, but verification did not run.',
+        );
+        callbacks.onToolCallStart?.({ name: 'file_edit' });
+        callbacks.onToolCallComplete?.({
+          name: 'file_edit',
+          result: 'Updated src/App.tsx and saved changes.',
+        });
+        callbacks.onDone?.();
+        return Promise.resolve();
+      });
+
+      const result = await spawnSubAgent(
+        {
+          parentConversationId: 'p',
+          agentRunId: 'run-contradictory-completion-state',
+          workstreamId: 'mixed',
+          prompt: 'Update src/App.tsx and run verification.',
+        },
+        mockProvider,
+      );
+
+      expect(result.status).toBe('completed');
+      expect(result.completionState).toBe('incomplete');
+      expect(result.output).not.toContain('completion_state: verified_success');
+      expect(result.output).not.toContain('completion_state: incomplete');
+      expect(result.output).toContain('The file changed, but verification did not run.');
+    });
+
+    it('does not self-certify verified_success after a max-iterations abort just because tool evidence exists', async () => {
+      const { runOrchestrator } = require('../../src/engine/orchestrator');
+      sendMessageSpy.mockResolvedValueOnce(
+        makeStructuredFinalizerResponse(
+          'The worker completed the task successfully.',
+          'verified_success',
+        ) as any,
+      );
+      runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
+        callbacks.onToolCallStart?.({
+          id: 'tc-1',
+          name: 'write_file',
+          arguments: '{"path":"graphbatchcheck.txt","content":"batch flow ok"}',
+          status: 'running',
+        });
+        callbacks.onToolCallComplete?.({
+          id: 'tc-1',
+          name: 'write_file',
+          status: 'completed',
+          result: 'Wrote 13 chars to graphbatchcheck.txt',
+        });
+        const err = new Error('Aborted');
+        err.name = 'AbortError';
+        return Promise.reject(err);
+      });
+
+      const result = await spawnSubAgent(
+        {
+          parentConversationId: 'p',
+          agentRunId: 'run-max-iterations-guardrail',
+          workstreamId: 'graphbatchcheck',
+          prompt: 'Create graphbatchcheck.txt with batch flow ok and verify it.',
+          maxIterations: 1,
+        },
+        mockProvider,
+      );
+
+      expect(result.status).not.toBe('completed');
+      expect(result.completionState).toBe('incomplete');
+      expect(result.output).toContain('The worker completed the task successfully.');
+      expect(result.output).not.toContain('completion_state:');
+    });
+
+    it('keeps dynamic skill worker reports incomplete when finalization does not certify completion', async () => {
+      const { runOrchestrator } = require('../../src/engine/orchestrator');
+      sendMessageSpy.mockResolvedValueOnce(
+        makeStructuredFinalizerResponse('Release finished successfully.', 'incomplete') as any,
       );
       runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
         callbacks.onAssistantMessage?.('Running the release workflow');
@@ -1207,30 +1533,14 @@ describe('Sub-Agent Service', () => {
       );
 
       expect(result.status).toBe('completed');
-      expect(result.output.startsWith('completion_state: verified_success\n')).toBe(true);
-      expect(result.output).toContain('actions_taken: ["tool:skill__acme_ops__release_delivery"]');
-      expect(result.output).toContain(
-        'external_runs_verified: ["Release deployment completed successfully."]',
-      );
+      expect(result.completionState).toBe('incomplete');
       expect(result.output).toContain('Release finished successfully.');
     });
 
-    it('downgrades verified_success worker reports that still carry unverified_claims', async () => {
+    it('keeps worker-reported blocked completion state separate from the visible report', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
-      streamMessageSpy.mockImplementationOnce(
-        () =>
-          makeStream(
-            {
-              type: 'token',
-              content:
-                'completion_state: verified_success\nunverified_claims: ["Blocage environnemental"]\nResultat final en attente.',
-            },
-            {
-              type: 'done',
-              content:
-                'completion_state: verified_success\nunverified_claims: ["Blocage environnemental"]\nResultat final en attente.',
-            },
-          ) as any,
+      sendMessageSpy.mockResolvedValueOnce(
+        makeStructuredFinalizerResponse('Resultat final en attente.', 'blocked') as any,
       );
       runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
         callbacks.onAssistantMessage?.('Monitoring workflow');
@@ -1254,10 +1564,8 @@ describe('Sub-Agent Service', () => {
       );
 
       expect(result.status).toBe('completed');
-      expect(result.output).toContain('completion_state: blocked');
-      expect(result.output).toContain(
-        'Worker output declared verified_success while still reporting unverified_claims.',
-      );
+      expect(result.completionState).toBe('blocked');
+      expect(result.output).toBe('Resultat final en attente.');
     });
   });
 });

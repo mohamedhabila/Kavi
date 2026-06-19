@@ -14,13 +14,14 @@
 //   Messages:         remaining budget (windowed recent-first)
 //   Output reserve:   reserve maxTokens for completion output
 
+import { resolveModelOutputTokenBudget } from './outputTokenBudget';
 import { estimateTokens, estimateMessageTokens, getWorkingContextWindow } from './tokenCounter';
 import {
-  estimateAllToolTokens,
   compressToolDefinitions,
   enforceToolTokenBudget,
-} from '../../engine/tools/toolManager';
-import type { ToolDefinition } from '../../types';
+  estimateAllToolTokens,
+} from '../../engine/tools/toolManagerTokenBudget';
+import type { ToolDefinition } from '../../types/tool';
 
 function isPlainRecord(value: unknown): value is Record<string, any> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -165,7 +166,10 @@ function estimateBudgetMessageTokens(
 
 // ── Budget computation ───────────────────────────────────────────────────
 
-export function computeContextBudget(model: string, maxTokens: number = 16384): ContextBudget {
+export function computeContextBudget(
+  model: string,
+  maxTokens: number = resolveModelOutputTokenBudget(model),
+): ContextBudget {
   const contextWindow = getWorkingContextWindow(model);
   const outputReserve = Math.max(MIN_OUTPUT_RESERVE, maxTokens);
 
@@ -194,7 +198,7 @@ export function inspectContextBudget(
   systemPrompt: string,
   tools: ToolDefinition[],
   messages: Array<{ role: string; content: string | any[]; [key: string]: any }>,
-  maxTokens: number = 16384,
+  maxTokens: number = resolveModelOutputTokenBudget(model),
 ): ContextBudgetPressure {
   const budget = computeContextBudget(model, maxTokens);
   const normalizedMessages = removeOrphanedToolResults(messages);
@@ -387,14 +391,17 @@ export function enforceContextBudget(
   systemPrompt: string,
   tools: ToolDefinition[],
   messages: Array<{ role: string; content: string | any[]; [key: string]: any }>,
-  maxTokens: number = 16384,
+  maxTokens: number = resolveModelOutputTokenBudget(model),
   options?: ContextBudgetEnforcementOptions,
 ): AdjustedPayload {
   const budget = computeContextBudget(model, maxTokens);
   const adjustments: string[] = [];
 
+  const pinnedToolNames = new Set(Array.from(options?.pinnedToolNames ?? []).filter(Boolean));
+  const compactionOptions = { pinnedToolNames };
+
   let adjustedPrompt = systemPrompt;
-  let adjustedTools = tools;
+  let adjustedTools = compressToolDefinitions(tools, compactionOptions);
   let adjustedMessages = removeOrphanedToolResults(messages);
 
   if (adjustedMessages.length !== messages.length) {
@@ -403,22 +410,18 @@ export function enforceContextBudget(
 
   // 1. Estimate current sizes
   let promptTokens = estimateTokens(adjustedPrompt);
-  let toolsTokens = estimateAllToolTokens(adjustedTools);
+  let toolsTokens = estimateAllToolTokens(adjustedTools, compactionOptions);
   let messagesTokens = estimateBudgetMessageTokens(adjustedMessages);
 
   const totalAvailable = budget.contextWindow - budget.outputReserve;
 
   // 2. Compress tool descriptions if tools exceed budget
   if (toolsTokens > budget.toolsBudget) {
-    adjustedTools = compressToolDefinitions(adjustedTools);
-    toolsTokens = estimateAllToolTokens(adjustedTools);
-    adjustments.push(`compressed tool descriptions (${toolsTokens} tokens)`);
-
     if (toolsTokens > budget.toolsBudget) {
       adjustedTools = enforceToolTokenBudget(adjustedTools, budget.toolsBudget, {
         pinnedToolNames: options?.pinnedToolNames,
       });
-      toolsTokens = estimateAllToolTokens(adjustedTools);
+      toolsTokens = estimateAllToolTokens(adjustedTools, compactionOptions);
       adjustments.push(
         `trimmed tools to ${adjustedTools.length} within budget (${toolsTokens} tokens)`,
       );
@@ -449,7 +452,7 @@ export function enforceContextBudget(
     adjustedTools = enforceToolTokenBudget(adjustedTools, aggressiveToolBudget, {
       pinnedToolNames: options?.pinnedToolNames,
     });
-    toolsTokens = estimateAllToolTokens(adjustedTools);
+    toolsTokens = estimateAllToolTokens(adjustedTools, compactionOptions);
     adjustments.push(`aggressively reduced tools to ${adjustedTools.length}`);
 
     // Re-window messages with the freed budget

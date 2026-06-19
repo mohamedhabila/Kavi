@@ -17,7 +17,8 @@ import type {
   OAuthProtectedResourceMetadata,
   OAuthTokens,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
-import type { McpOAuthConfig, McpServerConfig } from '../../types';
+import { APP_DISPLAY_NAME, APP_VERSION } from '../../constants/appMetadata';
+import type { McpOAuthConfig, McpServerConfig } from '../../types/remote';
 import {
   deleteMcpOAuthClientSecret,
   deleteMcpOAuthSecret,
@@ -488,13 +489,13 @@ function buildClientMetadata(
     : ['authorization_code'];
 
   return {
-    client_name: 'Kavi',
+    client_name: APP_DISPLAY_NAME,
     redirect_uris: [redirectUrl],
     grant_types: grantTypes,
     response_types: ['code'],
     token_endpoint_auth_method: 'none',
     software_id: 'kavi',
-    software_version: '0.1.0',
+    software_version: APP_VERSION,
   };
 }
 

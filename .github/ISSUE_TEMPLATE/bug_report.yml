@@ -4,6 +4,13 @@ title: 'bug: '
 labels:
   - bug
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Security-sensitive reports do not belong in public issues. If this bug
+        may expose secrets, credentials, private data, unsafe file access, SSRF,
+        sandbox escape, or other security impact, stop here and follow
+        `SECURITY.md` instead.
   - type: textarea
     id: summary
     attributes:
@@ -57,4 +64,4 @@ body:
     id: logs
     attributes:
       label: Logs or screenshots
-      description: Redact secrets before posting.
+      description: Redact secrets, tokens, private data, hostnames, and credentials before posting.

@@ -2,7 +2,6 @@
 // Tests — SkillsScreen
 // ---------------------------------------------------------------------------
 
-import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { SkillsScreen } from '../../src/screens/SkillsScreen';
 
@@ -87,9 +86,12 @@ jest.mock('../../src/store/useSettingsStore', () => ({
   useSettingsStore: (selector: any) => selector(mockExecutionSettings),
 }));
 
-jest.mock('../../src/services/clawhub/registryClient', () => ({
+jest.mock('../../src/services/clawhub/apiClient', () => ({
   listClawHubSkills: (...args: any[]) => mockListClawHubSkills(...args),
   searchClawHub: (...args: any[]) => mockSearchClawHub(...args),
+}));
+
+jest.mock('../../src/services/clawhub/installWorkflow', () => ({
   installSkillFromHub: (...args: any[]) => mockInstallSkillFromHub(...args),
   installSkillFromUrl: (...args: any[]) => mockInstallSkillFromUrl(...args),
 }));
@@ -142,7 +144,7 @@ describe('SkillsScreen', () => {
     mockEntries.push({
       id: 'skill1',
       enabled: true,
-      source: { source: 'local' },
+      source: { source: 'bundled' },
       metadata: {
         name: 'Weather Skill',
         description: 'Get weather info',
@@ -156,7 +158,7 @@ describe('SkillsScreen', () => {
     expect(getByText('Get weather info')).toBeTruthy();
     expect(getByText('v1.2.0')).toBeTruthy();
     expect(getByText('2 tools')).toBeTruthy();
-    expect(getByText('local')).toBeTruthy();
+    expect(getByText('built-in')).toBeTruthy();
     expect(getByText('Runs here')).toBeTruthy();
     expect(getByText('Mobile')).toBeTruthy();
   });
@@ -363,11 +365,13 @@ describe('SkillsScreen', () => {
       },
     });
 
-    const { getByText } = render(<SkillsScreen />);
+    const { getByText, queryByText } = render(<SkillsScreen />);
 
     await waitFor(() => {
       expect(getByText('0/1 secrets configured')).toBeTruthy();
     });
+    expect(getByText('ClawHub')).toBeTruthy();
+    expect(queryByText('clawhub')).toBeNull();
     expect(getByText('Setup required')).toBeTruthy();
     expect(getByText('Configure')).toBeTruthy();
   });

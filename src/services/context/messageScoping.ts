@@ -1,4 +1,4 @@
-import type { Message } from '../../types';
+import type { Message } from '../../types/message';
 
 /**
  * Removes a bounded count of trailing user messages used as internal control

@@ -1,5 +1,5 @@
 import { buildDisplayMessages } from '../../src/components/chat/messageGrouping';
-import { Message } from '../../src/types';
+import { Message } from '../../src/types/message';
 
 const timestamp = Date.now();
 
@@ -113,6 +113,154 @@ describe('buildDisplayMessages', () => {
       expect.objectContaining({
         messageId: 'assistant-2',
         toolCalls: [expect.objectContaining({ id: 'tool-1', status: 'completed' })],
+      }),
+    ]);
+  });
+
+  it('reconciles hidden tool-result messages into the visible assistant projection', () => {
+    const items = buildDisplayMessages([
+      makeMessage({ id: 'user-1', role: 'user', content: 'Inspect the file' }),
+      makeMessage({
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Checking the file now.',
+        toolCalls: [
+          {
+            id: 'tool-1',
+            name: 'read_file',
+            arguments: '{"path":"notes.md"}',
+            status: 'running',
+            progressText: 'Reading notes.md',
+          },
+        ],
+      }),
+      makeMessage({
+        id: 'tool-1-msg',
+        role: 'tool',
+        toolCallId: 'tool-1',
+        content: 'Done',
+        toolCalls: [
+          {
+            id: 'tool-1',
+            name: 'read_file',
+            arguments: '{"path":"notes.md"}',
+            status: 'completed',
+            result: 'notes content',
+          },
+        ],
+      }),
+      makeMessage({
+        id: 'assistant-2',
+        role: 'assistant',
+        content: 'Found the note.',
+      }),
+    ]);
+
+    expect(items).toHaveLength(2);
+    expect(items[1].sourceMessageIds).toEqual(['assistant-1', 'assistant-2']);
+    expect(items[1].projectionSourceMessageIds).toEqual([
+      'assistant-1',
+      'tool-1-msg',
+      'assistant-2',
+    ]);
+    expect(items[1].message.toolCalls).toEqual([
+      expect.objectContaining({
+        id: 'tool-1',
+        status: 'completed',
+        result: 'notes content',
+      }),
+    ]);
+    expect(items[1].responseSegments).toEqual([
+      expect.objectContaining({
+        messageId: 'assistant-1',
+        toolCalls: [expect.objectContaining({ id: 'tool-1', status: 'completed' })],
+      }),
+      expect.objectContaining({
+        messageId: 'assistant-2',
+        content: 'Found the note.',
+      }),
+    ]);
+  });
+
+  it('does not let an earlier tool result attach to a later assistant turn that reuses the same provider tool id', () => {
+    const items = buildDisplayMessages([
+      makeMessage({ id: 'user-1', role: 'user', content: 'Create, read, and run python' }),
+      makeMessage({
+        id: 'assistant-write',
+        role: 'assistant',
+        content: '',
+        toolCalls: [
+          {
+            id: 'gemini-call-0',
+            name: 'write_file',
+            arguments: '{"path":"c906b.txt","content":"C906B"}',
+            status: 'pending',
+          },
+        ],
+      }),
+      makeMessage({
+        id: 'tool-write',
+        role: 'tool',
+        toolCallId: 'gemini-call-0',
+        content: 'Wrote 5 chars to c906b.txt',
+        toolCalls: [
+          {
+            id: 'gemini-call-0',
+            name: 'write_file',
+            arguments: '{"path":"c906b.txt","content":"C906B"}',
+            status: 'completed',
+            result: 'Wrote 5 chars to c906b.txt',
+          },
+        ],
+      }),
+      makeMessage({
+        id: 'assistant-python',
+        role: 'assistant',
+        content: '',
+        toolCalls: [
+          {
+            id: 'gemini-call-0',
+            name: 'python',
+            arguments: '{"code":"print(\\"C906P\\")"}',
+            status: 'completed',
+            result: 'C906P',
+          },
+        ],
+      }),
+      makeMessage({
+        id: 'assistant-spawn',
+        role: 'assistant',
+        content: '',
+        toolCalls: [
+          {
+            id: 'gemini-call-0',
+            name: 'sessions_spawn',
+            arguments: '{"prompt":"Reply exactly C906W"}',
+            status: 'completed',
+            result: 'C906W',
+          },
+        ],
+      }),
+    ]);
+
+    expect(items[1].responseSegments).toEqual([
+      expect.objectContaining({
+        messageId: 'assistant-write',
+        toolCalls: [
+          expect.objectContaining({
+            name: 'write_file',
+            status: 'completed',
+            result: 'Wrote 5 chars to c906b.txt',
+          }),
+        ],
+      }),
+      expect.objectContaining({
+        messageId: 'assistant-python',
+        toolCalls: [expect.objectContaining({ name: 'python', result: 'C906P' })],
+      }),
+      expect.objectContaining({
+        messageId: 'assistant-spawn',
+        toolCalls: [expect.objectContaining({ name: 'sessions_spawn', result: 'C906W' })],
       }),
     ]);
   });

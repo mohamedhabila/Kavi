@@ -16,7 +16,7 @@
 //   • memory_block_edit  — replace/append a memory block's content.
 //   • memory_block_read  — read one or all memory blocks (no args = all).
 //
-// `memory_search` already exists in `parity-memory.ts` and is unchanged.
+// `memory_search` already exists in `builtin-memory.ts` and is unchanged.
 // ---------------------------------------------------------------------------
 
 import {
@@ -27,14 +27,15 @@ import {
 } from './entities';
 import {
   recordFact,
-  listFacts,
   invalidateFact,
   softDeleteFact,
   setFactPinned,
-  getFactById,
+} from './facts/mutations';
+import { listFacts, getFactById } from './facts/queries';
+import {
   type MemoryFact,
   type MemoryFactScope,
-} from './facts';
+} from './facts/types';
 import {
   editBlock,
   ensureDefaultBlocks,
@@ -201,8 +202,6 @@ export interface MemoryRememberArgs {
   predicate: string;
   value: string;
   confidence?: number;
-  /** When true, any currently-valid fact for (subject, predicate) is invalidated first. */
-  supersedePrior?: boolean;
   pinned?: boolean;
   scope?: MemoryFactScope;
   originConversationId?: string | null;
@@ -240,7 +239,7 @@ export function executeMemoryRemember(
       predicate,
       objectText: value,
       confidence: typeof args.confidence === 'number' ? args.confidence : undefined,
-      supersedePrior: args.supersedePrior === true,
+      supersedePrior: true,
       pinned: args.pinned === true,
       ...(args.scope ? { scope: args.scope } : {}),
       ...(args.originConversationId !== undefined

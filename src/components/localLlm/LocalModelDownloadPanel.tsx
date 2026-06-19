@@ -1,12 +1,28 @@
 import React, { useMemo } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { CheckCircle2, Download, TriangleAlert } from 'lucide-react-native';
-import type { LocalLlmModelCatalogEntry } from '../../types';
-import { useTranslation } from '../../i18n';
-import { useAppTheme, type AppPalette } from '../../theme/useAppTheme';
-import type { LocalLlmModelInstallProgress } from '../../services/localLlm/runtime';
+import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ArrowDownToLine,
+  CheckCircle2,
+  Cpu,
+  Download,
+  Trash2,
+  TriangleAlert,
+} from 'lucide-react-native';
+import type { LocalLlmModelCatalogEntry } from '../../types/provider';
+import { useTranslation } from '../../i18n/useTranslation';
+import { useAppTheme } from '../../theme/useAppTheme';
+import type {
+  LocalLlmModelInstallProgress,
+  LocalLlmRuntimeStatus,
+} from '../../services/localLlm/types';
+import type { InstalledLocalLlmModelValidationIssue } from '../../services/localLlm/modelArtifacts';
+import { createLocalModelDownloadPanelStyles } from './LocalModelDownloadPanel.styles';
+import {
+  formatLocalModelRuntimeStatusLabel,
+  getValidationIssueMessageKey,
+} from './localModelRuntimeLabels';
 
-type PanelStatus = 'idle' | 'blocked' | 'downloading' | 'ready' | 'failed';
+type PanelStatus = 'idle' | 'validating' | 'blocked' | 'downloading' | 'ready' | 'failed';
 
 interface LocalModelDownloadPanelProps {
   entry: LocalLlmModelCatalogEntry;
@@ -15,7 +31,13 @@ interface LocalModelDownloadPanelProps {
   message?: string | null;
   alreadyInstalled: boolean;
   wasJustDownloaded: boolean;
+  runtimeStatus?: LocalLlmRuntimeStatus | null;
+  invalidInstallIssue?: InstalledLocalLlmModelValidationIssue | null;
+  fallbackModelName?: string | null;
   onDownload: () => void;
+  onClearInvalidInstall?: () => void;
+  onSwitchToCpu?: () => void;
+  onChooseFallbackModel?: () => void;
 }
 
 function formatBytes(value: number, locale: string): string {
@@ -36,96 +58,6 @@ function formatBytes(value: number, locale: string): string {
   return `${new Intl.NumberFormat(locale, { maximumFractionDigits }).format(normalized)} ${units[unitIndex]}`;
 }
 
-function createStyles(colors: AppPalette) {
-  return StyleSheet.create({
-    card: {
-      borderRadius: 14,
-      borderWidth: 1,
-      padding: 14,
-      marginTop: 16,
-      gap: 10,
-    },
-    cardWarning: {
-      borderColor: colors.warning,
-      backgroundColor: colors.warningBackground,
-    },
-    cardReady: {
-      borderColor: colors.primary,
-      backgroundColor: colors.primarySoft,
-    },
-    cardError: {
-      borderColor: colors.danger,
-      backgroundColor: colors.dangerSoft,
-    },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-    },
-    headerBody: {
-      flex: 1,
-    },
-    title: {
-      fontSize: 15,
-      fontWeight: '700',
-      color: colors.text,
-    },
-    body: {
-      fontSize: 13,
-      lineHeight: 18,
-      color: colors.textSecondary,
-    },
-    metrics: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      gap: 12,
-    },
-    metricText: {
-      fontSize: 12,
-      color: colors.textSecondary,
-    },
-    progressTrack: {
-      height: 8,
-      borderRadius: 999,
-      backgroundColor: colors.surfaceAlt,
-      overflow: 'hidden',
-    },
-    progressFill: {
-      height: '100%',
-      borderRadius: 999,
-      backgroundColor: colors.primary,
-    },
-    button: {
-      minHeight: 44,
-      borderRadius: 12,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      backgroundColor: colors.primary,
-    },
-    buttonDisabled: {
-      opacity: 0.7,
-    },
-    buttonReady: {
-      backgroundColor: 'transparent',
-      borderWidth: 1,
-      borderColor: colors.primary,
-    },
-    buttonText: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: colors.onPrimary,
-    },
-    buttonReadyText: {
-      color: colors.primary,
-    },
-  });
-}
-
 export const LocalModelDownloadPanel: React.FC<LocalModelDownloadPanelProps> = ({
   entry,
   status,
@@ -133,18 +65,25 @@ export const LocalModelDownloadPanel: React.FC<LocalModelDownloadPanelProps> = (
   message,
   alreadyInstalled,
   wasJustDownloaded,
+  runtimeStatus,
+  invalidInstallIssue,
+  fallbackModelName,
   onDownload,
+  onClearInvalidInstall,
+  onSwitchToCpu,
+  onChooseFallbackModel,
 }) => {
   const { colors } = useAppTheme();
   const { locale, t } = useTranslation();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const styles = useMemo(() => createLocalModelDownloadPanelStyles(colors), [colors]);
 
   const totalBytes = progress?.totalBytes || entry.sizeBytes;
   const bytesWritten = progress?.bytesWritten || 0;
   const fraction = progress?.fraction ?? (status === 'ready' ? 1 : 0);
   const percent = Math.round(fraction * 100);
   const fallbackBody = t('localModels.downloadRequiredBody', { name: entry.name });
-  const hasInlineWarning = status === 'idle' && Boolean(message);
+  const hasInvalidInstall = Boolean(invalidInstallIssue);
+  const hasInlineWarning = status === 'idle' && Boolean(message) && !hasInvalidInstall;
 
   let title = t('localModels.downloadRequiredTitle');
   let body = message || fallbackBody;
@@ -160,7 +99,21 @@ export const LocalModelDownloadPanel: React.FC<LocalModelDownloadPanelProps> = (
     title = entry.name;
   }
 
-  if (status === 'downloading') {
+  if (hasInvalidInstall && invalidInstallIssue) {
+    title = t('localModels.recoveryTitle');
+    body = t(getValidationIssueMessageKey(invalidInstallIssue), { name: entry.name });
+    icon = <TriangleAlert size={18} color={colors.danger} />;
+    containerStyle = styles.cardError;
+    buttonLabel = t('localModels.retryDownloadButton');
+  } else if (status === 'validating') {
+    title = t('localModels.validatingTitle', { name: entry.name });
+    body = t('localModels.validatingBody');
+    icon = <ActivityIndicator size="small" color={colors.primary} />;
+    containerStyle = styles.cardWarning;
+    buttonLabel = t('localModels.validatingButton');
+    buttonIcon = <ActivityIndicator size="small" color={colors.onPrimary} />;
+    buttonDisabled = true;
+  } else if (status === 'downloading') {
     title = t('localModels.downloadingTitle', { name: entry.name });
     body = t('localModels.downloadingBody');
     icon = <ActivityIndicator size="small" color={colors.primary} />;
@@ -232,6 +185,13 @@ export const LocalModelDownloadPanel: React.FC<LocalModelDownloadPanelProps> = (
         </>
       ) : null}
 
+      {runtimeStatus ? (
+        <Text style={styles.metricText}>
+          {t('localModels.runtimeStatusLabel')}:{' '}
+          {formatLocalModelRuntimeStatusLabel(runtimeStatus, t)}
+        </Text>
+      ) : null}
+
       {status !== 'downloading' ? (
         <Text style={styles.metricText}>
           {t('localModels.storageFootnote', { size: entry.sizeLabel })}
@@ -249,6 +209,56 @@ export const LocalModelDownloadPanel: React.FC<LocalModelDownloadPanelProps> = (
         {buttonIcon}
         <Text style={buttonTextStyle}>{buttonLabel}</Text>
       </TouchableOpacity>
+
+      {onClearInvalidInstall || onSwitchToCpu || (fallbackModelName && onChooseFallbackModel) ? (
+        <View
+          style={styles.recoveryActions}
+          accessibilityLabel={t('localModels.recoveryActionsLabel')}
+        >
+          {onClearInvalidInstall ? (
+            <TouchableOpacity
+              style={styles.recoveryButton}
+              onPress={onClearInvalidInstall}
+              testID="local-model-clear-invalid-install"
+              accessibilityRole="button"
+              accessibilityLabel={t('localModels.clearInvalidInstallButton')}
+            >
+              <Trash2 size={15} color={colors.text} />
+              <Text style={styles.recoveryButtonText}>
+                {t('localModels.clearInvalidInstallButton')}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+          {onSwitchToCpu ? (
+            <TouchableOpacity
+              style={styles.recoveryButton}
+              onPress={onSwitchToCpu}
+              testID="local-model-switch-cpu"
+              accessibilityRole="button"
+              accessibilityLabel={t('localModels.switchToCpuButton')}
+            >
+              <Cpu size={15} color={colors.text} />
+              <Text style={styles.recoveryButtonText}>{t('localModels.switchToCpuButton')}</Text>
+            </TouchableOpacity>
+          ) : null}
+          {fallbackModelName && onChooseFallbackModel ? (
+            <TouchableOpacity
+              style={styles.recoveryButton}
+              onPress={onChooseFallbackModel}
+              testID="local-model-choose-fallback"
+              accessibilityRole="button"
+              accessibilityLabel={t('localModels.chooseSmallerModelButton', {
+                name: fallbackModelName,
+              })}
+            >
+              <ArrowDownToLine size={15} color={colors.text} />
+              <Text style={styles.recoveryButtonText}>
+                {t('localModels.chooseSmallerModelButton', { name: fallbackModelName })}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 };

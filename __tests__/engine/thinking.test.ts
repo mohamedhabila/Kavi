@@ -20,6 +20,10 @@ describe('getThinkingParams', () => {
   });
 
   describe('Anthropic adaptive thinking models (Claude 4.6)', () => {
+    it('keeps minimal Anthropic adaptive turns on the provider default path', () => {
+      expect(getThinkingParams('minimal', 'claude-sonnet-4-6')).toEqual({});
+    });
+
     it.each<[ThinkingLevel, string]>([
       ['low', 'low'],
       ['medium', 'medium'],
@@ -71,6 +75,12 @@ describe('getThinkingParams', () => {
       expect(result.thinking).toBeDefined();
     });
 
+    it('supports hosted Anthropic model namespaces', () => {
+      expect(getThinkingParams('high', 'anthropic/claude-sonnet-4-5')).toEqual({
+        thinking: { type: 'enabled', budget_tokens: 32768 },
+      });
+    });
+
     it('downgrades the thinking budget to fit max_tokens', () => {
       expect(getThinkingParams('high', 'claude-sonnet-4-5', { maxTokens: 3072 })).toEqual({
         thinking: { type: 'enabled', budget_tokens: 2048 },
@@ -102,6 +112,12 @@ describe('getThinkingParams', () => {
     it('maps medium to medium effort', () => {
       expect(getThinkingParams('medium', 'o3-mini')).toEqual({ reasoning_effort: 'medium' });
     });
+
+    it('supports hosted OpenAI model namespaces', () => {
+      expect(getThinkingParams('high', 'openai/o3-mini')).toEqual({
+        reasoning_effort: 'high',
+      });
+    });
   });
 
   describe('Gemini models', () => {
@@ -132,6 +148,15 @@ describe('getThinkingParams', () => {
       });
       expect(getThinkingParams('high', 'gemini-3-flash-preview')).toEqual({
         thinking: { thinkingLevel: 'high' },
+      });
+    });
+
+    it('supports hosted Gemini model namespaces', () => {
+      expect(getThinkingParams('off', 'google/gemini-2.5-pro')).toEqual({
+        thinking: { thinkingBudget: 128 },
+      });
+      expect(getThinkingParams('medium', 'google/gemini-3.1-pro-preview')).toEqual({
+        thinking: { thinkingLevel: 'medium' },
       });
     });
   });

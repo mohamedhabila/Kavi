@@ -170,6 +170,26 @@ jest.mock('expo-file-system', () => {
   };
 });
 
+const mockReadWorkspaceFile = jest.fn();
+const mockWriteWorkspaceFile = jest.fn();
+const mockListWorkspaceDirectory = jest.fn();
+
+jest.mock('../../src/services/workspaces/files', () => {
+  const actual = jest.requireActual('../../src/services/workspaces/files');
+  return {
+    ...actual,
+    readWorkspaceFile: (...args: any[]) => mockReadWorkspaceFile(...args),
+    writeWorkspaceFile: (...args: any[]) => mockWriteWorkspaceFile(...args),
+    listWorkspaceDirectory: (...args: any[]) => mockListWorkspaceDirectory(...args),
+  };
+});
+
+const mockSettingsState: {
+  workspaceTargets: any[];
+} = {
+  workspaceTargets: [],
+};
+
 jest.mock('../../src/store/useSettingsStore', () => ({
   useSettingsStore: {
     getState: () => ({
@@ -184,7 +204,18 @@ jest.mock('../../src/store/useSettingsStore', () => ({
           enabled: true,
         },
       ],
+      workspaceTargets: mockSettingsState.workspaceTargets,
     }),
+  },
+}));
+
+const mockChatStoreState: { conversations: any[] } = {
+  conversations: [],
+};
+
+jest.mock('../../src/store/useChatStore', () => ({
+  useChatStore: {
+    getState: () => mockChatStoreState,
   },
 }));
 
@@ -219,7 +250,7 @@ jest.mock('../../src/services/memory/sqlite-store', () => ({
   sqliteHybridSearch: jest.fn().mockResolvedValue([]),
 }));
 
-jest.mock('../../src/engine/tools/native-executor', () => ({
+jest.mock('../../src/engine/tools/native/executor', () => ({
   executeNativeTool: jest.fn().mockImplementation((name: string) => {
     if (name === 'notification_send') {
       return Promise.resolve(
@@ -237,6 +268,11 @@ jest.mock('../../src/engine/tools/native-executor', () => ({
 
 jest.mock('../../src/services/security/audit', () => ({
   logToolCall: jest.fn(),
+}));
+
+jest.mock('../../src/services/remote/approvalStore', () => ({
+  needsApprovalWithContext: jest.fn(() => false),
+  requestToolApproval: jest.fn(),
 }));
 
 const mockPermissionOverrides = new Map<string, boolean>();
@@ -275,11 +311,19 @@ let unregisterSkill: (id: string) => void;
 let clearAllSurfaces: () => void;
 let getSurface: (surfaceId: string) => any;
 let executePython: jest.Mock;
+const REMOTE_WORKSPACE_TARGET = {
+  id: 'workspace-target-1',
+  name: 'Repo Workspace',
+  rootPath: '/workspace/repo',
+  provider: 'code-server',
+  baseUrl: 'https://code.example.com',
+  enabled: true,
+} as const;
 
 function loadTestModules() {
   ({ __resetStore, __getStore } = require('expo-file-system'));
   ({ executeTool, loadMemory } = require('../../src/engine/tools/index'));
-  ({ executeNativeTool } = require('../../src/engine/tools/native-executor'));
+  ({ executeNativeTool } = require('../../src/engine/tools/native/executor'));
   ({ generateImage, editImage } = require('../../src/services/media/imageGeneration'));
   ({ hybridSearch } = require('../../src/services/memory/embeddings'));
   ({ indexMemoryToSqlite, sqliteHybridSearch } = require('../../src/services/memory/sqlite-store'));
@@ -293,6 +337,11 @@ beforeEach(() => {
   loadTestModules();
   __resetStore();
   jest.clearAllMocks();
+  mockChatStoreState.conversations = [];
+  mockSettingsState.workspaceTargets = [];
+  mockReadWorkspaceFile.mockReset();
+  mockWriteWorkspaceFile.mockReset();
+  mockListWorkspaceDirectory.mockReset();
   executePython.mockResolvedValue({ success: true, output: '42' });
   hybridSearch.mockReset();
   hybridSearch.mockResolvedValue([]);
@@ -445,6 +494,15 @@ describe('executeTool', () => {
         JSON.stringify({ path: 'test.txt', content: 'Hello world' }),
         CONV_ID,
       );
+      const parsed = JSON.parse(result);
+      expect(parsed).toEqual(
+        expect.objectContaining({
+          status: 'written',
+          path: 'test.txt',
+          size: 11,
+          sha256: '64ec88ca00b268e5ba1a35678a1b5316d212f4f366b2477232534a8aeca37f3c',
+        }),
+      );
       expect(result).toContain('Wrote 11 chars');
       expect(result).toContain('test.txt');
     });
@@ -531,6 +589,156 @@ describe('executeTool', () => {
       const result = await executeTool('list_files', JSON.stringify({ path: 123 }), CONV_ID);
       expect(result).toContain('Error');
       expect(result).toContain('path');
+    });
+  });
+
+  describe('attached workspace target routing', () => {
+    beforeEach(() => {
+      mockChatStoreState.conversations = [
+        {
+          id: CONV_ID,
+          workspaceTargetId: REMOTE_WORKSPACE_TARGET.id,
+        },
+      ];
+      mockSettingsState.workspaceTargets = [REMOTE_WORKSPACE_TARGET as any];
+    });
+
+    it('routes read_file through the attached workspace target', async () => {
+      mockReadWorkspaceFile.mockResolvedValue({
+        path: 'docs/notes.md',
+        content: 'remote workspace notes',
+        size: 22,
+      });
+
+      const result = await executeTool(
+        'read_file',
+        JSON.stringify({ path: 'docs/notes.md' }),
+        CONV_ID,
+      );
+
+      expect(result).toBe('remote workspace notes');
+      expect(mockReadWorkspaceFile).toHaveBeenCalledWith(
+        expect.objectContaining({ id: REMOTE_WORKSPACE_TARGET.id }),
+        'docs/notes.md',
+      );
+    });
+
+    it('routes write_file through the attached workspace target', async () => {
+      mockWriteWorkspaceFile.mockResolvedValue({
+        path: 'src/app.ts',
+        size: 17,
+      });
+
+      const result = await executeTool(
+        'write_file',
+        JSON.stringify({ path: 'src/app.ts', content: 'export default 1;' }),
+        CONV_ID,
+      );
+
+      expect(result).toContain('Wrote 17 chars to src/app.ts');
+      expect(mockWriteWorkspaceFile).toHaveBeenCalledWith(
+        expect.objectContaining({ id: REMOTE_WORKSPACE_TARGET.id }),
+        'src/app.ts',
+        'export default 1;',
+      );
+      expect(
+        __getStore()['file:///mock/documents/workspace/test-conversation/src/app.ts'],
+      ).toBeUndefined();
+    });
+
+    it('routes list_files through the attached workspace target', async () => {
+      mockListWorkspaceDirectory.mockResolvedValue({
+        path: '.',
+        entries: [
+          { name: 'src', isDirectory: true },
+          { name: 'README.md', isDirectory: false },
+        ],
+      });
+
+      const result = await executeTool('list_files', JSON.stringify({}), CONV_ID);
+
+      expect(result).toContain('src/');
+      expect(result).toContain('README.md');
+      expect(mockListWorkspaceDirectory).toHaveBeenCalledWith(
+        expect.objectContaining({ id: REMOTE_WORKSPACE_TARGET.id }),
+        '.',
+      );
+    });
+
+    it('routes file_edit through the attached workspace target', async () => {
+      mockReadWorkspaceFile.mockResolvedValue({
+        path: 'src/app.ts',
+        content: 'const value = 1;\n',
+        size: 17,
+      });
+      mockWriteWorkspaceFile.mockResolvedValue({
+        path: 'src/app.ts',
+        size: 17,
+      });
+
+      const result = await executeTool(
+        'file_edit',
+        JSON.stringify({
+          path: 'src/app.ts',
+          oldText: '1',
+          newText: '2',
+        }),
+        CONV_ID,
+      );
+
+      expect(result).toContain('Successfully edited src/app.ts');
+      expect(mockWriteWorkspaceFile).toHaveBeenCalledWith(
+        expect.objectContaining({ id: REMOTE_WORKSPACE_TARGET.id }),
+        'src/app.ts',
+        'const value = 2;\n',
+      );
+    });
+
+    it('routes text_search through the attached workspace target', async () => {
+      mockListWorkspaceDirectory.mockImplementation(async (_target: unknown, path: string) => {
+        if (path === '.') {
+          return {
+            path: '.',
+            entries: [
+              { name: 'src', isDirectory: true },
+              { name: 'README.md', isDirectory: false },
+            ],
+          };
+        }
+
+        if (path === 'src') {
+          return {
+            path: 'src',
+            entries: [{ name: 'app.ts', isDirectory: false }],
+          };
+        }
+
+        throw new Error(`directory not found: ${path}`);
+      });
+      mockReadWorkspaceFile.mockImplementation(async (_target: unknown, path: string) => {
+        if (path === 'README.md') {
+          return { path, content: 'No match here', size: 13 };
+        }
+
+        if (path === 'src/app.ts') {
+          return { path, content: 'const needle = true;\n', size: 21 };
+        }
+
+        throw new Error(`file not found: ${path}`);
+      });
+
+      const result = await executeTool('text_search', JSON.stringify({ query: 'needle' }), CONV_ID);
+
+      expect(result).toContain('src/app.ts');
+      expect(result).toContain('needle');
+      expect(mockListWorkspaceDirectory).toHaveBeenCalledWith(
+        expect.objectContaining({ id: REMOTE_WORKSPACE_TARGET.id }),
+        '.',
+      );
+      expect(mockReadWorkspaceFile).toHaveBeenCalledWith(
+        expect.objectContaining({ id: REMOTE_WORKSPACE_TARGET.id }),
+        'src/app.ts',
+      );
     });
   });
 
@@ -622,6 +830,24 @@ describe('executeTool', () => {
         'javascript',
         JSON.stringify({
           code: 'const double = require("helpers/math"); return double(Number(fs.readFile("data/value.txt")));',
+        }),
+        CONV_ID,
+      );
+
+      expect(result).toBe('42');
+    });
+
+    it('should support Node-style require("fs") sync workspace access', async () => {
+      await executeTool(
+        'write_file',
+        JSON.stringify({ path: 'data/value.txt', content: '21' }),
+        CONV_ID,
+      );
+
+      const result = await executeTool(
+        'javascript',
+        JSON.stringify({
+          code: 'const fs = require("fs"); return Number(fs.readFileSync("data/value.txt", "utf8")) * 2;',
         }),
         CONV_ID,
       );
@@ -976,6 +1202,21 @@ describe('executeTool', () => {
       );
     });
 
+    it('should not summarize short successful Python output just because it mentions error text', async () => {
+      executePython.mockResolvedValueOnce({
+        success: true,
+        output: 'error count: 0',
+      });
+
+      const result = await executeTool(
+        'python',
+        JSON.stringify({ code: 'print("error count: 0")' }),
+        CONV_ID,
+      );
+
+      expect(result).toBe('error count: 0');
+    });
+
     it('should surface runtime failures from the Pyodide bridge', async () => {
       executePython.mockResolvedValueOnce({
         success: false,
@@ -1118,7 +1359,7 @@ describe('executeTool — additional routes', () => {
   describe('notify tool', () => {
     it('returns notification sent status', async () => {
       const result = await executeTool(
-        'notify',
+        'notification_send',
         JSON.stringify({ title: 'Test', body: 'Hello' }),
         CONV_ID,
       );

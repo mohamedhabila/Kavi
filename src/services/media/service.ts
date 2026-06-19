@@ -7,7 +7,8 @@
 //   - local file reading plus best-effort document summaries for documents
 
 import { File } from 'expo-file-system';
-import type { Attachment, LlmProviderConfig } from '../../types';
+import type { Attachment } from '../../types/attachment';
+import type { LlmProviderConfig } from '../../types/provider';
 import type { MediaUnderstandingOutput } from './types';
 import { formatMediaUnderstandingBody } from './format';
 import { buildImageAttachmentDataUri } from './attachmentPayloads';

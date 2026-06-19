@@ -40,8 +40,9 @@ PODS:
     - ExpoModulesCore
   - ExpoAudio (55.0.12):
     - ExpoModulesCore
-  - ExpoBackgroundFetch (55.0.13):
+  - ExpoBackgroundTask (55.0.18):
     - ExpoModulesCore
+    - ExpoTaskManager
   - ExpoBattery (55.0.12):
     - ExpoModulesCore
   - ExpoCalendar (55.0.13):
@@ -129,7 +130,7 @@ PODS:
     - ExpoModulesCore
   - ExpoSQLite (55.0.14):
     - ExpoModulesCore
-  - ExpoTaskManager (55.0.13):
+  - ExpoTaskManager (55.0.16):
     - ExpoModulesCore
     - UMAppLoader
   - ExpoWebBrowser (55.0.13):
@@ -141,10 +142,9 @@ PODS:
   - hermes-engine (0.14.1):
     - hermes-engine/Pre-built (= 0.14.1)
   - hermes-engine/Pre-built (0.14.1)
-  - MediaPipeTasksGenAI (0.10.33):
-    - MediaPipeTasksGenAIC (= 0.10.33)
-  - MediaPipeTasksGenAIC (0.10.33)
-  - NMSSH (2.3.1)
+  - libssh2-iosx (1.11.0.1)
+  - NMSSH (2.3.1):
+    - libssh2-iosx (= 1.11.0.1)
   - RCT-Folly (2024.11.18.00):
     - boost
     - DoubleConversion
@@ -3088,7 +3088,7 @@ PODS:
     - SocketRocket
     - Yoga
   - SocketRocket (0.7.1)
-  - UMAppLoader (55.0.4)
+  - UMAppLoader (55.0.5)
   - Yoga (0.0.0)
 
 DEPENDENCIES:
@@ -3099,7 +3099,7 @@ DEPENDENCIES:
   - Expo (from `../node_modules/expo`)
   - ExpoAsset (from `../node_modules/expo-asset/ios`)
   - ExpoAudio (from `../node_modules/expo-audio/ios`)
-  - ExpoBackgroundFetch (from `../node_modules/expo-background-fetch/ios`)
+  - ExpoBackgroundTask (from `../node_modules/expo-background-task/ios`)
   - ExpoBattery (from `../node_modules/expo-battery/ios`)
   - ExpoCalendar (from `../node_modules/expo-calendar/ios`)
   - ExpoClipboard (from `../node_modules/expo-clipboard/ios`)
@@ -3134,8 +3134,8 @@ DEPENDENCIES:
   - fmt (from `../node_modules/react-native/third-party-podspecs/fmt.podspec`)
   - glog (from `../node_modules/react-native/third-party-podspecs/glog.podspec`)
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
-  - MediaPipeTasksGenAI
-  - MediaPipeTasksGenAIC
+  - libssh2-iosx (from `LocalPodspecs/libssh2-iosx.podspec`)
+  - NMSSH (from `LocalPodspecs/NMSSH.podspec`)
   - RCT-Folly (from `../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec`)
   - RCTDeprecation (from `../node_modules/react-native/ReactApple/Libraries/RCTFoundation/RCTDeprecation`)
   - RCTRequired (from `../node_modules/react-native/Libraries/Required`)
@@ -3223,9 +3223,6 @@ DEPENDENCIES:
 
 SPEC REPOS:
   trunk:
-    - MediaPipeTasksGenAI
-    - MediaPipeTasksGenAIC
-    - NMSSH
     - SocketRocket
 
 EXTERNAL SOURCES:
@@ -3243,8 +3240,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-asset/ios"
   ExpoAudio:
     :path: "../node_modules/expo-audio/ios"
-  ExpoBackgroundFetch:
-    :path: "../node_modules/expo-background-fetch/ios"
+  ExpoBackgroundTask:
+    :path: "../node_modules/expo-background-task/ios"
   ExpoBattery:
     :path: "../node_modules/expo-battery/ios"
   ExpoCalendar:
@@ -3314,6 +3311,10 @@ EXTERNAL SOURCES:
   hermes-engine:
     :podspec: "../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec"
     :tag: hermes-v0.14.1
+  libssh2-iosx:
+    :podspec: LocalPodspecs/libssh2-iosx.podspec
+  NMSSH:
+    :podspec: LocalPodspecs/NMSSH.podspec
   RCT-Folly:
     :podspec: "../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec"
   RCTDeprecation:
@@ -3487,7 +3488,7 @@ SPEC CHECKSUMS:
   Expo: 1915c9c2b3d0ba67e818e0eb0b54bc0cf6a3f391
   ExpoAsset: 3636e70a874487efd0a677f6c064dbc9fc8f174b
   ExpoAudio: 4909b976000ae98a23fc1db5d2da4a791f56f96c
-  ExpoBackgroundFetch: 77a32fdb958d1ff4f2d965650c024d359e66669d
+  ExpoBackgroundTask: 2c988fa88705c72b07f0e60d5661d566df611980
   ExpoBattery: b9597547bbd1c4b2893d3a72074d8108c23a478b
   ExpoCalendar: 2f454646d6368d72e49dc5cb98d2dcaad95d120a
   ExpoClipboard: 7c8c987388fcde07e799050a8c7a7d84ece2c919
@@ -3515,16 +3516,15 @@ SPEC CHECKSUMS:
   ExpoSMS: cd74cf9d83be085384481c47bfe7240baba70cb6
   ExpoSpeech: 05b9b4569d356b046f76a70cf15d8d11568510b0
   ExpoSQLite: 2e093a6c9ca7b43736211a6ba1e3c38baa612b44
-  ExpoTaskManager: 563a5b3625ceea4957221b531aa11ff8300842e0
+  ExpoTaskManager: a288a5a5eab33009b1fb7a413ba47ef7eac23fba
   ExpoWebBrowser: f81f8e35afd7f61ec809622ef354c579a3b580e2
   fast_float: b32c788ed9c6a8c584d114d0047beda9664e7cc6
   FBLazyVector: 82d1d7996af4c5850242966eb81e73f9a6dfab1e
   fmt: a40bb5bd0294ea969aaaba240a927bd33d878cdd
   glog: 5683914934d5b6e4240e497e0f4a3b42d1854183
   hermes-engine: 94a333fb97b8135eae5e4fb8fab6a67d61274dd1
-  MediaPipeTasksGenAI: 8eed8e6d03fe26d30c4205cb5295ec7b394432ad
-  MediaPipeTasksGenAIC: cb098ecea44e248efe8fe7e2f62b4cb0df781802
-  NMSSH: cd689ae535a1581a6dd9fd4600ff71247df510a6
+  libssh2-iosx: a096366b4de77f3de01bb1265e26beb2ad5b0784
+  NMSSH: 39d19ff70231635ff73b75052d0f32522a2b009e
   RCT-Folly: 846fda9475e61ec7bcbf8a3fe81edfcaeb090669
   RCTDeprecation: 9da1d0cf93db23ca8b41e8efe9ae558fd9c0077f
   RCTRequired: 92a63c7041031a131fa5206eb082d53f95729b79
@@ -3606,9 +3606,9 @@ SPEC CHECKSUMS:
   RNSVG: 595abfa0f9ac26d56afcaaedf4e37a00f54cab71
   RNWorklets: 01efdd402d236a13651ea5ea5437ca85a44e7afa
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
-  UMAppLoader: 6f70977c93a7033f0dc7cf2f0de9b49ce006f7bd
+  UMAppLoader: 045699ef1cc6afda399a5c78bde728f23bcce213
   Yoga: b669e79fa0f8d3f6f5e35372345f54b99e06b13c
 
-PODFILE CHECKSUM: 524d7f023377f2ed6c60fb96f0c60b24a64cb24f
+PODFILE CHECKSUM: e3091193c83ffb64fe13fdd3677a2f3d5d895f56
 
 COCOAPODS: 1.16.2

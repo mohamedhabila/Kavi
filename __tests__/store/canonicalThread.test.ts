@@ -9,11 +9,9 @@
 // fresh conversations. Side threads must never be touched by either path.
 // ---------------------------------------------------------------------------
 
-import {
-  collapseConversationsToCanonical,
-  useChatStore,
-} from '../../src/store/useChatStore';
-import type { Conversation } from '../../src/types';
+import { collapseConversationsToCanonical } from '../../src/store/chatStoreNormalization';
+import { useChatStore } from '../../src/store/useChatStore';
+import type { Conversation } from '../../src/types/conversation';
 
 function makeConversation(overrides: Partial<Conversation>): Conversation {
   return {
@@ -109,6 +107,29 @@ describe('collapseConversationsToCanonical (v6→v7)', () => {
     expect(byId.b.isCanonical).not.toBe(true);
   });
 
+  it('recovers malformed archived canonical rows by promoting the newest canonical', () => {
+    const out = collapseConversationsToCanonical([
+      makeConversation({
+        id: 'old',
+        personaId: 'researcher',
+        updatedAt: 100,
+        isCanonical: true,
+      }),
+      makeConversation({
+        id: 'new',
+        personaId: 'researcher',
+        updatedAt: 300,
+        isCanonical: true,
+        archivedFromMigration: true,
+      }),
+    ]);
+    const byId = Object.fromEntries(out.map((c) => [c.id, c]));
+    expect(byId.new.isCanonical).toBe(true);
+    expect(byId.new.archivedFromMigration).toBe(false);
+    expect(byId.old.archivedFromMigration).toBe(true);
+    expect(byId.old.isCanonical).toBe(false);
+  });
+
   it('returns the input unchanged when given an empty array', () => {
     expect(collapseConversationsToCanonical([])).toEqual([]);
   });
@@ -186,13 +207,40 @@ describe('getOrCreateCanonicalThread', () => {
 
   it('honors activate=false to keep the previously active conversation', () => {
     useChatStore.setState({ activeConversationId: 'pinned' });
-    const id = useChatStore
-      .getState()
-      .getOrCreateCanonicalThread('openai', 'sys', undefined, {
-        personaId: 'researcher',
-        activate: false,
-      });
+    const id = useChatStore.getState().getOrCreateCanonicalThread('openai', 'sys', undefined, {
+      personaId: 'researcher',
+      activate: false,
+    });
     expect(useChatStore.getState().activeConversationId).toBe('pinned');
     expect(id).toBeTruthy();
+  });
+
+  it('prefers the newest canonical when malformed duplicate canonicals already exist', () => {
+    useChatStore.setState({
+      conversations: [
+        makeConversation({
+          id: 'old',
+          personaId: 'researcher',
+          updatedAt: 100,
+          isCanonical: true,
+        }),
+        makeConversation({
+          id: 'new',
+          personaId: 'researcher',
+          updatedAt: 300,
+          isCanonical: true,
+        }),
+      ],
+      activeConversationId: null,
+      isLoading: false,
+    });
+
+    const id = useChatStore
+      .getState()
+      .getOrCreateCanonicalThread('openai', 'sys', 'gpt-x', { personaId: 'researcher' });
+
+    expect(id).toBe('new');
+    expect(useChatStore.getState().activeConversationId).toBe('new');
+    expect(useChatStore.getState().conversations).toHaveLength(2);
   });
 });

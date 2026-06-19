@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 // OAuth2 + PKCE authentication flows for provider tokens.
 
-import type { OAuthProvider, OAuthProfile } from '../../types';
+import type { OAuthProvider, OAuthProfile } from '../../types/oauth';
 import { saveSecure, getSecure, deleteSecure } from '../storage/SecureStorage';
 import { generateId } from '../../utils/id';
 

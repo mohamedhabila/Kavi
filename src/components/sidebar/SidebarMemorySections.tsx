@@ -12,20 +12,13 @@
 // ---------------------------------------------------------------------------
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { Compass, Pin, Search, Hash } from 'lucide-react-native';
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Compass, Pin, Search, Hash, Brain } from 'lucide-react-native';
 import { AppPalette } from '../../theme/useAppTheme';
-import { useTranslation } from '../../i18n';
-import type { Conversation } from '../../types';
+import { useTranslation } from '../../i18n/useTranslation';
+import type { Conversation } from '../../types/conversation';
 import type { MemoryBlock } from '../../services/memory/blocks';
-import { MemoryFact } from '@/services/memory/factStore';
+import type { MemoryFact } from '../../services/memory/facts/types';
 import { subscribeToMemoryChanges } from '../../services/memory/store';
 
 // ── Memory readers (guarded) ────────────────────────────────────────────────
@@ -41,23 +34,65 @@ function safeGetBlock(label: string): MemoryBlock | null {
   }
 }
 
-function safeGetWorkingBlockContent(label: 'active_focus' | 'open_threads'): string | null {
+function safeGetWorkingBlockContent(
+  label: 'active_focus' | 'open_threads',
+  options?: { conversationId?: string | null },
+): string | null {
   try {
-    const { listRecentWorkingBlocks } = require('../../services/memory/workingBlocks');
+    const {
+      getWorkingBlock,
+      listRecentWorkingBlocks,
+    } = require('../../services/memory/workingBlocks');
+    const conversationId = options?.conversationId?.trim();
+    if (conversationId) {
+      const scopedBlock = getWorkingBlock(label, {
+        conversationId,
+        threadId: conversationId,
+      });
+      return scopedBlock?.content ?? null;
+    }
     const block = listRecentWorkingBlocks(label, 1)?.[0];
     if (block?.content) return block.content;
   } catch {
     // fall back below
   }
-  return safeGetBlock(label)?.content ?? null;
+  return options?.conversationId ? null : (safeGetBlock(label)?.content ?? null);
 }
 
 function safeListPinnedFacts(limit: number): MemoryFact[] {
   try {
-    const { listFacts } = require('../../services/memory/facts');
+    const { listFacts } = require('../../services/memory/facts/queries');
     return listFacts({ pinnedOnly: true, limit });
   } catch {
     return [];
+  }
+}
+
+function safeCountFacts(): number {
+  try {
+    const { countFacts } = require('../../services/memory/facts/queries');
+    return countFacts();
+  } catch {
+    return 0;
+  }
+}
+
+function safeCountEpisodes(): number {
+  try {
+    const { countEpisodes } = require('../../services/memory/episodes/queries');
+    return countEpisodes();
+  } catch {
+    return 0;
+  }
+}
+
+function safeGetActiveTaskTitle(threadId?: string | null): string | null {
+  if (!threadId) return null;
+  try {
+    const { getActiveTaskTitle } = require('../../services/memory/taskStack');
+    return getActiveTaskTitle(threadId);
+  } catch {
+    return null;
   }
 }
 
@@ -137,14 +172,19 @@ export function bucketConversationsByTime(
 
 interface TodaysFocusTileProps {
   colors: AppPalette;
+  conversationId?: string | null;
   onPress?: () => void;
 }
 
-export const TodaysFocusTile: React.FC<TodaysFocusTileProps> = ({ colors, onPress }) => {
+export const TodaysFocusTile: React.FC<TodaysFocusTileProps> = ({
+  colors,
+  conversationId,
+  onPress,
+}) => {
   const { t } = useTranslation();
   const styles = useMemo(() => createStyles(colors), [colors]);
   useMemoryVersion();
-  const focus = (safeGetWorkingBlockContent('active_focus') ?? '').trim();
+  const focus = (safeGetWorkingBlockContent('active_focus', { conversationId }) ?? '').trim();
   const isEmpty = focus.length === 0;
 
   return (
@@ -173,14 +213,19 @@ export const TodaysFocusTile: React.FC<TodaysFocusTileProps> = ({ colors, onPres
 
 interface OpenThreadsChipsProps {
   colors: AppPalette;
+  conversationId?: string | null;
   onSelect?: (label: string) => void;
 }
 
-export const OpenThreadsChips: React.FC<OpenThreadsChipsProps> = ({ colors, onSelect }) => {
+export const OpenThreadsChips: React.FC<OpenThreadsChipsProps> = ({
+  colors,
+  conversationId,
+  onSelect,
+}) => {
   const { t } = useTranslation();
   const styles = useMemo(() => createStyles(colors), [colors]);
   useMemoryVersion();
-  const content = safeGetWorkingBlockContent('open_threads');
+  const content = safeGetWorkingBlockContent('open_threads', { conversationId });
   const labels = useMemo(() => parseOpenThreads(content), [content]);
 
   return (
@@ -263,11 +308,7 @@ interface PinnedMomentsProps {
   limit?: number;
 }
 
-export const PinnedMoments: React.FC<PinnedMomentsProps> = ({
-  colors,
-  onSelect,
-  limit = 5,
-}) => {
+export const PinnedMoments: React.FC<PinnedMomentsProps> = ({ colors, onSelect, limit = 5 }) => {
   const { t } = useTranslation();
   const styles = useMemo(() => createStyles(colors), [colors]);
   useMemoryVersion();
@@ -306,6 +347,69 @@ export const PinnedMoments: React.FC<PinnedMomentsProps> = ({
         </View>
       )}
     </View>
+  );
+};
+
+interface MemoryStatsProps {
+  colors: AppPalette;
+  conversationId?: string | null;
+  consolidationTierLabel?: string | null;
+  onPress?: () => void;
+}
+
+export const MemoryStats: React.FC<MemoryStatsProps> = ({
+  colors,
+  conversationId,
+  consolidationTierLabel,
+  onPress,
+}) => {
+  const { t } = useTranslation();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  useMemoryVersion();
+  const factCount = safeCountFacts();
+  const episodeCount = safeCountEpisodes();
+  const activeTask = safeGetActiveTaskTitle(conversationId);
+
+  return (
+    <TouchableOpacity
+      style={styles.section}
+      onPress={onPress}
+      disabled={!onPress}
+      accessibilityRole="button"
+      accessibilityLabel={t('nav.memoryStats')}
+      testID="sidebar-memory-stats"
+    >
+      <View style={styles.sectionHeader}>
+        <Brain size={14} color={colors.textSecondary} />
+        <Text style={styles.sectionTitle}>{t('nav.memoryStats')}</Text>
+      </View>
+      <View style={styles.statsRow}>
+        <Text style={styles.statsItem} testID="sidebar-memory-facts">
+          {t('nav.memoryStatsFacts', { count: factCount })}
+        </Text>
+        <Text style={styles.statsDot}>·</Text>
+        <Text style={styles.statsItem} testID="sidebar-memory-episodes">
+          {t('nav.memoryStatsEpisodes', { count: episodeCount })}
+        </Text>
+        {activeTask ? (
+          <>
+            <Text style={styles.statsDot}>·</Text>
+            <Text style={styles.statsItemActive} numberOfLines={1} testID="sidebar-memory-task">
+              {t('nav.memoryStatsActiveTask', { task: activeTask })}
+            </Text>
+          </>
+        ) : null}
+      </View>
+      {consolidationTierLabel ? (
+        <Text
+          style={styles.consolidationChip}
+          numberOfLines={2}
+          testID="sidebar-memory-consolidation-tier"
+        >
+          {consolidationTierLabel}
+        </Text>
+      ) : null}
+    </TouchableOpacity>
   );
 };
 
@@ -403,5 +507,31 @@ const createStyles = (colors: AppPalette) =>
       flex: 1,
       fontSize: 12,
       color: colors.text,
+    },
+    statsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      flexWrap: 'wrap',
+    },
+    statsItem: {
+      fontSize: 12,
+      color: colors.textSecondary,
+    },
+    statsDot: {
+      fontSize: 12,
+      color: colors.textTertiary,
+    },
+    statsItemActive: {
+      fontSize: 12,
+      color: colors.primary,
+      fontWeight: '500',
+      maxWidth: 180,
+    },
+    consolidationChip: {
+      marginTop: 6,
+      fontSize: 11,
+      color: colors.textSecondary,
+      lineHeight: 15,
     },
   });

@@ -1,6 +1,6 @@
 import { getSecure } from '../storage/SecureStorage';
-import { i18n } from '../../i18n';
-import type { WorkspaceTargetConfig } from '../../types';
+import { i18n } from '../../i18n/manager';
+import type { WorkspaceTargetConfig } from '../../types/remote';
 
 export type WorkspaceProvider = NonNullable<WorkspaceTargetConfig['provider']>;
 export type WorkspaceAuthMode = NonNullable<WorkspaceTargetConfig['authMode']>;

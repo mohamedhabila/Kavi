@@ -81,6 +81,12 @@ describe('getContextWindow', () => {
     expect(getContextWindow('gemini-3.5-flash')).toBe(1000000);
   });
 
+  it('supports hosted model namespaces in family fallbacks', () => {
+    expect(getContextWindow('openai/gpt-5.4-mini')).toBe(400000);
+    expect(getContextWindow('anthropic/claude-sonnet-4-6-latest')).toBe(1000000);
+    expect(getContextWindow('google/gemini-2.5-pro')).toBe(1000000);
+  });
+
   it('returns prefix match', () => {
     expect(getContextWindow('claude-sonnet-4-6-latest')).toBe(1000000);
   });

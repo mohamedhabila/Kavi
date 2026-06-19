@@ -7,12 +7,12 @@ jest.mock('../../../src/services/storage/SecureStorage', () => ({
   getSecure: jest.fn().mockResolvedValue(null),
 }));
 
-jest.mock('../../../src/services/browser/automation', () => ({
+jest.mock('../../../src/services/browser/automation/actions', () => ({
   browserScreenshot: jest.fn(),
 }));
 
 import { takeScreenshot } from '../../../src/services/browser/jobs';
-import { browserScreenshot } from '../../../src/services/browser/automation';
+import { browserScreenshot } from '../../../src/services/browser/automation/actions';
 
 const mockBrowserScreenshot = browserScreenshot as jest.MockedFunction<typeof browserScreenshot>;
 
@@ -31,9 +31,15 @@ jest.mock('../../../src/services/remote/store', () => ({
   getRemoteSessionRuntime: jest.fn(),
   addRemoteArtifact: jest.fn(),
 }));
-jest.mock('../../../src/services/browser/providers', () => ({
+jest.mock('../../../src/services/browser/providers/labels', () => ({
   getBrowserProviderLabel: jest.fn(() => 'Browserbase'),
+}));
+
+jest.mock('../../../src/services/browser/providers/readiness', () => ({
   getBrowserProviderReadiness: jest.fn(() => ({ launchable: true, reason: '' })),
+}));
+
+jest.mock('../../../src/services/browser/providers/connection', () => ({
   resolveBrowserProviderConnection: jest.fn(),
   withBrowserProviderAuth: jest.fn((url: string) => ({ url, headers: {} })),
 }));

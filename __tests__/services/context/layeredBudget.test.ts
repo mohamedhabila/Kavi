@@ -6,7 +6,7 @@ import {
   LAYERED_L3_FOCUS_CAP,
   LAYERED_L4_USER_TURN_CAP,
 } from '../../../src/services/context/layeredBudget';
-import type { MemoryFact } from '../../../src/services/memory/facts';
+import type { MemoryFact } from '../../../src/services/memory/facts/types';
 
 function fact(overrides: Partial<MemoryFact> & { id: string; objectText?: string }): MemoryFact {
   return {
@@ -149,7 +149,9 @@ describe('applyMemoryCascade', () => {
     expect(actions).toContain('window_buffer_tail');
     // Cascade order — window_buffer_tail must precede compress_l2_blocks/tier2 if both present.
     if (actions.includes('compress_l2_blocks')) {
-      expect(actions.indexOf('window_buffer_tail')).toBeLessThan(actions.indexOf('compress_l2_blocks'));
+      expect(actions.indexOf('window_buffer_tail')).toBeLessThan(
+        actions.indexOf('compress_l2_blocks'),
+      );
     }
   });
 

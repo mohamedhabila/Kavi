@@ -12,10 +12,7 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
-import {
-  ensureFactSchema,
-  resetFactSchemaCacheForTests,
-} from '../../src/services/memory/factStore';
+import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { ensureDefaultBlocks } from '../../src/services/memory/blocks';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import { executeTool } from '../../src/engine/tools';
@@ -66,5 +63,22 @@ describe('memory tools — opt-out gate', () => {
     const raw = await executeTool('memory_block_read', JSON.stringify({ label: 'profile' }), 'conv-1');
     const parsed = JSON.parse(raw);
     expect(parsed.code).not.toBe('permission_denied');
+  });
+
+  it('adds runtime conversation provenance to memory_remember writes', async () => {
+    const raw = await executeTool(
+      'memory_remember',
+      JSON.stringify({
+        subject: 'user',
+        predicate: 'timezone',
+        value: 'UTC+1',
+      }),
+      'conv-runtime-memory',
+    );
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.fact.scope).toBe('conversation');
+    expect(parsed.fact.originConversationId).toBe('conv-runtime-memory');
   });
 });

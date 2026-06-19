@@ -1,4 +1,4 @@
-_research/
+.private/
 coverage/
 node_modules/
 node-compile-cache/
@@ -9,6 +9,7 @@ jest_dx/
 .tmp/
 .venv/
 .expo/
+release-artifacts/
 dist/
 web-build/
 ios/Pods/
@@ -23,10 +24,17 @@ android/app/.cxx/
 *.mobileprovision
 *.apk
 *.aab
+*.ipa
+*.xcarchive
 *.app
 *.orig.*
 .env
 .env.local
+.env.*.local
+.env*.local
+ios/.xcode.env.local
+android/keystore.properties
+**/keystore.properties
 Kavi-simulator.app
 assets/editor/
 android/app/src/main/assets/editor/

@@ -17,18 +17,17 @@ describe('pendingAsyncOperations', () => {
     applyTrackedAsyncToolResult(
       trackedOperations,
       'sessions_spawn',
-      '{"prompt":"research"}',
+      '{"prompt":"research","waitForCompletion":true}',
       JSON.stringify({ status: 'running', sessionId: 'sub-1' }),
     );
 
     expect(getPendingTrackedAsyncOperations(trackedOperations)).toHaveLength(1);
     expect(getPendingTrackedAsyncOperationToolNames(trackedOperations).sort()).toEqual([
       'sessions_cancel',
-      'sessions_status',
       'sessions_wait',
     ]);
     expect(buildPendingAsyncOperationJoinNote(trackedOperations)).toContain(
-      'Primary next step when you need worker outputs: call sessions_wait with {"sessionId":"sub-1"}.',
+      'Primary wait step: sessions_wait with {"sessionId":"sub-1"}.',
     );
 
     applyTrackedAsyncToolResult(
@@ -39,6 +38,22 @@ describe('pendingAsyncOperations', () => {
     );
 
     expect(getPendingTrackedAsyncOperations(trackedOperations)).toHaveLength(0);
+  });
+
+  it('preserves session workstream identity across spawn, status, and wait actions', () => {
+    applyTrackedAsyncToolResult(
+      trackedOperations,
+      'sessions_spawn',
+      '{"prompt":"research","workstreamId":"wait-worker-session"}',
+      JSON.stringify({ status: 'running', sessionId: 'sub-workstream-1' }),
+    );
+
+    applyTrackedAsyncToolResult(
+      trackedOperations,
+      'sessions_status',
+      '{"sessionId":"sub-workstream-1","workstreamId":"wait-worker-session"}',
+      JSON.stringify({ status: 'running', sessionId: 'sub-workstream-1' }),
+    );
   });
 
   it('starts tracking from sessions_status when no prior spawn event was seen', () => {
@@ -84,7 +99,7 @@ describe('pendingAsyncOperations', () => {
     applyTrackedAsyncToolResult(
       trackedOperations,
       'sessions_spawn',
-      '{"prompt":"research"}',
+      '{"prompt":"research","waitForCompletion":true}',
       JSON.stringify({ status: 'running', sessionId: 'sub-1' }),
     );
 
@@ -103,6 +118,19 @@ describe('pendingAsyncOperations', () => {
     );
 
     expect(getPendingTrackedAsyncOperations(trackedOperations)).toHaveLength(0);
+  });
+
+  it('does not treat detached background sessions as pending foreground async work', () => {
+    applyTrackedAsyncToolResult(
+      trackedOperations,
+      'sessions_spawn',
+      '{"prompt":"research"}',
+      JSON.stringify({ status: 'running', sessionId: 'sub-detached-1' }),
+    );
+
+    expect(getPendingTrackedAsyncOperations(trackedOperations)).toHaveLength(0);
+    expect(getPendingTrackedAsyncOperationToolNames(trackedOperations)).toEqual([]);
+    expect(buildPendingAsyncOperationJoinNote(trackedOperations)).toBeUndefined();
   });
 
   it('tracks expo workflows by run id once a run is known', () => {
@@ -126,7 +154,7 @@ describe('pendingAsyncOperations', () => {
       'expo_eas_workflow_status',
       'expo_eas_workflow_wait',
     ]);
-    expect(buildPendingAsyncOperationJoinNote(trackedOperations)).toContain('Expo workflow 123');
+    expect(buildPendingAsyncOperationJoinNote(trackedOperations)).toContain('expo workflow 123');
 
     applyTrackedAsyncToolResult(
       trackedOperations,
@@ -180,7 +208,7 @@ describe('pendingAsyncOperations', () => {
         status: 'running',
       }),
     ]);
-    expect(buildPendingAsyncOperationJoinNote(trackedOperations)).toContain('Expo workflow 123');
+    expect(buildPendingAsyncOperationJoinNote(trackedOperations)).toContain('expo workflow 123');
   });
 
   it('tracks SSH background jobs until they complete', () => {
@@ -196,7 +224,7 @@ describe('pendingAsyncOperations', () => {
       'ssh_background_job_wait',
     ]);
     expect(buildPendingAsyncOperationJoinNote(trackedOperations)).toContain(
-      'SSH background job bg-1',
+      'ssh background job bg-1',
     );
 
     applyTrackedAsyncToolResult(

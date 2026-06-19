@@ -5,40 +5,19 @@
 // file integration for SSH and workspace targets.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Alert } from 'react-native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import {
-  ArrowLeft,
-  Save,
-  FileCode,
-  FolderOpen,
-  Eye,
-  Edit3,
-  RefreshCw,
-  FolderTree,
-  PlusSquare,
-} from 'lucide-react-native';
-import { useAppTheme, AppPalette } from '../theme/useAppTheme';
-import { useTranslation } from '../i18n';
+import { useAppTheme } from '../theme/useAppTheme';
+import { createCodeEditorScreenStyles as createStyles } from './codeEditor/codeEditorScreenStyles';
+import { CodeEditorScreenView } from './codeEditor/CodeEditorScreenView';
+import { useTranslation } from '../i18n/useTranslation';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { FileBrowser, type FileEntry } from '../components/files/FileBrowser';
+import type { FileEntry } from '../components/files/FileBrowser';
 import {
-  CodeEditorWebView,
-  CodeEditorWebViewRef,
+  type CodeEditorWebViewRef,
   detectEditorLanguage,
-  EditorLanguage,
+  type EditorLanguage,
 } from '../components/editor/CodeEditorWebView';
 import {
   getSshTargetLabel,
@@ -57,7 +36,7 @@ import {
   writeConversationWorkspaceTextFile,
 } from '../services/conversationWorkspace/files';
 import { useBackToChat } from '../navigation/useBackToChat';
-import type { SshTargetConfig, WorkspaceTargetConfig } from '../types';
+import type { SshTargetConfig, WorkspaceTargetConfig } from '../types/remote';
 
 type EditorRouteParams = {
   CodeEditor: {
@@ -200,7 +179,6 @@ export const CodeEditorScreen: React.FC = () => {
     return '/';
   }, [activeSshTarget, activeWorkspaceTarget, source]);
   const fileName = activePath.split('/').pop() || untitledFileLabel;
-  const hasRemoteTargets = enabledWorkspaceTargets.length > 0 || enabledSshTargets.length > 0;
   const canPersist =
     source === 'local'
       ? isConversationWorkspaceSource && Boolean(pathDraft.trim())
@@ -641,501 +619,56 @@ export const CodeEditorScreen: React.FC = () => {
         ? t('codeEditor.fullEditorModeMessage')
         : null;
 
+  const openRemoteWork = useCallback(() => {
+    navigation.navigate('RemoteWork');
+  }, [navigation]);
+
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} hitSlop={8} accessibilityLabel={t('common.back')}>
-          <ArrowLeft size={24} color={colors.text} />
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <FileCode size={16} color={colors.textSecondary} />
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {fileName || t('codeEditor.title')}
-          </Text>
-          {isDirty && <View style={styles.dirtyDot} />}
-        </View>
-        <View style={styles.headerActions}>
-          <TouchableOpacity
-            onPress={toggleReadOnly}
-            hitSlop={8}
-            style={styles.headerBtn}
-            accessibilityLabel={
-              readOnly ? t('codeEditor.switchToEditable') : t('codeEditor.switchToReadOnly')
-            }
-          >
-            {readOnly ? (
-              <Eye size={18} color={colors.textSecondary} />
-            ) : (
-              <Edit3 size={18} color={colors.primary} />
-            )}
-          </TouchableOpacity>
-          {!readOnly && (
-            <TouchableOpacity
-              onPress={handleSave}
-              hitSlop={8}
-              style={styles.headerBtn}
-              disabled={!isDirty || saving || !canPersist}
-              accessibilityLabel={t('codeEditor.saveFile')}
-            >
-              <Save
-                size={18}
-                color={isDirty && canPersist ? colors.primary : colors.textTertiary}
-              />
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-
-      <View style={styles.sourceBar}>
-        {(['workspace', 'ssh', 'local'] as Array<'workspace' | 'ssh' | 'local'>).map((entry) => {
-          const disabled =
-            (entry === 'workspace' && enabledWorkspaceTargets.length === 0) ||
-            (entry === 'ssh' && enabledSshTargets.length === 0);
-          const label =
-            entry === 'workspace'
-              ? t('codeEditor.workspaceLabel')
-              : entry === 'ssh'
-                ? t('codeEditor.sshLabel')
-                : localSourceLabel;
-          return (
-            <TouchableOpacity
-              key={entry}
-              style={[
-                styles.sourceChip,
-                source === entry && styles.sourceChipActive,
-                disabled && styles.sourceChipDisabled,
-              ]}
-              onPress={() => !disabled && handleSourceChange(entry)}
-              disabled={disabled}
-            >
-              <Text
-                style={[
-                  styles.sourceChipText,
-                  source === entry && styles.sourceChipTextActive,
-                  disabled && styles.sourceChipTextDisabled,
-                ]}
-              >
-                {label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {source !== 'local' && (
-        <View style={styles.targetBar}>
-          <Text style={styles.sectionLabel}>{t('codeEditor.targetLabel')}</Text>
-          <View style={styles.targetChipsWrap}>
-            {(source === 'workspace' ? enabledWorkspaceTargets : enabledSshTargets).map(
-              (target) => (
-                <TouchableOpacity
-                  key={target.id}
-                  style={[styles.targetChip, target.id === targetId && styles.targetChipActive]}
-                  onPress={() => handleTargetChange(target.id)}
-                >
-                  <Text
-                    style={[
-                      styles.targetChipText,
-                      target.id === targetId && styles.targetChipTextActive,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {target.name}
-                  </Text>
-                </TouchableOpacity>
-              ),
-            )}
-          </View>
-        </View>
-      )}
-
-      <View style={styles.pathBar}>
-        <FolderOpen size={12} color={colors.textTertiary} />
-        <TextInput
-          value={pathDraft}
-          onChangeText={setPathDraft}
-          style={styles.pathInput}
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={(source !== 'local' || isConversationWorkspaceSource) && !readOnly}
-          placeholder={t('codeEditor.untitledPath')}
-          placeholderTextColor={colors.textTertiary}
-        />
-        {language && (
-          <View style={styles.langBadge}>
-            <Text style={styles.langBadgeText}>{language}</Text>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.contextBar}>
-        <Text style={styles.contextText} numberOfLines={1}>
-          {targetLabel}
-        </Text>
-        <View style={styles.contextActions}>
-          {source !== 'local' && (
-            <TouchableOpacity
-              style={styles.contextBtn}
-              onPress={() => setBrowserVisible((value) => !value)}
-            >
-              <FolderTree size={14} color={colors.primary} />
-              <Text style={styles.contextBtnText}>{t('codeEditor.browseFiles')}</Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity style={styles.contextBtn} onPress={handleNewFile}>
-            <PlusSquare size={14} color={colors.primary} />
-            <Text style={styles.contextBtnText}>{t('codeEditor.newFile')}</Text>
-          </TouchableOpacity>
-          {(source !== 'local' || isConversationWorkspaceSource) && activePath ? (
-            <TouchableOpacity style={styles.contextBtn} onPress={handleReload}>
-              <RefreshCw size={14} color={colors.primary} />
-              <Text style={styles.contextBtnText}>{t('codeEditor.reloadFile')}</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      </View>
-
-      {modeBannerText ? (
-        <View
-          style={[
-            styles.modeBanner,
-            editorMode === 'fallback' ? styles.modeBannerWarning : styles.modeBannerSuccess,
-          ]}
-        >
-          <Text style={styles.modeBannerText}>{modeBannerText}</Text>
-          {editorMode === 'fallback' && editorModeReason ? (
-            <Text style={styles.modeBannerSubtext} numberOfLines={1}>
-              {editorModeReason}
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
-
-      {source !== 'local' && !activeTarget ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>{t('codeEditor.noTargetTitle')}</Text>
-          <Text style={styles.emptyBody}>{t('codeEditor.noTargetMessage')}</Text>
-          <TouchableOpacity
-            style={styles.primaryCta}
-            onPress={() => navigation.navigate('RemoteWork')}
-          >
-            <Text style={styles.primaryCtaText}>{t('codeEditor.openRemoteWork')}</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
-
-      {!hasRemoteTargets &&
-      source === 'local' &&
-      !isConversationWorkspaceSource &&
-      !activePath &&
-      !editorSeedContent ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>{t('codeEditor.startEditingTitle')}</Text>
-          <Text style={styles.emptyBody}>{t('codeEditor.startEditingMessage')}</Text>
-          <TouchableOpacity
-            style={styles.primaryCta}
-            onPress={() => navigation.navigate('RemoteWork')}
-          >
-            <Text style={styles.primaryCtaText}>{t('codeEditor.openRemoteWork')}</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
-
-      {browserVisible && source !== 'local' && activeTarget ? (
-        <View style={styles.browserPanel}>
-          <Text style={styles.sectionLabel}>{t('codeEditor.fileBrowserTitle')}</Text>
-          <FileBrowser
-            rootPath={activeTargetRoot}
-            listDirectory={listCurrentDirectory}
-            onFileSelect={(nextPath) => handleOpenFile(nextPath)}
-            maxHeight={260}
-          />
-        </View>
-      ) : null}
-
-      {/* Editor */}
-      {Platform.OS === 'ios' ? (
-        <KeyboardAvoidingView style={styles.flex} behavior="padding">
-          {loading ? (
-            <View style={styles.loadingState}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={styles.loadingText}>{t('codeEditor.loadingFile')}</Text>
-            </View>
-          ) : (
-            <CodeEditorWebView
-              key={`${editorKey}-${source}-${targetId ?? 'none'}`}
-              ref={editorRef}
-              initialContent={editorSeedContent}
-              language={language}
-              readOnly={readOnly}
-              onDirtyChange={handleDirtyChange}
-              onContent={handleContent}
-              onModeChange={(mode, reason) => {
-                setEditorMode(mode);
-                setEditorModeReason(reason ?? null);
-              }}
-              style={styles.flex}
-            />
-          )}
-        </KeyboardAvoidingView>
-      ) : (
-        <View style={styles.flex}>
-          {loading ? (
-            <View style={styles.loadingState}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={styles.loadingText}>{t('codeEditor.loadingFile')}</Text>
-            </View>
-          ) : (
-            <CodeEditorWebView
-              key={`${editorKey}-${source}-${targetId ?? 'none'}`}
-              ref={editorRef}
-              initialContent={editorSeedContent}
-              language={language}
-              readOnly={readOnly}
-              onDirtyChange={handleDirtyChange}
-              onContent={handleContent}
-              onModeChange={(mode, reason) => {
-                setEditorMode(mode);
-                setEditorModeReason(reason ?? null);
-              }}
-              style={styles.flex}
-            />
-          )}
-        </View>
-      )}
-    </SafeAreaView>
+    <CodeEditorScreenView
+      activePath={activePath}
+      activeTarget={activeTarget}
+      activeTargetRoot={activeTargetRoot}
+      browserVisible={browserVisible}
+      canPersist={canPersist}
+      colors={colors}
+      editorKey={editorKey}
+      editorMode={editorMode}
+      editorModeReason={editorModeReason}
+      editorRef={editorRef}
+      editorSeedContent={editorSeedContent}
+      enabledSshTargets={enabledSshTargets}
+      enabledWorkspaceTargets={enabledWorkspaceTargets}
+      fileName={fileName}
+      handleBack={handleBack}
+      handleContent={handleContent}
+      handleDirtyChange={handleDirtyChange}
+      handleNewFile={handleNewFile}
+      handleOpenFile={handleOpenFile}
+      handleReload={handleReload}
+      handleSave={handleSave}
+      handleSourceChange={handleSourceChange}
+      handleTargetChange={handleTargetChange}
+      isConversationWorkspaceSource={isConversationWorkspaceSource}
+      isDirty={isDirty}
+      language={language}
+      listCurrentDirectory={listCurrentDirectory}
+      loading={loading}
+      localSourceLabel={localSourceLabel}
+      modeBannerText={modeBannerText}
+      openRemoteWork={openRemoteWork}
+      pathDraft={pathDraft}
+      readOnly={readOnly}
+      saving={saving}
+      setBrowserVisible={setBrowserVisible}
+      setEditorMode={setEditorMode}
+      setEditorModeReason={setEditorModeReason}
+      setPathDraft={setPathDraft}
+      source={source}
+      styles={styles}
+      t={t}
+      targetId={targetId}
+      targetLabel={targetLabel}
+      toggleReadOnly={toggleReadOnly}
+    />
   );
 };
-
-const createStyles = (colors: AppPalette) =>
-  StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.background },
-    flex: { flex: 1 },
-    sourceBar: {
-      flexDirection: 'row',
-      gap: 8,
-      paddingHorizontal: 16,
-      paddingTop: 12,
-    },
-    sourceChip: {
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surface,
-    },
-    sourceChipActive: {
-      borderColor: colors.primary,
-      backgroundColor: colors.primarySoft,
-    },
-    sourceChipDisabled: {
-      opacity: 0.45,
-    },
-    sourceChipText: {
-      fontSize: 12,
-      color: colors.textSecondary,
-      fontWeight: '600',
-    },
-    sourceChipTextActive: {
-      color: colors.primary,
-    },
-    sourceChipTextDisabled: {
-      color: colors.textTertiary,
-    },
-    targetBar: {
-      paddingHorizontal: 16,
-      paddingTop: 10,
-      gap: 8,
-    },
-    sectionLabel: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: colors.textSecondary,
-    },
-    targetChipsWrap: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 8,
-    },
-    targetChip: {
-      maxWidth: '100%',
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surface,
-    },
-    targetChipActive: {
-      borderColor: colors.primary,
-      backgroundColor: colors.primarySoft,
-    },
-    targetChipText: {
-      fontSize: 12,
-      color: colors.textSecondary,
-    },
-    targetChipTextActive: {
-      color: colors.primary,
-      fontWeight: '600',
-    },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      backgroundColor: colors.header,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    headerCenter: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      marginHorizontal: 12,
-    },
-    headerTitle: { fontSize: 15, fontWeight: '600', color: colors.text, flexShrink: 1 },
-    dirtyDot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: colors.warning,
-      marginLeft: 4,
-    },
-    headerActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    headerBtn: { padding: 4 },
-    pathBar: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      paddingHorizontal: 16,
-      paddingVertical: 6,
-      backgroundColor: colors.surface,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    pathInput: {
-      flex: 1,
-      fontSize: 11,
-      color: colors.textTertiary,
-      fontFamily: 'monospace',
-      paddingVertical: 0,
-    },
-    langBadge: {
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: 4,
-      backgroundColor: colors.primarySoft,
-    },
-    langBadgeText: { fontSize: 10, fontWeight: '600', color: colors.primary },
-    contextBar: {
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-      gap: 8,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-      backgroundColor: colors.background,
-    },
-    contextText: {
-      fontSize: 12,
-      color: colors.textSecondary,
-      fontFamily: 'monospace',
-    },
-    contextActions: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 8,
-    },
-    contextBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surface,
-    },
-    contextBtnText: {
-      fontSize: 12,
-      color: colors.textSecondary,
-      fontWeight: '500',
-    },
-    modeBanner: {
-      marginHorizontal: 16,
-      marginTop: 10,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      borderRadius: 10,
-      borderWidth: 1,
-      gap: 2,
-    },
-    modeBannerWarning: {
-      backgroundColor: colors.warning + '15',
-      borderColor: colors.warning,
-    },
-    modeBannerSuccess: {
-      backgroundColor: colors.primarySoft,
-      borderColor: colors.primary,
-    },
-    modeBannerText: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: colors.text,
-    },
-    modeBannerSubtext: {
-      fontSize: 11,
-      color: colors.textSecondary,
-    },
-    browserPanel: {
-      paddingHorizontal: 16,
-      paddingTop: 12,
-      gap: 8,
-    },
-    emptyState: {
-      marginHorizontal: 16,
-      marginTop: 12,
-      padding: 16,
-      borderRadius: 14,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
-      gap: 10,
-    },
-    emptyTitle: {
-      fontSize: 16,
-      fontWeight: '700',
-      color: colors.text,
-    },
-    emptyBody: {
-      fontSize: 13,
-      lineHeight: 20,
-      color: colors.textSecondary,
-    },
-    primaryCta: {
-      alignSelf: 'flex-start',
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 999,
-      backgroundColor: colors.primary,
-    },
-    primaryCtaText: {
-      fontSize: 12,
-      color: colors.onPrimary,
-      fontWeight: '700',
-    },
-    loadingState: {
-      flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-    },
-    loadingText: {
-      fontSize: 13,
-      color: colors.textSecondary,
-    },
-  });

@@ -98,7 +98,6 @@ jest.mock('expo-file-system', () => {
 });
 
 const { __resetStore, __getStore, __getDirs } = require('expo-file-system');
-const { File, Directory, Paths } = require('expo-file-system');
 
 beforeEach(() => {
   __resetStore();
@@ -260,6 +259,21 @@ describe('executeGlobSearch', () => {
     const parsed = JSON.parse(result);
     expect(parsed.count).toBe(2);
     expect(parsed.matches).toEqual(expect.arrayContaining(['src/a.ts', 'src/b.ts']));
+  });
+
+  it('treats dot path as the workspace root for file-backed directories', async () => {
+    setupWorkspace(CONV, {
+      'inbox/untrusted_note.txt': 'safe',
+    });
+
+    const result = await executeGlobSearch({ pattern: '**/*', path: '.' }, CONV);
+    const parsed = JSON.parse(result);
+
+    expect(parsed.path).toBe('.');
+    expect(parsed.count).toBeGreaterThan(0);
+    expect(parsed.matches).toEqual(
+      expect.arrayContaining(['inbox/', 'inbox/untrusted_note.txt']),
+    );
   });
 
   it('returns no matches message', async () => {

@@ -6,15 +6,15 @@
 // batch embedding, content-hash deduplication, and efficient retrieval.
 
 import * as SQLite from 'expo-sqlite';
-import { cosineSimilarity, getEmbeddingCached } from './embeddings';
-import { temporalDecay } from './embeddings';
+import type { EmbeddingConfig, MemorySearchResult } from '../../types/memory';
+import { getEmbeddingCached } from './embeddings';
+import { createArrayChunkIndex, searchChunkIndex } from './ranking/chunkIndex';
 import {
-  readConversationMemory,
-  readGlobalMemory,
   listDailyMemoryFiles,
+  readConversationMemory,
   readDailyMemory,
+  readGlobalMemory,
 } from './store';
-import type { EmbeddingConfig, MemorySearchResult } from '../../types';
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -157,10 +157,7 @@ function parseEmbedding(raw: string | null): number[] | null {
   }
 }
 
-function normalizeChunkScope(
-  raw: unknown,
-  source: string,
-): 'global' | 'conversation' | 'daily' {
+function normalizeChunkScope(raw: unknown, source: string): 'global' | 'conversation' | 'daily' {
   if (raw === 'conversation' || raw === 'daily') return raw;
   if (source.startsWith('conversation/')) return 'conversation';
   if (source.startsWith('daily/')) return 'daily';
@@ -296,13 +293,19 @@ export function replaceChunksForSource(
 ): number {
   const database = getMemoryDb();
   const sourceKey = chunkSourceKey(source, options);
-  database.runSync('DELETE FROM memory_chunks WHERE source_key = ? OR source = ?', sourceKey, source);
+  database.runSync(
+    'DELETE FROM memory_chunks WHERE source_key = ? OR source = ?',
+    sourceKey,
+    source,
+  );
   let inserted = 0;
   for (const chunk of chunks) {
-    if (insertChunk(source, chunk.content, chunk.timestamp, chunk.embedding, {
-      ...options,
-      sourceKey,
-    })) {
+    if (
+      insertChunk(source, chunk.content, chunk.timestamp, chunk.embedding, {
+        ...options,
+        sourceKey,
+      })
+    ) {
       inserted += 1;
     }
   }
@@ -363,7 +366,8 @@ export async function indexMemoryToSqlite(
   if (!scope || scope === 'global' || scope === 'all') {
     const global = await readGlobalMemory();
     if (global) {
-      const sections = global.split(/\n(?=#{1,3}\s)/)
+      const sections = global
+        .split(/\n(?=#{1,3}\s)/)
         .map((section) => section.trim())
         .filter(Boolean)
         .map((content) => ({ content, timestamp: Date.now() }));
@@ -378,7 +382,8 @@ export async function indexMemoryToSqlite(
   if ((scope === 'conversation' || scope === 'all') && options?.conversationId) {
     const conversationMemory = await readConversationMemory(options.conversationId);
     if (conversationMemory) {
-      const sections = conversationMemory.split(/\n(?=#{1,3}\s)/)
+      const sections = conversationMemory
+        .split(/\n(?=#{1,3}\s)/)
         .map((section) => section.trim())
         .filter(Boolean)
         .map((content) => ({ content, timestamp: Date.now() }));
@@ -443,64 +448,22 @@ export async function sqliteHybridSearch(
   const requestedScope = options?.scope || 'global';
   const queryTokens = tokenizeForSearch(query);
 
-  // Score all chunks from SQLite
-  const chunks = getAllChunks();
-  const scored: MemorySearchResult[] = [];
-
-  for (const chunk of chunks) {
-    if (requestedScope === 'global' && chunk.scope === 'conversation') {
-      continue;
-    }
-    if (requestedScope === 'conversation') {
-      if (chunk.scope !== 'conversation') continue;
-      if (options?.conversationId && chunk.conversationId !== options.conversationId) continue;
-    }
-    if (requestedScope === 'all' && chunk.scope === 'conversation' && options?.conversationId) {
-      if (chunk.conversationId !== options.conversationId) continue;
-    }
-    if (options?.taskId && chunk.taskId && chunk.taskId !== options.taskId) {
-      continue;
-    }
-    if (options?.projectId && chunk.projectId && chunk.projectId !== options.projectId) {
-      continue;
-    }
-
-    let vectorScore = 0;
-    if (queryEmbedding && chunk.embedding) {
-      vectorScore = cosineSimilarity(queryEmbedding, chunk.embedding);
-    }
-
-    const textScore = lexicalSearchScore(queryTokens, chunk.content);
-    const temporalScore = temporalDecay(chunk.timestamp);
-
-    const combinedScore =
-      vectorWeight * vectorScore + textWeight * textScore + temporalWeight * temporalScore;
-
-    if (combinedScore > 0.01) {
-      scored.push({
-        source: chunk.source,
-        scope: chunk.scope,
-        snippet: chunk.content.slice(0, 500),
-        score: combinedScore,
-      });
-    }
-  }
-
-  scored.sort((a, b) => b.score - a.score);
-
-  // Deduplicate by content prefix
-  const seen = new Set<string>();
-  const deduped: MemorySearchResult[] = [];
-  for (const result of scored) {
-    const key = result.snippet.slice(0, 100);
-    if (!seen.has(key)) {
-      seen.add(key);
-      deduped.push(result);
-    }
-    if (deduped.length >= maxResults) break;
-  }
-
-  return deduped;
+  return searchChunkIndex({
+    index: createArrayChunkIndex(getAllChunks()),
+    queryEmbedding,
+    options: {
+      scope: requestedScope,
+      conversationId: options?.conversationId,
+      taskId: options?.taskId,
+      projectId: options?.projectId,
+    },
+    vectorWeight,
+    textWeight,
+    temporalWeight,
+    maxResults,
+    textScore: (chunk) => lexicalSearchScore(queryTokens, chunk.content),
+    dedupeBySnippetPrefix: true,
+  });
 }
 
 function tokenizeForSearch(value: string): Set<string> {

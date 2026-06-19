@@ -1,13 +1,13 @@
 import { useSettingsStore } from '../../store/useSettingsStore';
+import type { AppSettings } from '../../types/settings';
 import type {
-  AppSettings,
   BrowserProviderConfig,
   SshTargetConfig,
   WorkspaceTargetConfig,
-} from '../../types';
-import { browserNavigate } from '../browser/automation';
+} from '../../types/remote';
+import { browserNavigate } from '../browser/automation/actions';
 import { launchBrowserLiveSession, stopBrowserLiveSession } from '../browser/jobs';
-import { getBrowserProviderReadiness } from '../browser/providers';
+import { getBrowserProviderReadiness } from '../browser/providers/readiness';
 import { executeSshCommand, getSshTargetReadiness } from '../ssh/connector';
 import {
   getWorkspaceProviderFileAccessMode,

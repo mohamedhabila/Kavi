@@ -2,7 +2,8 @@
 // Tests — Conversation Mode (Types + Store Integration)
 // ---------------------------------------------------------------------------
 
-import type { Conversation, SubAgentConfig, ConversationMode } from '../../src/types';
+import type { Conversation, ConversationMode } from '../../src/types/conversation';
+import type { SubAgentConfig } from '../../src/types/subAgent';
 
 describe('Conversation type with mode', () => {
   it('accepts mode field as agentic', () => {

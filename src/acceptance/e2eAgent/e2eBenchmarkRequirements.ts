@@ -1,0 +1,435 @@
+// ---------------------------------------------------------------------------
+// Benchmark E2E requirement catalog
+// ---------------------------------------------------------------------------
+// Static benchmark requirement declarations are kept separate from manifest
+// construction so the manifest builder stays focused on generated per-scenario
+// metadata and audit logic.
+// ---------------------------------------------------------------------------
+
+import { E2E_AGENT_SCENARIOS } from './scenarios';
+import type { E2EBenchmarkRequirement } from './e2eBenchmarkManifest';
+
+export function listE2EBenchmarkRequirements(): E2EBenchmarkRequirement[] {
+  return [
+    {
+      id: 'fast-regression-tier',
+      source: 'Kavi deterministic regression suite',
+      objective: 'Keep the current fast suite as the deterministic regression tier.',
+      coverageStatus: 'implemented',
+      scenarioIds: E2E_AGENT_SCENARIOS.map((scenario) => scenario.id),
+      environmentKinds: ['node_fixture', 'native_fixture'],
+      requiredEvidence: [
+        'graph_state',
+        'workspace_artifact',
+        'memory_store',
+        'native_fixture_state',
+        'token_accounting',
+      ],
+    },
+    {
+      id: 'androidworld-native-fixtures',
+      source: 'AndroidWorld',
+      objective: 'Exercise mobile native task initialization, permissions, and app-state rewards.',
+      coverageStatus: 'implemented',
+      scenarioIds: [
+        'bench-androidworld-calendar-mutation',
+        'bench-androidworld-permission-denial',
+        'bench-androidworld-clipboard-share-notify',
+        'bench-mobileagent-media-state',
+      ],
+      environmentKinds: ['native_fixture'],
+      requiredEvidence: ['native_fixture_state', 'graph_state'],
+    },
+    {
+      id: 'androidworld-direct-shard',
+      source: 'AndroidWorld',
+      objective:
+        'Port a direct AndroidWorld-style app-state reward for calendar add/update into the deterministic native fixture tier.',
+      coverageStatus: 'implemented',
+      scenarioIds: ['direct-androidworld-calendar-add-update'],
+      environmentKinds: ['native_fixture'],
+      requiredEvidence: ['native_fixture_state', 'graph_state', 'token_accounting'],
+    },
+    {
+      id: 'androidworld-device-runner',
+      source: 'AndroidWorld',
+      objective: 'Run the same task family on Android emulator/device state with teardown.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['android_emulator'],
+      requiredEvidence: ['native_fixture_state', 'graph_state'],
+    },
+    {
+      id: 'mobileagentbench-native-fixtures',
+      source: 'MobileAgentBench',
+      objective: 'Cover contact, messaging, media, screen, camera, and mobile side effects.',
+      coverageStatus: 'implemented',
+      scenarioIds: [
+        'bench-mobileagent-contact-message-draft',
+        'bench-mobileworld-discover-contact-message',
+        'bench-knowu-personalized-contact-memory',
+        'bench-androidworld-clipboard-share-notify',
+        'bench-mobileagent-media-state',
+      ],
+      environmentKinds: ['native_fixture'],
+      requiredEvidence: ['native_fixture_state'],
+    },
+    {
+      id: 'mobileagentbench-gui-runner',
+      source: 'MobileAgentBench',
+      objective: 'Capture UI tree/screenshot final-state matching and step metrics.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['mobile_gui'],
+      requiredEvidence: ['native_fixture_state'],
+    },
+    {
+      id: 'mobileworld-native-fixtures',
+      source: 'MobileWorld',
+      objective:
+        'Cover mobile discovery-to-action workflows with user-interaction and MCP-style tool lookup pressure.',
+      coverageStatus: 'implemented',
+      scenarioIds: ['bench-mobileworld-discover-contact-message'],
+      environmentKinds: ['native_fixture'],
+      requiredEvidence: ['native_fixture_state', 'graph_state'],
+    },
+    {
+      id: 'mobileworld-direct-shard',
+      source: 'MobileWorld',
+      objective:
+        'Port a direct MobileWorld-style cross-app calendar/contact/message workflow with user-turn pressure.',
+      coverageStatus: 'implemented',
+      scenarioIds: ['direct-mobileworld-cross-app-contact-message'],
+      environmentKinds: ['native_fixture'],
+      requiredEvidence: ['native_fixture_state', 'graph_state', 'token_accounting'],
+    },
+    {
+      id: 'mobileworld-long-horizon-direct-shard',
+      source: 'MobileWorld / LoCoMo / LongMemEval-V2',
+      objective:
+        'Port a direct long-horizon mobile personalization shard that updates user memory before a cross-app mobile action.',
+      coverageStatus: 'implemented',
+      scenarioIds: ['direct-mobileworld-long-horizon-personalization'],
+      environmentKinds: ['native_fixture'],
+      requiredEvidence: ['memory_store', 'native_fixture_state', 'graph_state', 'token_accounting'],
+    },
+    {
+      id: 'mobileworld-gui-mcp-runner',
+      source: 'MobileWorld',
+      objective:
+        'Run GUI-only, user-interaction, and MCP-augmented mobile tasks with snapshot/backend verification.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['mobile_gui'],
+      requiredEvidence: ['native_fixture_state', 'graph_state'],
+    },
+    {
+      id: 'spabench-cross-app-runner',
+      source: 'SPA-Bench / Agent-SAMA / MobileUse',
+      objective:
+        'Measure cross-app GUI task success, action accuracy, satisfaction, termination, and recovery metrics.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['mobile_gui'],
+      requiredEvidence: ['native_fixture_state', 'graph_state'],
+    },
+    {
+      id: 'spabench-direct-shard',
+      source: 'SPA-Bench',
+      objective:
+        'Port a direct SPA-Bench-style cross-app device action sequence with final state and resource budget validation.',
+      coverageStatus: 'implemented',
+      scenarioIds: ['direct-spabench-cross-app-device-actions'],
+      environmentKinds: ['native_fixture'],
+      requiredEvidence: ['native_fixture_state', 'token_accounting'],
+    },
+    {
+      id: 'knowu-personalized-mobile-fixtures',
+      source: 'KnowU-Bench',
+      objective:
+        'Cover personalized mobile action selection from remembered user preference without prompt-text heuristics.',
+      coverageStatus: 'implemented',
+      scenarioIds: ['bench-knowu-personalized-contact-memory'],
+      environmentKinds: ['native_fixture'],
+      requiredEvidence: ['memory_store', 'native_fixture_state'],
+    },
+    {
+      id: 'knowu-online-personalization-runner',
+      source: 'KnowU-Bench',
+      objective:
+        'Run hidden-profile general, personalized, and proactive mobile tasks in Android emulation.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['android_emulator'],
+      requiredEvidence: ['memory_store', 'graph_state'],
+    },
+    {
+      id: 'ambibench-user-simulator',
+      source: 'AmbiBench',
+      objective: 'Score incomplete and ambiguous requests with hidden user ground truth.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['provider_matrix'],
+      requiredEvidence: ['graph_state'],
+    },
+    {
+      id: 'tau-direct-user-coordination-shard',
+      source: 'τ-bench / τ² / τ³',
+      objective:
+        'Port a direct stateful user-coordination shard with missing information followed by verified mobile state.',
+      coverageStatus: 'implemented',
+      scenarioIds: ['direct-tau-user-coordination-state'],
+      environmentKinds: ['native_fixture'],
+      requiredEvidence: ['native_fixture_state', 'graph_state', 'token_accounting'],
+    },
+    {
+      id: 'simuwob-mobile-web',
+      source: 'SimuWoB',
+      objective: 'Run URL-served mobile web app environments with reset/evaluateTask hooks.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['simulated_mobile_web'],
+      requiredEvidence: ['graph_state'],
+    },
+    {
+      id: 'bfcl-v4-function-calling',
+      source: 'Berkeley Function Calling Leaderboard V4',
+      objective: 'Measure single-turn, serial, parallel, and multi-turn task-state correctness.',
+      coverageStatus: 'implemented',
+      scenarioIds: [
+        'bench-bfcl-parallel-file-read',
+        'bench-bfcl-sequential-memory-chain',
+        'bench-bfcl-multi-turn-state-carry',
+        'bench-bfcl-passive-no-tools',
+      ],
+      environmentKinds: ['node_fixture'],
+      requiredEvidence: ['workspace_artifact', 'memory_store', 'graph_state'],
+    },
+    {
+      id: 'bfcl-v4-direct-shard',
+      source: 'Berkeley Function Calling Leaderboard V4',
+      objective:
+        'Port a direct BFCL V4-style parallel/relevance/state shard with final artifact and memory-state validation.',
+      coverageStatus: 'implemented',
+      scenarioIds: ['direct-bfcl-v4-parallel-relevance'],
+      environmentKinds: ['node_fixture'],
+      requiredEvidence: ['workspace_artifact', 'memory_store', 'graph_state', 'token_accounting'],
+    },
+    {
+      id: 'bfcl-v4-live-values',
+      source: 'Berkeley Function Calling Leaderboard V4',
+      objective: 'Evaluate live and rapidly changing values without static fixture leakage.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['provider_matrix'],
+      requiredEvidence: ['graph_state'],
+    },
+    {
+      id: 'tau3-stateful-domains',
+      source: 'tau3 / tau-bench',
+      objective: 'Validate domain API state with final database/state comparison and pass^k.',
+      coverageStatus: 'implemented',
+      scenarioIds: [
+        'bench-tau-native-json-outcome',
+        'bench-tau-calendar-events-chain',
+        'bench-androidworld-calendar-mutation',
+      ],
+      environmentKinds: ['native_fixture'],
+      requiredEvidence: ['native_fixture_state', 'graph_state'],
+    },
+    {
+      id: 'gaia-mobile-general-assistant',
+      source: 'GAIA',
+      objective: 'Evaluate multi-hop file/tool reasoning without coding-only assumptions.',
+      coverageStatus: 'implemented',
+      scenarioIds: ['bench-gaia-file-hop-chain', 'workspace-inventory-manifest'],
+      environmentKinds: ['node_fixture'],
+      requiredEvidence: ['workspace_artifact', 'artifact_hash'],
+    },
+    {
+      id: 'memory-state-current',
+      source: 'MemoryAgentBench / LongMemEval-V2 / STATE-Bench',
+      objective: 'Cover recall, dynamic tracking, scoped state, and delayed memory retrieval.',
+      coverageStatus: 'implemented',
+      scenarioIds: [
+        'bench-memory-state-3turn-recall',
+        'bench-longmem-delayed-recall',
+        'bench-longmem-dual-fact-recall',
+        'bench-scoped-recall-goal-switch',
+        'direct-beam-long-dialogue-multi-probe',
+      ],
+      environmentKinds: ['node_fixture'],
+      requiredEvidence: ['memory_store', 'graph_state'],
+    },
+    {
+      id: 'longmemeval-v2-direct-shard',
+      source: 'LongMemEval-V2',
+      objective:
+        'Port a direct dynamic-state and premise-awareness memory shard into the one-conversation mobile assistant setting.',
+      coverageStatus: 'implemented',
+      scenarioIds: [
+        'direct-longmemeval-v2-mobile-preference-update',
+        'direct-longmemeval-v2-experience-runbook',
+      ],
+      environmentKinds: ['node_fixture', 'native_fixture'],
+      requiredEvidence: [
+        'memory_store',
+        'workspace_artifact',
+        'native_fixture_state',
+        'token_accounting',
+      ],
+    },
+    {
+      id: 'locomo-direct-temporal-memory-shard',
+      source: 'LoCoMo',
+      objective:
+        'Port a direct multi-session temporal conversational memory shard with current-state and stale-state validation.',
+      coverageStatus: 'implemented',
+      scenarioIds: [
+        'direct-locomo-temporal-conversation-memory',
+        'direct-mobileworld-long-horizon-personalization',
+      ],
+      environmentKinds: ['node_fixture', 'native_fixture'],
+      requiredEvidence: [
+        'memory_store',
+        'workspace_artifact',
+        'native_fixture_state',
+        'token_accounting',
+      ],
+    },
+    {
+      id: 'beam-direct-long-dialogue-shard',
+      source: 'BEAM',
+      objective:
+        'Port a direct long-dialogue memory-probe shard with fragmented facts, distractors, updates, and final artifact validation.',
+      coverageStatus: 'implemented',
+      scenarioIds: ['direct-beam-long-dialogue-multi-probe'],
+      environmentKinds: ['node_fixture'],
+      requiredEvidence: ['memory_store', 'workspace_artifact', 'graph_state', 'token_accounting'],
+    },
+    {
+      id: 'longmemeval-v2-long-history',
+      source: 'LongMemEval-V2',
+      objective: 'Run calibrated long-history trajectories beyond the fast-suite token envelope.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['provider_matrix'],
+      requiredEvidence: ['memory_store', 'token_accounting'],
+    },
+    {
+      id: 'locomo-full-long-conversation-runner',
+      source: 'LoCoMo',
+      objective:
+        'Run full long-term conversational memory QA with multi-session histories and temporal/persona scoring.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['provider_matrix'],
+      requiredEvidence: ['memory_store', 'graph_state', 'token_accounting'],
+    },
+    {
+      id: 'beam-full-long-dialogue-runner',
+      source: 'BEAM',
+      objective:
+        'Run full BEAM long coherent interaction traces with memory quality, latency, and resource scoring.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['provider_matrix'],
+      requiredEvidence: ['memory_store', 'graph_state', 'token_accounting'],
+    },
+    {
+      id: 'toolsandbox-stateful-tools',
+      source: 'ToolSandbox',
+      objective:
+        'Evaluate implicit state dependencies, dynamic milestones, and tool state snapshots.',
+      coverageStatus: 'implemented',
+      scenarioIds: [
+        'bench-session-tool-cache',
+        'bench-androidworld-clipboard-share-notify',
+        'bench-bfcl-multi-turn-state-carry',
+      ],
+      environmentKinds: ['node_fixture', 'native_fixture'],
+      requiredEvidence: [
+        'workspace_artifact',
+        'memory_store',
+        'native_fixture_state',
+        'graph_state',
+      ],
+    },
+    {
+      id: 'toolsandbox-direct-shard',
+      source: 'ToolSandbox',
+      objective:
+        'Port a direct state-dependency shard where mobile state from contact lookup must feed the message composer.',
+      coverageStatus: 'implemented',
+      scenarioIds: ['direct-toolsandbox-state-dependency'],
+      environmentKinds: ['native_fixture'],
+      requiredEvidence: ['native_fixture_state', 'graph_state', 'token_accounting'],
+    },
+    {
+      id: 'agentdojo-prompt-injection',
+      source: 'AgentDojo',
+      objective: 'Measure benign utility and targeted attack success under untrusted tool output.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['security_fixture'],
+      requiredEvidence: ['graph_state'],
+    },
+    {
+      id: 'agentdojo-direct-untrusted-workspace-shard',
+      source: 'AgentDojo',
+      objective:
+        'Port a direct untrusted-workspace-content shard that validates utility success and absence of attacker-requested artifact.',
+      coverageStatus: 'implemented',
+      scenarioIds: ['direct-agentdojo-untrusted-workspace-note'],
+      environmentKinds: ['node_fixture'],
+      requiredEvidence: ['workspace_artifact', 'graph_state', 'token_accounting'],
+    },
+    {
+      id: 'mcptox-tool-poisoning',
+      source: 'MCPTox / OWASP MCP Tool Poisoning',
+      objective: 'Detect poisoned tool metadata that redirects legitimate tool calls.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['security_fixture'],
+      requiredEvidence: ['graph_state'],
+    },
+    {
+      id: 'provider-model-matrix',
+      source: 'Provider documentation and release gates',
+      objective: 'Report Gemini, OpenAI, Anthropic, OpenAI-compatible, and deterministic CI runs.',
+      coverageStatus: 'implemented',
+      scenarioIds: E2E_AGENT_SCENARIOS.map((scenario) => scenario.id),
+      environmentKinds: ['provider_matrix'],
+      requiredEvidence: ['token_accounting', 'cache_event'],
+    },
+    {
+      id: 'prompt-cache-long-horizon-provider-probes',
+      source: "Don't Break the Cache / provider cache docs",
+      objective:
+        'Measure OpenAI, Anthropic, Gemini, and OpenAI-compatible cache read/write behavior on long-horizon agentic traces.',
+      coverageStatus: 'implemented',
+      scenarioIds: ['bench-prompt-cache-long-horizon', 'bench-prompt-cache-convergence-long-run'],
+      environmentKinds: ['provider_matrix'],
+      requiredEvidence: ['token_accounting', 'cache_event'],
+    },
+    {
+      id: 'cacheprobe-gateway-isolation',
+      source: 'CacheProbe',
+      objective:
+        'Audit gateway prompt-cache isolation and metadata/timing leakage for OpenAI-compatible routers.',
+      coverageStatus: 'external_required',
+      scenarioIds: [],
+      environmentKinds: ['provider_matrix'],
+      requiredEvidence: ['token_accounting', 'cache_event'],
+    },
+    {
+      id: 'benchmark-drift-controls',
+      source: 'Benchmark harness controls',
+      objective: 'Pin manifest versions, seeds, provider versions, and source refresh dates.',
+      coverageStatus: 'implemented',
+      scenarioIds: E2E_AGENT_SCENARIOS.map((scenario) => scenario.id),
+      environmentKinds: ['node_fixture', 'native_fixture', 'provider_matrix'],
+      requiredEvidence: ['token_accounting'],
+    },
+  ];
+}

@@ -1,22 +1,30 @@
+import { createExpoProject } from '../../src/services/expo/projectCreation';
 import {
-  buildExpoDeployWorkflowTemplate,
-  createExpoProject,
-  excerptWorkflowLogText,
   getExpoAutomationSummary,
   getExpoProjectReadiness,
-  inspectExpoWorkflowRun,
+} from '../../src/services/expo/projectAutomation';
+import { resolveExpoProject } from '../../src/services/expo/projectState';
+import {
   listExpoProjects,
-  listExpoWorkflowRuns,
-  looksCompressed,
-  probeExpoProject,
-  resolveExpoProject,
-  resolveExpoProjectForExecutionTask,
-  runExpoGraphqlQuery,
-  runExpoProjectAction,
-  stripAnsiAndControlChars,
   syncExpoAccountProjects,
+} from '../../src/services/expo/projectSync';
+import { resolveExpoProjectForExecutionTask } from '../../src/services/expo/projectResolution';
+import { buildExpoDeployWorkflowTemplate } from '../../src/services/expo/workflowSelection';
+import {
+  probeExpoProject,
+  runExpoProjectAction,
+} from '../../src/services/expo/workflowActions';
+import { runExpoGraphqlQuery } from '../../src/services/expo/rawGraphql';
+import {
+  inspectExpoWorkflowRun,
+  listExpoWorkflowRuns,
   waitForExpoWorkflowRun,
-} from '../../src/services/expo/eas';
+} from '../../src/services/expo/workflowMonitoring';
+import {
+  excerptWorkflowLogText,
+  looksCompressed,
+  stripAnsiAndControlChars,
+} from '../../src/services/expo/logs/workflowText';
 import { gzipSync, strToU8, zipSync } from 'fflate';
 
 const brotliJs = require('brotli-js') as {
@@ -2012,16 +2020,6 @@ describe('compressed log decompression', () => {
     const { useSettingsStore } = require('../../src/store/useSettingsStore');
     useSettingsStore.setState(mockSettingsState);
   });
-
-  function mockExpoGraphql(resolver: (body: any) => any) {
-    (global.fetch as jest.Mock).mockImplementation(async (url: string, init?: any) => {
-      if (typeof url === 'string' && url.includes('expo.dev/graphql')) {
-        const body = JSON.parse(init?.body);
-        return { ok: true, status: 200, json: async () => resolver(body) } as any;
-      }
-      throw new Error(`Unexpected fetch URL: ${url}`);
-    });
-  }
 
   it('decompresses gzip-compressed JSONL logs from EAS build', async () => {
     const logContent = [

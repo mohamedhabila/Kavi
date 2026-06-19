@@ -2,6 +2,7 @@
 // Kavi — MCP Client (JSON-RPC 2.0)
 // ---------------------------------------------------------------------------
 
+import { APP_DISPLAY_NAME, APP_VERSION } from '../../constants/appMetadata';
 import { McpTransport, JsonRpcRequest, TransportPreference } from './transport';
 
 export interface McpServerCapabilities {
@@ -55,11 +56,9 @@ export class McpClient {
   private transport: McpTransport;
   private nextId = 1;
   private serverCapabilities: McpServerCapabilities | null = null;
-  private config: McpClientConfig;
   private onToolsChanged: (() => void) | null = null;
 
   constructor(config: McpClientConfig) {
-    this.config = config;
     const headers: Record<string, string> = { ...config.headers };
     if (config.token) {
       headers['Authorization'] = `Bearer ${config.token}`;
@@ -93,7 +92,7 @@ export class McpClient {
         {
           protocolVersion: '2025-03-26',
           capabilities: {},
-          clientInfo: { name: 'Kavi', version: '0.1.0' },
+          clientInfo: { name: APP_DISPLAY_NAME, version: APP_VERSION },
         },
         10000,
       ));

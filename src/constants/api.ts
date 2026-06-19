@@ -1,18 +1,15 @@
-import type {
-  LlmProviderConfig,
-  LlmProviderKind,
-  LocalLlmRuntime,
-  ModelCapabilities,
-} from '../types';
+import type { LlmProviderConfig, LlmProviderKind, LocalLlmRuntime } from '../types/provider';
+import type { ModelCapabilities } from '../types/tool';
 import {
   createDefaultLocalLlmProvider,
   isOnDeviceLlmProvider,
   normalizeLocalLlmProvider,
-} from '../services/localLlm/runtime';
+} from '../services/localLlm/provider';
+import { resolveProviderFamily as resolveConfiguredProviderFamily } from '../services/llm/catalog/providerFamilies';
 import {
   DEFAULT_LOCAL_LLM_MODEL_ID,
-  GEMMA_LOCAL_MODEL_CATALOG,
-  GEMMA_LOCAL_PROVIDER_NAME,
+  LOCAL_LLM_MODEL_CATALOG,
+  ON_DEVICE_PROVIDER_NAME,
   getLocalLlmCatalogEntry,
 } from '../services/localLlm/catalog';
 
@@ -286,6 +283,11 @@ export function finalizeProviderConfig(provider: LlmProviderConfig): LlmProvider
   return {
     ...provider,
     name,
+    providerFamily: resolveConfiguredProviderFamily({
+      name,
+      baseUrl,
+      providerFamily: provider.providerFamily,
+    }),
     baseUrl,
     model,
     availableModels,
@@ -294,7 +296,7 @@ export function finalizeProviderConfig(provider: LlmProviderConfig): LlmProvider
 }
 
 export function buildProviderFromPreset(
-  preset: (typeof KNOWN_PROVIDERS)[number],
+  preset: LlmProviderPreset,
   overrides: Partial<LlmProviderConfig> & Pick<LlmProviderConfig, 'id'>,
 ): LlmProviderConfig {
   if (isOnDeviceProviderPreset(preset)) {
@@ -363,14 +365,7 @@ export const KNOWN_PROVIDERS = [
     kind: 'remote',
     baseUrl: 'https://api.openai.com/v1',
     defaultModel: 'gpt-5.4',
-    availableModels: [
-      'gpt-5.5',
-      'gpt-5.4',
-      'gpt-5.4-mini',
-      'gpt-5-mini',
-      'o4-mini',
-      'o3',
-    ],
+    availableModels: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5-mini', 'o4-mini', 'o3'],
     modelCapabilities: buildModelCapabilities([
       'gpt-5.5',
       'gpt-5.4',
@@ -455,13 +450,13 @@ export const KNOWN_PROVIDERS = [
     ]),
   },
   {
-    name: GEMMA_LOCAL_PROVIDER_NAME,
+    name: ON_DEVICE_PROVIDER_NAME,
     kind: 'on-device',
     baseUrl: '',
     defaultModel: DEFAULT_LOCAL_LLM_MODEL_ID,
-    availableModels: GEMMA_LOCAL_MODEL_CATALOG.map((entry) => entry.id),
+    availableModels: LOCAL_LLM_MODEL_CATALOG.map((entry) => entry.id),
     modelCapabilities: Object.fromEntries(
-      GEMMA_LOCAL_MODEL_CATALOG.map((entry) => [entry.id, entry.capabilities]),
+      LOCAL_LLM_MODEL_CATALOG.map((entry) => [entry.id, entry.capabilities]),
     ),
     localRuntime: getLocalLlmCatalogEntry(DEFAULT_LOCAL_LLM_MODEL_ID)?.runtime || 'litert-lm',
   },

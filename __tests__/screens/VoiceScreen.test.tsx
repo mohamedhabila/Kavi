@@ -2,7 +2,6 @@
 // Tests — VoiceScreen
 // ---------------------------------------------------------------------------
 
-import React from 'react';
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { VoiceScreen } from '../../src/screens/VoiceScreen';
 

@@ -1,4 +1,3 @@
-import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
 import { ApprovalBanner } from '../../src/components/approval/ApprovalBanner';
 
@@ -31,7 +30,7 @@ jest.mock('../../src/theme/useAppTheme', () => ({
   AppPalette: {},
 }));
 
-jest.mock('../../src/i18n', () => ({
+jest.mock('../../src/i18n/useTranslation', () => ({
   useTranslation: () => ({
     t: (key: string, params?: Record<string, any>) => {
       switch (key) {

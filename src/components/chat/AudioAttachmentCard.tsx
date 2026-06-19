@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Pause, Play, Mic } from 'lucide-react-native';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import type { Attachment } from '../../types';
+import type { Attachment } from '../../types/attachment';
 import { AppPalette, useAppTheme } from '../../theme/useAppTheme';
 import { compactVoiceWaveformLevels } from '../../services/voice/voiceNote';
 

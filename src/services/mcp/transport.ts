@@ -5,6 +5,7 @@
 
 import { fetch as expoFetch } from 'expo/fetch';
 
+import { APP_DISPLAY_NAME, APP_VERSION } from '../../constants/appMetadata';
 import { unrefTimerIfSupported } from '../../utils/timers';
 
 export type TransportType = 'sse' | 'streamable-http';
@@ -171,7 +172,7 @@ export class McpTransport {
         params: {
           protocolVersion: DEFAULT_MCP_PROTOCOL_VERSION,
           capabilities: {},
-          clientInfo: { name: 'Kavi', version: '0.1.0' },
+          clientInfo: { name: APP_DISPLAY_NAME, version: APP_VERSION },
         },
       }),
       signal: timeoutRequest.signal,

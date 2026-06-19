@@ -1,8 +1,14 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import { fetch as expoFetch } from 'expo/fetch';
-import { Attachment, LlmProviderConfig, TokenUsage } from '../../types';
-import { isVertexNativeGeminiBaseUrl } from '../../constants/api';
+import { Attachment } from '../../types/attachment';
+import { LlmProviderConfig } from '../../types/provider';
+import { TokenUsage } from '../../types/usage';
 import { LlmService } from '../llm/LlmService';
+import {
+  isGeminiImageProvider,
+  isSupportedOpenAIImageEditModel,
+  resolveImageModel,
+} from '../llm/images/modelPolicy';
 import { generateId } from '../../utils/id';
 import { buildImageAttachmentDataUri, readAttachmentBase64 } from './attachmentPayloads';
 
@@ -112,22 +118,6 @@ for (const [index, char] of Array.from(
   BASE64_LOOKUP[char.charCodeAt(0)] = index;
 }
 
-function inferImageModel(provider: LlmProviderConfig, requestedModel?: string): string {
-  if (requestedModel) return requestedModel;
-  const configured = (provider.model || '').trim();
-  if (/gpt-image|dall-e/i.test(configured)) return configured;
-  if (/gemini-.*image|imagen/i.test(configured)) return configured;
-  const base = (provider.baseUrl || '').toLowerCase();
-  if (base.includes('openai.com')) return 'gpt-image-2';
-  if (
-    base.includes('generativelanguage.googleapis.com') ||
-    isVertexNativeGeminiBaseUrl(provider.baseUrl)
-  ) {
-    return 'gemini-3.1-flash-image-preview';
-  }
-  return configured || 'gpt-image-2';
-}
-
 function guessMimeType(format?: string): string {
   switch (format) {
     case 'jpeg':
@@ -138,19 +128,6 @@ function guessMimeType(format?: string): string {
     default:
       return 'image/png';
   }
-}
-
-function isGeminiImageProvider(provider: LlmProviderConfig, model: string): boolean {
-  const base = (provider.baseUrl || '').toLowerCase();
-  return (
-    /gemini-.*image|imagen/i.test(model) ||
-    base.includes('generativelanguage.googleapis.com') ||
-    isVertexNativeGeminiBaseUrl(provider.baseUrl)
-  );
-}
-
-function isSupportedOpenAIImageEditModel(model: string): boolean {
-  return /^gpt-image/i.test(model) || /^chatgpt-image-latest$/i.test(model);
 }
 
 function isLocalFileUri(value: string): boolean {
@@ -930,7 +907,7 @@ async function generateOpenAICompatibleImage(
   const llm = new LlmService(provider);
   const result = await llm.generateImage({
     prompt: options.prompt,
-    model: inferImageModel(provider, options.model),
+    model: resolveImageModel(provider, options.model),
     size: options.size,
     quality: options.quality,
     format: options.format,
@@ -949,8 +926,7 @@ export async function generateImage(
   provider: LlmProviderConfig,
   options: GenerateImageOptions,
 ): Promise<GeneratedImageResult> {
-  const base = (provider.baseUrl || '').toLowerCase();
-  if (base.includes('anthropic.com')) {
+  if (provider.providerFamily === 'anthropic') {
     throw new Error('Image generation is not supported by Anthropic in Kavi');
   }
   return generateOpenAICompatibleImage(provider, options);
@@ -960,12 +936,11 @@ export async function editImage(
   provider: LlmProviderConfig,
   options: EditImageOptions,
 ): Promise<EditedImageResult> {
-  const base = (provider.baseUrl || '').toLowerCase();
-  if (base.includes('anthropic.com')) {
+  if (provider.providerFamily === 'anthropic') {
     throw new Error('Image editing is not supported by Anthropic in Kavi');
   }
 
-  const model = inferImageModel(provider, options.model);
+  const model = resolveImageModel(provider, options.model);
   const usesGemini = isGeminiImageProvider(provider, model);
   if (!usesGemini && !isSupportedOpenAIImageEditModel(model)) {
     throw new Error('Image editing currently supports GPT Image and Gemini image models in Kavi');

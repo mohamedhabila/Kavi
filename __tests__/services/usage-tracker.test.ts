@@ -11,7 +11,6 @@ import {
   formatUsageReport,
   clearUsageData,
   getTotalUsage,
-  getAllSessionUsages,
 } from '../../src/services/usage/tracker';
 
 describe('Usage Tracker', () => {
@@ -247,7 +246,7 @@ describe('Usage Tracker', () => {
     });
 
     it('uses Gemini image pricing and bills thinking tokens at the text-output rate', () => {
-      const cost = estimateCost('gemini-3.1-flash-image-preview', 200, 1160, {
+      const cost = estimateCost('gemini-3.1-flash-image', 200, 1160, {
         tokenDetails: {
           inputTextTokens: 80,
           inputImageTokens: 120,
@@ -306,6 +305,51 @@ describe('Usage Tracker', () => {
       expect(usage!.totalInput).toBe(100);
       expect(usage!.totalOutput).toBe(50);
       expect(usage!.entries).toHaveLength(1);
+    });
+
+    it('preserves token bucket and prompt-cache telemetry on session entries', () => {
+      recordUsage('conv-telemetry', {
+        inputTokens: 1200,
+        outputTokens: 50,
+        model: 'gpt-5.4',
+        tokenBuckets: {
+          systemPromptTokens: 10,
+          toolDeclarationTokens: 20,
+          memoryContextTokens: 30,
+          conversationHistoryTokens: 40,
+          userTurnTokens: 50,
+          toolResultTokens: 60,
+        },
+        promptCache: {
+          eligible: true,
+          enabled: true,
+          estimatedInputTokens: 1200,
+          thresholdTokens: 1024,
+          providerFamily: 'openai',
+          hostedFamily: 'openai',
+          mode: 'openai_native',
+          event: 'provider_managed',
+          reason: 'automatic_prompt_cache',
+          explicitCacheName: 'cm:test',
+        },
+      });
+
+      expect(getSessionUsage('conv-telemetry')?.entries[0]).toMatchObject({
+        tokenBuckets: {
+          systemPromptTokens: 10,
+          toolDeclarationTokens: 20,
+          memoryContextTokens: 30,
+          conversationHistoryTokens: 40,
+          userTurnTokens: 50,
+          toolResultTokens: 60,
+        },
+        promptCache: {
+          eligible: true,
+          mode: 'openai_native',
+          event: 'provider_managed',
+          explicitCacheName: 'cm:test',
+        },
+      });
     });
 
     it('accumulates multiple recordings', () => {

@@ -1,6 +1,6 @@
 import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { i18n } from '../i18n';
+import { i18n } from '../i18n/manager';
 
 interface Props {
   children: React.ReactNode;

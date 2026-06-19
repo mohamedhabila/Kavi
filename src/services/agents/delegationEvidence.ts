@@ -1,4 +1,5 @@
-import type { Message, SubAgentSnapshot, ToolCall } from '../../types';
+import type { Message, ToolCall } from '../../types/message';
+import type { SubAgentSnapshot } from '../../types/subAgent';
 import { normalizeToolName } from '../../engine/tools/toolNameNormalization';
 
 export function isDelegationToolName(toolName: string | undefined): boolean {

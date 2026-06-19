@@ -158,6 +158,7 @@ describe('useSchedulerStore', () => {
 
     const enabled = useSchedulerStore.getState().getEnabledJobs();
     expect(enabled).toHaveLength(1);
+    expect(enabled[0].id).toBe(id1);
     expect(enabled[0].name).toBe('Enabled');
   });
 

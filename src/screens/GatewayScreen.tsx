@@ -14,22 +14,20 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
 import { ArrowLeft, Radio, Wifi, WifiOff, RefreshCw, Copy } from 'lucide-react-native';
 import { useAppTheme, AppPalette } from '../theme/useAppTheme';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../i18n/useTranslation';
 import {
   getGatewayClient,
   createGatewayClient,
   disconnectGateway,
 } from '../services/gateway/client';
-import type { GatewayConnectionState } from '../types';
+import type { GatewayConnectionState } from '../types/gateway';
 import { emitGatewayEvent } from '../services/events/bus';
 import * as Clipboard from 'expo-clipboard';
 import { useBackToChat } from '../navigation/useBackToChat';
 
 export const GatewayScreen: React.FC = () => {
-  const navigation = useNavigation();
   const handleBack = useBackToChat();
   const { colors } = useAppTheme();
   const { t } = useTranslation();

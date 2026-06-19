@@ -15,16 +15,14 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
 import { ArrowLeft, Clock, Plus, Trash2, X } from 'lucide-react-native';
 import { useSchedulerStore } from '../services/scheduler/store';
 import { useAppTheme, AppPalette } from '../theme/useAppTheme';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../i18n/useTranslation';
 import type { CronJob } from '../services/cron/types';
 import { useBackToChat } from '../navigation/useBackToChat';
 
 export const SchedulerScreen: React.FC = () => {
-  const navigation = useNavigation();
   const handleBack = useBackToChat();
   const { colors } = useAppTheme();
   const { t } = useTranslation();

@@ -1,4 +1,4 @@
-import type { Message } from '../../src/types';
+import type { Message } from '../../src/types/message';
 import { buildUnifiedMemoryAccessContext } from '../../src/services/memory/memoryAccessGateway';
 
 jest.mock('../../src/services/memory/livingMemoryBridge', () => ({
@@ -34,11 +34,21 @@ describe('memoryAccessGateway', () => {
     (canReadLongTermMemory as jest.Mock).mockReturnValue(true);
   });
 
-  it('applies boundary selection before loading living memory', async () => {
+  it('loads living memory from full chat history without topic-boundary scoping', async () => {
     const messages: Message[] = [
-      makeMessage({ id: 'u1', role: 'user', content: 'Discuss travel itinerary options', timestamp: 1_000 }),
+      makeMessage({
+        id: 'u1',
+        role: 'user',
+        content: 'Discuss travel itinerary options',
+        timestamp: 1_000,
+      }),
       makeMessage({ id: 'a1', role: 'assistant', content: 'Here are options', timestamp: 2_000 }),
-      makeMessage({ id: 'u2', role: 'user', content: 'Fix migration mismatch in release workflow', timestamp: 30_000_000 }),
+      makeMessage({
+        id: 'u2',
+        role: 'user',
+        content: 'Fix migration mismatch in release workflow',
+        timestamp: 30_000_000,
+      }),
     ];
 
     const result = await buildUnifiedMemoryAccessContext({
@@ -48,12 +58,47 @@ describe('memoryAccessGateway', () => {
       now: 30_000_000,
     });
 
+    expect(result.boundary.startIndex).toBe(0);
+    expect(result.boundary.reason).toBe('full_history');
+    expect(result.scopedMessages).toHaveLength(3);
+    expect(buildLivingMemorySections).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages,
+        conversationId: 'conv-1',
+      }),
+    );
+  });
+
+  it('applies boundary selection in pilot mode before loading living memory', async () => {
+    const messages: Message[] = [
+      makeMessage({
+        id: 'u1',
+        role: 'user',
+        content: 'Discuss travel itinerary options',
+        timestamp: 1_000,
+      }),
+      makeMessage({ id: 'a1', role: 'assistant', content: 'Here are options', timestamp: 2_000 }),
+      makeMessage({
+        id: 'u2',
+        role: 'user',
+        content: 'Fix migration mismatch in release workflow',
+        timestamp: 30_000_000,
+      }),
+    ];
+
+    const result = await buildUnifiedMemoryAccessContext({
+      messages,
+      conversationId: 'conv-pilot',
+      mode: 'pilot',
+      now: 30_000_000,
+    });
+
     expect(result.boundary.startIndex).toBe(2);
-    expect(result.scopedMessages).toHaveLength(1);
+    expect(result.scopedMessages).toEqual([messages[2]]);
     expect(buildLivingMemorySections).toHaveBeenCalledWith(
       expect.objectContaining({
         messages: [messages[2]],
-        conversationId: 'conv-1',
+        conversationId: 'conv-pilot',
       }),
     );
   });
@@ -76,9 +121,24 @@ describe('memoryAccessGateway', () => {
 
   it('excludes trailing internal control user prompts before boundary and recall', async () => {
     const messages: Message[] = [
-      makeMessage({ id: 'u1', role: 'user', content: 'Fix migration mismatch in release workflow', timestamp: 1_000 }),
-      makeMessage({ id: 'a1', role: 'assistant', content: 'Investigating migration mismatch.', timestamp: 2_000 }),
-      makeMessage({ id: 'u2', role: 'user', content: 'Continue from current draft and close pilot gaps.', timestamp: 3_000 }),
+      makeMessage({
+        id: 'u1',
+        role: 'user',
+        content: 'Fix migration mismatch in release workflow',
+        timestamp: 1_000,
+      }),
+      makeMessage({
+        id: 'a1',
+        role: 'assistant',
+        content: 'Investigating migration mismatch.',
+        timestamp: 2_000,
+      }),
+      makeMessage({
+        id: 'u2',
+        role: 'user',
+        content: 'Continue from current draft and close pilot gaps.',
+        timestamp: 3_000,
+      }),
     ];
 
     const result = await buildUnifiedMemoryAccessContext({

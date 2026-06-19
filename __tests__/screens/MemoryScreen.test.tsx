@@ -1,4 +1,3 @@
-import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import { MemoryScreen } from '../../src/screens/MemoryScreen';
@@ -93,6 +92,48 @@ jest.mock('../../src/services/memory/memoryTools', () => ({
   executeMemoryForget: () => ({ ok: true, fact: null, mode: 'invalidate' }),
   executeMemoryBlockRead: () => ({ ok: true, blocks: [] }),
   executeMemoryBlockEdit: () => ({ ok: true, block: null }),
+}));
+
+jest.mock('../../src/services/memory/episodeRecall', () => ({
+  recallRecentEpisodes: () => [],
+}));
+
+jest.mock('../../src/services/memory/memoryOverview', () => ({
+  loadMemoryOverviewSnapshot: () => ({
+    focus: null,
+    activeTask: null,
+    recentFacts: [],
+    consolidation: {
+      memoryDisabled: false,
+      tier: 'deterministic',
+      providerName: null,
+      explicitProviderSelected: false,
+      isFallback: true,
+    },
+    pendingIngestionJobs: 0,
+  }),
+}));
+
+jest.mock('../../src/services/memory/memoryDiagnostics', () => ({
+  loadMemoryDiagnosticsSnapshot: () => ({
+    threadId: null,
+    budgetEntries: [],
+    retrievalEntries: [],
+  }),
+}));
+
+jest.mock('../../src/components/memory/MemoryDiagnosticsPanel', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return {
+    MemoryDiagnosticsPanel: () => React.createElement(View, { testID: 'memory-diagnostics-panel' }),
+  };
+});
+
+jest.mock('../../src/store/useChatStore', () => ({
+  useChatStore: {
+    getState: () => ({ activeConversationId: null }),
+  },
 }));
 
 let memoryListener:

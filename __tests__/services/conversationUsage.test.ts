@@ -109,6 +109,26 @@ describe('conversationUsage', () => {
         cacheReadTokens: 20,
         cacheWriteTokens: 5,
         totalTokens: 180,
+        tokenBuckets: {
+          systemPromptTokens: 10,
+          toolDeclarationTokens: 20,
+          memoryContextTokens: 30,
+          conversationHistoryTokens: 40,
+          userTurnTokens: 50,
+          toolResultTokens: 60,
+        },
+        promptCache: {
+          eligible: true,
+          enabled: true,
+          estimatedInputTokens: 1200,
+          thresholdTokens: 1024,
+          providerFamily: 'openai',
+          hostedFamily: 'openai',
+          mode: 'openai_native',
+          event: 'provider_managed',
+          reason: 'automatic_prompt_cache',
+          explicitCacheName: 'cm:test',
+        },
       },
     });
 
@@ -140,6 +160,26 @@ describe('conversationUsage', () => {
         agentRunId: 'run-789',
         totalTokens: 180,
         estimatedCost: 0.0042,
+        tokenBuckets: {
+          systemPromptTokens: 10,
+          toolDeclarationTokens: 20,
+          memoryContextTokens: 30,
+          conversationHistoryTokens: 40,
+          userTurnTokens: 50,
+          toolResultTokens: 60,
+        },
+        promptCache: {
+          eligible: true,
+          enabled: true,
+          estimatedInputTokens: 1200,
+          thresholdTokens: 1024,
+          providerFamily: 'openai',
+          hostedFamily: 'openai',
+          mode: 'openai_native',
+          event: 'provider_managed',
+          reason: 'automatic_prompt_cache',
+          explicitCacheName: 'cm:test',
+        },
       }),
     );
     expect(conversation?.logs?.[0]).toEqual(
@@ -154,6 +194,24 @@ describe('conversationUsage', () => {
       expect.objectContaining({
         totalInput: 120,
         totalOutput: 45,
+      }),
+    );
+    expect(sessionUsage?.entries[0]).toEqual(
+      expect.objectContaining({
+        tokenBuckets: {
+          systemPromptTokens: 10,
+          toolDeclarationTokens: 20,
+          memoryContextTokens: 30,
+          conversationHistoryTokens: 40,
+          userTurnTokens: 50,
+          toolResultTokens: 60,
+        },
+        promptCache: expect.objectContaining({
+          eligible: true,
+          mode: 'openai_native',
+          event: 'provider_managed',
+          explicitCacheName: 'cm:test',
+        }),
       }),
     );
   });

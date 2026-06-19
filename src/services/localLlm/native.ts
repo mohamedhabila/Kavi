@@ -1,102 +1,12 @@
-import { DeviceEventEmitter, NativeEventEmitter, NativeModules, Platform } from 'react-native';
-import type { LocalLlmBackend, LocalLlmRuntime } from '../../types';
-
-export const LOCAL_LLM_STREAM_EVENT = 'KaviLocalLlmStream';
-
-export interface NativeLocalLlmAvailability {
-  available: boolean;
-  linked: boolean;
-  platform?: string | null;
-  runtime?: string | null;
-  reason?: string | null;
-  supportsStreaming?: boolean;
-  deviceMemoryGb?: number | null;
-  lowMemoryDevice?: boolean;
-}
-
-export interface NativeLocalLlmWarmupResult {
-  backend?: LocalLlmBackend;
-}
-
-export interface NativeLocalLlmConversationToolDefinition {
-  name: string;
-  description: string;
-  parameters: Record<string, any>;
-}
-
-export interface NativeLocalLlmConversationToolCall {
-  name: string;
-  arguments: Record<string, any>;
-}
-
-export interface NativeLocalLlmConversationToolResponse {
-  name: string;
-  response: unknown;
-}
-
-export interface NativeLocalLlmConversationMessage {
-  role: 'user' | 'assistant' | 'tool';
-  content?: string;
-  toolCalls?: NativeLocalLlmConversationToolCall[];
-  toolResponses?: NativeLocalLlmConversationToolResponse[];
-}
-
-export interface NativeLocalLlmToolCallResult {
-  id: string;
-  name: string;
-  arguments: Record<string, any>;
-}
-
-export interface NativeLocalLlmGenerateResult {
-  text: string;
-  toolCalls?: NativeLocalLlmToolCallResult[];
-  backend?: LocalLlmBackend;
-}
-
-export interface NativeLocalLlmRequest {
-  requestId: string;
-  conversationKey?: string;
-  modelPath: string;
-  runtime?: LocalLlmRuntime;
-  prompt?: string;
-  systemPrompt?: string | null;
-  history?: NativeLocalLlmConversationMessage[];
-  currentMessage?: NativeLocalLlmConversationMessage;
-  tools?: NativeLocalLlmConversationToolDefinition[];
-  backend?: LocalLlmBackend;
-  maxTokens?: number;
-  contextWindowTokens?: number;
-  topK?: number;
-  topP?: number;
-  temperature?: number;
-  enableConstrainedDecoding?: boolean;
-  minDeviceMemoryGb?: number;
-}
-
-export interface NativeLocalLlmWarmupRequest {
-  modelPath: string;
-  conversationKey?: string;
-  runtime?: LocalLlmRuntime;
-  systemPrompt?: string | null;
-  tools?: NativeLocalLlmConversationToolDefinition[];
-  backend?: LocalLlmBackend;
-  maxTokens?: number;
-  contextWindowTokens?: number;
-  topK?: number;
-  topP?: number;
-  temperature?: number;
-  enableConstrainedDecoding?: boolean;
-  minDeviceMemoryGb?: number;
-}
-
-export interface NativeLocalLlmStreamEvent {
-  requestId: string;
-  type: 'token' | 'tool_call' | 'done' | 'error';
-  content?: string;
-  toolCall?: NativeLocalLlmToolCallResult;
-  error?: string;
-  backend?: LocalLlmBackend;
-}
+import {
+  LOCAL_LLM_STREAM_EVENT,
+  type NativeLocalLlmAvailability,
+  type NativeLocalLlmGenerateResult,
+  type NativeLocalLlmRequest,
+  type NativeLocalLlmStreamEvent,
+  type NativeLocalLlmWarmupRequest,
+  type NativeLocalLlmWarmupResult,
+} from './nativeTypes';
 
 interface KaviLocalLlmModuleShape {
   addListener?(eventName: string): void;
@@ -108,29 +18,44 @@ interface KaviLocalLlmModuleShape {
   cancel(requestId: string): Promise<void>;
 }
 
-const kaviLocalLlmModule = NativeModules.KaviLocalLlm as KaviLocalLlmModuleShape | undefined;
+function getReactNativeRuntime(): typeof import('react-native') {
+  return require('react-native') as typeof import('react-native');
+}
+
+function getPlatformOs(): 'android' | 'ios' | string {
+  return getReactNativeRuntime().Platform.OS;
+}
+
+function getKaviLocalLlmModule(): KaviLocalLlmModuleShape | undefined {
+  return getReactNativeRuntime().NativeModules.KaviLocalLlm as
+    | KaviLocalLlmModuleShape
+    | undefined;
+}
 
 function getEventEmitter() {
-  if (Platform.OS === 'ios' && kaviLocalLlmModule) {
-    return new NativeEventEmitter(kaviLocalLlmModule as any);
+  const reactNative = getReactNativeRuntime();
+  const kaviLocalLlmModule = getKaviLocalLlmModule();
+  if (getPlatformOs() === 'ios' && kaviLocalLlmModule) {
+    return new reactNative.NativeEventEmitter(kaviLocalLlmModule as any);
   }
-  return DeviceEventEmitter;
+  return reactNative.DeviceEventEmitter;
 }
 
 export function isNativeLocalLlmLinked(): boolean {
-  return Boolean(kaviLocalLlmModule?.getAvailability);
+  return Boolean(getKaviLocalLlmModule()?.getAvailability);
 }
 
 export async function getNativeLocalLlmAvailability(): Promise<NativeLocalLlmAvailability> {
+  const kaviLocalLlmModule = getKaviLocalLlmModule();
+  const platformOs = getPlatformOs();
   if (!kaviLocalLlmModule?.getAvailability) {
-    const runtime = Platform.OS === 'android' ? 'litert-lm' : 'mediapipe-genai';
     return {
       available: false,
       linked: false,
-      platform: Platform.OS,
-      runtime,
+      platform: platformOs,
+      runtime: 'litert-lm',
       reason:
-        Platform.OS === 'android'
+        platformOs === 'android'
           ? 'The on-device Android bridge is not linked in this build.'
           : 'The on-device iOS bridge is not linked in this build.',
       supportsStreaming: false,
@@ -145,6 +70,7 @@ export async function getNativeLocalLlmAvailability(): Promise<NativeLocalLlmAva
 export async function warmupNativeLocalLlmEngine(
   request: NativeLocalLlmWarmupRequest,
 ): Promise<NativeLocalLlmWarmupResult | undefined> {
+  const kaviLocalLlmModule = getKaviLocalLlmModule();
   if (!kaviLocalLlmModule?.warmup) {
     return undefined;
   }
@@ -156,6 +82,7 @@ export async function warmupNativeLocalLlmEngine(
 export async function generateWithNativeLocalLlm(
   request: NativeLocalLlmRequest,
 ): Promise<NativeLocalLlmGenerateResult> {
+  const kaviLocalLlmModule = getKaviLocalLlmModule();
   if (!kaviLocalLlmModule?.generate) {
     throw new Error('local-llm-native-module-unavailable');
   }
@@ -165,10 +92,13 @@ export async function generateWithNativeLocalLlm(
     text: result?.text || '',
     ...(Array.isArray(result?.toolCalls) ? { toolCalls: result.toolCalls } : {}),
     ...(result?.backend ? { backend: result.backend } : {}),
+    ...(result?.visionBackend ? { visionBackend: result.visionBackend } : {}),
+    ...(result?.audioBackend ? { audioBackend: result.audioBackend } : {}),
   };
 }
 
 export async function cancelNativeLocalLlmRequest(requestId: string): Promise<void> {
+  const kaviLocalLlmModule = getKaviLocalLlmModule();
   if (!kaviLocalLlmModule?.cancel) {
     return;
   }
@@ -179,6 +109,7 @@ export async function cancelNativeLocalLlmRequest(requestId: string): Promise<vo
 export async function* streamWithNativeLocalLlm(
   request: NativeLocalLlmRequest,
 ): AsyncGenerator<NativeLocalLlmStreamEvent> {
+  const kaviLocalLlmModule = getKaviLocalLlmModule();
   if (!kaviLocalLlmModule?.startStreaming) {
     throw new Error('local-llm-native-module-unavailable');
   }

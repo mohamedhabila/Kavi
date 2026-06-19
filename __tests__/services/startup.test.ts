@@ -20,6 +20,8 @@ const mockListActiveSubAgents = jest.fn().mockReturnValue([]);
 const mockRepairTerminalAgentRunsMissingFinalResponses = jest.fn().mockResolvedValue([]);
 const mockHydrateCanvasSurfaces = jest.fn().mockResolvedValue(undefined);
 const mockEmitAppEvent = jest.fn().mockResolvedValue(undefined);
+const mockRunMemoryMigrationTick = jest.fn().mockResolvedValue(undefined);
+const mockRunMemoryBackgroundFlush = jest.fn().mockResolvedValue(undefined);
 const originalRequestIdleCallback = (global as any).requestIdleCallback;
 
 const { waitFor } = require('@testing-library/react-native');
@@ -49,7 +51,7 @@ const mockProvider = {
   enabled: true,
 };
 
-jest.mock('../../src/services/integrations/services', () => ({
+jest.mock('../../src/services/integrations/registry', () => ({
   registerBuiltInServiceSkills: mockRegisterBuiltInServiceSkills,
 }));
 
@@ -99,6 +101,11 @@ jest.mock('../../src/services/canvas/renderer', () => ({
 
 jest.mock('../../src/services/events/bus', () => ({
   emitAppEvent: (...args: any[]) => mockEmitAppEvent(...args),
+}));
+
+jest.mock('../../src/services/memory/lifecycle', () => ({
+  runMemoryMigrationTick: (...args: any[]) => mockRunMemoryMigrationTick(...args),
+  runMemoryBackgroundFlush: (...args: any[]) => mockRunMemoryBackgroundFlush(...args),
 }));
 
 jest.mock('../../src/services/mcp/manager', () => ({
@@ -271,20 +278,20 @@ beforeEach(() => {
       );
     },
   );
-    mockChatStoreState.updateMessageAssistantMetadata.mockImplementation(
-      (conversationId, messageId, assistantMetadata) => {
-        mockChatStoreState.conversations = mockChatStoreState.conversations.map((conversation) =>
-          conversation.id === conversationId
-            ? {
-                ...conversation,
-                messages: conversation.messages.map((message: any) =>
-                  message.id === messageId ? { ...message, assistantMetadata } : message,
-                ),
-              }
-            : conversation,
-        );
-      },
-    );
+  mockChatStoreState.updateMessageAssistantMetadata.mockImplementation(
+    (conversationId, messageId, assistantMetadata) => {
+      mockChatStoreState.conversations = mockChatStoreState.conversations.map((conversation) =>
+        conversation.id === conversationId
+          ? {
+              ...conversation,
+              messages: conversation.messages.map((message: any) =>
+                message.id === messageId ? { ...message, assistantMetadata } : message,
+              ),
+            }
+          : conversation,
+      );
+    },
+  );
   // Reset module to clear `initialized` flag
   jest.resetModules();
   mockRunOrchestrator.mockImplementation(async (options, callbacks) => {

@@ -104,11 +104,15 @@ import {
   supportsVerifiedSshConnections,
 } from '../../src/services/ssh/native';
 import { launchBrowserLiveSession, stopBrowserLiveSession } from '../../src/services/browser/jobs';
-import { probeBrowserProvider } from '../../src/services/browser/providers';
+import { probeBrowserProvider } from '../../src/services/browser/providers/probe';
 import { formatMcpResult } from '../../src/services/mcp/bridge';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import { buildRemoteCommandCenterSnapshot } from '../../src/services/remote/commandCenter';
-import type { SshTargetConfig, BrowserProviderConfig, McpServerConfig } from '../../src/types';
+import type {
+  SshTargetConfig,
+  BrowserProviderConfig,
+  McpServerConfig,
+} from '../../src/types/remote';
 
 // ---- Helpers ----
 function makeSshTarget(overrides: Partial<SshTargetConfig> = {}): SshTargetConfig {

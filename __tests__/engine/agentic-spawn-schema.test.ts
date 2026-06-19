@@ -2,19 +2,13 @@
 // Tests — Enhanced sessions_spawn Tool Schema
 // ---------------------------------------------------------------------------
 
-import { SESSION_SPAWN_TOOL } from '../../src/engine/tools/parity-definitions';
+import { SESSION_SPAWN_TOOL } from '../../src/engine/tools/builtin-definitions';
 
 describe('SESSION_SPAWN_TOOL schema', () => {
   const schema = SESSION_SPAWN_TOOL.input_schema;
 
   it('has prompt as the only required field', () => {
     expect(schema.required).toEqual(['prompt']);
-  });
-
-  it('includes systemPrompt property', () => {
-    expect(schema.properties.systemPrompt).toBeDefined();
-    expect(schema.properties.systemPrompt.type).toBe('string');
-    expect(schema.properties.systemPrompt.description).toContain('system prompt');
   });
 
   it('includes dependency-aware workstream fields', () => {
@@ -35,16 +29,20 @@ describe('SESSION_SPAWN_TOOL schema', () => {
     expect(schema.properties.tools).toBeDefined();
     expect(schema.properties.tools.type).toBe('array');
     expect(schema.properties.tools.items.type).toBe('string');
+    expect(schema.properties.tools.description).toContain('Optional worker-tool restriction');
   });
 
-  it('retains original properties', () => {
+  it('keeps the compact worker-launch properties', () => {
     expect(schema.properties.prompt).toBeDefined();
-    expect(schema.properties.model).toBeDefined();
-    expect(schema.properties.inheritMemory).toBeDefined();
-    expect(schema.properties.sandboxPolicy).toBeDefined();
-    expect(schema.properties.announce).toBeDefined();
     expect(schema.properties.waitForCompletion).toBeDefined();
-    expect(schema.properties.waitTimeoutMs).toBeDefined();
+    expect(schema.properties.model).toBeUndefined();
+    expect(schema.properties.systemPrompt).toBeUndefined();
+    expect(schema.properties.inheritMemory).toBeUndefined();
+    expect(schema.properties.sandboxPolicy).toBeUndefined();
+    expect(schema.properties.announce).toBeUndefined();
+    expect(schema.properties.waitTimeoutMs).toBeUndefined();
+    expect(schema.properties.objective).toBeUndefined();
+    expect(schema.properties.expectedOutput).toBeUndefined();
   });
 
   it('does not expose hard-deadline timeoutMs to the model', () => {
@@ -55,15 +53,16 @@ describe('SESSION_SPAWN_TOOL schema', () => {
     expect(schema.properties.maxIterations).toBeUndefined();
   });
 
-  it('describes workers as untimed by default', () => {
-    expect(SESSION_SPAWN_TOOL.description).toContain('intentionally untimed');
-    expect(SESSION_SPAWN_TOOL.description).toContain('cancel them for drift');
-    expect(SESSION_SPAWN_TOOL.description).toContain('generous internal iteration budget');
-  });
-
   it('documents dependency-aware launch sequencing', () => {
-    expect(SESSION_SPAWN_TOOL.description).toContain('workstreamId');
-    expect(SESSION_SPAWN_TOOL.description).toContain('dependsOnWorkstreams');
-    expect(SESSION_SPAWN_TOOL.description).toContain('independent');
+    expect(SESSION_SPAWN_TOOL.input_schema.properties.workstreamId.description).toContain(
+      'structured workstream',
+    );
+    expect(
+      SESSION_SPAWN_TOOL.input_schema.properties.dependsOnWorkstreams.description,
+    ).toContain('prerequisite');
+    expect(SESSION_SPAWN_TOOL.description).toContain(
+      "omit tools unless you need a narrower worker scope",
+    );
+    expect(SESSION_SPAWN_TOOL.description).not.toContain('transcript or reasoning trace');
   });
 });

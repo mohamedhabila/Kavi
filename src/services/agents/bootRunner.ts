@@ -4,9 +4,11 @@
 // Loads BOOT.md from workspace root, creates a temp session, executes one
 // agent turn silently on app launch.
 
-import type { BootConfig, BootRunResult, LlmProviderConfig } from '../../types';
+import type { BootConfig, BootRunResult } from '../../types/boot';
+import type { LlmProviderConfig } from '../../types/provider';
 import { Paths, File, Directory } from 'expo-file-system';
 import { runOrchestrator } from '../../engine/orchestrator';
+import { bindProviderToModel } from '../llm/support/providerSupport';
 import { generateId } from '../../utils/id';
 import { unrefTimerIfSupported } from '../../utils/timers';
 
@@ -93,6 +95,7 @@ export async function runBootOnce(
     typeof modelOverride === 'string' && modelOverride.trim().length > 0
       ? modelOverride.trim()
       : provider.model;
+  const bootProvider = bindProviderToModel(provider, bootModel);
 
   try {
     await new Promise<void>((resolve, reject) => {
@@ -103,7 +106,7 @@ export async function runBootOnce(
 
       runOrchestrator(
         {
-          provider,
+          provider: bootProvider,
           model: bootModel,
           conversationId: sessionId,
           systemPrompt:

@@ -1,16 +1,20 @@
-import type { Message, SubAgentSnapshot } from '../../src/types';
+import type { Message } from '../../src/types/message';
+import type { SubAgentSnapshot } from '../../src/types/subAgent';
 import {
   cloneSubAgentSnapshot,
   collectSubAgentSnapshotsFromMessages,
   getSubAgentsForConversation,
   getSubAgentsForAgentRun,
-  getLatestFinalAssistantResponsePreview,
-  hasDeliveredFinalAssistantResponse,
   resolveOwningConversationId,
   resolveAgentRunIdForSubAgent,
   resolveDisplayedSubAgentSnapshot,
+} from '../../src/services/agents/lifecycle/stateMachine';
+import {
+  getLatestFinalAssistantResponsePreview,
+  hasDeliveredFinalAssistantResponse,
+  getAgentRunMessageSlice,
   summarizeBackgroundWorkerRunOutcome,
-} from '../../src/services/agents/workflowState';
+} from '../../src/services/agents/lifecycle/agentRunStateMachine';
 
 function makeSnapshot(overrides: Partial<SubAgentSnapshot> = {}): SubAgentSnapshot {
   return {
@@ -123,6 +127,95 @@ describe('resolveDisplayedSubAgentSnapshot', () => {
 
     expect(resolvedSnapshot.status).toBe('completed');
     expect(resolvedSnapshot.output).toBe('Recovered live completion.');
+  });
+});
+
+describe('getAgentRunMessageSlice', () => {
+  it('returns an empty slice when the user message anchor does not exist', () => {
+    const messages: Message[] = [
+      { id: 'a1', role: 'assistant', content: 'hello', timestamp: 1 },
+      { id: 'u1', role: 'user', content: 'first request', timestamp: 2 },
+      { id: 'a2', role: 'assistant', content: 'response', timestamp: 3 },
+    ];
+
+    expect(getAgentRunMessageSlice(messages, 'missing')).toEqual([]);
+  });
+
+  it('slices the run transcript from the anchored user message to the next user message', () => {
+    const messages: Message[] = [
+      { id: 'u1', role: 'user', content: 'first request', timestamp: 1 },
+      { id: 'a1', role: 'assistant', content: 'ok', timestamp: 2 },
+      { id: 'u2', role: 'user', content: 'next request', timestamp: 3 },
+      { id: 'a2', role: 'assistant', content: 'later', timestamp: 4 },
+    ];
+
+    expect(getAgentRunMessageSlice(messages, 'u2')).toEqual([messages[2], messages[3]]);
+  });
+
+  it('includes internal system continuation messages before the next user boundary', () => {
+    const messages: Message[] = [
+      { id: 'u1', role: 'user', content: 'Initial request', timestamp: 1 },
+      { id: 'a1', role: 'assistant', content: 'working...', timestamp: 2 },
+      {
+        id: 'i1',
+        role: 'system',
+        content: 'Continue the same user-visible answer without replacing it.',
+        timestamp: 3,
+      },
+      { id: 'a2', role: 'assistant', content: 'partial update', timestamp: 4 },
+      { id: 'u2', role: 'user', content: 'new user turn', timestamp: 5 },
+      { id: 'a3', role: 'assistant', content: 'new run', timestamp: 6 },
+    ];
+
+    expect(getAgentRunMessageSlice(messages, 'u1')).toEqual([
+      messages[0],
+      messages[1],
+      messages[2],
+      messages[3],
+    ]);
+  });
+
+  it('falls back to the run start timestamp when transcript compaction removed the user anchor', () => {
+    const messages: Message[] = [
+      {
+        id: 'compact-1',
+        role: 'system',
+        content: '[Conversation Summary] Earlier turns were compacted.',
+        timestamp: 10,
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '',
+        timestamp: 120,
+        toolCalls: [
+          {
+            id: 'tc-1',
+            name: 'write_file',
+            arguments: '{"path":"c653a.txt"}',
+            status: 'completed',
+          },
+        ],
+      },
+      {
+        id: 'assistant-final',
+        role: 'assistant',
+        content: 'C653A C653B C653P C653W',
+        timestamp: 150,
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'complete',
+          finishReason: 'STOP',
+        },
+      },
+    ];
+
+    expect(
+      getAgentRunMessageSlice(messages, {
+        userMessageId: 'compacted-user',
+        runStartedAt: 100,
+      }),
+    ).toEqual([messages[1], messages[2]]);
   });
 });
 
@@ -377,7 +470,59 @@ describe('final assistant response helpers', () => {
     );
   });
 
-  it('does not treat pre-tool planning text as the delivered final response', () => {
+  it('detects a delivered final response even when the user anchor was compacted away', () => {
+    const messages: Message[] = [
+      {
+        id: 'compact-1',
+        role: 'system',
+        content: '[Conversation Summary] Earlier turns were compacted.',
+        timestamp: 10,
+      },
+      {
+        id: 'msg-tool-turn',
+        role: 'assistant',
+        content: '',
+        timestamp: 100,
+        toolCalls: [
+          {
+            id: 'tc-1',
+            name: 'sessions_spawn',
+            arguments: '{"prompt":"Reply exactly C653W"}',
+            status: 'completed',
+          },
+        ],
+      },
+      {
+        id: 'msg-final',
+        role: 'assistant',
+        content: 'C653A C653B C653P C653W',
+        timestamp: 110,
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'complete',
+          finishReason: 'STOP',
+        },
+      },
+      {
+        id: 'msg-empty-placeholder',
+        role: 'assistant',
+        content: '',
+        timestamp: 120,
+      },
+    ];
+
+    const runScope = {
+      userMessageId: 'compacted-user',
+      runStartedAt: 90,
+    };
+
+    expect(hasDeliveredFinalAssistantResponse(messages, runScope)).toBe(true);
+    expect(getLatestFinalAssistantResponsePreview(messages, runScope)).toBe(
+      'C653A C653B C653P C653W',
+    );
+  });
+
+  it('does not treat intermediate action text as the delivered final response', () => {
     const messages: Message[] = [
       {
         id: 'msg-user',
@@ -410,6 +555,63 @@ describe('final assistant response helpers', () => {
 
     expect(hasDeliveredFinalAssistantResponse(messages, 'msg-user')).toBe(false);
     expect(getLatestFinalAssistantResponsePreview(messages, 'msg-user')).toBeUndefined();
+  });
+
+  it('keeps a delivered final response even when later tool or worker artifacts are appended', () => {
+    const messages: Message[] = [
+      {
+        id: 'msg-user',
+        role: 'user',
+        content: 'Finish the run',
+        timestamp: 1,
+      },
+      {
+        id: 'msg-final',
+        role: 'assistant',
+        content: 'C661A C661B C661P C661W',
+        timestamp: 2,
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'complete',
+          finishReason: 'STOP',
+        },
+      },
+      {
+        id: 'msg-late-tool-turn',
+        role: 'assistant',
+        content: '',
+        timestamp: 3,
+        toolCalls: [
+          {
+            id: 'tc-late',
+            name: 'sessions_spawn',
+            arguments: '{"prompt":"noop"}',
+            status: 'completed',
+          },
+        ],
+      },
+      {
+        id: 'msg-late-worker',
+        role: 'assistant',
+        content: 'Worker completed.',
+        timestamp: 4,
+        subAgentEvent: {
+          type: 'sub-agent',
+          event: 'completed',
+          snapshot: makeSnapshot({
+            sessionId: 'sub-late',
+            status: 'completed',
+            updatedAt: 4,
+            output: 'noop',
+          }),
+        },
+      },
+    ];
+
+    expect(hasDeliveredFinalAssistantResponse(messages, 'msg-user')).toBe(true);
+    expect(getLatestFinalAssistantResponsePreview(messages, 'msg-user')).toBe(
+      'C661A C661B C661P C661W',
+    );
   });
 
   it('ignores incomplete final assistant text when deciding whether a run delivered an answer', () => {
@@ -447,6 +649,31 @@ describe('final assistant response helpers', () => {
           kind: 'final',
           completionStatus: 'incomplete',
           finishReason: 'network_interruption',
+        },
+      },
+    ];
+
+    expect(hasDeliveredFinalAssistantResponse(messages, 'msg-user')).toBe(false);
+    expect(getLatestFinalAssistantResponsePreview(messages, 'msg-user')).toBeUndefined();
+  });
+
+  it('ignores empty complete final metadata so review recovery can synthesize the missing answer', () => {
+    const messages: Message[] = [
+      {
+        id: 'msg-user',
+        role: 'user',
+        content: 'Finish the task',
+        timestamp: 1,
+      },
+      {
+        id: 'msg-final-empty',
+        role: 'assistant',
+        content: '',
+        timestamp: 2,
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'complete',
+          finishReason: 'STOP',
         },
       },
     ];
@@ -497,13 +724,51 @@ describe('summarizeBackgroundWorkerRunOutcome', () => {
 
   it('returns completed when all workers complete cleanly', () => {
     const outcome = summarizeBackgroundWorkerRunOutcome([
-      makeSnapshot({ status: 'completed' }),
-      makeSnapshot({ sessionId: 'sub-2', status: 'completed' }),
+      makeSnapshot({
+        status: 'completed',
+        completionState: 'verified_success',
+        output: 'Worker completed the delegated task.',
+      }),
+      makeSnapshot({
+        sessionId: 'sub-2',
+        status: 'completed',
+        completionState: 'verified_success',
+        output: 'Worker completed the delegated task.',
+      }),
     ]);
 
     expect(outcome).toEqual({
       status: 'completed',
       summary: 'All background workers finished.',
+    });
+  });
+
+  it('prefers structured completion state over worker output text', () => {
+    const outcome = summarizeBackgroundWorkerRunOutcome([
+      makeSnapshot({
+        status: 'completed',
+        completionState: 'verified_success',
+        output: 'Worker finished.',
+      }),
+    ]);
+
+    expect(outcome).toEqual({
+      status: 'completed',
+      summary: 'All background workers finished.',
+    });
+  });
+
+  it('fails closed when structured completion state is absent', () => {
+    const outcome = summarizeBackgroundWorkerRunOutcome([
+      makeSnapshot({
+        status: 'completed',
+        output: 'Worker finished.',
+      }),
+    ]);
+
+    expect(outcome).toEqual({
+      status: 'failed',
+      summary: 'Background work finished without verified worker completion.',
     });
   });
 });

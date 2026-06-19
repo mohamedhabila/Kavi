@@ -134,11 +134,6 @@ const ALLOWED_UNUSED_KEYS = new Set([
 ]);
 
 const DYNAMIC_KEY_PREFIXES = [
-  'chat.agentWorkflow.checkpointKind.',
-  'chat.agentWorkflow.confidence.',
-  'chat.agentWorkflow.controlAction.',
-  'chat.agentWorkflow.phase.',
-  'chat.agentWorkflow.status.',
   'onboarding.webProviders.',
   'settings.thinkingOptions.',
   'settings.toolGroups.',

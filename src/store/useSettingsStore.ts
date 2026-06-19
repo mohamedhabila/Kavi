@@ -5,30 +5,40 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppSettings } from '../types/settings';
 import {
-  AppSettings,
   BrowserProviderConfig,
-  ConversationMode,
   ExpoAccountConfig,
   ExpoProjectConfig,
-  LastUsedModelSelection,
-  LlmProviderConfig,
   McpServerConfig,
   SshTargetConfig,
-  ThinkingLevelPreference,
-  WebSearchProvider,
   WorkspaceTargetConfig,
-} from '../types';
+} from '../types/remote';
+import { ConversationMode } from '../types/conversation';
+import {
+  LastUsedModelSelection,
+  LlmProviderConfig,
+  ThinkingLevelPreference,
+} from '../types/provider';
+import { WebSearchProvider } from '../types/tool';
 import { STORAGE_KEYS } from '../constants/storage';
 import { finalizeProviderConfig } from '../constants/api';
 import type { Locale } from '../i18n/types';
-import { i18n } from '../i18n';
+import { i18n } from '../i18n/manager';
 import {
   getWorkspaceTargetDisplayName,
   normalizeWorkspaceTargetLinks,
+  resolveDefaultWorkspaceTargetId,
 } from '../services/workspaces/config';
+import {
+  deriveMemoryConsolidationModeFromSettings,
+  normalizeMemoryConsolidationMode,
+  resolveConsolidationProviderIdForMode,
+  type MemoryConsolidationMode,
+} from '../services/memory/memoryConsolidationMode';
 
 interface SettingsState extends AppSettings {
+  defaultWorkspaceTargetId: string | null;
   lastUsedModel: LastUsedModelSelection | null;
   thinkingLevel: ThinkingLevelPreference;
   locale: Locale;
@@ -78,13 +88,32 @@ interface SettingsState extends AppSettings {
   setMediaUnderstandingEnabled: (enabled: boolean) => void;
   setMaxLinks: (max: number) => void;
   setDefaultConversationMode: (mode: ConversationMode) => void;
+  setDefaultWorkspaceTargetId: (targetId: string | null) => void;
   setConsolidationProvider: (providerId: string | null) => void;
+  setMemoryConsolidationMode: (mode: MemoryConsolidationMode, providerId?: string | null) => void;
+  setCompactionProvider: (providerId: string | null) => void;
+  setCompactionModel: (model: string | null) => void;
   setDisableLongTermMemory: (disabled: boolean) => void;
   replaceAllSettings: (settings: Partial<AppSettings>) => void;
 }
 
 function hasOwnSetting(settings: Partial<AppSettings>, key: keyof AppSettings): boolean {
   return Object.prototype.hasOwnProperty.call(settings, key);
+}
+
+const VALID_WEB_SEARCH_PROVIDERS: readonly WebSearchProvider[] = [
+  'auto',
+  'brave',
+  'gemini',
+  'perplexity',
+  'grok',
+  'kimi',
+];
+
+function sanitizeWebSearchProvider(provider: unknown): WebSearchProvider {
+  return VALID_WEB_SEARCH_PROVIDERS.includes(provider as WebSearchProvider)
+    ? (provider as WebSearchProvider)
+    : 'auto';
 }
 
 function normalizeProviders(providers: LlmProviderConfig[] | undefined): LlmProviderConfig[] {
@@ -112,6 +141,13 @@ function sanitizeWorkspaceTargetsForState(
   return (workspaceTargets || []).map((target) =>
     normalizeWorkspaceTargetForState(target, settings),
   );
+}
+
+function sanitizeDefaultWorkspaceTargetIdForState(options: {
+  defaultWorkspaceTargetId?: string | null;
+  workspaceTargets?: WorkspaceTargetConfig[];
+}): string | null {
+  return resolveDefaultWorkspaceTargetId(options);
 }
 
 function sanitizeExpoProjectsForSshTargets(
@@ -155,7 +191,11 @@ export const useSettingsStore = create<SettingsState>()(
       mediaUnderstandingEnabled: true,
       maxLinks: 3,
       defaultConversationMode: 'agentic' as ConversationMode,
+      defaultWorkspaceTargetId: null,
       consolidationProvider: null,
+      memoryConsolidationMode: 'auto',
+      compactionProvider: null,
+      compactionModel: null,
       disableLongTermMemory: false,
 
       addProvider: (provider) =>
@@ -282,32 +322,56 @@ export const useSettingsStore = create<SettingsState>()(
         }),
 
       addWorkspaceTarget: (target) =>
-        set((state) => ({
-          workspaceTargets: [
+        set((state) => {
+          const workspaceTargets = [
             ...(state.workspaceTargets || []),
             normalizeWorkspaceTargetForState(target, {
               browserProviders: state.browserProviders,
               sshTargets: state.sshTargets,
             }),
-          ],
-        })),
+          ];
+          return {
+            workspaceTargets,
+            defaultWorkspaceTargetId: sanitizeDefaultWorkspaceTargetIdForState({
+              defaultWorkspaceTargetId: state.defaultWorkspaceTargetId,
+              workspaceTargets,
+            }),
+          };
+        }),
 
       updateWorkspaceTarget: (target) =>
-        set((state) => ({
-          workspaceTargets: (state.workspaceTargets || []).map((entry) =>
+        set((state) => {
+          const workspaceTargets = (state.workspaceTargets || []).map((entry) =>
             entry.id === target.id
               ? normalizeWorkspaceTargetForState(target, {
                   browserProviders: state.browserProviders,
                   sshTargets: state.sshTargets,
                 })
               : entry,
-          ),
-        })),
+          );
+          return {
+            workspaceTargets,
+            defaultWorkspaceTargetId: sanitizeDefaultWorkspaceTargetIdForState({
+              defaultWorkspaceTargetId: state.defaultWorkspaceTargetId,
+              workspaceTargets,
+            }),
+          };
+        }),
 
       removeWorkspaceTarget: (id) =>
-        set((state) => ({
-          workspaceTargets: (state.workspaceTargets || []).filter((entry) => entry.id !== id),
-        })),
+        set((state) => {
+          const workspaceTargets = (state.workspaceTargets || []).filter(
+            (entry) => entry.id !== id,
+          );
+          return {
+            workspaceTargets,
+            defaultWorkspaceTargetId: sanitizeDefaultWorkspaceTargetIdForState({
+              defaultWorkspaceTargetId:
+                state.defaultWorkspaceTargetId === id ? null : state.defaultWorkspaceTargetId,
+              workspaceTargets,
+            }),
+          };
+        }),
 
       addBrowserProvider: (provider) =>
         set((state) => ({ browserProviders: [...(state.browserProviders || []), provider] })),
@@ -387,21 +451,65 @@ export const useSettingsStore = create<SettingsState>()(
 
       setDefaultConversationMode: (mode) => set({ defaultConversationMode: mode }),
 
+      setDefaultWorkspaceTargetId: (targetId) =>
+        set((state) => ({
+          defaultWorkspaceTargetId: sanitizeDefaultWorkspaceTargetIdForState({
+            defaultWorkspaceTargetId: targetId,
+            workspaceTargets: state.workspaceTargets,
+          }),
+        })),
+
       setConsolidationProvider: (providerId) =>
-        set({
+        set((state) => ({
+          memoryConsolidationMode:
+            typeof providerId === 'string' && providerId.trim().length > 0
+              ? 'specific'
+              : state.memoryConsolidationMode === 'specific'
+                ? 'auto'
+                : state.memoryConsolidationMode,
           consolidationProvider:
+            typeof providerId === 'string' && providerId.trim().length > 0
+              ? providerId.trim()
+              : null,
+        })),
+
+      setMemoryConsolidationMode: (mode, providerId) =>
+        set(() => {
+          const normalizedMode = normalizeMemoryConsolidationMode(mode);
+          const resolvedProviderId = resolveConsolidationProviderIdForMode(
+            normalizedMode,
+            providerId,
+          );
+          return {
+            memoryConsolidationMode: normalizedMode,
+            consolidationProvider: resolvedProviderId,
+          };
+        }),
+
+      setCompactionProvider: (providerId) =>
+        set({
+          compactionProvider:
             typeof providerId === 'string' && providerId.trim().length > 0
               ? providerId.trim()
               : null,
         }),
 
-      setDisableLongTermMemory: (disabled) =>
-        set({ disableLongTermMemory: Boolean(disabled) }),
+      setCompactionModel: (model) =>
+        set({
+          compactionModel:
+            typeof model === 'string' && model.trim().length > 0 ? model.trim() : null,
+        }),
+
+      setDisableLongTermMemory: (disabled) => set({ disableLongTermMemory: Boolean(disabled) }),
 
       replaceAllSettings: (settings) =>
         set((state) => {
           const sshTargets = settings.sshTargets ?? state.sshTargets;
           const browserProviders = settings.browserProviders ?? state.browserProviders;
+          const workspaceTargets = sanitizeWorkspaceTargetsForState(
+            settings.workspaceTargets ?? state.workspaceTargets,
+            { browserProviders, sshTargets },
+          );
 
           return {
             providers: settings.providers
@@ -409,10 +517,7 @@ export const useSettingsStore = create<SettingsState>()(
               : state.providers,
             mcpServers: settings.mcpServers ?? state.mcpServers,
             sshTargets,
-            workspaceTargets: sanitizeWorkspaceTargetsForState(
-              settings.workspaceTargets ?? state.workspaceTargets,
-              { browserProviders, sshTargets },
-            ),
+            workspaceTargets,
             browserProviders,
             expoAccounts: settings.expoAccounts ?? state.expoAccounts,
             expoProjects: sanitizeExpoProjectsForSshTargets(
@@ -432,7 +537,10 @@ export const useSettingsStore = create<SettingsState>()(
               : state.lastUsedModel,
             thinkingLevel: settings.thinkingLevel ?? state.thinkingLevel,
             locale: settings.locale ?? state.locale,
-            webSearchProvider: settings.webSearchProvider ?? state.webSearchProvider,
+            webSearchProvider:
+              settings.webSearchProvider !== undefined
+                ? sanitizeWebSearchProvider(settings.webSearchProvider)
+                : state.webSearchProvider,
             linkUnderstandingEnabled:
               settings.linkUnderstandingEnabled ?? state.linkUnderstandingEnabled,
             mediaUnderstandingEnabled:
@@ -443,9 +551,27 @@ export const useSettingsStore = create<SettingsState>()(
                 : state.maxLinks,
             defaultConversationMode:
               settings.defaultConversationMode ?? state.defaultConversationMode,
+            defaultWorkspaceTargetId: hasOwnSetting(settings, 'defaultWorkspaceTargetId')
+              ? sanitizeDefaultWorkspaceTargetIdForState({
+                  defaultWorkspaceTargetId: settings.defaultWorkspaceTargetId ?? null,
+                  workspaceTargets,
+                })
+              : sanitizeDefaultWorkspaceTargetIdForState({
+                  defaultWorkspaceTargetId: state.defaultWorkspaceTargetId,
+                  workspaceTargets,
+                }),
             consolidationProvider: hasOwnSetting(settings, 'consolidationProvider')
               ? (settings.consolidationProvider ?? null)
               : state.consolidationProvider,
+            memoryConsolidationMode: hasOwnSetting(settings, 'memoryConsolidationMode')
+              ? normalizeMemoryConsolidationMode(settings.memoryConsolidationMode)
+              : state.memoryConsolidationMode,
+            compactionProvider: hasOwnSetting(settings, 'compactionProvider')
+              ? (settings.compactionProvider ?? null)
+              : state.compactionProvider,
+            compactionModel: hasOwnSetting(settings, 'compactionModel')
+              ? (settings.compactionModel ?? null)
+              : state.compactionModel,
             disableLongTermMemory: hasOwnSetting(settings, 'disableLongTermMemory')
               ? Boolean(settings.disableLongTermMemory)
               : state.disableLongTermMemory,
@@ -455,7 +581,7 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: STORAGE_KEYS.SETTINGS,
       storage: createJSONStorage(() => AsyncStorage),
-      version: 11,
+      version: 15,
       migrate: (persistedState: any, version) => {
         if (!persistedState) return persistedState;
         if (version < 2) {
@@ -536,6 +662,37 @@ export const useSettingsStore = create<SettingsState>()(
             };
           }
         }
+        if (version < 12) {
+          persistedState = {
+            ...persistedState,
+            webSearchProvider: sanitizeWebSearchProvider(persistedState.webSearchProvider),
+          };
+        }
+        if (version < 13) {
+          persistedState = {
+            ...persistedState,
+            defaultWorkspaceTargetId: sanitizeDefaultWorkspaceTargetIdForState({
+              defaultWorkspaceTargetId: persistedState.defaultWorkspaceTargetId ?? null,
+              workspaceTargets: persistedState.workspaceTargets || [],
+            }),
+          };
+        }
+        if (version < 14) {
+          persistedState = {
+            ...persistedState,
+            compactionProvider: persistedState.compactionProvider ?? null,
+            compactionModel: persistedState.compactionModel ?? null,
+          };
+        }
+        if (version < 15) {
+          persistedState = {
+            ...persistedState,
+            memoryConsolidationMode: deriveMemoryConsolidationModeFromSettings({
+              memoryConsolidationMode: persistedState.memoryConsolidationMode,
+              consolidationProvider: persistedState.consolidationProvider ?? null,
+            }),
+          };
+        }
         return persistedState;
       },
       partialize: (state) => ({
@@ -543,6 +700,7 @@ export const useSettingsStore = create<SettingsState>()(
         mcpServers: state.mcpServers,
         sshTargets: state.sshTargets,
         workspaceTargets: state.workspaceTargets,
+        defaultWorkspaceTargetId: state.defaultWorkspaceTargetId,
         browserProviders: state.browserProviders,
         expoAccounts: state.expoAccounts,
         expoProjects: state.expoProjects,
@@ -559,6 +717,9 @@ export const useSettingsStore = create<SettingsState>()(
         maxLinks: state.maxLinks,
         defaultConversationMode: state.defaultConversationMode,
         consolidationProvider: state.consolidationProvider,
+        memoryConsolidationMode: state.memoryConsolidationMode,
+        compactionProvider: state.compactionProvider,
+        compactionModel: state.compactionModel,
         disableLongTermMemory: state.disableLongTermMemory,
       }),
     },

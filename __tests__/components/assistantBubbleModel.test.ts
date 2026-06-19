@@ -1,5 +1,7 @@
 import { buildAssistantBubbleViewModel } from '../../src/components/chat/assistantBubbleModel';
-import { AgentRun, Attachment, Message, ToolCall } from '../../src/types';
+import { AgentRun } from '../../src/types/agentRun';
+import { Attachment } from '../../src/types/attachment';
+import { Message, ToolCall } from '../../src/types/message';
 
 const timestamp = Date.now();
 
@@ -682,7 +684,7 @@ describe('buildAssistantBubbleViewModel', () => {
           assistantMetadata: {
             kind: 'intermediate',
             completionStatus: 'incomplete',
-            finishReason: 'pilot_review_pending',
+            finishReason: 'terminal_review_pending',
           },
         },
         {
@@ -739,7 +741,7 @@ describe('buildAssistantBubbleViewModel', () => {
           assistantMetadata: {
             kind: 'intermediate',
             completionStatus: 'incomplete',
-            finishReason: 'pilot_review_pending',
+            finishReason: 'terminal_review_pending',
           },
         },
       ],
@@ -765,7 +767,7 @@ describe('buildAssistantBubbleViewModel', () => {
         assistantMetadata: {
           kind: 'final',
           completionStatus: 'complete',
-          finishReason: 'pilot_approved',
+          finishReason: 'graph_finalized',
         },
       }),
     });

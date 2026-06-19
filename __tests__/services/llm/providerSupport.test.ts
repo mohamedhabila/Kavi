@@ -2,7 +2,36 @@ import {
   assertProviderReadyForRequest,
   resolveConversationModel,
   resolveConversationStartSelection,
-} from '../../../src/services/llm/providerSupport';
+} from '../../../src/services/llm/support/providerSupport';
+import { finalizeProviderConfig } from '../../../src/constants/api';
+
+describe('finalizeProviderConfig', () => {
+  it('assigns explicit voyage provider family metadata', () => {
+    const provider = finalizeProviderConfig({
+      id: 'voyage',
+      name: 'Research backend',
+      baseUrl: 'https://api.voyageai.com/v1',
+      apiKey: 'vk',
+      model: 'voyage-3-lite',
+      enabled: true,
+    } as any);
+
+    expect(provider.providerFamily).toBe('voyage');
+  });
+
+  it('assigns explicit mistral provider family metadata', () => {
+    const provider = finalizeProviderConfig({
+      id: 'mistral',
+      name: 'Embeddings',
+      baseUrl: 'https://api.mistral.ai/v1',
+      apiKey: 'mk',
+      model: 'mistral-large-3',
+      enabled: true,
+    } as any);
+
+    expect(provider.providerFamily).toBe('mistral');
+  });
+});
 
 describe('resolveConversationStartSelection', () => {
   it('uses the preferred model for the preferred provider', () => {
@@ -144,12 +173,32 @@ describe('resolveConversationModel', () => {
         {
           id: 'gemini',
           name: 'Gemini',
+          providerFamily: 'gemini',
           baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
           model: 'gemini-3.1-pro-preview',
           availableModels: ['gemini-3.1-pro-preview', 'gemini-3.1-flash-lite'],
         },
         {
           activeProviderId: 'gemini',
+          activeModel: 'gemini-3.5-flash',
+        },
+      ),
+    ).toBe('gemini-3.5-flash');
+  });
+
+  it('uses explicit provider family metadata without rediscovering provider identity from names or URLs', () => {
+    expect(
+      resolveConversationModel(
+        {
+          id: 'internal-gateway',
+          name: 'Internal gateway',
+          providerFamily: 'gemini',
+          baseUrl: 'https://gateway.example.com/v1',
+          model: 'gemini-3.1-pro-preview',
+          availableModels: ['gemini-3.1-pro-preview'],
+        },
+        {
+          activeProviderId: 'internal-gateway',
           activeModel: 'gemini-3.5-flash',
         },
       ),
@@ -188,9 +237,9 @@ describe('assertProviderReadyForRequest', () => {
   it('allows on-device providers without an API key', () => {
     expect(() =>
       assertProviderReadyForRequest({
-        name: 'Gemma (on-device)',
+        name: 'On-device models',
         kind: 'on-device',
-        local: { runtime: 'mediapipe-genai' },
+        local: { runtime: 'litert-lm' },
         apiKey: '',
       } as any),
     ).not.toThrow();

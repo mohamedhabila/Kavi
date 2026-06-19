@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   Image,
   Linking,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,8 +22,6 @@ import {
   Menu,
   Globe,
   Camera,
-  Play,
-  Square,
   RefreshCw,
   ExternalLink,
   AlertTriangle,
@@ -37,12 +34,12 @@ import {
   Eye,
 } from 'lucide-react-native';
 import { useAppTheme, AppPalette } from '../theme/useAppTheme';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../i18n/useTranslation';
 import { useRemoteStore } from '../services/remote/store';
 import { useBrowserTraceStore, type BrowserTraceEntry } from '../services/browser/traceStore';
-import type { RemoteSessionRecord } from '../types';
+import type { RemoteSessionRecord } from '../types/remote';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { getBrowserProviderReadiness } from '../services/browser/providers';
+import { getBrowserProviderReadiness } from '../services/browser/providers/readiness';
 
 // ── Component ────────────────────────────────────────────────────────────
 
@@ -185,25 +182,6 @@ export const BrowserSessionScreen: React.FC = () => {
   const formatTime = (ts: number) => {
     const d = new Date(ts);
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  };
-
-  const getActionKindLabel = (kind: string) => {
-    switch (kind.toLowerCase()) {
-      case 'snapshot':
-        return t('browserSessions.actionSnapshot');
-      case 'screenshot':
-        return t('browserSessions.actionScreenshot');
-      case 'click':
-        return t('browserSessions.actionClick');
-      case 'type':
-        return t('browserSessions.actionType');
-      case 'scroll':
-        return t('browserSessions.actionScroll');
-      case 'reload':
-        return t('browserSessions.actionReload');
-      default:
-        return kind;
-    }
   };
 
   const getStatusLabel = (status: string) => {

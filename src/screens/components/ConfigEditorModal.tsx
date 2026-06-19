@@ -10,7 +10,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { X } from 'lucide-react-native';
+import { ArrowLeft, X } from 'lucide-react-native';
 
 import { useAppTheme } from '../../theme/useAppTheme';
 
@@ -29,6 +29,7 @@ type ConfigEditorModalProps = {
   subtitle?: string;
   onClose: () => void;
   closeAccessibilityLabel: string;
+  closeIcon?: 'close' | 'back';
   shellStyles: ConfigEditorModalShellStyles;
   contentContainerStyle?: StyleProp<ViewStyle>;
   children: React.ReactNode;
@@ -40,6 +41,7 @@ export const ConfigEditorModal: React.FC<ConfigEditorModalProps> = ({
   subtitle,
   onClose,
   closeAccessibilityLabel,
+  closeIcon = 'close',
   shellStyles,
   contentContainerStyle,
   children,
@@ -59,7 +61,11 @@ export const ConfigEditorModal: React.FC<ConfigEditorModalProps> = ({
             accessibilityRole="button"
             accessibilityLabel={closeAccessibilityLabel}
           >
-            <X size={24} color={colors.text} />
+            {closeIcon === 'back' ? (
+              <ArrowLeft size={24} color={colors.text} />
+            ) : (
+              <X size={24} color={colors.text} />
+            )}
           </TouchableOpacity>
         </View>
 

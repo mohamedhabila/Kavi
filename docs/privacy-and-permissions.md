@@ -59,4 +59,4 @@ When an on-device model is selected, inference can remain on the device instead 
 
 - Never commit real credentials, signed URLs, or private infrastructure endpoints.
 - Avoid posting raw logs that contain personal, provider, or remote-host data in issues or pull requests.
-- Keep `_research/` and other maintainer-private planning material out of the public git history.
+- Keep maintainer-private planning material out of the public git history.

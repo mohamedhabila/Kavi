@@ -1,4 +1,3 @@
-import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import { CodeEditorScreen } from '../../src/screens/CodeEditorScreen';
@@ -65,7 +64,7 @@ jest.mock('../../src/theme/useAppTheme', () => ({
   AppPalette: {},
 }));
 
-jest.mock('../../src/i18n', () => ({
+jest.mock('../../src/i18n/useTranslation', () => ({
   useTranslation: () => ({ t: mockTranslate }),
 }));
 

@@ -16,8 +16,9 @@
 //     twice (recordFact hashes by content).
 // ---------------------------------------------------------------------------
 
-import type { AgentRunEvidenceEntry } from '../../types';
-import { recordFact, type RecordFactResult } from './facts';
+import type { AgentRunEvidenceEntry, AgentRunEvidenceRecorder } from '../../types/agentRun';
+import { recordFact } from './facts/mutations';
+import type { RecordFactResult } from './facts/types';
 import { upsertEntity, type EntityType } from './entities';
 import { ensureFactSchema } from './schema';
 
@@ -32,9 +33,14 @@ export interface EvidenceBridgeOptions {
   defaultSubject?: { name: string; type?: EntityType };
   /** Run id for traceability — written to RecordFact.sourceRunId. */
   sourceRunId?: string;
+  originConversationId?: string;
+  originThreadId?: string;
+  originTaskId?: string;
   /** Optional now override (testing). */
   now?: number;
 }
+
+const MAX_GRAPH_EVIDENCE_BRIDGE_ENTRIES = 64;
 
 const DEFAULT_BRIDGED_KINDS: ReadonlySet<AgentRunEvidenceEntry['kind']> = new Set([
   'fact',
@@ -82,8 +88,7 @@ export function bridgeEvidenceToFacts(
   ensureFactSchema();
 
   const subjectName = options.subjectName?.trim() || options.defaultSubject?.name?.trim() || '';
-  const subjectType: EntityType =
-    options.subjectType ?? options.defaultSubject?.type ?? 'project';
+  const subjectType: EntityType = options.subjectType ?? options.defaultSubject?.type ?? 'project';
 
   const bridged: RecordFactResult[] = [];
   const skipped: Array<{ id: string; reason: string }> = [];
@@ -128,6 +133,11 @@ export function bridgeEvidenceToFacts(
         objectText,
         confidence,
         ...(options.sourceRunId ? { sourceRunId: options.sourceRunId } : {}),
+        ...(options.originConversationId
+          ? { originConversationId: options.originConversationId }
+          : {}),
+        ...(options.originThreadId ? { originThreadId: options.originThreadId } : {}),
+        ...(options.originTaskId ? { originTaskId: options.originTaskId } : {}),
         now: options.now,
       });
       bridged.push(result);
@@ -140,4 +150,48 @@ export function bridgeEvidenceToFacts(
   }
 
   return { bridged, skipped };
+}
+
+function resolveGraphEvidenceRecorder(prefix: string): AgentRunEvidenceRecorder {
+  if (prefix === 'python') return 'python';
+  if (prefix === 'worker') return 'worker';
+  return 'tool';
+}
+
+export function mapGraphGoalEvidenceToEntries(
+  evidenceStrings: ReadonlyArray<string>,
+  now: number = Date.now(),
+): AgentRunEvidenceEntry[] {
+  const unique = Array.from(
+    new Set(evidenceStrings.map((entry) => entry.trim()).filter((entry) => entry.length > 0)),
+  ).slice(0, MAX_GRAPH_EVIDENCE_BRIDGE_ENTRIES);
+
+  return unique.map((evidence, index) => {
+    const colonIndex = evidence.indexOf(':');
+    const prefix = colonIndex > 0 ? evidence.slice(0, colonIndex) : 'graph';
+    const recorder = resolveGraphEvidenceRecorder(prefix);
+    return {
+      id: `graph-evidence-${index}`,
+      kind: 'fact',
+      status: 'verified',
+      recorder,
+      title: prefix,
+      content: evidence,
+      dedupeKey: evidence.length > 120 ? evidence.slice(0, 120) : evidence,
+      createdAt: now,
+      updatedAt: now,
+      tags: ['graph', 'goal-evidence'],
+    };
+  });
+}
+
+export function bridgeGraphGoalEvidence(
+  evidenceStrings: ReadonlyArray<string>,
+  options: EvidenceBridgeOptions = {},
+): BridgeEvidenceResult {
+  const entries = mapGraphGoalEvidenceToEntries(evidenceStrings, options.now);
+  if (entries.length === 0) {
+    return { bridged: [], skipped: [] };
+  }
+  return bridgeEvidenceToFacts(entries, options);
 }

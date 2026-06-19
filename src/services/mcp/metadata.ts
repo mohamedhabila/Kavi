@@ -3,7 +3,7 @@ import type {
   McpCapabilityMetadata,
   McpServerConfig,
   McpTrustMetadata,
-} from '../../types';
+} from '../../types/remote';
 
 function hasConfiguredHeaders(headers?: Record<string, string>): boolean {
   return Object.values(headers || {}).some((value) => String(value).trim().length > 0);

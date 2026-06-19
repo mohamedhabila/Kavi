@@ -6,7 +6,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ChevronDown, ChevronRight, Brain } from 'lucide-react-native';
 import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
-import { useTranslation } from '../../i18n';
+import { useTranslation } from '../../i18n/useTranslation';
 
 interface ThinkingBlockProps {
   reasoning: string;

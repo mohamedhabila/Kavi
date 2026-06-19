@@ -1,4 +1,4 @@
-import type { Message } from '../../src/types';
+import type { Message } from '../../src/types/message';
 import { excludeTrailingInternalUserMessages } from '../../src/services/context/messageScoping';
 
 function makeMessage(overrides: Partial<Message>): Message {

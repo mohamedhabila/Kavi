@@ -1,7 +1,7 @@
 import { STORAGE_KEYS } from '../constants/storage';
 import { flushPendingStorageWrites, schedulePendingStorageFlush } from './throttledStorage';
 
-const CHAT_STORE_CHECKPOINT_DELAY_MS = 120;
+export const CHAT_STORE_CHECKPOINT_DELAY_MS = 750;
 
 export function requestChatStorePersistenceCheckpoint(
   delayMs = CHAT_STORE_CHECKPOINT_DELAY_MS,

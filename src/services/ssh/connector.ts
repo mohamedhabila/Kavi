@@ -1,14 +1,12 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import { deleteSecure, getSecure } from '../storage/SecureStorage';
-import { i18n } from '../../i18n';
+import { i18n } from '../../i18n/manager';
 import { generateId } from '../../utils/id';
 import { useSettingsStore } from '../../store/useSettingsStore';
-import type { SshTargetConfig } from '../../types';
+import type { SshTargetConfig } from '../../types/remote';
 import {
-  connectNativeSshWithKey,
   connectNativeSshWithVerifiedKey,
   connectNativeSshWithVerifiedPassword,
-  connectNativeSshWithPassword,
   getNativeSshHostFingerprint,
   getSshAuthMode,
   getSshPtyType,
@@ -142,10 +140,6 @@ function toNativeLocalPath(
   } catch {
     return normalized;
   }
-}
-
-function ensureTrailingSlash(path: string): string {
-  return path.endsWith('/') ? path : `${path}/`;
 }
 
 function buildRemoteCommand(command: string, cwd?: string): string {

@@ -1,8 +1,9 @@
 // ---------------------------------------------------------------------------
 // Kavi — Token Counter (approximate)
 // ---------------------------------------------------------------------------
-// Fast heuristic token counting using character/word ratios.
-// ~4 characters per token for English text (GPT models).
+// Fast token approximation using a conservative character-count ratio.
+
+import { resolveModelHostedFamily } from '../llm/catalog/providerFamilies';
 
 // Kavi uses chars/4 with a 1.2× safety margin for estimateTokens inaccuracy.
 export const CHARS_PER_TOKEN = 4;
@@ -71,17 +72,22 @@ export const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
   'phi4': 16384,
 };
 
+const MODEL_CONTEXT_WINDOW_ENTRIES_BY_SPECIFICITY = Object.entries(MODEL_CONTEXT_WINDOWS).sort(
+  (left, right) => right[0].length - left[0].length,
+);
+
 export function getContextWindow(model: string): number {
   // Check exact match
   if (MODEL_CONTEXT_WINDOWS[model]) return MODEL_CONTEXT_WINDOWS[model];
 
   // Check prefix match
   const lower = model.toLowerCase();
-  for (const [key, window] of Object.entries(MODEL_CONTEXT_WINDOWS)) {
+  for (const [key, window] of MODEL_CONTEXT_WINDOW_ENTRIES_BY_SPECIFICITY) {
     if (lower.includes(key.toLowerCase())) return window;
   }
 
   // Family-level fallback so newer minor revisions inherit safe defaults.
+  const hostedFamily = resolveModelHostedFamily(model);
   if (lower.includes('gpt-5')) {
     return lower.includes('mini') ? 400000 : 1000000;
   }
@@ -90,15 +96,21 @@ export function getContextWindow(model: string): number {
     return 200000;
   }
 
-  if (lower.includes('claude-opus-4') || lower.includes('claude-sonnet-4')) {
+  if (
+    hostedFamily === 'anthropic' &&
+    (lower.includes('claude-opus-4') || lower.includes('claude-sonnet-4'))
+  ) {
     return 1000000;
   }
 
-  if (lower.includes('claude-haiku-4')) {
+  if (hostedFamily === 'anthropic' && lower.includes('claude-haiku-4')) {
     return 200000;
   }
 
-  if (lower.includes('gemini') && (lower.includes('pro') || lower.includes('flash') || lower.includes('lite'))) {
+  if (
+    hostedFamily === 'gemini' &&
+    (lower.includes('pro') || lower.includes('flash') || lower.includes('lite'))
+  ) {
     return 1000000;
   }
 

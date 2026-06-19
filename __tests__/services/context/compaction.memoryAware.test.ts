@@ -7,7 +7,7 @@ import {
   buildStructuredSummary,
   COMPACTION_IDLE_GUARD_MS,
 } from '../../../src/services/context/compaction';
-import type { Message } from '../../../src/types';
+import type { Message } from '../../../src/types/message';
 
 jest.mock('../../../src/services/events/bus', () => ({
   emitSessionEvent: jest.fn().mockResolvedValue(undefined),

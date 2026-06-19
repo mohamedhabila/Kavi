@@ -47,7 +47,7 @@ Run on iOS:
 npm run ios
 ```
 
-Check Android release prerequisites:
+Run the public-safe Android release environment check:
 
 ```bash
 npm run check:android:release-env
@@ -61,28 +61,62 @@ Run the default local verification path before opening a pull request:
 npm run verify
 ```
 
-This currently runs:
+Pull request CI installs dependencies with `npm ci` and runs this same command
+from `.github/workflows/ci.yml`. The gate currently runs, in order:
 
-- ESLint
-- TypeScript type checking
-- Jest test suite in a contributor-safe mode
+- `npm run check:public-hygiene`
+- `npm run check:public-language`
+- `npm run check:links`
+- `npm run check:licenses`
+- `npm run check:app-metadata`
+- `npm run check:i18n`
+- `npm run check:no-legacy-planning-imports`
+- `npm run check:thin-e2e-harness`
+- `npm run check:graph-owned-mutations`
+- `npm run check:dead-exports`
+- `npm run check:tool-contracts`
+- `npm run lint`
+- `npm run typecheck`
+- `npm test -- --runInBand`
 
 If you are working on a narrow area, run the targeted tests for that area too.
+For high-risk agent, graph, memory, orchestration, or E2E harness changes,
+include `npm run verify:strict` in the pull request verification notes when it
+is practical to run locally.
 
 Useful supporting commands:
 
 ```bash
 npm run check:public-hygiene
+npm run check:public-language
+npm run check:links
+npm run check:licenses
+npm run check:app-metadata
+npm run check:i18n
+npm run check:no-legacy-planning-imports
+npm run check:thin-e2e-harness
+npm run check:graph-owned-mutations
+npm run check:dead-exports
+npm run check:tool-contracts
 npm run lint
+npm run typecheck
+npm run test:coverage
+npm test -- --runInBand
 npm run test:watch
 npm run format
 ```
+
+### Graph-owned control plane
+
+Agent run control graph state must mutate only through the graph layer (`src/engine/graph/**`) via `AgentControlGraphEvent` reducers. Store code may persist normalized snapshots received from graph callbacks, but must not invent graph transitions inline. `npm run check:graph-owned-mutations` enforces this boundary.
 
 ## Generated Assets And Native Artifacts
 
 Kavi includes generated editor assets and native build outputs.
 
 - `npm install` automatically runs `patch-package` and rebuilds editor assets.
+- If you change the editor runtime or templates, run `npm run build:editor-assets`
+  and commit only the generated runtime files that belong in source control.
 - Do not commit local cache directories, coverage output, emulator artifacts, or native build output.
 - After changing iOS native dependencies, run `cd ios && pod install`.
 - Use `npm run check:android:release-env` before debugging Android release-build failures.
@@ -118,10 +152,14 @@ Before submitting:
 
 - Rebase or merge cleanly onto the current default branch.
 - Run `npm run verify`.
-- Run `npm run check:public-hygiene` if the branch is intended to become part of a public repository.
+- Add `npm run verify:strict` when the change affects agent, graph, memory,
+  orchestration, or E2E harness behavior and the strict gate is practical to run
+  locally.
+- If you cannot run the full gate while preparing a public-facing docs-only
+  change, run `npm run check:public-hygiene` before requesting review.
 - Make sure new files and docs use the public `Kavi` name consistently.
-- Do not include private research notes, local credentials, or build artifacts.
-- Keep `_research/` and other maintainer-private working material out of the public git history.
+- Do not include maintainer-only notes, local credentials, or build artifacts.
+- Keep maintainer-private working material out of the public git history.
 
 ## Issues
 

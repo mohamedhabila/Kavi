@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { captureRef } from 'react-native-view-shot';
 import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
-import { useTranslation } from '../../i18n';
+import { useTranslation } from '../../i18n/useTranslation';
 import {
   closeCanvasSurface,
   getActiveSurfaces,
@@ -20,7 +20,7 @@ import {
 } from '../../services/canvas/renderer';
 import { hasCanvasSourceBundle } from '../../services/canvas/bundles';
 import { emitCanvasEvent } from '../../services/events/bus';
-import type { CanvasSurface } from '../../types';
+import type { CanvasSurface } from '../../types/canvas';
 import type { CanvasReadRequestOptions } from '../../services/canvas/types';
 import { buildJavaScriptCandidates } from '../../utils/javascript';
 
@@ -79,6 +79,9 @@ export const CanvasSurfacePresenter: React.FC = () => {
         var __error = null;
         for (var __i = 0; __i < __candidates.length; __i += 1) {
           try {
+            // Canvas eval intentionally runs inside the currently loaded WebView
+            // document so tools can inspect interactive canvas state. This shares
+            // the canvas page trust boundary and must not be treated as a sandbox.
             __result = Function(__candidates[__i])();
             __error = null;
             break;

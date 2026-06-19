@@ -1,3 +1,5 @@
+import { sanitizeWorkspaceRelativePath as sanitizeWorkspaceRelativePathValue } from '../../services/workspaces/paths';
+
 export interface ToolArgResult<T> {
   value?: T;
   error?: string;
@@ -74,22 +76,5 @@ export function getOptionalToolBooleanArg(
 }
 
 export function sanitizeWorkspaceRelativePath(inputPath: string): string {
-  let normalized = inputPath;
-  try {
-    normalized = decodeURIComponent(inputPath);
-  } catch {
-    normalized = inputPath;
-  }
-
-  normalized = normalized.replace(/\\/g, '/');
-  normalized = normalized.replace(/\0/g, '');
-
-  let previous = '';
-  while (previous !== normalized) {
-    previous = normalized;
-    normalized = normalized.replace(/\.\.\//g, '').replace(/\.\.$/g, '');
-  }
-
-  normalized = normalized.replace(/^\/+/, '');
-  return normalized.trim();
+  return sanitizeWorkspaceRelativePathValue(inputPath);
 }

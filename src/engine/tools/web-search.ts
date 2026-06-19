@@ -1,610 +1,229 @@
-// ---------------------------------------------------------------------------
-// Kavi — Web Search Tool
-// ---------------------------------------------------------------------------
-// 5 search providers: Brave, Perplexity, Grok, Kimi, Gemini
-// All use standard fetch() — fully RN compatible.
-
-import { getSecure } from '../../services/storage/SecureStorage';
-import { useSettingsStore } from '../../store/useSettingsStore';
-import { DEFAULT_GEMINI_AI_STUDIO_BASE_URL, DEFAULT_GEMINI_BASE_URL } from '../../constants/api';
+import type { ToolDefinition } from '../../types/tool';
+import type { ToolProviderContextInput } from './toolProviderContext';
+import {
+  getSearchProviderApiKey,
+  resolveConfiguredSearchProvider,
+  resolveSearchProvider,
+  type SearchProvider,
+} from '../../services/browser/core/providerDispatch';
+import {
+  normalizeShallowWebSearchResult,
+  type ShallowWebSearchResultRecord,
+} from '../../services/browser/core/resultShape';
 import {
   CacheEntry,
   DEFAULT_CACHE_TTL_MINUTES,
   DEFAULT_TIMEOUT_SECONDS,
+  isAbortLikeTransportError,
   normalizeCacheKey,
   readCache,
-  readResponseText,
   resolveCacheTtlMs,
-  resolveTimeoutSeconds,
-  withTimeout,
+  runWithTimeoutRetries,
   writeCache,
 } from './web-shared';
-import { ToolDefinition, WebSearchProvider } from '../../types';
+import { resolveGeminiSearchTransport } from './webSearchGeminiTransport';
+import { searchRemoteWebProvider } from './webSearchRemote';
 
-// ── Constants ────────────────────────────────────────────────────────────
-
-const SEARCH_PROVIDERS = ['brave', 'perplexity', 'grok', 'kimi', 'gemini'] as const;
-type SearchProvider = Exclude<WebSearchProvider, 'auto'>;
-
-const DEFAULT_SEARCH_COUNT = 5;
-const MAX_SEARCH_COUNT = 10;
-
-const BRAVE_SEARCH_ENDPOINT = 'https://api.search.brave.com/res/v1/web/search';
-const XAI_API_ENDPOINT = 'https://api.x.ai/v1/responses';
-const DEFAULT_GROK_MODEL = 'grok-4-1-fast';
-const DEFAULT_KIMI_BASE_URL = 'https://api.moonshot.ai/v1';
-const DEFAULT_KIMI_MODEL = 'moonshot-v1-128k';
-const DEFAULT_PERPLEXITY_MODEL = 'perplexity/sonar-pro';
-const DEFAULT_PERPLEXITY_BASE_URL = 'https://openrouter.ai/api/v1';
-const PERPLEXITY_DIRECT_BASE_URL = 'https://api.perplexity.ai';
-const DEFAULT_GEMINI_SEARCH_MODEL = 'gemini-2.5-flash';
+const SEARCH_RESULTS_PER_QUERY = 5;
+const MAX_BATCH_SEARCH_QUERIES = 4;
+const SEARCH_TOOL_TIMEOUT_SECONDS = 75;
+const SEARCH_TRANSPORT_ATTEMPTS = 2;
 
 const SEARCH_CACHE = new Map<string, CacheEntry<Record<string, unknown>>>();
-const GEMINI_SEARCH_BACKEND_CACHE = new Map<string, GeminiSearchBackend>();
 
-type GeminiSearchBackend = 'vertex' | 'ai-studio';
-
-class GeminiSearchHttpError extends Error {
-  status: number;
-
-  constructor(status: number, message: string) {
-    super(message);
-    this.name = 'GeminiSearchHttpError';
-    this.status = status;
-  }
-}
-
-const FRESHNESS_TO_RECENCY: Record<string, string> = {
-  pd: 'day',
-  pw: 'week',
-  pm: 'month',
-  py: 'year',
-};
-const RECENCY_TO_FRESHNESS: Record<string, string> = {
-  day: 'pd',
-  week: 'pw',
-  month: 'pm',
-  year: 'py',
-};
-
-// ── API Key Resolution ───────────────────────────────────────────────────
-
-async function getApiKey(key: string): Promise<string | null> {
-  return getSecure(key);
-}
-
-function fetchWithoutCookies(url: string, init: RequestInit = {}): Promise<Response> {
-  return fetch(url, {
-    ...init,
-    credentials: init.credentials ?? 'omit',
-  });
-}
-
-async function detectProvider(): Promise<{ provider: SearchProvider; apiKey: string } | null> {
-  const providers: Array<{ provider: SearchProvider; key: string }> = [
-    { provider: 'brave', key: 'BRAVE_API_KEY' },
-    { provider: 'perplexity', key: 'PERPLEXITY_API_KEY' },
-    { provider: 'grok', key: 'XAI_API_KEY' },
-    { provider: 'kimi', key: 'KIMI_API_KEY' },
-    { provider: 'gemini', key: 'GOOGLE_API_KEY' },
-  ];
-
-  for (const { provider, key } of providers) {
-    const apiKey = await getApiKey(key);
-    if (apiKey) return { provider, apiKey };
-  }
-  return null;
-}
-
-// ── Brave Search ─────────────────────────────────────────────────────────
-
-function resolveBraveFreshness(freshness?: string): string | undefined {
-  if (!freshness) return undefined;
-  const lower = freshness.trim().toLowerCase();
-  if (['pd', 'pw', 'pm', 'py'].includes(lower)) return lower;
-  if (RECENCY_TO_FRESHNESS[lower]) return RECENCY_TO_FRESHNESS[lower];
-  return undefined;
-}
-
-async function searchBrave(params: {
-  query: string;
-  count: number;
-  apiKey: string;
+type ExecuteWebSearchArgs = {
+  queries?: string[];
   freshness?: string;
   country?: string;
   language?: string;
-  signal?: AbortSignal;
-}): Promise<Record<string, unknown>> {
-  const url = new URL(BRAVE_SEARCH_ENDPOINT);
-  url.searchParams.set('q', params.query);
-  url.searchParams.set('count', String(Math.min(params.count, MAX_SEARCH_COUNT)));
-  if (params.country && params.country !== 'ALL') {
-    url.searchParams.set('country', params.country.toUpperCase());
-  }
-  if (params.language) url.searchParams.set('search_lang', params.language);
-  const braveFreshness = resolveBraveFreshness(params.freshness);
-  if (braveFreshness) url.searchParams.set('freshness', braveFreshness);
+};
 
-  const res = await fetchWithoutCookies(url.toString(), {
-    headers: {
-      Accept: 'application/json',
-      'Accept-Encoding': 'gzip',
-      'X-Subscription-Token': params.apiKey,
-    },
-    signal: params.signal,
-  });
-
-  if (!res.ok) throw new Error(`Brave search failed: HTTP ${res.status}`);
-  const data = await res.json();
-  const results = (data?.web?.results || []).map((r: any) => ({
-    title: r.title || '',
-    url: r.url || '',
-    description: r.description || '',
-    age: r.age,
-  }));
-
-  return {
-    provider: 'brave',
-    query: params.query,
-    results,
-    citations: results.map((r: any) => r.url).filter(Boolean),
-  };
-}
-
-// ── Perplexity Search ────────────────────────────────────────────────────
-
-function resolvePerplexityBaseUrl(apiKey: string): string {
-  if (apiKey.startsWith('pplx-')) return PERPLEXITY_DIRECT_BASE_URL;
-  return DEFAULT_PERPLEXITY_BASE_URL;
-}
-
-async function searchPerplexity(params: {
+type NormalizedWebSearchRequest = {
   query: string;
-  count: number;
-  apiKey: string;
-  freshness?: string;
-  signal?: AbortSignal;
-}): Promise<Record<string, unknown>> {
-  const baseUrl = resolvePerplexityBaseUrl(params.apiKey);
-  const model = params.apiKey.startsWith('pplx-') ? 'sonar-pro' : DEFAULT_PERPLEXITY_MODEL;
+};
 
-  const body: Record<string, unknown> = {
-    model,
-    messages: [{ role: 'user', content: params.query }],
-    max_tokens: 1024,
-  };
-
-  const recency = params.freshness
-    ? FRESHNESS_TO_RECENCY[params.freshness] || params.freshness
-    : undefined;
-  if (recency && ['day', 'week', 'month', 'year'].includes(recency)) {
-    body.search_recency_filter = recency;
-  }
-
-  const res = await fetchWithoutCookies(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${params.apiKey}`,
-    },
-    body: JSON.stringify(body),
-    signal: params.signal,
-  });
-
-  if (!res.ok) throw new Error(`Perplexity search failed: HTTP ${res.status}`);
-  const data = await res.json();
-
-  const content = data?.choices?.[0]?.message?.content || '';
-  const citations: string[] = [];
-  for (const c of data?.citations || []) {
-    if (typeof c === 'string' && c.trim()) citations.push(c);
-  }
-  for (const choice of data?.choices || []) {
-    for (const ann of choice?.message?.annotations || []) {
-      const url = ann?.url_citation?.url || ann?.url;
-      if (typeof url === 'string' && url.trim()) citations.push(url);
+function normalizeWebSearchRequests(args: ExecuteWebSearchArgs):
+  | {
+      searches: NormalizedWebSearchRequest[];
     }
-  }
+  | {
+      error: string;
+    } {
+  const batchQueries = Array.isArray(args.queries)
+    ? args.queries
+        .map((query) => (typeof query === 'string' ? query.trim() : ''))
+        .filter((query): query is string => query.length > 0)
+    : [];
 
-  return {
-    provider: 'perplexity',
-    query: params.query,
-    summary: content,
-    citations: [...new Set(citations)],
-    results: citations.map((url: string) => ({ url, title: '', description: '' })),
-  };
-}
-
-// ── Grok Search (xAI Responses API) ─────────────────────────────────────
-
-async function searchGrok(params: {
-  query: string;
-  count: number;
-  apiKey: string;
-  freshness?: string;
-  signal?: AbortSignal;
-}): Promise<Record<string, unknown>> {
-  const body = {
-    model: DEFAULT_GROK_MODEL,
-    tools: [{ type: 'web_search' as const }],
-    input: params.query,
-  };
-
-  const res = await fetchWithoutCookies(XAI_API_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${params.apiKey}`,
-    },
-    body: JSON.stringify(body),
-    signal: params.signal,
-  });
-
-  if (!res.ok) throw new Error(`Grok search failed: HTTP ${res.status}`);
-  const data = await res.json();
-
-  // Extract text from xAI Responses API format
-  let text = '';
-  const citations: string[] = [];
-
-  for (const output of data?.output || []) {
-    if (output?.type === 'message') {
-      for (const block of output?.content || []) {
-        if (block?.type === 'output_text' && typeof block?.text === 'string') {
-          text = block.text;
-          for (const ann of block?.annotations || []) {
-            if (ann?.type === 'url_citation' && typeof ann?.url === 'string') {
-              citations.push(ann.url);
-            }
-          }
-        }
-      }
-    }
-    if (output?.type === 'output_text' && typeof output?.text === 'string') {
-      text = output.text;
-      for (const ann of output?.annotations || []) {
-        if (ann?.type === 'url_citation' && typeof ann?.url === 'string') {
-          citations.push(ann.url);
-        }
-      }
-    }
-  }
-
-  if (!text && typeof data?.output_text === 'string') text = data.output_text;
-  if (data?.citations) citations.push(...data.citations.filter((c: any) => typeof c === 'string'));
-
-  return {
-    provider: 'grok',
-    query: params.query,
-    summary: text,
-    citations: [...new Set(citations)],
-    results: [...new Set(citations)].map((url) => ({ url, title: '', description: '' })),
-  };
-}
-
-// ── Kimi Search (Moonshot) ───────────────────────────────────────────────
-
-async function searchKimi(params: {
-  query: string;
-  count: number;
-  apiKey: string;
-  signal?: AbortSignal;
-}): Promise<Record<string, unknown>> {
-  const body = {
-    model: DEFAULT_KIMI_MODEL,
-    messages: [{ role: 'user', content: params.query }],
-    tools: [{ type: 'builtin_function', function: { name: '$web_search' } }],
-    stream: false,
-  };
-
-  const res = await fetchWithoutCookies(`${DEFAULT_KIMI_BASE_URL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${params.apiKey}`,
-    },
-    body: JSON.stringify(body),
-    signal: params.signal,
-  });
-
-  if (!res.ok) throw new Error(`Kimi search failed: HTTP ${res.status}`);
-  const data = await res.json();
-
-  const content = data?.choices?.[0]?.message?.content || '';
-  const searchResults = (data?.search_results || []).map((r: any) => ({
-    title: r.title || '',
-    url: r.url || '',
-    description: r.content || '',
-  }));
-
-  return {
-    provider: 'kimi',
-    query: params.query,
-    summary: content,
-    citations: searchResults.map((r: any) => r.url).filter(Boolean),
-    results: searchResults,
-  };
-}
-
-// ── Gemini Search ────────────────────────────────────────────────────────
-
-function buildGeminiSearchUrl(model: string, backend: GeminiSearchBackend): string {
-  const encodedModel = encodeURIComponent(model);
-  if (backend === 'vertex') {
-    return `${DEFAULT_GEMINI_BASE_URL}/publishers/google/models/${encodedModel}:generateContent`;
-  }
-
-  return `${DEFAULT_GEMINI_AI_STUDIO_BASE_URL}/models/${encodedModel}:generateContent`;
-}
-
-function buildGeminiSearchBody(
-  query: string,
-  model: string,
-  backend: GeminiSearchBackend,
-): Record<string, unknown> {
-  return {
-    contents: [{ role: 'user', parts: [{ text: query }] }],
-    tools: backend === 'vertex' ? [{ googleSearch: {} }] : [{ google_search: {} }],
-    ...(backend === 'vertex' ? { model: `publishers/google/models/${model}` } : {}),
-  };
-}
-
-function shouldRetryGeminiSearchBackend(error: unknown): boolean {
-  return error instanceof GeminiSearchHttpError && [400, 401, 403, 404].includes(error.status);
-}
-
-function extractGeminiGroundingResult(data: any): Record<string, unknown> {
-  let text = '';
-  const citations: string[] = [];
-
-  const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
-  for (const candidate of candidates) {
-    for (const part of candidate?.content?.parts || []) {
-      if (typeof part?.text === 'string') {
-        text += part.text;
-      }
-    }
-  }
-
-  const grounding = candidates[0]?.groundingMetadata;
-  if (grounding?.groundingChunks) {
-    for (const chunk of grounding.groundingChunks) {
-      if (chunk?.web?.uri) citations.push(chunk.web.uri);
-    }
-  }
-
-  return {
-    summary: text,
-    citations: [...new Set(citations)],
-    webSearchQueries: Array.isArray(grounding?.webSearchQueries) ? grounding.webSearchQueries : [],
-    searchEntryPoint: grounding?.searchEntryPoint,
-    groundingMetadata: grounding,
-    results: [...new Set(citations)].map((url) => ({ url, title: '', description: '' })),
-  };
-}
-
-async function searchGeminiWithBackend(params: {
-  query: string;
-  apiKey: string;
-  signal?: AbortSignal;
-  backend: GeminiSearchBackend;
-}): Promise<Record<string, unknown>> {
-  const model = DEFAULT_GEMINI_SEARCH_MODEL;
-  const res = await fetchWithoutCookies(buildGeminiSearchUrl(model, params.backend), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': params.apiKey,
-    },
-    body: JSON.stringify(buildGeminiSearchBody(params.query, model, params.backend)),
-    signal: params.signal,
-  });
-
-  if (!res.ok) {
-    const errorText = await readResponseText(res);
-    throw new GeminiSearchHttpError(
-      res.status,
-      `Gemini search failed: HTTP ${res.status}${errorText ? ` ${errorText}` : ''}`,
-    );
-  }
-
-  const data = await res.json();
-  return {
-    provider: 'gemini',
-    backend: params.backend,
-    query: params.query,
-    ...extractGeminiGroundingResult(data),
-  };
-}
-
-async function searchGemini(params: {
-  query: string;
-  count: number;
-  apiKey: string;
-  signal?: AbortSignal;
-}): Promise<Record<string, unknown>> {
-  const cachedBackend = GEMINI_SEARCH_BACKEND_CACHE.get(params.apiKey);
-  const backendOrder: GeminiSearchBackend[] = cachedBackend
-    ? [cachedBackend, cachedBackend === 'vertex' ? 'ai-studio' : 'vertex']
-    : ['vertex', 'ai-studio'];
-  let lastError: unknown;
-
-  for (let index = 0; index < backendOrder.length; index += 1) {
-    const backend = backendOrder[index];
-
-    try {
-      const result = await searchGeminiWithBackend({
-        query: params.query,
-        apiKey: params.apiKey,
-        signal: params.signal,
-        backend,
-      });
-      GEMINI_SEARCH_BACKEND_CACHE.set(params.apiKey, backend);
-      return result;
-    } catch (error: unknown) {
-      lastError = error;
-      if (!shouldRetryGeminiSearchBackend(error) || index === backendOrder.length - 1) {
-        throw error;
-      }
-
-      if (GEMINI_SEARCH_BACKEND_CACHE.get(params.apiKey) === backend) {
-        GEMINI_SEARCH_BACKEND_CACHE.delete(params.apiKey);
-      }
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error('Gemini search failed');
-}
-
-// ── Main search dispatcher ───────────────────────────────────────────────
-
-export async function executeWebSearch(args: {
-  query: string;
-  count?: number;
-  provider?: string;
-  freshness?: string;
-  country?: string;
-  language?: string;
-}): Promise<string> {
-  const query = args.query?.trim();
-  if (!query) return JSON.stringify({ error: 'Search query is required' });
-
-  const count = Math.max(1, Math.min(args.count || DEFAULT_SEARCH_COUNT, MAX_SEARCH_COUNT));
-  const cacheTtlMs = resolveCacheTtlMs(DEFAULT_CACHE_TTL_MINUTES, DEFAULT_CACHE_TTL_MINUTES);
-  const cacheKey = normalizeCacheKey(
-    `${args.provider || 'auto'}:${query}:${count}:${args.freshness || ''}`,
+  const normalizedQueries = batchQueries.filter(
+    (query, index, queries) => queries.indexOf(query) === index,
   );
-
-  const cached = readCache(SEARCH_CACHE, cacheKey);
-  if (cached) return JSON.stringify(cached.value);
-
-  let resolved: { provider: SearchProvider; apiKey: string } | null = null;
-  const preferredProvider = useSettingsStore.getState().webSearchProvider || 'auto';
-  const requestedProvider =
-    args.provider && SEARCH_PROVIDERS.includes(args.provider as SearchProvider)
-      ? (args.provider as SearchProvider)
-      : preferredProvider !== 'auto'
-        ? preferredProvider
-        : undefined;
-
-  if (requestedProvider) {
-    const key = await getApiKeyForProvider(requestedProvider);
-    if (key) resolved = { provider: requestedProvider, apiKey: key };
+  if (normalizedQueries.length === 0) {
+    return { error: 'At least one search query is required' };
+  }
+  if (normalizedQueries.length > MAX_BATCH_SEARCH_QUERIES) {
+    return {
+      error: `A maximum of ${MAX_BATCH_SEARCH_QUERIES} parallel search queries is supported per call`,
+    };
   }
 
-  if (!resolved) resolved = await detectProvider();
+  const searches = normalizedQueries.map((query) => {
+    return {
+      query,
+    };
+  });
+
+  return { searches };
+}
+
+async function executeSingleWebSearch(params: {
+  provider: SearchProvider;
+  apiKey: string;
+  query: string;
+  count: number;
+  freshness?: string;
+  country?: string;
+  language?: string;
+  context?: ToolProviderContextInput;
+}): Promise<ShallowWebSearchResultRecord> {
+  const cacheTtlMs = resolveCacheTtlMs(DEFAULT_CACHE_TTL_MINUTES, DEFAULT_CACHE_TTL_MINUTES);
+  const preferredProvider = resolveConfiguredSearchProvider() || 'auto';
+  const cacheKey = normalizeCacheKey(
+    `${preferredProvider}:${params.query}:${params.count}:${params.freshness || ''}`,
+  );
+  const cached = readCache(SEARCH_CACHE, cacheKey);
+  if (cached) {
+    return normalizeShallowWebSearchResult({
+      query: params.query,
+      result: cached.value,
+      maxResults: SEARCH_RESULTS_PER_QUERY,
+    });
+  }
+
+  const result = await runWithTimeoutRetries({
+    attempts: SEARCH_TRANSPORT_ATTEMPTS,
+    timeoutSeconds: SEARCH_TOOL_TIMEOUT_SECONDS || DEFAULT_TIMEOUT_SECONDS,
+    shouldRetry: isAbortLikeTransportError,
+    operation: (signal) =>
+      searchRemoteWebProvider({
+        provider: params.provider,
+        query: params.query,
+        count: params.count,
+        apiKey: params.apiKey,
+        freshness: params.freshness,
+        country: params.country,
+        language: params.language,
+        context: params.context,
+        signal,
+      }),
+  });
+
+  writeCache(SEARCH_CACHE, cacheKey, result, cacheTtlMs);
+  return normalizeShallowWebSearchResult({
+    query: params.query,
+    result,
+    maxResults: SEARCH_RESULTS_PER_QUERY,
+  });
+}
+
+export async function executeWebSearch(
+  args: ExecuteWebSearchArgs,
+  context?: ToolProviderContextInput,
+): Promise<string> {
+  const normalizedSearches = normalizeWebSearchRequests(args);
+  if ('error' in normalizedSearches) {
+    return JSON.stringify({ error: normalizedSearches.error });
+  }
+
+  const resolved = await resolveSearchProvider({
+    resolveGeminiApiKey: async () =>
+      (
+        await resolveGeminiSearchTransport({
+          context,
+          fallbackApiKey: await getSearchProviderApiKey('gemini'),
+        })
+      )?.apiKey,
+  });
   if (!resolved) {
     return JSON.stringify({
       error:
-        'No search provider configured. Add an API key in Settings for one of: Brave, Perplexity, Grok (xAI), Kimi, or Google Gemini.',
+        'No web search provider configured. Add an API key in Settings for Brave, Gemini, Perplexity, Grok (xAI), or Kimi.',
     });
   }
-
-  const timeoutMs = resolveTimeoutSeconds(DEFAULT_TIMEOUT_SECONDS, DEFAULT_TIMEOUT_SECONDS) * 1000;
-  const timeout = withTimeout(undefined, timeoutMs);
 
   try {
-    let result: Record<string, unknown>;
+    const searches = await Promise.all(
+      normalizedSearches.searches.map(async (search) => {
+        try {
+          return await executeSingleWebSearch({
+            provider: resolved.provider,
+            apiKey: resolved.apiKey,
+            query: search.query,
+            count: SEARCH_RESULTS_PER_QUERY,
+            freshness: args.freshness,
+            country: args.country,
+            language: args.language,
+            context,
+          });
+        } catch (error: unknown) {
+          return {
+            query: search.query,
+            error: `Search failed: ${error instanceof Error ? error.message : String(error)}`,
+          };
+        }
+      }),
+    );
 
-    switch (resolved.provider) {
-      case 'brave':
-        result = await searchBrave({
-          query,
-          count,
-          apiKey: resolved.apiKey,
-          freshness: args.freshness,
-          country: args.country,
-          language: args.language,
-          signal: timeout.signal,
-        });
-        break;
-      case 'perplexity':
-        result = await searchPerplexity({
-          query,
-          count,
-          apiKey: resolved.apiKey,
-          freshness: args.freshness,
-          signal: timeout.signal,
-        });
-        break;
-      case 'grok':
-        result = await searchGrok({
-          query,
-          count,
-          apiKey: resolved.apiKey,
-          freshness: args.freshness,
-          signal: timeout.signal,
-        });
-        break;
-      case 'kimi':
-        result = await searchKimi({
-          query,
-          count,
-          apiKey: resolved.apiKey,
-          signal: timeout.signal,
-        });
-        break;
-      case 'gemini':
-        result = await searchGemini({
-          query,
-          count,
-          apiKey: resolved.apiKey,
-          signal: timeout.signal,
-        });
-        break;
-      default:
-        return JSON.stringify({ error: `Unknown provider: ${resolved.provider}` });
-    }
-
-    writeCache(SEARCH_CACHE, cacheKey, result, cacheTtlMs);
-    return JSON.stringify(result);
-  } catch (err: unknown) {
     return JSON.stringify({
-      error: `Search failed: ${err instanceof Error ? err.message : String(err)}`,
+      provider: resolved.provider,
+      searches,
     });
-  } finally {
-    timeout.dispose();
+  } catch (error: unknown) {
+    return JSON.stringify({
+      error: `Search failed: ${error instanceof Error ? error.message : String(error)}`,
+    });
   }
 }
-
-async function getApiKeyForProvider(provider: SearchProvider): Promise<string | null> {
-  const keyMap: Record<SearchProvider, string> = {
-    brave: 'BRAVE_API_KEY',
-    perplexity: 'PERPLEXITY_API_KEY',
-    grok: 'XAI_API_KEY',
-    kimi: 'KIMI_API_KEY',
-    gemini: 'GOOGLE_API_KEY',
-  };
-  return getApiKey(keyMap[provider]);
-}
-
-// ── Tool Definition ──────────────────────────────────────────────────────
 
 export const WEB_SEARCH_TOOL: ToolDefinition = {
   name: 'web_search',
   description:
-    'Search the web using available search providers (Brave, Perplexity, Grok, Kimi, Gemini). ' +
-    'Automatically selects the best configured provider. Returns search results with titles, URLs, ' +
-    'descriptions, and citations. For Perplexity and Grok, also returns an AI-generated summary.',
+    'Run one or more independent web searches using the configured search provider. Always pass every ' +
+    'search in queries; for one lookup, use a one-item queries array. Batch independent searches together in one call. ' +
+    'This tool is intentionally shallow: it returns only the top 5 candidate pages per query for discovery, not page content or summaries. ' +
+    'Use plain-language queries. For comparisons, search each source separately and compare after fetching them. ' +
+    'If you already have a plausible URL, use web_fetch directly instead of searching first. Pass several URLs together in one web_fetch call when multiple pages should be read. Returns one searches[] entry per query, ' +
+    'each with query, results, and optional error.',
   input_schema: {
     type: 'object',
     properties: {
-      query: { type: 'string', description: 'Search query string' },
-      count: { type: 'number', description: 'Number of results (1-10, default: 5)' },
-      provider: {
-        type: 'string',
-        description: 'Force a specific provider: brave, perplexity, grok, kimi, or gemini',
+      queries: {
+        type: 'array',
+        items: { type: 'string' },
+        minItems: 1,
+        maxItems: MAX_BATCH_SEARCH_QUERIES,
+        description: 'One or more independent search queries to run in parallel in one tool call',
       },
       freshness: { type: 'string', description: 'Time filter: day, week, month, or year' },
       country: { type: 'string', description: '2-letter country code (e.g. US, DE)' },
       language: { type: 'string', description: 'ISO 639-1 language code (e.g. en, de)' },
     },
-    required: ['query'],
+    required: ['queries'],
+  },
+  contract: {
+    category: 'web',
+    capabilities: ['discover'],
+    resourceKinds: ['unknown'],
+    sideEffects: ['none'],
+    riskHints: ['read_only', 'open_world'],
+    providesEvidence: ['verification'],
+    workflowStages: ['discover_resource'],
+    produces: [{ kind: 'url', field: 'search_result' }],
+    precedes: ['web_fetch'],
   },
   strict: true,
 };
 
 export function clearWebSearchCaches(): void {
   SEARCH_CACHE.clear();
-  GEMINI_SEARCH_BACKEND_CACHE.clear();
 }

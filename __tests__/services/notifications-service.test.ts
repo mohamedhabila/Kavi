@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import {
+  cancelLocalNotification,
   getPendingNotificationRoute,
   initializeNotifications,
   sendLocalNotification,
@@ -20,6 +21,7 @@ describe('notifications service', () => {
       status: 'granted',
     });
     (Notifications.scheduleNotificationAsync as jest.Mock).mockResolvedValue('notification-id');
+    (Notifications.cancelScheduledNotificationAsync as jest.Mock).mockResolvedValue(undefined);
     (Notifications.addNotificationResponseReceivedListener as jest.Mock).mockReturnValue({
       remove: mockSubscriptionRemove,
     });
@@ -78,6 +80,13 @@ describe('notifications service', () => {
     const request = (Notifications.scheduleNotificationAsync as jest.Mock).mock.calls[0][0];
     expect(request.content.sound).toBe(true);
     expect(request.content.sound).not.toBe('default');
+  });
+
+  it('cancels a scheduled local notification by id', async () => {
+    const result = await cancelLocalNotification('notification-id');
+
+    expect(result).toEqual({ id: 'notification-id', cancelled: true });
+    expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith('notification-id');
   });
 
   it('requests permissions when not already granted', async () => {

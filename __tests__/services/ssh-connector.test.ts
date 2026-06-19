@@ -1,86 +1,4 @@
 const mockSecureValues: Record<string, string> = {};
-const mockFileStore: Record<string, string> = {};
-const mockDirectoryStore = new Set<string>();
-
-function createExpoFileSystemMock() {
-  class MockDirectory {
-    uri: string;
-    name: string;
-
-    constructor(...parts: any[]) {
-      const normalized = parts
-        .map((part) => {
-          if (typeof part === 'string') return part;
-          if (part && typeof part.uri === 'string') return part.uri;
-          return '';
-        })
-        .filter(Boolean);
-      this.uri = normalized.join('/').replace(/\/+/g, '/');
-      this.name = this.uri.split('/').pop() || 'dir';
-    }
-
-    get exists() {
-      return mockDirectoryStore.has(this.uri);
-    }
-
-    create() {
-      mockDirectoryStore.add(this.uri);
-    }
-
-    delete() {
-      mockDirectoryStore.delete(this.uri);
-      Object.keys(mockFileStore).forEach((key) => {
-        if (key === this.uri || key.startsWith(`${this.uri}/`)) {
-          delete mockFileStore[key];
-        }
-      });
-    }
-  }
-
-  class MockFile {
-    uri: string;
-    name: string;
-
-    constructor(...parts: any[]) {
-      const normalized = parts
-        .map((part) => {
-          if (typeof part === 'string') return part;
-          if (part && typeof part.uri === 'string') return part.uri;
-          return '';
-        })
-        .filter(Boolean);
-      this.uri = normalized.join('/').replace(/\/+/g, '/');
-      this.name = this.uri.split('/').pop() || 'file';
-    }
-
-    get exists() {
-      return Object.prototype.hasOwnProperty.call(mockFileStore, this.uri);
-    }
-
-    async text() {
-      return mockFileStore[this.uri] || '';
-    }
-
-    write(content: string) {
-      mockFileStore[this.uri] = content;
-    }
-
-    delete() {
-      delete mockFileStore[this.uri];
-    }
-  }
-
-  return {
-    Paths: { cache: { uri: 'file:///mock/cache' } },
-    Directory: MockDirectory,
-    File: MockFile,
-    __resetStore: () => {
-      Object.keys(mockFileStore).forEach((key) => delete mockFileStore[key]);
-      mockDirectoryStore.clear();
-    },
-    __getStore: () => mockFileStore,
-  };
-}
 
 const mockConnectWithPassword = jest.fn();
 const mockConnectWithKey = jest.fn();
@@ -127,7 +45,7 @@ jest.mock('../../src/store/useSettingsStore', () => ({
 }));
 
 type SshConnectorModule = typeof import('../../src/services/ssh/connector');
-type ExpoFileSystemMock = ReturnType<typeof createExpoFileSystemMock>;
+type ExpoFileSystemMock = { __resetStore?: () => void };
 
 let connectSshTarget: SshConnectorModule['connectSshTarget'];
 let executeSshCommand: SshConnectorModule['executeSshCommand'];

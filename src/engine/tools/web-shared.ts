@@ -113,6 +113,50 @@ export function withTimeout(signal: AbortSignal | undefined, timeoutMs: number):
   };
 }
 
+export function isAbortLikeTransportError(error: unknown): boolean {
+  if (typeof DOMException !== 'undefined' && error instanceof DOMException && error.name === 'AbortError') {
+    return true;
+  }
+
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : '';
+  return /\babort(ed|error)?\b/i.test(message) || /\btime(?:d)?\s*out\b/i.test(message);
+}
+
+export async function runWithTimeoutRetries<T>(params: {
+  attempts: number;
+  operation: (signal: AbortSignal, attempt: number) => Promise<T>;
+  shouldRetry: (error: unknown) => boolean;
+  signal?: AbortSignal;
+  timeoutSeconds: number;
+}): Promise<T> {
+  const attempts = Math.max(1, Math.floor(params.attempts));
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const timeout = withTimeout(
+      params.signal,
+      resolveTimeoutSeconds(params.timeoutSeconds, DEFAULT_TIMEOUT_SECONDS) * 1000,
+    );
+    try {
+      return await params.operation(timeout.signal, attempt);
+    } catch (error: unknown) {
+      lastError = error;
+      if (attempt >= attempts || !params.shouldRetry(error)) {
+        throw error;
+      }
+    } finally {
+      timeout.dispose();
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Operation failed');
+}
+
 export async function readResponseText(
   res: Response,
   options?: { maxBytes?: number },

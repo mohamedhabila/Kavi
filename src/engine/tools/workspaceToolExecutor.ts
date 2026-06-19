@@ -1,25 +1,12 @@
 import { useSettingsStore } from '../../store/useSettingsStore';
 import {
-  readWorkspaceFile,
-  writeWorkspaceFile,
-  listWorkspaceDirectory,
-  makeWorkspaceDirectory,
-  renameWorkspaceFile,
-  deleteWorkspaceFile,
-} from '../../services/workspaces/files';
-import {
   delegateWorkspaceTask,
   getWorkspaceTargetControlStatus,
   launchWorkspaceBrowserSession,
   type WorkspaceDelegationMode,
 } from '../../services/workspaces/control';
-import type { WorkspaceTargetConfig } from '../../types';
+import type { WorkspaceTargetConfig } from '../../types/remote';
 import { getOptionalToolStringArg, requireToolStringArg } from './fileArgumentUtils';
-import {
-  normalizeWorkspaceListResult,
-  normalizeWorkspaceMutationResult,
-  normalizeWorkspaceReadResult,
-} from './toolResultNormalization';
 
 function resolveWorkspaceTarget(targetId: string): WorkspaceTargetConfig {
   const targets: WorkspaceTargetConfig[] = useSettingsStore.getState().workspaceTargets || [];
@@ -30,33 +17,6 @@ function resolveWorkspaceTarget(targetId: string): WorkspaceTargetConfig {
 
 export async function executeWorkspaceTool(name: string, args: any): Promise<string> {
   const rawArgs = args as Record<string, unknown>;
-
-  // workspace_fs is a single discriminated tool that maps to legacy
-  // workspace_{read_file,write_file,list_files,mkdir,rename,delete} executors.
-  if (name === 'workspace_fs') {
-    const action = typeof rawArgs?.action === 'string' ? rawArgs.action.toLowerCase() : '';
-    switch (action) {
-      case 'list':
-      case 'ls':
-        return executeWorkspaceTool('workspace_list_files', args);
-      case 'read':
-        return executeWorkspaceTool('workspace_read_file', args);
-      case 'write':
-        return executeWorkspaceTool('workspace_write_file', args);
-      case 'mkdir':
-      case 'make_directory':
-        return executeWorkspaceTool('workspace_mkdir', args);
-      case 'rename':
-      case 'move':
-        return executeWorkspaceTool('workspace_rename', args);
-      case 'delete':
-      case 'remove':
-      case 'rm':
-        return executeWorkspaceTool('workspace_delete', args);
-      default:
-        return 'Error: workspace_fs requires action ∈ {list, read, write, mkdir, rename, delete}';
-    }
-  }
 
   if (name === 'workspace_status') {
     const targetIdArg = getOptionalToolStringArg(rawArgs, 'targetId', name);
@@ -84,73 +44,6 @@ export async function executeWorkspaceTool(name: string, args: any): Promise<str
   const target = resolveWorkspaceTarget(targetIdArg.value!);
 
   switch (name) {
-    case 'workspace_read_file': {
-      const pathArg = requireToolStringArg(rawArgs, 'path', name);
-      if (pathArg.error) return pathArg.error;
-      const result = await readWorkspaceFile(target, pathArg.value!);
-      return normalizeWorkspaceReadResult({
-        targetId: target.id,
-        path: result.path,
-        content: result.content,
-        size: result.size,
-      });
-    }
-    case 'workspace_write_file': {
-      const pathArg = requireToolStringArg(rawArgs, 'path', name);
-      if (pathArg.error) return pathArg.error;
-      const contentArg = requireToolStringArg(rawArgs, 'content', name, { allowEmpty: true });
-      if (contentArg.error) return contentArg.error;
-      const result = await writeWorkspaceFile(target, pathArg.value!, contentArg.value!);
-      return normalizeWorkspaceMutationResult({
-        targetId: target.id,
-        action: 'written',
-        path: result.path,
-        size: result.size,
-      });
-    }
-    case 'workspace_list_files': {
-      const pathArg = getOptionalToolStringArg(rawArgs, 'path', name);
-      if (pathArg.error) return pathArg.error;
-      const result = await listWorkspaceDirectory(target, pathArg.value || '.');
-      return normalizeWorkspaceListResult({
-        targetId: target.id,
-        path: result.path,
-        entries: result.entries,
-      });
-    }
-    case 'workspace_mkdir': {
-      const pathArg = requireToolStringArg(rawArgs, 'path', name);
-      if (pathArg.error) return pathArg.error;
-      await makeWorkspaceDirectory(target, pathArg.value!);
-      return normalizeWorkspaceMutationResult({
-        targetId: target.id,
-        action: 'created',
-        path: pathArg.value!,
-      });
-    }
-    case 'workspace_rename': {
-      const oldPathArg = requireToolStringArg(rawArgs, 'oldPath', name);
-      if (oldPathArg.error) return oldPathArg.error;
-      const newPathArg = requireToolStringArg(rawArgs, 'newPath', name);
-      if (newPathArg.error) return newPathArg.error;
-      await renameWorkspaceFile(target, oldPathArg.value!, newPathArg.value!);
-      return normalizeWorkspaceMutationResult({
-        targetId: target.id,
-        action: 'renamed',
-        oldPath: oldPathArg.value!,
-        newPath: newPathArg.value!,
-      });
-    }
-    case 'workspace_delete': {
-      const pathArg = requireToolStringArg(rawArgs, 'path', name);
-      if (pathArg.error) return pathArg.error;
-      await deleteWorkspaceFile(target, pathArg.value!);
-      return normalizeWorkspaceMutationResult({
-        targetId: target.id,
-        action: 'deleted',
-        path: pathArg.value!,
-      });
-    }
     case 'workspace_launch_browser': {
       const providerIdArg = getOptionalToolStringArg(rawArgs, 'providerId', name);
       if (providerIdArg.error) return providerIdArg.error;

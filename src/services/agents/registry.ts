@@ -1,6 +1,6 @@
 import type { AgentPersona } from './personas';
 import { BUILT_IN_PERSONAS } from './personas';
-import { usePersonaConfigStore, type PersonaConfigPatch } from './store';
+import { usePersonaConfigStore,type PersonaConfigPatch } from './store';
 
 function mergePersona(base: AgentPersona, override?: Partial<AgentPersona>): AgentPersona {
   if (!override) return base;

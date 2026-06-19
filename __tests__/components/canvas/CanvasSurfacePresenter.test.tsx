@@ -1,4 +1,3 @@
-import React from 'react';
 import { render } from '@testing-library/react-native';
 import { CanvasSurfacePresenter } from '../../../src/components/canvas/CanvasSurfacePresenter';
 
@@ -25,7 +24,7 @@ jest.mock('../../../src/theme/useAppTheme', () => ({
   AppPalette: {},
 }));
 
-jest.mock('../../../src/i18n', () => ({
+jest.mock('../../../src/i18n/useTranslation', () => ({
   useTranslation: () => ({
     t: (key: string) => key,
   }),
@@ -35,13 +34,18 @@ jest.mock('react-native-view-shot', () => ({
   captureRef: jest.fn().mockResolvedValue('base64-image'),
 }));
 
+const mockInjectJavaScript = jest.fn();
+
 jest.mock('react-native-webview', () => {
   const React = require('react');
   const { View } = require('react-native');
   return {
-    WebView: React.forwardRef((props: any, ref: any) =>
-      React.createElement(View, { ...props, ref }),
-    ),
+    WebView: React.forwardRef((props: any, ref: any) => {
+      React.useImperativeHandle(ref, () => ({
+        injectJavaScript: mockInjectJavaScript,
+      }));
+      return React.createElement(View, { ...props });
+    }),
   };
 });
 
@@ -103,6 +107,7 @@ describe('CanvasSurfacePresenter', () => {
     mockGetSurface.mockReturnValue(mockSurface);
     mockGetActiveSurfaces.mockReturnValue([mockSurface]);
     mockRenderSurfaceToHtml.mockReturnValue(mockSurface.rawHtml);
+    mockInjectJavaScript.mockClear();
   });
 
   it('loads bundle-backed html canvases from the persisted local entry uri with hardened JS/file flags', () => {
@@ -131,5 +136,20 @@ describe('CanvasSurfacePresenter', () => {
         onNavigate: expect.any(Function),
       }),
     );
+  });
+
+  it('injects eval through encoded candidates into the active WebView', () => {
+    render(<CanvasSurfacePresenter />);
+    const latestHandlerCall =
+      mockSetCanvasEventHandler.mock.calls[mockSetCanvasEventHandler.mock.calls.length - 1];
+    const handler = latestHandlerCall[0];
+
+    handler.onEval('bundle-surface', 'document.title');
+
+    expect(mockInjectJavaScript).toHaveBeenCalledTimes(1);
+    const injectedScript = String(mockInjectJavaScript.mock.calls[0][0]);
+    expect(injectedScript).toContain('Function(__candidates[__i])()');
+    expect(injectedScript).toContain('document.title');
+    expect(injectedScript).toContain('window.ReactNativeWebView.postMessage');
   });
 });

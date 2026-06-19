@@ -2,6 +2,9 @@
 // Kavi — Thinking Level Control
 // ---------------------------------------------------------------------------
 
+import { isOpenAIReasoningModel } from '../services/llm/catalog/providerCapabilities';
+import { resolveModelHostedFamily } from '../services/llm/catalog/providerFamilies';
+
 export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
 export interface ThinkingConfig {
@@ -32,6 +35,28 @@ const ANTHROPIC_THINKING_ORDER: Array<Exclude<ThinkingLevel, 'off'>> = [
   'xhigh',
 ];
 
+function normalizeModel(model: string): string {
+  return model.toLowerCase();
+}
+
+function isGemini3Model(model: string): boolean {
+  return /(?:^|\/)gemini[- ]?3(?:[.-]|$)/i.test(model);
+}
+
+function supportsAnthropicAdaptiveThinking(model: string): boolean {
+  const lower = normalizeModel(model);
+  return (
+    lower.includes('claude-opus-4-7') ||
+    lower.includes('claude-opus-4-6') ||
+    lower.includes('claude-sonnet-4-6')
+  );
+}
+
+function supportsAnthropicMaxEffort(model: string): boolean {
+  const lower = normalizeModel(model);
+  return lower.includes('claude-opus-4-7') || lower.includes('claude-opus-4-6');
+}
+
 function resolveAnthropicThinkingBudget(level: ThinkingLevel, maxTokens?: number): number | null {
   if (level === 'off') {
     return null;
@@ -61,19 +86,8 @@ function resolveAnthropicThinkingBudget(level: ThinkingLevel, maxTokens?: number
   return resolvedBudget;
 }
 
-function supportsAnthropicAdaptiveThinking(model: string): boolean {
-  const lower = model.toLowerCase();
-  return (
-    lower.includes('claude-opus-4-7') ||
-    lower.includes('claude-opus-4-6') ||
-    lower.includes('claude-sonnet-4-6')
-  );
-}
-
 function resolveAnthropicAdaptiveEffort(level: ThinkingLevel, model: string): AnthropicEffort {
-  const lower = model.toLowerCase();
-  const supportsMaxEffort =
-    lower.includes('claude-opus-4-7') || lower.includes('claude-opus-4-6');
+  const supportsMaxEffort = supportsAnthropicMaxEffort(model);
 
   switch (level) {
     case 'minimal':
@@ -90,7 +104,7 @@ function resolveAnthropicAdaptiveEffort(level: ThinkingLevel, model: string): An
 }
 
 function resolveGeminiThinkingLevel(level: ThinkingLevel, model: string): GeminiThinkingLevel {
-  const lower = model.toLowerCase();
+  const lower = normalizeModel(model);
   const supportsMinimal = !lower.includes('pro');
 
   switch (level) {
@@ -109,7 +123,7 @@ function resolveGeminiThinkingLevel(level: ThinkingLevel, model: string): Gemini
 }
 
 function resolveGeminiThinkingBudget(level: ThinkingLevel, model: string): number {
-  const lower = model.toLowerCase();
+  const lower = normalizeModel(model);
   const isPro = lower.includes('pro');
 
   if (isPro) {
@@ -143,10 +157,11 @@ export function getThinkingParams(
   model: string,
   options: ThinkingParamsOptions = {},
 ): Record<string, unknown> {
-  const lower = model.toLowerCase();
+  const lower = normalizeModel(model);
+  const hostedFamily = resolveModelHostedFamily(model);
 
-  if (lower.includes('gemini')) {
-    if (lower.includes('gemini-3')) {
+  if (hostedFamily === 'gemini') {
+    if (isGemini3Model(model)) {
       return {
         thinking: {
           thinkingLevel: resolveGeminiThinkingLevel(level, lower),
@@ -167,7 +182,11 @@ export function getThinkingParams(
 
   // Claude 4.6 models: adaptive thinking + effort.
   // Older Claude models: manual budget_tokens mode.
-  if (lower.includes('claude')) {
+  if (hostedFamily === 'anthropic') {
+    if (level === 'minimal') {
+      return {};
+    }
+
     if (supportsAnthropicAdaptiveThinking(lower)) {
       return {
         thinking: {
@@ -193,12 +212,7 @@ export function getThinkingParams(
   }
 
   // OpenAI models: use reasoning_effort
-  if (
-    lower.includes('o1') ||
-    lower.includes('o3') ||
-    lower.includes('o4') ||
-    lower.startsWith('gpt-5')
-  ) {
+  if (isOpenAIReasoningModel(model)) {
     const effortMap: Record<ThinkingLevel, string> = {
       off: 'low',
       minimal: 'low',

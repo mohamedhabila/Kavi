@@ -9,7 +9,7 @@ import renderer from 'react-test-renderer';
 import { ChatInput } from '../../src/components/chat/ChatInput';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { Attachment } from '../../src/types';
+import { Attachment } from '../../src/types/attachment';
 
 const mockUseChatVoiceRecorder = jest.fn();
 const mockVoiceRecorderOverlay = jest.fn();

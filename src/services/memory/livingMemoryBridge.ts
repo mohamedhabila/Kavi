@@ -13,24 +13,28 @@
 //   - Empty inputs produce zero sections so callers can blindly append.
 // ---------------------------------------------------------------------------
 
-import type { Message } from '../../types';
-import type { EmbeddingConfig } from '../../types';
+import type { EmbeddingConfig } from '../../types/memory';
+import type { Message } from '../../types/message';
 import { createLogger } from '../../utils/logger';
 import { listBlocks, type MemoryBlock } from './blocks';
 import { getEntityById } from './entities';
-import { recallFactsForQuery } from './factRecall';
+import type { AgentGoal } from '../../engine/goals/types';
+import type { AgentRunControlGraphAsyncWorkState } from '../../types/agentRun';
+import type { MemoryFact } from './facts/types';
+import { orchestrateMemoryRetrieval } from './retrievalOrchestrator';
 import { renderFocusBlock, type FocusGap } from './focus';
+import { assemblePrompt, type PromptMemoryFact, type SystemPromptSection } from './promptAssembly';
 import { getWorkingBlock, type WorkingMemoryBlock } from './workingBlocks';
-import {
-  assemblePrompt,
-  type PromptMemoryFact,
-  type SystemPromptSection,
-} from './promptAssembly';
+import { getActiveTaskId, readTaskStack } from './taskStack';
+import { logRetrieval } from './retrievalLog';
+import { getLatestReflection } from './reflections';
 
 const logger = createLogger('memory.livingMemoryBridge');
 
 const FOCUS_BLOCK_LABEL = 'active_focus';
 const OPEN_THREADS_LABEL = 'open_threads';
+const RECENT_USER_QUERY_WINDOW_TURNS = 4;
+const RECENT_USER_QUERY_WINDOW_CHARS = 2_000;
 
 const SAFE_BLOCK_LABELS_FOR_PROMPT = new Set<string>([
   'profile',
@@ -67,12 +71,20 @@ export interface BuildLivingMemorySectionsOptions {
   readBlocks?: () => MemoryBlock[];
   /** Override scoped working block reader (test seam). */
   readWorkingBlock?: (label: 'active_focus' | 'open_threads') => WorkingMemoryBlock | null;
+  /** Override reflection reader (test seam). */
+  readLatestReflection?: (threadId: string) => string | null;
+  /** Graph-owned goals for multi-signal retrieval. */
+  goals?: ReadonlyArray<AgentGoal>;
+  /** Graph active task id (typically active goal id). */
+  activeTaskId?: string;
+  /** Graph async work state for retrieval signals. */
+  asyncWork?: AgentRunControlGraphAsyncWorkState;
 }
 
 export interface LivingMemoryBridgeOutput {
   /** Sections to append to the existing system-prompt sections array. */
   sections: SystemPromptSection[];
-  /** Stable hash of the L1+L2 cacheable prefix — useful for telemetry. */
+  /** Stable hash of the provider-cacheable prefix. Memory sections are dynamic until epoch admission. */
   cacheableSignature: string;
   /** Trimmed `active_focus` block content (for compaction `focusBlock` param). */
   focusBlockText: string;
@@ -84,6 +96,8 @@ export interface LivingMemoryBridgeOutput {
   focusGap?: FocusGap;
   /** Number of facts recalled (post text-only fallback). */
   recalledFactCount: number;
+  /** Number of recent episodes included. */
+  recalledEpisodeCount: number;
 }
 
 const EMPTY_OUTPUT: LivingMemoryBridgeOutput = {
@@ -92,6 +106,7 @@ const EMPTY_OUTPUT: LivingMemoryBridgeOutput = {
   focusBlockText: '',
   openThreadLabels: [],
   recalledFactCount: 0,
+  recalledEpisodeCount: 0,
 };
 
 function safeListBlocks(reader?: () => MemoryBlock[]): MemoryBlock[] {
@@ -150,14 +165,22 @@ function inferThreadCreatedAt(messages: Message[], fallback: number): number {
   return fallback;
 }
 
-function latestUserText(messages: Message[]): string {
+function recentUserTextWindow(
+  messages: Message[],
+  maxTurns = RECENT_USER_QUERY_WINDOW_TURNS,
+  maxChars = RECENT_USER_QUERY_WINDOW_CHARS,
+): string {
+  const turns: string[] = [];
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
     if (message.role !== 'user') continue;
     const candidate = (message.enrichedContent ?? message.content ?? '').trim();
-    if (candidate.length > 0) return candidate;
+    if (candidate.length > 0) turns.push(candidate);
+    if (turns.length >= maxTurns) break;
   }
-  return '';
+  const joined = turns.reverse().join('\n');
+  if (joined.length <= maxChars) return joined;
+  return joined.slice(joined.length - maxChars).trimStart();
 }
 
 function splitThreadLabels(content: string): string[] {
@@ -175,7 +198,7 @@ function getFactSubjectLabel(subjectId: string): string {
   }
 }
 
-function withFactSubjectLabels(facts: Awaited<ReturnType<typeof recallFactsForQuery>>): PromptMemoryFact[] {
+function withFactSubjectLabels(facts: ReadonlyArray<MemoryFact>): PromptMemoryFact[] {
   return facts.map((fact) => ({
     ...fact,
     subjectLabel: getFactSubjectLabel(fact.subjectId),
@@ -202,6 +225,10 @@ export async function buildLivingMemorySections(
     taskId,
     readBlocks,
     readWorkingBlock,
+    readLatestReflection: readLatestReflectionOverride,
+    goals,
+    activeTaskId,
+    asyncWork,
   } = options;
 
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -214,23 +241,43 @@ export async function buildLivingMemorySections(
     return EMPTY_OUTPUT;
   }
 
+  // Resolve active task: explicit taskId wins, otherwise read from task stack.
+  let resolvedTaskId = taskId ?? null;
+  let activeTaskTitle: string | null = null;
+  if (!resolvedTaskId && conversationId) {
+    try {
+      resolvedTaskId = getActiveTaskId(conversationId);
+      if (resolvedTaskId) {
+        activeTaskTitle =
+          readTaskStack(conversationId).find((t) => t.id === resolvedTaskId)?.title ?? null;
+      }
+    } catch (error) {
+      logger.devWarn(
+        'livingMemoryBridge.taskStack read failed:',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
   const blocks = safeListBlocks(readBlocks);
   const promptBlocks = blocks.filter((block) => SAFE_BLOCK_LABELS_FOR_PROMPT.has(block.label));
 
   const scopedFocusBlock = safeGetWorkingBlock(FOCUS_BLOCK_LABEL, {
     conversationId,
-    taskId,
+    taskId: resolvedTaskId ?? undefined,
     readWorkingBlock,
   });
-  const focusBlockSource = scopedFocusBlock ?? (!conversationId ? findBlock(blocks, FOCUS_BLOCK_LABEL) : null);
+  const focusBlockSource =
+    scopedFocusBlock ?? (!conversationId ? findBlock(blocks, FOCUS_BLOCK_LABEL) : null);
   const focusBlockText = (focusBlockSource?.content ?? '').trim();
 
   const scopedOpenThreads = safeGetWorkingBlock(OPEN_THREADS_LABEL, {
     conversationId,
-    taskId,
+    taskId: resolvedTaskId ?? undefined,
     readWorkingBlock,
   });
-  const openThreadsSource = scopedOpenThreads ?? (!conversationId ? findBlock(blocks, OPEN_THREADS_LABEL) : null);
+  const openThreadsSource =
+    scopedOpenThreads ?? (!conversationId ? findBlock(blocks, OPEN_THREADS_LABEL) : null);
   const openThreadLabels = splitThreadLabels(openThreadsSource?.content ?? '');
 
   const lastAssistantAt = lastTimestamp(messages, 'assistant');
@@ -247,22 +294,52 @@ export async function buildLivingMemorySections(
   };
   const focusRendered = renderFocusBlock(focusInput);
 
-  const query = latestUserText(messages);
-  let recalledFacts: Awaited<ReturnType<typeof recallFactsForQuery>> = [];
+  const query = recentUserTextWindow(messages);
+  let recalledFacts: Awaited<ReturnType<typeof orchestrateMemoryRetrieval>>['facts'] = [];
+  let recalledEpisodes: Awaited<ReturnType<typeof orchestrateMemoryRetrieval>>['episodes'] = [];
   if (!disableRecall) {
     try {
-      recalledFacts = await recallFactsForQuery(query, {
+      const retrieval = await orchestrateMemoryRetrieval({
+        userMessage: query,
+        focusText: focusBlockText,
+        goals,
+        activeTaskId: activeTaskId ?? resolvedTaskId ?? undefined,
+        asyncWork,
+        conversationId,
+        taskId: resolvedTaskId ?? undefined,
+        embeddingConfig,
         limit: recallLimit,
-        ...(embeddingConfig ? { embeddingConfig } : {}),
-        ...(conversationId ? { conversationId } : {}),
-        ...(taskId ? { taskId } : {}),
+        now,
       });
+      recalledFacts = retrieval.facts;
+      recalledEpisodes = retrieval.episodes;
     } catch (error) {
       logger.devWarn(
-        'livingMemoryBridge.recallFactsForQuery failed:',
+        'livingMemoryBridge.orchestrateMemoryRetrieval failed:',
         error instanceof Error ? error.message : String(error),
       );
       recalledFacts = [];
+      recalledEpisodes = [];
+    }
+  }
+
+  const dynamicAddenda: string[] = [];
+  if (activeTaskTitle) {
+    dynamicAddenda.push(`Active task: ${activeTaskTitle}`);
+  }
+
+  let reflectionBlock = '';
+  if (conversationId) {
+    try {
+      reflectionBlock =
+        readLatestReflectionOverride?.(conversationId) ??
+        getLatestReflection({ threadId: conversationId, kind: 'daily_focus' })?.content ??
+        '';
+    } catch (error) {
+      logger.devWarn(
+        'livingMemoryBridge.getLatestReflection failed:',
+        error instanceof Error ? error.message : String(error),
+      );
     }
   }
 
@@ -270,12 +347,28 @@ export async function buildLivingMemorySections(
     basePrompt: '',
     blocks: promptBlocks,
     focusBlock: focusRendered.text,
+    reflectionBlock: reflectionBlock.trim() || undefined,
     retrievedFacts: withFactSubjectLabels(recalledFacts),
+    recentEpisodes: recalledEpisodes,
+    ...(dynamicAddenda.length > 0 ? { dynamicAddenda } : {}),
   });
 
   const idleAnchor = lastAssistantAt ?? lastUserAt;
   const idleSinceLastTurnMs =
     typeof idleAnchor === 'number' ? Math.max(now - idleAnchor, 0) : undefined;
+
+  // Rough telemetry estimate; provider token accounting records exact usage.
+  const assembledText = assembled.sections.map((s) => s.text).join('\n\n');
+  const tokenEstimate = Math.ceil(assembledText.length / 4);
+
+  logRetrieval({
+    threadId: conversationId ?? null,
+    taskId: resolvedTaskId ?? null,
+    query: query.slice(0, 500),
+    factIds: recalledFacts.map((f) => f.id),
+    episodeIds: recalledEpisodes.map((e) => e.id),
+    tokenEstimate,
+  });
 
   return {
     sections: assembled.sections,
@@ -285,5 +378,6 @@ export async function buildLivingMemorySections(
     ...(typeof idleSinceLastTurnMs === 'number' ? { idleSinceLastTurnMs } : {}),
     focusGap: focusRendered.gap,
     recalledFactCount: recalledFacts.length,
+    recalledEpisodeCount: recalledEpisodes.length,
   };
 }

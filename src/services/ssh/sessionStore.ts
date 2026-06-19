@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { SshTargetConfig } from '../../types';
+import type { SshTargetConfig } from '../../types/remote';
 import { getSshTargetLabel, openSshShell, type ConnectedSshShell } from './connector';
 import { generateId } from '../../utils/id';
 

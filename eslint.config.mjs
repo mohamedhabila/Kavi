@@ -7,7 +7,8 @@ const sourceFiles = ['**/*.{js,mjs,cjs,ts,tsx}'];
 export default tseslint.config(
   {
     ignores: [
-      '_research/**',
+      '.private/**',
+      '.tmp/**',
       'android/**',
       'assets/editor/**',
       'coverage/**',
@@ -38,9 +39,20 @@ export default tseslint.config(
       },
     },
     plugins: {
+      '@typescript-eslint': tseslint.plugin,
       'react-hooks': reactHooks,
     },
     rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+          destructuredArrayIgnorePattern: '^_',
+          ignoreRestSiblings: true,
+          varsIgnorePattern: '^_',
+        },
+      ],
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
     },

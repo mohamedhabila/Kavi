@@ -2,21 +2,19 @@ import type {
   AgentRun,
   AgentRunAsyncOperation,
   AgentRunCheckpoint,
+  AgentRunControlGraphPerformance,
+  AgentRunControlGraphState,
   AgentRunEvidenceEntry,
-  AgentRunPilotEvaluation,
   AgentRunPlan,
   AgentRunSummary,
-  Conversation,
-  ConversationLogEntry,
-  ConversationUsageEntry,
-  ConversationUsageSummary,
-  Message,
-  MessageProviderReplay,
-  SubAgentActivityEntry,
-  SubAgentSnapshot,
-  ToolCall,
-} from '../types';
+} from '../types/agentRun';
+import type { Conversation, ConversationLogEntry } from '../types/conversation';
+import type { ConversationUsageEntry, ConversationUsageSummary } from '../types/usage';
+import type { Message, MessageProviderReplay, ToolCall } from '../types/message';
+import type { SubAgentActivityEntry, SubAgentSnapshot } from '../types/subAgent';
 import { stripAttachmentPayload } from '../utils/messageAttachments';
+import { normalizeAgentRunControlGraphState } from '../services/agents/agentControlGraphState';
+import { compactPersistedToolContent } from './persistedToolContent';
 
 const MAX_PERSISTED_SYSTEM_PROMPT_CHARS = 24_000;
 const MAX_PERSISTED_USER_CONTENT_CHARS = 20_000;
@@ -31,9 +29,12 @@ const MAX_PERSISTED_LOG_TITLE_CHARS = 160;
 const MAX_PERSISTED_LOG_DETAIL_CHARS = 800;
 const MAX_PERSISTED_USAGE_ENTRIES = 80;
 const MAX_PERSISTED_LOG_ENTRIES = 120;
+const MAX_PERSISTED_MESSAGES = 500;
 const MAX_PERSISTED_AGENT_RUNS = 12;
 const MAX_PERSISTED_AGENT_RUN_CHECKPOINTS = 40;
 const MAX_PERSISTED_AGENT_RUN_EVIDENCE = 64;
+const MAX_PERSISTED_AGENT_RUN_CONTROL_GRAPH_REFS = 64;
+const MAX_PERSISTED_AGENT_RUN_CONTROL_GRAPH_AUDIT_EVENTS = 96;
 const MAX_PERSISTED_PLAN_TEXT_CHARS = 2_000;
 const MAX_PERSISTED_PLAN_RAW_CHARS = 4_000;
 const MAX_PERSISTED_EVIDENCE_CONTENT_CHARS = 1_200;
@@ -48,6 +49,10 @@ const MAX_PERSISTED_SUB_AGENT_ACTIVITY_ENTRIES = 8;
 const MAX_PERSISTED_SUB_AGENT_ACTIVITY_TEXT_CHARS = 180;
 const MAX_PERSISTED_SUB_AGENT_OUTPUT_CHARS = 4_000;
 const MAX_PERSISTED_PENDING_ASYNC_OPERATIONS = 8;
+
+function sanitizeNonNegativeNumber(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
 
 function truncateText(value: string | undefined, maxChars: number): string | undefined {
   if (!value) {
@@ -123,16 +128,26 @@ function sanitizeProviderReplay(
     providerReplay.openaiResponseId.trim().length > 0
       ? providerReplay.openaiResponseId.trim()
       : undefined;
+  const openaiResponseInputContext = clonePlainRecordArray(
+    providerReplay.openaiResponseInputContext,
+  );
   const openaiResponseOutput = clonePlainRecordArray(providerReplay.openaiResponseOutput);
   const geminiParts = clonePlainRecordArray(providerReplay.geminiParts);
   const anthropicBlocks = clonePlainRecordArray(providerReplay.anthropicBlocks);
 
-  if (!openaiResponseId && !openaiResponseOutput && !geminiParts && !anthropicBlocks) {
+  if (
+    !openaiResponseId &&
+    !openaiResponseInputContext &&
+    !openaiResponseOutput &&
+    !geminiParts &&
+    !anthropicBlocks
+  ) {
     return undefined;
   }
 
   return {
     ...(openaiResponseId ? { openaiResponseId } : {}),
+    ...(openaiResponseInputContext ? { openaiResponseInputContext } : {}),
     ...(openaiResponseOutput ? { openaiResponseOutput } : {}),
     ...(geminiParts ? { geminiParts } : {}),
     ...(anthropicBlocks ? { anthropicBlocks } : {}),
@@ -196,6 +211,91 @@ function sanitizeAgentRunAsyncOperation(operation: AgentRunAsyncOperation): Agen
       ? { statusArgs: sanitizeAsyncOperationArgs(operation.statusArgs) }
       : {}),
     ...(operation.waitArgs ? { waitArgs: sanitizeAsyncOperationArgs(operation.waitArgs) } : {}),
+  };
+}
+
+function sanitizeAgentRunControlGraph(
+  controlGraph: AgentRunControlGraphState | undefined,
+): AgentRunControlGraphState | undefined {
+  const normalized = normalizeAgentRunControlGraphState(controlGraph);
+  if (!normalized) {
+    return undefined;
+  }
+
+  return {
+    ...normalized,
+    expectedToolCalls: normalized.expectedToolCalls
+      .slice(-MAX_PERSISTED_AGENT_RUN_CONTROL_GRAPH_REFS)
+      .map((call) => ({
+        id: truncateText(call.id, MAX_PERSISTED_LOG_TITLE_CHARS) || call.id,
+        name: truncateText(call.name, MAX_PERSISTED_LOG_TITLE_CHARS) || call.name,
+      })),
+    observedToolResults: normalized.observedToolResults
+      .slice(-MAX_PERSISTED_AGENT_RUN_CONTROL_GRAPH_REFS)
+      .map((result) => ({
+        id: truncateText(result.id, MAX_PERSISTED_LOG_TITLE_CHARS) || result.id,
+        name: truncateText(result.name, MAX_PERSISTED_LOG_TITLE_CHARS) || result.name,
+        ...(result.failed ? { failed: true } : {}),
+      })),
+    lastModelToolNames: normalized.lastModelToolNames
+      .slice(-MAX_PERSISTED_AGENT_RUN_CONTROL_GRAPH_REFS)
+      .map((toolName) => truncateText(toolName, MAX_PERSISTED_LOG_TITLE_CHARS) || toolName),
+    ...(normalized.activeTaskId
+      ? {
+          activeTaskId:
+            truncateText(normalized.activeTaskId, MAX_PERSISTED_LOG_TITLE_CHARS) ||
+            normalized.activeTaskId,
+        }
+      : {}),
+    asyncWork: {
+      awaitingBackgroundWorkers: normalized.asyncWork.awaitingBackgroundWorkers,
+      pendingOperations: normalized.asyncWork.pendingOperations
+        .slice(0, MAX_PERSISTED_PENDING_ASYNC_OPERATIONS)
+        .map((operation) => sanitizeAgentRunAsyncOperation(operation)),
+      updatedAt: normalized.asyncWork.updatedAt,
+    },
+    performance: sanitizeAgentRunControlGraphPerformance(normalized.performance),
+    turnDirectives: {
+      ...normalized.turnDirectives,
+      ...(normalized.turnDirectives.incompleteFinalTextContinuationPrefix
+        ? {
+            incompleteFinalTextContinuationPrefix: truncateText(
+              normalized.turnDirectives.incompleteFinalTextContinuationPrefix,
+              MAX_PERSISTED_LOG_DETAIL_CHARS,
+            ),
+          }
+        : {}),
+    },
+    audit: normalized.audit
+      .slice(-MAX_PERSISTED_AGENT_RUN_CONTROL_GRAPH_AUDIT_EVENTS)
+      .map((event) => ({
+        type: truncateText(event.type, MAX_PERSISTED_LOG_TITLE_CHARS) || event.type,
+        timestamp: event.timestamp,
+        ...(event.iteration !== undefined ? { iteration: event.iteration } : {}),
+        ...(event.detail
+          ? { detail: truncateText(event.detail, MAX_PERSISTED_LOG_DETAIL_CHARS) }
+          : {}),
+      })),
+  };
+}
+
+function sanitizeAgentRunControlGraphPerformance(
+  performance: AgentRunControlGraphPerformance,
+): AgentRunControlGraphPerformance {
+  return {
+    modelTurnCount: sanitizeNonNegativeNumber(performance.modelTurnCount),
+    modelDurationMs: sanitizeNonNegativeNumber(performance.modelDurationMs),
+    ...(performance.timeToFirstTokenMs !== undefined
+      ? { timeToFirstTokenMs: sanitizeNonNegativeNumber(performance.timeToFirstTokenMs) }
+      : {}),
+    toolExecutionCount: sanitizeNonNegativeNumber(performance.toolExecutionCount),
+    toolExecutionDurationMs: sanitizeNonNegativeNumber(performance.toolExecutionDurationMs),
+    lastCandidateToolCount: sanitizeNonNegativeNumber(performance.lastCandidateToolCount),
+    lastActiveToolCount: sanitizeNonNegativeNumber(performance.lastActiveToolCount),
+    maxActiveToolCount: sanitizeNonNegativeNumber(performance.maxActiveToolCount),
+    lastActiveToolTokenEstimate: sanitizeNonNegativeNumber(performance.lastActiveToolTokenEstimate),
+    maxActiveToolTokenEstimate: sanitizeNonNegativeNumber(performance.maxActiveToolTokenEstimate),
+    updatedAt: sanitizeNonNegativeNumber(performance.updatedAt),
   };
 }
 
@@ -286,6 +386,10 @@ function sanitizeMessageContent(message: Message): string {
     return normalizeText(message.content) || '';
   }
 
+  if (message.role === 'tool') {
+    return compactPersistedToolContent(message.content, getMessageContentLimit(message)) || '';
+  }
+
   return truncateText(message.content, getMessageContentLimit(message)) || '';
 }
 
@@ -339,6 +443,131 @@ function sanitizeMessage(
   };
 }
 
+const USAGE_TOKEN_BUCKET_KEYS = [
+  'systemPromptTokens',
+  'toolDeclarationTokens',
+  'memoryContextTokens',
+  'conversationHistoryTokens',
+  'userTurnTokens',
+  'toolResultTokens',
+] as const;
+
+const PROMPT_CACHE_EVENTS = new Set(['create', 'reuse', 'skip', 'provider_managed']);
+const PROMPT_CACHE_MODES = new Set([
+  'openai_native',
+  'anthropic_native',
+  'gemini_native',
+  'openrouter_compatible',
+  'unsupported',
+]);
+const PROMPT_CACHE_PREFIX_DIVERGENCE_REASONS = new Set([
+  'no_tools',
+  'no_stable_tool_prefix',
+  'stable_prefix_with_dynamic_suffix',
+  'fully_stable_prefix',
+]);
+
+function sanitizeTokenCount(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.floor(value))
+    : undefined;
+}
+
+function sanitizeUsageTokenBuckets(
+  tokenBuckets: ConversationUsageEntry['tokenBuckets'],
+): ConversationUsageEntry['tokenBuckets'] | undefined {
+  if (!tokenBuckets || typeof tokenBuckets !== 'object') {
+    return undefined;
+  }
+
+  const sanitized: Record<(typeof USAGE_TOKEN_BUCKET_KEYS)[number], number> = {
+    systemPromptTokens: 0,
+    toolDeclarationTokens: 0,
+    memoryContextTokens: 0,
+    conversationHistoryTokens: 0,
+    userTurnTokens: 0,
+    toolResultTokens: 0,
+  };
+  for (const key of USAGE_TOKEN_BUCKET_KEYS) {
+    const value = sanitizeTokenCount(tokenBuckets[key]);
+    if (value === undefined) {
+      return undefined;
+    }
+    sanitized[key] = value;
+  }
+  return sanitized;
+}
+
+function sanitizeOptionalUsageString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function sanitizeUsagePromptCacheTelemetry(
+  promptCache: ConversationUsageEntry['promptCache'],
+): ConversationUsageEntry['promptCache'] | undefined {
+  if (!promptCache || typeof promptCache !== 'object') {
+    return undefined;
+  }
+
+  const record = promptCache as unknown as Record<string, unknown>;
+  const estimatedInputTokens = sanitizeTokenCount(record.estimatedInputTokens);
+  const thresholdTokens = sanitizeTokenCount(record.thresholdTokens);
+  const providerFamily = sanitizeOptionalUsageString(record.providerFamily);
+  const mode = sanitizeOptionalUsageString(record.mode);
+  const event = sanitizeOptionalUsageString(record.event);
+  const reason = sanitizeOptionalUsageString(record.reason);
+  if (
+    estimatedInputTokens === undefined ||
+    thresholdTokens === undefined ||
+    !providerFamily ||
+    !mode ||
+    !PROMPT_CACHE_MODES.has(mode) ||
+    !event ||
+    !PROMPT_CACHE_EVENTS.has(event) ||
+    !reason
+  ) {
+    return undefined;
+  }
+
+  const hostedFamily = sanitizeOptionalUsageString(record.hostedFamily);
+  const explicitCacheName = sanitizeOptionalUsageString(record.explicitCacheName);
+  const stableSystemPromptDigest = sanitizeOptionalUsageString(record.stableSystemPromptDigest);
+  const stableToolDeclarationDigest = sanitizeOptionalUsageString(
+    record.stableToolDeclarationDigest,
+  );
+  const cacheablePrefixDigest = sanitizeOptionalUsageString(record.cacheablePrefixDigest);
+  const toolDeclarationDigest = sanitizeOptionalUsageString(record.toolDeclarationDigest);
+  const rawPrefixDivergenceReason = sanitizeOptionalUsageString(record.prefixDivergenceReason);
+  const prefixDivergenceReason =
+    rawPrefixDivergenceReason &&
+    PROMPT_CACHE_PREFIX_DIVERGENCE_REASONS.has(rawPrefixDivergenceReason)
+      ? rawPrefixDivergenceReason
+      : undefined;
+  return {
+    eligible: record.eligible === true,
+    enabled: record.enabled === true,
+    estimatedInputTokens,
+    thresholdTokens,
+    providerFamily,
+    ...(hostedFamily ? { hostedFamily } : {}),
+    mode: mode as NonNullable<ConversationUsageEntry['promptCache']>['mode'],
+    event: event as NonNullable<ConversationUsageEntry['promptCache']>['event'],
+    reason,
+    ...(explicitCacheName ? { explicitCacheName } : {}),
+    ...(stableSystemPromptDigest ? { stableSystemPromptDigest } : {}),
+    ...(stableToolDeclarationDigest ? { stableToolDeclarationDigest } : {}),
+    ...(cacheablePrefixDigest ? { cacheablePrefixDigest } : {}),
+    ...(toolDeclarationDigest ? { toolDeclarationDigest } : {}),
+    ...(prefixDivergenceReason
+      ? {
+          prefixDivergenceReason: prefixDivergenceReason as NonNullable<
+            ConversationUsageEntry['promptCache']
+          >['prefixDivergenceReason'],
+        }
+      : {}),
+  };
+}
+
 function sanitizeUsageEntry(entry: ConversationUsageEntry): ConversationUsageEntry {
   const tokenDetails = entry.tokenDetails
     ? {
@@ -364,6 +593,8 @@ function sanitizeUsageEntry(entry: ConversationUsageEntry): ConversationUsageEnt
           : {}),
       }
     : undefined;
+  const tokenBuckets = sanitizeUsageTokenBuckets(entry.tokenBuckets);
+  const promptCache = sanitizeUsagePromptCacheTelemetry(entry.promptCache);
 
   return {
     model: entry.model,
@@ -381,6 +612,8 @@ function sanitizeUsageEntry(entry: ConversationUsageEntry): ConversationUsageEnt
     totalTokens: entry.totalTokens,
     estimatedCost: entry.estimatedCost,
     ...(tokenDetails && Object.keys(tokenDetails).length > 0 ? { tokenDetails } : {}),
+    ...(tokenBuckets ? { tokenBuckets } : {}),
+    ...(promptCache ? { promptCache } : {}),
     timestamp: entry.timestamp,
   };
 }
@@ -494,6 +727,13 @@ function sanitizeAgentRunPlan(plan: AgentRunPlan | undefined): AgentRunPlan | un
       ...(workstream.goal
         ? { goal: truncateText(workstream.goal, MAX_PERSISTED_PLAN_TEXT_CHARS) }
         : {}),
+      ...(workstream.expectedOutput
+        ? {
+            expectedOutput:
+              truncateText(workstream.expectedOutput, MAX_PERSISTED_PLAN_TEXT_CHARS) ||
+              workstream.expectedOutput,
+          }
+        : {}),
       ...(workstream.successCriteria
         ? {
             successCriteria: workstream.successCriteria
@@ -508,83 +748,41 @@ function sanitizeAgentRunPlan(plan: AgentRunPlan | undefined): AgentRunPlan | un
               .map((item) => truncateText(item, MAX_PERSISTED_PLAN_TEXT_CHARS) || item),
           }
         : {}),
+      ...(workstream.owner ? { owner: workstream.owner } : {}),
+      ...(workstream.requirements
+        ? {
+            requirements: workstream.requirements
+              .slice(0, MAX_PERSISTED_LIST_ITEMS)
+              .map((item) => truncateText(item, MAX_PERSISTED_PLAN_TEXT_CHARS) || item),
+          }
+        : {}),
+      ...(workstream.requiredCapabilities
+        ? {
+            requiredCapabilities: workstream.requiredCapabilities
+              .slice(0, MAX_PERSISTED_LIST_ITEMS)
+              .map((item) => truncateText(item, MAX_PERSISTED_PLAN_TEXT_CHARS) || item),
+          }
+        : {}),
     })),
     ...(plan.rawPlan ? { rawPlan: truncateText(plan.rawPlan, MAX_PERSISTED_PLAN_RAW_CHARS) } : {}),
     updatedAt: plan.updatedAt,
   };
 }
 
-function sanitizeAgentRunPilotEvaluation(
-  evaluation: AgentRunPilotEvaluation | undefined,
-): AgentRunPilotEvaluation | undefined {
-  if (!evaluation) {
-    return undefined;
-  }
-
-  return {
-    evaluatorVersion:
-      truncateText(evaluation.evaluatorVersion, MAX_PERSISTED_LOG_TITLE_CHARS) ||
-      evaluation.evaluatorVersion,
-    evaluatedAt: evaluation.evaluatedAt,
-    objective:
-      truncateText(evaluation.objective, MAX_PERSISTED_PLAN_TEXT_CHARS) || evaluation.objective,
-    completionScore: evaluation.completionScore,
-    adherenceScore: evaluation.adherenceScore,
-    evidenceScore: evaluation.evidenceScore,
-    processScore: evaluation.processScore,
-    overallScore: evaluation.overallScore,
-    maxOverallScore: evaluation.maxOverallScore,
-    approvalThreshold: evaluation.approvalThreshold,
-    approved: evaluation.approved,
-    recommendedAction: evaluation.recommendedAction,
-    controlAction: evaluation.controlAction,
-    confidence: evaluation.confidence,
-    summary: truncateText(evaluation.summary, MAX_PERSISTED_LOG_DETAIL_CHARS) || evaluation.summary,
-    rationale:
-      truncateText(evaluation.rationale, MAX_PERSISTED_LOG_DETAIL_CHARS) || evaluation.rationale,
-    ...(evaluation.source ? { source: evaluation.source } : {}),
-    ...(evaluation.fallbackReason ? { fallbackReason: evaluation.fallbackReason } : {}),
-    ...(evaluation.fallbackDetail
-      ? {
-          fallbackDetail:
-            truncateText(evaluation.fallbackDetail, MAX_PERSISTED_PLAN_RAW_CHARS)
-            || evaluation.fallbackDetail,
-        }
-      : {}),
-    ...(evaluation.stateSignature
-      ? { stateSignature: normalizeText(evaluation.stateSignature) }
-      : {}),
-    ...(evaluation.progressSignature
-      ? { progressSignature: normalizeText(evaluation.progressSignature) }
-      : {}),
-    strengths: evaluation.strengths
-      .slice(0, MAX_PERSISTED_LIST_ITEMS)
-      .map((item) => truncateText(item, MAX_PERSISTED_LOG_DETAIL_CHARS) || item),
-    gaps: evaluation.gaps
-      .slice(0, MAX_PERSISTED_LIST_ITEMS)
-      .map((item) => truncateText(item, MAX_PERSISTED_LOG_DETAIL_CHARS) || item),
-    nextActions: evaluation.nextActions
-      .slice(0, MAX_PERSISTED_LIST_ITEMS)
-      .map((item) => truncateText(item, MAX_PERSISTED_LOG_DETAIL_CHARS) || item),
-    criterionEvaluations: evaluation.criterionEvaluations
-      .slice(0, MAX_PERSISTED_LIST_ITEMS)
-      .map((criterionEvaluation) => ({
-        criterion:
-          truncateText(criterionEvaluation.criterion, MAX_PERSISTED_PLAN_TEXT_CHARS) ||
-          criterionEvaluation.criterion,
-        score: criterionEvaluation.score,
-        maxScore: criterionEvaluation.maxScore,
-        status: criterionEvaluation.status,
-        rationale:
-          truncateText(criterionEvaluation.rationale, MAX_PERSISTED_LOG_DETAIL_CHARS) ||
-          criterionEvaluation.rationale,
-      })),
-  };
-}
-
 function sanitizeAgentRun(run: AgentRun): AgentRun {
+  const {
+    routeState: _legacyRouteState,
+    awaitingBackgroundWorkers: _legacyAwaitingBackgroundWorkers,
+    pendingAsyncOperations: _legacyPendingAsyncOperations,
+    ...runWithoutLegacyState
+  } = run as AgentRun & {
+    routeState?: unknown;
+    awaitingBackgroundWorkers?: unknown;
+    pendingAsyncOperations?: unknown;
+  };
+
   return {
-    ...run,
+    ...runWithoutLegacyState,
     goal: truncateText(run.goal, MAX_PERSISTED_PLAN_TEXT_CHARS) || run.goal,
     phases: run.phases.map((phase) => ({
       ...phase,
@@ -603,16 +801,7 @@ function sanitizeAgentRun(run: AgentRun): AgentRun {
         }
       : {}),
     ...(run.plan ? { plan: sanitizeAgentRunPlan(run.plan) } : {}),
-    ...(run.latestPilotEvaluation
-      ? { latestPilotEvaluation: sanitizeAgentRunPilotEvaluation(run.latestPilotEvaluation) }
-      : {}),
-    ...(run.pendingAsyncOperations
-      ? {
-          pendingAsyncOperations: run.pendingAsyncOperations
-            .slice(0, MAX_PERSISTED_PENDING_ASYNC_OPERATIONS)
-            .map((operation) => sanitizeAgentRunAsyncOperation(operation)),
-        }
-      : {}),
+    ...(run.controlGraph ? { controlGraph: sanitizeAgentRunControlGraph(run.controlGraph) } : {}),
     ...(run.latestSummary
       ? { latestSummary: truncateText(run.latestSummary, MAX_PERSISTED_PLAN_RAW_CHARS) }
       : {}),
@@ -621,7 +810,7 @@ function sanitizeAgentRun(run: AgentRun): AgentRun {
 }
 
 export function sanitizeConversationForPersistence(conversation: Conversation): Conversation {
-  const messages = conversation.messages ?? [];
+  const messages = keepAnchoredTail(conversation.messages ?? [], MAX_PERSISTED_MESSAGES) ?? [];
   const replayStart = Math.max(0, messages.length - MAX_PERSISTED_EXACT_REPLAY_MESSAGES);
   const reasoningStart = Math.max(0, messages.length - MAX_PERSISTED_REASONING_MESSAGES);
 

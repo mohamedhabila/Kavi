@@ -3,7 +3,6 @@
 // ---------------------------------------------------------------------------
 
 const fs = require('fs');
-const path = require('path');
 
 let capturedCallback: ((cfg: any) => any) | null = null;
 

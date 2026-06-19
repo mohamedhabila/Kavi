@@ -12,6 +12,17 @@
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
 		AC6AA5895E7DF8662FA77F70 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF23EE3212FF1E0E52D0FF10 /* ExpoModulesProvider.swift */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
+		D4F410000000000000000001 /* KaviLocalLlm.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F410000000000000000011 /* KaviLocalLlm.swift */; };
+		D4F410000000000000000002 /* KaviLocalLlm.m in Sources */ = {isa = PBXBuildFile; fileRef = D4F410000000000000000012 /* KaviLocalLlm.m */; };
+		D4F410000000000000000003 /* LocalLlmTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F410000000000000000013 /* LocalLlmTypes.swift */; };
+		D4F410000000000000000004 /* LocalLlmAccelerators.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F410000000000000000014 /* LocalLlmAccelerators.swift */; };
+		D4F410000000000000000005 /* LocalLlmDeviceInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F410000000000000000015 /* LocalLlmDeviceInfo.swift */; };
+		D4F410000000000000000006 /* LocalLlmEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F410000000000000000016 /* LocalLlmEvents.swift */; };
+		D4F410000000000000000007 /* LocalLlmRequestParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F410000000000000000017 /* LocalLlmRequestParser.swift */; };
+		D4F410000000000000000008 /* LocalLlmMessageAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F410000000000000000018 /* LocalLlmMessageAdapter.swift */; };
+		D4F410000000000000000009 /* LocalLlmRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F410000000000000000019 /* LocalLlmRuntime.swift */; };
+		D4F41000000000000000000A /* LiteRTLM in Frameworks */ = {isa = PBXBuildFile; productRef = D4F410000000000000000021 /* LiteRTLM */; };
+		D4F41000000000000000000B /* LocalLlmBackgroundTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F41000000000000000001B /* LocalLlmBackgroundTask.swift */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 		F9326BBB3E2717BDA9337454 /* libPods-Kavi.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A920E20845CBF419427F22DF /* libPods-Kavi.a */; };
 /* End PBXBuildFile section */
@@ -26,6 +37,16 @@
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = Kavi/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
 		CF23EE3212FF1E0E52D0FF10 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-Kavi/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
+		D4F410000000000000000011 /* KaviLocalLlm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = KaviLocalLlm.swift; path = Kavi/KaviLocalLlm.swift; sourceTree = "<group>"; };
+		D4F410000000000000000012 /* KaviLocalLlm.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = KaviLocalLlm.m; path = Kavi/KaviLocalLlm.m; sourceTree = "<group>"; };
+		D4F410000000000000000013 /* LocalLlmTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLlmTypes.swift; sourceTree = "<group>"; };
+		D4F410000000000000000014 /* LocalLlmAccelerators.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLlmAccelerators.swift; sourceTree = "<group>"; };
+		D4F410000000000000000015 /* LocalLlmDeviceInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLlmDeviceInfo.swift; sourceTree = "<group>"; };
+		D4F410000000000000000016 /* LocalLlmEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLlmEvents.swift; sourceTree = "<group>"; };
+		D4F410000000000000000017 /* LocalLlmRequestParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLlmRequestParser.swift; sourceTree = "<group>"; };
+		D4F410000000000000000018 /* LocalLlmMessageAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLlmMessageAdapter.swift; sourceTree = "<group>"; };
+		D4F410000000000000000019 /* LocalLlmRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLlmRuntime.swift; sourceTree = "<group>"; };
+		D4F41000000000000000001B /* LocalLlmBackgroundTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLlmBackgroundTask.swift; sourceTree = "<group>"; };
 		E483BDAB6DAC516BA685370D /* Pods-Kavi.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Kavi.release.xcconfig"; path = "Target Support Files/Pods-Kavi/Pods-Kavi.release.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Kavi/AppDelegate.swift; sourceTree = "<group>"; };
@@ -38,6 +59,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F9326BBB3E2717BDA9337454 /* libPods-Kavi.a in Frameworks */,
+				D4F41000000000000000000A /* LiteRTLM in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -48,6 +70,9 @@
 			isa = PBXGroup;
 			children = (
 				F11748412D0307B40044C1D9 /* AppDelegate.swift */,
+				D4F410000000000000000011 /* KaviLocalLlm.swift */,
+				D4F410000000000000000012 /* KaviLocalLlm.m */,
+				D4F41000000000000000001A /* LocalLlm */,
 				F11748442D0722820044C1D9 /* Kavi-Bridging-Header.h */,
 				BB2F792B24A3F905000567C9 /* Supporting */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
@@ -122,6 +147,22 @@
 			path = Kavi/Supporting;
 			sourceTree = "<group>";
 		};
+		D4F41000000000000000001A /* LocalLlm */ = {
+			isa = PBXGroup;
+			children = (
+				D4F410000000000000000013 /* LocalLlmTypes.swift */,
+				D4F410000000000000000014 /* LocalLlmAccelerators.swift */,
+				D4F410000000000000000015 /* LocalLlmDeviceInfo.swift */,
+				D4F410000000000000000016 /* LocalLlmEvents.swift */,
+				D4F410000000000000000017 /* LocalLlmRequestParser.swift */,
+				D4F410000000000000000018 /* LocalLlmMessageAdapter.swift */,
+				D4F410000000000000000019 /* LocalLlmRuntime.swift */,
+				D4F41000000000000000001B /* LocalLlmBackgroundTask.swift */,
+			);
+			name = LocalLlm;
+			path = Kavi/LocalLlm;
+			sourceTree = "<group>";
+		};
 		D616C8D9AAF6D71DE2FC3D9F /* Pods */ = {
 			isa = PBXGroup;
 			children = (
@@ -153,6 +194,9 @@
 			dependencies = (
 			);
 			name = Kavi;
+			packageProductDependencies = (
+				D4F410000000000000000021 /* LiteRTLM */,
+			);
 			productName = Kavi;
 			productReference = 13B07F961A680F5B00A75B9A /* Kavi.app */;
 			productType = "com.apple.product-type.application";
@@ -179,6 +223,9 @@
 				Base,
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
+			packageReferences = (
+				D4F410000000000000000020 /* XCLocalSwiftPackageReference "LiteRTLM" */,
+			);
 			productRefGroup = 83CBBA001A601CBA00E9B192 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -339,6 +386,16 @@
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
 				AC6AA5895E7DF8662FA77F70 /* ExpoModulesProvider.swift in Sources */,
+				D4F410000000000000000001 /* KaviLocalLlm.swift in Sources */,
+				D4F410000000000000000002 /* KaviLocalLlm.m in Sources */,
+				D4F410000000000000000003 /* LocalLlmTypes.swift in Sources */,
+				D4F410000000000000000004 /* LocalLlmAccelerators.swift in Sources */,
+				D4F410000000000000000005 /* LocalLlmDeviceInfo.swift in Sources */,
+				D4F410000000000000000006 /* LocalLlmEvents.swift in Sources */,
+				D4F410000000000000000007 /* LocalLlmRequestParser.swift in Sources */,
+				D4F410000000000000000008 /* LocalLlmMessageAdapter.swift in Sources */,
+				D4F410000000000000000009 /* LocalLlmRuntime.swift in Sources */,
+				D4F41000000000000000000B /* LocalLlmBackgroundTask.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -354,7 +411,6 @@
 				CODE_SIGN_ENTITLEMENTS = Kavi/Kavi.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_BITCODE = NO;
-				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = arm64;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					"FB_SONARKIT_ENABLED=1",
@@ -365,11 +421,9 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"-ObjC",
-					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
 				PRODUCT_BUNDLE_IDENTIFIER = com.kavi.app;
@@ -390,18 +444,15 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Kavi/Kavi.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
-				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = arm64;
 				INFOPLIST_FILE = Kavi/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"-ObjC",
-					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
 				PRODUCT_BUNDLE_IDENTIFIER = com.kavi.app;
@@ -445,7 +496,6 @@
 				COPY_PHASE_STRIP = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = arm64;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -511,7 +561,6 @@
 				COPY_PHASE_STRIP = YES;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = arm64;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -559,6 +608,21 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		D4F410000000000000000020 /* XCLocalSwiftPackageReference "LiteRTLM" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = LocalPackages/LiteRTLM;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D4F410000000000000000021 /* LiteRTLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D4F410000000000000000020 /* XCLocalSwiftPackageReference "LiteRTLM" */;
+			productName = LiteRTLM;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 83CBB9F71A601CBA00E9B192 /* Project object */;
 }

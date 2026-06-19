@@ -2,7 +2,6 @@
 // Tests — ThinkingBlock Component
 // ---------------------------------------------------------------------------
 
-import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import { ThinkingBlock } from '../../src/components/chat/ThinkingBlock';

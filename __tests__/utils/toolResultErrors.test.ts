@@ -19,4 +19,11 @@ describe('isToolResultErrorLike', () => {
   it('ignores plain non-error text', () => {
     expect(isToolResultErrorLike('Completed successfully')).toBe(false);
   });
+
+  it('detects preflight tool-filter blocked messages', () => {
+    expect(
+      isToolResultErrorLike('Tool "update_goals" is not allowed in this context.'),
+    ).toBe(true);
+    expect(isToolResultErrorLike('Tool "unknown_tool" is not registered.')).toBe(true);
+  });
 });

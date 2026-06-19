@@ -1,13 +1,13 @@
-import type { Message } from '../../types';
+import type { AgentGoal } from '../../engine/goals/types';
+import type { AgentRunControlGraphAsyncWorkState } from '../../types/agentRun';
+import type { Message } from '../../types/message';
 import {
+  buildFullHistoryContextStartSelection,
   selectContextStartIndex,
   type ContextStartSelection,
 } from '../context/contextStartSelector';
 import { excludeTrailingInternalUserMessages } from '../context/messageScoping';
-import {
-  buildLivingMemorySections,
-  type LivingMemoryBridgeOutput,
-} from './livingMemoryBridge';
+import { buildLivingMemorySections, type LivingMemoryBridgeOutput } from './livingMemoryBridge';
 import { canReadLongTermMemory } from './policy';
 
 type MemoryAccessMode = 'chat' | 'agentic' | 'pilot';
@@ -21,6 +21,9 @@ export interface UnifiedMemoryAccessRequest {
   internalUserMessageCount?: number;
   now?: number;
   recallLimit?: number;
+  goals?: ReadonlyArray<AgentGoal>;
+  activeTaskId?: string;
+  asyncWork?: AgentRunControlGraphAsyncWorkState;
 }
 
 export interface UnifiedMemoryAccessResult {
@@ -37,16 +40,17 @@ export async function buildUnifiedMemoryAccessContext(
     request.internalUserMessageCount ?? 0,
   );
 
-  const boundary = selectContextStartIndex(normalizedMessages, {
-    personaId: request.personaId,
-    mode: request.mode,
-    ...(typeof request.now === 'number' ? { now: request.now } : {}),
-  });
+  const boundary =
+    request.mode === 'pilot'
+      ? selectContextStartIndex(normalizedMessages, {
+          personaId: request.personaId,
+          mode: request.mode,
+          ...(typeof request.now === 'number' ? { now: request.now } : {}),
+        })
+      : buildFullHistoryContextStartSelection(normalizedMessages);
 
   const scopedMessages =
-    boundary.startIndex > 0
-      ? normalizedMessages.slice(boundary.startIndex)
-      : normalizedMessages;
+    boundary.startIndex > 0 ? normalizedMessages.slice(boundary.startIndex) : normalizedMessages;
 
   if (!canReadLongTermMemory()) {
     return {
@@ -62,6 +66,9 @@ export async function buildUnifiedMemoryAccessContext(
     ...(typeof request.recallLimit === 'number' ? { recallLimit: request.recallLimit } : {}),
     ...(request.conversationId ? { conversationId: request.conversationId } : {}),
     ...(request.taskId ? { taskId: request.taskId } : {}),
+    ...(request.goals ? { goals: request.goals } : {}),
+    ...(request.activeTaskId ? { activeTaskId: request.activeTaskId } : {}),
+    ...(request.asyncWork ? { asyncWork: request.asyncWork } : {}),
   });
 
   return {

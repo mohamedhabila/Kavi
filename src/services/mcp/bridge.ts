@@ -4,7 +4,7 @@
 // Converts MCP tool schemas to Kavi tool definitions and routes calls
 
 import { McpClient, McpToolInfo, McpToolCallResult } from './client';
-import type { ToolDefinition } from '../../types';
+import type { ToolDefinition } from '../../types/tool';
 import { normalizeToolInputSchema } from '../../utils/toolSchema';
 import {
   addRemoteArtifact,

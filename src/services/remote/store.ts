@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { RemoteArtifact, RemoteJobRecord, RemoteSessionRecord } from '../../types';
+import type { RemoteArtifact, RemoteJobRecord, RemoteSessionRecord } from '../../types/remote';
 import { generateId } from '../../utils/id';
 
 interface RemoteStoreState {

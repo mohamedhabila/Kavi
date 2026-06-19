@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { ALL_BROWSER_TOOL_DEFINITIONS } from '../../src/engine/tools/browser-definitions';
-import { ALL_WORKSPACE_FILE_TOOL_DEFINITIONS } from '../../src/engine/tools/workspace-definitions';
+import { ALL_WORKSPACE_TOOL_DEFINITIONS } from '../../src/engine/tools/workspace-definitions';
 import { TOOL_DEFINITIONS } from '../../src/engine/tools/definitions';
 
 describe('ALL_BROWSER_TOOL_DEFINITIONS', () => {
@@ -53,6 +53,7 @@ describe('ALL_BROWSER_TOOL_DEFINITIONS', () => {
       expect(tool.input_schema.type).toBe('object');
       expect(tool.input_schema.properties).toBeDefined();
       expect(typeof tool.input_schema.properties).toBe('object');
+      expect(tool.contract).toBeDefined();
     }
   });
 
@@ -113,36 +114,36 @@ describe('ALL_BROWSER_TOOL_DEFINITIONS', () => {
   });
 });
 
-describe('ALL_WORKSPACE_FILE_TOOL_DEFINITIONS', () => {
-  it('exports exactly 4 workspace tools', () => {
-    expect(ALL_WORKSPACE_FILE_TOOL_DEFINITIONS).toHaveLength(4);
+describe('ALL_WORKSPACE_TOOL_DEFINITIONS', () => {
+  it('exports exactly 3 explicit external workspace control tools', () => {
+    expect(ALL_WORKSPACE_TOOL_DEFINITIONS).toHaveLength(3);
   });
 
   const expectedNames = [
-    'workspace_fs',
     'workspace_status',
     'workspace_launch_browser',
     'workspace_delegate_task',
   ];
 
   it('contains all expected workspace tool names', () => {
-    const names = ALL_WORKSPACE_FILE_TOOL_DEFINITIONS.map((t) => t.name);
+    const names = ALL_WORKSPACE_TOOL_DEFINITIONS.map((t) => t.name);
     for (const expected of expectedNames) {
       expect(names).toContain(expected);
     }
   });
 
   it('each tool has name, description, and valid input_schema', () => {
-    for (const tool of ALL_WORKSPACE_FILE_TOOL_DEFINITIONS) {
+    for (const tool of ALL_WORKSPACE_TOOL_DEFINITIONS) {
       expect(tool.name).toBeTruthy();
       expect(tool.description).toBeTruthy();
       expect(tool.input_schema.type).toBe('object');
       expect(tool.input_schema.properties).toBeDefined();
+      expect(tool.contract).toBeDefined();
     }
   });
 
   it('all mutating or target-specific workspace tools expose targetId', () => {
-    for (const tool of ALL_WORKSPACE_FILE_TOOL_DEFINITIONS) {
+    for (const tool of ALL_WORKSPACE_TOOL_DEFINITIONS) {
       if (tool.name !== 'workspace_status') {
         expect(tool.input_schema.required).toContain('targetId');
       }
@@ -150,21 +151,15 @@ describe('ALL_WORKSPACE_FILE_TOOL_DEFINITIONS', () => {
     }
   });
 
-  it('workspace_fs requires action and targetId', () => {
-    const tool = ALL_WORKSPACE_FILE_TOOL_DEFINITIONS.find((t) => t.name === 'workspace_fs')!;
-    expect(tool.input_schema.required).toContain('action');
-    expect(tool.input_schema.required).toContain('targetId');
-  });
-
   it('workspace_delegate_task requires prompt', () => {
-    const tool = ALL_WORKSPACE_FILE_TOOL_DEFINITIONS.find(
+    const tool = ALL_WORKSPACE_TOOL_DEFINITIONS.find(
       (t) => t.name === 'workspace_delegate_task',
     )!;
     expect(tool.input_schema.required).toContain('prompt');
   });
 
   it('has no duplicate tool names', () => {
-    const names = ALL_WORKSPACE_FILE_TOOL_DEFINITIONS.map((t) => t.name);
+    const names = ALL_WORKSPACE_TOOL_DEFINITIONS.map((t) => t.name);
     expect(new Set(names).size).toBe(names.length);
   });
 });
@@ -179,7 +174,7 @@ describe('TOOL_DEFINITIONS integration', () => {
 
   it('includes all workspace tools in TOOL_DEFINITIONS', () => {
     const allNames = TOOL_DEFINITIONS.map((t) => t.name);
-    for (const wt of ALL_WORKSPACE_FILE_TOOL_DEFINITIONS) {
+    for (const wt of ALL_WORKSPACE_TOOL_DEFINITIONS) {
       expect(allNames).toContain(wt.name);
     }
   });

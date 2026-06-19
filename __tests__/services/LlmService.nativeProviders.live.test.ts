@@ -1,10 +1,10 @@
-import { DEFAULT_GEMINI_OPENAI_BASE_URL } from '../../src/constants/api';
+import { DEFAULT_GEMINI_BASE_URL } from '../../src/constants/api';
 import { getThinkingParams } from '../../src/engine/thinking';
 import { buildToolDefinitions } from '../../src/engine/tools/definitions';
-import { selectToolsForRequest } from '../../src/engine/tools/toolManager';
 import { enforceContextBudget } from '../../src/services/context/budgetManager';
 import { LlmService } from '../../src/services/llm/LlmService';
-import type { LlmProviderConfig, ToolDefinition } from '../../src/types';
+import type { LlmProviderConfig } from '../../src/types/provider';
+import type { ToolDefinition } from '../../src/types/tool';
 
 const describeLive = process.env.RUN_LIVE_NATIVE_PROVIDER_CHECKS === '1' ? describe : describe.skip;
 const itLive = process.env.RUN_LIVE_NATIVE_PROVIDER_CHECKS === '1' ? it : it.skip;
@@ -95,12 +95,9 @@ async function captureFetches<T>(
 }
 
 function buildPreferredToolSet(provider: LlmProviderConfig, prompt: string): ToolDefinition[] {
-  const allTools = buildToolDefinitions();
-  return selectToolsForRequest(allTools, [prompt], provider.name, provider.baseUrl, undefined, {
-    model: provider.model,
-    preferredToolNames: ['read_file'],
-    restrictToPreferredTools: true,
-  });
+  const _provider = provider;
+  const _prompt = prompt;
+  return buildToolDefinitions().filter((tool) => tool.name === 'read_file');
 }
 
 function buildBudgetedRequest(
@@ -227,7 +224,7 @@ describeLive('LlmService native provider live validation', () => {
       expect(firstToolCall?.function?.name).toBe('read_file');
       expect(typeof firstToolCall?.id).toBe('string');
 
-      const assistantBlocks = firstToolCall?.raw?.extra_content?.anthropic?.assistant_blocks;
+      const assistantBlocks = firstResponse.choices?.[0]?.message?.providerReplay?.anthropicBlocks;
       expect(Array.isArray(assistantBlocks)).toBe(true);
       expect(
         assistantBlocks.some(
@@ -251,6 +248,7 @@ describeLive('LlmService native provider live validation', () => {
           {
             role: 'assistant',
             content: firstResponse.choices?.[0]?.message?.content || '',
+            providerReplay: firstResponse.choices?.[0]?.message?.providerReplay,
             tool_calls: firstResponse.choices?.[0]?.message?.tool_calls,
           },
           {
@@ -328,7 +326,7 @@ describeLive('LlmService native provider live validation', () => {
       const provider: LlmProviderConfig = {
         id: 'gemini-live-native',
         name: 'Gemini',
-        baseUrl: DEFAULT_GEMINI_OPENAI_BASE_URL,
+        baseUrl: DEFAULT_GEMINI_BASE_URL,
         apiKey,
         model: 'gemini-3-flash-preview',
         enabled: true,

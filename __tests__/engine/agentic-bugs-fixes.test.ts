@@ -25,15 +25,11 @@ jest.mock('../../src/utils/id', () => ({
   generateId: jest.fn(() => `mock-id-${++mockIdCounter}`),
 }));
 
-import {
-  spawnSubAgent,
-  getSubAgent,
-  getSessionContext,
-  listActiveSubAgents,
-} from '../../src/services/agents/subAgent';
+import { spawnSubAgent, getSessionContext } from '../../src/services/agents/subAgent';
 import { runOrchestrator } from '../../src/engine/orchestrator';
 import { LlmService } from '../../src/services/llm/LlmService';
-import type { LlmProviderConfig } from '../../src/types';
+import { GEMINI_IMPORTED_FUNCTION_CALL_THOUGHT_SIGNATURE } from '../../src/services/llm/providers/gemini/toolTurnRepair';
+import type { LlmProviderConfig } from '../../src/types/provider';
 
 const mockProvider: LlmProviderConfig = {
   id: 'test',
@@ -79,7 +75,7 @@ describe('Bug 1: Gemini thought_signature handling', () => {
     mockFetch.mockRestore();
   });
 
-  it('preserves real thought_signature from extra_content on native Gemini replay', async () => {
+  it('replays Gemini thought signatures from raw tool metadata when providerReplay is absent', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: () =>
@@ -110,11 +106,10 @@ describe('Bug 1: Gemini thought_signature handling', () => {
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     const modelParts = body.contents.find((c: any) => c.role === 'model')?.parts;
     expect(modelParts).toBeDefined();
-    // Real signature must be preserved on the functionCall part
     expect(modelParts[0].thoughtSignature).toBe('real-sig-A');
   });
 
-  it('injects the documented Gemini dummy thoughtSignature on current-turn native replay when the first function call signature is missing', async () => {
+  it('uses the official imported-call signature for complete Gemini 3 replay when raw metadata lacks one', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: () =>
@@ -143,12 +138,31 @@ describe('Bug 1: Gemini thought_signature handling', () => {
     ]);
 
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    const modelParts = body.contents.find((c: any) => c.role === 'model')?.parts;
-    expect(modelParts).toBeDefined();
-    expect(modelParts[0].thoughtSignature).toBe('skip_thought_signature_validator');
+    const allParts = body.contents.flatMap((content: any) => content.parts);
+    const functionCallPart = allParts.find((part: any) => part.functionCall);
+    const functionResponsePart = allParts.find((part: any) => part.functionResponse);
+    expect(functionCallPart).toEqual(
+      expect.objectContaining({
+        functionCall: expect.objectContaining({
+          id: 'tc1',
+          name: 'read_file',
+          args: { path: 'a.txt' },
+        }),
+        thoughtSignature: GEMINI_IMPORTED_FUNCTION_CALL_THOUGHT_SIGNATURE,
+      }),
+    );
+    expect(functionResponsePart).toEqual(
+      expect.objectContaining({
+        functionResponse: expect.objectContaining({
+          id: 'tc1',
+          name: 'read_file',
+          response: { result: 'file content' },
+        }),
+      }),
+    );
   });
 
-  it('preserves documented Gemini dummy signatures when building native Gemini function call parts', async () => {
+  it('replays raw Gemini thoughtSignature metadata when providerReplay is absent', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: () =>
@@ -169,7 +183,7 @@ describe('Bug 1: Gemini thought_signature handling', () => {
             id: 'tc1',
             type: 'function',
             function: { name: 'read_file', arguments: '{"path":"a.txt"}' },
-            extra_content: { google: { thought_signature: 'skip_thought_signature_validator' } },
+            extra_content: { google: { thought_signature: 'captured-sig-B' } },
           },
         ],
       } as any,
@@ -179,7 +193,7 @@ describe('Bug 1: Gemini thought_signature handling', () => {
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     const modelParts = body.contents.find((c: any) => c.role === 'model')?.parts;
     expect(modelParts).toBeDefined();
-    expect(modelParts[0].thoughtSignature).toBe('skip_thought_signature_validator');
+    expect(modelParts[0].thoughtSignature).toBe('captured-sig-B');
   });
 
   it('uses providerReplay.geminiParts with real signatures when available', async () => {
@@ -222,6 +236,52 @@ describe('Bug 1: Gemini thought_signature handling', () => {
     expect(modelParts).toBeDefined();
     // providerReplay takes priority → real signature
     expect(modelParts[0].thoughtSignature).toBe('crypto-real-sig');
+  });
+
+  it('rehydrates missing providerReplay signatures from streamed tool call raw metadata', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          candidates: [{ content: { parts: [{ text: 'ok' }] } }],
+        }),
+    });
+
+    const service = new LlmService(makeGeminiConfig());
+
+    await service.sendMessage([
+      { role: 'user', content: 'Read file a.txt' },
+      {
+        role: 'assistant',
+        content: '',
+        providerReplay: {
+          geminiParts: [
+            {
+              functionCall: { name: 'read_file', args: { path: 'a.txt' } },
+            },
+          ],
+        },
+        tool_calls: [
+          {
+            id: 'tc1',
+            type: 'function',
+            function: { name: 'read_file', arguments: '{"path":"a.txt"}' },
+            raw: {
+              id: 'tc1',
+              type: 'function',
+              function: { name: 'read_file', arguments: '{"path":"a.txt"}' },
+              thoughtSignature: 'streamed-sig-1',
+            },
+          },
+        ],
+      } as any,
+      { role: 'tool', content: 'file content', tool_call_id: 'tc1', name: 'read_file' } as any,
+    ]);
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const modelParts = body.contents.find((c: any) => c.role === 'model')?.parts;
+    expect(modelParts).toBeDefined();
+    expect(modelParts[0].thoughtSignature).toBe('streamed-sig-1');
   });
 
   it('retries Gemini structured output with legacy responseSchema when responseFormat is unsupported', async () => {
@@ -290,19 +350,14 @@ describe('Bug 1: Gemini thought_signature handling', () => {
 // ── Bug 2: Claude subagent empty output ─────────────────────────────────
 
 describe('Bug 2: Claude subagent output', () => {
-  let streamMessageSpy: jest.SpyInstance;
+  let sendMessageSpy: jest.SpyInstance;
 
   beforeEach(() => {
-    streamMessageSpy = jest.spyOn(LlmService.prototype, 'streamMessage').mockImplementation(
-      () =>
-        (async function* () {
-          yield { type: 'done', content: '' } as any;
-        })() as any,
-    );
+    sendMessageSpy = jest.spyOn(LlmService.prototype, 'sendMessage').mockResolvedValue({});
   });
 
   afterEach(() => {
-    streamMessageSpy.mockRestore();
+    sendMessageSpy.mockRestore();
   });
 
   it('synthesizes a terminal worker report when all turns are tool-only', async () => {
@@ -310,13 +365,12 @@ describe('Bug 2: Claude subagent output', () => {
       summary: 'Found 3 files',
       files: ['a.ts', 'b.ts', 'c.ts'],
     });
-    streamMessageSpy.mockImplementationOnce(
-      () =>
-        (async function* () {
-          yield { type: 'token', content: 'Final report: Found 3 files in the workspace.' } as any;
-          yield { type: 'done', content: 'Final report: Found 3 files in the workspace.' } as any;
-        })() as any,
-    );
+    sendMessageSpy.mockResolvedValueOnce({
+      output_parsed: {
+        report: 'Final report: Found 3 files in the workspace.',
+        completionState: 'incomplete',
+      },
+    } as any);
 
     (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
       // Simulate Claude tool_use: no text tokens, only tool calls
@@ -339,7 +393,7 @@ describe('Bug 2: Claude subagent output', () => {
 
     expect(result.status).toBe('completed');
     expect(result.output).toBe('Final report: Found 3 files in the workspace.');
-    expect(streamMessageSpy).toHaveBeenCalledTimes(1);
+    expect(sendMessageSpy).toHaveBeenCalledTimes(1);
   });
 
   it('prefers finalNonEmptyContent over tool results', async () => {
@@ -351,7 +405,7 @@ describe('Bug 2: Claude subagent output', () => {
         result: 'tool data',
         status: 'success',
       });
-      callbacks.onAssistantMessage('tool planning', [{ id: 'tc1', name: 'read_file' }]);
+      callbacks.onAssistantMessage('queued read_file', [{ id: 'tc1', name: 'read_file' }]);
       // Final turn with text only (no tools) → this is the "final" content
       callbacks.onAssistantMessage('Here are the results: everything passed.', undefined);
       callbacks.onDone();
@@ -365,7 +419,7 @@ describe('Bug 2: Claude subagent output', () => {
 
     expect(result.status).toBe('completed');
     expect(result.output).toContain('Here are the results');
-    expect(streamMessageSpy).not.toHaveBeenCalled();
+    expect(sendMessageSpy).not.toHaveBeenCalled();
   });
 
   it('shows up to 10 tool previews in fallback output', async () => {
@@ -392,7 +446,7 @@ describe('Bug 2: Claude subagent output', () => {
 
     expect(result.status).toBe('completed');
     expect(result.output).toBeTruthy();
-    expect(streamMessageSpy).toHaveBeenCalledTimes(1);
+    expect(sendMessageSpy).toHaveBeenCalledTimes(1);
   });
 
   it('falls back to the last substantive tool result when finalization produces no answer', async () => {
@@ -599,7 +653,6 @@ describe('Bug 3: Subagent context persistence', () => {
 
 describe('Bug 5: Sub-agent abort handling', () => {
   it('checks abort signal on state change', async () => {
-    const abortTime = Date.now();
     let stateChangeCalls = 0;
 
     (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
@@ -624,6 +677,7 @@ describe('Bug 5: Sub-agent abort handling', () => {
 
     expect(result.status).toBe('completed');
     expect(result.output).toContain('hello');
+    expect(stateChangeCalls).toBe(1);
   });
 
   it('checks abort signal before starting tool execution', async () => {

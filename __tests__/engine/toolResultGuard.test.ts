@@ -13,7 +13,7 @@ import {
   TOOL_RESULT_CHARS_PER_TOKEN,
   COMPACTION_PLACEHOLDER,
 } from '../../src/engine/toolResultGuard';
-import type { Message } from '../../src/types';
+import type { Message } from '../../src/types/message';
 
 const makeToolMsg = (id: string, content: string): Message => ({
   id,
@@ -135,7 +135,7 @@ describe('enforceToolResultBudget', () => {
     expect(compacted).toContain('lastItems');
   });
 
-  it('preserves expo workflow summaries and failure snippets when compacting large JSON', () => {
+  it('preserves structured summary and failureLogs when compacting large JSON', () => {
     const result = JSON.stringify({
       summary:
         'Workflow workflow-run-77: FAILURE (FAILURE). Build / Install Dependencies: npm ERR! 404 @kavi/private-package not found | Command failed with exit code 1',
@@ -177,6 +177,7 @@ describe('enforceToolResultBudget', () => {
     const compacted = enforceToolResultBudget(result, 4000);
     expect(compacted).toContain('Workflow workflow-run-77: FAILURE');
     expect(compacted).toContain('@kavi/private-package not found');
+    expect(compacted).not.toContain('failureSummary');
   });
 });
 

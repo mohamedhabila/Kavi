@@ -1,6 +1,6 @@
-export function extractPep723Dependencies(source: string): string[] {
+function findPep723ScriptBlock(source: string): { lines: string[]; blockStart: number; blockEnd: number } | null {
   if (!source) {
-    return [];
+    return null;
   }
 
   const lines = source.split(/\r?\n/);
@@ -15,7 +15,7 @@ export function extractPep723Dependencies(source: string): string[] {
   }
 
   if (blockStart < 0) {
-    return [];
+    return null;
   }
 
   for (let index = blockStart + 1; index < lines.length; index += 1) {
@@ -26,11 +26,32 @@ export function extractPep723Dependencies(source: string): string[] {
   }
 
   if (blockEnd <= blockStart + 1) {
+    return null;
+  }
+
+  return { lines, blockStart, blockEnd };
+}
+
+export function stripPep723MetadataBlock(source: string): string {
+  const block = findPep723ScriptBlock(source);
+  if (!block) {
+    return source;
+  }
+
+  return [
+    ...block.lines.slice(0, block.blockStart),
+    ...block.lines.slice(block.blockEnd + 1),
+  ].join('\n');
+}
+
+export function extractPep723Dependencies(source: string): string[] {
+  const block = findPep723ScriptBlock(source);
+  if (!block) {
     return [];
   }
 
-  const metadataBlock = lines
-    .slice(blockStart + 1, blockEnd)
+  const metadataBlock = block.lines
+    .slice(block.blockStart + 1, block.blockEnd)
     .map((line) => line.replace(/^\s*#\s?/, ''))
     .join('\n');
 

@@ -6,12 +6,12 @@
 // not read from any global state. All inputs are passed in explicitly so the
 // orchestrator stays in charge of fact retrieval, focus rendering, etc.
 //
-// Layer layout (see _research/SINGLE_THREAD_MEMORY_REDESIGN_20260429.md §6):
+// Layer layout:
 //
 //   L1  Stable system prompt    — base instructions, tool style guidance.
+//   ────── cache breakpoint ──────  (stable assistant/runtime policy)
 //   L2  Persistent memory       — pinned blocks (profile / persona / prefs)
 //                                 followed by entity dossier (canonicalized).
-//   ────── cache breakpoint ──────  (last cacheable section gets cache_control)
 //   L3  Per-turn context        — focus block + retrieved facts + open threads.
 //   L4  User turn               — handled by caller as a message, NOT a section.
 //
@@ -22,13 +22,14 @@
 // ---------------------------------------------------------------------------
 
 import type { MemoryBlock } from './blocks';
-import type { MemoryFact } from './facts';
+import type { MemoryFact } from './facts/types';
+import type { MemoryEpisode } from './episodes/types';
 
 export type PromptMemoryFact = MemoryFact & { subjectLabel?: string };
 
 export interface SystemPromptSection {
   text: string;
-  /** When true, the section is part of the cacheable prefix (L1 + L2). */
+  /** When true, the section is part of the provider-cacheable prefix. */
   cacheable?: boolean;
 }
 
@@ -45,7 +46,7 @@ export interface AssemblePromptInput {
   blocks?: MemoryBlock[];
   /**
    * L2 — optional entity dossier (canonical "who's who" snippet). The
-   * caller picks which entities are worth pinning to the cacheable prefix
+   * caller picks which entities are worth surfacing for this request
    * (e.g. the user, the active project). Order must be deterministic.
    */
   entityDossier?: string;
@@ -55,10 +56,19 @@ export interface AssemblePromptInput {
    */
   focusBlock?: string;
   /**
+   * L3 — structural daily reflection summary (background-generated).
+   */
+  reflectionBlock?: string;
+  /**
    * L3 — facts retrieved for THIS turn. Caller is responsible for ranking
    * and capping. Listed in caller-provided order.
    */
   retrievedFacts?: PromptMemoryFact[];
+  /**
+   * L3 — recent episodes for this thread/conversation. Listed in
+   * caller-provided order (typically newest first).
+   */
+  recentEpisodes?: MemoryEpisode[];
   /**
    * L3 — additional dynamic context the orchestrator wants to inject
    * (e.g. workflow status, tool catalog notes that change per turn).
@@ -70,7 +80,9 @@ const L1_HEADER = '## Identity & Style';
 const L2_BLOCKS_HEADER = '## Persistent Memory';
 const L2_DOSSIER_HEADER = '## Known Entities';
 const L3_HEADER = '## This Turn';
+const L3_REFLECTION_HEADER = '### Day Focus';
 const L3_FACTS_HEADER = '### Retrieved Memory';
+const L3_EPISODES_HEADER = '### Recent Activity';
 
 function joinNonEmpty(parts: Array<string | null | undefined>, sep = '\n\n'): string {
   return parts
@@ -130,14 +142,25 @@ function renderFact(fact: PromptMemoryFact): string {
   return `- ${subject} ${fact.predicate}: ${fact.objectText}${conf}`;
 }
 
+function renderEpisode(episode: MemoryEpisode): string {
+  const summary = episode.summary.trim();
+  if (!summary) return '';
+  const tools = episode.toolNames.length > 0 ? ` [${episode.toolNames.join(', ')}]` : '';
+  return `- ${summary.slice(0, 200)}${tools}`;
+}
+
 function renderL3(input: AssemblePromptInput): string {
   const focus = (input.focusBlock ?? '').trim();
+  const reflection = (input.reflectionBlock ?? '').trim();
   const facts = (input.retrievedFacts ?? []).map(renderFact);
+  const episodes = (input.recentEpisodes ?? []).map(renderEpisode).filter((r) => r.length > 0);
   const addenda = joinNonEmpty(input.dynamicAddenda ?? []);
 
   const parts: string[] = [];
+  if (reflection) parts.push(`${L3_REFLECTION_HEADER}\n${reflection}`);
   if (focus) parts.push(focus);
   if (facts.length > 0) parts.push(`${L3_FACTS_HEADER}\n${facts.join('\n')}`);
+  if (episodes.length > 0) parts.push(`${L3_EPISODES_HEADER}\n${episodes.join('\n')}`);
   if (addenda) parts.push(addenda);
 
   if (parts.length === 0) return '';
@@ -146,7 +169,7 @@ function renderL3(input: AssemblePromptInput): string {
 
 export interface AssemblePromptOutput {
   sections: SystemPromptSection[];
-  /** Stable hash of the cacheable prefix — useful as `prompt_cache_key` for OpenAI. */
+  /** Stable hash of the cacheable prefix. Memory sections are dynamic until admitted into an epoch. */
   cacheableSignature: string;
 }
 
@@ -162,11 +185,9 @@ function fnv1aHash(value: string): string {
 /**
  * Assemble prompt sections in cache-friendly order.
  *
- * The returned array can be handed straight to LlmService — sections marked
- * `cacheable: true` form the stable prefix (L1+L2); sections without
- * `cacheable` are dynamic per turn (L3). LlmService applies the provider's
- * cache marker (Anthropic `cache_control`, OpenAI `prompt_cache_key`,
- * Gemini `cachedContent`) at the LAST cacheable section.
+ * The returned array can be handed straight to LlmService. Only invariant
+ * assistant/runtime policy belongs in the provider-cacheable prefix. Memory is
+ * dynamic context until a durable context epoch admits it into a stable baseline.
  */
 export function assemblePrompt(input: AssemblePromptInput): AssemblePromptOutput {
   const l1 = renderL1(input);
@@ -175,7 +196,7 @@ export function assemblePrompt(input: AssemblePromptInput): AssemblePromptOutput
 
   const sections: SystemPromptSection[] = [];
   if (l1) sections.push({ text: l1, cacheable: true });
-  if (l2) sections.push({ text: l2, cacheable: true });
+  if (l2) sections.push({ text: l2 });
   if (l3) sections.push({ text: l3 });
 
   const cacheableText = sections

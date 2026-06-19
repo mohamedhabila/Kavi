@@ -8,9 +8,8 @@ import {
   getNextAvailableModel,
   recordFailure,
   recordSuccess,
-  FailoverState,
 } from '../../src/engine/failover';
-import { LlmProviderConfig } from '../../src/types';
+import { LlmProviderConfig } from '../../src/types/provider';
 
 // Mock SecureStorage
 jest.mock('../../src/services/storage/SecureStorage', () => ({

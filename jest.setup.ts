@@ -14,6 +14,21 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('expo-crypto', () => {
+  const { createHash } = require('crypto');
+  return {
+    CryptoDigestAlgorithm: {
+      SHA256: 'SHA-256',
+    },
+    digestStringAsync: jest.fn(async (algorithm: string, value: string) => {
+      if (algorithm !== 'SHA-256') {
+        throw new Error(`Unsupported digest algorithm: ${algorithm}`);
+      }
+      return createHash('sha256').update(value).digest('hex');
+    }),
+  };
+});
+
 jest.mock('expo-file-system', () => {
   const store: Record<string, string | Uint8Array> = {};
   const fileSizes: Record<string, number> = {};
@@ -332,6 +347,13 @@ jest.mock('expo-file-system/legacy', () => {
     File: new (uri: string) => { write: (content: string) => void };
     __setFileSize?: (uri: string, size: number) => void;
   };
+  const localLlmCatalog = jest.requireActual('./src/services/localLlm/catalog') as {
+    LOCAL_LLM_MODEL_CATALOG: Array<{
+      repositoryId: string;
+      fileName: string;
+      sizeBytes: number;
+    }>;
+  };
 
   type MockDownloadBehavior = {
     error?: Error | string;
@@ -347,16 +369,17 @@ jest.mock('expo-file-system/legacy', () => {
   const queuedDownloadBehaviors: MockDownloadBehavior[] = [];
 
   const inferDownloadSize = (url: string): number => {
-    if (url.includes('gemma-4-E4B-it')) {
-      return 3_654_467_584;
+    const exactFileMatch = localLlmCatalog.LOCAL_LLM_MODEL_CATALOG.find((entry) =>
+      url.includes(entry.fileName),
+    );
+    if (exactFileMatch) {
+      return exactFileMatch.sizeBytes;
     }
-    if (url.includes('gemma-4-E2B-it')) {
-      return 2_583_085_056;
-    }
-    if (url.includes('gemma3-1b-it-int4.task') || url.includes('Gemma3-1B-IT')) {
-      return 700_000_000;
-    }
-    return 1024;
+
+    const repositoryMatch = localLlmCatalog.LOCAL_LLM_MODEL_CATALOG.find((entry) =>
+      url.includes(entry.repositoryId),
+    );
+    return repositoryMatch?.sizeBytes ?? 1024;
   };
 
   const runDownload = async (params: {
@@ -497,6 +520,7 @@ jest.mock('expo-notifications', () => ({
   getPermissionsAsync: jest.fn().mockResolvedValue({ granted: true, status: 'granted' }),
   requestPermissionsAsync: jest.fn().mockResolvedValue({ granted: true, status: 'granted' }),
   scheduleNotificationAsync: jest.fn().mockResolvedValue('notification-id'),
+  cancelScheduledNotificationAsync: jest.fn().mockResolvedValue(undefined),
   setNotificationChannelAsync: jest.fn().mockResolvedValue(undefined),
   addNotificationResponseReceivedListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
   getLastNotificationResponseAsync: jest.fn().mockResolvedValue(null),

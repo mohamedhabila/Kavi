@@ -1,4 +1,3 @@
-import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
 import { PyodideWebView } from '../../src/components/python/PyodideWebView';
 

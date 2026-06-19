@@ -1,0 +1,133 @@
+import type { LocalLlmModelCatalogEntry } from '../../types/provider';
+import {
+  DEFAULT_LITERT_LM_TEMPERATURE,
+  DEFAULT_LITERT_LM_TOP_K,
+  DEFAULT_LITERT_LM_TOP_P,
+} from './catalogDefaults';
+
+export type LocalLlmRawCatalogEntry = Omit<
+  LocalLlmModelCatalogEntry,
+  'downloadUrl' | 'sizeLabel' | 'capabilities'
+> & {
+  supportsVision: boolean;
+  supportsTools: boolean;
+  supportsFileInput: boolean;
+};
+
+export const RAW_LOCAL_MODEL_CATALOG: LocalLlmRawCatalogEntry[] = [
+  {
+    id: 'gemma-4-E2B-it',
+    name: 'Gemma 4 E2B',
+    family: 'gemma',
+    runtime: 'litert-lm',
+    fileName: 'gemma-4-E2B-it.litertlm',
+    repositoryId: 'litert-community/gemma-4-E2B-it-litert-lm',
+    downloadRevision: '6e5c4f1e395deb959c494953478fa5cec4b8008f',
+    sizeBytes: 2_588_147_712,
+    maxContextLength: 32_000,
+    defaultMaxTokens: 4_000,
+    defaultTopK: DEFAULT_LITERT_LM_TOP_K,
+    defaultTopP: DEFAULT_LITERT_LM_TOP_P,
+    defaultTemperature: DEFAULT_LITERT_LM_TEMPERATURE,
+    minDeviceMemoryGb: 8,
+    supportedBackends: ['gpu', 'cpu'],
+    supportedPlatforms: ['android'],
+    defaultVisionAccelerator: 'gpu',
+    defaultAudioAccelerator: 'cpu',
+    supportsVision: true,
+    supportsAudioInput: true,
+    supportsTools: true,
+    supportsFileInput: true,
+    supportsThinking: true,
+    supportsSpeculativeDecoding: true,
+    availableUpdates: [
+      {
+        fileName: 'gemma-4-E2B-it.litertlm',
+        downloadRevision: '7fa1d78473894f7e736a21d920c3aa80f950c0db',
+      },
+    ],
+    updateInfo:
+      "Updated Gemma 4 artifacts can enable built-in Multi Token Prediction for faster decode on supported workloads.",
+    summary:
+      'Balanced multimodal Gemma 4 model with the strongest agentic fit in the local catalog.',
+  },
+  {
+    id: 'gemma-4-E4B-it',
+    name: 'Gemma 4 E4B',
+    family: 'gemma',
+    runtime: 'litert-lm',
+    fileName: 'gemma-4-E4B-it.litertlm',
+    repositoryId: 'litert-community/gemma-4-E4B-it-litert-lm',
+    downloadRevision: '28299f30ee4d43294517a4ac93abd6163412f07f',
+    sizeBytes: 3_659_530_240,
+    maxContextLength: 32_000,
+    defaultMaxTokens: 4_000,
+    defaultTopK: DEFAULT_LITERT_LM_TOP_K,
+    defaultTopP: DEFAULT_LITERT_LM_TOP_P,
+    defaultTemperature: DEFAULT_LITERT_LM_TEMPERATURE,
+    minDeviceMemoryGb: 12,
+    supportedBackends: ['gpu', 'cpu'],
+    supportedPlatforms: ['android'],
+    defaultVisionAccelerator: 'gpu',
+    defaultAudioAccelerator: 'cpu',
+    supportsVision: true,
+    supportsAudioInput: true,
+    supportsTools: true,
+    supportsFileInput: true,
+    supportsThinking: true,
+    supportsSpeculativeDecoding: true,
+    availableUpdates: [
+      {
+        fileName: 'gemma-4-E4B-it.litertlm',
+        downloadRevision: '9695417f248178c63a9f318c6e0c56cb917cb837',
+      },
+    ],
+    updateInfo:
+      "Updated Gemma 4 artifacts can enable built-in Multi Token Prediction for faster decode on supported workloads.",
+    summary: 'Higher-quality multimodal Gemma 4 option for larger Android devices.',
+  },
+  {
+    id: 'qwen-2.5-1.5b-instruct',
+    name: 'Qwen 2.5 1.5B Instruct',
+    family: 'qwen',
+    runtime: 'litert-lm',
+    fileName: 'Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm',
+    repositoryId: 'litert-community/Qwen2.5-1.5B-Instruct',
+    downloadRevision: '19edb84c69a0212f29a6ef17ba0d6f278b6a1614',
+    sizeBytes: 1_597_931_520,
+    defaultMaxTokens: 4_096,
+    defaultTopK: 20,
+    defaultTopP: 0.8,
+    defaultTemperature: 0.7,
+    minDeviceMemoryGb: 6,
+    supportedBackends: ['gpu', 'cpu'],
+    supportedPlatforms: ['android', 'ios'],
+    supportsVision: false,
+    supportsAudioInput: false,
+    supportsTools: false,
+    supportsFileInput: false,
+    summary: 'Compact Qwen instruction model for users who want a non-Gemma on-device option.',
+  },
+  {
+    id: 'deepseek-r1-distill-qwen-1.5b',
+    name: 'DeepSeek R1 Distill Qwen 1.5B',
+    family: 'deepseek',
+    runtime: 'litert-lm',
+    fileName: 'DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm',
+    repositoryId: 'litert-community/DeepSeek-R1-Distill-Qwen-1.5B',
+    downloadRevision: 'e34bb88632342d1f9640bad579a45134eb1cf988',
+    sizeBytes: 1_833_451_520,
+    defaultMaxTokens: 4_096,
+    defaultTopK: DEFAULT_LITERT_LM_TOP_K,
+    defaultTopP: DEFAULT_LITERT_LM_TOP_P,
+    defaultTemperature: DEFAULT_LITERT_LM_TEMPERATURE,
+    minDeviceMemoryGb: 6,
+    supportedBackends: ['gpu', 'cpu'],
+    supportedPlatforms: ['android', 'ios'],
+    supportsVision: false,
+    supportsAudioInput: false,
+    supportsTools: false,
+    supportsFileInput: false,
+    summary: 'Reasoning-oriented small model for users who want DeepSeek-style local behavior.',
+  },
+];

@@ -8,28 +8,11 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
-import {
-  ensureFactSchema,
-  resetFactSchemaCacheForTests,
-  upsertEntity,
-  findEntityByName,
-  getEntityById,
-  softDeleteEntity,
-  recordFact,
-  listFacts,
-  getFactById,
-  invalidateFact,
-  softDeleteFact,
-  setFactPinned,
-  ensureDefaultBlocks,
-  getBlock,
-  listBlocks,
-  editBlock,
-  upsertBlock,
-  clearBlock,
-  BlockOverflowError,
-  DEFAULT_MEMORY_BLOCKS,
-} from '../../src/services/memory/factStore';
+import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
+import { findEntityByName, getEntityById, softDeleteEntity, upsertEntity } from '../../src/services/memory/entities';
+import { invalidateFact, recordFact, setFactPinned, softDeleteFact } from '../../src/services/memory/facts/mutations';
+import { getFactById, listFacts } from '../../src/services/memory/facts/queries';
+import { BlockOverflowError, clearBlock, DEFAULT_MEMORY_BLOCKS, editBlock, ensureDefaultBlocks, getBlock, listBlocks, upsertBlock } from '../../src/services/memory/blocks';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 

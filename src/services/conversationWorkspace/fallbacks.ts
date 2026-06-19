@@ -1,6 +1,9 @@
-import type { AgentRun, ConversationUsageEntry, Message, SubAgentSnapshot } from '../../types';
+import type { AgentRun } from '../../types/agentRun';
+import type { ConversationUsageEntry } from '../../types/usage';
+import type { Message } from '../../types/message';
+import type { SubAgentSnapshot } from '../../types/subAgent';
 import { listActiveSubAgents } from '../agents/subAgent';
-import { getSubAgentsForConversation } from '../agents/workflowState';
+import { getSubAgentsForConversation } from '../agents/lifecycle/stateMachine';
 
 type ConversationWorkspaceFallbackSources = {
   conversationId: string | null | undefined;

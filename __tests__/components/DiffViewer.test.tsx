@@ -2,7 +2,6 @@
 // Tests — DiffViewer Component
 // ---------------------------------------------------------------------------
 
-import React from 'react';
 import { render } from '@testing-library/react-native';
 import { DiffViewer, InlineDiff } from '../../src/components/editor/DiffViewer';
 

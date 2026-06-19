@@ -5,10 +5,9 @@
 // state, and generates HTML for WebView rendering.
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { CanvasSurface, CanvasComponent, CanvasAction } from '../../types';
+import type { CanvasSurface, CanvasComponent } from '../../types/canvas';
 import type {
   ServerToClientMessage,
-  ClientToServerEvent,
   DataModelOperation,
   CanvasEventHandler,
   CanvasReadRequestOptions,

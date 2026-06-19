@@ -6,7 +6,8 @@ import React from 'react';
 import { act, render, fireEvent, waitFor } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import { ModelSelector } from '../../src/components/chat/ModelSelector';
-import { createDefaultLocalLlmProvider } from '../../src/services/localLlm/runtime';
+import { createDefaultLocalLlmProvider } from '../../src/services/localLlm/provider';
+import { getLocalLlmModelDisplayName } from '../../src/services/localLlm/catalog';
 
 const mockGetProviderApiKey = jest.fn().mockResolvedValue('sk-test');
 
@@ -135,7 +136,7 @@ describe('ModelSelector', () => {
     await act(async () => {
       fireEvent.press(getByText('Close'));
     });
-    // Modal should be closed
+    expect(queryByText('Select Model')).toBeNull();
   });
 
   it('should show model list from available models', async () => {
@@ -338,7 +339,7 @@ describe('ModelSelector', () => {
       );
 
       await act(async () => {
-        fireEvent.press(getByText(localProvider.model));
+        fireEvent.press(getByText(getLocalLlmModelDisplayName(localProvider.model)));
       });
 
       await waitFor(() => {

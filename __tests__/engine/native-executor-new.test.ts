@@ -23,16 +23,19 @@ jest.mock('react-native', () => ({
 }));
 
 import {
-  executeDeviceStatus,
+  executeDeviceHealth,
   executeDeviceInfo,
   executeDevicePermissions,
-  executeDeviceHealth,
-  executePhotosLatest,
+  executeDeviceStatus,
+} from '../../src/engine/tools/native/device/executor';
+import { executeNativeTool } from '../../src/engine/tools/native/executor';
+import { executeHapticFeedback } from '../../src/engine/tools/native/haptics/executor';
+import {
   executeCameraClip,
+  executePhotosLatest,
   executeScreenRecord,
-  executeHapticFeedback,
-  executeNativeTool,
-} from '../../src/engine/tools/native-executor';
+} from '../../src/engine/tools/native/media/executor';
+import { executeNotificationCancel } from '../../src/engine/tools/native/notifications/executor';
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -122,6 +125,18 @@ describe('Haptic Feedback Tool', () => {
   });
 });
 
+describe('Notification Cancel Tool', () => {
+  it('returns structured cancellation evidence', async () => {
+    const result = await executeNotificationCancel({ id: 'notification-id' });
+    const parsed = JSON.parse(result);
+    expect(parsed).toEqual({
+      status: 'notification_cancelled',
+      id: 'notification-id',
+      cancelled: true,
+    });
+  });
+});
+
 describe('Native Tool Dispatcher — New Tools', () => {
   it('routes device_status correctly', async () => {
     const result = await executeNativeTool('device_status', '{}');
@@ -152,6 +167,11 @@ describe('Native Tool Dispatcher — New Tools', () => {
   it('routes screen_record correctly', async () => {
     const result = await executeNativeTool('screen_record', '{}');
     expect(result).toBeDefined();
+  });
+
+  it('routes notification_cancel correctly', async () => {
+    const result = await executeNativeTool('notification_cancel', '{"id":"notification-id"}');
+    expect(JSON.parse(result).status).toBe('notification_cancelled');
   });
 
   it('continues to handle unknown tools', async () => {

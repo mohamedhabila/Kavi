@@ -3,7 +3,7 @@ import {
   AssistantMessageKind,
   AssistantMessageMetadata,
   Message,
-} from '../types';
+} from '../types/message';
 
 export function buildAssistantMessageMetadata(
   kind: AssistantMessageKind,
@@ -155,5 +155,13 @@ export function hasCompleteFinalAssistantMetadata(message: Message): boolean {
 export function isIncompleteAssistantMessage(message: Message): boolean {
   return (
     message.role === 'assistant' && message.assistantMetadata?.completionStatus === 'incomplete'
+  );
+}
+
+export function isPendingReviewAssistantMessage(message: Message): boolean {
+  return (
+    isIncompleteAssistantMessage(message) &&
+    message.assistantMetadata?.kind === 'final' &&
+    message.assistantMetadata.finishReason === 'terminal_review_pending'
   );
 }

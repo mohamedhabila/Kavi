@@ -1,38 +1,20 @@
 import Foundation
 import React
-import MediaPipeTasksGenAI
-import MediaPipeTasksGenAIC
 
 @objc(KaviLocalLlm)
 class KaviLocalLlm: RCTEventEmitter {
-  private struct HistoryEntry {
-    let role: String
-    let content: String
-  }
-
-  private struct LocalRequest {
-    let requestId: String
-    let modelPath: String
-    let runtime: String
-    let prompt: String
-    let systemPrompt: String?
-    let history: [HistoryEntry]
-    let maxTokens: Int
-  }
-
-  private final class ActiveRequest {
-    let task: Task<Void, Never>
-    let inference: NSObject?
-
-    init(task: Task<Void, Never>, inference: NSObject?) {
-      self.task = task
-      self.inference = inference
-    }
-  }
-
   private let streamEventName = "KaviLocalLlmStream"
-  private let activeRequestsLock = NSLock()
-  private var activeRequests: [String: ActiveRequest] = [:]
+  private let requestParser = LocalLlmRequestParser()
+  private let runtime = LocalLlmRuntime()
+  private let backgroundTask = LocalLlmBackgroundTask()
+  private let activeTaskLock = NSLock()
+  private var activeTasks: [String: Task<Void, Never>] = [:]
+
+  private lazy var events = LocalLlmEvents(
+    emit: { [weak self] body in
+      self?.sendEvent(withName: self?.streamEventName ?? "KaviLocalLlmStream", body: body)
+    }
+  )
 
   override static func requiresMainQueueSetup() -> Bool {
     false
@@ -43,306 +25,154 @@ class KaviLocalLlm: RCTEventEmitter {
   }
 
   @objc
-  func getAvailability(_ resolve: RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
-    resolve([
-      "available": true,
-      "linked": true,
-      "platform": "ios",
-      "runtime": "mediapipe-genai",
-      "supportsStreaming": true,
-      "deviceMemoryGb": NSNull(),
-      "lowMemoryDevice": false,
-      "reason": NSNull(),
-    ])
+  func getAvailability(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
+    Task { [runtime] in
+      let availability = await runtime.getAvailability()
+      resolveOnMain(resolve, availability)
+    }
   }
 
   @objc
-  func generate(_ request: NSDictionary, resolver resolve: RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
-    let parsed: LocalRequest
+  func warmup(_ request: NSDictionary, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+    let parsed: LocalLlmWarmupRequest
     do {
-      parsed = try parseRequest(request)
+      parsed = try requestParser.parseWarmupRequest(request)
     } catch {
       reject("LOCAL_LLM_INVALID_REQUEST", error.localizedDescription, error)
       return
     }
 
-    let inference: LlmInference
+    Task { [runtime] in
+      do {
+        let result = try await runtime.warmup(parsed)
+        resolveOnMain(resolve, result)
+      } catch {
+        rejectOnMain(reject, "LOCAL_LLM_WARMUP_FAILED", error)
+      }
+    }
+  }
+
+  @objc
+  func generate(_ request: NSDictionary, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+    let parsed: LocalLlmRequest
     do {
-      inference = try createInference(modelPath: parsed.modelPath, maxTokens: parsed.maxTokens)
+      parsed = try requestParser.parseRequest(request)
     } catch {
-      reject("LOCAL_LLM_LOAD_FAILED", error.localizedDescription, error)
+      reject("LOCAL_LLM_INVALID_REQUEST", error.localizedDescription, error)
       return
     }
 
-    let task = Task(priority: .userInitiated) { [weak self] in
+    let task = Task { [weak self, runtime] in
       defer {
-        self?.removeActiveRequest(parsed.requestId)
-        self?.closeIfPossible(inference as? NSObject)
+        self?.backgroundTask.end(requestId: parsed.requestId)
+        self?.removeTask(parsed.requestId)
       }
-
       do {
-        let text = try await self?.runInference(parsed, inference: inference) ?? ""
-        DispatchQueue.main.async {
-          resolve(["text": text])
-        }
+        let result = try await runtime.generate(parsed)
+        resolveOnMain(resolve, result.toDictionary())
       } catch is CancellationError {
-        DispatchQueue.main.async {
-          reject("LOCAL_LLM_CANCELLED", "The on-device request was cancelled.", nil)
-        }
+        rejectOnMain(reject, "LOCAL_LLM_CANCELLED", LocalLlmBridgeError.cancelled)
       } catch {
-        DispatchQueue.main.async {
-          reject("LOCAL_LLM_GENERATE_FAILED", error.localizedDescription, error)
-        }
+        rejectOnMain(reject, "LOCAL_LLM_GENERATE_FAILED", error)
       }
     }
-
-    storeActiveRequest(parsed.requestId, task: task, inference: inference as? NSObject)
+    storeTask(parsed.requestId, task)
+    backgroundTask.begin(requestId: parsed.requestId) { [weak self, runtime] in
+      self?.cancelTask(parsed.requestId)
+      Task { await runtime.cancel(requestId: parsed.requestId) }
+    }
   }
 
   @objc
   func startStreaming(_ request: NSDictionary, resolver resolve: RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
-    let parsed: LocalRequest
+    let parsed: LocalLlmRequest
     do {
-      parsed = try parseRequest(request)
+      parsed = try requestParser.parseRequest(request)
     } catch {
       reject("LOCAL_LLM_INVALID_REQUEST", error.localizedDescription, error)
       return
     }
 
-    let inference: LlmInference
-    do {
-      inference = try createInference(modelPath: parsed.modelPath, maxTokens: parsed.maxTokens)
-    } catch {
-      reject("LOCAL_LLM_LOAD_FAILED", error.localizedDescription, error)
-      return
-    }
-
-    let task = Task(priority: .userInitiated) { [weak self] in
+    let task = Task { [weak self, runtime, events] in
       defer {
-        self?.removeActiveRequest(parsed.requestId)
-        self?.closeIfPossible(inference as? NSObject)
+        self?.backgroundTask.end(requestId: parsed.requestId)
+        self?.removeTask(parsed.requestId)
       }
-
       do {
-        try await self?.runStreamingInference(parsed, inference: inference)
-        self?.emitDone(parsed.requestId)
-      } catch is CancellationError {
-        self?.emitDone(parsed.requestId)
+        let backend = try await runtime.stream(parsed, events: events)
+        events.emitDone(requestId: parsed.requestId, backend: backend)
       } catch {
-        self?.emitError(parsed.requestId, error.localizedDescription)
+        if Task.isCancelled {
+          events.emitDone(requestId: parsed.requestId, backend: nil)
+        } else {
+          events.emitError(requestId: parsed.requestId, message: error.localizedDescription)
+        }
       }
     }
-
-    storeActiveRequest(parsed.requestId, task: task, inference: inference as? NSObject)
+    storeTask(parsed.requestId, task)
+    backgroundTask.begin(requestId: parsed.requestId) { [weak self, runtime] in
+      self?.cancelTask(parsed.requestId)
+      Task { await runtime.cancel(requestId: parsed.requestId) }
+    }
     resolve(nil)
   }
 
   @objc
-  func cancel(_ requestId: NSString, resolver resolve: RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
-    if let activeRequest = removeActiveRequest(requestId as String) {
-      activeRequest.task.cancel()
-      cancelIfPossible(activeRequest.inference)
+  func cancel(_ requestId: NSString, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
+    let id = requestId as String
+    cancelTask(id)
+    Task { [runtime] in
+      await runtime.cancel(requestId: id)
+      resolveOnMain(resolve, nil)
     }
-    resolve(nil)
   }
 
   override func invalidate() {
     super.invalidate()
-    activeRequestsLock.lock()
-    let active = activeRequests.values
-    activeRequests.removeAll()
-    activeRequestsLock.unlock()
-
-    for request in active {
-      request.task.cancel()
-      cancelIfPossible(request.inference)
+    let tasks = clearTasks()
+    tasks.forEach { $0.cancel() }
+    backgroundTask.endAll()
+    Task { [runtime] in
+      await runtime.cancelAll()
     }
   }
 
-  private func parseRequest(_ request: NSDictionary) throws -> LocalRequest {
-    let requestId = (request["requestId"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    let modelPath = (request["modelPath"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    let runtime = (request["runtime"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "mediapipe-genai"
-    let prompt = (request["prompt"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    let systemPrompt = (request["systemPrompt"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-      .flatMap { $0.isEmpty ? nil : $0 }
-    let history = parseHistory(request["history"] as? NSArray)
-    let maxTokens = max((request["maxTokens"] as? NSNumber)?.intValue ?? 1024, 1)
-
-    guard !requestId.isEmpty else {
-      throw NSError(domain: "KaviLocalLlm", code: 1, userInfo: [NSLocalizedDescriptionKey: "requestId is required."])
-    }
-    guard !modelPath.isEmpty else {
-      throw NSError(domain: "KaviLocalLlm", code: 1, userInfo: [NSLocalizedDescriptionKey: "modelPath is required."])
-    }
-    guard !prompt.isEmpty else {
-      throw NSError(domain: "KaviLocalLlm", code: 1, userInfo: [NSLocalizedDescriptionKey: "prompt is required."])
-    }
-
-    return LocalRequest(
-      requestId: requestId,
-      modelPath: modelPath,
-      runtime: runtime,
-      prompt: prompt,
-      systemPrompt: systemPrompt,
-      history: history,
-      maxTokens: maxTokens
-    )
+  private func storeTask(_ requestId: String, _ task: Task<Void, Never>) {
+    activeTaskLock.lock()
+    activeTasks[requestId] = task
+    activeTaskLock.unlock()
   }
 
-  private func parseHistory(_ historyArray: NSArray?) -> [HistoryEntry] {
-    guard let historyArray else {
-      return []
-    }
-
-    return historyArray.compactMap { item in
-      guard
-        let entry = item as? NSDictionary,
-        let role = (entry["role"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
-        let content = (entry["content"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
-        !role.isEmpty,
-        !content.isEmpty
-      else {
-        return nil
-      }
-
-      return HistoryEntry(role: role, content: content)
-    }
+  private func removeTask(_ requestId: String) {
+    activeTaskLock.lock()
+    activeTasks.removeValue(forKey: requestId)
+    activeTaskLock.unlock()
   }
 
-  private func createInference(modelPath: String, maxTokens: Int) throws -> LlmInference {
-    let options = LlmInference.Options(modelPath: modelPath)
-    options.maxTokens = maxTokens
-    return try LlmInference(options: options)
+  private func cancelTask(_ requestId: String) {
+    activeTaskLock.lock()
+    let task = activeTasks[requestId]
+    activeTaskLock.unlock()
+    task?.cancel()
   }
 
-  private func createSession(for inference: LlmInference) throws -> LlmInference.Session {
-    let options = LlmInference.Session.Options()
-    options.topk = 64
-    options.topp = 0.95
-    options.temperature = 1.0
-    return try LlmInference.Session(llmInference: inference, options: options)
+  private func clearTasks() -> [Task<Void, Never>] {
+    activeTaskLock.lock()
+    let tasks = Array(activeTasks.values)
+    activeTasks.removeAll()
+    activeTaskLock.unlock()
+    return tasks
   }
+}
 
-  private func runInference(_ request: LocalRequest, inference: LlmInference) async throws -> String {
-    let session = try createSession(for: inference)
-    defer {
-      closeIfPossible(session as? NSObject)
-    }
-
-    try session.addQueryChunk(inputText: renderPrompt(for: request))
-
-    var output = ""
-    let responseStream = session.generateResponseAsync()
-    for try await chunk in responseStream {
-      try Task.checkCancellation()
-      output += chunk
-    }
-    return output
+private func resolveOnMain(_ resolve: @escaping RCTPromiseResolveBlock, _ value: Any?) {
+  DispatchQueue.main.async {
+    resolve(value)
   }
+}
 
-  private func runStreamingInference(_ request: LocalRequest, inference: LlmInference) async throws {
-    let session = try createSession(for: inference)
-    defer {
-      closeIfPossible(session as? NSObject)
-    }
-
-    try session.addQueryChunk(inputText: renderPrompt(for: request))
-
-    let responseStream = session.generateResponseAsync()
-    for try await chunk in responseStream {
-      try Task.checkCancellation()
-      emitToken(request.requestId, chunk)
-    }
-  }
-
-  private func renderPrompt(for request: LocalRequest) -> String {
-    var rendered = ""
-
-    if let systemPrompt = request.systemPrompt, !systemPrompt.isEmpty {
-      rendered += renderTurn(role: "user", content: systemPrompt)
-    }
-
-    for entry in request.history {
-      let role = entry.role == "assistant" ? "model" : "user"
-      rendered += renderTurn(role: role, content: entry.content)
-    }
-
-    rendered += renderTurn(role: "user", content: request.prompt, closeTurn: true)
-    rendered += "<start_of_turn>model\n"
-    return rendered
-  }
-
-  private func renderTurn(role: String, content: String, closeTurn: Bool = true) -> String {
-    var rendered = "<start_of_turn>\(role)\n\(content)"
-    if closeTurn {
-      rendered += "<end_of_turn>\n"
-    }
-    return rendered
-  }
-
-  private func emitToken(_ requestId: String, _ content: String) {
-    emit([
-      "requestId": requestId,
-      "type": "token",
-      "content": content,
-    ])
-  }
-
-  private func emitDone(_ requestId: String) {
-    emit([
-      "requestId": requestId,
-      "type": "done",
-    ])
-  }
-
-  private func emitError(_ requestId: String, _ error: String) {
-    emit([
-      "requestId": requestId,
-      "type": "error",
-      "error": error,
-    ])
-  }
-
-  private func emit(_ body: [String: Any]) {
-    DispatchQueue.main.async { [weak self] in
-      self?.sendEvent(withName: self?.streamEventName ?? "KaviLocalLlmStream", body: body)
-    }
-  }
-
-  private func storeActiveRequest(_ requestId: String, task: Task<Void, Never>, inference: NSObject?) {
-    activeRequestsLock.lock()
-    activeRequests[requestId] = ActiveRequest(task: task, inference: inference)
-    activeRequestsLock.unlock()
-  }
-
-  @discardableResult
-  private func removeActiveRequest(_ requestId: String) -> ActiveRequest? {
-    activeRequestsLock.lock()
-    let activeRequest = activeRequests.removeValue(forKey: requestId)
-    activeRequestsLock.unlock()
-    return activeRequest
-  }
-
-  private func cancelIfPossible(_ inference: NSObject?) {
-    guard let inference else {
-      return
-    }
-
-    let selector = NSSelectorFromString("cancelProcessing")
-    if inference.responds(to: selector) {
-      _ = inference.perform(selector)
-    }
-  }
-
-  private func closeIfPossible(_ object: NSObject?) {
-    guard let object else {
-      return
-    }
-
-    let selector = NSSelectorFromString("close")
-    if object.responds(to: selector) {
-      _ = object.perform(selector)
-    }
+private func rejectOnMain(_ reject: @escaping RCTPromiseRejectBlock, _ code: String, _ error: Error) {
+  DispatchQueue.main.async {
+    reject(code, error.localizedDescription, error)
   }
 }

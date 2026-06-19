@@ -1,9 +1,10 @@
 import { useSettingsStore } from '../../store/useSettingsStore';
-import type { AppSettings } from '../../types';
+import type { AppSettings } from '../../types/settings';
 import type { SkillExecutionSurface, SkillMetadata } from './types';
 import { getSkillCompatibility } from './manifest';
 import { buildSkillEligibilityContext, targetSupportsConfigPath } from './eligibility';
-import { getBrowserProviderLabel, getBrowserProviderReadiness } from '../browser/providers';
+import { getBrowserProviderLabel } from '../browser/providers/labels';
+import { getBrowserProviderReadiness } from '../browser/providers/readiness';
 import { getSshTargetLabel, getSshTargetReadiness } from '../ssh/connector';
 import {
   getWorkspaceProviderLabel,

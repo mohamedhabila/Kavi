@@ -2,7 +2,7 @@
 // Kavi — Conversation Helpers
 // ---------------------------------------------------------------------------
 
-import { i18n } from '../i18n';
+import { i18n } from '../i18n/manager';
 import type { TranslationMap } from '../i18n/types';
 import { ar } from '../i18n/locales/ar';
 import { de } from '../i18n/locales/de';

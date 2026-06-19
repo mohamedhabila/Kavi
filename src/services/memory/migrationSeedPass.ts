@@ -9,7 +9,7 @@
 // them into the existing `consolidateTurn` pipeline so that long-lived
 // information surfaces in the unified memory.
 //
-// Design rules (per `_research/SINGLE_THREAD_MEMORY_REDESIGN_20260429.md`):
+// Design rules:
 //   • Resumable — per-conversation cursor in `memory_migration_state`.
 //   • Throttled — process at most `maxTurnsPerCall` turn pairs per call so
 //     app launch never blocks on a large backlog.
@@ -21,8 +21,8 @@
 //     re-seeding produces zero new facts.
 // ---------------------------------------------------------------------------
 
+import { getMany, getOne, runMemoryStatement } from './access/crud';
 import { ensureFactSchema } from './schema';
-import { getMemoryDb } from './sqlite-store';
 import {
   applyConsolidatorResult,
   buildConsolidatorPrompt,
@@ -30,7 +30,8 @@ import {
   type ConsolidatorExtractor,
   type ConsolidatorResult,
 } from './consolidator';
-import type { Conversation, Message } from '../../types';
+import type { Conversation } from '../../types/conversation';
+import type { Message } from '../../types/message';
 import { createLogger } from '../../utils/logger';
 
 const logger = createLogger('memory.migrationSeedPass');
@@ -72,8 +73,7 @@ function rowToState(row: MigrationStateRowDb): MigrationStateRow {
 }
 
 export function getMigrationState(conversationId: string): MigrationStateRow | null {
-  ensureFactSchema();
-  const row = getMemoryDb().getFirstSync<MigrationStateRowDb>(
+  const row = getOne<MigrationStateRowDb>(
     `SELECT * FROM memory_migration_state WHERE conversation_id = ? LIMIT 1`,
     conversationId,
   );
@@ -81,8 +81,7 @@ export function getMigrationState(conversationId: string): MigrationStateRow | n
 }
 
 export function listMigrationStates(): MigrationStateRow[] {
-  ensureFactSchema();
-  const rows = getMemoryDb().getAllSync<MigrationStateRowDb>(
+  const rows = getMany<MigrationStateRowDb>(
     `SELECT * FROM memory_migration_state ORDER BY updated_at DESC`,
   );
   return rows.map(rowToState);
@@ -98,8 +97,7 @@ interface UpsertInput {
 }
 
 function upsertMigrationState(input: UpsertInput): void {
-  ensureFactSchema();
-  getMemoryDb().runSync(
+  runMemoryStatement(
     `INSERT INTO memory_migration_state (
        conversation_id, last_seeded_message_id, seeded_turns, status, error, updated_at
      ) VALUES (?, ?, ?, ?, ?, ?)
@@ -119,8 +117,7 @@ function upsertMigrationState(input: UpsertInput): void {
 }
 
 export function clearMigrationState(conversationId: string): void {
-  ensureFactSchema();
-  getMemoryDb().runSync(
+  runMemoryStatement(
     `DELETE FROM memory_migration_state WHERE conversation_id = ?`,
     conversationId,
   );
@@ -266,6 +263,7 @@ export async function seedConversation(
       if (input.dryRun !== true) {
         applyConsolidatorResult(result, {
           now: turn.assistantMessage.timestamp ?? now,
+          threadTitle: conv.title,
         });
       }
       results.push(result);
@@ -352,9 +350,7 @@ const ZERO_RESULT: RunSeedPassResult = {
  * Returns counters describing this call's progress; safe to call repeatedly
  * (e.g. on each app foreground) until `remainingConversations === 0`.
  */
-export async function runMigrationSeedPass(
-  input: RunSeedPassInput,
-): Promise<RunSeedPassResult> {
+export async function runMigrationSeedPass(input: RunSeedPassInput): Promise<RunSeedPassResult> {
   if (input.disableLongTermMemory) {
     return { ...ZERO_RESULT, skipped: countArchivedPending(input.conversations) };
   }

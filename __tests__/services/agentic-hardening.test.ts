@@ -10,7 +10,7 @@ import {
   SUPER_AGENT_SYSTEM_PROMPT,
   getPersona,
 } from '../../src/services/agents/personas';
-import { type ConversationMode } from '../../src/types';
+import { type ConversationMode } from '../../src/types/conversation';
 
 // ── SUPER_AGENT_PERSONA_ID constant ─────────────────────────────────────
 
@@ -131,21 +131,21 @@ describe('sub-agent name sanitization', () => {
 
 // ── Spawn schema validation ─────────────────────────────────────────────
 
-import { SESSION_SPAWN_TOOL } from '../../src/engine/tools/parity-definitions';
+import { SESSION_SPAWN_TOOL } from '../../src/engine/tools/builtin-definitions';
 
 describe('SESSION_SPAWN_TOOL schema hardening', () => {
   const schema = SESSION_SPAWN_TOOL.input_schema;
-
-  it('systemPrompt has maxLength of 50000', () => {
-    expect(schema.properties.systemPrompt.maxLength).toBe(50000);
-  });
 
   it('name has maxLength of 256', () => {
     expect(schema.properties.name.maxLength).toBe(256);
   });
 
-  it('tools description mentions sandbox intersection', () => {
-    expect(schema.properties.tools.description).toContain('intersection');
+  it('omits worker-config tuning knobs from the model-facing schema', () => {
+    expect(schema.properties.systemPrompt).toBeUndefined();
+    expect(schema.properties.inheritMemory).toBeUndefined();
+    expect(schema.properties.sandboxPolicy).toBeUndefined();
+    expect(schema.properties.announce).toBeUndefined();
+    expect(schema.properties.waitTimeoutMs).toBeUndefined();
   });
 });
 
@@ -185,58 +185,67 @@ describe('spawn error message mapping', () => {
 
 describe('SuperAgent system prompt — decision rules', () => {
   it('treats delegation as deliberate rather than automatic', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Use delegation deliberately, not ceremonially');
-  });
-
-  it('keeps direct execution available for simple work and execution asks', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Trivial tasks');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('handle DIRECTLY');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Simple tasks');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('handle them directly');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('execute directly first');
-  });
-
-  it('mentions sessions_spawn in Phase 4', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('sessions_spawn');
-  });
-
-  it('requires plan before spawning', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('present the plan using this exact structure');
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
-      'Always present the structured plan to the user FIRST',
+      'workers only when they materially improve completion',
     );
   });
 
+  it('keeps direct execution available for simple work and execution asks', () => {
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Trivial Q&A and one-shot lookups');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('answer directly');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
+      'highest-leverage tool that directly fits the next work unit',
+    );
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
+      'launch the worker directly instead of preflighting with supervisor tools',
+    );
+  });
+
+  it('mentions sessions_spawn for worker delegation', () => {
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('sessions_spawn');
+  });
+
+  it('avoids forcing a formal pre-tool plan before spawning', () => {
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
+      'do not emit a formal workstream plan before the first tool call',
+    );
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('If the next step is clear, start acting');
+  });
+
   it('requires delegated prompts to carry time context when freshness matters', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('include the relevant current-time context');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('timezone assumptions');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('recency requirements');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Fresh/live/status claims');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('runtime time context');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('verify with tools');
   });
 
   it('stops early on low-signal requests instead of manufacturing a workflow', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('low-signal or underspecified');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('stop the workflow immediately');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('ask the user for a concrete request');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Low-signal or underspecified request');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('stop and ask one concrete clarification');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('do not plan, delegate, or invent work');
   });
 
   it('criticizes unreasonable process requests and narrows scope', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('unreasonable effort');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('criticize that mismatch explicitly');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Unreasonable scope/process');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('say why');
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('smallest sensible scope');
   });
 
   it('forbids duplicate supervisor-plus-worker passes over the same substantive step', () => {
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('delegate only for named gaps');
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
-      'Do not do the primary substantive work for a workstream yourself and then delegate that same workstream again.',
+      'workers only when they materially improve completion',
     );
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Do not delegate merely for ceremony.');
     expect(SUPER_AGENT_SYSTEM_PROMPT).not.toContain(
       'pause final delivery and delegate before concluding',
     );
   });
 
   it('treats python as a capability-extension fallback before declaring tasks impossible', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('capability-extension tool');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('DOCX/XLSX/HTML/SVG/CSV');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
+      'Use python as a capability bridge only when first-class tools are insufficient',
+    );
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
+      'Use tool_catalog only when the exposed tool surface is insufficient for the next step',
+    );
   });
 });

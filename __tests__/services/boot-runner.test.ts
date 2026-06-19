@@ -48,7 +48,7 @@ import {
   getBootConfig,
   updateBootConfig,
 } from '../../src/services/agents/bootRunner';
-import type { LlmProviderConfig } from '../../src/types';
+import type { LlmProviderConfig } from '../../src/types/provider';
 
 const mockProvider: LlmProviderConfig = {
   id: 'test',
@@ -150,7 +150,10 @@ describe('Boot Runner', () => {
       expect(result.status).toBe('ran');
       expect(runOrchestrator).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: mockProvider,
+          provider: {
+            ...mockProvider,
+            model: 'gpt-4o-mini',
+          },
           model: 'gpt-4o-mini',
         }),
         expect.any(Object),

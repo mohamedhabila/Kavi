@@ -72,6 +72,10 @@ export const ja: TranslationMap = mergeTranslations(en, {
     openThreadsEmpty: '進行中のスレッドはありません。',
     pinnedMoments: 'ピン留めモーメント',
     pinnedMomentsEmpty: 'ピンした事柄がここに表示されます。',
+    memoryStats: 'Memory',
+    memoryStatsFacts: '{count} facts',
+    memoryStatsEpisodes: '{count} episodes',
+    memoryStatsActiveTask: 'Active: {task}',
     recallPlaceholder: 'モーメントを思い出す…',
     recallSearch: 'メモリを検索',
   },
@@ -93,9 +97,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
     deleteConversation: '会話を削除',
     searchConversations: '会話を検索…',
     emptyStateHint: 'メッセージを送信して開始します。お手伝いする準備ができています！',
-    localModelInitializingTitle: 'Initializing model',
-    localModelInitializingBody: 'Sit tight, this can take up to 1 minute.',
-    localModelInitializeFailed: 'Failed to initialize the on-device model.',
     thinking: '考え中…',
     toolCall: 'ツールを使用中: {name}',
     maxIterations: 'ツールの最大反復回数に達しました。',
@@ -120,7 +121,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
     assistantTyping: 'アシスタントが入力中',
     workingOnIt: '対応中です',
     reviewingWork: '作業をレビュー中',
-    pilotReviewingWork: 'パイロットが作業をレビュー中',
     showCode: 'コードを表示',
     hideCode: 'コードを隠す',
     plainTextFallback: '大きな応答は安定性のためプレーンテキストで表示されています。',
@@ -153,6 +153,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
     showLogs: 'ログを表示',
     hideLogs: 'ログを非表示',
     latestLogs: '最新のログ',
+    jumpToLatest: '最新へ移動',
     logsEmpty: 'まだログはありません。',
     showEarlierMessages: 'Show earlier messages ({count})',
     subAgentLabel: 'サブエージェント',
@@ -188,64 +189,30 @@ export const ja: TranslationMap = mergeTranslations(en, {
     subAgentRollupCompleted: '{count} 完了',
     subAgentRollupIssuesOne: '1 問題',
     subAgentRollupIssues: '{count} 問題',
-    agentWorkflow: {
-      title: 'エージェントのワークフロー',
-      showDetails: '詳細を表示',
-      hideDetails: '詳細を非表示',
-      showDetailsAccessibility: 'エージェントのワークフローの詳細を表示',
-      hideDetailsAccessibility: 'エージェントのワークフローの詳細を非表示',
-      stageLabel: 'ステージ: {stage}',
-      lastToolLabel: '最後のツール: {tool}',
-      noToolsYet: 'まだツールはありません',
-      turnLabel: 'ターン {count}',
-      objective: '目標',
-      latestUpdate: '最新の更新',
-      successCriteria: '成功基準',
-      stopConditions: '停止条件',
-      workstreams: 'ワークストリーム',
-      pilotTitle: 'パイロット',
-      pilotChip: 'パイロット: {action}',
-      pilotActionLabel: 'アクション: {action}',
-      pilotConfidenceLabel: '信頼度: {confidence}',
-      pilotScoreLabel: 'スコア: {score}/{max}',
+    agentGoals: {
+      header: 'ゴール ({count})',
+      bootstrapPending: 'ゴールの初期化待ち',
+      evidenceCount: '証拠 {count}',
       status: {
         running: '実行中',
         completed: '完了',
         failed: '失敗',
-        cancelled: 'キャンセルされた',
+        cancelled: 'キャンセル',
       },
-      phase: {
-        assess: '評価',
-        plan: '計画',
-        work: '作業',
-        review: 'レビュー',
-        pilot: 'パイロット',
-        deliver: '提供',
+      goalStatus: {
+        pending: '保留',
+        active: 'アクティブ',
+        completed: '完了',
+        blocked: 'ブロック',
       },
-      checkpointKind: {
-        run: '実行',
-        phase: 'フェーズ',
-        tool: 'ツール',
-        worker: 'ワーカー',
-        note: 'ノート',
-      },
-      controlAction: {
-        accept: '承認',
-        continue: '続行',
-        block: 'ブロック',
-        cancel: 'キャンセル',
-      },
-      confidence: {
-        low: '低',
-        medium: '中',
-        high: '高',
-      },
-      summary: {
-        turns: 'ターン {count}',
-        tools: 'ツール {completed}/{started}',
-        failed: '失敗 {count}',
-        workers: 'ワーカー {count}',
-      },
+    },
+    agentRunTrace: {
+      header: 'Run trace',
+      preview: 'Iteration {iteration} · {count} events',
+      iteration: 'Iteration {iteration}',
+    },
+    agentWorkflow: {
+      currentWork: '現在の作業',
     },
   },
   errorBoundary: {
@@ -273,9 +240,9 @@ export const ja: TranslationMap = mergeTranslations(en, {
     apiKeyPlaceholder: 'sk-…',
     defaultModel: 'デフォルトモデル',
     defaultModelPlaceholder: 'gpt-5.5',
-    onDeviceProviderTitle: 'オンデバイス Gemma',
+    onDeviceProviderTitle: 'オンデバイスモデル',
     onDeviceProviderHint:
-      'このプロバイダーを保存する前に、対応する Gemma モデルをこの端末へダウンロードしてください。その後、Kavi はリモート HTTP API ではなくネイティブランタイムを使用します。',
+      'このプロバイダーを保存する前に、対応するオンデバイスモデルをこの端末へダウンロードしてください。その後、Kavi はリモート HTTP API ではなくネイティブランタイムを使用します。',
     selectOnDeviceModel: 'オンデバイスモデル {name} を選択',
     onDeviceModelInstalled: 'インストール済み',
     deleteProvider: 'プロバイダーを削除',
@@ -338,10 +305,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
     mcpMetadata: '接続メタデータ',
     mcpManualServerHint:
       '手動サーバーは完全にユーザー管理です。接続前に URL、ヘッダー、トークン、OAuth 設定を確認してください。',
-    mcpOfficialRegistryHint:
-      'このサーバーは公式 MCP レジストリから追加されました。接続詳細を変更する前に、レジストリ情報とウェブサイトを確認してください。',
     mcpOAuthSessionSaved: 'OAuth セッション保存済み',
-    mcpOAuthSessionNotConnected: 'OAuth サインインが必要です',
     mcpResetOAuthSession: 'OAuth セッションをリセット',
     mcpResetOAuthSessionConfirm: 'この MCP サーバーの保存済み OAuth トークンを削除しますか？',
     mcpResetOAuthSessionSuccess: 'OAuth セッションを削除しました。',
@@ -429,7 +393,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
     workspaceConfigRoots: '設定ルート',
     workspaceConfigRootsHint:
       '1 行に 1 パスずつ指定します。設定ファイルが必要なスキルは、これらのパスが含まれる場合のみここへルーティングされます。',
-    workspaceConfigRootsPlaceholder: '/Users/username/.config\n/Users/username/.ssh',
     workspaceConfigRootsCount: '設定ルート {count} 件',
     deleteWorkspaceTarget: 'ワークスペースターゲットを削除',
     deleteWorkspaceTargetConfirm: 'このワークスペースターゲットを削除しますか？',
@@ -552,8 +515,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
     expoAccessTokenHint: '安全に保存されます。EAS CLI 直接実行モードで必要です。',
     expoAccessTokenPlaceholder: 'eas_xxx',
     deleteExpoAccount: 'Expo アカウントを削除',
-    deleteExpoAccountConfirm:
-      'これにより Kavi の設定から関連する Expo プロジェクトも削除されます。',
     deleteExpoAccountDetachConfirm:
       'この Expo アカウントを削除しますか？関連するプロジェクトは残りますが、アカウントとのリンクは解除されます。',
     expoProjectsSyncedCount: 'Projects synced: {count}',
@@ -761,6 +722,15 @@ export const ja: TranslationMap = mergeTranslations(en, {
   },
   memory: {
     title: 'メモリー',
+    overviewTab: '概要',
+    overviewFocusTitle: '今日のフォーカス',
+    overviewFocusEmpty: 'フォーカスはまだありません。',
+    overviewTaskTitle: '現在のタスク',
+    overviewTaskEmpty: 'アクティブなタスクセグメントがありません。',
+    overviewRecentFactsTitle: '最近のファクト',
+    overviewSearchPlaceholder: 'メモリーを検索…',
+    overviewConsolidationTitle: '統合',
+    overviewLoading: 'メモリー概要を読み込み中…',
     globalTab: 'グローバル',
     dailyTab: '日次ノート',
     factsTab: 'ファクト',
@@ -805,9 +775,40 @@ export const ja: TranslationMap = mergeTranslations(en, {
     migrationSeedComplete: 'すべてのアーカイブチャットを整理しました。',
     consolidationProvider: 'メモリ統合プロバイダー',
     consolidationProviderHint:
-      'チャットから永続的な事実を抽出するためのプロバイダーを 1 つ選択します。8 ターンごとに約 1 回の追加 LLM 呼び出しが発生します。',
-    consolidationProviderOff: 'オフ',
+      '各ターン後のメモリ強化方法を選択します。Auto はオンデバイス → アクティブチャット → 構造抽出の順です。構造のみでもエピソードとフォーカスは記録されます。',
+    consolidationModeAuto: '自動',
+    consolidationModeLocal: 'オンデバイス',
+    consolidationModeActiveProvider: 'アクティブチャット',
+    consolidationModeOff: '構造のみ',
+    compactionProvider: 'コンテキスト圧縮プロバイダー',
+    compactionProviderHint:
+      'ティア2/3圧縮要約用の低コストモデル（任意）。オフの場合は決定論的な構造圧縮を使用します。',
+    compactionProviderOff: 'オフ',
+    compactionModelPlaceholder: 'モデル上書き（例: gpt-5-mini）',
+    consolidationTierConfigured: '専用プロバイダー: {name}',
+    consolidationTierConfiguredGeneric: '専用統合プロバイダー',
+    consolidationTierOnDevice: 'オンデバイスフォールバック: {name}',
+    consolidationTierOnDeviceGeneric: 'オンデバイス統合フォールバック',
+    consolidationTierChat: 'チャットプロバイダーフォールバック: {name}',
+    consolidationTierChatGeneric: '現在のチャットプロバイダーフォールバック',
+    consolidationTierDeterministic: '構造抽出のみ（LLM 強化なし）',
+    consolidationTierDisabled: '長期記憶が無効です',
+    consolidationFallbackActive: '自動フォールバックが有効',
+    ingestionPendingJobs: '統合ジョブ {count} 件がキューにあります',
+    diagnosticsTitle: '診断',
+    diagnosticsBudgetTitle: 'コンテキスト予算',
+    diagnosticsBudgetEmpty: '予算監査エントリはまだありません。',
+    diagnosticsBudgetEntry: 'iter {iteration} · {model} · {total}/{window}',
+    diagnosticsRetrievalTitle: '取得ログ',
+    diagnosticsRetrievalEmpty: 'この会話の取得イベントはまだありません。',
+    diagnosticsRetrievalEntry:
+      '{factCount} 件の事実 · {episodeCount} 件のエピソード · {tokenEstimate} tok',
+    diagnosticsRetrievalTask: 'タスク {taskId}',
+    diagnosticsScopeActiveConversation: 'アクティブな会話',
     attribution: 'MemGPT、Graphiti、mem0 に着想を得ています。',
+    episodesTitle: 'Episodes',
+    episodesEmpty: 'No episodes recorded yet. Episodes capture context from completed tasks.',
+    episodeSources: '{count} sources',
   },
   scheduler: {
     title: 'スケジューラー',
@@ -1019,7 +1020,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
     infoText:
       'ゲートウェイはモバイルアプリを Kavi Gateway ノードに接続し、リモートツール、共有セッション、デスクトップ統合へのアクセスを可能にします。ゲートウェイ URL に接続して、デバイスを超えた機能で AI を拡張しましょう。',
     url: 'ゲートウェイ URL',
-    urlPlaceholder: 'wss://gateway.example.com',
+    urlPlaceholder: 'wss://gateway.example.invalid',
     token: 'ゲートウェイトークン',
     tokenPlaceholder: 'トークン',
     connected: '接続済み',
@@ -1192,7 +1193,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
     activeCount: '{count} 件稼働中',
     syncExpoProjects: 'Sync Expo projects',
     linkExpoAccount: 'Link Expo account',
-    workspaceNoSshTarget: 'No SSH target linked',
     expoEmptyHintWithAccounts:
       '連携済みの Expo アカウントを同期して既存プロジェクトを取り込み、必要に応じて workflow や SSH の詳細を追加してください。',
     expoEmptyHintNoAccounts:
@@ -1326,6 +1326,28 @@ export const ja: TranslationMap = mergeTranslations(en, {
       'モデルをダウンロードできませんでした。接続を確認して、もう一度お試しください。',
     retryDownloadButton: '再度ダウンロード',
     downloadAccessibilityLabel: 'モデル {name} をダウンロード',
+    validatingTitle: '{name} を確認中',
+    validatingBody: 'Kavi がモデルの互換性とローカルファイルを検証しています。',
+    validatingButton: '確認中…',
+    recoveryTitle: 'モデルの確認が必要です',
+    invalidInstallUnknown: '{name} はローカルモデルカタログにありません。',
+    invalidInstallFileName: '{name} のインストール済みファイルがカタログと一致しません。',
+    invalidInstallSource: '{name} のインストール元がカタログと一致しません。',
+    invalidInstallRepository: '{name} のインストール済みリポジトリがカタログと一致しません。',
+    invalidInstallRevision:
+      '{name} には新しいカタログリビジョンがあります。もう一度ダウンロードしてください。',
+    invalidInstallMissingFile: '{name} のインストール済みファイルが見つからないか不完全です。',
+    runtimeStatusLabel: 'ランタイム',
+    runtimeWarming: '{backend} を準備中',
+    runtimeRunningOn: '{backend} で実行中',
+    runtimeFallback:
+      '{backend} で実行中です。{requested} が要求され、ランタイムがフォールバックしました。',
+    runtimeLikely: 'おそらく {backend}',
+    runtimeConfiguredCpu: 'おそらく CPU。CPU が設定されています。',
+    recoveryActionsLabel: '復旧アクション',
+    clearInvalidInstallButton: 'ローカルファイルを削除',
+    switchToCpuButton: 'CPU を使用',
+    chooseSmallerModelButton: '{name} を使用',
   },
   onboarding: {
     welcome: 'Kavi へようこそ',
@@ -1406,7 +1428,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
       'スマートフォンから localhost に接続できない場合は、続行前に端末の IP、リバースプロキシ URL、またはトンネル URL に置き換えてください。',
     onDeviceNoteTitle: 'オンデバイス利用の注意',
     onDeviceNoteBody:
-      'Gemma モデルを選択し、端末にダウンロードしてからプロバイダーを保存してください。十分な保存容量が必要で、低速なネットワークでは時間がかかる場合があります。',
+      '対応するオンデバイスモデルを選択し、端末にダウンロードしてからプロバイダーを保存してください。十分な保存容量が必要で、低速なネットワークでは時間がかかる場合があります。',
     selectModel: 'モデル {name} を選択',
     saveProvider: 'プロバイダーを保存',
     skipProvider: '今回はスキップ',
@@ -1483,11 +1505,11 @@ export const ja: TranslationMap = mergeTranslations(en, {
           'Kavi 側の API 課金はありません。自分のハードウェアやホスティング費用だけで使えます。',
       },
       gemmaLocal: {
-        title: 'Gemma（オンデバイス）',
+        title: 'オンデバイスモデル',
         summary:
-          'リモートサーバーを呼び出す代わりに、Google のオンデバイスランタイムで Gemma をスマートフォン上でローカル実行します。',
+          'リモートサーバーを呼び出す代わりに、オンデバイスランタイムで対応モデルをスマートフォン上でローカル実行します。',
         setup:
-          'この端末で利用できる Gemma モデルを選択し、ダウンロードしてからプロバイダーを保存してください。Kavi が公式 Google AI Edge モデルバンドルを端末にダウンロードします。',
+          'この端末で利用できるオンデバイスモデルを選択し、ダウンロードしてからプロバイダーを保存してください。Kavi が選択したモデルバンドルを端末へ保存してローカル推論に使います。',
         freeAccess:
           'Kavi からのリクエストごとの API 課金はありません。ダウンロードしたモデルを保存できる十分な空き容量が必要です。',
       },
@@ -1510,6 +1532,11 @@ export const ja: TranslationMap = mergeTranslations(en, {
         detail:
           'Brave Search API の料金情報では毎月 5 ドル分の無料クレジットがある独立系検索インデックスです。',
       },
+      gemini: {
+        title: 'Gemini',
+        detail:
+          '公式 Gemini API と Google AI Studio API キーを使用し、Gemini の Google Search グラウンディングを利用します。',
+      },
       perplexity: {
         title: 'Perplexity',
         detail:
@@ -1523,11 +1550,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
         title: 'Kimi',
         detail: 'Moonshot Kimi の利用可否や料金は地域やアカウント状態で変わることがあります。',
       },
-      gemini: {
-        title: 'Gemini',
-        detail:
-          '本番向けの Google Cloud 利用には Vertex AI のキーを作成してください。既存の Google AI Studio キーも引き続き利用できます。',
-      },
     },
     services: {
       brave: {
@@ -1537,6 +1559,15 @@ export const ja: TranslationMap = mergeTranslations(en, {
         setup:
           'Brave Search API アカウントを作成し、ダッシュボードで購読トークンをコピーしてください。',
         freeAccess: '現在の Brave の料金体系では毎月 5 ドル分の無料クレジットが含まれます。',
+      },
+      gemini: {
+        title: 'Gemini API',
+        category: 'ウェブ検索',
+        unlocks: 'Gemini を活用したウェブ検索で、Google Search グラウンディングと引用付き。',
+        setup:
+          'Google AI Studio で Gemini API キーを作成・管理し、ここに貼り付けてください。Kavi はこのプロバイダーに対して、公式 Gemini API の Google Search グラウンディング ツールを使用します。',
+        freeAccess:
+          'Google AI Studio では初期テスト用に Gemini API キーを作成できますが、本番利用ではクォータ制限と課金対象の使用を想定してください。',
       },
       perplexity: {
         title: 'Perplexity API',
@@ -1562,15 +1593,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
         freeAccess:
           '利用可否や課金は地域差があるため、現在のプランをアカウントで確認してください。',
       },
-      gemini: {
-        title: 'Gemini API',
-        category: 'Web 検索',
-        unlocks: 'Gemini ベースの検索や Google AI 連携を利用できます。',
-        setup:
-          '本番向けの Google Cloud 利用には Vertex AI で Gemini 対応 API キーを作成してください。すでに設定済みなら従来の Google AI Studio キーも利用できます。Gemini の Web 検索はどちらのバックエンドにも対応しています。',
-        freeAccess:
-          'Vertex AI の express モードと Google AI Studio はどちらも初期テストに使えますが、本番利用では課金上限と適切に制限された認証情報を前提にしてください。',
-      },
       firecrawl: {
         title: 'Firecrawl',
         category: 'Web 抽出',
@@ -1589,7 +1611,8 @@ export const ja: TranslationMap = mergeTranslations(en, {
       github: {
         title: 'GitHub 個人アクセストークン',
         category: 'サービススキル',
-        unlocks: 'GitHub のリポジトリ一覧、Issue 読み取り、Issue 作成ツールを利用できます。',
+        unlocks:
+          'GitHub のリポジトリ一覧、ファイル読取、ブランチ作成、API コミット、Issue、Pull Request、Workflow 状態確認ツールを利用できます。',
         setup:
           'GitHub Settings の Developer settings で fine-grained personal access token を作成し、必要なリポジトリ権限だけを付与してください。',
         freeAccess: 'PAT の作成は GitHub アカウントがあれば無料です。',
@@ -1597,7 +1620,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
       alphaVantage: {
         title: 'Alpha Vantage',
         category: 'サービススキル',
-        unlocks: '株価や金融ツールを利用できます。',
+        unlocks: '株価と FX 為替レートのツールを利用できます。',
         setup: 'Alpha Vantage で無料 API キーを取得してここに貼り付けてください。',
         freeAccess: 'Alpha Vantage は 1 日 25 リクエストまでの無料 API キーを明示しています。',
       },
@@ -1789,10 +1812,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
       shareFileTitle: 'Share file',
       openUrlTitle: 'Open reviewed link',
       sshExecTitle: 'Run SSH command',
-      workspaceWriteFileTitle: 'Write workspace file',
-      workspaceDeleteTitle: 'Delete workspace file',
-      workspaceRenameTitle: 'Rename workspace path',
-      workspaceMkdirTitle: 'Create workspace folder',
       browserNavigateTitle: 'Open browser destination',
       expoBuildTitle: 'Start Expo build',
     },
@@ -1816,9 +1835,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
       commandExecutable: '{executable} command',
       workingDirectory: 'working directory set',
       targetSelected: 'target selected',
-      contentIncluded: 'file content included',
-      renameOperation: 'rename operation',
-      createDirectory: 'directory path included',
       urlMessageIncluded: 'share message included',
       titleIncluded: 'title included',
       fallbackEnabled: 'fallback enabled',

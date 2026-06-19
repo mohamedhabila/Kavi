@@ -9,7 +9,7 @@ import type {
   McpCapabilityMetadata,
   McpServerConfig,
   McpTrustMetadata,
-} from '../../types';
+} from '../../types/remote';
 import { generateId } from '../../utils/id';
 import { isSseTransportAvailable } from './transport';
 

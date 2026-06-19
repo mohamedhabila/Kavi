@@ -1,16 +1,19 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Copy, Edit2 } from 'lucide-react-native';
-import { AgentRun, Attachment, Message } from '../../types';
+import { AgentRun } from '../../types/agentRun';
+import { Attachment } from '../../types/attachment';
+import { Message } from '../../types/message';
 import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
-import { useTranslation } from '../../i18n';
+import { useTranslation } from '../../i18n/useTranslation';
 import { stripInternalUserTranscriptArtifacts } from '../../utils/assistantTextSanitizer';
 import { getPrimaryAudioAttachment } from '../../utils/messageAttachments';
 import { AssistantBubble } from './AssistantBubble';
 import { MessageAttachments } from './MessageAttachments';
 import { MessageContentRenderer } from './MessageContentRenderer';
 import { DisplayResponseSegment } from './messageGrouping';
+import { MessageActionButton } from './MessageActionButton';
 
 interface MessageBubbleProps {
   message: Message;
@@ -112,23 +115,20 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(
 
         {!isStreaming ? (
           <View style={[styles.actions, styles.actionsRight]}>
-            <TouchableOpacity
+            <MessageActionButton
               onPress={handleCopy}
-              hitSlop={8}
-              accessibilityRole="button"
+              disabled={!visibleUserContent}
               accessibilityLabel={t('chat.copyMessage')}
             >
-              <Copy size={14} color={colors.textTertiary} />
-            </TouchableOpacity>
+              <Copy size={16} color={colors.textTertiary} />
+            </MessageActionButton>
             {onEdit ? (
-              <TouchableOpacity
+              <MessageActionButton
                 onPress={() => onEdit(message.id, visibleUserContent)}
-                hitSlop={8}
-                accessibilityRole="button"
                 accessibilityLabel={t('chat.editMessage')}
               >
-                <Edit2 size={14} color={colors.textTertiary} />
-              </TouchableOpacity>
+                <Edit2 size={16} color={colors.textTertiary} />
+              </MessageActionButton>
             ) : null}
           </View>
         ) : null}
@@ -181,9 +181,9 @@ const createStyles = (colors: AppPalette) =>
     },
     actions: {
       flexDirection: 'row',
-      gap: 12,
-      marginTop: 4,
-      paddingHorizontal: 4,
+      gap: 2,
+      marginTop: 2,
+      paddingHorizontal: 0,
     },
     actionsRight: {
       justifyContent: 'flex-end',

@@ -3,7 +3,8 @@ import {
   type OrchestratorCallbacks,
   type OrchestratorOptions,
 } from '../../src/engine/orchestrator';
-import type { LlmProviderConfig, Message } from '../../src/types';
+import type { LlmProviderConfig } from '../../src/types/provider';
+import type { Message } from '../../src/types/message';
 
 const mockStreamMessage = jest.fn();
 
@@ -96,7 +97,7 @@ function makeCallbacks(): OrchestratorCallbacks {
 
 const onDeviceProvider: LlmProviderConfig = {
   id: 'gemma-local',
-  name: 'Gemma (on-device)',
+  name: 'On-device models',
   kind: 'on-device',
   apiKey: '',
   baseUrl: '',
@@ -145,7 +146,7 @@ describe('Orchestrator on-device local tooling support', () => {
     const requestOptions = mockStreamMessage.mock.calls[0][1] as { tools?: unknown } | undefined;
     expect(requestOptions?.tools).toBeDefined();
     expect(Array.isArray(requestOptions?.tools)).toBe(true);
-    expect(requestMessages[0]?.content).toContain('## Tool Call Style');
+    expect(requestMessages[0]?.content).not.toContain('## Tool Call Style');
     expect(requestMessages[0]?.content).not.toContain('No tools are registered with the model');
     expect(requestMessages[0]?.content).not.toContain('Do not emit tool calls');
   });

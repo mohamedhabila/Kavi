@@ -2,14 +2,14 @@ import React, { useMemo } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
-import { useTranslation } from '../../i18n';
+import { useTranslation } from '../../i18n/useTranslation';
 import { useAppTheme, type AppPalette } from '../../theme/useAppTheme';
-import type { SubAgentSnapshot } from '../../types';
+import type { SubAgentSnapshot } from '../../types/subAgent';
 import {
   buildSubAgentRollupMap,
   buildSubAgentSubtree,
-  getSubAgentDisplayName,
-} from '../../services/agents/subAgentPresentation';
+} from '../../services/agents/lifecycle/subAgentHierarchyPresentation';
+import { getSubAgentDisplayName } from '../../services/agents/lifecycle/presentPhase';
 import { SubAgentActivityCard } from './SubAgentActivityCard';
 import { SubAgentRollupCard } from './SubAgentRollupCard';
 

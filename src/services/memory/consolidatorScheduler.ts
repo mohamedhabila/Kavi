@@ -11,8 +11,9 @@
 //      the app moves to background.
 //
 // Gating:
-//   • The scheduler is a NO-OP when no `consolidationProvider` is configured
-//     in `useSettingsStore`. On-device users opt in by leaving it null/empty.
+//   • When no extractor is supplied, resolves the active cascade path from
+//     `resolveConsolidationPath()` (same as the ingestion queue).
+//   • Structural-only consolidation still runs when enrichment mode is `off`.
 //
 // Persistence:
 //   • Per-thread state lives in the `memory_consolidation_state` SQLite table
@@ -25,12 +26,22 @@
 //   - It does NOT throw into the chat path — every public call resolves.
 // ---------------------------------------------------------------------------
 
-import type { Message } from '../../types';
+import type { Message } from '../../types/message';
 import { createLogger } from '../../utils/logger';
+import { resolveConsolidationExtractor } from './consolidation/turnPipeline';
+import { runConsolidation } from './consolidation/orchestrator';
 import {
-  isAssistantFinalResponsePlaceholder,
-  isFinalAssistantMessage,
-} from '../../utils/assistantMessageMetadata';
+  evaluateTrigger,
+  lastAssistantMessage,
+  lastUserMessage,
+  unconsolidatedWindow,
+  type ConsolidationTriggerReason,
+} from './consolidation/schedulerEvaluation';
+import {
+  getConsolidationState,
+  listDirtyThreadIds,
+  upsertState,
+} from './consolidation/schedulerState';
 import {
   consolidateTurn,
   type ConsolidatorExtractor,
@@ -38,266 +49,26 @@ import {
   type ConsolidatorResult,
   type ConsolidatorTurnInput,
 } from './consolidator';
-import { ensureFactSchema } from './schema';
-import { getMemoryDb } from './sqlite-store';
 
 const logger = createLogger('memory.consolidatorScheduler');
 
-export const DEFAULT_TURN_THRESHOLD = 8;
-export const DEFAULT_IDLE_THRESHOLD_MS = 10 * 60 * 1000;
-
-export type ConsolidationTriggerReason =
-  | 'turn_threshold'
-  | 'idle_threshold'
-  | 'app_background'
-  | 'manual';
-
-export interface ConsolidationStateRow {
-  threadId: string;
-  lastConsolidatedMessageId: string | null;
-  lastConsolidatedAt: number;
-  turnsSinceLast: number;
-  updatedAt: number;
-}
-
-interface ConsolidationStateRowDb {
-  thread_id: string;
-  last_consolidated_message_id: string | null;
-  last_consolidated_at: number;
-  turns_since_last: number;
-  updated_at: number;
-}
-
-function rowToState(row: ConsolidationStateRowDb): ConsolidationStateRow {
-  return {
-    threadId: row.thread_id,
-    lastConsolidatedMessageId: row.last_consolidated_message_id,
-    lastConsolidatedAt: row.last_consolidated_at,
-    turnsSinceLast: row.turns_since_last,
-    updatedAt: row.updated_at,
-  };
-}
-
-export function getConsolidationState(threadId: string): ConsolidationStateRow | null {
-  if (!threadId) return null;
-  ensureFactSchema();
-  const row = getMemoryDb().getFirstSync<ConsolidationStateRowDb>(
-    `SELECT * FROM memory_consolidation_state WHERE thread_id = ? LIMIT 1`,
-    threadId,
-  );
-  return row ? rowToState(row) : null;
-}
-
-export function listDirtyThreadIds(): string[] {
-  ensureFactSchema();
-  const rows = getMemoryDb().getAllSync<{ thread_id: string }>(
-    `SELECT thread_id FROM memory_consolidation_state WHERE turns_since_last > 0`,
-  );
-  return rows.map((r) => r.thread_id);
-}
-
-interface UpsertStateInput {
-  threadId: string;
-  lastConsolidatedMessageId?: string | null;
-  lastConsolidatedAt?: number;
-  turnsSinceLast?: number;
-  now?: number;
-}
-
-function upsertState(input: UpsertStateInput): void {
-  ensureFactSchema();
-  const db = getMemoryDb();
-  const now = input.now ?? Date.now();
-  const existing = db.getFirstSync<ConsolidationStateRowDb>(
-    `SELECT * FROM memory_consolidation_state WHERE thread_id = ? LIMIT 1`,
-    input.threadId,
-  );
-  const lastConsolidatedMessageId =
-    input.lastConsolidatedMessageId !== undefined
-      ? input.lastConsolidatedMessageId
-      : (existing?.last_consolidated_message_id ?? null);
-  const lastConsolidatedAt =
-    input.lastConsolidatedAt !== undefined
-      ? input.lastConsolidatedAt
-      : (existing?.last_consolidated_at ?? 0);
-  const turnsSinceLast =
-    input.turnsSinceLast !== undefined
-      ? input.turnsSinceLast
-      : (existing?.turns_since_last ?? 0);
-  if (existing) {
-    db.runSync(
-      `UPDATE memory_consolidation_state
-         SET last_consolidated_message_id = ?,
-             last_consolidated_at = ?,
-             turns_since_last = ?,
-             updated_at = ?
-         WHERE thread_id = ?`,
-      lastConsolidatedMessageId,
-      lastConsolidatedAt,
-      turnsSinceLast,
-      now,
-      input.threadId,
-    );
-  } else {
-    db.runSync(
-      `INSERT INTO memory_consolidation_state
-         (thread_id, last_consolidated_message_id, last_consolidated_at, turns_since_last, updated_at)
-         VALUES (?, ?, ?, ?, ?)`,
-      input.threadId,
-      lastConsolidatedMessageId,
-      lastConsolidatedAt,
-      turnsSinceLast,
-      now,
-    );
-  }
-}
-
-export function clearConsolidationState(threadId: string): void {
-  if (!threadId) return;
-  ensureFactSchema();
-  getMemoryDb().runSync(
-    `DELETE FROM memory_consolidation_state WHERE thread_id = ?`,
-    threadId,
-  );
-}
-
-// ── Trigger logic ────────────────────────────────────────────────────────
-
-function findIndexById(messages: Message[], id: string | null | undefined): number {
-  if (!id) return -1;
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    if (messages[i]?.id === id) return i;
-  }
-  return -1;
-}
-
-function lastAssistantMessage(messages: Message[]): Message | undefined {
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    if (isConsolidatableAssistantMessage(messages[i])) return messages[i];
-  }
-  return undefined;
-}
-
-function isConsolidatableAssistantMessage(message: Message | undefined): message is Message {
-  if (!message || !isFinalAssistantMessage(message)) return false;
-  if (isAssistantFinalResponsePlaceholder(message)) return false;
-  const metadata = message.assistantMetadata;
-  if (!metadata) return true;
-  return metadata.kind === 'final' && metadata.completionStatus === 'complete';
-}
-
-function lastUserMessage(messages: Message[]): Message | undefined {
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    if (messages[i]?.role === 'user') return messages[i];
-  }
-  return undefined;
-}
-
-export interface CountableTurnsInput {
-  messages: Message[];
-  lastConsolidatedMessageId: string | null;
-}
-
-/** Number of `user`/`assistant` turns strictly after the anchor. */
-export function countNewTurns(input: CountableTurnsInput): number {
-  const idx = findIndexById(input.messages, input.lastConsolidatedMessageId);
-  let count = 0;
-  for (let i = idx + 1; i < input.messages.length; i += 1) {
-    const message = input.messages[i];
-    if (message?.role === 'user' || isConsolidatableAssistantMessage(message)) count += 1;
-  }
-  return count;
-}
-
-function unconsolidatedWindow(
-  messages: Message[],
-  lastConsolidatedMessageId: string | null | undefined,
-  anchorMessageId: string | null | undefined,
-): Message[] {
-  const start = findIndexById(messages, lastConsolidatedMessageId) + 1;
-  const anchorIndex = findIndexById(messages, anchorMessageId);
-  const end = anchorIndex >= 0 ? anchorIndex + 1 : messages.length;
-  return messages.slice(Math.max(start, 0), Math.max(end, start));
-}
-
-export interface EvaluateTriggerInput {
-  threadId: string;
-  messages: Message[];
-  now?: number;
-  turnThreshold?: number;
-  idleThresholdMs?: number;
-  appBackgrounded?: boolean;
-  state?: ConsolidationStateRow | null;
-}
-
-export interface EvaluateTriggerResult {
-  shouldRun: boolean;
-  reason?: ConsolidationTriggerReason;
-  newTurns: number;
-  idleMs: number;
-  /** Last assistant message id if we should consolidate (anchor for state advance). */
-  anchorMessageId?: string;
-}
-
-export function evaluateTrigger(input: EvaluateTriggerInput): EvaluateTriggerResult {
-  const turnThreshold = input.turnThreshold ?? DEFAULT_TURN_THRESHOLD;
-  const idleThresholdMs = input.idleThresholdMs ?? DEFAULT_IDLE_THRESHOLD_MS;
-  const now = input.now ?? Date.now();
-  const state = input.state ?? getConsolidationState(input.threadId);
-  const lastAssistant = lastAssistantMessage(input.messages);
-
-  // Nothing to consolidate without at least one closed assistant turn.
-  if (!lastAssistant) {
-    return { shouldRun: false, newTurns: 0, idleMs: 0 };
-  }
-
-  const newTurns = countNewTurns({
-    messages: input.messages,
-    lastConsolidatedMessageId: state?.lastConsolidatedMessageId ?? null,
-  });
-
-  // No new closed turns at all — nothing to do.
-  if (newTurns === 0) {
-    return { shouldRun: false, newTurns, idleMs: 0 };
-  }
-
-  const lastTurnTimestamp =
-    typeof lastAssistant.timestamp === 'number' ? lastAssistant.timestamp : now;
-  const idleMs = Math.max(now - lastTurnTimestamp, 0);
-
-  // App-background flush wins: if anything is dirty, consolidate now.
-  if (input.appBackgrounded) {
-    return {
-      shouldRun: true,
-      reason: 'app_background',
-      newTurns,
-      idleMs,
-      anchorMessageId: lastAssistant.id,
-    };
-  }
-
-  if (newTurns >= turnThreshold) {
-    return {
-      shouldRun: true,
-      reason: 'turn_threshold',
-      newTurns,
-      idleMs,
-      anchorMessageId: lastAssistant.id,
-    };
-  }
-
-  if (idleMs >= idleThresholdMs) {
-    return {
-      shouldRun: true,
-      reason: 'idle_threshold',
-      newTurns,
-      idleMs,
-      anchorMessageId: lastAssistant.id,
-    };
-  }
-
-  return { shouldRun: false, newTurns, idleMs, anchorMessageId: lastAssistant.id };
-}
+export {
+  DEFAULT_IDLE_THRESHOLD_MS,
+  DEFAULT_TURN_THRESHOLD,
+  countNewTurns,
+  evaluateTrigger,
+  type CountableTurnsInput,
+  type EvaluateTriggerInput,
+  type EvaluateTriggerResult,
+} from './consolidation/schedulerEvaluation';
+export {
+  clearConsolidationState,
+  getConsolidationState,
+  listDirtyThreadIds,
+  upsertState,
+  type ConsolidationStateRow,
+  type UpsertStateInput,
+} from './consolidation/schedulerState';
 
 export interface MarkThreadDirtyInput {
   threadId: string;
@@ -313,9 +84,7 @@ export interface MarkThreadDirtyResult {
   skipped?: 'opt_out' | 'no_closed_turn' | 'no_new_turns';
 }
 
-export function markThreadDirtyForMemory(
-  input: MarkThreadDirtyInput,
-): MarkThreadDirtyResult {
+export function markThreadDirtyForMemory(input: MarkThreadDirtyInput): MarkThreadDirtyResult {
   if (input.disableLongTermMemory) {
     return { marked: false, newTurns: 0, skipped: 'opt_out' };
   }
@@ -398,7 +167,6 @@ export async function maybeRunConsolidation(
   if (input.disableLongTermMemory) {
     return { ran: false, skipped: 'opt_out', newTurns: 0, idleMs: 0 };
   }
-  const provider = (input.consolidationProvider ?? '').trim();
   const state = getConsolidationState(input.threadId);
   const evaluation = evaluateTrigger({
     threadId: input.threadId,
@@ -424,28 +192,10 @@ export async function maybeRunConsolidation(
     });
   }
 
-  if (!provider) {
-    return {
-      ran: false,
-      skipped: 'no_provider',
-      newTurns: evaluation.newTurns,
-      idleMs: evaluation.idleMs,
-    };
-  }
-
   if (!evaluation.shouldRun) {
     return {
       ran: false,
       skipped: 'no_trigger',
-      newTurns: evaluation.newTurns,
-      idleMs: evaluation.idleMs,
-    };
-  }
-
-  if (!input.extractor) {
-    return {
-      ran: false,
-      skipped: 'no_extractor',
       newTurns: evaluation.newTurns,
       idleMs: evaluation.idleMs,
     };
@@ -468,6 +218,46 @@ export async function maybeRunConsolidation(
     evaluation.anchorMessageId ?? lastAssistant.id,
   );
 
+  let extractor = input.extractor;
+  if (!extractor) {
+    extractor = await resolveConsolidationExtractor();
+  }
+
+  if (!extractor) {
+    const ingestionResult = await runConsolidation({
+      threadId: input.threadId,
+      messages: input.messages,
+      threadTitle: input.threadTitle,
+      personaSummary: input.personaSummary,
+      now: input.now,
+      extractor: null,
+      skipWorkingMemorySync: true,
+    });
+    if (!ingestionResult.processed) {
+      return {
+        ran: false,
+        skipped: 'no_extractor',
+        newTurns: evaluation.newTurns,
+        idleMs: evaluation.idleMs,
+      };
+    }
+
+    return {
+      ran: true,
+      ...(evaluation.reason ? { reason: evaluation.reason } : {}),
+      newTurns: evaluation.newTurns,
+      idleMs: evaluation.idleMs,
+      result: {
+        episodeSummary: null,
+        newFacts: [],
+        invalidatedFacts: [],
+        activeFocus: null,
+        openThreads: [],
+        notable: [],
+      },
+    };
+  }
+
   const turnInput: ConsolidatorTurnInput = {
     userMessage: lastUser.content ?? '',
     assistantMessage: lastAssistant.content ?? '',
@@ -482,7 +272,7 @@ export async function maybeRunConsolidation(
   };
 
   const opts: ConsolidatorOptions = {
-    extractor: input.extractor,
+    extractor,
     persist: input.persist !== false,
     ...(typeof input.now === 'number' ? { now: () => input.now! } : {}),
   };
@@ -503,8 +293,6 @@ export async function maybeRunConsolidation(
     };
   }
 
-  // Advance the cursor — even if the model returned an empty result we still
-  // anchor at this assistant turn so we don't keep retrying it on every call.
   upsertState({
     threadId: input.threadId,
     lastConsolidatedMessageId: evaluation.anchorMessageId ?? lastAssistant.id,
@@ -547,17 +335,13 @@ export interface FlushAllResult {
  * via the `app_background` trigger. Safe to call from an `AppState` change
  * handler. Returns counters for telemetry.
  */
-export async function flushAllDirtyThreads(
-  input: FlushAllInput,
-): Promise<FlushAllResult> {
+export async function flushAllDirtyThreads(input: FlushAllInput): Promise<FlushAllResult> {
   const counters: FlushAllResult = { attempted: 0, ran: 0, skipped: 0, errors: 0 };
   if (input.disableLongTermMemory) {
     return counters;
   }
-  const provider = (input.consolidationProvider ?? '').trim();
-  if (!provider || !input.extractor) {
-    return counters;
-  }
+
+  const resolvedExtractor = input.extractor ?? (await resolveConsolidationExtractor());
 
   let dirty: string[] = [];
   try {
@@ -581,13 +365,11 @@ export async function flushAllDirtyThreads(
       const outcome = await maybeRunConsolidation({
         threadId,
         messages,
-        consolidationProvider: provider,
-        extractor: input.extractor,
+        consolidationProvider: input.consolidationProvider,
+        extractor: resolvedExtractor,
         appBackgrounded: true,
         ...(typeof input.now === 'number' ? { now: input.now } : {}),
-        ...(typeof input.turnThreshold === 'number'
-          ? { turnThreshold: input.turnThreshold }
-          : {}),
+        ...(typeof input.turnThreshold === 'number' ? { turnThreshold: input.turnThreshold } : {}),
         ...(typeof input.idleThresholdMs === 'number'
           ? { idleThresholdMs: input.idleThresholdMs }
           : {}),

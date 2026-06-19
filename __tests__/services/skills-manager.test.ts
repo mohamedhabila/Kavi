@@ -21,7 +21,7 @@ import {
 } from '../../src/services/skills/manager';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import type { Skill, SkillEntry, SkillMetadata } from '../../src/services/skills/types';
-import type { ToolDefinition } from '../../src/types';
+import type { ToolDefinition } from '../../src/types/tool';
 
 jest.mock('../../src/services/ssh/connector', () => ({
   getSshTargetReadiness: (target: any) => ({
@@ -652,7 +652,12 @@ function makeEntry(overrides: Partial<SkillEntry> & { id: string }): SkillEntry 
     },
     enabled: true,
     installedAt: Date.now(),
-    source: { source: 'clawhub', id: 'hub-1', url: 'https://hub.kavi.dev/s1', version: '1.0.0' },
+    source: {
+      source: 'clawhub',
+      id: 'hub-1',
+      url: 'https://clawhub.ai/api/v1/skills/hub-1/file?path=SKILL.md',
+      version: '1.0.0',
+    },
     ...overrides,
   };
 }
@@ -831,7 +836,7 @@ describe('getSkillSystemPrompts', () => {
     await expect(getSkillSystemPrompts('conv-1')).resolves.toBe('');
   });
 
-  it('returns an Kavi-style available_skills catalog and materializes the skill file', async () => {
+  it('returns a minimal skill catalog and materializes the skill file', async () => {
     useSkillsStore.getState().addEntry(
       makeEntry({
         id: 'sp-1',
@@ -842,7 +847,11 @@ describe('getSkillSystemPrompts', () => {
           version: '1.0',
           tools: [],
         },
-        source: { source: 'clawhub', id: 'sp-1', url: 'https://hub.kavi.dev/sp-1' },
+        source: {
+          source: 'clawhub',
+          id: 'sp-1',
+          url: 'https://clawhub.ai/api/v1/skills/sp-1/file?path=SKILL.md',
+        },
       }),
     );
     useSkillsStore.getState().addEntry(
@@ -854,22 +863,24 @@ describe('getSkillSystemPrompts', () => {
           version: '1.0',
           tools: [],
         },
-        source: { source: 'clawhub', id: 'sp-2', url: 'https://hub.kavi.dev/sp-2' },
+        source: {
+          source: 'clawhub',
+          id: 'sp-2',
+          url: 'https://clawhub.ai/api/v1/skills/sp-2/file?path=SKILL.md',
+        },
       }),
     );
 
     const prompt = await getSkillSystemPrompts('conv-1');
-    expect(prompt).toContain('<available_skills>');
-    expect(prompt).toContain('<name>Prompt Skill</name>');
-    expect(prompt).toContain('<description>Useful for prompt work.</description>');
-    expect(prompt).toContain('<location>skills/prompt-skill-sp-1/SKILL.md</location>');
+    expect(prompt).toContain('Available skills:');
+    expect(prompt).toContain('- Prompt Skill: skills/prompt-skill-sp-1/SKILL.md');
     expect(prompt).not.toContain('Always be helpful.');
     expect(
       __getStore()['file:///mock/documents/workspace/conv-1/skills/prompt-skill-sp-1/SKILL.md'],
     ).toContain('Always be helpful.');
   });
 
-  it('includes bundle-root and python-script hints for bundled Python skills', async () => {
+  it('keeps bundled Python skills minimal in the prompt while materializing scripts', async () => {
     __getStore()['file:///mock/documents/.managed-skills/ontology-skill-ontology/SKILL.md'] =
       '# Ontology\n\nUse scripts/ontology.py';
     __getStore()[
@@ -902,9 +913,8 @@ describe('getSkillSystemPrompts', () => {
     );
 
     const prompt = await getSkillSystemPrompts('conv-ontology');
-    expect(prompt).toContain('<bundle_root>skills/ontology-skill-ontology</bundle_root>');
-    expect(prompt).toContain('<path>skills/ontology-skill-ontology/scripts/ontology.py</path>');
-    expect(prompt).toContain('<python_packages>pyyaml</python_packages>');
+    expect(prompt).toContain('- Ontology Skill: skills/ontology-skill-ontology/SKILL.md');
+    expect(prompt).not.toContain('scripts/ontology.py');
     expect(
       __getStore()[
         'file:///mock/documents/workspace/conv-ontology/skills/ontology-skill-ontology/scripts/ontology.py'
@@ -948,7 +958,7 @@ describe('getSkillSystemPrompts', () => {
     ).toEqual(iconBytes);
   });
 
-  it('omits manual skills unless the user explicitly requests them', async () => {
+  it('omits manual skills from the prompt catalog', async () => {
     useSkillsStore.getState().addEntry(
       makeEntry({
         id: 'manual-skill',
@@ -960,17 +970,15 @@ describe('getSkillSystemPrompts', () => {
           tools: [],
           invocationPolicy: 'manual',
         },
-        source: { source: 'clawhub', id: 'manual-skill', url: 'https://hub.kavi.dev/manual-skill' },
+        source: {
+          source: 'clawhub',
+          id: 'manual-skill',
+          url: 'https://clawhub.ai/api/v1/skills/manual-skill/file?path=SKILL.md',
+        },
       }),
     );
 
-    await expect(getSkillSystemPrompts('conv-1', 'Tell me a joke')).resolves.toBe('');
-    await expect(
-      getSkillSystemPrompts('conv-1', 'Please use Manual Skill for this task'),
-    ).resolves.toContain('<name>Manual Skill</name>');
-    await expect(getSkillSystemPrompts('conv-1', 'please use manual-skill')).resolves.toContain(
-      '<name>Manual Skill</name>',
-    );
+    await expect(getSkillSystemPrompts('conv-1')).resolves.toBe('');
   });
 
   it('omits remote-only skills from the prompt catalog until a backing surface is configured', async () => {
@@ -1003,7 +1011,9 @@ describe('getSkillSystemPrompts', () => {
       ],
     });
 
-    await expect(getSkillSystemPrompts('conv-1')).resolves.toContain('<name>CLI Skill</name>');
+    await expect(getSkillSystemPrompts('conv-1')).resolves.toMatch(
+      /- CLI Skill: skills\/.+\/SKILL\.md/,
+    );
   });
 
   it('makes config-path skills visible only when a workspace target covers the required paths', async () => {
@@ -1049,12 +1059,12 @@ describe('getSkillSystemPrompts', () => {
       ],
     });
 
-    await expect(getSkillSystemPrompts('conv-1')).resolves.toContain(
-      '<name>Workspace Skill</name>',
+    await expect(getSkillSystemPrompts('conv-1')).resolves.toMatch(
+      /- Workspace Skill: skills\/.+\/SKILL\.md/,
     );
   });
 
-  it('falls back to compact format when the full catalog would exceed the prompt budget', async () => {
+  it('truncates the stable catalog when the full prompt would exceed the budget', async () => {
     for (let index = 0; index < 160; index += 1) {
       useSkillsStore.getState().addEntry(
         makeEntry({
@@ -1069,17 +1079,16 @@ describe('getSkillSystemPrompts', () => {
           source: {
             source: 'clawhub',
             id: `compact-${index}`,
-            url: `https://hub.kavi.dev/compact-${index}`,
+            url: `https://clawhub.ai/api/v1/skills/compact-${index}/file?path=SKILL.md`,
           },
         }),
       );
     }
 
     const prompt = await getSkillSystemPrompts('conv-compact');
-    expect(prompt).toContain('compact format');
-    expect(prompt).toContain('<available_skills>');
-    expect(prompt).not.toContain('<description>');
-    expect(prompt).toContain('<name>Compact Skill 0</name>');
+    expect(prompt).toContain('Available skills:');
+    expect(prompt).toMatch(/- Compact Skill 0: skills\/.+\/SKILL\.md/);
+    expect(prompt).not.toContain('Compact Skill 159');
   });
 });
 

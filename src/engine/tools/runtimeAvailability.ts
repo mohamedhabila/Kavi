@@ -1,39 +1,19 @@
-import type { ToolDefinition, WorkspaceTargetConfig } from '../../types';
-import { getBrowserProviderReadiness } from '../../services/browser/providers';
+import type { ToolDefinition } from '../../types/tool';
+import type { WorkspaceTargetConfig } from '../../types/remote';
+import { getBrowserProviderReadiness } from '../../services/browser/providers/readiness';
 import { getSshTargetReadiness } from '../../services/ssh/connector';
 import {
   getWorkspaceTargetReadiness,
   supportsWorkspaceAiTaskDelegation,
   supportsWorkspaceBrowserAutomation,
-  supportsWorkspaceFileAccess,
 } from '../../services/workspaces/connector';
 import { useSettingsStore } from '../../store/useSettingsStore';
 
 export interface RuntimeToolAvailabilityContext {
   hasWorkspaceTargets: boolean;
-  hasLaunchableWorkspaceTargets: boolean;
-  hasControllableWorkspaceTargets: boolean;
+  hasBrowserControllableWorkspaceTargets: boolean;
+  hasDelegableWorkspaceTargets: boolean;
 }
-
-export const REMOTE_WORKSPACE_FILE_TOOL_NAMES = new Set([
-  'workspace_read_file',
-  'workspace_write_file',
-  'workspace_list_files',
-  'workspace_mkdir',
-  'workspace_rename',
-  'workspace_delete',
-]);
-
-export const REMOTE_WORKSPACE_CONTROL_TOOL_NAMES = new Set([
-  'workspace_launch_browser',
-  'workspace_delegate_task',
-]);
-
-const REMOTE_TO_LOCAL_WORKSPACE_TOOL_FALLBACKS: Record<string, string> = {
-  workspace_read_file: 'read_file',
-  workspace_write_file: 'write_file',
-  workspace_list_files: 'list_files',
-};
 
 function normalizeWorkspaceTargets(targets?: WorkspaceTargetConfig[]): WorkspaceTargetConfig[] {
   return Array.isArray(targets) ? targets : [];
@@ -67,18 +47,21 @@ function hasLinkedSshTarget(target: WorkspaceTargetConfig): boolean {
   );
 }
 
-export function hasLaunchableWorkspaceTargets(targets?: WorkspaceTargetConfig[]): boolean {
+export function hasBrowserControllableWorkspaceTargets(targets?: WorkspaceTargetConfig[]): boolean {
   return normalizeWorkspaceTargets(targets).some(
     (target) =>
-      supportsWorkspaceFileAccess(target) && getWorkspaceTargetReadiness(target).launchable,
+      supportsWorkspaceBrowserAutomation(target) &&
+      getWorkspaceTargetReadiness(target).launchable &&
+      hasLinkedBrowserProvider(target),
   );
 }
 
-export function hasControllableWorkspaceTargets(targets?: WorkspaceTargetConfig[]): boolean {
+export function hasDelegableWorkspaceTargets(targets?: WorkspaceTargetConfig[]): boolean {
   return normalizeWorkspaceTargets(targets).some(
     (target) =>
-      (supportsWorkspaceBrowserAutomation(target) && hasLinkedBrowserProvider(target)) ||
-      (supportsWorkspaceAiTaskDelegation(target) && hasLinkedSshTarget(target)),
+      supportsWorkspaceAiTaskDelegation(target) &&
+      getWorkspaceTargetReadiness(target).launchable &&
+      hasLinkedSshTarget(target),
   );
 }
 
@@ -88,8 +71,8 @@ export function getRuntimeToolAvailabilityContext(
   const resolvedTargets = targets ?? useSettingsStore.getState().workspaceTargets ?? [];
   return {
     hasWorkspaceTargets: resolvedTargets.length > 0,
-    hasLaunchableWorkspaceTargets: hasLaunchableWorkspaceTargets(resolvedTargets),
-    hasControllableWorkspaceTargets: hasControllableWorkspaceTargets(resolvedTargets),
+    hasBrowserControllableWorkspaceTargets: hasBrowserControllableWorkspaceTargets(resolvedTargets),
+    hasDelegableWorkspaceTargets: hasDelegableWorkspaceTargets(resolvedTargets),
   };
 }
 
@@ -98,58 +81,38 @@ export function filterToolsByRuntimeAvailability(
   context?: RuntimeToolAvailabilityContext,
 ): ToolDefinition[] {
   const resolvedContext = context ?? getRuntimeToolAvailabilityContext();
-  return tools.filter((tool) => {
-    if (tool.name === 'workspace_status') {
-      return resolvedContext.hasWorkspaceTargets;
-    }
-    if (REMOTE_WORKSPACE_FILE_TOOL_NAMES.has(tool.name)) {
-      return resolvedContext.hasLaunchableWorkspaceTargets;
-    }
-    if (REMOTE_WORKSPACE_CONTROL_TOOL_NAMES.has(tool.name)) {
-      return resolvedContext.hasControllableWorkspaceTargets;
-    }
-    return true;
-  });
+  return tools.filter((tool) => isToolRuntimeAvailable(tool.name, resolvedContext));
 }
 
-export function resolveRuntimeFallbackToolName(
+export function isToolRuntimeAvailable(
   toolName: string,
-  options?: {
-    availableToolNames?: ReadonlySet<string>;
-    context?: RuntimeToolAvailabilityContext;
-  },
-): string {
-  const resolvedContext = options?.context ?? getRuntimeToolAvailabilityContext();
-  if (resolvedContext.hasLaunchableWorkspaceTargets) {
-    return toolName;
+  context?: RuntimeToolAvailabilityContext,
+): boolean {
+  const resolvedContext = context ?? getRuntimeToolAvailabilityContext();
+  if (toolName === 'workspace_status') {
+    return resolvedContext.hasWorkspaceTargets;
   }
-
-  const fallback = REMOTE_TO_LOCAL_WORKSPACE_TOOL_FALLBACKS[toolName];
-  if (!fallback) {
-    return toolName;
+  if (toolName === 'workspace_launch_browser') {
+    return resolvedContext.hasBrowserControllableWorkspaceTargets;
   }
-
-  if (options?.availableToolNames && !options.availableToolNames.has(fallback)) {
-    return toolName;
+  if (toolName === 'workspace_delegate_task') {
+    return resolvedContext.hasDelegableWorkspaceTargets;
   }
-
-  return fallback;
+  return true;
 }
 
-export function remapRuntimeUnavailableToolNames(
+export function filterRuntimeAvailableToolNames(
   toolNames?: string[],
-  options?: {
-    availableToolNames?: ReadonlySet<string>;
-    context?: RuntimeToolAvailabilityContext;
-  },
+  context?: RuntimeToolAvailabilityContext,
 ): string[] | undefined {
   if (!toolNames?.length) {
     return undefined;
   }
 
-  const remapped = Array.from(
-    new Set(toolNames.map((toolName) => resolveRuntimeFallbackToolName(toolName, options))),
+  const resolvedContext = context ?? getRuntimeToolAvailabilityContext();
+  const filtered = Array.from(
+    new Set(toolNames.filter((toolName) => isToolRuntimeAvailable(toolName, resolvedContext))),
   );
 
-  return remapped.length > 0 ? remapped : undefined;
+  return filtered.length > 0 ? filtered : undefined;
 }

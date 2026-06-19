@@ -1,0 +1,88 @@
+name: Agent E2E Nightly
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  agent-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out repository
+        # Pinned from actions/checkout@v4.
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        # Pinned from actions/setup-node@v4.
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run structural strict gate
+        run: npm run verify:strict
+
+      - name: Run live provider E2E harness
+        env:
+          E2E_PROVIDER: ${{ vars.E2E_PROVIDER || 'gemini' }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          E2E_OPENAI_MODEL: ${{ vars.E2E_OPENAI_MODEL }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          E2E_OPENROUTER_MODEL: ${{ vars.E2E_OPENROUTER_MODEL }}
+          E2E_COMPATIBLE_API_KEY: ${{ secrets.E2E_COMPATIBLE_API_KEY }}
+          E2E_COMPATIBLE_BASE_URL: ${{ vars.E2E_COMPATIBLE_BASE_URL }}
+          E2E_COMPATIBLE_MODEL: ${{ vars.E2E_COMPATIBLE_MODEL }}
+          RUN_E2E_AGENT_EVAL: '1'
+          E2E_MAX_SCENARIO_RETRIES: '1'
+          E2E_REPORT_PATH: .artifacts/e2e-agent-report.json
+        run: |
+          case "${E2E_PROVIDER}" in
+            gemini|google)
+              if [ -z "${GEMINI_API_KEY}${GOOGLE_API_KEY}${GOOGLE_GENERATIVE_AI_API_KEY}" ]; then
+                echo 'Selected Gemini E2E provider has no configured API key; skipping live E2E.'
+                exit 0
+              fi
+              ;;
+            openai)
+              if [ -z "${OPENAI_API_KEY}" ] || [ -z "${E2E_OPENAI_MODEL}" ]; then
+                echo 'Selected OpenAI E2E provider is missing OPENAI_API_KEY or E2E_OPENAI_MODEL; skipping live E2E.'
+                exit 0
+              fi
+              ;;
+            openrouter)
+              if [ -z "${OPENROUTER_API_KEY}" ] || [ -z "${E2E_OPENROUTER_MODEL}" ]; then
+                echo 'Selected OpenRouter E2E provider is missing OPENROUTER_API_KEY or E2E_OPENROUTER_MODEL; skipping live E2E.'
+                exit 0
+              fi
+              ;;
+            compatible|openai-compatible|custom)
+              if [ -z "${E2E_COMPATIBLE_API_KEY}" ] || [ -z "${E2E_COMPATIBLE_BASE_URL}" ] || [ -z "${E2E_COMPATIBLE_MODEL}" ]; then
+                echo 'Selected compatible E2E provider is missing key, base URL, or model; skipping live E2E.'
+                exit 0
+              fi
+              ;;
+          esac
+          npm run eval:e2e
+
+      - name: Upload E2E report artifact
+        if: always()
+        # Pinned from actions/upload-artifact@v4.
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e2e-agent-report
+          path: .artifacts/e2e-agent-report.json
+          if-no-files-found: ignore

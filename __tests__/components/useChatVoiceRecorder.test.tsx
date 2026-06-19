@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
-import type { Attachment } from '../../src/types';
+import type { Attachment } from '../../src/types/attachment';
 import { useChatVoiceRecorder } from '../../src/components/chat/useChatVoiceRecorder';
 
 const mockStartRecording = jest.fn();

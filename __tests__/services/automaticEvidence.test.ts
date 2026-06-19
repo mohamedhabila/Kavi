@@ -2,7 +2,7 @@ import {
   buildAutomaticPythonEvidenceEntries,
   buildAutomaticSubAgentEvidenceEntries,
 } from '../../src/services/agents/automaticEvidence';
-import type { SubAgentSnapshot } from '../../src/types';
+import type { SubAgentSnapshot } from '../../src/types/subAgent';
 
 function makeWorker(overrides: Partial<SubAgentSnapshot> = {}): SubAgentSnapshot {
   return {

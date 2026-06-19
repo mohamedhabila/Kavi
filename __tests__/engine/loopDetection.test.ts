@@ -1,23 +1,31 @@
-// ---------------------------------------------------------------------------
-// Tests — Loop Detection (Kavi 4-detector pattern)
-// ---------------------------------------------------------------------------
-
+import { GOAL_BOOTSTRAP_TOOL_NAME } from '../../src/engine/goals/bootstrap';
+import { createGoal } from '../../src/engine/goals/types';
 import {
-  detectGenericRepeat,
-  detectPingPong,
-  detectNoProgress,
-  detectRepeatedErrors,
-  detectLoops,
-  shouldBlockToolCall,
-  recordToolCall,
-  hashResult,
-  ToolCallRecord,
-  ERROR_WARNING_THRESHOLD,
-  ERROR_CRITICAL_THRESHOLD,
-  WARNING_THRESHOLD,
   CRITICAL_THRESHOLD,
-  GLOBAL_CIRCUIT_BREAKER_THRESHOLD,
+  ERROR_WARNING_THRESHOLD,
+  GOAL_BOOTSTRAP_STALL_THRESHOLD,
+  GOAL_MUTATION_STALL_THRESHOLD,
+  STAGNANT_PROGRESS_THRESHOLD,
   TOOL_CALL_HISTORY_SIZE,
+  WARNING_THRESHOLD,
+  buildGoalProgressFingerprint,
+  buildToolMultisetKey,
+  detectConsecutiveBlockedPreflightCalls,
+  detectGenericRepeat,
+  detectGoalBootstrapStall,
+  detectGoalFocusThrash,
+  detectGoalMutationErrorLoop,
+  detectGoalMutationStall,
+  detectLoops,
+  GOAL_FOCUS_THRASH_THRESHOLD,
+  detectRepeatedErrors,
+  detectStagnantProgress,
+  PREFLIGHT_BLOCKED_LOOP_THRESHOLD,
+  hashResult,
+  recordIterationProgressSignature,
+  recordToolCall,
+  type IterationProgressSignature,
+  type ToolCallRecord,
 } from '../../src/engine/loopDetection';
 
 const rec = (name: string, args: string, result?: string): ToolCallRecord => ({
@@ -33,601 +41,732 @@ describe('detectGenericRepeat', () => {
     expect(detectGenericRepeat([])).toEqual({ detected: false });
   });
 
-  it('returns false when below threshold', () => {
-    const h = [rec('read', '{"p":"a"}'), rec('read', '{"p":"a"}')];
-    expect(detectGenericRepeat(h)).toEqual({ detected: false });
+  it('detects identical tool calls at the warning threshold', () => {
+    const history = Array.from({ length: WARNING_THRESHOLD }, () => rec('read_file', '{"path":"a"}'));
+    expect(detectGenericRepeat(history)).toEqual({
+      detected: true,
+      tool: 'read_file',
+      count: WARNING_THRESHOLD,
+    });
   });
 
-  it('detects repeat at default threshold (3)', () => {
-    const h = [rec('read', '{"p":"a"}'), rec('read', '{"p":"a"}'), rec('read', '{"p":"a"}')];
-    const result = detectGenericRepeat(h);
-    expect(result.detected).toBe(true);
-    expect(result.tool).toBe('read');
-    expect(result.count).toBe(3);
-  });
-
-  it('respects custom threshold', () => {
-    const h = [rec('x', '1'), rec('x', '1')];
-    expect(detectGenericRepeat(h, 2).detected).toBe(true);
-  });
-
-  it('distinguishes different arguments', () => {
-    const h = [rec('read', '{"p":"a"}'), rec('read', '{"p":"b"}'), rec('read', '{"p":"c"}')];
-    expect(detectGenericRepeat(h)).toEqual({ detected: false });
-  });
-});
-
-describe('detectPingPong', () => {
-  it('returns false for short history', () => {
-    expect(detectPingPong([rec('a', '1')])).toEqual({ detected: false });
-  });
-
-  it('detects alternating A→B→A→B pattern', () => {
-    const h = [rec('a', '1'), rec('b', '2'), rec('a', '1'), rec('b', '2')];
-    const result = detectPingPong(h);
-    expect(result.detected).toBe(true);
-    expect(result.tools).toEqual(['a', 'b']);
-    expect(result.count).toBe(4);
-  });
-
-  it('returns false for non-alternating pattern', () => {
-    const h = [rec('a', '1'), rec('b', '2'), rec('c', '3'), rec('b', '2')];
-    expect(detectPingPong(h).detected).toBe(false);
-  });
-
-  it('returns false when A===B', () => {
-    const h = [rec('a', '1'), rec('a', '1'), rec('a', '1'), rec('a', '1')];
-    expect(detectPingPong(h).detected).toBe(false);
-  });
-
-  it('respects minCycles', () => {
-    const h = [
-      rec('a', '1'),
-      rec('b', '2'),
-      rec('a', '1'),
-      rec('b', '2'),
-      rec('a', '1'),
-      rec('b', '2'),
+  it('does not treat different arguments as the same loop', () => {
+    const history = [
+      rec('read_file', '{"path":"a"}'),
+      rec('read_file', '{"path":"b"}'),
+      rec('read_file', '{"path":"c"}'),
     ];
-    expect(detectPingPong(h, 3).detected).toBe(true);
-    expect(detectPingPong(h, 4).detected).toBe(false);
-  });
-});
-
-describe('detectNoProgress', () => {
-  it('returns false for short history', () => {
-    expect(detectNoProgress([rec('a', '1', 'r1')])).toEqual({ detected: false });
-  });
-
-  it('detects repeated same-result calls', () => {
-    const h = [
-      rec('fetch', '{"url":"x"}', 'result'),
-      rec('fetch', '{"url":"x"}', 'result'),
-      rec('fetch', '{"url":"x"}', 'result'),
-    ];
-    const result = detectNoProgress(h);
-    expect(result.detected).toBe(true);
-    expect(result.tool).toBe('fetch');
-    expect(result.count).toBe(3);
-  });
-
-  it('returns false if results differ', () => {
-    const h = [
-      rec('fetch', '{"url":"x"}', 'r1'),
-      rec('fetch', '{"url":"x"}', 'r2'),
-      rec('fetch', '{"url":"x"}', 'r3'),
-    ];
-    expect(detectNoProgress(h).detected).toBe(false);
-  });
-
-  it('returns false if args differ', () => {
-    const h = [
-      rec('fetch', '{"url":"a"}', 'same'),
-      rec('fetch', '{"url":"b"}', 'same'),
-      rec('fetch', '{"url":"c"}', 'same'),
-    ];
-    expect(detectNoProgress(h).detected).toBe(false);
-  });
-
-  it('ignores entries with undefined result', () => {
-    const h = [
-      rec('fetch', '{"url":"x"}'),
-      rec('fetch', '{"url":"x"}'),
-      rec('fetch', '{"url":"x"}'),
-    ];
-    expect(detectNoProgress(h).detected).toBe(false);
+    expect(detectGenericRepeat(history)).toEqual({ detected: false });
   });
 });
 
 describe('detectRepeatedErrors', () => {
-  it('detects repeated identical errors quickly', () => {
-    const h = [
-      rec('read_file', '{"path":"missing.txt"}', 'Error: ENOENT'),
-      rec('read_file', '{"path":"missing.txt"}', 'Error: ENOENT'),
+  it('detects repeated identical errors', () => {
+    const history = [
+      rec('web_fetch', '{"urls":["https://example.com"]}', 'Error: timeout'),
+      rec('web_fetch', '{"urls":["https://example.com"]}', 'Error: timeout'),
     ];
-
-    const result = detectRepeatedErrors(h);
-    expect(result.detected).toBe(true);
-    expect(result.tool).toBe('read_file');
-    expect(result.count).toBe(ERROR_WARNING_THRESHOLD);
+    expect(detectRepeatedErrors(history)).toEqual({
+      detected: true,
+      tool: 'web_fetch',
+      count: ERROR_WARNING_THRESHOLD,
+    });
   });
 
-  it('ignores non-error results', () => {
-    const h = [
-      rec('read_file', '{"path":"a.txt"}', 'ok'),
-      rec('read_file', '{"path":"a.txt"}', 'ok'),
+  it('ignores successful repeated calls', () => {
+    const history = [
+      rec('web_fetch', '{"urls":["https://example.com"]}', 'ok'),
+      rec('web_fetch', '{"urls":["https://example.com"]}', 'ok'),
     ];
-
-    expect(detectRepeatedErrors(h).detected).toBe(false);
-  });
-
-  it('treats JSON error payloads as repeated errors', () => {
-    const payload = JSON.stringify({ status: 'error', error: 'Missing surface' });
-    const h = [
-      rec('canvas_snapshot', '{"surfaceId":"abc"}', payload),
-      rec('canvas_snapshot', '{"surfaceId":"abc"}', payload),
-    ];
-
-    const result = detectRepeatedErrors(h);
-    expect(result.detected).toBe(true);
-    expect(result.tool).toBe('canvas_snapshot');
-    expect(result.count).toBe(ERROR_WARNING_THRESHOLD);
+    expect(detectRepeatedErrors(history)).toEqual({ detected: false });
   });
 });
 
-describe('detectLoops — warning/critical levels', () => {
-  it('returns no loop for normal history', () => {
-    const h = [rec('a', '1', 'x'), rec('b', '2', 'y'), rec('c', '3', 'z')];
-    expect(detectLoops(h).loopDetected).toBe(false);
+describe('stagnant progress detection', () => {
+  it('builds stable multiset and goal fingerprints', () => {
+    expect(buildToolMultisetKey(['write_file', 'read_file', 'write_file'])).toBe(
+      'read_file|write_file',
+    );
+    expect(
+      buildGoalProgressFingerprint([
+        {
+          id: 'gate-followup',
+          status: 'active',
+          evidence: ['write_file:artifacts/e2e.txt'],
+        },
+      ]),
+    ).toContain('gate-followup:active:1:');
   });
 
+  it('detects repeated tool multisets without goal progress', () => {
+    const signatures: IterationProgressSignature[] = [];
+    const entry = {
+      toolMultisetKey: buildToolMultisetKey(['write_file']),
+      goalProgressFingerprint: buildGoalProgressFingerprint([
+        { id: 'gate-followup', status: 'active', evidence: ['write_file:done'] },
+      ]),
+      activeGoalId: 'gate-followup',
+    };
+
+    for (let i = 0; i < STAGNANT_PROGRESS_THRESHOLD; i += 1) {
+      recordIterationProgressSignature(signatures, entry);
+    }
+
+    expect(detectStagnantProgress(signatures)).toEqual({
+      detected: true,
+      count: STAGNANT_PROGRESS_THRESHOLD,
+      multisetKey: 'write_file',
+    });
+  });
+
+  it('does not flag stagnant progress when goal evidence advances', () => {
+    const signatures: IterationProgressSignature[] = [];
+    const multisetKey = buildToolMultisetKey(['write_file', 'update_goals']);
+
+    recordIterationProgressSignature(signatures, {
+      toolMultisetKey: multisetKey,
+      goalProgressFingerprint: buildGoalProgressFingerprint([
+        { id: 'gate-followup', status: 'active', evidence: ['write_file:one'] },
+      ]),
+      activeGoalId: 'gate-followup',
+    });
+    recordIterationProgressSignature(signatures, {
+      toolMultisetKey: multisetKey,
+      goalProgressFingerprint: buildGoalProgressFingerprint([
+        { id: 'gate-followup', status: 'active', evidence: ['write_file:one', 'write_file:two'] },
+      ]),
+      activeGoalId: 'gate-followup',
+    });
+    recordIterationProgressSignature(signatures, {
+      toolMultisetKey: multisetKey,
+      goalProgressFingerprint: buildGoalProgressFingerprint([
+        { id: 'gate-followup', status: 'active', evidence: ['write_file:one', 'write_file:two'] },
+      ]),
+      activeGoalId: 'gate-followup',
+    });
+
+    expect(detectStagnantProgress(signatures)).toEqual({ detected: false });
+  });
+});
+
+describe('detectGoalMutationStall', () => {
+  it('detects unchanged goal progress during update_goals-only iterations when goals exist', () => {
+    const signatures: IterationProgressSignature[] = [];
+    const entry = {
+      toolMultisetKey: buildToolMultisetKey([GOAL_BOOTSTRAP_TOOL_NAME]),
+      goalProgressFingerprint: buildGoalProgressFingerprint([
+        { id: 'scope-a', status: 'active', evidence: [] },
+      ]),
+      activeGoalId: 'scope-a',
+    };
+
+    for (let i = 0; i < GOAL_MUTATION_STALL_THRESHOLD; i += 1) {
+      recordIterationProgressSignature(signatures, entry);
+    }
+
+    expect(detectGoalMutationStall(signatures)).toEqual({
+      detected: true,
+      count: GOAL_MUTATION_STALL_THRESHOLD,
+    });
+  });
+
+  it('does not fire when non-goal tools are in the multiset', () => {
+    const signatures: IterationProgressSignature[] = [];
+    const entry = {
+      toolMultisetKey: buildToolMultisetKey([GOAL_BOOTSTRAP_TOOL_NAME, 'memory_recall']),
+      goalProgressFingerprint: buildGoalProgressFingerprint([
+        { id: 'scope-a', status: 'active', evidence: [] },
+      ]),
+      activeGoalId: 'scope-a',
+    };
+
+    for (let i = 0; i < GOAL_MUTATION_STALL_THRESHOLD; i += 1) {
+      recordIterationProgressSignature(signatures, entry);
+    }
+
+    expect(detectGoalMutationStall(signatures)).toEqual({ detected: false });
+  });
+});
+
+describe('detectGoalFocusThrash', () => {
+  it('detects alternating active goal focus during update_goals-only iterations', () => {
+    const signatures: IterationProgressSignature[] = [];
+    const goalMutationKey = buildToolMultisetKey([GOAL_BOOTSTRAP_TOOL_NAME]);
+    const focusSequence = ['scope-a', 'scope-b', 'scope-a', 'scope-b'] as const;
+
+    for (const activeGoalId of focusSequence) {
+      recordIterationProgressSignature(signatures, {
+        toolMultisetKey: goalMutationKey,
+        goalProgressFingerprint: buildGoalProgressFingerprint([
+          {
+            id: 'scope-a',
+            status: activeGoalId === 'scope-a' ? 'active' : 'pending',
+            evidence: [],
+          },
+          {
+            id: 'scope-b',
+            status: activeGoalId === 'scope-b' ? 'active' : 'pending',
+            evidence: [],
+          },
+        ]),
+        activeGoalId,
+      });
+    }
+
+    expect(detectGoalFocusThrash(signatures)).toEqual({
+      detected: true,
+      count: GOAL_FOCUS_THRASH_THRESHOLD,
+    });
+  });
+});
+
+describe('detectGoalMutationErrorLoop', () => {
+  it('detects consecutive update_goals validation failures', () => {
+    const history = Array.from({ length: GOAL_MUTATION_STALL_THRESHOLD }, () =>
+      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"complete","goals":[{"id":"scope-b"}]}', 'Error: validation failed'),
+    );
+    expect(detectGoalMutationErrorLoop(history)).toEqual({
+      detected: true,
+      count: GOAL_MUTATION_STALL_THRESHOLD,
+    });
+  });
+
+  it('detects recent update_goals validation failures even when other tools are interleaved', () => {
+    const history = [
+      rec('write_file', '{"path":"status.txt"}', '{"ok":true}'),
+      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"complete","goals":[{"id":"scope-b"}]}', 'Error: validation failed'),
+      rec('write_file', '{"path":"status.txt"}', '{"ok":true}'),
+      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"complete","goals":[{"id":"scope-b"}]}', 'Error: validation failed'),
+      rec('device_status', '{}', '{"ok":true}'),
+      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"complete","goals":[{"id":"scope-b"}]}', 'Error: validation failed'),
+    ];
+
+    expect(detectGoalMutationErrorLoop(history)).toEqual({
+      detected: true,
+      count: GOAL_MUTATION_STALL_THRESHOLD,
+    });
+  });
+});
+
+describe('detectGoalBootstrapStall', () => {
+  it('does not fire when goals already exist', () => {
+    const history = Array.from({ length: GOAL_BOOTSTRAP_STALL_THRESHOLD }, () =>
+      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"add"}', 'Error: invalid payload'),
+    );
+    expect(
+      detectGoalBootstrapStall({
+        goals: [createGoal({ id: 'g-1', title: 'seeded', status: 'active' })],
+        history,
+      }),
+    ).toEqual({ detected: false });
+  });
+
+  it('detects identical bootstrap calls without goal creation', () => {
+    const history = Array.from({ length: GOAL_BOOTSTRAP_STALL_THRESHOLD }, () =>
+      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"add","goals":[]}', '{"updated":0}'),
+    );
+    expect(detectGoalBootstrapStall({ goals: [], history })).toEqual({
+      detected: true,
+      count: GOAL_BOOTSTRAP_STALL_THRESHOLD,
+    });
+  });
+
+  it('detects repeated bootstrap errors without goal creation', () => {
+    const history = Array.from({ length: GOAL_BOOTSTRAP_STALL_THRESHOLD }, () =>
+      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"add"}', 'Error: invalid payload'),
+    );
+    expect(detectGoalBootstrapStall({ goals: [], history })).toEqual({
+      detected: true,
+      count: GOAL_BOOTSTRAP_STALL_THRESHOLD,
+    });
+  });
+
+  it('allows bootstrap retries when arguments change', () => {
+    const history = [
+      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"add","goals":[{"id":"a"}]}', '{"updated":0}'),
+      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"add","goals":[{"id":"b"}]}', '{"updated":0}'),
+      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"add","goals":[{"id":"c"}]}', '{"updated":0}'),
+    ];
+    expect(detectGoalBootstrapStall({ goals: [], history })).toEqual({ detected: false });
+  });
+});
+
+describe('detectLoops', () => {
   it('returns no loop for empty history', () => {
-    expect(detectLoops([]).loopDetected).toBe(false);
+    expect(detectLoops([])).toEqual({ loopDetected: false });
   });
 
-  it('detects generic repeat at warning level', () => {
-    const h: ToolCallRecord[] = [];
-    for (let i = 0; i < WARNING_THRESHOLD; i++) {
-      h.push(rec('read', '{"p":"a"}', 'same'));
-    }
-    const result = detectLoops(h);
-    expect(result.loopDetected).toBe(true);
-    expect(result.level).toBe('warning');
-    expect(result.type).toBe('generic_repeat');
-  });
-
-  it('detects generic repeat at critical level', () => {
-    const h: ToolCallRecord[] = [];
-    for (let i = 0; i < CRITICAL_THRESHOLD; i++) {
-      h.push(rec('read', '{"p":"a"}', 'same'));
-    }
-    const result = detectLoops(h);
-    expect(result.loopDetected).toBe(true);
-    expect(result.level).toBe('critical');
-    expect(result.type).toBe('generic_repeat');
-  });
-
-  it('detects no-progress at warning level', () => {
-    const h: ToolCallRecord[] = [];
-    for (let i = 0; i < WARNING_THRESHOLD; i++) {
-      h.push(rec('fetch', '{"url":"x"}', 'same_result'));
-    }
-    const result = detectLoops(h);
-    expect(result.loopDetected).toBe(true);
-    expect(result.level).toBe('warning');
-  });
-
-  it('detects no-progress at critical level', () => {
-    const h: ToolCallRecord[] = [];
-    for (let i = 0; i < CRITICAL_THRESHOLD; i++) {
-      h.push(rec('fetch', '{"url":"x"}', 'same_result'));
-    }
-    const result = detectLoops(h);
-    expect(result.loopDetected).toBe(true);
-    expect(result.level).toBe('critical');
-  });
-
-  it('includes details string', () => {
-    const h: ToolCallRecord[] = [];
-    for (let i = 0; i < WARNING_THRESHOLD; i++) {
-      h.push(rec('read', '{}', 'same'));
-    }
-    const result = detectLoops(h);
-    expect(result.details).toContain('read');
-    expect(result.details).toContain('WARNING');
-  });
-
-  it('critical check overrides warning for same detector', () => {
-    // At critical threshold, should return critical not warning
-    const h: ToolCallRecord[] = [];
-    for (let i = 0; i < CRITICAL_THRESHOLD; i++) {
-      h.push(rec('write', '{"x":1}', 'ok'));
-    }
-    const result = detectLoops(h);
-    expect(result.level).toBe('critical');
-  });
-
-  it('warns early for repeated identical expo project discovery results', () => {
-    const h: ToolCallRecord[] = [
-      rec('expo_eas_list_projects', '{}', '{"status":"ok","count":1}'),
-      rec('expo_eas_list_projects', '{}', '{"status":"ok","count":1}'),
-    ];
-
-    const result = detectLoops(h);
-    expect(result).toEqual(
-      expect.objectContaining({
-        loopDetected: true,
-        level: 'warning',
-        type: 'known_poll_no_progress',
-        details: expect.stringContaining('Reuse the returned project id/fullName'),
-      }),
+  it('escalates bootstrap stall to critical when goals are absent', () => {
+    const history = Array.from({ length: GOAL_BOOTSTRAP_STALL_THRESHOLD }, () =>
+      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"add"}', 'Error: invalid payload'),
     );
-  });
-
-  it('blocks expo project discovery after a few identical results', () => {
-    const h: ToolCallRecord[] = [
-      rec('expo_eas_list_projects', '{}', '{"status":"ok","count":1}'),
-      rec('expo_eas_list_projects', '{}', '{"status":"ok","count":1}'),
-      rec('expo_eas_list_projects', '{}', '{"status":"ok","count":1}'),
-    ];
-
-    const result = detectLoops(h);
-    expect(result).toEqual(
+    expect(detectLoops(history, [], { goals: [] })).toEqual(
       expect.objectContaining({
         loopDetected: true,
         level: 'critical',
-        type: 'known_poll_no_progress',
-        details: expect.stringContaining('expo_eas_list_projects returned the same result 3 times'),
+        type: 'bootstrap_stall',
+        count: GOAL_BOOTSTRAP_STALL_THRESHOLD,
       }),
     );
   });
 
-  it('warns early for repeated identical tool_catalog category lookups', () => {
-    const h: ToolCallRecord[] = [
-      rec(
-        'tool_catalog',
-        '{"category":"browser"}',
-        '{"category":"browser","tools":[{"name":"browser_navigate"}]}',
-      ),
-      rec(
-        'tool_catalog',
-        '{"category":"browser"}',
-        '{"category":"browser","tools":[{"name":"browser_navigate"}]}',
-      ),
-    ];
+  it('does not infer bootstrap stall without explicit graph goal context', () => {
+    const history = Array.from({ length: GOAL_BOOTSTRAP_STALL_THRESHOLD }, () =>
+      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"add"}', 'Error: invalid payload'),
+    ).map((entry) => ({ ...entry, preflightBlockedKind: 'tool_filter' as const }));
 
-    const result = detectLoops(h);
-    expect(result).toEqual(
+    expect(detectLoops(history)).toEqual(
       expect.objectContaining({
         loopDetected: true,
-        level: 'warning',
-        type: 'known_poll_no_progress',
-        details: expect.stringContaining('Repeating tool_catalog with the same category'),
+        type: 'tool_filter_loop',
       }),
     );
   });
 
-  it('warns early for repeated identical empty workspace list_files results', () => {
-    const h: ToolCallRecord[] = [
-      rec('list_files', '{"path":"."}', '{"entries":[]}'),
-      rec('list_files', '{"path":"."}', '{"entries":[]}'),
-    ];
+  it('detects consecutive preflight blocked tool_filter calls at threshold 3', () => {
+    const history = Array.from({ length: PREFLIGHT_BLOCKED_LOOP_THRESHOLD }, () =>
+      rec('update_goals', '{}', 'Tool "update_goals" is not allowed in this context.'),
+    ).map((entry) => ({ ...entry, preflightBlockedKind: 'tool_filter' as const }));
 
-    const result = detectLoops(h);
-    expect(result).toEqual(
+    expect(detectConsecutiveBlockedPreflightCalls(history)).toEqual({
+      detected: true,
+      kind: 'tool_filter',
+      count: PREFLIGHT_BLOCKED_LOOP_THRESHOLD,
+    });
+    expect(detectLoops(history)).toEqual(
       expect.objectContaining({
         loopDetected: true,
-        level: 'warning',
-        type: 'known_poll_no_progress',
-        details: expect.stringContaining('current conversation workspace is empty'),
+        level: 'critical',
+        type: 'tool_filter_loop',
+        count: PREFLIGHT_BLOCKED_LOOP_THRESHOLD,
       }),
     );
   });
 
-  it('does not flag repeated sessions_status polling while pending async work is active', () => {
-    const runningStatus = JSON.stringify({
-      sessionId: 'sub-1',
-      status: 'running',
-      currentActivity: 'Auditing repository',
-      recommendedWaitMs: 5000,
-      hasNewActivity: false,
+  it('detects consecutive schema validation preflight blocks', () => {
+    const history = Array.from({ length: PREFLIGHT_BLOCKED_LOOP_THRESHOLD }, () =>
+      rec(
+        'calendar_create_event',
+        '{}',
+        '{"status":"error","code":"missing_required_argument"}',
+      ),
+    ).map((entry) => ({ ...entry, preflightBlockedKind: 'schema_validation' as const }));
+
+    expect(detectConsecutiveBlockedPreflightCalls(history)).toEqual({
+      detected: true,
+      kind: 'schema_validation',
+      count: PREFLIGHT_BLOCKED_LOOP_THRESHOLD,
     });
-    const h: ToolCallRecord[] = [];
-    for (let i = 0; i < CRITICAL_THRESHOLD; i++) {
-      h.push(rec('sessions_status', '{"sessionId":"sub-1"}', runningStatus));
-    }
-
     expect(
-      detectLoops(h, {
-        pendingAsyncOperationToolNames: ['sessions_status', 'sessions_wait'],
-      }),
-    ).toEqual({ loopDetected: false });
-  });
-
-  it('does not treat status-session-wait monitoring as ping-pong while pending async work is active', () => {
-    const runningStatus = JSON.stringify({
-      sessionId: 'sub-1',
-      status: 'running',
-      currentActivity: 'Auditing repository',
-      recommendedWaitMs: 5000,
-      hasNewActivity: false,
-    });
-    const waited = JSON.stringify({
-      status: 'running',
-      sessionIds: ['sub-1'],
-      sessionCount: 1,
-      completedCount: 0,
-      pendingCount: 1,
-      sessions: [
-        {
-          sessionId: 'sub-1',
-          status: 'running',
-          currentActivity: 'Auditing repository',
-        },
-      ],
-      pendingSessions: [
-        {
-          sessionId: 'sub-1',
-          status: 'running',
-          currentActivity: 'Auditing repository',
-        },
-      ],
-    });
-    const h: ToolCallRecord[] = [
-      rec('sessions_status', '{"sessionId":"sub-1"}', runningStatus),
-      rec('sessions_wait', '{"sessionId":"sub-1","waitTimeoutMs":5000}', waited),
-      rec('sessions_status', '{"sessionId":"sub-1"}', runningStatus),
-      rec('sessions_wait', '{"sessionId":"sub-1","waitTimeoutMs":5000}', waited),
-      rec('sessions_status', '{"sessionId":"sub-1"}', runningStatus),
-      rec('sessions_wait', '{"sessionId":"sub-1","waitTimeoutMs":5000}', waited),
-    ];
-
-    expect(
-      detectLoops(h, {
-        pendingAsyncOperationToolNames: ['sessions_status', 'sessions_wait'],
-      }),
-    ).toEqual({ loopDetected: false });
-  });
-
-  it('still catches repeated monitor-tool errors while pending async work is active', () => {
-    const errorResult = 'Error: session not found: sub-1';
-    const h: ToolCallRecord[] = [
-      rec('sessions_status', '{"sessionId":"sub-1"}', errorResult),
-      rec('sessions_status', '{"sessionId":"sub-1"}', errorResult),
-      rec('sessions_status', '{"sessionId":"sub-1"}', errorResult),
-    ];
-
-    expect(
-      detectLoops(h, {
-        pendingAsyncOperationToolNames: ['sessions_status', 'sessions_wait'],
+      detectLoops(history, [], {
+        goals: [
+          createGoal({
+            title: 'calendar mutation',
+            status: 'active',
+            completionPolicy: 'blocking',
+          }),
+        ],
       }),
     ).toEqual(
       expect.objectContaining({
         loopDetected: true,
         level: 'critical',
-        type: 'repeated_error',
+        type: 'tool_filter_loop',
+        count: PREFLIGHT_BLOCKED_LOOP_THRESHOLD,
       }),
     );
   });
 
-  it('treats repeated identical tool errors as a loop before generic thresholds', () => {
-    const h: ToolCallRecord[] = [
-      rec('read_file', '{"path":"missing.txt"}', 'Error: ENOENT'),
-      rec('read_file', '{"path":"missing.txt"}', 'Error: ENOENT'),
-      rec('read_file', '{"path":"missing.txt"}', 'Error: ENOENT'),
-    ];
+  it('downgrades preflight filter loops when only persistent focus goals remain', () => {
+    const history = Array.from({ length: PREFLIGHT_BLOCKED_LOOP_THRESHOLD }, () =>
+      rec('tool_catalog', '{}', 'Tool "tool_catalog" is not allowed in this context.'),
+    ).map((entry) => ({ ...entry, preflightBlockedKind: 'tool_filter' as const }));
 
-    const result = detectLoops(h);
-    expect(result).toEqual(
+    expect(
+      detectLoops(history, [], {
+        goals: [
+          createGoal({
+            id: 'scope-b',
+            title: 'scope-b-planning',
+            status: 'active',
+            completionPolicy: 'persistent',
+          }),
+        ],
+      }),
+    ).toEqual(
       expect.objectContaining({
         loopDetected: true,
-        level: 'critical',
-        type: 'repeated_error',
-        count: ERROR_CRITICAL_THRESHOLD,
-      }),
-    );
-  });
-});
-
-describe('shouldBlockToolCall', () => {
-  it('returns no block for fresh history', () => {
-    const result = shouldBlockToolCall([], 'read', '{"p":"a"}');
-    expect(result.loopDetected).toBe(false);
-  });
-
-  it('blocks at critical threshold', () => {
-    const history: ToolCallRecord[] = [];
-    for (let i = 0; i < CRITICAL_THRESHOLD; i++) {
-      history.push(rec('fetch', '{"url":"x"}', 'same'));
-    }
-    const result = shouldBlockToolCall(history, 'fetch', '{"url":"x"}');
-    expect(result.loopDetected).toBe(true);
-    expect(result.level).toBe('critical');
-  });
-
-  it('does not block different tool names', () => {
-    const history: ToolCallRecord[] = [];
-    for (let i = 0; i < CRITICAL_THRESHOLD; i++) {
-      history.push(rec('fetch', '{"url":"x"}', 'same'));
-    }
-    const result = shouldBlockToolCall(history, 'read', '{"p":"a"}');
-    expect(result.loopDetected).toBe(false);
-  });
-
-  it('blocks repeated expo project discovery before the generic thresholds', () => {
-    const history: ToolCallRecord[] = [
-      rec('expo_eas_list_projects', '{}', '{"status":"ok","count":1}'),
-      rec('expo_eas_list_projects', '{}', '{"status":"ok","count":1}'),
-      rec('expo_eas_list_projects', '{}', '{"status":"ok","count":1}'),
-    ];
-
-    const result = shouldBlockToolCall(history, 'expo_eas_list_projects', '{}');
-    expect(result).toEqual(
-      expect.objectContaining({
-        loopDetected: true,
-        level: 'critical',
-        type: 'known_poll_no_progress',
-        details: expect.stringContaining('Reuse the returned project id/fullName'),
+        level: 'warning',
+        type: 'tool_filter_loop',
+        count: PREFLIGHT_BLOCKED_LOOP_THRESHOLD,
       }),
     );
   });
 
-  it('does not block expected async monitor polls while pending async work is active', () => {
-    const runningStatus = JSON.stringify({
-      sessionId: 'sub-1',
-      status: 'running',
-      currentActivity: 'Auditing repository',
-      recommendedWaitMs: 5000,
-      hasNewActivity: false,
-    });
-    const history: ToolCallRecord[] = [];
-    for (let i = 0; i < CRITICAL_THRESHOLD; i++) {
-      history.push(rec('sessions_status', '{"sessionId":"sub-1"}', runningStatus));
+  it('changes goal progress fingerprint when a new goal id is added', () => {
+    const before = buildGoalProgressFingerprint([
+      { id: 'scope-a', status: 'active', evidence: [] },
+    ]);
+    const after = buildGoalProgressFingerprint([
+      { id: 'scope-a', status: 'pending', evidence: [] },
+      { id: 'scope-b', status: 'active', evidence: [] },
+    ]);
+
+    expect(before).not.toBe(after);
+    expect(after.startsWith('scope-a,scope-b|')).toBe(true);
+  });
+
+  it('escalates goal mutation stall to critical when blocking goals are incomplete', () => {
+    const signatures: IterationProgressSignature[] = [];
+    const entry = {
+      toolMultisetKey: buildToolMultisetKey([GOAL_BOOTSTRAP_TOOL_NAME]),
+      goalProgressFingerprint: buildGoalProgressFingerprint([
+        { id: 'scope-a', status: 'active', evidence: [] },
+        { id: 'scope-b', status: 'pending', evidence: [] },
+      ]),
+      activeGoalId: 'scope-a',
+    };
+    for (let i = 0; i < GOAL_MUTATION_STALL_THRESHOLD; i += 1) {
+      recordIterationProgressSignature(signatures, entry);
     }
 
     expect(
-      shouldBlockToolCall(history, 'sessions_status', '{"sessionId":"sub-1"}', {
-        pendingAsyncOperationToolNames: ['sessions_status', 'sessions_wait'],
-      }),
-    ).toEqual({ loopDetected: false });
-  });
-
-  it('still blocks repeated monitor-tool errors while pending async work is active', () => {
-    const errorResult = 'Error: session not found: sub-1';
-    const history: ToolCallRecord[] = [
-      rec('sessions_status', '{"sessionId":"sub-1"}', errorResult),
-      rec('sessions_status', '{"sessionId":"sub-1"}', errorResult),
-      rec('sessions_status', '{"sessionId":"sub-1"}', errorResult),
-    ];
-
-    expect(
-      shouldBlockToolCall(history, 'sessions_status', '{"sessionId":"sub-1"}', {
-        pendingAsyncOperationToolNames: ['sessions_status', 'sessions_wait'],
+      detectLoops([], signatures, {
+        goals: [
+          createGoal({
+            id: 'scope-a',
+            title: 'A',
+            status: 'active',
+            completionPolicy: 'blocking',
+            successCriteria: ['evidence.prefix:write_file'],
+          }),
+        ],
       }),
     ).toEqual(
       expect.objectContaining({
         loopDetected: true,
         level: 'critical',
+        type: 'goal_mutation_stall',
+        count: GOAL_MUTATION_STALL_THRESHOLD,
+      }),
+    );
+  });
+
+  it('warns for goal mutation stall when only persistent focus goals are live', () => {
+    const signatures: IterationProgressSignature[] = [];
+    const entry = {
+      toolMultisetKey: buildToolMultisetKey([GOAL_BOOTSTRAP_TOOL_NAME]),
+      goalProgressFingerprint: buildGoalProgressFingerprint([
+        { id: 'scope-a', status: 'pending', evidence: [] },
+        { id: 'scope-b', status: 'active', evidence: [] },
+      ]),
+      activeGoalId: 'scope-b',
+    };
+    for (let i = 0; i < GOAL_MUTATION_STALL_THRESHOLD; i += 1) {
+      recordIterationProgressSignature(signatures, entry);
+    }
+
+    expect(
+      detectLoops([], signatures, {
+        goals: [
+          createGoal({
+            id: 'scope-a',
+            title: 'A',
+            status: 'pending',
+            completionPolicy: 'persistent',
+          }),
+          createGoal({
+            id: 'scope-b',
+            title: 'B',
+            status: 'active',
+            completionPolicy: 'persistent',
+          }),
+        ],
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        loopDetected: true,
+        level: 'warning',
+        type: 'goal_mutation_stall',
+        count: GOAL_MUTATION_STALL_THRESHOLD,
+      }),
+    );
+  });
+
+  it('escalates goal mutation validation error loops while blocking goals are incomplete', () => {
+    const history = Array.from({ length: GOAL_MUTATION_STALL_THRESHOLD }, (_value, index) =>
+      rec(
+        GOAL_BOOTSTRAP_TOOL_NAME,
+        `{"action":"complete","goals":[{"id":"scope-a","attempt":${index}}]}`,
+        `Error: validation failed ${index}`,
+      ),
+    );
+
+    expect(
+      detectLoops(history, [], {
+        goals: [
+          createGoal({
+            id: 'scope-a',
+            title: 'A',
+            status: 'active',
+            completionPolicy: 'blocking',
+            successCriteria: ['evidence.prefix:write_file'],
+          }),
+        ],
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        loopDetected: true,
+        level: 'critical',
+        type: 'goal_mutation_stall',
+        count: GOAL_MUTATION_STALL_THRESHOLD,
+      }),
+    );
+  });
+
+  it('warns for goal mutation validation error loops after blocking goals are complete', () => {
+    const history = Array.from({ length: GOAL_MUTATION_STALL_THRESHOLD }, (_value, index) =>
+      rec(
+        GOAL_BOOTSTRAP_TOOL_NAME,
+        `{"action":"add","goals":[{"id":"stale-${index}"}]}`,
+        `Error: validation failed ${index}`,
+      ),
+    );
+
+    expect(
+      detectLoops(history, [], {
+        goals: [
+          createGoal({
+            id: 'scope-a',
+            title: 'A',
+            status: 'completed',
+            completionPolicy: 'blocking',
+            successCriteria: ['evidence.prefix:write_file'],
+            evidence: ['write_file:done'],
+          }),
+        ],
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        loopDetected: true,
+        level: 'warning',
+        type: 'goal_mutation_stall',
+        count: GOAL_MUTATION_STALL_THRESHOLD,
+      }),
+    );
+  });
+
+  it('escalates stagnant progress to critical for pre-tool deny', () => {
+    const signatures: IterationProgressSignature[] = [];
+    const entry = {
+      toolMultisetKey: buildToolMultisetKey(['write_file']),
+      goalProgressFingerprint: buildGoalProgressFingerprint([
+        { id: 'gate-followup', status: 'active', evidence: ['write_file:done'] },
+      ]),
+      activeGoalId: 'gate-followup',
+    };
+    for (let i = 0; i < STAGNANT_PROGRESS_THRESHOLD; i += 1) {
+      recordIterationProgressSignature(signatures, entry);
+    }
+
+    expect(detectLoops([], signatures)).toEqual(
+      expect.objectContaining({
+        loopDetected: true,
+        level: 'critical',
+        type: 'stagnant_progress',
+        count: STAGNANT_PROGRESS_THRESHOLD,
+      }),
+    );
+  });
+
+  it('warns instead of blocking for discovery-only stagnant progress', () => {
+    const signatures: IterationProgressSignature[] = [];
+    const entry = {
+      toolMultisetKey: buildToolMultisetKey(['tool_catalog']),
+      goalProgressFingerprint: '',
+      activeGoalId: null,
+    };
+    for (let i = 0; i < STAGNANT_PROGRESS_THRESHOLD; i += 1) {
+      recordIterationProgressSignature(signatures, entry);
+    }
+
+    expect(detectLoops([], signatures)).toEqual(
+      expect.objectContaining({
+        loopDetected: true,
+        level: 'warning',
+        type: 'discovery_stall',
+        count: STAGNANT_PROGRESS_THRESHOLD,
+      }),
+    );
+  });
+
+  it('warns for stagnant progress when blocking goals are complete', () => {
+    const signatures: IterationProgressSignature[] = [];
+    const entry = {
+      toolMultisetKey: buildToolMultisetKey(['memory_search']),
+      goalProgressFingerprint: buildGoalProgressFingerprint([
+        { id: 'memory-action', status: 'completed', evidence: ['memory_remember:done'] },
+      ]),
+      activeGoalId: null,
+    };
+    for (let i = 0; i < STAGNANT_PROGRESS_THRESHOLD; i += 1) {
+      recordIterationProgressSignature(signatures, entry);
+    }
+
+    expect(
+      detectLoops([], signatures, {
+        goals: [
+          createGoal({
+            id: 'memory-action',
+            title: 'Memory action',
+            status: 'completed',
+            completionPolicy: 'blocking',
+            successCriteria: ['evidence.prefix:memory_remember'],
+            evidence: ['memory_remember:done'],
+          }),
+        ],
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        loopDetected: true,
+        level: 'warning',
+        type: 'stagnant_progress',
+        count: STAGNANT_PROGRESS_THRESHOLD,
+      }),
+    );
+  });
+
+  it('warns for stagnant progress when active blocking goals already satisfy evidence', () => {
+    const signatures: IterationProgressSignature[] = [];
+    const entry = {
+      toolMultisetKey: buildToolMultisetKey(['calendar_events']),
+      goalProgressFingerprint: buildGoalProgressFingerprint([
+        {
+          id: 'calendar-direct',
+          status: 'active',
+          evidence: [
+            'calendar_list:[{"allowsModifications":true}]',
+            'calendar_create_event:{"status":"created"}',
+            'calendar_update_event:{"status":"updated"}',
+          ],
+        },
+      ]),
+      activeGoalId: 'calendar-direct',
+    };
+    for (let i = 0; i < STAGNANT_PROGRESS_THRESHOLD; i += 1) {
+      recordIterationProgressSignature(signatures, entry);
+    }
+
+    expect(
+      detectLoops([], signatures, {
+        goals: [
+          createGoal({
+            id: 'calendar-direct',
+            title: 'Calendar direct',
+            status: 'active',
+            completionPolicy: 'blocking',
+            successCriteria: [
+              'evidence.json_field:0.allowsModifications:true',
+              'evidence.json_field:status:created',
+              'evidence.json_field:status:updated',
+            ],
+            evidence: [
+              'calendar_list:[{"allowsModifications":true}]',
+              'calendar_create_event:{"status":"created"}',
+              'calendar_update_event:{"status":"updated"}',
+            ],
+          }),
+        ],
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        loopDetected: true,
+        level: 'warning',
+        type: 'stagnant_progress',
+        count: STAGNANT_PROGRESS_THRESHOLD,
+      }),
+    );
+  });
+
+  it('escalates identical-call critical loops before stagnant-progress warnings', () => {
+    const history = Array.from({ length: CRITICAL_THRESHOLD }, () =>
+      rec('read_file', '{"path":"same.txt"}', 'same content'),
+    );
+    const signatures: IterationProgressSignature[] = [];
+    const entry = {
+      toolMultisetKey: buildToolMultisetKey(['read_file']),
+      goalProgressFingerprint: buildGoalProgressFingerprint([
+        { id: 'gate-followup', status: 'active', evidence: ['read_file:same.txt'] },
+      ]),
+      activeGoalId: 'gate-followup',
+    };
+    for (let i = 0; i < STAGNANT_PROGRESS_THRESHOLD; i += 1) {
+      recordIterationProgressSignature(signatures, entry);
+    }
+
+    expect(detectLoops(history, signatures)).toEqual(
+      expect.objectContaining({
+        loopDetected: true,
+        level: 'critical',
+        type: 'generic_repeat',
+        count: CRITICAL_THRESHOLD,
+      }),
+    );
+  });
+
+  it('warns on repeated identical errors before generic repeat escalation', () => {
+    const history = [
+      rec('web_fetch', '{"urls":["https://example.com"]}', 'Error: timeout'),
+      rec('web_fetch', '{"urls":["https://example.com"]}', 'Error: timeout'),
+    ];
+    expect(detectLoops(history)).toEqual(
+      expect.objectContaining({
+        loopDetected: true,
+        level: 'warning',
         type: 'repeated_error',
+        count: ERROR_WARNING_THRESHOLD,
       }),
     );
   });
 
-  it('blocks repeated tool_catalog calls after a few identical category results', () => {
-    const history: ToolCallRecord[] = [
-      rec(
-        'tool_catalog',
-        '{"category":"browser"}',
-        '{"category":"browser","tools":[{"name":"browser_navigate"}]}',
-      ),
-      rec(
-        'tool_catalog',
-        '{"category":"browser"}',
-        '{"category":"browser","tools":[{"name":"browser_navigate"}]}',
-      ),
-      rec(
-        'tool_catalog',
-        '{"category":"browser"}',
-        '{"category":"browser","tools":[{"name":"browser_navigate"}]}',
-      ),
-    ];
-
-    const result = shouldBlockToolCall(history, 'tool_catalog', '{"category":"browser"}');
-    expect(result).toEqual(
+  it('warns on repeated identical input at the warning threshold', () => {
+    const history = Array.from({ length: WARNING_THRESHOLD }, () =>
+      rec('web_search', '{"queries":["official docs"]}', '{"provider":"brave","searches":[{"query":"official docs","results":[]}]}'),
+    );
+    expect(detectLoops(history)).toEqual(
       expect.objectContaining({
         loopDetected: true,
-        level: 'critical',
-        type: 'known_poll_no_progress',
-        details: expect.stringContaining('Repeating tool_catalog with the same category'),
+        level: 'warning',
+        type: 'generic_repeat',
+        count: WARNING_THRESHOLD,
       }),
     );
   });
 
-  it('blocks repeated plan-linked sessions_spawn retries even when the prompt wording changes', () => {
-    const history: ToolCallRecord[] = [
-      rec(
-        'sessions_spawn',
-        '{"prompt":"Review the implementation for correctness.","workstreamId":"1","name":"Final QA Reviewer"}',
-        '{"status":"running","sessionId":"sub-1","workstreamId":"1"}',
-      ),
-      rec(
-        'sessions_spawn',
-        '{"prompt":"Re-check the same implementation for any missed issues.","workstreamId":"1","name":"Final Review Specialist"}',
-        '{"status":"running","sessionId":"sub-2","workstreamId":"1"}',
-      ),
-      rec(
-        'sessions_spawn',
-        '{"prompt":"Perform one more final quality pass on the same workstream.","workstreamId":"1","name":"Final Quality Assurance Specialist"}',
-        '{"status":"running","sessionId":"sub-3","workstreamId":"1"}',
-      ),
-    ];
-
-    const result = shouldBlockToolCall(
-      history,
-      'sessions_spawn',
-      '{"prompt":"Run another review pass with the same goal.","workstreamId":"1","name":"Final Compliance Reviewer"}',
+  it('escalates to critical for longer identical-call streaks', () => {
+    const history = Array.from({ length: CRITICAL_THRESHOLD }, () =>
+      rec('web_search', '{"queries":["official docs"]}', '{"provider":"brave","searches":[{"query":"official docs","results":[]}]}'),
     );
-
-    expect(result).toEqual(
+    expect(detectLoops(history)).toEqual(
       expect.objectContaining({
         loopDetected: true,
         level: 'critical',
-        type: 'known_poll_no_progress',
-      }),
-    );
-  });
-
-  it('blocks repeated identical glob_search misses before another retry', () => {
-    const history: ToolCallRecord[] = [
-      rec('glob_search', '{"pattern":"src/**/*.swift"}', '{"matches":[]}'),
-      rec('glob_search', '{"pattern":"src/**/*.swift"}', '{"matches":[]}'),
-      rec('glob_search', '{"pattern":"src/**/*.swift"}', '{"matches":[]}'),
-    ];
-
-    const result = shouldBlockToolCall(history, 'glob_search', '{"pattern":"src/**/*.swift"}');
-    expect(result).toEqual(
-      expect.objectContaining({
-        loopDetected: true,
-        level: 'critical',
-        type: 'known_poll_no_progress',
-        details: expect.stringContaining('current conversation workspace has no matching files'),
-      }),
-    );
-  });
-
-  it('blocks repeated identical tool errors before another retry', () => {
-    const history: ToolCallRecord[] = [
-      rec('read_file', '{"path":"missing.txt"}', 'Error: ENOENT'),
-      rec('read_file', '{"path":"missing.txt"}', 'Error: ENOENT'),
-      rec('read_file', '{"path":"missing.txt"}', 'Error: ENOENT'),
-    ];
-
-    const result = shouldBlockToolCall(history, 'read_file', '{"path":"missing.txt"}');
-    expect(result).toEqual(
-      expect.objectContaining({
-        loopDetected: true,
-        level: 'critical',
-        type: 'repeated_error',
-        count: ERROR_CRITICAL_THRESHOLD,
+        type: 'generic_repeat',
+        count: CRITICAL_THRESHOLD,
       }),
     );
   });
 });
 
-describe('recordToolCall — sliding window', () => {
-  it('adds entries to history', () => {
+describe('recordToolCall', () => {
+  it('appends tool calls and trims to the configured history size', () => {
     const history: ToolCallRecord[] = [];
-    recordToolCall(history, rec('a', '1'));
-    expect(history).toHaveLength(1);
-  });
-
-  it('trims to TOOL_CALL_HISTORY_SIZE', () => {
-    const history: ToolCallRecord[] = [];
-    for (let i = 0; i < TOOL_CALL_HISTORY_SIZE + 10; i++) {
-      recordToolCall(history, rec('tool', String(i)));
+    for (let i = 0; i < TOOL_CALL_HISTORY_SIZE + 4; i += 1) {
+      recordToolCall(history, rec('tool', String(i), `result-${i}`));
     }
+
     expect(history).toHaveLength(TOOL_CALL_HISTORY_SIZE);
-    // Should keep most recent entries
-    expect(history[0].arguments).toBe(String(10));
+    expect(history[0]?.arguments).toBe('4');
+    expect(history.at(-1)?.arguments).toBe(String(TOOL_CALL_HISTORY_SIZE + 3));
   });
 });

@@ -4,20 +4,20 @@
 // Renders active canvas surfaces in a WebView. Each surface is its own
 // interactive component rendered as HTML via the canvas renderer.
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { ArrowLeft, Layers, MessageSquare, Trash2, RefreshCw } from 'lucide-react-native';
 import { useAppTheme, AppPalette } from '../theme/useAppTheme';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../i18n/useTranslation';
 import {
   getActiveSurfaces,
   deleteSurface,
   openCanvasSurface,
   subscribeToCanvasSurfaces,
 } from '../services/canvas/renderer';
-import type { CanvasSurface } from '../types';
+import type { CanvasSurface } from '../types/canvas';
 import { useBackToChat } from '../navigation/useBackToChat';
 
 function formatSurfaceDestination(url: string, maxLength = 56): string {

@@ -1,8 +1,8 @@
-import type { ToolCall } from '../types';
+import type { ToolCall } from '../types/message';
 
 type ToolCallMatchCandidate = Pick<ToolCall, 'id' | 'name' | 'arguments' | 'raw'>;
 
-const SYNTHETIC_TOOL_CALL_ID_PATTERNS = [/^gemini-call-\d+$/];
+const SYNTHETIC_TOOL_CALL_ID_PATTERNS = [/^gemini-call-\d+(?:-[0-9a-f]{8})?(?:-\d+)?$/i];
 
 function isPlainRecord(value: unknown): value is Record<string, any> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -24,6 +24,25 @@ function isStableToolCallIdentity(value: unknown): value is string {
   }
 
   return !SYNTHETIC_TOOL_CALL_ID_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+function isSyntheticToolCallIdentity(value: unknown): value is string {
+  const normalized = getNonEmptyString(value);
+  if (!normalized) {
+    return false;
+  }
+
+  return SYNTHETIC_TOOL_CALL_ID_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+function haveSameToolShape(
+  left: ToolCallMatchCandidate | undefined,
+  right: ToolCallMatchCandidate | undefined,
+): boolean {
+  return (
+    getNonEmptyString(left?.name) === getNonEmptyString(right?.name) &&
+    getNonEmptyString(left?.arguments) === getNonEmptyString(right?.arguments)
+  );
 }
 
 function hasExplicitIdentity(toolCall: ToolCallMatchCandidate | undefined): boolean {
@@ -127,12 +146,21 @@ export function findMatchingToolCallIndexWithinMessage<T extends ToolCallMatchCa
   nextToolCall: ToolCallMatchCandidate,
 ): number {
   const nextId = getNonEmptyString(nextToolCall.id);
-  if (nextId) {
+  if (nextId && isStableToolCallIdentity(nextId)) {
     const exactIdIndex = toolCalls.findIndex(
       (candidate) => getNonEmptyString(candidate.id) === nextId,
     );
     if (exactIdIndex >= 0) {
       return exactIdIndex;
+    }
+  }
+  if (nextId && isSyntheticToolCallIdentity(nextId)) {
+    const exactSyntheticIdIndex = toolCalls.findIndex(
+      (candidate) =>
+        getNonEmptyString(candidate.id) === nextId && haveSameToolShape(candidate, nextToolCall),
+    );
+    if (exactSyntheticIdIndex >= 0) {
+      return exactSyntheticIdIndex;
     }
   }
 

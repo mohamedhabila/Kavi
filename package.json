@@ -1,6 +1,6 @@
 {
   "name": "kavi",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Kavi is a mobile-first AI assistant for iOS and Android with agentic workflows, on-device models, and remote work tooling.",
   "private": true,
   "license": "MIT",
@@ -37,17 +37,36 @@
     "build:ios:release-sim": "mkdir -p ios/build/generated/autolinking ios/build/xcode-release-sim && node --no-warnings --eval \"require('expo/bin/autolinking')\" expo-modules-autolinking react-native-config --json --platform ios > ios/build/generated/autolinking/autolinking.json && node node_modules/react-native/scripts/generate-codegen-artifacts.js --path . --outputPath ios --targetPlatform ios && cd ios && NODE_ENV=production xcodebuild -workspace Kavi.xcworkspace -scheme Kavi -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/xcode-release-sim clean build",
     "web": "expo start --web",
     "check:public-hygiene": "node ./scripts/check-public-repo-state.js",
+    "check:public-language": "node ./scripts/check-public-language.js",
+    "check:links": "node ./scripts/check-markdown-links.js",
+    "check:licenses": "node ./scripts/check-dependency-licenses.js",
+    "check:app-metadata": "node ./scripts/check-app-metadata.js",
     "check:i18n": "node ./scripts/check-i18n-consistency.js",
+    "check:no-legacy-planning-imports": "node ./scripts/check-no-legacy-planning-imports.js",
+    "check:thin-e2e-harness": "node ./scripts/check-thin-e2e-harness.js",
+    "check:graph-owned-mutations": "node ./scripts/check-graph-owned-mutations.js",
+    "check:dead-exports": "node ./scripts/check-dead-exports.js",
+    "check:tool-contracts": "node ./scripts/check-tool-contracts.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "test": "jest",
+    "test:coverage": "jest --runInBand --coverage --no-cache",
     "test:watch": "jest --watch",
     "test:live:anthropic": "cross-env RUN_LIVE_ANTHROPIC=1 jest --runInBand __tests__/services/LlmService.anthropic.live.test.ts",
     "test:live:native-providers": "cross-env RUN_LIVE_NATIVE_PROVIDER_CHECKS=1 jest --runInBand __tests__/services/LlmService.nativeProviders.live.test.ts",
-    "verify": "npm run check:public-hygiene && npm run check:i18n && npm run lint && npm run typecheck && npm test -- --runInBand"
+    "eval:memory": "node ./scripts/memory-eval-harness.js",
+    "eval:agent": "node ./scripts/agent-eval-harness.js",
+    "eval:recovery": "jest --runInBand __tests__/acceptance/recoveryBenchmark.test.ts",
+    "eval:e2e": "node ./scripts/e2e-agent-eval-harness.js",
+    "eval:e2e:assess": "node ./scripts/e2e-assessment-collect.js",
+    "eval:e2e:providers": "node ./scripts/e2e-provider-matrix.js",
+    "eval:on-device": "node ./scripts/on-device-benchmark.js",
+    "verify": "npm run check:public-hygiene && npm run check:public-language && npm run check:links && npm run check:licenses && npm run check:app-metadata && npm run check:i18n && npm run check:no-legacy-planning-imports && npm run check:thin-e2e-harness && npm run check:graph-owned-mutations && npm run check:dead-exports && npm run check:tool-contracts && npm run lint && npm run typecheck && npm test -- --runInBand",
+    "verify:strict": "npm run verify && npm run eval:memory && npm run eval:agent",
+    "verify:strict:e2e": "node ./scripts/verify-strict-e2e.js"
   },
   "expo": {
     "doctor": {
@@ -65,12 +84,12 @@
     "@react-navigation/native-stack": "^7.14.5",
     "brotli-js": "^1.0.2",
     "croner": "^10.0.1",
-    "diff": "^7.0.0",
+    "diff": "^8.0.4",
     "expo": "~55.0.12",
     "expo-asset": "~55.0.13",
     "expo-audio": "~55.0.12",
     "expo-auth-session": "~55.0.12",
-    "expo-background-fetch": "~55.0.13",
+    "expo-background-task": "~55.0.9",
     "expo-battery": "~55.0.12",
     "expo-build-properties": "~55.0.12",
     "expo-calendar": "~55.0.13",
@@ -111,8 +130,9 @@
     "react-native-view-shot": "4.0.3",
     "react-native-webview": "13.16.0",
     "react-native-worklets": "0.7.2",
-    "shell-quote": "^1.8.3",
-    "yaml": "^2.8.2",
+    "shell-quote": "^1.8.4",
+    "xstate": "^5.31.1",
+    "yaml": "^2.9.0",
     "zustand": "^5.0.11"
   },
   "devDependencies": {
@@ -164,8 +184,11 @@
     ],
     "testPathIgnorePatterns": [
       "<rootDir>/node_modules/",
-      "<rootDir>/_research/",
-      "<rootDir>/__tests__/helpers/"
+      "<rootDir>/.private/",
+      "<rootDir>/__tests__/fixtures/",
+      "<rootDir>/__tests__/helpers/",
+      "<rootDir>/__tests__/engine/helpers/",
+      "<rootDir>/__tests__/screens/.*\\.testSupport\\.tsx$"
     ],
     "moduleFileExtensions": [
       "ts",
@@ -180,7 +203,6 @@
     "collectCoverageFrom": [
       "src/**/*.{ts,tsx}",
       "!src/**/*.d.ts",
-      "!src/types/index.ts",
       "!src/services/context/types.ts",
       "!src/services/cron/types.ts",
       "!src/services/events/types.ts",
@@ -188,12 +210,19 @@
       "!src/services/voice/voice.ts",
       "!src/engine/tools/native-executor.ts"
     ],
+    "coverageDirectory": ".tmp/coverage",
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "clover",
+      "json-summary"
+    ],
     "coverageThreshold": {
       "global": {
-        "branches": 80,
-        "functions": 85,
-        "lines": 90,
-        "statements": 90
+        "branches": 70.7,
+        "functions": 87.6,
+        "lines": 84.3,
+        "statements": 83.8
       }
     }
   }

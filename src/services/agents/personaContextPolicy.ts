@@ -74,6 +74,7 @@ function applyModeAdjustments(
       ...policy,
       minRecentUserTurns: Math.max(policy.minRecentUserTurns, 2),
       maxCarryoverUserTurns: Math.max(policy.maxCarryoverUserTurns, 5),
+      allowCrossTopicCarryover: true,
     };
   }
 

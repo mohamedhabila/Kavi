@@ -25,13 +25,13 @@ import {
   Share2,
 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
-import { useTranslation } from '../../i18n';
+import { useTranslation } from '../../i18n/useTranslation';
 import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
 import {
   inspectConversationWorkspaceFile,
   listConversationWorkspaceDirectory,
-  normalizeConversationWorkspacePath,
 } from '../../services/conversationWorkspace/files';
+import { normalizeConversationWorkspacePath } from '../../services/files/pathUtils';
 import { shareConversationWorkspaceFile } from '../../services/share/localShare';
 
 interface FileEntry {

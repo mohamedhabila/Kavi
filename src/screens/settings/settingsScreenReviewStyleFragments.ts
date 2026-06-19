@@ -1,0 +1,141 @@
+import type { AppPalette } from '../../theme/useAppTheme';
+
+export const createSettingsScreenReviewStyleFragments = (colors: AppPalette) => ({
+  reviewModalScroll: {
+    maxHeight: 420,
+  },
+  reviewModalScrollContent: {
+    paddingBottom: 8,
+  },
+  reviewModalSummary: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.textSecondary,
+    marginBottom: 16,
+  },
+  reviewModalSection: {
+    marginBottom: 16,
+  },
+  reviewModalSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  reviewModalParagraph: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.textSecondary,
+    marginBottom: 8,
+  },
+  reviewChecklistCard: {
+    marginTop: 10,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  reviewChecklistTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  reviewChecklistHint: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.textSecondary,
+    marginBottom: 8,
+  },
+  reviewChecklistItem: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.textTertiary,
+    marginBottom: 6,
+  },
+  featureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    marginBottom: 6,
+  },
+  featureContent: {
+    flex: 1,
+  },
+  featureHint: {
+    fontSize: 12,
+    color: colors.textTertiary,
+    marginTop: 2,
+  },
+  featureSubRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginBottom: 6,
+  },
+  featureSubLabel: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  stepperBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  stepperBtnText: {
+    fontSize: 18,
+    color: colors.text,
+    fontWeight: '600',
+  },
+  stepperValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    minWidth: 20,
+    textAlign: 'center',
+  },
+  quickSetupGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  quickSetupChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  quickSetupChipActive: {
+    borderColor: colors.success,
+    backgroundColor: colors.surface,
+  },
+  quickSetupLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.textTertiary,
+  },
+});

@@ -2,13 +2,13 @@
 // Tests — Sidebar memory IA sections
 // ---------------------------------------------------------------------------
 
-import React from 'react';
 import { act, render, fireEvent } from '@testing-library/react-native';
 import {
   TodaysFocusTile,
   OpenThreadsChips,
   PinnedMoments,
   RecallSearchInput,
+  MemoryStats,
   bucketConversationsByTime,
   parseOpenThreads,
 } from '../../src/components/sidebar/SidebarMemorySections';
@@ -21,15 +21,41 @@ jest.mock('../../src/services/memory/blocks', () => ({
     return fn(label);
   },
 }));
-jest.mock('../../src/services/memory/facts', () => ({
+jest.mock('../../src/services/memory/facts/queries', () => ({
   __mockListFacts: jest.fn(() => []),
+  __mockCountFacts: jest.fn(() => 0),
   listFacts: (opts: unknown) => {
-    const fn = require('../../src/services/memory/facts').__mockListFacts;
+    const fn = require('../../src/services/memory/facts/queries').__mockListFacts;
     return fn(opts);
   },
+  countFacts: () => {
+    const fn = require('../../src/services/memory/facts/queries').__mockCountFacts;
+    return fn();
+  },
 }));
+jest.mock('../../src/services/memory/episodes/queries', () => ({
+  __mockCountEpisodes: jest.fn(() => 0),
+  countEpisodes: () => {
+    const fn = require('../../src/services/memory/episodes/queries').__mockCountEpisodes;
+    return fn();
+  },
+}));
+
+jest.mock('../../src/services/memory/taskStack', () => ({
+  __mockGetActiveTaskTitle: jest.fn(() => null),
+  getActiveTaskTitle: (threadId: string) => {
+    const fn = require('../../src/services/memory/taskStack').__mockGetActiveTaskTitle;
+    return fn(threadId);
+  },
+}));
+
 jest.mock('../../src/services/memory/workingBlocks', () => ({
+  __mockGetWorkingBlock: jest.fn(() => null),
   __mockListRecentWorkingBlocks: jest.fn(() => []),
+  getWorkingBlock: (label: string, scope: unknown) => {
+    const fn = require('../../src/services/memory/workingBlocks').__mockGetWorkingBlock;
+    return fn(label, scope);
+  },
   listRecentWorkingBlocks: (label: string, limit: number) => {
     const fn = require('../../src/services/memory/workingBlocks').__mockListRecentWorkingBlocks;
     return fn(label, limit);
@@ -49,13 +75,15 @@ jest.mock('../../src/services/memory/store', () => ({
 }));
 
 const blocksMock = require('../../src/services/memory/blocks');
-const factsMock = require('../../src/services/memory/facts');
+const factsMock = require('../../src/services/memory/facts/queries');
+const episodesMock = require('../../src/services/memory/episodes/queries');
+const taskStackMock = require('../../src/services/memory/taskStack');
 const workingBlocksMock = require('../../src/services/memory/workingBlocks');
 const memoryStoreMock = require('../../src/services/memory/store');
 
-jest.mock('../../src/i18n', () => ({
+jest.mock('../../src/i18n/useTranslation', () => ({
   useTranslation: () => ({
-    t: (key: string) => {
+    t: (key: string, params?: Record<string, unknown>) => {
       const map: Record<string, string> = {
         'nav.todaysFocus': "Today's focus",
         'nav.todaysFocusEmpty': 'Nothing in focus yet.',
@@ -65,8 +93,18 @@ jest.mock('../../src/i18n', () => ({
         'nav.pinnedMomentsEmpty': 'Pin a fact to surface it here.',
         'nav.recallPlaceholder': 'Recall a moment…',
         'nav.recallSearch': 'Search memory',
+        'nav.memoryStats': 'Memory',
+        'nav.memoryStatsFacts': '{count} facts',
+        'nav.memoryStatsEpisodes': '{count} episodes',
+        'nav.memoryStatsActiveTask': 'Active: {task}',
       };
-      return map[key] ?? key;
+      let text = map[key] ?? key;
+      if (params) {
+        for (const [k, v] of Object.entries(params)) {
+          text = text.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
+        }
+      }
+      return text;
     },
   }),
 }));
@@ -91,8 +129,16 @@ beforeEach(() => {
   blocksMock.__mockGetBlock.mockReturnValue(null);
   factsMock.__mockListFacts.mockReset();
   factsMock.__mockListFacts.mockReturnValue([]);
+  factsMock.__mockCountFacts.mockReset();
+  factsMock.__mockCountFacts.mockReturnValue(0);
+  episodesMock.__mockCountEpisodes.mockReset();
+  episodesMock.__mockCountEpisodes.mockReturnValue(0);
+  taskStackMock.__mockGetActiveTaskTitle.mockReset();
+  taskStackMock.__mockGetActiveTaskTitle.mockReturnValue(null);
   workingBlocksMock.__mockListRecentWorkingBlocks.mockReset();
   workingBlocksMock.__mockListRecentWorkingBlocks.mockReturnValue([]);
+  workingBlocksMock.__mockGetWorkingBlock.mockReset();
+  workingBlocksMock.__mockGetWorkingBlock.mockReturnValue(null);
   memoryStoreMock.__mockSubscribeToMemoryChanges.mockReset();
   memoryStoreMock.__mockSubscribeToMemoryChanges.mockImplementation((listener: typeof memoryListener) => {
     memoryListener = listener;
@@ -179,6 +225,29 @@ describe('TodaysFocusTile', () => {
     );
   });
 
+  it('prefers the scoped active focus for the active conversation over unrelated recent focus', () => {
+    workingBlocksMock.__mockGetWorkingBlock.mockImplementation((label: string, scope: any) => {
+      if (
+        label === 'active_focus' &&
+        scope?.conversationId === 'conv-side' &&
+        scope?.threadId === 'conv-side'
+      ) {
+        return { content: 'Scoped side-thread focus.' };
+      }
+      return null;
+    });
+    workingBlocksMock.__mockListRecentWorkingBlocks.mockReturnValue([
+      { content: 'Stale focus from another thread.' },
+    ]);
+
+    const { getByTestId } = render(
+      <TodaysFocusTile colors={colors} conversationId="conv-side" />,
+    );
+    expect(getByTestId('sidebar-todays-focus-body').props.children).toBe(
+      'Scoped side-thread focus.',
+    );
+  });
+
   it('refreshes when structured memory changes', () => {
     workingBlocksMock.__mockListRecentWorkingBlocks.mockReturnValueOnce([]);
     const { getByTestId } = render(<TodaysFocusTile colors={colors} />);
@@ -248,6 +317,30 @@ describe('OpenThreadsChips', () => {
     fireEvent.press(getByTestId('sidebar-open-thread-beta'));
     expect(onSelect).toHaveBeenCalledWith('beta');
   });
+
+  it('uses scoped open threads for the active conversation instead of unrelated recent blocks', () => {
+    workingBlocksMock.__mockGetWorkingBlock.mockImplementation((label: string, scope: any) => {
+      if (
+        label === 'open_threads' &&
+        scope?.conversationId === 'conv-side' &&
+        scope?.threadId === 'conv-side'
+      ) {
+        return { content: '- scoped alpha\n- scoped beta' };
+      }
+      return null;
+    });
+    workingBlocksMock.__mockListRecentWorkingBlocks.mockReturnValue([
+      { content: '- stale unrelated thread' },
+    ]);
+
+    const onSelect = jest.fn();
+    const { getByTestId, queryByTestId } = render(
+      <OpenThreadsChips colors={colors} conversationId="conv-side" onSelect={onSelect} />,
+    );
+    expect(queryByTestId('sidebar-open-thread-stale unrelated thread')).toBeNull();
+    fireEvent.press(getByTestId('sidebar-open-thread-scoped beta'));
+    expect(onSelect).toHaveBeenCalledWith('scoped beta');
+  });
 });
 
 // ── PinnedMoments ───────────────────────────────────────────────────────────
@@ -309,5 +402,83 @@ describe('RecallSearchInput', () => {
     fireEvent.changeText(input, '   ');
     fireEvent(input, 'submitEditing');
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+});
+
+// ── MemoryStats ─────────────────────────────────────────────────────────────
+
+describe('MemoryStats', () => {
+  it('renders fact and episode counts', () => {
+    factsMock.__mockCountFacts.mockReturnValue(12);
+    episodesMock.__mockCountEpisodes.mockReturnValue(3);
+
+    const { getByTestId } = render(<MemoryStats colors={colors} />);
+    expect(getByTestId('sidebar-memory-facts').props.children).toBe('12 facts');
+    expect(getByTestId('sidebar-memory-episodes').props.children).toBe('3 episodes');
+  });
+
+  it('renders active task when one exists', () => {
+    taskStackMock.__mockGetActiveTaskTitle.mockReturnValue('Build API');
+
+    const { getByTestId } = render(
+      <MemoryStats colors={colors} conversationId="conv-1" />,
+    );
+    expect(getByTestId('sidebar-memory-task').props.children).toBe('Active: Build API');
+  });
+
+  it('renders consolidation tier label when provided', () => {
+    const { getByTestId } = render(
+      <MemoryStats
+        colors={colors}
+        consolidationTierLabel="Active chat provider fallback: Chat Provider"
+      />,
+    );
+    expect(getByTestId('sidebar-memory-consolidation-tier').props.children).toBe(
+      'Active chat provider fallback: Chat Provider',
+    );
+  });
+
+  it('does not render active task line when none exists', () => {
+    const { queryByTestId } = render(
+      <MemoryStats colors={colors} conversationId="conv-1" />,
+    );
+    expect(queryByTestId('sidebar-memory-task')).toBeNull();
+  });
+
+  it('calls onPress when tapped', () => {
+    const onPress = jest.fn();
+    const { getByTestId } = render(
+      <MemoryStats colors={colors} onPress={onPress} />,
+    );
+    fireEvent.press(getByTestId('sidebar-memory-stats'));
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes counts when structured memory changes', () => {
+    factsMock.__mockCountFacts.mockReturnValueOnce(1).mockReturnValue(5);
+    episodesMock.__mockCountEpisodes.mockReturnValueOnce(0).mockReturnValue(2);
+
+    const { getByTestId } = render(<MemoryStats colors={colors} />);
+    expect(getByTestId('sidebar-memory-facts').props.children).toBe('1 facts');
+
+    act(() => {
+      memoryListener?.({ scope: 'structured', updatedAt: 100 });
+    });
+
+    expect(getByTestId('sidebar-memory-facts').props.children).toBe('5 facts');
+    expect(getByTestId('sidebar-memory-episodes').props.children).toBe('2 episodes');
+  });
+
+  it('survives a read failure by rendering zeros', () => {
+    factsMock.__mockCountFacts.mockImplementation(() => {
+      throw new Error('db down');
+    });
+    episodesMock.__mockCountEpisodes.mockImplementation(() => {
+      throw new Error('db down');
+    });
+
+    const { getByTestId } = render(<MemoryStats colors={colors} />);
+    expect(getByTestId('sidebar-memory-facts').props.children).toBe('0 facts');
+    expect(getByTestId('sidebar-memory-episodes').props.children).toBe('0 episodes');
   });
 });

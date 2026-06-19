@@ -73,6 +73,10 @@ export const en: TranslationMap = {
     openThreadsEmpty: 'No open threads.',
     pinnedMoments: 'Pinned moments',
     pinnedMomentsEmpty: 'Pin a fact to surface it here.',
+    memoryStats: 'Memory',
+    memoryStatsFacts: '{count} facts',
+    memoryStatsEpisodes: '{count} episodes',
+    memoryStatsActiveTask: 'Active: {task}',
     recallPlaceholder: 'Recall a moment…',
     recallSearch: 'Search memory',
   },
@@ -96,9 +100,6 @@ export const en: TranslationMap = {
     deleteConversation: 'Delete Conversation',
     searchConversations: 'Search conversations…',
     emptyStateHint: "Send a message to get started. I'm ready to help!",
-    localModelInitializingTitle: 'Initializing model',
-    localModelInitializingBody: 'Sit tight, this can take up to 1 minute.',
-    localModelInitializeFailed: 'Failed to initialize the on-device model.',
     thinking: 'Thinking...',
     toolCall: 'Using tool: {name}',
     maxIterations: "I've reached the maximum number of tool iterations.",
@@ -124,7 +125,6 @@ export const en: TranslationMap = {
     assistantTyping: 'Assistant is typing',
     workingOnIt: 'Working on it',
     reviewingWork: 'Reviewing the work',
-    pilotReviewingWork: 'Pilot is reviewing the work',
     showCode: 'Show code',
     hideCode: 'Hide code',
     plainTextFallback: 'Large response shown as plain text for stability.',
@@ -156,6 +156,7 @@ export const en: TranslationMap = {
     showLogs: 'Show logs',
     hideLogs: 'Hide logs',
     latestLogs: 'Latest logs',
+    jumpToLatest: 'Jump to latest',
     logsEmpty: 'No logs yet.',
     showEarlierMessages: 'Show earlier messages ({count})',
     subAgentLabel: 'Sub-agent',
@@ -191,64 +192,30 @@ export const en: TranslationMap = {
     subAgentRollupCompleted: '{count} completed',
     subAgentRollupIssuesOne: '1 issue',
     subAgentRollupIssues: '{count} issues',
-    agentWorkflow: {
-      title: 'Agent workflow',
-      showDetails: 'View details',
-      hideDetails: 'Hide details',
-      showDetailsAccessibility: 'Show agent workflow details',
-      hideDetailsAccessibility: 'Hide agent workflow details',
-      stageLabel: 'Stage: {stage}',
-      lastToolLabel: 'Last tool: {tool}',
-      noToolsYet: 'No tools yet',
-      turnLabel: 'Turn {count}',
-      objective: 'Objective',
-      latestUpdate: 'Latest update',
-      successCriteria: 'Success criteria',
-      stopConditions: 'Stop conditions',
-      workstreams: 'Workstreams',
-      pilotTitle: 'Pilot',
-      pilotChip: 'Pilot: {action}',
-      pilotActionLabel: 'Action: {action}',
-      pilotConfidenceLabel: 'Confidence: {confidence}',
-      pilotScoreLabel: 'Score: {score}/{max}',
+    agentGoals: {
+      header: 'Goals ({count})',
+      bootstrapPending: 'Goals pending bootstrap',
+      evidenceCount: '{count} evidence',
       status: {
         running: 'Running',
         completed: 'Completed',
         failed: 'Failed',
         cancelled: 'Cancelled',
       },
-      phase: {
-        assess: 'Assess',
-        plan: 'Plan',
-        work: 'Work',
-        review: 'Review',
-        pilot: 'Pilot',
-        deliver: 'Deliver',
+      goalStatus: {
+        pending: 'Pending',
+        active: 'Active',
+        completed: 'Completed',
+        blocked: 'Blocked',
       },
-      checkpointKind: {
-        run: 'Run',
-        phase: 'Phase',
-        tool: 'Tool',
-        worker: 'Worker',
-        note: 'Note',
-      },
-      controlAction: {
-        accept: 'Accept',
-        continue: 'Continue',
-        block: 'Block',
-        cancel: 'Cancel',
-      },
-      confidence: {
-        low: 'Low',
-        medium: 'Medium',
-        high: 'High',
-      },
-      summary: {
-        turns: 'Turns {count}',
-        tools: 'Tools {completed}/{started}',
-        failed: 'Failed {count}',
-        workers: 'Workers {count}',
-      },
+    },
+    agentRunTrace: {
+      header: 'Run trace',
+      preview: 'Iteration {iteration} · {count} events',
+      iteration: 'Iteration {iteration}',
+    },
+    agentWorkflow: {
+      currentWork: 'Current work',
     },
   },
 
@@ -279,9 +246,9 @@ export const en: TranslationMap = {
     apiKeyPlaceholder: 'sk-…',
     defaultModel: 'Default Model',
     defaultModelPlaceholder: 'gpt-5.5',
-    onDeviceProviderTitle: 'On-device Gemma',
+    onDeviceProviderTitle: 'On-device models',
     onDeviceProviderHint:
-      'Download a supported on-device Gemma model to this device before saving the provider. Kavi then uses the native runtime instead of a remote HTTP API.',
+      'Download a supported on-device model to this device before saving the provider. Kavi then uses the native runtime instead of a remote HTTP API.',
     selectOnDeviceModel: 'Select on-device model {name}',
     onDeviceModelInstalled: 'Installed',
     deleteProvider: 'Delete Provider',
@@ -342,10 +309,7 @@ export const en: TranslationMap = {
     mcpMetadata: 'Connection metadata',
     mcpManualServerHint:
       'Manual servers are fully user-managed. Review the URL, headers, token, and OAuth settings before connecting.',
-    mcpOfficialRegistryHint:
-      'This server came from the official MCP registry. Review its registry identity and website before changing connection details.',
     mcpOAuthSessionSaved: 'OAuth session saved',
-    mcpOAuthSessionNotConnected: 'OAuth sign-in required',
     mcpResetOAuthSession: 'Reset OAuth session',
     mcpResetOAuthSessionConfirm: 'Clear the stored OAuth tokens for this MCP server?',
     mcpResetOAuthSessionSuccess: 'OAuth session cleared.',
@@ -433,7 +397,6 @@ export const en: TranslationMap = {
     workspaceConfigRoots: 'Config Roots',
     workspaceConfigRootsHint:
       'One path per line. Skills that require config files only route here when these paths are covered.',
-    workspaceConfigRootsPlaceholder: '/Users/username/.config\n/Users/username/.ssh',
     workspaceConfigRootsCount: '{count} config roots',
     deleteWorkspaceTarget: 'Delete Workspace Target',
     deleteWorkspaceTargetConfirm: 'Remove this workspace target?',
@@ -556,7 +519,6 @@ export const en: TranslationMap = {
     expoAccessTokenHint: 'Stored securely. Required for direct EAS CLI mode.',
     expoAccessTokenPlaceholder: 'eas_xxx',
     deleteExpoAccount: 'Delete Expo Account',
-    deleteExpoAccountConfirm: 'This will also remove linked Expo projects from Kavi settings.',
     deleteExpoAccountDetachConfirm:
       'Delete this Expo account? Associated projects will remain but lose their account link.',
     expoProjectsSyncedCount: 'Projects synced: {count}',
@@ -775,6 +737,15 @@ export const en: TranslationMap = {
   // ── Memory Screen ────────────────────────────────────────────────────
   memory: {
     title: 'Memory',
+    overviewTab: 'Overview',
+    overviewFocusTitle: "Today's focus",
+    overviewFocusEmpty: 'Nothing in focus yet.',
+    overviewTaskTitle: 'Current task',
+    overviewTaskEmpty: 'No active task segment.',
+    overviewRecentFactsTitle: 'Recent facts',
+    overviewSearchPlaceholder: 'Search memory…',
+    overviewConsolidationTitle: 'Consolidation',
+    overviewLoading: 'Loading memory overview…',
     globalTab: 'Global',
     dailyTab: 'Daily Notes',
     factsTab: 'Facts',
@@ -819,9 +790,39 @@ export const en: TranslationMap = {
     migrationSeedComplete: 'All archived chats have been organized.',
     consolidationProvider: 'Memory consolidation provider',
     consolidationProviderHint:
-      'Picks one configured provider to extract durable facts from chats. Uses about one extra LLM call per 8 turns.',
-    consolidationProviderOff: 'Off',
+      'Choose how Kavi enriches memory after each turn. Auto cascades on-device → active chat → structural extraction. Structural-only still records episodes and focus.',
+    consolidationModeAuto: 'Auto',
+    consolidationModeLocal: 'On-device',
+    consolidationModeActiveProvider: 'Active chat',
+    consolidationModeOff: 'Structural only',
+    compactionProvider: 'Context compaction provider',
+    compactionProviderHint:
+      'Optional cheaper model for tier-2/tier-3 compaction summaries. When Off, Kavi uses deterministic structural compaction.',
+    compactionProviderOff: 'Off',
+    compactionModelPlaceholder: 'Optional model override (e.g. gpt-5-mini)',
+    consolidationTierConfigured: 'Dedicated provider: {name}',
+    consolidationTierConfiguredGeneric: 'Dedicated consolidation provider',
+    consolidationTierOnDevice: 'On-device fallback: {name}',
+    consolidationTierOnDeviceGeneric: 'On-device consolidation fallback',
+    consolidationTierChat: 'Chat provider fallback: {name}',
+    consolidationTierChatGeneric: 'Active chat provider fallback',
+    consolidationTierDeterministic: 'Structural extraction only (no LLM enrichment)',
+    consolidationTierDisabled: 'Long-term memory disabled',
+    consolidationFallbackActive: 'Automatic fallback active',
+    ingestionPendingJobs: '{count} consolidation jobs queued',
+    diagnosticsTitle: 'Diagnostics',
+    diagnosticsBudgetTitle: 'Context budget',
+    diagnosticsBudgetEmpty: 'No budget audit entries yet.',
+    diagnosticsBudgetEntry: 'iter {iteration} · {model} · {total}/{window}',
+    diagnosticsRetrievalTitle: 'Retrieval log',
+    diagnosticsRetrievalEmpty: 'No retrieval events for this conversation yet.',
+    diagnosticsRetrievalEntry: '{factCount} facts · {episodeCount} episodes · {tokenEstimate} tok',
+    diagnosticsRetrievalTask: 'task {taskId}',
+    diagnosticsScopeActiveConversation: 'Active conversation',
     attribution: 'Inspired by MemGPT, Graphiti, and mem0.',
+    episodesTitle: 'Episodes',
+    episodesEmpty: 'No episodes recorded yet. Episodes capture context from completed tasks.',
+    episodeSources: '{count} sources',
   },
 
   // ── Scheduler Screen ───────────────────────────────────────────────────
@@ -1044,7 +1045,7 @@ export const en: TranslationMap = {
     infoText:
       'Gateway connects your mobile app to an Kavi Gateway node, enabling access to remote tools, shared sessions, and desktop integrations. Connect to a gateway URL to extend your AI with capabilities beyond the device.',
     url: 'Gateway URL',
-    urlPlaceholder: 'wss://gateway.kavi.dev',
+    urlPlaceholder: 'wss://gateway.example.invalid',
     token: 'Token',
     tokenPlaceholder: 'Gateway authentication token',
     connected: 'Connected',
@@ -1218,7 +1219,6 @@ export const en: TranslationMap = {
     activeCount: '{count} active',
     syncExpoProjects: 'Sync Expo projects',
     linkExpoAccount: 'Link Expo account',
-    workspaceNoSshTarget: 'No SSH target linked',
     expoEmptyHintWithAccounts:
       'Sync your linked Expo account to import existing projects, then add any optional workflow or SSH details you need.',
     expoEmptyHintNoAccounts:
@@ -1358,6 +1358,26 @@ export const en: TranslationMap = {
     downloadFailedBody: 'The model could not be downloaded. Check your connection and try again.',
     retryDownloadButton: 'Retry download',
     downloadAccessibilityLabel: 'Download model {name}',
+    validatingTitle: 'Checking {name}',
+    validatingBody: 'Kavi is validating model compatibility and local files.',
+    validatingButton: 'Checking…',
+    recoveryTitle: 'Model needs attention',
+    invalidInstallUnknown: '{name} is no longer in the local model catalog.',
+    invalidInstallFileName: 'The installed file for {name} no longer matches the catalog.',
+    invalidInstallSource: 'The installed source for {name} no longer matches the catalog.',
+    invalidInstallRepository: 'The installed repository for {name} no longer matches the catalog.',
+    invalidInstallRevision: 'A newer catalog revision is available for {name}. Re-download it.',
+    invalidInstallMissingFile: 'The installed file for {name} is missing or incomplete.',
+    runtimeStatusLabel: 'Runtime',
+    runtimeWarming: 'Warming {backend}',
+    runtimeRunningOn: 'Running on {backend}',
+    runtimeFallback: 'Running on {backend}. {requested} was requested and the runtime fell back.',
+    runtimeLikely: 'Likely {backend}',
+    runtimeConfiguredCpu: 'Likely CPU. CPU is configured.',
+    recoveryActionsLabel: 'Recovery actions',
+    clearInvalidInstallButton: 'Clear local file',
+    switchToCpuButton: 'Use CPU',
+    chooseSmallerModelButton: 'Use {name}',
   },
   onboarding: {
     welcome: 'Welcome to Kavi',
@@ -1441,7 +1461,7 @@ export const en: TranslationMap = {
       'If your phone cannot reach localhost, replace it with your machine IP, reverse proxy URL, or tunnel URL before continuing.',
     onDeviceNoteTitle: 'On-device note',
     onDeviceNoteBody:
-      'Choose a Gemma model, download it to your device, and then save the provider. This requires substantial storage and can take time on slower networks.',
+      'Choose a supported on-device model, download it to your device, and then save the provider. This requires substantial storage and can take time on slower networks.',
     selectModel: 'Select model {name}',
     saveProvider: 'Save provider',
     skipProvider: 'Skip provider for now',
@@ -1521,11 +1541,11 @@ export const en: TranslationMap = {
         freeAccess: 'No API billing from Kavi. You pay only for your own hardware and hosting.',
       },
       gemmaLocal: {
-        title: 'Gemma on-device',
+        title: 'On-device models',
         summary:
-          "Runs Gemma locally on the phone using Google's on-device runtime instead of calling a remote server.",
+          'Runs selected models locally on the phone using the native on-device runtime instead of calling a remote server.',
         setup:
-          'Choose the supported on-device Gemma model for this device, download it, and then save the provider. Kavi downloads the official Google AI Edge model bundle to your device.',
+          'Choose a supported on-device model for this device, download it, and then save the provider. Kavi stores the selected model bundle on the device for local inference.',
         freeAccess:
           'No per-request API billing from Kavi. You need enough device storage for the downloaded model.',
       },
@@ -1548,6 +1568,11 @@ export const en: TranslationMap = {
         detail:
           'Independent search index with $5 in monthly free credits according to Brave Search API pricing.',
       },
+      gemini: {
+        title: 'Gemini',
+        detail:
+          'Uses Gemini grounding with Google Search through the official Gemini API and a Google AI Studio API key.',
+      },
       perplexity: {
         title: 'Perplexity',
         detail:
@@ -1561,11 +1586,6 @@ export const en: TranslationMap = {
         title: 'Kimi',
         detail: 'Moonshot Kimi access and pricing can vary by region and account status.',
       },
-      gemini: {
-        title: 'Gemini',
-        detail:
-          'Create a Vertex AI key for production-oriented Google Cloud usage; legacy Google AI Studio keys also work.',
-      },
     },
     services: {
       brave: {
@@ -1575,6 +1595,15 @@ export const en: TranslationMap = {
         setup:
           'Create a Brave Search API account, open the dashboard, and copy the subscription token.',
         freeAccess: 'Brave pricing currently includes $5 in free credits every month.',
+      },
+      gemini: {
+        title: 'Gemini API',
+        category: 'Web search',
+        unlocks: 'Gemini-backed web search with Google Search grounding and citations.',
+        setup:
+          'Create and manage a Gemini API key in Google AI Studio, then paste it here. Kavi uses the official Gemini API Google Search grounding tool for this provider.',
+        freeAccess:
+          'Google AI Studio lets you create a Gemini API key for initial testing, but production usage should assume quota limits and billed usage.',
       },
       perplexity: {
         title: 'Perplexity API',
@@ -1598,15 +1627,6 @@ export const en: TranslationMap = {
         freeAccess:
           'Availability and billing can vary by region, so verify the current plan in your account.',
       },
-      gemini: {
-        title: 'Gemini API',
-        category: 'Web search',
-        unlocks: 'Gemini-based search and Google AI integrations.',
-        setup:
-          'Create a Gemini-capable API key in Vertex AI for production-oriented Google Cloud usage, or use a legacy Google AI Studio key if that is what you already have configured. Gemini web search supports either backend.',
-        freeAccess:
-          'Vertex AI express mode and Google AI Studio both allow initial testing, but production usage should assume billed limits and properly restricted credentials.',
-      },
       firecrawl: {
         title: 'Firecrawl',
         category: 'Web extraction',
@@ -1625,7 +1645,8 @@ export const en: TranslationMap = {
       github: {
         title: 'GitHub Personal Access Token',
         category: 'Service skill',
-        unlocks: 'GitHub repo listing, issue reading, and issue creation tools.',
+        unlocks:
+          'GitHub repo listing, file reads, branch creation, commits, issue tools, pull requests, and workflow status tools.',
         setup:
           'In GitHub Settings, open Developer settings, create a fine-grained personal access token, and grant only the repository permissions you need.',
         freeAccess: 'Creating a PAT is free with a GitHub account.',
@@ -1633,7 +1654,7 @@ export const en: TranslationMap = {
       alphaVantage: {
         title: 'Alpha Vantage',
         category: 'Service skill',
-        unlocks: 'Stock quote and finance tools.',
+        unlocks: 'Stock quote and FX exchange-rate tools.',
         setup: 'Claim a free API key from Alpha Vantage support, then paste it here.',
         freeAccess:
           'Alpha Vantage explicitly offers a free API key with up to 25 requests per day.',
@@ -1826,10 +1847,6 @@ export const en: TranslationMap = {
       shareFileTitle: 'Share file',
       openUrlTitle: 'Open reviewed link',
       sshExecTitle: 'Run SSH command',
-      workspaceWriteFileTitle: 'Write workspace file',
-      workspaceDeleteTitle: 'Delete workspace file',
-      workspaceRenameTitle: 'Rename workspace path',
-      workspaceMkdirTitle: 'Create workspace folder',
       browserNavigateTitle: 'Open browser destination',
       expoBuildTitle: 'Start Expo build',
     },
@@ -1853,9 +1870,6 @@ export const en: TranslationMap = {
       commandExecutable: '{executable} command',
       workingDirectory: 'working directory set',
       targetSelected: 'target selected',
-      contentIncluded: 'file content included',
-      renameOperation: 'rename operation',
-      createDirectory: 'directory path included',
       urlMessageIncluded: 'share message included',
       titleIncluded: 'title included',
       fallbackEnabled: 'fallback enabled',

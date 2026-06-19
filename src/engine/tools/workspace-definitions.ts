@@ -1,44 +1,13 @@
 /**
- * Workspace file operation tool definitions for remote code-server /
- * OpenVSCode Server workspaces.
+ * Workspace target control tool definitions for configured external
+ * code-server / OpenVSCode / browser-first workspace targets.
  *
- * These tools let the AI agent read, write, list, rename, and delete files
- * on a remote workspace target — completing the "editor surface" alongside
- * the existing workspace connector (launch/probe).
+ * Current-workspace file operations go through the core file tools.
+ * These tools exist only for inspecting and controlling explicit external
+ * workspace targets.
  */
 
-import type { ToolDefinition } from '../../types';
-
-export const WORKSPACE_FS_TOOL: ToolDefinition = {
-  name: 'workspace_fs',
-  description:
-    'Perform a filesystem operation on a configured external remote workspace target (code-server / OpenVSCode Server). ' +
-    'Use action to choose: list, read, write (create or overwrite), mkdir, rename/move, or delete. ' +
-    'For the conversation workspace use read_file/write_file/list_files instead; this tool is only for explicit remote workspace targets and requires targetId.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      action: {
-        type: 'string',
-        enum: ['list', 'read', 'write', 'mkdir', 'rename', 'delete'],
-        description: 'Filesystem operation to perform.',
-      },
-      targetId: { type: 'string', description: 'Workspace target ID from settings.' },
-      path: {
-        type: 'string',
-        description:
-          'File or directory path relative to workspace root. Required for read/write/mkdir/delete; defaults to root for list.',
-      },
-      content: {
-        type: 'string',
-        description: 'File content. Required for action=write.',
-      },
-      oldPath: { type: 'string', description: 'Existing path. Required for action=rename.' },
-      newPath: { type: 'string', description: 'Destination path. Required for action=rename.' },
-    },
-    required: ['action', 'targetId'],
-  },
-};
+import type { ToolDefinition } from '../../types/tool';
 
 export const WORKSPACE_STATUS_TOOL: ToolDefinition = {
   name: 'workspace_status',
@@ -53,6 +22,15 @@ export const WORKSPACE_STATUS_TOOL: ToolDefinition = {
       },
     },
     required: [],
+  },
+  contract: {
+    category: 'workspace_files',
+    capabilities: ['read', 'verify'],
+    resourceKinds: ['conversation_workspace'],
+    sideEffects: ['none'],
+    riskHints: ['read_only', 'idempotent'],
+    providesEvidence: ['verification'],
+    workflowStages: ['inspect_resource', 'verify_evidence'],
   },
 };
 
@@ -72,6 +50,14 @@ export const WORKSPACE_LAUNCH_BROWSER_TOOL: ToolDefinition = {
       },
     },
     required: ['targetId'],
+  },
+  contract: {
+    category: 'browser',
+    capabilities: ['write', 'verify'],
+    resourceKinds: ['conversation_workspace', 'browser'],
+    sideEffects: ['external_run'],
+    providesEvidence: ['external_run', 'verification'],
+    workflowStages: ['start_external_execution', 'verify_evidence'],
   },
 };
 
@@ -96,10 +82,18 @@ export const WORKSPACE_DELEGATE_TASK_TOOL: ToolDefinition = {
     },
     required: ['targetId', 'prompt'],
   },
+  contract: {
+    category: 'sessions',
+    capabilities: ['coordinate', 'write'],
+    resourceKinds: ['conversation_workspace'],
+    sideEffects: ['external_run'],
+    riskHints: ['requires_approval'],
+    providesEvidence: ['external_run'],
+    workflowStages: ['start_external_execution'],
+  },
 };
 
-export const ALL_WORKSPACE_FILE_TOOL_DEFINITIONS: ToolDefinition[] = [
-  WORKSPACE_FS_TOOL,
+export const ALL_WORKSPACE_TOOL_DEFINITIONS: ToolDefinition[] = [
   WORKSPACE_STATUS_TOOL,
   WORKSPACE_LAUNCH_BROWSER_TOOL,
   WORKSPACE_DELEGATE_TASK_TOOL,

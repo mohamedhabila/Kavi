@@ -1,13 +1,11 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { Text } from 'react-native';
 import { render, waitFor } from '@testing-library/react-native';
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
-import {
-  selectRemoteWorkRemoteSlice,
-  selectRemoteWorkSettingsSlice,
-  selectRemoteWorkSshSlice,
-} from '../../src/screens/remoteWorkStoreSelectors';
+import { selectRemoteConfigSettingsSlice } from '../../src/features/remoteConfig/hooks/useRemoteConfigStore';
+import { selectRemoteRuntimeSlice } from '../../src/services/remote/storeSelectors';
+import { selectSshSessionRuntimeSlice } from '../../src/services/ssh/sessionSelectors';
 
 describe('Remote Work selector stability', () => {
   it('keeps zustand selector outputs stable for shallow-equal state', async () => {
@@ -25,6 +23,7 @@ describe('Remote Work selector stability', () => {
             enabled: true,
           },
         ],
+        defaultWorkspaceTargetId: 'ws-1',
         sshTargets: [
           {
             id: 'ssh-1',
@@ -92,6 +91,7 @@ describe('Remote Work selector stability', () => {
         addWorkspaceTarget: () => {},
         updateWorkspaceTarget: () => {},
         removeWorkspaceTarget: () => {},
+        setDefaultWorkspaceTargetId: () => {},
         addBrowserProvider: () => {},
         updateBrowserProvider: () => {},
         removeBrowserProvider: () => {},
@@ -130,9 +130,9 @@ describe('Remote Work selector stability', () => {
       }));
 
       const Harness = () => {
-        const settings = useSettingsStore(useShallow(selectRemoteWorkSettingsSlice));
-        const ssh = useSshSessionStore(useShallow(selectRemoteWorkSshSlice));
-        const remote = useRemoteStore(useShallow(selectRemoteWorkRemoteSlice));
+        const settings = useSettingsStore(useShallow(selectRemoteConfigSettingsSlice));
+        const ssh = useSshSessionStore(useShallow(selectSshSessionRuntimeSlice));
+        const remote = useRemoteStore(useShallow(selectRemoteRuntimeSlice));
 
         const sshSessions = useMemo(() => Object.values(ssh.sessions), [ssh.sessions]);
         const remoteSessions = useMemo(() => Object.values(remote.sessions), [remote.sessions]);

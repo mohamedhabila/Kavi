@@ -236,6 +236,27 @@ function summarizeStructuredFinalizationToolResult(
   return segments.join('; ');
 }
 
+function appendStructuredOutputSummary(
+  primarySummary: string,
+  parsed: Record<string, unknown>,
+): string {
+  const outputSummary = summarizeFinalizationStructuredText(
+    parsed.output ?? parsed.outputExcerpt ?? parsed.content ?? parsed.contentExcerpt,
+    'output',
+  );
+  if (!outputSummary) {
+    return primarySummary;
+  }
+
+  const normalizedPrimary = primarySummary.trim().toLowerCase();
+  const normalizedOutput = outputSummary.trim().toLowerCase();
+  if (normalizedPrimary.includes(normalizedOutput)) {
+    return primarySummary;
+  }
+
+  return `${primarySummary}; ${outputSummary}`;
+}
+
 export function summarizeFinalizationToolResultPreview(result?: string): string | undefined {
   if (!result) {
     return undefined;
@@ -257,7 +278,10 @@ export function summarizeFinalizationToolResultPreview(result?: string): string 
     for (const key of candidateKeys) {
       const summary = summarizeFinalizationScalarValue(parsed[key]);
       if (summary) {
-        return normalizeFinalizationPreviewText(summary, FINALIZATION_RESULT_PREVIEW_CHARS);
+        return normalizeFinalizationPreviewText(
+          appendStructuredOutputSummary(summary, parsed),
+          FINALIZATION_RESULT_PREVIEW_CHARS,
+        );
       }
     }
 

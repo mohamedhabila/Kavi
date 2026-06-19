@@ -122,26 +122,28 @@ jest.mock('../../src/engine/tools/definitions', () => ({
   TOOL_DEFINITIONS: [],
 }));
 
-jest.mock('../../src/services/expo/eas', () => ({
-  getExpoProjectExecutionMode: jest.fn(),
+jest.mock('../../src/services/expo/projectState', () => ({
   getExpoProjectDisplayOwner: jest.fn(),
-  getExpoProjectReadiness: jest.fn(),
-  getExpoProjectReadinessLabel: jest.fn(),
-  listExpoProjects: jest.fn(),
-  probeExpoProject: jest.fn(),
   resolveExpoAccount: jest.fn(),
   resolveExpoProject: jest.fn(),
+}));
+
+jest.mock('../../src/services/expo/projectAutomation', () => ({
+  getExpoProjectExecutionMode: jest.fn(),
+  getExpoProjectReadiness: jest.fn(),
+  getExpoProjectReadinessLabel: jest.fn(),
+}));
+
+jest.mock('../../src/services/expo/projectSync', () => ({
+  listExpoProjects: jest.fn(),
+}));
+
+jest.mock('../../src/services/expo/workflowActions', () => ({
+  probeExpoProject: jest.fn(),
   runExpoProjectAction: jest.fn(),
 }));
 
-import {
-  executeSshExec,
-  executeSshBackgroundJobStatus,
-  executeSshBackgroundJobWait,
-  executeSshListDirectory,
-  executeSshReadFile,
-  getLastWorkingDirectory,
-} from '../../src/engine/tools/parity-executor';
+import { executeSshBackgroundJobStatus, executeSshBackgroundJobWait, executeSshExec, executeSshListDirectory, executeSshReadFile, getLastWorkingDirectory } from '../../src/engine/tools/builtin-ssh';
 import { enhancedExec } from '../../src/engine/tools/enhancedExec';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -169,7 +171,7 @@ describe('executeSshExec', () => {
   });
 
   it('delegates to enhancedExec when timeoutMs is provided', async () => {
-    const result = await executeSshExec({
+    await executeSshExec({
       command: 'long-running-task',
       timeoutMs: 30000,
     });
@@ -194,7 +196,7 @@ describe('executeSshExec', () => {
     expect(parsed.command).toBe('ls -la');
   });
 
-  it('summarizes error-heavy SSH command output', async () => {
+  it('trims long SSH command output without reclassifying it from text heuristics', async () => {
     const { executeSshCommand } = require('../../src/services/ssh/connector');
     executeSshCommand.mockResolvedValueOnce(
       [
@@ -213,7 +215,7 @@ describe('executeSshExec', () => {
     const parsed = JSON.parse(result);
 
     expect(parsed.status).toBe('executed');
-    expect(parsed.summary).toContain('error-like output');
+    expect(parsed.summary).toContain('completed on t1');
     expect(parsed.outputExcerpt).toContain('@kavi/private-package not found');
     expect(parsed.output).toBeUndefined();
   });
@@ -399,7 +401,7 @@ describe('CWD persistence', () => {
 describe('SSH_EXEC_TOOL definition', () => {
   it('includes background and timeoutMs properties', () => {
     // Import the definition to verify schema
-    const { SSH_EXEC_TOOL } = require('../../src/engine/tools/parity-definitions');
+    const { SSH_EXEC_TOOL } = require('../../src/engine/tools/builtin-definitions');
     expect(SSH_EXEC_TOOL.input_schema.properties).toHaveProperty('background');
     expect(SSH_EXEC_TOOL.input_schema.properties.background.type).toBe('boolean');
     expect(SSH_EXEC_TOOL.input_schema.properties).toHaveProperty('timeoutMs');
@@ -411,7 +413,7 @@ describe('SSH_EXEC_TOOL definition', () => {
     const {
       SSH_BACKGROUND_JOB_STATUS_TOOL,
       SSH_BACKGROUND_JOB_WAIT_TOOL,
-    } = require('../../src/engine/tools/parity-definitions');
+    } = require('../../src/engine/tools/builtin-definitions');
     expect(SSH_BACKGROUND_JOB_STATUS_TOOL.input_schema.required).toEqual(['jobId']);
     expect(SSH_BACKGROUND_JOB_WAIT_TOOL.input_schema.required).toEqual(['jobId']);
     expect(SSH_BACKGROUND_JOB_WAIT_TOOL.input_schema.properties).toHaveProperty('pollIntervalMs');

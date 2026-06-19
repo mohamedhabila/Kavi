@@ -6,18 +6,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
 import {
   ArrowLeft,
   Mic,
-  MicOff,
   Volume2,
   Loader,
   AlertCircle,
   PauseCircle,
 } from 'lucide-react-native';
 import { useAppTheme, AppPalette } from '../theme/useAppTheme';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../i18n/useTranslation';
 import {
   TalkModeManager,
   TalkModeState,
@@ -33,7 +31,7 @@ import {
   providerRequiresApiKey,
   resolveEnabledProvider,
   resolveProviderApiKey,
-} from '../services/llm/providerSupport';
+} from '../services/llm/support/providerSupport';
 
 const defaultConfig: TalkModeConfig = {
   ttsProvider: 'auto',
@@ -70,7 +68,6 @@ const stateColors = (colors: AppPalette): Record<TalkModeState, string> => ({
 });
 
 export const VoiceScreen: React.FC = () => {
-  const navigation = useNavigation();
   const { colors } = useAppTheme();
   const { t } = useTranslation();
   const handleBack = useBackToChat();

@@ -7,7 +7,6 @@ import {
   MCP_PRESET_CATEGORIES,
   getPresetsByCategory,
   searchPresets,
-  type McpPreset,
 } from '../../src/constants/mcpPresets';
 
 describe('MCP_PRESETS', () => {

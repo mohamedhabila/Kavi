@@ -1,10 +1,10 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { useTranslation } from '../../i18n';
+import { useTranslation } from '../../i18n/useTranslation';
+import type { SubAgentRollup } from '../../services/agents/lifecycle/subAgentHierarchyPresentation';
+import { getSubAgentDisplayName } from '../../services/agents/lifecycle/presentPhase';
 import { useAppTheme, type AppPalette } from '../../theme/useAppTheme';
-import type { SubAgentSnapshot } from '../../types';
-import type { SubAgentRollup } from '../../services/agents/subAgentPresentation';
-import { getSubAgentDisplayName } from '../../services/agents/subAgentPresentation';
+import type { SubAgentSnapshot } from '../../types/subAgent';
 
 interface SubAgentRollupCardProps {
   rootSnapshot: SubAgentSnapshot;

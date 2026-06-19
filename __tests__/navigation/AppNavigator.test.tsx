@@ -2,7 +2,6 @@
 // Tests — AppNavigator
 // ---------------------------------------------------------------------------
 
-import React from 'react';
 import { act, render } from '@testing-library/react-native';
 import { AppNavigator } from '../../src/navigation/AppNavigator';
 
@@ -158,7 +157,7 @@ jest.mock('../../src/screens/ApprovalHistoryScreen', () => ({
 }));
 
 jest.mock('../../src/components/onboarding/OnboardingWizard', () => ({
-  OnboardingWizard: ({ onComplete }: any) => {
+  OnboardingWizard: (_props: any) => {
     const React = require('react');
     const { View, Text } = require('react-native');
     return React.createElement(View, null, React.createElement(Text, null, 'OnboardingWizard'));

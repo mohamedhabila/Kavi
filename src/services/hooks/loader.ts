@@ -3,12 +3,8 @@
 // ---------------------------------------------------------------------------
 // Loads HOOK.md files, parses YAML frontmatter, and binds to event system.
 
-import type { HookDefinition } from '../../types';
-import {
-  parseFrontmatterBlock,
-  getFrontmatterString,
-  normalizeStringList,
-} from '../markdown/frontmatter';
+import type { HookDefinition } from '../../types/hooks';
+import { parseFrontmatterBlock, getFrontmatterString } from '../markdown/frontmatter';
 import {
   registerInternalHook,
   unregisterInternalHook,

@@ -11,7 +11,7 @@ import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
-} from '../../../src/services/memory/factStore';
+} from '../../../src/services/memory/schema';
 import { ensureDefaultBlocks } from '../../../src/services/memory/blocks';
 import {
   countNewTurns,
@@ -24,7 +24,8 @@ import {
   DEFAULT_TURN_THRESHOLD,
   DEFAULT_IDLE_THRESHOLD_MS,
 } from '../../../src/services/memory/consolidatorScheduler';
-import type { Message } from '../../../src/types';
+import type { Message } from '../../../src/types/message';
+import { useSettingsStore } from '../../../src/store/useSettingsStore';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -34,6 +35,12 @@ beforeEach(() => {
   resetFactSchemaCacheForTests();
   ensureFactSchema();
   ensureDefaultBlocks();
+  useSettingsStore.setState({
+    disableLongTermMemory: false,
+    memoryConsolidationMode: 'off',
+    consolidationProvider: null,
+    providers: [],
+  } as never);
 });
 
 afterEach(() => {
@@ -60,6 +67,19 @@ function buildTranscript(turns: number, anchorTs = 1_000): Message[] {
   return messages;
 }
 
+/** Keep `now` near the transcript so idle_threshold does not fire accidentally. */
+function nearLastTurnNow(messages: Message[], offsetMs = 5): number {
+  const last = messages[messages.length - 1];
+  const ts = typeof last?.timestamp === 'number' ? last.timestamp : Date.now();
+  return ts + offsetMs;
+}
+
+function seedDirtyThread(threadId: string, turns: number): Message[] {
+  const messages = buildTranscript(turns);
+  markThreadDirtyForMemory({ threadId, messages, now: nearLastTurnNow(messages) });
+  return messages;
+}
+
 const STUB_EXTRACTOR = async () =>
   JSON.stringify({
     new_facts: [],
@@ -70,17 +90,15 @@ const STUB_EXTRACTOR = async () =>
 
 describe('countNewTurns', () => {
   it('returns total user/assistant count when no anchor is set', () => {
-    expect(
-      countNewTurns({ messages: buildTranscript(3), lastConsolidatedMessageId: null }),
-    ).toBe(6);
+    expect(countNewTurns({ messages: buildTranscript(3), lastConsolidatedMessageId: null })).toBe(
+      6,
+    );
   });
 
   it('counts only turns strictly after the anchor', () => {
     const messages = buildTranscript(5);
     // anchor at the 2nd assistant turn (index 3 — id=a1)
-    expect(
-      countNewTurns({ messages, lastConsolidatedMessageId: 'a1' }),
-    ).toBe(6); // u2,a2,u3,a3,u4,a4
+    expect(countNewTurns({ messages, lastConsolidatedMessageId: 'a1' })).toBe(6); // u2,a2,u3,a3,u4,a4
   });
 
   it('returns 0 when anchor is the final message', () => {
@@ -95,9 +113,7 @@ describe('countNewTurns', () => {
 
   it('returns total when the anchor id is not found in the transcript', () => {
     const messages = buildTranscript(2);
-    expect(
-      countNewTurns({ messages, lastConsolidatedMessageId: 'missing' }),
-    ).toBe(4);
+    expect(countNewTurns({ messages, lastConsolidatedMessageId: 'missing' })).toBe(4);
   });
 });
 
@@ -228,18 +244,18 @@ describe('maybeRunConsolidation gating', () => {
     expect(getConsolidationState(THREAD)).toBeNull();
   });
 
-  it('is a no-op when consolidationProvider is null/empty', async () => {
+  it('runs structural consolidation when no extractor is configured', async () => {
     const messages = buildTranscript(DEFAULT_TURN_THRESHOLD);
-    const extractor = jest.fn(STUB_EXTRACTOR);
     const result = await maybeRunConsolidation({
       threadId: THREAD,
       messages,
       consolidationProvider: null,
-      extractor,
+      now: 999_000,
     });
-    expect(result.ran).toBe(false);
-    expect(result.skipped).toBe('no_provider');
-    expect(extractor).not.toHaveBeenCalled();
+    expect(result.ran).toBe(true);
+    expect(getConsolidationState(THREAD)?.lastConsolidatedMessageId).toBe(
+      messages[messages.length - 1].id,
+    );
   });
 
   it('still records dirty turn count even when no provider is set', async () => {
@@ -248,20 +264,29 @@ describe('maybeRunConsolidation gating', () => {
       threadId: THREAD,
       messages,
       consolidationProvider: null,
+      now: nearLastTurnNow(messages),
     });
     expect(getConsolidationState(THREAD)?.turnsSinceLast).toBe(4);
     expect(listDirtyThreadIds()).toContain(THREAD);
   });
 
-  it('returns no_extractor when provider is set but extractor missing', async () => {
+  it('falls back to structural consolidation when specific provider is missing', async () => {
+    useSettingsStore.setState({
+      memoryConsolidationMode: 'specific',
+      consolidationProvider: 'openai',
+      providers: [],
+    } as never);
     const messages = buildTranscript(DEFAULT_TURN_THRESHOLD);
     const result = await maybeRunConsolidation({
       threadId: THREAD,
       messages,
       consolidationProvider: 'openai',
+      now: nearLastTurnNow(messages),
     });
-    expect(result.ran).toBe(false);
-    expect(result.skipped).toBe('no_extractor');
+    expect(result.ran).toBe(true);
+    expect(getConsolidationState(THREAD)?.lastConsolidatedMessageId).toBe(
+      messages[messages.length - 1].id,
+    );
   });
 
   it('returns no_trigger when provider configured but conditions not met', async () => {
@@ -348,33 +373,23 @@ describe('maybeRunConsolidation gating', () => {
 });
 
 describe('flushAllDirtyThreads', () => {
-  it('does nothing when provider is unset', async () => {
-    // First make a thread dirty.
-    await maybeRunConsolidation({
-      threadId: THREAD,
-      messages: buildTranscript(2),
-      consolidationProvider: null,
-    });
+  it('flushes dirty threads using cascade or structural consolidation without provider id', async () => {
+    const messages = seedDirtyThread(THREAD, DEFAULT_TURN_THRESHOLD / 2);
     const counters = await flushAllDirtyThreads({
-      loadMessages: () => buildTranscript(2),
+      loadMessages: () => messages,
       consolidationProvider: null,
-      extractor: STUB_EXTRACTOR,
+      now: nearLastTurnNow(messages),
     });
-    expect(counters).toEqual({ attempted: 0, ran: 0, skipped: 0, errors: 0 });
+    expect(counters.attempted).toBe(1);
+    expect(counters.ran).toBe(1);
+    expect(listDirtyThreadIds()).toEqual([]);
   });
 
   it('flushes every dirty thread on app-background', async () => {
     const dirtyThreads: Record<string, Message[]> = {
-      a: buildTranscript(2),
-      b: buildTranscript(3),
+      a: seedDirtyThread('a', 2),
+      b: seedDirtyThread('b', 3),
     };
-    for (const [threadId, messages] of Object.entries(dirtyThreads)) {
-      await maybeRunConsolidation({
-        threadId,
-        messages,
-        consolidationProvider: null,
-      });
-    }
     expect(listDirtyThreadIds().sort()).toEqual(['a', 'b']);
 
     const extractor = jest.fn(STUB_EXTRACTOR);
@@ -382,6 +397,7 @@ describe('flushAllDirtyThreads', () => {
       loadMessages: (threadId) => dirtyThreads[threadId] ?? [],
       consolidationProvider: 'openai',
       extractor,
+      now: nearLastTurnNow(dirtyThreads.b),
     });
     expect(counters.attempted).toBe(2);
     expect(counters.ran).toBe(2);
@@ -392,16 +408,9 @@ describe('flushAllDirtyThreads', () => {
 
   it('records errors but keeps going across threads', async () => {
     const dirtyThreads: Record<string, Message[]> = {
-      a: buildTranscript(2),
-      b: buildTranscript(2),
+      a: seedDirtyThread('a', 2),
+      b: seedDirtyThread('b', 2),
     };
-    for (const [threadId, messages] of Object.entries(dirtyThreads)) {
-      await maybeRunConsolidation({
-        threadId,
-        messages,
-        consolidationProvider: null,
-      });
-    }
 
     const counters = await flushAllDirtyThreads({
       loadMessages: (threadId) => {
@@ -410,6 +419,7 @@ describe('flushAllDirtyThreads', () => {
       },
       consolidationProvider: 'openai',
       extractor: STUB_EXTRACTOR,
+      now: nearLastTurnNow(dirtyThreads.b),
     });
     expect(counters.attempted).toBe(2);
     expect(counters.errors).toBe(1);
@@ -417,11 +427,7 @@ describe('flushAllDirtyThreads', () => {
   });
 
   it('skips threads whose loadMessages returns empty', async () => {
-    await maybeRunConsolidation({
-      threadId: 'a',
-      messages: buildTranscript(2),
-      consolidationProvider: null,
-    });
+    seedDirtyThread('a', 2);
     const counters = await flushAllDirtyThreads({
       loadMessages: () => [],
       consolidationProvider: 'openai',
@@ -433,11 +439,7 @@ describe('flushAllDirtyThreads', () => {
   });
 
   it('returns zero counters when disableLongTermMemory is true', async () => {
-    await maybeRunConsolidation({
-      threadId: 'a',
-      messages: buildTranscript(2),
-      consolidationProvider: null,
-    });
+    seedDirtyThread('a', 2);
     const extractor = jest.fn(STUB_EXTRACTOR);
     const counters = await flushAllDirtyThreads({
       loadMessages: () => buildTranscript(2),

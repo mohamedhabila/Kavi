@@ -2,6 +2,8 @@
 // Kavi — Skills Types
 // ---------------------------------------------------------------------------
 
+import type { ToolDefinition } from '../../types/tool';
+
 export interface Skill {
   id: string;
   name: string;
@@ -28,6 +30,7 @@ export interface SkillToolDefinition {
     additionalProperties?: boolean;
   };
   strict?: boolean;
+  contract?: ToolDefinition['contract'];
   handler?: (args: any, context: SkillToolExecutionContext) => Promise<string>;
 }
 
@@ -73,6 +76,7 @@ export interface KaviSkillInstallSpec {
 }
 
 export interface SkillInstallSpec {
+  // Persisted compatibility value for skills installed from the ClawHub ecosystem.
   source: 'bundled' | 'url' | 'clawhub' | 'manual';
   url?: string;
   id?: string;

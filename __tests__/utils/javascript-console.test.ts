@@ -82,6 +82,10 @@ describe('JavaScript sandbox console.log capture', () => {
     expect(executeJavaScriptWithResult('JSON.stringify({a:1})')).toBe('{"a":1}');
   });
 
+  it('documents that standard JavaScript globals remain available', () => {
+    expect(executeJavaScriptWithResult('typeof globalThis')).toBe('object');
+  });
+
   it('empty code returns undefined', () => {
     expect(executeJavaScriptWithResult('')).toBeUndefined();
   });

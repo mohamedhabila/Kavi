@@ -13,7 +13,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Brain, X } from 'lucide-react-native';
-import { useTranslation } from '../i18n';
+import { useTranslation } from '../i18n/useTranslation';
 import { AppPalette } from '../theme/useAppTheme';
 
 function safeListStates(): { pending: number; total: number } {

@@ -5,7 +5,7 @@
 
 import { InteractionManager } from 'react-native';
 import { startScheduler, setSchedulerExecutor } from './scheduler/engine';
-import { registerBuiltInServiceSkills } from './integrations/services';
+import { registerBuiltInServiceSkills } from './integrations/registry';
 import { activateEnabledSkills } from './skills/manager';
 import { registerBackgroundFetch } from './scheduler/background';
 import { runBootOnce, hasBootMd } from './agents/bootRunner';
@@ -31,16 +31,21 @@ import {
   runMemoryMigrationTick,
   runMemoryBackgroundFlush,
 } from './memory/lifecycle';
+import { editWorkingBlock } from './memory/workingBlocks';
 import {
   buildSurfacedSubAgentOutputToolResultSummary,
   parseSurfacedSubAgentOutputResult,
 } from './agents/surfacedSubAgentOutput';
 import {
+  applyOrchestratorCompactionEffect,
+  buildOrchestratorCompactionEffect,
+} from '../engine/orchestratorCompactionEffect';
+import {
   providerRequiresApiKey,
   resolveConversationModel,
   resolveEnabledProvider,
   resolveProviderApiKey,
-} from './llm/providerSupport';
+} from './llm/support/providerSupport';
 import { SUPER_AGENT_PERSONA_ID } from './agents/personas';
 
 function shouldDeliverNotification(job: CronJob): boolean {
@@ -227,6 +232,9 @@ function initializeDeferredStartupServices(): void {
     void runMemoryMigrationTick().catch((e) =>
       console.warn('[startup] runMemoryMigrationTick failed:', e),
     );
+    void runMemoryBackgroundFlush().catch((e) =>
+      console.warn('[startup] runMemoryBackgroundFlush failed:', e),
+    );
   });
 }
 
@@ -335,20 +343,6 @@ async function executeScheduledJob(job: CronJob): Promise<string> {
 
     const clearSurfacedSubAgentOutputLock = () => {
       surfacedSubAgentOutputActive = false;
-    };
-
-    const queueSurfacedSubAgentOutput = (toolCall: {
-      id: string;
-      result?: string;
-    }): boolean => {
-      const surfacedOutput = parseSurfacedSubAgentOutputResult(toolCall.result);
-      if (!surfacedOutput) {
-        pendingSurfacedSubAgentOutputs.delete(toolCall.id);
-        return false;
-      }
-
-      pendingSurfacedSubAgentOutputs.set(toolCall.id, surfacedOutput);
-      return true;
     };
 
     const flushSurfacedSubAgentOutput = (toolCallId: string) => {
@@ -507,7 +501,26 @@ async function executeScheduledJob(job: CronJob): Promise<string> {
         useChatStore.getState().updateMessage(conversationId, assistantMessageId, fallback);
       },
       onCompaction: (event) => {
-        useChatStore.getState().applyConversationCompaction(conversationId, event.messages);
+        applyOrchestratorCompactionEffect({
+          effect: buildOrchestratorCompactionEffect({
+            event,
+            includeLogEntry: false,
+          }),
+          actions: {
+            applyConversationCompaction: (messages) => {
+              useChatStore.getState().applyConversationCompaction(conversationId, messages);
+            },
+            writeCompactionSummary: (summary) => {
+              try {
+                editWorkingBlock('compaction_summary', summary, {
+                  conversationId,
+                });
+              } catch {
+                // Memory write is best-effort; never break compaction
+              }
+            },
+          },
+        });
       },
       onUsage: () => {},
       onDone: () => {

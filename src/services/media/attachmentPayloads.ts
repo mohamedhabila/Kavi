@@ -1,5 +1,5 @@
 import * as LegacyFileSystem from 'expo-file-system/legacy';
-import type { Attachment } from '../../types';
+import type { Attachment } from '../../types/attachment';
 
 function normalizeBase64(value: string | undefined): string | undefined {
   if (!value) {

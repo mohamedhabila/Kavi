@@ -1,5 +1,6 @@
 import {
   bucketFocusGap,
+  composeActiveFocusContent,
   renderFocusBlock,
   type FocusBlockInput,
 } from '../../src/services/memory/focus';
@@ -58,6 +59,26 @@ describe('bucketFocusGap', () => {
     expect(result.bucket).toBe('extended_break');
     expect(result.phrase).toMatch(/Monday/);
     expect(result.phrase).toMatch(/Mar 9/);
+  });
+});
+
+describe('composeActiveFocusContent', () => {
+  it('preserves thread title metadata ahead of rolling focus content', () => {
+    expect(
+      composeActiveFocusContent({
+        threadTitle: 'longmem-delayed-thread',
+        activeFocus: 'Running: memory_recall',
+      }),
+    ).toBe('longmem-delayed-thread\nRunning: memory_recall');
+  });
+
+  it('does not duplicate an existing thread title anchor', () => {
+    expect(
+      composeActiveFocusContent({
+        threadTitle: 'longmem-delayed-thread',
+        activeFocus: 'longmem-delayed-thread\nRunning: memory_recall',
+      }),
+    ).toBe('longmem-delayed-thread\nRunning: memory_recall');
   });
 });
 

@@ -34,15 +34,32 @@ jest.mock('../../src/services/skills/storage', () => ({
 import {
   listClawHubSkills,
   getFeaturedSkills,
+  searchClawHub,
+} from '../../src/services/clawhub/apiClient';
+import { __resetClawHubConvexDiscoveryForTests } from '../../src/services/clawhub/convexClient';
+import {
   installSkillFromHub,
   installSkillFromUrl,
-  searchClawHub,
   updateSkillFromHub,
-} from '../../src/services/clawhub/registryClient';
+} from '../../src/services/clawhub/installWorkflow';
 import { zipSync } from 'fflate';
+
+const TEST_CLAWHUB_CONVEX_URL = 'https://clawhub-convex.example.invalid';
 
 function toExactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+function mockClawHubBrowseDiscovery(): void {
+  mockFetch
+    .mockResolvedValueOnce({
+      ok: true,
+      text: async () => '<html><link rel="modulepreload" href="/assets/main-test.js"></html>',
+    })
+    .mockResolvedValueOnce({
+      ok: true,
+      text: async () => `globalThis.env = { VITE_CONVEX_URL: "${TEST_CLAWHUB_CONVEX_URL}" };`,
+    });
 }
 
 describe('ClawHub registry client', () => {
@@ -51,6 +68,8 @@ describe('ClawHub registry client', () => {
     mockAddEntry.mockReset();
     mockUpdateEntry.mockReset();
     mockSaveManagedSkillBundle.mockClear();
+    __resetClawHubConvexDiscoveryForTests();
+    delete process.env.EXPO_PUBLIC_CLAWHUB_CONVEX_URL;
   });
 
   it('maps the documented v1 search response shape with a single request', async () => {
@@ -146,6 +165,7 @@ describe('ClawHub registry client', () => {
       },
     };
 
+    mockClawHubBrowseDiscovery();
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => payload,
@@ -161,9 +181,25 @@ describe('ClawHub registry client', () => {
         rating: 4,
       }),
     );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      'https://clawhub.ai/skills?nonSuspicious=true',
+      expect.any(Object),
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      'https://clawhub.ai/assets/main-test.js',
+      expect.any(Object),
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      3,
+      `${TEST_CLAWHUB_CONVEX_URL}/api/query`,
+      expect.any(Object),
+    );
   });
 
   it('returns a cursor when listing skills from the live list endpoint', async () => {
+    mockClawHubBrowseDiscovery();
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -214,8 +250,8 @@ describe('ClawHub registry client', () => {
       nextCursor: 'cursor-2',
     });
 
-    const [url, init] = mockFetch.mock.calls[0];
-    expect(url).toBe('https://wry-manatee-359.convex.cloud/api/query');
+    const [url, init] = mockFetch.mock.calls[2];
+    expect(url).toBe(`${TEST_CLAWHUB_CONVEX_URL}/api/query`);
     expect(init.method).toBe('POST');
     expect(JSON.parse(init.body)).toEqual({
       path: 'skills:listPublicPageV4',
@@ -226,6 +262,44 @@ describe('ClawHub registry client', () => {
         nonSuspiciousOnly: true,
       },
     });
+  });
+
+  it('uses an explicit ClawHub Convex URL when configured', async () => {
+    process.env.EXPO_PUBLIC_CLAWHUB_CONVEX_URL = TEST_CLAWHUB_CONVEX_URL;
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        status: 'success',
+        value: {
+          hasMore: false,
+          nextCursor: null,
+          page: [
+            {
+              skill: {
+                slug: 'configured-source',
+                displayName: 'Configured Source',
+                summary: 'Loaded through configured Convex URL.',
+              },
+              latestVersion: { version: '1.0.0' },
+            },
+          ],
+        },
+      }),
+    });
+
+    const result = await listClawHubSkills({ limit: 1, sort: 'newest' });
+
+    expect(result.skills[0]).toEqual(
+      expect.objectContaining({
+        id: 'configured-source',
+        name: 'Configured Source',
+      }),
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledWith(
+      `${TEST_CLAWHUB_CONVEX_URL}/api/query`,
+      expect.any(Object),
+    );
   });
 
   it('installs a skill from a direct URL', async () => {

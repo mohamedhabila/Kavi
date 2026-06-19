@@ -2,10 +2,9 @@
 // Tests — ToolCallDisplay Component
 // ---------------------------------------------------------------------------
 
-import React from 'react';
 import { act, render, fireEvent } from '@testing-library/react-native';
 import { summarizeToolCall, ToolCallDisplay } from '../../src/components/chat/ToolCallDisplay';
-import { ToolCall } from '../../src/types';
+import { ToolCall } from '../../src/types/message';
 
 jest.mock('../../src/theme/useAppTheme', () => ({
   useAppTheme: () => ({

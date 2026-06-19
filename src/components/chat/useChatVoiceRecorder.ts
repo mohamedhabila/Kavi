@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GestureResponderEvent } from 'react-native';
-import type { Attachment } from '../../types';
+import type { Attachment } from '../../types/attachment';
 import {
   ensureRecordingPermission,
   getRecordingStatus,

@@ -87,8 +87,13 @@ import {
   executeCalendarCreate,
   executeCalendarEvents,
   executeCalendarList,
+  executeCalendarUpdate,
+} from '../../src/engine/tools/native/calendar/executor';
+import {
   executeClipboardRead,
   executeClipboardWrite,
+} from '../../src/engine/tools/native/clipboard/executor';
+import {
   executeContactsCreate,
   executeContactsEdit,
   executeContactsGet,
@@ -99,19 +104,23 @@ import {
   executeContactsSearchFull,
   executeContactsShare,
   executeContactsView,
+} from '../../src/engine/tools/native/contacts/executor';
+import {
   executeEmailCompose,
-  executeLocationCurrent,
   executeMapsOpen,
-  executeNativeTool,
   executeOpenUrl,
   executePhoneCall,
+  executeSmsCompose,
+} from '../../src/engine/tools/native/communication/executor';
+import { executeNativeTool } from '../../src/engine/tools/native/executor';
+import { executeLocationCurrent } from '../../src/engine/tools/native/location/executor';
+import {
   executeShare,
   executeShareContact,
   executeShareFile,
   executeShareText,
   executeShareUrl,
-  executeSmsCompose,
-} from '../../src/engine/tools/native-executor';
+} from '../../src/engine/tools/native/share/executor';
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -438,11 +447,18 @@ describe('legacy native utilities', () => {
         endDate: '2024-01-01T11:00:00Z',
       }),
     );
+    const calendarUpdate = JSON.parse(
+      await executeCalendarUpdate({
+        id: 'event-1',
+        title: 'Updated meeting',
+      }),
+    );
     const location = JSON.parse(await executeLocationCurrent());
 
     expect(calendarList.error || calendarList.status).toBeDefined();
     expect(calendarEvents.error || calendarEvents.status).toBeDefined();
     expect(calendarCreate.error || calendarCreate.status).toBeDefined();
+    expect(calendarUpdate.error || calendarUpdate.status).toBeDefined();
     expect(location.error || location.latitude).toBeDefined();
   });
 });
@@ -472,6 +488,17 @@ describe('executeNativeTool', () => {
     expect(contactResult.status).toBe('picked');
     expect(accessResult.status).toBe('unavailable');
     expect(shareResult.status).toBe('shared');
+  });
+
+  it('routes calendar update through the dispatcher', async () => {
+    const result = JSON.parse(
+      await executeNativeTool(
+        'calendar_update_event',
+        JSON.stringify({ id: 'event-1', title: 'Updated meeting' }),
+      ),
+    );
+
+    expect(result.error || result.status).toBeDefined();
   });
 
   it('returns error for unknown native tools', async () => {

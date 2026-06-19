@@ -4,7 +4,7 @@
 // Embeds xterm.js inside a WebView with a PostMessage bridge for input/output.
 // Supports SSH shell sessions, local JS REPL, and Termux shell.
 
-import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import WebView, { WebViewMessageEvent } from 'react-native-webview';
 import type { AppPalette } from '../../theme/useAppTheme';

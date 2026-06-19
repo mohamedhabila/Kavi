@@ -2,7 +2,7 @@ import {
   buildAssistantBubbleTranscriptFileName,
   buildAssistantBubbleTranscriptMarkdown,
 } from '../../src/components/chat/assistantBubbleTranscript';
-import { Message } from '../../src/types';
+import { Message } from '../../src/types/message';
 
 const translate = (key: string, params?: Record<string, string | number>) => {
   switch (key) {

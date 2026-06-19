@@ -11,15 +11,15 @@ import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { useNavigation } from '@react-navigation/native';
 import { Menu, ShieldCheck, ShieldX, Clock, Trash2, ShieldAlert } from 'lucide-react-native';
 import { useAppTheme, type AppPalette } from '../theme/useAppTheme';
-import { useTranslation } from '../i18n';
-import { useApprovalStore, type ApprovalPolicy } from '../services/remote/approvalStore';
+import { useTranslation } from '../i18n/useTranslation';
+import { useApprovalStore } from '../services/remote/approvalStore';
 import {
   getAuditLogVersion,
   getAuditStats,
   getRecentAuditEntries,
   subscribeAuditLog,
 } from '../services/security/audit';
-import type { RemoteApprovalRequest } from '../types';
+import type { RemoteApprovalRequest } from '../types/remote';
 
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected' | 'expired';
 

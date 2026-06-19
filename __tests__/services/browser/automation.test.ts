@@ -7,17 +7,21 @@ import {
   browserAct,
   browserScreenshot,
   browserSnapshot,
-  browserConsoleMessages,
-  browserPageErrors,
-  browserNetworkRequests,
+  browserSessionStatus,
+} from '../../../src/services/browser/automation/actions';
+import {
   browserSetCookies,
   browserClearCookies,
   browserGetCookies,
   browserStorageGet,
   browserStorageSet,
   browserStorageClear,
-  browserSessionStatus,
-} from '../../../src/services/browser/automation';
+} from '../../../src/services/browser/automation/state';
+import {
+  browserConsoleMessages,
+  browserPageErrors,
+  browserNetworkRequests,
+} from '../../../src/services/browser/automation/trace';
 import {
   resetRemoteStore,
   useRemoteStore,

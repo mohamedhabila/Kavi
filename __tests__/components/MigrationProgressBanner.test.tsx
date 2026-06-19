@@ -2,8 +2,7 @@
 // Tests — MigrationProgressBanner
 // ---------------------------------------------------------------------------
 
-import React from 'react';
-import { render, fireEvent, act } from '@testing-library/react-native';
+import { render, fireEvent } from '@testing-library/react-native';
 import { MigrationProgressBanner } from '../../src/components/MigrationProgressBanner';
 import type { AppPalette } from '../../src/theme/useAppTheme';
 

@@ -3,7 +3,8 @@
 // ---------------------------------------------------------------------------
 // Backup and restore all app settings, hooks, and skill configurations.
 
-import type { ExportedSettings, AppSettings, HookDefinition } from '../../types';
+import type { ExportedSettings } from '../../types/settingsExport';
+import type { AppSettings } from '../../types/settings';
 import type { SkillEntry } from '../skills/types';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useSkillsStore } from '../skills/manager';
@@ -28,16 +29,14 @@ const EXPO_PROJECT_TOKENS_WARNING =
 
 const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const;
 const LOCALES = ['en', 'zh-CN', 'zh-TW', 'pt-BR', 'de', 'es', 'ar', 'fr', 'ja'] as const;
-const WEB_SEARCH_PROVIDERS = ['auto', 'brave', 'perplexity', 'grok', 'kimi', 'gemini'] as const;
+const WEB_SEARCH_PROVIDERS = ['auto', 'brave', 'gemini', 'perplexity', 'grok', 'kimi'] as const;
 // 'direct' is accepted for backwards compatibility with exports created before
 // the 2026-04-29 rename to 'chitchat'. New exports always emit 'chitchat'.
 const LEGACY_CONVERSATION_MODE_ALIASES: Record<string, 'agentic' | 'chitchat'> = {
   direct: 'chitchat',
 };
 
-function normalizeConversationMode(
-  value: unknown,
-): 'agentic' | 'chitchat' | undefined {
+function normalizeConversationMode(value: unknown): 'agentic' | 'chitchat' | undefined {
   if (typeof value !== 'string') return undefined;
   if (value === 'agentic' || value === 'chitchat') return value;
   return LEGACY_CONVERSATION_MODE_ALIASES[value];

@@ -8,11 +8,8 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
-import {
-  ensureFactSchema,
-  resetFactSchemaCacheForTests,
-  ensureDefaultBlocks,
-} from '../../src/services/memory/factStore';
+import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
+import { ensureDefaultBlocks } from '../../src/services/memory/blocks';
 import {
   executeMemoryRecall,
   executeMemoryRemember,
@@ -58,17 +55,110 @@ describe('executeMemoryRemember', () => {
     expect(second.status).toBe('duplicate');
   });
 
-  it('supersedes prior fact when supersedePrior=true', () => {
+  it('supersedes prior fact by default for the same subject and predicate', () => {
     rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin' });
     const next = rememberOk({
       subject: 'user',
       predicate: 'lives_in',
       value: 'Munich',
-      supersedePrior: true,
+    });
+
+    expect(next.status).toBe('created');
+    expect(next.superseded).toHaveLength(1);
+    expect(next.superseded[0].value).toBe('Berlin');
+
+    const recall = executeMemoryRecall({ subject: 'user', predicate: 'lives_in' });
+    expect(recall.ok).toBe(true);
+    if (recall.ok) {
+      expect(recall.facts.map((fact) => fact.value)).toEqual(['Munich']);
+    }
+  });
+
+  it('ignores provider-supplied supersedePrior=false and keeps current state singular', () => {
+    rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin' });
+    const next = rememberOk({
+      subject: 'user',
+      predicate: 'lives_in',
+      value: 'Munich',
+      supersedePrior: false,
+    } as Parameters<typeof executeMemoryRemember>[0] & { supersedePrior: false });
+
+    expect(next.status).toBe('created');
+    expect(next.superseded).toHaveLength(1);
+    expect(next.superseded[0].value).toBe('Berlin');
+
+    const recall = executeMemoryRecall({ subject: 'user', predicate: 'lives_in' });
+    expect(recall.ok).toBe(true);
+    if (recall.ok) {
+      expect(recall.facts.map((fact) => fact.value)).toEqual(['Munich']);
+    }
+  });
+
+  it('supersedes prior fact on current-state updates', () => {
+    rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin' });
+    const next = rememberOk({
+      subject: 'user',
+      predicate: 'lives_in',
+      value: 'Munich',
     });
     expect(next.status).toBe('created');
     expect(next.superseded).toHaveLength(1);
     expect(next.superseded[0].value).toBe('Berlin');
+  });
+
+  it('supersedes prior durable facts across provider-selected non-session scopes', () => {
+    rememberOk({
+      subject: 'user',
+      predicate: 'lives_in',
+      value: 'Berlin',
+      scope: 'global',
+    });
+    const next = rememberOk({
+      subject: 'user',
+      predicate: 'lives_in',
+      value: 'Munich',
+      scope: 'conversation',
+      originConversationId: 'conv-1',
+    });
+
+    expect(next.status).toBe('created');
+    expect(next.superseded.map((fact) => fact.value)).toEqual(['Berlin']);
+
+    const recall = executeMemoryRecall({ subject: 'user', predicate: 'lives_in' });
+    expect(recall.ok).toBe(true);
+    if (recall.ok) {
+      expect(recall.facts.map((fact) => fact.value)).toEqual(['Munich']);
+    }
+  });
+
+  it('keeps session-scoped task facts isolated from durable supersession', () => {
+    rememberOk({
+      subject: 'release-task',
+      predicate: 'next_step',
+      value: 'Run staging validation',
+      scope: 'session',
+      originConversationId: 'conv-1',
+      originTaskId: 'task-1',
+    });
+    const next = rememberOk({
+      subject: 'release-task',
+      predicate: 'next_step',
+      value: 'Run production validation',
+      scope: 'conversation',
+      originConversationId: 'conv-1',
+    });
+
+    expect(next.status).toBe('created');
+    expect(next.superseded).toEqual([]);
+
+    const recall = executeMemoryRecall({ subject: 'release-task', predicate: 'next_step' });
+    expect(recall.ok).toBe(true);
+    if (recall.ok) {
+      expect(recall.facts.map((fact) => fact.value).sort()).toEqual([
+        'Run production validation',
+        'Run staging validation',
+      ]);
+    }
   });
 
   it('rejects missing required args', () => {

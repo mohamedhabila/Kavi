@@ -2,7 +2,6 @@
 // Tests — GatewayScreen
 // ---------------------------------------------------------------------------
 
-import React from 'react';
 import { act, render, fireEvent, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import { GatewayScreen } from '../../src/screens/GatewayScreen';
@@ -118,7 +117,7 @@ describe('GatewayScreen', () => {
 
   it('shows gateway URL input when disconnected', () => {
     const { getByPlaceholderText } = render(<GatewayScreen />);
-    expect(getByPlaceholderText('wss://gateway.kavi.dev')).toBeTruthy();
+    expect(getByPlaceholderText('wss://gateway.example.invalid')).toBeTruthy();
   });
 
   it('shows connect button when disconnected', () => {
@@ -135,7 +134,7 @@ describe('GatewayScreen', () => {
 
   it('allows entering gateway URL', () => {
     const { getByPlaceholderText } = render(<GatewayScreen />);
-    const input = getByPlaceholderText('wss://gateway.kavi.dev');
+    const input = getByPlaceholderText('wss://gateway.example.invalid');
     fireEvent.changeText(input, 'wss://my-gateway.example.com');
     // Just verifying no crash
   });
@@ -147,7 +146,7 @@ describe('GatewayScreen', () => {
 
   it('calls createGatewayClient on connect press', () => {
     const { getByText, getByPlaceholderText } = render(<GatewayScreen />);
-    const input = getByPlaceholderText('wss://gateway.kavi.dev');
+    const input = getByPlaceholderText('wss://gateway.example.invalid');
     fireEvent.changeText(input, 'wss://test.example.com');
     fireEvent.press(getByText('Connect'));
     expect(mockCreateGatewayClient).toHaveBeenCalled();
@@ -157,7 +156,7 @@ describe('GatewayScreen', () => {
     const { getByText, getByPlaceholderText } = render(<GatewayScreen />);
 
     fireEvent.changeText(
-      getByPlaceholderText('wss://gateway.kavi.dev'),
+      getByPlaceholderText('wss://gateway.example.invalid'),
       '  wss://test.example.com  ',
     );
     fireEvent.changeText(getByPlaceholderText('Gateway authentication token'), 'fresh-token');
@@ -187,7 +186,10 @@ describe('GatewayScreen', () => {
     });
 
     const { getByText, getByPlaceholderText } = render(<GatewayScreen />);
-    fireEvent.changeText(getByPlaceholderText('wss://gateway.kavi.dev'), 'wss://test.example.com');
+    fireEvent.changeText(
+      getByPlaceholderText('wss://gateway.example.invalid'),
+      'wss://test.example.com',
+    );
     fireEvent.press(getByText('Connect'));
 
     expect(mockEmitGatewayEvent).toHaveBeenCalledWith('error', {

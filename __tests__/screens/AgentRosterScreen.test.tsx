@@ -1,7 +1,6 @@
-import React from 'react';
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { AgentRosterScreen } from '../../src/screens/AgentRosterScreen';
-import type { SubAgentSnapshot } from '../../src/types';
+import type { SubAgentSnapshot } from '../../src/types/subAgent';
 
 const mockOpenDrawer = jest.fn();
 

@@ -6,7 +6,33 @@
  * screenshot, snapshot (page content), observation, and state management.
  */
 
-import type { ToolDefinition } from '../../types';
+import type { ToolDefinition } from '../../types/tool';
+
+type ToolContract = NonNullable<ToolDefinition['contract']>;
+
+function browserActionContract(overrides: Partial<ToolContract> = {}): ToolContract {
+  return {
+    category: 'browser',
+    capabilities: ['read', 'write', 'verify'],
+    resourceKinds: ['browser'],
+    sideEffects: ['external_run'],
+    providesEvidence: ['verification', 'external_run'],
+    ...overrides,
+  };
+}
+
+function browserMonitorContract(overrides: Partial<ToolContract> = {}): ToolContract {
+  return {
+    category: 'browser',
+    capabilities: ['monitor', 'read', 'verify'],
+    resourceKinds: ['browser'],
+    sideEffects: ['none'],
+    providesEvidence: ['verification', 'external_run'],
+    workflowStages: ['monitor_external_execution', 'verify_evidence'],
+    riskHints: ['read_only', 'idempotent'],
+    ...overrides,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Navigation
@@ -25,6 +51,7 @@ export const BROWSER_NAVIGATE_TOOL: ToolDefinition = {
     },
     required: ['sessionId', 'url'],
   },
+  contract: browserActionContract(),
 };
 
 // ---------------------------------------------------------------------------
@@ -50,6 +77,7 @@ export const BROWSER_CLICK_TOOL: ToolDefinition = {
     },
     required: ['sessionId', 'ref'],
   },
+  contract: browserActionContract(),
 };
 
 export const BROWSER_TYPE_TOOL: ToolDefinition = {
@@ -70,6 +98,7 @@ export const BROWSER_TYPE_TOOL: ToolDefinition = {
     },
     required: ['sessionId', 'ref', 'text'],
   },
+  contract: browserActionContract(),
 };
 
 export const BROWSER_PRESS_KEY_TOOL: ToolDefinition = {
@@ -87,6 +116,7 @@ export const BROWSER_PRESS_KEY_TOOL: ToolDefinition = {
     },
     required: ['sessionId', 'key'],
   },
+  contract: browserActionContract(),
 };
 
 export const BROWSER_HOVER_TOOL: ToolDefinition = {
@@ -100,6 +130,7 @@ export const BROWSER_HOVER_TOOL: ToolDefinition = {
     },
     required: ['sessionId', 'ref'],
   },
+  contract: browserActionContract(),
 };
 
 export const BROWSER_SELECT_TOOL: ToolDefinition = {
@@ -114,6 +145,7 @@ export const BROWSER_SELECT_TOOL: ToolDefinition = {
     },
     required: ['sessionId', 'ref', 'values'],
   },
+  contract: browserActionContract(),
 };
 
 export const BROWSER_DRAG_TOOL: ToolDefinition = {
@@ -128,6 +160,7 @@ export const BROWSER_DRAG_TOOL: ToolDefinition = {
     },
     required: ['sessionId', 'startRef', 'endRef'],
   },
+  contract: browserActionContract(),
 };
 
 // ---------------------------------------------------------------------------
@@ -156,6 +189,9 @@ export const BROWSER_WAIT_TOOL: ToolDefinition = {
     },
     required: ['sessionId'],
   },
+  contract: browserMonitorContract({
+    capabilities: ['monitor', 'wait', 'verify'],
+  }),
 };
 
 // ---------------------------------------------------------------------------
@@ -180,6 +216,7 @@ export const BROWSER_SCREENSHOT_TOOL: ToolDefinition = {
     },
     required: ['sessionId'],
   },
+  contract: browserActionContract(),
 };
 
 export const BROWSER_SNAPSHOT_TOOL: ToolDefinition = {
@@ -199,6 +236,7 @@ export const BROWSER_SNAPSHOT_TOOL: ToolDefinition = {
     },
     required: ['sessionId'],
   },
+  contract: browserMonitorContract(),
 };
 
 // ---------------------------------------------------------------------------
@@ -234,6 +272,7 @@ export const BROWSER_INSPECT_TOOL: ToolDefinition = {
     },
     required: ['sessionId', 'kind'],
   },
+  contract: browserMonitorContract(),
 };
 
 // ---------------------------------------------------------------------------
@@ -265,6 +304,7 @@ export const BROWSER_COOKIES_TOOL: ToolDefinition = {
     },
     required: ['sessionId', 'action'],
   },
+  contract: browserActionContract(),
 };
 
 export const BROWSER_STORAGE_TOOL: ToolDefinition = {
@@ -281,6 +321,7 @@ export const BROWSER_STORAGE_TOOL: ToolDefinition = {
     },
     required: ['sessionId', 'kind', 'action'],
   },
+  contract: browserActionContract(),
 };
 
 // ---------------------------------------------------------------------------
@@ -303,6 +344,7 @@ export const BROWSER_LAUNCH_TOOL: ToolDefinition = {
     },
     required: [],
   },
+  contract: browserActionContract(),
 };
 
 export const BROWSER_STOP_TOOL: ToolDefinition = {
@@ -315,6 +357,10 @@ export const BROWSER_STOP_TOOL: ToolDefinition = {
     },
     required: ['sessionId'],
   },
+  contract: browserActionContract({
+    sideEffects: ['external_run', 'destructive'],
+    riskHints: ['destructive'],
+  }),
 };
 
 export const BROWSER_STATUS_TOOL: ToolDefinition = {
@@ -327,6 +373,7 @@ export const BROWSER_STATUS_TOOL: ToolDefinition = {
     },
     required: ['sessionId'],
   },
+  contract: browserMonitorContract(),
 };
 
 // ---------------------------------------------------------------------------
@@ -353,6 +400,7 @@ export const BROWSER_EVALUATE_TOOL: ToolDefinition = {
     },
     required: ['sessionId', 'expression'],
   },
+  contract: browserActionContract(),
 };
 
 // ---------------------------------------------------------------------------
@@ -377,6 +425,7 @@ export const BROWSER_UPLOAD_TOOL: ToolDefinition = {
     },
     required: ['sessionId', 'ref', 'filePath'],
   },
+  contract: browserActionContract(),
 };
 
 // ---------------------------------------------------------------------------
@@ -404,6 +453,7 @@ export const BROWSER_DOWNLOAD_TOOL: ToolDefinition = {
     },
     required: ['sessionId'],
   },
+  contract: browserActionContract(),
 };
 
 // ---------------------------------------------------------------------------
@@ -432,6 +482,7 @@ export const BROWSER_PDF_TOOL: ToolDefinition = {
     },
     required: ['sessionId'],
   },
+  contract: browserActionContract(),
 };
 
 // ---------------------------------------------------------------------------
@@ -467,6 +518,7 @@ export const BROWSER_FILL_FORM_TOOL: ToolDefinition = {
     },
     required: ['sessionId', 'fields'],
   },
+  contract: browserActionContract(),
 };
 
 // ---------------------------------------------------------------------------
@@ -494,6 +546,7 @@ export const BROWSER_DIALOG_TOOL: ToolDefinition = {
     },
     required: ['sessionId', 'action'],
   },
+  contract: browserActionContract(),
 };
 
 // ---------------------------------------------------------------------------
