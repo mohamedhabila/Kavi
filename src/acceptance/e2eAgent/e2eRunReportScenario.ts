@@ -11,7 +11,7 @@ import type {
   E2ERunReportScenarioLoopDiagnostics,
   E2ERunReportScenarioRubricAudit,
 } from './e2eRunReport';
-import { buildE2EScenarioTraceSummary } from './e2eTraceArtifacts';
+import { buildE2EScenarioTraceSummary } from './e2eTraceSummary';
 import { evaluateE2EScenarioRubrics } from './rubricEvaluators';
 import type { E2ERubric, E2EScenarioResult, E2ETokenUsageSummary } from './types';
 import type { AcceptanceFixtureOutcome } from '../acceptanceMetrics/types';
