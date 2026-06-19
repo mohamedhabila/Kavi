@@ -7,6 +7,7 @@ import {
   estimateCost,
   getUsageCacheSummary,
   recordUsage,
+  getAllSessionUsages,
   getSessionUsage,
   formatUsageReport,
   clearUsageData,
@@ -207,6 +208,33 @@ describe('Usage Tracker', () => {
       expect(anthropicCost).toBeGreaterThan(0);
     });
 
+    it('uses family fallback pricing for unseen text model revisions', () => {
+      expect(estimateCost('openai/gpt-5.6-nano', 1000, 500)).toBeCloseTo(
+        (1000 * 0.75 + 500 * 4.5) / 1_000_000,
+        10,
+      );
+      expect(estimateCost('openai/gpt-5.6', 1000, 500)).toBeCloseTo(
+        (1000 * 2.5 + 500 * 15) / 1_000_000,
+        10,
+      );
+      expect(estimateCost('o4', 1000, 500)).toBeCloseTo(
+        (1000 * 1.1 + 500 * 4.4) / 1_000_000,
+        10,
+      );
+      expect(estimateCost('anthropic/claude-sonnet-4-7', 1000, 500)).toBeCloseTo(
+        (1000 * 3 + 500 * 15) / 1_000_000,
+        10,
+      );
+      expect(estimateCost('google/gemini-3.2-pro', 250_000, 10_000)).toBeCloseTo(
+        (250_000 * 4 + 10_000 * 18) / 1_000_000,
+        10,
+      );
+      expect(estimateCost('google/gemini-3.2-flash', 1000, 500)).toBeCloseTo(
+        (1000 * 0.5 + 500 * 3) / 1_000_000,
+        10,
+      );
+    });
+
     it('uses Gemini 2.5 Pro standard pricing for prompts at or below 200k tokens', () => {
       const cost = estimateCost('gemini-2.5-pro', 1000, 500);
       expect(cost).toBeCloseTo((1000 * 1.25 + 500 * 10) / 1_000_000, 10);
@@ -379,6 +407,17 @@ describe('Usage Tracker', () => {
       expect(usage?.totalCost).toBe(0);
       expect(usage?.entries[0]?.estimatedCost).toBe(0);
     });
+
+    it('evicts the oldest session when the in-memory tracker reaches capacity', () => {
+      for (let index = 0; index < 101; index += 1) {
+        recordUsage(`conv-${index}`, { inputTokens: 10, outputTokens: 5, model: 'gpt-5.4' });
+      }
+
+      expect(getAllSessionUsages()).toHaveLength(100);
+      expect(getSessionUsage('conv-0')).toBeUndefined();
+      expect(getSessionUsage('conv-1')).toBeDefined();
+      expect(getSessionUsage('conv-100')).toBeDefined();
+    });
   });
 
   describe('formatUsageReport', () => {
@@ -399,6 +438,10 @@ describe('Usage Tracker', () => {
       recordUsage('conv-1', { inputTokens: 10000, outputTokens: 5000, model: 'gpt-5.4' });
       const report = formatUsageReport('conv-1');
       expect(report).toContain('$');
+    });
+
+    it('returns a clear message for a session with no recorded usage', () => {
+      expect(formatUsageReport('missing-session')).toBe('No usage data for this session.');
     });
   });
 
