@@ -9,9 +9,42 @@ import {
   DELEGATION_E2E_SCENARIOS,
   E2E_AGENT_SCENARIOS,
 } from '../../src/acceptance/e2eAgent/scenarios';
+import { E2E_BENCHMARK_SCENARIOS } from '../../src/acceptance/e2eAgent/benchmarkScenarios';
 import { listE2EBenchmarkRequirements as listRequirementCatalog } from '../../src/acceptance/e2eAgent/e2eBenchmarkRequirements';
 
 describe('e2eBenchmarkManifest', () => {
+  it('keeps the benchmark scenario catalog order stable across implementation modules', () => {
+    expect(E2E_BENCHMARK_SCENARIOS.map((scenario) => scenario.id)).toEqual([
+      'bench-gaia-file-hop-chain',
+      'bench-session-tool-cache',
+      'bench-prompt-cache-long-horizon',
+      'bench-prompt-cache-convergence-long-run',
+      'bench-tool-describe-then-use',
+      'bench-memory-state-3turn-recall',
+      'bench-goal-json-field-criterion',
+      'bench-scoped-recall-goal-switch',
+      'bench-bootstrap-first-turn-goals',
+      'bench-tau-native-json-outcome',
+      'bench-tau-calendar-events-chain',
+      'bench-agentbench-tool-chain',
+      'bench-bfcl-parallel-file-read',
+      'bench-bfcl-sequential-memory-chain',
+      'bench-bfcl-multi-turn-state-carry',
+      'bench-bfcl-passive-no-tools',
+      'bench-longmem-delayed-recall',
+      'bench-longmem-dual-fact-recall',
+      'bench-longmem-knowledge-update-recall',
+      'bench-longmem-abstention-empty-recall',
+      'bench-androidworld-calendar-mutation',
+      'bench-androidworld-permission-denial',
+      'bench-mobileagent-contact-message-draft',
+      'bench-mobileworld-discover-contact-message',
+      'bench-knowu-personalized-contact-memory',
+      'bench-androidworld-clipboard-share-notify',
+      'bench-mobileagent-media-state',
+    ]);
+  });
+
   it('keeps the extracted requirement catalog available through the manifest API', () => {
     expect(listE2EBenchmarkRequirements()).toEqual(listRequirementCatalog());
   });

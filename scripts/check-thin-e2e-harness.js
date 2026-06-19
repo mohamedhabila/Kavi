@@ -18,6 +18,10 @@ const scenarioSourceFiles = [
   'src/acceptance/e2eAgent/scenariosCoreWorkspace.ts',
   'src/acceptance/e2eAgent/scenariosDelegation.ts',
   'src/acceptance/e2eAgent/benchmarkScenarios.ts',
+  'src/acceptance/e2eAgent/benchmarkMemoryScenarios.ts',
+  'src/acceptance/e2eAgent/benchmarkNativeScenarios.ts',
+  'src/acceptance/e2eAgent/benchmarkPromptCacheScenarios.ts',
+  'src/acceptance/e2eAgent/benchmarkWorkspaceScenarios.ts',
   'src/acceptance/e2eAgent/directBenchmarkScenarios.ts',
 ];
 const allowedMocks = new Set(['expo-sqlite']);
