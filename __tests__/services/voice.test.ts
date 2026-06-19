@@ -1,10 +1,9 @@
 // ---------------------------------------------------------------------------
 // Voice I/O Service — tests
 // ---------------------------------------------------------------------------
-// The voice module uses dynamic imports (await import('expo-speech'/'expo-av'))
-// which are not testable in standard Jest without --experimental-vm-modules.
-// We test the functions that don't use dynamic imports directly, AND verify
-// the error paths that throw before dynamic imports are reached.
+// The voice module reaches native Expo audio/speech APIs through runtime
+// requires, so these tests keep the native boundary mocked and focus on the
+// service contract.
 
 jest.mock('../../src/services/storage/SecureStorage', () => ({
   getSecure: jest.fn(),
@@ -135,11 +134,13 @@ import { getSecure } from '../../src/services/storage/SecureStorage';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import {
   ensureRecordingPermission,
+  getRecordingStatus,
   startRecording,
   transcribeAudio,
   speakText,
   isRecording,
   stopRecording,
+  waitForRecordedAudioFile,
 } from '../../src/services/voice/voice';
 
 const mockGetSecure = getSecure as jest.Mock;
@@ -267,6 +268,72 @@ describe('Voice — STT (transcribeAudio)', () => {
     await expect(transcribeAudio(emptyUri)).rejects.toThrow('Recorded audio file is empty');
     expect(mockFetch).not.toHaveBeenCalled();
   });
+
+  it('should reject unavailable local audio files before upload', async () => {
+    mockGetSecure.mockResolvedValue('sk-test');
+
+    await expect(transcribeAudio('file://missing.m4a')).rejects.toThrow(
+      'Recorded audio file is unavailable',
+    );
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('should pass language and Groq transcription model for Groq providers', async () => {
+    const originalFormData = global.FormData;
+    const parts: Array<[string, any]> = [];
+    class MockFormData {
+      append(key: string, value: any) {
+        parts.push([key, value]);
+      }
+    }
+
+    (global as any).FormData = MockFormData;
+    mockGetSecure.mockResolvedValue(null);
+    const { getProviderApiKey } = require('../../src/services/storage/SecureStorage');
+    (getProviderApiKey as jest.Mock).mockResolvedValue('gsk-provider');
+    mockGetState.mockReturnValue({
+      activeProviderId: 'groq',
+      providers: [
+        {
+          id: 'groq',
+          name: 'Groq',
+          enabled: true,
+          apiKey: '',
+          baseUrl: 'https://api.groq.com/openai/v1/',
+          model: 'llama-3.1',
+        },
+      ],
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ text: 'bonjour', language: 'fr' }),
+    });
+
+    await transcribeAudio('file://voice-note.wav', { language: 'fr' });
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://api.groq.com/openai/v1/audio/transcriptions',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(parts).toEqual(
+      expect.arrayContaining([
+        ['model', 'whisper-large-v3-turbo'],
+        ['language', 'fr'],
+      ]),
+    );
+
+    (global as any).FormData = originalFormData;
+  });
+
+  it('should skip file-system inspection for non-file recording URIs', async () => {
+    await expect(
+      waitForRecordedAudioFile('content://voice/audio/1', { timeoutMs: 0 }),
+    ).resolves.toEqual({
+      inspected: false,
+      exists: true,
+      sizeBytes: 0,
+    });
+  });
 });
 
 describe('Voice — TTS (speakText) — error paths', () => {
@@ -306,6 +373,25 @@ describe('Voice — TTS (speakText) — error paths', () => {
     await expect(speakText('hello', 'elevenlabs')).rejects.toThrow('ElevenLabs TTS failed');
   });
 
+  it('auto TTS prefers ElevenLabs when that provider is configured', async () => {
+    mockGetSecure.mockImplementation(async (key: string) => {
+      if (key === 'ELEVENLABS_API_KEY') return 'el-key';
+      if (key === 'ELEVENLABS_VOICE_ID') return 'voice-123';
+      return null;
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      blob: async () => new Blob(['audio']),
+    });
+
+    await expect(speakText('hello', 'auto')).resolves.toBeUndefined();
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://api.elevenlabs.io/v1/text-to-speech/voice-123',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
   it('system TTS resolves on the speech completion callback', async () => {
     await expect(speakText('hello', 'system')).resolves.toBeUndefined();
     expect(mockSpeechSpeak).toHaveBeenCalledWith(
@@ -313,6 +399,14 @@ describe('Voice — TTS (speakText) — error paths', () => {
       expect.objectContaining({ onDone: expect.any(Function) }),
     );
     expect(mockSetAudioModeAsync).toHaveBeenCalled();
+  });
+
+  it('system TTS rejects on the speech error callback', async () => {
+    mockSpeechSpeak.mockImplementationOnce((_text: string, options?: any) => {
+      options?.onError?.(new Error('speech failed'));
+    });
+
+    await expect(speakText('hello', 'system')).rejects.toThrow('System TTS failed');
   });
 
   it('auto TTS prefers the OpenAI-compatible path when available', async () => {
@@ -392,6 +486,23 @@ describe('Voice — TTS (speakText) — error paths', () => {
       jest.useRealTimers();
     }
   });
+
+  it('OpenAI TTS surfaces playback failures', async () => {
+    mockGetSecure.mockResolvedValue('sk-test');
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      blob: async () => new Blob(['audio']),
+    });
+    mockCreateAudioPlayer.mockImplementationOnce(() => ({
+      play: jest.fn(() => {
+        throw new Error('native playback failed');
+      }),
+      remove: jest.fn(),
+      setPlaybackRate: jest.fn(),
+    }));
+
+    await expect(speakText('hello', 'openai')).rejects.toThrow('Audio playback failed');
+  });
 });
 
 describe('Voice — Recording state', () => {
@@ -439,6 +550,49 @@ describe('Voice — Recording state', () => {
   it('stopRecording returns null when not recording', async () => {
     const uri = await stopRecording();
     expect(uri).toBeNull();
+  });
+
+  it('startRecording rejects when microphone permission is denied', async () => {
+    mockRequestRecordingPermissionsAsync.mockResolvedValueOnce({
+      granted: false,
+      status: 'denied',
+    });
+
+    await expect(startRecording()).rejects.toThrow('Microphone permission denied');
+  });
+
+  it('startRecording stops a stale active recorder before replacing it', async () => {
+    await startRecording();
+    const staleRecorder = mockAudioRecorderInstances[0];
+
+    await startRecording();
+
+    expect(staleRecorder.stop).toHaveBeenCalledTimes(1);
+    expect(mockAudioRecorderInstances[1].record).toHaveBeenCalledTimes(1);
+
+    await stopRecording();
+  });
+
+  it('getRecordingStatus returns null when the active recorder status throws', async () => {
+    mockAudioRecorderConstructor.mockImplementationOnce(() => {
+      const instance = {
+        prepareToRecordAsync: jest.fn().mockResolvedValue(undefined),
+        record: jest.fn(),
+        stop: jest.fn().mockResolvedValue(undefined),
+        getStatus: jest.fn(() => {
+          throw new Error('status unavailable');
+        }),
+        uri: 'file:///mock/cache/status-error.m4a',
+      };
+      mockAudioRecorderInstances.push(instance);
+      return instance;
+    });
+
+    await startRecording();
+
+    expect(getRecordingStatus()).toBeNull();
+
+    await stopRecording();
   });
 
   it('falls back to a second supported preset when the first preparation attempt fails', async () => {
@@ -507,5 +661,32 @@ describe('Voice — Recording state', () => {
     expect(mockAudioRecorderInstances[1].record).toHaveBeenCalledTimes(1);
 
     await stopRecording();
+  });
+
+  it('reports all recorder preparation failures with nested causes', async () => {
+    mockAudioRecorderConstructor.mockImplementation(() => {
+      const instance = {
+        prepareToRecordAsync: jest
+          .fn()
+          .mockRejectedValue(
+            new Error('prepare failed', {
+              cause: new Error('native recorder rejected preset'),
+            }),
+          ),
+        record: jest.fn(),
+        stop: jest.fn().mockResolvedValue(undefined),
+        getStatus: jest.fn().mockReturnValue(null),
+        uri: 'file:///mock/cache/failed.m4a',
+      };
+      mockAudioRecorderInstances.push(instance);
+      return instance;
+    });
+
+    await expect(startRecording()).rejects.toThrow(
+      'prepare failed -> native recorder rejected preset',
+    );
+    expect(mockSetAudioModeAsync).toHaveBeenLastCalledWith(
+      expect.objectContaining({ allowsRecording: false }),
+    );
   });
 });
