@@ -75,6 +75,7 @@ from `.github/workflows/ci.yml`. The gate currently runs, in order:
 - `npm run check:graph-owned-mutations`
 - `npm run check:dead-exports`
 - `npm run check:tool-contracts`
+- `npm run check:maintainability`
 - `npm run lint`
 - `npm run typecheck`
 - `npm test -- --runInBand`
@@ -98,6 +99,7 @@ npm run check:thin-e2e-harness
 npm run check:graph-owned-mutations
 npm run check:dead-exports
 npm run check:tool-contracts
+npm run check:maintainability
 npm run lint
 npm run typecheck
 npm run test:coverage
@@ -136,6 +138,8 @@ This repository uses `patch-package`.
 - Use `npm run format` for mechanical formatting changes and keep them separate from behavior changes when practical.
 - Keep public behavior explicit in code and tests.
 - Prefer small refactors over broad rewrites.
+- Keep hand-maintained contribution-facing files within the repository file-size
+  limit and avoid pass-through barrel files.
 - Add or update tests when behavior changes.
 - Avoid mixing unrelated cleanup into a feature or bug-fix pull request.
 

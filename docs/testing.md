@@ -13,7 +13,8 @@ Kavi has a large Jest-based test suite and a smaller set of environment-dependen
 **Tier 1 (`verify`)** is the contributor gate and matches pull request CI. It
 runs the public hygiene, public language, link, license, app metadata, i18n,
 legacy import, thin E2E harness, graph mutation, dead export, tool contract,
-lint, typecheck, and local Jest checks listed in the default gate section below.
+maintainability, lint, typecheck, and local Jest checks listed in the default
+gate section below.
 E2E and live-provider tests are skipped unless explicitly opted in.
 
 **Tier 2 (`verify:strict`)** runs Tier 1, then:
@@ -54,6 +55,7 @@ That command currently runs:
 - `npm run check:graph-owned-mutations`
 - `npm run check:dead-exports`
 - `npm run check:tool-contracts`
+- `npm run check:maintainability`
 - `npm run lint`
 - `npm run typecheck`
 - `npm test -- --runInBand`
