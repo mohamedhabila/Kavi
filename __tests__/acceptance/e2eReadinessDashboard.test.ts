@@ -3,6 +3,8 @@ import { buildE2EReadinessDashboard } from '../../src/acceptance/e2eAgent/e2eRea
 import {
   buildE2ERunReport,
   buildE2ERunReportScenarioEntry,
+  type E2ERunReportRubricFailure,
+  type E2ERunReportScenarioEntry,
 } from '../../src/acceptance/e2eAgent/e2eRunReport';
 import type { E2EScenarioResult } from '../../src/acceptance/e2eAgent/types';
 
@@ -27,6 +29,50 @@ function buildFixtureResult(overrides?: Partial<E2EScenarioResult>): E2EScenario
     durationMs: 1500,
     userTurnCount: 1,
     ...overrides,
+  };
+}
+
+function buildTaxonomyEntry(params: {
+  fixtureId: string;
+  passed?: boolean;
+  failedRubricKinds?: string[];
+  rubricAudit?: Partial<E2ERunReportScenarioEntry['rubricAudit']>;
+  usage?: Partial<E2EScenarioResult['usage']>;
+}): E2ERunReportScenarioEntry {
+  const baseUsage: E2EScenarioResult['usage'] = {
+    inputTokens: 1000,
+    outputTokens: 20,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    totalTokens: 1020,
+    eventCount: 1,
+  };
+  const result = buildFixtureResult({
+    fixtureId: params.fixtureId,
+    usage: {
+      ...baseUsage,
+      ...params.usage,
+    },
+  });
+  const entry = buildE2ERunReportScenarioEntry({
+    suite: 'core',
+    result,
+    outcome: { fixtureId: params.fixtureId, passed: params.passed ?? false },
+    attemptCount: 1,
+  });
+  const failedRubrics: E2ERunReportRubricFailure[] | undefined = params.failedRubricKinds?.map(
+    (kind) => ({
+      fixtureId: `${params.fixtureId}:${kind}`,
+    }),
+  );
+
+  return {
+    ...entry,
+    ...(failedRubrics ? { failedRubrics } : {}),
+    rubricAudit: {
+      ...entry.rubricAudit,
+      ...params.rubricAudit,
+    },
   };
 }
 
@@ -178,5 +224,126 @@ describe('e2eReadinessDashboard', () => {
       'mobile_benchmarks',
     ]);
     expect(dashboard.humanAuditCalibration.status).toBe('not_required_structural_graders_only');
+  });
+
+  it('classifies readiness failures from structural scenario metadata', () => {
+    const report = buildE2ERunReport(
+      [
+        buildTaxonomyEntry({
+          fixtureId: 'file-write-read',
+          failedRubricKinds: ['workspace_file_absent'],
+        }),
+        buildTaxonomyEntry({
+          fixtureId: 'direct-agentdojo-untrusted-workspace-note',
+          failedRubricKinds: ['workspace_file_absent', 'workspace_file'],
+        }),
+        buildTaxonomyEntry({
+          fixtureId: 'bench-androidworld-calendar-mutation',
+          failedRubricKinds: ['workspace_file'],
+        }),
+        buildTaxonomyEntry({
+          fixtureId: 'bench-androidworld-permission-denial',
+          failedRubricKinds: ['native_fixture_state'],
+        }),
+        buildTaxonomyEntry({
+          fixtureId: 'direct-toolsandbox-state-dependency',
+          failedRubricKinds: ['native_fixture_state'],
+        }),
+        buildTaxonomyEntry({
+          fixtureId: 'bench-bfcl-sequential-memory-chain',
+          failedRubricKinds: ['memory_fact'],
+        }),
+        buildTaxonomyEntry({
+          fixtureId: 'bench-prompt-cache-long-horizon',
+          failedRubricKinds: ['cache_prefix_readiness'],
+        }),
+        buildTaxonomyEntry({
+          fixtureId: 'tool-catalog-agents',
+          failedRubricKinds: ['token_budget'],
+        }),
+        buildTaxonomyEntry({
+          fixtureId: 'multi-turn-gate-followup',
+          failedRubricKinds: ['min_user_turns'],
+        }),
+        buildTaxonomyEntry({
+          fixtureId: 'tool-catalog-query-memory',
+          failedRubricKinds: ['unsupported_rubric'],
+        }),
+        buildTaxonomyEntry({
+          fixtureId: 'multi-turn-catalog-memory',
+          passed: true,
+          rubricAudit: {
+            assistantProseRubricCount: 1,
+            risks: [
+              {
+                rubricKind: 'assistant_text',
+                reason: 'covered by dashboard grader-quality taxonomy',
+              },
+            ],
+          },
+        }),
+        buildTaxonomyEntry({
+          fixtureId: 'workspace-inventory-manifest',
+        }),
+        buildTaxonomyEntry({
+          fixtureId: 'bench-prompt-cache-convergence-long-run',
+          passed: true,
+          usage: {
+            inputTokens: 4096,
+            outputTokens: 20,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            totalTokens: 4116,
+            eventCount: 1,
+          },
+        }),
+      ],
+      {
+        generatedAt: '2026-06-12T00:00:00.000Z',
+        maxScenarioRetries: 0,
+      },
+    );
+    const clusters = new Map(
+      report.readinessDashboard.failureTaxonomy.map((cluster) => [cluster.category, cluster]),
+    );
+
+    expect(clusters.get('wrong_args')?.scenarioIds).toEqual(['file-write-read']);
+    expect(clusters.get('tool_poisoning_vulnerability')?.scenarioIds).toEqual([
+      'direct-agentdojo-untrusted-workspace-note',
+    ]);
+    expect(clusters.get('permission_failure')?.scenarioIds).toEqual([
+      'bench-androidworld-permission-denial',
+      'direct-agentdojo-untrusted-workspace-note',
+    ]);
+    expect(clusters.get('native_side_effect_failure')?.scenarioIds).toEqual([
+      'bench-androidworld-calendar-mutation',
+      'direct-toolsandbox-state-dependency',
+    ]);
+    expect(clusters.get('memory_retrieval_miss')?.scenarioIds).toEqual([
+      'bench-bfcl-sequential-memory-chain',
+    ]);
+    expect(clusters.get('cache_prefix_drift')?.scenarioIds).toEqual([
+      'bench-prompt-cache-convergence-long-run',
+      'bench-prompt-cache-long-horizon',
+    ]);
+    expect(clusters.get('token_budget_overrun')?.scenarioIds).toEqual(['tool-catalog-agents']);
+    expect(clusters.get('missing_clarification')?.scenarioIds).toEqual([
+      'multi-turn-gate-followup',
+    ]);
+    expect(clusters.get('grader_quality')?.scenarioIds).toEqual(['multi-turn-catalog-memory']);
+    expect(clusters.get('unknown_structural_failure')?.scenarioIds).toEqual([
+      'tool-catalog-query-memory',
+      'workspace-inventory-manifest',
+    ]);
+  });
+
+  it('uses zero percentiles for empty readiness input', () => {
+    const report = buildE2ERunReport([], {
+      generatedAt: '2026-06-12T00:00:00.000Z',
+      maxScenarioRetries: 0,
+    });
+
+    expect(report.readinessDashboard.tokenCostLatency.p95ScenarioTotalTokens).toBe(0);
+    expect(report.readinessDashboard.tokenCostLatency.p95ScenarioDurationMs).toBe(0);
   });
 });
