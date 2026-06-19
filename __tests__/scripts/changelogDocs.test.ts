@@ -3,7 +3,7 @@ const { join } = require('path');
 
 const projectRoot = join(__dirname, '../..');
 const packageJson = require('../../package.json');
-const publicReleaseDate = '2026-06-19';
+const publicReleaseDate = '2026-06-20';
 
 function readRepoFile(relativePath: string): string {
   return readFileSync(join(projectRoot, relativePath), 'utf8');

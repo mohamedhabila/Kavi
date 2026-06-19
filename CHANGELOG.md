@@ -5,7 +5,7 @@ All notable changes to Kavi will be documented in this file.
 The format is based on Keep a Changelog, and this project follows semantic
 versioning where practical for tagged releases.
 
-## [1.0.0] - 2026-06-19
+## [1.0.0] - 2026-06-20
 
 ### Added
 
