@@ -47,7 +47,7 @@ Run on iOS:
 npm run ios
 ```
 
-Run the public-safe Android release environment check:
+Run the Android release environment check:
 
 ```bash
 npm run check:android:release-env
@@ -159,11 +159,11 @@ Before submitting:
 - Add `npm run verify:strict` when the change affects agent, graph, memory,
   orchestration, or E2E harness behavior and the strict gate is practical to run
   locally.
-- If you cannot run the full gate while preparing a public-facing docs-only
-  change, run `npm run check:public-hygiene` before requesting review.
+- If you cannot run the full gate while preparing a docs-only change, run
+  `npm run check:public-hygiene` before requesting review.
 - Make sure new files and docs use the public `Kavi` name consistently.
-- Do not include maintainer-only notes, local credentials, or build artifacts.
-- Keep maintainer-private working material out of the public git history.
+- Do not include local credentials, personal notes, or build artifacts.
+- Keep scratch work and planning notes out of git history.
 
 ## Issues
 

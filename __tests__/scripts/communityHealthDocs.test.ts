@@ -46,7 +46,9 @@ describe('community health files', () => {
     expect(bugTemplate).toMatch(/body:\n\s+- type: markdown/);
     expect(bugTemplate).toContain('Security-sensitive reports do not belong in public issues');
     expect(bugTemplate).toContain('SECURITY.md');
-    expect(bugTemplate).toContain('Redact secrets, tokens, private data, hostnames, and credentials');
+    expect(bugTemplate).toContain(
+      'Redact secrets, tokens, private data, hostnames, and credentials',
+    );
     expect(contributing).toContain('For security reports, follow [SECURITY.md](SECURITY.md)');
   });
 
@@ -56,11 +58,13 @@ describe('community health files', () => {
     expect(pullRequestTemplate).toContain('npm run verify');
     expect(pullRequestTemplate).toContain('npm run verify:strict');
     expect(pullRequestTemplate).toContain('agent, graph, memory, orchestration, or E2E harness');
-    expect(pullRequestTemplate).toContain('no secrets, private notes, or build artifacts were added');
+    expect(pullRequestTemplate).toContain(
+      'no secrets, private notes, or build artifacts were added',
+    );
     expect(pullRequestTemplate).toContain('security-sensitive reports or repro details');
   });
 
-  it('keeps issue templates scoped and public-safe', () => {
+  it('keeps issue templates scoped for external contributors', () => {
     const featureTemplate = readRepoFile('.github/ISSUE_TEMPLATE/feature_request.yml');
     const config = readRepoFile('.github/ISSUE_TEMPLATE/config.yml');
 

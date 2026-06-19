@@ -314,9 +314,8 @@ reason to defer it.
 
 ## Release-Oriented Validation
 
-For Android release work, start with the public-safe environment check. It
-verifies Java and Android SDK discovery without requiring maintainer signing
-material:
+For Android release work, start with the Android release environment check. It
+verifies Java and Android SDK discovery without requiring signing material:
 
 ```bash
 npm run check:android:release-env

@@ -1,44 +1,55 @@
 # Kavi
 
+<img src="assets/icon.png" alt="Kavi app icon" width="96" height="96">
+
 [![CI](https://github.com/mohamedhabila/Kavi/actions/workflows/ci.yml/badge.svg)](https://github.com/mohamedhabila/Kavi/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node 22](https://img.shields.io/badge/node-22.x-339933.svg)](.nvmrc)
 
-Kavi is a mobile-first AI assistant for iOS and Android.
+Kavi is a mobile-only AI assistant for iOS and Android.
 
-It started as a side project. Then the side project learned tools, memory,
-MCP, SSH, browser automation, local models, Expo release chores, and native
-phone actions. At some point it stopped being a demo and became a full
-assistant in a pocket. This repository is the cleaned-up public version: useful
-to run, practical to inspect, and friendly to contributors who like software
-that can do real work without hiding the wiring.
+No required Kavi server. No required gateway. No desktop sidecar quietly doing
+the interesting work while the phone holds the clipboard. Kavi runs as the
+mobile app: bring an on-device model or your own provider credentials, then let
+the phone drive the assistant loop, tools, memory, files, voice, and native
+actions.
+
+It started as a side project with a suspiciously simple question: what if the
+phone was the assistant runtime, not just a remote control for one? Then the
+side project learned MCP, SSH, browser automation, local models, Expo release
+chores, GitHub workflows, workspace files, memory, and enough native phone
+tricks to make the settings screen ask for a meeting with HR.
 
 ## What Kavi Does
 
-- Runs direct chat or agentic workflows from a mobile UI.
-- Uses hosted model providers and on-device Gemma through native runtime hooks.
-- Connects to MCP servers and keeps ClawHub-compatible skills as a first-class
-  source of assistant capabilities.
+- Runs direct chat and agentic workflows inside the mobile app.
+- Works without a Kavi-hosted backend or gateway for core assistant use.
+- Uses on-device Gemma through native runtime hooks, or user-configured hosted
+  model providers when you choose them.
+- Connects to optional MCP servers and keeps ClawHub-compatible skills as a
+  first-class source of assistant capabilities.
 - Works with conversation workspaces, browser sessions, SSH targets, GitHub
-  workflows, Expo/EAS projects, files, media, and voice input.
+  workflows, Expo/EAS projects, files, media, and voice input when those
+  integrations are configured.
 - Maintains optional local long-term memory in SQLite, with user controls to
   disable it.
 - Treats mobile-native tools as real surfaces: contacts, calendar, clipboard,
   sharing, notifications, location, media, and device state are modeled through
   explicit permissions and test fixtures.
 
-Kavi is not trying to be a tiny chat wrapper in a trench coat. It is closer to
-a developer workstation that got compressed until it fit on a phone.
+Kavi is not a tiny chat box wearing a tool belt. It is a pocket-sized assistant
+runtime that happens to have thumbs.
 
 ## Why Developers Might Care
 
-- **Mobile-first agent runtime:** the app is designed around phone ergonomics,
-  not a desktop product squeezed into a smaller screen.
+- **Mobile-only agent runtime:** the app is designed for phone constraints,
+  permissions, interruptions, and native surfaces from the start.
+- **No required backend:** core chat, local state, local memory, and on-device
+  model paths do not depend on a Kavi server or gateway.
 - **Tooling with contracts:** builtin tools carry capability metadata and are
   checked by `npm run check:tool-contracts`.
-- **Public hygiene by default:** repository checks fail on private artifacts,
-  stale internal language, generated release output, oversized contribution
-  files, and barrel-only modules.
+- **Repository hygiene by default:** checks fail on local artifacts, generated
+  release output, oversized contribution files, and barrel-only modules.
 - **Benchmark-shaped evals:** local and opt-in harnesses use structural outcome
   rubrics such as file hashes, native fixture state, memory predicates, graph
   terminal status, token budgets, and cache reads.
@@ -46,15 +57,15 @@ a developer workstation that got compressed until it fit on a phone.
   patches, generated editor assets, and verification scripts are all in the
   repo.
 
-## Readiness Snapshot
+## Quality Snapshot
 
-These numbers describe the current public release gate. They are not leaderboard
+These numbers describe the current quality gate. They are not leaderboard
 claims; they are reproducible checks for this mobile assistant codebase.
 
 | Signal                    | Current gate                                                                                                                                   |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | Contributor CI            | `npm run verify` runs public hygiene, language, links, licenses, app metadata, i18n, maintainability, lint, typecheck, and deterministic Jest. |
-| Local deterministic tests | Latest release check passed 6,100+ Jest tests across 700+ suites.                                                                              |
+| Local deterministic tests | Latest verification passed 6,100+ Jest tests across 700+ suites.                                                                               |
 | Coverage floor            | `npm run test:coverage` enforces statements >=83.8%, branches >=70.7%, functions >=87.6%, lines >=84.3%.                                       |
 | Strict keyless metrics    | `npm run eval:memory` passed 3/3 memory metric tests; `npm run eval:agent` passed 13/13 agent metric tests.                                    |
 | Opt-in E2E shape          | 55 selected-provider scenarios plus 2 delegation scenarios, mapped across 24 benchmark families and 11 assessment dimensions.                  |
@@ -114,8 +125,8 @@ Notes:
 - After changing native iOS dependencies, run `cd ios && pod install`.
 - Optional local environment overrides can be copied from `.env.local.example`
   to `.env.local`.
-- Maintainer signing material, generated release output, coverage reports, and
-  private working notes are intentionally excluded from the public repository.
+- Signing material, generated release output, coverage reports, and local
+  scratch notes stay out of source control.
 
 ## Core Commands
 
@@ -159,10 +170,11 @@ Kavi is organized around a few major subsystems:
 - `__tests__`: unit, integration, screen, Android contract, and acceptance tests
 - `plugins`: bundled plugin surfaces kept compatible with the mobile app
 
-The app is mobile-first by design. Some features rely on remote services or
-external credentials, while others run locally on-device. MCP and Expo/EAS
-integrations are public runtime surfaces and should remain compatible when
-changing repository hygiene rules.
+Kavi's center of gravity is the phone. Some optional integrations call remote
+services or require external credentials, while the app runtime, local state,
+local memory, and on-device model path remain mobile-owned. MCP, ClawHub skills,
+and Expo/EAS integrations are supported runtime surfaces and should remain
+compatible when changing repository hygiene rules.
 
 ## Testing
 

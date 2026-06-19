@@ -27,11 +27,12 @@ describe('public changelog', () => {
   });
 
   it('summarizes contributor-visible capability and maintenance areas', () => {
-    expect(changelog).toContain('Mobile-first assistant app');
+    expect(changelog).toContain('Mobile-only assistant app');
+    expect(changelog).toMatch(/no\s+required\s+Kavi\s+server\s+or\s+gateway/);
     expect(changelog).toContain('ClawHub-compatible skill discovery');
     expect(changelog).toContain('MCP servers');
     expect(changelog).toContain('On-device Gemma runtime support');
-    expect(changelog).toMatch(/public\s+repository guardrails/);
+    expect(changelog).toMatch(/repository\s+guardrails/);
     expect(changelog).toMatch(/release\s+checklist expectations/);
   });
 
