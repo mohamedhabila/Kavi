@@ -86,7 +86,7 @@
     "brotli-js": "^1.0.2",
     "croner": "^10.0.1",
     "diff": "^8.0.4",
-    "expo": "~55.0.12",
+    "expo": "~55.0.26",
     "expo-asset": "~55.0.13",
     "expo-audio": "~55.0.12",
     "expo-auth-session": "~55.0.12",
