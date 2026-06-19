@@ -155,9 +155,9 @@ describe('useSettingsStore browser provider settings', () => {
 describe('useSettingsStore Expo settings', () => {
   it('adds, updates, and removes an Expo account', () => {
     useSettingsStore.getState().addExpoAccount(makeExpoAccount());
-    useSettingsStore.getState().updateExpoAccount(makeExpoAccount({ owner: 'openclaw-team' }));
+    useSettingsStore.getState().updateExpoAccount(makeExpoAccount({ owner: 'kavi-team' }));
 
-    expect(useSettingsStore.getState().expoAccounts[0].owner).toBe('openclaw-team');
+    expect(useSettingsStore.getState().expoAccounts[0].owner).toBe('kavi-team');
 
     useSettingsStore.getState().removeExpoAccount('expo-account-1');
     expect(useSettingsStore.getState().expoAccounts).toHaveLength(0);
