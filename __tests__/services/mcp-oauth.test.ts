@@ -31,9 +31,16 @@ import {
   discoverAuthorizationServerMetadata,
   discoverOAuthProtectedResourceMetadata,
   exchangeAuthorization,
+  refreshAuthorization,
   registerClient,
 } from '@modelcontextprotocol/sdk/client/auth.js';
-import { authenticateMcpServer, McpOAuthError } from '../../src/services/mcp/oauth';
+import {
+  authenticateMcpServer,
+  clearMcpOAuth,
+  getMcpOAuthHeaders,
+  hasStoredMcpOAuth,
+  McpOAuthError,
+} from '../../src/services/mcp/oauth';
 
 describe('MCP OAuth service', () => {
   const originalCrypto = global.crypto;
@@ -258,5 +265,286 @@ describe('MCP OAuth service', () => {
       expect((error as McpOAuthError).message).toContain('authorization exchange');
       expect((error as McpOAuthError).message).not.toContain('Invalid OAuth error response');
     });
+  });
+
+  it('returns no headers when no OAuth session is stored', async () => {
+    await expect(
+      getMcpOAuthHeaders({
+        id: 'server-1',
+        name: 'Linear',
+        type: 'remote',
+        transport: 'streamable-http',
+        url: 'https://mcp.linear.app/mcp',
+        headers: {},
+      } as any),
+    ).resolves.toEqual({});
+  });
+
+  it('returns stored bearer headers without refreshing valid tokens', async () => {
+    mockGetMcpOAuthSecret.mockResolvedValueOnce(
+      JSON.stringify({
+        tokens: {
+          access_token: 'stored-access-token',
+          refresh_token: 'stored-refresh-token',
+          expires_in: 3600,
+          obtainedAt: Date.now(),
+        },
+      }),
+    );
+
+    const headers = await getMcpOAuthHeaders({
+      id: 'server-1',
+      name: 'Linear',
+      type: 'remote',
+      transport: 'streamable-http',
+      url: 'https://mcp.linear.app/mcp',
+      headers: {},
+    } as any);
+
+    expect(headers).toEqual({ Authorization: 'Bearer stored-access-token' });
+    expect(refreshAuthorization).not.toHaveBeenCalled();
+  });
+
+  it('drops expired stored bearer headers when refresh fails', async () => {
+    mockGetMcpOAuthSecret.mockResolvedValueOnce(
+      JSON.stringify({
+        authorizationServerUrl: 'https://linear.app',
+        clientInformation: {
+          client_id: 'linear-mobile-client',
+        },
+        tokens: {
+          access_token: 'expired-access-token',
+          refresh_token: 'stored-refresh-token',
+          expires_in: 1,
+          obtainedAt: Date.now() - 10_000,
+        },
+      }),
+    );
+    (refreshAuthorization as jest.Mock).mockRejectedValueOnce(new Error('session expired'));
+
+    const headers = await getMcpOAuthHeaders({
+      id: 'server-1',
+      name: 'Linear',
+      type: 'remote',
+      transport: 'streamable-http',
+      url: 'https://mcp.linear.app/mcp',
+      headers: {},
+    } as any);
+
+    expect(headers).toEqual({});
+    expect(mockSaveMcpOAuthSecret).not.toHaveBeenCalled();
+  });
+
+  it('refreshes expired stored bearer tokens and preserves the refresh token fallback', async () => {
+    mockGetMcpOAuthSecret.mockResolvedValueOnce(
+      JSON.stringify({
+        authorizationServerUrl: 'https://linear.app',
+        metadata: {
+          token_endpoint: 'https://linear.app/oauth/token',
+        },
+        resourceMetadata: {
+          resource: 'https://mcp.linear.app/mcp',
+        },
+        clientInformation: {
+          client_id: 'linear-mobile-client',
+        },
+        tokens: {
+          access_token: 'expired-access-token',
+          refresh_token: 'stored-refresh-token',
+          expires_in: 1,
+          obtainedAt: Date.now() - 10_000,
+        },
+      }),
+    );
+    (refreshAuthorization as jest.Mock).mockResolvedValueOnce({
+      access_token: 'refreshed-access-token',
+      expires_in: 3600,
+      token_type: 'Bearer',
+    });
+
+    const headers = await getMcpOAuthHeaders({
+      id: 'server-1',
+      name: 'Linear',
+      type: 'remote',
+      transport: 'streamable-http',
+      url: 'https://mcp.linear.app/mcp',
+      headers: {
+        'X-MCP-Trace': 'trace-id',
+        Authorization: 'Bearer static-token',
+      },
+    } as any);
+
+    expect(headers).toEqual({ Authorization: 'Bearer refreshed-access-token' });
+    expect(refreshAuthorization).toHaveBeenCalledWith(
+      'https://linear.app',
+      expect.objectContaining({
+        refreshToken: 'stored-refresh-token',
+        resource: new URL('https://mcp.linear.app/mcp'),
+      }),
+    );
+    const refreshOptions = (refreshAuthorization as jest.Mock).mock.calls[0][1];
+    const originalFetch = global.fetch;
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true } as Response);
+    Object.defineProperty(global, 'fetch', {
+      value: fetchMock,
+      configurable: true,
+    });
+    try {
+      await refreshOptions.fetchFn('https://linear.app/oauth/token');
+    } finally {
+      Object.defineProperty(global, 'fetch', {
+        value: originalFetch,
+        configurable: true,
+      });
+    }
+    const forwardedHeaders = fetchMock.mock.calls[0][1].headers as Headers;
+    expect(forwardedHeaders.get('X-MCP-Trace')).toBe('trace-id');
+    expect(forwardedHeaders.has('Authorization')).toBe(false);
+
+    const savedState = JSON.parse(mockSaveMcpOAuthSecret.mock.calls[0][1]);
+    expect(savedState.tokens).toEqual(
+      expect.objectContaining({
+        access_token: 'refreshed-access-token',
+        refresh_token: 'stored-refresh-token',
+        obtainedAt: expect.any(Number),
+      }),
+    );
+  });
+
+  it('reuses stored OAuth client information when the redirect URL still matches', async () => {
+    mockGetMcpOAuthSecret.mockResolvedValueOnce(
+      JSON.stringify({
+        clientInformation: {
+          client_id: 'stored-client-id',
+          redirect_uris: ['https://auth.expo.io/@test-owner/kavi'],
+          grant_types: ['authorization_code'],
+          response_types: ['code'],
+          token_endpoint_auth_method: 'none',
+        },
+      }),
+    );
+
+    await authenticateMcpServer({
+      id: 'server-1',
+      name: 'Linear',
+      type: 'remote',
+      transport: 'streamable-http',
+      url: 'https://mcp.linear.app/mcp',
+      headers: {},
+    } as any);
+
+    expect(mockRegisterClient).not.toHaveBeenCalled();
+    expect(exchangeAuthorization).toHaveBeenCalledWith(
+      'https://linear.app',
+      expect.objectContaining({
+        clientInformation: expect.objectContaining({
+          client_id: 'stored-client-id',
+        }),
+      }),
+    );
+  });
+
+  it('uses explicit OAuth endpoints without metadata discovery', async () => {
+    await authenticateMcpServer({
+      id: 'server-1',
+      name: 'Configured OAuth MCP',
+      type: 'remote',
+      transport: 'streamable-http',
+      url: 'https://configured.example.com/mcp',
+      headers: {},
+      oauth: {
+        clientId: 'configured-client',
+        authorizationUrl: 'https://auth.configured.example.com/oauth/authorize',
+        tokenUrl: 'https://auth.configured.example.com/oauth/token',
+      },
+    } as any);
+
+    expect(discoverOAuthProtectedResourceMetadata).not.toHaveBeenCalled();
+    expect(discoverAuthorizationServerMetadata).not.toHaveBeenCalled();
+    expect(exchangeAuthorization).toHaveBeenCalledWith(
+      'https://auth.configured.example.com/',
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          authorization_endpoint: 'https://auth.configured.example.com/oauth/authorize',
+          token_endpoint: 'https://auth.configured.example.com/oauth/token',
+        }),
+      }),
+    );
+  });
+
+  it('requires configured client information when registration metadata is missing', async () => {
+    (discoverAuthorizationServerMetadata as jest.Mock).mockResolvedValueOnce({
+      issuer: 'https://linear.app',
+      authorization_endpoint: 'https://linear.app/oauth/authorize',
+      token_endpoint: 'https://linear.app/oauth/token',
+      grant_types_supported: ['authorization_code'],
+    });
+
+    await authenticateMcpServer({
+      id: 'server-1',
+      name: 'Linear',
+      type: 'remote',
+      transport: 'streamable-http',
+      url: 'https://mcp.linear.app/mcp',
+      headers: {},
+    } as any).catch((error: unknown) => {
+      expect(error).toBeInstanceOf(McpOAuthError);
+      expect((error as McpOAuthError).code).toBe('configuration_required');
+      expect((error as McpOAuthError).message).toContain('add a client ID');
+    });
+
+    expect(WebBrowser.openAuthSessionAsync).not.toHaveBeenCalled();
+  });
+
+  it('adds the proxy project hint when an anonymous direct callback reports a redirect error', async () => {
+    expoConstants.expoConfig.owner = undefined;
+    (WebBrowser.openAuthSessionAsync as jest.Mock).mockImplementationOnce(async (browserUrl: string) => {
+      const state = new URL(browserUrl).searchParams.get('state') || '';
+      return {
+        type: 'success',
+        url: `kavi://mcp-auth/server-1?error=invalid_request&error_description=${encodeURIComponent(
+          'redirect_uri blocked',
+        )}&state=${encodeURIComponent(state)}`,
+      };
+    });
+
+    await authenticateMcpServer({
+      id: 'server-1',
+      name: 'Linear',
+      type: 'remote',
+      transport: 'streamable-http',
+      url: 'https://mcp.linear.app/mcp',
+      headers: {},
+      oauth: {
+        clientId: 'linear-mobile-client',
+      },
+    } as any).catch((error: unknown) => {
+      expect(error).toBeInstanceOf(McpOAuthError);
+      expect((error as McpOAuthError).code).toBe('auth_failed');
+      expect((error as McpOAuthError).message).toContain('OAuth Proxy Project Name');
+    });
+  });
+
+  it('reports invalid stored OAuth state as empty', async () => {
+    mockGetMcpOAuthSecret.mockResolvedValueOnce('{not valid JSON');
+
+    await expect(hasStoredMcpOAuth('server-1')).resolves.toBe(false);
+  });
+
+  it('reports and clears stored OAuth state', async () => {
+    mockGetMcpOAuthSecret.mockResolvedValueOnce(
+      JSON.stringify({
+        pending: {
+          state: 'pending-state',
+        },
+      }),
+    );
+
+    await expect(hasStoredMcpOAuth('server-1')).resolves.toBe(true);
+
+    await clearMcpOAuth('server-1');
+
+    expect(mockDeleteMcpOAuthSecret).toHaveBeenCalledWith('server-1');
+    expect(mockDeleteMcpOAuthClientSecret).toHaveBeenCalledWith('server-1');
   });
 });
