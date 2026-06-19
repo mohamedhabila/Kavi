@@ -1,202 +1,34 @@
-// ---------------------------------------------------------------------------
-// Kavi — Settings Store (Zustand)
-// ---------------------------------------------------------------------------
-
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AppSettings } from '../types/settings';
-import {
-  BrowserProviderConfig,
-  ExpoAccountConfig,
-  ExpoProjectConfig,
-  McpServerConfig,
-  SshTargetConfig,
-  WorkspaceTargetConfig,
-} from '../types/remote';
-import { ConversationMode } from '../types/conversation';
-import {
-  LastUsedModelSelection,
-  LlmProviderConfig,
-  ThinkingLevelPreference,
-} from '../types/provider';
-import { WebSearchProvider } from '../types/tool';
+import type { AppSettings } from '../types/settings';
 import { STORAGE_KEYS } from '../constants/storage';
 import { finalizeProviderConfig } from '../constants/api';
-import type { Locale } from '../i18n/types';
-import { i18n } from '../i18n/manager';
 import {
-  getWorkspaceTargetDisplayName,
-  normalizeWorkspaceTargetLinks,
-  resolveDefaultWorkspaceTargetId,
-} from '../services/workspaces/config';
-import {
-  deriveMemoryConsolidationModeFromSettings,
   normalizeMemoryConsolidationMode,
   resolveConsolidationProviderIdForMode,
-  type MemoryConsolidationMode,
 } from '../services/memory/memoryConsolidationMode';
-
-interface SettingsState extends AppSettings {
-  defaultWorkspaceTargetId: string | null;
-  lastUsedModel: LastUsedModelSelection | null;
-  thinkingLevel: ThinkingLevelPreference;
-  locale: Locale;
-  webSearchProvider: WebSearchProvider;
-  linkUnderstandingEnabled: boolean;
-  mediaUnderstandingEnabled: boolean;
-  maxLinks: number;
-  defaultConversationMode: ConversationMode;
-
-  addProvider: (provider: LlmProviderConfig) => void;
-  updateProvider: (provider: LlmProviderConfig) => void;
-  removeProvider: (id: string) => void;
-  toggleModelVisibility: (providerId: string, model: string) => void;
-  setActiveProviderAndModel: (providerId: string | null, model: string | null) => void;
-  setLastUsedModel: (providerId: string, model: string) => void;
-
-  addMcpServer: (server: McpServerConfig) => void;
-  updateMcpServer: (server: McpServerConfig) => void;
-  removeMcpServer: (id: string) => void;
-
-  addSshTarget: (target: SshTargetConfig) => void;
-  updateSshTarget: (target: SshTargetConfig) => void;
-  removeSshTarget: (id: string) => void;
-
-  addWorkspaceTarget: (target: WorkspaceTargetConfig) => void;
-  updateWorkspaceTarget: (target: WorkspaceTargetConfig) => void;
-  removeWorkspaceTarget: (id: string) => void;
-
-  addBrowserProvider: (provider: BrowserProviderConfig) => void;
-  updateBrowserProvider: (provider: BrowserProviderConfig) => void;
-  removeBrowserProvider: (id: string) => void;
-
-  addExpoAccount: (account: ExpoAccountConfig) => void;
-  updateExpoAccount: (account: ExpoAccountConfig) => void;
-  removeExpoAccount: (id: string) => void;
-
-  addExpoProject: (project: ExpoProjectConfig) => void;
-  updateExpoProject: (project: ExpoProjectConfig) => void;
-  removeExpoProject: (id: string) => void;
-
-  setTheme: (theme: AppSettings['theme']) => void;
-  setSystemPrompt: (prompt: string) => void;
-  setThinkingLevel: (level: ThinkingLevelPreference) => void;
-  setLocale: (locale: Locale) => void;
-  setWebSearchProvider: (provider: WebSearchProvider) => void;
-  setLinkUnderstandingEnabled: (enabled: boolean) => void;
-  setMediaUnderstandingEnabled: (enabled: boolean) => void;
-  setMaxLinks: (max: number) => void;
-  setDefaultConversationMode: (mode: ConversationMode) => void;
-  setDefaultWorkspaceTargetId: (targetId: string | null) => void;
-  setConsolidationProvider: (providerId: string | null) => void;
-  setMemoryConsolidationMode: (mode: MemoryConsolidationMode, providerId?: string | null) => void;
-  setCompactionProvider: (providerId: string | null) => void;
-  setCompactionModel: (model: string | null) => void;
-  setDisableLongTermMemory: (disabled: boolean) => void;
-  replaceAllSettings: (settings: Partial<AppSettings>) => void;
-}
-
-function hasOwnSetting(settings: Partial<AppSettings>, key: keyof AppSettings): boolean {
-  return Object.prototype.hasOwnProperty.call(settings, key);
-}
-
-const VALID_WEB_SEARCH_PROVIDERS: readonly WebSearchProvider[] = [
-  'auto',
-  'brave',
-  'gemini',
-  'perplexity',
-  'grok',
-  'kimi',
-];
-
-function sanitizeWebSearchProvider(provider: unknown): WebSearchProvider {
-  return VALID_WEB_SEARCH_PROVIDERS.includes(provider as WebSearchProvider)
-    ? (provider as WebSearchProvider)
-    : 'auto';
-}
-
-function normalizeProviders(providers: LlmProviderConfig[] | undefined): LlmProviderConfig[] {
-  return (providers || []).map((provider) => finalizeProviderConfig(provider));
-}
-
-type WorkspaceLinkSettings = Pick<AppSettings, 'browserProviders' | 'sshTargets'>;
-
-function normalizeWorkspaceTargetForState(
-  target: WorkspaceTargetConfig,
-  settings: WorkspaceLinkSettings,
-): WorkspaceTargetConfig {
-  const namedTarget: WorkspaceTargetConfig = {
-    ...target,
-    name: getWorkspaceTargetDisplayName(target),
-  };
-
-  return normalizeWorkspaceTargetLinks(namedTarget, settings);
-}
-
-function sanitizeWorkspaceTargetsForState(
-  workspaceTargets: WorkspaceTargetConfig[] | undefined,
-  settings: WorkspaceLinkSettings,
-): WorkspaceTargetConfig[] {
-  return (workspaceTargets || []).map((target) =>
-    normalizeWorkspaceTargetForState(target, settings),
-  );
-}
-
-function sanitizeDefaultWorkspaceTargetIdForState(options: {
-  defaultWorkspaceTargetId?: string | null;
-  workspaceTargets?: WorkspaceTargetConfig[];
-}): string | null {
-  return resolveDefaultWorkspaceTargetId(options);
-}
-
-function sanitizeExpoProjectsForSshTargets(
-  expoProjects: ExpoProjectConfig[] | undefined,
-  sshTargets: SshTargetConfig[] | undefined,
-): ExpoProjectConfig[] {
-  const validTargetIds = new Set((sshTargets || []).map((target) => target.id));
-
-  return (expoProjects || []).map((project) => {
-    const sshTargetId = (project.sshTargetId || '').trim();
-    if (!sshTargetId || validTargetIds.has(sshTargetId)) {
-      return project;
-    }
-
-    return {
-      ...project,
-      sshTargetId: undefined,
-    };
-  });
-}
+import { createDefaultSettingsDataState, type SettingsState } from './settingsStoreTypes';
+import {
+  clampMaxLinks,
+  hasOwnSetting,
+  normalizeProviders,
+  normalizeWorkspaceTargetForState,
+  sanitizeDefaultWorkspaceTargetIdForState,
+  sanitizeExpoProjectsForSshTargets,
+  sanitizeWebSearchProvider,
+  sanitizeWorkspaceTargetsForState,
+} from './settingsStoreNormalization';
+import {
+  migrateSettingsState,
+  partializeSettingsState,
+  SETTINGS_STORE_VERSION,
+} from './settingsStorePersistence';
 
 export const useSettingsStore = create<SettingsState>()(
-  persist(
+  persist<SettingsState, [], [], AppSettings>(
     (set) => ({
-      providers: [],
-      mcpServers: [],
-      sshTargets: [],
-      workspaceTargets: [],
-      browserProviders: [],
-      expoAccounts: [],
-      expoProjects: [],
-      activeProviderId: null,
-      activeModel: null,
-      theme: 'dark',
-      systemPrompt: i18n.t('settings.defaultSystemPrompt'),
-      lastUsedModel: null,
-      thinkingLevel: 'medium' as const,
-      locale: 'en' as Locale,
-      webSearchProvider: 'auto' as WebSearchProvider,
-      linkUnderstandingEnabled: true,
-      mediaUnderstandingEnabled: true,
-      maxLinks: 3,
-      defaultConversationMode: 'agentic' as ConversationMode,
-      defaultWorkspaceTargetId: null,
-      consolidationProvider: null,
-      memoryConsolidationMode: 'auto',
-      compactionProvider: null,
-      compactionModel: null,
-      disableLongTermMemory: false,
+      ...createDefaultSettingsDataState(),
 
       addProvider: (provider) =>
         set((state) => {
@@ -255,15 +87,15 @@ export const useSettingsStore = create<SettingsState>()(
 
       toggleModelVisibility: (providerId, model) =>
         set((state) => ({
-          providers: state.providers.map((p) => {
-            if (p.id !== providerId) return p;
-            const hidden = new Set(p.hiddenModels || []);
+          providers: state.providers.map((provider) => {
+            if (provider.id !== providerId) return provider;
+            const hidden = new Set(provider.hiddenModels || []);
             if (hidden.has(model)) {
               hidden.delete(model);
             } else {
               hidden.add(model);
             }
-            return { ...p, hiddenModels: Array.from(hidden) };
+            return { ...provider, hiddenModels: Array.from(hidden) };
           }),
         })),
 
@@ -280,12 +112,12 @@ export const useSettingsStore = create<SettingsState>()(
 
       updateMcpServer: (server) =>
         set((state) => ({
-          mcpServers: state.mcpServers.map((s) => (s.id === server.id ? server : s)),
+          mcpServers: state.mcpServers.map((entry) => (entry.id === server.id ? server : entry)),
         })),
 
       removeMcpServer: (id) =>
         set((state) => ({
-          mcpServers: state.mcpServers.filter((s) => s.id !== id),
+          mcpServers: state.mcpServers.filter((entry) => entry.id !== id),
         })),
 
       addSshTarget: (target) =>
@@ -447,7 +279,7 @@ export const useSettingsStore = create<SettingsState>()(
 
       setMediaUnderstandingEnabled: (enabled) => set({ mediaUnderstandingEnabled: enabled }),
 
-      setMaxLinks: (max) => set({ maxLinks: Math.max(1, Math.min(10, max)) }),
+      setMaxLinks: (max) => set({ maxLinks: clampMaxLinks(max) }),
 
       setDefaultConversationMode: (mode) => set({ defaultConversationMode: mode }),
 
@@ -546,9 +378,7 @@ export const useSettingsStore = create<SettingsState>()(
             mediaUnderstandingEnabled:
               settings.mediaUnderstandingEnabled ?? state.mediaUnderstandingEnabled,
             maxLinks:
-              settings.maxLinks !== undefined
-                ? Math.max(1, Math.min(10, settings.maxLinks))
-                : state.maxLinks,
+              settings.maxLinks !== undefined ? clampMaxLinks(settings.maxLinks) : state.maxLinks,
             defaultConversationMode:
               settings.defaultConversationMode ?? state.defaultConversationMode,
             defaultWorkspaceTargetId: hasOwnSetting(settings, 'defaultWorkspaceTargetId')
@@ -580,148 +410,10 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: STORAGE_KEYS.SETTINGS,
-      storage: createJSONStorage(() => AsyncStorage),
-      version: 15,
-      migrate: (persistedState: any, version) => {
-        if (!persistedState) return persistedState;
-        if (version < 2) {
-          persistedState = {
-            ...persistedState,
-            webSearchProvider: persistedState.webSearchProvider || 'auto',
-          };
-        }
-        if (version < 3) {
-          persistedState = {
-            ...persistedState,
-            sshTargets: persistedState.sshTargets || [],
-            workspaceTargets: persistedState.workspaceTargets || [],
-          };
-        }
-        if (version < 4) {
-          persistedState = {
-            ...persistedState,
-            browserProviders: persistedState.browserProviders || [],
-          };
-        }
-        if (version < 5) {
-          persistedState = {
-            ...persistedState,
-            expoAccounts: persistedState.expoAccounts || [],
-            expoProjects: persistedState.expoProjects || [],
-          };
-        }
-        if (version < 6) {
-          persistedState = {
-            ...persistedState,
-            defaultConversationMode: persistedState.defaultConversationMode || 'agentic',
-          };
-        }
-        if (version < 7) {
-          persistedState = {
-            ...persistedState,
-            providers: normalizeProviders(persistedState.providers),
-          };
-        }
-        if (version < 8) {
-          const sshTargets = persistedState.sshTargets || [];
-          const browserProviders = persistedState.browserProviders || [];
-          persistedState = {
-            ...persistedState,
-            workspaceTargets: sanitizeWorkspaceTargetsForState(
-              persistedState.workspaceTargets || [],
-              { browserProviders, sshTargets },
-            ),
-            expoProjects: sanitizeExpoProjectsForSshTargets(
-              persistedState.expoProjects || [],
-              sshTargets,
-            ),
-          };
-        }
-        if (version < 9) {
-          // 'direct' conversation mode renamed to 'chitchat' on 2026-04-29.
-          if (persistedState.defaultConversationMode === 'direct') {
-            persistedState = {
-              ...persistedState,
-              defaultConversationMode: 'chitchat',
-            };
-          }
-        }
-        if (version < 10) {
-          if (persistedState.consolidationProvider === undefined) {
-            persistedState = {
-              ...persistedState,
-              consolidationProvider: null,
-            };
-          }
-        }
-        if (version < 11) {
-          if (persistedState.disableLongTermMemory === undefined) {
-            persistedState = {
-              ...persistedState,
-              disableLongTermMemory: false,
-            };
-          }
-        }
-        if (version < 12) {
-          persistedState = {
-            ...persistedState,
-            webSearchProvider: sanitizeWebSearchProvider(persistedState.webSearchProvider),
-          };
-        }
-        if (version < 13) {
-          persistedState = {
-            ...persistedState,
-            defaultWorkspaceTargetId: sanitizeDefaultWorkspaceTargetIdForState({
-              defaultWorkspaceTargetId: persistedState.defaultWorkspaceTargetId ?? null,
-              workspaceTargets: persistedState.workspaceTargets || [],
-            }),
-          };
-        }
-        if (version < 14) {
-          persistedState = {
-            ...persistedState,
-            compactionProvider: persistedState.compactionProvider ?? null,
-            compactionModel: persistedState.compactionModel ?? null,
-          };
-        }
-        if (version < 15) {
-          persistedState = {
-            ...persistedState,
-            memoryConsolidationMode: deriveMemoryConsolidationModeFromSettings({
-              memoryConsolidationMode: persistedState.memoryConsolidationMode,
-              consolidationProvider: persistedState.consolidationProvider ?? null,
-            }),
-          };
-        }
-        return persistedState;
-      },
-      partialize: (state) => ({
-        providers: state.providers.map((p) => ({ ...p, apiKey: '' })), // Don't persist API keys in plain storage
-        mcpServers: state.mcpServers,
-        sshTargets: state.sshTargets,
-        workspaceTargets: state.workspaceTargets,
-        defaultWorkspaceTargetId: state.defaultWorkspaceTargetId,
-        browserProviders: state.browserProviders,
-        expoAccounts: state.expoAccounts,
-        expoProjects: state.expoProjects,
-        activeProviderId: state.activeProviderId,
-        activeModel: state.activeModel,
-        theme: state.theme,
-        systemPrompt: state.systemPrompt,
-        lastUsedModel: state.lastUsedModel,
-        thinkingLevel: state.thinkingLevel,
-        locale: state.locale,
-        webSearchProvider: state.webSearchProvider,
-        linkUnderstandingEnabled: state.linkUnderstandingEnabled,
-        mediaUnderstandingEnabled: state.mediaUnderstandingEnabled,
-        maxLinks: state.maxLinks,
-        defaultConversationMode: state.defaultConversationMode,
-        consolidationProvider: state.consolidationProvider,
-        memoryConsolidationMode: state.memoryConsolidationMode,
-        compactionProvider: state.compactionProvider,
-        compactionModel: state.compactionModel,
-        disableLongTermMemory: state.disableLongTermMemory,
-      }),
+      storage: createJSONStorage<AppSettings>(() => AsyncStorage),
+      version: SETTINGS_STORE_VERSION,
+      migrate: migrateSettingsState,
+      partialize: partializeSettingsState,
     },
   ),
 );
