@@ -26,6 +26,7 @@ ios/Pods/
 *.app
 *.orig.*
 web-build/
+.private
 .private/
 OPEN_SOURCE_READINESS_PLAN.md
 .env

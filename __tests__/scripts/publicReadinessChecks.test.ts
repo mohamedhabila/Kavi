@@ -1,8 +1,14 @@
+const { execFileSync } = require('child_process');
+const { mkdtempSync, rmSync, writeFileSync } = require('fs');
+const { tmpdir } = require('os');
+const { join } = require('path');
+
 const {
   DEFAULT_CONFIG,
   PUBLIC_LANGUAGE_PATTERNS,
   SECRET_PATTERNS,
   collectContentFindings,
+  evaluatePublicHygiene,
   evaluateTrackedDocs,
   findBlockedTrackedPathFailures,
   splitAllowedFindings,
@@ -42,6 +48,34 @@ describe('public readiness checks', () => {
     expect(result.plannedCleanupDocs).toEqual([]);
     expect(result.failures).toHaveLength(1);
     expect(result.failures[0].message).toContain('docs/private-surprise.md');
+  });
+
+  it('recognizes private workspace ignores in a clean checkout without local private directories', () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), 'kavi-public-hygiene-'));
+    try {
+      execFileSync('git', ['init'], { cwd: projectRoot, stdio: 'ignore' });
+      writeFileSync(projectRoot + '/.gitignore', ['.private', '.private/', ''].join('\n'));
+
+      const result = evaluatePublicHygiene({
+        projectRoot,
+        config: {
+          ...DEFAULT_CONFIG,
+          privatePaths: ['.private'],
+          absentLocalPaths: [],
+          ignoredPaths: ['.private', '.private/'],
+          exportIgnorePaths: [],
+          blockedTrackedPathRules: [],
+          publicDocAllowlist: new Set(),
+          plannedDocCleanupPaths: new Set(),
+          excludedContentPaths: new Set(),
+          publicLanguageAllowlist: [],
+        },
+      });
+
+      expect(result.failures).toEqual([]);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 
   it('detects high-confidence secrets without flagging short placeholders', () => {

@@ -24,7 +24,9 @@ describe('release maintainer checklist', () => {
 
     expect(checklist).toContain('[SECURITY.md](../SECURITY.md)');
     expect(checklist).toContain('[CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md)');
-    expect(checklist).toContain('Issue templates should keep security-sensitive reports out of public issues.');
+    expect(checklist).toContain(
+      'Issue templates should keep security-sensitive reports out of public issues.',
+    );
   });
 
   it('keeps release verification aligned with current repository gates', () => {
@@ -43,7 +45,7 @@ describe('release maintainer checklist', () => {
     expect(checklist).toContain('CHANGELOG.md');
   });
 
-  it('documents public-safe build checks and maintainer-only signing boundaries', () => {
+  it('documents build checks and maintainer-only signing boundaries', () => {
     const checklist = readReleaseChecklist();
 
     expect(checklist).toContain('npm run check:android:release-env');

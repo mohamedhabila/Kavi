@@ -46,16 +46,16 @@ describe('contributor documentation', () => {
     expect(testingGuide).toContain('.github/workflows/ci.yml');
   });
 
-  it('documents public-safe local setup boundaries without private paths or keys', () => {
+  it('documents local setup boundaries without private paths or keys', () => {
     const setupGuide = readRepoFile('docs/setup/development.md');
     const testingGuide = readRepoFile('docs/testing.md');
     const combinedDocs = [setupGuide, testingGuide].join('\n');
 
     expect(setupGuide).toContain('.env.local.example');
     expect(testingGuide).toContain('cp .env.local.example .env.local');
-    expect(setupGuide).toContain('public-safe Android release check');
-    expect(setupGuide).toContain('maintainer signing material');
-    expect(testingGuide).toContain('public-safe environment check');
+    expect(setupGuide).toContain('Android release environment check');
+    expect(setupGuide).toContain('signing material');
+    expect(testingGuide).toContain('Android release environment check');
     expect(testingGuide).toContain('npm run build:android:aab');
     expect(readRepoFile('README.md')).toContain('Selected-provider E2E');
     expect(setupGuide).toContain('npm run build:editor-assets');

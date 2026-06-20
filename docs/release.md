@@ -1,6 +1,8 @@
 # Maintainer Release And Repository Checklist
 
-This checklist covers repository-host settings and maintainer-only release gates that cannot be fully represented in git. Review it before making the repository public, before changing the default branch rules, and before each tagged release.
+This checklist covers repository-host settings and maintainer-only release gates
+that cannot be fully represented in git. Review it before changing default
+branch rules and before each tagged release.
 
 ## Default Branch Protection
 
@@ -65,7 +67,7 @@ tag candidate and run the release gate from a clean checkout.
 - Run `npm run check:licenses` after dependency changes and commit regenerated `THIRD_PARTY_NOTICES.md` when it changes.
 - Run `npm run check:links`.
 - Confirm app metadata and native identifiers with `npm run check:app-metadata`.
-- Run the public-safe Android release environment check with
+- Run the Android release environment check with
   `npm run check:android:release-env`.
 - Run iOS simulator release validation with `npm run build:ios:release-sim`
   on a macOS machine with the required Xcode toolchain.
@@ -78,7 +80,8 @@ tag candidate and run the release gate from a clean checkout.
 - Build signed Android artifacts only from a maintainer signing environment:
   `npm run build:android:release` for APK output and
   `npm run build:android:aab` for App Bundle output.
-- Confirm release artifacts, signing keys, credentials, `.env.local`, and maintainer-only working material are not tracked.
+- Confirm release artifacts, signing keys, credentials, `.env.local`, and local
+  scratch material are not tracked.
 - Store generated release artifacts outside git. The local export path
   `release-artifacts/` is ignored and must remain untracked.
 - Update [CHANGELOG.md](../CHANGELOG.md) for user-visible changes.
@@ -87,7 +90,7 @@ tag candidate and run the release gate from a clean checkout.
 
 ## Tagging And GitHub Release
 
-After release readiness passes:
+After release validation passes:
 
 - Create an annotated version tag such as
   `git tag -a vX.Y.Z -m "Kavi X.Y.Z"`.

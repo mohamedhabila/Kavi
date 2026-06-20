@@ -4,10 +4,10 @@ Kavi has a large Jest-based test suite and a smaller set of environment-dependen
 
 ## Quality Gate Tiers
 
-| Tier                 | Command                     | API keys         | When to use                                                |
-| -------------------- | --------------------------- | ---------------- | ---------------------------------------------------------- |
-| **1 — Default**      | `npm run verify`            | None             | Every PR; matches keyless CI                               |
-| **2 — Strict**       | `npm run verify:strict`     | None             | Maintainer pre-release; adds structural acceptance metrics |
+| Tier                 | Command                     | API keys              | When to use                                                |
+| -------------------- | --------------------------- | --------------------- | ---------------------------------------------------------- |
+| **1 — Default**      | `npm run verify`            | None                  | Every PR; matches keyless CI                               |
+| **2 — Strict**       | `npm run verify:strict`     | None                  | Maintainer pre-release; adds structural acceptance metrics |
 | **3 — Strict + E2E** | `npm run verify:strict:e2e` | Selected-provider key | Full agent quality proof before major agent/graph changes  |
 
 **Tier 1 (`verify`)** is the contributor gate and matches pull request CI. It
@@ -75,11 +75,10 @@ npm run test:coverage
 ```
 
 The coverage gate uses the same local Jest suite with source collection enabled
-for `src/**/*.{ts,tsx}` and enforces the current measured baseline: statements
->=83.8%, branches >=70.7%, functions >=87.6%, and lines >=84.3%. Do not lower
-these floors without maintainer approval. Raise them when focused tests improve
-real coverage. Coverage reports are written under `.tmp/coverage`, which is
-ignored by git.
+for `src/**/*.{ts,tsx}`. Coverage floors are statements >=83.8%, branch coverage >=70.7%,
+function coverage >=87.6%, and line coverage >=84.3%. Do not lower these floors
+without maintainer approval. Raise them when focused tests improve real coverage.
+Coverage reports are written under `.tmp/coverage`, which is ignored by git.
 
 Run lint only:
 
@@ -165,29 +164,29 @@ npm run verify:strict:e2e
 Run only direct benchmark shards:
 
 ```bash
-E2E_SCENARIO_IDS="direct-agentdojo-untrusted-workspace-note direct-bfcl-v4-parallel-relevance direct-toolsandbox-state-dependency direct-tau-user-coordination-state direct-androidworld-calendar-add-update direct-mobileworld-cross-app-contact-message direct-spabench-cross-app-device-actions direct-longmemeval-v2-mobile-preference-update" npm run eval:e2e:assess
+E2E_SCENARIO_IDS="direct-agentdojo-untrusted-workspace-note direct-bfcl-v4-parallel-relevance direct-toolsandbox-state-dependency direct-tau-user-coordination-state direct-androidworld-calendar-add-update direct-mobileworld-cross-app-contact-message direct-spabench-cross-app-device-actions direct-longmemeval-v2-mobile-preference-update direct-locomo-temporal-conversation-memory direct-beam-long-dialogue-multi-probe direct-longmemeval-v2-experience-runbook direct-mobileworld-long-horizon-personalization" npm run eval:e2e:assess
 ```
 
 ### Environment variables
 
-| Variable                   | Required            | Purpose                                                           |
-| -------------------------- | ------------------- | ----------------------------------------------------------------- |
-| `RUN_E2E_AGENT_EVAL`       | Yes                 | Set to `1` in `.env.local` (harness loads it automatically)       |
-| `E2E_PROVIDER`             | No                  | `gemini` by default; supports `openai`, `openrouter`, `openai-compatible` |
-| `GEMINI_API_KEY`           | For Gemini          | Same key as emulator Gemini provider                              |
-| `GEMINI_BASE_URL`          | If Vertex           | Match app provider settings                                       |
-| `E2E_GEMINI_MODEL`         | No                  | Override Gemini model (default: capable flash from catalog)       |
-| `OPENAI_API_KEY`           | For OpenAI          | OpenAI API key                                                    |
-| `E2E_OPENAI_MODEL`         | For OpenAI          | OpenAI model used by live E2E                                     |
-| `OPENAI_BASE_URL`          | No                  | Defaults to `https://api.openai.com/v1`                           |
-| `OPENROUTER_API_KEY`       | For OpenRouter      | OpenRouter API key                                                |
-| `E2E_OPENROUTER_MODEL`     | For OpenRouter      | OpenRouter model id                                               |
-| `E2E_COMPATIBLE_API_KEY`   | For compatible      | Generic OpenAI-compatible API key                                 |
-| `E2E_COMPATIBLE_BASE_URL`  | For compatible      | Generic OpenAI-compatible base URL                                |
-| `E2E_COMPATIBLE_MODEL`     | For compatible      | Generic OpenAI-compatible model id                                |
-| `E2E_MAX_SCENARIO_RETRIES` | No                  | Per-scenario retry budget (default `0`; nightly uses `1`)         |
-| `E2E_REPORT_PATH`          | No                  | JSON run report path (default `.artifacts/e2e-agent-report.json`) |
-| `E2E_SCENARIO_IDS`         | No                  | Comma/whitespace-separated scenario IDs for targeted assessment   |
+| Variable                   | Required       | Purpose                                                                   |
+| -------------------------- | -------------- | ------------------------------------------------------------------------- |
+| `RUN_E2E_AGENT_EVAL`       | Yes            | Set to `1` in `.env.local` (harness loads it automatically)               |
+| `E2E_PROVIDER`             | No             | `gemini` by default; supports `openai`, `openrouter`, `openai-compatible` |
+| `GEMINI_API_KEY`           | For Gemini     | Same key as emulator Gemini provider                                      |
+| `GEMINI_BASE_URL`          | If Vertex      | Match app provider settings                                               |
+| `E2E_GEMINI_MODEL`         | No             | Override Gemini model (default: capable flash from catalog)               |
+| `OPENAI_API_KEY`           | For OpenAI     | OpenAI API key                                                            |
+| `E2E_OPENAI_MODEL`         | For OpenAI     | OpenAI model used by live E2E                                             |
+| `OPENAI_BASE_URL`          | No             | Defaults to `https://api.openai.com/v1`                                   |
+| `OPENROUTER_API_KEY`       | For OpenRouter | OpenRouter API key                                                        |
+| `E2E_OPENROUTER_MODEL`     | For OpenRouter | OpenRouter model id                                                       |
+| `E2E_COMPATIBLE_API_KEY`   | For compatible | Generic OpenAI-compatible API key                                         |
+| `E2E_COMPATIBLE_BASE_URL`  | For compatible | Generic OpenAI-compatible base URL                                        |
+| `E2E_COMPATIBLE_MODEL`     | For compatible | Generic OpenAI-compatible model id                                        |
+| `E2E_MAX_SCENARIO_RETRIES` | No             | Per-scenario retry budget (default `0`; nightly uses `1`)                 |
+| `E2E_REPORT_PATH`          | No             | JSON run report path (default `.artifacts/e2e-agent-report.json`)         |
+| `E2E_SCENARIO_IDS`         | No             | Comma/whitespace-separated scenario IDs for targeted assessment           |
 
 The harness scripts (`eval:e2e`, `verify:strict:e2e`) load `.env.local` via `scripts/load-local-env.js`. They are never bundled into the app.
 
@@ -208,28 +207,37 @@ Assessment axes (for evidence-based readiness and benchmark coverage):
 | `delegation`         | Spawn, worker evidence, coordinate capability                                           |
 | `outcome_validators` | `native_fixture_state`, `file_hash`, `goal_criterion`                                   |
 | `control_graph`      | Evidence gates, holds, terminal success                                                 |
+| `mobile_native`      | Permission-aware device actions, native app state, and mobile fixtures                  |
+| `privacy_safety`     | Sensitive native surfaces, redaction, untrusted content, and approval boundaries        |
 
 Benchmark families for mobile assistant scope (structural rubrics only):
 
-| Family                       | External lineage                                | Kavi scenarios                                                                                   |
-| ---------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `kavi-core`                  | Kavi core mobile-assistant scenario suite       | core workspace, memory, native tool, delegation, and goal-completion flows                        |
-| `gaia-adapted`               | GAIA multi-hop file reasoning                   | `bench-gaia-file-hop-chain`, inventory flows                                                     |
-| `tau-bench-adapted`          | τ-bench structured final-state outcomes         | `native-calendar-json-field`, `bench-tau-native-json-outcome`, `bench-goal-json-field-criterion` |
-| `agentbench-adapted`         | AgentBench multi-tool chains                    | `bench-agentbench-tool-chain`, file/inventory chains                                             |
-| `memory-agent-bench-adapted` | MemoryAgentBench long-horizon recall            | memory + passive ingestion scenarios                                                             |
-| `state-bench-adapted`        | STATE-Bench multi-turn task tracking            | goal-switch + scoped recall scenarios                                                            |
-| `tool-discovery-adapted`     | Tool search + session activation                | `bench-session-tool-cache`, `bench-tool-describe-then-use`, catalog flows                        |
-| `bfcl-adapted`               | Berkeley Function Calling Leaderboard (BFCL v4) | `bench-bfcl-parallel-file-read`, `bench-bfcl-sequential-memory-chain`                            |
-| `longmem-adapted`            | LongMemEval delayed recall                      | `bench-longmem-delayed-recall`                                                                   |
-| `androidworld-direct`        | AndroidWorld app-state rewards                  | `direct-androidworld-calendar-add-update`                                                        |
-| `mobileworld-direct`         | MobileWorld cross-app/user-interaction tasks    | `direct-mobileworld-cross-app-contact-message`                                                   |
-| `spa-bench-direct`           | SPA-Bench smartphone resource metrics           | `direct-spabench-cross-app-device-actions`                                                       |
-| `bfcl-v4-direct`             | BFCL V4 agentic tool evaluation                 | `direct-bfcl-v4-parallel-relevance`                                                              |
-| `longmemeval-v2-direct`      | LongMemEval-V2 dynamic memory abilities         | `direct-longmemeval-v2-mobile-preference-update`                                                 |
-| `tau-bench-direct`           | τ-bench / τ² / τ³ user-tool state interaction   | `direct-tau-user-coordination-state`                                                             |
-| `toolsandbox-direct`         | ToolSandbox state dependency                    | `direct-toolsandbox-state-dependency`                                                            |
-| `agentdojo-direct`           | AgentDojo untrusted-content safety              | `direct-agentdojo-untrusted-workspace-note`                                                      |
+| Family                         | External lineage                                | Kavi scenarios                                                                                   |
+| ------------------------------ | ----------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `kavi-core`                    | Kavi core mobile-assistant scenario suite       | core workspace, memory, native tool, delegation, and goal-completion flows                       |
+| `gaia-adapted`                 | GAIA multi-hop file reasoning                   | `bench-gaia-file-hop-chain`, inventory flows                                                     |
+| `tau-bench-adapted`            | τ-bench structured final-state outcomes         | `native-calendar-json-field`, `bench-tau-native-json-outcome`, `bench-goal-json-field-criterion` |
+| `agentbench-adapted`           | AgentBench multi-tool chains                    | `bench-agentbench-tool-chain`, file/inventory chains                                             |
+| `memory-agent-bench-adapted`   | MemoryAgentBench long-horizon recall            | memory + passive ingestion scenarios                                                             |
+| `state-bench-adapted`          | STATE-Bench multi-turn task tracking            | goal-switch + scoped recall scenarios                                                            |
+| `tool-discovery-adapted`       | Tool search + session activation                | `bench-session-tool-cache`, `bench-tool-describe-then-use`, catalog flows                        |
+| `bfcl-adapted`                 | Berkeley Function Calling Leaderboard (BFCL v4) | `bench-bfcl-parallel-file-read`, `bench-bfcl-sequential-memory-chain`                            |
+| `longmem-adapted`              | LongMemEval delayed recall                      | `bench-longmem-delayed-recall`                                                                   |
+| `androidworld-adapted`         | AndroidWorld app-state rewards                  | calendar mutation, permission-denial, clipboard/share/notification native fixture flows          |
+| `mobile-agent-bench-adapted`   | MobileAgentBench mobile planning/execution      | contact/message draft and media-state native fixture flows                                       |
+| `mobileworld-adapted`          | MobileWorld cross-app mobile tasks              | contact discovery, calendar, and cross-app message flows                                         |
+| `knowu-bench-adapted`          | KnowU-Bench personalized mobile agents          | memory-driven native contact action from remembered user preference                              |
+| `androidworld-direct`          | AndroidWorld app-state rewards                  | `direct-androidworld-calendar-add-update`                                                        |
+| `mobileworld-direct`           | MobileWorld cross-app/user-interaction tasks    | `direct-mobileworld-cross-app-contact-message`                                                   |
+| `spa-bench-direct`             | SPA-Bench smartphone resource metrics           | `direct-spabench-cross-app-device-actions`                                                       |
+| `bfcl-v4-direct`               | BFCL V4 agentic tool evaluation                 | `direct-bfcl-v4-parallel-relevance`                                                              |
+| `longmemeval-v2-direct`        | LongMemEval-V2 dynamic memory abilities         | `direct-longmemeval-v2-mobile-preference-update`                                                 |
+| `tau-bench-direct`             | τ-bench / τ² / τ³ user-tool state interaction   | `direct-tau-user-coordination-state`                                                             |
+| `toolsandbox-direct`           | ToolSandbox state dependency                    | `direct-toolsandbox-state-dependency`                                                            |
+| `agentdojo-direct`             | AgentDojo untrusted-content safety              | `direct-agentdojo-untrusted-workspace-note`                                                      |
+| `locomo-direct`                | LoCoMo long-term conversational memory          | temporal conversation memory and mobile long-horizon personalization shards                      |
+| `beam-direct`                  | BEAM agent memory over long interactions        | long dialogue with fragmented probes, distractors, and structural recall                         |
+| `provider-prompt-cache-direct` | Provider prompt-cache behavior                  | long-horizon prompt-cache probes with stable-prefix accounting                                   |
 
 Registry: `src/acceptance/e2eAgent/e2eBenchmarkRegistry.ts`. Report builder: `e2eAssessmentReport.ts`.
 
@@ -239,14 +247,14 @@ Registry: `src/acceptance/e2eAgent/e2eBenchmarkRegistry.ts`. Report builder: `e2
 
 | Suite             | Test file                      | Scenarios                                                            | Pass bar                                    |
 | ----------------- | ------------------------------ | -------------------------------------------------------------------- | ------------------------------------------- |
-| Core + benchmarks | `e2eAgentMetrics.test.ts`      | 49 (16 core + 25 adapted benchmark + 8 direct benchmark shards)      | ≥90% per run (`E2E_SCENARIO_MIN_PASS_RATE`) |
+| Core + benchmarks | `e2eAgentMetrics.test.ts`      | 55 (16 core + 27 adapted benchmark + 12 direct benchmark shards)     | ≥90% per run (`E2E_SCENARIO_MIN_PASS_RATE`) |
 | Delegation        | `e2eDelegationMetrics.test.ts` | 2 (`delegation-worker-finalize`, `delegation-worker-evidence-chain`) | 100% (mocked worker, structural rubrics)    |
 
 **Core scenarios (personal-assistant scope):** file write + read, goal evidence completion, gate recovery, `tool_catalog` + `agents`, memory remember + recall, shopping list, workspace inventory manifest, native calendar JSON, passive memory ingestion, goal-scoped recall, and multi-turn flows (memory preference, trip artifact, inventory readback, catalog → memory, catalog query → memory recall, gate follow-up). Multi-turn scenarios invoke `runOrchestrator` once per user message with accumulated history and graph resume — matching the foreground conversation path.
 
-**Benchmark-adapted scenarios (`bench-*`):** GAIA file-hop chain, session memory cache, describe-then-use, 3-turn memory state, native calendar state criterion, scoped goal-switch recall, bootstrap-first-turn goals, τ-bench calendar state chain, AgentBench inventory chain, BFCL parallel file read, BFCL sequential memory chain, LongMemEval delayed recall, AndroidWorld/MobileAgent/MobileWorld/KnowU-style native fixture tasks.
+**Benchmark-adapted scenarios (`bench-*`):** GAIA file-hop chain, session memory cache, prompt-cache long-horizon probes, describe-then-use, 3-turn memory state, native calendar state criterion, scoped goal-switch recall, bootstrap-first-turn goals, τ-bench calendar state chain, AgentBench inventory chain, BFCL parallel file read, BFCL sequential memory chain, LongMemEval delayed recall/update/abstention, AndroidWorld/MobileAgent/MobileWorld/KnowU-style native fixture tasks.
 
-**Direct benchmark shards (`direct-*`):** local runnable direct ports for AndroidWorld calendar app-state reward, MobileWorld cross-app contact/message flow, SPA-Bench cross-app device actions, BFCL V4 parallel/relevance state, LongMemEval-V2 dynamic mobile preference memory, τ-style missing-info coordination, ToolSandbox state dependency, and AgentDojo untrusted workspace content. These are not full upstream benchmark replacements; `e2eBenchmarkManifest.ts` keeps the full Android emulator, mobile GUI/MCP, provider matrix, and security fixture runners marked as external requirements.
+**Direct benchmark shards (`direct-*`):** local runnable direct ports for AndroidWorld calendar app-state reward, MobileWorld cross-app contact/message flow, SPA-Bench cross-app device actions, BFCL V4 parallel/relevance state, LongMemEval-V2 dynamic mobile preference memory and experience-runbook recall, LoCoMo-style temporal conversation memory, BEAM-style long-dialogue probes, τ-style missing-info coordination, ToolSandbox state dependency, and AgentDojo untrusted workspace content. These are not full upstream benchmark replacements; `e2eBenchmarkManifest.ts` keeps the full Android emulator, mobile GUI/MCP, provider matrix, and security fixture runners marked as external requirements.
 
 **Assessment coverage:** `e2eAssessmentCoverage.test.ts` asserts every assessment dimension maps to ≥2 scenarios and every benchmark family maps to ≥1 scenario (`e2eBenchmarkRegistry.ts`).
 
@@ -258,7 +266,7 @@ Registry: `src/acceptance/e2eAgent/e2eBenchmarkRegistry.ts`. Report builder: `e2
 
 | Scope                           | Typical duration | Token budget (ceiling)                                |
 | ------------------------------- | ---------------- | ----------------------------------------------------- |
-| Core + benchmark (49 scenarios) | 30–60+ minutes   | ≤4M total (`E2E_PROGRAM_MAX_TOTAL_TOKENS`)            |
+| Core + benchmark (55 scenarios) | 30–60+ minutes   | ≤4M total (`E2E_PROGRAM_MAX_TOTAL_TOKENS`)            |
 | Delegation only                 | ~10 seconds      | ≤200K (`E2E_DELEGATION_PROGRAM_MAX_TOTAL_TOKENS`)     |
 | Full `eval:e2e`                 | 30–60+ minutes   | Per-scenario ceilings in `E2E_SCENARIO_TOKEN_BUDGETS` |
 
@@ -306,9 +314,8 @@ reason to defer it.
 
 ## Release-Oriented Validation
 
-For Android release work, start with the public-safe environment check. It
-verifies Java and Android SDK discovery without requiring maintainer signing
-material:
+For Android release work, start with the Android release environment check. It
+verifies Java and Android SDK discovery without requiring signing material:
 
 ```bash
 npm run check:android:release-env
