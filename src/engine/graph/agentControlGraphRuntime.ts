@@ -36,6 +36,7 @@ export function createAgentControlGraphRuntime(params: {
   conversationId: string;
   initialMessages: ReadonlyArray<Message>;
   initialSnapshot?: AgentRunControlGraphState;
+  warn?: (message: string, error: unknown) => void;
   workflowScopeUserMessageId?: string;
 }) {
   let snapshot = createInitialAgentControlGraphSnapshot(params.initialSnapshot);
@@ -66,6 +67,7 @@ export function createAgentControlGraphRuntime(params: {
     callbacks: params.callbacks,
     conversationId: params.conversationId,
     applyEvents,
+    warn: params.warn,
   });
 
   return {

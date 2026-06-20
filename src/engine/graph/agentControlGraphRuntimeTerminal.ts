@@ -13,7 +13,21 @@ export function createAgentControlGraphRuntimeTerminal(params: {
   callbacks: RuntimeCallbacks;
   conversationId: string;
   applyEvents: ApplyEvents;
+  warn?: (message: string, error: unknown) => void;
 }) {
+  const emitTerminalSessionEnd = async (reason?: string): Promise<void> => {
+    try {
+      await emitSessionEvent(
+        'end',
+        reason
+          ? { conversationId: params.conversationId, reason }
+          : { conversationId: params.conversationId },
+      );
+    } catch (error: unknown) {
+      params.warn?.('Agent control graph terminal session end event failed', error);
+    }
+  };
+
   const finishTerminalRunWithGraphEvent = async (args: {
     graphEvent: TerminalGraphEvent;
     state: 'idle' | 'error';
@@ -36,12 +50,7 @@ export function createAgentControlGraphRuntimeTerminal(params: {
       );
     }
     params.callbacks.onStateChange(args.state);
-    await emitSessionEvent(
-      'end',
-      args.sessionEndReason
-        ? { conversationId: params.conversationId, reason: args.sessionEndReason }
-        : { conversationId: params.conversationId },
-    );
+    await emitTerminalSessionEnd(args.sessionEndReason);
     if (args.error) {
       params.callbacks.onError(args.error);
     }
@@ -87,22 +96,12 @@ export function createAgentControlGraphRuntimeTerminal(params: {
         args.assistantMetadata,
       );
       params.callbacks.onStateChange('idle');
-      await emitSessionEvent(
-        'end',
-        args.sessionEndReason
-          ? { conversationId: params.conversationId, reason: args.sessionEndReason }
-          : { conversationId: params.conversationId },
-      );
+      await emitTerminalSessionEnd(args.sessionEndReason);
       params.callbacks.onDone();
     },
     async finishExistingTerminalSession(sessionEndReason?: string): Promise<void> {
       params.callbacks.onStateChange('idle');
-      await emitSessionEvent(
-        'end',
-        sessionEndReason
-          ? { conversationId: params.conversationId, reason: sessionEndReason }
-          : { conversationId: params.conversationId },
-      );
+      await emitTerminalSessionEnd(sessionEndReason);
       params.callbacks.onDone();
     },
     async finishFailure(error: Error): Promise<void> {

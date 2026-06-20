@@ -129,4 +129,20 @@ describe('agentControlGraphSessionExecution', () => {
       }),
     );
   });
+
+  it('preserves the original failure when failure finalization rejects', async () => {
+    const originalError = new Error('model turn failed');
+    const finalizationError = new Error('finalization failed');
+    const params = createParams();
+    mockedExecuteAgentControlGraphIteration.mockRejectedValueOnce(originalError);
+    (params.graph.finishFailure as jest.Mock).mockRejectedValueOnce(finalizationError);
+
+    await expect(executeAgentControlGraphSession(params)).rejects.toBe(originalError);
+
+    expect(params.graph.finishFailure).toHaveBeenCalledWith(originalError);
+    expect(params.warn).toHaveBeenCalledWith(
+      'Agent control graph failure finalization failed',
+      finalizationError,
+    );
+  });
 });

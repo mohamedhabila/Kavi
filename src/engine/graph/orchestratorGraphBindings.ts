@@ -39,6 +39,7 @@ export function createOrchestratorGraphBindings(
     conversationId: params.conversationId,
     initialMessages: params.initialMessages,
     initialSnapshot: params.initialSnapshot,
+    warn: params.warn,
     workflowScopeUserMessageId: params.workflowScopeUserMessageId,
   });
 

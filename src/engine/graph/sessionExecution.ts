@@ -82,11 +82,19 @@ export async function executeAgentControlGraphSession(
     });
   } catch (error: unknown) {
     if (params.signal?.signal.aborted) {
-      await params.graph.finishCancelled();
+      try {
+        await params.graph.finishCancelled();
+      } catch (finalizationError: unknown) {
+        params.warn('Agent control graph cancellation finalization failed', finalizationError);
+      }
       return;
     }
     const normalizedError = error instanceof Error ? error : new Error(String(error));
-    await params.graph.finishFailure(normalizedError);
+    try {
+      await params.graph.finishFailure(normalizedError);
+    } catch (finalizationError: unknown) {
+      params.warn('Agent control graph failure finalization failed', finalizationError);
+    }
     throw normalizedError;
   }
 }
