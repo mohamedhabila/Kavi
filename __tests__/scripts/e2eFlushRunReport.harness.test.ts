@@ -88,6 +88,7 @@ describe('e2e-flush-run-report harness', () => {
 
       expect(result.status).toBe(0);
       expect(result.stdout).toContain('wrote');
+      expect(result.stdout).toContain('summary wrote');
 
       const report = JSON.parse(readFileSync(reportPath, 'utf8')) as {
         scenarios: Array<{
@@ -174,6 +175,11 @@ describe('e2e-flush-run-report harness', () => {
         benchmarkRequirements: { externalRequired: number };
       };
       expect(dashboard.benchmarkRequirements.externalRequired).toBeGreaterThan(0);
+      const summaryPath = join(dir, 'e2e-agent-report.md');
+      expect(existsSync(summaryPath)).toBe(true);
+      const summary = readFileSync(summaryPath, 'utf8');
+      expect(summary).toContain('E2E Agent Report Summary');
+      expect(summary).toContain('file-write-read');
 
       const retentionIndex = JSON.parse(
         readFileSync(join(dir, 'e2e-readiness-runs', 'index.json'), 'utf8'),

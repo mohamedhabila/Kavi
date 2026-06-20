@@ -209,6 +209,7 @@ E2E_SCENARIO_IDS="direct-agentdojo-untrusted-workspace-note direct-bfcl-v4-paral
 | `E2E_COMPATIBLE_MODEL`     | For compatible | Generic OpenAI-compatible model id                                        |
 | `E2E_MAX_SCENARIO_RETRIES` | No             | Per-scenario retry budget (default `0`; nightly uses `1`)                 |
 | `E2E_REPORT_PATH`          | No             | JSON run report path (default `.artifacts/e2e-agent-report.json`)         |
+| `E2E_REPORT_SUMMARY_PATH`  | No             | Markdown summary path (default `.artifacts/e2e-agent-report.md`)          |
 | `E2E_SCENARIO_IDS`         | No             | Comma/whitespace-separated scenario IDs for targeted assessment           |
 
 The harness scripts (`eval:e2e`, `verify:strict:e2e`) load `.env.local` via
@@ -220,7 +221,17 @@ The harness scripts (`eval:e2e`, `verify:strict:e2e`) load `.env.local` via
 per-scenario pass/fail, attempt count, token usage, cache reads, duration, and
 an **`assessment`** block with dimensional and benchmark-family pass rates.
 Default path: `.artifacts/e2e-agent-report.json` (gitignored). Nightly CI
-uploads this file as a workflow artifact.
+uploads this file and the derived Markdown summary as workflow artifacts.
+
+`eval:e2e` also writes `.artifacts/e2e-agent-report.md`, a sanitized Markdown
+summary for quick review. It includes aggregate pass rates, cache/reliability
+metrics, failed scenario IDs, and issue counts, but intentionally excludes
+prompts, transcripts, tool outputs, provider error text, raw traces, and
+credentials. To regenerate it from an existing JSON report, run:
+
+```bash
+npm run eval:e2e:summary
+```
 
 Assessment axes (for evidence-based readiness and benchmark coverage):
 

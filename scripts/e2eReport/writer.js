@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { READINESS_ARTIFACT_RETENTION_RUNS, READINESS_DASHBOARD_VERSION } = require('./constants');
 const { parseNonNegativeInteger } = require('./parser');
+const { writeE2eReportSummaryArtifact } = require('./summary');
 
 function resolveReadinessRetentionLimit() {
   return (
@@ -98,12 +99,13 @@ function writeReportArtifacts(reportPath, partialPath, report) {
   fs.mkdirSync(path.dirname(resolvedReportPath), { recursive: true });
   fs.writeFileSync(resolvedReportPath, JSON.stringify(report, null, 2), 'utf8');
   const readinessArtifacts = writeReadinessArtifacts(resolvedReportPath, report);
+  const summaryPath = writeE2eReportSummaryArtifact(resolvedReportPath, report);
 
   if (fs.existsSync(partialPath)) {
     fs.unlinkSync(partialPath);
   }
 
-  return { resolvedReportPath, readinessArtifacts };
+  return { resolvedReportPath, readinessArtifacts, summaryPath };
 }
 
 module.exports = {

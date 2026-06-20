@@ -72,7 +72,7 @@ function flushE2eRunReport() {
   }
 
   const report = buildE2eRunReport(entries);
-  const { resolvedReportPath, readinessArtifacts } = writeReportArtifacts(
+  const { resolvedReportPath, readinessArtifacts, summaryPath } = writeReportArtifacts(
     reportPath,
     partialPath,
     report,
@@ -95,9 +95,10 @@ function flushE2eRunReport() {
     `[e2e-readiness-dashboard] passing=${readinessDashboard.overall.passing} minedEvalCandidates=${readinessDashboard.minedEvalCandidates.length} externalRequirements=${readinessDashboard.benchmarkRequirements.externalRequired}`,
   );
   console.log(`[e2e-run-report] wrote ${resolvedReportPath}`);
+  console.log(`[e2e-run-report] summary wrote ${summaryPath}`);
   console.log(`[e2e-readiness-dashboard] wrote ${readinessArtifacts.dashboardPath}`);
 
-  return { report, resolvedReportPath, readinessArtifacts };
+  return { report, resolvedReportPath, readinessArtifacts, summaryPath };
 }
 
 if (require.main === module) {

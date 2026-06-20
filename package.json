@@ -63,6 +63,7 @@
     "eval:recovery": "jest --runInBand __tests__/acceptance/recoveryBenchmark.test.ts",
     "eval:e2e": "node ./scripts/e2e-agent-eval-harness.js",
     "eval:e2e:assess": "node ./scripts/e2e-assessment-collect.js",
+    "eval:e2e:summary": "node ./scripts/e2e-report-summary.js",
     "eval:e2e:providers": "node ./scripts/e2e-provider-matrix.js",
     "eval:on-device": "node ./scripts/on-device-benchmark.js",
     "verify": "npm run check:public-hygiene && npm run check:public-language && npm run check:links && npm run check:licenses && npm run check:app-metadata && npm run check:i18n && npm run check:no-legacy-planning-imports && npm run check:thin-e2e-harness && npm run check:graph-owned-mutations && npm run check:dead-exports && npm run check:tool-contracts && npm run check:maintainability && npm run lint && npm run typecheck && npm test -- --runInBand",
