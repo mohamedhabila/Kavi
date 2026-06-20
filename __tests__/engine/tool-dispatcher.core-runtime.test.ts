@@ -8,7 +8,7 @@ let executeTool: ToolDispatcherHarness['executeTool'];
 let builtinMod: ToolDispatcherHarness['builtinMod'];
 let executeNativeTool: ToolDispatcherHarness['executeNativeTool'];
 let memoryStore: ToolDispatcherHarness['memoryStore'];
-let mockGetJob: ToolDispatcherHarness['mockGetJob'];
+let mockRunJobNow: ToolDispatcherHarness['mockRunJobNow'];
 let mockExecutePython: ToolDispatcherHarness['mockExecutePython'];
 let mockRecordAgentRunEvidence: ToolDispatcherHarness['mockRecordAgentRunEvidence'];
 
@@ -18,7 +18,7 @@ beforeEach(() => {
   builtinMod = harness.builtinMod;
   executeNativeTool = harness.executeNativeTool;
   memoryStore = harness.memoryStore;
-  mockGetJob = harness.mockGetJob;
+  mockRunJobNow = harness.mockRunJobNow;
   mockExecutePython = harness.mockExecutePython;
   mockRecordAgentRunEvidence = harness.mockRecordAgentRunEvidence;
 });
@@ -115,10 +115,10 @@ describe('executeTool — core tools routing', () => {
   });
 
   it('routes cron run', async () => {
-    mockGetJob.mockReturnValue({ name: 'test job' });
     const result = await executeTool('cron', '{"action":"run","id":"job-1"}', CONV_ID);
     const parsed = JSON.parse(result);
     expect(parsed.status).toBe('triggered');
+    expect(mockRunJobNow).toHaveBeenCalledWith('job-1', { trigger: 'manual' });
   });
 
   it('handles cron unknown action', async () => {

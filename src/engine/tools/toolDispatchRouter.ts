@@ -11,6 +11,7 @@ import { parseMcpToolName, executeMcpTool } from '../../services/mcp/bridge';
 import { mcpManager } from '../../services/mcp/manager';
 import { parseSkillToolName, executeSkillTool } from '../../services/skills/manager';
 import { useSchedulerStore } from '../../services/scheduler/store';
+import { runJobNow } from '../../services/scheduler/engine';
 import { syncSchedulerWakeNotifications } from '../../services/scheduler/wakeNotifications';
 import { executeBrowserTool } from './browserToolExecutor';
 import { executeImageEdit, executeImageGenerate } from './toolImageExecution';
@@ -271,9 +272,13 @@ export async function executeToolInner(
           return JSON.stringify({ status: 'disabled', id: args.id });
         case 'run': {
           if (!args.id) return 'Error: id is required for run action';
-          const job = store.getJob(args.id);
-          if (!job) return `Error: job not found: ${args.id}`;
-          return JSON.stringify({ status: 'triggered', id: args.id, name: job.name });
+          const result = await runJobNow(args.id, { trigger: 'manual' });
+          if (result.status === 'not_found') return `Error: job not found: ${args.id}`;
+          return JSON.stringify({
+            status: result.status === 'completed' ? 'triggered' : result.status,
+            id: args.id,
+            name: result.name,
+          });
         }
         default:
           return `Error: unknown cron action: ${action}`;

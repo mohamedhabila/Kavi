@@ -66,7 +66,10 @@ describe('Background Fetch', () => {
 
     expect(definedTaskHandler).toBeDefined();
     await expect(definedTaskHandler?.()).resolves.toBe(1);
-    expect(mockEvaluateJobsOnce).toHaveBeenCalledTimes(1);
+    expect(mockEvaluateJobsOnce).toHaveBeenCalledWith({
+      trigger: 'background-fetch',
+      timeBudgetMs: 25_000,
+    });
   });
 
   it('registered task reports failure when job evaluation throws', async () => {

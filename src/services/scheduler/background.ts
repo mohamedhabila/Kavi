@@ -5,6 +5,7 @@
 // when the app is in the background. iOS gives ~30s per wake; Android varies.
 
 const BACKGROUND_TASK_NAME = 'KAVI_CRON_BACKGROUND_FETCH';
+const BACKGROUND_EVALUATION_BUDGET_MS = 25_000;
 
 let registered = false;
 let taskDefined = false;
@@ -20,7 +21,10 @@ function defineBackgroundTaskIfAvailable(): BackgroundTaskModule | null {
       TaskManager.defineTask(BACKGROUND_TASK_NAME, async () => {
         try {
           const { evaluateJobsOnce } = require('./engine') as typeof import('./engine');
-          await evaluateJobsOnce();
+          await evaluateJobsOnce({
+            trigger: 'background-fetch',
+            timeBudgetMs: BACKGROUND_EVALUATION_BUDGET_MS,
+          });
           return BackgroundTask.BackgroundTaskResult.Success;
         } catch {
           return BackgroundTask.BackgroundTaskResult.Failed;

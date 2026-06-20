@@ -2,7 +2,9 @@ const mockRegisterBuiltInServiceSkills = jest.fn();
 const mockActivateEnabledSkills = jest.fn();
 const mockSetSchedulerExecutor = jest.fn();
 const mockStartScheduler = jest.fn();
+const mockEvaluateJobsOnce = jest.fn().mockResolvedValue(undefined);
 const mockRegisterBackgroundFetch = jest.fn().mockResolvedValue(undefined);
+const mockSyncSchedulerWakeNotifications = jest.fn().mockResolvedValue(undefined);
 const mockRunBootOnce = jest.fn().mockResolvedValue(undefined);
 const mockHasBootMd = jest.fn().mockResolvedValue(false);
 const mockLoadHooksFromDirectory = jest.fn().mockResolvedValue(undefined);
@@ -53,6 +55,7 @@ jest.mock('../../src/services/skills/manager', () => ({
 jest.mock('../../src/services/scheduler/engine', () => ({
   setSchedulerExecutor: mockSetSchedulerExecutor,
   startScheduler: mockStartScheduler,
+  evaluateJobsOnce: (...args: any[]) => mockEvaluateJobsOnce(...args),
 }));
 jest.mock('../../src/engine/tools/index', () => ({
   executeTool: jest.fn(),
@@ -60,6 +63,9 @@ jest.mock('../../src/engine/tools/index', () => ({
 jest.mock('../../src/services/scheduler/background', () => ({
   registerBackgroundFetch: (...args: any[]) => mockRegisterBackgroundFetch(...args),
   isBackgroundFetchRegistered: jest.fn().mockReturnValue(false),
+}));
+jest.mock('../../src/services/scheduler/wakeNotifications', () => ({
+  syncSchedulerWakeNotifications: (...args: any[]) => mockSyncSchedulerWakeNotifications(...args),
 }));
 jest.mock('../../src/services/agents/bootRunner', () => ({
   runBootOnce: (...args: any[]) => mockRunBootOnce(...args),
@@ -154,6 +160,8 @@ beforeEach(() => {
   mockChatStoreState.activeConversationId = 'active-conversation';
   mockListActiveSubAgents.mockReturnValue([]);
   mockRepairTerminalAgentRunsMissingFinalResponses.mockResolvedValue([]);
+  mockEvaluateJobsOnce.mockResolvedValue(undefined);
+  mockSyncSchedulerWakeNotifications.mockResolvedValue(undefined);
   mockChatStoreState.createConversation.mockImplementation(
     (providerId, systemPrompt, modelOverride, options) => {
       const id = `conv-${mockChatStoreState.conversations.length + 1}`;
@@ -303,6 +311,18 @@ describe('initializeServices', () => {
     );
     expect(mockSetSchedulerExecutor).toHaveBeenCalledTimes(1);
     expect(mockStartScheduler).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(mockSyncSchedulerWakeNotifications).toHaveBeenCalledWith({ force: true }),
+    );
+  });
+  it('reconciles scheduled jobs when the app returns to foreground', async () => {
+    const { handleAppForeground } = require('../../src/services/startup');
+
+    handleAppForeground();
+
+    expect(mockEvaluateJobsOnce).toHaveBeenCalledWith({ trigger: 'foreground-reconcile' });
+    expect(mockSyncSchedulerWakeNotifications).toHaveBeenCalledWith({ force: true });
+    expect(mockRunMemoryMigrationTick).toHaveBeenCalledTimes(1);
   });
   it('recovers persisted worker and workflow state on startup', async () => {
     const { initializeServices } = require('../../src/services/startup');

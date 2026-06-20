@@ -4,10 +4,11 @@
 // Called once on app launch to wire up background services.
 
 import { InteractionManager } from 'react-native';
-import { startScheduler, setSchedulerExecutor } from './scheduler/engine';
+import { evaluateJobsOnce, startScheduler, setSchedulerExecutor } from './scheduler/engine';
 import { registerBuiltInServiceSkills } from './integrations/registry';
 import { activateEnabledSkills } from './skills/manager';
 import { registerBackgroundFetch } from './scheduler/background';
+import { syncSchedulerWakeNotifications } from './scheduler/wakeNotifications';
 import { runBootOnce, hasBootMd } from './agents/bootRunner';
 import { loadHooksFromDirectory } from './hooks/loader';
 import { flushChatStorePersistenceNow } from '../store/chatStorePersistence';
@@ -27,10 +28,7 @@ import { buildAssistantMessageMetadata } from '../utils/assistantMessageMetadata
 import { unrefTimerIfSupported } from '../utils/timers';
 import { initSubAgentRegistry, listActiveSubAgents } from './agents/subAgent';
 import { repairTerminalAgentRunsMissingFinalResponses } from './agents/agentRunRepair';
-import {
-  runMemoryMigrationTick,
-  runMemoryBackgroundFlush,
-} from './memory/lifecycle';
+import { runMemoryMigrationTick, runMemoryBackgroundFlush } from './memory/lifecycle';
 import { editWorkingBlock } from './memory/workingBlocks';
 import {
   buildSurfacedSubAgentOutputToolResultSummary,
@@ -214,6 +212,11 @@ async function runBootOnLaunchIfPresent(): Promise<void> {
   }
 }
 
+async function initializeNotificationsAndWakeSync(): Promise<void> {
+  await initializeNotifications();
+  await syncSchedulerWakeNotifications({ force: true });
+}
+
 function initializeDeferredStartupServices(): void {
   // Keep first render responsive by pushing non-essential startup I/O
   // and model-triggered work until the app reaches an idle window.
@@ -221,8 +224,8 @@ function initializeDeferredStartupServices(): void {
     void hydrateCanvasSurfaces().catch((e) =>
       console.warn('[startup] hydrateCanvasSurfaces failed:', e),
     );
-    void initializeNotifications().catch((e) =>
-      console.warn('[startup] initializeNotifications failed:', e),
+    void initializeNotificationsAndWakeSync().catch((e) =>
+      console.warn('[startup] initializeNotificationsAndWakeSync failed:', e),
     );
     void registerBackgroundFetch().catch((e) =>
       console.warn('[startup] registerBackgroundFetch failed:', e),
@@ -296,9 +299,7 @@ async function executeScheduledJob(job: CronJob): Promise<string> {
             {
               activate: false,
               personaId:
-                settings.defaultConversationMode === 'agentic'
-                  ? SUPER_AGENT_PERSONA_ID
-                  : undefined,
+                settings.defaultConversationMode === 'agentic' ? SUPER_AGENT_PERSONA_ID : undefined,
               mode: settings.defaultConversationMode,
             },
           )
@@ -310,9 +311,7 @@ async function executeScheduledJob(job: CronJob): Promise<string> {
             {
               activate: false,
               personaId:
-                settings.defaultConversationMode === 'agentic'
-                  ? SUPER_AGENT_PERSONA_ID
-                  : undefined,
+                settings.defaultConversationMode === 'agentic' ? SUPER_AGENT_PERSONA_ID : undefined,
               mode: settings.defaultConversationMode,
             },
           );
@@ -631,6 +630,12 @@ export function initializeServices(): void {
  * v6→v7 archived-thread backlog drains across sessions.
  */
 export function handleAppForeground(): void {
+  void evaluateJobsOnce({ trigger: 'foreground-reconcile' }).catch((e) =>
+    console.warn('[startup] foreground scheduler reconciliation failed:', e),
+  );
+  void syncSchedulerWakeNotifications({ force: true }).catch((e) =>
+    console.warn('[startup] foreground wake notification sync failed:', e),
+  );
   void runMemoryMigrationTick().catch((e) =>
     console.warn('[startup] foreground memory tick failed:', e),
   );

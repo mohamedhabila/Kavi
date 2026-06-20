@@ -403,6 +403,11 @@ const mockGetJob = jest.fn();
 const mockRemoveJob = jest.fn();
 const mockEnableJob = jest.fn();
 const mockDisableJob = jest.fn();
+const mockRunJobNow = jest.fn().mockResolvedValue({
+  status: 'completed',
+  id: 'job-1',
+  name: 'test job',
+});
 jest.mock('../../src/services/scheduler/store', () => ({
   useSchedulerStore: {
     getState: () => ({
@@ -414,6 +419,9 @@ jest.mock('../../src/services/scheduler/store', () => ({
       disableJob: mockDisableJob,
     }),
   },
+}));
+jest.mock('../../src/services/scheduler/engine', () => ({
+  runJobNow: (...args: any[]) => mockRunJobNow(...args),
 }));
 jest.mock('../../src/services/security/audit', () => ({
   logToolCall: jest.fn(),
@@ -467,6 +475,7 @@ export type ToolDispatcherHarness = {
   editImage: jest.Mock;
   memoryStore: MemoryStoreModule;
   mockGetJob: typeof mockGetJob;
+  mockRunJobNow: typeof mockRunJobNow;
   mockExecutePython: typeof mockExecutePython;
   mockRecordAgentRunEvidence: typeof mockRecordAgentRunEvidence;
   mockGetWorkspaceTargetControlStatus: typeof mockGetWorkspaceTargetControlStatus;
@@ -507,6 +516,7 @@ function loadTestModules(): LoadedToolDispatcherHarness {
     editImage,
     memoryStore,
     mockGetJob,
+    mockRunJobNow,
     mockExecutePython,
     mockRecordAgentRunEvidence,
     mockGetWorkspaceTargetControlStatus,
@@ -539,6 +549,11 @@ export function setupToolDispatcherHarness(): ToolDispatcherHarness {
     () => mockChatState.conversations[0].agentRuns[0].evidence,
   );
   mockGetSubAgent.mockReturnValue(undefined);
+  mockRunJobNow.mockResolvedValue({
+    status: 'completed',
+    id: 'job-1',
+    name: 'test job',
+  });
   mockExecutePython.mockResolvedValue({ success: true, output: '42' });
   mockReadWorkspaceFile.mockResolvedValue({
     path: '/workspace/project/README.md',
