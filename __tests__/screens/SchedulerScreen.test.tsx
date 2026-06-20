@@ -98,6 +98,8 @@ describe('SchedulerScreen', () => {
       enabled: true,
       schedule: { kind: 'cron', expr: '0 9 * * *' },
       payload: { prompt: 'Generate report' },
+      nextRunAtMs: Date.now() + 3600000,
+      lastRunAtMs: Date.now() - 3600000,
       updatedAtMs: undefined,
     });
 
@@ -105,7 +107,24 @@ describe('SchedulerScreen', () => {
     expect(getByText('Morning Report')).toBeTruthy();
     expect(getByText('Cron: 0 9 * * *')).toBeTruthy();
     expect(getByText('Generate report')).toBeTruthy();
+    expect(getByText(/^Next run:/)).toBeTruthy();
+    expect(getByText(/^Last run:/)).toBeTruthy();
     expect(getByText('Last update: Never')).toBeTruthy();
+  });
+
+  it('renders last scheduler error when available', () => {
+    mockJobs.push({
+      id: 'job-error',
+      name: 'Broken Job',
+      enabled: true,
+      schedule: { kind: 'every', everyMs: 300000 },
+      payload: {},
+      lastError: 'Network unavailable',
+      updatedAtMs: undefined,
+    });
+
+    const { getByText } = render(<SchedulerScreen />);
+    expect(getByText('Error: Network unavailable')).toBeTruthy();
   });
 
   it('renders every-type schedule', () => {

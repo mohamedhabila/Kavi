@@ -131,50 +131,68 @@ export const SchedulerScreen: React.FC = () => {
     return t('scheduler.unknown');
   };
 
-  const formatLastRun = (ts?: number) => {
+  const formatTimestamp = (ts?: number) => {
     if (!ts) return t('scheduler.never');
     return new Date(ts).toLocaleString();
   };
 
-  const renderJob = ({ item: job }: { item: CronJob }) => (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <View style={styles.cardTitleRow}>
-          <Clock size={16} color={job.enabled ? colors.primary : colors.textTertiary} />
-          <Text style={styles.cardTitle} numberOfLines={1}>
-            {job.name || t('scheduler.untitledJob')}
+  const renderJob = ({ item: job }: { item: CronJob }) => {
+    const nextRunAtMs = job.nextRetryAtMs || job.nextRunAtMs;
+    return (
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <View style={styles.cardTitleRow}>
+            <Clock size={16} color={job.enabled ? colors.primary : colors.textTertiary} />
+            <Text style={styles.cardTitle} numberOfLines={1}>
+              {job.name || t('scheduler.untitledJob')}
+            </Text>
+          </View>
+          <Switch
+            value={job.enabled}
+            onValueChange={(v) => (v ? enableJob(job.id) : disableJob(job.id))}
+            trackColor={{ true: colors.primary }}
+          />
+        </View>
+
+        <Text style={styles.schedule}>{formatSchedule(job)}</Text>
+
+        {job.payload?.prompt && (
+          <Text style={styles.prompt} numberOfLines={2}>
+            {job.payload.prompt}
+          </Text>
+        )}
+
+        <View style={styles.runtimeGrid}>
+          <Text style={styles.runtimeText}>
+            {t('scheduler.nextRun')}: {formatTimestamp(nextRunAtMs)}
+          </Text>
+          <Text style={styles.runtimeText}>
+            {t('scheduler.lastRun')}: {formatTimestamp(job.lastRunAtMs)}
           </Text>
         </View>
-        <Switch
-          value={job.enabled}
-          onValueChange={(v) => (v ? enableJob(job.id) : disableJob(job.id))}
-          trackColor={{ true: colors.primary }}
-        />
+
+        {job.lastError ? (
+          <Text style={styles.errorText} numberOfLines={1}>
+            {t('common.error')}: {job.lastError}
+          </Text>
+        ) : null}
+
+        <View style={styles.cardFooter}>
+          <Text style={styles.lastRun}>
+            {t('scheduler.lastUpdate', { date: formatTimestamp(job.updatedAtMs) })}
+          </Text>
+          <TouchableOpacity
+            onPress={() => handleDelete(job)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`Delete task ${job.name || job.id}`}
+          >
+            <Trash2 size={16} color={colors.danger} />
+          </TouchableOpacity>
+        </View>
       </View>
-
-      <Text style={styles.schedule}>{formatSchedule(job)}</Text>
-
-      {job.payload?.prompt && (
-        <Text style={styles.prompt} numberOfLines={2}>
-          {job.payload.prompt}
-        </Text>
-      )}
-
-      <View style={styles.cardFooter}>
-        <Text style={styles.lastRun}>
-          {t('scheduler.lastUpdate', { date: formatLastRun(job.updatedAtMs) })}
-        </Text>
-        <TouchableOpacity
-          onPress={() => handleDelete(job)}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={`Delete task ${job.name || job.id}`}
-        >
-          <Trash2 size={16} color={colors.danger} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -371,6 +389,19 @@ const createStyles = (colors: AppPalette) =>
       fontSize: 13,
       color: colors.textSecondary,
       lineHeight: 18,
+      marginBottom: 8,
+    },
+    runtimeGrid: {
+      gap: 2,
+      marginBottom: 8,
+    },
+    runtimeText: {
+      fontSize: 11,
+      color: colors.textTertiary,
+    },
+    errorText: {
+      fontSize: 11,
+      color: colors.danger,
       marginBottom: 8,
     },
     cardFooter: {
