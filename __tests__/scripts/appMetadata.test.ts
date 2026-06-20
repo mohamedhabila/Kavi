@@ -6,6 +6,7 @@ const {
   collectAppMetadata,
   findAppMetadataFailures,
   parseAndroidGradle,
+  plistStringArrayValue,
   parseXcodeProject,
 } = require('../../scripts/lib/appMetadata');
 
@@ -22,19 +23,11 @@ function createMetadataFixture(overrides: Record<string, string> = {}): string {
   const iosBundleIdentifier = overrides.iosBundleIdentifier || 'com.kavi.app';
   const androidApplicationId = overrides.androidApplicationId || 'com.kavi.mobile';
 
-  writeFixture(
-    projectRoot,
-    'package.json',
-    JSON.stringify({ name: 'kavi', version }, null, 2),
-  );
+  writeFixture(projectRoot, 'package.json', JSON.stringify({ name: 'kavi', version }, null, 2));
   writeFixture(
     projectRoot,
     'package-lock.json',
-    JSON.stringify(
-      { name: 'kavi', version, packages: { '': { name: 'kavi', version } } },
-      null,
-      2,
-    ),
+    JSON.stringify({ name: 'kavi', version, packages: { '': { name: 'kavi', version } } }, null, 2),
   );
   writeFixture(
     projectRoot,
@@ -45,6 +38,7 @@ function createMetadataFixture(overrides: Record<string, string> = {}): string {
           name: 'Kavi',
           slug: 'kavi',
           version: expoVersion,
+          plugins: ['expo-background-task'],
           ios: { bundleIdentifier: iosBundleIdentifier, buildNumber: '1' },
           android: { package: androidApplicationId, versionCode: 1 },
         },
@@ -78,6 +72,16 @@ function createMetadataFixture(overrides: Record<string, string> = {}): string {
       `<string>${expoVersion}</string>`,
       '<key>CFBundleVersion</key>',
       '<string>1</string>',
+      '<key>UIBackgroundModes</key>',
+      '<array>',
+      '<string>processing</string>',
+      '<string>fetch</string>',
+      '<string>audio</string>',
+      '</array>',
+      '<key>BGTaskSchedulerPermittedIdentifiers</key>',
+      '<array>',
+      '<string>com.expo.modules.backgroundtask.processing</string>',
+      '</array>',
       '</dict></plist>',
     ].join('\n'),
   );
@@ -132,6 +136,19 @@ describe('app metadata checks', () => {
       marketingVersions: ['1.0.0'],
       productBundleIdentifiers: ['com.kavi.app'],
     });
+
+    expect(
+      plistStringArrayValue(
+        `
+        <key>UIBackgroundModes</key>
+        <array>
+          <string>processing</string>
+          <string>fetch</string>
+        </array>
+      `,
+        'UIBackgroundModes',
+      ),
+    ).toEqual(['processing', 'fetch']);
   });
 
   it('passes when public package, Expo, native, and runtime metadata are aligned', () => {
@@ -168,6 +185,21 @@ describe('app metadata checks', () => {
         'Expo Android package is "com.example.android", expected "com.kavi.mobile"',
         'Android namespace is "com.example.android", expected "com.kavi.mobile"',
         'Android applicationId is "com.example.android", expected "com.kavi.mobile"',
+      ]),
+    );
+  });
+
+  it('detects missing background task configuration required for scheduled work', () => {
+    const metadata = collectAppMetadata(createMetadataFixture());
+    metadata.expo.plugins = [];
+    metadata.ios.backgroundModes = ['fetch', 'audio'];
+    metadata.ios.backgroundTaskIdentifiers = [];
+
+    expect(findAppMetadataFailures(metadata)).toEqual(
+      expect.arrayContaining([
+        'Expo plugins must include "expo-background-task" for scheduled background work',
+        'iOS UIBackgroundModes must include "processing" for scheduled background work',
+        'iOS BGTaskSchedulerPermittedIdentifiers must include "com.expo.modules.backgroundtask.processing"',
       ]),
     );
   });

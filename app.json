@@ -60,6 +60,7 @@
     },
     "plugins": [
       "expo-secure-store",
+      "expo-background-task",
       [
         "expo-build-properties",
         {

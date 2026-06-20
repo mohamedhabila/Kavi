@@ -31,10 +31,16 @@ function unique(values) {
 }
 
 function plistStringValue(content, key) {
-  return matchString(
+  return matchString(content, new RegExp(`<key>${key}</key>\\s*<string>([^<]+)</string>`, 'm'));
+}
+
+function plistStringArrayValue(content, key) {
+  const arrayContent = matchString(
     content,
-    new RegExp(`<key>${key}</key>\\s*<string>([^<]+)</string>`, 'm'),
+    new RegExp(`<key>${key}</key>\\s*<array>([\\s\\S]*?)</array>`, 'm'),
   );
+  if (!arrayContent) return [];
+  return matchAllStrings(arrayContent, /<string>([^<]+)<\/string>/g);
 }
 
 function tsStringExport(content, exportName) {
@@ -91,6 +97,7 @@ function collectAppMetadata(projectRoot = path.resolve(__dirname, '../..')) {
       name: appJson.expo?.name ?? null,
       slug: appJson.expo?.slug ?? null,
       version: appJson.expo?.version ?? null,
+      plugins: appJson.expo?.plugins ?? [],
       iosBundleIdentifier: appJson.expo?.ios?.bundleIdentifier ?? null,
       iosBuildNumber: appJson.expo?.ios?.buildNumber ?? null,
       androidPackage: appJson.expo?.android?.package ?? null,
@@ -101,6 +108,11 @@ function collectAppMetadata(projectRoot = path.resolve(__dirname, '../..')) {
       bundleIdentifier: plistStringValue(iosInfoPlist, 'CFBundleIdentifier'),
       shortVersionString: plistStringValue(iosInfoPlist, 'CFBundleShortVersionString'),
       bundleVersion: plistStringValue(iosInfoPlist, 'CFBundleVersion'),
+      backgroundModes: plistStringArrayValue(iosInfoPlist, 'UIBackgroundModes'),
+      backgroundTaskIdentifiers: plistStringArrayValue(
+        iosInfoPlist,
+        'BGTaskSchedulerPermittedIdentifiers',
+      ),
       xcodeProject,
     },
     runtime: {
@@ -133,6 +145,9 @@ function findAppMetadataFailures(metadata, expected = EXPECTED_APP_METADATA) {
   const sourceVersion = metadata.packageJson.version;
   const iosBuildNumber = String(metadata.expo.iosBuildNumber ?? '');
   const androidVersionCode = String(metadata.expo.androidVersionCode ?? '');
+  const expoPlugins = new Set(
+    (metadata.expo.plugins ?? []).map((plugin) => (Array.isArray(plugin) ? plugin[0] : plugin)),
+  );
 
   addMismatch(failures, 'package.json name', metadata.packageJson.name, expected.packageName);
   addMismatch(failures, 'package-lock.json name', metadata.packageLock.name, expected.packageName);
@@ -210,7 +225,12 @@ function findAppMetadataFailures(metadata, expected = EXPECTED_APP_METADATA) {
     metadata.runtime.displayName,
     expected.displayName,
   );
-  addMismatch(failures, 'latest changelog version', metadata.changelog.latestVersion, sourceVersion);
+  addMismatch(
+    failures,
+    'latest changelog version',
+    metadata.changelog.latestVersion,
+    sourceVersion,
+  );
 
   addMismatch(failures, 'iOS CFBundleVersion', metadata.ios.bundleVersion, iosBuildNumber);
   addAllMismatch(
@@ -220,6 +240,20 @@ function findAppMetadataFailures(metadata, expected = EXPECTED_APP_METADATA) {
     iosBuildNumber,
   );
   addMismatch(failures, 'Android versionCode', metadata.android.versionCode, androidVersionCode);
+
+  if (!expoPlugins.has('expo-background-task')) {
+    failures.push('Expo plugins must include "expo-background-task" for scheduled background work');
+  }
+  if (!metadata.ios.backgroundModes.includes('processing')) {
+    failures.push('iOS UIBackgroundModes must include "processing" for scheduled background work');
+  }
+  if (
+    !metadata.ios.backgroundTaskIdentifiers.includes('com.expo.modules.backgroundtask.processing')
+  ) {
+    failures.push(
+      'iOS BGTaskSchedulerPermittedIdentifiers must include "com.expo.modules.backgroundtask.processing"',
+    );
+  }
 
   return failures;
 }
@@ -246,6 +280,7 @@ module.exports = {
   collectAppMetadata,
   findAppMetadataFailures,
   parseAndroidGradle,
+  plistStringArrayValue,
   parseXcodeProject,
   runAppMetadataCli,
 };
