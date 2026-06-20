@@ -129,9 +129,12 @@ into one file.
 - Keep graph mutations inside `AgentControlGraphEvent` reducers; store code persists normalized snapshots only.
 - Keep observability, loop recovery, and completion-gate policy in graph modules rather than the orchestrator shell.
 
-### `src/services/localLlm/runtime.ts`
+### `src/services/localLlm`
 
-- Keep engine and session lifecycle management separate from request shaping and conversation-cache policy.
+- Keep engine and session lifecycle management in the module that owns the
+  behavior rather than adding a pass-through runtime barrel.
+- Keep request shaping and conversation-cache policy separate from native bridge
+  calls and provider selection.
 - Keep platform capability detection and backend selection separate from inference request execution.
 
 ## Design Constraints

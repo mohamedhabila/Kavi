@@ -101,7 +101,7 @@ describe('public readiness checks', () => {
     ]);
   });
 
-  it('allows known phased language cleanup areas but fails unexpected residue', () => {
+  it('keeps legacy benchmark and project residue blocked outside checker fixtures', () => {
     const legacyBenchmarkFamily = ['internal', 'pa'].join('-');
     const findings = collectContentFindings(
       [
@@ -122,10 +122,13 @@ describe('public readiness checks', () => {
     );
     const split = splitAllowedFindings(findings, DEFAULT_CONFIG.publicLanguageAllowlist);
 
-    expect(split.allowedFindings.map((finding: { filePath: string }) => finding.filePath)).toEqual([
-      'src/acceptance/e2eAgent/e2eReadinessDashboard.ts',
-    ]);
+    expect(split.allowedFindings).toEqual([]);
     expect(split.unexpectedFindings).toEqual([
+      {
+        filePath: 'src/acceptance/e2eAgent/e2eReadinessDashboard.ts',
+        lineNumber: 1,
+        patternId: 'legacy-benchmark-claim',
+      },
       {
         filePath: 'src/newFeature.ts',
         lineNumber: 1,

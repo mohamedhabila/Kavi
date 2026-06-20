@@ -148,18 +148,6 @@ const DEFAULT_CONFIG = {
       status: 'permanent',
       reason: 'the public readiness checker and its tests intentionally contain blocked terms as patterns and fixtures',
     },
-    {
-      id: 'endpoint-fixture-cleanup',
-      pathRegex: /^(?:__tests__\/features\/remoteConfig\/|__tests__\/screens\/GatewayScreen\.test\.tsx$)/,
-      status: 'temporary endpoint fixture cleanup',
-      reason: 'hardcoded endpoint and deployment fixtures are sanitized during public-readiness cleanup',
-    },
-    {
-      id: 'e2e-readiness-terminology-cleanup',
-      pathRegex: /^(?:src\/acceptance\/e2eAgent\/|__tests__\/acceptance\/|scripts\/e2e(?:-|Report\/)|__tests__\/scripts\/e2eFlushRunReport\.harness\.test\.ts$)/,
-      status: 'temporary e2e terminology cleanup',
-      reason: 'E2E readiness terminology is being renamed for public audience',
-    },
   ],
 };
 
