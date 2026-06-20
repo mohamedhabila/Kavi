@@ -53,6 +53,9 @@ describe('useSchedulerStore', () => {
     expect(jobs[0].sessionTarget).toBe('isolated');
     expect(jobs[0].wakeMode).toBe('new');
     expect(jobs[0].delivery?.mode).toBe('both');
+    expect(typeof jobs[0].nextRunAtMs).toBe('number');
+    expect(jobs[0].retryAttempts).toBe(0);
+    expect(jobs[0].wakePolicy).toBe('try_background_then_notify');
   });
 
   it('addJob uses provided optional params', () => {
@@ -73,6 +76,7 @@ describe('useSchedulerStore', () => {
     expect(job.sessionTarget).toBe('main');
     expect(job.wakeMode).toBe('continue');
     expect(job.delivery?.mode).toBe('both');
+    expect((job.schedule as any).anchorMs).toBeDefined();
   });
 
   it('removeJob removes a job', () => {
@@ -125,6 +129,32 @@ describe('useSchedulerStore', () => {
     const job = useSchedulerStore.getState().jobs[0];
     // The store only auto-disables 'at' or deleteAfterRun
     expect(job.updatedAtMs).toBeGreaterThan(0);
+    expect(job.lastSuccessAtMs).toBeGreaterThan(0);
+    expect(job.retryAttempts).toBe(0);
+  });
+
+  it('recordRunFailure persists retry state without disabling recurring jobs', () => {
+    const id = useSchedulerStore.getState().addJob({
+      name: 'Retrying',
+      schedule: { kind: 'cron', expr: '0 9 * * *' },
+      prompt: 'daily',
+    });
+    const timestamp = Date.now();
+
+    useSchedulerStore.getState().recordRunFailure(id, {
+      timestamp,
+      error: 'network down',
+      attempt: 1,
+      nextRetryAtMs: timestamp + 30_000,
+      final: false,
+    });
+
+    const job = useSchedulerStore.getState().jobs[0];
+    expect(job.enabled).toBe(true);
+    expect(job.lastFailureAtMs).toBe(timestamp);
+    expect(job.lastError).toBe('network down');
+    expect(job.retryAttempts).toBe(1);
+    expect(job.nextRetryAtMs).toBe(timestamp + 30_000);
   });
 
   it('getJob returns job by id', () => {

@@ -29,6 +29,14 @@ export type CronSchedule =
 export type SessionTarget = 'main' | 'isolated';
 export type WakeMode = 'continue' | 'new';
 export type DeliveryMode = 'conversation' | 'notification' | 'both';
+export type SchedulerWakePolicy = 'try_background_then_notify' | 'notify_only' | 'active_only';
+export type SchedulerTrigger =
+  | 'scheduled'
+  | 'manual'
+  | 'missed-recovery'
+  | 'background-fetch'
+  | 'foreground-reconcile'
+  | 'notification-tap';
 
 export type CronPayload = {
   prompt: string;
@@ -48,6 +56,23 @@ export type CronFailureAlert = {
   maxRetries?: number;
 };
 
+export type CronJobRuntimeState = {
+  nextRunAtMs?: number;
+  lastRunAtMs?: number;
+  lastAttemptAtMs?: number;
+  lastSuccessAtMs?: number;
+  lastFailureAtMs?: number;
+  lastError?: string;
+  retryAttempts?: number;
+  nextRetryAtMs?: number;
+  runningAttemptId?: string;
+  runningStartedAtMs?: number;
+  pendingWakeNotificationId?: string;
+  lastWakeAtMs?: number;
+  lastWakeSource?: SchedulerTrigger;
+  wakePolicy?: SchedulerWakePolicy;
+};
+
 export type CronJob = CronJobBase<
   CronSchedule,
   SessionTarget,
@@ -55,4 +80,5 @@ export type CronJob = CronJobBase<
   CronPayload,
   CronDelivery,
   CronFailureAlert
->;
+> &
+  CronJobRuntimeState;

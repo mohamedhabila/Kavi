@@ -12,16 +12,32 @@ jest.mock('../../src/services/events/bus', () => ({
 
 jest.mock('../../src/services/scheduler/store', () => {
   const jobs: any[] = [];
+  const state = {
+    get jobs() {
+      return jobs;
+    },
+    getEnabledJobs: () => jobs.filter((j: any) => j.enabled),
+    getJob: (id: string) => jobs.find((j: any) => j.id === id),
+    markJobAttemptStarted: jest.fn(),
+    recordRun: jest.fn(),
+    recordRunFailure: jest.fn(),
+    resetJobRetry: jest.fn(),
+    updateJobRuntimeState: jest.fn(),
+    recordEvaluation: jest.fn(),
+  };
   return {
     useSchedulerStore: {
-      getState: () => ({
-        getEnabledJobs: () => jobs.filter((j: any) => j.enabled),
-        recordRun: jest.fn(),
-      }),
+      getState: () => state,
     },
     __addJob: (job: any) => jobs.push(job),
     __clearJobs: () => {
       jobs.length = 0;
+      state.markJobAttemptStarted.mockClear();
+      state.recordRun.mockClear();
+      state.recordRunFailure.mockClear();
+      state.resetJobRetry.mockClear();
+      state.updateJobRuntimeState.mockClear();
+      state.recordEvaluation.mockClear();
     },
   };
 });
@@ -43,6 +59,7 @@ describe('Scheduler Engine', () => {
     jest.clearAllMocks();
     jest.useFakeTimers();
     storeMock.__clearJobs();
+    setSchedulerExecutor(null);
     stopScheduler();
   });
 

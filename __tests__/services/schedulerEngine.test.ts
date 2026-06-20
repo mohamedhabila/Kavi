@@ -3,29 +3,42 @@
 // ---------------------------------------------------------------------------
 
 import {
-  startScheduler,
-  stopScheduler,
-  setSchedulerExecutor,
   evaluateJobsOnce,
   resetJobRetry,
+  runJobNow,
+  setSchedulerExecutor,
+  startScheduler,
+  stopScheduler,
 } from '../../src/services/scheduler/engine';
 import { useSchedulerStore } from '../../src/services/scheduler/store';
 import { useExecutionTraceStore } from '../../src/services/scheduler/traceStore';
 
-// Helpers
 function resetStores() {
-  useSchedulerStore.setState({ jobs: [] });
+  useSchedulerStore.setState({ jobs: [], lastEvaluationAtMs: undefined });
   useExecutionTraceStore.setState({ traces: [] });
+}
+
+function setJobRuntime(id: string, updates: Record<string, unknown>) {
+  useSchedulerStore.setState({
+    jobs: useSchedulerStore
+      .getState()
+      .jobs.map((job) => (job.id === id ? { ...job, ...updates } : job)),
+  });
+}
+
+function mockNow(timestamp: number) {
+  return jest.spyOn(Date, 'now').mockReturnValue(timestamp);
 }
 
 describe('Scheduler Engine', () => {
   beforeEach(() => {
     stopScheduler();
     resetStores();
-    setSchedulerExecutor(null as any);
+    setSchedulerExecutor(null);
   });
 
-  afterAll(() => {
+  afterEach(() => {
+    jest.restoreAllMocks();
     stopScheduler();
   });
 
@@ -39,31 +52,8 @@ describe('Scheduler Engine', () => {
     it('does not create multiple intervals on double start', () => {
       setSchedulerExecutor({ execute: async () => 'ok' });
       startScheduler();
-      startScheduler(); // second call should be no-op
+      startScheduler();
       stopScheduler();
-    });
-  });
-
-  describe('setSchedulerExecutor', () => {
-    it('records trace with error when no executor set', async () => {
-      useSchedulerStore.getState().addJob({
-        name: 'test-job',
-        schedule: { kind: 'cron', expr: '* * * * *' },
-        prompt: 'Do something',
-      });
-
-      // Force the job to appear as due by manually enabling it
-      const job = useSchedulerStore.getState().jobs[0];
-      expect(job).toBeDefined();
-      expect(job.enabled).toBe(true);
-
-      await evaluateJobsOnce();
-
-      // Trace store should have a trace with error (no executor)
-      const traces = useExecutionTraceStore.getState().traces;
-      // May or may not have traces depending on whether the job was "due"
-      // The important thing is it doesn't crash
-      expect(Array.isArray(traces)).toBe(true);
     });
   });
 
@@ -73,27 +63,178 @@ describe('Scheduler Engine', () => {
       await expect(evaluateJobsOnce()).resolves.toBeUndefined();
     });
 
-    it('executes a due job and records success trace', async () => {
+    it('records an error trace when no executor is configured for a due job', async () => {
+      const now = 1_700_000_000_000;
+      mockNow(now);
+
+      const jobId = useSchedulerStore.getState().addJob({
+        name: 'test-job',
+        schedule: { kind: 'every', everyMs: 60_000 },
+        prompt: 'Do something',
+      });
+      setJobRuntime(jobId, { nextRunAtMs: now - 1 });
+
+      await evaluateJobsOnce({ nowMs: now, trigger: 'scheduled' });
+
+      const traces = useExecutionTraceStore.getState().traces;
+      expect(traces).toHaveLength(1);
+      expect(traces[0]).toMatchObject({
+        jobId,
+        status: 'error',
+        error: 'No executor configured',
+        trigger: 'scheduled',
+      });
+      expect(useSchedulerStore.getState().getJob(jobId)?.lastError).toBe('No executor configured');
+    });
+
+    it('executes a due job and persists success runtime state', async () => {
+      const now = 1_700_000_100_000;
+      mockNow(now);
       const executeFn = jest.fn().mockResolvedValue('done');
       setSchedulerExecutor({ execute: executeFn });
 
       const jobId = useSchedulerStore.getState().addJob({
         name: 'Due Job',
-        schedule: { kind: 'cron', expr: '* * * * *' },
+        schedule: { kind: 'every', everyMs: 60_000 },
         prompt: 'Run this',
       });
+      setJobRuntime(jobId, { nextRunAtMs: now - 1 });
 
-      // Manually backdate the job so it appears due
-      const jobs = useSchedulerStore
-        .getState()
-        .jobs.map((j) => (j.id === jobId ? { ...j, createdAtMs: Date.now() - 120_000 } : j));
-      useSchedulerStore.setState({ jobs });
+      await evaluateJobsOnce({ nowMs: now, trigger: 'scheduled' });
 
-      // First evaluateJobsOnce to set lastEvaluationMs
-      await evaluateJobsOnce();
+      expect(executeFn).toHaveBeenCalledTimes(1);
+      const job = useSchedulerStore.getState().getJob(jobId);
+      expect(job?.lastSuccessAtMs).toBe(now);
+      expect(job?.lastError).toBeUndefined();
+      expect(job?.retryAttempts).toBe(0);
+      expect(job?.runningAttemptId).toBeUndefined();
+      expect(job?.nextRunAtMs).toBe(now + 60_000);
+      expect(useExecutionTraceStore.getState().traces[0]).toMatchObject({
+        jobId,
+        status: 'success',
+        output: 'done',
+        trigger: 'scheduled',
+      });
+    });
 
-      // Check if executor was called (depends on timing logic)
-      // At minimum, it should not crash
+    it('persists retry cooldown and retries only after the cooldown expires', async () => {
+      const now = 1_700_000_200_000;
+      const nowSpy = mockNow(now);
+      const executeFn = jest
+        .fn()
+        .mockRejectedValueOnce(new Error('temporary failure'))
+        .mockResolvedValueOnce('recovered');
+      setSchedulerExecutor({ execute: executeFn });
+
+      const jobId = useSchedulerStore.getState().addJob({
+        name: 'Retry Job',
+        schedule: { kind: 'every', everyMs: 60_000 },
+        prompt: 'retry',
+      });
+      setJobRuntime(jobId, { nextRunAtMs: now - 1 });
+
+      await evaluateJobsOnce({ nowMs: now, trigger: 'scheduled' });
+
+      let job = useSchedulerStore.getState().getJob(jobId);
+      expect(executeFn).toHaveBeenCalledTimes(1);
+      expect(job?.retryAttempts).toBe(1);
+      expect(job?.nextRetryAtMs).toBe(now + 30_000);
+      expect(job?.lastError).toBe('temporary failure');
+
+      nowSpy.mockReturnValue(now + 10_000);
+      await evaluateJobsOnce({ nowMs: now + 10_000, trigger: 'scheduled' });
+      expect(executeFn).toHaveBeenCalledTimes(1);
+
+      nowSpy.mockReturnValue(now + 30_000);
+      await evaluateJobsOnce({ nowMs: now + 30_000, trigger: 'scheduled' });
+
+      job = useSchedulerStore.getState().getJob(jobId);
+      expect(executeFn).toHaveBeenCalledTimes(2);
+      expect(job?.retryAttempts).toBe(0);
+      expect(job?.nextRetryAtMs).toBeUndefined();
+      expect(job?.lastSuccessAtMs).toBe(now + 30_000);
+      expect(useExecutionTraceStore.getState().traces.map((trace) => trace.status)).toEqual([
+        'success',
+        'retrying',
+      ]);
+    });
+
+    it('recovers a missed run from persisted nextRunAtMs after a cold start', async () => {
+      const now = 1_700_000_300_000;
+      mockNow(now);
+      const executeFn = jest.fn().mockResolvedValue('missed recovered');
+      setSchedulerExecutor({ execute: executeFn });
+
+      const jobId = useSchedulerStore.getState().addJob({
+        name: 'Missed Job',
+        schedule: { kind: 'every', everyMs: 300_000 },
+        prompt: 'recover',
+      });
+      setJobRuntime(jobId, {
+        nextRunAtMs: now - 300_000,
+        lastRunAtMs: now - 900_000,
+      });
+
+      await evaluateJobsOnce({ nowMs: now, trigger: 'missed-recovery' });
+
+      expect(executeFn).toHaveBeenCalledTimes(1);
+      expect(useExecutionTraceStore.getState().traces[0]).toMatchObject({
+        jobId,
+        status: 'success',
+        trigger: 'missed-recovery',
+      });
+    });
+
+    it('skips active attempts but recovers stale running attempts', async () => {
+      const now = 1_700_000_400_000;
+      const nowSpy = mockNow(now);
+      const executeFn = jest.fn().mockResolvedValue('ok');
+      setSchedulerExecutor({ execute: executeFn });
+
+      const jobId = useSchedulerStore.getState().addJob({
+        name: 'Lease Job',
+        schedule: { kind: 'every', everyMs: 60_000 },
+        prompt: 'lease',
+      });
+      setJobRuntime(jobId, {
+        nextRunAtMs: now - 1,
+        runningAttemptId: 'active-attempt',
+        runningStartedAtMs: now - 60_000,
+      });
+
+      await evaluateJobsOnce({ nowMs: now, trigger: 'scheduled' });
+      expect(executeFn).not.toHaveBeenCalled();
+
+      nowSpy.mockReturnValue(now + 11 * 60_000);
+      await evaluateJobsOnce({ nowMs: now + 11 * 60_000, trigger: 'scheduled' });
+      expect(executeFn).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('runJobNow', () => {
+    it('runs a disabled job when explicitly requested', async () => {
+      const now = 1_700_000_500_000;
+      mockNow(now);
+      const executeFn = jest.fn().mockResolvedValue('manual');
+      setSchedulerExecutor({ execute: executeFn });
+
+      const jobId = useSchedulerStore.getState().addJob({
+        name: 'Manual Job',
+        schedule: { kind: 'every', everyMs: 60_000 },
+        prompt: 'manual',
+      });
+      useSchedulerStore.getState().disableJob(jobId);
+
+      await expect(runJobNow(jobId, { nowMs: now })).resolves.toEqual({
+        status: 'completed',
+        id: jobId,
+        name: 'Manual Job',
+      });
+      expect(executeFn).toHaveBeenCalledTimes(1);
+      expect(useExecutionTraceStore.getState().traces[0]).toMatchObject({
+        trigger: 'manual',
+        status: 'success',
+      });
     });
   });
 
@@ -102,79 +243,26 @@ describe('Scheduler Engine', () => {
       expect(() => resetJobRetry('unknown-id')).not.toThrow();
     });
 
-    it('does not throw for known job', () => {
+    it('clears persisted retry fields for a known job', () => {
+      const now = 1_700_000_600_000;
+      mockNow(now);
       const jobId = useSchedulerStore.getState().addJob({
         name: 'retry-test',
-        schedule: { kind: 'cron', expr: '*/5 * * * *' },
+        schedule: { kind: 'every', everyMs: 60_000 },
         prompt: 'test',
       });
-      expect(() => resetJobRetry(jobId)).not.toThrow();
-    });
-  });
-
-  describe('executor non-Error throw handling', () => {
-    it('records error trace when executor throws a string', async () => {
-      const executeFn = jest.fn().mockRejectedValue('string failure');
-      setSchedulerExecutor({ execute: executeFn });
-
-      const jobId = useSchedulerStore.getState().addJob({
-        name: 'String Error Job',
-        schedule: { kind: 'cron', expr: '* * * * *' },
-        prompt: 'test',
+      setJobRuntime(jobId, {
+        retryAttempts: 1,
+        nextRetryAtMs: now + 30_000,
+        lastError: 'fail',
       });
 
-      // Backdate to make it due
-      const jobs = useSchedulerStore
-        .getState()
-        .jobs.map((j) => (j.id === jobId ? { ...j, createdAtMs: Date.now() - 120_000 } : j));
-      useSchedulerStore.setState({ jobs });
+      resetJobRetry(jobId);
 
-      await evaluateJobsOnce();
-
-      const traces = useExecutionTraceStore.getState().traces;
-      // If the job was evaluated, the trace should contain the string error
-      const errorTrace = traces.find((t) => t.error?.includes('string failure'));
-      if (executeFn.mock.calls.length > 0) {
-        expect(errorTrace).toBeDefined();
-        expect(errorTrace!.status).toMatch(/error|retrying/);
-      }
-    });
-  });
-
-  describe('retry state garbage collection', () => {
-    it('does not crash when no retry state exists', async () => {
-      setSchedulerExecutor({ execute: async () => 'ok' });
-      await expect(evaluateJobsOnce()).resolves.toBeUndefined();
-    });
-
-    it('cleans up retry state for deleted jobs after evaluation', async () => {
-      const executeFn = jest.fn().mockRejectedValue(new Error('fail'));
-      setSchedulerExecutor({ execute: executeFn });
-
-      const jobId = useSchedulerStore.getState().addJob({
-        name: 'GC-Test',
-        schedule: { kind: 'cron', expr: '* * * * *' },
-        prompt: 'gc',
-      });
-
-      // Backdate to make it due
-      const jobs = useSchedulerStore
-        .getState()
-        .jobs.map((j) => (j.id === jobId ? { ...j, createdAtMs: Date.now() - 120_000 } : j));
-      useSchedulerStore.setState({ jobs });
-
-      // First eval — creates retry state for the job
-      await evaluateJobsOnce();
-
-      // Now remove the job
-      useSchedulerStore.setState({ jobs: [] });
-
-      // Second eval — should GC the retry state without error
-      executeFn.mockResolvedValue('ok');
-      await expect(evaluateJobsOnce()).resolves.toBeUndefined();
-
-      // Reset retry for deleted job should not throw
-      expect(() => resetJobRetry(jobId)).not.toThrow();
+      const job = useSchedulerStore.getState().getJob(jobId);
+      expect(job?.retryAttempts).toBe(0);
+      expect(job?.nextRetryAtMs).toBeUndefined();
+      expect(job?.lastError).toBeUndefined();
     });
   });
 });

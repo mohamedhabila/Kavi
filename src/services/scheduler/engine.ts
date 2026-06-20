@@ -1,112 +1,135 @@
 // ---------------------------------------------------------------------------
-// Kavi — Scheduler Engine (Enhanced)
+// Kavi — Scheduler Engine
 // ---------------------------------------------------------------------------
-// Evaluates cron jobs with missed-run recovery, retry with exponential
-// backoff, and execution trace recording.
+// Evaluates scheduled jobs with persisted next-run, retry, and attempt state.
 
 import { computeNextRunAtMs } from '../cron/schedule';
 import { useSchedulerStore } from './store';
 import { useExecutionTraceStore, type ExecutionTrace } from './traceStore';
-import type { CronJob } from '../cron/types';
+import type { CronJob, SchedulerTrigger } from '../cron/types';
 import { emitSchedulerEvent } from '../events/bus';
 import { generateId } from '../../utils/id';
 import { unrefTimerIfSupported } from '../../utils/timers';
 
 let schedulerInterval: ReturnType<typeof setInterval> | null = null;
-const CHECK_INTERVAL_MS = 60_000; // Check every minute
+const CHECK_INTERVAL_MS = 60_000;
+const ATTEMPT_LEASE_MS = 10 * 60_000;
+const DEFAULT_MAX_RETRIES = 2;
 
 export interface SchedulerExecutor {
   execute: (job: CronJob) => Promise<string>;
 }
 
+export interface EvaluateJobsOptions {
+  nowMs?: number;
+  trigger?: SchedulerTrigger;
+  targetJobId?: string;
+  force?: boolean;
+  timeBudgetMs?: number;
+}
+
+export type RunJobNowResult =
+  | { status: 'not_found'; id: string }
+  | { status: 'skipped'; id: string; name: string }
+  | { status: 'completed'; id: string; name: string };
+
 let executor: SchedulerExecutor | null = null;
 
-export function setSchedulerExecutor(exec: SchedulerExecutor): void {
+export function setSchedulerExecutor(exec: SchedulerExecutor | null): void {
   executor = exec;
 }
 
 // ── Retry logic ──────────────────────────────────────────────────────────
 
-const retryState = new Map<string, { attempts: number; nextRetryAt: number }>();
-
 function getRetryDelay(attempt: number): number {
-  // Exponential backoff: 30s, 60s, 120s, 240s, cap at 5 min
+  // Exponential backoff: 30s, 60s, 120s, 240s, cap at 5 min.
   const base = 30_000;
   return Math.min(base * Math.pow(2, attempt - 1), 5 * 60_000);
 }
 
-function canRetry(jobId: string, maxRetries: number): boolean {
-  const state = retryState.get(jobId);
-  if (!state) return true;
-  return state.attempts < maxRetries;
+function coerceFiniteNumber(value: unknown): number | undefined {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function shouldRetryNow(jobId: string): boolean {
-  const state = retryState.get(jobId);
-  if (!state) return true;
-  return Date.now() >= state.nextRetryAt;
+function normalizePositiveTimestamp(value: unknown): number | undefined {
+  const parsed = coerceFiniteNumber(value);
+  if (parsed === undefined || parsed <= 0) return undefined;
+  return Math.floor(parsed);
 }
 
-function recordRetryAttempt(jobId: string): number {
-  const current = retryState.get(jobId);
-  const attempts = (current?.attempts ?? 0) + 1;
-  const nextRetryAt = Date.now() + getRetryDelay(attempts);
-  retryState.set(jobId, { attempts, nextRetryAt });
-  return attempts;
+function normalizeRetryAttempts(value: unknown): number {
+  const parsed = coerceFiniteNumber(value);
+  if (parsed === undefined) return 0;
+  return Math.max(0, Math.floor(parsed));
 }
 
-function clearRetryState(jobId: string): void {
-  retryState.delete(jobId);
+function maxRetriesForJob(job: CronJob): number {
+  if (job.failureAlert?.enabled === false) return 0;
+  const configured = coerceFiniteNumber(job.failureAlert?.maxRetries);
+  if (configured === undefined) return DEFAULT_MAX_RETRIES;
+  return Math.max(0, Math.floor(configured));
 }
 
-// ── Missed-run detection ─────────────────────────────────────────────────
+function resolveJobNextRunAtMs(job: CronJob, nowMs: number): number | undefined {
+  const persisted = normalizePositiveTimestamp(job.nextRunAtMs);
+  if (persisted !== undefined) return persisted;
 
-let lastEvaluationMs = 0;
-
-/**
- * Detects jobs that should have run during a period when the scheduler was
- * not active (e.g., app was backgrounded). Compares last evaluation time
- * to now and checks for any missed windows.
- */
-function detectMissedRuns(enabledJobs: CronJob[], nowMs: number): CronJob[] {
-  if (lastEvaluationMs === 0) return [];
-  const gapMs = nowMs - lastEvaluationMs;
-  // Only look for missed runs if gap > 1.5× check interval (app was backgrounded)
-  if (gapMs < CHECK_INTERVAL_MS * 1.5) return [];
-
-  const missed: CronJob[] = [];
-  for (const job of enabledJobs) {
-    const nextRun = computeNextRunAtMs(job.schedule, lastEvaluationMs);
-    if (nextRun !== undefined && nextRun <= nowMs && nextRun > lastEvaluationMs) {
-      missed.push(job);
-    }
+  try {
+    return normalizePositiveTimestamp(computeNextRunAtMs(job.schedule, nowMs - CHECK_INTERVAL_MS));
+  } catch {
+    return undefined;
   }
-  return missed;
+}
+
+function hasActiveAttempt(job: CronJob, nowMs: number): boolean {
+  if (!job.runningAttemptId) return false;
+  const startedAtMs = normalizePositiveTimestamp(job.runningStartedAtMs);
+  return startedAtMs !== undefined && nowMs - startedAtMs < ATTEMPT_LEASE_MS;
+}
+
+function shouldRunJob(job: CronJob, nowMs: number, force: boolean): boolean {
+  if (!force && !job.enabled) return false;
+  if (hasActiveAttempt(job, nowMs)) return false;
+
+  const nextRetryAtMs = normalizePositiveTimestamp(job.nextRetryAtMs);
+  if (nextRetryAtMs !== undefined) {
+    return force || nowMs >= nextRetryAtMs;
+  }
+
+  const nextRunAtMs = resolveJobNextRunAtMs(job, nowMs);
+  return force || (nextRunAtMs !== undefined && nextRunAtMs <= nowMs);
 }
 
 // ── Execution trace recording ───────────────────────────────────────────
 
-function recordTrace(
-  jobId: string,
-  jobName: string,
-  status: ExecutionTrace['status'],
-  durationMs: number,
-  output?: string,
-  error?: string,
-  attempt?: number,
-): void {
+function recordTrace(params: {
+  jobId: string;
+  jobName: string;
+  status: ExecutionTrace['status'];
+  startedAt: number;
+  completedAt: number;
+  output?: string;
+  error?: string;
+  attempt?: number;
+  trigger: SchedulerTrigger;
+}): void {
   useExecutionTraceStore.getState().addTrace({
     id: `trace-${generateId()}`,
-    jobId,
-    jobName,
-    startedAt: Date.now() - durationMs,
-    completedAt: Date.now(),
-    durationMs,
-    status,
-    output: output?.slice(0, 2000),
-    error,
-    attempt,
-    trigger: lastEvaluationMs === 0 ? 'manual' : 'scheduled',
+    jobId: params.jobId,
+    jobName: params.jobName,
+    startedAt: params.startedAt,
+    completedAt: params.completedAt,
+    durationMs: Math.max(0, params.completedAt - params.startedAt),
+    status: params.status,
+    output: params.output?.slice(0, 2000),
+    error: params.error,
+    attempt: params.attempt,
+    trigger: params.trigger,
   });
 }
 
@@ -115,112 +138,163 @@ function recordTrace(
 async function executeJob(
   job: CronJob,
   nowMs: number,
-): Promise<void> {
+  trigger: SchedulerTrigger,
+  force: boolean,
+): Promise<'completed' | 'skipped'> {
   const store = useSchedulerStore.getState();
-  const maxRetries = job.failureAlert?.maxRetries ?? 2;
+  if (!shouldRunJob(job, nowMs, force)) {
+    return 'skipped';
+  }
 
+  const attempt = normalizeRetryAttempts(job.retryAttempts) + 1;
+  const attemptId = `attempt-${generateId()}`;
+  store.markJobAttemptStarted(job.id, attemptId, nowMs);
   emitSchedulerEvent('task_run', { taskId: job.id, taskName: job.name });
 
   if (!executor) {
-    emitSchedulerEvent('task_failed', { taskId: job.id, error: 'No executor configured' });
-    recordTrace(job.id, job.name, 'error', 0, undefined, 'No executor configured');
-    return;
+    const error = 'No executor configured';
+    store.updateJobRuntimeState(job.id, {
+      lastAttemptAtMs: nowMs,
+      lastFailureAtMs: nowMs,
+      lastError: error,
+      runningAttemptId: undefined,
+      runningStartedAtMs: undefined,
+    });
+    emitSchedulerEvent('task_failed', { taskId: job.id, error });
+    recordTrace({
+      jobId: job.id,
+      jobName: job.name,
+      status: 'error',
+      startedAt: nowMs,
+      completedAt: nowMs,
+      error,
+      attempt,
+      trigger,
+    });
+    return 'completed';
   }
 
   const startMs = Date.now();
   try {
     const result = await executor.execute(job);
-    const durationMs = Date.now() - startMs;
-    store.recordRun(job.id, nowMs);
-    clearRetryState(job.id);
+    const completedAt = Date.now();
+    store.recordRun(job.id, completedAt);
     emitSchedulerEvent('task_complete', { taskId: job.id, taskName: job.name });
-    recordTrace(job.id, job.name, 'success', durationMs, result);
+    recordTrace({
+      jobId: job.id,
+      jobName: job.name,
+      status: 'success',
+      startedAt: startMs,
+      completedAt,
+      output: result,
+      trigger,
+    });
+    return 'completed';
   } catch (err: unknown) {
-    const durationMs = Date.now() - startMs;
-    const attempt = recordRetryAttempt(job.id);
+    const completedAt = Date.now();
+    const error = err instanceof Error ? err.message : String(err);
+    const maxRetries = maxRetriesForJob(job);
+    const willRetry = attempt < maxRetries;
 
-    if (canRetry(job.id, maxRetries)) {
+    if (willRetry) {
+      const nextRetryAtMs = completedAt + getRetryDelay(attempt);
+      store.recordRunFailure(job.id, {
+        timestamp: completedAt,
+        error,
+        attempt,
+        nextRetryAtMs,
+        final: false,
+      });
       emitSchedulerEvent('task_failed', {
         taskId: job.id,
-        error: `${err instanceof Error ? err.message : String(err)} (retry ${attempt}/${maxRetries})`,
+        error: `${error} (retry ${attempt}/${maxRetries})`,
       });
-      recordTrace(
-        job.id,
-        job.name,
-        'retrying',
-        durationMs,
-        undefined,
-        err instanceof Error ? err.message : String(err),
+      recordTrace({
+        jobId: job.id,
+        jobName: job.name,
+        status: 'retrying',
+        startedAt: startMs,
+        completedAt,
+        error,
         attempt,
-      );
-    } else {
-      emitSchedulerEvent('task_failed', {
-        taskId: job.id,
-        error: err instanceof Error ? err.message : String(err),
+        trigger,
       });
-      recordTrace(
-        job.id,
-        job.name,
-        'error',
-        durationMs,
-        undefined,
-        err instanceof Error ? err.message : String(err),
-        attempt,
-      );
-      clearRetryState(job.id);
-      // Record final failed run so it doesn't re-trigger
-      store.recordRun(job.id, nowMs);
+      return 'completed';
     }
+
+    store.recordRunFailure(job.id, {
+      timestamp: completedAt,
+      error,
+      attempt,
+      final: true,
+    });
+    emitSchedulerEvent('task_failed', { taskId: job.id, error });
+    recordTrace({
+      jobId: job.id,
+      jobName: job.name,
+      status: 'error',
+      startedAt: startMs,
+      completedAt,
+      error,
+      attempt,
+      trigger,
+    });
+    return 'completed';
   }
 }
 
-async function evaluateJobs(): Promise<void> {
+async function evaluateJobs(options: EvaluateJobsOptions = {}): Promise<void> {
+  const startedAtMs = Date.now();
+  const nowMs = options.nowMs ?? startedAtMs;
+  const trigger = options.trigger ?? 'scheduled';
   const store = useSchedulerStore.getState();
-  const enabledJobs = store.getEnabledJobs();
-  const nowMs = Date.now();
+  const candidates = options.targetJobId
+    ? store.jobs.filter((job) => job.id === options.targetJobId)
+    : store.getEnabledJobs();
 
-  // Check for missed runs from app backgrounding
-  const missedJobs = detectMissedRuns(enabledJobs, nowMs);
-  for (const job of missedJobs) {
-    await executeJob(job, nowMs);
+  for (const job of candidates) {
+    if (
+      options.timeBudgetMs !== undefined &&
+      Date.now() - startedAtMs >= Math.max(0, options.timeBudgetMs)
+    ) {
+      break;
+    }
+    await executeJob(job, nowMs, trigger, options.force === true);
   }
 
-  // Regular evaluation
-  for (const job of enabledJobs) {
-    // Skip if this job was already handled as a missed run
-    if (missedJobs.some((m) => m.id === job.id)) continue;
-
-    // Check retry cooldown
-    if (retryState.has(job.id) && !shouldRetryNow(job.id)) continue;
-
-    const nextRun = computeNextRunAtMs(job.schedule, nowMs - CHECK_INTERVAL_MS);
-    if (nextRun === undefined) continue;
-    if (nextRun > nowMs) continue;
-
-    await executeJob(job, nowMs);
-  }
-
-  lastEvaluationMs = nowMs;
-
-  // Garbage-collect retry state for jobs that no longer exist
-  const enabledIds = new Set(enabledJobs.map((j) => j.id));
-  for (const id of retryState.keys()) {
-    if (!enabledIds.has(id)) retryState.delete(id);
-  }
+  store.recordEvaluation(nowMs, trigger);
 }
 
 export function startScheduler(): void {
   if (schedulerInterval) return;
-  lastEvaluationMs = Date.now();
-  schedulerInterval = setInterval(evaluateJobs, CHECK_INTERVAL_MS);
+  schedulerInterval = setInterval(() => {
+    void evaluateJobs({ trigger: 'scheduled' }).catch(console.error);
+  }, CHECK_INTERVAL_MS);
   unrefTimerIfSupported(schedulerInterval);
-  // Run initial check
-  evaluateJobs().catch(console.error);
+  void evaluateJobs({ trigger: 'scheduled' }).catch(console.error);
 }
 
-/** Run a single evaluation pass (for background fetch calls). */
-export async function evaluateJobsOnce(): Promise<void> {
-  return evaluateJobs();
+/** Run a single evaluation pass. Used by background tasks and lifecycle hooks. */
+export async function evaluateJobsOnce(options: EvaluateJobsOptions = {}): Promise<void> {
+  return evaluateJobs(options);
+}
+
+export async function runJobNow(
+  jobId: string,
+  options: Omit<EvaluateJobsOptions, 'targetJobId' | 'force'> = {},
+): Promise<RunJobNowResult> {
+  const job = useSchedulerStore.getState().getJob(jobId);
+  if (!job) return { status: 'not_found', id: jobId };
+
+  const result = await executeJob(
+    job,
+    options.nowMs ?? Date.now(),
+    options.trigger ?? 'manual',
+    true,
+  );
+  return result === 'skipped'
+    ? { status: 'skipped', id: job.id, name: job.name }
+    : { status: 'completed', id: job.id, name: job.name };
 }
 
 export function stopScheduler(): void {
@@ -232,5 +306,5 @@ export function stopScheduler(): void {
 
 /** Reset retry state for a specific job (e.g., after manual edit). */
 export function resetJobRetry(jobId: string): void {
-  clearRetryState(jobId);
+  useSchedulerStore.getState().resetJobRetry(jobId);
 }

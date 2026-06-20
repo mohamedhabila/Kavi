@@ -7,6 +7,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { SchedulerTrigger } from '../cron/types';
 
 export interface ExecutionTrace {
   id: string;
@@ -19,7 +20,7 @@ export interface ExecutionTrace {
   output?: string;
   error?: string;
   attempt?: number;
-  trigger: 'scheduled' | 'manual' | 'missed-recovery' | 'background-fetch';
+  trigger: SchedulerTrigger;
 }
 
 interface ExecutionTraceState {
