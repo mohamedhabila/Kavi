@@ -64,6 +64,12 @@ tag candidate and run the release gate from a clean checkout.
 - Run production dependency audit with
   `npm audit --omit=dev --audit-level=high`.
 - Run full dependency audit with `npm audit --audit-level=high`.
+- Review moderate advisories with `npm audit --audit-level=moderate` before
+  major public releases and after dependency-tree changes. Moderate advisories
+  do not automatically block every release, but they must be fixed or
+  documented before release when they affect runtime dependencies, credentials,
+  network input, local file access, native build tooling, code execution, or
+  package integrity.
 - Run `npm run check:licenses` after dependency changes and commit regenerated `THIRD_PARTY_NOTICES.md` when it changes.
 - Run `npm run check:links`.
 - Confirm app metadata and native identifiers with `npm run check:app-metadata`.

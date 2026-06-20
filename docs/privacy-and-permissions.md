@@ -42,6 +42,20 @@ Depending on configuration, Kavi may send user-provided content to:
 The app does not require these systems. They are optional execution surfaces
 configured by the user.
 
+## Agent Execution Boundaries
+
+Agent workflows can use several execution surfaces. Each surface should stay
+within its documented boundary:
+
+| Surface                          | Boundary                                                                                                            |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Primary mobile graph             | Owns run lifecycle, control-graph state, and local persistence; it does not require a Kavi-operated server.          |
+| On-device model                  | Runs supported inference requests locally when selected; unsupported request paths may still need another provider.  |
+| Configured LLM provider          | Receives prompt/context needed for the user-requested turn; credentials should stay in secure-storage abstractions.  |
+| Built-in tools                   | Execute through declared tool contracts and permission-gated native adapters for sensitive device surfaces.          |
+| MCP, SSH, workspace, and browser | Use only user-configured external targets and send the content needed for the requested action.                      |
+| Background and sub-agent work    | Stays scoped to the parent conversation/run and must not expand permissions beyond the initiating workflow.          |
+
 ## On-Device Model Behavior
 
 When an on-device model is selected, inference can remain on the device instead

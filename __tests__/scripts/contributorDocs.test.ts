@@ -32,6 +32,7 @@ describe('contributor documentation', () => {
     }
 
     expect(docs['CONTRIBUTING.md']).toContain('npm run verify:strict');
+    expect(docs['CONTRIBUTING.md']).toContain('docs/privacy-and-permissions.md');
   });
 
   it('documents CI as the same contributor gate contributors run locally', () => {

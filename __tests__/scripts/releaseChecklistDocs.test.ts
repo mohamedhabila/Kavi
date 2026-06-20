@@ -38,6 +38,9 @@ describe('release maintainer checklist', () => {
     expect(checklist).toContain('npm run test:coverage');
     expect(checklist).toContain('npm audit --omit=dev --audit-level=high');
     expect(checklist).toContain('npm audit --audit-level=high');
+    expect(checklist).toContain('npm audit --audit-level=moderate');
+    expect(checklist).toContain('do not automatically block every release');
+    expect(checklist).toContain('runtime dependencies, credentials');
     expect(checklist).toContain('npm run check:licenses');
     expect(checklist).toContain('npm run check:links');
     expect(checklist).toContain('npm run check:app-metadata');

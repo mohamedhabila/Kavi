@@ -9,6 +9,7 @@ This repository is an application codebase, not a library package. The goal for 
 - Read [README.md](README.md) for the project overview and core commands.
 - Read [ARCHITECTURE.md](ARCHITECTURE.md) for the subsystem map.
 - Read [docs/setup/development.md](docs/setup/development.md) and [docs/testing.md](docs/testing.md) before changing build or test workflows.
+- Read [docs/privacy-and-permissions.md](docs/privacy-and-permissions.md) before changing tools, permissions, agent execution surfaces, or remote integrations.
 - Read [SECURITY.md](SECURITY.md) before reporting vulnerabilities.
 - Keep changes focused. Small, reviewable pull requests are strongly preferred.
 
