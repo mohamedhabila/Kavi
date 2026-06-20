@@ -33,7 +33,7 @@ and covered by tests whenever their behavior changes.
   caller.
 - Trust boundary: trusted-by-user workspace automation code. The bridge limits
   `require` and `fs` to bridge-provided APIs and the in-memory workspace cache,
-  but it is not a hostile-code sandbox.
+  but it is not a sandbox for untrusted remote code.
 - Guards and limits: workspace paths are normalized and path traversal out of
   the workspace is rejected; unsupported Node modules are not resolved unless
   they are bridge builtins; `process.env` is copied from explicit context only.

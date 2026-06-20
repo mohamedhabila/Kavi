@@ -1,6 +1,7 @@
 # Local LLM Runtime
 
-There is intentionally no `runtime.ts` barrel. Import the module that owns the behavior you need so dependency boundaries stay visible.
+There is intentionally no `runtime.ts` barrel. Import the module that owns the
+behavior you need so dependency boundaries stay visible.
 
 ## Module Map
 
@@ -14,8 +15,15 @@ There is intentionally no `runtime.ts` barrel. Import the module that owns the b
 - `plainPrompt.ts`, `structuredConversation.ts`, `structuredBudget.ts`, `structuredMessages.ts`, `promptContent.ts`, and `toolAdapter.ts`: prompt shaping, budgeting, OpenAPI tool mapping, and native structured conversation assembly.
 - `modelArtifacts.ts`, `constants.ts`, and `types.ts`: artifact selectors, shared constants, and local LLM TypeScript contracts.
 
-## Provider Modernization Notes
+## Platform Notes
 
-- Android uses the LiteRT-LM bridge through `native.ts` and `android/app/src/main/java/com/kavi/app/KaviLocalLlmModule.kt`. Audit the Gradle dependency against the current LiteRT-LM release in a native build before enabling newer runtime features such as MTP/speculative decoding.
-- iOS uses the LiteRT-LM bridge behind the same `nativeTypes.ts` request contract as Android; keep platform-specific runtime details out of TypeScript prompt assembly.
-- `downloads.ts` preserves the existing Expo FileSystem behavior for now. A production-grade large-model installer should move to native WorkManager/URLSession so downloads can resume safely after process death and report OS-visible progress without JS lifecycle pressure.
+- Android uses the LiteRT-LM bridge through `native.ts` and
+  `android/app/src/main/java/com/kavi/app/KaviLocalLlmModule.kt`. Validate
+  Gradle dependency changes in a native build before enabling newer runtime
+  features such as MTP or speculative decoding.
+- iOS uses the LiteRT-LM bridge behind the same `nativeTypes.ts` request
+  contract as Android. Keep platform-specific runtime details out of
+  TypeScript prompt assembly.
+- `downloads.ts` uses Expo FileSystem for the current model install flow. Large
+  model download changes should preserve resumability, progress reporting, and
+  recovery after app restarts.

@@ -37,8 +37,8 @@ Enable the repository host security features available to the project:
 - Keep `.github/dependabot.yml` enabled for npm and GitHub Actions maintenance updates.
 - Enable secret scanning when available.
 - Enable push protection when available.
-- Enable code scanning when available, or document why it is not enabled for the
-  current repository host and plan.
+- Enable code scanning when available, or document why it is not enabled for
+  the current repository hosting setup.
 - Review pinned GitHub Actions in `.github/workflows/` during dependency-maintenance work.
 
 ## Public Contact Links

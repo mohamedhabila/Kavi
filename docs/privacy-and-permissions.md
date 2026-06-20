@@ -1,10 +1,12 @@
 # Privacy And Permissions
 
-This document explains what Kavi stores locally, what can be sent to remote systems, and why the mobile app requests sensitive permissions.
+This document explains what Kavi stores locally, what can be sent to remote
+systems, and why the mobile app requests sensitive permissions.
 
 ## Principle
 
-Kavi should only access sensitive device data or remote systems when the user explicitly requests a feature that needs it.
+Kavi should only access sensitive device data or remote systems when the user
+explicitly requests a feature that needs it.
 
 Kavi's core assistant runtime is mobile-owned. It does not require a
 Kavi-operated server or gateway; remote systems appear only when the user
@@ -22,7 +24,9 @@ Examples include:
 - workflow state and local metadata
 - generated artifacts tied to active conversations or tools
 
-Secrets such as provider API keys, remote access tokens, and private SSH material are intended to flow through secure-storage abstractions rather than the plain persisted settings store.
+Secrets such as provider API keys, remote access tokens, and private SSH
+material are intended to flow through secure-storage abstractions rather than
+the plain persisted settings store.
 
 ## Remote Data Flows
 
@@ -40,7 +44,9 @@ configured by the user.
 
 ## On-Device Model Behavior
 
-When an on-device model is selected, inference can remain on the device instead of calling a remote provider. This improves privacy for supported workflows, but it does not automatically cover every feature or attachment path.
+When an on-device model is selected, inference can remain on the device instead
+of calling a remote provider. This improves privacy for supported workflows, but
+it does not automatically cover every feature or attachment path.
 
 ## Permission Map
 
@@ -59,10 +65,12 @@ When an on-device model is selected, inference can remain on the device instead 
 - Do not expand permission scope casually.
 - Keep permission prompts tied to clear user-triggered actions.
 - Document every new permission in `app.json`, this file, and release notes.
-- Treat provider credentials, SSH private keys, and remote access tokens as sensitive material in every test and log path.
+- Treat provider credentials, SSH private keys, and remote access tokens as
+  sensitive material in every test and log path.
 
 ## Repository Hygiene
 
 - Never commit real credentials, signed URLs, or private infrastructure endpoints.
-- Avoid posting raw logs that contain personal, provider, or remote-host data in issues or pull requests.
+- Avoid posting raw logs that contain personal, provider, or remote-host data in
+  issues or pull requests.
 - Keep scratch planning material out of git history.

@@ -57,13 +57,14 @@ Optional machine-specific values belong in `.env.local`, copied from
 - Leave `EXPO_PUBLIC_CLAWHUB_CONVEX_URL` unset unless ClawHub browse discovery
   is unavailable or you are testing against a compatible local endpoint.
 - Keep MCP and Expo/EAS integration files in the repository; they are public
-  runtime compatibility surfaces, not private cleanup material.
+  runtime compatibility surfaces.
 
 ## App Identity And Versioning
 
 The public source package version, Expo app version, iOS marketing version,
 Android `versionName`, and MCP client metadata are kept on the same semantic
-version. For this release line that version is `1.0.0`.
+version. The metadata guard in `npm run verify` checks that these values stay
+aligned.
 
 The native app identifiers are intentionally platform-specific:
 
@@ -72,9 +73,9 @@ The native app identifiers are intentionally platform-specific:
 
 Do not rename either native identifier as part of routine cleanup. Changing
 them creates different installed apps and can affect signing, updates, deep
-links, and local app storage. If a future release needs to change an identifier,
-update the native project files, Expo config, app metadata guard, and migration
-notes together.
+links, and local app storage. If an identifier change is required, update the
+native project files, Expo config, app metadata guard, and migration notes
+together.
 
 ## Run The App
 
@@ -183,7 +184,8 @@ caches and release outputs untracked.
 
 - Scratch work and planning notes should stay out of git history.
 - Build output, local caches, and editor-generated artifacts outside the committed runtime files should remain untracked.
-- Use `THIRD_PARTY_PROVENANCE.md` when changing patched or historically carried-forward code.
+- Update `THIRD_PARTY_PROVENANCE.md` when changing dependency patches,
+  generated third-party assets, or attribution-sensitive source files.
 
 Before opening a pull request, run:
 

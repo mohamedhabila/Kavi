@@ -59,7 +59,12 @@ The main request lifecycle is:
 - `src/engine/orchestrator.ts` is the thin entry shell; `src/engine/orchestrator/bootstrap.ts` and `session.ts` own bootstrap and graph-session execution.
 - `src/engine/graph/*` is the graph-owned control plane (XState, goals, completion gate, tool turns, observability).
 - `src/engine/tools` contains tool definitions, dispatching, builtin execution, native executors, and web/browser helpers.
-- Tool-execution seams now live in domain files such as `src/engine/tools/browserToolExecutor.ts`, `src/engine/tools/workspaceToolExecutor.ts`, `src/engine/tools/builtin-ssh.ts`, and `src/engine/tools/builtin-expo.ts` so contributors can change one execution surface without paging through the entire dispatcher.
+- Tool-execution boundaries live in domain files such as
+  `src/engine/tools/browserToolExecutor.ts`,
+  `src/engine/tools/workspaceToolExecutor.ts`,
+  `src/engine/tools/builtin-ssh.ts`, and
+  `src/engine/tools/builtin-expo.ts` so contributors can change one execution
+  surface without paging through the entire dispatcher.
 - `src/engine/toolResultGuard.ts`, `src/engine/toolResultPairingGuard.ts`, and `src/engine/loopDetection.ts` protect the conversation context and workflow from runaway tool behavior.
 
 ### Optional Remote Work Surfaces
@@ -92,22 +97,19 @@ Kavi includes non-trivial runtime surfaces beyond standard React Native UI:
 
 These layers are powerful but also increase maintenance cost, especially when Expo, React Native, or mobile OS versions change.
 
-## Current Refactor Hotspots
+## Contribution Areas And Module Boundaries
 
-The largest contribution barriers are the large modules listed below.
+Most contribution work should stay inside one subsystem at a time. The largest
+hand-maintained screens are currently:
 
-Highest-value decomposition targets:
+1. `src/screens/ChatScreen.tsx`
+2. `src/screens/SettingsScreen.tsx`
+3. `src/screens/RemoteWorkScreen.tsx`
 
-1. `src/screens/SettingsScreen.tsx`
-2. `src/screens/RemoteWorkScreen.tsx`
-3. `src/screens/ChatScreen.tsx`
-4. `src/services/llm/LlmService.ts`
-5. `src/store/useChatStore.ts`
-6. `src/screens/ChatScreen.tsx` (and related chat screen modules)
-
-## Boundary Map For Remaining Large Modules
-
-The tool-executor split removes one of the highest-churn monolith clusters. The remaining large non-screen files should be treated with the following boundaries when contributors continue modularization work.
+Changes in those screens should preserve their existing presenter, selector,
+and service boundaries. For shared runtime modules, use the boundaries below so
+new code does not collapse provider, graph, store, or platform concerns back
+into one file.
 
 ### `src/services/llm/LlmService.ts`
 

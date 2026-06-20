@@ -13,7 +13,9 @@ Older releases may not receive security updates.
 
 Please do not open a public issue for suspected security vulnerabilities.
 
-Use the repository host's private vulnerability reporting feature if it is enabled. If private reporting is unavailable, contact the maintainers through the private contact channel listed in the repository hosting profile.
+Use the repository host's private vulnerability reporting feature if it is
+enabled. If private reporting is unavailable, contact the maintainers through a
+non-public contact path listed on the repository or owner profile.
 
 When reporting a vulnerability, include:
 
@@ -32,7 +34,8 @@ Maintainers will review reports as quickly as practical and aim to:
 - decide on a remediation path
 - coordinate disclosure timing when a fix is needed
 
-Please avoid public disclosure until the maintainers have had a reasonable opportunity to investigate and mitigate the issue.
+Please avoid public disclosure until the maintainers have had a reasonable
+opportunity to investigate and mitigate the issue.
 
 ## Scope
 
@@ -62,4 +65,5 @@ The following are usually out of scope unless they create a direct security impa
 - Never commit secrets, tokens, private keys, or production credentials.
 - Use local test credentials and mock services where possible.
 - Avoid sharing sensitive logs or payloads in public issues and pull requests.
-- Prefer minimal proof-of-concept material over broad dumps of personal or production data.
+- Prefer minimal proof-of-concept material over broad dumps of personal or
+  production data.

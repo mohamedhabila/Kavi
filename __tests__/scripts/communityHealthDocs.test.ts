@@ -31,7 +31,8 @@ describe('community health files', () => {
 
     expect(license).toContain('MIT License');
     expect(license).toContain('Kavi contributors');
-    expect(conduct).toContain('private contact channel');
+    expect(conduct).toContain('non-public contact path');
+    expect(conduct).toContain('repository or owner profile');
     expect(conduct).toContain('Contributor Covenant');
   });
 
@@ -42,7 +43,8 @@ describe('community health files', () => {
 
     expect(security).toContain('Please do not open a public issue');
     expect(security).toContain('private vulnerability reporting');
-    expect(security).toContain('private contact channel');
+    expect(security).toContain('non-public contact path');
+    expect(security).toContain('repository or owner profile');
     expect(bugTemplate).toMatch(/body:\n\s+- type: markdown/);
     expect(bugTemplate).toContain('Security-sensitive reports do not belong in public issues');
     expect(bugTemplate).toContain('SECURITY.md');

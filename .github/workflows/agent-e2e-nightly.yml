@@ -46,6 +46,9 @@ jobs:
           GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           E2E_OPENAI_MODEL: ${{ vars.E2E_OPENAI_MODEL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_BASE_URL: ${{ vars.ANTHROPIC_BASE_URL }}
+          E2E_ANTHROPIC_MODEL: ${{ vars.E2E_ANTHROPIC_MODEL }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           E2E_OPENROUTER_MODEL: ${{ vars.E2E_OPENROUTER_MODEL }}
           E2E_COMPATIBLE_API_KEY: ${{ secrets.E2E_COMPATIBLE_API_KEY }}
@@ -65,6 +68,12 @@ jobs:
             openai)
               if [ -z "${OPENAI_API_KEY}" ] || [ -z "${E2E_OPENAI_MODEL}" ]; then
                 echo 'Selected OpenAI E2E provider is missing OPENAI_API_KEY or E2E_OPENAI_MODEL; skipping live E2E.'
+                exit 0
+              fi
+              ;;
+            anthropic|claude)
+              if [ -z "${ANTHROPIC_API_KEY}" ] || [ -z "${E2E_ANTHROPIC_MODEL}" ]; then
+                echo 'Selected Anthropic E2E provider is missing ANTHROPIC_API_KEY or E2E_ANTHROPIC_MODEL; skipping live E2E.'
                 exit 0
               fi
               ;;

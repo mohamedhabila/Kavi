@@ -2,7 +2,12 @@
 
 ## Our Pledge
 
-We as contributors and maintainers pledge to make participation in the Kavi project and community a harassment-free experience for everyone, regardless of age, body size, visible or invisible disability, ethnicity, sex characteristics, gender identity and expression, level of experience, education, socioeconomic status, nationality, personal appearance, race, religion, or sexual identity and orientation.
+We as contributors and maintainers pledge to make participation in the Kavi
+project and community a harassment-free experience for everyone, regardless of
+age, body size, visible or invisible disability, ethnicity, sex
+characteristics, gender identity and expression, level of experience,
+education, socioeconomic status, nationality, personal appearance, race,
+religion, or sexual identity and orientation.
 
 We pledge to act and interact in ways that contribute to an open, welcoming, diverse, inclusive, and healthy community.
 
@@ -26,48 +31,78 @@ Examples of unacceptable behavior include:
 
 ## Enforcement Responsibilities
 
-Project maintainers are responsible for clarifying and enforcing our standards of acceptable behavior and will take appropriate and fair corrective action in response to any behavior they deem inappropriate, threatening, offensive, or harmful.
+Project maintainers are responsible for clarifying and enforcing our standards
+of acceptable behavior and will take appropriate and fair corrective action in
+response to any behavior they deem inappropriate, threatening, offensive, or
+harmful.
 
-Project maintainers have the right and responsibility to remove, edit, or reject comments, commits, code, wiki edits, issues, and other contributions that are not aligned with this Code of Conduct, and will communicate reasons for moderation decisions when appropriate.
+Project maintainers have the right and responsibility to remove, edit, or
+reject comments, commits, code, wiki edits, issues, and other contributions
+that are not aligned with this Code of Conduct, and will communicate reasons
+for moderation decisions when appropriate.
 
 ## Scope
 
-This Code of Conduct applies within all project spaces and also applies when an individual is officially representing the project in public spaces. Examples of representing the project include using an official project email address, posting via an official social media account, or acting as an appointed representative at an online or offline event.
+This Code of Conduct applies within all project spaces and also applies when
+an individual is officially representing the project in public spaces. Examples
+of representing the project include using an official project email address,
+posting via an official social media account, or acting as an appointed
+representative at an online or offline event.
 
 ## Reporting
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project maintainers through the private contact channel listed in the repository hosting profile or repository security reporting settings.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be
+reported to the project maintainers through a non-public contact path listed on
+the repository or owner profile, or through the repository security reporting
+settings when that is the appropriate private channel.
 
 All reports will be reviewed and investigated promptly and fairly.
 
 ## Enforcement Guidelines
 
-Project maintainers will follow these general community impact guidelines when determining consequences for any action they deem in violation of this Code of Conduct:
+Project maintainers will follow these general community impact guidelines when
+determining consequences for any action they deem in violation of this Code of
+Conduct:
 
 ### 1. Correction
 
 Community Impact: Use of inappropriate language or other behavior deemed unprofessional or unwelcome in the community.
 
-Consequence: A private, written warning from project maintainers, providing clarity around the nature of the violation and an explanation of why the behavior was inappropriate. A public apology may be requested.
+Consequence: A private, written warning from project maintainers, providing
+clarity around the nature of the violation and an explanation of why the
+behavior was inappropriate. A public apology may be requested.
 
 ### 2. Warning
 
 Community Impact: A violation through a single incident or series of actions.
 
-Consequence: A warning with consequences for continued behavior. No interaction with the people involved, including unsolicited interaction with those enforcing the Code of Conduct, for a specified period of time. This includes avoiding interactions in community spaces as well as external channels such as social media. Violating these terms may lead to a temporary or permanent ban.
+Consequence: A warning with consequences for continued behavior. No
+interaction with the people involved, including unsolicited interaction with
+those enforcing the Code of Conduct, for a specified period of time. This
+includes avoiding interactions in community spaces as well as external channels
+such as social media. Violating these terms may lead to a temporary or
+permanent ban.
 
 ### 3. Temporary Ban
 
 Community Impact: A serious violation of community standards, including sustained inappropriate behavior.
 
-Consequence: A temporary ban from any sort of interaction or public communication with the community for a specified period of time. No public or private interaction with the people involved, including unsolicited interaction with those enforcing the Code of Conduct, is allowed during this period. Violating these terms may lead to a permanent ban.
+Consequence: A temporary ban from any sort of interaction or public
+communication with the community for a specified period of time. No public or
+private interaction with the people involved, including unsolicited interaction
+with those enforcing the Code of Conduct, is allowed during this period.
+Violating these terms may lead to a permanent ban.
 
 ### 4. Permanent Ban
 
-Community Impact: Demonstrating a pattern of violation of community standards, including sustained inappropriate behavior, harassment of an individual, or aggression toward or disparagement of classes of individuals.
+Community Impact: Demonstrating a pattern of violation of community standards,
+including sustained inappropriate behavior, harassment of an individual, or
+aggression toward or disparagement of classes of individuals.
 
 Consequence: A permanent ban from any sort of public interaction within the project community.
 
 ## Attribution
 
-This Code of Conduct is based on the Contributor Covenant, version 2.1, available at https://www.contributor-covenant.org/version/2/1/code_of_conduct.html.
+This Code of Conduct is based on the Contributor Covenant, version 2.1,
+available at
+https://www.contributor-covenant.org/version/2/1/code_of_conduct.html.
