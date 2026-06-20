@@ -59,11 +59,11 @@ describe('GitHub workflows', () => {
 
   it('pins action dependencies to full commit SHAs', () => {
     expect(workflowUses(readWorkflow('ci.yml'))).toEqual([
-      'actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5',
+      'actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0',
       'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020',
     ]);
     expect(workflowUses(readWorkflow('agent-e2e-nightly.yml'))).toEqual([
-      'actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5',
+      'actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0',
       'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020',
       'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
     ]);
