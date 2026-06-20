@@ -5,7 +5,10 @@ import {
 } from '../../../services/agents/agentRunCancellation';
 import { handleForegroundRunCompletionFlow } from './completionFlow';
 import { reviewForegroundRunCompletion } from './completionReview';
-import type { ForegroundConversationRunRuntimeParams } from './executionTypes';
+import type {
+  ForegroundConversationRunRuntimeParams,
+  ForegroundRunLogEntryInput,
+} from './executionTypes';
 import type { ForegroundRunMutableState } from './executionRuntimeState';
 import { recoverForegroundAgentRunFinalPreview } from './finalPreviewRecovery';
 import { resolveForegroundInterruptedResponseOutcome } from './foregroundInterruptedResponse';
@@ -34,13 +37,7 @@ type RuntimeTerminalLifecycleParams = Pick<
 > & {
   abort: AbortController;
   assistantStream: ReturnType<typeof createForegroundAssistantStreamController>;
-  appendConversationLog: (entry: {
-    title: string;
-    detail?: string;
-    level?: AgentRun['status'] extends never ? never : any;
-    kind?: any;
-    timestamp?: number;
-  }) => void;
+  appendConversationLog: (entry: ForegroundRunLogEntryInput) => void;
   flushPendingSurfacedSubAgentOutputs: () => void;
   getCurrentAssistantMessageId: () => string;
   mutableState: ForegroundRunMutableState;

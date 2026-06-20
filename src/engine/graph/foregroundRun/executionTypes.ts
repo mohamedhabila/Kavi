@@ -1,8 +1,9 @@
 import type { MutableRefObject } from 'react';
 import type { ThinkingLevel } from '../../thinking';
+import type { ChatState } from '../../../store/chatStoreTypes';
 import type { Conversation, ConversationLogEntry } from '../../../types/conversation';
 import type { LlmProviderConfig } from '../../../types/provider';
-import type { ToolCall } from '../../../types/message';
+import type { Message, ToolCall } from '../../../types/message';
 import type {
   EnsureAgentRunFinalResponse,
   ResolvedFinalizationProviderContext,
@@ -29,43 +30,55 @@ export type ForegroundRunLogEntryInput = {
 };
 
 export type ForegroundStreamingDraft = {
+  content?: string;
+  reasoning?: string;
   toolCalls?: ToolCall[];
-  effectId?: any;
-} & Record<string, unknown>;
+  effectId?: Message['effectId'];
+};
 
-export interface ForegroundConversationRunStoreActions {
-  addMessage: (...args: any[]) => any;
-  addToolCall: (...args: any[]) => any;
-  appendAgentRunCheckpoint: (...args: any[]) => any;
-  completeAgentRun: (...args: any[]) => any;
-  setAgentRunPhase: (...args: any[]) => any;
-  startAgentRun: (...args: any[]) => any;
-  updateAgentRunAsyncWork: (...args: any[]) => any;
-  updateAgentRunControlGraph: (...args: any[]) => any;
-  updateAgentRunPlan: (...args: any[]) => any;
-  updateAgentRunSummary: (...args: any[]) => any;
-  updateMessage: (...args: any[]) => any;
-  updateMessageAssistantMetadata: (...args: any[]) => any;
-  updateMessageEffect: (...args: any[]) => any;
-  updateMessageEnrichedContent: (...args: any[]) => any;
-  updateMessageProviderReplay: (...args: any[]) => any;
-  updateMessageReasoning: (...args: any[]) => any;
-  updateToolCallStatus: (...args: any[]) => any;
-  applyConversationCompaction: (...args: any[]) => any;
-}
+export type ForegroundConversationRunStoreActions = Pick<
+  ChatState,
+  | 'addMessage'
+  | 'addToolCall'
+  | 'appendAgentRunCheckpoint'
+  | 'applyConversationCompaction'
+  | 'completeAgentRun'
+  | 'setAgentRunPhase'
+  | 'startAgentRun'
+  | 'updateAgentRunAsyncWork'
+  | 'updateAgentRunControlGraph'
+  | 'updateAgentRunPlan'
+  | 'updateAgentRunSummary'
+  | 'updateMessage'
+  | 'updateMessageAssistantMetadata'
+  | 'updateMessageEffect'
+  | 'updateMessageEnrichedContent'
+  | 'updateMessageProviderReplay'
+  | 'updateMessageReasoning'
+  | 'updateToolCallStatus'
+>;
 
 export interface ForegroundConversationRunRequestActions {
-  abortForegroundRequestForConversation: (...args: any[]) => any;
-  clearForegroundRequest: (...args: any[]) => any;
-  isCurrentForegroundRequest: (...args: any[]) => boolean;
-  registerForegroundRequest: (...args: any[]) => any;
-  setStreamingMessageId: (...args: any[]) => any;
+  abortForegroundRequestForConversation: (conversationId: string, reason?: string) => boolean;
+  clearForegroundRequest: (requestId: string, abortController: AbortController) => boolean;
+  isCurrentForegroundRequest: (requestId: string, abortController: AbortController) => boolean;
+  registerForegroundRequest: (
+    requestId: string,
+    conversationId: string,
+    abortController: AbortController,
+  ) => void;
+  setStreamingMessageId: (messageId: string | null) => void;
 }
 
 export interface ForegroundConversationRunStreamingActions {
-  clearStreamingDraft: (...args: any[]) => any;
-  mergeStreamingDraft: (...args: any[]) => any;
-  updateStreamingDraft: (...args: any[]) => any;
+  clearStreamingDraft: (messageId: string) => void;
+  mergeStreamingDraft: (messageId: string, patch: Partial<ForegroundStreamingDraft>) => void;
+  updateStreamingDraft: (
+    messageId: string,
+    updater: (
+      currentDraft: ForegroundStreamingDraft | undefined,
+    ) => ForegroundStreamingDraft | undefined,
+  ) => void;
 }
 
 export interface ForegroundConversationRunRefs {

@@ -88,7 +88,7 @@ export function createForegroundRunRuntimeControllers(params: RuntimeControllers
     checkpointIntervalMs: shared.state.streamStoreCheckpointIntervalMs,
     createAssistantMessageId: shared.helpers.createId,
     currentAssistantMessageId: bootstrapResult.assistantMessageId,
-    getStreamingDraft: (messageId) => shared.refs.streamingDraftsRef.current[messageId] as any,
+    getStreamingDraft: (messageId) => shared.refs.streamingDraftsRef.current[messageId],
     publishIntervalMs: shared.state.streamUiDraftPublishIntervalMs,
     resumedAssistantDraft: bootstrapResult.bootstrap.resumedAssistantDraft,
   });
@@ -104,7 +104,7 @@ export function createForegroundRunRuntimeControllers(params: RuntimeControllers
       return;
     }
 
-    shared.streaming.updateStreamingDraft(messageId, (currentDraft: any) => ({
+    shared.streaming.updateStreamingDraft(messageId, (currentDraft) => ({
       ...(currentDraft ?? {}),
       toolCalls: mergeForegroundStreamingToolCall(
         currentDraft?.toolCalls ?? getPersistedAssistantToolCalls(messageId),
@@ -121,7 +121,7 @@ export function createForegroundRunRuntimeControllers(params: RuntimeControllers
       return;
     }
 
-    shared.streaming.updateStreamingDraft(messageId, (currentDraft: any) => ({
+    shared.streaming.updateStreamingDraft(messageId, (currentDraft) => ({
       ...(currentDraft ?? {}),
       toolCalls: mergeForegroundStreamingToolCalls(
         currentDraft?.toolCalls ?? getPersistedAssistantToolCalls(messageId),
