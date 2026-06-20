@@ -31,10 +31,23 @@ describe('GitHub workflows', () => {
     const ciWorkflow = readWorkflow('ci.yml');
 
     expect(ciWorkflow).toContain('pull_request:');
+    expect(ciWorkflow).toContain('sudo apt-get install -y ripgrep');
     expect(ciWorkflow).toContain('run: npm run verify');
     expect(ciWorkflow).not.toMatch(/run:\s*npm run (?:check:public-hygiene|lint|typecheck)\b/);
     expect(ciWorkflow).not.toContain('npm test -- --runInBand');
     expect(ciWorkflow).not.toContain('secrets.');
+  });
+
+  it('installs ripgrep before verification gates that rely on rg', () => {
+    for (const fileName of ['ci.yml', 'agent-e2e-nightly.yml']) {
+      const workflow = readWorkflow(fileName);
+      const installIndex = workflow.indexOf('sudo apt-get install -y ripgrep');
+      const verifyIndex = workflow.indexOf(fileName === 'ci.yml' ? 'npm run verify' : 'npm run verify:strict');
+
+      expect(installIndex).toBeGreaterThan(-1);
+      expect(verifyIndex).toBeGreaterThan(-1);
+      expect(installIndex).toBeLessThan(verifyIndex);
+    }
   });
 
   it('uses read-only default token permissions in every workflow', () => {
