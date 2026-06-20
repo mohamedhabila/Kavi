@@ -65,7 +65,7 @@ describe('GitHub workflows', () => {
     expect(workflowUses(readWorkflow('agent-e2e-nightly.yml'))).toEqual([
       'actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0',
       'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020',
-      'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02',
+      'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
     ]);
 
     const actionRefs = readWorkflowFiles().flatMap((fileName) => workflowUses(readWorkflow(fileName)));
