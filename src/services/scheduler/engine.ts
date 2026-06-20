@@ -6,6 +6,7 @@
 import { computeNextRunAtMs } from '../cron/schedule';
 import { useSchedulerStore } from './store';
 import { useExecutionTraceStore, type ExecutionTrace } from './traceStore';
+import { syncSchedulerWakeNotifications } from './wakeNotifications';
 import type { CronJob, SchedulerTrigger } from '../cron/types';
 import { emitSchedulerEvent } from '../events/bus';
 import { generateId } from '../../utils/id';
@@ -263,6 +264,9 @@ async function evaluateJobs(options: EvaluateJobsOptions = {}): Promise<void> {
   }
 
   store.recordEvaluation(nowMs, trigger);
+  await syncSchedulerWakeNotifications({ nowMs, force: false }).catch((error) =>
+    console.warn('[scheduler] Wake notification maintenance failed:', error),
+  );
 }
 
 export function startScheduler(): void {
@@ -286,11 +290,10 @@ export async function runJobNow(
   const job = useSchedulerStore.getState().getJob(jobId);
   if (!job) return { status: 'not_found', id: jobId };
 
-  const result = await executeJob(
-    job,
-    options.nowMs ?? Date.now(),
-    options.trigger ?? 'manual',
-    true,
+  const nowMs = options.nowMs ?? Date.now();
+  const result = await executeJob(job, nowMs, options.trigger ?? 'manual', true);
+  await syncSchedulerWakeNotifications({ nowMs, force: false }).catch((error) =>
+    console.warn('[scheduler] Wake notification maintenance failed:', error),
   );
   return result === 'skipped'
     ? { status: 'skipped', id: job.id, name: job.name }

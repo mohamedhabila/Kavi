@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Clock, Plus, Trash2, X } from 'lucide-react-native';
 import { useSchedulerStore } from '../services/scheduler/store';
+import { syncSchedulerWakeNotifications } from '../services/scheduler/wakeNotifications';
 import { useAppTheme, AppPalette } from '../theme/useAppTheme';
 import { useTranslation } from '../i18n/useTranslation';
 import type { CronJob } from '../services/cron/types';
@@ -82,6 +83,9 @@ export const SchedulerScreen: React.FC = () => {
       }
       addJob({ name, prompt, schedule: { kind: 'cron', expr } });
     }
+    void syncSchedulerWakeNotifications({ force: true }).catch((error) =>
+      console.warn('[scheduler] Failed to schedule wake notification:', error),
+    );
     setNewName('');
     setNewPrompt('');
     setIntervalValue('1');

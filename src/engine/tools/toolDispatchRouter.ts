@@ -11,6 +11,7 @@ import { parseMcpToolName, executeMcpTool } from '../../services/mcp/bridge';
 import { mcpManager } from '../../services/mcp/manager';
 import { parseSkillToolName, executeSkillTool } from '../../services/skills/manager';
 import { useSchedulerStore } from '../../services/scheduler/store';
+import { syncSchedulerWakeNotifications } from '../../services/scheduler/wakeNotifications';
 import { executeBrowserTool } from './browserToolExecutor';
 import { executeImageEdit, executeImageGenerate } from './toolImageExecution';
 import { executeJavascript } from './toolJavaScriptExecution';
@@ -113,6 +114,9 @@ export async function executeCreateTask(args: {
     schedule: { kind: 'cron', expr: args.schedule },
     prompt: args.prompt,
   });
+  await syncSchedulerWakeNotifications({ force: true }).catch((error) =>
+    console.warn('[tools] Failed to schedule wake notification for cron task:', error),
+  );
   return JSON.stringify({
     status: 'task_created',
     id,

@@ -60,6 +60,21 @@ describe('notifications service', () => {
     });
   });
 
+  it('includes scheduler wake metadata in notification payloads', async () => {
+    await sendLocalNotification({
+      title: 'Wake task',
+      body: 'Open scheduler',
+      data: { screen: 'Scheduler', jobId: 'job-1', source: 'scheduled_task_wake' },
+    });
+
+    expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledWith({
+      content: expect.objectContaining({
+        data: { screen: 'Scheduler', jobId: 'job-1', source: 'scheduled_task_wake' },
+      }),
+      trigger: null,
+    });
+  });
+
   it('schedules a delayed local notification', async () => {
     const result = await sendLocalNotification({ title: 'Hello', body: 'Later', delaySeconds: 90 });
 
@@ -140,6 +155,31 @@ describe('notifications service', () => {
     });
   });
 
+  it('subscribes to scheduler wake routes without requiring a conversation id', () => {
+    const listener = jest.fn();
+    subscribeToNotificationRoutes(listener);
+
+    const handler = (Notifications.addNotificationResponseReceivedListener as jest.Mock).mock
+      .calls[0][0];
+    handler({
+      actionIdentifier: Notifications.DEFAULT_ACTION_IDENTIFIER,
+      notification: {
+        request: {
+          identifier: 'notif-wake-1',
+          content: {
+            data: { jobId: 'job-42', source: 'scheduled_task_wake' },
+          },
+        },
+      },
+    });
+
+    expect(listener).toHaveBeenCalledWith({
+      screen: 'Scheduler',
+      jobId: 'job-42',
+      source: 'scheduled_task_wake',
+    });
+  });
+
   it('reads and clears the pending notification route once', async () => {
     (Notifications.getLastNotificationResponseAsync as jest.Mock).mockResolvedValueOnce({
       actionIdentifier: Notifications.DEFAULT_ACTION_IDENTIFIER,
@@ -159,5 +199,25 @@ describe('notifications service', () => {
       source: 'scheduled_task',
     });
     expect(Notifications.clearLastNotificationResponseAsync).toHaveBeenCalled();
+  });
+
+  it('reads pending scheduler wake routes once', async () => {
+    (Notifications.getLastNotificationResponseAsync as jest.Mock).mockResolvedValueOnce({
+      actionIdentifier: Notifications.DEFAULT_ACTION_IDENTIFIER,
+      notification: {
+        request: {
+          identifier: 'notif-wake-2',
+          content: {
+            data: { screen: 'Scheduler', jobId: 'job-77', source: 'scheduled_task_wake' },
+          },
+        },
+      },
+    });
+
+    await expect(getPendingNotificationRoute()).resolves.toEqual({
+      screen: 'Scheduler',
+      jobId: 'job-77',
+      source: 'scheduled_task_wake',
+    });
   });
 });

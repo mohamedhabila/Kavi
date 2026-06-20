@@ -8,6 +8,7 @@ import { AppNavigator } from '../../src/navigation/AppNavigator';
 const mockSetActiveConversation = jest.fn();
 const mockSubscribeToNotificationRoutes = jest.fn();
 const mockGetPendingNotificationRoute = jest.fn().mockResolvedValue(null);
+const mockRunJobNow = jest.fn().mockResolvedValue({ status: 'completed' });
 let mockChatHydrated = true;
 const mockChatHydrationListeners = new Set<() => void>();
 const mockChatState = {
@@ -184,6 +185,10 @@ jest.mock('../../src/services/notifications/service', () => ({
   getPendingNotificationRoute: (...args: any[]) => mockGetPendingNotificationRoute(...args),
 }));
 
+jest.mock('../../src/services/scheduler/engine', () => ({
+  runJobNow: (...args: any[]) => mockRunJobNow(...args),
+}));
+
 const AsyncStorageMod = require('@react-native-async-storage/async-storage');
 const mockAsyncStorage = AsyncStorageMod.default || AsyncStorageMod;
 
@@ -197,6 +202,7 @@ describe('AppNavigator', () => {
     mockAsyncStorage.getItem.mockResolvedValue(null);
     mockGetPendingNotificationRoute.mockResolvedValue(null);
     mockSubscribeToNotificationRoutes.mockImplementation(() => jest.fn());
+    mockRunJobNow.mockResolvedValue({ status: 'completed' });
   });
 
   it('should render without crashing', async () => {
@@ -235,7 +241,9 @@ describe('AppNavigator', () => {
 
   it('activates the linked conversation when a notification route arrives', async () => {
     mockAsyncStorage.getItem.mockResolvedValue('true');
-    let routeHandler: ((route: { conversationId?: string }) => void) | undefined;
+    let routeHandler:
+      | ((route: { conversationId?: string; jobId?: string; source?: string }) => void)
+      | undefined;
     mockSubscribeToNotificationRoutes.mockImplementation((handler) => {
       routeHandler = handler;
       return jest.fn();
@@ -250,6 +258,27 @@ describe('AppNavigator', () => {
       routeHandler?.({ conversationId: 'conv-1' });
     });
     expect(mockSetActiveConversation).toHaveBeenCalledWith('conv-1');
+  });
+
+  it('runs a scheduled job when a wake notification route arrives', async () => {
+    mockAsyncStorage.getItem.mockResolvedValue('true');
+    let routeHandler:
+      | ((route: { conversationId?: string; jobId?: string; source?: string }) => void)
+      | undefined;
+    mockSubscribeToNotificationRoutes.mockImplementation((handler) => {
+      routeHandler = handler;
+      return jest.fn();
+    });
+
+    render(<AppNavigator />);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
+
+    await act(async () => {
+      routeHandler?.({ jobId: 'job-1', source: 'scheduled_task_wake' });
+    });
+    expect(mockRunJobNow).toHaveBeenCalledWith('job-1', { trigger: 'notification-tap' });
   });
 
   it('waits for chat hydration before activating a pending notification conversation', async () => {

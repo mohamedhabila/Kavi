@@ -56,6 +56,7 @@ const mockEnableJob = jest.fn();
 const mockDisableJob = jest.fn();
 const mockRemoveJob = jest.fn();
 const mockAddJob = jest.fn();
+const mockSyncSchedulerWakeNotifications = jest.fn().mockResolvedValue(undefined);
 
 jest.mock('../../src/services/scheduler/store', () => ({
   useSchedulerStore: (selector: any) =>
@@ -68,9 +69,14 @@ jest.mock('../../src/services/scheduler/store', () => ({
     }),
 }));
 
+jest.mock('../../src/services/scheduler/wakeNotifications', () => ({
+  syncSchedulerWakeNotifications: (...args: any[]) => mockSyncSchedulerWakeNotifications(...args),
+}));
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockJobs.length = 0;
+  mockSyncSchedulerWakeNotifications.mockResolvedValue(undefined);
 });
 
 describe('SchedulerScreen', () => {
@@ -257,6 +263,7 @@ describe('SchedulerScreen', () => {
       prompt: 'Summarize the inbox',
       schedule: { kind: 'every', everyMs: 300000 },
     });
+    expect(mockSyncSchedulerWakeNotifications).toHaveBeenCalledWith({ force: true });
   });
 
   it('creates a cron-schedule job', () => {
@@ -274,6 +281,7 @@ describe('SchedulerScreen', () => {
       prompt: 'Summarize the inbox',
       schedule: { kind: 'cron', expr: '0 9 * * *' },
     });
+    expect(mockSyncSchedulerWakeNotifications).toHaveBeenCalledWith({ force: true });
   });
 
   it('executes delete confirmation for a job', () => {

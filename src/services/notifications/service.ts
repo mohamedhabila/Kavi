@@ -4,9 +4,10 @@ let notificationHandlerConfigured = false;
 const DEFAULT_CHANNEL_ID = 'kavi-default';
 
 export interface NotificationRouteData extends Record<string, unknown> {
-  screen?: 'Chat';
+  screen?: 'Chat' | 'Scheduler';
   conversationId?: string;
-  source?: 'scheduled_task';
+  jobId?: string;
+  source?: 'scheduled_task' | 'scheduled_task_wake';
 }
 
 let lastHandledNotificationKey: string | null = null;
@@ -75,13 +76,14 @@ function extractNotificationRouteData(
   }
 
   const route = contentData as NotificationRouteData;
-  if (!route.conversationId) {
+  if (!route.conversationId && !route.jobId) {
     return null;
   }
 
   return {
-    screen: route.screen || 'Chat',
+    screen: route.screen || (route.jobId ? 'Scheduler' : 'Chat'),
     conversationId: route.conversationId,
+    jobId: route.jobId,
     source: route.source,
   };
 }

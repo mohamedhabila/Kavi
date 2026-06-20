@@ -35,8 +35,10 @@ import {
 import { useChatStore } from '../store/useChatStore';
 import {
   getPendingNotificationRoute,
+  type NotificationRouteData,
   subscribeToNotificationRoutes,
 } from '../services/notifications/service';
+import { runJobNow } from '../services/scheduler/engine';
 
 const Drawer = createDrawerNavigator();
 const ONBOARDING_KEY = 'kavi_onboarding_complete';
@@ -50,6 +52,7 @@ export const AppNavigator: React.FC = () => {
   );
   const [navReady, setNavReady] = useState(false);
   const [pendingConversationId, setPendingConversationId] = useState<string | null>(null);
+  const [pendingSchedulerOpen, setPendingSchedulerOpen] = useState(false);
 
   useEffect(() => {
     if (chatHydrated) {
@@ -71,18 +74,29 @@ export const AppNavigator: React.FC = () => {
   }, [chatHydrated]);
 
   useEffect(() => {
-    const activateConversation = (conversationId?: string) => {
-      if (!conversationId) return;
-      setPendingConversationId(conversationId);
+    const activateRoute = (route?: NotificationRouteData | null) => {
+      if (!route) return;
+      if (route.source === 'scheduled_task_wake' && route.jobId) {
+        void runJobNow(route.jobId, { trigger: 'notification-tap' }).catch((e) =>
+          console.warn('[AppNavigator] Failed to run wake notification task:', e),
+        );
+        setPendingSchedulerOpen(true);
+      }
+      if (route.screen === 'Scheduler') {
+        setPendingSchedulerOpen(true);
+      }
+      if (route.conversationId) {
+        setPendingConversationId(route.conversationId);
+      }
     };
 
     const unsubscribe = subscribeToNotificationRoutes((route) => {
-      activateConversation(route.conversationId);
+      activateRoute(route);
     });
 
     void getPendingNotificationRoute()
       .then((route) => {
-        activateConversation(route?.conversationId);
+        activateRoute(route);
       })
       .catch((e) => console.warn('[AppNavigator] Failed to get pending notification route:', e));
 
@@ -120,6 +134,20 @@ export const AppNavigator: React.FC = () => {
     navigationRef.navigate('Chat');
     setPendingConversationId(null);
   }, [chatHydrated, navReady, pendingConversationId, showOnboarding]);
+
+  useEffect(() => {
+    if (
+      !navReady ||
+      showOnboarding !== false ||
+      !pendingSchedulerOpen ||
+      !navigationRef.isReady()
+    ) {
+      return;
+    }
+
+    navigationRef.navigate('Scheduler');
+    setPendingSchedulerOpen(false);
+  }, [navReady, pendingSchedulerOpen, showOnboarding]);
 
   useEffect(() => {
     AsyncStorage.getItem(ONBOARDING_KEY).then((val) => {

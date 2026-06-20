@@ -119,6 +119,7 @@ function normalizePersistedJob(job: CronJob, nowMs: number): CronJob {
     runningAttemptId: undefined,
     runningStartedAtMs: undefined,
     pendingWakeNotificationId: job.pendingWakeNotificationId,
+    pendingWakeNotificationRunAtMs: finiteTimestamp(job.pendingWakeNotificationRunAtMs),
     lastWakeAtMs: finiteTimestamp(job.lastWakeAtMs),
     lastWakeSource: job.lastWakeSource,
     wakePolicy: job.wakePolicy || 'try_background_then_notify',
