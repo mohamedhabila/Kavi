@@ -46,7 +46,8 @@ npm start
 
 ## Local Environment Overrides
 
-The app does not require private backend defaults for local development.
+The app does not require a Kavi server, gateway, or hosted backend defaults for
+local development.
 Optional machine-specific values belong in `.env.local`, copied from
 `.env.local.example` when needed.
 
@@ -117,8 +118,8 @@ Gradle itself needs an explicit Java runtime outside the release wrapper, set
 
 ## Android Release Checks And Signing
 
-The public-safe Android release check verifies local Java and Android SDK
-discovery without requiring maintainer signing material:
+The Android release environment check verifies local Java and Android SDK
+discovery without requiring signing material:
 
 ```bash
 npm run check:android:release-env
@@ -133,8 +134,8 @@ environment variables expected by `android/app/build.gradle`:
 - `KAVI_UPLOAD_KEY_ALIAS`
 - `KAVI_UPLOAD_KEY_PASSWORD`
 
-Build a signed Android release artifact only after the public-safe check passes
-and signing is configured on the maintainer machine:
+Build a signed Android release artifact only after the environment check passes
+and signing is configured on the release machine:
 
 ```bash
 npm run build:android:release
@@ -178,16 +179,17 @@ the same asset build automatically before starting their native work. Commit
 the generated runtime files that belong to the editor bundle; keep local build
 caches and release outputs untracked.
 
-## Public Repository Hygiene
+## Repository Hygiene
 
-- Maintainer-private working material should not be carried into public git history.
+- Scratch work and planning notes should stay out of git history.
 - Build output, local caches, and editor-generated artifacts outside the committed runtime files should remain untracked.
 - Use `THIRD_PARTY_PROVENANCE.md` when changing patched or historically carried-forward code.
 
-Before creating or validating a public branch, run:
+Before opening a pull request, run:
 
 ```bash
 npm run check:public-hygiene
 ```
 
-The check skips when this workspace is not inside a git repository and becomes an enforcement guard once the public repository is created.
+The check skips when this workspace is not inside a git repository and enforces
+source-control hygiene inside normal git checkouts.

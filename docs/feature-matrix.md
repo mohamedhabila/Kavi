@@ -2,6 +2,10 @@
 
 This matrix is intended for contributors. It reflects current project intent and contributor expectations, not a compatibility warranty.
 
+Kavi is a mobile-only app. Core assistant use does not require a Kavi server,
+gateway, or desktop companion. Rows that mention remote systems describe
+optional user-configured integrations.
+
 ## Support Levels
 
 - `Supported`: expected to work in normal contributor and user flows.
@@ -25,7 +29,6 @@ This matrix is intended for contributors. It reflects current project intent and
 | Image and document attachments                       | Yes | Yes     | Supported            | Some provider features depend on model capabilities.                                     |
 | Calendar, contacts, location, and notification tools | Yes | Yes     | Supported with setup | Permission-gated and user-request driven.                                                |
 | Expo / EAS automation                                | Yes | Yes     | Supported with setup | Requires Expo credentials and remote project configuration.                              |
-| Gateway node connectivity                            | Yes | Yes     | Experimental         | Useful, but not yet a fully stabilized public surface.                                   |
 | Local shell execution                                | No  | Yes     | Supported with setup | Android-only local shell path is tied to the local runtime environment.                  |
 | SSH shell terminal UI                                | Yes | Yes     | Supported with setup | Shared terminal UI works on both platforms once a remote SSH target exists.              |
 

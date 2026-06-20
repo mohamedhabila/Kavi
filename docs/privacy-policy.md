@@ -4,7 +4,12 @@ Last updated: 2026-04-30
 
 ## Overview
 
-Kavi is a mobile-first AI assistant for iOS and Android. Depending on the features you choose to use, Kavi can run supported AI models on-device, connect to user-configured remote AI providers, and interact with user-configured services such as SSH targets, remote workspaces, browser workers, and MCP servers.
+Kavi is a mobile-only AI assistant for iOS and Android. The app does not require
+a Kavi server, gateway, or desktop companion to run core assistant features.
+Depending on the features you choose to use, Kavi can run supported AI models
+on-device, connect to user-configured remote AI providers, and interact with
+user-configured services such as SSH targets, remote workspaces, browser
+workers, and MCP servers.
 
 This Privacy Policy explains what information Kavi can handle, how it is used, when information may leave your device, and what controls are available to you.
 
@@ -39,12 +44,15 @@ Kavi supports both on-device and remote processing.
 1. If you select a supported on-device model, prompts and inference can stay on your device.
 2. If you configure a remote AI provider, MCP server, SSH target, remote workspace, browser worker, or similar service, Kavi sends the minimum data needed for the user-requested action to that configured service.
 3. Kavi does not silently enable or auto-discover remote services. Remote access depends on settings and connections that you explicitly provide.
+4. Kavi's own core app runtime does not require a Kavi-operated gateway.
 
 ## Third-Party Services And Sharing
 
 Kavi shares information only when a feature requires it or when you configure a third-party service and ask Kavi to use it. Depending on your configuration, this can include AI model providers, remote hosts, remote workspaces, browser automation workers, MCP servers, and other integrations you explicitly add.
 
-Kavi does not use your information for third-party advertising or cross-app tracking in the store release configuration prepared for submission. Third-party services that you choose to connect may process data under their own privacy terms.
+Kavi does not use your information for third-party advertising or cross-app
+tracking. Third-party services that you choose to connect may process data under
+their own privacy terms.
 
 ## Permissions
 
@@ -62,7 +70,7 @@ Kavi requests sensitive permissions only when the related feature is used.
 
 1. In release builds, sensitive secrets such as API keys, OAuth secrets, SSH credentials, and workspace tokens are intended to be stored using platform secure storage.
 2. General app settings, local conversation data, and other non-secret state may be stored locally on your device so the app can restore your experience between launches.
-3. Kavi does not use hidden overlay access or unnecessary broad storage permissions in the store release configuration prepared for submission.
+3. Kavi does not use hidden overlay access or unnecessary broad storage permissions.
 4. No security method is perfect, so Kavi cannot guarantee absolute security in every circumstance.
 
 ## Retention And Deletion

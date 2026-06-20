@@ -6,6 +6,11 @@ This document explains what Kavi stores locally, what can be sent to remote syst
 
 Kavi should only access sensitive device data or remote systems when the user explicitly requests a feature that needs it.
 
+Kavi's core assistant runtime is mobile-owned. It does not require a
+Kavi-operated server or gateway; remote systems appear only when the user
+configures a provider, MCP server, SSH target, browser worker, workspace, or
+other integration.
+
 ## Local Data
 
 Kavi stores application state locally for usability and continuity.
@@ -30,7 +35,8 @@ Depending on configuration, Kavi may send user-provided content to:
 - remote workspace URLs
 - Expo / EAS endpoints
 
-The app does not require all of these systems. They are optional execution surfaces configured by the user.
+The app does not require these systems. They are optional execution surfaces
+configured by the user.
 
 ## On-Device Model Behavior
 
@@ -55,8 +61,8 @@ When an on-device model is selected, inference can remain on the device instead 
 - Document every new permission in `app.json`, this file, and release notes.
 - Treat provider credentials, SSH private keys, and remote access tokens as sensitive material in every test and log path.
 
-## Public Repository Hygiene
+## Repository Hygiene
 
 - Never commit real credentials, signed URLs, or private infrastructure endpoints.
 - Avoid posting raw logs that contain personal, provider, or remote-host data in issues or pull requests.
-- Keep maintainer-private planning material out of the public git history.
+- Keep scratch planning material out of git history.

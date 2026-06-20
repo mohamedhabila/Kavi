@@ -1,6 +1,10 @@
 # Kavi Architecture
 
-Kavi is a mobile-first AI assistant application built on Expo and React Native. The app combines conversation UX, provider routing, on-device inference, remote execution surfaces, and tool-driven workflows inside a single mobile runtime.
+Kavi is a mobile-only AI assistant application built on Expo and React Native.
+The app combines conversation UX, provider routing, on-device inference,
+optional remote execution surfaces, and tool-driven workflows inside one mobile
+runtime. Core assistant use does not require a Kavi-hosted server, gateway, or
+desktop companion process.
 
 ## System Map
 
@@ -36,7 +40,7 @@ The main request lifecycle is:
 - `src/store/useSettingsStore.ts` owns providers, SSH targets, workspace targets, browser providers, MCP servers, Expo/EAS accounts, and feature toggles.
 - Sensitive values such as provider secrets and remote credentials are stored through secure-storage abstractions instead of plain persisted state.
 
-### Remote Execution State
+### Optional Remote Execution State
 
 - `src/services/ssh/sessionStore.ts` manages active SSH shell sessions.
 - `src/services/remote/store.ts` tracks remote browser jobs and sessions.
@@ -58,7 +62,7 @@ The main request lifecycle is:
 - Tool-execution seams now live in domain files such as `src/engine/tools/browserToolExecutor.ts`, `src/engine/tools/workspaceToolExecutor.ts`, `src/engine/tools/builtin-ssh.ts`, and `src/engine/tools/builtin-expo.ts` so contributors can change one execution surface without paging through the entire dispatcher.
 - `src/engine/toolResultGuard.ts`, `src/engine/toolResultPairingGuard.ts`, and `src/engine/loopDetection.ts` protect the conversation context and workflow from runaway tool behavior.
 
-### Remote Work Surfaces
+### Optional Remote Work Surfaces
 
 - `src/services/ssh`: SSH connectivity, fingerprints, command execution, shell sessions, and file operations.
 - `src/services/browser`: browser-provider config, action execution, trace capture, and live session jobs.
@@ -130,7 +134,9 @@ The tool-executor split removes one of the highest-churn monolith clusters. The 
 
 ## Design Constraints
 
-- Mobile UX is the primary product surface, even when the feature itself controls remote or desktop-class systems.
+- Mobile UX is the product surface. Optional remote or desktop-class systems
+  must behave like integrations controlled by the app, not hidden dependencies
+  required to make the assistant work.
 - Default verification must stay local and contributor-safe; paid or remote-provider tests should remain opt-in.
 - Sensitive data should not flow into plain persisted stores.
 - Tooling and workflow systems must assume interrupted, resumed, or partially failed runs are normal.

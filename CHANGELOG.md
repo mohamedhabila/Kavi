@@ -9,8 +9,9 @@ versioning where practical for tagged releases.
 
 ### Added
 
-- Mobile-first assistant app for iOS and Android with direct chat, agentic
-  workflows, conversation workspaces, attachments, and voice input.
+- Mobile-only assistant app for iOS and Android with direct chat, agentic
+  workflows, conversation workspaces, attachments, voice input, and no required
+  Kavi server or gateway for core use.
 - Structured tool orchestration for local app actions, MCP servers, SSH
   sessions, browser automation, remote workspaces, and Expo/EAS workflows.
 - ClawHub-compatible skill discovery and installation while keeping MCP runtime
@@ -24,9 +25,8 @@ versioning where practical for tagged releases.
 
 ### Changed
 
-- Public documentation now describes contributor setup, verification tiers,
-  release readiness, and maintainer-owned signing responsibilities without
-  requiring private context.
+- Documentation now describes contributor setup, verification tiers, optional
+  remote integrations, and maintainer-owned signing responsibilities.
 - Default verification now runs public hygiene, public language, Markdown link
   validation, dependency license checks, app metadata checks, i18n consistency,
   structural guards, lint, typecheck, and the Jest suite.
@@ -37,9 +37,8 @@ versioning where practical for tagged releases.
 
 ### Security
 
-- Added public repository hygiene checks for ignored private material,
-  generated output, local artifacts, tracked secret patterns, and
-  public-facing language.
+- Added repository hygiene checks for ignored local material, generated output,
+  local artifacts, tracked secret patterns, and contributor-facing language.
 - Documented private vulnerability reporting expectations and
   sensitive-data-handling guidance.
 - Added dependency license inventory checks and generated third-party notices.
@@ -49,9 +48,9 @@ versioning where practical for tagged releases.
 ### Tests
 
 - Default contributor verification runs the local Jest suite, lint, typecheck,
-  documentation link checks, license checks, metadata checks, and public
-  repository guardrails.
-- Added durable coverage for public-readiness checks, dependency license
+  documentation link checks, license checks, metadata checks, and repository
+  guardrails.
+- Added durable coverage for repository hygiene checks, dependency license
   inventory, GitHub workflow hardening, contributor documentation, and release
   checklist expectations.
 - Retained strict maintainer gates for memory, agent, and live E2E validation
