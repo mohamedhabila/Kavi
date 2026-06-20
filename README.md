@@ -8,17 +8,19 @@
 
 Kavi is a mobile-only AI assistant for iOS and Android.
 
-No required Kavi server. No required gateway. No desktop sidecar quietly doing
-the interesting work while the phone holds the clipboard. Kavi runs as the
-mobile app: bring an on-device model or your own provider credentials, then let
-the phone drive the assistant loop, tools, memory, files, voice, and native
+No required Kavi server. No gateway. No desktop sidecar quietly doing the
+interesting work while the phone holds the clipboard. Kavi runs as the mobile
+app: bring an on-device model or your own provider credentials, then let the
+phone drive the assistant loop, tools, memory, files, voice, and native
 actions.
 
-It started as a side project with a suspiciously simple question: what if the
-phone was the assistant runtime, not just a remote control for one? Then the
-side project learned MCP, SSH, browser automation, local models, Expo release
-chores, GitHub workflows, workspace files, memory, and enough native phone
-tricks to make the settings screen ask for a meeting with HR.
+It started as a side project with one tiny question and absolutely no respect
+for scope: what if the phone was the assistant runtime, not just a remote
+control? A few commits later, it had learned MCP, ClawHub-compatible skills,
+SSH, browser automation, local models, Expo release chores, GitHub workflows,
+workspaces, memory, voice, media, and native device actions. At that point, the
+side project had stopped behaving like a side project and started looking
+suspiciously like a full assistant in your pocket.
 
 ## What Kavi Does
 
@@ -37,8 +39,9 @@ tricks to make the settings screen ask for a meeting with HR.
   sharing, notifications, location, media, and device state are modeled through
   explicit permissions and test fixtures.
 
-Kavi is not a tiny chat box wearing a tool belt. It is a pocket-sized assistant
-runtime that happens to have thumbs.
+Kavi is not a tiny chat box wearing a tool belt. It is the assistant runtime
+squeezed into a phone: close to the camera, files, contacts, notifications,
+network edges, and all the interruptions real mobile software has to survive.
 
 ## Why Developers Might Care
 
