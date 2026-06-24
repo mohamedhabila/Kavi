@@ -93,7 +93,7 @@
     "expo-auth-session": "~55.0.12",
     "expo-background-task": "~55.0.9",
     "expo-battery": "~55.0.12",
-    "expo-build-properties": "~55.0.12",
+    "expo-build-properties": "~56.0.19",
     "expo-calendar": "~55.0.13",
     "expo-clipboard": "~55.0.12",
     "expo-contacts": "~55.0.12",
