@@ -428,7 +428,37 @@ describe('recallFactsForQuery — scoped decay and reinforcement', () => {
     expect(facts.map((fact) => fact.id)).not.toContain(other.fact.id);
   });
 
-  it('keeps recent current conversation facts available for vague followups', async () => {
+  it('does not retrieve current-conversation facts on recency alone', async () => {
+    const user = upsertEntity({ name: 'beam-user', type: 'person' });
+    const conversationId = 'conv-current-state';
+
+    recordFact({
+      subjectId: user.id,
+      predicate: 'route_code',
+      objectText: 'BEAM-ROUTE-A',
+      scope: 'conversation',
+      originConversationId: conversationId,
+      now: 1_000,
+    });
+    recordFact({
+      subjectId: user.id,
+      predicate: 'reminder_window',
+      objectText: 'BEAM-WINDOW-9',
+      scope: 'conversation',
+      originConversationId: conversationId,
+      now: 5_000,
+    });
+
+    const facts = await recallFactsForQuery('continue with the current summary', {
+      conversationId,
+      limit: 6,
+      now: 6_000,
+    });
+
+    expect(facts).toHaveLength(0);
+  });
+
+  it('keeps recent current conversation facts available for anchored followups', async () => {
     const user = upsertEntity({ name: 'beam-user', type: 'person' });
     const team = upsertEntity({ name: 'beam-team', type: 'concept' });
     const conversationId = 'conv-current-state';
@@ -475,7 +505,7 @@ describe('recallFactsForQuery — scoped decay and reinforcement', () => {
       now: 5_000,
     });
 
-    const facts = await recallFactsForQuery('continue with the current summary', {
+    const facts = await recallFactsForQuery('BEAM route meal window channel summary', {
       conversationId,
       limit: 6,
       now: 6_000,
@@ -491,6 +521,33 @@ describe('recallFactsForQuery — scoped decay and reinforcement', () => {
       ]),
     );
     expect(values).not.toContain('BEAM-MEAL-OLD');
+  });
+
+  it('recalls relevant older facts beyond the newest tail candidate window', async () => {
+    const project = upsertEntity({ name: 'project-tail', type: 'project' });
+    const target = recordFact({
+      subjectId: project.id,
+      predicate: 'handoff_token',
+      objectText: 'TAIL-ANCHOR-RELEVANT',
+      scope: 'global',
+      now: 1,
+    });
+    for (let index = 0; index < 650; index += 1) {
+      recordFact({
+        subjectId: project.id,
+        predicate: `recent_noise_${index}`,
+        objectText: `TAIL-NOISE-${index}`,
+        scope: 'global',
+        now: 10_000 + index,
+      });
+    }
+
+    const facts = await recallFactsForQuery('TAIL-ANCHOR-RELEVANT handoff token', {
+      limit: 3,
+      now: 20_000,
+    });
+
+    expect(facts.map((fact) => fact.id)).toContain(target.fact.id);
   });
 
   it('demotes stale low-importance facts behind recent important facts', async () => {

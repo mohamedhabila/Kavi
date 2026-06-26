@@ -1,12 +1,11 @@
 // ---------------------------------------------------------------------------
 // Kavi — Embedding Memory Service
 // ---------------------------------------------------------------------------
-// Provides embedding-based semantic memory search using remote APIs.
-// Supports: OpenAI, Gemini, Voyage, Mistral, Ollama.
+// Provides embedding-based semantic memory search.
+// Supports: local Unicode n-gram hashing, OpenAI, Gemini, Voyage, Mistral, Ollama.
 // Scoring: vectorWeight * cosine + textWeight * bm25 + temporal_decay + mmr
 
 import type {
-  EmbeddingProvider,
   EmbeddingConfig,
   EmbeddingResult,
   MemorySearchResult,
@@ -28,6 +27,18 @@ import { createTimeoutSignal } from '../../utils/runtime';
 import { createArrayChunkIndex, searchChunkIndex } from './ranking/chunkIndex';
 
 const EMBEDDING_TIMEOUT_MS = 30_000;
+const LOCAL_EMBEDDING_MODEL = 'unicode-char-ngram-v1';
+const LOCAL_EMBEDDING_DIMENSIONS = 384;
+const LOCAL_EMBEDDING_MIN_DIMENSIONS = 64;
+const LOCAL_EMBEDDING_MAX_DIMENSIONS = 2_048;
+const LOCAL_FEATURE_SEQUENCE_PATTERN = /[\p{L}\p{M}\p{N}]+/gu;
+const LOCAL_FEATURE_CODE_POINT_PATTERN = /[\p{L}\p{N}]/u;
+
+export const DEFAULT_LOCAL_EMBEDDING_CONFIG: EmbeddingConfig = {
+  provider: 'local',
+  model: LOCAL_EMBEDDING_MODEL,
+  dimensions: LOCAL_EMBEDDING_DIMENSIONS,
+};
 
 export { cosineSimilarity } from './ranking/similarity';
 export { temporalDecay } from './ranking/scoring';
@@ -38,6 +49,77 @@ function timeoutSignal(ms: number = EMBEDDING_TIMEOUT_MS): AbortSignal {
 }
 
 // ── Provider-specific embedding fetchers ─────────────────────────────────
+
+function clampLocalDimensions(dimensions: number | undefined): number {
+  if (!Number.isFinite(dimensions ?? NaN)) return LOCAL_EMBEDDING_DIMENSIONS;
+  return Math.max(
+    LOCAL_EMBEDDING_MIN_DIMENSIONS,
+    Math.min(Math.floor(dimensions ?? LOCAL_EMBEDDING_DIMENSIONS), LOCAL_EMBEDDING_MAX_DIMENSIONS),
+  );
+}
+
+function hashString32(value: string): number {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash >>> 0;
+}
+
+function addHashedFeature(vector: number[], feature: string, weight: number): void {
+  const hash = hashString32(feature);
+  const index = hash % vector.length;
+  const sign = (hash & 0x80000000) === 0 ? 1 : -1;
+  vector[index] += sign * weight;
+}
+
+function normalizeLocalEmbeddingText(text: string): string {
+  return text.normalize('NFKC').toLocaleLowerCase();
+}
+
+function sequenceCodePoints(sequence: string): string[] {
+  return Array.from(sequence).filter((char) => LOCAL_FEATURE_CODE_POINT_PATTERN.test(char));
+}
+
+export function getLocalTextEmbedding(text: string, dimensions = LOCAL_EMBEDDING_DIMENSIONS): number[] {
+  const resolvedDimensions = clampLocalDimensions(dimensions);
+  const vector = Array.from({ length: resolvedDimensions }, () => 0);
+  const normalized = normalizeLocalEmbeddingText(text);
+  let featureCount = 0;
+
+  LOCAL_FEATURE_SEQUENCE_PATTERN.lastIndex = 0;
+  for (const match of normalized.matchAll(LOCAL_FEATURE_SEQUENCE_PATTERN)) {
+    const sequence = match[0];
+    const chars = sequenceCodePoints(sequence);
+    if (chars.length === 0) continue;
+    addHashedFeature(vector, `seq:${sequence}`, 0.8);
+    featureCount += 1;
+    for (const width of [2, 3, 4]) {
+      if (chars.length < width) continue;
+      const weight = 1 / width;
+      for (let index = 0; index <= chars.length - width; index += 1) {
+        addHashedFeature(vector, `${width}:${chars.slice(index, index + width).join('')}`, weight);
+        featureCount += 1;
+      }
+    }
+  }
+
+  if (featureCount === 0) return vector;
+  let norm = 0;
+  for (const value of vector) norm += value * value;
+  norm = Math.sqrt(norm);
+  if (norm === 0) return vector;
+  return vector.map((value) => value / norm);
+}
+
+async function fetchLocalEmbedding(text: string, config: EmbeddingConfig): Promise<EmbeddingResult> {
+  const dimensions = clampLocalDimensions(config.dimensions);
+  return {
+    embedding: getLocalTextEmbedding(text, dimensions),
+    model: config.model || LOCAL_EMBEDDING_MODEL,
+  };
+}
 
 async function fetchOpenAIEmbedding(
   text: string,
@@ -217,6 +299,8 @@ export async function getEmbedding(
   config: EmbeddingConfig,
 ): Promise<EmbeddingResult> {
   switch (config.provider) {
+    case 'local':
+      return fetchLocalEmbedding(text, config);
     case 'openai':
       return fetchOpenAIEmbedding(text, config);
     case 'gemini':
@@ -238,8 +322,14 @@ const embeddingCache = new Map<string, { embedding: number[]; timestamp: number 
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 export const CACHE_CONFIG = { maxSize: 500 };
 
-function getCacheKey(text: string, provider: EmbeddingProvider): string {
-  return `${provider}:${text.slice(0, 200)}`;
+function getCacheKey(text: string, config: EmbeddingConfig): string {
+  return [
+    config.provider,
+    config.model ?? '',
+    config.dimensions ?? '',
+    hashString32(text),
+    text.length,
+  ].join(':');
 }
 
 function evictExpiredCacheEntries(): void {
@@ -252,7 +342,7 @@ function evictExpiredCacheEntries(): void {
 }
 
 export async function getEmbeddingCached(text: string, config: EmbeddingConfig): Promise<number[]> {
-  const key = getCacheKey(text, config.provider);
+  const key = getCacheKey(text, config);
   const cached = embeddingCache.get(key);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.embedding;
@@ -277,6 +367,10 @@ export async function getEmbeddingCached(text: string, config: EmbeddingConfig):
 
 export function clearEmbeddingCache(): void {
   embeddingCache.clear();
+}
+
+export function isLocalEmbeddingConfig(config: EmbeddingConfig | undefined): boolean {
+  return config?.provider === 'local';
 }
 
 // ── Hybrid memory search (text + embedding) ──────────────────────────────

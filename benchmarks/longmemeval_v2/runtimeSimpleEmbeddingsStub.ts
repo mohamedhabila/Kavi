@@ -2,6 +2,13 @@ import type { EmbeddingConfig } from '../../src/types/memory';
 
 const DEFAULT_DIMENSIONS = 384;
 const CODE_POINT_PATTERN = /[\p{L}\p{M}\p{N}]/u;
+const MODEL = 'unicode-char-ngram-v1';
+
+export const DEFAULT_LOCAL_EMBEDDING_CONFIG: EmbeddingConfig = {
+  provider: 'local',
+  model: MODEL,
+  dimensions: DEFAULT_DIMENSIONS,
+};
 
 function hashString(value: string): number {
   let hash = 0x811c9dc5;
@@ -25,7 +32,7 @@ function normalizedCodePoints(text: string): string[] {
   );
 }
 
-export function embedText(text: string, dimensions = DEFAULT_DIMENSIONS): number[] {
+export function getLocalTextEmbedding(text: string, dimensions = DEFAULT_DIMENSIONS): number[] {
   const vector = Array.from({ length: dimensions }, () => 0);
   const chars = normalizedCodePoints(text);
   if (chars.length === 0) return vector;
@@ -44,9 +51,22 @@ export function embedText(text: string, dimensions = DEFAULT_DIMENSIONS): number
   return vector.map((value) => value / norm);
 }
 
+export const embedText = getLocalTextEmbedding;
+
+export async function getEmbedding(text: string, config: EmbeddingConfig) {
+  return {
+    embedding: getLocalTextEmbedding(text, config.dimensions ?? DEFAULT_DIMENSIONS),
+    model: config.model || MODEL,
+  };
+}
+
 export async function getEmbeddingCached(
   text: string,
-  _config: EmbeddingConfig,
+  config: EmbeddingConfig,
 ): Promise<number[]> {
-  return embedText(text);
+  return getLocalTextEmbedding(text, config.dimensions ?? DEFAULT_DIMENSIONS);
+}
+
+export function isLocalEmbeddingConfig(config: EmbeddingConfig | undefined): boolean {
+  return config?.provider === 'local';
 }

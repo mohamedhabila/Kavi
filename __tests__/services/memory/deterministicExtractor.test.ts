@@ -303,7 +303,7 @@ describe('extractStructuralMemory — structural facts', () => {
     );
   });
 
-  it('extracts tool result facts from JSON tool responses', () => {
+  it('does not turn generic JSON tool responses into semantic facts', () => {
     const result = extractStructuralMemory({
       ...baseInput,
       messages: [
@@ -314,11 +314,8 @@ describe('extractStructuralMemory — structural facts', () => {
         }),
       ],
     });
-    expect(result.facts.length).toBeGreaterThan(0);
     const fact = result.facts.find((f) => f.predicate === 'tool_result');
-    expect(fact).toBeDefined();
-    expect(fact!.value).toContain('list_files');
-    expect(fact!.scope).toBe('conversation');
+    expect(fact).toBeUndefined();
   });
 
   it('skips non-JSON tool responses', () => {

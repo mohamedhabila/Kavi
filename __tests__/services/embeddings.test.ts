@@ -31,6 +31,9 @@ import {
   clearEmbeddingCache,
   getIndexSize,
   CACHE_CONFIG,
+  DEFAULT_LOCAL_EMBEDDING_CONFIG,
+  getLocalTextEmbedding,
+  isLocalEmbeddingConfig,
 } from '../../src/services/memory/embeddings';
 
 const {
@@ -93,6 +96,34 @@ describe('Embeddings Service', () => {
   });
 
   describe('getEmbedding', () => {
+    it('returns deterministic local Unicode n-gram embeddings without network calls', async () => {
+      const first = await getEmbedding('東京の会議場所', {
+        ...DEFAULT_LOCAL_EMBEDDING_CONFIG,
+        dimensions: 128,
+      });
+      const second = await getEmbedding('東京の会議場所', {
+        ...DEFAULT_LOCAL_EMBEDDING_CONFIG,
+        dimensions: 128,
+      });
+
+      expect(first.model).toBe(DEFAULT_LOCAL_EMBEDDING_CONFIG.model);
+      expect(first.embedding).toHaveLength(128);
+      expect(first.embedding).toEqual(second.embedding);
+      expect(first.embedding.some((value) => value !== 0)).toBe(true);
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(isLocalEmbeddingConfig(DEFAULT_LOCAL_EMBEDDING_CONFIG)).toBe(true);
+    });
+
+    it('keeps local embeddings language-agnostic at the feature level', () => {
+      const arabic = getLocalTextEmbedding('القهوة السادة', 96);
+      const japanese = getLocalTextEmbedding('東京の会議場所', 96);
+
+      expect(arabic).toHaveLength(96);
+      expect(japanese).toHaveLength(96);
+      expect(arabic.some((value) => value !== 0)).toBe(true);
+      expect(japanese.some((value) => value !== 0)).toBe(true);
+    });
+
     it('fetches OpenAI embedding and returns EmbeddingResult', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,

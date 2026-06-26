@@ -240,20 +240,18 @@ async function main(): Promise<void> {
   const appTextRelevanceOnly = await recallScoredFactsForQuery(args.query, {
     limit: args.limit,
     conversationId,
-    includeRecentContextFacts: false,
     vectorWeight: 0,
     textWeight: 1,
     threshold: 0,
   });
   const embeddedCount = await backfillFactEmbeddings(
-    { provider: 'local-simple', model: 'unicode-char-ngram' } as never,
-    { maxFacts: 500 },
+    { provider: 'local', model: 'unicode-char-ngram-v1' },
+    { maxFacts: 3_000 },
   );
-  const appSimpleEmbeddingTop500 = await recallScoredFactsForQuery(args.query, {
+  const appLocalEmbedding = await recallScoredFactsForQuery(args.query, {
     limit: args.limit,
     conversationId,
-    includeRecentContextFacts: false,
-    embeddingConfig: { provider: 'local-simple', model: 'unicode-char-ngram' } as never,
+    embeddingConfig: { provider: 'local', model: 'unicode-char-ngram-v1' },
     vectorWeight: 0.7,
     textWeight: 0.3,
     threshold: 0,
@@ -274,6 +272,7 @@ async function main(): Promise<void> {
         factId: entry.fact.id,
         sourceRunId: entry.fact.sourceRunId,
         score: entry.score,
+        relevanceScore: entry.relevanceScore,
         textScore: entry.textScore,
         vectorScore: entry.vectorScore,
         scopeBoost: entry.scopeBoost,
@@ -287,6 +286,7 @@ async function main(): Promise<void> {
         factId: entry.fact.id,
         sourceRunId: entry.fact.sourceRunId,
         score: entry.score,
+        relevanceScore: entry.relevanceScore,
         textScore: entry.textScore,
         vectorScore: entry.vectorScore,
         scopeBoost: entry.scopeBoost,
@@ -294,18 +294,19 @@ async function main(): Promise<void> {
       })),
       sourceRuns: appSourceRunSummary(appTextRelevanceOnly),
     },
-    appSimpleEmbeddingTop500: {
+    appLocalEmbedding: {
       embeddedCount,
-      selected: appSimpleEmbeddingTop500.map((entry) => ({
+      selected: appLocalEmbedding.map((entry) => ({
         factId: entry.fact.id,
         sourceRunId: entry.fact.sourceRunId,
         score: entry.score,
+        relevanceScore: entry.relevanceScore,
         textScore: entry.textScore,
         vectorScore: entry.vectorScore,
         scopeBoost: entry.scopeBoost,
         objectText: entry.fact.objectText.slice(0, 260),
       })),
-      sourceRuns: appSourceRunSummary(appSimpleEmbeddingTop500),
+      sourceRuns: appSourceRunSummary(appLocalEmbedding),
     },
     dbAllLexical: {
       sourceRuns: sourceRunSummary(dbAllLexical, args.limit),

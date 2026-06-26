@@ -203,35 +203,7 @@ function extractStructuralFacts(messages: Message[]): ConsolidatorFact[] {
     }
   }
 
-  // Fact 2: Tool outcomes — universally meaningful regardless of language
-  for (const m of messages) {
-    if (m.role !== 'tool') continue;
-    const toolName = m.toolCalls?.[0]?.name ?? 'tool';
-    const content = (m.content ?? '').trim();
-    // Only capture structured tool results (JSON) as they indicate outcomes
-    if (content.startsWith('{') && content.length > 10 && content.length < 300) {
-      try {
-        const parsed = JSON.parse(content);
-        const status = parsed.status ?? parsed.ok ?? parsed.success ?? parsed.result;
-        if (status !== undefined) {
-          facts.push({
-            subject: 'system',
-            predicate: 'tool_result',
-            value: `${toolName}: ${String(status).slice(0, 120)}`,
-            scope: 'conversation',
-            importance: 0.55,
-            confidence: 0.8,
-            reason: 'Tool execution result captured.',
-          });
-          if (facts.length >= MAX_STRUCTURAL_FACTS) return facts;
-        }
-      } catch {
-        // Not valid JSON, skip
-      }
-    }
-  }
-
-  // Fact 3: File operations — detected by tool name, not language
+  // Fact 2: File operations — detected by tool name, not language
   const fileTools = ['write_file', 'file_edit', 'apply_patch', 'read_file'];
   for (const m of messages) {
     for (const tc of m.toolCalls ?? []) {
@@ -258,7 +230,7 @@ function extractStructuralFacts(messages: Message[]): ConsolidatorFact[] {
     }
   }
 
-  // Fact 4: Sub-agent spawning — structural
+  // Fact 3: Sub-agent spawning — structural
   for (const m of messages) {
     for (const tc of m.toolCalls ?? []) {
       if (tc.name === 'sessions_spawn') {

@@ -11,28 +11,35 @@
 //   • Lexical overlap     — fraction of query lexical units appearing in
 //                           "<subject> <predicate> <objectText>". Weight:
 //                           textWeight (0.4).
-//   • Pinned boost        — additive bump so user-pinned facts always win ties.
+//   • Context quality     — scope, reinforcement, importance, retrievability,
+//                           and recency adjust facts only after relevance is
+//                           established. Pinned facts remain explicit anchors.
 //
-// The function never throws; embedding failures degrade to text-only scoring.
+// The function never throws; remote embedding failures degrade to text scoring.
+// The default app path uses the local Unicode n-gram provider, which avoids
+// network dependency while preserving multilingual recall.
 // All retrieved facts are currently-valid (`invalid_at IS NULL`) by default —
 // callers can pass `asOf` for historical queries.
 // ---------------------------------------------------------------------------
 
 import type { EmbeddingConfig } from '../../types/memory';
-import { getEmbeddingCached } from './embeddings';
+import { getEmbeddingCached, isLocalEmbeddingConfig } from './embeddings';
 import { markFactsRecalled, setFactEmbedding } from './facts/mutations';
-import { listFacts } from './facts/queries';
+import { listFactsForRecallCandidates } from './facts/queries';
 import { type MemoryFact, type MemoryFactScope } from './facts/types';
 import { cosineSimilarity } from './ranking/similarity';
 import { exponentialDecayMultiplier } from './ranking/scoring';
 
 const DEFAULT_LIMIT = 8;
-const DEFAULT_SIMILARITY_THRESHOLD = 0.45;
-const DEFAULT_TEXT_THRESHOLD = 0.1;
+const DEFAULT_VECTOR_THRESHOLD = 0.08;
+const DEFAULT_TEXT_THRESHOLD = 0.04;
 const DEFAULT_VECTOR_WEIGHT = 0.6;
 const DEFAULT_TEXT_WEIGHT = 0.4;
 const PINNED_BOOST = 0.25;
-const CANDIDATE_POOL_LIMIT = 500;
+const CANDIDATE_POOL_LIMIT = 2_000;
+const CANDIDATE_POOL_MAX = 10_000;
+const LOCAL_QUERY_EMBEDDING_BACKFILL_LIMIT = 5_000;
+const RELEVANCE_EPSILON = 1e-6;
 
 export interface RecallFactsOptions {
   /**
@@ -43,12 +50,9 @@ export interface RecallFactsOptions {
   /** Maximum facts returned. Default 8. */
   limit?: number;
   /**
-   * Combined-score floor for inclusion. The combined score is a weighted sum
-   * (vectorWeight * cosine + textWeight * lexicalOverlap + pinnedBoost), so
-   * thresholds are on the weighted scale, not raw similarity. Vector path
-   * defaults to 0.45 (cosine ≈ 0.75 with default 0.6 weight); text-only
-   * defaults to 0.1 (≈ 25% query lexical-unit overlap with default 0.4 weight).
-   * Override to widen/tighten the funnel per turn.
+   * Relevance-score floor for inclusion. Scope, reinforcement, importance,
+   * retrievability, and recency cannot move zero-relevance facts over this
+   * floor; pinned facts are the only explicit non-query anchors.
    */
   threshold?: number;
   /** Vector-component weight. Default 0.6. Set to 0 to disable vectors. */
@@ -72,13 +76,6 @@ export interface RecallFactsOptions {
    * recall, slower scoring. Default 500.
    */
   candidatePoolLimit?: number;
-  /**
-   * Include the newest valid facts that are explicitly linked to the active
-   * conversation/task before filling the remaining slots by relevance. This
-   * keeps one-conversation working memory current without language heuristics.
-   * Default true.
-   */
-  includeRecentContextFacts?: boolean;
 }
 
 export interface ScoredFact {
@@ -91,6 +88,8 @@ export interface ScoredFact {
   scopeBoost: number;
   reinforcementBoost: number;
   importanceScore: number;
+  retrievabilityScore: number;
+  relevanceScore: number;
 }
 
 type WordSegment = {
@@ -244,16 +243,6 @@ function isFactEligibleForRecall(fact: MemoryFact, options: RecallFactsOptions):
   return true;
 }
 
-function factContextMatches(fact: MemoryFact, options: RecallFactsOptions): boolean {
-  if (options.conversationId && fact.originConversationId === options.conversationId) {
-    return true;
-  }
-  if (options.taskId && fact.originTaskId === options.taskId) {
-    return true;
-  }
-  return false;
-}
-
 function factSemanticKey(fact: MemoryFact): string {
   return [
     fact.subjectId,
@@ -262,45 +251,14 @@ function factSemanticKey(fact: MemoryFact): string {
   ].join('\u0000');
 }
 
-function selectRecentContextFacts(
-  candidates: MemoryFact[],
-  options: RecallFactsOptions,
-  limit: number,
-): MemoryFact[] {
-  if (options.includeRecentContextFacts === false) return [];
-  if (!options.conversationId && !options.taskId) return [];
-
-  const selected: MemoryFact[] = [];
-  const seen = new Set<string>();
-  const ranked = candidates
-    .filter((fact) => factContextMatches(fact, options))
-    .sort((a, b) => {
-      const aStrength = Math.max(a.lastReinforcedAt ?? 0, a.updatedAt, a.validAt);
-      const bStrength = Math.max(b.lastReinforcedAt ?? 0, b.updatedAt, b.validAt);
-      if (bStrength !== aStrength) return bStrength - aStrength;
-      if (b.importance !== a.importance) return b.importance - a.importance;
-      return b.createdAt - a.createdAt;
-    });
-
-  for (const fact of ranked) {
-    const key = factSemanticKey(fact);
-    if (seen.has(key)) continue;
-    selected.push(fact);
-    seen.add(key);
-    if (selected.length >= limit) break;
-  }
-  return selected;
-}
-
 function scoreScope(fact: MemoryFact, options: RecallFactsOptions): number {
   if (fact.scope === 'conversation' && fact.originConversationId === options.conversationId) {
-    return 0.18;
+    return 0.08;
   }
   if (fact.scope === 'session' && fact.originTaskId === options.taskId) {
-    return 0.16;
+    return 0.08;
   }
-  if (options.scopeHints?.includes(fact.scope)) return 0.1;
-  if (fact.scope === 'global') return 0.04;
+  if (options.scopeHints?.includes(fact.scope)) return 0.04;
   return 0;
 }
 
@@ -321,7 +279,11 @@ function scoreDecay(fact: MemoryFact, now: number): number {
 }
 
 function scoreReinforcement(fact: MemoryFact): number {
-  return Math.min(0.12, Math.log1p(fact.accessCount + fact.repeatedMentionCount) * 0.035);
+  return Math.min(0.05, Math.log1p(fact.accessCount + fact.repeatedMentionCount) * 0.015);
+}
+
+function scoreRetrievability(fact: MemoryFact): number {
+  return Math.max(0, Math.min(1, fact.retrievability));
 }
 
 function buildScoredFact(params: {
@@ -354,14 +316,15 @@ function buildScoredFact(params: {
   const decayMultiplier = scoreDecay(fact, now);
   const scopeBoost = scoreScope(fact, options);
   const reinforcementBoost = scoreReinforcement(fact);
-  const importanceScore = fact.importance * 0.1;
+  const importanceScore = fact.importance * 0.04;
+  const retrievabilityScore = scoreRetrievability(fact);
   const retrievalScore = vectorWeight * vectorScore + textWeight * textScore;
+  const relevanceScore = retrievalScore * fact.confidence * decayMultiplier * retrievabilityScore;
+  const hasRelevance = relevanceScore > RELEVANCE_EPSILON;
   const score =
-    retrievalScore * fact.confidence * decayMultiplier +
+    relevanceScore +
     pinnedBoost +
-    scopeBoost +
-    reinforcementBoost +
-    importanceScore;
+    (hasRelevance ? scopeBoost + reinforcementBoost + importanceScore : 0);
   return {
     fact,
     score,
@@ -372,6 +335,8 @@ function buildScoredFact(params: {
     scopeBoost,
     reinforcementBoost,
     importanceScore,
+    retrievabilityScore,
+    relevanceScore,
   };
 }
 
@@ -401,21 +366,28 @@ async function buildRecallSelection(
   const textWeight = Math.max(0, options.textWeight ?? DEFAULT_TEXT_WEIGHT);
   const candidatePool = Math.max(
     limit,
-    Math.min(options.candidatePoolLimit ?? CANDIDATE_POOL_LIMIT, CANDIDATE_POOL_LIMIT),
+    Math.min(options.candidatePoolLimit ?? CANDIDATE_POOL_LIMIT, CANDIDATE_POOL_MAX),
   );
   const alwaysIncludePinned = options.alwaysIncludePinned !== false;
   const trimmedQuery = query.trim();
   const now = options.now ?? options.asOf ?? Date.now();
   const candidateScopes = getCandidateScopes(options);
+  const queryUnits = tokenize(trimmedQuery);
 
-  const candidates = listFacts({
+  const candidates = listFactsForRecallCandidates({
     limit: candidatePool,
+    lexicalUnits: Array.from(queryUnits),
+    ...(options.conversationId ? { scopedRecentConversationId: options.conversationId } : {}),
+    ...(options.taskId ? { scopedRecentTaskId: options.taskId } : {}),
     ...(candidateScopes ? { scope: candidateScopes } : {}),
     ...(options.includeHistorical ? { includeInvalidated: true } : {}),
     ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
   }).filter((fact) => isFactEligibleForRecall(fact, options));
 
-  const queryUnits = tokenize(trimmedQuery);
+  if (trimmedQuery && vectorWeight > 0 && options.embeddingConfig) {
+    await maybeBackfillLocalCandidateEmbeddings(candidates, queryUnits, options.embeddingConfig);
+  }
+
   const queryEmbedding =
     trimmedQuery && vectorWeight > 0
       ? await maybeEmbedQuery(trimmedQuery, options.embeddingConfig)
@@ -450,19 +422,12 @@ async function buildRecallSelection(
     }
   }
 
-  if (selected.length < limit) {
-    for (const fact of selectRecentContextFacts(candidates, options, limit)) {
-      addSelectedFact({ selected, seenIds, seenSemanticKeys, fact, limit });
-      if (selected.length >= limit) break;
-    }
-  }
-
   if (trimmedQuery && selected.length < limit) {
-    const defaultThreshold = queryEmbedding ? DEFAULT_SIMILARITY_THRESHOLD : DEFAULT_TEXT_THRESHOLD;
+    const defaultThreshold = queryEmbedding ? DEFAULT_VECTOR_THRESHOLD : DEFAULT_TEXT_THRESHOLD;
     const threshold = options.threshold ?? defaultThreshold;
     const diversified = diversifyScoredFacts(scored, limit);
     for (const entry of diversified) {
-      if (entry.score < threshold) continue;
+      if (entry.relevanceScore < threshold) continue;
       addSelectedFact({ selected, seenIds, seenSemanticKeys, fact: entry.fact, limit });
       if (selected.length >= limit) break;
     }
@@ -483,6 +448,32 @@ async function maybeEmbedQuery(
     return await getEmbeddingCached(query, config);
   } catch {
     return null;
+  }
+}
+
+async function maybeBackfillLocalCandidateEmbeddings(
+  candidates: MemoryFact[],
+  queryUnits: Set<string>,
+  config: EmbeddingConfig,
+): Promise<void> {
+  if (!isLocalEmbeddingConfig(config)) return;
+  const missing = candidates
+    .filter((fact) => !fact.embedding || fact.embedding.length === 0)
+    .map((fact) => ({
+      fact,
+      textScore: lexicalOverlap(queryUnits, factHaystack(fact)),
+      strength: Math.max(fact.lastReinforcedAt ?? 0, fact.updatedAt, fact.validAt),
+    }))
+    .sort((a, b) => {
+      if (b.textScore !== a.textScore) return b.textScore - a.textScore;
+      if (b.fact.pinned !== a.fact.pinned) return b.fact.pinned ? 1 : -1;
+      if (b.fact.importance !== a.fact.importance) return b.fact.importance - a.fact.importance;
+      return b.strength - a.strength;
+    })
+    .slice(0, LOCAL_QUERY_EMBEDDING_BACKFILL_LIMIT);
+
+  for (const { fact } of missing) {
+    await embedFact(fact, config);
   }
 }
 
@@ -513,9 +504,9 @@ export async function backfillFactEmbeddings(
   config: EmbeddingConfig,
   options: { maxFacts?: number; asOf?: number } = {},
 ): Promise<number> {
-  const maxFacts = Math.max(1, Math.min(options.maxFacts ?? 32, 200));
-  const candidates = listFacts({
-    limit: CANDIDATE_POOL_LIMIT,
+  const maxFacts = Math.max(1, Math.min(options.maxFacts ?? 32, CANDIDATE_POOL_MAX));
+  const candidates = listFactsForRecallCandidates({
+    limit: Math.max(CANDIDATE_POOL_LIMIT, maxFacts),
     ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
   }).filter((fact) => !fact.embedding || fact.embedding.length === 0);
 

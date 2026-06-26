@@ -1,4 +1,4 @@
-export type EmbeddingProvider = 'openai' | 'gemini' | 'voyage' | 'mistral' | 'ollama';
+export type EmbeddingProvider = 'openai' | 'gemini' | 'voyage' | 'mistral' | 'ollama' | 'local';
 
 export interface EmbeddingConfig {
   provider: EmbeddingProvider;
