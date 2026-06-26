@@ -72,7 +72,7 @@ describe('structured observation memory', () => {
     const schemas = listFacts({ memoryKind: 'surface_schema', originTaskId: 'task-ui' });
     const outcomes = listFacts({ memoryKind: 'outcome', originTaskId: 'task-ui' });
 
-    expect(affordances).toHaveLength(3);
+    expect(affordances).toHaveLength(2);
     expect(schemas).toHaveLength(1);
     expect(outcomes).toHaveLength(1);
     expect(affordances.some((fact) => fact.objectText.includes('Save'))).toBe(true);
@@ -106,9 +106,11 @@ describe('structured observation memory', () => {
     });
 
     expect(result.consumedEvidence).toEqual([evidence]);
-    expect(listFacts({ memoryKind: 'ui_affordance', originConversationId: 'conv-evidence' }))
-      .toHaveLength(1);
-    expect(listFacts({ memoryKind: 'outcome', originConversationId: 'conv-evidence' }))
-      .toHaveLength(1);
+    expect(
+      listFacts({ memoryKind: 'ui_affordance', originConversationId: 'conv-evidence' }),
+    ).toHaveLength(1);
+    expect(
+      listFacts({ memoryKind: 'outcome', originConversationId: 'conv-evidence' }),
+    ).toHaveLength(1);
   });
 });

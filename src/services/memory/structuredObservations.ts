@@ -13,9 +13,36 @@ import { recordFact } from './facts/mutations';
 import type { MemoryFactKind, RecordFactInput } from './facts/types';
 import { ensureFactSchema } from './schema';
 
-const MAX_ACCESSIBILITY_NODES_PER_PAYLOAD = 64;
+const MAX_ACCESSIBILITY_NODES_PER_PAYLOAD = 48;
+const MAX_AFFORDANCE_FACTS_PER_PAYLOAD = 4;
 const MAX_SCHEMA_NODES_PER_PAYLOAD = 48;
 const MAX_TEXT_CHARS = 1400;
+
+const ACTIONABLE_ROLES = new Set([
+  'button',
+  'checkbox',
+  'combobox',
+  'link',
+  'menuitem',
+  'option',
+  'radio',
+  'searchbox',
+  'slider',
+  'spinbutton',
+  'switch',
+  'tab',
+  'textbox',
+]);
+
+const ACTIONABLE_ATTRIBUTES = new Set([
+  'checked',
+  'clickable',
+  'disabled',
+  'editable',
+  'expanded',
+  'pressed',
+  'selected',
+]);
 
 type JsonRecord = Record<string, unknown>;
 
@@ -240,18 +267,18 @@ function recordObservationPayload(payload: JsonRecord, context: ObservationConte
 function hasObservationFields(payload: JsonRecord): boolean {
   return Boolean(
     stringField(payload, 'accessibility_tree') ||
-      stringField(payload, 'url') ||
-      stringField(payload, 'start_url') ||
-      stringField(payload, 'surface_id') ||
-      stringField(payload, 'surfaceId') ||
-      stringField(payload, 'app_id') ||
-      stringField(payload, 'appId') ||
-      stringField(payload, 'package') ||
-      stringField(payload, 'bundle_id') ||
-      stringField(payload, 'action') ||
-      stringField(payload, 'thought') ||
-      stringField(payload, 'status') ||
-      stringField(payload, 'outcome'),
+    stringField(payload, 'url') ||
+    stringField(payload, 'start_url') ||
+    stringField(payload, 'surface_id') ||
+    stringField(payload, 'surfaceId') ||
+    stringField(payload, 'app_id') ||
+    stringField(payload, 'appId') ||
+    stringField(payload, 'package') ||
+    stringField(payload, 'bundle_id') ||
+    stringField(payload, 'action') ||
+    stringField(payload, 'thought') ||
+    stringField(payload, 'status') ||
+    stringField(payload, 'outcome'),
   );
 }
 
@@ -310,7 +337,10 @@ function recordUiMemories(input: {
     if (schemaFactId) factIds.push(schemaFactId);
   }
 
-  for (const node of input.nodes.slice(0, MAX_ACCESSIBILITY_NODES_PER_PAYLOAD)) {
+  const actionableNodes = input.nodes
+    .filter(isActionableAccessibilityNode)
+    .slice(0, MAX_AFFORDANCE_FACTS_PER_PAYLOAD);
+  for (const node of actionableNodes) {
     const affordanceId = recordTypedFact({
       kind: 'ui_affordance',
       subjectName: input.surfaceId,
@@ -343,6 +373,14 @@ function recordUiMemories(input: {
   }
 
   return factIds;
+}
+
+function isActionableAccessibilityNode(node: AccessibilityNode): boolean {
+  const role = node.role.toLocaleLowerCase();
+  if (ACTIONABLE_ROLES.has(role)) return true;
+  return node.attributes.some((attribute) =>
+    ACTIONABLE_ATTRIBUTES.has(attribute.split('=')[0]?.trim().toLocaleLowerCase() ?? ''),
+  );
 }
 
 function recordTypedFact(input: {
