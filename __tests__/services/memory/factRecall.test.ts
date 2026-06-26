@@ -222,6 +222,28 @@ describe('recallFactsForQuery — vector path with embedding config', () => {
 
     expect(getEmbeddingCachedSpy).not.toHaveBeenCalled();
   });
+
+  it('uses locally backfilled fact embeddings during the first recall pass', async () => {
+    const page = upsertEntity({ name: 'forum-homepage', type: 'concept' });
+    const recorded = recordFact({
+      subjectId: page.id,
+      predicate: 'page_observation',
+      objectText: 'custom forum homepage has no direct textbox for submitting a new post',
+    });
+    getEmbeddingCachedSpy.mockImplementation(async (text: string) =>
+      embeddings.getLocalTextEmbedding(text),
+    );
+
+    const facts = await recallFactsForQuery('custom forum homepage textbox submit post', {
+      embeddingConfig: { provider: 'local', model: 'unicode-char-ngram-v1' },
+      vectorWeight: 1,
+      textWeight: 0,
+      threshold: 0.05,
+    });
+
+    expect(facts.map((fact) => fact.id)).toContain(recorded.fact.id);
+    expect(getFactById(recorded.fact.id)?.embedding).not.toBeNull();
+  });
 });
 
 describe('recallFactsForQuery — bi-temporal anchor', () => {

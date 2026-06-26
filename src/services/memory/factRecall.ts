@@ -35,10 +35,12 @@ const DEFAULT_VECTOR_THRESHOLD = 0.08;
 const DEFAULT_TEXT_THRESHOLD = 0.04;
 const DEFAULT_VECTOR_WEIGHT = 0.6;
 const DEFAULT_TEXT_WEIGHT = 0.4;
+const DEFAULT_LOCAL_VECTOR_WEIGHT = 0.2;
+const DEFAULT_LOCAL_TEXT_WEIGHT = 0.8;
 const PINNED_BOOST = 0.25;
 const CANDIDATE_POOL_LIMIT = 2_000;
 const CANDIDATE_POOL_MAX = 10_000;
-const LOCAL_QUERY_EMBEDDING_BACKFILL_LIMIT = 5_000;
+const LOCAL_QUERY_EMBEDDING_BACKFILL_LIMIT = 512;
 const RELEVANCE_EPSILON = 1e-6;
 
 export interface RecallFactsOptions {
@@ -362,8 +364,15 @@ async function buildRecallSelection(
   options: RecallFactsOptions,
 ): Promise<{ facts: MemoryFact[]; scoredFacts: ScoredFact[] }> {
   const limit = Math.max(1, Math.min(options.limit ?? DEFAULT_LIMIT, 50));
-  const vectorWeight = Math.max(0, options.vectorWeight ?? DEFAULT_VECTOR_WEIGHT);
-  const textWeight = Math.max(0, options.textWeight ?? DEFAULT_TEXT_WEIGHT);
+  const usesLocalEmbedding = isLocalEmbeddingConfig(options.embeddingConfig);
+  const vectorWeight = Math.max(
+    0,
+    options.vectorWeight ?? (usesLocalEmbedding ? DEFAULT_LOCAL_VECTOR_WEIGHT : DEFAULT_VECTOR_WEIGHT),
+  );
+  const textWeight = Math.max(
+    0,
+    options.textWeight ?? (usesLocalEmbedding ? DEFAULT_LOCAL_TEXT_WEIGHT : DEFAULT_TEXT_WEIGHT),
+  );
   const candidatePool = Math.max(
     limit,
     Math.min(options.candidatePoolLimit ?? CANDIDATE_POOL_LIMIT, CANDIDATE_POOL_MAX),
@@ -473,7 +482,10 @@ async function maybeBackfillLocalCandidateEmbeddings(
     .slice(0, LOCAL_QUERY_EMBEDDING_BACKFILL_LIMIT);
 
   for (const { fact } of missing) {
-    await embedFact(fact, config);
+    const embedding = await embedFact(fact, config);
+    if (embedding) {
+      fact.embedding = embedding;
+    }
   }
 }
 

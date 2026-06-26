@@ -83,6 +83,8 @@ const L3_HEADER = '## This Turn';
 const L3_REFLECTION_HEADER = '### Day Focus';
 const L3_FACTS_HEADER = '### Retrieved Memory';
 const L3_EPISODES_HEADER = '### Recent Activity';
+const MAX_RENDERED_FACT_CHARS = 3_200;
+const MAX_RENDERED_EPISODE_CHARS = 200;
 
 function joinNonEmpty(parts: Array<string | null | undefined>, sep = '\n\n'): string {
   return parts
@@ -132,6 +134,12 @@ function renderL2(input: AssemblePromptInput): string {
   return sections.join('\n\n');
 }
 
+function fitText(value: string, maxChars: number): string {
+  const trimmed = value.trim();
+  if (trimmed.length <= maxChars) return trimmed;
+  return `${trimmed.slice(0, maxChars - 1).trimEnd()}\u2026`;
+}
+
 function renderFact(fact: PromptMemoryFact): string {
   // Compact one-liner. Confidence rendered only when meaningfully low.
   const conf =
@@ -139,32 +147,54 @@ function renderFact(fact: PromptMemoryFact): string {
       ? ` (confidence ${fact.confidence.toFixed(2)})`
       : '';
   const subject = fact.subjectLabel?.trim() || fact.subjectId;
-  return `- ${subject} ${fact.predicate}: ${fact.objectText}${conf}`;
+  return `- ${subject} ${fact.predicate}: ${fitText(fact.objectText, MAX_RENDERED_FACT_CHARS)}${conf}`;
 }
 
 function renderEpisode(episode: MemoryEpisode): string {
   const summary = episode.summary.trim();
   if (!summary) return '';
   const tools = episode.toolNames.length > 0 ? ` [${episode.toolNames.join(', ')}]` : '';
-  return `- ${summary.slice(0, 200)}${tools}`;
+  return `- ${fitText(summary, MAX_RENDERED_EPISODE_CHARS)}${tools}`;
 }
 
-function renderL3(input: AssemblePromptInput): string {
+function renderRetrievedFactSection(
+  fact: PromptMemoryFact,
+  index: number,
+  total: number,
+): string {
+  return `${L3_HEADER}\n${L3_FACTS_HEADER} ${index + 1}/${total}\n${renderFact(fact)}`;
+}
+
+function renderL3Sections(input: AssemblePromptInput): string[] {
   const focus = (input.focusBlock ?? '').trim();
   const reflection = (input.reflectionBlock ?? '').trim();
   const facts = (input.retrievedFacts ?? []).map(renderFact);
   const episodes = (input.recentEpisodes ?? []).map(renderEpisode).filter((r) => r.length > 0);
   const addenda = joinNonEmpty(input.dynamicAddenda ?? []);
 
-  const parts: string[] = [];
-  if (reflection) parts.push(`${L3_REFLECTION_HEADER}\n${reflection}`);
-  if (focus) parts.push(focus);
-  if (facts.length > 0) parts.push(`${L3_FACTS_HEADER}\n${facts.join('\n')}`);
-  if (episodes.length > 0) parts.push(`${L3_EPISODES_HEADER}\n${episodes.join('\n')}`);
-  if (addenda) parts.push(addenda);
+  const preludeParts: string[] = [];
+  if (reflection) preludeParts.push(`${L3_REFLECTION_HEADER}\n${reflection}`);
+  if (focus) preludeParts.push(focus);
 
-  if (parts.length === 0) return '';
-  return `${L3_HEADER}\n${parts.join('\n\n')}`;
+  const trailingParts: string[] = [];
+  if (episodes.length > 0) trailingParts.push(`${L3_EPISODES_HEADER}\n${episodes.join('\n')}`);
+  if (addenda) trailingParts.push(addenda);
+
+  const sections: string[] = [];
+  if (preludeParts.length > 0) {
+    sections.push(`${L3_HEADER}\n${preludeParts.join('\n\n')}`);
+  }
+  if (facts.length > 0) {
+    sections.push(
+      ...(input.retrievedFacts ?? []).map((fact, index) =>
+        renderRetrievedFactSection(fact, index, facts.length),
+      ),
+    );
+  }
+  if (trailingParts.length > 0) {
+    sections.push(`${L3_HEADER}\n${trailingParts.join('\n\n')}`);
+  }
+  return sections;
 }
 
 export interface AssemblePromptOutput {
@@ -192,12 +222,12 @@ function fnv1aHash(value: string): string {
 export function assemblePrompt(input: AssemblePromptInput): AssemblePromptOutput {
   const l1 = renderL1(input);
   const l2 = renderL2(input);
-  const l3 = renderL3(input);
+  const l3Sections = renderL3Sections(input);
 
   const sections: SystemPromptSection[] = [];
   if (l1) sections.push({ text: l1, cacheable: true });
   if (l2) sections.push({ text: l2 });
-  if (l3) sections.push({ text: l3 });
+  sections.push(...l3Sections.map((text) => ({ text })));
 
   const cacheableText = sections
     .filter((section) => section.cacheable)

@@ -378,6 +378,7 @@ export function applyConsolidatorResult(
     sourceUserMessageId?: string;
     sourceAssistantMessageId?: string;
     messages?: Message[];
+    skipWorkingMemoryWrites?: boolean;
   } = {},
 ): {
   recordedFactIds: string[];
@@ -458,7 +459,7 @@ export function applyConsolidatorResult(
 
   let activeFocusUpdated = false;
   const taskId = options.taskId?.trim();
-  if (result.activeFocus !== null && !taskId) {
+  if (!options.skipWorkingMemoryWrites && result.activeFocus !== null && !taskId) {
     try {
       const activeFocus = composeActiveFocusContent({
         threadTitle: options.threadTitle,
@@ -472,11 +473,13 @@ export function applyConsolidatorResult(
   }
 
   let openThreadsUpdated = false;
-  try {
-    writeWorkingOrLegacyBlock('open_threads', fitBlockLines(result.openThreads, 800), options, now);
-    openThreadsUpdated = true;
-  } catch {
-    // BlockOverflowError or unknown block - never throw out of the chat path.
+  if (!options.skipWorkingMemoryWrites) {
+    try {
+      writeWorkingOrLegacyBlock('open_threads', fitBlockLines(result.openThreads, 800), options, now);
+      openThreadsUpdated = true;
+    } catch {
+      // BlockOverflowError or unknown block - never throw out of the chat path.
+    }
   }
 
   return {

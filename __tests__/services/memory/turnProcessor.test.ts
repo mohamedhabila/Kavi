@@ -323,7 +323,7 @@ describe('processCompletedTurn', () => {
         activeFocus: 'Deployment',
         openThreads: ['Verify staging'],
       }),
-      expect.any(Object),
+      expect.objectContaining({ skipWorkingMemoryWrites: true }),
     );
   });
 

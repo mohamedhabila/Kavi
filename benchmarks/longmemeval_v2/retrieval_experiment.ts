@@ -189,6 +189,9 @@ async function main(): Promise<void> {
   const { recallScoredFactsForQuery, backfillFactEmbeddings } = await import(
     '../../src/services/memory/factRecall'
   );
+  const { buildUnifiedMemoryAccessContext } = await import(
+    '../../src/services/memory/memoryAccessGateway'
+  );
   resetFactSchemaCacheForTests();
   ensureFactSchema();
 
@@ -244,6 +247,35 @@ async function main(): Promise<void> {
     textWeight: 1,
     threshold: 0,
   });
+  const now = Date.now();
+  const buildBridgeDiagnostic = () =>
+    buildUnifiedMemoryAccessContext({
+      messages: [
+        {
+          id: `diagnostic-query-${now}`,
+          role: 'user',
+          content: args.query,
+          timestamp: now,
+        },
+      ],
+      conversationId,
+      mode: 'agentic',
+      recallLimit: args.limit,
+      goals: [
+        {
+          id: `diagnostic-question-${now}`,
+          title: args.query,
+          status: 'active',
+          dependencies: [],
+          evidence: [],
+          createdAt: now,
+          updatedAt: now,
+          completionPolicy: 'persistent',
+        },
+      ],
+      now,
+    });
+  const appBridgeBeforeBackfill = await buildBridgeDiagnostic();
   const embeddedCount = await backfillFactEmbeddings(
     { provider: 'local', model: 'unicode-char-ngram-v1' },
     { maxFacts: 3_000 },
@@ -256,6 +288,7 @@ async function main(): Promise<void> {
     textWeight: 0.3,
     threshold: 0,
   });
+  const appBridgeAfterBackfill = await buildBridgeDiagnostic();
 
   const dbAllLexical = rankDbFacts(allFacts, args.query, { text: 1, vector: 0 });
   const dbAllSimpleEmbedding = rankDbFacts(allFacts, args.query, { text: 0.3, vector: 0.7 });
@@ -307,6 +340,30 @@ async function main(): Promise<void> {
         objectText: entry.fact.objectText.slice(0, 260),
       })),
       sourceRuns: appSourceRunSummary(appLocalEmbedding),
+    },
+    appBridgeBeforeBackfill: {
+      recalledFactCount: appBridgeBeforeBackfill.livingMemory?.recalledFactCount ?? 0,
+      recalledEpisodeCount: appBridgeBeforeBackfill.livingMemory?.recalledEpisodeCount ?? 0,
+      sections: (appBridgeBeforeBackfill.livingMemory?.sections ?? []).map((section, index) => ({
+        index,
+        text: section.text.slice(0, 1000),
+      })),
+      flattened: (appBridgeBeforeBackfill.livingMemory?.sections ?? [])
+        .map((section) => section.text)
+        .join('\n\n')
+        .slice(0, 2000),
+    },
+    appBridgeAfterBackfill: {
+      recalledFactCount: appBridgeAfterBackfill.livingMemory?.recalledFactCount ?? 0,
+      recalledEpisodeCount: appBridgeAfterBackfill.livingMemory?.recalledEpisodeCount ?? 0,
+      sections: (appBridgeAfterBackfill.livingMemory?.sections ?? []).map((section, index) => ({
+        index,
+        text: section.text.slice(0, 1000),
+      })),
+      flattened: (appBridgeAfterBackfill.livingMemory?.sections ?? [])
+        .map((section) => section.text)
+        .join('\n\n')
+        .slice(0, 2000),
     },
     dbAllLexical: {
       sourceRuns: sourceRunSummary(dbAllLexical, args.limit),

@@ -455,6 +455,52 @@ describe('applyConsolidatorResult', () => {
     ).toBe('scope-b-planning');
   });
 
+  it('skips working-memory writes when persistence is durable-only', () => {
+    editWorkingBlock('active_focus', 'live-focus-token', {
+      conversationId: 'conv-delayed',
+      threadId: 'conv-delayed',
+    });
+    editWorkingBlock('open_threads', 'live-open-thread', {
+      conversationId: 'conv-delayed',
+      threadId: 'conv-delayed',
+    });
+
+    const result = applyConsolidatorResult(
+      {
+        episodeSummary: 'Delayed ingestion finished.',
+        newFacts: [],
+        invalidatedFacts: [],
+        activeFocus: 'stale-delayed-focus-token',
+        openThreads: ['stale delayed thread'],
+        notable: [],
+      },
+      {
+        now: 4,
+        conversationId: 'conv-delayed',
+        threadId: 'conv-delayed',
+        skipWorkingMemoryWrites: true,
+      },
+    );
+
+    expect(result.activeFocusUpdated).toBe(false);
+    expect(result.openThreadsUpdated).toBe(false);
+    expect(
+      getWorkingBlock('active_focus', {
+        conversationId: 'conv-delayed',
+        threadId: 'conv-delayed',
+      })?.content,
+    ).toBe('live-focus-token');
+    expect(
+      getWorkingBlock('open_threads', {
+        conversationId: 'conv-delayed',
+        threadId: 'conv-delayed',
+      })?.content,
+    ).toBe('live-open-thread');
+    expect(listEpisodes({ threadId: 'conv-delayed', limit: 1 })[0]?.summary).toBe(
+      'Delayed ingestion finished.',
+    );
+  });
+
   it('supersedes stale conversation facts across task scopes', () => {
     applyConsolidatorResult(
       {

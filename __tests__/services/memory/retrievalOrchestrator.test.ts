@@ -102,7 +102,7 @@ describe('orchestrateMemoryRetrieval', () => {
     expect(result.facts.some((fact) => fact.id === pinned.id)).toBe(true);
   });
 
-  it('uses active focus text as a retrieval signal', async () => {
+  it('uses active focus text as a fallback retrieval signal', async () => {
     const entity = upsertEntity({ name: 'release', type: 'project', now: 1 });
     const focusFact = recordFact({
       subjectId: entity.id,
@@ -114,7 +114,7 @@ describe('orchestrateMemoryRetrieval', () => {
     }).fact;
 
     const result = await orchestrateMemoryRetrieval({
-      userMessage: 'continue',
+      userMessage: '',
       focusText: 'NEBULA-FOCUS-E2E release validation',
       conversationId: 'conv-focus',
       limit: 5,
@@ -122,8 +122,40 @@ describe('orchestrateMemoryRetrieval', () => {
     });
 
     expect(result.querySignals).toEqual(
-      expect.arrayContaining(['continue', 'NEBULA-FOCUS-E2E release validation']),
+      expect.arrayContaining(['NEBULA-FOCUS-E2E release validation']),
     );
     expect(result.facts.some((fact) => fact.id === focusFact.id)).toBe(true);
+  });
+
+  it('prioritizes explicit request signals over stale active focus', async () => {
+    const relevantEntity = upsertEntity({ name: 'forum', type: 'project', now: 1 });
+    const staleEntity = upsertEntity({ name: 'catalog', type: 'project', now: 1 });
+    const relevantFact = recordFact({
+      subjectId: relevantEntity.id,
+      predicate: 'homepage_control',
+      objectText: 'CUSTOM-FORUM-HOME-TOKEN has no direct submit textbox',
+      scope: 'conversation',
+      originConversationId: 'conv-focus-priority',
+      now: 1,
+    }).fact;
+    const staleFact = recordFact({
+      subjectId: staleEntity.id,
+      predicate: 'review_state',
+      objectText: 'STALE-FOCUS-TOKEN product review workflow',
+      scope: 'conversation',
+      originConversationId: 'conv-focus-priority',
+      now: 2,
+    }).fact;
+
+    const result = await orchestrateMemoryRetrieval({
+      userMessage: 'CUSTOM-FORUM-HOME-TOKEN direct submit textbox',
+      focusText: 'STALE-FOCUS-TOKEN product review workflow',
+      conversationId: 'conv-focus-priority',
+      limit: 1,
+      now: 3,
+    });
+
+    expect(result.facts.map((fact) => fact.id)).toEqual([relevantFact.id]);
+    expect(result.facts.some((fact) => fact.id === staleFact.id)).toBe(false);
   });
 });

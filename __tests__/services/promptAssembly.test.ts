@@ -155,7 +155,7 @@ describe('assemblePrompt — deterministic ordering', () => {
 });
 
 describe('assemblePrompt — L3 contents', () => {
-  it('renders retrieved facts as a bullet list', () => {
+  it('renders retrieved facts as separate bounded sections', () => {
     const out = assemblePrompt({
       basePrompt: 'BASE',
       retrievedFacts: [
@@ -163,9 +163,11 @@ describe('assemblePrompt — L3 contents', () => {
         makeFact({ id: 'f2', predicate: 'role', objectText: 'Engineer' }),
       ],
     });
+    expect(out.sections).toHaveLength(3);
     expect(out.sections[1].text).toContain('### Retrieved Memory');
     expect(out.sections[1].text).toContain('- user lives_in: Berlin');
-    expect(out.sections[1].text).toContain('- user role: Engineer');
+    expect(out.sections[2].text).toContain('### Retrieved Memory');
+    expect(out.sections[2].text).toContain('- user role: Engineer');
   });
 
   it('annotates only low-confidence facts', () => {
@@ -176,10 +178,20 @@ describe('assemblePrompt — L3 contents', () => {
         makeFact({ confidence: 0.3, objectText: 'Munich' }),
       ],
     });
-    const text = out.sections[1].text;
+    const text = out.sections.map((section) => section.text).join('\n');
     expect(text).toContain('Berlin');
     expect(text).not.toMatch(/Berlin.*confidence/);
     expect(text).toMatch(/Munich \(confidence 0\.30\)/);
+  });
+
+  it('bounds long retrieved fact text inside each dynamic section', () => {
+    const out = assemblePrompt({
+      basePrompt: 'BASE',
+      retrievedFacts: [makeFact({ objectText: 'A'.repeat(4_000) })],
+    });
+    const section = out.sections[1].text;
+    expect(section.length).toBeLessThan(3_600);
+    expect(section).toContain('\u2026');
   });
 
   it('skips L3 entirely when nothing dynamic to render', () => {
@@ -266,7 +278,7 @@ describe('assemblePrompt — L3 contents', () => {
       retrievedFacts: [makeFact({ predicate: 'role', objectText: 'Engineer' })],
       dynamicAddenda: ['EXTRA'],
     });
-    const text = out.sections[1].text;
+    const text = flattenPromptSections(out.sections);
     const idxReflection = text.indexOf('### Day Focus');
     const idxFocus = text.indexOf('<focus>FOCUS</focus>');
     const idxEpisodes = text.indexOf('### Recent Activity');

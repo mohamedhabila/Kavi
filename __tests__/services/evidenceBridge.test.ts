@@ -170,12 +170,20 @@ describe('bridgeEvidenceToFacts', () => {
     expect(result.bridged[0].fact.sourceRunId).toBe('run-1');
   });
 
-  it('truncates oversize content', () => {
-    const long = 'x'.repeat(500);
+  it('preserves long structured evidence up to the bridge cap', () => {
+    const long = 'x'.repeat(900);
     const result = bridgeEvidenceToFacts([makeEntry({ title: '', content: long })], {
       subjectName: 'run-001',
     });
-    expect(result.bridged[0].fact.objectText.length).toBeLessThanOrEqual(200);
+    expect(result.bridged[0].fact.objectText).toBe(long);
+  });
+
+  it('truncates content above the bridge cap', () => {
+    const long = 'x'.repeat(4000);
+    const result = bridgeEvidenceToFacts([makeEntry({ title: '', content: long })], {
+      subjectName: 'run-001',
+    });
+    expect(result.bridged[0].fact.objectText.length).toBeLessThanOrEqual(3200);
     expect(result.bridged[0].fact.objectText).toMatch(/\u2026$/);
   });
 });

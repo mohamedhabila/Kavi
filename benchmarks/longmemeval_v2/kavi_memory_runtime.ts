@@ -42,7 +42,7 @@ const DEFAULT_CONFIG: RuntimeConfig = {
   chunkChars: 3600,
   chunkOverlapChars: 320,
   maxItems: 12,
-  maxItemChars: 2400,
+  maxItemChars: 5000,
   minScore: 0.01,
   conversationId: 'longmemeval-v2',
 };
@@ -110,14 +110,14 @@ function stateEvidenceObject(trajectoryIdValue: string, state: JsonObject, fallb
     action: compactScalar(state.action, 800),
     thought: compactScalar(state.thought, 800),
     screenshot: compactScalar(state.screenshot, 500),
-    accessibility_tree: compactScalar(state.accessibility_tree, 1200),
+    accessibility_tree: compactScalar(state.accessibility_tree, 3200),
   };
 }
 
 function buildGraphEvidence(trajectory: JsonObject, id: string): string[] {
   const evidence: string[] = [];
   const pushEvidence = (payload: JsonObject) => {
-    evidence.push(`longmemeval:${compactJson(payload, 1400)}`);
+    evidence.push(`longmemeval:${compactJson(payload, 5000)}`);
   };
 
   pushEvidence({ kind: 'trajectory', ...trajectoryMetadata(trajectory, id) });

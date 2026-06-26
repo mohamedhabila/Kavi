@@ -41,6 +41,7 @@ export interface EvidenceBridgeOptions {
 }
 
 const MAX_GRAPH_EVIDENCE_BRIDGE_ENTRIES = 64;
+const MAX_BRIDGED_OBJECT_TEXT_CHARS = 3200;
 
 const DEFAULT_BRIDGED_KINDS: ReadonlySet<AgentRunEvidenceEntry['kind']> = new Set([
   'fact',
@@ -70,10 +71,14 @@ function buildObjectText(entry: AgentRunEvidenceEntry): string {
   const content = entry.content?.trim();
   if (title && content && title !== content) {
     const merged = `${title}: ${content}`;
-    return merged.length > 200 ? `${merged.slice(0, 199).trimEnd()}\u2026` : merged;
+    return merged.length > MAX_BRIDGED_OBJECT_TEXT_CHARS
+      ? `${merged.slice(0, MAX_BRIDGED_OBJECT_TEXT_CHARS - 1).trimEnd()}\u2026`
+      : merged;
   }
   const value = (title || content || '').trim();
-  return value.length > 200 ? `${value.slice(0, 199).trimEnd()}\u2026` : value;
+  return value.length > MAX_BRIDGED_OBJECT_TEXT_CHARS
+    ? `${value.slice(0, MAX_BRIDGED_OBJECT_TEXT_CHARS - 1).trimEnd()}\u2026`
+    : value;
 }
 
 /**

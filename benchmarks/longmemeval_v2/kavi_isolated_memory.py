@@ -14,7 +14,7 @@ from .memory import Memory, MemoryConfig, MemoryContextItem, register_memory, re
 
 
 DEFAULT_MAX_ITEMS = 12
-DEFAULT_MAX_ITEM_CHARS = 2400
+DEFAULT_MAX_ITEM_CHARS = 5000
 DEFAULT_CHUNK_CHARS = 3600
 DEFAULT_CHUNK_OVERLAP_CHARS = 320
 

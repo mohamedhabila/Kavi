@@ -234,7 +234,7 @@ def main() -> None:
                 "runtime_bundle_path": str(runtime_bundle),
                 "node_binary": args.node_binary,
                 "max_items": int(os.getenv("KAVI_LME_MAX_ITEMS", "12")),
-                "max_item_chars": int(os.getenv("KAVI_LME_MAX_ITEM_CHARS", "2400")),
+                "max_item_chars": int(os.getenv("KAVI_LME_MAX_ITEM_CHARS", "5000")),
                 "chunk_chars": int(os.getenv("KAVI_LME_CHUNK_CHARS", "3600")),
                 "chunk_overlap_chars": int(os.getenv("KAVI_LME_CHUNK_OVERLAP_CHARS", "320")),
             },

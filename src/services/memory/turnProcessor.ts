@@ -420,6 +420,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
     sourceUserMessageId: user?.id,
     sourceAssistantMessageId: assistant?.id,
     messages: input.messages,
+    skipWorkingMemoryWrites: input.skipWorkingMemorySync,
   });
 
   let bridgedEvidenceFactIds: string[] = [];
