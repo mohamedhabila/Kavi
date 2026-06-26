@@ -1,9 +1,9 @@
 // ---------------------------------------------------------------------------
 // Kavi — Episode Recall
 // ---------------------------------------------------------------------------
-// Language-agnostic retrieval of recent episodes for prompt assembly.
-// Simple recency-based retrieval. Episodes are already ranked by importance
-// at creation time; we just fetch the most recent ones for the current thread.
+// Language-agnostic retrieval of episodes for prompt assembly.
+// Relevance is primary when a query is supplied; recency remains a tie-breaker
+// and the fallback for empty queries.
 // ---------------------------------------------------------------------------
 
 import { ensureFactSchema } from './schema';
@@ -16,6 +16,30 @@ export interface RecallEpisodesOptions {
   taskId?: string;
   limit?: number;
   maxAgeMs?: number;
+}
+
+const WORD_LIKE_SEQUENCE_PATTERN = /[\p{L}\p{M}\p{N}]+/gu;
+
+function lexicalUnits(value: string): Set<string> {
+  const out = new Set<string>();
+  const normalized = value.normalize('NFKC').toLocaleLowerCase();
+  WORD_LIKE_SEQUENCE_PATTERN.lastIndex = 0;
+  for (const match of normalized.matchAll(WORD_LIKE_SEQUENCE_PATTERN)) {
+    const unit = match[0].trim();
+    if (unit) out.add(unit);
+  }
+  return out;
+}
+
+function lexicalOverlap(query: Set<string>, haystack: string): number {
+  if (query.size === 0) return 0;
+  const units = lexicalUnits(haystack);
+  if (units.size === 0) return 0;
+  let hits = 0;
+  for (const unit of query) {
+    if (units.has(unit)) hits += 1;
+  }
+  return hits / query.size;
 }
 
 export function recallRecentEpisodes(options: RecallEpisodesOptions = {}): MemoryEpisode[] {
@@ -87,6 +111,35 @@ export function recallRecentEpisodes(options: RecallEpisodesOptions = {}): Memor
     createdAt: row.created_at,
     deletedAt: row.deleted_at,
   }));
+}
+
+export function recallEpisodesForQuery(
+  query: string,
+  options: RecallEpisodesOptions = {},
+): MemoryEpisode[] {
+  const trimmed = query.trim();
+  if (!trimmed) return recallRecentEpisodes(options);
+  const candidateLimit = Math.max(20, Math.min((options.limit ?? 6) * 8, 80));
+  const candidates = recallRecentEpisodes({ ...options, limit: candidateLimit });
+  const queryUnits = lexicalUnits(trimmed);
+  return candidates
+    .map((episode) => ({
+      episode,
+      score: lexicalOverlap(
+        queryUnits,
+        `${episode.summary} ${episode.entities.join(' ')} ${episode.toolNames.join(' ')}`,
+      ),
+    }))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (b.episode.importance !== a.episode.importance) {
+        return b.episode.importance - a.episode.importance;
+      }
+      return b.episode.endedAt - a.episode.endedAt;
+    })
+    .slice(0, Math.max(1, Math.min(options.limit ?? 6, 20)))
+    .map((entry) => entry.episode);
 }
 
 function safeParseJsonArray<T>(raw: string): T[] {

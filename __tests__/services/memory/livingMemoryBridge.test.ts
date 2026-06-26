@@ -236,7 +236,7 @@ describe('buildLivingMemorySections', () => {
     expect(dynamicText).not.toContain(fact.fact.subjectId);
   });
 
-  it('surfaces the current fact before stale passive activity for updated preferences', async () => {
+  it('surfaces the current fact without unrelated stale passive activity', async () => {
     const subject = upsertEntity({ name: 'direct-longmem-user', type: 'person' });
     const conversationId = 'conv-longmem-preference';
     recordFact({
@@ -288,8 +288,7 @@ describe('buildLivingMemorySections', () => {
     );
     const passiveEpisodeIndex = dynamicText.indexOf('Passive activity mentioned Morgan.');
     expect(currentFactIndex).toBeGreaterThan(-1);
-    expect(passiveEpisodeIndex).toBeGreaterThan(-1);
-    expect(currentFactIndex).toBeLessThan(passiveEpisodeIndex);
+    expect(passiveEpisodeIndex).toBe(-1);
   });
 
   it('surfaces recent current conversation facts for underspecified final actions', async () => {

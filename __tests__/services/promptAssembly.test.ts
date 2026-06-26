@@ -155,7 +155,7 @@ describe('assemblePrompt — deterministic ordering', () => {
 });
 
 describe('assemblePrompt — L3 contents', () => {
-  it('renders retrieved facts as separate bounded sections', () => {
+  it('renders retrieved facts in a typed relevant-facts section', () => {
     const out = assemblePrompt({
       basePrompt: 'BASE',
       retrievedFacts: [
@@ -163,11 +163,35 @@ describe('assemblePrompt — L3 contents', () => {
         makeFact({ id: 'f2', predicate: 'role', objectText: 'Engineer' }),
       ],
     });
-    expect(out.sections).toHaveLength(3);
+    expect(out.sections).toHaveLength(2);
     expect(out.sections[1].text).toContain('### Retrieved Memory');
+    expect(out.sections[1].text).toContain('#### Relevant Facts');
     expect(out.sections[1].text).toContain('- user lives_in: Berlin');
-    expect(out.sections[2].text).toContain('### Retrieved Memory');
-    expect(out.sections[2].text).toContain('- user role: Engineer');
+    expect(out.sections[1].text).toContain('- user role: Engineer');
+  });
+
+  it('renders UI and outcome memories in separate typed sections', () => {
+    const out = assemblePrompt({
+      basePrompt: 'BASE',
+      retrievedFacts: [
+        makeFact({
+          predicate: 'ui_affordance',
+          objectText: '{"role":"button","name":"Save"}',
+          memoryKind: 'ui_affordance',
+        }),
+        makeFact({
+          id: 'f2',
+          predicate: 'tool_outcome',
+          objectText: '{"outcome":"failure"}',
+          memoryKind: 'outcome',
+        }),
+      ],
+    });
+    const text = flattenPromptSections(out.sections);
+    expect(text).toContain('#### Observed UI and Surface Schema');
+    expect(text).toContain('kind=ui_affordance');
+    expect(text).toContain('#### Outcomes and Gotchas');
+    expect(text).toContain('kind=outcome');
   });
 
   it('annotates only low-confidence facts', () => {

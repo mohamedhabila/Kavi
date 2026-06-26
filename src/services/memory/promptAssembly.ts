@@ -82,6 +82,10 @@ const L2_DOSSIER_HEADER = '## Known Entities';
 const L3_HEADER = '## This Turn';
 const L3_REFLECTION_HEADER = '### Day Focus';
 const L3_FACTS_HEADER = '### Retrieved Memory';
+const L3_RELEVANT_FACTS_HEADER = '#### Relevant Facts';
+const L3_UI_HEADER = '#### Observed UI and Surface Schema';
+const L3_PROCEDURES_HEADER = '#### Procedures';
+const L3_OUTCOMES_HEADER = '#### Outcomes and Gotchas';
 const L3_EPISODES_HEADER = '### Recent Activity';
 const MAX_RENDERED_FACT_CHARS = 3_200;
 const MAX_RENDERED_EPISODE_CHARS = 200;
@@ -147,7 +151,11 @@ function renderFact(fact: PromptMemoryFact): string {
       ? ` (confidence ${fact.confidence.toFixed(2)})`
       : '';
   const subject = fact.subjectLabel?.trim() || fact.subjectId;
-  return `- ${subject} ${fact.predicate}: ${fitText(fact.objectText, MAX_RENDERED_FACT_CHARS)}${conf}`;
+  const source = fact.sourceRunId ? ` source=${fact.sourceRunId}` : '';
+  const memoryKind = fact.memoryKind ?? 'semantic_fact';
+  const kind = memoryKind === 'semantic_fact' ? '' : ` kind=${memoryKind}`;
+  const meta = kind || source ? ` [${`${kind}${source}`.trim()}]` : '';
+  return `- ${subject} ${fact.predicate}: ${fitText(fact.objectText, MAX_RENDERED_FACT_CHARS)}${conf}${meta}`;
 }
 
 function renderEpisode(episode: MemoryEpisode): string {
@@ -157,18 +165,46 @@ function renderEpisode(episode: MemoryEpisode): string {
   return `- ${fitText(summary, MAX_RENDERED_EPISODE_CHARS)}${tools}`;
 }
 
-function renderRetrievedFactSection(
-  fact: PromptMemoryFact,
-  index: number,
-  total: number,
-): string {
-  return `${L3_HEADER}\n${L3_FACTS_HEADER} ${index + 1}/${total}\n${renderFact(fact)}`;
+function factGroupHeader(fact: PromptMemoryFact): string {
+  const memoryKind = fact.memoryKind ?? 'semantic_fact';
+  if (memoryKind === 'ui_affordance' || memoryKind === 'surface_schema') {
+    return L3_UI_HEADER;
+  }
+  if (memoryKind === 'procedure') return L3_PROCEDURES_HEADER;
+  if (memoryKind === 'outcome' || memoryKind === 'gotcha') return L3_OUTCOMES_HEADER;
+  return L3_RELEVANT_FACTS_HEADER;
+}
+
+function groupRetrievedFacts(facts: PromptMemoryFact[]): Array<{
+  header: string;
+  facts: PromptMemoryFact[];
+}> {
+  const orderedHeaders = [
+    L3_RELEVANT_FACTS_HEADER,
+    L3_UI_HEADER,
+    L3_PROCEDURES_HEADER,
+    L3_OUTCOMES_HEADER,
+  ];
+  const byHeader = new Map<string, PromptMemoryFact[]>();
+  for (const fact of facts) {
+    const header = factGroupHeader(fact);
+    const list = byHeader.get(header) ?? [];
+    list.push(fact);
+    byHeader.set(header, list);
+  }
+  return orderedHeaders
+    .map((header) => ({ header, facts: byHeader.get(header) ?? [] }))
+    .filter((group) => group.facts.length > 0);
+}
+
+function renderRetrievedFactGroup(group: { header: string; facts: PromptMemoryFact[] }): string {
+  return `${L3_HEADER}\n${L3_FACTS_HEADER}\n${group.header}\n${group.facts.map(renderFact).join('\n')}`;
 }
 
 function renderL3Sections(input: AssemblePromptInput): string[] {
   const focus = (input.focusBlock ?? '').trim();
   const reflection = (input.reflectionBlock ?? '').trim();
-  const facts = (input.retrievedFacts ?? []).map(renderFact);
+  const factGroups = groupRetrievedFacts(input.retrievedFacts ?? []);
   const episodes = (input.recentEpisodes ?? []).map(renderEpisode).filter((r) => r.length > 0);
   const addenda = joinNonEmpty(input.dynamicAddenda ?? []);
 
@@ -184,12 +220,8 @@ function renderL3Sections(input: AssemblePromptInput): string[] {
   if (preludeParts.length > 0) {
     sections.push(`${L3_HEADER}\n${preludeParts.join('\n\n')}`);
   }
-  if (facts.length > 0) {
-    sections.push(
-      ...(input.retrievedFacts ?? []).map((fact, index) =>
-        renderRetrievedFactSection(fact, index, facts.length),
-      ),
-    );
+  if (factGroups.length > 0) {
+    sections.push(...factGroups.map(renderRetrievedFactGroup));
   }
   if (trailingParts.length > 0) {
     sections.push(`${L3_HEADER}\n${trailingParts.join('\n\n')}`);

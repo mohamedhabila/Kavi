@@ -12,7 +12,10 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { recordEpisode } from '../../../src/services/memory/episodes/mutations';
-import { recallRecentEpisodes } from '../../../src/services/memory/episodeRecall';
+import {
+  recallEpisodesForQuery,
+  recallRecentEpisodes,
+} from '../../../src/services/memory/episodeRecall';
 import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -178,5 +181,29 @@ describe('recallRecentEpisodes', () => {
     expect(ep.toolNames).toEqual(['read_file']);
     expect(ep.importance).toBe(0.8);
     expect(ep.embedding).toBeNull();
+  });
+});
+
+describe('recallEpisodesForQuery', () => {
+  it('prefers relevant older episodes over unrelated recent episodes', () => {
+    makeEpisode({
+      summary: 'Unrelated shopping workflow',
+      endedAt: 3_000,
+      startedAt: 3_000,
+    });
+    makeEpisode({
+      summary: 'Fraud status filter investigation',
+      endedAt: 1_000,
+      startedAt: 1_000,
+      toolNames: ['browser_observe'],
+    });
+
+    const episodes = recallEpisodesForQuery('fraud status filter', {
+      threadId: 'conv-1',
+      limit: 1,
+    });
+
+    expect(episodes).toHaveLength(1);
+    expect(episodes[0].summary).toBe('Fraud status filter investigation');
   });
 });

@@ -26,7 +26,7 @@ import type { EmbeddingConfig } from '../../types/memory';
 import { getEmbeddingCached, isLocalEmbeddingConfig } from './embeddings';
 import { markFactsRecalled, setFactEmbedding } from './facts/mutations';
 import { listFactsForRecallCandidates } from './facts/queries';
-import { type MemoryFact, type MemoryFactScope } from './facts/types';
+import { type MemoryFact, type MemoryFactKind, type MemoryFactScope } from './facts/types';
 import { cosineSimilarity } from './ranking/similarity';
 import { exponentialDecayMultiplier } from './ranking/scoring';
 
@@ -67,6 +67,7 @@ export interface RecallFactsOptions {
   scopeHints?: MemoryFactScope[];
   conversationId?: string;
   taskId?: string;
+  memoryKind?: MemoryFactKind | MemoryFactKind[];
   now?: number;
   /**
    * When true (default), pinned facts are always returned regardless of
@@ -389,6 +390,7 @@ async function buildRecallSelection(
     ...(options.conversationId ? { scopedRecentConversationId: options.conversationId } : {}),
     ...(options.taskId ? { scopedRecentTaskId: options.taskId } : {}),
     ...(candidateScopes ? { scope: candidateScopes } : {}),
+    ...(options.memoryKind ? { memoryKind: options.memoryKind } : {}),
     ...(options.includeHistorical ? { includeInvalidated: true } : {}),
     ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
   }).filter((fact) => isFactEligibleForRecall(fact, options));

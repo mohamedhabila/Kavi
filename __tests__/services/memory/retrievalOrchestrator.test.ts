@@ -158,4 +158,38 @@ describe('orchestrateMemoryRetrieval', () => {
     expect(result.facts.map((fact) => fact.id)).toEqual([relevantFact.id]);
     expect(result.facts.some((fact) => fact.id === staleFact.id)).toBe(false);
   });
+
+  it('retrieves interface memories through a dedicated lane', async () => {
+    const surface = upsertEntity({ name: 'surface:https://app.example.test', type: 'project' });
+    const profile = upsertEntity({ name: 'profile', type: 'concept' });
+    const uiFact = recordFact({
+      subjectId: surface.id,
+      predicate: 'ui_affordance',
+      objectText: '{"role":"button","name":"Save","url":"https://app.example.test/settings"}',
+      memoryKind: 'ui_affordance',
+      scope: 'conversation',
+      originConversationId: 'conv-ui-lane',
+      now: 1,
+    }).fact;
+    recordFact({
+      subjectId: profile.id,
+      predicate: 'settings_note',
+      objectText: 'settings page was recently discussed',
+      memoryKind: 'semantic_fact',
+      scope: 'conversation',
+      originConversationId: 'conv-ui-lane',
+      now: 2,
+    });
+
+    const result = await orchestrateMemoryRetrieval({
+      userMessage: 'settings Save button',
+      conversationId: 'conv-ui-lane',
+      limit: 3,
+      now: 3,
+    });
+
+    const interfaceLane = result.lanes.find((lane) => lane.id === 'interface');
+    expect(interfaceLane?.facts.some((fact) => fact.id === uiFact.id)).toBe(true);
+    expect(result.facts.some((fact) => fact.id === uiFact.id)).toBe(true);
+  });
 });

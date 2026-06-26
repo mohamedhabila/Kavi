@@ -269,6 +269,7 @@ function ensureFactColumns(db: ReturnType<typeof getMemoryDb>): void {
     'memory_kind',
     "memory_kind TEXT NOT NULL DEFAULT 'semantic_fact'",
   );
+  db.execSync("UPDATE memory_facts SET memory_kind = 'semantic_fact' WHERE memory_kind = 'semantic'");
 }
 
 export function resetFactSchemaCacheForTests(): void {
