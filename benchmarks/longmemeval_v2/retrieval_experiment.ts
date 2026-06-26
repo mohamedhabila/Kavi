@@ -21,6 +21,7 @@ interface FactRow {
   object_text: string;
   source_summary: string | null;
   source_run_id: string | null;
+  memory_kind: string;
   scope: string;
   origin_conversation_id: string | null;
   updated_at: number;
@@ -212,7 +213,7 @@ async function main(): Promise<void> {
   const allFacts = db
     .prepare(
       `SELECT id, subject_id, predicate, object_text, source_summary, source_run_id,
-              scope, origin_conversation_id, updated_at, importance, confidence, embedding
+              memory_kind, scope, origin_conversation_id, updated_at, importance, confidence, embedding
          FROM memory_facts
         WHERE deleted_at IS NULL
           AND invalid_at IS NULL
@@ -304,6 +305,7 @@ async function main(): Promise<void> {
       selected: appCurrent.map((entry) => ({
         factId: entry.fact.id,
         sourceRunId: entry.fact.sourceRunId,
+        memoryKind: entry.fact.memoryKind,
         score: entry.score,
         relevanceScore: entry.relevanceScore,
         textScore: entry.textScore,
@@ -318,6 +320,7 @@ async function main(): Promise<void> {
       selected: appTextRelevanceOnly.map((entry) => ({
         factId: entry.fact.id,
         sourceRunId: entry.fact.sourceRunId,
+        memoryKind: entry.fact.memoryKind,
         score: entry.score,
         relevanceScore: entry.relevanceScore,
         textScore: entry.textScore,
@@ -332,6 +335,7 @@ async function main(): Promise<void> {
       selected: appLocalEmbedding.map((entry) => ({
         factId: entry.fact.id,
         sourceRunId: entry.fact.sourceRunId,
+        memoryKind: entry.fact.memoryKind,
         score: entry.score,
         relevanceScore: entry.relevanceScore,
         textScore: entry.textScore,
@@ -370,6 +374,7 @@ async function main(): Promise<void> {
       topFacts: dbAllLexical.slice(0, args.limit).map((entry) => ({
         factId: entry.fact.id,
         sourceRunId: entry.fact.source_run_id,
+        memoryKind: entry.fact.memory_kind,
         score: entry.score,
         textScore: entry.textScore,
         vectorScore: entry.vectorScore,
@@ -381,6 +386,7 @@ async function main(): Promise<void> {
       topFacts: dbAllSimpleEmbedding.slice(0, args.limit).map((entry) => ({
         factId: entry.fact.id,
         sourceRunId: entry.fact.source_run_id,
+        memoryKind: entry.fact.memory_kind,
         score: entry.score,
         textScore: entry.textScore,
         vectorScore: entry.vectorScore,

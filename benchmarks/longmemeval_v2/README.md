@@ -24,6 +24,8 @@ by Kavi's app flows:
 - trajectory states are represented as intermediate assistant/tool activity;
 - the trajectory outcome is represented as the final assistant turn;
 - ingestion runs through `processIngestionTurn`;
+- structured state evidence is recorded as typed `ui_affordance`,
+  `surface_schema`, and `outcome` memories instead of raw semantic facts;
 - query-time retrieval runs through `buildUnifiedMemoryAccessContext` in
   `agentic` mode and returns Kavi living-memory sections.
 
@@ -50,7 +52,8 @@ The smoke writes a JSON artifact under:
 
 Inspect `query_result.selected` to confirm the returned sources are
 `living_memory/section/*`, and inspect `query_result.stats.db_dir` to confirm
-per-question isolation.
+per-question isolation. Inspect `query_result.stats.fact_counts_by_kind` to
+confirm the import is using typed memory lanes.
 
 ## Official Run
 

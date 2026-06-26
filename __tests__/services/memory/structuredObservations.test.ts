@@ -58,6 +58,7 @@ describe('structured observation memory', () => {
       messages: [
         toolMessage({
           status: 'completed',
+          outcome: 'success',
           url: 'https://app.example.test/settings',
           action: 'click("save")',
           accessibility_tree:

@@ -7,7 +7,7 @@ import type { AgentGoal } from '../../src/engine/goals/types';
 import { buildUnifiedMemoryAccessContext } from '../../src/services/memory/memoryAccessGateway';
 import { processIngestionTurn } from '../../src/services/memory/turnProcessor';
 import { countEpisodes } from '../../src/services/memory/episodes/queries';
-import { countFacts, listFacts } from '../../src/services/memory/facts/queries';
+import { countFacts, countFactsByKind, listFacts } from '../../src/services/memory/facts/queries';
 import { flattenPromptSections } from '../../src/services/memory/promptAssembly';
 import {
   clearStructuredMemory,
@@ -102,9 +102,16 @@ function trajectoryMetadata(trajectory: JsonObject, id: string): JsonObject {
   };
 }
 
-function stateEvidenceObject(trajectoryIdValue: string, state: JsonObject, fallbackIndex: number): JsonObject {
+function stateEvidenceObject(
+  trajectory: JsonObject,
+  trajectoryIdValue: string,
+  state: JsonObject,
+  fallbackIndex: number,
+): JsonObject {
   return {
     trajectory_id: trajectoryIdValue,
+    goal: compactScalar(trajectory.goal, 600),
+    trajectory_outcome: compactScalar(trajectory.outcome, 160),
     state_index: state.state_index ?? state.step ?? fallbackIndex,
     url: compactScalar(state.url, 500),
     action: compactScalar(state.action, 800),
@@ -125,7 +132,7 @@ function buildGraphEvidence(trajectory: JsonObject, id: string): string[] {
   states.forEach((rawState, index) => {
     if (evidence.length >= 64) return;
     const state = asObject(rawState);
-    pushEvidence({ kind: 'state', ...stateEvidenceObject(id, state, index) });
+    pushEvidence({ kind: 'state', ...stateEvidenceObject(trajectory, id, state, index) });
   });
   return evidence;
 }
@@ -163,13 +170,16 @@ function buildToolMessagesForTrajectory(trajectory: JsonObject, id: string, now:
         {
           status: 'completed',
           trajectory_id: id,
+          goal: compactScalar(trajectory.goal, 600),
+          trajectory_outcome: compactScalar(trajectory.outcome, 160),
           state_index: stateIndex,
           url: compactScalar(state.url, 500),
           action: compactScalar(state.action, 800),
           thought: compactScalar(state.thought, 800),
           screenshot: compactScalar(state.screenshot, 500),
+          accessibility_tree: compactScalar(state.accessibility_tree, 3200),
         },
-        2200,
+        5000,
       ),
       toolCallId,
       timestamp: now + index * 2 + 2,
@@ -293,6 +303,7 @@ async function insertTrajectory(
     episode_id: ingestionResult.episodeId,
     deterministic_fact_ids: ingestionResult.deterministicFactIds,
     bridged_evidence_fact_ids: ingestionResult.bridgedEvidenceFactIds,
+    structured_memory_fact_ids: ingestionResult.structuredMemoryFactIds,
     total_chunks: getChunkCount(),
     inserted_trajectories: insertedTrajectoryIds.size,
   };
@@ -400,10 +411,13 @@ function stats(): JsonObject {
     insert_calls: insertCalls,
     chunk_count: getChunkCount(),
     fact_count: countFacts(),
+    fact_counts_by_kind: countFactsByKind(),
     episode_count: countEpisodes(),
     sample_facts: listFacts({ limit: 5 }).map((fact) => ({
       id: fact.id,
       scope: fact.scope,
+      memoryKind: fact.memoryKind,
+      sourceRunId: fact.sourceRunId,
       predicate: fact.predicate,
       objectText: fact.objectText,
     })),

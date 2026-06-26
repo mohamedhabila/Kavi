@@ -217,6 +217,17 @@ export function countFacts(
   return countRows(`SELECT COUNT(*) as count FROM memory_facts WHERE ${where}`, ...params);
 }
 
+export function countFactsByKind(): Record<string, number> {
+  const rows = getMany<{ memory_kind: string; count: number }>(
+    `SELECT memory_kind, COUNT(*) AS count
+       FROM memory_facts
+      WHERE deleted_at IS NULL
+      GROUP BY memory_kind
+      ORDER BY count DESC`,
+  );
+  return Object.fromEntries(rows.map((row) => [row.memory_kind, row.count]));
+}
+
 export function getFactById(id: string): MemoryFact | null {
   const row = getOne<FactRow>(`SELECT * FROM memory_facts WHERE id = ? LIMIT 1`, id);
   return row ? rowToFact(row) : null;

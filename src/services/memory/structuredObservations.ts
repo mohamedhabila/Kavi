@@ -171,8 +171,12 @@ function recordObservationPayload(payload: JsonRecord, context: ObservationConte
   const sourceRunId = stringField(payload, 'trajectory_id') ?? context.sourceRunId;
   const stateIndex = scalarField(payload, 'state_index') ?? scalarField(payload, 'step');
   const action = stringField(payload, 'action');
+  const thought = stringField(payload, 'thought');
+  const goal = stringField(payload, 'goal');
+  const trajectoryOutcome = stringField(payload, 'trajectory_outcome');
   const status = stringField(payload, 'status') ?? context.toolStatus ?? null;
-  const outcome = stringField(payload, 'outcome') ?? status;
+  const explicitOutcome = stringField(payload, 'outcome');
+  const outcome = explicitOutcome ?? status;
   const accessibilityTree = stringField(payload, 'accessibility_tree');
   const factIds: string[] = [];
 
@@ -187,13 +191,17 @@ function recordObservationPayload(payload: JsonRecord, context: ObservationConte
         sourceRunId,
         stateIndex,
         action,
+        thought,
+        goal,
+        trajectoryOutcome,
         outcome,
         nodes,
       }),
     );
   }
 
-  if (surfaceId && (outcome || action || stringField(payload, 'thought'))) {
+  const statusIsInformative = Boolean(status && status !== 'completed');
+  if (surfaceId && (explicitOutcome || statusIsInformative)) {
     const recorded = recordTypedFact({
       kind: 'outcome',
       subjectName: surfaceId,
@@ -202,7 +210,8 @@ function recordObservationPayload(payload: JsonRecord, context: ObservationConte
         outcome,
         status,
         action,
-        thought: stringField(payload, 'thought'),
+        thought,
+        goal,
         url,
         sourceRunId,
         stateIndex,
@@ -213,6 +222,8 @@ function recordObservationPayload(payload: JsonRecord, context: ObservationConte
         outcome,
         status,
         action,
+        thought,
+        goal,
         sourceRunId,
         stateIndex,
       },
@@ -252,6 +263,9 @@ function recordUiMemories(input: {
   sourceRunId?: string;
   stateIndex?: string;
   action: string | null;
+  thought: string | null;
+  goal: string | null;
+  trajectoryOutcome: string | null;
   outcome: string | null;
   nodes: AccessibilityNode[];
 }): string[] {
@@ -264,6 +278,11 @@ function recordUiMemories(input: {
       predicate: 'surface_inventory',
       objectText: compactJson({
         url: input.url,
+        goal: input.goal,
+        action: input.action,
+        thought: input.thought,
+        trajectoryOutcome: input.trajectoryOutcome,
+        outcome: input.outcome,
         sourceRunId: input.sourceRunId,
         stateIndex: input.stateIndex,
         nodes: inventoryNodes.map((node) => ({
@@ -279,11 +298,14 @@ function recordUiMemories(input: {
         stateIndex: input.stateIndex,
         nodeCount: input.nodes.length,
         action: input.action,
+        thought: input.thought,
+        goal: input.goal,
+        trajectoryOutcome: input.trajectoryOutcome,
         outcome: input.outcome,
       },
       context: input.context,
-      retrievability: 0.88,
-      stability: 0.65,
+      retrievability: 0.94,
+      stability: 0.7,
     });
     if (schemaFactId) factIds.push(schemaFactId);
   }
@@ -314,7 +336,7 @@ function recordUiMemories(input: {
         outcome: input.outcome,
       },
       context: input.context,
-      retrievability: 0.9,
+      retrievability: 0.78,
       stability: 0.6,
     });
     if (affordanceId) factIds.push(affordanceId);

@@ -11,7 +11,12 @@ import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { findEntityByName, getEntityById, softDeleteEntity, upsertEntity } from '../../src/services/memory/entities';
 import { invalidateFact, recordFact, setFactPinned, softDeleteFact } from '../../src/services/memory/facts/mutations';
-import { countFacts, getFactById, listFacts } from '../../src/services/memory/facts/queries';
+import {
+  countFacts,
+  countFactsByKind,
+  getFactById,
+  listFacts,
+} from '../../src/services/memory/facts/queries';
 import { BlockOverflowError, clearBlock, DEFAULT_MEMORY_BLOCKS, editBlock, ensureDefaultBlocks, getBlock, listBlocks, upsertBlock } from '../../src/services/memory/blocks';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -233,6 +238,10 @@ describe('recordFact', () => {
     expect(affordance.fact.id).not.toBe(semantic.fact.id);
     expect(listFacts({ subjectId: userId, memoryKind: 'semantic_fact' })).toHaveLength(1);
     expect(listFacts({ subjectId: userId, memoryKind: 'ui_affordance' })).toHaveLength(1);
+    expect(countFactsByKind()).toMatchObject({
+      semantic_fact: 1,
+      ui_affordance: 1,
+    });
   });
 });
 
