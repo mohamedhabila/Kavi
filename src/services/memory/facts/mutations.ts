@@ -5,6 +5,7 @@ import { notifyStructuredMemoryChanged } from '../store';
 import {
   clamp01,
   normalizeDecayPolicy,
+  normalizeFactKind,
   normalizeScope,
   rowToFact,
   type FactRow,
@@ -15,6 +16,7 @@ import {
 
 function factContentHash(input: RecordFactInput): string {
   const payload = JSON.stringify([
+    normalizeFactKind(input.memoryKind),
     normalizeScope(input.scope),
     input.originConversationId ?? null,
     input.originTaskId ?? null,
@@ -84,7 +86,13 @@ export function recordFact(input: RecordFactInput): RecordFactResult {
   const scope = normalizeScope(input.scope);
   const confidence = clamp01(input.confidence ?? 1.0);
   const importance = clamp01(input.importance ?? 0.5);
+  const retrievability = clamp01(input.retrievability ?? 1);
+  const stability = clamp01(input.stability ?? 0.5);
+  const decayRate = Math.max(0, input.decayRate ?? 0.03);
   const decayPolicy = normalizeDecayPolicy(input.decayPolicy);
+  const memoryKind = normalizeFactKind(input.memoryKind);
+  const reviewState = input.reviewState?.trim() || 'auto';
+  const sensitivity = input.sensitivity?.trim() || 'normal';
 
   const existing = db.getFirstSync<FactRow>(
     `SELECT * FROM memory_facts
@@ -102,6 +110,12 @@ export function recordFact(input: RecordFactInput): RecordFactResult {
              updated_at = ?,
              confidence = MAX(confidence, ?),
              importance = MAX(importance, ?),
+             retrievability = MAX(retrievability, ?),
+             stability = MAX(stability, ?),
+             decay_rate = MIN(decay_rate, ?),
+             review_state = ?,
+             sensitivity = ?,
+             memory_kind = ?,
              repeated_mention_count = repeated_mention_count + 1,
              last_reinforced_at = ?,
              last_accessed_at = ?
@@ -110,6 +124,12 @@ export function recordFact(input: RecordFactInput): RecordFactResult {
       now,
       confidence,
       importance,
+      retrievability,
+      stability,
+      decayRate,
+      reviewState,
+      sensitivity,
+      memoryKind,
       now,
       now,
       existing.id,
@@ -122,6 +142,12 @@ export function recordFact(input: RecordFactInput): RecordFactResult {
         updated_at: now,
         confidence: Math.max(existing.confidence, confidence),
         importance: Math.max(existing.importance ?? 0.5, importance),
+        retrievability: Math.max(existing.retrievability ?? 1, retrievability),
+        stability: Math.max(existing.stability ?? 0.5, stability),
+        decay_rate: Math.min(existing.decay_rate ?? 0.03, decayRate),
+        review_state: reviewState,
+        sensitivity,
+        memory_kind: memoryKind,
         repeated_mention_count: (existing.repeated_mention_count ?? 0) + 1,
         last_reinforced_at: now,
         last_accessed_at: now,
@@ -181,17 +207,17 @@ export function recordFact(input: RecordFactInput): RecordFactResult {
     updatedAt: now,
     deletedAt: null,
     pinned: input.pinned ?? false,
-    sourceActorId: null,
-    taskId: input.originTaskId ?? null,
-    retrievability: 1,
-    stability: 0.5,
-    decayRate: 0.03,
+    sourceActorId: input.sourceActorId ?? null,
+    taskId: input.taskId ?? input.originTaskId ?? null,
+    retrievability,
+    stability,
+    decayRate,
     lastPresentedAt: null,
     lastConfirmedAt: null,
     lastConflictedAt: null,
-    reviewState: 'auto',
-    sensitivity: 'normal',
-    memoryKind: 'semantic',
+    reviewState,
+    sensitivity,
+    memoryKind,
   };
   db.runSync(
     `INSERT INTO memory_facts
@@ -200,9 +226,11 @@ export function recordFact(input: RecordFactInput): RecordFactResult {
         origin_thread_id, origin_task_id, source_turn_id, source_summary, importance,
         access_count, repeated_mention_count, last_recalled_at, last_reinforced_at,
         last_accessed_at, decay_policy, expires_at, content_hash, embedding, valid_at,
-        invalid_at, created_at, updated_at, deleted_at, pinned)
+        invalid_at, created_at, updated_at, deleted_at, pinned, source_actor_id, task_id,
+        retrievability, stability, decay_rate, last_presented_at, last_confirmed_at,
+        last_conflicted_at, review_state, sensitivity, memory_kind)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, NULL, NULL, NULL,
-        ?, ?, ?, NULL, ?, NULL, ?, ?, NULL, ?)`,
+        ?, ?, ?, NULL, ?, NULL, ?, ?, NULL, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?)`,
     fact.id,
     fact.subjectId,
     fact.predicate,
@@ -226,6 +254,14 @@ export function recordFact(input: RecordFactInput): RecordFactResult {
     fact.createdAt,
     fact.updatedAt,
     fact.pinned ? 1 : 0,
+    fact.sourceActorId,
+    fact.taskId,
+    fact.retrievability,
+    fact.stability,
+    fact.decayRate,
+    fact.reviewState,
+    fact.sensitivity,
+    fact.memoryKind,
   );
   notifyStructuredMemoryChanged(fact.originConversationId);
   return { fact, status: 'created', superseded };

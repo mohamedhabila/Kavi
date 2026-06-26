@@ -5,6 +5,7 @@ import {
   type FactRow,
   type ListFactsOptions,
   type MemoryFact,
+  type MemoryFactKind,
   type MemoryFactScope,
 } from './types';
 
@@ -49,6 +50,11 @@ function buildFactFilter(options: ListFactsOptions): FactFilter {
     params.push(options.originTaskId);
   }
   if (options.pinnedOnly) clauses.push('pinned = 1');
+  if (options.memoryKind) {
+    const kinds = Array.isArray(options.memoryKind) ? options.memoryKind : [options.memoryKind];
+    clauses.push(`memory_kind IN (${kinds.map(() => '?').join(', ')})`);
+    params.push(...kinds);
+  }
   if (!options.includeDeleted) clauses.push('deleted_at IS NULL');
   if (!options.includeExpired) {
     const asOf = options.asOf ?? Date.now();
@@ -194,7 +200,7 @@ export function listFactsForRecallCandidates(
 }
 
 export function countFacts(
-  options: { pinnedOnly?: boolean; scope?: MemoryFactScope } = {},
+  options: { pinnedOnly?: boolean; scope?: MemoryFactScope; memoryKind?: MemoryFactKind } = {},
 ): number {
   const clauses: string[] = ['deleted_at IS NULL'];
   const params: Array<string | number> = [];
@@ -202,6 +208,10 @@ export function countFacts(
   if (options.scope) {
     clauses.push('scope = ?');
     params.push(options.scope);
+  }
+  if (options.memoryKind) {
+    clauses.push('memory_kind = ?');
+    params.push(options.memoryKind);
   }
   const where = clauses.join(' AND ');
   return countRows(`SELECT COUNT(*) as count FROM memory_facts WHERE ${where}`, ...params);

@@ -263,7 +263,12 @@ function ensureFactColumns(db: ReturnType<typeof getMemoryDb>): void {
   ensureColumn(db, 'memory_facts', 'last_conflicted_at', 'last_conflicted_at INTEGER');
   ensureColumn(db, 'memory_facts', 'review_state', "review_state TEXT NOT NULL DEFAULT 'auto'");
   ensureColumn(db, 'memory_facts', 'sensitivity', "sensitivity TEXT NOT NULL DEFAULT 'normal'");
-  ensureColumn(db, 'memory_facts', 'memory_kind', "memory_kind TEXT NOT NULL DEFAULT 'semantic'");
+  ensureColumn(
+    db,
+    'memory_facts',
+    'memory_kind',
+    "memory_kind TEXT NOT NULL DEFAULT 'semantic_fact'",
+  );
 }
 
 export function resetFactSchemaCacheForTests(): void {

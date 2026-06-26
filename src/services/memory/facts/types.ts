@@ -4,6 +4,15 @@ export type MemoryFactScope = 'global' | 'project' | 'conversation' | 'session' 
 
 export type MemoryDecayPolicy = 'normal' | 'slow' | 'fast' | 'pinned' | 'ephemeral';
 
+export type MemoryFactKind =
+  | 'semantic_fact'
+  | 'episodic_event'
+  | 'ui_affordance'
+  | 'surface_schema'
+  | 'procedure'
+  | 'outcome'
+  | 'gotcha';
+
 export interface MemoryFact {
   id: string;
   subjectId: string;
@@ -46,7 +55,7 @@ export interface MemoryFact {
   lastConflictedAt: number | null;
   reviewState: string;
   sensitivity: string;
-  memoryKind: string;
+  memoryKind: MemoryFactKind;
 }
 
 export interface FactRow {
@@ -91,7 +100,7 @@ export interface FactRow {
   last_conflicted_at?: number | null;
   review_state?: string;
   sensitivity?: string;
-  memory_kind?: string;
+  memory_kind?: MemoryFactKind;
 }
 
 export function clamp01(value: number): number {
@@ -112,6 +121,17 @@ export function normalizeDecayPolicy(value: unknown): MemoryDecayPolicy {
   return value === 'slow' || value === 'fast' || value === 'pinned' || value === 'ephemeral'
     ? value
     : 'normal';
+}
+
+export function normalizeFactKind(value: unknown): MemoryFactKind {
+  return value === 'episodic_event' ||
+    value === 'ui_affordance' ||
+    value === 'surface_schema' ||
+    value === 'procedure' ||
+    value === 'outcome' ||
+    value === 'gotcha'
+    ? value
+    : 'semantic_fact';
 }
 
 export function rowToFact(row: FactRow): MemoryFact {
@@ -157,7 +177,7 @@ export function rowToFact(row: FactRow): MemoryFact {
     lastConflictedAt: row.last_conflicted_at ?? null,
     reviewState: row.review_state ?? 'auto',
     sensitivity: row.sensitivity ?? 'normal',
-    memoryKind: row.memory_kind ?? 'semantic',
+    memoryKind: normalizeFactKind(row.memory_kind),
   };
 }
 
@@ -181,6 +201,14 @@ export interface RecordFactInput {
   expiresAt?: number | null;
   validAt?: number;
   pinned?: boolean;
+  sourceActorId?: string | null;
+  taskId?: string | null;
+  retrievability?: number;
+  stability?: number;
+  decayRate?: number;
+  reviewState?: string;
+  sensitivity?: string;
+  memoryKind?: MemoryFactKind;
   /** When true, any existing currently-valid fact for (subject, predicate) is invalidated. */
   supersedePrior?: boolean;
   now?: number;
@@ -202,6 +230,7 @@ export interface ListFactsOptions {
   includeInvalidated?: boolean;
   includeDeleted?: boolean;
   includeExpired?: boolean;
+  memoryKind?: MemoryFactKind | MemoryFactKind[];
   limit?: number;
   /** Only return facts valid at this timestamp. Defaults to "currently valid". */
   asOf?: number;

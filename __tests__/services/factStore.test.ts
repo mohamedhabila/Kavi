@@ -11,7 +11,7 @@ import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { findEntityByName, getEntityById, softDeleteEntity, upsertEntity } from '../../src/services/memory/entities';
 import { invalidateFact, recordFact, setFactPinned, softDeleteFact } from '../../src/services/memory/facts/mutations';
-import { getFactById, listFacts } from '../../src/services/memory/facts/queries';
+import { countFacts, getFactById, listFacts } from '../../src/services/memory/facts/queries';
 import { BlockOverflowError, clearBlock, DEFAULT_MEMORY_BLOCKS, editBlock, ensureDefaultBlocks, getBlock, listBlocks, upsertBlock } from '../../src/services/memory/blocks';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -186,6 +186,53 @@ describe('recordFact', () => {
     });
     expect(r.fact.sourceMessageId).toBe('m_42');
     expect(r.fact.sourceRunId).toBe('run_7');
+  });
+
+  it('persists typed retrieval metadata for non-semantic memories', () => {
+    const r = recordFact({
+      subjectId: userId,
+      predicate: 'visible_control',
+      objectText: 'submit button',
+      memoryKind: 'ui_affordance',
+      retrievability: 0.82,
+      stability: 0.71,
+      decayRate: 0.01,
+      reviewState: 'verified',
+      sensitivity: 'normal',
+      sourceActorId: 'browser',
+      taskId: 'task-1',
+      now: 100,
+    });
+
+    const stored = getFactById(r.fact.id);
+    expect(stored?.memoryKind).toBe('ui_affordance');
+    expect(stored?.retrievability).toBe(0.82);
+    expect(stored?.stability).toBe(0.71);
+    expect(stored?.decayRate).toBe(0.01);
+    expect(stored?.reviewState).toBe('verified');
+    expect(stored?.sourceActorId).toBe('browser');
+    expect(stored?.taskId).toBe('task-1');
+    expect(countFacts({ memoryKind: 'ui_affordance' })).toBe(1);
+  });
+
+  it('does not dedupe distinct memory kinds into one row', () => {
+    const semantic = recordFact({
+      subjectId: userId,
+      predicate: 'observed',
+      objectText: 'search field is visible',
+      memoryKind: 'semantic_fact',
+    });
+    const affordance = recordFact({
+      subjectId: userId,
+      predicate: 'observed',
+      objectText: 'search field is visible',
+      memoryKind: 'ui_affordance',
+    });
+
+    expect(affordance.status).toBe('created');
+    expect(affordance.fact.id).not.toBe(semantic.fact.id);
+    expect(listFacts({ subjectId: userId, memoryKind: 'semantic_fact' })).toHaveLength(1);
+    expect(listFacts({ subjectId: userId, memoryKind: 'ui_affordance' })).toHaveLength(1);
   });
 });
 
