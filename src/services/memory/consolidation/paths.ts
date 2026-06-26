@@ -24,6 +24,7 @@ import type { ConsolidatorExtractor } from '../consolidator';
 
 const logger = createLogger('memory.consolidationCascade');
 const MEMORY_EXTRACTOR_TIMEOUT_MS = 30_000;
+const MEMORY_EXTRACTOR_MAX_TOKENS = 32_000;
 
 export type ConsolidationProviderTier = 'configured' | 'on_device' | 'chat' | 'deterministic';
 
@@ -67,7 +68,7 @@ function buildProviderExtractor(
     try {
       const response = await llm.sendMessage([{ role: 'user', content: prompt }] as never, {
         model,
-        maxTokens: 1600,
+        maxTokens: MEMORY_EXTRACTOR_MAX_TOKENS,
         signal: createTimeoutSignal(MEMORY_EXTRACTOR_TIMEOUT_MS),
       });
       return extractAssistantText(response);
