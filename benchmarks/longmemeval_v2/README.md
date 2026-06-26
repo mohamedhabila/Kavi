@@ -63,10 +63,20 @@ Requirements:
 - `EVALUATOR_MODEL` containing `gpt-5.2`.
 - evaluator API key in `EVALUATOR_API_KEY_ENV`.
 
+Reader defaults mirror the official LongMemEval-V2 runner:
+
+- `READER_MODEL=Qwen/Qwen3.5-9B` or an endpoint model id containing `qwen3.5-9b`;
+- `READER_TEMPERATURE=0.6`;
+- `READER_TOP_P=0.95`;
+- `READER_TOP_K=20`;
+- `--max-completion-tokens 20000`;
+- `--memory-context-max-tokens 200000`;
+- reader thinking enabled by default.
+
 Run one domain:
 
 ```bash
-python3 benchmarks/longmemeval_v2/run_kavi_isolated.py \
+.private/evals/venv-longmemeval-py311/bin/python benchmarks/longmemeval_v2/run_kavi_isolated.py \
   --upstream .private/evals/upstream/LongMemEval-V2 \
   --data-root .private/evals/data/longmemeval-v2 \
   --domain web \
@@ -84,6 +94,24 @@ export TIER=small
 benchmarks/longmemeval_v2/run_kavi_isolated.sh \
   --upstream .private/evals/upstream/LongMemEval-V2
 ```
+
+## Reader Diagnostics
+
+If a run produces malformed or unexpectedly short reader output, inspect the
+saved prompt with the same OpenAI-compatible reader endpoint before changing
+memory code:
+
+```bash
+.private/evals/venv-longmemeval-py311/bin/python benchmarks/longmemeval_v2/diagnose_reader_prompt.py \
+  --env-file .env \
+  --prompt-rows .private/evals/runs/longmemeval-v2/kavi_memory_isolated_web_small/prompt_rows.jsonl \
+  --question-id 01f6e679 \
+  --output .private/evals/runs/longmemeval-v2/diagnostics/reader_01f6e679.json
+```
+
+The diagnostic artifact records `finish_reason`, `native_finish_reason`,
+reported usage, content length, reasoning length, and the parsed boxed answer.
+It does not affect official scoring or submission artifacts.
 
 ## Package
 

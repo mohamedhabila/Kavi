@@ -48,6 +48,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reader-temperature", type=float, default=float(os.getenv("READER_TEMPERATURE", "0.6")))
     parser.add_argument("--reader-top-p", type=float, default=float(os.getenv("READER_TOP_P", "0.95")))
     parser.add_argument("--reader-top-k", type=int, default=int(os.getenv("READER_TOP_K", "20")))
+    parser.add_argument("--reader-enable-thinking", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument(
         "--reader-max-concurrent-requests",
         type=int,
@@ -70,8 +71,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--evaluator-max-completion-tokens", type=int, default=4096)
     parser.add_argument("--node-binary", default=os.getenv("KAVI_LME_NODE_BINARY", "node"))
     parser.add_argument("--preflight-only", action="store_true")
-    parser.add_argument("--skip-evaluation", action="store_true")
-    parser.add_argument("--save-memory", action="store_true")
     parser.add_argument("--force", action="store_true")
     return parser.parse_args()
 
@@ -287,10 +286,8 @@ def main() -> None:
         "--top-k",
         str(args.reader_top_k),
     ]
-    if args.save_memory or args.skip_evaluation:
-        cmd.append("--save-memory")
-    if args.skip_evaluation:
-        cmd.append("--skip-evaluation")
+    if not args.reader_enable_thinking:
+        cmd.append("--reader-disable-thinking")
 
     subprocess.run(cmd, cwd=str(upstream), env=env, check=True)
 

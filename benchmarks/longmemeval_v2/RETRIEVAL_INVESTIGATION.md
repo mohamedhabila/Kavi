@@ -147,3 +147,25 @@ Before a full benchmark run:
    - memory contexts must remain non-truncated;
    - top recalled source trajectories must vary by question;
    - no reader response should hit the max-completion token ceiling.
+
+## Reader Configuration Follow-up
+
+The official LongMemEval-V2 runner uses Qwen3.5-9B as the fixed reader with
+`temperature=0.6`, `top_p=0.95`, `top_k=20`, `max_completion_tokens=20000`, and
+reader thinking enabled. Keep these defaults for official runs.
+
+Targeted experiments on `01f6e679` showed:
+
+| Variant | Result |
+| --- | --- |
+| official 20K reader cap | Stopped normally below cap; answer can vary because the retrieved context contains an incidental UI helper control. |
+| 32K reader cap | Also stopped normally, but still produced the wrong answer in one run; increasing the cap does not fix the semantic failure. |
+| 1K reader cap | Hit `length` before content because Qwen spent most of the budget in reasoning. |
+| low-temperature 20K | Provider returned an error-style completion with reasoning only. |
+| six retrieved memory items | Reproduced a true reader loop that hit the 20K cap by repeating an accessibility-tree label line. |
+
+Conclusion: the default reader is not globally capped too tightly. Low caps can
+cause reasoning-only outputs, and higher caps can prolong loops. For malformed or
+short reader outputs, inspect provider `finish_reason` with
+`benchmarks/longmemeval_v2/diagnose_reader_prompt.py` before changing memory
+retrieval or prompt assembly.
