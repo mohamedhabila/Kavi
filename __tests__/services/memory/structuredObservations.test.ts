@@ -1,0 +1,113 @@
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
+});
+
+import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
+import {
+  ensureFactSchema,
+  resetFactSchemaCacheForTests,
+} from '../../../src/services/memory/schema';
+import { listFacts } from '../../../src/services/memory/facts/queries';
+import {
+  recordStructuredObservationsFromEvidence,
+  recordStructuredObservationsFromMessages,
+} from '../../../src/services/memory/structuredObservations';
+import type { Message } from '../../../src/types/message';
+
+const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
+
+beforeEach(() => {
+  closeMemoryDb();
+  expoSqlite.__resetExpoSqliteForTests();
+  resetFactSchemaCacheForTests();
+  ensureFactSchema();
+});
+
+afterEach(() => {
+  closeMemoryDb();
+});
+
+function toolMessage(payload: Record<string, unknown>): Message {
+  return {
+    id: 'tool-1',
+    role: 'tool',
+    content: JSON.stringify(payload),
+    timestamp: 1,
+    toolCallId: 'tc-1',
+    toolCalls: [
+      {
+        id: 'tc-1',
+        name: 'browser_observe',
+        arguments: '{}',
+        status: 'completed',
+      },
+    ],
+  };
+}
+
+describe('structured observation memory', () => {
+  it('records accessibility trees as typed UI, schema, and outcome memories', () => {
+    const result = recordStructuredObservationsFromMessages({
+      conversationId: 'conv-ui',
+      threadId: 'conv-ui',
+      taskId: 'task-ui',
+      sourceRunId: 'run-ui',
+      sourceTurnId: 'assistant-1',
+      now: 100,
+      messages: [
+        toolMessage({
+          status: 'completed',
+          url: 'https://app.example.test/settings',
+          action: 'click("save")',
+          accessibility_tree:
+            "RootWebArea 'Settings', focused\n\t[10] button 'Save', clickable, visible\n\t[11] textbox 'Display name', editable, visible",
+        }),
+      ],
+    });
+
+    expect(result.factIds.length).toBeGreaterThanOrEqual(4);
+    const affordances = listFacts({ memoryKind: 'ui_affordance', originTaskId: 'task-ui' });
+    const schemas = listFacts({ memoryKind: 'surface_schema', originTaskId: 'task-ui' });
+    const outcomes = listFacts({ memoryKind: 'outcome', originTaskId: 'task-ui' });
+
+    expect(affordances).toHaveLength(3);
+    expect(schemas).toHaveLength(1);
+    expect(outcomes).toHaveLength(1);
+    expect(affordances.some((fact) => fact.objectText.includes('Save'))).toBe(true);
+    expect(affordances.every((fact) => fact.scope === 'session')).toBe(true);
+    expect(affordances.every((fact) => fact.memoryKind === 'ui_affordance')).toBe(true);
+    expect(schemas[0].attributes).toMatchObject({
+      surfaceId: 'surface:https://app.example.test',
+      url: 'https://app.example.test/settings',
+      nodeCount: 3,
+    });
+  });
+
+  it('consumes structured evidence and records typed memories', () => {
+    const evidence =
+      'agent:' +
+      JSON.stringify({
+        kind: 'state',
+        trajectory_id: 'traj-1',
+        state_index: 2,
+        outcome: 'failure',
+        url: 'https://app.example.test/search',
+        accessibility_tree: "[7] searchbox 'Query', clickable, visible",
+      });
+
+    const result = recordStructuredObservationsFromEvidence({
+      evidence: [evidence],
+      conversationId: 'conv-evidence',
+      threadId: 'conv-evidence',
+      sourceRunId: 'run-evidence',
+      now: 200,
+    });
+
+    expect(result.consumedEvidence).toEqual([evidence]);
+    expect(listFacts({ memoryKind: 'ui_affordance', originConversationId: 'conv-evidence' }))
+      .toHaveLength(1);
+    expect(listFacts({ memoryKind: 'outcome', originConversationId: 'conv-evidence' }))
+      .toHaveLength(1);
+  });
+});

@@ -26,6 +26,10 @@ import { editWorkingBlock } from './workingBlocks';
 import { composeActiveFocusContent } from './focus';
 import { findEntityByName } from './entities';
 import { listFacts } from './facts/queries';
+import {
+  recordStructuredObservationsFromEvidence,
+  recordStructuredObservationsFromMessages,
+} from './structuredObservations';
 
 const logger = createLogger('memory.turnProcessor');
 
@@ -52,6 +56,7 @@ export interface ProcessTurnResult {
   openThreadsUpdated: boolean;
   enriched: boolean;
   bridgedEvidenceFactIds: string[];
+  structuredMemoryFactIds: string[];
   skipped?: 'opt_out' | 'no_closed_turn';
 }
 
@@ -372,6 +377,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
       openThreadsUpdated: false,
       enriched: false,
       bridgedEvidenceFactIds: [],
+      structuredMemoryFactIds: [],
     };
   }
 
@@ -423,10 +429,43 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
     skipWorkingMemoryWrites: input.skipWorkingMemorySync,
   });
 
+  let structuredMemoryFactIds: string[] = [];
+  try {
+    const structuredFromMessages = recordStructuredObservationsFromMessages({
+      messages: turnInput.messages ?? [],
+      conversationId: input.threadId,
+      threadId: input.threadId,
+      taskId: input.taskId,
+      sourceRunId: input.sourceRunId,
+      sourceTurnId: assistant.id,
+      now,
+    });
+    structuredMemoryFactIds.push(...structuredFromMessages.factIds);
+  } catch (error) {
+    logger.devWarn(
+      'Structured observation ingestion failed:',
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+
   let bridgedEvidenceFactIds: string[] = [];
   if (input.graphGoalEvidence?.length) {
     try {
-      const bridgeResult = bridgeGraphGoalEvidence(input.graphGoalEvidence, {
+      const structuredFromEvidence = recordStructuredObservationsFromEvidence({
+        evidence: input.graphGoalEvidence,
+        conversationId: input.threadId,
+        threadId: input.threadId,
+        taskId: input.taskId,
+        sourceRunId: input.sourceRunId,
+        sourceTurnId: assistant.id,
+        now,
+      });
+      structuredMemoryFactIds.push(...structuredFromEvidence.factIds);
+      const consumedEvidence = new Set(structuredFromEvidence.consumedEvidence);
+      const bridgeableEvidence = input.graphGoalEvidence.filter(
+        (evidence) => !consumedEvidence.has(evidence),
+      );
+      const bridgeResult = bridgeGraphGoalEvidence(bridgeableEvidence, {
         subjectName: input.taskId ?? input.threadId,
         subjectType: 'project',
         sourceRunId: input.sourceRunId,
@@ -466,6 +505,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
     openThreadsUpdated: persistResult.openThreadsUpdated,
     enriched,
     bridgedEvidenceFactIds,
+    structuredMemoryFactIds,
   };
 }
 

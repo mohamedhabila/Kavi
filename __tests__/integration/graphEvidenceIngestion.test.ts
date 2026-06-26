@@ -77,4 +77,39 @@ describe('graph evidence ingestion bridge', () => {
 
     expect(recalled.some((fact) => fact.objectText.includes(evidence))).toBe(true);
   });
+
+  it('routes structured graph observations to typed memories instead of raw fact bridging', async () => {
+    const structuredEvidence =
+      'agent:' +
+      JSON.stringify({
+        kind: 'state',
+        trajectory_id: 'traj-ui',
+        state_index: 4,
+        outcome: 'failure',
+        url: 'https://app.example.test/forum',
+        accessibility_tree: "[12] searchbox 'Search query', clickable, visible",
+      });
+
+    const result = await processIngestionTurn({
+      threadId: THREAD_ID,
+      messages: buildClosedTurnMessages(),
+      taskId: TASK_ID,
+      sourceRunId: 'run-graph-structured',
+      graphGoalEvidence: [structuredEvidence],
+      skipWorkingMemorySync: true,
+    });
+
+    expect(result.structuredMemoryFactIds.length).toBeGreaterThan(0);
+    expect(result.bridgedEvidenceFactIds).toHaveLength(0);
+
+    const typedFacts = listFacts({ originConversationId: THREAD_ID });
+    expect(typedFacts.some((fact) => fact.memoryKind === 'ui_affordance')).toBe(true);
+    expect(typedFacts.some((fact) => fact.memoryKind === 'surface_schema')).toBe(true);
+    expect(typedFacts.some((fact) => fact.memoryKind === 'outcome')).toBe(true);
+    expect(
+      typedFacts.some(
+        (fact) => fact.memoryKind === 'semantic_fact' && fact.objectText.includes(structuredEvidence),
+      ),
+    ).toBe(false);
+  });
 });
