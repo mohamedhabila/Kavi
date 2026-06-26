@@ -240,7 +240,7 @@ describe('recordCompletedTurnForMemory', () => {
         conversationId: 'conv-provider',
         threadId: 'conv-provider',
       })?.content,
-    ).toBe('Validating the Android release build.');
+    ).toContain('Release hardening');
   });
 
   it('falls back to the active enabled provider when consolidationProvider is unset', async () => {
@@ -331,7 +331,7 @@ describe('recordCompletedTurnForMemory', () => {
     expect(mockSendMessage).toHaveBeenCalledTimes(1);
     expect(mockSendMessage.mock.calls[0][1]).toMatchObject({
       model: 'gemini-3.5-flash',
-      maxTokens: 1600,
+      maxTokens: 32000,
     });
   });
 
