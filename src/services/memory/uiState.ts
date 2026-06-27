@@ -94,6 +94,8 @@ const ACTIONABLE_ROLES = new Set([
   'textbox',
 ]);
 
+const NON_CONTROL_CLICKABLE_ROLES = new Set(['labeltext', 'statictext']);
+
 const FIELD_CONTROL_ROLES = new Set([
   'combobox',
   'radio',
@@ -121,10 +123,10 @@ const CONTEXT_LABEL_ROLES = new Set([
   'strong',
 ]);
 
-const MAX_CONTROL_SUMMARY_ITEMS = 36;
+const MAX_CONTROL_SUMMARY_ITEMS = 96;
 const MAX_FIELD_SUMMARY_ITEMS = 36;
 const MAX_LABEL_VALUE_ITEMS = 36;
-const MAX_NAME_SUMMARY_ITEMS = 48;
+const MAX_NAME_SUMMARY_ITEMS = 192;
 const MAX_CONTROL_OPTIONS = 48;
 const MAX_TABLE_SUMMARY_ITEMS = 6;
 const MAX_TABLE_COLUMNS = 18;
@@ -134,7 +136,15 @@ const MAX_PARSED_ACCESSIBILITY_NODES = 2_500;
 const REQUIRED_MARKER = '*';
 
 function isInteractiveControlNode(node: AccessibilityNode): boolean {
-  return ACTIONABLE_ROLES.has(node.role.toLocaleLowerCase());
+  const role = node.role.toLocaleLowerCase();
+  return (
+    ACTIONABLE_ROLES.has(role) ||
+    Boolean(
+      node.name &&
+        !NON_CONTROL_CLICKABLE_ROLES.has(role) &&
+        node.attributes.some((attribute) => attribute.trim() === 'clickable'),
+    )
+  );
 }
 
 export function parseAccessibilityTree(tree: string): AccessibilityNode[] {

@@ -59,6 +59,10 @@ describe('structured observation memory', () => {
         toolMessage({
           status: 'completed',
           outcome: 'success',
+          goal: 'Update settings page controls',
+          trajectory_outcome: 'success',
+          domain: 'mobile-app',
+          environment: 'test',
           url: 'https://app.example.test/settings',
           action: 'click("save")',
           accessibility_tree:
@@ -69,17 +73,19 @@ describe('structured observation memory', () => {
 
     expect(result.factIds.length).toBeGreaterThanOrEqual(2);
     const inventories = listFacts({ memoryKind: 'ui_inventory', originTaskId: 'task-ui' });
-    const affordances = listFacts({ memoryKind: 'ui_affordance', originTaskId: 'task-ui' });
     const outcomes = listFacts({ memoryKind: 'outcome', originTaskId: 'task-ui' });
     const inventory = inventories.find((fact) => fact.predicate === 'ui_inventory');
 
     expect(inventories).toHaveLength(1);
-    expect(affordances).toHaveLength(2);
+    expect(listFacts({ memoryKind: 'ui_affordance', originTaskId: 'task-ui' })).toHaveLength(0);
     expect(outcomes).toHaveLength(1);
     expect(inventory?.objectText).toContain('Save');
-    expect(Math.min(...affordances.map((fact) => fact.retrievability))).toBeGreaterThan(
-      inventory!.retrievability,
-    );
+    expect(JSON.parse(inventory!.objectText)).toMatchObject({
+      goal: 'Update settings page controls',
+      trajectoryOutcome: 'success',
+      domain: 'mobile-app',
+      environment: 'test',
+    });
     expect(inventories.every((fact) => fact.scope === 'session')).toBe(true);
     expect(inventories.every((fact) => fact.memoryKind === 'ui_inventory')).toBe(true);
     expect(inventory?.attributes).toMatchObject({
@@ -92,7 +98,7 @@ describe('structured observation memory', () => {
     expect(() => JSON.parse(inventory!.objectText)).not.toThrow();
   });
 
-  it('records actionable controls as compact affordance facts with structural context', () => {
+  it('records actionable controls inside compact inventories with structural context', () => {
     recordStructuredObservationsFromMessages({
       conversationId: 'conv-affordance',
       threadId: 'conv-affordance',
@@ -117,26 +123,70 @@ describe('structured observation memory', () => {
       ],
     });
 
-    const affordances = listFacts({
+    const inventory = JSON.parse(
+      listFacts({
+        memoryKind: 'ui_inventory',
+        originConversationId: 'conv-affordance',
+      })[0].objectText,
+    );
+    const controls = inventory.controls;
+
+    expect(listFacts({
       memoryKind: 'ui_affordance',
       originConversationId: 'conv-affordance',
-    }).map((fact) => JSON.parse(fact.objectText));
+    })).toHaveLength(0);
 
-    expect(affordances.map((fact) => fact.name)).toEqual([
+    expect(controls.map((control: { name?: string }) => control.name)).toEqual([
       'Delete forum',
       'Edit forum',
       'Moderation log',
     ]);
-    expect(affordances).toEqual(
+    expect(controls).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           name: 'Edit forum',
           role: 'link',
           contextLabels: ['Toolbox'],
-          sourceRunId: 'run-affordance',
         }),
       ]),
     );
+    expect(inventory.sourceRunId).toBe('run-affordance');
+  });
+
+  it('records named clickable non-control roles without treating labels as controls', () => {
+    recordStructuredObservationsFromMessages({
+      conversationId: 'conv-clickable-role',
+      threadId: 'conv-clickable-role',
+      sourceRunId: 'run-clickable-role',
+      now: 275,
+      messages: [
+        toolMessage({
+          url: 'https://forum.example.test/f/general',
+          accessibility_tree: [
+            "RootWebArea 'Forum'",
+            "\t[1] complementary ''",
+            "\t\t[2] DisclosureTriangle 'Advanced options', clickable, visible, expanded=False",
+            "\t\t[3] LabelText 'Decorative helper', clickable, visible",
+          ].join('\n'),
+        }),
+      ],
+    });
+
+    const inventory = JSON.parse(
+      listFacts({
+        memoryKind: 'ui_inventory',
+        originConversationId: 'conv-clickable-role',
+      })[0].objectText,
+    );
+
+    expect(listFacts({
+      memoryKind: 'ui_affordance',
+      originConversationId: 'conv-clickable-role',
+    })).toHaveLength(0);
+    expect(inventory.controlNames).toEqual(['Advanced options']);
+    expect(inventory.controls.map((control: { name?: string }) => control.name)).toEqual([
+      'Advanced options',
+    ]);
   });
 
   it('records label-control field relations and complete page inventories', () => {
@@ -253,6 +303,7 @@ describe('structured observation memory', () => {
             "\t\t[151] option 'general', selected=False",
             "\t\t[152] option 'funny', selected=True",
             ...bulkControls,
+            "\t[390] button 'late-critical-action', clickable, visible",
           ].join('\n'),
         }),
       ],
@@ -265,7 +316,12 @@ describe('structured observation memory', () => {
     const inventoryObject = JSON.parse(inventory.objectText);
 
     expect(inventory.objectText.length).toBeLessThanOrEqual(4_000);
+    expect(listFacts({
+      memoryKind: 'ui_affordance',
+      originConversationId: 'conv-large-ui',
+    })).toHaveLength(0);
     expect(inventoryObject.fieldLabels).toEqual(['Title', 'Body', 'Forum']);
+    expect(inventoryObject.controlNames).toContain('late-critical-action');
     expect(inventoryObject.fields).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ label: 'Body', role: 'textbox' }),

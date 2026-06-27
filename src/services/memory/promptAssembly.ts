@@ -84,6 +84,8 @@ const L3_REFLECTION_HEADER = '### Day Focus';
 const L3_FACTS_HEADER = '### Retrieved Memory';
 const L3_RELEVANT_FACTS_HEADER = '#### Relevant Facts';
 const L3_UI_HEADER = '#### Observed UI and Surface Schema';
+const L3_UI_SNAPSHOT_NOTE =
+  'UI inventories are direct evidence for UI availability in observed states. Listed controls and fields were visible for that URL/state; controls not listed were not visible in that snapshot.';
 const L3_PROCEDURES_HEADER = '#### Procedures';
 const L3_OUTCOMES_HEADER = '#### Outcomes and Gotchas';
 const L3_EPISODES_HEADER = '### Recent Activity';
@@ -138,6 +140,10 @@ const UI_FILTER_STATE_PROMPT_FIELDS = [
   'stateIndex',
 ] as const;
 const UI_INVENTORY_PROMPT_FIELDS = [
+  'goal',
+  'trajectoryOutcome',
+  'domain',
+  'environment',
   'fieldLabels',
   'fields',
   'textEntryControls',
@@ -254,6 +260,55 @@ function compactFactFields(
   return hasEvidenceField ? JSON.stringify(compact) : null;
 }
 
+function compactUiInventoryPromptFields(
+  fact: PromptMemoryFact,
+  parsed: Record<string, unknown> | null,
+): string | null {
+  if (!parsed) return null;
+  const compact: Record<string, unknown> = {};
+  const copyField = (from: string, to = from): void => {
+    const rawValue =
+      from === 'sourceRunId'
+        ? (fact.sourceRunId ?? fact.attributes[from] ?? parsed[from])
+        : (fact.attributes[from] ?? parsed[from]);
+    if (rawValue !== undefined && rawValue !== null && rawValue !== '') {
+      compact[to] = rawValue;
+    }
+  };
+
+  copyField('goal', 'sourceGoal');
+  copyField('trajectoryOutcome');
+  copyField('domain');
+  copyField('environment');
+  copyField('url');
+  copyField('sourceRunId');
+  copyField('stateIndex');
+  copyField('controlNames', 'visibleControls');
+  if (!compact.visibleControls && Array.isArray(parsed.controls)) {
+    const visibleControls = parsed.controls
+      .map((control) =>
+        control && typeof control === 'object' && !Array.isArray(control)
+          ? (control as Record<string, unknown>).name
+          : null,
+      )
+      .filter((name): name is string => typeof name === 'string' && name.trim().length > 0);
+    if (visibleControls.length > 0) compact.visibleControls = visibleControls.slice(0, 48);
+  }
+  copyField('fieldLabels');
+  copyField('fields');
+  copyField('textEntryControls');
+  copyField('searchControls');
+  copyField('labelValues');
+  copyField('tables');
+  copyField('roleCounts');
+  copyField('controls');
+  copyField('nodeCount');
+  copyField('controlCount');
+  copyField('textEntryCount');
+  copyField('searchControlCount');
+  return Object.keys(compact).length > 0 ? JSON.stringify(compact) : null;
+}
+
 function renderableFactText(fact: PromptMemoryFact): string {
   const memoryKind = fact.memoryKind ?? 'semantic_fact';
   let fields: ReadonlyArray<string> | null = null;
@@ -264,6 +319,10 @@ function renderableFactText(fact: PromptMemoryFact): string {
   if (memoryKind === 'ui_inventory') fields = UI_INVENTORY_PROMPT_FIELDS;
   if (!fields) return fact.objectText;
   const parsed = parseJsonRecord(fact.objectText);
+  if (memoryKind === 'ui_inventory') {
+    const rendered = compactUiInventoryPromptFields(fact, parsed);
+    if (rendered) return rendered;
+  }
   const compactFromAttributes = compactFactFields(fact, parsed, fields);
   if (compactFromAttributes) return compactFromAttributes;
   if (!parsed) return fact.objectText;
@@ -340,16 +399,19 @@ function groupRetrievedFacts(facts: PromptMemoryFact[]): Array<{
 function renderRetrievedFactGroup(group: { header: string; facts: PromptMemoryFact[] }): string[] {
   const sectionPrefix = `${L3_HEADER}\n${L3_FACTS_HEADER}\n${group.header}`;
   const sections: string[] = [];
-  let lines: string[] = [];
-  let sectionChars = sectionPrefix.length;
+  const baseLines = group.header === L3_UI_HEADER ? [L3_UI_SNAPSHOT_NOTE] : [];
+  let lines: string[] = [...baseLines];
+  let sectionChars =
+    sectionPrefix.length + baseLines.reduce((sum, line) => sum + 1 + line.length, 0);
 
   for (const fact of group.facts) {
     const line = renderFact(fact);
     const nextChars = sectionChars + 1 + line.length;
-    if (lines.length > 0 && nextChars > MAX_RETRIEVED_FACT_SECTION_CHARS) {
+    if (lines.length > baseLines.length && nextChars > MAX_RETRIEVED_FACT_SECTION_CHARS) {
       sections.push(`${sectionPrefix}\n${lines.join('\n')}`);
-      lines = [];
-      sectionChars = sectionPrefix.length;
+      lines = [...baseLines];
+      sectionChars =
+        sectionPrefix.length + baseLines.reduce((sum, baseLine) => sum + 1 + baseLine.length, 0);
     }
     lines.push(line);
     sectionChars += 1 + line.length;

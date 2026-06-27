@@ -339,9 +339,37 @@ describe('assemblePrompt — L3 contents', () => {
 
     const text = flattenPromptSections(out.sections);
     expect(text).toContain('"fieldLabels":["URL","Image","Title","Body","Forum"]');
+    expect(text).toContain('"visibleControls"');
     expect(text).toContain('"label":"Body"');
     expect(text).toContain('"label":"Forum"');
     expect(text).not.toContain('bulk-control-79');
+  });
+
+  it('renders UI inventories with the visible snapshot contract and source context', () => {
+    const out = assemblePrompt({
+      basePrompt: 'BASE',
+      retrievedFacts: [
+        makeFact({
+          predicate: 'ui_inventory',
+          memoryKind: 'ui_inventory',
+          sourceRunId: 'run-visible-state',
+          objectText: JSON.stringify({
+            goal: 'Review settings page controls',
+            trajectoryOutcome: 'success',
+            controlNames: ['Save', 'Cancel'],
+            url: 'https://app.example.test/settings',
+            sourceRunId: 'run-visible-state',
+            stateIndex: '3',
+          }),
+        }),
+      ],
+    });
+
+    const text = flattenPromptSections(out.sections);
+    expect(text).toContain('UI inventories are direct evidence for UI availability');
+    expect(text).toContain('controls not listed were not visible in that snapshot');
+    expect(text).toContain('"sourceGoal":"Review settings page controls"');
+    expect(text).toContain('"trajectoryOutcome":"success"');
   });
 
   it('skips L3 entirely when nothing dynamic to render', () => {

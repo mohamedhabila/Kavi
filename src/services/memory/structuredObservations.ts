@@ -20,23 +20,15 @@ import {
   parseAccessibilityTree,
   type AccessibilityNode,
 } from './uiState';
+import {
+  compactJson,
+  compactJsonForStorage,
+  fitObjectTextForStorage,
+} from './structuredObservationCompaction';
 
 const MAX_TEXT_CHARS = 4_000;
-const MAX_AFFORDANCE_FACTS_PER_PAYLOAD = 96;
 const MAX_FIELD_FACTS_PER_PAYLOAD = 96;
 const MAX_FILTER_STATE_FACTS_PER_PAYLOAD = 96;
-const UI_INVENTORY_ARRAY_COMPACT_ORDER = [
-  'controls',
-  'controlNames',
-  'roleCounts',
-  'tables',
-  'labelValues',
-  'searchControls',
-  'textEntryControls',
-  'fields',
-  'fieldLabels',
-] as const;
-
 type JsonRecord = Record<string, unknown>;
 
 interface ObservationContext {
@@ -311,40 +303,6 @@ function recordUiMemories(input: {
     if (inventoryFactId) factIds.push(inventoryFactId);
   }
 
-  for (const control of summary.controls.slice(0, MAX_AFFORDANCE_FACTS_PER_PAYLOAD)) {
-    const affordanceId = recordTypedFact({
-      kind: 'ui_affordance',
-      subjectName: input.surfaceId,
-      predicate: 'ui_affordance',
-      objectText: compactJson({
-        ...compactFieldLikeControl(control),
-        ...baseUiPayload(input),
-      }),
-      attributes: {
-        surfaceId: input.surfaceId,
-        url: input.url,
-        sourceRunId: input.sourceRunId,
-        stateIndex: input.stateIndex,
-        index: control.index,
-        nodeId: control.nodeId,
-        role: control.role,
-        name: control.name,
-        label: control.label,
-        value: control.value,
-        options: control.options,
-        checked: control.checked,
-        selected: control.selected,
-        disabled: control.disabled,
-        expanded: control.expanded,
-        contextLabels: control.contextLabels,
-      },
-      context: input.context,
-      retrievability: 0.98,
-      stability: 0.72,
-    });
-    if (affordanceId) factIds.push(affordanceId);
-  }
-
   for (const field of summary.fields.slice(0, MAX_FIELD_FACTS_PER_PAYLOAD)) {
     const fieldId = recordTypedFact({
       kind: 'ui_field',
@@ -405,23 +363,6 @@ function recordUiMemories(input: {
   return factIds;
 }
 
-function compactFieldLikeControl(control: ReturnType<typeof extractUiStateSummary>['controls'][number]): JsonRecord {
-  return dropEmpty({
-    index: control.index,
-    nodeId: control.nodeId,
-    role: control.role,
-    name: control.name,
-    label: control.label,
-    value: control.value,
-    options: control.options.length > 0 ? control.options : undefined,
-    checked: control.checked,
-    selected: control.selected,
-    disabled: control.disabled || undefined,
-    expanded: control.expanded,
-    contextLabels: control.contextLabels.length > 0 ? control.contextLabels : undefined,
-  });
-}
-
 function compactUiInventoryPayload(
   summary: ReturnType<typeof extractUiStateSummary>,
   input: Parameters<typeof recordUiMemories>[0],
@@ -442,6 +383,7 @@ function compactUiInventoryPayload(
     textEntryCount: inventory.textEntryCount,
     searchControlCount: inventory.searchControlCount,
     ...baseUiPayload(input),
+    ...sourceContextPayload(input),
   });
 }
 
@@ -450,6 +392,17 @@ function baseUiPayload(input: Parameters<typeof recordUiMemories>[0]): JsonRecor
     url: input.url,
     sourceRunId: input.sourceRunId,
     stateIndex: input.stateIndex,
+  };
+}
+
+function sourceContextPayload(input: Parameters<typeof recordUiMemories>[0]): JsonRecord {
+  const domain = stringField(input.payload, 'domain');
+  const environment = stringField(input.payload, 'environment');
+  return {
+    goal: input.goal,
+    trajectoryOutcome: input.trajectoryOutcome,
+    ...(domain ? { domain } : {}),
+    ...(environment ? { environment } : {}),
   };
 }
 
@@ -538,184 +491,6 @@ function scalarField(payload: JsonRecord, key: string): string | undefined {
   return undefined;
 }
 
-function compactJson(value: unknown): string {
-  return JSON.stringify(value);
-}
-
-function fitObjectTextForStorage(value: string, maxChars: number): string {
-  const trimmed = value.trim();
-  if (trimmed.length <= maxChars) return trimmed;
-  const parsed = parseJsonPayload(trimmed);
-  if (parsed) return compactJsonForStorage(parsed, maxChars);
-  return fitText(trimmed, maxChars);
-}
-
-function compactJsonForStorage(value: JsonRecord, maxChars: number): string {
-  const compact = compactJson(value);
-  if (compact.length <= maxChars) return compact;
-
-  if (isUiInventoryPayload(value)) {
-    return compactUiInventoryForStorage(value, maxChars);
-  }
-
-  return compactGenericJsonForStorage(value, maxChars);
-}
-
-function isUiInventoryPayload(value: JsonRecord): boolean {
-  return (
-    Array.isArray(value.fieldLabels) ||
-    Array.isArray(value.fields) ||
-    Array.isArray(value.controls) ||
-    typeof value.controlCount === 'number'
-  );
-}
-
-function compactUiInventoryForStorage(value: JsonRecord, maxChars: number): string {
-  const stages = [
-    omitKeys(value, ['controls']),
-    omitKeys(value, ['controls', 'controlNames']),
-    omitKeys(value, ['controls', 'controlNames', 'roleCounts']),
-    limitInventoryArrays(value, {
-      fieldLabels: 48,
-      fields: 24,
-      textEntryControls: 24,
-      searchControls: 12,
-      labelValues: 24,
-      tables: 4,
-      controlNames: 24,
-      controls: 0,
-      roleCounts: 0,
-    }),
-    limitInventoryArrays(value, {
-      fieldLabels: 36,
-      fields: 16,
-      textEntryControls: 16,
-      searchControls: 8,
-      labelValues: 12,
-      tables: 2,
-      controlNames: 0,
-      controls: 0,
-      roleCounts: 0,
-    }),
-    limitInventoryArrays(value, {
-      fieldLabels: 24,
-      fields: 8,
-      textEntryControls: 8,
-      searchControls: 4,
-      labelValues: 8,
-      tables: 1,
-      controlNames: 0,
-      controls: 0,
-      roleCounts: 0,
-    }),
-  ];
-
-  for (const stage of stages) {
-    const compact = compactJson(stage);
-    if (compact.length <= maxChars) return compact;
-  }
-
-  const minimal = dropEmpty({
-    fieldLabels: limitStringArray(value.fieldLabels, 16, 96),
-    fields: limitArray(value.fields, 4),
-    textEntryControls: limitArray(value.textEntryControls, 4),
-    searchControls: limitArray(value.searchControls, 2),
-    url: value.url,
-    sourceRunId: value.sourceRunId,
-    stateIndex: value.stateIndex,
-    nodeCount: value.nodeCount,
-    controlCount: value.controlCount,
-    textEntryCount: value.textEntryCount,
-    searchControlCount: value.searchControlCount,
-  });
-  return compactRecordToLimit(minimal, maxChars, UI_INVENTORY_ARRAY_COMPACT_ORDER);
-}
-
-function compactGenericJsonForStorage(value: JsonRecord, maxChars: number): string {
-  const compacted = dropEmpty(
-    Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => {
-        if (Array.isArray(entry)) return [key, limitArray(entry, 8)];
-        if (isRecord(entry)) return [key, null];
-        if (typeof entry === 'string') return [key, fitText(entry, 240)];
-        return [key, entry];
-      }),
-    ),
-  );
-  return compactRecordToLimit(compacted, maxChars, Object.keys(compacted));
-}
-
-function limitInventoryArrays(
-  value: JsonRecord,
-  limits: Partial<Record<(typeof UI_INVENTORY_ARRAY_COMPACT_ORDER)[number], number>>,
-): JsonRecord {
-  return dropEmpty({
-    ...value,
-    fieldLabels: limitArray(value.fieldLabels, limits.fieldLabels),
-    fields: limitArray(value.fields, limits.fields),
-    textEntryControls: limitArray(value.textEntryControls, limits.textEntryControls),
-    searchControls: limitArray(value.searchControls, limits.searchControls),
-    labelValues: limitArray(value.labelValues, limits.labelValues),
-    tables: limitArray(value.tables, limits.tables),
-    controlNames: limitArray(value.controlNames, limits.controlNames),
-    roleCounts: limits.roleCounts === 0 ? null : value.roleCounts,
-    controls: limitArray(value.controls, limits.controls),
-  });
-}
-
-function compactRecordToLimit(
-  value: JsonRecord,
-  maxChars: number,
-  shrinkOrder: ReadonlyArray<string>,
-): string {
-  const candidate = { ...value };
-  let compact = compactJson(dropEmpty(candidate));
-  if (compact.length <= maxChars) return compact;
-
-  for (const key of shrinkOrder) {
-    const entry = candidate[key];
-    if (Array.isArray(entry) && entry.length > 0) {
-      candidate[key] = entry.slice(0, Math.max(0, Math.floor(entry.length / 2)));
-      compact = compactJson(dropEmpty(candidate));
-      if (compact.length <= maxChars) return compact;
-    } else if (entry && typeof entry === 'object') {
-      delete candidate[key];
-      compact = compactJson(dropEmpty(candidate));
-      if (compact.length <= maxChars) return compact;
-    }
-  }
-
-  for (const key of [...Object.keys(candidate)].reverse()) {
-    delete candidate[key];
-    compact = compactJson(dropEmpty(candidate));
-    if (compact.length <= maxChars) return compact;
-  }
-
-  return '{}';
-}
-
-function omitKeys(value: JsonRecord, keys: ReadonlyArray<string>): JsonRecord {
-  const omit = new Set(keys);
-  return dropEmpty(
-    Object.fromEntries(Object.entries(value).filter(([key]) => !omit.has(key))),
-  );
-}
-
-function limitArray(value: unknown, limit: number | undefined): unknown {
-  if (!Array.isArray(value)) return value;
-  if (limit === undefined) return value;
-  if (limit <= 0) return null;
-  return value.slice(0, limit);
-}
-
-function limitStringArray(value: unknown, limit: number, maxItemChars: number): string[] | null {
-  if (!Array.isArray(value)) return null;
-  return value
-    .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
-    .slice(0, limit)
-    .map((entry) => fitText(entry, maxItemChars));
-}
-
 function dropEmpty(value: JsonRecord): JsonRecord {
   return Object.fromEntries(
     Object.entries(value).filter(([, entry]) => {
@@ -723,10 +498,4 @@ function dropEmpty(value: JsonRecord): JsonRecord {
       return !Array.isArray(entry) || entry.length > 0;
     }),
   );
-}
-
-function fitText(value: string, maxChars: number): string {
-  const trimmed = value.trim();
-  if (trimmed.length <= maxChars) return trimmed;
-  return `${trimmed.slice(0, maxChars - 1).trimEnd()}\u2026`;
 }
