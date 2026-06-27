@@ -7,6 +7,8 @@
 // strings or English phrase rules so it works across app surfaces and locales.
 // ---------------------------------------------------------------------------
 
+import { compactUiSection, extractUiSectionsFromControls, type UiSectionSummary } from './uiSections';
+
 type JsonRecord = Record<string, unknown>;
 
 export interface AccessibilityNode {
@@ -70,6 +72,7 @@ export interface UiStateSummary {
   nodeCount: number;
   roleCounts: Record<string, number>;
   controls: UiControl[];
+  sections: UiSectionSummary[];
   fields: UiField[];
   labelValues: UiLabelValue[];
   tables: UiTableSummary[];
@@ -197,10 +200,12 @@ export function extractUiStateSummary(nodes: AccessibilityNode[]): UiStateSummar
 
   const labelValues = extractLabelValues(nodes);
   const tables = extractTableSummaries(nodes);
+  const sections = extractUiSectionsFromControls(nodes, controls);
   return {
     nodeCount: nodes.length,
     roleCounts,
     controls,
+    sections,
     fields,
     labelValues,
     tables,
@@ -255,6 +260,7 @@ export function compactUiInventory(summary: UiStateSummary): JsonRecord {
     searchControlCount: summary.searchControlCount,
     fieldLabels: uniqueNamedValues(summary.fields.map((field) => field.label)),
     controlNames: uniqueNamedValues(summary.controls.map((control) => control.name)),
+    sections: summary.sections.map(compactUiSection),
     textEntryControls,
     searchControls,
     fields: summary.fields.slice(0, MAX_FIELD_SUMMARY_ITEMS).map(compactField),

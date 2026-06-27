@@ -588,7 +588,11 @@ export async function orchestrateMemoryRetrieval(
     ),
   );
   const sourceLinkedStarted = Date.now();
-  const sourceLinkedInterfaceFacts = recallSourceLinkedInterfaceFacts(rawLanes, options);
+  const sourceLinkedInterfaceFacts = recallSourceLinkedInterfaceFacts(
+    rawLanes,
+    options,
+    [primaryQuery, expansionQuery, fallbackQuery].join('\n'),
+  );
   const sourceLinkedInterfaceMs = Date.now() - sourceLinkedStarted;
   const lanes = rawLanes.map((lane) =>
     mergeSourceLinkedInterfaceFacts(

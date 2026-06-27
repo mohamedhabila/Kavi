@@ -110,14 +110,14 @@ describe('structured observation memory', () => {
           accessibility_tree: [
             "RootWebArea 'Forum'",
             "\t[1] Section ''",
-            "\t\t[2] heading 'Toolbox'",
+            "\t\t[2] heading 'qsection-actions'",
             "\t\t[3] list ''",
             "\t\t\t[4] listitem ''",
-            "\t\t\t\t[5] link 'Delete forum', clickable, visible",
+            "\t\t\t\t[5] link 'qaction-alpha', clickable, visible",
             "\t\t\t[6] listitem ''",
-            "\t\t\t\t[7] link 'Edit forum', clickable, visible",
+            "\t\t\t\t[7] link 'qaction-beta', clickable, visible",
             "\t\t\t[8] listitem ''",
-            "\t\t\t\t[9] link 'Moderation log', clickable, visible",
+            "\t\t\t\t[9] link 'qaction-gamma', clickable, visible",
           ].join('\n'),
         }),
       ],
@@ -137,16 +137,16 @@ describe('structured observation memory', () => {
     })).toHaveLength(0);
 
     expect(controls.map((control: { name?: string }) => control.name)).toEqual([
-      'Delete forum',
-      'Edit forum',
-      'Moderation log',
+      'qaction-alpha',
+      'qaction-beta',
+      'qaction-gamma',
     ]);
     expect(controls).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          name: 'Edit forum',
+          name: 'qaction-beta',
           role: 'link',
-          contextLabels: ['Toolbox'],
+          contextLabels: ['qsection-actions'],
         }),
       ]),
     );
@@ -270,6 +270,55 @@ describe('structured observation memory', () => {
       expect.objectContaining({ role: 'textbox', label: 'Title' }),
       expect.objectContaining({ role: 'textbox', label: 'Body' }),
     ]);
+  });
+
+  it('records named UI sections with their contained controls', () => {
+    recordStructuredObservationsFromMessages({
+      conversationId: 'conv-ui-sections',
+      threadId: 'conv-ui-sections',
+      sourceRunId: 'run-ui-sections',
+      now: 410,
+      messages: [
+        toolMessage({
+          url: 'https://forum.example.test/user/current',
+          accessibility_tree: [
+            "RootWebArea 'Profile'",
+            "\t[1] Section '', visible",
+            "\t\t[2] heading 'qsection-alpha', visible",
+            "\t\t[3] list '', visible",
+            "\t\t\t[4] listitem '', visible",
+            "\t\t\t\t[5] link 'qsection-action-one', clickable, visible",
+            "\t\t\t[6] listitem '', visible",
+            "\t\t\t\t[7] link 'qsection-action-two', clickable, visible",
+            "\t[8] Section '', visible",
+            "\t\t[9] heading 'qsection-beta', visible",
+            "\t\t[10] list '', visible",
+            "\t\t\t[11] listitem '', visible",
+            "\t\t\t\t[12] link 'qsection-action-three', clickable, visible",
+          ].join('\n'),
+        }),
+      ],
+    });
+
+    const inventory = JSON.parse(
+      listFacts({
+        memoryKind: 'ui_inventory',
+        originConversationId: 'conv-ui-sections',
+      })[0].objectText,
+    );
+
+    expect(inventory.sections).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: 'qsection-alpha',
+          controlNames: ['qsection-action-one', 'qsection-action-two'],
+        }),
+        expect.objectContaining({
+          label: 'qsection-beta',
+          controlNames: ['qsection-action-three'],
+        }),
+      ]),
+    );
   });
 
   it('keeps large UI inventories parseable while preserving field structure', () => {

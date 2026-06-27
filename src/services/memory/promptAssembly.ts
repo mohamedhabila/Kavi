@@ -148,6 +148,7 @@ const UI_INVENTORY_PROMPT_FIELDS = [
   'fields',
   'textEntryControls',
   'searchControls',
+  'sections',
   'labelValues',
   'tables',
   'controlNames',
@@ -284,6 +285,7 @@ function compactUiInventoryPromptFields(
   copyField('sourceRunId');
   copyField('stateIndex');
   copyField('controlNames', 'visibleControls');
+  copyField('sections');
   if (!compact.visibleControls && Array.isArray(parsed.controls)) {
     const visibleControls = parsed.controls
       .map((control) =>

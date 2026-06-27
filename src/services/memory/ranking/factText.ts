@@ -5,6 +5,7 @@ const UI_INVENTORY_RETRIEVAL_FIELDS = [
   'fields',
   'textEntryControls',
   'searchControls',
+  'sections',
   'controlNames',
   'labelValues',
   'tables',

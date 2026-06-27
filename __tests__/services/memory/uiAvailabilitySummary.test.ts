@@ -57,4 +57,58 @@ describe('buildUiAvailabilitySummary', () => {
     expect(summary).toContain('namedControl: "Save"');
     expect(summary).toContain('"namedControlVisible":true');
   });
+
+  it('summarizes named sections and their controls from recalled inventories', () => {
+    const summary = buildUiAvailabilitySummary('Compare links in `qsection-alpha`.', [
+      makeInventory({
+        sourceRunId: 'current-profile',
+        url: 'https://forum.example.test/user/current',
+        visibleControls: ['qsection-action-one', 'qsection-action-two'],
+        sections: [
+          {
+            label: 'qsection-alpha',
+            controlNames: ['qsection-action-one', 'qsection-action-two'],
+          },
+        ],
+      }),
+      makeInventory({
+        sourceRunId: 'other-profile',
+        url: 'https://forum.example.test/user/other',
+        visibleControls: ['qsection-action-three'],
+        sections: [
+          {
+            label: 'qsection-alpha',
+            controlNames: ['qsection-action-three'],
+          },
+        ],
+      }),
+    ]);
+
+    expect(summary).toContain('namedControl: "qsection-alpha"');
+    expect(summary).toContain('"namedSectionPresent":true');
+    expect(summary).toContain('qsection-action-one');
+    expect(summary).toContain('qsection-action-three');
+  });
+
+  it('keeps strong quoted UI labels distinct from apostrophes in adjacent text', () => {
+    const summary = buildUiAvailabilitySummary(
+      "qactor-one's view compares `qsection-beta` with qactor-two's view.",
+      [
+        makeInventory({
+          sourceRunId: 'first-surface',
+          url: 'https://forum.example.test/user/first',
+          visibleControls: ['qsection-beta-action-one'],
+          sections: [
+            {
+              label: 'qsection-beta',
+              controlNames: ['qsection-beta-action-one'],
+            },
+          ],
+        }),
+      ],
+    );
+
+    expect(summary).toContain('namedControl: "qsection-beta"');
+    expect(summary).toContain('qsection-beta-action-one');
+  });
 });

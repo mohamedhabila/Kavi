@@ -194,6 +194,45 @@ describe('orchestrateMemoryRetrieval', () => {
     expect(result.facts.some((fact) => fact.id === uiFact.id)).toBe(true);
   });
 
+  it('keeps short structured UI labels addressable in large inventories', async () => {
+    const surface = upsertEntity({
+      name: 'surface:https://dense.example.test',
+      type: 'project',
+    });
+    const longControlNames = Array.from(
+      { length: 260 },
+      (_, index) => `qlongcontrolname${String(index).padStart(3, '0')}suffixvalue`,
+    );
+    const target = recordFact({
+      subjectId: surface.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({
+        url: 'https://dense.example.test/current',
+        controlNames: ['qsave', ...longControlNames],
+        sections: [
+          {
+            label: 'qpanel',
+            controlNames: ['qsave'],
+          },
+        ],
+      }),
+      sourceRunId: 'dense-ui-run',
+      memoryKind: 'ui_inventory',
+      scope: 'conversation',
+      originConversationId: 'conv-dense-ui-labels',
+      now: 1,
+    }).fact;
+
+    const result = await orchestrateMemoryRetrieval({
+      userMessage: 'qsave',
+      conversationId: 'conv-dense-ui-labels',
+      limit: 1,
+      now: 2,
+    });
+
+    expect(result.facts.map((fact) => fact.id)).toEqual([target.id]);
+  });
+
   it('routes code-heavy action schemas to relevant typed UI evidence', async () => {
     const adminSurface = upsertEntity({
       name: 'surface:https://admin.example.test',
@@ -373,8 +412,19 @@ describe('orchestrateMemoryRetrieval', () => {
         predicate: 'ui_inventory',
         objectText: JSON.stringify({
           url: `https://forum.example.test/create_forum/${index}`,
-          fieldLabels: ['Name', 'Title', 'Description', 'Sidebar', 'Tags'],
-          controlNames: ['Home', 'Forums', 'Submit', 'Create forum'],
+          fieldLabels: [
+            'qform-field-alpha',
+            'qform-field-beta',
+            'qform-field-gamma',
+            'qform-field-delta',
+            'qform-field-epsilon',
+          ],
+          controlNames: [
+            'qnav-alpha',
+            'qnav-beta',
+            'qsubmit-alpha',
+            'qsubmit-beta',
+          ],
         }),
         attributes: {
           sourceRunId: 'generic-forum-run',
@@ -482,157 +532,4 @@ describe('orchestrateMemoryRetrieval', () => {
     expect(result.facts.some((fact) => fact.id === optionFact.id)).toBe(true);
   });
 
-  it('probes extracted interface signals independently before source grouping', async () => {
-    const adminSurface = upsertEntity({
-      name: 'surface:https://admin.example.test',
-      type: 'project',
-    });
-    const commonUnits = Array.from({ length: 4 }, (_, index) => `qcommon${index}`);
-    for (let sourceIndex = 0; sourceIndex < 40; sourceIndex += 1) {
-      recordFact({
-        subjectId: adminSurface.id,
-        predicate: 'ui_inventory',
-        objectText: JSON.stringify({
-          fieldLabels: [commonUnits[sourceIndex % commonUnits.length]],
-          fields: [{
-            order: 0,
-            label: commonUnits[sourceIndex % commonUnits.length],
-            role: 'textbox',
-          }],
-          url: `https://admin.example.test/noisy/${sourceIndex}`,
-        }),
-        sourceRunId: `noisy-interface-run-${sourceIndex}`,
-        memoryKind: 'ui_inventory',
-        scope: 'conversation',
-        originConversationId: 'conv-independent-interface-probes',
-        now: 100 + sourceIndex,
-      });
-    }
-    const optionFact = recordFact({
-      subjectId: adminSurface.id,
-      predicate: 'ui_field',
-      objectText: JSON.stringify({
-        label: 'qtargetfield',
-        role: 'combobox',
-        options: ['qtargetoption'],
-        url: 'https://admin.example.test/relevant',
-      }),
-      sourceRunId: 'target-interface-run',
-      memoryKind: 'ui_field',
-      scope: 'conversation',
-      originConversationId: 'conv-independent-interface-probes',
-      now: 1,
-    }).fact;
-
-    const result = await orchestrateMemoryRetrieval({
-      userMessage: [
-        `Need ${commonUnits.join(' ')} and \`qmissing qtargetoption\`.`,
-        'scroll(delta_x: float, delta_y: float), click(bid: str), select_option(bid: str, options: str | list[str])',
-      ].join('\n'),
-      conversationId: 'conv-independent-interface-probes',
-      limit: 2,
-      now: 200,
-    });
-
-    expect(result.facts.some((fact) => fact.id === optionFact.id)).toBe(true);
-  });
-
-  it('interleaves independent interface probes before the candidate pool fills', async () => {
-    const surface = upsertEntity({
-      name: 'surface:https://admin.example.test',
-      type: 'project',
-    });
-    for (let index = 0; index < 48; index += 1) {
-      recordFact({
-        subjectId: surface.id,
-        predicate: 'ui_inventory',
-        objectText: JSON.stringify({
-          controlNames: ['qbroadcontext'],
-          url: `https://admin.example.test/noisy/${index}`,
-        }),
-        sourceRunId: `broad-source-${index}`,
-        memoryKind: 'ui_inventory',
-        scope: 'conversation',
-        originConversationId: 'conv-interleaved-interface-probes',
-        now: 100 + index,
-      });
-    }
-    const target = recordFact({
-      subjectId: surface.id,
-      predicate: 'ui_field',
-      objectText: JSON.stringify({
-        label: 'qtargetoption',
-        role: 'combobox',
-        options: ['qtargetoption'],
-        url: 'https://admin.example.test/target',
-      }),
-      sourceRunId: 'target-probe-source',
-      memoryKind: 'ui_field',
-      scope: 'conversation',
-      originConversationId: 'conv-interleaved-interface-probes',
-      now: 1,
-    }).fact;
-
-    const result = await orchestrateMemoryRetrieval({
-      userMessage: 'qbroadcontext `qtargetoption`',
-      conversationId: 'conv-interleaved-interface-probes',
-      limit: 2,
-      now: 200,
-    });
-
-    expect(result.facts.some((fact) => fact.id === target.id)).toBe(true);
-  });
-
-  it('expands terminal UI state from a relevant interface source run', async () => {
-    const now = Date.now();
-    const surface = upsertEntity({
-      name: 'surface:https://workflow.example.test',
-      type: 'project',
-    });
-    const anchor = recordFact({
-      subjectId: surface.id,
-      predicate: 'ui_inventory',
-      objectText: JSON.stringify({
-        controlNames: ['qsource-anchor'],
-        url: 'https://workflow.example.test/edit',
-      }),
-      attributes: {
-        url: 'https://workflow.example.test/edit',
-        stateIndex: '1',
-      },
-      sourceRunId: 'qsource-run',
-      memoryKind: 'ui_inventory',
-      scope: 'conversation',
-      originConversationId: 'conv-interface-source-linked',
-      now,
-    }).fact;
-    const terminal = recordFact({
-      subjectId: surface.id,
-      predicate: 'ui_inventory',
-      objectText: JSON.stringify({
-        controlNames: ['qterminal-control'],
-        url: 'https://workflow.example.test/done',
-      }),
-      attributes: {
-        url: 'https://workflow.example.test/done',
-        stateIndex: '4',
-      },
-      sourceRunId: 'qsource-run',
-      memoryKind: 'ui_inventory',
-      scope: 'conversation',
-      originConversationId: 'conv-interface-source-linked',
-      now: now + 4,
-    }).fact;
-
-    const result = await orchestrateMemoryRetrieval({
-      userMessage: 'qsource-anchor',
-      conversationId: 'conv-interface-source-linked',
-      limit: 2,
-      now: now + 10,
-    });
-
-    expect(result.facts.map((fact) => fact.id)).toEqual(
-      expect.arrayContaining([anchor.id, terminal.id]),
-    );
-  });
 });

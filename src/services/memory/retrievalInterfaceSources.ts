@@ -7,6 +7,7 @@ import {
   tokenizeLexicalUnits,
 } from './ranking/lexical';
 import { retrievalTextForFact } from './ranking/factText';
+import { quotedSpanUnitSets } from './ranking/quotedSpans';
 
 export const INTERFACE_SOURCE_POOL_LIMIT = 32;
 export const INTERFACE_SOURCE_POOL_MIN = 24;
@@ -14,8 +15,10 @@ export const INTERFACE_SOURCE_POOL_MULTIPLIER = 5;
 
 const INTERFACE_SOURCE_GROUP_TOP_FACTS = 6;
 const INTERFACE_SOURCE_GROUP_FACT_LIMIT = 3;
-const SOURCE_LINKED_INTERFACE_POOL_LIMIT = 24;
-const SOURCE_LINKED_INTERFACE_PER_SOURCE = 3;
+const SOURCE_LINKED_INTERFACE_POOL_LIMIT = 32;
+const SOURCE_LINKED_INTERFACE_PER_SOURCE = 6;
+const QUOTED_SPAN_LIMIT = 12;
+const MAX_ANCHOR_SIGNATURE_CONTROLS = 24;
 
 interface InterfaceLaneLike {
   id: string;
@@ -30,6 +33,66 @@ function sourceGroupKey(fact: MemoryFact): string {
 
 function sourceRankingText(fact: MemoryFact): string {
   return retrievalTextForFact(fact);
+}
+
+function anchorOverlapScore(anchorUnitSets: ReadonlyArray<Set<string>>, text: string): number {
+  if (anchorUnitSets.length === 0) return 0;
+  let best = 0;
+  for (const units of anchorUnitSets) {
+    best = Math.max(best, lexicalOverlap(units, text));
+  }
+  return best;
+}
+
+function parseJsonRecord(value: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeSignatureText(value: string): string {
+  const units = Array.from(tokenizeLexicalUnits(value)).sort();
+  return units.length > 0 ? units.join(' ') : value.normalize('NFKC').trim();
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+    : [];
+}
+
+function anchorEvidenceSignature(
+  fact: MemoryFact,
+  anchorUnitSets: ReadonlyArray<Set<string>>,
+): string | null {
+  if (anchorUnitSets.length === 0 || fact.memoryKind !== 'ui_inventory') return null;
+  const payload = parseJsonRecord(fact.objectText);
+  if (!payload) return null;
+  if (Array.isArray(payload.sections)) {
+    for (const entry of payload.sections) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+      const section = entry as Record<string, unknown>;
+      if (typeof section.label !== 'string') continue;
+      if (anchorOverlapScore(anchorUnitSets, section.label) <= 0) continue;
+      const controls = stringArray(section.controlNames)
+        .slice(0, MAX_ANCHOR_SIGNATURE_CONTROLS)
+        .map(normalizeSignatureText)
+        .filter(Boolean)
+        .sort();
+      return `section:${normalizeSignatureText(section.label)}:${controls.join('|')}`;
+    }
+  }
+  for (const controlName of stringArray(payload.visibleControls ?? payload.controlNames)) {
+    if (anchorOverlapScore(anchorUnitSets, controlName) > 0) {
+      return `control:${normalizeSignatureText(controlName)}`;
+    }
+  }
+  return null;
 }
 
 function mergeUniqueScoredFacts(entries: ScoredFact[], limit: number): ScoredFact[] {
@@ -62,6 +125,7 @@ export function selectSourceAwareInterfaceFacts(
   if (entries.length <= limit) return entries;
   const queryUnits = tokenizeLexicalUnits(query);
   if (queryUnits.size === 0) return mergeUniqueScoredFacts(entries, limit);
+  const anchorUnitSets = quotedSpanUnitSets(query, QUOTED_SPAN_LIMIT);
   const unitWeights = buildQueryUnitWeights(queryUnits, entries, (entry) =>
     sourceRankingText(entry.fact),
   );
@@ -83,18 +147,25 @@ export function selectSourceAwareInterfaceFacts(
         return right.fact.updatedAt - left.fact.updatedAt;
       });
       const topEntries = rankedEntries.slice(0, INTERFACE_SOURCE_GROUP_TOP_FACTS);
+      const groupText = topEntries.map((entry) => sourceRankingText(entry.fact)).join('\n');
       const coverageScore = lexicalOverlap(
         queryUnits,
-        topEntries.map((entry) => sourceRankingText(entry.fact)).join('\n'),
+        groupText,
         unitWeights,
       );
+      const anchorScore = anchorOverlapScore(anchorUnitSets, groupText);
+      const contextualAnchorScore = anchorScore * coverageScore;
       const bestScore = Math.max(...topEntries.map((entry) => entry.score));
       const averageScore =
         topEntries.reduce((sum, entry) => sum + entry.score, 0) / Math.max(1, topEntries.length);
       return {
         key,
         entries: rankedEntries,
-        score: coverageScore * 0.3 + bestScore * 0.55 + averageScore * 0.15,
+        score:
+          coverageScore * 0.45 +
+          bestScore * 0.35 +
+          averageScore * 0.1 +
+          contextualAnchorScore * 0.1,
       };
     })
     .sort((left, right) => {
@@ -105,19 +176,41 @@ export function selectSourceAwareInterfaceFacts(
   const selected: ScoredFact[] = [];
   const seenIds = new Set<string>();
   const selectedPerGroup = new Map<string, number>();
+  const selectedAnchorSignatures = new Set<string>();
+  const signatureForEntry = (entry: ScoredFact): string | null =>
+    anchorEvidenceSignature(entry.fact, anchorUnitSets);
   const addEntry = (groupKey: string, entry: ScoredFact): void => {
     if (selected.length >= limit || seenIds.has(entry.fact.id)) return;
     selected.push(entry);
     seenIds.add(entry.fact.id);
     selectedPerGroup.set(groupKey, (selectedPerGroup.get(groupKey) ?? 0) + 1);
+    const signature = signatureForEntry(entry);
+    if (signature) selectedAnchorSignatures.add(signature);
   };
 
-  for (const group of rankedGroups) {
+  const addFirstFromGroup = (group: (typeof rankedGroups)[number]): void => {
     const first =
       group.entries.find(
         (entry) => entry.fact.memoryKind === 'ui_inventory' && !seenIds.has(entry.fact.id),
       ) ?? group.entries.find((entry) => !seenIds.has(entry.fact.id));
     if (first) addEntry(group.key, first);
+  };
+
+  if (anchorUnitSets.length > 0 && rankedGroups.length > 0) {
+    addFirstFromGroup(rankedGroups[0]);
+    for (const group of rankedGroups) {
+      if (selected.length >= limit) return selected;
+      const diverseAnchorEntry = group.entries.find((entry) => {
+        if (seenIds.has(entry.fact.id)) return false;
+        const signature = signatureForEntry(entry);
+        return Boolean(signature && !selectedAnchorSignatures.has(signature));
+      });
+      if (diverseAnchorEntry) addEntry(group.key, diverseAnchorEntry);
+    }
+  }
+
+  for (const group of rankedGroups) {
+    addFirstFromGroup(group);
     if (selected.length >= limit) return selected;
   }
 
@@ -169,7 +262,6 @@ function mergeSourceRunScore(
 function sourceRunScoresFromLanes(lanes: ReadonlyArray<InterfaceLaneLike>): Map<string, number> {
   const scores = new Map<string, number>();
   for (const lane of lanes) {
-    if (lane.id !== 'interface') continue;
     for (const entry of lane.scoredFacts) {
       const sourceScore = Math.max(entry.relevanceScore, entry.score);
       mergeSourceRunScore(scores, entry.fact.sourceRunId, sourceScore);
@@ -181,6 +273,7 @@ function sourceRunScoresFromLanes(lanes: ReadonlyArray<InterfaceLaneLike>): Map<
 export function recallSourceLinkedInterfaceFacts(
   lanes: ReadonlyArray<InterfaceLaneLike>,
   options: RecallFactsOptions,
+  query: string,
 ): ScoredFact[] {
   const sourceScores = sourceRunScoresFromLanes(lanes);
   if (sourceScores.size === 0) return [];
@@ -205,6 +298,9 @@ export function recallSourceLinkedInterfaceFacts(
     );
   }
   if (inventories.length === 0) return [];
+  const queryUnits = tokenizeLexicalUnits(query);
+  const unitWeights = buildQueryUnitWeights(queryUnits, inventories, sourceRankingText);
+  const anchorUnitSets = quotedSpanUnitSets(query, QUOTED_SPAN_LIMIT);
   const maxStateIndexBySource = new Map<string, number>();
   for (const fact of inventories) {
     const sourceRunId = fact.sourceRunId ?? '';
@@ -220,7 +316,16 @@ export function recallSourceLinkedInterfaceFacts(
       const stateIndex = numericStateIndex(fact);
       const maxStateIndex = Math.max(1, maxStateIndexBySource.get(fact.sourceRunId ?? '') ?? 1);
       const stateScore = Math.max(0, Math.min(1, stateIndex / maxStateIndex));
-      const score = linkedScore + stateScore * 0.1 + fact.retrievability * 0.02 + fact.importance * 0.01;
+      const queryScore =
+        queryUnits.size > 0 ? lexicalOverlap(queryUnits, sourceRankingText(fact), unitWeights) : 0;
+      const anchorScore = anchorOverlapScore(anchorUnitSets, sourceRankingText(fact));
+      const score =
+        linkedScore +
+        anchorScore * 0.4 +
+        queryScore * 0.25 +
+        stateScore * 0.03 +
+        fact.retrievability * 0.02 +
+        fact.importance * 0.01;
       return scoredSourceLinkedInterfaceFact({ fact, score });
     })
     .sort((left, right) => {

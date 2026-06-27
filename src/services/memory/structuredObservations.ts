@@ -371,6 +371,7 @@ function compactUiInventoryPayload(
   return dropEmpty({
     fieldLabels: inventory.fieldLabels,
     fields: inventory.fields,
+    sections: inventory.sections,
     textEntryControls: inventory.textEntryControls,
     searchControls: inventory.searchControls,
     labelValues: inventory.labelValues,
