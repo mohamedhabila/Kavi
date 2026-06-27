@@ -152,8 +152,12 @@ const UI_INVENTORY_PROMPT_FIELDS = [
   'labelValues',
   'tables',
   'controlNames',
-  'roleCounts',
-  'controls',
+  'action',
+  'thought',
+  'previousAction',
+  'previousUrl',
+  'previousStateIndex',
+  'previousControlNames',
   'url',
   'sourceRunId',
   'stateIndex',
@@ -302,12 +306,16 @@ function compactUiInventoryPromptFields(
   copyField('searchControls');
   copyField('labelValues');
   copyField('tables');
-  copyField('roleCounts');
-  copyField('controls');
   copyField('nodeCount');
   copyField('controlCount');
   copyField('textEntryCount');
   copyField('searchControlCount');
+  copyField('action');
+  copyField('thought');
+  copyField('previousAction');
+  copyField('previousUrl');
+  copyField('previousStateIndex');
+  copyField('previousControlNames');
   return Object.keys(compact).length > 0 ? JSON.stringify(compact) : null;
 }
 

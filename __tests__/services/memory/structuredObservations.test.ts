@@ -502,6 +502,51 @@ describe('structured observation memory', () => {
     ]);
   });
 
+  it('stores previous observation controls on the following UI inventory', () => {
+    recordStructuredObservationsFromMessages({
+      conversationId: 'conv-transition-context',
+      threadId: 'conv-transition-context',
+      sourceRunId: 'run-transition-context',
+      now: 375,
+      messages: [
+        toolMessage({
+          state_index: 1,
+          url: 'https://workflow.example.test/input',
+          action: null,
+          accessibility_tree: [
+            "RootWebArea 'Input'",
+            "\t[1] button 'qtransition-submit', clickable, visible",
+            "\t[2] textbox 'qtransition-field', editable, visible",
+          ].join('\n'),
+        }),
+        toolMessage({
+          state_index: 2,
+          url: 'https://workflow.example.test/result',
+          action: "click('1')",
+          accessibility_tree: [
+            "RootWebArea 'Result'",
+            "\t[3] heading 'qsection-result'",
+            "\t[4] link 'qresult-alpha', clickable, visible",
+          ].join('\n'),
+        }),
+      ],
+    });
+
+    const inventories = listFacts({
+      memoryKind: 'ui_inventory',
+      originConversationId: 'conv-transition-context',
+    });
+    const resultInventory = inventories
+      .map((fact) => JSON.parse(fact.objectText))
+      .find((payload) => payload.url === 'https://workflow.example.test/result');
+
+    expect(resultInventory).toMatchObject({
+      previousUrl: 'https://workflow.example.test/input',
+      previousStateIndex: '1',
+      previousControlNames: expect.arrayContaining(['qtransition-submit']),
+    });
+  });
+
   it('consumes structured evidence and records typed memories', () => {
     const evidence =
       'agent:' +

@@ -218,7 +218,7 @@ describe('assemblePrompt — L3 contents', () => {
     expect(section).toContain('\u2026');
   });
 
-  it('splits large retrieved UI groups so later affordances remain visible', () => {
+  it('keeps large retrieved UI groups compact so later affordances remain visible', () => {
     const longInventory = (id: string) =>
       makeFact({
         id,
@@ -261,9 +261,8 @@ describe('assemblePrompt — L3 contents', () => {
       section.text.includes('qtarget-action'),
     );
 
-    expect(uiSections.length).toBeGreaterThan(1);
     expect(uiSections.every((section) => section.text.length < 3_700)).toBe(true);
-    expect(targetSectionIndex).toBeGreaterThan(0);
+    expect(targetSectionIndex).toBeGreaterThanOrEqual(0);
     expect(uiSections[targetSectionIndex].text).toContain('qtarget-context');
   });
 

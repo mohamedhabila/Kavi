@@ -40,7 +40,15 @@ interface ObservationContext {
   sourceTurnId?: string;
   toolName?: string;
   toolStatus?: string;
+  previousObservation?: PreviousObservation;
   now?: number;
+}
+
+interface PreviousObservation {
+  url: string | null;
+  action: string | null;
+  stateIndex?: string;
+  controlNames: string[];
 }
 
 interface StructuredObservationResult {
@@ -66,6 +74,7 @@ export function recordStructuredObservationsFromMessages(input: {
   return runMemoryTransaction(() => {
     const factIds: string[] = [];
     const consumedEvidence: string[] = [];
+    const previousBySource = new Map<string, PreviousObservation>();
 
     for (const message of input.messages) {
       const toolNames = message.toolCalls?.map((toolCall) => toolCall.name).filter(Boolean) ?? [];
@@ -86,7 +95,14 @@ export function recordStructuredObservationsFromMessages(input: {
       };
 
       for (const parsed of payloadsFromMessage(message)) {
-        factIds.push(...recordObservationPayload(parsed.payload, context));
+        const sourceKey = observationSourceKey(parsed.payload, context);
+        const scopedContext: ObservationContext = {
+          ...context,
+          previousObservation: sourceKey ? previousBySource.get(sourceKey) : undefined,
+        };
+        factIds.push(...recordObservationPayload(parsed.payload, scopedContext));
+        const snapshot = observationSnapshotFromPayload(parsed.payload);
+        if (sourceKey && snapshot) previousBySource.set(sourceKey, snapshot);
       }
     }
 
@@ -107,11 +123,12 @@ export function recordStructuredObservationsFromEvidence(input: {
   return runMemoryTransaction(() => {
     const factIds: string[] = [];
     const consumedEvidence: string[] = [];
+    const previousBySource = new Map<string, PreviousObservation>();
 
     for (const evidence of input.evidence) {
       const parsed = parseEvidencePayload(evidence);
       if (!parsed) continue;
-      const recorded = recordObservationPayload(parsed.payload, {
+      const baseContext: ObservationContext = {
         conversationId: input.conversationId,
         threadId: input.threadId,
         taskId: input.taskId,
@@ -119,15 +136,46 @@ export function recordStructuredObservationsFromEvidence(input: {
         sourceTurnId: input.sourceTurnId,
         sourceMessageId: parsed.sourceLabel,
         now: input.now,
+      };
+      const sourceKey = observationSourceKey(parsed.payload, baseContext);
+      const recorded = recordObservationPayload(parsed.payload, {
+        ...baseContext,
+        previousObservation: sourceKey ? previousBySource.get(sourceKey) : undefined,
       });
       if (recorded.length > 0) {
         factIds.push(...recorded);
         consumedEvidence.push(evidence);
       }
+      const snapshot = observationSnapshotFromPayload(parsed.payload);
+      if (sourceKey && snapshot) previousBySource.set(sourceKey, snapshot);
     }
 
     return { factIds, consumedEvidence };
   });
+}
+
+function observationSourceKey(payload: JsonRecord, context: ObservationContext): string | null {
+  return stringField(payload, 'trajectory_id') ?? context.sourceRunId ?? null;
+}
+
+function observationSnapshotFromPayload(payload: JsonRecord): PreviousObservation | null {
+  const accessibilityTree = stringField(payload, 'accessibility_tree');
+  if (!accessibilityTree) return null;
+  const url = stringField(payload, 'url');
+  const action = stringField(payload, 'action');
+  const stateIndex = scalarField(payload, 'state_index') ?? scalarField(payload, 'step');
+  const compactInventory = compactUiInventory(extractUiStateSummary(parseAccessibilityTree(accessibilityTree)));
+  const controlNames = Array.isArray(compactInventory?.controlNames)
+    ? compactInventory.controlNames
+        .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+        .slice(0, 80)
+    : [];
+  return {
+    url,
+    action,
+    ...(stateIndex ? { stateIndex } : {}),
+    controlNames,
+  };
 }
 
 function payloadsFromMessage(message: Message): ParsedPayload[] {
@@ -391,8 +439,14 @@ function compactUiInventoryPayload(
 function baseUiPayload(input: Parameters<typeof recordUiMemories>[0]): JsonRecord {
   return {
     url: input.url,
+    action: input.action,
+    thought: input.thought,
     sourceRunId: input.sourceRunId,
     stateIndex: input.stateIndex,
+    previousUrl: input.context.previousObservation?.url,
+    previousAction: input.context.previousObservation?.action,
+    previousStateIndex: input.context.previousObservation?.stateIndex,
+    previousControlNames: input.context.previousObservation?.controlNames,
   };
 }
 

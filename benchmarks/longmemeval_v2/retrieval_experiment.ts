@@ -3,8 +3,6 @@ import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import process from 'node:process';
 
-import { embedText } from './runtimeSimpleEmbeddingsStub';
-
 type JsonObject = Record<string, unknown>;
 
 interface Args {
@@ -27,13 +25,11 @@ interface FactRow {
   updated_at: number;
   importance: number;
   confidence: number;
-  embedding: string | null;
 }
 
 interface RankedDbFact {
   fact: FactRow;
   textScore: number;
-  vectorScore: number;
   score: number;
 }
 
@@ -57,20 +53,6 @@ function parseArgs(argv: string[]): Args {
   if (!parsed.query) throw new Error('--query is required');
   if (!parsed.out) throw new Error('--out is required');
   return parsed as Args;
-}
-
-function cosine(left: number[], right: number[]): number {
-  let dot = 0;
-  let leftNorm = 0;
-  let rightNorm = 0;
-  const length = Math.min(left.length, right.length);
-  for (let index = 0; index < length; index += 1) {
-    dot += left[index] * right[index];
-    leftNorm += left[index] * left[index];
-    rightNorm += right[index] * right[index];
-  }
-  if (leftNorm === 0 || rightNorm === 0) return 0;
-  return dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
 }
 
 function textForFact(fact: FactRow): string {
@@ -143,27 +125,16 @@ function appSourceRunSummary(rows: Array<{ fact: { sourceRunId?: string | null; 
   }));
 }
 
-function rankDbFacts(
-  facts: FactRow[],
-  query: string,
-  weights: { text: number; vector: number },
-): RankedDbFact[] {
+function rankDbFacts(facts: FactRow[], query: string): RankedDbFact[] {
   const queryUnits = units(query);
-  const queryVector = embedText(query);
   return facts
     .map((fact) => {
       const text = textForFact(fact);
       const textScore = overlap(queryUnits, text);
-      const vectorScore = Math.max(0, cosine(queryVector, embedText(text)));
       return {
         fact,
         textScore,
-        vectorScore,
-        score:
-          weights.text * textScore +
-          weights.vector * vectorScore +
-          fact.importance * 0.01 +
-          fact.confidence * 0.001,
+        score: textScore + fact.importance * 0.01 + fact.confidence * 0.001,
       };
     })
     .sort((left, right) => {
@@ -187,9 +158,7 @@ async function main(): Promise<void> {
     '../../src/services/memory/schema'
   );
   const { closeMemoryDb } = await import('../../src/services/memory/sqlite-store');
-  const { recallScoredFactsForQuery, backfillFactEmbeddings } = await import(
-    '../../src/services/memory/factRecall'
-  );
+  const { recallScoredFactsForQuery } = await import('../../src/services/memory/factRecall');
   const { buildUnifiedMemoryAccessContext } = await import(
     '../../src/services/memory/memoryAccessGateway'
   );
@@ -216,7 +185,7 @@ async function main(): Promise<void> {
   const allFacts = db
     .prepare(
       `SELECT id, subject_id, predicate, object_text, source_summary, source_run_id,
-              memory_kind, scope, origin_conversation_id, updated_at, importance, confidence, embedding
+              memory_kind, scope, origin_conversation_id, updated_at, importance, confidence
          FROM memory_facts
         WHERE deleted_at IS NULL
           AND invalid_at IS NULL
@@ -244,11 +213,9 @@ async function main(): Promise<void> {
     limit: args.limit,
     conversationId,
   });
-  const appTextRelevanceOnly = await recallScoredFactsForQuery(args.query, {
+  const appZeroThreshold = await recallScoredFactsForQuery(args.query, {
     limit: args.limit,
     conversationId,
-    vectorWeight: 0,
-    textWeight: 1,
     threshold: 0,
   });
   const now = Date.now();
@@ -279,11 +246,10 @@ async function main(): Promise<void> {
       ],
       now,
     });
-  const appBridgeBeforeBackfill = await buildBridgeDiagnostic();
-  const appOrchestratorBeforeBackfill = await orchestrateMemoryRetrieval({
+  const appBridge = await buildBridgeDiagnostic();
+  const appOrchestrator = await orchestrateMemoryRetrieval({
     userMessage: args.query,
     conversationId,
-    embeddingConfig: { provider: 'local', model: 'unicode-char-ngram-v1', dimensions: 384 },
     limit: args.limit,
     goals: [
       {
@@ -300,14 +266,12 @@ async function main(): Promise<void> {
     now,
   });
   const appSignalRecalls = await Promise.all(
-    appOrchestratorBeforeBackfill.querySignals.slice(0, 12).map(async (signal) => ({
+    appOrchestrator.querySignals.slice(0, 12).map(async (signal) => ({
       signal,
       uiTextOnly: (
         await recallScoredFactsForQuery(signal, {
           conversationId,
           memoryKind: ['ui_inventory', 'ui_field', 'ui_filter_state'],
-          vectorWeight: 0,
-          textWeight: 1,
           threshold: 0,
           limit: args.limit,
         })
@@ -321,22 +285,8 @@ async function main(): Promise<void> {
       })),
     })),
   );
-  const embeddedCount = await backfillFactEmbeddings(
-    { provider: 'local', model: 'unicode-char-ngram-v1' },
-    { maxFacts: 3_000 },
-  );
-  const appLocalEmbedding = await recallScoredFactsForQuery(args.query, {
-    limit: args.limit,
-    conversationId,
-    embeddingConfig: { provider: 'local', model: 'unicode-char-ngram-v1' },
-    vectorWeight: 0.7,
-    textWeight: 0.3,
-    threshold: 0,
-  });
-  const appBridgeAfterBackfill = await buildBridgeDiagnostic();
 
-  const dbAllLexical = rankDbFacts(allFacts, args.query, { text: 1, vector: 0 });
-  const dbAllSimpleEmbedding = rankDbFacts(allFacts, args.query, { text: 0.3, vector: 0.7 });
+  const dbAllLexical = rankDbFacts(allFacts, args.query);
 
   const payload = {
     sourceDb,
@@ -353,90 +303,49 @@ async function main(): Promise<void> {
         score: entry.score,
         relevanceScore: entry.relevanceScore,
         textScore: entry.textScore,
-        vectorScore: entry.vectorScore,
         scopeBoost: entry.scopeBoost,
         reinforcementBoost: entry.reinforcementBoost,
         objectText: entry.fact.objectText.slice(0, 260),
       })),
       sourceRuns: appSourceRunSummary(appCurrent),
     },
-    appTextRelevanceOnly: {
-      selected: appTextRelevanceOnly.map((entry) => ({
+    appZeroThreshold: {
+      selected: appZeroThreshold.map((entry) => ({
         factId: entry.fact.id,
         sourceRunId: entry.fact.sourceRunId,
         memoryKind: entry.fact.memoryKind,
         score: entry.score,
         relevanceScore: entry.relevanceScore,
         textScore: entry.textScore,
-        vectorScore: entry.vectorScore,
         scopeBoost: entry.scopeBoost,
         objectText: entry.fact.objectText.slice(0, 260),
       })),
-      sourceRuns: appSourceRunSummary(appTextRelevanceOnly),
+      sourceRuns: appSourceRunSummary(appZeroThreshold),
     },
-    appLocalEmbedding: {
-      embeddedCount,
-      selected: appLocalEmbedding.map((entry) => ({
-        factId: entry.fact.id,
-        sourceRunId: entry.fact.sourceRunId,
-        memoryKind: entry.fact.memoryKind,
-        score: entry.score,
-        relevanceScore: entry.relevanceScore,
-        textScore: entry.textScore,
-        vectorScore: entry.vectorScore,
-        scopeBoost: entry.scopeBoost,
-        objectText: entry.fact.objectText.slice(0, 260),
-      })),
-      sourceRuns: appSourceRunSummary(appLocalEmbedding),
-    },
-    appBridgeBeforeBackfill: {
-      recalledFactCount: appBridgeBeforeBackfill.livingMemory?.recalledFactCount ?? 0,
-      recalledEpisodeCount: appBridgeBeforeBackfill.livingMemory?.recalledEpisodeCount ?? 0,
-      sections: (appBridgeBeforeBackfill.livingMemory?.sections ?? []).map((section, index) => ({
+    appBridge: {
+      recalledFactCount: appBridge.livingMemory?.recalledFactCount ?? 0,
+      recalledEpisodeCount: appBridge.livingMemory?.recalledEpisodeCount ?? 0,
+      sections: (appBridge.livingMemory?.sections ?? []).map((section, index) => ({
         index,
         text: section.text.slice(0, 1000),
       })),
-      flattened: (appBridgeBeforeBackfill.livingMemory?.sections ?? [])
+      flattened: (appBridge.livingMemory?.sections ?? [])
         .map((section) => section.text)
         .join('\n\n')
         .slice(0, 2000),
     },
-    appOrchestratorBeforeBackfill: {
-      querySignals: appOrchestratorBeforeBackfill.querySignals,
+    appOrchestrator: {
+      querySignals: appOrchestrator.querySignals,
       signalRecalls: appSignalRecalls,
-      selected: appOrchestratorBeforeBackfill.scoredFacts.map((entry) => ({
+      selected: appOrchestrator.scoredFacts.map((entry) => ({
         sourceRunId: entry.fact.sourceRunId,
         memoryKind: entry.fact.memoryKind,
         score: entry.score,
         relevanceScore: entry.relevanceScore,
         textScore: entry.textScore,
-        vectorScore: entry.vectorScore,
         objectText: entry.fact.objectText.slice(0, 260),
       })),
-      lanes: appOrchestratorBeforeBackfill.lanes.map((lane) => ({
-        id: lane.id,
-        selected: lane.scoredFacts.map((entry) => ({
-          sourceRunId: entry.fact.sourceRunId,
-          memoryKind: entry.fact.memoryKind,
-          score: entry.score,
-          relevanceScore: entry.relevanceScore,
-          textScore: entry.textScore,
-          vectorScore: entry.vectorScore,
-          objectText: entry.fact.objectText.slice(0, 260),
-        })),
-      })),
-    },
-    appBridgeAfterBackfill: {
-      recalledFactCount: appBridgeAfterBackfill.livingMemory?.recalledFactCount ?? 0,
-      recalledEpisodeCount: appBridgeAfterBackfill.livingMemory?.recalledEpisodeCount ?? 0,
-      sections: (appBridgeAfterBackfill.livingMemory?.sections ?? []).map((section, index) => ({
-        index,
-        text: section.text.slice(0, 1000),
-      })),
-      flattened: (appBridgeAfterBackfill.livingMemory?.sections ?? [])
-        .map((section) => section.text)
-        .join('\n\n')
-        .slice(0, 2000),
+      timings: appOrchestrator.timings,
     },
     dbAllLexical: {
       sourceRuns: sourceRunSummary(dbAllLexical, args.limit),
@@ -446,19 +355,6 @@ async function main(): Promise<void> {
         memoryKind: entry.fact.memory_kind,
         score: entry.score,
         textScore: entry.textScore,
-        vectorScore: entry.vectorScore,
-        objectText: entry.fact.object_text.slice(0, 260),
-      })),
-    },
-    dbAllSimpleEmbedding: {
-      sourceRuns: sourceRunSummary(dbAllSimpleEmbedding, args.limit),
-      topFacts: dbAllSimpleEmbedding.slice(0, args.limit).map((entry) => ({
-        factId: entry.fact.id,
-        sourceRunId: entry.fact.source_run_id,
-        memoryKind: entry.fact.memory_kind,
-        score: entry.score,
-        textScore: entry.textScore,
-        vectorScore: entry.vectorScore,
         objectText: entry.fact.object_text.slice(0, 260),
       })),
     },

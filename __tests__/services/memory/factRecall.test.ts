@@ -6,42 +6,24 @@ jest.mock('expo-sqlite', () => {
 import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../../src/services/memory/schema';
 import { upsertEntity } from '../../../src/services/memory/entities';
-import { recordFact, setFactEmbedding, setFactPinned } from '../../../src/services/memory/facts/mutations';
+import { recordFact, setFactPinned } from '../../../src/services/memory/facts/mutations';
 import { getFactById } from '../../../src/services/memory/facts/queries';
 import {
-  backfillFactEmbeddings,
-  embedFact,
   recallFactsForQuery,
   recallScoredFactsForQuery,
 } from '../../../src/services/memory/factRecall';
-import * as embeddings from '../../../src/services/memory/embeddings';
-import type { EmbeddingConfig } from '../../../src/types/memory';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
-
-const FAKE_CONFIG: EmbeddingConfig = { provider: 'openai', model: 'text-embedding-3-small' };
-
-let getEmbeddingCachedSpy: jest.SpyInstance;
-
-function fakeEmbedding(seed: number, dim = 4): number[] {
-  // Deterministic small unit-ish vectors keyed by `seed` so tests can assert
-  // ordering without depending on a real embedder.
-  const v = new Array(dim).fill(0).map((_, i) => Math.sin((seed + 1) * (i + 1)));
-  const norm = Math.sqrt(v.reduce((s, x) => s + x * x, 0));
-  return norm === 0 ? v : v.map((x) => x / norm);
-}
 
 beforeEach(() => {
   closeMemoryDb();
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
-  getEmbeddingCachedSpy = jest.spyOn(embeddings, 'getEmbeddingCached');
-  getEmbeddingCachedSpy.mockReset();
 });
 
 afterEach(() => {
-  getEmbeddingCachedSpy?.mockRestore();
+  closeMemoryDb();
 });
 
 describe('recallFactsForQuery — text-only (no embedding config)', () => {
@@ -154,98 +136,6 @@ describe('recallFactsForQuery — pinned facts', () => {
   });
 });
 
-describe('recallFactsForQuery — vector path with embedding config', () => {
-  it('uses cosine similarity when both query and facts are embedded', async () => {
-    const user = upsertEntity({ name: 'user', type: 'self' });
-    const near = recordFact({
-      subjectId: user.id,
-      predicate: 'enjoys',
-      objectText: 'jazz piano',
-    });
-    const far = recordFact({
-      subjectId: user.id,
-      predicate: 'enjoys',
-      objectText: 'cycling',
-    });
-
-    // Embed each fact with a deterministic vector — `near` matches the query,
-    // `far` is orthogonal.
-    setFactEmbedding(near.fact.id, fakeEmbedding(1));
-    setFactEmbedding(far.fact.id, fakeEmbedding(99));
-
-    // Query embedding equals `near.fact` embedding ⇒ cosine == 1.
-    getEmbeddingCachedSpy.mockResolvedValueOnce(fakeEmbedding(1));
-
-    const facts = await recallFactsForQuery('something about music', {
-      embeddingConfig: FAKE_CONFIG,
-      threshold: 0.5,
-    });
-
-    expect(facts[0].id).toBe(near.fact.id);
-    expect(facts.map((f) => f.id)).not.toContain(far.fact.id);
-  });
-
-  it('degrades to text-only scoring when embedder throws', async () => {
-    const user = upsertEntity({ name: 'user', type: 'self' });
-    recordFact({ subjectId: user.id, predicate: 'lives_in', objectText: 'Berlin' });
-
-    getEmbeddingCachedSpy.mockRejectedValue(new Error('network down'));
-
-    const facts = await recallFactsForQuery('Berlin trip planning', {
-      embeddingConfig: FAKE_CONFIG,
-    });
-
-    // Still recovers Berlin fact via text overlap.
-    expect(facts.map((f) => f.objectText)).toContain('Berlin');
-  });
-
-  it('skips vector scoring entirely when vectorWeight is 0', async () => {
-    const user = upsertEntity({ name: 'user', type: 'self' });
-    recordFact({ subjectId: user.id, predicate: 'lives_in', objectText: 'Berlin' });
-
-    await recallFactsForQuery('Berlin', {
-      embeddingConfig: FAKE_CONFIG,
-      vectorWeight: 0,
-    });
-
-    expect(getEmbeddingCachedSpy).not.toHaveBeenCalled();
-  });
-
-  it('does not embed the query when no candidate facts have vectors', async () => {
-    const user = upsertEntity({ name: 'user', type: 'self' });
-    recordFact({ subjectId: user.id, predicate: 'lives_in', objectText: 'Berlin' });
-
-    const facts = await recallFactsForQuery('Berlin trip planning', {
-      embeddingConfig: FAKE_CONFIG,
-    });
-
-    expect(facts.map((f) => f.objectText)).toContain('Berlin');
-    expect(getEmbeddingCachedSpy).not.toHaveBeenCalled();
-  });
-
-  it('uses transient local fact embeddings during recall without mutating storage', async () => {
-    const page = upsertEntity({ name: 'forum-homepage', type: 'concept' });
-    const recorded = recordFact({
-      subjectId: page.id,
-      predicate: 'page_observation',
-      objectText: 'custom forum homepage has no direct textbox for submitting a new post',
-    });
-    getEmbeddingCachedSpy.mockImplementation(async (text: string) =>
-      embeddings.getLocalTextEmbedding(text),
-    );
-
-    const facts = await recallFactsForQuery('custom forum homepage textbox submit post', {
-      embeddingConfig: { provider: 'local', model: 'unicode-char-ngram-v1' },
-      vectorWeight: 1,
-      textWeight: 0,
-      threshold: 0.05,
-    });
-
-    expect(facts.map((fact) => fact.id)).toContain(recorded.fact.id);
-    expect(getFactById(recorded.fact.id)?.embedding).toBeNull();
-  });
-});
-
 describe('recallFactsForQuery — bi-temporal anchor', () => {
   it('honors the asOf option to recall facts that were valid at a past time', async () => {
     const user = upsertEntity({ name: 'user', type: 'self' });
@@ -275,61 +165,6 @@ describe('recallFactsForQuery — bi-temporal anchor', () => {
     expect(past.map((f) => f.objectText)).not.toContain('Globex');
     expect(recent.map((f) => f.objectText)).toContain('Globex');
     expect(recent.map((f) => f.objectText)).not.toContain('Acme');
-  });
-});
-
-describe('embedFact / backfillFactEmbeddings', () => {
-  it('persists an embedding for a fact', async () => {
-    const user = upsertEntity({ name: 'user', type: 'self' });
-    const result = recordFact({
-      subjectId: user.id,
-      predicate: 'role',
-      objectText: 'Engineer',
-    });
-    expect(result.fact.embedding).toBeNull();
-
-    getEmbeddingCachedSpy.mockResolvedValue(fakeEmbedding(7));
-    const stored = await embedFact(result.fact, FAKE_CONFIG);
-
-    expect(stored).not.toBeNull();
-    const refreshed = getFactById(result.fact.id);
-    expect(refreshed?.embedding).toHaveLength(4);
-  });
-
-  it('returns null and does not touch the row when embedder fails', async () => {
-    const user = upsertEntity({ name: 'user', type: 'self' });
-    const result = recordFact({
-      subjectId: user.id,
-      predicate: 'role',
-      objectText: 'Engineer',
-    });
-
-    getEmbeddingCachedSpy.mockRejectedValue(new Error('boom'));
-    const stored = await embedFact(result.fact, FAKE_CONFIG);
-
-    expect(stored).toBeNull();
-    expect(getFactById(result.fact.id)?.embedding).toBeNull();
-  });
-
-  it('backfills embeddings only for facts that lack one (capped by maxFacts)', async () => {
-    const user = upsertEntity({ name: 'user', type: 'self' });
-    const a = recordFact({ subjectId: user.id, predicate: 'p1', objectText: 'v1' });
-    const b = recordFact({ subjectId: user.id, predicate: 'p2', objectText: 'v2' });
-    const c = recordFact({ subjectId: user.id, predicate: 'p3', objectText: 'v3' });
-    setFactEmbedding(a.fact.id, fakeEmbedding(1));
-
-    let calls = 0;
-    getEmbeddingCachedSpy.mockImplementation(async () => {
-      calls += 1;
-      return fakeEmbedding(calls + 10);
-    });
-
-    const embedded = await backfillFactEmbeddings(FAKE_CONFIG, { maxFacts: 5 });
-
-    // a was already embedded; b and c needed embedding.
-    expect(embedded).toBe(2);
-    expect(getFactById(b.fact.id)?.embedding).not.toBeNull();
-    expect(getFactById(c.fact.id)?.embedding).not.toBeNull();
   });
 });
 

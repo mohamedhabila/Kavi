@@ -53,8 +53,6 @@ describe('recallFactsForQuery — ranking', () => {
       'qcommonone qcommontwo qcommonthree qraretoken',
       {
         limit: 3,
-        vectorWeight: 0,
-        textWeight: 1,
         threshold: 0.01,
         candidatePoolLimit: 50,
       },
@@ -74,8 +72,6 @@ describe('recallFactsForQuery — ranking', () => {
 
     const scored = await recallScoredFactsForQuery('qmissingtarget qavailablecontext', {
       limit: 1,
-      vectorWeight: 0,
-      textWeight: 1,
       threshold: 0,
       candidatePoolLimit: 10,
     });
@@ -85,7 +81,7 @@ describe('recallFactsForQuery — ranking', () => {
     expect(scored[0].textScore).toBeLessThan(1);
   });
 
-  it('keeps relevant trajectory neighbors with a retrieved source-run fact', async () => {
+  it('does not expand source-run neighbors without direct query evidence', async () => {
     const corpus = upsertEntity({ name: 'trajectory-corpus', type: 'concept' });
     for (let index = 0; index < 8; index += 1) {
       recordFact({
@@ -97,10 +93,10 @@ describe('recallFactsForQuery — ranking', () => {
         now: 1_000 + index,
       });
     }
-    recordFact({
+    const target = recordFact({
       subjectId: corpus.id,
       predicate: 'target_anchor',
-      objectText: 'qanchor qshared qtarget',
+      objectText: 'qanchor qshared quniqueexact',
       sourceRunId: 'run-target',
       attributes: { stateIndex: 5 },
       now: 3_000,
@@ -113,7 +109,7 @@ describe('recallFactsForQuery — ranking', () => {
       attributes: { stateIndex: 0 },
       now: 1_999,
     });
-    const prior = recordFact({
+    recordFact({
       subjectId: corpus.id,
       predicate: 'target_prior',
       objectText: 'qshared qtarget-prior',
@@ -121,7 +117,7 @@ describe('recallFactsForQuery — ranking', () => {
       attributes: { stateIndex: 1 },
       now: 2_000,
     });
-    const nearPrior = recordFact({
+    recordFact({
       subjectId: corpus.id,
       predicate: 'target_near_prior',
       objectText: 'qanchor qshared qtarget-near-prior',
@@ -129,7 +125,7 @@ describe('recallFactsForQuery — ranking', () => {
       attributes: { stateIndex: 4 },
       now: 2_999,
     });
-    const next = recordFact({
+    recordFact({
       subjectId: corpus.id,
       predicate: 'target_next',
       objectText: 'qshared qtarget-next',
@@ -154,21 +150,14 @@ describe('recallFactsForQuery — ranking', () => {
       now: 3_003,
     });
 
-    const facts = await recallFactsForQuery('qanchor qshared', {
+    const facts = await recallFactsForQuery('quniqueexact', {
       limit: 5,
-      vectorWeight: 0,
-      textWeight: 1,
       threshold: 0.01,
       candidatePoolLimit: 50,
       now: 4_000,
     });
 
-    expect(next.fact.attributes.stateIndex).toBe(6);
-    expect(facts[0].attributes.stateIndex).toBe(5);
-    expect(facts.map((fact) => fact.id)).toContain(prior.fact.id);
-    expect(facts.map((fact) => fact.id)).not.toContain(nearPrior.fact.id);
-    expect(facts.some((fact) => Number(fact.attributes.stateIndex) > 5)).toBe(true);
-    expect(facts.map((fact) => Number(fact.attributes.stateIndex))).toEqual([5, 6, 7, 0, 1]);
+    expect(facts.map((fact) => fact.id)).toEqual([target.fact.id]);
   });
 
   it('anchors late discriminative query units before scoped recency fill', async () => {
@@ -201,8 +190,6 @@ describe('recallFactsForQuery — ranking', () => {
       conversationId,
       limit: 5,
       candidatePoolLimit: 120,
-      vectorWeight: 0,
-      textWeight: 1,
       threshold: 0.01,
       now: 20_000,
     });
@@ -246,8 +233,6 @@ describe('recallFactsForQuery — ranking', () => {
         conversationId: 'conv-ui-ranking-text',
         memoryKind: ['ui_inventory', 'ui_field'],
         limit: 1,
-        vectorWeight: 0,
-        textWeight: 1,
         threshold: 0.01,
         now: 20_000,
       },
@@ -299,8 +284,6 @@ describe('recallFactsForQuery — ranking', () => {
       conversationId,
       memoryKind: ['ui_affordance', 'ui_inventory'],
       limit: 3,
-      vectorWeight: 0,
-      textWeight: 1,
       threshold: 0.01,
       now: 20_000,
     });
@@ -351,8 +334,6 @@ describe('recallFactsForQuery — ranking', () => {
       memoryKind: 'ui_affordance',
       limit: 5,
       candidatePoolLimit: 128,
-      vectorWeight: 0,
-      textWeight: 1,
       threshold: 0.01,
       now: 20_000,
     });

@@ -8,7 +8,7 @@ type TermInsertValue = string | number | null;
 const MAX_TERMS_PER_FACT = 192;
 const MAX_PRIORITY_UI_TERMS_PER_FACT = 96;
 const MAX_PRIORITY_VALUE_DEPTH = 4;
-const UI_PRIORITY_FIELDS = [
+const UI_INVENTORY_PRIORITY_FIELDS = [
   'sections',
   'controlNames',
   'fieldLabels',
@@ -16,6 +16,39 @@ const UI_PRIORITY_FIELDS = [
   'textEntryControls',
   'searchControls',
   'labelValues',
+  'action',
+  'thought',
+  'previousAction',
+  'previousUrl',
+  'previousControlNames',
+] as const;
+const UI_FIELD_PRIORITY_FIELDS = [
+  'label',
+  'role',
+  'controlName',
+  'value',
+  'options',
+  'url',
+  'sourceRunId',
+  'stateIndex',
+] as const;
+const UI_AFFORDANCE_PRIORITY_FIELDS = [
+  'role',
+  'name',
+  'label',
+  'contextLabels',
+  'value',
+  'options',
+  'url',
+  'sourceRunId',
+  'stateIndex',
+] as const;
+const UI_FILTER_STATE_PRIORITY_FIELDS = [
+  'label',
+  'value',
+  'url',
+  'sourceRunId',
+  'stateIndex',
 ] as const;
 
 function termWeight(unit: string): number {
@@ -53,19 +86,17 @@ function collectStrings(value: unknown, output: string[], depth = 0): void {
 }
 
 function priorityUiTermTexts(fact: MemoryFact): string[] {
-  if (
-    fact.memoryKind !== 'ui_inventory' &&
-    fact.memoryKind !== 'ui_affordance' &&
-    fact.memoryKind !== 'ui_field' &&
-    fact.memoryKind !== 'ui_filter_state' &&
-    fact.memoryKind !== 'surface_schema'
-  ) {
-    return [];
-  }
+  let fields: ReadonlyArray<string> = [];
+  if (fact.memoryKind === 'ui_inventory') fields = UI_INVENTORY_PRIORITY_FIELDS;
+  if (fact.memoryKind === 'ui_field') fields = UI_FIELD_PRIORITY_FIELDS;
+  if (fact.memoryKind === 'ui_affordance') fields = UI_AFFORDANCE_PRIORITY_FIELDS;
+  if (fact.memoryKind === 'ui_filter_state') fields = UI_FILTER_STATE_PRIORITY_FIELDS;
+  if (fact.memoryKind === 'surface_schema') fields = UI_INVENTORY_PRIORITY_FIELDS;
+  if (fields.length === 0) return [];
   const parsed = parseJsonRecord(fact.objectText);
   if (!parsed) return [];
   const values: string[] = [];
-  for (const field of UI_PRIORITY_FIELDS) {
+  for (const field of fields) {
     collectStrings(parsed[field], values);
     collectStrings(fact.attributes[field], values);
   }

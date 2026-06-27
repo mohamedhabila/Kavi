@@ -70,8 +70,6 @@ describe('graph evidence ingestion bridge', () => {
 
     const recalled = await recallFactsForQuery('python artifact reports analysis json', {
       conversationId: THREAD_ID,
-      textWeight: 1,
-      vectorWeight: 0,
       threshold: 0.05,
     });
 

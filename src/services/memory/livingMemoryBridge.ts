@@ -13,7 +13,6 @@
 //   - Empty inputs produce zero sections so callers can blindly append.
 // ---------------------------------------------------------------------------
 
-import type { EmbeddingConfig } from '../../types/memory';
 import type { Message } from '../../types/message';
 import { createLogger } from '../../utils/logger';
 import { listBlocks, type MemoryBlock } from './blocks';
@@ -21,6 +20,7 @@ import { getEntityById } from './entities';
 import type { AgentGoal } from '../../engine/goals/types';
 import type { AgentRunControlGraphAsyncWorkState } from '../../types/agentRun';
 import type { MemoryFact } from './facts/types';
+import { listFacts } from './facts/queries';
 import {
   orchestrateMemoryRetrieval,
   type RetrievalOrchestratorTimings,
@@ -31,8 +31,6 @@ import { getWorkingBlock, type WorkingMemoryBlock } from './workingBlocks';
 import { getActiveTaskId, readTaskStack } from './taskStack';
 import { logRetrieval } from './retrievalLog';
 import { getLatestReflection } from './reflections';
-import { DEFAULT_LOCAL_EMBEDDING_CONFIG } from './embeddings';
-import { buildUiAvailabilitySummary } from './uiAvailabilitySummary';
 
 const logger = createLogger('memory.livingMemoryBridge');
 
@@ -59,8 +57,6 @@ export interface BuildLivingMemorySectionsOptions {
   taskId?: string;
   /** Now (ms). Defaults to `Date.now()`. Test seam. */
   now?: number;
-  /** Optional embedding config. When omitted, recall uses the on-device local embedder. */
-  embeddingConfig?: EmbeddingConfig;
   /** Recall fanout. Default 6. */
   recallLimit?: number;
   /** When true, skip recall entirely (e.g. for tool-only iterations). */
@@ -226,6 +222,47 @@ function withFactSubjectLabels(facts: ReadonlyArray<MemoryFact>): PromptMemoryFa
   }));
 }
 
+function listScopedCurrentFacts(params: {
+  conversationId?: string;
+  taskId?: string;
+  limit: number;
+}): MemoryFact[] {
+  const byId = new Map<string, MemoryFact>();
+  const add = (facts: MemoryFact[]): void => {
+    for (const fact of facts) {
+      if (byId.size >= params.limit) break;
+      byId.set(fact.id, fact);
+    }
+  };
+  if (params.conversationId) {
+    add(listFacts({ originConversationId: params.conversationId, limit: params.limit }));
+  }
+  if (params.taskId && byId.size < params.limit) {
+    add(listFacts({ originTaskId: params.taskId, limit: params.limit - byId.size }));
+  }
+  return Array.from(byId.values());
+}
+
+function appendScopedCurrentFacts(
+  recalledFacts: MemoryFact[],
+  params: { conversationId?: string; taskId?: string; limit: number },
+): MemoryFact[] {
+  if (recalledFacts.length >= params.limit) return recalledFacts;
+  const selected = [...recalledFacts];
+  const seen = new Set(selected.map((fact) => fact.id));
+  for (const fact of listScopedCurrentFacts({
+    conversationId: params.conversationId,
+    taskId: params.taskId,
+    limit: params.limit,
+  })) {
+    if (selected.length >= params.limit) break;
+    if (seen.has(fact.id)) continue;
+    selected.push(fact);
+    seen.add(fact.id);
+  }
+  return selected;
+}
+
 /**
  * Build the per-request memory-aware sections + the inputs the compaction
  * engine needs (focus / open threads / idle gap). Safe to call once per
@@ -250,7 +287,6 @@ export async function buildLivingMemorySections(
   const {
     messages,
     now = Date.now(),
-    embeddingConfig = DEFAULT_LOCAL_EMBEDDING_CONFIG,
     recallLimit = 6,
     disableRecall = false,
     disableLongTermMemory = false,
@@ -351,11 +387,14 @@ export async function buildLivingMemorySections(
         asyncWork,
         conversationId,
         taskId: resolvedTaskId ?? undefined,
-        ...(embeddingConfig ? { embeddingConfig } : {}),
         limit: recallLimit,
         now,
       });
-      recalledFacts = retrieval.facts;
+      recalledFacts = appendScopedCurrentFacts(retrieval.facts, {
+        conversationId,
+        taskId: resolvedTaskId ?? undefined,
+        limit: recallLimit,
+      });
       recalledEpisodes = retrieval.episodes;
       retrievalTimings = retrieval.timings;
     } catch (error) {
@@ -372,10 +411,6 @@ export async function buildLivingMemorySections(
   const dynamicAddenda: string[] = [];
   if (activeTaskTitle) {
     dynamicAddenda.push(`Active task: ${activeTaskTitle}`);
-  }
-  const uiAvailabilitySummary = buildUiAvailabilitySummary(query, recalledFacts);
-  if (uiAvailabilitySummary) {
-    dynamicAddenda.push(uiAvailabilitySummary);
   }
 
   let reflectionBlock = '';
