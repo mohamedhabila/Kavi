@@ -16,12 +16,11 @@
 //                           and recency adjust facts only after relevance is
 //                           established. Pinned facts remain explicit anchors.
 //
-// The function never throws; remote embedding failures degrade to text scoring.
-// The default app path uses the local Unicode n-gram provider, which avoids
-// network dependency while preserving multilingual recall. Text-only candidate
-// generation is index-backed. Query-time local embeddings are attached
-// transiently for reranking; durable embedding writes belong to explicit
-// background backfill, not the user-turn read path.
+// The function never throws; embedding failures degrade to text scoring.
+// The default app path uses indexed sparse retrieval. When a caller supplies
+// the local Unicode n-gram provider, local embeddings are attached transiently
+// for reranking; durable embedding writes belong to explicit background
+// backfill, not the user-turn read path.
 // All retrieved facts are currently-valid (`invalid_at IS NULL`) by default —
 // callers can pass `asOf` for historical queries.
 // ---------------------------------------------------------------------------

@@ -21,7 +21,6 @@ import { getEntityById } from './entities';
 import type { AgentGoal } from '../../engine/goals/types';
 import type { AgentRunControlGraphAsyncWorkState } from '../../types/agentRun';
 import type { MemoryFact } from './facts/types';
-import { DEFAULT_LOCAL_EMBEDDING_CONFIG } from './embeddings';
 import { orchestrateMemoryRetrieval } from './retrievalOrchestrator';
 import { renderFocusBlock, type FocusGap } from './focus';
 import { assemblePrompt, type PromptMemoryFact, type SystemPromptSection } from './promptAssembly';
@@ -55,7 +54,7 @@ export interface BuildLivingMemorySectionsOptions {
   taskId?: string;
   /** Now (ms). Defaults to `Date.now()`. Test seam. */
   now?: number;
-  /** Optional embedding config — when omitted, recall uses the local on-device provider. */
+  /** Optional embedding config. When omitted, recall uses indexed sparse retrieval only. */
   embeddingConfig?: EmbeddingConfig;
   /** Recall fanout. Default 6. */
   recallLimit?: number;
@@ -298,7 +297,6 @@ export async function buildLivingMemorySections(
   const query = recentUserTextWindow(messages);
   let recalledFacts: Awaited<ReturnType<typeof orchestrateMemoryRetrieval>>['facts'] = [];
   let recalledEpisodes: Awaited<ReturnType<typeof orchestrateMemoryRetrieval>>['episodes'] = [];
-  const recallEmbeddingConfig = embeddingConfig ?? DEFAULT_LOCAL_EMBEDDING_CONFIG;
   if (!disableRecall) {
     try {
       const retrieval = await orchestrateMemoryRetrieval({
@@ -309,7 +307,7 @@ export async function buildLivingMemorySections(
         asyncWork,
         conversationId,
         taskId: resolvedTaskId ?? undefined,
-        embeddingConfig: recallEmbeddingConfig,
+        ...(embeddingConfig ? { embeddingConfig } : {}),
         limit: recallLimit,
         now,
       });
