@@ -85,7 +85,7 @@ const L3_FACTS_HEADER = '### Retrieved Memory';
 const L3_RELEVANT_FACTS_HEADER = '#### Relevant Facts';
 const L3_UI_HEADER = '#### Observed UI and Surface Schema';
 const L3_UI_SNAPSHOT_NOTE =
-  'UI inventories are direct evidence for UI availability in observed states. Listed controls and fields were visible for that URL/state; controls not listed were not visible in that snapshot.';
+  'UI inventories are direct evidence for UI availability in observed states. Listed controls and fields were visible for that URL/state; controls not listed were not visible in that snapshot. Treat a named control missing from a snapshot visibleControls list as observed negative visibility evidence for that snapshot, not as unknown.';
 const L3_PROCEDURES_HEADER = '#### Procedures';
 const L3_OUTCOMES_HEADER = '#### Outcomes and Gotchas';
 const L3_EPISODES_HEADER = '### Recent Activity';
@@ -433,10 +433,10 @@ function renderL3Sections(input: AssemblePromptInput): string[] {
   const preludeParts: string[] = [];
   if (reflection) preludeParts.push(`${L3_REFLECTION_HEADER}\n${reflection}`);
   if (focus) preludeParts.push(focus);
+  if (addenda) preludeParts.push(addenda);
 
   const trailingParts: string[] = [];
   if (episodes.length > 0) trailingParts.push(`${L3_EPISODES_HEADER}\n${episodes.join('\n')}`);
-  if (addenda) trailingParts.push(addenda);
 
   const sections: string[] = [];
   if (preludeParts.length > 0) {

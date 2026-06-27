@@ -37,6 +37,7 @@ import {
 import { type MemoryFact, type MemoryFactKind, type MemoryFactScope } from './facts/types';
 import { countLexicalUnits } from './ranking/lexical';
 import { retrievalTextForFact } from './ranking/factText';
+import { buildScoringLexicalUnits } from './ranking/queryUnits';
 import { cosineSimilarity } from './ranking/similarity';
 import { exponentialDecayMultiplier } from './ranking/scoring';
 import { diversifyTrajectoryAware } from './ranking/trajectoryDiversification';
@@ -418,8 +419,7 @@ async function buildRecallSelection(
     ...(options.memoryKind ? { memoryKind: options.memoryKind } : {}),
     ...(options.lexicalUnitLimit ? { lexicalUnitLimit: options.lexicalUnitLimit } : {}),
   });
-  const scoringQueryUnits =
-    selectedLexicalUnits.length > 0 ? new Set(selectedLexicalUnits) : queryUnits;
+  const scoringQueryUnits = buildScoringLexicalUnits(queryUnits, selectedLexicalUnits);
   timing.tokenizeQueryMs = Date.now() - tokenizeStarted;
   timing.queryUnitCount = queryUnits.size;
   const includeUnanchoredCandidates = Boolean(

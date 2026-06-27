@@ -25,6 +25,7 @@ import { planRetrievalSignals } from './retrievalQueryPlan';
 import {
   INTERFACE_SOURCE_POOL_LIMIT,
   INTERFACE_SOURCE_POOL_MULTIPLIER,
+  INTERFACE_SOURCE_POOL_MIN,
   mergeSourceLinkedInterfaceFacts,
   recallSourceLinkedInterfaceFacts,
   selectSourceAwareInterfaceFacts,
@@ -221,6 +222,26 @@ function recallOptions(input: RetrievalOrchestratorInput, limit: number): Recall
   };
 }
 
+function contextualizeSignals(
+  signals: ReadonlyArray<string>,
+  context: string,
+): string[] {
+  const trimmedContext = context.trim();
+  if (!trimmedContext) return signals.map((signal) => signal.trim()).filter(Boolean);
+  const contextualized: string[] = [];
+  for (const signal of signals) {
+    const trimmedSignal = signal.trim();
+    if (!trimmedSignal) continue;
+    if (trimmedSignal === trimmedContext || trimmedContext.includes(trimmedSignal)) {
+      contextualized.push(trimmedContext);
+    } else {
+      contextualized.push(`${trimmedContext}\n${trimmedSignal}`);
+      contextualized.push(trimmedSignal);
+    }
+  }
+  return Array.from(new Set(contextualized));
+}
+
 async function recallScoredFactsForSignals(
   query: string,
   options: RecallFactsOptions,
@@ -239,11 +260,11 @@ async function recallScoredFactsForSignalSet(
     new Set(signals.map((signal) => signal.trim()).filter((signal) => signal.length > 0)),
   );
   const probes = uniqueSignals.length > 0 ? uniqueSignals : [fallbackQuery.trim()].filter(Boolean);
-  const recalled: ScoredFact[] = [];
+  const recalledByProbe: ScoredFact[][] = [];
   for (const probe of probes) {
-    recalled.push(...(await recallScoredFactsForSignals(probe, options)));
+    recalledByProbe.push(await recallScoredFactsForSignals(probe, options));
   }
-  return mergeUniqueScoredFacts(recalled, options.limit ?? probes.length);
+  return mergeUniqueScoredFactsInterleaved(recalledByProbe, options.limit ?? probes.length);
 }
 
 function laneLimit(config: RetrievalLaneConfig, totalLimit: number): number {
@@ -268,7 +289,10 @@ async function recallLane(
   const limit = laneLimit(config, input.totalLimit);
   const sourceAwareInterface = config.id === 'interface';
   const interfacePoolLimit = sourceAwareInterface
-    ? Math.min(INTERFACE_SOURCE_POOL_LIMIT, Math.max(limit, limit * INTERFACE_SOURCE_POOL_MULTIPLIER))
+    ? Math.min(
+        INTERFACE_SOURCE_POOL_LIMIT,
+        Math.max(limit, INTERFACE_SOURCE_POOL_MIN, limit * INTERFACE_SOURCE_POOL_MULTIPLIER),
+      )
     : limit;
   const laneOptionsBase: RecallFactsOptions = {
     ...input.options,
@@ -313,10 +337,14 @@ async function recallLane(
   const expansion =
     expansionLimit > 0
       ? sourceAwareInterface
-        ? await recallScoredFactsForSignalSet(input.expansionSignals, input.expansionQuery, {
+        ? await recallScoredFactsForSignalSet(
+            contextualizeSignals(input.expansionSignals, input.primaryQuery),
+            [input.primaryQuery, input.expansionQuery].join('\n'),
+            {
             ...laneOptionsBaseWithTiming,
             limit: expansionLimit,
-          })
+            },
+          )
         : await recallScoredFactsForSignals(input.expansionQuery, {
             ...laneOptionsBaseWithTiming,
             limit: expansionLimit,
@@ -406,6 +434,22 @@ function mergeUniqueScoredFacts(entries: ScoredFact[], limit: number): ScoredFac
     merged.push(entry);
     seenIds.add(entry.fact.id);
     if (merged.length >= limit) break;
+  }
+  return merged;
+}
+
+function mergeUniqueScoredFactsInterleaved(groups: ScoredFact[][], limit: number): ScoredFact[] {
+  const merged: ScoredFact[] = [];
+  const seenIds = new Set<string>();
+  const maxGroupLength = Math.max(0, ...groups.map((group) => group.length));
+  for (let rank = 0; rank < maxGroupLength; rank += 1) {
+    for (const group of groups) {
+      const entry = group[rank];
+      if (!entry || seenIds.has(entry.fact.id)) continue;
+      merged.push(entry);
+      seenIds.add(entry.fact.id);
+      if (merged.length >= limit) return merged;
+    }
   }
   return merged;
 }

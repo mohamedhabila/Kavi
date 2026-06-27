@@ -9,12 +9,11 @@ import {
 import { retrievalTextForFact } from './ranking/factText';
 
 export const INTERFACE_SOURCE_POOL_LIMIT = 32;
+export const INTERFACE_SOURCE_POOL_MIN = 24;
 export const INTERFACE_SOURCE_POOL_MULTIPLIER = 5;
 
 const INTERFACE_SOURCE_GROUP_TOP_FACTS = 6;
 const INTERFACE_SOURCE_GROUP_FACT_LIMIT = 3;
-const INTERFACE_SOURCE_GROUP_EARLY_SUPPORT_GROUPS = 4;
-const INTERFACE_SOURCE_GROUP_EARLY_SUPPORT_FACTS = 2;
 const SOURCE_LINKED_INTERFACE_POOL_LIMIT = 24;
 const SOURCE_LINKED_INTERFACE_PER_SOURCE = 3;
 
@@ -95,7 +94,7 @@ export function selectSourceAwareInterfaceFacts(
       return {
         key,
         entries: rankedEntries,
-        score: bestScore * 0.65 + coverageScore * 0.25 + averageScore * 0.1,
+        score: coverageScore * 0.3 + bestScore * 0.55 + averageScore * 0.15,
       };
     })
     .sort((left, right) => {
@@ -113,29 +112,13 @@ export function selectSourceAwareInterfaceFacts(
     selectedPerGroup.set(groupKey, (selectedPerGroup.get(groupKey) ?? 0) + 1);
   };
 
-  for (const [groupIndex, group] of rankedGroups.entries()) {
+  for (const group of rankedGroups) {
     const first =
       group.entries.find(
         (entry) => entry.fact.memoryKind === 'ui_inventory' && !seenIds.has(entry.fact.id),
       ) ?? group.entries.find((entry) => !seenIds.has(entry.fact.id));
     if (first) addEntry(group.key, first);
     if (selected.length >= limit) return selected;
-    if (groupIndex < INTERFACE_SOURCE_GROUP_EARLY_SUPPORT_GROUPS) {
-      const inventory = group.entries.find(
-        (entry) => entry.fact.memoryKind === 'ui_inventory' && !seenIds.has(entry.fact.id),
-      );
-      if (inventory) addEntry(group.key, inventory);
-      if (selected.length >= limit) return selected;
-      while (
-        selected.length < limit &&
-        (selectedPerGroup.get(group.key) ?? 0) < INTERFACE_SOURCE_GROUP_EARLY_SUPPORT_FACTS
-      ) {
-        const next = group.entries.find((entry) => !seenIds.has(entry.fact.id));
-        if (!next) break;
-        addEntry(group.key, next);
-      }
-      if (selected.length >= limit) return selected;
-    }
   }
 
   let added = true;

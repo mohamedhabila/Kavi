@@ -64,6 +64,27 @@ describe('recallFactsForQuery — ranking', () => {
     expect(scored[0].textScore).toBeGreaterThan(scored[1].textScore);
   });
 
+  it('keeps absent query units in the relevance denominator', async () => {
+    const corpus = upsertEntity({ name: 'missing-unit-corpus', type: 'concept' });
+    const partial = recordFact({
+      subjectId: corpus.id,
+      predicate: 'surface_state',
+      objectText: 'qavailablecontext',
+    });
+
+    const scored = await recallScoredFactsForQuery('qmissingtarget qavailablecontext', {
+      limit: 1,
+      vectorWeight: 0,
+      textWeight: 1,
+      threshold: 0,
+      candidatePoolLimit: 10,
+    });
+
+    expect(scored.map((entry) => entry.fact.id)).toEqual([partial.fact.id]);
+    expect(scored[0].textScore).toBeGreaterThan(0);
+    expect(scored[0].textScore).toBeLessThan(1);
+  });
+
   it('keeps relevant trajectory neighbors with a retrieved source-run fact', async () => {
     const corpus = upsertEntity({ name: 'trajectory-corpus', type: 'concept' });
     for (let index = 0; index < 8; index += 1) {

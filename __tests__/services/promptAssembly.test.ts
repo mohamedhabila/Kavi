@@ -368,6 +368,7 @@ describe('assemblePrompt — L3 contents', () => {
     const text = flattenPromptSections(out.sections);
     expect(text).toContain('UI inventories are direct evidence for UI availability');
     expect(text).toContain('controls not listed were not visible in that snapshot');
+    expect(text).toContain('observed negative visibility evidence');
     expect(text).toContain('"sourceGoal":"Review settings page controls"');
     expect(text).toContain('"trajectoryOutcome":"success"');
   });
@@ -464,9 +465,9 @@ describe('assemblePrompt — L3 contents', () => {
     const idxAddenda = text.indexOf('EXTRA');
     expect(idxReflection).toBeGreaterThan(-1);
     expect(idxFocus).toBeGreaterThan(idxReflection);
-    expect(idxFacts).toBeGreaterThan(idxFocus);
+    expect(idxAddenda).toBeGreaterThan(idxFocus);
+    expect(idxFacts).toBeGreaterThan(idxAddenda);
     expect(idxEpisodes).toBeGreaterThan(idxFacts);
-    expect(idxAddenda).toBeGreaterThan(idxEpisodes);
   });
 });
 

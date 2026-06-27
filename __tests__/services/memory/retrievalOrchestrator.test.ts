@@ -308,6 +308,55 @@ describe('orchestrateMemoryRetrieval', () => {
     expect(result.facts.map((fact) => fact.id)).toEqual([relevant.id]);
   });
 
+  it('reranks interface source groups by full query coverage over isolated span matches', async () => {
+    const relevantSurface = upsertEntity({
+      name: 'surface:https://admin.example.test',
+      type: 'project',
+    });
+    const otherSurface = upsertEntity({
+      name: 'surface:https://catalog.example.test',
+      type: 'project',
+    });
+    const relevant = recordFact({
+      subjectId: relevantSurface.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({
+        url: 'https://admin.example.test/orders',
+        fieldLabels: ['qordersstatus'],
+        controlNames: ['qorderspage', 'qstatusfilter', 'qapplyfilter'],
+      }),
+      sourceRunId: 'orders-source-run',
+      memoryKind: 'ui_inventory',
+      scope: 'conversation',
+      originConversationId: 'conv-source-full-query',
+      now: 1,
+    }).fact;
+    for (let index = 0; index < 8; index += 1) {
+      recordFact({
+        subjectId: otherSurface.id,
+        predicate: 'ui_inventory',
+        objectText: JSON.stringify({
+          url: `https://catalog.example.test/${index}`,
+          controlNames: ['qisolatedtarget'],
+        }),
+        sourceRunId: `isolated-source-run-${index}`,
+        memoryKind: 'ui_inventory',
+        scope: 'conversation',
+        originConversationId: 'conv-source-full-query',
+        now: 100 + index,
+      });
+    }
+
+    const result = await orchestrateMemoryRetrieval({
+      userMessage: 'qorderspage qstatusfilter `qisolatedtarget`',
+      conversationId: 'conv-source-full-query',
+      limit: 1,
+      now: 200,
+    });
+
+    expect(result.facts.map((fact) => fact.id)).toEqual([relevant.id]);
+  });
+
   it('keeps compact form evidence when generic interface inventories share the same surface', async () => {
     const genericSurface = upsertEntity({
       name: 'surface:https://forum.example.test',
@@ -486,6 +535,52 @@ describe('orchestrateMemoryRetrieval', () => {
     });
 
     expect(result.facts.some((fact) => fact.id === optionFact.id)).toBe(true);
+  });
+
+  it('interleaves independent interface probes before the candidate pool fills', async () => {
+    const surface = upsertEntity({
+      name: 'surface:https://admin.example.test',
+      type: 'project',
+    });
+    for (let index = 0; index < 48; index += 1) {
+      recordFact({
+        subjectId: surface.id,
+        predicate: 'ui_inventory',
+        objectText: JSON.stringify({
+          controlNames: ['qbroadcontext'],
+          url: `https://admin.example.test/noisy/${index}`,
+        }),
+        sourceRunId: `broad-source-${index}`,
+        memoryKind: 'ui_inventory',
+        scope: 'conversation',
+        originConversationId: 'conv-interleaved-interface-probes',
+        now: 100 + index,
+      });
+    }
+    const target = recordFact({
+      subjectId: surface.id,
+      predicate: 'ui_field',
+      objectText: JSON.stringify({
+        label: 'qtargetoption',
+        role: 'combobox',
+        options: ['qtargetoption'],
+        url: 'https://admin.example.test/target',
+      }),
+      sourceRunId: 'target-probe-source',
+      memoryKind: 'ui_field',
+      scope: 'conversation',
+      originConversationId: 'conv-interleaved-interface-probes',
+      now: 1,
+    }).fact;
+
+    const result = await orchestrateMemoryRetrieval({
+      userMessage: 'qbroadcontext `qtargetoption`',
+      conversationId: 'conv-interleaved-interface-probes',
+      limit: 2,
+      now: 200,
+    });
+
+    expect(result.facts.some((fact) => fact.id === target.id)).toBe(true);
   });
 
   it('expands terminal UI state from a relevant interface source run', async () => {

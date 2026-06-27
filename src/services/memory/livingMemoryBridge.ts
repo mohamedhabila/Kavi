@@ -32,6 +32,7 @@ import { getActiveTaskId, readTaskStack } from './taskStack';
 import { logRetrieval } from './retrievalLog';
 import { getLatestReflection } from './reflections';
 import { DEFAULT_LOCAL_EMBEDDING_CONFIG } from './embeddings';
+import { buildUiAvailabilitySummary } from './uiAvailabilitySummary';
 
 const logger = createLogger('memory.livingMemoryBridge');
 
@@ -371,6 +372,10 @@ export async function buildLivingMemorySections(
   const dynamicAddenda: string[] = [];
   if (activeTaskTitle) {
     dynamicAddenda.push(`Active task: ${activeTaskTitle}`);
+  }
+  const uiAvailabilitySummary = buildUiAvailabilitySummary(query, recalledFacts);
+  if (uiAvailabilitySummary) {
+    dynamicAddenda.push(uiAvailabilitySummary);
   }
 
   let reflectionBlock = '';
