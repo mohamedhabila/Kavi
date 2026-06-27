@@ -170,6 +170,62 @@ describe('structured observation memory', () => {
     ]);
   });
 
+  it('keeps large UI inventories parseable while preserving field structure', () => {
+    const bulkControls = Array.from(
+      { length: 80 },
+      (_, index) =>
+        `\t[${200 + index}] button 'bulk-control-${index}-${'x'.repeat(
+          180,
+        )}', clickable, visible`,
+    );
+
+    recordStructuredObservationsFromMessages({
+      conversationId: 'conv-large-ui',
+      threadId: 'conv-large-ui',
+      sourceRunId: 'run-large-ui',
+      now: 425,
+      messages: [
+        toolMessage({
+          url: 'https://forum.example.test/submit/funny',
+          accessibility_tree: [
+            "RootWebArea 'Submit'",
+            "\t[10] LabelText '', visible",
+            "\t\tStaticText 'Title'",
+            "\t[11] textbox 'Title', editable, visible",
+            "\t[12] LabelText '', visible",
+            "\t\tStaticText 'Body'",
+            "\t[13] textbox 'Body', editable, visible",
+            "\t[14] LabelText '', visible",
+            "\t\tStaticText 'Forum'",
+            "\t[15] combobox 'funny' value='funny', clickable, hasPopup='menu'",
+            "\t\t[151] option 'general', selected=False",
+            "\t\t[152] option 'funny', selected=True",
+            ...bulkControls,
+          ].join('\n'),
+        }),
+      ],
+    });
+
+    const inventory = listFacts({
+      memoryKind: 'ui_inventory',
+      originConversationId: 'conv-large-ui',
+    })[0];
+    const inventoryObject = JSON.parse(inventory.objectText);
+
+    expect(inventory.objectText.length).toBeLessThanOrEqual(4_000);
+    expect(inventoryObject.fieldLabels).toEqual(['Title', 'Body', 'Forum']);
+    expect(inventoryObject.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: 'Body', role: 'textbox' }),
+        expect.objectContaining({
+          label: 'Forum',
+          role: 'combobox',
+          options: ['general', 'funny'],
+        }),
+      ]),
+    );
+  });
+
   it('records generic label-value state for active filters without phrase rules', () => {
     recordStructuredObservationsFromMessages({
       conversationId: 'conv-filter-state',

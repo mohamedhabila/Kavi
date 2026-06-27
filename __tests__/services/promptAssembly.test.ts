@@ -257,6 +257,44 @@ describe('assemblePrompt — L3 contents', () => {
     expect(uiSection?.text).not.toContain('"nodes"');
   });
 
+  it('renders UI inventory field structure before bulky controls', () => {
+    const out = assemblePrompt({
+      basePrompt: 'BASE',
+      retrievedFacts: [
+        makeFact({
+          predicate: 'ui_inventory',
+          memoryKind: 'ui_inventory',
+          sourceRunId: 'run-form',
+          objectText: JSON.stringify({
+            nodeCount: 100,
+            controlCount: 24,
+            textEntryCount: 4,
+            searchControlCount: 1,
+            fieldLabels: ['URL', 'Image', 'Title', 'Body', 'Forum'],
+            fields: [
+              { order: 2, label: 'Title', role: 'textbox' },
+              { order: 3, label: 'Body', role: 'textbox' },
+              { order: 4, label: 'Forum', role: 'combobox', value: 'funny' },
+            ],
+            controls: Array.from({ length: 80 }, (_, index) => ({
+              role: 'button',
+              name: `bulk-control-${index}`,
+            })),
+            url: 'https://forum.example.test/submit/funny',
+            sourceRunId: 'run-form',
+            stateIndex: '21',
+          }),
+        }),
+      ],
+    });
+
+    const text = flattenPromptSections(out.sections);
+    expect(text).toContain('"fieldLabels":["URL","Image","Title","Body","Forum"]');
+    expect(text).toContain('"label":"Body"');
+    expect(text).toContain('"label":"Forum"');
+    expect(text).not.toContain('bulk-control-79');
+  });
+
   it('skips L3 entirely when nothing dynamic to render', () => {
     const out = assemblePrompt({ basePrompt: 'BASE', blocks: [makeBlock()] });
     expect(out.sections).toHaveLength(2);
