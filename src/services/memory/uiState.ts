@@ -98,9 +98,9 @@ const ACTIONABLE_ATTRIBUTES = new Set([
   'selected',
 ]);
 
-const MAX_CONTROL_SUMMARY_ITEMS = 80;
-const MAX_FIELD_SUMMARY_ITEMS = 48;
-const MAX_LABEL_VALUE_ITEMS = 64;
+const MAX_CONTROL_SUMMARY_ITEMS = 36;
+const MAX_FIELD_SUMMARY_ITEMS = 36;
+const MAX_LABEL_VALUE_ITEMS = 36;
 const MAX_PARSED_ACCESSIBILITY_NODES = 2_500;
 const REQUIRED_MARKER = '*';
 
@@ -202,10 +202,10 @@ export function compactUiInventory(summary: UiStateSummary): JsonRecord {
     controlCount: summary.controlCount,
     textEntryCount: summary.textEntryCount,
     searchControlCount: summary.searchControlCount,
-    roleCounts: summary.roleCounts,
     fields: summary.fields.slice(0, MAX_FIELD_SUMMARY_ITEMS).map(compactField),
     controls: summary.controls.slice(0, MAX_CONTROL_SUMMARY_ITEMS).map(compactControl),
     labelValues: summary.labelValues.slice(0, MAX_LABEL_VALUE_ITEMS),
+    roleCounts: summary.roleCounts,
   };
 }
 

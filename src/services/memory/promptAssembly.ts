@@ -88,7 +88,7 @@ const L3_PROCEDURES_HEADER = '#### Procedures';
 const L3_OUTCOMES_HEADER = '#### Outcomes and Gotchas';
 const L3_EPISODES_HEADER = '### Recent Activity';
 const MAX_RENDERED_FACT_CHARS = 3_200;
-const MAX_RENDERED_UI_FACT_CHARS = 1_800;
+const MAX_RENDERED_UI_FACT_CHARS = 2_400;
 const MAX_RENDERED_EPISODE_CHARS = 200;
 const SURFACE_PROMPT_FIELDS = [
   'url',

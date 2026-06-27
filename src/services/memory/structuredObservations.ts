@@ -20,7 +20,7 @@ import {
   type AccessibilityNode,
 } from './uiState';
 
-const MAX_TEXT_CHARS = 1400;
+const MAX_TEXT_CHARS = 4_000;
 const MAX_FIELD_FACTS_PER_PAYLOAD = 96;
 const MAX_FILTER_STATE_FACTS_PER_PAYLOAD = 96;
 
@@ -276,8 +276,8 @@ function recordUiMemories(input: {
       subjectName: input.surfaceId,
       predicate: 'ui_inventory',
       objectText: compactJson({
-        ...baseUiPayload(input),
         ...compactUiInventory(summary),
+        ...baseUiPayload(input),
       }),
       attributes: {
         surfaceId: input.surfaceId,
@@ -302,8 +302,8 @@ function recordUiMemories(input: {
       subjectName: input.surfaceId,
       predicate: 'ui_field',
       objectText: compactJson({
-        ...baseUiPayload(input),
         ...compactField(field),
+        ...baseUiPayload(input),
       }),
       attributes: {
         surfaceId: input.surfaceId,
@@ -331,10 +331,10 @@ function recordUiMemories(input: {
       subjectName: input.surfaceId,
       predicate: 'ui_label_value',
       objectText: compactJson({
-        ...baseUiPayload(input),
         label: labelValue.label,
         value: labelValue.value,
         sourceIndex: labelValue.sourceIndex,
+        ...baseUiPayload(input),
       }),
       attributes: {
         surfaceId: input.surfaceId,
@@ -358,11 +358,6 @@ function recordUiMemories(input: {
 function baseUiPayload(input: Parameters<typeof recordUiMemories>[0]): JsonRecord {
   return {
     url: input.url,
-    goal: input.goal,
-    action: input.action,
-    thought: input.thought,
-    trajectoryOutcome: input.trajectoryOutcome,
-    outcome: input.outcome,
     sourceRunId: input.sourceRunId,
     stateIndex: input.stateIndex,
   };
