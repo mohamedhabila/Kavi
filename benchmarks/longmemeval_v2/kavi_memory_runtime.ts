@@ -46,6 +46,8 @@ const DEFAULT_CONFIG: RuntimeConfig = {
   minScore: 0.01,
   conversationId: 'longmemeval-v2',
 };
+const MAX_ACCESSIBILITY_TREE_CHARS = 50_000;
+const MAX_STRUCTURED_STATE_CHARS = 60_000;
 
 const insertedTrajectoryIds = new Set<string>();
 let currentConfig: RuntimeConfig = { ...DEFAULT_CONFIG };
@@ -117,14 +119,14 @@ function stateEvidenceObject(
     action: compactScalar(state.action, 800),
     thought: compactScalar(state.thought, 800),
     screenshot: compactScalar(state.screenshot, 500),
-    accessibility_tree: compactScalar(state.accessibility_tree, 3200),
+    accessibility_tree: compactScalar(state.accessibility_tree, MAX_ACCESSIBILITY_TREE_CHARS),
   };
 }
 
 function buildGraphEvidence(trajectory: JsonObject, id: string): string[] {
   const evidence: string[] = [];
   const pushEvidence = (payload: JsonObject) => {
-    evidence.push(`longmemeval:${compactJson(payload, 5000)}`);
+    evidence.push(`longmemeval:${compactJson(payload, MAX_STRUCTURED_STATE_CHARS)}`);
   };
 
   pushEvidence({ kind: 'trajectory', ...trajectoryMetadata(trajectory, id) });
@@ -177,9 +179,9 @@ function buildToolMessagesForTrajectory(trajectory: JsonObject, id: string, now:
           action: compactScalar(state.action, 800),
           thought: compactScalar(state.thought, 800),
           screenshot: compactScalar(state.screenshot, 500),
-          accessibility_tree: compactScalar(state.accessibility_tree, 3200),
+          accessibility_tree: compactScalar(state.accessibility_tree, MAX_ACCESSIBILITY_TREE_CHARS),
         },
-        5000,
+        MAX_STRUCTURED_STATE_CHARS,
       ),
       toolCallId,
       timestamp: now + index * 2 + 2,
