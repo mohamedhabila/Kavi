@@ -135,14 +135,6 @@ export function normalizeTerminalClosedTurnMessages(messages: Message[]): Messag
   return messages;
 }
 
-function isStructuredEvidenceCandidate(evidence: string): boolean {
-  const trimmed = evidence.trim();
-  const colonIndex = trimmed.indexOf(':');
-  if (colonIndex <= 0) return false;
-  const payload = trimmed.slice(colonIndex + 1).trimStart();
-  return payload.startsWith('{') || payload.startsWith('[');
-}
-
 function findLastMessageIndex(messages: Message[], role: Message['role']): number {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     if (messages[index]?.role === role) {
@@ -471,7 +463,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
       structuredMemoryFactIds.push(...structuredFromEvidence.factIds);
       const consumedEvidence = new Set(structuredFromEvidence.consumedEvidence);
       const bridgeableEvidence = input.graphGoalEvidence.filter(
-        (evidence) => !consumedEvidence.has(evidence) && !isStructuredEvidenceCandidate(evidence),
+        (evidence) => !consumedEvidence.has(evidence),
       );
       const bridgeResult = bridgeGraphGoalEvidence(bridgeableEvidence, {
         subjectName: input.taskId ?? input.threadId,

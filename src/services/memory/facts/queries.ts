@@ -49,10 +49,6 @@ function buildFactFilter(options: ListFactsOptions): FactFilter {
     clauses.push('origin_task_id = ?');
     params.push(options.originTaskId);
   }
-  if (options.sourceRunId) {
-    clauses.push('source_run_id = ?');
-    params.push(options.sourceRunId);
-  }
   if (options.pinnedOnly) clauses.push('pinned = 1');
   if (options.memoryKind) {
     const kinds = Array.isArray(options.memoryKind) ? options.memoryKind : [options.memoryKind];

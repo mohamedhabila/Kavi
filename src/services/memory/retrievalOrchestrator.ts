@@ -54,8 +54,6 @@ interface RetrievalLaneConfig {
   minLimit: number;
   share: number;
   priority: number;
-  vectorWeight?: number;
-  textWeight?: number;
 }
 
 const RETRIEVAL_LANES: RetrievalLaneConfig[] = [
@@ -76,8 +74,6 @@ const RETRIEVAL_LANES: RetrievalLaneConfig[] = [
     minLimit: 2,
     share: 0.45,
     priority: 1,
-    vectorWeight: 0,
-    textWeight: 1,
   },
   {
     id: 'procedural',
@@ -213,8 +209,6 @@ async function recallLane(
   const laneOptionsBase: RecallFactsOptions = {
     ...input.options,
     memoryKind: config.memoryKinds,
-    ...(typeof config.vectorWeight === 'number' ? { vectorWeight: config.vectorWeight } : {}),
-    ...(typeof config.textWeight === 'number' ? { textWeight: config.textWeight } : {}),
   };
   const hasExpansion =
     input.expansionQuery.trim().length > 0 &&
@@ -286,109 +280,6 @@ function mergeLaneResults(
     if (merged.length >= limit) break;
   }
   return merged;
-}
-
-function numericStateIndex(fact: MemoryFact): number | null {
-  const value = fact.attributes.stateIndex;
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
-
-function isUiMemoryKind(kind: MemoryFactKind): boolean {
-  return kind === 'ui_inventory' || kind === 'ui_field' || kind === 'ui_filter_state';
-}
-
-function sourceCompanionScore(anchor: ScoredFact, fact: MemoryFact, index: number): ScoredFact {
-  const anchorState = numericStateIndex(anchor.fact);
-  const factState = numericStateIndex(fact);
-  const distance =
-    anchorState !== null && factState !== null ? Math.abs(anchorState - factState) : index + 4;
-  const memoryKindBoost = fact.memoryKind === 'ui_filter_state' || fact.memoryKind === 'ui_field' ? 0.02 : 0;
-  const score = Math.max(0, anchor.score - distance * 0.002 + memoryKindBoost);
-  return {
-    fact,
-    score,
-    vectorScore: 0,
-    textScore: 0,
-    pinnedBoost: 0,
-    decayMultiplier: anchor.decayMultiplier,
-    scopeBoost: anchor.scopeBoost,
-    reinforcementBoost: 0,
-    importanceScore: fact.importance * 0.04,
-    retrievabilityScore: fact.retrievability,
-    relevanceScore: Math.max(0, anchor.relevanceScore - distance * 0.002),
-  };
-}
-
-function sourceCompanionsForFact(
-  anchor: ScoredFact,
-  input: RetrievalOrchestratorInput,
-  seenIds: Set<string>,
-): ScoredFact[] {
-  const sourceRunId = anchor.fact.sourceRunId;
-  if (!sourceRunId || !isUiMemoryKind(anchor.fact.memoryKind)) return [];
-  const resolvedTaskId = input.taskId ?? input.activeTaskId;
-  const companions = listFacts({
-    sourceRunId,
-    memoryKind: ['ui_field', 'ui_filter_state'],
-    ...(input.conversationId ? { originConversationId: input.conversationId } : {}),
-    ...(resolvedTaskId ? { originTaskId: resolvedTaskId } : {}),
-    limit: 48,
-  })
-    .filter((fact) => !seenIds.has(fact.id))
-    .sort((left, right) => {
-      const anchorState = numericStateIndex(anchor.fact);
-      const leftState = numericStateIndex(left);
-      const rightState = numericStateIndex(right);
-      const leftDistance =
-        anchorState !== null && leftState !== null ? Math.abs(leftState - anchorState) : 999;
-      const rightDistance =
-        anchorState !== null && rightState !== null ? Math.abs(rightState - anchorState) : 999;
-      if (leftDistance !== rightDistance) return leftDistance - rightDistance;
-      if (left.memoryKind !== right.memoryKind) {
-        if (left.memoryKind === 'ui_filter_state') return -1;
-        if (right.memoryKind === 'ui_filter_state') return 1;
-      }
-      return right.updatedAt - left.updatedAt;
-    })
-    .slice(0, 3);
-  return companions.map((fact, index) => sourceCompanionScore(anchor, fact, index));
-}
-
-function expandWithSourceCompanions(
-  scoredFacts: ScoredFact[],
-  input: RetrievalOrchestratorInput,
-  limit: number,
-): ScoredFact[] {
-  const expanded: ScoredFact[] = [];
-  const seenIds = new Set<string>();
-  const uiInventorySeenBySource = new Set<string>();
-  const add = (entry: ScoredFact): boolean => {
-    if (expanded.length >= limit) return false;
-    if (seenIds.has(entry.fact.id)) return false;
-    if (entry.fact.memoryKind === 'ui_inventory' && entry.fact.sourceRunId) {
-      const key = entry.fact.sourceRunId;
-      if (uiInventorySeenBySource.has(key)) return false;
-      uiInventorySeenBySource.add(key);
-    }
-    expanded.push(entry);
-    seenIds.add(entry.fact.id);
-    return true;
-  };
-
-  for (const entry of scoredFacts) {
-    if (!add(entry)) continue;
-    for (const companion of sourceCompanionsForFact(entry, input, seenIds)) {
-      add(companion);
-      if (expanded.length >= limit) break;
-    }
-    if (expanded.length >= limit) break;
-  }
-  return expanded;
 }
 
 function scoredScopedCurrentFact(fact: MemoryFact): ScoredFact {
@@ -477,11 +368,7 @@ export async function orchestrateMemoryRetrieval(
     input,
     limit - laneFactCount,
   );
-  const scoredFacts = expandWithSourceCompanions(
-    mergeLaneResults(lanes, scopedCurrentFacts, limit),
-    input,
-    limit,
-  );
+  const scoredFacts = mergeLaneResults(lanes, scopedCurrentFacts, limit);
   const facts = scoredFacts.map((entry) => entry.fact);
   markFactsRecalled(
     facts.map((fact) => fact.id),
