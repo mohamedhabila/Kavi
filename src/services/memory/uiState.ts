@@ -24,6 +24,7 @@ export interface UiControl {
   role: string;
   name: string | null;
   value: string | null;
+  options: string[];
   attributes: string[];
   label: string | null;
   required: boolean;
@@ -39,6 +40,7 @@ export interface UiField {
   role: string;
   controlName: string | null;
   value: string | null;
+  options: string[];
   controlIndex: number;
   nodeId: string | null;
   required: boolean;
@@ -105,11 +107,13 @@ const TABLE_CONTAINER_ROLES = new Set(['grid', 'table', 'treegrid']);
 const ROW_ROLES = new Set(['row']);
 const COLUMN_HEADER_ROLES = new Set(['columnheader']);
 const CELL_ROLES = new Set(['cell', 'gridcell', 'rowheader']);
+const OPTION_ROLES = new Set(['option']);
 
 const MAX_CONTROL_SUMMARY_ITEMS = 36;
 const MAX_FIELD_SUMMARY_ITEMS = 36;
 const MAX_LABEL_VALUE_ITEMS = 36;
 const MAX_NAME_SUMMARY_ITEMS = 48;
+const MAX_CONTROL_OPTIONS = 48;
 const MAX_TABLE_SUMMARY_ITEMS = 6;
 const MAX_TABLE_COLUMNS = 18;
 const MAX_TABLE_VALUES_PER_COLUMN = 12;
@@ -143,7 +147,13 @@ export function extractUiStateSummary(nodes: AccessibilityNode[]): UiStateSummar
     if (!isInteractiveControlNode(node)) continue;
     const labelBlock = findNearestUnusedPriorLabel(node, labelBlocks, usedLabelIndexes);
     if (labelBlock) usedLabelIndexes.add(labelBlock.index);
-    const control = controlFromNode(node, labelBlock?.text ?? null, labelBlock?.required ?? false);
+    const options = childOptionNames(nodes, node.index);
+    const control = controlFromNode(
+      node,
+      labelBlock?.text ?? null,
+      labelBlock?.required ?? false,
+      options,
+    );
     controls.push(control);
     if (labelBlock && FIELD_CONTROL_ROLES.has(node.role.toLocaleLowerCase())) {
       fields.push({
@@ -152,6 +162,7 @@ export function extractUiStateSummary(nodes: AccessibilityNode[]): UiStateSummar
         role: node.role,
         controlName: node.name,
         value: control.value,
+        options: control.options,
         controlIndex: node.index,
         nodeId: node.nodeId,
         required: labelBlock.required || control.required,
@@ -186,6 +197,7 @@ export function compactControl(control: UiControl): JsonRecord {
     name: control.name,
     label: control.label,
     value: control.value,
+    options: control.options.length > 0 ? control.options : undefined,
     required: control.required || undefined,
     checked: control.checked,
     selected: control.selected,
@@ -201,6 +213,7 @@ export function compactField(field: UiField): JsonRecord {
     role: field.role,
     controlName: field.controlName,
     value: field.value,
+    options: field.options.length > 0 ? field.options : undefined,
     controlIndex: field.controlIndex,
     nodeId: field.nodeId,
     required: field.required || undefined,
@@ -381,6 +394,7 @@ function controlFromNode(
   node: AccessibilityNode,
   label: string | null,
   labelRequired: boolean,
+  options: string[],
 ): UiControl {
   return {
     index: node.index,
@@ -388,6 +402,7 @@ function controlFromNode(
     role: node.role,
     name: node.name,
     value: attributeValue(node.attributes, 'value'),
+    options,
     attributes: node.attributes,
     label,
     required: labelRequired || hasAttributeFlag(node.attributes, 'required'),
@@ -396,6 +411,24 @@ function controlFromNode(
     disabled: hasAttributeFlag(node.attributes, 'disabled'),
     expanded: attributeValue(node.attributes, 'expanded'),
   };
+}
+
+function childOptionNames(nodes: AccessibilityNode[], controlIndex: number): string[] {
+  const control = nodes[controlIndex];
+  if (!control) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (let index = controlIndex + 1; index < nodes.length; index += 1) {
+    const node = nodes[index];
+    if (node.indent <= control.indent) break;
+    if (!OPTION_ROLES.has(node.role.toLocaleLowerCase())) continue;
+    const name = node.name?.trim();
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    out.push(name);
+    if (out.length >= MAX_CONTROL_OPTIONS) break;
+  }
+  return out;
 }
 
 function attributeValue(attributes: string[], key: string): string | null {

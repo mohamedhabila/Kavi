@@ -112,6 +112,8 @@ describe('structured observation memory', () => {
             "\t\tStaticText 'Destination'",
             "\t\tStaticText '*'",
             "\t[16] combobox 'general' value='general', clickable, hasPopup='menu'",
+            "\t\t[161] option 'general', selected=True",
+            "\t\t[162] option 'news', selected=False",
             "\t[17] button 'Create submission', clickable, visible",
             "\t[18] LabelText 'Decorative helper', clickable, visible",
           ].join('\n'),
@@ -135,14 +137,21 @@ describe('structured observation memory', () => {
       label: 'Destination',
       controlName: 'general',
       value: 'general',
+      options: ['general', 'news'],
       required: true,
     });
     expect(inventoryObject).toMatchObject({
-      controlCount: 7,
+      controlCount: 9,
       textEntryCount: 2,
       searchControlCount: 1,
       fieldLabels: ['Title', 'Body', 'Destination'],
     });
+    expect(
+      inventoryObject.controls.find(
+        (control: { role?: string; name?: string }) =>
+          control.role === 'combobox' && control.name === 'general',
+      ),
+    ).toMatchObject({ options: ['general', 'news'] });
     expect(inventoryObject.controls.some((control: { name?: string }) => control.name === 'Formatting help +')).toBe(
       true,
     );

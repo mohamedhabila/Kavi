@@ -314,6 +314,7 @@ function recordUiMemories(input: {
         role: field.role,
         name: field.controlName,
         value: field.value,
+        options: field.options,
         controlIndex: field.controlIndex,
         nodeId: field.nodeId,
         required: field.required,
