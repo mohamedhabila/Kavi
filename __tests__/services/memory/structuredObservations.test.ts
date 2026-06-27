@@ -77,6 +77,9 @@ describe('structured observation memory', () => {
     expect(affordances).toHaveLength(2);
     expect(outcomes).toHaveLength(1);
     expect(inventory?.objectText).toContain('Save');
+    expect(Math.min(...affordances.map((fact) => fact.retrievability))).toBeGreaterThan(
+      inventory!.retrievability,
+    );
     expect(inventories.every((fact) => fact.scope === 'session')).toBe(true);
     expect(inventories.every((fact) => fact.memoryKind === 'ui_inventory')).toBe(true);
     expect(inventory?.attributes).toMatchObject({

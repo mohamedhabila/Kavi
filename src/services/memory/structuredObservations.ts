@@ -305,7 +305,7 @@ function recordUiMemories(input: {
         searchControlCount: summary.searchControlCount,
       },
       context: input.context,
-      retrievability: 0.96,
+      retrievability: 0.86,
       stability: 0.75,
     });
     if (inventoryFactId) factIds.push(inventoryFactId);
@@ -339,7 +339,7 @@ function recordUiMemories(input: {
         contextLabels: control.contextLabels,
       },
       context: input.context,
-      retrievability: 0.94,
+      retrievability: 0.98,
       stability: 0.72,
     });
     if (affordanceId) factIds.push(affordanceId);
@@ -369,7 +369,7 @@ function recordUiMemories(input: {
         required: field.required,
       },
       context: input.context,
-      retrievability: 0.9,
+      retrievability: 0.93,
       stability: 0.72,
     });
     if (fieldId) factIds.push(fieldId);
@@ -396,7 +396,7 @@ function recordUiMemories(input: {
         sourceIndex: labelValue.sourceIndex,
       },
       context: input.context,
-      retrievability: 0.88,
+      retrievability: 0.9,
       stability: 0.7,
     });
     if (filterId) factIds.push(filterId);

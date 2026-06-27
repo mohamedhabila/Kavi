@@ -8,7 +8,6 @@ import {
   type MemoryFactKind,
   type MemoryFactScope,
 } from './types';
-import { ensureFactRetrievalIndexCoverage } from './retrievalIndex';
 
 type SqlBindValue = string | number;
 
@@ -207,7 +206,6 @@ export function listFactsForRecallCandidates(
   ).slice(0, clampLimit(options.lexicalUnitLimit, DEFAULT_RECALL_LEXICAL_UNIT_LIMIT, 64));
   const prioritizedLexicalUnits = prioritizeLexicalUnits(lexicalUnits);
   if (prioritizedLexicalUnits.length > 0) {
-    ensureFactRetrievalIndexCoverage();
     addIndexedLexicalRows(prioritizedLexicalUnits, totalLimit);
   }
 
