@@ -222,6 +222,7 @@ class KaviIsolatedMemory(Memory):
                 "query": query,
                 "queryImage": query_image,
                 "questionId": context.get("question_id"),
+                "questionContext": context.get("question_item"),
                 "config": self.config,
             }
         )

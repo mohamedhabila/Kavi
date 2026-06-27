@@ -36,6 +36,7 @@ interface RuntimeRequest {
   query?: string;
   queryImage?: string | null;
   questionId?: string | null;
+  questionContext?: JsonObject | null;
 }
 
 const DEFAULT_CONFIG: RuntimeConfig = {
@@ -112,6 +113,8 @@ function stateEvidenceObject(
 ): JsonObject {
   return {
     trajectory_id: trajectoryIdValue,
+    domain: compactScalar(trajectory.domain, 160),
+    environment: compactScalar(trajectory.environment, 160),
     goal: compactScalar(trajectory.goal, 600),
     trajectory_outcome: compactScalar(trajectory.outcome, 160),
     state_index: state.state_index ?? state.step ?? fallbackIndex,
@@ -172,6 +175,8 @@ function buildToolMessagesForTrajectory(trajectory: JsonObject, id: string, now:
         {
           status: 'completed',
           trajectory_id: id,
+          domain: compactScalar(trajectory.domain, 160),
+          environment: compactScalar(trajectory.environment, 160),
           goal: compactScalar(trajectory.goal, 600),
           trajectory_outcome: compactScalar(trajectory.outcome, 160),
           state_index: stateIndex,
@@ -336,11 +341,24 @@ function buildQueryMessages(query: string, queryImage: string | null, now: numbe
   ];
 }
 
-function buildQueryGoals(query: string, questionId: string | null, now: number): AgentGoal[] {
+function buildQueryGoals(
+  query: string,
+  questionId: string | null,
+  questionContext: JsonObject | null,
+  now: number,
+): AgentGoal[] {
+  const contextFields = questionContext
+    ? {
+        domain: compactScalar(questionContext.domain, 160),
+        environment: compactScalar(questionContext.environment, 160),
+        question_type: compactScalar(questionContext.question_type, 160),
+      }
+    : null;
   return [
     {
       id: questionId ? `question-${questionId}` : `question-${now}`,
       title: query,
+      ...(contextFields ? { description: compactJson(contextFields, 600) } : {}),
       status: 'active',
       dependencies: [],
       evidence: [],
@@ -383,7 +401,12 @@ async function queryMemory(request: RuntimeRequest): Promise<JsonObject> {
     conversationId: resolved.conversationId,
     mode: 'agentic',
     recallLimit: resolved.maxItems,
-    goals: buildQueryGoals(query, request.questionId ?? null, now),
+    goals: buildQueryGoals(
+      query,
+      request.questionId ?? null,
+      request.questionContext ?? null,
+      now,
+    ),
     now,
   });
   timings.memory_access_seconds = (performance.now() - stepStarted) / 1000;
@@ -409,6 +432,7 @@ async function queryMemory(request: RuntimeRequest): Promise<JsonObject> {
     flattened_sections: flattenedSections,
     recalled_fact_count: memoryAccess.livingMemory?.recalledFactCount ?? 0,
     recalled_episode_count: memoryAccess.livingMemory?.recalledEpisodeCount ?? 0,
+    living_memory_timings: memoryAccess.livingMemory?.timings ?? null,
     duration_seconds: (performance.now() - started) / 1000,
     timings,
     question_id: request.questionId ?? null,
@@ -417,24 +441,29 @@ async function queryMemory(request: RuntimeRequest): Promise<JsonObject> {
   };
 }
 
-function stats(): JsonObject {
+function stats(options: { includeSamples?: boolean } = {}): JsonObject {
+  const includeSamples = options.includeSamples === true;
   return {
     db_dir: resolve(process.env.KAVI_MEMORY_SQLITE_DIR || process.cwd()),
     memory_type: 'kavi_memory_isolated',
     inserted_trajectories: insertedTrajectoryIds.size,
     insert_calls: insertCalls,
     chunk_count: getChunkCount(),
-    fact_count: countFacts(),
-    fact_counts_by_kind: countFactsByKind(),
-    episode_count: countEpisodes(),
-    sample_facts: listFacts({ limit: 5 }).map((fact) => ({
-      id: fact.id,
-      scope: fact.scope,
-      memoryKind: fact.memoryKind,
-      sourceRunId: fact.sourceRunId,
-      predicate: fact.predicate,
-      objectText: fact.objectText,
-    })),
+    ...(includeSamples
+      ? {
+          fact_count: countFacts(),
+          fact_counts_by_kind: countFactsByKind(),
+          episode_count: countEpisodes(),
+          sample_facts: listFacts({ limit: 5 }).map((fact) => ({
+            id: fact.id,
+            scope: fact.scope,
+            memoryKind: fact.memoryKind,
+            sourceRunId: fact.sourceRunId,
+            predicate: fact.predicate,
+            objectText: fact.objectText,
+          })),
+        }
+      : {}),
     config: currentConfig,
   };
 }
@@ -449,7 +478,7 @@ async function handleRequest(request: RuntimeRequest): Promise<JsonObject | null
     case 'query':
       return queryMemory(request);
     case 'stats':
-      return stats();
+      return stats({ includeSamples: true });
     case 'shutdown':
       closeMemoryDb();
       return null;
