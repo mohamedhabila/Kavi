@@ -88,7 +88,28 @@ const L3_PROCEDURES_HEADER = '#### Procedures';
 const L3_OUTCOMES_HEADER = '#### Outcomes and Gotchas';
 const L3_EPISODES_HEADER = '### Recent Activity';
 const MAX_RENDERED_FACT_CHARS = 3_200;
+const MAX_RENDERED_UI_FACT_CHARS = 900;
 const MAX_RENDERED_EPISODE_CHARS = 200;
+const SURFACE_PROMPT_FIELDS = [
+  'url',
+  'goal',
+  'action',
+  'thought',
+  'outcome',
+  'trajectoryOutcome',
+  'sourceRunId',
+  'stateIndex',
+] as const;
+const UI_AFFORDANCE_PROMPT_FIELDS = [
+  'index',
+  'nodeId',
+  'role',
+  'name',
+  'attributes',
+  'url',
+  'sourceRunId',
+  'stateIndex',
+] as const;
 
 function joinNonEmpty(parts: Array<string | null | undefined>, sep = '\n\n'): string {
   return parts
@@ -144,6 +165,57 @@ function fitText(value: string, maxChars: number): string {
   return `${trimmed.slice(0, maxChars - 1).trimEnd()}\u2026`;
 }
 
+function parseJsonRecord(value: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function compactJsonFields(
+  value: Record<string, unknown>,
+  fields: ReadonlyArray<string>,
+): string {
+  const compact: Record<string, unknown> = {};
+  for (const field of fields) {
+    if (value[field] !== undefined && value[field] !== null && value[field] !== '') {
+      compact[field] = value[field];
+    }
+  }
+  return JSON.stringify(Object.keys(compact).length > 0 ? compact : value);
+}
+
+function compactFactFields(
+  fact: PromptMemoryFact,
+  fields: ReadonlyArray<string>,
+): string | null {
+  const compact: Record<string, unknown> = {};
+  for (const field of fields) {
+    const rawValue = field === 'sourceRunId' ? (fact.sourceRunId ?? fact.attributes[field]) : fact.attributes[field];
+    if (rawValue !== undefined && rawValue !== null && rawValue !== '') {
+      compact[field] = rawValue;
+    }
+  }
+  return Object.keys(compact).length > 0 ? JSON.stringify(compact) : null;
+}
+
+function renderableFactText(fact: PromptMemoryFact): string {
+  const memoryKind = fact.memoryKind ?? 'semantic_fact';
+  if (memoryKind !== 'surface_schema' && memoryKind !== 'ui_affordance') {
+    return fact.objectText;
+  }
+  const fields = memoryKind === 'surface_schema' ? SURFACE_PROMPT_FIELDS : UI_AFFORDANCE_PROMPT_FIELDS;
+  const parsed = parseJsonRecord(fact.objectText);
+  const compactFromAttributes = compactFactFields(fact, fields);
+  if (compactFromAttributes) return compactFromAttributes;
+  if (!parsed) return fact.objectText;
+  return compactJsonFields(parsed, fields);
+}
+
 function renderFact(fact: PromptMemoryFact): string {
   // Compact one-liner. Confidence rendered only when meaningfully low.
   const conf =
@@ -155,7 +227,11 @@ function renderFact(fact: PromptMemoryFact): string {
   const memoryKind = fact.memoryKind ?? 'semantic_fact';
   const kind = memoryKind === 'semantic_fact' ? '' : ` kind=${memoryKind}`;
   const meta = kind || source ? ` [${`${kind}${source}`.trim()}]` : '';
-  return `- ${subject} ${fact.predicate}: ${fitText(fact.objectText, MAX_RENDERED_FACT_CHARS)}${conf}${meta}`;
+  const maxChars =
+    memoryKind === 'ui_affordance' || memoryKind === 'surface_schema'
+      ? MAX_RENDERED_UI_FACT_CHARS
+      : MAX_RENDERED_FACT_CHARS;
+  return `- ${subject} ${fact.predicate}: ${fitText(renderableFactText(fact), maxChars)}${conf}${meta}`;
 }
 
 function renderEpisode(episode: MemoryEpisode): string {

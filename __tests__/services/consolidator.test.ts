@@ -18,8 +18,6 @@ import {
   buildConsolidatorPrompt,
   parseConsolidatorOutput,
   applyConsolidatorResult,
-  consolidateTurn,
-  type ConsolidatorExtractor,
 } from '../../src/services/memory/consolidator';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -673,62 +671,5 @@ describe('applyConsolidatorResult', () => {
         { now: 1 },
       ),
     ).not.toThrow();
-  });
-});
-
-describe('consolidateTurn', () => {
-  const buildExtractor = (payload: unknown): ConsolidatorExtractor =>
-    jest.fn().mockResolvedValue(JSON.stringify(payload));
-
-  it('runs end-to-end and persists by default', async () => {
-    const extractor = buildExtractor({
-      new_facts: [{ subject: 'user', predicate: 'has_name', value: 'Mo' }],
-      active_focus: 'Saying hello.',
-      open_threads: [],
-      notable: [],
-    });
-    const result = await consolidateTurn(
-      {
-        userMessage: 'My name is Mo.',
-        assistantMessage: 'Nice to meet you, Mo.',
-        now: 42,
-      },
-      { extractor },
-    );
-    expect(result.newFacts).toHaveLength(1);
-    expect(getBlock('active_focus')?.content).toBe('Saying hello.');
-  });
-
-  it('skips persistence when persist=false', async () => {
-    const extractor = buildExtractor({
-      new_facts: [{ subject: 'user', predicate: 'has_name', value: 'Mo' }],
-      active_focus: 'noop',
-      open_threads: [],
-      notable: [],
-    });
-    const result = await consolidateTurn(
-      { userMessage: 'hi', assistantMessage: 'hi back' },
-      { extractor, persist: false },
-    );
-    expect(result.newFacts).toHaveLength(1);
-    const userEntity = findEntityByName('user');
-    expect(userEntity).toBeNull();
-    expect(getBlock('active_focus')?.content).toBe('');
-  });
-
-  it('returns an empty result when the extractor throws', async () => {
-    const extractor: ConsolidatorExtractor = () => Promise.reject(new Error('network'));
-    const result = await consolidateTurn(
-      { userMessage: 'hi', assistantMessage: 'hi back' },
-      { extractor },
-    );
-    expect(result).toEqual({
-      episodeSummary: null,
-      newFacts: [],
-      invalidatedFacts: [],
-      activeFocus: null,
-      openThreads: [],
-      notable: [],
-    });
   });
 });

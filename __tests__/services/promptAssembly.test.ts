@@ -218,6 +218,45 @@ describe('assemblePrompt — L3 contents', () => {
     expect(section).toContain('\u2026');
   });
 
+  it('keeps multiple UI trajectory facts inside a compact dynamic section', () => {
+    const retrievedFacts = [0, 1, 5, 6, 7].map((stateIndex) =>
+      makeFact({
+        id: `ui-${stateIndex}`,
+        predicate: 'surface_inventory',
+        memoryKind: 'surface_schema',
+        sourceRunId: 'run-ui',
+        attributes: {
+          url: `https://app.example/surface/${stateIndex}`,
+          action: `action-${stateIndex}`,
+          thought: `evidence-${stateIndex} ${'detail '.repeat(40)}`,
+          sourceRunId: 'run-ui',
+          stateIndex: String(stateIndex),
+        },
+        objectText: `${JSON.stringify({
+          url: `https://app.example/surface/${stateIndex}`,
+          action: `action-${stateIndex}`,
+          thought: `evidence-${stateIndex} ${'detail '.repeat(40)}`,
+          sourceRunId: 'run-ui',
+          stateIndex: String(stateIndex),
+          nodes: Array.from({ length: 40 }, (_, index) => ({
+            role: 'button',
+            name: `node-${stateIndex}-${index}`,
+            attributes: ['visible', 'clickable'],
+          })),
+        }).slice(0, 600)}...`,
+      }),
+    );
+    const out = assemblePrompt({ basePrompt: 'BASE', retrievedFacts });
+    const uiSection = out.sections.find((section) =>
+      section.text.includes('#### Observed UI and Surface Schema'),
+    );
+
+    expect(uiSection?.text.length).toBeLessThan(5_000);
+    expect(uiSection?.text).toContain('stateIndex":"1');
+    expect(uiSection?.text).toContain('stateIndex":"7');
+    expect(uiSection?.text).not.toContain('"nodes"');
+  });
+
   it('skips L3 entirely when nothing dynamic to render', () => {
     const out = assemblePrompt({ basePrompt: 'BASE', blocks: [makeBlock()] });
     expect(out.sections).toHaveLength(2);

@@ -23,7 +23,7 @@ async function main() {
   const outfile =
     args.out || path.join(repoRoot, '.private', 'evals', 'runtime', 'kavi_memory_runtime.cjs');
   const expoSqliteShim = path.join(__dirname, 'nodeExpoSqlite.ts');
-  const embeddingsStub = path.join(__dirname, 'runtimeEmbeddingsStub.ts');
+  const embeddingsStub = path.join(__dirname, 'runtimeSimpleEmbeddingsStub.ts');
   const memoryStoreStub = path.join(__dirname, 'runtimeMemoryStoreStub.ts');
   const memoryPolicyStub = path.join(__dirname, 'runtimeMemoryPolicyStub.ts');
 

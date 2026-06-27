@@ -28,8 +28,14 @@ import { getEmbeddingCached, isLocalEmbeddingConfig } from './embeddings';
 import { markFactsRecalled, setFactEmbedding } from './facts/mutations';
 import { listFactsForRecallCandidates } from './facts/queries';
 import { type MemoryFact, type MemoryFactKind, type MemoryFactScope } from './facts/types';
+import {
+  buildQueryUnitWeights,
+  lexicalOverlap,
+  tokenizeLexicalUnits,
+} from './ranking/lexical';
 import { cosineSimilarity } from './ranking/similarity';
 import { exponentialDecayMultiplier } from './ranking/scoring';
+import { diversifyTrajectoryAware } from './ranking/trajectoryDiversification';
 
 const DEFAULT_LIMIT = 8;
 const DEFAULT_VECTOR_THRESHOLD = 0.08;
@@ -43,7 +49,7 @@ const CANDIDATE_POOL_LIMIT = 2_000;
 const CANDIDATE_POOL_MAX = 10_000;
 const LOCAL_QUERY_EMBEDDING_BACKFILL_LIMIT = 512;
 const RELEVANCE_EPSILON = 1e-6;
-const TRAJECTORY_NEIGHBOR_LIMIT = 2;
+const TRAJECTORY_NEIGHBOR_LIMIT = 4;
 
 export interface RecallFactsOptions {
   /**
@@ -97,245 +103,16 @@ export interface ScoredFact {
   relevanceScore: number;
 }
 
-type WordSegment = {
-  segment: string;
-  isWordLike?: boolean;
-};
-
-type WordSegmenter = {
-  segment(input: string): Iterable<WordSegment>;
-};
-
-type WordSegmenterConstructor = new (
-  locales?: string | string[],
-  options?: { granularity?: 'word' },
-) => WordSegmenter;
-
-const WORD_LIKE_SEQUENCE_PATTERN = /[\p{L}\p{M}\p{N}]+/gu;
-const WORD_LIKE_CODE_POINT_PATTERN = /[\p{L}\p{N}]/u;
-const CONTINUOUS_WORD_SCRIPT_PATTERN =
-  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
-
-let cachedWordSegmenter: WordSegmenter | null | undefined;
-
-function getWordSegmenter(): WordSegmenter | null {
-  if (cachedWordSegmenter !== undefined) return cachedWordSegmenter;
-  const segmenterCtor = (
-    Intl as typeof Intl & {
-      Segmenter?: WordSegmenterConstructor;
-    }
-  ).Segmenter;
-  cachedWordSegmenter =
-    typeof segmenterCtor === 'function'
-      ? new segmenterCtor(undefined, { granularity: 'word' })
-      : null;
-  return cachedWordSegmenter;
-}
-
-function normalizeLexicalText(value: string): string {
-  return value.normalize('NFKC').toLocaleLowerCase();
-}
-
-function hasWordLikeCodePoint(value: string): boolean {
-  return WORD_LIKE_CODE_POINT_PATTERN.test(value);
-}
-
-function addSegmentUnits(units: Set<string>, rawSegment: string): void {
-  const segment = normalizeLexicalText(rawSegment).trim();
-  if (!segment || !hasWordLikeCodePoint(segment)) return;
-  units.add(segment);
-
-  if (!CONTINUOUS_WORD_SCRIPT_PATTERN.test(segment)) return;
-  const codePoints = Array.from(segment);
-  for (const width of [2, 3]) {
-    if (codePoints.length < width) continue;
-    for (let index = 0; index <= codePoints.length - width; index += 1) {
-      units.add(`${width}:${codePoints.slice(index, index + width).join('')}`);
-    }
-  }
-}
-
-function addUnicodeSequenceUnits(units: Set<string>, value: string): void {
-  WORD_LIKE_SEQUENCE_PATTERN.lastIndex = 0;
-  for (const match of value.matchAll(WORD_LIKE_SEQUENCE_PATTERN)) {
-    addSegmentUnits(units, match[0]);
-  }
-}
-
-function tokenize(value: string): Set<string> {
-  const normalized = normalizeLexicalText(value);
-  const units = new Set<string>();
-  const segmenter = getWordSegmenter();
-  if (segmenter) {
-    for (const segment of segmenter.segment(normalized)) {
-      if (segment.isWordLike === false) continue;
-      addSegmentUnits(units, segment.segment);
-    }
-  }
-  addUnicodeSequenceUnits(units, normalized);
-  return units;
-}
-
-function lexicalOverlap(
-  queryUnits: Set<string>,
-  factText: string,
-  unitWeights?: ReadonlyMap<string, number>,
-): number {
-  if (queryUnits.size === 0) return 0;
-  const factUnits = tokenize(factText);
-  if (factUnits.size === 0) return 0;
-  let hits = 0;
-  let total = 0;
-  for (const unit of queryUnits) {
-    const weight = unitWeights?.get(unit) ?? 1;
-    total += weight;
-    if (factUnits.has(unit)) hits += weight;
-  }
-  return total > 0 ? hits / total : 0;
-}
-
-function lexicalUnitJaccard(left: Set<string>, right: Set<string>): number {
-  if (left.size === 0 || right.size === 0) return 0;
-  let intersection = 0;
-  for (const unit of left) {
-    if (right.has(unit)) intersection += 1;
-  }
-  return intersection / (left.size + right.size - intersection);
-}
-
 function factHaystack(fact: MemoryFact): string {
   return `${fact.subjectId} ${fact.predicate} ${fact.objectText} ${fact.sourceSummary ?? ''}`;
 }
 
-function numericAttribute(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
-
-function trajectoryStateIndex(fact: MemoryFact): number | null {
-  return numericAttribute(fact.attributes.stateIndex);
-}
-
-function buildQueryUnitWeights(
-  queryUnits: Set<string>,
-  candidates: ReadonlyArray<MemoryFact>,
-): Map<string, number> {
-  const weights = new Map<string, number>();
-  if (queryUnits.size === 0 || candidates.length === 0) return weights;
-  const documentFrequency = new Map<string, number>();
-  for (const fact of candidates) {
-    const factUnits = tokenize(factHaystack(fact));
-    for (const unit of queryUnits) {
-      if (factUnits.has(unit)) {
-        documentFrequency.set(unit, (documentFrequency.get(unit) ?? 0) + 1);
-      }
-    }
-  }
-  const documentCount = candidates.length;
-  for (const unit of queryUnits) {
-    const df = documentFrequency.get(unit) ?? 0;
-    weights.set(unit, Math.log((documentCount + 1) / (df + 1)) + 1);
-  }
-  return weights;
-}
-
 function diversifyScoredFacts(scored: ScoredFact[], limit: number): ScoredFact[] {
-  const remaining = [...scored];
-  const selected: ScoredFact[] = [];
-  const selectedUnits: Array<Set<string>> = [];
-  const unitCache = new Map<string, Set<string>>();
-  const targetCount = Math.max(limit * 2, limit);
-  const unitsFor = (fact: MemoryFact): Set<string> => {
-    const cached = unitCache.get(fact.id);
-    if (cached) return cached;
-    const computed = tokenize(factHaystack(fact));
-    unitCache.set(fact.id, computed);
-    return computed;
-  };
-  const selectEntry = (entry: ScoredFact): void => {
-    selected.push(entry);
-    selectedUnits.push(unitsFor(entry.fact));
-  };
-  const selectTrajectoryNeighbors = (anchor: ScoredFact): void => {
-    if (selected.length >= targetCount) return;
-    if (!anchor.fact.sourceRunId) return;
-    const anchorStateIndex = trajectoryStateIndex(anchor.fact);
-    if (anchorStateIndex === null) return;
-    const neighborBudget = Math.min(
-      TRAJECTORY_NEIGHBOR_LIMIT,
-      Math.max(0, targetCount - selected.length),
-    );
-    if (neighborBudget <= 0) return;
-    const selectedStateIndexes = new Set(
-      selected
-        .filter((entry) => entry.fact.sourceRunId === anchor.fact.sourceRunId)
-        .map((entry) => trajectoryStateIndex(entry.fact))
-        .filter((stateIndex): stateIndex is number => stateIndex !== null),
-    );
-    const bestByStateIndex = new Map<
-      number,
-      { entry: ScoredFact; stateIndex: number; distance: number }
-    >();
-    for (const entry of remaining) {
-      if (entry.fact.sourceRunId !== anchor.fact.sourceRunId) continue;
-      if (entry.relevanceScore <= RELEVANCE_EPSILON) continue;
-      const stateIndex = trajectoryStateIndex(entry.fact);
-      if (stateIndex === null || selectedStateIndexes.has(stateIndex)) continue;
-      const distance = stateIndex - anchorStateIndex;
-      if (distance === 0) continue;
-      const existing = bestByStateIndex.get(stateIndex);
-      if (!existing || entry.score > existing.entry.score) {
-        bestByStateIndex.set(stateIndex, { entry, stateIndex, distance });
-      }
-    }
-    const rankedNeighbors = Array.from(bestByStateIndex.values()).sort((left, right) => {
-      const leftForward = left.distance > 0 ? 0 : 1;
-      const rightForward = right.distance > 0 ? 0 : 1;
-      if (leftForward !== rightForward) return leftForward - rightForward;
-      const distanceDelta = Math.abs(left.distance) - Math.abs(right.distance);
-      if (distanceDelta !== 0) return distanceDelta;
-      return right.entry.score - left.entry.score;
-    });
-    for (const { entry } of rankedNeighbors) {
-      if (selected.length >= targetCount) break;
-      if (
-        selected.filter(
-          (selectedEntry) => selectedEntry.fact.sourceRunId === anchor.fact.sourceRunId,
-        ).length > neighborBudget
-      ) {
-        break;
-      }
-      const index = remaining.findIndex((candidate) => candidate.fact.id === entry.fact.id);
-      if (index < 0) continue;
-      const [neighbor] = remaining.splice(index, 1);
-      selectEntry(neighbor);
-    }
-  };
-
-  while (remaining.length > 0 && selected.length < targetCount) {
-    let bestIndex = 0;
-    let bestScore = Number.NEGATIVE_INFINITY;
-    for (let index = 0; index < remaining.length; index += 1) {
-      const candidate = remaining[index];
-      const candidateUnits = unitsFor(candidate.fact);
-      const redundancy = selectedUnits.length
-        ? Math.max(...selectedUnits.map((units) => lexicalUnitJaccard(candidateUnits, units)))
-        : 0;
-      const mmrScore = candidate.score * 0.82 - redundancy * 0.18;
-      if (mmrScore > bestScore) {
-        bestScore = mmrScore;
-        bestIndex = index;
-      }
-    }
-    const [picked] = remaining.splice(bestIndex, 1);
-    selectEntry(picked);
-    selectTrajectoryNeighbors(picked);
-  }
-  return [...selected, ...remaining];
+  return diversifyTrajectoryAware(scored, limit, {
+    textForFact: factHaystack,
+    relevanceEpsilon: RELEVANCE_EPSILON,
+    trajectoryNeighborLimit: TRAJECTORY_NEIGHBOR_LIMIT,
+  });
 }
 
 function getCandidateScopes(options: RecallFactsOptions): MemoryFactScope[] | undefined {
@@ -498,7 +275,7 @@ async function buildRecallSelection(
   const trimmedQuery = query.trim();
   const now = options.now ?? options.asOf ?? Date.now();
   const candidateScopes = getCandidateScopes(options);
-  const queryUnits = tokenize(trimmedQuery);
+  const queryUnits = tokenizeLexicalUnits(trimmedQuery);
 
   const candidates = listFactsForRecallCandidates({
     limit: candidatePool,
@@ -514,7 +291,7 @@ async function buildRecallSelection(
   if (trimmedQuery && vectorWeight > 0 && options.embeddingConfig) {
     await maybeBackfillLocalCandidateEmbeddings(candidates, queryUnits, options.embeddingConfig);
   }
-  const unitWeights = buildQueryUnitWeights(queryUnits, candidates);
+  const unitWeights = buildQueryUnitWeights(queryUnits, candidates, factHaystack);
 
   const queryEmbedding =
     trimmedQuery && vectorWeight > 0

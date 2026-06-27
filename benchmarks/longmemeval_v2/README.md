@@ -134,8 +134,8 @@ python leaderboard/build_submission_step_1_single_operating_point.py \
 
 python leaderboard/build_submission_step_2_build_package.py \
   kavi_memory_isolated_small \
-  /path/to/openclaw-mobile/benchmarks/longmemeval_v2/SYSTEM_DESCRIPTION.md \
-  /path/to/openclaw-mobile/benchmarks/longmemeval_v2/kavi_isolated_memory.py \
+  /path/to/repo/benchmarks/longmemeval_v2/SYSTEM_DESCRIPTION.md \
+  /path/to/repo/benchmarks/longmemeval_v2/kavi_isolated_memory.py \
   leaderboard/submissions/kavi_memory_isolated_small/operating_points/balanced
 ```
 

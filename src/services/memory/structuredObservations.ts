@@ -16,6 +16,7 @@ import { ensureFactSchema } from './schema';
 const MAX_ACCESSIBILITY_NODES_PER_PAYLOAD = 48;
 const MAX_AFFORDANCE_FACTS_PER_PAYLOAD = 4;
 const MAX_SCHEMA_NODES_PER_PAYLOAD = 48;
+const MAX_SCHEMA_CONTEXT_NODES = 4;
 const MAX_TEXT_CHARS = 1400;
 
 const ACTIONABLE_ROLES = new Set([
@@ -42,6 +43,22 @@ const ACTIONABLE_ATTRIBUTES = new Set([
   'expanded',
   'pressed',
   'selected',
+]);
+
+const CONTROL_ROLE_PRIORITY = new Map<string, number>([
+  ['textbox', 0],
+  ['searchbox', 0],
+  ['combobox', 0],
+  ['spinbutton', 0],
+  ['slider', 0],
+  ['checkbox', 1],
+  ['radio', 1],
+  ['switch', 1],
+  ['option', 1],
+  ['button', 2],
+  ['menuitem', 2],
+  ['tab', 2],
+  ['link', 3],
 ]);
 
 type JsonRecord = Record<string, unknown>;
@@ -297,27 +314,13 @@ function recordUiMemories(input: {
   nodes: AccessibilityNode[];
 }): string[] {
   const factIds: string[] = [];
-  const inventoryNodes = input.nodes.slice(0, MAX_SCHEMA_NODES_PER_PAYLOAD);
+  const inventoryNodes = selectSurfaceSchemaNodes(input.nodes);
   if (inventoryNodes.length > 0) {
     const schemaFactId = recordTypedFact({
       kind: 'surface_schema',
       subjectName: input.surfaceId,
       predicate: 'surface_inventory',
-      objectText: compactJson({
-        url: input.url,
-        goal: input.goal,
-        action: input.action,
-        thought: input.thought,
-        trajectoryOutcome: input.trajectoryOutcome,
-        outcome: input.outcome,
-        sourceRunId: input.sourceRunId,
-        stateIndex: input.stateIndex,
-        nodes: inventoryNodes.map((node) => ({
-          role: node.role,
-          name: node.name,
-          attributes: node.attributes,
-        })),
-      }),
+      objectText: compactSurfaceSchemaJson(input, inventoryNodes),
       attributes: {
         surfaceId: input.surfaceId,
         url: input.url,
@@ -337,15 +340,15 @@ function recordUiMemories(input: {
     if (schemaFactId) factIds.push(schemaFactId);
   }
 
-  const actionableNodes = input.nodes
-    .filter(isActionableAccessibilityNode)
-    .slice(0, MAX_AFFORDANCE_FACTS_PER_PAYLOAD);
+  const actionableNodes = rankActionableNodes(input.nodes).slice(0, MAX_AFFORDANCE_FACTS_PER_PAYLOAD);
   for (const node of actionableNodes) {
     const affordanceId = recordTypedFact({
       kind: 'ui_affordance',
       subjectName: input.surfaceId,
       predicate: 'ui_affordance',
       objectText: compactJson({
+        index: node.index,
+        nodeId: node.nodeId,
         role: node.role,
         name: node.name,
         attributes: node.attributes,
@@ -358,6 +361,7 @@ function recordUiMemories(input: {
         role: node.role,
         name: node.name,
         attributes: node.attributes,
+        index: node.index,
         url: input.url,
         sourceRunId: input.sourceRunId,
         stateIndex: input.stateIndex,
@@ -373,6 +377,90 @@ function recordUiMemories(input: {
   }
 
   return factIds;
+}
+
+function compactNode(node: AccessibilityNode): JsonRecord {
+  return {
+    index: node.index,
+    role: node.role,
+    name: node.name,
+    attributes: node.attributes,
+  };
+}
+
+function addUniqueNode(
+  selected: AccessibilityNode[],
+  seen: Set<string>,
+  node: AccessibilityNode,
+): void {
+  const key = node.nodeId ?? String(node.index);
+  if (seen.has(key)) return;
+  selected.push(node);
+  seen.add(key);
+}
+
+function rolePriority(node: AccessibilityNode): number {
+  return CONTROL_ROLE_PRIORITY.get(node.role.toLocaleLowerCase()) ?? 4;
+}
+
+function rankActionableNodes(nodes: AccessibilityNode[]): AccessibilityNode[] {
+  return nodes
+    .filter(isActionableAccessibilityNode)
+    .sort((left, right) => {
+      const priorityDelta = rolePriority(left) - rolePriority(right);
+      if (priorityDelta !== 0) return priorityDelta;
+      return left.index - right.index;
+    });
+}
+
+function selectSurfaceSchemaNodes(nodes: AccessibilityNode[]): AccessibilityNode[] {
+  const selected: AccessibilityNode[] = [];
+  const seen = new Set<string>();
+  for (const node of nodes.slice(0, MAX_SCHEMA_CONTEXT_NODES)) {
+    addUniqueNode(selected, seen, node);
+  }
+  for (const node of rankActionableNodes(nodes)) {
+    addUniqueNode(selected, seen, node);
+    if (selected.length >= MAX_SCHEMA_NODES_PER_PAYLOAD) break;
+  }
+  for (const node of nodes) {
+    if (selected.length >= MAX_SCHEMA_NODES_PER_PAYLOAD) break;
+    addUniqueNode(selected, seen, node);
+  }
+  return selected;
+}
+
+function compactSurfaceSchemaJson(
+  input: Parameters<typeof recordUiMemories>[0],
+  nodes: AccessibilityNode[],
+): string {
+  const base = {
+    url: input.url,
+    goal: input.goal,
+    action: input.action,
+    thought: input.thought,
+    trajectoryOutcome: input.trajectoryOutcome,
+    outcome: input.outcome,
+    sourceRunId: input.sourceRunId,
+    stateIndex: input.stateIndex,
+  };
+  let nodeCount = nodes.length;
+  while (nodeCount > 0) {
+    const serialized = compactJson({
+      ...base,
+      nodes: nodes.slice(0, nodeCount).map(compactNode),
+    });
+    if (serialized.length <= MAX_TEXT_CHARS) return serialized;
+    nodeCount = Math.floor(nodeCount / 2);
+  }
+  const serialized = compactJson(base);
+  if (serialized.length <= MAX_TEXT_CHARS) return serialized;
+  return compactJson({
+    ...base,
+    goal: fitText(input.goal ?? '', 240),
+    action: fitText(input.action ?? '', 240),
+    thought: fitText(input.thought ?? '', 480),
+  });
 }
 
 function isActionableAccessibilityNode(node: AccessibilityNode): boolean {
