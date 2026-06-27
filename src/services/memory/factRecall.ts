@@ -25,10 +25,21 @@ import {
   selectIndexedLexicalUnitsForRecall,
 } from './facts/queries';
 import { type MemoryFact, type MemoryFactKind, type MemoryFactScope } from './facts/types';
+import { collectJsonStrings, parseJsonRecord } from './factJson';
 import { countLexicalUnits } from './ranking/lexical';
 import { buildScoringLexicalUnits } from './ranking/queryUnits';
 import { quotedSpanUnitSets } from './ranking/quotedSpans';
 import { exponentialDecayMultiplier } from './ranking/scoring';
+import {
+  UI_INVENTORY_FORM_FIELD_SHAPE_FIELDS,
+  UI_INVENTORY_LABEL_VALUE_SHAPE_FIELDS,
+  UI_INVENTORY_SEARCH_SHAPE_FIELDS,
+  UI_INVENTORY_SECTION_SHAPE_FIELDS,
+  UI_INVENTORY_TABLE_SHAPE_FIELDS,
+  UI_INVENTORY_TEXT_ENTRY_SHAPE_FIELDS,
+  UI_INVENTORY_TRANSITION_CURRENT_FIELDS,
+  UI_INVENTORY_TRANSITION_PREVIOUS_FIELDS,
+} from './uiFactFields';
 
 const DEFAULT_LIMIT = 8;
 const DEFAULT_TEXT_THRESHOLD = 0.04;
@@ -219,17 +230,6 @@ function scoreRetrievability(fact: MemoryFact): number {
   return Math.max(0, Math.min(1, fact.retrievability));
 }
 
-function parseJsonRecord(value: string): Record<string, unknown> | null {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
-}
-
 function stringArray(value: unknown, limit = UI_SCHEMA_KEY_ARRAY_LIMIT): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -263,30 +263,12 @@ function objectArrayShape(
     .slice(0, limit);
 }
 
-function collectStrings(value: unknown, output: string[], depth = 0): void {
-  if (depth > 4) return;
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (trimmed) output.push(trimmed);
-    return;
-  }
-  if (Array.isArray(value)) {
-    for (const entry of value) collectStrings(entry, output, depth + 1);
-    return;
-  }
-  if (value && typeof value === 'object') {
-    for (const entry of Object.values(value as Record<string, unknown>)) {
-      collectStrings(entry, output, depth + 1);
-    }
-  }
-}
-
 function unitsForJsonFields(
   parsed: Record<string, unknown>,
   fields: ReadonlyArray<string>,
 ): Set<string> {
   const values: string[] = [];
-  for (const field of fields) collectStrings(parsed[field], values);
+  for (const field of fields) collectJsonStrings(parsed[field], values);
   const units = new Set<string>();
   for (const value of values) {
     for (const unit of countLexicalUnits(value).keys()) units.add(unit);
@@ -307,19 +289,15 @@ function uiInventorySchemaKey(fact: MemoryFact): string | null {
   const parsed = parseJsonRecord(fact.objectText);
   if (!parsed) return null;
   const url = scalarString(fact.attributes.url, parsed.url);
-  const fields = objectArrayShape(parsed.fields, ['role', 'controlName', 'name', 'type', 'required']);
-  const textEntryControls = objectArrayShape(parsed.textEntryControls, [
-    'role',
-    'name',
-    'controlName',
-    'type',
-  ]);
-  const searchControls = objectArrayShape(parsed.searchControls, [
-    'role',
-    'name',
-    'controlName',
-    'type',
-  ]);
+  const fields = objectArrayShape(parsed.fields, UI_INVENTORY_FORM_FIELD_SHAPE_FIELDS);
+  const textEntryControls = objectArrayShape(
+    parsed.textEntryControls,
+    UI_INVENTORY_TEXT_ENTRY_SHAPE_FIELDS,
+  );
+  const searchControls = objectArrayShape(
+    parsed.searchControls,
+    UI_INVENTORY_SEARCH_SHAPE_FIELDS,
+  );
   const hasFormShape =
     fields.length > 0 || textEntryControls.length > 0 || searchControls.length > 0;
   const key = {
@@ -330,11 +308,11 @@ function uiInventorySchemaKey(fact: MemoryFact): string | null {
     fields,
     textEntryControls,
     searchControls,
-    labelValues: objectArrayShape(parsed.labelValues, ['label', 'role', 'name']),
+    labelValues: objectArrayShape(parsed.labelValues, UI_INVENTORY_LABEL_VALUE_SHAPE_FIELDS),
     sections: hasFormShape
       ? []
-      : objectArrayShape(parsed.sections, ['label', 'controlNames', 'fieldLabels']),
-    tables: objectArrayShape(parsed.tables, ['label', 'columns']),
+      : objectArrayShape(parsed.sections, UI_INVENTORY_SECTION_SHAPE_FIELDS),
+    tables: objectArrayShape(parsed.tables, UI_INVENTORY_TABLE_SHAPE_FIELDS),
   };
   return `ui_inventory:${JSON.stringify(key)}`;
 }
@@ -361,23 +339,9 @@ function transitionStateBoost(
   if (fact.memoryKind !== 'ui_inventory' || queryUnits.size === 0) return 0;
   const parsed = parseJsonRecord(fact.objectText);
   if (!parsed) return 0;
-  const previousUnits = unitsForJsonFields(parsed, [
-    'previousAction',
-    'previousControlNames',
-    'previousUrl',
-  ]);
+  const previousUnits = unitsForJsonFields(parsed, UI_INVENTORY_TRANSITION_PREVIOUS_FIELDS);
   if (previousUnits.size === 0) return 0;
-  const currentUnits = unitsForJsonFields(parsed, [
-    'sections',
-    'controlNames',
-    'fieldLabels',
-    'fields',
-    'textEntryControls',
-    'searchControls',
-    'labelValues',
-    'tables',
-    'url',
-  ]);
+  const currentUnits = unitsForJsonFields(parsed, UI_INVENTORY_TRANSITION_CURRENT_FIELDS);
   if (currentUnits.size === 0) return 0;
   const previousOnlyUnits = new Set(
     Array.from(previousUnits).filter((unit) => !currentUnits.has(unit)),

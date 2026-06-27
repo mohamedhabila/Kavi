@@ -1,6 +1,8 @@
 import { getSchemaReadyMemoryDb } from '../access/schemaGuard';
+import { collectJsonStrings, parseJsonRecord } from '../factJson';
 import { retrievalTextForFact } from '../ranking/factText';
 import { tokenizeLexicalUnits } from '../ranking/lexical';
+import { priorityFieldsForMemoryKind } from '../uiFactFields';
 import type { MemoryFact } from './types';
 
 type TermInsertValue = string | number | null;
@@ -8,97 +10,21 @@ type TermInsertValue = string | number | null;
 const MAX_TERMS_PER_FACT = 192;
 const MAX_PRIORITY_UI_TERMS_PER_FACT = 96;
 const MAX_PRIORITY_VALUE_DEPTH = 4;
-const UI_INVENTORY_PRIORITY_FIELDS = [
-  'sections',
-  'controlNames',
-  'fieldLabels',
-  'fields',
-  'textEntryControls',
-  'searchControls',
-  'labelValues',
-  'action',
-  'thought',
-  'previousAction',
-  'previousUrl',
-  'previousControlNames',
-] as const;
-const UI_FIELD_PRIORITY_FIELDS = [
-  'label',
-  'role',
-  'controlName',
-  'value',
-  'options',
-  'url',
-  'sourceRunId',
-  'stateIndex',
-] as const;
-const UI_AFFORDANCE_PRIORITY_FIELDS = [
-  'role',
-  'name',
-  'label',
-  'contextLabels',
-  'value',
-  'options',
-  'url',
-  'sourceRunId',
-  'stateIndex',
-] as const;
-const UI_FILTER_STATE_PRIORITY_FIELDS = [
-  'label',
-  'value',
-  'url',
-  'sourceRunId',
-  'stateIndex',
-] as const;
 
 function termWeight(unit: string): number {
   const length = Array.from(unit).length;
   return 1 + Math.min(length, 24) / 24;
 }
 
-function parseJsonRecord(value: string): Record<string, unknown> | null {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function collectStrings(value: unknown, output: string[], depth = 0): void {
-  if (depth > MAX_PRIORITY_VALUE_DEPTH) return;
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (trimmed) output.push(trimmed);
-    return;
-  }
-  if (Array.isArray(value)) {
-    for (const entry of value) collectStrings(entry, output, depth + 1);
-    return;
-  }
-  if (value && typeof value === 'object') {
-    for (const entry of Object.values(value as Record<string, unknown>)) {
-      collectStrings(entry, output, depth + 1);
-    }
-  }
-}
-
 function priorityUiTermTexts(fact: MemoryFact): string[] {
-  let fields: ReadonlyArray<string> = [];
-  if (fact.memoryKind === 'ui_inventory') fields = UI_INVENTORY_PRIORITY_FIELDS;
-  if (fact.memoryKind === 'ui_field') fields = UI_FIELD_PRIORITY_FIELDS;
-  if (fact.memoryKind === 'ui_affordance') fields = UI_AFFORDANCE_PRIORITY_FIELDS;
-  if (fact.memoryKind === 'ui_filter_state') fields = UI_FILTER_STATE_PRIORITY_FIELDS;
-  if (fact.memoryKind === 'surface_schema') fields = UI_INVENTORY_PRIORITY_FIELDS;
-  if (fields.length === 0) return [];
+  const fields = priorityFieldsForMemoryKind(fact.memoryKind);
+  if (!fields) return [];
   const parsed = parseJsonRecord(fact.objectText);
   if (!parsed) return [];
   const values: string[] = [];
   for (const field of fields) {
-    collectStrings(parsed[field], values);
-    collectStrings(fact.attributes[field], values);
+    collectJsonStrings(parsed[field], values, 0, MAX_PRIORITY_VALUE_DEPTH);
+    collectJsonStrings(fact.attributes[field], values, 0, MAX_PRIORITY_VALUE_DEPTH);
   }
   return values;
 }

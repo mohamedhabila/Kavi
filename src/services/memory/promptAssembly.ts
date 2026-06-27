@@ -24,6 +24,8 @@
 import type { MemoryBlock } from './blocks';
 import type { MemoryFact } from './facts/types';
 import type { MemoryEpisode } from './episodes/types';
+import { compactJsonFields, parseJsonRecord } from './factJson';
+import { isUiSurfaceMemoryKind, promptFieldsForMemoryKind } from './uiFactFields';
 
 export type PromptMemoryFact = MemoryFact & { subjectLabel?: string };
 
@@ -93,79 +95,6 @@ const MAX_RENDERED_FACT_CHARS = 3_200;
 const MAX_RENDERED_UI_FACT_CHARS = 2_400;
 const MAX_RETRIEVED_FACT_SECTION_CHARS = 3_400;
 const MAX_RENDERED_EPISODE_CHARS = 200;
-const SURFACE_PROMPT_FIELDS = [
-  'url',
-  'goal',
-  'action',
-  'thought',
-  'outcome',
-  'trajectoryOutcome',
-  'sourceRunId',
-  'stateIndex',
-] as const;
-const UI_AFFORDANCE_PROMPT_FIELDS = [
-  'index',
-  'nodeId',
-  'role',
-  'name',
-  'label',
-  'contextLabels',
-  'value',
-  'options',
-  'attributes',
-  'url',
-  'sourceRunId',
-  'stateIndex',
-] as const;
-const UI_FIELD_PROMPT_FIELDS = [
-  'order',
-  'label',
-  'role',
-  'controlName',
-  'value',
-  'options',
-  'controlIndex',
-  'nodeId',
-  'required',
-  'url',
-  'sourceRunId',
-  'stateIndex',
-] as const;
-const UI_FILTER_STATE_PROMPT_FIELDS = [
-  'label',
-  'value',
-  'sourceIndex',
-  'url',
-  'sourceRunId',
-  'stateIndex',
-] as const;
-const UI_INVENTORY_PROMPT_FIELDS = [
-  'goal',
-  'trajectoryOutcome',
-  'domain',
-  'environment',
-  'fieldLabels',
-  'fields',
-  'textEntryControls',
-  'searchControls',
-  'sections',
-  'labelValues',
-  'tables',
-  'controlNames',
-  'action',
-  'thought',
-  'previousAction',
-  'previousUrl',
-  'previousStateIndex',
-  'previousControlNames',
-  'url',
-  'sourceRunId',
-  'stateIndex',
-  'nodeCount',
-  'controlCount',
-  'textEntryCount',
-  'searchControlCount',
-] as const;
 
 function joinNonEmpty(parts: Array<string | null | undefined>, sep = '\n\n'): string {
   return parts
@@ -219,30 +148,6 @@ function fitText(value: string, maxChars: number): string {
   const trimmed = value.trim();
   if (trimmed.length <= maxChars) return trimmed;
   return `${trimmed.slice(0, maxChars - 1).trimEnd()}\u2026`;
-}
-
-function parseJsonRecord(value: string): Record<string, unknown> | null {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function compactJsonFields(
-  value: Record<string, unknown>,
-  fields: ReadonlyArray<string>,
-): string {
-  const compact: Record<string, unknown> = {};
-  for (const field of fields) {
-    if (value[field] !== undefined && value[field] !== null && value[field] !== '') {
-      compact[field] = value[field];
-    }
-  }
-  return JSON.stringify(Object.keys(compact).length > 0 ? compact : value);
 }
 
 function compactFactFields(
@@ -321,12 +226,7 @@ function compactUiInventoryPromptFields(
 
 function renderableFactText(fact: PromptMemoryFact): string {
   const memoryKind = fact.memoryKind ?? 'semantic_fact';
-  let fields: ReadonlyArray<string> | null = null;
-  if (memoryKind === 'surface_schema') fields = SURFACE_PROMPT_FIELDS;
-  if (memoryKind === 'ui_affordance') fields = UI_AFFORDANCE_PROMPT_FIELDS;
-  if (memoryKind === 'ui_field') fields = UI_FIELD_PROMPT_FIELDS;
-  if (memoryKind === 'ui_filter_state') fields = UI_FILTER_STATE_PROMPT_FIELDS;
-  if (memoryKind === 'ui_inventory') fields = UI_INVENTORY_PROMPT_FIELDS;
+  const fields = promptFieldsForMemoryKind(memoryKind);
   if (!fields) return fact.objectText;
   const parsed = parseJsonRecord(fact.objectText);
   if (memoryKind === 'ui_inventory') {
@@ -350,14 +250,9 @@ function renderFact(fact: PromptMemoryFact): string {
   const memoryKind = fact.memoryKind ?? 'semantic_fact';
   const kind = memoryKind === 'semantic_fact' ? '' : ` kind=${memoryKind}`;
   const meta = kind || source ? ` [${`${kind}${source}`.trim()}]` : '';
-  const maxChars =
-    memoryKind === 'ui_affordance' ||
-    memoryKind === 'ui_field' ||
-    memoryKind === 'ui_inventory' ||
-    memoryKind === 'ui_filter_state' ||
-    memoryKind === 'surface_schema'
-      ? MAX_RENDERED_UI_FACT_CHARS
-      : MAX_RENDERED_FACT_CHARS;
+  const maxChars = isUiSurfaceMemoryKind(memoryKind)
+    ? MAX_RENDERED_UI_FACT_CHARS
+    : MAX_RENDERED_FACT_CHARS;
   return `- ${subject} ${fact.predicate}: ${fitText(renderableFactText(fact), maxChars)}${conf}${meta}`;
 }
 
@@ -370,13 +265,7 @@ function renderEpisode(episode: MemoryEpisode): string {
 
 function factGroupHeader(fact: PromptMemoryFact): string {
   const memoryKind = fact.memoryKind ?? 'semantic_fact';
-  if (
-    memoryKind === 'ui_affordance' ||
-    memoryKind === 'ui_field' ||
-    memoryKind === 'ui_inventory' ||
-    memoryKind === 'ui_filter_state' ||
-    memoryKind === 'surface_schema'
-  ) {
+  if (isUiSurfaceMemoryKind(memoryKind)) {
     return L3_UI_HEADER;
   }
   if (memoryKind === 'procedure') return L3_PROCEDURES_HEADER;

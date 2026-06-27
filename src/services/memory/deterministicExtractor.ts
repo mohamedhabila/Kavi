@@ -12,6 +12,7 @@
 
 import type { Message } from '../../types/message';
 import type { ConsolidatorFact, ConsolidatorTurnInput } from './consolidator';
+import { parseJsonRecord } from './factJson';
 
 const MAX_STRUCTURAL_FACTS = 5;
 const DIRECT_MEMORY_TOOL_REASON = 'Direct memory_remember tool call arguments.';
@@ -279,16 +280,6 @@ function memoryRememberToolCallToFact(argumentsJson: string | undefined): Consol
     ...(importance !== undefined ? { importance } : {}),
     reason: DIRECT_MEMORY_TOOL_REASON,
   };
-}
-
-function parseJsonRecord(value: string): Record<string, unknown> | null {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-    return parsed as Record<string, unknown>;
-  } catch {
-    return null;
-  }
 }
 
 function normalizedBoundedString(value: unknown, maxLength: number): string | null {
