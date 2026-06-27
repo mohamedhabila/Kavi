@@ -88,7 +88,7 @@ const L3_PROCEDURES_HEADER = '#### Procedures';
 const L3_OUTCOMES_HEADER = '#### Outcomes and Gotchas';
 const L3_EPISODES_HEADER = '### Recent Activity';
 const MAX_RENDERED_FACT_CHARS = 3_200;
-const MAX_RENDERED_UI_FACT_CHARS = 900;
+const MAX_RENDERED_UI_FACT_CHARS = 1_800;
 const MAX_RENDERED_EPISODE_CHARS = 200;
 const SURFACE_PROMPT_FIELDS = [
   'url',
@@ -105,10 +105,62 @@ const UI_AFFORDANCE_PROMPT_FIELDS = [
   'nodeId',
   'role',
   'name',
+  'label',
+  'value',
   'attributes',
   'url',
   'sourceRunId',
   'stateIndex',
+] as const;
+const UI_CONTROL_PROMPT_FIELDS = [
+  'index',
+  'nodeId',
+  'role',
+  'name',
+  'label',
+  'value',
+  'required',
+  'checked',
+  'selected',
+  'disabled',
+  'expanded',
+  'url',
+  'sourceRunId',
+  'stateIndex',
+] as const;
+const UI_FIELD_PROMPT_FIELDS = [
+  'order',
+  'label',
+  'role',
+  'controlName',
+  'value',
+  'controlIndex',
+  'nodeId',
+  'required',
+  'url',
+  'sourceRunId',
+  'stateIndex',
+] as const;
+const UI_FILTER_STATE_PROMPT_FIELDS = [
+  'label',
+  'value',
+  'sourceIndex',
+  'url',
+  'sourceRunId',
+  'stateIndex',
+] as const;
+const UI_INVENTORY_PROMPT_FIELDS = [
+  'url',
+  'sourceRunId',
+  'stateIndex',
+  'nodeCount',
+  'controlCount',
+  'textEntryCount',
+  'searchControlCount',
+  'roleCounts',
+  'fields',
+  'controls',
+  'labelValues',
 ] as const;
 
 function joinNonEmpty(parts: Array<string | null | undefined>, sep = '\n\n'): string {
@@ -205,10 +257,14 @@ function compactFactFields(
 
 function renderableFactText(fact: PromptMemoryFact): string {
   const memoryKind = fact.memoryKind ?? 'semantic_fact';
-  if (memoryKind !== 'surface_schema' && memoryKind !== 'ui_affordance') {
-    return fact.objectText;
-  }
-  const fields = memoryKind === 'surface_schema' ? SURFACE_PROMPT_FIELDS : UI_AFFORDANCE_PROMPT_FIELDS;
+  let fields: ReadonlyArray<string> | null = null;
+  if (memoryKind === 'surface_schema') fields = SURFACE_PROMPT_FIELDS;
+  if (memoryKind === 'ui_affordance') fields = UI_AFFORDANCE_PROMPT_FIELDS;
+  if (memoryKind === 'ui_control') fields = UI_CONTROL_PROMPT_FIELDS;
+  if (memoryKind === 'ui_field') fields = UI_FIELD_PROMPT_FIELDS;
+  if (memoryKind === 'ui_filter_state') fields = UI_FILTER_STATE_PROMPT_FIELDS;
+  if (memoryKind === 'ui_inventory') fields = UI_INVENTORY_PROMPT_FIELDS;
+  if (!fields) return fact.objectText;
   const parsed = parseJsonRecord(fact.objectText);
   const compactFromAttributes = compactFactFields(fact, fields);
   if (compactFromAttributes) return compactFromAttributes;
@@ -228,7 +284,12 @@ function renderFact(fact: PromptMemoryFact): string {
   const kind = memoryKind === 'semantic_fact' ? '' : ` kind=${memoryKind}`;
   const meta = kind || source ? ` [${`${kind}${source}`.trim()}]` : '';
   const maxChars =
-    memoryKind === 'ui_affordance' || memoryKind === 'surface_schema'
+    memoryKind === 'ui_affordance' ||
+    memoryKind === 'ui_control' ||
+    memoryKind === 'ui_field' ||
+    memoryKind === 'ui_inventory' ||
+    memoryKind === 'ui_filter_state' ||
+    memoryKind === 'surface_schema'
       ? MAX_RENDERED_UI_FACT_CHARS
       : MAX_RENDERED_FACT_CHARS;
   return `- ${subject} ${fact.predicate}: ${fitText(renderableFactText(fact), maxChars)}${conf}${meta}`;
@@ -243,7 +304,14 @@ function renderEpisode(episode: MemoryEpisode): string {
 
 function factGroupHeader(fact: PromptMemoryFact): string {
   const memoryKind = fact.memoryKind ?? 'semantic_fact';
-  if (memoryKind === 'ui_affordance' || memoryKind === 'surface_schema') {
+  if (
+    memoryKind === 'ui_affordance' ||
+    memoryKind === 'ui_control' ||
+    memoryKind === 'ui_field' ||
+    memoryKind === 'ui_inventory' ||
+    memoryKind === 'ui_filter_state' ||
+    memoryKind === 'surface_schema'
+  ) {
     return L3_UI_HEADER;
   }
   if (memoryKind === 'procedure') return L3_PROCEDURES_HEADER;

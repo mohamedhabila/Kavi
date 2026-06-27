@@ -12,37 +12,20 @@ import { upsertEntity } from './entities';
 import { recordFact } from './facts/mutations';
 import type { MemoryFactKind, RecordFactInput } from './facts/types';
 import { ensureFactSchema } from './schema';
+import {
+  compactControl,
+  compactField,
+  compactUiInventory,
+  extractUiStateSummary,
+  isActionableAccessibilityNode,
+  parseAccessibilityTree,
+  type AccessibilityNode,
+} from './uiState';
 
-const MAX_ACCESSIBILITY_NODES_PER_PAYLOAD = 48;
-const MAX_AFFORDANCE_FACTS_PER_PAYLOAD = MAX_ACCESSIBILITY_NODES_PER_PAYLOAD;
-const MAX_SCHEMA_NODES_PER_PAYLOAD = 48;
 const MAX_TEXT_CHARS = 1400;
-
-const ACTIONABLE_ROLES = new Set([
-  'button',
-  'checkbox',
-  'combobox',
-  'link',
-  'menuitem',
-  'option',
-  'radio',
-  'searchbox',
-  'slider',
-  'spinbutton',
-  'switch',
-  'tab',
-  'textbox',
-]);
-
-const ACTIONABLE_ATTRIBUTES = new Set([
-  'checked',
-  'clickable',
-  'disabled',
-  'editable',
-  'expanded',
-  'pressed',
-  'selected',
-]);
+const MAX_CONTROL_FACTS_PER_PAYLOAD = 128;
+const MAX_FIELD_FACTS_PER_PAYLOAD = 96;
+const MAX_FILTER_STATE_FACTS_PER_PAYLOAD = 96;
 
 type JsonRecord = Record<string, unknown>;
 
@@ -61,14 +44,6 @@ interface ObservationContext {
 interface StructuredObservationResult {
   factIds: string[];
   consumedEvidence: string[];
-}
-
-interface AccessibilityNode {
-  index: number;
-  nodeId: string | null;
-  role: string;
-  name: string | null;
-  attributes: string[];
 }
 
 interface ParsedPayload {
@@ -297,19 +272,43 @@ function recordUiMemories(input: {
   nodes: AccessibilityNode[];
 }): string[] {
   const factIds: string[] = [];
-  const inventoryNodes = selectSurfaceSchemaNodes(input.nodes);
-  if (inventoryNodes.length > 0) {
-    const schemaFactId = recordTypedFact({
-      kind: 'surface_schema',
+  const summary = extractUiStateSummary(input.nodes);
+  if (summary.nodeCount > 0) {
+    const inventoryFactId = recordTypedFact({
+      kind: 'ui_inventory',
       subjectName: input.surfaceId,
-      predicate: 'surface_inventory',
-      objectText: compactSurfaceSchemaJson(input, inventoryNodes),
+      predicate: 'ui_inventory',
+      objectText: compactJson({
+        ...baseUiPayload(input),
+        ...compactUiInventory(summary),
+      }),
       attributes: {
         surfaceId: input.surfaceId,
         url: input.url,
         sourceRunId: input.sourceRunId,
         stateIndex: input.stateIndex,
-        nodeCount: input.nodes.length,
+        nodeCount: summary.nodeCount,
+        controlCount: summary.controlCount,
+        textEntryCount: summary.textEntryCount,
+        searchControlCount: summary.searchControlCount,
+      },
+      context: input.context,
+      retrievability: 0.96,
+      stability: 0.75,
+    });
+    if (inventoryFactId) factIds.push(inventoryFactId);
+
+    const schemaFactId = recordTypedFact({
+      kind: 'surface_schema',
+      subjectName: input.surfaceId,
+      predicate: 'surface_state',
+      objectText: compactSurfaceSchemaJson(input),
+      attributes: {
+        surfaceId: input.surfaceId,
+        url: input.url,
+        sourceRunId: input.sourceRunId,
+        stateIndex: input.stateIndex,
+        nodeCount: summary.nodeCount,
         action: input.action,
         thought: input.thought,
         goal: input.goal,
@@ -317,15 +316,100 @@ function recordUiMemories(input: {
         outcome: input.outcome,
       },
       context: input.context,
-      retrievability: 0.94,
+      retrievability: 0.72,
       stability: 0.7,
     });
     if (schemaFactId) factIds.push(schemaFactId);
   }
 
-  const actionableNodes = input.nodes
-    .filter(isActionableAccessibilityNode)
-    .slice(0, MAX_AFFORDANCE_FACTS_PER_PAYLOAD);
+  for (const field of summary.fields.slice(0, MAX_FIELD_FACTS_PER_PAYLOAD)) {
+    const fieldId = recordTypedFact({
+      kind: 'ui_field',
+      subjectName: input.surfaceId,
+      predicate: 'ui_field',
+      objectText: compactJson({
+        ...baseUiPayload(input),
+        ...compactField(field),
+      }),
+      attributes: {
+        surfaceId: input.surfaceId,
+        url: input.url,
+        sourceRunId: input.sourceRunId,
+        stateIndex: input.stateIndex,
+        label: field.label,
+        role: field.role,
+        name: field.controlName,
+        value: field.value,
+        controlIndex: field.controlIndex,
+        nodeId: field.nodeId,
+        required: field.required,
+      },
+      context: input.context,
+      retrievability: 0.9,
+      stability: 0.72,
+    });
+    if (fieldId) factIds.push(fieldId);
+  }
+
+  for (const labelValue of summary.labelValues.slice(0, MAX_FILTER_STATE_FACTS_PER_PAYLOAD)) {
+    const filterId = recordTypedFact({
+      kind: 'ui_filter_state',
+      subjectName: input.surfaceId,
+      predicate: 'ui_label_value',
+      objectText: compactJson({
+        ...baseUiPayload(input),
+        label: labelValue.label,
+        value: labelValue.value,
+        sourceIndex: labelValue.sourceIndex,
+      }),
+      attributes: {
+        surfaceId: input.surfaceId,
+        url: input.url,
+        sourceRunId: input.sourceRunId,
+        stateIndex: input.stateIndex,
+        label: labelValue.label,
+        value: labelValue.value,
+        sourceIndex: labelValue.sourceIndex,
+      },
+      context: input.context,
+      retrievability: 0.88,
+      stability: 0.7,
+    });
+    if (filterId) factIds.push(filterId);
+  }
+
+  for (const control of summary.controls.slice(0, MAX_CONTROL_FACTS_PER_PAYLOAD)) {
+    const controlId = recordTypedFact({
+      kind: 'ui_control',
+      subjectName: input.surfaceId,
+      predicate: 'ui_control',
+      objectText: compactJson({
+        ...baseUiPayload(input),
+        ...compactControl(control),
+      }),
+      attributes: {
+        surfaceId: input.surfaceId,
+        role: control.role,
+        name: control.name,
+        value: control.value,
+        label: control.label,
+        attributes: control.attributes,
+        index: control.index,
+        url: input.url,
+        sourceRunId: input.sourceRunId,
+        stateIndex: input.stateIndex,
+        nodeId: control.nodeId,
+        action: input.action,
+        outcome: input.outcome,
+      },
+      context: input.context,
+      retrievability: 0.82,
+      stability: 0.64,
+    });
+    if (controlId) factIds.push(controlId);
+  }
+
+  const actionableNodes = input.nodes.filter(isActionableAccessibilityNode).slice(0, MAX_CONTROL_FACTS_PER_PAYLOAD);
   for (const node of actionableNodes) {
     const affordanceId = recordTypedFact({
       kind: 'ui_affordance',
@@ -364,39 +448,8 @@ function recordUiMemories(input: {
   return factIds;
 }
 
-function compactNode(node: AccessibilityNode): JsonRecord {
-  return {
-    index: node.index,
-    role: node.role,
-    name: node.name,
-    attributes: node.attributes,
-  };
-}
-
-function addUniqueNode(
-  selected: AccessibilityNode[],
-  seen: Set<string>,
-  node: AccessibilityNode,
-): void {
-  const key = node.nodeId ?? String(node.index);
-  if (seen.has(key)) return;
-  selected.push(node);
-  seen.add(key);
-}
-
-function selectSurfaceSchemaNodes(nodes: AccessibilityNode[]): AccessibilityNode[] {
-  const selected: AccessibilityNode[] = [];
-  const seen = new Set<string>();
-  for (const node of nodes) {
-    if (selected.length >= MAX_SCHEMA_NODES_PER_PAYLOAD) break;
-    addUniqueNode(selected, seen, node);
-  }
-  return selected;
-}
-
 function compactSurfaceSchemaJson(
   input: Parameters<typeof recordUiMemories>[0],
-  nodes: AccessibilityNode[],
 ): string {
   const base = {
     url: input.url,
@@ -408,15 +461,6 @@ function compactSurfaceSchemaJson(
     sourceRunId: input.sourceRunId,
     stateIndex: input.stateIndex,
   };
-  let nodeCount = nodes.length;
-  while (nodeCount > 0) {
-    const serialized = compactJson({
-      ...base,
-      nodes: nodes.slice(0, nodeCount).map(compactNode),
-    });
-    if (serialized.length <= MAX_TEXT_CHARS) return serialized;
-    nodeCount = Math.floor(nodeCount / 2);
-  }
   const serialized = compactJson(base);
   if (serialized.length <= MAX_TEXT_CHARS) return serialized;
   return compactJson({
@@ -427,12 +471,17 @@ function compactSurfaceSchemaJson(
   });
 }
 
-function isActionableAccessibilityNode(node: AccessibilityNode): boolean {
-  const role = node.role.toLocaleLowerCase();
-  if (ACTIONABLE_ROLES.has(role)) return true;
-  return node.attributes.some((attribute) =>
-    ACTIONABLE_ATTRIBUTES.has(attribute.split('=')[0]?.trim().toLocaleLowerCase() ?? ''),
-  );
+function baseUiPayload(input: Parameters<typeof recordUiMemories>[0]): JsonRecord {
+  return {
+    url: input.url,
+    goal: input.goal,
+    action: input.action,
+    thought: input.thought,
+    trajectoryOutcome: input.trajectoryOutcome,
+    outcome: input.outcome,
+    sourceRunId: input.sourceRunId,
+    stateIndex: input.stateIndex,
+  };
 }
 
 function recordTypedFact(input: {
@@ -506,62 +555,6 @@ function surfaceFromUrl(rawUrl: string): string | null {
   } catch {
     return null;
   }
-}
-
-function parseAccessibilityTree(tree: string): AccessibilityNode[] {
-  const nodes: AccessibilityNode[] = [];
-  const lines = tree.split(/\r?\n/);
-  for (const rawLine of lines) {
-    if (nodes.length >= MAX_ACCESSIBILITY_NODES_PER_PAYLOAD) break;
-    const parsed = parseAccessibilityLine(rawLine, nodes.length);
-    if (parsed) nodes.push(parsed);
-  }
-  return nodes;
-}
-
-function parseAccessibilityLine(rawLine: string, index: number): AccessibilityNode | null {
-  const line = rawLine.trim();
-  if (!line) return null;
-  const withoutId = line.replace(/^\[(\d+)\]\s*/, '');
-  const idMatch = line.match(/^\[(\d+)\]/);
-  const firstQuote = firstQuoteIndex(withoutId);
-  const roleRaw =
-    firstQuote >= 0 ? withoutId.slice(0, firstQuote).trim() : withoutId.split(',')[0]?.trim();
-  const roleHead = roleRaw ?? '';
-  const role = roleHead.replace(/\s+/g, '_');
-  if (!role) return null;
-  const name = firstQuote >= 0 ? readQuotedValue(withoutId, firstQuote) : null;
-  const afterName =
-    firstQuote >= 0 && name
-      ? withoutId.slice(firstQuote + name.length + 2)
-      : withoutId.slice(roleHead.length);
-  const attributes = afterName
-    .split(',')
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0)
-    .slice(0, 12);
-  return {
-    index,
-    nodeId: idMatch?.[1] ?? null,
-    role: fitText(role, 80),
-    name: name ? fitText(name, 240) : null,
-    attributes,
-  };
-}
-
-function firstQuoteIndex(value: string): number {
-  const single = value.indexOf("'");
-  const double = value.indexOf('"');
-  if (single < 0) return double;
-  if (double < 0) return single;
-  return Math.min(single, double);
-}
-
-function readQuotedValue(value: string, quoteIndex: number): string | null {
-  const quote = value[quoteIndex];
-  const end = value.indexOf(quote, quoteIndex + 1);
-  if (end <= quoteIndex) return null;
-  return value.slice(quoteIndex + 1, end);
 }
 
 function stringField(payload: JsonRecord, key: string): string | null {

@@ -16,6 +16,7 @@ import type { MemoryFact, MemoryFactKind } from './facts/types';
 import { markFactsRecalled } from './facts/mutations';
 import { listFacts } from './facts/queries';
 import { getMemoryTask } from './tasks';
+import { planRetrievalSignals } from './retrievalQueryPlan';
 
 export interface RetrievalOrchestratorInput {
   userMessage: string;
@@ -65,16 +66,23 @@ const RETRIEVAL_LANES: RetrievalLaneConfig[] = [
   },
   {
     id: 'interface',
-    memoryKinds: ['ui_affordance', 'surface_schema'],
+    memoryKinds: [
+      'ui_inventory',
+      'ui_field',
+      'ui_filter_state',
+      'ui_control',
+      'ui_affordance',
+      'surface_schema',
+    ],
     minLimit: 2,
-    share: 0.35,
+    share: 0.45,
     priority: 1,
   },
   {
     id: 'procedural',
     memoryKinds: ['procedure', 'outcome', 'gotcha', 'episodic_event'],
     minLimit: 1,
-    share: 0.2,
+    share: 0.1,
     priority: 2,
   },
 ];
@@ -132,11 +140,10 @@ function buildRetrievalQuery(input: RetrievalOrchestratorInput): {
     if (task?.summary?.trim()) primarySignals.push(task.summary.trim());
   }
 
-  const uniquePrimarySignals = Array.from(
-    new Set(primarySignals.filter((signal) => signal.length > 0)),
-  );
+  const queryPlan = planRetrievalSignals(primarySignals);
+  const uniquePrimarySignals = Array.from(new Set(queryPlan.primarySignals));
   const uniqueFallbackSignals = Array.from(
-    new Set(fallbackSignals.filter((signal) => signal.length > 0)),
+    new Set([...queryPlan.supportingSignals, ...fallbackSignals].filter((signal) => signal.length > 0)),
   );
   const effectivePrimarySignals =
     uniquePrimarySignals.length > 0 ? uniquePrimarySignals : uniqueFallbackSignals;

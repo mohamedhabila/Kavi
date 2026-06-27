@@ -192,4 +192,64 @@ describe('orchestrateMemoryRetrieval', () => {
     expect(interfaceLane?.facts.some((fact) => fact.id === uiFact.id)).toBe(true);
     expect(result.facts.some((fact) => fact.id === uiFact.id)).toBe(true);
   });
+
+  it('routes code-heavy action schemas to relevant typed UI evidence', async () => {
+    const adminSurface = upsertEntity({
+      name: 'surface:https://admin.example.test',
+      type: 'project',
+    });
+    const storefrontSurface = upsertEntity({
+      name: 'surface:https://shop.example.test',
+      type: 'project',
+    });
+    const relevant = recordFact({
+      subjectId: adminSurface.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({
+        url: 'https://admin.example.test/orders',
+        fields: [{ label: 'Order state', role: 'combobox', value: 'Archived' }],
+        labelValues: [{ label: 'Order state', value: 'Archived' }],
+      }),
+      attributes: {
+        url: 'https://admin.example.test/orders',
+        sourceRunId: 'admin-run',
+        stateIndex: 2,
+      },
+      memoryKind: 'ui_inventory',
+      scope: 'conversation',
+      originConversationId: 'conv-code-heavy-query',
+      now: 1,
+    }).fact;
+    recordFact({
+      subjectId: storefrontSurface.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({
+        url: 'https://shop.example.test/search',
+        controls: [{ role: 'button', name: 'Buy' }],
+      }),
+      attributes: {
+        url: 'https://shop.example.test/search',
+        sourceRunId: 'storefront-run',
+        stateIndex: 1,
+      },
+      memoryKind: 'ui_inventory',
+      scope: 'conversation',
+      originConversationId: 'conv-code-heavy-query',
+      now: 100,
+    });
+
+    const result = await orchestrateMemoryRetrieval({
+      userMessage: [
+        'I need the admin orders page state filter evidence.',
+        'scroll(delta_x: float, delta_y: float), click(bid: str), fill(bid: str, value: str), select_option(bid: str, options: str | list[str])',
+      ].join('\n'),
+      conversationId: 'conv-code-heavy-query',
+      limit: 2,
+      now: 200,
+    });
+
+    expect(result.querySignals).toContain('I need the admin orders page state filter evidence.');
+    expect(result.querySignals.join('\n')).not.toContain('select_option');
+    expect(result.facts.some((fact) => fact.id === relevant.id)).toBe(true);
+  });
 });
