@@ -87,7 +87,7 @@ describe('structured observation memory', () => {
     expect(() => JSON.parse(inventory!.objectText)).not.toThrow();
   });
 
-  it('prioritizes form controls over generic links in affordance memories', () => {
+  it('records actionable affordance memories in source order without role priority', () => {
     const result = recordStructuredObservationsFromMessages({
       conversationId: 'conv-form',
       threadId: 'conv-form',
@@ -116,6 +116,8 @@ describe('structured observation memory', () => {
     });
 
     expect(affordances.map((fact) => JSON.parse(fact.objectText).name)).toEqual([
+      'Home',
+      'Forums',
       'Title',
       'Body',
       'Forum',
