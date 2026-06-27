@@ -19,8 +19,9 @@
 // The function never throws; remote embedding failures degrade to text scoring.
 // The default app path uses the local Unicode n-gram provider, which avoids
 // network dependency while preserving multilingual recall. Text-only candidate
-// generation is index-backed; bounded unanchored scans are reserved for
-// vector-enabled recall where vectors need a candidate sample.
+// generation is index-backed. Query-time local embeddings are attached
+// transiently for reranking; durable embedding writes belong to explicit
+// background backfill, not the user-turn read path.
 // All retrieved facts are currently-valid (`invalid_at IS NULL`) by default —
 // callers can pass `asOf` for historical queries.
 // ---------------------------------------------------------------------------
@@ -50,7 +51,7 @@ const DEFAULT_LOCAL_TEXT_WEIGHT = 0.8;
 const PINNED_BOOST = 0.25;
 const CANDIDATE_POOL_LIMIT = 512;
 const CANDIDATE_POOL_MAX = 2_000;
-const LOCAL_QUERY_EMBEDDING_BACKFILL_LIMIT = 512;
+const LOCAL_QUERY_EMBEDDING_ATTACH_LIMIT = 128;
 const RELEVANCE_EPSILON = 1e-6;
 const TRAJECTORY_NEIGHBOR_LIMIT = 4;
 
@@ -280,7 +281,7 @@ async function buildRecallSelection(
   const candidateScopes = getCandidateScopes(options);
   const queryUnits = tokenizeLexicalUnits(trimmedQuery);
   const includeUnanchoredCandidates = Boolean(
-    trimmedQuery && options.embeddingConfig && vectorWeight > 0,
+    trimmedQuery && options.embeddingConfig && vectorWeight > 0 && !usesLocalEmbedding,
   );
 
   const candidates = listFactsForRecallCandidates({
@@ -296,7 +297,7 @@ async function buildRecallSelection(
   }).filter((fact) => isFactEligibleForRecall(fact, options));
 
   if (trimmedQuery && vectorWeight > 0 && options.embeddingConfig) {
-    await maybeBackfillLocalCandidateEmbeddings(candidates, queryUnits, options.embeddingConfig);
+    await maybeAttachLocalCandidateEmbeddings(candidates, queryUnits, options.embeddingConfig);
   }
   const unitWeights = buildQueryUnitWeights(queryUnits, candidates, factHaystack);
 
@@ -364,7 +365,7 @@ async function maybeEmbedQuery(
   }
 }
 
-async function maybeBackfillLocalCandidateEmbeddings(
+async function maybeAttachLocalCandidateEmbeddings(
   candidates: MemoryFact[],
   queryUnits: Set<string>,
   config: EmbeddingConfig,
@@ -383,12 +384,13 @@ async function maybeBackfillLocalCandidateEmbeddings(
       if (b.fact.importance !== a.fact.importance) return b.fact.importance - a.fact.importance;
       return b.strength - a.strength;
     })
-    .slice(0, LOCAL_QUERY_EMBEDDING_BACKFILL_LIMIT);
+    .slice(0, LOCAL_QUERY_EMBEDDING_ATTACH_LIMIT);
 
   for (const { fact } of missing) {
-    const embedding = await embedFact(fact, config);
-    if (embedding) {
-      fact.embedding = embedding;
+    try {
+      fact.embedding = await getEmbeddingCached(factHaystack(fact), config);
+    } catch {
+      // Local vector reranking is opportunistic; lexical scoring remains available.
     }
   }
 }

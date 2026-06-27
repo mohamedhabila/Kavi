@@ -223,7 +223,7 @@ describe('recallFactsForQuery — vector path with embedding config', () => {
     expect(getEmbeddingCachedSpy).not.toHaveBeenCalled();
   });
 
-  it('uses locally backfilled fact embeddings during the first recall pass', async () => {
+  it('uses transient local fact embeddings during recall without mutating storage', async () => {
     const page = upsertEntity({ name: 'forum-homepage', type: 'concept' });
     const recorded = recordFact({
       subjectId: page.id,
@@ -242,7 +242,7 @@ describe('recallFactsForQuery — vector path with embedding config', () => {
     });
 
     expect(facts.map((fact) => fact.id)).toContain(recorded.fact.id);
-    expect(getFactById(recorded.fact.id)?.embedding).not.toBeNull();
+    expect(getFactById(recorded.fact.id)?.embedding).toBeNull();
   });
 });
 
