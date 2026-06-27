@@ -222,6 +222,17 @@ function fitBlockLines(lines: string[], maxChars: number): string {
   return joined.length <= maxChars ? joined : joined.slice(0, maxChars);
 }
 
+function isStructuredEvidenceCandidate(evidence: string): boolean {
+  const trimmed = evidence.trim();
+  const colonIndex = trimmed.indexOf(':');
+  if (colonIndex <= 0) {
+    return false;
+  }
+
+  const payload = trimmed.slice(colonIndex + 1).trimStart();
+  return payload.startsWith('{') || payload.startsWith('[');
+}
+
 function applyWorkingMemoryFromStructural(
   structural: ReturnType<typeof extractStructuralMemory>,
   input: ProcessTurnInput,
@@ -463,7 +474,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
       structuredMemoryFactIds.push(...structuredFromEvidence.factIds);
       const consumedEvidence = new Set(structuredFromEvidence.consumedEvidence);
       const bridgeableEvidence = input.graphGoalEvidence.filter(
-        (evidence) => !consumedEvidence.has(evidence),
+        (evidence) => !consumedEvidence.has(evidence) && !isStructuredEvidenceCandidate(evidence),
       );
       const bridgeResult = bridgeGraphGoalEvidence(bridgeableEvidence, {
         subjectName: input.taskId ?? input.threadId,
