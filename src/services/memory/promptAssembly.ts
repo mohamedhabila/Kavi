@@ -89,6 +89,7 @@ const L3_OUTCOMES_HEADER = '#### Outcomes and Gotchas';
 const L3_EPISODES_HEADER = '### Recent Activity';
 const MAX_RENDERED_FACT_CHARS = 3_200;
 const MAX_RENDERED_UI_FACT_CHARS = 2_400;
+const MAX_RETRIEVED_FACT_SECTION_CHARS = 3_400;
 const MAX_RENDERED_EPISODE_CHARS = 200;
 const SURFACE_PROMPT_FIELDS = [
   'url',
@@ -106,6 +107,7 @@ const UI_AFFORDANCE_PROMPT_FIELDS = [
   'role',
   'name',
   'label',
+  'contextLabels',
   'value',
   'options',
   'attributes',
@@ -234,16 +236,22 @@ function compactJsonFields(
 
 function compactFactFields(
   fact: PromptMemoryFact,
+  parsed: Record<string, unknown> | null,
   fields: ReadonlyArray<string>,
 ): string | null {
   const compact: Record<string, unknown> = {};
+  let hasEvidenceField = false;
   for (const field of fields) {
-    const rawValue = field === 'sourceRunId' ? (fact.sourceRunId ?? fact.attributes[field]) : fact.attributes[field];
+    const rawValue =
+      field === 'sourceRunId'
+        ? (fact.sourceRunId ?? fact.attributes[field] ?? parsed?.[field])
+        : (fact.attributes[field] ?? parsed?.[field]);
     if (rawValue !== undefined && rawValue !== null && rawValue !== '') {
       compact[field] = rawValue;
+      if (field !== 'sourceRunId' && field !== 'stateIndex') hasEvidenceField = true;
     }
   }
-  return Object.keys(compact).length > 0 ? JSON.stringify(compact) : null;
+  return hasEvidenceField ? JSON.stringify(compact) : null;
 }
 
 function renderableFactText(fact: PromptMemoryFact): string {
@@ -256,8 +264,7 @@ function renderableFactText(fact: PromptMemoryFact): string {
   if (memoryKind === 'ui_inventory') fields = UI_INVENTORY_PROMPT_FIELDS;
   if (!fields) return fact.objectText;
   const parsed = parseJsonRecord(fact.objectText);
-  if (memoryKind === 'ui_inventory' && parsed) return compactJsonFields(parsed, fields);
-  const compactFromAttributes = compactFactFields(fact, fields);
+  const compactFromAttributes = compactFactFields(fact, parsed, fields);
   if (compactFromAttributes) return compactFromAttributes;
   if (!parsed) return fact.objectText;
   return compactJsonFields(parsed, fields);
@@ -330,8 +337,28 @@ function groupRetrievedFacts(facts: PromptMemoryFact[]): Array<{
     .filter((group) => group.facts.length > 0);
 }
 
-function renderRetrievedFactGroup(group: { header: string; facts: PromptMemoryFact[] }): string {
-  return `${L3_HEADER}\n${L3_FACTS_HEADER}\n${group.header}\n${group.facts.map(renderFact).join('\n')}`;
+function renderRetrievedFactGroup(group: { header: string; facts: PromptMemoryFact[] }): string[] {
+  const sectionPrefix = `${L3_HEADER}\n${L3_FACTS_HEADER}\n${group.header}`;
+  const sections: string[] = [];
+  let lines: string[] = [];
+  let sectionChars = sectionPrefix.length;
+
+  for (const fact of group.facts) {
+    const line = renderFact(fact);
+    const nextChars = sectionChars + 1 + line.length;
+    if (lines.length > 0 && nextChars > MAX_RETRIEVED_FACT_SECTION_CHARS) {
+      sections.push(`${sectionPrefix}\n${lines.join('\n')}`);
+      lines = [];
+      sectionChars = sectionPrefix.length;
+    }
+    lines.push(line);
+    sectionChars += 1 + line.length;
+  }
+
+  if (lines.length > 0) {
+    sections.push(`${sectionPrefix}\n${lines.join('\n')}`);
+  }
+  return sections;
 }
 
 function renderL3Sections(input: AssemblePromptInput): string[] {
@@ -354,7 +381,7 @@ function renderL3Sections(input: AssemblePromptInput): string[] {
     sections.push(`${L3_HEADER}\n${preludeParts.join('\n\n')}`);
   }
   if (factGroups.length > 0) {
-    sections.push(...factGroups.map(renderRetrievedFactGroup));
+    sections.push(...factGroups.flatMap(renderRetrievedFactGroup));
   }
   if (trailingParts.length > 0) {
     sections.push(`${L3_HEADER}\n${trailingParts.join('\n\n')}`);

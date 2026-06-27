@@ -218,6 +218,55 @@ describe('assemblePrompt — L3 contents', () => {
     expect(section).toContain('\u2026');
   });
 
+  it('splits large retrieved UI groups so later affordances remain visible', () => {
+    const longInventory = (id: string) =>
+      makeFact({
+        id,
+        predicate: 'ui_inventory',
+        memoryKind: 'ui_inventory',
+        objectText: JSON.stringify({
+          fieldLabels: ['qbulk'],
+          controls: Array.from({ length: 200 }, (_, index) => ({
+            role: 'button',
+            name: `qbulk-control-${id}-${index}`,
+          })),
+          url: `https://app.example/${id}`,
+          sourceRunId: 'run-packing',
+          stateIndex: id,
+        }),
+      });
+    const target = makeFact({
+      id: 'ui-target',
+      predicate: 'ui_affordance',
+      memoryKind: 'ui_affordance',
+      sourceRunId: 'run-packing',
+      objectText: JSON.stringify({
+        role: 'button',
+        name: 'qtarget-action',
+        contextLabels: ['qtarget-context'],
+        url: 'https://app.example/target',
+        sourceRunId: 'run-packing',
+        stateIndex: 'target',
+      }),
+    });
+
+    const out = assemblePrompt({
+      basePrompt: 'BASE',
+      retrievedFacts: [longInventory('a'), longInventory('b'), target],
+    });
+    const uiSections = out.sections.filter((section) =>
+      section.text.includes('#### Observed UI and Surface Schema'),
+    );
+    const targetSectionIndex = uiSections.findIndex((section) =>
+      section.text.includes('qtarget-action'),
+    );
+
+    expect(uiSections.length).toBeGreaterThan(1);
+    expect(uiSections.every((section) => section.text.length < 3_700)).toBe(true);
+    expect(targetSectionIndex).toBeGreaterThan(0);
+    expect(uiSections[targetSectionIndex].text).toContain('qtarget-context');
+  });
+
   it('keeps multiple UI trajectory facts inside a compact dynamic section', () => {
     const retrievedFacts = [0, 1, 5, 6, 7].map((stateIndex) =>
       makeFact({
