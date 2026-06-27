@@ -307,4 +307,129 @@ describe('orchestrateMemoryRetrieval', () => {
     expect(result.querySignals[0]).not.toContain('Fraud Suspect Resolution');
     expect(result.facts.map((fact) => fact.id)).toEqual([relevant.id]);
   });
+
+  it('keeps compact form evidence when generic interface inventories share the same surface', async () => {
+    const genericSurface = upsertEntity({
+      name: 'surface:https://forum.example.test',
+      type: 'project',
+    });
+    const targetSurface = upsertEntity({
+      name: 'surface:https://forum.example.test',
+      type: 'project',
+    });
+
+    for (let index = 0; index < 8; index += 1) {
+      recordFact({
+        subjectId: genericSurface.id,
+        predicate: 'ui_inventory',
+        objectText: JSON.stringify({
+          url: `https://forum.example.test/create_forum/${index}`,
+          fieldLabels: ['Name', 'Title', 'Description', 'Sidebar', 'Tags'],
+          controlNames: ['Home', 'Forums', 'Submit', 'Create forum'],
+        }),
+        attributes: {
+          sourceRunId: 'generic-forum-run',
+          stateIndex: index,
+        },
+        sourceRunId: 'generic-forum-run',
+        memoryKind: 'ui_inventory',
+        scope: 'conversation',
+        originConversationId: 'conv-source-aware-form',
+        importance: 0.9,
+        now: 100 + index,
+      });
+    }
+
+    const target = recordFact({
+      subjectId: targetSurface.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({
+        url: 'https://forum.example.test/submit/funny',
+        fieldLabels: ['URL', 'Image', 'Title', 'Body', 'Forum'],
+        fields: [
+          { order: 2, label: 'Title', role: 'textbox' },
+          { order: 3, label: 'Body', role: 'textbox' },
+          { order: 4, label: 'Forum', role: 'combobox', value: 'funny' },
+        ],
+      }),
+      attributes: {
+        sourceRunId: 'submission-form-run',
+        stateIndex: 7,
+      },
+      sourceRunId: 'submission-form-run',
+      memoryKind: 'ui_inventory',
+      scope: 'conversation',
+      originConversationId: 'conv-source-aware-form',
+      now: 1,
+    }).fact;
+
+    const result = await orchestrateMemoryRetrieval({
+      userMessage: 'create submission form field between body and forum',
+      conversationId: 'conv-source-aware-form',
+      limit: 4,
+      now: 200,
+    });
+
+    expect(result.facts.some((fact) => fact.id === target.id)).toBe(true);
+  });
+
+  it('retrieves interface field memories through captured option values', async () => {
+    const adminSurface = upsertEntity({
+      name: 'surface:https://admin.example.test',
+      type: 'project',
+    });
+    const optionFact = recordFact({
+      subjectId: adminSurface.id,
+      predicate: 'ui_field',
+      objectText: JSON.stringify({
+        label: 'Status',
+        role: 'combobox',
+        value: 'Complete',
+        options: ['Canceled', 'Closed', 'Complete', 'Suspected Fraud', 'Processing'],
+        url: 'https://admin.example.test/orders',
+      }),
+      attributes: {
+        label: 'Status',
+        role: 'combobox',
+        value: 'Complete',
+        options: ['Canceled', 'Closed', 'Complete', 'Suspected Fraud', 'Processing'],
+        sourceRunId: 'order-status-options-run',
+        stateIndex: 5,
+      },
+      sourceRunId: 'order-status-options-run',
+      memoryKind: 'ui_field',
+      scope: 'conversation',
+      originConversationId: 'conv-status-options',
+      now: 1,
+    }).fact;
+
+    recordFact({
+      subjectId: adminSurface.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({
+        url: 'https://admin.example.test/orders',
+        fieldLabels: ['Status'],
+        controlNames: ['Orders', 'Filters'],
+      }),
+      attributes: {
+        sourceRunId: 'generic-orders-run',
+        stateIndex: 1,
+      },
+      sourceRunId: 'generic-orders-run',
+      memoryKind: 'ui_inventory',
+      scope: 'conversation',
+      originConversationId: 'conv-status-options',
+      importance: 0.9,
+      now: 100,
+    });
+
+    const result = await orchestrateMemoryRetrieval({
+      userMessage: 'Fraud Suspect Resolution status filter',
+      conversationId: 'conv-status-options',
+      limit: 3,
+      now: 200,
+    });
+
+    expect(result.facts.some((fact) => fact.id === optionFact.id)).toBe(true);
+  });
 });

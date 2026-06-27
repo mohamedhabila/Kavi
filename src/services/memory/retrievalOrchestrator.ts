@@ -17,6 +17,11 @@ import { markFactsRecalled } from './facts/mutations';
 import { listFacts } from './facts/queries';
 import { getMemoryTask } from './tasks';
 import { planRetrievalSignals } from './retrievalQueryPlan';
+import {
+  buildQueryUnitWeights,
+  lexicalOverlap,
+  tokenizeLexicalUnits,
+} from './ranking/lexical';
 
 export interface RetrievalOrchestratorInput {
   userMessage: string;
@@ -83,6 +88,11 @@ const RETRIEVAL_LANES: RetrievalLaneConfig[] = [
     priority: 2,
   },
 ];
+
+const INTERFACE_SOURCE_POOL_LIMIT = 50;
+const INTERFACE_SOURCE_POOL_MULTIPLIER = 8;
+const INTERFACE_SOURCE_GROUP_TOP_FACTS = 6;
+const INTERFACE_SOURCE_GROUP_FACT_LIMIT = 3;
 
 function collectGoalSignals(goals: ReadonlyArray<AgentGoal> | undefined): string[] {
   if (!goals?.length) return [];
@@ -206,15 +216,26 @@ async function recallLane(
   },
 ): Promise<RetrievalLaneResult> {
   const limit = laneLimit(config, input.totalLimit);
+  const sourceAwareInterface = config.id === 'interface';
+  const interfacePoolLimit = sourceAwareInterface
+    ? Math.min(INTERFACE_SOURCE_POOL_LIMIT, Math.max(limit, limit * INTERFACE_SOURCE_POOL_MULTIPLIER))
+    : limit;
   const laneOptionsBase: RecallFactsOptions = {
     ...input.options,
     memoryKind: config.memoryKinds,
+    ...(sourceAwareInterface ? { vectorWeight: 0, textWeight: 1, threshold: 0.01 } : {}),
   };
   const hasExpansion =
     input.expansionQuery.trim().length > 0 &&
     input.expansionQuery.trim() !== input.primaryQuery.trim();
-  const expansionLimit = hasExpansion ? Math.max(1, Math.floor(limit * 0.35)) : 0;
-  const primaryLimit = Math.max(1, limit - expansionLimit);
+  const expansionLimit = hasExpansion
+    ? sourceAwareInterface
+      ? interfacePoolLimit
+      : Math.max(1, Math.floor(limit * 0.35))
+    : 0;
+  const primaryLimit = sourceAwareInterface
+    ? interfacePoolLimit
+    : Math.max(1, limit - expansionLimit);
   const primary = await recallScoredFactsForSignals(input.primaryQuery, {
     ...laneOptionsBase,
     limit: primaryLimit,
@@ -226,21 +247,125 @@ async function recallLane(
           limit: expansionLimit,
         })
       : [];
-  const currentCount = mergeUniqueScoredFacts([...primary, ...expansion], limit).length;
+  const mergedInitial = mergeUniqueScoredFacts(
+    [...primary, ...expansion],
+    sourceAwareInterface ? INTERFACE_SOURCE_POOL_LIMIT : limit,
+  );
+  const currentCount = sourceAwareInterface
+    ? Math.min(mergedInitial.length, limit)
+    : mergedInitial.length;
   const fallback =
     input.useFallback && currentCount < limit
       ? await recallScoredFactsForSignals(input.fallbackQuery, {
           ...laneOptionsBase,
-          limit: limit - currentCount,
+          limit: sourceAwareInterface ? interfacePoolLimit : limit - currentCount,
         })
       : [];
-  const scoredFacts = mergeUniqueScoredFacts([...primary, ...expansion, ...fallback], limit);
+  const mergedPool = mergeUniqueScoredFacts(
+    [...primary, ...expansion, ...fallback],
+    sourceAwareInterface ? INTERFACE_SOURCE_POOL_LIMIT : limit,
+  );
+  const scoredFacts = sourceAwareInterface
+    ? selectSourceAwareInterfaceFacts(
+        mergedPool,
+        [input.primaryQuery, input.expansionQuery, input.fallbackQuery].join('\n'),
+        limit,
+      )
+    : mergedPool;
   return {
     id: config.id,
     memoryKinds: config.memoryKinds,
     scoredFacts,
     facts: scoredFacts.map((entry) => entry.fact),
   };
+}
+
+function sourceGroupKey(fact: MemoryFact): string {
+  return fact.sourceRunId ?? fact.id;
+}
+
+function sourceRankingText(fact: MemoryFact): string {
+  return `${fact.subjectId} ${fact.predicate} ${fact.objectText} ${fact.sourceSummary ?? ''}`;
+}
+
+function selectSourceAwareInterfaceFacts(
+  entries: ScoredFact[],
+  query: string,
+  limit: number,
+): ScoredFact[] {
+  if (entries.length <= limit) return entries;
+  const queryUnits = tokenizeLexicalUnits(query);
+  if (queryUnits.size === 0) return mergeUniqueScoredFacts(entries, limit);
+  const unitWeights = buildQueryUnitWeights(queryUnits, entries, (entry) =>
+    sourceRankingText(entry.fact),
+  );
+  const groups = new Map<string, ScoredFact[]>();
+  for (const entry of entries) {
+    const key = sourceGroupKey(entry.fact);
+    const group = groups.get(key) ?? [];
+    group.push(entry);
+    groups.set(key, group);
+  }
+
+  const rankedGroups = Array.from(groups.entries())
+    .map(([key, group]) => {
+      const rankedEntries = [...group].sort((left, right) => {
+        const rightOverlap = lexicalOverlap(queryUnits, sourceRankingText(right.fact), unitWeights);
+        const leftOverlap = lexicalOverlap(queryUnits, sourceRankingText(left.fact), unitWeights);
+        if (rightOverlap !== leftOverlap) return rightOverlap - leftOverlap;
+        if (right.score !== left.score) return right.score - left.score;
+        return right.fact.updatedAt - left.fact.updatedAt;
+      });
+      const topEntries = rankedEntries.slice(0, INTERFACE_SOURCE_GROUP_TOP_FACTS);
+      const coverageScore = lexicalOverlap(
+        queryUnits,
+        topEntries.map((entry) => sourceRankingText(entry.fact)).join('\n'),
+        unitWeights,
+      );
+      const bestScore = Math.max(...topEntries.map((entry) => entry.score));
+      const averageScore =
+        topEntries.reduce((sum, entry) => sum + entry.score, 0) / Math.max(1, topEntries.length);
+      return {
+        key,
+        entries: rankedEntries,
+        score: coverageScore * 0.55 + bestScore * 0.35 + averageScore * 0.1,
+      };
+    })
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score;
+      return right.entries[0].fact.updatedAt - left.entries[0].fact.updatedAt;
+    });
+
+  const selected: ScoredFact[] = [];
+  const seenIds = new Set<string>();
+  const selectedPerGroup = new Map<string, number>();
+  const addEntry = (groupKey: string, entry: ScoredFact): void => {
+    if (selected.length >= limit || seenIds.has(entry.fact.id)) return;
+    selected.push(entry);
+    seenIds.add(entry.fact.id);
+    selectedPerGroup.set(groupKey, (selectedPerGroup.get(groupKey) ?? 0) + 1);
+  };
+
+  for (const group of rankedGroups) {
+    const first = group.entries.find((entry) => !seenIds.has(entry.fact.id));
+    if (first) addEntry(group.key, first);
+    if (selected.length >= limit) return selected;
+  }
+
+  let added = true;
+  while (selected.length < limit && added) {
+    added = false;
+    for (const group of rankedGroups) {
+      if ((selectedPerGroup.get(group.key) ?? 0) >= INTERFACE_SOURCE_GROUP_FACT_LIMIT) continue;
+      const next = group.entries.find((entry) => !seenIds.has(entry.fact.id));
+      if (!next) continue;
+      addEntry(group.key, next);
+      added = true;
+      if (selected.length >= limit) break;
+    }
+  }
+
+  return selected;
 }
 
 function mergeUniqueScoredFacts(entries: ScoredFact[], limit: number): ScoredFact[] {
