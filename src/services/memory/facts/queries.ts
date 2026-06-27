@@ -17,7 +17,8 @@ const DEFAULT_RECALL_CANDIDATE_LIMIT = 2_000;
 const MAX_RECALL_CANDIDATE_LIMIT = 10_000;
 const DEFAULT_RECALL_PINNED_LIMIT = 64;
 const DEFAULT_RECALL_SCOPED_RECENT_LIMIT = 192;
-const DEFAULT_RECALL_LEXICAL_UNIT_LIMIT = 24;
+const DEFAULT_RECALL_LEXICAL_UNIT_LIMIT = 64;
+const DEFAULT_RECALL_LEXICAL_ANCHOR_LIMIT = 32;
 
 interface FactFilter {
   clauses: string[];
@@ -86,6 +87,25 @@ function escapeLikeLiteral(value: string): string {
   return value.replace(/[\\%_]/g, (match) => `\\${match}`);
 }
 
+function buildLexicalUnitFilter(unit: string): { clause: string; params: SqlBindValue[] } {
+  const likeValue = `%${escapeLikeLiteral(unit)}%`;
+  return {
+    clause:
+      "(subject_id LIKE ? ESCAPE '\\' OR predicate LIKE ? ESCAPE '\\' OR object_text LIKE ? ESCAPE '\\' OR source_summary LIKE ? ESCAPE '\\')",
+    params: [likeValue, likeValue, likeValue, likeValue],
+  };
+}
+
+function prioritizeLexicalUnits(units: string[]): string[] {
+  return units
+    .map((unit, index) => ({ unit, index }))
+    .sort((left, right) => {
+      if (right.unit.length !== left.unit.length) return right.unit.length - left.unit.length;
+      return left.index - right.index;
+    })
+    .map((entry) => entry.unit);
+}
+
 export function listFacts(options: ListFactsOptions = {}): MemoryFact[] {
   const filter = buildFactFilter(options);
   const limit = clampLimit(options.limit, DEFAULT_FACT_LIMIT, MAX_FACT_LIMIT);
@@ -105,6 +125,7 @@ export interface ListFactsForRecallCandidatesOptions extends ListFactsOptions {
   pinnedLimit?: number;
   scopedRecentLimit?: number;
   lexicalUnitLimit?: number;
+  lexicalAnchorLimit?: number;
 }
 
 export function listFactsForRecallCandidates(
@@ -149,6 +170,45 @@ export function listFactsForRecallCandidates(
     clampLimit(options.pinnedLimit, DEFAULT_RECALL_PINNED_LIMIT, totalLimit),
   );
 
+  const lexicalUnits = Array.from(
+    new Set((options.lexicalUnits ?? []).map((unit) => unit.trim()).filter(Boolean)),
+  ).slice(0, clampLimit(options.lexicalUnitLimit, DEFAULT_RECALL_LEXICAL_UNIT_LIMIT, 64));
+  const prioritizedLexicalUnits = prioritizeLexicalUnits(lexicalUnits);
+  if (prioritizedLexicalUnits.length > 0) {
+    const perUnitLimit = Math.max(
+      4,
+      Math.min(
+        options.lexicalAnchorLimit ?? DEFAULT_RECALL_LEXICAL_ANCHOR_LIMIT,
+        Math.ceil(totalLimit / prioritizedLexicalUnits.length),
+      ),
+    );
+    for (const unit of prioritizedLexicalUnits) {
+      const lexicalFilter = buildLexicalUnitFilter(unit);
+      addRows(
+        [lexicalFilter.clause],
+        lexicalFilter.params,
+        'retrievability DESC, importance DESC, updated_at DESC',
+        perUnitLimit,
+      );
+    }
+  }
+
+  if (lexicalUnits.length > 0) {
+    const lexicalClauses: string[] = [];
+    const lexicalParams: SqlBindValue[] = [];
+    for (const unit of lexicalUnits) {
+      const lexicalFilter = buildLexicalUnitFilter(unit);
+      lexicalClauses.push(lexicalFilter.clause);
+      lexicalParams.push(...lexicalFilter.params);
+    }
+    addRows(
+      [`(${lexicalClauses.join(' OR ')})`],
+      lexicalParams,
+      'pinned DESC, retrievability DESC, importance DESC, updated_at DESC',
+      totalLimit,
+    );
+  }
+
   const scopedClauses: string[] = [];
   const scopedParams: SqlBindValue[] = [];
   if (options.scopedRecentConversationId) {
@@ -165,27 +225,6 @@ export function listFactsForRecallCandidates(
       scopedParams,
       'updated_at DESC, importance DESC',
       clampLimit(options.scopedRecentLimit, DEFAULT_RECALL_SCOPED_RECENT_LIMIT, totalLimit),
-    );
-  }
-
-  const lexicalUnits = Array.from(
-    new Set((options.lexicalUnits ?? []).map((unit) => unit.trim()).filter(Boolean)),
-  ).slice(0, clampLimit(options.lexicalUnitLimit, DEFAULT_RECALL_LEXICAL_UNIT_LIMIT, 64));
-  if (lexicalUnits.length > 0) {
-    const lexicalClauses: string[] = [];
-    const lexicalParams: SqlBindValue[] = [];
-    for (const unit of lexicalUnits) {
-      const likeValue = `%${escapeLikeLiteral(unit)}%`;
-      lexicalClauses.push(
-        "(subject_id LIKE ? ESCAPE '\\' OR predicate LIKE ? ESCAPE '\\' OR object_text LIKE ? ESCAPE '\\' OR source_summary LIKE ? ESCAPE '\\')",
-      );
-      lexicalParams.push(likeValue, likeValue, likeValue, likeValue);
-    }
-    addRows(
-      [`(${lexicalClauses.join(' OR ')})`],
-      lexicalParams,
-      'pinned DESC, retrievability DESC, importance DESC, updated_at DESC',
-      totalLimit,
     );
   }
 

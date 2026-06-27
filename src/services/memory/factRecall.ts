@@ -33,6 +33,7 @@ import {
   lexicalOverlap,
   tokenizeLexicalUnits,
 } from './ranking/lexical';
+import { retrievalTextForFact } from './ranking/factText';
 import { cosineSimilarity } from './ranking/similarity';
 import { exponentialDecayMultiplier } from './ranking/scoring';
 import { diversifyTrajectoryAware } from './ranking/trajectoryDiversification';
@@ -104,7 +105,7 @@ export interface ScoredFact {
 }
 
 function factHaystack(fact: MemoryFact): string {
-  return `${fact.subjectId} ${fact.predicate} ${fact.objectText} ${fact.sourceSummary ?? ''}`;
+  return retrievalTextForFact(fact);
 }
 
 function diversifyScoredFacts(scored: ScoredFact[], limit: number): ScoredFact[] {

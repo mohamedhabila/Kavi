@@ -149,4 +149,90 @@ describe('recallFactsForQuery — ranking', () => {
     expect(facts.some((fact) => Number(fact.attributes.stateIndex) > 5)).toBe(true);
     expect(facts.map((fact) => Number(fact.attributes.stateIndex))).toEqual([5, 6, 7, 0, 1]);
   });
+
+  it('anchors late discriminative query units before scoped recency fill', async () => {
+    const corpus = upsertEntity({ name: 'candidate-coverage-corpus', type: 'concept' });
+    const conversationId = 'conv-candidate-coverage';
+    const commonUnits = Array.from({ length: 40 }, (_, index) => `qcommon${index}`);
+    const query = `${commonUnits.join(' ')} qtargetdeep`;
+
+    for (let index = 0; index < 180; index += 1) {
+      recordFact({
+        subjectId: corpus.id,
+        predicate: `recent_${index}`,
+        objectText: `qcommon0 qnoise${index}`,
+        scope: 'conversation',
+        originConversationId: conversationId,
+        now: 10_000 + index,
+      });
+    }
+
+    const target = recordFact({
+      subjectId: corpus.id,
+      predicate: 'target',
+      objectText: 'qtargetdeep qcommon0',
+      scope: 'conversation',
+      originConversationId: conversationId,
+      now: 1,
+    });
+
+    const scored = await recallScoredFactsForQuery(query, {
+      conversationId,
+      limit: 5,
+      candidatePoolLimit: 120,
+      vectorWeight: 0,
+      textWeight: 1,
+      threshold: 0.01,
+      now: 20_000,
+    });
+
+    expect(scored.some((entry) => entry.fact.id === target.fact.id)).toBe(true);
+  });
+
+  it('ranks UI inventories on schema state instead of bulk control text', async () => {
+    const surface = upsertEntity({ name: 'surface:https://admin.example.test', type: 'project' });
+    const commonUnits = Array.from({ length: 30 }, (_, index) => `qcommon${index}`);
+    recordFact({
+      subjectId: surface.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({
+        controlNames: commonUnits,
+        controls: commonUnits.map((name) => ({ role: 'button', name })),
+        url: 'https://admin.example.test/noisy',
+      }),
+      memoryKind: 'ui_inventory',
+      scope: 'conversation',
+      originConversationId: 'conv-ui-ranking-text',
+      now: 10_000,
+    });
+    const target = recordFact({
+      subjectId: surface.id,
+      predicate: 'ui_field',
+      objectText: JSON.stringify({
+        label: 'qtargetlabel',
+        role: 'combobox',
+        options: ['qtargetoption'],
+        url: 'https://admin.example.test/relevant',
+      }),
+      memoryKind: 'ui_field',
+      scope: 'conversation',
+      originConversationId: 'conv-ui-ranking-text',
+      now: 1,
+    });
+
+    const scored = await recallScoredFactsForQuery(
+      `${commonUnits.join(' ')} qtargetoption`,
+      {
+        conversationId: 'conv-ui-ranking-text',
+        memoryKind: ['ui_inventory', 'ui_field'],
+        limit: 1,
+        vectorWeight: 0,
+        textWeight: 1,
+        threshold: 0.01,
+        now: 20_000,
+      },
+    );
+
+    expect(scored.map((entry) => entry.fact.id)).toEqual([target.fact.id]);
+  });
 });
