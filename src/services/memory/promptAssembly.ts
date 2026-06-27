@@ -141,10 +141,15 @@ const UI_INVENTORY_PROMPT_FIELDS = [
   'controlCount',
   'textEntryCount',
   'searchControlCount',
+  'fieldLabels',
+  'controlNames',
+  'textEntryControls',
+  'searchControls',
   'roleCounts',
   'fields',
   'controls',
   'labelValues',
+  'tables',
 ] as const;
 
 function joinNonEmpty(parts: Array<string | null | undefined>, sep = '\n\n'): string {

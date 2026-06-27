@@ -20,6 +20,8 @@ const FUNCTION_SIGNATURE_PATTERN = /[\p{L}_][\p{L}\p{N}_-]*\s*\([^)]*\)/gu;
 const MACHINE_PUNCTUATION_PATTERN = /[{}()[\]<>_=|,:;]/g;
 const QUOTED_SPAN_PATTERN = /`([^`]{1,160})`|"([^"]{1,160})"|'([^']{1,160})'/gu;
 const WHITESPACE_PATTERN = /\s+/g;
+const CONTENT_CHAR_PATTERN = /[\p{L}\p{M}\p{N}]/gu;
+const MIN_REDACTED_CONTENT_CHARS = 3;
 
 export function planRetrievalSignals(rawSignals: ReadonlyArray<string>): RetrievalQueryPlan {
   const primarySignals: string[] = [];
@@ -45,7 +47,13 @@ export function planRetrievalSignals(rawSignals: ReadonlyArray<string>): Retriev
 
     const cleaned = normalizeSignal(cleanedLines.join('\n'));
     if (cleaned) {
-      addUniqueSignal(primarySignals, fitSignal(cleaned), MAX_PRIMARY_SIGNALS);
+      const redacted = normalizeSignal(redactQuotedSpans(cleaned));
+      if (redacted && redacted !== cleaned && contentCharCount(redacted) >= MIN_REDACTED_CONTENT_CHARS) {
+        addUniqueSignal(primarySignals, fitSignal(redacted), MAX_PRIMARY_SIGNALS);
+        addUniqueSignal(supportingSignals, fitSignal(cleaned), MAX_SUPPORTING_SIGNALS);
+      } else {
+        addUniqueSignal(primarySignals, fitSignal(cleaned), MAX_PRIMARY_SIGNALS);
+      }
     } else {
       for (const span of extracted) addUniqueSignal(primarySignals, span, MAX_PRIMARY_SIGNALS);
     }
@@ -71,6 +79,15 @@ function extractQuotedSpans(value: string): string[] {
     addUniqueSignal(spans, span, MAX_EXTRACTED_SPANS);
   }
   return spans;
+}
+
+function redactQuotedSpans(value: string): string {
+  QUOTED_SPAN_PATTERN.lastIndex = 0;
+  return value.replace(QUOTED_SPAN_PATTERN, ' ');
+}
+
+function contentCharCount(value: string): number {
+  return Array.from(value.matchAll(CONTENT_CHAR_PATTERN)).length;
 }
 
 function isMachineDenseLine(line: string): boolean {

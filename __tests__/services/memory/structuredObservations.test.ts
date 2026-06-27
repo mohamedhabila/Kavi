@@ -113,6 +113,7 @@ describe('structured observation memory', () => {
             "\t\tStaticText '*'",
             "\t[16] combobox 'general' value='general', clickable, hasPopup='menu'",
             "\t[17] button 'Create submission', clickable, visible",
+            "\t[18] LabelText 'Decorative helper', clickable, visible",
           ].join('\n'),
         }),
       ],
@@ -140,10 +141,24 @@ describe('structured observation memory', () => {
       controlCount: 7,
       textEntryCount: 2,
       searchControlCount: 1,
+      fieldLabels: ['Title', 'Body', 'Destination'],
     });
     expect(inventoryObject.controls.some((control: { name?: string }) => control.name === 'Formatting help +')).toBe(
       true,
     );
+    expect(inventoryObject.controls.some((control: { role?: string }) => control.role === 'LabelText')).toBe(
+      false,
+    );
+    expect(inventoryObject.controlNames).toEqual(
+      expect.arrayContaining(['Home', 'Search query', 'Title This field is required.', 'Body']),
+    );
+    expect(inventoryObject.searchControls).toEqual([
+      expect.objectContaining({ role: 'searchbox', name: 'Search query' }),
+    ]);
+    expect(inventoryObject.textEntryControls).toEqual([
+      expect.objectContaining({ role: 'textbox', label: 'Title' }),
+      expect.objectContaining({ role: 'textbox', label: 'Body' }),
+    ]);
   });
 
   it('records generic label-value state for active filters without phrase rules', () => {
@@ -217,6 +232,51 @@ describe('structured observation memory', () => {
       'Body',
       'Forum',
       'Create submission',
+    ]);
+  });
+
+  it('records compact table column values from accessibility grids', () => {
+    recordStructuredObservationsFromMessages({
+      conversationId: 'conv-table',
+      threadId: 'conv-table',
+      sourceRunId: 'run-table',
+      now: 350,
+      messages: [
+        toolMessage({
+          url: 'https://admin.example.test/orders',
+          accessibility_tree: [
+            "RootWebArea 'Orders'",
+            "\t[1] table ''",
+            "\t\t[2] row ''",
+            "\t\t\t[3] columnheader 'Reference'",
+            "\t\t\t[4] columnheader 'State'",
+            "\t\t[5] row ''",
+            "\t\t\t[6] gridcell '000001'",
+            "\t\t\t[7] gridcell 'Closed'",
+            "\t\t[8] row ''",
+            "\t\t\t[9] gridcell '000002'",
+            "\t\t\t[10] gridcell 'Open'",
+          ].join('\n'),
+        }),
+      ],
+    });
+
+    const inventory = JSON.parse(
+      listFacts({
+        memoryKind: 'ui_inventory',
+        originConversationId: 'conv-table',
+      })[0].objectText,
+    );
+
+    expect(inventory.tables).toEqual([
+      expect.objectContaining({
+        role: 'table',
+        columnLabels: ['Reference', 'State'],
+        rowCount: 3,
+        columnValueSamples: expect.arrayContaining([
+          { column: 'State', values: ['Closed', 'Open'] },
+        ]),
+      }),
     ]);
   });
 

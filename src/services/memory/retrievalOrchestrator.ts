@@ -115,9 +115,11 @@ function collectAsyncWorkSignals(
 
 function buildRetrievalQuery(input: RetrievalOrchestratorInput): {
   primaryQuery: string;
+  expansionQuery: string;
   fallbackQuery: string;
   signals: string[];
   primarySignals: string[];
+  expansionSignals: string[];
   fallbackSignals: string[];
 } {
   const primarySignals: string[] = [];
@@ -139,18 +141,32 @@ function buildRetrievalQuery(input: RetrievalOrchestratorInput): {
 
   const queryPlan = planRetrievalSignals(primarySignals);
   const uniquePrimarySignals = Array.from(new Set(queryPlan.primarySignals));
-  const uniqueFallbackSignals = Array.from(
-    new Set([...queryPlan.supportingSignals, ...fallbackSignals].filter((signal) => signal.length > 0)),
-  );
+  const uniqueExpansionSignals = Array.from(new Set(queryPlan.supportingSignals));
+  const uniqueFallbackSignals = Array.from(new Set(fallbackSignals.filter((signal) => signal.length > 0)));
   const effectivePrimarySignals =
-    uniquePrimarySignals.length > 0 ? uniquePrimarySignals : uniqueFallbackSignals;
-  const uniqueSignals = Array.from(new Set([...effectivePrimarySignals, ...uniqueFallbackSignals]));
+    uniquePrimarySignals.length > 0
+      ? uniquePrimarySignals
+      : [...uniqueExpansionSignals, ...uniqueFallbackSignals];
+  const effectiveExpansionSignals =
+    uniquePrimarySignals.length > 0
+      ? uniqueExpansionSignals.filter((signal) => !effectivePrimarySignals.includes(signal))
+      : [];
+  const effectiveFallbackSignals = uniquePrimarySignals.length > 0 ? uniqueFallbackSignals : [];
+  const uniqueSignals = Array.from(
+    new Set([
+      ...effectivePrimarySignals,
+      ...effectiveExpansionSignals,
+      ...effectiveFallbackSignals,
+    ]),
+  );
   return {
     primaryQuery: effectivePrimarySignals.join('\n'),
-    fallbackQuery: uniqueFallbackSignals.join('\n'),
+    expansionQuery: effectiveExpansionSignals.join('\n'),
+    fallbackQuery: effectiveFallbackSignals.join('\n'),
     signals: uniqueSignals,
     primarySignals: effectivePrimarySignals,
-    fallbackSignals: uniqueFallbackSignals,
+    expansionSignals: effectiveExpansionSignals,
+    fallbackSignals: effectiveFallbackSignals,
   };
 }
 
@@ -182,6 +198,7 @@ async function recallLane(
   config: RetrievalLaneConfig,
   input: {
     primaryQuery: string;
+    expansionQuery: string;
     fallbackQuery: string;
     useFallback: boolean;
     options: RecallFactsOptions;
@@ -189,20 +206,35 @@ async function recallLane(
   },
 ): Promise<RetrievalLaneResult> {
   const limit = laneLimit(config, input.totalLimit);
-  const laneOptions: RecallFactsOptions = {
+  const laneOptionsBase: RecallFactsOptions = {
     ...input.options,
-    limit,
     memoryKind: config.memoryKinds,
   };
-  const primary = await recallScoredFactsForSignals(input.primaryQuery, laneOptions);
-  const fallback =
-    input.useFallback && primary.length < limit
-      ? await recallScoredFactsForSignals(input.fallbackQuery, {
-          ...laneOptions,
-          limit: limit - primary.length,
+  const hasExpansion =
+    input.expansionQuery.trim().length > 0 &&
+    input.expansionQuery.trim() !== input.primaryQuery.trim();
+  const expansionLimit = hasExpansion ? Math.max(1, Math.floor(limit * 0.35)) : 0;
+  const primaryLimit = Math.max(1, limit - expansionLimit);
+  const primary = await recallScoredFactsForSignals(input.primaryQuery, {
+    ...laneOptionsBase,
+    limit: primaryLimit,
+  });
+  const expansion =
+    expansionLimit > 0
+      ? await recallScoredFactsForSignals(input.expansionQuery, {
+          ...laneOptionsBase,
+          limit: expansionLimit,
         })
       : [];
-  const scoredFacts = mergeUniqueScoredFacts([...primary, ...fallback], limit);
+  const currentCount = mergeUniqueScoredFacts([...primary, ...expansion], limit).length;
+  const fallback =
+    input.useFallback && currentCount < limit
+      ? await recallScoredFactsForSignals(input.fallbackQuery, {
+          ...laneOptionsBase,
+          limit: limit - currentCount,
+        })
+      : [];
+  const scoredFacts = mergeUniqueScoredFacts([...primary, ...expansion, ...fallback], limit);
   return {
     id: config.id,
     memoryKinds: config.memoryKinds,
@@ -309,7 +341,8 @@ function recallScopedCurrentFacts(
 export async function orchestrateMemoryRetrieval(
   input: RetrievalOrchestratorInput,
 ): Promise<RetrievalOrchestratorResult> {
-  const { primaryQuery, fallbackQuery, signals, primarySignals } = buildRetrievalQuery(input);
+  const { primaryQuery, expansionQuery, fallbackQuery, signals, primarySignals } =
+    buildRetrievalQuery(input);
   const resolvedTaskId = input.taskId ?? input.activeTaskId;
   const limit = Math.max(1, Math.min(input.limit ?? 8, 50));
   const options = recallOptions(input, limit);
@@ -322,6 +355,7 @@ export async function orchestrateMemoryRetrieval(
     RETRIEVAL_LANES.map((lane) =>
       recallLane(lane, {
         primaryQuery,
+        expansionQuery,
         fallbackQuery,
         useFallback: shouldUseFallback,
         options,

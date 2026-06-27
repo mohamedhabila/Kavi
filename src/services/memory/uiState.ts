@@ -51,12 +51,25 @@ export interface UiLabelValue {
   sourceIndex: number;
 }
 
+export interface UiTableSummary {
+  index: number;
+  role: string;
+  columnLabels: string[];
+  rowCount: number;
+  columnValueSamples: Array<{
+    column: string;
+    values: string[];
+  }>;
+  rowSamples: Array<Record<string, string>>;
+}
+
 export interface UiStateSummary {
   nodeCount: number;
   roleCounts: Record<string, number>;
   controls: UiControl[];
   fields: UiField[];
   labelValues: UiLabelValue[];
+  tables: UiTableSummary[];
   controlCount: number;
   textEntryCount: number;
   searchControlCount: number;
@@ -88,28 +101,24 @@ const FIELD_CONTROL_ROLES = new Set([
   'textbox',
 ]);
 
-const ACTIONABLE_ATTRIBUTES = new Set([
-  'checked',
-  'clickable',
-  'disabled',
-  'editable',
-  'expanded',
-  'pressed',
-  'selected',
-]);
+const TABLE_CONTAINER_ROLES = new Set(['grid', 'table', 'treegrid']);
+const ROW_ROLES = new Set(['row']);
+const COLUMN_HEADER_ROLES = new Set(['columnheader']);
+const CELL_ROLES = new Set(['cell', 'gridcell', 'rowheader']);
 
 const MAX_CONTROL_SUMMARY_ITEMS = 36;
 const MAX_FIELD_SUMMARY_ITEMS = 36;
 const MAX_LABEL_VALUE_ITEMS = 36;
+const MAX_NAME_SUMMARY_ITEMS = 48;
+const MAX_TABLE_SUMMARY_ITEMS = 6;
+const MAX_TABLE_COLUMNS = 18;
+const MAX_TABLE_VALUES_PER_COLUMN = 12;
+const MAX_TABLE_ROW_SAMPLES = 3;
 const MAX_PARSED_ACCESSIBILITY_NODES = 2_500;
 const REQUIRED_MARKER = '*';
 
-export function isActionableAccessibilityNode(node: AccessibilityNode): boolean {
-  const role = node.role.toLocaleLowerCase();
-  if (ACTIONABLE_ROLES.has(role)) return true;
-  return node.attributes.some((attribute) =>
-    ACTIONABLE_ATTRIBUTES.has(attribute.split('=')[0]?.trim().toLocaleLowerCase() ?? ''),
-  );
+function isInteractiveControlNode(node: AccessibilityNode): boolean {
+  return ACTIONABLE_ROLES.has(node.role.toLocaleLowerCase());
 }
 
 export function parseAccessibilityTree(tree: string): AccessibilityNode[] {
@@ -131,7 +140,7 @@ export function extractUiStateSummary(nodes: AccessibilityNode[]): UiStateSummar
   const fields: UiField[] = [];
 
   for (const node of nodes) {
-    if (!isActionableAccessibilityNode(node)) continue;
+    if (!isInteractiveControlNode(node)) continue;
     const labelBlock = findNearestUnusedPriorLabel(node, labelBlocks, usedLabelIndexes);
     if (labelBlock) usedLabelIndexes.add(labelBlock.index);
     const control = controlFromNode(node, labelBlock?.text ?? null, labelBlock?.required ?? false);
@@ -152,12 +161,14 @@ export function extractUiStateSummary(nodes: AccessibilityNode[]): UiStateSummar
   }
 
   const labelValues = extractLabelValues(nodes);
+  const tables = extractTableSummaries(nodes);
   return {
     nodeCount: nodes.length,
     roleCounts,
     controls,
     fields,
     labelValues,
+    tables,
     controlCount: controls.length,
     textEntryCount: controls.filter((control) => control.role.toLocaleLowerCase() === 'textbox')
       .length,
@@ -197,16 +208,55 @@ export function compactField(field: UiField): JsonRecord {
 }
 
 export function compactUiInventory(summary: UiStateSummary): JsonRecord {
+  const textEntryControls = compactControlsByRole(summary.controls, ['textbox']);
+  const searchControls = compactControlsByRole(summary.controls, ['searchbox']);
   return {
     nodeCount: summary.nodeCount,
     controlCount: summary.controlCount,
     textEntryCount: summary.textEntryCount,
     searchControlCount: summary.searchControlCount,
+    fieldLabels: uniqueNamedValues(summary.fields.map((field) => field.label)),
+    controlNames: uniqueNamedValues(summary.controls.map((control) => control.name)),
+    textEntryControls,
+    searchControls,
     fields: summary.fields.slice(0, MAX_FIELD_SUMMARY_ITEMS).map(compactField),
     controls: summary.controls.slice(0, MAX_CONTROL_SUMMARY_ITEMS).map(compactControl),
     labelValues: summary.labelValues.slice(0, MAX_LABEL_VALUE_ITEMS),
+    tables: summary.tables.slice(0, MAX_TABLE_SUMMARY_ITEMS).map(compactTableSummary),
     roleCounts: summary.roleCounts,
   };
+}
+
+function compactControlsByRole(controls: UiControl[], roles: string[]): JsonRecord[] {
+  const roleSet = new Set(roles.map((role) => role.toLocaleLowerCase()));
+  return controls
+    .filter((control) => roleSet.has(control.role.toLocaleLowerCase()))
+    .slice(0, MAX_CONTROL_SUMMARY_ITEMS)
+    .map(compactControl);
+}
+
+function uniqueNamedValues(values: Array<string | null>): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const normalized = value?.trim();
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    out.push(normalized);
+    if (out.length >= MAX_NAME_SUMMARY_ITEMS) break;
+  }
+  return out;
+}
+
+function compactTableSummary(table: UiTableSummary): JsonRecord {
+  return dropEmpty({
+    index: table.index,
+    role: table.role,
+    columnLabels: table.columnLabels,
+    rowCount: table.rowCount,
+    columnValueSamples: table.columnValueSamples,
+    rowSamples: table.rowSamples,
+  });
 }
 
 function parseAccessibilityLine(rawLine: string, index: number): AccessibilityNode | null {
@@ -397,6 +447,111 @@ function findFollowingValue(nodes: AccessibilityNode[], startIndex: number, labe
     return node.name.trim();
   }
   return null;
+}
+
+function extractTableSummaries(nodes: AccessibilityNode[]): UiTableSummary[] {
+  const tableIndexes = nodes
+    .filter((node) => TABLE_CONTAINER_ROLES.has(node.role.toLocaleLowerCase()))
+    .map((node) => node.index);
+  const rootRegions = tableIndexes.length > 0 ? tableIndexes : [0];
+  const summaries: UiTableSummary[] = [];
+
+  for (const tableIndex of rootRegions) {
+    if (summaries.length >= MAX_TABLE_SUMMARY_ITEMS) break;
+    const table = nodes[tableIndex];
+    if (!table) continue;
+    const endIndex = subtreeEndIndex(nodes, tableIndex);
+    const summary = extractTableSummary(nodes, tableIndex, endIndex);
+    if (!summary) continue;
+    summaries.push(summary);
+  }
+
+  return summaries;
+}
+
+function extractTableSummary(
+  nodes: AccessibilityNode[],
+  startIndex: number,
+  endIndex: number,
+): UiTableSummary | null {
+  const table = nodes[startIndex];
+  if (!table) return null;
+  const columnLabels = uniqueNamedValues(
+    nodes
+      .slice(startIndex + 1, endIndex)
+      .filter((node) => COLUMN_HEADER_ROLES.has(node.role.toLocaleLowerCase()))
+      .map((node) => nodeText(nodes, node.index)),
+  ).slice(0, MAX_TABLE_COLUMNS);
+  const rowRecords: Array<Record<string, string>> = [];
+  const valueSamples = new Map<string, string[]>();
+  let rowCount = 0;
+
+  for (let index = startIndex + 1; index < endIndex; index += 1) {
+    const row = nodes[index];
+    if (!ROW_ROLES.has(row.role.toLocaleLowerCase())) continue;
+    rowCount += 1;
+    const rowEnd = Math.min(subtreeEndIndex(nodes, index), endIndex);
+    const cells = nodes
+      .slice(index + 1, rowEnd)
+      .filter((node) => CELL_ROLES.has(node.role.toLocaleLowerCase()))
+      .map((node) => nodeText(nodes, node.index))
+      .filter((value): value is string => Boolean(value));
+    if (columnLabels.length === 0 || cells.length === 0) continue;
+    const record: Record<string, string> = {};
+    for (let cellIndex = 0; cellIndex < Math.min(columnLabels.length, cells.length); cellIndex += 1) {
+      const column = columnLabels[cellIndex];
+      const value = fitText(cells[cellIndex], 160);
+      if (!column || !value) continue;
+      record[column] = value;
+      const existing = valueSamples.get(column) ?? [];
+      if (!existing.includes(value) && existing.length < MAX_TABLE_VALUES_PER_COLUMN) {
+        existing.push(value);
+        valueSamples.set(column, existing);
+      }
+    }
+    if (Object.keys(record).length > 0 && rowRecords.length < MAX_TABLE_ROW_SAMPLES) {
+      rowRecords.push(record);
+    }
+  }
+
+  const columnValueSamples = Array.from(valueSamples.entries())
+    .slice(0, MAX_TABLE_COLUMNS)
+    .map(([column, values]) => ({ column, values }));
+  if (columnLabels.length === 0 && rowRecords.length === 0 && columnValueSamples.length === 0) {
+    return null;
+  }
+  return {
+    index: table.index,
+    role: table.role,
+    columnLabels,
+    rowCount,
+    columnValueSamples,
+    rowSamples: rowRecords,
+  };
+}
+
+function subtreeEndIndex(nodes: AccessibilityNode[], startIndex: number): number {
+  const start = nodes[startIndex];
+  if (!start) return startIndex;
+  for (let index = startIndex + 1; index < nodes.length; index += 1) {
+    if (nodes[index].indent <= start.indent) return index;
+  }
+  return nodes.length;
+}
+
+function nodeText(nodes: AccessibilityNode[], index: number): string | null {
+  const node = nodes[index];
+  if (!node) return null;
+  const parts: string[] = [];
+  if (node.name) parts.push(node.name);
+  for (let childIndex = index + 1; childIndex < nodes.length; childIndex += 1) {
+    const child = nodes[childIndex];
+    if (child.indent <= node.indent) break;
+    if (child.name) parts.push(child.name);
+    if (parts.join(' ').length >= 220) break;
+  }
+  const text = normalizeLabelText(parts);
+  return text ? fitText(text, 220) : null;
 }
 
 function dropEmpty(value: JsonRecord): JsonRecord {

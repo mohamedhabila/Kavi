@@ -253,4 +253,58 @@ describe('orchestrateMemoryRetrieval', () => {
     expect(result.querySignals.join('\n')).not.toContain('select_option');
     expect(result.facts.some((fact) => fact.id === relevant.id)).toBe(true);
   });
+
+  it('retrieves surrounding interface evidence when a quoted target is absent', async () => {
+    const adminSurface = upsertEntity({
+      name: 'surface:https://admin.example.test',
+      type: 'project',
+    });
+    const otherSurface = upsertEntity({
+      name: 'surface:https://docs.example.test',
+      type: 'project',
+    });
+    const relevant = recordFact({
+      subjectId: adminSurface.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({
+        url: 'https://admin.example.test/orders',
+        fieldLabels: ['Status'],
+        labelValues: [
+          { label: 'Status', value: 'Canceled' },
+          { label: 'Status', value: 'Complete' },
+        ],
+        controls: [{ role: 'button', name: 'Filters' }],
+      }),
+      attributes: {
+        url: 'https://admin.example.test/orders',
+        sourceRunId: 'admin-orders-run',
+        stateIndex: 4,
+      },
+      memoryKind: 'ui_inventory',
+      scope: 'conversation',
+      originConversationId: 'conv-absent-target',
+      now: 1,
+    }).fact;
+    recordFact({
+      subjectId: otherSurface.id,
+      predicate: 'semantic_note',
+      objectText: 'Fraud Suspect Resolution is referenced in a support article title.',
+      memoryKind: 'semantic_fact',
+      scope: 'conversation',
+      originConversationId: 'conv-absent-target',
+      now: 100,
+    });
+
+    const result = await orchestrateMemoryRetrieval({
+      userMessage:
+        'On the admin orders page, can I filter order status by `Fraud Suspect Resolution`?',
+      conversationId: 'conv-absent-target',
+      limit: 1,
+      now: 200,
+    });
+
+    expect(result.querySignals[0]).toContain('On the admin orders page');
+    expect(result.querySignals[0]).not.toContain('Fraud Suspect Resolution');
+    expect(result.facts.map((fact) => fact.id)).toEqual([relevant.id]);
+  });
 });
