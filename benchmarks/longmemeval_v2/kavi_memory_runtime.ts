@@ -374,6 +374,8 @@ async function queryMemory(request: RuntimeRequest): Promise<JsonObject> {
     return { memory_context: [], selected: [], stats: stats() };
   }
   const started = performance.now();
+  let stepStarted = started;
+  const timings: Record<string, number> = {};
 
   const now = Date.now();
   const memoryAccess = await buildUnifiedMemoryAccessContext({
@@ -384,24 +386,34 @@ async function queryMemory(request: RuntimeRequest): Promise<JsonObject> {
     goals: buildQueryGoals(query, request.questionId ?? null, now),
     now,
   });
+  timings.memory_access_seconds = (performance.now() - stepStarted) / 1000;
+  stepStarted = performance.now();
   const sections = memoryAccess.livingMemory?.sections ?? [];
   const selected = selectedSections(sections, resolved.maxItemChars);
+  timings.select_sections_seconds = (performance.now() - stepStarted) / 1000;
+  stepStarted = performance.now();
   const memoryContext = selected.map((item) => ({
     type: 'text',
     value:
       `[Kavi living memory #${item.rank} | source=${item.source}]\n` +
       String(item.content),
   }));
+  const flattenedSections = flattenPromptSections(sections);
+  timings.flatten_sections_seconds = (performance.now() - stepStarted) / 1000;
+  stepStarted = performance.now();
+  const runtimeStats = stats();
+  timings.stats_seconds = (performance.now() - stepStarted) / 1000;
   return {
     memory_context: memoryContext,
     selected,
-    flattened_sections: flattenPromptSections(sections),
+    flattened_sections: flattenedSections,
     recalled_fact_count: memoryAccess.livingMemory?.recalledFactCount ?? 0,
     recalled_episode_count: memoryAccess.livingMemory?.recalledEpisodeCount ?? 0,
     duration_seconds: (performance.now() - started) / 1000,
+    timings,
     question_id: request.questionId ?? null,
     query_image: request.queryImage ?? null,
-    stats: stats(),
+    stats: runtimeStats,
   };
 }
 

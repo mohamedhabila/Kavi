@@ -48,7 +48,7 @@ const DEFAULT_TEXT_WEIGHT = 0.4;
 const DEFAULT_LOCAL_VECTOR_WEIGHT = 0.2;
 const DEFAULT_LOCAL_TEXT_WEIGHT = 0.8;
 const PINNED_BOOST = 0.25;
-const CANDIDATE_POOL_LIMIT = 512;
+const CANDIDATE_POOL_LIMIT = 128;
 const CANDIDATE_POOL_MAX = 2_000;
 const LOCAL_QUERY_EMBEDDING_ATTACH_LIMIT = 128;
 const RELEVANCE_EPSILON = 1e-6;
@@ -87,7 +87,7 @@ export interface RecallFactsOptions {
   alwaysIncludePinned?: boolean;
   /**
    * Pool of candidates pulled from the store before scoring. Larger = more
-   * recall, slower scoring. Default 512.
+   * recall, slower scoring. Default 128.
    */
   candidatePoolLimit?: number;
 }
