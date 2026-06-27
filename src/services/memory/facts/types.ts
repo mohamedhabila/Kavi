@@ -232,6 +232,7 @@ export interface ListFactsOptions {
   scope?: MemoryFactScope | MemoryFactScope[];
   originConversationId?: string;
   originTaskId?: string;
+  sourceRunId?: string;
   pinnedOnly?: boolean;
   includeInvalidated?: boolean;
   includeDeleted?: boolean;

@@ -111,4 +111,31 @@ describe('graph evidence ingestion bridge', () => {
       ),
     ).toBe(false);
   });
+
+  it('does not bridge malformed structured observations as semantic facts', async () => {
+    const malformedStructuredEvidence =
+      'agent:' +
+      JSON.stringify({
+        kind: 'state',
+        trajectory_id: 'traj-ui',
+        accessibility_tree: "[12] searchbox 'Search query', clickable, visible",
+      }).slice(0, -4);
+
+    const result = await processIngestionTurn({
+      threadId: THREAD_ID,
+      messages: buildClosedTurnMessages(),
+      taskId: TASK_ID,
+      sourceRunId: 'run-graph-malformed',
+      graphGoalEvidence: [malformedStructuredEvidence],
+      skipWorkingMemorySync: true,
+    });
+
+    expect(result.structuredMemoryFactIds).toHaveLength(0);
+    expect(result.bridgedEvidenceFactIds).toHaveLength(0);
+    expect(
+      listFacts({ originConversationId: THREAD_ID }).some((fact) =>
+        fact.objectText.includes(malformedStructuredEvidence),
+      ),
+    ).toBe(false);
+  });
 });
