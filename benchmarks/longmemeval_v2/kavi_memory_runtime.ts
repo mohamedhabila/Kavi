@@ -344,21 +344,12 @@ function buildQueryMessages(query: string, queryImage: string | null, now: numbe
 function buildQueryGoals(
   query: string,
   questionId: string | null,
-  questionContext: JsonObject | null,
   now: number,
 ): AgentGoal[] {
-  const contextFields = questionContext
-    ? {
-        domain: compactScalar(questionContext.domain, 160),
-        environment: compactScalar(questionContext.environment, 160),
-        question_type: compactScalar(questionContext.question_type, 160),
-      }
-    : null;
   return [
     {
       id: questionId ? `question-${questionId}` : `question-${now}`,
       title: query,
-      ...(contextFields ? { description: compactJson(contextFields, 600) } : {}),
       status: 'active',
       dependencies: [],
       evidence: [],
@@ -401,12 +392,7 @@ async function queryMemory(request: RuntimeRequest): Promise<JsonObject> {
     conversationId: resolved.conversationId,
     mode: 'agentic',
     recallLimit: resolved.maxItems,
-    goals: buildQueryGoals(
-      query,
-      request.questionId ?? null,
-      request.questionContext ?? null,
-      now,
-    ),
+    goals: buildQueryGoals(query, request.questionId ?? null, now),
     now,
   });
   timings.memory_access_seconds = (performance.now() - stepStarted) / 1000;

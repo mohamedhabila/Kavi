@@ -22,6 +22,12 @@ HARNESS_KAVI_ISOLATED_LINE = (
 )
 NONSHARED_MEMORY_SET_START = "NONSHARED_PARALLEL_MEMORY_TYPES = {\n"
 NONSHARED_KAVI_MEMORY_LINE = '    "kavi_memory_isolated",\n'
+HARNESS_REASONING_CHOICES_LINE = (
+    '    parser.add_argument("--reasoning-effort", choices=["low", "medium", "high"], default=None)\n'
+)
+HARNESS_OPENROUTER_REASONING_CHOICES_LINE = (
+    '    parser.add_argument("--reasoning-effort", choices=["none", "low", "medium", "high"], default=None)\n'
+)
 
 
 def parse_question_ids(raw_values: list[str] | None) -> list[str] | None:
@@ -48,7 +54,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reader-temperature", type=float, default=float(os.getenv("READER_TEMPERATURE", "0.6")))
     parser.add_argument("--reader-top-p", type=float, default=float(os.getenv("READER_TOP_P", "0.95")))
     parser.add_argument("--reader-top-k", type=int, default=int(os.getenv("READER_TOP_K", "20")))
-    parser.add_argument("--reader-enable-thinking", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--reader-enable-thinking", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument(
+        "--reader-reasoning-effort",
+        choices=["none", "low", "medium", "high"],
+        default=os.getenv("READER_REASONING_EFFORT", "none"),
+    )
     parser.add_argument(
         "--reader-max-concurrent-requests",
         type=int,
@@ -118,6 +129,15 @@ def install_adapter(upstream: Path, adapter_source: Path) -> None:
             "Unable to patch LongMemEval harness shared-haystack selection for Kavi isolation",
         )
         harness_text = harness_text.replace(HARNESS_SHARED_HAYSTACK_LINE, HARNESS_KAVI_ISOLATED_LINE)
+    if HARNESS_OPENROUTER_REASONING_CHOICES_LINE not in harness_text:
+        require(
+            HARNESS_REASONING_CHOICES_LINE in harness_text,
+            "Unable to patch LongMemEval harness reader reasoning choices",
+        )
+        harness_text = harness_text.replace(
+            HARNESS_REASONING_CHOICES_LINE,
+            HARNESS_OPENROUTER_REASONING_CHOICES_LINE,
+        )
     harness_py.write_text(harness_text, encoding="utf-8")
 
 
@@ -285,6 +305,8 @@ def main() -> None:
         str(args.reader_top_p),
         "--top-k",
         str(args.reader_top_k),
+        "--reasoning-effort",
+        args.reader_reasoning_effort,
     ]
     if not args.reader_enable_thinking:
         cmd.append("--reader-disable-thinking")

@@ -62,7 +62,7 @@ describe('recallFactsForQuery — ranking', () => {
     expect(scored[0].textScore).toBeGreaterThan(scored[1].textScore);
   });
 
-  it('keeps absent query units in the relevance denominator', async () => {
+  it('scores against selected indexed units instead of absent query noise', async () => {
     const corpus = upsertEntity({ name: 'missing-unit-corpus', type: 'concept' });
     const partial = recordFact({
       subjectId: corpus.id,
@@ -77,8 +77,7 @@ describe('recallFactsForQuery — ranking', () => {
     });
 
     expect(scored.map((entry) => entry.fact.id)).toEqual([partial.fact.id]);
-    expect(scored[0].textScore).toBeGreaterThan(0);
-    expect(scored[0].textScore).toBeLessThan(1);
+    expect(scored[0].textScore).toBe(1);
   });
 
   it('does not expand source-run neighbors without direct query evidence', async () => {
@@ -227,16 +226,13 @@ describe('recallFactsForQuery — ranking', () => {
       now: 1,
     });
 
-    const scored = await recallScoredFactsForQuery(
-      `${commonUnits.join(' ')} qtargetoption`,
-      {
-        conversationId: 'conv-ui-ranking-text',
-        memoryKind: ['ui_inventory', 'ui_field'],
-        limit: 1,
-        threshold: 0.01,
-        now: 20_000,
-      },
-    );
+    const scored = await recallScoredFactsForQuery(`${commonUnits.join(' ')} qtargetoption`, {
+      conversationId: 'conv-ui-ranking-text',
+      memoryKind: ['ui_inventory', 'ui_field'],
+      limit: 1,
+      threshold: 0.01,
+      now: 20_000,
+    });
 
     expect(scored.map((entry) => entry.fact.id)).toEqual([target.fact.id]);
   });

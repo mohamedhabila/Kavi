@@ -174,6 +174,67 @@ describe('orchestrateMemoryRetrieval', () => {
     expect(result.facts.some((fact) => fact.id === uiFact.id)).toBe(true);
   });
 
+  it('includes the latest UI snapshot from a relevant source run', async () => {
+    const surface = upsertEntity({
+      name: 'surface:https://workflow.example.test',
+      type: 'project',
+    });
+    const anchor = recordFact({
+      subjectId: surface.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({
+        url: 'https://workflow.example.test/start',
+        controlNames: ['qworkflow-anchor'],
+      }),
+      sourceRunId: 'run-workflow-packet',
+      attributes: { stateIndex: '0', url: 'https://workflow.example.test/start' },
+      memoryKind: 'ui_inventory',
+      scope: 'conversation',
+      originConversationId: 'conv-workflow-packet',
+      now: 1,
+    }).fact;
+    const latest = recordFact({
+      subjectId: surface.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({
+        url: 'https://workflow.example.test/result',
+        sections: [{ label: 'qresult-panel', controlNames: ['qfinal-control'] }],
+      }),
+      sourceRunId: 'run-workflow-packet',
+      attributes: { stateIndex: '4', url: 'https://workflow.example.test/result' },
+      memoryKind: 'ui_inventory',
+      scope: 'conversation',
+      originConversationId: 'conv-workflow-packet',
+      now: 2,
+    }).fact;
+    recordFact({
+      subjectId: surface.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({
+        url: 'https://workflow.example.test/noise',
+        sections: [{ label: 'qnoise-panel', controlNames: ['qnoise-control'] }],
+      }),
+      sourceRunId: 'run-workflow-noise',
+      attributes: { stateIndex: '9', url: 'https://workflow.example.test/noise' },
+      memoryKind: 'ui_inventory',
+      scope: 'conversation',
+      originConversationId: 'conv-workflow-packet',
+      now: 3,
+    });
+
+    const result = await orchestrateMemoryRetrieval({
+      userMessage: 'qworkflow-anchor',
+      conversationId: 'conv-workflow-packet',
+      limit: 4,
+      now: 10,
+    });
+
+    expect(result.facts.map((fact) => fact.id)).toEqual(
+      expect.arrayContaining([anchor.id, latest.id]),
+    );
+    expect(result.facts.some((fact) => fact.sourceRunId === 'run-workflow-noise')).toBe(false);
+  });
+
   it('ranks a post-transition UI state using previous-state controls', async () => {
     const surface = upsertEntity({
       name: 'surface:https://workflow.example.test',

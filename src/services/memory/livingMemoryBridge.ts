@@ -20,7 +20,6 @@ import { getEntityById } from './entities';
 import type { AgentGoal } from '../../engine/goals/types';
 import type { AgentRunControlGraphAsyncWorkState } from '../../types/agentRun';
 import type { MemoryFact } from './facts/types';
-import { listFacts } from './facts/queries';
 import {
   orchestrateMemoryRetrieval,
   type RetrievalOrchestratorTimings,
@@ -222,47 +221,6 @@ function withFactSubjectLabels(facts: ReadonlyArray<MemoryFact>): PromptMemoryFa
   }));
 }
 
-function listScopedCurrentFacts(params: {
-  conversationId?: string;
-  taskId?: string;
-  limit: number;
-}): MemoryFact[] {
-  const byId = new Map<string, MemoryFact>();
-  const add = (facts: MemoryFact[]): void => {
-    for (const fact of facts) {
-      if (byId.size >= params.limit) break;
-      byId.set(fact.id, fact);
-    }
-  };
-  if (params.conversationId) {
-    add(listFacts({ originConversationId: params.conversationId, limit: params.limit }));
-  }
-  if (params.taskId && byId.size < params.limit) {
-    add(listFacts({ originTaskId: params.taskId, limit: params.limit - byId.size }));
-  }
-  return Array.from(byId.values());
-}
-
-function appendScopedCurrentFacts(
-  recalledFacts: MemoryFact[],
-  params: { conversationId?: string; taskId?: string; limit: number },
-): MemoryFact[] {
-  if (recalledFacts.length >= params.limit) return recalledFacts;
-  const selected = [...recalledFacts];
-  const seen = new Set(selected.map((fact) => fact.id));
-  for (const fact of listScopedCurrentFacts({
-    conversationId: params.conversationId,
-    taskId: params.taskId,
-    limit: params.limit,
-  })) {
-    if (selected.length >= params.limit) break;
-    if (seen.has(fact.id)) continue;
-    selected.push(fact);
-    seen.add(fact.id);
-  }
-  return selected;
-}
-
 /**
  * Build the per-request memory-aware sections + the inputs the compaction
  * engine needs (focus / open threads / idle gap). Safe to call once per
@@ -390,11 +348,7 @@ export async function buildLivingMemorySections(
         limit: recallLimit,
         now,
       });
-      recalledFacts = appendScopedCurrentFacts(retrieval.facts, {
-        conversationId,
-        taskId: resolvedTaskId ?? undefined,
-        limit: recallLimit,
-      });
+      recalledFacts = retrieval.facts;
       recalledEpisodes = retrieval.episodes;
       retrievalTimings = retrieval.timings;
     } catch (error) {

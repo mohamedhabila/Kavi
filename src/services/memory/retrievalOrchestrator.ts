@@ -19,6 +19,7 @@ import {
 import { recallEpisodesForQuery } from './episodeRecall';
 import type { MemoryEpisode } from './episodes/types';
 import type { MemoryFact } from './facts/types';
+import { listLatestFactsForSourceRuns } from './facts/queries';
 import { markFactsRecalled } from './facts/mutations';
 import { getMemoryTask } from './tasks';
 import { planRetrievalSignals } from './retrievalQueryPlan';
@@ -55,8 +56,8 @@ export interface RetrievalOrchestratorTimings {
 const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 50;
 const DEFAULT_CANDIDATE_POOL_LIMIT = 256;
-const DEFAULT_LEXICAL_UNIT_LIMIT = 32;
 const DEFAULT_THRESHOLD = 0.01;
+const SOURCE_RUN_TERMINAL_MEMORY_KIND = 'ui_inventory';
 
 function collectGoalSignals(goals: ReadonlyArray<AgentGoal> | undefined): string[] {
   if (!goals?.length) return [];
@@ -103,10 +104,7 @@ function buildQuerySignals(input: RetrievalOrchestratorInput): string[] {
   }
 
   const planned = planRetrievalSignals(primarySignals);
-  const signals =
-    planned.primarySignals.length > 0
-      ? planned.primarySignals
-      : [];
+  const signals = planned.primarySignals.length > 0 ? planned.primarySignals : [];
   if (signals.length === 0 && input.focusText?.trim()) {
     signals.push(input.focusText.trim());
   }
@@ -123,12 +121,70 @@ function recallOptions(
     limit,
     threshold: DEFAULT_THRESHOLD,
     candidatePoolLimit: DEFAULT_CANDIDATE_POOL_LIMIT,
-    lexicalUnitLimit: DEFAULT_LEXICAL_UNIT_LIMIT,
     onTiming,
     ...(input.conversationId ? { conversationId: input.conversationId } : {}),
     ...(resolvedTaskId ? { taskId: resolvedTaskId } : {}),
     ...(typeof input.now === 'number' ? { now: input.now } : {}),
   };
+}
+
+function hasSourceRunUiEvidence(fact: MemoryFact): boolean {
+  return (
+    typeof fact.sourceRunId === 'string' &&
+    fact.sourceRunId.trim().length > 0 &&
+    (fact.memoryKind === 'ui_inventory' ||
+      fact.memoryKind === 'ui_field' ||
+      fact.memoryKind === 'ui_filter_state' ||
+      fact.memoryKind === 'ui_affordance' ||
+      fact.memoryKind === 'surface_schema')
+  );
+}
+
+function addFact(
+  selected: MemoryFact[],
+  seenIds: Set<string>,
+  fact: MemoryFact,
+  limit: number,
+): void {
+  if (selected.length >= limit || seenIds.has(fact.id)) return;
+  selected.push(fact);
+  seenIds.add(fact.id);
+}
+
+function includeSourceRunTerminalUiFacts(
+  facts: ReadonlyArray<MemoryFact>,
+  limit: number,
+): MemoryFact[] {
+  const sourceRunIds = Array.from(
+    new Set(
+      facts
+        .filter(hasSourceRunUiEvidence)
+        .map((fact) => fact.sourceRunId?.trim())
+        .filter((sourceRunId): sourceRunId is string => Boolean(sourceRunId)),
+    ),
+  );
+  if (sourceRunIds.length === 0) return [...facts];
+
+  const latestBySourceRun = new Map<string, MemoryFact>();
+  for (const fact of listLatestFactsForSourceRuns(sourceRunIds, {
+    memoryKind: SOURCE_RUN_TERMINAL_MEMORY_KIND,
+    limit: sourceRunIds.length,
+  })) {
+    if (fact.sourceRunId && !latestBySourceRun.has(fact.sourceRunId)) {
+      latestBySourceRun.set(fact.sourceRunId, fact);
+    }
+  }
+
+  const selected: MemoryFact[] = [];
+  const seenIds = new Set<string>();
+  for (const fact of facts) {
+    addFact(selected, seenIds, fact, limit);
+    if (selected.length >= limit) break;
+    const latest = fact.sourceRunId ? latestBySourceRun.get(fact.sourceRunId) : undefined;
+    if (latest) addFact(selected, seenIds, latest, limit);
+    if (selected.length >= limit) break;
+  }
+  return selected;
 }
 
 export async function orchestrateMemoryRetrieval(
@@ -150,7 +206,10 @@ export async function orchestrateMemoryRetrieval(
       )
     : [];
   const recallMs = Date.now() - recallStarted;
-  const facts = scoredFacts.map((entry) => entry.fact);
+  const facts = includeSourceRunTerminalUiFacts(
+    scoredFacts.map((entry) => entry.fact),
+    limit,
+  );
 
   const markFactsStarted = Date.now();
   markFactsRecalled(

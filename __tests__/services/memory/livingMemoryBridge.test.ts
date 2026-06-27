@@ -269,10 +269,7 @@ describe('buildLivingMemorySections', () => {
 
     const out = await buildLivingMemorySections({
       messages: [
-        userMessage(
-          'Use current preferred_message_contact for direct-longmem-user',
-          3_000,
-        ),
+        userMessage('Use current preferred_message_contact for direct-longmem-user', 3_000),
       ],
       conversationId,
       now: 4_000,
@@ -291,7 +288,7 @@ describe('buildLivingMemorySections', () => {
     expect(passiveEpisodeIndex).toBe(-1);
   });
 
-  it('surfaces recent current conversation facts for underspecified final actions', async () => {
+  it('does not fill underspecified turns with unrelated scoped facts', async () => {
     const user = upsertEntity({ name: 'beam-user', type: 'person' });
     const team = upsertEntity({ name: 'beam-team', type: 'concept' });
     const conversationId = 'conv-current-action';
@@ -339,9 +336,7 @@ describe('buildLivingMemorySections', () => {
     });
 
     const out = await buildLivingMemorySections({
-      messages: [
-        userMessage('Please write the current state into the requested artifact.', 6_000),
-      ],
+      messages: [userMessage('Please write the current state into the requested artifact.', 6_000)],
       conversationId,
       now: 7_000,
       recallLimit: 6,
@@ -351,10 +346,11 @@ describe('buildLivingMemorySections', () => {
       .map((s) => s.text)
       .join('\n');
 
-    expect(dynamicText).toContain('beam-user route_code: BEAM-ROUTE-A');
-    expect(dynamicText).toContain('beam-user meal_preference: BEAM-MEAL-NEW');
-    expect(dynamicText).toContain('beam-user reminder_window: BEAM-WINDOW-9');
-    expect(dynamicText).toContain('beam-team escalation_channel: BEAM-CHANNEL-7');
+    expect(out.recalledFactCount).toBe(0);
+    expect(dynamicText).not.toContain('beam-user route_code: BEAM-ROUTE-A');
+    expect(dynamicText).not.toContain('beam-user meal_preference: BEAM-MEAL-NEW');
+    expect(dynamicText).not.toContain('beam-user reminder_window: BEAM-WINDOW-9');
+    expect(dynamicText).not.toContain('beam-team escalation_channel: BEAM-CHANNEL-7');
     expect(dynamicText).not.toContain('BEAM-MEAL-OLD');
   });
 

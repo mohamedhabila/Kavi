@@ -57,9 +57,7 @@ function buildFactFilter(options: ListFactsOptions, alias?: string): FactFilter 
   if (options.pinnedOnly) clauses.push(`${column('pinned', alias)} = 1`);
   if (options.memoryKind) {
     const kinds = Array.isArray(options.memoryKind) ? options.memoryKind : [options.memoryKind];
-    clauses.push(
-      `${column('memory_kind', alias)} IN (${kinds.map(() => '?').join(', ')})`,
-    );
+    clauses.push(`${column('memory_kind', alias)} IN (${kinds.map(() => '?').join(', ')})`);
     params.push(...kinds);
   }
   if (!options.includeDeleted) clauses.push(`${column('deleted_at', alias)} IS NULL`);
@@ -325,7 +323,10 @@ export function listFactTermUnitHitsForFacts(
 
 export function listFactsForSourceRuns(
   sourceRunIds: ReadonlyArray<string>,
-  options: Pick<ListFactsOptions, 'memoryKind' | 'includeDeleted' | 'includeExpired' | 'includeInvalidated' | 'asOf'> & {
+  options: Pick<
+    ListFactsOptions,
+    'memoryKind' | 'includeDeleted' | 'includeExpired' | 'includeInvalidated' | 'asOf'
+  > & {
     limit?: number;
   } = {},
 ): MemoryFact[] {
@@ -356,6 +357,49 @@ export function listFactsForSourceRuns(
   return rows.map(rowToFact);
 }
 
+export function listLatestFactsForSourceRuns(
+  sourceRunIds: ReadonlyArray<string>,
+  options: Pick<
+    ListFactsOptions,
+    'memoryKind' | 'includeDeleted' | 'includeExpired' | 'includeInvalidated' | 'asOf'
+  > & {
+    limit?: number;
+    perRunLimit?: number;
+  } = {},
+): MemoryFact[] {
+  const uniqueSourceRunIds = Array.from(
+    new Set(sourceRunIds.map((id) => id.trim()).filter((id) => id.length > 0)),
+  );
+  if (uniqueSourceRunIds.length === 0) return [];
+  const filter = buildFactFilter(options);
+  const perRunLimit = clampLimit(options.perRunLimit, 1, 8);
+  const totalLimit = clampLimit(
+    options.limit,
+    uniqueSourceRunIds.length * perRunLimit,
+    MAX_FACT_LIMIT,
+  );
+  const facts: MemoryFact[] = [];
+  for (const sourceRunId of uniqueSourceRunIds) {
+    if (facts.length >= totalLimit) break;
+    const rows = getMany<FactRow>(
+      `SELECT * FROM memory_facts
+        ${whereSql({
+          clauses: ['source_run_id = ?', ...filter.clauses],
+          params: [sourceRunId, ...filter.params],
+        })}
+        ORDER BY CAST(json_extract(attributes, '$.stateIndex') AS INTEGER) DESC,
+                 retrievability DESC,
+                 importance DESC,
+                 updated_at DESC
+        LIMIT ${Math.min(perRunLimit, totalLimit - facts.length)}`,
+      sourceRunId,
+      ...filter.params,
+    );
+    facts.push(...rows.map(rowToFact));
+  }
+  return facts;
+}
+
 export interface FactObservationContext {
   sourceRunId?: string | null;
   stateIndex?: string | number | null;
@@ -368,13 +412,11 @@ function scalarToString(value: unknown): string | null {
   return null;
 }
 
-function factMatchesObservationContext(
-  fact: MemoryFact,
-  context: FactObservationContext,
-): boolean {
+function factMatchesObservationContext(fact: MemoryFact, context: FactObservationContext): boolean {
   const contextStateIndex = scalarToString(context.stateIndex);
   const factStateIndex = scalarToString(fact.attributes.stateIndex);
-  const contextUrl = typeof context.url === 'string' && context.url.trim() ? context.url.trim() : null;
+  const contextUrl =
+    typeof context.url === 'string' && context.url.trim() ? context.url.trim() : null;
   const factUrl = typeof fact.attributes.url === 'string' ? fact.attributes.url : null;
   if (contextStateIndex && factStateIndex === contextStateIndex) {
     return !contextUrl || factUrl === contextUrl;
@@ -384,7 +426,10 @@ function factMatchesObservationContext(
 
 export function listUiInventoriesForObservationContexts(
   contexts: ReadonlyArray<FactObservationContext>,
-  options: Pick<ListFactsOptions, 'includeDeleted' | 'includeExpired' | 'includeInvalidated' | 'asOf'> & {
+  options: Pick<
+    ListFactsOptions,
+    'includeDeleted' | 'includeExpired' | 'includeInvalidated' | 'asOf'
+  > & {
     limit?: number;
   } = {},
 ): MemoryFact[] {
@@ -433,11 +478,7 @@ export function listUiInventoriesForObservationContexts(
     const rows = getMany<FactRow>(
       `SELECT * FROM memory_facts
         ${whereSql({
-          clauses: [
-            'source_run_id = ?',
-            `(${matchClauses.join(' OR ')})`,
-            ...filter.clauses,
-          ],
+          clauses: ['source_run_id = ?', `(${matchClauses.join(' OR ')})`, ...filter.clauses],
           params: [context.sourceRunId, ...matchParams, ...filter.params],
         })}
         ORDER BY retrievability DESC, importance DESC, updated_at DESC
