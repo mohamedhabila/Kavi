@@ -24,8 +24,8 @@ by Kavi's app flows:
 - trajectory states are represented as intermediate assistant/tool activity;
 - the trajectory outcome is represented as the final assistant turn;
 - ingestion runs through `processIngestionTurn`;
-- structured state evidence is recorded as typed `ui_affordance`,
-  `surface_schema`, and `outcome` memories instead of raw semantic facts;
+- structured state evidence is recorded as compact typed `ui_inventory`,
+  `ui_field`, `ui_filter_state`, and `outcome` memories instead of raw semantic facts;
 - query-time retrieval runs through `buildUnifiedMemoryAccessContext` in
   `agentic` mode and returns Kavi living-memory sections.
 

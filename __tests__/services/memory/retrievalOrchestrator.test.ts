@@ -164,9 +164,10 @@ describe('orchestrateMemoryRetrieval', () => {
     const profile = upsertEntity({ name: 'profile', type: 'concept' });
     const uiFact = recordFact({
       subjectId: surface.id,
-      predicate: 'ui_affordance',
-      objectText: '{"role":"button","name":"Save","url":"https://app.example.test/settings"}',
-      memoryKind: 'ui_affordance',
+      predicate: 'ui_inventory',
+      objectText:
+        '{"controls":[{"role":"button","name":"Save"}],"url":"https://app.example.test/settings"}',
+      memoryKind: 'ui_inventory',
       scope: 'conversation',
       originConversationId: 'conv-ui-lane',
       now: 1,

@@ -47,7 +47,7 @@ function toolMessage(payload: Record<string, unknown>): Message {
 }
 
 describe('structured observation memory', () => {
-  it('records accessibility trees as typed UI, schema, and outcome memories', () => {
+  it('records accessibility trees as typed UI inventory and outcome memories', () => {
     const result = recordStructuredObservationsFromMessages({
       conversationId: 'conv-ui',
       threadId: 'conv-ui',
@@ -67,22 +67,16 @@ describe('structured observation memory', () => {
       ],
     });
 
-    expect(result.factIds.length).toBeGreaterThanOrEqual(7);
-    const affordances = listFacts({ memoryKind: 'ui_affordance', originTaskId: 'task-ui' });
-    const controls = listFacts({ memoryKind: 'ui_control', originTaskId: 'task-ui' });
+    expect(result.factIds.length).toBeGreaterThanOrEqual(2);
     const inventories = listFacts({ memoryKind: 'ui_inventory', originTaskId: 'task-ui' });
-    const schemas = listFacts({ memoryKind: 'surface_schema', originTaskId: 'task-ui' });
     const outcomes = listFacts({ memoryKind: 'outcome', originTaskId: 'task-ui' });
     const inventory = inventories.find((fact) => fact.predicate === 'ui_inventory');
 
-    expect(affordances).toHaveLength(2);
-    expect(controls).toHaveLength(2);
     expect(inventories).toHaveLength(1);
-    expect(schemas).toHaveLength(1);
     expect(outcomes).toHaveLength(1);
-    expect(affordances.some((fact) => fact.objectText.includes('Save'))).toBe(true);
-    expect(affordances.every((fact) => fact.scope === 'session')).toBe(true);
-    expect(affordances.every((fact) => fact.memoryKind === 'ui_affordance')).toBe(true);
+    expect(inventory?.objectText).toContain('Save');
+    expect(inventories.every((fact) => fact.scope === 'session')).toBe(true);
+    expect(inventories.every((fact) => fact.memoryKind === 'ui_inventory')).toBe(true);
     expect(inventory?.attributes).toMatchObject({
       surfaceId: 'surface:https://app.example.test',
       url: 'https://app.example.test/settings',
@@ -187,7 +181,7 @@ describe('structured observation memory', () => {
     ]);
   });
 
-  it('records actionable affordance memories in source order without role priority', () => {
+  it('preserves controls in source order inside compact inventories', () => {
     const result = recordStructuredObservationsFromMessages({
       conversationId: 'conv-form',
       threadId: 'conv-form',
@@ -210,12 +204,13 @@ describe('structured observation memory', () => {
     });
 
     expect(result.factIds.length).toBeGreaterThanOrEqual(1);
-    const affordances = listFacts({
-      memoryKind: 'ui_affordance',
+    const inventories = listFacts({
+      memoryKind: 'ui_inventory',
       originConversationId: 'conv-form',
     });
+    const inventory = JSON.parse(inventories[0].objectText);
 
-    expect(affordances.map((fact) => JSON.parse(fact.objectText).name)).toEqual([
+    expect(inventory.controls.map((control: { name: string }) => control.name)).toEqual([
       'Home',
       'Forums',
       'Title',
@@ -246,9 +241,9 @@ describe('structured observation memory', () => {
     });
 
     expect(result.consumedEvidence).toEqual([evidence]);
-    expect(
-      listFacts({ memoryKind: 'ui_affordance', originConversationId: 'conv-evidence' }),
-    ).toHaveLength(1);
+    expect(listFacts({ memoryKind: 'ui_inventory', originConversationId: 'conv-evidence' })).toHaveLength(
+      1,
+    );
     expect(
       listFacts({ memoryKind: 'outcome', originConversationId: 'conv-evidence' }),
     ).toHaveLength(1);

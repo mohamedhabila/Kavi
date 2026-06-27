@@ -103,8 +103,7 @@ describe('graph evidence ingestion bridge', () => {
     expect(result.bridgedEvidenceFactIds).toHaveLength(0);
 
     const typedFacts = listFacts({ originConversationId: THREAD_ID });
-    expect(typedFacts.some((fact) => fact.memoryKind === 'ui_affordance')).toBe(true);
-    expect(typedFacts.some((fact) => fact.memoryKind === 'surface_schema')).toBe(true);
+    expect(typedFacts.some((fact) => fact.memoryKind === 'ui_inventory')).toBe(true);
     expect(typedFacts.some((fact) => fact.memoryKind === 'outcome')).toBe(true);
     expect(
       typedFacts.some(

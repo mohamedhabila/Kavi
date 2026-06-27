@@ -13,17 +13,14 @@ import { recordFact } from './facts/mutations';
 import type { MemoryFactKind, RecordFactInput } from './facts/types';
 import { ensureFactSchema } from './schema';
 import {
-  compactControl,
   compactField,
   compactUiInventory,
   extractUiStateSummary,
-  isActionableAccessibilityNode,
   parseAccessibilityTree,
   type AccessibilityNode,
 } from './uiState';
 
 const MAX_TEXT_CHARS = 1400;
-const MAX_CONTROL_FACTS_PER_PAYLOAD = 128;
 const MAX_FIELD_FACTS_PER_PAYLOAD = 96;
 const MAX_FILTER_STATE_FACTS_PER_PAYLOAD = 96;
 
@@ -297,29 +294,6 @@ function recordUiMemories(input: {
       stability: 0.75,
     });
     if (inventoryFactId) factIds.push(inventoryFactId);
-
-    const schemaFactId = recordTypedFact({
-      kind: 'surface_schema',
-      subjectName: input.surfaceId,
-      predicate: 'surface_state',
-      objectText: compactSurfaceSchemaJson(input),
-      attributes: {
-        surfaceId: input.surfaceId,
-        url: input.url,
-        sourceRunId: input.sourceRunId,
-        stateIndex: input.stateIndex,
-        nodeCount: summary.nodeCount,
-        action: input.action,
-        thought: input.thought,
-        goal: input.goal,
-        trajectoryOutcome: input.trajectoryOutcome,
-        outcome: input.outcome,
-      },
-      context: input.context,
-      retrievability: 0.72,
-      stability: 0.7,
-    });
-    if (schemaFactId) factIds.push(schemaFactId);
   }
 
   for (const field of summary.fields.slice(0, MAX_FIELD_FACTS_PER_PAYLOAD)) {
@@ -378,97 +352,7 @@ function recordUiMemories(input: {
     if (filterId) factIds.push(filterId);
   }
 
-  for (const control of summary.controls.slice(0, MAX_CONTROL_FACTS_PER_PAYLOAD)) {
-    const controlId = recordTypedFact({
-      kind: 'ui_control',
-      subjectName: input.surfaceId,
-      predicate: 'ui_control',
-      objectText: compactJson({
-        ...baseUiPayload(input),
-        ...compactControl(control),
-      }),
-      attributes: {
-        surfaceId: input.surfaceId,
-        role: control.role,
-        name: control.name,
-        value: control.value,
-        label: control.label,
-        attributes: control.attributes,
-        index: control.index,
-        url: input.url,
-        sourceRunId: input.sourceRunId,
-        stateIndex: input.stateIndex,
-        nodeId: control.nodeId,
-        action: input.action,
-        outcome: input.outcome,
-      },
-      context: input.context,
-      retrievability: 0.82,
-      stability: 0.64,
-    });
-    if (controlId) factIds.push(controlId);
-  }
-
-  const actionableNodes = input.nodes.filter(isActionableAccessibilityNode).slice(0, MAX_CONTROL_FACTS_PER_PAYLOAD);
-  for (const node of actionableNodes) {
-    const affordanceId = recordTypedFact({
-      kind: 'ui_affordance',
-      subjectName: input.surfaceId,
-      predicate: 'ui_affordance',
-      objectText: compactJson({
-        index: node.index,
-        nodeId: node.nodeId,
-        role: node.role,
-        name: node.name,
-        attributes: node.attributes,
-        url: input.url,
-        sourceRunId: input.sourceRunId,
-        stateIndex: input.stateIndex,
-      }),
-      attributes: {
-        surfaceId: input.surfaceId,
-        role: node.role,
-        name: node.name,
-        attributes: node.attributes,
-        index: node.index,
-        url: input.url,
-        sourceRunId: input.sourceRunId,
-        stateIndex: input.stateIndex,
-        nodeId: node.nodeId,
-        action: input.action,
-        outcome: input.outcome,
-      },
-      context: input.context,
-      retrievability: 0.78,
-      stability: 0.6,
-    });
-    if (affordanceId) factIds.push(affordanceId);
-  }
-
   return factIds;
-}
-
-function compactSurfaceSchemaJson(
-  input: Parameters<typeof recordUiMemories>[0],
-): string {
-  const base = {
-    url: input.url,
-    goal: input.goal,
-    action: input.action,
-    thought: input.thought,
-    trajectoryOutcome: input.trajectoryOutcome,
-    outcome: input.outcome,
-    sourceRunId: input.sourceRunId,
-    stateIndex: input.stateIndex,
-  };
-  const serialized = compactJson(base);
-  if (serialized.length <= MAX_TEXT_CHARS) return serialized;
-  return compactJson({
-    ...base,
-    goal: fitText(input.goal ?? '', 240),
-    action: fitText(input.action ?? '', 240),
-    thought: fitText(input.thought ?? '', 480),
-  });
 }
 
 function baseUiPayload(input: Parameters<typeof recordUiMemories>[0]): JsonRecord {

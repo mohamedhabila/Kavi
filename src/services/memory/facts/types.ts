@@ -8,7 +8,6 @@ export type MemoryFactKind =
   | 'semantic_fact'
   | 'episodic_event'
   | 'ui_affordance'
-  | 'ui_control'
   | 'ui_field'
   | 'ui_inventory'
   | 'ui_filter_state'
@@ -130,7 +129,6 @@ export function normalizeDecayPolicy(value: unknown): MemoryDecayPolicy {
 export function normalizeFactKind(value: unknown): MemoryFactKind {
   return value === 'episodic_event' ||
     value === 'ui_affordance' ||
-    value === 'ui_control' ||
     value === 'ui_field' ||
     value === 'ui_inventory' ||
     value === 'ui_filter_state' ||

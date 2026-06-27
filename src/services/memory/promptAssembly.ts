@@ -112,22 +112,6 @@ const UI_AFFORDANCE_PROMPT_FIELDS = [
   'sourceRunId',
   'stateIndex',
 ] as const;
-const UI_CONTROL_PROMPT_FIELDS = [
-  'index',
-  'nodeId',
-  'role',
-  'name',
-  'label',
-  'value',
-  'required',
-  'checked',
-  'selected',
-  'disabled',
-  'expanded',
-  'url',
-  'sourceRunId',
-  'stateIndex',
-] as const;
 const UI_FIELD_PROMPT_FIELDS = [
   'order',
   'label',
@@ -260,12 +244,12 @@ function renderableFactText(fact: PromptMemoryFact): string {
   let fields: ReadonlyArray<string> | null = null;
   if (memoryKind === 'surface_schema') fields = SURFACE_PROMPT_FIELDS;
   if (memoryKind === 'ui_affordance') fields = UI_AFFORDANCE_PROMPT_FIELDS;
-  if (memoryKind === 'ui_control') fields = UI_CONTROL_PROMPT_FIELDS;
   if (memoryKind === 'ui_field') fields = UI_FIELD_PROMPT_FIELDS;
   if (memoryKind === 'ui_filter_state') fields = UI_FILTER_STATE_PROMPT_FIELDS;
   if (memoryKind === 'ui_inventory') fields = UI_INVENTORY_PROMPT_FIELDS;
   if (!fields) return fact.objectText;
   const parsed = parseJsonRecord(fact.objectText);
+  if (memoryKind === 'ui_inventory' && parsed) return compactJsonFields(parsed, fields);
   const compactFromAttributes = compactFactFields(fact, fields);
   if (compactFromAttributes) return compactFromAttributes;
   if (!parsed) return fact.objectText;
@@ -285,7 +269,6 @@ function renderFact(fact: PromptMemoryFact): string {
   const meta = kind || source ? ` [${`${kind}${source}`.trim()}]` : '';
   const maxChars =
     memoryKind === 'ui_affordance' ||
-    memoryKind === 'ui_control' ||
     memoryKind === 'ui_field' ||
     memoryKind === 'ui_inventory' ||
     memoryKind === 'ui_filter_state' ||
@@ -306,7 +289,6 @@ function factGroupHeader(fact: PromptMemoryFact): string {
   const memoryKind = fact.memoryKind ?? 'semantic_fact';
   if (
     memoryKind === 'ui_affordance' ||
-    memoryKind === 'ui_control' ||
     memoryKind === 'ui_field' ||
     memoryKind === 'ui_inventory' ||
     memoryKind === 'ui_filter_state' ||
