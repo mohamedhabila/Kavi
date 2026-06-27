@@ -31,9 +31,8 @@ export function planRetrievalSignals(rawSignals: ReadonlyArray<string>): Retriev
   for (const rawSignal of rawSignals) {
     const signal = normalizeSignal(rawSignal);
     if (!signal) continue;
-    const extracted = extractQuotedSpans(signal);
-    for (const span of extracted) addUniqueSignal(supportingSignals, span, MAX_SUPPORTING_SIGNALS);
 
+    const extracted: string[] = [];
     const cleanedLines: string[] = [];
     for (const rawLine of rawSignal.split(/\r?\n/)) {
       const line = normalizeSignal(rawLine);
@@ -42,8 +41,10 @@ export function planRetrievalSignals(rawSignals: ReadonlyArray<string>): Retriev
         droppedSignals.push(line);
         continue;
       }
+      for (const span of extractQuotedSpans(line)) addUniqueSignal(extracted, span, MAX_EXTRACTED_SPANS);
       cleanedLines.push(line);
     }
+    for (const span of extracted) addUniqueSignal(supportingSignals, span, MAX_SUPPORTING_SIGNALS);
 
     const cleaned = normalizeSignal(cleanedLines.join('\n'));
     if (cleaned) {

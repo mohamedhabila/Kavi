@@ -432,4 +432,59 @@ describe('orchestrateMemoryRetrieval', () => {
 
     expect(result.facts.some((fact) => fact.id === optionFact.id)).toBe(true);
   });
+
+  it('probes extracted interface signals independently before source grouping', async () => {
+    const adminSurface = upsertEntity({
+      name: 'surface:https://admin.example.test',
+      type: 'project',
+    });
+    const commonUnits = Array.from({ length: 4 }, (_, index) => `qcommon${index}`);
+    for (let sourceIndex = 0; sourceIndex < 40; sourceIndex += 1) {
+      recordFact({
+        subjectId: adminSurface.id,
+        predicate: 'ui_inventory',
+        objectText: JSON.stringify({
+          fieldLabels: [commonUnits[sourceIndex % commonUnits.length]],
+          fields: [{
+            order: 0,
+            label: commonUnits[sourceIndex % commonUnits.length],
+            role: 'textbox',
+          }],
+          url: `https://admin.example.test/noisy/${sourceIndex}`,
+        }),
+        sourceRunId: `noisy-interface-run-${sourceIndex}`,
+        memoryKind: 'ui_inventory',
+        scope: 'conversation',
+        originConversationId: 'conv-independent-interface-probes',
+        now: 100 + sourceIndex,
+      });
+    }
+    const optionFact = recordFact({
+      subjectId: adminSurface.id,
+      predicate: 'ui_field',
+      objectText: JSON.stringify({
+        label: 'qtargetfield',
+        role: 'combobox',
+        options: ['qtargetoption'],
+        url: 'https://admin.example.test/relevant',
+      }),
+      sourceRunId: 'target-interface-run',
+      memoryKind: 'ui_field',
+      scope: 'conversation',
+      originConversationId: 'conv-independent-interface-probes',
+      now: 1,
+    }).fact;
+
+    const result = await orchestrateMemoryRetrieval({
+      userMessage: [
+        `Need ${commonUnits.join(' ')} and \`qmissing qtargetoption\`.`,
+        'scroll(delta_x: float, delta_y: float), click(bid: str), select_option(bid: str, options: str | list[str])',
+      ].join('\n'),
+      conversationId: 'conv-independent-interface-probes',
+      limit: 2,
+      now: 200,
+    });
+
+    expect(result.facts.some((fact) => fact.id === optionFact.id)).toBe(true);
+  });
 });

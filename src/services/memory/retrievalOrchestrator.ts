@@ -22,6 +22,7 @@ import {
   lexicalOverlap,
   tokenizeLexicalUnits,
 } from './ranking/lexical';
+import { retrievalTextForFact } from './ranking/factText';
 
 export interface RetrievalOrchestratorInput {
   userMessage: string;
@@ -93,6 +94,8 @@ const INTERFACE_SOURCE_POOL_LIMIT = 50;
 const INTERFACE_SOURCE_POOL_MULTIPLIER = 8;
 const INTERFACE_SOURCE_GROUP_TOP_FACTS = 6;
 const INTERFACE_SOURCE_GROUP_FACT_LIMIT = 3;
+const INTERFACE_SOURCE_GROUP_EARLY_SUPPORT_GROUPS = 2;
+const INTERFACE_SOURCE_GROUP_EARLY_SUPPORT_FACTS = 2;
 
 function collectGoalSignals(goals: ReadonlyArray<AgentGoal> | undefined): string[] {
   if (!goals?.length) return [];
@@ -200,6 +203,22 @@ async function recallScoredFactsForSignals(
   return recallScoredFactsForQuery(trimmed, options);
 }
 
+async function recallScoredFactsForSignalSet(
+  signals: ReadonlyArray<string>,
+  fallbackQuery: string,
+  options: RecallFactsOptions,
+): Promise<ScoredFact[]> {
+  const uniqueSignals = Array.from(
+    new Set(signals.map((signal) => signal.trim()).filter((signal) => signal.length > 0)),
+  );
+  const probes = uniqueSignals.length > 0 ? uniqueSignals : [fallbackQuery.trim()].filter(Boolean);
+  const recalled: ScoredFact[] = [];
+  for (const probe of probes) {
+    recalled.push(...(await recallScoredFactsForSignals(probe, options)));
+  }
+  return mergeUniqueScoredFacts(recalled, options.limit ?? probes.length);
+}
+
 function laneLimit(config: RetrievalLaneConfig, totalLimit: number): number {
   return Math.max(1, Math.min(totalLimit, Math.max(config.minLimit, Math.ceil(totalLimit * config.share))));
 }
@@ -210,6 +229,9 @@ async function recallLane(
     primaryQuery: string;
     expansionQuery: string;
     fallbackQuery: string;
+    primarySignals: string[];
+    expansionSignals: string[];
+    fallbackSignals: string[];
     useFallback: boolean;
     options: RecallFactsOptions;
     totalLimit: number;
@@ -236,35 +258,54 @@ async function recallLane(
   const primaryLimit = sourceAwareInterface
     ? interfacePoolLimit
     : Math.max(1, limit - expansionLimit);
-  const primary = await recallScoredFactsForSignals(input.primaryQuery, {
-    ...laneOptionsBase,
-    limit: primaryLimit,
-  });
+  const primary = sourceAwareInterface
+    ? await recallScoredFactsForSignalSet(input.primarySignals, input.primaryQuery, {
+        ...laneOptionsBase,
+        limit: primaryLimit,
+      })
+    : await recallScoredFactsForSignals(input.primaryQuery, {
+        ...laneOptionsBase,
+        limit: primaryLimit,
+      });
   const expansion =
     expansionLimit > 0
-      ? await recallScoredFactsForSignals(input.expansionQuery, {
-          ...laneOptionsBase,
-          limit: expansionLimit,
-        })
+      ? sourceAwareInterface
+        ? await recallScoredFactsForSignalSet(input.expansionSignals, input.expansionQuery, {
+            ...laneOptionsBase,
+            limit: expansionLimit,
+          })
+        : await recallScoredFactsForSignals(input.expansionQuery, {
+            ...laneOptionsBase,
+            limit: expansionLimit,
+          })
       : [];
-  const mergedInitial = mergeUniqueScoredFacts(
-    [...primary, ...expansion],
-    sourceAwareInterface ? INTERFACE_SOURCE_POOL_LIMIT : limit,
-  );
+  const mergedInitial = sourceAwareInterface
+    ? mergeUniqueScoredFactsByScore(
+        [...primary, ...expansion],
+        INTERFACE_SOURCE_POOL_LIMIT,
+      )
+    : mergeUniqueScoredFacts([...primary, ...expansion], limit);
   const currentCount = sourceAwareInterface
     ? Math.min(mergedInitial.length, limit)
     : mergedInitial.length;
   const fallback =
     input.useFallback && currentCount < limit
-      ? await recallScoredFactsForSignals(input.fallbackQuery, {
-          ...laneOptionsBase,
-          limit: sourceAwareInterface ? interfacePoolLimit : limit - currentCount,
-        })
+      ? sourceAwareInterface
+        ? await recallScoredFactsForSignalSet(input.fallbackSignals, input.fallbackQuery, {
+            ...laneOptionsBase,
+            limit: interfacePoolLimit,
+          })
+        : await recallScoredFactsForSignals(input.fallbackQuery, {
+            ...laneOptionsBase,
+            limit: limit - currentCount,
+          })
       : [];
-  const mergedPool = mergeUniqueScoredFacts(
-    [...primary, ...expansion, ...fallback],
-    sourceAwareInterface ? INTERFACE_SOURCE_POOL_LIMIT : limit,
-  );
+  const mergedPool = sourceAwareInterface
+    ? mergeUniqueScoredFactsByScore(
+        [...primary, ...expansion, ...fallback],
+        INTERFACE_SOURCE_POOL_LIMIT,
+      )
+    : mergeUniqueScoredFacts([...primary, ...expansion, ...fallback], limit);
   const scoredFacts = sourceAwareInterface
     ? selectSourceAwareInterfaceFacts(
         mergedPool,
@@ -285,7 +326,7 @@ function sourceGroupKey(fact: MemoryFact): string {
 }
 
 function sourceRankingText(fact: MemoryFact): string {
-  return `${fact.subjectId} ${fact.predicate} ${fact.objectText} ${fact.sourceSummary ?? ''}`;
+  return retrievalTextForFact(fact);
 }
 
 function selectSourceAwareInterfaceFacts(
@@ -310,10 +351,10 @@ function selectSourceAwareInterfaceFacts(
   const rankedGroups = Array.from(groups.entries())
     .map(([key, group]) => {
       const rankedEntries = [...group].sort((left, right) => {
+        if (right.score !== left.score) return right.score - left.score;
         const rightOverlap = lexicalOverlap(queryUnits, sourceRankingText(right.fact), unitWeights);
         const leftOverlap = lexicalOverlap(queryUnits, sourceRankingText(left.fact), unitWeights);
         if (rightOverlap !== leftOverlap) return rightOverlap - leftOverlap;
-        if (right.score !== left.score) return right.score - left.score;
         return right.fact.updatedAt - left.fact.updatedAt;
       });
       const topEntries = rankedEntries.slice(0, INTERFACE_SOURCE_GROUP_TOP_FACTS);
@@ -328,7 +369,7 @@ function selectSourceAwareInterfaceFacts(
       return {
         key,
         entries: rankedEntries,
-        score: coverageScore * 0.55 + bestScore * 0.35 + averageScore * 0.1,
+        score: bestScore * 0.65 + coverageScore * 0.25 + averageScore * 0.1,
       };
     })
     .sort((left, right) => {
@@ -346,10 +387,21 @@ function selectSourceAwareInterfaceFacts(
     selectedPerGroup.set(groupKey, (selectedPerGroup.get(groupKey) ?? 0) + 1);
   };
 
-  for (const group of rankedGroups) {
+  for (const [groupIndex, group] of rankedGroups.entries()) {
     const first = group.entries.find((entry) => !seenIds.has(entry.fact.id));
     if (first) addEntry(group.key, first);
     if (selected.length >= limit) return selected;
+    if (groupIndex < INTERFACE_SOURCE_GROUP_EARLY_SUPPORT_GROUPS) {
+      while (
+        selected.length < limit &&
+        (selectedPerGroup.get(group.key) ?? 0) < INTERFACE_SOURCE_GROUP_EARLY_SUPPORT_FACTS
+      ) {
+        const next = group.entries.find((entry) => !seenIds.has(entry.fact.id));
+        if (!next) break;
+        addEntry(group.key, next);
+      }
+      if (selected.length >= limit) return selected;
+    }
   }
 
   let added = true;
@@ -378,6 +430,16 @@ function mergeUniqueScoredFacts(entries: ScoredFact[], limit: number): ScoredFac
     if (merged.length >= limit) break;
   }
   return merged;
+}
+
+function mergeUniqueScoredFactsByScore(entries: ScoredFact[], limit: number): ScoredFact[] {
+  return mergeUniqueScoredFacts(
+    [...entries].sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score;
+      return right.fact.updatedAt - left.fact.updatedAt;
+    }),
+    limit,
+  );
 }
 
 function mergeLaneResults(
@@ -466,7 +528,15 @@ function recallScopedCurrentFacts(
 export async function orchestrateMemoryRetrieval(
   input: RetrievalOrchestratorInput,
 ): Promise<RetrievalOrchestratorResult> {
-  const { primaryQuery, expansionQuery, fallbackQuery, signals, primarySignals } =
+  const {
+    primaryQuery,
+    expansionQuery,
+    fallbackQuery,
+    signals,
+    primarySignals,
+    expansionSignals,
+    fallbackSignals,
+  } =
     buildRetrievalQuery(input);
   const resolvedTaskId = input.taskId ?? input.activeTaskId;
   const limit = Math.max(1, Math.min(input.limit ?? 8, 50));
@@ -482,6 +552,9 @@ export async function orchestrateMemoryRetrieval(
         primaryQuery,
         expansionQuery,
         fallbackQuery,
+        primarySignals,
+        expansionSignals,
+        fallbackSignals,
         useFallback: shouldUseFallback,
         options,
         totalLimit: limit,
