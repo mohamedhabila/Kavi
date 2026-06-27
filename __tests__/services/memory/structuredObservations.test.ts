@@ -69,10 +69,12 @@ describe('structured observation memory', () => {
 
     expect(result.factIds.length).toBeGreaterThanOrEqual(2);
     const inventories = listFacts({ memoryKind: 'ui_inventory', originTaskId: 'task-ui' });
+    const affordances = listFacts({ memoryKind: 'ui_affordance', originTaskId: 'task-ui' });
     const outcomes = listFacts({ memoryKind: 'outcome', originTaskId: 'task-ui' });
     const inventory = inventories.find((fact) => fact.predicate === 'ui_inventory');
 
     expect(inventories).toHaveLength(1);
+    expect(affordances).toHaveLength(2);
     expect(outcomes).toHaveLength(1);
     expect(inventory?.objectText).toContain('Save');
     expect(inventories.every((fact) => fact.scope === 'session')).toBe(true);
@@ -85,6 +87,53 @@ describe('structured observation memory', () => {
       textEntryCount: 1,
     });
     expect(() => JSON.parse(inventory!.objectText)).not.toThrow();
+  });
+
+  it('records actionable controls as compact affordance facts with structural context', () => {
+    recordStructuredObservationsFromMessages({
+      conversationId: 'conv-affordance',
+      threadId: 'conv-affordance',
+      sourceRunId: 'run-affordance',
+      now: 250,
+      messages: [
+        toolMessage({
+          url: 'https://forum.example.test/f/general',
+          accessibility_tree: [
+            "RootWebArea 'Forum'",
+            "\t[1] Section ''",
+            "\t\t[2] heading 'Toolbox'",
+            "\t\t[3] list ''",
+            "\t\t\t[4] listitem ''",
+            "\t\t\t\t[5] link 'Delete forum', clickable, visible",
+            "\t\t\t[6] listitem ''",
+            "\t\t\t\t[7] link 'Edit forum', clickable, visible",
+            "\t\t\t[8] listitem ''",
+            "\t\t\t\t[9] link 'Moderation log', clickable, visible",
+          ].join('\n'),
+        }),
+      ],
+    });
+
+    const affordances = listFacts({
+      memoryKind: 'ui_affordance',
+      originConversationId: 'conv-affordance',
+    }).map((fact) => JSON.parse(fact.objectText));
+
+    expect(affordances.map((fact) => fact.name)).toEqual([
+      'Delete forum',
+      'Edit forum',
+      'Moderation log',
+    ]);
+    expect(affordances).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'Edit forum',
+          role: 'link',
+          contextLabels: ['Toolbox'],
+          sourceRunId: 'run-affordance',
+        }),
+      ]),
+    );
   });
 
   it('records label-control field relations and complete page inventories', () => {

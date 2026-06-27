@@ -32,6 +32,7 @@ export interface UiControl {
   selected: string | null;
   disabled: boolean;
   expanded: string | null;
+  contextLabels: string[];
 }
 
 export interface UiField {
@@ -108,6 +109,17 @@ const ROW_ROLES = new Set(['row']);
 const COLUMN_HEADER_ROLES = new Set(['columnheader']);
 const CELL_ROLES = new Set(['cell', 'gridcell', 'rowheader']);
 const OPTION_ROLES = new Set(['option']);
+const CONTEXT_LABEL_ROLES = new Set([
+  'article',
+  'complementary',
+  'group',
+  'heading',
+  'main',
+  'navigation',
+  'region',
+  'section',
+  'strong',
+]);
 
 const MAX_CONTROL_SUMMARY_ITEMS = 36;
 const MAX_FIELD_SUMMARY_ITEMS = 36;
@@ -148,11 +160,13 @@ export function extractUiStateSummary(nodes: AccessibilityNode[]): UiStateSummar
     const labelBlock = findNearestUnusedPriorLabel(node, labelBlocks, usedLabelIndexes);
     if (labelBlock) usedLabelIndexes.add(labelBlock.index);
     const options = childOptionNames(nodes, node.index);
+    const contextLabels = findContextLabels(nodes, node.index);
     const control = controlFromNode(
       node,
       labelBlock?.text ?? null,
       labelBlock?.required ?? false,
       options,
+      contextLabels,
     );
     controls.push(control);
     if (labelBlock && FIELD_CONTROL_ROLES.has(node.role.toLocaleLowerCase())) {
@@ -203,6 +217,7 @@ export function compactControl(control: UiControl): JsonRecord {
     selected: control.selected,
     disabled: control.disabled || undefined,
     expanded: control.expanded,
+    contextLabels: control.contextLabels.length > 0 ? control.contextLabels : undefined,
   });
 }
 
@@ -395,6 +410,7 @@ function controlFromNode(
   label: string | null,
   labelRequired: boolean,
   options: string[],
+  contextLabels: string[],
 ): UiControl {
   return {
     index: node.index,
@@ -410,7 +426,41 @@ function controlFromNode(
     selected: attributeValue(node.attributes, 'selected'),
     disabled: hasAttributeFlag(node.attributes, 'disabled'),
     expanded: attributeValue(node.attributes, 'expanded'),
+    contextLabels,
   };
+}
+
+function findContextLabels(nodes: AccessibilityNode[], controlIndex: number): string[] {
+  const control = nodes[controlIndex];
+  if (!control) return [];
+  const labels: string[] = [];
+  const seen = new Set<string>();
+
+  const addLabel = (value: string | null | undefined): void => {
+    const normalized = normalizeLabelText(value ? [value] : []);
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    labels.push(normalized);
+  };
+
+  let ancestorIndent = control.indent;
+  for (let index = controlIndex - 1; index >= 0; index -= 1) {
+    const node = nodes[index];
+    if (node.indent >= ancestorIndent) continue;
+    ancestorIndent = node.indent;
+    if (CONTEXT_LABEL_ROLES.has(node.role.toLocaleLowerCase())) addLabel(node.name);
+    if (ancestorIndent === 0) break;
+  }
+
+  const lowerBound = Math.max(0, controlIndex - 32);
+  for (let index = controlIndex - 1; index >= lowerBound && labels.length < 6; index -= 1) {
+    const node = nodes[index];
+    if (node.indent > control.indent) continue;
+    if (!CONTEXT_LABEL_ROLES.has(node.role.toLocaleLowerCase())) continue;
+    addLabel(node.name);
+  }
+
+  return labels.slice(0, 6);
 }
 
 function childOptionNames(nodes: AccessibilityNode[], controlIndex: number): string[] {

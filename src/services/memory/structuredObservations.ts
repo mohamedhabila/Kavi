@@ -21,6 +21,7 @@ import {
 } from './uiState';
 
 const MAX_TEXT_CHARS = 4_000;
+const MAX_AFFORDANCE_FACTS_PER_PAYLOAD = 96;
 const MAX_FIELD_FACTS_PER_PAYLOAD = 96;
 const MAX_FILTER_STATE_FACTS_PER_PAYLOAD = 96;
 const UI_INVENTORY_ARRAY_COMPACT_ORDER = [
@@ -305,6 +306,40 @@ function recordUiMemories(input: {
     if (inventoryFactId) factIds.push(inventoryFactId);
   }
 
+  for (const control of summary.controls.slice(0, MAX_AFFORDANCE_FACTS_PER_PAYLOAD)) {
+    const affordanceId = recordTypedFact({
+      kind: 'ui_affordance',
+      subjectName: input.surfaceId,
+      predicate: 'ui_affordance',
+      objectText: compactJson({
+        ...compactFieldLikeControl(control),
+        ...baseUiPayload(input),
+      }),
+      attributes: {
+        surfaceId: input.surfaceId,
+        url: input.url,
+        sourceRunId: input.sourceRunId,
+        stateIndex: input.stateIndex,
+        index: control.index,
+        nodeId: control.nodeId,
+        role: control.role,
+        name: control.name,
+        label: control.label,
+        value: control.value,
+        options: control.options,
+        checked: control.checked,
+        selected: control.selected,
+        disabled: control.disabled,
+        expanded: control.expanded,
+        contextLabels: control.contextLabels,
+      },
+      context: input.context,
+      retrievability: 0.94,
+      stability: 0.72,
+    });
+    if (affordanceId) factIds.push(affordanceId);
+  }
+
   for (const field of summary.fields.slice(0, MAX_FIELD_FACTS_PER_PAYLOAD)) {
     const fieldId = recordTypedFact({
       kind: 'ui_field',
@@ -363,6 +398,23 @@ function recordUiMemories(input: {
   }
 
   return factIds;
+}
+
+function compactFieldLikeControl(control: ReturnType<typeof extractUiStateSummary>['controls'][number]): JsonRecord {
+  return dropEmpty({
+    index: control.index,
+    nodeId: control.nodeId,
+    role: control.role,
+    name: control.name,
+    label: control.label,
+    value: control.value,
+    options: control.options.length > 0 ? control.options : undefined,
+    checked: control.checked,
+    selected: control.selected,
+    disabled: control.disabled || undefined,
+    expanded: control.expanded,
+    contextLabels: control.contextLabels.length > 0 ? control.contextLabels : undefined,
+  });
 }
 
 function compactUiInventoryPayload(

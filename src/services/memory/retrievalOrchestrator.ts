@@ -73,6 +73,7 @@ const RETRIEVAL_LANES: RetrievalLaneConfig[] = [
   {
     id: 'interface',
     memoryKinds: [
+      'ui_affordance',
       'ui_inventory',
       'ui_field',
       'ui_filter_state',
