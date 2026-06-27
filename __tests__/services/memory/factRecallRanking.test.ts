@@ -235,4 +235,108 @@ describe('recallFactsForQuery — ranking', () => {
 
     expect(scored.map((entry) => entry.fact.id)).toEqual([target.fact.id]);
   });
+
+  it('prioritizes first-class UI affordances over recent bulk page state', async () => {
+    const surface = upsertEntity({ name: 'surface:https://admin.example.test', type: 'project' });
+    const conversationId = 'conv-ui-affordance-priority';
+    for (let index = 0; index < 120; index += 1) {
+      recordFact({
+        subjectId: surface.id,
+        predicate: 'ui_inventory',
+        objectText: JSON.stringify({
+          fieldLabels: [`qforum${index}`],
+          controls: Array.from({ length: 30 }, (_, controlIndex) => ({
+            role: 'button',
+            name: `qnoise${index}-${controlIndex}`,
+          })),
+          url: `https://admin.example.test/noise/${index}`,
+        }),
+        memoryKind: 'ui_inventory',
+        scope: 'conversation',
+        originConversationId: conversationId,
+        now: 10_000 + index,
+      });
+    }
+    const target = recordFact({
+      subjectId: surface.id,
+      predicate: 'ui_affordance',
+      objectText: JSON.stringify({
+        role: 'button',
+        name: 'qdelete qforum',
+        contextLabels: ['qmoderation'],
+        url: 'https://admin.example.test/target',
+        sourceRunId: 'run-ui-affordance-priority',
+        stateIndex: '4',
+      }),
+      memoryKind: 'ui_affordance',
+      scope: 'conversation',
+      originConversationId: conversationId,
+      sourceRunId: 'run-ui-affordance-priority',
+      now: 1,
+    });
+
+    const scored = await recallScoredFactsForQuery('qdelete qforum qmoderation', {
+      conversationId,
+      memoryKind: ['ui_affordance', 'ui_inventory'],
+      limit: 3,
+      vectorWeight: 0,
+      textWeight: 1,
+      threshold: 0.01,
+      now: 20_000,
+    });
+
+    expect(scored[0].fact.id).toBe(target.fact.id);
+    expect(scored[0].fact.memoryKind).toBe('ui_affordance');
+  });
+
+  it('recalls an older relevant UI affordance despite many recent unrelated controls', async () => {
+    const surface = upsertEntity({ name: 'surface:https://mobile.example.test', type: 'project' });
+    const conversationId = 'conv-ui-affordance-scale';
+    const target = recordFact({
+      subjectId: surface.id,
+      predicate: 'ui_affordance',
+      objectText: JSON.stringify({
+        role: 'button',
+        name: 'qtargetaction',
+        contextLabels: ['qtargetsurface'],
+        url: 'https://mobile.example.test/target',
+        sourceRunId: 'run-ui-affordance-scale',
+        stateIndex: '2',
+      }),
+      memoryKind: 'ui_affordance',
+      scope: 'conversation',
+      originConversationId: conversationId,
+      sourceRunId: 'run-ui-affordance-scale',
+      now: 1,
+    });
+    for (let index = 0; index < 500; index += 1) {
+      recordFact({
+        subjectId: surface.id,
+        predicate: 'ui_affordance',
+        objectText: JSON.stringify({
+          role: 'button',
+          name: `qunrelated${index}`,
+          contextLabels: [`qrecent${index}`],
+          url: `https://mobile.example.test/recent/${index}`,
+        }),
+        memoryKind: 'ui_affordance',
+        scope: 'conversation',
+        originConversationId: conversationId,
+        now: 10_000 + index,
+      });
+    }
+
+    const scored = await recallScoredFactsForQuery('qtargetaction qtargetsurface', {
+      conversationId,
+      memoryKind: 'ui_affordance',
+      limit: 5,
+      candidatePoolLimit: 128,
+      vectorWeight: 0,
+      textWeight: 1,
+      threshold: 0.01,
+      now: 20_000,
+    });
+
+    expect(scored.map((entry) => entry.fact.id)).toContain(target.fact.id);
+  });
 });

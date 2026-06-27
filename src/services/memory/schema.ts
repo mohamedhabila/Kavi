@@ -62,6 +62,21 @@ export function ensureFactSchema(): void {
     CREATE INDEX IF NOT EXISTS idx_facts_pinned
       ON memory_facts(pinned);
 
+    CREATE TABLE IF NOT EXISTS memory_fact_terms (
+      fact_id TEXT NOT NULL,
+      unit TEXT NOT NULL,
+      source_run_id TEXT,
+      memory_kind TEXT NOT NULL,
+      weight REAL NOT NULL DEFAULT 1.0,
+      PRIMARY KEY (fact_id, unit)
+    );
+    CREATE INDEX IF NOT EXISTS idx_fact_terms_unit_kind
+      ON memory_fact_terms(unit, memory_kind);
+    CREATE INDEX IF NOT EXISTS idx_fact_terms_fact
+      ON memory_fact_terms(fact_id);
+    CREATE INDEX IF NOT EXISTS idx_fact_terms_source
+      ON memory_fact_terms(source_run_id);
+
     CREATE TABLE IF NOT EXISTS memory_blocks (
       label TEXT PRIMARY KEY,
       content TEXT NOT NULL DEFAULT '',
@@ -281,6 +296,7 @@ export function clearStructuredMemory(): void {
   const db = getMemoryDb();
   db.execSync(`
     DELETE FROM memory_fact_evidence;
+    DELETE FROM memory_fact_terms;
     DELETE FROM memory_episodes;
     DELETE FROM memory_facts;
     DELETE FROM memory_entities;

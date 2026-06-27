@@ -8,68 +8,76 @@ import {
   type MemoryFactKind,
   type MemoryFactScope,
 } from './types';
+import { ensureFactRetrievalIndexCoverage } from './retrievalIndex';
 
 type SqlBindValue = string | number;
 
 const DEFAULT_FACT_LIMIT = 100;
 const MAX_FACT_LIMIT = 500;
-const DEFAULT_RECALL_CANDIDATE_LIMIT = 2_000;
-const MAX_RECALL_CANDIDATE_LIMIT = 10_000;
+const DEFAULT_RECALL_CANDIDATE_LIMIT = 512;
+const MAX_RECALL_CANDIDATE_LIMIT = 2_000;
 const DEFAULT_RECALL_PINNED_LIMIT = 64;
 const DEFAULT_RECALL_SCOPED_RECENT_LIMIT = 192;
 const DEFAULT_RECALL_LEXICAL_UNIT_LIMIT = 64;
-const DEFAULT_RECALL_LEXICAL_ANCHOR_LIMIT = 32;
 
 interface FactFilter {
   clauses: string[];
   params: SqlBindValue[];
 }
 
-function buildFactFilter(options: ListFactsOptions): FactFilter {
+function column(name: string, alias?: string): string {
+  return alias ? `${alias}.${name}` : name;
+}
+
+function buildFactFilter(options: ListFactsOptions, alias?: string): FactFilter {
   const clauses: string[] = [];
   const params: SqlBindValue[] = [];
   if (options.subjectId) {
-    clauses.push('subject_id = ?');
+    clauses.push(`${column('subject_id', alias)} = ?`);
     params.push(options.subjectId);
   }
   if (options.predicate) {
-    clauses.push('predicate = ?');
+    clauses.push(`${column('predicate', alias)} = ?`);
     params.push(options.predicate);
   }
   if (options.scope) {
     const scopes = Array.isArray(options.scope) ? options.scope : [options.scope];
     const normalizedScopes = scopes.map(normalizeScope);
-    clauses.push(`scope IN (${normalizedScopes.map(() => '?').join(', ')})`);
+    clauses.push(`${column('scope', alias)} IN (${normalizedScopes.map(() => '?').join(', ')})`);
     params.push(...normalizedScopes);
   }
   if (options.originConversationId) {
-    clauses.push('origin_conversation_id = ?');
+    clauses.push(`${column('origin_conversation_id', alias)} = ?`);
     params.push(options.originConversationId);
   }
   if (options.originTaskId) {
-    clauses.push('origin_task_id = ?');
+    clauses.push(`${column('origin_task_id', alias)} = ?`);
     params.push(options.originTaskId);
   }
-  if (options.pinnedOnly) clauses.push('pinned = 1');
+  if (options.pinnedOnly) clauses.push(`${column('pinned', alias)} = 1`);
   if (options.memoryKind) {
     const kinds = Array.isArray(options.memoryKind) ? options.memoryKind : [options.memoryKind];
-    clauses.push(`memory_kind IN (${kinds.map(() => '?').join(', ')})`);
+    clauses.push(
+      `${column('memory_kind', alias)} IN (${kinds.map(() => '?').join(', ')})`,
+    );
     params.push(...kinds);
   }
-  if (!options.includeDeleted) clauses.push('deleted_at IS NULL');
+  if (!options.includeDeleted) clauses.push(`${column('deleted_at', alias)} IS NULL`);
   if (!options.includeExpired) {
     const asOf = options.asOf ?? Date.now();
-    clauses.push('(expires_at IS NULL OR expires_at > ?)');
+    clauses.push(`(${column('expires_at', alias)} IS NULL OR ${column('expires_at', alias)} > ?)`);
     params.push(asOf);
   }
   if (!options.includeInvalidated) {
     if (options.asOf !== undefined) {
-      clauses.push('valid_at <= ?');
+      clauses.push(`${column('valid_at', alias)} <= ?`);
       params.push(options.asOf);
-      clauses.push('(invalid_at IS NULL OR invalid_at > ?)');
+      clauses.push(
+        `(${column('invalid_at', alias)} IS NULL OR ${column('invalid_at', alias)} > ?)`,
+      );
       params.push(options.asOf);
     } else {
-      clauses.push('invalid_at IS NULL');
+      clauses.push(`${column('invalid_at', alias)} IS NULL`);
     }
   }
   return { clauses, params };
@@ -81,19 +89,6 @@ function whereSql(filter: FactFilter): string {
 
 function clampLimit(value: number | undefined, fallback: number, max: number): number {
   return Math.max(1, Math.min(value ?? fallback, max));
-}
-
-function escapeLikeLiteral(value: string): string {
-  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
-}
-
-function buildLexicalUnitFilter(unit: string): { clause: string; params: SqlBindValue[] } {
-  const likeValue = `%${escapeLikeLiteral(unit)}%`;
-  return {
-    clause:
-      "(subject_id LIKE ? ESCAPE '\\' OR predicate LIKE ? ESCAPE '\\' OR object_text LIKE ? ESCAPE '\\' OR source_summary LIKE ? ESCAPE '\\')",
-    params: [likeValue, likeValue, likeValue, likeValue],
-  };
 }
 
 function prioritizeLexicalUnits(units: string[]): string[] {
@@ -125,7 +120,7 @@ export interface ListFactsForRecallCandidatesOptions extends ListFactsOptions {
   pinnedLimit?: number;
   scopedRecentLimit?: number;
   lexicalUnitLimit?: number;
-  lexicalAnchorLimit?: number;
+  includeUnanchoredCandidates?: boolean;
 }
 
 export function listFactsForRecallCandidates(
@@ -163,6 +158,43 @@ export function listFactsForRecallCandidates(
     }
   }
 
+  function addIndexedLexicalRows(units: string[], limit: number): void {
+    if (byId.size >= totalLimit || units.length === 0) return;
+    const laneLimit = Math.max(1, Math.min(limit, totalLimit - byId.size));
+    const factFilter = buildFactFilter(options, 'f');
+    const termClauses = [`t.unit IN (${units.map(() => '?').join(', ')})`];
+    const params: SqlBindValue[] = [...units];
+    if (options.memoryKind) {
+      const kinds = Array.isArray(options.memoryKind) ? options.memoryKind : [options.memoryKind];
+      termClauses.push(`t.memory_kind IN (${kinds.map(() => '?').join(', ')})`);
+      params.push(...kinds);
+    }
+    const where = whereSql({
+      clauses: [...termClauses, ...factFilter.clauses],
+      params: [...params, ...factFilter.params],
+    });
+    const rows = getMany<FactRow>(
+      `SELECT f.*
+         FROM memory_fact_terms t
+         JOIN memory_facts f ON f.id = t.fact_id
+         ${where}
+        GROUP BY f.id
+        ORDER BY SUM(t.weight) DESC,
+                 COUNT(*) DESC,
+                 f.pinned DESC,
+                 f.retrievability DESC,
+                 f.importance DESC,
+                 f.updated_at DESC
+        LIMIT ${laneLimit}`,
+      ...params,
+      ...factFilter.params,
+    );
+    for (const row of rows) {
+      if (byId.size >= totalLimit) break;
+      byId.set(row.id, rowToFact(row));
+    }
+  }
+
   addRows(
     ['pinned = 1'],
     [],
@@ -175,38 +207,8 @@ export function listFactsForRecallCandidates(
   ).slice(0, clampLimit(options.lexicalUnitLimit, DEFAULT_RECALL_LEXICAL_UNIT_LIMIT, 64));
   const prioritizedLexicalUnits = prioritizeLexicalUnits(lexicalUnits);
   if (prioritizedLexicalUnits.length > 0) {
-    const perUnitLimit = Math.max(
-      4,
-      Math.min(
-        options.lexicalAnchorLimit ?? DEFAULT_RECALL_LEXICAL_ANCHOR_LIMIT,
-        Math.ceil(totalLimit / prioritizedLexicalUnits.length),
-      ),
-    );
-    for (const unit of prioritizedLexicalUnits) {
-      const lexicalFilter = buildLexicalUnitFilter(unit);
-      addRows(
-        [lexicalFilter.clause],
-        lexicalFilter.params,
-        'retrievability DESC, importance DESC, updated_at DESC',
-        perUnitLimit,
-      );
-    }
-  }
-
-  if (lexicalUnits.length > 0) {
-    const lexicalClauses: string[] = [];
-    const lexicalParams: SqlBindValue[] = [];
-    for (const unit of lexicalUnits) {
-      const lexicalFilter = buildLexicalUnitFilter(unit);
-      lexicalClauses.push(lexicalFilter.clause);
-      lexicalParams.push(...lexicalFilter.params);
-    }
-    addRows(
-      [`(${lexicalClauses.join(' OR ')})`],
-      lexicalParams,
-      'pinned DESC, retrievability DESC, importance DESC, updated_at DESC',
-      totalLimit,
-    );
+    ensureFactRetrievalIndexCoverage();
+    addIndexedLexicalRows(prioritizedLexicalUnits, totalLimit);
   }
 
   const scopedClauses: string[] = [];
@@ -228,12 +230,14 @@ export function listFactsForRecallCandidates(
     );
   }
 
-  addRows(
-    [],
-    [],
-    'pinned DESC, retrievability DESC, importance DESC, updated_at DESC',
-    totalLimit,
-  );
+  if (options.includeUnanchoredCandidates || lexicalUnits.length === 0) {
+    addRows(
+      [],
+      [],
+      'pinned DESC, retrievability DESC, importance DESC, updated_at DESC',
+      totalLimit,
+    );
+  }
 
   return Array.from(byId.values());
 }

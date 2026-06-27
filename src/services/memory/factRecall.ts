@@ -18,7 +18,9 @@
 //
 // The function never throws; remote embedding failures degrade to text scoring.
 // The default app path uses the local Unicode n-gram provider, which avoids
-// network dependency while preserving multilingual recall.
+// network dependency while preserving multilingual recall. Text-only candidate
+// generation is index-backed; bounded unanchored scans are reserved for
+// vector-enabled recall where vectors need a candidate sample.
 // All retrieved facts are currently-valid (`invalid_at IS NULL`) by default —
 // callers can pass `asOf` for historical queries.
 // ---------------------------------------------------------------------------
@@ -46,8 +48,8 @@ const DEFAULT_TEXT_WEIGHT = 0.4;
 const DEFAULT_LOCAL_VECTOR_WEIGHT = 0.2;
 const DEFAULT_LOCAL_TEXT_WEIGHT = 0.8;
 const PINNED_BOOST = 0.25;
-const CANDIDATE_POOL_LIMIT = 2_000;
-const CANDIDATE_POOL_MAX = 10_000;
+const CANDIDATE_POOL_LIMIT = 512;
+const CANDIDATE_POOL_MAX = 2_000;
 const LOCAL_QUERY_EMBEDDING_BACKFILL_LIMIT = 512;
 const RELEVANCE_EPSILON = 1e-6;
 const TRAJECTORY_NEIGHBOR_LIMIT = 4;
@@ -85,7 +87,7 @@ export interface RecallFactsOptions {
   alwaysIncludePinned?: boolean;
   /**
    * Pool of candidates pulled from the store before scoring. Larger = more
-   * recall, slower scoring. Default 500.
+   * recall, slower scoring. Default 512.
    */
   candidatePoolLimit?: number;
 }
@@ -277,10 +279,14 @@ async function buildRecallSelection(
   const now = options.now ?? options.asOf ?? Date.now();
   const candidateScopes = getCandidateScopes(options);
   const queryUnits = tokenizeLexicalUnits(trimmedQuery);
+  const includeUnanchoredCandidates = Boolean(
+    trimmedQuery && options.embeddingConfig && vectorWeight > 0,
+  );
 
   const candidates = listFactsForRecallCandidates({
     limit: candidatePool,
     lexicalUnits: Array.from(queryUnits),
+    includeUnanchoredCandidates,
     ...(options.conversationId ? { scopedRecentConversationId: options.conversationId } : {}),
     ...(options.taskId ? { scopedRecentTaskId: options.taskId } : {}),
     ...(candidateScopes ? { scope: candidateScopes } : {}),
@@ -417,6 +423,7 @@ export async function backfillFactEmbeddings(
   const maxFacts = Math.max(1, Math.min(options.maxFacts ?? 32, CANDIDATE_POOL_MAX));
   const candidates = listFactsForRecallCandidates({
     limit: Math.max(CANDIDATE_POOL_LIMIT, maxFacts),
+    includeUnanchoredCandidates: true,
     ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
   }).filter((fact) => !fact.embedding || fact.embedding.length === 0);
 

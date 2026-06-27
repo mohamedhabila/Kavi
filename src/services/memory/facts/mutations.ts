@@ -2,6 +2,7 @@ import { getSchemaReadyMemoryDb } from '../access/schemaGuard';
 import { runMemoryStatement } from '../access/crud';
 import { fnv1aHash, newId, safeParseObject } from '../schema';
 import { notifyStructuredMemoryChanged } from '../store';
+import { deleteFactRetrievalTerms, replaceFactRetrievalTerms } from './retrievalIndex';
 import {
   clamp01,
   normalizeDecayPolicy,
@@ -134,24 +135,26 @@ export function recordFact(input: RecordFactInput): RecordFactResult {
       now,
       existing.id,
     );
+    const fact = rowToFact({
+      ...existing,
+      attributes: JSON.stringify(merged),
+      updated_at: now,
+      confidence: Math.max(existing.confidence, confidence),
+      importance: Math.max(existing.importance ?? 0.5, importance),
+      retrievability: Math.max(existing.retrievability ?? 1, retrievability),
+      stability: Math.max(existing.stability ?? 0.5, stability),
+      decay_rate: Math.min(existing.decay_rate ?? 0.03, decayRate),
+      review_state: reviewState,
+      sensitivity,
+      memory_kind: memoryKind,
+      repeated_mention_count: (existing.repeated_mention_count ?? 0) + 1,
+      last_reinforced_at: now,
+      last_accessed_at: now,
+    });
+    replaceFactRetrievalTerms(fact);
     notifyStructuredMemoryChanged(existing.origin_conversation_id);
     return {
-      fact: rowToFact({
-        ...existing,
-        attributes: JSON.stringify(merged),
-        updated_at: now,
-        confidence: Math.max(existing.confidence, confidence),
-        importance: Math.max(existing.importance ?? 0.5, importance),
-        retrievability: Math.max(existing.retrievability ?? 1, retrievability),
-        stability: Math.max(existing.stability ?? 0.5, stability),
-        decay_rate: Math.min(existing.decay_rate ?? 0.03, decayRate),
-        review_state: reviewState,
-        sensitivity,
-        memory_kind: memoryKind,
-        repeated_mention_count: (existing.repeated_mention_count ?? 0) + 1,
-        last_reinforced_at: now,
-        last_accessed_at: now,
-      }),
+      fact,
       status: 'duplicate',
       superseded: [],
     };
@@ -263,6 +266,7 @@ export function recordFact(input: RecordFactInput): RecordFactResult {
     fact.sensitivity,
     fact.memoryKind,
   );
+  replaceFactRetrievalTerms(fact);
   notifyStructuredMemoryChanged(fact.originConversationId);
   return { fact, status: 'created', superseded };
 }
@@ -297,7 +301,9 @@ export function invalidateFact(id: string, now = Date.now()): boolean {
     id,
   );
   const changed = (result.changes ?? 0) > 0;
-  if (changed) notifyStructuredMemoryChanged();
+  if (changed) {
+    notifyStructuredMemoryChanged();
+  }
   return changed;
 }
 
@@ -311,7 +317,10 @@ export function softDeleteFact(id: string, now = Date.now()): boolean {
     id,
   );
   const changed = (result.changes ?? 0) > 0;
-  if (changed) notifyStructuredMemoryChanged();
+  if (changed) {
+    deleteFactRetrievalTerms(id);
+    notifyStructuredMemoryChanged();
+  }
   return changed;
 }
 

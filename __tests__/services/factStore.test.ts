@@ -7,7 +7,7 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
+import { closeMemoryDb, getMemoryDb } from '../../src/services/memory/sqlite-store';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { findEntityByName, getEntityById, softDeleteEntity, upsertEntity } from '../../src/services/memory/entities';
 import { invalidateFact, recordFact, setFactPinned, softDeleteFact } from '../../src/services/memory/facts/mutations';
@@ -191,6 +191,33 @@ describe('recordFact', () => {
     });
     expect(r.fact.sourceMessageId).toBe('m_42');
     expect(r.fact.sourceRunId).toBe('run_7');
+  });
+
+  it('maintains indexed retrieval terms for active facts', () => {
+    const r = recordFact({
+      subjectId: userId,
+      predicate: 'route_code',
+      objectText: 'QNEEDLE active memory',
+      memoryKind: 'semantic_fact',
+    });
+    const db = getMemoryDb();
+    expect(
+      db.getFirstSync<{ count: number }>(
+        `SELECT COUNT(*) AS count
+           FROM memory_fact_terms
+          WHERE fact_id = ? AND unit = ?`,
+        r.fact.id,
+        'qneedle',
+      )?.count,
+    ).toBe(1);
+
+    expect(softDeleteFact(r.fact.id)).toBe(true);
+    expect(
+      db.getFirstSync<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM memory_fact_terms WHERE fact_id = ?',
+        r.fact.id,
+      )?.count,
+    ).toBe(0);
   });
 
   it('persists typed retrieval metadata for non-semantic memories', () => {
