@@ -193,6 +193,9 @@ async function main(): Promise<void> {
   const { buildUnifiedMemoryAccessContext } = await import(
     '../../src/services/memory/memoryAccessGateway'
   );
+  const { orchestrateMemoryRetrieval } = await import(
+    '../../src/services/memory/retrievalOrchestrator'
+  );
   resetFactSchemaCacheForTests();
   ensureFactSchema();
 
@@ -277,6 +280,47 @@ async function main(): Promise<void> {
       now,
     });
   const appBridgeBeforeBackfill = await buildBridgeDiagnostic();
+  const appOrchestratorBeforeBackfill = await orchestrateMemoryRetrieval({
+    userMessage: args.query,
+    conversationId,
+    embeddingConfig: { provider: 'local', model: 'unicode-char-ngram-v1', dimensions: 384 },
+    limit: args.limit,
+    goals: [
+      {
+        id: `diagnostic-question-${now}`,
+        title: args.query,
+        status: 'active',
+        dependencies: [],
+        evidence: [],
+        createdAt: now,
+        updatedAt: now,
+        completionPolicy: 'persistent',
+      },
+    ],
+    now,
+  });
+  const appSignalRecalls = await Promise.all(
+    appOrchestratorBeforeBackfill.querySignals.slice(0, 12).map(async (signal) => ({
+      signal,
+      uiTextOnly: (
+        await recallScoredFactsForQuery(signal, {
+          conversationId,
+          memoryKind: ['ui_inventory', 'ui_field', 'ui_filter_state'],
+          vectorWeight: 0,
+          textWeight: 1,
+          threshold: 0,
+          limit: args.limit,
+        })
+      ).map((entry) => ({
+        sourceRunId: entry.fact.sourceRunId,
+        memoryKind: entry.fact.memoryKind,
+        score: entry.score,
+        relevanceScore: entry.relevanceScore,
+        textScore: entry.textScore,
+        objectText: entry.fact.objectText.slice(0, 260),
+      })),
+    })),
+  );
   const embeddedCount = await backfillFactEmbeddings(
     { provider: 'local', model: 'unicode-char-ngram-v1' },
     { maxFacts: 3_000 },
@@ -356,6 +400,31 @@ async function main(): Promise<void> {
         .map((section) => section.text)
         .join('\n\n')
         .slice(0, 2000),
+    },
+    appOrchestratorBeforeBackfill: {
+      querySignals: appOrchestratorBeforeBackfill.querySignals,
+      signalRecalls: appSignalRecalls,
+      selected: appOrchestratorBeforeBackfill.scoredFacts.map((entry) => ({
+        sourceRunId: entry.fact.sourceRunId,
+        memoryKind: entry.fact.memoryKind,
+        score: entry.score,
+        relevanceScore: entry.relevanceScore,
+        textScore: entry.textScore,
+        vectorScore: entry.vectorScore,
+        objectText: entry.fact.objectText.slice(0, 260),
+      })),
+      lanes: appOrchestratorBeforeBackfill.lanes.map((lane) => ({
+        id: lane.id,
+        selected: lane.scoredFacts.map((entry) => ({
+          sourceRunId: entry.fact.sourceRunId,
+          memoryKind: entry.fact.memoryKind,
+          score: entry.score,
+          relevanceScore: entry.relevanceScore,
+          textScore: entry.textScore,
+          vectorScore: entry.vectorScore,
+          objectText: entry.fact.objectText.slice(0, 260),
+        })),
+      })),
     },
     appBridgeAfterBackfill: {
       recalledFactCount: appBridgeAfterBackfill.livingMemory?.recalledFactCount ?? 0,

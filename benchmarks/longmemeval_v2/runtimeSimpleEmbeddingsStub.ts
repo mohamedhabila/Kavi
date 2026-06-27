@@ -1,7 +1,8 @@
 import type { EmbeddingConfig } from '../../src/types/memory';
 
 const DEFAULT_DIMENSIONS = 384;
-const CODE_POINT_PATTERN = /[\p{L}\p{M}\p{N}]/u;
+const LOCAL_FEATURE_SEQUENCE_PATTERN = /[\p{L}\p{M}\p{N}]+/gu;
+const LOCAL_FEATURE_CODE_POINT_PATTERN = /[\p{L}\p{N}]/u;
 const MODEL = 'unicode-char-ngram-v1';
 
 export const DEFAULT_LOCAL_EMBEDDING_CONFIG: EmbeddingConfig = {
@@ -26,24 +27,37 @@ function addFeature(vector: number[], feature: string, weight: number): void {
   vector[index] += sign * weight;
 }
 
-function normalizedCodePoints(text: string): string[] {
-  return Array.from(text.normalize('NFKC').toLocaleLowerCase()).filter((char) =>
-    CODE_POINT_PATTERN.test(char),
-  );
+function normalizedText(text: string): string {
+  return text.normalize('NFKC').toLocaleLowerCase();
+}
+
+function sequenceCodePoints(sequence: string): string[] {
+  return Array.from(sequence).filter((char) => LOCAL_FEATURE_CODE_POINT_PATTERN.test(char));
 }
 
 export function getLocalTextEmbedding(text: string, dimensions = DEFAULT_DIMENSIONS): number[] {
   const vector = Array.from({ length: dimensions }, () => 0);
-  const chars = normalizedCodePoints(text);
-  if (chars.length === 0) return vector;
+  const normalized = normalizedText(text);
+  let featureCount = 0;
 
-  for (const width of [2, 3, 4]) {
-    if (chars.length < width) continue;
-    for (let index = 0; index <= chars.length - width; index += 1) {
-      addFeature(vector, `${width}:${chars.slice(index, index + width).join('')}`, 1 / width);
+  LOCAL_FEATURE_SEQUENCE_PATTERN.lastIndex = 0;
+  for (const match of normalized.matchAll(LOCAL_FEATURE_SEQUENCE_PATTERN)) {
+    const sequence = match[0];
+    const chars = sequenceCodePoints(sequence);
+    if (chars.length === 0) continue;
+    addFeature(vector, `seq:${sequence}`, 0.8);
+    featureCount += 1;
+    for (const width of [2, 3, 4]) {
+      if (chars.length < width) continue;
+      const weight = 1 / width;
+      for (let index = 0; index <= chars.length - width; index += 1) {
+        addFeature(vector, `${width}:${chars.slice(index, index + width).join('')}`, weight);
+        featureCount += 1;
+      }
     }
   }
 
+  if (featureCount === 0) return vector;
   let norm = 0;
   for (const value of vector) norm += value * value;
   norm = Math.sqrt(norm);
