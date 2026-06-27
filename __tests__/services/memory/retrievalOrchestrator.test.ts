@@ -303,13 +303,8 @@ describe('orchestrateMemoryRetrieval', () => {
       now: 200,
     });
 
-    expect(result.querySignals[0]).toContain('Fraud Suspect Resolution');
-    expect(result.querySignals).toEqual(
-      expect.arrayContaining([expect.stringContaining('On the admin orders page')]),
-    );
-    expect(
-      result.querySignals.some((signal) => !signal.includes('Fraud Suspect Resolution')),
-    ).toBe(true);
-    expect(result.facts.some((fact) => fact.id === relevant.id)).toBe(true);
+    expect(result.querySignals[0]).toContain('On the admin orders page');
+    expect(result.querySignals[0]).not.toContain('Fraud Suspect Resolution');
+    expect(result.facts.map((fact) => fact.id)).toEqual([relevant.id]);
   });
 });

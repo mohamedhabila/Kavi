@@ -49,8 +49,8 @@ export function planRetrievalSignals(rawSignals: ReadonlyArray<string>): Retriev
     if (cleaned) {
       const redacted = normalizeSignal(redactQuotedSpans(cleaned));
       if (redacted && redacted !== cleaned && contentCharCount(redacted) >= MIN_REDACTED_CONTENT_CHARS) {
-        addUniqueSignal(primarySignals, fitSignal(cleaned), MAX_PRIMARY_SIGNALS);
-        addUniqueSignal(supportingSignals, fitSignal(redacted), MAX_SUPPORTING_SIGNALS);
+        addUniqueSignal(primarySignals, fitSignal(redacted), MAX_PRIMARY_SIGNALS);
+        addUniqueSignal(supportingSignals, fitSignal(cleaned), MAX_SUPPORTING_SIGNALS);
       } else {
         addUniqueSignal(primarySignals, fitSignal(cleaned), MAX_PRIMARY_SIGNALS);
       }
