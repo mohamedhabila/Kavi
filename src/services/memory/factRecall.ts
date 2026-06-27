@@ -28,13 +28,14 @@
 import type { EmbeddingConfig } from '../../types/memory';
 import { getEmbeddingCached, isLocalEmbeddingConfig } from './embeddings';
 import { markFactsRecalled, setFactEmbedding } from './facts/mutations';
-import { listFactsForRecallCandidates } from './facts/queries';
-import { type MemoryFact, type MemoryFactKind, type MemoryFactScope } from './facts/types';
 import {
-  buildQueryUnitWeights,
-  lexicalOverlap,
-  tokenizeLexicalUnits,
-} from './ranking/lexical';
+  listFactsForRecallCandidates,
+  listFactTermUnitHitsForFacts,
+  listUiInventoriesForObservationContexts,
+  selectIndexedLexicalUnitsForRecall,
+} from './facts/queries';
+import { type MemoryFact, type MemoryFactKind, type MemoryFactScope } from './facts/types';
+import { countLexicalUnits } from './ranking/lexical';
 import { retrievalTextForFact } from './ranking/factText';
 import { cosineSimilarity } from './ranking/similarity';
 import { exponentialDecayMultiplier } from './ranking/scoring';
@@ -53,6 +54,7 @@ const CANDIDATE_POOL_MAX = 2_000;
 const LOCAL_QUERY_EMBEDDING_ATTACH_LIMIT = 128;
 const RELEVANCE_EPSILON = 1e-6;
 const TRAJECTORY_NEIGHBOR_LIMIT = 4;
+const UI_OBSERVATION_CONTEXT_EXPANSION_LIMIT = 32;
 
 export interface RecallFactsOptions {
   /**
@@ -90,6 +92,33 @@ export interface RecallFactsOptions {
    * recall, slower scoring. Default 128.
    */
   candidatePoolLimit?: number;
+  /**
+   * Maximum indexed lexical units used to fetch candidates. Lower values favor
+   * rare discriminative units and bound SQLite fanout.
+   */
+  lexicalUnitLimit?: number;
+  /** Optional recall-stage telemetry. Used by product diagnostics and benchmarks. */
+  onTiming?: (timing: RecallFactsTiming) => void;
+}
+
+export interface RecallFactsTiming {
+  queryChars: number;
+  queryUnitCount: number;
+  candidateCount: number;
+  candidateHitFactCount: number;
+  tokenizeQueryMs: number;
+  candidateFetchMs: number;
+  candidateBaseFetchMs: number;
+  observationExpansionMs: number;
+  candidateTermHitsMs: number;
+  localEmbeddingsMs: number;
+  unitWeightsMs: number;
+  queryEmbeddingMs: number;
+  scoreMs: number;
+  sortMs: number;
+  diversifyMs: number;
+  selectMs: number;
+  totalMs: number;
 }
 
 export interface ScoredFact {
@@ -110,9 +139,55 @@ function factHaystack(fact: MemoryFact): string {
   return retrievalTextForFact(fact);
 }
 
-function diversifyScoredFacts(scored: ScoredFact[], limit: number): ScoredFact[] {
+function lexicalOverlapFromUnitHits(
+  queryUnits: Set<string>,
+  factUnitHits: ReadonlySet<string> | undefined,
+  unitWeights?: ReadonlyMap<string, number>,
+): number {
+  if (queryUnits.size === 0 || !factUnitHits || factUnitHits.size === 0) return 0;
+  let hits = 0;
+  let total = 0;
+  for (const unit of queryUnits) {
+    const weight = unitWeights?.get(unit) ?? 1;
+    total += weight;
+    if (factUnitHits.has(unit)) hits += weight;
+  }
+  return total > 0 ? hits / total : 0;
+}
+
+function buildQueryUnitWeightsFromHits(
+  queryUnits: Set<string>,
+  candidates: ReadonlyArray<MemoryFact>,
+  candidateUnitHits: ReadonlyMap<string, ReadonlySet<string>>,
+): Map<string, number> {
+  const weights = new Map<string, number>();
+  if (queryUnits.size === 0 || candidates.length === 0) return weights;
+  const documentFrequency = new Map<string, number>();
+  for (const candidate of candidates) {
+    const hits = candidateUnitHits.get(candidate.id);
+    if (!hits || hits.size === 0) continue;
+    for (const unit of queryUnits) {
+      if (hits.has(unit)) {
+        documentFrequency.set(unit, (documentFrequency.get(unit) ?? 0) + 1);
+      }
+    }
+  }
+  const documentCount = candidates.length;
+  for (const unit of queryUnits) {
+    const df = documentFrequency.get(unit) ?? 0;
+    weights.set(unit, Math.log((documentCount + 1) / (df + 1)) + 1);
+  }
+  return weights;
+}
+
+function diversifyScoredFacts(
+  scored: ScoredFact[],
+  limit: number,
+  candidateUnitHits: ReadonlyMap<string, Set<string>>,
+): ScoredFact[] {
   return diversifyTrajectoryAware(scored, limit, {
     textForFact: factHaystack,
+    unitsForFact: (fact) => candidateUnitHits.get(fact.id),
     relevanceEpsilon: RELEVANCE_EPSILON,
     trajectoryNeighborLimit: TRAJECTORY_NEIGHBOR_LIMIT,
   });
@@ -141,6 +216,32 @@ function isFactEligibleForRecall(fact: MemoryFact, options: RecallFactsOptions):
 }
 
 function factSemanticKey(fact: MemoryFact): string {
+  if (fact.memoryKind === 'ui_inventory') {
+    try {
+      const parsed = JSON.parse(fact.objectText) as unknown;
+      const payload = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {};
+      const url = typeof fact.attributes.url === 'string' ? fact.attributes.url : '';
+      const controlNames = Array.isArray(payload.controlNames)
+        ? payload.controlNames.filter((entry): entry is string => typeof entry === 'string').join('\u0001')
+        : '';
+      const fieldLabels = Array.isArray(payload.fieldLabels)
+        ? payload.fieldLabels.filter((entry): entry is string => typeof entry === 'string').join('\u0001')
+        : '';
+      if (url || controlNames || fieldLabels) {
+        return [
+          fact.subjectId,
+          fact.predicate.normalize('NFKC').toLocaleLowerCase().trim(),
+          url.normalize('NFKC').toLocaleLowerCase().trim(),
+          controlNames.normalize('NFKC').toLocaleLowerCase().trim(),
+          fieldLabels.normalize('NFKC').toLocaleLowerCase().trim(),
+        ].join('\u0000');
+      }
+    } catch {
+      // Fall through to the exact text key for malformed rows.
+    }
+  }
   return [
     fact.subjectId,
     fact.predicate.normalize('NFKC').toLocaleLowerCase().trim(),
@@ -187,6 +288,8 @@ function buildScoredFact(params: {
   fact: MemoryFact;
   queryUnits: Set<string>;
   queryEmbedding: number[] | null;
+  factUnitHits: ReadonlySet<string> | undefined;
+  sourceUnitHits: ReadonlySet<string> | undefined;
   vectorWeight: number;
   textWeight: number;
   unitWeights: ReadonlyMap<string, number>;
@@ -198,14 +301,21 @@ function buildScoredFact(params: {
     fact,
     queryUnits,
     queryEmbedding,
+    factUnitHits,
+    sourceUnitHits,
     vectorWeight,
     textWeight,
     alwaysIncludePinned,
     options,
     now,
   } = params;
-  const haystack = factHaystack(fact);
-  const textScore = textWeight > 0 ? lexicalOverlap(queryUnits, haystack, params.unitWeights) : 0;
+  const textScore =
+    textWeight > 0
+      ? Math.max(
+          lexicalOverlapFromUnitHits(queryUnits, factUnitHits, params.unitWeights),
+          lexicalOverlapFromUnitHits(queryUnits, sourceUnitHits, params.unitWeights) * 0.72,
+        )
+      : 0;
   const vectorScore =
     queryEmbedding && fact.embedding && fact.embedding.length > 0 && vectorWeight > 0
       ? Math.max(0, cosineSimilarity(queryEmbedding, fact.embedding))
@@ -259,6 +369,26 @@ async function buildRecallSelection(
   query: string,
   options: RecallFactsOptions,
 ): Promise<{ facts: MemoryFact[]; scoredFacts: ScoredFact[] }> {
+  const totalStarted = Date.now();
+  const timing: RecallFactsTiming = {
+    queryChars: query.length,
+    queryUnitCount: 0,
+    candidateCount: 0,
+    candidateHitFactCount: 0,
+    tokenizeQueryMs: 0,
+    candidateFetchMs: 0,
+    candidateBaseFetchMs: 0,
+    observationExpansionMs: 0,
+    candidateTermHitsMs: 0,
+    localEmbeddingsMs: 0,
+    unitWeightsMs: 0,
+    queryEmbeddingMs: 0,
+    scoreMs: 0,
+    sortMs: 0,
+    diversifyMs: 0,
+    selectMs: 0,
+    totalMs: 0,
+  };
   const limit = Math.max(1, Math.min(options.limit ?? DEFAULT_LIMIT, 50));
   const usesLocalEmbedding = isLocalEmbeddingConfig(options.embeddingConfig);
   const vectorWeight = Math.max(
@@ -278,14 +408,29 @@ async function buildRecallSelection(
   const trimmedQuery = query.trim();
   const now = options.now ?? options.asOf ?? Date.now();
   const candidateScopes = getCandidateScopes(options);
-  const queryUnits = tokenizeLexicalUnits(trimmedQuery);
+  const tokenizeStarted = Date.now();
+  const queryUnitCounts = countLexicalUnits(trimmedQuery);
+  const queryUnits = new Set(queryUnitCounts.keys());
+  const lexicalUnitsForRecall = Array.from(queryUnitCounts.entries()).flatMap(([unit, count]) =>
+    Array.from({ length: Math.max(1, Math.min(count, 16)) }, () => unit),
+  );
+  const selectedLexicalUnits = selectIndexedLexicalUnitsForRecall(lexicalUnitsForRecall, {
+    ...(options.memoryKind ? { memoryKind: options.memoryKind } : {}),
+    ...(options.lexicalUnitLimit ? { lexicalUnitLimit: options.lexicalUnitLimit } : {}),
+  });
+  const scoringQueryUnits =
+    selectedLexicalUnits.length > 0 ? new Set(selectedLexicalUnits) : queryUnits;
+  timing.tokenizeQueryMs = Date.now() - tokenizeStarted;
+  timing.queryUnitCount = queryUnits.size;
   const includeUnanchoredCandidates = Boolean(
     trimmedQuery && options.embeddingConfig && vectorWeight > 0 && !usesLocalEmbedding,
   );
 
+  const candidateFetchStarted = Date.now();
   const candidates = listFactsForRecallCandidates({
     limit: candidatePool,
-    lexicalUnits: Array.from(queryUnits),
+    lexicalUnits: lexicalUnitsForRecall,
+    selectedLexicalUnits,
     includeUnanchoredCandidates,
     ...(options.conversationId ? { scopedRecentConversationId: options.conversationId } : {}),
     ...(options.taskId ? { scopedRecentTaskId: options.taskId } : {}),
@@ -294,21 +439,90 @@ async function buildRecallSelection(
     ...(options.includeHistorical ? { includeInvalidated: true } : {}),
     ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
   }).filter((fact) => isFactEligibleForRecall(fact, options));
+  timing.candidateBaseFetchMs = Date.now() - candidateFetchStarted;
+  if (
+    Array.isArray(options.memoryKind)
+      ? options.memoryKind.includes('ui_inventory')
+      : options.memoryKind === 'ui_inventory'
+  ) {
+    const observationExpansionStarted = Date.now();
+    const observationInventoryNeighbors = listUiInventoriesForObservationContexts(
+      candidates
+        .filter((fact) => fact.memoryKind !== 'ui_inventory')
+        .slice(0, UI_OBSERVATION_CONTEXT_EXPANSION_LIMIT)
+        .map((fact) => ({
+          sourceRunId: fact.sourceRunId,
+          stateIndex:
+            typeof fact.attributes.stateIndex === 'string' ||
+            typeof fact.attributes.stateIndex === 'number'
+              ? fact.attributes.stateIndex
+              : null,
+          url: typeof fact.attributes.url === 'string' ? fact.attributes.url : null,
+        })),
+      {
+        limit: 32,
+        ...(options.includeHistorical ? { includeInvalidated: true } : {}),
+        ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
+      },
+    ).filter((fact) => isFactEligibleForRecall(fact, options));
+    const seenCandidateIds = new Set(candidates.map((fact) => fact.id));
+    for (const fact of observationInventoryNeighbors) {
+      if (seenCandidateIds.has(fact.id)) continue;
+      candidates.push(fact);
+      seenCandidateIds.add(fact.id);
+    }
+    timing.observationExpansionMs = Date.now() - observationExpansionStarted;
 
-  if (trimmedQuery && vectorWeight > 0 && options.embeddingConfig) {
-    await maybeAttachLocalCandidateEmbeddings(candidates, queryUnits, options.embeddingConfig);
   }
-  const unitWeights = buildQueryUnitWeights(queryUnits, candidates, factHaystack);
+  timing.candidateFetchMs = Date.now() - candidateFetchStarted;
+  timing.candidateCount = candidates.length;
+  const candidateTermHitsStarted = Date.now();
+  const candidateUnitHits = listFactTermUnitHitsForFacts(
+    candidates.map((fact) => fact.id),
+    Array.from(scoringQueryUnits),
+  );
+  const sourceUnitHits = new Map<string, Set<string>>();
+  for (const fact of candidates) {
+    if (!fact.sourceRunId) continue;
+    const hits = candidateUnitHits.get(fact.id);
+    if (!hits || hits.size === 0) continue;
+    const sourceHits = sourceUnitHits.get(fact.sourceRunId) ?? new Set<string>();
+    for (const unit of hits) sourceHits.add(unit);
+    sourceUnitHits.set(fact.sourceRunId, sourceHits);
+  }
+  timing.candidateTermHitsMs = Date.now() - candidateTermHitsStarted;
+  timing.candidateHitFactCount = candidateUnitHits.size;
 
+  if (trimmedQuery && candidates.length > 0 && vectorWeight > 0 && options.embeddingConfig) {
+    const localEmbeddingsStarted = Date.now();
+    await maybeAttachLocalCandidateEmbeddings(
+      candidates,
+      scoringQueryUnits,
+      candidateUnitHits,
+      options.embeddingConfig,
+    );
+    timing.localEmbeddingsMs = Date.now() - localEmbeddingsStarted;
+  }
+  const unitWeightsStarted = Date.now();
+  const unitWeights = buildQueryUnitWeightsFromHits(scoringQueryUnits, candidates, candidateUnitHits);
+  timing.unitWeightsMs = Date.now() - unitWeightsStarted;
+
+  const queryEmbeddingStarted = Date.now();
+  const hasVectorCandidates =
+    vectorWeight > 0 && candidates.some((fact) => fact.embedding && fact.embedding.length > 0);
   const queryEmbedding =
-    trimmedQuery && vectorWeight > 0
+    trimmedQuery && hasVectorCandidates
       ? await maybeEmbedQuery(trimmedQuery, options.embeddingConfig)
       : null;
+  timing.queryEmbeddingMs = Date.now() - queryEmbeddingStarted;
+  const scoreStarted = Date.now();
   const scored = candidates.map((fact) =>
     buildScoredFact({
       fact,
-      queryUnits,
+      queryUnits: scoringQueryUnits,
       queryEmbedding,
+      factUnitHits: candidateUnitHits.get(fact.id),
+      sourceUnitHits: fact.sourceRunId ? sourceUnitHits.get(fact.sourceRunId) : undefined,
       vectorWeight,
       textWeight,
       unitWeights,
@@ -317,12 +531,16 @@ async function buildRecallSelection(
       now,
     }),
   );
+  timing.scoreMs = Date.now() - scoreStarted;
+  const sortStarted = Date.now();
   scored.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
     return b.fact.updatedAt - a.fact.updatedAt;
   });
+  timing.sortMs = Date.now() - sortStarted;
   const scoredById = new Map(scored.map((entry) => [entry.fact.id, entry]));
 
+  const selectStarted = Date.now();
   const selected: MemoryFact[] = [];
   const seenIds = new Set<string>();
   const seenSemanticKeys = new Set<string>();
@@ -338,13 +556,18 @@ async function buildRecallSelection(
   if (trimmedQuery && selected.length < limit) {
     const defaultThreshold = queryEmbedding ? DEFAULT_VECTOR_THRESHOLD : DEFAULT_TEXT_THRESHOLD;
     const threshold = options.threshold ?? defaultThreshold;
-    const diversified = diversifyScoredFacts(scored, limit);
+    const diversifyStarted = Date.now();
+    const diversified = diversifyScoredFacts(scored, limit, candidateUnitHits);
+    timing.diversifyMs = Date.now() - diversifyStarted;
     for (const entry of diversified) {
       if (entry.relevanceScore < threshold) continue;
       addSelectedFact({ selected, seenIds, seenSemanticKeys, fact: entry.fact, limit });
       if (selected.length >= limit) break;
     }
   }
+  timing.selectMs = Date.now() - selectStarted;
+  timing.totalMs = Date.now() - totalStarted;
+  options.onTiming?.(timing);
 
   return {
     facts: selected,
@@ -367,6 +590,7 @@ async function maybeEmbedQuery(
 async function maybeAttachLocalCandidateEmbeddings(
   candidates: MemoryFact[],
   queryUnits: Set<string>,
+  candidateUnitHits: ReadonlyMap<string, ReadonlySet<string>>,
   config: EmbeddingConfig,
 ): Promise<void> {
   if (!isLocalEmbeddingConfig(config)) return;
@@ -374,7 +598,7 @@ async function maybeAttachLocalCandidateEmbeddings(
     .filter((fact) => !fact.embedding || fact.embedding.length === 0)
     .map((fact) => ({
       fact,
-      textScore: lexicalOverlap(queryUnits, factHaystack(fact)),
+      textScore: lexicalOverlapFromUnitHits(queryUnits, candidateUnitHits.get(fact.id)),
       strength: Math.max(fact.lastReinforcedAt ?? 0, fact.updatedAt, fact.validAt),
     }))
     .sort((a, b) => {

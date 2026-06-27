@@ -17,7 +17,8 @@ const DEFAULT_RECALL_CANDIDATE_LIMIT = 128;
 const MAX_RECALL_CANDIDATE_LIMIT = 2_000;
 const DEFAULT_RECALL_PINNED_LIMIT = 64;
 const DEFAULT_RECALL_SCOPED_RECENT_LIMIT = 192;
-const DEFAULT_RECALL_LEXICAL_UNIT_LIMIT = 64;
+const DEFAULT_RECALL_LEXICAL_UNIT_LIMIT = 12;
+const MAX_RECALL_LEXICAL_UNIT_LIMIT = 32;
 
 interface FactFilter {
   clauses: string[];
@@ -90,14 +91,68 @@ function clampLimit(value: number | undefined, fallback: number, max: number): n
   return Math.max(1, Math.min(value ?? fallback, max));
 }
 
-function prioritizeLexicalUnits(units: string[]): string[] {
-  return units
-    .map((unit, index) => ({ unit, index }))
+export function selectIndexedLexicalUnitsForRecall(
+  units: string[],
+  options: Pick<ListFactsForRecallCandidatesOptions, 'memoryKind' | 'lexicalUnitLimit'>,
+): string[] {
+  const unitStats = new Map<string, { index: number; queryCount: number }>();
+  for (const rawUnit of units) {
+    const unit = rawUnit.trim();
+    if (!unit) continue;
+    const existing = unitStats.get(unit);
+    if (existing) {
+      existing.queryCount += 1;
+    } else {
+      unitStats.set(unit, { index: unitStats.size, queryCount: 1 });
+    }
+  }
+  const uniqueUnits = Array.from(unitStats.keys());
+  if (uniqueUnits.length === 0) return [];
+  const maxUnits = clampLimit(
+    options.lexicalUnitLimit,
+    DEFAULT_RECALL_LEXICAL_UNIT_LIMIT,
+    MAX_RECALL_LEXICAL_UNIT_LIMIT,
+  );
+  const termClauses = [`unit IN (${uniqueUnits.map(() => '?').join(', ')})`];
+  const params: SqlBindValue[] = [...uniqueUnits];
+  if (options.memoryKind) {
+    const kinds = Array.isArray(options.memoryKind) ? options.memoryKind : [options.memoryKind];
+    termClauses.push(`memory_kind IN (${kinds.map(() => '?').join(', ')})`);
+    params.push(...kinds);
+  }
+  const rows = getMany<{ unit: string; hit_count: number }>(
+    `SELECT unit, SUM(fact_count) AS hit_count
+       FROM memory_fact_term_stats
+      WHERE ${termClauses.join(' AND ')}
+      GROUP BY unit`,
+    ...params,
+  );
+  const hitCounts = new Map(rows.map((row) => [row.unit, row.hit_count]));
+  const maxHitCount = Math.max(1, ...Array.from(hitCounts.values()));
+  const positiveEntries = uniqueUnits
+    .map((unit) => {
+      const stats = unitStats.get(unit) ?? { index: 0, queryCount: 1 };
+      const hitCount = hitCounts.get(unit) ?? 0;
+      const inverseFrequency = Math.log((maxHitCount + 1) / (hitCount + 1)) + 1;
+      return {
+        unit,
+        index: stats.index,
+        hitCount,
+        score: stats.queryCount * inverseFrequency,
+      };
+    })
+    .filter((entry) => entry.hitCount > 0);
+  const ranked = positiveEntries
     .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score;
+      if (left.hitCount !== right.hitCount) return left.hitCount - right.hitCount;
       if (right.unit.length !== left.unit.length) return right.unit.length - left.unit.length;
       return left.index - right.index;
     })
+    .slice(0, maxUnits)
     .map((entry) => entry.unit);
+  if (ranked.length > 0) return ranked;
+  return uniqueUnits.slice(0, maxUnits);
 }
 
 export function listFacts(options: ListFactsOptions = {}): MemoryFact[] {
@@ -114,6 +169,7 @@ export function listFacts(options: ListFactsOptions = {}): MemoryFact[] {
 
 export interface ListFactsForRecallCandidatesOptions extends ListFactsOptions {
   lexicalUnits?: string[];
+  selectedLexicalUnits?: string[];
   scopedRecentConversationId?: string;
   scopedRecentTaskId?: string;
   pinnedLimit?: number;
@@ -174,7 +230,7 @@ export function listFactsForRecallCandidates(
     });
     const rows = getMany<FactRow>(
       `SELECT f.*
-         FROM memory_fact_terms t
+         FROM memory_fact_terms AS t INDEXED BY idx_fact_terms_unit_kind_fact
          JOIN memory_facts f ON f.id = t.fact_id
          ${where}
         GROUP BY f.id
@@ -197,16 +253,15 @@ export function listFactsForRecallCandidates(
   addRows(
     ['pinned = 1'],
     [],
-    'updated_at DESC',
+    'pinned DESC, retrievability DESC, importance DESC, updated_at DESC',
     clampLimit(options.pinnedLimit, DEFAULT_RECALL_PINNED_LIMIT, totalLimit),
   );
 
-  const lexicalUnits = Array.from(
-    new Set((options.lexicalUnits ?? []).map((unit) => unit.trim()).filter(Boolean)),
-  ).slice(0, clampLimit(options.lexicalUnitLimit, DEFAULT_RECALL_LEXICAL_UNIT_LIMIT, 64));
-  const prioritizedLexicalUnits = prioritizeLexicalUnits(lexicalUnits);
-  if (prioritizedLexicalUnits.length > 0) {
-    addIndexedLexicalRows(prioritizedLexicalUnits, totalLimit);
+  const lexicalUnits = options.selectedLexicalUnits?.length
+    ? Array.from(new Set(options.selectedLexicalUnits.map((unit) => unit.trim()).filter(Boolean)))
+    : selectIndexedLexicalUnitsForRecall(options.lexicalUnits ?? [], options);
+  if (lexicalUnits.length > 0) {
+    addIndexedLexicalRows(lexicalUnits, totalLimit);
   }
 
   const scopedClauses: string[] = [];
@@ -237,6 +292,169 @@ export function listFactsForRecallCandidates(
     );
   }
 
+  return Array.from(byId.values());
+}
+
+export function listFactTermUnitHitsForFacts(
+  factIds: ReadonlyArray<string>,
+  queryUnits: ReadonlyArray<string>,
+): Map<string, Set<string>> {
+  const uniqueFactIds = Array.from(
+    new Set(factIds.map((id) => id.trim()).filter((id) => id.length > 0)),
+  );
+  const uniqueQueryUnits = Array.from(
+    new Set(queryUnits.map((unit) => unit.trim()).filter((unit) => unit.length > 0)),
+  );
+  const hits = new Map<string, Set<string>>();
+  if (uniqueFactIds.length === 0 || uniqueQueryUnits.length === 0) return hits;
+  const rows = getMany<{ fact_id: string; unit: string }>(
+    `SELECT fact_id, unit
+       FROM memory_fact_terms INDEXED BY idx_fact_terms_fact
+      WHERE fact_id IN (${uniqueFactIds.map(() => '?').join(', ')})
+        AND unit IN (${uniqueQueryUnits.map(() => '?').join(', ')})`,
+    ...uniqueFactIds,
+    ...uniqueQueryUnits,
+  );
+  for (const row of rows) {
+    const units = hits.get(row.fact_id) ?? new Set<string>();
+    units.add(row.unit);
+    hits.set(row.fact_id, units);
+  }
+  return hits;
+}
+
+export function listFactsForSourceRuns(
+  sourceRunIds: ReadonlyArray<string>,
+  options: Pick<ListFactsOptions, 'memoryKind' | 'includeDeleted' | 'includeExpired' | 'includeInvalidated' | 'asOf'> & {
+    limit?: number;
+  } = {},
+): MemoryFact[] {
+  const uniqueSourceRunIds = Array.from(
+    new Set(sourceRunIds.map((id) => id.trim()).filter((id) => id.length > 0)),
+  );
+  if (uniqueSourceRunIds.length === 0) return [];
+  const filter = buildFactFilter(options);
+  const limit = clampLimit(options.limit, uniqueSourceRunIds.length, MAX_FACT_LIMIT);
+  const rows = getMany<FactRow>(
+    `SELECT * FROM memory_facts
+      ${whereSql({
+        clauses: [
+          `source_run_id IN (${uniqueSourceRunIds.map(() => '?').join(', ')})`,
+          ...filter.clauses,
+        ],
+        params: [...uniqueSourceRunIds, ...filter.params],
+      })}
+      ORDER BY source_run_id,
+               CAST(json_extract(attributes, '$.stateIndex') AS INTEGER) DESC,
+               retrievability DESC,
+               importance DESC,
+               updated_at DESC
+      LIMIT ${limit}`,
+    ...uniqueSourceRunIds,
+    ...filter.params,
+  );
+  return rows.map(rowToFact);
+}
+
+export interface FactObservationContext {
+  sourceRunId?: string | null;
+  stateIndex?: string | number | null;
+  url?: string | null;
+}
+
+function scalarToString(value: unknown): string | null {
+  if (typeof value === 'string' && value.trim().length > 0) return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return null;
+}
+
+function factMatchesObservationContext(
+  fact: MemoryFact,
+  context: FactObservationContext,
+): boolean {
+  const contextStateIndex = scalarToString(context.stateIndex);
+  const factStateIndex = scalarToString(fact.attributes.stateIndex);
+  const contextUrl = typeof context.url === 'string' && context.url.trim() ? context.url.trim() : null;
+  const factUrl = typeof fact.attributes.url === 'string' ? fact.attributes.url : null;
+  if (contextStateIndex && factStateIndex === contextStateIndex) {
+    return !contextUrl || factUrl === contextUrl;
+  }
+  return Boolean(contextUrl && factUrl === contextUrl);
+}
+
+export function listUiInventoriesForObservationContexts(
+  contexts: ReadonlyArray<FactObservationContext>,
+  options: Pick<ListFactsOptions, 'includeDeleted' | 'includeExpired' | 'includeInvalidated' | 'asOf'> & {
+    limit?: number;
+  } = {},
+): MemoryFact[] {
+  const normalizedContexts = contexts
+    .map((context) => ({
+      sourceRunId:
+        typeof context.sourceRunId === 'string' && context.sourceRunId.trim()
+          ? context.sourceRunId.trim()
+          : null,
+      stateIndex: scalarToString(context.stateIndex),
+      url: typeof context.url === 'string' && context.url.trim() ? context.url.trim() : null,
+    }))
+    .filter((context) => context.sourceRunId && (context.stateIndex || context.url));
+  if (normalizedContexts.length === 0) return [];
+  const contextLimit = Math.max(1, Math.min(Math.max((options.limit ?? 32) * 2, 32), 96));
+  const boundedContexts = normalizedContexts.slice(0, contextLimit);
+
+  const byId = new Map<string, MemoryFact>();
+  const limit = clampLimit(options.limit, boundedContexts.length, MAX_FACT_LIMIT);
+  const filter = buildFactFilter({
+    memoryKind: 'ui_inventory',
+    ...(options.includeDeleted ? { includeDeleted: true } : {}),
+    ...(options.includeExpired ? { includeExpired: true } : {}),
+    ...(options.includeInvalidated ? { includeInvalidated: true } : {}),
+    ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
+  });
+  for (const context of boundedContexts) {
+    if (!context.sourceRunId) continue;
+    if (byId.size >= limit) return Array.from(byId.values());
+    const matchClauses: string[] = [];
+    const matchParams: SqlBindValue[] = [];
+    if (context.stateIndex && context.url) {
+      matchClauses.push(
+        `(json_extract(attributes, '$.stateIndex') = ? AND json_extract(attributes, '$.url') = ?)`,
+      );
+      matchParams.push(context.stateIndex, context.url);
+    } else if (context.stateIndex) {
+      matchClauses.push(`json_extract(attributes, '$.stateIndex') = ?`);
+      matchParams.push(context.stateIndex);
+    }
+    if (context.url) {
+      matchClauses.push(`json_extract(attributes, '$.url') = ?`);
+      matchParams.push(context.url);
+    }
+    if (matchClauses.length === 0) continue;
+    const rows = getMany<FactRow>(
+      `SELECT * FROM memory_facts
+        ${whereSql({
+          clauses: [
+            'source_run_id = ?',
+            `(${matchClauses.join(' OR ')})`,
+            ...filter.clauses,
+          ],
+          params: [context.sourceRunId, ...matchParams, ...filter.params],
+        })}
+        ORDER BY retrievability DESC, importance DESC, updated_at DESC
+        LIMIT ${limit - byId.size}`,
+      context.sourceRunId,
+      ...matchParams,
+      ...filter.params,
+    );
+    for (const row of rows) {
+      const fact = rowToFact(row);
+      if (!factMatchesObservationContext(fact, context)) continue;
+      byId.set(fact.id, fact);
+      if (byId.size >= limit) {
+        return Array.from(byId.values());
+      }
+    }
+  }
   return Array.from(byId.values());
 }
 

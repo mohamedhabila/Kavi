@@ -70,12 +70,42 @@ export function ensureFactSchema(): void {
       weight REAL NOT NULL DEFAULT 1.0,
       PRIMARY KEY (fact_id, unit)
     );
-    CREATE INDEX IF NOT EXISTS idx_fact_terms_unit_kind
-      ON memory_fact_terms(unit, memory_kind);
+    CREATE INDEX IF NOT EXISTS idx_fact_terms_unit_kind_fact
+      ON memory_fact_terms(unit, memory_kind, fact_id, weight);
     CREATE INDEX IF NOT EXISTS idx_fact_terms_fact
       ON memory_fact_terms(fact_id);
     CREATE INDEX IF NOT EXISTS idx_fact_terms_source
       ON memory_fact_terms(source_run_id);
+
+    CREATE TABLE IF NOT EXISTS memory_fact_term_stats (
+      unit TEXT NOT NULL,
+      memory_kind TEXT NOT NULL,
+      fact_count INTEGER NOT NULL DEFAULT 0,
+      total_weight REAL NOT NULL DEFAULT 0,
+      PRIMARY KEY (unit, memory_kind)
+    );
+    CREATE TRIGGER IF NOT EXISTS trg_memory_fact_terms_insert_stats
+      AFTER INSERT ON memory_fact_terms
+      BEGIN
+        INSERT INTO memory_fact_term_stats(unit, memory_kind, fact_count, total_weight)
+        VALUES (NEW.unit, NEW.memory_kind, 1, NEW.weight)
+        ON CONFLICT(unit, memory_kind) DO UPDATE SET
+          fact_count = fact_count + 1,
+          total_weight = total_weight + NEW.weight;
+      END;
+    CREATE TRIGGER IF NOT EXISTS trg_memory_fact_terms_delete_stats
+      AFTER DELETE ON memory_fact_terms
+      BEGIN
+        UPDATE memory_fact_term_stats
+           SET fact_count = MAX(0, fact_count - 1),
+               total_weight = MAX(0, total_weight - OLD.weight)
+         WHERE unit = OLD.unit
+           AND memory_kind = OLD.memory_kind;
+        DELETE FROM memory_fact_term_stats
+         WHERE unit = OLD.unit
+           AND memory_kind = OLD.memory_kind
+           AND fact_count <= 0;
+      END;
 
     CREATE TABLE IF NOT EXISTS memory_blocks (
       label TEXT PRIMARY KEY,
@@ -225,7 +255,9 @@ export function ensureFactSchema(): void {
       ON memory_reflections(task_id, deleted_at);
   `);
   ensureFactColumns(db);
+  ensureFactTermStats(db);
   db.execSync(`
+    DROP INDEX IF EXISTS idx_fact_terms_unit_kind;
     CREATE INDEX IF NOT EXISTS idx_facts_scope_origin
       ON memory_facts(scope, origin_conversation_id, deleted_at, invalid_at);
     CREATE INDEX IF NOT EXISTS idx_facts_scope_task
@@ -236,6 +268,57 @@ export function ensureFactSchema(): void {
       ON memory_facts(last_recalled_at);
     CREATE INDEX IF NOT EXISTS idx_facts_importance
       ON memory_facts(importance);
+    CREATE INDEX IF NOT EXISTS idx_facts_live_kind_rank
+      ON memory_facts(
+        memory_kind,
+        invalid_at,
+        deleted_at,
+        pinned DESC,
+        retrievability DESC,
+        importance DESC,
+        updated_at DESC
+      );
+    CREATE INDEX IF NOT EXISTS idx_facts_scope_origin_kind_rank
+      ON memory_facts(
+        scope,
+        origin_conversation_id,
+        memory_kind,
+        deleted_at,
+        invalid_at,
+        pinned DESC,
+        importance DESC,
+        updated_at DESC
+      );
+    CREATE INDEX IF NOT EXISTS idx_facts_scope_task_kind_rank
+      ON memory_facts(
+        scope,
+        origin_task_id,
+        memory_kind,
+        deleted_at,
+        invalid_at,
+        pinned DESC,
+        importance DESC,
+        updated_at DESC
+      );
+    CREATE INDEX IF NOT EXISTS idx_facts_scope_kind_rank
+      ON memory_facts(
+        scope,
+        memory_kind,
+        invalid_at,
+        deleted_at,
+        pinned DESC,
+        retrievability DESC,
+        importance DESC,
+        updated_at DESC
+      );
+    CREATE INDEX IF NOT EXISTS idx_facts_source_kind_rank
+      ON memory_facts(
+        source_run_id,
+        memory_kind,
+        invalid_at,
+        deleted_at,
+        updated_at DESC
+      );
   `);
   schemaReady = true;
 }
@@ -297,6 +380,7 @@ export function clearStructuredMemory(): void {
   db.execSync(`
     DELETE FROM memory_fact_evidence;
     DELETE FROM memory_fact_terms;
+    DELETE FROM memory_fact_term_stats;
     DELETE FROM memory_episodes;
     DELETE FROM memory_facts;
     DELETE FROM memory_entities;
@@ -308,6 +392,24 @@ export function clearStructuredMemory(): void {
     DELETE FROM memory_tasks;
     DELETE FROM memory_reflections;
     DELETE FROM memory_chunks;
+  `);
+}
+
+function ensureFactTermStats(db: ReturnType<typeof getMemoryDb>): void {
+  const statsCount =
+    db.getFirstSync<{ count: number }>(
+      'SELECT COUNT(*) AS count FROM memory_fact_term_stats',
+    )?.count ?? 0;
+  if (statsCount > 0) return;
+  const termsCount =
+    db.getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM memory_fact_terms')?.count ??
+    0;
+  if (termsCount === 0) return;
+  db.execSync(`
+    INSERT OR REPLACE INTO memory_fact_term_stats(unit, memory_kind, fact_count, total_weight)
+    SELECT unit, memory_kind, COUNT(*) AS fact_count, SUM(weight) AS total_weight
+      FROM memory_fact_terms
+     GROUP BY unit, memory_kind;
   `);
 }
 

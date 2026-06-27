@@ -9,6 +9,7 @@ jest.mock('expo-sqlite', () => {
 
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
 import {
+  clearStructuredMemory,
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
@@ -88,5 +89,33 @@ describe('ensureFactSchema', () => {
     expect(factCount?.count).toBe(1);
     expect(episodeCount?.count).toBe(1);
     expect(evidenceCount?.count).toBe(1);
+  });
+
+  it('maintains retrieval term statistics with fact term writes and clears', () => {
+    ensureFactSchema();
+    const entity = upsertEntity({ name: 'forum', type: 'project', now: 1 });
+    recordFact({
+      subjectId: entity.id,
+      predicate: 'ui_inventory',
+      objectText: 'Cyberpunk forum Hide this forum',
+      memoryKind: 'ui_inventory',
+      now: 2,
+    });
+
+    const stats = getMemoryDb().getFirstSync<{ fact_count: number }>(
+      `SELECT fact_count
+         FROM memory_fact_term_stats
+        WHERE unit = ?
+          AND memory_kind = ?`,
+      'cyberpunk',
+      'ui_inventory',
+    );
+    expect(stats?.fact_count).toBe(1);
+
+    clearStructuredMemory();
+    const statsAfterClear = getMemoryDb().getFirstSync<{ count: number }>(
+      'SELECT COUNT(*) AS count FROM memory_fact_term_stats',
+    );
+    expect(statsAfterClear?.count).toBe(0);
   });
 });

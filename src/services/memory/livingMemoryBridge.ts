@@ -21,13 +21,17 @@ import { getEntityById } from './entities';
 import type { AgentGoal } from '../../engine/goals/types';
 import type { AgentRunControlGraphAsyncWorkState } from '../../types/agentRun';
 import type { MemoryFact } from './facts/types';
-import { orchestrateMemoryRetrieval } from './retrievalOrchestrator';
+import {
+  orchestrateMemoryRetrieval,
+  type RetrievalOrchestratorTimings,
+} from './retrievalOrchestrator';
 import { renderFocusBlock, type FocusGap } from './focus';
 import { assemblePrompt, type PromptMemoryFact, type SystemPromptSection } from './promptAssembly';
 import { getWorkingBlock, type WorkingMemoryBlock } from './workingBlocks';
 import { getActiveTaskId, readTaskStack } from './taskStack';
 import { logRetrieval } from './retrievalLog';
 import { getLatestReflection } from './reflections';
+import { DEFAULT_LOCAL_EMBEDDING_CONFIG } from './embeddings';
 
 const logger = createLogger('memory.livingMemoryBridge');
 
@@ -54,7 +58,7 @@ export interface BuildLivingMemorySectionsOptions {
   taskId?: string;
   /** Now (ms). Defaults to `Date.now()`. Test seam. */
   now?: number;
-  /** Optional embedding config. When omitted, recall uses indexed sparse retrieval only. */
+  /** Optional embedding config. When omitted, recall uses the on-device local embedder. */
   embeddingConfig?: EmbeddingConfig;
   /** Recall fanout. Default 6. */
   recallLimit?: number;
@@ -98,6 +102,22 @@ export interface LivingMemoryBridgeOutput {
   recalledFactCount: number;
   /** Number of recent episodes included. */
   recalledEpisodeCount: number;
+  /** Internal timing breakdown for product telemetry and benchmark diagnostics. */
+  timings?: LivingMemoryBridgeTimings;
+}
+
+export interface LivingMemoryBridgeTimings {
+  taskStackMs: number;
+  blockReadMs: number;
+  workingBlockMs: number;
+  focusRenderMs: number;
+  retrievalMs: number;
+  reflectionMs: number;
+  subjectLabelsMs: number;
+  assembleMs: number;
+  logRetrievalMs: number;
+  totalMs: number;
+  retrieval?: RetrievalOrchestratorTimings;
 }
 
 const EMPTY_OUTPUT: LivingMemoryBridgeOutput = {
@@ -213,10 +233,23 @@ function withFactSubjectLabels(facts: ReadonlyArray<MemoryFact>): PromptMemoryFa
 export async function buildLivingMemorySections(
   options: BuildLivingMemorySectionsOptions,
 ): Promise<LivingMemoryBridgeOutput> {
+  const totalStarted = Date.now();
+  const timings: LivingMemoryBridgeTimings = {
+    taskStackMs: 0,
+    blockReadMs: 0,
+    workingBlockMs: 0,
+    focusRenderMs: 0,
+    retrievalMs: 0,
+    reflectionMs: 0,
+    subjectLabelsMs: 0,
+    assembleMs: 0,
+    logRetrievalMs: 0,
+    totalMs: 0,
+  };
   const {
     messages,
     now = Date.now(),
-    embeddingConfig,
+    embeddingConfig = DEFAULT_LOCAL_EMBEDDING_CONFIG,
     recallLimit = 6,
     disableRecall = false,
     disableLongTermMemory = false,
@@ -245,6 +278,7 @@ export async function buildLivingMemorySections(
   let resolvedTaskId = taskId ?? null;
   let activeTaskTitle: string | null = null;
   if (!resolvedTaskId && conversationId) {
+    const started = Date.now();
     try {
       resolvedTaskId = getActiveTaskId(conversationId);
       if (resolvedTaskId) {
@@ -257,11 +291,15 @@ export async function buildLivingMemorySections(
         error instanceof Error ? error.message : String(error),
       );
     }
+    timings.taskStackMs += Date.now() - started;
   }
 
+  const blockStarted = Date.now();
   const blocks = safeListBlocks(readBlocks);
+  timings.blockReadMs += Date.now() - blockStarted;
   const promptBlocks = blocks.filter((block) => SAFE_BLOCK_LABELS_FOR_PROMPT.has(block.label));
 
+  const workingBlockStarted = Date.now();
   const scopedFocusBlock = safeGetWorkingBlock(FOCUS_BLOCK_LABEL, {
     conversationId,
     taskId: resolvedTaskId ?? undefined,
@@ -279,6 +317,7 @@ export async function buildLivingMemorySections(
   const openThreadsSource =
     scopedOpenThreads ?? (!conversationId ? findBlock(blocks, OPEN_THREADS_LABEL) : null);
   const openThreadLabels = splitThreadLabels(openThreadsSource?.content ?? '');
+  timings.workingBlockMs += Date.now() - workingBlockStarted;
 
   const lastAssistantAt = lastTimestamp(messages, 'assistant');
   const lastUserAt = lastTimestamp(messages, 'user');
@@ -292,12 +331,16 @@ export async function buildLivingMemorySections(
     ...(focusBlockText ? { activeFocus: focusBlockText } : {}),
     ...(openThreadLabels.length > 0 ? { openThreads: openThreadLabels } : {}),
   };
+  const focusStarted = Date.now();
   const focusRendered = renderFocusBlock(focusInput);
+  timings.focusRenderMs += Date.now() - focusStarted;
 
   const query = recentUserTextWindow(messages);
   let recalledFacts: Awaited<ReturnType<typeof orchestrateMemoryRetrieval>>['facts'] = [];
   let recalledEpisodes: Awaited<ReturnType<typeof orchestrateMemoryRetrieval>>['episodes'] = [];
+  let retrievalTimings: RetrievalOrchestratorTimings | undefined;
   if (!disableRecall) {
+    const retrievalStarted = Date.now();
     try {
       const retrieval = await orchestrateMemoryRetrieval({
         userMessage: query,
@@ -313,6 +356,7 @@ export async function buildLivingMemorySections(
       });
       recalledFacts = retrieval.facts;
       recalledEpisodes = retrieval.episodes;
+      retrievalTimings = retrieval.timings;
     } catch (error) {
       logger.devWarn(
         'livingMemoryBridge.orchestrateMemoryRetrieval failed:',
@@ -321,6 +365,7 @@ export async function buildLivingMemorySections(
       recalledFacts = [];
       recalledEpisodes = [];
     }
+    timings.retrievalMs += Date.now() - retrievalStarted;
   }
 
   const dynamicAddenda: string[] = [];
@@ -330,6 +375,7 @@ export async function buildLivingMemorySections(
 
   let reflectionBlock = '';
   if (conversationId) {
+    const reflectionStarted = Date.now();
     try {
       reflectionBlock =
         readLatestReflectionOverride?.(conversationId) ??
@@ -341,17 +387,23 @@ export async function buildLivingMemorySections(
         error instanceof Error ? error.message : String(error),
       );
     }
+    timings.reflectionMs += Date.now() - reflectionStarted;
   }
 
+  const subjectLabelsStarted = Date.now();
+  const factsForPrompt = withFactSubjectLabels(recalledFacts);
+  timings.subjectLabelsMs += Date.now() - subjectLabelsStarted;
+  const assembleStarted = Date.now();
   const assembled = assemblePrompt({
     basePrompt: '',
     blocks: promptBlocks,
     focusBlock: focusRendered.text,
     reflectionBlock: reflectionBlock.trim() || undefined,
-    retrievedFacts: withFactSubjectLabels(recalledFacts),
+    retrievedFacts: factsForPrompt,
     recentEpisodes: recalledEpisodes,
     ...(dynamicAddenda.length > 0 ? { dynamicAddenda } : {}),
   });
+  timings.assembleMs += Date.now() - assembleStarted;
 
   const idleAnchor = lastAssistantAt ?? lastUserAt;
   const idleSinceLastTurnMs =
@@ -361,6 +413,7 @@ export async function buildLivingMemorySections(
   const assembledText = assembled.sections.map((s) => s.text).join('\n\n');
   const tokenEstimate = Math.ceil(assembledText.length / 4);
 
+  const logStarted = Date.now();
   logRetrieval({
     threadId: conversationId ?? null,
     taskId: resolvedTaskId ?? null,
@@ -369,6 +422,9 @@ export async function buildLivingMemorySections(
     episodeIds: recalledEpisodes.map((e) => e.id),
     tokenEstimate,
   });
+  timings.logRetrievalMs += Date.now() - logStarted;
+  timings.totalMs = Date.now() - totalStarted;
+  if (retrievalTimings) timings.retrieval = retrievalTimings;
 
   return {
     sections: assembled.sections,
@@ -379,5 +435,6 @@ export async function buildLivingMemorySections(
     focusGap: focusRendered.gap,
     recalledFactCount: recalledFacts.length,
     recalledEpisodeCount: recalledEpisodes.length,
+    timings,
   };
 }

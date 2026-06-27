@@ -30,6 +30,7 @@ export function diversifyTrajectoryAware<TEntry extends RankedMemoryFactEntry>(
   limit: number,
   options: {
     textForFact: (fact: TEntry['fact']) => string;
+    unitsForFact?: (fact: TEntry['fact']) => Set<string> | undefined;
     relevanceEpsilon: number;
     trajectoryNeighborLimit: number;
   },
@@ -43,7 +44,7 @@ export function diversifyTrajectoryAware<TEntry extends RankedMemoryFactEntry>(
   const unitsFor = (fact: TEntry['fact']): Set<string> => {
     const cached = unitCache.get(fact.id);
     if (cached) return cached;
-    const computed = tokenizeLexicalUnits(options.textForFact(fact));
+    const computed = options.unitsForFact?.(fact) ?? tokenizeLexicalUnits(options.textForFact(fact));
     unitCache.set(fact.id, computed);
     return computed;
   };

@@ -1,29 +1,18 @@
-// ---------------------------------------------------------------------------
-// Tests — Query-time fact recall
-// ---------------------------------------------------------------------------
-
 jest.mock('expo-sqlite', () => {
   const { makeExpoSqliteMock } = require('../../helpers/expoSqliteShim');
   return makeExpoSqliteMock();
 });
 
 import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
-import {
-  ensureFactSchema,
-  resetFactSchemaCacheForTests,
-} from '../../../src/services/memory/schema';
+import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../../src/services/memory/schema';
 import { upsertEntity } from '../../../src/services/memory/entities';
-import {
-  recordFact,
-  setFactEmbedding,
-  setFactPinned,
-} from '../../../src/services/memory/facts/mutations';
+import { recordFact, setFactEmbedding, setFactPinned } from '../../../src/services/memory/facts/mutations';
 import { getFactById } from '../../../src/services/memory/facts/queries';
 import {
+  backfillFactEmbeddings,
+  embedFact,
   recallFactsForQuery,
   recallScoredFactsForQuery,
-  embedFact,
-  backfillFactEmbeddings,
 } from '../../../src/services/memory/factRecall';
 import * as embeddings from '../../../src/services/memory/embeddings';
 import type { EmbeddingConfig } from '../../../src/types/memory';
@@ -48,7 +37,6 @@ beforeEach(() => {
   resetFactSchemaCacheForTests();
   ensureFactSchema();
   getEmbeddingCachedSpy = jest.spyOn(embeddings, 'getEmbeddingCached');
-  getEmbeddingCachedSpy.mockReset();
   getEmbeddingCachedSpy.mockReset();
 });
 
@@ -220,6 +208,18 @@ describe('recallFactsForQuery — vector path with embedding config', () => {
       vectorWeight: 0,
     });
 
+    expect(getEmbeddingCachedSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not embed the query when no candidate facts have vectors', async () => {
+    const user = upsertEntity({ name: 'user', type: 'self' });
+    recordFact({ subjectId: user.id, predicate: 'lives_in', objectText: 'Berlin' });
+
+    const facts = await recallFactsForQuery('Berlin trip planning', {
+      embeddingConfig: FAKE_CONFIG,
+    });
+
+    expect(facts.map((f) => f.objectText)).toContain('Berlin');
     expect(getEmbeddingCachedSpy).not.toHaveBeenCalled();
   });
 

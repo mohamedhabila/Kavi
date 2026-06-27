@@ -63,6 +63,46 @@ function addUnicodeSequenceUnits(units: Set<string>, value: string): void {
   }
 }
 
+function incrementUnit(counts: Map<string, number>, unit: string): void {
+  counts.set(unit, (counts.get(unit) ?? 0) + 1);
+}
+
+function countSegmentUnits(counts: Map<string, number>, rawSegment: string): void {
+  const segment = normalizeLexicalText(rawSegment).trim();
+  if (!segment || !hasWordLikeCodePoint(segment)) return;
+  incrementUnit(counts, segment);
+
+  if (!CONTINUOUS_WORD_SCRIPT_PATTERN.test(segment)) return;
+  const codePoints = Array.from(segment);
+  for (const width of [2, 3]) {
+    if (codePoints.length < width) continue;
+    for (let index = 0; index <= codePoints.length - width; index += 1) {
+      incrementUnit(counts, `${width}:${codePoints.slice(index, index + width).join('')}`);
+    }
+  }
+}
+
+function countUnicodeSequenceUnits(counts: Map<string, number>, value: string): void {
+  WORD_LIKE_SEQUENCE_PATTERN.lastIndex = 0;
+  for (const match of value.matchAll(WORD_LIKE_SEQUENCE_PATTERN)) {
+    countSegmentUnits(counts, match[0]);
+  }
+}
+
+export function countLexicalUnits(value: string): Map<string, number> {
+  const normalized = normalizeLexicalText(value);
+  const counts = new Map<string, number>();
+  const segmenter = getWordSegmenter();
+  if (segmenter) {
+    for (const segment of segmenter.segment(normalized)) {
+      if (segment.isWordLike === false) continue;
+      countSegmentUnits(counts, segment.segment);
+    }
+  }
+  countUnicodeSequenceUnits(counts, normalized);
+  return counts;
+}
+
 export function tokenizeLexicalUnits(value: string): Set<string> {
   const normalized = normalizeLexicalText(value);
   const units = new Set<string>();

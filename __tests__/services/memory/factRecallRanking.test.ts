@@ -189,14 +189,13 @@ describe('recallFactsForQuery — ranking', () => {
     expect(scored.some((entry) => entry.fact.id === target.fact.id)).toBe(true);
   });
 
-  it('ranks UI inventories on schema state instead of bulk control text', async () => {
+  it('ranks UI inventories on compact schema state instead of full control object bulk text', async () => {
     const surface = upsertEntity({ name: 'surface:https://admin.example.test', type: 'project' });
     const commonUnits = Array.from({ length: 30 }, (_, index) => `qcommon${index}`);
     recordFact({
       subjectId: surface.id,
       predicate: 'ui_inventory',
       objectText: JSON.stringify({
-        controlNames: commonUnits,
         controls: commonUnits.map((name) => ({ role: 'button', name })),
         url: 'https://admin.example.test/noisy',
       }),

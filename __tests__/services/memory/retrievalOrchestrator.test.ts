@@ -487,4 +487,57 @@ describe('orchestrateMemoryRetrieval', () => {
 
     expect(result.facts.some((fact) => fact.id === optionFact.id)).toBe(true);
   });
+
+  it('expands terminal UI state from a relevant interface source run', async () => {
+    const now = Date.now();
+    const surface = upsertEntity({
+      name: 'surface:https://workflow.example.test',
+      type: 'project',
+    });
+    const anchor = recordFact({
+      subjectId: surface.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({
+        controlNames: ['qsource-anchor'],
+        url: 'https://workflow.example.test/edit',
+      }),
+      attributes: {
+        url: 'https://workflow.example.test/edit',
+        stateIndex: '1',
+      },
+      sourceRunId: 'qsource-run',
+      memoryKind: 'ui_inventory',
+      scope: 'conversation',
+      originConversationId: 'conv-interface-source-linked',
+      now,
+    }).fact;
+    const terminal = recordFact({
+      subjectId: surface.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({
+        controlNames: ['qterminal-control'],
+        url: 'https://workflow.example.test/done',
+      }),
+      attributes: {
+        url: 'https://workflow.example.test/done',
+        stateIndex: '4',
+      },
+      sourceRunId: 'qsource-run',
+      memoryKind: 'ui_inventory',
+      scope: 'conversation',
+      originConversationId: 'conv-interface-source-linked',
+      now: now + 4,
+    }).fact;
+
+    const result = await orchestrateMemoryRetrieval({
+      userMessage: 'qsource-anchor',
+      conversationId: 'conv-interface-source-linked',
+      limit: 2,
+      now: now + 10,
+    });
+
+    expect(result.facts.map((fact) => fact.id)).toEqual(
+      expect.arrayContaining([anchor.id, terminal.id]),
+    );
+  });
 });

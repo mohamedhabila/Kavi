@@ -9,7 +9,12 @@
 import type { AgentGoal } from '../../engine/goals/types';
 import type { AgentRunControlGraphAsyncWorkState } from '../../types/agentRun';
 import type { EmbeddingConfig } from '../../types/memory';
-import { recallScoredFactsForQuery, type RecallFactsOptions, type ScoredFact } from './factRecall';
+import {
+  recallScoredFactsForQuery,
+  type RecallFactsOptions,
+  type RecallFactsTiming,
+  type ScoredFact,
+} from './factRecall';
 import { recallEpisodesForQuery } from './episodeRecall';
 import type { MemoryEpisode } from './episodes/types';
 import type { MemoryFact, MemoryFactKind } from './facts/types';
@@ -18,11 +23,12 @@ import { listFacts } from './facts/queries';
 import { getMemoryTask } from './tasks';
 import { planRetrievalSignals } from './retrievalQueryPlan';
 import {
-  buildQueryUnitWeights,
-  lexicalOverlap,
-  tokenizeLexicalUnits,
-} from './ranking/lexical';
-import { retrievalTextForFact } from './ranking/factText';
+  INTERFACE_SOURCE_POOL_LIMIT,
+  INTERFACE_SOURCE_POOL_MULTIPLIER,
+  mergeSourceLinkedInterfaceFacts,
+  recallSourceLinkedInterfaceFacts,
+  selectSourceAwareInterfaceFacts,
+} from './retrievalInterfaceSources';
 
 export interface RetrievalOrchestratorInput {
   userMessage: string;
@@ -43,6 +49,7 @@ export interface RetrievalOrchestratorResult {
   querySignals: string[];
   scoredFacts: ScoredFact[];
   lanes: RetrievalLaneResult[];
+  timings?: RetrievalOrchestratorTimings;
 }
 
 export type RetrievalLaneId = 'semantic' | 'interface' | 'procedural';
@@ -52,6 +59,32 @@ export interface RetrievalLaneResult {
   memoryKinds: MemoryFactKind[];
   scoredFacts: ScoredFact[];
   facts: MemoryFact[];
+  timings?: RetrievalLaneTimings;
+}
+
+export interface RetrievalLaneTimings {
+  primaryRecallMs: number;
+  expansionRecallMs: number;
+  fallbackRecallMs: number;
+  mergeMs: number;
+  selectMs: number;
+  totalMs: number;
+  probeCount: number;
+  poolSize: number;
+  recalls: RecallFactsTiming[];
+}
+
+export interface RetrievalOrchestratorTimings {
+  planMs: number;
+  lanesMs: number;
+  sourceLinkedInterfaceMs: number;
+  scopedCurrentMs: number;
+  mergeMs: number;
+  markFactsRecalledMs: number;
+  episodesMs: number;
+  totalMs: number;
+  probeCount: number;
+  laneTimings: Record<RetrievalLaneId, RetrievalLaneTimings>;
 }
 
 interface RetrievalLaneConfig {
@@ -67,7 +100,7 @@ const RETRIEVAL_LANES: RetrievalLaneConfig[] = [
     id: 'semantic',
     memoryKinds: ['semantic_fact'],
     minLimit: 2,
-    share: 0.45,
+    share: 0.3,
     priority: 0,
   },
   {
@@ -79,24 +112,17 @@ const RETRIEVAL_LANES: RetrievalLaneConfig[] = [
       'ui_filter_state',
     ],
     minLimit: 2,
-    share: 0.45,
+    share: 0.6,
     priority: 1,
   },
   {
     id: 'procedural',
     memoryKinds: ['procedure', 'outcome', 'gotcha', 'episodic_event'],
-    minLimit: 1,
-    share: 0.1,
+    minLimit: 3,
+    share: 0.15,
     priority: 2,
   },
 ];
-
-const INTERFACE_SOURCE_POOL_LIMIT = 50;
-const INTERFACE_SOURCE_POOL_MULTIPLIER = 8;
-const INTERFACE_SOURCE_GROUP_TOP_FACTS = 6;
-const INTERFACE_SOURCE_GROUP_FACT_LIMIT = 3;
-const INTERFACE_SOURCE_GROUP_EARLY_SUPPORT_GROUPS = 2;
-const INTERFACE_SOURCE_GROUP_EARLY_SUPPORT_FACTS = 2;
 
 function collectGoalSignals(goals: ReadonlyArray<AgentGoal> | undefined): string[] {
   if (!goals?.length) return [];
@@ -238,6 +264,7 @@ async function recallLane(
     totalLimit: number;
   },
 ): Promise<RetrievalLaneResult> {
+  const totalStarted = Date.now();
   const limit = laneLimit(config, input.totalLimit);
   const sourceAwareInterface = config.id === 'interface';
   const interfacePoolLimit = sourceAwareInterface
@@ -246,7 +273,14 @@ async function recallLane(
   const laneOptionsBase: RecallFactsOptions = {
     ...input.options,
     memoryKind: config.memoryKinds,
-    ...(sourceAwareInterface ? { vectorWeight: 0, textWeight: 1, threshold: 0.01 } : {}),
+    ...(sourceAwareInterface
+      ? {
+          vectorWeight: 0,
+          textWeight: 1,
+          threshold: 0.01,
+          candidatePoolLimit: interfacePoolLimit,
+        }
+      : {}),
   };
   const hasExpansion =
     input.expansionQuery.trim().length > 0 &&
@@ -259,27 +293,37 @@ async function recallLane(
   const primaryLimit = sourceAwareInterface
     ? interfacePoolLimit
     : Math.max(1, limit - expansionLimit);
+  const recallTimings: RecallFactsTiming[] = [];
+  const laneOptionsBaseWithTiming: RecallFactsOptions = {
+    ...laneOptionsBase,
+    onTiming: (timing) => recallTimings.push(timing),
+  };
+  const primaryStarted = Date.now();
   const primary = sourceAwareInterface
     ? await recallScoredFactsForSignalSet(input.primarySignals, input.primaryQuery, {
-        ...laneOptionsBase,
+        ...laneOptionsBaseWithTiming,
         limit: primaryLimit,
       })
     : await recallScoredFactsForSignals(input.primaryQuery, {
-        ...laneOptionsBase,
+        ...laneOptionsBaseWithTiming,
         limit: primaryLimit,
       });
+  const primaryRecallMs = Date.now() - primaryStarted;
+  const expansionStarted = Date.now();
   const expansion =
     expansionLimit > 0
       ? sourceAwareInterface
         ? await recallScoredFactsForSignalSet(input.expansionSignals, input.expansionQuery, {
-            ...laneOptionsBase,
+            ...laneOptionsBaseWithTiming,
             limit: expansionLimit,
           })
         : await recallScoredFactsForSignals(input.expansionQuery, {
-            ...laneOptionsBase,
+            ...laneOptionsBaseWithTiming,
             limit: expansionLimit,
           })
       : [];
+  const expansionRecallMs = Date.now() - expansionStarted;
+  const mergeStarted = Date.now();
   const mergedInitial = sourceAwareInterface
     ? mergeUniqueScoredFactsByScore(
         [...primary, ...expansion],
@@ -289,24 +333,28 @@ async function recallLane(
   const currentCount = sourceAwareInterface
     ? Math.min(mergedInitial.length, limit)
     : mergedInitial.length;
+  const fallbackStarted = Date.now();
   const fallback =
     input.useFallback && currentCount < limit
       ? sourceAwareInterface
         ? await recallScoredFactsForSignalSet(input.fallbackSignals, input.fallbackQuery, {
-            ...laneOptionsBase,
+            ...laneOptionsBaseWithTiming,
             limit: interfacePoolLimit,
           })
         : await recallScoredFactsForSignals(input.fallbackQuery, {
-            ...laneOptionsBase,
+            ...laneOptionsBaseWithTiming,
             limit: limit - currentCount,
           })
       : [];
+  const fallbackRecallMs = Date.now() - fallbackStarted;
   const mergedPool = sourceAwareInterface
     ? mergeUniqueScoredFactsByScore(
         [...primary, ...expansion, ...fallback],
         INTERFACE_SOURCE_POOL_LIMIT,
       )
     : mergeUniqueScoredFacts([...primary, ...expansion, ...fallback], limit);
+  const mergeMs = Date.now() - mergeStarted - fallbackRecallMs;
+  const selectStarted = Date.now();
   const scoredFacts = sourceAwareInterface
     ? selectSourceAwareInterfaceFacts(
         mergedPool,
@@ -314,111 +362,40 @@ async function recallLane(
         limit,
       )
     : mergedPool;
+  const selectMs = Date.now() - selectStarted;
+  const probeCount =
+    sourceAwareInterface
+      ? Number(input.primarySignals.some((signal) => signal.trim().length > 0) || input.primaryQuery.trim().length > 0) +
+        Number(
+          expansionLimit > 0 &&
+            (input.expansionSignals.some((signal) => signal.trim().length > 0) ||
+              input.expansionQuery.trim().length > 0),
+        ) +
+        Number(
+          fallback.length > 0 &&
+            (input.fallbackSignals.some((signal) => signal.trim().length > 0) ||
+              input.fallbackQuery.trim().length > 0),
+        )
+      : Number(input.primaryQuery.trim().length > 0) +
+        Number(expansionLimit > 0 && input.expansionQuery.trim().length > 0) +
+        Number(fallback.length > 0 && input.fallbackQuery.trim().length > 0);
   return {
     id: config.id,
     memoryKinds: config.memoryKinds,
     scoredFacts,
     facts: scoredFacts.map((entry) => entry.fact),
+    timings: {
+      primaryRecallMs,
+      expansionRecallMs,
+      fallbackRecallMs,
+      mergeMs,
+      selectMs,
+      totalMs: Date.now() - totalStarted,
+      probeCount,
+      poolSize: mergedPool.length,
+      recalls: recallTimings,
+    },
   };
-}
-
-function sourceGroupKey(fact: MemoryFact): string {
-  return fact.sourceRunId ?? fact.id;
-}
-
-function sourceRankingText(fact: MemoryFact): string {
-  return retrievalTextForFact(fact);
-}
-
-function selectSourceAwareInterfaceFacts(
-  entries: ScoredFact[],
-  query: string,
-  limit: number,
-): ScoredFact[] {
-  if (entries.length <= limit) return entries;
-  const queryUnits = tokenizeLexicalUnits(query);
-  if (queryUnits.size === 0) return mergeUniqueScoredFacts(entries, limit);
-  const unitWeights = buildQueryUnitWeights(queryUnits, entries, (entry) =>
-    sourceRankingText(entry.fact),
-  );
-  const groups = new Map<string, ScoredFact[]>();
-  for (const entry of entries) {
-    const key = sourceGroupKey(entry.fact);
-    const group = groups.get(key) ?? [];
-    group.push(entry);
-    groups.set(key, group);
-  }
-
-  const rankedGroups = Array.from(groups.entries())
-    .map(([key, group]) => {
-      const rankedEntries = [...group].sort((left, right) => {
-        if (right.score !== left.score) return right.score - left.score;
-        const rightOverlap = lexicalOverlap(queryUnits, sourceRankingText(right.fact), unitWeights);
-        const leftOverlap = lexicalOverlap(queryUnits, sourceRankingText(left.fact), unitWeights);
-        if (rightOverlap !== leftOverlap) return rightOverlap - leftOverlap;
-        return right.fact.updatedAt - left.fact.updatedAt;
-      });
-      const topEntries = rankedEntries.slice(0, INTERFACE_SOURCE_GROUP_TOP_FACTS);
-      const coverageScore = lexicalOverlap(
-        queryUnits,
-        topEntries.map((entry) => sourceRankingText(entry.fact)).join('\n'),
-        unitWeights,
-      );
-      const bestScore = Math.max(...topEntries.map((entry) => entry.score));
-      const averageScore =
-        topEntries.reduce((sum, entry) => sum + entry.score, 0) / Math.max(1, topEntries.length);
-      return {
-        key,
-        entries: rankedEntries,
-        score: bestScore * 0.65 + coverageScore * 0.25 + averageScore * 0.1,
-      };
-    })
-    .sort((left, right) => {
-      if (right.score !== left.score) return right.score - left.score;
-      return right.entries[0].fact.updatedAt - left.entries[0].fact.updatedAt;
-    });
-
-  const selected: ScoredFact[] = [];
-  const seenIds = new Set<string>();
-  const selectedPerGroup = new Map<string, number>();
-  const addEntry = (groupKey: string, entry: ScoredFact): void => {
-    if (selected.length >= limit || seenIds.has(entry.fact.id)) return;
-    selected.push(entry);
-    seenIds.add(entry.fact.id);
-    selectedPerGroup.set(groupKey, (selectedPerGroup.get(groupKey) ?? 0) + 1);
-  };
-
-  for (const [groupIndex, group] of rankedGroups.entries()) {
-    const first = group.entries.find((entry) => !seenIds.has(entry.fact.id));
-    if (first) addEntry(group.key, first);
-    if (selected.length >= limit) return selected;
-    if (groupIndex < INTERFACE_SOURCE_GROUP_EARLY_SUPPORT_GROUPS) {
-      while (
-        selected.length < limit &&
-        (selectedPerGroup.get(group.key) ?? 0) < INTERFACE_SOURCE_GROUP_EARLY_SUPPORT_FACTS
-      ) {
-        const next = group.entries.find((entry) => !seenIds.has(entry.fact.id));
-        if (!next) break;
-        addEntry(group.key, next);
-      }
-      if (selected.length >= limit) return selected;
-    }
-  }
-
-  let added = true;
-  while (selected.length < limit && added) {
-    added = false;
-    for (const group of rankedGroups) {
-      if ((selectedPerGroup.get(group.key) ?? 0) >= INTERFACE_SOURCE_GROUP_FACT_LIMIT) continue;
-      const next = group.entries.find((entry) => !seenIds.has(entry.fact.id));
-      if (!next) continue;
-      addEntry(group.key, next);
-      added = true;
-      if (selected.length >= limit) break;
-    }
-  }
-
-  return selected;
 }
 
 function mergeUniqueScoredFacts(entries: ScoredFact[], limit: number): ScoredFact[] {
@@ -529,6 +506,10 @@ function recallScopedCurrentFacts(
 export async function orchestrateMemoryRetrieval(
   input: RetrievalOrchestratorInput,
 ): Promise<RetrievalOrchestratorResult> {
+  const totalStarted = Date.now();
+  const planStarted = Date.now();
+  const queryPlan = buildRetrievalQuery(input);
+  const planMs = Date.now() - planStarted;
   const {
     primaryQuery,
     expansionQuery,
@@ -537,8 +518,7 @@ export async function orchestrateMemoryRetrieval(
     primarySignals,
     expansionSignals,
     fallbackSignals,
-  } =
-    buildRetrievalQuery(input);
+  } = queryPlan;
   const resolvedTaskId = input.taskId ?? input.activeTaskId;
   const limit = Math.max(1, Math.min(input.limit ?? 8, 50));
   const options = recallOptions(input, limit);
@@ -547,7 +527,8 @@ export async function orchestrateMemoryRetrieval(
     fallbackQuery.trim().length > 0 &&
     primarySignals.length > 0 &&
     fallbackQuery.trim() !== primaryQuery.trim();
-  const lanes = await Promise.all(
+  const lanesStarted = Date.now();
+  const rawLanes = await Promise.all(
     RETRIEVAL_LANES.map((lane) =>
       recallLane(lane, {
         primaryQuery,
@@ -562,23 +543,49 @@ export async function orchestrateMemoryRetrieval(
       }),
     ),
   );
+  const sourceLinkedStarted = Date.now();
+  const sourceLinkedInterfaceFacts = recallSourceLinkedInterfaceFacts(rawLanes, options);
+  const sourceLinkedInterfaceMs = Date.now() - sourceLinkedStarted;
+  const lanes = rawLanes.map((lane) =>
+    mergeSourceLinkedInterfaceFacts(
+      lane,
+      sourceLinkedInterfaceFacts,
+      [primaryQuery, expansionQuery, fallbackQuery].join('\n'),
+      laneLimit(
+        RETRIEVAL_LANES.find((config) => config.id === lane.id) ?? RETRIEVAL_LANES[0],
+        limit,
+      ),
+    ),
+  );
+  const lanesMs = Date.now() - lanesStarted;
   const laneFactCount = lanes.reduce((sum, lane) => sum + lane.scoredFacts.length, 0);
+  const scopedCurrentStarted = Date.now();
   const scopedCurrentFacts = recallScopedCurrentFacts(
     input,
     limit - laneFactCount,
   );
+  const scopedCurrentMs = Date.now() - scopedCurrentStarted;
+  const mergeStarted = Date.now();
   const scoredFacts = mergeLaneResults(lanes, scopedCurrentFacts, limit);
   const facts = scoredFacts.map((entry) => entry.fact);
+  const mergeMs = Date.now() - mergeStarted;
+  const markFactsStarted = Date.now();
   markFactsRecalled(
     facts.map((fact) => fact.id),
     input.now ?? Date.now(),
   );
+  const markFactsRecalledMs = Date.now() - markFactsStarted;
 
+  const episodesStarted = Date.now();
   const episodes = recallEpisodesForQuery(primaryQuery || fallbackQuery, {
     threadId: input.conversationId,
     taskId: resolvedTaskId,
     limit: 4,
   });
+  const episodesMs = Date.now() - episodesStarted;
+  const laneTimings = Object.fromEntries(
+    lanes.map((lane) => [lane.id, lane.timings]),
+  ) as Record<RetrievalLaneId, RetrievalLaneTimings>;
 
   return {
     facts,
@@ -586,5 +593,17 @@ export async function orchestrateMemoryRetrieval(
     querySignals: signals,
     scoredFacts,
     lanes,
+    timings: {
+      planMs,
+      lanesMs,
+      sourceLinkedInterfaceMs,
+      scopedCurrentMs,
+      mergeMs,
+      markFactsRecalledMs,
+      episodesMs,
+      totalMs: Date.now() - totalStarted,
+      probeCount: lanes.reduce((sum, lane) => sum + (lane.timings?.probeCount ?? 0), 0),
+      laneTimings,
+    },
   };
 }
