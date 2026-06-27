@@ -9,6 +9,7 @@
 
 import type { Message } from '../../types/message';
 import { upsertEntity } from './entities';
+import { runMemoryTransaction } from './access/transaction';
 import { recordFact } from './facts/mutations';
 import type { MemoryFactKind, RecordFactInput } from './facts/types';
 import { ensureFactSchema } from './schema';
@@ -70,33 +71,35 @@ export function recordStructuredObservationsFromMessages(input: {
   now?: number;
 }): StructuredObservationResult {
   ensureFactSchema();
-  const factIds: string[] = [];
-  const consumedEvidence: string[] = [];
+  return runMemoryTransaction(() => {
+    const factIds: string[] = [];
+    const consumedEvidence: string[] = [];
 
-  for (const message of input.messages) {
-    const toolNames = message.toolCalls?.map((toolCall) => toolCall.name).filter(Boolean) ?? [];
-    const toolName = toolNames[0] ?? message.toolCallId ?? undefined;
-    const toolStatus =
-      message.toolCalls?.find((toolCall) => toolCall.status)?.status ??
-      (message.isError ? 'failed' : undefined);
-    const context: ObservationContext = {
-      conversationId: input.conversationId,
-      threadId: input.threadId,
-      taskId: input.taskId,
-      sourceRunId: input.sourceRunId,
-      sourceMessageId: message.id,
-      sourceTurnId: input.sourceTurnId,
-      toolName,
-      toolStatus,
-      now: input.now,
-    };
+    for (const message of input.messages) {
+      const toolNames = message.toolCalls?.map((toolCall) => toolCall.name).filter(Boolean) ?? [];
+      const toolName = toolNames[0] ?? message.toolCallId ?? undefined;
+      const toolStatus =
+        message.toolCalls?.find((toolCall) => toolCall.status)?.status ??
+        (message.isError ? 'failed' : undefined);
+      const context: ObservationContext = {
+        conversationId: input.conversationId,
+        threadId: input.threadId,
+        taskId: input.taskId,
+        sourceRunId: input.sourceRunId,
+        sourceMessageId: message.id,
+        sourceTurnId: input.sourceTurnId,
+        toolName,
+        toolStatus,
+        now: input.now,
+      };
 
-    for (const parsed of payloadsFromMessage(message)) {
-      factIds.push(...recordObservationPayload(parsed.payload, context));
+      for (const parsed of payloadsFromMessage(message)) {
+        factIds.push(...recordObservationPayload(parsed.payload, context));
+      }
     }
-  }
 
-  return { factIds, consumedEvidence };
+    return { factIds, consumedEvidence };
+  });
 }
 
 export function recordStructuredObservationsFromEvidence(input: {
@@ -109,28 +112,30 @@ export function recordStructuredObservationsFromEvidence(input: {
   now?: number;
 }): StructuredObservationResult {
   ensureFactSchema();
-  const factIds: string[] = [];
-  const consumedEvidence: string[] = [];
+  return runMemoryTransaction(() => {
+    const factIds: string[] = [];
+    const consumedEvidence: string[] = [];
 
-  for (const evidence of input.evidence) {
-    const parsed = parseEvidencePayload(evidence);
-    if (!parsed) continue;
-    const recorded = recordObservationPayload(parsed.payload, {
-      conversationId: input.conversationId,
-      threadId: input.threadId,
-      taskId: input.taskId,
-      sourceRunId: input.sourceRunId,
-      sourceTurnId: input.sourceTurnId,
-      sourceMessageId: parsed.sourceLabel,
-      now: input.now,
-    });
-    if (recorded.length > 0) {
-      factIds.push(...recorded);
-      consumedEvidence.push(evidence);
+    for (const evidence of input.evidence) {
+      const parsed = parseEvidencePayload(evidence);
+      if (!parsed) continue;
+      const recorded = recordObservationPayload(parsed.payload, {
+        conversationId: input.conversationId,
+        threadId: input.threadId,
+        taskId: input.taskId,
+        sourceRunId: input.sourceRunId,
+        sourceTurnId: input.sourceTurnId,
+        sourceMessageId: parsed.sourceLabel,
+        now: input.now,
+      });
+      if (recorded.length > 0) {
+        factIds.push(...recorded);
+        consumedEvidence.push(evidence);
+      }
     }
-  }
 
-  return { factIds, consumedEvidence };
+    return { factIds, consumedEvidence };
+  });
 }
 
 function payloadsFromMessage(message: Message): ParsedPayload[] {
