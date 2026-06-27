@@ -17,6 +17,7 @@ import { markFactsRecalled } from './facts/mutations';
 import { listFacts } from './facts/queries';
 import { getMemoryTask } from './tasks';
 import { planRetrievalSignals } from './retrievalQueryPlan';
+import { lexicalOverlap, tokenizeLexicalUnits } from './ranking/lexical';
 
 export interface RetrievalOrchestratorInput {
   userMessage: string;
@@ -56,6 +57,7 @@ interface RetrievalLaneConfig {
   priority: number;
   vectorWeight?: number;
   textWeight?: number;
+  expansionShare?: number;
 }
 
 const RETRIEVAL_LANES: RetrievalLaneConfig[] = [
@@ -78,6 +80,7 @@ const RETRIEVAL_LANES: RetrievalLaneConfig[] = [
     priority: 1,
     vectorWeight: 0,
     textWeight: 1,
+    expansionShare: 0.5,
   },
   {
     id: 'procedural',
@@ -219,7 +222,9 @@ async function recallLane(
   const hasExpansion =
     input.expansionQuery.trim().length > 0 &&
     input.expansionQuery.trim() !== input.primaryQuery.trim();
-  const expansionLimit = hasExpansion ? Math.max(1, Math.floor(limit * 0.35)) : 0;
+  const expansionLimit = hasExpansion
+    ? Math.max(1, Math.ceil(limit * (config.expansionShare ?? 0.35)))
+    : 0;
   const primaryLimit = Math.max(1, limit - expansionLimit);
   const primary = await recallScoredFactsForSignals(input.primaryQuery, {
     ...laneOptionsBase,
@@ -327,6 +332,7 @@ function sourceCompanionScore(anchor: ScoredFact, fact: MemoryFact, index: numbe
 function sourceCompanionsForFact(
   anchor: ScoredFact,
   input: RetrievalOrchestratorInput,
+  queryUnits: Set<string>,
   seenIds: Set<string>,
 ): ScoredFact[] {
   const sourceRunId = anchor.fact.sourceRunId;
@@ -340,51 +346,79 @@ function sourceCompanionsForFact(
     limit: 48,
   })
     .filter((fact) => !seenIds.has(fact.id))
+    .map((fact) => ({
+      fact,
+      overlap: lexicalOverlap(queryUnits, `${fact.predicate} ${fact.objectText} ${fact.sourceSummary ?? ''}`),
+    }))
+    .filter((entry) => queryUnits.size === 0 || entry.overlap > 0)
     .sort((left, right) => {
       const anchorState = numericStateIndex(anchor.fact);
-      const leftState = numericStateIndex(left);
-      const rightState = numericStateIndex(right);
+      if (right.overlap !== left.overlap) return right.overlap - left.overlap;
+      const leftState = numericStateIndex(left.fact);
+      const rightState = numericStateIndex(right.fact);
       const leftDistance =
         anchorState !== null && leftState !== null ? Math.abs(leftState - anchorState) : 999;
       const rightDistance =
         anchorState !== null && rightState !== null ? Math.abs(rightState - anchorState) : 999;
       if (leftDistance !== rightDistance) return leftDistance - rightDistance;
-      if (left.memoryKind !== right.memoryKind) {
-        if (left.memoryKind === 'ui_filter_state') return -1;
-        if (right.memoryKind === 'ui_filter_state') return 1;
+      if (left.fact.memoryKind !== right.fact.memoryKind) {
+        if (left.fact.memoryKind === 'ui_filter_state') return -1;
+        if (right.fact.memoryKind === 'ui_filter_state') return 1;
       }
-      return right.updatedAt - left.updatedAt;
+      return right.fact.updatedAt - left.fact.updatedAt;
     })
-    .slice(0, 3);
-  return companions.map((fact, index) => sourceCompanionScore(anchor, fact, index));
+    .slice(0, 2);
+  return companions.map(({ fact }, index) => sourceCompanionScore(anchor, fact, index));
 }
 
 function expandWithSourceCompanions(
   scoredFacts: ScoredFact[],
   input: RetrievalOrchestratorInput,
+  queryText: string,
   limit: number,
 ): ScoredFact[] {
-  const expanded: ScoredFact[] = [];
+  const base: ScoredFact[] = [];
   const seenIds = new Set<string>();
   const uiInventorySeenBySource = new Set<string>();
-  const add = (entry: ScoredFact): boolean => {
-    if (expanded.length >= limit) return false;
+  const addBase = (entry: ScoredFact): boolean => {
+    if (base.length >= limit) return false;
     if (seenIds.has(entry.fact.id)) return false;
     if (entry.fact.memoryKind === 'ui_inventory' && entry.fact.sourceRunId) {
       const key = entry.fact.sourceRunId;
       if (uiInventorySeenBySource.has(key)) return false;
       uiInventorySeenBySource.add(key);
     }
-    expanded.push(entry);
+    base.push(entry);
     seenIds.add(entry.fact.id);
     return true;
   };
 
   for (const entry of scoredFacts) {
-    if (!add(entry)) continue;
-    for (const companion of sourceCompanionsForFact(entry, input, seenIds)) {
-      add(companion);
-      if (expanded.length >= limit) break;
+    addBase(entry);
+    if (base.length >= limit) break;
+  }
+
+  const expanded: ScoredFact[] = [];
+  const expandedIds = new Set<string>();
+  const queryUnits = tokenizeLexicalUnits(queryText);
+  let companionCount = 0;
+  const companionBudget = Math.max(1, Math.floor(limit * 0.4));
+  const addExpanded = (entry: ScoredFact): boolean => {
+    if (expanded.length >= limit) return false;
+    if (expandedIds.has(entry.fact.id)) return false;
+    expanded.push(entry);
+    expandedIds.add(entry.fact.id);
+    return true;
+  };
+
+  for (const entry of base) {
+    addExpanded(entry);
+    if (companionCount < companionBudget) {
+      for (const companion of sourceCompanionsForFact(entry, input, queryUnits, expandedIds)) {
+        if (!addExpanded(companion)) continue;
+        companionCount += 1;
+        if (companionCount >= companionBudget || expanded.length >= limit) break;
+      }
     }
     if (expanded.length >= limit) break;
   }
@@ -480,6 +514,7 @@ export async function orchestrateMemoryRetrieval(
   const scoredFacts = expandWithSourceCompanions(
     mergeLaneResults(lanes, scopedCurrentFacts, limit),
     input,
+    signals.join('\n'),
     limit,
   );
   const facts = scoredFacts.map((entry) => entry.fact);
