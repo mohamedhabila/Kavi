@@ -13,6 +13,11 @@ import {
   extractLabelValues,
   type UiLabelValue,
 } from './uiLabelValues';
+import {
+  extractTableSummaries,
+  MAX_TABLE_SUMMARY_ITEMS,
+  type UiTableSummary,
+} from './uiTables';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -53,18 +58,6 @@ export interface UiField {
   nodeId: string | null;
   required: boolean;
   attributes: string[];
-}
-
-export interface UiTableSummary {
-  index: number;
-  role: string;
-  columnLabels: string[];
-  rowCount: number;
-  columnValueSamples: Array<{
-    column: string;
-    values: string[];
-  }>;
-  rowSamples: Array<Record<string, string>>;
 }
 
 export interface UiStateSummary {
@@ -109,10 +102,6 @@ const FIELD_CONTROL_ROLES = new Set([
   'textbox',
 ]);
 
-const TABLE_CONTAINER_ROLES = new Set(['grid', 'table', 'treegrid']);
-const ROW_ROLES = new Set(['row']);
-const COLUMN_HEADER_ROLES = new Set(['columnheader']);
-const CELL_ROLES = new Set(['cell', 'gridcell', 'rowheader']);
 const OPTION_ROLES = new Set(['option']);
 const CONTEXT_LABEL_ROLES = new Set([
   'article',
@@ -131,10 +120,6 @@ const MAX_FIELD_SUMMARY_ITEMS = 36;
 const MAX_LABEL_VALUE_ITEMS = 36;
 const MAX_NAME_SUMMARY_ITEMS = 192;
 const MAX_CONTROL_OPTIONS = 48;
-const MAX_TABLE_SUMMARY_ITEMS = 6;
-const MAX_TABLE_COLUMNS = 18;
-const MAX_TABLE_VALUES_PER_COLUMN = 12;
-const MAX_TABLE_ROW_SAMPLES = 3;
 const MAX_PARSED_ACCESSIBILITY_NODES = 2_500;
 const REQUIRED_MARKER = '*';
 
@@ -554,87 +539,6 @@ function stripWrappingQuote(value: string): string {
   return value;
 }
 
-function extractTableSummaries(nodes: AccessibilityNode[]): UiTableSummary[] {
-  const tableIndexes = nodes
-    .filter((node) => TABLE_CONTAINER_ROLES.has(node.role.toLocaleLowerCase()))
-    .map((node) => node.index);
-  const rootRegions = tableIndexes.length > 0 ? tableIndexes : [0];
-  const summaries: UiTableSummary[] = [];
-
-  for (const tableIndex of rootRegions) {
-    if (summaries.length >= MAX_TABLE_SUMMARY_ITEMS) break;
-    const table = nodes[tableIndex];
-    if (!table) continue;
-    const endIndex = subtreeEndIndex(nodes, tableIndex);
-    const summary = extractTableSummary(nodes, tableIndex, endIndex);
-    if (!summary) continue;
-    summaries.push(summary);
-  }
-
-  return summaries;
-}
-
-function extractTableSummary(
-  nodes: AccessibilityNode[],
-  startIndex: number,
-  endIndex: number,
-): UiTableSummary | null {
-  const table = nodes[startIndex];
-  if (!table) return null;
-  const columnLabels = uniqueNamedValues(
-    nodes
-      .slice(startIndex + 1, endIndex)
-      .filter((node) => COLUMN_HEADER_ROLES.has(node.role.toLocaleLowerCase()))
-      .map((node) => nodeText(nodes, node.index)),
-  ).slice(0, MAX_TABLE_COLUMNS);
-  const rowRecords: Array<Record<string, string>> = [];
-  const valueSamples = new Map<string, string[]>();
-  let rowCount = 0;
-
-  for (let index = startIndex + 1; index < endIndex; index += 1) {
-    const row = nodes[index];
-    if (!ROW_ROLES.has(row.role.toLocaleLowerCase())) continue;
-    rowCount += 1;
-    const rowEnd = Math.min(subtreeEndIndex(nodes, index), endIndex);
-    const cells = nodes
-      .slice(index + 1, rowEnd)
-      .filter((node) => CELL_ROLES.has(node.role.toLocaleLowerCase()))
-      .map((node) => nodeText(nodes, node.index))
-      .filter((value): value is string => Boolean(value));
-    if (columnLabels.length === 0 || cells.length === 0) continue;
-    const record: Record<string, string> = {};
-    for (let cellIndex = 0; cellIndex < Math.min(columnLabels.length, cells.length); cellIndex += 1) {
-      const column = columnLabels[cellIndex];
-      const value = fitText(cells[cellIndex], 160);
-      if (!column || !value) continue;
-      record[column] = value;
-      const existing = valueSamples.get(column) ?? [];
-      if (!existing.includes(value) && existing.length < MAX_TABLE_VALUES_PER_COLUMN) {
-        existing.push(value);
-        valueSamples.set(column, existing);
-      }
-    }
-    if (Object.keys(record).length > 0 && rowRecords.length < MAX_TABLE_ROW_SAMPLES) {
-      rowRecords.push(record);
-    }
-  }
-
-  const columnValueSamples = Array.from(valueSamples.entries())
-    .slice(0, MAX_TABLE_COLUMNS)
-    .map(([column, values]) => ({ column, values }));
-  if (columnLabels.length === 0 && rowRecords.length === 0 && columnValueSamples.length === 0) {
-    return null;
-  }
-  return {
-    index: table.index,
-    role: table.role,
-    columnLabels,
-    rowCount,
-    columnValueSamples,
-    rowSamples: rowRecords,
-  };
-}
-
 function subtreeEndIndex(nodes: AccessibilityNode[], startIndex: number): number {
   const start = nodes[startIndex];
   if (!start) return startIndex;
@@ -642,21 +546,6 @@ function subtreeEndIndex(nodes: AccessibilityNode[], startIndex: number): number
     if (nodes[index].indent <= start.indent) return index;
   }
   return nodes.length;
-}
-
-function nodeText(nodes: AccessibilityNode[], index: number): string | null {
-  const node = nodes[index];
-  if (!node) return null;
-  const parts: string[] = [];
-  if (node.name) parts.push(node.name);
-  for (let childIndex = index + 1; childIndex < nodes.length; childIndex += 1) {
-    const child = nodes[childIndex];
-    if (child.indent <= node.indent) break;
-    if (child.name) parts.push(child.name);
-    if (parts.join(' ').length >= 220) break;
-  }
-  const text = normalizeLabelText(parts);
-  return text ? fitText(text, 220) : null;
 }
 
 function dropEmpty(value: JsonRecord): JsonRecord {

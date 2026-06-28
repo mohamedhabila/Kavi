@@ -4,7 +4,6 @@ const UI_INVENTORY_ARRAY_COMPACT_ORDER = [
   'controls',
   'controlNames',
   'roleCounts',
-  'tables',
   'sections',
   'labelValues',
   'popupControls',
@@ -12,6 +11,7 @@ const UI_INVENTORY_ARRAY_COMPACT_ORDER = [
   'textEntryControls',
   'fields',
   'fieldLabels',
+  'tables',
 ] as const;
 
 export function compactJson(value: unknown): string {
@@ -122,6 +122,7 @@ function compactUiInventoryForStorage(value: JsonRecord, maxChars: number): stri
   const minimal = dropEmpty({
     fieldLabels: limitStringArray(value.fieldLabels, 16, 96),
     controlNames: limitStringArrayBalanced(value.controlNames, 24, 96),
+    tables: limitArray(value.tables, 1),
     sections: limitArray(value.sections, 8),
     fields: limitArray(value.fields, 4),
     textEntryControls: limitArray(value.textEntryControls, 4),

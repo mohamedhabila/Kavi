@@ -344,6 +344,48 @@ describe('assemblePrompt — L3 contents', () => {
     expect(text).not.toContain('bulk-control-79');
   });
 
+  it('renders compact table evidence before bulky UI lists', () => {
+    const out = assemblePrompt({
+      basePrompt: 'BASE',
+      retrievedFacts: [
+        makeFact({
+          predicate: 'ui_inventory',
+          memoryKind: 'ui_inventory',
+          sourceRunId: 'run-table',
+          objectText: JSON.stringify({
+            nodeCount: 900,
+            controlCount: 240,
+            controlNames: Array.from({ length: 240 }, (_, index) => `bulk-control-${index}`),
+            sections: Array.from({ length: 32 }, (_, index) => ({
+              label: `section-${index}`,
+              controlNames: [`bulk-control-${index}`],
+            })),
+            tables: [
+              {
+                index: 82,
+                role: 'table',
+                columnLabels: ['Description', 'Quantity', 'Total'],
+                rowCount: 3,
+                columnValueSamples: [{ column: 'Total', values: ['-'] }],
+                rowSamples: [{ Description: 'Loaner Laptop', Quantity: '5' }, { Total: '-' }],
+              },
+            ],
+            url: 'https://admin.example.test/order-status',
+            sourceRunId: 'run-table',
+            stateIndex: '45',
+          }),
+        }),
+      ],
+    });
+
+    const text = flattenPromptSections(out.sections);
+    expect(text).toContain('"columnLabels":["Description","Quantity","Total"]');
+    expect(text).toContain('"rowSamples":[{"Description":"Loaner Laptop","Quantity":"5"},{"Total":"-"}]');
+    expect(text.indexOf('"tables"')).toBeGreaterThan(-1);
+    expect(text.indexOf('"visibleControls"')).toBeGreaterThan(text.indexOf('"tables"'));
+    expect(text).not.toContain('bulk-control-239');
+  });
+
   it('renders UI inventories with the visible snapshot contract and source context', () => {
     const out = assemblePrompt({
       basePrompt: 'BASE',

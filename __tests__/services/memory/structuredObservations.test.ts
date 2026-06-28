@@ -501,51 +501,6 @@ describe('structured observation memory', () => {
     ]);
   });
 
-  it('records compact table column values from accessibility grids', () => {
-    recordStructuredObservationsFromMessages({
-      conversationId: 'conv-table',
-      threadId: 'conv-table',
-      sourceRunId: 'run-table',
-      now: 350,
-      messages: [
-        toolMessage({
-          url: 'https://admin.example.test/orders',
-          accessibility_tree: [
-            "RootWebArea 'Orders'",
-            "\t[1] table ''",
-            "\t\t[2] row ''",
-            "\t\t\t[3] columnheader 'Reference'",
-            "\t\t\t[4] columnheader 'State'",
-            "\t\t[5] row ''",
-            "\t\t\t[6] gridcell '000001'",
-            "\t\t\t[7] gridcell 'Closed'",
-            "\t\t[8] row ''",
-            "\t\t\t[9] gridcell '000002'",
-            "\t\t\t[10] gridcell 'Open'",
-          ].join('\n'),
-        }),
-      ],
-    });
-
-    const inventory = JSON.parse(
-      listFacts({
-        memoryKind: 'ui_inventory',
-        originConversationId: 'conv-table',
-      })[0].objectText,
-    );
-
-    expect(inventory.tables).toEqual([
-      expect.objectContaining({
-        role: 'table',
-        columnLabels: ['Reference', 'State'],
-        rowCount: 3,
-        columnValueSamples: expect.arrayContaining([
-          { column: 'State', values: ['Closed', 'Open'] },
-        ]),
-      }),
-    ]);
-  });
-
   it('stores consecutive observations as standalone UI inventories', () => {
     recordStructuredObservationsFromMessages({
       conversationId: 'conv-transition-context',

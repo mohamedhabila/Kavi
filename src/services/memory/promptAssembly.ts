@@ -194,8 +194,14 @@ function compactUiInventoryPromptFields(
   copyField('url');
   copyField('sourceRunId');
   copyField('stateIndex');
+  copyField('tables');
+  copyField('labelValues');
+  copyField('fieldLabels');
+  copyField('fields');
+  copyField('textEntryControls');
+  copyField('searchControls');
+  copyField('popupControls');
   copyField('controlNames', 'visibleControls');
-  copyField('sections');
   if (!compact.visibleControls && Array.isArray(parsed.controls)) {
     const visibleControls = parsed.controls
       .map((control) =>
@@ -206,13 +212,7 @@ function compactUiInventoryPromptFields(
       .filter((name): name is string => typeof name === 'string' && name.trim().length > 0);
     if (visibleControls.length > 0) compact.visibleControls = visibleControls.slice(0, 48);
   }
-  copyField('fieldLabels');
-  copyField('fields');
-  copyField('textEntryControls');
-  copyField('searchControls');
-  copyField('popupControls');
-  copyField('labelValues');
-  copyField('tables');
+  copyField('sections');
   copyField('nodeCount');
   copyField('controlCount');
   copyField('textEntryCount');
