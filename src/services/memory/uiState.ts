@@ -8,6 +8,11 @@
 // ---------------------------------------------------------------------------
 
 import { compactUiSection, extractUiSectionsFromControls, type UiSectionSummary } from './uiSections';
+import {
+  compactLabelValue,
+  extractLabelValues,
+  type UiLabelValue,
+} from './uiLabelValues';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -50,12 +55,6 @@ export interface UiField {
   attributes: string[];
 }
 
-export interface UiLabelValue {
-  label: string;
-  value: string;
-  sourceIndex: number;
-}
-
 export interface UiTableSummary {
   index: number;
   role: string;
@@ -72,6 +71,7 @@ export interface UiStateSummary {
   nodeCount: number;
   roleCounts: Record<string, number>;
   controls: UiControl[];
+  popupControls: UiControl[];
   sections: UiSectionSummary[];
   fields: UiField[];
   labelValues: UiLabelValue[];
@@ -172,7 +172,7 @@ export function extractUiStateSummary(nodes: AccessibilityNode[]): UiStateSummar
     if (!isInteractiveControlNode(node)) continue;
     const labelBlock = findNearestUnusedPriorLabel(node, labelBlocks, usedLabelIndexes);
     if (labelBlock) usedLabelIndexes.add(labelBlock.index);
-    const options = childOptionNames(nodes, node.index);
+    const options = childPopupItemNames(nodes, node.index);
     const contextLabels = findContextLabels(nodes, node.index);
     const control = controlFromNode(
       node,
@@ -201,10 +201,14 @@ export function extractUiStateSummary(nodes: AccessibilityNode[]): UiStateSummar
   const labelValues = extractLabelValues(nodes);
   const tables = extractTableSummaries(nodes);
   const sections = extractUiSectionsFromControls(nodes, controls);
+  const popupControls = controls.filter(
+    (control) => control.options.length > 0 || control.expanded !== null,
+  );
   return {
     nodeCount: nodes.length,
     roleCounts,
     controls,
+    popupControls,
     sections,
     fields,
     labelValues,
@@ -263,9 +267,10 @@ export function compactUiInventory(summary: UiStateSummary): JsonRecord {
     sections: summary.sections.map(compactUiSection),
     textEntryControls,
     searchControls,
+    popupControls: summary.popupControls.slice(0, MAX_CONTROL_SUMMARY_ITEMS).map(compactControl),
     fields: summary.fields.slice(0, MAX_FIELD_SUMMARY_ITEMS).map(compactField),
     controls: summary.controls.slice(0, MAX_CONTROL_SUMMARY_ITEMS).map(compactControl),
-    labelValues: summary.labelValues.slice(0, MAX_LABEL_VALUE_ITEMS),
+    labelValues: summary.labelValues.slice(0, MAX_LABEL_VALUE_ITEMS).map(compactLabelValue),
     tables: summary.tables.slice(0, MAX_TABLE_SUMMARY_ITEMS).map(compactTableSummary),
     roleCounts: summary.roleCounts,
   };
@@ -479,22 +484,50 @@ function findContextLabels(nodes: AccessibilityNode[], controlIndex: number): st
   return labels.slice(0, 6);
 }
 
-function childOptionNames(nodes: AccessibilityNode[], controlIndex: number): string[] {
+function childPopupItemNames(nodes: AccessibilityNode[], controlIndex: number): string[] {
   const control = nodes[controlIndex];
   if (!control) return [];
   const out: string[] = [];
   const seen = new Set<string>();
-  for (let index = controlIndex + 1; index < nodes.length; index += 1) {
+  const hasPopup =
+    hasAttributeFlag(control.attributes, 'hasPopup') ||
+    attributeValue(control.attributes, 'expanded') !== null;
+  const isExpandedOpen = attributeValue(control.attributes, 'expanded')?.toLocaleLowerCase() === 'true';
+  const ownSubtreeEnd = subtreeEndIndex(nodes, controlIndex);
+  collectPopupNames(nodes, controlIndex + 1, ownSubtreeEnd, hasPopup, seen, out);
+  if (!hasPopup || out.length > 0 || !isExpandedOpen) return out;
+
+  for (let index = ownSubtreeEnd; index < nodes.length; index += 1) {
     const node = nodes[index];
-    if (node.indent <= control.indent) break;
-    if (!OPTION_ROLES.has(node.role.toLocaleLowerCase())) continue;
+    if (node.indent < control.indent) break;
+    if (node.indent !== control.indent) continue;
+    const siblingEnd = subtreeEndIndex(nodes, index);
+    const before = out.length;
+    collectPopupNames(nodes, index, siblingEnd, hasPopup, seen, out);
+    if (out.length > before || out.length >= MAX_CONTROL_OPTIONS) break;
+    index = siblingEnd - 1;
+  }
+  return out;
+}
+
+function collectPopupNames(
+  nodes: AccessibilityNode[],
+  startIndex: number,
+  endIndex: number,
+  hasPopup: boolean,
+  seen: Set<string>,
+  out: string[],
+): void {
+  for (let index = startIndex; index < endIndex; index += 1) {
+    const node = nodes[index];
+    const role = node.role.toLocaleLowerCase();
+    if (!OPTION_ROLES.has(role) && !(hasPopup && isInteractiveControlNode(node))) continue;
     const name = node.name?.trim();
     if (!name || seen.has(name)) continue;
     seen.add(name);
     out.push(name);
     if (out.length >= MAX_CONTROL_OPTIONS) break;
   }
-  return out;
 }
 
 function attributeValue(attributes: string[], key: string): string | null {
@@ -519,33 +552,6 @@ function stripWrappingQuote(value: string): string {
     if ((first === "'" || first === '"') && first === last) return value.slice(1, -1);
   }
   return value;
-}
-
-function extractLabelValues(nodes: AccessibilityNode[]): UiLabelValue[] {
-  const out: UiLabelValue[] = [];
-  for (let index = 0; index < nodes.length; index += 1) {
-    const label = nodes[index];
-    if (!label.name || !label.name.trim().endsWith(':')) continue;
-    const labelText = label.name.trim().slice(0, -1).trim();
-    if (!labelText) continue;
-    const value = findFollowingValue(nodes, index, label.indent);
-    if (!value) continue;
-    out.push({ label: labelText, value, sourceIndex: label.index });
-    if (out.length >= MAX_LABEL_VALUE_ITEMS) break;
-  }
-  return out;
-}
-
-function findFollowingValue(nodes: AccessibilityNode[], startIndex: number, labelIndent: number): string | null {
-  for (let index = startIndex + 1; index < Math.min(nodes.length, startIndex + 12); index += 1) {
-    const node = nodes[index];
-    if (node.indent < labelIndent) break;
-    if (!node.name) continue;
-    if (node.name.trim() === REQUIRED_MARKER) continue;
-    if (node.name.trim().endsWith(':')) continue;
-    return node.name.trim();
-  }
-  return null;
 }
 
 function extractTableSummaries(nodes: AccessibilityNode[]): UiTableSummary[] {

@@ -19,6 +19,11 @@ const DEFAULT_RECALL_PINNED_LIMIT = 64;
 const DEFAULT_RECALL_SCOPED_RECENT_LIMIT = 192;
 const DEFAULT_RECALL_LEXICAL_UNIT_LIMIT = 12;
 const MAX_RECALL_LEXICAL_UNIT_LIMIT = 32;
+const COMPACT_UI_RECALL_KINDS: MemoryFactKind[] = [
+  'ui_affordance',
+  'ui_field',
+  'ui_filter_state',
+];
 
 interface FactFilter {
   clauses: string[];
@@ -211,14 +216,19 @@ export function listFactsForRecallCandidates(
     }
   }
 
-  function addIndexedLexicalRows(units: string[], limit: number): void {
+  function addIndexedLexicalRows(
+    units: string[],
+    limit: number,
+    memoryKinds?: ReadonlyArray<MemoryFactKind>,
+  ): void {
     if (byId.size >= totalLimit || units.length === 0) return;
     const laneLimit = Math.max(1, Math.min(limit, totalLimit - byId.size));
     const factFilter = buildFactFilter(options, 'f');
     const termClauses = [`t.unit IN (${units.map(() => '?').join(', ')})`];
     const params: SqlBindValue[] = [...units];
-    if (options.memoryKind) {
-      const kinds = Array.isArray(options.memoryKind) ? options.memoryKind : [options.memoryKind];
+    const requestedKinds = memoryKinds ?? options.memoryKind;
+    if (requestedKinds) {
+      const kinds = Array.isArray(requestedKinds) ? requestedKinds : [requestedKinds];
       termClauses.push(`t.memory_kind IN (${kinds.map(() => '?').join(', ')})`);
       params.push(...kinds);
     }
@@ -259,6 +269,17 @@ export function listFactsForRecallCandidates(
     ? Array.from(new Set(options.selectedLexicalUnits.map((unit) => unit.trim()).filter(Boolean)))
     : selectIndexedLexicalUnitsForRecall(options.lexicalUnits ?? [], options);
   if (lexicalUnits.length > 0) {
+    if (!options.memoryKind) {
+      const compactUiLexicalUnits = selectIndexedLexicalUnitsForRecall(options.lexicalUnits ?? [], {
+        memoryKind: COMPACT_UI_RECALL_KINDS,
+        lexicalUnitLimit: MAX_RECALL_LEXICAL_UNIT_LIMIT,
+      });
+      addIndexedLexicalRows(
+        compactUiLexicalUnits.length > 0 ? compactUiLexicalUnits : lexicalUnits,
+        Math.max(16, Math.ceil(totalLimit * 0.25)),
+        COMPACT_UI_RECALL_KINDS,
+      );
+    }
     addIndexedLexicalRows(lexicalUnits, totalLimit);
   }
 
@@ -355,49 +376,6 @@ export function listFactsForSourceRuns(
     ...filter.params,
   );
   return rows.map(rowToFact);
-}
-
-export function listLatestFactsForSourceRuns(
-  sourceRunIds: ReadonlyArray<string>,
-  options: Pick<
-    ListFactsOptions,
-    'memoryKind' | 'includeDeleted' | 'includeExpired' | 'includeInvalidated' | 'asOf'
-  > & {
-    limit?: number;
-    perRunLimit?: number;
-  } = {},
-): MemoryFact[] {
-  const uniqueSourceRunIds = Array.from(
-    new Set(sourceRunIds.map((id) => id.trim()).filter((id) => id.length > 0)),
-  );
-  if (uniqueSourceRunIds.length === 0) return [];
-  const filter = buildFactFilter(options);
-  const perRunLimit = clampLimit(options.perRunLimit, 1, 8);
-  const totalLimit = clampLimit(
-    options.limit,
-    uniqueSourceRunIds.length * perRunLimit,
-    MAX_FACT_LIMIT,
-  );
-  const facts: MemoryFact[] = [];
-  for (const sourceRunId of uniqueSourceRunIds) {
-    if (facts.length >= totalLimit) break;
-    const rows = getMany<FactRow>(
-      `SELECT * FROM memory_facts
-        ${whereSql({
-          clauses: ['source_run_id = ?', ...filter.clauses],
-          params: [sourceRunId, ...filter.params],
-        })}
-        ORDER BY CAST(json_extract(attributes, '$.stateIndex') AS INTEGER) DESC,
-                 retrievability DESC,
-                 importance DESC,
-                 updated_at DESC
-        LIMIT ${Math.min(perRunLimit, totalLimit - facts.length)}`,
-      sourceRunId,
-      ...filter.params,
-    );
-    facts.push(...rows.map(rowToFact));
-  }
-  return facts;
 }
 
 export interface FactObservationContext {

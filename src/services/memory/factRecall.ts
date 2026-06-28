@@ -25,7 +25,7 @@ import {
   selectIndexedLexicalUnitsForRecall,
 } from './facts/queries';
 import { type MemoryFact, type MemoryFactKind, type MemoryFactScope } from './facts/types';
-import { collectJsonStrings, parseJsonRecord } from './factJson';
+import { parseJsonRecord } from './factJson';
 import { countLexicalUnits } from './ranking/lexical';
 import { buildScoringLexicalUnits } from './ranking/queryUnits';
 import { quotedSpanUnitSets } from './ranking/quotedSpans';
@@ -33,12 +33,11 @@ import { exponentialDecayMultiplier } from './ranking/scoring';
 import {
   UI_INVENTORY_FORM_FIELD_SHAPE_FIELDS,
   UI_INVENTORY_LABEL_VALUE_SHAPE_FIELDS,
+  UI_INVENTORY_POPUP_SHAPE_FIELDS,
   UI_INVENTORY_SEARCH_SHAPE_FIELDS,
   UI_INVENTORY_SECTION_SHAPE_FIELDS,
   UI_INVENTORY_TABLE_SHAPE_FIELDS,
   UI_INVENTORY_TEXT_ENTRY_SHAPE_FIELDS,
-  UI_INVENTORY_TRANSITION_CURRENT_FIELDS,
-  UI_INVENTORY_TRANSITION_PREVIOUS_FIELDS,
 } from './uiFactFields';
 
 const DEFAULT_LIMIT = 8;
@@ -263,19 +262,6 @@ function objectArrayShape(
     .slice(0, limit);
 }
 
-function unitsForJsonFields(
-  parsed: Record<string, unknown>,
-  fields: ReadonlyArray<string>,
-): Set<string> {
-  const values: string[] = [];
-  for (const field of fields) collectJsonStrings(parsed[field], values);
-  const units = new Set<string>();
-  for (const value of values) {
-    for (const unit of countLexicalUnits(value).keys()) units.add(unit);
-  }
-  return units;
-}
-
 function scalarString(...values: unknown[]): string {
   for (const value of values) {
     if (typeof value === 'string' && value.trim().length > 0) return value.trim();
@@ -298,8 +284,15 @@ function uiInventorySchemaKey(fact: MemoryFact): string | null {
     parsed.searchControls,
     UI_INVENTORY_SEARCH_SHAPE_FIELDS,
   );
+  const popupControls = objectArrayShape(
+    parsed.popupControls,
+    UI_INVENTORY_POPUP_SHAPE_FIELDS,
+  );
   const hasFormShape =
-    fields.length > 0 || textEntryControls.length > 0 || searchControls.length > 0;
+    fields.length > 0 ||
+    textEntryControls.length > 0 ||
+    searchControls.length > 0 ||
+    popupControls.length > 0;
   const key = {
     subjectId: fact.subjectId,
     predicate: fact.predicate,
@@ -308,6 +301,7 @@ function uiInventorySchemaKey(fact: MemoryFact): string | null {
     fields,
     textEntryControls,
     searchControls,
+    popupControls,
     labelValues: objectArrayShape(parsed.labelValues, UI_INVENTORY_LABEL_VALUE_SHAPE_FIELDS),
     sections: hasFormShape
       ? []
@@ -328,32 +322,10 @@ function uiStateSlotKey(fact: MemoryFact): string | null {
 }
 
 function selectionDedupeKey(fact: MemoryFact): string | null {
+  if (fact.memoryKind === 'procedure' && fact.sourceRunId) {
+    return `procedure:${fact.sourceRunId}:${fact.predicate}`;
+  }
   return uiInventorySchemaKey(fact) ?? uiStateSlotKey(fact);
-}
-
-function transitionStateBoost(
-  fact: MemoryFact,
-  queryUnits: Set<string>,
-  unitWeights: ReadonlyMap<string, number>,
-): number {
-  if (fact.memoryKind !== 'ui_inventory' || queryUnits.size === 0) return 0;
-  const parsed = parseJsonRecord(fact.objectText);
-  if (!parsed) return 0;
-  const previousUnits = unitsForJsonFields(parsed, UI_INVENTORY_TRANSITION_PREVIOUS_FIELDS);
-  if (previousUnits.size === 0) return 0;
-  const currentUnits = unitsForJsonFields(parsed, UI_INVENTORY_TRANSITION_CURRENT_FIELDS);
-  if (currentUnits.size === 0) return 0;
-  const previousOnlyUnits = new Set(
-    Array.from(previousUnits).filter((unit) => !currentUnits.has(unit)),
-  );
-  const previousOnlyOverlap = lexicalOverlapFromUnitHits(
-    queryUnits,
-    previousOnlyUnits,
-    unitWeights,
-  );
-  const currentOverlap = lexicalOverlapFromUnitHits(queryUnits, currentUnits, unitWeights);
-  if (previousOnlyOverlap <= 0 || currentOverlap <= 0) return 0;
-  return Math.min(0.16, (previousOnlyOverlap + currentOverlap) * 0.5);
 }
 
 function buildScoredFact(params: {
@@ -384,12 +356,10 @@ function buildScoredFact(params: {
   const retrievabilityScore = scoreRetrievability(fact);
   const relevanceScore = textScore * fact.confidence * decayMultiplier * retrievabilityScore;
   const anchorBoost = anchorMatchBoost(anchorUnitSets, factUnitHits);
-  const transitionBoost = transitionStateBoost(fact, queryUnits, params.unitWeights);
   const hasRelevance = relevanceScore > RELEVANCE_EPSILON;
   const score =
     relevanceScore +
     anchorBoost +
-    transitionBoost +
     pinnedBoost +
     (hasRelevance || anchorBoost > 0 ? scopeBoost + reinforcementBoost + importanceScore : 0);
   return {
@@ -455,6 +425,9 @@ async function buildRecallSelection(
   const queryUnitCounts = countLexicalUnits(trimmedQuery);
   const queryUnits = new Set(queryUnitCounts.keys());
   const anchorUnitSets = quotedSpanUnitSets(trimmedQuery, QUOTED_ANCHOR_LIMIT);
+  const anchorLexicalUnits = Array.from(
+    new Set(anchorUnitSets.flatMap((anchorUnits) => Array.from(anchorUnits))),
+  );
   const lexicalUnitsForRecall = Array.from(queryUnitCounts.entries()).flatMap(([unit, count]) =>
     Array.from({ length: Math.max(1, Math.min(count, 16)) }, () => unit),
   );
@@ -462,7 +435,8 @@ async function buildRecallSelection(
     ...(options.memoryKind ? { memoryKind: options.memoryKind } : {}),
     ...(options.lexicalUnitLimit ? { lexicalUnitLimit: options.lexicalUnitLimit } : {}),
   });
-  const scoringQueryUnits = buildScoringLexicalUnits(queryUnits, selectedLexicalUnits);
+  const recallLexicalUnits = Array.from(new Set([...selectedLexicalUnits, ...anchorLexicalUnits]));
+  const scoringQueryUnits = buildScoringLexicalUnits(queryUnits, recallLexicalUnits);
   timing.tokenizeQueryMs = Date.now() - tokenizeStarted;
   timing.queryUnitCount = queryUnits.size;
 
@@ -470,7 +444,7 @@ async function buildRecallSelection(
   const candidates = listFactsForRecallCandidates({
     limit: candidatePool,
     lexicalUnits: lexicalUnitsForRecall,
-    selectedLexicalUnits,
+    selectedLexicalUnits: recallLexicalUnits,
     ...(options.conversationId ? { scopedRecentConversationId: options.conversationId } : {}),
     ...(options.taskId ? { scopedRecentTaskId: options.taskId } : {}),
     ...(candidateScopes ? { scope: candidateScopes } : {}),

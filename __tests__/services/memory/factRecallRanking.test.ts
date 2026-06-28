@@ -80,6 +80,35 @@ describe('recallFactsForQuery — ranking', () => {
     expect(scored[0].textScore).toBe(1);
   });
 
+  it('keeps quoted anchor units available when scoring-unit selection is saturated', async () => {
+    const corpus = upsertEntity({ name: 'quoted-anchor-corpus', type: 'concept' });
+    const noiseUnits = Array.from({ length: 20 }, (_, index) => `qverylongnoise${index}`);
+    for (const unit of noiseUnits) {
+      recordFact({
+        subjectId: corpus.id,
+        predicate: `noise_${unit}`,
+        objectText: unit,
+      });
+    }
+    const target = recordFact({
+      subjectId: corpus.id,
+      predicate: 'target',
+      objectText: 'qverylongbridge qa qb',
+    });
+
+    const scored = await recallScoredFactsForQuery(
+      `${noiseUnits.join(' ')} qverylongbridge "qa qb"`,
+      {
+        limit: 1,
+        threshold: 0.01,
+        candidatePoolLimit: 80,
+      },
+    );
+
+    expect(scored.map((entry) => entry.fact.id)).toEqual([target.fact.id]);
+    expect(scored[0].score).toBeGreaterThan(0.3);
+  });
+
   it('does not expand source-run neighbors without direct query evidence', async () => {
     const corpus = upsertEntity({ name: 'trajectory-corpus', type: 'concept' });
     for (let index = 0; index < 8; index += 1) {
@@ -237,6 +266,113 @@ describe('recallFactsForQuery — ranking', () => {
     expect(scored.map((entry) => entry.fact.id)).toEqual([target.fact.id]);
   });
 
+  it('ranks compact popup option facts above noisy page inventories', async () => {
+    const surface = upsertEntity({ name: 'surface:https://forum.example.test', type: 'project' });
+    const conversationId = 'conv-popup-option-ranking';
+    for (let index = 0; index < 40; index += 1) {
+      recordFact({
+        subjectId: surface.id,
+        predicate: 'ui_inventory',
+        objectText: JSON.stringify({
+          controlNames: [`qshared${index}`, 'qforum-control'],
+          sections: [
+            {
+              label: `qsection${index}`,
+              controlNames: Array.from(
+                { length: 24 },
+                (_, controlIndex) => `qshared-content-${index}-${controlIndex}`,
+              ),
+            },
+          ],
+          url: `https://forum.example.test/noise/${index}`,
+        }),
+        memoryKind: 'ui_inventory',
+        scope: 'conversation',
+        originConversationId: conversationId,
+        now: 10_000 + index,
+      });
+    }
+    const target = recordFact({
+      subjectId: surface.id,
+      predicate: 'ui_popup_options',
+      objectText: JSON.stringify({
+        role: 'button',
+        name: 'qsort-current',
+        controlName: 'qsort-current',
+        options: ['qoption-alpha', 'qoption-beta'],
+        url: 'https://forum.example.test/target',
+        sourceRunId: 'run-popup-option-ranking',
+        stateIndex: '3',
+      }),
+      memoryKind: 'ui_field',
+      scope: 'conversation',
+      originConversationId: conversationId,
+      sourceRunId: 'run-popup-option-ranking',
+      now: 1,
+    });
+
+    const scored = await recallScoredFactsForQuery(
+      'qforum-control qsort-current qoption-beta',
+      {
+        conversationId,
+        memoryKind: ['ui_inventory', 'ui_field'],
+        limit: 1,
+        threshold: 0.01,
+        now: 20_000,
+      },
+    );
+
+    expect(scored.map((entry) => entry.fact.id)).toEqual([target.fact.id]);
+  });
+
+  it('keeps compact UI state candidates from being crowded out by broad procedures', async () => {
+    const surface = upsertEntity({ name: 'surface:https://forum.example.test', type: 'project' });
+    const conversationId = 'conv-compact-ui-candidate-lane';
+    for (let index = 0; index < 80; index += 1) {
+      recordFact({
+        subjectId: surface.id,
+        predicate: 'procedure_trace',
+        objectText: JSON.stringify({
+          sourceRunId: `run-noise-${index}`,
+          goal: `qshared-context qprocedure-noise-${index}`,
+          steps: [{ thought: `qshared-context qprocedure-noise-${index}` }],
+        }),
+        memoryKind: 'procedure',
+        retrievability: 0.25,
+        scope: 'conversation',
+        originConversationId: conversationId,
+        sourceRunId: `run-noise-${index}`,
+        now: 10_000 + index,
+      });
+    }
+    const target = recordFact({
+      subjectId: surface.id,
+      predicate: 'ui_label_value',
+      objectText: JSON.stringify({
+        label: 'qtarget-label',
+        value: 'qtarget-value',
+        nearbyTextBefore: ['qshared-context'],
+        url: 'https://forum.example.test/thread',
+      }),
+      memoryKind: 'ui_filter_state',
+      retrievability: 0.95,
+      scope: 'conversation',
+      originConversationId: conversationId,
+      sourceRunId: 'run-target-ui-state',
+      now: 1,
+    });
+
+    const scored = await recallScoredFactsForQuery('qshared-context', {
+      conversationId,
+      limit: 5,
+      threshold: 0.01,
+      candidatePoolLimit: 10,
+      now: 20_000,
+    });
+
+    expect(scored.some((entry) => entry.fact.id === target.fact.id)).toBe(true);
+  });
+
   it('prioritizes first-class UI affordances over recent bulk page state', async () => {
     const surface = upsertEntity({ name: 'surface:https://admin.example.test', type: 'project' });
     const conversationId = 'conv-ui-affordance-priority';
@@ -286,6 +422,34 @@ describe('recallFactsForQuery — ranking', () => {
 
     expect(scored[0].fact.id).toBe(target.fact.id);
     expect(scored[0].fact.memoryKind).toBe('ui_affordance');
+  });
+
+  it('deduplicates procedure traces by source run', async () => {
+    const workflow = upsertEntity({ name: 'surface:https://workflow.example.test', type: 'project' });
+    recordFact({
+      subjectId: workflow.id,
+      predicate: 'procedure_trace',
+      objectText: 'qdedupeaction',
+      memoryKind: 'procedure',
+      sourceRunId: 'run-procedure-dedupe',
+      now: 1,
+    });
+    recordFact({
+      subjectId: workflow.id,
+      predicate: 'procedure_trace',
+      objectText: 'qdedupeaction qdedupenext',
+      memoryKind: 'procedure',
+      sourceRunId: 'run-procedure-dedupe',
+      now: 2,
+    });
+
+    const facts = await recallFactsForQuery('procedure_trace qdedupeaction qdedupenext', {
+      memoryKind: 'procedure',
+      limit: 4,
+      threshold: 0,
+    });
+
+    expect(facts.filter((fact) => fact.sourceRunId === 'run-procedure-dedupe')).toHaveLength(1);
   });
 
   it('recalls an older relevant UI affordance despite many recent unrelated controls', async () => {

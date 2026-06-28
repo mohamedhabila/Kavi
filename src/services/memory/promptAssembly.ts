@@ -87,7 +87,7 @@ const L3_FACTS_HEADER = '### Retrieved Memory';
 const L3_RELEVANT_FACTS_HEADER = '#### Relevant Facts';
 const L3_UI_HEADER = '#### Observed UI and Surface Schema';
 const L3_UI_SNAPSHOT_NOTE =
-  'UI inventories are direct evidence for UI availability in observed states. Listed controls and fields were visible for that URL/state; controls not listed were not visible in that snapshot. Treat a named control missing from a snapshot visibleControls list as observed negative visibility evidence for that snapshot, not as unknown.';
+  'UI inventories are direct evidence for UI availability in observed states. Listed controls and fields were visible for that URL/state; controls not listed were not visible in that snapshot. Treat a named control missing from a snapshot visibleControls list as observed negative visibility evidence for that snapshot, not as unknown. Ordered options arrays preserve the observed option order; when a requested neighbor would fall past the last listed option, that is observed absence, not unknown.';
 const L3_PROCEDURES_HEADER = '#### Procedures';
 const L3_OUTCOMES_HEADER = '#### Outcomes and Gotchas';
 const L3_EPISODES_HEADER = '### Recent Activity';
@@ -209,18 +209,13 @@ function compactUiInventoryPromptFields(
   copyField('fields');
   copyField('textEntryControls');
   copyField('searchControls');
+  copyField('popupControls');
   copyField('labelValues');
   copyField('tables');
   copyField('nodeCount');
   copyField('controlCount');
   copyField('textEntryCount');
   copyField('searchControlCount');
-  copyField('action');
-  copyField('thought');
-  copyField('previousAction');
-  copyField('previousUrl');
-  copyField('previousStateIndex');
-  copyField('previousControlNames');
   return Object.keys(compact).length > 0 ? JSON.stringify(compact) : null;
 }
 

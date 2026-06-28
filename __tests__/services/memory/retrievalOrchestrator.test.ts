@@ -174,7 +174,7 @@ describe('orchestrateMemoryRetrieval', () => {
     expect(result.facts.some((fact) => fact.id === uiFact.id)).toBe(true);
   });
 
-  it('includes the latest UI snapshot from a relevant source run', async () => {
+  it('does not add source-run terminal snapshots without direct query evidence', async () => {
     const surface = upsertEntity({
       name: 'surface:https://workflow.example.test',
       type: 'project',
@@ -230,12 +230,13 @@ describe('orchestrateMemoryRetrieval', () => {
     });
 
     expect(result.facts.map((fact) => fact.id)).toEqual(
-      expect.arrayContaining([anchor.id, latest.id]),
+      expect.arrayContaining([anchor.id]),
     );
+    expect(result.facts.some((fact) => fact.id === latest.id)).toBe(false);
     expect(result.facts.some((fact) => fact.sourceRunId === 'run-workflow-noise')).toBe(false);
   });
 
-  it('ranks a post-transition UI state using previous-state controls', async () => {
+  it('does not rank a post-transition UI state from previous-state-only controls', async () => {
     const surface = upsertEntity({
       name: 'surface:https://workflow.example.test',
       type: 'project',
@@ -245,7 +246,6 @@ describe('orchestrateMemoryRetrieval', () => {
       predicate: 'ui_inventory',
       objectText: JSON.stringify({
         url: 'https://workflow.example.test/result',
-        previousControlNames: ['qtransition-submit'],
         controlNames: ['qresult-alpha', 'qresult-beta'],
         sections: [
           {
@@ -275,13 +275,13 @@ describe('orchestrateMemoryRetrieval', () => {
     }
 
     const result = await orchestrateMemoryRetrieval({
-      userMessage: 'After `qtransition-submit`, what is in qsection-result?',
+      userMessage: '`qtransition-submit`',
       conversationId: 'conv-transition',
       limit: 1,
       now: 200,
     });
 
-    expect(result.facts.map((fact) => fact.id)).toEqual([target.id]);
+    expect(result.facts.some((fact) => fact.id === target.id)).toBe(false);
   });
 
   it('drops dense tool signatures while retaining natural query context', async () => {

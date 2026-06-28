@@ -254,6 +254,13 @@ describe('structured observation memory', () => {
           control.role === 'combobox' && control.name === 'general',
       ),
     ).toMatchObject({ options: ['general', 'news'] });
+    expect(inventoryObject.popupControls).toEqual([
+      expect.objectContaining({
+        role: 'combobox',
+        name: 'general',
+        options: ['general', 'news'],
+      }),
+    ]);
     expect(inventoryObject.controls.some((control: { name?: string }) => control.name === 'Formatting help +')).toBe(
       true,
     );
@@ -270,6 +277,78 @@ describe('structured observation memory', () => {
       expect.objectContaining({ role: 'textbox', label: 'Title' }),
       expect.objectContaining({ role: 'textbox', label: 'Body' }),
     ]);
+  });
+
+  it('records sibling-rendered popup menu options without absorbing following content', () => {
+    recordStructuredObservationsFromMessages({
+      conversationId: 'conv-popup-sibling',
+      threadId: 'conv-popup-sibling',
+      sourceRunId: 'run-popup-sibling',
+      now: 405,
+      messages: [
+        toolMessage({
+          url: 'https://forum.example.test/f/qscope',
+          accessibility_tree: [
+            "RootWebArea 'qpage'",
+            "\t[1] main '', visible",
+            "\t\t[2] navigation '', visible",
+            "\t\t\t[3] list '', visible",
+            "\t\t\t\t[4] listitem '', visible",
+            "\t\t\t\t\t[5] button 'qsort-current', clickable, visible, hasPopup='menu', expanded=True",
+            "\t\t\t\t\t\tStaticText 'qsort-current'",
+            "\t\t\t\t\t[6] list '', visible",
+            "\t\t\t\t\t\t[7] listitem '', visible",
+            "\t\t\t\t\t\t\t[8] link 'qmenu-alpha', clickable, visible",
+            "\t\t\t\t\t\t[9] listitem '', visible",
+            "\t\t\t\t\t\t\t[10] link 'qmenu-beta', clickable, visible",
+            "\t\t[11] article '', visible",
+            "\t\t\t[12] heading 'qpost-title', visible",
+            "\t\t\t\t[13] link 'qpost-title', clickable, visible",
+            "\t\t[14] navigation '', visible",
+            "\t\t\t[15] list '', visible",
+            "\t\t\t\t[16] listitem '', visible",
+            "\t\t\t\t\t[17] button 'qclosed-popup', clickable, visible, hasPopup='menu', expanded=False",
+            "\t\t\t\t\t[18] list '', visible",
+            "\t\t\t\t\t\t[19] listitem '', visible",
+            "\t\t\t\t\t\t\t[20] link 'qclosed-follower', clickable, visible",
+          ].join('\n'),
+        }),
+      ],
+    });
+
+    const inventory = JSON.parse(
+      listFacts({
+        memoryKind: 'ui_inventory',
+        originConversationId: 'conv-popup-sibling',
+      })[0].objectText,
+    );
+
+    expect(inventory.popupControls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'button',
+          name: 'qsort-current',
+          options: ['qmenu-alpha', 'qmenu-beta'],
+        }),
+      ]),
+    );
+    const expandedPopup = inventory.popupControls.find(
+      (control: { name?: string }) => control.name === 'qsort-current',
+    );
+    expect(expandedPopup.options).not.toContain('qpost-title');
+
+    const popupFacts = listFacts({
+      memoryKind: 'ui_field',
+      originConversationId: 'conv-popup-sibling',
+    });
+    expect(popupFacts.map((fact) => fact.predicate)).toEqual(['ui_popup_options']);
+    expect(JSON.parse(popupFacts[0].objectText)).toMatchObject({
+      role: 'button',
+      name: 'qsort-current',
+      controlName: 'qsort-current',
+      options: ['qmenu-alpha', 'qmenu-beta'],
+    });
+    expect(popupFacts[0].objectText).not.toContain('qclosed-follower');
   });
 
   it('records named UI sections with their contained controls', () => {
@@ -383,41 +462,6 @@ describe('structured observation memory', () => {
     );
   });
 
-  it('records generic label-value state for active filters without phrase rules', () => {
-    recordStructuredObservationsFromMessages({
-      conversationId: 'conv-filter-state',
-      threadId: 'conv-filter-state',
-      sourceRunId: 'run-filter-state',
-      now: 500,
-      messages: [
-        toolMessage({
-          url: 'https://admin.example.test/orders',
-          accessibility_tree: [
-            "RootWebArea 'Orders'",
-            "\tStaticText 'Order state:'",
-            "\tStaticText 'Archived'",
-            "\t[10] button 'Clear active state', clickable",
-            "\t[11] textbox 'Search by keyword', value='Avery', clickable",
-            "\t[12] button 'Filters', clickable",
-          ].join('\n'),
-        }),
-      ],
-    });
-
-    const labelValues = listFacts({
-      memoryKind: 'ui_filter_state',
-      originConversationId: 'conv-filter-state',
-    }).map((fact) => JSON.parse(fact.objectText));
-
-    expect(labelValues).toEqual([
-      expect.objectContaining({
-        label: 'Order state',
-        value: 'Archived',
-        sourceRunId: 'run-filter-state',
-      }),
-    ]);
-  });
-
   it('preserves controls in source order inside compact inventories', () => {
     const result = recordStructuredObservationsFromMessages({
       conversationId: 'conv-form',
@@ -502,7 +546,7 @@ describe('structured observation memory', () => {
     ]);
   });
 
-  it('stores previous observation controls on the following UI inventory', () => {
+  it('stores consecutive observations as standalone UI inventories', () => {
     recordStructuredObservationsFromMessages({
       conversationId: 'conv-transition-context',
       threadId: 'conv-transition-context',
@@ -536,14 +580,45 @@ describe('structured observation memory', () => {
       memoryKind: 'ui_inventory',
       originConversationId: 'conv-transition-context',
     });
-    const resultInventory = inventories
-      .map((fact) => JSON.parse(fact.objectText))
-      .find((payload) => payload.url === 'https://workflow.example.test/result');
+    const parsedInventories = inventories.map((fact) => JSON.parse(fact.objectText));
+    const inputInventory = parsedInventories.find(
+      (payload) => payload.url === 'https://workflow.example.test/input',
+    );
+    const resultInventory = parsedInventories.find(
+      (payload) => payload.url === 'https://workflow.example.test/result',
+    );
 
+    expect(inputInventory.controlNames).toEqual(
+      expect.arrayContaining(['qtransition-submit', 'qtransition-field']),
+    );
     expect(resultInventory).toMatchObject({
-      previousUrl: 'https://workflow.example.test/input',
-      previousStateIndex: '1',
-      previousControlNames: expect.arrayContaining(['qtransition-submit']),
+      url: 'https://workflow.example.test/result',
+      stateIndex: '2',
+    });
+    expect(resultInventory).not.toHaveProperty('action');
+    expect(resultInventory).not.toHaveProperty('thought');
+    expect(resultInventory).not.toHaveProperty('previousUrl');
+    expect(resultInventory).not.toHaveProperty('previousStateIndex');
+    expect(resultInventory).not.toHaveProperty('previousControlNames');
+
+    const procedure = listFacts({
+      memoryKind: 'procedure',
+      originConversationId: 'conv-transition-context',
+    })[0];
+    expect(JSON.parse(procedure.objectText)).toMatchObject({
+      sourceRunId: 'run-transition-context',
+      stepCount: 2,
+      steps: [
+        expect.objectContaining({
+          stateIndex: '1',
+          url: 'https://workflow.example.test/input',
+        }),
+        expect.objectContaining({
+          stateIndex: '2',
+          url: 'https://workflow.example.test/result',
+          action: "click('1')",
+        }),
+      ],
     });
   });
 
