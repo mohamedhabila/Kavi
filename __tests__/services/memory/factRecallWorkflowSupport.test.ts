@@ -189,4 +189,167 @@ describe('recallFactsForQuery — workflow support', () => {
     expect(selectedIds).toContain(targetSupport.id);
     expect(selectedIds).not.toContain(competitorSupport.id);
   });
+
+  it('does not expand procedure-only memories into UI support slots', async () => {
+    const corpus = upsertEntity({ name: 'procedure-support-corpus', type: 'concept' });
+    const procedureNoise = recordFact({
+      subjectId: corpus.id,
+      predicate: 'procedure_noise',
+      objectText: JSON.stringify({
+        sourceRunId: 'run-procedure-noise',
+        goal: 'qprocanchor qprocquery',
+        steps: [{ stateIndex: '1' }],
+      }),
+      sourceRunId: 'run-procedure-noise',
+      memoryKind: 'procedure',
+      importance: 1,
+      now: 1_000,
+    }).fact;
+    recordFact({
+      subjectId: corpus.id,
+      predicate: 'procedure_noise_ui',
+      objectText: JSON.stringify({
+        controlNames: ['qprocanchor', 'qprocquery'],
+        url: 'https://example.test/noise/start',
+        stateIndex: '1',
+      }),
+      sourceRunId: 'run-procedure-noise',
+      memoryKind: 'ui_inventory',
+      attributes: { stateIndex: 1, url: 'https://example.test/noise/start' },
+      now: 900,
+    });
+    const noiseSupport = recordFact({
+      subjectId: corpus.id,
+      predicate: 'procedure_noise_support',
+      objectText: JSON.stringify({
+        controlNames: ['qprocanchor', 'qprocquery', 'qprocnoise'],
+        url: 'https://example.test/noise/result',
+        stateIndex: '2',
+      }),
+      sourceRunId: 'run-procedure-noise',
+      memoryKind: 'ui_inventory',
+      attributes: { stateIndex: 2, url: 'https://example.test/noise/result' },
+      now: 2_000,
+    }).fact;
+    const target = recordFact({
+      subjectId: corpus.id,
+      predicate: 'procedure_target',
+      objectText: JSON.stringify({
+        controlNames: ['qprocanchor', 'qproctarget'],
+        url: 'https://example.test/target/start',
+        stateIndex: '3',
+      }),
+      sourceRunId: 'run-procedure-target',
+      memoryKind: 'ui_inventory',
+      importance: 1,
+      attributes: { stateIndex: 3, url: 'https://example.test/target/start' },
+      now: 800,
+    }).fact;
+    const filler = recordFact({
+      subjectId: corpus.id,
+      predicate: 'procedure_filler',
+      objectText: 'qprocanchor qprocfiller',
+      sourceRunId: 'run-procedure-filler',
+      now: 700,
+    }).fact;
+    const targetSupport = recordFact({
+      subjectId: corpus.id,
+      predicate: 'procedure_target_support',
+      objectText: JSON.stringify({
+        controlNames: ['qprocterminal'],
+        url: 'https://example.test/target/result',
+        stateIndex: '4',
+      }),
+      sourceRunId: 'run-procedure-target',
+      memoryKind: 'ui_inventory',
+      attributes: { stateIndex: 4, url: 'https://example.test/target/result' },
+      now: 3_000,
+    }).fact;
+
+    const facts = await recallFactsForQuery('qprocanchor qprocquery qproctarget', {
+      limit: 4,
+      threshold: 0.01,
+      candidatePoolLimit: 40,
+      now: 4_000,
+    });
+    const selectedIds = facts.map((fact) => fact.id);
+
+    expect(selectedIds.slice(0, 3)).toEqual(
+      expect.arrayContaining([procedureNoise.id, target.id, filler.id]),
+    );
+    expect(selectedIds).toContain(targetSupport.id);
+    expect(selectedIds).not.toContain(noiseSupport.id);
+  });
+
+  it('uses the latest support representative for repeated workflow surfaces', async () => {
+    const corpus = upsertEntity({ name: 'support-phase-corpus', type: 'concept' });
+    const target = recordFact({
+      subjectId: corpus.id,
+      predicate: 'phase_primary',
+      objectText: JSON.stringify({
+        controlNames: ['qphaseanchor', 'qphasetarget'],
+        url: 'https://example.test/flow/surface',
+        stateIndex: '10',
+      }),
+      sourceRunId: 'run-support-phase',
+      memoryKind: 'ui_inventory',
+      importance: 1,
+      attributes: { stateIndex: 10, url: 'https://example.test/flow/surface' },
+      now: 1_000,
+    }).fact;
+    const fillerA = recordFact({
+      subjectId: corpus.id,
+      predicate: 'phase_filler_a',
+      objectText: 'qphaseanchor qfillera',
+      sourceRunId: 'run-support-phase-filler-a',
+      now: 900,
+    }).fact;
+    const fillerB = recordFact({
+      subjectId: corpus.id,
+      predicate: 'phase_filler_b',
+      objectText: 'qphaseanchor qfillerb',
+      sourceRunId: 'run-support-phase-filler-b',
+      now: 800,
+    }).fact;
+    const staleSupport = recordFact({
+      subjectId: corpus.id,
+      predicate: 'phase_support_stale',
+      objectText: JSON.stringify({
+        controlNames: ['qphaseanchor', 'qphasestale'],
+        url: 'https://example.test/flow/surface',
+        stateIndex: '11',
+      }),
+      sourceRunId: 'run-support-phase',
+      memoryKind: 'ui_inventory',
+      importance: 1,
+      attributes: { stateIndex: 11, url: 'https://example.test/flow/surface' },
+      now: 2_000,
+    }).fact;
+    const latestSupport = recordFact({
+      subjectId: corpus.id,
+      predicate: 'phase_support_latest',
+      objectText: JSON.stringify({
+        controlNames: ['qphaselatest'],
+        url: 'https://example.test/flow/surface',
+        stateIndex: '12',
+      }),
+      sourceRunId: 'run-support-phase',
+      memoryKind: 'ui_inventory',
+      importance: 0.1,
+      attributes: { stateIndex: 12, url: 'https://example.test/flow/surface' },
+      now: 3_000,
+    }).fact;
+
+    const facts = await recallFactsForQuery('qphaseanchor qphasetarget', {
+      limit: 4,
+      threshold: 0.01,
+      candidatePoolLimit: 40,
+      now: 4_000,
+    });
+    const selectedIds = facts.map((fact) => fact.id);
+
+    expect(selectedIds.slice(0, 3)).toEqual([target.id, fillerA.id, fillerB.id]);
+    expect(selectedIds).toContain(latestSupport.id);
+    expect(selectedIds).not.toContain(staleSupport.id);
+  });
 });

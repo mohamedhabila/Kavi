@@ -31,10 +31,12 @@ import { quotedSpanUnitSets } from './ranking/quotedSpans';
 import { exponentialDecayMultiplier } from './ranking/scoring';
 import {
   compareSupportCandidates,
+  compareSupportPhaseRepresentatives,
   primarySelectionGroupKey,
   selectionDedupeKey,
   sourceRunSupportContexts,
   supportDiversityKey,
+  supportPhaseKey,
   supportSlotCount,
 } from './ranking/selection';
 
@@ -52,6 +54,12 @@ const SOURCE_RUN_SUPPORT_FORWARD_RADIUS = 16;
 const SOURCE_RUN_SUPPORT_FORWARD_STATE_LIMIT = 16;
 const SOURCE_RUN_SUPPORT_RADIUS = 2;
 const SOURCE_RUN_SUPPORT_PER_RUN_LIMIT = 8;
+const WORKFLOW_SUPPORT_ANCHOR_KINDS = new Set<MemoryFactKind>([
+  'ui_inventory',
+  'ui_field',
+  'ui_filter_state',
+  'outcome',
+]);
 
 export interface RecallFactsOptions {
   /** Maximum facts returned. Default 8. */
@@ -236,6 +244,10 @@ function isFactEligibleForRecall(fact: MemoryFact, options: RecallFactsOptions):
     return Boolean(options.taskId && fact.originTaskId === options.taskId);
   }
   return true;
+}
+
+function canAnchorWorkflowSupport(fact: MemoryFact): boolean {
+  return WORKFLOW_SUPPORT_ANCHOR_KINDS.has(fact.memoryKind);
 }
 
 function scoreScope(fact: MemoryFact, options: RecallFactsOptions): number {
@@ -477,9 +489,10 @@ async function buildRecallSelection(
   }
 
   if (trimmedQuery && selected.length < limit && reservedSupportSlots > 0) {
-    const supportContexts = sourceRunSupportContexts(selected, scored);
+    const supportAnchors = selected.filter(canAnchorWorkflowSupport);
+    const supportContexts = sourceRunSupportContexts(supportAnchors, scored);
     const selectedSourceRuns = Array.from(
-      new Set(selected.map((fact) => fact.sourceRunId).filter(Boolean) as string[]),
+      new Set(supportAnchors.map((fact) => fact.sourceRunId).filter(Boolean) as string[]),
     );
     const supportLimit = Math.min(limit, selected.length + reservedSupportSlots);
     const supportFactsById = new Map<string, MemoryFact>();
@@ -530,27 +543,42 @@ async function buildRecallSelection(
     const seenSupportDiversityKeys = new Set(
       selected.map((fact) => supportDiversityKey(fact)).filter(Boolean),
     );
-    const supportEntries = supportFacts
-      .map((fact) => ({
+    const supportEntries = supportFacts.map((fact) => ({
+      fact,
+      scored: buildScoredFact({
         fact,
-        scored: buildScoredFact({
-          fact,
-          queryUnits: scoringQueryUnits,
-          factUnitHits: supportUnitHits.get(fact.id),
-          unitWeights,
-          anchorUnitSets,
-          alwaysIncludePinned,
-          options,
-          now,
-        }),
-      }))
-      .sort((left, right) => {
-        const leftRank = sourceRunSupportRank.get(left.fact.sourceRunId ?? '') ?? Number.MAX_SAFE_INTEGER;
-        const rightRank = sourceRunSupportRank.get(right.fact.sourceRunId ?? '') ?? Number.MAX_SAFE_INTEGER;
-        if (leftRank !== rightRank) return leftRank - rightRank;
-        return compareSupportCandidates(left, right);
-      });
+        queryUnits: scoringQueryUnits,
+        factUnitHits: supportUnitHits.get(fact.id),
+        unitWeights,
+        anchorUnitSets,
+        alwaysIncludePinned,
+        options,
+        now,
+      }),
+    }));
+    const supportEntriesByPhase = new Map<string, (typeof supportEntries)[number]>();
+    const ungroupedSupportEntries: typeof supportEntries = [];
     for (const entry of supportEntries) {
+      const phaseKey = supportPhaseKey(entry.fact);
+      if (!phaseKey) {
+        ungroupedSupportEntries.push(entry);
+        continue;
+      }
+      const existing = supportEntriesByPhase.get(phaseKey);
+      if (!existing || compareSupportPhaseRepresentatives(entry, existing) < 0) {
+        supportEntriesByPhase.set(phaseKey, entry);
+      }
+    }
+    const rankedSupportEntries = [
+      ...supportEntriesByPhase.values(),
+      ...ungroupedSupportEntries,
+    ].sort((left, right) => {
+      const leftRank = sourceRunSupportRank.get(left.fact.sourceRunId ?? '') ?? Number.MAX_SAFE_INTEGER;
+      const rightRank = sourceRunSupportRank.get(right.fact.sourceRunId ?? '') ?? Number.MAX_SAFE_INTEGER;
+      if (leftRank !== rightRank) return leftRank - rightRank;
+      return compareSupportCandidates(left, right);
+    });
+    for (const entry of rankedSupportEntries) {
       const diversityKey = supportDiversityKey(entry.fact);
       if (diversityKey && seenSupportDiversityKeys.has(diversityKey)) continue;
       const added = addSelectedFact({

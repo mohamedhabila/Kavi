@@ -186,6 +186,24 @@ export function supportDiversityKey(fact: MemoryFact): string | null {
   return `support_ui_phase:${JSON.stringify(key)}`;
 }
 
+export function supportPhaseKey(fact: MemoryFact): string | null {
+  if (fact.memoryKind !== 'ui_inventory' || !fact.sourceRunId) return null;
+  const parsed = parseJsonRecord(fact.objectText);
+  const url = canonicalSurfacePath(scalarString(fact.attributes.url, parsed?.url));
+  if (!url) return null;
+  return `support_surface:${fact.sourceRunId}:${url}`;
+}
+
+function factStateNumber(fact: MemoryFact): number | null {
+  const value = factStateIndex(fact);
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 export function primarySelectionGroupKey(fact: MemoryFact): string {
   return fact.sourceRunId ? `source_run:${fact.sourceRunId}` : `fact:${fact.id}`;
 }
@@ -263,4 +281,16 @@ export function compareSupportCandidates(
     return right.fact.retrievability - left.fact.retrievability;
   }
   return right.fact.updatedAt - left.fact.updatedAt;
+}
+
+export function compareSupportPhaseRepresentatives(
+  left: { fact: MemoryFact; scored: ScoredSelectionFact },
+  right: { fact: MemoryFact; scored: ScoredSelectionFact },
+): number {
+  const leftState = factStateNumber(left.fact);
+  const rightState = factStateNumber(right.fact);
+  if (leftState !== null && rightState !== null && leftState !== rightState) {
+    return rightState - leftState;
+  }
+  return compareSupportCandidates(left, right);
 }
