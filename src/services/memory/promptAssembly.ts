@@ -96,6 +96,7 @@ const MAX_RENDERED_PROCEDURE_FACT_CHARS = 5_000;
 const MAX_RENDERED_UI_FACT_CHARS = 2_400;
 const MAX_RETRIEVED_FACT_SECTION_CHARS = 3_400;
 const MAX_RENDERED_EPISODE_CHARS = 200;
+const MAX_VISIBLE_UI_CONTROLS = 64;
 
 function joinNonEmpty(parts: Array<string | null | undefined>, sep = '\n\n'): string {
   return parts
@@ -186,6 +187,30 @@ function compactUiInventoryPromptFields(
       compact[to] = rawValue;
     }
   };
+  const copyVisibleControls = (): void => {
+    const rawControlNames = fact.attributes.controlNames ?? parsed.controlNames;
+    if (Array.isArray(rawControlNames)) {
+      const visibleControls = rawControlNames
+        .filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
+        .map((name) => name.trim())
+        .slice(0, MAX_VISIBLE_UI_CONTROLS);
+      if (visibleControls.length > 0) {
+        compact.visibleControls = visibleControls;
+        return;
+      }
+    }
+    if (Array.isArray(parsed.controls)) {
+      const visibleControls = parsed.controls
+        .map((control) =>
+          control && typeof control === 'object' && !Array.isArray(control)
+            ? (control as Record<string, unknown>).name
+            : null,
+        )
+        .filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
+        .slice(0, MAX_VISIBLE_UI_CONTROLS);
+      if (visibleControls.length > 0) compact.visibleControls = visibleControls;
+    }
+  };
 
   copyField('goal', 'sourceGoal');
   copyField('trajectoryOutcome');
@@ -197,21 +222,11 @@ function compactUiInventoryPromptFields(
   copyField('tables');
   copyField('labelValues');
   copyField('fieldLabels');
+  copyVisibleControls();
   copyField('fields');
   copyField('textEntryControls');
   copyField('searchControls');
   copyField('popupControls');
-  copyField('controlNames', 'visibleControls');
-  if (!compact.visibleControls && Array.isArray(parsed.controls)) {
-    const visibleControls = parsed.controls
-      .map((control) =>
-        control && typeof control === 'object' && !Array.isArray(control)
-          ? (control as Record<string, unknown>).name
-          : null,
-      )
-      .filter((name): name is string => typeof name === 'string' && name.trim().length > 0);
-    if (visibleControls.length > 0) compact.visibleControls = visibleControls.slice(0, 48);
-  }
   copyField('sections');
   copyField('nodeCount');
   copyField('controlCount');

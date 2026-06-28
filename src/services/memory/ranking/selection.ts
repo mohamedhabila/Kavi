@@ -62,6 +62,18 @@ function scalarString(...values: unknown[]): string {
   return '';
 }
 
+function canonicalSurfacePath(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  try {
+    const url = new URL(trimmed);
+    const decodedPath = decodeURIComponent(url.pathname);
+    return `${url.origin}${decodedPath.split('?')[0]}`;
+  } catch {
+    return decodeURIComponent(trimmed).split('?')[0].split('#')[0];
+  }
+}
+
 function factStateIndex(fact: MemoryFact): string | number | null {
   const parsed = parseJsonRecord(fact.objectText);
   return (
@@ -131,6 +143,47 @@ export function selectionDedupeKey(fact: MemoryFact): string | null {
     return `procedure:${fact.sourceRunId}:${fact.predicate}`;
   }
   return uiInventorySchemaKey(fact) ?? uiStateSlotKey(fact);
+}
+
+export function supportDiversityKey(fact: MemoryFact): string | null {
+  if (fact.memoryKind !== 'ui_inventory' || !fact.sourceRunId) return selectionDedupeKey(fact);
+  const parsed = parseJsonRecord(fact.objectText);
+  if (!parsed) return selectionDedupeKey(fact);
+  const fields = objectArrayShape(parsed.fields, UI_INVENTORY_FORM_FIELD_SHAPE_FIELDS);
+  const textEntryControls = objectArrayShape(
+    parsed.textEntryControls,
+    UI_INVENTORY_TEXT_ENTRY_SHAPE_FIELDS,
+  );
+  const searchControls = objectArrayShape(
+    parsed.searchControls,
+    UI_INVENTORY_SEARCH_SHAPE_FIELDS,
+  );
+  const popupControls = objectArrayShape(
+    parsed.popupControls,
+    UI_INVENTORY_POPUP_SHAPE_FIELDS,
+  );
+  const hasFormShape =
+    fields.length > 0 ||
+    textEntryControls.length > 0 ||
+    searchControls.length > 0 ||
+    popupControls.length > 0;
+  const url = canonicalSurfacePath(scalarString(fact.attributes.url, parsed.url));
+  const key = {
+    sourceRunId: fact.sourceRunId,
+    subjectId: fact.subjectId,
+    predicate: fact.predicate,
+    url,
+    fields,
+    textEntryControls,
+    searchControls,
+    popupControls,
+    controlNames: hasFormShape ? [] : stringArray(parsed.controlNames),
+    sections: hasFormShape
+      ? []
+      : objectArrayShape(parsed.sections, UI_INVENTORY_SECTION_SHAPE_FIELDS),
+    tables: objectArrayShape(parsed.tables, UI_INVENTORY_TABLE_SHAPE_FIELDS),
+  };
+  return `support_ui_phase:${JSON.stringify(key)}`;
 }
 
 export function primarySelectionGroupKey(fact: MemoryFact): string {

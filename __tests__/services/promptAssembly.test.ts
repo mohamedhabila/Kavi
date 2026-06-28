@@ -305,7 +305,7 @@ describe('assemblePrompt — L3 contents', () => {
     expect(uiSection?.text).not.toContain('"nodes"');
   });
 
-  it('renders UI inventory field structure before bulky controls', () => {
+  it('renders UI inventory visible controls before bulky field details', () => {
     const out = assemblePrompt({
       basePrompt: 'BASE',
       retrievedFacts: [
@@ -341,6 +341,7 @@ describe('assemblePrompt — L3 contents', () => {
     expect(text).toContain('"visibleControls"');
     expect(text).toContain('"label":"Body"');
     expect(text).toContain('"label":"Forum"');
+    expect(text.indexOf('"visibleControls"')).toBeLessThan(text.indexOf('"fields"'));
     expect(text).not.toContain('bulk-control-79');
   });
 
@@ -384,6 +385,47 @@ describe('assemblePrompt — L3 contents', () => {
     expect(text.indexOf('"tables"')).toBeGreaterThan(-1);
     expect(text.indexOf('"visibleControls"')).toBeGreaterThan(text.indexOf('"tables"'));
     expect(text).not.toContain('bulk-control-239');
+  });
+
+  it('keeps visible controls available when UI field details are verbose', () => {
+    const out = assemblePrompt({
+      basePrompt: 'BASE',
+      retrievedFacts: [
+        makeFact({
+          predicate: 'ui_inventory',
+          memoryKind: 'ui_inventory',
+          sourceRunId: 'run-verbose-ui',
+          objectText: JSON.stringify({
+            controlNames: [
+              'Navigate home',
+              'Open menu',
+              'Review status',
+              'Confirm downstream action',
+            ],
+            fields: Array.from({ length: 24 }, (_, index) => ({
+              order: index,
+              label: `Verbose field ${index}`,
+              role: 'textbox',
+              controlName: `Verbose field ${index}`,
+              value: `Long repeated value ${index} ${'x'.repeat(80)}`,
+            })),
+            textEntryControls: Array.from({ length: 24 }, (_, index) => ({
+              index,
+              role: 'textbox',
+              name: `Verbose text entry ${index}`,
+              value: `Long text entry value ${index} ${'y'.repeat(80)}`,
+            })),
+            url: 'https://app.example.test/result',
+            sourceRunId: 'run-verbose-ui',
+            stateIndex: '9',
+          }),
+        }),
+      ],
+    });
+
+    const text = flattenPromptSections(out.sections);
+    expect(text).toContain('Confirm downstream action');
+    expect(text.indexOf('"visibleControls"')).toBeLessThan(text.indexOf('"fields"'));
   });
 
   it('renders UI inventories with the visible snapshot contract and source context', () => {

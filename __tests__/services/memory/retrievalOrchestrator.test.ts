@@ -174,7 +174,7 @@ describe('orchestrateMemoryRetrieval', () => {
     expect(result.facts.some((fact) => fact.id === uiFact.id)).toBe(true);
   });
 
-  it('does not add source-run terminal snapshots without direct query evidence', async () => {
+  it('adds bounded downstream source-run support without unrelated workflow noise', async () => {
     const surface = upsertEntity({
       name: 'surface:https://workflow.example.test',
       type: 'project',
@@ -232,7 +232,7 @@ describe('orchestrateMemoryRetrieval', () => {
     expect(result.facts.map((fact) => fact.id)).toEqual(
       expect.arrayContaining([anchor.id]),
     );
-    expect(result.facts.some((fact) => fact.id === latest.id)).toBe(false);
+    expect(result.facts.some((fact) => fact.id === latest.id)).toBe(true);
     expect(result.facts.some((fact) => fact.sourceRunId === 'run-workflow-noise')).toBe(false);
   });
 

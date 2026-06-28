@@ -320,6 +320,103 @@ function stateIndexToNumber(value: string | number | null | undefined): number |
   return null;
 }
 
+export function listFactsForSourceRunForwardWindows(
+  contexts: ReadonlyArray<SourceRunStateNeighborhoodContext>,
+  options: Pick<
+    ListFactsOptions,
+    | 'memoryKind'
+    | 'scope'
+    | 'originConversationId'
+    | 'originTaskId'
+    | 'includeDeleted'
+    | 'includeExpired'
+    | 'includeInvalidated'
+    | 'asOf'
+  > & {
+    forwardRadius?: number;
+    limit?: number;
+    stateLimit?: number;
+  } = {},
+): MemoryFact[] {
+  const normalizedContexts = contexts
+    .map((context) => ({
+      sourceRunId:
+        typeof context.sourceRunId === 'string' && context.sourceRunId.trim()
+          ? context.sourceRunId.trim()
+          : null,
+      stateIndex: stateIndexToNumber(context.stateIndex),
+    }))
+    .filter(
+      (context): context is { sourceRunId: string; stateIndex: number } =>
+        Boolean(context.sourceRunId) && context.stateIndex !== null,
+    );
+  if (normalizedContexts.length === 0) return [];
+
+  const byKey = new Map<string, { sourceRunId: string; stateIndex: number }>();
+  for (const context of normalizedContexts) {
+    byKey.set(`${context.sourceRunId}:${context.stateIndex}`, context);
+  }
+
+  const uniqueContexts = Array.from(byKey.values());
+  const forwardRadius = Math.max(1, Math.min(Math.floor(options.forwardRadius ?? 16), 64));
+  const stateLimit = Math.max(1, Math.min(Math.floor(options.stateLimit ?? 16), 32));
+  const limit = clampLimit(options.limit, uniqueContexts.length * stateLimit, MAX_FACT_LIMIT);
+  const filter = buildFactFilter(options, 'f');
+  const stateExpr = "CAST(json_extract(f.attributes, '$.stateIndex') AS REAL)";
+  const byId = new Map<string, MemoryFact>();
+
+  for (const context of uniqueContexts) {
+    if (byId.size >= limit) break;
+    const rows = getMany<FactRow>(
+      `SELECT *
+         FROM (
+           SELECT f.*,
+                  ${stateExpr} AS state_index_rank,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY ${stateExpr}
+                    ORDER BY CASE
+                               WHEN f.memory_kind = 'ui_inventory' THEN 0
+                               WHEN f.memory_kind = 'outcome' THEN 1
+                               WHEN f.memory_kind = 'ui_field' THEN 2
+                               ELSE 3
+                             END ASC,
+                             f.retrievability DESC,
+                             f.importance DESC,
+                             f.updated_at DESC
+                  ) AS state_rank
+             FROM memory_facts AS f
+             ${whereSql({
+               clauses: [
+                 'f.source_run_id = ?',
+                 `${stateExpr} > ?`,
+                 `${stateExpr} <= ?`,
+                 ...filter.clauses,
+               ],
+               params: [
+                 context.sourceRunId,
+                 context.stateIndex,
+                 context.stateIndex + forwardRadius,
+                 ...filter.params,
+               ],
+             })}
+         )
+        WHERE state_rank = 1
+        ORDER BY state_index_rank ASC
+        LIMIT ${Math.min(stateLimit, limit - byId.size)}`,
+      context.sourceRunId,
+      context.stateIndex,
+      context.stateIndex + forwardRadius,
+      ...filter.params,
+    );
+    for (const row of rows) {
+      byId.set(row.id, rowToFact(row));
+      if (byId.size >= limit) break;
+    }
+  }
+
+  return Array.from(byId.values());
+}
+
 export function listFactsForSourceRunStateNeighborhoods(
   contexts: ReadonlyArray<SourceRunStateNeighborhoodContext>,
   options: Pick<

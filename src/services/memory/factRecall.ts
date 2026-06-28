@@ -20,6 +20,7 @@
 
 import { markFactsRecalled } from './facts/mutations';
 import {
+  listFactsForSourceRunForwardWindows,
   listFactsForRecallCandidates,
   listFactTermUnitHitsForFacts,
   listFactsForSourceRunStateNeighborhoods,
@@ -33,6 +34,7 @@ import {
   primarySelectionGroupKey,
   selectionDedupeKey,
   sourceRunSupportContexts,
+  supportDiversityKey,
   supportSlotCount,
 } from './ranking/selection';
 
@@ -46,6 +48,8 @@ const QUOTED_ANCHOR_LIMIT = 12;
 const QUOTED_ANCHOR_MATCH_BOOST = 0.18;
 const QUOTED_ANCHOR_FULL_MATCH_BOOST = 0.12;
 const RECALL_QUERY_UNIT_LIMIT = 96;
+const SOURCE_RUN_SUPPORT_FORWARD_RADIUS = 16;
+const SOURCE_RUN_SUPPORT_FORWARD_STATE_LIMIT = 16;
 const SOURCE_RUN_SUPPORT_RADIUS = 2;
 const SOURCE_RUN_SUPPORT_PER_RUN_LIMIT = 8;
 
@@ -479,6 +483,23 @@ async function buildRecallSelection(
     );
     const supportLimit = Math.min(limit, selected.length + reservedSupportSlots);
     const supportFactsById = new Map<string, MemoryFact>();
+    const forwardFacts = listFactsForSourceRunForwardWindows(supportContexts, {
+      memoryKind: ['ui_inventory', 'ui_field', 'ui_filter_state', 'outcome'],
+      forwardRadius: SOURCE_RUN_SUPPORT_FORWARD_RADIUS,
+      stateLimit: SOURCE_RUN_SUPPORT_FORWARD_STATE_LIMIT,
+      limit: selectedSourceRuns.length * SOURCE_RUN_SUPPORT_FORWARD_STATE_LIMIT,
+      ...(candidateScopes ? { scope: candidateScopes } : {}),
+      ...(options.conversationId ? { originConversationId: options.conversationId } : {}),
+      ...(options.taskId ? { originTaskId: options.taskId } : {}),
+      ...(options.includeHistorical ? { includeInvalidated: true } : {}),
+      ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
+    });
+    for (const fact of forwardFacts) {
+      if (seenIds.has(fact.id) || !fact.sourceRunId || !selectedSourceRuns.includes(fact.sourceRunId)) {
+        continue;
+      }
+      supportFactsById.set(fact.id, fact);
+    }
     for (const sourceRunId of selectedSourceRuns) {
       const contextsForRun = supportContexts.filter((context) => context.sourceRunId === sourceRunId);
       if (contextsForRun.length === 0) continue;
@@ -503,6 +524,12 @@ async function buildRecallSelection(
       supportFacts.map((fact) => fact.id),
       recallLexicalUnits,
     );
+    const sourceRunSupportRank = new Map(
+      selectedSourceRuns.map((sourceRunId, index) => [sourceRunId, index]),
+    );
+    const seenSupportDiversityKeys = new Set(
+      selected.map((fact) => supportDiversityKey(fact)).filter(Boolean),
+    );
     const supportEntries = supportFacts
       .map((fact) => ({
         fact,
@@ -517,8 +544,15 @@ async function buildRecallSelection(
           now,
         }),
       }))
-      .sort(compareSupportCandidates);
+      .sort((left, right) => {
+        const leftRank = sourceRunSupportRank.get(left.fact.sourceRunId ?? '') ?? Number.MAX_SAFE_INTEGER;
+        const rightRank = sourceRunSupportRank.get(right.fact.sourceRunId ?? '') ?? Number.MAX_SAFE_INTEGER;
+        if (leftRank !== rightRank) return leftRank - rightRank;
+        return compareSupportCandidates(left, right);
+      });
     for (const entry of supportEntries) {
+      const diversityKey = supportDiversityKey(entry.fact);
+      if (diversityKey && seenSupportDiversityKeys.has(diversityKey)) continue;
       const added = addSelectedFact({
         selected,
         seenIds,
@@ -526,7 +560,10 @@ async function buildRecallSelection(
         fact: entry.fact,
         limit: supportLimit,
       });
-      if (added) scoredById.set(entry.fact.id, entry.scored);
+      if (added) {
+        if (diversityKey) seenSupportDiversityKeys.add(diversityKey);
+        scoredById.set(entry.fact.id, entry.scored);
+      }
       if (selected.length >= supportLimit) break;
     }
   }
