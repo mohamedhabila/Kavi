@@ -29,6 +29,9 @@ import {
 } from './structuredObservationCompaction';
 
 const MAX_TEXT_CHARS = 4_000;
+const MAX_PROCEDURE_TEXT_CHARS = 7_500;
+const MAX_PROCEDURE_URL_CHARS = 260;
+const MAX_PROCEDURE_ACTION_CHARS = 220;
 const MAX_FIELD_FACTS_PER_PAYLOAD = 96;
 const MAX_FILTER_STATE_FACTS_PER_PAYLOAD = 96;
 type JsonRecord = Record<string, unknown>;
@@ -273,13 +276,11 @@ function collectProcedureTrace(
   if (!hasObservationFields(payload)) return;
   const sourceRunId = stringField(payload, 'trajectory_id') ?? context.sourceRunId;
   if (!sourceRunId) return;
-  const surfaceId = resolveSurfaceId(payload, context) ?? `workflow:${sourceRunId}`;
   const stateIndex = scalarField(payload, 'state_index') ?? scalarField(payload, 'step');
   const step = dropEmpty({
     stateIndex,
     url: stringField(payload, 'url'),
     action: stringField(payload, 'action'),
-    thought: stringField(payload, 'thought'),
     outcome: stringField(payload, 'outcome') ?? stringField(payload, 'status') ?? context.toolStatus,
   });
   if (Object.keys(step).length === 0) return;
@@ -299,15 +300,28 @@ function collectProcedureTrace(
       environment: stringField(payload, 'environment'),
       steps: [],
     };
-  if (existing.subjectName.startsWith('workflow:') && surfaceId) {
-    existing.subjectName = surfaceId;
-  }
   existing.goal ??= stringField(payload, 'goal');
   existing.trajectoryOutcome ??= stringField(payload, 'trajectory_outcome');
   existing.domain ??= stringField(payload, 'domain');
   existing.environment ??= stringField(payload, 'environment');
   existing.steps.push(step);
   traces.set(sourceRunId, existing);
+}
+
+function fitProcedureText(value: unknown, maxChars: number): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.length <= maxChars ? trimmed : trimmed.slice(0, maxChars).trimEnd();
+}
+
+function compactProcedureStep(step: JsonRecord): JsonRecord {
+  return dropEmpty({
+    stateIndex: scalarField(step, 'stateIndex'),
+    url: fitProcedureText(stringField(step, 'url'), MAX_PROCEDURE_URL_CHARS),
+    action: fitProcedureText(stringField(step, 'action'), MAX_PROCEDURE_ACTION_CHARS),
+    outcome: stringField(step, 'outcome'),
+  });
 }
 
 function stateIndexNumber(step: JsonRecord): number {
@@ -329,7 +343,8 @@ function recordProcedureTraces(traces: ReadonlyMap<string, ProcedureTrace>): str
       if (leftIndex !== rightIndex) return leftIndex - rightIndex;
       return 0;
     });
-    if (orderedSteps.length === 0) continue;
+    const compactSteps = orderedSteps.map(compactProcedureStep).filter((step) => Object.keys(step).length > 0);
+    if (compactSteps.length === 0) continue;
     const recorded = recordTypedFact({
       kind: 'procedure',
       subjectName: trace.subjectName,
@@ -341,10 +356,10 @@ function recordProcedureTraces(traces: ReadonlyMap<string, ProcedureTrace>): str
           trajectoryOutcome: trace.trajectoryOutcome,
           domain: trace.domain,
           environment: trace.environment,
-          stepCount: orderedSteps.length,
-          steps: orderedSteps,
+          stepCount: compactSteps.length,
+          steps: compactSteps,
         }),
-        MAX_TEXT_CHARS,
+        MAX_PROCEDURE_TEXT_CHARS,
       ),
       attributes: dropEmpty({
         sourceRunId: trace.sourceRunId,
@@ -352,13 +367,15 @@ function recordProcedureTraces(traces: ReadonlyMap<string, ProcedureTrace>): str
         trajectoryOutcome: trace.trajectoryOutcome,
         domain: trace.domain,
         environment: trace.environment,
-        stepCount: orderedSteps.length,
-        startUrl: orderedSteps[0]?.url,
-        finalUrl: orderedSteps[orderedSteps.length - 1]?.url,
+        stepCount: compactSteps.length,
+        startUrl: compactSteps[0]?.url,
+        finalUrl: compactSteps[compactSteps.length - 1]?.url,
       }),
       context: trace.context,
       retrievability: 0.9,
       stability: 0.7,
+      maxTextChars: MAX_PROCEDURE_TEXT_CHARS,
+      supersedePrior: true,
     });
     if (recorded) factIds.push(recorded);
   }
@@ -575,8 +592,10 @@ function recordTypedFact(input: {
   context: ObservationContext;
   retrievability: number;
   stability: number;
+  maxTextChars?: number;
+  supersedePrior?: boolean;
 }): string | null {
-  const objectText = fitObjectTextForStorage(input.objectText, MAX_TEXT_CHARS);
+  const objectText = fitObjectTextForStorage(input.objectText, input.maxTextChars ?? MAX_TEXT_CHARS);
   if (!objectText) return null;
   const subject = upsertEntity({
     name: input.subjectName,
@@ -609,6 +628,7 @@ function recordTypedFact(input: {
     stability: input.stability,
     decayRate: 0.01,
     reviewState: 'auto',
+    supersedePrior: input.supersedePrior,
     now: input.context.now,
   };
   const recorded = recordFact(factInput);

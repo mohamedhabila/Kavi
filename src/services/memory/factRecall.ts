@@ -22,23 +22,19 @@ import { markFactsRecalled } from './facts/mutations';
 import {
   listFactsForRecallCandidates,
   listFactTermUnitHitsForFacts,
-  selectIndexedLexicalUnitsForRecall,
+  listFactsForSourceRunStateNeighborhoods,
 } from './facts/queries';
 import { type MemoryFact, type MemoryFactKind, type MemoryFactScope } from './facts/types';
-import { parseJsonRecord } from './factJson';
 import { countLexicalUnits } from './ranking/lexical';
-import { buildScoringLexicalUnits } from './ranking/queryUnits';
 import { quotedSpanUnitSets } from './ranking/quotedSpans';
 import { exponentialDecayMultiplier } from './ranking/scoring';
 import {
-  UI_INVENTORY_FORM_FIELD_SHAPE_FIELDS,
-  UI_INVENTORY_LABEL_VALUE_SHAPE_FIELDS,
-  UI_INVENTORY_POPUP_SHAPE_FIELDS,
-  UI_INVENTORY_SEARCH_SHAPE_FIELDS,
-  UI_INVENTORY_SECTION_SHAPE_FIELDS,
-  UI_INVENTORY_TABLE_SHAPE_FIELDS,
-  UI_INVENTORY_TEXT_ENTRY_SHAPE_FIELDS,
-} from './uiFactFields';
+  compareSupportCandidates,
+  primarySelectionGroupKey,
+  selectionDedupeKey,
+  sourceRunSupportContexts,
+  supportSlotCount,
+} from './ranking/selection';
 
 const DEFAULT_LIMIT = 8;
 const DEFAULT_TEXT_THRESHOLD = 0.04;
@@ -49,7 +45,9 @@ const RELEVANCE_EPSILON = 1e-6;
 const QUOTED_ANCHOR_LIMIT = 12;
 const QUOTED_ANCHOR_MATCH_BOOST = 0.18;
 const QUOTED_ANCHOR_FULL_MATCH_BOOST = 0.12;
-const UI_SCHEMA_KEY_ARRAY_LIMIT = 48;
+const RECALL_QUERY_UNIT_LIMIT = 96;
+const SOURCE_RUN_SUPPORT_RADIUS = 2;
+const SOURCE_RUN_SUPPORT_PER_RUN_LIMIT = 8;
 
 export interface RecallFactsOptions {
   /** Maximum facts returned. Default 8. */
@@ -78,10 +76,7 @@ export interface RecallFactsOptions {
    * recall, slower scoring. Default 128.
    */
   candidatePoolLimit?: number;
-  /**
-   * Maximum indexed lexical units used to fetch candidates. Lower values favor
-   * rare discriminative units and bound SQLite fanout.
-   */
+  /** Maximum query lexical units used for indexed recall fanout. */
   lexicalUnitLimit?: number;
   /** Optional recall-stage telemetry. Used by product diagnostics and benchmarks. */
   onTiming?: (timing: RecallFactsTiming) => void;
@@ -106,6 +101,7 @@ export interface ScoredFact {
   fact: MemoryFact;
   score: number;
   textScore: number;
+  lexicalScore: number;
   pinnedBoost: number;
   decayMultiplier: number;
   scopeBoost: number;
@@ -154,6 +150,50 @@ function buildQueryUnitWeightsFromHits(
     weights.set(unit, Math.log((documentCount + 1) / (df + 1)) + 1);
   }
   return weights;
+}
+
+function buildRecallLexicalUnits(
+  queryUnitCounts: ReadonlyMap<string, number>,
+  anchorLexicalUnits: ReadonlyArray<string>,
+  lexicalUnitLimit: number | undefined,
+): string[] {
+  const limit = Math.max(
+    1,
+    Math.min(lexicalUnitLimit ?? RECALL_QUERY_UNIT_LIMIT, RECALL_QUERY_UNIT_LIMIT),
+  );
+  const units: string[] = [];
+  const seen = new Set<string>();
+  const addUnit = (rawUnit: string) => {
+    if (units.length >= limit) return;
+    const unit = rawUnit.trim();
+    if (!unit || seen.has(unit)) return;
+    seen.add(unit);
+    units.push(unit);
+  };
+
+  for (const unit of anchorLexicalUnits) addUnit(unit);
+  for (const unit of queryUnitCounts.keys()) addUnit(unit);
+  return units;
+}
+
+function selectScoringQueryUnits(
+  recallLexicalUnits: ReadonlyArray<string>,
+  queryUnits: ReadonlySet<string>,
+  candidateUnitHits: ReadonlyMap<string, ReadonlySet<string>>,
+): Set<string> {
+  const hitUnits = new Set<string>();
+  for (const hits of candidateUnitHits.values()) {
+    for (const unit of hits) hitUnits.add(unit);
+  }
+  const scoringUnits = new Set<string>();
+  for (const unit of recallLexicalUnits) {
+    if (queryUnits.has(unit) && hitUnits.has(unit)) scoringUnits.add(unit);
+  }
+  if (scoringUnits.size > 0) return scoringUnits;
+  for (const unit of recallLexicalUnits) {
+    if (queryUnits.has(unit)) scoringUnits.add(unit);
+  }
+  return scoringUnits;
 }
 
 function anchorMatchBoost(
@@ -229,105 +269,6 @@ function scoreRetrievability(fact: MemoryFact): number {
   return Math.max(0, Math.min(1, fact.retrievability));
 }
 
-function stringArray(value: unknown, limit = UI_SCHEMA_KEY_ARRAY_LIMIT): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
-    .map((entry) => entry.trim())
-    .slice(0, limit);
-}
-
-function objectArrayShape(
-  value: unknown,
-  fields: ReadonlyArray<string>,
-  limit = UI_SCHEMA_KEY_ARRAY_LIMIT,
-): Array<Record<string, unknown>> {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((entry): entry is Record<string, unknown> =>
-      Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry),
-    )
-    .map((entry) =>
-      Object.fromEntries(
-        fields
-          .map((field) => [field, entry[field]] as const)
-          .filter(([, fieldValue]) =>
-            Array.isArray(fieldValue)
-              ? fieldValue.length > 0
-              : fieldValue !== undefined && fieldValue !== null && fieldValue !== '',
-          ),
-      ),
-    )
-    .filter((entry) => Object.keys(entry).length > 0)
-    .slice(0, limit);
-}
-
-function scalarString(...values: unknown[]): string {
-  for (const value of values) {
-    if (typeof value === 'string' && value.trim().length > 0) return value.trim();
-    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
-  }
-  return '';
-}
-
-function uiInventorySchemaKey(fact: MemoryFact): string | null {
-  if (fact.memoryKind !== 'ui_inventory') return null;
-  const parsed = parseJsonRecord(fact.objectText);
-  if (!parsed) return null;
-  const url = scalarString(fact.attributes.url, parsed.url);
-  const fields = objectArrayShape(parsed.fields, UI_INVENTORY_FORM_FIELD_SHAPE_FIELDS);
-  const textEntryControls = objectArrayShape(
-    parsed.textEntryControls,
-    UI_INVENTORY_TEXT_ENTRY_SHAPE_FIELDS,
-  );
-  const searchControls = objectArrayShape(
-    parsed.searchControls,
-    UI_INVENTORY_SEARCH_SHAPE_FIELDS,
-  );
-  const popupControls = objectArrayShape(
-    parsed.popupControls,
-    UI_INVENTORY_POPUP_SHAPE_FIELDS,
-  );
-  const hasFormShape =
-    fields.length > 0 ||
-    textEntryControls.length > 0 ||
-    searchControls.length > 0 ||
-    popupControls.length > 0;
-  const key = {
-    subjectId: fact.subjectId,
-    predicate: fact.predicate,
-    url,
-    controlNames: hasFormShape ? [] : stringArray(parsed.controlNames),
-    fields,
-    textEntryControls,
-    searchControls,
-    popupControls,
-    labelValues: objectArrayShape(parsed.labelValues, UI_INVENTORY_LABEL_VALUE_SHAPE_FIELDS),
-    sections: hasFormShape
-      ? []
-      : objectArrayShape(parsed.sections, UI_INVENTORY_SECTION_SHAPE_FIELDS),
-    tables: objectArrayShape(parsed.tables, UI_INVENTORY_TABLE_SHAPE_FIELDS),
-  };
-  return `ui_inventory:${JSON.stringify(key)}`;
-}
-
-function uiStateSlotKey(fact: MemoryFact): string | null {
-  if (fact.memoryKind !== 'ui_field' && fact.memoryKind !== 'ui_filter_state') return null;
-  const parsed = parseJsonRecord(fact.objectText);
-  const sourceRunId = scalarString(fact.sourceRunId, fact.attributes.sourceRunId, parsed?.sourceRunId);
-  const stateIndex = scalarString(fact.attributes.stateIndex, parsed?.stateIndex);
-  const url = scalarString(fact.attributes.url, parsed?.url);
-  if (!sourceRunId && !stateIndex && !url) return null;
-  return `ui_state:${sourceRunId}:${stateIndex}:${url}`;
-}
-
-function selectionDedupeKey(fact: MemoryFact): string | null {
-  if (fact.memoryKind === 'procedure' && fact.sourceRunId) {
-    return `procedure:${fact.sourceRunId}:${fact.predicate}`;
-  }
-  return uiInventorySchemaKey(fact) ?? uiStateSlotKey(fact);
-}
-
 function buildScoredFact(params: {
   fact: MemoryFact;
   queryUnits: Set<string>;
@@ -347,7 +288,8 @@ function buildScoredFact(params: {
     options,
     now,
   } = params;
-  const textScore = lexicalOverlapFromUnitHits(queryUnits, factUnitHits, params.unitWeights);
+  const lexicalScore = lexicalOverlapFromUnitHits(queryUnits, factUnitHits, params.unitWeights);
+  const textScore = lexicalScore;
   const pinnedBoost = alwaysIncludePinned && fact.pinned ? PINNED_BOOST : 0;
   const decayMultiplier = scoreDecay(fact, now);
   const scopeBoost = scoreScope(fact, options);
@@ -366,6 +308,7 @@ function buildScoredFact(params: {
     fact,
     score,
     textScore,
+    lexicalScore,
     pinnedBoost,
     decayMultiplier,
     scopeBoost,
@@ -428,22 +371,17 @@ async function buildRecallSelection(
   const anchorLexicalUnits = Array.from(
     new Set(anchorUnitSets.flatMap((anchorUnits) => Array.from(anchorUnits))),
   );
-  const lexicalUnitsForRecall = Array.from(queryUnitCounts.entries()).flatMap(([unit, count]) =>
-    Array.from({ length: Math.max(1, Math.min(count, 16)) }, () => unit),
+  const recallLexicalUnits = buildRecallLexicalUnits(
+    queryUnitCounts,
+    anchorLexicalUnits,
+    options.lexicalUnitLimit,
   );
-  const selectedLexicalUnits = selectIndexedLexicalUnitsForRecall(lexicalUnitsForRecall, {
-    ...(options.memoryKind ? { memoryKind: options.memoryKind } : {}),
-    ...(options.lexicalUnitLimit ? { lexicalUnitLimit: options.lexicalUnitLimit } : {}),
-  });
-  const recallLexicalUnits = Array.from(new Set([...selectedLexicalUnits, ...anchorLexicalUnits]));
-  const scoringQueryUnits = buildScoringLexicalUnits(queryUnits, recallLexicalUnits);
   timing.tokenizeQueryMs = Date.now() - tokenizeStarted;
   timing.queryUnitCount = queryUnits.size;
 
   const candidateFetchStarted = Date.now();
   const candidates = listFactsForRecallCandidates({
     limit: candidatePool,
-    lexicalUnits: lexicalUnitsForRecall,
     selectedLexicalUnits: recallLexicalUnits,
     ...(options.conversationId ? { scopedRecentConversationId: options.conversationId } : {}),
     ...(options.taskId ? { scopedRecentTaskId: options.taskId } : {}),
@@ -457,10 +395,15 @@ async function buildRecallSelection(
   const candidateTermHitsStarted = Date.now();
   const candidateUnitHits = listFactTermUnitHitsForFacts(
     candidates.map((fact) => fact.id),
-    Array.from(scoringQueryUnits),
+    recallLexicalUnits,
   );
   timing.candidateTermHitsMs = Date.now() - candidateTermHitsStarted;
   timing.candidateHitFactCount = candidateUnitHits.size;
+  const scoringQueryUnits = selectScoringQueryUnits(
+    recallLexicalUnits,
+    queryUnits,
+    candidateUnitHits,
+  );
 
   const unitWeightsStarted = Date.now();
   const unitWeights = buildQueryUnitWeightsFromHits(scoringQueryUnits, candidates, candidateUnitHits);
@@ -492,12 +435,99 @@ async function buildRecallSelection(
   const selected: MemoryFact[] = [];
   const seenIds = new Set<string>();
   const seenKeys = new Set<string>();
+  const primaryGroups = new Set<string>();
+  const reservedSupportSlots = supportSlotCount(limit);
+  const primaryLimit = Math.max(1, limit - reservedSupportSlots);
 
   if (alwaysIncludePinned) {
     for (const entry of scored) {
       if (!entry.fact.pinned) continue;
-      addSelectedFact({ selected, seenIds, seenKeys, fact: entry.fact, limit });
-      if (selected.length >= limit) break;
+      const added = addSelectedFact({
+        selected,
+        seenIds,
+        seenKeys,
+        fact: entry.fact,
+        limit: primaryLimit,
+      });
+      if (added) primaryGroups.add(primarySelectionGroupKey(entry.fact));
+      if (selected.length >= primaryLimit) break;
+    }
+  }
+
+  if (trimmedQuery && selected.length < limit) {
+    const threshold = options.threshold ?? DEFAULT_TEXT_THRESHOLD;
+    for (const entry of scored) {
+      if (entry.relevanceScore < threshold && entry.score < threshold) continue;
+      const groupKey = primarySelectionGroupKey(entry.fact);
+      if (primaryGroups.has(groupKey)) continue;
+      const added = addSelectedFact({
+        selected,
+        seenIds,
+        seenKeys,
+        fact: entry.fact,
+        limit: primaryLimit,
+      });
+      if (added) primaryGroups.add(groupKey);
+      if (selected.length >= primaryLimit) break;
+    }
+  }
+
+  if (trimmedQuery && selected.length < limit && reservedSupportSlots > 0) {
+    const supportContexts = sourceRunSupportContexts(selected, scored);
+    const selectedSourceRuns = Array.from(
+      new Set(selected.map((fact) => fact.sourceRunId).filter(Boolean) as string[]),
+    );
+    const supportLimit = Math.min(limit, selected.length + reservedSupportSlots);
+    const supportFactsById = new Map<string, MemoryFact>();
+    for (const sourceRunId of selectedSourceRuns) {
+      const contextsForRun = supportContexts.filter((context) => context.sourceRunId === sourceRunId);
+      if (contextsForRun.length === 0) continue;
+      const supportFacts = listFactsForSourceRunStateNeighborhoods(contextsForRun, {
+        memoryKind: ['ui_inventory', 'ui_field', 'ui_filter_state', 'outcome'],
+        preferAdjacent: true,
+        radius: SOURCE_RUN_SUPPORT_RADIUS,
+        limit: SOURCE_RUN_SUPPORT_PER_RUN_LIMIT,
+        ...(candidateScopes ? { scope: candidateScopes } : {}),
+        ...(options.conversationId ? { originConversationId: options.conversationId } : {}),
+        ...(options.taskId ? { originTaskId: options.taskId } : {}),
+        ...(options.includeHistorical ? { includeInvalidated: true } : {}),
+        ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
+      });
+      for (const fact of supportFacts) {
+        if (seenIds.has(fact.id) || fact.sourceRunId !== sourceRunId) continue;
+        supportFactsById.set(fact.id, fact);
+      }
+    }
+    const supportFacts = Array.from(supportFactsById.values());
+    const supportUnitHits = listFactTermUnitHitsForFacts(
+      supportFacts.map((fact) => fact.id),
+      recallLexicalUnits,
+    );
+    const supportEntries = supportFacts
+      .map((fact) => ({
+        fact,
+        scored: buildScoredFact({
+          fact,
+          queryUnits: scoringQueryUnits,
+          factUnitHits: supportUnitHits.get(fact.id),
+          unitWeights,
+          anchorUnitSets,
+          alwaysIncludePinned,
+          options,
+          now,
+        }),
+      }))
+      .sort(compareSupportCandidates);
+    for (const entry of supportEntries) {
+      const added = addSelectedFact({
+        selected,
+        seenIds,
+        seenKeys,
+        fact: entry.fact,
+        limit: supportLimit,
+      });
+      if (added) scoredById.set(entry.fact.id, entry.scored);
+      if (selected.length >= supportLimit) break;
     }
   }
 

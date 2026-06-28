@@ -17,13 +17,6 @@ const DEFAULT_RECALL_CANDIDATE_LIMIT = 128;
 const MAX_RECALL_CANDIDATE_LIMIT = 2_000;
 const DEFAULT_RECALL_PINNED_LIMIT = 64;
 const DEFAULT_RECALL_SCOPED_RECENT_LIMIT = 192;
-const DEFAULT_RECALL_LEXICAL_UNIT_LIMIT = 12;
-const MAX_RECALL_LEXICAL_UNIT_LIMIT = 32;
-const COMPACT_UI_RECALL_KINDS: MemoryFactKind[] = [
-  'ui_affordance',
-  'ui_field',
-  'ui_filter_state',
-];
 
 interface FactFilter {
   clauses: string[];
@@ -94,70 +87,6 @@ function clampLimit(value: number | undefined, fallback: number, max: number): n
   return Math.max(1, Math.min(value ?? fallback, max));
 }
 
-export function selectIndexedLexicalUnitsForRecall(
-  units: string[],
-  options: Pick<ListFactsForRecallCandidatesOptions, 'memoryKind' | 'lexicalUnitLimit'>,
-): string[] {
-  const unitStats = new Map<string, { index: number; queryCount: number }>();
-  for (const rawUnit of units) {
-    const unit = rawUnit.trim();
-    if (!unit) continue;
-    const existing = unitStats.get(unit);
-    if (existing) {
-      existing.queryCount += 1;
-    } else {
-      unitStats.set(unit, { index: unitStats.size, queryCount: 1 });
-    }
-  }
-  const uniqueUnits = Array.from(unitStats.keys());
-  if (uniqueUnits.length === 0) return [];
-  const maxUnits = clampLimit(
-    options.lexicalUnitLimit,
-    DEFAULT_RECALL_LEXICAL_UNIT_LIMIT,
-    MAX_RECALL_LEXICAL_UNIT_LIMIT,
-  );
-  const termClauses = [`unit IN (${uniqueUnits.map(() => '?').join(', ')})`];
-  const params: SqlBindValue[] = [...uniqueUnits];
-  if (options.memoryKind) {
-    const kinds = Array.isArray(options.memoryKind) ? options.memoryKind : [options.memoryKind];
-    termClauses.push(`memory_kind IN (${kinds.map(() => '?').join(', ')})`);
-    params.push(...kinds);
-  }
-  const rows = getMany<{ unit: string; hit_count: number }>(
-    `SELECT unit, SUM(fact_count) AS hit_count
-       FROM memory_fact_term_stats
-      WHERE ${termClauses.join(' AND ')}
-      GROUP BY unit`,
-    ...params,
-  );
-  const hitCounts = new Map(rows.map((row) => [row.unit, row.hit_count]));
-  const maxHitCount = Math.max(1, ...Array.from(hitCounts.values()));
-  const positiveEntries = uniqueUnits
-    .map((unit) => {
-      const stats = unitStats.get(unit) ?? { index: 0, queryCount: 1 };
-      const hitCount = hitCounts.get(unit) ?? 0;
-      const inverseFrequency = Math.log((maxHitCount + 1) / (hitCount + 1)) + 1;
-      return {
-        unit,
-        index: stats.index,
-        hitCount,
-        score: stats.queryCount * inverseFrequency,
-      };
-    })
-    .filter((entry) => entry.hitCount > 0);
-  const ranked = positiveEntries
-    .sort((left, right) => {
-      if (right.score !== left.score) return right.score - left.score;
-      if (left.hitCount !== right.hitCount) return left.hitCount - right.hitCount;
-      if (right.unit.length !== left.unit.length) return right.unit.length - left.unit.length;
-      return left.index - right.index;
-    })
-    .slice(0, maxUnits)
-    .map((entry) => entry.unit);
-  if (ranked.length > 0) return ranked;
-  return uniqueUnits.slice(0, maxUnits);
-}
-
 export function listFacts(options: ListFactsOptions = {}): MemoryFact[] {
   const filter = buildFactFilter(options);
   const limit = clampLimit(options.limit, DEFAULT_FACT_LIMIT, MAX_FACT_LIMIT);
@@ -177,7 +106,6 @@ export interface ListFactsForRecallCandidatesOptions extends ListFactsOptions {
   scopedRecentTaskId?: string;
   pinnedLimit?: number;
   scopedRecentLimit?: number;
-  lexicalUnitLimit?: number;
   includeUnanchoredCandidates?: boolean;
 }
 
@@ -265,21 +193,14 @@ export function listFactsForRecallCandidates(
     clampLimit(options.pinnedLimit, DEFAULT_RECALL_PINNED_LIMIT, totalLimit),
   );
 
-  const lexicalUnits = options.selectedLexicalUnits?.length
-    ? Array.from(new Set(options.selectedLexicalUnits.map((unit) => unit.trim()).filter(Boolean)))
-    : selectIndexedLexicalUnitsForRecall(options.lexicalUnits ?? [], options);
+  const lexicalUnits = Array.from(
+    new Set(
+      (options.selectedLexicalUnits?.length ? options.selectedLexicalUnits : options.lexicalUnits ?? [])
+        .map((unit) => unit.trim())
+        .filter(Boolean),
+    ),
+  );
   if (lexicalUnits.length > 0) {
-    if (!options.memoryKind) {
-      const compactUiLexicalUnits = selectIndexedLexicalUnitsForRecall(options.lexicalUnits ?? [], {
-        memoryKind: COMPACT_UI_RECALL_KINDS,
-        lexicalUnitLimit: MAX_RECALL_LEXICAL_UNIT_LIMIT,
-      });
-      addIndexedLexicalRows(
-        compactUiLexicalUnits.length > 0 ? compactUiLexicalUnits : lexicalUnits,
-        Math.max(16, Math.ceil(totalLimit * 0.25)),
-        COMPACT_UI_RECALL_KINDS,
-      );
-    }
     addIndexedLexicalRows(lexicalUnits, totalLimit);
   }
 
@@ -346,7 +267,14 @@ export function listFactsForSourceRuns(
   sourceRunIds: ReadonlyArray<string>,
   options: Pick<
     ListFactsOptions,
-    'memoryKind' | 'includeDeleted' | 'includeExpired' | 'includeInvalidated' | 'asOf'
+    | 'memoryKind'
+    | 'scope'
+    | 'originConversationId'
+    | 'originTaskId'
+    | 'includeDeleted'
+    | 'includeExpired'
+    | 'includeInvalidated'
+    | 'asOf'
   > & {
     limit?: number;
   } = {},
@@ -376,6 +304,115 @@ export function listFactsForSourceRuns(
     ...filter.params,
   );
   return rows.map(rowToFact);
+}
+
+export interface SourceRunStateNeighborhoodContext {
+  sourceRunId?: string | null;
+  stateIndex?: string | number | null;
+}
+
+function stateIndexToNumber(value: string | number | null | undefined): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+export function listFactsForSourceRunStateNeighborhoods(
+  contexts: ReadonlyArray<SourceRunStateNeighborhoodContext>,
+  options: Pick<
+    ListFactsOptions,
+    | 'memoryKind'
+    | 'scope'
+    | 'originConversationId'
+    | 'originTaskId'
+    | 'includeDeleted'
+    | 'includeExpired'
+    | 'includeInvalidated'
+    | 'asOf'
+  > & {
+    limit?: number;
+    preferAdjacent?: boolean;
+    radius?: number;
+  } = {},
+): MemoryFact[] {
+  const normalizedContexts = contexts
+    .map((context) => ({
+      sourceRunId:
+        typeof context.sourceRunId === 'string' && context.sourceRunId.trim()
+          ? context.sourceRunId.trim()
+          : null,
+      stateIndex: stateIndexToNumber(context.stateIndex),
+    }))
+    .filter(
+      (context): context is { sourceRunId: string; stateIndex: number } =>
+        Boolean(context.sourceRunId) && context.stateIndex !== null,
+    );
+  if (normalizedContexts.length === 0) return [];
+
+  const byKey = new Map<string, { sourceRunId: string; stateIndex: number }>();
+  for (const context of normalizedContexts) {
+    byKey.set(`${context.sourceRunId}:${context.stateIndex}`, context);
+  }
+
+  const uniqueContexts = Array.from(byKey.values());
+  const radius = Math.max(0, Math.min(Math.floor(options.radius ?? 2), 8));
+  const limit = clampLimit(options.limit, uniqueContexts.length * 4, MAX_FACT_LIMIT);
+  const perContextLimit = Math.max(3, Math.min(8, Math.ceil(limit / uniqueContexts.length)));
+  const filter = buildFactFilter(options);
+  const stateExpr = "CAST(json_extract(attributes, '$.stateIndex') AS REAL)";
+  const byId = new Map<string, MemoryFact>();
+
+  for (const context of uniqueContexts) {
+    if (byId.size >= limit) break;
+    const minState = context.stateIndex - radius;
+    const maxState = context.stateIndex + radius;
+    const orderSql = options.preferAdjacent
+      ? `CASE WHEN ${stateExpr} = ? THEN 1 ELSE 0 END ASC,
+                 ABS(${stateExpr} - ?) ASC,
+                 CASE WHEN ${stateExpr} >= ? THEN 0 ELSE 1 END ASC,
+                 CASE
+                   WHEN memory_kind = 'ui_inventory' THEN 0
+                   WHEN memory_kind = 'ui_field' THEN 1
+                   ELSE 2
+                 END ASC,
+                 retrievability DESC,
+                 importance DESC,
+                 updated_at DESC`
+      : `ABS(${stateExpr} - ?) ASC,
+                 retrievability DESC,
+                 importance DESC,
+                 updated_at DESC`;
+    const orderParams = options.preferAdjacent
+      ? [context.stateIndex, context.stateIndex, context.stateIndex]
+      : [context.stateIndex];
+    const rows = getMany<FactRow>(
+      `SELECT * FROM memory_facts
+        ${whereSql({
+          clauses: [
+            'source_run_id = ?',
+            `${stateExpr} BETWEEN ? AND ?`,
+            ...filter.clauses,
+          ],
+          params: [context.sourceRunId, minState, maxState, ...filter.params],
+        })}
+        ORDER BY ${orderSql}
+        LIMIT ${Math.min(perContextLimit, limit - byId.size)}`,
+      context.sourceRunId,
+      minState,
+      maxState,
+      ...filter.params,
+      ...orderParams,
+    );
+    for (const row of rows) {
+      byId.set(row.id, rowToFact(row));
+      if (byId.size >= limit) break;
+    }
+  }
+
+  return Array.from(byId.values());
 }
 
 export interface FactObservationContext {

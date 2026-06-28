@@ -62,6 +62,63 @@ describe('recallFactsForQuery — ranking', () => {
     expect(scored[0].textScore).toBeGreaterThan(scored[1].textScore);
   });
 
+  it('uses broad indexed query evidence instead of a rare-term-only candidate lane', async () => {
+    const corpus = upsertEntity({ name: 'broad-evidence-corpus', type: 'concept' });
+    for (let index = 0; index < 12; index += 1) {
+      recordFact({
+        subjectId: corpus.id,
+        predicate: `distractor_${index}`,
+        objectText: `qrareonly qdistractor${index}`,
+      });
+    }
+    const target = recordFact({
+      subjectId: corpus.id,
+      predicate: 'target',
+      objectText: 'qadmin qproducts qselected qupdate qfinal qstate',
+    });
+
+    const scored = await recallScoredFactsForQuery(
+      'qrareonly qadmin qproducts qselected qupdate qfinal qstate',
+      {
+        limit: 3,
+        threshold: 0.01,
+        candidatePoolLimit: 20,
+      },
+    );
+
+    expect(scored[0].fact.id).toBe(target.fact.id);
+    expect(scored[0].textScore).toBeGreaterThan(0.8);
+  });
+
+  it('diversifies primary recall across source runs before adding duplicate workflow facts', async () => {
+    const corpus = upsertEntity({ name: 'source-run-diversity-corpus', type: 'concept' });
+    for (let index = 0; index < 4; index += 1) {
+      recordFact({
+        subjectId: corpus.id,
+        predicate: `run_a_fact_${index}`,
+        objectText: 'qcommonone qcommontwo qcommonthree',
+        sourceRunId: 'run-a',
+        now: 10 + index,
+      });
+    }
+    const runB = recordFact({
+      subjectId: corpus.id,
+      predicate: 'run_b_fact',
+      objectText: 'qcommonone qcommontwo qcommonthree',
+      sourceRunId: 'run-b',
+      now: 1,
+    });
+
+    const scored = await recallScoredFactsForQuery('qcommonone qcommontwo qcommonthree', {
+      limit: 2,
+      threshold: 0,
+      candidatePoolLimit: 20,
+    });
+
+    expect(scored.map((entry) => entry.fact.sourceRunId)).toEqual(['run-a', 'run-b']);
+    expect(scored.map((entry) => entry.fact.id)).toContain(runB.fact.id);
+  });
+
   it('scores against selected indexed units instead of absent query noise', async () => {
     const corpus = upsertEntity({ name: 'missing-unit-corpus', type: 'concept' });
     const partial = recordFact({
@@ -109,7 +166,7 @@ describe('recallFactsForQuery — ranking', () => {
     expect(scored[0].score).toBeGreaterThan(0.3);
   });
 
-  it('does not expand source-run neighbors without direct query evidence', async () => {
+  it('adds adjacent source-run UI observations without pulling distant states', async () => {
     const corpus = upsertEntity({ name: 'trajectory-corpus', type: 'concept' });
     for (let index = 0; index < 8; index += 1) {
       recordFact({
@@ -126,30 +183,34 @@ describe('recallFactsForQuery — ranking', () => {
       predicate: 'target_anchor',
       objectText: 'qanchor qshared quniqueexact',
       sourceRunId: 'run-target',
+      memoryKind: 'ui_inventory',
       attributes: { stateIndex: 5 },
       now: 3_000,
     });
-    recordFact({
+    const distantSetup = recordFact({
       subjectId: corpus.id,
       predicate: 'target_setup',
       objectText: 'qshared qtarget-setup',
       sourceRunId: 'run-target',
+      memoryKind: 'ui_field',
       attributes: { stateIndex: 0 },
       now: 1_999,
-    });
-    recordFact({
+    }).fact;
+    const distantPrior = recordFact({
       subjectId: corpus.id,
       predicate: 'target_prior',
       objectText: 'qshared qtarget-prior',
       sourceRunId: 'run-target',
+      memoryKind: 'ui_field',
       attributes: { stateIndex: 1 },
       now: 2_000,
-    });
+    }).fact;
     recordFact({
       subjectId: corpus.id,
       predicate: 'target_near_prior',
       objectText: 'qanchor qshared qtarget-near-prior',
       sourceRunId: 'run-target',
+      memoryKind: 'ui_field',
       attributes: { stateIndex: 4 },
       now: 2_999,
     });
@@ -158,6 +219,7 @@ describe('recallFactsForQuery — ranking', () => {
       predicate: 'target_next',
       objectText: 'qshared qtarget-next',
       sourceRunId: 'run-target',
+      memoryKind: 'ui_field',
       attributes: { stateIndex: 6 },
       now: 3_001,
     });
@@ -166,6 +228,7 @@ describe('recallFactsForQuery — ranking', () => {
       predicate: 'target_next_duplicate',
       objectText: 'qshared qtarget-next-duplicate',
       sourceRunId: 'run-target',
+      memoryKind: 'ui_field',
       attributes: { stateIndex: 6 },
       now: 3_002,
     });
@@ -174,6 +237,7 @@ describe('recallFactsForQuery — ranking', () => {
       predicate: 'target_result',
       objectText: 'qshared qtarget-result',
       sourceRunId: 'run-target',
+      memoryKind: 'ui_field',
       attributes: { stateIndex: 7 },
       now: 3_003,
     });
@@ -185,7 +249,17 @@ describe('recallFactsForQuery — ranking', () => {
       now: 4_000,
     });
 
-    expect(facts.map((fact) => fact.id)).toEqual([target.fact.id]);
+    expect(facts.map((fact) => fact.id)).toContain(target.fact.id);
+    expect(
+      facts.some((fact) =>
+        ['target_near_prior', 'target_next', 'target_next_duplicate', 'target_result'].includes(
+          fact.predicate,
+        ),
+      ),
+    ).toBe(true);
+    expect(facts.some((fact) => fact.id === distantSetup.id || fact.id === distantPrior.id)).toBe(
+      false,
+    );
   });
 
   it('anchors late discriminative query units before scoped recency fill', async () => {

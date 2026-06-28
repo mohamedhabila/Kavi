@@ -208,7 +208,6 @@ async function main(): Promise<void> {
         LIMIT 12`,
     )
     .all();
-
   const appCurrent = await recallScoredFactsForQuery(args.query, {
     limit: args.limit,
     conversationId,
@@ -281,6 +280,7 @@ async function main(): Promise<void> {
         score: entry.score,
         relevanceScore: entry.relevanceScore,
         textScore: entry.textScore,
+        lexicalScore: entry.lexicalScore,
         objectText: entry.fact.objectText.slice(0, 260),
       })),
     })),
@@ -303,6 +303,7 @@ async function main(): Promise<void> {
         score: entry.score,
         relevanceScore: entry.relevanceScore,
         textScore: entry.textScore,
+        lexicalScore: entry.lexicalScore,
         scopeBoost: entry.scopeBoost,
         reinforcementBoost: entry.reinforcementBoost,
         objectText: entry.fact.objectText.slice(0, 260),
@@ -317,6 +318,7 @@ async function main(): Promise<void> {
         score: entry.score,
         relevanceScore: entry.relevanceScore,
         textScore: entry.textScore,
+        lexicalScore: entry.lexicalScore,
         scopeBoost: entry.scopeBoost,
         objectText: entry.fact.objectText.slice(0, 260),
       })),
@@ -343,6 +345,7 @@ async function main(): Promise<void> {
         score: entry.score,
         relevanceScore: entry.relevanceScore,
         textScore: entry.textScore,
+        lexicalScore: entry.lexicalScore,
         objectText: entry.fact.objectText.slice(0, 260),
       })),
       timings: appOrchestrator.timings,

@@ -92,6 +92,7 @@ const L3_PROCEDURES_HEADER = '#### Procedures';
 const L3_OUTCOMES_HEADER = '#### Outcomes and Gotchas';
 const L3_EPISODES_HEADER = '### Recent Activity';
 const MAX_RENDERED_FACT_CHARS = 3_200;
+const MAX_RENDERED_PROCEDURE_FACT_CHARS = 5_000;
 const MAX_RENDERED_UI_FACT_CHARS = 2_400;
 const MAX_RETRIEVED_FACT_SECTION_CHARS = 3_400;
 const MAX_RENDERED_EPISODE_CHARS = 200;
@@ -245,9 +246,12 @@ function renderFact(fact: PromptMemoryFact): string {
   const memoryKind = fact.memoryKind ?? 'semantic_fact';
   const kind = memoryKind === 'semantic_fact' ? '' : ` kind=${memoryKind}`;
   const meta = kind || source ? ` [${`${kind}${source}`.trim()}]` : '';
-  const maxChars = isUiSurfaceMemoryKind(memoryKind)
-    ? MAX_RENDERED_UI_FACT_CHARS
-    : MAX_RENDERED_FACT_CHARS;
+  const maxChars =
+    memoryKind === 'procedure'
+      ? MAX_RENDERED_PROCEDURE_FACT_CHARS
+      : isUiSurfaceMemoryKind(memoryKind)
+        ? MAX_RENDERED_UI_FACT_CHARS
+        : MAX_RENDERED_FACT_CHARS;
   return `- ${subject} ${fact.predicate}: ${fitText(renderableFactText(fact), maxChars)}${conf}${meta}`;
 }
 
