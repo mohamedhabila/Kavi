@@ -394,6 +394,10 @@ function compactUiFieldForStorage(value: unknown): unknown {
       value.adjacentControls,
       MAX_STORED_UI_FIELD_ADJACENT_CONTROLS,
     ),
+    checked: value.checked,
+    selected: value.selected,
+    disabled: value.disabled,
+    expanded: value.expanded,
     controlIndex: value.controlIndex,
     nodeId: value.nodeId,
     required: value.required,
@@ -528,6 +532,10 @@ function uiFieldSalienceScore(value: unknown): number {
   if (Array.isArray(value.adjacentControls) && value.adjacentControls.length > 0) score += 3;
   if (Array.isArray(value.symbolMarkers) && value.symbolMarkers.length > 0) score += 3;
   if (Array.isArray(value.options) && value.options.length > 0) score += 2;
+  if (value.checked !== undefined && value.checked !== null && value.checked !== '') score += 8;
+  if (value.selected !== undefined && value.selected !== null && value.selected !== '') score += 4;
+  if (value.disabled === true) score += 2;
+  if (value.expanded !== undefined && value.expanded !== null && value.expanded !== '') score += 2;
   if (value.required === true) score += 1;
   return score;
 }

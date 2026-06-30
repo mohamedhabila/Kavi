@@ -372,4 +372,71 @@ describe('recallFactsForQuery — UI observation context expansion', () => {
 
     expect(facts.map((entry) => entry.fact.id)).toContain(actionResult.id);
   });
+
+  it('adds exact state inventory when a field-level fact is selected', async () => {
+    const surface = upsertEntity({ name: 'surface:https://app.example.test/form', type: 'surface' });
+    const inventory = recordFact({
+      subjectId: surface.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({
+        surfaceLabels: ['qform-surface'],
+        fields: [
+          { label: 'qactive', role: 'checkbox', checked: 'true' },
+          { label: 'qnotes', role: 'checkbox', checked: 'false' },
+        ],
+      }),
+      memoryKind: 'ui_inventory',
+      sourceRunId: 'run-field-state',
+      attributes: {
+        url: 'https://app.example.test/form',
+        stateIndex: '3',
+      },
+      retrievability: 0.86,
+      now: 1,
+    }).fact;
+    recordFact({
+      subjectId: surface.id,
+      predicate: 'ui_field',
+      objectText: JSON.stringify({
+        label: 'qdescription',
+        role: 'textbox',
+        value: 'qfield-anchor qfield-detail',
+      }),
+      memoryKind: 'ui_field',
+      sourceRunId: 'run-field-state',
+      attributes: {
+        url: 'https://app.example.test/form',
+        stateIndex: '3',
+      },
+      retrievability: 0.98,
+      now: 2,
+    });
+    for (let index = 0; index < 3; index += 1) {
+      recordFact({
+        subjectId: surface.id,
+        predicate: 'ui_field',
+        objectText: JSON.stringify({
+          label: `qdistractor-${index}`,
+          role: 'textbox',
+          value: 'qfield-anchor qfield-detail qnoise',
+        }),
+        memoryKind: 'ui_field',
+        sourceRunId: `run-field-distractor-${index}`,
+        attributes: {
+          url: `https://app.example.test/distractor/${index}`,
+          stateIndex: '1',
+        },
+        retrievability: 0.99,
+        now: 10 + index,
+      });
+    }
+
+    const facts = await recallFactsForQuery('qfield-anchor qfield-detail', {
+      memoryKind: ['ui_inventory', 'ui_field'],
+      limit: 4,
+      threshold: 0,
+    });
+
+    expect(facts.map((fact) => fact.id)).toContain(inventory.id);
+  });
 });

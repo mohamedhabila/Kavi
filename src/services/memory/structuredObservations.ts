@@ -450,6 +450,7 @@ function recordUiMemories(input: {
         ...compactControl(control),
         controlName: control.name,
         controlIndex: control.index,
+        surfaceLabels: summary.surfaceLabels,
         ...baseUiPayload(input),
       }),
       attributes: {
@@ -457,6 +458,7 @@ function recordUiMemories(input: {
         url: input.url,
         sourceRunId: input.sourceRunId,
         stateIndex: input.stateIndex,
+        surfaceLabels: summary.surfaceLabels,
         label: control.label,
         role: control.role,
         name: control.name,
@@ -481,6 +483,7 @@ function recordUiMemories(input: {
       predicate: 'ui_field',
       objectText: compactJson({
         ...compactField(field),
+        surfaceLabels: summary.surfaceLabels,
         ...baseUiPayload(input),
       }),
       attributes: {
@@ -488,6 +491,7 @@ function recordUiMemories(input: {
         url: input.url,
         sourceRunId: input.sourceRunId,
         stateIndex: input.stateIndex,
+        surfaceLabels: summary.surfaceLabels,
         label: field.label,
         role: field.role,
         name: field.controlName,
@@ -498,6 +502,10 @@ function recordUiMemories(input: {
         controlIndex: field.controlIndex,
         nodeId: field.nodeId,
         required: field.required,
+        checked: field.checked,
+        selected: field.selected,
+        disabled: field.disabled,
+        expanded: field.expanded,
       },
       context: input.context,
       retrievability: 0.93,

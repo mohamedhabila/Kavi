@@ -1,4 +1,5 @@
 import type { MemoryFact } from './facts/types';
+import { recordHasUiStateBearingValue } from './uiStateBearingFields';
 
 const MAX_VISIBLE_UI_CONTROLS = 64;
 const MAX_VISIBLE_UI_SECTIONS = 12;
@@ -215,6 +216,9 @@ function compactUiFieldForPrompt(field: Record<string, unknown>): Record<string,
   copyScalar('value', 160);
   copyScalar('displayText', 160);
   copyScalar('required');
+  copyScalar('checked');
+  copyScalar('selected');
+  copyScalar('disabled');
   copyScalar('expanded');
   if (Array.isArray(field.symbolMarkers)) compact.symbolMarkers = field.symbolMarkers.slice(0, 4);
   if (Array.isArray(field.options)) {
@@ -322,6 +326,23 @@ export function compactUiInventoryPromptFields(
       .slice(0, MAX_VISIBLE_UI_FIELDS);
     if (fields.length > 0) compact.fields = fields;
   };
+  const compactStateFields = (): void => {
+    const rawFields = fact.attributes.fields ?? parsed.fields;
+    if (!Array.isArray(rawFields)) return;
+    const fields = rawFields
+      .map((field) =>
+        field && typeof field === 'object' && !Array.isArray(field)
+          ? (field as Record<string, unknown>)
+          : null,
+      )
+      .filter((field): field is Record<string, unknown> =>
+        Boolean(field && recordHasUiStateBearingValue(field)),
+      )
+      .map(compactUiFieldForPrompt)
+      .filter((field): field is Record<string, unknown> => Boolean(field))
+      .slice(0, MAX_VISIBLE_UI_FIELDS);
+    if (fields.length > 0) compact.stateFields = fields;
+  };
   const compactSections = (): void => {
     const rawSections = fact.attributes.sections ?? parsed.sections;
     if (!Array.isArray(rawSections)) return;
@@ -357,6 +378,7 @@ export function compactUiInventoryPromptFields(
   compactVisibleTextSnippets();
   copyField('fieldLabels');
   compactFieldRows();
+  compactStateFields();
   copyField('queryQuotedControlLabelEvidence');
   copyField('tables');
   copyField('labelValues');

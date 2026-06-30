@@ -9,6 +9,7 @@ import {
 } from './ranking/selection';
 import { countLexicalUnits } from './ranking/lexical';
 import { collectUiObservationEvidenceTexts, isUiObservationFact } from './uiObservationEvidence';
+import { uiInventoryHasStateBearingFields } from './factRecallUiStateInventorySupport';
 
 export interface WorkflowSupportEntry {
   exactContext: boolean;
@@ -77,6 +78,7 @@ export function selectedActionResultSourceRuns(facts: ReadonlyArray<MemoryFact>)
 }
 
 function observedStateSupportPriority(fact: MemoryFact): number {
+  if (fact.memoryKind === 'ui_inventory' && uiInventoryHasStateBearingFields(fact)) return 5;
   if (fact.memoryKind === 'ui_field' || fact.memoryKind === 'ui_filter_state') return 4;
   if (fact.memoryKind === 'ui_inventory') return 3;
   if (isActionResultOutcome(fact)) return 2;

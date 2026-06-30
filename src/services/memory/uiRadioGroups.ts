@@ -70,6 +70,10 @@ function groupFieldFromNode(
     controlIndex: group.index,
     nodeId: group.nodeId,
     required: false,
+    checked: null,
+    selected: null,
+    disabled: false,
+    expanded: null,
     attributes: group.attributes,
     symbolMarkers: extractUiSymbolMarkers([
       { source: 'controlName', text: group.name },

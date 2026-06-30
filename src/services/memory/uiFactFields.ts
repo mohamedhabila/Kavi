@@ -50,8 +50,12 @@ export const UI_FIELD_FACT_FIELDS = [
   'controlIndex',
   'nodeId',
   'required',
+  'checked',
+  'selected',
+  'disabled',
   'expanded',
   'contextLabels',
+  'surfaceLabels',
   'url',
   'sourceRunId',
   'stateIndex',
@@ -67,8 +71,12 @@ export const UI_FIELD_RETRIEVAL_FIELDS = [
   'symbolMarkers',
   'adjacentControls',
   'required',
+  'checked',
+  'selected',
+  'disabled',
   'expanded',
   'contextLabels',
+  'surfaceLabels',
   'url',
 ] as const;
 
@@ -163,6 +171,7 @@ export const UI_FIELD_PRIORITY_FIELDS = [
   'symbolMarkers',
   'expanded',
   'contextLabels',
+  'surfaceLabels',
   'url',
 ] as const;
 
@@ -190,6 +199,9 @@ export const UI_INVENTORY_FORM_FIELD_SHAPE_FIELDS = [
   'name',
   'type',
   'required',
+  'checked',
+  'selected',
+  'disabled',
   'displayText',
   'symbolMarkers',
 ] as const;

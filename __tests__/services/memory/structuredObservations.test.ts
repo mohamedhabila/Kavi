@@ -248,10 +248,10 @@ describe('structured observation memory', () => {
       originConversationId: 'conv-ui-graph',
     })[0];
     const inventoryObject = JSON.parse(inventory.objectText);
-
-    expect(fields.map((field) => field.label)).toEqual(['Title', 'Body', 'Destination']);
-    expect(fields.map((field) => field.role)).toEqual(['textbox', 'textbox', 'combobox']);
-    expect(fields[2]).toMatchObject({
+    expect(fields.map((field) => field.label)).toEqual(['Search query', 'Title', 'Body', 'Formatting help +', 'Destination']);
+    expect(fields.map((field) => field.role)).toEqual(['searchbox', 'textbox', 'textbox', 'checkbox', 'combobox']);
+    expect(fields[3]).toMatchObject({ label: 'Formatting help +', checked: 'false' });
+    expect(fields[4]).toMatchObject({
       label: 'Destination',
       controlName: 'general',
       value: 'general',
@@ -262,7 +262,7 @@ describe('structured observation memory', () => {
       controlCount: 9,
       textEntryCount: 2,
       searchControlCount: 1,
-      fieldLabels: ['Title', 'Body', 'Destination'],
+      fieldLabels: ['Search query', 'Title', 'Body', 'Formatting help +', 'Destination'],
     });
     expect(
       inventoryObject.controls.find(

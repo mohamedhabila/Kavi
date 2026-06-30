@@ -49,6 +49,10 @@ export interface UiField {
   controlIndex: number;
   nodeId: string | null;
   required: boolean;
+  checked: string | null;
+  selected: string | null;
+  disabled: boolean;
+  expanded: string | null;
   attributes: string[];
   symbolMarkers?: UiSymbolMarker[];
 }
@@ -73,6 +77,7 @@ export interface UiStateSummary {
 }
 
 const FIELD_CONTROL_ROLES = new Set([
+  'checkbox',
   'combobox',
   'radio',
   'searchbox',
@@ -152,11 +157,14 @@ export function extractUiStateSummary(nodes: AccessibilityNode[]): UiStateSummar
       contextLabels,
     );
     controls.push(control);
-    if (labelBlock && FIELD_CONTROL_ROLES.has(node.role.toLocaleLowerCase())) {
+    const fieldLabel =
+      labelBlock?.text ??
+      (FIELD_CONTROL_ROLES.has(role) && control.name?.trim() ? control.name.trim() : null);
+    if (fieldLabel && FIELD_CONTROL_ROLES.has(role)) {
       const displayText = uiFieldDisplayText(control);
       fields.push({
         order: fields.length,
-        label: labelBlock.text,
+        label: fieldLabel,
         role: node.role,
         controlName: node.name,
         value: control.value,
@@ -166,7 +174,11 @@ export function extractUiStateSummary(nodes: AccessibilityNode[]): UiStateSummar
           control.options.length === 0 ? adjacentFieldControls(nodes, node.index) : [],
         controlIndex: node.index,
         nodeId: node.nodeId,
-        required: labelBlock.required || control.required,
+        required: Boolean(labelBlock?.required) || control.required,
+        checked: control.checked,
+        selected: control.selected,
+        disabled: control.disabled,
+        expanded: control.expanded,
         attributes: control.attributes,
         symbolMarkers: extractUiSymbolMarkers([
           { source: 'controlName', text: control.name },
@@ -252,6 +264,10 @@ export function compactField(field: UiField): JsonRecord {
     controlIndex: field.controlIndex,
     nodeId: field.nodeId,
     required: field.required || undefined,
+    checked: field.checked,
+    selected: field.selected,
+    disabled: field.disabled || undefined,
+    expanded: field.expanded,
   });
 }
 
