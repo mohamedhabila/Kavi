@@ -13,10 +13,29 @@ from uuid import uuid4
 from .memory import Memory, MemoryConfig, MemoryContextItem, register_memory, require
 
 
-DEFAULT_MAX_ITEMS = 12
+DEFAULT_MAX_ITEMS = 6
 DEFAULT_MAX_ITEM_CHARS = 5000
 DEFAULT_CHUNK_CHARS = 3600
 DEFAULT_CHUNK_OVERLAP_CHARS = 320
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _as_bool(value: object, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return default
 
 
 def _safe_name(value: str) -> str:
@@ -177,6 +196,35 @@ class KaviIsolatedMemory(Memory):
                 memory_params.get("chunk_overlap_chars", DEFAULT_CHUNK_OVERLAP_CHARS)
             ),
             "conversationId": f"longmemeval-{self.instance_id}",
+            "queryImageUnderstanding": _as_bool(
+                memory_params.get(
+                    "query_image_understanding",
+                    _env_bool("KAVI_LME_QUERY_IMAGE_UNDERSTANDING", True),
+                ),
+                True,
+            ),
+            "queryImageModel": str(
+                memory_params.get(
+                    "query_image_model",
+                    os.getenv("KAVI_LME_QUERY_IMAGE_MODEL")
+                    or os.getenv("E2E_OPENAI_MODEL")
+                    or "",
+                )
+            ),
+            "queryImageBaseUrl": str(
+                memory_params.get(
+                    "query_image_base_url",
+                    os.getenv("KAVI_LME_QUERY_IMAGE_BASE_URL")
+                    or os.getenv("OPENAI_BASE_URL")
+                    or "https://api.openai.com/v1",
+                )
+            ),
+            "queryImageApiKeyEnv": str(
+                memory_params.get(
+                    "query_image_api_key_env",
+                    os.getenv("KAVI_LME_QUERY_IMAGE_API_KEY_ENV") or "OPENAI_API_KEY",
+                )
+            ),
         }
 
         self.client = KaviMemoryRuntimeClient(
@@ -198,6 +246,10 @@ class KaviIsolatedMemory(Memory):
                 "max_item_chars": self.config["maxItemChars"],
                 "chunk_chars": self.config["chunkChars"],
                 "chunk_overlap_chars": self.config["chunkOverlapChars"],
+                "query_image_understanding": self.config["queryImageUnderstanding"],
+                "query_image_model": self.config["queryImageModel"],
+                "query_image_base_url": self.config["queryImageBaseUrl"],
+                "query_image_api_key_env": self.config["queryImageApiKeyEnv"],
             },
         }
 

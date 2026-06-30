@@ -100,7 +100,7 @@ describe('orchestrateMemoryRetrieval', () => {
     expect(result.facts.some((fact) => fact.id === pinned.id)).toBe(true);
   });
 
-  it('uses focus text only when there is no current request signal', async () => {
+  it('includes focus text alongside the current request signal', async () => {
     const entity = upsertEntity({ name: 'release', type: 'project', now: 1 });
     const focusFact = recordFact({
       subjectId: entity.id,
@@ -127,14 +127,17 @@ describe('orchestrateMemoryRetrieval', () => {
       now: 3,
     });
     const currentRequest = await orchestrateMemoryRetrieval({
-      userMessage: 'NEBULA-FOCUS-E2E release validation',
-      focusText: 'STALE-FOCUS-TOKEN',
+      userMessage: 'release validation',
+      focusText: 'NEBULA-FOCUS-E2E current screen',
       conversationId: 'conv-focus',
       limit: 1,
       now: 4,
     });
 
     expect(fallback.facts.some((fact) => fact.id === focusFact.id)).toBe(true);
+    expect(currentRequest.querySignals).toEqual(
+      expect.arrayContaining(['release validation', 'NEBULA-FOCUS-E2E current screen']),
+    );
     expect(currentRequest.facts.map((fact) => fact.id)).toEqual([focusFact.id]);
     expect(currentRequest.facts.some((fact) => fact.id === staleFact.id)).toBe(false);
   });

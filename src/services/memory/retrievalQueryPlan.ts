@@ -16,7 +16,7 @@ const MAX_SIGNAL_CHARS = 1_200;
 const MAX_PRIMARY_SIGNALS = 4;
 const MAX_SUPPORTING_SIGNALS = 8;
 const MAX_EXTRACTED_SPANS = 8;
-const FUNCTION_SIGNATURE_PATTERN = /[\p{L}_][\p{L}\p{N}_-]*\s*\([^)]*\)/gu;
+const FUNCTION_SIGNATURE_PATTERN = /[\p{L}_][\p{L}\p{N}_-]*\([^)]*\)/gu;
 const MACHINE_PUNCTUATION_PATTERN = /[{}()[\]<>_=|,:;]/g;
 const QUOTED_SPAN_PATTERN = /`([^`]{1,160})`|"([^"]{1,160})"|'([^']{1,160})'/gu;
 const WHITESPACE_PATTERN = /\s+/g;

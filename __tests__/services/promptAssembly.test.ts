@@ -295,14 +295,16 @@ describe('assemblePrompt — L3 contents', () => {
       }),
     );
     const out = assemblePrompt({ basePrompt: 'BASE', retrievedFacts });
-    const uiSection = out.sections.find((section) =>
+    const uiSections = out.sections.filter((section) =>
       section.text.includes('#### Observed UI and Surface Schema'),
     );
+    const uiText = uiSections.map((section) => section.text).join('\n');
 
-    expect(uiSection?.text.length).toBeLessThan(5_000);
-    expect(uiSection?.text).toContain('stateIndex":"1');
-    expect(uiSection?.text).toContain('stateIndex":"7');
-    expect(uiSection?.text).not.toContain('"nodes"');
+    expect(uiSections.length).toBeGreaterThan(0);
+    expect(uiSections.every((section) => section.text.length < 5_000)).toBe(true);
+    expect(uiText).toContain('stateIndex":"1');
+    expect(uiText).toContain('stateIndex":"7');
+    expect(uiText).not.toContain('"nodes"');
   });
 
   it('renders UI inventory visible controls before bulky field details', () => {
@@ -363,10 +365,10 @@ describe('assemblePrompt — L3 contents', () => {
             })),
             tables: [
               {
-                index: 82,
-                role: 'table',
+                index: 82, role: 'table',
                 columnLabels: ['Description', 'Quantity', 'Total'],
-                rowCount: 3,
+                rowCount: 3, interactiveControlCount: 1,
+                interactiveControls: [{ index: 88, role: 'button', name: 'Open row' }],
                 columnValueSamples: [{ column: 'Total', values: ['-'] }],
                 rowSamples: [{ Description: 'Loaner Laptop', Quantity: '5' }, { Total: '-' }],
               },
@@ -381,6 +383,7 @@ describe('assemblePrompt — L3 contents', () => {
 
     const text = flattenPromptSections(out.sections);
     expect(text).toContain('"columnLabels":["Description","Quantity","Total"]');
+    expect(text).toContain('"interactiveControls":[{"index":88,"role":"button","name":"Open row"}]');
     expect(text).toContain('"rowSamples":[{"Description":"Loaner Laptop","Quantity":"5"},{"Total":"-"}]');
     expect(text.indexOf('"tables"')).toBeGreaterThan(-1);
     expect(text.indexOf('"visibleControls"')).toBeGreaterThan(text.indexOf('"tables"'));
@@ -428,6 +431,63 @@ describe('assemblePrompt — L3 contents', () => {
     expect(text.indexOf('"visibleControls"')).toBeLessThan(text.indexOf('"fields"'));
   });
 
+  it('keeps compact form rows visible before bulky UI section details', () => {
+    const out = assemblePrompt({
+      basePrompt: 'BASE',
+      retrievedFacts: [
+        makeFact({
+          predicate: 'ui_inventory',
+          memoryKind: 'ui_inventory',
+          sourceRunId: 'run-settings-fields',
+          objectText: JSON.stringify({
+            fieldLabels: ['Language', 'Time zone', 'Front page'],
+            controlNames: Array.from({ length: 80 }, (_, index) => `bulk-control-${index}`),
+            fields: [
+              {
+                order: 0,
+                label: 'Language',
+                role: 'combobox',
+                controlName: 'Language',
+                value: 'English',
+                options: Array.from({ length: 60 }, (_, index) => `language-${index}`),
+              },
+              {
+                order: 1,
+                label: 'Time zone',
+                role: 'combobox',
+                controlName: 'Time zone',
+                value: 'UTC',
+                options: Array.from({ length: 60 }, (_, index) => `timezone-${index}`),
+              },
+              {
+                order: 2,
+                label: 'Front page',
+                role: 'combobox',
+                controlName: 'Front page',
+                value: 'Home',
+                options: ['Home', 'Forums', 'Wiki'],
+              },
+            ],
+            sections: Array.from({ length: 30 }, (_, index) => ({
+              label: `section-${index}`,
+              controlNames: [`bulk-control-${index}`],
+            })),
+            url: 'https://forum.example.test/user/settings/preferences',
+            sourceRunId: 'run-settings-fields',
+            stateIndex: '2',
+          }),
+        }),
+      ],
+    });
+
+    const text = flattenPromptSections(out.sections);
+    expect(text).toContain('"fieldRows"');
+    expect(text).toContain('"label":"Front page"');
+    expect(text).toContain('"options":["Home","Forums","Wiki"]');
+    expect(text.indexOf('"fieldRows"')).toBeLessThan(text.indexOf('"sections"'));
+    expect(text).not.toContain('language-59');
+  });
+
   it('renders UI inventories with the visible snapshot contract and source context', () => {
     const out = assemblePrompt({
       basePrompt: 'BASE',
@@ -449,11 +509,83 @@ describe('assemblePrompt — L3 contents', () => {
     });
 
     const text = flattenPromptSections(out.sections);
-    expect(text).toContain('UI inventories are direct evidence for UI availability');
-    expect(text).toContain('controls not listed were not visible in that snapshot');
-    expect(text).toContain('observed negative visibility evidence');
+    for (const fragment of ['UI inventories are observed evidence for a specific URL/state', 'answer that no such control/options are present, not unknown', 'landmarkRows summarize section labels', 'use landmarkRole and structuralPath as layout evidence', 'complementary is supporting secondary content', 'Table columnLabels name columns', 'table interactiveControls are the observed controls inside that table', 'Treat rowSample values as content, not controls', 'without renaming them or inferring absent statuses', 'not members of an ordered row-value sequence', 'Count ordinals only within the requested role/context']) {
+      expect(text).toContain(fragment);
+    }
     expect(text).toContain('"sourceGoal":"Review settings page controls"');
     expect(text).toContain('"trajectoryOutcome":"success"');
+  });
+
+  it('renders query-specific exact label evidence before bulky UI inventory details', () => {
+    const out = assemblePrompt({
+      basePrompt: 'BASE',
+      retrievedFacts: [
+        makeFact({
+          predicate: 'ui_inventory',
+          memoryKind: 'ui_inventory',
+          sourceRunId: 'run-visible-state',
+          attributes: {
+            queryQuotedControlLabelEvidence: {
+              matched: [{ requested: 'Archive Item', observed: 'Archive Item' }],
+            },
+          },
+          objectText: JSON.stringify({
+            controlNames: ['Archive Item', 'Share Item'],
+            url: 'https://app.example.test/items/1',
+            sourceRunId: 'run-visible-state',
+            stateIndex: '3',
+          }),
+        }),
+      ],
+    });
+
+    const text = flattenPromptSections(out.sections);
+    expect(text).toContain('queryQuotedControlLabelEvidence');
+    expect(text).toContain('exact quoted control-label evidence');
+    expect(text).not.toContain('notInThisInventory');
+    expect(text).not.toContain('premiseContradictions');
+    expect(text.indexOf('"queryQuotedControlLabelEvidence"')).toBeLessThan(
+      text.indexOf('"visibleControls"'),
+    );
+  });
+
+  it('renders observed UI state before procedure traces', () => {
+    const out = assemblePrompt({
+      basePrompt: 'BASE',
+      retrievedFacts: [
+        makeFact({
+          id: 'procedure-1',
+          subjectId: 'workflow:run-order',
+          predicate: 'procedure_trace',
+          memoryKind: 'procedure',
+          objectText: JSON.stringify({
+            sourceRunId: 'run-order',
+            trajectoryOutcome: 'success',
+            steps: [{ stateIndex: '1', action: "click('order')" }],
+          }),
+        }),
+        makeFact({
+          id: 'ui-1',
+          subjectId: 'workflow:run-order:state:7',
+          predicate: 'ui_inventory',
+          memoryKind: 'ui_inventory',
+          objectText: JSON.stringify({
+            sourceRunId: 'run-order',
+            stateIndex: '7',
+            tables: [
+              {
+                columnLabels: ['Item', 'Stage'],
+                rowSamples: [{ Item: 'Macbook Pro', Stage: 'Observed approval chain' }],
+              },
+            ],
+          }),
+        }),
+      ],
+    });
+
+    const text = flattenPromptSections(out.sections);
+    expect(text.indexOf('#### Observed UI and Surface Schema')).toBeLessThan(text.indexOf('#### Procedures'));
+    expect(text.indexOf('"Stage":"Observed approval chain"')).toBeLessThan(text.indexOf('procedure_trace'));
   });
 
   it('skips L3 entirely when nothing dynamic to render', () => {

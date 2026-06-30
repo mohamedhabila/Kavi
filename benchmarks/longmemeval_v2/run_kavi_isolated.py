@@ -28,6 +28,18 @@ HARNESS_REASONING_CHOICES_LINE = (
 HARNESS_OPENROUTER_REASONING_CHOICES_LINE = (
     '    parser.add_argument("--reasoning-effort", choices=["none", "low", "medium", "high"], default=None)\n'
 )
+HARNESS_QWEN_THINKING_EXACT_MODEL_LINE = (
+    '    if args.base_url and args.model == "Qwen/Qwen3.5-9B" and not args.reader_enable_thinking:\n'
+)
+HARNESS_QWEN_THINKING_MODEL_ID_LINE = (
+    '    if args.base_url and "qwen3.5-9b" in str(args.model).lower() and not args.reader_enable_thinking:\n'
+)
+HARNESS_MALFORMED_PREMISE_BOXED_LINE = (
+    '        "explanation in \\boxed{} explaining why the question is flawed."\n'
+)
+HARNESS_ESCAPED_PREMISE_BOXED_LINE = (
+    '        "explanation in \\\\boxed{} explaining why the question is flawed."\n'
+)
 
 
 def parse_question_ids(raw_values: list[str] | None) -> list[str] | None:
@@ -54,7 +66,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reader-temperature", type=float, default=float(os.getenv("READER_TEMPERATURE", "0.6")))
     parser.add_argument("--reader-top-p", type=float, default=float(os.getenv("READER_TOP_P", "0.95")))
     parser.add_argument("--reader-top-k", type=int, default=int(os.getenv("READER_TOP_K", "20")))
-    parser.add_argument("--reader-enable-thinking", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--reader-enable-thinking", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument(
         "--reader-reasoning-effort",
         choices=["none", "low", "medium", "high"],
@@ -137,6 +149,16 @@ def install_adapter(upstream: Path, adapter_source: Path) -> None:
         harness_text = harness_text.replace(
             HARNESS_REASONING_CHOICES_LINE,
             HARNESS_OPENROUTER_REASONING_CHOICES_LINE,
+        )
+    if HARNESS_QWEN_THINKING_EXACT_MODEL_LINE in harness_text:
+        harness_text = harness_text.replace(
+            HARNESS_QWEN_THINKING_EXACT_MODEL_LINE,
+            HARNESS_QWEN_THINKING_MODEL_ID_LINE,
+        )
+    if HARNESS_MALFORMED_PREMISE_BOXED_LINE in harness_text:
+        harness_text = harness_text.replace(
+            HARNESS_MALFORMED_PREMISE_BOXED_LINE,
+            HARNESS_ESCAPED_PREMISE_BOXED_LINE,
         )
     harness_py.write_text(harness_text, encoding="utf-8")
 
@@ -252,7 +274,7 @@ def main() -> None:
                 "workspace_root": str((output_dir / "kavi_memory_workspaces").resolve()),
                 "runtime_bundle_path": str(runtime_bundle),
                 "node_binary": args.node_binary,
-                "max_items": int(os.getenv("KAVI_LME_MAX_ITEMS", "12")),
+                "max_items": int(os.getenv("KAVI_LME_MAX_ITEMS", "6")),
                 "max_item_chars": int(os.getenv("KAVI_LME_MAX_ITEM_CHARS", "5000")),
                 "chunk_chars": int(os.getenv("KAVI_LME_CHUNK_CHARS", "3600")),
                 "chunk_overlap_chars": int(os.getenv("KAVI_LME_CHUNK_OVERLAP_CHARS", "320")),

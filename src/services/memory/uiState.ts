@@ -1,34 +1,24 @@
-// ---------------------------------------------------------------------------
-// Kavi — UI state extraction
-// ---------------------------------------------------------------------------
-// Turns accessibility-tree observations into a compact, typed state graph.
-// The extraction is based on accessibility roles, tree indentation, attributes,
-// and sibling/ancestor relationships. It intentionally avoids product-specific
-// strings or English phrase rules so it works across app surfaces and locales.
-// ---------------------------------------------------------------------------
-
 import { compactUiSection, extractUiSectionsFromControls, type UiSectionSummary } from './uiSections';
-import {
-  compactLabelValue,
-  extractLabelValues,
-  type UiLabelValue,
-} from './uiLabelValues';
+import { type AccessibilityNode } from './accessibilityTree';
+import { compactLabelValue, extractLabelValues, type UiLabelValue } from './uiLabelValues';
 import {
   extractTableSummaries,
   MAX_TABLE_SUMMARY_ITEMS,
   type UiTableSummary,
 } from './uiTables';
+import { extractRadioGroupFields, radioControlIndexesInGroups } from './uiRadioGroups';
+import { extractSurfaceLabels } from './uiSurfaceLabels';
+import { isInteractiveUiNode } from './uiInteractivity';
+import { extractUiSymbolMarkers, uiFieldDisplayText, type UiSymbolMarker } from './uiSymbols';
+import {
+  extractVisibleTextSnippets,
+  type UiVisibleTextSnippet,
+} from './uiVisibleText';
+
+export { parseAccessibilityTree } from './accessibilityTree';
+export type { AccessibilityNode } from './accessibilityTree';
 
 type JsonRecord = Record<string, unknown>;
-
-export interface AccessibilityNode {
-  index: number;
-  nodeId: string | null;
-  indent: number;
-  role: string;
-  name: string | null;
-  attributes: string[];
-}
 
 export interface UiControl {
   index: number;
@@ -53,19 +43,27 @@ export interface UiField {
   role: string;
   controlName: string | null;
   value: string | null;
+  displayText?: string | null;
   options: string[];
+  adjacentControls: UiControl[];
   controlIndex: number;
   nodeId: string | null;
   required: boolean;
   attributes: string[];
+  symbolMarkers?: UiSymbolMarker[];
 }
 
 export interface UiStateSummary {
   nodeCount: number;
   roleCounts: Record<string, number>;
+  surfaceLabels: string[];
   controls: UiControl[];
+  actionControls: UiControl[];
+  roleControls: Record<string, JsonRecord[]>;
+  contextRoleControls: JsonRecord[];
   popupControls: UiControl[];
   sections: UiSectionSummary[];
+  visibleTextSnippets: UiVisibleTextSnippet[];
   fields: UiField[];
   labelValues: UiLabelValue[];
   tables: UiTableSummary[];
@@ -73,24 +71,6 @@ export interface UiStateSummary {
   textEntryCount: number;
   searchControlCount: number;
 }
-
-const ACTIONABLE_ROLES = new Set([
-  'button',
-  'checkbox',
-  'combobox',
-  'link',
-  'menuitem',
-  'option',
-  'radio',
-  'searchbox',
-  'slider',
-  'spinbutton',
-  'switch',
-  'tab',
-  'textbox',
-]);
-
-const NON_CONTROL_CLICKABLE_ROLES = new Set(['labeltext', 'statictext']);
 
 const FIELD_CONTROL_ROLES = new Set([
   'combobox',
@@ -102,7 +82,20 @@ const FIELD_CONTROL_ROLES = new Set([
   'textbox',
 ]);
 
+const TRAILING_LABEL_CONTROL_ROLES = new Set(['checkbox', 'radio', 'switch']);
 const OPTION_ROLES = new Set(['option']);
+const ACTION_CONTROL_ROLE_ORDER = [
+  'button',
+  'checkbox',
+  'link',
+  'menuitem',
+  'radio',
+  'slider',
+  'spinbutton',
+  'switch',
+  'tab',
+] as const;
+const ACTION_CONTROL_ROLES = new Set<string>(ACTION_CONTROL_ROLE_ORDER);
 const CONTEXT_LABEL_ROLES = new Set([
   'article',
   'complementary',
@@ -116,46 +109,38 @@ const CONTEXT_LABEL_ROLES = new Set([
 ]);
 
 const MAX_CONTROL_SUMMARY_ITEMS = 96;
+const MAX_ACTION_CONTROL_SUMMARY_ITEMS = 48;
+const MAX_ROLE_CONTROL_GROUP_ITEMS = 12;
+const MAX_CONTEXT_ROLE_GROUPS = 16;
+const MAX_CONTEXT_ROLE_GROUP_ITEMS = 8;
 const MAX_FIELD_SUMMARY_ITEMS = 36;
+const MAX_FIELD_ADJACENT_CONTROLS = 6;
 const MAX_LABEL_VALUE_ITEMS = 36;
 const MAX_NAME_SUMMARY_ITEMS = 192;
 const MAX_CONTROL_OPTIONS = 48;
-const MAX_PARSED_ACCESSIBILITY_NODES = 2_500;
+const MAX_DETACHED_POPUP_SCAN_NODES = 1_500;
 const REQUIRED_MARKER = '*';
 
 function isInteractiveControlNode(node: AccessibilityNode): boolean {
-  const role = node.role.toLocaleLowerCase();
-  return (
-    ACTIONABLE_ROLES.has(role) ||
-    Boolean(
-      node.name &&
-        !NON_CONTROL_CLICKABLE_ROLES.has(role) &&
-        node.attributes.some((attribute) => attribute.trim() === 'clickable'),
-    )
-  );
-}
-
-export function parseAccessibilityTree(tree: string): AccessibilityNode[] {
-  const nodes: AccessibilityNode[] = [];
-  const lines = tree.split(/\r?\n/);
-  for (const rawLine of lines) {
-    if (nodes.length >= MAX_PARSED_ACCESSIBILITY_NODES) break;
-    const parsed = parseAccessibilityLine(rawLine, nodes.length);
-    if (parsed) nodes.push(parsed);
-  }
-  return nodes;
+  return isInteractiveUiNode(node);
 }
 
 export function extractUiStateSummary(nodes: AccessibilityNode[]): UiStateSummary {
   const roleCounts = countRoles(nodes);
   const labelBlocks = extractLabelBlocks(nodes);
+  const labelBlocksByIndex = new Map(labelBlocks.map((label) => [label.index, label]));
   const usedLabelIndexes = new Set<number>();
   const controls: UiControl[] = [];
   const fields: UiField[] = [];
 
   for (const node of nodes) {
     if (!isInteractiveControlNode(node)) continue;
-    const labelBlock = findNearestUnusedPriorLabel(node, labelBlocks, usedLabelIndexes);
+    const role = node.role.toLocaleLowerCase();
+    const labelBlock =
+      findNearestUnusedPriorLabel(node, labelBlocks, usedLabelIndexes) ??
+      (TRAILING_LABEL_CONTROL_ROLES.has(role)
+        ? findNearestUnusedFollowingLabel(node, nodes, labelBlocksByIndex, usedLabelIndexes)
+        : null);
     if (labelBlock) usedLabelIndexes.add(labelBlock.index);
     const options = childPopupItemNames(nodes, node.index);
     const contextLabels = findContextLabels(nodes, node.index);
@@ -168,34 +153,61 @@ export function extractUiStateSummary(nodes: AccessibilityNode[]): UiStateSummar
     );
     controls.push(control);
     if (labelBlock && FIELD_CONTROL_ROLES.has(node.role.toLocaleLowerCase())) {
+      const displayText = uiFieldDisplayText(control);
       fields.push({
         order: fields.length,
         label: labelBlock.text,
         role: node.role,
         controlName: node.name,
         value: control.value,
+        displayText,
         options: control.options,
+        adjacentControls:
+          control.options.length === 0 ? adjacentFieldControls(nodes, node.index) : [],
         controlIndex: node.index,
         nodeId: node.nodeId,
         required: labelBlock.required || control.required,
         attributes: control.attributes,
+        symbolMarkers: extractUiSymbolMarkers([
+          { source: 'controlName', text: control.name },
+          { source: 'value', text: control.value },
+          { source: 'displayText', text: displayText },
+          ...control.options.map((option) => ({ source: 'option', text: option })),
+        ]),
       });
     }
   }
+  const groupedRadioIndexes = radioControlIndexesInGroups(nodes);
+  const fieldsForSummary = [
+    ...extractRadioGroupFields(nodes, 0),
+    ...fields.filter((field) => !groupedRadioIndexes.has(field.controlIndex)),
+  ].map((field, order) => ({ ...field, order }));
 
   const labelValues = extractLabelValues(nodes);
   const tables = extractTableSummaries(nodes);
   const sections = extractUiSectionsFromControls(nodes, controls);
+  const visibleTextSnippets = extractVisibleTextSnippets(nodes, controls);
+  const surfaceLabels = extractSurfaceLabels(controls, sections);
+  const actionControls = controls.filter((control) =>
+    ACTION_CONTROL_ROLES.has(control.role.toLocaleLowerCase()),
+  );
+  const roleControls = compactControlsByRoleGroups(actionControls);
+  const contextRoleControls = compactContextRoleControls(actionControls);
   const popupControls = controls.filter(
     (control) => control.options.length > 0 || control.expanded !== null,
   );
   return {
     nodeCount: nodes.length,
     roleCounts,
+    surfaceLabels,
     controls,
+    actionControls,
+    roleControls,
+    contextRoleControls,
     popupControls,
     sections,
-    fields,
+    visibleTextSnippets,
+    fields: fieldsForSummary,
     labelValues,
     tables,
     controlCount: controls.length,
@@ -232,7 +244,11 @@ export function compactField(field: UiField): JsonRecord {
     role: field.role,
     controlName: field.controlName,
     value: field.value,
+    displayText: field.displayText,
     options: field.options.length > 0 ? field.options : undefined,
+    adjacentControls:
+      field.adjacentControls.length > 0 ? field.adjacentControls.map(compactControl) : undefined,
+    symbolMarkers: field.symbolMarkers,
     controlIndex: field.controlIndex,
     nodeId: field.nodeId,
     required: field.required || undefined,
@@ -247,9 +263,16 @@ export function compactUiInventory(summary: UiStateSummary): JsonRecord {
     controlCount: summary.controlCount,
     textEntryCount: summary.textEntryCount,
     searchControlCount: summary.searchControlCount,
+    surfaceLabels: summary.surfaceLabels,
+    visibleTextSnippets: summary.visibleTextSnippets,
     fieldLabels: uniqueNamedValues(summary.fields.map((field) => field.label)),
     controlNames: uniqueNamedValues(summary.controls.map((control) => control.name)),
     sections: summary.sections.map(compactUiSection),
+    actionControls: summary.actionControls
+      .slice(0, MAX_ACTION_CONTROL_SUMMARY_ITEMS)
+      .map(compactControl),
+    roleControls: summary.roleControls,
+    contextRoleControls: summary.contextRoleControls,
     textEntryControls,
     searchControls,
     popupControls: summary.popupControls.slice(0, MAX_CONTROL_SUMMARY_ITEMS).map(compactControl),
@@ -267,6 +290,45 @@ function compactControlsByRole(controls: UiControl[], roles: string[]): JsonReco
     .filter((control) => roleSet.has(control.role.toLocaleLowerCase()))
     .slice(0, MAX_CONTROL_SUMMARY_ITEMS)
     .map(compactControl);
+}
+
+function compactContextRoleControls(controls: UiControl[]): JsonRecord[] {
+  const contexts = new Map<string, Map<string, JsonRecord[]>>();
+  for (const control of controls) {
+    for (const contextLabel of control.contextLabels) {
+      const label = contextLabel.trim();
+      if (!label) continue;
+      let roles = contexts.get(label);
+      if (!roles) {
+        if (contexts.size >= MAX_CONTEXT_ROLE_GROUPS) continue;
+        roles = new Map<string, JsonRecord[]>();
+        contexts.set(label, roles);
+      }
+      const role = control.role.toLocaleLowerCase();
+      if (!ACTION_CONTROL_ROLES.has(role)) continue;
+      const entries = roles.get(role) ?? [];
+      if (entries.length >= MAX_CONTEXT_ROLE_GROUP_ITEMS) continue;
+      entries.push(compactControl(control));
+      roles.set(role, entries);
+    }
+  }
+
+  return Array.from(contexts.entries()).map(([label, roles]) => ({
+    label,
+    roleControls: Object.fromEntries(roles.entries()),
+  }));
+}
+
+function compactControlsByRoleGroups(controls: UiControl[]): Record<string, JsonRecord[]> {
+  const grouped: Record<string, JsonRecord[]> = {};
+  for (const role of ACTION_CONTROL_ROLE_ORDER) {
+    const entries = controls
+      .filter((control) => control.role.toLocaleLowerCase() === role)
+      .slice(0, MAX_ROLE_CONTROL_GROUP_ITEMS)
+      .map(compactControl);
+    if (entries.length > 0) grouped[role] = entries;
+  }
+  return grouped;
 }
 
 function uniqueNamedValues(values: Array<string | null>): string[] {
@@ -288,59 +350,11 @@ function compactTableSummary(table: UiTableSummary): JsonRecord {
     role: table.role,
     columnLabels: table.columnLabels,
     rowCount: table.rowCount,
+    interactiveControlCount: table.interactiveControlCount,
+    interactiveControls: table.interactiveControls,
     columnValueSamples: table.columnValueSamples,
     rowSamples: table.rowSamples,
   });
-}
-
-function parseAccessibilityLine(rawLine: string, index: number): AccessibilityNode | null {
-  if (!rawLine.trim()) return null;
-  const indent = rawLine.match(/^\s*/)?.[0]?.length ?? 0;
-  const line = rawLine.trim();
-  const idMatch = line.match(/^\[([^\]]+)\]/);
-  const withoutId = line.replace(/^\[[^\]]+\]\s*/, '');
-  const firstQuote = firstQuoteIndex(withoutId);
-  const roleRaw =
-    firstQuote >= 0 ? withoutId.slice(0, firstQuote).trim() : withoutId.split(',')[0]?.trim();
-  const roleHead = roleRaw ?? '';
-  const role = roleHead.replace(/\s+/g, '_');
-  if (!role) return null;
-  const name = firstQuote >= 0 ? readQuotedValue(withoutId, firstQuote) : null;
-  const afterName =
-    firstQuote >= 0 && name !== null
-      ? withoutId.slice(firstQuote + name.length + 2)
-      : withoutId.slice(roleHead.length);
-  const attributes = splitAttributes(afterName).slice(0, 16);
-  return {
-    index,
-    nodeId: idMatch?.[1] ?? null,
-    indent,
-    role: fitText(role, 80),
-    name: name ? fitText(name, 260) : null,
-    attributes,
-  };
-}
-
-function firstQuoteIndex(value: string): number {
-  const single = value.indexOf("'");
-  const double = value.indexOf('"');
-  if (single < 0) return double;
-  if (double < 0) return single;
-  return Math.min(single, double);
-}
-
-function readQuotedValue(value: string, quoteIndex: number): string | null {
-  const quote = value[quoteIndex];
-  const end = value.indexOf(quote, quoteIndex + 1);
-  if (end <= quoteIndex) return null;
-  return value.slice(quoteIndex + 1, end);
-}
-
-function splitAttributes(value: string): string[] {
-  return value
-    .split(',')
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
 }
 
 function countRoles(nodes: AccessibilityNode[]): Record<string, number> {
@@ -411,6 +425,32 @@ function findNearestUnusedPriorLabel(
   return best;
 }
 
+function findNearestUnusedFollowingLabel(
+  control: AccessibilityNode,
+  nodes: AccessibilityNode[],
+  labelBlocksByIndex: ReadonlyMap<number, LabelBlock>,
+  usedLabelIndexes: Set<number>,
+): LabelBlock | null {
+  for (let index = control.index + 1; index < nodes.length; index += 1) {
+    const node = nodes[index];
+    if (node.indent < control.indent) break;
+    if (node.indent > control.indent + 2) continue;
+    if (isInteractiveControlNode(node)) break;
+    if (CONTEXT_LABEL_ROLES.has(node.role.toLocaleLowerCase())) break;
+    const label = labelBlocksByIndex.get(index);
+    if (!label || usedLabelIndexes.has(label.index)) continue;
+    if (!isCompatibleTrailingLabel(control, label)) return null;
+    return label;
+  }
+  return null;
+}
+
+function isCompatibleTrailingLabel(control: AccessibilityNode, label: LabelBlock): boolean {
+  const controlName = normalizeLabelText(control.name ? [control.name] : []);
+  if (!controlName) return true;
+  return controlName === label.text;
+}
+
 function controlFromNode(
   node: AccessibilityNode,
   label: string | null,
@@ -462,11 +502,40 @@ function findContextLabels(nodes: AccessibilityNode[], controlIndex: number): st
   for (let index = controlIndex - 1; index >= lowerBound && labels.length < 6; index -= 1) {
     const node = nodes[index];
     if (node.indent > control.indent) continue;
+    if (node.role === 'LabelText') break;
     if (!CONTEXT_LABEL_ROLES.has(node.role.toLocaleLowerCase())) continue;
     addLabel(node.name);
+    break;
   }
 
   return labels.slice(0, 6);
+}
+
+function adjacentFieldControls(nodes: AccessibilityNode[], controlIndex: number): UiControl[] {
+  const control = nodes[controlIndex];
+  if (!control) return [];
+  const out: UiControl[] = [];
+  const startIndex = subtreeEndIndex(nodes, controlIndex);
+  for (let index = startIndex; index < nodes.length; index += 1) {
+    const node = nodes[index];
+    if (node.indent < control.indent) break;
+    if (node.role === 'LabelText' && node.indent <= control.indent) break;
+    if (!isInteractiveControlNode(node)) continue;
+    const role = node.role.toLocaleLowerCase();
+    if (FIELD_CONTROL_ROLES.has(role) && node.indent <= control.indent) break;
+    if (!ACTION_CONTROL_ROLES.has(role)) continue;
+    out.push(
+      controlFromNode(
+        node,
+        null,
+        false,
+        childPopupItemNames(nodes, node.index),
+        findContextLabels(nodes, node.index),
+      ),
+    );
+    if (out.length >= MAX_FIELD_ADJACENT_CONTROLS) break;
+  }
+  return out;
 }
 
 function childPopupItemNames(nodes: AccessibilityNode[], controlIndex: number): string[] {
@@ -485,14 +554,39 @@ function childPopupItemNames(nodes: AccessibilityNode[], controlIndex: number): 
   for (let index = ownSubtreeEnd; index < nodes.length; index += 1) {
     const node = nodes[index];
     if (node.indent < control.indent) break;
+    if (node.indent <= control.indent && node.role === 'LabelText') break;
+    if (node.indent <= control.indent && FIELD_CONTROL_ROLES.has(node.role.toLocaleLowerCase())) {
+      break;
+    }
     if (node.indent !== control.indent) continue;
     const siblingEnd = subtreeEndIndex(nodes, index);
     const before = out.length;
-    collectPopupNames(nodes, index, siblingEnd, hasPopup, seen, out);
+    collectPopupNames(nodes, index, siblingEnd, hasPopup, seen, out, false);
     if (out.length > before || out.length >= MAX_CONTROL_OPTIONS) break;
     index = siblingEnd - 1;
   }
+  if (out.length === 0) {
+    collectDetachedListboxNames(nodes, controlIndex, seen, out);
+  }
   return out;
+}
+
+function collectDetachedListboxNames(
+  nodes: AccessibilityNode[],
+  controlIndex: number,
+  seen: Set<string>,
+  out: string[],
+): void {
+  const endIndex = Math.min(nodes.length, controlIndex + MAX_DETACHED_POPUP_SCAN_NODES);
+  for (let index = controlIndex + 1; index < endIndex; index += 1) {
+    const node = nodes[index];
+    if (node.role.toLocaleLowerCase() !== 'listbox') continue;
+    const listboxEnd = subtreeEndIndex(nodes, index);
+    const before = out.length;
+    collectPopupNames(nodes, index + 1, listboxEnd, true, seen, out);
+    if (out.length > before || out.length >= MAX_CONTROL_OPTIONS) break;
+    index = listboxEnd - 1;
+  }
 }
 
 function collectPopupNames(
@@ -502,11 +596,19 @@ function collectPopupNames(
   hasPopup: boolean,
   seen: Set<string>,
   out: string[],
+  includeInteractiveStartNode = true,
 ): void {
   for (let index = startIndex; index < endIndex; index += 1) {
     const node = nodes[index];
     const role = node.role.toLocaleLowerCase();
-    if (!OPTION_ROLES.has(role) && !(hasPopup && isInteractiveControlNode(node))) continue;
+    const isStartNode = index === startIndex;
+    const includeInteractiveNode = includeInteractiveStartNode || !isStartNode;
+    if (
+      !OPTION_ROLES.has(role) &&
+      !(hasPopup && includeInteractiveNode && isInteractiveControlNode(node))
+    ) {
+      continue;
+    }
     const name = node.name?.trim();
     if (!name || seen.has(name)) continue;
     seen.add(name);
@@ -552,10 +654,4 @@ function dropEmpty(value: JsonRecord): JsonRecord {
   return Object.fromEntries(
     Object.entries(value).filter(([, entry]) => entry !== null && entry !== undefined && entry !== ''),
   );
-}
-
-function fitText(value: string, maxChars: number): string {
-  const trimmed = value.trim();
-  if (trimmed.length <= maxChars) return trimmed;
-  return `${trimmed.slice(0, maxChars - 1).trimEnd()}\u2026`;
 }

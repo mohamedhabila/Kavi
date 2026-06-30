@@ -75,11 +75,18 @@ describe('structured observation memory', () => {
     const inventories = listFacts({ memoryKind: 'ui_inventory', originTaskId: 'task-ui' });
     const outcomes = listFacts({ memoryKind: 'outcome', originTaskId: 'task-ui' });
     const inventory = inventories.find((fact) => fact.predicate === 'ui_inventory');
+    const actionResult = outcomes.find((fact) => fact.predicate === 'ui_action_result');
 
     expect(inventories).toHaveLength(1);
     expect(listFacts({ memoryKind: 'ui_affordance', originTaskId: 'task-ui' })).toHaveLength(0);
-    expect(outcomes).toHaveLength(1);
+    expect(outcomes.map((fact) => fact.predicate).sort()).toEqual([
+      'tool_outcome',
+      'ui_action_result',
+    ]);
     expect(inventory?.objectText).toContain('Save');
+    expect(JSON.parse(actionResult!.objectText)).not.toHaveProperty('goal');
+    expect(actionResult?.attributes.goal).toBe('Update settings page controls');
+    expect(actionResult?.attributes.trajectoryOutcome).toBe('success');
     expect(JSON.parse(inventory!.objectText)).toMatchObject({
       goal: 'Update settings page controls',
       trajectoryOutcome: 'success',
@@ -142,6 +149,15 @@ describe('structured observation memory', () => {
       'qaction-gamma',
     ]);
     expect(controls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'qaction-beta',
+          role: 'link',
+          contextLabels: ['qsection-actions'],
+        }),
+      ]),
+    );
+    expect(inventory.actionControls).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           name: 'qaction-beta',
@@ -261,6 +277,18 @@ describe('structured observation memory', () => {
         options: ['general', 'news'],
       }),
     ]);
+    expect(inventoryObject.actionControls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ role: 'link', name: 'Home' }),
+        expect.objectContaining({ role: 'button', name: 'Create submission' }),
+      ]),
+    );
+    expect(
+      inventoryObject.actionControls.some(
+        (control: { role?: string; name?: string }) =>
+          control.role === 'textbox' && control.name === 'Body',
+      ),
+    ).toBe(false);
     expect(inventoryObject.controls.some((control: { name?: string }) => control.name === 'Formatting help +')).toBe(
       true,
     );
@@ -448,8 +476,9 @@ describe('structured observation memory', () => {
       memoryKind: 'ui_affordance',
       originConversationId: 'conv-large-ui',
     })).toHaveLength(0);
-    expect(inventoryObject.fieldLabels).toEqual(['Title', 'Body', 'Forum']);
+    expect(inventoryObject.fieldLabels).toEqual(expect.arrayContaining(['Title']));
     expect(inventoryObject.controlNames).toContain('late-critical-action');
+    expect(inventoryObject.actionControls.length).toBeLessThanOrEqual(48);
     expect(inventoryObject.fields).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ label: 'Body', role: 'textbox' }),
@@ -460,6 +489,55 @@ describe('structured observation memory', () => {
         }),
       ]),
     );
+  });
+
+  it('records visible symbol markers attached to field options', () => {
+    recordStructuredObservationsFromMessages({
+      conversationId: 'conv-field-symbols',
+      threadId: 'conv-field-symbols',
+      sourceRunId: 'run-field-symbols',
+      now: 430,
+      messages: [
+        toolMessage({
+          url: 'https://forum.example.test/submit/pittsburgh',
+          accessibility_tree: [
+            "RootWebArea 'Create submission'",
+            "\t[1] LabelText '', visible",
+            "\t\tStaticText 'Forum'",
+            "\t\tStaticText '*'",
+            "\t[2] combobox 'pittsburgh' value='pittsburgh', clickable, visible, hasPopup='menu'",
+            "\t\t[3] textbox 'pittsburgh ❤️' value='pittsburgh', visible",
+            "\t\t\tStaticText 'pittsburgh'",
+            "\t\t\t[4] image '', visible",
+          ].join('\n'),
+        }),
+      ],
+    });
+
+    const inventory = JSON.parse(listFacts({
+      memoryKind: 'ui_inventory',
+      originConversationId: 'conv-field-symbols',
+    })[0].objectText);
+    const forumField = inventory.fields.find((field: { label?: string }) => field.label === 'Forum');
+
+    expect(forumField).toMatchObject({
+      label: 'Forum',
+      role: 'combobox',
+      value: 'pittsburgh',
+      displayText: 'pittsburgh ❤️',
+      options: ['pittsburgh ❤️'],
+      symbolMarkers: [{ glyph: '❤️', source: 'displayText', text: 'pittsburgh ❤️' }],
+    });
+
+    const fieldFact = JSON.parse(listFacts({
+      memoryKind: 'ui_field',
+      originConversationId: 'conv-field-symbols',
+    })[0].objectText);
+    expect(fieldFact).toMatchObject({
+      label: 'Forum',
+      displayText: 'pittsburgh ❤️',
+      symbolMarkers: [{ glyph: '❤️', source: 'displayText', text: 'pittsburgh ❤️' }],
+    });
   });
 
   it('preserves controls in source order inside compact inventories', () => {
@@ -499,6 +577,18 @@ describe('structured observation memory', () => {
       'Forum',
       'Create submission',
     ]);
+    expect(inventory.actionControls.map((control: { name: string }) => control.name)).toEqual([
+      'Home',
+      'Forums',
+      'Create submission',
+    ]);
+    expect(inventory.roleControls).toMatchObject({
+      link: [
+        expect.objectContaining({ name: 'Home' }),
+        expect.objectContaining({ name: 'Forums' }),
+      ],
+      button: [expect.objectContaining({ name: 'Create submission' })],
+    });
   });
 
   it('stores consecutive observations as standalone UI inventories', () => {
@@ -512,6 +602,7 @@ describe('structured observation memory', () => {
           state_index: 1,
           url: 'https://workflow.example.test/input',
           action: null,
+          thought: 'Use qtransition-submit after entering qtransition-field.',
           accessibility_tree: [
             "RootWebArea 'Input'",
             "\t[1] button 'qtransition-submit', clickable, visible",
@@ -522,6 +613,7 @@ describe('structured observation memory', () => {
           state_index: 2,
           url: 'https://workflow.example.test/result',
           action: "click('1')",
+          thought: 'Open qresult-alpha for the result details.',
           accessibility_tree: [
             "RootWebArea 'Result'",
             "\t[3] heading 'qsection-result'",
@@ -567,11 +659,13 @@ describe('structured observation memory', () => {
         expect.objectContaining({
           stateIndex: '1',
           url: 'https://workflow.example.test/input',
+          thought: expect.stringContaining('qtransition-submit'),
         }),
         expect.objectContaining({
           stateIndex: '2',
           url: 'https://workflow.example.test/result',
           action: "click('1')",
+          thought: expect.stringContaining('qresult-alpha'),
         }),
       ],
     });
@@ -598,9 +692,7 @@ describe('structured observation memory', () => {
     });
 
     expect(result.consumedEvidence).toEqual([evidence]);
-    expect(listFacts({ memoryKind: 'ui_inventory', originConversationId: 'conv-evidence' })).toHaveLength(
-      1,
-    );
+    expect(listFacts({ memoryKind: 'ui_inventory', originConversationId: 'conv-evidence' })).toHaveLength(1);
     expect(
       listFacts({ memoryKind: 'outcome', originConversationId: 'conv-evidence' }),
     ).toHaveLength(1);

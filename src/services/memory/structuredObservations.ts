@@ -16,7 +16,6 @@ import { ensureFactSchema } from './schema';
 import {
   compactField,
   compactControl,
-  compactUiInventory,
   extractUiStateSummary,
   parseAccessibilityTree,
   type AccessibilityNode,
@@ -27,11 +26,16 @@ import {
   compactJsonForStorage,
   fitObjectTextForStorage,
 } from './structuredObservationCompaction';
+import { buildUiActionResultMemory } from './uiActionResultMemory';
+import { compactUiInventoryPayload } from './uiInventoryMemory';
+import {
+  collectProcedureTrace,
+  recordProcedureTraces,
+  type ProcedureTrace,
+} from './structuredProcedureTrace';
+import type { UiActionTrailEntry } from './uiActionResultMemory';
 
 const MAX_TEXT_CHARS = 4_000;
-const MAX_PROCEDURE_TEXT_CHARS = 7_500;
-const MAX_PROCEDURE_URL_CHARS = 260;
-const MAX_PROCEDURE_ACTION_CHARS = 220;
 const MAX_FIELD_FACTS_PER_PAYLOAD = 96;
 const MAX_FILTER_STATE_FACTS_PER_PAYLOAD = 96;
 type JsonRecord = Record<string, unknown>;
@@ -58,15 +62,11 @@ interface ParsedPayload {
   sourceLabel: string;
 }
 
-interface ProcedureTrace {
-  context: ObservationContext;
-  sourceRunId: string;
-  subjectName: string;
-  goal: string | null;
-  trajectoryOutcome: string | null;
-  domain: string | null;
-  environment: string | null;
-  steps: JsonRecord[];
+interface PreviousObservationContext {
+  action: string | null;
+  thought: string | null;
+  stateIndex?: string;
+  recentActionTrail?: UiActionTrailEntry[];
 }
 
 export function recordStructuredObservationsFromMessages(input: {
@@ -83,6 +83,7 @@ export function recordStructuredObservationsFromMessages(input: {
     const factIds: string[] = [];
     const consumedEvidence: string[] = [];
     const procedureTraces = new Map<string, ProcedureTrace>();
+    const previousObservations = new Map<string, PreviousObservationContext>();
 
     for (const message of input.messages) {
       const toolNames = message.toolCalls?.map((toolCall) => toolCall.name).filter(Boolean) ?? [];
@@ -103,7 +104,13 @@ export function recordStructuredObservationsFromMessages(input: {
       };
 
       for (const parsed of payloadsFromMessage(message)) {
-        factIds.push(...recordObservationPayload(parsed.payload, context));
+        const previousObservation = previousObservationForPayload(
+          parsed.payload,
+          context,
+          previousObservations,
+        );
+        factIds.push(...recordObservationPayload(parsed.payload, context, previousObservation));
+        rememberObservation(parsed.payload, context, previousObservations);
         collectProcedureTrace(procedureTraces, parsed.payload, context);
       }
     }
@@ -127,6 +134,7 @@ export function recordStructuredObservationsFromEvidence(input: {
     const factIds: string[] = [];
     const consumedEvidence: string[] = [];
     const procedureTraces = new Map<string, ProcedureTrace>();
+    const previousObservations = new Map<string, PreviousObservationContext>();
 
     for (const evidence of input.evidence) {
       const parsed = parseEvidencePayload(evidence);
@@ -140,7 +148,13 @@ export function recordStructuredObservationsFromEvidence(input: {
         sourceMessageId: parsed.sourceLabel,
         now: input.now,
       };
-      const recorded = recordObservationPayload(parsed.payload, baseContext);
+      const previousObservation = previousObservationForPayload(
+        parsed.payload,
+        baseContext,
+        previousObservations,
+      );
+      const recorded = recordObservationPayload(parsed.payload, baseContext, previousObservation);
+      rememberObservation(parsed.payload, baseContext, previousObservations);
       collectProcedureTrace(procedureTraces, parsed.payload, baseContext);
       if (recorded.length > 0) {
         factIds.push(...recorded);
@@ -195,7 +209,57 @@ function isRecord(value: unknown): value is JsonRecord {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function recordObservationPayload(payload: JsonRecord, context: ObservationContext): string[] {
+function observationTemporalKey(payload: JsonRecord, context: ObservationContext): string | null {
+  const sourceRunId = stringField(payload, 'trajectory_id') ?? context.sourceRunId;
+  if (sourceRunId) return `run:${sourceRunId}`;
+  const surfaceId = resolveSurfaceId(payload, context);
+  return surfaceId ? `surface:${surfaceId}` : null;
+}
+
+function previousObservationForPayload(
+  payload: JsonRecord,
+  context: ObservationContext,
+  previousObservations: ReadonlyMap<string, PreviousObservationContext>,
+): PreviousObservationContext | null {
+  if (!hasObservationFields(payload)) return null;
+  const key = observationTemporalKey(payload, context);
+  return key ? (previousObservations.get(key) ?? null) : null;
+}
+
+function rememberObservation(
+  payload: JsonRecord,
+  context: ObservationContext,
+  previousObservations: Map<string, PreviousObservationContext>,
+): void {
+  if (!hasObservationFields(payload)) return;
+  const key = observationTemporalKey(payload, context);
+  if (!key) return;
+  const stateIndex = scalarField(payload, 'state_index') ?? scalarField(payload, 'step');
+  const current: UiActionTrailEntry = {
+    action: stringField(payload, 'action'),
+    thought: stringField(payload, 'thought'),
+    ...(stateIndex ? { stateIndex } : {}),
+  };
+  const previous: PreviousObservationContext = {
+    action: current.action,
+    thought: current.thought,
+    ...(stateIndex ? { stateIndex } : {}),
+    recentActionTrail: [
+      ...(previousObservations.get(key)?.recentActionTrail ?? []),
+      current,
+    ]
+      .filter((entry) => entry.action || entry.thought || entry.stateIndex)
+      .slice(-8),
+  };
+  if (!previous.action && !previous.thought && !previous.stateIndex) return;
+  previousObservations.set(key, previous);
+}
+
+function recordObservationPayload(
+  payload: JsonRecord,
+  context: ObservationContext,
+  previousObservation: PreviousObservationContext | null = null,
+): string[] {
   if (!hasObservationFields(payload)) return [];
   const surfaceId = resolveSurfaceId(payload, context);
   const url = stringField(payload, 'url');
@@ -227,6 +291,7 @@ function recordObservationPayload(payload: JsonRecord, context: ObservationConte
         trajectoryOutcome,
         outcome,
         nodes,
+        previousObservation,
       }),
     );
   }
@@ -268,120 +333,6 @@ function recordObservationPayload(payload: JsonRecord, context: ObservationConte
   return factIds;
 }
 
-function collectProcedureTrace(
-  traces: Map<string, ProcedureTrace>,
-  payload: JsonRecord,
-  context: ObservationContext,
-): void {
-  if (!hasObservationFields(payload)) return;
-  const sourceRunId = stringField(payload, 'trajectory_id') ?? context.sourceRunId;
-  if (!sourceRunId) return;
-  const stateIndex = scalarField(payload, 'state_index') ?? scalarField(payload, 'step');
-  const step = dropEmpty({
-    stateIndex,
-    url: stringField(payload, 'url'),
-    action: stringField(payload, 'action'),
-    outcome: stringField(payload, 'outcome') ?? stringField(payload, 'status') ?? context.toolStatus,
-  });
-  if (Object.keys(step).length === 0) return;
-
-  const existing =
-    traces.get(sourceRunId) ??
-    {
-      context: {
-        ...context,
-        sourceRunId,
-      },
-      sourceRunId,
-      subjectName: `workflow:${sourceRunId}`,
-      goal: stringField(payload, 'goal'),
-      trajectoryOutcome: stringField(payload, 'trajectory_outcome'),
-      domain: stringField(payload, 'domain'),
-      environment: stringField(payload, 'environment'),
-      steps: [],
-    };
-  existing.goal ??= stringField(payload, 'goal');
-  existing.trajectoryOutcome ??= stringField(payload, 'trajectory_outcome');
-  existing.domain ??= stringField(payload, 'domain');
-  existing.environment ??= stringField(payload, 'environment');
-  existing.steps.push(step);
-  traces.set(sourceRunId, existing);
-}
-
-function fitProcedureText(value: unknown, maxChars: number): string | null {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  return trimmed.length <= maxChars ? trimmed : trimmed.slice(0, maxChars).trimEnd();
-}
-
-function compactProcedureStep(step: JsonRecord): JsonRecord {
-  return dropEmpty({
-    stateIndex: scalarField(step, 'stateIndex'),
-    url: fitProcedureText(stringField(step, 'url'), MAX_PROCEDURE_URL_CHARS),
-    action: fitProcedureText(stringField(step, 'action'), MAX_PROCEDURE_ACTION_CHARS),
-    outcome: stringField(step, 'outcome'),
-  });
-}
-
-function stateIndexNumber(step: JsonRecord): number {
-  const value = step.stateIndex;
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return Number.POSITIVE_INFINITY;
-}
-
-function recordProcedureTraces(traces: ReadonlyMap<string, ProcedureTrace>): string[] {
-  const factIds: string[] = [];
-  for (const trace of traces.values()) {
-    const orderedSteps = [...trace.steps].sort((left, right) => {
-      const leftIndex = stateIndexNumber(left);
-      const rightIndex = stateIndexNumber(right);
-      if (leftIndex !== rightIndex) return leftIndex - rightIndex;
-      return 0;
-    });
-    const compactSteps = orderedSteps.map(compactProcedureStep).filter((step) => Object.keys(step).length > 0);
-    if (compactSteps.length === 0) continue;
-    const recorded = recordTypedFact({
-      kind: 'procedure',
-      subjectName: trace.subjectName,
-      predicate: 'procedure_trace',
-      objectText: compactJsonForStorage(
-        dropEmpty({
-          sourceRunId: trace.sourceRunId,
-          goal: trace.goal,
-          trajectoryOutcome: trace.trajectoryOutcome,
-          domain: trace.domain,
-          environment: trace.environment,
-          stepCount: compactSteps.length,
-          steps: compactSteps,
-        }),
-        MAX_PROCEDURE_TEXT_CHARS,
-      ),
-      attributes: dropEmpty({
-        sourceRunId: trace.sourceRunId,
-        goal: trace.goal,
-        trajectoryOutcome: trace.trajectoryOutcome,
-        domain: trace.domain,
-        environment: trace.environment,
-        stepCount: compactSteps.length,
-        startUrl: compactSteps[0]?.url,
-        finalUrl: compactSteps[compactSteps.length - 1]?.url,
-      }),
-      context: trace.context,
-      retrievability: 0.9,
-      stability: 0.7,
-      maxTextChars: MAX_PROCEDURE_TEXT_CHARS,
-      supersedePrior: true,
-    });
-    if (recorded) factIds.push(recorded);
-  }
-  return factIds;
-}
-
 function hasObservationFields(payload: JsonRecord): boolean {
   return Boolean(
     stringField(payload, 'accessibility_tree') ||
@@ -413,11 +364,22 @@ function recordUiMemories(input: {
   trajectoryOutcome: string | null;
   outcome: string | null;
   nodes: AccessibilityNode[];
+  previousObservation: PreviousObservationContext | null;
 }): string[] {
   const factIds: string[] = [];
   const summary = extractUiStateSummary(input.nodes);
+  let inventoryPayload: JsonRecord | null = null;
   if (summary.nodeCount > 0) {
-    const inventoryPayload = compactUiInventoryPayload(summary, input);
+    inventoryPayload = compactUiInventoryPayload({
+      summary,
+      goal: input.goal,
+      trajectoryOutcome: input.trajectoryOutcome,
+      domain: stringField(input.payload, 'domain'),
+      environment: stringField(input.payload, 'environment'),
+      url: input.url,
+      sourceRunId: input.sourceRunId,
+      stateIndex: input.stateIndex,
+    });
     const inventoryFactId = recordTypedFact({
       kind: 'ui_inventory',
       subjectName: input.surfaceId,
@@ -438,6 +400,38 @@ function recordUiMemories(input: {
       stability: 0.75,
     });
     if (inventoryFactId) factIds.push(inventoryFactId);
+
+    const actionResult = buildUiActionResultMemory({
+      action: input.action,
+      thought: input.thought,
+      goal: input.goal,
+      trajectoryOutcome: input.trajectoryOutcome,
+      url: input.url,
+      sourceRunId: input.sourceRunId,
+      stateIndex: input.stateIndex,
+      previousAction: input.previousObservation?.action,
+      previousThought: input.previousObservation?.thought,
+      previousStateIndex: input.previousObservation?.stateIndex,
+      recentActionTrail: input.previousObservation?.recentActionTrail,
+      inventoryPayload,
+      maxTextChars: MAX_TEXT_CHARS,
+    });
+    if (actionResult) {
+      const actionResultFactId = recordTypedFact({
+        kind: 'outcome',
+        subjectName: input.surfaceId,
+        predicate: 'ui_action_result',
+        objectText: actionResult.objectText,
+        attributes: {
+          surfaceId: input.surfaceId,
+          ...actionResult.attributes,
+        },
+        context: input.context,
+        retrievability: 0.88,
+        stability: 0.68,
+      });
+      if (actionResultFactId) factIds.push(actionResultFactId);
+    }
   }
 
   const fieldControlIndexes = new Set(summary.fields.map((field) => field.controlIndex));
@@ -493,7 +487,9 @@ function recordUiMemories(input: {
         role: field.role,
         name: field.controlName,
         value: field.value,
+        displayText: field.displayText,
         options: field.options,
+        symbolMarkers: field.symbolMarkers,
         controlIndex: field.controlIndex,
         nodeId: field.nodeId,
         required: field.required,
@@ -536,50 +532,11 @@ function recordUiMemories(input: {
   return factIds;
 }
 
-function compactUiInventoryPayload(
-  summary: ReturnType<typeof extractUiStateSummary>,
-  input: Parameters<typeof recordUiMemories>[0],
-): JsonRecord {
-  const inventory = compactUiInventory(summary);
-  return dropEmpty({
-    fieldLabels: inventory.fieldLabels,
-    fields: inventory.fields,
-    sections: inventory.sections,
-    textEntryControls: inventory.textEntryControls,
-    searchControls: inventory.searchControls,
-    popupControls: inventory.popupControls,
-    labelValues: inventory.labelValues,
-    tables: inventory.tables,
-    controlNames: inventory.controlNames,
-    roleCounts: inventory.roleCounts,
-    controls: inventory.controls,
-    nodeCount: inventory.nodeCount,
-    controlCount: inventory.controlCount,
-    textEntryCount: inventory.textEntryCount,
-    searchControlCount: inventory.searchControlCount,
-    url: input.url,
-    sourceRunId: input.sourceRunId,
-    stateIndex: input.stateIndex,
-    ...sourceContextPayload(input),
-  });
-}
-
 function baseUiPayload(input: Parameters<typeof recordUiMemories>[0]): JsonRecord {
   return {
     url: input.url,
     sourceRunId: input.sourceRunId,
     stateIndex: input.stateIndex,
-  };
-}
-
-function sourceContextPayload(input: Parameters<typeof recordUiMemories>[0]): JsonRecord {
-  const domain = stringField(input.payload, 'domain');
-  const environment = stringField(input.payload, 'environment');
-  return {
-    goal: input.goal,
-    trajectoryOutcome: input.trajectoryOutcome,
-    ...(domain ? { domain } : {}),
-    ...(environment ? { environment } : {}),
   };
 }
 
@@ -669,13 +626,4 @@ function scalarField(payload: JsonRecord, key: string): string | undefined {
   if (typeof value === 'string' && value.trim()) return value.trim();
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   return undefined;
-}
-
-function dropEmpty(value: JsonRecord): JsonRecord {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => {
-      if (entry === null || entry === undefined || entry === '') return false;
-      return !Array.isArray(entry) || entry.length > 0;
-    }),
-  );
 }

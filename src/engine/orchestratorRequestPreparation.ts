@@ -2,6 +2,7 @@ import { runLinkUnderstanding } from '../services/links/service';
 import { runMediaUnderstanding } from '../services/media/service';
 import { type LivingMemoryBridgeOutput } from '../services/memory/livingMemoryBridge';
 import { buildUnifiedMemoryAccessContext } from '../services/memory/memoryAccessGateway';
+import { excludeTrailingInternalUserMessages } from '../services/context/messageScoping';
 import type { RequestAssessment } from '../services/agents/requestGovernance';
 import { getSkillSystemPrompts } from '../services/skills/manager';
 import type { AgentRunControlGraphState } from '../types/agentRun';
@@ -24,6 +25,81 @@ type LoggerLike = {
 type PreparationCallbacks = {
   onUserMessageEnriched?: (messageId: string, enrichedContent: string) => void;
 };
+
+type PreMemoryEnrichmentResult = {
+  messages: Message[];
+  enrichedMessageId?: string;
+  enrichedContent?: string;
+  shouldPersistEnrichment?: boolean;
+};
+
+async function enrichLatestUserMessageForRequest(params: {
+  activeModel: string;
+  activeProvider: LlmProviderConfig;
+  internalUserMessageCount: number;
+  linkUnderstandingEnabled: boolean;
+  maxLinks: number;
+  mediaUnderstandingEnabled: boolean;
+  messages: Message[];
+}): Promise<PreMemoryEnrichmentResult> {
+  const visibleMessages = excludeTrailingInternalUserMessages(
+    params.messages,
+    params.internalUserMessageCount,
+  );
+  const lastUserForEnrichment = visibleMessages.findLast((message) => message.role === 'user');
+  if (!lastUserForEnrichment) {
+    return { messages: params.messages };
+  }
+
+  const initialPersistedEnrichedContent = getUserMessagePromptContent(lastUserForEnrichment);
+  let persistedEnrichedContent = initialPersistedEnrichedContent;
+
+  if (params.linkUnderstandingEnabled) {
+    try {
+      const linkResult = await runLinkUnderstanding(persistedEnrichedContent, {
+        enabled: true,
+        maxLinks: params.maxLinks,
+      });
+      persistedEnrichedContent = linkResult.enrichedBody;
+    } catch {
+      // Best-effort only.
+    }
+  }
+
+  if (params.mediaUnderstandingEnabled && lastUserForEnrichment.attachments?.length) {
+    try {
+      const mediaResult = await runMediaUnderstanding(
+        persistedEnrichedContent,
+        lastUserForEnrichment.attachments,
+        {
+          enabled: true,
+          provider: params.activeProvider,
+          model: params.activeModel,
+        },
+      );
+      persistedEnrichedContent = mediaResult.enrichedBody;
+    } catch {
+      // Best-effort only.
+    }
+  }
+
+  const currentUserContent =
+    lastUserForEnrichment.enrichedContent || lastUserForEnrichment.content;
+  if (persistedEnrichedContent === currentUserContent) {
+    return { messages: params.messages };
+  }
+
+  return {
+    messages: params.messages.map((message) =>
+      message.id === lastUserForEnrichment.id
+        ? { ...message, enrichedContent: persistedEnrichedContent }
+        : message,
+    ),
+    enrichedMessageId: lastUserForEnrichment.id,
+    enrichedContent: persistedEnrichedContent,
+    shouldPersistEnrichment: persistedEnrichedContent !== initialPersistedEnrichedContent,
+  };
+}
 
 export async function prepareOrchestratorRequestBundle(params: {
   activeModel: string;
@@ -54,10 +130,19 @@ export async function prepareOrchestratorRequestBundle(params: {
   const graphGoals = params.graphSnapshot?.goals;
   const graphActiveTaskId =
     params.graphSnapshot?.activeTaskId ?? getActiveGoal(graphGoals ?? [])?.id ?? params.taskId;
+  const enrichedRequest = await enrichLatestUserMessageForRequest({
+    activeModel: params.activeModel,
+    activeProvider: params.activeProvider,
+    internalUserMessageCount: params.internalUserMessageCount,
+    linkUnderstandingEnabled: params.linkUnderstandingEnabled,
+    maxLinks: params.maxLinks,
+    mediaUnderstandingEnabled: params.mediaUnderstandingEnabled,
+    messages: params.messages,
+  });
   let memoryAccessContext: Awaited<ReturnType<typeof buildUnifiedMemoryAccessContext>>;
   try {
     memoryAccessContext = await buildUnifiedMemoryAccessContext({
-      messages: params.messages,
+      messages: enrichedRequest.messages,
       conversationId: params.memoryConversationId,
       personaId: params.personaId,
       mode: memoryAccessMode,
@@ -72,7 +157,7 @@ export async function prepareOrchestratorRequestBundle(params: {
       memoryAccessError instanceof Error ? memoryAccessError.message : String(memoryAccessError),
     );
     memoryAccessContext = buildScopedFallbackMemoryAccessContext({
-      messages: params.messages,
+      messages: enrichedRequest.messages,
       personaId: params.personaId,
       mode: memoryAccessMode,
       internalUserMessageCount: params.internalUserMessageCount,
@@ -122,55 +207,17 @@ export async function prepareOrchestratorRequestBundle(params: {
     }),
   );
 
-  const lastUserForEnrichment = workingMessages.findLast((message) => message.role === 'user');
-  if (lastUserForEnrichment) {
-    const initialPersistedEnrichedContent = getUserMessagePromptContent(lastUserForEnrichment);
-    let persistedEnrichedContent = initialPersistedEnrichedContent;
-
-    if (params.linkUnderstandingEnabled) {
-      try {
-        const linkResult = await runLinkUnderstanding(lastUserForEnrichment.content, {
-          enabled: true,
-          maxLinks: params.maxLinks,
-        });
-        persistedEnrichedContent = linkResult.enrichedBody;
-      } catch {
-        // Best-effort only.
-      }
-    }
-
-    if (params.mediaUnderstandingEnabled && lastUserForEnrichment.attachments?.length) {
-      try {
-        const mediaResult = await runMediaUnderstanding(
-          persistedEnrichedContent,
-          lastUserForEnrichment.attachments,
-          {
-            enabled: true,
-            provider: params.activeProvider,
-            model: params.activeModel,
-          },
-        );
-        persistedEnrichedContent = mediaResult.enrichedBody;
-      } catch {
-        // Best-effort only.
-      }
-    }
-
-    const currentWorkingUserContent =
-      lastUserForEnrichment.enrichedContent || lastUserForEnrichment.content;
-    if (persistedEnrichedContent !== currentWorkingUserContent) {
-      workingMessages = workingMessages.map((message) =>
-        message.id === lastUserForEnrichment.id
-          ? { ...message, enrichedContent: persistedEnrichedContent }
-          : message,
+  if (enrichedRequest.enrichedMessageId && enrichedRequest.enrichedContent) {
+    workingMessages = workingMessages.map((message) =>
+      message.id === enrichedRequest.enrichedMessageId
+        ? { ...message, enrichedContent: enrichedRequest.enrichedContent }
+        : message,
+    );
+    if (enrichedRequest.shouldPersistEnrichment) {
+      params.callbacks.onUserMessageEnriched?.(
+        enrichedRequest.enrichedMessageId,
+        enrichedRequest.enrichedContent,
       );
-    }
-
-    if (
-      persistedEnrichedContent !== initialPersistedEnrichedContent &&
-      params.callbacks.onUserMessageEnriched
-    ) {
-      params.callbacks.onUserMessageEnriched?.(lastUserForEnrichment.id, persistedEnrichedContent);
     }
   }
 

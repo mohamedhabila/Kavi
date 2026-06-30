@@ -13,4 +13,14 @@ describe('planRetrievalSignals', () => {
     expect(plan.supportingSignals).not.toContain('left');
     expect(plan.droppedSignals.join('\n')).toContain("button='left'");
   });
+
+  it('keeps natural parenthetical clarifications in the primary retrieval signal', () => {
+    const query =
+      'Find total possible (qcolor, qstorage) combinations and answer with a short phrase.';
+
+    const plan = planRetrievalSignals([query]);
+
+    expect(plan.primarySignals).toContain(query);
+    expect(plan.droppedSignals).toHaveLength(0);
+  });
 });

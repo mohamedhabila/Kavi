@@ -1,15 +1,24 @@
 import type { AccessibilityNode } from './uiState';
+import { isInteractiveUiNode, UI_ACTIONABLE_ROLES } from './uiInteractivity';
 
 export interface UiTableSummary {
   index: number;
   role: string;
   columnLabels: string[];
   rowCount: number;
+  interactiveControlCount: number;
+  interactiveControls: UiTableInteractiveControl[];
   columnValueSamples: Array<{
     column: string;
     values: string[];
   }>;
   rowSamples: Array<Record<string, string>>;
+}
+
+export interface UiTableInteractiveControl {
+  index: number;
+  role: string;
+  name: string;
 }
 
 const TABLE_CONTAINER_ROLES = new Set(['grid', 'table', 'treegrid']);
@@ -21,6 +30,9 @@ export const MAX_TABLE_SUMMARY_ITEMS = 6;
 const MAX_TABLE_COLUMNS = 18;
 const MAX_TABLE_VALUES_PER_COLUMN = 12;
 const MAX_TABLE_ROW_SAMPLES = 3;
+const MAX_TABLE_CELL_TEXT_CHARS = 420;
+const MAX_TABLE_NODE_TEXT_CHARS = 520;
+const MAX_TABLE_INTERACTIVE_CONTROLS = 18;
 
 export function extractTableSummaries(nodes: AccessibilityNode[]): UiTableSummary[] {
   const tableIndexes = nodes
@@ -57,6 +69,7 @@ function extractTableSummary(
   ).slice(0, MAX_TABLE_COLUMNS);
   const rowRecords: Array<Record<string, string>> = [];
   const valueSamples = new Map<string, string[]>();
+  const interactiveControls = tableInteractiveControls(nodes, startIndex, endIndex);
   let rowCount = 0;
 
   for (let index = startIndex + 1; index < endIndex; index += 1) {
@@ -86,9 +99,39 @@ function extractTableSummary(
     role: table.role,
     columnLabels,
     rowCount,
+    interactiveControlCount: interactiveControls.count,
+    interactiveControls: interactiveControls.controls,
     columnValueSamples,
     rowSamples: rowRecords,
   };
+}
+
+function tableInteractiveControls(
+  nodes: AccessibilityNode[],
+  startIndex: number,
+  endIndex: number,
+): { count: number; controls: UiTableInteractiveControl[] } {
+  const controls: UiTableInteractiveControl[] = [];
+  const seen = new Set<string>();
+  let count = 0;
+  for (let index = startIndex + 1; index < endIndex; index += 1) {
+    const node = nodes[index];
+    if (!isInteractiveUiNode(node)) continue;
+    count += 1;
+    if (controls.length >= MAX_TABLE_INTERACTIVE_CONTROLS) continue;
+    const role = node.role.toLocaleLowerCase();
+    const name = node.name?.trim();
+    if (!name) continue;
+    const key = `${role}\u0000${name}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    controls.push({
+      index: node.index,
+      role: UI_ACTIONABLE_ROLES.has(role) ? role : node.role,
+      name: fitText(name, MAX_TABLE_CELL_TEXT_CHARS),
+    });
+  }
+  return { count, controls };
 }
 
 function summarizeTableRow(
@@ -151,7 +194,7 @@ function cellText(nodes: AccessibilityNode[], index: number): string {
 
 function compactCellText(value: string): string | null {
   const trimmed = value.trim();
-  return trimmed ? fitText(trimmed, 160) : null;
+  return trimmed ? fitText(trimmed, MAX_TABLE_CELL_TEXT_CHARS) : null;
 }
 
 function nodeText(nodes: AccessibilityNode[], index: number): string | null {
@@ -163,10 +206,10 @@ function nodeText(nodes: AccessibilityNode[], index: number): string | null {
     const child = nodes[childIndex];
     if (child.indent <= node.indent) break;
     if (child.name) parts.push(child.name);
-    if (parts.join(' ').length >= 220) break;
+    if (parts.join(' ').length >= MAX_TABLE_NODE_TEXT_CHARS) break;
   }
   const text = normalizeText(parts);
-  return text ? fitText(text, 220) : null;
+  return text ? fitText(text, MAX_TABLE_NODE_TEXT_CHARS) : null;
 }
 
 function uniqueNamedValues(values: Array<string | null>): string[] {

@@ -54,7 +54,7 @@ export interface RetrievalOrchestratorTimings {
 
 const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 50;
-const DEFAULT_CANDIDATE_POOL_LIMIT = 256;
+const DEFAULT_CANDIDATE_POOL_LIMIT = 128;
 const DEFAULT_THRESHOLD = 0.01;
 
 function collectGoalSignals(goals: ReadonlyArray<AgentGoal> | undefined): string[] {
@@ -93,6 +93,7 @@ function buildQuerySignals(input: RetrievalOrchestratorInput): string[] {
 
   primarySignals.push(...collectGoalSignals(input.goals));
   primarySignals.push(...collectAsyncWorkSignals(input.asyncWork));
+  if (input.focusText?.trim()) primarySignals.push(input.focusText.trim());
 
   const resolvedTaskId = input.taskId ?? input.activeTaskId;
   if (resolvedTaskId) {
@@ -103,9 +104,6 @@ function buildQuerySignals(input: RetrievalOrchestratorInput): string[] {
 
   const planned = planRetrievalSignals(primarySignals);
   const signals = planned.primarySignals.length > 0 ? planned.primarySignals : [];
-  if (signals.length === 0 && input.focusText?.trim()) {
-    signals.push(input.focusText.trim());
-  }
   return Array.from(new Set(signals.map((signal) => signal.trim()).filter(Boolean)));
 }
 

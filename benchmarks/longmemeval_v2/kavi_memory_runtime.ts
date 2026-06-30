@@ -1,6 +1,6 @@
 import { createInterface } from 'node:readline';
-import { mkdirSync, rmSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { basename, join, resolve } from 'node:path';
 import process from 'node:process';
 
 import type { AgentGoal } from '../../src/engine/goals/types';
@@ -19,6 +19,8 @@ import type { Message } from '../../src/types/message';
 
 type JsonObject = Record<string, unknown>;
 
+const DEFAULT_QUERY_IMAGE_BASE_URL = 'https://api.openai.com/v1';
+
 interface RuntimeConfig {
   chunkChars: number;
   chunkOverlapChars: number;
@@ -26,6 +28,10 @@ interface RuntimeConfig {
   maxItemChars: number;
   minScore: number;
   conversationId: string;
+  queryImageUnderstanding: boolean;
+  queryImageModel: string;
+  queryImageBaseUrl: string;
+  queryImageApiKeyEnv: string;
 }
 
 interface RuntimeRequest {
@@ -42,10 +48,18 @@ interface RuntimeRequest {
 const DEFAULT_CONFIG: RuntimeConfig = {
   chunkChars: 3600,
   chunkOverlapChars: 320,
-  maxItems: 12,
+  maxItems: 6,
   maxItemChars: 5000,
   minScore: 0.01,
   conversationId: 'longmemeval-v2',
+  queryImageUnderstanding: true,
+  queryImageModel:
+    process.env.KAVI_LME_QUERY_IMAGE_MODEL || process.env.E2E_OPENAI_MODEL || '',
+  queryImageBaseUrl:
+    process.env.KAVI_LME_QUERY_IMAGE_BASE_URL ||
+    process.env.OPENAI_BASE_URL ||
+    DEFAULT_QUERY_IMAGE_BASE_URL,
+  queryImageApiKeyEnv: process.env.KAVI_LME_QUERY_IMAGE_API_KEY_ENV || 'OPENAI_API_KEY',
 };
 const MAX_ACCESSIBILITY_TREE_CHARS = 50_000;
 const MAX_STRUCTURED_STATE_CHARS = 60_000;
@@ -53,6 +67,21 @@ const MAX_STRUCTURED_STATE_CHARS = 60_000;
 const insertedTrajectoryIds = new Set<string>();
 let currentConfig: RuntimeConfig = { ...DEFAULT_CONFIG };
 let insertCalls = 0;
+
+const QUERY_IMAGE_DESCRIPTION_PROMPT =
+  'Describe this image concisely. Focus on the key content, text visible in the image, and any relevant details. Keep the description under 200 words.';
+
+interface QueryMessagesResult {
+  messages: Message[];
+  imageDescription?: string;
+  imageDescriptionError?: string;
+}
+
+interface QueryImageProvider {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+}
 
 function asObject(value: unknown): JsonObject {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as JsonObject) : {};
@@ -63,6 +92,15 @@ function asString(value: unknown): string | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
   return trimmed;
+}
+
+function asBoolean(value: unknown): boolean | null {
+  if (typeof value === 'boolean') return value;
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return null;
 }
 
 function trajectoryId(trajectory: JsonObject, fallback: number): string {
@@ -92,6 +130,82 @@ function compactScalar(value: unknown, maxChars: number): string | number | bool
   const text = scalarToText(value);
   if (text === null) return null;
   return text.length <= maxChars ? text : `${text.slice(0, maxChars - 3)}...`;
+}
+
+function queryImageMimeType(imagePath: string): string {
+  const lower = imagePath.toLowerCase().split(/[?#]/, 1)[0];
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.gif')) return 'image/gif';
+  return 'image/png';
+}
+
+function queryImageDataUri(imagePath: string): string | null {
+  if (/^https?:\/\//i.test(imagePath) || /^data:/i.test(imagePath)) return imagePath;
+  const path = imagePath.startsWith('file://') ? new URL(imagePath) : imagePath;
+  if (typeof path === 'string' && !existsSync(path)) return null;
+  const bytes = readFileSync(path);
+  return `data:${queryImageMimeType(imagePath)};base64,${bytes.toString('base64')}`;
+}
+
+function buildQueryImageProvider(config: RuntimeConfig): QueryImageProvider | null {
+  if (!config.queryImageUnderstanding) return null;
+  const model = config.queryImageModel.trim();
+  const apiKey = process.env[config.queryImageApiKeyEnv]?.trim();
+  if (!model || !apiKey) return null;
+  return {
+    baseUrl: (config.queryImageBaseUrl || DEFAULT_QUERY_IMAGE_BASE_URL).replace(/\/+$/, ''),
+    apiKey,
+    model,
+  };
+}
+
+async function describeQueryImage(
+  queryImage: string | null,
+  config: RuntimeConfig,
+): Promise<{ text?: string; error?: string }> {
+  if (!queryImage) return {};
+  const provider = buildQueryImageProvider(config);
+  if (!provider) return {};
+  try {
+    const dataUri = queryImageDataUri(queryImage);
+    if (!dataUri) {
+      return { error: 'query image payload not available' };
+    }
+    const response = await fetch(`${provider.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${provider.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: provider.model,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: QUERY_IMAGE_DESCRIPTION_PROMPT },
+              {
+                type: 'image_url',
+                image_url: { url: dataUri },
+              },
+            ],
+          },
+        ],
+        max_completion_tokens: 512,
+      }),
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      return { error: `HTTP ${response.status}: ${body.slice(0, 500)}` };
+    }
+    const payload = await response.json();
+    const text = payload?.choices?.[0]?.message?.content || payload?.content?.[0]?.text || '';
+    const trimmed = typeof text === 'string' ? text.trim() : '';
+    return trimmed ? { text: trimmed } : { error: 'empty query image description' };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 function trajectoryMetadata(trajectory: JsonObject, id: string): JsonObject {
@@ -257,6 +371,16 @@ function applyConfig(config?: Partial<RuntimeConfig>): RuntimeConfig {
   currentConfig.minScore = Math.max(0, Math.min(1, Number(currentConfig.minScore)));
   currentConfig.conversationId =
     currentConfig.conversationId.trim() || DEFAULT_CONFIG.conversationId;
+  currentConfig.queryImageUnderstanding =
+    asBoolean(currentConfig.queryImageUnderstanding) ?? DEFAULT_CONFIG.queryImageUnderstanding;
+  currentConfig.queryImageModel =
+    String(currentConfig.queryImageModel || DEFAULT_CONFIG.queryImageModel).trim();
+  currentConfig.queryImageBaseUrl = String(
+    currentConfig.queryImageBaseUrl || DEFAULT_CONFIG.queryImageBaseUrl,
+  ).trim();
+  currentConfig.queryImageApiKeyEnv = String(
+    currentConfig.queryImageApiKeyEnv || DEFAULT_CONFIG.queryImageApiKeyEnv,
+  ).trim();
   return currentConfig;
 }
 
@@ -316,29 +440,43 @@ async function insertTrajectory(
   };
 }
 
-function buildQueryMessages(query: string, queryImage: string | null, now: number): Message[] {
-  return [
-    {
-      id: `query-user-${now}`,
-      role: 'user',
-      content: query,
-      timestamp: now,
-      ...(queryImage
-        ? {
-            attachments: [
-              {
-                id: `query-image-${now}`,
-                type: 'image' as const,
-                uri: queryImage,
-                name: queryImage.split('/').pop() || 'query-image',
-                mimeType: 'image/png',
-                size: 0,
-              },
-            ],
-          }
-        : {}),
-    },
-  ];
+async function buildQueryMessages(
+  query: string,
+  queryImage: string | null,
+  now: number,
+  config: RuntimeConfig,
+): Promise<QueryMessagesResult> {
+  const imageDescription = await describeQueryImage(queryImage, config);
+  const enrichedContent = imageDescription.text
+    ? `${query}\n\n<media_context>\n[Image Attachment #1]\nDescription:\n${imageDescription.text}\n</media_context>`
+    : undefined;
+  return {
+    messages: [
+      {
+        id: `query-user-${now}`,
+        role: 'user',
+        content: query,
+        ...(enrichedContent ? { enrichedContent } : {}),
+        timestamp: now,
+        ...(queryImage
+          ? {
+              attachments: [
+                {
+                  id: `query-image-${now}`,
+                  type: 'image' as const,
+                  uri: queryImage,
+                  name: basename(queryImage) || 'query-image',
+                  mimeType: queryImageMimeType(queryImage),
+                  size: 0,
+                },
+              ],
+            }
+          : {}),
+      },
+    ],
+    ...(imageDescription.text ? { imageDescription: imageDescription.text } : {}),
+    ...(imageDescription.error ? { imageDescriptionError: imageDescription.error } : {}),
+  };
 }
 
 function buildQueryGoals(
@@ -387,8 +525,16 @@ async function queryMemory(request: RuntimeRequest): Promise<JsonObject> {
   const timings: Record<string, number> = {};
 
   const now = Date.now();
+  const queryMessages = await buildQueryMessages(
+    query,
+    request.queryImage ?? null,
+    now,
+    resolved,
+  );
+  timings.query_image_understanding_seconds = (performance.now() - stepStarted) / 1000;
+  stepStarted = performance.now();
   const memoryAccess = await buildUnifiedMemoryAccessContext({
-    messages: buildQueryMessages(query, request.queryImage ?? null, now),
+    messages: queryMessages.messages,
     conversationId: resolved.conversationId,
     mode: 'agentic',
     recallLimit: resolved.maxItems,
@@ -423,6 +569,8 @@ async function queryMemory(request: RuntimeRequest): Promise<JsonObject> {
     timings,
     question_id: request.questionId ?? null,
     query_image: request.queryImage ?? null,
+    query_image_description: queryMessages.imageDescription ?? null,
+    query_image_description_error: queryMessages.imageDescriptionError ?? null,
     stats: runtimeStats,
   };
 }

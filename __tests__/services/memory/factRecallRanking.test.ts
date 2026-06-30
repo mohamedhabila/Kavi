@@ -62,6 +62,37 @@ describe('recallFactsForQuery — ranking', () => {
     expect(scored[0].textScore).toBeGreaterThan(scored[1].textScore);
   });
 
+  it('reranks broad candidates with discriminative query evidence', async () => {
+    const corpus = upsertEntity({ name: 'discriminative-rerank-corpus', type: 'concept' });
+    for (let index = 0; index < 18; index += 1) {
+      recordFact({
+        subjectId: corpus.id,
+        predicate: `generic_${index}`,
+        objectText: `qformat qanswer qquestion qportal qcurrent qnoise${index}`,
+        sourceRunId: `run-generic-${index}`,
+        now: 20_000 + index,
+      });
+    }
+    const target = recordFact({
+      subjectId: corpus.id,
+      predicate: 'specific_target',
+      objectText: 'qhardware qmodel qcategory qperipheral',
+      sourceRunId: 'run-specific-target',
+      now: 1_000,
+    });
+
+    const scored = await recallScoredFactsForQuery(
+      'qformat qanswer qquestion qportal qcurrent qhardware qmodel qcategory qperipheral',
+      {
+        limit: 4,
+        threshold: 0,
+        candidatePoolLimit: 40,
+      },
+    );
+
+    expect(scored[0].fact.id).toBe(target.fact.id);
+  });
+
   it('uses broad indexed query evidence instead of a rare-term-only candidate lane', async () => {
     const corpus = upsertEntity({ name: 'broad-evidence-corpus', type: 'concept' });
     for (let index = 0; index < 12; index += 1) {
@@ -113,6 +144,47 @@ describe('recallFactsForQuery — ranking', () => {
       limit: 2,
       threshold: 0,
       candidatePoolLimit: 20,
+    });
+
+    expect(scored.map((entry) => entry.fact.sourceRunId)).toEqual(['run-a', 'run-b']);
+    expect(scored.map((entry) => entry.fact.id)).toContain(runB.fact.id);
+  });
+
+  it('does not let action outcomes and workflow summaries from one source consume all primary slots', async () => {
+    const corpus = upsertEntity({ name: 'source-run-primary-cap-corpus', type: 'concept' });
+    recordFact({
+      subjectId: corpus.id,
+      predicate: 'ui_action_result',
+      objectText: 'qprimarycap qsharedtoken qactionone',
+      sourceRunId: 'run-a',
+      memoryKind: 'outcome',
+      importance: 1,
+      now: 3_000,
+    });
+    recordFact({
+      subjectId: corpus.id,
+      predicate: 'procedure_trace',
+      objectText: 'qprimarycap qsharedtoken qprocedureone',
+      sourceRunId: 'run-a',
+      memoryKind: 'procedure',
+      importance: 1,
+      now: 2_000,
+    });
+    const runB = recordFact({
+      subjectId: corpus.id,
+      predicate: 'ui_action_result',
+      objectText: 'qprimarycap qsharedtoken qactiontwo',
+      sourceRunId: 'run-b',
+      memoryKind: 'outcome',
+      importance: 0.6,
+      now: 1_000,
+    });
+
+    const scored = await recallScoredFactsForQuery('qprimarycap qsharedtoken', {
+      limit: 2,
+      threshold: 0.01,
+      candidatePoolLimit: 20,
+      now: 4_000,
     });
 
     expect(scored.map((entry) => entry.fact.sourceRunId)).toEqual(['run-a', 'run-b']);

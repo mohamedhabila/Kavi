@@ -1,6 +1,7 @@
 import type { MemoryFact } from '../facts/types';
 import { parseJsonRecord } from '../factJson';
 import {
+  UI_INVENTORY_ACTION_CONTROL_SHAPE_FIELDS,
   UI_INVENTORY_FORM_FIELD_SHAPE_FIELDS,
   UI_INVENTORY_LABEL_VALUE_SHAPE_FIELDS,
   UI_INVENTORY_POPUP_SHAPE_FIELDS,
@@ -11,8 +12,9 @@ import {
 } from '../uiFactFields';
 
 const SOURCE_RUN_SUPPORT_CONTEXTS_PER_RUN = 4;
-const SOURCE_RUN_SUPPORT_MAX_SLOTS = 3;
+const SOURCE_RUN_SUPPORT_MAX_SLOTS = 4;
 const UI_SCHEMA_KEY_ARRAY_LIMIT = 48;
+const WORKFLOW_REPRESENTATIVE_MIN_SCORE_RATIO = 0.75;
 
 export interface ScoredSelectionFact {
   fact: MemoryFact;
@@ -62,15 +64,28 @@ function scalarString(...values: unknown[]): string {
   return '';
 }
 
+const UI_INVENTORY_SUPPORT_FORM_FIELD_FIELDS = [
+  ...UI_INVENTORY_FORM_FIELD_SHAPE_FIELDS,
+  'value',
+  'options',
+] as const;
+
 function canonicalSurfacePath(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) return '';
+  const decodePathSegment = (candidate: string): string => {
+    try {
+      return decodeURIComponent(candidate);
+    } catch {
+      return candidate;
+    }
+  };
   try {
     const url = new URL(trimmed);
-    const decodedPath = decodeURIComponent(url.pathname);
+    const decodedPath = decodePathSegment(url.pathname);
     return `${url.origin}${decodedPath.split('?')[0]}`;
   } catch {
-    return decodeURIComponent(trimmed).split('?')[0].split('#')[0];
+    return decodePathSegment(trimmed).split('?')[0].split('#')[0];
   }
 }
 
@@ -81,6 +96,40 @@ function factStateIndex(fact: MemoryFact): string | number | null {
     scalarString(fact.attributes.state_index, parsed?.state_index) ||
     null
   );
+}
+
+function factStateIndexes(fact: MemoryFact): Array<string | number> {
+  const directStateIndex = factStateIndex(fact);
+  const indexes: Array<string | number> = directStateIndex !== null ? [directStateIndex] : [];
+  if (fact.memoryKind !== 'procedure') return indexes;
+  const parsed = parseJsonRecord(fact.objectText);
+  const steps = parsed?.steps;
+  if (!Array.isArray(steps)) return indexes;
+  const seen = new Set(indexes.map((index) => String(index)));
+  const stepStateIndexes = steps
+    .map((step) => {
+      if (!step || typeof step !== 'object' || Array.isArray(step)) return '';
+      return scalarString(
+        (step as Record<string, unknown>).stateIndex,
+        (step as Record<string, unknown>).state_index,
+      );
+    })
+    .filter(Boolean);
+  const orderedStepStateIndexes: string[] = [];
+  for (
+    let start = 0, end = stepStateIndexes.length - 1;
+    start <= end && orderedStepStateIndexes.length < SOURCE_RUN_SUPPORT_CONTEXTS_PER_RUN * 2;
+    start += 1, end -= 1
+  ) {
+    orderedStepStateIndexes.push(stepStateIndexes[start]);
+    if (end !== start) orderedStepStateIndexes.push(stepStateIndexes[end]);
+  }
+  for (const stateIndex of orderedStepStateIndexes) {
+    if (!stateIndex || seen.has(stateIndex)) continue;
+    seen.add(stateIndex);
+    indexes.push(stateIndex);
+  }
+  return indexes;
 }
 
 function uiInventorySchemaKey(fact: MemoryFact): string | null {
@@ -101,6 +150,10 @@ function uiInventorySchemaKey(fact: MemoryFact): string | null {
     parsed.popupControls,
     UI_INVENTORY_POPUP_SHAPE_FIELDS,
   );
+  const actionControls = objectArrayShape(
+    parsed.actionControls,
+    UI_INVENTORY_ACTION_CONTROL_SHAPE_FIELDS,
+  );
   const hasFormShape =
     fields.length > 0 ||
     textEntryControls.length > 0 ||
@@ -115,6 +168,7 @@ function uiInventorySchemaKey(fact: MemoryFact): string | null {
     textEntryControls,
     searchControls,
     popupControls,
+    actionControls,
     labelValues: objectArrayShape(parsed.labelValues, UI_INVENTORY_LABEL_VALUE_SHAPE_FIELDS),
     sections: hasFormShape
       ? []
@@ -149,7 +203,7 @@ export function supportDiversityKey(fact: MemoryFact): string | null {
   if (fact.memoryKind !== 'ui_inventory' || !fact.sourceRunId) return selectionDedupeKey(fact);
   const parsed = parseJsonRecord(fact.objectText);
   if (!parsed) return selectionDedupeKey(fact);
-  const fields = objectArrayShape(parsed.fields, UI_INVENTORY_FORM_FIELD_SHAPE_FIELDS);
+  const fields = objectArrayShape(parsed.fields, UI_INVENTORY_SUPPORT_FORM_FIELD_FIELDS);
   const textEntryControls = objectArrayShape(
     parsed.textEntryControls,
     UI_INVENTORY_TEXT_ENTRY_SHAPE_FIELDS,
@@ -162,22 +216,23 @@ export function supportDiversityKey(fact: MemoryFact): string | null {
     parsed.popupControls,
     UI_INVENTORY_POPUP_SHAPE_FIELDS,
   );
+  const actionControls = objectArrayShape(
+    parsed.actionControls,
+    UI_INVENTORY_ACTION_CONTROL_SHAPE_FIELDS,
+  );
   const hasFormShape =
     fields.length > 0 ||
     textEntryControls.length > 0 ||
     searchControls.length > 0 ||
     popupControls.length > 0;
-  const url = canonicalSurfacePath(scalarString(fact.attributes.url, parsed.url));
   const key = {
-    sourceRunId: fact.sourceRunId,
     subjectId: fact.subjectId,
-    predicate: fact.predicate,
-    url,
     fields,
     textEntryControls,
     searchControls,
     popupControls,
-    controlNames: hasFormShape ? [] : stringArray(parsed.controlNames),
+    actionControls,
+    controlNames: stringArray(parsed.controlNames),
     sections: hasFormShape
       ? []
       : objectArrayShape(parsed.sections, UI_INVENTORY_SECTION_SHAPE_FIELDS),
@@ -194,6 +249,18 @@ export function supportPhaseKey(fact: MemoryFact): string | null {
   return `support_surface:${fact.sourceRunId}:${url}`;
 }
 
+export function sourceRunStateKey(fact: MemoryFact): string | null {
+  if (!fact.sourceRunId) return null;
+  const stateIndex = fact.attributes.stateIndex;
+  if (typeof stateIndex === 'string' && stateIndex.trim()) {
+    return `${fact.sourceRunId}:${stateIndex.trim()}`;
+  }
+  if (typeof stateIndex === 'number' && Number.isFinite(stateIndex)) {
+    return `${fact.sourceRunId}:${stateIndex}`;
+  }
+  return null;
+}
+
 function factStateNumber(fact: MemoryFact): number | null {
   const value = factStateIndex(fact);
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -205,12 +272,94 @@ function factStateNumber(fact: MemoryFact): number | null {
 }
 
 export function primarySelectionGroupKey(fact: MemoryFact): string {
-  return fact.sourceRunId ? `source_run:${fact.sourceRunId}` : `fact:${fact.id}`;
+  if (!fact.sourceRunId) return `fact:${fact.id}`;
+  return `source_run:${fact.sourceRunId}`;
+}
+
+function procedureStepCount(fact: MemoryFact): number | null {
+  if (fact.memoryKind !== 'procedure') return null;
+  const parsed = parseJsonRecord(fact.objectText);
+  if (typeof parsed?.stepCount === 'number' && Number.isFinite(parsed.stepCount)) {
+    return parsed.stepCount;
+  }
+  const steps = parsed?.steps;
+  return Array.isArray(steps) ? steps.length : null;
+}
+
+function procedureMaxStateNumber(fact: MemoryFact): number | null {
+  if (fact.memoryKind !== 'procedure') return null;
+  const parsed = parseJsonRecord(fact.objectText);
+  const steps = parsed?.steps;
+  if (!Array.isArray(steps)) return null;
+  let maxState: number | null = null;
+  for (const step of steps) {
+    if (!step || typeof step !== 'object' || Array.isArray(step)) continue;
+    const value = scalarString(
+      (step as Record<string, unknown>).stateIndex,
+      (step as Record<string, unknown>).state_index,
+    );
+    if (!value) continue;
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) continue;
+    maxState = maxState === null ? numeric : Math.max(maxState, numeric);
+  }
+  return maxState;
+}
+
+function hasDownstreamProcedureEvidence(outcome: MemoryFact, procedure: MemoryFact): boolean {
+  const outcomeState = factStateNumber(outcome);
+  const maxProcedureState = procedureMaxStateNumber(procedure);
+  if (outcomeState === null || maxProcedureState === null) return false;
+  return maxProcedureState > outcomeState + 1;
+}
+
+export function workflowProcedureRepresentativeForOutcome(
+  outcome: MemoryFact,
+  procedures: ReadonlyArray<MemoryFact>,
+): MemoryFact | null {
+  if (!outcome.sourceRunId || outcome.memoryKind !== 'outcome') return null;
+  let best: MemoryFact | null = null;
+  for (const procedure of procedures) {
+    if (procedure.sourceRunId !== outcome.sourceRunId) continue;
+    if (!hasDownstreamProcedureEvidence(outcome, procedure)) continue;
+    if (!best) {
+      best = procedure;
+      continue;
+    }
+    const procedureSteps = procedureStepCount(procedure) ?? 0;
+    const bestSteps = procedureStepCount(best) ?? 0;
+    if (procedureSteps !== bestSteps) {
+      if (procedureSteps > bestSteps) best = procedure;
+      continue;
+    }
+    if (procedure.updatedAt > best.updatedAt) best = procedure;
+  }
+  return best;
+}
+
+export function primaryWorkflowRepresentative(
+  entry: ScoredSelectionFact,
+  scoredFacts: ReadonlyArray<ScoredSelectionFact>,
+  threshold: number,
+): ScoredSelectionFact {
+  if (!entry.fact.sourceRunId || entry.fact.memoryKind !== 'outcome') return entry;
+  const minScore = Math.max(threshold, entry.score * WORKFLOW_REPRESENTATIVE_MIN_SCORE_RATIO);
+  let bestProcedure: ScoredSelectionFact | null = null;
+  for (const candidate of scoredFacts) {
+    if (candidate.fact.sourceRunId !== entry.fact.sourceRunId) continue;
+    if (candidate.fact.memoryKind !== 'procedure') continue;
+    if (candidate.score < minScore && candidate.relevanceScore < threshold) continue;
+    if (!hasDownstreamProcedureEvidence(entry.fact, candidate.fact)) continue;
+    if (!bestProcedure || candidate.score > bestProcedure.score) {
+      bestProcedure = candidate;
+    }
+  }
+  return bestProcedure ?? entry;
 }
 
 export function supportSlotCount(limit: number): number {
   if (limit < 4) return 0;
-  return Math.min(SOURCE_RUN_SUPPORT_MAX_SLOTS, Math.ceil(limit * 0.25));
+  return Math.min(SOURCE_RUN_SUPPORT_MAX_SLOTS, Math.max(1, Math.floor(limit * 0.25)));
 }
 
 export function sourceRunSupportContexts(
@@ -229,29 +378,36 @@ export function sourceRunSupportContexts(
   }
 
   const byKey = new Map<string, { sourceRunId: string; stateIndex: string | number }>();
-  const addFactContext = (fact: MemoryFact): void => {
-    if (!fact.sourceRunId || !selectedRuns.has(fact.sourceRunId)) return;
-    const stateIndex = factStateIndex(fact);
-    if (stateIndex === null) return;
-    byKey.set(`${fact.sourceRunId}:${stateIndex}`, {
-      sourceRunId: fact.sourceRunId,
-      stateIndex,
-    });
+  const contextCountForRun = (sourceRunId: string): number =>
+    Array.from(byKey.values()).filter((context) => context.sourceRunId === sourceRunId).length;
+  const addFactContexts = (fact: MemoryFact): number => {
+    if (!fact.sourceRunId || !selectedRuns.has(fact.sourceRunId)) return 0;
+    let added = 0;
+    let contextCount = contextCountForRun(fact.sourceRunId);
+    for (const stateIndex of factStateIndexes(fact)) {
+      if (contextCount >= SOURCE_RUN_SUPPORT_CONTEXTS_PER_RUN) break;
+      const beforeSize = byKey.size;
+      byKey.set(`${fact.sourceRunId}:${stateIndex}`, {
+        sourceRunId: fact.sourceRunId,
+        stateIndex,
+      });
+      if (byKey.size > beforeSize) {
+        added += 1;
+        contextCount += 1;
+      }
+    }
+    return added;
   };
 
-  for (const fact of facts) addFactContext(fact);
+  for (const fact of facts) addFactContexts(fact);
 
   for (const sourceRunId of selectedRunOrder) {
-    let contextCount = Array.from(byKey.values()).filter(
-      (context) => context.sourceRunId === sourceRunId,
-    ).length;
+    let contextCount = contextCountForRun(sourceRunId);
     if (contextCount >= SOURCE_RUN_SUPPORT_CONTEXTS_PER_RUN) continue;
     for (const entry of scoredFacts) {
       if (entry.fact.sourceRunId !== sourceRunId) continue;
       if (entry.textScore <= 0 && entry.score <= 0) continue;
-      const beforeSize = byKey.size;
-      addFactContext(entry.fact);
-      if (byKey.size > beforeSize) contextCount += 1;
+      contextCount += addFactContexts(entry.fact);
       if (contextCount >= SOURCE_RUN_SUPPORT_CONTEXTS_PER_RUN) break;
     }
   }
@@ -260,6 +416,7 @@ export function sourceRunSupportContexts(
 }
 
 function supportFactPriority(fact: MemoryFact): number {
+  if (fact.memoryKind === 'ui_filter_state') return 4;
   if (fact.memoryKind === 'ui_inventory') return 3;
   if (fact.memoryKind !== 'ui_field') return 1;
   const parsed = parseJsonRecord(fact.objectText);
@@ -270,13 +427,13 @@ export function compareSupportCandidates(
   left: { fact: MemoryFact; scored: ScoredSelectionFact },
   right: { fact: MemoryFact; scored: ScoredSelectionFact },
 ): number {
-  const rightPriority = supportFactPriority(right.fact);
-  const leftPriority = supportFactPriority(left.fact);
-  if (rightPriority !== leftPriority) return rightPriority - leftPriority;
   if (right.scored.score !== left.scored.score) return right.scored.score - left.scored.score;
   if (right.scored.relevanceScore !== left.scored.relevanceScore) {
     return right.scored.relevanceScore - left.scored.relevanceScore;
   }
+  const rightPriority = supportFactPriority(right.fact);
+  const leftPriority = supportFactPriority(left.fact);
+  if (rightPriority !== leftPriority) return rightPriority - leftPriority;
   if (right.fact.retrievability !== left.fact.retrievability) {
     return right.fact.retrievability - left.fact.retrievability;
   }
@@ -287,10 +444,12 @@ export function compareSupportPhaseRepresentatives(
   left: { fact: MemoryFact; scored: ScoredSelectionFact },
   right: { fact: MemoryFact; scored: ScoredSelectionFact },
 ): number {
+  const supportComparison = compareSupportCandidates(left, right);
+  if (supportComparison !== 0) return supportComparison;
   const leftState = factStateNumber(left.fact);
   const rightState = factStateNumber(right.fact);
   if (leftState !== null && rightState !== null && leftState !== rightState) {
     return rightState - leftState;
   }
-  return compareSupportCandidates(left, right);
+  return 0;
 }

@@ -5,7 +5,9 @@
 import {
   runOrchestrator,
   legacyFileSystem,
+  buildLivingMemorySections,
   mockStreamMessage,
+  mockSendMessage,
   makeProvider,
   makeCallbacks,
   createStreamGenerator,
@@ -65,6 +67,66 @@ describe('Orchestrator', () => {
             image_url: { url: 'data:image/jpeg;base64,diskimagebase64' },
           }),
         ]),
+      );
+    });
+
+    it('uses media-enriched user content for memory retrieval', async () => {
+      legacyFileSystem.readAsStringAsync.mockResolvedValueOnce('diskimagebase64');
+      mockSendMessage.mockResolvedValueOnce({
+        choices: [
+          {
+            message: {
+              content:
+                'The current screen shows an Update button, an Execute Now link, and 0 records match condition.',
+            },
+          },
+        ],
+      });
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator([
+          { type: 'token', content: 'Done' },
+          { type: 'done', content: 'Done' },
+        ]),
+      );
+
+      const callbacks = makeCallbacks();
+      callbacks.onUserMessageEnriched = jest.fn();
+      const options: OrchestratorOptions = {
+        provider: makeProvider(),
+        model: 'gpt-5.4',
+        conversationId: 'conv-image-memory',
+        systemPrompt: 'You are helpful',
+        mediaUnderstandingEnabled: true,
+        messages: [
+          {
+            id: 'msg1',
+            role: 'user',
+            content: 'What should I do on this screen?',
+            attachments: [
+              {
+                id: 'att-1',
+                type: 'image',
+                uri: 'file:///screen.png',
+                name: 'screen.png',
+                mimeType: 'image/png',
+                size: 1024,
+              },
+            ],
+            timestamp: Date.now(),
+          },
+        ],
+      };
+
+      await runOrchestrator(options, callbacks);
+
+      const memoryInput = (buildLivingMemorySections as jest.Mock).mock.calls[0][0];
+      expect(memoryInput.messages[0].enrichedContent).toContain('<media_context>');
+      expect(memoryInput.messages[0].enrichedContent).toContain(
+        'The current screen shows an Update button',
+      );
+      expect(callbacks.onUserMessageEnriched).toHaveBeenCalledWith(
+        'msg1',
+        expect.stringContaining('<media_context>'),
       );
     });
 
