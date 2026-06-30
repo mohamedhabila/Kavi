@@ -287,6 +287,58 @@ describe('orchestrateMemoryRetrieval', () => {
     expect(result.facts.some((fact) => fact.id === target.id)).toBe(false);
   });
 
+  it('recalls separate user-message lines before merging multi-signal results', async () => {
+    const primaryEntity = upsertEntity({
+      name: 'surface:https://primary-signal.example.test',
+      type: 'project',
+    });
+    const tailEntity = upsertEntity({
+      name: 'surface:https://tail-signal.example.test',
+      type: 'project',
+    });
+    const primaryFact = recordFact({
+      subjectId: primaryEntity.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({
+        url: 'https://primary-signal.example.test',
+        controlNames: ['qprimary-task-token'],
+      }),
+      memoryKind: 'ui_inventory',
+      scope: 'conversation',
+      originConversationId: 'conv-multi-signal',
+      now: 1,
+    }).fact;
+    const tailFact = recordFact({
+      subjectId: tailEntity.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({
+        url: 'https://tail-signal.example.test',
+        controlNames: ['qformat-tail-token'],
+      }),
+      memoryKind: 'ui_inventory',
+      scope: 'conversation',
+      originConversationId: 'conv-multi-signal',
+      now: 2,
+    }).fact;
+
+    const result = await orchestrateMemoryRetrieval({
+      userMessage: [
+        'Find qprimary-task-token on the current screen.',
+        'Return qformat-tail-token format.',
+      ].join('\n'),
+      conversationId: 'conv-multi-signal',
+      limit: 1,
+      now: 3,
+    });
+
+    expect(result.querySignals).toEqual([
+      'Find qprimary-task-token on the current screen.',
+      'Return qformat-tail-token format.',
+    ]);
+    expect(result.facts.map((fact) => fact.id)).toEqual([primaryFact.id]);
+    expect(result.facts.some((fact) => fact.id === tailFact.id)).toBe(false);
+  });
+
   it('drops dense tool signatures while retaining natural query context', async () => {
     const adminSurface = upsertEntity({
       name: 'surface:https://admin.example.test',

@@ -56,6 +56,15 @@ const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 50;
 const DEFAULT_CANDIDATE_POOL_LIMIT = 128;
 const DEFAULT_THRESHOLD = 0.01;
+const SIGNAL_RANK_FUSION_K = 60;
+const SIGNAL_ORDER_DECAY = 0.85;
+
+interface SignalRecallEntry {
+  entry: ScoredFact;
+  fusionScore: number;
+  firstSignalIndex: number;
+  bestRank: number;
+}
 
 function collectGoalSignals(goals: ReadonlyArray<AgentGoal> | undefined): string[] {
   if (!goals?.length) return [];
@@ -124,6 +133,53 @@ function recallOptions(
   };
 }
 
+function mergeSignalRecalls(
+  signalRecalls: ReadonlyArray<ReadonlyArray<ScoredFact>>,
+  limit: number,
+): ScoredFact[] {
+  const byFactId = new Map<string, SignalRecallEntry>();
+
+  signalRecalls.forEach((recall, signalIndex) => {
+    const signalWeight = SIGNAL_ORDER_DECAY ** signalIndex;
+    recall.forEach((entry, rankIndex) => {
+      const rank = rankIndex + 1;
+      const contribution = signalWeight / (SIGNAL_RANK_FUSION_K + rank);
+      const existing = byFactId.get(entry.fact.id);
+      if (!existing) {
+        byFactId.set(entry.fact.id, {
+          entry,
+          fusionScore: contribution,
+          firstSignalIndex: signalIndex,
+          bestRank: rank,
+        });
+        return;
+      }
+      existing.fusionScore += contribution;
+      existing.bestRank = Math.min(existing.bestRank, rank);
+      existing.firstSignalIndex = Math.min(existing.firstSignalIndex, signalIndex);
+      if (
+        entry.score > existing.entry.score ||
+        (entry.score === existing.entry.score && entry.fact.updatedAt > existing.entry.fact.updatedAt)
+      ) {
+        existing.entry = entry;
+      }
+    });
+  });
+
+  return Array.from(byFactId.values())
+    .sort((left, right) => {
+      if (right.fusionScore !== left.fusionScore) return right.fusionScore - left.fusionScore;
+      if (left.firstSignalIndex !== right.firstSignalIndex) {
+        return left.firstSignalIndex - right.firstSignalIndex;
+      }
+      if (left.bestRank !== right.bestRank) return left.bestRank - right.bestRank;
+      if (right.entry.score !== left.entry.score) return right.entry.score - left.entry.score;
+      return right.entry.fact.updatedAt - left.entry.fact.updatedAt;
+    })
+    .slice(0, limit)
+    .map((merged) => merged.entry);
+}
+
 export async function orchestrateMemoryRetrieval(
   input: RetrievalOrchestratorInput,
 ): Promise<RetrievalOrchestratorResult> {
@@ -136,12 +192,17 @@ export async function orchestrateMemoryRetrieval(
   const recallTimings: RecallFactsTiming[] = [];
 
   const recallStarted = Date.now();
-  const scoredFacts = query
-    ? await recallScoredFactsForQuery(
-        query,
-        recallOptions(input, limit, (timing) => recallTimings.push(timing)),
+  const signalRecalls = query
+    ? await Promise.all(
+        querySignals.map((signal) =>
+          recallScoredFactsForQuery(
+            signal,
+            recallOptions(input, limit, (timing) => recallTimings.push(timing)),
+          ),
+        ),
       )
     : [];
+  const scoredFacts = mergeSignalRecalls(signalRecalls, limit);
   const recallMs = Date.now() - recallStarted;
   const facts = scoredFacts.map((entry) => entry.fact);
 

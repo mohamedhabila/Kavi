@@ -23,4 +23,15 @@ describe('planRetrievalSignals', () => {
     expect(plan.primarySignals).toContain(query);
     expect(plan.droppedSignals).toHaveLength(0);
   });
+
+  it('preserves user line boundaries as separate primary retrieval signals', () => {
+    const plan = planRetrievalSignals([
+      ['Find qprimary-task evidence on the active surface.', 'Return qformat-tail only.'].join('\n'),
+    ]);
+
+    expect(plan.primarySignals).toEqual([
+      'Find qprimary-task evidence on the active surface.',
+      'Return qformat-tail only.',
+    ]);
+  });
 });
