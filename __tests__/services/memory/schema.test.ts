@@ -35,6 +35,18 @@ function columnNames(table: string): string[] {
     .map((row) => row.name);
 }
 
+function indexNames(table: string): string[] {
+  return getMemoryDb()
+    .getAllSync<{ name: string }>(`PRAGMA index_list(${table})`)
+    .map((row) => row.name);
+}
+
+function indexedColumns(index: string): string[] {
+  return getMemoryDb()
+    .getAllSync<{ name: string }>(`PRAGMA index_info(${index})`)
+    .map((row) => row.name);
+}
+
 describe('ensureFactSchema', () => {
   it('creates scoped fact provenance columns and episodic tables', () => {
     ensureFactSchema();
@@ -117,5 +129,16 @@ describe('ensureFactSchema', () => {
       'SELECT COUNT(*) AS count FROM memory_fact_term_stats',
     );
     expect(statsAfterClear?.count).toBe(0);
+  });
+
+  it('indexes source-run lexical expansion by source and query unit', () => {
+    ensureFactSchema();
+
+    expect(indexNames('memory_fact_terms')).toContain('idx_fact_terms_source_unit_fact');
+    expect(indexedColumns('idx_fact_terms_source_unit_fact').slice(0, 3)).toEqual([
+      'source_run_id',
+      'unit',
+      'fact_id',
+    ]);
   });
 });

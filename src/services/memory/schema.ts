@@ -74,8 +74,8 @@ export function ensureFactSchema(): void {
       ON memory_fact_terms(unit, memory_kind, fact_id, weight);
     CREATE INDEX IF NOT EXISTS idx_fact_terms_fact
       ON memory_fact_terms(fact_id);
-    CREATE INDEX IF NOT EXISTS idx_fact_terms_source
-      ON memory_fact_terms(source_run_id);
+    CREATE INDEX IF NOT EXISTS idx_fact_terms_source_unit_fact
+      ON memory_fact_terms(source_run_id, unit, fact_id, weight);
 
     CREATE TABLE IF NOT EXISTS memory_fact_term_stats (
       unit TEXT NOT NULL,
@@ -258,6 +258,9 @@ export function ensureFactSchema(): void {
   ensureFactTermStats(db);
   db.execSync(`
     DROP INDEX IF EXISTS idx_fact_terms_unit_kind;
+    DROP INDEX IF EXISTS idx_fact_terms_source;
+    CREATE INDEX IF NOT EXISTS idx_fact_terms_source_unit_fact
+      ON memory_fact_terms(source_run_id, unit, fact_id, weight);
     CREATE INDEX IF NOT EXISTS idx_facts_scope_origin
       ON memory_facts(scope, origin_conversation_id, deleted_at, invalid_at);
     CREATE INDEX IF NOT EXISTS idx_facts_scope_task

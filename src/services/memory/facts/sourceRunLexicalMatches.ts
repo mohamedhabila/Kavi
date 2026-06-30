@@ -98,7 +98,7 @@ export function listFactsForSourceRunLexicalMatches(
               SUM(t.weight) AS source_match_weight,
               COUNT(DISTINCT t.unit) AS source_unit_count,
               ${stateExpr} AS source_state_index
-         FROM memory_fact_terms AS t INDEXED BY idx_fact_terms_source
+         FROM memory_fact_terms AS t INDEXED BY idx_fact_terms_source_unit_fact
          JOIN memory_facts f ON f.id = t.fact_id
         ${whereSql({
           clauses: [
