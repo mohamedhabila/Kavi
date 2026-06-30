@@ -391,32 +391,6 @@ async function buildRecallSelection(
   );
 
   if (trimmedQuery && selected.length < limit && reservedSupportSlots > 0) {
-    const threshold = options.threshold ?? DEFAULT_TEXT_THRESHOLD;
-    insertSelectedUiStateInventories({
-      selected,
-      scoredById,
-      limit,
-      options,
-      addSelectedInventory: (fact) =>
-        addSelectedFact({
-          selected,
-          seenIds,
-          seenKeys,
-          fact,
-          limit,
-        }),
-      candidateFacts: scored
-        .filter(
-          (entry) =>
-            isUiStateDetailFact(entry.fact) &&
-            (entry.relevanceScore >= threshold || entry.score >= threshold) &&
-            isUiSurfaceIdentityCompatible(entry, dominantUiSurfaceIdentity),
-        )
-        .map((entry) => entry.fact),
-    });
-  }
-
-  if (trimmedQuery && selected.length < limit && reservedSupportSlots > 0) {
     insertWorkflowUiSupport({
       selected,
       seenIds,
@@ -444,6 +418,32 @@ async function buildRecallSelection(
           limit: supportLimit,
           dedupeKey,
         }),
+    });
+  }
+
+  if (trimmedQuery && selected.length < limit && reservedSupportSlots > 0) {
+    const threshold = options.threshold ?? DEFAULT_TEXT_THRESHOLD;
+    insertSelectedUiStateInventories({
+      selected,
+      scoredById,
+      limit,
+      options,
+      addSelectedInventory: (fact) =>
+        addSelectedFact({
+          selected,
+          seenIds,
+          seenKeys,
+          fact,
+          limit,
+        }),
+      candidateFacts: scored
+        .filter(
+          (entry) =>
+            isUiStateDetailFact(entry.fact) &&
+            (entry.relevanceScore >= threshold || entry.score >= threshold) &&
+            isUiSurfaceIdentityCompatible(entry, dominantUiSurfaceIdentity),
+        )
+        .map((entry) => entry.fact),
     });
   }
 

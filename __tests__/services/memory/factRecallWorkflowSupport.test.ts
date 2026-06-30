@@ -449,18 +449,21 @@ describe('recallFactsForQuery — workflow support', () => {
     expect(selectedIds).not.toContain(distantUi.id);
   });
 
-  it('balances long procedure support across entry and terminal workflow states', async () => {
-    const corpus = upsertEntity({ name: 'late-procedure-support-corpus', type: 'concept' });
+  it('uses query-matched procedure states for precise workflow support', async () => {
+    const corpus = upsertEntity({ name: 'query-phase-procedure-support-corpus', type: 'concept' });
     const procedure = recordFact({
       subjectId: corpus.id,
       predicate: 'procedure_target',
       objectText: JSON.stringify({
-        sourceRunId: 'run-late-procedure-target',
-        goal: 'qlateprocanchor qlateprocquery',
-        stepCount: 9,
-        steps: Array.from({ length: 9 }, (_, index) => ({ stateIndex: String(index) })),
+        sourceRunId: 'run-query-phase-procedure-target',
+        goal: 'qphaseprocanchor qphaseprocquery',
+        stepCount: 11,
+        steps: Array.from({ length: 11 }, (_, index) => ({
+          stateIndex: String(index),
+          thought: index === 5 ? 'qphase-target' : `qphase-step-${index}`,
+        })),
       }),
-      sourceRunId: 'run-late-procedure-target',
+      sourceRunId: 'run-query-phase-procedure-target',
       memoryKind: 'procedure',
       importance: 1,
       now: 1_000,
@@ -468,57 +471,67 @@ describe('recallFactsForQuery — workflow support', () => {
     const fillerA = recordFact({
       subjectId: corpus.id,
       predicate: 'late_procedure_filler_a',
-      objectText: 'qlateprocanchor qfillera',
+      objectText: 'qphaseprocanchor qfillera',
       importance: 1,
       now: 900,
     }).fact;
     const fillerB = recordFact({
       subjectId: corpus.id,
       predicate: 'late_procedure_filler_b',
-      objectText: 'qlateprocanchor qfillerb',
+      objectText: 'qphaseprocanchor qfillerb',
       importance: 1,
       now: 800,
     }).fact;
-    const earlyUi = recordFact({
+    const phaseTab = recordFact({
       subjectId: corpus.id,
-      predicate: 'early_setup_ui',
+      predicate: 'query_phase_tab',
       objectText: JSON.stringify({
-        controlNames: ['qearly-setup'],
-        url: 'https://example.test/flow/setup',
-        stateIndex: '1',
+        role: 'tab',
+        name: 'qphase-target',
+        selected: true,
+        expanded: true,
+        url: 'https://example.test/flow/middle',
+        stateIndex: '5',
       }),
-      sourceRunId: 'run-late-procedure-target',
-      memoryKind: 'ui_inventory',
-      attributes: { stateIndex: 1, url: 'https://example.test/flow/setup' },
-      now: 1_100,
-    }).fact;
-    const lateUi = recordFact({
-      subjectId: corpus.id,
-      predicate: 'late_phase_ui',
-      objectText: JSON.stringify({
-        controlNames: ['qlateprocanchor', 'qlate-phase-control'],
-        url: 'https://example.test/flow/review',
-        stateIndex: '8',
-      }),
-      sourceRunId: 'run-late-procedure-target',
-      memoryKind: 'ui_inventory',
-      attributes: { stateIndex: 8, url: 'https://example.test/flow/review' },
+      sourceRunId: 'run-query-phase-procedure-target',
+      memoryKind: 'ui_field',
+      attributes: { stateIndex: 5, url: 'https://example.test/flow/middle' },
       now: 1_200,
     }).fact;
+    const preciseField = recordFact({
+      subjectId: corpus.id,
+      predicate: 'query_phase_field',
+      objectText: JSON.stringify({
+        label: 'qcritical-field',
+        role: 'textbox',
+        controlName: 'qcritical-field',
+        required: true,
+        disabled: true,
+        url: 'https://example.test/flow/middle',
+        stateIndex: '5',
+      }),
+      sourceRunId: 'run-query-phase-procedure-target',
+      memoryKind: 'ui_field',
+      attributes: { stateIndex: 5, url: 'https://example.test/flow/middle' },
+      now: 1_300,
+    }).fact;
 
-    const facts = await recallFactsForQuery('qlateprocanchor qlateprocquery qfillera qfillerb', {
-      limit: 5,
-      threshold: 0.01,
-      candidatePoolLimit: 40,
-      now: 2_000,
-    });
+    const facts = await recallFactsForQuery(
+      'qphaseprocanchor qphaseprocquery qphase-target qfillera qfillerb',
+      {
+        limit: 5,
+        threshold: 0.01,
+        candidatePoolLimit: 40,
+        now: 2_000,
+      },
+    );
     const selectedIds = facts.map((fact) => fact.id);
 
     expect(selectedIds.slice(0, 3)).toEqual(
       expect.arrayContaining([procedure.id, fillerA.id, fillerB.id]),
     );
-    expect(selectedIds).toContain(lateUi.id);
-    expect(selectedIds).not.toContain(earlyUi.id);
+    expect(selectedIds).toContain(preciseField.id);
+    expect(selectedIds).not.toContain(phaseTab.id);
   });
 
   it('uses a compact procedure representative for intermediate workflow outcomes', async () => {

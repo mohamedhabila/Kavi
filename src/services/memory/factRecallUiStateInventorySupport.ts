@@ -4,7 +4,7 @@ import {
 import type { MemoryFact } from './facts/types';
 import { parseJsonRecord } from './factJson';
 import type { RecallFactsOptions, ScoredFact } from './factRecallTypes';
-import { selectionDedupeKey, sourceRunStateKey } from './ranking/selection';
+import { sourceRunStateKey } from './ranking/selection';
 import { recordHasUiStateBearingValue } from './uiStateBearingFields';
 
 type SelectedInventoryAdder = (fact: MemoryFact) => boolean;
@@ -116,17 +116,9 @@ export function ensureSelectedUiStateInventories(params: {
       uiInventoryQueryOptions(params.options),
     );
     if (!inventory || !uiInventoryHasStateBearingFields(inventory)) continue;
-    if (params.selected.length < params.limit) {
-      const added = params.addSelectedInventory(inventory);
-      if (!added) continue;
-    } else {
-      const index = params.selected.findIndex((fact) => fact.id === detailFact.id);
-      if (index < 0) continue;
-      params.selected[index] = inventory;
-      params.seenIds.add(inventory.id);
-      const key = selectionDedupeKey(inventory);
-      if (key) params.seenKeys.add(key);
-    }
+    if (params.selected.length >= params.limit) continue;
+    const added = params.addSelectedInventory(inventory);
+    if (!added) continue;
     const scoredAnchor = params.scoredById.get(detailFact.id);
     if (scoredAnchor) params.scoredById.set(inventory.id, { ...scoredAnchor, fact: inventory });
   }

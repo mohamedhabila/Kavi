@@ -25,6 +25,7 @@ import {
 
 const SOURCE_RUN_SUPPORT_FORWARD_RADIUS = 16;
 const SOURCE_RUN_SUPPORT_FORWARD_STATE_LIMIT = 16;
+const SOURCE_RUN_EXACT_STATE_PRECISE_SUPPORT_LIMIT = 12;
 const SOURCE_RUN_SUPPORT_LEXICAL_PER_RUN_LIMIT = 6;
 const SOURCE_RUN_SUPPORT_RADIUS = 2;
 const SOURCE_RUN_SUPPORT_PER_RUN_LIMIT = 8;
@@ -44,6 +45,18 @@ type AddSelectedSupportFact = (
 
 function canAnchorWorkflowSupport(fact: MemoryFact): boolean {
   return WORKFLOW_SUPPORT_ANCHOR_KINDS.has(fact.memoryKind);
+}
+
+function supportObservationContext(fact: MemoryFact): {
+  sourceRunId: string | null;
+  stateIndex: string | number | null;
+} {
+  const stateIndex = fact.attributes.stateIndex;
+  return {
+    sourceRunId: fact.sourceRunId,
+    stateIndex:
+      typeof stateIndex === 'string' || typeof stateIndex === 'number' ? stateIndex : null,
+  };
 }
 
 export function insertWorkflowUiSupport(params: {
@@ -70,12 +83,19 @@ export function insertWorkflowUiSupport(params: {
     return;
   }
   const supportAnchors = params.selected.filter(canAnchorWorkflowSupport);
-  const supportContexts = sourceRunSupportContexts(supportAnchors, params.scored);
+  const procedureSupportAnchors = supportAnchors.filter(
+    (fact) => fact.memoryKind === 'procedure',
+  );
+  const orderedSupportAnchors = [
+    ...procedureSupportAnchors,
+    ...supportAnchors.filter((fact) => fact.memoryKind !== 'procedure'),
+  ];
+  const supportContexts = sourceRunSupportContexts(orderedSupportAnchors, params.scored);
   const exactSupportContextKeys = new Set(
     supportContexts.map((context) => `${context.sourceRunId}:${context.stateIndex}`),
   );
   const selectedSourceRuns = Array.from(
-    new Set(supportAnchors.map((fact) => fact.sourceRunId).filter(Boolean) as string[]),
+    new Set(orderedSupportAnchors.map((fact) => fact.sourceRunId).filter(Boolean) as string[]),
   );
   const supportLimit = Math.min(params.limit, params.selected.length + params.reservedSupportSlots);
   const supportFactsById = new Map<string, MemoryFact>();
@@ -135,9 +155,9 @@ export function insertWorkflowUiSupport(params: {
     if (contextsForRun.length === 0) continue;
     const supportFacts = listFactsForSourceRunStateNeighborhoods(contextsForRun, {
       memoryKind: ['ui_inventory', 'ui_field', 'ui_filter_state'],
-      preferAdjacent: true,
+      preferAdjacent: false,
       radius: SOURCE_RUN_SUPPORT_RADIUS,
-      limit: SOURCE_RUN_SUPPORT_PER_RUN_LIMIT,
+      limit: contextsForRun.length * SOURCE_RUN_SUPPORT_PER_RUN_LIMIT,
       ...commonQueryOptions,
     });
     for (const fact of supportFacts) {
@@ -165,6 +185,26 @@ export function insertWorkflowUiSupport(params: {
     if (
       isActionResultOutcome(fact) &&
       selectedActionResultSourceRuns(params.selected).has(fact.sourceRunId)
+    ) {
+      continue;
+    }
+    supportFactsById.set(fact.id, fact);
+  }
+  const exactStatePreciseSupportFacts = listFactsForSourceRunStateNeighborhoods(
+    Array.from(supportFactsById.values()).map(supportObservationContext),
+    {
+      memoryKind: ['ui_field', 'ui_filter_state'],
+      preferAdjacent: false,
+      radius: 0,
+      limit: supportFactsById.size * SOURCE_RUN_EXACT_STATE_PRECISE_SUPPORT_LIMIT,
+      ...commonQueryOptions,
+    },
+  );
+  for (const fact of exactStatePreciseSupportFacts) {
+    if (
+      params.seenIds.has(fact.id) ||
+      !fact.sourceRunId ||
+      !selectedSourceRuns.includes(fact.sourceRunId)
     ) {
       continue;
     }
@@ -202,8 +242,24 @@ export function insertWorkflowUiSupport(params: {
     entries: supportEntries,
     sourceRunSupportRank,
   });
+  const procedureSourceRuns = new Set(
+    procedureSupportAnchors
+      .map((fact) => fact.sourceRunId)
+      .filter((sourceRunId): sourceRunId is string => Boolean(sourceRunId)),
+  );
+  const procedureFirstSupportEntries =
+    procedureSourceRuns.size > 0
+      ? [
+          ...rankedSupportEntries.filter((entry) =>
+            procedureSourceRuns.has(entry.fact.sourceRunId ?? ''),
+          ),
+          ...rankedSupportEntries.filter(
+            (entry) => !procedureSourceRuns.has(entry.fact.sourceRunId ?? ''),
+          ),
+        ]
+      : rankedSupportEntries;
   const supportEntriesForSelection = sourceBalancedSupportEntries({
-    entries: rankedSupportEntries,
+    entries: procedureFirstSupportEntries,
     selectedSourceRuns,
     supportSlots: params.reservedSupportSlots,
   });

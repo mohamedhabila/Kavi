@@ -78,11 +78,29 @@ export function selectedActionResultSourceRuns(facts: ReadonlyArray<MemoryFact>)
 }
 
 function observedStateSupportPriority(fact: MemoryFact): number {
-  if (fact.memoryKind === 'ui_inventory' && uiInventoryHasStateBearingFields(fact)) return 5;
-  if (fact.memoryKind === 'ui_field' || fact.memoryKind === 'ui_filter_state') return 4;
+  if (fact.memoryKind === 'ui_filter_state') return 6;
+  if (fact.memoryKind === 'ui_field') return uiFieldSupportPriority(fact);
+  if (fact.memoryKind === 'ui_inventory' && uiInventoryHasStateBearingFields(fact)) return 4;
   if (fact.memoryKind === 'ui_inventory') return 3;
   if (isActionResultOutcome(fact)) return 2;
   return 1;
+}
+
+function uiFieldSupportPriority(fact: MemoryFact): number {
+  const parsed = parseJsonRecord(fact.objectText);
+  if (parsed?.role === 'tab') return 3;
+  if (parsed?.required === true) return 7;
+  if (parsed && hasStructuredFieldState(parsed)) return 5;
+  return 4;
+}
+
+function hasStructuredFieldState(field: Record<string, unknown>): boolean {
+  if (field.required === true) return true;
+  for (const key of ['checked', 'selected', 'disabled', 'expanded', 'value', 'displayText']) {
+    const value = field[key];
+    if (value !== undefined && value !== null && value !== '') return true;
+  }
+  return Array.isArray(field.options) && field.options.length > 0;
 }
 
 export function rankWorkflowSupportEntries<T extends WorkflowSupportEntry>(params: {
@@ -127,9 +145,17 @@ export function rankWorkflowSupportEntries<T extends WorkflowSupportEntry>(param
     }
   }
 
-  return [...supportEntriesByPhase.values(), ...ungroupedSupportEntries].sort((left, right) =>
-    compareRankedSupportEntries(left, right, sourceRunSupportRank),
-  );
+  return [...supportEntriesByPhase.values(), ...ungroupedSupportEntries].sort((left, right) => {
+    const requiredDiff =
+      requiredFieldSupportPriority(right.fact) - requiredFieldSupportPriority(left.fact);
+    if (requiredDiff !== 0) return requiredDiff;
+    return compareRankedSupportEntries(left, right, sourceRunSupportRank);
+  });
+}
+
+function requiredFieldSupportPriority(fact: MemoryFact): number {
+  if (fact.memoryKind !== 'ui_field') return 0;
+  return parseJsonRecord(fact.objectText)?.required === true ? 1 : 0;
 }
 
 export function supportEvidenceRichness(fact: MemoryFact): number {

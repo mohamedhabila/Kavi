@@ -401,7 +401,25 @@ export function sourceRunSupportContexts(
     return added;
   };
 
-  for (const fact of facts) addFactContexts(fact);
+  for (const fact of facts) {
+    if (fact.memoryKind !== 'procedure') addFactContexts(fact);
+  }
+
+  for (const sourceRunId of selectedRunOrder) {
+    let contextCount = contextCountForRun(sourceRunId);
+    if (contextCount >= SOURCE_RUN_SUPPORT_CONTEXTS_PER_RUN) continue;
+    for (const entry of scoredFacts) {
+      if (entry.fact.sourceRunId !== sourceRunId) continue;
+      if (entry.fact.memoryKind === 'procedure') continue;
+      if (entry.textScore <= 0 && entry.score <= 0) continue;
+      contextCount += addFactContexts(entry.fact);
+      if (contextCount >= SOURCE_RUN_SUPPORT_CONTEXTS_PER_RUN) break;
+    }
+  }
+
+  for (const fact of facts) {
+    if (fact.memoryKind === 'procedure') addFactContexts(fact);
+  }
 
   for (const sourceRunId of selectedRunOrder) {
     let contextCount = contextCountForRun(sourceRunId);
