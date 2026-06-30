@@ -114,7 +114,19 @@ function insertSelectedActionProcedureSupport(
         isActionResultOutcome(entry.fact) &&
         entry.fact.sourceRunId &&
         !selectedProcedureSources.has(entry.fact.sourceRunId),
-    );
+    )
+    .sort((left, right) => {
+      const leftScored = params.scoredById.get(left.fact.id);
+      const rightScored = params.scoredById.get(right.fact.id);
+      if (leftScored && rightScored) {
+        return compareSupportCandidates(
+          { fact: left.fact, scored: leftScored },
+          { fact: right.fact, scored: rightScored },
+        );
+      }
+      if (leftScored !== rightScored) return leftScored ? -1 : 1;
+      return left.index - right.index;
+    });
   if (actionAnchors.length === 0) return;
 
   const sourceRunIds = Array.from(

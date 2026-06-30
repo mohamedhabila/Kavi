@@ -2,12 +2,15 @@ import { upsertEntity } from './entities';
 import { recordFact } from './facts/mutations';
 import type { RecordFactInput } from './facts/types';
 import { compactJson } from './structuredObservationCompaction';
+import { parseAccessibilityTree, type AccessibilityNode } from './accessibilityTree';
+import { isInteractiveUiNode } from './uiInteractivity';
 
 const MAX_PROCEDURE_TEXT_CHARS = 7_500;
 const MAX_PROCEDURE_GOAL_CHARS = 600;
 const MAX_PROCEDURE_URL_CHARS = 260;
 const MAX_PROCEDURE_ACTION_CHARS = 220;
 const MAX_PROCEDURE_THOUGHT_CHARS = 320;
+const MAX_PROCEDURE_TARGET_CHARS = 160;
 const MAX_PROCEDURE_STEPS_FOR_STORAGE = 36;
 const NON_ENVIRONMENT_PROCEDURE_ACTIONS = new Set(['send_msg_to_user']);
 
@@ -23,6 +26,10 @@ export interface ProcedureObservationContext {
   toolName?: string;
   toolStatus?: string;
   now?: number;
+}
+
+export interface ProcedurePreviousObservation {
+  accessibilityTree?: string | null;
 }
 
 export interface ProcedureTrace {
@@ -63,6 +70,7 @@ export function collectProcedureTrace(
   traces: Map<string, ProcedureTrace>,
   payload: JsonRecord,
   context: ProcedureObservationContext,
+  previousObservation?: ProcedurePreviousObservation | null,
 ): void {
   if (!hasObservationFields(payload)) return;
   const sourceRunId = stringField(payload, 'trajectory_id') ?? context.sourceRunId;
@@ -74,6 +82,7 @@ export function collectProcedureTrace(
     stateIndex,
     url: stringField(payload, 'url'),
     action,
+    targetControl: action ? targetControlForAction(payload, action, previousObservation) : null,
     thought: stringField(payload, 'thought'),
     outcome: stringField(payload, 'outcome') ?? stringField(payload, 'status') ?? context.toolStatus,
   });
@@ -235,6 +244,7 @@ function compactProcedureStep(step: JsonRecord, plan: ProcedureStoragePlan): Jso
       stringField(step, 'action'),
       Math.min(plan.actionChars, MAX_PROCEDURE_ACTION_CHARS),
     ),
+    targetControl: compactProcedureTargetControl(step.targetControl),
     thought: fitProcedureText(
       stringField(step, 'thought'),
       Math.min(plan.thoughtChars, MAX_PROCEDURE_THOUGHT_CHARS),
@@ -248,6 +258,59 @@ function compactMinimalProcedureStep(step: JsonRecord, plan: ProcedureStoragePla
     stateIndex: scalarField(step, 'stateIndex'),
     url: fitProcedureText(stringField(step, 'url'), plan.urlChars),
     action: fitProcedureText(stringField(step, 'action'), plan.actionChars),
+    targetControl: compactProcedureTargetControl(step.targetControl),
+  });
+}
+
+function targetControlForAction(
+  payload: JsonRecord,
+  action: string,
+  previousObservation?: ProcedurePreviousObservation | null,
+): JsonRecord | null {
+  const targetRef = firstActionTargetRef(action);
+  if (!targetRef) return null;
+  const previousAccessibilityTree = previousObservation?.accessibilityTree?.trim() || null;
+  const currentAccessibilityTree = stringField(payload, 'accessibility_tree');
+  const previousTarget = previousAccessibilityTree
+    ? targetControlFromTree(previousAccessibilityTree, targetRef)
+    : null;
+  return previousTarget ?? (currentAccessibilityTree ? targetControlFromTree(currentAccessibilityTree, targetRef) : null);
+}
+
+function targetControlFromTree(accessibilityTree: string, targetRef: string): JsonRecord | null {
+  const nodes = parseAccessibilityTree(accessibilityTree);
+  const byNodeId = nodes.find((node) => node.nodeId === targetRef);
+  if (byNodeId) return compactTargetNode(byNodeId);
+  const byName = nodes.find(
+    (node) => node.name?.trim() === targetRef && isInteractiveUiNode(node),
+  );
+  return byName ? compactTargetNode(byName) : null;
+}
+
+function firstActionTargetRef(action: string): string | null {
+  const callArgs = action.match(/^[A-Za-z_][A-Za-z0-9_]*\s*\((.*)\)\s*$/s)?.[1];
+  if (!callArgs) return null;
+  const quoted = callArgs.match(/^\s*(['"])(.*?)\1/s);
+  if (quoted?.[2]?.trim()) return quoted[2].trim();
+  const firstArg = callArgs.split(',')[0]?.trim();
+  return firstArg && /^[A-Za-z0-9_.:-]+$/.test(firstArg) ? firstArg : null;
+}
+
+function compactTargetNode(node: AccessibilityNode): JsonRecord {
+  return dropEmpty({
+    nodeId: node.nodeId,
+    role: fitProcedureText(node.role, 80),
+    name: fitProcedureText(node.name, MAX_PROCEDURE_TARGET_CHARS),
+  });
+}
+
+function compactProcedureTargetControl(value: unknown): JsonRecord | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const target = value as JsonRecord;
+  return dropEmpty({
+    nodeId: fitProcedureText(stringField(target, 'nodeId'), 80),
+    role: fitProcedureText(stringField(target, 'role'), 80),
+    name: fitProcedureText(stringField(target, 'name'), MAX_PROCEDURE_TARGET_CHARS),
   });
 }
 

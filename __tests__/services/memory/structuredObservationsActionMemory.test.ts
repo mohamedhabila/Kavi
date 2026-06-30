@@ -539,6 +539,99 @@ describe('structured observation action memory', () => {
     expect(JSON.stringify(procedure.steps)).toContain('qterminal-procedure-phase');
   });
 
+  it('stores observed target control labels for node-id procedure actions', () => {
+    recordStructuredObservationsFromMessages({
+      conversationId: 'conv-procedure-target-control',
+      threadId: 'conv-procedure-target-control',
+      sourceRunId: 'run-procedure-target-control',
+      now: 392,
+      messages: [
+        toolMessage(
+          {
+            state_index: 4,
+            url: 'https://workflow.example.test/checkout',
+            action: "click('42')",
+            thought: 'qtarget-control-thought',
+            accessibility_tree: [
+              "RootWebArea 'Checkout'",
+              "\t[41] button 'qother-action', clickable, visible",
+              "\t[42] button 'qtarget-action', clickable, visible",
+            ].join('\n'),
+          },
+          'tool-procedure-target-control',
+        ),
+      ],
+    });
+
+    const procedureFact = listFacts({
+      memoryKind: 'procedure',
+      originConversationId: 'conv-procedure-target-control',
+    })[0];
+    const procedure = JSON.parse(procedureFact.objectText);
+
+    expect(procedure.steps[0].targetControl).toEqual({
+      nodeId: '42',
+      role: 'button',
+      name: 'qtarget-action',
+    });
+
+    const promptText = assemblePrompt({
+      basePrompt: 'base',
+      retrievedFacts: [procedureFact],
+    }).sections.map((section) => section.text).join('\n');
+
+    expect(promptText).toContain('targetControl');
+    expect(promptText).toContain('qtarget-action');
+  });
+
+  it('resolves procedure action targets from the previous UI state', () => {
+    recordStructuredObservationsFromMessages({
+      conversationId: 'conv-procedure-previous-target-control',
+      threadId: 'conv-procedure-previous-target-control',
+      sourceRunId: 'run-procedure-previous-target-control',
+      now: 393,
+      messages: [
+        toolMessage(
+          {
+            state_index: 1,
+            url: 'https://workflow.example.test/cart',
+            accessibility_tree: [
+              "RootWebArea 'Cart'",
+              "\t[90] button 'qcheckout-action', clickable, visible",
+            ].join('\n'),
+          },
+          'tool-procedure-previous-target-control-1',
+        ),
+        toolMessage(
+          {
+            state_index: 2,
+            url: 'https://workflow.example.test/checkout',
+            action: "click('90')",
+            thought: 'qafter-action-thought',
+            accessibility_tree: [
+              "RootWebArea 'Checkout'",
+              "\t[91] button 'qnext-action', clickable, visible",
+            ].join('\n'),
+          },
+          'tool-procedure-previous-target-control-2',
+        ),
+      ],
+    });
+
+    const procedure = JSON.parse(
+      listFacts({
+        memoryKind: 'procedure',
+        originConversationId: 'conv-procedure-previous-target-control',
+      })[0].objectText,
+    );
+
+    expect(procedure.steps[1].targetControl).toEqual({
+      nodeId: '90',
+      role: 'button',
+      name: 'qcheckout-action',
+    });
+  });
+
   it('does not store user-message narration as environment procedure steps', () => {
     recordStructuredObservationsFromMessages({
       conversationId: 'conv-procedure-message-action',

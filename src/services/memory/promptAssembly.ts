@@ -212,8 +212,21 @@ function compactProcedureStep(step: unknown): Record<string, unknown> | null {
   copyScalar('state_index');
   copyScalar('url');
   copyScalar('action');
+  const targetControl = compactProcedureTargetControl(input.targetControl);
+  if (targetControl) compact.targetControl = targetControl;
   copyScalar('thought');
   copyScalar('outcome');
+  return Object.keys(compact).length > 0 ? compact : null;
+}
+
+function compactProcedureTargetControl(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  const compact = dropEmptyPromptRecord({
+    nodeId: typeof input.nodeId === 'string' ? fitText(input.nodeId, 80) : undefined,
+    role: typeof input.role === 'string' ? fitText(input.role, 80) : undefined,
+    name: typeof input.name === 'string' ? fitText(input.name, 160) : undefined,
+  });
   return Object.keys(compact).length > 0 ? compact : null;
 }
 
@@ -223,6 +236,7 @@ function compactProcedureSurfaceTrailStep(step: unknown): Record<string, unknown
   const stateIndex = input.stateIndex ?? input.state_index;
   const url = input.url;
   const action = input.action;
+  const targetControl = compactProcedureTargetControl(input.targetControl);
   const compact = dropEmptyPromptRecord({
     stateIndex:
       typeof stateIndex === 'string'
@@ -232,6 +246,7 @@ function compactProcedureSurfaceTrailStep(step: unknown): Record<string, unknown
           : undefined,
     url: typeof url === 'string' ? fitText(url, 220) : undefined,
     action: typeof action === 'string' ? fitText(action, 120) : undefined,
+    targetControl,
   });
   return Object.keys(compact).length > 0 ? compact : null;
 }

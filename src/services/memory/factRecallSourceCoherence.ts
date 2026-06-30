@@ -5,7 +5,7 @@ const SOURCE_COHERENCE_FACT_LIMIT = 4;
 const SOURCE_COHERENCE_DECAY = 0.5;
 const SOURCE_COHERENCE_KIND_BONUS = 0.04;
 const SOURCE_COHERENCE_KIND_BONUS_MAX = 0.12;
-const SOURCE_COHERENCE_ACTION_RESULT_BONUS = 0.2;
+const SOURCE_COHERENCE_ACTION_RESULT_BONUS_MAX = 0.2;
 const SOURCE_COHERENCE_MAX_NON_RELEVANCE_EVIDENCE = 0.2;
 const SOURCE_COHERENCE_LOCAL_STATE_RADIUS = 4;
 
@@ -57,6 +57,7 @@ function scoreSourceGroup(entries: ReadonlyArray<ScoredFact>): number {
   let weight = 1;
   let counted = 0;
   let anchorStateIndex: number | null = null;
+  let bestActionResultEvidence = 0;
   for (const entry of entries) {
     const stateIndex = numericStateIndex(entry);
     if (anchorStateIndex === null && stateIndex !== null) anchorStateIndex = stateIndex;
@@ -69,6 +70,12 @@ function scoreSourceGroup(entries: ReadonlyArray<ScoredFact>): number {
     }
     const evidenceScore = entryEvidenceScore(entry);
     if (evidenceScore <= 0) continue;
+    if (entry.fact.memoryKind === 'outcome' || entry.fact.memoryKind === 'gotcha') {
+      bestActionResultEvidence = Math.max(
+        bestActionResultEvidence,
+        Math.max(entry.relevanceScore, 0) + Math.max(entry.quotedUiControlBoost ?? 0, 0),
+      );
+    }
     const key = evidenceKey(entry);
     if (seenEvidence.has(key)) continue;
     seenEvidence.add(key);
@@ -82,8 +89,10 @@ function scoreSourceGroup(entries: ReadonlyArray<ScoredFact>): number {
     SOURCE_COHERENCE_KIND_BONUS_MAX,
     Math.max(0, seenKinds.size - 1) * SOURCE_COHERENCE_KIND_BONUS,
   );
-  const actionResultBonus =
-    seenKinds.has('outcome') || seenKinds.has('gotcha') ? SOURCE_COHERENCE_ACTION_RESULT_BONUS : 0;
+  const actionResultBonus = Math.min(
+    SOURCE_COHERENCE_ACTION_RESULT_BONUS_MAX,
+    bestActionResultEvidence,
+  );
   return score + kindBonus + actionResultBonus;
 }
 

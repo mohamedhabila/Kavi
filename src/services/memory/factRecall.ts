@@ -29,6 +29,10 @@ import {
 import { countLexicalUnits } from './ranking/lexical';
 import { quotedSpanUnitSets } from './ranking/quotedSpans';
 import {
+  bestStandaloneProcedureCandidate,
+  primaryProcedureSlotLimit,
+} from './factRecallProcedureSelection';
+import {
   primarySelectionGroupKey,
   primaryWorkflowRepresentative,
   selectionDedupeKey,
@@ -70,13 +74,7 @@ const SOURCE_RUN_SUPPORT_FORWARD_STATE_LIMIT = 16;
 const SOURCE_RUN_SUPPORT_LEXICAL_PER_RUN_LIMIT = 6;
 const SOURCE_RUN_SUPPORT_RADIUS = 2;
 const SOURCE_RUN_SUPPORT_PER_RUN_LIMIT = 8;
-const WORKFLOW_SUPPORT_ANCHOR_KINDS = new Set<MemoryFactKind>([
-  'procedure',
-  'ui_inventory',
-  'ui_field',
-  'ui_filter_state',
-  'outcome',
-]);
+const WORKFLOW_SUPPORT_ANCHOR_KINDS = new Set<MemoryFactKind>(['procedure', 'ui_inventory', 'ui_field', 'ui_filter_state', 'outcome']);
 
 function getCandidateScopes(options: RecallFactsOptions): MemoryFactScope[] | undefined {
   if (!options.scopeHints?.length && !options.conversationId && !options.taskId) {
@@ -108,19 +106,6 @@ function uniqueFactsById(facts: ReadonlyArray<MemoryFact>): MemoryFact[] {
 
 function canAnchorWorkflowSupport(fact: MemoryFact): boolean {
   return WORKFLOW_SUPPORT_ANCHOR_KINDS.has(fact.memoryKind);
-}
-
-function isProcedureOnlyRecall(options: RecallFactsOptions): boolean {
-  const memoryKind = options.memoryKind;
-  return (
-    memoryKind === 'procedure' ||
-    (Array.isArray(memoryKind) && memoryKind.length === 1 && memoryKind[0] === 'procedure')
-  );
-}
-
-function primaryProcedureSlotLimit(primaryLimit: number, options: RecallFactsOptions): number {
-  if (isProcedureOnlyRecall(options)) return primaryLimit;
-  return Math.max(1, Math.floor(primaryLimit * 0.25));
 }
 
 function addSelectedFact(params: {
@@ -293,7 +278,10 @@ async function buildRecallSelection(
         fact: entry.fact,
         limit: primaryLimit,
       });
-      if (added) primaryGroups.add(primarySelectionGroupKey(entry.fact));
+      if (added) {
+        primaryGroups.add(primarySelectionGroupKey(entry.fact));
+        if (entry.fact.memoryKind === 'procedure') selectedPrimaryProcedures += 1;
+      }
       if (selected.length >= primaryLimit) break;
     }
   }
@@ -306,7 +294,6 @@ async function buildRecallSelection(
           .filter(
             (entry) =>
               entry.fact.memoryKind === 'outcome' &&
-              !isActionResultOutcome(entry.fact) &&
               entry.fact.sourceRunId &&
               (entry.relevanceScore >= threshold || entry.score >= threshold),
           )
@@ -330,6 +317,26 @@ async function buildRecallSelection(
         workflowProceduresBySourceRun.set(procedure.sourceRunId, procedures);
       }
     }
+    if (primaryLimit > primaryProcedureLimit && selected.length < primaryLimit && selectedPrimaryProcedures < primaryProcedureLimit) {
+      const bestStandaloneProcedure = bestStandaloneProcedureCandidate(
+        scored,
+        threshold,
+        (entry) => isUiSurfaceIdentityCompatible(entry, dominantUiSurfaceIdentity),
+      );
+      if (bestStandaloneProcedure) {
+        const added = addSelectedFact({
+          selected,
+          seenIds,
+          seenKeys,
+          fact: bestStandaloneProcedure.fact,
+          limit: primaryLimit,
+        });
+        if (added) {
+          primaryGroups.add(primarySelectionGroupKey(bestStandaloneProcedure.fact));
+          selectedPrimaryProcedures += 1;
+        }
+      }
+    }
     for (const entry of rankSourceCoherentEntries(scored)) {
       if (entry.relevanceScore < threshold && entry.score < threshold) continue;
       if (!isUiSurfaceIdentityCompatible(entry, dominantUiSurfaceIdentity)) continue;
@@ -341,19 +348,23 @@ async function buildRecallSelection(
       }
       const groupKey = primarySelectionGroupKey(entry.fact);
       if (primaryGroups.has(groupKey)) continue;
-      let representative = isActionResultOutcome(entry.fact)
-        ? entry
-        : (primaryWorkflowRepresentative(entry, scored, threshold) as ScoredFact);
+      let representative = primaryWorkflowRepresentative(entry, scored, threshold) as ScoredFact;
       if (
         representative.fact.id === entry.fact.id &&
         entry.fact.sourceRunId &&
-        !isActionResultOutcome(entry.fact)
+        entry.fact.memoryKind === 'outcome'
       ) {
         const procedure = workflowProcedureRepresentativeForOutcome(
           entry.fact,
           workflowProceduresBySourceRun.get(entry.fact.sourceRunId) ?? [],
         );
         if (procedure) representative = { ...entry, fact: procedure };
+      }
+      if (
+        representative.fact.memoryKind === 'procedure' &&
+        selectedPrimaryProcedures >= primaryProcedureLimit
+      ) {
+        continue;
       }
       const added = addSelectedFact({
         selected,
@@ -617,14 +628,16 @@ async function buildRecallSelection(
     const selectedUiSupportCount = selected.filter(
       (fact) => fact.memoryKind === 'ui_inventory',
     ).length;
-    const selectedProcedureCount = selected.filter(
-      (fact) => fact.memoryKind === 'procedure',
-    ).length;
-    const hasActionResultSupportAnchor = selected.some(isActionResultOutcome);
-    const availableProcedureSupportSlots = Math.max(
-      0,
-      limit - selected.length,
-      reservedSupportSlots - selectedUiSupportCount,
+    const selectedProcedureSourceRuns = new Set(
+      selected
+        .filter((fact) => fact.memoryKind === 'procedure' && fact.sourceRunId)
+        .map((fact) => fact.sourceRunId as string),
+    );
+    const hasActionResultSupportAnchor = selected.some(
+      (fact) =>
+        isActionResultOutcome(fact) &&
+        fact.sourceRunId &&
+        !selectedProcedureSourceRuns.has(fact.sourceRunId),
     );
     insertProcedureLocalSupport({
       selected,
@@ -634,10 +647,7 @@ async function buildRecallSelection(
       scored,
       limit,
       uiSupportBudget: Math.max(0, reservedSupportSlots - selectedUiSupportCount),
-      procedureSupportBudget:
-        selectedProcedureCount === 0 && hasActionResultSupportAnchor
-          ? Math.min(1, availableProcedureSupportSlots)
-          : 0,
+      procedureSupportBudget: hasActionResultSupportAnchor ? 1 : 0,
       candidateScopes,
       options,
       scoringQueryUnits: discriminativeScoringUnits,

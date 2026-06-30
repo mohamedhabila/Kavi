@@ -137,6 +137,7 @@ const DEFAULT_CONFIG = {
     'docs/privacy-policy.md',
     'docs/release.md',
     'docs/setup/development.md',
+    'docs/store-submission-readiness.md',
     'docs/testing.md',
   ]),
   plannedDocCleanupPaths: new Set(),

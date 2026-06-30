@@ -32,6 +32,7 @@ import {
   collectProcedureTrace,
   recordProcedureTraces,
   type ProcedureTrace,
+  type ProcedurePreviousObservation,
 } from './structuredProcedureTrace';
 import type { UiActionTrailEntry } from './uiActionResultMemory';
 
@@ -62,7 +63,7 @@ interface ParsedPayload {
   sourceLabel: string;
 }
 
-interface PreviousObservationContext {
+interface PreviousObservationContext extends ProcedurePreviousObservation {
   action: string | null;
   thought: string | null;
   stateIndex?: string;
@@ -111,7 +112,7 @@ export function recordStructuredObservationsFromMessages(input: {
         );
         factIds.push(...recordObservationPayload(parsed.payload, context, previousObservation));
         rememberObservation(parsed.payload, context, previousObservations);
-        collectProcedureTrace(procedureTraces, parsed.payload, context);
+        collectProcedureTrace(procedureTraces, parsed.payload, context, previousObservation);
       }
     }
     factIds.push(...recordProcedureTraces(procedureTraces));
@@ -155,7 +156,7 @@ export function recordStructuredObservationsFromEvidence(input: {
       );
       const recorded = recordObservationPayload(parsed.payload, baseContext, previousObservation);
       rememberObservation(parsed.payload, baseContext, previousObservations);
-      collectProcedureTrace(procedureTraces, parsed.payload, baseContext);
+      collectProcedureTrace(procedureTraces, parsed.payload, baseContext, previousObservation);
       if (recorded.length > 0) {
         factIds.push(...recorded);
         consumedEvidence.push(evidence);
@@ -235,6 +236,7 @@ function rememberObservation(
   const key = observationTemporalKey(payload, context);
   if (!key) return;
   const stateIndex = scalarField(payload, 'state_index') ?? scalarField(payload, 'step');
+  const accessibilityTree = stringField(payload, 'accessibility_tree');
   const current: UiActionTrailEntry = {
     action: stringField(payload, 'action'),
     thought: stringField(payload, 'thought'),
@@ -244,6 +246,7 @@ function rememberObservation(
     action: current.action,
     thought: current.thought,
     ...(stateIndex ? { stateIndex } : {}),
+    accessibilityTree,
     recentActionTrail: [
       ...(previousObservations.get(key)?.recentActionTrail ?? []),
       current,
@@ -251,7 +254,9 @@ function rememberObservation(
       .filter((entry) => entry.action || entry.thought || entry.stateIndex)
       .slice(-8),
   };
-  if (!previous.action && !previous.thought && !previous.stateIndex) return;
+  if (!previous.action && !previous.thought && !previous.stateIndex && !previous.accessibilityTree) {
+    return;
+  }
   previousObservations.set(key, previous);
 }
 

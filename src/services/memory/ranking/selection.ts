@@ -306,11 +306,13 @@ function procedureMaxStateNumber(fact: MemoryFact): number | null {
   return maxState;
 }
 
-function hasDownstreamProcedureEvidence(outcome: MemoryFact, procedure: MemoryFact): boolean {
+function hasWorkflowProcedureEvidence(outcome: MemoryFact, procedure: MemoryFact): boolean {
   const outcomeState = factStateNumber(outcome);
   const maxProcedureState = procedureMaxStateNumber(procedure);
-  if (outcomeState === null || maxProcedureState === null) return false;
-  return maxProcedureState > outcomeState + 1;
+  const stepCount = procedureStepCount(procedure) ?? 0;
+  if (stepCount <= 1) return false;
+  if (outcomeState === null || maxProcedureState === null) return stepCount > 1;
+  return maxProcedureState >= outcomeState;
 }
 
 export function workflowProcedureRepresentativeForOutcome(
@@ -321,7 +323,7 @@ export function workflowProcedureRepresentativeForOutcome(
   let best: MemoryFact | null = null;
   for (const procedure of procedures) {
     if (procedure.sourceRunId !== outcome.sourceRunId) continue;
-    if (!hasDownstreamProcedureEvidence(outcome, procedure)) continue;
+    if (!hasWorkflowProcedureEvidence(outcome, procedure)) continue;
     if (!best) {
       best = procedure;
       continue;
@@ -349,7 +351,7 @@ export function primaryWorkflowRepresentative(
     if (candidate.fact.sourceRunId !== entry.fact.sourceRunId) continue;
     if (candidate.fact.memoryKind !== 'procedure') continue;
     if (candidate.score < minScore && candidate.relevanceScore < threshold) continue;
-    if (!hasDownstreamProcedureEvidence(entry.fact, candidate.fact)) continue;
+    if (!hasWorkflowProcedureEvidence(entry.fact, candidate.fact)) continue;
     if (!bestProcedure || candidate.score > bestProcedure.score) {
       bestProcedure = candidate;
     }
