@@ -207,7 +207,6 @@ function compactProcedureStep(step: unknown): Record<string, unknown> | null {
   copyScalar('outcome');
   return Object.keys(compact).length > 0 ? compact : null;
 }
-
 function compactProcedureTargetControl(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const input = value as Record<string, unknown>;
@@ -215,6 +214,12 @@ function compactProcedureTargetControl(value: unknown): Record<string, unknown> 
     nodeId: typeof input.nodeId === 'string' ? fitText(input.nodeId, 80) : undefined,
     role: typeof input.role === 'string' ? fitText(input.role, 80) : undefined,
     name: typeof input.name === 'string' ? fitText(input.name, 160) : undefined,
+    peerNames: Array.isArray(input.peerNames)
+      ? input.peerNames
+          .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+          .map((entry) => fitText(entry, 160))
+          .slice(0, 8)
+      : undefined,
   });
   return Object.keys(compact).length > 0 ? compact : null;
 }

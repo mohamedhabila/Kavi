@@ -9,11 +9,12 @@ import type { RecallFactsOptions, ScoredFact } from './factRecallTypes';
 import {
   compareSupportCandidates,
   sourceRunStateKey,
-  sourceRunSupportContexts,
 } from './ranking/selection';
 import { isActionResultOutcome, supportEvidenceRichness } from './factRecallSupport';
+import { parseJsonRecord } from './factJson';
 
-const SOURCE_RUN_SUPPORT_FORWARD_RADIUS = 16;
+const PROCEDURE_UI_SUPPORT_FORWARD_RADIUS = 2;
+const PROCEDURE_UI_SUPPORT_CONTEXT_LIMIT = 2;
 const SOURCE_RUN_SUPPORT_FORWARD_STATE_LIMIT = 16;
 
 type ProcedureSupportOverflowPolicy = 'default' | 'replace_unrelated_context';
@@ -298,6 +299,51 @@ function isUiProcedureSupportAnchor(fact: MemoryFact): boolean {
   );
 }
 
+function procedureEndpointSupportContexts(
+  fact: MemoryFact,
+): Array<{ sourceRunId: string; stateIndex: string | number }> {
+  if (fact.memoryKind !== 'procedure' || !fact.sourceRunId) return [];
+  const parsed = parseJsonRecord(fact.objectText);
+  if (!parsed) return [];
+  const contexts: Array<{ sourceRunId: string; stateIndex: string | number }> = [];
+  const seen = new Set<string>();
+  const add = (value: unknown): void => {
+    if (contexts.length >= PROCEDURE_UI_SUPPORT_CONTEXT_LIMIT) return;
+    const stateIndex = stateIndexValue(value);
+    if (stateIndex === null) return;
+    const key = String(stateIndex);
+    if (seen.has(key)) return;
+    seen.add(key);
+    contexts.push({ sourceRunId: fact.sourceRunId as string, stateIndex });
+  };
+
+  addStateSequence(parsed.actionTransitions, (entry) => {
+    add(entry.toStateIndex);
+    add(entry.fromStateIndex);
+  });
+  addStateSequence(parsed.surfaceTrail, (entry) => add(entry.stateIndex));
+  addStateSequence(parsed.steps, (entry) => add(entry.stateIndex));
+  return contexts;
+}
+
+function addStateSequence(
+  value: unknown,
+  addEntry: (entry: Record<string, unknown>) => void,
+): void {
+  if (!Array.isArray(value)) return;
+  for (let index = value.length - 1; index >= 0; index -= 1) {
+    const entry = value[index];
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    addEntry(entry as Record<string, unknown>);
+  }
+}
+
+function stateIndexValue(value: unknown): string | number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  return null;
+}
+
 function insertProcedureUiSupport(params: Parameters<typeof insertProcedureLocalSupport>[0]): void {
   if (params.uiSupportBudget <= 0 || params.selected.length === 0) return;
   let inserted = 0;
@@ -307,11 +353,6 @@ function insertProcedureUiSupport(params: Parameters<typeof insertProcedureLocal
       .map((fact) => sourceRunStateKey(fact))
       .filter(Boolean),
   );
-  const hasSelectedUiInventoryForSource = (sourceRunId: string): boolean =>
-    params.selected.some(
-      (fact) => fact.sourceRunId === sourceRunId && fact.memoryKind === 'ui_inventory',
-    );
-
   for (
     let index = 0;
     index < params.selected.length && inserted < params.uiSupportBudget;
@@ -319,12 +360,12 @@ function insertProcedureUiSupport(params: Parameters<typeof insertProcedureLocal
   ) {
     const anchor = params.selected[index];
     if (anchor.memoryKind !== 'procedure' || !anchor.sourceRunId) continue;
-    if (hasSelectedUiInventoryForSource(anchor.sourceRunId)) continue;
-    const contexts = sourceRunSupportContexts([anchor], params.scored);
+    const contexts = procedureEndpointSupportContexts(anchor);
     if (contexts.length === 0) continue;
     const supportFacts = listFactsForSourceRunForwardWindows(contexts, {
       memoryKind: ['ui_inventory'],
-      forwardRadius: SOURCE_RUN_SUPPORT_FORWARD_RADIUS,
+      forwardRadius: PROCEDURE_UI_SUPPORT_FORWARD_RADIUS,
+      includeAnchorState: true,
       stateLimit: SOURCE_RUN_SUPPORT_FORWARD_STATE_LIMIT,
       limit: contexts.length * SOURCE_RUN_SUPPORT_FORWARD_STATE_LIMIT,
       ...(params.candidateScopes ? { scope: params.candidateScopes } : {}),
@@ -360,28 +401,34 @@ function insertProcedureUiSupport(params: Parameters<typeof insertProcedureLocal
         }),
       }))
       .sort((left, right) => {
+        const scoredDiff = compareSupportCandidates(left, right);
+        if (scoredDiff !== 0) return scoredDiff;
         const richnessDiff =
           supportEvidenceRichness(right.fact) - supportEvidenceRichness(left.fact);
         if (richnessDiff !== 0) return richnessDiff;
-        return compareSupportCandidates(left, right);
+        return 0;
       });
-    const support = supportEntries[0];
-    if (!support) continue;
-    const didInsert = insertSupportAfterAnchor({
-      selected: params.selected,
-      seenIds: params.seenIds,
-      seenKeys: params.seenKeys,
-      scoredById: params.scoredById,
-      limit: params.limit,
-      anchorIndex: index,
-      supportFact: support.fact,
-      supportScore: support.scored,
-      seenKey: `procedure_local_support:${support.fact.id}`,
-      overflowPolicy: 'default',
-      protectedSourceRunId: anchor.sourceRunId,
-    });
-    if (!didInsert) continue;
-    inserted += 1;
-    index += 1;
+    let insertedForAnchor = 0;
+    for (const support of supportEntries) {
+      if (inserted >= params.uiSupportBudget) break;
+      if (params.seenIds.has(support.fact.id)) continue;
+      const didInsert = insertSupportAfterAnchor({
+        selected: params.selected,
+        seenIds: params.seenIds,
+        seenKeys: params.seenKeys,
+        scoredById: params.scoredById,
+        limit: params.limit,
+        anchorIndex: index + insertedForAnchor,
+        supportFact: support.fact,
+        supportScore: support.scored,
+        seenKey: `procedure_local_support:${support.fact.id}`,
+        overflowPolicy: 'default',
+        protectedSourceRunId: anchor.sourceRunId,
+      });
+      if (!didInsert) continue;
+      inserted += 1;
+      insertedForAnchor += 1;
+    }
+    index += insertedForAnchor;
   }
 }

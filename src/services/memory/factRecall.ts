@@ -535,6 +535,7 @@ async function buildRecallSelection(
         );
       },
     );
+    const selectedProcedureNeedsEndpointSupport = selectedProcedureSourceRuns.size > 0;
     insertProcedureLocalSupport({
       selected,
       seenIds,
@@ -542,7 +543,9 @@ async function buildRecallSelection(
       scoredById,
       scored,
       limit,
-      uiSupportBudget: Math.max(0, reservedSupportSlots - selectedUiSupportCount),
+      uiSupportBudget: selectedProcedureNeedsEndpointSupport
+        ? Math.max(1, reservedSupportSlots - selectedUiSupportCount)
+        : Math.max(0, reservedSupportSlots - selectedUiSupportCount),
       procedureSupportBudget: hasActionResultSupportAnchor ? 1 : 0,
       uiProcedureSupportBudget: hasUiProcedureSupportAnchor ? 1 : 0,
       candidateScopes,

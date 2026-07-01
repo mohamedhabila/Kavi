@@ -367,6 +367,7 @@ export function listFactsForSourceRunForwardWindows(
     | 'asOf'
   > & {
     forwardRadius?: number;
+    includeAnchorState?: boolean;
     limit?: number;
     stateLimit?: number;
   } = {},
@@ -396,6 +397,7 @@ export function listFactsForSourceRunForwardWindows(
   const limit = clampLimit(options.limit, uniqueContexts.length * stateLimit, MAX_FACT_LIMIT);
   const filter = buildFactFilter(options, 'f');
   const stateExpr = "CAST(json_extract(f.attributes, '$.stateIndex') AS REAL)";
+  const lowerBoundOperator = options.includeAnchorState ? '>=' : '>';
   const byId = new Map<string, MemoryFact>();
 
   for (const context of uniqueContexts) {
@@ -421,7 +423,7 @@ export function listFactsForSourceRunForwardWindows(
              ${whereSql({
                clauses: [
                  'f.source_run_id = ?',
-                 `${stateExpr} > ?`,
+                 `${stateExpr} ${lowerBoundOperator} ?`,
                  `${stateExpr} <= ?`,
                  ...filter.clauses,
                ],

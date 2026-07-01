@@ -11,8 +11,10 @@ const MAX_PROCEDURE_URL_CHARS = 260;
 const MAX_PROCEDURE_ACTION_CHARS = 220;
 const MAX_PROCEDURE_THOUGHT_CHARS = 320;
 const MAX_PROCEDURE_TARGET_CHARS = 160;
+const MAX_PROCEDURE_TARGET_PEER_NAMES = 8;
 const MAX_PROCEDURE_STEPS_FOR_STORAGE = 36;
 const NON_ENVIRONMENT_PROCEDURE_ACTIONS = new Set(['send_msg_to_user']);
+const TARGET_PEER_CONTEXT_ROLES = new Set(['listitem', 'menuitem', 'option']);
 
 type JsonRecord = Record<string, unknown>;
 
@@ -280,11 +282,11 @@ function targetControlForAction(
 function targetControlFromTree(accessibilityTree: string, targetRef: string): JsonRecord | null {
   const nodes = parseAccessibilityTree(accessibilityTree);
   const byNodeId = nodes.find((node) => node.nodeId === targetRef);
-  if (byNodeId) return compactTargetNode(byNodeId);
+  if (byNodeId) return compactTargetNode(nodes, byNodeId);
   const byName = nodes.find(
     (node) => node.name?.trim() === targetRef && isInteractiveUiNode(node),
   );
-  return byName ? compactTargetNode(byName) : null;
+  return byName ? compactTargetNode(nodes, byName) : null;
 }
 
 function firstActionTargetRef(action: string): string | null {
@@ -296,22 +298,94 @@ function firstActionTargetRef(action: string): string | null {
   return firstArg && /^[A-Za-z0-9_.:-]+$/.test(firstArg) ? firstArg : null;
 }
 
-function compactTargetNode(node: AccessibilityNode): JsonRecord {
+function compactTargetNode(nodes: AccessibilityNode[], node: AccessibilityNode): JsonRecord {
   return dropEmpty({
     nodeId: node.nodeId,
     role: fitProcedureText(node.role, 80),
-    name: fitProcedureText(node.name, MAX_PROCEDURE_TARGET_CHARS),
+    name: fitProcedureText(accessibleNodeName(nodes, node), MAX_PROCEDURE_TARGET_CHARS),
+    peerNames: TARGET_PEER_CONTEXT_ROLES.has(node.role.toLocaleLowerCase())
+      ? peerControlNames(nodes, node)
+      : undefined,
   });
 }
 
 function compactProcedureTargetControl(value: unknown): JsonRecord | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const target = value as JsonRecord;
+  const peerNames = Array.isArray(target.peerNames)
+    ? target.peerNames
+        .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+        .map((entry) => fitProcedureText(entry, MAX_PROCEDURE_TARGET_CHARS))
+        .filter((entry): entry is string => Boolean(entry))
+        .slice(0, MAX_PROCEDURE_TARGET_PEER_NAMES)
+    : undefined;
   return dropEmpty({
     nodeId: fitProcedureText(stringField(target, 'nodeId'), 80),
     role: fitProcedureText(stringField(target, 'role'), 80),
     name: fitProcedureText(stringField(target, 'name'), MAX_PROCEDURE_TARGET_CHARS),
+    peerNames,
   });
+}
+
+function accessibleNodeName(nodes: AccessibilityNode[], node: AccessibilityNode): string | null {
+  const ownName = node.name?.trim();
+  if (ownName) return ownName;
+  return descendantText(nodes, node);
+}
+
+function peerControlNames(nodes: AccessibilityNode[], node: AccessibilityNode): string[] {
+  const parent = parentNode(nodes, node);
+  if (!parent) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const end = subtreeEndIndex(nodes, parent.index);
+  for (let index = parent.index + 1; index < end; index += 1) {
+    const sibling = nodes[index];
+    if (sibling.indent !== node.indent || !isPeerTargetNode(node, sibling)) continue;
+    const name = accessibleNodeName(nodes, sibling);
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    out.push(name);
+    if (out.length >= MAX_PROCEDURE_TARGET_PEER_NAMES) break;
+  }
+  return out.length > 1 ? out : [];
+}
+
+function isPeerTargetNode(target: AccessibilityNode, candidate: AccessibilityNode): boolean {
+  return candidate.role === target.role || isInteractiveUiNode(candidate);
+}
+
+function descendantText(nodes: AccessibilityNode[], node: AccessibilityNode): string | null {
+  const parts: string[] = [];
+  const seen = new Set<string>();
+  const end = subtreeEndIndex(nodes, node.index);
+  for (let index = node.index + 1; index < end; index += 1) {
+    const child = nodes[index];
+    if (isInteractiveUiNode(child)) continue;
+    const name = child.name?.trim();
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    parts.push(name);
+    if (parts.length >= 4) break;
+  }
+  return parts.length > 0 ? parts.join(' ') : null;
+}
+
+function parentNode(nodes: AccessibilityNode[], node: AccessibilityNode): AccessibilityNode | null {
+  for (let index = node.index - 1; index >= 0; index -= 1) {
+    const candidate = nodes[index];
+    if (candidate.indent < node.indent) return candidate;
+  }
+  return null;
+}
+
+function subtreeEndIndex(nodes: AccessibilityNode[], startIndex: number): number {
+  const root = nodes[startIndex];
+  if (!root) return startIndex;
+  for (let index = startIndex + 1; index < nodes.length; index += 1) {
+    if (nodes[index].indent <= root.indent) return index;
+  }
+  return nodes.length;
 }
 
 function capProcedureStepsForStorage(steps: JsonRecord[], maxSteps: number): JsonRecord[] {
