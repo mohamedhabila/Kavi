@@ -5,20 +5,8 @@
 // assembler is intentionally pure — it does not touch the network and does
 // not read from any global state. All inputs are passed in explicitly so the
 // orchestrator stays in charge of fact retrieval, focus rendering, etc.
-//
-// Layer layout:
-//
-//   L1  Stable system prompt    — base instructions, tool style guidance.
-//   ────── cache breakpoint ──────  (stable assistant/runtime policy)
-//   L2  Persistent memory       — pinned blocks (profile / persona / prefs)
-//                                 followed by entity dossier (canonicalized).
-//   L3  Per-turn context        — focus block + retrieved facts + open threads.
-//   L4  User turn               — handled by caller as a message, NOT a section.
-//
-// The user-turn layer (L4) is intentionally NOT emitted by this module — it
-// is sent as a real `user` message in the request payload, not as system
-// content. Attachments belong to L4 as well (kept out of cached sections to
-// avoid invalidating provider caches on image-bearing turns).
+// L1/L2 sections are stable policy and persistent memory; L3 is per-turn
+// context. The live user turn remains a real user message outside this module.
 // ---------------------------------------------------------------------------
 
 import type { MemoryBlock } from './blocks';
@@ -95,10 +83,10 @@ const L3_UI_SNAPSHOT_NOTE =
   'UI inventories are observed evidence for a specific URL/state. Listed controls, stateFields, fields, field displayText, field symbolMarkers, sections, table interactiveControls, and paths were visible; if the identified surface lacks a requested control, answer that no such control/options are present, not unknown. stateFields are compact fields with observed checked/selected/disabled/expanded state. sectionOutline is a compact ordered map of visible regions. landmarkRows summarize section labels, controls, and text by accessibility landmark. sectionRows group controls and text by observed region; use landmarkRole and structuralPath as layout evidence when a question refers to page region or position. precedingControls are sibling controls immediately before that section body. landmarkRole follows accessibility landmarks: main is primary content; complementary is supporting secondary content. queryQuotedControlLabelEvidence is exact quoted control-label evidence; unmatched quoted spans may be values, IDs, names, or content. Table columnLabels name columns; table interactiveControls are the observed controls inside that table. rowCount is the observed table cardinality for that snapshot; do not infer extra directly visible rows beyond rowCount. Treat rowSample values as content, not controls, unless found in interactiveControls or another control field. Use exact labels/values without renaming them or inferring absent statuses. Table schema, dates, and counters are not members of an ordered row-value sequence unless inside that row. Count ordinals only within the requested role/context. Past-end ordered options are absent.';
 const L3_PROCEDURES_HEADER = '#### Procedures';
 const L3_PROCEDURES_NOTE =
-  'Procedure traces are observed action-history evidence. Treat successful traces as stronger action guidance; treat failed traces as evidence for actions that did not complete the goal. Do not infer unobserved screens, controls, or workflow steps from platform conventions; when the trace shows fewer relevant visible phases than a requested ordinal, treat the missing ordinal as observed absence.';
+  'Procedure traces are observed action-history evidence. actionTransitions compactly show adjacent state changes: observedAction is the recorded action that led from fromStateIndex/fromUrl into toStateIndex/toUrl. For action guidance, compare the direct observed transition with the user requested destination before suggesting follow-up steps. Treat successful traces as stronger action guidance; treat failed traces as evidence for actions that did not complete the goal. Do not infer unobserved screens, controls, or workflow steps from platform conventions; when the trace shows fewer relevant visible phases than a requested ordinal, treat the missing ordinal as observed absence.';
 const L3_OUTCOMES_HEADER = '#### Outcomes and Gotchas';
 const L3_OUTCOMES_NOTE =
-  'Action-result memories may include recentActionTrail, stateTransition, immediatePriorObservation, and resultingObservation. recentActionTrail is bounded same-source history before the resulting state; stateTransition is the observed next action from a prior state into the resulting state. Use them as direct action memory when the current user is at a matching screen/state.';
+  'Action-result memories may include recentActionTrail, stateTransition, immediatePriorObservation, and resultingObservation. recentActionTrail is bounded same-source history before the resulting state; stateTransition is the observed action that led from the prior state into the resulting state. arrivalAction is the action recorded as entering that observation; stateThought is the rationale recorded at that observation. Use them as direct action memory when the current user is at a matching screen/state.';
 const L3_EPISODES_HEADER = '### Recent Activity';
 const MAX_RENDERED_FACT_CHARS = 3_200;
 const MAX_RENDERED_PROCEDURE_FACT_CHARS = 5_000;
@@ -107,6 +95,7 @@ const MAX_RETRIEVED_FACT_SECTION_CHARS = 3_400;
 const MAX_RENDERED_EPISODE_CHARS = 200;
 const MAX_PROCEDURE_STEP_TEXT_CHARS = 140;
 const MAX_PROCEDURE_SURFACE_TRAIL_ENTRIES = 16;
+const MAX_PROCEDURE_ACTION_TRANSITIONS = 12;
 
 function hasPromptUiObservation(
   fact: PromptMemoryFact,
@@ -273,6 +262,60 @@ function capProcedureSurfaceTrail(trail: Record<string, unknown>[]): Record<stri
   return capped;
 }
 
+function capProcedureActionTransitions(
+  transitions: Record<string, unknown>[],
+): Record<string, unknown>[] {
+  if (transitions.length <= MAX_PROCEDURE_ACTION_TRANSITIONS) return transitions;
+  const headCount = Math.ceil(MAX_PROCEDURE_ACTION_TRANSITIONS / 2);
+  const tailCount = Math.floor(MAX_PROCEDURE_ACTION_TRANSITIONS / 2);
+  return [...transitions.slice(0, headCount), ...transitions.slice(-tailCount)];
+}
+
+function compactProcedureActionTransitions(steps: unknown): Record<string, unknown>[] | null {
+  if (!Array.isArray(steps)) return null;
+  const transitions: Record<string, unknown>[] = [];
+  for (let index = 0; index < steps.length - 1; index += 1) {
+    const fromStep = steps[index];
+    const toStep = steps[index + 1];
+    if (
+      !fromStep ||
+      typeof fromStep !== 'object' ||
+      Array.isArray(fromStep) ||
+      !toStep ||
+      typeof toStep !== 'object' ||
+      Array.isArray(toStep)
+    ) {
+      continue;
+    }
+    const from = fromStep as Record<string, unknown>;
+    const to = toStep as Record<string, unknown>;
+    const action = to.action;
+    if (typeof action !== 'string' || !action.trim()) continue;
+    const fromStateIndex = from.stateIndex ?? from.state_index;
+    const toStateIndex = to.stateIndex ?? to.state_index;
+    const transition = dropEmptyPromptRecord({
+      fromStateIndex:
+        typeof fromStateIndex === 'string'
+          ? fitText(fromStateIndex, 24)
+          : typeof fromStateIndex === 'number'
+            ? fromStateIndex
+            : undefined,
+      observedAction: fitText(action, 120),
+      targetControl: compactProcedureTargetControl(to.targetControl),
+      fromUrl: typeof from.url === 'string' ? fitText(from.url, 180) : undefined,
+      toStateIndex:
+        typeof toStateIndex === 'string'
+          ? fitText(toStateIndex, 24)
+          : typeof toStateIndex === 'number'
+            ? toStateIndex
+            : undefined,
+      toUrl: typeof to.url === 'string' ? fitText(to.url, 180) : undefined,
+    });
+    if (Object.keys(transition).length > 0) transitions.push(transition);
+  }
+  return transitions.length > 0 ? capProcedureActionTransitions(transitions) : null;
+}
+
 function compactProcedureSurfaceTrail(steps: unknown): Record<string, unknown>[] | null {
   if (!Array.isArray(steps)) return null;
   const trail: Record<string, unknown>[] = [];
@@ -309,6 +352,8 @@ function compactProcedurePromptFields(parsed: Record<string, unknown> | null): s
   copyField('domain');
   copyField('environment');
   copyField('stepCount');
+  const actionTransitions = compactProcedureActionTransitions(parsed.steps);
+  if (actionTransitions) compact.actionTransitions = actionTransitions;
   const surfaceTrail = compactProcedureSurfaceTrail(parsed.steps);
   if (surfaceTrail) compact.surfaceTrail = surfaceTrail;
   if (Array.isArray(parsed.steps)) {
@@ -347,11 +392,11 @@ function compactActionResultPromptFields(
   const previousThought = readField('previousThought');
   const previousStateIndex = readField('previousStateIndex');
   if (previousAction !== undefined && previousAction !== null && previousAction !== '') {
-    immediatePriorObservation.action =
+    immediatePriorObservation.arrivalAction =
       typeof previousAction === 'string' ? fitText(previousAction, 700) : previousAction;
   }
   if (previousThought !== undefined && previousThought !== null && previousThought !== '') {
-    immediatePriorObservation.thought =
+    immediatePriorObservation.stateThought =
       typeof previousThought === 'string' ? fitText(previousThought, 700) : previousThought;
   }
   if (
@@ -362,16 +407,24 @@ function compactActionResultPromptFields(
     immediatePriorObservation.stateIndex = previousStateIndex;
   }
 
-  copyField(resultingObservation, 'action');
-  copyField(resultingObservation, 'thought');
+  const currentAction = readField('action');
+  const currentThought = readField('thought');
+  if (currentAction !== undefined && currentAction !== null && currentAction !== '') {
+    resultingObservation.arrivalAction =
+      typeof currentAction === 'string' ? fitText(currentAction, 700) : currentAction;
+  }
+  if (currentThought !== undefined && currentThought !== null && currentThought !== '') {
+    resultingObservation.stateThought =
+      typeof currentThought === 'string' ? fitText(currentThought, 700) : currentThought;
+  }
   copyField(resultingObservation, 'outcome');
   copyField(resultingObservation, 'stateIndex');
   if (Object.keys(immediatePriorObservation).length > 0) {
     stateTransition = dropEmptyPromptRecord({
       fromStateIndex: immediatePriorObservation.stateIndex,
-      nextObservedAction: resultingObservation.action,
+      observedAction: resultingObservation.arrivalAction,
       toStateIndex: resultingObservation.stateIndex,
-      priorStateRationale: immediatePriorObservation.thought,
+      priorStateRationale: immediatePriorObservation.stateThought,
     });
   }
 
@@ -389,10 +442,10 @@ function compactActionResultPromptFields(
 
   const primaryTexts = new Set(
     [
-      immediatePriorObservation.action,
-      immediatePriorObservation.thought,
-      resultingObservation.action,
-      resultingObservation.thought,
+      immediatePriorObservation.arrivalAction,
+      immediatePriorObservation.stateThought,
+      resultingObservation.arrivalAction,
+      resultingObservation.stateThought,
       resultingObservation.outcome,
     ]
       .filter((value): value is string => typeof value === 'string')
@@ -513,16 +566,12 @@ function groupRetrievedFacts(facts: PromptMemoryFact[]): Array<{
   header: string;
   facts: PromptMemoryFact[];
 }> {
-  const orderedHeaders = [
-    L3_RELEVANT_FACTS_HEADER,
-    L3_UI_HEADER,
-    L3_PROCEDURES_HEADER,
-    L3_OUTCOMES_HEADER,
-  ];
   const byHeader = new Map<string, PromptMemoryFact[]>();
+  const orderedHeaders: string[] = [];
   for (const fact of facts) {
     const header = factGroupHeader(fact);
     const list = byHeader.get(header) ?? [];
+    if (list.length === 0) orderedHeaders.push(header);
     list.push(fact);
     byHeader.set(header, list);
   }

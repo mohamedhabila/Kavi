@@ -57,7 +57,6 @@ const MAX_LIMIT = 50;
 const DEFAULT_CANDIDATE_POOL_LIMIT = 128;
 const DEFAULT_THRESHOLD = 0.01;
 const SIGNAL_RANK_FUSION_K = 60;
-const SIGNAL_ORDER_DECAY = 0.85;
 
 interface SignalRecallEntry {
   entry: ScoredFact;
@@ -140,10 +139,9 @@ function mergeSignalRecalls(
   const byFactId = new Map<string, SignalRecallEntry>();
 
   signalRecalls.forEach((recall, signalIndex) => {
-    const signalWeight = SIGNAL_ORDER_DECAY ** signalIndex;
     recall.forEach((entry, rankIndex) => {
       const rank = rankIndex + 1;
-      const contribution = signalWeight / (SIGNAL_RANK_FUSION_K + rank);
+      const contribution = 1 / (SIGNAL_RANK_FUSION_K + rank);
       const existing = byFactId.get(entry.fact.id);
       if (!existing) {
         byFactId.set(entry.fact.id, {

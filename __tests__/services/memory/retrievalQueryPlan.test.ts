@@ -34,4 +34,39 @@ describe('planRetrievalSignals', () => {
       'Return qformat-tail only.',
     ]);
   });
+
+  it('keeps later non-machine lines in a compact whole-message signal', () => {
+    const plan = planRetrievalSignals([
+      [
+        'Find qimage-target evidence on the active surface.',
+        'qfirst-detail-line describes the currently visible source.',
+        'qsecond-detail-line describes the visible destination state.',
+        'qthird-detail-line describes the relevant control.',
+        'qfourth-detail-line describes the result.',
+        'qimage-detail-line describes the visible destination state.',
+      ].join('\n'),
+    ]);
+
+    expect(plan.primarySignals[0]).toBe('Find qimage-target evidence on the active surface.');
+    expect(plan.primarySignals[1]).toContain('qimage-target');
+    expect(plan.primarySignals[1]).toContain('qimage-detail-line');
+  });
+
+  it('drops standalone structural markers without dropping later content lines', () => {
+    const plan = planRetrievalSignals([
+      [
+        'Find qimage-target evidence on the active surface.',
+        '<attachment>',
+        '[1]',
+        'metadata:',
+        'qimage-detail-line describes the visible destination state.',
+      ].join('\n'),
+    ]);
+
+    expect(plan.primarySignals).toEqual([
+      'Find qimage-target evidence on the active surface.',
+      'qimage-detail-line describes the visible destination state.',
+    ]);
+    expect(plan.droppedSignals).toEqual(['<attachment>', '[1]', 'metadata:']);
+  });
 });

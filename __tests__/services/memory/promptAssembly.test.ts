@@ -113,18 +113,18 @@ describe('assemblePrompt memory ordering', () => {
       basePrompt: 'base',
       retrievedFacts: [
         fact(
+          'procedure',
+          'procedure',
+          JSON.stringify({
+            steps: [{ action: "tap('qstart')", thought: 'qprocedure-step' }],
+          }),
+        ),
+        fact(
           'action-outcome',
           'outcome',
           JSON.stringify({
             action: "tap('qfinish')",
             thought: 'qoutcome-detail',
-          }),
-        ),
-        fact(
-          'procedure',
-          'procedure',
-          JSON.stringify({
-            steps: [{ action: "tap('qstart')", thought: 'qprocedure-step' }],
           }),
         ),
       ],
@@ -199,8 +199,55 @@ describe('assemblePrompt memory ordering', () => {
     const promptText = sections.join('\n');
 
     expect(promptText).toContain('"surfaceTrail"');
+    expect(promptText).toContain('"actionTransitions"');
+    expect(promptText).toContain('"fromStateIndex":"0"');
+    expect(promptText).toContain("\"observedAction\":\"tap('1')\"");
+    expect(promptText).toContain('"toStateIndex":"1"');
+    expect(promptText).toContain('"toUrl":"https://mobile.example.test/account/summary"');
     expect(promptText).toContain('"url":"https://mobile.example.test/account/summary"');
+    expect(promptText.indexOf('"actionTransitions"')).toBeLessThan(
+      promptText.indexOf('"surfaceTrail"'),
+    );
     expect(promptText.indexOf('"surfaceTrail"')).toBeLessThan(promptText.indexOf('"steps"'));
+  });
+
+  it('preserves retrieved group order so top-ranked procedures are not buried under UI', () => {
+    const sections = assemblePrompt({
+      basePrompt: 'base',
+      retrievedFacts: [
+        fact(
+          'ranked-procedure',
+          'procedure',
+          JSON.stringify({
+            sourceRunId: 'run-ranked-procedure',
+            steps: [
+              {
+                stateIndex: '0',
+                url: 'https://mobile.example.test/start',
+              },
+              {
+                stateIndex: '1',
+                url: 'https://mobile.example.test/result',
+                action: "tap('qprimary-action')",
+              },
+            ],
+          }),
+        ),
+        fact(
+          'later-ui',
+          'ui_inventory',
+          JSON.stringify({
+            url: 'https://mobile.example.test/result',
+            surfaceLabels: ['qlater-ui-surface'],
+          }),
+        ),
+      ],
+    }).sections.map((section) => section.text);
+    const promptText = sections.join('\n');
+
+    expect(promptText.indexOf('#### Procedures')).toBeLessThan(
+      promptText.indexOf('#### Observed UI and Surface Schema'),
+    );
   });
 
   it('renders section text before detailed control inventories in UI memory', () => {
@@ -391,7 +438,7 @@ describe('assemblePrompt memory ordering', () => {
     expect(promptText.indexOf('#### Observed UI and Surface Schema')).toBeLessThan(
       promptText.indexOf('#### Outcomes and Gotchas'),
     );
-    expect(promptText).toContain('"action":"click');
+    expect(promptText).toContain('"arrivalAction":"click');
     expect(promptText).toContain('qpost-action-screen');
     expect(promptText).toContain('qadded-notice');
     expect(promptText).toContain('qquantity');
@@ -468,7 +515,9 @@ describe('assemblePrompt memory ordering', () => {
 
     expect(promptText).toContain('stateTransition');
     expect(promptText).toContain('recentActionTrail');
-    expect(promptText).toContain('nextObservedAction');
+    expect(promptText).toContain('observedAction');
+    expect(promptText).toContain('arrivalAction');
+    expect(promptText).toContain('stateThought');
     expect(promptText).toContain('immediatePriorObservation');
     expect(promptText).toContain('resultingObservation');
     expect(promptText).toContain('qtrail-prerequisite-tail');

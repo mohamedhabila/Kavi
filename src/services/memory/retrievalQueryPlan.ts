@@ -20,6 +20,8 @@ const FUNCTION_SIGNATURE_PATTERN = /[\p{L}_][\p{L}\p{N}_-]*\([^)]*\)/gu;
 const MACHINE_PUNCTUATION_PATTERN = /[{}()[\]<>_=|,:;]/g;
 const QUOTED_SPAN_PATTERN = /`([^`]{1,160})`|"([^"]{1,160})"|'([^']{1,160})'/gu;
 const WHITESPACE_PATTERN = /\s+/g;
+const WRAPPED_MARKER_PATTERN = /^(?:<[^<>]{1,80}>|\[[^\[\]]{1,80}\])$/u;
+const LABEL_MARKER_PATTERN = /^[\p{L}\p{M}\p{N}\s#._/-]{1,80}:$/u;
 
 export function planRetrievalSignals(rawSignals: ReadonlyArray<string>): RetrievalQueryPlan {
   const primarySignals: string[] = [];
@@ -31,7 +33,7 @@ export function planRetrievalSignals(rawSignals: ReadonlyArray<string>): Retriev
     if (!signal) continue;
 
     const extracted: string[] = [];
-    let keptAnyLine = false;
+    const keptLines: string[] = [];
     for (const rawLine of rawSignal.split(/\r?\n/)) {
       const line = normalizeSignal(rawLine);
       if (!line) continue;
@@ -39,13 +41,26 @@ export function planRetrievalSignals(rawSignals: ReadonlyArray<string>): Retriev
         droppedSignals.push(line);
         continue;
       }
+      if (isStructuralMarkerLine(line)) {
+        droppedSignals.push(line);
+        continue;
+      }
       for (const span of extractQuotedSpans(line)) addUniqueSignal(extracted, span, MAX_EXTRACTED_SPANS);
-      addUniqueSignal(primarySignals, fitSignal(line), MAX_PRIMARY_SIGNALS);
-      keptAnyLine = true;
+      keptLines.push(line);
+    }
+
+    if (keptLines.length > 0) {
+      addUniqueSignal(primarySignals, fitSignal(keptLines[0] ?? ''), MAX_PRIMARY_SIGNALS);
+      if (keptLines.length > MAX_PRIMARY_SIGNALS) {
+        addUniqueSignal(primarySignals, fitSignal(keptLines.join(' ')), MAX_PRIMARY_SIGNALS);
+      }
+      for (const line of keptLines.slice(1)) {
+        addUniqueSignal(primarySignals, fitSignal(line), MAX_PRIMARY_SIGNALS);
+      }
     }
     for (const span of extracted) addUniqueSignal(supportingSignals, span, MAX_SUPPORTING_SIGNALS);
 
-    if (!keptAnyLine) {
+    if (keptLines.length === 0) {
       for (const span of extracted) addUniqueSignal(primarySignals, span, MAX_PRIMARY_SIGNALS);
     }
   }
@@ -79,6 +94,13 @@ function isMachineDenseLine(line: string): boolean {
   const punctuationCount = Array.from(line.matchAll(MACHINE_PUNCTUATION_PATTERN)).length;
   const punctuationRatio = punctuationCount / Math.max(1, line.length);
   return punctuationRatio >= 0.12;
+}
+
+function isStructuralMarkerLine(line: string): boolean {
+  if (WRAPPED_MARKER_PATTERN.test(line)) return true;
+  if (!LABEL_MARKER_PATTERN.test(line)) return false;
+  const lexicalUnits = Array.from(line.matchAll(/[\p{L}\p{M}\p{N}]+/gu)).length;
+  return lexicalUnits <= 6;
 }
 
 function fitSignal(value: string): string {

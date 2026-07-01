@@ -339,6 +339,100 @@ describe('orchestrateMemoryRetrieval', () => {
     expect(result.facts.some((fact) => fact.id === tailFact.id)).toBe(false);
   });
 
+  it('uses content-bearing attachment lines without recalling standalone markers', async () => {
+    const surface = upsertEntity({
+      name: 'surface:https://attachment-signal.example.test',
+      type: 'project',
+    });
+    const relevant = recordFact({
+      subjectId: surface.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({
+        url: 'https://attachment-signal.example.test/current',
+        surfaceLabels: ['qattachment-detail-token'],
+        controlNames: ['qattachment-action-token'],
+      }),
+      memoryKind: 'ui_inventory',
+      scope: 'conversation',
+      originConversationId: 'conv-attachment-signal',
+      now: 1,
+    }).fact;
+
+    const result = await orchestrateMemoryRetrieval({
+      userMessage: [
+        'Find the current attached surface evidence.',
+        '<attachment>',
+        '[1]',
+        'metadata:',
+        'qattachment-detail-token is visible beside qattachment-action-token.',
+      ].join('\n'),
+      conversationId: 'conv-attachment-signal',
+      limit: 1,
+      now: 2,
+    });
+
+    expect(result.querySignals).toEqual([
+      'Find the current attached surface evidence.',
+      'qattachment-detail-token is visible beside qattachment-action-token.',
+    ]);
+    expect(result.facts.map((fact) => fact.id)).toEqual([relevant.id]);
+  });
+
+  it('does not let broad earlier-signal matches crowd out precise later content', async () => {
+    const broadSurface = upsertEntity({
+      name: 'surface:https://broad-signal.example.test',
+      type: 'project',
+    });
+    const targetSurface = upsertEntity({
+      name: 'surface:https://precise-signal.example.test',
+      type: 'project',
+    });
+    for (let index = 0; index < 12; index += 1) {
+      recordFact({
+        subjectId: broadSurface.id,
+        predicate: 'ui_inventory',
+        objectText: JSON.stringify({
+          url: `https://broad-signal.example.test/${index}`,
+          controlNames: ['qbroad-anchor', `qbroad-noise-${index}`],
+        }),
+        memoryKind: 'ui_inventory',
+        scope: 'conversation',
+        originConversationId: 'conv-precise-later-signal',
+        now: index + 1,
+      });
+    }
+    const precise = recordFact({
+      subjectId: targetSurface.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({
+        url: 'https://precise-signal.example.test/current',
+        controlNames: ['qprecise-later-anchor'],
+      }),
+      memoryKind: 'ui_inventory',
+      scope: 'conversation',
+      originConversationId: 'conv-precise-later-signal',
+      now: 50,
+    }).fact;
+
+    const result = await orchestrateMemoryRetrieval({
+      userMessage: [
+        'Find qbroad-anchor on the current surface.',
+        '<attachment>',
+        '[1]',
+        'qprecise-later-anchor is visible on the attached current surface.',
+      ].join('\n'),
+      conversationId: 'conv-precise-later-signal',
+      limit: 8,
+      now: 100,
+    });
+
+    expect(result.querySignals).toEqual([
+      'Find qbroad-anchor on the current surface.',
+      'qprecise-later-anchor is visible on the attached current surface.',
+    ]);
+    expect(result.facts.some((fact) => fact.id === precise.id)).toBe(true);
+  });
+
   it('drops dense tool signatures while retaining natural query context', async () => {
     const adminSurface = upsertEntity({
       name: 'surface:https://admin.example.test',

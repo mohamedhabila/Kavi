@@ -554,17 +554,6 @@ describe('assemblePrompt — L3 contents', () => {
       basePrompt: 'BASE',
       retrievedFacts: [
         makeFact({
-          id: 'procedure-1',
-          subjectId: 'workflow:run-order',
-          predicate: 'procedure_trace',
-          memoryKind: 'procedure',
-          objectText: JSON.stringify({
-            sourceRunId: 'run-order',
-            trajectoryOutcome: 'success',
-            steps: [{ stateIndex: '1', action: "click('order')" }],
-          }),
-        }),
-        makeFact({
           id: 'ui-1',
           subjectId: 'workflow:run-order:state:7',
           predicate: 'ui_inventory',
@@ -578,6 +567,17 @@ describe('assemblePrompt — L3 contents', () => {
                 rowSamples: [{ Item: 'Macbook Pro', Stage: 'Observed approval chain' }],
               },
             ],
+          }),
+        }),
+        makeFact({
+          id: 'procedure-1',
+          subjectId: 'workflow:run-order',
+          predicate: 'procedure_trace',
+          memoryKind: 'procedure',
+          objectText: JSON.stringify({
+            sourceRunId: 'run-order',
+            trajectoryOutcome: 'success',
+            steps: [{ stateIndex: '1', action: "click('order')" }],
           }),
         }),
       ],
