@@ -218,6 +218,7 @@ describe('recallFactsForQuery - procedure representatives', () => {
       limit: 4,
       uiSupportBudget: 0,
       procedureSupportBudget: 1,
+      uiProcedureSupportBudget: 0,
       candidateScopes: undefined,
       options: {},
       scoringQueryUnits: new Set(['qshared', 'qstrong']),
@@ -236,4 +237,5 @@ describe('recallFactsForQuery - procedure representatives', () => {
     expect(selected.map((fact) => fact.id)).not.toContain(weakProcedure.id);
     expect(selected).toHaveLength(4);
   });
+
 });

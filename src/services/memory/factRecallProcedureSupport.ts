@@ -16,6 +16,8 @@ import { isActionResultOutcome, supportEvidenceRichness } from './factRecallSupp
 const SOURCE_RUN_SUPPORT_FORWARD_RADIUS = 16;
 const SOURCE_RUN_SUPPORT_FORWARD_STATE_LIMIT = 16;
 
+type ProcedureSupportOverflowPolicy = 'default' | 'replace_unrelated_context';
+
 export function insertProcedureLocalSupport(params: {
   selected: MemoryFact[];
   seenIds: Set<string>;
@@ -25,6 +27,7 @@ export function insertProcedureLocalSupport(params: {
   limit: number;
   uiSupportBudget: number;
   procedureSupportBudget: number;
+  uiProcedureSupportBudget: number;
   candidateScopes: MemoryFactScope[] | undefined;
   options: RecallFactsOptions;
   scoringQueryUnits: ReadonlySet<string>;
@@ -38,11 +41,13 @@ export function insertProcedureLocalSupport(params: {
   if (
     params.uiSupportBudget <= 0 &&
     params.procedureSupportBudget <= 0 &&
+    params.uiProcedureSupportBudget <= 0 &&
     params.selected.length === 0
   ) {
     return;
   }
   insertSelectedActionProcedureSupport(params);
+  insertSelectedUiProcedureSupport(params);
   insertProcedureUiSupport(params);
 }
 
@@ -51,27 +56,65 @@ function removeOverflowFact(params: {
   seenIds: Set<string>;
   insertedIndex: number;
   limit: number;
-}): void {
-  if (params.selected.length <= params.limit) return;
-  let removeIndex = -1;
-  for (let index = params.selected.length - 1; index >= 0; index -= 1) {
-    if (index === params.insertedIndex) continue;
-    if (params.selected[index].memoryKind === 'outcome') {
-      removeIndex = index;
-      break;
-    }
-  }
+  policy: ProcedureSupportOverflowPolicy;
+  protectedSourceRunId?: string;
+}): boolean {
+  if (params.selected.length <= params.limit) return true;
+  const removeIndex = overflowRemovalIndex(params);
   if (removeIndex < 0) {
-    for (let index = params.selected.length - 1; index >= 0; index -= 1) {
-      if (index !== params.insertedIndex) {
-        removeIndex = index;
-        break;
-      }
-    }
+    const [inserted] = params.selected.splice(params.insertedIndex, 1);
+    if (inserted) params.seenIds.delete(inserted.id);
+    return false;
   }
-  if (removeIndex < 0) return;
   const [removed] = params.selected.splice(removeIndex, 1);
   if (removed) params.seenIds.delete(removed.id);
+  return true;
+}
+
+function overflowRemovalIndex(params: {
+  selected: MemoryFact[];
+  insertedIndex: number;
+  policy: ProcedureSupportOverflowPolicy;
+  protectedSourceRunId?: string;
+}): number {
+  if (params.policy === 'replace_unrelated_context') {
+    const unrelatedProcedure = findOverflowIndex(
+      params,
+      (fact) =>
+        fact.memoryKind === 'procedure' &&
+        (!params.protectedSourceRunId || fact.sourceRunId !== params.protectedSourceRunId),
+    );
+    if (unrelatedProcedure >= 0) return unrelatedProcedure;
+    const unrelatedOutcome = findOverflowIndex(
+      params,
+      (fact) =>
+        fact.memoryKind === 'outcome' &&
+        (!params.protectedSourceRunId || fact.sourceRunId !== params.protectedSourceRunId),
+    );
+    if (unrelatedOutcome >= 0) return unrelatedOutcome;
+    return findOverflowIndex(
+      params,
+      (fact) => !params.protectedSourceRunId || fact.sourceRunId !== params.protectedSourceRunId,
+    );
+  }
+  const outcomeIndex = findOverflowIndex(params, (fact) => fact.memoryKind === 'outcome');
+  if (outcomeIndex >= 0) return outcomeIndex;
+  return findOverflowIndex(params, () => true);
+}
+
+function findOverflowIndex(
+  params: {
+    selected: MemoryFact[];
+    insertedIndex: number;
+  },
+  canRemove: (fact: MemoryFact) => boolean,
+): number {
+  for (let index = params.selected.length - 1; index >= 0; index -= 1) {
+    if (index === params.insertedIndex) continue;
+    const fact = params.selected[index];
+    if (fact && canRemove(fact)) return index;
+  }
+  return -1;
 }
 
 function insertSupportAfterAnchor(params: {
@@ -84,24 +127,75 @@ function insertSupportAfterAnchor(params: {
   supportFact: MemoryFact;
   supportScore: ScoredFact;
   seenKey: string;
-}): void {
+  overflowPolicy: ProcedureSupportOverflowPolicy;
+  protectedSourceRunId?: string;
+}): boolean {
   const insertedIndex = Math.min(params.anchorIndex + 1, params.selected.length);
   params.selected.splice(insertedIndex, 0, params.supportFact);
   params.seenIds.add(params.supportFact.id);
-  params.seenKeys.add(params.seenKey);
   params.scoredById.set(params.supportFact.id, params.supportScore);
-  removeOverflowFact({
+  const retained = removeOverflowFact({
     selected: params.selected,
     seenIds: params.seenIds,
     insertedIndex,
     limit: params.limit,
+    policy: params.overflowPolicy,
+    protectedSourceRunId: params.protectedSourceRunId,
   });
+  if (!retained) {
+    params.scoredById.delete(params.supportFact.id);
+    return false;
+  }
+  params.seenKeys.add(params.seenKey);
+  return true;
 }
 
 function insertSelectedActionProcedureSupport(
   params: Parameters<typeof insertProcedureLocalSupport>[0],
 ): void {
-  if (params.procedureSupportBudget <= 0) return;
+  insertSelectedProcedureSupportForAnchors({
+    params,
+    budget: params.procedureSupportBudget,
+    canAnchor: isActionResultOutcome,
+    allowOverflowReplacement: true,
+    requireSupportRelevance: false,
+    seenKeyPrefix: 'action_procedure_support',
+  });
+}
+
+function insertSelectedUiProcedureSupport(
+  params: Parameters<typeof insertProcedureLocalSupport>[0],
+): void {
+  insertSelectedProcedureSupportForAnchors({
+    params,
+    budget: params.uiProcedureSupportBudget,
+    canAnchor: isUiProcedureSupportAnchor,
+    allowOverflowReplacement: true,
+    requireSupportRelevance: false,
+    overflowPolicy: 'replace_unrelated_context',
+    seenKeyPrefix: 'ui_procedure_support',
+  });
+}
+
+function insertSelectedProcedureSupportForAnchors(input: {
+  params: Parameters<typeof insertProcedureLocalSupport>[0];
+  budget: number;
+  canAnchor: (fact: MemoryFact) => boolean;
+  allowOverflowReplacement: boolean;
+  requireSupportRelevance: boolean;
+  overflowPolicy?: ProcedureSupportOverflowPolicy;
+  seenKeyPrefix: string;
+}): void {
+  const {
+    params,
+    budget,
+    canAnchor,
+    allowOverflowReplacement,
+    requireSupportRelevance,
+    overflowPolicy,
+    seenKeyPrefix,
+  } = input;
+  if (budget <= 0) return;
   const selectedProcedureSources = new Set(
     params.selected
       .filter((fact) => fact.memoryKind === 'procedure' && fact.sourceRunId)
@@ -111,7 +205,7 @@ function insertSelectedActionProcedureSupport(
     .map((fact, index) => ({ fact, index }))
     .filter(
       (entry) =>
-        isActionResultOutcome(entry.fact) &&
+        canAnchor(entry.fact) &&
         entry.fact.sourceRunId &&
         !selectedProcedureSources.has(entry.fact.sourceRunId),
     )
@@ -163,7 +257,7 @@ function insertSelectedActionProcedureSupport(
       options: params.options,
       now: params.now,
     });
-    if (scored.score <= 0 && scored.relevanceScore <= 0) continue;
+    if (requireSupportRelevance && scored.score <= 0 && scored.relevanceScore <= 0) continue;
     const list = proceduresBySource.get(fact.sourceRunId) ?? [];
     list.push({ fact, scored });
     proceduresBySource.set(fact.sourceRunId, list);
@@ -171,12 +265,13 @@ function insertSelectedActionProcedureSupport(
 
   let inserted = 0;
   for (const anchor of actionAnchors) {
-    if (inserted >= params.procedureSupportBudget) break;
+    if (inserted >= budget) break;
     const candidates = proceduresBySource.get(anchor.fact.sourceRunId as string);
     if (!candidates?.length) continue;
     candidates.sort((left, right) => compareSupportCandidates(left, right));
     const support = candidates[0];
-    insertSupportAfterAnchor({
+    if (!allowOverflowReplacement && params.selected.length >= params.limit) break;
+    const didInsert = insertSupportAfterAnchor({
       selected: params.selected,
       seenIds: params.seenIds,
       seenKeys: params.seenKeys,
@@ -185,11 +280,22 @@ function insertSelectedActionProcedureSupport(
       anchorIndex: anchor.index,
       supportFact: support.fact,
       supportScore: support.scored,
-      seenKey: `action_procedure_support:${support.fact.id}`,
+      seenKey: `${seenKeyPrefix}:${support.fact.id}`,
+      overflowPolicy: overflowPolicy ?? 'default',
+      protectedSourceRunId: anchor.fact.sourceRunId as string,
     });
+    if (!didInsert) continue;
     selectedProcedureSources.add(anchor.fact.sourceRunId as string);
     inserted += 1;
   }
+}
+
+function isUiProcedureSupportAnchor(fact: MemoryFact): boolean {
+  return (
+    fact.memoryKind === 'ui_inventory' ||
+    fact.memoryKind === 'ui_field' ||
+    fact.memoryKind === 'ui_filter_state'
+  );
 }
 
 function insertProcedureUiSupport(params: Parameters<typeof insertProcedureLocalSupport>[0]): void {
@@ -261,7 +367,7 @@ function insertProcedureUiSupport(params: Parameters<typeof insertProcedureLocal
       });
     const support = supportEntries[0];
     if (!support) continue;
-    insertSupportAfterAnchor({
+    const didInsert = insertSupportAfterAnchor({
       selected: params.selected,
       seenIds: params.seenIds,
       seenKeys: params.seenKeys,
@@ -271,7 +377,10 @@ function insertProcedureUiSupport(params: Parameters<typeof insertProcedureLocal
       supportFact: support.fact,
       supportScore: support.scored,
       seenKey: `procedure_local_support:${support.fact.id}`,
+      overflowPolicy: 'default',
+      protectedSourceRunId: anchor.sourceRunId,
     });
+    if (!didInsert) continue;
     inserted += 1;
     index += 1;
   }

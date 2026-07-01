@@ -517,11 +517,23 @@ async function buildRecallSelection(
         .filter((fact) => fact.memoryKind === 'procedure' && fact.sourceRunId)
         .map((fact) => fact.sourceRunId as string),
     );
+    const selectedActionResultSourceRunIds = selectedActionResultSourceRuns(selected);
     const hasActionResultSupportAnchor = selected.some(
       (fact) =>
         isActionResultOutcome(fact) &&
         fact.sourceRunId &&
         !selectedProcedureSourceRuns.has(fact.sourceRunId),
+    );
+    const hasUiProcedureSupportAnchor = selected.some(
+      (fact) => {
+        if (!fact.sourceRunId || selectedProcedureSourceRuns.has(fact.sourceRunId)) return false;
+        if (selectedActionResultSourceRunIds.has(fact.sourceRunId)) return false;
+        return (
+          fact.memoryKind === 'ui_inventory' ||
+          fact.memoryKind === 'ui_field' ||
+          fact.memoryKind === 'ui_filter_state'
+        );
+      },
     );
     insertProcedureLocalSupport({
       selected,
@@ -532,6 +544,7 @@ async function buildRecallSelection(
       limit,
       uiSupportBudget: Math.max(0, reservedSupportSlots - selectedUiSupportCount),
       procedureSupportBudget: hasActionResultSupportAnchor ? 1 : 0,
+      uiProcedureSupportBudget: hasUiProcedureSupportAnchor ? 1 : 0,
       candidateScopes,
       options,
       scoringQueryUnits: discriminativeScoringUnits,
