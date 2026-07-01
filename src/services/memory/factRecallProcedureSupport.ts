@@ -299,7 +299,7 @@ function isUiProcedureSupportAnchor(fact: MemoryFact): boolean {
   );
 }
 
-function procedureEndpointSupportContexts(
+function procedureBoundarySupportContexts(
   fact: MemoryFact,
 ): Array<{ sourceRunId: string; stateIndex: string | number }> {
   if (fact.memoryKind !== 'procedure' || !fact.sourceRunId) return [];
@@ -317,25 +317,49 @@ function procedureEndpointSupportContexts(
     contexts.push({ sourceRunId: fact.sourceRunId as string, stateIndex });
   };
 
-  addStateSequence(parsed.actionTransitions, (entry) => {
-    add(entry.toStateIndex);
-    add(entry.fromStateIndex);
-  });
-  addStateSequence(parsed.surfaceTrail, (entry) => add(entry.stateIndex));
-  addStateSequence(parsed.steps, (entry) => add(entry.stateIndex));
+  if (addBoundaryStates(actionTransitionStateIndexes(parsed.actionTransitions), add)) {
+    return contexts;
+  }
+  if (addBoundaryStates(entryStateIndexes(parsed.surfaceTrail), add)) return contexts;
+  addBoundaryStates(entryStateIndexes(parsed.steps), add);
   return contexts;
 }
 
-function addStateSequence(
-  value: unknown,
-  addEntry: (entry: Record<string, unknown>) => void,
-): void {
-  if (!Array.isArray(value)) return;
-  for (let index = value.length - 1; index >= 0; index -= 1) {
-    const entry = value[index];
+function addBoundaryStates(
+  values: ReadonlyArray<string | number>,
+  add: (value: unknown) => void,
+): boolean {
+  if (values.length === 0) return false;
+  add(values[0]);
+  add(values[values.length - 1]);
+  return true;
+}
+
+function actionTransitionStateIndexes(value: unknown): Array<string | number> {
+  if (!Array.isArray(value)) return [];
+  const indexes: Array<string | number> = [];
+  for (const entry of value) {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
-    addEntry(entry as Record<string, unknown>);
+    addStateIndex(indexes, (entry as Record<string, unknown>).fromStateIndex);
+    addStateIndex(indexes, (entry as Record<string, unknown>).toStateIndex);
   }
+  return indexes;
+}
+
+function entryStateIndexes(value: unknown): Array<string | number> {
+  if (!Array.isArray(value)) return [];
+  const indexes: Array<string | number> = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    addStateIndex(indexes, (entry as Record<string, unknown>).stateIndex);
+  }
+  return indexes;
+}
+
+function addStateIndex(indexes: Array<string | number>, value: unknown): void {
+  const stateIndex = stateIndexValue(value);
+  if (stateIndex === null) return;
+  indexes.push(stateIndex);
 }
 
 function stateIndexValue(value: unknown): string | number | null {
@@ -360,8 +384,14 @@ function insertProcedureUiSupport(params: Parameters<typeof insertProcedureLocal
   ) {
     const anchor = params.selected[index];
     if (anchor.memoryKind !== 'procedure' || !anchor.sourceRunId) continue;
-    const contexts = procedureEndpointSupportContexts(anchor);
+    const contexts = procedureBoundarySupportContexts(anchor);
     if (contexts.length === 0) continue;
+    const contextRank = new Map(
+      contexts.map((context, contextIndex) => [
+        `${context.sourceRunId}:${context.stateIndex}`,
+        contextIndex,
+      ]),
+    );
     const supportFacts = listFactsForSourceRunForwardWindows(contexts, {
       memoryKind: ['ui_inventory'],
       forwardRadius: PROCEDURE_UI_SUPPORT_FORWARD_RADIUS,
@@ -401,6 +431,11 @@ function insertProcedureUiSupport(params: Parameters<typeof insertProcedureLocal
         }),
       }))
       .sort((left, right) => {
+        const leftContextRank =
+          contextRank.get(sourceRunStateKey(left.fact) ?? '') ?? Number.MAX_SAFE_INTEGER;
+        const rightContextRank =
+          contextRank.get(sourceRunStateKey(right.fact) ?? '') ?? Number.MAX_SAFE_INTEGER;
+        if (leftContextRank !== rightContextRank) return leftContextRank - rightContextRank;
         const scoredDiff = compareSupportCandidates(left, right);
         if (scoredDiff !== 0) return scoredDiff;
         const richnessDiff =

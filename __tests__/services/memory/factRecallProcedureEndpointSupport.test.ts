@@ -53,7 +53,76 @@ function scored(fact: MemoryFact, score: number, relevanceScore = score): Scored
   };
 }
 
-describe('procedure endpoint UI support', () => {
+describe('procedure boundary UI support', () => {
+  it('anchors procedure UI support to the first boundary when the starting state is observed', () => {
+    const corpus = upsertEntity({ name: 'procedure-boundary-ui-support', type: 'concept' });
+    const procedure = recordFact({
+      subjectId: corpus.id,
+      predicate: 'procedure_trace',
+      objectText: JSON.stringify({
+        sourceRunId: 'run-procedure-boundary-support',
+        steps: [
+          { stateIndex: '0', action: 'observe qstart' },
+          { stateIndex: '5', action: 'observe qfinal' },
+        ],
+      }),
+      sourceRunId: 'run-procedure-boundary-support',
+      memoryKind: 'procedure',
+      now: 1_000,
+    }).fact;
+    const startUi = recordFact({
+      subjectId: corpus.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({
+        sourceRunId: 'run-procedure-boundary-support',
+        stateIndex: '0',
+        controlNames: ['qtarget qstart'],
+      }),
+      sourceRunId: 'run-procedure-boundary-support',
+      memoryKind: 'ui_inventory',
+      attributes: { stateIndex: 0 },
+      now: 1_100,
+    }).fact;
+    recordFact({
+      subjectId: corpus.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({
+        sourceRunId: 'run-procedure-boundary-support',
+        stateIndex: '5',
+        controlNames: ['qtarget qfinal'],
+      }),
+      sourceRunId: 'run-procedure-boundary-support',
+      memoryKind: 'ui_inventory',
+      attributes: { stateIndex: 5 },
+      now: 1_200,
+    });
+    const selected = [procedure];
+    const scoredById = new Map([[procedure.id, scored(procedure, 1)]]);
+
+    insertProcedureLocalSupport({
+      selected,
+      seenIds: new Set(selected.map((fact) => fact.id)),
+      seenKeys: new Set(),
+      scoredById,
+      scored: [scored(procedure, 1)],
+      limit: 2,
+      uiSupportBudget: 1,
+      procedureSupportBudget: 0,
+      uiProcedureSupportBudget: 0,
+      candidateScopes: undefined,
+      options: {},
+      scoringQueryUnits: new Set(['qtarget']),
+      recallLexicalUnits: ['qtarget'],
+      unitWeights: new Map([['qtarget', 1]]),
+      query: 'qtarget',
+      anchorUnitSets: [],
+      alwaysIncludePinned: false,
+      now: 2_000,
+    });
+
+    expect(selected.map((fact) => fact.id)).toEqual([procedure.id, startUi.id]);
+  });
+
   it('anchors procedure UI support to the latest endpoint in repeated attempts', () => {
     const corpus = upsertEntity({ name: 'procedure-endpoint-ui-support', type: 'concept' });
     const procedure = recordFact({

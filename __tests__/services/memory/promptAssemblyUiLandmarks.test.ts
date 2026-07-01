@@ -126,8 +126,9 @@ describe('assemblePrompt — UI landmarks', () => {
 
     const text = flattenPromptSections(out.sections);
     expect(text).toContain('"sectionOutline"');
+    expect(text).toContain('"sectionRows"');
     expect(text).toContain('"precedingControls":["qsection-disclosure"]');
-    expect(text.indexOf('"sectionOutline"')).toBeLessThan(text.indexOf('"sectionRows"'));
+    expect(text.indexOf('"sectionRows"')).toBeLessThan(text.indexOf('"sectionOutline"'));
     expect(text.indexOf('"precedingControls"')).toBeLessThan(text.indexOf('"landmarkRows"'));
   });
 });

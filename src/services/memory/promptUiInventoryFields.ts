@@ -144,13 +144,13 @@ function compactUiSectionForPrompt(section: unknown): Record<string, unknown> | 
   const structuralPath = compactSectionStructuralPathForPrompt(input.structuralPath);
   if (!structuralPath && !textSnippets && (!controlNames || controlNames.length < 2)) return null;
   const compact = dropEmptyPromptRecord({
-    label: typeof input.label === 'string' ? fitText(input.label, 140) : input.label,
+    textSnippets,
+    containerName: typeof input.label === 'string' ? fitText(input.label, 140) : input.label,
     landmarkRole:
       typeof input.landmarkRole === 'string' ? fitText(input.landmarkRole, 80) : input.landmarkRole,
     structuralPath,
     controlNames,
     adjacentControlPairs: adjacentStringPairs(controlNames),
-    textSnippets,
     controlCount: input.controlCount,
     firstControlIndex: input.firstControlIndex,
   });
@@ -170,10 +170,10 @@ function compactUiSectionOutlineForPrompt(section: unknown): Record<string, unkn
     96,
   );
   const compact = dropEmptyPromptRecord({
-    label: typeof input.label === 'string' ? fitText(input.label, 140) : input.label,
     landmarkRole,
     structuralPath,
     controlNames,
+    containerName: typeof input.label === 'string' ? fitText(input.label, 140) : input.label,
     firstControlIndex: input.firstControlIndex,
   });
   return Object.keys(compact).length > 0 ? compact : null;
@@ -408,14 +408,6 @@ export function compactUiInventoryPromptFields(
   const compactSections = (): void => {
     const rawSections = fact.attributes.sections ?? parsed.sections;
     if (!Array.isArray(rawSections)) return;
-    const sectionOutline = rawSections
-      .map((section) => {
-        const outline = compactUiSectionOutlineForPrompt(section);
-        return outline ? addSectionBoundaryControls(outline, section, orderedVisibleControls) : null;
-      })
-      .filter((section): section is Record<string, unknown> => Boolean(section))
-      .slice(0, MAX_SECTION_OUTLINE_ROWS);
-    if (sectionOutline.length > 0) compact.sectionOutline = sectionOutline;
     const sections = rawSections
       .map((section) => {
         const compactSection = compactUiSectionForPrompt(section);
@@ -426,6 +418,14 @@ export function compactUiInventoryPromptFields(
       .filter((section): section is Record<string, unknown> => Boolean(section))
       .slice(0, MAX_VISIBLE_UI_SECTIONS);
     if (sections.length > 0) compact.sectionRows = sections;
+    const sectionOutline = rawSections
+      .map((section) => {
+        const outline = compactUiSectionOutlineForPrompt(section);
+        return outline ? addSectionBoundaryControls(outline, section, orderedVisibleControls) : null;
+      })
+      .filter((section): section is Record<string, unknown> => Boolean(section))
+      .slice(0, MAX_SECTION_OUTLINE_ROWS);
+    if (sectionOutline.length > 0) compact.sectionOutline = sectionOutline;
     const landmarkRows = compactLandmarkRowsForPrompt(rawSections);
     if (landmarkRows) compact.landmarkRows = landmarkRows;
   };
@@ -449,13 +449,13 @@ export function compactUiInventoryPromptFields(
   copyField('url');
   copyField('sourceRunId');
   copyField('stateIndex');
-  copyField('surfaceLabels');
   copyField('queryQuotedControlLabelEvidence');
   copyField('tables');
   copyField('labelValues');
   copyVisibleControls();
   compactSections();
   compactVisibleTextSnippets();
+  copyField('surfaceLabels', 'surfaceNames');
   copyField('fieldLabels');
   compactFieldRows();
   compactStateFields();
