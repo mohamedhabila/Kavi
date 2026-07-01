@@ -48,13 +48,12 @@ interface RuntimeRequest {
 const DEFAULT_CONFIG: RuntimeConfig = {
   chunkChars: 3600,
   chunkOverlapChars: 320,
-  maxItems: 6,
+  maxItems: 12,
   maxItemChars: 5000,
   minScore: 0.01,
   conversationId: 'longmemeval-v2',
   queryImageUnderstanding: true,
-  queryImageModel:
-    process.env.KAVI_LME_QUERY_IMAGE_MODEL || process.env.E2E_OPENAI_MODEL || '',
+  queryImageModel: process.env.KAVI_LME_QUERY_IMAGE_MODEL || process.env.E2E_OPENAI_MODEL || '',
   queryImageBaseUrl:
     process.env.KAVI_LME_QUERY_IMAGE_BASE_URL ||
     process.env.OPENAI_BASE_URL ||
@@ -256,7 +255,11 @@ function buildGraphEvidence(trajectory: JsonObject, id: string): string[] {
   return evidence;
 }
 
-function buildToolMessagesForTrajectory(trajectory: JsonObject, id: string, now: number): Message[] {
+function buildToolMessagesForTrajectory(
+  trajectory: JsonObject,
+  id: string,
+  now: number,
+): Message[] {
   const states = Array.isArray(trajectory.states) ? trajectory.states : [];
   const messages: Message[] = [];
   states.forEach((rawState, index) => {
@@ -373,8 +376,9 @@ function applyConfig(config?: Partial<RuntimeConfig>): RuntimeConfig {
     currentConfig.conversationId.trim() || DEFAULT_CONFIG.conversationId;
   currentConfig.queryImageUnderstanding =
     asBoolean(currentConfig.queryImageUnderstanding) ?? DEFAULT_CONFIG.queryImageUnderstanding;
-  currentConfig.queryImageModel =
-    String(currentConfig.queryImageModel || DEFAULT_CONFIG.queryImageModel).trim();
+  currentConfig.queryImageModel = String(
+    currentConfig.queryImageModel || DEFAULT_CONFIG.queryImageModel,
+  ).trim();
   currentConfig.queryImageBaseUrl = String(
     currentConfig.queryImageBaseUrl || DEFAULT_CONFIG.queryImageBaseUrl,
   ).trim();
@@ -479,11 +483,7 @@ async function buildQueryMessages(
   };
 }
 
-function buildQueryGoals(
-  query: string,
-  questionId: string | null,
-  now: number,
-): AgentGoal[] {
+function buildQueryGoals(query: string, questionId: string | null, now: number): AgentGoal[] {
   return [
     {
       id: questionId ? `question-${questionId}` : `question-${now}`,
@@ -525,12 +525,7 @@ async function queryMemory(request: RuntimeRequest): Promise<JsonObject> {
   const timings: Record<string, number> = {};
 
   const now = Date.now();
-  const queryMessages = await buildQueryMessages(
-    query,
-    request.queryImage ?? null,
-    now,
-    resolved,
-  );
+  const queryMessages = await buildQueryMessages(query, request.queryImage ?? null, now, resolved);
   timings.query_image_understanding_seconds = (performance.now() - stepStarted) / 1000;
   stepStarted = performance.now();
   const memoryAccess = await buildUnifiedMemoryAccessContext({
@@ -549,9 +544,7 @@ async function queryMemory(request: RuntimeRequest): Promise<JsonObject> {
   stepStarted = performance.now();
   const memoryContext = selected.map((item) => ({
     type: 'text',
-    value:
-      `[Kavi living memory #${item.rank} | source=${item.source}]\n` +
-      String(item.content),
+    value: `[Kavi living memory #${item.rank} | source=${item.source}]\n` + String(item.content),
   }));
   const flattenedSections = flattenPromptSections(sections);
   timings.flatten_sections_seconds = (performance.now() - stepStarted) / 1000;

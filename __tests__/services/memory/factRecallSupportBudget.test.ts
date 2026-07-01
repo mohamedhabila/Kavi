@@ -86,9 +86,9 @@ describe('recallFactsForQuery - workflow support budget', () => {
     ).length;
     const supportCount = facts.filter((fact) => fact.memoryKind === 'ui_inventory').length;
 
-    expect(supportSlotCount(12)).toBe(3);
+    expect(supportSlotCount(12)).toBe(4);
     expect(selectedPrimaryCount).toBeGreaterThanOrEqual(7);
-    expect(supportCount).toBeLessThanOrEqual(3);
+    expect(supportCount).toBeLessThanOrEqual(4);
   });
 
   it('balances support across selected workflow sources when budget allows it', async () => {
@@ -451,5 +451,4 @@ describe('recallFactsForQuery - workflow support budget', () => {
     expect(selectedIds).toContain(primary.id);
     expect(selectedIds).toContain(procedure.id);
   });
-
 });

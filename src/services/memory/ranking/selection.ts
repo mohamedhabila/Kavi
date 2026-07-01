@@ -38,8 +38,9 @@ function objectArrayShape(
 ): Array<Record<string, unknown>> {
   if (!Array.isArray(value)) return [];
   return value
-    .filter((entry): entry is Record<string, unknown> =>
-      Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry),
+    .filter(
+      (entry): entry is Record<string, unknown> =>
+        Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry),
     )
     .map((entry) =>
       Object.fromEntries(
@@ -142,14 +143,8 @@ function uiInventorySchemaKey(fact: MemoryFact): string | null {
     parsed.textEntryControls,
     UI_INVENTORY_TEXT_ENTRY_SHAPE_FIELDS,
   );
-  const searchControls = objectArrayShape(
-    parsed.searchControls,
-    UI_INVENTORY_SEARCH_SHAPE_FIELDS,
-  );
-  const popupControls = objectArrayShape(
-    parsed.popupControls,
-    UI_INVENTORY_POPUP_SHAPE_FIELDS,
-  );
+  const searchControls = objectArrayShape(parsed.searchControls, UI_INVENTORY_SEARCH_SHAPE_FIELDS);
+  const popupControls = objectArrayShape(parsed.popupControls, UI_INVENTORY_POPUP_SHAPE_FIELDS);
   const actionControls = objectArrayShape(
     parsed.actionControls,
     UI_INVENTORY_ACTION_CONTROL_SHAPE_FIELDS,
@@ -208,14 +203,8 @@ export function supportDiversityKey(fact: MemoryFact): string | null {
     parsed.textEntryControls,
     UI_INVENTORY_TEXT_ENTRY_SHAPE_FIELDS,
   );
-  const searchControls = objectArrayShape(
-    parsed.searchControls,
-    UI_INVENTORY_SEARCH_SHAPE_FIELDS,
-  );
-  const popupControls = objectArrayShape(
-    parsed.popupControls,
-    UI_INVENTORY_POPUP_SHAPE_FIELDS,
-  );
+  const searchControls = objectArrayShape(parsed.searchControls, UI_INVENTORY_SEARCH_SHAPE_FIELDS);
+  const popupControls = objectArrayShape(parsed.popupControls, UI_INVENTORY_POPUP_SHAPE_FIELDS);
   const actionControls = objectArrayShape(
     parsed.actionControls,
     UI_INVENTORY_ACTION_CONTROL_SHAPE_FIELDS,
@@ -246,7 +235,8 @@ export function supportPhaseKey(fact: MemoryFact): string | null {
   const parsed = parseJsonRecord(fact.objectText);
   const url = canonicalSurfacePath(scalarString(fact.attributes.url, parsed?.url));
   if (!url) return null;
-  return `support_surface:${fact.sourceRunId}:${url}`;
+  const stateIndex = scalarString(fact.attributes.stateIndex, parsed?.stateIndex);
+  return `support_surface:${fact.sourceRunId}:${url}:${stateIndex}`;
 }
 
 export function sourceRunStateKey(fact: MemoryFact): string | null {
@@ -315,11 +305,102 @@ function hasWorkflowProcedureEvidence(outcome: MemoryFact, procedure: MemoryFact
   return maxProcedureState >= outcomeState;
 }
 
+function arrayHasEntries(value: unknown): boolean {
+  return Array.isArray(value) && value.length > 0;
+}
+
+function hasStructuredControlState(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (arrayHasEntries(record.options)) return true;
+  for (const key of ['value', 'displayText', 'checked', 'selected', 'expanded', 'disabled']) {
+    const fieldValue = record[key];
+    if (fieldValue !== undefined && fieldValue !== null && fieldValue !== '') return true;
+  }
+  return false;
+}
+
+function inventoryHasStructuredControlState(parsed: Record<string, unknown> | null): boolean {
+  if (!parsed) return false;
+  for (const key of ['fields', 'textEntryControls', 'searchControls', 'popupControls']) {
+    const entries = parsed[key];
+    if (!Array.isArray(entries)) continue;
+    if (entries.some(hasStructuredControlState)) return true;
+  }
+  return false;
+}
+
+function outcomeHasDirectObservationEvidence(parsed: Record<string, unknown> | null): boolean {
+  if (!parsed) return false;
+  return [
+    'fields',
+    'sections',
+    'actionControls',
+    'controlNames',
+    'visibleTextSnippets',
+    'fieldLabels',
+  ].some((key) => arrayHasEntries(parsed[key]));
+}
+
+function workflowRepresentativePriority(fact: MemoryFact): number {
+  if (fact.memoryKind === 'ui_filter_state') return 6;
+  const parsed = parseJsonRecord(fact.objectText);
+  if (fact.memoryKind === 'ui_field') {
+    return hasStructuredControlState(parsed) ? 5 : 1;
+  }
+  if (fact.memoryKind === 'ui_inventory') {
+    return inventoryHasStructuredControlState(parsed) ? 4 : 2;
+  }
+  if (fact.memoryKind === 'outcome') {
+    return outcomeHasDirectObservationEvidence(parsed) ? 3 : 1;
+  }
+  if (fact.memoryKind === 'procedure') return 2;
+  return 1;
+}
+
+function shouldKeepDirectOutcomeEvidence(outcome: MemoryFact): boolean {
+  if (outcome.memoryKind !== 'outcome') return false;
+  return outcomeHasDirectObservationEvidence(parseJsonRecord(outcome.objectText));
+}
+
+function outcomePreviousStateNumber(fact: MemoryFact): number | null {
+  if (fact.memoryKind !== 'outcome') return null;
+  const parsed = parseJsonRecord(fact.objectText);
+  const value = scalarString(fact.attributes.previousStateIndex, parsed?.previousStateIndex);
+  if (!value) return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function immediateOutcomeContinuation(
+  representative: ScoredSelectionFact,
+  scoredFacts: ReadonlyArray<ScoredSelectionFact>,
+  threshold: number,
+): ScoredSelectionFact | null {
+  if (!representative.fact.sourceRunId || representative.fact.memoryKind !== 'outcome') {
+    return null;
+  }
+  const stateNumber = factStateNumber(representative.fact);
+  if (stateNumber === null) return null;
+  let best: ScoredSelectionFact | null = null;
+  for (const candidate of scoredFacts) {
+    if (candidate.fact.sourceRunId !== representative.fact.sourceRunId) continue;
+    if (candidate.fact.id === representative.fact.id) continue;
+    if (candidate.fact.memoryKind !== 'outcome') continue;
+    if (candidate.score < threshold && candidate.relevanceScore < threshold) continue;
+    if (!shouldKeepDirectOutcomeEvidence(candidate.fact)) continue;
+    if (outcomePreviousStateNumber(candidate.fact) !== stateNumber) continue;
+    if (!best || candidate.score > best.score) best = candidate;
+  }
+  return best;
+}
+
 export function workflowProcedureRepresentativeForOutcome(
   outcome: MemoryFact,
   procedures: ReadonlyArray<MemoryFact>,
 ): MemoryFact | null {
   if (!outcome.sourceRunId || outcome.memoryKind !== 'outcome') return null;
+  if (shouldKeepDirectOutcomeEvidence(outcome)) return null;
   let best: MemoryFact | null = null;
   for (const procedure of procedures) {
     if (procedure.sourceRunId !== outcome.sourceRunId) continue;
@@ -344,24 +425,36 @@ export function primaryWorkflowRepresentative(
   scoredFacts: ReadonlyArray<ScoredSelectionFact>,
   threshold: number,
 ): ScoredSelectionFact {
-  if (!entry.fact.sourceRunId || entry.fact.memoryKind !== 'outcome') return entry;
+  if (!entry.fact.sourceRunId) return entry;
   const minScore = Math.max(threshold, entry.score * WORKFLOW_REPRESENTATIVE_MIN_SCORE_RATIO);
-  let bestProcedure: ScoredSelectionFact | null = null;
+  let best: ScoredSelectionFact = entry;
+  let bestPriority = workflowRepresentativePriority(entry.fact);
   for (const candidate of scoredFacts) {
     if (candidate.fact.sourceRunId !== entry.fact.sourceRunId) continue;
-    if (candidate.fact.memoryKind !== 'procedure') continue;
     if (candidate.score < minScore && candidate.relevanceScore < threshold) continue;
-    if (!hasWorkflowProcedureEvidence(entry.fact, candidate.fact)) continue;
-    if (!bestProcedure || candidate.score > bestProcedure.score) {
-      bestProcedure = candidate;
+    if (
+      candidate.fact.memoryKind === 'procedure' &&
+      entry.fact.memoryKind === 'outcome' &&
+      !hasWorkflowProcedureEvidence(entry.fact, candidate.fact)
+    ) {
+      continue;
+    }
+    const candidatePriority = workflowRepresentativePriority(candidate.fact);
+    if (
+      candidatePriority > bestPriority ||
+      (candidatePriority === bestPriority && candidate.score > best.score)
+    ) {
+      best = candidate;
+      bestPriority = candidatePriority;
     }
   }
-  return bestProcedure ?? entry;
+  return immediateOutcomeContinuation(best, scoredFacts, threshold) ?? best;
 }
 
 export function supportSlotCount(limit: number): number {
   if (limit < 4) return 0;
-  return Math.min(SOURCE_RUN_SUPPORT_MAX_SLOTS, Math.max(1, Math.floor(limit * 0.25)));
+  if (limit <= 4) return 1;
+  return Math.min(SOURCE_RUN_SUPPORT_MAX_SLOTS, Math.max(1, Math.ceil(limit * 0.4)));
 }
 
 export function sourceRunSupportContexts(

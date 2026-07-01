@@ -687,5 +687,4 @@ describe('recallFactsForQuery — workflow support', () => {
     expect(selectedIds).toContain(labelValueState.id);
     expect(selectedIds).not.toContain(inventory.id);
   });
-
 });

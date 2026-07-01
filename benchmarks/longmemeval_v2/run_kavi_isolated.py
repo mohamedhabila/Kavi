@@ -274,7 +274,7 @@ def main() -> None:
                 "workspace_root": str((output_dir / "kavi_memory_workspaces").resolve()),
                 "runtime_bundle_path": str(runtime_bundle),
                 "node_binary": args.node_binary,
-                "max_items": int(os.getenv("KAVI_LME_MAX_ITEMS", "6")),
+                "max_items": int(os.getenv("KAVI_LME_MAX_ITEMS", "12")),
                 "max_item_chars": int(os.getenv("KAVI_LME_MAX_ITEM_CHARS", "5000")),
                 "chunk_chars": int(os.getenv("KAVI_LME_CHUNK_CHARS", "3600")),
                 "chunk_overlap_chars": int(os.getenv("KAVI_LME_CHUNK_OVERLAP_CHARS", "320")),

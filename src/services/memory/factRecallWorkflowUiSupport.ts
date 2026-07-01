@@ -5,10 +5,7 @@ import {
 } from './facts/queries';
 import { listFactsForSourceRunLexicalMatches } from './facts/sourceRunLexicalMatches';
 import type { MemoryFact, MemoryFactKind, MemoryFactScope } from './facts/types';
-import {
-  type RecallFactsOptions,
-  type ScoredFact,
-} from './factRecallTypes';
+import { type RecallFactsOptions, type ScoredFact } from './factRecallTypes';
 import { buildScoredFact } from './factRecallScoring';
 import {
   isActionResultOutcome,
@@ -18,6 +15,7 @@ import {
   supportQueryEvidenceScore,
 } from './factRecallSupport';
 import {
+  compareSupportCandidates,
   sourceRunSupportContexts,
   sourceRunStateKey,
   supportDiversityKey,
@@ -59,6 +57,38 @@ function supportObservationContext(fact: MemoryFact): {
   };
 }
 
+function supportStateNumber(fact: MemoryFact): number | null {
+  const stateIndex = supportObservationContext(fact).stateIndex;
+  if (typeof stateIndex === 'number' && Number.isFinite(stateIndex)) return stateIndex;
+  if (typeof stateIndex === 'string' && stateIndex.trim()) {
+    const parsed = Number(stateIndex);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function immediateOutcomeContinuationKeys(facts: ReadonlyArray<MemoryFact>): Set<string> {
+  const keys = new Set<string>();
+  for (const fact of facts) {
+    if (!isActionResultOutcome(fact) || !fact.sourceRunId) continue;
+    const stateNumber = supportStateNumber(fact);
+    if (stateNumber === null) continue;
+    keys.add(`${fact.sourceRunId}:${stateNumber + 1}`);
+  }
+  return keys;
+}
+
+function selectedOutcomeStateKeys(facts: ReadonlyArray<MemoryFact>): Set<string> {
+  const keys = new Set<string>();
+  for (const fact of facts) {
+    if (!isActionResultOutcome(fact) || !fact.sourceRunId) continue;
+    const stateNumber = supportStateNumber(fact);
+    if (stateNumber === null) continue;
+    keys.add(`${fact.sourceRunId}:${stateNumber}`);
+  }
+  return keys;
+}
+
 export function insertWorkflowUiSupport(params: {
   selected: MemoryFact[];
   seenIds: ReadonlySet<string>;
@@ -83,9 +113,7 @@ export function insertWorkflowUiSupport(params: {
     return;
   }
   const supportAnchors = params.selected.filter(canAnchorWorkflowSupport);
-  const procedureSupportAnchors = supportAnchors.filter(
-    (fact) => fact.memoryKind === 'procedure',
-  );
+  const procedureSupportAnchors = supportAnchors.filter((fact) => fact.memoryKind === 'procedure');
   const orderedSupportAnchors = [
     ...procedureSupportAnchors,
     ...supportAnchors.filter((fact) => fact.memoryKind !== 'procedure'),
@@ -149,9 +177,7 @@ export function insertWorkflowUiSupport(params: {
     }
   }
   for (const sourceRunId of selectedSourceRuns) {
-    const contextsForRun = supportContexts.filter(
-      (context) => context.sourceRunId === sourceRunId,
-    );
+    const contextsForRun = supportContexts.filter((context) => context.sourceRunId === sourceRunId);
     if (contextsForRun.length === 0) continue;
     const supportFacts = listFactsForSourceRunStateNeighborhoods(contextsForRun, {
       memoryKind: ['ui_inventory', 'ui_field', 'ui_filter_state'],
@@ -258,6 +284,80 @@ export function insertWorkflowUiSupport(params: {
           ),
         ]
       : rankedSupportEntries;
+  const selectedSupportIds = new Set<string>();
+  const addSupportEntry = (
+    entry: (typeof procedureFirstSupportEntries)[number],
+    dedupeKeyOverride?: string | null,
+  ): boolean => {
+    if (selectedSupportIds.has(entry.fact.id)) return false;
+    const diversityKey = supportDiversityKey(entry.fact);
+    const diversitySourceKey = diversityKey
+      ? `${entry.fact.sourceRunId ?? ''}:${diversityKey}`
+      : null;
+    if (diversitySourceKey && params.seenUiSupportDiversitySourceKeys.has(diversitySourceKey)) {
+      return false;
+    }
+    if (diversityKey && params.seenUiSupportDiversityKeys.has(diversityKey)) {
+      return false;
+    }
+    const added = params.addSelectedSupportFact(
+      entry.fact,
+      supportLimit,
+      dedupeKeyOverride ?? diversityKey,
+    );
+    if (!added) return false;
+    selectedSupportIds.add(entry.fact.id);
+    if (diversityKey) params.seenUiSupportDiversityKeys.add(diversityKey);
+    if (diversitySourceKey) {
+      params.seenUiSupportDiversitySourceKeys.add(diversitySourceKey);
+    }
+    params.scoredById.set(entry.fact.id, entry.scored);
+    return true;
+  };
+
+  const selectedOutcomeKeys = selectedOutcomeStateKeys(params.selected);
+  if (selectedOutcomeKeys.size > 0) {
+    const exactOutcomeStateEntries = procedureFirstSupportEntries
+      .filter((entry) => {
+        const stateKey = sourceRunStateKey(entry.fact);
+        return Boolean(stateKey && selectedOutcomeKeys.has(stateKey));
+      })
+      .filter((entry) => entry.fact.memoryKind !== 'outcome')
+      .sort((left, right) => compareSupportCandidates(left, right));
+    for (const entry of exactOutcomeStateEntries) {
+      const stateKey = sourceRunStateKey(entry.fact);
+      addSupportEntry(entry, `selected_outcome_state_support:${stateKey}`);
+      if (params.selected.length >= supportLimit) break;
+    }
+  }
+
+  const immediateContinuationKeys = immediateOutcomeContinuationKeys(params.selected);
+  if (immediateContinuationKeys.size > 0) {
+    const supportEntryOrder = new Map(
+      procedureFirstSupportEntries.map((entry, index) => [entry.fact.id, index]),
+    );
+    const immediateContinuationEntries = procedureFirstSupportEntries
+      .filter((entry) => {
+        const stateKey = sourceRunStateKey(entry.fact);
+        return Boolean(stateKey && immediateContinuationKeys.has(stateKey));
+      })
+      .sort((left, right) => {
+        const leftRank =
+          sourceRunSupportRank.get(left.fact.sourceRunId ?? '') ?? Number.MAX_SAFE_INTEGER;
+        const rightRank =
+          sourceRunSupportRank.get(right.fact.sourceRunId ?? '') ?? Number.MAX_SAFE_INTEGER;
+        if (leftRank !== rightRank) return leftRank - rightRank;
+        return (
+          (supportEntryOrder.get(left.fact.id) ?? 0) - (supportEntryOrder.get(right.fact.id) ?? 0)
+        );
+      });
+    for (const entry of immediateContinuationEntries) {
+      const stateKey = sourceRunStateKey(entry.fact);
+      addSupportEntry(entry, `immediate_outcome_support:${stateKey}`);
+      if (params.selected.length >= supportLimit) break;
+    }
+  }
+
   const supportEntriesForSelection = sourceBalancedSupportEntries({
     entries: procedureFirstSupportEntries,
     selectedSourceRuns,
@@ -269,15 +369,13 @@ export function insertWorkflowUiSupport(params: {
       .map((entry) => entry.fact.id),
   );
   for (const entry of supportEntriesForSelection) {
+    if (selectedSupportIds.has(entry.fact.id)) continue;
     const diversityKey = supportDiversityKey(entry.fact);
     const diversitySourceKey = diversityKey
       ? `${entry.fact.sourceRunId ?? ''}:${diversityKey}`
       : null;
     const isSourceBalancedSupport = sourceBalancedSupportIds.has(entry.fact.id);
-    if (
-      diversitySourceKey &&
-      params.seenUiSupportDiversitySourceKeys.has(diversitySourceKey)
-    ) {
+    if (diversitySourceKey && params.seenUiSupportDiversitySourceKeys.has(diversitySourceKey)) {
       continue;
     }
     if (
@@ -287,20 +385,12 @@ export function insertWorkflowUiSupport(params: {
     ) {
       continue;
     }
-    const added = params.addSelectedSupportFact(
-      entry.fact,
-      supportLimit,
+    addSupportEntry(
+      entry,
       isSourceBalancedSupport
         ? `source_balanced_support:${entry.fact.sourceRunId ?? ''}:${diversityKey ?? entry.fact.id}`
         : diversityKey,
     );
-    if (added) {
-      if (diversityKey) params.seenUiSupportDiversityKeys.add(diversityKey);
-      if (diversitySourceKey) {
-        params.seenUiSupportDiversitySourceKeys.add(diversitySourceKey);
-      }
-      params.scoredById.set(entry.fact.id, entry.scored);
-    }
     if (params.selected.length >= supportLimit) break;
   }
 }

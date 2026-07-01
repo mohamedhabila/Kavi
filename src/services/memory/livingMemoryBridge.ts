@@ -245,7 +245,7 @@ export async function buildLivingMemorySections(
   const {
     messages,
     now = Date.now(),
-    recallLimit = 6,
+    recallLimit = 12,
     disableRecall = false,
     disableLongTermMemory = false,
     threadCreatedAt,
