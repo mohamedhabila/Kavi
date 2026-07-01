@@ -13,6 +13,7 @@ const MAX_VISIBLE_LANDMARK_ROWS = 8;
 const MAX_LANDMARK_ROW_LABELS = 8;
 const MAX_LANDMARK_ROW_CONTROLS = 24;
 const MAX_LANDMARK_ROW_TEXT_SNIPPETS = 8;
+const MAX_ADJACENT_CONTROL_PAIRS = 8;
 
 function fitText(value: string, maxChars: number): string {
   const trimmed = value.trim();
@@ -45,7 +46,8 @@ function limitPromptStringArray(
 function adjacentStringPairs(values: string[] | null): string[][] | null {
   if (!values || values.length < 2) return null;
   const pairs: string[][] = [];
-  for (let index = 0; index < values.length - 1; index += 1) {
+  const pairLimit = Math.min(values.length - 1, MAX_ADJACENT_CONTROL_PAIRS);
+  for (let index = 0; index < pairLimit; index += 1) {
     pairs.push([values[index], values[index + 1]]);
   }
   return pairs.length > 0 ? pairs : null;
@@ -346,13 +348,13 @@ export function compactUiInventoryPromptFields(
   const compactSections = (): void => {
     const rawSections = fact.attributes.sections ?? parsed.sections;
     if (!Array.isArray(rawSections)) return;
-    const landmarkRows = compactLandmarkRowsForPrompt(rawSections);
-    if (landmarkRows) compact.landmarkRows = landmarkRows;
     const sections = rawSections
       .map(compactUiSectionForPrompt)
       .filter((section): section is Record<string, unknown> => Boolean(section))
       .slice(0, MAX_VISIBLE_UI_SECTIONS);
     if (sections.length > 0) compact.sectionRows = sections;
+    const landmarkRows = compactLandmarkRowsForPrompt(rawSections);
+    if (landmarkRows) compact.landmarkRows = landmarkRows;
   };
   const compactVisibleTextSnippets = (): void => {
     const rawSnippets = fact.attributes.visibleTextSnippets ?? parsed.visibleTextSnippets;
@@ -375,15 +377,15 @@ export function compactUiInventoryPromptFields(
   copyField('sourceRunId');
   copyField('stateIndex');
   copyField('surfaceLabels');
-  compactVisibleTextSnippets();
-  copyField('fieldLabels');
-  compactFieldRows();
-  compactStateFields();
   copyField('queryQuotedControlLabelEvidence');
   copyField('tables');
   copyField('labelValues');
   copyVisibleControls();
   compactSections();
+  compactVisibleTextSnippets();
+  copyField('fieldLabels');
+  compactFieldRows();
+  compactStateFields();
   compactFields();
   copyField('sections');
   copyField('actionControls');

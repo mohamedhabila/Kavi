@@ -55,4 +55,44 @@ describe('assemblePrompt — UI landmarks', () => {
     expect(text).toContain('"landmarkRole":"complementary"');
     expect(text).toContain('"controlNames":["qprofile-link","qedit-profile"]');
   });
+
+  it('renders local section rows before aggregate landmark rows', () => {
+    const out = assemblePrompt({
+      basePrompt: 'base',
+      retrievedFacts: [
+        fact({
+          objectText: JSON.stringify({
+            url: 'https://workflow.example.test/item/thread',
+            sourceRunId: 'run-ui-section-order',
+            stateIndex: '7',
+            sections: [
+              {
+                label: 'qthread-body',
+                landmarkRole: 'main',
+                controlNames: ['qtitle', 'qauthor', 'qvote-up', 'qvote-down'],
+                textSnippets: ['qthread-copy'],
+              },
+              {
+                label: 'qcomment-card',
+                landmarkRole: 'main',
+                controlNames: ['qcomment-author', 'qreply-action', 'qpermalink-action'],
+                textSnippets: ['qcomment-copy'],
+              },
+            ],
+          }),
+        }),
+      ],
+    });
+
+    const text = flattenPromptSections(out.sections);
+    const sectionRowsIndex = text.indexOf('"sectionRows"');
+    const landmarkRowsIndex = text.indexOf('"landmarkRows"');
+
+    expect(sectionRowsIndex).toBeGreaterThanOrEqual(0);
+    expect(landmarkRowsIndex).toBeGreaterThanOrEqual(0);
+    expect(sectionRowsIndex).toBeLessThan(landmarkRowsIndex);
+    expect(text.indexOf('["qreply-action","qpermalink-action"]')).toBeLessThan(
+      landmarkRowsIndex,
+    );
+  });
 });
