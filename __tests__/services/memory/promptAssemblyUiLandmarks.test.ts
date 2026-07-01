@@ -95,4 +95,39 @@ describe('assemblePrompt — UI landmarks', () => {
       landmarkRowsIndex,
     );
   });
+
+  it('preserves sibling controls that immediately precede a section body', () => {
+    const out = assemblePrompt({
+      basePrompt: 'base',
+      retrievedFacts: [
+        fact({
+          objectText: JSON.stringify({
+            url: 'https://workflow.example.test/item/section-boundary',
+            sourceRunId: 'run-ui-boundary',
+            stateIndex: '9',
+            controlNames: [
+              'qglobal-nav',
+              'qsection-disclosure',
+              'qsection-action',
+              'qsection-log',
+            ],
+            sections: [
+              {
+                label: 'qsection-tools',
+                landmarkRole: 'complementary',
+                structuralPath: [{ role: 'complementary' }, { role: 'Section' }],
+                controlNames: ['qsection-action', 'qsection-log'],
+              },
+            ],
+          }),
+        }),
+      ],
+    });
+
+    const text = flattenPromptSections(out.sections);
+    expect(text).toContain('"sectionOutline"');
+    expect(text).toContain('"precedingControls":["qsection-disclosure"]');
+    expect(text.indexOf('"sectionOutline"')).toBeLessThan(text.indexOf('"sectionRows"'));
+    expect(text.indexOf('"precedingControls"')).toBeLessThan(text.indexOf('"landmarkRows"'));
+  });
 });

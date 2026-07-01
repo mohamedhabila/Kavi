@@ -3,6 +3,8 @@ import { recordHasUiStateBearingValue } from './uiStateBearingFields';
 
 const MAX_VISIBLE_UI_CONTROLS = 64;
 const MAX_VISIBLE_UI_SECTIONS = 12;
+const MAX_SECTION_OUTLINE_ROWS = 16;
+const MAX_SECTION_OUTLINE_CONTROLS = 6;
 const MAX_VISIBLE_SECTION_CONTROLS = 20;
 const MAX_VISIBLE_SECTION_TEXT_SNIPPETS = 4;
 const MAX_VISIBLE_TEXT_SNIPPETS = 24;
@@ -14,6 +16,7 @@ const MAX_LANDMARK_ROW_LABELS = 8;
 const MAX_LANDMARK_ROW_CONTROLS = 24;
 const MAX_LANDMARK_ROW_TEXT_SNIPPETS = 8;
 const MAX_ADJACENT_CONTROL_PAIRS = 8;
+const MAX_SECTION_BOUNDARY_CONTROLS = 1;
 
 function fitText(value: string, maxChars: number): string {
   const trimmed = value.trim();
@@ -51,6 +54,61 @@ function adjacentStringPairs(values: string[] | null): string[][] | null {
     pairs.push([values[index], values[index + 1]]);
   }
   return pairs.length > 0 ? pairs : null;
+}
+
+function normalizedControlKey(value: string): string {
+  return value.normalize('NFKC').trim().toLocaleLowerCase();
+}
+
+function orderedVisibleControlNamesForPrompt(
+  fact: MemoryFact,
+  parsed: Record<string, unknown>,
+): string[] | null {
+  const rawControlNames = fact.attributes.controlNames ?? parsed.controlNames;
+  const visibleFromNames = limitPromptStringArray(rawControlNames, MAX_VISIBLE_UI_CONTROLS, 120);
+  if (visibleFromNames) return visibleFromNames;
+  if (!Array.isArray(parsed.controls)) return null;
+  const visibleControls = parsed.controls
+    .map((control) =>
+      control && typeof control === 'object' && !Array.isArray(control)
+        ? (control as Record<string, unknown>).name
+        : null,
+    )
+    .filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
+    .slice(0, MAX_VISIBLE_UI_CONTROLS)
+    .map((name) => fitText(name, 120));
+  return visibleControls.length > 0 ? visibleControls : null;
+}
+
+function rawSectionControlNames(section: unknown): string[] {
+  if (!section || typeof section !== 'object' || Array.isArray(section)) return [];
+  const rawControlNames = (section as Record<string, unknown>).controlNames;
+  if (!Array.isArray(rawControlNames)) return [];
+  return rawControlNames
+    .filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
+    .map((name) => name.trim());
+}
+
+function addSectionBoundaryControls(
+  compactSection: Record<string, unknown>,
+  rawSection: unknown,
+  orderedVisibleControls: readonly string[] | null,
+): Record<string, unknown> {
+  if (!orderedVisibleControls || orderedVisibleControls.length < 2) return compactSection;
+  const sectionControlKeys = new Set(rawSectionControlNames(rawSection).map(normalizedControlKey));
+  if (sectionControlKeys.size === 0) return compactSection;
+  const firstVisibleSectionControlIndex = orderedVisibleControls.findIndex((controlName) =>
+    sectionControlKeys.has(normalizedControlKey(controlName)),
+  );
+  if (firstVisibleSectionControlIndex <= 0) return compactSection;
+  const precedingControls = orderedVisibleControls
+    .slice(
+      Math.max(0, firstVisibleSectionControlIndex - MAX_SECTION_BOUNDARY_CONTROLS),
+      firstVisibleSectionControlIndex,
+    )
+    .filter((controlName) => !sectionControlKeys.has(normalizedControlKey(controlName)));
+  if (precedingControls.length === 0) return compactSection;
+  return { ...compactSection, precedingControls };
 }
 
 function compactSectionStructuralPathForPrompt(value: unknown): Record<string, unknown>[] | null {
@@ -94,6 +152,28 @@ function compactUiSectionForPrompt(section: unknown): Record<string, unknown> | 
     adjacentControlPairs: adjacentStringPairs(controlNames),
     textSnippets,
     controlCount: input.controlCount,
+    firstControlIndex: input.firstControlIndex,
+  });
+  return Object.keys(compact).length > 0 ? compact : null;
+}
+
+function compactUiSectionOutlineForPrompt(section: unknown): Record<string, unknown> | null {
+  if (!section || typeof section !== 'object' || Array.isArray(section)) return null;
+  const input = section as Record<string, unknown>;
+  const structuralPath = compactSectionStructuralPathForPrompt(input.structuralPath);
+  const landmarkRole =
+    typeof input.landmarkRole === 'string' ? fitText(input.landmarkRole, 80) : input.landmarkRole;
+  if (!landmarkRole && !structuralPath) return null;
+  const controlNames = limitPromptStringArray(
+    input.controlNames,
+    MAX_SECTION_OUTLINE_CONTROLS,
+    96,
+  );
+  const compact = dropEmptyPromptRecord({
+    label: typeof input.label === 'string' ? fitText(input.label, 140) : input.label,
+    landmarkRole,
+    structuralPath,
+    controlNames,
     firstControlIndex: input.firstControlIndex,
   });
   return Object.keys(compact).length > 0 ? compact : null;
@@ -271,6 +351,7 @@ export function compactUiInventoryPromptFields(
 ): string | null {
   if (!parsed) return null;
   const compact: Record<string, unknown> = {};
+  const orderedVisibleControls = orderedVisibleControlNamesForPrompt(fact, parsed);
   const copyField = (from: string, to = from): void => {
     const rawValue =
       from === 'sourceRunId'
@@ -281,28 +362,7 @@ export function compactUiInventoryPromptFields(
     }
   };
   const copyVisibleControls = (): void => {
-    const rawControlNames = fact.attributes.controlNames ?? parsed.controlNames;
-    if (Array.isArray(rawControlNames)) {
-      const visibleControls = rawControlNames
-        .filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
-        .map((name) => name.trim())
-        .slice(0, MAX_VISIBLE_UI_CONTROLS);
-      if (visibleControls.length > 0) {
-        compact.visibleControls = visibleControls;
-        return;
-      }
-    }
-    if (Array.isArray(parsed.controls)) {
-      const visibleControls = parsed.controls
-        .map((control) =>
-          control && typeof control === 'object' && !Array.isArray(control)
-            ? (control as Record<string, unknown>).name
-            : null,
-        )
-        .filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
-        .slice(0, MAX_VISIBLE_UI_CONTROLS);
-      if (visibleControls.length > 0) compact.visibleControls = visibleControls;
-    }
+    if (orderedVisibleControls) compact.visibleControls = orderedVisibleControls;
   };
   const compactFieldRows = (): void => {
     const rawFieldLabels = fact.attributes.fieldLabels ?? parsed.fieldLabels;
@@ -348,8 +408,21 @@ export function compactUiInventoryPromptFields(
   const compactSections = (): void => {
     const rawSections = fact.attributes.sections ?? parsed.sections;
     if (!Array.isArray(rawSections)) return;
+    const sectionOutline = rawSections
+      .map((section) => {
+        const outline = compactUiSectionOutlineForPrompt(section);
+        return outline ? addSectionBoundaryControls(outline, section, orderedVisibleControls) : null;
+      })
+      .filter((section): section is Record<string, unknown> => Boolean(section))
+      .slice(0, MAX_SECTION_OUTLINE_ROWS);
+    if (sectionOutline.length > 0) compact.sectionOutline = sectionOutline;
     const sections = rawSections
-      .map(compactUiSectionForPrompt)
+      .map((section) => {
+        const compactSection = compactUiSectionForPrompt(section);
+        return compactSection
+          ? addSectionBoundaryControls(compactSection, section, orderedVisibleControls)
+          : null;
+      })
       .filter((section): section is Record<string, unknown> => Boolean(section))
       .slice(0, MAX_VISIBLE_UI_SECTIONS);
     if (sections.length > 0) compact.sectionRows = sections;
