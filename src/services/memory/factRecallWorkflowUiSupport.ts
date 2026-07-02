@@ -23,6 +23,8 @@ import {
 
 const SOURCE_RUN_SUPPORT_FORWARD_RADIUS = 16;
 const SOURCE_RUN_SUPPORT_FORWARD_STATE_LIMIT = 16;
+const ACTION_RESULT_CONTINUATION_RADIUS = 1;
+const ACTION_RESULT_CONTINUATION_STATE_LIMIT = 1;
 const SOURCE_RUN_EXACT_STATE_PRECISE_SUPPORT_LIMIT = 12;
 const SOURCE_RUN_SUPPORT_LEXICAL_PER_RUN_LIMIT = 6;
 const SOURCE_RUN_SUPPORT_RADIUS = 2;
@@ -285,6 +287,32 @@ export function insertWorkflowUiSupport(params: {
         ]
       : rankedSupportEntries;
   const selectedSupportIds = new Set<string>();
+  const makeSupportEntry = (
+    fact: MemoryFact,
+    exactContext = false,
+  ): (typeof procedureFirstSupportEntries)[number] => {
+    const supportUnitHits = listFactTermUnitHitsForFacts([fact.id], params.recallLexicalUnits);
+    return {
+      fact,
+      exactContext,
+      queryEvidenceScore: supportQueryEvidenceScore(
+        fact,
+        params.scoringQueryUnits,
+        params.unitWeights,
+      ),
+      scored: buildScoredFact({
+        fact,
+        queryUnits: params.scoringQueryUnits,
+        factUnitHits: supportUnitHits.get(fact.id),
+        unitWeights: params.unitWeights,
+        query: params.query,
+        anchorUnitSets: params.anchorUnitSets,
+        alwaysIncludePinned: params.alwaysIncludePinned,
+        options: params.options,
+        now: params.now,
+      }),
+    };
+  };
   const addSupportEntry = (
     entry: (typeof procedureFirstSupportEntries)[number],
     dedupeKeyOverride?: string | null,
@@ -313,6 +341,38 @@ export function insertWorkflowUiSupport(params: {
     }
     params.scoredById.set(entry.fact.id, entry.scored);
     return true;
+  };
+  const addImmediateOutcomeContinuationChain = (
+    entry: (typeof procedureFirstSupportEntries)[number],
+  ): void => {
+    if (!isActionResultOutcome(entry.fact)) return;
+    const visitedStateKeys = new Set<string>();
+    let anchorFact: MemoryFact = entry.fact;
+    while (params.selected.length < supportLimit) {
+      const anchorStateKey = sourceRunStateKey(anchorFact);
+      if (!anchorStateKey || visitedStateKeys.has(anchorStateKey)) return;
+      visitedStateKeys.add(anchorStateKey);
+      const nextOutcome = listFactsForSourceRunForwardWindows(
+        [supportObservationContext(anchorFact)],
+        {
+          memoryKind: ['outcome'],
+          forwardRadius: ACTION_RESULT_CONTINUATION_RADIUS,
+          stateLimit: ACTION_RESULT_CONTINUATION_STATE_LIMIT,
+          factsPerStateKind: 4,
+          limit: 4,
+          ...commonQueryOptions,
+        },
+      ).find((fact) => isActionResultOutcome(fact) && !params.seenIds.has(fact.id));
+      if (!nextOutcome) return;
+      const nextEntry = makeSupportEntry(nextOutcome);
+      const stateKey = sourceRunStateKey(nextOutcome);
+      const added = addSupportEntry(
+        nextEntry,
+        `immediate_outcome_support:${stateKey ?? nextOutcome.id}`,
+      );
+      if (!added) return;
+      anchorFact = nextOutcome;
+    }
   };
 
   const selectedOutcomeKeys = selectedOutcomeStateKeys(params.selected);
@@ -353,7 +413,9 @@ export function insertWorkflowUiSupport(params: {
       });
     for (const entry of immediateContinuationEntries) {
       const stateKey = sourceRunStateKey(entry.fact);
-      addSupportEntry(entry, `immediate_outcome_support:${stateKey}`);
+      if (addSupportEntry(entry, `immediate_outcome_support:${stateKey}`)) {
+        addImmediateOutcomeContinuationChain(entry);
+      }
       if (params.selected.length >= supportLimit) break;
     }
   }
@@ -391,6 +453,7 @@ export function insertWorkflowUiSupport(params: {
         ? `source_balanced_support:${entry.fact.sourceRunId ?? ''}:${diversityKey ?? entry.fact.id}`
         : diversityKey,
     );
+    addImmediateOutcomeContinuationChain(entry);
     if (params.selected.length >= supportLimit) break;
   }
 }

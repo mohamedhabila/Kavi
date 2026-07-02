@@ -14,6 +14,11 @@ import type { MemoryFact } from './facts/types';
 import type { MemoryEpisode } from './episodes/types';
 import { compactJsonFields, parseJsonRecord } from './factJson';
 import { compactUiInventoryPromptFields } from './promptUiInventoryFields';
+import {
+  compactProcedureTraceActionTransitions,
+  compactProcedureTraceSurfaceTrail,
+  compactProcedureTraceTargetControl,
+} from './procedureTraceSummary';
 import { isUiSurfaceMemoryKind, promptFieldsForMemoryKind } from './uiFactFields';
 import {
   collectUiObservationEvidenceTexts,
@@ -94,8 +99,6 @@ const MAX_RENDERED_UI_FACT_CHARS = 2_400;
 const MAX_RETRIEVED_FACT_SECTION_CHARS = 3_400;
 const MAX_RENDERED_EPISODE_CHARS = 200;
 const MAX_PROCEDURE_STEP_TEXT_CHARS = 140;
-const MAX_PROCEDURE_SURFACE_TRAIL_ENTRIES = 16;
-const MAX_PROCEDURE_ACTION_TRANSITIONS = 12;
 
 function hasPromptUiObservation(
   fact: PromptMemoryFact,
@@ -195,153 +198,28 @@ function compactProcedureStep(step: unknown): Record<string, unknown> | null {
     const value = input[field];
     if (value === undefined || value === null || value === '') return;
     compact[field] =
-      typeof value === 'string' ? fitText(value, MAX_PROCEDURE_STEP_TEXT_CHARS) : value;
+      typeof value === 'string'
+        ? field === 'thought'
+          ? fitBalancedPromptText(value, MAX_PROCEDURE_STEP_TEXT_CHARS)
+          : fitText(value, MAX_PROCEDURE_STEP_TEXT_CHARS)
+        : value;
   };
   copyScalar('stateIndex');
   copyScalar('state_index');
   copyScalar('url');
   copyScalar('action');
-  const targetControl = compactProcedureTargetControl(input.targetControl);
+  const targetControl = compactProcedureTraceTargetControl(input.targetControl);
   if (targetControl) compact.targetControl = targetControl;
+  if (Array.isArray(input.surfaceLabels)) {
+    const surfaceLabels = input.surfaceLabels
+      .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+      .map((entry) => fitText(entry, 160))
+      .slice(0, 6);
+    if (surfaceLabels.length > 0) compact.surfaceLabels = surfaceLabels;
+  }
   copyScalar('thought');
   copyScalar('outcome');
   return Object.keys(compact).length > 0 ? compact : null;
-}
-function compactProcedureTargetControl(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const input = value as Record<string, unknown>;
-  const compact = dropEmptyPromptRecord({
-    nodeId: typeof input.nodeId === 'string' ? fitText(input.nodeId, 80) : undefined,
-    role: typeof input.role === 'string' ? fitText(input.role, 80) : undefined,
-    name: typeof input.name === 'string' ? fitText(input.name, 160) : undefined,
-    peerNames: Array.isArray(input.peerNames)
-      ? input.peerNames
-          .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
-          .map((entry) => fitText(entry, 160))
-          .slice(0, 8)
-      : undefined,
-  });
-  return Object.keys(compact).length > 0 ? compact : null;
-}
-
-function compactProcedureSurfaceTrailStep(step: unknown): Record<string, unknown> | null {
-  if (!step || typeof step !== 'object' || Array.isArray(step)) return null;
-  const input = step as Record<string, unknown>;
-  const stateIndex = input.stateIndex ?? input.state_index;
-  const url = input.url;
-  const action = input.action;
-  const targetControl = compactProcedureTargetControl(input.targetControl);
-  const compact = dropEmptyPromptRecord({
-    stateIndex:
-      typeof stateIndex === 'string'
-        ? fitText(stateIndex, 24)
-        : typeof stateIndex === 'number'
-          ? stateIndex
-          : undefined,
-    url: typeof url === 'string' ? fitText(url, 220) : undefined,
-    action: typeof action === 'string' ? fitText(action, 120) : undefined,
-    targetControl,
-  });
-  return Object.keys(compact).length > 0 ? compact : null;
-}
-
-function sameProcedureSurfaceTrailEntry(
-  left: Record<string, unknown> | null,
-  right: Record<string, unknown> | null,
-): boolean {
-  if (!left || !right) return false;
-  return (
-    left.stateIndex === right.stateIndex && left.url === right.url && left.action === right.action
-  );
-}
-
-function capProcedureSurfaceTrail(trail: Record<string, unknown>[]): Record<string, unknown>[] {
-  if (trail.length <= MAX_PROCEDURE_SURFACE_TRAIL_ENTRIES) return trail;
-  const headCount = Math.ceil(MAX_PROCEDURE_SURFACE_TRAIL_ENTRIES / 2);
-  const tailCount = Math.floor(MAX_PROCEDURE_SURFACE_TRAIL_ENTRIES / 2);
-  const capped: Record<string, unknown>[] = [];
-  for (const entry of [...trail.slice(0, headCount), ...trail.slice(-tailCount)]) {
-    if (sameProcedureSurfaceTrailEntry(capped[capped.length - 1] ?? null, entry)) continue;
-    capped.push(entry);
-  }
-  return capped;
-}
-
-function capProcedureActionTransitions(
-  transitions: Record<string, unknown>[],
-): Record<string, unknown>[] {
-  if (transitions.length <= MAX_PROCEDURE_ACTION_TRANSITIONS) return transitions;
-  const headCount = Math.ceil(MAX_PROCEDURE_ACTION_TRANSITIONS / 2);
-  const tailCount = Math.floor(MAX_PROCEDURE_ACTION_TRANSITIONS / 2);
-  return [...transitions.slice(0, headCount), ...transitions.slice(-tailCount)];
-}
-
-function compactProcedureActionTransitions(steps: unknown): Record<string, unknown>[] | null {
-  if (!Array.isArray(steps)) return null;
-  const transitions: Record<string, unknown>[] = [];
-  for (let index = 0; index < steps.length - 1; index += 1) {
-    const fromStep = steps[index];
-    const toStep = steps[index + 1];
-    if (
-      !fromStep ||
-      typeof fromStep !== 'object' ||
-      Array.isArray(fromStep) ||
-      !toStep ||
-      typeof toStep !== 'object' ||
-      Array.isArray(toStep)
-    ) {
-      continue;
-    }
-    const from = fromStep as Record<string, unknown>;
-    const to = toStep as Record<string, unknown>;
-    const action = to.action;
-    if (typeof action !== 'string' || !action.trim()) continue;
-    const fromStateIndex = from.stateIndex ?? from.state_index;
-    const toStateIndex = to.stateIndex ?? to.state_index;
-    const transition = dropEmptyPromptRecord({
-      fromStateIndex:
-        typeof fromStateIndex === 'string'
-          ? fitText(fromStateIndex, 24)
-          : typeof fromStateIndex === 'number'
-            ? fromStateIndex
-            : undefined,
-      observedAction: fitText(action, 120),
-      targetControl: compactProcedureTargetControl(to.targetControl),
-      fromUrl: typeof from.url === 'string' ? fitText(from.url, 180) : undefined,
-      toStateIndex:
-        typeof toStateIndex === 'string'
-          ? fitText(toStateIndex, 24)
-          : typeof toStateIndex === 'number'
-            ? toStateIndex
-            : undefined,
-      toUrl: typeof to.url === 'string' ? fitText(to.url, 180) : undefined,
-    });
-    if (Object.keys(transition).length > 0) transitions.push(transition);
-  }
-  return transitions.length > 0 ? capProcedureActionTransitions(transitions) : null;
-}
-
-function compactProcedureSurfaceTrail(steps: unknown): Record<string, unknown>[] | null {
-  if (!Array.isArray(steps)) return null;
-  const trail: Record<string, unknown>[] = [];
-  let lastUrl: string | null = null;
-  let finalEntry: Record<string, unknown> | null = null;
-  for (const step of steps) {
-    const entry = compactProcedureSurfaceTrailStep(step);
-    if (!entry) continue;
-    finalEntry = entry;
-    const url = typeof entry.url === 'string' ? entry.url : null;
-    if (trail.length === 0 || (url && url !== lastUrl)) {
-      if (!sameProcedureSurfaceTrailEntry(trail[trail.length - 1] ?? null, entry)) {
-        trail.push(entry);
-      }
-    }
-    if (url) lastUrl = url;
-  }
-  if (finalEntry && !sameProcedureSurfaceTrailEntry(trail[trail.length - 1] ?? null, finalEntry)) {
-    trail.push(finalEntry);
-  }
-  return trail.length > 0 ? capProcedureSurfaceTrail(trail) : null;
 }
 
 function compactProcedurePromptFields(parsed: Record<string, unknown> | null): string | null {
@@ -357,10 +235,10 @@ function compactProcedurePromptFields(parsed: Record<string, unknown> | null): s
   copyField('domain');
   copyField('environment');
   copyField('stepCount');
-  const actionTransitions = compactProcedureActionTransitions(parsed.steps);
-  if (actionTransitions) compact.actionTransitions = actionTransitions;
-  const surfaceTrail = compactProcedureSurfaceTrail(parsed.steps);
+  const surfaceTrail = compactProcedureTraceSurfaceTrail(parsed.steps);
   if (surfaceTrail) compact.surfaceTrail = surfaceTrail;
+  const actionTransitions = compactProcedureTraceActionTransitions(parsed.steps);
+  if (actionTransitions) compact.actionTransitions = actionTransitions;
   if (Array.isArray(parsed.steps)) {
     const steps = parsed.steps.map(compactProcedureStep).filter(Boolean);
     if (steps.length > 0) compact.steps = steps;

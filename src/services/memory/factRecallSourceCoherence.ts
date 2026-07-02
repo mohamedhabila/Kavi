@@ -96,7 +96,10 @@ function scoreSourceGroup(entries: ReadonlyArray<ScoredFact>): number {
   return score + kindBonus + actionResultBonus;
 }
 
-export function rankSourceCoherentEntries(scored: ReadonlyArray<ScoredFact>): ScoredFact[] {
+export function rankSourceCoherentEntries(
+  scored: ReadonlyArray<ScoredFact>,
+  sourceRunEvidenceRank: ReadonlyMap<string, number> = new Map(),
+): ScoredFact[] {
   const groupsByKey = new Map<string, SourceGroup>();
   scored.forEach((entry, index) => {
     const key = sourceGroupKey(entry);
@@ -121,6 +124,13 @@ export function rankSourceCoherentEntries(scored: ReadonlyArray<ScoredFact>): Sc
   groups.sort((left, right) => {
     if (right.score !== left.score) return right.score - left.score;
     if (right.bestScore !== left.bestScore) return right.bestScore - left.bestScore;
+    const leftEvidenceRank = left.key.startsWith('source:')
+      ? (sourceRunEvidenceRank.get(left.key.slice('source:'.length)) ?? Number.MAX_SAFE_INTEGER)
+      : Number.MAX_SAFE_INTEGER;
+    const rightEvidenceRank = right.key.startsWith('source:')
+      ? (sourceRunEvidenceRank.get(right.key.slice('source:'.length)) ?? Number.MAX_SAFE_INTEGER)
+      : Number.MAX_SAFE_INTEGER;
+    if (leftEvidenceRank !== rightEvidenceRank) return leftEvidenceRank - rightEvidenceRank;
     return left.firstIndex - right.firstIndex;
   });
   return groups.flatMap((group) => group.entries);

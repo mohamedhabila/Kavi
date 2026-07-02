@@ -45,6 +45,7 @@ export const UI_FIELD_FACT_FIELDS = [
   'value',
   'displayText',
   'options',
+  'optionRoles',
   'symbolMarkers',
   'adjacentControls',
   'controlIndex',
@@ -55,7 +56,6 @@ export const UI_FIELD_FACT_FIELDS = [
   'disabled',
   'expanded',
   'contextLabels',
-  'surfaceLabels',
   'url',
   'sourceRunId',
   'stateIndex',
@@ -68,6 +68,7 @@ export const UI_FIELD_RETRIEVAL_FIELDS = [
   'value',
   'displayText',
   'options',
+  'optionRoles',
   'symbolMarkers',
   'adjacentControls',
   'required',
@@ -76,7 +77,6 @@ export const UI_FIELD_RETRIEVAL_FIELDS = [
   'disabled',
   'expanded',
   'contextLabels',
-  'surfaceLabels',
   'url',
 ] as const;
 
@@ -168,10 +168,10 @@ export const UI_FIELD_PRIORITY_FIELDS = [
   'value',
   'displayText',
   'options',
+  'optionRoles',
   'symbolMarkers',
   'expanded',
   'contextLabels',
-  'surfaceLabels',
   'url',
 ] as const;
 
@@ -204,8 +204,14 @@ export const UI_INVENTORY_FORM_FIELD_SHAPE_FIELDS = [
   'disabled',
   'displayText',
   'symbolMarkers',
+  'optionRoles',
 ] as const;
-export const UI_INVENTORY_TEXT_ENTRY_SHAPE_FIELDS = ['role', 'name', 'controlName', 'type'] as const;
+export const UI_INVENTORY_TEXT_ENTRY_SHAPE_FIELDS = [
+  'role',
+  'name',
+  'controlName',
+  'type',
+] as const;
 export const UI_INVENTORY_SEARCH_SHAPE_FIELDS = ['role', 'name', 'controlName', 'type'] as const;
 export const UI_INVENTORY_ACTION_CONTROL_SHAPE_FIELDS = [
   'role',
@@ -223,6 +229,7 @@ export const UI_INVENTORY_POPUP_SHAPE_FIELDS = [
   'controlName',
   'value',
   'options',
+  'optionRoles',
   'expanded',
 ] as const;
 export const UI_INVENTORY_LABEL_VALUE_SHAPE_FIELDS = [
@@ -231,12 +238,13 @@ export const UI_INVENTORY_LABEL_VALUE_SHAPE_FIELDS = [
   'contextLabels',
   'nearbyTextBefore',
 ] as const;
-export const UI_INVENTORY_SECTION_SHAPE_FIELDS = [
+export const UI_INVENTORY_SECTION_SHAPE_FIELDS = ['label', 'controlNames', 'fieldLabels'] as const;
+export const UI_INVENTORY_TABLE_SHAPE_FIELDS = [
+  'role',
   'label',
-  'controlNames',
-  'fieldLabels',
+  'columnLabels',
+  'rowCount',
 ] as const;
-export const UI_INVENTORY_TABLE_SHAPE_FIELDS = ['role', 'label', 'columnLabels', 'rowCount'] as const;
 
 const PROMPT_FIELDS_BY_KIND: Partial<Record<MemoryFactKind, ReadonlyArray<string>>> = {
   surface_schema: SURFACE_PROMPT_FIELDS,

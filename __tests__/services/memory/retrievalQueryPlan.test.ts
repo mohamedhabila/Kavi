@@ -24,9 +24,22 @@ describe('planRetrievalSignals', () => {
     expect(plan.droppedSignals).toHaveLength(0);
   });
 
+  it('splits single-line task and response-shape sentences into separate retrieval signals', () => {
+    const plan = planRetrievalSignals([
+      'Find qworkflow-target evidence on the active surface. Return qresponse-shape only.',
+    ]);
+
+    expect(plan.primarySignals).toEqual([
+      'Find qworkflow-target evidence on the active surface.',
+      'Return qresponse-shape only.',
+    ]);
+  });
+
   it('preserves user line boundaries as separate primary retrieval signals', () => {
     const plan = planRetrievalSignals([
-      ['Find qprimary-task evidence on the active surface.', 'Return qformat-tail only.'].join('\n'),
+      ['Find qprimary-task evidence on the active surface.', 'Return qformat-tail only.'].join(
+        '\n',
+      ),
     ]);
 
     expect(plan.primarySignals).toEqual([

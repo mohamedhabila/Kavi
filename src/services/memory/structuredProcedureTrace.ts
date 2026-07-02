@@ -3,6 +3,7 @@ import { recordFact } from './facts/mutations';
 import type { RecordFactInput } from './facts/types';
 import { compactJson } from './structuredObservationCompaction';
 import { parseAccessibilityTree, type AccessibilityNode } from './accessibilityTree';
+import { extractUiStateSummary } from './uiState';
 import { isInteractiveUiNode } from './uiInteractivity';
 
 const MAX_PROCEDURE_TEXT_CHARS = 7_500;
@@ -12,6 +13,8 @@ const MAX_PROCEDURE_ACTION_CHARS = 220;
 const MAX_PROCEDURE_THOUGHT_CHARS = 320;
 const MAX_PROCEDURE_TARGET_CHARS = 160;
 const MAX_PROCEDURE_TARGET_PEER_NAMES = 8;
+const MAX_PROCEDURE_SURFACE_LABELS = 6;
+const MAX_PROCEDURE_SURFACE_LABEL_CHARS = 160;
 const MAX_PROCEDURE_STEPS_FOR_STORAGE = 36;
 const NON_ENVIRONMENT_PROCEDURE_ACTIONS = new Set(['send_msg_to_user']);
 const TARGET_PEER_CONTEXT_ROLES = new Set(['listitem', 'menuitem', 'option']);
@@ -80,31 +83,34 @@ export function collectProcedureTrace(
   const stateIndex = scalarField(payload, 'state_index') ?? scalarField(payload, 'step');
   const action = stringField(payload, 'action');
   if (action && isNonEnvironmentProcedureAction(action)) return;
+  const currentNodes = parsePayloadAccessibilityNodes(payload);
   const step = dropEmpty({
     stateIndex,
     url: stringField(payload, 'url'),
     action,
-    targetControl: action ? targetControlForAction(payload, action, previousObservation) : null,
+    targetControl: action
+      ? targetControlForAction(payload, action, previousObservation, currentNodes)
+      : null,
+    surfaceLabels: currentNodes ? procedureSurfaceLabels(currentNodes) : undefined,
     thought: stringField(payload, 'thought'),
-    outcome: stringField(payload, 'outcome') ?? stringField(payload, 'status') ?? context.toolStatus,
+    outcome:
+      stringField(payload, 'outcome') ?? stringField(payload, 'status') ?? context.toolStatus,
   });
   if (Object.keys(step).length === 0) return;
 
-  const existing =
-    traces.get(sourceRunId) ??
-    {
-      context: {
-        ...context,
-        sourceRunId,
-      },
+  const existing = traces.get(sourceRunId) ?? {
+    context: {
+      ...context,
       sourceRunId,
-      subjectName: `workflow:${sourceRunId}`,
-      goal: stringField(payload, 'goal'),
-      trajectoryOutcome: stringField(payload, 'trajectory_outcome'),
-      domain: stringField(payload, 'domain'),
-      environment: stringField(payload, 'environment'),
-      steps: [],
-    };
+    },
+    sourceRunId,
+    subjectName: `workflow:${sourceRunId}`,
+    goal: stringField(payload, 'goal'),
+    trajectoryOutcome: stringField(payload, 'trajectory_outcome'),
+    domain: stringField(payload, 'domain'),
+    environment: stringField(payload, 'environment'),
+    steps: [],
+  };
   existing.goal ??= stringField(payload, 'goal');
   existing.trajectoryOutcome ??= stringField(payload, 'trajectory_outcome');
   existing.domain ??= stringField(payload, 'domain');
@@ -241,12 +247,16 @@ function recordProcedureFact(input: {
 function compactProcedureStep(step: JsonRecord, plan: ProcedureStoragePlan): JsonRecord {
   return dropEmpty({
     stateIndex: scalarField(step, 'stateIndex'),
-    url: fitProcedureText(stringField(step, 'url'), Math.min(plan.urlChars, MAX_PROCEDURE_URL_CHARS)),
+    url: fitProcedureText(
+      stringField(step, 'url'),
+      Math.min(plan.urlChars, MAX_PROCEDURE_URL_CHARS),
+    ),
     action: fitProcedureText(
       stringField(step, 'action'),
       Math.min(plan.actionChars, MAX_PROCEDURE_ACTION_CHARS),
     ),
     targetControl: compactProcedureTargetControl(step.targetControl),
+    surfaceLabels: compactProcedureSurfaceLabels(step.surfaceLabels),
     thought: fitProcedureText(
       stringField(step, 'thought'),
       Math.min(plan.thoughtChars, MAX_PROCEDURE_THOUGHT_CHARS),
@@ -261,6 +271,7 @@ function compactMinimalProcedureStep(step: JsonRecord, plan: ProcedureStoragePla
     url: fitProcedureText(stringField(step, 'url'), plan.urlChars),
     action: fitProcedureText(stringField(step, 'action'), plan.actionChars),
     targetControl: compactProcedureTargetControl(step.targetControl),
+    surfaceLabels: compactProcedureSurfaceLabels(step.surfaceLabels),
   });
 }
 
@@ -268,25 +279,52 @@ function targetControlForAction(
   payload: JsonRecord,
   action: string,
   previousObservation?: ProcedurePreviousObservation | null,
+  currentNodes?: AccessibilityNode[] | null,
 ): JsonRecord | null {
   const targetRef = firstActionTargetRef(action);
   if (!targetRef) return null;
   const previousAccessibilityTree = previousObservation?.accessibilityTree?.trim() || null;
-  const currentAccessibilityTree = stringField(payload, 'accessibility_tree');
   const previousTarget = previousAccessibilityTree
     ? targetControlFromTree(previousAccessibilityTree, targetRef)
     : null;
-  return previousTarget ?? (currentAccessibilityTree ? targetControlFromTree(currentAccessibilityTree, targetRef) : null);
+  return previousTarget ?? (currentNodes ? targetControlFromNodes(currentNodes, targetRef) : null);
 }
 
 function targetControlFromTree(accessibilityTree: string, targetRef: string): JsonRecord | null {
-  const nodes = parseAccessibilityTree(accessibilityTree);
+  return targetControlFromNodes(parseAccessibilityTree(accessibilityTree), targetRef);
+}
+
+function targetControlFromNodes(nodes: AccessibilityNode[], targetRef: string): JsonRecord | null {
   const byNodeId = nodes.find((node) => node.nodeId === targetRef);
   if (byNodeId) return compactTargetNode(nodes, byNodeId);
-  const byName = nodes.find(
-    (node) => node.name?.trim() === targetRef && isInteractiveUiNode(node),
-  );
+  const byName = nodes.find((node) => node.name?.trim() === targetRef && isInteractiveUiNode(node));
   return byName ? compactTargetNode(nodes, byName) : null;
+}
+
+function parsePayloadAccessibilityNodes(payload: JsonRecord): AccessibilityNode[] | null {
+  const accessibilityTree = stringField(payload, 'accessibility_tree');
+  if (!accessibilityTree) return null;
+  const nodes = parseAccessibilityTree(accessibilityTree);
+  return nodes.length > 0 ? nodes : null;
+}
+
+function procedureSurfaceLabels(nodes: AccessibilityNode[]): string[] | undefined {
+  const labels = compactProcedureSurfaceLabels(extractUiStateSummary(nodes).surfaceLabels);
+  return labels && labels.length > 0 ? labels : undefined;
+}
+
+function compactProcedureSurfaceLabels(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const labels: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    const label = fitProcedureText(entry, MAX_PROCEDURE_SURFACE_LABEL_CHARS);
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    labels.push(label);
+    if (labels.length >= MAX_PROCEDURE_SURFACE_LABELS) break;
+  }
+  return labels.length > 0 ? labels : undefined;
 }
 
 function firstActionTargetRef(action: string): string | null {

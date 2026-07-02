@@ -16,6 +16,7 @@ import {
 } from '../../src/services/memory/schema';
 import { closeMemoryDb, getChunkCount } from '../../src/services/memory/sqlite-store';
 import type { Message } from '../../src/types/message';
+import { compactJson } from './runtimeJsonCompaction';
 
 type JsonObject = Record<string, unknown>;
 
@@ -116,12 +117,6 @@ function scalarToText(value: unknown): string | null {
     return String(value);
   }
   return null;
-}
-
-function compactJson(value: unknown, maxChars: number): string {
-  const serialized = JSON.stringify(value);
-  if (serialized.length <= maxChars) return serialized;
-  return `${serialized.slice(0, maxChars - 3)}...`;
 }
 
 function compactScalar(value: unknown, maxChars: number): string | number | boolean | null {

@@ -23,6 +23,21 @@ const WHITESPACE_PATTERN = /\s+/g;
 const WRAPPED_MARKER_PATTERN = /^(?:<[^<>]{1,80}>|\[[^\[\]]{1,80}\])$/u;
 const LABEL_MARKER_PATTERN = /^[\p{L}\p{M}\p{N}\s#._/-]{1,80}:$/u;
 
+type SentenceSegment = {
+  segment: string;
+};
+
+type SentenceSegmenter = {
+  segment(input: string): Iterable<SentenceSegment>;
+};
+
+type SentenceSegmenterConstructor = new (
+  locales?: string | string[],
+  options?: { granularity?: 'sentence' },
+) => SentenceSegmenter;
+
+let cachedSentenceSegmenter: SentenceSegmenter | null | undefined;
+
 export function planRetrievalSignals(rawSignals: ReadonlyArray<string>): RetrievalQueryPlan {
   const primarySignals: string[] = [];
   const supportingSignals: string[] = [];
@@ -45,11 +60,16 @@ export function planRetrievalSignals(rawSignals: ReadonlyArray<string>): Retriev
         droppedSignals.push(line);
         continue;
       }
-      for (const span of extractQuotedSpans(line)) addUniqueSignal(extracted, span, MAX_EXTRACTED_SPANS);
+      for (const span of extractQuotedSpans(line))
+        addUniqueSignal(extracted, span, MAX_EXTRACTED_SPANS);
       keptLines.push(line);
     }
 
-    if (keptLines.length > 0) {
+    if (keptLines.length === 1) {
+      for (const lineSignal of primarySignalsForSingleLine(keptLines[0] ?? '')) {
+        addUniqueSignal(primarySignals, fitSignal(lineSignal), MAX_PRIMARY_SIGNALS);
+      }
+    } else if (keptLines.length > 0) {
       addUniqueSignal(primarySignals, fitSignal(keptLines[0] ?? ''), MAX_PRIMARY_SIGNALS);
       if (keptLines.length > MAX_PRIMARY_SIGNALS) {
         addUniqueSignal(primarySignals, fitSignal(keptLines.join(' ')), MAX_PRIMARY_SIGNALS);
@@ -74,6 +94,40 @@ export function planRetrievalSignals(rawSignals: ReadonlyArray<string>): Retriev
 
 function normalizeSignal(value: string): string {
   return value.normalize('NFKC').replace(WHITESPACE_PATTERN, ' ').trim();
+}
+
+function getSentenceSegmenter(): SentenceSegmenter | null {
+  if (cachedSentenceSegmenter !== undefined) return cachedSentenceSegmenter;
+  const segmenterCtor = (
+    Intl as typeof Intl & {
+      Segmenter?: SentenceSegmenterConstructor;
+    }
+  ).Segmenter;
+  cachedSentenceSegmenter =
+    typeof segmenterCtor === 'function'
+      ? new segmenterCtor(undefined, { granularity: 'sentence' })
+      : null;
+  return cachedSentenceSegmenter;
+}
+
+function sentenceSegments(value: string): string[] {
+  const normalized = normalizeSignal(value);
+  if (!normalized) return [];
+  const segmenter = getSentenceSegmenter();
+  if (segmenter) {
+    return Array.from(segmenter.segment(normalized), (segment) =>
+      normalizeSignal(segment.segment),
+    ).filter(Boolean);
+  }
+  return normalized
+    .split(/(?<=[.!?。！？])\s+/u)
+    .map(normalizeSignal)
+    .filter(Boolean);
+}
+
+function primarySignalsForSingleLine(line: string): string[] {
+  const segments = sentenceSegments(line);
+  return segments.length > 1 ? segments : [line];
 }
 
 function extractQuotedSpans(value: string): string[] {

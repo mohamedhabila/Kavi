@@ -5,6 +5,7 @@ import {
   type FactRow,
   type ListFactsOptions,
   type MemoryFact,
+  type MemoryFactKind,
 } from './types';
 
 type SqlBindValue = string | number;
@@ -114,7 +115,8 @@ export function listFactsForSourceRunLexicalMatches(
        SELECT matched.*,
               ROW_NUMBER() OVER (
                 PARTITION BY matched.source_run_id
-                ORDER BY matched.source_match_weight DESC,
+                ORDER BY CASE WHEN matched.memory_kind = 'procedure' THEN 0 ELSE 1 END ASC,
+                         matched.source_match_weight DESC,
                          matched.source_unit_count DESC,
                          matched.source_state_index DESC,
                          matched.retrievability DESC,
@@ -139,4 +141,98 @@ export function listFactsForSourceRunLexicalMatches(
     factsPerSourceRun,
   );
   return rows.map(rowToFact);
+}
+
+export function listSourceRunIdsForLexicalEvidence(
+  queryUnits: ReadonlyArray<string>,
+  options: Pick<
+    ListFactsOptions,
+    | 'memoryKind'
+    | 'scope'
+    | 'originConversationId'
+    | 'originTaskId'
+    | 'includeDeleted'
+    | 'includeExpired'
+    | 'includeInvalidated'
+    | 'asOf'
+  > & {
+    limit?: number;
+    memoryKind?: MemoryFactKind | MemoryFactKind[];
+  } = {},
+): string[] {
+  const uniqueQueryUnits = Array.from(
+    new Set(queryUnits.map((unit) => unit.trim()).filter((unit) => unit.length > 0)),
+  );
+  if (uniqueQueryUnits.length === 0) return [];
+  const filter = sourceRunFactFilter(options);
+  const limit = clampLimit(options.limit, 12);
+  const fetchLimit = Math.min(MAX_SOURCE_RUN_LEXICAL_LIMIT, Math.max(limit * 8, limit));
+  const rows = getMany<{
+    source_run_id: string;
+    best_fact_weight: number;
+    best_fact_unit_count: number;
+    source_match_weight: number;
+    matched_fact_count: number;
+  }>(
+    `WITH fact_matches AS (
+       SELECT t.source_run_id,
+              t.fact_id,
+              SUM(t.weight) AS fact_match_weight,
+              COUNT(DISTINCT t.unit) AS fact_unit_count
+         FROM memory_fact_terms AS t INDEXED BY idx_fact_terms_unit_kind_fact
+         JOIN memory_facts f ON f.id = t.fact_id
+        ${whereSql({
+          clauses: [
+            't.source_run_id IS NOT NULL',
+            `t.unit IN (${uniqueQueryUnits.map(() => '?').join(', ')})`,
+            ...filter.clauses,
+          ],
+          params: [...uniqueQueryUnits, ...filter.params],
+        })}
+        GROUP BY t.source_run_id, t.fact_id
+     ),
+     source_matches AS (
+       SELECT source_run_id,
+              MAX(fact_match_weight) AS best_fact_weight,
+              MAX(fact_unit_count) AS best_fact_unit_count,
+              SUM(fact_match_weight) AS source_match_weight,
+              COUNT(*) AS matched_fact_count
+         FROM fact_matches
+        GROUP BY source_run_id
+     )
+     SELECT source_run_id
+            ,best_fact_weight
+            ,best_fact_unit_count
+            ,source_match_weight
+            ,matched_fact_count
+       FROM source_matches
+      ORDER BY best_fact_weight DESC,
+               best_fact_unit_count DESC,
+               source_match_weight DESC,
+               matched_fact_count DESC
+      LIMIT ${fetchLimit}`,
+    ...uniqueQueryUnits,
+    ...filter.params,
+  );
+  return rows
+    .sort((left, right) => {
+      const leftAdditional = Math.max(left.source_match_weight - left.best_fact_weight, 0);
+      const rightAdditional = Math.max(right.source_match_weight - right.best_fact_weight, 0);
+      const leftScore = left.best_fact_weight + Math.log1p(leftAdditional);
+      const rightScore = right.best_fact_weight + Math.log1p(rightAdditional);
+      if (rightScore !== leftScore) return rightScore - leftScore;
+      if (right.best_fact_weight !== left.best_fact_weight) {
+        return right.best_fact_weight - left.best_fact_weight;
+      }
+      if (right.best_fact_unit_count !== left.best_fact_unit_count) {
+        return right.best_fact_unit_count - left.best_fact_unit_count;
+      }
+      if (right.matched_fact_count !== left.matched_fact_count) {
+        return right.matched_fact_count - left.matched_fact_count;
+      }
+      return 0;
+    })
+    .slice(0, limit)
+    .map((row) => row.source_run_id)
+    .filter(Boolean);
 }

@@ -8,8 +8,12 @@ import {
   listFactsForRecallCandidates,
   listFactsForSourceRuns,
 } from './facts/queries';
-import { listFactsForSourceRunLexicalMatches } from './facts/sourceRunLexicalMatches';
+import {
+  listFactsForSourceRunLexicalMatches,
+  listSourceRunIdsForLexicalEvidence,
+} from './facts/sourceRunLexicalMatches';
 import { type MemoryFact, type MemoryFactScope } from './facts/types';
+import { promoteSelectedActionResultContinuations } from './factRecallActionContinuations';
 import { selectIndexedRecallLexicalUnits } from './factRecallCandidateUnits';
 import { insertProcedureLocalSupport } from './factRecallProcedureSupport';
 import { buildRecallLexicalUnits, selectScoringQueryUnits } from './factRecallQueryUnits';
@@ -17,6 +21,7 @@ import { rankSourceCoherentEntries } from './factRecallSourceCoherence';
 import {
   SOURCE_RUN_CANDIDATE_EXPANSION_KINDS,
   SOURCE_RUN_CANDIDATE_FACTS_PER_SOURCE,
+  SOURCE_RUN_CANDIDATE_SOURCE_LIMIT,
   sourceRunIdsForLocalExpansion,
 } from './factRecallSourceExpansion';
 import {
@@ -45,6 +50,7 @@ import {
   selectDiscriminativeScoringUnits,
 } from './factRecallScoring';
 import {
+  isImmediateActionResultContinuation,
   isActionResultOutcome,
   selectedActionResultSourceRuns,
 } from './factRecallSupport';
@@ -52,6 +58,7 @@ import {
   ensureSelectedUiStateInventories,
   insertSelectedUiStateInventories,
   isUiStateDetailFact,
+  uiInventoryHasStateBearingFields,
 } from './factRecallUiStateInventorySupport';
 import { insertWorkflowUiSupport } from './factRecallWorkflowUiSupport';
 import { annotateUiInventoryQueryEvidence } from './queryUiEvidence';
@@ -116,6 +123,43 @@ function addSelectedFact(params: {
   return true;
 }
 
+function hasDirectQueryEvidence(score: ScoredFact | undefined, threshold: number): boolean {
+  if (!score) return false;
+  return (
+    score.relevanceScore >= threshold ||
+    score.quotedUiControlBoost > 0 ||
+    score.surfaceLabelBoost > 0 ||
+    score.visibleTextEvidenceBoost > 0
+  );
+}
+
+function pruneBroadUiInventoriesShadowedByPreciseState(params: {
+  selected: MemoryFact[];
+  scoredById: ReadonlyMap<string, ScoredFact>;
+  threshold: number;
+}): void {
+  const preciseStateKeys = new Set<string>();
+  for (const fact of params.selected) {
+    if (!isUiStateDetailFact(fact)) continue;
+    const stateKey = sourceRunStateKey(fact);
+    if (!stateKey) continue;
+    if (!hasDirectQueryEvidence(params.scoredById.get(fact.id), params.threshold)) continue;
+    preciseStateKeys.add(stateKey);
+  }
+  if (preciseStateKeys.size === 0) return;
+
+  const pruned = params.selected.filter((fact) => {
+    if (fact.memoryKind !== 'ui_inventory') return true;
+    const stateKey = sourceRunStateKey(fact);
+    if (!stateKey || !preciseStateKeys.has(stateKey)) return true;
+    if (uiInventoryHasStateBearingFields(fact)) return true;
+    return hasDirectQueryEvidence(params.scoredById.get(fact.id), params.threshold);
+  });
+  if (pruned.length !== params.selected.length) {
+    params.selected.splice(0, params.selected.length, ...pruned);
+  }
+}
+
 async function buildRecallSelection(
   query: string,
   options: RecallFactsOptions,
@@ -175,7 +219,24 @@ async function buildRecallSelection(
     ...(options.includeHistorical ? { includeInvalidated: true } : {}),
     ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
   });
-  const localExpansionSourceRunIds = sourceRunIdsForLocalExpansion(indexedCandidates);
+  const lexicalEvidenceSourceRunIds = listSourceRunIdsForLexicalEvidence(
+    indexedRecallLexicalUnits,
+    {
+      memoryKind: options.memoryKind ?? SOURCE_RUN_CANDIDATE_EXPANSION_KINDS,
+      limit: SOURCE_RUN_CANDIDATE_SOURCE_LIMIT,
+      ...(candidateScopes ? { scope: candidateScopes } : {}),
+      ...(options.conversationId ? { originConversationId: options.conversationId } : {}),
+      ...(options.taskId ? { originTaskId: options.taskId } : {}),
+      ...(options.includeHistorical ? { includeInvalidated: true } : {}),
+      ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
+    },
+  );
+  const sourceRunEvidenceRank = new Map(
+    lexicalEvidenceSourceRunIds.map((sourceRunId, index) => [sourceRunId, index]),
+  );
+  const localExpansionSourceRunIds = Array.from(
+    new Set([...sourceRunIdsForLocalExpansion(indexedCandidates), ...lexicalEvidenceSourceRunIds]),
+  );
   const sourceRunCandidates =
     localExpansionSourceRunIds.length > 0
       ? listFactsForSourceRunLexicalMatches(localExpansionSourceRunIds, recallLexicalUnits, {
@@ -307,11 +368,13 @@ async function buildRecallSelection(
         workflowProceduresBySourceRun.set(procedure.sourceRunId, procedures);
       }
     }
-    if (primaryLimit > primaryProcedureLimit && selected.length < primaryLimit && selectedPrimaryProcedures < primaryProcedureLimit) {
-      const bestStandaloneProcedure = bestStandaloneProcedureCandidate(
-        scored,
-        threshold,
-        (entry) => isUiSurfaceIdentityCompatible(entry, dominantUiSurfaceIdentity),
+    if (
+      primaryLimit > primaryProcedureLimit &&
+      selected.length < primaryLimit &&
+      selectedPrimaryProcedures < primaryProcedureLimit
+    ) {
+      const bestStandaloneProcedure = bestStandaloneProcedureCandidate(scored, threshold, (entry) =>
+        isUiSurfaceIdentityCompatible(entry, dominantUiSurfaceIdentity),
       );
       if (bestStandaloneProcedure) {
         const added = addSelectedFact({
@@ -327,7 +390,7 @@ async function buildRecallSelection(
         }
       }
     }
-    for (const entry of rankSourceCoherentEntries(scored)) {
+    for (const entry of rankSourceCoherentEntries(scored, sourceRunEvidenceRank)) {
       if (entry.relevanceScore < threshold && entry.score < threshold) continue;
       if (!isUiSurfaceIdentityCompatible(entry, dominantUiSurfaceIdentity)) continue;
       if (
@@ -354,7 +417,8 @@ async function buildRecallSelection(
         representative.fact.memoryKind === 'procedure' &&
         selectedPrimaryProcedures >= primaryProcedureLimit
       ) {
-        continue;
+        if (entry.fact.memoryKind === 'procedure') continue;
+        representative = entry;
       }
       const added = addSelectedFact({
         selected,
@@ -476,7 +540,8 @@ async function buildRecallSelection(
       if (
         isActionResultOutcome(entry.fact) &&
         entry.fact.sourceRunId &&
-        selectedActionResultSourceRuns(selected).has(entry.fact.sourceRunId)
+        selectedActionResultSourceRuns(selected).has(entry.fact.sourceRunId) &&
+        !isImmediateActionResultContinuation(entry.fact, selected)
       ) {
         continue;
       }
@@ -524,17 +589,15 @@ async function buildRecallSelection(
         fact.sourceRunId &&
         !selectedProcedureSourceRuns.has(fact.sourceRunId),
     );
-    const hasUiProcedureSupportAnchor = selected.some(
-      (fact) => {
-        if (!fact.sourceRunId || selectedProcedureSourceRuns.has(fact.sourceRunId)) return false;
-        if (selectedActionResultSourceRunIds.has(fact.sourceRunId)) return false;
-        return (
-          fact.memoryKind === 'ui_inventory' ||
-          fact.memoryKind === 'ui_field' ||
-          fact.memoryKind === 'ui_filter_state'
-        );
-      },
-    );
+    const hasUiProcedureSupportAnchor = selected.some((fact) => {
+      if (!fact.sourceRunId || selectedProcedureSourceRuns.has(fact.sourceRunId)) return false;
+      if (selectedActionResultSourceRunIds.has(fact.sourceRunId)) return false;
+      return (
+        fact.memoryKind === 'ui_inventory' ||
+        fact.memoryKind === 'ui_field' ||
+        fact.memoryKind === 'ui_filter_state'
+      );
+    });
     const selectedProcedureNeedsEndpointSupport = selectedProcedureSourceRuns.size > 0;
     insertProcedureLocalSupport({
       selected,
@@ -557,6 +620,33 @@ async function buildRecallSelection(
       anchorUnitSets,
       alwaysIncludePinned,
       now,
+    });
+  }
+
+  if (trimmedQuery) {
+    promoteSelectedActionResultContinuations({
+      selected,
+      seenIds,
+      scoredById,
+      limit,
+      threshold: options.threshold ?? DEFAULT_TEXT_THRESHOLD,
+      candidateScopes,
+      options,
+      scoringQueryUnits: discriminativeScoringUnits,
+      recallLexicalUnits,
+      unitWeights,
+      query: trimmedQuery,
+      anchorUnitSets,
+      alwaysIncludePinned,
+      now,
+    });
+  }
+
+  if (trimmedQuery) {
+    pruneBroadUiInventoriesShadowedByPreciseState({
+      selected,
+      scoredById,
+      threshold: options.threshold ?? DEFAULT_TEXT_THRESHOLD,
     });
   }
 

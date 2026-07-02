@@ -184,7 +184,7 @@ function uiStateSlotKey(fact: MemoryFact): string | null {
   const stateIndex = scalarString(fact.attributes.stateIndex, parsed?.stateIndex);
   const url = scalarString(fact.attributes.url, parsed?.url);
   if (!sourceRunId && !stateIndex && !url) return null;
-  return `ui_state:${sourceRunId}:${stateIndex}:${url}`;
+  return `ui_state:${fact.memoryKind}:${sourceRunId}:${stateIndex}:${url}`;
 }
 
 export function selectionDedupeKey(fact: MemoryFact): string | null {
@@ -343,18 +343,18 @@ function outcomeHasDirectObservationEvidence(parsed: Record<string, unknown> | n
 }
 
 function workflowRepresentativePriority(fact: MemoryFact): number {
-  if (fact.memoryKind === 'ui_filter_state') return 6;
   const parsed = parseJsonRecord(fact.objectText);
   if (fact.memoryKind === 'ui_field') {
-    return hasStructuredControlState(parsed) ? 5 : 1;
+    return hasStructuredControlState(parsed) ? 6 : 1;
   }
+  if (fact.memoryKind === 'ui_filter_state') return 5;
   if (fact.memoryKind === 'ui_inventory') {
     return inventoryHasStructuredControlState(parsed) ? 4 : 2;
   }
   if (fact.memoryKind === 'outcome') {
     return outcomeHasDirectObservationEvidence(parsed) ? 3 : 1;
   }
-  if (fact.memoryKind === 'procedure') return 2;
+  if (fact.memoryKind === 'procedure') return 4;
   return 1;
 }
 
@@ -432,6 +432,13 @@ export function primaryWorkflowRepresentative(
   for (const candidate of scoredFacts) {
     if (candidate.fact.sourceRunId !== entry.fact.sourceRunId) continue;
     if (candidate.score < minScore && candidate.relevanceScore < threshold) continue;
+    if (
+      entry.fact.memoryKind === 'outcome' &&
+      candidate.fact.memoryKind !== 'outcome' &&
+      candidate.fact.memoryKind !== 'procedure'
+    ) {
+      continue;
+    }
     if (
       candidate.fact.memoryKind === 'procedure' &&
       entry.fact.memoryKind === 'outcome' &&
@@ -533,19 +540,24 @@ function supportFactPriority(fact: MemoryFact): number {
   if (fact.memoryKind === 'ui_inventory') return 3;
   if (fact.memoryKind !== 'ui_field') return 1;
   const parsed = parseJsonRecord(fact.objectText);
-  return parsed?.role === 'tab' ? 0 : 2;
+  return parsed?.role === 'tab' ? 5 : 2;
 }
 
 export function compareSupportCandidates(
   left: { fact: MemoryFact; scored: ScoredSelectionFact },
   right: { fact: MemoryFact; scored: ScoredSelectionFact },
 ): number {
+  const rightPriority = supportFactPriority(right.fact);
+  const leftPriority = supportFactPriority(left.fact);
+  const leftStateKey = sourceRunStateKey(left.fact);
+  const rightStateKey = sourceRunStateKey(right.fact);
+  if (leftStateKey && leftStateKey === rightStateKey && rightPriority !== leftPriority) {
+    return rightPriority - leftPriority;
+  }
   if (right.scored.score !== left.scored.score) return right.scored.score - left.scored.score;
   if (right.scored.relevanceScore !== left.scored.relevanceScore) {
     return right.scored.relevanceScore - left.scored.relevanceScore;
   }
-  const rightPriority = supportFactPriority(right.fact);
-  const leftPriority = supportFactPriority(left.fact);
   if (rightPriority !== leftPriority) return rightPriority - leftPriority;
   if (right.fact.retrievability !== left.fact.retrievability) {
     return right.fact.retrievability - left.fact.retrievability;

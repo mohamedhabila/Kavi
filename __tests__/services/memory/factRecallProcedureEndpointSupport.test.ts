@@ -8,7 +8,6 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { upsertEntity } from '../../../src/services/memory/entities';
-import { recallFactsForQuery } from '../../../src/services/memory/factRecall';
 import { insertProcedureLocalSupport } from '../../../src/services/memory/factRecallProcedureSupport';
 import type { ScoredFact } from '../../../src/services/memory/factRecallTypes';
 import type { MemoryFact } from '../../../src/services/memory/facts/types';
@@ -123,56 +122,49 @@ describe('procedure boundary UI support', () => {
     expect(selected.map((fact) => fact.id)).toEqual([procedure.id, startUi.id]);
   });
 
-  it('anchors procedure UI support to the latest endpoint in repeated attempts', () => {
-    const corpus = upsertEntity({ name: 'procedure-endpoint-ui-support', type: 'concept' });
+  it('anchors procedure UI support to the first action-bearing state after passive setup', () => {
+    const corpus = upsertEntity({ name: 'procedure-action-step-support', type: 'concept' });
     const procedure = recordFact({
       subjectId: corpus.id,
       predicate: 'procedure_trace',
       objectText: JSON.stringify({
-        sourceRunId: 'run-procedure-endpoint-support',
-        actionTransitions: [
-          { fromStateIndex: '20', toStateIndex: '21', observedAction: 'click qearly-action' },
-          { fromStateIndex: '49', toStateIndex: '50', observedAction: 'click qfinal-action' },
-        ],
+        sourceRunId: 'run-procedure-action-step-support',
         steps: [
-          { stateIndex: '0', action: 'click qstart' },
-          { stateIndex: '20', action: 'click qearly-action' },
-          { stateIndex: '49', action: 'click qfinal-action' },
+          { stateIndex: '0', thought: 'observe qpassive setup' },
+          { stateIndex: '1', action: 'click qfirst-action' },
+          { stateIndex: '5', action: 'click qfinal-action' },
         ],
       }),
-      sourceRunId: 'run-procedure-endpoint-support',
+      sourceRunId: 'run-procedure-action-step-support',
       memoryKind: 'procedure',
       now: 1_000,
     }).fact;
-    const earlyUi = recordFact({
+    recordFact({
       subjectId: corpus.id,
       predicate: 'ui_inventory',
       objectText: JSON.stringify({
-        sourceRunId: 'run-procedure-endpoint-support',
-        stateIndex: '21',
-        controlNames: ['qtarget qearly qrich'],
-        fields: [
-          { role: 'textbox', controlName: 'qtarget qearly-field' },
-          { role: 'combobox', controlName: 'qtarget qearly-combo', options: ['qa', 'qb'] },
-        ],
+        sourceRunId: 'run-procedure-action-step-support',
+        stateIndex: '0',
+        controlNames: ['qtarget qpassive'],
       }),
-      sourceRunId: 'run-procedure-endpoint-support',
+      sourceRunId: 'run-procedure-action-step-support',
       memoryKind: 'ui_inventory',
-      attributes: { stateIndex: 21 },
-      now: 1_300,
-    }).fact;
-    const endpointUi = recordFact({
-      subjectId: corpus.id,
-      predicate: 'ui_inventory',
-      objectText: JSON.stringify({
-        sourceRunId: 'run-procedure-endpoint-support',
-        stateIndex: '50',
-        controlNames: ['qtarget qfinal'],
-      }),
-      sourceRunId: 'run-procedure-endpoint-support',
-      memoryKind: 'ui_inventory',
-      attributes: { stateIndex: 50 },
+      attributes: { stateIndex: 0 },
+      retrievability: 1,
       now: 1_100,
+    });
+    const firstActionUi = recordFact({
+      subjectId: corpus.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({
+        sourceRunId: 'run-procedure-action-step-support',
+        stateIndex: '1',
+        controlNames: ['qtarget qfirst-action-state'],
+      }),
+      sourceRunId: 'run-procedure-action-step-support',
+      memoryKind: 'ui_inventory',
+      attributes: { stateIndex: 1 },
+      now: 1_200,
     }).fact;
     const selected = [procedure];
     const scoredById = new Map([[procedure.id, scored(procedure, 1)]]);
@@ -182,7 +174,7 @@ describe('procedure boundary UI support', () => {
       seenIds: new Set(selected.map((fact) => fact.id)),
       seenKeys: new Set(),
       scoredById,
-      scored: [scored(procedure, 1), scored(earlyUi, 10)],
+      scored: [scored(procedure, 1)],
       limit: 2,
       uiSupportBudget: 1,
       procedureSupportBudget: 0,
@@ -198,56 +190,142 @@ describe('procedure boundary UI support', () => {
       now: 2_000,
     });
 
-    expect(selected.map((fact) => fact.id)).toEqual([procedure.id, endpointUi.id]);
+    expect(selected.map((fact) => fact.id)).toEqual([procedure.id, firstActionUi.id]);
   });
 
-  it('adds endpoint support when another same-run UI state is already selected', () => {
-    const corpus = upsertEntity({ name: 'procedure-endpoint-selected-ui-support', type: 'concept' });
+  it('prefers structural navigation state over passive label state for procedure continuation', () => {
+    const corpus = upsertEntity({ name: 'procedure-navigation-state-support', type: 'concept' });
+    const sourceRunId = 'run-procedure-navigation-state-support';
     const procedure = recordFact({
       subjectId: corpus.id,
       predicate: 'procedure_trace',
       objectText: JSON.stringify({
-        sourceRunId: 'run-procedure-selected-ui-support',
-        steps: [
-          { stateIndex: '21', action: 'click qearly-action' },
-          { stateIndex: '49', action: 'click qfinal-action' },
-          { stateIndex: '50', action: 'observe qfinal-state' },
+        sourceRunId,
+        actionTransitions: [
+          {
+            fromStateIndex: '1',
+            toStateIndex: '2',
+            observedAction: 'qcontinue qsurface',
+          },
         ],
       }),
-      sourceRunId: 'run-procedure-selected-ui-support',
+      sourceRunId,
       memoryKind: 'procedure',
       now: 1_000,
     }).fact;
-    const selectedUi = recordFact({
+    recordFact({
       subjectId: corpus.id,
-      predicate: 'ui_inventory',
+      predicate: 'ui_label_value',
       objectText: JSON.stringify({
-        sourceRunId: 'run-procedure-selected-ui-support',
-        stateIndex: '21',
-        controlNames: ['qtarget qearly'],
+        sourceRunId,
+        stateIndex: '2',
+        label: 'qsurface',
+        value: 'qpassive',
       }),
-      sourceRunId: 'run-procedure-selected-ui-support',
-      memoryKind: 'ui_inventory',
-      attributes: { stateIndex: 21 },
+      sourceRunId,
+      memoryKind: 'ui_filter_state',
+      attributes: { stateIndex: 2 },
+      retrievability: 0.9,
       now: 1_100,
-    }).fact;
-    const endpointUi = recordFact({
+    });
+    const navigationState = recordFact({
       subjectId: corpus.id,
-      predicate: 'ui_inventory',
+      predicate: 'ui_popup_options',
       objectText: JSON.stringify({
-        sourceRunId: 'run-procedure-selected-ui-support',
-        stateIndex: '50',
-        controlNames: ['qtarget qfinal'],
+        sourceRunId,
+        stateIndex: '2',
+        role: 'tab',
+        controlName: 'qsurface',
+        options: ['qpanel-alpha', 'qpanel-beta'],
       }),
-      sourceRunId: 'run-procedure-selected-ui-support',
-      memoryKind: 'ui_inventory',
-      attributes: { stateIndex: 50 },
+      sourceRunId,
+      memoryKind: 'ui_field',
+      attributes: { stateIndex: 2 },
+      retrievability: 0.8,
       now: 1_200,
     }).fact;
-    const selected = [procedure, selectedUi];
+    const selected = [procedure];
+    const scoredById = new Map([[procedure.id, scored(procedure, 1)]]);
+
+    insertProcedureLocalSupport({
+      selected,
+      seenIds: new Set(selected.map((fact) => fact.id)),
+      seenKeys: new Set(),
+      scoredById,
+      scored: [scored(procedure, 1)],
+      limit: 2,
+      uiSupportBudget: 1,
+      procedureSupportBudget: 0,
+      uiProcedureSupportBudget: 0,
+      candidateScopes: undefined,
+      options: {},
+      scoringQueryUnits: new Set(['qsurface']),
+      recallLexicalUnits: ['qsurface'],
+      unitWeights: new Map([['qsurface', 1]]),
+      query: 'qsurface',
+      anchorUnitSets: [],
+      alwaysIncludePinned: false,
+      now: 2_000,
+    });
+
+    expect(selected.map((fact) => fact.id)).toEqual([procedure.id, navigationState.id]);
+  });
+
+  it('does not let selected scalar state evidence suppress same-state controls', () => {
+    const corpus = upsertEntity({ name: 'procedure-scalar-state-support', type: 'concept' });
+    const sourceRunId = 'run-procedure-scalar-state-support';
+    const procedure = recordFact({
+      subjectId: corpus.id,
+      predicate: 'procedure_trace',
+      objectText: JSON.stringify({
+        sourceRunId,
+        actionTransitions: [
+          {
+            fromStateIndex: '1',
+            toStateIndex: '2',
+            observedAction: 'qcontinue qsurface',
+          },
+        ],
+      }),
+      sourceRunId,
+      memoryKind: 'procedure',
+      now: 1_000,
+    }).fact;
+    const scalarState = recordFact({
+      subjectId: corpus.id,
+      predicate: 'ui_label_value',
+      objectText: JSON.stringify({
+        sourceRunId,
+        stateIndex: '2',
+        label: 'qsurface',
+        value: 'qpassive',
+      }),
+      sourceRunId,
+      memoryKind: 'ui_filter_state',
+      attributes: { stateIndex: 2 },
+      retrievability: 0.9,
+      now: 1_100,
+    }).fact;
+    const navigationState = recordFact({
+      subjectId: corpus.id,
+      predicate: 'ui_popup_options',
+      objectText: JSON.stringify({
+        sourceRunId,
+        stateIndex: '2',
+        role: 'tab',
+        controlName: 'qsurface',
+        options: ['qpanel-alpha', 'qpanel-beta'],
+      }),
+      sourceRunId,
+      memoryKind: 'ui_field',
+      attributes: { stateIndex: 2 },
+      retrievability: 0.8,
+      now: 1_200,
+    }).fact;
+    const selected = [procedure, scalarState];
     const scoredById = new Map([
       [procedure.id, scored(procedure, 1)],
-      [selectedUi.id, scored(selectedUi, 0.9)],
+      [scalarState.id, scored(scalarState, 1)],
     ]);
 
     insertProcedureLocalSupport({
@@ -255,7 +333,98 @@ describe('procedure boundary UI support', () => {
       seenIds: new Set(selected.map((fact) => fact.id)),
       seenKeys: new Set(),
       scoredById,
-      scored: Array.from(scoredById.values()),
+      scored: [scored(procedure, 1), scored(scalarState, 1)],
+      limit: 3,
+      uiSupportBudget: 1,
+      procedureSupportBudget: 0,
+      uiProcedureSupportBudget: 0,
+      candidateScopes: undefined,
+      options: {},
+      scoringQueryUnits: new Set(['qsurface']),
+      recallLexicalUnits: ['qsurface'],
+      unitWeights: new Map([['qsurface', 1]]),
+      query: 'qsurface',
+      anchorUnitSets: [],
+      alwaysIncludePinned: false,
+      now: 2_000,
+    });
+
+    expect(selected.map((fact) => fact.id)).toEqual([
+      procedure.id,
+      navigationState.id,
+      scalarState.id,
+    ]);
+  });
+
+  it('does not let a selected field suppress another same-state control', () => {
+    const corpus = upsertEntity({ name: 'procedure-same-state-field-support', type: 'concept' });
+    const sourceRunId = 'run-procedure-same-state-field-support';
+    const procedure = recordFact({
+      subjectId: corpus.id,
+      predicate: 'procedure_trace',
+      objectText: JSON.stringify({
+        sourceRunId,
+        steps: [
+          {
+            stateIndex: '1',
+            action: 'click qsetup-action',
+            targetControl: { role: 'button', name: 'qsetup-control' },
+          },
+          {
+            stateIndex: '4',
+            action: 'click qtarget-action',
+            targetControl: { role: 'menuitem', name: 'qtarget-control' },
+          },
+        ],
+      }),
+      sourceRunId,
+      memoryKind: 'procedure',
+      now: 1_000,
+    }).fact;
+    const selectedField = recordFact({
+      subjectId: corpus.id,
+      predicate: 'ui_field',
+      objectText: JSON.stringify({
+        sourceRunId,
+        stateIndex: '4',
+        role: 'combobox',
+        controlName: 'qunrelated-control',
+        options: ['qunrelated-option'],
+      }),
+      sourceRunId,
+      memoryKind: 'ui_field',
+      attributes: { stateIndex: 4 },
+      retrievability: 1,
+      now: 1_100,
+    }).fact;
+    const navigationState = recordFact({
+      subjectId: corpus.id,
+      predicate: 'ui_popup_options',
+      objectText: JSON.stringify({
+        sourceRunId,
+        stateIndex: '4',
+        role: 'tab',
+        controlName: 'qdestination-surface',
+        options: ['qdestination-panel-a', 'qdestination-panel-b'],
+      }),
+      sourceRunId,
+      memoryKind: 'ui_field',
+      attributes: { stateIndex: 4 },
+      retrievability: 0.9,
+      now: 1_200,
+    }).fact;
+    const selected = [procedure, selectedField];
+    const scoredById = new Map([
+      [procedure.id, scored(procedure, 1)],
+      [selectedField.id, scored(selectedField, 1)],
+    ]);
+
+    insertProcedureLocalSupport({
+      selected,
+      seenIds: new Set(selected.map((fact) => fact.id)),
+      seenKeys: new Set(),
+      scoredById,
+      scored: [scored(procedure, 1), scored(selectedField, 1)],
       limit: 3,
       uiSupportBudget: 1,
       procedureSupportBudget: 0,
@@ -271,77 +440,10 @@ describe('procedure boundary UI support', () => {
       now: 2_000,
     });
 
-    expect(selected.map((fact) => fact.id)).toEqual([procedure.id, endpointUi.id, selectedUi.id]);
-  });
-
-  it('recall gives selected procedures an endpoint support attempt when UI slots are full', async () => {
-    const corpus = upsertEntity({ name: 'procedure-endpoint-budget-support', type: 'concept' });
-    const procedure = recordFact({
-      subjectId: corpus.id,
-      predicate: 'procedure_trace',
-      objectText: JSON.stringify({
-        sourceRunId: 'run-procedure-budget-support',
-        goal: 'qtarget procedure',
-        steps: [
-          { stateIndex: '21', action: 'click qearly-action' },
-          { stateIndex: '49', action: 'click qfinal-action' },
-          { stateIndex: '50', action: 'observe qfinal-state' },
-        ],
-      }),
-      sourceRunId: 'run-procedure-budget-support',
-      memoryKind: 'procedure',
-      now: 1_000,
-    }).fact;
-    const earlyUi = recordFact({
-      subjectId: corpus.id,
-      predicate: 'ui_inventory',
-      objectText: JSON.stringify({
-        sourceRunId: 'run-procedure-budget-support',
-        stateIndex: '21',
-        controlNames: ['qtarget qearly'],
-      }),
-      sourceRunId: 'run-procedure-budget-support',
-      memoryKind: 'ui_inventory',
-      attributes: { stateIndex: 21 },
-      now: 1_100,
-    }).fact;
-    const endpointUi = recordFact({
-      subjectId: corpus.id,
-      predicate: 'ui_inventory',
-      objectText: JSON.stringify({
-        sourceRunId: 'run-procedure-budget-support',
-        stateIndex: '50',
-        controlNames: ['qfinal-endpoint'],
-      }),
-      sourceRunId: 'run-procedure-budget-support',
-      memoryKind: 'ui_inventory',
-      attributes: { stateIndex: 50 },
-      now: 1_200,
-    }).fact;
-    recordFact({
-      subjectId: corpus.id,
-      predicate: 'ui_inventory',
-      objectText: JSON.stringify({
-        sourceRunId: 'run-procedure-budget-filler',
-        stateIndex: '3',
-        controlNames: ['qtarget qfiller'],
-      }),
-      sourceRunId: 'run-procedure-budget-filler',
-      memoryKind: 'ui_inventory',
-      attributes: { stateIndex: 3 },
-      now: 1_300,
-    });
-
-    const facts = await recallFactsForQuery('qtarget', {
-      limit: 4,
-      threshold: 0.01,
-      candidatePoolLimit: 40,
-      now: 2_000,
-    });
-    const selectedIds = facts.map((fact) => fact.id);
-
-    expect(selectedIds).toContain(procedure.id);
-    expect(selectedIds).toContain(earlyUi.id);
-    expect(selectedIds).toContain(endpointUi.id);
+    expect(selected.map((fact) => fact.id)).toEqual([
+      procedure.id,
+      navigationState.id,
+      selectedField.id,
+    ]);
   });
 });

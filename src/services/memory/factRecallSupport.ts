@@ -77,12 +77,47 @@ export function selectedActionResultSourceRuns(facts: ReadonlyArray<MemoryFact>)
   );
 }
 
+function stateNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function actionResultStateNumber(fact: MemoryFact): number | null {
+  const parsed = parseJsonRecord(fact.objectText);
+  return stateNumber(fact.attributes.stateIndex ?? parsed?.stateIndex);
+}
+
+function actionResultPreviousStateNumber(fact: MemoryFact): number | null {
+  const parsed = parseJsonRecord(fact.objectText);
+  return stateNumber(fact.attributes.previousStateIndex ?? parsed?.previousStateIndex);
+}
+
+export function isImmediateActionResultContinuation(
+  candidate: MemoryFact,
+  selected: ReadonlyArray<MemoryFact>,
+): boolean {
+  if (!isActionResultOutcome(candidate) || !candidate.sourceRunId) return false;
+  const candidateState = actionResultStateNumber(candidate);
+  const candidatePreviousState = actionResultPreviousStateNumber(candidate);
+  if (candidateState === null && candidatePreviousState === null) return false;
+  return selected.some((fact) => {
+    if (!isActionResultOutcome(fact) || fact.sourceRunId !== candidate.sourceRunId) return false;
+    const selectedState = actionResultStateNumber(fact);
+    if (selectedState === null) return false;
+    return candidatePreviousState === selectedState || candidateState === selectedState + 1;
+  });
+}
+
 function observedStateSupportPriority(fact: MemoryFact): number {
+  if (isActionResultOutcome(fact)) return 8;
   if (fact.memoryKind === 'ui_filter_state') return 6;
   if (fact.memoryKind === 'ui_field') return uiFieldSupportPriority(fact);
   if (fact.memoryKind === 'ui_inventory' && uiInventoryHasStateBearingFields(fact)) return 4;
   if (fact.memoryKind === 'ui_inventory') return 3;
-  if (isActionResultOutcome(fact)) return 2;
   return 1;
 }
 

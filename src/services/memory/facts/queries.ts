@@ -16,7 +16,9 @@ const MAX_FACT_LIMIT = 500;
 const DEFAULT_RECALL_CANDIDATE_LIMIT = 128;
 const MAX_RECALL_CANDIDATE_LIMIT = 2_000;
 const DEFAULT_RECALL_PINNED_LIMIT = 64;
+const DEFAULT_RECALL_STRUCTURED_UI_LIMIT = 32;
 const DEFAULT_RECALL_SCOPED_RECENT_LIMIT = 192;
+const STRUCTURED_UI_RECALL_KINDS: MemoryFactKind[] = ['ui_field', 'ui_filter_state'];
 
 interface FactFilter {
   clauses: string[];
@@ -85,6 +87,12 @@ function whereSql(filter: FactFilter): string {
 
 function clampLimit(value: number | undefined, fallback: number, max: number): number {
   return Math.max(1, Math.min(value ?? fallback, max));
+}
+
+function requestedStructuredUiKinds(memoryKind: ListFactsOptions['memoryKind']): MemoryFactKind[] {
+  if (!memoryKind) return STRUCTURED_UI_RECALL_KINDS;
+  const requestedKinds = Array.isArray(memoryKind) ? memoryKind : [memoryKind];
+  return STRUCTURED_UI_RECALL_KINDS.filter((kind) => requestedKinds.includes(kind));
 }
 
 export function listFacts(options: ListFactsOptions = {}): MemoryFact[] {
@@ -195,12 +203,23 @@ export function listFactsForRecallCandidates(
 
   const lexicalUnits = Array.from(
     new Set(
-      (options.selectedLexicalUnits?.length ? options.selectedLexicalUnits : options.lexicalUnits ?? [])
+      (options.selectedLexicalUnits?.length
+        ? options.selectedLexicalUnits
+        : (options.lexicalUnits ?? [])
+      )
         .map((unit) => unit.trim())
         .filter(Boolean),
     ),
   );
   if (lexicalUnits.length > 0) {
+    const structuredUiKinds = requestedStructuredUiKinds(options.memoryKind);
+    if (structuredUiKinds.length > 0) {
+      addIndexedLexicalRows(
+        lexicalUnits,
+        Math.min(DEFAULT_RECALL_STRUCTURED_UI_LIMIT, totalLimit),
+        structuredUiKinds,
+      );
+    }
     addIndexedLexicalRows(lexicalUnits, totalLimit);
   }
 
@@ -369,6 +388,7 @@ export function listFactsForSourceRunForwardWindows(
     forwardRadius?: number;
     includeAnchorState?: boolean;
     limit?: number;
+    factsPerStateKind?: number;
     stateLimit?: number;
   } = {},
 ): MemoryFact[] {
@@ -394,6 +414,7 @@ export function listFactsForSourceRunForwardWindows(
   const uniqueContexts = Array.from(byKey.values());
   const forwardRadius = Math.max(1, Math.min(Math.floor(options.forwardRadius ?? 16), 64));
   const stateLimit = Math.max(1, Math.min(Math.floor(options.stateLimit ?? 16), 32));
+  const factsPerStateKind = Math.max(1, Math.min(Math.floor(options.factsPerStateKind ?? 1), 8));
   const limit = clampLimit(options.limit, uniqueContexts.length * stateLimit, MAX_FACT_LIMIT);
   const filter = buildFactFilter(options, 'f');
   const stateExpr = "CAST(json_extract(f.attributes, '$.stateIndex') AS REAL)";
@@ -407,18 +428,19 @@ export function listFactsForSourceRunForwardWindows(
          FROM (
            SELECT f.*,
                   ${stateExpr} AS state_index_rank,
+                  CASE
+                    WHEN f.memory_kind = 'ui_filter_state' THEN 0
+                    WHEN f.memory_kind = 'ui_field' THEN 1
+                    WHEN f.memory_kind = 'ui_inventory' THEN 2
+                    WHEN f.memory_kind = 'outcome' THEN 3
+                    ELSE 4
+                  END AS memory_kind_rank,
                   ROW_NUMBER() OVER (
-                    PARTITION BY ${stateExpr}
-                    ORDER BY CASE
-                               WHEN f.memory_kind = 'ui_inventory' THEN 0
-                               WHEN f.memory_kind = 'outcome' THEN 1
-                               WHEN f.memory_kind = 'ui_field' THEN 2
-                               ELSE 3
-                             END ASC,
-                             f.retrievability DESC,
+                    PARTITION BY ${stateExpr}, f.memory_kind
+                    ORDER BY f.retrievability DESC,
                              f.importance DESC,
                              f.updated_at DESC
-                  ) AS state_rank
+                  ) AS state_kind_rank
              FROM memory_facts AS f
              ${whereSql({
                clauses: [
@@ -435,8 +457,8 @@ export function listFactsForSourceRunForwardWindows(
                ],
              })}
          )
-        WHERE state_rank = 1
-        ORDER BY state_index_rank ASC
+        WHERE state_kind_rank <= ${factsPerStateKind}
+        ORDER BY state_index_rank ASC, memory_kind_rank ASC
         LIMIT ${Math.min(stateLimit, limit - byId.size)}`,
       context.sourceRunId,
       context.stateIndex,
@@ -523,11 +545,7 @@ export function listFactsForSourceRunStateNeighborhoods(
     const rows = getMany<FactRow>(
       `SELECT * FROM memory_facts
         ${whereSql({
-          clauses: [
-            'source_run_id = ?',
-            `${stateExpr} BETWEEN ? AND ?`,
-            ...filter.clauses,
-          ],
+          clauses: ['source_run_id = ?', `${stateExpr} BETWEEN ? AND ?`, ...filter.clauses],
           params: [context.sourceRunId, minState, maxState, ...filter.params],
         })}
         ORDER BY ${orderSql}

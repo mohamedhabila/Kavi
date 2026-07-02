@@ -54,7 +54,10 @@ function groupFieldFromNode(
     if (!option || seen.has(option)) continue;
     seen.add(option);
     options.push(option);
-    if (!value && (attributeIsTrue(node.attributes, 'checked') || attributeIsTrue(node.attributes, 'selected'))) {
+    if (
+      !value &&
+      (attributeIsTrue(node.attributes, 'checked') || attributeIsTrue(node.attributes, 'selected'))
+    ) {
       value = option;
     }
   }
@@ -66,6 +69,7 @@ function groupFieldFromNode(
     controlName: group.name,
     value,
     options,
+    optionRoles: [],
     adjacentControls: [],
     controlIndex: group.index,
     nodeId: group.nodeId,
@@ -96,9 +100,7 @@ export function extractRadioGroupFields(
   return fields;
 }
 
-export function radioControlIndexesInGroups(
-  nodes: ReadonlyArray<AccessibilityNode>,
-): Set<number> {
+export function radioControlIndexesInGroups(nodes: ReadonlyArray<AccessibilityNode>): Set<number> {
   const indexes = new Set<number>();
   for (let groupIndex = 0; groupIndex < nodes.length; groupIndex += 1) {
     if (nodes[groupIndex].role.toLocaleLowerCase() !== RADIO_GROUP_ROLE) continue;

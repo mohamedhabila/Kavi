@@ -1,19 +1,17 @@
-import { compactUiSection, extractUiSectionsFromControls, type UiSectionSummary } from './uiSections';
+import {
+  compactUiSection,
+  extractUiSectionsFromControls,
+  type UiSectionSummary,
+} from './uiSections';
 import { type AccessibilityNode } from './accessibilityTree';
 import { compactLabelValue, extractLabelValues, type UiLabelValue } from './uiLabelValues';
-import {
-  extractTableSummaries,
-  MAX_TABLE_SUMMARY_ITEMS,
-  type UiTableSummary,
-} from './uiTables';
+import { extractTableSummaries, MAX_TABLE_SUMMARY_ITEMS, type UiTableSummary } from './uiTables';
 import { extractRadioGroupFields, radioControlIndexesInGroups } from './uiRadioGroups';
 import { extractSurfaceLabels } from './uiSurfaceLabels';
 import { isInteractiveUiNode } from './uiInteractivity';
+import { extractPopupOptions, type UiPopupOption } from './uiPopupOptions';
 import { extractUiSymbolMarkers, uiFieldDisplayText, type UiSymbolMarker } from './uiSymbols';
-import {
-  extractVisibleTextSnippets,
-  type UiVisibleTextSnippet,
-} from './uiVisibleText';
+import { extractVisibleTextSnippets, type UiVisibleTextSnippet } from './uiVisibleText';
 
 export { parseAccessibilityTree } from './accessibilityTree';
 export type { AccessibilityNode } from './accessibilityTree';
@@ -27,6 +25,7 @@ export interface UiControl {
   name: string | null;
   value: string | null;
   options: string[];
+  optionRoles: string[];
   attributes: string[];
   label: string | null;
   required: boolean;
@@ -45,6 +44,7 @@ export interface UiField {
   value: string | null;
   displayText?: string | null;
   options: string[];
+  optionRoles: string[];
   adjacentControls: UiControl[];
   controlIndex: number;
   nodeId: string | null;
@@ -88,7 +88,6 @@ const FIELD_CONTROL_ROLES = new Set([
 ]);
 
 const TRAILING_LABEL_CONTROL_ROLES = new Set(['checkbox', 'radio', 'switch']);
-const OPTION_ROLES = new Set(['option']);
 const ACTION_CONTROL_ROLE_ORDER = [
   'button',
   'checkbox',
@@ -122,8 +121,6 @@ const MAX_FIELD_SUMMARY_ITEMS = 36;
 const MAX_FIELD_ADJACENT_CONTROLS = 6;
 const MAX_LABEL_VALUE_ITEMS = 36;
 const MAX_NAME_SUMMARY_ITEMS = 192;
-const MAX_CONTROL_OPTIONS = 48;
-const MAX_DETACHED_POPUP_SCAN_NODES = 1_500;
 const REQUIRED_MARKER = '*';
 
 function isInteractiveControlNode(node: AccessibilityNode): boolean {
@@ -147,13 +144,13 @@ export function extractUiStateSummary(nodes: AccessibilityNode[]): UiStateSummar
         ? findNearestUnusedFollowingLabel(node, nodes, labelBlocksByIndex, usedLabelIndexes)
         : null);
     if (labelBlock) usedLabelIndexes.add(labelBlock.index);
-    const options = childPopupItemNames(nodes, node.index);
+    const popupItems = extractPopupOptions(nodes, node.index);
     const contextLabels = findContextLabels(nodes, node.index);
     const control = controlFromNode(
       node,
       labelBlock?.text ?? null,
       labelBlock?.required ?? false,
-      options,
+      popupItems,
       contextLabels,
     );
     controls.push(control);
@@ -170,6 +167,7 @@ export function extractUiStateSummary(nodes: AccessibilityNode[]): UiStateSummar
         value: control.value,
         displayText,
         options: control.options,
+        optionRoles: control.optionRoles,
         adjacentControls:
           control.options.length === 0 ? adjacentFieldControls(nodes, node.index) : [],
         controlIndex: node.index,
@@ -240,6 +238,7 @@ export function compactControl(control: UiControl): JsonRecord {
     label: control.label,
     value: control.value,
     options: control.options.length > 0 ? control.options : undefined,
+    optionRoles: control.optionRoles.length > 0 ? control.optionRoles : undefined,
     required: control.required || undefined,
     checked: control.checked,
     selected: control.selected,
@@ -258,6 +257,7 @@ export function compactField(field: UiField): JsonRecord {
     value: field.value,
     displayText: field.displayText,
     options: field.options.length > 0 ? field.options : undefined,
+    optionRoles: field.optionRoles.length > 0 ? field.optionRoles : undefined,
     adjacentControls:
       field.adjacentControls.length > 0 ? field.adjacentControls.map(compactControl) : undefined,
     symbolMarkers: field.symbolMarkers,
@@ -471,9 +471,10 @@ function controlFromNode(
   node: AccessibilityNode,
   label: string | null,
   labelRequired: boolean,
-  options: string[],
+  popupItems: UiPopupOption[],
   contextLabels: string[],
 ): UiControl {
+  const options = popupItems.map((item) => item.name);
   return {
     index: node.index,
     nodeId: node.nodeId,
@@ -481,6 +482,7 @@ function controlFromNode(
     name: node.name,
     value: attributeValue(node.attributes, 'value'),
     options,
+    optionRoles: uniqueNamedValues(popupItems.map((item) => item.role)),
     attributes: node.attributes,
     label,
     required: labelRequired || hasAttributeFlag(node.attributes, 'required'),
@@ -545,92 +547,13 @@ function adjacentFieldControls(nodes: AccessibilityNode[], controlIndex: number)
         node,
         null,
         false,
-        childPopupItemNames(nodes, node.index),
+        extractPopupOptions(nodes, node.index),
         findContextLabels(nodes, node.index),
       ),
     );
     if (out.length >= MAX_FIELD_ADJACENT_CONTROLS) break;
   }
   return out;
-}
-
-function childPopupItemNames(nodes: AccessibilityNode[], controlIndex: number): string[] {
-  const control = nodes[controlIndex];
-  if (!control) return [];
-  const out: string[] = [];
-  const seen = new Set<string>();
-  const hasPopup =
-    hasAttributeFlag(control.attributes, 'hasPopup') ||
-    attributeValue(control.attributes, 'expanded') !== null;
-  const isExpandedOpen = attributeValue(control.attributes, 'expanded')?.toLocaleLowerCase() === 'true';
-  const ownSubtreeEnd = subtreeEndIndex(nodes, controlIndex);
-  collectPopupNames(nodes, controlIndex + 1, ownSubtreeEnd, hasPopup, seen, out);
-  if (!hasPopup || out.length > 0 || !isExpandedOpen) return out;
-
-  for (let index = ownSubtreeEnd; index < nodes.length; index += 1) {
-    const node = nodes[index];
-    if (node.indent < control.indent) break;
-    if (node.indent <= control.indent && node.role === 'LabelText') break;
-    if (node.indent <= control.indent && FIELD_CONTROL_ROLES.has(node.role.toLocaleLowerCase())) {
-      break;
-    }
-    if (node.indent !== control.indent) continue;
-    const siblingEnd = subtreeEndIndex(nodes, index);
-    const before = out.length;
-    collectPopupNames(nodes, index, siblingEnd, hasPopup, seen, out, false);
-    if (out.length > before || out.length >= MAX_CONTROL_OPTIONS) break;
-    index = siblingEnd - 1;
-  }
-  if (out.length === 0) {
-    collectDetachedListboxNames(nodes, controlIndex, seen, out);
-  }
-  return out;
-}
-
-function collectDetachedListboxNames(
-  nodes: AccessibilityNode[],
-  controlIndex: number,
-  seen: Set<string>,
-  out: string[],
-): void {
-  const endIndex = Math.min(nodes.length, controlIndex + MAX_DETACHED_POPUP_SCAN_NODES);
-  for (let index = controlIndex + 1; index < endIndex; index += 1) {
-    const node = nodes[index];
-    if (node.role.toLocaleLowerCase() !== 'listbox') continue;
-    const listboxEnd = subtreeEndIndex(nodes, index);
-    const before = out.length;
-    collectPopupNames(nodes, index + 1, listboxEnd, true, seen, out);
-    if (out.length > before || out.length >= MAX_CONTROL_OPTIONS) break;
-    index = listboxEnd - 1;
-  }
-}
-
-function collectPopupNames(
-  nodes: AccessibilityNode[],
-  startIndex: number,
-  endIndex: number,
-  hasPopup: boolean,
-  seen: Set<string>,
-  out: string[],
-  includeInteractiveStartNode = true,
-): void {
-  for (let index = startIndex; index < endIndex; index += 1) {
-    const node = nodes[index];
-    const role = node.role.toLocaleLowerCase();
-    const isStartNode = index === startIndex;
-    const includeInteractiveNode = includeInteractiveStartNode || !isStartNode;
-    if (
-      !OPTION_ROLES.has(role) &&
-      !(hasPopup && includeInteractiveNode && isInteractiveControlNode(node))
-    ) {
-      continue;
-    }
-    const name = node.name?.trim();
-    if (!name || seen.has(name)) continue;
-    seen.add(name);
-    out.push(name);
-    if (out.length >= MAX_CONTROL_OPTIONS) break;
-  }
 }
 
 function attributeValue(attributes: string[], key: string): string | null {
@@ -668,6 +591,8 @@ function subtreeEndIndex(nodes: AccessibilityNode[], startIndex: number): number
 
 function dropEmpty(value: JsonRecord): JsonRecord {
   return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => entry !== null && entry !== undefined && entry !== ''),
+    Object.entries(value).filter(
+      ([, entry]) => entry !== null && entry !== undefined && entry !== '',
+    ),
   );
 }

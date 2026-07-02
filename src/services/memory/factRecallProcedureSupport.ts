@@ -6,15 +6,18 @@ import {
 import type { MemoryFact, MemoryFactScope } from './facts/types';
 import { buildScoredFact } from './factRecallScoring';
 import type { RecallFactsOptions, ScoredFact } from './factRecallTypes';
-import {
-  compareSupportCandidates,
-  sourceRunStateKey,
-} from './ranking/selection';
+import { compareSupportCandidates, sourceRunStateKey } from './ranking/selection';
+import { countLexicalUnits } from './ranking/lexical';
 import { isActionResultOutcome, supportEvidenceRichness } from './factRecallSupport';
 import { parseJsonRecord } from './factJson';
+import {
+  compactProcedureTraceActionTransitions,
+  compactProcedureTraceSurfaceTrail,
+} from './procedureTraceSummary';
 
 const PROCEDURE_UI_SUPPORT_FORWARD_RADIUS = 2;
 const PROCEDURE_UI_SUPPORT_CONTEXT_LIMIT = 2;
+const PROCEDURE_UI_SUPPORT_FACTS_PER_STATE_KIND = 6;
 const SOURCE_RUN_SUPPORT_FORWARD_STATE_LIMIT = 16;
 
 type ProcedureSupportOverflowPolicy = 'default' | 'replace_unrelated_context';
@@ -301,10 +304,21 @@ function isUiProcedureSupportAnchor(fact: MemoryFact): boolean {
 
 function procedureBoundarySupportContexts(
   fact: MemoryFact,
+  queryUnits: ReadonlyArray<string>,
 ): Array<{ sourceRunId: string; stateIndex: string | number }> {
   if (fact.memoryKind !== 'procedure' || !fact.sourceRunId) return [];
   const parsed = parseJsonRecord(fact.objectText);
   if (!parsed) return [];
+  const storedActionTransitions = Array.isArray(parsed.actionTransitions)
+    ? parsed.actionTransitions
+    : null;
+  const storedSurfaceTrail = Array.isArray(parsed.surfaceTrail) ? parsed.surfaceTrail : null;
+  const queryActionTransitions = queryProcedureActionTransitions(parsed);
+  const querySurfaceTrail = queryProcedureSurfaceTrail(parsed);
+  const fallbackActionTransitions = storedActionTransitions;
+  const fallbackSurfaceTrail = storedSurfaceTrail;
+  const actionTransitions = queryActionTransitions;
+  const surfaceTrail = querySurfaceTrail;
   const contexts: Array<{ sourceRunId: string; stateIndex: string | number }> = [];
   const seen = new Set<string>();
   const add = (value: unknown): void => {
@@ -317,12 +331,93 @@ function procedureBoundarySupportContexts(
     contexts.push({ sourceRunId: fact.sourceRunId as string, stateIndex });
   };
 
-  if (addBoundaryStates(actionTransitionStateIndexes(parsed.actionTransitions), add)) {
+  if (
+    addBoundaryStates(
+      queryRelevantProcedureEntryStateIndexes(actionTransitions, 'toStateIndex', queryUnits),
+      add,
+    )
+  ) {
     return contexts;
   }
-  if (addBoundaryStates(entryStateIndexes(parsed.surfaceTrail), add)) return contexts;
+  if (
+    addBoundaryStates(
+      queryRelevantProcedureEntryStateIndexes(surfaceTrail, 'stateIndex', queryUnits),
+      add,
+    )
+  ) {
+    return contexts;
+  }
+  if (addBoundaryStates(actionTransitionDestinationStateIndexes(fallbackActionTransitions), add)) {
+    return contexts;
+  }
+  if (addBoundaryStates(actionStepStateIndexes(parsed.steps), add)) return contexts;
+  if (addBoundaryStates(entryStateIndexes(fallbackSurfaceTrail), add)) return contexts;
   addBoundaryStates(entryStateIndexes(parsed.steps), add);
   return contexts;
+}
+
+function queryProcedureActionTransitions(parsed: Record<string, unknown>): unknown {
+  return Array.isArray(parsed.actionTransitions)
+    ? parsed.actionTransitions
+    : compactProcedureTraceActionTransitions(parsed.steps);
+}
+
+function queryProcedureSurfaceTrail(parsed: Record<string, unknown>): unknown {
+  return Array.isArray(parsed.surfaceTrail)
+    ? parsed.surfaceTrail
+    : compactProcedureTraceSurfaceTrail(parsed.steps);
+}
+
+function queryRelevantProcedureEntryStateIndexes(
+  value: unknown,
+  stateIndexKey: string,
+  queryUnits: ReadonlyArray<string>,
+): Array<string | number> {
+  if (!Array.isArray(value) || queryUnits.length === 0) return [];
+  const queryUnitSet = new Set(queryUnits);
+  const candidates: Array<{ stateIndex: string | number; score: number; index: number }> = [];
+  value.forEach((entry, index) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return;
+    const stateIndex = stateIndexValue((entry as Record<string, unknown>)[stateIndexKey]);
+    if (stateIndex === null) return;
+    const score = lexicalUnitOverlapScore(queryUnitSet, collectStructuredText(entry).join(' '));
+    if (score <= 0) return;
+    candidates.push({ stateIndex, score, index });
+  });
+  return candidates
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score;
+      return left.index - right.index;
+    })
+    .map((candidate) => candidate.stateIndex);
+}
+
+function collectStructuredText(value: unknown, out: string[] = []): string[] {
+  if (typeof value === 'string' && value.trim()) {
+    out.push(value);
+    return out;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    out.push(String(value));
+    return out;
+  }
+  if (!value || typeof value !== 'object') return out;
+  if (Array.isArray(value)) {
+    for (const entry of value) collectStructuredText(entry, out);
+    return out;
+  }
+  for (const entry of Object.values(value)) collectStructuredText(entry, out);
+  return out;
+}
+
+function lexicalUnitOverlapScore(queryUnits: ReadonlySet<string>, text: string): number {
+  if (queryUnits.size === 0 || !text.trim()) return 0;
+  const textUnits = countLexicalUnits(text);
+  let matched = 0;
+  for (const unit of queryUnits) {
+    if (textUnits.has(unit)) matched += 1;
+  }
+  return matched / queryUnits.size;
 }
 
 function addBoundaryStates(
@@ -330,20 +425,18 @@ function addBoundaryStates(
   add: (value: unknown) => void,
 ): boolean {
   if (values.length === 0) return false;
-  add(values[0]);
-  add(values[values.length - 1]);
+  for (const value of values) add(value);
   return true;
 }
 
-function actionTransitionStateIndexes(value: unknown): Array<string | number> {
+function actionTransitionDestinationStateIndexes(value: unknown): Array<string | number> {
   if (!Array.isArray(value)) return [];
   const indexes: Array<string | number> = [];
   for (const entry of value) {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
-    addStateIndex(indexes, (entry as Record<string, unknown>).fromStateIndex);
     addStateIndex(indexes, (entry as Record<string, unknown>).toStateIndex);
   }
-  return indexes;
+  return indexes.reverse();
 }
 
 function entryStateIndexes(value: unknown): Array<string | number> {
@@ -351,6 +444,17 @@ function entryStateIndexes(value: unknown): Array<string | number> {
   const indexes: Array<string | number> = [];
   for (const entry of value) {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    addStateIndex(indexes, (entry as Record<string, unknown>).stateIndex);
+  }
+  return indexes;
+}
+
+function actionStepStateIndexes(value: unknown): Array<string | number> {
+  if (!Array.isArray(value)) return [];
+  const indexes: Array<string | number> = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    if (typeof (entry as Record<string, unknown>).action !== 'string') continue;
     addStateIndex(indexes, (entry as Record<string, unknown>).stateIndex);
   }
   return indexes;
@@ -371,20 +475,56 @@ function stateIndexValue(value: unknown): string | number | null {
 function insertProcedureUiSupport(params: Parameters<typeof insertProcedureLocalSupport>[0]): void {
   if (params.uiSupportBudget <= 0 || params.selected.length === 0) return;
   let inserted = 0;
-  const selectedPreciseUiStateKeys = new Set(
+  const selectedUiSupportCountBySource = new Map<string, number>();
+  for (const fact of params.selected) {
+    if (
+      !fact.sourceRunId ||
+      (fact.memoryKind !== 'ui_inventory' &&
+        fact.memoryKind !== 'ui_field' &&
+        fact.memoryKind !== 'ui_filter_state')
+    ) {
+      continue;
+    }
+    selectedUiSupportCountBySource.set(
+      fact.sourceRunId,
+      (selectedUiSupportCountBySource.get(fact.sourceRunId) ?? 0) + 1,
+    );
+  }
+  const supportQueryUnits = Array.from(params.scoringQueryUnits);
+  const procedureAnchors = params.selected
+    .map((fact, index) => ({ fact, index }))
+    .filter((entry) => entry.fact.memoryKind === 'procedure' && entry.fact.sourceRunId)
+    .sort((left, right) => {
+      const leftQueryRelevance = procedureBoundaryQueryRelevanceScore(left.fact, supportQueryUnits);
+      const rightQueryRelevance = procedureBoundaryQueryRelevanceScore(
+        right.fact,
+        supportQueryUnits,
+      );
+      if (leftQueryRelevance !== rightQueryRelevance) {
+        return rightQueryRelevance - leftQueryRelevance;
+      }
+      const leftSupportCount =
+        selectedUiSupportCountBySource.get(left.fact.sourceRunId as string) ?? 0;
+      const rightSupportCount =
+        selectedUiSupportCountBySource.get(right.fact.sourceRunId as string) ?? 0;
+      if (leftSupportCount !== rightSupportCount) return leftSupportCount - rightSupportCount;
+      return left.index - right.index;
+    });
+  const selectedProcedureSourceCount = new Set(
+    procedureAnchors.map((entry) => entry.fact.sourceRunId as string),
+  ).size;
+  const supportPerProcedureLimit = selectedProcedureSourceCount > 1 ? 1 : params.uiSupportBudget;
+  const selectedInventoryStateKeys = new Set(
     params.selected
-      .filter((fact) => fact.memoryKind === 'ui_field' || fact.memoryKind === 'ui_filter_state')
+      .filter((fact) => fact.memoryKind === 'ui_inventory')
       .map((fact) => sourceRunStateKey(fact))
       .filter(Boolean),
   );
-  for (
-    let index = 0;
-    index < params.selected.length && inserted < params.uiSupportBudget;
-    index += 1
-  ) {
-    const anchor = params.selected[index];
-    if (anchor.memoryKind !== 'procedure' || !anchor.sourceRunId) continue;
-    const contexts = procedureBoundarySupportContexts(anchor);
+  for (const anchorEntry of procedureAnchors) {
+    if (inserted >= params.uiSupportBudget) break;
+    const anchor = anchorEntry.fact;
+    if (!anchor.sourceRunId) continue;
+    const contexts = procedureBoundarySupportContexts(anchor, supportQueryUnits);
     if (contexts.length === 0) continue;
     const contextRank = new Map(
       contexts.map((context, contextIndex) => [
@@ -393,8 +533,9 @@ function insertProcedureUiSupport(params: Parameters<typeof insertProcedureLocal
       ]),
     );
     const supportFacts = listFactsForSourceRunForwardWindows(contexts, {
-      memoryKind: ['ui_inventory'],
+      memoryKind: ['ui_inventory', 'ui_field', 'ui_filter_state'],
       forwardRadius: PROCEDURE_UI_SUPPORT_FORWARD_RADIUS,
+      factsPerStateKind: PROCEDURE_UI_SUPPORT_FACTS_PER_STATE_KIND,
       includeAnchorState: true,
       stateLimit: SOURCE_RUN_SUPPORT_FORWARD_STATE_LIMIT,
       limit: contexts.length * SOURCE_RUN_SUPPORT_FORWARD_STATE_LIMIT,
@@ -408,7 +549,7 @@ function insertProcedureUiSupport(params: Parameters<typeof insertProcedureLocal
     }).filter(
       (fact) =>
         !params.seenIds.has(fact.id) &&
-        !selectedPreciseUiStateKeys.has(sourceRunStateKey(fact) ?? ''),
+        !selectedInventoryStateKeys.has(sourceRunStateKey(fact) ?? ''),
     );
     if (supportFacts.length === 0) continue;
     const supportUnitHits = listFactTermUnitHitsForFacts(
@@ -446,14 +587,17 @@ function insertProcedureUiSupport(params: Parameters<typeof insertProcedureLocal
     let insertedForAnchor = 0;
     for (const support of supportEntries) {
       if (inserted >= params.uiSupportBudget) break;
+      if (insertedForAnchor >= supportPerProcedureLimit) break;
       if (params.seenIds.has(support.fact.id)) continue;
+      const anchorIndex = params.selected.indexOf(anchor);
+      if (anchorIndex < 0) break;
       const didInsert = insertSupportAfterAnchor({
         selected: params.selected,
         seenIds: params.seenIds,
         seenKeys: params.seenKeys,
         scoredById: params.scoredById,
         limit: params.limit,
-        anchorIndex: index + insertedForAnchor,
+        anchorIndex: anchorIndex + insertedForAnchor,
         supportFact: support.fact,
         supportScore: support.scored,
         seenKey: `procedure_local_support:${support.fact.id}`,
@@ -464,6 +608,39 @@ function insertProcedureUiSupport(params: Parameters<typeof insertProcedureLocal
       inserted += 1;
       insertedForAnchor += 1;
     }
-    index += insertedForAnchor;
   }
+}
+
+function procedureBoundaryQueryRelevanceScore(
+  fact: MemoryFact,
+  queryUnits: ReadonlyArray<string>,
+): number {
+  if (fact.memoryKind !== 'procedure' || queryUnits.length === 0) return 0;
+  const parsed = parseJsonRecord(fact.objectText);
+  if (!parsed) return 0;
+  const actionTransitions = queryProcedureActionTransitions(parsed);
+  const surfaceTrail = queryProcedureSurfaceTrail(parsed);
+  const queryUnitSet = new Set(queryUnits);
+  return Math.max(
+    maxProcedureEntryQueryOverlap(actionTransitions, 'toStateIndex', queryUnitSet),
+    maxProcedureEntryQueryOverlap(surfaceTrail, 'stateIndex', queryUnitSet),
+  );
+}
+
+function maxProcedureEntryQueryOverlap(
+  value: unknown,
+  stateIndexKey: string,
+  queryUnits: ReadonlySet<string>,
+): number {
+  if (!Array.isArray(value) || queryUnits.size === 0) return 0;
+  let best = 0;
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    if (stateIndexValue((entry as Record<string, unknown>)[stateIndexKey]) === null) continue;
+    best = Math.max(
+      best,
+      lexicalUnitOverlapScore(queryUnits, collectStructuredText(entry).join(' ')),
+    );
+  }
+  return best;
 }

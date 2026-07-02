@@ -169,7 +169,35 @@ describe('assemblePrompt memory ordering', () => {
     expect(promptText.length).toBeLessThan(6_600);
   });
 
-  it('renders a compact procedure surface trail before verbose steps', () => {
+  it('preserves tail labels inside compact procedure step thoughts', () => {
+    const sections = assemblePrompt({
+      basePrompt: 'base',
+      retrievedFacts: [
+        fact(
+          'procedure-step-tail',
+          'procedure',
+          JSON.stringify({
+            sourceRunId: 'run-procedure-step-tail',
+            goal: 'continue a compact workflow',
+            trajectoryOutcome: 'success',
+            stepCount: 2,
+            steps: [
+              {
+                stateIndex: '1',
+                url: 'https://mobile.example.test/flow',
+                thought: `${'qverbose '.repeat(40)} qtail-stage-label`,
+              },
+            ],
+          }),
+        ),
+      ],
+    }).sections.map((section) => section.text);
+    const promptText = sections.join('\n');
+
+    expect(promptText).toContain('qtail-stage-label');
+  });
+
+  it('renders a compact procedure surface trail before verbose transitions and steps', () => {
     const sections = assemblePrompt({
       basePrompt: 'base',
       retrievedFacts: [
@@ -201,14 +229,50 @@ describe('assemblePrompt memory ordering', () => {
     expect(promptText).toContain('"surfaceTrail"');
     expect(promptText).toContain('"actionTransitions"');
     expect(promptText).toContain('"fromStateIndex":"0"');
-    expect(promptText).toContain("\"observedAction\":\"tap('1')\"");
+    expect(promptText).toContain('"observedAction":"tap(\'1\')"');
     expect(promptText).toContain('"toStateIndex":"1"');
     expect(promptText).toContain('"toUrl":"https://mobile.example.test/account/summary"');
     expect(promptText).toContain('"url":"https://mobile.example.test/account/summary"');
-    expect(promptText.indexOf('"actionTransitions"')).toBeLessThan(
-      promptText.indexOf('"surfaceTrail"'),
+    expect(promptText.indexOf('"surfaceTrail"')).toBeLessThan(
+      promptText.indexOf('"actionTransitions"'),
     );
-    expect(promptText.indexOf('"surfaceTrail"')).toBeLessThan(promptText.indexOf('"steps"'));
+    expect(promptText.indexOf('"actionTransitions"')).toBeLessThan(promptText.indexOf('"steps"'));
+  });
+
+  it('keeps procedure surface labels visible before verbose transition history consumes budget', () => {
+    const sections = assemblePrompt({
+      basePrompt: 'base',
+      retrievedFacts: [
+        fact(
+          'procedure-surface-budget',
+          'procedure',
+          JSON.stringify({
+            sourceRunId: 'run-procedure-surface-budget',
+            goal: 'complete a long mobile workflow',
+            trajectoryOutcome: 'success',
+            stepCount: 24,
+            steps: Array.from({ length: 24 }, (_, index) => ({
+              stateIndex: String(index),
+              url: 'https://mobile.example.test/surface',
+              action: `tap('${index}')`,
+              thought: `qverbose-detail-${index} ${'x'.repeat(260)}`,
+              surfaceLabels:
+                index < 8
+                  ? ['qsurface-start']
+                  : index < 16
+                    ? ['qsurface-label-retained']
+                    : ['qsurface-end'],
+            })),
+          }),
+        ),
+      ],
+    }).sections.map((section) => section.text);
+    const promptText = sections.join('\n');
+
+    expect(promptText).toContain('qsurface-label-retained');
+    expect(promptText.indexOf('qsurface-label-retained')).toBeLessThan(
+      promptText.indexOf('"actionTransitions"'),
+    );
   });
 
   it('preserves retrieved group order so top-ranked procedures are not buried under UI', () => {

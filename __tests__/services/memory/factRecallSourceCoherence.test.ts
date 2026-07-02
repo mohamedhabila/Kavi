@@ -12,8 +12,7 @@ function fact(params: {
     id: params.id,
     sourceRunId: params.sourceRunId ?? null,
     memoryKind: params.memoryKind ?? 'procedure',
-    attributes:
-      typeof params.stateIndex === 'number' ? { stateIndex: params.stateIndex } : {},
+    attributes: typeof params.stateIndex === 'number' ? { stateIndex: params.stateIndex } : {},
     objectText: '{}',
   } as MemoryFact;
 }
@@ -156,5 +155,47 @@ describe('rankSourceCoherentEntries', () => {
     ]);
 
     expect(ordered[0].fact.id).toBe('exact-action');
+  });
+
+  it('uses source-run evidence rank only after coherence scores tie', () => {
+    const relevanceFirst = rankSourceCoherentEntries(
+      [
+        scored({ id: 'ranked-single', sourceRunId: 'run-ranked', score: 0.62 }),
+        scored({ id: 'coherent-a', sourceRunId: 'run-coherent', score: 0.54, stateIndex: 4 }),
+        scored({
+          id: 'coherent-b',
+          sourceRunId: 'run-coherent',
+          memoryKind: 'ui_inventory',
+          score: 0.5,
+          stateIndex: 5,
+        }),
+        scored({
+          id: 'coherent-c',
+          sourceRunId: 'run-coherent',
+          memoryKind: 'outcome',
+          score: 0.46,
+          stateIndex: 6,
+        }),
+      ],
+      new Map([
+        ['run-ranked', 0],
+        ['run-coherent', 8],
+      ]),
+    );
+
+    expect(relevanceFirst[0].fact.sourceRunId).toBe('run-coherent');
+
+    const tieBroken = rankSourceCoherentEntries(
+      [
+        scored({ id: 'ranked-single', sourceRunId: 'run-ranked', score: 0.62 }),
+        scored({ id: 'coherent-single', sourceRunId: 'run-coherent', score: 0.62 }),
+      ],
+      new Map([
+        ['run-ranked', 0],
+        ['run-coherent', 8],
+      ]),
+    );
+
+    expect(tieBroken[0].fact.sourceRunId).toBe('run-ranked');
   });
 });

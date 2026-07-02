@@ -51,15 +51,16 @@ describe('structured procedure traces - target context', () => {
             url: 'https://workflow.example.test/list',
             action: "click('13')",
             accessibility_tree: [
-              "RootWebArea 'List'",
-              "\t[9] button 'qaction-menu', clickable, visible",
-              "\t[10] list '', visible",
-              "\t\t[11] listitem '', visible",
-              "\t\t\tStaticText 'qdelete-option'",
-              "\t\t[12] listitem '', visible",
-              "\t\t\tStaticText 'qstatus-option'",
-              "\t\t[13] listitem '', visible",
-              "\t\t\tStaticText 'qupdate-option'",
+              "RootWebArea 'qworkflow-surface'",
+              "\tmain 'qworkflow-surface'",
+              "\t\t[9] button 'qaction-menu', clickable, visible",
+              "\t\t[10] list '', visible",
+              "\t\t\t[11] listitem '', visible",
+              "\t\t\t\tStaticText 'qdelete-option'",
+              "\t\t\t[12] listitem '', visible",
+              "\t\t\t\tStaticText 'qstatus-option'",
+              "\t\t\t[13] listitem '', visible",
+              "\t\t\t\tStaticText 'qupdate-option'",
             ].join('\n'),
           },
           'tool-procedure-target-context',
@@ -79,13 +80,17 @@ describe('structured procedure traces - target context', () => {
       name: 'qupdate-option',
       peerNames: ['qdelete-option', 'qstatus-option', 'qupdate-option'],
     });
+    expect(procedure.steps[0].surfaceLabels).toContain('qworkflow-surface');
 
     const promptText = assemblePrompt({
       basePrompt: 'base',
       retrievedFacts: [procedureFact],
-    }).sections.map((section) => section.text).join('\n');
+    })
+      .sections.map((section) => section.text)
+      .join('\n');
 
     expect(promptText).toContain('qupdate-option');
     expect(promptText).toContain('qstatus-option');
+    expect(promptText).toContain('qworkflow-surface');
   });
 });

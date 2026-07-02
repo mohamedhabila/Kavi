@@ -232,9 +232,7 @@ describe('orchestrateMemoryRetrieval', () => {
       now: 10,
     });
 
-    expect(result.facts.map((fact) => fact.id)).toEqual(
-      expect.arrayContaining([anchor.id]),
-    );
+    expect(result.facts.map((fact) => fact.id)).toEqual(expect.arrayContaining([anchor.id]));
     expect(result.facts.some((fact) => fact.id === latest.id)).toBe(true);
     expect(result.facts.some((fact) => fact.sourceRunId === 'run-workflow-noise')).toBe(false);
   });
@@ -337,6 +335,62 @@ describe('orchestrateMemoryRetrieval', () => {
     ]);
     expect(result.facts.map((fact) => fact.id)).toEqual([primaryFact.id]);
     expect(result.facts.some((fact) => fact.id === tailFact.id)).toBe(false);
+  });
+
+  it('fuses multi-signal evidence by source run before choosing representatives', async () => {
+    const surface = upsertEntity({
+      name: 'surface:https://source-fusion.example.test',
+      type: 'project',
+    });
+    recordFact({
+      subjectId: surface.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({ controlNames: ['qsource-alpha'] }),
+      sourceRunId: 'run-source-fusion-target',
+      memoryKind: 'ui_inventory',
+      scope: 'conversation',
+      originConversationId: 'conv-source-fusion',
+      now: 1,
+    });
+    recordFact({
+      subjectId: surface.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({ controlNames: ['qsource-beta'] }),
+      sourceRunId: 'run-source-fusion-target',
+      memoryKind: 'ui_inventory',
+      scope: 'conversation',
+      originConversationId: 'conv-source-fusion',
+      now: 2,
+    });
+    recordFact({
+      subjectId: surface.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({ controlNames: ['qsource-alpha', 'qsource-noise-a'] }),
+      sourceRunId: 'run-source-fusion-noise-a',
+      memoryKind: 'ui_inventory',
+      scope: 'conversation',
+      originConversationId: 'conv-source-fusion',
+      now: 3,
+    });
+    recordFact({
+      subjectId: surface.id,
+      predicate: 'ui_inventory',
+      objectText: JSON.stringify({ controlNames: ['qsource-beta', 'qsource-noise-b'] }),
+      sourceRunId: 'run-source-fusion-noise-b',
+      memoryKind: 'ui_inventory',
+      scope: 'conversation',
+      originConversationId: 'conv-source-fusion',
+      now: 4,
+    });
+
+    const result = await orchestrateMemoryRetrieval({
+      userMessage: ['Find qsource-alpha.', 'Find qsource-beta.'].join('\n'),
+      conversationId: 'conv-source-fusion',
+      limit: 2,
+      now: 5,
+    });
+
+    expect(result.facts[0]?.sourceRunId).toBe('run-source-fusion-target');
   });
 
   it('uses content-bearing attachment lines without recalling standalone markers', async () => {

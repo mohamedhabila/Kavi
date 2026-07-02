@@ -59,4 +59,43 @@ describe('recallFactsForQuery - indexed unit selection', () => {
     expect(scored.map((entry) => entry.fact.id)).toEqual([target.fact.id]);
     expect(scored[0].textScore).toBeGreaterThan(0);
   });
+
+  it('keeps late workflow-defining units in long user requests', async () => {
+    const corpus = upsertEntity({ name: 'indexed-workflow-coverage-corpus', type: 'concept' });
+    const conversationId = 'conv-indexed-workflow-coverage';
+    const setupUnits = Array.from({ length: 28 }, (_, index) => `qsetup${index}`);
+
+    for (let index = 0; index < 80; index += 1) {
+      recordFact({
+        subjectId: corpus.id,
+        predicate: `noise_${index}`,
+        objectText: `qsetup0 qsetup1 qsetup2 qnoise${index}`,
+        scope: 'conversation',
+        originConversationId: conversationId,
+        now: 10_000 + index,
+      });
+    }
+
+    const target = recordFact({
+      subjectId: corpus.id,
+      predicate: 'workflow',
+      objectText: 'qworkflowstage qworkflowtarget qworkflowanswer',
+      scope: 'conversation',
+      originConversationId: conversationId,
+      now: 1,
+    });
+
+    const scored = await recallScoredFactsForQuery(
+      `${setupUnits.join(' ')} qworkflowstage qworkflowtarget qworkflowanswer`,
+      {
+        conversationId,
+        limit: 3,
+        candidatePoolLimit: 64,
+        threshold: 0.01,
+        now: 20_000,
+      },
+    );
+
+    expect(scored.some((entry) => entry.fact.id === target.fact.id)).toBe(true);
+  });
 });
