@@ -46,10 +46,6 @@ function scored(fact: MemoryFact, score: number, relevanceScore = score): Scored
     reinforcementBoost: 0,
     importanceScore: 0,
     retrievabilityScore: 1,
-    quotedUiControlBoost: 0,
-    surfaceLabelBoost: 0,
-    surfaceIdentityScore: 0,
-    visibleTextEvidenceBoost: 0,
   };
 }
 
@@ -58,7 +54,7 @@ describe('recallFactsForQuery - procedure representatives', () => {
     const corpus = upsertEntity({ name: 'action-result-procedure-representative', type: 'concept' });
     const actionResult = recordFact({
       subjectId: corpus.id,
-      predicate: 'ui_action_result',
+      predicate: 'agent_run_result',
       objectText: 'qrepresentative qworkflow qstate',
       sourceRunId: 'run-action-procedure',
       memoryKind: 'outcome',
@@ -96,7 +92,7 @@ describe('recallFactsForQuery - procedure representatives', () => {
     const corpus = upsertEntity({ name: 'terminal-procedure-representative', type: 'concept' });
     const actionResult = recordFact({
       subjectId: corpus.id,
-      predicate: 'ui_action_result',
+      predicate: 'agent_run_result',
       objectText: 'qterminal qworkflow qstate',
       sourceRunId: 'run-terminal-procedure',
       memoryKind: 'outcome',

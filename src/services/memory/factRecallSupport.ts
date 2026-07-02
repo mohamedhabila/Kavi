@@ -1,5 +1,4 @@
 import { type MemoryFact } from './facts/types';
-import { parseJsonRecord } from './factJson';
 import {
   compareSupportCandidates,
   compareSupportPhaseRepresentatives,
@@ -7,9 +6,6 @@ import {
   supportPhaseKey,
   type ScoredSelectionFact,
 } from './ranking/selection';
-import { countLexicalUnits } from './ranking/lexical';
-import { collectUiObservationEvidenceTexts, isUiObservationFact } from './uiObservationEvidence';
-import { uiInventoryHasStateBearingFields } from './factRecallUiStateInventorySupport';
 
 export interface WorkflowSupportEntry {
   exactContext: boolean;
@@ -66,7 +62,7 @@ export function compareRankedSupportEntries<
 }
 
 export function isActionResultOutcome(fact: MemoryFact): boolean {
-  return fact.memoryKind === 'outcome' && fact.predicate === 'ui_action_result';
+  return fact.memoryKind === 'outcome';
 }
 
 export function selectedActionResultSourceRuns(facts: ReadonlyArray<MemoryFact>): Set<string> {
@@ -77,65 +73,19 @@ export function selectedActionResultSourceRuns(facts: ReadonlyArray<MemoryFact>)
   );
 }
 
-function stateNumber(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
-
-function actionResultStateNumber(fact: MemoryFact): number | null {
-  const parsed = parseJsonRecord(fact.objectText);
-  return stateNumber(fact.attributes.stateIndex ?? parsed?.stateIndex);
-}
-
-function actionResultPreviousStateNumber(fact: MemoryFact): number | null {
-  const parsed = parseJsonRecord(fact.objectText);
-  return stateNumber(fact.attributes.previousStateIndex ?? parsed?.previousStateIndex);
-}
-
 export function isImmediateActionResultContinuation(
   candidate: MemoryFact,
   selected: ReadonlyArray<MemoryFact>,
 ): boolean {
   if (!isActionResultOutcome(candidate) || !candidate.sourceRunId) return false;
-  const candidateState = actionResultStateNumber(candidate);
-  const candidatePreviousState = actionResultPreviousStateNumber(candidate);
-  if (candidateState === null && candidatePreviousState === null) return false;
-  return selected.some((fact) => {
-    if (!isActionResultOutcome(fact) || fact.sourceRunId !== candidate.sourceRunId) return false;
-    const selectedState = actionResultStateNumber(fact);
-    if (selectedState === null) return false;
-    return candidatePreviousState === selectedState || candidateState === selectedState + 1;
-  });
-}
-
-function observedStateSupportPriority(fact: MemoryFact): number {
-  if (isActionResultOutcome(fact)) return 8;
-  if (fact.memoryKind === 'ui_filter_state') return 6;
-  if (fact.memoryKind === 'ui_field') return uiFieldSupportPriority(fact);
-  if (fact.memoryKind === 'ui_inventory' && uiInventoryHasStateBearingFields(fact)) return 4;
-  if (fact.memoryKind === 'ui_inventory') return 3;
-  return 1;
-}
-
-function uiFieldSupportPriority(fact: MemoryFact): number {
-  const parsed = parseJsonRecord(fact.objectText);
-  if (parsed?.role === 'tab') return 3;
-  if (parsed?.required === true) return 7;
-  if (parsed && hasStructuredFieldState(parsed)) return 5;
-  return 4;
-}
-
-function hasStructuredFieldState(field: Record<string, unknown>): boolean {
-  if (field.required === true) return true;
-  for (const key of ['checked', 'selected', 'disabled', 'expanded', 'value', 'displayText']) {
-    const value = field[key];
-    if (value !== undefined && value !== null && value !== '') return true;
-  }
-  return Array.isArray(field.options) && field.options.length > 0;
+  const candidateStateKey = sourceRunStateKey(candidate);
+  if (!candidateStateKey) return false;
+  return selected.some(
+    (fact) =>
+      isActionResultOutcome(fact) &&
+      fact.sourceRunId === candidate.sourceRunId &&
+      sourceRunStateKey(fact) === candidateStateKey,
+  );
 }
 
 export function rankWorkflowSupportEntries<T extends WorkflowSupportEntry>(params: {
@@ -143,32 +93,9 @@ export function rankWorkflowSupportEntries<T extends WorkflowSupportEntry>(param
   sourceRunSupportRank: ReadonlyMap<string, number>;
 }): T[] {
   const { entries, sourceRunSupportRank } = params;
-  const supportEntriesByObservedState = new Map<string, T>();
-  const ungroupedObservedStateSupportEntries: T[] = [];
-  const compareObservedStateSupportEntries = (left: T, right: T): number => {
-    const rightPriority = observedStateSupportPriority(right.fact);
-    const leftPriority = observedStateSupportPriority(left.fact);
-    if (rightPriority !== leftPriority) return rightPriority - leftPriority;
-    return compareRankedSupportEntries(left, right, sourceRunSupportRank);
-  };
-  for (const entry of entries) {
-    const stateKey = sourceRunStateKey(entry.fact);
-    if (!stateKey) {
-      ungroupedObservedStateSupportEntries.push(entry);
-      continue;
-    }
-    const existing = supportEntriesByObservedState.get(stateKey);
-    if (!existing || compareObservedStateSupportEntries(entry, existing) < 0) {
-      supportEntriesByObservedState.set(stateKey, entry);
-    }
-  }
-
   const supportEntriesByPhase = new Map<string, T>();
   const ungroupedSupportEntries: T[] = [];
-  for (const entry of [
-    ...supportEntriesByObservedState.values(),
-    ...ungroupedObservedStateSupportEntries,
-  ]) {
+  for (const entry of entries) {
     const phaseKey = supportPhaseKey(entry.fact);
     if (!phaseKey) {
       ungroupedSupportEntries.push(entry);
@@ -180,37 +107,15 @@ export function rankWorkflowSupportEntries<T extends WorkflowSupportEntry>(param
     }
   }
 
-  return [...supportEntriesByPhase.values(), ...ungroupedSupportEntries].sort((left, right) => {
-    const requiredDiff =
-      requiredFieldSupportPriority(right.fact) - requiredFieldSupportPriority(left.fact);
-    if (requiredDiff !== 0) return requiredDiff;
-    return compareRankedSupportEntries(left, right, sourceRunSupportRank);
-  });
-}
-
-function requiredFieldSupportPriority(fact: MemoryFact): number {
-  if (fact.memoryKind !== 'ui_field') return 0;
-  return parseJsonRecord(fact.objectText)?.required === true ? 1 : 0;
+  return [...supportEntriesByPhase.values(), ...ungroupedSupportEntries].sort((left, right) =>
+    compareRankedSupportEntries(left, right, sourceRunSupportRank),
+  );
 }
 
 export function supportEvidenceRichness(fact: MemoryFact): number {
-  if (fact.memoryKind !== 'ui_inventory') return 0;
-  const parsed = parseJsonRecord(fact.objectText);
-  if (!parsed) return 0;
-  const countArray = (value: unknown): number => (Array.isArray(value) ? value.length : 0);
-  const fields = Array.isArray(parsed.fields) ? parsed.fields : [];
-  const fieldOptionCount = fields.reduce((total, field) => {
-    if (!field || typeof field !== 'object' || Array.isArray(field)) return total;
-    return total + countArray((field as Record<string, unknown>).options);
-  }, 0);
-  return (
-    countArray(parsed.fields) * 2 +
-    countArray(parsed.visibleTextSnippets) * 2 +
-    countArray(parsed.controlNames) +
-    countArray(parsed.popupControls) * 2 +
-    countArray(parsed.labelValues) +
-    fieldOptionCount
-  );
+  const textLength = fact.objectText.trim().length;
+  const attributeCount = Object.keys(fact.attributes ?? {}).length;
+  return Math.min(10, Math.ceil(textLength / 400) + attributeCount);
 }
 
 export function supportQueryEvidenceScore(
@@ -219,29 +124,13 @@ export function supportQueryEvidenceScore(
   unitWeights: ReadonlyMap<string, number>,
 ): number {
   if (queryUnits.size === 0) return 0;
-  const parsed = parseJsonRecord(fact.objectText);
-  if (!isUiObservationFact(fact, parsed)) return 0;
-  const evidenceTexts = collectUiObservationEvidenceTexts(parsed, fact.attributes);
-  if (evidenceTexts.length === 0) return 0;
   let queryWeight = 0;
-  for (const unit of queryUnits) queryWeight += unitWeights.get(unit) ?? 1;
-  if (queryWeight <= 0) return 0;
-  let best = 0;
-  for (const text of evidenceTexts) {
-    const evidenceUnits = Array.from(countLexicalUnits(text).keys());
-    if (evidenceUnits.length === 0) continue;
-    let matchedWeight = 0;
-    let evidenceWeight = 0;
-    for (const unit of evidenceUnits) {
-      const weight = unitWeights.get(unit) ?? 1;
-      evidenceWeight += weight;
-      if (queryUnits.has(unit)) matchedWeight += weight;
-    }
-    if (matchedWeight <= 0 || evidenceWeight <= 0) continue;
-    best = Math.max(
-      best,
-      (matchedWeight / evidenceWeight) * 0.7 + (matchedWeight / queryWeight) * 0.3,
-    );
+  let matchedWeight = 0;
+  const text = `${fact.predicate} ${fact.objectText} ${fact.sourceSummary ?? ''}`.toLocaleLowerCase();
+  for (const unit of queryUnits) {
+    const weight = unitWeights.get(unit) ?? 1;
+    queryWeight += weight;
+    if (text.includes(unit.toLocaleLowerCase())) matchedWeight += weight;
   }
-  return best;
+  return queryWeight > 0 ? matchedWeight / queryWeight : 0;
 }

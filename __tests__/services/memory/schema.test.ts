@@ -108,9 +108,9 @@ describe('ensureFactSchema', () => {
     const entity = upsertEntity({ name: 'forum', type: 'project', now: 1 });
     recordFact({
       subjectId: entity.id,
-      predicate: 'ui_inventory',
-      objectText: 'Cyberpunk forum Hide this forum',
-      memoryKind: 'ui_inventory',
+      predicate: 'agent_run_result',
+      objectText: 'Cyberpunk forum analysis produced reports/analysis.json',
+      memoryKind: 'outcome',
       now: 2,
     });
 
@@ -120,7 +120,7 @@ describe('ensureFactSchema', () => {
         WHERE unit = ?
           AND memory_kind = ?`,
       'cyberpunk',
-      'ui_inventory',
+      'outcome',
     );
     expect(stats?.fact_count).toBe(1);
 

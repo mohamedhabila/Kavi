@@ -3,9 +3,9 @@
 // ---------------------------------------------------------------------------
 // The orchestrator intentionally stays small: it builds one structural query,
 // asks the fact store for one ranked pool, and returns the selected facts plus
-// recent episodes. UI transitions, fields, controls, and outcomes are stored as
-// ordinary fact text, so recall does not need separate lanes or source-link
-// reconstruction.
+// recent episodes. Agent-run evidence is stored as compact procedure, outcome,
+// source, artifact, decision, risk, summary, and durable fact records, so recall
+// does not need domain-specific candidate lanes.
 // ---------------------------------------------------------------------------
 
 import type { AgentGoal } from '../../engine/goals/types';
@@ -240,10 +240,6 @@ function scoredProcedureSupport(fact: MemoryFact, anchor: ScoredFact): ScoredFac
     textScore: 0,
     lexicalScore: 0,
     relevanceScore: anchor.relevanceScore,
-    quotedUiControlBoost: 0,
-    surfaceLabelBoost: 0,
-    surfaceIdentityScore: 0,
-    visibleTextEvidenceBoost: 0,
   };
 }
 

@@ -59,9 +59,5 @@ export interface ScoredFact {
   reinforcementBoost: number;
   importanceScore: number;
   retrievabilityScore: number;
-  quotedUiControlBoost: number;
-  surfaceLabelBoost: number;
-  surfaceIdentityScore: number;
-  visibleTextEvidenceBoost: number;
   relevanceScore: number;
 }

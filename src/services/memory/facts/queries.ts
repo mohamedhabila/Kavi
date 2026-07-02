@@ -16,9 +16,7 @@ const MAX_FACT_LIMIT = 500;
 const DEFAULT_RECALL_CANDIDATE_LIMIT = 128;
 const MAX_RECALL_CANDIDATE_LIMIT = 2_000;
 const DEFAULT_RECALL_PINNED_LIMIT = 64;
-const DEFAULT_RECALL_STRUCTURED_UI_LIMIT = 32;
 const DEFAULT_RECALL_SCOPED_RECENT_LIMIT = 192;
-const STRUCTURED_UI_RECALL_KINDS: MemoryFactKind[] = ['ui_field', 'ui_filter_state'];
 
 interface FactFilter {
   clauses: string[];
@@ -87,12 +85,6 @@ function whereSql(filter: FactFilter): string {
 
 function clampLimit(value: number | undefined, fallback: number, max: number): number {
   return Math.max(1, Math.min(value ?? fallback, max));
-}
-
-function requestedStructuredUiKinds(memoryKind: ListFactsOptions['memoryKind']): MemoryFactKind[] {
-  if (!memoryKind) return STRUCTURED_UI_RECALL_KINDS;
-  const requestedKinds = Array.isArray(memoryKind) ? memoryKind : [memoryKind];
-  return STRUCTURED_UI_RECALL_KINDS.filter((kind) => requestedKinds.includes(kind));
 }
 
 export function listFacts(options: ListFactsOptions = {}): MemoryFact[] {
@@ -212,14 +204,6 @@ export function listFactsForRecallCandidates(
     ),
   );
   if (lexicalUnits.length > 0) {
-    const structuredUiKinds = requestedStructuredUiKinds(options.memoryKind);
-    if (structuredUiKinds.length > 0) {
-      addIndexedLexicalRows(
-        lexicalUnits,
-        Math.min(DEFAULT_RECALL_STRUCTURED_UI_LIMIT, totalLimit),
-        structuredUiKinds,
-      );
-    }
     addIndexedLexicalRows(lexicalUnits, totalLimit);
   }
 
@@ -427,14 +411,16 @@ export function listFactsForSourceRunForwardWindows(
       `SELECT *
          FROM (
            SELECT f.*,
-                  ${stateExpr} AS state_index_rank,
-                  CASE
-                    WHEN f.memory_kind = 'ui_filter_state' THEN 0
-                    WHEN f.memory_kind = 'ui_field' THEN 1
-                    WHEN f.memory_kind = 'ui_inventory' THEN 2
-                    WHEN f.memory_kind = 'outcome' THEN 3
-                    ELSE 4
-                  END AS memory_kind_rank,
+	                  ${stateExpr} AS state_index_rank,
+	                  CASE
+	                    WHEN f.memory_kind = 'outcome' THEN 0
+	                    WHEN f.memory_kind = 'procedure' THEN 1
+	                    WHEN f.memory_kind = 'decision' THEN 2
+	                    WHEN f.memory_kind = 'risk' THEN 3
+	                    WHEN f.memory_kind = 'artifact' THEN 4
+	                    WHEN f.memory_kind = 'source' THEN 5
+	                    ELSE 6
+	                  END AS memory_kind_rank,
                   ROW_NUMBER() OVER (
                     PARTITION BY ${stateExpr}, f.memory_kind
                     ORDER BY f.retrievability DESC,
@@ -526,12 +512,14 @@ export function listFactsForSourceRunStateNeighborhoods(
     const orderSql = options.preferAdjacent
       ? `CASE WHEN ${stateExpr} = ? THEN 1 ELSE 0 END ASC,
                  ABS(${stateExpr} - ?) ASC,
-                 CASE WHEN ${stateExpr} >= ? THEN 0 ELSE 1 END ASC,
-                 CASE
-                   WHEN memory_kind = 'ui_inventory' THEN 0
-                   WHEN memory_kind = 'ui_field' THEN 1
-                   ELSE 2
-                 END ASC,
+	                 CASE WHEN ${stateExpr} >= ? THEN 0 ELSE 1 END ASC,
+	                 CASE
+	                   WHEN memory_kind = 'outcome' THEN 0
+	                   WHEN memory_kind = 'procedure' THEN 1
+	                   WHEN memory_kind = 'decision' THEN 2
+	                   WHEN memory_kind = 'risk' THEN 3
+	                   ELSE 4
+	                 END ASC,
                  retrievability DESC,
                  importance DESC,
                  updated_at DESC`
@@ -562,105 +550,6 @@ export function listFactsForSourceRunStateNeighborhoods(
     }
   }
 
-  return Array.from(byId.values());
-}
-
-export interface FactObservationContext {
-  sourceRunId?: string | null;
-  stateIndex?: string | number | null;
-  url?: string | null;
-}
-
-function scalarToString(value: unknown): string | null {
-  if (typeof value === 'string' && value.trim().length > 0) return value.trim();
-  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
-  return null;
-}
-
-function factMatchesObservationContext(fact: MemoryFact, context: FactObservationContext): boolean {
-  const contextStateIndex = scalarToString(context.stateIndex);
-  const factStateIndex = scalarToString(fact.attributes.stateIndex);
-  const contextUrl =
-    typeof context.url === 'string' && context.url.trim() ? context.url.trim() : null;
-  const factUrl = typeof fact.attributes.url === 'string' ? fact.attributes.url : null;
-  if (contextStateIndex && factStateIndex === contextStateIndex) {
-    return !contextUrl || factUrl === contextUrl;
-  }
-  return Boolean(contextUrl && factUrl === contextUrl);
-}
-
-export function listUiInventoriesForObservationContexts(
-  contexts: ReadonlyArray<FactObservationContext>,
-  options: Pick<
-    ListFactsOptions,
-    'includeDeleted' | 'includeExpired' | 'includeInvalidated' | 'asOf'
-  > & {
-    limit?: number;
-  } = {},
-): MemoryFact[] {
-  const normalizedContexts = contexts
-    .map((context) => ({
-      sourceRunId:
-        typeof context.sourceRunId === 'string' && context.sourceRunId.trim()
-          ? context.sourceRunId.trim()
-          : null,
-      stateIndex: scalarToString(context.stateIndex),
-      url: typeof context.url === 'string' && context.url.trim() ? context.url.trim() : null,
-    }))
-    .filter((context) => context.sourceRunId && (context.stateIndex || context.url));
-  if (normalizedContexts.length === 0) return [];
-  const contextLimit = Math.max(1, Math.min(Math.max((options.limit ?? 32) * 2, 32), 96));
-  const boundedContexts = normalizedContexts.slice(0, contextLimit);
-
-  const byId = new Map<string, MemoryFact>();
-  const limit = clampLimit(options.limit, boundedContexts.length, MAX_FACT_LIMIT);
-  const filter = buildFactFilter({
-    memoryKind: 'ui_inventory',
-    ...(options.includeDeleted ? { includeDeleted: true } : {}),
-    ...(options.includeExpired ? { includeExpired: true } : {}),
-    ...(options.includeInvalidated ? { includeInvalidated: true } : {}),
-    ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
-  });
-  for (const context of boundedContexts) {
-    if (!context.sourceRunId) continue;
-    if (byId.size >= limit) return Array.from(byId.values());
-    const matchClauses: string[] = [];
-    const matchParams: SqlBindValue[] = [];
-    if (context.stateIndex && context.url) {
-      matchClauses.push(
-        `(json_extract(attributes, '$.stateIndex') = ? AND json_extract(attributes, '$.url') = ?)`,
-      );
-      matchParams.push(context.stateIndex, context.url);
-    } else if (context.stateIndex) {
-      matchClauses.push(`json_extract(attributes, '$.stateIndex') = ?`);
-      matchParams.push(context.stateIndex);
-    }
-    if (context.url) {
-      matchClauses.push(`json_extract(attributes, '$.url') = ?`);
-      matchParams.push(context.url);
-    }
-    if (matchClauses.length === 0) continue;
-    const rows = getMany<FactRow>(
-      `SELECT * FROM memory_facts
-        ${whereSql({
-          clauses: ['source_run_id = ?', `(${matchClauses.join(' OR ')})`, ...filter.clauses],
-          params: [context.sourceRunId, ...matchParams, ...filter.params],
-        })}
-        ORDER BY retrievability DESC, importance DESC, updated_at DESC
-        LIMIT ${limit - byId.size}`,
-      context.sourceRunId,
-      ...matchParams,
-      ...filter.params,
-    );
-    for (const row of rows) {
-      const fact = rowToFact(row);
-      if (!factMatchesObservationContext(fact, context)) continue;
-      byId.set(fact.id, fact);
-      if (byId.size >= limit) {
-        return Array.from(byId.values());
-      }
-    }
-  }
   return Array.from(byId.values());
 }
 

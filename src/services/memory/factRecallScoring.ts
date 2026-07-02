@@ -1,24 +1,11 @@
 import { type MemoryFact } from './facts/types';
 import { type RecallFactsOptions, type ScoredFact } from './factRecallTypes';
-import { parseJsonRecord } from './factJson';
-import { queryQuotedControlLabelMatchRatio } from './queryUiEvidence';
-import { countLexicalUnits } from './ranking/lexical';
 import { exponentialDecayMultiplier } from './ranking/scoring';
-import { surfaceIdentityScore, surfaceLabelMatchBoost } from './uiSurfaceIdentity';
-import {
-  collectUiObservationEvidenceTexts,
-  isUiObservationFact,
-} from './uiObservationEvidence';
 
 const PINNED_BOOST = 0.25;
 const RELEVANCE_EPSILON = 1e-6;
 const QUOTED_ANCHOR_MATCH_BOOST = 0.18;
 const QUOTED_ANCHOR_FULL_MATCH_BOOST = 0.12;
-const UI_QUOTED_CONTROL_LABEL_MATCH_BOOST = 0.8;
-const UI_INVENTORY_VISIBLE_TEXT_DIRECT_EVIDENCE_BOOST = 0.25;
-const UI_OUTCOME_VISIBLE_TEXT_DIRECT_EVIDENCE_BOOST = 0.75;
-const UI_VISIBLE_TEXT_MIN_MATCHED_UNITS = 2;
-const UI_VISIBLE_TEXT_MIN_UNITS = 4;
 const DISCRIMINATIVE_SCORING_MIN_UNITS = 8;
 
 export function buildQueryUnitWeightsFromHits(
@@ -89,7 +76,6 @@ export function buildScoredFact(params: {
     fact,
     queryUnits,
     factUnitHits,
-    query,
     anchorUnitSets,
     alwaysIncludePinned,
     options,
@@ -105,26 +91,12 @@ export function buildScoredFact(params: {
   const retrievabilityScore = scoreRetrievability(fact);
   const relevanceScore = textScore * fact.confidence * decayMultiplier * retrievabilityScore;
   const anchorBoost = anchorMatchBoost(anchorUnitSets, factUnitHits);
-  const quotedUiControlBoost =
-    queryQuotedControlLabelMatchRatio(query, fact) * UI_QUOTED_CONTROL_LABEL_MATCH_BOOST;
-  const surfaceLabelBoost = surfaceLabelMatchBoost(fact, queryUnits, params.unitWeights);
-  const visibleTextEvidenceBoost = visibleTextDirectEvidenceBoost(
-    fact,
-    queryUnits,
-    params.unitWeights,
-  );
-  const uiSurfaceIdentityScore = surfaceIdentityScore(fact, queryUnits, params.unitWeights);
   const hasRelevance = relevanceScore > RELEVANCE_EPSILON;
   const score =
     relevanceScore +
     anchorBoost +
-    quotedUiControlBoost +
-    surfaceLabelBoost +
-    visibleTextEvidenceBoost +
     pinnedBoost +
-    (hasRelevance || anchorBoost > 0 || surfaceLabelBoost > 0 || visibleTextEvidenceBoost > 0
-      ? scopeBoost + reinforcementBoost + importanceScore
-      : 0);
+    (hasRelevance || anchorBoost > 0 ? scopeBoost + reinforcementBoost + importanceScore : 0);
   return {
     fact,
     score,
@@ -136,10 +108,6 @@ export function buildScoredFact(params: {
     reinforcementBoost,
     importanceScore,
     retrievabilityScore,
-    quotedUiControlBoost,
-    surfaceLabelBoost,
-    surfaceIdentityScore: uiSurfaceIdentityScore,
-    visibleTextEvidenceBoost,
     relevanceScore,
   };
 }
@@ -174,84 +142,6 @@ function anchorMatchBoost(
     matched * QUOTED_ANCHOR_MATCH_BOOST +
     (matched === anchorUnitSets.length ? QUOTED_ANCHOR_FULL_MATCH_BOOST : 0)
   );
-}
-
-function visibleTextDirectEvidenceBoost(
-  fact: MemoryFact,
-  queryUnits: ReadonlySet<string>,
-  unitWeights: ReadonlyMap<string, number>,
-): number {
-  const parsed = parseJsonRecord(fact.objectText);
-  const isStructuredOutcome = fact.memoryKind === 'outcome' && isUiObservationFact(fact, parsed);
-  const evidenceTexts =
-    fact.memoryKind === 'ui_inventory'
-      ? uiInventoryVisibleTexts(parsed)
-      : isStructuredOutcome
-        ? collectUiObservationEvidenceTexts(parsed, fact.attributes)
-        : [];
-  if (queryUnits.size === 0 || evidenceTexts.length === 0) return 0;
-
-  const queryWeight = totalUnitWeight(queryUnits, unitWeights);
-  if (queryWeight <= 0) return 0;
-
-  let bestEvidenceScore = 0;
-  for (const text of evidenceTexts) {
-    const snippetUnits = Array.from(countLexicalUnits(text).keys());
-    if (snippetUnits.length < UI_VISIBLE_TEXT_MIN_UNITS) continue;
-
-    let matchedCount = 0;
-    let matchedWeight = 0;
-    let snippetWeight = 0;
-    for (const unit of snippetUnits) {
-      const weight = unitWeights.get(unit) ?? 1;
-      snippetWeight += weight;
-      if (!queryUnits.has(unit)) continue;
-      matchedCount += 1;
-      matchedWeight += weight;
-    }
-    if (
-      matchedCount < UI_VISIBLE_TEXT_MIN_MATCHED_UNITS ||
-      matchedWeight <= 0 ||
-      snippetWeight <= 0
-    ) {
-      continue;
-    }
-
-    const snippetCoverage = matchedWeight / snippetWeight;
-    const queryCoverage = matchedWeight / queryWeight;
-    bestEvidenceScore = Math.max(
-      bestEvidenceScore,
-      snippetCoverage * 0.7 + queryCoverage * 0.3,
-    );
-  }
-
-  return (
-    bestEvidenceScore *
-    (isStructuredOutcome
-      ? UI_OUTCOME_VISIBLE_TEXT_DIRECT_EVIDENCE_BOOST
-      : UI_INVENTORY_VISIBLE_TEXT_DIRECT_EVIDENCE_BOOST)
-  );
-}
-
-function uiInventoryVisibleTexts(parsed: Record<string, unknown> | null): string[] {
-  const snippets = parsed?.visibleTextSnippets;
-  if (!Array.isArray(snippets)) return [];
-  return snippets
-    .map((snippet) => {
-      if (!snippet || typeof snippet !== 'object' || Array.isArray(snippet)) return '';
-      const text = (snippet as Record<string, unknown>).text;
-      return typeof text === 'string' ? text : '';
-    })
-    .filter((text) => text.trim().length > 0);
-}
-
-function totalUnitWeight(
-  units: Iterable<string>,
-  unitWeights: ReadonlyMap<string, number>,
-): number {
-  let total = 0;
-  for (const unit of units) total += unitWeights.get(unit) ?? 1;
-  return total;
 }
 
 function scoreScope(fact: MemoryFact, options: RecallFactsOptions): number {

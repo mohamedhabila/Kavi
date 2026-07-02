@@ -1,6 +1,6 @@
 // Kavi query-time fact recall. This path is deterministic and local: indexed
-// lexical candidates, sparse scoring, source-coherent selection, then support
-// grounding for prompt assembly.
+// lexical candidates, sparse scoring, source-coherent selection, and compact
+// workflow support for agent-run evidence.
 
 import { markFactsRecalled } from './facts/mutations';
 import {
@@ -39,8 +39,6 @@ import {
   primarySelectionGroupKey,
   primaryWorkflowRepresentative,
   selectionDedupeKey,
-  sourceRunStateKey,
-  supportDiversityKey,
   supportSlotCount,
   workflowProcedureRepresentativeForOutcome,
 } from './ranking/selection';
@@ -50,24 +48,10 @@ import {
   selectDiscriminativeScoringUnits,
 } from './factRecallScoring';
 import {
-  isImmediateActionResultContinuation,
   isActionResultOutcome,
+  isImmediateActionResultContinuation,
   selectedActionResultSourceRuns,
 } from './factRecallSupport';
-import {
-  ensureSelectedUiStateInventories,
-  insertSelectedUiStateInventories,
-  isUiStateDetailFact,
-  uiInventoryHasStateBearingFields,
-} from './factRecallUiStateInventorySupport';
-import { insertWorkflowUiSupport } from './factRecallWorkflowUiSupport';
-import { annotateUiInventoryQueryEvidence } from './queryUiEvidence';
-import {
-  dominantUiSurfaceIdentityScore,
-  isUiSurfaceIdentityCompatible,
-  pruneUiSurfaceIdentityConflicts,
-  selectedUiSurfaceIdentityScore,
-} from './uiSurfaceIdentity';
 
 export type { RecallFactsOptions, RecallFactsTiming, ScoredFact } from './factRecallTypes';
 
@@ -121,43 +105,6 @@ function addSelectedFact(params: {
   params.seenIds.add(params.fact.id);
   if (key) params.seenKeys.add(key);
   return true;
-}
-
-function hasDirectQueryEvidence(score: ScoredFact | undefined, threshold: number): boolean {
-  if (!score) return false;
-  return (
-    score.relevanceScore >= threshold ||
-    score.quotedUiControlBoost > 0 ||
-    score.surfaceLabelBoost > 0 ||
-    score.visibleTextEvidenceBoost > 0
-  );
-}
-
-function pruneBroadUiInventoriesShadowedByPreciseState(params: {
-  selected: MemoryFact[];
-  scoredById: ReadonlyMap<string, ScoredFact>;
-  threshold: number;
-}): void {
-  const preciseStateKeys = new Set<string>();
-  for (const fact of params.selected) {
-    if (!isUiStateDetailFact(fact)) continue;
-    const stateKey = sourceRunStateKey(fact);
-    if (!stateKey) continue;
-    if (!hasDirectQueryEvidence(params.scoredById.get(fact.id), params.threshold)) continue;
-    preciseStateKeys.add(stateKey);
-  }
-  if (preciseStateKeys.size === 0) return;
-
-  const pruned = params.selected.filter((fact) => {
-    if (fact.memoryKind !== 'ui_inventory') return true;
-    const stateKey = sourceRunStateKey(fact);
-    if (!stateKey || !preciseStateKeys.has(stateKey)) return true;
-    if (uiInventoryHasStateBearingFields(fact)) return true;
-    return hasDirectQueryEvidence(params.scoredById.get(fact.id), params.threshold);
-  });
-  if (pruned.length !== params.selected.length) {
-    params.selected.splice(0, params.selected.length, ...pruned);
-  }
 }
 
 async function buildRecallSelection(
@@ -250,11 +197,12 @@ async function buildRecallSelection(
           ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
         })
       : [];
-  const candidates = uniqueFactsById([...indexedCandidates, ...sourceRunCandidates]).filter(
-    (fact) => isFactEligibleForRecall(fact, options),
+  const candidates = uniqueFactsById([...indexedCandidates, ...sourceRunCandidates]).filter((fact) =>
+    isFactEligibleForRecall(fact, options),
   );
   timing.candidateFetchMs = Date.now() - candidateFetchStarted;
   timing.candidateCount = candidates.length;
+
   const candidateTermHitsStarted = Date.now();
   const candidateUnitHits = listFactTermUnitHitsForFacts(
     candidates.map((fact) => fact.id),
@@ -308,7 +256,6 @@ async function buildRecallSelection(
   });
   timing.sortMs = Date.now() - sortStarted;
   const scoredById = new Map(scored.map((entry) => [entry.fact.id, entry]));
-  const dominantUiSurfaceIdentity = dominantUiSurfaceIdentityScore(scored);
 
   const selectStarted = Date.now();
   const selected: MemoryFact[] = [];
@@ -319,6 +266,7 @@ async function buildRecallSelection(
   const primaryLimit = Math.max(1, limit - reservedSupportSlots);
   const primaryProcedureLimit = primaryProcedureSlotLimit(primaryLimit, options);
   let selectedPrimaryProcedures = 0;
+
   if (alwaysIncludePinned) {
     for (const entry of scored) {
       if (!entry.fact.pinned) continue;
@@ -336,6 +284,7 @@ async function buildRecallSelection(
       if (selected.length >= primaryLimit) break;
     }
   }
+
   if (trimmedQuery && selected.length < limit) {
     const threshold = options.threshold ?? DEFAULT_TEXT_THRESHOLD;
     const workflowProceduresBySourceRun = new Map<string, MemoryFact[]>();
@@ -368,14 +317,13 @@ async function buildRecallSelection(
         workflowProceduresBySourceRun.set(procedure.sourceRunId, procedures);
       }
     }
+
     if (
       primaryLimit > primaryProcedureLimit &&
       selected.length < primaryLimit &&
       selectedPrimaryProcedures < primaryProcedureLimit
     ) {
-      const bestStandaloneProcedure = bestStandaloneProcedureCandidate(scored, threshold, (entry) =>
-        isUiSurfaceIdentityCompatible(entry, dominantUiSurfaceIdentity),
-      );
+      const bestStandaloneProcedure = bestStandaloneProcedureCandidate(scored, threshold, () => true);
       if (bestStandaloneProcedure) {
         const added = addSelectedFact({
           selected,
@@ -390,9 +338,9 @@ async function buildRecallSelection(
         }
       }
     }
+
     for (const entry of rankSourceCoherentEntries(scored, sourceRunEvidenceRank)) {
       if (entry.relevanceScore < threshold && entry.score < threshold) continue;
-      if (!isUiSurfaceIdentityCompatible(entry, dominantUiSurfaceIdentity)) continue;
       if (
         entry.fact.memoryKind === 'procedure' &&
         selectedPrimaryProcedures >= primaryProcedureLimit
@@ -438,167 +386,36 @@ async function buildRecallSelection(
     }
   }
 
-  const seenUiSupportDiversityKeys = new Set<string>(
-    selected
-      .filter((fact) => fact.memoryKind === 'ui_inventory')
-      .map((fact) => supportDiversityKey(fact))
-      .filter((key): key is string => Boolean(key)),
-  );
-  const seenUiSupportDiversitySourceKeys = new Set<string>(
-    selected
-      .filter((fact) => fact.memoryKind === 'ui_inventory')
-      .map((fact) => {
-        const diversityKey = supportDiversityKey(fact);
-        return diversityKey ? `${fact.sourceRunId ?? ''}:${diversityKey}` : null;
-      })
-      .filter((key): key is string => Boolean(key)),
-  );
-
-  if (trimmedQuery && selected.length < limit && reservedSupportSlots > 0) {
-    insertWorkflowUiSupport({
-      selected,
-      seenIds,
-      seenUiSupportDiversityKeys,
-      seenUiSupportDiversitySourceKeys,
-      scoredById,
-      scored,
-      limit,
-      reservedSupportSlots,
-      candidateScopes,
-      options,
-      scoringQueryUnits: discriminativeScoringUnits,
-      recallLexicalUnits,
-      unitWeights,
-      query: trimmedQuery,
-      anchorUnitSets,
-      alwaysIncludePinned,
-      now,
-      addSelectedSupportFact: (fact, supportLimit, dedupeKey) =>
-        addSelectedFact({
-          selected,
-          seenIds,
-          seenKeys,
-          fact,
-          limit: supportLimit,
-          dedupeKey,
-        }),
-    });
-  }
-
-  if (trimmedQuery && selected.length < limit && reservedSupportSlots > 0) {
-    const threshold = options.threshold ?? DEFAULT_TEXT_THRESHOLD;
-    insertSelectedUiStateInventories({
-      selected,
-      scoredById,
-      limit,
-      options,
-      addSelectedInventory: (fact) =>
-        addSelectedFact({
-          selected,
-          seenIds,
-          seenKeys,
-          fact,
-          limit,
-        }),
-      candidateFacts: scored
-        .filter(
-          (entry) =>
-            isUiStateDetailFact(entry.fact) &&
-            (entry.relevanceScore >= threshold || entry.score >= threshold) &&
-            isUiSurfaceIdentityCompatible(entry, dominantUiSurfaceIdentity),
-        )
-        .map((entry) => entry.fact),
-    });
-  }
-
-  const identityPrunedSelected = pruneUiSurfaceIdentityConflicts(selected, scoredById);
-  if (identityPrunedSelected.length !== selected.length) {
-    selected.splice(0, selected.length, ...identityPrunedSelected);
-  }
-  const fallbackUiSurfaceIdentity = Math.max(
-    dominantUiSurfaceIdentity,
-    selectedUiSurfaceIdentityScore(selected, scoredById),
-  );
-
   if (trimmedQuery && selected.length < limit) {
     const threshold = options.threshold ?? DEFAULT_TEXT_THRESHOLD;
-    const selectedPreciseUiStateKeys = new Set(
-      selected
-        .filter((fact) => fact.memoryKind === 'ui_field' || fact.memoryKind === 'ui_filter_state')
-        .map((fact) => sourceRunStateKey(fact))
-        .filter(Boolean),
-    );
+    const selectedActionResultSourceRunIds = selectedActionResultSourceRuns(selected);
     for (const entry of scored) {
       if (entry.relevanceScore < threshold && entry.score < threshold) continue;
-      if (!isUiSurfaceIdentityCompatible(entry, fallbackUiSurfaceIdentity)) continue;
-      if (
-        entry.fact.memoryKind === 'ui_inventory' &&
-        selectedPreciseUiStateKeys.has(sourceRunStateKey(entry.fact) ?? '')
-      ) {
-        continue;
-      }
       if (
         isActionResultOutcome(entry.fact) &&
         entry.fact.sourceRunId &&
-        selectedActionResultSourceRuns(selected).has(entry.fact.sourceRunId) &&
+        selectedActionResultSourceRunIds.has(entry.fact.sourceRunId) &&
         !isImmediateActionResultContinuation(entry.fact, selected)
       ) {
         continue;
       }
-      const diversityKey =
-        entry.fact.memoryKind === 'ui_inventory' ? supportDiversityKey(entry.fact) : null;
-      if (diversityKey && seenUiSupportDiversityKeys.has(diversityKey)) continue;
-      const added = addSelectedFact({ selected, seenIds, seenKeys, fact: entry.fact, limit });
-      if (added && diversityKey) seenUiSupportDiversityKeys.add(diversityKey);
+      addSelectedFact({ selected, seenIds, seenKeys, fact: entry.fact, limit });
       if (selected.length >= limit) break;
     }
   }
 
   if (trimmedQuery) {
-    ensureSelectedUiStateInventories({
-      selected,
-      seenIds,
-      seenKeys,
-      scoredById,
-      limit,
-      options,
-      addSelectedInventory: (fact) =>
-        addSelectedFact({
-          selected,
-          seenIds,
-          seenKeys,
-          fact,
-          limit,
-        }),
-    });
-  }
-
-  if (trimmedQuery) {
-    const selectedUiSupportCount = selected.filter(
-      (fact) => fact.memoryKind === 'ui_inventory',
-    ).length;
     const selectedProcedureSourceRuns = new Set(
       selected
         .filter((fact) => fact.memoryKind === 'procedure' && fact.sourceRunId)
         .map((fact) => fact.sourceRunId as string),
     );
-    const selectedActionResultSourceRunIds = selectedActionResultSourceRuns(selected);
     const hasActionResultSupportAnchor = selected.some(
       (fact) =>
         isActionResultOutcome(fact) &&
         fact.sourceRunId &&
         !selectedProcedureSourceRuns.has(fact.sourceRunId),
     );
-    const hasUiProcedureSupportAnchor = selected.some((fact) => {
-      if (!fact.sourceRunId || selectedProcedureSourceRuns.has(fact.sourceRunId)) return false;
-      if (selectedActionResultSourceRunIds.has(fact.sourceRunId)) return false;
-      return (
-        fact.memoryKind === 'ui_inventory' ||
-        fact.memoryKind === 'ui_field' ||
-        fact.memoryKind === 'ui_filter_state'
-      );
-    });
-    const selectedProcedureNeedsEndpointSupport = selectedProcedureSourceRuns.size > 0;
     insertProcedureLocalSupport({
       selected,
       seenIds,
@@ -606,11 +423,7 @@ async function buildRecallSelection(
       scoredById,
       scored,
       limit,
-      uiSupportBudget: selectedProcedureNeedsEndpointSupport
-        ? Math.max(1, reservedSupportSlots - selectedUiSupportCount)
-        : Math.max(0, reservedSupportSlots - selectedUiSupportCount),
       procedureSupportBudget: hasActionResultSupportAnchor ? 1 : 0,
-      uiProcedureSupportBudget: hasUiProcedureSupportAnchor ? 1 : 0,
       candidateScopes,
       options,
       scoringQueryUnits: discriminativeScoringUnits,
@@ -642,22 +455,13 @@ async function buildRecallSelection(
     });
   }
 
-  if (trimmedQuery) {
-    pruneBroadUiInventoriesShadowedByPreciseState({
-      selected,
-      scoredById,
-      threshold: options.threshold ?? DEFAULT_TEXT_THRESHOLD,
-    });
-  }
-
   timing.selectMs = Date.now() - selectStarted;
   timing.totalMs = Date.now() - totalStarted;
   options.onTiming?.(timing);
 
-  const annotatedFacts = annotateUiInventoryQueryEvidence(trimmedQuery, selected);
   return {
-    facts: annotatedFacts,
-    scoredFacts: annotatedFacts
+    facts: selected,
+    scoredFacts: selected
       .map((fact) => {
         const scoredFact = scoredById.get(fact.id);
         return scoredFact ? { ...scoredFact, fact } : null;

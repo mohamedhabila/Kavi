@@ -76,16 +76,17 @@ describe('graph evidence ingestion bridge', () => {
     expect(recalled.some((fact) => fact.objectText.includes(evidence))).toBe(true);
   });
 
-  it('routes structured graph observations to typed memories instead of raw fact bridging', async () => {
-    const structuredEvidence =
+  it('routes agent-run graph observations to compact run memories instead of raw fact bridging', async () => {
+    const agentRunEvidence =
       'agent:' +
       JSON.stringify({
         kind: 'state',
-        trajectory_id: 'traj-ui',
+        trajectory_id: 'traj-agent',
         state_index: 4,
-        outcome: 'failure',
-        url: 'https://app.example.test/forum',
-        accessibility_tree: "[12] searchbox 'Search query', clickable, visible",
+        action: 'Run the analysis tool',
+        thought: 'Need a durable artifact for the user.',
+        outcome: 'reports/analysis.json was created',
+        artifact: 'reports/analysis.json',
       });
 
     const result = await processIngestionTurn({
@@ -93,38 +94,39 @@ describe('graph evidence ingestion bridge', () => {
       messages: buildClosedTurnMessages(),
       taskId: TASK_ID,
       sourceRunId: 'run-graph-structured',
-      graphGoalEvidence: [structuredEvidence],
+      graphGoalEvidence: [agentRunEvidence],
       skipWorkingMemorySync: true,
     });
 
-    expect(result.structuredMemoryFactIds.length).toBeGreaterThan(0);
+    expect(result.agentRunMemoryFactIds.length).toBeGreaterThan(0);
     expect(result.bridgedEvidenceFactIds).toHaveLength(0);
 
     const typedFacts = listFacts({ originConversationId: THREAD_ID });
-    expect(typedFacts.some((fact) => fact.memoryKind === 'ui_inventory')).toBe(true);
+    expect(typedFacts.filter((fact) => fact.sourceRunId === 'traj-agent')).toHaveLength(2);
+    expect(typedFacts.some((fact) => fact.memoryKind === 'procedure')).toBe(true);
     expect(typedFacts.some((fact) => fact.memoryKind === 'outcome')).toBe(true);
     expect(
       typedFacts.some(
-        (fact) => fact.memoryKind === 'semantic_fact' && fact.objectText.includes(structuredEvidence),
+        (fact) => fact.memoryKind === 'semantic_fact' && fact.objectText.includes(agentRunEvidence),
       ),
     ).toBe(false);
   });
 
-  it('does not bridge malformed structured graph observations as semantic facts', async () => {
-    const malformedStructuredEvidence =
-      'agent:{"kind":"state","trajectory_id":"traj-ui","state_index":4,';
+  it('does not bridge malformed agent-run graph observations as semantic facts', async () => {
+    const malformedAgentRunEvidence =
+      'agent:{"kind":"state","trajectory_id":"traj-agent","state_index":4,';
 
     const result = await processIngestionTurn({
       threadId: THREAD_ID,
       messages: buildClosedTurnMessages(),
       taskId: TASK_ID,
       sourceRunId: 'run-graph-malformed',
-      graphGoalEvidence: [malformedStructuredEvidence],
+      graphGoalEvidence: [malformedAgentRunEvidence],
       skipWorkingMemorySync: true,
     });
 
     expect(result.processed).toBe(true);
-    expect(result.structuredMemoryFactIds).toHaveLength(0);
+    expect(result.agentRunMemoryFactIds).toHaveLength(0);
     expect(result.bridgedEvidenceFactIds).toHaveLength(0);
 
     const storedFacts = listFacts({ originConversationId: THREAD_ID });
@@ -132,7 +134,7 @@ describe('graph evidence ingestion bridge', () => {
       storedFacts.some(
         (fact) =>
           fact.memoryKind === 'semantic_fact' &&
-          fact.objectText.includes(malformedStructuredEvidence),
+          fact.objectText.includes(malformedAgentRunEvidence),
       ),
     ).toBe(false);
   });

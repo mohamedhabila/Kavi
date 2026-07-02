@@ -20,9 +20,6 @@ function compareProcedureRelevance(left: ScoredFact, right: ScoredFact): number 
   if (right.relevanceScore !== left.relevanceScore) {
     return right.relevanceScore - left.relevanceScore;
   }
-  if (right.quotedUiControlBoost !== left.quotedUiControlBoost) {
-    return right.quotedUiControlBoost - left.quotedUiControlBoost;
-  }
   if (right.score !== left.score) return right.score - left.score;
   return right.fact.updatedAt - left.fact.updatedAt;
 }

@@ -1,6 +1,6 @@
 import { listFactTermStatsForUnits } from './facts/queries';
 
-const RECALL_INDEXED_QUERY_UNIT_LIMIT = 36;
+const RECALL_INDEXED_QUERY_UNIT_LIMIT = 24;
 const RECALL_INDEXED_QUERY_UNIT_MIN = 8;
 
 export function selectIndexedRecallLexicalUnits(

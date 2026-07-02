@@ -267,10 +267,19 @@ async function main(): Promise<void> {
   const appSignalRecalls = await Promise.all(
     appOrchestrator.querySignals.slice(0, 12).map(async (signal) => ({
       signal,
-      uiTextOnly: (
+      agentRunEvidence: (
         await recallScoredFactsForQuery(signal, {
           conversationId,
-          memoryKind: ['ui_inventory', 'ui_field', 'ui_filter_state'],
+          memoryKind: [
+            'procedure',
+            'outcome',
+            'tool_result',
+            'decision',
+            'risk',
+            'artifact',
+            'source',
+            'summary',
+          ],
           threshold: 0,
           limit: args.limit,
         })

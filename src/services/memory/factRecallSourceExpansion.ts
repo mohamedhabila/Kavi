@@ -6,10 +6,14 @@ export const SOURCE_RUN_CANDIDATE_FACTS_PER_SOURCE = 3;
 
 export const SOURCE_RUN_CANDIDATE_EXPANSION_KINDS: MemoryFactKind[] = [
   'procedure',
-  'ui_inventory',
-  'ui_field',
-  'ui_filter_state',
   'outcome',
+  'tool_result',
+  'decision',
+  'risk',
+  'artifact',
+  'summary',
+  'source',
+  'gotcha',
 ];
 
 export function sourceRunIdsForLocalExpansion(facts: ReadonlyArray<MemoryFact>): string[] {

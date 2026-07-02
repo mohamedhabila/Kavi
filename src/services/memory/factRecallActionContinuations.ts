@@ -18,12 +18,6 @@ function actionContinuationReplacementIndex(
   selected.forEach((fact, index) => {
     if (fact.pinned || fact.memoryKind === 'procedure' || isActionResultOutcome(fact)) return;
     if (!fact.sourceRunId || fact.sourceRunId !== sourceRunId) return;
-    if (fact.predicate === 'ui_popup_options') return;
-    const isUiSupport =
-      fact.memoryKind === 'ui_inventory' ||
-      fact.memoryKind === 'ui_field' ||
-      fact.memoryKind === 'ui_filter_state';
-    if (!isUiSupport) return;
     const score = scoredById.get(fact.id)?.score ?? 0;
     if (score < bestScore) {
       bestIndex = index;

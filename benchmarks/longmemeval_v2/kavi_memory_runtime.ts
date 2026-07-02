@@ -433,7 +433,7 @@ async function insertTrajectory(
     episode_id: ingestionResult.episodeId,
     deterministic_fact_ids: ingestionResult.deterministicFactIds,
     bridged_evidence_fact_ids: ingestionResult.bridgedEvidenceFactIds,
-    structured_memory_fact_ids: ingestionResult.structuredMemoryFactIds,
+    agent_run_memory_fact_ids: ingestionResult.agentRunMemoryFactIds,
     total_chunks: getChunkCount(),
     inserted_trajectories: insertedTrajectoryIds.size,
   };

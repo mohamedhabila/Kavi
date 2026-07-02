@@ -26,10 +26,7 @@ import { editWorkingBlock } from './workingBlocks';
 import { composeActiveFocusContent } from './focus';
 import { findEntityByName } from './entities';
 import { listFacts } from './facts/queries';
-import {
-  recordStructuredObservationsFromEvidence,
-  recordStructuredObservationsFromMessages,
-} from './structuredObservations';
+import { recordAgentRunEvidenceMemory } from './agentRunEvidenceMemory';
 
 const logger = createLogger('memory.turnProcessor');
 
@@ -56,7 +53,7 @@ export interface ProcessTurnResult {
   openThreadsUpdated: boolean;
   enriched: boolean;
   bridgedEvidenceFactIds: string[];
-  structuredMemoryFactIds: string[];
+  agentRunMemoryFactIds: string[];
   skipped?: 'opt_out' | 'no_closed_turn';
 }
 
@@ -222,7 +219,7 @@ function fitBlockLines(lines: string[], maxChars: number): string {
   return joined.length <= maxChars ? joined : joined.slice(0, maxChars);
 }
 
-function isStructuredEvidenceCandidate(evidence: string): boolean {
+function isJsonEvidenceCandidate(evidence: string): boolean {
   const trimmed = evidence.trim();
   const colonIndex = trimmed.indexOf(':');
   if (colonIndex <= 0) {
@@ -388,7 +385,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
       openThreadsUpdated: false,
       enriched: false,
       bridgedEvidenceFactIds: [],
-      structuredMemoryFactIds: [],
+      agentRunMemoryFactIds: [],
     };
   }
 
@@ -440,10 +437,12 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
     skipWorkingMemoryWrites: input.skipWorkingMemorySync,
   });
 
-  let structuredMemoryFactIds: string[] = [];
+  let agentRunMemoryFactIds: string[] = [];
+  let consumedAgentRunEvidence = new Set<string>();
   try {
-    const structuredFromMessages = recordStructuredObservationsFromMessages({
+    const agentRunMemory = recordAgentRunEvidenceMemory({
       messages: turnInput.messages ?? [],
+      evidence: input.graphGoalEvidence ?? [],
       conversationId: input.threadId,
       threadId: input.threadId,
       taskId: input.taskId,
@@ -451,10 +450,11 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
       sourceTurnId: assistant.id,
       now,
     });
-    structuredMemoryFactIds.push(...structuredFromMessages.factIds);
+    agentRunMemoryFactIds.push(...agentRunMemory.factIds);
+    consumedAgentRunEvidence = new Set(agentRunMemory.consumedEvidence);
   } catch (error) {
     logger.devWarn(
-      'Structured observation ingestion failed:',
+      'Agent-run memory ingestion failed:',
       error instanceof Error ? error.message : String(error),
     );
   }
@@ -462,19 +462,8 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
   let bridgedEvidenceFactIds: string[] = [];
   if (input.graphGoalEvidence?.length) {
     try {
-      const structuredFromEvidence = recordStructuredObservationsFromEvidence({
-        evidence: input.graphGoalEvidence,
-        conversationId: input.threadId,
-        threadId: input.threadId,
-        taskId: input.taskId,
-        sourceRunId: input.sourceRunId,
-        sourceTurnId: assistant.id,
-        now,
-      });
-      structuredMemoryFactIds.push(...structuredFromEvidence.factIds);
-      const consumedEvidence = new Set(structuredFromEvidence.consumedEvidence);
       const bridgeableEvidence = input.graphGoalEvidence.filter(
-        (evidence) => !consumedEvidence.has(evidence) && !isStructuredEvidenceCandidate(evidence),
+        (evidence) => !consumedAgentRunEvidence.has(evidence) && !isJsonEvidenceCandidate(evidence),
       );
       const bridgeResult = bridgeGraphGoalEvidence(bridgeableEvidence, {
         subjectName: input.taskId ?? input.threadId,
@@ -516,7 +505,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
     openThreadsUpdated: persistResult.openThreadsUpdated,
     enriched,
     bridgedEvidenceFactIds,
-    structuredMemoryFactIds,
+    agentRunMemoryFactIds,
   };
 }
 
