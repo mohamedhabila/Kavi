@@ -1,57 +1,25 @@
-// Kavi query-time fact recall. This path is deterministic and local: indexed
-// lexical candidates, sparse scoring, source-coherent selection, and compact
-// workflow support for agent-run evidence.
+// Kavi query-time fact recall. This path is deterministic and local: build one
+// indexed lexical candidate pool, score it once, and return the best matching
+// memories. Agent-run structure belongs in compact memory records, not in
+// query-time repair lanes.
 
 import { markFactsRecalled } from './facts/mutations';
-import {
-  listFactTermUnitHitsForFacts,
-  listFactsForRecallCandidates,
-  listFactsForSourceRuns,
-} from './facts/queries';
-import {
-  listFactsForSourceRunLexicalMatches,
-  listSourceRunIdsForLexicalEvidence,
-} from './facts/sourceRunLexicalMatches';
+import { listFactTermUnitHitsForFacts, listFactsForRecallCandidates } from './facts/queries';
 import { type MemoryFact, type MemoryFactScope } from './facts/types';
-import { promoteSelectedActionResultContinuations } from './factRecallActionContinuations';
 import { selectIndexedRecallLexicalUnits } from './factRecallCandidateUnits';
-import { insertProcedureLocalSupport } from './factRecallProcedureSupport';
 import { buildRecallLexicalUnits, selectScoringQueryUnits } from './factRecallQueryUnits';
-import { rankSourceCoherentEntries } from './factRecallSourceCoherence';
-import {
-  SOURCE_RUN_CANDIDATE_EXPANSION_KINDS,
-  SOURCE_RUN_CANDIDATE_FACTS_PER_SOURCE,
-  SOURCE_RUN_CANDIDATE_SOURCE_LIMIT,
-  sourceRunIdsForLocalExpansion,
-} from './factRecallSourceExpansion';
 import {
   type RecallFactsOptions,
   type RecallFactsTiming,
   type ScoredFact,
 } from './factRecallTypes';
-import { countLexicalUnits } from './ranking/lexical';
-import { quotedSpanUnitSets } from './ranking/quotedSpans';
-import {
-  bestStandaloneProcedureCandidate,
-  primaryProcedureSlotLimit,
-} from './factRecallProcedureSelection';
-import {
-  primarySelectionGroupKey,
-  primaryWorkflowRepresentative,
-  selectionDedupeKey,
-  supportSlotCount,
-  workflowProcedureRepresentativeForOutcome,
-} from './ranking/selection';
 import {
   buildQueryUnitWeightsFromHits,
   buildScoredFact,
   selectDiscriminativeScoringUnits,
 } from './factRecallScoring';
-import {
-  isActionResultOutcome,
-  isImmediateActionResultContinuation,
-  selectedActionResultSourceRuns,
-} from './factRecallSupport';
+import { countLexicalUnits } from './ranking/lexical';
+import { quotedSpanUnitSets } from './ranking/quotedSpans';
 
 export type { RecallFactsOptions, RecallFactsTiming, ScoredFact } from './factRecallTypes';
 
@@ -89,22 +57,34 @@ function uniqueFactsById(facts: ReadonlyArray<MemoryFact>): MemoryFact[] {
   return Array.from(byId.values());
 }
 
-function addSelectedFact(params: {
-  selected: MemoryFact[];
-  seenIds: Set<string>;
-  seenKeys: Set<string>;
-  fact: MemoryFact;
-  limit: number;
-  dedupeKey?: string | null;
-}): boolean {
-  if (params.selected.length >= params.limit) return false;
-  if (params.seenIds.has(params.fact.id)) return false;
-  const key = params.dedupeKey ?? selectionDedupeKey(params.fact);
-  if (key && params.seenKeys.has(key)) return false;
-  params.selected.push(params.fact);
-  params.seenIds.add(params.fact.id);
-  if (key) params.seenKeys.add(key);
-  return true;
+function factDedupeKey(fact: MemoryFact): string {
+  return `${fact.memoryKind}\u0000${fact.contentHash || fact.objectText.trim()}`;
+}
+
+function selectTopFacts(
+  scored: ReadonlyArray<ScoredFact>,
+  options: RecallFactsOptions,
+  limit: number,
+): ScoredFact[] {
+  const threshold = options.threshold ?? DEFAULT_TEXT_THRESHOLD;
+  const alwaysIncludePinned = options.alwaysIncludePinned !== false;
+  const selected: ScoredFact[] = [];
+  const seenIds = new Set<string>();
+  const seenKeys = new Set<string>();
+
+  for (const entry of scored) {
+    if (selected.length >= limit) break;
+    const isPinned = alwaysIncludePinned && entry.fact.pinned;
+    if (!isPinned && entry.relevanceScore < threshold && entry.score < threshold) continue;
+    if (seenIds.has(entry.fact.id)) continue;
+    const key = factDedupeKey(entry.fact);
+    if (seenKeys.has(key)) continue;
+    selected.push(entry);
+    seenIds.add(entry.fact.id);
+    seenKeys.add(key);
+  }
+
+  return selected;
 }
 
 async function buildRecallSelection(
@@ -135,6 +115,7 @@ async function buildRecallSelection(
   const trimmedQuery = query.trim();
   const now = options.now ?? options.asOf ?? Date.now();
   const candidateScopes = getCandidateScopes(options);
+
   const tokenizeStarted = Date.now();
   const queryUnitCounts = countLexicalUnits(trimmedQuery);
   const queryUnits = new Set(queryUnitCounts.keys());
@@ -155,51 +136,18 @@ async function buildRecallSelection(
     recallLexicalUnits,
     anchorLexicalUnits,
   );
-
-  const indexedCandidates = listFactsForRecallCandidates({
-    limit: candidatePool,
-    selectedLexicalUnits: indexedRecallLexicalUnits,
-    ...(options.conversationId ? { scopedRecentConversationId: options.conversationId } : {}),
-    ...(options.taskId ? { scopedRecentTaskId: options.taskId } : {}),
-    ...(candidateScopes ? { scope: candidateScopes } : {}),
-    ...(options.memoryKind ? { memoryKind: options.memoryKind } : {}),
-    ...(options.includeHistorical ? { includeInvalidated: true } : {}),
-    ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
-  });
-  const lexicalEvidenceSourceRunIds = listSourceRunIdsForLexicalEvidence(
-    indexedRecallLexicalUnits,
-    {
-      memoryKind: options.memoryKind ?? SOURCE_RUN_CANDIDATE_EXPANSION_KINDS,
-      limit: SOURCE_RUN_CANDIDATE_SOURCE_LIMIT,
+  const candidates = uniqueFactsById(
+    listFactsForRecallCandidates({
+      limit: candidatePool,
+      selectedLexicalUnits: indexedRecallLexicalUnits,
+      ...(options.conversationId ? { scopedRecentConversationId: options.conversationId } : {}),
+      ...(options.taskId ? { scopedRecentTaskId: options.taskId } : {}),
       ...(candidateScopes ? { scope: candidateScopes } : {}),
-      ...(options.conversationId ? { originConversationId: options.conversationId } : {}),
-      ...(options.taskId ? { originTaskId: options.taskId } : {}),
+      ...(options.memoryKind ? { memoryKind: options.memoryKind } : {}),
       ...(options.includeHistorical ? { includeInvalidated: true } : {}),
       ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
-    },
-  );
-  const sourceRunEvidenceRank = new Map(
-    lexicalEvidenceSourceRunIds.map((sourceRunId, index) => [sourceRunId, index]),
-  );
-  const localExpansionSourceRunIds = Array.from(
-    new Set([...sourceRunIdsForLocalExpansion(indexedCandidates), ...lexicalEvidenceSourceRunIds]),
-  );
-  const sourceRunCandidates =
-    localExpansionSourceRunIds.length > 0
-      ? listFactsForSourceRunLexicalMatches(localExpansionSourceRunIds, recallLexicalUnits, {
-          memoryKind: options.memoryKind ?? SOURCE_RUN_CANDIDATE_EXPANSION_KINDS,
-          limit: localExpansionSourceRunIds.length * SOURCE_RUN_CANDIDATE_FACTS_PER_SOURCE,
-          factsPerSourceRun: SOURCE_RUN_CANDIDATE_FACTS_PER_SOURCE,
-          ...(candidateScopes ? { scope: candidateScopes } : {}),
-          ...(options.conversationId ? { originConversationId: options.conversationId } : {}),
-          ...(options.taskId ? { originTaskId: options.taskId } : {}),
-          ...(options.includeHistorical ? { includeInvalidated: true } : {}),
-          ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
-        })
-      : [];
-  const candidates = uniqueFactsById([...indexedCandidates, ...sourceRunCandidates]).filter((fact) =>
-    isFactEligibleForRecall(fact, options),
-  );
+    }),
+  ).filter((fact) => isFactEligibleForRecall(fact, options));
   timing.candidateFetchMs = Date.now() - candidateFetchStarted;
   timing.candidateCount = candidates.length;
 
@@ -249,224 +197,23 @@ async function buildRecallSelection(
     }),
   );
   timing.scoreMs = Date.now() - scoreStarted;
+
   const sortStarted = Date.now();
   scored.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
     return b.fact.updatedAt - a.fact.updatedAt;
   });
   timing.sortMs = Date.now() - sortStarted;
-  const scoredById = new Map(scored.map((entry) => [entry.fact.id, entry]));
 
   const selectStarted = Date.now();
-  const selected: MemoryFact[] = [];
-  const seenIds = new Set<string>();
-  const seenKeys = new Set<string>();
-  const primaryGroups = new Set<string>();
-  const reservedSupportSlots = supportSlotCount(limit);
-  const primaryLimit = Math.max(1, limit - reservedSupportSlots);
-  const primaryProcedureLimit = primaryProcedureSlotLimit(primaryLimit, options);
-  let selectedPrimaryProcedures = 0;
-
-  if (alwaysIncludePinned) {
-    for (const entry of scored) {
-      if (!entry.fact.pinned) continue;
-      const added = addSelectedFact({
-        selected,
-        seenIds,
-        seenKeys,
-        fact: entry.fact,
-        limit: primaryLimit,
-      });
-      if (added) {
-        primaryGroups.add(primarySelectionGroupKey(entry.fact));
-        if (entry.fact.memoryKind === 'procedure') selectedPrimaryProcedures += 1;
-      }
-      if (selected.length >= primaryLimit) break;
-    }
-  }
-
-  if (trimmedQuery && selected.length < limit) {
-    const threshold = options.threshold ?? DEFAULT_TEXT_THRESHOLD;
-    const workflowProceduresBySourceRun = new Map<string, MemoryFact[]>();
-    const outcomeSourceRunIds = Array.from(
-      new Set(
-        scored
-          .filter(
-            (entry) =>
-              entry.fact.memoryKind === 'outcome' &&
-              entry.fact.sourceRunId &&
-              (entry.relevanceScore >= threshold || entry.score >= threshold),
-          )
-          .map((entry) => entry.fact.sourceRunId as string),
-      ),
-    );
-    if (outcomeSourceRunIds.length > 0) {
-      const workflowProcedures = listFactsForSourceRuns(outcomeSourceRunIds, {
-        memoryKind: 'procedure',
-        limit: Math.min(outcomeSourceRunIds.length * 2, CANDIDATE_POOL_MAX),
-        ...(candidateScopes ? { scope: candidateScopes } : {}),
-        ...(options.conversationId ? { originConversationId: options.conversationId } : {}),
-        ...(options.taskId ? { originTaskId: options.taskId } : {}),
-        ...(options.includeHistorical ? { includeInvalidated: true } : {}),
-        ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
-      });
-      for (const procedure of workflowProcedures) {
-        if (!procedure.sourceRunId) continue;
-        const procedures = workflowProceduresBySourceRun.get(procedure.sourceRunId) ?? [];
-        procedures.push(procedure);
-        workflowProceduresBySourceRun.set(procedure.sourceRunId, procedures);
-      }
-    }
-
-    if (
-      primaryLimit > primaryProcedureLimit &&
-      selected.length < primaryLimit &&
-      selectedPrimaryProcedures < primaryProcedureLimit
-    ) {
-      const bestStandaloneProcedure = bestStandaloneProcedureCandidate(scored, threshold, () => true);
-      if (bestStandaloneProcedure) {
-        const added = addSelectedFact({
-          selected,
-          seenIds,
-          seenKeys,
-          fact: bestStandaloneProcedure.fact,
-          limit: primaryLimit,
-        });
-        if (added) {
-          primaryGroups.add(primarySelectionGroupKey(bestStandaloneProcedure.fact));
-          selectedPrimaryProcedures += 1;
-        }
-      }
-    }
-
-    for (const entry of rankSourceCoherentEntries(scored, sourceRunEvidenceRank)) {
-      if (entry.relevanceScore < threshold && entry.score < threshold) continue;
-      if (
-        entry.fact.memoryKind === 'procedure' &&
-        selectedPrimaryProcedures >= primaryProcedureLimit
-      ) {
-        continue;
-      }
-      const groupKey = primarySelectionGroupKey(entry.fact);
-      if (primaryGroups.has(groupKey)) continue;
-      let representative = primaryWorkflowRepresentative(entry, scored, threshold) as ScoredFact;
-      if (
-        representative.fact.id === entry.fact.id &&
-        entry.fact.sourceRunId &&
-        entry.fact.memoryKind === 'outcome'
-      ) {
-        const procedure = workflowProcedureRepresentativeForOutcome(
-          entry.fact,
-          workflowProceduresBySourceRun.get(entry.fact.sourceRunId) ?? [],
-        );
-        if (procedure) representative = { ...entry, fact: procedure };
-      }
-      if (
-        representative.fact.memoryKind === 'procedure' &&
-        selectedPrimaryProcedures >= primaryProcedureLimit
-      ) {
-        if (entry.fact.memoryKind === 'procedure') continue;
-        representative = entry;
-      }
-      const added = addSelectedFact({
-        selected,
-        seenIds,
-        seenKeys,
-        fact: representative.fact,
-        limit: primaryLimit,
-      });
-      if (added) {
-        primaryGroups.add(groupKey);
-        if (representative.fact.memoryKind === 'procedure') selectedPrimaryProcedures += 1;
-        if (representative.fact.id !== entry.fact.id) {
-          scoredById.set(representative.fact.id, representative as ScoredFact);
-        }
-      }
-      if (selected.length >= primaryLimit) break;
-    }
-  }
-
-  if (trimmedQuery && selected.length < limit) {
-    const threshold = options.threshold ?? DEFAULT_TEXT_THRESHOLD;
-    const selectedActionResultSourceRunIds = selectedActionResultSourceRuns(selected);
-    for (const entry of scored) {
-      if (entry.relevanceScore < threshold && entry.score < threshold) continue;
-      if (
-        isActionResultOutcome(entry.fact) &&
-        entry.fact.sourceRunId &&
-        selectedActionResultSourceRunIds.has(entry.fact.sourceRunId) &&
-        !isImmediateActionResultContinuation(entry.fact, selected)
-      ) {
-        continue;
-      }
-      addSelectedFact({ selected, seenIds, seenKeys, fact: entry.fact, limit });
-      if (selected.length >= limit) break;
-    }
-  }
-
-  if (trimmedQuery) {
-    const selectedProcedureSourceRuns = new Set(
-      selected
-        .filter((fact) => fact.memoryKind === 'procedure' && fact.sourceRunId)
-        .map((fact) => fact.sourceRunId as string),
-    );
-    const hasActionResultSupportAnchor = selected.some(
-      (fact) =>
-        isActionResultOutcome(fact) &&
-        fact.sourceRunId &&
-        !selectedProcedureSourceRuns.has(fact.sourceRunId),
-    );
-    insertProcedureLocalSupport({
-      selected,
-      seenIds,
-      seenKeys,
-      scoredById,
-      scored,
-      limit,
-      procedureSupportBudget: hasActionResultSupportAnchor ? 1 : 0,
-      candidateScopes,
-      options,
-      scoringQueryUnits: discriminativeScoringUnits,
-      recallLexicalUnits,
-      unitWeights,
-      query: trimmedQuery,
-      anchorUnitSets,
-      alwaysIncludePinned,
-      now,
-    });
-  }
-
-  if (trimmedQuery) {
-    promoteSelectedActionResultContinuations({
-      selected,
-      seenIds,
-      scoredById,
-      limit,
-      threshold: options.threshold ?? DEFAULT_TEXT_THRESHOLD,
-      candidateScopes,
-      options,
-      scoringQueryUnits: discriminativeScoringUnits,
-      recallLexicalUnits,
-      unitWeights,
-      query: trimmedQuery,
-      anchorUnitSets,
-      alwaysIncludePinned,
-      now,
-    });
-  }
-
+  const selected = selectTopFacts(scored, options, limit);
   timing.selectMs = Date.now() - selectStarted;
   timing.totalMs = Date.now() - totalStarted;
   options.onTiming?.(timing);
 
   return {
-    facts: selected,
-    scoredFacts: selected
-      .map((fact) => {
-        const scoredFact = scoredById.get(fact.id);
-        return scoredFact ? { ...scoredFact, fact } : null;
-      })
-      .filter(Boolean) as ScoredFact[],
+    facts: selected.map((entry) => entry.fact),
+    scoredFacts: selected,
   };
 }
 

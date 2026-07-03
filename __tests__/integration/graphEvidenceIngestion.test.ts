@@ -85,6 +85,7 @@ describe('graph evidence ingestion bridge', () => {
         state_index: 4,
         action: 'Run the analysis tool',
         thought: 'Need a durable artifact for the user.',
+        accessibility_tree: 'status panel: analysis complete; artifact reports/analysis.json ready',
         outcome: 'reports/analysis.json was created',
         artifact: 'reports/analysis.json',
       });
@@ -105,6 +106,7 @@ describe('graph evidence ingestion bridge', () => {
     expect(typedFacts.filter((fact) => fact.sourceRunId === 'traj-agent')).toHaveLength(2);
     expect(typedFacts.some((fact) => fact.memoryKind === 'procedure')).toBe(true);
     expect(typedFacts.some((fact) => fact.memoryKind === 'outcome')).toBe(true);
+    expect(typedFacts.some((fact) => fact.objectText.includes('analysis complete'))).toBe(true);
     expect(
       typedFacts.some(
         (fact) => fact.memoryKind === 'semantic_fact' && fact.objectText.includes(agentRunEvidence),

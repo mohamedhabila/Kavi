@@ -5,7 +5,10 @@ jest.mock('expo-sqlite', () => {
 
 import { recordAgentRunEvidenceMemory } from '../../../src/services/memory/agentRunEvidenceMemory';
 import { listFacts } from '../../../src/services/memory/facts/queries';
-import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../../src/services/memory/schema';
+import {
+  ensureFactSchema,
+  resetFactSchemaCacheForTests,
+} from '../../../src/services/memory/schema';
 import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -70,6 +73,224 @@ describe('recordAgentRunEvidenceMemory', () => {
     expect(result.consumedEvidence).toHaveLength(0);
     expect(result.factIds).toHaveLength(0);
     expect(listFacts({ originConversationId: 'conv-agent-memory' })).toHaveLength(0);
+  });
+
+  it('stores unsuccessful agent-run evidence with lower answer authority', () => {
+    const evidence = [
+      `agent:${JSON.stringify({
+        trajectory_id: 'run-success',
+        goal: 'Inspect the target record',
+        outcome: 'success',
+        state_index: 1,
+        action: 'Inspect',
+        toolName: 'browser_state',
+      })}`,
+      `agent:${JSON.stringify({
+        trajectory_id: 'run-failure',
+        goal: 'Inspect the target record',
+        outcome: 'failure',
+        state_index: 1,
+        action: 'Inspect',
+        toolName: 'browser_state',
+      })}`,
+    ];
+
+    const result = recordAgentRunEvidenceMemory({
+      evidence,
+      conversationId: 'conv-agent-memory',
+      threadId: 'conv-agent-memory',
+      taskId: 'task-analysis',
+      now: 10,
+    });
+
+    expect(result.factIds).toHaveLength(4);
+    const facts = listFacts({ originConversationId: 'conv-agent-memory' });
+    const success = facts.find(
+      (fact) => fact.sourceRunId === 'run-success' && fact.memoryKind === 'outcome',
+    );
+    const failure = facts.find(
+      (fact) => fact.sourceRunId === 'run-failure' && fact.memoryKind === 'outcome',
+    );
+    const successProcedure = facts.find(
+      (fact) => fact.sourceRunId === 'run-success' && fact.memoryKind === 'procedure',
+    );
+    const failureProcedure = facts.find(
+      (fact) => fact.sourceRunId === 'run-failure' && fact.memoryKind === 'procedure',
+    );
+    expect(success).toBeDefined();
+    expect(failure).toBeDefined();
+    expect(successProcedure).toBeDefined();
+    expect(failureProcedure).toBeDefined();
+    expect(failure?.confidence).toBeLessThan(success?.confidence ?? 0);
+    expect(failure?.retrievability).toBeLessThan(success?.retrievability ?? 0);
+    expect(failureProcedure?.confidence).toBe(successProcedure?.confidence);
+    expect(failureProcedure?.retrievability).toBe(successProcedure?.retrievability);
+  });
+
+  it('keeps bounded observed tool output inside compact run memories', () => {
+    const observedState = [
+      'window',
+      'heading "Review changes"',
+      'button "Submit"',
+      'status "Ready"',
+      'metadata '.repeat(500),
+    ].join('\n');
+    const evidence = [
+      `agent:${JSON.stringify({
+        trajectory_id: 'run-observed',
+        state_index: 3,
+        action: 'Inspect the current screen',
+        accessibility_tree: observedState,
+        toolName: 'browser_state',
+        status: 'completed',
+      })}`,
+    ];
+
+    const result = recordAgentRunEvidenceMemory({
+      evidence,
+      conversationId: 'conv-agent-memory',
+      threadId: 'conv-agent-memory',
+      taskId: 'task-analysis',
+      sourceTurnId: 'assistant-1',
+      now: 10,
+    });
+
+    expect(result.consumedEvidence).toHaveLength(1);
+    expect(result.factIds).toHaveLength(2);
+
+    const facts = listFacts({ originConversationId: 'conv-agent-memory' });
+    expect(facts.map((fact) => fact.memoryKind).sort()).toEqual(['outcome', 'procedure']);
+    expect(facts).toHaveLength(2);
+
+    const joined = facts.map((fact) => fact.objectText).join('\n');
+    expect(joined).toContain('"observation"');
+    expect(joined).toContain('Submit');
+    expect(joined).toContain('Ready');
+    expect(joined).not.toContain('"surfaceControls"');
+    expect(joined).not.toContain('"actionInventory"');
+    expect(joined.length).toBeLessThan(12_500);
+  });
+
+  it('keeps representative lines from long observed tool output', () => {
+    const observedState = Array.from({ length: 90 }, (_, index) =>
+      index === 45
+        ? 'field-marker-midrun-checkbox is visible and unchecked'
+        : `observed line ${index}`,
+    ).join('\n');
+    const evidence = [
+      `agent:${JSON.stringify({
+        trajectory_id: 'run-distributed-observation',
+        state_index: 8,
+        action: 'Inspect long structured output',
+        accessibility_tree: observedState,
+        toolName: 'browser_state',
+        status: 'completed',
+      })}`,
+    ];
+
+    const result = recordAgentRunEvidenceMemory({
+      evidence,
+      conversationId: 'conv-agent-memory',
+      threadId: 'conv-agent-memory',
+      taskId: 'task-analysis',
+      sourceTurnId: 'assistant-1',
+      now: 10,
+    });
+
+    expect(result.factIds).toHaveLength(2);
+    const facts = listFacts({ originConversationId: 'conv-agent-memory' });
+    const joined = facts.map((fact) => fact.objectText).join('\n');
+    expect(joined).toContain('field-marker-midrun-checkbox');
+    expect(joined).toContain('observed line 0');
+    expect(joined).toContain('observed line 87');
+    expect(joined.length).toBeLessThan(12_500);
+  });
+
+  it('keeps local observed relationships from long structured tool output', () => {
+    const observedState = Array.from({ length: 280 }, (_, index) => {
+      if (index === 92) return "[control-1] toggle 'Auto approve' value='off'";
+      if (index === 93) return "[control-2] input 'Approver' value='Ada Lovelace'";
+      return `structured output line ${index}`;
+    }).join('\n');
+    const evidence = [
+      `agent:${JSON.stringify({
+        trajectory_id: 'run-local-relationship',
+        state_index: 10,
+        action: 'Inspect structured tool state',
+        accessibility_tree: observedState,
+        toolName: 'browser_state',
+        status: 'completed',
+      })}`,
+    ];
+
+    const result = recordAgentRunEvidenceMemory({
+      evidence,
+      conversationId: 'conv-agent-memory',
+      threadId: 'conv-agent-memory',
+      taskId: 'task-analysis',
+      sourceTurnId: 'assistant-1',
+      now: 10,
+    });
+
+    expect(result.factIds).toHaveLength(2);
+    const facts = listFacts({ originConversationId: 'conv-agent-memory' });
+    const joined = facts.map((fact) => fact.objectText).join('\n');
+    expect(joined).toContain("toggle 'Auto approve'");
+    expect(joined).toContain("input 'Approver'");
+    expect(joined.length).toBeLessThan(12_500);
+  });
+
+  it('retains temporally distributed observations from long agent runs', () => {
+    const evidence = Array.from({ length: 100 }, (_, index) => {
+      const observedState =
+        index === 69
+          ? 'middle workflow checkpoint: approval record is ready'
+          : `step ${index} observed state`;
+      return [
+        `agent:${JSON.stringify({
+          trajectory_id: 'run-long',
+          state_index: index,
+          toolName: 'browser_state',
+          status: 'completed',
+        })}`,
+        `agent:${JSON.stringify({
+          trajectory_id: 'run-long',
+          state_index: index,
+          action: `Continue workflow step ${index}`,
+          url: `https://example.com/workflows/${index}?source=${'path-'.repeat(40)}`,
+          accessibility_tree: observedState,
+          status: 'completed',
+        })}`,
+      ];
+    }).flat();
+
+    const result = recordAgentRunEvidenceMemory({
+      evidence,
+      conversationId: 'conv-agent-memory',
+      threadId: 'conv-agent-memory',
+      taskId: 'task-analysis',
+      sourceTurnId: 'assistant-1',
+      now: 10,
+    });
+
+    expect(result.consumedEvidence).toHaveLength(200);
+    expect(result.factIds).toHaveLength(2);
+
+    const facts = listFacts({ originConversationId: 'conv-agent-memory' });
+    const joined = facts.map((fact) => fact.objectText).join('\n');
+    expect(joined).toContain('middle workflow checkpoint');
+    expect(facts.every((fact) => fact.attributes.stepCount === 100)).toBe(true);
+    const procedure = facts.find((fact) => fact.memoryKind === 'procedure');
+    const procedureRecord = JSON.parse(procedure?.objectText ?? '{}');
+    expect(Array.isArray(procedureRecord.steps)).toBe(true);
+    expect(procedureRecord.steps.length).toBeGreaterThan(1);
+    expect(procedureRecord.steps.some((step: Record<string, unknown>) => step.observation)).toBe(
+      false,
+    );
+    for (const fact of facts) {
+      expect(fact.objectText.length).toBeLessThanOrEqual(6_000);
+      expect(JSON.parse(fact.objectText)).toMatchObject({ sourceRunId: 'run-long' });
+    }
   });
 
   it('does not create empty run records from unrelated json payloads', () => {

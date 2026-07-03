@@ -1,4 +1,12 @@
 import type { Message } from '../../types/message';
+import {
+  STEP_TEXT_LIMITS,
+  boundedSteps,
+  fitAgentRunText,
+  observedAgentRunOutput,
+  observedAgentRunText,
+  type AgentRunStep,
+} from './agentRunEvidenceCompaction';
 import { upsertEntity } from './entities';
 import { recordFact } from './facts/mutations';
 import type { MemoryFactKind } from './facts/types';
@@ -22,17 +30,6 @@ export interface AgentRunEvidenceMemoryResult {
   consumedEvidence: string[];
 }
 
-interface AgentRunStep {
-  stateIndex?: string | number;
-  action?: string;
-  thought?: string;
-  url?: string;
-  outcome?: string;
-  status?: string;
-  toolName?: string;
-  toolResult?: string;
-}
-
 interface AgentRunBundle {
   sourceRunId: string;
   goal?: string;
@@ -49,16 +46,37 @@ interface AgentRunBundle {
   steps: AgentRunStep[];
 }
 
-const MAX_TEXT_CHARS = 900;
 const MAX_RECORD_CHARS = 6_000;
-const MAX_STEPS_PER_RUN = 24;
 const MAX_RUNS_PER_TURN = 16;
+const SUCCESSFUL_RUN_SIGNALS = new Set(['complete', 'completed', 'success', 'succeeded']);
+const UNSUCCESSFUL_RUN_SIGNALS = new Set([
+  'cancelled',
+  'canceled',
+  'error',
+  'failed',
+  'failure',
+  'incomplete',
+]);
+const UNSUCCESSFUL_RUN_AUTHORITY_MULTIPLIER = 0.72;
 
-function fitText(value: string, maxChars = MAX_TEXT_CHARS): string {
-  const trimmed = value.trim();
-  if (trimmed.length <= maxChars) return trimmed;
-  return `${trimmed.slice(0, maxChars - 1).trimEnd()}\u2026`;
+interface CompactRecordLimits {
+  maxStringChars: number;
+  maxTopLevelArrayItems: number;
+  maxNestedArrayItems: number;
 }
+
+const COMPACT_RECORD_LIMITS: CompactRecordLimits[] = [
+  { maxStringChars: 1_200, maxTopLevelArrayItems: 32, maxNestedArrayItems: 12 },
+  { maxStringChars: 900, maxTopLevelArrayItems: 28, maxNestedArrayItems: 10 },
+  { maxStringChars: 700, maxTopLevelArrayItems: 24, maxNestedArrayItems: 8 },
+  { maxStringChars: 520, maxTopLevelArrayItems: 20, maxNestedArrayItems: 6 },
+  { maxStringChars: 360, maxTopLevelArrayItems: 18, maxNestedArrayItems: 5 },
+  { maxStringChars: 260, maxTopLevelArrayItems: 16, maxNestedArrayItems: 4 },
+  { maxStringChars: 180, maxTopLevelArrayItems: 16, maxNestedArrayItems: 3 },
+  { maxStringChars: 120, maxTopLevelArrayItems: 14, maxNestedArrayItems: 3 },
+  { maxStringChars: 80, maxTopLevelArrayItems: 14, maxNestedArrayItems: 2 },
+  { maxStringChars: 60, maxTopLevelArrayItems: 12, maxNestedArrayItems: 2 },
+];
 
 function stringField(record: JsonRecord, field: string): string | undefined {
   const value = record[field];
@@ -90,16 +108,120 @@ function parseJsonPayload(value: string): JsonRecord | null {
 }
 
 function compactRecord(value: JsonRecord): string {
-  const json = JSON.stringify(value);
-  return json.length <= MAX_RECORD_CHARS
-    ? json
-    : `${json.slice(0, MAX_RECORD_CHARS - 1).trimEnd()}\u2026`;
+  for (const limits of COMPACT_RECORD_LIMITS) {
+    const compacted = compactRecordValue(value, limits, 0);
+    const json = JSON.stringify(compacted);
+    if (json.length <= MAX_RECORD_CHARS) return json;
+  }
+
+  const fallback = compactRecordScalars(value);
+  const fallbackJson = JSON.stringify(fallback);
+  if (fallbackJson.length <= MAX_RECORD_CHARS) return fallbackJson;
+
+  return JSON.stringify({
+    sourceRunId: stringField(value, 'sourceRunId'),
+    goal: fitAgentRunText(String(value.goal ?? ''), 360),
+    status: fitAgentRunText(String(value.status ?? ''), 120),
+    outcome: fitAgentRunText(String(value.outcome ?? ''), 120),
+  });
+}
+
+function compactRecordValue(
+  value: unknown,
+  limits: CompactRecordLimits,
+  depth: number,
+  fieldName?: string,
+): unknown {
+  if (typeof value === 'string') {
+    return fitAgentRunText(value, compactStringLimit(fieldName, limits));
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') return value;
+  if (Array.isArray(value)) {
+    const maxItems = depth <= 1 ? limits.maxTopLevelArrayItems : limits.maxNestedArrayItems;
+    return sampleArray(value, maxItems)
+      .map((entry) => compactRecordValue(entry, limits, depth + 1, fieldName))
+      .filter(hasRecordValue);
+  }
+  if (!value || typeof value !== 'object') return undefined;
+  return Object.fromEntries(
+    Object.entries(value as JsonRecord)
+      .map(([key, entry]) => [key, compactRecordValue(entry, limits, depth + 1, key)] as const)
+      .filter(([, entry]) => hasRecordValue(entry)),
+  );
+}
+
+function compactStringLimit(fieldName: string | undefined, limits: CompactRecordLimits): number {
+  return limits.maxStringChars;
+}
+
+function compactRecordScalars(value: JsonRecord): JsonRecord {
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, entry]) => typeof entry === 'string' || typeof entry === 'number')
+      .map(([key, entry]) => [
+        key,
+        typeof entry === 'string' ? fitAgentRunText(entry, 360) : entry,
+      ]),
+  );
+}
+
+function hasRecordValue(value: unknown): boolean {
+  if (value === undefined || value === null || value === '') return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'object') return Object.keys(value as JsonRecord).length > 0;
+  return true;
+}
+
+function sampleArray<T>(values: ReadonlyArray<T>, maxItems: number): T[] {
+  if (values.length <= maxItems) return [...values];
+  if (maxItems <= 1) return values[0] === undefined ? [] : [values[0]];
+  const lastIndex = values.length - 1;
+  const sampled: T[] = [];
+  const seen = new Set<number>();
+  for (let slot = 0; slot < maxItems; slot += 1) {
+    const index = Math.round((slot * lastIndex) / (maxItems - 1));
+    if (seen.has(index)) continue;
+    const value = values[index];
+    if (value === undefined) continue;
+    seen.add(index);
+    sampled.push(value);
+  }
+  return sampled;
+}
+
+function procedureStepForRecord(step: AgentRunStep): JsonRecord {
+  return Object.fromEntries(
+    Object.entries({
+      stateIndex: step.stateIndex,
+      action: step.action,
+      thought: step.thought,
+      url: step.url,
+      outcome: step.outcome,
+      status: step.status,
+      toolName: step.toolName,
+    }).filter(([, value]) => value !== undefined && value !== null && value !== ''),
+  );
 }
 
 function appendText(target: Set<string>, value: unknown): void {
   if (typeof value !== 'string') return;
   const trimmed = value.trim();
-  if (trimmed) target.add(fitText(trimmed));
+  if (trimmed) target.add(fitAgentRunText(trimmed));
+}
+
+function normalizedRunSignal(value: string | undefined): string | null {
+  const signal = value?.trim().toLocaleLowerCase();
+  return signal ? signal : null;
+}
+
+function agentRunAuthorityMultiplier(bundle: AgentRunBundle): number {
+  const signals = [normalizedRunSignal(bundle.status), normalizedRunSignal(bundle.outcome)].filter(
+    (signal): signal is string => Boolean(signal),
+  );
+  if (signals.some((signal) => UNSUCCESSFUL_RUN_SIGNALS.has(signal))) {
+    return UNSUCCESSFUL_RUN_AUTHORITY_MULTIPLIER;
+  }
+  return signals.some((signal) => SUCCESSFUL_RUN_SIGNALS.has(signal)) ? 1 : 0.9;
 }
 
 function getBundle(
@@ -138,7 +260,9 @@ function resolveSourceRunId(record: JsonRecord, fallback?: string): string | und
 
 function mergeBundleMetadata(bundle: AgentRunBundle, record: JsonRecord): void {
   bundle.goal ??=
-    stringField(record, 'goal') ?? stringField(record, 'task') ?? stringField(record, 'instruction');
+    stringField(record, 'goal') ??
+    stringField(record, 'task') ??
+    stringField(record, 'instruction');
   bundle.outcome ??=
     stringField(record, 'outcome') ??
     stringField(record, 'trajectoryOutcome') ??
@@ -180,6 +304,8 @@ function hasAgentRunEvidence(record: JsonRecord): boolean {
     'tool_name',
     'toolResult',
     'tool_result',
+    'observation',
+    'accessibility_tree',
   ];
   return evidenceFields.some((field) => {
     const value = record[field];
@@ -191,19 +317,22 @@ function hasAgentRunEvidence(record: JsonRecord): boolean {
 }
 
 function appendStep(bundle: AgentRunBundle, record: JsonRecord): void {
-  if (bundle.steps.length >= MAX_STEPS_PER_RUN) return;
   const toolName = stringField(record, 'toolName') ?? stringField(record, 'tool_name');
   const toolResult = stringField(record, 'toolResult') ?? stringField(record, 'tool_result');
-  if (toolName) bundle.tools.add(fitText(toolName, 160));
+  const outcome =
+    stringField(record, 'outcome') ??
+    stringField(record, 'result') ??
+    stringField(record, 'observation');
+  const observed = observedAgentRunText(record);
+  const observation = observedAgentRunOutput(observed, [outcome, toolResult]);
+  if (toolName) bundle.tools.add(fitAgentRunText(toolName, 160));
   const step: AgentRunStep = {
     stateIndex: scalarField(record, 'stateIndex') ?? scalarField(record, 'state_index'),
     action: stringField(record, 'action'),
     thought: stringField(record, 'thought') ?? stringField(record, 'reasoning'),
     url: stringField(record, 'url') ?? stringField(record, 'start_url'),
-    outcome:
-      stringField(record, 'outcome') ??
-      stringField(record, 'result') ??
-      stringField(record, 'observation'),
+    observation,
+    outcome,
     status: stringField(record, 'status'),
     toolName,
     toolResult,
@@ -212,16 +341,26 @@ function appendStep(bundle: AgentRunBundle, record: JsonRecord): void {
     (value) => value !== undefined && value !== null && value !== '',
   );
   if (hasContent) {
-    bundle.steps.push(
-      Object.fromEntries(
-        Object.entries(step)
-          .filter(([, value]) => value !== undefined && value !== null && value !== '')
-          .map(([key, value]) => [
-            key,
-            typeof value === 'string' ? fitText(value) : value,
-          ]),
-      ) as AgentRunStep,
+    const normalized = Object.fromEntries(
+      Object.entries(step)
+        .filter(([, value]) => value !== undefined && value !== null && value !== '')
+        .map(([key, value]) => [
+          key,
+          typeof value === 'string'
+            ? fitAgentRunText(value, STEP_TEXT_LIMITS[key as keyof AgentRunStep])
+            : value,
+        ]),
     );
+    const stateIndex = normalized.stateIndex;
+    const existingIndex =
+      stateIndex === undefined
+        ? -1
+        : bundle.steps.findIndex((existing) => existing.stateIndex === stateIndex);
+    if (existingIndex >= 0) {
+      bundle.steps[existingIndex] = { ...normalized, ...bundle.steps[existingIndex] };
+      return;
+    }
+    bundle.steps.push(normalized as AgentRunStep);
   }
 }
 
@@ -279,11 +418,6 @@ function ingestEvidence(
   return consumed;
 }
 
-function boundedSteps(steps: ReadonlyArray<AgentRunStep>): AgentRunStep[] {
-  if (steps.length <= 14) return [...steps];
-  return [...steps.slice(0, 4), ...steps.slice(-10)];
-}
-
 function recordBundleFact(
   bundle: AgentRunBundle,
   input: AgentRunEvidenceMemoryInput,
@@ -297,6 +431,7 @@ function recordBundleFact(
 ): string | null {
   const trimmed = objectText.trim();
   if (!trimmed) return null;
+  const authorityMultiplier = kind === 'procedure' ? 1 : agentRunAuthorityMultiplier(bundle);
   const recorded = recordFact({
     subjectId,
     predicate,
@@ -309,9 +444,9 @@ function recordBundleFact(
     originTaskId: input.taskId,
     taskId: input.taskId,
     scope: input.taskId ? 'session' : 'conversation',
-    confidence: 0.82,
+    confidence: 0.82 * authorityMultiplier,
     importance,
-    retrievability,
+    retrievability: retrievability * authorityMultiplier,
     stability: 0.72,
     attributes,
     now: input.now,
@@ -327,6 +462,7 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
   });
   const factIds: string[] = [];
   const steps = boundedSteps(bundle.steps);
+  const procedureSteps = steps.map(procedureStepForRecord);
   const tools = Array.from(bundle.tools).slice(0, 16);
   const sources = Array.from(bundle.sources).slice(0, 12);
   const artifacts = Array.from(bundle.artifacts).slice(0, 12);
@@ -350,8 +486,8 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
     domain: bundle.domain,
     environment: bundle.environment,
     tools,
+    steps: procedureSteps,
     sources,
-    steps,
   });
   const procedureId = recordBundleFact(
     bundle,
@@ -372,12 +508,12 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
     status: bundle.status,
     outcome: bundle.outcome,
     tools,
+    lastSteps: steps.slice(-6),
     sources,
     artifacts,
     decisions,
     risks,
     summaries,
-    lastSteps: steps.slice(-6),
   });
   const evidenceId = recordBundleFact(
     bundle,

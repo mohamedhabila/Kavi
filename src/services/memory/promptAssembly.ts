@@ -12,6 +12,7 @@ import type { MemoryBlock } from './blocks';
 import type { MemoryFact, MemoryFactKind } from './facts/types';
 import type { MemoryEpisode } from './episodes/types';
 import { compactJsonFields, parseJsonRecord } from './factJson';
+import { tokenizeLexicalUnits } from './ranking/lexical';
 
 export type PromptMemoryFact = MemoryFact & { subjectLabel?: string };
 
@@ -50,6 +51,11 @@ export interface AssemblePromptInput {
   recentEpisodes?: MemoryEpisode[];
   /** L3 - additional dynamic context from the orchestrator. */
   dynamicAddenda?: string[];
+  /**
+   * Current retrieval query. Used only to render compact evidence excerpts from
+   * already-selected agent-run memories; selection and persistence stay upstream.
+   */
+  retrievalQuery?: string;
 }
 
 const L1_HEADER = '## Identity & Style';
@@ -73,6 +79,15 @@ const MAX_RENDERED_PROCEDURE_FACT_CHARS = 5_000;
 const MAX_RETRIEVED_FACT_SECTION_CHARS = 3_800;
 const MAX_RENDERED_EPISODE_CHARS = 200;
 const MAX_FIELD_TEXT_CHARS = 700;
+const MAX_QUERY_FOCUSED_LINES = 8;
+const FACT_GROUP_HEADER_ORDER = [
+  L3_RELEVANT_FACTS_HEADER,
+  L3_OUTCOMES_HEADER,
+  L3_DECISIONS_RISKS_HEADER,
+  L3_ARTIFACTS_SOURCES_HEADER,
+  L3_PROCEDURES_HEADER,
+  L3_SUMMARIES_HEADER,
+];
 
 function joinNonEmpty(parts: Array<string | null | undefined>, sep = '\n\n'): string {
   return parts
@@ -150,7 +165,58 @@ function fitPromptValue(value: unknown, maxChars = MAX_FIELD_TEXT_CHARS): unknow
   return value;
 }
 
-function compactProcedureStep(value: unknown): Record<string, unknown> | null {
+function queryHitCount(value: string, queryUnits: ReadonlySet<string> | null): number {
+  if (!queryUnits || queryUnits.size === 0) return 0;
+  const valueUnits = tokenizeLexicalUnits(value);
+  let hits = 0;
+  for (const unit of queryUnits) {
+    if (valueUnits.has(unit)) hits += 1;
+  }
+  return hits;
+}
+
+function queryFocusedMultilineText(
+  value: string,
+  queryUnits: ReadonlySet<string> | null,
+  maxChars: number,
+): string | null {
+  if (!queryUnits || queryUnits.size === 0) return null;
+  const lines = value
+    .split(/\r?\n/)
+    .map((line, index) => ({ line: line.trimEnd(), index }))
+    .filter((entry) => entry.line.trim().length > 0);
+  if (lines.length < 4) return null;
+
+  const scored = lines
+    .map((entry) => ({
+      ...entry,
+      score: queryHitCount(entry.line, queryUnits),
+    }))
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score;
+      return left.index - right.index;
+    })
+    .slice(0, MAX_QUERY_FOCUSED_LINES)
+    .sort((left, right) => left.index - right.index);
+
+  if (scored.length === 0) return null;
+  return fitText(scored.map((entry) => entry.line).join('\n...\n'), maxChars);
+}
+
+function fitPromptEvidenceText(
+  value: unknown,
+  queryUnits: ReadonlySet<string> | null,
+  maxChars = MAX_FIELD_TEXT_CHARS,
+): unknown {
+  if (typeof value !== 'string') return fitPromptValue(value, maxChars);
+  return queryFocusedMultilineText(value, queryUnits, maxChars) ?? fitText(value, maxChars);
+}
+
+function compactProcedureStep(
+  value: unknown,
+  queryUnits: ReadonlySet<string> | null,
+): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const input = value as Record<string, unknown>;
   const compact = dropEmptyPromptRecord({
@@ -159,18 +225,29 @@ function compactProcedureStep(value: unknown): Record<string, unknown> | null {
     action: fitPromptValue(input.action, 260),
     thought: fitPromptValue(input.thought, 260),
     toolName: fitPromptValue(input.toolName ?? input.tool_name, 160),
-    toolResult: fitPromptValue(input.toolResult ?? input.tool_result, 360),
+    observation: fitPromptEvidenceText(input.observation, queryUnits, 520),
+    toolResult: fitPromptEvidenceText(input.toolResult ?? input.tool_result, queryUnits, 360),
     status: fitPromptValue(input.status, 160),
-    outcome: fitPromptValue(input.outcome, 360),
+    outcome: fitPromptEvidenceText(input.outcome, queryUnits, 360),
   });
   return Object.keys(compact).length > 0 ? compact : null;
 }
 
-function compactProcedurePromptFields(parsed: Record<string, unknown> | null): string | null {
+function compactAgentSteps(
+  value: unknown,
+  queryUnits: ReadonlySet<string> | null,
+): Array<Record<string, unknown>> | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const steps = value.map((step) => compactProcedureStep(step, queryUnits)).filter(Boolean);
+  return steps.length > 0 ? (steps as Array<Record<string, unknown>>) : undefined;
+}
+
+function compactProcedurePromptFields(
+  parsed: Record<string, unknown> | null,
+  queryUnits: ReadonlySet<string> | null,
+): string | null {
   if (!parsed) return null;
-  const steps = Array.isArray(parsed.steps)
-    ? parsed.steps.map(compactProcedureStep).filter(Boolean)
-    : undefined;
+  const steps = compactAgentSteps(parsed.steps, queryUnits);
   const compact = dropEmptyPromptRecord({
     sourceRunId: parsed.sourceRunId,
     goal: fitPromptValue(parsed.goal),
@@ -185,7 +262,10 @@ function compactProcedurePromptFields(parsed: Record<string, unknown> | null): s
   return Object.keys(compact).length > 0 ? JSON.stringify(compact) : null;
 }
 
-function compactAgentEvidencePromptFields(parsed: Record<string, unknown> | null): string | null {
+function compactAgentEvidencePromptFields(
+  parsed: Record<string, unknown> | null,
+  queryUnits: ReadonlySet<string> | null,
+): string | null {
   if (!parsed) return null;
   const compact = dropEmptyPromptRecord({
     sourceRunId: parsed.sourceRunId,
@@ -198,7 +278,7 @@ function compactAgentEvidencePromptFields(parsed: Record<string, unknown> | null
     decisions: fitPromptValue(parsed.decisions),
     risks: fitPromptValue(parsed.risks),
     summaries: fitPromptValue(parsed.summaries),
-    lastSteps: fitPromptValue(parsed.lastSteps),
+    lastSteps: compactAgentSteps(parsed.lastSteps, queryUnits),
   });
   return Object.keys(compact).length > 0 ? JSON.stringify(compact) : null;
 }
@@ -238,14 +318,17 @@ function promptFieldsForMemoryKind(kind: MemoryFactKind): ReadonlyArray<string> 
   }
 }
 
-function renderableFactText(fact: PromptMemoryFact): string {
+function renderableFactText(
+  fact: PromptMemoryFact,
+  queryUnits: ReadonlySet<string> | null,
+): string {
   const memoryKind = fact.memoryKind ?? 'semantic_fact';
   const parsed = parseJsonRecord(fact.objectText);
   if (memoryKind === 'procedure') {
-    return compactProcedurePromptFields(parsed) ?? fact.objectText;
+    return compactProcedurePromptFields(parsed, queryUnits) ?? fact.objectText;
   }
   if (memoryKind === 'outcome' || memoryKind === 'tool_result' || memoryKind === 'gotcha') {
-    return compactAgentEvidencePromptFields(parsed) ?? fact.objectText;
+    return compactAgentEvidencePromptFields(parsed, queryUnits) ?? fact.objectText;
   }
   const fields = promptFieldsForMemoryKind(memoryKind);
   if (!fields) return fact.objectText;
@@ -253,7 +336,7 @@ function renderableFactText(fact: PromptMemoryFact): string {
   return fromAttributes || fact.objectText;
 }
 
-function renderFact(fact: PromptMemoryFact): string {
+function renderFact(fact: PromptMemoryFact, queryUnits: ReadonlySet<string> | null): string {
   const conf =
     typeof fact.confidence === 'number' && fact.confidence < 0.6
       ? ` (confidence ${fact.confidence.toFixed(2)})`
@@ -265,7 +348,7 @@ function renderFact(fact: PromptMemoryFact): string {
   const meta = kind || source ? ` [${`${kind}${source}`.trim()}]` : '';
   const maxChars =
     memoryKind === 'procedure' ? MAX_RENDERED_PROCEDURE_FACT_CHARS : MAX_RENDERED_FACT_CHARS;
-  return `- ${subject} ${fact.predicate}: ${fitText(renderableFactText(fact), maxChars)}${conf}${meta}`;
+  return `- ${subject} ${fact.predicate}: ${fitText(renderableFactText(fact, queryUnits), maxChars)}${conf}${meta}`;
 }
 
 function renderEpisode(episode: MemoryEpisode): string {
@@ -300,7 +383,11 @@ function groupRetrievedFacts(facts: PromptMemoryFact[]): Array<{
     list.push(fact);
     byHeader.set(header, list);
   }
-  return orderedHeaders
+  const fixedHeaders = FACT_GROUP_HEADER_ORDER.filter((header) => byHeader.has(header));
+  const remainingHeaders = orderedHeaders.filter(
+    (header) => !FACT_GROUP_HEADER_ORDER.includes(header),
+  );
+  return [...fixedHeaders, ...remainingHeaders]
     .map((header) => ({ header, facts: byHeader.get(header) ?? [] }))
     .filter((group) => group.facts.length > 0);
 }
@@ -311,7 +398,10 @@ function notesForHeader(header: string): string[] {
   return [];
 }
 
-function renderRetrievedFactGroup(group: { header: string; facts: PromptMemoryFact[] }): string[] {
+function renderRetrievedFactGroup(
+  group: { header: string; facts: PromptMemoryFact[] },
+  queryUnits: ReadonlySet<string> | null,
+): string[] {
   const sectionPrefix = `${L3_HEADER}\n${L3_FACTS_HEADER}\n${group.header}`;
   const sections: string[] = [];
   const noteLines = notesForHeader(group.header);
@@ -321,7 +411,7 @@ function renderRetrievedFactGroup(group: { header: string; facts: PromptMemoryFa
   let hasFactInSection = false;
 
   for (const fact of group.facts) {
-    const line = renderFact(fact);
+    const line = renderFact(fact, queryUnits);
     const nextChars = sectionChars + 1 + line.length;
     if (hasFactInSection && nextChars > MAX_RETRIEVED_FACT_SECTION_CHARS) {
       sections.push(`${sectionPrefix}\n${lines.join('\n')}`);
@@ -342,6 +432,9 @@ function renderL3Sections(input: AssemblePromptInput): string[] {
   const focus = (input.focusBlock ?? '').trim();
   const reflection = (input.reflectionBlock ?? '').trim();
   const factGroups = groupRetrievedFacts(input.retrievedFacts ?? []);
+  const queryUnits = input.retrievalQuery?.trim()
+    ? tokenizeLexicalUnits(input.retrievalQuery)
+    : null;
   const episodes = (input.recentEpisodes ?? []).map(renderEpisode).filter((r) => r.length > 0);
   const addenda = joinNonEmpty(input.dynamicAddenda ?? []);
 
@@ -352,7 +445,9 @@ function renderL3Sections(input: AssemblePromptInput): string[] {
 
   const sections: string[] = [];
   if (preludeParts.length > 0) sections.push(`${L3_HEADER}\n${preludeParts.join('\n\n')}`);
-  if (factGroups.length > 0) sections.push(...factGroups.flatMap(renderRetrievedFactGroup));
+  if (factGroups.length > 0) {
+    sections.push(...factGroups.flatMap((group) => renderRetrievedFactGroup(group, queryUnits)));
+  }
   if (episodes.length > 0) {
     sections.push(`${L3_HEADER}\n### Recent Activity\n${episodes.join('\n')}`);
   }

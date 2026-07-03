@@ -94,7 +94,7 @@ export interface LivingMemoryBridgeOutput {
   idleSinceLastTurnMs?: number;
   /** Categorised gap bucket for telemetry. */
   focusGap?: FocusGap;
-  /** Number of facts recalled (post text-only fallback). */
+  /** Number of facts recalled. */
   recalledFactCount: number;
   /** Number of recent episodes included. */
   recalledEpisodeCount: number;
@@ -395,6 +395,7 @@ export async function buildLivingMemorySections(
     reflectionBlock: reflectionBlock.trim() || undefined,
     retrievedFacts: factsForPrompt,
     recentEpisodes: recalledEpisodes,
+    retrievalQuery: query,
     ...(dynamicAddenda.length > 0 ? { dynamicAddenda } : {}),
   });
   timings.assembleMs += Date.now() - assembleStarted;

@@ -120,9 +120,7 @@ describe('assemblePrompt - layer ordering', () => {
       focusBlock: '<focus>FOCUS</focus>',
     });
     const text = flattenPromptSections(out.sections);
-    expect(text.indexOf('## Identity & Style')).toBeLessThan(
-      text.indexOf('## Persistent Memory'),
-    );
+    expect(text.indexOf('## Identity & Style')).toBeLessThan(text.indexOf('## Persistent Memory'));
     expect(text.indexOf('## Persistent Memory')).toBeLessThan(text.indexOf('## This Turn'));
   });
 
@@ -147,7 +145,11 @@ describe('assemblePrompt - product memory groups', () => {
           goal: 'Prepare release notes',
           steps: [
             { action: 'read changelog', toolName: 'read_file' },
-            { action: 'write release notes', toolResult: 'created notes.md' },
+            {
+              action: 'write release notes',
+              observation: 'editor shows notes.md ready to save',
+              toolResult: 'created notes.md',
+            },
           ],
         }),
         makeAgentFact('outcome', 'outcome', {
@@ -162,9 +164,44 @@ describe('assemblePrompt - product memory groups', () => {
     const text = flattenPromptSections(out.sections);
     expect(text).toContain('#### Procedures');
     expect(text).toContain('#### Outcomes and Tool Results');
+    expect(text.indexOf('#### Outcomes and Tool Results')).toBeLessThan(
+      text.indexOf('#### Procedures'),
+    );
     expect(text).toContain('read changelog');
+    expect(text).toContain('editor shows notes.md ready to save');
     expect(text).toContain('notes.md was created');
     expect(text).not.toContain('Observed UI');
+  });
+
+  it('renders query-focused excerpts from long tool observations', () => {
+    const out = assemblePrompt({
+      ...baseInput,
+      retrievalQuery: 'needle',
+      retrievedFacts: [
+        makeAgentFact('outcome', 'outcome', {
+          sourceRunId: 'run-outcome',
+          goal: 'Inspect a long tool result',
+          outcome: 'inspection completed',
+          lastSteps: [
+            {
+              action: 'inspect',
+              observation: [
+                'unrelated line 1',
+                'unrelated line 2',
+                'needle line carries the relevant evidence',
+                'unrelated line 3',
+                'unrelated line 4',
+                'unrelated line 5',
+              ].join('\n'),
+            },
+          ],
+        }),
+      ],
+    });
+
+    const text = flattenPromptSections(out.sections);
+    expect(text).toContain('needle line carries the relevant evidence');
+    expect(text).not.toContain('unrelated line 5');
   });
 
   it('groups decisions, risks, artifacts, sources, and summaries separately', () => {
