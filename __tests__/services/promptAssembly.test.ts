@@ -169,6 +169,12 @@ describe('assemblePrompt - product memory groups', () => {
     );
     expect(text).toContain('complete observed workflow traces');
     expect(text).toContain('do not reduce a successful trace to only its last action');
+    expect(text).toContain(
+      'treat that observed action set as direct evidence of both available and unavailable actions',
+    );
+    expect(text).toContain('do not invent missing actions');
+    expect(text).toContain('Grouped observed action sections are siblings');
+    expect(text).toContain('relevant actions in sibling groups are not substitutes');
     expect(text).toContain('read changelog');
     expect(text).toContain('editor shows notes.md ready to save');
     expect(text).toContain('notes.md was created');
@@ -218,8 +224,18 @@ describe('assemblePrompt - product memory groups', () => {
               stateIndex: 4,
               action: 'open controls',
               observedAffordances: [
-                { role: 'menuitem', label: 'Incident Mobile', attributes: 'visible' },
-                { role: 'menuitem', label: 'Incident Portal', attributes: 'visible' },
+                {
+                  role: 'menuitem',
+                  label: 'Incident Mobile',
+                  attributes: 'visible',
+                  section: 'Incident Actions',
+                },
+                {
+                  role: 'menuitem',
+                  label: 'Incident Portal',
+                  attributes: 'visible',
+                  section: 'Incident Actions',
+                },
               ],
               inputControlsPresent: false,
             },
@@ -230,9 +246,46 @@ describe('assemblePrompt - product memory groups', () => {
 
     const text = flattenPromptSections(out.sections);
     expect(text).toContain('observedAffordances');
+    expect(text).toContain('availableActions');
+    expect(text).toContain('Incident Actions');
     expect(text).toContain('Incident Mobile');
     expect(text).toContain('Incident Portal');
     expect(text).toContain('inputControlsPresent');
+  });
+
+  it('renders observed control source order for action and column evidence', () => {
+    const out = assemblePrompt({
+      ...baseInput,
+      retrievalQuery: 'Which controls are next to Approve?',
+      retrievedFacts: [
+        makeAgentFact('procedure', 'procedure', {
+          sourceRunId: 'run-procedure',
+          goal: 'Inspect a workflow surface',
+          steps: [
+            {
+              stateIndex: 4,
+              action: 'inspect controls',
+              observedControlSequence: [
+                { role: 'button', label: 'Open', attributes: 'visible' },
+                { role: 'button', label: 'Review', attributes: 'visible' },
+                { role: 'button', label: 'Approve', attributes: 'visible' },
+                { role: 'button', label: 'Archive', attributes: 'visible' },
+                { role: 'columnheader', label: 'Name', attributes: 'visible' },
+                { role: 'columnheader', label: 'Status', attributes: 'visible' },
+              ],
+            },
+          ],
+        }),
+      ],
+    });
+
+    const text = flattenPromptSections(out.sections);
+    expect(text).toContain('observedControlSequence');
+    expect(text).toContain('source order');
+    expect(text.indexOf('Open')).toBeLessThan(text.indexOf('Review'));
+    expect(text.indexOf('Review')).toBeLessThan(text.indexOf('Approve'));
+    expect(text.indexOf('Approve')).toBeLessThan(text.indexOf('Archive'));
+    expect(text.indexOf('Name')).toBeLessThan(text.indexOf('Status'));
   });
 
   it('renders query-relevant observed outcome evidence before bulky metadata', () => {

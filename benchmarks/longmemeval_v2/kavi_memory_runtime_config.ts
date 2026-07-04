@@ -27,6 +27,22 @@ export interface RuntimeConfig {
 
 export const DEFAULT_QUERY_IMAGE_BASE_URL = 'https://api.openai.com/v1';
 
+function envBoolean(name: string): boolean | null {
+  const value = process.env[name];
+  if (value === undefined) return null;
+  return asBoolean(value);
+}
+
+function configuredRetrievalModel(): string {
+  return process.env.KAVI_LME_RETRIEVAL_LLM_MODEL || process.env.E2E_OPENAI_MODEL || '';
+}
+
+function retrievalLlmEnabledByDefault(): boolean {
+  const configured = envBoolean('KAVI_LME_RETRIEVAL_LLM_ENABLED');
+  if (configured !== null) return configured;
+  return configuredRetrievalModel().trim().length > 0;
+}
+
 export const DEFAULT_CONFIG: RuntimeConfig = {
   chunkChars: 3600,
   chunkOverlapChars: 320,
@@ -41,8 +57,8 @@ export const DEFAULT_CONFIG: RuntimeConfig = {
     process.env.OPENAI_BASE_URL ||
     DEFAULT_QUERY_IMAGE_BASE_URL,
   queryImageApiKeyEnv: process.env.KAVI_LME_QUERY_IMAGE_API_KEY_ENV || 'OPENAI_API_KEY',
-  retrievalLlmEnabled: process.env.KAVI_LME_RETRIEVAL_LLM_ENABLED === '1',
-  retrievalLlmModel: process.env.KAVI_LME_RETRIEVAL_LLM_MODEL || '',
+  retrievalLlmEnabled: retrievalLlmEnabledByDefault(),
+  retrievalLlmModel: configuredRetrievalModel(),
   retrievalLlmBaseUrl:
     process.env.KAVI_LME_RETRIEVAL_LLM_BASE_URL ||
     process.env.OPENAI_BASE_URL ||

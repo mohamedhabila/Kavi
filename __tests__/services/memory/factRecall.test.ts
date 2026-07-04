@@ -223,6 +223,39 @@ describe('recallScoredFactsForQuery', () => {
     expect(scored.map((entry) => entry.fact.id)).toEqual([selected.fact.id]);
   });
 
+  it('shows high-information query evidence to the semantic selector beyond the top prefix', async () => {
+    const project = upsertEntity({ name: 'delta release', type: 'project' });
+    const target = recordFact({
+      subjectId: project.id,
+      predicate: 'observation',
+      objectText: 'zqxj-confirmed evidence appears in the final tool observation',
+      importance: 0.1,
+      retrievability: 0.1,
+    });
+    for (let index = 0; index < 12; index += 1) {
+      recordFact({
+        subjectId: project.id,
+        predicate: 'observation',
+        objectText: `delta release project planning evidence ${index}`,
+        importance: 0.9,
+        supersedePrior: false,
+      });
+    }
+    let observedCandidateIds: string[] = [];
+
+    const scored = await recallScoredFactsForQuery('delta release project zqxj-confirmed', {
+      limit: 1,
+      selectorCandidateLimit: 4,
+      selector: async ({ candidates }) => {
+        observedCandidateIds = candidates.map((candidate) => candidate.fact.id);
+        return { factIds: [target.fact.id] };
+      },
+    });
+
+    expect(observedCandidateIds).toContain(target.fact.id);
+    expect(scored.map((entry) => entry.fact.id)).toEqual([target.fact.id]);
+  });
+
   it('keeps pinned evidence protected when semantic selection is available', async () => {
     const project = upsertEntity({ name: 'gamma release', type: 'project' });
     const pinned = recordFact({

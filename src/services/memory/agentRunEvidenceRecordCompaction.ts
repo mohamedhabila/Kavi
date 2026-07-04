@@ -6,6 +6,7 @@ const MAX_RECORD_CHARS = 10_000;
 const MIN_COMPACT_OBSERVATION_CHARS = 700;
 const MIN_COMPACT_TOOL_RESULT_CHARS = 520;
 const MIN_OBSERVED_AFFORDANCE_ITEMS = 18;
+const MIN_OBSERVED_CONTROL_SEQUENCE_ITEMS = 32;
 
 interface CompactRecordLimits {
   maxStringChars: number;
@@ -77,9 +78,13 @@ function compactRecordValue(
     const maxItems =
       fieldName === 'observedAffordances'
         ? Math.max(baseMaxItems, MIN_OBSERVED_AFFORDANCE_ITEMS)
-        : baseMaxItems;
+        : fieldName === 'observedControlSequence'
+          ? Math.max(baseMaxItems, MIN_OBSERVED_CONTROL_SEQUENCE_ITEMS)
+          : baseMaxItems;
     const selected =
-      fieldName === 'observedAffordances' ? value.slice(0, maxItems) : sampleArray(value, maxItems);
+      fieldName === 'observedControlSequence'
+        ? value.slice(0, maxItems)
+        : sampleArray(value, maxItems);
     return selected
       .map((entry) => compactRecordValue(entry, limits, depth + 1, fieldName))
       .filter(hasRecordValue);
@@ -124,13 +129,13 @@ function compactStructuredEvidenceRecord(value: JsonRecord): string | null {
   if (!stepField) return null;
   const sourceSteps = value[stepField] as unknown[];
   const budgets = [
-    { maxSteps: 6, maxAffordances: 18, observationChars: 240 },
-    { maxSteps: 6, maxAffordances: 18, observationChars: 0 },
-    { maxSteps: 4, maxAffordances: 18, observationChars: 0 },
-    { maxSteps: 3, maxAffordances: 18, observationChars: 0 },
-    { maxSteps: 6, maxAffordances: 12, observationChars: 160 },
-    { maxSteps: 4, maxAffordances: 12, observationChars: 0 },
-    { maxSteps: 3, maxAffordances: 8, observationChars: 0 },
+    { maxSteps: 6, maxAffordances: 18, maxControls: 32, observationChars: 240 },
+    { maxSteps: 6, maxAffordances: 18, maxControls: 32, observationChars: 0 },
+    { maxSteps: 4, maxAffordances: 18, maxControls: 32, observationChars: 0 },
+    { maxSteps: 3, maxAffordances: 18, maxControls: 32, observationChars: 0 },
+    { maxSteps: 6, maxAffordances: 12, maxControls: 24, observationChars: 160 },
+    { maxSteps: 4, maxAffordances: 12, maxControls: 24, observationChars: 0 },
+    { maxSteps: 3, maxAffordances: 8, maxControls: 18, observationChars: 0 },
   ];
 
   for (const budget of budgets) {
@@ -140,8 +145,7 @@ function compactStructuredEvidenceRecord(value: JsonRecord): string | null {
         status: stringField(value, 'status'),
         outcome: stringField(value, 'outcome'),
         tools: Array.isArray(value.tools) ? value.tools.slice(0, 8) : undefined,
-        [stepField]: sourceSteps
-          .slice(0, budget.maxSteps)
+        [stepField]: sampleArray(sourceSteps, budget.maxSteps)
           .map((step) => compactStructuredEvidenceStep(step, budget))
           .filter(hasRecordValue),
       }).filter(([, entry]) => hasRecordValue(entry)),
@@ -154,7 +158,7 @@ function compactStructuredEvidenceRecord(value: JsonRecord): string | null {
 
 function compactStructuredEvidenceStep(
   value: unknown,
-  budget: { maxAffordances: number; observationChars: number },
+  budget: { maxAffordances: number; maxControls: number; observationChars: number },
 ): JsonRecord | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const record = value as JsonRecord;
@@ -169,6 +173,11 @@ function compactStructuredEvidenceStep(
       thought: stringField(record, 'thought')
         ? fitAgentRunText(stringField(record, 'thought') ?? '', 180)
         : undefined,
+      observedControlSequence: compactObservedAffordances(
+        record.observedControlSequence,
+        budget.maxControls,
+        { preservePrefix: true },
+      ),
       observedAffordances: compactObservedAffordances(
         record.observedAffordances,
         budget.maxAffordances,
@@ -191,10 +200,17 @@ function compactStructuredEvidenceStep(
   );
 }
 
-function compactObservedAffordances(value: unknown, limit: number): JsonRecord[] | undefined {
+function compactObservedAffordances(
+  value: unknown,
+  limit: number,
+  options: { preservePrefix?: boolean } = {},
+): JsonRecord[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const compacted = value
-    .slice(0, Math.max(1, limit))
+  const compacted = (
+    options.preservePrefix
+      ? value.slice(0, Math.max(1, limit))
+      : sampleArray(value, Math.max(1, limit))
+  )
     .map((entry): JsonRecord | undefined => {
       if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return undefined;
       const record = entry as JsonRecord;
@@ -206,6 +222,9 @@ function compactObservedAffordances(value: unknown, limit: number): JsonRecord[]
             : undefined,
           attributes: stringField(record, 'attributes')
             ? fitAgentRunText(stringField(record, 'attributes') ?? '', 140)
+            : undefined,
+          section: stringField(record, 'section')
+            ? fitAgentRunText(stringField(record, 'section') ?? '', 140)
             : undefined,
         }).filter(([, item]) => hasRecordValue(item)),
       ) as JsonRecord;
@@ -245,7 +264,7 @@ export function compactProcedureRecord(params: {
   ]);
   if (full) return full;
 
-  const conciseSteps = steps.slice(0, Math.min(4, steps.length));
+  const conciseSteps = sampleArray(steps, Math.min(4, steps.length));
   const concise = compactRecordPreservingArrays(
     { ...base, sources: sources.slice(0, 8), waypoints, steps: conciseSteps },
     ['waypoints'],

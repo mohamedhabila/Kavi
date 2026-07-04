@@ -33,7 +33,12 @@ const DEFAULT_TEXT_THRESHOLD = 0.04;
 const CANDIDATE_POOL_LIMIT = 128;
 const CANDIDATE_POOL_MAX = 2_000;
 const QUOTED_ANCHOR_LIMIT = 12;
-const DEFAULT_SELECTOR_CANDIDATE_LIMIT = 16;
+const DEFAULT_SELECTOR_CANDIDATE_LIMIT = 48;
+
+function selectorTargetCount(candidateCount: number, limit: number): number {
+  if (candidateCount <= 0) return 0;
+  return Math.max(1, Math.min(candidateCount, limit));
+}
 
 function getCandidateScopes(options: RecallFactsOptions): MemoryFactScope[] | undefined {
   if (!options.scopeHints?.length && !options.conversationId && !options.taskId) {
@@ -97,6 +102,9 @@ async function selectFactsWithSemanticSelector(params: {
   query: string;
   scored: ReadonlyArray<ScoredFact>;
   deterministicSelected: ReadonlyArray<ScoredFact>;
+  candidateUnitHits: ReadonlyMap<string, ReadonlySet<string>>;
+  unitWeights: ReadonlyMap<string, number>;
+  scoringUnits: ReadonlySet<string>;
   options: RecallFactsOptions;
   limit: number;
   timing: RecallFactsTiming;
@@ -111,7 +119,13 @@ async function selectFactsWithSemanticSelector(params: {
       params.scored.length,
     ),
   );
-  const candidates = params.scored.slice(0, selectorCandidateLimit);
+  const candidates = selectSelectorCandidates({
+    scored: params.scored,
+    candidateUnitHits: params.candidateUnitHits,
+    unitWeights: params.unitWeights,
+    scoringUnits: params.scoringUnits,
+    limit: selectorCandidateLimit,
+  });
   params.timing.selectorCandidateCount = candidates.length;
   const byId = new Map(candidates.map((entry) => [entry.fact.id, entry]));
   const protectedSelected = params.deterministicSelected.filter((entry) => entry.fact.pinned);
@@ -137,6 +151,7 @@ async function selectFactsWithSemanticSelector(params: {
     const result = await selector({
       query: params.query,
       limit: params.limit,
+      targetCount: selectorTargetCount(candidates.length, params.limit),
       candidates,
     });
     for (const factId of result.factIds) {
@@ -158,6 +173,43 @@ async function selectFactsWithSemanticSelector(params: {
   params.timing.selectorSelectedCount = semanticSelectedCount;
   params.timing.selectorApplied = true;
   return selected;
+}
+
+function selectSelectorCandidates(params: {
+  scored: ReadonlyArray<ScoredFact>;
+  candidateUnitHits: ReadonlyMap<string, ReadonlySet<string>>;
+  unitWeights: ReadonlyMap<string, number>;
+  scoringUnits: ReadonlySet<string>;
+  limit: number;
+}): ScoredFact[] {
+  const selected = new Map<string, ScoredFact>();
+  const firstStageRank = new Map(params.scored.map((entry, index) => [entry.fact.id, index]));
+  const append = (entry: ScoredFact | undefined): void => {
+    if (!entry || selected.size >= params.limit || selected.has(entry.fact.id)) return;
+    selected.set(entry.fact.id, entry);
+  };
+
+  const rankedUnits = Array.from(params.scoringUnits)
+    .map((unit) => ({ unit, weight: params.unitWeights.get(unit) ?? 1 }))
+    .sort((left, right) => {
+      if (right.weight !== left.weight) return right.weight - left.weight;
+      return left.unit.localeCompare(right.unit);
+    });
+
+  for (const { unit } of rankedUnits) {
+    append(params.scored.find((entry) => params.candidateUnitHits.get(entry.fact.id)?.has(unit)));
+    if (selected.size >= params.limit) break;
+  }
+  for (const entry of params.scored) {
+    append(entry);
+    if (selected.size >= params.limit) break;
+  }
+
+  return Array.from(selected.values()).sort(
+    (left, right) =>
+      (firstStageRank.get(left.fact.id) ?? Number.MAX_SAFE_INTEGER) -
+      (firstStageRank.get(right.fact.id) ?? Number.MAX_SAFE_INTEGER),
+  );
 }
 
 async function buildRecallSelection(
@@ -285,6 +337,9 @@ async function buildRecallSelection(
     query: trimmedQuery,
     scored,
     deterministicSelected,
+    candidateUnitHits,
+    unitWeights,
+    scoringUnits: discriminativeScoringUnits,
     options,
     limit,
     timing,

@@ -17,6 +17,8 @@ const MAX_QUERY_CHARS = 2_000;
 const MAX_STEP_TEXT_CHARS = 420;
 const MAX_STEP_COUNT = 8;
 const MAX_SELECTOR_AFFORDANCE_ITEMS = 18;
+const MAX_SELECTOR_CONTROL_SEQUENCE_ITEMS = 36;
+const CONTROL_SEQUENCE_QUERY_WINDOW_RADIUS = 3;
 
 export interface LlmMemorySelectorConfig {
   provider: LlmProviderConfig;
@@ -77,15 +79,102 @@ function fitUnknownValue(value: unknown, maxChars: number, arrayLimit = 12): unk
   return value;
 }
 
-function compactStep(value: unknown): Record<string, unknown> | null {
+function compactObservedAffordancesForSelector(
+  value: unknown,
+  queryUnits: ReadonlySet<string>,
+): unknown {
+  if (!Array.isArray(value)) {
+    return fitUnknownValue(value, MAX_STEP_TEXT_CHARS, MAX_SELECTOR_AFFORDANCE_ITEMS);
+  }
+  const selected: unknown[] = [];
+  const seen = new Set<number>();
+  const append = (entry: { index: number; value: unknown }): void => {
+    if (selected.length >= MAX_SELECTOR_AFFORDANCE_ITEMS || seen.has(entry.index)) return;
+    selected.push(entry.value);
+    seen.add(entry.index);
+  };
+  const indexed = value.map((entry, index) => ({
+    index,
+    value: entry,
+    score: textHitCount(JSON.stringify(entry), queryUnits),
+  }));
+  for (const entry of indexed
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score;
+      return left.index - right.index;
+    })) {
+    append(entry);
+  }
+  for (const entry of indexed) append(entry);
+  return fitUnknownValue(selected, MAX_STEP_TEXT_CHARS, MAX_SELECTOR_AFFORDANCE_ITEMS);
+}
+
+function selectControlSequenceIndexes(
+  value: ReadonlyArray<unknown>,
+  queryUnits: ReadonlySet<string>,
+  maxItems: number,
+): number[] {
+  if (queryUnits.size === 0) return value.slice(0, maxItems).map((_entry, index) => index);
+
+  const indexed = value.map((entry, index) => ({
+    index,
+    score: textHitCount(JSON.stringify(entry), queryUnits),
+  }));
+  const matches = indexed
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score;
+      return left.index - right.index;
+    });
+  if (matches.length === 0) return value.slice(0, maxItems).map((_entry, index) => index);
+
+  const selected = new Set<number>();
+  for (const match of matches) {
+    for (
+      let index = Math.max(0, match.index - CONTROL_SEQUENCE_QUERY_WINDOW_RADIUS);
+      index <= Math.min(value.length - 1, match.index + CONTROL_SEQUENCE_QUERY_WINDOW_RADIUS);
+      index += 1
+    ) {
+      selected.add(index);
+      if (selected.size >= maxItems) break;
+    }
+    if (selected.size >= maxItems) break;
+  }
+
+  return Array.from(selected).sort((left, right) => left - right);
+}
+
+function compactObservedControlSequenceForSelector(
+  value: unknown,
+  queryUnits: ReadonlySet<string>,
+): unknown {
+  if (!Array.isArray(value)) {
+    return fitUnknownValue(value, MAX_STEP_TEXT_CHARS, MAX_SELECTOR_CONTROL_SEQUENCE_ITEMS);
+  }
+  const selected = selectControlSequenceIndexes(
+    value,
+    queryUnits,
+    MAX_SELECTOR_CONTROL_SEQUENCE_ITEMS,
+  ).map((index) => value[index]);
+  return fitUnknownValue(selected, MAX_STEP_TEXT_CHARS, MAX_SELECTOR_CONTROL_SEQUENCE_ITEMS);
+}
+
+function compactStep(
+  value: unknown,
+  queryUnits: ReadonlySet<string>,
+): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   const compact = {
     stateIndex: record.stateIndex ?? record.state_index,
-    observedAffordances: fitUnknownValue(
+    observedControlSequence: compactObservedControlSequenceForSelector(
+      record.observedControlSequence,
+      queryUnits,
+    ),
+    observedAffordances: compactObservedAffordancesForSelector(
       record.observedAffordances,
-      MAX_STEP_TEXT_CHARS,
-      MAX_SELECTOR_AFFORDANCE_ITEMS,
+      queryUnits,
     ),
     inputControlsPresent: record.inputControlsPresent,
     observation: fitUnknownValue(record.observation, MAX_STEP_TEXT_CHARS),
@@ -105,6 +194,7 @@ function stepEvidenceScore(value: unknown, queryUnits: ReadonlySet<string>): num
   if (queryUnits.size === 0 || !value || typeof value !== 'object') return 0;
   const record = value as Record<string, unknown>;
   const structuredEvidence = JSON.stringify({
+    observedControlSequence: record.observedControlSequence,
     observedAffordances: record.observedAffordances,
     toolResult: record.toolResult ?? record.tool_result,
     outcome: record.outcome,
@@ -149,9 +239,9 @@ function selectStepsForPrompt(
           score: 0,
         }));
 
-  const compacted = selected.map((entry) => compactStep(entry.step)).filter(Boolean) as Array<
-    Record<string, unknown>
-  >;
+  const compacted = selected
+    .map((entry) => compactStep(entry.step, queryUnits))
+    .filter(Boolean) as Array<Record<string, unknown>>;
   return compacted.length > 0 ? compacted : undefined;
 }
 
@@ -226,20 +316,21 @@ export function createLlmMemoryFactSelector(
   const model = (config.model || provider.model || '').trim();
   if (!model) return undefined;
 
-  return async ({ query, limit, candidates }) => {
+  return async ({ query, limit, targetCount, candidates }) => {
     if (candidates.length === 0) return { factIds: [] };
     const queryUnits = tokenizeLexicalUnits(query);
     const messages: ChatCompletionMessage[] = [
       {
         role: 'system',
         content:
-          'Select the memory records that are most useful evidence for the current user request. Do not answer the request. Return only record ids from the provided candidates. Prefer direct evidence over broad topical similarity, and prefer fewer records when they are sufficient.',
+          'Rerank the provided memory records into a compact evidence slate for the current user request. Do not answer the request. Return only record ids from the provided candidates. Prefer direct observed evidence over broad topical similarity. Return targetSelected ids unless fewer candidates have plausible relevance; the caller already bounded the pool, so do not stop at the first plausible record when nearby candidates may establish presence, absence, conflict, or complementary evidence.',
       },
       {
         role: 'user',
         content: JSON.stringify({
           request: fitText(query, MAX_QUERY_CHARS),
           maxSelected: limit,
+          targetSelected: Math.max(1, Math.min(targetCount, candidates.length, limit)),
           candidates: candidates.map((candidate, index) =>
             candidateForPrompt(candidate, index, queryUnits),
           ),

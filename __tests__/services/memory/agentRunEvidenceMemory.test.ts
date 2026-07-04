@@ -568,9 +568,118 @@ describe('recordAgentRunEvidenceMemory', () => {
         String(step.observation ?? '').includes('waypoint workflow checkpoint'),
       ),
     ).toBe(true);
+    expect(
+      procedureRecord.waypoints.some((step: Record<string, unknown>) =>
+        String(step.observation ?? '').includes('step 99 observed state'),
+      ),
+    ).toBe(true);
     for (const fact of facts) {
       expect(fact.objectText.length).toBeLessThanOrEqual(10_000);
       expect(JSON.parse(fact.objectText)).toMatchObject({ sourceRunId: 'run-long' });
+    }
+  });
+
+  it('preserves distributed observed affordance labels in compact run records', () => {
+    const accessibilityTree = [
+      ...Array.from(
+        { length: 18 },
+        (_, index) => `[${100 + index}] button 'Primary action ${index}', clickable, visible`,
+      ),
+      ...Array.from(
+        { length: 18 },
+        (_, index) => `[${140 + index}] link 'Navigation item ${index}', clickable, visible`,
+      ),
+      ...Array.from(
+        { length: 17 },
+        (_, index) => `[${180 + index}] heading 'Context section ${index}', visible`,
+      ),
+      "[220] heading 'Late evidence section', visible",
+      "[221] link 'Late section action', clickable, visible",
+    ].join('\n');
+    const evidence = [
+      `agent:${JSON.stringify({
+        trajectory_id: 'run-affordance-spread',
+        state_index: 1,
+        action: 'Inspect available actions',
+        toolName: 'browser_state',
+        accessibility_tree: accessibilityTree,
+        status: 'completed',
+      })}`,
+    ];
+
+    const result = recordAgentRunEvidenceMemory({
+      evidence,
+      conversationId: 'conv-agent-memory',
+      threadId: 'conv-agent-memory',
+      taskId: 'task-analysis',
+      sourceTurnId: 'assistant-1',
+      now: 10,
+    });
+
+    expect(result.factIds).toHaveLength(2);
+    const facts = listFacts({ originConversationId: 'conv-agent-memory' });
+    const joined = facts.map((fact) => fact.objectText).join('\n');
+    expect(joined).toContain('Late evidence section');
+    expect(joined).toContain('Late section action');
+    expect(joined).toContain('"section":"Late evidence section"');
+    for (const fact of facts) {
+      expect(fact.objectText.length).toBeLessThanOrEqual(10_000);
+    }
+  });
+
+  it('preserves observed control source order in compact run records', () => {
+    const accessibilityTree = [
+      ...Array.from(
+        { length: 40 },
+        (_, index) => `[${100 + index}] button 'Control ${index}', clickable, visible`,
+      ),
+      "[200] columnheader 'Name', visible",
+      "[202] columnheader 'Status', visible",
+      "[204] columnheader 'Owner', visible",
+    ].join('\n');
+    const evidence = [
+      `agent:${JSON.stringify({
+        trajectory_id: 'run-control-order',
+        state_index: 1,
+        action: 'Inspect available controls',
+        toolName: 'browser_state',
+        accessibility_tree: accessibilityTree,
+        status: 'completed',
+      })}`,
+    ];
+
+    recordAgentRunEvidenceMemory({
+      evidence,
+      conversationId: 'conv-agent-memory',
+      threadId: 'conv-agent-memory',
+      taskId: 'task-analysis',
+      sourceTurnId: 'assistant-1',
+      now: 10,
+    });
+
+    const facts = listFacts({ originConversationId: 'conv-agent-memory' });
+    const procedure = facts.find((fact) => fact.memoryKind === 'procedure');
+    const outcome = facts.find((fact) => fact.memoryKind === 'outcome');
+    const procedureRecord = JSON.parse(procedure?.objectText ?? '{}');
+    const outcomeRecord = JSON.parse(outcome?.objectText ?? '{}');
+    const procedureSequence = procedureRecord.steps?.[0]?.observedControlSequence ?? [];
+    const outcomeSequence = outcomeRecord.lastSteps?.[0]?.observedControlSequence ?? [];
+
+    const expectedPrefix = Array.from({ length: 18 }, (_, index) => `Control ${index}`);
+    expect(
+      procedureSequence
+        .slice(0, expectedPrefix.length)
+        .map((entry: Record<string, unknown>) => entry.label),
+    ).toEqual(expectedPrefix);
+    expect(
+      outcomeSequence
+        .slice(0, expectedPrefix.length)
+        .map((entry: Record<string, unknown>) => entry.label),
+    ).toEqual(expectedPrefix);
+    expect(JSON.stringify(procedureRecord)).toContain('"observedAffordances"');
+    expect(JSON.stringify(procedureRecord)).toContain('"observedControlSequence"');
+    for (const fact of facts) {
+      expect(fact.objectText.length).toBeLessThanOrEqual(10_000);
     }
   });
 

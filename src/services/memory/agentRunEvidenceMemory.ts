@@ -4,6 +4,7 @@ import {
   boundedSteps,
   fitAgentRunText,
   observedAgentRunAffordances,
+  observedAgentRunControlSequence,
   observedInputControlsPresent,
   observedAgentRunOutput,
   observedAgentRunText,
@@ -88,6 +89,7 @@ function procedureStepForRecord(step: AgentRunStep): JsonRecord {
       action: step.action,
       thought: step.thought,
       url: step.url,
+      observedControlSequence: step.observedControlSequence,
       observedAffordances: step.observedAffordances,
       inputControlsPresent: step.inputControlsPresent,
       observation: step.observation,
@@ -106,6 +108,7 @@ function procedureWaypointForRecord(step: AgentRunStep): JsonRecord {
       url: step.url ? fitAgentRunText(step.url, 180) : undefined,
       action: step.action ? fitAgentRunText(step.action, 180) : undefined,
       thought: step.thought ? fitAgentRunText(step.thought, 260) : undefined,
+      observedControlSequence: step.observedControlSequence,
       observedAffordances: step.observedAffordances,
       inputControlsPresent: step.inputControlsPresent,
       observation: step.observation ? fitAgentRunText(step.observation, 180) : undefined,
@@ -139,6 +142,7 @@ function agentRunAuthorityMultiplier(bundle: AgentRunBundle): number {
 
 function bundleHasObservedSourceEvidence(bundle: AgentRunBundle): boolean {
   return bundle.steps.some((step) => {
+    if (step.observedControlSequence && step.observedControlSequence.length > 0) return true;
     if (step.observedAffordances && step.observedAffordances.length > 0) return true;
     return Boolean(step.observation || step.toolResult);
   });
@@ -245,6 +249,7 @@ function appendStep(bundle: AgentRunBundle, record: JsonRecord): void {
     stringField(record, 'observation');
   const observed = observedAgentRunText(record);
   const observation = observedAgentRunOutput(observed, [outcome, toolResult]);
+  const observedControlSequence = observedAgentRunControlSequence(observed);
   const observedAffordances = observedAgentRunAffordances(observed);
   if (toolName) bundle.tools.add(fitAgentRunText(toolName, 160));
   const step: AgentRunStep = {
@@ -253,6 +258,7 @@ function appendStep(bundle: AgentRunBundle, record: JsonRecord): void {
     thought: stringField(record, 'thought') ?? stringField(record, 'reasoning'),
     url: stringField(record, 'url') ?? stringField(record, 'start_url'),
     observation,
+    observedControlSequence,
     observedAffordances,
     inputControlsPresent: observedInputControlsPresent(observedAffordances),
     outcome,

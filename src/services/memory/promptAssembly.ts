@@ -72,9 +72,9 @@ const L3_DECISIONS_RISKS_HEADER = '#### Decisions and Risks';
 const L3_ARTIFACTS_SOURCES_HEADER = '#### Artifacts and Sources';
 const L3_SUMMARIES_HEADER = '#### Summaries';
 const L3_PROCEDURES_NOTE =
-  'Procedure memories are complete observed workflow traces. Use the full ordered route as evidence of the workflow, including prerequisite, verification, navigation, and finalization phases; do not reduce a successful trace to only its last action.';
+  'Procedure memories are complete observed workflow traces. Use the full ordered route as evidence of the workflow, including prerequisite, verification, navigation, and finalization phases; do not reduce a successful trace to only its last action. When a step records observed available actions, treat that observed action set as direct evidence of both available and unavailable actions in that state. When a step records an observed control sequence, that array preserves source order from the observed state and is direct evidence for order, adjacency, and visible controls. Grouped observed action sections are siblings, not nested groups; an action belongs only to the section object that contains it. If the request names a group, only actions inside that group satisfy it; relevant actions in sibling groups are not substitutes.';
 const L3_OUTCOMES_NOTE =
-  'Outcome and tool-result memories summarize completed or failed agent work. Prefer direct observed outcomes over assumptions from prior platform behavior.';
+  'Outcome and tool-result memories summarize completed or failed agent work. Prefer direct observed outcomes over assumptions from prior platform behavior. When an outcome records observed available actions, do not invent missing actions from nearby labels, headings, or generic platform expectations. When a step records an observed control sequence, that array preserves source order from the observed state and is direct evidence for order, adjacency, and visible controls. Grouped observed action sections are siblings, not nested groups; an action belongs only to the section object that contains it. If the request names a group, only actions inside that group satisfy it; relevant actions in sibling groups are not substitutes.';
 const MAX_RENDERED_FACT_CHARS = 3_200;
 const MAX_RENDERED_PROCEDURE_FACT_CHARS = 5_000;
 const MAX_RETRIEVED_FACT_SECTION_CHARS = 3_800;
@@ -84,6 +84,8 @@ const MAX_QUERY_FOCUSED_LINES = 8;
 const QUERY_RELEVANT_STEP_LIMIT = 6;
 const QUERY_ANCHOR_LIMIT = 12;
 const QUERY_ANCHOR_FULL_MATCH_SCORE = 1_000;
+const MAX_OBSERVED_CONTROL_SEQUENCE_ITEMS = 48;
+const CONTROL_SEQUENCE_QUERY_WINDOW_RADIUS = 3;
 const FACT_GROUP_HEADER_ORDER = [
   L3_RELEVANT_FACTS_HEADER,
   L3_PROCEDURES_HEADER,
@@ -217,6 +219,132 @@ function fitPromptEvidenceText(
   return queryFocusedMultilineText(value, queryUnits, maxChars) ?? fitText(value, maxChars);
 }
 
+function promptStringField(record: Record<string, unknown>, field: string): string | undefined {
+  const value = record[field];
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function compactPromptAffordance(entry: Record<string, unknown>): Record<string, unknown> {
+  return dropEmptyPromptRecord({
+    role: fitPromptValue(promptStringField(entry, 'role'), 80),
+    label: fitPromptValue(promptStringField(entry, 'label'), 180),
+    attributes: fitPromptValue(promptStringField(entry, 'attributes'), 160),
+  });
+}
+
+function compactPromptControl(entry: Record<string, unknown>): Record<string, unknown> {
+  return dropEmptyPromptRecord({
+    role: fitPromptValue(promptStringField(entry, 'role'), 80),
+    label: fitPromptValue(promptStringField(entry, 'label'), 180),
+    attributes: fitPromptValue(promptStringField(entry, 'attributes'), 160),
+    section: fitPromptValue(promptStringField(entry, 'section'), 180),
+  });
+}
+
+function selectControlSequenceIndexes(
+  value: ReadonlyArray<unknown>,
+  queryUnits: ReadonlySet<string> | null,
+  maxItems: number,
+): number[] {
+  if (!queryUnits || queryUnits.size === 0) {
+    return value.slice(0, maxItems).map((_entry, index) => index);
+  }
+
+  const indexed = value.map((entry, index) => ({
+    index,
+    score: queryHitCount(JSON.stringify(entry), queryUnits),
+  }));
+  const matches = indexed
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score;
+      return left.index - right.index;
+    });
+  if (matches.length === 0) return value.slice(0, maxItems).map((_entry, index) => index);
+
+  const selected = new Set<number>();
+  for (const match of matches) {
+    for (
+      let index = Math.max(0, match.index - CONTROL_SEQUENCE_QUERY_WINDOW_RADIUS);
+      index <= Math.min(value.length - 1, match.index + CONTROL_SEQUENCE_QUERY_WINDOW_RADIUS);
+      index += 1
+    ) {
+      selected.add(index);
+      if (selected.size >= maxItems) break;
+    }
+    if (selected.size >= maxItems) break;
+  }
+
+  return Array.from(selected).sort((left, right) => left - right);
+}
+
+function compactObservedControlSequenceForPrompt(
+  value: unknown,
+  queryUnits: ReadonlySet<string> | null,
+): unknown {
+  if (!Array.isArray(value)) return fitPromptValue(value, 260);
+  const compacted = selectControlSequenceIndexes(
+    value,
+    queryUnits,
+    MAX_OBSERVED_CONTROL_SEQUENCE_ITEMS,
+  )
+    .map((index) => value[index])
+    .map((entry): Record<string, unknown> | null => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
+      const compact = compactPromptControl(entry as Record<string, unknown>);
+      return Object.keys(compact).length > 0 ? compact : null;
+    })
+    .filter((entry): entry is Record<string, unknown> => entry !== null);
+  return compacted.length > 0 ? compacted : undefined;
+}
+
+function compactObservedAffordancesForPrompt(value: unknown): unknown {
+  if (!Array.isArray(value)) return fitPromptValue(value, 260);
+
+  const headings: string[] = [];
+  const sectionActions = new Map<string, Array<Record<string, unknown>>>();
+  const unsectionedActions: Array<Record<string, unknown>> = [];
+
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const record = entry as Record<string, unknown>;
+    const role = promptStringField(record, 'role');
+    const label = promptStringField(record, 'label');
+    if (role === 'heading' && label) {
+      if (!headings.includes(label)) headings.push(label);
+      continue;
+    }
+
+    const compact = compactPromptAffordance(record);
+    if (Object.keys(compact).length === 0) continue;
+
+    const section = promptStringField(record, 'section');
+    if (section) {
+      const entries = sectionActions.get(section) ?? [];
+      entries.push(compact);
+      sectionActions.set(section, entries);
+    } else {
+      unsectionedActions.push(compact);
+    }
+  }
+
+  const sections = Array.from(sectionActions.entries()).map(([section, availableActions]) => ({
+    section: fitText(section, 180),
+    availableActions: availableActions.slice(0, 24),
+  }));
+
+  return fitPromptValue(
+    dropEmptyPromptRecord({
+      sections,
+      unsectionedActions,
+      headings,
+    }),
+    260,
+  );
+}
+
 function compactProcedureStep(
   value: unknown,
   queryUnits: ReadonlySet<string> | null,
@@ -229,7 +357,11 @@ function compactProcedureStep(
     action: fitPromptValue(input.action, 260),
     thought: fitPromptValue(input.thought, 260),
     toolName: fitPromptValue(input.toolName ?? input.tool_name, 160),
-    observedAffordances: fitPromptValue(input.observedAffordances, 260),
+    observedControlSequence: compactObservedControlSequenceForPrompt(
+      input.observedControlSequence,
+      queryUnits,
+    ),
+    observedAffordances: compactObservedAffordancesForPrompt(input.observedAffordances),
     inputControlsPresent: input.inputControlsPresent,
     observation: fitPromptEvidenceText(input.observation, queryUnits, 520),
     toolResult: fitPromptEvidenceText(input.toolResult ?? input.tool_result, queryUnits, 360),
@@ -247,6 +379,7 @@ function stepEvidenceQueryScore(
   if (!queryUnits || queryUnits.size === 0 || !value || typeof value !== 'object') return 0;
   const input = value as Record<string, unknown>;
   const structuredEvidence = JSON.stringify({
+    observedControlSequence: input.observedControlSequence,
     observedAffordances: input.observedAffordances,
     toolResult: input.toolResult ?? input.tool_result,
     outcome: input.outcome,

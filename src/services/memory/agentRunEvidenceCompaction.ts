@@ -4,6 +4,7 @@ export interface AgentRunStep {
   thought?: string;
   url?: string;
   observation?: string;
+  observedControlSequence?: AgentRunObservedControl[];
   observedAffordances?: AgentRunObservedAffordance[];
   inputControlsPresent?: boolean;
   outcome?: string;
@@ -16,7 +17,10 @@ export interface AgentRunObservedAffordance {
   role: string;
   label?: string;
   attributes?: string;
+  section?: string;
 }
+
+export type AgentRunObservedControl = AgentRunObservedAffordance;
 
 type IndexedAgentRunObservedAffordance = AgentRunObservedAffordance & { index: number };
 
@@ -25,11 +29,13 @@ type JsonRecord = Record<string, unknown>;
 const MAX_TEXT_CHARS = 900;
 const MAX_COMPACT_STEPS_PER_RUN = 8;
 const DEFAULT_AFFORDANCE_LIMIT = 36;
+const DEFAULT_CONTROL_SEQUENCE_LIMIT = 72;
 const MAX_AFFORDANCES_PER_ROLE = 18;
 const MAX_SOURCE_EVIDENCE_STEP_INDEXES = 6;
 const MAX_AFFORDANCE_LABEL_CHARS = 180;
 const MAX_AFFORDANCE_ATTRIBUTES_CHARS = 160;
 const MAX_LABEL_ANNOTATION_LOOKAHEAD_LINES = 8;
+const MAX_SECTION_CONTEXT_DISTANCE_LINES = 18;
 export const STEP_TEXT_LIMITS: Partial<Record<keyof AgentRunStep, number>> = {
   url: 220,
   action: 260,
@@ -73,6 +79,21 @@ const HIGH_VALUE_AFFORDANCE_ROLES = new Set([
   'radio',
   'tab',
   'search',
+]);
+const CONTROL_SEQUENCE_ROLES = new Set([
+  'menuitem',
+  'option',
+  'textbox',
+  'combobox',
+  'checkbox',
+  'radio',
+  'tab',
+  'search',
+  'button',
+  'link',
+  'listbox',
+  'columnheader',
+  'rowheader',
 ]);
 const INPUT_AFFORDANCE_ROLES = new Set(['textbox', 'combobox', 'search']);
 const LABEL_TEXT_HAS_CONTENT_PATTERN = /[\p{L}\p{M}\p{N}]/u;
@@ -302,18 +323,31 @@ function attributesWithAnnotation(
   return attributes ? `${attributes}; ${annotationText}` : annotationText;
 }
 
-export function observedAgentRunAffordances(
+function nearestPriorSectionLabel(
+  parsedLines: ReadonlyArray<ParsedAffordanceLine | null>,
+  controlIndex: number,
+): string | undefined {
+  for (let index = controlIndex - 1; index >= 0; index -= 1) {
+    if (controlIndex - index > MAX_SECTION_CONTEXT_DISTANCE_LINES) break;
+    const parsed = parsedLines[index];
+    if (parsed?.role === 'heading' && hasVisibleLabelText(parsed.label)) return parsed.label;
+  }
+  return undefined;
+}
+
+function indexedObservedAffordances(
   observed: string | undefined,
-  limit = DEFAULT_AFFORDANCE_LIMIT,
-): AgentRunObservedAffordance[] | undefined {
-  if (!observed) return undefined;
+): IndexedAgentRunObservedAffordance[] {
+  if (!observed) return [];
   const lines = observed.split(/\r?\n/);
   const parsedLines = lines.map((line, index) => parseAffordanceLine(line, index));
   const annotations = extractLabelAnnotations(lines, parsedLines);
-  const parsed = parsedLines
+  return parsedLines
     .map((entry): IndexedAgentRunObservedAffordance | null => {
       if (!entry || !AFFORDANCE_ROLE_PRIORITY.has(entry.role)) return null;
       const annotation = nearestPriorLabelAnnotation(annotations, entry.label, entry.index);
+      const section =
+        entry.role === 'heading' ? undefined : nearestPriorSectionLabel(parsedLines, entry.index);
       const attributes = attributesWithAnnotation(entry.attributes, annotation);
       if (
         !entry.label &&
@@ -329,14 +363,24 @@ export function observedAgentRunAffordances(
         role: entry.role,
         ...(entry.label ? { label: entry.label } : {}),
         ...(attributes ? { attributes } : {}),
+        ...(section ? { section } : {}),
       };
     })
     .filter((entry): entry is IndexedAgentRunObservedAffordance => entry !== null);
+}
+
+export function observedAgentRunAffordances(
+  observed: string | undefined,
+  limit = DEFAULT_AFFORDANCE_LIMIT,
+): AgentRunObservedAffordance[] | undefined {
+  const parsed = indexedObservedAffordances(observed);
   if (parsed.length === 0) return undefined;
 
   const seen = new Set<string>();
   const unique = parsed.filter((entry) => {
-    const key = `${entry.role}\u0000${entry.label ?? ''}\u0000${entry.attributes ?? ''}`;
+    const key = `${entry.role}\u0000${entry.label ?? ''}\u0000${entry.attributes ?? ''}\u0000${
+      entry.section ?? ''
+    }`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -351,7 +395,33 @@ export function observedAgentRunAffordances(
     return priorityDelta !== 0 ? priorityDelta : left.index - right.index;
   });
 
-  return roleCapped.slice(0, Math.max(1, limit)).map(({ index: _index, ...entry }) => entry);
+  return selectSpreadEntries(roleCapped, Math.max(1, limit)).map(
+    ({ index: _index, ...entry }) => entry,
+  );
+}
+
+export function observedAgentRunControlSequence(
+  observed: string | undefined,
+  limit = DEFAULT_CONTROL_SEQUENCE_LIMIT,
+): AgentRunObservedControl[] | undefined {
+  const parsed = indexedObservedAffordances(observed).filter((entry) =>
+    CONTROL_SEQUENCE_ROLES.has(entry.role),
+  );
+  if (parsed.length === 0) return undefined;
+
+  let previousKey: string | undefined;
+  const compacted = parsed.filter((entry) => {
+    const key = `${entry.role}\u0000${entry.label ?? ''}\u0000${entry.attributes ?? ''}\u0000${
+      entry.section ?? ''
+    }`;
+    if (key === previousKey) return false;
+    previousKey = key;
+    return true;
+  });
+
+  return selectSpreadEntries(compacted, Math.max(1, limit)).map(
+    ({ index: _index, ...entry }) => entry,
+  );
 }
 
 export function observedInputControlsPresent(
@@ -445,6 +515,10 @@ function sourceEvidenceStepScore(step: AgentRunStep): number {
     } else {
       score += 1;
     }
+  }
+  for (const control of step.observedControlSequence ?? []) {
+    if (!control.label && control.role !== 'textbox' && control.role !== 'search') continue;
+    score += HIGH_VALUE_AFFORDANCE_ROLES.has(control.role) ? 2 : 1;
   }
   return score;
 }
