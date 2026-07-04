@@ -106,6 +106,7 @@ describe('createLlmMemoryFactSelector', () => {
       messages: Array<{ role: string; content: string }>;
     };
     expect(params.messages[0]?.content).toContain('evidence slate');
+    expect(params.messages[0]?.content).toContain('distinct sourceRunId');
     expect(params.messages[0]?.content).not.toContain('Prefer fewer');
     const payload = JSON.parse(params.messages[1]?.content ?? '{}') as {
       maxSelected?: number;
@@ -236,5 +237,63 @@ describe('createLlmMemoryFactSelector', () => {
     expect(text).toContain('observedControlSequence');
     expect(text.indexOf('Review')).toBeLessThan(text.indexOf('Approve'));
     expect(text.indexOf('Approve')).toBeLessThan(text.indexOf('Archive'));
+  });
+
+  it('keeps ordered control sequence boundaries with query-neighbor evidence', async () => {
+    mockSendLlmMessage.mockResolvedValue({
+      output_parsed: { selectedFactIds: ['fact-target'] },
+    });
+    const provider: LlmProviderConfig = {
+      id: 'test-provider',
+      name: 'Test Provider',
+      kind: 'remote',
+      protocol: 'openai-responses',
+      providerFamily: 'openai',
+      baseUrl: 'https://example.invalid/v1',
+      apiKey: 'test-key',
+      model: 'test-model',
+      enabled: true,
+      capabilityHints: { supportsStructuredOutput: true },
+    };
+    const observedControlSequence = Array.from({ length: 60 }, (_, index) => ({
+      role: 'button',
+      label: `control-${index}`,
+    }));
+    observedControlSequence[0] = { role: 'button', label: 'boundary-start' };
+    observedControlSequence[30] = { role: 'button', label: 'needle-control' };
+    observedControlSequence[59] = { role: 'button', label: 'boundary-end' };
+    const selector = createLlmMemoryFactSelector({ provider, model: 'test-model' });
+
+    await selector?.({
+      query: 'needle control',
+      limit: 1,
+      targetCount: 1,
+      candidates: [
+        {
+          fact: fact(
+            'fact-target',
+            JSON.stringify({
+              sourceRunId: 'run-target',
+              status: 'completed',
+              steps: [{ observedControlSequence }],
+            }),
+          ),
+          score: 0.4,
+          textScore: 0.2,
+          relevanceScore: 0.2,
+        },
+      ],
+    });
+
+    const params = mockSendLlmMessage.mock.calls[0]?.[0] as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const payload = JSON.parse(params.messages[1]?.content ?? '{}') as {
+      candidates?: Array<{ text?: string }>;
+    };
+    const text = payload.candidates?.[0]?.text ?? '';
+    expect(text).toContain('boundary-start');
+    expect(text).toContain('needle-control');
+    expect(text).toContain('boundary-end');
   });
 });

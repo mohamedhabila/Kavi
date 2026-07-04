@@ -72,6 +72,20 @@ function factDedupeKey(fact: MemoryFact): string {
   return `${fact.memoryKind}\u0000${fact.contentHash || fact.objectText.trim()}`;
 }
 
+function selectorDiversityKey(fact: MemoryFact): string {
+  const sourceRunId = fact.sourceRunId?.trim();
+  if (sourceRunId) return `run:${sourceRunId}`;
+  const taskId = fact.originTaskId?.trim() || fact.taskId?.trim();
+  if (taskId) return `task:${taskId}`;
+  const turnId = fact.sourceTurnId?.trim();
+  if (turnId) return `turn:${turnId}`;
+  const conversationId = fact.originConversationId?.trim() || fact.originThreadId?.trim();
+  if (conversationId) {
+    return `conversation:${conversationId}:${fact.memoryKind}:${fact.subjectId}:${fact.predicate}`;
+  }
+  return `fact:${fact.memoryKind}:${fact.subjectId}:${fact.predicate}`;
+}
+
 function selectTopFacts(
   scored: ReadonlyArray<ScoredFact>,
   options: RecallFactsOptions,
@@ -183,10 +197,15 @@ function selectSelectorCandidates(params: {
   limit: number;
 }): ScoredFact[] {
   const selected = new Map<string, ScoredFact>();
+  const selectedDiversityKeys = new Set<string>();
   const firstStageRank = new Map(params.scored.map((entry, index) => [entry.fact.id, index]));
-  const append = (entry: ScoredFact | undefined): void => {
-    if (!entry || selected.size >= params.limit || selected.has(entry.fact.id)) return;
+  const append = (entry: ScoredFact | undefined, requireNewDiversityKey = false): boolean => {
+    if (!entry || selected.size >= params.limit || selected.has(entry.fact.id)) return false;
+    const diversityKey = selectorDiversityKey(entry.fact);
+    if (requireNewDiversityKey && selectedDiversityKeys.has(diversityKey)) return false;
     selected.set(entry.fact.id, entry);
+    selectedDiversityKeys.add(diversityKey);
+    return true;
   };
 
   const rankedUnits = Array.from(params.scoringUnits)
@@ -197,7 +216,16 @@ function selectSelectorCandidates(params: {
     });
 
   for (const { unit } of rankedUnits) {
-    append(params.scored.find((entry) => params.candidateUnitHits.get(entry.fact.id)?.has(unit)));
+    const matchingEntries = params.scored.filter((entry) =>
+      params.candidateUnitHits.get(entry.fact.id)?.has(unit),
+    );
+    if (!matchingEntries.some((entry) => append(entry, true))) {
+      append(matchingEntries[0]);
+    }
+    if (selected.size >= params.limit) break;
+  }
+  for (const entry of params.scored) {
+    append(entry, true);
     if (selected.size >= params.limit) break;
   }
   for (const entry of params.scored) {

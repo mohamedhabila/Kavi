@@ -14,6 +14,7 @@ import type { MemoryEpisode } from './episodes/types';
 import { compactJsonFields, parseJsonRecord } from './factJson';
 import { tokenizeLexicalUnits } from './ranking/lexical';
 import { quotedSpanUnitSets } from './ranking/quotedSpans';
+import { selectOrderedEvidenceIndexes } from './controlSequenceCompaction';
 
 export type PromptMemoryFact = MemoryFact & { subjectLabel?: string };
 
@@ -249,7 +250,7 @@ function selectControlSequenceIndexes(
   maxItems: number,
 ): number[] {
   if (!queryUnits || queryUnits.size === 0) {
-    return value.slice(0, maxItems).map((_entry, index) => index);
+    return selectOrderedEvidenceIndexes({ itemCount: value.length, maxItems });
   }
 
   const indexed = value.map((entry, index) => ({
@@ -262,22 +263,12 @@ function selectControlSequenceIndexes(
       if (right.score !== left.score) return right.score - left.score;
       return left.index - right.index;
     });
-  if (matches.length === 0) return value.slice(0, maxItems).map((_entry, index) => index);
-
-  const selected = new Set<number>();
-  for (const match of matches) {
-    for (
-      let index = Math.max(0, match.index - CONTROL_SEQUENCE_QUERY_WINDOW_RADIUS);
-      index <= Math.min(value.length - 1, match.index + CONTROL_SEQUENCE_QUERY_WINDOW_RADIUS);
-      index += 1
-    ) {
-      selected.add(index);
-      if (selected.size >= maxItems) break;
-    }
-    if (selected.size >= maxItems) break;
-  }
-
-  return Array.from(selected).sort((left, right) => left - right);
+  return selectOrderedEvidenceIndexes({
+    itemCount: value.length,
+    maxItems,
+    matchIndexes: matches.map((entry) => entry.index),
+    windowRadius: CONTROL_SEQUENCE_QUERY_WINDOW_RADIUS,
+  });
 }
 
 function compactObservedControlSequenceForPrompt(

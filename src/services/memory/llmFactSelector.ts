@@ -7,6 +7,7 @@ import type { ChatCompletionMessage, StructuredOutputOptions } from '../llm/supp
 import type { MemoryFactSelectionCandidate, MemoryFactSelector } from './factRecallTypes';
 import { parseJsonRecord } from './factJson';
 import { tokenizeLexicalUnits } from './ranking/lexical';
+import { selectOrderedEvidenceIndexes } from './controlSequenceCompaction';
 
 const logger = createLogger('memory.llmFactSelector');
 
@@ -115,7 +116,9 @@ function selectControlSequenceIndexes(
   queryUnits: ReadonlySet<string>,
   maxItems: number,
 ): number[] {
-  if (queryUnits.size === 0) return value.slice(0, maxItems).map((_entry, index) => index);
+  if (queryUnits.size === 0) {
+    return selectOrderedEvidenceIndexes({ itemCount: value.length, maxItems });
+  }
 
   const indexed = value.map((entry, index) => ({
     index,
@@ -127,22 +130,12 @@ function selectControlSequenceIndexes(
       if (right.score !== left.score) return right.score - left.score;
       return left.index - right.index;
     });
-  if (matches.length === 0) return value.slice(0, maxItems).map((_entry, index) => index);
-
-  const selected = new Set<number>();
-  for (const match of matches) {
-    for (
-      let index = Math.max(0, match.index - CONTROL_SEQUENCE_QUERY_WINDOW_RADIUS);
-      index <= Math.min(value.length - 1, match.index + CONTROL_SEQUENCE_QUERY_WINDOW_RADIUS);
-      index += 1
-    ) {
-      selected.add(index);
-      if (selected.size >= maxItems) break;
-    }
-    if (selected.size >= maxItems) break;
-  }
-
-  return Array.from(selected).sort((left, right) => left - right);
+  return selectOrderedEvidenceIndexes({
+    itemCount: value.length,
+    maxItems,
+    matchIndexes: matches.map((entry) => entry.index),
+    windowRadius: CONTROL_SEQUENCE_QUERY_WINDOW_RADIUS,
+  });
 }
 
 function compactObservedControlSequenceForSelector(
@@ -323,7 +316,7 @@ export function createLlmMemoryFactSelector(
       {
         role: 'system',
         content:
-          'Rerank the provided memory records into a compact evidence slate for the current user request. Do not answer the request. Return only record ids from the provided candidates. Prefer direct observed evidence over broad topical similarity. Return targetSelected ids unless fewer candidates have plausible relevance; the caller already bounded the pool, so do not stop at the first plausible record when nearby candidates may establish presence, absence, conflict, or complementary evidence.',
+          'Rerank the provided memory records into a compact evidence slate for the current user request. Do not answer the request. Return only record ids from the provided candidates. Prefer direct observed evidence over broad topical similarity. Return targetSelected ids unless fewer candidates have plausible relevance; the caller already bounded the pool, so do not stop at the first plausible record when nearby candidates may establish presence, absence, conflict, or complementary evidence. Prefer covering distinct sourceRunId, subject, task, or turn groups before repeated variants of one group.',
       },
       {
         role: 'user',
