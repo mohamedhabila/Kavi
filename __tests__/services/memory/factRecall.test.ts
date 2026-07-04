@@ -4,7 +4,10 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
-import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../../src/services/memory/schema';
+import {
+  ensureFactSchema,
+  resetFactSchemaCacheForTests,
+} from '../../../src/services/memory/schema';
 import { upsertEntity } from '../../../src/services/memory/entities';
 import { recordFact, setFactPinned } from '../../../src/services/memory/facts/mutations';
 import { getFactById } from '../../../src/services/memory/facts/queries';
@@ -190,6 +193,86 @@ describe('recallScoredFactsForQuery', () => {
     expect(scored[0].importanceScore).toBeGreaterThan(0);
     expect(scored[0].decayMultiplier).toBeGreaterThan(0);
   });
+
+  it('uses a semantic selector as the authoritative evidence selection', async () => {
+    const project = upsertEntity({ name: 'alpha release', type: 'project' });
+    const first = recordFact({
+      subjectId: project.id,
+      predicate: 'decision',
+      objectText: 'alpha release backend uses remote execution by default',
+      importance: 0.9,
+    });
+    const selected = recordFact({
+      subjectId: project.id,
+      predicate: 'decision',
+      objectText: 'alpha release backend uses local execution after verified migration evidence',
+      importance: 0.1,
+      supersedePrior: false,
+    });
+    let observedCandidateIds: string[] = [];
+
+    const scored = await recallScoredFactsForQuery('alpha release backend execution', {
+      limit: 2,
+      selector: async ({ candidates }) => {
+        observedCandidateIds = candidates.map((candidate) => candidate.fact.id);
+        return { factIds: [selected.fact.id] };
+      },
+    });
+
+    expect(observedCandidateIds).toEqual(expect.arrayContaining([first.fact.id, selected.fact.id]));
+    expect(scored.map((entry) => entry.fact.id)).toEqual([selected.fact.id]);
+  });
+
+  it('keeps pinned evidence protected when semantic selection is available', async () => {
+    const project = upsertEntity({ name: 'gamma release', type: 'project' });
+    const pinned = recordFact({
+      subjectId: project.id,
+      predicate: 'decision',
+      objectText: 'gamma release must always include verified compliance notes',
+      importance: 0.9,
+    });
+    setFactPinned(pinned.fact.id, true);
+    const selected = recordFact({
+      subjectId: project.id,
+      predicate: 'risk',
+      objectText: 'gamma release has an unresolved migration risk',
+      importance: 0.1,
+      supersedePrior: false,
+    });
+
+    const scored = await recallScoredFactsForQuery('gamma release backend execution', {
+      limit: 2,
+      threshold: 0.2,
+      selector: async () => ({ factIds: [selected.fact.id] }),
+    });
+
+    expect(scored.map((entry) => entry.fact.id)).toEqual([pinned.fact.id, selected.fact.id]);
+  });
+
+  it('falls back to the local ranking when the semantic selector returns no usable ids', async () => {
+    const project = upsertEntity({ name: 'beta release', type: 'project' });
+    const expected = recordFact({
+      subjectId: project.id,
+      predicate: 'decision',
+      objectText: 'beta release backend uses local execution',
+      importance: 0.9,
+    });
+    recordFact({
+      subjectId: project.id,
+      predicate: 'decision',
+      objectText: 'beta release backend uses remote execution',
+      importance: 0.1,
+      supersedePrior: false,
+    });
+
+    const scored = await recallScoredFactsForQuery('beta release backend local execution', {
+      limit: 1,
+      selector: async () => ({ factIds: ['not-a-candidate'] }),
+    });
+
+    expect(scored).toHaveLength(1);
+    expect(scored[0].fact.id).toBe(expected.fact.id);
+  });
 });
 
 describe('recallFactsForQuery — scoped decay and reinforcement', () => {
@@ -373,6 +456,42 @@ describe('recallFactsForQuery — scoped decay and reinforcement', () => {
       expect.arrayContaining(['BEAM-ROUTE-A', 'BEAM-MEAL-NEW', 'BEAM-WINDOW-9', 'BEAM-CHANNEL-7']),
     );
     expect(values).not.toContain('BEAM-MEAL-OLD');
+  });
+
+  it('admits quoted-anchor candidates before broad lexical distractors', async () => {
+    const project = upsertEntity({ name: 'anchor-project', type: 'project' });
+    const target = recordFact({
+      subjectId: project.id,
+      predicate: 'observed_state',
+      objectText: 'ALPHA-PANEL-VALUE is visible in Alpha Panel.',
+      scope: 'global',
+      importance: 0.1,
+      now: 1,
+    });
+    for (let index = 0; index < 20; index += 1) {
+      recordFact({
+        subjectId: project.id,
+        predicate: `distractor_${index}`,
+        objectText:
+          index % 2 === 0
+            ? `Alpha account summary order number completed distractor ${index}`
+            : `Panel account summary order number completed distractor ${index}`,
+        scope: 'global',
+        importance: 0.9,
+        now: 10_000 + index,
+      });
+    }
+
+    const facts = await recallFactsForQuery(
+      'What value is shown under "Alpha Panel" account summary order number completed?',
+      {
+        limit: 1,
+        candidatePoolLimit: 3,
+        now: 20_000,
+      },
+    );
+
+    expect(facts.map((fact) => fact.id)).toContain(target.fact.id);
   });
 
   it('recalls relevant older facts beyond the newest tail candidate window', async () => {

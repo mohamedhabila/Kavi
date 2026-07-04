@@ -1,6 +1,7 @@
 import type { AgentGoal } from '../../engine/goals/types';
 import type { AgentRunControlGraphAsyncWorkState } from '../../types/agentRun';
 import type { Message } from '../../types/message';
+import type { LlmProviderConfig } from '../../types/provider';
 import {
   buildFullHistoryContextStartSelection,
   selectContextStartIndex,
@@ -24,6 +25,10 @@ export interface UnifiedMemoryAccessRequest {
   goals?: ReadonlyArray<AgentGoal>;
   activeTaskId?: string;
   asyncWork?: AgentRunControlGraphAsyncWorkState;
+  retrievalLlm?: {
+    provider: LlmProviderConfig;
+    model?: string;
+  };
 }
 
 export interface UnifiedMemoryAccessResult {
@@ -69,6 +74,7 @@ export async function buildUnifiedMemoryAccessContext(
     ...(request.goals ? { goals: request.goals } : {}),
     ...(request.activeTaskId ? { activeTaskId: request.activeTaskId } : {}),
     ...(request.asyncWork ? { asyncWork: request.asyncWork } : {}),
+    ...(request.retrievalLlm ? { retrievalLlm: request.retrievalLlm } : {}),
   });
 
   return {

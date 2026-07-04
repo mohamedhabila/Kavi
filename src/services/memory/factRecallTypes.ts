@@ -31,6 +31,14 @@ export interface RecallFactsOptions {
   lexicalUnitLimit?: number;
   /** Optional recall-stage telemetry. Used by product diagnostics and benchmarks. */
   onTiming?: (timing: RecallFactsTiming) => void;
+  /**
+   * Optional semantic selector that reranks the locally-ranked candidate pool.
+   * The local scorer remains the source of candidates and the fallback path
+   * when the selector is unavailable or returns no usable ids.
+   */
+  selector?: MemoryFactSelector;
+  /** Maximum locally-ranked candidates shown to the semantic selector. */
+  selectorCandidateLimit?: number;
 }
 
 export interface RecallFactsTiming {
@@ -45,6 +53,10 @@ export interface RecallFactsTiming {
   scoreMs: number;
   sortMs: number;
   selectMs: number;
+  selectorMs?: number;
+  selectorCandidateCount?: number;
+  selectorSelectedCount?: number;
+  selectorApplied?: boolean;
   totalMs: number;
 }
 
@@ -61,3 +73,24 @@ export interface ScoredFact {
   retrievabilityScore: number;
   relevanceScore: number;
 }
+
+export interface MemoryFactSelectionCandidate {
+  fact: MemoryFact;
+  score: number;
+  textScore: number;
+  relevanceScore: number;
+}
+
+export interface MemoryFactSelectionRequest {
+  query: string;
+  limit: number;
+  candidates: ReadonlyArray<MemoryFactSelectionCandidate>;
+}
+
+export interface MemoryFactSelectionResult {
+  factIds: string[];
+}
+
+export type MemoryFactSelector = (
+  request: MemoryFactSelectionRequest,
+) => Promise<MemoryFactSelectionResult>;

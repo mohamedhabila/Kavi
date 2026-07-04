@@ -14,6 +14,7 @@ import {
   recallScoredFactsForQuery,
   type RecallFactsOptions,
   type RecallFactsTiming,
+  type MemoryFactSelector,
   type ScoredFact,
 } from './factRecall';
 import { recallEpisodesForQuery } from './episodeRecall';
@@ -33,6 +34,7 @@ export interface RetrievalOrchestratorInput {
   taskId?: string;
   limit?: number;
   now?: number;
+  factSelector?: MemoryFactSelector;
 }
 
 export interface RetrievalOrchestratorResult {
@@ -121,6 +123,7 @@ function recallOptions(
     threshold: DEFAULT_THRESHOLD,
     candidatePoolLimit: DEFAULT_CANDIDATE_POOL_LIMIT,
     onTiming,
+    ...(input.factSelector ? { selector: input.factSelector } : {}),
     ...(input.conversationId ? { conversationId: input.conversationId } : {}),
     ...(resolvedTaskId ? { taskId: resolvedTaskId } : {}),
     ...(typeof input.now === 'number' ? { now: input.now } : {}),

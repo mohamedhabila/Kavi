@@ -43,6 +43,12 @@ describe('Orchestrator', () => {
         expect.objectContaining({
           conversationId: 'conv1',
           messages: expect.any(Array),
+          retrievalLlm: expect.objectContaining({
+            model: 'gpt-5.4',
+            provider: expect.objectContaining({
+              id: options.provider.id,
+            }),
+          }),
         }),
       );
       const apiMessages = mockStreamMessage.mock.calls[0]?.[0] as Array<{

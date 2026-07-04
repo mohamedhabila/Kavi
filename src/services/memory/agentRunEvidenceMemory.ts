@@ -3,16 +3,23 @@ import {
   STEP_TEXT_LIMITS,
   boundedSteps,
   fitAgentRunText,
+  observedAgentRunAffordances,
+  observedInputControlsPresent,
   observedAgentRunOutput,
   observedAgentRunText,
   type AgentRunStep,
 } from './agentRunEvidenceCompaction';
+import {
+  compactProcedureRecord,
+  compactRecord,
+  scalarField,
+  stringField,
+  type JsonRecord,
+} from './agentRunEvidenceRecordCompaction';
 import { upsertEntity } from './entities';
 import { recordFact } from './facts/mutations';
 import type { MemoryFactKind } from './facts/types';
 import { ensureFactSchema } from './schema';
-
-type JsonRecord = Record<string, unknown>;
 
 export interface AgentRunEvidenceMemoryInput {
   messages?: ReadonlyArray<Message>;
@@ -46,8 +53,8 @@ interface AgentRunBundle {
   steps: AgentRunStep[];
 }
 
-const MAX_RECORD_CHARS = 6_000;
 const MAX_RUNS_PER_TURN = 16;
+const MAX_WAYPOINTS_PER_RUN = 12;
 const SUCCESSFUL_RUN_SIGNALS = new Set(['complete', 'completed', 'success', 'succeeded']);
 const UNSUCCESSFUL_RUN_SIGNALS = new Set([
   'cancelled',
@@ -58,39 +65,6 @@ const UNSUCCESSFUL_RUN_SIGNALS = new Set([
   'incomplete',
 ]);
 const UNSUCCESSFUL_RUN_AUTHORITY_MULTIPLIER = 0.72;
-
-interface CompactRecordLimits {
-  maxStringChars: number;
-  maxTopLevelArrayItems: number;
-  maxNestedArrayItems: number;
-}
-
-const COMPACT_RECORD_LIMITS: CompactRecordLimits[] = [
-  { maxStringChars: 1_200, maxTopLevelArrayItems: 32, maxNestedArrayItems: 12 },
-  { maxStringChars: 900, maxTopLevelArrayItems: 28, maxNestedArrayItems: 10 },
-  { maxStringChars: 700, maxTopLevelArrayItems: 24, maxNestedArrayItems: 8 },
-  { maxStringChars: 520, maxTopLevelArrayItems: 20, maxNestedArrayItems: 6 },
-  { maxStringChars: 360, maxTopLevelArrayItems: 18, maxNestedArrayItems: 5 },
-  { maxStringChars: 260, maxTopLevelArrayItems: 16, maxNestedArrayItems: 4 },
-  { maxStringChars: 180, maxTopLevelArrayItems: 16, maxNestedArrayItems: 3 },
-  { maxStringChars: 120, maxTopLevelArrayItems: 14, maxNestedArrayItems: 3 },
-  { maxStringChars: 80, maxTopLevelArrayItems: 14, maxNestedArrayItems: 2 },
-  { maxStringChars: 60, maxTopLevelArrayItems: 12, maxNestedArrayItems: 2 },
-];
-
-function stringField(record: JsonRecord, field: string): string | undefined {
-  const value = record[field];
-  if (typeof value !== 'string') return undefined;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function scalarField(record: JsonRecord, field: string): string | number | undefined {
-  const value = record[field];
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim().length > 0) return value.trim();
-  return undefined;
-}
 
 function parseJsonPayload(value: string): JsonRecord | null {
   const trimmed = value.trim();
@@ -107,88 +81,6 @@ function parseJsonPayload(value: string): JsonRecord | null {
   }
 }
 
-function compactRecord(value: JsonRecord): string {
-  for (const limits of COMPACT_RECORD_LIMITS) {
-    const compacted = compactRecordValue(value, limits, 0);
-    const json = JSON.stringify(compacted);
-    if (json.length <= MAX_RECORD_CHARS) return json;
-  }
-
-  const fallback = compactRecordScalars(value);
-  const fallbackJson = JSON.stringify(fallback);
-  if (fallbackJson.length <= MAX_RECORD_CHARS) return fallbackJson;
-
-  return JSON.stringify({
-    sourceRunId: stringField(value, 'sourceRunId'),
-    goal: fitAgentRunText(String(value.goal ?? ''), 360),
-    status: fitAgentRunText(String(value.status ?? ''), 120),
-    outcome: fitAgentRunText(String(value.outcome ?? ''), 120),
-  });
-}
-
-function compactRecordValue(
-  value: unknown,
-  limits: CompactRecordLimits,
-  depth: number,
-  fieldName?: string,
-): unknown {
-  if (typeof value === 'string') {
-    return fitAgentRunText(value, compactStringLimit(fieldName, limits));
-  }
-  if (typeof value === 'number' || typeof value === 'boolean') return value;
-  if (Array.isArray(value)) {
-    const maxItems = depth <= 1 ? limits.maxTopLevelArrayItems : limits.maxNestedArrayItems;
-    return sampleArray(value, maxItems)
-      .map((entry) => compactRecordValue(entry, limits, depth + 1, fieldName))
-      .filter(hasRecordValue);
-  }
-  if (!value || typeof value !== 'object') return undefined;
-  return Object.fromEntries(
-    Object.entries(value as JsonRecord)
-      .map(([key, entry]) => [key, compactRecordValue(entry, limits, depth + 1, key)] as const)
-      .filter(([, entry]) => hasRecordValue(entry)),
-  );
-}
-
-function compactStringLimit(fieldName: string | undefined, limits: CompactRecordLimits): number {
-  return limits.maxStringChars;
-}
-
-function compactRecordScalars(value: JsonRecord): JsonRecord {
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(([, entry]) => typeof entry === 'string' || typeof entry === 'number')
-      .map(([key, entry]) => [
-        key,
-        typeof entry === 'string' ? fitAgentRunText(entry, 360) : entry,
-      ]),
-  );
-}
-
-function hasRecordValue(value: unknown): boolean {
-  if (value === undefined || value === null || value === '') return false;
-  if (Array.isArray(value)) return value.length > 0;
-  if (typeof value === 'object') return Object.keys(value as JsonRecord).length > 0;
-  return true;
-}
-
-function sampleArray<T>(values: ReadonlyArray<T>, maxItems: number): T[] {
-  if (values.length <= maxItems) return [...values];
-  if (maxItems <= 1) return values[0] === undefined ? [] : [values[0]];
-  const lastIndex = values.length - 1;
-  const sampled: T[] = [];
-  const seen = new Set<number>();
-  for (let slot = 0; slot < maxItems; slot += 1) {
-    const index = Math.round((slot * lastIndex) / (maxItems - 1));
-    if (seen.has(index)) continue;
-    const value = values[index];
-    if (value === undefined) continue;
-    seen.add(index);
-    sampled.push(value);
-  }
-  return sampled;
-}
-
 function procedureStepForRecord(step: AgentRunStep): JsonRecord {
   return Object.fromEntries(
     Object.entries({
@@ -196,9 +88,30 @@ function procedureStepForRecord(step: AgentRunStep): JsonRecord {
       action: step.action,
       thought: step.thought,
       url: step.url,
+      observedAffordances: step.observedAffordances,
+      inputControlsPresent: step.inputControlsPresent,
+      observation: step.observation,
+      toolResult: step.toolResult,
       outcome: step.outcome,
       status: step.status,
       toolName: step.toolName,
+    }).filter(([, value]) => value !== undefined && value !== null && value !== ''),
+  );
+}
+
+function procedureWaypointForRecord(step: AgentRunStep): JsonRecord {
+  return Object.fromEntries(
+    Object.entries({
+      stateIndex: step.stateIndex,
+      url: step.url ? fitAgentRunText(step.url, 180) : undefined,
+      action: step.action ? fitAgentRunText(step.action, 180) : undefined,
+      thought: step.thought ? fitAgentRunText(step.thought, 260) : undefined,
+      observedAffordances: step.observedAffordances,
+      inputControlsPresent: step.inputControlsPresent,
+      observation: step.observation ? fitAgentRunText(step.observation, 180) : undefined,
+      outcome: step.outcome ? fitAgentRunText(step.outcome, 220) : undefined,
+      status: step.status ? fitAgentRunText(step.status, 120) : undefined,
+      toolName: step.toolName ? fitAgentRunText(step.toolName, 120) : undefined,
     }).filter(([, value]) => value !== undefined && value !== null && value !== ''),
   );
 }
@@ -222,6 +135,13 @@ function agentRunAuthorityMultiplier(bundle: AgentRunBundle): number {
     return UNSUCCESSFUL_RUN_AUTHORITY_MULTIPLIER;
   }
   return signals.some((signal) => SUCCESSFUL_RUN_SIGNALS.has(signal)) ? 1 : 0.9;
+}
+
+function bundleHasObservedSourceEvidence(bundle: AgentRunBundle): boolean {
+  return bundle.steps.some((step) => {
+    if (step.observedAffordances && step.observedAffordances.length > 0) return true;
+    return Boolean(step.observation || step.toolResult);
+  });
 }
 
 function getBundle(
@@ -325,6 +245,7 @@ function appendStep(bundle: AgentRunBundle, record: JsonRecord): void {
     stringField(record, 'observation');
   const observed = observedAgentRunText(record);
   const observation = observedAgentRunOutput(observed, [outcome, toolResult]);
+  const observedAffordances = observedAgentRunAffordances(observed);
   if (toolName) bundle.tools.add(fitAgentRunText(toolName, 160));
   const step: AgentRunStep = {
     stateIndex: scalarField(record, 'stateIndex') ?? scalarField(record, 'state_index'),
@@ -332,6 +253,8 @@ function appendStep(bundle: AgentRunBundle, record: JsonRecord): void {
     thought: stringField(record, 'thought') ?? stringField(record, 'reasoning'),
     url: stringField(record, 'url') ?? stringField(record, 'start_url'),
     observation,
+    observedAffordances,
+    inputControlsPresent: observedInputControlsPresent(observedAffordances),
     outcome,
     status: stringField(record, 'status'),
     toolName,
@@ -357,7 +280,7 @@ function appendStep(bundle: AgentRunBundle, record: JsonRecord): void {
         ? -1
         : bundle.steps.findIndex((existing) => existing.stateIndex === stateIndex);
     if (existingIndex >= 0) {
-      bundle.steps[existingIndex] = { ...normalized, ...bundle.steps[existingIndex] };
+      bundle.steps[existingIndex] = { ...bundle.steps[existingIndex], ...normalized };
       return;
     }
     bundle.steps.push(normalized as AgentRunStep);
@@ -431,7 +354,10 @@ function recordBundleFact(
 ): string | null {
   const trimmed = objectText.trim();
   if (!trimmed) return null;
-  const authorityMultiplier = kind === 'procedure' ? 1 : agentRunAuthorityMultiplier(bundle);
+  const authorityMultiplier =
+    kind === 'procedure' || bundleHasObservedSourceEvidence(bundle)
+      ? 1
+      : agentRunAuthorityMultiplier(bundle);
   const recorded = recordFact({
     subjectId,
     predicate,
@@ -462,6 +388,9 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
   });
   const factIds: string[] = [];
   const steps = boundedSteps(bundle.steps);
+  const waypoints = boundedSteps(bundle.steps, MAX_WAYPOINTS_PER_RUN).map(
+    procedureWaypointForRecord,
+  );
   const procedureSteps = steps.map(procedureStepForRecord);
   const tools = Array.from(bundle.tools).slice(0, 16);
   const sources = Array.from(bundle.sources).slice(0, 12);
@@ -478,14 +407,17 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
     tools,
   };
 
-  const procedureRecord = compactRecord({
-    sourceRunId: bundle.sourceRunId,
-    goal: bundle.goal,
-    status: bundle.status,
-    outcome: bundle.outcome,
-    domain: bundle.domain,
-    environment: bundle.environment,
-    tools,
+  const procedureRecord = compactProcedureRecord({
+    base: {
+      sourceRunId: bundle.sourceRunId,
+      goal: bundle.goal,
+      status: bundle.status,
+      outcome: bundle.outcome,
+      domain: bundle.domain,
+      environment: bundle.environment,
+      tools,
+    },
+    waypoints,
     steps: procedureSteps,
     sources,
   });

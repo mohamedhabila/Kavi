@@ -9,15 +9,34 @@ jest.mock('expo-sqlite', () => {
 
 import { closeMemoryDb, getMemoryDb } from '../../src/services/memory/sqlite-store';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
-import { findEntityByName, getEntityById, softDeleteEntity, upsertEntity } from '../../src/services/memory/entities';
-import { invalidateFact, recordFact, setFactPinned, softDeleteFact } from '../../src/services/memory/facts/mutations';
+import {
+  findEntityByName,
+  getEntityById,
+  softDeleteEntity,
+  upsertEntity,
+} from '../../src/services/memory/entities';
+import {
+  invalidateFact,
+  recordFact,
+  setFactPinned,
+  softDeleteFact,
+} from '../../src/services/memory/facts/mutations';
 import {
   countFacts,
   countFactsByKind,
   getFactById,
   listFacts,
 } from '../../src/services/memory/facts/queries';
-import { BlockOverflowError, clearBlock, DEFAULT_MEMORY_BLOCKS, editBlock, ensureDefaultBlocks, getBlock, listBlocks, upsertBlock } from '../../src/services/memory/blocks';
+import {
+  BlockOverflowError,
+  clearBlock,
+  DEFAULT_MEMORY_BLOCKS,
+  editBlock,
+  ensureDefaultBlocks,
+  getBlock,
+  listBlocks,
+  upsertBlock,
+} from '../../src/services/memory/blocks';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -220,6 +239,32 @@ describe('recordFact', () => {
     ).toBe(0);
   });
 
+  it('indexes short observed labels from long compact facts', () => {
+    const longObservedTerms = Array.from(
+      { length: 260 },
+      (_, index) => `specificdescriptor${index.toString().padStart(3, '0')}`,
+    ).join(' ');
+    const r = recordFact({
+      subjectId: userId,
+      predicate: 'agent_observation',
+      objectText: `${longObservedTerms} go qa panel`,
+      memoryKind: 'procedure',
+    });
+    const db = getMemoryDb();
+    const units = new Set(
+      db
+        .getAllSync<{
+          unit: string;
+        }>('SELECT unit FROM memory_fact_terms WHERE fact_id = ?', r.fact.id)
+        .map((row) => row.unit),
+    );
+
+    expect(units.size).toBeLessThanOrEqual(384);
+    expect(units.has('go')).toBe(true);
+    expect(units.has('qa')).toBe(true);
+    expect(units.has('panel')).toBe(true);
+  });
+
   it('persists typed retrieval metadata for non-semantic memories', () => {
     const r = recordFact({
       subjectId: userId,
@@ -277,7 +322,9 @@ describe('recordFact', () => {
 describe('memory blocks', () => {
   it('ensureDefaultBlocks creates the catalog idempotently', () => {
     ensureDefaultBlocks();
-    const labels = listBlocks().map((b) => b.label).sort();
+    const labels = listBlocks()
+      .map((b) => b.label)
+      .sort();
     expect(labels).toEqual([...DEFAULT_MEMORY_BLOCKS.map((d) => d.label)].sort());
     // second call is a no-op (no duplicate rows)
     ensureDefaultBlocks();

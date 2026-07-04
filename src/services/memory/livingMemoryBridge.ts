@@ -14,6 +14,7 @@
 // ---------------------------------------------------------------------------
 
 import type { Message } from '../../types/message';
+import type { LlmProviderConfig } from '../../types/provider';
 import { createLogger } from '../../utils/logger';
 import { listBlocks, type MemoryBlock } from './blocks';
 import { getEntityById } from './entities';
@@ -30,6 +31,7 @@ import { getWorkingBlock, type WorkingMemoryBlock } from './workingBlocks';
 import { getActiveTaskId, readTaskStack } from './taskStack';
 import { logRetrieval } from './retrievalLog';
 import { getLatestReflection } from './reflections';
+import { createLlmMemoryFactSelector } from './llmFactSelector';
 
 const logger = createLogger('memory.livingMemoryBridge');
 
@@ -56,7 +58,7 @@ export interface BuildLivingMemorySectionsOptions {
   taskId?: string;
   /** Now (ms). Defaults to `Date.now()`. Test seam. */
   now?: number;
-  /** Recall fanout. Default 6. */
+  /** Recall fanout. Default 12. */
   recallLimit?: number;
   /** When true, skip recall entirely (e.g. for tool-only iterations). */
   disableRecall?: boolean;
@@ -79,6 +81,11 @@ export interface BuildLivingMemorySectionsOptions {
   activeTaskId?: string;
   /** Graph async work state for retrieval signals. */
   asyncWork?: AgentRunControlGraphAsyncWorkState;
+  /** App-configured model used for optional semantic memory evidence selection. */
+  retrievalLlm?: {
+    provider: LlmProviderConfig;
+    model?: string;
+  };
 }
 
 export interface LivingMemoryBridgeOutput {
@@ -257,6 +264,7 @@ export async function buildLivingMemorySections(
     goals,
     activeTaskId,
     asyncWork,
+    retrievalLlm,
   } = options;
 
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -334,6 +342,7 @@ export async function buildLivingMemorySections(
   let recalledFacts: Awaited<ReturnType<typeof orchestrateMemoryRetrieval>>['facts'] = [];
   let recalledEpisodes: Awaited<ReturnType<typeof orchestrateMemoryRetrieval>>['episodes'] = [];
   let retrievalTimings: RetrievalOrchestratorTimings | undefined;
+  const factSelector = createLlmMemoryFactSelector(retrievalLlm);
   if (!disableRecall) {
     const retrievalStarted = Date.now();
     try {
@@ -343,6 +352,7 @@ export async function buildLivingMemorySections(
         goals,
         activeTaskId: activeTaskId ?? resolvedTaskId ?? undefined,
         asyncWork,
+        ...(factSelector ? { factSelector } : {}),
         conversationId,
         taskId: resolvedTaskId ?? undefined,
         limit: recallLimit,

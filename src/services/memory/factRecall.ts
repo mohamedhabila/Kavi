@@ -21,13 +21,19 @@ import {
 import { countLexicalUnits } from './ranking/lexical';
 import { quotedSpanUnitSets } from './ranking/quotedSpans';
 
-export type { RecallFactsOptions, RecallFactsTiming, ScoredFact } from './factRecallTypes';
+export type {
+  MemoryFactSelector,
+  RecallFactsOptions,
+  RecallFactsTiming,
+  ScoredFact,
+} from './factRecallTypes';
 
 const DEFAULT_LIMIT = 8;
 const DEFAULT_TEXT_THRESHOLD = 0.04;
 const CANDIDATE_POOL_LIMIT = 128;
 const CANDIDATE_POOL_MAX = 2_000;
 const QUOTED_ANCHOR_LIMIT = 12;
+const DEFAULT_SELECTOR_CANDIDATE_LIMIT = 16;
 
 function getCandidateScopes(options: RecallFactsOptions): MemoryFactScope[] | undefined {
   if (!options.scopeHints?.length && !options.conversationId && !options.taskId) {
@@ -84,6 +90,73 @@ function selectTopFacts(
     seenKeys.add(key);
   }
 
+  return selected;
+}
+
+async function selectFactsWithSemanticSelector(params: {
+  query: string;
+  scored: ReadonlyArray<ScoredFact>;
+  deterministicSelected: ReadonlyArray<ScoredFact>;
+  options: RecallFactsOptions;
+  limit: number;
+  timing: RecallFactsTiming;
+}): Promise<ScoredFact[]> {
+  const selector = params.options.selector;
+  if (!selector) return [...params.deterministicSelected];
+
+  const selectorCandidateLimit = Math.max(
+    params.limit,
+    Math.min(
+      params.options.selectorCandidateLimit ?? DEFAULT_SELECTOR_CANDIDATE_LIMIT,
+      params.scored.length,
+    ),
+  );
+  const candidates = params.scored.slice(0, selectorCandidateLimit);
+  params.timing.selectorCandidateCount = candidates.length;
+  const byId = new Map(candidates.map((entry) => [entry.fact.id, entry]));
+  const protectedSelected = params.deterministicSelected.filter((entry) => entry.fact.pinned);
+  const selected: ScoredFact[] = [];
+  const seenIds = new Set<string>();
+  const seenKeys = new Set<string>();
+  const appendSelected = (entry: ScoredFact): boolean => {
+    if (selected.length >= params.limit) return false;
+    if (seenIds.has(entry.fact.id)) return false;
+    const key = factDedupeKey(entry.fact);
+    if (seenKeys.has(key)) return false;
+    selected.push(entry);
+    seenIds.add(entry.fact.id);
+    seenKeys.add(key);
+    return true;
+  };
+  for (const entry of protectedSelected) appendSelected(entry);
+
+  let semanticSelectedCount = 0;
+  let semanticAdmittedCount = 0;
+  const selectorStarted = Date.now();
+  try {
+    const result = await selector({
+      query: params.query,
+      limit: params.limit,
+      candidates,
+    });
+    for (const factId of result.factIds) {
+      const entry = byId.get(factId);
+      if (!entry) continue;
+      semanticSelectedCount += 1;
+      if (appendSelected(entry)) semanticAdmittedCount += 1;
+    }
+  } finally {
+    params.timing.selectorMs = Date.now() - selectorStarted;
+  }
+
+  if (semanticAdmittedCount === 0) {
+    params.timing.selectorSelectedCount = semanticSelectedCount;
+    params.timing.selectorApplied = false;
+    return [...params.deterministicSelected];
+  }
+
+  params.timing.selectorSelectedCount = semanticSelectedCount;
+  params.timing.selectorApplied = true;
   return selected;
 }
 
@@ -146,6 +219,7 @@ async function buildRecallSelection(
       ...(options.memoryKind ? { memoryKind: options.memoryKind } : {}),
       ...(options.includeHistorical ? { includeInvalidated: true } : {}),
       ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
+      anchorLexicalUnitSets: anchorUnitSets.map((anchorUnits) => Array.from(anchorUnits)),
     }),
   ).filter((fact) => isFactEligibleForRecall(fact, options));
   timing.candidateFetchMs = Date.now() - candidateFetchStarted;
@@ -206,7 +280,15 @@ async function buildRecallSelection(
   timing.sortMs = Date.now() - sortStarted;
 
   const selectStarted = Date.now();
-  const selected = selectTopFacts(scored, options, limit);
+  const deterministicSelected = selectTopFacts(scored, options, limit);
+  const selected = await selectFactsWithSemanticSelector({
+    query: trimmedQuery,
+    scored,
+    deterministicSelected,
+    options,
+    limit,
+    timing,
+  });
   timing.selectMs = Date.now() - selectStarted;
   timing.totalMs = Date.now() - totalStarted;
   options.onTiming?.(timing);

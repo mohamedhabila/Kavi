@@ -13,3 +13,5 @@ export function listDailyMemoryFiles(): string[] {
 export async function readDailyMemory(_dateStr: string): Promise<string | null> {
   return null;
 }
+
+export function notifyStructuredMemoryChanged(_conversationId?: string): void {}

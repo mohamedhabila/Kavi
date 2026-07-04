@@ -164,9 +164,11 @@ describe('assemblePrompt - product memory groups', () => {
     const text = flattenPromptSections(out.sections);
     expect(text).toContain('#### Procedures');
     expect(text).toContain('#### Outcomes and Tool Results');
-    expect(text.indexOf('#### Outcomes and Tool Results')).toBeLessThan(
-      text.indexOf('#### Procedures'),
+    expect(text.indexOf('#### Procedures')).toBeLessThan(
+      text.indexOf('#### Outcomes and Tool Results'),
     );
+    expect(text).toContain('complete observed workflow traces');
+    expect(text).toContain('do not reduce a successful trace to only its last action');
     expect(text).toContain('read changelog');
     expect(text).toContain('editor shows notes.md ready to save');
     expect(text).toContain('notes.md was created');
@@ -202,6 +204,117 @@ describe('assemblePrompt - product memory groups', () => {
     const text = flattenPromptSections(out.sections);
     expect(text).toContain('needle line carries the relevant evidence');
     expect(text).not.toContain('unrelated line 5');
+  });
+
+  it('renders exact observed affordances from source-backed agent memories', () => {
+    const out = assemblePrompt({
+      ...baseInput,
+      retrievedFacts: [
+        makeAgentFact('procedure', 'procedure', {
+          sourceRunId: 'run-procedure',
+          goal: 'Inspect the current workflow surface',
+          steps: [
+            {
+              stateIndex: 4,
+              action: 'open controls',
+              observedAffordances: [
+                { role: 'menuitem', label: 'Incident Mobile', attributes: 'visible' },
+                { role: 'menuitem', label: 'Incident Portal', attributes: 'visible' },
+              ],
+              inputControlsPresent: false,
+            },
+          ],
+        }),
+      ],
+    });
+
+    const text = flattenPromptSections(out.sections);
+    expect(text).toContain('observedAffordances');
+    expect(text).toContain('Incident Mobile');
+    expect(text).toContain('Incident Portal');
+    expect(text).toContain('inputControlsPresent');
+  });
+
+  it('renders query-relevant observed outcome evidence before bulky metadata', () => {
+    const out = assemblePrompt({
+      ...baseInput,
+      retrievalQuery: 'incident filter option labels',
+      retrievedFacts: [
+        makeAgentFact('outcome', 'outcome', {
+          sourceRunId: 'run-outcome',
+          goal: 'A long completed task description that should not hide observed evidence.',
+          status: 'completed',
+          outcome: 'inspection completed',
+          sources: [
+            'https://example.test/a/very/long/source/url/that/is/useful/metadata',
+            'https://example.test/another/source/url/that/is/useful/metadata',
+          ],
+          lastSteps: [
+            {
+              stateIndex: 1,
+              action: 'open unrelated page',
+              observation: 'RootWebArea "Incidents"',
+            },
+            {
+              stateIndex: 2,
+              action: 'open controls',
+              observedAffordances: [
+                { role: 'menuitem', label: 'Incident Mobile', attributes: 'visible' },
+                { role: 'menuitem', label: 'Incident Portal', attributes: 'visible' },
+                { role: 'menuitem', label: 'My Open Incidents', attributes: 'visible' },
+              ],
+              inputControlsPresent: false,
+            },
+          ],
+        }),
+      ],
+    });
+
+    const text = flattenPromptSections(out.sections);
+    expect(text).toContain('Incident Mobile');
+    expect(text.indexOf('Incident Mobile')).toBeLessThan(text.indexOf('RootWebArea'));
+    expect(text.indexOf('lastSteps')).toBeLessThan(text.indexOf('sources'));
+    expect(text.indexOf('sources')).toBeLessThan(text.indexOf('goal'));
+  });
+
+  it('renders exact delimited request-anchor evidence before generic step matches', () => {
+    const out = assemblePrompt({
+      ...baseInput,
+      retrievalQuery: 'On the `Project Alpha Console`, which controls are visible?',
+      retrievedFacts: [
+        makeAgentFact('outcome', 'outcome', {
+          sourceRunId: 'run-outcome',
+          status: 'completed',
+          outcome: 'inspection completed',
+          lastSteps: [
+            {
+              stateIndex: 1,
+              action: 'inspect earlier settings',
+              thought:
+                'The current form has visible controls and a list of fields, but it is not the named surface.',
+              observedAffordances: [
+                { role: 'textbox', label: 'Generic Name', attributes: 'visible' },
+                { role: 'combobox', label: 'Generic State', attributes: 'visible' },
+              ],
+            },
+            {
+              stateIndex: 2,
+              action: 'inspect target surface',
+              thought: 'The Project Alpha Console is open and ready for review.',
+              observedAffordances: [
+                { role: 'button', label: 'Approve', attributes: 'visible' },
+                { role: 'button', label: 'Escalate', attributes: 'visible' },
+              ],
+            },
+          ],
+        }),
+      ],
+    });
+
+    const text = flattenPromptSections(out.sections);
+    expect(text).toContain('Project Alpha Console');
+    expect(text).toContain('Approve');
+    expect(text.indexOf('Project Alpha Console')).toBeLessThan(text.indexOf('Generic Name'));
   });
 
   it('groups decisions, risks, artifacts, sources, and summaries separately', () => {

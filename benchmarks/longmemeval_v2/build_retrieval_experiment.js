@@ -26,6 +26,10 @@ async function main() {
   const embeddingsStub = path.join(__dirname, 'runtimeSimpleEmbeddingsStub.ts');
   const memoryStoreStub = path.join(__dirname, 'runtimeMemoryStoreStub.ts');
   const memoryPolicyStub = path.join(__dirname, 'runtimeMemoryPolicyStub.ts');
+  const secureStorageStub = path.join(__dirname, 'runtimeSecureStorageStub.ts');
+  const reactNativeStub = path.join(__dirname, 'runtimeReactNativeStub.ts');
+  const expoFileSystemStub = path.join(__dirname, 'runtimeExpoFileSystemStub.ts');
+  const expoFetchStub = path.join(__dirname, 'runtimeExpoFetchStub.ts');
 
   await esbuild.build({
     entryPoints: [path.join(__dirname, 'retrieval_experiment.ts')],
@@ -34,7 +38,8 @@ async function main() {
     platform: 'node',
     target: ['node22'],
     format: 'cjs',
-    external: ['better-sqlite3', 'react-native'],
+    define: { __DEV__: 'false' },
+    external: ['better-sqlite3'],
     sourcemap: false,
     logLevel: 'silent',
     plugins: [
@@ -42,6 +47,11 @@ async function main() {
         name: 'kavi-retrieval-experiment-aliases',
         setup(build) {
           build.onResolve({ filter: /^expo-sqlite$/ }, () => ({ path: expoSqliteShim }));
+          build.onResolve({ filter: /^expo\/fetch$/ }, () => ({ path: expoFetchStub }));
+          build.onResolve({ filter: /^expo-file-system$/ }, () => ({
+            path: expoFileSystemStub,
+          }));
+          build.onResolve({ filter: /^react-native$/ }, () => ({ path: reactNativeStub }));
           build.onResolve({ filter: /^\.\/embeddings$/ }, (args) => {
             if (args.importer.includes(path.join('src', 'services', 'memory'))) {
               return { path: embeddingsStub };
@@ -54,12 +64,21 @@ async function main() {
             }
             return null;
           });
-          build.onResolve({ filter: /^\.\/store$/ }, (args) => {
-            if (args.importer.endsWith(path.join('src', 'services', 'memory', 'sqlite-store.ts'))) {
-              return { path: memoryStoreStub };
-            }
-            return null;
-          });
+          build.onResolve(
+            { filter: /(^\.\/store(\.ts)?$|src\/services\/memory\/store(\.ts)?$)/ },
+            (args) => {
+              if (
+                args.importer.includes(path.join('src', 'services', 'memory')) ||
+                args.path.includes(path.join('src', 'services', 'memory', 'store'))
+              ) {
+                return { path: memoryStoreStub };
+              }
+              return null;
+            },
+          );
+          build.onResolve({ filter: /SecureStorage$/ }, () => ({
+            path: secureStorageStub,
+          }));
         },
       },
     ],

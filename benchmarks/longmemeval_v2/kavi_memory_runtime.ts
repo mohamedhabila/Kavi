@@ -16,24 +16,16 @@ import {
 } from '../../src/services/memory/schema';
 import { closeMemoryDb, getChunkCount } from '../../src/services/memory/sqlite-store';
 import type { Message } from '../../src/types/message';
+import {
+  buildRetrievalLlmConfig,
+  DEFAULT_CONFIG,
+  DEFAULT_QUERY_IMAGE_BASE_URL,
+  normalizeRuntimeConfig,
+  type RuntimeConfig,
+} from './kavi_memory_runtime_config';
 import { compactJson } from './runtimeJsonCompaction';
 
 type JsonObject = Record<string, unknown>;
-
-const DEFAULT_QUERY_IMAGE_BASE_URL = 'https://api.openai.com/v1';
-
-interface RuntimeConfig {
-  chunkChars: number;
-  chunkOverlapChars: number;
-  maxItems: number;
-  maxItemChars: number;
-  minScore: number;
-  conversationId: string;
-  queryImageUnderstanding: boolean;
-  queryImageModel: string;
-  queryImageBaseUrl: string;
-  queryImageApiKeyEnv: string;
-}
 
 interface RuntimeRequest {
   id?: string;
@@ -46,21 +38,6 @@ interface RuntimeRequest {
   questionContext?: JsonObject | null;
 }
 
-const DEFAULT_CONFIG: RuntimeConfig = {
-  chunkChars: 3600,
-  chunkOverlapChars: 320,
-  maxItems: 12,
-  maxItemChars: 5000,
-  minScore: 0.01,
-  conversationId: 'longmemeval-v2',
-  queryImageUnderstanding: true,
-  queryImageModel: process.env.KAVI_LME_QUERY_IMAGE_MODEL || process.env.E2E_OPENAI_MODEL || '',
-  queryImageBaseUrl:
-    process.env.KAVI_LME_QUERY_IMAGE_BASE_URL ||
-    process.env.OPENAI_BASE_URL ||
-    DEFAULT_QUERY_IMAGE_BASE_URL,
-  queryImageApiKeyEnv: process.env.KAVI_LME_QUERY_IMAGE_API_KEY_ENV || 'OPENAI_API_KEY',
-};
 const MAX_ACCESSIBILITY_TREE_CHARS = 50_000;
 const MAX_STRUCTURED_STATE_CHARS = 60_000;
 
@@ -92,15 +69,6 @@ function asString(value: unknown): string | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
   return trimmed;
-}
-
-function asBoolean(value: unknown): boolean | null {
-  if (typeof value === 'boolean') return value;
-  if (typeof value !== 'string') return null;
-  const normalized = value.trim().toLowerCase();
-  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
-  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
-  return null;
 }
 
 function trajectoryId(trajectory: JsonObject, fallback: number): string {
@@ -349,37 +317,7 @@ function buildTrajectoryMessages(trajectory: JsonObject, id: string, now: number
 }
 
 function applyConfig(config?: Partial<RuntimeConfig>): RuntimeConfig {
-  if (!config) return currentConfig;
-  currentConfig = {
-    ...currentConfig,
-    ...Object.fromEntries(
-      Object.entries(config).filter(([, value]) => value !== undefined && value !== null),
-    ),
-  };
-  currentConfig.chunkChars = Math.max(800, Math.min(20_000, Math.floor(currentConfig.chunkChars)));
-  currentConfig.chunkOverlapChars = Math.max(
-    0,
-    Math.min(currentConfig.chunkChars - 1, Math.floor(currentConfig.chunkOverlapChars)),
-  );
-  currentConfig.maxItems = Math.max(1, Math.min(50, Math.floor(currentConfig.maxItems)));
-  currentConfig.maxItemChars = Math.max(
-    200,
-    Math.min(20_000, Math.floor(currentConfig.maxItemChars)),
-  );
-  currentConfig.minScore = Math.max(0, Math.min(1, Number(currentConfig.minScore)));
-  currentConfig.conversationId =
-    currentConfig.conversationId.trim() || DEFAULT_CONFIG.conversationId;
-  currentConfig.queryImageUnderstanding =
-    asBoolean(currentConfig.queryImageUnderstanding) ?? DEFAULT_CONFIG.queryImageUnderstanding;
-  currentConfig.queryImageModel = String(
-    currentConfig.queryImageModel || DEFAULT_CONFIG.queryImageModel,
-  ).trim();
-  currentConfig.queryImageBaseUrl = String(
-    currentConfig.queryImageBaseUrl || DEFAULT_CONFIG.queryImageBaseUrl,
-  ).trim();
-  currentConfig.queryImageApiKeyEnv = String(
-    currentConfig.queryImageApiKeyEnv || DEFAULT_CONFIG.queryImageApiKeyEnv,
-  ).trim();
+  currentConfig = normalizeRuntimeConfig(currentConfig, config);
   return currentConfig;
 }
 
@@ -523,12 +461,14 @@ async function queryMemory(request: RuntimeRequest): Promise<JsonObject> {
   const queryMessages = await buildQueryMessages(query, request.queryImage ?? null, now, resolved);
   timings.query_image_understanding_seconds = (performance.now() - stepStarted) / 1000;
   stepStarted = performance.now();
+  const retrievalLlm = buildRetrievalLlmConfig(resolved);
   const memoryAccess = await buildUnifiedMemoryAccessContext({
     messages: queryMessages.messages,
     conversationId: resolved.conversationId,
     mode: 'agentic',
     recallLimit: resolved.maxItems,
     goals: buildQueryGoals(query, request.questionId ?? null, now),
+    ...(retrievalLlm ? { retrievalLlm } : {}),
     now,
   });
   timings.memory_access_seconds = (performance.now() - stepStarted) / 1000;

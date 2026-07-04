@@ -102,6 +102,7 @@ export function listFacts(options: ListFactsOptions = {}): MemoryFact[] {
 export interface ListFactsForRecallCandidatesOptions extends ListFactsOptions {
   lexicalUnits?: string[];
   selectedLexicalUnits?: string[];
+  anchorLexicalUnitSets?: ReadonlyArray<ReadonlyArray<string>>;
   scopedRecentConversationId?: string;
   scopedRecentTaskId?: string;
   pinnedLimit?: number;
@@ -186,6 +187,41 @@ export function listFactsForRecallCandidates(
     }
   }
 
+  function addAnchorLexicalRows(anchorUnitSets: ReadonlyArray<ReadonlyArray<string>>): void {
+    if (byId.size >= totalLimit || anchorUnitSets.length === 0) return;
+    const factFilter = buildFactFilter(options, 'f');
+    for (const anchorUnits of anchorUnitSets) {
+      if (byId.size >= totalLimit) break;
+      const units = Array.from(
+        new Set(anchorUnits.map((unit) => unit.trim()).filter((unit) => unit.length > 0)),
+      );
+      if (units.length === 0) continue;
+      const laneLimit = Math.max(1, Math.min(24, totalLimit - byId.size));
+      const params: SqlBindValue[] = [...units, ...factFilter.params, units.length];
+      const rows = getMany<FactRow>(
+        `SELECT f.*
+           FROM memory_fact_terms AS t INDEXED BY idx_fact_terms_unit_kind_fact
+           JOIN memory_facts f ON f.id = t.fact_id
+           ${whereSql({
+             clauses: [`t.unit IN (${units.map(() => '?').join(', ')})`, ...factFilter.clauses],
+             params: [...units, ...factFilter.params],
+           })}
+          GROUP BY f.id
+         HAVING COUNT(DISTINCT t.unit) = ?
+          ORDER BY f.pinned DESC,
+                   f.retrievability DESC,
+                   f.importance DESC,
+                   f.updated_at DESC
+          LIMIT ${laneLimit}`,
+        ...params,
+      );
+      for (const row of rows) {
+        if (byId.size >= totalLimit) break;
+        byId.set(row.id, rowToFact(row));
+      }
+    }
+  }
+
   addRows(
     ['pinned = 1'],
     [],
@@ -203,6 +239,7 @@ export function listFactsForRecallCandidates(
         .filter(Boolean),
     ),
   );
+  addAnchorLexicalRows(options.anchorLexicalUnitSets ?? []);
   if (lexicalUnits.length > 0) {
     addIndexedLexicalRows(lexicalUnits, totalLimit);
   }

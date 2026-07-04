@@ -5,26 +5,37 @@ import type { MemoryFact } from './types';
 
 type TermInsertValue = string | number | null;
 
-const MAX_TERMS_PER_FACT = 192;
+const MAX_TERMS_PER_FACT = 384;
+const ENCOUNTER_ORDER_TERM_BUDGET = Math.floor(MAX_TERMS_PER_FACT / 2);
 
 function termWeight(unit: string): number {
   const length = Array.from(unit).length;
   return 1 + Math.min(length, 24) / 24;
 }
 
-function sortedGeneralTerms(fact: MemoryFact): string[] {
-  return Array.from(tokenizeLexicalUnits(retrievalTextForFact(fact)))
-    .sort((left, right) => {
-      const rightLength = Array.from(right).length;
-      const leftLength = Array.from(left).length;
-      if (rightLength !== leftLength) return rightLength - leftLength;
-      return left.localeCompare(right);
-    });
+function termsInEncounterOrder(fact: MemoryFact): string[] {
+  return Array.from(tokenizeLexicalUnits(retrievalTextForFact(fact)));
+}
+
+function termsBySpecificity(terms: ReadonlyArray<string>): string[] {
+  return [...terms].sort((left, right) => {
+    const rightLength = Array.from(right).length;
+    const leftLength = Array.from(left).length;
+    if (rightLength !== leftLength) return rightLength - leftLength;
+    return left.localeCompare(right);
+  });
 }
 
 function rankedTermsForFact(fact: MemoryFact): string[] {
+  const terms = termsInEncounterOrder(fact);
+  if (terms.length <= MAX_TERMS_PER_FACT) return terms;
+
   const selected = new Set<string>();
-  for (const term of sortedGeneralTerms(fact)) {
+  for (const term of terms) {
+    if (selected.size >= ENCOUNTER_ORDER_TERM_BUDGET) break;
+    selected.add(term);
+  }
+  for (const term of termsBySpecificity(terms)) {
     if (selected.size >= MAX_TERMS_PER_FACT) break;
     selected.add(term);
   }

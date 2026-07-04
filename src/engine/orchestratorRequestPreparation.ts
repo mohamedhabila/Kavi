@@ -83,8 +83,7 @@ async function enrichLatestUserMessageForRequest(params: {
     }
   }
 
-  const currentUserContent =
-    lastUserForEnrichment.enrichedContent || lastUserForEnrichment.content;
+  const currentUserContent = lastUserForEnrichment.enrichedContent || lastUserForEnrichment.content;
   if (persistedEnrichedContent === currentUserContent) {
     return { messages: params.messages };
   }
@@ -150,6 +149,10 @@ export async function prepareOrchestratorRequestBundle(params: {
       ...(graphActiveTaskId ? { taskId: graphActiveTaskId, activeTaskId: graphActiveTaskId } : {}),
       ...(graphGoals?.length ? { goals: graphGoals } : {}),
       ...(params.graphSnapshot?.asyncWork ? { asyncWork: params.graphSnapshot.asyncWork } : {}),
+      retrievalLlm: {
+        provider: params.activeProvider,
+        model: params.activeModel,
+      },
     });
   } catch (memoryAccessError: unknown) {
     params.logger.devWarn(

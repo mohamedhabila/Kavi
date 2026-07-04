@@ -13,6 +13,7 @@ import type { MemoryFact, MemoryFactKind } from './facts/types';
 import type { MemoryEpisode } from './episodes/types';
 import { compactJsonFields, parseJsonRecord } from './factJson';
 import { tokenizeLexicalUnits } from './ranking/lexical';
+import { quotedSpanUnitSets } from './ranking/quotedSpans';
 
 export type PromptMemoryFact = MemoryFact & { subjectLabel?: string };
 
@@ -71,7 +72,7 @@ const L3_DECISIONS_RISKS_HEADER = '#### Decisions and Risks';
 const L3_ARTIFACTS_SOURCES_HEADER = '#### Artifacts and Sources';
 const L3_SUMMARIES_HEADER = '#### Summaries';
 const L3_PROCEDURES_NOTE =
-  'Procedure memories are observed action history. Use them as evidence of what worked, what was attempted, and what state or tool result followed each action.';
+  'Procedure memories are complete observed workflow traces. Use the full ordered route as evidence of the workflow, including prerequisite, verification, navigation, and finalization phases; do not reduce a successful trace to only its last action.';
 const L3_OUTCOMES_NOTE =
   'Outcome and tool-result memories summarize completed or failed agent work. Prefer direct observed outcomes over assumptions from prior platform behavior.';
 const MAX_RENDERED_FACT_CHARS = 3_200;
@@ -80,12 +81,15 @@ const MAX_RETRIEVED_FACT_SECTION_CHARS = 3_800;
 const MAX_RENDERED_EPISODE_CHARS = 200;
 const MAX_FIELD_TEXT_CHARS = 700;
 const MAX_QUERY_FOCUSED_LINES = 8;
+const QUERY_RELEVANT_STEP_LIMIT = 6;
+const QUERY_ANCHOR_LIMIT = 12;
+const QUERY_ANCHOR_FULL_MATCH_SCORE = 1_000;
 const FACT_GROUP_HEADER_ORDER = [
   L3_RELEVANT_FACTS_HEADER,
+  L3_PROCEDURES_HEADER,
   L3_OUTCOMES_HEADER,
   L3_DECISIONS_RISKS_HEADER,
   L3_ARTIFACTS_SOURCES_HEADER,
-  L3_PROCEDURES_HEADER,
   L3_SUMMARIES_HEADER,
 ];
 
@@ -225,6 +229,8 @@ function compactProcedureStep(
     action: fitPromptValue(input.action, 260),
     thought: fitPromptValue(input.thought, 260),
     toolName: fitPromptValue(input.toolName ?? input.tool_name, 160),
+    observedAffordances: fitPromptValue(input.observedAffordances, 260),
+    inputControlsPresent: input.inputControlsPresent,
     observation: fitPromptEvidenceText(input.observation, queryUnits, 520),
     toolResult: fitPromptEvidenceText(input.toolResult ?? input.tool_result, queryUnits, 360),
     status: fitPromptValue(input.status, 160),
@@ -233,21 +239,76 @@ function compactProcedureStep(
   return Object.keys(compact).length > 0 ? compact : null;
 }
 
+function stepEvidenceQueryScore(
+  value: unknown,
+  queryUnits: ReadonlySet<string> | null,
+  anchorUnitSets: ReadonlyArray<ReadonlySet<string>>,
+): number {
+  if (!queryUnits || queryUnits.size === 0 || !value || typeof value !== 'object') return 0;
+  const input = value as Record<string, unknown>;
+  const structuredEvidence = JSON.stringify({
+    observedAffordances: input.observedAffordances,
+    toolResult: input.toolResult ?? input.tool_result,
+    outcome: input.outcome,
+  });
+  const observedEvidence = String(input.observation ?? '');
+  const actionContext = JSON.stringify({
+    action: input.action,
+    thought: input.thought,
+    url: input.url,
+    toolName: input.toolName ?? input.tool_name,
+  });
+  const stepUnits = tokenizeLexicalUnits(
+    `${structuredEvidence}\n${observedEvidence}\n${actionContext}`,
+  );
+  const anchorScore = anchorUnitSets.filter((anchorUnits) => {
+    if (anchorUnits.size === 0) return false;
+    for (const unit of anchorUnits) {
+      if (!stepUnits.has(unit)) return false;
+    }
+    return true;
+  }).length;
+
+  return (
+    anchorScore * QUERY_ANCHOR_FULL_MATCH_SCORE +
+    queryHitCount(structuredEvidence, queryUnits) * 4 +
+    queryHitCount(observedEvidence, queryUnits) * 2 +
+    queryHitCount(actionContext, queryUnits)
+  );
+}
+
 function compactAgentSteps(
   value: unknown,
   queryUnits: ReadonlySet<string> | null,
+  anchorUnitSets: ReadonlyArray<ReadonlySet<string>>,
+  options: { prioritizeQueryMatches?: boolean } = {},
 ): Array<Record<string, unknown>> | undefined {
   if (!Array.isArray(value)) return undefined;
-  const steps = value.map((step) => compactProcedureStep(step, queryUnits)).filter(Boolean);
+  const sourceSteps = options.prioritizeQueryMatches
+    ? value
+        .map((step, index) => ({
+          step,
+          index,
+          score: stepEvidenceQueryScore(step, queryUnits, anchorUnitSets),
+        }))
+        .sort((left, right) => {
+          if (right.score !== left.score) return right.score - left.score;
+          return right.index - left.index;
+        })
+        .slice(0, QUERY_RELEVANT_STEP_LIMIT)
+        .map((entry) => entry.step)
+    : value;
+  const steps = sourceSteps.map((step) => compactProcedureStep(step, queryUnits)).filter(Boolean);
   return steps.length > 0 ? (steps as Array<Record<string, unknown>>) : undefined;
 }
 
 function compactProcedurePromptFields(
   parsed: Record<string, unknown> | null,
   queryUnits: ReadonlySet<string> | null,
+  anchorUnitSets: ReadonlyArray<ReadonlySet<string>>,
 ): string | null {
   if (!parsed) return null;
-  const steps = compactAgentSteps(parsed.steps, queryUnits);
+  const steps = compactAgentSteps(parsed.steps, queryUnits, anchorUnitSets);
   const compact = dropEmptyPromptRecord({
     sourceRunId: parsed.sourceRunId,
     goal: fitPromptValue(parsed.goal),
@@ -257,6 +318,7 @@ function compactProcedurePromptFields(
     environment: fitPromptValue(parsed.environment, 160),
     tools: fitPromptValue(parsed.tools, 160),
     sources: fitPromptValue(parsed.sources, 260),
+    waypoints: compactAgentSteps(parsed.waypoints, queryUnits, anchorUnitSets),
     steps,
   });
   return Object.keys(compact).length > 0 ? JSON.stringify(compact) : null;
@@ -265,20 +327,23 @@ function compactProcedurePromptFields(
 function compactAgentEvidencePromptFields(
   parsed: Record<string, unknown> | null,
   queryUnits: ReadonlySet<string> | null,
+  anchorUnitSets: ReadonlyArray<ReadonlySet<string>>,
 ): string | null {
   if (!parsed) return null;
   const compact = dropEmptyPromptRecord({
     sourceRunId: parsed.sourceRunId,
-    goal: fitPromptValue(parsed.goal),
     status: fitPromptValue(parsed.status, 240),
     outcome: fitPromptValue(parsed.outcome),
-    tools: fitPromptValue(parsed.tools, 160),
-    sources: fitPromptValue(parsed.sources, 260),
+    lastSteps: compactAgentSteps(parsed.lastSteps, queryUnits, anchorUnitSets, {
+      prioritizeQueryMatches: true,
+    }),
     artifacts: fitPromptValue(parsed.artifacts),
     decisions: fitPromptValue(parsed.decisions),
     risks: fitPromptValue(parsed.risks),
     summaries: fitPromptValue(parsed.summaries),
-    lastSteps: compactAgentSteps(parsed.lastSteps, queryUnits),
+    tools: fitPromptValue(parsed.tools, 160),
+    sources: fitPromptValue(parsed.sources, 260),
+    goal: fitPromptValue(parsed.goal),
   });
   return Object.keys(compact).length > 0 ? JSON.stringify(compact) : null;
 }
@@ -321,14 +386,15 @@ function promptFieldsForMemoryKind(kind: MemoryFactKind): ReadonlyArray<string> 
 function renderableFactText(
   fact: PromptMemoryFact,
   queryUnits: ReadonlySet<string> | null,
+  anchorUnitSets: ReadonlyArray<ReadonlySet<string>>,
 ): string {
   const memoryKind = fact.memoryKind ?? 'semantic_fact';
   const parsed = parseJsonRecord(fact.objectText);
   if (memoryKind === 'procedure') {
-    return compactProcedurePromptFields(parsed, queryUnits) ?? fact.objectText;
+    return compactProcedurePromptFields(parsed, queryUnits, anchorUnitSets) ?? fact.objectText;
   }
   if (memoryKind === 'outcome' || memoryKind === 'tool_result' || memoryKind === 'gotcha') {
-    return compactAgentEvidencePromptFields(parsed, queryUnits) ?? fact.objectText;
+    return compactAgentEvidencePromptFields(parsed, queryUnits, anchorUnitSets) ?? fact.objectText;
   }
   const fields = promptFieldsForMemoryKind(memoryKind);
   if (!fields) return fact.objectText;
@@ -336,7 +402,11 @@ function renderableFactText(
   return fromAttributes || fact.objectText;
 }
 
-function renderFact(fact: PromptMemoryFact, queryUnits: ReadonlySet<string> | null): string {
+function renderFact(
+  fact: PromptMemoryFact,
+  queryUnits: ReadonlySet<string> | null,
+  anchorUnitSets: ReadonlyArray<ReadonlySet<string>>,
+): string {
   const conf =
     typeof fact.confidence === 'number' && fact.confidence < 0.6
       ? ` (confidence ${fact.confidence.toFixed(2)})`
@@ -348,7 +418,7 @@ function renderFact(fact: PromptMemoryFact, queryUnits: ReadonlySet<string> | nu
   const meta = kind || source ? ` [${`${kind}${source}`.trim()}]` : '';
   const maxChars =
     memoryKind === 'procedure' ? MAX_RENDERED_PROCEDURE_FACT_CHARS : MAX_RENDERED_FACT_CHARS;
-  return `- ${subject} ${fact.predicate}: ${fitText(renderableFactText(fact, queryUnits), maxChars)}${conf}${meta}`;
+  return `- ${subject} ${fact.predicate}: ${fitText(renderableFactText(fact, queryUnits, anchorUnitSets), maxChars)}${conf}${meta}`;
 }
 
 function renderEpisode(episode: MemoryEpisode): string {
@@ -401,6 +471,7 @@ function notesForHeader(header: string): string[] {
 function renderRetrievedFactGroup(
   group: { header: string; facts: PromptMemoryFact[] },
   queryUnits: ReadonlySet<string> | null,
+  anchorUnitSets: ReadonlyArray<ReadonlySet<string>>,
 ): string[] {
   const sectionPrefix = `${L3_HEADER}\n${L3_FACTS_HEADER}\n${group.header}`;
   const sections: string[] = [];
@@ -411,7 +482,7 @@ function renderRetrievedFactGroup(
   let hasFactInSection = false;
 
   for (const fact of group.facts) {
-    const line = renderFact(fact, queryUnits);
+    const line = renderFact(fact, queryUnits, anchorUnitSets);
     const nextChars = sectionChars + 1 + line.length;
     if (hasFactInSection && nextChars > MAX_RETRIEVED_FACT_SECTION_CHARS) {
       sections.push(`${sectionPrefix}\n${lines.join('\n')}`);
@@ -435,6 +506,9 @@ function renderL3Sections(input: AssemblePromptInput): string[] {
   const queryUnits = input.retrievalQuery?.trim()
     ? tokenizeLexicalUnits(input.retrievalQuery)
     : null;
+  const anchorUnitSets = input.retrievalQuery?.trim()
+    ? quotedSpanUnitSets(input.retrievalQuery, QUERY_ANCHOR_LIMIT)
+    : [];
   const episodes = (input.recentEpisodes ?? []).map(renderEpisode).filter((r) => r.length > 0);
   const addenda = joinNonEmpty(input.dynamicAddenda ?? []);
 
@@ -446,7 +520,9 @@ function renderL3Sections(input: AssemblePromptInput): string[] {
   const sections: string[] = [];
   if (preludeParts.length > 0) sections.push(`${L3_HEADER}\n${preludeParts.join('\n\n')}`);
   if (factGroups.length > 0) {
-    sections.push(...factGroups.flatMap((group) => renderRetrievedFactGroup(group, queryUnits)));
+    sections.push(
+      ...factGroups.flatMap((group) => renderRetrievedFactGroup(group, queryUnits, anchorUnitSets)),
+    );
   }
   if (episodes.length > 0) {
     sections.push(`${L3_HEADER}\n### Recent Activity\n${episodes.join('\n')}`);

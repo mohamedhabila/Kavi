@@ -127,6 +127,35 @@ describe('recordAgentRunEvidenceMemory', () => {
     expect(failureProcedure?.retrievability).toBe(successProcedure?.retrievability);
   });
 
+  it('keeps observed source evidence retrievable even when the run outcome failed', () => {
+    const evidence = [
+      `agent:${JSON.stringify({
+        trajectory_id: 'run-failed-observed',
+        goal: 'Inspect current controls',
+        outcome: 'failure',
+        state_index: 1,
+        action: 'Inspect',
+        accessibility_tree: "[menu-1] menuitem 'Incident Mobile', visible",
+        toolName: 'browser_state',
+      })}`,
+    ];
+
+    const result = recordAgentRunEvidenceMemory({
+      evidence,
+      conversationId: 'conv-agent-memory',
+      threadId: 'conv-agent-memory',
+      taskId: 'task-analysis',
+      now: 10,
+    });
+
+    expect(result.factIds).toHaveLength(2);
+    const facts = listFacts({ originConversationId: 'conv-agent-memory' });
+    const outcome = facts.find((fact) => fact.memoryKind === 'outcome');
+    const procedure = facts.find((fact) => fact.memoryKind === 'procedure');
+    expect(outcome?.confidence).toBe(procedure?.confidence);
+    expect(outcome?.retrievability).toBeGreaterThan(0.8);
+  });
+
   it('keeps bounded observed tool output inside compact run memories', () => {
     const observedState = [
       'window',
@@ -169,6 +198,243 @@ describe('recordAgentRunEvidenceMemory', () => {
     expect(joined).not.toContain('"surfaceControls"');
     expect(joined).not.toContain('"actionInventory"');
     expect(joined.length).toBeLessThan(12_500);
+  });
+
+  it('preserves prioritized exact affordance evidence from dense tool observations', () => {
+    const observedState = [
+      ...Array.from({ length: 120 }, (_, index) => `[noise-${index}] StaticText 'row ${index}'`),
+      ...Array.from({ length: 30 }, (_, index) => `[option-${index}] option 'Generic ${index}'`),
+      "[menu-1] menuitem 'Incident Mobile', visible",
+      "[menu-2] menuitem 'Incident Portal', visible",
+      "[menu-3] menuitem 'My Open Incidents', visible",
+      "[button-1] button 'Apply', clickable, visible",
+    ].join('\n');
+    const evidence = [
+      `agent:${JSON.stringify({
+        trajectory_id: 'run-affordance',
+        state_index: 11,
+        action: 'Open the current control menu',
+        accessibility_tree: observedState,
+        toolName: 'browser_state',
+        status: 'completed',
+      })}`,
+    ];
+
+    const result = recordAgentRunEvidenceMemory({
+      evidence,
+      conversationId: 'conv-agent-memory',
+      threadId: 'conv-agent-memory',
+      taskId: 'task-analysis',
+      sourceTurnId: 'assistant-1',
+      now: 10,
+    });
+
+    expect(result.factIds).toHaveLength(2);
+    const facts = listFacts({ originConversationId: 'conv-agent-memory' });
+    const procedure = facts.find((fact) => fact.memoryKind === 'procedure');
+    const procedureRecord = JSON.parse(procedure?.objectText ?? '{}');
+    const affordanceLabels = [
+      ...(procedureRecord.steps ?? []),
+      ...(procedureRecord.waypoints ?? []),
+    ].flatMap((step: Record<string, unknown>) =>
+      Array.isArray(step.observedAffordances)
+        ? step.observedAffordances.map((entry: Record<string, unknown>) => entry.label)
+        : [],
+    );
+
+    expect(affordanceLabels).toEqual(
+      expect.arrayContaining(['Incident Mobile', 'Incident Portal', 'My Open Incidents']),
+    );
+    expect(JSON.stringify(procedureRecord)).toContain('"inputControlsPresent":false');
+    for (const fact of facts) {
+      expect(fact.objectText.length).toBeLessThanOrEqual(10_000);
+    }
+  });
+
+  it('preserves adjacent accessibility annotations on matching controls', () => {
+    const observedState = [
+      "RootWebArea 'Project Form'",
+      "[field-label] LabelText '', visible",
+      "[field-note] note 'Locked by policy', visible",
+      "StaticText 'Project code'",
+      "[field-input] textbox 'Project code' value='ALPHA-7', clickable, visible",
+    ].join('\n');
+    const evidence = [
+      `agent:${JSON.stringify({
+        trajectory_id: 'run-annotation',
+        state_index: 3,
+        action: 'Inspect project form',
+        accessibility_tree: observedState,
+        toolName: 'browser_state',
+        status: 'completed',
+      })}`,
+    ];
+
+    recordAgentRunEvidenceMemory({
+      evidence,
+      conversationId: 'conv-agent-memory',
+      threadId: 'conv-agent-memory',
+      taskId: 'task-analysis',
+      sourceTurnId: 'assistant-1',
+      now: 10,
+    });
+
+    const facts = listFacts({ originConversationId: 'conv-agent-memory' });
+    const procedure = facts.find((fact) => fact.memoryKind === 'procedure');
+    const procedureRecord = JSON.parse(procedure?.objectText ?? '{}');
+    const affordances = [
+      ...(procedureRecord.steps ?? []),
+      ...(procedureRecord.waypoints ?? []),
+    ].flatMap((step: Record<string, unknown>) =>
+      Array.isArray(step.observedAffordances) ? step.observedAffordances : [],
+    ) as Array<Record<string, unknown>>;
+    const projectCode = affordances.find((entry) => entry.label === 'Project code');
+
+    expect(projectCode?.attributes).toContain("note='Locked by policy'");
+  });
+
+  it('merges richer tool-result state evidence over earlier tool-call shells', () => {
+    const evidence = [
+      `agent:${JSON.stringify({
+        trajectory_id: 'run-merge',
+        state_index: 11,
+        toolName: 'browser_state',
+        status: 'completed',
+      })}`,
+      `agent:${JSON.stringify({
+        trajectory_id: 'run-merge',
+        state_index: 11,
+        action: 'Open menu',
+        accessibility_tree: [
+          "RootWebArea 'Records'",
+          "[menu-1] menuitem 'Incident Mobile', visible",
+          "[menu-2] menuitem 'Incident Portal', visible",
+          "[menu-3] menuitem 'My Open Incidents', visible",
+        ].join('\n'),
+        toolName: 'browser_state',
+        status: 'completed',
+      })}`,
+    ];
+
+    const result = recordAgentRunEvidenceMemory({
+      evidence,
+      conversationId: 'conv-agent-memory',
+      threadId: 'conv-agent-memory',
+      taskId: 'task-analysis',
+      sourceTurnId: 'assistant-1',
+      now: 10,
+    });
+
+    expect(result.factIds).toHaveLength(2);
+    const facts = listFacts({ originConversationId: 'conv-agent-memory' });
+    const procedure = facts.find((fact) => fact.memoryKind === 'procedure');
+    const procedureRecord = JSON.parse(procedure?.objectText ?? '{}');
+    const rendered = JSON.stringify(procedureRecord);
+    expect(rendered).toContain('Open menu');
+    expect(rendered).toContain('Incident Mobile');
+    expect(rendered).toContain('Incident Portal');
+    expect(rendered).toContain('My Open Incidents');
+  });
+
+  it('retains dense option states ahead of repeated generic controls', () => {
+    const evidence = Array.from({ length: 40 }, (_, index) => {
+      const accessibilityTree =
+        index === 17
+          ? [
+              "RootWebArea 'Records'",
+              "[menu-1] menuitem 'Incident Mobile', visible",
+              "[menu-2] menuitem 'Incident Portal', visible",
+              "[menu-3] menuitem 'My Open Incidents', visible",
+            ].join('\n')
+          : [
+              "RootWebArea 'Records'",
+              "[search-1] combobox 'Search', clickable, visible",
+              `[button-${index}] button 'Next ${index}', clickable, visible`,
+            ].join('\n');
+      return `agent:${JSON.stringify({
+        trajectory_id: 'run-dense-menu',
+        state_index: index,
+        action: `Inspect step ${index}`,
+        accessibility_tree: accessibilityTree,
+        toolName: 'browser_state',
+        status: 'completed',
+      })}`;
+    });
+
+    const result = recordAgentRunEvidenceMemory({
+      evidence,
+      conversationId: 'conv-agent-memory',
+      threadId: 'conv-agent-memory',
+      taskId: 'task-analysis',
+      sourceTurnId: 'assistant-1',
+      now: 10,
+    });
+
+    expect(result.factIds).toHaveLength(2);
+    const facts = listFacts({ originConversationId: 'conv-agent-memory' });
+    const procedure = facts.find((fact) => fact.memoryKind === 'procedure');
+    const procedureRecord = JSON.parse(procedure?.objectText ?? '{}');
+    const rendered = JSON.stringify(procedureRecord);
+    expect(rendered).toContain('Incident Mobile');
+    expect(rendered).toContain('Incident Portal');
+    expect(rendered).toContain('My Open Incidents');
+  });
+
+  it('keeps adjacent structured affordances when compacting long outcome memories', () => {
+    const fillerObservation = Array.from(
+      { length: 140 },
+      (_, line) => `[noise-${line}] StaticText 'background row ${line}'`,
+    ).join('\n');
+    const evidence = Array.from({ length: 18 }, (_, index) => {
+      const accessibilityTree =
+        index === 12
+          ? [
+              "RootWebArea 'Records'",
+              ...Array.from(
+                { length: 14 },
+                (_, optionIndex) =>
+                  `[menu-${optionIndex}] menuitem 'Generic ${optionIndex}', visible`,
+              ),
+              "[menu-14] menuitem 'Incident Mobile', visible",
+              "[menu-15] menuitem 'Incident Portal', visible",
+              "[menu-16] menuitem 'My Open Incidents', visible",
+              ...Array.from(
+                { length: 120 },
+                (_, line) => `[noise-${line}] StaticText 'background row ${line}'`,
+              ),
+            ].join('\n')
+          : fillerObservation;
+      return `agent:${JSON.stringify({
+        trajectory_id: 'run-affordance-compaction',
+        state_index: index,
+        goal: 'Complete a long observed workflow while retaining compact structural evidence for later agent reasoning.',
+        action: `Inspect step ${index}`,
+        thought:
+          'The assistant is observing the current state and preserving the controls that may matter for a later follow-up.',
+        accessibility_tree: accessibilityTree,
+        toolName: 'browser_state',
+        status: 'completed',
+      })}`;
+    });
+
+    const result = recordAgentRunEvidenceMemory({
+      evidence,
+      conversationId: 'conv-agent-memory',
+      threadId: 'conv-agent-memory',
+      taskId: 'task-analysis',
+      sourceTurnId: 'assistant-1',
+      now: 10,
+    });
+
+    expect(result.factIds).toHaveLength(2);
+    const facts = listFacts({ originConversationId: 'conv-agent-memory' });
+    const outcome = facts.find((fact) => fact.memoryKind === 'outcome');
+    const outcomeRecord = JSON.parse(outcome?.objectText ?? '{}');
+    const rendered = JSON.stringify(outcomeRecord);
+    expect(rendered).toContain('Incident Mobile');
+    expect(rendered).toContain('Incident Portal');
+    expect(rendered).toContain('My Open Incidents');
+    expect(outcome?.objectText.length).toBeLessThanOrEqual(10_000);
   });
 
   it('keeps representative lines from long observed tool output', () => {
@@ -243,9 +509,11 @@ describe('recordAgentRunEvidenceMemory', () => {
   it('retains temporally distributed observations from long agent runs', () => {
     const evidence = Array.from({ length: 100 }, (_, index) => {
       const observedState =
-        index === 69
+        index === 71
           ? 'middle workflow checkpoint: approval record is ready'
-          : `step ${index} observed state`;
+          : index === 72
+            ? 'waypoint workflow checkpoint: follow-up state is visible'
+            : `step ${index} observed state`;
       return [
         `agent:${JSON.stringify({
           trajectory_id: 'run-long',
@@ -281,14 +549,27 @@ describe('recordAgentRunEvidenceMemory', () => {
     expect(joined).toContain('middle workflow checkpoint');
     expect(facts.every((fact) => fact.attributes.stepCount === 100)).toBe(true);
     const procedure = facts.find((fact) => fact.memoryKind === 'procedure');
+    expect(procedure?.objectText).toContain('middle workflow checkpoint');
     const procedureRecord = JSON.parse(procedure?.objectText ?? '{}');
     expect(Array.isArray(procedureRecord.steps)).toBe(true);
     expect(procedureRecord.steps.length).toBeGreaterThan(1);
+    expect(Array.isArray(procedureRecord.waypoints)).toBe(true);
+    expect(procedureRecord.waypoints.length).toBeGreaterThanOrEqual(procedureRecord.steps.length);
     expect(procedureRecord.steps.some((step: Record<string, unknown>) => step.observation)).toBe(
-      false,
+      true,
     );
+    expect(
+      procedureRecord.waypoints.some((step: Record<string, unknown>) =>
+        String(step.action ?? '').includes('Continue workflow step'),
+      ),
+    ).toBe(true);
+    expect(
+      procedureRecord.waypoints.some((step: Record<string, unknown>) =>
+        String(step.observation ?? '').includes('waypoint workflow checkpoint'),
+      ),
+    ).toBe(true);
     for (const fact of facts) {
-      expect(fact.objectText.length).toBeLessThanOrEqual(6_000);
+      expect(fact.objectText.length).toBeLessThanOrEqual(10_000);
       expect(JSON.parse(fact.objectText)).toMatchObject({ sourceRunId: 'run-long' });
     }
   });
