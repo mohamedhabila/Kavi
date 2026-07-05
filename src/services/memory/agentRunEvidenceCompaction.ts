@@ -492,16 +492,44 @@ function transitionStepIndexes(steps: ReadonlyArray<AgentRunStep>): number[] {
 }
 
 function sourceEvidenceStepIndexes(steps: ReadonlyArray<AgentRunStep>): number[] {
-  return steps
+  const scored = steps
     .map((step, index) => ({ index, score: sourceEvidenceStepScore(step) }))
     .filter((entry) => entry.score > 0)
-    .sort((left, right) => {
-      if (right.score !== left.score) return right.score - left.score;
-      return left.index - right.index;
-    })
-    .slice(0, MAX_SOURCE_EVIDENCE_STEP_INDEXES)
-    .map((entry) => entry.index)
-    .sort((left, right) => left - right);
+    .sort((left, right) => left.index - right.index);
+  if (scored.length <= MAX_SOURCE_EVIDENCE_STEP_INDEXES) {
+    return scored.map((entry) => entry.index);
+  }
+
+  const coverageBudget = Math.max(1, Math.ceil(MAX_SOURCE_EVIDENCE_STEP_INDEXES / 2));
+  const coverageIndexes = spreadIndexes(
+    scored.map((entry) => entry.index),
+    coverageBudget,
+  );
+  const selected = new Set<number>(coverageIndexes);
+  while (selected.size < MAX_SOURCE_EVIDENCE_STEP_INDEXES) {
+    const next = scored
+      .filter((entry) => !selected.has(entry.index))
+      .sort((left, right) => {
+        if (right.score !== left.score) return right.score - left.score;
+        const distanceDelta =
+          minDistanceToSelected(right.index, selected) -
+          minDistanceToSelected(left.index, selected);
+        if (distanceDelta !== 0) return distanceDelta;
+        return left.index - right.index;
+      })[0];
+    if (!next) break;
+    selected.add(next.index);
+  }
+
+  return Array.from(selected).sort((left, right) => left - right);
+}
+
+function minDistanceToSelected(index: number, selected: ReadonlySet<number>): number {
+  let distance = Number.POSITIVE_INFINITY;
+  for (const selectedIndex of selected) {
+    distance = Math.min(distance, Math.abs(index - selectedIndex));
+  }
+  return distance;
 }
 
 function sourceEvidenceStepScore(step: AgentRunStep): number {
@@ -529,16 +557,17 @@ export function boundedSteps(
 ): AgentRunStep[] {
   const limit = Math.max(1, maxSteps);
   if (steps.length <= limit) return [...steps];
+  const sourceIndexes = sourceEvidenceStepIndexes(steps);
   const candidateIndexes = Array.from(
     new Set([
       0,
       ...transitionStepIndexes(steps),
-      ...sourceEvidenceStepIndexes(steps),
+      ...sourceIndexes,
       steps.length - 1,
     ]),
   ).sort((a, b) => a - b);
   const selectedIndexes = new Set(spreadIndexes(candidateIndexes, limit));
-  if (selectedIndexes.size < limit) {
+  if (sourceIndexes.length === 0 && selectedIndexes.size < limit) {
     for (const index of spreadIndexes(
       Array.from({ length: steps.length }, (_, index) => index),
       limit,

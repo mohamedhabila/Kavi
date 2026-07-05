@@ -627,62 +627,6 @@ describe('recordAgentRunEvidenceMemory', () => {
     }
   });
 
-  it('preserves observed control source order in compact run records', () => {
-    const accessibilityTree = [
-      ...Array.from(
-        { length: 40 },
-        (_, index) => `[${100 + index}] button 'Control ${index}', clickable, visible`,
-      ),
-      "[200] columnheader 'Name', visible",
-      "[202] columnheader 'Status', visible",
-      "[204] columnheader 'Owner', visible",
-    ].join('\n');
-    const evidence = [
-      `agent:${JSON.stringify({
-        trajectory_id: 'run-control-order',
-        state_index: 1,
-        action: 'Inspect available controls',
-        toolName: 'browser_state',
-        accessibility_tree: accessibilityTree,
-        status: 'completed',
-      })}`,
-    ];
-
-    recordAgentRunEvidenceMemory({
-      evidence,
-      conversationId: 'conv-agent-memory',
-      threadId: 'conv-agent-memory',
-      taskId: 'task-analysis',
-      sourceTurnId: 'assistant-1',
-      now: 10,
-    });
-
-    const facts = listFacts({ originConversationId: 'conv-agent-memory' });
-    const procedure = facts.find((fact) => fact.memoryKind === 'procedure');
-    const outcome = facts.find((fact) => fact.memoryKind === 'outcome');
-    const procedureRecord = JSON.parse(procedure?.objectText ?? '{}');
-    const outcomeRecord = JSON.parse(outcome?.objectText ?? '{}');
-    const procedureSequence = procedureRecord.steps?.[0]?.observedControlSequence ?? [];
-    const outcomeSequence = outcomeRecord.lastSteps?.[0]?.observedControlSequence ?? [];
-
-    const expectedPrefix = Array.from({ length: 18 }, (_, index) => `Control ${index}`);
-    expect(
-      procedureSequence
-        .slice(0, expectedPrefix.length)
-        .map((entry: Record<string, unknown>) => entry.label),
-    ).toEqual(expectedPrefix);
-    expect(
-      outcomeSequence
-        .slice(0, expectedPrefix.length)
-        .map((entry: Record<string, unknown>) => entry.label),
-    ).toEqual(expectedPrefix);
-    expect(JSON.stringify(procedureRecord)).toContain('"observedAffordances"');
-    expect(JSON.stringify(procedureRecord)).toContain('"observedControlSequence"');
-    for (const fact of facts) {
-      expect(fact.objectText.length).toBeLessThanOrEqual(10_000);
-    }
-  });
-
   it('does not create empty run records from unrelated json payloads', () => {
     const result = recordAgentRunEvidenceMemory({
       evidence: [`agent:${JSON.stringify({ trajectory_id: 'run-empty', value: 42 })}`],

@@ -6,7 +6,7 @@ const MAX_RECORD_CHARS = 10_000;
 const MIN_COMPACT_OBSERVATION_CHARS = 700;
 const MIN_COMPACT_TOOL_RESULT_CHARS = 520;
 const MIN_OBSERVED_AFFORDANCE_ITEMS = 18;
-const MIN_OBSERVED_CONTROL_SEQUENCE_ITEMS = 32;
+const MIN_OBSERVED_CONTROL_SEQUENCE_ITEMS = 18;
 
 interface CompactRecordLimits {
   maxStringChars: number;
@@ -81,11 +81,7 @@ function compactRecordValue(
         : fieldName === 'observedControlSequence'
           ? Math.max(baseMaxItems, MIN_OBSERVED_CONTROL_SEQUENCE_ITEMS)
           : baseMaxItems;
-    const selected =
-      fieldName === 'observedControlSequence'
-        ? value.slice(0, maxItems)
-        : sampleArray(value, maxItems);
-    return selected
+    return sampleArray(value, maxItems)
       .map((entry) => compactRecordValue(entry, limits, depth + 1, fieldName))
       .filter(hasRecordValue);
   }
@@ -129,10 +125,10 @@ function compactStructuredEvidenceRecord(value: JsonRecord): string | null {
   if (!stepField) return null;
   const sourceSteps = value[stepField] as unknown[];
   const budgets = [
-    { maxSteps: 6, maxAffordances: 18, maxControls: 32, observationChars: 240 },
-    { maxSteps: 6, maxAffordances: 18, maxControls: 32, observationChars: 0 },
-    { maxSteps: 4, maxAffordances: 18, maxControls: 32, observationChars: 0 },
-    { maxSteps: 3, maxAffordances: 18, maxControls: 32, observationChars: 0 },
+    { maxSteps: 6, maxAffordances: 18, maxControls: 18, observationChars: 240 },
+    { maxSteps: 6, maxAffordances: 18, maxControls: 18, observationChars: 0 },
+    { maxSteps: 4, maxAffordances: 18, maxControls: 18, observationChars: 0 },
+    { maxSteps: 3, maxAffordances: 18, maxControls: 18, observationChars: 0 },
     { maxSteps: 6, maxAffordances: 12, maxControls: 24, observationChars: 160 },
     { maxSteps: 4, maxAffordances: 12, maxControls: 24, observationChars: 0 },
     { maxSteps: 3, maxAffordances: 8, maxControls: 18, observationChars: 0 },
@@ -176,7 +172,6 @@ function compactStructuredEvidenceStep(
       observedControlSequence: compactObservedAffordances(
         record.observedControlSequence,
         budget.maxControls,
-        { preservePrefix: true },
       ),
       observedAffordances: compactObservedAffordances(
         record.observedAffordances,
@@ -203,14 +198,9 @@ function compactStructuredEvidenceStep(
 function compactObservedAffordances(
   value: unknown,
   limit: number,
-  options: { preservePrefix?: boolean } = {},
 ): JsonRecord[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const compacted = (
-    options.preservePrefix
-      ? value.slice(0, Math.max(1, limit))
-      : sampleArray(value, Math.max(1, limit))
-  )
+  const compacted = sampleArray(value, Math.max(1, limit))
     .map((entry): JsonRecord | undefined => {
       if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return undefined;
       const record = entry as JsonRecord;
