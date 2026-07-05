@@ -7,7 +7,7 @@ import type { ChatCompletionMessage, StructuredOutputOptions } from '../llm/supp
 import type { MemoryFactSelectionCandidate, MemoryFactSelector } from './factRecallTypes';
 import { parseJsonRecord } from './factJson';
 import { tokenizeLexicalUnits } from './ranking/lexical';
-import { selectOrderedEvidenceIndexes } from './controlSequenceCompaction';
+import { hasDirectStepEvidence, selectOrderedEvidenceIndexes } from './controlSequenceCompaction';
 
 const logger = createLogger('memory.llmFactSelector');
 
@@ -159,6 +159,7 @@ function compactStep(
 ): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
+  const hasDirectEvidence = hasDirectStepEvidence(record);
   const compact = {
     stateIndex: record.stateIndex ?? record.state_index,
     observedControlSequence: compactObservedControlSequenceForSelector(
@@ -174,7 +175,7 @@ function compactStep(
     toolResult: fitUnknownValue(record.toolResult ?? record.tool_result, MAX_STEP_TEXT_CHARS),
     outcome: fitUnknownValue(record.outcome, MAX_STEP_TEXT_CHARS),
     action: fitUnknownValue(record.action, 240),
-    thought: fitUnknownValue(record.thought, 240),
+    thought: hasDirectEvidence ? undefined : fitUnknownValue(record.thought, 240),
     status: fitUnknownValue(record.status, 120),
   };
   const entries = Object.entries(compact).filter(

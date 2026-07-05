@@ -78,4 +78,58 @@ describe('assemblePrompt', () => {
     expect(text).toContain('needle-control');
     expect(text).toContain('boundary-end');
   });
+
+  it('omits prior step thoughts when direct observed evidence is present', () => {
+    const assembled = assemblePrompt({
+      basePrompt: 'Base prompt.',
+      retrievalQuery: 'target evidence',
+      retrievedFacts: [
+        memoryFact(
+          'target',
+          JSON.stringify({
+            sourceRunId: 'run-target',
+            status: 'completed',
+            lastSteps: [
+              {
+                action: 'inspect-state',
+                thought: 'prior model inference that should not compete with observation',
+                observedControlSequence: [{ role: 'button', label: 'target evidence action' }],
+                observation: 'target evidence was directly observed',
+              },
+            ],
+          }),
+        ),
+      ],
+    });
+
+    const text = assembled.sections.map((section) => section.text).join('\n\n');
+    expect(text).toContain('target evidence action');
+    expect(text).toContain('target evidence was directly observed');
+    expect(text).not.toContain('prior model inference');
+  });
+
+  it('keeps prior step thoughts when no direct observed evidence is available', () => {
+    const assembled = assemblePrompt({
+      basePrompt: 'Base prompt.',
+      retrievalQuery: 'fallback note',
+      retrievedFacts: [
+        memoryFact(
+          'target',
+          JSON.stringify({
+            sourceRunId: 'run-target',
+            status: 'completed',
+            lastSteps: [
+              {
+                action: 'record-note',
+                thought: 'fallback note from sparse agent record',
+              },
+            ],
+          }),
+        ),
+      ],
+    });
+
+    const text = assembled.sections.map((section) => section.text).join('\n\n');
+    expect(text).toContain('fallback note from sparse agent record');
+  });
 });

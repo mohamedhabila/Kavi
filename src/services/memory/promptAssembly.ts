@@ -14,7 +14,7 @@ import type { MemoryEpisode } from './episodes/types';
 import { compactJsonFields, parseJsonRecord } from './factJson';
 import { tokenizeLexicalUnits } from './ranking/lexical';
 import { quotedSpanUnitSets } from './ranking/quotedSpans';
-import { selectOrderedEvidenceIndexes } from './controlSequenceCompaction';
+import { hasDirectStepEvidence, selectOrderedEvidenceIndexes } from './controlSequenceCompaction';
 
 export type PromptMemoryFact = MemoryFact & { subjectLabel?: string };
 
@@ -95,7 +95,6 @@ const FACT_GROUP_HEADER_ORDER = [
   L3_ARTIFACTS_SOURCES_HEADER,
   L3_SUMMARIES_HEADER,
 ];
-
 function joinNonEmpty(parts: Array<string | null | undefined>, sep = '\n\n'): string {
   return parts
     .map((part) => (typeof part === 'string' ? part.trim() : ''))
@@ -109,7 +108,6 @@ function sortBlocksDeterministically(blocks: MemoryBlock[]): MemoryBlock[] {
     return a.label.localeCompare(b.label);
   });
 }
-
 function renderBlock(block: MemoryBlock): string {
   const description = block.description.trim();
   const content = block.content.trim();
@@ -339,14 +337,23 @@ function compactObservedAffordancesForPrompt(value: unknown): unknown {
 function compactProcedureStep(
   value: unknown,
   queryUnits: ReadonlySet<string> | null,
+  anchorUnitSets: ReadonlyArray<ReadonlySet<string>>,
 ): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const input = value as Record<string, unknown>;
+  const hasDirectEvidence = hasDirectStepEvidence(input);
+  const thought = promptStringField(input, 'thought');
+  const thoughtUnits = thought && anchorUnitSets.length > 0 ? tokenizeLexicalUnits(thought) : null;
+  const thoughtMatchesAnchor = thoughtUnits
+    ? anchorUnitSets.some((anchorUnits) =>
+        Array.from(anchorUnits).every((unit) => thoughtUnits.has(unit)),
+      )
+    : false;
   const compact = dropEmptyPromptRecord({
     stateIndex: input.stateIndex ?? input.state_index,
     url: fitPromptValue(input.url, 220),
     action: fitPromptValue(input.action, 260),
-    thought: fitPromptValue(input.thought, 260),
+    thought: hasDirectEvidence && !thoughtMatchesAnchor ? undefined : fitPromptValue(thought, 260),
     toolName: fitPromptValue(input.toolName ?? input.tool_name, 160),
     observedControlSequence: compactObservedControlSequenceForPrompt(
       input.observedControlSequence,
@@ -422,7 +429,9 @@ function compactAgentSteps(
         .slice(0, QUERY_RELEVANT_STEP_LIMIT)
         .map((entry) => entry.step)
     : value;
-  const steps = sourceSteps.map((step) => compactProcedureStep(step, queryUnits)).filter(Boolean);
+  const steps = sourceSteps.map((step) =>
+    compactProcedureStep(step, queryUnits, anchorUnitSets),
+  ).filter(Boolean);
   return steps.length > 0 ? (steps as Array<Record<string, unknown>>) : undefined;
 }
 
