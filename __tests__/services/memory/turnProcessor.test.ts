@@ -376,7 +376,7 @@ describe('processCompletedTurn', () => {
     expect(persisted.activeFocus).toBe('Provider focus');
   });
 
-  it('falls back to structural result when provider enrichment fails', async () => {
+  it('propagates provider enrichment failure before durable persistence', async () => {
     mockExtractStructuralMemory.mockReturnValue({
       episodeSummary: 'Structural',
       facts: [{ subject: 'user', predicate: 'name', value: 'Mo' }],
@@ -385,28 +385,23 @@ describe('processCompletedTurn', () => {
     });
     mockExtractProviderEnrichment.mockRejectedValue(new Error('Timeout'));
 
-    const result = await processCompletedTurn({
-      threadId: 'conv-1',
-      messages: [
-        makeMsg({ role: 'user', content: 'Hey' }),
-        makeMsg({
-          role: 'assistant',
-          content: 'Hi',
-          assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
-        }),
-      ],
-      extractor: jest.fn(),
-    });
-
-    expect(result.processed).toBe(true);
-    expect(result.enriched).toBe(false);
-    expect(mockApplyConsolidatorResult).toHaveBeenCalledWith(
-      expect.objectContaining({
-        episodeSummary: 'Structural',
-        newFacts: [{ subject: 'user', predicate: 'name', value: 'Mo' }],
+    await expect(
+      processCompletedTurn({
+        threadId: 'conv-1',
+        messages: [
+          makeMsg({ role: 'user', content: 'Hey' }),
+          makeMsg({
+            role: 'assistant',
+            content: 'Hi',
+            assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
+          }),
+        ],
+        extractor: jest.fn(),
       }),
-      expect.any(Object),
-    );
+    ).rejects.toThrow('Timeout');
+
+    expect(mockApplyConsolidatorResult).not.toHaveBeenCalled();
+    expect(mockUpsertState).not.toHaveBeenCalled();
   });
 
   it('deduplicates provider facts against structural facts by key', async () => {

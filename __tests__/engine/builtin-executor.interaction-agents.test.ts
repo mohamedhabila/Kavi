@@ -1,3 +1,18 @@
+const mockRecallScoredFactsForQuery = jest.fn();
+const mockMarkFactsRecalled = jest.fn();
+
+jest.mock('../../src/services/memory/factRecall', () => ({
+  recallScoredFactsForQuery: (...args: any[]) => mockRecallScoredFactsForQuery(...args),
+}));
+
+jest.mock('../../src/services/memory/facts/mutations', () => ({
+  markFactsRecalled: (...args: any[]) => mockMarkFactsRecalled(...args),
+}));
+
+jest.mock('../../src/services/memory/entities', () => ({
+  getEntityById: () => undefined,
+}));
+
 import {
   executeAgentsConfigure,
   executeAgentsList,
@@ -8,9 +23,16 @@ import {
   executeSpeak,
   installBuiltinExecutorRuntimeReset,
 } from '../helpers/builtinExecutorRuntimeHarness';
+import { makeScoredFact } from '../helpers/memoryFactFixtures';
 
 describe('builtin executor interaction, agent, and memory tools', () => {
   installBuiltinExecutorRuntimeReset();
+
+  beforeEach(() => {
+    mockRecallScoredFactsForQuery.mockReset();
+    mockRecallScoredFactsForQuery.mockResolvedValue([]);
+    mockMarkFactsRecalled.mockReset();
+  });
 
   describe('interactive helpers', () => {
     it('creates poll payloads with normalized options', async () => {
@@ -129,19 +151,47 @@ describe('builtin executor interaction, agent, and memory tools', () => {
 
   describe('executeMemorySearch (with citations)', () => {
     it('returns citation-formatted results', async () => {
-      const { sqliteHybridSearch } = require('../../src/services/memory/sqlite-store');
-      sqliteHybridSearch.mockResolvedValueOnce([
-        { source: 'MEMORY.md', snippet: 'User prefers dark mode', score: 0.9 },
-        { source: 'daily/2024-01-15.md', snippet: 'Discussed project setup', score: 0.6 },
+      mockRecallScoredFactsForQuery.mockResolvedValueOnce([
+        makeScoredFact({
+          fact: {
+            id: 'fact-1',
+            subjectId: 'subject-1',
+            predicate: 'preference',
+            objectText: 'User prefers dark mode',
+            sourceRunId: 'run-1',
+            scope: 'global',
+            originConversationId: null,
+            originThreadId: null,
+            memoryKind: 'semantic_fact',
+          },
+          score: 0.9,
+        }),
+        makeScoredFact({
+          fact: {
+            id: 'fact-2',
+            subjectId: 'subject-2',
+            predicate: 'event',
+            objectText: 'Discussed project setup',
+            sourceMessageId: 'message-2',
+            scope: 'conversation',
+            originConversationId: 'conversation-1',
+            originThreadId: 'conversation-1',
+            contentHash: 'hash-2',
+            memoryKind: 'episodic_event',
+          },
+          score: 0.6,
+          importanceScore: 0.7,
+        }),
       ]);
 
       const result = await executeMemorySearch({ query: 'preferences' });
       const parsed = JSON.parse(result);
-      expect(parsed.method).toBe('text');
+      expect(parsed.method).toBe('living_memory');
       expect(parsed.results).toHaveLength(2);
-      expect(parsed.results[0].citation).toBe('[1] MEMORY.md');
+      expect(parsed.results[0].citation).toBe('[1] run-1');
       expect(parsed.results[0].relevance).toBe('90%');
-      expect(parsed.results[1].citation).toBe('[2] daily/2024-01-15.md');
+      expect(parsed.results[1].citation).toBe('[2] message-2');
+      expect(mockMarkFactsRecalled).toHaveBeenCalledWith(['fact-1', 'fact-2'], expect.any(Number));
     });
   });
 });

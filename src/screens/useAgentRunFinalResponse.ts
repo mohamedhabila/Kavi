@@ -88,13 +88,14 @@ export function useAgentRunFinalResponse({
             return undefined;
           }
           const runMessageScope = buildAgentRunMessageScope(run);
+          const memoryProvider = params.providerContext?.provider;
 
           const existingPreview = getLatestFinalAssistantResponsePreview(
             conversation.messages,
             runMessageScope,
           );
           if (hasDeliveredFinalAssistantResponse(conversation.messages, runMessageScope)) {
-            recordConversationTurnMemory(params.conversationId);
+            recordConversationTurnMemory(params.conversationId, memoryProvider);
             return existingPreview;
           }
 
@@ -119,7 +120,7 @@ export function useAgentRunFinalResponse({
             },
           });
           if (preferredPreview) {
-            recordConversationTurnMemory(params.conversationId);
+            recordConversationTurnMemory(params.conversationId, memoryProvider);
             return preferredPreview;
           }
 
@@ -200,7 +201,7 @@ export function useAgentRunFinalResponse({
             },
           });
 
-          recordConversationTurnMemory(params.conversationId);
+          recordConversationTurnMemory(params.conversationId, memoryProvider);
 
           return preview;
         } finally {

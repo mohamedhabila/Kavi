@@ -3,8 +3,8 @@ import { ToolDefinition } from '../../types/tool';
 export const MEMORY_SEARCH_TOOL: ToolDefinition = {
   name: 'memory_search',
   description:
-    'Search conversation memory, global memory, or both using memory-aware search. ' +
-    'Results label which scope each match came from so you can decide whether the information is conversation-local or durable across conversations.',
+    'Search the structured living-memory fact store for conversation memory, global memory, or both. ' +
+    'Results label which scope each match came from and cite the fact/source record used as evidence.',
   input_schema: {
     type: 'object',
     properties: {
@@ -34,7 +34,7 @@ export const MEMORY_RECALL_TOOL: ToolDefinition = {
   description:
     'Recall structured facts from the living-memory fact store. Filter by subject (entity name), predicate (relation), or pinnedOnly. ' +
     'Returns the current set of valid facts plus optionally invalidated/historical rows when includeHistory is true. ' +
-    'Use this when you need exact, structured recall of what is known about a subject — for fuzzy or unstructured search across notes/messages, prefer memory_search. ' +
+    'Use this when you need exact, structured recall of what is known about a subject; use memory_search when the subject or predicate is not known yet. ' +
     'If recall supports a same-turn request to write, create, send, update, open, or otherwise act, continue to the action tool with the recalled facts before final delivery.',
   input_schema: {
     type: 'object',

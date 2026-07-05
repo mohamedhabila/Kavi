@@ -1,11 +1,10 @@
 // ---------------------------------------------------------------------------
-// Kavi — Provider-based Memory Extractor (Optional Enrichment)
+// Kavi - Provider-based Memory Extractor
 // ---------------------------------------------------------------------------
 // Thin wrapper around the existing LLM consolidator. Only called when a
-// provider is available. Enhances the deterministic extraction with deeper
-// semantic analysis.
-//
-// This is an OPTIONAL layer. Memory works perfectly without it.
+// provider is available. Enhances structural extraction with deeper semantic
+// analysis. Provider failures propagate so the queue can retry and surface a
+// degraded memory-enrichment state instead of recording empty memory as success.
 // ---------------------------------------------------------------------------
 
 import type {
@@ -20,29 +19,13 @@ export interface ProviderEnrichmentOptions {
   now?: () => number;
 }
 
-/**
- * Run the LLM extractor on a turn and return parsed results.
- * Safe: never throws. Returns empty result on any failure.
- */
 export async function extractProviderEnrichment(
   input: ConsolidatorTurnInput,
   options: ProviderEnrichmentOptions,
 ): Promise<ConsolidatorResult> {
-  try {
-    const result = await consolidateTurn(input, {
-      extractor: options.extractor,
-      persist: false,
-      now: options.now,
-    });
-    return result;
-  } catch {
-    return {
-      episodeSummary: null,
-      newFacts: [],
-      invalidatedFacts: [],
-      activeFocus: null,
-      openThreads: [],
-      notable: [],
-    };
-  }
+  return consolidateTurn(input, {
+    extractor: options.extractor,
+    persist: false,
+    now: options.now,
+  });
 }

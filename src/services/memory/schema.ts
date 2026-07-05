@@ -203,6 +203,7 @@ export function ensureFactSchema(): void {
       reason TEXT NOT NULL DEFAULT 'turn_completed',
       status TEXT NOT NULL DEFAULT 'pending',
       attempt_count INTEGER NOT NULL DEFAULT 0,
+      provider_enrichment INTEGER NOT NULL DEFAULT 1,
       error TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
@@ -369,6 +370,12 @@ function ensureFactColumns(db: ReturnType<typeof getMemoryDb>): void {
     'memory_facts',
     'memory_kind',
     "memory_kind TEXT NOT NULL DEFAULT 'semantic_fact'",
+  );
+  ensureColumn(
+    db,
+    'memory_ingestion_jobs',
+    'provider_enrichment',
+    'provider_enrichment INTEGER NOT NULL DEFAULT 1',
   );
   db.execSync("UPDATE memory_facts SET memory_kind = 'semantic_fact' WHERE memory_kind = 'semantic'");
 }

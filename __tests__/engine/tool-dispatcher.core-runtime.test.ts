@@ -30,11 +30,6 @@ describe('executeTool — core tools routing', () => {
     expect(result).toBe(JSON.stringify({ status: 'ok' }));
     expect(builtinMod.executeMemorySearch).toHaveBeenCalledWith(
       { query: 'state' },
-      {
-        provider: 'openai',
-        apiKey: 'sk-image',
-        baseUrl: 'https://api.openai.com/v1',
-      },
       { conversationId: CONV_ID },
     );
     expect(memoryStore.searchMemory).not.toHaveBeenCalledWith('state', {

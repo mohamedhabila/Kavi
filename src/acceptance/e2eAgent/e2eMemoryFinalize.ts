@@ -11,6 +11,7 @@ import { drainIngestionQueue } from '../../services/memory/ingestionQueue';
 import { recordCompletedTurnForMemory } from '../../services/memory/lifecycle';
 import { syncActiveTaskFromGoal } from '../../services/memory/tasks';
 import { normalizeTerminalClosedTurnMessages } from '../../services/memory/turnProcessor';
+import { isE2EAgentEvalEnabled } from './providerConfig';
 
 export async function finalizeE2EScenarioTurnMemory(params: {
   conversationId: string;
@@ -24,11 +25,14 @@ export async function finalizeE2EScenarioTurnMemory(params: {
     activeTaskId: params.graphState?.activeTaskId,
   });
   const normalizedMessages = normalizeTerminalClosedTurnMessages(params.messages);
+  const useProviderEnrichment = isE2EAgentEvalEnabled() && Boolean(params.activeChatProvider);
+  const activeMemoryProvider = useProviderEnrichment ? params.activeChatProvider : undefined;
   const record = await recordCompletedTurnForMemory({
     threadId: params.conversationId,
     messages: normalizedMessages,
     threadTitle: params.threadTitle,
-    activeChatProvider: params.activeChatProvider,
+    activeChatProvider: activeMemoryProvider,
+    providerEnrichment: useProviderEnrichment,
     ...(taskId ? { taskId } : {}),
   });
 
@@ -53,6 +57,6 @@ export async function finalizeE2EScenarioTurnMemory(params: {
   await drainIngestionQueue({
     loadMessagesForThread: () => normalizedMessages,
     threadTitle: params.threadTitle,
-    activeChatProvider: params.activeChatProvider,
+    activeChatProvider: activeMemoryProvider,
   });
 }

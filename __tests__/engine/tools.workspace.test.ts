@@ -3,7 +3,6 @@ import {
   __getStore,
   executeTool,
   getSurface,
-  indexMemoryToSqlite,
   mockChatStoreState,
   mockListWorkspaceDirectory,
   mockReadWorkspaceFile,
@@ -11,18 +10,13 @@ import {
   mockWriteWorkspaceFile,
   registerSkill,
   REMOTE_WORKSPACE_TARGET,
-  sqliteHybridSearch,
   unregisterSkill,
 } from '../helpers/toolsExecutorHarness';
 
 describe('executeTool', () => {
   const CONV_ID = 'test-conversation';
 
-  it('derives hybrid memory search from the active provider when embeddings are supported', async () => {
-    sqliteHybridSearch.mockResolvedValueOnce([
-      { source: 'MEMORY.md', snippet: 'remember this detail', score: 0.92, scope: 'global' },
-    ]);
-
+  it('routes memory search through the structured living-memory store', async () => {
     const result = await executeTool(
       'memory_search',
       JSON.stringify({ query: 'remember this detail' }),
@@ -30,31 +24,9 @@ describe('executeTool', () => {
     );
     const parsed = JSON.parse(result);
 
-    expect(parsed.method).toBe('hybrid');
-    expect(indexMemoryToSqlite).toHaveBeenCalledWith(
-      expect.objectContaining({
-        provider: 'openai',
-        apiKey: 'sk-image',
-        baseUrl: 'https://api.openai.com/v1',
-      }),
-      undefined,
-      expect.objectContaining({
-        scope: 'all',
-      }),
-    );
-    expect(sqliteHybridSearch).toHaveBeenCalledWith(
-      'remember this detail',
-      expect.objectContaining({
-        embedding: expect.objectContaining({
-          provider: 'openai',
-          apiKey: 'sk-image',
-          baseUrl: 'https://api.openai.com/v1',
-        }),
-      }),
-      expect.objectContaining({
-        scope: 'all',
-      }),
-    );
+    expect(parsed.method).toBe('living_memory');
+    expect(parsed.index).toBe('memory_facts');
+    expect(parsed.results).toEqual([]);
   });
 
   it('passes conversation workspace access to skill tools', async () => {

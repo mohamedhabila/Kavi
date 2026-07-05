@@ -41,6 +41,9 @@ function selectorTargetCount(candidateCount: number, limit: number): number {
 }
 
 function getCandidateScopes(options: RecallFactsOptions): MemoryFactScope[] | undefined {
+  if (options.scopeFilter) {
+    return Array.isArray(options.scopeFilter) ? options.scopeFilter : [options.scopeFilter];
+  }
   if (!options.scopeHints?.length && !options.conversationId && !options.taskId) {
     return undefined;
   }

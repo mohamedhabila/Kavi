@@ -2,46 +2,119 @@
 // Tests - Builtin Tool Executor: executeMemorySearch
 // ---------------------------------------------------------------------------
 
+const mockRecallScoredFactsForQuery = jest.fn();
+const mockMarkFactsRecalled = jest.fn();
+const mockGetEntityById = jest.fn();
+
+jest.mock('../../../src/services/memory/factRecall', () => ({
+  recallScoredFactsForQuery: (...args: any[]) => mockRecallScoredFactsForQuery(...args),
+}));
+
+jest.mock('../../../src/services/memory/facts/mutations', () => ({
+  markFactsRecalled: (...args: any[]) => mockMarkFactsRecalled(...args),
+}));
+
+jest.mock('../../../src/services/memory/entities', () => ({
+  getEntityById: (...args: any[]) => mockGetEntityById(...args),
+}));
+
 import { executeMemorySearch } from '../../helpers/builtinExecutorHarness';
+import { makeScoredFact } from '../../helpers/memoryFactFixtures';
 
 describe('Builtin Tool Executor', () => {
   describe('executeMemorySearch', () => {
-    it('searches memory for a query', async () => {
+    beforeEach(() => {
+      mockRecallScoredFactsForQuery.mockReset();
+      mockRecallScoredFactsForQuery.mockResolvedValue([]);
+      mockMarkFactsRecalled.mockReset();
+      mockGetEntityById.mockReset();
+    });
+
+    it('searches the structured living-memory fact store for a query', async () => {
       const result = await executeMemorySearch({ query: 'test search' });
       const parsed = JSON.parse(result);
       expect(parsed).toHaveProperty('results');
-      expect(parsed.method).toBe('text');
+      expect(parsed.method).toBe('living_memory');
+      expect(parsed.index).toBe('memory_facts');
+      expect(mockRecallScoredFactsForQuery).toHaveBeenCalledWith(
+        'test search',
+        expect.objectContaining({
+          limit: 10,
+          threshold: 0.01,
+        }),
+      );
     });
 
     it('handles missing query gracefully', async () => {
       const result = await executeMemorySearch({ query: '' });
-      expect(typeof result).toBe('string');
+      const parsed = JSON.parse(result);
+      expect(parsed).toEqual(
+        expect.objectContaining({
+          results: [],
+          method: 'living_memory',
+          index: 'memory_facts',
+          totalFound: 0,
+        }),
+      );
+      expect(mockRecallScoredFactsForQuery).not.toHaveBeenCalled();
     });
 
-    it('uses hybrid search when embedding config provided', async () => {
-      const { sqliteHybridSearch } = require('../../../src/services/memory/sqlite-store');
-      sqliteHybridSearch.mockResolvedValueOnce([
-        { source: 'MEMORY.md', snippet: 'result', score: 0.9 },
+    it('returns citation-formatted living-memory facts', async () => {
+      mockGetEntityById.mockReturnValueOnce({
+        id: 'subject-1',
+        canonicalName: 'project alpha',
+      });
+      mockRecallScoredFactsForQuery.mockResolvedValueOnce([
+        makeScoredFact({
+          fact: {
+            id: 'fact-1',
+            subjectId: 'subject-1',
+            predicate: 'decision',
+            objectText: 'Use the local queue for durable enrichment.',
+            sourceMessageId: 'message-1',
+            scope: 'conversation',
+            originConversationId: 'conversation-1',
+            originThreadId: 'conversation-1',
+            memoryKind: 'decision',
+          },
+          score: 0.92,
+          relevanceScore: 0.9,
+        }),
       ]);
+
       const result = await executeMemorySearch(
-        { query: 'search test', maxResults: 5 },
-        { provider: 'openai', apiKey: 'k' },
+        { query: 'durable enrichment', maxResults: 5 },
+        { conversationId: 'conversation-1' },
       );
       const parsed = JSON.parse(result);
-      expect(parsed.method).toBe('hybrid');
+
+      expect(parsed.method).toBe('living_memory');
+      expect(parsed.index).toBe('memory_facts');
+      expect(parsed.results).toHaveLength(1);
+      expect(parsed.results[0]).toEqual(
+        expect.objectContaining({
+          factId: 'fact-1',
+          source: 'message-1',
+          subject: 'project alpha',
+          snippet: 'Use the local queue for durable enrichment.',
+          citation: '[1] message-1',
+          relevance: '92%',
+        }),
+      );
+      expect(mockMarkFactsRecalled).toHaveBeenCalledWith(['fact-1'], expect.any(Number));
     });
 
-    it('returns a degraded sqlite result on hybrid error', async () => {
-      const { sqliteHybridSearch } = require('../../../src/services/memory/sqlite-store');
-      sqliteHybridSearch.mockRejectedValueOnce(new Error('embed fail'));
+    it('returns a degraded living-memory result on recall error', async () => {
+      mockRecallScoredFactsForQuery.mockRejectedValueOnce(new Error('recall fail'));
       const result = await executeMemorySearch(
         { query: 'fallback', maxResults: 5 },
-        { provider: 'openai', apiKey: 'k' },
+        { conversationId: 'conversation-1' },
       );
       const parsed = JSON.parse(result);
-      expect(parsed.method).toBe('hybrid');
-      expect(parsed.index).toBe('sqlite');
+      expect(parsed.method).toBe('living_memory');
+      expect(parsed.index).toBe('memory_facts');
       expect(parsed.degraded).toBe(true);
+      expect(parsed.error).toBe('recall fail');
     });
   });
 });

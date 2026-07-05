@@ -35,6 +35,7 @@ import { listFacts } from '../../../src/services/memory/facts/queries';
 import { listEpisodes } from '../../../src/services/memory/episodes/queries';
 import {
   drainIngestionQueue,
+  enqueueIngestionJob,
   __resetIngestionQueueForTests,
 } from '../../../src/services/memory/ingestionQueue';
 import {
@@ -103,8 +104,11 @@ describe('runMemoryBackgroundFlush', () => {
   });
 });
 
-async function drainRecordedTurn(threadId: string, messages: Message[]): Promise<void> {
-  await drainIngestionQueue({
+async function drainRecordedTurn(
+  threadId: string,
+  messages: Message[],
+): Promise<Awaited<ReturnType<typeof drainIngestionQueue>>> {
+  return drainIngestionQueue({
     loadMessagesForThread: (id) => (id === threadId ? messages : []),
   });
 }
@@ -335,7 +339,7 @@ describe('recordCompletedTurnForMemory', () => {
     });
   });
 
-  it('keeps structural memory and advances the cursor when provider extraction fails', async () => {
+  it('keeps sync focus but leaves durable enrichment retryable when provider extraction fails', async () => {
     useSettingsStore.setState({
       consolidationProvider: 'provider-1',
       providers: [
@@ -360,15 +364,96 @@ describe('recordCompletedTurnForMemory', () => {
 
     expect(result.processed).toBe(true);
     expect(result.enqueued).toBe(true);
-    await drainRecordedTurn('conv-provider-fail', messages);
-    expect(listEpisodes({ threadId: 'conv-provider-fail' }).length).toBeGreaterThanOrEqual(1);
-    expect(getConsolidationState('conv-provider-fail')?.lastConsolidatedMessageId).toBe('a-1');
+    const drain = await drainRecordedTurn('conv-provider-fail', messages);
+    expect(drain.failed).toBe(1);
+    expect(listEpisodes({ threadId: 'conv-provider-fail' })).toHaveLength(0);
+    expect(getConsolidationState('conv-provider-fail')).toBeNull();
     expect(
       getWorkingBlock('active_focus', {
         conversationId: 'conv-provider-fail',
         threadId: 'conv-provider-fail',
       })?.content,
     ).toContain('Release hardening');
+  });
+
+  it('uses the active provider while flushing queued memory jobs in the background', async () => {
+    useSettingsStore.setState({
+      activeProviderId: 'provider-active-bg',
+      providers: [
+        {
+          id: 'provider-active-bg',
+          name: 'OpenAI',
+          baseUrl: 'https://api.openai.com/v1',
+          apiKey: '',
+          model: 'gpt-4o-mini',
+          enabled: true,
+        },
+      ],
+    } as any);
+    mockSendMessage.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              new_facts: [],
+              active_focus: 'Background flush focus.',
+              open_threads: [],
+              notable: [],
+            }),
+          },
+        },
+      ],
+    });
+    useChatStore.setState({
+      conversations: [
+        {
+          id: 'conv-background-provider',
+          title: 'Background provider flow',
+          messages,
+        },
+      ],
+    } as any);
+    enqueueIngestionJob({
+      threadId: 'conv-background-provider',
+      sourceStartMessageId: 'u-1',
+      sourceEndMessageId: 'a-1',
+    });
+
+    await runMemoryBackgroundFlush();
+
+    expect(mockSendMessage).toHaveBeenCalledTimes(1);
+    expect(getConsolidationState('conv-background-provider')?.lastConsolidatedMessageId).toBe(
+      'a-1',
+    );
+  });
+
+  it('allows structural callers to opt out of active provider resolution', async () => {
+    useSettingsStore.setState({
+      activeProviderId: 'provider-active-chat',
+      providers: [
+        {
+          id: 'provider-active-chat',
+          name: 'OpenAI',
+          baseUrl: 'https://api.openai.com/v1',
+          apiKey: '',
+          model: 'gpt-4o-mini',
+          enabled: true,
+        },
+      ],
+    } as any);
+
+    const result = await recordCompletedTurnForMemory({
+      threadId: 'conv-structural-only',
+      messages,
+      threadTitle: 'Structural acceptance flow',
+      providerEnrichment: false,
+    });
+    const drain = await drainRecordedTurn('conv-structural-only', messages);
+
+    expect(result.enqueued).toBe(true);
+    expect(drain.completed).toBe(1);
+    expect(mockSendMessage).not.toHaveBeenCalled();
+    expect(getConsolidationState('conv-structural-only')?.lastConsolidatedMessageId).toBe('a-1');
   });
 
   it('anchors focus to the completed final assistant turn when placeholders trail it', async () => {

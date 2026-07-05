@@ -1,4 +1,3 @@
-import { indexMemoryToSqlite, sqliteHybridSearch } from '../../services/memory/sqlite-store';
 import {
   executeMemoryRecall as recallFacts,
   executeMemoryRemember as rememberFact,
@@ -14,76 +13,128 @@ import {
   type MemoryBlockReadArgs,
   type MemoryBlockEditArgs,
 } from '../../services/memory/memoryTools';
-import type { EmbeddingConfig } from '../../types/memory';
+import { markFactsRecalled } from '../../services/memory/facts/mutations';
+import { getEntityById } from '../../services/memory/entities';
+import { recallScoredFactsForQuery } from '../../services/memory/factRecall';
+import type { MemoryFactScope } from '../../services/memory/facts/types';
+import type { ScoredFact } from '../../services/memory/factRecallTypes';
+
+type MemorySearchScope = 'all' | 'conversation' | 'global';
+
+export interface MemorySearchOptions {
+  conversationId?: string;
+}
+
+const DEFAULT_MEMORY_SEARCH_LIMIT = 10;
+const MAX_MEMORY_SEARCH_LIMIT = 50;
+
+function clampMemorySearchLimit(value: unknown): number {
+  return Math.max(
+    1,
+    Math.min(
+      typeof value === 'number' && Number.isFinite(value)
+        ? Math.floor(value)
+        : DEFAULT_MEMORY_SEARCH_LIMIT,
+      MAX_MEMORY_SEARCH_LIMIT,
+    ),
+  );
+}
+
+function normalizeMemorySearchScope(value: unknown): MemorySearchScope {
+  return value === 'conversation' || value === 'global' || value === 'all' ? value : 'all';
+}
+
+function scopeFilterForSearch(
+  scope: MemorySearchScope,
+  conversationId: string | undefined,
+): MemoryFactScope | MemoryFactScope[] | undefined {
+  if (scope === 'global') return 'global';
+  if (scope === 'conversation') return conversationId ? 'conversation' : undefined;
+  return undefined;
+}
+
+function searchSourceForFact(entry: ScoredFact): string {
+  return entry.fact.sourceRunId || entry.fact.sourceMessageId || entry.fact.id;
+}
+
+function subjectLabel(subjectId: string): string {
+  return getEntityById(subjectId)?.canonicalName ?? subjectId;
+}
+
+function formatSearchResult(entry: ScoredFact, index: number): object {
+  const fact = entry.fact;
+  const source = searchSourceForFact(entry);
+  return {
+    factId: fact.id,
+    source,
+    scope: fact.scope,
+    kind: fact.memoryKind,
+    subject: subjectLabel(fact.subjectId),
+    predicate: fact.predicate,
+    snippet: fact.objectText,
+    score: entry.score,
+    relevanceScore: entry.relevanceScore,
+    citation: `[${index + 1}] ${source}`,
+    relevance: `${Math.round(entry.score * 100)}%`,
+  };
+}
 
 export async function executeMemorySearch(
   args: { query: string; maxResults?: number; scope?: 'all' | 'conversation' | 'global' },
-  embeddingConfig?: EmbeddingConfig,
-  options?: { conversationId?: string },
+  options: MemorySearchOptions = {},
 ): Promise<string> {
-  const maxResults = args.maxResults || 10;
-  const requestedScope = args.scope || 'all';
-
-  const formatWithCitations = (
-    results: Array<{ source: string; snippet: string; score: number; scope?: string }>,
-    method: string,
-  ) => {
-    const cited = results.slice(0, maxResults).map((result, index) => ({
-      ...result,
-      scope: result.scope,
-      citation: `[${index + 1}] ${result.source}`,
-      relevance: Math.round(result.score * 100) + '%',
-    }));
-    return JSON.stringify({
-      results: cited,
-      method,
-      totalFound: results.length,
-      scope: requestedScope,
-    });
-  };
-
+  const query = typeof args.query === 'string' ? args.query.trim() : '';
+  const maxResults = clampMemorySearchLimit(args.maxResults);
+  const requestedScope = normalizeMemorySearchScope(args.scope);
+  const conversationId = options.conversationId?.trim() || undefined;
   try {
-    await indexMemoryToSqlite(embeddingConfig, undefined, {
-      scope: requestedScope,
-      conversationId: options?.conversationId,
-    });
-    const persistentResults = await sqliteHybridSearch(
-      args.query,
-      {
-        ...(embeddingConfig ? { embedding: embeddingConfig } : {}),
-        maxResults,
-      },
-      {
-        scope: requestedScope,
-        conversationId: options?.conversationId,
-      },
-    );
-    if (persistentResults.length > 0) {
+    if (!query) {
       return JSON.stringify({
-        results: persistentResults.map((result: any, index: number) => ({
-          ...result,
-          citation: `[${index + 1}] ${result.source || 'memory'}`,
-          relevance: result.score != null ? Math.round(result.score * 100) + '%' : undefined,
-        })),
-        method: embeddingConfig ? 'hybrid' : 'text',
-        index: 'sqlite',
-        totalFound: persistentResults.length,
+        results: [],
+        method: 'living_memory',
+        index: 'memory_facts',
+        totalFound: 0,
         scope: requestedScope,
       });
     }
+    if (requestedScope === 'conversation' && !conversationId) {
+      return JSON.stringify({
+        results: [],
+        method: 'living_memory',
+        index: 'memory_facts',
+        totalFound: 0,
+        scope: requestedScope,
+      });
+    }
+    const scopeFilter = scopeFilterForSearch(requestedScope, conversationId);
+    const scored = await recallScoredFactsForQuery(query, {
+      limit: maxResults,
+      threshold: 0.01,
+      ...(requestedScope !== 'global' && conversationId ? { conversationId } : {}),
+      ...(scopeFilter ? { scopeFilter } : {}),
+    });
+    markFactsRecalled(
+      scored.map((entry) => entry.fact.id),
+      Date.now(),
+    );
+    return JSON.stringify({
+      results: scored.map(formatSearchResult),
+      method: 'living_memory',
+      index: 'memory_facts',
+      totalFound: scored.length,
+      scope: requestedScope,
+    });
   } catch (error) {
     return JSON.stringify({
       results: [],
-      method: embeddingConfig ? 'hybrid' : 'text',
-      index: 'sqlite',
+      method: 'living_memory',
+      index: 'memory_facts',
       totalFound: 0,
       scope: requestedScope,
       degraded: true,
       error: error instanceof Error ? error.message : 'memory search unavailable',
     });
   }
-
-  return formatWithCitations([], embeddingConfig ? 'hybrid' : 'text');
 }
 
 // ---------------------------------------------------------------------------

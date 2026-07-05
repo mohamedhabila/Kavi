@@ -2,7 +2,7 @@
 // Tests — Provider Extractor (Optional Enrichment)
 // ---------------------------------------------------------------------------
 // Thin wrapper around consolidateTurn. Tests verify args forwarding and
-// graceful degradation on failure.
+// transparent error propagation to the queue/lifecycle layer.
 // ---------------------------------------------------------------------------
 
 const mockConsolidateTurn = jest.fn();
@@ -62,33 +62,25 @@ describe('extractProviderEnrichment', () => {
     expect(result).toEqual(expected);
   });
 
-  it('returns an empty result when consolidateTurn throws', async () => {
+  it('propagates consolidateTurn failures', async () => {
     mockConsolidateTurn.mockRejectedValue(new Error('Provider timeout'));
 
-    const result = await extractProviderEnrichment(
-      { userMessage: 'x', assistantMessage: 'y', conversationId: 'c1', threadId: 'c1' },
-      { extractor: jest.fn() },
-    );
-
-    expect(result).toEqual({
-      episodeSummary: null,
-      newFacts: [],
-      invalidatedFacts: [],
-      activeFocus: null,
-      openThreads: [],
-      notable: [],
-    });
+    await expect(
+      extractProviderEnrichment(
+        { userMessage: 'x', assistantMessage: 'y', conversationId: 'c1', threadId: 'c1' },
+        { extractor: jest.fn() },
+      ),
+    ).rejects.toThrow('Provider timeout');
   });
 
-  it('returns an empty result when consolidateTurn throws a non-Error', async () => {
+  it('propagates non-Error consolidateTurn failures', async () => {
     mockConsolidateTurn.mockRejectedValue('string-error');
 
-    const result = await extractProviderEnrichment(
-      { userMessage: 'x', assistantMessage: 'y', conversationId: 'c1', threadId: 'c1' },
-      { extractor: jest.fn() },
-    );
-
-    expect(result.newFacts).toEqual([]);
-    expect(result.episodeSummary).toBeNull();
+    await expect(
+      extractProviderEnrichment(
+        { userMessage: 'x', assistantMessage: 'y', conversationId: 'c1', threadId: 'c1' },
+        { extractor: jest.fn() },
+      ),
+    ).rejects.toBe('string-error');
   });
 });

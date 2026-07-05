@@ -282,7 +282,7 @@ export async function maybeRunConsolidation(
     result = await consolidateTurn(turnInput, opts);
   } catch (error) {
     logger.devWarn(
-      'consolidatorScheduler.consolidateTurn threw (should not happen):',
+      'consolidatorScheduler.consolidateTurn failed:',
       error instanceof Error ? error.message : String(error),
     );
     return {

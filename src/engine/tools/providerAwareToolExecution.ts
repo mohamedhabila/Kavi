@@ -1,4 +1,3 @@
-import { resolveProviderEmbeddingConfig } from './embeddingConfigResolver';
 import { executeSessionSend } from './builtin-session-send';
 import { executeSessionSpawn } from './builtin-session-spawn';
 import { executeMemorySearch } from './builtin-memory';
@@ -25,6 +24,10 @@ export async function executeProviderAwareTool(params: {
 }): Promise<string | null> {
   if (!PROVIDER_AWARE_TOOL_NAMES.has(params.name)) {
     return null;
+  }
+
+  if (params.name === 'memory_search') {
+    return executeMemorySearch(params.args, { conversationId: params.workspaceConversationId });
   }
 
   const providerContext = await resolveToolProviderContext(
@@ -61,12 +64,6 @@ export async function executeProviderAwareTool(params: {
         params.args,
         providerContext.provider,
         params.context?.model,
-      );
-    case 'memory_search':
-      return executeMemorySearch(
-        params.args,
-        resolveProviderEmbeddingConfig(providerContext.provider),
-        { conversationId: params.workspaceConversationId },
       );
     case 'web_search':
       return executeWebSearch(params.args, {

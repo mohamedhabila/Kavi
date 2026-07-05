@@ -17,21 +17,7 @@ describe('executeProviderAwareTool', () => {
     mockExecuteMemorySearch.mockResolvedValue('{"ok":true}');
   });
 
-  it('routes memory_search through explicit voyage provider family metadata', async () => {
-    mockResolveToolProviderContext.mockResolvedValue({
-      provider: {
-        id: 'voyage',
-        name: 'Research backend',
-        providerFamily: 'voyage',
-        baseUrl: 'https://example.invalid/v1',
-        apiKey: 'vk',
-        model: 'voyage-3-lite',
-        enabled: true,
-      },
-      allProviders: [],
-      model: 'voyage-3-lite',
-    });
-
+  it('routes memory_search to living memory with the workspace conversation scope', async () => {
     await executeProviderAwareTool({
       name: 'memory_search',
       args: { query: 'facts about codex' },
@@ -41,29 +27,12 @@ describe('executeProviderAwareTool', () => {
 
     expect(mockExecuteMemorySearch).toHaveBeenCalledWith(
       { query: 'facts about codex' },
-      expect.objectContaining({
-        provider: 'voyage',
-        apiKey: 'vk',
-      }),
       { conversationId: 'workspace-1' },
     );
+    expect(mockResolveToolProviderContext).not.toHaveBeenCalled();
   });
 
-  it('normalizes ollama memory embedding config from explicit provider family metadata', async () => {
-    mockResolveToolProviderContext.mockResolvedValue({
-      provider: {
-        id: 'ollama',
-        name: 'Local provider',
-        providerFamily: 'ollama',
-        baseUrl: 'http://localhost:11434/v1',
-        apiKey: '',
-        model: 'llama4',
-        enabled: true,
-      },
-      allProviders: [],
-      model: 'llama4',
-    });
-
+  it('does not resolve provider embedding config for memory_search', async () => {
     await executeProviderAwareTool({
       name: 'memory_search',
       args: { query: 'workspace facts' },
@@ -73,11 +42,8 @@ describe('executeProviderAwareTool', () => {
 
     expect(mockExecuteMemorySearch).toHaveBeenCalledWith(
       { query: 'workspace facts' },
-      expect.objectContaining({
-        provider: 'ollama',
-        baseUrl: 'http://localhost:11434',
-      }),
       { conversationId: 'workspace-1' },
     );
+    expect(mockResolveToolProviderContext).not.toHaveBeenCalled();
   });
 });

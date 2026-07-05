@@ -37,6 +37,7 @@ export interface IngestionJob {
   reason: IngestionJobReason;
   status: IngestionJobStatus;
   attemptCount: number;
+  providerEnrichment: boolean;
   error: string | null;
   createdAt: number;
   updatedAt: number;
@@ -52,6 +53,7 @@ interface IngestionJobRow {
   reason: string;
   status: string;
   attempt_count: number;
+  provider_enrichment?: number;
   error: string | null;
   created_at: number;
   updated_at: number;
@@ -68,6 +70,7 @@ function rowToJob(row: IngestionJobRow): IngestionJob {
     reason: row.reason as IngestionJobReason,
     status: row.status as IngestionJobStatus,
     attemptCount: row.attempt_count,
+    providerEnrichment: row.provider_enrichment !== 0,
     error: row.error,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -81,6 +84,7 @@ export interface EnqueueIngestionJobInput {
   sourceStartMessageId?: string | null;
   taskId?: string | null;
   reason?: IngestionJobReason;
+  providerEnrichment?: boolean;
   now?: number;
 }
 
@@ -107,14 +111,15 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
   db.runSync(
     `INSERT INTO memory_ingestion_jobs
        (id, thread_id, task_id, source_start_message_id, source_end_message_id,
-        reason, status, attempt_count, error, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, NULL, ?, ?)`,
+        reason, status, attempt_count, provider_enrichment, error, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, ?, NULL, ?, ?)`,
     id,
     threadId,
     input.taskId ?? null,
     input.sourceStartMessageId ?? null,
     sourceEndMessageId,
     input.reason ?? 'turn_completed',
+    input.providerEnrichment === false ? 0 : 1,
     now,
     now,
   );
@@ -127,6 +132,7 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
     reason: input.reason ?? 'turn_completed',
     status: 'pending',
     attempt_count: 0,
+    provider_enrichment: input.providerEnrichment === false ? 0 : 1,
     error: null,
     created_at: now,
     updated_at: now,
@@ -273,7 +279,8 @@ export async function processIngestionJob(
       messages: input.messages,
       threadTitle: input.threadTitle,
       personaSummary: input.personaSummary,
-      activeChatProvider: input.activeChatProvider,
+      activeChatProvider: job.providerEnrichment ? input.activeChatProvider : undefined,
+      ...(job.providerEnrichment ? {} : { extractor: null }),
       taskId: job.taskId ?? undefined,
       graphGoalEvidence: input.graphGoalEvidence,
       sourceRunId: input.sourceRunId,

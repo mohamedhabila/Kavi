@@ -120,6 +120,44 @@ describe('ingestionQueue', () => {
     expect(getIngestionJob(job!.id)?.status).toBe('completed');
   });
 
+  it('keeps failed enrichment jobs pending for retry', async () => {
+    mockedProcessIngestionTurn.mockRejectedValueOnce(new Error('Provider timeout'));
+    const job = enqueueIngestionJob({
+      threadId: 'conv-fail',
+      sourceEndMessageId: 'assistant-fail',
+    });
+    const messages: Message[] = [
+      {
+        id: 'user-fail',
+        role: 'user',
+        content: 'Remember this',
+        createdAt: 1,
+      },
+      {
+        id: 'assistant-fail',
+        role: 'assistant',
+        content: 'Done',
+        createdAt: 2,
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'complete',
+          finishReason: 'stop',
+        },
+      },
+    ];
+
+    const result = await drainIngestionQueue({
+      loadMessagesForThread: () => messages,
+    });
+
+    expect(result.attempted).toBe(1);
+    expect(result.completed).toBe(0);
+    expect(result.failed).toBe(1);
+    expect(getIngestionJob(job!.id)?.status).toBe('pending');
+    expect(getIngestionJob(job!.id)?.attemptCount).toBe(1);
+    expect(getIngestionJob(job!.id)?.error).toContain('Provider timeout');
+  });
+
   it('forwards active chat provider context into consolidation', async () => {
     const provider: LlmProviderConfig = {
       id: 'active-provider',
@@ -160,6 +198,54 @@ describe('ingestionQueue', () => {
 
     expect(job).not.toBeNull();
     expect(mockedResolveConsolidationPath).toHaveBeenCalledWith(provider);
+  });
+
+  it('keeps provider enrichment scoped to each queued job', async () => {
+    const provider: LlmProviderConfig = {
+      id: 'active-provider',
+      name: 'Active Provider',
+      baseUrl: 'https://api.example.test',
+      apiKey: 'test-key',
+      model: 'model-test',
+      enabled: true,
+    };
+    const job = enqueueIngestionJob({
+      threadId: 'conv-structural',
+      sourceEndMessageId: 'assistant-structural',
+      providerEnrichment: false,
+    });
+    const messages: Message[] = [
+      {
+        id: 'user-structural',
+        role: 'user',
+        content: 'Remember this',
+        createdAt: 1,
+      },
+      {
+        id: 'assistant-structural',
+        role: 'assistant',
+        content: 'Done',
+        createdAt: 2,
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'complete',
+          finishReason: 'stop',
+        },
+      },
+    ];
+
+    await drainIngestionQueue({
+      loadMessagesForThread: () => messages,
+      activeChatProvider: provider,
+    });
+
+    expect(job?.providerEnrichment).toBe(false);
+    expect(mockedResolveConsolidationPath).not.toHaveBeenCalled();
+    expect(mockedProcessIngestionTurn).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        extractor: expect.any(Function),
+      }),
+    );
   });
 
   it('forwards thread title through scheduled drains', async () => {

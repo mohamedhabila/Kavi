@@ -15,14 +15,12 @@ import {
   isMemoryConsolidationEnrichmentEnabled,
 } from '../memoryConsolidationMode';
 import { isE2EAgentEvalRuntime } from '../../../engine/tools/e2eNativeCalendarFixtures';
-import { createLogger } from '../../../utils/logger';
 import { createTimeoutSignal } from '../../../utils/runtime';
 import { LlmService } from '../../llm/LlmService';
 import { isOnDeviceLlmProvider } from '../../localLlm/provider';
 import { resolveConversationModel, resolveProviderApiKey } from '../../llm/support/providerSupport';
 import type { ConsolidatorExtractor } from '../consolidator';
 
-const logger = createLogger('memory.consolidationCascade');
 const MEMORY_EXTRACTOR_TIMEOUT_MS = 30_000;
 const MEMORY_EXTRACTOR_MAX_TOKENS = 32_000;
 
@@ -65,20 +63,12 @@ function buildProviderExtractor(
 ): ConsolidatorExtractor {
   const llm = new LlmService(apiKey ? { ...provider, apiKey } : provider);
   return async (prompt: string) => {
-    try {
-      const response = await llm.sendMessage([{ role: 'user', content: prompt }] as never, {
-        model,
-        maxTokens: MEMORY_EXTRACTOR_MAX_TOKENS,
-        signal: createTimeoutSignal(MEMORY_EXTRACTOR_TIMEOUT_MS),
-      });
-      return extractAssistantText(response);
-    } catch (error) {
-      logger.devWarn(
-        'Memory extractor failed:',
-        error instanceof Error ? error.message : String(error),
-      );
-      return '';
-    }
+    const response = await llm.sendMessage([{ role: 'user', content: prompt }] as never, {
+      model,
+      maxTokens: MEMORY_EXTRACTOR_MAX_TOKENS,
+      signal: createTimeoutSignal(MEMORY_EXTRACTOR_TIMEOUT_MS),
+    });
+    return extractAssistantText(response);
   };
 }
 

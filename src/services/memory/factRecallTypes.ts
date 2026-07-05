@@ -13,6 +13,8 @@ export interface RecallFactsOptions {
   asOf?: number;
   includeHistorical?: boolean;
   scopeHints?: MemoryFactScope[];
+  /** Exact scope filter for callers that expose user-visible scope controls. */
+  scopeFilter?: MemoryFactScope | MemoryFactScope[];
   conversationId?: string;
   taskId?: string;
   memoryKind?: MemoryFactKind | MemoryFactKind[];
@@ -29,7 +31,7 @@ export interface RecallFactsOptions {
   candidatePoolLimit?: number;
   /** Maximum query lexical units used for indexed recall fanout. */
   lexicalUnitLimit?: number;
-  /** Optional recall-stage telemetry. Used by product diagnostics and benchmarks. */
+  /** Optional recall-stage telemetry for product diagnostics. */
   onTiming?: (timing: RecallFactsTiming) => void;
   /**
    * Optional semantic selector that reranks the locally-ranked candidate pool.

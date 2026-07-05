@@ -54,6 +54,13 @@ function loadMessagesForThread(threadId: string): Message[] {
   return conversation?.messages ?? [];
 }
 
+function resolveActiveMemoryChatProvider(): LlmProviderConfig | undefined {
+  const settings = useSettingsStore.getState();
+  const activeProviderId = settings.activeProviderId?.trim();
+  if (!activeProviderId) return undefined;
+  return settings.providers.find((provider) => provider.id === activeProviderId && provider.enabled);
+}
+
 export function loadGraphGoalEvidenceContext(threadId: string): GraphGoalEvidenceContext {
   const conversation = useChatStore
     .getState()
@@ -131,6 +138,7 @@ export async function runMemoryBackgroundFlush(): Promise<void> {
   await drainIngestionQueue({
     loadMessagesForThread,
     loadGraphGoalEvidenceForThread: loadGraphGoalEvidenceContext,
+    activeChatProvider: resolveActiveMemoryChatProvider(),
   });
 }
 
@@ -142,6 +150,7 @@ export interface RecordCompletedTurnForMemoryInput {
   threadTitle?: string;
   personaSummary?: string;
   activeChatProvider?: LlmProviderConfig;
+  providerEnrichment?: boolean;
   taskId?: string;
   now?: number;
 }
@@ -252,13 +261,16 @@ export async function recordCompletedTurnForMemory(
     sourceEndMessageId: syncResult.sourceEndMessageId,
     sourceStartMessageId: syncResult.sourceStartMessageId,
     taskId: input.taskId ?? null,
+    providerEnrichment: input.providerEnrichment,
     now: input.now,
   });
 
   scheduleIngestionDrain(
     loadMessagesForThread,
     loadGraphGoalEvidenceContext,
-    input.activeChatProvider,
+    input.providerEnrichment === false
+      ? undefined
+      : (input.activeChatProvider ?? resolveActiveMemoryChatProvider()),
     input.threadTitle,
   );
 

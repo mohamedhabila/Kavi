@@ -407,23 +407,16 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
   };
 
   if (input.extractor) {
-    try {
-      const providerResult = await extractProviderEnrichment(turnInput, {
-        extractor: input.extractor,
-        now: () => now,
-      });
-      enriched =
-        providerResult.newFacts.length > 0 ||
-        providerResult.episodeSummary !== null ||
-        !!providerResult.activeFocus ||
-        providerResult.openThreads.length > 0;
-      mergedResult = mergeProviderIntoStructural(structural, providerResult);
-    } catch (error) {
-      logger.devWarn(
-        'Provider enrichment failed:',
-        error instanceof Error ? error.message : String(error),
-      );
-    }
+    const providerResult = await extractProviderEnrichment(turnInput, {
+      extractor: input.extractor,
+      now: () => now,
+    });
+    enriched =
+      providerResult.newFacts.length > 0 ||
+      providerResult.episodeSummary !== null ||
+      !!providerResult.activeFocus ||
+      providerResult.openThreads.length > 0;
+    mergedResult = mergeProviderIntoStructural(structural, providerResult);
   }
 
   const persistResult = applyConsolidatorResult(mergedResult, {

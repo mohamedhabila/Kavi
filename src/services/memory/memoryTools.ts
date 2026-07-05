@@ -16,7 +16,8 @@
 //   • memory_block_edit  — replace/append a memory block's content.
 //   • memory_block_read  — read one or all memory blocks (no args = all).
 //
-// `memory_search` already exists in `builtin-memory.ts` and is unchanged.
+// `memory_search` is implemented in `builtin-memory.ts` over the same
+// structured living-memory fact store.
 // ---------------------------------------------------------------------------
 
 import {

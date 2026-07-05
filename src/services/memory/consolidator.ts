@@ -536,7 +536,8 @@ function fitBlockLines(lines: string[], maxChars: number): string {
 
 /**
  * One-shot consolidation: build the prompt, call the extractor, parse, and
- * (optionally) persist. Always resolves; never throws into the chat loop.
+ * (optionally) persist. Extractor failures propagate to the async queue so
+ * failed enrichment is retryable instead of being recorded as empty success.
  */
 export async function consolidateTurn(
   input: ConsolidatorTurnInput,
@@ -544,19 +545,7 @@ export async function consolidateTurn(
 ): Promise<ConsolidatorResult> {
   const persist = options.persist !== false;
   const prompt = buildConsolidatorPrompt(input);
-  let raw = '';
-  try {
-    raw = await options.extractor(prompt);
-  } catch {
-    return {
-      episodeSummary: null,
-      newFacts: [],
-      invalidatedFacts: [],
-      activeFocus: null,
-      openThreads: [],
-      notable: [],
-    };
-  }
+  const raw = await options.extractor(prompt);
   const result = parseConsolidatorOutput(raw);
   if (persist) {
     applyConsolidatorResult(result, {

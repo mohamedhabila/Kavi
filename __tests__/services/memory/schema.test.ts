@@ -67,6 +67,7 @@ describe('ensureFactSchema', () => {
     );
     expect(columnNames('memory_episodes')).toContain('summary');
     expect(columnNames('memory_fact_evidence')).toContain('fact_id');
+    expect(columnNames('memory_ingestion_jobs')).toContain('provider_enrichment');
   });
 
   it('is idempotent and preserves existing rows across migration calls', () => {

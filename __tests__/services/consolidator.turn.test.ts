@@ -71,19 +71,10 @@ describe('consolidateTurn', () => {
     expect(getBlock('active_focus')?.content).toBe('');
   });
 
-  it('returns an empty result when the extractor throws', async () => {
+  it('propagates extractor failures so callers can retry the turn', async () => {
     const extractor: ConsolidatorExtractor = () => Promise.reject(new Error('network'));
-    const result = await consolidateTurn(
-      { userMessage: 'hi', assistantMessage: 'hi back' },
-      { extractor },
-    );
-    expect(result).toEqual({
-      episodeSummary: null,
-      newFacts: [],
-      invalidatedFacts: [],
-      activeFocus: null,
-      openThreads: [],
-      notable: [],
-    });
+    await expect(
+      consolidateTurn({ userMessage: 'hi', assistantMessage: 'hi back' }, { extractor }),
+    ).rejects.toThrow('network');
   });
 });
