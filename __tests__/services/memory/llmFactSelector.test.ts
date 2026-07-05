@@ -354,4 +354,59 @@ describe('createLlmMemoryFactSelector', () => {
     expect(text).toContain('direct evidence was observed');
     expect(text).not.toContain('previous inferred plan');
   });
+
+  it('keeps selector candidates focused on ordered controls over sampled affordance summaries', async () => {
+    mockSendLlmMessage.mockResolvedValue({
+      output_parsed: { selectedFactIds: ['fact-target'] },
+    });
+    const provider: LlmProviderConfig = {
+      id: 'test-provider',
+      name: 'Test Provider',
+      kind: 'remote',
+      protocol: 'openai-responses',
+      providerFamily: 'openai',
+      baseUrl: 'https://example.invalid/v1',
+      apiKey: 'test-key',
+      model: 'test-model',
+      enabled: true,
+      capabilityHints: { supportsStructuredOutput: true },
+    };
+    const selector = createLlmMemoryFactSelector({ provider, model: 'test-model' });
+
+    await selector?.({
+      query: 'direct control',
+      limit: 1,
+      targetCount: 1,
+      candidates: [
+        {
+          fact: fact(
+            'fact-target',
+            JSON.stringify({
+              sourceRunId: 'run-target',
+              status: 'completed',
+              lastSteps: [
+                {
+                  observedControlSequence: [{ role: 'button', label: 'direct control action' }],
+                  observedAffordances: [{ role: 'button', label: 'duplicated sampled action' }],
+                },
+              ],
+            }),
+          ),
+          score: 0.4,
+          textScore: 0.2,
+          relevanceScore: 0.2,
+        },
+      ],
+    });
+
+    const params = mockSendLlmMessage.mock.calls[0]?.[0] as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const payload = JSON.parse(params.messages[1]?.content ?? '{}') as {
+      candidates?: Array<{ text?: string }>;
+    };
+    const text = payload.candidates?.[0]?.text ?? '';
+    expect(text).toContain('direct control action');
+    expect(text).not.toContain('duplicated sampled action');
+  });
 });

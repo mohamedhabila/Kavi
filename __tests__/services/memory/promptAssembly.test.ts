@@ -108,6 +108,32 @@ describe('assemblePrompt', () => {
     expect(text).not.toContain('prior model inference');
   });
 
+  it('omits sampled affordance summaries when query-focused ordered controls are present', () => {
+    const assembled = assemblePrompt({
+      basePrompt: 'Base prompt.',
+      retrievalQuery: 'target evidence',
+      retrievedFacts: [
+        memoryFact(
+          'target',
+          JSON.stringify({
+            sourceRunId: 'run-target',
+            status: 'completed',
+            lastSteps: [
+              {
+                observedControlSequence: [{ role: 'button', label: 'target evidence action' }],
+                observedAffordances: [{ role: 'button', label: 'duplicated sampled action' }],
+              },
+            ],
+          }),
+        ),
+      ],
+    });
+
+    const text = assembled.sections.map((section) => section.text).join('\n\n');
+    expect(text).toContain('target evidence action');
+    expect(text).not.toContain('duplicated sampled action');
+  });
+
   it('keeps prior step thoughts when no direct observed evidence is available', () => {
     const assembled = assemblePrompt({
       basePrompt: 'Base prompt.',

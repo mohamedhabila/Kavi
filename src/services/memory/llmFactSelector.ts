@@ -7,7 +7,11 @@ import type { ChatCompletionMessage, StructuredOutputOptions } from '../llm/supp
 import type { MemoryFactSelectionCandidate, MemoryFactSelector } from './factRecallTypes';
 import { parseJsonRecord } from './factJson';
 import { tokenizeLexicalUnits } from './ranking/lexical';
-import { hasDirectStepEvidence, selectOrderedEvidenceIndexes } from './controlSequenceCompaction';
+import {
+  hasDirectStepEvidence,
+  hasObservedControlSequence,
+  selectOrderedEvidenceIndexes,
+} from './controlSequenceCompaction';
 
 const logger = createLogger('memory.llmFactSelector');
 
@@ -166,10 +170,9 @@ function compactStep(
       record.observedControlSequence,
       queryUnits,
     ),
-    observedAffordances: compactObservedAffordancesForSelector(
-      record.observedAffordances,
-      queryUnits,
-    ),
+    observedAffordances: hasObservedControlSequence(record)
+      ? undefined
+      : compactObservedAffordancesForSelector(record.observedAffordances, queryUnits),
     inputControlsPresent: record.inputControlsPresent,
     observation: fitUnknownValue(record.observation, MAX_STEP_TEXT_CHARS),
     toolResult: fitUnknownValue(record.toolResult ?? record.tool_result, MAX_STEP_TEXT_CHARS),

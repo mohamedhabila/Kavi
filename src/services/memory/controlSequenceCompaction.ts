@@ -22,6 +22,10 @@ export function hasDirectStepEvidence(record: Record<string, unknown>): boolean 
   );
 }
 
+export function hasObservedControlSequence(record: Record<string, unknown>): boolean {
+  return hasEvidenceValue(record.observedControlSequence);
+}
+
 export function selectOrderedEvidenceIndexes(input: OrderedEvidenceIndexInput): number[] {
   const itemCount = Math.max(0, Math.floor(input.itemCount));
   const maxItems = Math.max(0, Math.floor(input.maxItems));

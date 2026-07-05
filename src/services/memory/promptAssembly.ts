@@ -14,7 +14,7 @@ import type { MemoryEpisode } from './episodes/types';
 import { compactJsonFields, parseJsonRecord } from './factJson';
 import { tokenizeLexicalUnits } from './ranking/lexical';
 import { quotedSpanUnitSets } from './ranking/quotedSpans';
-import { hasDirectStepEvidence, selectOrderedEvidenceIndexes } from './controlSequenceCompaction';
+import { hasDirectStepEvidence, hasObservedControlSequence, selectOrderedEvidenceIndexes } from './controlSequenceCompaction';
 
 export type PromptMemoryFact = MemoryFact & { subjectLabel?: string };
 
@@ -359,7 +359,7 @@ function compactProcedureStep(
       input.observedControlSequence,
       queryUnits,
     ),
-    observedAffordances: compactObservedAffordancesForPrompt(input.observedAffordances),
+    observedAffordances: queryUnits && hasObservedControlSequence(input) ? undefined : compactObservedAffordancesForPrompt(input.observedAffordances),
     inputControlsPresent: input.inputControlsPresent,
     observation: fitPromptEvidenceText(input.observation, queryUnits, 520),
     toolResult: fitPromptEvidenceText(input.toolResult ?? input.tool_result, queryUnits, 360),
