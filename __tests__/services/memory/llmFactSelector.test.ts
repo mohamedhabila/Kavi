@@ -177,6 +177,84 @@ describe('createLlmMemoryFactSelector', () => {
     expect(payload.candidates?.[0]?.text).toContain('Late evidence section');
   });
 
+  it('exposes compact query coverage for selector candidate comparison', async () => {
+    mockSendLlmMessage.mockResolvedValue({
+      output_parsed: { selectedFactIds: ['fact-target'] },
+    });
+    const provider: LlmProviderConfig = {
+      id: 'test-provider',
+      name: 'Test Provider',
+      kind: 'remote',
+      protocol: 'openai-responses',
+      providerFamily: 'openai',
+      baseUrl: 'https://example.invalid/v1',
+      apiKey: 'test-key',
+      model: 'test-model',
+      enabled: true,
+      capabilityHints: { supportsStructuredOutput: true },
+    };
+    const selector = createLlmMemoryFactSelector({ provider, model: 'test-model' });
+
+    await selector?.({
+      query: 'surface alpha target',
+      limit: 1,
+      candidates: [
+        {
+          fact: fact(
+            'fact-target',
+            JSON.stringify({
+              sourceRunId: 'run-target',
+              status: 'completed',
+              evidenceSlices: [
+                {
+                  url: 'https://app.example.test/surface/alpha',
+                  observedControlSequence: [{ role: 'button', label: 'target action' }],
+                },
+              ],
+            }),
+          ),
+          score: 0.4,
+          textScore: 0.2,
+          relevanceScore: 0.2,
+        },
+        {
+          fact: fact(
+            'fact-other',
+            JSON.stringify({
+              sourceRunId: 'run-other',
+              status: 'completed',
+              evidenceSlices: [
+                {
+                  url: 'https://app.example.test/other',
+                  observedControlSequence: [{ role: 'button', label: 'target action' }],
+                },
+              ],
+            }),
+          ),
+          score: 0.4,
+          textScore: 0.2,
+          relevanceScore: 0.2,
+        },
+      ],
+    });
+
+    const params = mockSendLlmMessage.mock.calls[0]?.[0] as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const payload = JSON.parse(params.messages[1]?.content ?? '{}') as {
+      candidates?: Array<{ matchedQueryUnits?: string[]; queryUnitCoverage?: number }>;
+    };
+    expect(payload.candidates?.[0]?.matchedQueryUnits).toEqual(
+      expect.arrayContaining(['surface', 'alpha', 'target']),
+    );
+    expect(payload.candidates?.[1]?.matchedQueryUnits).toEqual(
+      expect.arrayContaining(['target']),
+    );
+    expect(payload.candidates?.[0]?.queryUnitCoverage ?? 0).toBeGreaterThan(
+      payload.candidates?.[1]?.queryUnitCoverage ?? 0,
+    );
+  });
+
   it('keeps query-neighboring observed controls in source order for selector candidates', async () => {
     mockSendLlmMessage.mockResolvedValue({
       output_parsed: { selectedFactIds: ['fact-target'] },

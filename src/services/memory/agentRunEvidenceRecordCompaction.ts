@@ -13,6 +13,7 @@ const MIN_COMPACT_TOOL_RESULT_CHARS = 520;
 const MIN_OBSERVED_AFFORDANCE_ITEMS = 18;
 const MIN_OBSERVED_CONTROL_SEQUENCE_ITEMS = 18;
 const SMALL_AFFORDANCE_GROUP_LIMIT = 12;
+const OBSERVED_EVIDENCE_NEIGHBOR_RADIUS = 1;
 const COMPACT_ACTION_GROUP_ROLES = new Set([
   'button',
   'checkbox',
@@ -103,7 +104,11 @@ function compactRecordValue(
         : fieldName === 'observedControlSequence'
           ? Math.max(baseMaxItems, MIN_OBSERVED_CONTROL_SEQUENCE_ITEMS)
           : baseMaxItems;
-    return sampleArray(value, maxItems)
+    const sampled =
+      fieldName === 'observedControlSequence'
+        ? sampleLocalNeighborhoodArray(value, maxItems)
+        : sampleArray(value, maxItems);
+    return sampled
       .map((entry) => compactRecordValue(entry, limits, depth + 1, fieldName))
       .filter(hasRecordValue);
   }
@@ -556,18 +561,56 @@ function minDistanceToSelected(index: number, selected: ReadonlySet<number>): nu
 }
 
 function sampleArray<T>(values: ReadonlyArray<T>, maxItems: number): T[] {
-  if (values.length <= maxItems) return [...values];
-  if (maxItems <= 1) return values[0] === undefined ? [] : [values[0]];
-  const lastIndex = values.length - 1;
-  const sampled: T[] = [];
+  return sampleIndexes(values.length, maxItems)
+    .map((index) => values[index])
+    .filter((value): value is T => value !== undefined);
+}
+
+function sampleLocalNeighborhoodArray<T>(values: ReadonlyArray<T>, maxItems: number): T[] {
+  const windowIndexes = sampleLocalNeighborhoodIndexes(values.length, maxItems);
+  return windowIndexes
+    .map((index) => values[index])
+    .filter((value): value is T => value !== undefined);
+}
+
+function sampleLocalNeighborhoodIndexes(length: number, maxItems: number): number[] {
+  if (length <= maxItems) return Array.from({ length }, (_value, index) => index);
+  if (maxItems <= 1) return length > 0 ? [0] : [];
+  const windowSize = OBSERVED_EVIDENCE_NEIGHBOR_RADIUS * 2 + 1;
+  const anchorBudget = Math.max(1, Math.ceil(maxItems / windowSize));
+  const selected = new Set<number>();
+  const append = (index: number): void => {
+    if (selected.size >= maxItems || index < 0 || index >= length) return;
+    selected.add(index);
+  };
+
+  for (const anchor of sampleIndexes(length, anchorBudget)) {
+    append(anchor);
+    for (let distance = 1; distance <= OBSERVED_EVIDENCE_NEIGHBOR_RADIUS; distance += 1) {
+      append(anchor - distance);
+      append(anchor + distance);
+    }
+  }
+
+  for (const index of sampleIndexes(length, maxItems)) {
+    if (selected.size >= maxItems) break;
+    append(index);
+  }
+
+  return Array.from(selected).sort((left, right) => left - right);
+}
+
+function sampleIndexes(length: number, maxItems: number): number[] {
+  if (length <= maxItems) return Array.from({ length }, (_value, index) => index);
+  if (maxItems <= 1) return length > 0 ? [0] : [];
+  const lastIndex = length - 1;
+  const sampled: number[] = [];
   const seen = new Set<number>();
   for (let slot = 0; slot < maxItems; slot += 1) {
     const index = Math.round((slot * lastIndex) / (maxItems - 1));
     if (seen.has(index)) continue;
-    const value = values[index];
-    if (value === undefined) continue;
     seen.add(index);
-    sampled.push(value);
+    sampled.push(index);
   }
   return sampled;
 }

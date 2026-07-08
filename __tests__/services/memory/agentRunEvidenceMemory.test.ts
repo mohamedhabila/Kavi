@@ -191,6 +191,57 @@ describe('recordAgentRunEvidenceMemory', () => {
     expect(joined.length).toBeLessThan(12_500);
   });
 
+  it('preserves local observed control neighborhoods inside compact evidence spans', () => {
+    const observedState = [
+      ...Array.from({ length: 33 }, (_, index) => `[nav-${index}] link 'nav:${index}', visible`),
+      "[col-0] columnheader 'col:0', visible",
+      "[col-1] columnheader 'col:1', visible",
+      "[col-2] columnheader 'col:2', visible",
+      "[col-3] columnheader 'col:3', visible",
+      ...Array.from({ length: 8 }, (_, index) => `[tail-${index}] button 'tail:${index}', visible`),
+    ].join('\n');
+    const evidence = [
+      `agent:${JSON.stringify({
+        trajectory_id: 'run-local-controls',
+        state_index: 3,
+        action: 'Inspect the current surface',
+        accessibility_tree: observedState,
+        toolName: 'mobile_state',
+        status: 'completed',
+      })}`,
+    ];
+
+    recordAgentRunEvidenceMemory({
+      evidence,
+      conversationId: 'conv-agent-memory',
+      threadId: 'conv-agent-memory',
+      taskId: 'task-analysis',
+      sourceTurnId: 'assistant-1',
+      now: 10,
+    });
+
+    const facts = listFacts({ originConversationId: 'conv-agent-memory' });
+    const spanRecords = facts
+      .filter((fact) => fact.memoryKind === 'evidence_span')
+      .map((fact) => JSON.parse(fact.objectText) as Record<string, unknown>);
+    const labels = spanRecords.flatMap((record) =>
+      Array.isArray(record.observedControlSequence)
+        ? record.observedControlSequence.map((entry) =>
+            typeof entry === 'object' && entry !== null
+              ? String((entry as Record<string, unknown>).label ?? '')
+              : '',
+          )
+        : [],
+    );
+    const anchorIndex = labels.indexOf('col:2');
+
+    expect(anchorIndex).toBeGreaterThanOrEqual(0);
+    expect(labels[anchorIndex + 1]).toBe('col:3');
+    for (const fact of facts) {
+      expect(fact.objectText.length).toBeLessThanOrEqual(10_000);
+    }
+  });
+
   it('preserves prioritized exact affordance evidence from dense tool observations', () => {
     const observedState = [
       ...Array.from({ length: 120 }, (_, index) => `[noise-${index}] StaticText 'row ${index}'`),

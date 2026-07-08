@@ -21,6 +21,7 @@ const MAX_CANDIDATE_TEXT_CHARS = 1_800;
 const MAX_QUERY_CHARS = 2_000;
 const MAX_STEP_TEXT_CHARS = 420;
 const MAX_STEP_COUNT = 8;
+const MAX_MATCHED_QUERY_UNITS = 24;
 const MAX_SELECTOR_AFFORDANCE_ITEMS = 18;
 const MAX_SELECTOR_CONTROL_SEQUENCE_ITEMS = 36;
 const CONTROL_SEQUENCE_QUERY_WINDOW_RADIUS = 3;
@@ -64,6 +65,18 @@ function textHitCount(value: string, queryUnits: ReadonlySet<string>): number {
     if (valueUnits.has(unit)) hits += 1;
   }
   return hits;
+}
+
+function matchedQueryUnits(value: string, queryUnits: ReadonlySet<string>): string[] {
+  if (queryUnits.size === 0) return [];
+  const valueUnits = tokenizeLexicalUnits(value);
+  const matched: string[] = [];
+  for (const unit of queryUnits) {
+    if (!valueUnits.has(unit)) continue;
+    matched.push(unit);
+    if (matched.length >= MAX_MATCHED_QUERY_UNITS) break;
+  }
+  return matched;
 }
 
 function fitUnknownValue(value: unknown, maxChars: number, arrayLimit = 12): unknown {
@@ -295,6 +308,8 @@ function candidateForPrompt(
   queryUnits: ReadonlySet<string>,
 ): object {
   const fact = candidate.fact;
+  const text = selectorEvidenceText(candidate, queryUnits);
+  const matchedUnits = matchedQueryUnits(text, queryUnits);
   return {
     rank: index + 1,
     factId: fact.id,
@@ -305,7 +320,9 @@ function candidateForPrompt(
     score: Number(candidate.score.toFixed(4)),
     relevanceScore: Number(candidate.relevanceScore.toFixed(4)),
     textScore: Number(candidate.textScore.toFixed(4)),
-    text: selectorEvidenceText(candidate, queryUnits),
+    matchedQueryUnits: matchedUnits,
+    queryUnitCoverage: Number((matchedUnits.length / Math.max(1, queryUnits.size)).toFixed(4)),
+    text,
   };
 }
 
@@ -337,7 +354,7 @@ export function createLlmMemoryFactSelector(
       {
         role: 'system',
         content:
-          'Rerank the provided memory records into a compact evidence slate for the current user request. Do not answer the request. Return only record ids from the provided candidates. Prefer direct observed evidence over broad topical similarity. Return the smallest sufficient set, up to maxSelected records. Include additional records only when they add necessary complementary, conflicting, temporal, or uncertainty-resolving evidence. Prefer covering distinct sourceRunId, subject, task, or turn groups before repeated variants of one group.',
+          'Rerank the provided memory records into a compact evidence slate for the current user request. Do not answer the request. Return only record ids from the provided candidates. Prefer direct observed evidence over broad topical similarity. Use matchedQueryUnits and queryUnitCoverage as compact overlap signals, then verify the evidence text itself supports the request. Return the smallest sufficient set, up to maxSelected records. Include additional records only when they add necessary complementary, conflicting, temporal, or uncertainty-resolving evidence. Prefer covering distinct sourceRunId, subject, task, or turn groups before repeated variants of one group.',
       },
       {
         role: 'user',
