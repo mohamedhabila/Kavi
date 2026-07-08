@@ -12,6 +12,7 @@ import {
   hasObservedControlSequence,
   selectOrderedEvidenceIndexes,
 } from './controlSequenceCompaction';
+import { quotedSpanUnitSets } from './ranking/quotedSpans';
 
 const logger = createLogger('memory.llmFactSelector');
 
@@ -26,6 +27,7 @@ const MAX_SELECTOR_AFFORDANCE_ITEMS = 18;
 const MAX_SELECTOR_AFFORDANCE_COMPLEMENT_ITEMS = 6;
 const MAX_SELECTOR_CONTROL_SEQUENCE_ITEMS = 36;
 const CONTROL_SEQUENCE_QUERY_WINDOW_RADIUS = 3;
+const SELECTOR_QUOTED_ANCHOR_LIMIT = 12;
 
 export interface LlmMemorySelectorConfig {
   provider: LlmProviderConfig;
@@ -220,10 +222,18 @@ function compactObservedControlSequenceForSelector(
 function compactStep(
   value: unknown,
   queryUnits: ReadonlySet<string>,
+  anchorUnitSets: ReadonlyArray<ReadonlySet<string>>,
 ): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   const hasDirectEvidence = hasDirectStepEvidence(record);
+  const thought = typeof record.thought === 'string' ? record.thought : '';
+  const thoughtUnits = thought && anchorUnitSets.length > 0 ? tokenizeLexicalUnits(thought) : null;
+  const thoughtMatchesAnchor = thoughtUnits
+    ? anchorUnitSets.some((anchorUnits) =>
+        Array.from(anchorUnits).every((unit) => thoughtUnits.has(unit)),
+      )
+    : false;
   const observedControlSequence = compactObservedControlSequenceForSelector(
     record.observedControlSequence,
     queryUnits,
@@ -245,7 +255,7 @@ function compactStep(
     toolResult: fitUnknownValue(record.toolResult ?? record.tool_result, MAX_STEP_TEXT_CHARS),
     outcome: fitUnknownValue(record.outcome, MAX_STEP_TEXT_CHARS),
     action: fitUnknownValue(record.action, 240),
-    thought: hasDirectEvidence ? undefined : fitUnknownValue(record.thought, 240),
+    thought: hasDirectEvidence && !thoughtMatchesAnchor ? undefined : fitUnknownValue(thought, 240),
     status: fitUnknownValue(record.status, 120),
   };
   const entries = Object.entries(compact).filter(
@@ -280,6 +290,7 @@ function stepEvidenceScore(value: unknown, queryUnits: ReadonlySet<string>): num
 function selectStepsForPrompt(
   steps: unknown,
   queryUnits: ReadonlySet<string>,
+  anchorUnitSets: ReadonlyArray<ReadonlySet<string>>,
 ): Array<Record<string, unknown>> | undefined {
   if (!Array.isArray(steps) || steps.length === 0) return undefined;
   const indexed = steps
@@ -304,7 +315,7 @@ function selectStepsForPrompt(
         }));
 
   const compacted = selected
-    .map((entry) => compactStep(entry.step, queryUnits))
+    .map((entry) => compactStep(entry.step, queryUnits, anchorUnitSets))
     .filter(Boolean) as Array<Record<string, unknown>>;
   return compacted.length > 0 ? compacted : undefined;
 }
@@ -312,12 +323,13 @@ function selectStepsForPrompt(
 function selectorEvidenceText(
   candidate: MemoryFactSelectionCandidate,
   queryUnits: ReadonlySet<string>,
+  anchorUnitSets: ReadonlyArray<ReadonlySet<string>>,
 ): string {
   const fact = candidate.fact;
   const parsed = parseJsonRecord(fact.objectText);
   if (!parsed) return fitText(fact.objectText, MAX_CANDIDATE_TEXT_CHARS);
   if (fact.memoryKind === 'evidence_span') {
-    const step = compactStep(parsed, queryUnits) ?? {};
+    const step = compactStep(parsed, queryUnits, anchorUnitSets) ?? {};
     const compact = {
       sourceRunId: parsed.sourceRunId,
       goal: fitUnknownValue(parsed.goal, 500),
@@ -337,7 +349,7 @@ function selectorEvidenceText(
     sourceRunId: parsed.sourceRunId,
     status: fitUnknownValue(parsed.status, 120),
     outcome: fitUnknownValue(parsed.outcome, 500),
-    evidenceSlices: selectStepsForPrompt(parsed.evidenceSlices, queryUnits),
+    evidenceSlices: selectStepsForPrompt(parsed.evidenceSlices, queryUnits, anchorUnitSets),
     summaries: fitUnknownValue(parsed.summaries, 500),
     decisions: fitUnknownValue(parsed.decisions, 500),
     risks: fitUnknownValue(parsed.risks, 500),
@@ -359,9 +371,10 @@ function candidateForPrompt(
   candidate: MemoryFactSelectionCandidate,
   index: number,
   queryUnits: ReadonlySet<string>,
+  anchorUnitSets: ReadonlyArray<ReadonlySet<string>>,
 ): object {
   const fact = candidate.fact;
-  const text = selectorEvidenceText(candidate, queryUnits);
+  const text = selectorEvidenceText(candidate, queryUnits, anchorUnitSets);
   const matchedUnits = matchedQueryUnits(text, queryUnits);
   return {
     rank: index + 1,
@@ -403,6 +416,7 @@ export function createLlmMemoryFactSelector(
   return async ({ query, limit, candidates }) => {
     if (candidates.length === 0) return { factIds: [] };
     const queryUnits = tokenizeLexicalUnits(query);
+    const anchorUnitSets = quotedSpanUnitSets(query, SELECTOR_QUOTED_ANCHOR_LIMIT);
     const messages: ChatCompletionMessage[] = [
       {
         role: 'system',
@@ -415,7 +429,7 @@ export function createLlmMemoryFactSelector(
           request: fitText(query, MAX_QUERY_CHARS),
           maxSelected: limit,
           candidates: candidates.map((candidate, index) =>
-            candidateForPrompt(candidate, index, queryUnits),
+            candidateForPrompt(candidate, index, queryUnits, anchorUnitSets),
           ),
         }),
       },
@@ -429,6 +443,7 @@ export function createLlmMemoryFactSelector(
         options: {
           model,
           maxTokens: config.maxTokens ?? DEFAULT_SELECTOR_MAX_TOKENS,
+          temperature: 0,
           reasoning_effort: 'none',
           signal: createTimeoutSignal(config.timeoutMs ?? DEFAULT_SELECTOR_TIMEOUT_MS),
           structuredOutput: SELECTION_SCHEMA,

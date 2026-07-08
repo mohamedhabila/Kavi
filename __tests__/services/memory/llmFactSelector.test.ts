@@ -107,6 +107,7 @@ describe('createLlmMemoryFactSelector', () => {
     expect(result?.factIds).toEqual(['fact-b', 'fact-a']);
     const params = mockSendLlmMessage.mock.calls[0]?.[0] as {
       messages: Array<{ role: string; content: string }>;
+      options?: { temperature?: number };
     };
     expect(params.messages[0]?.content).toContain('evidence slate');
     expect(params.messages[0]?.content).toContain('distinct sourceRunId');
@@ -120,6 +121,7 @@ describe('createLlmMemoryFactSelector', () => {
     expect(payload.maxSelected).toBe(4);
     expect(payload.targetSelected).toBeUndefined();
     expect(payload.candidates).toHaveLength(3);
+    expect(params.options?.temperature).toBe(0);
   });
 
   it('keeps query-matching structured affordances visible in selector candidates', async () => {
@@ -489,6 +491,63 @@ describe('createLlmMemoryFactSelector', () => {
     expect(text).toContain('direct evidence action');
     expect(text).toContain('direct evidence was observed');
     expect(text).not.toContain('previous inferred plan');
+  });
+
+  it('keeps quoted-anchor thoughts visible when they disambiguate direct evidence', async () => {
+    mockSendLlmMessage.mockResolvedValue({
+      output_parsed: { selectedFactIds: ['fact-target'] },
+    });
+    const provider: LlmProviderConfig = {
+      id: 'test-provider',
+      name: 'Test Provider',
+      kind: 'remote',
+      protocol: 'openai-responses',
+      providerFamily: 'openai',
+      baseUrl: 'https://example.invalid/v1',
+      apiKey: 'test-key',
+      model: 'test-model',
+      enabled: true,
+      capabilityHints: { supportsStructuredOutput: true },
+    };
+    const selector = createLlmMemoryFactSelector({ provider, model: 'test-model' });
+
+    await selector?.({
+      query: 'what happened to "ZX-42" after the action?',
+      limit: 1,
+      candidates: [
+        {
+          fact: fact(
+            'fact-target',
+            JSON.stringify({
+              sourceRunId: 'run-target',
+              status: 'completed',
+              evidenceSlices: [
+                {
+                  action: 'inspect-state',
+                  thought: 'ZX-42 changed after the selected action completed',
+                  observedControlSequence: [{ role: 'button', label: 'direct control action' }],
+                  observation: 'direct state was observed',
+                },
+              ],
+            }),
+          ),
+          score: 0.4,
+          textScore: 0.2,
+          relevanceScore: 0.2,
+        },
+      ],
+    });
+
+    const params = mockSendLlmMessage.mock.calls[0]?.[0] as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const payload = JSON.parse(params.messages[1]?.content ?? '{}') as {
+      candidates?: Array<{ text?: string }>;
+    };
+    const text = payload.candidates?.[0]?.text ?? '';
+    expect(text).toContain('direct control action');
+    expect(text).toContain('direct state was observed');
+    expect(text).toContain('ZX-42 changed after the selected action completed');
   });
 
   it('keeps selector candidates focused on ordered controls over sampled affordance summaries', async () => {
