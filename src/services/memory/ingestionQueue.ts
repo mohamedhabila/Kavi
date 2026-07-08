@@ -31,6 +31,7 @@ export type IngestionJobReason = 'turn_completed' | 'migration' | 'manual';
 export interface IngestionJob {
   id: string;
   threadId: string;
+  memoryConversationId: string;
   taskId: string | null;
   sourceStartMessageId: string | null;
   sourceEndMessageId: string;
@@ -47,6 +48,7 @@ export interface IngestionJob {
 interface IngestionJobRow {
   id: string;
   thread_id: string;
+  memory_conversation_id?: string | null;
   task_id: string | null;
   source_start_message_id: string | null;
   source_end_message_id: string;
@@ -61,9 +63,12 @@ interface IngestionJobRow {
 }
 
 function rowToJob(row: IngestionJobRow): IngestionJob {
+  const threadId = row.thread_id;
+  const memoryConversationId = row.memory_conversation_id?.trim() || threadId;
   return {
     id: row.id,
-    threadId: row.thread_id,
+    threadId,
+    memoryConversationId,
     taskId: row.task_id,
     sourceStartMessageId: row.source_start_message_id,
     sourceEndMessageId: row.source_end_message_id,
@@ -80,6 +85,7 @@ function rowToJob(row: IngestionJobRow): IngestionJob {
 
 export interface EnqueueIngestionJobInput {
   threadId: string;
+  memoryConversationId?: string | null;
   sourceEndMessageId: string;
   sourceStartMessageId?: string | null;
   taskId?: string | null;
@@ -93,6 +99,7 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
   const db = getMemoryDb();
   const now = input.now ?? Date.now();
   const threadId = input.threadId.trim();
+  const memoryConversationId = input.memoryConversationId?.trim() || threadId;
   const sourceEndMessageId = input.sourceEndMessageId.trim();
   if (!threadId || !sourceEndMessageId) return null;
 
@@ -110,11 +117,12 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
   const id = newId('ingest');
   db.runSync(
     `INSERT INTO memory_ingestion_jobs
-       (id, thread_id, task_id, source_start_message_id, source_end_message_id,
+       (id, thread_id, memory_conversation_id, task_id, source_start_message_id, source_end_message_id,
         reason, status, attempt_count, provider_enrichment, error, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, ?, NULL, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, NULL, ?, ?)`,
     id,
     threadId,
+    memoryConversationId,
     input.taskId ?? null,
     input.sourceStartMessageId ?? null,
     sourceEndMessageId,
@@ -126,6 +134,7 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
   return rowToJob({
     id,
     thread_id: threadId,
+    memory_conversation_id: memoryConversationId,
     task_id: input.taskId ?? null,
     source_start_message_id: input.sourceStartMessageId ?? null,
     source_end_message_id: sourceEndMessageId,
@@ -224,11 +233,11 @@ function markJobFailed(jobId: string, error: string, now: number): void {
 }
 
 function preserveThreadTitleFocus(input: {
-  threadId: string;
+  memoryConversationId: string;
   threadTitle?: string;
   now: number;
 }): void {
-  const threadId = input.threadId.trim();
+  const threadId = input.memoryConversationId.trim();
   const threadTitle = input.threadTitle?.trim();
   if (!threadId || !threadTitle) {
     return;
@@ -276,6 +285,7 @@ export async function processIngestionJob(
   try {
     await runConsolidation({
       threadId: job.threadId,
+      memoryConversationId: job.memoryConversationId,
       messages: input.messages,
       threadTitle: input.threadTitle,
       personaSummary: input.personaSummary,
@@ -288,13 +298,13 @@ export async function processIngestionJob(
       skipWorkingMemorySync: true,
     });
     preserveThreadTitleFocus({
-      threadId: job.threadId,
+      memoryConversationId: job.memoryConversationId,
       threadTitle: input.threadTitle,
       now,
     });
     markJobCompleted(job.id, now);
     refreshThreadReflection({
-      threadId: job.threadId,
+      threadId: job.memoryConversationId,
       taskId: job.taskId,
       now,
     });

@@ -241,7 +241,7 @@ export function refreshThreadReflection(input: {
   try {
     const now = input.now ?? Date.now();
     const { start, end } = dayPeriodBounds(now);
-    const episodes = listEpisodes({ threadId, limit: 24 }).filter(
+    const episodes = listEpisodes({ conversationId: threadId, limit: 24 }).filter(
       (episode) => episode.endedAt >= start && episode.endedAt < end,
     );
     const facts = listFacts({ originConversationId: threadId, limit: 24 }).filter(

@@ -110,6 +110,10 @@ export async function executeForegroundConversationRun(
     context.requests.isCurrentForegroundRequest(foregroundRequestId, abortController) &&
     !abortController.signal.aborted;
   const guardRunCallback = () => isCurrentRunInvocation();
+  const workspaceTarget = resolveConversationWorkspaceTarget({
+    conversationId,
+    conversations: context.helpers.getConversations(),
+  });
   let hasCompletedRunCallbacks = false;
   const completeRunOnce = async (task: () => Promise<void> | void) => {
     if (!isCurrentRunInvocation() || hasCompletedRunCallbacks) {
@@ -130,6 +134,7 @@ export async function executeForegroundConversationRun(
     guardRunCallback,
     isCurrentRunInvocation,
     model,
+    memoryConversationId: workspaceTarget.workspaceConversationId,
     options,
     provider,
     shared: context,
@@ -156,11 +161,6 @@ export async function executeForegroundConversationRun(
     fallbackUserMessageId: bootstrap.latestUserMessage?.id,
     messages: orchestratorMessages,
   });
-  const workspaceTarget = resolveConversationWorkspaceTarget({
-    conversationId,
-    conversations: context.helpers.getConversations(),
-  });
-
   try {
     await runOrchestrator(
       {

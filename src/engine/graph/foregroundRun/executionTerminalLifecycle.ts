@@ -41,6 +41,7 @@ type RuntimeTerminalLifecycleParams = Pick<
   flushPendingSurfacedSubAgentOutputs: () => void;
   getCurrentAssistantMessageId: () => string;
   mutableState: ForegroundRunMutableState;
+  memoryConversationId: string;
   runId?: string;
   runStartedAt: number;
   trackedRunStore: ReturnType<typeof createForegroundTrackedRunStore>;
@@ -59,6 +60,7 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
     getCurrentAssistantMessageId,
     getCurrentConversation,
     mutableState,
+    memoryConversationId,
     runId,
     runStartedAt,
     shared,
@@ -75,6 +77,7 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
       conversationId,
       ensureAgentRunFinalResponse: shared.helpers.ensureAgentRunFinalResponse,
       finalizationProviderContext,
+      memoryConversationId,
       preferredAssistantMessageId,
       runId,
       signal,
@@ -223,6 +226,7 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
             shared.state.providers.find(
               (provider) => provider.id === shared.state.activeProviderId && provider.enabled,
             ),
+            { memoryConversationId },
           ),
         reviewCompletion: () =>
           reviewForegroundRunCompletion({

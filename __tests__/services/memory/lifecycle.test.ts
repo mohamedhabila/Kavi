@@ -47,6 +47,7 @@ import {
 import { __resetOnDeviceGuardsForTests } from '../../../src/services/memory/onDeviceGuards';
 import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
 import { getWorkingBlock } from '../../../src/services/memory/workingBlocks';
+import { buildLivingMemorySections } from '../../../src/services/memory/livingMemoryBridge';
 import { useChatStore } from '../../../src/store/useChatStore';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { Message } from '../../../src/types/message';
@@ -183,6 +184,82 @@ describe('recordCompletedTurnForMemory', () => {
     await drainRecordedTurn('conv-tools', toolMessages);
     expect(listEpisodes({ threadId: 'conv-tools' }).length).toBeGreaterThanOrEqual(1);
     expect(listFacts({ limit: 20 }).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('ingests a child source turn into the parent memory namespace used by retrieval', async () => {
+    const childMessages: Message[] = [
+      {
+        id: 'u-shared-1',
+        role: 'user',
+        content: 'Persist the current release artifact path.',
+        timestamp: 1,
+      },
+      {
+        id: 'a-shared-1',
+        role: 'assistant',
+        content: 'Recorded.',
+        timestamp: 2,
+        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        toolCalls: [
+          {
+            id: 'tc-memory-1',
+            name: 'memory_remember',
+            arguments: JSON.stringify({
+              subject: 'release-artifact',
+              predicate: 'checklist_path',
+              value: '/workspace/release-checklist.md',
+              scope: 'conversation',
+              confidence: 0.95,
+            }),
+          },
+        ],
+      },
+    ];
+
+    const result = await recordCompletedTurnForMemory({
+      threadId: 'child-conv-shared',
+      memoryConversationId: 'parent-conv-shared',
+      threadTitle: 'Shared release workspace',
+      messages: childMessages,
+      providerEnrichment: false,
+      now: 10,
+    });
+
+    expect(result.processed).toBe(true);
+    expect(result.enqueued).toBe(true);
+    await drainRecordedTurn('child-conv-shared', childMessages);
+
+    const parentFacts = listFacts({ originConversationId: 'parent-conv-shared', limit: 20 });
+    const checklistFact = parentFacts.find((fact) => fact.predicate === 'checklist_path');
+    expect(checklistFact?.objectText).toBe('/workspace/release-checklist.md');
+    expect(checklistFact?.originConversationId).toBe('parent-conv-shared');
+    expect(checklistFact?.originThreadId).toBe('child-conv-shared');
+    expect(
+      listFacts({ originConversationId: 'child-conv-shared', limit: 20 }).some(
+        (fact) => fact.predicate === 'checklist_path',
+      ),
+    ).toBe(false);
+    expect(listEpisodes({ conversationId: 'parent-conv-shared' })[0]).toMatchObject({
+      conversationId: 'parent-conv-shared',
+      threadId: 'child-conv-shared',
+    });
+
+    const memory = await buildLivingMemorySections({
+      conversationId: 'parent-conv-shared',
+      messages: [
+        {
+          id: 'u-query-shared',
+          role: 'user',
+          content: 'Find release-artifact checklist_path.',
+          timestamp: 20,
+        },
+      ],
+      now: 20,
+      recallLimit: 4,
+    });
+    const memoryText = memory.sections.map((section) => section.text).join('\n\n');
+    expect(memory.recalledFactCount).toBeGreaterThan(0);
+    expect(memoryText).toContain('/workspace/release-checklist.md');
   });
 
   it('enriches with provider when configured', async () => {

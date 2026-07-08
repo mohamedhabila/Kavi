@@ -60,7 +60,11 @@ describe('memory tools — opt-out gate', () => {
 
   it('does NOT short-circuit when disableLongTermMemory is false', async () => {
     useSettingsStore.setState({ disableLongTermMemory: false });
-    const raw = await executeTool('memory_block_read', JSON.stringify({ label: 'profile' }), 'conv-1');
+    const raw = await executeTool(
+      'memory_block_read',
+      JSON.stringify({ label: 'profile' }),
+      'conv-1',
+    );
     const parsed = JSON.parse(raw);
     expect(parsed.code).not.toBe('permission_denied');
   });
@@ -80,5 +84,25 @@ describe('memory tools — opt-out gate', () => {
     expect(parsed.ok).toBe(true);
     expect(parsed.fact.scope).toBe('conversation');
     expect(parsed.fact.originConversationId).toBe('conv-runtime-memory');
+    expect(parsed.fact.originThreadId).toBe('conv-runtime-memory');
+  });
+
+  it('writes memory_remember facts to the workspace namespace with source-thread provenance', async () => {
+    const raw = await executeTool(
+      'memory_remember',
+      JSON.stringify({
+        subject: 'project',
+        predicate: 'release_artifact',
+        value: 'build-42',
+      }),
+      'child-runtime-memory',
+      { workspaceConversationId: 'parent-runtime-memory' },
+    );
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.fact.scope).toBe('conversation');
+    expect(parsed.fact.originConversationId).toBe('parent-runtime-memory');
+    expect(parsed.fact.originThreadId).toBe('child-runtime-memory');
   });
 });

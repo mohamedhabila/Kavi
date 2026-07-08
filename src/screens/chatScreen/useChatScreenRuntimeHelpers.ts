@@ -14,6 +14,10 @@ type UseChatScreenRuntimeHelpersParams = {
   pendingAgentRunTerminalReviewsRef: MutableRefObject<Map<string, Promise<void>>>;
 };
 
+type RecordConversationTurnMemoryOptions = {
+  memoryConversationId?: string | null;
+};
+
 export function useChatScreenRuntimeHelpers(params: UseChatScreenRuntimeHelpersParams): {
   appendConversationLog: (
     conversationId: string,
@@ -31,6 +35,7 @@ export function useChatScreenRuntimeHelpers(params: UseChatScreenRuntimeHelpersP
   recordConversationTurnMemory: (
     conversationId: string,
     activeChatProvider?: LlmProviderConfig,
+    options?: RecordConversationTurnMemoryOptions,
   ) => void;
 } {
   const appendConversationLog = useCallback(
@@ -73,24 +78,30 @@ export function useChatScreenRuntimeHelpers(params: UseChatScreenRuntimeHelpersP
     ],
   );
 
-  const recordConversationTurnMemory = useCallback((
-    conversationId: string,
-    activeChatProvider?: LlmProviderConfig,
-  ) => {
-    const latestConversation = useChatStore
-      .getState()
-      .conversations.find((candidate) => candidate.id === conversationId);
-    if (!latestConversation) {
-      return;
-    }
+  const recordConversationTurnMemory = useCallback(
+    (
+      conversationId: string,
+      activeChatProvider?: LlmProviderConfig,
+      options: RecordConversationTurnMemoryOptions = {},
+    ) => {
+      const latestConversation = useChatStore
+        .getState()
+        .conversations.find((candidate) => candidate.id === conversationId);
+      if (!latestConversation) {
+        return;
+      }
 
-    void recordCompletedTurnForMemory({
-      threadId: conversationId,
-      messages: latestConversation.messages,
-      threadTitle: latestConversation.title,
-      activeChatProvider,
-    }).catch(() => undefined);
-  }, []);
+      const memoryConversationId = options.memoryConversationId?.trim() || conversationId;
+      void recordCompletedTurnForMemory({
+        threadId: conversationId,
+        memoryConversationId,
+        messages: latestConversation.messages,
+        threadTitle: latestConversation.title,
+        activeChatProvider,
+      }).catch(() => undefined);
+    },
+    [],
+  );
 
   return {
     appendConversationLog,

@@ -104,6 +104,7 @@ export interface ForegroundConversationRunHelpers {
   recordConversationTurnMemory: (
     conversationId: string,
     activeChatProvider?: LlmProviderConfig,
+    options?: { memoryConversationId?: string | null },
   ) => void;
   requestPersistenceCheckpoint: (delayMs?: number) => void;
   setChatError: (message: string | null) => void;
@@ -154,6 +155,7 @@ export interface ForegroundConversationRunRuntimeParams {
   guardRunCallback: () => boolean;
   isCurrentRunInvocation: () => boolean;
   model: string;
+  memoryConversationId: string;
   options?: RunChatOptions;
   provider: LlmProviderConfig;
   shared: ExecuteForegroundConversationRunParams['context'];

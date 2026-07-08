@@ -9,6 +9,7 @@ import {
   getRunningConversationRunsForCancellation,
   getRunningLiveSubAgentsForRun,
 } from '../../services/agents/subAgentRunTracking';
+import { resolveConversationWorkspaceTarget } from '../../services/conversationWorkspace/ownership';
 import type { AgentRun } from '../../types/agentRun';
 import type { Conversation, ConversationLogEntry } from '../../types/conversation';
 import {
@@ -27,6 +28,7 @@ type EnsureAgentRunFinalResponse = (params: {
   conversationId: string;
   runId: string;
   status: Exclude<AgentRun['status'], 'running'>;
+  memoryConversationId?: string;
   timestamp?: number;
 }) => Promise<string | undefined>;
 
@@ -139,11 +141,16 @@ export function stopForegroundConversationRuns(params: {
       runId: run.id,
     });
     clearAgentRunCancellation(params.conversationId, run.id);
+    const workspaceTarget = resolveConversationWorkspaceTarget({
+      conversationId: params.conversationId,
+      conversations: params.conversation ? [params.conversation] : [],
+    });
     void params.actions
       .ensureAgentRunFinalResponse?.({
         conversationId: params.conversationId,
         runId: run.id,
         status: 'cancelled',
+        memoryConversationId: workspaceTarget.workspaceConversationId,
         timestamp: Date.now(),
       })
       .catch((error: unknown) => {

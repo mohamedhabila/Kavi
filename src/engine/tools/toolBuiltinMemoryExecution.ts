@@ -36,13 +36,17 @@ function buildMemoryPermissionDenied(): string {
 function withExecutionMemoryContext(
   args: unknown,
   conversationId: string,
+  workspaceConversationId: string,
 ): MemoryRememberArgs {
   const base =
     args && typeof args === 'object' && !Array.isArray(args)
       ? { ...(args as Partial<MemoryRememberArgs>) }
       : {};
   if (base.originConversationId === undefined) {
-    base.originConversationId = conversationId;
+    base.originConversationId = workspaceConversationId;
+  }
+  if (base.originThreadId === undefined) {
+    base.originThreadId = conversationId;
   }
   if (base.scope === undefined) {
     base.scope = 'conversation';
@@ -76,7 +80,9 @@ export async function executeBuiltinMemoryTool(
 
   if (name === 'memory_recall') return executeMemoryRecall(args);
   if (name === 'memory_remember') {
-    return executeMemoryRemember(withExecutionMemoryContext(args, conversationId));
+    return executeMemoryRemember(
+      withExecutionMemoryContext(args, conversationId, workspaceConversationId),
+    );
   }
   if (name === 'memory_pin') return executeMemoryPin(args);
   if (name === 'memory_unpin') return executeMemoryUnpin(args);

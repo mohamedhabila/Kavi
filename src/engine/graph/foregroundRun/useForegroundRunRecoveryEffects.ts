@@ -6,6 +6,7 @@ import {
 } from '../terminalFinalResponseRecovery';
 import type { EnsureAgentRunFinalResponse, ResolvedFinalizationProviderContext } from './contracts';
 import { getReviewableSubAgentsForRun } from '../../../services/agents/subAgentRunTracking';
+import { resolveConversationWorkspaceTarget } from '../../../services/conversationWorkspace/ownership';
 import type { Conversation } from '../../../types/conversation';
 
 type ResolveConversationFinalizationContext = (
@@ -60,11 +61,16 @@ export function useForegroundRunRecoveryEffects(params: {
           conversation,
           hasProviderContext: !!providerContext,
         })) {
+          const workspaceTarget = resolveConversationWorkspaceTarget({
+            conversationId: candidate.conversationId,
+            conversations,
+          });
           await ensureAgentRunFinalResponse({
             conversationId: candidate.conversationId,
             runId: candidate.runId,
             status: candidate.status,
             providerContext,
+            memoryConversationId: workspaceTarget.workspaceConversationId,
             timestamp: candidate.timestamp,
           });
 

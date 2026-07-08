@@ -46,8 +46,9 @@ import type { Message } from '../../../src/types/message';
 import type { LlmProviderConfig } from '../../../src/types/provider';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
-const mockedResolveConsolidationPath =
-  resolveConsolidationPath as jest.MockedFunction<typeof resolveConsolidationPath>;
+const mockedResolveConsolidationPath = resolveConsolidationPath as jest.MockedFunction<
+  typeof resolveConsolidationPath
+>;
 const mockedProcessIngestionTurn = processIngestionTurn as jest.MockedFunction<
   typeof processIngestionTurn
 >;
@@ -82,6 +83,59 @@ describe('ingestionQueue', () => {
     expect(first?.id).toBeTruthy();
     expect(second?.id).toBe(first?.id);
     expect(listPendingIngestionJobs()).toHaveLength(1);
+  });
+
+  it('keeps the source thread separate from the memory namespace while draining', async () => {
+    const job = enqueueIngestionJob({
+      threadId: 'child-conv-1',
+      memoryConversationId: 'parent-conv-1',
+      sourceEndMessageId: 'assistant-1',
+      sourceStartMessageId: 'user-1',
+    });
+    const messages: Message[] = [
+      {
+        id: 'user-1',
+        role: 'user',
+        content: 'Record this memory.',
+        createdAt: 1,
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Done',
+        createdAt: 2,
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'complete',
+          finishReason: 'stop',
+        },
+      },
+    ];
+    const loadMessagesForThread = jest.fn((threadId: string) =>
+      threadId === 'child-conv-1' ? messages : [],
+    );
+
+    const result = await drainIngestionQueue({
+      loadMessagesForThread,
+      threadTitle: 'Shared workspace',
+    });
+
+    expect(result.completed).toBe(1);
+    expect(job?.threadId).toBe('child-conv-1');
+    expect(job?.memoryConversationId).toBe('parent-conv-1');
+    expect(loadMessagesForThread).toHaveBeenCalledWith('child-conv-1');
+    expect(mockedProcessIngestionTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId: 'child-conv-1',
+        memoryConversationId: 'parent-conv-1',
+      }),
+    );
+    expect(
+      getWorkingBlock('active_focus', {
+        conversationId: 'parent-conv-1',
+        threadId: 'parent-conv-1',
+      })?.content,
+    ).toBe('Shared workspace');
   });
 
   it('drains pending jobs and marks them completed', async () => {
@@ -273,12 +327,7 @@ describe('ingestionQueue', () => {
       },
     ];
 
-    scheduleIngestionDrain(
-      () => messages,
-      undefined,
-      undefined,
-      'longmem-delayed-thread',
-    );
+    scheduleIngestionDrain(() => messages, undefined, undefined, 'longmem-delayed-thread');
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(job).not.toBeNull();

@@ -95,7 +95,9 @@ export function useAgentRunFinalResponse({
             runMessageScope,
           );
           if (hasDeliveredFinalAssistantResponse(conversation.messages, runMessageScope)) {
-            recordConversationTurnMemory(params.conversationId, memoryProvider);
+            recordConversationTurnMemory(params.conversationId, memoryProvider, {
+              memoryConversationId: params.memoryConversationId,
+            });
             return existingPreview;
           }
 
@@ -120,7 +122,9 @@ export function useAgentRunFinalResponse({
             },
           });
           if (preferredPreview) {
-            recordConversationTurnMemory(params.conversationId, memoryProvider);
+            recordConversationTurnMemory(params.conversationId, memoryProvider, {
+              memoryConversationId: params.memoryConversationId,
+            });
             return preferredPreview;
           }
 
@@ -201,7 +205,9 @@ export function useAgentRunFinalResponse({
             },
           });
 
-          recordConversationTurnMemory(params.conversationId, memoryProvider);
+          recordConversationTurnMemory(params.conversationId, memoryProvider, {
+            memoryConversationId: params.memoryConversationId,
+          });
 
           return preview;
         } finally {

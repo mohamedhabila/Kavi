@@ -58,7 +58,9 @@ function resolveActiveMemoryChatProvider(): LlmProviderConfig | undefined {
   const settings = useSettingsStore.getState();
   const activeProviderId = settings.activeProviderId?.trim();
   if (!activeProviderId) return undefined;
-  return settings.providers.find((provider) => provider.id === activeProviderId && provider.enabled);
+  return settings.providers.find(
+    (provider) => provider.id === activeProviderId && provider.enabled,
+  );
 }
 
 export function loadGraphGoalEvidenceContext(threadId: string): GraphGoalEvidenceContext {
@@ -146,6 +148,7 @@ export async function runMemoryBackgroundFlush(): Promise<void> {
 
 export interface RecordCompletedTurnForMemoryInput {
   threadId: string;
+  memoryConversationId?: string | null;
   messages: Message[];
   threadTitle?: string;
   personaSummary?: string;
@@ -179,11 +182,11 @@ function composeConversationFocusFromThreadTitle(
 }
 
 function syncConversationFocusFromThreadTitle(input: {
-  threadId: string;
+  memoryConversationId: string;
   threadTitle?: string;
   now?: number;
 }): boolean {
-  const threadId = input.threadId.trim();
+  const threadId = input.memoryConversationId.trim();
   const threadTitle = input.threadTitle?.trim();
   if (!threadId || !threadTitle) return false;
 
@@ -228,13 +231,17 @@ export async function recordCompletedTurnForMemory(
     };
   }
 
+  const threadId = input.threadId.trim();
+  const memoryConversationId = input.memoryConversationId?.trim() || threadId;
+
   const conversationFocusUpdated = syncConversationFocusFromThreadTitle({
-    threadId: input.threadId,
+    memoryConversationId,
     threadTitle: input.threadTitle,
     now: input.now,
   });
   const syncResult = syncWorkingMemoryFromTurn({
     threadId: input.threadId,
+    memoryConversationId,
     messages: input.messages,
     threadTitle: input.threadTitle,
     personaSummary: input.personaSummary,
@@ -258,6 +265,7 @@ export async function recordCompletedTurnForMemory(
 
   const job = enqueueIngestionJob({
     threadId: input.threadId,
+    memoryConversationId,
     sourceEndMessageId: syncResult.sourceEndMessageId,
     sourceStartMessageId: syncResult.sourceStartMessageId,
     taskId: input.taskId ?? null,

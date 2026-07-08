@@ -6,6 +6,10 @@ import { upsertGoalTaskEntry } from '../services/memory/taskStack';
 import { useChatStore } from '../store/useChatStore';
 import type { LlmProviderConfig } from '../types/provider';
 
+export interface RecordConversationTurnMemoryOptions {
+  memoryConversationId?: string | null;
+}
+
 function resolveMemoryTaskContext(conversationId: string): {
   taskId?: string;
   goalTitle?: string;
@@ -34,6 +38,7 @@ function resolveMemoryTaskContext(conversationId: string): {
 export function recordConversationTurnMemory(
   conversationId: string,
   activeChatProvider?: LlmProviderConfig,
+  options: RecordConversationTurnMemoryOptions = {},
 ): void {
   const latestConversation = useChatStore
     .getState()
@@ -43,9 +48,11 @@ export function recordConversationTurnMemory(
   }
 
   const { taskId, goalTitle } = resolveMemoryTaskContext(conversationId);
+  const memoryConversationId = options.memoryConversationId?.trim() || conversationId;
 
   void recordCompletedTurnForMemory({
     threadId: conversationId,
+    memoryConversationId,
     messages: latestConversation.messages,
     threadTitle: latestConversation.title,
     activeChatProvider,
@@ -56,9 +63,9 @@ export function recordConversationTurnMemory(
         return;
       }
       try {
-        upsertGoalTaskEntry(conversationId, taskId, goalTitle, 'active');
+        upsertGoalTaskEntry(memoryConversationId, taskId, goalTitle, 'active');
         syncActiveTaskFromGoal({
-          threadId: conversationId,
+          threadId: memoryConversationId,
           goalId: taskId,
           goalTitle,
           threadTitle: latestConversation.title,

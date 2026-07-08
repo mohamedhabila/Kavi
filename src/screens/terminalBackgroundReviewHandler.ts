@@ -6,6 +6,7 @@ import {
 import { useChatStore } from '../store/useChatStore';
 import { ConversationLogEntry } from '../types/conversation';
 import { findLatestPreferredAgentRunAssistantMessageId } from '../engine/graph/foregroundRun/assistantMessages';
+import { resolveConversationWorkspaceTarget } from '../services/conversationWorkspace/ownership';
 import {
   EnsureAgentRunFinalResponse,
   ResumeAgentRun,
@@ -71,10 +72,15 @@ export async function handleTerminalBackgroundReview(params: {
       conversation.messages,
       runMessageScope,
     );
+    const workspaceTarget = resolveConversationWorkspaceTarget({
+      conversationId: params.conversationId,
+      conversations: useChatStore.getState().conversations,
+    });
     const finalResponsePreview = await params.ensureAgentRunFinalResponse?.({
       conversationId: params.conversationId,
       runId: params.runId,
       status,
+      memoryConversationId: workspaceTarget.workspaceConversationId,
       preferredAssistantMessageId,
       timestamp: params.reviewTimestamp,
       signal: params.signal,

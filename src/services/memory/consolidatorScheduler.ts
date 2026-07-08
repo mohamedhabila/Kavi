@@ -115,6 +115,7 @@ export function markThreadDirtyForMemory(input: MarkThreadDirtyInput): MarkThrea
 
 export interface RunConsolidationInput {
   threadId: string;
+  memoryConversationId?: string;
   messages: Message[];
   /**
    * When null/undefined, the scheduler is disabled. The scheduler will still ADVANCE the state cursor on
@@ -224,8 +225,10 @@ export async function maybeRunConsolidation(
   }
 
   if (!extractor) {
+    const memoryConversationId = input.memoryConversationId?.trim() || input.threadId.trim();
     const ingestionResult = await runConsolidation({
       threadId: input.threadId,
+      memoryConversationId,
       messages: input.messages,
       threadTitle: input.threadTitle,
       personaSummary: input.personaSummary,
@@ -258,10 +261,11 @@ export async function maybeRunConsolidation(
     };
   }
 
+  const memoryConversationId = input.memoryConversationId?.trim() || input.threadId.trim();
   const turnInput: ConsolidatorTurnInput = {
     userMessage: lastUser.content ?? '',
     assistantMessage: lastAssistant.content ?? '',
-    conversationId: input.threadId,
+    conversationId: memoryConversationId,
     threadId: input.threadId,
     sourceUserMessageId: lastUser.id,
     sourceAssistantMessageId: lastAssistant.id,

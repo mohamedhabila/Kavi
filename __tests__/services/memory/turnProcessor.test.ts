@@ -393,7 +393,11 @@ describe('processCompletedTurn', () => {
           makeMsg({
             role: 'assistant',
             content: 'Hi',
-            assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
+            assistantMetadata: {
+              finishReason: 'stop',
+              kind: 'final',
+              completionStatus: 'complete',
+            },
           }),
         ],
         extractor: jest.fn(),

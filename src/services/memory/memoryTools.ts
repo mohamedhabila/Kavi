@@ -20,30 +20,11 @@
 // structured living-memory fact store.
 // ---------------------------------------------------------------------------
 
-import {
-  upsertEntity,
-  findEntityByName,
-  getEntityById,
-  type EntityType,
-} from './entities';
-import {
-  recordFact,
-  invalidateFact,
-  softDeleteFact,
-  setFactPinned,
-} from './facts/mutations';
+import { upsertEntity, findEntityByName, getEntityById, type EntityType } from './entities';
+import { recordFact, invalidateFact, softDeleteFact, setFactPinned } from './facts/mutations';
 import { listFacts, getFactById } from './facts/queries';
-import {
-  type MemoryFact,
-  type MemoryFactScope,
-} from './facts/types';
-import {
-  editBlock,
-  ensureDefaultBlocks,
-  getBlock,
-  listBlocks,
-  BlockOverflowError,
-} from './blocks';
+import { type MemoryFact, type MemoryFactScope } from './facts/types';
+import { editBlock, ensureDefaultBlocks, getBlock, listBlocks, BlockOverflowError } from './blocks';
 import { ensureFactSchema } from './schema';
 
 // ── Common types ─────────────────────────────────────────────────────────
@@ -51,12 +32,7 @@ import { ensureFactSchema } from './schema';
 export interface MemoryToolError {
   ok: false;
   error: string;
-  code:
-    | 'invalid_args'
-    | 'not_found'
-    | 'block_overflow'
-    | 'unknown_block'
-    | 'internal';
+  code: 'invalid_args' | 'not_found' | 'block_overflow' | 'unknown_block' | 'internal';
 }
 
 function err(code: MemoryToolError['code'], message: string): MemoryToolError {
@@ -85,6 +61,7 @@ export interface SerializedMemoryFact {
   deletedAt: number | null;
   scope: MemoryFactScope;
   originConversationId: string | null;
+  originThreadId: string | null;
   originTaskId: string | null;
   sourceMessageId: string | null;
   sourceTurnId: string | null;
@@ -113,6 +90,7 @@ function serializeFact(fact: MemoryFact): SerializedMemoryFact {
     deletedAt: fact.deletedAt,
     scope: fact.scope,
     originConversationId: fact.originConversationId,
+    originThreadId: fact.originThreadId,
     originTaskId: fact.originTaskId,
     sourceMessageId: fact.sourceMessageId,
     sourceTurnId: fact.sourceTurnId,
@@ -146,9 +124,7 @@ export interface MemoryRecallResult {
   facts: ReturnType<typeof serializeFact>[];
 }
 
-export function executeMemoryRecall(
-  args: MemoryRecallArgs,
-): MemoryRecallResult | MemoryToolError {
+export function executeMemoryRecall(args: MemoryRecallArgs): MemoryRecallResult | MemoryToolError {
   ensureFactSchema();
   const subject = trimNonEmpty(args.subject, 80);
   const predicate = trimNonEmpty(args.predicate, 80);
@@ -206,6 +182,7 @@ export interface MemoryRememberArgs {
   pinned?: boolean;
   scope?: MemoryFactScope;
   originConversationId?: string | null;
+  originThreadId?: string | null;
   originTaskId?: string | null;
   sourceMessageId?: string | null;
   sourceSummary?: string | null;
@@ -246,6 +223,7 @@ export function executeMemoryRemember(
       ...(args.originConversationId !== undefined
         ? { originConversationId: args.originConversationId }
         : {}),
+      ...(args.originThreadId !== undefined ? { originThreadId: args.originThreadId } : {}),
       ...(args.originTaskId !== undefined ? { originTaskId: args.originTaskId } : {}),
       ...(args.sourceMessageId !== undefined ? { sourceMessageId: args.sourceMessageId } : {}),
       ...(args.sourceSummary !== undefined ? { sourceSummary: args.sourceSummary } : {}),
@@ -310,9 +288,7 @@ export interface MemoryForgetResult {
   mode: 'invalidate' | 'delete';
 }
 
-export function executeMemoryForget(
-  args: MemoryForgetArgs,
-): MemoryForgetResult | MemoryToolError {
+export function executeMemoryForget(args: MemoryForgetArgs): MemoryForgetResult | MemoryToolError {
   ensureFactSchema();
   const id = trimNonEmpty(args.factId, 64);
   if (!id) return err('invalid_args', 'factId is required');
@@ -353,7 +329,9 @@ export function executeMemoryBlockRead(
   ensureFactSchema();
   ensureDefaultBlocks();
   const label = trimNonEmpty(args.label, 64);
-  const blocks = label ? [getBlock(label)].filter((b): b is NonNullable<typeof b> => !!b) : listBlocks();
+  const blocks = label
+    ? [getBlock(label)].filter((b): b is NonNullable<typeof b> => !!b)
+    : listBlocks();
   if (label && blocks.length === 0) {
     return err('unknown_block', `block "${label}" not found`);
   }

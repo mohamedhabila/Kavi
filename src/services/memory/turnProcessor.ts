@@ -32,6 +32,7 @@ const logger = createLogger('memory.turnProcessor');
 
 export interface ProcessTurnInput {
   threadId: string;
+  memoryConversationId?: string;
   messages: Message[];
   threadTitle?: string;
   personaSummary?: string;
@@ -41,6 +42,12 @@ export interface ProcessTurnInput {
   now?: number;
   extractor?: ConsolidatorExtractor;
   skipWorkingMemorySync?: boolean;
+}
+
+function resolveMemoryConversationId(
+  input: Pick<ProcessTurnInput, 'threadId' | 'memoryConversationId'>,
+): string {
+  return input.memoryConversationId?.trim() || input.threadId.trim();
 }
 
 export interface ProcessTurnResult {
@@ -202,7 +209,7 @@ function buildTurnInput(
   return {
     userMessage: user?.content ?? '',
     assistantMessage: assistant?.content ?? '',
-    conversationId: input.threadId,
+    conversationId: resolveMemoryConversationId(input),
     threadId: input.threadId,
     taskId: input.taskId,
     threadTitle: input.threadTitle,
@@ -238,8 +245,8 @@ function applyWorkingMemoryFromStructural(
   let activeFocusUpdated = false;
   let openThreadsUpdated = false;
   const scope = {
-    conversationId: input.threadId,
-    threadId: input.threadId,
+    conversationId: resolveMemoryConversationId(input),
+    threadId: resolveMemoryConversationId(input),
     taskId: input.taskId,
   };
 
@@ -391,6 +398,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
 
   const turnInput = buildTurnInput(user, assistant, input);
   const structural = extractStructuralMemory(turnInput);
+  const memoryConversationId = resolveMemoryConversationId(input);
 
   if (!input.skipWorkingMemorySync) {
     applyWorkingMemoryFromStructural(structural, input, now);
@@ -421,9 +429,10 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
 
   const persistResult = applyConsolidatorResult(mergedResult, {
     now,
-    conversationId: input.threadId,
+    conversationId: memoryConversationId,
     threadId: input.threadId,
     taskId: input.taskId,
+    threadTitle: input.threadTitle,
     sourceUserMessageId: user?.id,
     sourceAssistantMessageId: assistant?.id,
     messages: input.messages,
@@ -436,7 +445,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
     const agentRunMemory = recordAgentRunEvidenceMemory({
       messages: turnInput.messages ?? [],
       evidence: input.graphGoalEvidence ?? [],
-      conversationId: input.threadId,
+      conversationId: memoryConversationId,
       threadId: input.threadId,
       taskId: input.taskId,
       sourceRunId: input.sourceRunId,
@@ -462,7 +471,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
         subjectName: input.taskId ?? input.threadId,
         subjectType: 'project',
         sourceRunId: input.sourceRunId,
-        originConversationId: input.threadId,
+        originConversationId: memoryConversationId,
         originThreadId: input.threadId,
         originTaskId: input.taskId,
         now,

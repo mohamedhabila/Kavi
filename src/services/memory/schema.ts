@@ -197,6 +197,7 @@ export function ensureFactSchema(): void {
     CREATE TABLE IF NOT EXISTS memory_ingestion_jobs (
       id TEXT PRIMARY KEY,
       thread_id TEXT NOT NULL,
+      memory_conversation_id TEXT,
       task_id TEXT,
       source_start_message_id TEXT,
       source_end_message_id TEXT NOT NULL,
@@ -347,7 +348,12 @@ function ensureFactColumns(db: ReturnType<typeof getMemoryDb>): void {
   ensureColumn(db, 'memory_facts', 'source_summary', 'source_summary TEXT');
   ensureColumn(db, 'memory_facts', 'importance', 'importance REAL NOT NULL DEFAULT 0.5');
   ensureColumn(db, 'memory_facts', 'access_count', 'access_count INTEGER NOT NULL DEFAULT 0');
-  ensureColumn(db, 'memory_facts', 'repeated_mention_count', 'repeated_mention_count INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(
+    db,
+    'memory_facts',
+    'repeated_mention_count',
+    'repeated_mention_count INTEGER NOT NULL DEFAULT 0',
+  );
   ensureColumn(db, 'memory_facts', 'last_recalled_at', 'last_recalled_at INTEGER');
   ensureColumn(db, 'memory_facts', 'last_reinforced_at', 'last_reinforced_at INTEGER');
   ensureColumn(db, 'memory_facts', 'last_accessed_at', 'last_accessed_at INTEGER');
@@ -377,7 +383,15 @@ function ensureFactColumns(db: ReturnType<typeof getMemoryDb>): void {
     'provider_enrichment',
     'provider_enrichment INTEGER NOT NULL DEFAULT 1',
   );
-  db.execSync("UPDATE memory_facts SET memory_kind = 'semantic_fact' WHERE memory_kind = 'semantic'");
+  ensureColumn(
+    db,
+    'memory_ingestion_jobs',
+    'memory_conversation_id',
+    'memory_conversation_id TEXT',
+  );
+  db.execSync(
+    "UPDATE memory_facts SET memory_kind = 'semantic_fact' WHERE memory_kind = 'semantic'",
+  );
 }
 
 export function resetFactSchemaCacheForTests(): void {
@@ -407,9 +421,8 @@ export function clearStructuredMemory(): void {
 
 function ensureFactTermStats(db: ReturnType<typeof getMemoryDb>): void {
   const statsCount =
-    db.getFirstSync<{ count: number }>(
-      'SELECT COUNT(*) AS count FROM memory_fact_term_stats',
-    )?.count ?? 0;
+    db.getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM memory_fact_term_stats')
+      ?.count ?? 0;
   if (statsCount > 0) return;
   const termsCount =
     db.getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM memory_fact_terms')?.count ??
