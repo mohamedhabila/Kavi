@@ -11,7 +11,7 @@ import {
   type AgentRunStep,
 } from './agentRunEvidenceCompaction';
 import {
-  compactProcedureRecord,
+  compactAgentRunRecord,
   compactRecord,
   scalarField,
   stringField,
@@ -55,7 +55,8 @@ interface AgentRunBundle {
 }
 
 const MAX_RUNS_PER_TURN = 16;
-const MAX_WAYPOINTS_PER_RUN = 12;
+const MAX_EVIDENCE_SLICES_PER_RUN = 12;
+const MAX_EVIDENCE_SPAN_FACTS_PER_RUN = 8;
 const SUCCESSFUL_RUN_SIGNALS = new Set(['complete', 'completed', 'success', 'succeeded']);
 const UNSUCCESSFUL_RUN_SIGNALS = new Set([
   'cancelled',
@@ -82,13 +83,14 @@ function parseJsonPayload(value: string): JsonRecord | null {
   }
 }
 
-function procedureStepForRecord(step: AgentRunStep): JsonRecord {
+function evidenceSliceForRecord(step: AgentRunStep): JsonRecord {
   return Object.fromEntries(
     Object.entries({
       stateIndex: step.stateIndex,
       action: step.action,
       thought: step.thought,
       url: step.url,
+      navigationAnchor: step.navigationAnchor,
       observedControlSequence: step.observedControlSequence,
       observedAffordances: step.observedAffordances,
       inputControlsPresent: step.inputControlsPresent,
@@ -101,22 +103,27 @@ function procedureStepForRecord(step: AgentRunStep): JsonRecord {
   );
 }
 
-function procedureWaypointForRecord(step: AgentRunStep): JsonRecord {
-  return Object.fromEntries(
-    Object.entries({
-      stateIndex: step.stateIndex,
-      url: step.url ? fitAgentRunText(step.url, 180) : undefined,
-      action: step.action ? fitAgentRunText(step.action, 180) : undefined,
-      thought: step.thought ? fitAgentRunText(step.thought, 260) : undefined,
-      observedControlSequence: step.observedControlSequence,
-      observedAffordances: step.observedAffordances,
-      inputControlsPresent: step.inputControlsPresent,
-      observation: step.observation ? fitAgentRunText(step.observation, 180) : undefined,
-      outcome: step.outcome ? fitAgentRunText(step.outcome, 220) : undefined,
-      status: step.status ? fitAgentRunText(step.status, 120) : undefined,
-      toolName: step.toolName ? fitAgentRunText(step.toolName, 120) : undefined,
-    }).filter(([, value]) => value !== undefined && value !== null && value !== ''),
+function stepHasDirectEvidence(step: AgentRunStep): boolean {
+  if (step.observation || step.toolResult) return true;
+  if ((step.observedControlSequence?.length ?? 0) > 0) return true;
+  if ((step.observedAffordances?.length ?? 0) > 0) return true;
+  return Boolean(
+    step.outcome &&
+    (step.stateIndex !== undefined || step.action || step.toolName || step.url || step.status),
   );
+}
+
+function evidenceSpanRecordForStep(
+  bundle: AgentRunBundle,
+  step: AgentRunStep,
+  sequence: number,
+): string {
+  return compactRecord({
+    sourceRunId: bundle.sourceRunId,
+    goal: bundle.goal,
+    sequence,
+    ...evidenceSliceForRecord(step),
+  });
 }
 
 function appendText(target: Set<string>, value: unknown): void {
@@ -360,10 +367,9 @@ function recordBundleFact(
 ): string | null {
   const trimmed = objectText.trim();
   if (!trimmed) return null;
-  const authorityMultiplier =
-    kind === 'procedure' || bundleHasObservedSourceEvidence(bundle)
-      ? 1
-      : agentRunAuthorityMultiplier(bundle);
+  const authorityMultiplier = bundleHasObservedSourceEvidence(bundle)
+    ? 1
+    : agentRunAuthorityMultiplier(bundle);
   const recorded = recordFact({
     subjectId,
     predicate,
@@ -393,11 +399,9 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
     now: input.now,
   });
   const factIds: string[] = [];
-  const steps = boundedSteps(bundle.steps);
-  const waypoints = boundedSteps(bundle.steps, MAX_WAYPOINTS_PER_RUN).map(
-    procedureWaypointForRecord,
+  const evidenceSlices = boundedSteps(bundle.steps, MAX_EVIDENCE_SLICES_PER_RUN).map(
+    evidenceSliceForRecord,
   );
-  const procedureSteps = steps.map(procedureStepForRecord);
   const tools = Array.from(bundle.tools).slice(0, 16);
   const sources = Array.from(bundle.sources).slice(0, 12);
   const artifacts = Array.from(bundle.artifacts).slice(0, 12);
@@ -413,7 +417,7 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
     tools,
   };
 
-  const procedureRecord = compactProcedureRecord({
+  const agentRunRecord = compactAgentRunRecord({
     base: {
       sourceRunId: bundle.sourceRunId,
       goal: bundle.goal,
@@ -423,46 +427,23 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
       environment: bundle.environment,
       tools,
     },
-    waypoints,
-    steps: procedureSteps,
-    sources,
-  });
-  const procedureId = recordBundleFact(
-    bundle,
-    input,
-    subject.id,
-    'procedure',
-    'agent_run_trace',
-    procedureRecord,
-    { ...baseAttributes, evidenceType: 'agent_run_trace' },
-    0.74,
-    0.82,
-  );
-  if (procedureId) factIds.push(procedureId);
-
-  const evidenceRecord = compactRecord({
-    sourceRunId: bundle.sourceRunId,
-    goal: bundle.goal,
-    status: bundle.status,
-    outcome: bundle.outcome,
-    tools,
-    lastSteps: steps.slice(-6),
+    evidenceSlices,
     sources,
     artifacts,
     decisions,
     risks,
     summaries,
   });
-  const evidenceId = recordBundleFact(
+  const agentRunId = recordBundleFact(
     bundle,
     input,
     subject.id,
-    'outcome',
-    'agent_run_result',
-    evidenceRecord,
+    'agent_run',
+    'agent_run',
+    agentRunRecord,
     {
       ...baseAttributes,
-      evidenceType: 'agent_run_result',
+      evidenceType: 'agent_run',
       artifacts,
       decisions,
       risks,
@@ -472,7 +453,66 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
     0.8,
     0.88,
   );
-  if (evidenceId) factIds.push(evidenceId);
+  if (agentRunId) factIds.push(agentRunId);
+
+  const evidenceSpanSteps = evidenceSlices
+    .filter((step): step is JsonRecord => Boolean(step && typeof step === 'object'))
+    .filter((step) =>
+      stepHasDirectEvidence({
+        stateIndex: scalarField(step, 'stateIndex') ?? scalarField(step, 'state_index'),
+        action: stringField(step, 'action'),
+        thought: stringField(step, 'thought'),
+        url: stringField(step, 'url'),
+        navigationAnchor:
+          typeof step.navigationAnchor === 'boolean' ? step.navigationAnchor : undefined,
+        observation: stringField(step, 'observation'),
+        observedControlSequence: Array.isArray(step.observedControlSequence)
+          ? (step.observedControlSequence as AgentRunStep['observedControlSequence'])
+          : undefined,
+        observedAffordances: Array.isArray(step.observedAffordances)
+          ? (step.observedAffordances as AgentRunStep['observedAffordances'])
+          : undefined,
+        inputControlsPresent:
+          typeof step.inputControlsPresent === 'boolean' ? step.inputControlsPresent : undefined,
+        outcome: stringField(step, 'outcome'),
+        status: stringField(step, 'status'),
+        toolName: stringField(step, 'toolName') ?? stringField(step, 'tool_name'),
+        toolResult: stringField(step, 'toolResult') ?? stringField(step, 'tool_result'),
+      }),
+    )
+    .slice(0, MAX_EVIDENCE_SPAN_FACTS_PER_RUN);
+
+  evidenceSpanSteps.forEach((step, index) => {
+    const stepStateIndex = scalarField(step, 'stateIndex') ?? scalarField(step, 'state_index');
+    const recorded = recordFact({
+      subjectId: subject.id,
+      predicate: 'evidence_span',
+      objectText: evidenceSpanRecordForStep(bundle, step as AgentRunStep, index),
+      memoryKind: 'evidence_span',
+      sourceRunId: bundle.sourceRunId,
+      sourceTurnId: input.sourceTurnId,
+      originConversationId: input.conversationId,
+      originThreadId: input.threadId ?? input.conversationId,
+      originTaskId: input.taskId,
+      taskId: input.taskId,
+      scope: input.taskId ? 'session' : 'conversation',
+      confidence: 0.9,
+      importance: 0.86,
+      retrievability: 0.94,
+      stability: 0.66,
+      attributes: {
+        ...baseAttributes,
+        evidenceType: 'evidence_span',
+        sequence: index,
+        stateIndex: stepStateIndex,
+        status: stringField(step, 'status'),
+        toolName: stringField(step, 'toolName') ?? stringField(step, 'tool_name'),
+        url: stringField(step, 'url'),
+      },
+      now: input.now,
+    });
+    factIds.push(recorded.fact.id);
+  });
 
   return factIds;
 }

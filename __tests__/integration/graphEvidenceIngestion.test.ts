@@ -103,9 +103,15 @@ describe('graph evidence ingestion bridge', () => {
     expect(result.bridgedEvidenceFactIds).toHaveLength(0);
 
     const typedFacts = listFacts({ originConversationId: THREAD_ID });
-    expect(typedFacts.filter((fact) => fact.sourceRunId === 'traj-agent')).toHaveLength(2);
-    expect(typedFacts.some((fact) => fact.memoryKind === 'procedure')).toBe(true);
-    expect(typedFacts.some((fact) => fact.memoryKind === 'outcome')).toBe(true);
+    const agentRunFacts = typedFacts.filter(
+      (fact) => fact.sourceRunId === 'traj-agent' && fact.memoryKind === 'agent_run',
+    );
+    const evidenceSpanFacts = typedFacts.filter(
+      (fact) => fact.sourceRunId === 'traj-agent' && fact.memoryKind === 'evidence_span',
+    );
+    expect(agentRunFacts).toHaveLength(1);
+    expect(evidenceSpanFacts.length).toBeGreaterThan(0);
+    expect(evidenceSpanFacts.length).toBeLessThanOrEqual(8);
     expect(typedFacts.some((fact) => fact.objectText.includes('analysis complete'))).toBe(true);
     expect(
       typedFacts.some(

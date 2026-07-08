@@ -80,7 +80,7 @@ function makeAgentFact(
   return makeFact({
     id,
     subjectId: 'task',
-    predicate: memoryKind === 'procedure' ? 'agent_run_trace' : 'agent_run_result',
+    predicate: memoryKind === 'agent_run' ? 'agent_run' : 'agent_memory',
     objectText: JSON.stringify(objectText),
     sourceRunId: `run-${id}`,
     contentHash: `hash-${id}`,
@@ -136,14 +136,14 @@ describe('assemblePrompt - layer ordering', () => {
 });
 
 describe('assemblePrompt - product memory groups', () => {
-  it('renders compact procedure and outcome evidence in workflow sections', () => {
+  it('renders compact agent-run evidence in one workflow section', () => {
     const out = assemblePrompt({
       ...baseInput,
       retrievedFacts: [
-        makeAgentFact('procedure', 'procedure', {
-          sourceRunId: 'run-procedure',
+        makeAgentFact('agent-run', 'agent_run', {
+          sourceRunId: 'run-agent',
           goal: 'Prepare release notes',
-          steps: [
+          evidenceSlices: [
             { action: 'read changelog', toolName: 'read_file' },
             {
               action: 'write release notes',
@@ -151,10 +151,6 @@ describe('assemblePrompt - product memory groups', () => {
               toolResult: 'created notes.md',
             },
           ],
-        }),
-        makeAgentFact('outcome', 'outcome', {
-          sourceRunId: 'run-outcome',
-          goal: 'Prepare release notes',
           outcome: 'notes.md was created',
           artifacts: ['notes.md'],
         }),
@@ -162,19 +158,11 @@ describe('assemblePrompt - product memory groups', () => {
     });
 
     const text = flattenPromptSections(out.sections);
-    expect(text).toContain('#### Procedures');
-    expect(text).toContain('#### Outcomes and Tool Results');
-    expect(text.indexOf('#### Procedures')).toBeLessThan(
-      text.indexOf('#### Outcomes and Tool Results'),
-    );
-    expect(text).toContain('complete observed workflow traces');
-    expect(text).toContain('do not reduce a successful trace to only its last action');
-    expect(text).toContain(
-      'treat that observed action set as direct evidence of both available and unavailable actions',
-    );
-    expect(text).toContain('do not invent missing actions');
-    expect(text).toContain('Grouped observed action sections are siblings');
-    expect(text).toContain('relevant actions in sibling groups are not substitutes');
+    expect(text).toContain('#### Agent Run Evidence');
+    expect(text).not.toContain('#### Procedures');
+    expect(text).not.toContain('#### Outcomes and Tool Results');
+    expect(text).toContain('compact records of completed assistant work');
+    expect(text).toContain('prefer direct observations, tool results, artifacts');
     expect(text).toContain('read changelog');
     expect(text).toContain('editor shows notes.md ready to save');
     expect(text).toContain('notes.md was created');
@@ -186,11 +174,11 @@ describe('assemblePrompt - product memory groups', () => {
       ...baseInput,
       retrievalQuery: 'needle',
       retrievedFacts: [
-        makeAgentFact('outcome', 'outcome', {
-          sourceRunId: 'run-outcome',
+        makeAgentFact('agent-run', 'agent_run', {
+          sourceRunId: 'run-agent',
           goal: 'Inspect a long tool result',
           outcome: 'inspection completed',
-          lastSteps: [
+          evidenceSlices: [
             {
               action: 'inspect',
               observation: [
@@ -216,10 +204,10 @@ describe('assemblePrompt - product memory groups', () => {
     const out = assemblePrompt({
       ...baseInput,
       retrievedFacts: [
-        makeAgentFact('procedure', 'procedure', {
-          sourceRunId: 'run-procedure',
+        makeAgentFact('agent-run', 'agent_run', {
+          sourceRunId: 'run-agent',
           goal: 'Inspect the current workflow surface',
-          steps: [
+          evidenceSlices: [
             {
               stateIndex: 4,
               action: 'open controls',
@@ -258,10 +246,10 @@ describe('assemblePrompt - product memory groups', () => {
       ...baseInput,
       retrievalQuery: 'Which controls are next to Approve?',
       retrievedFacts: [
-        makeAgentFact('procedure', 'procedure', {
-          sourceRunId: 'run-procedure',
+        makeAgentFact('agent-run', 'agent_run', {
+          sourceRunId: 'run-agent',
           goal: 'Inspect a workflow surface',
-          steps: [
+          evidenceSlices: [
             {
               stateIndex: 4,
               action: 'inspect controls',
@@ -288,13 +276,13 @@ describe('assemblePrompt - product memory groups', () => {
     expect(text.indexOf('Name')).toBeLessThan(text.indexOf('Status'));
   });
 
-  it('renders query-relevant observed outcome evidence before bulky metadata', () => {
+  it('renders query-relevant observed run evidence before bulky metadata', () => {
     const out = assemblePrompt({
       ...baseInput,
       retrievalQuery: 'incident filter option labels',
       retrievedFacts: [
-        makeAgentFact('outcome', 'outcome', {
-          sourceRunId: 'run-outcome',
+        makeAgentFact('agent-run', 'agent_run', {
+          sourceRunId: 'run-agent',
           goal: 'A long completed task description that should not hide observed evidence.',
           status: 'completed',
           outcome: 'inspection completed',
@@ -302,7 +290,7 @@ describe('assemblePrompt - product memory groups', () => {
             'https://example.test/a/very/long/source/url/that/is/useful/metadata',
             'https://example.test/another/source/url/that/is/useful/metadata',
           ],
-          lastSteps: [
+          evidenceSlices: [
             {
               stateIndex: 1,
               action: 'open unrelated page',
@@ -325,9 +313,8 @@ describe('assemblePrompt - product memory groups', () => {
 
     const text = flattenPromptSections(out.sections);
     expect(text).toContain('Incident Mobile');
-    expect(text.indexOf('Incident Mobile')).toBeLessThan(text.indexOf('RootWebArea'));
-    expect(text.indexOf('lastSteps')).toBeLessThan(text.indexOf('sources'));
-    expect(text.indexOf('sources')).toBeLessThan(text.indexOf('goal'));
+    expect(text).not.toContain('RootWebArea');
+    expect(text.indexOf('evidenceSlices')).toBeLessThan(text.indexOf('sources'));
   });
 
   it('renders exact delimited request-anchor evidence before generic step matches', () => {
@@ -335,11 +322,11 @@ describe('assemblePrompt - product memory groups', () => {
       ...baseInput,
       retrievalQuery: 'On the `Project Alpha Console`, which controls are visible?',
       retrievedFacts: [
-        makeAgentFact('outcome', 'outcome', {
-          sourceRunId: 'run-outcome',
+        makeAgentFact('agent-run', 'agent_run', {
+          sourceRunId: 'run-agent',
           status: 'completed',
           outcome: 'inspection completed',
-          lastSteps: [
+          evidenceSlices: [
             {
               stateIndex: 1,
               action: 'inspect earlier settings',

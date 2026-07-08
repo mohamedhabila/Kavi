@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 describe('recordAgentRunEvidenceMemory', () => {
-  it('stores one compact procedure and one compact outcome per source run', () => {
+  it('stores one compact agent-run memory and direct evidence spans per source run', () => {
     const evidence = [
       `agent:${JSON.stringify({
         trajectory_id: 'run-1',
@@ -53,10 +53,11 @@ describe('recordAgentRunEvidenceMemory', () => {
     });
 
     expect(result.consumedEvidence).toHaveLength(2);
-    expect(result.factIds).toHaveLength(2);
+    expect(result.factIds.length).toBeGreaterThan(1);
 
     const facts = listFacts({ originConversationId: 'conv-agent-memory' });
-    expect(facts.map((fact) => fact.memoryKind).sort()).toEqual(['outcome', 'procedure']);
+    expect(facts.filter((fact) => fact.memoryKind === 'agent_run')).toHaveLength(1);
+    expect(facts.filter((fact) => fact.memoryKind === 'evidence_span').length).toBeGreaterThan(0);
     expect(facts.every((fact) => fact.sourceRunId === 'run-1')).toBe(true);
     expect(facts.some((fact) => fact.objectText.includes('reports/analysis.json'))).toBe(true);
   });
@@ -103,28 +104,18 @@ describe('recordAgentRunEvidenceMemory', () => {
       now: 10,
     });
 
-    expect(result.factIds).toHaveLength(4);
+    expect(result.factIds.length).toBeGreaterThanOrEqual(2);
     const facts = listFacts({ originConversationId: 'conv-agent-memory' });
     const success = facts.find(
-      (fact) => fact.sourceRunId === 'run-success' && fact.memoryKind === 'outcome',
+      (fact) => fact.sourceRunId === 'run-success' && fact.memoryKind === 'agent_run',
     );
     const failure = facts.find(
-      (fact) => fact.sourceRunId === 'run-failure' && fact.memoryKind === 'outcome',
-    );
-    const successProcedure = facts.find(
-      (fact) => fact.sourceRunId === 'run-success' && fact.memoryKind === 'procedure',
-    );
-    const failureProcedure = facts.find(
-      (fact) => fact.sourceRunId === 'run-failure' && fact.memoryKind === 'procedure',
+      (fact) => fact.sourceRunId === 'run-failure' && fact.memoryKind === 'agent_run',
     );
     expect(success).toBeDefined();
     expect(failure).toBeDefined();
-    expect(successProcedure).toBeDefined();
-    expect(failureProcedure).toBeDefined();
     expect(failure?.confidence).toBeLessThan(success?.confidence ?? 0);
     expect(failure?.retrievability).toBeLessThan(success?.retrievability ?? 0);
-    expect(failureProcedure?.confidence).toBe(successProcedure?.confidence);
-    expect(failureProcedure?.retrievability).toBe(successProcedure?.retrievability);
   });
 
   it('keeps observed source evidence retrievable even when the run outcome failed', () => {
@@ -148,12 +139,12 @@ describe('recordAgentRunEvidenceMemory', () => {
       now: 10,
     });
 
-    expect(result.factIds).toHaveLength(2);
+    expect(result.factIds.length).toBeGreaterThan(1);
     const facts = listFacts({ originConversationId: 'conv-agent-memory' });
-    const outcome = facts.find((fact) => fact.memoryKind === 'outcome');
-    const procedure = facts.find((fact) => fact.memoryKind === 'procedure');
-    expect(outcome?.confidence).toBe(procedure?.confidence);
-    expect(outcome?.retrievability).toBeGreaterThan(0.8);
+    const agentRun = facts.find((fact) => fact.memoryKind === 'agent_run');
+    expect(facts.some((fact) => fact.memoryKind === 'evidence_span')).toBe(true);
+    expect(agentRun?.confidence).toBeGreaterThan(0.8);
+    expect(agentRun?.retrievability).toBeGreaterThan(0.8);
   });
 
   it('keeps bounded observed tool output inside compact run memories', () => {
@@ -185,11 +176,11 @@ describe('recordAgentRunEvidenceMemory', () => {
     });
 
     expect(result.consumedEvidence).toHaveLength(1);
-    expect(result.factIds).toHaveLength(2);
+    expect(result.factIds.length).toBeGreaterThan(1);
 
     const facts = listFacts({ originConversationId: 'conv-agent-memory' });
-    expect(facts.map((fact) => fact.memoryKind).sort()).toEqual(['outcome', 'procedure']);
-    expect(facts).toHaveLength(2);
+    expect(facts.filter((fact) => fact.memoryKind === 'agent_run')).toHaveLength(1);
+    expect(facts.filter((fact) => fact.memoryKind === 'evidence_span')).toHaveLength(1);
 
     const joined = facts.map((fact) => fact.objectText).join('\n');
     expect(joined).toContain('"observation"');
@@ -229,23 +220,21 @@ describe('recordAgentRunEvidenceMemory', () => {
       now: 10,
     });
 
-    expect(result.factIds).toHaveLength(2);
+    expect(result.factIds.length).toBeGreaterThan(1);
     const facts = listFacts({ originConversationId: 'conv-agent-memory' });
-    const procedure = facts.find((fact) => fact.memoryKind === 'procedure');
-    const procedureRecord = JSON.parse(procedure?.objectText ?? '{}');
-    const affordanceLabels = [
-      ...(procedureRecord.steps ?? []),
-      ...(procedureRecord.waypoints ?? []),
-    ].flatMap((step: Record<string, unknown>) =>
-      Array.isArray(step.observedAffordances)
-        ? step.observedAffordances.map((entry: Record<string, unknown>) => entry.label)
-        : [],
+    const agentRun = facts.find((fact) => fact.memoryKind === 'agent_run');
+    const agentRunRecord = JSON.parse(agentRun?.objectText ?? '{}');
+    const affordanceLabels = (agentRunRecord.evidenceSlices ?? []).flatMap(
+      (step: Record<string, unknown>) =>
+        Array.isArray(step.observedAffordances)
+          ? step.observedAffordances.map((entry: Record<string, unknown>) => entry.label)
+          : [],
     );
 
     expect(affordanceLabels).toEqual(
       expect.arrayContaining(['Incident Mobile', 'Incident Portal', 'My Open Incidents']),
     );
-    expect(JSON.stringify(procedureRecord)).toContain('"inputControlsPresent":false');
+    expect(JSON.stringify(agentRunRecord)).toContain('"inputControlsPresent":false');
     for (const fact of facts) {
       expect(fact.objectText.length).toBeLessThanOrEqual(10_000);
     }
@@ -280,13 +269,11 @@ describe('recordAgentRunEvidenceMemory', () => {
     });
 
     const facts = listFacts({ originConversationId: 'conv-agent-memory' });
-    const procedure = facts.find((fact) => fact.memoryKind === 'procedure');
-    const procedureRecord = JSON.parse(procedure?.objectText ?? '{}');
-    const affordances = [
-      ...(procedureRecord.steps ?? []),
-      ...(procedureRecord.waypoints ?? []),
-    ].flatMap((step: Record<string, unknown>) =>
-      Array.isArray(step.observedAffordances) ? step.observedAffordances : [],
+    const agentRun = facts.find((fact) => fact.memoryKind === 'agent_run');
+    const agentRunRecord = JSON.parse(agentRun?.objectText ?? '{}');
+    const affordances = (agentRunRecord.evidenceSlices ?? []).flatMap(
+      (step: Record<string, unknown>) =>
+        Array.isArray(step.observedAffordances) ? step.observedAffordances : [],
     ) as Array<Record<string, unknown>>;
     const projectCode = affordances.find((entry) => entry.label === 'Project code');
 
@@ -325,11 +312,11 @@ describe('recordAgentRunEvidenceMemory', () => {
       now: 10,
     });
 
-    expect(result.factIds).toHaveLength(2);
+    expect(result.factIds.length).toBeGreaterThan(1);
     const facts = listFacts({ originConversationId: 'conv-agent-memory' });
-    const procedure = facts.find((fact) => fact.memoryKind === 'procedure');
-    const procedureRecord = JSON.parse(procedure?.objectText ?? '{}');
-    const rendered = JSON.stringify(procedureRecord);
+    const agentRun = facts.find((fact) => fact.memoryKind === 'agent_run');
+    const agentRunRecord = JSON.parse(agentRun?.objectText ?? '{}');
+    const rendered = JSON.stringify(agentRunRecord);
     expect(rendered).toContain('Open menu');
     expect(rendered).toContain('Incident Mobile');
     expect(rendered).toContain('Incident Portal');
@@ -370,17 +357,17 @@ describe('recordAgentRunEvidenceMemory', () => {
       now: 10,
     });
 
-    expect(result.factIds).toHaveLength(2);
+    expect(result.factIds.length).toBeGreaterThan(1);
     const facts = listFacts({ originConversationId: 'conv-agent-memory' });
-    const procedure = facts.find((fact) => fact.memoryKind === 'procedure');
-    const procedureRecord = JSON.parse(procedure?.objectText ?? '{}');
-    const rendered = JSON.stringify(procedureRecord);
+    const agentRun = facts.find((fact) => fact.memoryKind === 'agent_run');
+    const agentRunRecord = JSON.parse(agentRun?.objectText ?? '{}');
+    const rendered = JSON.stringify(agentRunRecord);
     expect(rendered).toContain('Incident Mobile');
     expect(rendered).toContain('Incident Portal');
     expect(rendered).toContain('My Open Incidents');
   });
 
-  it('keeps adjacent structured affordances when compacting long outcome memories', () => {
+  it('keeps adjacent structured affordances when compacting long agent-run memories', () => {
     const fillerObservation = Array.from(
       { length: 140 },
       (_, line) => `[noise-${line}] StaticText 'background row ${line}'`,
@@ -426,15 +413,18 @@ describe('recordAgentRunEvidenceMemory', () => {
       now: 10,
     });
 
-    expect(result.factIds).toHaveLength(2);
+    expect(result.factIds.length).toBeGreaterThan(1);
     const facts = listFacts({ originConversationId: 'conv-agent-memory' });
-    const outcome = facts.find((fact) => fact.memoryKind === 'outcome');
-    const outcomeRecord = JSON.parse(outcome?.objectText ?? '{}');
-    const rendered = JSON.stringify(outcomeRecord);
+    const agentRun = facts.find((fact) => fact.memoryKind === 'agent_run');
+    const agentRunRecord = JSON.parse(agentRun?.objectText ?? '{}');
+    const rendered = JSON.stringify(agentRunRecord);
+    expect(agentRunRecord.goal).toBe(
+      'Complete a long observed workflow while retaining compact structural evidence for later agent reasoning.',
+    );
     expect(rendered).toContain('Incident Mobile');
     expect(rendered).toContain('Incident Portal');
     expect(rendered).toContain('My Open Incidents');
-    expect(outcome?.objectText.length).toBeLessThanOrEqual(10_000);
+    expect(agentRun?.objectText.length).toBeLessThanOrEqual(10_000);
   });
 
   it('keeps representative lines from long observed tool output', () => {
@@ -463,7 +453,7 @@ describe('recordAgentRunEvidenceMemory', () => {
       now: 10,
     });
 
-    expect(result.factIds).toHaveLength(2);
+    expect(result.factIds.length).toBeGreaterThan(1);
     const facts = listFacts({ originConversationId: 'conv-agent-memory' });
     const joined = facts.map((fact) => fact.objectText).join('\n');
     expect(joined).toContain('field-marker-midrun-checkbox');
@@ -498,7 +488,7 @@ describe('recordAgentRunEvidenceMemory', () => {
       now: 10,
     });
 
-    expect(result.factIds).toHaveLength(2);
+    expect(result.factIds.length).toBeGreaterThan(1);
     const facts = listFacts({ originConversationId: 'conv-agent-memory' });
     const joined = facts.map((fact) => fact.objectText).join('\n');
     expect(joined).toContain("toggle 'Auto approve'");
@@ -518,12 +508,14 @@ describe('recordAgentRunEvidenceMemory', () => {
         `agent:${JSON.stringify({
           trajectory_id: 'run-long',
           state_index: index,
+          goal: 'Complete a long approval workflow and preserve why each observed state mattered.',
           toolName: 'browser_state',
           status: 'completed',
         })}`,
         `agent:${JSON.stringify({
           trajectory_id: 'run-long',
           state_index: index,
+          goal: 'Complete a long approval workflow and preserve why each observed state mattered.',
           action: `Continue workflow step ${index}`,
           url: `https://example.com/workflows/${index}?source=${'path-'.repeat(40)}`,
           accessibility_tree: observedState,
@@ -542,40 +534,41 @@ describe('recordAgentRunEvidenceMemory', () => {
     });
 
     expect(result.consumedEvidence).toHaveLength(200);
-    expect(result.factIds).toHaveLength(2);
+    expect(result.factIds.length).toBeGreaterThan(1);
 
     const facts = listFacts({ originConversationId: 'conv-agent-memory' });
     const joined = facts.map((fact) => fact.objectText).join('\n');
     expect(joined).toContain('middle workflow checkpoint');
-    expect(facts.every((fact) => fact.attributes.stepCount === 100)).toBe(true);
-    const procedure = facts.find((fact) => fact.memoryKind === 'procedure');
-    expect(procedure?.objectText).toContain('middle workflow checkpoint');
-    const procedureRecord = JSON.parse(procedure?.objectText ?? '{}');
-    expect(Array.isArray(procedureRecord.steps)).toBe(true);
-    expect(procedureRecord.steps.length).toBeGreaterThan(1);
-    expect(Array.isArray(procedureRecord.waypoints)).toBe(true);
-    expect(procedureRecord.waypoints.length).toBeGreaterThanOrEqual(procedureRecord.steps.length);
-    expect(procedureRecord.steps.some((step: Record<string, unknown>) => step.observation)).toBe(
-      true,
-    );
+    const agentRun = facts.find((fact) => fact.memoryKind === 'agent_run');
+    expect(agentRun?.attributes.stepCount).toBe(100);
+    expect(agentRun?.objectText).toContain('middle workflow checkpoint');
+    const agentRunRecord = JSON.parse(agentRun?.objectText ?? '{}');
+    expect(Array.isArray(agentRunRecord.evidenceSlices)).toBe(true);
+    expect(agentRunRecord.evidenceSlices.length).toBeGreaterThan(1);
     expect(
-      procedureRecord.waypoints.some((step: Record<string, unknown>) =>
+      agentRunRecord.evidenceSlices.some((step: Record<string, unknown>) => step.observation),
+    ).toBe(true);
+    expect(
+      agentRunRecord.evidenceSlices.some((step: Record<string, unknown>) =>
         String(step.action ?? '').includes('Continue workflow step'),
       ),
     ).toBe(true);
     expect(
-      procedureRecord.waypoints.some((step: Record<string, unknown>) =>
+      agentRunRecord.evidenceSlices.some((step: Record<string, unknown>) =>
         String(step.observation ?? '').includes('waypoint workflow checkpoint'),
       ),
     ).toBe(true);
     expect(
-      procedureRecord.waypoints.some((step: Record<string, unknown>) =>
+      agentRunRecord.evidenceSlices.some((step: Record<string, unknown>) =>
         String(step.observation ?? '').includes('step 99 observed state'),
       ),
     ).toBe(true);
     for (const fact of facts) {
       expect(fact.objectText.length).toBeLessThanOrEqual(10_000);
-      expect(JSON.parse(fact.objectText)).toMatchObject({ sourceRunId: 'run-long' });
+      expect(JSON.parse(fact.objectText)).toMatchObject({
+        sourceRunId: 'run-long',
+        goal: 'Complete a long approval workflow and preserve why each observed state mattered.',
+      });
     }
   });
 
@@ -616,7 +609,7 @@ describe('recordAgentRunEvidenceMemory', () => {
       now: 10,
     });
 
-    expect(result.factIds).toHaveLength(2);
+    expect(result.factIds.length).toBeGreaterThan(1);
     const facts = listFacts({ originConversationId: 'conv-agent-memory' });
     const joined = facts.map((fact) => fact.objectText).join('\n');
     expect(joined).toContain('Late evidence section');

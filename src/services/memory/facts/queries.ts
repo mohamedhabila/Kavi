@@ -448,13 +448,13 @@ export function listFactsForSourceRunForwardWindows(
       `SELECT *
          FROM (
            SELECT f.*,
-	                  ${stateExpr} AS state_index_rank,
-	                  CASE
-	                    WHEN f.memory_kind = 'outcome' THEN 0
-	                    WHEN f.memory_kind = 'procedure' THEN 1
-	                    WHEN f.memory_kind = 'decision' THEN 2
-	                    WHEN f.memory_kind = 'risk' THEN 3
-	                    WHEN f.memory_kind = 'artifact' THEN 4
+		                  ${stateExpr} AS state_index_rank,
+			                  CASE
+			                    WHEN f.memory_kind = 'evidence_span' THEN 0
+			                    WHEN f.memory_kind = 'agent_run' THEN 1
+			                    WHEN f.memory_kind = 'decision' THEN 2
+			                    WHEN f.memory_kind = 'risk' THEN 3
+			                    WHEN f.memory_kind = 'artifact' THEN 4
 	                    WHEN f.memory_kind = 'source' THEN 5
 	                    ELSE 6
 	                  END AS memory_kind_rank,
@@ -549,12 +549,12 @@ export function listFactsForSourceRunStateNeighborhoods(
     const orderSql = options.preferAdjacent
       ? `CASE WHEN ${stateExpr} = ? THEN 1 ELSE 0 END ASC,
                  ABS(${stateExpr} - ?) ASC,
-	                 CASE WHEN ${stateExpr} >= ? THEN 0 ELSE 1 END ASC,
-	                 CASE
-	                   WHEN memory_kind = 'outcome' THEN 0
-	                   WHEN memory_kind = 'procedure' THEN 1
-	                   WHEN memory_kind = 'decision' THEN 2
-	                   WHEN memory_kind = 'risk' THEN 3
+		                 CASE WHEN ${stateExpr} >= ? THEN 0 ELSE 1 END ASC,
+			                 CASE
+			                   WHEN memory_kind = 'evidence_span' THEN 0
+			                   WHEN memory_kind = 'agent_run' THEN 1
+			                   WHEN memory_kind = 'decision' THEN 2
+			                   WHEN memory_kind = 'risk' THEN 3
 	                   ELSE 4
 	                 END ASC,
                  retrievability DESC,

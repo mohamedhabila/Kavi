@@ -12,7 +12,7 @@ function fact(id: string, objectText: string): MemoryFact {
   return {
     id,
     subjectId: `subject-${id}`,
-    predicate: 'agent_run_trace',
+    predicate: 'agent_run',
     objectText,
     confidence: 0.9,
     validAt: 1,
@@ -39,7 +39,7 @@ function fact(id: string, objectText: string): MemoryFact {
     contentHash: null,
     sourceActorId: null,
     taskId: null,
-    memoryKind: 'procedure',
+    memoryKind: 'agent_run',
     retrievability: 1,
     stability: 0.8,
     decayRate: 0.03,
@@ -57,7 +57,7 @@ describe('createLlmMemoryFactSelector', () => {
     mockSendLlmMessage.mockReset();
   });
 
-  it('asks the configured LLM to rank a bounded evidence slate instead of minimizing records', async () => {
+  it('asks the configured LLM to select a compact high-confidence evidence slate', async () => {
     mockSendLlmMessage.mockResolvedValue({
       output_parsed: { selectedFactIds: ['fact-b', 'fact-a'] },
     });
@@ -78,7 +78,6 @@ describe('createLlmMemoryFactSelector', () => {
     const result = await selector?.({
       query: 'which workflow evidence supports the current request?',
       limit: 4,
-      targetCount: 4,
       candidates: [
         {
           fact: fact('fact-a', 'first direct workflow observation'),
@@ -107,14 +106,15 @@ describe('createLlmMemoryFactSelector', () => {
     };
     expect(params.messages[0]?.content).toContain('evidence slate');
     expect(params.messages[0]?.content).toContain('distinct sourceRunId');
-    expect(params.messages[0]?.content).not.toContain('Prefer fewer');
+    expect(params.messages[0]?.content).toContain('smallest sufficient set');
+    expect(params.messages[0]?.content).not.toContain('targetSelected');
     const payload = JSON.parse(params.messages[1]?.content ?? '{}') as {
       maxSelected?: number;
       targetSelected?: number;
       candidates?: unknown[];
     };
     expect(payload.maxSelected).toBe(4);
-    expect(payload.targetSelected).toBe(3);
+    expect(payload.targetSelected).toBeUndefined();
     expect(payload.candidates).toHaveLength(3);
   });
 
@@ -150,7 +150,6 @@ describe('createLlmMemoryFactSelector', () => {
     await selector?.({
       query: 'late evidence action',
       limit: 1,
-      targetCount: 1,
       candidates: [
         {
           fact: fact(
@@ -158,7 +157,7 @@ describe('createLlmMemoryFactSelector', () => {
             JSON.stringify({
               sourceRunId: 'run-target',
               status: 'completed',
-              lastSteps: [{ observedAffordances }],
+              evidenceSlices: [{ observedAffordances }],
             }),
           ),
           score: 0.4,
@@ -199,7 +198,6 @@ describe('createLlmMemoryFactSelector', () => {
     await selector?.({
       query: 'Approve adjacent controls',
       limit: 1,
-      targetCount: 1,
       candidates: [
         {
           fact: fact(
@@ -207,7 +205,7 @@ describe('createLlmMemoryFactSelector', () => {
             JSON.stringify({
               sourceRunId: 'run-target',
               status: 'completed',
-              steps: [
+              evidenceSlices: [
                 {
                   observedControlSequence: [
                     { role: 'button', label: 'Open' },
@@ -239,6 +237,64 @@ describe('createLlmMemoryFactSelector', () => {
     expect(text.indexOf('Approve')).toBeLessThan(text.indexOf('Archive'));
   });
 
+  it('keeps step surface URLs visible in selector candidates', async () => {
+    mockSendLlmMessage.mockResolvedValue({
+      output_parsed: { selectedFactIds: ['fact-target'] },
+    });
+    const provider: LlmProviderConfig = {
+      id: 'test-provider',
+      name: 'Test Provider',
+      kind: 'remote',
+      protocol: 'openai-responses',
+      providerFamily: 'openai',
+      baseUrl: 'https://example.invalid/v1',
+      apiKey: 'test-key',
+      model: 'test-model',
+      enabled: true,
+      capabilityHints: { supportsStructuredOutput: true },
+    };
+    const selector = createLlmMemoryFactSelector({ provider, model: 'test-model' });
+
+    await selector?.({
+      query: 'which action is shown on the detail surface?',
+      limit: 1,
+      candidates: [
+        {
+          fact: fact(
+            'fact-target',
+            JSON.stringify({
+              sourceRunId: 'run-target',
+              status: 'completed',
+              evidenceSlices: [
+                {
+                  url: 'https://app.example.test/work/items/index/edit/id/10',
+                  observedControlSequence: [
+                    { role: 'button', label: 'action-a' },
+                    { role: 'button', label: 'action-b' },
+                  ],
+                },
+              ],
+            }),
+          ),
+          score: 0.4,
+          textScore: 0.2,
+          relevanceScore: 0.2,
+        },
+      ],
+    });
+
+    const params = mockSendLlmMessage.mock.calls[0]?.[0] as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const payload = JSON.parse(params.messages[1]?.content ?? '{}') as {
+      candidates?: Array<{ text?: string }>;
+    };
+    const text = payload.candidates?.[0]?.text ?? '';
+    expect(text).toContain('https://app.example.test/work/items/index/edit/id/10');
+    expect(text).toContain('action-a');
+    expect(text).toContain('action-b');
+  });
+
   it('keeps ordered control sequence boundaries with query-neighbor evidence', async () => {
     mockSendLlmMessage.mockResolvedValue({
       output_parsed: { selectedFactIds: ['fact-target'] },
@@ -267,7 +323,6 @@ describe('createLlmMemoryFactSelector', () => {
     await selector?.({
       query: 'needle control',
       limit: 1,
-      targetCount: 1,
       candidates: [
         {
           fact: fact(
@@ -275,7 +330,7 @@ describe('createLlmMemoryFactSelector', () => {
             JSON.stringify({
               sourceRunId: 'run-target',
               status: 'completed',
-              steps: [{ observedControlSequence }],
+              evidenceSlices: [{ observedControlSequence }],
             }),
           ),
           score: 0.4,
@@ -318,7 +373,6 @@ describe('createLlmMemoryFactSelector', () => {
     await selector?.({
       query: 'direct evidence',
       limit: 1,
-      targetCount: 1,
       candidates: [
         {
           fact: fact(
@@ -326,7 +380,7 @@ describe('createLlmMemoryFactSelector', () => {
             JSON.stringify({
               sourceRunId: 'run-target',
               status: 'completed',
-              lastSteps: [
+              evidenceSlices: [
                 {
                   action: 'inspect-state',
                   thought: 'previous inferred plan that should not fill selector context',
@@ -376,7 +430,6 @@ describe('createLlmMemoryFactSelector', () => {
     await selector?.({
       query: 'direct control',
       limit: 1,
-      targetCount: 1,
       candidates: [
         {
           fact: fact(
@@ -384,7 +437,7 @@ describe('createLlmMemoryFactSelector', () => {
             JSON.stringify({
               sourceRunId: 'run-target',
               status: 'completed',
-              lastSteps: [
+              evidenceSlices: [
                 {
                   observedControlSequence: [{ role: 'button', label: 'direct control action' }],
                   observedAffordances: [{ role: 'button', label: 'duplicated sampled action' }],

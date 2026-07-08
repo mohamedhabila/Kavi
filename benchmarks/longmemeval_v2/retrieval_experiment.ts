@@ -104,7 +104,9 @@ function sourceRunSummary(rows: RankedDbFact[], limit: number): JsonObject[] {
   }));
 }
 
-function appSourceRunSummary(rows: Array<{ fact: { sourceRunId?: string | null; objectText: string }; score: number }>): JsonObject[] {
+function appSourceRunSummary(
+  rows: Array<{ fact: { sourceRunId?: string | null; objectText: string }; score: number }>,
+): JsonObject[] {
   const counts = new Map<string, { count: number; bestScore: number; bestSnippet: string }>();
   for (const row of rows) {
     const key = row.fact.sourceRunId ?? '(none)';
@@ -154,17 +156,14 @@ async function main(): Promise<void> {
   copyFileSync(sourceDb, join(workDir, 'kavi-memory.db'));
   process.env.KAVI_MEMORY_SQLITE_DIR = workDir;
 
-  const { ensureFactSchema, resetFactSchemaCacheForTests } = await import(
-    '../../src/services/memory/schema'
-  );
+  const { ensureFactSchema, resetFactSchemaCacheForTests } =
+    await import('../../src/services/memory/schema');
   const { closeMemoryDb } = await import('../../src/services/memory/sqlite-store');
   const { recallScoredFactsForQuery } = await import('../../src/services/memory/factRecall');
-  const { buildUnifiedMemoryAccessContext } = await import(
-    '../../src/services/memory/memoryAccessGateway'
-  );
-  const { orchestrateMemoryRetrieval } = await import(
-    '../../src/services/memory/retrievalOrchestrator'
-  );
+  const { buildUnifiedMemoryAccessContext } =
+    await import('../../src/services/memory/memoryAccessGateway');
+  const { orchestrateMemoryRetrieval } =
+    await import('../../src/services/memory/retrievalOrchestrator');
   resetFactSchemaCacheForTests();
   ensureFactSchema();
 
@@ -271,8 +270,8 @@ async function main(): Promise<void> {
         await recallScoredFactsForQuery(signal, {
           conversationId,
           memoryKind: [
-            'procedure',
-            'outcome',
+            'agent_run',
+            'evidence_span',
             'tool_result',
             'decision',
             'risk',

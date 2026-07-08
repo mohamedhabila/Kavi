@@ -35,11 +35,6 @@ const CANDIDATE_POOL_MAX = 2_000;
 const QUOTED_ANCHOR_LIMIT = 12;
 const DEFAULT_SELECTOR_CANDIDATE_LIMIT = 48;
 
-function selectorTargetCount(candidateCount: number, limit: number): number {
-  if (candidateCount <= 0) return 0;
-  return Math.max(1, Math.min(candidateCount, limit));
-}
-
 function getCandidateScopes(options: RecallFactsOptions): MemoryFactScope[] | undefined {
   if (options.scopeFilter) {
     return Array.isArray(options.scopeFilter) ? options.scopeFilter : [options.scopeFilter];
@@ -168,7 +163,6 @@ async function selectFactsWithSemanticSelector(params: {
     const result = await selector({
       query: params.query,
       limit: params.limit,
-      targetCount: selectorTargetCount(candidates.length, params.limit),
       candidates,
     });
     for (const factId of result.factIds) {

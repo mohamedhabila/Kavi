@@ -109,9 +109,9 @@ describe('ensureFactSchema', () => {
     const entity = upsertEntity({ name: 'forum', type: 'project', now: 1 });
     recordFact({
       subjectId: entity.id,
-      predicate: 'agent_run_result',
+      predicate: 'agent_run',
       objectText: 'Cyberpunk forum analysis produced reports/analysis.json',
-      memoryKind: 'outcome',
+      memoryKind: 'agent_run',
       now: 2,
     });
 
@@ -121,7 +121,7 @@ describe('ensureFactSchema', () => {
         WHERE unit = ?
           AND memory_kind = ?`,
       'cyberpunk',
-      'outcome',
+      'agent_run',
     );
     expect(stats?.fact_count).toBe(1);
 
@@ -130,6 +130,28 @@ describe('ensureFactSchema', () => {
       'SELECT COUNT(*) AS count FROM memory_fact_term_stats',
     );
     expect(statsAfterClear?.count).toBe(0);
+  });
+
+  it('indexes direct evidence span memories as first-class recall records', () => {
+    ensureFactSchema();
+    const entity = upsertEntity({ name: 'release', type: 'project', now: 1 });
+    recordFact({
+      subjectId: entity.id,
+      predicate: 'evidence_span',
+      objectText: 'release manifest path dist/release-manifest.json',
+      memoryKind: 'evidence_span',
+      now: 2,
+    });
+
+    const stats = getMemoryDb().getFirstSync<{ fact_count: number }>(
+      `SELECT fact_count
+         FROM memory_fact_term_stats
+        WHERE unit = ?
+          AND memory_kind = ?`,
+      'manifest',
+      'evidence_span',
+    );
+    expect(stats?.fact_count).toBe(1);
   });
 
   it('indexes source-run lexical expansion by source and query unit', () => {

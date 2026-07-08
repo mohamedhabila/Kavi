@@ -166,6 +166,7 @@ function compactStep(
   const hasDirectEvidence = hasDirectStepEvidence(record);
   const compact = {
     stateIndex: record.stateIndex ?? record.state_index,
+    url: fitUnknownValue(record.url, 240),
     observedControlSequence: compactObservedControlSequenceForSelector(
       record.observedControlSequence,
       queryUnits,
@@ -249,12 +250,28 @@ function selectorEvidenceText(
   const fact = candidate.fact;
   const parsed = parseJsonRecord(fact.objectText);
   if (!parsed) return fitText(fact.objectText, MAX_CANDIDATE_TEXT_CHARS);
+  if (fact.memoryKind === 'evidence_span') {
+    const step = compactStep(parsed, queryUnits) ?? {};
+    const compact = {
+      sourceRunId: parsed.sourceRunId,
+      goal: fitUnknownValue(parsed.goal, 500),
+      sequence: parsed.sequence,
+      ...step,
+    };
+    const entries = Object.entries(compact).filter(
+      ([, entry]) =>
+        entry !== undefined &&
+        entry !== null &&
+        entry !== '' &&
+        (!Array.isArray(entry) || entry.length > 0),
+    );
+    return fitText(JSON.stringify(Object.fromEntries(entries)), MAX_CANDIDATE_TEXT_CHARS);
+  }
   const compact = {
     sourceRunId: parsed.sourceRunId,
     status: fitUnknownValue(parsed.status, 120),
     outcome: fitUnknownValue(parsed.outcome, 500),
-    steps: selectStepsForPrompt(parsed.steps ?? parsed.lastSteps, queryUnits),
-    waypoints: selectStepsForPrompt(parsed.waypoints, queryUnits),
+    evidenceSlices: selectStepsForPrompt(parsed.evidenceSlices, queryUnits),
     summaries: fitUnknownValue(parsed.summaries, 500),
     decisions: fitUnknownValue(parsed.decisions, 500),
     risks: fitUnknownValue(parsed.risks, 500),
@@ -313,21 +330,20 @@ export function createLlmMemoryFactSelector(
   const model = (config.model || provider.model || '').trim();
   if (!model) return undefined;
 
-  return async ({ query, limit, targetCount, candidates }) => {
+  return async ({ query, limit, candidates }) => {
     if (candidates.length === 0) return { factIds: [] };
     const queryUnits = tokenizeLexicalUnits(query);
     const messages: ChatCompletionMessage[] = [
       {
         role: 'system',
         content:
-          'Rerank the provided memory records into a compact evidence slate for the current user request. Do not answer the request. Return only record ids from the provided candidates. Prefer direct observed evidence over broad topical similarity. Return targetSelected ids unless fewer candidates have plausible relevance; the caller already bounded the pool, so do not stop at the first plausible record when nearby candidates may establish presence, absence, conflict, or complementary evidence. Prefer covering distinct sourceRunId, subject, task, or turn groups before repeated variants of one group.',
+          'Rerank the provided memory records into a compact evidence slate for the current user request. Do not answer the request. Return only record ids from the provided candidates. Prefer direct observed evidence over broad topical similarity. Return the smallest sufficient set, up to maxSelected records. Include additional records only when they add necessary complementary, conflicting, temporal, or uncertainty-resolving evidence. Prefer covering distinct sourceRunId, subject, task, or turn groups before repeated variants of one group.',
       },
       {
         role: 'user',
         content: JSON.stringify({
           request: fitText(query, MAX_QUERY_CHARS),
           maxSelected: limit,
-          targetSelected: Math.max(1, Math.min(targetCount, candidates.length, limit)),
           candidates: candidates.map((candidate, index) =>
             candidateForPrompt(candidate, index, queryUnits),
           ),

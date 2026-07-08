@@ -14,8 +14,8 @@ export type MemoryFactKind =
   | 'risk'
   | 'artifact'
   | 'summary'
-  | 'procedure'
-  | 'outcome'
+  | 'evidence_span'
+  | 'agent_run'
   | 'gotcha';
 
 export interface MemoryFact {
@@ -137,8 +137,8 @@ export function normalizeFactKind(value: unknown): MemoryFactKind {
     value === 'risk' ||
     value === 'artifact' ||
     value === 'summary' ||
-    value === 'procedure' ||
-    value === 'outcome' ||
+    value === 'evidence_span' ||
+    value === 'agent_run' ||
     value === 'gotcha'
     ? value
     : 'semantic_fact';

@@ -86,12 +86,6 @@ export interface MemoryFactSelectionCandidate {
 export interface MemoryFactSelectionRequest {
   query: string;
   limit: number;
-  /**
-   * Desired evidence-slate size within the caller's bounded limit. Selectors
-   * should return an ordered slate near this size when candidates contain
-   * plausible support, rather than collapsing to one broad topical match.
-   */
-  targetCount: number;
   candidates: ReadonlyArray<MemoryFactSelectionCandidate>;
 }
 

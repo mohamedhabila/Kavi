@@ -1,11 +1,15 @@
 import { assemblePrompt } from '../../../src/services/memory/promptAssembly';
-import type { MemoryFact } from '../../../src/services/memory/facts/types';
+import type { MemoryFact, MemoryFactKind } from '../../../src/services/memory/facts/types';
 
-function memoryFact(id: string, objectText: string): MemoryFact {
+function memoryFact(
+  id: string,
+  objectText: string,
+  memoryKind: MemoryFactKind = 'agent_run',
+): MemoryFact {
   return {
     id,
     subjectId: `subject-${id}`,
-    predicate: 'agent_run_result',
+    predicate: memoryKind,
     objectText,
     objectEntityId: null,
     attributes: {},
@@ -44,7 +48,7 @@ function memoryFact(id: string, objectText: string): MemoryFact {
     lastConflictedAt: null,
     reviewState: 'auto',
     sensitivity: 'normal',
-    memoryKind: 'outcome',
+    memoryKind,
   };
 }
 
@@ -67,7 +71,7 @@ describe('assemblePrompt', () => {
           JSON.stringify({
             sourceRunId: 'run-target',
             status: 'completed',
-            lastSteps: [{ observedControlSequence }],
+            evidenceSlices: [{ observedControlSequence }],
           }),
         ),
       ],
@@ -89,7 +93,7 @@ describe('assemblePrompt', () => {
           JSON.stringify({
             sourceRunId: 'run-target',
             status: 'completed',
-            lastSteps: [
+            evidenceSlices: [
               {
                 action: 'inspect-state',
                 thought: 'prior model inference that should not compete with observation',
@@ -118,7 +122,7 @@ describe('assemblePrompt', () => {
           JSON.stringify({
             sourceRunId: 'run-target',
             status: 'completed',
-            lastSteps: [
+            evidenceSlices: [
               {
                 observedControlSequence: [{ role: 'button', label: 'target evidence action' }],
                 observedAffordances: [{ role: 'button', label: 'duplicated sampled action' }],
@@ -144,7 +148,7 @@ describe('assemblePrompt', () => {
           JSON.stringify({
             sourceRunId: 'run-target',
             status: 'completed',
-            lastSteps: [
+            evidenceSlices: [
               {
                 action: 'record-note',
                 thought: 'fallback note from sparse agent record',
@@ -157,5 +161,38 @@ describe('assemblePrompt', () => {
 
     const text = assembled.sections.map((section) => section.text).join('\n\n');
     expect(text).toContain('fallback note from sparse agent record');
+  });
+
+  it('renders direct evidence spans ahead of compact run summaries', () => {
+    const assembled = assemblePrompt({
+      basePrompt: 'Base prompt.',
+      retrievalQuery: 'deployment artifact path',
+      retrievedFacts: [
+        memoryFact(
+          'summary',
+          JSON.stringify({
+            sourceRunId: 'run-target',
+            status: 'completed',
+            evidenceSlices: [{ action: 'Inspect deployment output' }],
+          }),
+        ),
+        memoryFact(
+          'span',
+          JSON.stringify({
+            sourceRunId: 'run-target',
+            stateIndex: 4,
+            action: 'Inspect deployment output',
+            toolResult: 'deployment artifact path reports/release.json was written',
+          }),
+          'evidence_span',
+        ),
+      ],
+    });
+
+    const text = assembled.sections.map((section) => section.text).join('\n\n');
+    expect(text.indexOf('#### Observed Evidence')).toBeLessThan(
+      text.indexOf('#### Agent Run Evidence'),
+    );
+    expect(text).toContain('deployment artifact path reports/release.json was written');
   });
 });

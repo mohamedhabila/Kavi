@@ -24,9 +24,12 @@ by Kavi's app flows:
 - trajectory states are represented as intermediate assistant/tool activity;
 - the trajectory outcome is represented as the final assistant turn;
 - ingestion runs through `processIngestionTurn`;
-- agent-run evidence is recorded as compact `procedure` and `outcome`
-  memories with bounded goals, tools, sources, artifacts, decisions, risks,
-  summaries, and step evidence;
+- agent-run evidence is recorded as one compact `agent_run` memory per source
+  run with bounded goals, tools, sources, artifacts, decisions, risks,
+  summaries, and evidence slices;
+- direct observations and tool outputs from the same run are also recorded as
+  bounded `evidence_span` memories so retrieval can ground answers on compact
+  exact evidence before broader run summaries;
 - query-time retrieval runs through `buildUnifiedMemoryAccessContext` in
   `agentic` mode and returns Kavi living-memory sections.
 

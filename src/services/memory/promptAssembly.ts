@@ -9,12 +9,17 @@
 // ---------------------------------------------------------------------------
 
 import type { MemoryBlock } from './blocks';
-import type { MemoryFact, MemoryFactKind } from './facts/types';
+import type { MemoryFact } from './facts/types';
 import type { MemoryEpisode } from './episodes/types';
 import { compactJsonFields, parseJsonRecord } from './factJson';
+import { promptFieldsForMemoryKind } from './promptFactFields';
 import { tokenizeLexicalUnits } from './ranking/lexical';
 import { quotedSpanUnitSets } from './ranking/quotedSpans';
-import { hasDirectStepEvidence, hasObservedControlSequence, selectOrderedEvidenceIndexes } from './controlSequenceCompaction';
+import {
+  hasDirectStepEvidence,
+  hasObservedControlSequence,
+  selectOrderedEvidenceIndexes,
+} from './controlSequenceCompaction';
 
 export type PromptMemoryFact = MemoryFact & { subjectLabel?: string };
 
@@ -67,17 +72,19 @@ const L3_HEADER = '## This Turn';
 const L3_REFLECTION_HEADER = '### Day Focus';
 const L3_FACTS_HEADER = '### Retrieved Memory';
 const L3_RELEVANT_FACTS_HEADER = '#### Relevant Facts';
-const L3_PROCEDURES_HEADER = '#### Procedures';
-const L3_OUTCOMES_HEADER = '#### Outcomes and Tool Results';
+const L3_EVIDENCE_SPANS_HEADER = '#### Observed Evidence';
+const L3_AGENT_RUNS_HEADER = '#### Agent Run Evidence';
+const L3_TOOL_RESULTS_HEADER = '#### Tool Results and Outcomes';
 const L3_DECISIONS_RISKS_HEADER = '#### Decisions and Risks';
 const L3_ARTIFACTS_SOURCES_HEADER = '#### Artifacts and Sources';
 const L3_SUMMARIES_HEADER = '#### Summaries';
-const L3_PROCEDURES_NOTE =
-  'Procedure memories are complete observed workflow traces. Use the full ordered route as evidence of the workflow, including prerequisite, verification, navigation, and finalization phases; do not reduce a successful trace to only its last action. When a step records observed available actions, treat that observed action set as direct evidence of both available and unavailable actions in that state. When a step records an observed control sequence, that array preserves source order from the observed state and is direct evidence for order, adjacency, and visible controls. Grouped observed action sections are siblings, not nested groups; an action belongs only to the section object that contains it. If the request names a group, only actions inside that group satisfy it; relevant actions in sibling groups are not substitutes.';
-const L3_OUTCOMES_NOTE =
-  'Outcome and tool-result memories summarize completed or failed agent work. Prefer direct observed outcomes over assumptions from prior platform behavior. When an outcome records observed available actions, do not invent missing actions from nearby labels, headings, or generic platform expectations. When a step records an observed control sequence, that array preserves source order from the observed state and is direct evidence for order, adjacency, and visible controls. Grouped observed action sections are siblings, not nested groups; an action belongs only to the section object that contains it. If the request names a group, only actions inside that group satisfy it; relevant actions in sibling groups are not substitutes.';
+const L3_AGENT_RUNS_NOTE =
+  'Agent-run memories are compact records of completed assistant work. Treat evidenceSlices as grounded local observations from the actual tool/action flow; prefer direct observations, tool results, artifacts, decisions, risks, and source references over inferred behavior. When an evidence slice records ordered controls or observations, preserve that source order.';
+const L3_EVIDENCE_SPANS_NOTE =
+  'Observed evidence spans are compact excerpts from actual tool results or agent observations. Use them as primary grounding when they directly match the current request.';
 const MAX_RENDERED_FACT_CHARS = 3_200;
-const MAX_RENDERED_PROCEDURE_FACT_CHARS = 5_000;
+const MAX_RENDERED_EVIDENCE_SPAN_FACT_CHARS = 3_800;
+const MAX_RENDERED_AGENT_RUN_FACT_CHARS = 5_000;
 const MAX_RETRIEVED_FACT_SECTION_CHARS = 3_800;
 const MAX_RENDERED_EPISODE_CHARS = 200;
 const MAX_FIELD_TEXT_CHARS = 700;
@@ -89,8 +96,9 @@ const MAX_OBSERVED_CONTROL_SEQUENCE_ITEMS = 48;
 const CONTROL_SEQUENCE_QUERY_WINDOW_RADIUS = 3;
 const FACT_GROUP_HEADER_ORDER = [
   L3_RELEVANT_FACTS_HEADER,
-  L3_PROCEDURES_HEADER,
-  L3_OUTCOMES_HEADER,
+  L3_EVIDENCE_SPANS_HEADER,
+  L3_AGENT_RUNS_HEADER,
+  L3_TOOL_RESULTS_HEADER,
   L3_DECISIONS_RISKS_HEADER,
   L3_ARTIFACTS_SOURCES_HEADER,
   L3_SUMMARIES_HEADER,
@@ -359,7 +367,10 @@ function compactProcedureStep(
       input.observedControlSequence,
       queryUnits,
     ),
-    observedAffordances: queryUnits && hasObservedControlSequence(input) ? undefined : compactObservedAffordancesForPrompt(input.observedAffordances),
+    observedAffordances:
+      queryUnits && hasObservedControlSequence(input)
+        ? undefined
+        : compactObservedAffordancesForPrompt(input.observedAffordances),
     inputControlsPresent: input.inputControlsPresent,
     observation: fitPromptEvidenceText(input.observation, queryUnits, 520),
     toolResult: fitPromptEvidenceText(input.toolResult ?? input.tool_result, queryUnits, 360),
@@ -415,33 +426,35 @@ function compactAgentSteps(
   options: { prioritizeQueryMatches?: boolean } = {},
 ): Array<Record<string, unknown>> | undefined {
   if (!Array.isArray(value)) return undefined;
-  const sourceSteps = options.prioritizeQueryMatches
-    ? value
-        .map((step, index) => ({
-          step,
-          index,
-          score: stepEvidenceQueryScore(step, queryUnits, anchorUnitSets),
-        }))
-        .sort((left, right) => {
-          if (right.score !== left.score) return right.score - left.score;
-          return right.index - left.index;
-        })
-        .slice(0, QUERY_RELEVANT_STEP_LIMIT)
-        .map((entry) => entry.step)
-    : value;
-  const steps = sourceSteps.map((step) =>
-    compactProcedureStep(step, queryUnits, anchorUnitSets),
-  ).filter(Boolean);
+  let sourceSteps = value;
+  if (options.prioritizeQueryMatches) {
+    const scored = value
+      .map((step, index) => ({
+        step,
+        index,
+        score: stepEvidenceQueryScore(step, queryUnits, anchorUnitSets),
+      }))
+      .sort((left, right) => {
+        if (right.score !== left.score) return right.score - left.score;
+        return left.index - right.index;
+      });
+    const matched = scored.filter((entry) => entry.score > 0);
+    if (matched.length > 0) {
+      sourceSteps = matched.slice(0, QUERY_RELEVANT_STEP_LIMIT).map((entry) => entry.step);
+    }
+  }
+  const steps = sourceSteps
+    .map((step) => compactProcedureStep(step, queryUnits, anchorUnitSets))
+    .filter(Boolean);
   return steps.length > 0 ? (steps as Array<Record<string, unknown>>) : undefined;
 }
 
-function compactProcedurePromptFields(
+function compactAgentRunPromptFields(
   parsed: Record<string, unknown> | null,
   queryUnits: ReadonlySet<string> | null,
   anchorUnitSets: ReadonlyArray<ReadonlySet<string>>,
 ): string | null {
   if (!parsed) return null;
-  const steps = compactAgentSteps(parsed.steps, queryUnits, anchorUnitSets);
   const compact = dropEmptyPromptRecord({
     sourceRunId: parsed.sourceRunId,
     goal: fitPromptValue(parsed.goal),
@@ -450,70 +463,32 @@ function compactProcedurePromptFields(
     domain: fitPromptValue(parsed.domain, 160),
     environment: fitPromptValue(parsed.environment, 160),
     tools: fitPromptValue(parsed.tools, 160),
+    evidenceSlices: compactAgentSteps(parsed.evidenceSlices, queryUnits, anchorUnitSets, {
+      prioritizeQueryMatches: true,
+    }),
     sources: fitPromptValue(parsed.sources, 260),
-    waypoints: compactAgentSteps(parsed.waypoints, queryUnits, anchorUnitSets),
-    steps,
+    artifacts: fitPromptValue(parsed.artifacts),
+    decisions: fitPromptValue(parsed.decisions),
+    risks: fitPromptValue(parsed.risks),
+    summaries: fitPromptValue(parsed.summaries),
   });
   return Object.keys(compact).length > 0 ? JSON.stringify(compact) : null;
 }
 
-function compactAgentEvidencePromptFields(
+function compactEvidenceSpanPromptFields(
   parsed: Record<string, unknown> | null,
   queryUnits: ReadonlySet<string> | null,
   anchorUnitSets: ReadonlyArray<ReadonlySet<string>>,
 ): string | null {
   if (!parsed) return null;
+  const step = compactProcedureStep(parsed, queryUnits, anchorUnitSets);
   const compact = dropEmptyPromptRecord({
     sourceRunId: parsed.sourceRunId,
-    status: fitPromptValue(parsed.status, 240),
-    outcome: fitPromptValue(parsed.outcome),
-    lastSteps: compactAgentSteps(parsed.lastSteps, queryUnits, anchorUnitSets, {
-      prioritizeQueryMatches: true,
-    }),
-    artifacts: fitPromptValue(parsed.artifacts),
-    decisions: fitPromptValue(parsed.decisions),
-    risks: fitPromptValue(parsed.risks),
-    summaries: fitPromptValue(parsed.summaries),
-    tools: fitPromptValue(parsed.tools, 160),
-    sources: fitPromptValue(parsed.sources, 260),
     goal: fitPromptValue(parsed.goal),
+    sequence: parsed.sequence,
+    ...(step ?? {}),
   });
   return Object.keys(compact).length > 0 ? JSON.stringify(compact) : null;
-}
-
-function promptFieldsForMemoryKind(kind: MemoryFactKind): ReadonlyArray<string> | null {
-  switch (kind) {
-    case 'goal':
-      return ['goal', 'status', 'sourceRunId'];
-    case 'tool_result':
-    case 'outcome':
-    case 'gotcha':
-      return [
-        'sourceRunId',
-        'goal',
-        'status',
-        'outcome',
-        'tools',
-        'sources',
-        'artifacts',
-        'decisions',
-        'risks',
-        'summaries',
-        'lastSteps',
-      ];
-    case 'decision':
-      return ['decision', 'status', 'reason', 'sourceRunId'];
-    case 'risk':
-      return ['risk', 'status', 'mitigation', 'sourceRunId'];
-    case 'artifact':
-      return ['artifact', 'path', 'url', 'summary', 'sourceRunId'];
-    case 'source':
-      return ['source', 'url', 'title', 'summary', 'sourceRunId'];
-    case 'summary':
-      return ['summary', 'sourceRunId'];
-    default:
-      return null;
-  }
 }
 
 function renderableFactText(
@@ -523,11 +498,11 @@ function renderableFactText(
 ): string {
   const memoryKind = fact.memoryKind ?? 'semantic_fact';
   const parsed = parseJsonRecord(fact.objectText);
-  if (memoryKind === 'procedure') {
-    return compactProcedurePromptFields(parsed, queryUnits, anchorUnitSets) ?? fact.objectText;
+  if (memoryKind === 'evidence_span') {
+    return compactEvidenceSpanPromptFields(parsed, queryUnits, anchorUnitSets) ?? fact.objectText;
   }
-  if (memoryKind === 'outcome' || memoryKind === 'tool_result' || memoryKind === 'gotcha') {
-    return compactAgentEvidencePromptFields(parsed, queryUnits, anchorUnitSets) ?? fact.objectText;
+  if (memoryKind === 'agent_run') {
+    return compactAgentRunPromptFields(parsed, queryUnits, anchorUnitSets) ?? fact.objectText;
   }
   const fields = promptFieldsForMemoryKind(memoryKind);
   if (!fields) return fact.objectText;
@@ -550,7 +525,11 @@ function renderFact(
   const kind = memoryKind === 'semantic_fact' ? '' : ` kind=${memoryKind}`;
   const meta = kind || source ? ` [${`${kind}${source}`.trim()}]` : '';
   const maxChars =
-    memoryKind === 'procedure' ? MAX_RENDERED_PROCEDURE_FACT_CHARS : MAX_RENDERED_FACT_CHARS;
+    memoryKind === 'agent_run'
+      ? MAX_RENDERED_AGENT_RUN_FACT_CHARS
+      : memoryKind === 'evidence_span'
+        ? MAX_RENDERED_EVIDENCE_SPAN_FACT_CHARS
+        : MAX_RENDERED_FACT_CHARS;
   return `- ${subject} ${fact.predicate}: ${fitText(renderableFactText(fact, queryUnits, anchorUnitSets), maxChars)}${conf}${meta}`;
 }
 
@@ -563,9 +542,10 @@ function renderEpisode(episode: MemoryEpisode): string {
 
 function factGroupHeader(fact: PromptMemoryFact): string {
   const memoryKind = fact.memoryKind ?? 'semantic_fact';
-  if (memoryKind === 'procedure') return L3_PROCEDURES_HEADER;
-  if (memoryKind === 'outcome' || memoryKind === 'tool_result' || memoryKind === 'gotcha') {
-    return L3_OUTCOMES_HEADER;
+  if (memoryKind === 'evidence_span') return L3_EVIDENCE_SPANS_HEADER;
+  if (memoryKind === 'agent_run') return L3_AGENT_RUNS_HEADER;
+  if (memoryKind === 'tool_result' || memoryKind === 'gotcha') {
+    return L3_TOOL_RESULTS_HEADER;
   }
   if (memoryKind === 'decision' || memoryKind === 'risk') return L3_DECISIONS_RISKS_HEADER;
   if (memoryKind === 'artifact' || memoryKind === 'source') return L3_ARTIFACTS_SOURCES_HEADER;
@@ -596,8 +576,8 @@ function groupRetrievedFacts(facts: PromptMemoryFact[]): Array<{
 }
 
 function notesForHeader(header: string): string[] {
-  if (header === L3_PROCEDURES_HEADER) return [L3_PROCEDURES_NOTE];
-  if (header === L3_OUTCOMES_HEADER) return [L3_OUTCOMES_NOTE];
+  if (header === L3_EVIDENCE_SPANS_HEADER) return [L3_EVIDENCE_SPANS_NOTE];
+  if (header === L3_AGENT_RUNS_HEADER) return [L3_AGENT_RUNS_NOTE];
   return [];
 }
 

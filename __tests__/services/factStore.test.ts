@@ -248,7 +248,7 @@ describe('recordFact', () => {
       subjectId: userId,
       predicate: 'agent_observation',
       objectText: `${longObservedTerms} go qa panel`,
-      memoryKind: 'procedure',
+      memoryKind: 'agent_run',
     });
     const db = getMemoryDb();
     const units = new Set(
@@ -268,9 +268,9 @@ describe('recordFact', () => {
   it('persists typed retrieval metadata for non-semantic memories', () => {
     const r = recordFact({
       subjectId: userId,
-      predicate: 'agent_run_result',
+      predicate: 'agent_run',
       objectText: 'reports/analysis.json was created',
-      memoryKind: 'outcome',
+      memoryKind: 'agent_run',
       retrievability: 0.82,
       stability: 0.71,
       decayRate: 0.01,
@@ -282,14 +282,14 @@ describe('recordFact', () => {
     });
 
     const stored = getFactById(r.fact.id);
-    expect(stored?.memoryKind).toBe('outcome');
+    expect(stored?.memoryKind).toBe('agent_run');
     expect(stored?.retrievability).toBe(0.82);
     expect(stored?.stability).toBe(0.71);
     expect(stored?.decayRate).toBe(0.01);
     expect(stored?.reviewState).toBe('verified');
     expect(stored?.sourceActorId).toBe('browser');
     expect(stored?.taskId).toBe('task-1');
-    expect(countFacts({ memoryKind: 'outcome' })).toBe(1);
+    expect(countFacts({ memoryKind: 'agent_run' })).toBe(1);
   });
 
   it('does not dedupe distinct memory kinds into one row', () => {
@@ -299,20 +299,20 @@ describe('recordFact', () => {
       objectText: 'reports/analysis.json was created',
       memoryKind: 'semantic_fact',
     });
-    const outcome = recordFact({
+    const agentRun = recordFact({
       subjectId: userId,
       predicate: 'observed',
       objectText: 'reports/analysis.json was created',
-      memoryKind: 'outcome',
+      memoryKind: 'agent_run',
     });
 
-    expect(outcome.status).toBe('created');
-    expect(outcome.fact.id).not.toBe(semantic.fact.id);
+    expect(agentRun.status).toBe('created');
+    expect(agentRun.fact.id).not.toBe(semantic.fact.id);
     expect(listFacts({ subjectId: userId, memoryKind: 'semantic_fact' })).toHaveLength(1);
-    expect(listFacts({ subjectId: userId, memoryKind: 'outcome' })).toHaveLength(1);
+    expect(listFacts({ subjectId: userId, memoryKind: 'agent_run' })).toHaveLength(1);
     expect(countFactsByKind()).toMatchObject({
       semantic_fact: 1,
-      outcome: 1,
+      agent_run: 1,
     });
   });
 });

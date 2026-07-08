@@ -3,8 +3,8 @@
 // ---------------------------------------------------------------------------
 // The orchestrator intentionally stays small: it builds one structural query,
 // asks the fact store for one ranked pool, and returns the selected facts plus
-// recent episodes. Agent-run evidence is stored as compact procedure, outcome,
-// source, artifact, decision, risk, summary, and durable fact records, so recall
+// recent episodes. Agent-run evidence is stored as compact agent-run records
+// plus source, artifact, decision, risk, summary, and durable fact records, so recall
 // does not need domain-specific candidate lanes.
 // ---------------------------------------------------------------------------
 

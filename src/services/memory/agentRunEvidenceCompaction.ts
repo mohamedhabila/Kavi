@@ -1,8 +1,15 @@
+import {
+  agentRunRouteAnchorStepIndexes,
+  agentRunTransitionStepIndexes,
+} from './agentRunEvidenceRouteAnchors';
+import { tokenizeLexicalUnits } from './ranking/lexical';
+
 export interface AgentRunStep {
   stateIndex?: string | number;
   action?: string;
   thought?: string;
   url?: string;
+  navigationAnchor?: boolean;
   observation?: string;
   observedControlSequence?: AgentRunObservedControl[];
   observedAffordances?: AgentRunObservedAffordance[];
@@ -32,10 +39,12 @@ const DEFAULT_AFFORDANCE_LIMIT = 36;
 const DEFAULT_CONTROL_SEQUENCE_LIMIT = 72;
 const MAX_AFFORDANCES_PER_ROLE = 18;
 const MAX_SOURCE_EVIDENCE_STEP_INDEXES = 6;
+const SOURCE_EVIDENCE_CONTEXT_RADIUS = 1;
 const MAX_AFFORDANCE_LABEL_CHARS = 180;
 const MAX_AFFORDANCE_ATTRIBUTES_CHARS = 160;
 const MAX_LABEL_ANNOTATION_LOOKAHEAD_LINES = 8;
-const MAX_SECTION_CONTEXT_DISTANCE_LINES = 18;
+const MAX_SECTION_CONTEXT_DISTANCE_LINES = 32;
+const MAX_ROUTE_ANCHOR_STEP_INDEXES = 6;
 export const STEP_TEXT_LIMITS: Partial<Record<keyof AgentRunStep, number>> = {
   url: 220,
   action: 260,
@@ -476,24 +485,37 @@ function spreadIndexes(indexes: ReadonlyArray<number>, limit: number): number[] 
   return selected;
 }
 
-function transitionStepIndexes(steps: ReadonlyArray<AgentRunStep>): number[] {
-  const indexes: number[] = [];
-  let previousUrl: string | undefined;
-  let previousTransitionIndex = Number.NEGATIVE_INFINITY;
-  steps.forEach((step, index) => {
-    if (!step.url || step.url === previousUrl) return;
-    if (index !== previousTransitionIndex + 1) {
-      indexes.push(index);
+function directEvidenceText(step: AgentRunStep): string {
+  return [step.observation, step.toolResult, step.outcome].filter(Boolean).join('\n');
+}
+
+function sourceEvidenceTextScores(steps: ReadonlyArray<AgentRunStep>): number[] {
+  const unitSets = steps.map((step) => tokenizeLexicalUnits(directEvidenceText(step)));
+  const documentFrequency = new Map<string, number>();
+  for (const units of unitSets) {
+    for (const unit of units) {
+      documentFrequency.set(unit, (documentFrequency.get(unit) ?? 0) + 1);
     }
-    previousTransitionIndex = index;
-    previousUrl = step.url;
+  }
+  const documentCount = Math.max(1, steps.length);
+  return unitSets.map((units) => {
+    if (units.size === 0) return 0;
+    let score = 0;
+    for (const unit of units) {
+      const frequency = documentFrequency.get(unit) ?? 0;
+      score += Math.log((documentCount + 1) / (frequency + 1));
+    }
+    return score / Math.sqrt(units.size);
   });
-  return indexes;
 }
 
 function sourceEvidenceStepIndexes(steps: ReadonlyArray<AgentRunStep>): number[] {
+  const textScores = sourceEvidenceTextScores(steps);
   const scored = steps
-    .map((step, index) => ({ index, score: sourceEvidenceStepScore(step) }))
+    .map((step, index) => ({
+      index,
+      score: sourceEvidenceStepScore(step) + (textScores[index] ?? 0),
+    }))
     .filter((entry) => entry.score > 0)
     .sort((left, right) => left.index - right.index);
   if (scored.length <= MAX_SOURCE_EVIDENCE_STEP_INDEXES) {
@@ -521,6 +543,21 @@ function sourceEvidenceStepIndexes(steps: ReadonlyArray<AgentRunStep>): number[]
     selected.add(next.index);
   }
 
+  return Array.from(selected).sort((left, right) => left - right);
+}
+
+function expandLocalIndexes(
+  indexes: ReadonlyArray<number>,
+  stepCount: number,
+  radius: number,
+): number[] {
+  const selected = new Set<number>();
+  for (const index of indexes) {
+    for (let offset = -radius; offset <= radius; offset += 1) {
+      const candidate = index + offset;
+      if (candidate >= 0 && candidate < stepCount) selected.add(candidate);
+    }
+  }
   return Array.from(selected).sort((left, right) => left - right);
 }
 
@@ -558,16 +595,34 @@ export function boundedSteps(
   const limit = Math.max(1, maxSteps);
   if (steps.length <= limit) return [...steps];
   const sourceIndexes = sourceEvidenceStepIndexes(steps);
+  const selectedIndexes = new Set<number>();
+  const routeAnchorIndexes = new Set(
+    agentRunRouteAnchorStepIndexes(steps, Math.min(limit, MAX_ROUTE_ANCHOR_STEP_INDEXES)),
+  );
+  for (const index of routeAnchorIndexes) {
+    if (selectedIndexes.size >= limit) break;
+    selectedIndexes.add(index);
+  }
+  for (const index of sourceIndexes) {
+    if (selectedIndexes.size >= limit) break;
+    selectedIndexes.add(index);
+  }
+  for (const index of expandLocalIndexes(
+    sourceIndexes,
+    steps.length,
+    SOURCE_EVIDENCE_CONTEXT_RADIUS,
+  )) {
+    if (selectedIndexes.size >= limit) break;
+    selectedIndexes.add(index);
+  }
   const candidateIndexes = Array.from(
-    new Set([
-      0,
-      ...transitionStepIndexes(steps),
-      ...sourceIndexes,
-      steps.length - 1,
-    ]),
+    new Set([0, ...agentRunTransitionStepIndexes(steps), ...sourceIndexes, steps.length - 1]),
   ).sort((a, b) => a - b);
-  const selectedIndexes = new Set(spreadIndexes(candidateIndexes, limit));
-  if (sourceIndexes.length === 0 && selectedIndexes.size < limit) {
+  for (const index of spreadIndexes(candidateIndexes, limit)) {
+    if (selectedIndexes.size >= limit) break;
+    selectedIndexes.add(index);
+  }
+  if (selectedIndexes.size < limit) {
     for (const index of spreadIndexes(
       Array.from({ length: steps.length }, (_, index) => index),
       limit,
@@ -578,6 +633,9 @@ export function boundedSteps(
   }
   return Array.from(selectedIndexes)
     .sort((a, b) => a - b)
-    .map((index) => steps[index])
+    .map((index) => {
+      const step = steps[index];
+      return step && routeAnchorIndexes.has(index) ? { ...step, navigationAnchor: true } : step;
+    })
     .filter((step): step is AgentRunStep => step !== undefined);
 }

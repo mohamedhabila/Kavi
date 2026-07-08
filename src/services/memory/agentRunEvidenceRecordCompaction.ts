@@ -1,4 +1,9 @@
 import { fitAgentRunText } from './agentRunEvidenceCompaction';
+import {
+  agentRunNavigationSurfaceDepth,
+  agentRunNavigationSurfaceFamilyKey,
+  agentRunNavigationSurfaceKey,
+} from './agentRunNavigationSurface';
 
 export type JsonRecord = Record<string, unknown>;
 
@@ -7,6 +12,23 @@ const MIN_COMPACT_OBSERVATION_CHARS = 700;
 const MIN_COMPACT_TOOL_RESULT_CHARS = 520;
 const MIN_OBSERVED_AFFORDANCE_ITEMS = 18;
 const MIN_OBSERVED_CONTROL_SEQUENCE_ITEMS = 18;
+const SMALL_AFFORDANCE_GROUP_LIMIT = 12;
+const COMPACT_ACTION_GROUP_ROLES = new Set([
+  'button',
+  'checkbox',
+  'combobox',
+  'menuitem',
+  'option',
+  'radio',
+  'tab',
+  'textbox',
+]);
+
+interface ObservedAffordanceIndexGroup {
+  indexes: number[];
+  role?: string;
+  sectioned: boolean;
+}
 
 interface CompactRecordLimits {
   maxStringChars: number;
@@ -94,6 +116,9 @@ function compactRecordValue(
 }
 
 function compactStringLimit(fieldName: string | undefined, limits: CompactRecordLimits): number {
+  if (fieldName === 'goal') {
+    return Math.max(limits.maxStringChars, 360);
+  }
   if (fieldName === 'observation' || fieldName === 'accessibility_tree') {
     return Math.max(limits.maxStringChars, MIN_COMPACT_OBSERVATION_CHARS);
   }
@@ -115,33 +140,32 @@ function compactRecordScalars(value: JsonRecord): JsonRecord {
 }
 
 function compactStructuredEvidenceRecord(value: JsonRecord): string | null {
-  const stepField = Array.isArray(value.lastSteps)
-    ? 'lastSteps'
-    : Array.isArray(value.steps)
-      ? 'steps'
-      : Array.isArray(value.waypoints)
-        ? 'waypoints'
-        : null;
-  if (!stepField) return null;
-  const sourceSteps = value[stepField] as unknown[];
+  if (!Array.isArray(value.evidenceSlices)) return null;
+  const sourceSteps = value.evidenceSlices as unknown[];
   const budgets = [
-    { maxSteps: 6, maxAffordances: 18, maxControls: 18, observationChars: 240 },
-    { maxSteps: 6, maxAffordances: 18, maxControls: 18, observationChars: 0 },
-    { maxSteps: 4, maxAffordances: 18, maxControls: 18, observationChars: 0 },
-    { maxSteps: 3, maxAffordances: 18, maxControls: 18, observationChars: 0 },
-    { maxSteps: 6, maxAffordances: 12, maxControls: 24, observationChars: 160 },
-    { maxSteps: 4, maxAffordances: 12, maxControls: 24, observationChars: 0 },
-    { maxSteps: 3, maxAffordances: 8, maxControls: 18, observationChars: 0 },
+    { maxSteps: 12, maxAffordances: 12, maxControls: 18, observationChars: 700 },
+    { maxSteps: 12, maxAffordances: 8, maxControls: 12, observationChars: 240 },
+    { maxSteps: 12, maxAffordances: 6, maxControls: 10, observationChars: 0 },
+    { maxSteps: 8, maxAffordances: 8, maxControls: 12, observationChars: 240 },
+    { maxSteps: 8, maxAffordances: 6, maxControls: 10, observationChars: 0 },
+    { maxSteps: 6, maxAffordances: 8, maxControls: 14, observationChars: 0 },
+    { maxSteps: 4, maxAffordances: 6, maxControls: 12, observationChars: 0 },
   ];
 
   for (const budget of budgets) {
     const compact = Object.fromEntries(
       Object.entries({
         sourceRunId: stringField(value, 'sourceRunId'),
+        goal: stringField(value, 'goal'),
         status: stringField(value, 'status'),
         outcome: stringField(value, 'outcome'),
         tools: Array.isArray(value.tools) ? value.tools.slice(0, 8) : undefined,
-        [stepField]: sampleArray(sourceSteps, budget.maxSteps)
+        sources: Array.isArray(value.sources) ? value.sources.slice(0, 8) : undefined,
+        artifacts: Array.isArray(value.artifacts) ? value.artifacts.slice(0, 8) : undefined,
+        decisions: Array.isArray(value.decisions) ? value.decisions.slice(0, 8) : undefined,
+        risks: Array.isArray(value.risks) ? value.risks.slice(0, 8) : undefined,
+        summaries: Array.isArray(value.summaries) ? value.summaries.slice(0, 8) : undefined,
+        evidenceSlices: selectEvidenceSlices(sourceSteps, budget.maxSteps)
           .map((step) => compactStructuredEvidenceStep(step, budget))
           .filter(hasRecordValue),
       }).filter(([, entry]) => hasRecordValue(entry)),
@@ -158,6 +182,10 @@ function compactStructuredEvidenceStep(
 ): JsonRecord | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const record = value as JsonRecord;
+  const observationChars =
+    record.navigationAnchor === true
+      ? Math.max(budget.observationChars, MIN_COMPACT_OBSERVATION_CHARS)
+      : budget.observationChars;
   return Object.fromEntries(
     Object.entries({
       stateIndex: scalarField(record, 'stateIndex') ?? scalarField(record, 'state_index'),
@@ -169,6 +197,11 @@ function compactStructuredEvidenceStep(
       thought: stringField(record, 'thought')
         ? fitAgentRunText(stringField(record, 'thought') ?? '', 180)
         : undefined,
+      url: stringField(record, 'url')
+        ? fitAgentRunText(stringField(record, 'url') ?? '', 220)
+        : undefined,
+      navigationAnchor:
+        typeof record.navigationAnchor === 'boolean' ? record.navigationAnchor : undefined,
       observedControlSequence: compactObservedAffordances(
         record.observedControlSequence,
         budget.maxControls,
@@ -180,27 +213,26 @@ function compactStructuredEvidenceStep(
       inputControlsPresent:
         typeof record.inputControlsPresent === 'boolean' ? record.inputControlsPresent : undefined,
       observation:
-        budget.observationChars > 0 && stringField(record, 'observation')
-          ? fitAgentRunText(stringField(record, 'observation') ?? '', budget.observationChars)
+        observationChars > 0 && stringField(record, 'observation')
+          ? fitAgentRunText(stringField(record, 'observation') ?? '', observationChars)
           : undefined,
       toolResult:
-        budget.observationChars > 0 &&
+        observationChars > 0 &&
         (stringField(record, 'toolResult') ?? stringField(record, 'tool_result'))
           ? fitAgentRunText(
               stringField(record, 'toolResult') ?? stringField(record, 'tool_result') ?? '',
-              budget.observationChars,
+              observationChars,
             )
           : undefined,
     }).filter(([, entry]) => hasRecordValue(entry)),
   );
 }
 
-function compactObservedAffordances(
-  value: unknown,
-  limit: number,
-): JsonRecord[] | undefined {
+function compactObservedAffordances(value: unknown, limit: number): JsonRecord[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const compacted = sampleArray(value, Math.max(1, limit))
+  const selectedIndexes = selectObservedAffordanceIndexes(value, Math.max(1, limit));
+  const compacted = selectedIndexes
+    .map((index) => value[index])
     .map((entry): JsonRecord | undefined => {
       if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return undefined;
       const record = entry as JsonRecord;
@@ -223,6 +255,90 @@ function compactObservedAffordances(
   return compacted.length > 0 ? compacted : undefined;
 }
 
+function selectObservedAffordanceIndexes(value: ReadonlyArray<unknown>, limit: number): number[] {
+  if (value.length <= limit) return Array.from({ length: value.length }, (_entry, index) => index);
+  const selected = new Set<number>();
+  const append = (index: number): void => {
+    if (selected.size >= limit || index < 0 || index >= value.length) return;
+    selected.add(index);
+  };
+
+  const grouped = observedAffordanceIndexGroups(value);
+  for (const group of grouped.filter(isCompactActionGroup)) {
+    for (const index of group.indexes) append(index);
+  }
+  const perGroupLimit = Math.max(1, Math.ceil(limit / Math.max(1, grouped.length)));
+  const groupSelections = grouped.map((group) => {
+    const groupLimit =
+      group.indexes.length <= SMALL_AFFORDANCE_GROUP_LIMIT
+        ? group.indexes.length
+        : Math.min(group.indexes.length, perGroupLimit);
+    return selectAnchoredSpreadIndexes(group.indexes, groupLimit);
+  });
+  const longestGroupSelection = Math.max(0, ...groupSelections.map((indexes) => indexes.length));
+  for (let offset = 0; offset < longestGroupSelection; offset += 1) {
+    for (const indexes of groupSelections) {
+      const index = indexes[offset];
+      if (index !== undefined) append(index);
+    }
+  }
+
+  for (const index of sampleArray(
+    Array.from({ length: value.length }, (_entry, index) => index),
+    limit,
+  )) {
+    append(index);
+  }
+
+  return Array.from(selected).sort((left, right) => left - right);
+}
+
+function selectAnchoredSpreadIndexes(indexes: ReadonlyArray<number>, limit: number): number[] {
+  if (indexes.length <= limit) return [...indexes];
+  const selected = new Set<number>();
+  const append = (index: number | undefined): void => {
+    if (index === undefined || selected.size >= limit) return;
+    selected.add(index);
+  };
+  append(indexes[0]);
+  append(indexes[Math.floor(indexes.length / 2)]);
+  append(indexes[indexes.length - 3]);
+  append(indexes[indexes.length - 2]);
+  append(indexes[indexes.length - 1]);
+  for (const index of sampleArray(indexes, limit)) {
+    append(index);
+  }
+  return Array.from(selected).sort((left, right) => left - right);
+}
+
+function observedAffordanceIndexGroups(
+  value: ReadonlyArray<unknown>,
+): ObservedAffordanceIndexGroup[] {
+  const groups = new Map<string, ObservedAffordanceIndexGroup>();
+  for (const [index, entry] of value.entries()) {
+    const record =
+      entry && typeof entry === 'object' && !Array.isArray(entry) ? (entry as JsonRecord) : null;
+    const role = record ? stringField(record, 'role') : undefined;
+    const section = record ? stringField(record, 'section') : undefined;
+    const key = `${role ?? ''}\u0000${section ?? ''}`;
+    const group = groups.get(key) ?? { indexes: [], role, sectioned: Boolean(section) };
+    group.indexes.push(index);
+    groups.set(key, group);
+  }
+  return Array.from(groups.values())
+    .filter((group) => group.indexes.length > 0)
+    .sort((left, right) => Number(right.sectioned) - Number(left.sectioned));
+}
+
+function isCompactActionGroup(group: ObservedAffordanceIndexGroup): boolean {
+  return (
+    group.sectioned &&
+    group.indexes.length > 0 &&
+    group.indexes.length <= SMALL_AFFORDANCE_GROUP_LIMIT &&
+    Boolean(group.role && COMPACT_ACTION_GROUP_ROLES.has(group.role))
+  );
+}
+
 function compactRecordPreservingArrays(
   value: JsonRecord,
   requiredArrays: ReadonlyArray<string>,
@@ -241,33 +357,57 @@ function compactRecordPreservingArrays(
   }
 }
 
-export function compactProcedureRecord(params: {
+export function compactAgentRunRecord(params: {
   base: JsonRecord;
-  waypoints: JsonRecord[];
-  steps: JsonRecord[];
+  evidenceSlices: JsonRecord[];
   sources: string[];
+  artifacts: string[];
+  decisions: string[];
+  risks: string[];
+  summaries: string[];
 }): string {
-  const { base, waypoints, steps, sources } = params;
-  const full = compactRecordPreservingArrays({ ...base, sources, waypoints, steps }, [
-    'waypoints',
-    'steps',
-  ]);
+  const { base, evidenceSlices, sources, artifacts, decisions, risks, summaries } = params;
+  const structured = compactStructuredEvidenceRecord({
+    ...base,
+    sources,
+    artifacts,
+    decisions,
+    risks,
+    summaries,
+    evidenceSlices,
+  });
+  if (structured) return structured;
+
+  const full = compactRecordPreservingArrays(
+    { ...base, sources, artifacts, decisions, risks, summaries, evidenceSlices },
+    ['evidenceSlices'],
+  );
   if (full) return full;
 
-  const conciseSteps = sampleArray(steps, Math.min(4, steps.length));
+  const conciseSlices = selectEvidenceSlices(evidenceSlices, Math.min(4, evidenceSlices.length));
   const concise = compactRecordPreservingArrays(
-    { ...base, sources: sources.slice(0, 8), waypoints, steps: conciseSteps },
-    ['waypoints'],
+    {
+      ...base,
+      sources: sources.slice(0, 8),
+      artifacts: artifacts.slice(0, 8),
+      decisions: decisions.slice(0, 8),
+      risks: risks.slice(0, 8),
+      summaries: summaries.slice(0, 8),
+      evidenceSlices: conciseSlices,
+    },
+    ['evidenceSlices'],
   );
   if (concise) return concise;
 
-  const waypointOnly = compactRecordPreservingArrays(
-    { ...base, sources: sources.slice(0, 8), waypoints },
-    ['waypoints'],
-  );
-  if (waypointOnly) return waypointOnly;
-
-  return compactRecord({ ...base, sources: sources.slice(0, 8), steps });
+  return compactRecord({
+    ...base,
+    sources: sources.slice(0, 8),
+    artifacts: artifacts.slice(0, 8),
+    decisions: decisions.slice(0, 8),
+    risks: risks.slice(0, 8),
+    summaries: summaries.slice(0, 8),
+    evidenceSlices: conciseSlices,
+  });
 }
 
 function hasRecordValue(value: unknown): boolean {
@@ -275,6 +415,144 @@ function hasRecordValue(value: unknown): boolean {
   if (Array.isArray(value)) return value.length > 0;
   if (typeof value === 'object') return Object.keys(value as JsonRecord).length > 0;
   return true;
+}
+
+function selectEvidenceSlices<T>(values: ReadonlyArray<T>, maxItems: number): T[] {
+  if (values.length <= maxItems) return [...values];
+  if (maxItems <= 1) return values[0] === undefined ? [] : [values[0]];
+
+  const selected = new Set<number>();
+  const append = (index: number | undefined): void => {
+    if (index === undefined || index < 0 || index >= values.length) return;
+    if (selected.size >= maxItems) return;
+    selected.add(index);
+  };
+
+  for (const index of diverseEvidenceSliceAnchorIndexes(values, maxItems)) {
+    append(index);
+  }
+  for (const value of sampleArray(values, maxItems)) {
+    append(values.indexOf(value));
+  }
+
+  return Array.from(selected)
+    .sort((left, right) => left - right)
+    .map((index) => values[index])
+    .filter((value): value is T => value !== undefined);
+}
+
+function evidenceSliceExplicitAnchorIndexes(values: ReadonlyArray<unknown>): number[] {
+  const indexes: number[] = [];
+  values.forEach((value, index) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+    if ((value as JsonRecord).navigationAnchor === true) indexes.push(index);
+  });
+  return indexes;
+}
+
+function evidenceSliceRouteAnchorIndexes(values: ReadonlyArray<unknown>): number[] {
+  const selected = new Set<number>();
+  const surfaceVisits = new Map<string, { first: number; last: number }>();
+  const append = (index: number | undefined): void => {
+    if (index === undefined || index < 0 || index >= values.length) return;
+    selected.add(index);
+  };
+
+  append(0);
+  values.forEach((value, index) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+    const url = stringField(value as JsonRecord, 'url');
+    const surfaceKey = agentRunNavigationSurfaceKey(url);
+    if (!surfaceKey) return;
+    const visit = surfaceVisits.get(surfaceKey);
+    if (visit) {
+      visit.last = index;
+    } else {
+      surfaceVisits.set(surfaceKey, { first: index, last: index });
+    }
+  });
+  for (const visit of surfaceVisits.values()) {
+    append(visit.first);
+    append(visit.last);
+  }
+  append(values.length - 1);
+
+  return Array.from(selected).sort((left, right) => left - right);
+}
+
+function diverseEvidenceSliceAnchorIndexes(
+  values: ReadonlyArray<unknown>,
+  limit: number,
+): number[] {
+  const anchorIndexes = Array.from(
+    new Set([
+      ...evidenceSliceExplicitAnchorIndexes(values),
+      ...evidenceSliceRouteAnchorIndexes(values),
+    ]),
+  )
+    .filter((index) => index >= 0 && index < values.length)
+    .sort((left, right) => left - right);
+  if (anchorIndexes.length <= limit) return anchorIndexes;
+  const selected = new Set<number>();
+  const append = (index: number | undefined): void => {
+    if (index === undefined || selected.size >= limit) return;
+    selected.add(index);
+  };
+
+  append(anchorIndexes[0]);
+  append(anchorIndexes[anchorIndexes.length - 1]);
+  const selectedFamilies = new Set(
+    Array.from(selected)
+      .map((index) => evidenceSliceFamilyKey(values[index]))
+      .filter((familyKey): familyKey is string => Boolean(familyKey)),
+  );
+
+  while (selected.size < limit) {
+    const candidates = anchorIndexes.filter((index) => !selected.has(index));
+    if (candidates.length === 0) break;
+    const unrepresentedFamilyCandidates = candidates.filter((index) => {
+      const familyKey = evidenceSliceFamilyKey(values[index]);
+      return familyKey && !selectedFamilies.has(familyKey);
+    });
+    const pool =
+      unrepresentedFamilyCandidates.length > 0 ? unrepresentedFamilyCandidates : candidates;
+    const next = pool.sort((left, right) => {
+      const depthDelta = evidenceSliceDepth(values[right]) - evidenceSliceDepth(values[left]);
+      if (depthDelta !== 0) return depthDelta;
+      const distanceDelta =
+        minDistanceToSelected(right, selected) - minDistanceToSelected(left, selected);
+      if (distanceDelta !== 0) return distanceDelta;
+      return left - right;
+    })[0];
+    if (next === undefined) break;
+    append(next);
+    const familyKey = evidenceSliceFamilyKey(values[next]);
+    if (familyKey) selectedFamilies.add(familyKey);
+  }
+
+  return Array.from(selected).sort((left, right) => left - right);
+}
+
+function evidenceSliceUrl(value: unknown): string | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? stringField(value as JsonRecord, 'url')
+    : undefined;
+}
+
+function evidenceSliceDepth(value: unknown): number {
+  return agentRunNavigationSurfaceDepth(evidenceSliceUrl(value));
+}
+
+function evidenceSliceFamilyKey(value: unknown): string | undefined {
+  return agentRunNavigationSurfaceFamilyKey(evidenceSliceUrl(value));
+}
+
+function minDistanceToSelected(index: number, selected: ReadonlySet<number>): number {
+  let distance = Number.POSITIVE_INFINITY;
+  for (const selectedIndex of selected) {
+    distance = Math.min(distance, Math.abs(index - selectedIndex));
+  }
+  return distance;
 }
 
 function sampleArray<T>(values: ReadonlyArray<T>, maxItems: number): T[] {

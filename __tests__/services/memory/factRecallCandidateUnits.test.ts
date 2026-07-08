@@ -28,7 +28,7 @@ afterEach(() => {
 function insertUnitStat(unit: string, factCount: number): void {
   runMemoryStatement(
     `INSERT INTO memory_fact_term_stats(unit, memory_kind, fact_count, total_weight)
-       VALUES (?, 'outcome', ?, ?)`,
+       VALUES (?, 'agent_run', ?, ?)`,
     unit,
     factCount,
     factCount,

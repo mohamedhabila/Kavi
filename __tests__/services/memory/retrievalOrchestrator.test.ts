@@ -26,17 +26,19 @@ afterEach(() => {
 });
 
 describe('orchestrateMemoryRetrieval', () => {
-  it('retrieves compact agent-run outcome and source procedure evidence together', async () => {
+  it('retrieves compact agent-run evidence once', async () => {
     const subject = upsertEntity({ name: 'analysis task', type: 'project', now: 1 });
     recordFact({
       subjectId: subject.id,
-      predicate: 'agent_run_trace',
+      predicate: 'agent_run',
       objectText: JSON.stringify({
         sourceRunId: 'run-analysis',
         goal: 'Analyze the dataset',
-        steps: [{ action: 'Run python analysis', toolName: 'python' }],
+        outcome: 'reports/analysis.json was created',
+        artifacts: ['reports/analysis.json'],
+        evidenceSlices: [{ action: 'Run python analysis', toolName: 'python' }],
       }),
-      memoryKind: 'procedure',
+      memoryKind: 'agent_run',
       sourceRunId: 'run-analysis',
       originConversationId: 'conv-retrieval',
       scope: 'conversation',
@@ -44,24 +46,6 @@ describe('orchestrateMemoryRetrieval', () => {
       importance: 0.8,
       now: 2,
     });
-    recordFact({
-      subjectId: subject.id,
-      predicate: 'agent_run_result',
-      objectText: JSON.stringify({
-        sourceRunId: 'run-analysis',
-        goal: 'Analyze the dataset',
-        outcome: 'reports/analysis.json was created',
-        artifacts: ['reports/analysis.json'],
-      }),
-      memoryKind: 'outcome',
-      sourceRunId: 'run-analysis',
-      originConversationId: 'conv-retrieval',
-      scope: 'conversation',
-      retrievability: 0.95,
-      importance: 0.85,
-      now: 3,
-    });
-
     const result = await orchestrateMemoryRetrieval({
       userMessage: 'Where is the analysis json artifact?',
       conversationId: 'conv-retrieval',
@@ -69,12 +53,54 @@ describe('orchestrateMemoryRetrieval', () => {
       now: 4,
     });
 
-    expect(result.facts.some((fact) => fact.memoryKind === 'outcome')).toBe(true);
-    expect(result.facts.some((fact) => fact.memoryKind === 'procedure')).toBe(true);
-    expect(result.facts.findIndex((fact) => fact.memoryKind === 'outcome')).toBeLessThan(
-      result.facts.findIndex((fact) => fact.memoryKind === 'procedure'),
-    );
+    expect(result.facts.filter((fact) => fact.memoryKind === 'agent_run')).toHaveLength(1);
     expect(result.facts.every((fact) => fact.memoryKind !== 'semantic_fact')).toBe(true);
+  });
+
+  it('can retrieve a direct evidence span without relying on a broader run summary', async () => {
+    const subject = upsertEntity({ name: 'release task', type: 'project', now: 1 });
+    const span = recordFact({
+      subjectId: subject.id,
+      predicate: 'evidence_span',
+      objectText: JSON.stringify({
+        sourceRunId: 'run-release',
+        stateIndex: 3,
+        toolResult: 'release manifest path dist/release-manifest.json',
+      }),
+      memoryKind: 'evidence_span',
+      sourceRunId: 'run-release',
+      originConversationId: 'conv-retrieval',
+      scope: 'conversation',
+      retrievability: 0.94,
+      importance: 0.86,
+      now: 2,
+    });
+    recordFact({
+      subjectId: subject.id,
+      predicate: 'agent_run',
+      objectText: JSON.stringify({
+        sourceRunId: 'run-release',
+        goal: 'Prepare release artifacts',
+        evidenceSlices: [{ action: 'Inspect artifacts' }],
+      }),
+      memoryKind: 'agent_run',
+      sourceRunId: 'run-release',
+      originConversationId: 'conv-retrieval',
+      scope: 'conversation',
+      retrievability: 0.7,
+      importance: 0.7,
+      now: 3,
+    });
+
+    const result = await orchestrateMemoryRetrieval({
+      userMessage: 'What was the release manifest path?',
+      conversationId: 'conv-retrieval',
+      limit: 2,
+      now: 4,
+    });
+
+    expect(result.facts[0]?.id).toBe(span.fact.id);
+    expect(result.facts[0]?.memoryKind).toBe('evidence_span');
   });
 
   it('uses quoted observations as recall signals alongside the primary request', async () => {
@@ -85,7 +111,7 @@ describe('orchestrateMemoryRetrieval', () => {
         predicate: `noise_${index}`,
         objectText:
           'workspace action detail page toolbar visible control candidate summary repeated context',
-        memoryKind: 'procedure',
+        memoryKind: 'agent_run',
         sourceRunId: `run-noise-${index}`,
         originConversationId: 'conv-retrieval',
         scope: 'conversation',
@@ -96,17 +122,17 @@ describe('orchestrateMemoryRetrieval', () => {
     }
     const target = recordFact({
       subjectId: subject.id,
-      predicate: 'agent_run_trace',
+      predicate: 'agent_run',
       objectText: JSON.stringify({
         sourceRunId: 'run-target',
-        steps: [
+        evidenceSlices: [
           {
             action: 'inspect project state',
             observation: 'Target Action is recorded next to Return Control in the project log',
           },
         ],
       }),
-      memoryKind: 'procedure',
+      memoryKind: 'agent_run',
       sourceRunId: 'run-target',
       originConversationId: 'conv-retrieval',
       scope: 'conversation',
