@@ -8,7 +8,11 @@ import { createLlmMemoryFactSelector } from '../../../src/services/memory/llmFac
 import type { MemoryFact } from '../../../src/services/memory/facts/types';
 import type { LlmProviderConfig } from '../../../src/types/provider';
 
-function fact(id: string, objectText: string): MemoryFact {
+function fact(
+  id: string,
+  objectText: string,
+  memoryKind: MemoryFact['memoryKind'] = 'agent_run',
+): MemoryFact {
   return {
     id,
     subjectId: `subject-${id}`,
@@ -39,7 +43,7 @@ function fact(id: string, objectText: string): MemoryFact {
     contentHash: null,
     sourceActorId: null,
     taskId: null,
-    memoryKind: 'agent_run',
+    memoryKind,
     retrievability: 1,
     stability: 0.8,
     decayRate: 0.03,
@@ -539,5 +543,66 @@ describe('createLlmMemoryFactSelector', () => {
     const text = payload.candidates?.[0]?.text ?? '';
     expect(text).toContain('direct control action');
     expect(text).not.toContain('duplicated sampled action');
+  });
+
+  it('keeps complementary query-matching affordance evidence when ordered controls omit it', async () => {
+    mockSendLlmMessage.mockResolvedValue({
+      output_parsed: { selectedFactIds: ['fact-target'] },
+    });
+    const provider: LlmProviderConfig = {
+      id: 'test-provider',
+      name: 'Test Provider',
+      kind: 'remote',
+      protocol: 'openai-responses',
+      providerFamily: 'openai',
+      baseUrl: 'https://example.invalid/v1',
+      apiKey: 'test-key',
+      model: 'test-model',
+      enabled: true,
+      capabilityHints: { supportsStructuredOutput: true },
+    };
+    const selector = createLlmMemoryFactSelector({ provider, model: 'test-model' });
+    const longControlSequence = Array.from({ length: 48 }, (_, index) => ({
+      role: 'button',
+      label: `alpha workspace action ${index}`,
+      attributes: `visible action ${index}`,
+    }));
+
+    await selector?.({
+      query: 'alpha marker value',
+      limit: 1,
+      candidates: [
+        {
+          fact: fact(
+            'fact-target',
+            JSON.stringify({
+              sourceRunId: 'run-target',
+              sequence: 4,
+              observedControlSequence: longControlSequence,
+              observedAffordances: [
+                { role: 'textbox', label: 'marker', attributes: "value='TARGET-123'" },
+                { role: 'button', label: 'unrelated affordance' },
+              ],
+            }),
+            'evidence_span',
+          ),
+          score: 0.4,
+          textScore: 0.2,
+          relevanceScore: 0.2,
+        },
+      ],
+    });
+
+    const params = mockSendLlmMessage.mock.calls[0]?.[0] as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const payload = JSON.parse(params.messages[1]?.content ?? '{}') as {
+      candidates?: Array<{ text?: string }>;
+    };
+    const text = payload.candidates?.[0]?.text ?? '';
+    expect(text).toContain('marker');
+    expect(text).toContain('TARGET-123');
+    expect(text).toContain('observedControlSequence');
+    expect(text).not.toContain('unrelated affordance');
   });
 });

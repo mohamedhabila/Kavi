@@ -6,7 +6,6 @@ const PINNED_BOOST = 0.25;
 const RELEVANCE_EPSILON = 1e-6;
 const QUOTED_ANCHOR_MATCH_BOOST = 0.18;
 const QUOTED_ANCHOR_FULL_MATCH_BOOST = 0.12;
-const DISCRIMINATIVE_SCORING_MIN_UNITS = 8;
 
 export function buildQueryUnitWeightsFromHits(
   queryUnits: ReadonlySet<string>,
@@ -31,34 +30,6 @@ export function buildQueryUnitWeightsFromHits(
     weights.set(unit, Math.log((documentCount + 1) / (df + 1)) + 1);
   }
   return weights;
-}
-
-export function selectDiscriminativeScoringUnits(params: {
-  scoringUnits: ReadonlySet<string>;
-  unitWeights: ReadonlyMap<string, number>;
-  anchorLexicalUnits: ReadonlyArray<string>;
-}): Set<string> {
-  const { scoringUnits, unitWeights, anchorLexicalUnits } = params;
-  if (scoringUnits.size <= DISCRIMINATIVE_SCORING_MIN_UNITS) return new Set(scoringUnits);
-  const weightedUnits = Array.from(scoringUnits)
-    .map((unit) => ({ unit, weight: unitWeights.get(unit) ?? 1 }))
-    .sort((left, right) => {
-      if (right.weight !== left.weight) return right.weight - left.weight;
-      return left.unit.localeCompare(right.unit);
-    });
-  const weights = weightedUnits.map((entry) => entry.weight).sort((left, right) => left - right);
-  const medianWeight = weights[Math.floor(weights.length / 2)] ?? 1;
-  const selected = new Set<string>();
-  const anchors = new Set(anchorLexicalUnits);
-  for (const entry of weightedUnits) {
-    if (entry.weight >= medianWeight || anchors.has(entry.unit)) selected.add(entry.unit);
-  }
-  const minUnits = Math.min(DISCRIMINATIVE_SCORING_MIN_UNITS, scoringUnits.size);
-  for (const entry of weightedUnits) {
-    if (selected.size >= minUnits) break;
-    selected.add(entry.unit);
-  }
-  return selected;
 }
 
 export function buildScoredFact(params: {

@@ -23,6 +23,7 @@ const MAX_STEP_TEXT_CHARS = 420;
 const MAX_STEP_COUNT = 8;
 const MAX_MATCHED_QUERY_UNITS = 24;
 const MAX_SELECTOR_AFFORDANCE_ITEMS = 18;
+const MAX_SELECTOR_AFFORDANCE_COMPLEMENT_ITEMS = 6;
 const MAX_SELECTOR_CONTROL_SEQUENCE_ITEMS = 36;
 const CONTROL_SEQUENCE_QUERY_WINDOW_RADIUS = 3;
 
@@ -63,6 +64,16 @@ function textHitCount(value: string, queryUnits: ReadonlySet<string>): number {
   let hits = 0;
   for (const unit of queryUnits) {
     if (valueUnits.has(unit)) hits += 1;
+  }
+  return hits;
+}
+
+function matchedQueryUnitSet(value: string, queryUnits: ReadonlySet<string>): Set<string> {
+  if (queryUnits.size === 0) return new Set();
+  const valueUnits = tokenizeLexicalUnits(value);
+  const hits = new Set<string>();
+  for (const unit of queryUnits) {
+    if (valueUnits.has(unit)) hits.add(unit);
   }
   return hits;
 }
@@ -128,6 +139,42 @@ function compactObservedAffordancesForSelector(
   return fitUnknownValue(selected, MAX_STEP_TEXT_CHARS, MAX_SELECTOR_AFFORDANCE_ITEMS);
 }
 
+function compactObservedAffordanceComplementForSelector(params: {
+  observedAffordances: unknown;
+  compactedControlSequence: unknown;
+  queryUnits: ReadonlySet<string>;
+}): unknown {
+  const { observedAffordances, compactedControlSequence, queryUnits } = params;
+  if (!Array.isArray(observedAffordances) || observedAffordances.length === 0) return undefined;
+  if (queryUnits.size === 0) return undefined;
+
+  const controlHits = matchedQueryUnitSet(JSON.stringify(compactedControlSequence), queryUnits);
+  const indexed = observedAffordances
+    .map((entry, index) => {
+      const hits = matchedQueryUnitSet(JSON.stringify(entry), queryUnits);
+      const complementaryHitCount = Array.from(hits).filter((unit) => !controlHits.has(unit)).length;
+      return {
+        index,
+        value: entry,
+        hitCount: hits.size,
+        complementaryHitCount,
+      };
+    })
+    .filter((entry) => entry.complementaryHitCount > 0)
+    .sort((left, right) => {
+      if (right.complementaryHitCount !== left.complementaryHitCount) {
+        return right.complementaryHitCount - left.complementaryHitCount;
+      }
+      if (right.hitCount !== left.hitCount) return right.hitCount - left.hitCount;
+      return left.index - right.index;
+    })
+    .slice(0, MAX_SELECTOR_AFFORDANCE_COMPLEMENT_ITEMS);
+
+  if (indexed.length === 0) return undefined;
+  const selected = indexed.sort((left, right) => left.index - right.index).map((entry) => entry.value);
+  return fitUnknownValue(selected, MAX_STEP_TEXT_CHARS, MAX_SELECTOR_AFFORDANCE_COMPLEMENT_ITEMS);
+}
+
 function selectControlSequenceIndexes(
   value: ReadonlyArray<unknown>,
   queryUnits: ReadonlySet<string>,
@@ -177,16 +224,22 @@ function compactStep(
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   const hasDirectEvidence = hasDirectStepEvidence(record);
+  const observedControlSequence = compactObservedControlSequenceForSelector(
+    record.observedControlSequence,
+    queryUnits,
+  );
+  const observedAffordances = hasObservedControlSequence(record)
+    ? compactObservedAffordanceComplementForSelector({
+        observedAffordances: record.observedAffordances,
+        compactedControlSequence: observedControlSequence,
+        queryUnits,
+      })
+    : compactObservedAffordancesForSelector(record.observedAffordances, queryUnits);
   const compact = {
     stateIndex: record.stateIndex ?? record.state_index,
     url: fitUnknownValue(record.url, 240),
-    observedControlSequence: compactObservedControlSequenceForSelector(
-      record.observedControlSequence,
-      queryUnits,
-    ),
-    observedAffordances: hasObservedControlSequence(record)
-      ? undefined
-      : compactObservedAffordancesForSelector(record.observedAffordances, queryUnits),
+    observedAffordances,
+    observedControlSequence,
     inputControlsPresent: record.inputControlsPresent,
     observation: fitUnknownValue(record.observation, MAX_STEP_TEXT_CHARS),
     toolResult: fitUnknownValue(record.toolResult ?? record.tool_result, MAX_STEP_TEXT_CHARS),

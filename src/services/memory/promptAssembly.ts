@@ -20,6 +20,7 @@ import {
   hasObservedControlSequence,
   selectOrderedEvidenceIndexes,
 } from './controlSequenceCompaction';
+import { compactObservedAffordanceComplementForPrompt } from './promptAffordanceComplement';
 
 export type PromptMemoryFact = MemoryFact & { subjectLabel?: string };
 
@@ -357,20 +358,26 @@ function compactProcedureStep(
         Array.from(anchorUnits).every((unit) => thoughtUnits.has(unit)),
       )
     : false;
+  const observedControlSequence = compactObservedControlSequenceForPrompt(
+    input.observedControlSequence,
+    queryUnits,
+  );
+  const observedAffordances =
+    queryUnits && hasObservedControlSequence(input)
+      ? compactObservedAffordanceComplementForPrompt({
+          observedAffordances: input.observedAffordances,
+          compactedControlSequence: observedControlSequence,
+          queryUnits,
+        })
+      : compactObservedAffordancesForPrompt(input.observedAffordances);
   const compact = dropEmptyPromptRecord({
     stateIndex: input.stateIndex ?? input.state_index,
     url: fitPromptValue(input.url, 220),
     action: fitPromptValue(input.action, 260),
     thought: hasDirectEvidence && !thoughtMatchesAnchor ? undefined : fitPromptValue(thought, 260),
     toolName: fitPromptValue(input.toolName ?? input.tool_name, 160),
-    observedControlSequence: compactObservedControlSequenceForPrompt(
-      input.observedControlSequence,
-      queryUnits,
-    ),
-    observedAffordances:
-      queryUnits && hasObservedControlSequence(input)
-        ? undefined
-        : compactObservedAffordancesForPrompt(input.observedAffordances),
+    observedAffordances,
+    observedControlSequence,
     inputControlsPresent: input.inputControlsPresent,
     observation: fitPromptEvidenceText(input.observation, queryUnits, 520),
     toolResult: fitPromptEvidenceText(input.toolResult ?? input.tool_result, queryUnits, 360),

@@ -138,6 +138,50 @@ describe('assemblePrompt', () => {
     expect(text).not.toContain('duplicated sampled action');
   });
 
+  it('keeps complementary query-matching affordance evidence in final prompt context', () => {
+    const observedControlSequence = Array.from({ length: 48 }, (_, index) => ({
+      role: 'button',
+      label: `alpha workspace action ${index}`,
+      attributes: `visible action ${index}`,
+    }));
+
+    const assembled = assemblePrompt({
+      basePrompt: 'Base prompt.',
+      retrievalQuery: 'alpha marker value',
+      retrievedFacts: [
+        memoryFact(
+          'target',
+          JSON.stringify({
+            sourceRunId: 'run-target',
+            status: 'completed',
+            evidenceSlices: [
+              {
+                observedControlSequence,
+                observedAffordances: [
+                  {
+                    role: 'textbox',
+                    label: 'marker',
+                    attributes: "value='TARGET-123'",
+                    section: 'target section',
+                  },
+                  { role: 'button', label: 'unrelated affordance' },
+                ],
+              },
+            ],
+          }),
+        ),
+      ],
+    });
+
+    const text = assembled.sections.map((section) => section.text).join('\n\n');
+    expect(text).toContain('observedAffordances');
+    expect(text).toContain('marker');
+    expect(text).toContain('TARGET-123');
+    expect(text).toContain('target section');
+    expect(text).toContain('observedControlSequence');
+    expect(text).not.toContain('unrelated affordance');
+  });
+
   it('keeps prior step thoughts when no direct observed evidence is available', () => {
     const assembled = assemblePrompt({
       basePrompt: 'Base prompt.',

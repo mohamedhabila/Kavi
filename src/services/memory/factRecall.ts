@@ -16,7 +16,6 @@ import {
 import {
   buildQueryUnitWeightsFromHits,
   buildScoredFact,
-  selectDiscriminativeScoringUnits,
 } from './factRecallScoring';
 import { countLexicalUnits } from './ranking/lexical';
 import { quotedSpanUnitSets } from './ranking/quotedSpans';
@@ -144,20 +143,25 @@ async function selectFactsWithSemanticSelector(params: {
   const selected: ScoredFact[] = [];
   const seenIds = new Set<string>();
   const seenKeys = new Set<string>();
-  const appendSelected = (entry: ScoredFact): boolean => {
+  const seenDiversityKeys = new Set<string>();
+  const appendSelected = (entry: ScoredFact, requireNewDiversityKey = false): boolean => {
     if (selected.length >= params.limit) return false;
     if (seenIds.has(entry.fact.id)) return false;
+    const diversityKey = selectorDiversityKey(entry.fact);
+    if (requireNewDiversityKey && seenDiversityKeys.has(diversityKey)) return false;
     const key = factDedupeKey(entry.fact);
     if (seenKeys.has(key)) return false;
     selected.push(entry);
     seenIds.add(entry.fact.id);
     seenKeys.add(key);
+    seenDiversityKeys.add(diversityKey);
     return true;
   };
   for (const entry of protectedSelected) appendSelected(entry);
 
   let semanticSelectedCount = 0;
   let semanticAdmittedCount = 0;
+  const semanticSelectedEntries: ScoredFact[] = [];
   const selectorStarted = Date.now();
   try {
     const result = await selector({
@@ -169,6 +173,12 @@ async function selectFactsWithSemanticSelector(params: {
       const entry = byId.get(factId);
       if (!entry) continue;
       semanticSelectedCount += 1;
+      semanticSelectedEntries.push(entry);
+    }
+    for (const entry of semanticSelectedEntries) {
+      if (appendSelected(entry, true)) semanticAdmittedCount += 1;
+    }
+    for (const entry of semanticSelectedEntries) {
       if (appendSelected(entry)) semanticAdmittedCount += 1;
     }
   } finally {
@@ -316,18 +326,8 @@ async function buildRecallSelection(
   );
 
   const unitWeightsStarted = Date.now();
-  const initialUnitWeights = buildQueryUnitWeightsFromHits(
-    scoringQueryUnits,
-    candidates,
-    candidateUnitHits,
-  );
-  const discriminativeScoringUnits = selectDiscriminativeScoringUnits({
-    scoringUnits: scoringQueryUnits,
-    unitWeights: initialUnitWeights,
-    anchorLexicalUnits,
-  });
   const unitWeights = buildQueryUnitWeightsFromHits(
-    discriminativeScoringUnits,
+    scoringQueryUnits,
     candidates,
     candidateUnitHits,
   );
@@ -337,7 +337,7 @@ async function buildRecallSelection(
   const scored = candidates.map((fact) =>
     buildScoredFact({
       fact,
-      queryUnits: discriminativeScoringUnits,
+      queryUnits: scoringQueryUnits,
       factUnitHits: candidateUnitHits.get(fact.id),
       unitWeights,
       query: trimmedQuery,
@@ -364,7 +364,7 @@ async function buildRecallSelection(
     deterministicSelected,
     candidateUnitHits,
     unitWeights,
-    scoringUnits: discriminativeScoringUnits,
+    scoringUnits: scoringQueryUnits,
     options,
     limit,
     timing,

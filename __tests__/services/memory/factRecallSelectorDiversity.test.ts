@@ -78,4 +78,44 @@ describe('recallScoredFactsForQuery selector candidate diversity', () => {
     );
     expect(scored.map((entry) => entry.fact.id)).toEqual([sourceC.fact.id]);
   });
+
+  it('admits semantic selections from distinct sources before repeated source variants', async () => {
+    const project = upsertEntity({ name: 'zeta release', type: 'project' });
+    const firstSourceA = recordFact({
+      subjectId: project.id,
+      predicate: 'observation',
+      objectText: 'zeta shared evidence source a first',
+      sourceRunId: 'source-a',
+      importance: 0.9,
+      now: 1,
+    });
+    const secondSourceA = recordFact({
+      subjectId: project.id,
+      predicate: 'observation',
+      objectText: 'zeta shared evidence source a second',
+      sourceRunId: 'source-a',
+      importance: 0.8,
+      supersedePrior: false,
+      now: 2,
+    });
+    const sourceB = recordFact({
+      subjectId: project.id,
+      predicate: 'observation',
+      objectText: 'zeta shared evidence source b complementary',
+      sourceRunId: 'source-b',
+      importance: 0.7,
+      supersedePrior: false,
+      now: 3,
+    });
+
+    const scored = await recallScoredFactsForQuery('zeta shared evidence', {
+      limit: 2,
+      selectorCandidateLimit: 6,
+      selector: async () => ({
+        factIds: [firstSourceA.fact.id, secondSourceA.fact.id, sourceB.fact.id],
+      }),
+    });
+
+    expect(scored.map((entry) => entry.fact.id)).toEqual([firstSourceA.fact.id, sourceB.fact.id]);
+  });
 });
