@@ -185,6 +185,7 @@ export interface MemoryRememberArgs {
   originThreadId?: string | null;
   originTaskId?: string | null;
   sourceMessageId?: string | null;
+  sourceRunId?: string | null;
   sourceSummary?: string | null;
   importance?: number;
 }
@@ -226,6 +227,7 @@ export function executeMemoryRemember(
       ...(args.originThreadId !== undefined ? { originThreadId: args.originThreadId } : {}),
       ...(args.originTaskId !== undefined ? { originTaskId: args.originTaskId } : {}),
       ...(args.sourceMessageId !== undefined ? { sourceMessageId: args.sourceMessageId } : {}),
+      ...(args.sourceRunId !== undefined ? { sourceRunId: args.sourceRunId } : {}),
       ...(args.sourceSummary !== undefined ? { sourceSummary: args.sourceSummary } : {}),
       ...(typeof args.importance === 'number' ? { importance: args.importance } : {}),
     });

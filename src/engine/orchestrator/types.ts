@@ -66,4 +66,5 @@ export interface OrchestratorOptions {
   initialAgentControlGraphState?: AgentRunControlGraphState;
   workflowScopeUserMessageId?: string;
   taskId?: string;
+  agentRunId?: string;
 }

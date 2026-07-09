@@ -117,6 +117,7 @@ export async function runOrchestratorGraphSession(params: {
     await executeAgentControlGraphSession({
       allProviders,
       allTools,
+      agentRunId: options.agentRunId,
       callbacks,
       compactionEngine,
       conversationId,

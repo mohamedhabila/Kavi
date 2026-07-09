@@ -69,6 +69,7 @@ export async function executePreparedAgentControlGraphPendingToolTurn(params: {
     finishWithGraphTerminalEvent: params.iterationParams.graph.finishWithGraphTerminalEvent,
     recordPerformanceMetrics: params.iterationParams.graph.recordPerformanceMetrics,
     emitPendingAsyncOperationsChange: params.iterationParams.emitPendingAsyncOperationsChange,
+    agentRunId: params.iterationParams.agentRunId,
     warningInjectedThisRound: params.runtime.warningInjectedThisRound,
     turnAssistantContent: params.turnAssistantContent,
     reasoning: params.reasoning,

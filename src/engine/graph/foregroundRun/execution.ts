@@ -192,6 +192,7 @@ export async function executeForegroundConversationRun(
         initialPendingAsyncOperations: options?.initialPendingAsyncOperations,
         initialAgentControlGraphState: resumePreparation.initialAgentControlGraphState,
         workflowScopeUserMessageId: resumePreparation.workflowScopeUserMessageId,
+        agentRunId: bootstrapResult.trackedAgentRunId,
       },
       runtime.callbacks,
     );

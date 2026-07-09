@@ -137,6 +137,7 @@ export type ToolRuntimeBindings = {
 export interface ExecuteAgentControlGraphIterationParams {
   allProviders?: LlmProviderConfig[];
   allTools: ReadonlyArray<ToolDefinition>;
+  agentRunId?: string;
   callbacks: IterationCallbacks;
   compactionEngine: AgentTurnCompactionEngine;
   conversationId: string;

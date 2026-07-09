@@ -269,7 +269,11 @@ describe('processCompletedTurn', () => {
       content: 'Deployed.',
       assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
     });
-    await processCompletedTurn({ threadId: 'conv-1', messages: [user, assistant] });
+    await processCompletedTurn({
+      threadId: 'conv-1',
+      messages: [user, assistant],
+      sourceRunId: 'run-structural',
+    });
 
     expect(mockExtractStructuralMemory).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -277,6 +281,7 @@ describe('processCompletedTurn', () => {
         assistantMessage: 'Deployed.',
         conversationId: 'conv-1',
         threadId: 'conv-1',
+        sourceRunId: 'run-structural',
         sourceUserMessageId: user.id,
         sourceAssistantMessageId: assistant.id,
       }),
@@ -308,6 +313,7 @@ describe('processCompletedTurn', () => {
           assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
         }),
       ],
+      sourceRunId: 'run-persisted',
     });
 
     expect(result.processed).toBe(true);
@@ -324,6 +330,10 @@ describe('processCompletedTurn', () => {
         openThreads: ['Verify staging'],
       }),
       expect.objectContaining({ skipWorkingMemoryWrites: true }),
+    );
+    expect(mockApplyConsolidatorResult).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ sourceRunId: 'run-persisted' }),
     );
   });
 

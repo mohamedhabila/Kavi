@@ -113,12 +113,6 @@ export const MEMORY_REMEMBER_TOOL: ToolDefinition = {
         enum: ['global', 'project', 'conversation', 'session', 'persona'],
         description: 'Where this fact belongs. Use global only for stable profile/preferences.',
       },
-      originConversationId: {
-        type: 'string',
-        description: 'Conversation where the fact was learned.',
-      },
-      originTaskId: { type: 'string', description: 'Agent task/run where the fact was learned.' },
-      sourceMessageId: { type: 'string', description: 'Message id that supports this fact.' },
       sourceSummary: { type: 'string', description: 'Short evidence note or reason.' },
       importance: { type: 'number', description: '0..1 importance used for recall and decay.' },
       pinned: {

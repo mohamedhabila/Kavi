@@ -46,6 +46,7 @@ export interface ConsolidatorTurnInput {
   conversationId?: string;
   threadId?: string;
   taskId?: string;
+  sourceRunId?: string;
   sourceUserMessageId?: string;
   sourceAssistantMessageId?: string;
   /** All user/assistant/tool messages since the previous consolidation cursor. */
@@ -374,6 +375,7 @@ export function applyConsolidatorResult(
     conversationId?: string;
     threadId?: string;
     taskId?: string;
+    sourceRunId?: string;
     threadTitle?: string;
     sourceUserMessageId?: string;
     sourceAssistantMessageId?: string;
@@ -434,6 +436,7 @@ export function applyConsolidatorResult(
       originConversationId: options.conversationId ?? null,
       originThreadId: options.threadId ?? options.conversationId ?? null,
       originTaskId: options.taskId ?? null,
+      sourceRunId: options.sourceRunId ?? null,
       sourceMessageId,
       sourceTurnId: options.sourceAssistantMessageId ?? options.sourceUserMessageId ?? null,
       sourceSummary: fact.reason ?? episodeSummary ?? null,
@@ -553,6 +556,7 @@ export async function consolidateTurn(
       conversationId: input.conversationId,
       threadId: input.threadId,
       taskId: input.taskId,
+      sourceRunId: input.sourceRunId,
       threadTitle: input.threadTitle,
       sourceUserMessageId: input.sourceUserMessageId,
       sourceAssistantMessageId: input.sourceAssistantMessageId,

@@ -1,4 +1,5 @@
 import { useSettingsStore } from '../../store/useSettingsStore';
+import { resolveGraphTaskId } from '../goals/graphTaskScope';
 import { executeProviderAwareTool } from './providerAwareToolExecution';
 import {
   executeMemoryBlockEdit,
@@ -11,6 +12,7 @@ import {
 } from './builtin-memory';
 import type { MemoryRememberArgs } from '../../services/memory/memoryTools';
 import type { BuiltinToolExecutionParams } from './toolBuiltinExecutionTypes';
+import type { ToolExecutionContext } from './toolExecutionContext';
 
 export const BUILTIN_MEMORY_TOOL_NAMES = new Set([
   'memory_search',
@@ -37,21 +39,30 @@ function withExecutionMemoryContext(
   args: unknown,
   conversationId: string,
   workspaceConversationId: string,
+  context?: ToolExecutionContext,
 ): MemoryRememberArgs {
-  const base =
+  const source =
     args && typeof args === 'object' && !Array.isArray(args)
-      ? { ...(args as Partial<MemoryRememberArgs>) }
+      ? (args as Partial<MemoryRememberArgs>)
       : {};
-  if (base.originConversationId === undefined) {
-    base.originConversationId = workspaceConversationId;
-  }
-  if (base.originThreadId === undefined) {
-    base.originThreadId = conversationId;
-  }
-  if (base.scope === undefined) {
-    base.scope = 'conversation';
-  }
-  return base as MemoryRememberArgs;
+  const sourceRunId = context?.agentRunId?.trim() ? context.agentRunId.trim() : null;
+  const taskId = resolveGraphTaskId({ goals: context?.controlGraphGoals });
+  return {
+    subject: source.subject as string,
+    subjectType: source.subjectType,
+    predicate: source.predicate as string,
+    value: source.value as string,
+    confidence: source.confidence,
+    pinned: source.pinned,
+    scope: source.scope ?? 'conversation',
+    sourceSummary: source.sourceSummary,
+    importance: source.importance,
+    originConversationId: workspaceConversationId,
+    originThreadId: conversationId,
+    originTaskId: taskId ?? null,
+    sourceMessageId: null,
+    sourceRunId,
+  };
 }
 
 export async function executeBuiltinMemoryTool(
@@ -81,7 +92,7 @@ export async function executeBuiltinMemoryTool(
   if (name === 'memory_recall') return executeMemoryRecall(args);
   if (name === 'memory_remember') {
     return executeMemoryRemember(
-      withExecutionMemoryContext(args, conversationId, workspaceConversationId),
+      withExecutionMemoryContext(args, conversationId, workspaceConversationId, context),
     );
   }
   if (name === 'memory_pin') return executeMemoryPin(args);

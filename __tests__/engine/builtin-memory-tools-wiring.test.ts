@@ -111,6 +111,17 @@ describe('living-memory tool wiring', () => {
     );
   });
 
+  it('keeps runtime-owned memory provenance out of the provider-facing write schema', () => {
+    expect(MEMORY_REMEMBER_TOOL.input_schema.properties).not.toHaveProperty(
+      'originConversationId',
+    );
+    expect(MEMORY_REMEMBER_TOOL.input_schema.properties).not.toHaveProperty('originThreadId');
+    expect(MEMORY_REMEMBER_TOOL.input_schema.properties).not.toHaveProperty('originTaskId');
+    expect(MEMORY_REMEMBER_TOOL.input_schema.properties).not.toHaveProperty('sourceMessageId');
+    expect(MEMORY_REMEMBER_TOOL.input_schema.properties).not.toHaveProperty('sourceRunId');
+    expect(MEMORY_REMEMBER_TOOL.input_schema.properties).toHaveProperty('sourceSummary');
+  });
+
   it('lists structured fact-memory tools under the memory category', async () => {
     const raw = await executeToolCatalog({ category: 'memory' });
     const result = JSON.parse(raw);
