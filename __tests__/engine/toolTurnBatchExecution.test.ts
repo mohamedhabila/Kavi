@@ -1,5 +1,7 @@
 import { executeAgentControlGraphToolBatch } from '../../src/engine/graph/toolTurnBatchExecution';
 import { GOAL_BOOTSTRAP_TOOL_NAME } from '../../src/engine/goals/bootstrap';
+import { buildEffectCompletionCriterion } from '../../src/engine/goals/effectCompletionEvidence';
+import { resolveToolEffectCompletionRequirement } from '../../src/engine/toolExecution/toolEffectCompletionContract';
 import { buildToolResultMessage } from '../../src/engine/toolExecution/toolExecutionMessages';
 import { executeToolCallLifecycle } from '../../src/engine/toolExecution/toolCallLifecycle';
 import type { Message } from '../../src/types/message';
@@ -31,6 +33,26 @@ const tools: ToolDefinition[] = [
     },
   },
 ];
+
+const writeFileTool: ToolDefinition = {
+  name: 'write_file',
+  description: 'Write a workspace file.',
+  input_schema: {
+    type: 'object',
+    properties: { path: { type: 'string' }, content: { type: 'string' } },
+    required: ['path', 'content'],
+  },
+};
+
+const readFileTool: ToolDefinition = {
+  name: 'read_file',
+  description: 'Read a workspace file.',
+  input_schema: {
+    type: 'object',
+    properties: { path: { type: 'string' } },
+    required: ['path'],
+  },
+};
 
 function createParams(overrides: Record<string, unknown> = {}) {
   return {
@@ -150,11 +172,289 @@ describe('toolTurnBatchExecution', () => {
     expect(mockedExecuteToolCallLifecycle).toHaveBeenCalledTimes(1);
   });
 
+  it('blocks an effect until an active blocking goal owns its exact completion contract', async () => {
+    mockedExecuteToolCallLifecycle.mockImplementation(async (params: any) => {
+      const blocked = params.workflowToolCallBlocker(params.tc.name, params.tc.arguments);
+      return {
+        toolCallId: params.tc.id,
+        effectiveToolName: params.tc.name,
+        result: blocked ?? '{}',
+        toolMessage: buildToolResultMessage({
+          idPrefix: blocked ? 'blocked' : 'tool',
+          toolCallId: params.tc.id,
+          content: blocked ?? '{}',
+          toolCall: {
+            id: params.tc.id,
+            name: params.tc.name,
+            arguments: params.tc.arguments,
+            status: blocked ? 'failed' : 'completed',
+          },
+          isError: Boolean(blocked),
+        }),
+      };
+    });
+
+    const outcomes = await executeAgentControlGraphToolBatch(
+      createParams({
+        executableToolCalls: [
+          {
+            id: 'tc-write',
+            name: 'write_file',
+            arguments: '{"path":"reports/final.md","content":"done"}',
+          },
+        ],
+        groundedRequestScopedTools: [writeFileTool],
+        availableToolNames: new Set(['write_file']),
+        controlGraphGoals: [],
+      }),
+    );
+
+    const blocked = JSON.parse(outcomes[0]?.toolMessage.content ?? '{}');
+    expect(blocked).toMatchObject({
+      status: 'error',
+      code: 'completion_contract_required',
+      tool: 'write_file',
+      repair: {
+        tool: GOAL_BOOTSTRAP_TOOL_NAME,
+        completionPolicy: 'blocking',
+        status: 'active',
+      },
+    });
+    expect(blocked.requiredCriterion).toEqual(expect.stringMatching(/^evidence\.effect:/u));
+  });
+
+  it.each([
+    ['wrong resource', { resource: { kind: 'workspace_file', id: 'reports/other.md' } }],
+    ['wrong digest', { resource: { digest: `sha256:${'b'.repeat(64)}` } }],
+  ])('rejects a goal contract bound to the %s', async (_label, criterionOverride) => {
+    const argumentsText = '{"path":"reports/final.md","content":"done"}';
+    const requirement = await resolveToolEffectCompletionRequirement({
+      toolName: 'write_file',
+      argumentsText,
+    });
+    expect(requirement.kind).toBe('effectful');
+    if (requirement.kind !== 'effectful') {
+      throw new Error('write_file must have a code-owned effect completion contract');
+    }
+    const criterion = buildEffectCompletionCriterion({
+      ...requirement.criterion,
+      resource: {
+        ...requirement.criterion.resource,
+        ...criterionOverride.resource,
+      },
+    });
+    mockedExecuteToolCallLifecycle.mockImplementation(async (params: any) => {
+      const blocked = params.workflowToolCallBlocker(params.tc.name, params.tc.arguments);
+      return {
+        toolCallId: params.tc.id,
+        effectiveToolName: params.tc.name,
+        result: blocked ?? '{}',
+        toolMessage: buildToolResultMessage({
+          idPrefix: 'tool',
+          toolCallId: params.tc.id,
+          content: blocked ?? '{}',
+          toolCall: {
+            id: params.tc.id,
+            name: params.tc.name,
+            arguments: params.tc.arguments,
+            status: blocked ? 'failed' : 'completed',
+          },
+          isError: Boolean(blocked),
+        }),
+      };
+    });
+
+    const outcomes = await executeAgentControlGraphToolBatch(
+      createParams({
+        executableToolCalls: [
+          { id: 'tc-write', name: 'write_file', arguments: argumentsText },
+        ],
+        groundedRequestScopedTools: [writeFileTool],
+        availableToolNames: new Set(['write_file']),
+        controlGraphGoals: [
+          {
+            id: 'g-write',
+            title: 'Write final report',
+            status: 'active',
+            completionPolicy: 'blocking',
+            dependencies: [],
+            evidence: [],
+            successCriteria: [criterion],
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+      }),
+    );
+
+    expect(JSON.parse(outcomes[0]?.toolMessage.content ?? '{}')).toMatchObject({
+      code: 'completion_contract_required',
+    });
+  });
+
+  it('allows an effect when an active blocking goal owns the exact request-bound contract', async () => {
+    const argumentsText = '{"path":"reports/final.md","content":"done"}';
+    const requirement = await resolveToolEffectCompletionRequirement({
+      toolName: 'write_file',
+      argumentsText,
+    });
+    expect(requirement.kind).toBe('effectful');
+    if (requirement.kind !== 'effectful') {
+      throw new Error('write_file must have a code-owned effect completion contract');
+    }
+    mockedExecuteToolCallLifecycle.mockImplementation(async (params: any) => {
+      expect(params.workflowToolCallBlocker(params.tc.name, params.tc.arguments)).toBeUndefined();
+      return {
+        toolCallId: params.tc.id,
+        effectiveToolName: params.tc.name,
+        result: '{}',
+        toolMessage: buildToolResultMessage({
+          idPrefix: 'tool',
+          toolCallId: params.tc.id,
+          content: '{}',
+          toolCall: {
+            id: params.tc.id,
+            name: params.tc.name,
+            arguments: params.tc.arguments,
+            status: 'completed',
+          },
+        }),
+      };
+    });
+
+    await executeAgentControlGraphToolBatch(
+      createParams({
+        executableToolCalls: [
+          { id: 'tc-write', name: 'write_file', arguments: argumentsText },
+        ],
+        groundedRequestScopedTools: [writeFileTool],
+        availableToolNames: new Set(['write_file']),
+        controlGraphGoals: [
+          {
+            id: 'g-write',
+            title: 'Write final report',
+            status: 'active',
+            completionPolicy: 'blocking',
+            dependencies: [],
+            evidence: [],
+            successCriteria: [requirement.serializedCriterion],
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+      }),
+    );
+
+    expect(mockedExecuteToolCallLifecycle).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps goal mutation and effect execution on separate graph boundaries', async () => {
+    mockedExecuteToolCallLifecycle.mockImplementation(async (params: any) => {
+      const blocked = params.workflowToolCallBlocker(params.tc.name, params.tc.arguments);
+      return {
+        toolCallId: params.tc.id,
+        effectiveToolName: params.tc.name,
+        result: blocked ?? '{}',
+        toolMessage: buildToolResultMessage({
+          idPrefix: 'tool',
+          toolCallId: params.tc.id,
+          content: blocked ?? '{}',
+          toolCall: {
+            id: params.tc.id,
+            name: params.tc.name,
+            arguments: params.tc.arguments,
+            status: blocked ? 'failed' : 'completed',
+          },
+          isError: Boolean(blocked),
+        }),
+      };
+    });
+    const argumentsText = '{"path":"reports/final.md","content":"done"}';
+    const requirement = await resolveToolEffectCompletionRequirement({
+      toolName: 'write_file',
+      argumentsText,
+    });
+    if (requirement.kind !== 'effectful') {
+      throw new Error('write_file must have a code-owned effect completion contract');
+    }
+
+    const outcomes = await executeAgentControlGraphToolBatch(
+      createParams({
+        executableToolCalls: [
+          { id: 'tc-goal', name: GOAL_BOOTSTRAP_TOOL_NAME, arguments: '{"action":"create"}' },
+          { id: 'tc-write', name: 'write_file', arguments: argumentsText },
+        ],
+        groundedRequestScopedTools: [
+          {
+            name: GOAL_BOOTSTRAP_TOOL_NAME,
+            description: 'Update graph goals.',
+            input_schema: { type: 'object', properties: {} },
+          },
+          writeFileTool,
+        ],
+        availableToolNames: new Set([GOAL_BOOTSTRAP_TOOL_NAME, 'write_file']),
+        controlGraphGoals: [
+          {
+            id: 'g-write',
+            title: 'Write final report',
+            status: 'active',
+            completionPolicy: 'blocking',
+            dependencies: [],
+            evidence: [],
+            successCriteria: [requirement.serializedCriterion],
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+      }),
+    );
+
+    expect(JSON.parse(outcomes[1]?.toolMessage.content ?? '{}')).toMatchObject({
+      code: 'goal_mutation_boundary',
+      tool: 'write_file',
+    });
+  });
+
+  it('allows an answer-supporting read-only tool without a completion goal', async () => {
+    mockedExecuteToolCallLifecycle.mockImplementation(async (params: any) => {
+      expect(params.workflowToolCallBlocker(params.tc.name, params.tc.arguments)).toBeUndefined();
+      return {
+        toolCallId: params.tc.id,
+        effectiveToolName: params.tc.name,
+        result: '{}',
+        toolMessage: buildToolResultMessage({
+          idPrefix: 'tool',
+          toolCallId: params.tc.id,
+          content: '{}',
+          toolCall: {
+            id: params.tc.id,
+            name: params.tc.name,
+            arguments: params.tc.arguments,
+            status: 'completed',
+          },
+        }),
+      };
+    });
+
+    await executeAgentControlGraphToolBatch(
+      createParams({
+        executableToolCalls: [
+          { id: 'tc-read', name: 'read_file', arguments: '{"path":"reports/final.md"}' },
+        ],
+        groundedRequestScopedTools: [readFileTool],
+        availableToolNames: new Set(['read_file']),
+        controlGraphGoals: [],
+      }),
+    );
+
+    expect(mockedExecuteToolCallLifecycle).toHaveBeenCalledTimes(1);
+  });
+
   it('interrupts a serial batch after repeated failed goal mutations and returns skipped tool results', async () => {
     const serialTools: ToolDefinition[] = [
       {
-        name: 'write_file',
-        description: 'Write a local file.',
+        name: 'read_file',
+        description: 'Read a local file.',
         input_schema: { type: 'object', properties: {} },
       },
       {
@@ -196,16 +496,16 @@ describe('toolTurnBatchExecution', () => {
     const outcomes = await executeAgentControlGraphToolBatch(
       createParams({
         executableToolCalls: [
-          { id: 'tc-write-1', name: 'write_file', arguments: '{"path":"one.txt"}' },
+          { id: 'tc-read-1', name: 'read_file', arguments: '{"path":"one.txt"}' },
           { id: 'tc-goal-1', name: GOAL_BOOTSTRAP_TOOL_NAME, arguments: '{"action":"complete"}' },
-          { id: 'tc-write-2', name: 'write_file', arguments: '{"path":"two.txt"}' },
+          { id: 'tc-read-2', name: 'read_file', arguments: '{"path":"two.txt"}' },
           { id: 'tc-goal-2', name: GOAL_BOOTSTRAP_TOOL_NAME, arguments: '{"action":"complete"}' },
-          { id: 'tc-write-3', name: 'write_file', arguments: '{"path":"three.txt"}' },
+          { id: 'tc-read-3', name: 'read_file', arguments: '{"path":"three.txt"}' },
           { id: 'tc-goal-3', name: GOAL_BOOTSTRAP_TOOL_NAME, arguments: '{"action":"complete"}' },
-          { id: 'tc-write-4', name: 'write_file', arguments: '{"path":"four.txt"}' },
+          { id: 'tc-read-4', name: 'read_file', arguments: '{"path":"four.txt"}' },
         ],
         groundedRequestScopedTools: serialTools,
-        availableToolNames: new Set(['write_file', GOAL_BOOTSTRAP_TOOL_NAME]),
+        availableToolNames: new Set(['read_file', GOAL_BOOTSTRAP_TOOL_NAME]),
         controlGraphGoals: [
           {
             id: 'g1',
@@ -214,7 +514,7 @@ describe('toolTurnBatchExecution', () => {
             completionPolicy: 'blocking',
             dependencies: [],
             evidence: [],
-            successCriteria: ['evidence.tool:write_file'],
+            successCriteria: ['evidence.tool:read_file'],
             createdAt: 1,
             updatedAt: 1,
           },
@@ -224,7 +524,7 @@ describe('toolTurnBatchExecution', () => {
 
     expect(mockedExecuteToolCallLifecycle).toHaveBeenCalledTimes(6);
     expect(outcomes).toHaveLength(7);
-    expect(outcomes[6]?.toolCallId).toBe('tc-write-4');
+    expect(outcomes[6]?.toolCallId).toBe('tc-read-4');
     expect(outcomes[6]?.toolMessage.isError).toBe(true);
     expect(outcomes[6]?.toolMessage.content).toContain('critical_loop_detected');
   });

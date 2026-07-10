@@ -12,6 +12,13 @@ import {
 import { executeToolExecutionBatch } from '../toolExecution/toolExecutionBatch';
 import type { RuntimeToolAvailabilityContext } from '../tools/runtimeAvailability';
 import { normalizeToolName } from '../tools/toolNameNormalization';
+import { GOAL_BOOTSTRAP_TOOL_NAME } from '../goals/bootstrap';
+import {
+  buildEffectCompletionContractBlock,
+  buildGoalMutationBoundaryBlock,
+  findGoalForEffectCompletionRequirement,
+  resolveToolEffectCompletionRequirement,
+} from '../toolExecution/toolEffectCompletionContract';
 import type { AgentControlPerformance } from './agentControlGraph';
 import type { PendingAgentToolCall } from './modelTurnExecutionTypes';
 import { parseAgentControlGraphSessionsYieldResult } from './sessionsYield';
@@ -54,6 +61,41 @@ export async function executeAgentControlGraphToolBatch(params: {
   const executionToolFilter = (toolName: string): boolean =>
     isToolAllowedByGroundedSurface(toolName) &&
     (params.toolFilter ? params.toolFilter(toolName) : true);
+  const hasGoalMutation = params.executableToolCalls.some(
+    (toolCall) => normalizeToolName(toolCall.name) === GOAL_BOOTSTRAP_TOOL_NAME,
+  );
+  const completionRequirements = await Promise.all(
+    params.executableToolCalls.map((toolCall) =>
+      resolveToolEffectCompletionRequirement({
+        toolName: toolCall.name,
+        argumentsText: toolCall.arguments,
+      }),
+    ),
+  );
+  const workflowBlockerByCallId = new Map<string, string>();
+  for (const [index, toolCall] of params.executableToolCalls.entries()) {
+    const requirement = completionRequirements[index];
+    if (!requirement || requirement.kind === 'effect_free') {
+      continue;
+    }
+    if (hasGoalMutation && requirement.kind === 'effectful') {
+      workflowBlockerByCallId.set(
+        toolCall.id,
+        buildGoalMutationBoundaryBlock(requirement.toolName),
+      );
+      continue;
+    }
+    if (
+      requirement.kind === 'effectful' &&
+      findGoalForEffectCompletionRequirement(params.controlGraphGoals, requirement)
+    ) {
+      continue;
+    }
+    workflowBlockerByCallId.set(
+      toolCall.id,
+      buildEffectCompletionContractBlock(requirement),
+    );
+  }
 
   const executePendingToolCall = async (
     toolCall: PendingAgentToolCall,
@@ -80,6 +122,7 @@ export async function executeAgentControlGraphToolBatch(params: {
         onToolCallStart: params.callbacks.onToolCallStart,
         onToolCallComplete: params.callbacks.onToolCallComplete,
       },
+      workflowToolCallBlocker: () => workflowBlockerByCallId.get(toolCall.id),
       toolFilter: executionToolFilter,
       pendingAsyncMonitorToolNames: params.pendingAsyncMonitorToolNames,
       usePerformanceMetrics: true,

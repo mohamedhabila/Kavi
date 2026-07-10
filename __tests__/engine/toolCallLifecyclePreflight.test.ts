@@ -297,4 +297,52 @@ describe('resolveToolCallPreflight', () => {
     expect(lifecycle.callbacks.onToolCallStart).not.toHaveBeenCalled();
     expect(lifecycle.callbacks.onToolCallComplete).not.toHaveBeenCalled();
   });
+
+  it('settles a workflow-blocked tool call and records the structured repair before execution', () => {
+    const blocker = JSON.stringify({
+      status: 'error',
+      code: 'completion_contract_required',
+      tool: 'write_file',
+    });
+    const lifecycle = buildLifecycle({
+      tc: {
+        id: 'tc-write',
+        name: 'write_file',
+        arguments: '{"path":"reports/final.md","content":"done"}',
+      },
+      availableToolNames: new Set(['write_file']),
+      groundedRequestScopedTools: [
+        {
+          name: 'write_file',
+          description: 'Write a workspace file.',
+          input_schema: {
+            type: 'object',
+            properties: { path: { type: 'string' }, content: { type: 'string' } },
+            required: ['path', 'content'],
+          },
+        },
+      ],
+      workflowToolCallBlocker: () => blocker,
+    });
+
+    const result = resolveToolCallPreflight(lifecycle, lifecycle.tc);
+
+    expect(result?.toolMessage.content).toBe(blocker);
+    expect(result?.toolMessage.isError).toBe(true);
+    expect(result?.toolMessage.toolCalls?.[0]).toEqual(
+      expect.objectContaining({
+        name: 'write_file',
+        status: 'failed',
+        failureKind: 'workflow_guard',
+      }),
+    );
+    expect(lifecycle.callbacks.onToolCallStart).toHaveBeenCalledTimes(1);
+    expect(lifecycle.callbacks.onToolCallComplete).toHaveBeenCalledTimes(1);
+    expect(lifecycle.toolCallHistory).toEqual([
+      expect.objectContaining({
+        name: 'write_file',
+        result: blocker,
+      }),
+    ]);
+  });
 });

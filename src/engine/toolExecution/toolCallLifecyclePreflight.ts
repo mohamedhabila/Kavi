@@ -139,5 +139,7 @@ export function resolveToolCallPreflight(
     idPrefix: params.idPrefixes.workflow,
     content: workflowBlocker,
     failureKind: 'workflow_guard',
+    notifyStart: true,
+    notifyComplete: true,
   });
 }

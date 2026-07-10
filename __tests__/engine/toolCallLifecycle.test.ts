@@ -341,4 +341,44 @@ describe('executeToolCallLifecycle', () => {
       }),
     );
   });
+
+  it('does not invoke an effectful runtime when its completion contract is missing', async () => {
+    const blocker = JSON.stringify({
+      status: 'error',
+      code: 'completion_contract_required',
+      tool: 'write_file',
+    });
+    const onToolCallStart = jest.fn();
+    const onToolCallComplete = jest.fn();
+
+    const result = await executeToolCallLifecycle(
+      buildLifecycle({
+        tc: {
+          id: 'tc-write-blocked',
+          name: 'write_file',
+          arguments: '{"path":"reports/final.md","content":"done"}',
+        },
+        availableToolNames: new Set(['write_file']),
+        groundedRequestScopedTools: [
+          {
+            name: 'write_file',
+            description: 'Write a workspace file.',
+            input_schema: {
+              type: 'object',
+              properties: { path: { type: 'string' }, content: { type: 'string' } },
+              required: ['path', 'content'],
+            },
+          },
+        ],
+        callbacks: { onToolCallStart, onToolCallComplete },
+        workflowToolCallBlocker: () => blocker,
+      }),
+    );
+
+    expect(mockedExecuteTool).not.toHaveBeenCalled();
+    expect(result.toolMessage.content).toBe(blocker);
+    expect(result.toolMessage.isError).toBe(true);
+    expect(onToolCallStart).toHaveBeenCalledTimes(1);
+    expect(onToolCallComplete).toHaveBeenCalledTimes(1);
+  });
 });
