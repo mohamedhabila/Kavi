@@ -6,6 +6,8 @@ Research snapshot: 2026-07-10.
 
 Kavi keeps its local SQLite memory store and provider-neutral request path. Hybrid retrieval is a bounded union of local candidate lanes, not a new memory backend, service, reranking model, or network call. Every lane must apply the existing scope, validity, deletion, expiry, and opt-out rules before a candidate can be ranked.
 
+Recall eligibility is enforced in SQL before every lane's `ORDER BY` and `LIMIT`: project facts are exact to the active root, conversation facts are root-wide, and session facts are exact to root plus task and source thread when the thread is available. Raw unknown scopes never normalize into a visible recall branch. Exact persona ownership remains gated on the owner/persona identity schema rather than being inferred from content.
+
 The production strategy is `hybrid`; `lexical` remains an exact same-path ablation. Both strategies use the same downstream scorer, optional semantic selector, prompt assembly, and answer model. If compatible local embeddings are absent, semantic contribution is explicitly unavailable and lexical retrieval continues deterministically.
 
 ## Primary-source findings
@@ -49,4 +51,4 @@ Diagnostic targets and guardrails:
 
 The report separately exposes scope/expiry/deletion false positives and hybrid-only pollution regressions. It contains no selected fact IDs or memory content. The checked-in synthetic set is frozen by a checked signature after implementation validation. Helpful-memory, completion, release, and frontier claims still require downstream-answer evaluation and evaluator-custodied packs under [the evaluation protocol](./evaluation.md).
 
-The exported runner refuses to start unless every relevant structured-memory table is empty. After a successful or failed run it clears the exact structured stores in a `finally` boundary. It never clears a nonempty user vault; execute it only against an isolated evaluation database.
+The exported runner enumerates every `memory_*` table and refuses unknown cleanup classifications or nonempty evaluation-owned tables. It preserves the explicit vault-identity table, passes one schema-ready database handle through precondition, operation, and cleanup, rejects nested runs, and atomically clears classified evaluation tables in a `finally` boundary after success or failure. It never clears a nonempty user vault; execute it only against an isolated evaluation database.

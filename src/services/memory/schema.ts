@@ -11,11 +11,13 @@
 // ---------------------------------------------------------------------------
 
 import { getMemoryDb } from './sqlite-store';
+import { runMemoryDatabaseSavepoint } from './access/databaseSavepoint';
 import { buildFactContentHash } from './facts/contentIdentity';
 import { ensureIngestionQueueSchema } from './ingestionQueueSchema';
 import { ensureMigrationStateSchema } from './migrationStateSchema';
-import { clearRetrievalEventStore, ensureRetrievalEventSchema } from './retrievalEventSchema';
-import { clearWithdrawalStore, ensureWithdrawalSchema } from './withdrawalSchema';
+import { ensureRetrievalEventSchema } from './retrievalEventSchema';
+import { CLEARED_STRUCTURED_MEMORY_TABLES } from './structuredMemoryTableRegistry';
+import { ensureWithdrawalSchema } from './withdrawalSchema';
 
 let schemaReady = false;
 
@@ -558,28 +560,21 @@ export function resetFactSchemaCacheForTests(): void {
   schemaReady = false;
 }
 
+export function clearStructuredMemoryDatabase(db: ReturnType<typeof getMemoryDb>): void {
+  runMemoryDatabaseSavepoint(db, (database) => {
+    for (const table of CLEARED_STRUCTURED_MEMORY_TABLES) {
+      const exists = database.getFirstSync<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+        table,
+      );
+      if (exists) database.runSync(`DELETE FROM ${table}`);
+    }
+  });
+}
+
 export function clearStructuredMemory(): void {
   ensureFactSchema();
-  const db = getMemoryDb();
-  db.execSync(`
-    DELETE FROM memory_fact_evidence;
-    DELETE FROM memory_fact_terms;
-    DELETE FROM memory_fact_term_stats;
-    DELETE FROM memory_episodes;
-    DELETE FROM memory_facts;
-    DELETE FROM memory_entities;
-    DELETE FROM memory_blocks;
-    DELETE FROM memory_working_blocks;
-    DELETE FROM memory_consolidation_state;
-    DELETE FROM memory_migration_state;
-    DELETE FROM memory_ingestion_receipts;
-    DELETE FROM memory_ingestion_jobs;
-    DELETE FROM memory_tasks;
-    DELETE FROM memory_reflections;
-    DELETE FROM memory_chunks;
-  `);
-  clearRetrievalEventStore(db);
-  clearWithdrawalStore(db);
+  clearStructuredMemoryDatabase(getMemoryDb());
 }
 
 function ensureFactTermStats(db: ReturnType<typeof getMemoryDb>): void {

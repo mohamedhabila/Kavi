@@ -7,9 +7,9 @@ import {
   buildMemoryRetrievalScopeHash,
   readRecentMemoryRetrievalEvents,
 } from '../services/memory/retrievalLog';
-import { clearStructuredMemory } from '../services/memory/schema';
 import { getMemoryDb } from '../services/memory/sqlite-store';
 import { stableHash, stableStringify } from './e2eAgent/e2eTraceRedaction';
+import { runInIsolatedStructuredMemoryEvaluation } from './structuredMemoryEvaluation';
 import {
   MEMORY_HYBRID_ABLATION_CASES,
   MEMORY_HYBRID_ABLATION_FIXTURE_SIGNATURE,
@@ -85,46 +85,6 @@ function assertFrozenFixtureSignature(): void {
   const actual = stableHash(stableStringify(MEMORY_HYBRID_ABLATION_CASES));
   if (actual !== MEMORY_HYBRID_ABLATION_FIXTURE_SIGNATURE) {
     throw new Error('Frozen hybrid ablation fixture signature mismatch.');
-  }
-}
-
-const STRUCTURED_MEMORY_TABLES = [
-  'memory_fact_observations',
-  'memory_fact_evidence',
-  'memory_fact_terms',
-  'memory_fact_term_stats',
-  'memory_episodes',
-  'memory_facts',
-  'memory_entities',
-  'memory_blocks',
-  'memory_working_blocks',
-  'memory_consolidation_state',
-  'memory_migration_state',
-  'memory_ingestion_receipts',
-  'memory_ingestion_jobs',
-  'memory_tasks',
-  'memory_reflections',
-  'memory_chunks',
-  'memory_retrieval_events',
-  'memory_withdrawal_sources',
-  'memory_withdrawal_facts',
-  'memory_withdrawals',
-  'memory_episode_access_policies',
-] as const;
-
-function assertEmptyEvaluationDatabase(): void {
-  const db = getMemoryDb();
-  for (const table of STRUCTURED_MEMORY_TABLES) {
-    const exists = db.getFirstSync<{ name: string }>(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
-      table,
-    );
-    if (!exists) continue;
-    const count = db.getFirstSync<{ count: number }>(`SELECT COUNT(*) AS count FROM ${table}`)
-      ?.count;
-    if (count !== 0) {
-      throw new Error('Hybrid ablation requires an isolated empty evaluation database.');
-    }
   }
 }
 
@@ -385,10 +345,5 @@ async function runAblationOnEmptyDatabase(): Promise<MemoryHybridAblationReport>
 
 export async function runMemoryHybridAblation(): Promise<MemoryHybridAblationReport> {
   assertFrozenFixtureSignature();
-  assertEmptyEvaluationDatabase();
-  try {
-    return await runAblationOnEmptyDatabase();
-  } finally {
-    clearStructuredMemory();
-  }
+  return runInIsolatedStructuredMemoryEvaluation(runAblationOnEmptyDatabase);
 }

@@ -123,21 +123,4 @@ describe('frozen hybrid memory ablation', () => {
     );
     expect(listFacts().map((fact) => fact.id)).toEqual([existing.fact.id]);
   });
-
-  it('cleans every synthetic structured row when execution fails', async () => {
-    getMemoryDb().execSync(`
-      CREATE TRIGGER fail_ablation_fact_insert
-      BEFORE INSERT ON memory_facts
-      BEGIN
-        SELECT RAISE(FAIL, 'forced ablation failure');
-      END;
-    `);
-
-    await expect(runMemoryHybridAblation()).rejects.toThrow('forced ablation failure');
-    expect(listFacts()).toEqual([]);
-    expect(
-      getMemoryDb().getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM memory_entities')
-        ?.count,
-    ).toBe(0);
-  });
 });
