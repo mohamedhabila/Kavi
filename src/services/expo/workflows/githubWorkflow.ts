@@ -111,6 +111,71 @@ async function findLatestWorkflowRunAcrossRefs(
   return latestRun;
 }
 
+interface GitHubWorkflowDispatchDetails {
+  workflowRunId: number;
+  apiUrl: string;
+  htmlUrl: string;
+}
+
+function exactHttpsUrl(value: unknown, host: string, path: string): string | null {
+  if (typeof value !== 'string' || value !== value.trim()) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' &&
+      url.hostname === host &&
+      url.port === '' &&
+      url.username === '' &&
+      url.password === '' &&
+      url.search === '' &&
+      url.hash === '' &&
+      url.pathname.toLowerCase() === path.toLowerCase()
+      ? value
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function decodeGitHubWorkflowDispatchDetails(
+  value: unknown,
+  repo: string,
+): GitHubWorkflowDispatchDetails | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const workflowRunId = record.workflow_run_id;
+  if (!Number.isSafeInteger(workflowRunId) || (workflowRunId as number) <= 0) return null;
+  const apiPath = `/repos/${repo}/actions/runs/${workflowRunId}`;
+  const htmlPath = `/${repo}/actions/runs/${workflowRunId}`;
+  const apiUrl = exactHttpsUrl(record.run_url, 'api.github.com', apiPath);
+  const htmlUrl = exactHttpsUrl(record.html_url, 'github.com', htmlPath);
+  return apiUrl && htmlUrl ? { workflowRunId: workflowRunId as number, apiUrl, htmlUrl } : null;
+}
+
+function decodeGitHubWorkflowRunInspection(
+  value: unknown,
+  dispatch: GitHubWorkflowDispatchDetails,
+): ExpoCommandResult['workflowRun'] | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (record.id !== dispatch.workflowRunId) return null;
+  const status = typeof record.status === 'string' ? trimToUndefined(record.status) : undefined;
+  const url = exactHttpsUrl(record.html_url, 'github.com', new URL(dispatch.htmlUrl).pathname);
+  const conclusion = record.conclusion;
+  if (
+    !status ||
+    !url ||
+    (conclusion !== null && conclusion !== undefined && typeof conclusion !== 'string')
+  ) {
+    return null;
+  }
+  return {
+    id: dispatch.workflowRunId,
+    url,
+    status,
+    conclusion: typeof conclusion === 'string' ? conclusion : null,
+  };
+}
+
 async function dispatchGitHubWorkflow(
   project: ExpoProjectConfig,
   action: 'build' | 'update' | 'submit' | 'deploy-web',
@@ -131,22 +196,21 @@ async function dispatchGitHubWorkflow(
   const refResolution = await resolveExpoProjectGitRefAsync(project, githubToken);
   const explicitWorkflowRef = normalizeExpoWorkflowGitRef(args.workflowRef);
   let ref = explicitWorkflowRef || refResolution.ref;
-  const startedAt = Date.now();
-
-  let dispatched = false;
+  let dispatch: GitHubWorkflowDispatchDetails | null = null;
   let lastDispatchError: unknown;
   for (const candidateRef of getExpoGitRefCandidates({
     workflowRef: ref,
     repoDefaultBranch: refResolution.repoDefaultBranch,
   })) {
     try {
-      await githubApi(
+      const response = await githubApi<unknown>(
         `/repos/${repo}/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`,
         githubToken,
         {
           method: 'POST',
           body: JSON.stringify({
             ref: candidateRef,
+            return_run_details: true,
             inputs: {
               action,
               platform: args.platform || 'android',
@@ -158,8 +222,13 @@ async function dispatchGitHubWorkflow(
           }),
         },
       );
+      dispatch = decodeGitHubWorkflowDispatchDetails(response, repo);
+      if (!dispatch) {
+        throw new Error(
+          'github-workflow-dispatch-uncorrelated: GitHub accepted the workflow dispatch without returning valid exact run details. Do not retry automatically; inspect Actions before dispatching again.',
+        );
+      }
       ref = candidateRef;
-      dispatched = true;
       lastDispatchError = undefined;
       break;
     } catch (error) {
@@ -173,7 +242,7 @@ async function dispatchGitHubWorkflow(
     }
   }
 
-  if (!dispatched) {
+  if (!dispatch) {
     const candidates = getExpoGitRefCandidates({
       workflowRef: ref,
       repoDefaultBranch: refResolution.repoDefaultBranch,
@@ -187,37 +256,45 @@ async function dispatchGitHubWorkflow(
       : new Error(`GitHub workflow dispatch failed. ${hint}`);
   }
 
-  let run = await findLatestWorkflowRun(repo, workflowFile, githubToken, ref, startedAt - 5000);
-  const waitTimeoutMs = args.waitTimeoutMs || 3 * 60 * 1000;
-  const deadline = Date.now() + waitTimeoutMs;
-
-  while (!run && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    run = await findLatestWorkflowRun(repo, workflowFile, githubToken, ref, startedAt - 5000);
-  }
-
-  if (!run) {
-    throw new Error(
-      'github-workflow-dispatch-uncorrelated: GitHub acknowledged the workflow dispatch, but no exact run could be correlated. Do not retry automatically; inspect Actions for the target ref before dispatching again.',
-    );
-  }
-
-  if (args.waitForCompletion) {
-    while (run.status !== 'completed' && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-      run = await githubApi<any>(`/repos/${repo}/actions/runs/${run.id}`, githubToken);
-    }
-  }
-
-  return {
+  const pendingResult: ExpoCommandResult = {
     mode: 'github-workflow',
     workflowRun: {
-      id: run.id,
-      url: run.html_url,
-      status: run.status,
-      conclusion: run.conclusion,
+      id: dispatch.workflowRunId,
+      url: dispatch.htmlUrl,
+      status: 'pending',
+      conclusion: null,
     },
   };
+  if (!args.waitForCompletion) return pendingResult;
+
+  const waitTimeoutMs = args.waitTimeoutMs || 3 * 60 * 1000;
+  const deadline = Date.now() + waitTimeoutMs;
+  try {
+    let run = decodeGitHubWorkflowRunInspection(
+      await githubApi<unknown>(dispatch.apiUrl.slice('https://api.github.com'.length), githubToken),
+      dispatch,
+    );
+    if (!run) throw new Error('github-workflow-inspection-contract-invalid');
+    while (run.status !== 'completed' && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      run = decodeGitHubWorkflowRunInspection(
+        await githubApi<unknown>(
+          dispatch.apiUrl.slice('https://api.github.com'.length),
+          githubToken,
+        ),
+        dispatch,
+      );
+      if (!run) throw new Error('github-workflow-inspection-contract-invalid');
+    }
+    return { mode: 'github-workflow', workflowRun: run };
+  } catch {
+    return {
+      ...pendingResult,
+      note:
+        `GitHub accepted exact workflow run ${dispatch.workflowRunId}, but its status could ` +
+        'not be inspected yet. Durable monitoring will continue using this exact run ID.',
+    };
+  }
 }
 
 export {

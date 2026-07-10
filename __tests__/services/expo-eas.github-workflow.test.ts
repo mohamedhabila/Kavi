@@ -30,20 +30,23 @@ describe('expo eas github workflow execution and monitoring', () => {
           name: 'EAS Deploy',
         }),
       })
-      .mockResolvedValueOnce({ ok: true, status: 204, text: async () => '' })
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
         json: async () => ({
-          workflow_runs: [
-            {
-              id: 91,
-              html_url: 'https://github.com/kavi/mobile/actions/runs/91',
-              status: 'completed',
-              conclusion: 'success',
-              created_at: new Date().toISOString(),
-            },
-          ],
+          workflow_run_id: 91,
+          run_url: 'https://api.github.com/repos/kavi/mobile/actions/runs/91',
+          html_url: 'https://github.com/kavi/mobile/actions/runs/91',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: 91,
+          html_url: 'https://github.com/kavi/mobile/actions/runs/91',
+          status: 'completed',
+          conclusion: 'success',
         }),
       });
 
@@ -58,6 +61,87 @@ describe('expo eas github workflow execution and monitoring', () => {
       'remote-job-1',
       expect.objectContaining({ status: 'completed', externalId: '91' }),
     );
+    const dispatchCall = (global.fetch as jest.Mock).mock.calls.find(([url]) =>
+      String(url).endsWith('/dispatches'),
+    );
+    expect(JSON.parse(String((dispatchCall?.[1] as RequestInit).body))).toEqual(
+      expect.objectContaining({ return_run_details: true }),
+    );
+    expect(
+      (global.fetch as jest.Mock).mock.calls.some(([url]) => String(url).includes('/runs?')),
+    ).toBe(false);
+  });
+
+  it('preserves the exact accepted run as pending when status inspection fails', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          path: '.github/workflows/eas.yml',
+          state: 'active',
+          name: 'EAS Deploy',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          workflow_run_id: 92,
+          run_url: 'https://api.github.com/repos/kavi/mobile/actions/runs/92',
+          html_url: 'https://github.com/kavi/mobile/actions/runs/92',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        text: async () => 'temporarily unavailable',
+      });
+
+    const result = await runExpoProjectAction('expo-project-2', 'build', {
+      waitForCompletion: true,
+    });
+
+    expect(result.workflowRun).toEqual({
+      id: 92,
+      url: 'https://github.com/kavi/mobile/actions/runs/92',
+      status: 'pending',
+      conclusion: null,
+    });
+    expect(result.note).toContain('exact workflow run 92');
+    expect(mockUpdateRemoteJob).toHaveBeenCalledWith(
+      'remote-job-1',
+      expect.objectContaining({ status: 'running', externalId: '92' }),
+    );
+    expect(
+      (global.fetch as jest.Mock).mock.calls.filter(([url]) => String(url).endsWith('/dispatches')),
+    ).toHaveLength(1);
+  });
+
+  it('fails closed without another dispatch when accepted run details are malformed', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          path: '.github/workflows/eas.yml',
+          state: 'active',
+          name: 'EAS Deploy',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ workflow_run_id: 93 }),
+      });
+
+    await expect(runExpoProjectAction('expo-project-2', 'update')).rejects.toThrow(
+      'github-workflow-dispatch-uncorrelated',
+    );
+    expect(
+      (global.fetch as jest.Mock).mock.calls.filter(([url]) => String(url).endsWith('/dispatches')),
+    ).toHaveLength(1);
   });
 
   it('lists and inspects GitHub workflow runs with job details', async () => {
@@ -378,16 +462,14 @@ describe('expo eas github workflow execution and monitoring', () => {
           name: 'EAS Deploy',
         }),
       })
-      .mockResolvedValueOnce({ ok: true, status: 204, text: async () => '' })
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => ({ workflow_runs: [] }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ workflow_runs: [] }),
+        json: async () => ({
+          workflow_run_id: 94,
+          run_url: 'https://api.github.com/repos/kavi/mobile/actions/runs/94',
+          html_url: 'https://github.com/kavi/mobile/actions/runs/94',
+        }),
       });
 
     mockExpoEasHarnessState.settingsState = {
@@ -416,7 +498,11 @@ describe('expo eas github workflow execution and monitoring', () => {
         platform: 'ios',
         waitTimeoutMs: 1,
       }),
-    ).rejects.toThrow('github-workflow-dispatch-uncorrelated');
+    ).resolves.toEqual(
+      expect.objectContaining({
+        workflowRun: expect.objectContaining({ id: 94, status: 'pending' }),
+      }),
+    );
 
     expect(global.fetch).toHaveBeenCalled();
     for (const [url, init] of (global.fetch as jest.Mock).mock.calls) {
