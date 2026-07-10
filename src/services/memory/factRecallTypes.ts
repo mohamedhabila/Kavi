@@ -22,6 +22,7 @@ export interface RecallFactsOptions {
   /** Exact scope filter for callers that expose user-visible scope controls. */
   scopeFilter?: MemoryFactScope | MemoryFactScope[];
   conversationId?: string;
+  threadId?: string;
   taskId?: string;
   memoryKind?: MemoryFactKind | MemoryFactKind[];
   now?: number;

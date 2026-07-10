@@ -1,5 +1,11 @@
 import { countRows, getMany, getOne } from '../access/crud';
 import {
+  buildFactFilter,
+  whereSql,
+  type RecallFactScopeIdentity,
+  type SqlBindValue,
+} from './queryFilter';
+import {
   normalizeScope,
   rowToFact,
   type FactRow,
@@ -9,79 +15,14 @@ import {
   type MemoryFactScope,
 } from './types';
 
-type SqlBindValue = string | number;
-
 const DEFAULT_FACT_LIMIT = 100;
 const MAX_FACT_LIMIT = 500;
 const DEFAULT_RECALL_CANDIDATE_LIMIT = 128;
+const DEFAULT_RECALL_ELIGIBLE_SCAN_LIMIT = 256;
 const MAX_RECALL_CANDIDATE_LIMIT = 2_000;
 const DEFAULT_RECALL_PINNED_LIMIT = 64;
 const DEFAULT_RECALL_SCOPED_RECENT_LIMIT = 192;
 
-interface FactFilter {
-  clauses: string[];
-  params: SqlBindValue[];
-}
-
-function column(name: string, alias?: string): string {
-  return alias ? `${alias}.${name}` : name;
-}
-
-function buildFactFilter(options: ListFactsOptions, alias?: string): FactFilter {
-  const clauses: string[] = [];
-  const params: SqlBindValue[] = [];
-  if (options.subjectId) {
-    clauses.push(`${column('subject_id', alias)} = ?`);
-    params.push(options.subjectId);
-  }
-  if (options.predicate) {
-    clauses.push(`${column('predicate', alias)} = ? COLLATE NOCASE`);
-    params.push(options.predicate);
-  }
-  if (options.scope) {
-    const scopes = Array.isArray(options.scope) ? options.scope : [options.scope];
-    const normalizedScopes = scopes.map(normalizeScope);
-    clauses.push(`${column('scope', alias)} IN (${normalizedScopes.map(() => '?').join(', ')})`);
-    params.push(...normalizedScopes);
-  }
-  if (options.originConversationId) {
-    clauses.push(`${column('origin_conversation_id', alias)} = ?`);
-    params.push(options.originConversationId);
-  }
-  if (options.originTaskId) {
-    clauses.push(`${column('origin_task_id', alias)} = ?`);
-    params.push(options.originTaskId);
-  }
-  if (options.pinnedOnly) clauses.push(`${column('pinned', alias)} = 1`);
-  if (options.memoryKind) {
-    const kinds = Array.isArray(options.memoryKind) ? options.memoryKind : [options.memoryKind];
-    clauses.push(`${column('memory_kind', alias)} IN (${kinds.map(() => '?').join(', ')})`);
-    params.push(...kinds);
-  }
-  if (!options.includeDeleted) clauses.push(`${column('deleted_at', alias)} IS NULL`);
-  if (!options.includeExpired) {
-    const asOf = options.asOf ?? Date.now();
-    clauses.push(`(${column('expires_at', alias)} IS NULL OR ${column('expires_at', alias)} > ?)`);
-    params.push(asOf);
-  }
-  if (!options.includeInvalidated) {
-    if (options.asOf !== undefined) {
-      clauses.push(`${column('valid_at', alias)} <= ?`);
-      params.push(options.asOf);
-      clauses.push(
-        `(${column('invalid_at', alias)} IS NULL OR ${column('invalid_at', alias)} > ?)`,
-      );
-      params.push(options.asOf);
-    } else {
-      clauses.push(`${column('invalid_at', alias)} IS NULL`);
-    }
-  }
-  return { clauses, params };
-}
-
-function whereSql(filter: FactFilter): string {
-  return filter.clauses.length ? `WHERE ${filter.clauses.join(' AND ')}` : '';
-}
 
 function clampLimit(value: number | undefined, fallback: number, max: number): number {
   const requested = value === undefined || !Number.isFinite(value) ? fallback : Math.floor(value);
@@ -91,6 +32,28 @@ function clampLimit(value: number | undefined, fallback: number, max: number): n
 export function listFacts(options: ListFactsOptions = {}): MemoryFact[] {
   const filter = buildFactFilter(options);
   const limit = clampLimit(options.limit, DEFAULT_FACT_LIMIT, MAX_FACT_LIMIT);
+  const rows = getMany<FactRow>(
+    `SELECT * FROM memory_facts ${whereSql(filter)}
+       ORDER BY pinned DESC, importance DESC, updated_at DESC
+       LIMIT ${limit}`,
+    ...filter.params,
+  );
+  return rows.map(rowToFact);
+}
+
+export interface ListFactsForRecallEligibleScanOptions extends ListFactsOptions {
+  recallScopeIdentity: RecallFactScopeIdentity;
+}
+
+export function listFactsForRecallEligibleScan(
+  options: ListFactsForRecallEligibleScanOptions,
+): MemoryFact[] {
+  const filter = buildFactFilter(options, undefined, options.recallScopeIdentity);
+  const limit = clampLimit(
+    options.limit,
+    DEFAULT_RECALL_ELIGIBLE_SCAN_LIMIT,
+    MAX_FACT_LIMIT,
+  );
   const rows = getMany<FactRow>(
     `SELECT * FROM memory_facts ${whereSql(filter)}
        ORDER BY pinned DESC, importance DESC, updated_at DESC
@@ -163,6 +126,7 @@ export function hasCurrentFactForSubjectPredicate(subjectId: string, predicate: 
 }
 
 export interface ListFactsForRecallCandidatesOptions extends ListFactsOptions {
+  recallScopeIdentity: RecallFactScopeIdentity;
   lexicalUnits?: string[];
   selectedLexicalUnits?: string[];
   anchorLexicalUnitSets?: ReadonlyArray<ReadonlyArray<string>>;
@@ -174,14 +138,14 @@ export interface ListFactsForRecallCandidatesOptions extends ListFactsOptions {
 }
 
 export function listFactsForRecallCandidates(
-  options: ListFactsForRecallCandidatesOptions = {},
+  options: ListFactsForRecallCandidatesOptions,
 ): MemoryFact[] {
   const totalLimit = clampLimit(
     options.limit,
     DEFAULT_RECALL_CANDIDATE_LIMIT,
     MAX_RECALL_CANDIDATE_LIMIT,
   );
-  const filter = buildFactFilter(options);
+  const filter = buildFactFilter(options, undefined, options.recallScopeIdentity);
   const byId = new Map<string, MemoryFact>();
 
   function addRows(
@@ -215,7 +179,7 @@ export function listFactsForRecallCandidates(
   ): void {
     if (byId.size >= totalLimit || units.length === 0) return;
     const laneLimit = Math.max(1, Math.min(limit, totalLimit - byId.size));
-    const factFilter = buildFactFilter(options, 'f');
+    const factFilter = buildFactFilter(options, 'f', options.recallScopeIdentity);
     const termClauses = [`t.unit IN (${units.map(() => '?').join(', ')})`];
     const params: SqlBindValue[] = [...units];
     const requestedKinds = memoryKinds ?? options.memoryKind;
@@ -252,7 +216,7 @@ export function listFactsForRecallCandidates(
 
   function addAnchorLexicalRows(anchorUnitSets: ReadonlyArray<ReadonlyArray<string>>): void {
     if (byId.size >= totalLimit || anchorUnitSets.length === 0) return;
-    const factFilter = buildFactFilter(options, 'f');
+    const factFilter = buildFactFilter(options, 'f', options.recallScopeIdentity);
     for (const anchorUnits of anchorUnitSets) {
       if (byId.size >= totalLimit) break;
       const units = Array.from(

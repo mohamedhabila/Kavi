@@ -5,8 +5,8 @@
 
 import { markFactsRecalled } from './facts/mutations';
 import {
-  listFacts,
   listFactTermUnitHitsForFacts,
+  listFactsForRecallEligibleScan,
   listFactsForRecallCandidates,
 } from './facts/queries';
 import { type MemoryFact, type MemoryFactScope } from './facts/types';
@@ -68,11 +68,17 @@ function getCandidateScopes(options: RecallFactsOptions): MemoryFactScope[] | un
 }
 
 function isFactEligibleForRecall(fact: MemoryFact, options: RecallFactsOptions): boolean {
-  if (fact.scope === 'conversation') {
+  if (fact.scope === 'project' || fact.scope === 'conversation') {
     return Boolean(options.conversationId && fact.originConversationId === options.conversationId);
   }
   if (fact.scope === 'session') {
-    return Boolean(options.taskId && fact.originTaskId === options.taskId);
+    return Boolean(
+      options.conversationId &&
+        fact.originConversationId === options.conversationId &&
+        options.taskId &&
+        fact.originTaskId === options.taskId &&
+        (!options.threadId || fact.originThreadId === options.threadId),
+    );
   }
   return true;
 }
@@ -291,6 +297,11 @@ async function buildRecallSelection(
   const now = options.now ?? options.asOf ?? Date.now();
   const candidateScopes = getCandidateScopes(options);
   const candidateStrategy = options.candidateStrategy ?? 'hybrid';
+  const recallScopeIdentity = {
+    ...(options.conversationId ? { conversationId: options.conversationId } : {}),
+    ...(options.threadId ? { threadId: options.threadId } : {}),
+    ...(options.taskId ? { taskId: options.taskId } : {}),
+  };
   const eligibleScanLimit = normalizePositiveIntegerLimit(
     options.eligibleScanLimit,
     RECALL_CANDIDATE_LIMITS.defaultEligibleScan,
@@ -321,6 +332,7 @@ async function buildRecallSelection(
   const lexicalCandidates = uniqueFactsById(
     listFactsForRecallCandidates({
       limit: candidatePool,
+      recallScopeIdentity,
       selectedLexicalUnits: indexedRecallLexicalUnits,
       ...(options.conversationId ? { scopedRecentConversationId: options.conversationId } : {}),
       ...(options.taskId ? { scopedRecentTaskId: options.taskId } : {}),
@@ -333,8 +345,9 @@ async function buildRecallSelection(
   ).filter((fact) => isFactEligibleForRecall(fact, options));
   const eligibleFacts =
     candidateStrategy === 'hybrid' && trimmedQuery
-      ? listFacts({
+      ? listFactsForRecallEligibleScan({
           limit: eligibleScanLimit,
+          recallScopeIdentity,
           ...(candidateScopes ? { scope: candidateScopes } : {}),
           ...(options.memoryKind ? { memoryKind: options.memoryKind } : {}),
           ...(options.includeHistorical ? { includeInvalidated: true } : {}),

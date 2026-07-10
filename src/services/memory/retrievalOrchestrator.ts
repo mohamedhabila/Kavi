@@ -34,6 +34,7 @@ export interface RetrievalOrchestratorInput {
   activeTaskId?: string;
   asyncWork?: AgentRunControlGraphAsyncWorkState;
   conversationId?: string;
+  threadId?: string;
   taskId?: string;
   limit?: number;
   now?: number;
@@ -133,6 +134,7 @@ function recallOptions(
     ...(input.candidateStrategy ? { candidateStrategy: input.candidateStrategy } : {}),
     ...(input.localSemantic ? { localSemantic: input.localSemantic } : {}),
     ...(input.conversationId ? { conversationId: input.conversationId } : {}),
+    ...(input.threadId ? { threadId: input.threadId } : {}),
     ...(resolvedTaskId ? { taskId: resolvedTaskId } : {}),
     ...(typeof input.now === 'number' ? { now: input.now } : {}),
   };

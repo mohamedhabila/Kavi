@@ -379,6 +379,7 @@ describe('recallFactsForQuery — scoped decay and reinforcement', () => {
       predicate: 'next_step',
       objectText: 'Run the Android release validation',
       scope: 'session',
+      originConversationId: 'conv-release',
       originTaskId: 'task-active',
       importance: 0.5,
     });
@@ -387,12 +388,14 @@ describe('recallFactsForQuery — scoped decay and reinforcement', () => {
       predicate: 'next_step',
       objectText: 'Skip validation and deploy directly',
       scope: 'session',
+      originConversationId: 'conv-release',
       originTaskId: 'task-other',
       importance: 1,
     });
     setFactPinned(other.fact.id, true);
 
     const facts = await recallFactsForQuery('release validation next step', {
+      conversationId: 'conv-release',
       taskId: 'task-active',
       limit: 5,
     });

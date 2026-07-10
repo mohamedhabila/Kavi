@@ -382,6 +382,7 @@ export async function buildLivingMemorySections(
         asyncWork,
         ...(factSelector ? { factSelector } : {}),
         conversationId,
+        threadId: sourceThreadId,
         taskId: resolvedTaskId ?? undefined,
         limit: recallLimit,
         now,

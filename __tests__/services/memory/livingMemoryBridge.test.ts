@@ -290,6 +290,48 @@ describe('buildLivingMemorySections', () => {
     expect(passiveEpisodeIndex).toBe(-1);
   });
 
+  it('keeps session recall exact to the source thread when the task id is reused', async () => {
+    const subject = upsertEntity({ name: 'release routing', type: 'project' });
+    const active = recordFact({
+      subjectId: subject.id,
+      predicate: 'release_channel',
+      objectText: 'Use the active-thread canary channel',
+      scope: 'session',
+      originConversationId: 'root-release',
+      originThreadId: 'thread-active',
+      originTaskId: 'task-release',
+      now: 1_000,
+    });
+    const sibling = recordFact({
+      subjectId: subject.id,
+      predicate: 'release_channel',
+      objectText: 'Use the sibling-thread production channel',
+      scope: 'session',
+      originConversationId: 'root-release',
+      originThreadId: 'thread-sibling',
+      originTaskId: 'task-release',
+      supersedePrior: false,
+      now: 2_000,
+    });
+    setFactPinned(sibling.fact.id, true);
+
+    const out = await buildLivingMemorySections({
+      messages: [userMessage('Which release routing channel should I use?', 3_000)],
+      conversationId: 'root-release',
+      sourceThreadId: 'thread-active',
+      taskId: 'task-release',
+      now: 4_000,
+    });
+    const dynamicText = out.sections
+      .filter((section) => !section.cacheable)
+      .map((section) => section.text)
+      .join('\n');
+
+    expect(out.recalledFactCount).toBeGreaterThan(0);
+    expect(dynamicText).toContain(active.fact.objectText);
+    expect(dynamicText).not.toContain(sibling.fact.objectText);
+  });
+
   it('does not fill underspecified turns with unrelated scoped facts', async () => {
     const user = upsertEntity({ name: 'beam-user', type: 'person' });
     const team = upsertEntity({ name: 'beam-team', type: 'concept' });
