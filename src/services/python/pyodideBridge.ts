@@ -1,5 +1,6 @@
 import { getPyodideHtml } from './runtimeBootstrap';
 import { performPythonHttpRequest } from './httpBridge';
+import { createPythonFailureResult } from './executionResults';
 import {
   getDispatchAcknowledgementTimeoutMs,
   normalizePythonExecutionRequest,
@@ -19,12 +20,14 @@ import {
 } from './runtimeProtocol';
 import type {
   NormalizedPythonExecutionRequest,
+  PythonExecutionFailureKind,
   PythonExecutionRequest,
   PythonExecutionResult,
 } from './types';
 import { normalizePythonWorkflowBridgeResult } from './workflowBridge';
 
 export type {
+  PythonExecutionFailureKind,
   PythonExecutionRequest,
   PythonExecutionResult,
   PythonWorkflowBridgeState,
@@ -146,10 +149,13 @@ function startRuntimeBoot(): void {
   runtimeReadyDeferred = createDeferred<void>();
 }
 
-function clearExecutionQueueWithError(error: string): void {
+function clearExecutionQueueWithError(
+  error: string,
+  failureKind: PythonExecutionFailureKind,
+): void {
   while (queuedExecutions.length > 0) {
     const entry = queuedExecutions.shift();
-    entry?.resolve({ success: false, output: '', error });
+    entry?.resolve(createPythonFailureResult(error, failureKind));
   }
 }
 
@@ -226,7 +232,10 @@ function sendPyodideBridgeMessage(message: PythonBridgeMessage): void {
   throw new Error('Pyodide WebView bridge does not support postMessage or injectJavaScript.');
 }
 
-export function reportPyodideRuntimeFailure(reason: string): void {
+export function reportPyodideRuntimeFailure(
+  reason: string,
+  failureKind: PythonExecutionFailureKind = 'runtime_failed',
+): void {
   const message = reason.trim() || 'Python runtime failed to initialize.';
 
   abortPendingHttpRequests(message);
@@ -240,11 +249,11 @@ export function reportPyodideRuntimeFailure(reason: string): void {
 
   if (activeExecution) {
     clearActiveExecutionTimers(activeExecution);
-    activeExecution.entry.resolve({ success: false, output: '', error: message });
+    activeExecution.entry.resolve(createPythonFailureResult(message, failureKind));
     activeExecution = null;
   }
 
-  clearExecutionQueueWithError(message);
+  clearExecutionQueueWithError(message, failureKind);
 }
 
 async function waitForPyodideReady(): Promise<void> {
@@ -256,13 +265,11 @@ async function waitForPyodideReady(): Promise<void> {
       await Promise.race([
         mountDeferred.promise,
         new Promise<never>((_, reject) => {
-        mountTimeout = setTimeout(() => {
-          mountReadyDeferred = null;
-          reject(
-            new Error(
-              `Python runtime mount timed out after ${DEFAULT_PYODIDE_STARTUP_TIMEOUT_MS}ms.`,
-            ),
-            );
+          mountTimeout = setTimeout(() => {
+            mountReadyDeferred = null;
+            const message = `Python runtime mount timed out after ${DEFAULT_PYODIDE_STARTUP_TIMEOUT_MS}ms.`;
+            clearExecutionQueueWithError(message, 'timed_out');
+            reject(new Error(message));
           }, DEFAULT_PYODIDE_STARTUP_TIMEOUT_MS);
           unrefTimerIfSupported(mountTimeout);
         }),
@@ -302,7 +309,7 @@ async function waitForPyodideReady(): Promise<void> {
       new Promise<never>((_, reject) => {
         timeout = setTimeout(() => {
           const message = `Python runtime startup timed out after ${DEFAULT_PYODIDE_STARTUP_TIMEOUT_MS}ms.`;
-          reportPyodideRuntimeFailure(message);
+          reportPyodideRuntimeFailure(message, 'timed_out');
           reject(new Error(message));
         }, DEFAULT_PYODIDE_STARTUP_TIMEOUT_MS);
         unrefTimerIfSupported(timeout);
@@ -331,11 +338,12 @@ function handleActiveExecutionDispatchTimeout(): void {
     return;
   }
 
-  stalledExecution.entry.resolve({
-    success: false,
-    output: '',
-    error: `Python runtime did not acknowledge the execution request after ${getDispatchAcknowledgementTimeoutMs(stalledExecution.entry.request.timeoutMs)}ms.`,
-  });
+  stalledExecution.entry.resolve(
+    createPythonFailureResult(
+      `Python runtime did not acknowledge the execution request after ${getDispatchAcknowledgementTimeoutMs(stalledExecution.entry.request.timeoutMs)}ms.`,
+      'timed_out',
+    ),
+  );
 
   reloadPyodideRuntime();
   void drainExecutionQueue();
@@ -349,11 +357,12 @@ function handleActiveExecutionTimeout(): void {
   const timedOutExecution = activeExecution;
   clearActiveExecutionTimers(timedOutExecution);
   activeExecution = null;
-  timedOutExecution.entry.resolve({
-    success: false,
-    output: '',
-    error: `Python execution timed out after ${timedOutExecution.entry.request.timeoutMs}ms.`,
-  });
+  timedOutExecution.entry.resolve(
+    createPythonFailureResult(
+      `Python execution timed out after ${timedOutExecution.entry.request.timeoutMs}ms.`,
+      'timed_out',
+    ),
+  );
 
   reloadPyodideRuntime();
   void drainExecutionQueue();
@@ -417,11 +426,12 @@ async function drainExecutionQueue(): Promise<void> {
       activeExecution = null;
 
       const message = err instanceof Error ? err.message : String(err);
-      entry.resolve({
-        success: false,
-        output: '',
-        error: `Python runtime is not available. ${message}`,
-      });
+      entry.resolve(
+        createPythonFailureResult(
+          `Python runtime is not available. ${message}`,
+          'runtime_unavailable',
+        ),
+      );
       void drainExecutionQueue();
     }
   })().finally(() => {
@@ -530,20 +540,16 @@ export function unregisterPyodideWebView(): void {
 
   if (activeExecution) {
     clearActiveExecutionTimers(activeExecution);
-    activeExecution.entry.resolve({
-      success: false,
-      output: '',
-      error: 'Pyodide WebView was unmounted.',
-    });
+    activeExecution.entry.resolve(
+      createPythonFailureResult('Pyodide WebView was unmounted.', 'runtime_unavailable'),
+    );
     activeExecution = null;
   }
 
-  clearExecutionQueueWithError('Pyodide WebView was unmounted.');
+  clearExecutionQueueWithError('Pyodide WebView was unmounted.', 'runtime_unavailable');
 }
 
-export function subscribeToPyodideMountRequests(
-  listener: PyodideMountRequestListener,
-): () => void {
+export function subscribeToPyodideMountRequests(listener: PyodideMountRequestListener): () => void {
   mountRequestListeners.add(listener);
   return () => {
     mountRequestListeners.delete(listener);
@@ -627,16 +633,24 @@ export function handlePyodideMessage(data: string): void {
       clearActiveExecutionTimers(currentExecution);
       const completedExecution = currentExecution.entry;
       activeExecution = null;
-      completedExecution.resolve({
-        success: !message.error,
+      const commonResult = {
         output: message.output ?? '',
-        error: message.error,
         durationMs: message.durationMs,
         files: normalizeWorkspaceFiles(message.files),
         ...(normalizePythonWorkflowBridgeResult(message.workflowBridge)
           ? { workflowBridge: normalizePythonWorkflowBridgeResult(message.workflowBridge) }
           : {}),
-      });
+      };
+      completedExecution.resolve(
+        message.error
+          ? {
+              ...commonResult,
+              success: false,
+              error: message.error,
+              failureKind: 'execution_failed',
+            }
+          : { ...commonResult, success: true },
+      );
       void drainExecutionQueue();
     }
   } catch {
@@ -649,11 +663,10 @@ export async function executePython(
 ): Promise<PythonExecutionResult> {
   const normalized = normalizePythonExecutionRequest(request);
   if (normalized.error || !normalized.request) {
-    return {
-      success: false,
-      output: '',
-      error: normalized.error || 'Python execution request is invalid.',
-    };
+    return createPythonFailureResult(
+      normalized.error || 'Python execution request is invalid.',
+      'invalid_request',
+    );
   }
 
   const normalizedRequest = normalized.request;

@@ -3,6 +3,7 @@ import {
   TOOL_EFFECT_KINDS,
   TOOL_EFFECT_STATES,
   TOOL_EFFECT_VERIFICATION_STATES,
+  TOOL_EXECUTION_STATES,
   type ToolEffectKind,
   type ToolEffectIdentitySelector,
   type ToolEffectResourceSelector,
@@ -14,6 +15,7 @@ import {
   type ToolEffectState,
   type ToolEffectTransportState,
   type ToolEffectVerificationState,
+  type ToolExecutionState,
 } from '../../types/toolEffectReceipt';
 import {
   decodeToolEffectReceipt,
@@ -24,7 +26,7 @@ import { getCodeOwnedToolEffectContract } from './toolEffectReceiptContracts';
 const PATH_SEGMENT_PATTERN = /^[A-Za-z0-9_-]{1,64}$/u;
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u;
 const CONTRACT_KEYS = new Set(['statusPath', 'outcomes', 'resource', 'operationHandle']);
-const OUTCOME_KEYS = new Set(['effectKind', 'effectState', 'verificationState']);
+const OUTCOME_KEYS = new Set(['effectKind', 'executionState', 'effectState', 'verificationState']);
 const IDENTITY_SELECTOR_KEYS = new Set(['kind', 'source', 'path']);
 const RESOURCE_SELECTOR_KEYS = new Set(['kind', 'source', 'path', 'digestPath']);
 const SHA256_PATTERN = /^(?:sha256:)?[a-f0-9]{64}$/u;
@@ -43,6 +45,7 @@ type BuildToolEffectReceiptParams = {
 
 type ResolvedEffectOutcome = {
   effectKind: ToolEffectKind;
+  executionState?: ToolExecutionState;
   effectState: ToolEffectState;
   verificationState: ToolEffectVerificationState;
   resource?: ToolEffectResourceRef;
@@ -140,16 +143,24 @@ function normalizeOutcome(value: unknown): ToolEffectResultOutcome | undefined {
     TOOL_EFFECT_STATES.includes(value.effectState as ToolEffectState)
       ? (value.effectState as ToolEffectState)
       : undefined;
+  const executionState =
+    value.executionState === undefined
+      ? undefined
+      : typeof value.executionState === 'string' &&
+          TOOL_EXECUTION_STATES.includes(value.executionState as ToolExecutionState)
+        ? (value.executionState as ToolExecutionState)
+        : null;
   const verificationState =
     typeof value.verificationState === 'string' &&
     TOOL_EFFECT_VERIFICATION_STATES.includes(value.verificationState as ToolEffectVerificationState)
       ? (value.verificationState as ToolEffectVerificationState)
       : undefined;
-  if (effectKind === null || !effectState || !verificationState) {
+  if (effectKind === null || executionState === null || !effectState || !verificationState) {
     return undefined;
   }
   const outcome = {
     ...(effectKind ? { effectKind } : {}),
+    ...(executionState ? { executionState } : {}),
     effectState,
     verificationState,
   };
@@ -290,39 +301,59 @@ function resolveResource(
   });
 }
 
+function unknownResolvedOutcome(
+  effectKind: ToolEffectKind,
+  executionState?: ToolExecutionState,
+): ResolvedEffectOutcome {
+  return {
+    effectKind,
+    ...(executionState ? { executionState } : {}),
+    effectState: 'unknown',
+    verificationState: 'unverified',
+  };
+}
+
 function resolveReturnedOutcome(params: BuildToolEffectReceiptParams): ResolvedEffectOutcome {
   const codeOwnedContract = getCodeOwnedToolEffectContract(params.toolName);
   const effectKind = codeOwnedContract?.effectKind ?? 'unknown';
-  if (params.resultIsError) {
-    return { effectKind, effectState: 'unknown', verificationState: 'unverified' };
-  }
+  const unknownExecutionState = codeOwnedContract?.tracksExecution ? 'unknown' : undefined;
 
   if (codeOwnedContract?.effectMode === 'none') {
+    if (params.resultIsError) {
+      return unknownResolvedOutcome(effectKind, unknownExecutionState);
+    }
     return { effectKind, effectState: 'none', verificationState: 'not_applicable' };
   }
   if (codeOwnedContract?.effectMode !== 'effectful') {
-    return { effectKind: 'unknown', effectState: 'unknown', verificationState: 'unverified' };
+    return unknownResolvedOutcome('unknown');
   }
 
   const contract = normalizeResultContract(codeOwnedContract.result);
   const resultValue = parseJsonRecord(params.resultText);
   if (!contract || !resultValue) {
-    return { effectKind, effectState: 'unknown', verificationState: 'unverified' };
+    return unknownResolvedOutcome(effectKind, unknownExecutionState);
   }
   const status = readPath(resultValue, contract.statusPath);
   if (typeof status !== 'string' || status !== status.trim()) {
-    return { effectKind, effectState: 'unknown', verificationState: 'unverified' };
+    return unknownResolvedOutcome(effectKind, unknownExecutionState);
   }
   const outcome = contract.outcomes[status];
   if (!outcome) {
-    return { effectKind, effectState: 'unknown', verificationState: 'unverified' };
+    return unknownResolvedOutcome(effectKind, unknownExecutionState);
+  }
+  if (params.resultIsError) {
+    const executionState =
+      status === 'completed' && outcome.executionState === 'completed'
+        ? unknownExecutionState
+        : (outcome.executionState ?? unknownExecutionState);
+    return unknownResolvedOutcome(outcome.effectKind ?? effectKind, executionState);
   }
 
   const argumentsValue = parseJsonRecord(params.argumentsText);
   const resource = resolveResource(contract.resource, argumentsValue, resultValue);
   const operationHandle = resolveIdentity(contract.operationHandle, argumentsValue, resultValue);
   if ((contract.resource && !resource) || (contract.operationHandle && !operationHandle)) {
-    return { effectKind, effectState: 'unknown', verificationState: 'unverified' };
+    return unknownResolvedOutcome(effectKind, outcome.executionState ?? unknownExecutionState);
   }
   return {
     effectKind: outcome.effectKind ?? effectKind,
@@ -349,19 +380,27 @@ export async function buildToolEffectReceipt(
     sha256(params.argumentsText),
     sha256(params.resultText),
   ]);
-  const codeOwnedEffectKind =
-    getCodeOwnedToolEffectContract(params.toolName)?.effectKind ?? 'unknown';
+  const codeOwnedContract = getCodeOwnedToolEffectContract(params.toolName);
+  const codeOwnedEffectKind = codeOwnedContract?.effectKind ?? 'unknown';
+  const tracksExecution = codeOwnedContract?.tracksExecution === true;
   const effectOutcome: ResolvedEffectOutcome =
     params.transportState === 'returned'
       ? resolveReturnedOutcome(params)
       : params.transportState === 'rejected'
         ? {
             effectKind: codeOwnedEffectKind,
+            ...(tracksExecution
+              ? {
+                  executionState:
+                    params.terminalEffectState === 'cancelled' ? 'cancelled' : 'unknown',
+                }
+              : {}),
             effectState: params.terminalEffectState ?? 'failed',
             verificationState: 'unverified',
           }
         : {
             effectKind: codeOwnedEffectKind,
+            ...(tracksExecution ? { executionState: 'unknown' as const } : {}),
             effectState: 'unknown',
             verificationState: 'unverified',
           };

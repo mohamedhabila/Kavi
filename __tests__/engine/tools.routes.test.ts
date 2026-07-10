@@ -239,7 +239,13 @@ describe('executeTool additional routes', () => {
         },
       );
 
-      expect(result).toBe('42');
+      expect(JSON.parse(result)).toEqual(
+        expect.objectContaining({
+          status: 'completed',
+          workspaceMutationState: 'none_observed',
+          output: '42',
+        }),
+      );
     });
   });
 

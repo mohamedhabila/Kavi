@@ -1,4 +1,5 @@
 import { limitArray } from './resultNormalizer';
+import type { PythonExecutionFailureKind } from '../../../services/python/types';
 import {
   approxBinaryBytes,
   buildRelevantOutputExcerpt,
@@ -7,24 +8,60 @@ import {
   MAX_LIST_ENTRIES,
 } from './transformers';
 
-export function normalizePythonToolResult(result: {
-  success: boolean;
-  output?: string;
-  error?: string;
-  files?: Array<{ path: string; contentBase64?: string }>;
-}): string {
-  const output = result.output || '';
+function buildExecutionOutputFields(output: string): Record<string, unknown> {
   const outputLines = countLines(output);
   const hasLargeOutput = output.length > MAX_EXEC_OUTPUT_CHARS || outputLines > 80;
+  if (!output.trim()) {
+    return {};
+  }
+  return hasLargeOutput
+    ? {
+        outputExcerpt: buildRelevantOutputExcerpt(output),
+        outputChars: output.length,
+        outputLines,
+        truncated: true,
+      }
+    : { output };
+}
+
+type PythonToolResult =
+  | {
+      success: true;
+      output?: string;
+      files?: Array<{ path: string; contentBase64?: string }>;
+    }
+  | {
+      success: false;
+      output?: string;
+      error: string;
+      failureKind: PythonExecutionFailureKind;
+    };
+
+export function normalizePythonToolResult(result: PythonToolResult): string {
+  const output = result.output || '';
 
   if (!result.success) {
-    const message = result.error || 'Python execution failed.';
-    if (!output.trim()) {
-      return message;
-    }
-
-    const excerpt = hasLargeOutput ? buildRelevantOutputExcerpt(output) : output;
-    return `${message}\n\n${excerpt}`.trim();
+    const error = result.error;
+    const status =
+      result.failureKind === 'timed_out'
+        ? 'timed_out'
+        : result.failureKind === 'workspace_persistence_failed'
+          ? 'effect_failed'
+          : 'failed';
+    return JSON.stringify({
+      status,
+      isError: true,
+      summary:
+        status === 'timed_out'
+          ? 'Python execution timed out.'
+          : status === 'effect_failed'
+            ? 'Python execution completed but workspace persistence failed.'
+            : 'Python execution failed.',
+      error,
+      failureKind: result.failureKind,
+      workspaceMutationState: 'unknown',
+      ...buildExecutionOutputFields(output),
+    });
   }
 
   const normalizedFiles = (result.files ?? []).map((file) => ({
@@ -38,30 +75,18 @@ export function normalizePythonToolResult(result: {
     Math.min(MAX_LIST_ENTRIES, 20),
   );
 
-  if (!normalizedFiles.length && !hasLargeOutput) {
-    return output || '(no output)';
-  }
-
   const summary =
     normalizedFiles.length > 0
       ? `Python execution completed and wrote ${normalizedFiles.length} workspace file${normalizedFiles.length === 1 ? '' : 's'}.`
-      : hasLargeOutput
+      : output.length > MAX_EXEC_OUTPUT_CHARS || countLines(output) > 80
         ? 'Python execution completed with trimmed output for context.'
         : 'Python execution completed.';
 
   return JSON.stringify({
     summary,
     status: 'completed',
-    ...(output.trim()
-      ? hasLargeOutput
-        ? {
-            outputExcerpt: buildRelevantOutputExcerpt(output),
-            outputChars: output.length,
-            outputLines,
-            truncated: hasLargeOutput,
-          }
-        : { output }
-      : {}),
+    workspaceMutationState: normalizedFiles.length > 0 ? 'applied' : 'none_observed',
+    ...buildExecutionOutputFields(output || '(no output)'),
     ...(normalizedFiles.length > 0
       ? {
           fileCount: normalizedFiles.length,
@@ -73,13 +98,31 @@ export function normalizePythonToolResult(result: {
 }
 
 export function normalizeJavaScriptToolResult(result: {
+  success: boolean;
   output?: string;
+  error?: string;
+  failureKind?: 'execution_failed' | 'workspace_persistence_failed';
   files?: Array<{ path: string; content?: string }>;
   deletedPaths?: string[];
 }): string {
   const output = result.output || '';
-  const outputLines = countLines(output);
-  const hasLargeOutput = output.length > MAX_EXEC_OUTPUT_CHARS || outputLines > 80;
+
+  if (!result.success) {
+    const status =
+      result.failureKind === 'workspace_persistence_failed' ? 'effect_failed' : 'failed';
+    return JSON.stringify({
+      status,
+      isError: true,
+      summary:
+        status === 'effect_failed'
+          ? 'JavaScript execution completed but workspace persistence failed.'
+          : 'JavaScript execution failed.',
+      error: result.error || 'JavaScript execution failed.',
+      failureKind: result.failureKind ?? 'execution_failed',
+      workspaceMutationState: 'unknown',
+      ...buildExecutionOutputFields(output),
+    });
+  }
 
   const normalizedFiles = (result.files ?? []).map((file) => ({
     path: file.path,
@@ -88,10 +131,6 @@ export function normalizeJavaScriptToolResult(result: {
   const deletedPaths = (result.deletedPaths ?? []).filter(
     (path) => typeof path === 'string' && path.trim(),
   );
-
-  if (!normalizedFiles.length && !deletedPaths.length && !hasLargeOutput) {
-    return output || '(no return value)';
-  }
 
   const { items: files, omitted: omittedFiles } = limitArray(
     normalizedFiles,
@@ -105,23 +144,16 @@ export function normalizeJavaScriptToolResult(result: {
   const summary =
     normalizedFiles.length > 0 || deletedPaths.length > 0
       ? `JavaScript execution completed and changed ${normalizedFiles.length} workspace file${normalizedFiles.length === 1 ? '' : 's'}${deletedPaths.length > 0 ? `, deleted ${deletedPaths.length} path${deletedPaths.length === 1 ? '' : 's'}` : ''}.`
-      : hasLargeOutput
+      : output.length > MAX_EXEC_OUTPUT_CHARS || countLines(output) > 80
         ? 'JavaScript execution completed with trimmed output for context.'
         : 'JavaScript execution completed.';
 
   return JSON.stringify({
     summary,
     status: 'completed',
-    ...(output.trim()
-      ? hasLargeOutput
-        ? {
-            outputExcerpt: buildRelevantOutputExcerpt(output),
-            outputChars: output.length,
-            outputLines,
-            truncated: hasLargeOutput,
-          }
-        : { output }
-      : {}),
+    workspaceMutationState:
+      normalizedFiles.length > 0 || deletedPaths.length > 0 ? 'applied' : 'none_observed',
+    ...buildExecutionOutputFields(output || '(no return value)'),
     ...(normalizedFiles.length > 0
       ? {
           fileCount: normalizedFiles.length,

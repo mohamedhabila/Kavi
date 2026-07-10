@@ -1,5 +1,26 @@
 import { __getStore, executePython, executeTool } from '../helpers/toolsExecutorHarness';
 
+function expectCompletedExecution(result: string, output: string): void {
+  expect(JSON.parse(result)).toEqual(
+    expect.objectContaining({
+      status: 'completed',
+      workspaceMutationState: 'none_observed',
+      output,
+    }),
+  );
+}
+
+function expectFailedExecution(result: string, errorFragment: string): void {
+  expect(JSON.parse(result)).toEqual(
+    expect.objectContaining({
+      status: 'failed',
+      isError: true,
+      workspaceMutationState: 'unknown',
+      error: expect.stringContaining(errorFragment),
+    }),
+  );
+}
+
 describe('executeTool', () => {
   const CONV_ID = 'test-conversation';
 
@@ -10,7 +31,7 @@ describe('executeTool', () => {
         JSON.stringify({ code: 'return 2 + 2;' }),
         CONV_ID,
       );
-      expect(result).toBe('4');
+      expectCompletedExecution(result, '4');
     });
 
     it('should return the last expression without requiring an explicit return', async () => {
@@ -20,7 +41,7 @@ describe('executeTool', () => {
         CONV_ID,
       );
 
-      expect(result).toBe('42');
+      expectCompletedExecution(result, '42');
     });
 
     it('should handle code with no return value', async () => {
@@ -29,7 +50,7 @@ describe('executeTool', () => {
         JSON.stringify({ code: 'const x = 5;' }),
         CONV_ID,
       );
-      expect(result).toBe('(no return value)');
+      expectCompletedExecution(result, '(no return value)');
     });
 
     it('should handle errors in code execution', async () => {
@@ -38,8 +59,7 @@ describe('executeTool', () => {
         JSON.stringify({ code: 'throw new Error("test error");' }),
         CONV_ID,
       );
-      expect(result).toContain('Error');
-      expect(result).toContain('test error');
+      expectFailedExecution(result, 'test error');
     });
 
     it('should handle string return values', async () => {
@@ -48,7 +68,7 @@ describe('executeTool', () => {
         JSON.stringify({ code: 'return "hello";' }),
         CONV_ID,
       );
-      expect(result).toBe('hello');
+      expectCompletedExecution(result, 'hello');
     });
 
     it('should return a friendly error when code is missing', async () => {
@@ -58,8 +78,7 @@ describe('executeTool', () => {
         CONV_ID,
       );
 
-      expect(result).toContain('Error');
-      expect(result).toContain('code');
+      expectFailedExecution(result, 'code');
     });
 
     it('should accept fenced JavaScript code', async () => {
@@ -69,7 +88,7 @@ describe('executeTool', () => {
         CONV_ID,
       );
 
-      expect(result).toBe('42');
+      expectCompletedExecution(result, '42');
     });
 
     it('should read workspace files and require workspace modules from inline JavaScript', async () => {
@@ -95,7 +114,7 @@ describe('executeTool', () => {
         CONV_ID,
       );
 
-      expect(result).toBe('42');
+      expectCompletedExecution(result, '42');
     });
 
     it('should support Node-style require("fs") sync workspace access', async () => {
@@ -113,7 +132,7 @@ describe('executeTool', () => {
         CONV_ID,
       );
 
-      expect(result).toBe('42');
+      expectCompletedExecution(result, '42');
     });
 
     it('should execute workspace JavaScript files by path and sync written files back', async () => {
@@ -145,6 +164,7 @@ describe('executeTool', () => {
         expect.objectContaining({
           summary: 'JavaScript execution completed and changed 1 workspace file.',
           status: 'completed',
+          workspaceMutationState: 'applied',
           output: '42',
           fileCount: 1,
           files: [expect.objectContaining({ path: 'tools/outputs/result.txt' })],
@@ -172,6 +192,7 @@ describe('executeTool', () => {
         expect.objectContaining({
           summary: 'JavaScript execution completed and changed 0 workspace files, deleted 1 path.',
           status: 'completed',
+          workspaceMutationState: 'applied',
           deletedCount: 1,
           deletedPaths: ['temp/remove.txt'],
         }),
@@ -190,7 +211,7 @@ describe('executeTool', () => {
         CONV_ID,
       );
 
-      expect(result).toBe('42');
+      expectCompletedExecution(result, '42');
       expect(executePython).toHaveBeenCalledWith(
         expect.objectContaining({
           code: 'print(40 + 2)',
@@ -208,7 +229,7 @@ describe('executeTool', () => {
         CONV_ID,
       );
 
-      expect(result).toBe('42');
+      expectCompletedExecution(result, '42');
       expect(executePython).toHaveBeenCalledWith(
         expect.objectContaining({
           code: 'print(42)',
@@ -224,15 +245,14 @@ describe('executeTool', () => {
         CONV_ID,
       );
 
-      expect(result).toContain('timeoutMs');
+      expectFailedExecution(result, 'timeoutMs');
       expect(executePython).not.toHaveBeenCalled();
     });
 
     it('should return a friendly error when code is missing', async () => {
       const result = await executeTool('python', JSON.stringify({ script: 'print(42)' }), CONV_ID);
 
-      expect(result).toContain('Error');
-      expect(result).toContain('code');
+      expectFailedExecution(result, 'code');
     });
 
     it('should reject non-string package entries', async () => {
@@ -242,7 +262,7 @@ describe('executeTool', () => {
         CONV_ID,
       );
 
-      expect(result).toContain('packages');
+      expectFailedExecution(result, 'packages');
       expect(executePython).not.toHaveBeenCalled();
     });
 
@@ -257,7 +277,7 @@ describe('executeTool', () => {
         CONV_ID,
       );
 
-      expect(result).toBe('42');
+      expectCompletedExecution(result, '42');
       expect(executePython).toHaveBeenCalledWith(
         expect.objectContaining({
           code: 'print(42)',
@@ -276,7 +296,7 @@ describe('executeTool', () => {
         CONV_ID,
       );
 
-      expect(result).toContain('indexUrls');
+      expectFailedExecution(result, 'indexUrls');
       expect(executePython).not.toHaveBeenCalled();
     });
 
@@ -311,7 +331,7 @@ describe('executeTool', () => {
         CONV_ID,
       );
 
-      expect(result).toBe('script ok');
+      expectCompletedExecution(result, 'script ok');
       expect(executePython).toHaveBeenCalledWith(
         expect.objectContaining({
           scriptPath: 'skills/image-helper/scripts/generate.py',
@@ -432,6 +452,7 @@ describe('executeTool', () => {
         expect.objectContaining({
           summary: 'Python execution completed and wrote 1 workspace file.',
           status: 'completed',
+          workspaceMutationState: 'applied',
           output: 'saved',
           fileCount: 1,
           files: [expect.objectContaining({ path: 'outputs/result.txt' })],
@@ -458,6 +479,7 @@ describe('executeTool', () => {
         expect.objectContaining({
           summary: 'Python execution completed with trimmed output for context.',
           status: 'completed',
+          workspaceMutationState: 'none_observed',
           truncated: true,
         }),
       );
@@ -475,7 +497,7 @@ describe('executeTool', () => {
         CONV_ID,
       );
 
-      expect(result).toBe('error count: 0');
+      expectCompletedExecution(result, 'error count: 0');
     });
 
     it('should surface runtime failures from the Pyodide bridge', async () => {
@@ -483,11 +505,37 @@ describe('executeTool', () => {
         success: false,
         output: '',
         error: 'Python runtime unavailable',
+        failureKind: 'runtime_unavailable',
       });
 
       const result = await executeTool('python', JSON.stringify({ code: 'print(42)' }), CONV_ID);
 
-      expect(result).toContain('Python runtime unavailable');
+      expectFailedExecution(result, 'Python runtime unavailable');
+    });
+
+    it('should preserve a code-owned hard timeout status', async () => {
+      executePython.mockResolvedValueOnce({
+        success: false,
+        output: '',
+        error: 'Python execution timed out after 1000ms',
+        failureKind: 'timed_out',
+      });
+
+      const result = await executeTool(
+        'python',
+        JSON.stringify({ code: 'while True: pass' }),
+        CONV_ID,
+      );
+
+      expect(JSON.parse(result)).toEqual(
+        expect.objectContaining({
+          status: 'timed_out',
+          isError: true,
+          workspaceMutationState: 'unknown',
+          failureKind: 'timed_out',
+          error: 'Python execution timed out after 1000ms',
+        }),
+      );
     });
   });
 });

@@ -143,6 +143,44 @@ describe('resolveTurnToolSurface discovery decay', () => {
     expect(selectedNames(surface).has('tool_catalog')).toBe(false);
   });
 
+  it('keeps code execution off read/write surfaces unless compute is explicitly required', () => {
+    const python: ToolDefinition = {
+      name: 'python',
+      description: 'Execute Python.',
+      input_schema: { type: 'object', properties: {} },
+      contract: {
+        category: 'code',
+        capabilities: ['compute', 'read', 'write'],
+        resourceKinds: ['conversation_workspace', 'unknown'],
+        sideEffects: ['local_artifact', 'remote_mutation'],
+      },
+    };
+    const resolve = (requiredCapabilities: string[]) =>
+      resolveTurnToolSurface({
+        allTools: [...discoveryTools, python],
+        goals: [
+          {
+            id: 'code-surface',
+            title: 'Process workspace data',
+            status: 'active',
+            dependencies: [],
+            evidence: [],
+            createdAt: 1,
+            updatedAt: 1,
+            requiredCapabilities,
+          },
+        ],
+        pendingAsyncMonitorToolNames: new Set<string>(),
+        observedToolNames: [],
+        recentContinuationToolNames: new Set<string>(),
+        activatedCatalogToolNames: new Set<string>(),
+        includeToolCatalog: false,
+      });
+
+    expect(selectedNames(resolve(['read', 'write'])).has('python')).toBe(false);
+    expect(selectedNames(resolve(['compute'])).has('python')).toBe(true);
+  });
+
   it('keeps discovery tools available after session activation', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
@@ -600,7 +638,7 @@ describe('resolveTurnToolSurface discovery decay', () => {
           evidence: ['workspace_note_write:{"status":"written"}'],
           createdAt: 1,
           updatedAt: 2,
-      completionPolicy: 'blocking',
+          completionPolicy: 'blocking',
           successCriteria: ['evidence.min:1'],
         },
       ],

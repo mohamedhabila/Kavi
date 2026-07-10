@@ -1,4 +1,9 @@
-import { executePython, handlePyodideMessage, registerPyodideWebView, unregisterPyodideWebView } from '../../src/services/python/pyodideBridge';
+import {
+  executePython,
+  handlePyodideMessage,
+  registerPyodideWebView,
+  unregisterPyodideWebView,
+} from '../../src/services/python/pyodideBridge';
 
 describe('pyodideBridge', () => {
   let mockInjectJavaScript: jest.Mock;
@@ -149,6 +154,7 @@ describe('pyodideBridge', () => {
     const result = await resultPromise;
     expect(result.success).toBe(false);
     expect(result.error).toContain('ZeroDivisionError');
+    expect(result.failureKind).toBe('execution_failed');
   });
   it('routes python-http-request messages through native fetch and returns python-http-response', async () => {
     global.fetch = jest.fn().mockResolvedValue(
@@ -323,6 +329,7 @@ describe('pyodideBridge', () => {
     const result = await resultPromise;
     expect(result.success).toBe(false);
     expect(result.error).toContain('did not acknowledge');
+    expect(result.failureKind).toBe('timed_out');
     expect(mockReload).toHaveBeenCalledTimes(2);
   });
   it('times out when no response is received after acknowledgement', async () => {
@@ -346,6 +353,7 @@ describe('pyodideBridge', () => {
     const result = await resultPromise;
     expect(result.success).toBe(false);
     expect(result.error).toContain('timed out');
+    expect(result.failureKind).toBe('timed_out');
     expect(mockReload).toHaveBeenCalledTimes(1);
   });
   it('serializes concurrent executions on the shared runtime', async () => {

@@ -1,4 +1,12 @@
-import { executePython, getPyodideHtml, handlePyodideMessage, isPyodideReady, registerPyodideWebView, reportPyodideRuntimeFailure, unregisterPyodideWebView } from '../../src/services/python/pyodideBridge';
+import {
+  executePython,
+  getPyodideHtml,
+  handlePyodideMessage,
+  isPyodideReady,
+  registerPyodideWebView,
+  reportPyodideRuntimeFailure,
+  unregisterPyodideWebView,
+} from '../../src/services/python/pyodideBridge';
 
 describe('pyodideBridge', () => {
   let mockInjectJavaScript: jest.Mock;
@@ -57,6 +65,7 @@ describe('pyodideBridge', () => {
     const slowResult = await slowResultPromise;
     expect(slowResult.success).toBe(false);
     expect(slowResult.error).toContain('timed out');
+    expect(slowResult.failureKind).toBe('timed_out');
     expect(mockReload).toHaveBeenCalledTimes(1);
 
     await flushAsyncWork();
@@ -92,8 +101,10 @@ describe('pyodideBridge', () => {
     const queuedResult = await queuedPromise;
     expect(result.success).toBe(false);
     expect(result.error).toContain('unmounted');
+    expect(result.failureKind).toBe('runtime_unavailable');
     expect(queuedResult.success).toBe(false);
     expect(queuedResult.error).toContain('unmounted');
+    expect(queuedResult.failureKind).toBe('runtime_unavailable');
   });
   it('sanitizes env values to strings only', async () => {
     bootRuntime();
@@ -208,8 +219,10 @@ describe('pyodideBridge', () => {
     const queuedResult = await queuedPromise;
     expect(activeResult.success).toBe(false);
     expect(activeResult.error).toContain('network failed');
+    expect(activeResult.failureKind).toBe('runtime_failed');
     expect(queuedResult.success).toBe(false);
     expect(queuedResult.error).toContain('network failed');
+    expect(queuedResult.failureKind).toBe('runtime_failed');
     expect(isPyodideReady()).toBe(false);
   });
   it('allows direct runtime failure reporting through the public helper', async () => {
@@ -225,8 +238,10 @@ describe('pyodideBridge', () => {
     const queuedResult = await queuedPromise;
     expect(activeResult.success).toBe(false);
     expect(activeResult.error).toContain('network failed');
+    expect(activeResult.failureKind).toBe('runtime_failed');
     expect(queuedResult.success).toBe(false);
     expect(queuedResult.error).toContain('network failed');
+    expect(queuedResult.failureKind).toBe('runtime_failed');
   });
   it('generates Pyodide HTML with worker bootstrap and runtime error plumbing', () => {
     const html = getPyodideHtml();

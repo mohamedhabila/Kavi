@@ -28,6 +28,31 @@ const calendarCreateTool: ToolDefinition = {
   contract: { sideEffects: ['remote_mutation'] },
 };
 
+function codeTool(name: 'javascript' | 'python'): ToolDefinition {
+  return {
+    name,
+    description: `Execute ${name}.`,
+    input_schema: {
+      type: 'object',
+      properties: { code: { type: 'string' } },
+      required: ['code'],
+    },
+    contract: { sideEffects: ['local_artifact'] },
+  };
+}
+
+function codeLifecycle(
+  name: 'javascript' | 'python',
+  overrides: Partial<ToolExecutionLifecycleParams> = {},
+): ToolExecutionLifecycleParams {
+  return buildLifecycle({
+    tc: { id: `tc-${name}`, name, arguments: '{"code":"42"}' },
+    availableToolNames: new Set([name]),
+    groundedRequestScopedTools: [codeTool(name)],
+    ...overrides,
+  });
+}
+
 function buildLifecycle(
   overrides: Partial<ToolExecutionLifecycleParams> = {},
 ): ToolExecutionLifecycleParams {
@@ -210,5 +235,110 @@ describe('executeToolCallLifecycle', () => {
       }),
     );
     expect(result.toolMessage.toolCalls?.[0]?.effectReceipts).toBeUndefined();
+  });
+
+  it.each(['javascript', 'python'] as const)(
+    'records %s interpreter completion without claiming side-effect completion',
+    async (toolName) => {
+      mockedExecuteTool.mockResolvedValueOnce(
+        JSON.stringify({
+          status: 'completed',
+          workspaceMutationState: 'none_observed',
+          output: '42',
+        }),
+      );
+
+      const result = await executeToolCallLifecycle(codeLifecycle(toolName));
+
+      expect(result.effectReceipt).toEqual(
+        expect.objectContaining({
+          transportState: 'returned',
+          executionState: 'completed',
+          effectKind: 'compute.execute',
+          effectState: 'unknown',
+          verificationState: 'unverified',
+        }),
+      );
+      expect(result.effectReceipt?.resource).toBeUndefined();
+      expect(result.effectReceipt?.operationHandle).toBeUndefined();
+    },
+  );
+
+  it('keeps a returned Python timeout distinct from transport failure', async () => {
+    mockedExecuteTool.mockResolvedValueOnce(
+      JSON.stringify({
+        status: 'timed_out',
+        isError: true,
+        failureKind: 'timed_out',
+        error: 'Python execution timed out after 1000ms',
+      }),
+    );
+
+    const result = await executeToolCallLifecycle(codeLifecycle('python'));
+
+    expect(result.toolMessage.isError).toBe(true);
+    expect(result.effectReceipt).toEqual(
+      expect.objectContaining({
+        transportState: 'returned',
+        executionState: 'timed_out',
+        effectState: 'unknown',
+        verificationState: 'unverified',
+      }),
+    );
+  });
+
+  it('keeps interpreter completion when returned workspace persistence fails', async () => {
+    mockedExecuteTool.mockResolvedValueOnce(
+      JSON.stringify({
+        status: 'effect_failed',
+        isError: true,
+        failureKind: 'workspace_persistence_failed',
+        error: 'storage unavailable',
+      }),
+    );
+
+    const result = await executeToolCallLifecycle(codeLifecycle('javascript'));
+
+    expect(result.toolMessage.isError).toBe(true);
+    expect(result.effectReceipt).toEqual(
+      expect.objectContaining({
+        transportState: 'returned',
+        executionState: 'completed',
+        effectState: 'unknown',
+        verificationState: 'unverified',
+      }),
+    );
+  });
+
+  it('keeps an unexpected JavaScript bridge throw execution-unknown', async () => {
+    mockedExecuteTool.mockRejectedValueOnce(new Error('bridge crashed'));
+
+    const result = await executeToolCallLifecycle(codeLifecycle('javascript'));
+
+    expect(result.effectReceipt).toEqual(
+      expect.objectContaining({
+        transportState: 'threw',
+        executionState: 'unknown',
+        effectState: 'unknown',
+        verificationState: 'unverified',
+      }),
+    );
+  });
+
+  it('records pre-execution Python cancellation without invoking the runtime', async () => {
+    const signal = new AbortController();
+    signal.abort();
+
+    const result = await executeToolCallLifecycle(codeLifecycle('python', { signal }));
+
+    expect(mockedExecuteTool).not.toHaveBeenCalled();
+    expect(result.effectReceipt).toEqual(
+      expect.objectContaining({
+        transportState: 'rejected',
+        executionState: 'cancelled',
+        effectState: 'cancelled',
+        verificationState: 'unverified',
+      }),
+    );
   });
 });

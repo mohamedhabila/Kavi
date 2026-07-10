@@ -8,6 +8,14 @@ import {
 } from './toolWorkspaceSnapshots';
 import { sanitizeToolWorkspacePath } from './toolWorkspaceFiles';
 
+function javascriptFailure(
+  error: string,
+  output?: string,
+  failureKind: 'execution_failed' | 'workspace_persistence_failed' = 'execution_failed',
+): string {
+  return normalizeJavaScriptToolResult({ success: false, error, output, failureKind });
+}
+
 function diffJavaScriptWorkspaceFiles(
   initialFiles: Map<string, string>,
   nextFiles: Map<string, string>,
@@ -89,12 +97,12 @@ export async function executeJavascript(
     const rawArgs = args as Record<string, unknown>;
     const codeArg = getOptionalToolStringArg(rawArgs, 'code', 'javascript');
     if (codeArg.error) {
-      return codeArg.error;
+      return javascriptFailure(codeArg.error);
     }
 
     const pathArg = getOptionalToolStringArg(rawArgs, 'path', 'javascript');
     if (pathArg.error) {
-      return pathArg.error;
+      return javascriptFailure(pathArg.error);
     }
 
     const scriptPathArg =
@@ -102,31 +110,31 @@ export async function executeJavascript(
         ? getOptionalToolStringArg(rawArgs, 'scriptPath', 'javascript')
         : { value: undefined as string | undefined };
     if (scriptPathArg.error) {
-      return scriptPathArg.error;
+      return javascriptFailure(scriptPathArg.error);
     }
 
     const argvArg = normalizeJavaScriptArgv(rawArgs.argv);
     if (argvArg.error) {
-      return argvArg.error;
+      return javascriptFailure(argvArg.error);
     }
 
     const envArg = normalizeJavaScriptEnv(rawArgs.env);
     if (envArg.error) {
-      return envArg.error;
+      return javascriptFailure(envArg.error);
     }
 
     const selectedPath = pathArg.value ?? scriptPathArg.value;
     if (!codeArg.value && !selectedPath) {
-      return 'Error: javascript requires either "code" or "path".';
+      return javascriptFailure('javascript requires either "code" or "path".');
     }
 
     if (codeArg.value && selectedPath) {
-      return 'Error: javascript accepts either "code" or "path", not both.';
+      return javascriptFailure('javascript accepts either "code" or "path", not both.');
     }
 
     const safePath = selectedPath ? sanitizeToolWorkspacePath(selectedPath) : undefined;
     if (selectedPath && !safePath) {
-      return 'Error: "path" is required for javascript and must not be empty.';
+      return javascriptFailure('"path" is required for javascript and must not be empty.');
     }
 
     const workspaceFiles = await prepareJavaScriptWorkspaceExecution(
@@ -149,7 +157,7 @@ export async function executeJavascript(
         : '(no return value)';
 
     if (execution.hadError) {
-      return output;
+      return javascriptFailure(output);
     }
 
     const { changedFiles, deletedPaths } = diffJavaScriptWorkspaceFiles(
@@ -157,16 +165,22 @@ export async function executeJavascript(
       execution.fileCache,
     );
     if (changedFiles.length > 0 || deletedPaths.length > 0) {
-      await persistJavaScriptWorkspaceChanges(conversationId, changedFiles, deletedPaths);
+      try {
+        await persistJavaScriptWorkspaceChanges(conversationId, changedFiles, deletedPaths);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return javascriptFailure(message, output, 'workspace_persistence_failed');
+      }
     }
 
     return normalizeJavaScriptToolResult({
+      success: true,
       output,
       files: changedFiles,
       deletedPaths,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    return `Error: ${message}`;
+    return javascriptFailure(message);
   }
 }

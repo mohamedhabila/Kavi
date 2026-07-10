@@ -6,11 +6,13 @@ import type {
   ToolEffectResultOutcome,
   ToolEffectState,
   ToolEffectVerificationState,
+  ToolExecutionState,
 } from '../../types/toolEffectReceipt';
 
 export interface CodeOwnedToolEffectContract {
   readonly effectMode: 'none' | 'effectful';
   readonly effectKind: ToolEffectKind;
+  readonly tracksExecution?: true;
   readonly result?: ToolEffectResultContract;
 }
 
@@ -18,12 +20,18 @@ function outcome(
   effectState: ToolEffectState,
   verificationState: ToolEffectVerificationState,
   effectKind?: ToolEffectKind,
+  executionState?: ToolExecutionState,
 ): ToolEffectResultOutcome {
   return Object.freeze({
     ...(effectKind ? { effectKind } : {}),
+    ...(executionState ? { executionState } : {}),
     effectState,
     verificationState,
   });
+}
+
+function executionOutcome(executionState: ToolExecutionState): ToolEffectResultOutcome {
+  return outcome('unknown', 'unverified', undefined, executionState);
 }
 
 const APPLIED = outcome('applied', 'acknowledged');
@@ -76,13 +84,15 @@ function effectful(
   outcomes: Readonly<Record<string, ToolEffectResultOutcome>>,
   options: {
     statusPath?: readonly string[];
-    resource?: ToolEffectIdentitySelector;
+    resource?: ToolEffectResourceSelector;
     operationHandle?: ToolEffectIdentitySelector;
+    tracksExecution?: boolean;
   } = {},
 ): CodeOwnedToolEffectContract {
   return Object.freeze({
     effectMode: 'effectful',
     effectKind,
+    ...(options.tracksExecution ? { tracksExecution: true as const } : {}),
     result: Object.freeze({
       statusPath: Object.freeze([...(options.statusPath ?? ['status'])]),
       outcomes: Object.freeze({ ...outcomes }),
@@ -125,6 +135,27 @@ const READ_ONLY_CONTRACTS = Object.fromEntries(
 // MCP, and skill declarations must never be able to grant themselves evidence.
 const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEffectContract>> =
   Object.freeze({
+    // A successful interpreter exit proves execution, not the completeness or
+    // verification of arbitrary side effects produced by user-authored code.
+    javascript: effectful(
+      'compute.execute',
+      {
+        completed: executionOutcome('completed'),
+        effect_failed: executionOutcome('completed'),
+        failed: executionOutcome('failed'),
+      },
+      { tracksExecution: true },
+    ),
+    python: effectful(
+      'compute.execute',
+      {
+        completed: executionOutcome('completed'),
+        effect_failed: executionOutcome('completed'),
+        failed: executionOutcome('failed'),
+        timed_out: executionOutcome('timed_out'),
+      },
+      { tracksExecution: true },
+    ),
     // Workspace writes expose a code-computed content digest, but do not read
     // the file back; their successful result is an acknowledgement, not proof.
     write_file: effectful(

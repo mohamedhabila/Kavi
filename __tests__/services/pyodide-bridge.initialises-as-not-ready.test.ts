@@ -1,4 +1,12 @@
-import { executePython, handlePyodideMessage, isPyodideReady, registerPyodideWebView, subscribeToPyodideMountRequests, unregisterPyodideWebView } from '../../src/services/python/pyodideBridge';
+import {
+  DEFAULT_PYODIDE_STARTUP_TIMEOUT_MS,
+  executePython,
+  handlePyodideMessage,
+  isPyodideReady,
+  registerPyodideWebView,
+  subscribeToPyodideMountRequests,
+  unregisterPyodideWebView,
+} from '../../src/services/python/pyodideBridge';
 
 describe('pyodideBridge', () => {
   let mockInjectJavaScript: jest.Mock;
@@ -89,11 +97,45 @@ describe('pyodideBridge', () => {
 
     unsubscribe();
   });
+  it('returns structural timeout truth when the lazy runtime mount stalls', async () => {
+    jest.useFakeTimers();
+    unregisterPyodideWebView();
+
+    const resultPromise = executePython({ code: 'print("hi")', timeoutMs: 200 });
+    await flushAsyncWork();
+    jest.advanceTimersByTime(DEFAULT_PYODIDE_STARTUP_TIMEOUT_MS);
+    await flushAsyncWork();
+
+    await expect(resultPromise).resolves.toEqual(
+      expect.objectContaining({
+        success: false,
+        failureKind: 'timed_out',
+        error: expect.stringContaining('mount timed out'),
+      }),
+    );
+  });
+  it('returns structural timeout truth when runtime startup stalls', async () => {
+    jest.useFakeTimers();
+
+    const resultPromise = executePython({ code: 'print("hi")', timeoutMs: 200 });
+    await flushAsyncWork();
+    jest.advanceTimersByTime(DEFAULT_PYODIDE_STARTUP_TIMEOUT_MS);
+    await flushAsyncWork();
+
+    await expect(resultPromise).resolves.toEqual(
+      expect.objectContaining({
+        success: false,
+        failureKind: 'timed_out',
+        error: expect.stringContaining('startup timed out'),
+      }),
+    );
+  });
   it('rejects requests that omit both inline code and a script path', async () => {
     const result = await executePython({});
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('either inline code or a scriptPath');
+    expect(result.failureKind).toBe('invalid_request');
     expect(mockPostMessage).not.toHaveBeenCalled();
   });
   it('rejects ambiguous requests that provide both inline code and a script path', async () => {
@@ -101,6 +143,7 @@ describe('pyodideBridge', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('not both');
+    expect(result.failureKind).toBe('invalid_request');
     expect(mockPostMessage).not.toHaveBeenCalled();
   });
   it('waits for the runtime to become ready before dispatching execution requests', async () => {
@@ -139,6 +182,7 @@ describe('pyodideBridge', () => {
     const result = await resultPromise;
     expect(result.success).toBe(false);
     expect(result.error).toContain('CDN load failed');
+    expect(result.failureKind).toBe('runtime_failed');
     expect(isPyodideReady()).toBe(false);
     expect(mockPostMessage).not.toHaveBeenCalled();
   });

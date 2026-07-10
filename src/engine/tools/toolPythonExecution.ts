@@ -1,4 +1,5 @@
 import { executePython } from '../../services/python/pyodideBridge';
+import type { PythonExecutionFailureKind } from '../../services/python/types';
 import { getOptionalToolStringArg } from './fileArgumentUtils';
 import { normalizePythonToolResult } from './resultNormalization/runtimeResult';
 import type { ToolExecutionContext } from './toolExecutionContext';
@@ -10,6 +11,14 @@ import { sanitizeToolWorkspacePath } from './toolWorkspaceFiles';
 
 const MAX_PYTHON_TOOL_TIMEOUT_MS = 15 * 60 * 1000;
 const PYTHON_HTTP_URL_PATTERN = /^https?:\/\/\S+$/i;
+
+function pythonFailure(
+  error: string,
+  failureKind: PythonExecutionFailureKind,
+  output?: string,
+): string {
+  return normalizePythonToolResult({ success: false, error, failureKind, output });
+}
 
 function normalizePythonPackages(value: unknown): { packages?: string[]; error?: string } {
   if (value == null) {
@@ -147,12 +156,12 @@ export async function executePythonTool(
     const rawArgs = args as Record<string, unknown>;
     const codeArg = getOptionalToolStringArg(rawArgs, 'code', 'python');
     if (codeArg.error) {
-      return codeArg.error;
+      return pythonFailure(codeArg.error, 'invalid_request');
     }
 
     const pathArg = getOptionalToolStringArg(rawArgs, 'path', 'python');
     if (pathArg.error) {
-      return pathArg.error;
+      return pythonFailure(pathArg.error, 'invalid_request');
     }
 
     const scriptPathArg =
@@ -160,52 +169,55 @@ export async function executePythonTool(
         ? getOptionalToolStringArg(rawArgs, 'scriptPath', 'python')
         : { value: undefined as string | undefined };
     if (scriptPathArg.error) {
-      return scriptPathArg.error;
+      return pythonFailure(scriptPathArg.error, 'invalid_request');
     }
 
     const selectedPath = pathArg.value ?? scriptPathArg.value;
     if (!codeArg.value && !selectedPath) {
-      return 'Error: python requires either "code" or "path".';
+      return pythonFailure('python requires either "code" or "path".', 'invalid_request');
     }
 
     if (codeArg.value && selectedPath) {
-      return 'Error: python accepts either "code" or "path", not both.';
+      return pythonFailure('python accepts either "code" or "path", not both.', 'invalid_request');
     }
 
     const packagesArg = normalizePythonPackages(rawArgs?.packages);
     if (packagesArg.error) {
-      return packagesArg.error;
+      return pythonFailure(packagesArg.error, 'invalid_request');
     }
 
     const indexUrlsArg = normalizePythonIndexUrls(rawArgs?.indexUrls);
     if (indexUrlsArg.error) {
-      return indexUrlsArg.error;
+      return pythonFailure(indexUrlsArg.error, 'invalid_request');
     }
 
     const argvArg = normalizePythonArgv(rawArgs?.argv);
     if (argvArg.error) {
-      return argvArg.error;
+      return pythonFailure(argvArg.error, 'invalid_request');
     }
 
     const envArg = normalizePythonEnv(rawArgs?.env);
     if (envArg.error) {
-      return envArg.error;
+      return pythonFailure(envArg.error, 'invalid_request');
     }
 
     const timeoutArg = normalizePythonTimeoutMs(rawArgs?.timeoutMs);
     if (timeoutArg.error) {
-      return timeoutArg.error;
+      return pythonFailure(timeoutArg.error, 'invalid_request');
     }
 
     if (codeArg.value && argvArg.argv?.length) {
-      return 'Error: "argv" for python can only be used with "path".';
+      return pythonFailure('"argv" for python can only be used with "path".', 'invalid_request');
     }
 
     let result;
     if (selectedPath) {
       const safePath = sanitizeToolWorkspacePath(selectedPath);
       if (!safePath) {
-        return 'Error: "path" is required for python and must not be empty.';
+        return pythonFailure(
+          '"path" is required for python and must not be empty.',
+          'invalid_request',
+        );
       }
 
       const prepared = await preparePythonWorkspaceExecution(
@@ -241,17 +253,20 @@ export async function executePythonTool(
     }
 
     if (result.files?.length) {
-      await persistPythonWorkspaceFiles(workspaceConversationId, result.files);
+      try {
+        await persistPythonWorkspaceFiles(workspaceConversationId, result.files);
+      } catch (err: unknown) {
+        if (result.success) {
+          const message = err instanceof Error ? err.message : String(err);
+          return pythonFailure(message, 'workspace_persistence_failed', result.output);
+        }
+        throw err;
+      }
     }
 
-    const normalizedResult = normalizePythonToolResult(result);
-    if (!result.success) {
-      return `Error: ${normalizedResult}`;
-    }
-
-    return normalizedResult;
+    return normalizePythonToolResult(result);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    return `Error: ${message}`;
+    return pythonFailure(message, 'runtime_failed');
   }
 }

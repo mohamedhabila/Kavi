@@ -7,14 +7,26 @@ export interface PythonWorkspaceFile {
   contentBase64: string;
 }
 
-export interface PythonExecutionResult {
-  success: boolean;
+export type PythonExecutionFailureKind =
+  | 'invalid_request'
+  | 'runtime_unavailable'
+  | 'runtime_failed'
+  | 'execution_failed'
+  | 'workspace_persistence_failed'
+  | 'timed_out';
+
+interface PythonExecutionResultBase {
   output: string;
-  error?: string;
   durationMs?: number;
   files?: PythonWorkspaceFile[];
   workflowBridge?: PythonWorkflowBridgeResult;
 }
+
+export type PythonExecutionResult = PythonExecutionResultBase &
+  (
+    | { success: true; error?: never; failureKind?: never }
+    | { success: false; error: string; failureKind: PythonExecutionFailureKind }
+  );
 
 export interface PythonExecutionRequest {
   code?: string;

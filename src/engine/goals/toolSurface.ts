@@ -45,9 +45,10 @@ export const DEFAULT_CORE_TOOL_NAMES: ReadonlySet<string> = new Set<string>(
   DEFAULT_CORE_TOOL_ORDER,
 );
 const STABLE_TOOL_SURFACE_ORDER = new Map(
-  [...STABLE_TOOL_SURFACE_ORDER_VALUES, 'tool_catalog', 'tool_describe'].map(
-    (name, index) => [name, index],
-  ),
+  [...STABLE_TOOL_SURFACE_ORDER_VALUES, 'tool_catalog', 'tool_describe'].map((name, index) => [
+    name,
+    index,
+  ]),
 );
 
 const GOAL_CAPABILITY_EXCLUDED_TOOL_NAMES = new Set(['tool_catalog', 'tool_describe']);
@@ -155,8 +156,8 @@ function prunePrematureWorkflowConsumers(params: {
   toolByName: ReadonlyMap<string, ToolDefinition>;
   observedToolNames: ReadonlySet<string>;
 }): void {
-  const observedProductions = Array.from(params.observedToolNames).flatMap((toolName) =>
-    normalizeToolWorkflowContract(params.toolByName.get(toolName)?.contract).produces,
+  const observedProductions = Array.from(params.observedToolNames).flatMap(
+    (toolName) => normalizeToolWorkflowContract(params.toolByName.get(toolName)?.contract).produces,
   );
   const selectedProducers = Array.from(params.selectedNames).flatMap((toolName) => {
     const contract = normalizeToolWorkflowContract(params.toolByName.get(toolName)?.contract);
@@ -390,6 +391,9 @@ function resolveGoalCapabilityToolNamesForGoals(
         if (requiredCapabilities.length === 0) {
           return false;
         }
+        if (isCodeExecutionTool(tool) && !requiredCapabilities.includes('compute')) {
+          return false;
+        }
         const capabilityMatch = capabilities.some((capability) =>
           requiredCapabilities.includes(capability),
         );
@@ -509,8 +513,7 @@ export function resolveTurnToolSurface(params: ResolveTurnToolSurfaceParams): To
         completedResourceScopedGoalCapabilityToolNames,
         completedGoalEvidenceToolNames,
         completedWorkflowToolNames,
-        allowUnownedSideEffectfulTool:
-          params.workflowContinuationToolNames?.has(toolName) === true,
+        allowUnownedSideEffectfulTool: params.workflowContinuationToolNames?.has(toolName) === true,
       })
     ) {
       selectedNames.add(toolName);

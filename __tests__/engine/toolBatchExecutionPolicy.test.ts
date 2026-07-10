@@ -12,14 +12,14 @@ describe('tool batch execution policy', () => {
     ).toBe(true);
   });
 
-  it('does not parallelize arbitrary code that can mutate shared workspace state', () => {
-    expect(shouldExecuteToolBatchInParallel([{ name: 'read_file' }, { name: 'javascript' }])).toBe(
-      false,
-    );
-    expect(shouldExecuteToolBatchInParallel([{ name: 'read_file' }, { name: 'python' }])).toBe(
-      false,
-    );
-  });
+  it.each(['javascript', 'python'])(
+    'does not parallelize potentially mutating %s execution',
+    (toolName) => {
+      expect(shouldExecuteToolBatchInParallel([{ name: 'read_file' }, { name: toolName }])).toBe(
+        false,
+      );
+    },
+  );
 
   it('does not parallelize single tool calls', () => {
     expect(shouldExecuteToolBatchInParallel([{ name: 'read_file' }])).toBe(false);

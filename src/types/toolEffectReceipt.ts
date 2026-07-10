@@ -21,6 +21,15 @@ export const TOOL_EFFECT_VERIFICATION_STATES = [
 ] as const;
 export type ToolEffectVerificationState = (typeof TOOL_EFFECT_VERIFICATION_STATES)[number];
 
+export const TOOL_EXECUTION_STATES = [
+  'completed',
+  'failed',
+  'timed_out',
+  'cancelled',
+  'unknown',
+] as const;
+export type ToolExecutionState = (typeof TOOL_EXECUTION_STATES)[number];
+
 export const TOOL_EFFECT_KINDS = [
   'unknown',
   'observation.read',
@@ -71,6 +80,7 @@ export interface ToolEffectReceipt {
   readonly toolName: string;
   readonly runId?: string;
   readonly transportState: ToolEffectTransportState;
+  readonly executionState?: ToolExecutionState;
   readonly effectKind: ToolEffectKind;
   readonly effectState: ToolEffectState;
   readonly verificationState: ToolEffectVerificationState;
@@ -83,6 +93,7 @@ export interface ToolEffectReceipt {
 
 export interface ToolEffectResultOutcome {
   readonly effectKind?: ToolEffectKind;
+  readonly executionState?: ToolExecutionState;
   readonly effectState: ToolEffectState;
   readonly verificationState: ToolEffectVerificationState;
 }

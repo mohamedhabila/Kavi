@@ -194,6 +194,39 @@ describe('tool capability contracts', () => {
     }
   });
 
+  it('declares code runtimes as potentially mutating rather than idempotent verification tools', () => {
+    const javascript = CORE_DOMAIN_TOOLS.find((tool) => tool.name === 'javascript');
+    const python = CORE_DOMAIN_TOOLS.find((tool) => tool.name === 'python');
+
+    expect(javascript?.contract).toEqual(
+      expect.objectContaining({
+        capabilities: ['compute', 'read', 'write'],
+        resourceKinds: ['conversation_workspace'],
+        sideEffects: ['local_artifact'],
+        riskHints: ['requires_approval'],
+        providesEvidence: ['local_artifact'],
+        workflowStages: ['prepare_artifact', 'persist_artifact'],
+      }),
+    );
+    expect(python?.contract).toEqual(
+      expect.objectContaining({
+        capabilities: ['compute', 'read', 'write'],
+        resourceKinds: ['conversation_workspace', 'unknown'],
+        sideEffects: ['local_artifact', 'remote_mutation'],
+        riskHints: ['open_world', 'requires_approval'],
+        providesEvidence: ['local_artifact'],
+        workflowStages: ['prepare_artifact', 'persist_artifact', 'mutate_remote_state'],
+      }),
+    );
+
+    for (const tool of [javascript, python]) {
+      expect(tool?.contract?.sideEffects).not.toContain('none');
+      expect(tool?.contract?.riskHints).not.toContain('idempotent');
+      expect(tool?.contract?.providesEvidence).not.toContain('verification');
+      expect(tool?.contract?.workflowStages).not.toContain('verify_evidence');
+    }
+  });
+
   it('keeps web contracts split between discovery and reading', () => {
     expect(inferToolCapabilityDescriptor(WEB_SEARCH_TOOL)).toEqual(
       expect.objectContaining({

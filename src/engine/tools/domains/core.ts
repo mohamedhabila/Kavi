@@ -138,14 +138,12 @@ export const CORE_DOMAIN_TOOLS: ToolDefinition[] = [
     },
     contract: {
       category: 'code',
-      capabilities: ['compute'],
+      capabilities: ['compute', 'read', 'write'],
       resourceKinds: ['conversation_workspace'],
-      // Arbitrary JavaScript can write or delete workspace files through the
-      // fs bridge. It is therefore neither effect-free nor replay-safe.
       sideEffects: ['local_artifact'],
-      riskHints: [],
-      providesEvidence: ['verification'],
-      workflowStages: ['verify_evidence'],
+      riskHints: ['requires_approval'],
+      providesEvidence: ['local_artifact'],
+      workflowStages: ['prepare_artifact', 'persist_artifact'],
     },
     strict: true,
   },
@@ -217,15 +215,12 @@ export const CORE_DOMAIN_TOOLS: ToolDefinition[] = [
     },
     contract: {
       category: 'code',
-      capabilities: ['compute'],
-      resourceKinds: ['conversation_workspace'],
-      // Python can change mounted workspace files and can issue arbitrary HTTP
-      // requests. The runtime cannot infer that a particular script is safe to
-      // replay, so the broad tool contract must expose both possible effects.
+      capabilities: ['compute', 'read', 'write'],
+      resourceKinds: ['conversation_workspace', 'unknown'],
       sideEffects: ['local_artifact', 'remote_mutation'],
       riskHints: ['open_world', 'requires_approval'],
-      providesEvidence: ['verification'],
-      workflowStages: ['verify_evidence'],
+      providesEvidence: ['local_artifact'],
+      workflowStages: ['prepare_artifact', 'persist_artifact', 'mutate_remote_state'],
     },
     strict: false,
   },

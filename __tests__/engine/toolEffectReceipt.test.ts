@@ -44,7 +44,7 @@ describe('ToolEffectReceipt', () => {
     expect(getCodeOwnedToolEffectContract('skill__calendar__create_event')).toBeUndefined();
   });
 
-  it('covers the reviewed workspace artifact slice while deferring other execution families', () => {
+  it('covers the reviewed local artifact family while deferring unowned runtimes', () => {
     for (const toolName of [
       'write_file',
       'file_edit',
@@ -60,8 +60,6 @@ describe('ToolEffectReceipt', () => {
 
     for (const deferredName of [
       'shell',
-      'javascript',
-      'python',
       'ssh_exec',
       'expo_eas_build',
       'skill__github__commit_files',

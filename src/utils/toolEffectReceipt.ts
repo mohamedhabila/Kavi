@@ -3,12 +3,14 @@ import {
   TOOL_EFFECT_STATES,
   TOOL_EFFECT_TRANSPORT_STATES,
   TOOL_EFFECT_VERIFICATION_STATES,
+  TOOL_EXECUTION_STATES,
   type ToolEffectOperationHandle,
   type ToolEffectReceipt,
   type ToolEffectResourceRef,
   type ToolEffectState,
   type ToolEffectTransportState,
   type ToolEffectVerificationState,
+  type ToolExecutionState,
 } from '../types/toolEffectReceipt';
 
 const RECEIPT_ID_PATTERN = /^ter_[a-f0-9]{32}$/u;
@@ -21,6 +23,7 @@ const RECEIPT_KEYS = new Set([
   'toolName',
   'runId',
   'transportState',
+  'executionState',
   'effectKind',
   'effectState',
   'verificationState',
@@ -120,6 +123,23 @@ export function isToolEffectStateCombinationValid(params: {
   }
 }
 
+function isToolExecutionStateCombinationValid(params: {
+  transportState: ToolEffectTransportState;
+  executionState?: ToolExecutionState;
+}): boolean {
+  switch (params.executionState) {
+    case undefined:
+    case 'unknown':
+      return true;
+    case 'completed':
+    case 'failed':
+    case 'timed_out':
+      return params.transportState === 'returned';
+    case 'cancelled':
+      return params.transportState !== 'threw';
+  }
+}
+
 export function decodeToolEffectReceipt(value: unknown): ToolEffectReceipt | undefined {
   if (!isPlainRecord(value) || !hasOnlyKeys(value, RECEIPT_KEYS) || value.version !== 1) {
     return undefined;
@@ -130,6 +150,10 @@ export function decodeToolEffectReceipt(value: unknown): ToolEffectReceipt | und
   const toolName = boundedString(value.toolName, 256);
   const runId = value.runId === undefined ? undefined : boundedString(value.runId, 256);
   const transportState = enumValue(value.transportState, TOOL_EFFECT_TRANSPORT_STATES);
+  const executionState =
+    value.executionState === undefined
+      ? undefined
+      : enumValue(value.executionState, TOOL_EXECUTION_STATES);
   const effectKind = enumValue(value.effectKind, TOOL_EFFECT_KINDS);
   const effectState = enumValue(value.effectState, TOOL_EFFECT_STATES);
   const verificationState = enumValue(value.verificationState, TOOL_EFFECT_VERIFICATION_STATES);
@@ -144,6 +168,7 @@ export function decodeToolEffectReceipt(value: unknown): ToolEffectReceipt | und
     !toolName ||
     (value.runId !== undefined && !runId) ||
     !transportState ||
+    (value.executionState !== undefined && !executionState) ||
     !effectKind ||
     !effectState ||
     !verificationState ||
@@ -155,6 +180,12 @@ export function decodeToolEffectReceipt(value: unknown): ToolEffectReceipt | und
     (recordedAt as number) < 0 ||
     !isToolEffectStateCombinationValid({ transportState, effectState, verificationState })
   ) {
+    return undefined;
+  }
+  if (!isToolExecutionStateCombinationValid({ transportState, executionState })) {
+    return undefined;
+  }
+  if (executionState && effectKind !== 'compute.execute') {
     return undefined;
   }
 
@@ -176,6 +207,7 @@ export function decodeToolEffectReceipt(value: unknown): ToolEffectReceipt | und
     toolName,
     ...(runId ? { runId } : {}),
     transportState,
+    ...(executionState ? { executionState } : {}),
     effectKind,
     effectState,
     verificationState,
@@ -195,6 +227,7 @@ function receiptsMatchReplay(left: ToolEffectReceipt, right: ToolEffectReceipt):
     left.toolName === right.toolName &&
     left.runId === right.runId &&
     left.transportState === right.transportState &&
+    left.executionState === right.executionState &&
     left.effectKind === right.effectKind &&
     left.effectState === right.effectState &&
     left.verificationState === right.verificationState &&

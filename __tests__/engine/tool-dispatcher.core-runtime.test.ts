@@ -12,6 +12,16 @@ let mockRunJobNow: ToolDispatcherHarness['mockRunJobNow'];
 let mockExecutePython: ToolDispatcherHarness['mockExecutePython'];
 let mockRecordAgentRunEvidence: ToolDispatcherHarness['mockRecordAgentRunEvidence'];
 
+function expectCompletedExecution(result: string, output: string): void {
+  expect(JSON.parse(result)).toEqual(
+    expect.objectContaining({
+      status: 'completed',
+      workspaceMutationState: 'none_observed',
+      output,
+    }),
+  );
+}
+
 beforeEach(() => {
   const harness = setupToolDispatcherHarness();
   executeTool = harness.executeTool;
@@ -138,7 +148,7 @@ describe('executeTool — core tools routing', () => {
 
   it('routes javascript', async () => {
     const result = await executeTool('javascript', '{"code":"return 42"}', CONV_ID);
-    expect(result).toBe('42');
+    expectCompletedExecution(result, '42');
   });
 
   it('routes python through the Pyodide bridge', async () => {
@@ -147,7 +157,7 @@ describe('executeTool — core tools routing', () => {
       '{"code":"print(40 + 2)","packages":["numpy"]}',
       CONV_ID,
     );
-    expect(result).toBe('42');
+    expectCompletedExecution(result, '42');
     expect(mockExecutePython).toHaveBeenCalledWith(
       expect.objectContaining({
         code: 'print(40 + 2)',
@@ -163,7 +173,7 @@ describe('executeTool — core tools routing', () => {
       '{"code":"print(40 + 2)","timeoutMs":120000}',
       CONV_ID,
     );
-    expect(result).toBe('42');
+    expectCompletedExecution(result, '42');
     expect(mockExecutePython).toHaveBeenCalledWith(
       expect.objectContaining({
         code: 'print(40 + 2)',
@@ -179,7 +189,7 @@ describe('executeTool — core tools routing', () => {
       CONV_ID,
     );
 
-    expect(result).toBe('42');
+    expectCompletedExecution(result, '42');
     expect(mockExecutePython).toHaveBeenCalledWith(
       expect.objectContaining({
         code: 'print(40 + 2)',
