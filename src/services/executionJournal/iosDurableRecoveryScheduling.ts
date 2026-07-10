@@ -1,55 +1,55 @@
-import {
-  enqueueAndroidDurableExecution,
-  readAndroidDurableExecution,
-  releaseTerminalAndroidDurableExecution,
-} from './androidDurableExecutionNative';
+import { Platform } from 'react-native';
+import { getDurablePlatformExecutionBridge } from './durablePlatformBridge';
 import type {
-  AndroidDurableAdapterResult,
-  AndroidDurableExecutionPointer,
-  AndroidDurableExecutionRecord,
-  AndroidExternalDurableExecutionRequest,
-} from './androidDurableExecutionTypes';
+  DurablePlatformAdapterResult,
+  DurablePlatformExecutionBridge,
+  DurablePlatformExecutionPointer,
+  DurablePlatformExecutionRequest,
+  IOSDurablePlatformRecord,
+} from './durablePlatformBridgeTypes';
+import type { DurableRecoveryScheduleOutcome } from './durableRecoverySchedulingTypes';
 import {
   listPersistedExternalRecoveryCandidates,
   readPersistedExternalRecoveryCandidate,
   type PersistedExternalRecoveryCandidate,
 } from './productionRecovery';
-import type { DurableRecoveryScheduleOutcome } from './durableRecoverySchedulingTypes';
 
 const DEFAULT_CANDIDATE_SLICE_SIZE = 25;
 const MAX_CANDIDATE_SLICE_SIZE = 100;
-const MAX_ANDROID_RECOVERY_ATTEMPTS = 5;
+const MAX_IOS_RECOVERY_ATTEMPTS = 5;
 const INITIAL_BACKOFF_MILLIS = 30_000;
 
 const ACTIVE_NATIVE_STATES = new Set([
   'scheduling',
-  'enqueued',
+  'submitted',
   'running',
   'retry_waiting',
   'cancel_requested',
 ]);
 
-export type AndroidDurableRecoveryScheduleOutcome = DurableRecoveryScheduleOutcome;
+export type IOSDurableRecoveryScheduleOutcome = DurableRecoveryScheduleOutcome;
 
-interface AndroidDurableRecoverySchedulingDependencies {
+interface IOSDurableRecoverySchedulingDependencies {
   now(): number;
   readCandidate: typeof readPersistedExternalRecoveryCandidate;
   listCandidates: typeof listPersistedExternalRecoveryCandidates;
-  readNative: typeof readAndroidDurableExecution;
-  releaseNative: typeof releaseTerminalAndroidDurableExecution;
-  enqueueNative: typeof enqueueAndroidDurableExecution;
+  getBridge(): DurablePlatformExecutionBridge | null;
 }
 
-const DEFAULT_DEPENDENCIES: AndroidDurableRecoverySchedulingDependencies = {
+const DEFAULT_DEPENDENCIES: IOSDurableRecoverySchedulingDependencies = {
   now: Date.now,
   readCandidate: readPersistedExternalRecoveryCandidate,
   listCandidates: listPersistedExternalRecoveryCandidates,
-  readNative: readAndroidDurableExecution,
-  releaseNative: releaseTerminalAndroidDurableExecution,
-  enqueueNative: enqueueAndroidDurableExecution,
+  getBridge: () => (Platform.OS === 'ios' ? getDurablePlatformExecutionBridge() : null),
 };
 
-function generationPointer(record: AndroidDurableExecutionRecord): AndroidDurableExecutionPointer {
+function isIOSRecord(
+  record: Awaited<ReturnType<DurablePlatformExecutionBridge['getRecord']>>['record'],
+): record is IOSDurablePlatformRecord {
+  return record !== null && 'taskIdentifier' in record;
+}
+
+function generationPointer(record: IOSDurablePlatformRecord): DurablePlatformExecutionPointer {
   const identity = record.request.identity;
   return {
     schema: 1,
@@ -61,8 +61,22 @@ function generationPointer(record: AndroidDurableExecutionRecord): AndroidDurabl
   };
 }
 
+function samePointer(
+  left: DurablePlatformExecutionPointer,
+  right: DurablePlatformExecutionPointer,
+): boolean {
+  return (
+    left.schema === right.schema &&
+    left.runId === right.runId &&
+    left.controlEpoch === right.controlEpoch &&
+    left.snapshotUpdatedAtMillis === right.snapshotUpdatedAtMillis &&
+    left.snapshotDigest === right.snapshotDigest &&
+    left.commandDigest === right.commandDigest
+  );
+}
+
 function sameGeneration(
-  record: AndroidDurableExecutionRecord,
+  record: IOSDurablePlatformRecord,
   candidate: PersistedExternalRecoveryCandidate,
 ): boolean {
   const identity = record.request.identity;
@@ -77,7 +91,7 @@ function sameGeneration(
 }
 
 function compareGeneration(
-  record: AndroidDurableExecutionRecord,
+  record: IOSDurablePlatformRecord,
   candidate: PersistedExternalRecoveryCandidate,
 ): number {
   const identity = record.request.identity;
@@ -93,12 +107,11 @@ function compareGeneration(
 function buildRequest(
   candidate: PersistedExternalRecoveryCandidate,
   now: number,
-): AndroidExternalDurableExecutionRequest {
+): DurablePlatformExecutionRequest {
   if (!Number.isSafeInteger(now) || now < 0) {
-    throw new Error('android-durable-scheduler-clock-invalid');
+    throw new Error('ios-durable-scheduler-clock-invalid');
   }
   const requestedAtMillis = Math.max(now, candidate.generation.updatedAt);
-  const earliestStartAtMillis = Math.max(requestedAtMillis, candidate.retryAt ?? requestedAtMillis);
   return {
     schema: 1,
     durabilityClass: 'external_durable_operation',
@@ -113,13 +126,13 @@ function buildRequest(
     constraints: {
       network: 'connected',
       requiresCharging: false,
-      requiresBatteryNotLow: true,
-      requiresStorageNotLow: true,
+      requiresBatteryNotLow: false,
+      requiresStorageNotLow: false,
       requiresDeviceIdle: false,
-      earliestStartAtMillis,
+      earliestStartAtMillis: Math.max(requestedAtMillis, candidate.retryAt ?? requestedAtMillis),
     },
     retryPolicy: {
-      maxAttempts: MAX_ANDROID_RECOVERY_ATTEMPTS,
+      maxAttempts: MAX_IOS_RECOVERY_ATTEMPTS,
       backoffPolicy: 'exponential',
       initialBackoffMillis: INITIAL_BACKOFF_MILLIS,
     },
@@ -129,41 +142,48 @@ function buildRequest(
 
 function classifyAdapterResult(
   runId: string,
-  result: AndroidDurableAdapterResult,
-): AndroidDurableRecoveryScheduleOutcome {
-  if (result.status === 'accepted') return { kind: 'scheduled', runId };
-  if (result.status === 'no_op') return { kind: 'already_scheduled', runId };
-  if (result.status === 'deferred') {
-    return { kind: 'deferred', runId, reason: result.reason };
+  result: DurablePlatformAdapterResult,
+): IOSDurableRecoveryScheduleOutcome {
+  switch (result.status) {
+    case 'accepted':
+      return { kind: 'scheduled', runId };
+    case 'no_op':
+      return { kind: 'already_scheduled', runId };
+    case 'deferred':
+      return { kind: 'deferred', runId, reason: result.reason };
+    case 'unsupported':
+    case 'rejected':
+      return { kind: 'blocked', runId, reason: result.reason };
+    case 'released':
+      return { kind: 'blocked', runId, reason: 'native_release_contract_failure' };
   }
-  return { kind: 'blocked', runId, reason: result.reason ?? 'native_contract_failure' };
 }
 
-/** Schedules exactly the current persisted journal generation for one run. */
-export async function schedulePersistedAndroidExternalRecoveryRun(
+/** Schedules exactly the current persisted external-reconciliation generation for one run. */
+export async function schedulePersistedIOSExternalRecoveryRun(
   runId: string,
-  dependencies: AndroidDurableRecoverySchedulingDependencies = DEFAULT_DEPENDENCIES,
-): Promise<AndroidDurableRecoveryScheduleOutcome> {
+  dependencies: IOSDurableRecoverySchedulingDependencies = DEFAULT_DEPENDENCIES,
+): Promise<IOSDurableRecoveryScheduleOutcome> {
   return scheduleExactRun(runId, null, dependencies);
 }
 
-/**
- * Continues one finished WorkManager chain and releases only its exact terminal native tombstone
- * when the authoritative journal has no successor.
- */
-export async function continuePersistedAndroidExternalRecoveryRun(
+/** Releases one finished native generation and schedules its authoritative journal successor. */
+export async function continuePersistedIOSExternalRecoveryRun(
   runId: string,
-  predecessorWorkId: string,
-  dependencies: AndroidDurableRecoverySchedulingDependencies = DEFAULT_DEPENDENCIES,
-): Promise<AndroidDurableRecoveryScheduleOutcome> {
-  return scheduleExactRun(runId, predecessorWorkId, dependencies);
+  predecessor: DurablePlatformExecutionPointer,
+  dependencies: IOSDurableRecoverySchedulingDependencies = DEFAULT_DEPENDENCIES,
+): Promise<IOSDurableRecoveryScheduleOutcome> {
+  return scheduleExactRun(runId, predecessor, dependencies);
 }
 
 async function scheduleExactRun(
   runId: string,
-  predecessorWorkId: string | null,
-  dependencies: AndroidDurableRecoverySchedulingDependencies,
-): Promise<AndroidDurableRecoveryScheduleOutcome> {
+  predecessor: DurablePlatformExecutionPointer | null,
+  dependencies: IOSDurableRecoverySchedulingDependencies,
+): Promise<IOSDurableRecoveryScheduleOutcome> {
+  const bridge = dependencies.getBridge();
+  if (!bridge) return { kind: 'deferred', runId, reason: 'native_bridge_unavailable' };
+
   let candidateResult: Awaited<ReturnType<typeof readPersistedExternalRecoveryCandidate>>;
   try {
     candidateResult = await dependencies.readCandidate(runId);
@@ -171,8 +191,9 @@ async function scheduleExactRun(
     return { kind: 'deferred', runId, reason: 'journal_unavailable' };
   }
   if (candidateResult.kind === 'not_candidate') {
-    if (predecessorWorkId === null) return candidateResult;
-    return releaseFinishedPredecessor(runId, predecessorWorkId, dependencies);
+    return predecessor === null
+      ? candidateResult
+      : releaseFinishedPredecessor(runId, predecessor, bridge);
   }
   if (candidateResult.kind === 'blocked') {
     return {
@@ -185,9 +206,9 @@ async function scheduleExactRun(
   const request = buildRequest(candidate, dependencies.now());
 
   for (let conflictAttempt = 0; conflictAttempt < 2; conflictAttempt += 1) {
-    let native: Awaited<ReturnType<typeof readAndroidDurableExecution>>;
+    let native: Awaited<ReturnType<DurablePlatformExecutionBridge['getRecord']>>;
     try {
-      native = await dependencies.readNative(runId);
+      native = await bridge.getRecord(runId);
     } catch {
       return { kind: 'deferred', runId, reason: 'native_bridge_unavailable' };
     }
@@ -196,16 +217,15 @@ async function scheduleExactRun(
     }
     if (native.status === 'missing') {
       try {
-        return classifyAdapterResult(runId, await dependencies.enqueueNative(request));
+        return classifyAdapterResult(runId, await bridge.enqueue(request));
       } catch {
         return { kind: 'deferred', runId, reason: 'native_bridge_unavailable' };
       }
     }
-    if (native.status !== 'found' || native.record === null) {
-      return { kind: 'deferred', runId, reason: 'native_store_unavailable' };
+    if (native.status !== 'found' || !isIOSRecord(native.record)) {
+      return { kind: 'blocked', runId, reason: 'native_platform_conflict' };
     }
     const record = native.record;
-
     const ordering = compareGeneration(record, candidate);
     if (Number.isNaN(ordering)) {
       return { kind: 'blocked', runId, reason: 'native_generation_conflict' };
@@ -222,15 +242,15 @@ async function scheduleExactRun(
       return { kind: 'deferred', runId, reason: 'older_native_generation_active' };
     }
 
-    let released: Awaited<ReturnType<typeof releaseTerminalAndroidDurableExecution>>;
+    let released: DurablePlatformAdapterResult;
     try {
-      released = await dependencies.releaseNative(generationPointer(record));
+      released = await bridge.releaseTerminal(generationPointer(record));
     } catch {
       return { kind: 'deferred', runId, reason: 'native_bridge_unavailable' };
     }
     if (released.status === 'released') {
       try {
-        return classifyAdapterResult(runId, await dependencies.enqueueNative(request));
+        return classifyAdapterResult(runId, await bridge.enqueue(request));
       } catch {
         return { kind: 'deferred', runId, reason: 'native_bridge_unavailable' };
       }
@@ -242,22 +262,21 @@ async function scheduleExactRun(
     return {
       kind: 'blocked',
       runId,
-      reason: released.reason ?? 'native_release_contract_failure',
+      reason: 'native_release_contract_failure',
     };
   }
-
   return { kind: 'deferred', runId, reason: 'native_release_race' };
 }
 
 async function releaseFinishedPredecessor(
   runId: string,
-  predecessorWorkId: string,
-  dependencies: AndroidDurableRecoverySchedulingDependencies,
-): Promise<AndroidDurableRecoveryScheduleOutcome> {
+  predecessor: DurablePlatformExecutionPointer,
+  bridge: DurablePlatformExecutionBridge,
+): Promise<IOSDurableRecoveryScheduleOutcome> {
   for (let conflictAttempt = 0; conflictAttempt < 2; conflictAttempt += 1) {
-    let native: Awaited<ReturnType<typeof readAndroidDurableExecution>>;
+    let native: Awaited<ReturnType<DurablePlatformExecutionBridge['getRecord']>>;
     try {
-      native = await dependencies.readNative(runId);
+      native = await bridge.getRecord(runId);
     } catch {
       return { kind: 'deferred', runId, reason: 'native_bridge_unavailable' };
     }
@@ -265,20 +284,19 @@ async function releaseFinishedPredecessor(
       return { kind: 'deferred', runId, reason: 'native_store_unavailable' };
     }
     if (native.status === 'missing') return { kind: 'not_candidate', runId };
-    if (native.status !== 'found' || native.record === null) {
-      return { kind: 'deferred', runId, reason: 'native_store_unavailable' };
+    if (native.status !== 'found' || !isIOSRecord(native.record)) {
+      return { kind: 'blocked', runId, reason: 'native_platform_conflict' };
     }
     const record = native.record;
-    if (record.platformWorkId !== predecessorWorkId) {
+    if (!samePointer(generationPointer(record), predecessor)) {
       return { kind: 'blocked', runId, reason: 'predecessor_identity_conflict' };
     }
     if (ACTIVE_NATIVE_STATES.has(record.state)) {
       return { kind: 'deferred', runId, reason: 'predecessor_not_terminal' };
     }
-
-    let released: Awaited<ReturnType<typeof releaseTerminalAndroidDurableExecution>>;
+    let released: DurablePlatformAdapterResult;
     try {
-      released = await dependencies.releaseNative(generationPointer(record));
+      released = await bridge.releaseTerminal(predecessor);
     } catch {
       return { kind: 'deferred', runId, reason: 'native_bridge_unavailable' };
     }
@@ -287,33 +305,25 @@ async function releaseFinishedPredecessor(
       return { kind: 'deferred', runId, reason: released.reason };
     }
     if (released.status === 'rejected' && released.reason === 'record_not_found') continue;
-    return {
-      kind: 'blocked',
-      runId,
-      reason: released.reason ?? 'native_release_contract_failure',
-    };
+    return { kind: 'blocked', runId, reason: 'native_release_contract_failure' };
   }
   return { kind: 'deferred', runId, reason: 'native_release_race' };
 }
 
-export interface SchedulePersistedAndroidExternalRecoveryCandidateSliceInput {
+export interface SchedulePersistedIOSExternalRecoveryCandidateSliceInput {
   limit?: number;
   after?: string;
 }
 
-export interface SchedulePersistedAndroidExternalRecoveryCandidateSliceResult {
-  outcomes: AndroidDurableRecoveryScheduleOutcome[];
+export interface SchedulePersistedIOSExternalRecoveryCandidateSliceResult {
+  outcomes: IOSDurableRecoveryScheduleOutcome[];
   nextAfter: string | null;
 }
 
-/**
- * Schedules one bounded repair slice. The lifecycle owns continuation so long journals yield
- * between slices instead of monopolizing the JS event loop or silently stopping at a fixed page.
- */
-export async function schedulePersistedAndroidExternalRecoveryCandidateSlice(
-  input: SchedulePersistedAndroidExternalRecoveryCandidateSliceInput = {},
-  dependencies: AndroidDurableRecoverySchedulingDependencies = DEFAULT_DEPENDENCIES,
-): Promise<SchedulePersistedAndroidExternalRecoveryCandidateSliceResult> {
+export async function schedulePersistedIOSExternalRecoveryCandidateSlice(
+  input: SchedulePersistedIOSExternalRecoveryCandidateSliceInput = {},
+  dependencies: IOSDurableRecoverySchedulingDependencies = DEFAULT_DEPENDENCIES,
+): Promise<SchedulePersistedIOSExternalRecoveryCandidateSliceResult> {
   const limit = input.limit ?? DEFAULT_CANDIDATE_SLICE_SIZE;
   if (
     !Number.isSafeInteger(limit) ||
@@ -321,9 +331,8 @@ export async function schedulePersistedAndroidExternalRecoveryCandidateSlice(
     limit > MAX_CANDIDATE_SLICE_SIZE ||
     (input.after !== undefined && typeof input.after !== 'string')
   ) {
-    throw new Error('android-durable-scan-contract-invalid');
+    throw new Error('ios-durable-scan-contract-invalid');
   }
-
   const listed = await dependencies.listCandidates({
     limit,
     ...(input.after === undefined ? {} : { after: input.after }),
@@ -341,12 +350,11 @@ export async function schedulePersistedAndroidExternalRecoveryCandidateSlice(
     };
   }
   if (listed.nextAfter !== null && listed.nextAfter === input.after) {
-    throw new Error('android-durable-scan-cursor-stalled');
+    throw new Error('ios-durable-scan-cursor-stalled');
   }
-
-  const outcomes: AndroidDurableRecoveryScheduleOutcome[] = [];
+  const outcomes: IOSDurableRecoveryScheduleOutcome[] = [];
   for (const candidate of listed.candidates) {
-    outcomes.push(await schedulePersistedAndroidExternalRecoveryRun(candidate.runId, dependencies));
+    outcomes.push(await schedulePersistedIOSExternalRecoveryRun(candidate.runId, dependencies));
   }
   return { outcomes, nextAfter: listed.nextAfter };
 }
