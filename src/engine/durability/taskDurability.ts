@@ -35,14 +35,8 @@ const EXPO_WORKFLOW_HANDLE_SOURCES = new Set([
   'expo_eas_update',
   'expo_eas_submit',
   'expo_eas_deploy_web',
-  'expo_eas_workflow_runs',
   'expo_eas_workflow_status',
   'expo_eas_workflow_wait',
-]);
-
-const GITHUB_WORKFLOW_HANDLE_SOURCES = new Set([
-  'skill__github__workflow_runs',
-  'skill__github__checks_status',
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -84,10 +78,7 @@ export function qualifyExternalDurableHandle(candidate: unknown): ExternalDurabl
   }
 
   if (locator.kind === 'github_workflow_run') {
-    if (
-      !EXPO_WORKFLOW_HANDLE_SOURCES.has(sourceToolName) &&
-      !GITHUB_WORKFLOW_HANDLE_SOURCES.has(sourceToolName)
-    ) {
+    if (!EXPO_WORKFLOW_HANDLE_SOURCES.has(sourceToolName)) {
       return null;
     }
     return { ...locator, sourceToolName };

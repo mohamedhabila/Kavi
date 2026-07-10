@@ -44,7 +44,7 @@ describe('task durability policy', () => {
     });
   });
 
-  it('qualifies exact GitHub workflow run ids from the code-owned GitHub skill', () => {
+  it('does not synthesize a handle from GitHub list and aggregate status tools', () => {
     expect(
       qualifyExternalDurableHandle({
         version: 1,
@@ -54,14 +54,17 @@ describe('task durability policy', () => {
         workflowRunId: 123456789,
         credentialRef: 'GITHUB_TOKEN',
       }),
-    ).toEqual({
-      version: 1,
-      kind: 'github_workflow_run',
-      sourceToolName: 'skill__github__workflow_runs',
-      repository: 'openai/kavi-mobile',
-      workflowRunId: '123456789',
-      credentialRef: 'GITHUB_TOKEN',
-    });
+    ).toBeNull();
+    expect(
+      qualifyExternalDurableHandle({
+        version: 1,
+        kind: 'github_workflow_run',
+        sourceToolName: 'skill__github__checks_status',
+        repository: 'openai/kavi-mobile',
+        workflowRunId: '123456789',
+        credentialRef: 'GITHUB_TOKEN',
+      }),
+    ).toBeNull();
   });
 
   it('qualifies the exact GitHub run created by an Expo action tool', () => {
