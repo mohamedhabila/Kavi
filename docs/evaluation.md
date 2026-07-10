@@ -64,6 +64,10 @@ A local score is never official. LongMemEval-V2 accepts a validated package
 through its submission form; STATE-Bench accepts scored trajectories and
 metrics through a GitHub issue. `resultStatus` stays `not_submitted` until a
 submission exists and cannot become `accepted` without its public review URL.
+LongMemEval-V2 candidates must be built through Kavi's private preparation gate,
+which rejects subset runs, verifies score-bearing dataset files, sanitizes a
+copy without mutating raw evidence, and records package content hashes. Passing
+that gate means only that the archive is ready for maintainer review.
 
 ### Explicit pricing snapshots
 

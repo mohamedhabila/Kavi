@@ -140,28 +140,38 @@ The diagnostic artifact records `finish_reason`, `native_finish_reason`,
 reported usage, content length, reasoning length, and the parsed boxed answer.
 It does not affect official scoring or submission artifacts.
 
-## Package
+## Prepare a submission candidate
 
-After both web and enterprise runs complete, build the official package from
-inside the upstream checkout:
+Do not invoke the upstream packaging scripts directly. They validate coverage
+against the questions selected into a run, so a diagnostic subset can otherwise
+look packageable. Kavi's fail-closed preparation command additionally requires:
+
+- all 240 released web questions and all 211 released enterprise questions;
+- exact pinned question, haystack, trajectory, and score-bearing file hashes;
+- the same official reader, evaluator, decoding, and Kavi memory configuration
+  in both domains;
+- a clean Kavi worktree and the exact permitted upstream patch;
+- a private sanitized copy with no credentials, signed URLs, unmapped local
+  paths, or private provider endpoints.
+
+After both full-domain runs complete, prepare one still-unsubmitted candidate:
 
 ```bash
-cd .private/evals/upstream/LongMemEval-V2
-
-python leaderboard/build_submission_step_1_single_operating_point.py \
-  "$OUTPUT_ROOT/kavi_memory_isolated_web_small" \
-  "$OUTPUT_ROOT/kavi_memory_isolated_enterprise_small" \
-  kavi_memory_isolated_small \
-  balanced \
-  small \
-  --method kavi_memory_isolated
-
-python leaderboard/build_submission_step_2_build_package.py \
-  kavi_memory_isolated_small \
-  /path/to/repo/benchmarks/longmemeval_v2/SYSTEM_DESCRIPTION.md \
-  /path/to/repo/benchmarks/longmemeval_v2/kavi_isolated_memory.py \
-  leaderboard/submissions/kavi_memory_isolated_small/operating_points/balanced
+python3 benchmarks/longmemeval_v2/prepare_kavi_submission.py \
+  --upstream .private/evals/upstream/LongMemEval-V2 \
+  --data-root .private/evals/data/longmemeval-v2 \
+  --web-run "$OUTPUT_ROOT/kavi_memory_isolated_web_small" \
+  --enterprise-run "$OUTPUT_ROOT/kavi_memory_isolated_enterprise_small" \
+  --tier small \
+  --submission-name kavi_memory_isolated_small \
+  --operating-point balanced
 ```
 
-Submit only the final `leaderboard/submissions/kavi_memory_isolated_small.tar.gz`
-after inspecting `submission_overview.json`.
+The private staging folder contains the upstream archive and a
+`kavi_submission_integrity.json` manifest with source pins, content hashes,
+question counts, sanitization evidence, and `claimStatus: not_submitted`. The
+raw runs are hashed before and after staging and are never modified. Inspect
+both the integrity manifest and `submission_overview.json` before sending the
+archive through the upstream submission form. A packaged candidate is not an
+official result; the public provenance registry remains `not_submitted` until
+the benchmark maintainers accept it and publish a review record.
