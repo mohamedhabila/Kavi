@@ -124,7 +124,7 @@ final class IOSDurableExecutionAdapterTests: XCTestCase {
       controlEpoch: 1,
       snapshotUpdatedAtMillis: 2_200,
       snapshotDigest: String(repeating: "c", count: 64),
-      commandKind: .continueAfterToolResult,
+      commandKind: .reconcileExternalHandles,
       commandDigest: String(repeating: "d", count: 64)
     )
     let checkpointed = acceptedRecord(
@@ -158,6 +158,43 @@ final class IOSDurableExecutionAdapterTests: XCTestCase {
     XCTAssertEqual(completed.state, .completed)
     XCTAssertEqual(completed.receiptDigest, String(repeating: "e", count: 64))
     XCTAssertEqual(scheduler.completions.last?.1, true)
+  }
+
+  func testCheckpointRejectsUnsupportedRecoveryCommand() {
+    let store = InMemoryDurableStore()
+    let adapter = IOSDurableExecutionAdapter(store: store, scheduler: FakeDurableScheduler())
+    let submitted = acceptedRecord(
+      adapter.enqueue(durableRequest(), capabilities: foregroundIOS26())
+    )
+    let running = acceptedRecord(
+      adapter.launchContinuedTask(
+        taskIdentifier: submitted.taskIdentifier,
+        updatedAtMillis: 2_000
+      )
+    )
+    let unsupported = IOSRecoveryCommandIdentity(
+      runId: "run-1",
+      controlEpoch: 1,
+      snapshotUpdatedAtMillis: 2_100,
+      snapshotDigest: String(repeating: "c", count: 64),
+      commandKind: .continueAfterToolResult,
+      commandDigest: String(repeating: "d", count: 64)
+    )
+
+    guard
+      case .rejected(let reason) = adapter.checkpoint(
+        pointer: attemptPointer(running),
+        nextIdentity: unsupported,
+        updatedAtMillis: 2_100
+      )
+    else {
+      return XCTFail("Unsupported recovery checkpoint must be rejected")
+    }
+    XCTAssertEqual(reason, .invalidCheckpoint)
+    guard case .found(let persisted) = store.read(runId: "run-1") else {
+      return XCTFail("Rejected checkpoint must preserve its running record")
+    }
+    XCTAssertEqual(persisted, running)
   }
 
   func testRejectsRegressingProgressAndStaleAttempts() {

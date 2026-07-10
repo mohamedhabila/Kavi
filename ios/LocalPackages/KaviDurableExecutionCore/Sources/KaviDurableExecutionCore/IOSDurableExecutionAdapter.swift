@@ -232,6 +232,7 @@ public final class IOSDurableExecutionAdapter: @unchecked Sendable {
     updateRunning(pointer) { current in
       let previous = current.request.identity
       guard IOSDurableExecutionPolicy.isValidIdentity(nextIdentity),
+        nextIdentity.commandKind == .reconcileExternalHandles,
         nextIdentity.runId == previous.runId,
         nextIdentity.controlEpoch >= previous.controlEpoch,
         nextIdentity.snapshotUpdatedAtMillis >= previous.snapshotUpdatedAtMillis,
