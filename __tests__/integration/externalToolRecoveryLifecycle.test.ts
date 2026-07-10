@@ -17,8 +17,14 @@ import { resolveExternalToolResultDurability } from '../../src/engine/durability
 import { scheduleAndroidDurableRecoveryRepair } from '../../src/services/executionJournal/androidDurableRecoveryLifecycle';
 import { schedulePersistedAndroidExternalRecoveryCandidateSlice } from '../../src/services/executionJournal/androidDurableRecoveryScheduling';
 import { closeExecutionJournalDb } from '../../src/services/executionJournal/database';
+import { scheduleDurableRecoveryRunImmediately } from '../../src/services/executionJournal/durableRecoveryLifecycle';
+import type {
+  DurablePlatformExecutionBridge,
+  IOSDurablePlatformRecord,
+} from '../../src/services/executionJournal/durablePlatformBridgeTypes';
 import { observeExternalToolResultDurability } from '../../src/services/executionJournal/externalToolDurabilityLifecycle';
 import { persistExternalToolObservation } from '../../src/services/executionJournal/externalToolObservationStore';
+import { schedulePersistedIOSExternalRecoveryRun } from '../../src/services/executionJournal/iosDurableRecoveryScheduling';
 import {
   listPersistedExternalRecoveryCandidates,
   readPersistedExternalRecoveryCandidate,
@@ -42,6 +48,120 @@ afterEach(() => {
 });
 
 describe('production external tool recovery lifecycle', () => {
+  it('turns a real Expo result into an immediate exact iOS generation', async () => {
+    const input = {
+      toolName: 'expo_eas_build',
+      toolCallId: 'tool-call-build-ios',
+      argumentsText: JSON.stringify({ projectId: 'local-project', platform: 'ios' }),
+      resultText: JSON.stringify({
+        mode: 'eas-workflow',
+        workflowRun: {
+          id: 'd7f109d3-2c6b-45ed-99e8-b94f120901ab',
+          status: 'NEW',
+          conclusion: null,
+        },
+      }),
+      conversationId: 'conversation-1',
+      parentAgentRunId: 'agent-run-1',
+      observedAt: 1_000,
+    };
+    let scheduledRecord: IOSDurablePlatformRecord | undefined;
+    const nativeBridge: DurablePlatformExecutionBridge = {
+      bridgeSchema: 1,
+      wakeEventName: 'KaviDurableExecutionWake',
+      supportsProgressCheckpoint: false,
+      enqueue: jest.fn(async (request) => {
+        const record: IOSDurablePlatformRecord = {
+          request,
+          schedulerKind: 'background_processing',
+          taskIdentifier: 'com.kavi.app.durable-processing',
+          state: 'submitted',
+          attempt: 0,
+          nextAttemptAtMillis: null,
+          failureReason: null,
+          receiptDigest: null,
+          progressCompleted: null,
+          progressTotal: null,
+          lastCheckpointAtMillis: null,
+          revision: 1,
+          updatedAtMillis: 1_001,
+        };
+        scheduledRecord = record;
+        return { schema: 1, status: 'accepted', reason: null, record };
+      }),
+      cancel: jest.fn(),
+      complete: jest.fn(),
+      scheduleRetry: jest.fn(),
+      block: jest.fn(),
+      releaseTerminal: jest.fn(),
+      getRecord: jest.fn().mockResolvedValue({ schema: 1, status: 'missing', record: null }),
+      reconcileOutboxes: jest.fn(),
+    };
+    const scheduleIOS = (runId: string) =>
+      schedulePersistedIOSExternalRecoveryRun(runId, {
+        now: () => 1_001,
+        readCandidate: readPersistedExternalRecoveryCandidate,
+        listCandidates: listPersistedExternalRecoveryCandidates,
+        getBridge: () => nativeBridge,
+      });
+
+    const observed = await observeExternalToolResultDurability(input, {
+      resolve: (candidate) =>
+        resolveExternalToolResultDurability(candidate, {
+          resolveExpoProjectContext: () => ({
+            project: {
+              id: 'local-project',
+              easProjectId: 'eas-project-id',
+              name: 'Kavi Mobile',
+              accountId: 'expo-account',
+              owner: 'openai',
+              slug: 'kavi',
+              enabled: true,
+              mode: 'eas-workflow',
+            },
+            account: {
+              id: 'expo-account',
+              name: 'Expo',
+              owner: 'openai',
+              tokenRef: 'PROJECT_EXPO_TOKEN',
+              enabled: true,
+            },
+          }),
+        }),
+      persist: persistExternalToolObservation,
+      schedule: (runId) =>
+        scheduleDurableRecoveryRunImmediately(runId, {
+          platform: 'ios',
+          scheduleAndroid: jest.fn(),
+          scheduleIOS,
+          repairAndroid: jest.fn(),
+          initializeIOS: jest.fn(),
+          reconcileIOS: jest.fn(),
+        }),
+    });
+
+    expect(observed).toMatchObject({
+      kind: 'persisted',
+      observation: { kind: 'created', status: 'pending', terminal: false },
+      scheduling: { kind: 'scheduled' },
+    });
+    expect(scheduledRecord).toEqual(
+      expect.objectContaining({
+        state: 'submitted',
+        request: expect.objectContaining({
+          durabilityClass: 'external_durable_operation',
+          identity: expect.objectContaining({
+            runId: expect.stringMatching(/^external-/u),
+            commandKind: 'reconcile_external_handles',
+            commandDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
+            snapshotDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
+          }),
+          constraints: expect.objectContaining({ network: 'connected' }),
+        }),
+      }),
+    );
+  });
+
   it('turns a real Expo result into a startup-scheduled exact Android generation', async () => {
     const rawResult = JSON.stringify({
       mode: 'eas-workflow',
