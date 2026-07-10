@@ -29,6 +29,7 @@ import { useAssistantBubbleEffects } from './useAssistantBubbleEffects';
 import { AssistantBubbleActions } from './AssistantBubbleActions';
 import { AssistantMemoryFeedback } from './AssistantMemoryFeedback';
 import type { MemoryRetrievalFeedbackChoice } from '../../services/memory/retrievalOutcomeStore';
+import { isMemoryRetrievalEventId } from '../../utils/assistantMessageMetadata';
 
 interface AssistantBubbleProps {
   message: Message;
@@ -111,11 +112,14 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
       effectId: message.effectId,
       styles,
     });
-    const memoryRetrievalEventId =
+    const candidateMemoryRetrievalEventId =
       message.assistantMetadata?.kind === 'final' &&
       message.assistantMetadata.completionStatus === 'complete'
         ? message.assistantMetadata.memoryRetrievalEventId
         : undefined;
+    const memoryRetrievalEventId = isMemoryRetrievalEventId(candidateMemoryRetrievalEventId)
+      ? candidateMemoryRetrievalEventId
+      : undefined;
     const exactMemoryFeedbackMessageId =
       memoryFeedbackMessageId === undefined ? message.id : memoryFeedbackMessageId;
 

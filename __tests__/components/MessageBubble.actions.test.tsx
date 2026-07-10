@@ -132,6 +132,21 @@ describe('MessageBubble actions', () => {
           ...baseMessage,
           assistantMetadata: {
             kind: 'final',
+            completionStatus: 'complete',
+            memoryRetrievalEventId: '../not-code-owned',
+          },
+        }}
+        onMemoryFeedback={onMemoryFeedback}
+      />,
+    );
+    expect(queryByLabelText('Helpful')).toBeNull();
+
+    rerender(
+      <MessageBubble
+        message={{
+          ...baseMessage,
+          assistantMetadata: {
+            kind: 'final',
             completionStatus: 'incomplete',
             memoryRetrievalEventId: 'retrieval_event_m123_1_abc',
           },
