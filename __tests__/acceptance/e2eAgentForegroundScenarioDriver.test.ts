@@ -7,7 +7,10 @@ import {
 } from '../../src/services/memory/ingestionQueue';
 import { recordCompletedTurnForMemory } from '../../src/services/memory/lifecycle';
 import { runForegroundScenario } from '../../src/acceptance/e2eAgent/foregroundScenarioDriver';
-import { settleForegroundScenarioMemory } from '../../src/acceptance/e2eAgent/foregroundScenarioDriverRuntime';
+import {
+  resolveForegroundScenarioFinalAssistant,
+  settleForegroundScenarioMemory,
+} from '../../src/acceptance/e2eAgent/foregroundScenarioDriverRuntime';
 import { useChatStore } from '../../src/store/useChatStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import type { Conversation } from '../../src/types/conversation';
@@ -204,6 +207,20 @@ describe('runForegroundScenario', () => {
     expect(mockedRecordCompletedTurnForMemory).toHaveBeenCalledTimes(2);
     expect(result.turns).toHaveLength(2);
     expect(result.turns[0]).toMatchObject({
+      completion: {
+        assistantStatus: 'complete',
+        executionCompleted: true,
+        finalResponseCompleted: true,
+        runStatus: 'not_applicable',
+        runCompleted: null,
+      },
+      finalAssistant: {
+        text: 'Response 1',
+        completionStatus: 'complete',
+        finishReason: null,
+        terminalReason: null,
+      },
+      finalAssistantCandidateCount: 1,
       route: { directive: 'forced_chitchat', mode: 'chitchat', personaId: 'default' },
       run: null,
       timedOut: false,
@@ -218,10 +235,19 @@ describe('runForegroundScenario', () => {
       userMessageId: result.turns[1].userMessageId,
       status: 'completed',
     });
+    expect(result.turns[1].completion).toMatchObject({
+      assistantStatus: 'complete',
+      executionCompleted: true,
+      finalResponseCompleted: true,
+      runStatus: 'completed',
+      runCompleted: true,
+    });
     expect(result.turns[1].memory).toHaveLength(1);
     expect(result.turns[0].usage?.totalTokens).toBe(15);
     expect(result.turns[1].usage?.totalTokens).toBe(15);
     expect(Object.isFrozen(result.turns[1].messages)).toBe(true);
+    expect(Object.isFrozen(result.turns[1].finalAssistant)).toBe(true);
+    expect(Object.isFrozen(result.turns[1].completion)).toBe(true);
     expect(result.turns[1].messages.filter((message) => message.role === 'user')).toHaveLength(1);
     expect(Object.isFrozen(result.finalConversation)).toBe(true);
 
@@ -301,6 +327,83 @@ describe('runForegroundScenario', () => {
       expect.any(Object),
     );
     expect(result.turns[0].memory).toHaveLength(1);
+    expect(result.turns[0].finalAssistantCandidateCount).toBe(1);
+  });
+
+  it('does not count an incomplete final response as a completed turn', async () => {
+    mockedRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
+      callbacks.onAssistantMessage(
+        'I could not finish.',
+        undefined,
+        undefined,
+        buildAssistantMessageMetadata('final', {
+          completionStatus: 'incomplete',
+          finishReason: 'length',
+          terminalReason: 'tool_failure',
+        }),
+      );
+      callbacks.onDone();
+    });
+
+    const result = await runForegroundScenario({
+      provider: makeProvider('scenario-provider'),
+      conversationId: 'scenario-conversation',
+      conversationTitle: 'Scenario title',
+      systemPrompt: 'Scenario prompt',
+      defaultMode: 'chitchat',
+      turns: [{ content: 'Finish this.', route: 'production_auto' }],
+    });
+
+    expect(result.turns[0]).toMatchObject({
+      error: null,
+      finalAssistant: {
+        text: 'I could not finish.',
+        completionStatus: 'incomplete',
+        finishReason: 'length',
+        terminalReason: 'tool_failure',
+      },
+      completion: {
+        assistantStatus: 'incomplete',
+        executionCompleted: true,
+        finalResponseCompleted: false,
+        runStatus: 'not_applicable',
+        runCompleted: null,
+      },
+    });
+  });
+
+  it('diagnoses duplicate explicit finals and selects the last persisted response', () => {
+    const resolution = resolveForegroundScenarioFinalAssistant([
+      {
+        id: 'assistant-first',
+        role: 'assistant',
+        content: 'First final.',
+        timestamp: 1,
+        assistantMetadata: buildAssistantMessageMetadata('final'),
+      },
+      {
+        id: 'assistant-second',
+        role: 'assistant',
+        content: 'Second final.',
+        timestamp: 2,
+        assistantMetadata: buildAssistantMessageMetadata('final', {
+          completionStatus: 'incomplete',
+          finishReason: 'length',
+        }),
+      },
+    ]);
+
+    expect(resolution).toEqual({
+      candidateCount: 2,
+      selected: {
+        messageId: 'assistant-second',
+        text: 'Second final.',
+        timestamp: 2,
+        completionStatus: 'incomplete',
+        finishReason: 'length',
+        terminalReason: null,
+      },
+    });
   });
 
   it('aborts timed-out turns and restores both global stores', async () => {

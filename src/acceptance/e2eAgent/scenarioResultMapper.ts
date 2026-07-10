@@ -96,11 +96,29 @@ function buildTurnTrace(turn: ForegroundScenarioTurnSnapshot): E2EScenarioTurnTr
     : [];
   return {
     turnIndex: turn.turnIndex,
+    route: cloneJson(turn.route),
+    finalAssistant: turn.finalAssistant ? cloneJson(turn.finalAssistant) : null,
+    finalAssistantCandidateCount: turn.finalAssistantCandidateCount,
+    completion: cloneJson(turn.completion),
+    agentRun: turn.run
+      ? {
+          runId: turn.run.id,
+          userMessageId: turn.run.userMessageId,
+          status: turn.run.status,
+          currentPhase: turn.run.currentPhase,
+          createdAt: turn.run.createdAt,
+          updatedAt: turn.run.updatedAt,
+          completedAt: turn.run.completedAt ?? null,
+          terminalReason: turn.run.terminalReason ?? null,
+          summary: cloneJson(turn.run.summary),
+        }
+      : null,
+    memory: cloneJson(turn.memory),
     toolCalls: collectToolCalls(turn.messages),
     toolResults: collectToolResults(turn.messages),
     graphSnapshots,
     usage: aggregateE2ETokenUsage(buildUsageEvents(turn)),
-    completed: !turn.error && !turn.timedOut,
+    completed: turn.completion.executionCompleted,
   };
 }
 

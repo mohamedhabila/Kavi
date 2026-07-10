@@ -29,10 +29,14 @@ import { useChatStore } from '../../store/useChatStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import type { AgentRun } from '../../types/agentRun';
 import type { Conversation, ConversationMode } from '../../types/conversation';
+import type { Message } from '../../types/message';
 import type { ConversationUsageSummary } from '../../types/usage';
 import { generateId } from '../../utils/id';
 import type {
+  ForegroundScenarioCompletionSnapshot,
   ForegroundScenarioDriverInput,
+  ForegroundScenarioExecutionContextSnapshot,
+  ForegroundScenarioFinalAssistantSnapshot,
   ForegroundScenarioMemoryRecord,
   ForegroundScenarioMemorySnapshot,
   ForegroundScenarioRouteDirective,
@@ -87,7 +91,7 @@ export function applyForegroundScenarioRoute(
   conversationId: string,
   directive: ForegroundScenarioRouteDirective,
   defaultMode: ConversationMode,
-): { mode: ConversationMode; personaId: string } {
+): ForegroundScenarioExecutionContextSnapshot {
   const before = useChatStore
     .getState()
     .conversations.find((candidate) => candidate.id === conversationId);
@@ -104,6 +108,13 @@ export function applyForegroundScenarioRoute(
     store.updatePersonaInConversation(conversationId, personaId);
   }
 
+  return resolveForegroundScenarioExecutionContext(conversationId, defaultMode);
+}
+
+export function resolveForegroundScenarioExecutionContext(
+  conversationId: string,
+  defaultMode: ConversationMode,
+): ForegroundScenarioExecutionContextSnapshot {
   const conversation = useChatStore
     .getState()
     .conversations.find((candidate) => candidate.id === conversationId);
@@ -111,6 +122,54 @@ export function applyForegroundScenarioRoute(
     conversation,
     defaultConversationMode: defaultMode,
   });
+}
+
+export function resolveForegroundScenarioFinalAssistant(
+  messages: ReadonlyArray<Message>,
+): Readonly<{
+  candidateCount: number;
+  selected: ForegroundScenarioFinalAssistantSnapshot | null;
+}> {
+  const finalMessages = messages.filter(
+    (message) => message.role === 'assistant' && message.assistantMetadata?.kind === 'final',
+  );
+  const message = finalMessages[finalMessages.length - 1];
+  if (!message?.assistantMetadata) {
+    return { candidateCount: finalMessages.length, selected: null };
+  }
+  return {
+    candidateCount: finalMessages.length,
+    selected: {
+      messageId: message.id,
+      text: message.content,
+      timestamp: message.timestamp,
+      completionStatus: message.assistantMetadata.completionStatus,
+      finishReason: message.assistantMetadata.finishReason ?? null,
+      terminalReason: message.assistantMetadata.terminalReason ?? null,
+    },
+  };
+}
+
+export function buildForegroundScenarioCompletionSnapshot(params: {
+  error: string | null;
+  finalAssistant: ForegroundScenarioFinalAssistantSnapshot | null;
+  route: ForegroundScenarioExecutionContextSnapshot;
+  run: AgentRun | null;
+  timedOut: boolean;
+}): ForegroundScenarioCompletionSnapshot {
+  const runStatus =
+    params.route.mode === 'agentic' ? (params.run?.status ?? 'missing') : 'not_applicable';
+  return {
+    assistantStatus: params.finalAssistant?.completionStatus ?? 'missing',
+    executionCompleted: !params.error && !params.timedOut,
+    finalResponseCompleted: params.finalAssistant?.completionStatus === 'complete',
+    runStatus,
+    runCompleted: runStatus === 'not_applicable' ? null : runStatus === 'completed',
+    runCompletedAt: params.run?.completedAt ?? null,
+    runTerminalReason: params.run?.terminalReason ?? null,
+    graphStatus: params.run?.controlGraph?.status ?? null,
+    graphTerminalReason: params.run?.controlGraph?.terminalReason ?? null,
+  };
 }
 
 function createRequestRegistry() {

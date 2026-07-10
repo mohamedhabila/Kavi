@@ -9,10 +9,12 @@ import { useSettingsStore } from '../../store/useSettingsStore';
 import { generateId } from '../../utils/id';
 import {
   applyForegroundScenarioRoute,
+  buildForegroundScenarioCompletionSnapshot,
   buildForegroundScenarioUsageDelta,
   createForegroundScenarioRuntime,
   createSeedConversation,
   ensureForegroundScenarioStoresHydrated,
+  resolveForegroundScenarioFinalAssistant,
   resolveForegroundScenarioTurnRun,
   settleForegroundScenarioMemory,
 } from './foregroundScenarioDriverRuntime';
@@ -25,8 +27,11 @@ import {
 } from './foregroundScenarioDriverTypes';
 
 export type {
+  ForegroundScenarioCompletionSnapshot,
   ForegroundScenarioDriverInput,
   ForegroundScenarioDriverResult,
+  ForegroundScenarioExecutionContextSnapshot,
+  ForegroundScenarioFinalAssistantSnapshot,
   ForegroundScenarioMemorySnapshot,
   ForegroundScenarioRouteDirective,
   ForegroundScenarioTurnInput,
@@ -159,6 +164,9 @@ async function runScenarioIsolated(
         .conversations.find((candidate) => candidate.id === input.conversationId);
       if (!conversation) throw new Error(`Conversation ${input.conversationId} is unavailable.`);
       const run = resolveForegroundScenarioTurnRun(conversation, userMessageId, priorRunIds);
+      const turnMessages = conversation.messages.slice(messageStartIndex);
+      const finalAssistantResolution = resolveForegroundScenarioFinalAssistant(turnMessages);
+      const finalAssistant = finalAssistantResolution.selected;
       const chatError = runtime.getChatError();
       const memoryInvariantError =
         !timedOut && !chatError && memory.length !== 1
@@ -167,12 +175,22 @@ async function runScenarioIsolated(
       const turnError = timedOut
         ? `Foreground scenario turn timed out after ${timeoutMs}ms.`
         : (chatError ?? memoryInvariantError);
+      const completion = buildForegroundScenarioCompletionSnapshot({
+        error: turnError,
+        finalAssistant,
+        route,
+        run,
+        timedOut,
+      });
       turnSnapshots.push(
         cloneAndFreeze({
+          completion,
           durationMs: Date.now() - startedAt,
           error: turnError,
+          finalAssistant,
+          finalAssistantCandidateCount: finalAssistantResolution.candidateCount,
           memory,
-          messages: conversation.messages.slice(messageStartIndex),
+          messages: turnMessages,
           route: { directive: turn.route, ...route },
           run,
           timedOut,

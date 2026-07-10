@@ -2,11 +2,23 @@
 // Kavi — E2E agent eval types (structural rubrics only)
 // ---------------------------------------------------------------------------
 
-import type { AgentGoalStatus, AgentRunControlGraphState } from '../../types/agentRun';
+import type {
+  AgentGoalStatus,
+  AgentRunControlGraphState,
+  AgentRunPhaseKey,
+  AgentRunStatus,
+  AgentRunSummary,
+} from '../../types/agentRun';
 import type { ConversationMode } from '../../types/conversation';
 import type { Message } from '../../types/message';
 import type { UsagePromptCacheTelemetry, UsageTokenBuckets } from '../../types/usage';
-import type { ForegroundScenarioRouteDirective } from './foregroundScenarioDriverTypes';
+import type {
+  ForegroundScenarioCompletionSnapshot,
+  ForegroundScenarioExecutionContextSnapshot,
+  ForegroundScenarioFinalAssistantSnapshot,
+  ForegroundScenarioMemorySnapshot,
+  ForegroundScenarioRouteDirective,
+} from './foregroundScenarioDriverTypes';
 
 export type E2EToolCallRecord = {
   id: string;
@@ -71,8 +83,28 @@ export type E2EPromptCacheSummary = {
   events: UsagePromptCacheTelemetry[];
 };
 
+export type E2EAgentRunTrace = {
+  runId: string;
+  userMessageId: string;
+  status: AgentRunStatus;
+  currentPhase: AgentRunPhaseKey;
+  createdAt: number;
+  updatedAt: number;
+  completedAt: number | null;
+  terminalReason: string | null;
+  summary: AgentRunSummary;
+};
+
 export type E2EScenarioTurnTrace = {
   turnIndex: number;
+  route: Readonly<{
+    directive: ForegroundScenarioRouteDirective;
+  }> & ForegroundScenarioExecutionContextSnapshot;
+  finalAssistant: ForegroundScenarioFinalAssistantSnapshot | null;
+  finalAssistantCandidateCount: number;
+  completion: ForegroundScenarioCompletionSnapshot;
+  agentRun: E2EAgentRunTrace | null;
+  memory: ReadonlyArray<ForegroundScenarioMemorySnapshot>;
   toolCalls: ReadonlyArray<E2EToolCallRecord>;
   toolResults: ReadonlyArray<E2EToolResultRecord>;
   graphSnapshots: ReadonlyArray<AgentRunControlGraphState>;

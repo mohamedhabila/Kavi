@@ -210,6 +210,25 @@ describe('runE2EScenario product foreground integration', () => {
     expect(mockedRecordCompletedTurnForMemory).toHaveBeenCalledTimes(2);
     expect(result).toMatchObject({ completed: true, userTurnCount: 2 });
     expect(result.turnTraces).toHaveLength(2);
+    expect(result.turnTraces[0]).toMatchObject({
+      route: { directive: 'forced_agentic', mode: 'agentic', personaId: 'super-agent' },
+      finalAssistant: { text: 'Response 1', completionStatus: 'complete' },
+      finalAssistantCandidateCount: 1,
+      completion: {
+        assistantStatus: 'complete',
+        executionCompleted: true,
+        finalResponseCompleted: true,
+        runStatus: 'completed',
+        runCompleted: true,
+        graphStatus: 'finalized',
+      },
+      agentRun: {
+        status: 'completed',
+        currentPhase: 'deliver',
+        terminalReason: null,
+      },
+      memory: [{ status: 'completed_enriched' }],
+    });
     expect(result.graphSnapshots.at(-1)?.status).toBe('finalized');
   });
 
@@ -365,6 +384,44 @@ describe('runE2EScenario product foreground integration', () => {
     expect(result.completed).toBe(false);
     expect(result.turnTraces).toHaveLength(1);
     expect(result.errors).toContain('provider unavailable');
+  });
+
+  it('keeps harness, final-response, and graph completion evidence independent', async () => {
+    mockedRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
+      callbacks.onAssistantMessage(
+        'The action is still pending.',
+        undefined,
+        undefined,
+        buildAssistantMessageMetadata('final', {
+          completionStatus: 'complete',
+          finishReason: 'yielded',
+        }),
+      );
+      callbacks.onAgentControlGraphStateChange(
+        buildFinalizedGraphSnapshot({ status: 'yielded', terminalReason: 'pending_async_work' }),
+      );
+      callbacks.onDone();
+    });
+
+    const result = await runE2EScenario(scenario());
+
+    expect(result.completed).toBe(false);
+    expect(result.turnTraces[0]).toMatchObject({
+      finalAssistant: {
+        text: 'The run completed, but no final response was generated.',
+        completionStatus: 'complete',
+        finishReason: 'fallback_from_evidence',
+      },
+      completion: {
+        assistantStatus: 'complete',
+        executionCompleted: false,
+        finalResponseCompleted: true,
+        runStatus: 'completed',
+        runCompleted: true,
+        graphStatus: 'yielded',
+        graphTerminalReason: 'pending_async_work',
+      },
+    });
   });
 
   it('resets native fixtures and isolates live-eval conversation ids', async () => {

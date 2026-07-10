@@ -1,8 +1,8 @@
 import type { IngestionJob } from '../../services/memory/ingestionQueue';
 import type { RecordCompletedTurnForMemoryResult } from '../../services/memory/lifecycle';
-import type { AgentRun } from '../../types/agentRun';
+import type { AgentRun, AgentRunControlGraphStatus, AgentRunStatus } from '../../types/agentRun';
 import type { Conversation, ConversationMode } from '../../types/conversation';
-import type { Message } from '../../types/message';
+import type { AssistantCompletionStatus, Message } from '../../types/message';
 import type { LlmProviderConfig } from '../../types/provider';
 import type { ConversationUsageSummary } from '../../types/usage';
 
@@ -47,16 +47,43 @@ export type ForegroundScenarioMemorySnapshot = Readonly<{
   status: IngestionJob['status'] | 'not_enqueued';
 }>;
 
+export type ForegroundScenarioExecutionContextSnapshot = Readonly<{
+  mode: ConversationMode;
+  personaId: string;
+}>;
+
+export type ForegroundScenarioFinalAssistantSnapshot = Readonly<{
+  messageId: string;
+  text: string;
+  timestamp: number;
+  completionStatus: AssistantCompletionStatus;
+  finishReason: string | null;
+  terminalReason: string | null;
+}>;
+
+export type ForegroundScenarioCompletionSnapshot = Readonly<{
+  assistantStatus: AssistantCompletionStatus | 'missing';
+  executionCompleted: boolean;
+  finalResponseCompleted: boolean;
+  runStatus: AgentRunStatus | 'missing' | 'not_applicable';
+  runCompleted: boolean | null;
+  runCompletedAt: number | null;
+  runTerminalReason: string | null;
+  graphStatus: AgentRunControlGraphStatus | null;
+  graphTerminalReason: string | null;
+}>;
+
 export type ForegroundScenarioTurnSnapshot = Readonly<{
+  completion: ForegroundScenarioCompletionSnapshot;
   durationMs: number;
   error: string | null;
+  finalAssistant: ForegroundScenarioFinalAssistantSnapshot | null;
+  finalAssistantCandidateCount: number;
   memory: ReadonlyArray<ForegroundScenarioMemorySnapshot>;
   messages: DeepReadonly<Message[]>;
   route: Readonly<{
     directive: ForegroundScenarioRouteDirective;
-    mode: ConversationMode;
-    personaId: string;
-  }>;
+  }> & ForegroundScenarioExecutionContextSnapshot;
   run: DeepReadonly<AgentRun> | null;
   timedOut: boolean;
   turnIndex: number;
