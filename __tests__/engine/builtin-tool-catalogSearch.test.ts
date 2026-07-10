@@ -85,6 +85,40 @@ describe('builtin-tool-catalogSearch', () => {
     );
   });
 
+  it('prefers a strong query match over an incorrect capability hint and declares relaxation', async () => {
+    const result = await executeToolCatalog({
+      query: 'sms',
+      capabilities: ['push'],
+    });
+    const parsed = JSON.parse(result);
+    const toolNames = parsed.tools.map((tool: { name: string }) => tool.name);
+
+    expect(parsed.capabilities).toEqual(['push']);
+    expect(parsed.relaxedFilters).toEqual(['capabilities']);
+    expect(parsed.relaxationReason).toBe(
+      'query_or_workflow_match_without_all_requested_capabilities',
+    );
+    expect(toolNames).toContain('sms_compose');
+    expect(toolNames).not.toContain('github_push');
+  });
+
+  it('includes declared workflow producers for a discovered consumer', async () => {
+    const result = await executeToolCatalog({
+      query: 'sms_compose',
+      capabilities: ['write'],
+    });
+    const parsed = JSON.parse(result);
+    const toolNames = parsed.tools.map((tool: { name: string }) => tool.name);
+
+    expect(toolNames).toEqual(
+      expect.arrayContaining(['sms_compose', 'contacts_search', 'contacts_search_full']),
+    );
+    expect(
+      parsed.tools.find((tool: { name: string }) => tool.name === 'contacts_search')
+        .capabilitySummary.produces,
+    ).toContainEqual({ kind: 'contact_candidate' });
+  });
+
   it('does not rank persona management as delegated work coordination', async () => {
     const result = await executeToolCatalog({
       query: 'agent coordination',

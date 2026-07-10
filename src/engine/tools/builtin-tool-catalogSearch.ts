@@ -29,6 +29,11 @@ export {
   tokenizeStructuralIdentifiers,
 } from './builtin-tool-catalogSearchTokens';
 
+interface ToolCatalogSearchResult {
+  tools: ToolCatalogSearchToolEntry[];
+  capabilityFiltersRelaxed: boolean;
+}
+
 export function searchToolCatalogEntries(params: {
   query?: string;
   capabilities?: ReadonlyArray<string>;
@@ -36,16 +41,28 @@ export function searchToolCatalogEntries(params: {
   options?: ExecuteToolCatalogOptions;
   limit?: number;
 }): ToolCatalogSearchToolEntry[] {
+  return searchToolCatalogEntriesWithMetadata(params).tools;
+}
+
+function searchToolCatalogEntriesWithMetadata(params: {
+  query?: string;
+  capabilities?: ReadonlyArray<string>;
+  category?: string;
+  options?: ExecuteToolCatalogOptions;
+  limit?: number;
+}): ToolCatalogSearchResult {
   const queryTokens = tokenizeStructuralIdentifiers(params.query?.trim() ?? '');
   const requiredCapabilities = normalizeCapabilityFilters(params.capabilities);
   const category = params.category?.trim().toLowerCase();
   const limit = Math.max(1, params.limit ?? 25);
   const searchIndex = buildToolCatalogSearchIndex(params.options);
+  let capabilityFiltersRelaxed = false;
   let matches = searchInitialCatalogEntries(searchIndex, {
     queryTokens,
     requiredCapabilities,
     category,
   });
+  let workflowSeeds = matches;
 
   if (matches.length === 0 && requiredCapabilities.length > 0) {
     matches = searchCapabilityFallbackEntries(searchIndex, {
@@ -53,6 +70,18 @@ export function searchToolCatalogEntries(params: {
       requiredCapabilities,
       category,
     });
+    workflowSeeds = matches;
+  }
+  if (matches.length === 0 && queryTokens.length > 0 && requiredCapabilities.length > 0) {
+    matches = searchInitialCatalogEntries(searchIndex, {
+      queryTokens,
+      requiredCapabilities: [],
+      category,
+    });
+    if (matches.length > 0) {
+      capabilityFiltersRelaxed = true;
+      workflowSeeds = matches;
+    }
   }
   if (matches.length === 0 && category) {
     matches = searchCategoryFallbackEntries(searchIndex, {
@@ -90,7 +119,21 @@ export function searchToolCatalogEntries(params: {
     );
   }
 
-  return matches.slice(0, limit).map(projectSearchEntry);
+  if (workflowSeeds.length > 0) {
+    matches = mergeCatalogMatches(
+      matches,
+      searchWorkflowPrerequisiteEntries(searchIndex, workflowSeeds),
+    );
+  }
+
+  capabilityFiltersRelaxed ||=
+    requiredCapabilities.length > 0 &&
+    matches.some((entry) => !entryMatchesCapabilities(entry, requiredCapabilities));
+
+  return {
+    tools: matches.slice(0, limit).map(projectSearchEntry),
+    capabilityFiltersRelaxed,
+  };
 }
 
 export function buildToolCatalogSearchResponse(params: {
@@ -103,24 +146,31 @@ export function buildToolCatalogSearchResponse(params: {
   const capabilities = normalizeCapabilityFilters(params.capabilities);
   const rawCategory = params.category?.trim().toLowerCase();
   const category = rawCategory && TOOL_CATALOG_CATEGORIES[rawCategory] ? rawCategory : undefined;
-  let tools = searchToolCatalogEntries({
+  let searchResult = searchToolCatalogEntriesWithMetadata({
     query,
     capabilities,
     category,
     options: params.options,
   });
-  if (tools.length === 0 && capabilities.length > 0 && (query || category)) {
-    tools = searchToolCatalogEntries({
+  if (searchResult.tools.length === 0 && capabilities.length > 0 && (query || category)) {
+    searchResult = searchToolCatalogEntriesWithMetadata({
       capabilities,
       options: params.options,
     });
   }
+  const tools = searchResult.tools;
 
   return JSON.stringify({
     mode: 'search',
     ...(query ? { query } : {}),
     ...(capabilities.length > 0 ? { capabilities } : {}),
     ...(category ? { category } : {}),
+    ...(searchResult.capabilityFiltersRelaxed
+      ? {
+          relaxedFilters: ['capabilities'],
+          relaxationReason: 'query_or_workflow_match_without_all_requested_capabilities',
+        }
+      : {}),
     tools: tools.map((tool) => ({
       name: tool.name,
       description: tool.description,
@@ -135,6 +185,25 @@ export function buildToolCatalogSearchResponse(params: {
     })),
     totalMatches: tools.length,
   });
+}
+
+function searchWorkflowPrerequisiteEntries(
+  searchIndex: ReadonlyArray<CatalogSearchableEntry>,
+  consumers: ReadonlyArray<CatalogSearchableEntry>,
+): CatalogSearchableEntry[] {
+  const consumedKinds = new Set(
+    consumers.flatMap((entry) =>
+      (entry.capabilitySummary?.consumes ?? []).map((consumed) => consumed.kind),
+    ),
+  );
+  if (consumedKinds.size === 0) return [];
+  return searchIndex
+    .filter((entry) =>
+      (entry.capabilitySummary?.produces ?? []).some((produced) =>
+        consumedKinds.has(produced.kind),
+      ),
+    )
+    .sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function searchInitialCatalogEntries(
