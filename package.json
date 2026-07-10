@@ -43,6 +43,7 @@
     "check:evaluation-contract": "node ./scripts/check-evaluation-contract.js",
     "check:evaluation-release": "node ./scripts/check-evaluation-contract.js --private-release",
     "check:judge-calibration": "node ./scripts/judge-calibration.js",
+    "aggregate:evaluation": "node ./scripts/evaluation-statistics.js",
     "check:app-metadata": "node ./scripts/check-app-metadata.js",
     "check:i18n": "node ./scripts/check-i18n-consistency.js",
     "check:no-legacy-planning-imports": "node ./scripts/check-no-legacy-planning-imports.js",

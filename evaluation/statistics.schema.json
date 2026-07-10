@@ -1,0 +1,930 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/statistics.schema.json",
+  "title": "Kavi evaluation trial statistics",
+  "description": "Closed contracts for deterministic aggregation input and content-free public statistics output.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/trialSet"
+    },
+    {
+      "$ref": "#/$defs/statisticsReport"
+    }
+  ],
+  "$defs": {
+    "safeId": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "seed": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      ]
+    },
+    "trialOutcome": {
+      "type": "string",
+      "enum": ["passed", "failed", "skipped", "infrastructure_error", "ambiguous"]
+    },
+    "failureRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary", "secondary"],
+      "properties": {
+        "primary": {
+          "$ref": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/schema.json#/$defs/failureCategory"
+        },
+        "secondary": {
+          "type": "array",
+          "items": {
+            "$ref": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/schema.json#/$defs/failureCategory"
+          },
+          "maxItems": 20,
+          "uniqueItems": true
+        }
+      }
+    },
+    "safetyObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["passed", "failed", "not_evaluated"]
+        }
+      }
+    },
+    "scenarioManifestEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "families", "safetyInvariantIds"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "families": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/safeId"
+          },
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true
+        },
+        "safetyInvariantIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/safeId"
+          },
+          "maxItems": 100,
+          "uniqueItems": true
+        }
+      }
+    },
+    "trial": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenarioId",
+        "trialIndex",
+        "seed",
+        "outcome",
+        "taskScore",
+        "rubricPassed",
+        "rubricTotal",
+        "failures",
+        "safety",
+        "accidentalSuccess"
+      ],
+      "properties": {
+        "scenarioId": {
+          "$ref": "#/$defs/safeId"
+        },
+        "trialIndex": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "seed": {
+          "$ref": "#/$defs/seed"
+        },
+        "outcome": {
+          "$ref": "#/$defs/trialOutcome"
+        },
+        "taskScore": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "rubricPassed": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "rubricTotal": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "failures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/failureRecord"
+          },
+          "maxItems": 20
+        },
+        "safety": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/safetyObservation"
+          },
+          "maxItems": 100
+        },
+        "accidentalSuccess": {
+          "type": "boolean"
+        }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "outcome": { "const": "passed" },
+            "taskScore": { "type": "number", "minimum": 0, "maximum": 1 },
+            "rubricPassed": { "type": "integer", "minimum": 0 },
+            "rubricTotal": { "type": "integer", "minimum": 1 },
+            "failures": { "type": "array", "maxItems": 0 }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "outcome": { "const": "failed" },
+            "taskScore": { "type": "number", "minimum": 0, "maximum": 1 },
+            "rubricPassed": { "type": "integer", "minimum": 0 },
+            "rubricTotal": { "type": "integer", "minimum": 1 },
+            "failures": { "type": "array", "minItems": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "outcome": { "enum": ["skipped", "ambiguous"] },
+            "taskScore": { "type": "null" },
+            "rubricPassed": { "type": "null" },
+            "rubricTotal": { "type": "null" },
+            "failures": { "type": "array", "maxItems": 0 },
+            "accidentalSuccess": { "const": false }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "outcome": { "const": "infrastructure_error" },
+            "taskScore": { "type": "null" },
+            "rubricPassed": { "type": "null" },
+            "rubricTotal": { "type": "null" },
+            "failures": { "type": "array", "minItems": 1 },
+            "accidentalSuccess": { "const": false }
+          }
+        }
+      ]
+    },
+    "pairEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "conditionId",
+        "outcome",
+        "passed",
+        "taskScore",
+        "rubricPassed",
+        "rubricTotal",
+        "accidentalSuccess"
+      ],
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": ["reference", "candidate"]
+        },
+        "conditionId": {
+          "$ref": "#/$defs/safeId"
+        },
+        "outcome": {
+          "type": "string",
+          "enum": ["completed", "skipped", "infrastructure_error", "ambiguous"]
+        },
+        "passed": {
+          "type": ["boolean", "null"]
+        },
+        "taskScore": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "rubricPassed": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "rubricTotal": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "accidentalSuccess": {
+          "type": "boolean"
+        }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "outcome": { "const": "completed" },
+            "passed": { "type": "boolean" },
+            "taskScore": { "type": "number", "minimum": 0, "maximum": 1 },
+            "rubricPassed": { "type": "integer", "minimum": 0 },
+            "rubricTotal": { "type": "integer", "minimum": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "outcome": { "enum": ["skipped", "infrastructure_error", "ambiguous"] },
+            "passed": { "type": "null" },
+            "taskScore": { "type": "null" },
+            "rubricPassed": { "type": "null" },
+            "rubricTotal": { "type": "null" },
+            "accidentalSuccess": { "const": false }
+          }
+        }
+      ]
+    },
+    "pairedComparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "scenarioId", "trialIndex", "seed", "reference", "candidate"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "scenarioId": {
+          "$ref": "#/$defs/safeId"
+        },
+        "trialIndex": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "seed": {
+          "$ref": "#/$defs/seed"
+        },
+        "reference": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/pairEndpoint"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "const": "reference"
+                }
+              }
+            }
+          ]
+        },
+        "candidate": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/pairEndpoint"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "const": "candidate"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "aggregationConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trialCount", "seeds", "k", "bootstrap", "comparison"],
+      "properties": {
+        "trialCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "seeds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/seed"
+          },
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true
+        },
+        "k": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "bootstrap": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method", "seed", "samples"],
+          "properties": {
+            "method": {
+              "const": "paired_scenario_cluster_percentile_v1"
+            },
+            "seed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "samples": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 100000
+            }
+          }
+        },
+        "comparison": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["referenceConditionId", "candidateConditionId"],
+              "properties": {
+                "referenceConditionId": {
+                  "$ref": "#/$defs/safeId"
+                },
+                "candidateConditionId": {
+                  "$ref": "#/$defs/safeId"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "trialSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "$schema",
+        "kind",
+        "schemaVersion",
+        "id",
+        "source",
+        "aggregationConfigSha256",
+        "scenarioManifestSha256",
+        "aggregation",
+        "families",
+        "scenarioManifest",
+        "trials",
+        "pairedComparisons"
+      ],
+      "properties": {
+        "$schema": {
+          "const": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/statistics.schema.json"
+        },
+        "kind": {
+          "const": "evaluation_trial_set"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "runManifestSchemaVersion",
+            "runManifestSha256",
+            "lane",
+            "protocolConformance",
+            "splitKind"
+          ],
+          "properties": {
+            "runManifestSchemaVersion": {
+              "const": "1.0.0"
+            },
+            "runManifestSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "lane": {
+              "$ref": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/schema.json#/$defs/lane"
+            },
+            "protocolConformance": {
+              "$ref": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/schema.json#/$defs/protocolConformance"
+            },
+            "splitKind": {
+              "$ref": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/schema.json#/$defs/splitKind"
+            }
+          }
+        },
+        "aggregationConfigSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "scenarioManifestSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "aggregation": {
+          "$ref": "#/$defs/aggregationConfig"
+        },
+        "families": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/safeId"
+          },
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true
+        },
+        "scenarioManifest": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/scenarioManifestEntry"
+          },
+          "minItems": 1,
+          "maxItems": 10000
+        },
+        "trials": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/trial"
+          },
+          "maxItems": 100000
+        },
+        "pairedComparisons": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pairedComparison"
+          },
+          "maxItems": 100000
+        }
+      }
+    },
+    "probabilityInterval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["low", "high"],
+      "properties": {
+        "low": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "high": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "deltaInterval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["low", "high"],
+      "properties": {
+        "low": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "high": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        }
+      }
+    },
+    "binaryMetric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "total", "rate", "wilson95"],
+      "properties": {
+        "passed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rate": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "wilson95": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/probabilityInterval"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "metricSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passAt1", "passAtK", "allPass"],
+      "properties": {
+        "passAt1": {
+          "$ref": "#/$defs/binaryMetric"
+        },
+        "passAtK": {
+          "$ref": "#/$defs/binaryMetric"
+        },
+        "allPass": {
+          "$ref": "#/$defs/binaryMetric"
+        }
+      }
+    },
+    "familyStatistics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["family", "scenarioCount", "metrics", "accidentalSuccessCount"],
+      "properties": {
+        "family": {
+          "$ref": "#/$defs/safeId"
+        },
+        "scenarioCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "metrics": {
+          "$ref": "#/$defs/metricSet"
+        },
+        "accidentalSuccessCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "failureCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["category", "primaryCount", "secondaryCount"],
+      "properties": {
+        "category": {
+          "$ref": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/schema.json#/$defs/failureCategory"
+        },
+        "primaryCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "secondaryCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "safetySummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "passed", "failed", "notEvaluated", "invariantSatisfied"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "passed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "notEvaluated": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "invariantSatisfied": {
+          "type": "boolean"
+        }
+      }
+    },
+    "deltaSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mean", "bootstrap95"],
+      "properties": {
+        "mean": {
+          "type": ["number", "null"],
+          "minimum": -1,
+          "maximum": 1
+        },
+        "bootstrap95": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/deltaInterval"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "eligibilityFailure": {
+      "type": "string",
+      "enum": [
+        "invalid_contract",
+        "config_digest_mismatch",
+        "scenario_manifest_digest_mismatch",
+        "missing_trial",
+        "duplicate_trial",
+        "seed_mismatch",
+        "skipped_evidence",
+        "ambiguous_evidence",
+        "infrastructure_error",
+        "safety_invariant_failure",
+        "safety_invariant_missing",
+        "invalid_pair_evidence"
+      ]
+    },
+    "statisticsReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "$schema",
+        "kind",
+        "schemaVersion",
+        "generatedAt",
+        "inputSha256",
+        "source",
+        "aggregationConfigSha256",
+        "scenarioManifestSha256",
+        "reliabilityConfig",
+        "claimEligible",
+        "eligibilityFailures",
+        "evidence",
+        "overall",
+        "families",
+        "paired",
+        "failureTaxonomy",
+        "safety",
+        "accidentalSuccessCount"
+      ],
+      "properties": {
+        "$schema": {
+          "const": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/statistics.schema.json"
+        },
+        "kind": {
+          "const": "evaluation_statistics_report"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "generatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "inputSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "runManifestSchemaVersion",
+            "runManifestSha256",
+            "lane",
+            "protocolConformance",
+            "splitKind"
+          ],
+          "properties": {
+            "runManifestSchemaVersion": {
+              "const": "1.0.0"
+            },
+            "runManifestSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "lane": {
+              "$ref": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/schema.json#/$defs/lane"
+            },
+            "protocolConformance": {
+              "$ref": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/schema.json#/$defs/protocolConformance"
+            },
+            "splitKind": {
+              "$ref": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/schema.json#/$defs/splitKind"
+            }
+          }
+        },
+        "aggregationConfigSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "scenarioManifestSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "reliabilityConfig": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["trialCount", "k"],
+          "properties": {
+            "trialCount": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        },
+        "claimEligible": {
+          "type": "boolean"
+        },
+        "eligibilityFailures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/eligibilityFailure"
+          },
+          "uniqueItems": true
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "expectedTrialCount",
+            "observedTrialCount",
+            "missingTrialCount",
+            "duplicateTrialCount",
+            "seedMismatchCount",
+            "skippedCount",
+            "ambiguousCount",
+            "infrastructureErrorCount"
+          ],
+          "properties": {
+            "expectedTrialCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "observedTrialCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "missingTrialCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "duplicateTrialCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "seedMismatchCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "skippedCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "ambiguousCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "infrastructureErrorCount": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "overall": {
+          "$ref": "#/$defs/metricSet"
+        },
+        "families": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/familyStatistics"
+          },
+          "minItems": 1
+        },
+        "paired": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "expectedPairCount",
+            "resolvedPairCount",
+            "qualifiedPairCount",
+            "accidentalEndpointCount",
+            "unresolvedPairCount",
+            "bootstrap",
+            "taskDelta",
+            "rubricDelta",
+            "candidateOnlyPassCount",
+            "referenceOnlyPassCount"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": ["not_requested", "valid", "invalid"]
+            },
+            "expectedPairCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "resolvedPairCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "qualifiedPairCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "accidentalEndpointCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unresolvedPairCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "bootstrap": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["method", "seed", "samples"],
+              "properties": {
+                "method": {
+                  "const": "paired_scenario_cluster_percentile_v1"
+                },
+                "seed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 4294967295
+                },
+                "samples": {
+                  "type": "integer",
+                  "minimum": 1000,
+                  "maximum": 100000
+                }
+              }
+            },
+            "taskDelta": {
+              "$ref": "#/$defs/deltaSummary"
+            },
+            "rubricDelta": {
+              "$ref": "#/$defs/deltaSummary"
+            },
+            "candidateOnlyPassCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "referenceOnlyPassCount": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "failureTaxonomy": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/failureCount"
+          },
+          "minItems": 20,
+          "maxItems": 20
+        },
+        "safety": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/safetySummary"
+          }
+        },
+        "accidentalSuccessCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}
