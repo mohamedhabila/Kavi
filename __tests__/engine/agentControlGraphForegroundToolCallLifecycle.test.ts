@@ -1,5 +1,6 @@
 import { createForegroundToolCallLifecycleController } from '../../src/engine/graph/foregroundRun/toolCallLifecycle';
 import type { ToolCall } from '../../src/types/message';
+import { buildToolEffectReceipt } from '../../src/engine/toolExecution/toolEffectReceipt';
 
 function createHarness(
   overrides: {
@@ -240,5 +241,38 @@ describe('foreground tool call lifecycle controller', () => {
         ],
       }),
     );
+  });
+
+  it('persists receipts on the canonical assistant tool call without duplicating them into tool messages', async () => {
+    const receipt = await buildToolEffectReceipt({
+      toolCallId: 'tc-receipt',
+      toolName: 'mcp__remote__mutate',
+      argumentsText: '{}',
+      resultText: '{"status":"completed"}',
+      transportState: 'returned',
+      recordedAt: 1_700_000_000_400,
+    });
+    const toolCall: ToolCall = {
+      id: 'tc-receipt',
+      name: 'mcp__remote__mutate',
+      arguments: '{}',
+      status: 'completed',
+      result: '{"status":"completed"}',
+      completedAt: 1_700_000_000_400,
+      effectReceipts: [receipt],
+    };
+    const harness = createHarness({ liveToolCalls: [toolCall] });
+
+    harness.controller.completeToolCall(toolCall);
+    harness.controller.publishToolMessage(toolCall.id, toolCall.result!);
+
+    expect(harness.actions.updateToolCallStatus).toHaveBeenCalledWith(
+      'assistant-1',
+      'tc-receipt',
+      'completed',
+      expect.objectContaining({ effectReceipt: receipt }),
+    );
+    const publishedMessage = harness.actions.addToolMessage.mock.calls[0]?.[0];
+    expect(publishedMessage.toolCalls?.[0]?.effectReceipts).toBeUndefined();
   });
 });

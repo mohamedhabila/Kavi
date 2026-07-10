@@ -3,6 +3,7 @@ import { buildSurfacedSubAgentOutputToolResultSummary } from '../../../services/
 import { formatCompactElapsed } from '../../../services/agents/lifecycle/presentPhase';
 import type { ConversationLogEntry } from '../../../types/conversation';
 import type { Message, ToolCall } from '../../../types/message';
+import type { ToolEffectReceipt } from '../../../types/toolEffectReceipt';
 import {
   extractMessageEffect,
   summarizeToolArguments,
@@ -51,7 +52,12 @@ type ForegroundToolLifecycleActions = {
     assistantMessageId: string,
     toolCallId: string,
     status: ToolCall['status'],
-    patch: { completedAt?: number; error?: string; result?: string },
+    patch: {
+      completedAt?: number;
+      error?: string;
+      result?: string;
+      effectReceipt?: ToolEffectReceipt;
+    },
   ) => void;
   upsertLiveToolCall: (assistantMessageId: string, toolCall: ToolCall) => void;
 };
@@ -82,13 +88,15 @@ function resolveForegroundToolResultCall(params: {
     return undefined;
   }
 
-  return {
+  const resultToolCall: ToolCall = {
     ...sourceToolCall,
     status: sourceToolCall.status === 'failed' ? 'failed' : 'completed',
     result: sourceToolCall.result ?? params.result,
     error: sourceToolCall.error,
     completedAt: sourceToolCall.completedAt ?? params.now,
   };
+  delete resultToolCall.effectReceipts;
+  return resultToolCall;
 }
 
 export function createForegroundToolCallLifecycleController(params: {
@@ -125,6 +133,7 @@ export function createForegroundToolCallLifecycleController(params: {
         toolCall,
       });
       const assistantMessageId = resolveToolCallAssistantMessageId(toolCall.id);
+      const latestEffectReceipt = toolCall.effectReceipts?.[toolCall.effectReceipts.length - 1];
       params.actions.upsertLiveToolCall(assistantMessageId, toolCall);
       params.actions.updateToolCallStatus(assistantMessageId, toolCall.id, toolCall.status, {
         result: surfacedOutput
@@ -132,6 +141,7 @@ export function createForegroundToolCallLifecycleController(params: {
           : toolCall.result,
         error: toolCall.error,
         completedAt: toolCall.completedAt,
+        effectReceipt: latestEffectReceipt,
       });
 
       if (toolCall.name === 'message_effect') {

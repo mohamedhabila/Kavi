@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { useChatStore } from '../../helpers/chatStoreHarness';
+import { buildToolEffectReceipt } from '../../../src/engine/toolExecution/toolEffectReceipt';
 
 describe('useChatStore', () => {
   describe('updateToolCallStatus', () => {
@@ -157,6 +158,73 @@ describe('useChatStore', () => {
       expect(afterConversation.messages[0].toolCalls![0].completedAt).toBe(1700000001000);
 
       nowSpy.mockRestore();
+    });
+
+    it('rejects provider-authored receipts and appends code-owned receipts idempotently', async () => {
+      const receipt = await buildToolEffectReceipt({
+        toolCallId: 'tc-receipt',
+        toolName: 'mcp__remote__mutate',
+        argumentsText: '{}',
+        resultText: '{"status":"completed"}',
+        transportState: 'returned',
+        recordedAt: 500,
+      });
+      const convId = useChatStore.getState().createConversation('p1', 's');
+      useChatStore.getState().addMessage(convId, {
+        id: 'msg-receipt',
+        role: 'assistant',
+        content: '',
+        toolCalls: [
+          {
+            id: 'tc-receipt',
+            name: 'mcp__remote__mutate',
+            arguments: '{}',
+            status: 'running',
+            effectReceipts: [receipt],
+          },
+        ],
+      });
+
+      let storedToolCall = useChatStore
+        .getState()
+        .conversations.find((conversation) => conversation.id === convId)!
+        .messages[0].toolCalls![0];
+      expect(storedToolCall.effectReceipts).toBeUndefined();
+
+      expect(() =>
+        useChatStore
+          .getState()
+          .updateToolCallStatus(convId, 'msg-receipt', 'tc-receipt', 'completed', {
+            effectReceipt: { ...receipt, toolCallId: 'different-tool-call' },
+          }),
+      ).toThrow(/Invalid tool effect receipt/u);
+      expect(() =>
+        useChatStore
+          .getState()
+          .updateToolCallStatus(convId, 'msg-receipt', 'tc-receipt', 'completed', {
+            effectReceipt: { ...receipt, toolName: 'mcp__other__mutate' },
+          }),
+      ).toThrow(/Invalid tool effect receipt/u);
+
+      useChatStore
+        .getState()
+        .updateToolCallStatus(convId, 'msg-receipt', 'tc-receipt', 'completed', {
+          result: '{"status":"completed"}',
+          effectReceipt: receipt,
+        });
+      useChatStore
+        .getState()
+        .updateToolCallStatus(convId, 'msg-receipt', 'tc-receipt', 'completed', {
+          result: '{"status":"completed"}',
+          effectReceipt: receipt,
+        });
+
+      storedToolCall = useChatStore
+        .getState()
+        .conversations.find((conversation) => conversation.id === convId)!
+        .messages[0].toolCalls![0];
+      expect(storedToolCall.effectReceipts).toEqual([receipt]);
+      expect(storedToolCall.effectReceipts).toHaveLength(1);
     });
   });
 });

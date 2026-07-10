@@ -6,6 +6,7 @@ import type { ToolCallRecord } from '../loopDetection';
 import type { TrackedAsyncOperation } from '../pendingAsyncOperations';
 import type { RuntimeToolAvailabilityContext } from '../tools/runtimeAvailability';
 import type { RuntimeToolCallInput } from './toolExecutionMessages';
+import type { ToolEffectReceipt } from '../../types/toolEffectReceipt';
 
 export type ToolExecutionLifecycleIdPrefixes = {
   blocked: string;
@@ -60,4 +61,5 @@ export type ToolExecutionLifecycleResult = {
   toolMessage: Message;
   effectiveToolName: string;
   result?: string;
+  effectReceipt?: ToolEffectReceipt;
 };

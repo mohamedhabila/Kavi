@@ -102,6 +102,7 @@ export async function executeAgentControlGraphToolBatch(params: {
       index: _index,
       toolCallId: toolCall.id,
       toolMessage: outcome.toolMessage,
+      effectReceipt: outcome.effectReceipt,
       yieldedMessage: yieldResult.yielded
         ? yieldResult.message || 'Waiting for background agent results.'
         : undefined,

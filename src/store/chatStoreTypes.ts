@@ -24,6 +24,7 @@ import type {
 } from '../types/conversation';
 import type { ConversationUsageSource, TokenUsage } from '../types/usage';
 import type { SubAgentSnapshot } from '../types/subAgent';
+import type { ToolEffectReceipt } from '../types/toolEffectReceipt';
 import type { AgentRunEvidenceDraft } from '../services/agents/lifecycle/evidenceTypes';
 
 export interface ChatState {
@@ -97,7 +98,13 @@ export interface ChatState {
     messageId: string,
     toolCallId: string,
     status: ToolCall['status'],
-    payload?: { result?: string; error?: string; completedAt?: number; progressText?: string },
+    payload?: {
+      result?: string;
+      error?: string;
+      completedAt?: number;
+      progressText?: string;
+      effectReceipt?: ToolEffectReceipt;
+    },
   ) => void;
   recordConversationUsage: (
     conversationId: string,

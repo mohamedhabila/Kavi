@@ -1,6 +1,7 @@
 import type { SubAgentLifecycleEvent, SubAgentSnapshot } from './subAgent';
 import type { Attachment } from './attachment';
 import type { AgentRunTerminalReason } from './agentRun';
+import type { ToolEffectReceipt } from './toolEffectReceipt';
 
 export interface ToolCall {
   id: string;
@@ -16,6 +17,8 @@ export interface ToolCall {
   progressText?: string;
   result?: string;
   error?: string;
+  /** Code-owned, append-only execution receipts. Provider/model tool calls cannot populate this. */
+  effectReceipts?: ReadonlyArray<ToolEffectReceipt>;
 }
 
 export type ToolCallFailureKind =

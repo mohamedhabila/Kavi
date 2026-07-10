@@ -25,6 +25,7 @@ const calendarCreateTool: ToolDefinition = {
     },
     required: ['title', 'startDate', 'endDate'],
   },
+  contract: { sideEffects: ['remote_mutation'] },
 };
 
 function buildLifecycle(
@@ -108,5 +109,52 @@ describe('executeToolCallLifecycle', () => {
         failureKind: 'tool_error',
       }),
     );
+  });
+
+  it('records an unknown receipt for an uncontracted effectful result without exposing it to the provider transcript', async () => {
+    mockedExecuteTool.mockResolvedValueOnce(
+      JSON.stringify({ status: 'created', id: 'event-uncontracted-1' }),
+    );
+    const onToolCallComplete = jest.fn();
+    const result = await executeToolCallLifecycle(
+      buildLifecycle({
+        tc: {
+          id: 'tc-calendar-uncontracted',
+          name: calendarCreateTool.name,
+          arguments: JSON.stringify({
+            title: 'Planning',
+            startDate: '2026-06-14T09:00:00',
+            endDate: '2026-06-14T10:00:00',
+          }),
+        },
+        callbacks: {
+          onToolCallStart: jest.fn(),
+          onToolCallComplete,
+        },
+        agentRunId: 'run-uncontracted-1',
+      }),
+    );
+
+    expect(onToolCallComplete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'completed',
+        effectReceipts: [
+          expect.objectContaining({
+            runId: 'run-uncontracted-1',
+            transportState: 'returned',
+            effectKind: 'unknown',
+            effectState: 'unknown',
+            verificationState: 'unverified',
+          }),
+        ],
+      }),
+    );
+    expect(result.effectReceipt).toEqual(
+      expect.objectContaining({
+        effectState: 'unknown',
+        verificationState: 'unverified',
+      }),
+    );
+    expect(result.toolMessage.toolCalls?.[0]?.effectReceipts).toBeUndefined();
   });
 });

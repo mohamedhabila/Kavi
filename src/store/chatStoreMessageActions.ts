@@ -1,5 +1,5 @@
 import type { StoreApi } from 'zustand';
-import type { Message } from '../types/message';
+import type { Message, ToolCall } from '../types/message';
 import { generateId } from '../utils/id';
 import { generateConversationTitle, isPlaceholderTitle } from '../utils/conversation';
 import { findMatchingToolCallIndexWithinMessage } from '../utils/toolCallMatching';
@@ -15,8 +15,15 @@ import {
   updateConversationMessageById,
 } from './chatStoreHelpers';
 import type { ChatState } from './chatStoreTypes';
+import { appendToolEffectReceipt } from '../utils/toolEffectReceipt';
 
 type ChatStoreSet = StoreApi<ChatState>['setState'];
+
+function stripUntrustedToolEffectReceipts(toolCall: ToolCall): ToolCall {
+  const sanitized = { ...toolCall };
+  delete sanitized.effectReceipts;
+  return sanitized;
+}
 
 export function createMessageStoreActions(
   set: ChatStoreSet,
@@ -45,6 +52,9 @@ export function createMessageStoreActions(
             ...message,
             id: message.id || generateId(),
             timestamp,
+            ...(message.toolCalls
+              ? { toolCalls: message.toolCalls.map(stripUntrustedToolEffectReceipts) }
+              : {}),
           };
           const shouldAutoTitle =
             message.role === 'user' && !!message.content?.trim() && isPlaceholderTitle(c.title);
@@ -216,15 +226,16 @@ export function createMessageStoreActions(
             const existingToolCall =
               existingIndex >= 0 ? existingToolCalls[existingIndex] : undefined;
             const now = Date.now();
+            const incomingToolCall = stripUntrustedToolEffectReceipts(toolCall);
             const normalizedToolCall = {
               ...existingToolCall,
-              ...toolCall,
-              startedAt: toolCall.startedAt ?? existingToolCall?.startedAt ?? now,
-              updatedAt: toolCall.updatedAt ?? existingToolCall?.updatedAt ?? now,
-              completedAt: toolCall.completedAt ?? existingToolCall?.completedAt,
-              progressText: toolCall.progressText ?? existingToolCall?.progressText,
-              result: toolCall.result ?? existingToolCall?.result,
-              error: toolCall.error ?? existingToolCall?.error,
+              ...incomingToolCall,
+              startedAt: incomingToolCall.startedAt ?? existingToolCall?.startedAt ?? now,
+              updatedAt: incomingToolCall.updatedAt ?? existingToolCall?.updatedAt ?? now,
+              completedAt: incomingToolCall.completedAt ?? existingToolCall?.completedAt,
+              progressText: incomingToolCall.progressText ?? existingToolCall?.progressText,
+              result: incomingToolCall.result ?? existingToolCall?.result,
+              error: incomingToolCall.error ?? existingToolCall?.error,
             };
 
             const incomingAttachments = extractToolCallAttachments(normalizedToolCall);
@@ -289,13 +300,20 @@ export function createMessageStoreActions(
               payload?.result ?? (status === 'failed' ? undefined : currentToolCall.result);
             const nextError =
               payload?.error ?? (status !== 'failed' ? undefined : currentToolCall.error);
+            const nextEffectReceipts = payload?.effectReceipt
+              ? appendToolEffectReceipt(currentToolCall.effectReceipts, payload.effectReceipt, {
+                  toolCallId: currentToolCall.id,
+                  toolName: currentToolCall.name,
+                })
+              : currentToolCall.effectReceipts;
             const hasToolCallChange =
               currentToolCall.status !== status ||
               currentToolCall.startedAt !== nextStartedAt ||
               currentToolCall.completedAt !== nextCompletedAt ||
               currentToolCall.progressText !== nextProgressText ||
               currentToolCall.result !== nextResult ||
-              currentToolCall.error !== nextError;
+              currentToolCall.error !== nextError ||
+              currentToolCall.effectReceipts !== nextEffectReceipts;
 
             const nextToolCall = hasToolCallChange
               ? {
@@ -307,6 +325,7 @@ export function createMessageStoreActions(
                   progressText: nextProgressText,
                   result: nextResult,
                   error: nextError,
+                  effectReceipts: nextEffectReceipts,
                 }
               : currentToolCall;
 

@@ -1,6 +1,7 @@
 import type { LivingMemoryBridgeOutput } from '../../services/memory/livingMemoryBridge';
 import type { AgentRunControlGraphState } from '../../types/agentRun';
 import type { Message } from '../../types/message';
+import type { ToolEffectReceipt } from '../../types/toolEffectReceipt';
 import type { ToolDefinition } from '../../types/tool';
 import { buildAssistantMessageMetadata } from '../../utils/assistantMessageMetadata';
 import { type TrackedAsyncOperation } from '../pendingAsyncOperations';
@@ -35,6 +36,7 @@ export interface ToolExecutionOutcome {
   forceFinalText?: boolean;
   yieldCompletionNoteMessage?: string;
   skipWorkflowProgress?: boolean;
+  effectReceipt?: ToolEffectReceipt;
 }
 
 function updateToolCallHistoryResult(params: {

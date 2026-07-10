@@ -25,6 +25,7 @@ import {
   truncateText,
 } from './chatPersistencePrimitives';
 import { compactPersistedToolContent } from './persistedToolContent';
+import { sanitizeToolEffectReceipts } from '../utils/toolEffectReceipt';
 
 function sanitizeProviderReplay(
   providerReplay: MessageProviderReplay | undefined,
@@ -64,8 +65,18 @@ function sanitizeProviderReplay(
   };
 }
 
-function sanitizeToolCall(toolCall: ToolCall, preserveRaw: boolean): ToolCall {
+function sanitizeToolCall(
+  toolCall: ToolCall,
+  preserveRaw: boolean,
+  preserveEffectReceipts: boolean,
+): ToolCall {
   const raw = preserveRaw ? clonePlainRecord(toolCall.raw) : undefined;
+  const effectReceipts = preserveEffectReceipts
+    ? sanitizeToolEffectReceipts(toolCall.effectReceipts, {
+        toolCallId: toolCall.id,
+        toolName: toolCall.name,
+      })
+    : undefined;
 
   return {
     id: toolCall.id,
@@ -85,6 +96,7 @@ function sanitizeToolCall(toolCall: ToolCall, preserveRaw: boolean): ToolCall {
     ...(toolCall.error
       ? { error: truncateText(toolCall.error, MAX_PERSISTED_TOOL_ERROR_CHARS) }
       : {}),
+    ...(effectReceipts ? { effectReceipts } : {}),
   };
 }
 
@@ -182,7 +194,7 @@ export function sanitizeMessage(
     ...(message.toolCalls?.length
       ? {
           toolCalls: message.toolCalls.map((toolCall) =>
-            sanitizeToolCall(toolCall, options.preserveReplay),
+            sanitizeToolCall(toolCall, options.preserveReplay, message.role === 'assistant'),
           ),
         }
       : {}),

@@ -2,11 +2,39 @@ import {
   partializeChatPersistState,
   sanitizeConversationForPersistence,
 } from '../../src/store/chatPersistence';
+import { normalizePersistedChatState } from '../../src/store/chatStoreNormalization';
+import type { ToolEffectReceipt } from '../../src/types/toolEffectReceipt';
+import { decodeToolEffectReceipt } from '../../src/utils/toolEffectReceipt';
 import {
   makeTestAgentRun as makeAgentRun,
   makeTestConversation as makeConversation,
   makeTestMessage as makeMessage,
 } from '../helpers/factories';
+
+function makePersistedEffectReceipt(
+  overrides: Partial<ToolEffectReceipt> = {},
+): ToolEffectReceipt {
+  const receipt = decodeToolEffectReceipt({
+    version: 1,
+    receiptId: `ter_${'a'.repeat(32)}`,
+    toolCallId: 'tool-receipt-1',
+    toolName: 'calendar_create_event',
+    runId: 'run-restart-1',
+    transportState: 'returned',
+    effectKind: 'calendar.create',
+    effectState: 'applied',
+    verificationState: 'acknowledged',
+    requestDigest: `sha256:${'b'.repeat(64)}`,
+    resultDigest: `sha256:${'c'.repeat(64)}`,
+    resource: { kind: 'calendar_event', id: 'event-restart-1' },
+    recordedAt: 1_700_000_000_100,
+    ...overrides,
+  });
+  if (!receipt) {
+    throw new Error('Invalid persisted receipt fixture.');
+  }
+  return receipt;
+}
 
 describe('chatPersistence', () => {
   it('strips attachment base64 blobs from persisted conversations', () => {
@@ -357,5 +385,163 @@ describe('chatPersistence', () => {
     expect(persisted.messages[491].providerReplay).toBeUndefined();
     expect(persisted.messages[492].providerReplay).toEqual({ openaiResponseId: 'resp-642' });
     expect(persisted.messages[499].providerReplay).toEqual({ openaiResponseId: 'resp-649' });
+  });
+
+  it('round-trips effect receipts through restart serialization without raw payload duplication', () => {
+    const receipt = makePersistedEffectReceipt();
+    const persisted = partializeChatPersistState({
+      conversations: [
+        makeConversation({
+          messages: [
+            makeMessage(1, {
+              role: 'assistant',
+              toolCalls: [
+                {
+                  id: 'tool-receipt-1',
+                  name: 'calendar_create_event',
+                  arguments: JSON.stringify({ title: 'Private restart meeting' }),
+                  status: 'completed',
+                  result: JSON.stringify({ status: 'created', id: 'event-restart-1' }),
+                  effectReceipts: [receipt],
+                },
+              ],
+            }),
+          ],
+        }),
+      ],
+      activeConversationId: 'conv-1',
+      isLoading: false,
+    });
+
+    const serializedReceipt = JSON.stringify(
+      persisted.conversations[0].messages[0].toolCalls?.[0]?.effectReceipts?.[0],
+    );
+    expect(serializedReceipt).not.toContain('Private restart meeting');
+
+    const restarted = normalizePersistedChatState(
+      JSON.parse(JSON.stringify(persisted)) as typeof persisted,
+    );
+    const restartedReceipts =
+      restarted.conversations[0].messages[0].toolCalls?.[0]?.effectReceipts;
+    expect(restartedReceipts).toEqual([receipt]);
+    expect(Object.isFrozen(restartedReceipts)).toBe(true);
+    expect(Object.isFrozen(restartedReceipts?.[0])).toBe(true);
+  });
+
+  it('invalidates corrupt, conflicting, out-of-order, and cross-parent receipt histories on restart', () => {
+    const malformedParent = {
+      toolCallId: 'tool-malformed-history',
+      toolName: 'mcp__remote__mutate',
+    };
+    const validAfterMalformed = makePersistedEffectReceipt({
+      receiptId: `ter_${'d'.repeat(32)}`,
+      ...malformedParent,
+      effectKind: 'remote.mutate',
+    });
+    const conflicting = makePersistedEffectReceipt({
+      receiptId: `ter_${'e'.repeat(32)}`,
+      toolCallId: 'tool-conflict-history',
+      toolName: 'mcp__remote__mutate',
+      effectKind: 'remote.mutate',
+      recordedAt: 500,
+    });
+    const newestFirst = makePersistedEffectReceipt({
+      receiptId: `ter_${'f'.repeat(32)}`,
+      toolCallId: 'tool-order-history',
+      toolName: 'mcp__remote__mutate',
+      effectKind: 'remote.mutate',
+      recordedAt: 700,
+    });
+    const olderSecond = makePersistedEffectReceipt({
+      receiptId: `ter_${'1'.repeat(32)}`,
+      toolCallId: 'tool-order-history',
+      toolName: 'mcp__remote__mutate',
+      effectKind: 'remote.mutate',
+      recordedAt: 600,
+    });
+    const rawPersistedState = {
+      conversations: [
+        makeConversation({
+        messages: [
+          makeMessage(1, {
+            role: 'assistant',
+            toolCalls: [
+              {
+                id: malformedParent.toolCallId,
+                name: 'mcp__remote__mutate',
+                arguments: '{}',
+                status: 'completed',
+                effectReceipts: [
+                  { ...validAfterMalformed, resultDigest: 'sha256:invalid' } as any,
+                  validAfterMalformed,
+                ],
+              },
+              {
+                id: 'tool-conflict-history',
+                name: 'mcp__remote__mutate',
+                arguments: '{}',
+                status: 'completed',
+                effectReceipts: [
+                  conflicting,
+                  { ...conflicting, verificationState: 'verified', recordedAt: 600 },
+                ],
+              },
+              {
+                id: 'tool-order-history',
+                name: 'mcp__remote__mutate',
+                arguments: '{}',
+                status: 'completed',
+                effectReceipts: [newestFirst, olderSecond],
+              },
+              {
+                id: 'tool-cross-call',
+                name: 'mcp__remote__mutate',
+                arguments: '{}',
+                status: 'completed',
+                effectReceipts: [
+                  makePersistedEffectReceipt({
+                    receiptId: `ter_${'2'.repeat(32)}`,
+                    toolCallId: 'different-tool-call',
+                    toolName: 'mcp__remote__mutate',
+                    effectKind: 'remote.mutate',
+                  }),
+                ],
+              },
+              {
+                id: 'tool-cross-name',
+                name: 'mcp__remote__mutate',
+                arguments: '{}',
+                status: 'completed',
+                effectReceipts: [
+                  makePersistedEffectReceipt({
+                    receiptId: `ter_${'3'.repeat(32)}`,
+                    toolCallId: 'tool-cross-name',
+                    toolName: 'mcp__other__mutate',
+                    effectKind: 'remote.mutate',
+                  }),
+                ],
+              },
+              {
+                id: 'tool-missing-receipt',
+                name: 'mcp__remote__mutate',
+                arguments: '{}',
+                status: 'completed',
+              },
+            ],
+          }),
+        ],
+        }),
+      ],
+      activeConversationId: 'conv-1',
+    };
+    const restarted = normalizePersistedChatState(
+      JSON.parse(JSON.stringify(rawPersistedState)) as typeof rawPersistedState,
+    );
+    const toolCalls = restarted.conversations[0].messages[0].toolCalls;
+
+    expect(toolCalls).toHaveLength(6);
+    for (const toolCall of toolCalls ?? []) {
+      expect(toolCall.effectReceipts).toBeUndefined();
+    }
   });
 });

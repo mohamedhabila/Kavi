@@ -19,10 +19,47 @@ import {
 } from './toolCallLifecycleRecording';
 import { resolveToolCallPreflight } from './toolCallLifecyclePreflight';
 import { enrichToolResultWithSchemaRepair } from './toolResultRepair';
+import { buildToolEffectReceipt } from './toolEffectReceipt';
+import { appendToolEffectReceipt } from '../../utils/toolEffectReceipt';
+import type { ToolCall } from '../../types/message';
+import type { ToolEffectReceipt } from '../../types/toolEffectReceipt';
 import type {
   ToolExecutionLifecycleParams,
   ToolExecutionLifecycleResult,
 } from './toolCallLifecycleTypes';
+
+async function appendExecutionReceipt(params: {
+  lifecycle: ToolExecutionLifecycleParams;
+  toolCall: ToolCall;
+  result: string;
+  transportState: 'returned' | 'rejected' | 'threw';
+  resultIsError?: boolean;
+  terminalEffectState?: 'cancelled' | 'failed';
+  recordedAt: number;
+}): Promise<ToolEffectReceipt | undefined> {
+  try {
+    const receipt = await buildToolEffectReceipt({
+      toolCallId: params.toolCall.id,
+      toolName: params.toolCall.name,
+      argumentsText: params.toolCall.arguments,
+      resultText: params.result,
+      transportState: params.transportState,
+      resultIsError: params.resultIsError,
+      terminalEffectState: params.terminalEffectState,
+      runId: params.lifecycle.agentRunId,
+      recordedAt: params.recordedAt,
+    });
+    params.toolCall.effectReceipts = appendToolEffectReceipt(
+      params.toolCall.effectReceipts,
+      receipt,
+      { toolCallId: params.toolCall.id, toolName: params.toolCall.name },
+    );
+    return receipt;
+  } catch {
+    // Receipt creation is fail-closed: absence remains unknown and never becomes success evidence.
+    return undefined;
+  }
+}
 
 export type {
   ToolExecutionLifecycleCallbacks,
@@ -49,9 +86,19 @@ export async function executeToolCallLifecycle(
   await yieldToUiFrame();
 
   if (params.signal?.signal.aborted) {
-    failRunningToolCall(toolCall, 'Request cancelled');
-    params.callbacks.onToolCallComplete(toolCall);
     const cancellationMessage = 'Error: Request cancelled';
+    const completedAt = Date.now();
+    failRunningToolCall(toolCall, 'Request cancelled', completedAt);
+    const effectReceipt = await appendExecutionReceipt({
+      lifecycle: params,
+      toolCall,
+      result: cancellationMessage,
+      transportState: 'rejected',
+      resultIsError: true,
+      terminalEffectState: 'cancelled',
+      recordedAt: completedAt,
+    });
+    params.callbacks.onToolCallComplete(toolCall);
     return {
       toolCallId: effectiveToolCall.id,
       effectiveToolName: effectiveToolCall.name,
@@ -63,6 +110,7 @@ export async function executeToolCallLifecycle(
         isError: true,
       }),
       result: cancellationMessage,
+      ...(effectReceipt ? { effectReceipt } : {}),
     };
   }
 
@@ -113,13 +161,22 @@ export async function executeToolCallLifecycle(
     params.onPendingAsyncOperationsChange?.();
 
     const toolResultIsError = isToolResultErrorLike(result);
+    const completedAt = Date.now();
     completeRunningToolCall(
       toolCall,
       result,
       toolResultIsError,
-      Date.now(),
+      completedAt,
       toolResultIsError ? 'tool_error' : undefined,
     );
+    const effectReceipt = await appendExecutionReceipt({
+      lifecycle: params,
+      toolCall,
+      result,
+      transportState: 'returned',
+      resultIsError: toolResultIsError,
+      recordedAt: completedAt,
+    });
     params.callbacks.onToolCallComplete(toolCall);
     await emitAgentEvent('tool_end', {
       conversationId: params.conversationId,
@@ -152,10 +209,21 @@ export async function executeToolCallLifecycle(
         isError: toolResultIsError,
       }),
       result,
+      ...(effectReceipt ? { effectReceipt } : {}),
     };
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
-    failRunningToolCall(toolCall, errMsg, Date.now(), 'runtime_error');
+    const completedAt = Date.now();
+    failRunningToolCall(toolCall, errMsg, completedAt, 'runtime_error');
+    const errorResult = `Error: ${errMsg}`;
+    const effectReceipt = await appendExecutionReceipt({
+      lifecycle: params,
+      toolCall,
+      result: errorResult,
+      transportState: 'threw',
+      resultIsError: true,
+      recordedAt: completedAt,
+    });
     params.callbacks.onToolCallComplete(toolCall);
     recordLifecyclePerformanceMetrics({
       enabled: params.usePerformanceMetrics,
@@ -164,7 +232,6 @@ export async function executeToolCallLifecycle(
       reason: 'tool_execution_failed',
     });
 
-    const errorResult = `Error: ${errMsg}`;
     applyTrackedAsyncToolResult(
       params.trackedAsyncOperations,
       effectiveToolCall.name,
@@ -191,6 +258,7 @@ export async function executeToolCallLifecycle(
         isError: true,
       }),
       result: errorResult,
+      ...(effectReceipt ? { effectReceipt } : {}),
     };
   }
 }

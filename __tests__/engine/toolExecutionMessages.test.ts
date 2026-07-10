@@ -14,7 +14,8 @@ describe('toolExecutionMessages', () => {
         name: 'read_file',
         arguments: '{"path":"a.txt"}',
         raw: { provider: 'test' },
-      },
+        effectReceipts: [{ effectState: 'applied', verificationState: 'verified' }],
+      } as any,
       100,
     );
 
@@ -27,6 +28,7 @@ describe('toolExecutionMessages', () => {
       startedAt: 100,
       updatedAt: 100,
     });
+    expect(toolCall.effectReceipts).toBeUndefined();
 
     const failed = createFailedToolCall(toolCall, 'Blocked', 200);
     expect(failed).toMatchObject({

@@ -82,12 +82,14 @@ export function buildToolResultMessage(params: {
   timestamp?: number;
 }): Message {
   const timestamp = params.timestamp ?? Date.now();
+  const messageToolCall = { ...params.toolCall };
+  delete messageToolCall.effectReceipts;
   return {
     id: `msg_${timestamp}_${params.idPrefix}_${params.toolCallId}`,
     role: 'tool',
     content: params.content,
     toolCallId: params.toolCallId,
-    toolCalls: [{ ...params.toolCall }],
+    toolCalls: [messageToolCall],
     timestamp,
     ...(params.isError ? { isError: true } : {}),
   };
