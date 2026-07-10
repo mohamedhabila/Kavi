@@ -2,10 +2,9 @@
 // Kavi - Retrieval orchestrator
 // ---------------------------------------------------------------------------
 // The orchestrator intentionally stays small: it builds one structural query,
-// asks the fact store for one ranked pool, and returns the selected facts plus
-// recent episodes. Agent-run evidence is stored as compact agent-run records
-// plus source, artifact, decision, risk, summary, and durable fact records, so recall
-// does not need domain-specific candidate lanes.
+// asks the fact store for one bounded ranked pool, and returns selected facts
+// plus recent episodes. Candidate strategy and an already-available local query
+// vector can cross this seam; vector creation and provider calls cannot.
 // ---------------------------------------------------------------------------
 
 import type { AgentGoal } from '../../engine/goals/types';
@@ -19,6 +18,10 @@ import {
 } from './factRecall';
 import { recallEpisodesForQuery, type RecallEpisodesTiming } from './episodeRecall';
 import type { MemoryEpisode } from './episodes/types';
+import type {
+  RecallCandidateStrategy,
+  RecallLocalSemanticInput,
+} from './factRecallCandidateContract';
 import type { MemoryFact } from './facts/types';
 import { markFactsRecalled } from './facts/mutations';
 import { getMemoryTask } from './tasks';
@@ -35,6 +38,8 @@ export interface RetrievalOrchestratorInput {
   limit?: number;
   now?: number;
   factSelector?: MemoryFactSelector;
+  candidateStrategy?: RecallCandidateStrategy;
+  localSemantic?: RecallLocalSemanticInput;
 }
 
 export interface RetrievalOrchestratorResult {
@@ -125,6 +130,8 @@ function recallOptions(
     candidatePoolLimit: DEFAULT_CANDIDATE_POOL_LIMIT,
     onTiming,
     ...(input.factSelector ? { selector: input.factSelector } : {}),
+    ...(input.candidateStrategy ? { candidateStrategy: input.candidateStrategy } : {}),
+    ...(input.localSemantic ? { localSemantic: input.localSemantic } : {}),
     ...(input.conversationId ? { conversationId: input.conversationId } : {}),
     ...(resolvedTaskId ? { taskId: resolvedTaskId } : {}),
     ...(typeof input.now === 'number' ? { now: input.now } : {}),

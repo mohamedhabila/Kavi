@@ -4,7 +4,10 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { upsertEntity } from '../../../src/services/memory/entities';
-import { recordFact } from '../../../src/services/memory/facts/mutations';
+import {
+  recordFact,
+  setFactEmbedding,
+} from '../../../src/services/memory/facts/mutations';
 import { orchestrateMemoryRetrieval } from '../../../src/services/memory/retrievalOrchestrator';
 import {
   ensureFactSchema,
@@ -159,5 +162,41 @@ describe('orchestrateMemoryRetrieval', () => {
       result.querySignals.findIndex((signal) => signal.includes('project log')),
     );
     expect(result.facts.some((fact) => fact.id === target.fact.id)).toBe(true);
+  });
+
+  it('forwards the closed strategy and caller-supplied local semantic input', async () => {
+    const subject = upsertEntity({ name: 'semantic handoff', type: 'project', now: 1 });
+    const target = recordFact({
+      subjectId: subject.id,
+      predicate: 'opaque_result',
+      objectText: 'violet-handoff',
+      now: 2,
+    });
+    setFactEmbedding(target.fact.id, [1, 0], 3);
+
+    const lexical = await orchestrateMemoryRetrieval({
+      userMessage: 'conceptually related evidence',
+      candidateStrategy: 'lexical',
+      localSemantic: { queryEmbedding: [1, 0] },
+      now: 4,
+    });
+    const hybrid = await orchestrateMemoryRetrieval({
+      userMessage: 'conceptually related evidence',
+      candidateStrategy: 'hybrid',
+      localSemantic: { queryEmbedding: [1, 0] },
+      now: 4,
+    });
+
+    expect(lexical.facts).toHaveLength(0);
+    expect(lexical.timings?.recall?.candidateStages).toMatchObject({
+      strategy: 'lexical',
+      localSemanticOutcome: 'not_requested',
+    });
+    expect(hybrid.facts.map((fact) => fact.id)).toEqual([target.fact.id]);
+    expect(hybrid.timings?.recall?.candidateStages).toMatchObject({
+      strategy: 'hybrid',
+      localSemanticOutcome: 'applied',
+      localSemanticCount: 1,
+    });
   });
 });
