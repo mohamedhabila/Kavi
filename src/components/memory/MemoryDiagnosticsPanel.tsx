@@ -107,25 +107,41 @@ export const MemoryDiagnosticsPanel: React.FC<MemoryDiagnosticsPanelProps> = ({ 
               {entry.operation} · {entry.mode} · {entry.outcome}
             </Text>
             <Text style={styles.rowSecondary}>
-              facts {entry.counts.selectedFactCount}/{entry.counts.candidateFactCount} · episodes{' '}
-              {entry.counts.selectedEpisodeCount}/{entry.counts.candidateEpisodeCount} ·{' '}
-              {entry.timings.totalMs} ms
+              {t('memory.diagnosticsRetrievalEntry', {
+                selectedFacts: entry.counts.selectedFactCount,
+                candidateFacts: entry.counts.candidateFactCount,
+                selectedEpisodes: entry.counts.selectedEpisodeCount,
+                candidateEpisodes: entry.counts.candidateEpisodeCount,
+                durationMs: entry.timings.totalMs,
+              })}
             </Text>
             <Text style={styles.rowSecondary}>
-              query {entry.queryFingerprint.length} chars/{entry.queryFingerprint.unitCount} units ·
-              selector {entry.selector.mode}/{entry.selector.outcome}
+              {t('memory.diagnosticsRetrievalQuery', {
+                characterCount: entry.queryFingerprint.length,
+                unitCount: entry.queryFingerprint.unitCount,
+                selectorMode: entry.selector.mode,
+                selectorOutcome: entry.selector.outcome,
+              })}
             </Text>
             {entry.barrier ? (
               <Text style={styles.rowSecondary}>
-                barrier {entry.barrier.outcome} · wait {entry.barrier.waitMs} ms
-                {entry.barrier.queueAgeMs === null ? '' : ` · queue ${entry.barrier.queueAgeMs} ms`}
+                {t('memory.diagnosticsRetrievalBarrier', {
+                  outcome: entry.barrier.outcome,
+                  waitMs: entry.barrier.waitMs,
+                  queueAge:
+                    entry.barrier.queueAgeMs === null ? '—' : `${entry.barrier.queueAgeMs} ms`,
+                })}
               </Text>
             ) : null}
             <Text style={styles.rowSecondary}>
-              facts: {formatRetrievalIdList(entry.counts.selectedFactIds)}
+              {t('memory.diagnosticsRetrievalSelectedFacts', {
+                ids: formatRetrievalIdList(entry.counts.selectedFactIds),
+              })}
             </Text>
             <Text style={styles.rowSecondary}>
-              episodes: {formatRetrievalIdList(entry.counts.selectedEpisodeIds)}
+              {t('memory.diagnosticsRetrievalSelectedEpisodes', {
+                ids: formatRetrievalIdList(entry.counts.selectedEpisodeIds),
+              })}
             </Text>
           </View>
         ))

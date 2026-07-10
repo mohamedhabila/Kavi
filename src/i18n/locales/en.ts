@@ -821,8 +821,13 @@ export const en: TranslationMap = {
     diagnosticsBudgetEntry: 'iter {iteration} · {model} · {total}/{window}',
     diagnosticsRetrievalTitle: 'Retrieval log',
     diagnosticsRetrievalEmpty: 'No retrieval events for this conversation yet.',
-    diagnosticsRetrievalEntry: '{factCount} facts · {episodeCount} episodes · {tokenEstimate} tok',
-    diagnosticsRetrievalTask: 'task {taskId}',
+    diagnosticsRetrievalEntry:
+      '{selectedFacts}/{candidateFacts} facts · {selectedEpisodes}/{candidateEpisodes} episodes · {durationMs} ms',
+    diagnosticsRetrievalQuery:
+      'query {characterCount} chars/{unitCount} units · selector {selectorMode}/{selectorOutcome}',
+    diagnosticsRetrievalBarrier: 'barrier {outcome} · wait {waitMs} ms · queue {queueAge}',
+    diagnosticsRetrievalSelectedFacts: 'facts: {ids}',
+    diagnosticsRetrievalSelectedEpisodes: 'episodes: {ids}',
     diagnosticsScopeActiveConversation: 'Active conversation',
     attribution: 'Inspired by MemGPT, Graphiti, and mem0.',
     episodesTitle: 'Episodes',

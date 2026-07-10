@@ -817,8 +817,14 @@ export const de: TranslationMap = mergeTranslations(en, {
     diagnosticsBudgetEntry: 'iter {iteration} · {model} · {total}/{window}',
     diagnosticsRetrievalTitle: 'Abrufprotokoll',
     diagnosticsRetrievalEmpty: 'Noch keine Abrufereignisse für diese Unterhaltung.',
-    diagnosticsRetrievalEntry: '{factCount} Fakten · {episodeCount} Episoden · {tokenEstimate} tok',
-    diagnosticsRetrievalTask: 'Aufgabe {taskId}',
+    diagnosticsRetrievalEntry:
+      '{selectedFacts}/{candidateFacts} Fakten · {selectedEpisodes}/{candidateEpisodes} Episoden · {durationMs} ms',
+    diagnosticsRetrievalQuery:
+      'Abfrage {characterCount} Zeichen/{unitCount} Einheiten · Auswahl {selectorMode}/{selectorOutcome}',
+    diagnosticsRetrievalBarrier:
+      'Barriere {outcome} · Wartezeit {waitMs} ms · Warteschlange {queueAge}',
+    diagnosticsRetrievalSelectedFacts: 'Fakten: {ids}',
+    diagnosticsRetrievalSelectedEpisodes: 'Episoden: {ids}',
     diagnosticsScopeActiveConversation: 'Aktive Unterhaltung',
     attribution: 'Inspiriert von MemGPT, Graphiti und mem0.',
     episodesTitle: 'Episodes',

@@ -788,8 +788,13 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     diagnosticsBudgetEntry: 'iter {iteration} · {model} · {total}/{window}',
     diagnosticsRetrievalTitle: '检索日志',
     diagnosticsRetrievalEmpty: '此对话尚无检索事件。',
-    diagnosticsRetrievalEntry: '{factCount} 条事实 · {episodeCount} 条片段 · {tokenEstimate} tok',
-    diagnosticsRetrievalTask: '任务 {taskId}',
+    diagnosticsRetrievalEntry:
+      '事实 {selectedFacts}/{candidateFacts} · 片段 {selectedEpisodes}/{candidateEpisodes} · {durationMs} 毫秒',
+    diagnosticsRetrievalQuery:
+      '查询 {characterCount} 字符/{unitCount} 单元 · 选择器 {selectorMode}/{selectorOutcome}',
+    diagnosticsRetrievalBarrier: '屏障 {outcome} · 等待 {waitMs} 毫秒 · 队列 {queueAge}',
+    diagnosticsRetrievalSelectedFacts: '事实：{ids}',
+    diagnosticsRetrievalSelectedEpisodes: '片段：{ids}',
     diagnosticsScopeActiveConversation: '当前对话',
     attribution: '灵感来自 MemGPT、Graphiti 和 mem0。',
     episodesTitle: 'Episodes',

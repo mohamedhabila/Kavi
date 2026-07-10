@@ -797,8 +797,14 @@ export const ar: TranslationMap = mergeTranslations(en, {
     diagnosticsBudgetEntry: 'iter {iteration} · {model} · {total}/{window}',
     diagnosticsRetrievalTitle: 'سجل الاسترجاع',
     diagnosticsRetrievalEmpty: 'لا توجد أحداث استرجاع لهذه المحادثة بعد.',
-    diagnosticsRetrievalEntry: '{factCount} حقائق · {episodeCount} حلقات · {tokenEstimate} tok',
-    diagnosticsRetrievalTask: 'مهمة {taskId}',
+    diagnosticsRetrievalEntry:
+      '{selectedFacts}/{candidateFacts} حقائق · {selectedEpisodes}/{candidateEpisodes} حلقات · {durationMs} مللي ثانية',
+    diagnosticsRetrievalQuery:
+      'الاستعلام {characterCount} حرفًا/{unitCount} وحدات · المحدد {selectorMode}/{selectorOutcome}',
+    diagnosticsRetrievalBarrier:
+      'الحاجز {outcome} · الانتظار {waitMs} مللي ثانية · قائمة الانتظار {queueAge}',
+    diagnosticsRetrievalSelectedFacts: 'الحقائق: {ids}',
+    diagnosticsRetrievalSelectedEpisodes: 'الحلقات: {ids}',
     diagnosticsScopeActiveConversation: 'المحادثة النشطة',
     attribution: 'مستوحى من MemGPT و Graphiti و mem0.',
     episodesTitle: 'Episodes',

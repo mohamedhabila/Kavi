@@ -815,8 +815,13 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     diagnosticsBudgetEntry: 'iter {iteration} · {model} · {total}/{window}',
     diagnosticsRetrievalTitle: 'Registro de recuperação',
     diagnosticsRetrievalEmpty: 'Ainda não há eventos de recuperação para esta conversa.',
-    diagnosticsRetrievalEntry: '{factCount} fatos · {episodeCount} episódios · {tokenEstimate} tok',
-    diagnosticsRetrievalTask: 'tarefa {taskId}',
+    diagnosticsRetrievalEntry:
+      '{selectedFacts}/{candidateFacts} fatos · {selectedEpisodes}/{candidateEpisodes} episódios · {durationMs} ms',
+    diagnosticsRetrievalQuery:
+      'consulta {characterCount} caracteres/{unitCount} unidades · seletor {selectorMode}/{selectorOutcome}',
+    diagnosticsRetrievalBarrier: 'barreira {outcome} · espera {waitMs} ms · fila {queueAge}',
+    diagnosticsRetrievalSelectedFacts: 'fatos: {ids}',
+    diagnosticsRetrievalSelectedEpisodes: 'episódios: {ids}',
     diagnosticsScopeActiveConversation: 'Conversa ativa',
     attribution: 'Inspirado por MemGPT, Graphiti e mem0.',
     episodesTitle: 'Episodes',

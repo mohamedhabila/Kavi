@@ -787,8 +787,13 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     diagnosticsBudgetEntry: 'iter {iteration} · {model} · {total}/{window}',
     diagnosticsRetrievalTitle: '擷取日誌',
     diagnosticsRetrievalEmpty: '此對話尚無擷取事件。',
-    diagnosticsRetrievalEntry: '{factCount} 筆事實 · {episodeCount} 筆片段 · {tokenEstimate} tok',
-    diagnosticsRetrievalTask: '任務 {taskId}',
+    diagnosticsRetrievalEntry:
+      '事實 {selectedFacts}/{candidateFacts} · 片段 {selectedEpisodes}/{candidateEpisodes} · {durationMs} 毫秒',
+    diagnosticsRetrievalQuery:
+      '查詢 {characterCount} 字元/{unitCount} 單位 · 選擇器 {selectorMode}/{selectorOutcome}',
+    diagnosticsRetrievalBarrier: '屏障 {outcome} · 等待 {waitMs} 毫秒 · 佇列 {queueAge}',
+    diagnosticsRetrievalSelectedFacts: '事實：{ids}',
+    diagnosticsRetrievalSelectedEpisodes: '片段：{ids}',
     diagnosticsScopeActiveConversation: '目前對話',
     attribution: '靈感來自 MemGPT、Graphiti 和 mem0。',
     episodesTitle: 'Episodes',

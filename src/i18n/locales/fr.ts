@@ -814,8 +814,13 @@ export const fr: TranslationMap = mergeTranslations(en, {
     diagnosticsBudgetEntry: 'iter {iteration} · {model} · {total}/{window}',
     diagnosticsRetrievalTitle: 'Journal de récupération',
     diagnosticsRetrievalEmpty: 'Aucun événement de récupération pour cette conversation.',
-    diagnosticsRetrievalEntry: '{factCount} faits · {episodeCount} épisodes · {tokenEstimate} tok',
-    diagnosticsRetrievalTask: 'tâche {taskId}',
+    diagnosticsRetrievalEntry:
+      '{selectedFacts}/{candidateFacts} faits · {selectedEpisodes}/{candidateEpisodes} épisodes · {durationMs} ms',
+    diagnosticsRetrievalQuery:
+      'requête {characterCount} caractères/{unitCount} unités · sélecteur {selectorMode}/{selectorOutcome}',
+    diagnosticsRetrievalBarrier: 'barrière {outcome} · attente {waitMs} ms · file {queueAge}',
+    diagnosticsRetrievalSelectedFacts: 'faits : {ids}',
+    diagnosticsRetrievalSelectedEpisodes: 'épisodes : {ids}',
     diagnosticsScopeActiveConversation: 'Conversation active',
     attribution: 'Inspiré par MemGPT, Graphiti et mem0.',
     episodesTitle: 'Episodes',

@@ -807,8 +807,12 @@ export const ja: TranslationMap = mergeTranslations(en, {
     diagnosticsRetrievalTitle: '取得ログ',
     diagnosticsRetrievalEmpty: 'この会話の取得イベントはまだありません。',
     diagnosticsRetrievalEntry:
-      '{factCount} 件の事実 · {episodeCount} 件のエピソード · {tokenEstimate} tok',
-    diagnosticsRetrievalTask: 'タスク {taskId}',
+      '事実 {selectedFacts}/{candidateFacts} · エピソード {selectedEpisodes}/{candidateEpisodes} · {durationMs} ms',
+    diagnosticsRetrievalQuery:
+      'クエリ {characterCount} 文字/{unitCount} 単位 · セレクター {selectorMode}/{selectorOutcome}',
+    diagnosticsRetrievalBarrier: 'バリア {outcome} · 待機 {waitMs} ms · キュー {queueAge}',
+    diagnosticsRetrievalSelectedFacts: '事実: {ids}',
+    diagnosticsRetrievalSelectedEpisodes: 'エピソード: {ids}',
     diagnosticsScopeActiveConversation: 'アクティブな会話',
     attribution: 'MemGPT、Graphiti、mem0 に着想を得ています。',
     episodesTitle: 'Episodes',
