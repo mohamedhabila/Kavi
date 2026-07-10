@@ -217,6 +217,7 @@ export interface ExecutionExternalHandleRecord {
   status: ExecutionExternalHandleStatus;
   createdAt: number;
   updatedAt: number;
+  lastAttemptedAt: number;
   lastVerifiedAt: number | null;
 }
 import type { ExecutionExternalHandleLocator } from './externalLocators';

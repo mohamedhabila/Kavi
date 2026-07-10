@@ -105,6 +105,7 @@ export function handleRow(
     status: record.status,
     created_at: record.createdAt,
     updated_at: record.updatedAt,
+    last_attempted_at: record.lastAttemptedAt,
     last_verified_at: record.lastVerifiedAt,
   };
 }

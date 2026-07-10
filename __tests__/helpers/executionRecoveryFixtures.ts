@@ -159,6 +159,7 @@ export function recoveryHandle(
     status,
     createdAt: 40,
     updatedAt: 40,
+    lastAttemptedAt: 40,
     lastVerifiedAt: 40,
     ...overrides,
   };

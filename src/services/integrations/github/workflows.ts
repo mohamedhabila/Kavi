@@ -3,13 +3,33 @@ import { getGitHubToken, resolveGitHubTargetRef } from './repository';
 import type { GitHubTargetRef } from './types';
 import { normalizeGitHubPath } from './normalize';
 
+export interface GitHubWorkflowRunInspection {
+  id?: string | number;
+  status?: unknown;
+  conclusion?: unknown;
+}
+
+export function fetchGitHubWorkflowRunById(
+  repository: string,
+  workflowRunId: string,
+  token: string,
+): Promise<GitHubWorkflowRunInspection> {
+  return githubApi<GitHubWorkflowRunInspection>(
+    `/repos/${repository}/actions/runs/${workflowRunId}`,
+    token,
+  );
+}
+
 export async function listGitHubWorkflowRuns(
   repo: string,
   args: Record<string, unknown>,
 ): Promise<any[]> {
   const target = await resolveGitHubTargetRef(repo, args);
   const query = new URLSearchParams();
-  query.set('per_page', String(Math.max(1, Math.min(Number(args.limit || args.perPage || 10), 100))));
+  query.set(
+    'per_page',
+    String(Math.max(1, Math.min(Number(args.limit || args.perPage || 10), 100))),
+  );
   const status = typeof args.status === 'string' ? args.status.trim() : '';
   const event = typeof args.event === 'string' ? args.event.trim() : '';
   const workflowFileArg =

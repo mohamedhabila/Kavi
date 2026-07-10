@@ -24,7 +24,7 @@ import {
   EXECUTION_RECOVERY_RECEIPT_REASONS,
 } from './recoveryCoordinatorTypes';
 
-export const EXECUTION_JOURNAL_SCHEMA_VERSION = 3;
+export const EXECUTION_JOURNAL_SCHEMA_VERSION = 4;
 export const EXECUTION_JOURNAL_APPLICATION_ID = 1_263_164_492;
 
 function sqlEnum(values: readonly string[]): string {
@@ -146,6 +146,9 @@ const CREATE_EXECUTION_EXTERNAL_HANDLES = `
     status TEXT NOT NULL CHECK (status IN (${sqlEnum(EXECUTION_EXTERNAL_HANDLE_STATUSES)})),
     created_at INTEGER NOT NULL CHECK (created_at >= 0),
     updated_at INTEGER NOT NULL CHECK (updated_at >= created_at),
+    last_attempted_at INTEGER NOT NULL CHECK (
+      last_attempted_at >= created_at AND last_attempted_at <= updated_at
+    ),
     last_verified_at INTEGER CHECK (
       last_verified_at IS NULL
       OR (last_verified_at >= created_at AND last_verified_at <= updated_at)
@@ -157,7 +160,8 @@ const CREATE_EXECUTION_EXTERNAL_HANDLES = `
       OR
       (handle_kind = 'github_workflow_run'
         AND expo_project_id IS NULL
-        AND github_repository IS NOT NULL)
+        AND github_repository IS NOT NULL
+        AND github_repository = lower(github_repository))
     ),
     FOREIGN KEY (run_id, effect_id)
       REFERENCES execution_effects(run_id, id) ON DELETE CASCADE
@@ -278,6 +282,11 @@ const SCHEMA_OBJECT_SQL = new Map<string, string>([
        ON execution_effects(run_id, status, updated_at)`,
   ],
   [
+    'idx_execution_effects_status_run',
+    `CREATE INDEX idx_execution_effects_status_run
+       ON execution_effects(status, run_id)`,
+  ],
+  [
     'ux_execution_effects_idempotency_key',
     `CREATE UNIQUE INDEX ux_execution_effects_idempotency_key
        ON execution_effects(run_id, idempotency_key_digest)
@@ -294,6 +303,11 @@ const SCHEMA_OBJECT_SQL = new Map<string, string>([
     `CREATE UNIQUE INDEX ux_execution_external_handles_github_locator
        ON execution_external_handles(run_id, github_repository, workflow_run_id)
        WHERE handle_kind = 'github_workflow_run'`,
+  ],
+  [
+    'idx_execution_external_handles_status_run',
+    `CREATE INDEX idx_execution_external_handles_status_run
+       ON execution_external_handles(status, run_id)`,
   ],
   [
     'idx_execution_recovery_dispatches_run_state',

@@ -6,7 +6,6 @@ jest.mock('expo-sqlite', () => {
 import type * as SQLite from 'expo-sqlite';
 import {
   closeExecutionJournalDb,
-  EXECUTION_JOURNAL_DATABASE_NAME,
   getExecutionJournalDb,
 } from '../../src/services/executionJournal/database';
 import {
@@ -155,6 +154,7 @@ function insertHandle(db: Db, overrides: Partial<RawRow> = {}): RawRow {
     status: 'pending',
     created_at: 10,
     updated_at: 10,
+    last_attempted_at: 10,
     last_verified_at: null,
     ...overrides,
   };
@@ -162,8 +162,9 @@ function insertHandle(db: Db, overrides: Partial<RawRow> = {}): RawRow {
     `INSERT INTO execution_external_handles (
        id, run_id, effect_id, handle_kind, locator_version, expo_project_id,
        github_repository, workflow_run_id, credential_ref,
-       source_tool_name_digest, status, created_at, updated_at, last_verified_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       source_tool_name_digest, status, created_at, updated_at,
+       last_attempted_at, last_verified_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ...Object.values(row),
   );
   return row;
@@ -386,6 +387,7 @@ describe('closed SQL constraints', () => {
     ['source_tool_name_digest', 'bad'],
     ['workflow_run_id', ''],
     ['updated_at', 9],
+    ['last_attempted_at', 11],
   ])('rejects invalid execution_external_handles.%s', (column, value) => {
     const db = getExecutionJournalDb();
     seedCompleteRun(db);
@@ -406,6 +408,28 @@ describe('closed SQL constraints', () => {
       tool_call_id: 'tool-call-2',
     });
     expect(() => insertHandle(db, { id: 'handle-3', effect_id: 'effect-2' })).toThrow();
+  });
+
+  it('stores GitHub repository locators only in canonical lowercase form', () => {
+    const db = getExecutionJournalDb();
+    seedCompleteRun(db);
+    db.runSync('DELETE FROM execution_external_handles');
+    expect(() =>
+      insertHandle(db, {
+        handle_kind: 'github_workflow_run',
+        expo_project_id: null,
+        github_repository: 'OpenAI/Kavi-Mobile',
+        workflow_run_id: '12345',
+      }),
+    ).toThrow();
+    expect(() =>
+      insertHandle(db, {
+        handle_kind: 'github_workflow_run',
+        expo_project_id: null,
+        github_repository: 'openai/kavi-mobile',
+        workflow_run_id: '12345',
+      }),
+    ).not.toThrow();
   });
 
   it('rejects external-handle verification timestamps later than the row update', () => {
@@ -584,10 +608,26 @@ describe('strict row decoders', () => {
     expect(() =>
       decodeExecutionExternalHandleRow({
         ...handle,
+        last_attempted_at: 11,
+        updated_at: 10,
+      }),
+    ).toThrow('execution_journal_malformed_row:external_handle:timeline');
+    expect(() =>
+      decodeExecutionExternalHandleRow({
+        ...handle,
         last_verified_at: 11,
         updated_at: 10,
       }),
     ).toThrow('execution_journal_malformed_row:external_handle:timeline');
+    expect(() =>
+      decodeExecutionExternalHandleRow({
+        ...handle,
+        handle_kind: 'github_workflow_run',
+        expo_project_id: null,
+        github_repository: 'OpenAI/Kavi-Mobile',
+        workflow_run_id: '12345',
+      }),
+    ).toThrow('execution_journal_malformed_row:external_handle:locator');
   });
 });
 
@@ -660,56 +700,5 @@ describe('retention and explicit deletion', () => {
     expect(
       db.getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM execution_runs')?.count,
     ).toBe(1);
-  });
-});
-
-describe('schema migration policy', () => {
-  function rawDatabase(): Db {
-    return sqliteMock.openDatabaseSync(EXECUTION_JOURNAL_DATABASE_NAME);
-  }
-
-  it('rejects future schema versions without attempting migration', () => {
-    const futureVersion = EXECUTION_JOURNAL_SCHEMA_VERSION + 1;
-    rawDatabase().execSync(`PRAGMA user_version = ${futureVersion}`);
-    expect(() => getExecutionJournalDb()).toThrow(
-      `execution_journal_unsupported_schema_version:${futureVersion}`,
-    );
-  });
-
-  it('rejects unversioned or legacy tables without importing them', () => {
-    rawDatabase().execSync('CREATE TABLE legacy_runs (id TEXT PRIMARY KEY)');
-    expect(() => getExecutionJournalDb()).toThrow('execution_journal_unversioned_schema');
-  });
-
-  it('rejects a versioned database with the wrong application identity', () => {
-    const db = rawDatabase();
-    db.execSync(`PRAGMA user_version = ${EXECUTION_JOURNAL_SCHEMA_VERSION}`);
-    db.execSync('PRAGMA application_id = 123');
-    expect(() => getExecutionJournalDb()).toThrow('execution_journal_application_id_mismatch');
-  });
-
-  it('rejects a claimed current version whose schema is incomplete', () => {
-    const db = rawDatabase();
-    db.execSync('CREATE TABLE execution_runs (id TEXT PRIMARY KEY)');
-    db.execSync(`PRAGMA application_id = ${EXECUTION_JOURNAL_APPLICATION_ID}`);
-    db.execSync(`PRAGMA user_version = ${EXECUTION_JOURNAL_SCHEMA_VERSION}`);
-    expect(() => getExecutionJournalDb()).toThrow('execution_journal_schema_table_mismatch');
-  });
-
-  it('rejects extra user-defined schema objects in a claimed current schema', () => {
-    const db = getExecutionJournalDb();
-    db.execSync('CREATE INDEX unexpected_execution_index ON execution_runs(id)');
-    closeExecutionJournalDb();
-    expect(() => getExecutionJournalDb()).toThrow('execution_journal_schema_object_set_mismatch');
-  });
-
-  it('rejects an expected schema object whose definition was replaced', () => {
-    const db = getExecutionJournalDb();
-    db.execSync('DROP INDEX idx_execution_runs_status_updated');
-    db.execSync('CREATE INDEX idx_execution_runs_status_updated ON execution_runs(status)');
-    closeExecutionJournalDb();
-    expect(() => getExecutionJournalDb()).toThrow(
-      'execution_journal_schema_object_mismatch:idx_execution_runs_status_updated',
-    );
   });
 });

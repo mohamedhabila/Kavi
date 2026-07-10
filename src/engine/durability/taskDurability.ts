@@ -94,10 +94,9 @@ export function qualifyExternalDurableHandle(candidate: unknown): ExternalDurabl
 }
 
 /**
- * Truthful baseline before the persisted journal and platform schedulers land.
- * Every local work unit remains process-bound. A concrete cloud workflow can
- * be classified as externally durable because the remote operation survives,
- * but recovery still requires explicit reconciliation rather than local resume.
+ * Local tool work remains process-bound. A concrete cloud workflow is externally
+ * durable because the remote operation survives; journal recovery reconciles its
+ * exact remote handle instead of pretending the interrupted local call can resume.
  */
 export function classifyCurrentToolTaskDurability(input: {
   toolName: string;

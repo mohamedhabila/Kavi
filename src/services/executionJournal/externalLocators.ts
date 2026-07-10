@@ -77,7 +77,7 @@ function normalizeGitHubRepository(value: unknown): string | null {
   ) {
     return null;
   }
-  return normalized;
+  return normalized.toLowerCase();
 }
 
 /** Qualify one exact workflow run. Relative selectors such as "latest" fail closed. */

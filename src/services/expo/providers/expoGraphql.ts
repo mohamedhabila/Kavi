@@ -15,6 +15,20 @@ import {
 
 const EXPO_GRAPHQL_URL = 'https://api.expo.dev/graphql';
 
+export type ExpoGraphqlRequestErrorKind = 'http' | 'graphql' | 'contract';
+
+export class ExpoGraphqlRequestError extends Error {
+  constructor(
+    message: string,
+    readonly kind: ExpoGraphqlRequestErrorKind,
+    readonly status: number | null,
+    readonly codes: readonly string[] = [],
+  ) {
+    super(message);
+    this.name = 'ExpoGraphqlRequestError';
+  }
+}
+
 function formatExpoGraphqlErrors(errors?: ExpoGraphqlErrorEntry[] | null): Array<{
   message: string;
   path?: string;
@@ -96,9 +110,13 @@ async function fetchExpoGraphqlEnvelope<T>(
     };
   } catch {
     if (!response.ok) {
-      throw new Error(trimToUndefined(rawText) || `expo-graphql-${response.status}`);
+      throw new ExpoGraphqlRequestError(
+        trimToUndefined(rawText) || `expo-graphql-${response.status}`,
+        'http',
+        response.status,
+      );
     }
-    throw new Error('expo-graphql-invalid-response');
+    throw new ExpoGraphqlRequestError('expo-graphql-invalid-response', 'contract', response.status);
   }
 }
 
@@ -114,15 +132,29 @@ async function expoGraphqlRequest<T>(
       describeExpoGraphqlErrors(payload?.errors) ||
       trimToUndefined(rawText) ||
       `expo-graphql-${response.status}`;
-    throw new Error(errorMessage);
+    throw new ExpoGraphqlRequestError(
+      errorMessage,
+      'http',
+      response.status,
+      formatExpoGraphqlErrors(payload?.errors)
+        .map((entry) => entry.code)
+        .filter((code): code is string => Boolean(code)),
+    );
   }
 
   if (payload?.errors?.length) {
-    throw new Error(describeExpoGraphqlErrors(payload.errors) || 'expo-graphql-error');
+    throw new ExpoGraphqlRequestError(
+      describeExpoGraphqlErrors(payload.errors) || 'expo-graphql-error',
+      'graphql',
+      response.status,
+      formatExpoGraphqlErrors(payload.errors)
+        .map((entry) => entry.code)
+        .filter((code): code is string => Boolean(code)),
+    );
   }
 
   if (payload?.data === undefined || payload.data === null) {
-    throw new Error('expo-graphql-empty-response');
+    throw new ExpoGraphqlRequestError('expo-graphql-empty-response', 'contract', response.status);
   }
 
   return payload.data;

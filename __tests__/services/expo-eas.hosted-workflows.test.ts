@@ -8,10 +8,21 @@ import {
 } from '../helpers/expoEasHarness';
 import { runExpoProjectAction } from '../../src/services/expo/workflowActions';
 import { inspectExpoWorkflowRun } from '../../src/services/expo/workflowMonitoring';
+import { fetchExpoWorkflowRunByIdAsync } from '../../src/services/expo/workflows/expoHostedRuns';
 
 describe('expo eas hosted workflow execution and diagnostics', () => {
   beforeEach(() => {
     resetExpoEasMocks();
+  });
+
+  it('classifies a malformed exact-run response as a provider contract failure', async () => {
+    mockExpoGraphql(() => ({ data: { workflowRuns: null } }));
+
+    await expect(fetchExpoWorkflowRunByIdAsync('token', 'workflow-run-1')).rejects.toMatchObject({
+      name: 'ExpoGraphqlRequestError',
+      kind: 'contract',
+      status: 200,
+    });
   });
 
   it('returns Expo-hosted build-stage logs for failed build jobs', async () => {

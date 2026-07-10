@@ -5,7 +5,7 @@ import type {
   ExpoWorkflowFailureLog,
   ExpoWorkflowJobStatus,
 } from '../contracts';
-import { expoGraphqlRequest } from '../providers/expoGraphql';
+import { ExpoGraphqlRequestError, expoGraphqlRequest } from '../providers/expoGraphql';
 import { fetchExpoProjectWorkflowsAsync, findExpoProjectByFullNameAsync } from '../projectRemote';
 import { getExpoProjectExecutionMode } from '../projectAutomation';
 import { getExpoProjectFullName } from '../projectState';
@@ -169,7 +169,22 @@ async function fetchExpoWorkflowRunByIdAsync(
     { workflowRunId },
   );
 
-  const run = data.workflowRuns.byId;
+  const workflowRuns =
+    data && typeof data === 'object'
+      ? (data as unknown as Record<string, unknown>).workflowRuns
+      : null;
+  const run =
+    workflowRuns && typeof workflowRuns === 'object'
+      ? (workflowRuns as Record<string, unknown>).byId
+      : null;
+  if (
+    !run ||
+    typeof run !== 'object' ||
+    typeof run.id !== 'string' ||
+    typeof run.status !== 'string'
+  ) {
+    throw new ExpoGraphqlRequestError('expo-workflow-run-invalid-response', 'contract', 200);
+  }
   const failureLogs = extractFailureLogsFromErrorEntries(run.errors, 'expo-workflow-error');
   const errorMessage = failureLogs?.map((entry) => entry.excerpt).join('; ') || undefined;
   return {

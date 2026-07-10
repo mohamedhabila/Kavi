@@ -42,8 +42,9 @@ export function insertRecoveryHandle(
     `INSERT INTO execution_external_handles (
        id, run_id, effect_id, handle_kind, locator_version, expo_project_id,
        github_repository, workflow_run_id, credential_ref,
-       source_tool_name_digest, status, created_at, updated_at, last_verified_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       source_tool_name_digest, status, created_at, updated_at,
+       last_attempted_at, last_verified_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ...Object.values(handleRow(handle)),
   );
 }
@@ -88,6 +89,7 @@ export function seedOrderedRecoveryGraph(
       },
       createdAt: 35,
       updatedAt: 35,
+      lastAttemptedAt: 35,
       lastVerifiedAt: null,
     }),
     recoveryHandle('pending', {
@@ -102,6 +104,7 @@ export function seedOrderedRecoveryGraph(
       },
       createdAt: 36,
       updatedAt: 36,
+      lastAttemptedAt: 36,
       lastVerifiedAt: null,
     }),
   ];

@@ -495,6 +495,7 @@ export function registerExecutionExternalHandle(
         status: input.status,
         createdAt: input.createdAt,
         updatedAt: input.createdAt,
+        lastAttemptedAt: input.createdAt,
         lastVerifiedAt: input.createdAt,
       }),
     );
@@ -502,8 +503,9 @@ export function registerExecutionExternalHandle(
       `INSERT INTO execution_external_handles (
          id, run_id, effect_id, handle_kind, locator_version, expo_project_id,
          github_repository, workflow_run_id, credential_ref,
-         source_tool_name_digest, status, created_at, updated_at, last_verified_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         source_tool_name_digest, status, created_at, updated_at,
+         last_attempted_at, last_verified_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ...Object.values(handleRow(handle)),
     );
     touchRun(database, run, handle.createdAt);
@@ -533,15 +535,17 @@ export function transitionExecutionExternalHandle(
         ...handle,
         status: input.nextStatus,
         updatedAt: input.occurredAt,
+        lastAttemptedAt: input.occurredAt,
         lastVerifiedAt: input.occurredAt,
       }),
     );
     const result = database.runSync(
       `UPDATE execution_external_handles
-       SET status = ?, updated_at = ?, last_verified_at = ?
+       SET status = ?, updated_at = ?, last_attempted_at = ?, last_verified_at = ?
        WHERE run_id = ? AND id = ? AND status = ?`,
       next.status,
       next.updatedAt,
+      next.lastAttemptedAt,
       next.lastVerifiedAt,
       run.id,
       handle.id,

@@ -316,6 +316,7 @@ const HANDLE_COLUMNS = [
   'status',
   'created_at',
   'updated_at',
+  'last_attempted_at',
   'last_verified_at',
 ] as const;
 
@@ -324,9 +325,15 @@ export function decodeExecutionExternalHandleRow(value: unknown): ExecutionExter
   requireExactKeys(row, HANDLE_COLUMNS, 'external_handle');
   const createdAt = requireInteger(row.created_at, 'external_handle.created_at');
   const updatedAt = requireInteger(row.updated_at, 'external_handle.updated_at');
+  const lastAttemptedAt = requireInteger(
+    row.last_attempted_at,
+    'external_handle.last_attempted_at',
+  );
   const lastVerifiedAt = nullableInteger(row.last_verified_at, 'external_handle.last_verified_at');
   if (
     updatedAt < createdAt ||
+    lastAttemptedAt < createdAt ||
+    lastAttemptedAt > updatedAt ||
     (lastVerifiedAt !== null && (lastVerifiedAt < createdAt || lastVerifiedAt > updatedAt))
   ) {
     throw new Error('execution_journal_malformed_row:external_handle:timeline');
@@ -353,7 +360,10 @@ export function decodeExecutionExternalHandleRow(value: unknown): ExecutionExter
           credentialRef: row.credential_ref,
         };
   const locator = qualifyExecutionExternalHandleLocator(locatorCandidate);
-  if (!locator) {
+  if (
+    !locator ||
+    (locator.kind === 'github_workflow_run' && locator.repository !== row.github_repository)
+  ) {
     throw new Error('execution_journal_malformed_row:external_handle:locator');
   }
   return {
@@ -368,6 +378,7 @@ export function decodeExecutionExternalHandleRow(value: unknown): ExecutionExter
     status: requireEnum(row.status, EXECUTION_EXTERNAL_HANDLE_STATUSES, 'external_handle.status'),
     createdAt,
     updatedAt,
+    lastAttemptedAt,
     lastVerifiedAt,
   };
 }
