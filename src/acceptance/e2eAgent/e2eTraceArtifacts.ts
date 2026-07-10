@@ -9,17 +9,18 @@ import type { E2EScenarioTraceSummary } from './e2eTraceSummary';
 
 export { buildE2EScenarioTraceSummary } from './e2eTraceSummary';
 export type {
-  E2ERedactedEvidencePrefixCount,
   E2ERedactedHash,
-  E2ERedactedStructuralString,
-  E2ERedactedValuePreview,
+  E2ERedactedHashCount,
+  E2ERedactedValueFingerprint,
 } from './e2eTraceRedaction';
 export type {
   E2ERedactedGoalTrace,
   E2ERedactedGraphAuditEvent,
+  E2ERedactedGraphAuditType,
   E2ERedactedGraphSnapshotTrace,
 } from './e2eTraceGraphSnapshots';
 export type {
+  E2ERedactedStatusFieldTrace,
   E2ERedactedToolCallTrace,
   E2ERedactedToolCatalogResultTrace,
   E2ERedactedToolResultTrace,
@@ -27,13 +28,11 @@ export type {
 } from './e2eTraceToolResults';
 export type {
   E2ERedactedPromptCacheEvent,
+  E2ERedactedPromptCacheReasonCount,
   E2ERedactedPromptCacheTrace,
   E2ERedactedUsageTrace,
 } from './e2eTraceUsage';
-export type {
-  E2ERedactedTurnTrace,
-  E2EScenarioTraceSummary,
-} from './e2eTraceSummary';
+export type { E2ERedactedTurnTrace, E2EScenarioTraceSummary } from './e2eTraceSummary';
 export type {
   E2ERunReportScenarioTraceArtifact,
   E2ETraceRetentionReason,

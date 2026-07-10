@@ -4,45 +4,48 @@ import type {
   AgentRunControlGraphState,
 } from '../../types/agentRun';
 import {
-  MAX_SAFE_PREVIEW_LENGTH,
   hashString,
-  redactStructuralString,
   tailItems,
   uniqueSorted,
-  type E2ERedactedEvidencePrefixCount,
   type E2ERedactedHash,
-  type E2ERedactedStructuralString,
+  type E2ERedactedHashCount,
 } from './e2eTraceRedaction';
+import { buildRedactedToolName, buildRedactedToolNameList } from './e2eTraceToolNames';
 
 export type E2ERedactedGoalTrace = {
-  id: string;
+  goalIdHash: E2ERedactedHash;
   status: AgentGoal['status'];
   completionPolicy?: AgentGoal['completionPolicy'];
-  successCriteria: E2ERedactedStructuralString[];
+  successCriteriaCount: number;
+  successCriteriaHashes: E2ERedactedHash[];
   evidenceCount: number;
-  evidencePrefixCounts: E2ERedactedEvidencePrefixCount[];
+  evidenceSourceHashCounts: E2ERedactedHashCount[];
 };
 
 export type E2ERedactedGraphSnapshotTrace = {
   status: AgentRunControlGraphState['status'];
   iteration: number;
-  finalizationHoldReason?: string;
-  terminalReason?: string;
-  activeTaskId?: string;
-  goalIdsByStatus: Record<AgentGoal['status'], string[]>;
+  finalizationHoldReasonHash?: E2ERedactedHash;
+  terminalReasonHash?: E2ERedactedHash;
+  activeTaskIdHash?: E2ERedactedHash;
+  goalIdHashesByStatus: Record<AgentGoal['status'], E2ERedactedHash[]>;
   goalSummaries: E2ERedactedGoalTrace[];
   expectedToolNames: string[];
+  expectedToolNameHashes: E2ERedactedHash[];
   observedToolResults: Array<{
-    name: string;
+    name?: string;
+    nameHash: E2ERedactedHash;
     failed: boolean;
     canonicalized: boolean;
     graphApplied: boolean;
     evidenceCount: number;
-    evidencePrefixCounts: E2ERedactedEvidencePrefixCount[];
+    evidenceSourceHashCounts: E2ERedactedHashCount[];
   }>;
   pendingAsyncCount: number;
   lastModelToolNames: string[];
+  lastModelToolNameHashes: E2ERedactedHash[];
   sessionActivatedToolNames: string[];
+  sessionActivatedToolNameHashes: E2ERedactedHash[];
   auditEventCount: number;
   selectedToolSurfaceEventCount: number;
   observedToolResultCount: number;
@@ -58,29 +61,58 @@ export type E2ERedactedGraphSnapshotTrace = {
   >;
 };
 
+const PUBLIC_GRAPH_AUDIT_TYPES = [
+  'ASYNC_WAITING',
+  'BLOCKED',
+  'CANCELLED',
+  'COMPLETION_GATE',
+  'FAILED',
+  'FINALIZATION_HELD',
+  'FINALIZED',
+  'FINAL_CANDIDATE_READY',
+  'GOALS_UPDATED',
+  'GOAL_EVIDENCE_ADDED',
+  'LOOP_DETECTED',
+  'MEMORY_RETRIEVAL',
+  'MODEL_TURN_COMPLETED',
+  'MODEL_TURN_FAILED',
+  'MODEL_TURN_STARTED',
+  'PERFORMANCE_METRICS_RECORDED',
+  'SESSION_ACTIVATED_TOOLS_UPDATED',
+  'TOOL_BATCH_INCOMPLETE',
+  'TOOL_RESULTS_RECORDED',
+  'TOOL_RESULT_RECORDED',
+  'TOOL_SURFACE_SELECTED',
+  'TOOL_SURFACE_TOKEN_AUDIT',
+  'TURN_DIRECTIVES_CONSUMED',
+  'TURN_DIRECTIVES_RECORDED',
+  'YIELDED',
+] as const;
+
+export type E2ERedactedGraphAuditType = (typeof PUBLIC_GRAPH_AUDIT_TYPES)[number] | 'OTHER';
+
 export type E2ERedactedGraphAuditEvent = {
-  type: string;
+  type: E2ERedactedGraphAuditType;
+  typeHash?: E2ERedactedHash;
   iteration?: number;
   detailHash?: E2ERedactedHash;
-  detailPreview?: string;
 };
 
 const MAX_AUDIT_EVENTS_PER_SNAPSHOT = 32;
 const MAX_SELECTED_TOOL_SURFACE_EVENTS_PER_SNAPSHOT = 8;
 const MAX_OBSERVED_TOOL_RESULTS_PER_SNAPSHOT = 64;
 const TOOL_SURFACE_AUDIT_TYPE = 'TOOL_SURFACE_SELECTED';
-const SAFE_STRUCTURED_AUDIT_DETAIL_TYPES = new Set([
-  'COMPLETION_GATE',
-  'TOOL_SURFACE_SELECTED',
-  'TOOL_SURFACE_TOKEN_AUDIT',
-  'MEMORY_RETRIEVAL',
-  'LOOP_DETECTED',
-  'TOOL_BATCH_INCOMPLETE',
-]);
+const PUBLIC_GRAPH_AUDIT_TYPE_SET = new Set<string>(PUBLIC_GRAPH_AUDIT_TYPES);
 
-function buildGoalIdsByStatus(
+function hashUniqueValues(values: Iterable<string>): E2ERedactedHash[] {
+  return uniqueSorted(values)
+    .map(hashString)
+    .sort((left, right) => left.hash.localeCompare(right.hash));
+}
+
+function buildGoalIdHashesByStatus(
   goals: ReadonlyArray<AgentGoal> | undefined,
-): Record<AgentGoal['status'], string[]> {
+): Record<AgentGoal['status'], E2ERedactedHash[]> {
   const byStatus: Record<AgentGoal['status'], string[]> = {
     pending: [],
     active: [],
@@ -91,72 +123,62 @@ function buildGoalIdsByStatus(
     byStatus[goal.status].push(goal.id);
   }
   return {
-    pending: uniqueSorted(byStatus.pending),
-    active: uniqueSorted(byStatus.active),
-    completed: uniqueSorted(byStatus.completed),
-    blocked: uniqueSorted(byStatus.blocked),
+    pending: hashUniqueValues(byStatus.pending),
+    active: hashUniqueValues(byStatus.active),
+    completed: hashUniqueValues(byStatus.completed),
+    blocked: hashUniqueValues(byStatus.blocked),
   };
 }
 
-function evidencePrefix(value: string): string {
+function evidenceSource(value: string): string {
   const separatorIndex = value.indexOf(':');
   return separatorIndex > 0 ? value.slice(0, separatorIndex).trim() : 'unscoped';
 }
 
-function buildEvidencePrefixCounts(
+function buildEvidenceSourceHashCounts(
   evidence: ReadonlyArray<string> | undefined,
-): E2ERedactedEvidencePrefixCount[] {
+): E2ERedactedHashCount[] {
   const counts = new Map<string, number>();
   for (const entry of evidence ?? []) {
-    const prefix = evidencePrefix(entry);
-    counts.set(prefix, (counts.get(prefix) ?? 0) + 1);
+    const source = evidenceSource(entry);
+    counts.set(source, (counts.get(source) ?? 0) + 1);
   }
   return Array.from(counts.entries())
-    .map(([prefix, count]) => ({ prefix, count }))
-    .sort((left, right) => left.prefix.localeCompare(right.prefix));
+    .map(([source, count]) => ({ valueHash: hashString(source), count }))
+    .sort((left, right) => left.valueHash.hash.localeCompare(right.valueHash.hash));
 }
 
 function buildGoalSummaries(goals: ReadonlyArray<AgentGoal> | undefined): E2ERedactedGoalTrace[] {
-  return (goals ?? []).map((goal) => ({
-    id: goal.id,
-    status: goal.status,
-    ...(goal.completionPolicy ? { completionPolicy: goal.completionPolicy } : {}),
-    successCriteria: (goal.successCriteria ?? []).map(redactStructuralString),
-    evidenceCount: goal.evidence.length,
-    evidencePrefixCounts: buildEvidencePrefixCounts(goal.evidence),
-  }));
+  return (goals ?? []).map((goal) => {
+    const successCriteria = goal.successCriteria ?? [];
+    return {
+      goalIdHash: hashString(goal.id),
+      status: goal.status,
+      ...(goal.completionPolicy ? { completionPolicy: goal.completionPolicy } : {}),
+      successCriteriaCount: successCriteria.length,
+      successCriteriaHashes: successCriteria.map((criterion) => hashString(criterion.trim())),
+      evidenceCount: goal.evidence.length,
+      evidenceSourceHashCounts: buildEvidenceSourceHashCounts(goal.evidence),
+    };
+  });
 }
 
-function safeAuditDetail(
-  type: string,
-  detail: string | undefined,
-): {
-  detailHash?: E2ERedactedHash;
-  detailPreview?: string;
-} {
-  if (!detail?.trim()) {
-    return {};
-  }
-  const trimmed = detail.trim();
-  if (!SAFE_STRUCTURED_AUDIT_DETAIL_TYPES.has(type)) {
-    return {
-      detailHash: hashString(trimmed),
-    };
-  }
-  return {
-    detailHash: hashString(trimmed),
-    detailPreview:
-      trimmed.length > MAX_SAFE_PREVIEW_LENGTH
-        ? `${trimmed.slice(0, MAX_SAFE_PREVIEW_LENGTH)}...`
-        : trimmed,
-  };
+function optionalHash(value: string | undefined): E2ERedactedHash | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? hashString(trimmed) : undefined;
 }
 
 function buildAuditEventTrace(event: AgentRunControlGraphAuditEvent): E2ERedactedGraphAuditEvent {
+  const type = PUBLIC_GRAPH_AUDIT_TYPE_SET.has(event.type)
+    ? (event.type as E2ERedactedGraphAuditType)
+    : 'OTHER';
+  const typeHash = type === 'OTHER' ? hashString(event.type) : undefined;
+  const detailHash = optionalHash(event.detail);
   return {
-    type: event.type,
+    type,
+    ...(typeHash ? { typeHash } : {}),
     ...(event.iteration !== undefined ? { iteration: event.iteration } : {}),
-    ...safeAuditDetail(event.type, event.detail),
+    ...(detailHash ? { detailHash } : {}),
   };
 }
 
@@ -173,31 +195,42 @@ export function buildGraphSnapshotTrace(
     MAX_SELECTED_TOOL_SURFACE_EVENTS_PER_SNAPSHOT,
   ).map(buildAuditEventTrace);
   const performance = snapshot.performance;
+  const finalizationHoldReasonHash = optionalHash(snapshot.finalizationHoldReason);
+  const terminalReasonHash = optionalHash(snapshot.terminalReason);
+  const activeTaskIdHash = optionalHash(snapshot.activeTaskId);
+  const expectedToolNames = buildRedactedToolNameList(
+    (snapshot.expectedToolCalls ?? []).map((call) => call.name),
+  );
+  const lastModelToolNames = buildRedactedToolNameList(snapshot.lastModelToolNames ?? []);
+  const sessionActivatedToolNames = buildRedactedToolNameList(
+    snapshot.sessionActivatedToolNames ?? [],
+  );
   return {
     status: snapshot.status,
     iteration: snapshot.iteration ?? 0,
-    ...(snapshot.finalizationHoldReason
-      ? { finalizationHoldReason: snapshot.finalizationHoldReason }
-      : {}),
-    ...(snapshot.terminalReason ? { terminalReason: snapshot.terminalReason } : {}),
-    ...(snapshot.activeTaskId ? { activeTaskId: snapshot.activeTaskId } : {}),
-    goalIdsByStatus: buildGoalIdsByStatus(snapshot.goals),
+    ...(finalizationHoldReasonHash ? { finalizationHoldReasonHash } : {}),
+    ...(terminalReasonHash ? { terminalReasonHash } : {}),
+    ...(activeTaskIdHash ? { activeTaskIdHash } : {}),
+    goalIdHashesByStatus: buildGoalIdHashesByStatus(snapshot.goals),
     goalSummaries: buildGoalSummaries(snapshot.goals),
-    expectedToolNames: uniqueSorted((snapshot.expectedToolCalls ?? []).map((call) => call.name)),
+    expectedToolNames: expectedToolNames.names,
+    expectedToolNameHashes: expectedToolNames.nameHashes,
     observedToolResults: tailItems(
       sourceObservedToolResults,
       MAX_OBSERVED_TOOL_RESULTS_PER_SNAPSHOT,
     ).map((result) => ({
-      name: result.name,
+      ...buildRedactedToolName(result.name),
       failed: result.failed === true,
       canonicalized: result.canonicalized === true,
       graphApplied: result.graphApplied === true,
       evidenceCount: result.evidence?.length ?? 0,
-      evidencePrefixCounts: buildEvidencePrefixCounts(result.evidence),
+      evidenceSourceHashCounts: buildEvidenceSourceHashCounts(result.evidence),
     })),
     pendingAsyncCount: snapshot.pendingAsyncCount ?? 0,
-    lastModelToolNames: uniqueSorted(snapshot.lastModelToolNames ?? []),
-    sessionActivatedToolNames: uniqueSorted(snapshot.sessionActivatedToolNames ?? []),
+    lastModelToolNames: lastModelToolNames.names,
+    lastModelToolNameHashes: lastModelToolNames.nameHashes,
+    sessionActivatedToolNames: sessionActivatedToolNames.names,
+    sessionActivatedToolNameHashes: sessionActivatedToolNames.nameHashes,
     auditEventCount: sourceAuditEvents.length,
     selectedToolSurfaceEventCount: sourceAuditEvents.filter(
       (event) => event.type === TOOL_SURFACE_AUDIT_TYPE,

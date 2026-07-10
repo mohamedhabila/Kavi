@@ -5,27 +5,19 @@ export type E2ERedactedHash = {
   length: number;
 };
 
-export type E2ERedactedValuePreview = {
+export type E2ERedactedValueFingerprint = {
   fieldPath: string;
-  type: string;
-  hash: string;
-  preview?: string | number | boolean | null;
+  valueType: string;
+  valueHash: string;
+  count?: number;
 };
 
-export type E2ERedactedStructuralString = E2ERedactedHash & {
-  preview?: string;
-};
-
-export type E2ERedactedEvidencePrefixCount = {
-  prefix: string;
+export type E2ERedactedHashCount = {
+  valueHash: E2ERedactedHash;
   count: number;
 };
 
 const HASH_PREFIX = 'sha256';
-
-export const MAX_SAFE_PREVIEW_LENGTH = 160;
-
-const SAFE_STRING_PREVIEW_FIELD_PATHS = new Set(['status', 'code', 'errorClass']);
 
 export function stableHash(value: string): string {
   return `${HASH_PREFIX}:${createHash('sha256').update(value).digest('hex')}`;
@@ -35,14 +27,6 @@ export function hashString(value: string): E2ERedactedHash {
   return {
     hash: stableHash(value),
     length: value.length,
-  };
-}
-
-export function redactStructuralString(value: string): E2ERedactedStructuralString {
-  const trimmed = value.trim();
-  return {
-    ...hashString(trimmed),
-    ...(trimmed.length <= MAX_SAFE_PREVIEW_LENGTH ? { preview: trimmed } : {}),
   };
 }
 
@@ -151,38 +135,21 @@ export function readFieldPath(value: unknown, fieldPath: string): unknown {
   return current;
 }
 
-export function canPreviewStringField(fieldPath: string): boolean {
-  const segments = fieldPath.split('.');
-  const leafField = segments[segments.length - 1] ?? fieldPath;
-  return SAFE_STRING_PREVIEW_FIELD_PATHS.has(leafField);
-}
-
-export function buildValuePreview(
+export function buildValueFingerprint(
   fieldPath: string,
   value: unknown,
-  options?: { allowStringPreview?: boolean },
-): E2ERedactedValuePreview | null {
+  options?: { count?: number },
+): E2ERedactedValueFingerprint | null {
   if (value === undefined) {
     return null;
   }
   const serialized = stableStringify(value);
-  const type = valueType(value);
-  const preview: E2ERedactedValuePreview = {
+  return {
     fieldPath,
-    type,
-    hash: stableHash(serialized),
+    valueType: valueType(value),
+    valueHash: stableHash(serialized),
+    ...(options?.count !== undefined ? { count: options.count } : {}),
   };
-  if (
-    value === null ||
-    typeof value === 'boolean' ||
-    typeof value === 'number' ||
-    (options?.allowStringPreview === true &&
-      typeof value === 'string' &&
-      value.length <= MAX_SAFE_PREVIEW_LENGTH)
-  ) {
-    preview.preview = value;
-  }
-  return preview;
 }
 
 export function uniqueSorted(values: Iterable<string>): string[] {

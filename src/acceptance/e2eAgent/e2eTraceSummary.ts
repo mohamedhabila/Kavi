@@ -1,11 +1,11 @@
 import { getE2ENativeMobileFixtureStateSnapshot } from './e2eNativeMobileFixtures';
 import type { E2ERubric, E2EScenarioResult, E2EScenarioTurnTrace } from './types';
 import {
-  buildValuePreview,
+  buildValueFingerprint,
   hashString,
   tailItems,
   type E2ERedactedHash,
-  type E2ERedactedValuePreview,
+  type E2ERedactedValueFingerprint,
 } from './e2eTraceRedaction';
 import {
   buildGraphSnapshotTrace,
@@ -29,7 +29,7 @@ export type E2ERedactedTurnTrace = {
 };
 
 export type E2EScenarioTraceSummary = {
-  schemaVersion: 'e2e-redacted-trace-v1';
+  schemaVersion: 'e2e-redacted-trace-v2';
   fixtureId: string;
   conversationIdHash: E2ERedactedHash;
   completed: boolean;
@@ -43,7 +43,7 @@ export type E2EScenarioTraceSummary = {
   toolCalls: E2ERedactedToolCallTrace[];
   toolResults: E2ERedactedToolResultTrace[];
   graphSnapshots: E2ERedactedGraphSnapshotTrace[];
-  nativeFixtureState: E2ERedactedValuePreview[];
+  nativeFixtureStateFingerprints: E2ERedactedValueFingerprint[];
   turns: E2ERedactedTurnTrace[];
 };
 
@@ -51,28 +51,28 @@ const MAX_SCENARIO_GRAPH_SNAPSHOTS = 12;
 const MAX_TURN_GRAPH_SNAPSHOTS = 6;
 const MAX_NATIVE_FIXTURE_STATE_FIELDS = 96;
 
-function collectPrimitiveValuePreviews(
+function collectPrimitiveValueFingerprints(
   value: unknown,
   path: string[],
-  previews: E2ERedactedValuePreview[],
+  fingerprints: E2ERedactedValueFingerprint[],
 ): void {
-  if (previews.length >= MAX_NATIVE_FIXTURE_STATE_FIELDS) {
+  if (fingerprints.length >= MAX_NATIVE_FIXTURE_STATE_FIELDS) {
     return;
   }
   if (value && typeof value === 'object') {
     if (Array.isArray(value)) {
-      const preview = buildValuePreview(path.join('.'), value.length, {
-        allowStringPreview: false,
+      const fingerprint = buildValueFingerprint(path.join('.'), value, {
+        count: value.length,
       });
-      if (preview) {
-        previews.push(preview);
+      if (fingerprint) {
+        fingerprints.push(fingerprint);
       }
       return;
     }
     const record = value as Record<string, unknown>;
     for (const key of Object.keys(record).sort()) {
-      collectPrimitiveValuePreviews(record[key], [...path, key], previews);
-      if (previews.length >= MAX_NATIVE_FIXTURE_STATE_FIELDS) {
+      collectPrimitiveValueFingerprints(record[key], [...path, key], fingerprints);
+      if (fingerprints.length >= MAX_NATIVE_FIXTURE_STATE_FIELDS) {
         return;
       }
     }
@@ -83,18 +83,20 @@ function collectPrimitiveValuePreviews(
   if (!fieldPath) {
     return;
   }
-  const preview = buildValuePreview(fieldPath, value, {
-    allowStringPreview: false,
+  const isCount =
+    typeof value === 'number' && Number.isInteger(value) && value >= 0 && /Count$/.test(fieldPath);
+  const fingerprint = buildValueFingerprint(fieldPath, value, {
+    ...(isCount ? { count: value } : {}),
   });
-  if (preview) {
-    previews.push(preview);
+  if (fingerprint) {
+    fingerprints.push(fingerprint);
   }
 }
 
-function buildNativeFixtureStateTrace(): E2ERedactedValuePreview[] {
-  const previews: E2ERedactedValuePreview[] = [];
-  collectPrimitiveValuePreviews(getE2ENativeMobileFixtureStateSnapshot(), [], previews);
-  return previews;
+function buildNativeFixtureStateTrace(): E2ERedactedValueFingerprint[] {
+  const fingerprints: E2ERedactedValueFingerprint[] = [];
+  collectPrimitiveValueFingerprints(getE2ENativeMobileFixtureStateSnapshot(), [], fingerprints);
+  return fingerprints;
 }
 
 function buildTurnTrace(turn: E2EScenarioTurnTrace): E2ERedactedTurnTrace {
@@ -117,7 +119,7 @@ export function buildE2EScenarioTraceSummary(params: {
   const { result } = params;
   const lastGraph = result.graphSnapshots[result.graphSnapshots.length - 1];
   return {
-    schemaVersion: 'e2e-redacted-trace-v1',
+    schemaVersion: 'e2e-redacted-trace-v2',
     fixtureId: result.fixtureId,
     conversationIdHash: hashString(result.conversationId),
     completed: result.completed,
@@ -133,7 +135,7 @@ export function buildE2EScenarioTraceSummary(params: {
     graphSnapshots: tailItems(result.graphSnapshots, MAX_SCENARIO_GRAPH_SNAPSHOTS).map(
       buildGraphSnapshotTrace,
     ),
-    nativeFixtureState: buildNativeFixtureStateTrace(),
+    nativeFixtureStateFingerprints: buildNativeFixtureStateTrace(),
     turns: result.turnTraces.map(buildTurnTrace),
   };
 }
