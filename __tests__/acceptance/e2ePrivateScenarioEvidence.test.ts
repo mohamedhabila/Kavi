@@ -65,6 +65,7 @@ function buildPrivateResult(): E2EScenarioResult {
     turnTraces: [
       {
         turnIndex: 0,
+        lifecycleBefore: null,
         user: {
           messageId: 'private-user-message',
           text: 'PRIVATE-USER-SENTINEL',
@@ -152,6 +153,14 @@ describe('private E2E scenario evidence', () => {
     const serialized = JSON.stringify(evidence);
 
     expect(evidence.schemaVersion).toBe(E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION);
+    expect(evidence.scenario.requestedTurns).toEqual([
+      {
+        text: 'PRIVATE-REQUEST-SENTINEL',
+        route: 'production_auto',
+        lifecycleBefore: null,
+      },
+    ]);
+    expect(evidence.result.turns[0]?.lifecycleBefore).toBeNull();
     for (const sentinel of [
       'PRIVATE-REQUEST-SENTINEL',
       'PRIVATE-USER-SENTINEL',
@@ -165,6 +174,36 @@ describe('private E2E scenario evidence', () => {
     }
     expect(serialized).not.toContain('providerReplay');
     expect(serialized).not.toContain('initialMessages');
+  });
+
+  it('preserves a verified relaunch boundary in requested and observed private evidence', () => {
+    const lifecycleBefore = {
+      boundary: 'app_relaunch' as const,
+      chatStore: 'rehydrated' as const,
+      memoryStore: 'reopened' as const,
+    };
+    const result = buildPrivateResult();
+    const evidence = buildE2EPrivateScenarioEvidence({
+      scenario: {
+        ...SCENARIO,
+        userTurns: [
+          {
+            content: 'PRIVATE-REQUEST-SENTINEL',
+            route: 'forced_chitchat',
+            lifecycleBefore: 'app_relaunch',
+          },
+        ],
+      },
+      result: {
+        ...result,
+        turnTraces: [{ ...result.turnTraces[0]!, lifecycleBefore }],
+      },
+    });
+
+    expect(evidence.scenario.requestedTurns[0]).toMatchObject({
+      lifecycleBefore: 'app_relaunch',
+    });
+    expect(evidence.result.turns[0]?.lifecycleBefore).toEqual(lifecycleBefore);
   });
 
   it('writes unique owner-only artifacts only inside the configured private root', () => {
@@ -188,11 +227,22 @@ describe('private E2E scenario evidence', () => {
 
     expect(firstPath).not.toBe(secondPath);
     expect(readdirSync(configuredDir)).toHaveLength(2);
+    expect(statSync(join(cwd, '.private', 'evals')).mode & 0o777).toBe(0o700);
+    expect(statSync(configuredDir).mode & 0o777).toBe(0o700);
     expect(statSync(firstPath!).mode & 0o777).toBe(0o600);
     expect(JSON.parse(readFileSync(firstPath!, 'utf8'))).toMatchObject({
       evidenceId: 'attempt-1',
       result: { contentClass: 'private' },
     });
+    expect(() =>
+      writeE2EPrivateScenarioEvidence({
+        scenario: SCENARIO,
+        result,
+        env,
+        cwd,
+        evidenceId: 'attempt-1',
+      }),
+    ).toThrow('Private evidence id already exists');
   });
 
   it('does not write when unconfigured and rejects paths outside .private/evals', () => {
@@ -227,6 +277,22 @@ describe('private E2E scenario evidence', () => {
         cwd,
       }),
     ).toThrow(`${E2E_PRIVATE_EVIDENCE_DIR_ENV} must not escape .private/evals via symlink.`);
+  });
+
+  it('rejects a symlinked private root', () => {
+    const result = buildPrivateResult();
+    const outside = join(cwd, 'outside');
+    mkdirSync(outside, { recursive: true });
+    symlinkSync(outside, join(cwd, '.private'), 'dir');
+
+    expect(() =>
+      writeE2EPrivateScenarioEvidence({
+        scenario: SCENARIO,
+        result,
+        env: { [E2E_PRIVATE_EVIDENCE_DIR_ENV]: join(cwd, '.private', 'evals') },
+        cwd,
+      }),
+    ).toThrow(`${E2E_PRIVATE_EVIDENCE_DIR_ENV} private root must not be a symlink.`);
   });
 
   it('rejects mismatched scenario identity and classification', () => {

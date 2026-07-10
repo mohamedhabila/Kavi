@@ -215,6 +215,25 @@ references explicitly based at `retention_root`; each path includes its run id.
 The uploaded artifact includes that retention tree. It may contain structural
 redacted traces, but never raw or private traces.
 
+The current public trace contract is `e2e-redacted-trace-v2`. Each turn is a
+closed projection of the immutable run result: actual route and mode,
+completion states, hashed user and final-response identities, bounded AgentRun
+counters, memory deltas and persistence-receipt counts, native state
+fingerprints, and a verified lifecycle boundary when an app relaunch occurred.
+Raw text, raw IDs, memory values, provider payloads, and native arguments are
+excluded. Missing or unknown current-schema fields are rejected rather than
+silently omitted. A hash is an integrity fingerprint, not anonymization or
+permission to publish private input.
+
+Raw scenario evidence is local and opt-in. Set `E2E_PRIVATE_EVIDENCE_DIR` to a
+directory that resolves inside `.private/evals/` to write one unique
+`e2e-private-scenario-evidence-v2` file per attempt. The private file retains
+requested turns, final responses, exact memory and receipt evidence, tool and
+native results, graph state, and verified relaunch boundaries for diagnosis.
+Directories are owner-only, files are written atomically with mode `0600`,
+symlink escapes are rejected, and no private path is included in a public
+report. Never upload this directory as a public CI artifact.
+
 Partial report exchange is a private, current-schema-only transaction. Writers
 lock and atomically replace `e2e-partial-report-v2`; flush rejects legacy or
 unversioned entries. Public runs are built in staging directories and atomically

@@ -1,12 +1,12 @@
-import { chmodSync, mkdirSync, realpathSync } from 'fs';
+import { chmodSync, existsSync, mkdirSync, realpathSync } from 'fs';
 import { randomUUID } from 'crypto';
-import { join, relative, resolve, sep } from 'path';
+import { dirname, join, relative, resolve, sep } from 'path';
 
 import { atomicWriteFileSync } from '../../../scripts/e2eReport/fileTransaction';
 import type { E2EScenario, E2EScenarioResult, E2EScenarioTurnTrace } from './types';
 
 export const E2E_PRIVATE_EVIDENCE_DIR_ENV = 'E2E_PRIVATE_EVIDENCE_DIR';
-export const E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION = 'e2e-private-scenario-evidence-v1';
+export const E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION = 'e2e-private-scenario-evidence-v2';
 
 export type E2EPrivateScenarioEvidence = {
   schemaVersion: typeof E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION;
@@ -16,7 +16,11 @@ export type E2EPrivateScenarioEvidence = {
     id: string;
     contentClass: E2EScenario['contentClass'];
     execution: E2EScenario['execution'];
-    requestedTurns: ReadonlyArray<{ text: string; route: E2EScenario['execution']['route'] }>;
+    requestedTurns: ReadonlyArray<{
+      text: string;
+      route: E2EScenario['execution']['route'];
+      lifecycleBefore: 'app_relaunch' | null;
+    }>;
     rubrics: E2EScenario['rubrics'];
   };
   result: {
@@ -31,6 +35,7 @@ export type E2EPrivateScenarioEvidence = {
     memoryFinalState: E2EScenarioResult['memoryFinalState'];
     turns: ReadonlyArray<{
       turnIndex: number;
+      lifecycleBefore: E2EScenarioTurnTrace['lifecycleBefore'];
       user: E2EScenarioTurnTrace['user'];
       route: E2EScenarioTurnTrace['route'];
       finalAssistant: E2EScenarioTurnTrace['finalAssistant'];
@@ -56,14 +61,19 @@ function requestedTurns(
   return turns.map((turn) => ({
     text: turn.content,
     route: turn.route ?? scenario.execution.route,
+    lifecycleBefore: turn.lifecycleBefore ?? null,
   }));
 }
 
 function projectTurn(
   turn: E2EScenarioTurnTrace,
 ): E2EPrivateScenarioEvidence['result']['turns'][number] {
+  if (turn.lifecycleBefore === undefined) {
+    throw new Error('Private evidence turn lifecycleBefore is missing.');
+  }
   return {
     turnIndex: turn.turnIndex,
+    lifecycleBefore: turn.lifecycleBefore,
     user: turn.user,
     route: turn.route,
     finalAssistant: turn.finalAssistant,
@@ -128,18 +138,37 @@ function isWithin(root: string, candidate: string): boolean {
 }
 
 function resolvePrivateEvidenceDirectory(cwd: string, configuredPath: string): string {
+  const realCwd = realpathSync(cwd);
+  const privateParent = resolve(cwd, '.private');
   const privateRoot = resolve(cwd, '.private', 'evals');
   const requested = resolve(cwd, configuredPath);
   if (!isWithin(privateRoot, requested)) {
     throw new Error(`${E2E_PRIVATE_EVIDENCE_DIR_ENV} must resolve inside .private/evals.`);
   }
+
+  mkdirSync(privateParent, { recursive: true, mode: 0o700 });
+  if (realpathSync(privateParent) !== resolve(realCwd, '.private')) {
+    throw new Error(`${E2E_PRIVATE_EVIDENCE_DIR_ENV} private root must not be a symlink.`);
+  }
+  chmodSync(realpathSync(privateParent), 0o700);
   mkdirSync(privateRoot, { recursive: true, mode: 0o700 });
-  mkdirSync(requested, { recursive: true, mode: 0o700 });
   const realRoot = realpathSync(privateRoot);
+  if (realRoot !== resolve(realCwd, '.private', 'evals')) {
+    throw new Error(`${E2E_PRIVATE_EVIDENCE_DIR_ENV} private root must not be a symlink.`);
+  }
+
+  let existingAncestor = requested;
+  while (!existsSync(existingAncestor)) existingAncestor = dirname(existingAncestor);
+  if (!isWithin(realRoot, realpathSync(existingAncestor))) {
+    throw new Error(`${E2E_PRIVATE_EVIDENCE_DIR_ENV} must not escape .private/evals via symlink.`);
+  }
+  mkdirSync(requested, { recursive: true, mode: 0o700 });
   const realRequested = realpathSync(requested);
   if (!isWithin(realRoot, realRequested)) {
     throw new Error(`${E2E_PRIVATE_EVIDENCE_DIR_ENV} must not escape .private/evals via symlink.`);
   }
+  chmodSync(realRoot, 0o700);
+  chmodSync(realRequested, 0o700);
   return realRequested;
 }
 
@@ -167,6 +196,9 @@ export function writeE2EPrivateScenarioEvidence(params: {
   );
   if (relative(outputDir, outputPath).startsWith('..')) {
     throw new Error('Private evidence output escaped its configured directory.');
+  }
+  if (existsSync(outputPath)) {
+    throw new Error('Private evidence id already exists in the configured directory.');
   }
   atomicWriteFileSync(outputPath, JSON.stringify(evidence, null, 2), 'utf8');
   chmodSync(outputPath, 0o600);

@@ -225,6 +225,7 @@ E2E_SCENARIO_IDS="direct-agentdojo-untrusted-workspace-note direct-bfcl-v4-paral
 | `E2E_REPORT_PATH`          | No             | JSON run report path (default `.artifacts/e2e-agent-report.json`)                      |
 | `E2E_REPORT_SUMMARY_PATH`  | No             | Markdown summary path (default `.artifacts/e2e-agent-report.md`)                       |
 | `E2E_SCENARIO_IDS`         | No             | Comma/whitespace-separated scenario IDs for targeted assessment                        |
+| `E2E_PRIVATE_EVIDENCE_DIR` | No             | Raw local evidence path inside `.private/evals/`; never upload it publicly             |
 
 The harness scripts (`eval:e2e`, `verify:strict:e2e`) load `.env.local` via
 `scripts/load-local-env.js`. They are never bundled into the app.
@@ -249,6 +250,14 @@ with the root report, so references do not dangle. Absolute workstation paths
 are not part of the public schema. Raw or private traces are excluded by the
 public artifact writer and must remain outside the public E2E retention
 directory.
+
+For exact local diagnosis, set
+`E2E_PRIVATE_EVIDENCE_DIR=.private/evals/<run-name>`. The runner then writes an
+atomic, owner-only `e2e-private-scenario-evidence-v2` file per attempt with raw
+turn, result, memory-receipt, native, graph, and lifecycle evidence. The setting
+is intentionally opt-in; the directory is gitignored, cannot escape the private
+root through `..` or symlinks, is never referenced by the public report, and
+must not be included in uploaded CI artifacts.
 
 Parallel scenario workers exchange entries through the private
 `e2e-partial-report-v2` envelope. The writer accepts only
