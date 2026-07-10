@@ -72,6 +72,7 @@ export async function runOrchestratorGraphSession(params: {
   const runtimeContextNote = buildRuntimeContextNote();
 
   const {
+    currentUserMessage,
     latestUserMessageText,
     livingMemory,
     requestFrame: structuralRequestFrame,
@@ -182,6 +183,7 @@ export async function runOrchestratorGraphSession(params: {
       thinkingLevel,
       toolRuntime: {
         availableToolNames,
+        ...(currentUserMessage ? { currentUserMessage } : {}),
         memoryConversationId: sharedConversationId,
         runtimeToolAvailability,
         toolCallHistory,

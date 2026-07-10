@@ -39,6 +39,7 @@ import {
 } from './graphObservability';
 import { materializeToolEffectCompletionGoals } from './toolEffectGoalMaterialization';
 import type { AgentControlGraphWorkflowToolResultProgress } from './workflowToolResultProgress';
+import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
 
 type TerminalGraphEvent = Extract<
   AgentControlGraphEvent,
@@ -79,6 +80,7 @@ export interface ExecuteAgentControlGraphToolTurnParams {
   activeProvider: LlmProviderConfig;
   allProviders?: LlmProviderConfig[];
   activeModel: string;
+  currentUserMessage?: CodeOwnedCurrentUserMessage;
   memoryConversationId: string;
   workspaceConversationId?: string;
   workspaceReadFallbackConversationId?: string;
@@ -230,6 +232,7 @@ export async function executeAgentControlGraphToolTurn(
     activeProvider: params.activeProvider,
     allProviders: params.allProviders,
     activeModel: params.activeModel,
+    currentUserMessage: params.currentUserMessage,
     memoryConversationId: params.memoryConversationId,
     workspaceConversationId: params.workspaceConversationId,
     workspaceReadFallbackConversationId: params.workspaceReadFallbackConversationId,

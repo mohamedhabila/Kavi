@@ -29,6 +29,7 @@ export async function executePreparedAgentControlGraphPendingToolTurn(params: {
     activeProvider: params.runtime.activeProvider,
     allProviders: params.iterationParams.allProviders,
     activeModel: params.runtime.activeModel,
+    currentUserMessage: params.iterationParams.toolRuntime.currentUserMessage,
     memoryConversationId: params.iterationParams.toolRuntime.memoryConversationId,
     workspaceConversationId: params.iterationParams.toolRuntime.workspaceConversationId,
     workspaceReadFallbackConversationId:

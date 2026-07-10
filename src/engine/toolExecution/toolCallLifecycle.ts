@@ -156,6 +156,7 @@ export async function executeToolCallLifecycle(
         availableToolNames: Array.from(params.availableToolNames),
         controlGraphGoals: params.controlGraphGoals,
         agentRunId: params.agentRunId,
+        currentUserMessage: params.currentUserMessage,
       },
     );
     if (!isToolResultErrorLike(result)) {

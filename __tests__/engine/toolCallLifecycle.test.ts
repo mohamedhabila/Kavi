@@ -113,6 +113,20 @@ describe('executeToolCallLifecycle', () => {
     });
   });
 
+  it('passes the code-owned current user message only through execution context', async () => {
+    mockedExecuteTool.mockResolvedValueOnce('{}');
+    const currentUserMessage = { id: 'user-current', text: 'Raw current request.' };
+
+    await executeToolCallLifecycle(codeLifecycle('javascript', { currentUserMessage }));
+
+    expect(mockedExecuteTool).toHaveBeenCalledWith(
+      'javascript',
+      expect.any(String),
+      'conv-1',
+      expect.objectContaining({ currentUserMessage }),
+    );
+  });
+
   it('returns schema-grounded retry details for structured missing required arguments', async () => {
     mockedExecuteTool.mockResolvedValueOnce(
       JSON.stringify({

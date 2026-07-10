@@ -25,6 +25,7 @@ import {
   stripRuntimeContextFromUserContent,
 } from './prompts/orchestratorPromptSections';
 import { repairModelVisibleToolResultTranscript } from './orchestratorToolTranscript';
+import type { CodeOwnedCurrentUserMessage } from './tools/toolExecutionContext';
 
 type LoggerLike = {
   devLog: (message: string, payload?: unknown) => void;
@@ -146,6 +147,7 @@ export async function prepareOrchestratorRequestBundle(params: {
   memoryRetrievalStrategy?: MemoryRetrievalStrategy;
   memoryContextStrategy?: MemoryContextStrategy;
 }): Promise<{
+  currentUserMessage?: CodeOwnedCurrentUserMessage;
   latestUserMessageText: string;
   livingMemory: LivingMemoryBridgeOutput | null;
   memoryConsistencyBarrier: Awaited<
@@ -277,6 +279,14 @@ export async function prepareOrchestratorRequestBundle(params: {
   }
 
   return {
+    ...(requestContext.requestContextLastUserMessage
+      ? {
+          currentUserMessage: {
+            id: requestContext.requestContextLastUserMessage.id,
+            text: requestContext.requestContextLastUserMessage.content,
+          },
+        }
+      : {}),
     latestUserMessageText: requestContext.lastUserMessageText,
     livingMemory: memoryAccessContext.livingMemory,
     memoryConsistencyBarrier: memoryAccessContext.consistencyBarrier,

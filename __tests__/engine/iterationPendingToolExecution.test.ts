@@ -126,4 +126,23 @@ describe('iterationPendingToolExecution', () => {
       'file_edit',
     ]);
   });
+
+  it('passes only the code-owned current user message into tool execution', async () => {
+    const currentUserMessage = { id: 'user-current', text: 'Raw current request.' };
+    await executePreparedAgentControlGraphPendingToolTurn(
+      createParams({
+        iterationParams: {
+          ...createParams().iterationParams,
+          toolRuntime: {
+            ...createParams().iterationParams.toolRuntime,
+            currentUserMessage,
+          },
+        },
+      }),
+    );
+
+    expect(mockedExecuteAgentControlGraphToolTurn.mock.calls[0]?.[0]?.currentUserMessage).toBe(
+      currentUserMessage,
+    );
+  });
 });

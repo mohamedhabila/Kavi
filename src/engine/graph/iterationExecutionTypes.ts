@@ -28,6 +28,7 @@ import type { PrepareAgentControlGraphModelTurnParams } from './prepareAgentCont
 import type { AgentTurnCompactionEngine } from './agentTurnRequestBudget';
 import type { AgentControlGraphWorkflowToolResultProgress } from './workflowToolResultProgress';
 import type { ThinkingLevel } from '../thinking';
+import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
 
 export type IterationCallbacks = {
   onAssistantMessage: (
@@ -125,6 +126,7 @@ export type GraphIterationBindings = {
 
 export type ToolRuntimeBindings = {
   availableToolNames: ReadonlySet<string>;
+  currentUserMessage?: CodeOwnedCurrentUserMessage;
   memoryConversationId: string;
   runtimeToolAvailability: RuntimeToolAvailabilityContext;
   toolCallHistory: ToolCallRecord[];

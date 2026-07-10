@@ -1,6 +1,11 @@
 import type { AgentGoal } from '../../types/agentRun';
 import type { LlmProviderConfig } from '../../types/provider';
 
+export interface CodeOwnedCurrentUserMessage {
+  id: string;
+  text: string;
+}
+
 export interface ToolExecutionContext {
   provider?: LlmProviderConfig;
   allProviders?: LlmProviderConfig[];
@@ -12,6 +17,8 @@ export interface ToolExecutionContext {
   availableToolNames?: string[];
   controlGraphGoals?: ReadonlyArray<AgentGoal>;
   agentRunId?: string;
+  /** Exact raw request message selected by product code; never provider supplied. */
+  currentUserMessage?: CodeOwnedCurrentUserMessage;
 }
 
 export type ResolvedToolWorkspaceContext = {

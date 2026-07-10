@@ -7,6 +7,7 @@ import type { TrackedAsyncOperation } from '../pendingAsyncOperations';
 import type { RuntimeToolAvailabilityContext } from '../tools/runtimeAvailability';
 import type { RuntimeToolCallInput } from './toolExecutionMessages';
 import type { ToolEffectReceipt } from '../../types/toolEffectReceipt';
+import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
 
 export type ToolExecutionLifecycleIdPrefixes = {
   blocked: string;
@@ -34,6 +35,7 @@ export type ToolExecutionLifecycleParams = {
   provider: LlmProviderConfig;
   allProviders?: LlmProviderConfig[];
   model: string;
+  currentUserMessage?: CodeOwnedCurrentUserMessage;
   memoryConversationId: string;
   workspaceConversationId?: string;
   workspaceReadFallbackConversationId?: string;

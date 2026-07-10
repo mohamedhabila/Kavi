@@ -93,6 +93,20 @@ function withExecutionMemoryContext(
     context,
   );
   const taskId = executionMemoryContext.taskId;
+  const currentUserMessage = context?.currentUserMessage;
+  const rememberContext: MemoryRememberExecutionContext = {
+    ...(currentUserMessage
+      ? {
+          requestEvidence: {
+            memoryConversationId,
+            sourceThreadId: conversationId,
+            taskId,
+            userMessageId: currentUserMessage.id,
+            userMessageText: currentUserMessage.text,
+          },
+        }
+      : {}),
+  };
   const scope = source.scope as MemoryRememberArgs['scope'];
   const common = {
     subject: source.subject as string,
@@ -107,11 +121,12 @@ function withExecutionMemoryContext(
     sourceMessageId: null,
     sourceRunId,
   };
-  if (scope === 'global') return { args: common, context: {} };
+  if (scope === 'global') return { args: common, context: rememberContext };
   if (scope === 'persona') {
     return {
       args: common,
       context: {
+        ...rememberContext,
         personaId: executionMemoryContext.personaId,
       },
     };
@@ -123,7 +138,7 @@ function withExecutionMemoryContext(
         originConversationId: memoryConversationId,
         originThreadId: conversationId,
       },
-      context: {},
+      context: rememberContext,
     };
   }
   if (scope === 'session') {
@@ -134,10 +149,10 @@ function withExecutionMemoryContext(
         originThreadId: conversationId,
         originTaskId: taskId ?? null,
       },
-      context: {},
+      context: rememberContext,
     };
   }
-  return { args: common, context: {} };
+  return { args: common, context: rememberContext };
 }
 
 export async function executeBuiltinMemoryTool(

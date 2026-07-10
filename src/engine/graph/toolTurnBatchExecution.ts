@@ -24,6 +24,7 @@ import type { PendingAgentToolCall } from './modelTurnExecutionTypes';
 import { parseAgentControlGraphSessionsYieldResult } from './sessionsYield';
 import { shouldExecuteToolBatchInParallel } from './toolBatchExecutionPolicy';
 import type { ToolExecutionOutcome } from './toolExecutionOutcomeResolution';
+import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
 
 export async function executeAgentControlGraphToolBatch(params: {
   executableToolCalls: ReadonlyArray<PendingAgentToolCall>;
@@ -32,6 +33,7 @@ export async function executeAgentControlGraphToolBatch(params: {
   activeProvider: LlmProviderConfig;
   allProviders?: LlmProviderConfig[];
   activeModel: string;
+  currentUserMessage?: CodeOwnedCurrentUserMessage;
   memoryConversationId: string;
   workspaceConversationId?: string;
   workspaceReadFallbackConversationId?: string;
@@ -115,6 +117,7 @@ export async function executeAgentControlGraphToolBatch(params: {
       provider: params.activeProvider,
       allProviders: params.allProviders,
       model: params.activeModel,
+      currentUserMessage: params.currentUserMessage,
       memoryConversationId: params.memoryConversationId,
       workspaceConversationId: params.workspaceConversationId,
       workspaceReadFallbackConversationId: params.workspaceReadFallbackConversationId,

@@ -172,6 +172,32 @@ describe('toolTurnBatchExecution', () => {
     expect(mockedExecuteToolCallLifecycle).toHaveBeenCalledTimes(1);
   });
 
+  it('passes the code-owned current user message through the batch boundary', async () => {
+    const currentUserMessage = { id: 'user-current', text: 'Raw current request.' };
+    mockedExecuteToolCallLifecycle.mockImplementation(async (params: any) => {
+      expect(params.currentUserMessage).toBe(currentUserMessage);
+      return {
+        toolCallId: params.tc.id,
+        effectiveToolName: params.tc.name,
+        result: '{}',
+        toolMessage: buildToolResultMessage({
+          idPrefix: 'tool',
+          toolCallId: params.tc.id,
+          content: '{}',
+          toolCall: {
+            id: params.tc.id,
+            name: params.tc.name,
+            arguments: params.tc.arguments,
+            status: 'completed',
+          },
+        }),
+      };
+    });
+
+    await executeAgentControlGraphToolBatch(createParams({ currentUserMessage }));
+    expect(mockedExecuteToolCallLifecycle).toHaveBeenCalledTimes(1);
+  });
+
   it('blocks an effect until an active blocking goal owns its exact completion contract', async () => {
     mockedExecuteToolCallLifecycle.mockImplementation(async (params: any) => {
       const blocked = params.workflowToolCallBlocker(params.tc.name, params.tc.arguments);
