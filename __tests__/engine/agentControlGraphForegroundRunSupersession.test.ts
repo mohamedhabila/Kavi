@@ -1,0 +1,153 @@
+import { runOrchestrator } from '../../src/engine/orchestrator';
+import { executeForegroundConversationRun } from '../../src/engine/graph/foregroundRun/execution';
+import { resolveForegroundRunPreflight } from '../../src/engine/graph/foregroundRun/preflight';
+import { createForegroundRequestRegistry } from '../../src/engine/graph/foregroundRun/requestRegistry';
+import { __resetOnDeviceGuardsForTests } from '../../src/services/memory/onDeviceGuards';
+import {
+  createConversation,
+  createExecutionContext,
+  createProvider,
+} from '../helpers/foregroundRunExecutionContextHarness';
+
+jest.mock('../../src/engine/orchestrator', () => ({
+  runOrchestrator: jest.fn(),
+}));
+
+jest.mock('../../src/engine/graph/foregroundRun/preflight', () => ({
+  resolveForegroundRunPreflight: jest.fn(),
+}));
+
+const mockedRunOrchestrator = runOrchestrator as jest.MockedFunction<typeof runOrchestrator>;
+const mockedResolveForegroundRunPreflight = resolveForegroundRunPreflight as jest.MockedFunction<
+  typeof resolveForegroundRunPreflight
+>;
+
+function useRealRequestRegistry(
+  context: ReturnType<typeof createExecutionContext>,
+): void {
+  const registry = createForegroundRequestRegistry();
+  context.requests = {
+    abortForegroundRequestForConversation: (conversationId, reason) =>
+      registry.abortForConversation(conversationId, reason),
+    clearForegroundRequest: (conversationId, requestId, controller) =>
+      registry.clear({ conversationId, requestId, controller }),
+    isCurrentForegroundRequest: (conversationId, requestId, controller) =>
+      registry.isCurrent({ conversationId, requestId, controller }),
+    registerForegroundRequest: (requestId, conversationId, controller) =>
+      registry.register({ conversationId, requestId, controller }),
+    setStreamingMessageId: (conversationId, requestId, controller, messageId) =>
+      registry.setStreamingMessageId({ conversationId, requestId, controller }, messageId),
+  };
+}
+
+function configureReadyPreflight(
+  conversation: ReturnType<typeof createConversation>,
+  provider: ReturnType<typeof createProvider>,
+): void {
+  mockedResolveForegroundRunPreflight.mockResolvedValue({
+    kind: 'ready',
+    provider,
+    providerWithApiKey: provider,
+    model: provider.model,
+    finalizationProviderContext: {
+      provider,
+      model: provider.model,
+      systemPromptText: conversation.systemPrompt,
+      conversationId: conversation.id,
+    },
+  });
+}
+
+describe('foreground run supersession', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    __resetOnDeviceGuardsForTests();
+  });
+
+  it('does not surface a wait error from a request that is no longer current', async () => {
+    const conversation = createConversation({ mode: 'agentic' });
+    const provider = createProvider('target-provider', 'target-model');
+    const context = createExecutionContext({
+      conversation,
+      providers: [provider],
+      ensureCanonicalConversation: jest.fn(),
+      recordConversationTurnMemory: jest.fn(),
+    });
+    const setChatError = jest.fn();
+    context.helpers.setChatError = setChatError;
+    context.requests.isCurrentForegroundRequest.mockReturnValue(false);
+    context.durability.waitForProjectionAvailability.mockRejectedValueOnce(
+      new Error('foreground_model_projection_wait_cancelled'),
+    );
+    configureReadyPreflight(conversation, provider);
+
+    await executeForegroundConversationRun({ context, conversationId: conversation.id });
+
+    expect(setChatError).not.toHaveBeenCalled();
+    expect(context.store.startAgentRun).not.toHaveBeenCalled();
+    expect(context.durability.createModelExecution).not.toHaveBeenCalled();
+    expect(mockedRunOrchestrator).not.toHaveBeenCalled();
+  });
+
+  it('lets the newest turn win when supersession happens before the old projection claim', async () => {
+    const conversation = createConversation({ mode: 'agentic' });
+    const provider = createProvider('target-provider', 'target-model');
+    const context = createExecutionContext({
+      conversation,
+      providers: [provider],
+      ensureCanonicalConversation: jest.fn(),
+      recordConversationTurnMemory: jest.fn(),
+    });
+    useRealRequestRegistry(context);
+    configureReadyPreflight(conversation, provider);
+    context.store.startAgentRun
+      .mockReturnValueOnce('run-first')
+      .mockReturnValueOnce('run-second');
+    context.store.completeAgentRun = jest.fn();
+    const defaultCreateModelExecution =
+      context.durability.createModelExecution.getMockImplementation()!;
+    let releaseFirstCreate = () => {};
+    const firstCreateBarrier = new Promise<void>((resolve) => {
+      releaseFirstCreate = resolve;
+    });
+    context.durability.createModelExecution.mockImplementationOnce(async (input) => {
+      await firstCreateBarrier;
+      return defaultCreateModelExecution(input);
+    });
+    mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
+      callbacks.onDone();
+    });
+
+    const first = executeForegroundConversationRun({
+      context,
+      conversationId: conversation.id,
+    });
+    while (context.durability.createModelExecution.mock.calls.length < 1) {
+      await Promise.resolve();
+    }
+    const second = executeForegroundConversationRun({
+      context,
+      conversationId: conversation.id,
+    });
+
+    await second;
+    releaseFirstCreate();
+    await first;
+
+    expect(mockedRunOrchestrator).toHaveBeenCalledTimes(1);
+    expect(context.durability.completeModelExecution).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'succeeded' }),
+    );
+    expect(context.durability.completeModelExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lease: expect.objectContaining({ expectedStatus: 'queued' }),
+        status: 'cancelled',
+      }),
+    );
+    expect(context.store.completeAgentRun).toHaveBeenCalledWith(
+      conversation.id,
+      expect.objectContaining({ status: 'cancelled' }),
+      'run-first',
+    );
+  });
+});

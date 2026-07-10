@@ -107,8 +107,9 @@ export async function executeForegroundConversationRun(
       signal: abortController.signal,
     });
   } catch (error: unknown) {
-    clearForegroundRequestIfCurrent();
-    context.helpers.setChatError(error instanceof Error ? error.message : String(error));
+    if (clearForegroundRequestIfCurrent()) {
+      context.helpers.setChatError(error instanceof Error ? error.message : String(error));
+    }
     return;
   }
   if (!isCurrentRunInvocation()) {
@@ -159,6 +160,7 @@ export async function executeForegroundConversationRun(
   let projectionClaimed = false;
   let journalTerminal = false;
   let projectionReleased = false;
+  let closingSupersededGeneration = false;
   const guardRunCallback = () =>
     isCurrentRunInvocation() &&
     (!projectionOwner ||
@@ -344,6 +346,12 @@ export async function executeForegroundConversationRun(
         thinkingLevel: context.state.thinkingLevel,
       },
     });
+    if (!isCurrentRunInvocation()) {
+      const terminalStatus = runtime.terminalLifecycle.handleCatch(new Error('Request cancelled'));
+      closingSupersededGeneration = true;
+      await closeModelGeneration(terminalStatus);
+      return;
+    }
     projectionOwner = foregroundModelProjectionOwnerForLease(executionLease);
     const claim = context.durability.claimModelProjection({
       conversationId,
@@ -368,10 +376,19 @@ export async function executeForegroundConversationRun(
     if (!context.durability.ownsModelProjection(conversationId, projectionOwner)) {
       throw new Error('foreground_model_projection_ownership_changed');
     }
+    if (!isCurrentRunInvocation()) {
+      const terminalStatus = runtime.terminalLifecycle.handleCatch(new Error('Request cancelled'));
+      closingSupersededGeneration = true;
+      await closeModelGeneration(terminalStatus);
+      return;
+    }
     executionLease = await context.durability.activateModelExecution({
       lease: executionLease,
     });
   } catch (error: unknown) {
+    if (closingSupersededGeneration) {
+      throw error;
+    }
     const ownsClaim =
       projectionOwner &&
       context.durability.ownsModelProjection(conversationId, projectionOwner);
