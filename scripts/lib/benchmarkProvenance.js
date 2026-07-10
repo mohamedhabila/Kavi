@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const childProcess = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const Ajv2020 = require('ajv/dist/2020');
@@ -48,9 +49,7 @@ function validateSchema(value, schema) {
       (error) => `${formatInstancePath(error.instancePath, 'provenance')}: ${error.message}`,
     );
   } catch (error) {
-    return [
-      `benchmarkProvenanceSchema: ${error instanceof Error ? error.message : String(error)}`,
-    ];
+    return [`benchmarkProvenanceSchema: ${error instanceof Error ? error.message : String(error)}`];
   }
 }
 
@@ -68,25 +67,26 @@ function collectFiles(projectRoot, relativeRoot) {
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
     throw new Error(`adapter root must be a real directory: ${relativeRoot}`);
   }
-  const files = [];
-  function visit(directory) {
-    for (const entry of fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) =>
-      a.name.localeCompare(b.name),
-    )) {
-      const absolutePath = path.join(directory, entry.name);
-      if (entry.isSymbolicLink()) {
-        throw new Error(`adapter source must not contain symlinks: ${absolutePath}`);
-      }
-      if (entry.isDirectory()) {
-        visit(absolutePath);
-      } else if (entry.isFile()) {
-        files.push(absolutePath);
-      } else {
-        throw new Error(`adapter source must contain only files and directories: ${absolutePath}`);
-      }
+  const output = childProcess.execFileSync(
+    'git',
+    ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', relativeToProject],
+    { cwd: projectRoot, encoding: 'utf8' },
+  );
+  const files = output
+    .split('\0')
+    .filter(Boolean)
+    .map((relativePath) => path.resolve(projectRoot, relativePath))
+    .filter(
+      (absolutePath) =>
+        absolutePath === absoluteRoot || absolutePath.startsWith(`${absoluteRoot}${path.sep}`),
+    )
+    .sort((left, right) => left.localeCompare(right));
+  for (const absolutePath of files) {
+    const stat = fs.lstatSync(absolutePath);
+    if (!stat.isFile() || stat.isSymbolicLink()) {
+      throw new Error(`adapter source must contain only real files: ${absolutePath}`);
     }
   }
-  visit(absoluteRoot);
   if (files.length === 0) throw new Error(`adapter root is empty: ${relativeRoot}`);
   return files;
 }
@@ -170,7 +170,10 @@ function validateAdapter(adapter, index, projectRoot, failures) {
     ['adapter.roots', adapter.adapter?.roots],
     ['upstream.allowedInstalledChanges', adapter.upstream?.allowedInstalledChanges],
     ['data.integrity', adapter.data?.integrity?.map((entry) => entry.id)],
-    ['dependencyReproducibility.files', adapter.dependencyReproducibility?.files?.map((entry) => entry.path)],
+    [
+      'dependencyReproducibility.files',
+      adapter.dependencyReproducibility?.files?.map((entry) => entry.path),
+    ],
     ['runRequirements', adapter.runRequirements],
   ]) {
     if (Array.isArray(values) && !isSortedUnique(values)) {
@@ -256,9 +259,7 @@ function checkBenchmarkProvenance(projectRoot) {
       projectRoot,
     );
   } catch (error) {
-    return [
-      `benchmarkProvenance: ${error instanceof Error ? error.message : String(error)}`,
-    ];
+    return [`benchmarkProvenance: ${error instanceof Error ? error.message : String(error)}`];
   }
 }
 

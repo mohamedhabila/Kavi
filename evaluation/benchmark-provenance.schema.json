@@ -4,14 +4,7 @@
   "title": "Kavi enabled benchmark provenance registry",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "$schema",
-    "kind",
-    "schemaVersion",
-    "reviewedAt",
-    "claimPolicy",
-    "adapters"
-  ],
+  "required": ["$schema", "kind", "schemaVersion", "reviewedAt", "claimPolicy", "adapters"],
   "properties": {
     "$schema": {
       "const": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/benchmark-provenance.schema.json"
@@ -71,10 +64,7 @@
         "sourceUrl": { "type": "string", "format": "uri" },
         "redistribution": {
           "type": "string",
-          "enum": [
-            "permitted_with_apache_2_0_conditions",
-            "permitted_with_mit_notice"
-          ]
+          "enum": ["permitted_with_apache_2_0_conditions", "permitted_with_mit_notice"]
         }
       }
     },
@@ -193,7 +183,9 @@
               "uniqueItems": true,
               "items": { "$ref": "#/$defs/relativePath" }
             },
-            "sourceDigestAlgorithm": { "const": "sha256_path_nul_bytes_nul_v1" },
+            "sourceDigestAlgorithm": {
+              "const": "sha256_versionable_path_nul_bytes_nul_v2"
+            },
             "sourceSha256": { "$ref": "#/$defs/sha256" },
             "modifiesUpstream": { "const": true }
           }

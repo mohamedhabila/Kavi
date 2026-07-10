@@ -47,9 +47,11 @@ An adapter is enabled only when it appears in the provenance registry. The
 registry pins the upstream code and data revisions, distinguishes code and data
 licenses, records dependency-lock and container status, names every permitted
 upstream installation change, and identifies the upstream submission route.
-The validator also hashes every checked-in adapter source file using the sorted
-project-relative path, a NUL byte, the file bytes, and a trailing NUL byte.
-Source changes therefore require an explicit provenance review.
+The validator hashes every Git-versionable adapter source file—tracked files
+plus non-ignored new files—using the sorted project-relative path, a NUL byte,
+the file bytes, and a trailing NUL byte. Ignored caches and local runtime
+artifacts cannot make the digest machine-dependent. Source changes therefore
+require an explicit provenance review.
 
 The default validation remains network-free and does not inspect ignored
 `.private` checkouts. A candidate run must separately prove that its app and
@@ -319,17 +321,17 @@ fields from a post-execution frame is not a valid substitute.
 
 The closed frame has ten fields:
 
-| Field                  | Meaning                                                                    |
-| ---------------------- | -------------------------------------------------------------------------- |
-| `goal`                 | Requested outcome or subgoals.                                             |
-| `entities`             | People, objects, apps, locations, records, or other referenced entities.   |
-| `constraints`          | Hard limits the result or execution must respect.                          |
-| `preferences`          | Soft choices that should guide an otherwise valid result.                  |
-| `missingInformation`   | Facts that must be clarified before a safe or correct next action.         |
-| `requestedAction`      | Closed action class such as answer, clarify, plan, execute, or remember.   |
-| `requestedMode`        | Chitchat, agentic, either, or clarification before routing.                |
-| `approvalRisk`         | No approval, approval required, prohibited, or unknown.                    |
-| `temporalRequirements` | Deadlines, ordering, recurrence, duration, or explicit absence of timing.  |
+| Field                  | Meaning                                                                   |
+| ---------------------- | ------------------------------------------------------------------------- |
+| `goal`                 | Requested outcome or subgoals.                                            |
+| `entities`             | People, objects, apps, locations, records, or other referenced entities.  |
+| `constraints`          | Hard limits the result or execution must respect.                         |
+| `preferences`          | Soft choices that should guide an otherwise valid result.                 |
+| `missingInformation`   | Facts that must be clarified before a safe or correct next action.        |
+| `requestedAction`      | Closed action class such as answer, clarify, plan, execute, or remember.  |
+| `requestedMode`        | Chitchat, agentic, either, or clarification before routing.               |
+| `approvalRisk`         | No approval, approval required, prohibited, or unknown.                   |
+| `temporalRequirements` | Deadlines, ordering, recurrence, duration, or explicit absence of timing. |
 | `successCriteria`      | Observable conditions that make the requested outcome complete.           |
 
 Multi-value fields contain bounded canonical atoms. Use the sole atom `none`

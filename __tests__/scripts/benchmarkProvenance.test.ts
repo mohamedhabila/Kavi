@@ -1,8 +1,10 @@
+import fs from 'fs';
 import path from 'path';
 
 const {
   BENCHMARK_PROVENANCE_SCHEMA_URL,
   checkBenchmarkProvenance,
+  hashAdapterRoots,
   loadBenchmarkProvenance,
   loadBenchmarkProvenanceSchema,
   validateBenchmarkProvenance,
@@ -53,6 +55,25 @@ describe('benchmark provenance', () => {
         expect.stringContaining('for the checked-in adapter source'),
       ]),
     );
+  });
+
+  it('excludes ignored runtime caches from the versionable source digest', () => {
+    const roots = registry.adapters[0].adapter.roots;
+    const before = hashAdapterRoots(projectRoot, roots);
+    const ignoredCache = path.join(
+      projectRoot,
+      'benchmarks',
+      'longmemeval_v2',
+      '__pycache__',
+      'provenance-test.pyc',
+    );
+    fs.mkdirSync(path.dirname(ignoredCache), { recursive: true });
+    try {
+      fs.writeFileSync(ignoredCache, 'machine-dependent-cache');
+      expect(hashAdapterRoots(projectRoot, roots)).toBe(before);
+    } finally {
+      fs.rmSync(ignoredCache, { force: true });
+    }
   });
 
   it('cannot label a result submitted or accepted without a public record', () => {

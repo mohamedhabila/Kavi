@@ -18,8 +18,8 @@
       "adapter": {
         "integrationKind": "upstream_memory_backend_patch",
         "roots": ["benchmarks/longmemeval_v2"],
-        "sourceDigestAlgorithm": "sha256_path_nul_bytes_nul_v1",
-        "sourceSha256": "fc1e8030dc32694929deae63110d423e03a56df989267f692770b7fec4e7b608",
+        "sourceDigestAlgorithm": "sha256_versionable_path_nul_bytes_nul_v2",
+        "sourceSha256": "12c514247a34604a2c814421cb71a89ae03abdfa834f58115b78ceb2ae7c69bb",
         "modifiesUpstream": true
       },
       "upstream": {
@@ -133,7 +133,7 @@
       "adapter": {
         "integrationKind": "upstream_agent_learning_hook",
         "roots": ["benchmarks/state_bench"],
-        "sourceDigestAlgorithm": "sha256_path_nul_bytes_nul_v1",
+        "sourceDigestAlgorithm": "sha256_versionable_path_nul_bytes_nul_v2",
         "sourceSha256": "c0c3197abe45cd9c9e4c5f4dbd29c7b006991c5ed8d3bd60152f4b5f268f2387",
         "modifiesUpstream": true
       },
