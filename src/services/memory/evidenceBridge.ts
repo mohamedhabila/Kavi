@@ -19,8 +19,8 @@
 import type { AgentRunEvidenceEntry, AgentRunEvidenceRecorder } from '../../types/agentRun';
 import { runMemoryTransaction } from './access/transaction';
 import { addFactEvidence } from './episodes/mutations';
-import { recordFact } from './facts/mutations';
-import type { RecordFactResult } from './facts/types';
+import { recordFactWithApplicability } from './facts/mutations';
+import type { MemoryFactScope, RecordFactResult } from './facts/types';
 import { upsertEntity, type EntityType } from './entities';
 import { ensureFactSchema } from './schema';
 
@@ -40,6 +40,7 @@ export interface EvidenceBridgeOptions {
   originConversationId?: string;
   originThreadId?: string;
   originTaskId?: string;
+  scope: MemoryFactScope;
   /** Optional now override (testing). */
   now?: number;
 }
@@ -96,7 +97,7 @@ function buildObjectText(entry: AgentRunEvidenceEntry): string {
  */
 export function bridgeEvidenceToFacts(
   entries: ReadonlyArray<AgentRunEvidenceEntry>,
-  options: EvidenceBridgeOptions = {},
+  options: EvidenceBridgeOptions,
 ): BridgeEvidenceResult {
   ensureFactSchema();
 
@@ -143,20 +144,27 @@ export function bridgeEvidenceToFacts(
 
     try {
       const result = runMemoryTransaction(() => {
-        const recorded = recordFact({
-          subjectId: factSubjectId,
-          predicate: buildPredicate(entry),
-          objectText,
-          confidence,
-          ...(options.sourceRunId ? { sourceRunId: options.sourceRunId } : {}),
-          ...(sourceTurnId ? { sourceMessageId: sourceTurnId, sourceTurnId } : {}),
-          ...(options.originConversationId
-            ? { originConversationId: options.originConversationId }
-            : {}),
-          ...(options.originThreadId ? { originThreadId: options.originThreadId } : {}),
-          ...(options.originTaskId ? { originTaskId: options.originTaskId } : {}),
-          now: options.now,
-        });
+        const recorded = recordFactWithApplicability(
+          {
+            subjectId: factSubjectId,
+            predicate: buildPredicate(entry),
+            objectText,
+            confidence,
+            scope: options.scope,
+            ...(options.sourceRunId ? { sourceRunId: options.sourceRunId } : {}),
+            ...(sourceTurnId ? { sourceMessageId: sourceTurnId, sourceTurnId } : {}),
+            ...(options.originConversationId
+              ? { originConversationId: options.originConversationId }
+              : {}),
+            ...(options.originThreadId ? { originThreadId: options.originThreadId } : {}),
+            ...(options.originTaskId ? { originTaskId: options.originTaskId } : {}),
+            now: options.now,
+          },
+          {
+            factClass: 'workflow',
+            sourceAuthority: 'assistant_inferred',
+          },
+        );
         if (sourceTurnId) {
           addFactEvidence({
             factId: recorded.fact.id,

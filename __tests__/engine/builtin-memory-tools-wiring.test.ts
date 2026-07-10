@@ -133,9 +133,10 @@ describe('living-memory tool wiring', () => {
   });
 
   it('keeps runtime-owned memory provenance out of the provider-facing write schema', () => {
-    expect(MEMORY_REMEMBER_TOOL.input_schema.properties).not.toHaveProperty(
-      'originConversationId',
+    expect(MEMORY_REMEMBER_TOOL.input_schema.required).toEqual(
+      expect.arrayContaining(['subject', 'predicate', 'value', 'scope']),
     );
+    expect(MEMORY_REMEMBER_TOOL.input_schema.properties).not.toHaveProperty('originConversationId');
     expect(MEMORY_REMEMBER_TOOL.input_schema.properties).not.toHaveProperty('originThreadId');
     expect(MEMORY_REMEMBER_TOOL.input_schema.properties).not.toHaveProperty('originTaskId');
     expect(MEMORY_REMEMBER_TOOL.input_schema.properties).not.toHaveProperty('sourceMessageId');
@@ -178,8 +179,17 @@ describe('living-memory tool wiring', () => {
   });
 
   it('memory_recall can list all valid facts without a subject hint', () => {
-    JSON.parse(executeMemoryRemember({ subject: 'user', predicate: 'tz', value: 'UTC+1' }));
-    JSON.parse(executeMemoryRemember({ subject: 'project', predicate: 'name', value: 'Kavi' }));
+    JSON.parse(
+      executeMemoryRemember({ subject: 'user', predicate: 'tz', value: 'UTC+1', scope: 'global' }),
+    );
+    JSON.parse(
+      executeMemoryRemember({
+        subject: 'project',
+        predicate: 'name',
+        value: 'Kavi',
+        scope: 'global',
+      }),
+    );
 
     const recalled = JSON.parse(executeMemoryRecall({ all: true, limit: 10 }));
 
@@ -189,7 +199,12 @@ describe('living-memory tool wiring', () => {
 
   it('memory_pin / memory_unpin flip the pinned flag', () => {
     const r = JSON.parse(
-      executeMemoryRemember({ subject: 'user', predicate: 'tz', value: 'UTC+1' }),
+      executeMemoryRemember({
+        subject: 'user',
+        predicate: 'tz',
+        value: 'UTC+1',
+        scope: 'global',
+      }),
     );
     const factId = r.fact.id;
 
@@ -204,7 +219,12 @@ describe('living-memory tool wiring', () => {
 
   it('memory_forget withdraws without returning the private value', () => {
     const r = JSON.parse(
-      executeMemoryRemember({ subject: 'user', predicate: 'name', value: 'Alice' }),
+      executeMemoryRemember({
+        subject: 'user',
+        predicate: 'name',
+        value: 'Alice',
+        scope: 'global',
+      }),
     );
     const factId = r.fact.id;
 
@@ -216,7 +236,12 @@ describe('living-memory tool wiring', () => {
 
   it('memory invalidation preserves correction history through its own executor', () => {
     const r = JSON.parse(
-      executeMemoryRemember({ subject: 'user', predicate: 'name', value: 'Alice' }),
+      executeMemoryRemember({
+        subject: 'user',
+        predicate: 'name',
+        value: 'Alice',
+        scope: 'global',
+      }),
     );
     const invalidated = JSON.parse(executeMemoryInvalidate({ factId: r.fact.id }));
     expect(invalidated).toEqual(
@@ -243,7 +268,9 @@ describe('living-memory tool wiring', () => {
   });
 
   it('returns structured errors as JSON instead of throwing', () => {
-    const result = JSON.parse(executeMemoryRemember({ subject: '', predicate: '', value: '' } as any));
+    const result = JSON.parse(
+      executeMemoryRemember({ subject: '', predicate: '', value: '', scope: 'global' } as any),
+    );
     expect(result.ok).toBe(false);
     expect(typeof result.error).toBe('string');
     expect(typeof result.code).toBe('string');

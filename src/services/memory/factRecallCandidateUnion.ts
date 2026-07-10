@@ -42,7 +42,7 @@ function laneLimit(reason: RecallCandidateReasonCode): number {
 export function recallCandidateDiversityKey(fact: MemoryFact): string {
   const sourceRunId = fact.sourceRunId?.trim();
   if (sourceRunId) return `run:${sourceRunId}`;
-  const taskId = fact.originTaskId?.trim() || fact.taskId?.trim();
+  const taskId = fact.originTaskId?.trim();
   if (taskId) return `task:${taskId}`;
   const turnId = fact.sourceTurnId?.trim();
   if (turnId) return `turn:${turnId}`;

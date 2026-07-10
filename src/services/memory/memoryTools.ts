@@ -21,9 +21,11 @@
 // ---------------------------------------------------------------------------
 
 import { upsertEntity, findEntityByName, getEntityById, type EntityType } from './entities';
-import { recordFact, invalidateFact, setFactPinned } from './facts/mutations';
+import { recordFactWithApplicability, invalidateFact, setFactPinned } from './facts/mutations';
+import { requireFactScopeIdentity } from './facts/scopeIdentity';
 import { listFacts, getFactById } from './facts/queries';
-import { type MemoryFact, type MemoryFactScope } from './facts/types';
+import { requireMemoryFactScope, type MemoryFact, type MemoryFactScope } from './facts/types';
+import { isExactMemoryScopeId } from './memoryScopeIdentity';
 import { editBlock, ensureDefaultBlocks, getBlock, listBlocks, BlockOverflowError } from './blocks';
 import { ensureFactSchema } from './schema';
 import { canWriteLongTermMemory } from './policy';
@@ -69,6 +71,7 @@ export interface SerializedMemoryFact {
   updatedAt: number;
   deletedAt: number | null;
   scope: MemoryFactScope;
+  personaId: string | null;
   originConversationId: string | null;
   originThreadId: string | null;
   originTaskId: string | null;
@@ -98,6 +101,7 @@ function serializeFact(fact: MemoryFact): SerializedMemoryFact {
     updatedAt: fact.updatedAt,
     deletedAt: fact.deletedAt,
     scope: fact.scope,
+    personaId: fact.personaId,
     originConversationId: fact.originConversationId,
     originThreadId: fact.originThreadId,
     originTaskId: fact.originTaskId,
@@ -189,7 +193,7 @@ export interface MemoryRememberArgs {
   value: string;
   confidence?: number;
   pinned?: boolean;
-  scope?: MemoryFactScope;
+  scope: MemoryFactScope;
   originConversationId?: string | null;
   originThreadId?: string | null;
   originTaskId?: string | null;
@@ -206,8 +210,14 @@ export interface MemoryRememberResult {
   superseded: ReturnType<typeof serializeFact>[];
 }
 
+export interface MemoryRememberExecutionContext {
+  /** Code-owned persona identity; never accepted from provider tool arguments. */
+  personaId?: string;
+}
+
 export function executeMemoryRemember(
   args: MemoryRememberArgs,
+  context: MemoryRememberExecutionContext = {},
 ): MemoryRememberResult | MemoryToolError {
   ensureFactSchema();
   const subject = trimNonEmpty(args.subject, 80);
@@ -220,26 +230,44 @@ export function executeMemoryRemember(
   const subjectType: EntityType =
     args.subjectType ?? (subject.toLowerCase() === 'user' ? 'self' : 'concept');
 
+  let scope: MemoryFactScope;
+  try {
+    scope = requireMemoryFactScope(args.scope);
+    requireFactScopeIdentity(args, scope);
+    if (scope === 'persona' && !isExactMemoryScopeId(context.personaId)) {
+      throw new Error('memory_fact_persona_id_required');
+    }
+  } catch (error) {
+    return err('invalid_args', error instanceof Error ? error.message : 'invalid memory scope');
+  }
+
   try {
     const entity = upsertEntity({ name: subject, type: subjectType });
-    const result = recordFact({
-      subjectId: entity.id,
-      predicate,
-      objectText: value,
-      confidence: typeof args.confidence === 'number' ? args.confidence : undefined,
-      supersedePrior: true,
-      pinned: args.pinned === true,
-      ...(args.scope ? { scope: args.scope } : {}),
-      ...(args.originConversationId !== undefined
-        ? { originConversationId: args.originConversationId }
-        : {}),
-      ...(args.originThreadId !== undefined ? { originThreadId: args.originThreadId } : {}),
-      ...(args.originTaskId !== undefined ? { originTaskId: args.originTaskId } : {}),
-      ...(args.sourceMessageId !== undefined ? { sourceMessageId: args.sourceMessageId } : {}),
-      ...(args.sourceRunId !== undefined ? { sourceRunId: args.sourceRunId } : {}),
-      ...(args.sourceSummary !== undefined ? { sourceSummary: args.sourceSummary } : {}),
-      ...(typeof args.importance === 'number' ? { importance: args.importance } : {}),
-    });
+    const result = recordFactWithApplicability(
+      {
+        subjectId: entity.id,
+        predicate,
+        objectText: value,
+        confidence: typeof args.confidence === 'number' ? args.confidence : undefined,
+        supersedePrior: true,
+        pinned: args.pinned === true,
+        scope,
+        ...(args.originConversationId !== undefined
+          ? { originConversationId: args.originConversationId }
+          : {}),
+        ...(args.originThreadId !== undefined ? { originThreadId: args.originThreadId } : {}),
+        ...(args.originTaskId !== undefined ? { originTaskId: args.originTaskId } : {}),
+        ...(args.sourceMessageId !== undefined ? { sourceMessageId: args.sourceMessageId } : {}),
+        ...(args.sourceRunId !== undefined ? { sourceRunId: args.sourceRunId } : {}),
+        ...(args.sourceSummary !== undefined ? { sourceSummary: args.sourceSummary } : {}),
+        ...(typeof args.importance === 'number' ? { importance: args.importance } : {}),
+      },
+      {
+        factClass: subjectType === 'self' ? 'subjective_user' : 'unknown',
+        sourceAuthority: 'assistant_inferred',
+        ...(scope === 'persona' ? { personaId: context.personaId } : {}),
+      },
+    );
     return {
       ok: true,
       fact: serializeFact(result.fact),

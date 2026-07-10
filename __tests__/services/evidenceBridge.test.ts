@@ -51,10 +51,12 @@ describe('bridgeEvidenceToFacts', () => {
     const result = bridgeEvidenceToFacts([makeEntry()], {
       subjectName: 'run-001',
       subjectType: 'project',
+      scope: 'global',
     });
     expect(result.bridged).toHaveLength(1);
     expect(result.skipped).toEqual([]);
     expect(result.bridged[0].fact.confidence).toBe(0.85);
+    expect(result.bridged[0].fact.sourceAuthority).toBe('assistant_inferred');
     expect(result.bridged[0].fact.objectText).toBe(
       'API key rotated: OpenAI key rotated on 2026-04-29',
     );
@@ -63,6 +65,7 @@ describe('bridgeEvidenceToFacts', () => {
   it('bridges a candidate fact at low confidence', () => {
     const result = bridgeEvidenceToFacts([makeEntry({ status: 'candidate' })], {
       subjectName: 'run-001',
+      scope: 'global',
     });
     expect(result.bridged).toHaveLength(1);
     expect(result.bridged[0].fact.confidence).toBe(0.5);
@@ -77,7 +80,7 @@ describe('bridgeEvidenceToFacts', () => {
         makeEntry({ id: 'e4', kind: 'source' }),
         makeEntry({ id: 'e5', kind: 'summary' }),
       ],
-      { subjectName: 'run-001' },
+      { subjectName: 'run-001', scope: 'global' },
     );
     expect(result.bridged).toEqual([]);
     expect(result.skipped).toHaveLength(5);
@@ -89,7 +92,7 @@ describe('bridgeEvidenceToFacts', () => {
   it('skips status=open and status=resolved', () => {
     const result = bridgeEvidenceToFacts(
       [makeEntry({ id: 'e1', status: 'open' }), makeEntry({ id: 'e2', status: 'resolved' })],
-      { subjectName: 'run-001' },
+      { subjectName: 'run-001', scope: 'global' },
     );
     expect(result.bridged).toEqual([]);
     expect(result.skipped).toHaveLength(2);
@@ -98,6 +101,7 @@ describe('bridgeEvidenceToFacts', () => {
   it('falls back to defaultSubject when subjectName is missing', () => {
     const result = bridgeEvidenceToFacts([makeEntry()], {
       defaultSubject: { name: 'run-002', type: 'project' },
+      scope: 'global',
     });
     expect(result.bridged).toHaveLength(1);
     const entity = findEntityByName('run-002');
@@ -109,7 +113,7 @@ describe('bridgeEvidenceToFacts', () => {
   });
 
   it('returns no-op when no subject available', () => {
-    const result = bridgeEvidenceToFacts([makeEntry()], {});
+    const result = bridgeEvidenceToFacts([makeEntry()], { scope: 'global' });
     expect(result.bridged).toEqual([]);
     expect(result.skipped[0].reason).toBe('missing subject');
   });
@@ -117,6 +121,7 @@ describe('bridgeEvidenceToFacts', () => {
   it('uses dedupeKey as the predicate when present', () => {
     const result = bridgeEvidenceToFacts([makeEntry({ dedupeKey: 'rotated:openai_key' })], {
       subjectName: 'run-001',
+      scope: 'global',
     });
     expect(result.bridged[0].fact.predicate).toBe('rotated:openai_key');
   });
@@ -124,14 +129,15 @@ describe('bridgeEvidenceToFacts', () => {
   it('uses synthetic predicate when dedupeKey is absent', () => {
     const result = bridgeEvidenceToFacts([makeEntry({ kind: 'decision', dedupeKey: undefined })], {
       subjectName: 'run-001',
+      scope: 'global',
     });
     expect(result.bridged[0].fact.predicate).toBe('evidence_decision');
   });
 
   it('is idempotent: re-running yields duplicates instead of new facts', () => {
     const entries = [makeEntry({ dedupeKey: 'k1' })];
-    const a = bridgeEvidenceToFacts(entries, { subjectName: 'run-001' });
-    const b = bridgeEvidenceToFacts(entries, { subjectName: 'run-001' });
+    const a = bridgeEvidenceToFacts(entries, { subjectName: 'run-001', scope: 'global' });
+    const b = bridgeEvidenceToFacts(entries, { subjectName: 'run-001', scope: 'global' });
     expect(a.bridged[0].status).toBe('created');
     expect(b.bridged[0].status).toBe('duplicate');
     const entity = findEntityByName('run-001');
@@ -142,6 +148,7 @@ describe('bridgeEvidenceToFacts', () => {
     const result = bridgeEvidenceToFacts([makeEntry()], {
       subjectName: 'run-001',
       sourceRunId: 'agent-run-42',
+      scope: 'global',
     });
     expect(result.bridged[0].fact.sourceRunId).toBe('agent-run-42');
   });
@@ -165,6 +172,7 @@ describe('bridgeEvidenceToFacts', () => {
       originConversationId: 'conv-1',
       originThreadId: 'conv-1',
       originTaskId: 'goal-42',
+      scope: 'session',
     });
     expect(result.bridged).toHaveLength(1);
     expect(result.bridged[0].fact.originTaskId).toBe('goal-42');
@@ -176,6 +184,7 @@ describe('bridgeEvidenceToFacts', () => {
     const long = 'x'.repeat(900);
     const result = bridgeEvidenceToFacts([makeEntry({ title: '', content: long })], {
       subjectName: 'run-001',
+      scope: 'global',
     });
     expect(result.bridged[0].fact.objectText).toBe(long);
   });
@@ -184,6 +193,7 @@ describe('bridgeEvidenceToFacts', () => {
     const long = 'x'.repeat(4000);
     const result = bridgeEvidenceToFacts([makeEntry({ title: '', content: long })], {
       subjectName: 'run-001',
+      scope: 'global',
     });
     expect(result.bridged[0].fact.objectText.length).toBeLessThanOrEqual(3200);
     expect(result.bridged[0].fact.objectText).toMatch(/\u2026$/);

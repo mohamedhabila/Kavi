@@ -111,6 +111,7 @@ export function persistStructuralTurn(input: PersistStructuralTurnInput): TurnPe
         originConversationId: input.conversationId,
         originThreadId: input.threadId,
         originTaskId: input.taskId,
+        scope: input.taskId ? 'session' : 'conversation',
         now: input.now,
       }).bridged.map((entry) => entry.fact.id);
     }

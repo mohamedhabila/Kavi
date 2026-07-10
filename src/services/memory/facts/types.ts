@@ -1,4 +1,5 @@
 import { safeParseArray, safeParseObject } from '../schema';
+import type { MemoryFactReviewState, MemoryFactSensitivity } from './applicabilityProvenance';
 
 export type MemoryFactScope = 'global' | 'project' | 'conversation' | 'session' | 'persona';
 
@@ -28,6 +29,10 @@ export interface MemoryFact {
   confidence: number;
   sourceMessageId: string | null;
   sourceRunId: string | null;
+  memoryOwnerId: string | null;
+  personaId: string | null;
+  factClass: string;
+  sourceAuthority: string;
   scope: MemoryFactScope;
   originConversationId: string | null;
   originThreadId: string | null;
@@ -51,7 +56,6 @@ export interface MemoryFact {
   deletedAt: number | null;
   pinned: boolean;
   sourceActorId: string | null;
-  taskId: string | null;
   retrievability: number;
   stability: number;
   decayRate: number;
@@ -73,6 +77,10 @@ export interface FactRow {
   confidence: number;
   source_message_id: string | null;
   source_run_id: string | null;
+  memory_owner_id?: string | null;
+  persona_id?: string | null;
+  fact_class?: string;
+  source_authority?: string;
   scope: string;
   origin_conversation_id: string | null;
   origin_thread_id: string | null;
@@ -96,7 +104,6 @@ export interface FactRow {
   deleted_at: number | null;
   pinned: number;
   source_actor_id?: string | null;
-  task_id?: string | null;
   retrievability?: number;
   stability?: number;
   decay_rate?: number;
@@ -113,13 +120,19 @@ export function clamp01(value: number): number {
   return Math.max(0, Math.min(value, 1));
 }
 
-export function normalizeScope(value: unknown): MemoryFactScope {
-  return value === 'project' ||
+export function isMemoryFactScope(value: unknown): value is MemoryFactScope {
+  return (
+    value === 'global' ||
+    value === 'project' ||
     value === 'conversation' ||
     value === 'session' ||
     value === 'persona'
-    ? value
-    : 'global';
+  );
+}
+
+export function requireMemoryFactScope(value: unknown): MemoryFactScope {
+  if (!isMemoryFactScope(value)) throw new Error('memory_fact_scope_invalid');
+  return value;
 }
 
 export function normalizeDecayPolicy(value: unknown): MemoryDecayPolicy {
@@ -155,7 +168,11 @@ export function rowToFact(row: FactRow): MemoryFact {
     confidence: row.confidence,
     sourceMessageId: row.source_message_id,
     sourceRunId: row.source_run_id,
-    scope: normalizeScope(row.scope),
+    memoryOwnerId: row.memory_owner_id ?? null,
+    personaId: row.persona_id ?? null,
+    factClass: row.fact_class ?? 'unknown',
+    sourceAuthority: row.source_authority ?? 'unknown',
+    scope: requireMemoryFactScope(row.scope),
     originConversationId: row.origin_conversation_id,
     originThreadId: row.origin_thread_id,
     originTaskId: row.origin_task_id,
@@ -178,7 +195,6 @@ export function rowToFact(row: FactRow): MemoryFact {
     deletedAt: row.deleted_at,
     pinned: row.pinned !== 0,
     sourceActorId: row.source_actor_id ?? null,
-    taskId: row.task_id ?? null,
     retrievability: clamp01(row.retrievability ?? 1),
     stability: clamp01(row.stability ?? 0.5),
     decayRate: Math.max(0, row.decay_rate ?? 0.03),
@@ -200,7 +216,7 @@ export interface RecordFactInput {
   confidence?: number;
   sourceMessageId?: string | null;
   sourceRunId?: string | null;
-  scope?: MemoryFactScope;
+  scope: MemoryFactScope;
   originConversationId?: string | null;
   originThreadId?: string | null;
   originTaskId?: string | null;
@@ -212,12 +228,11 @@ export interface RecordFactInput {
   validAt?: number;
   pinned?: boolean;
   sourceActorId?: string | null;
-  taskId?: string | null;
   retrievability?: number;
   stability?: number;
   decayRate?: number;
-  reviewState?: string;
-  sensitivity?: string;
+  reviewState?: MemoryFactReviewState;
+  sensitivity?: MemoryFactSensitivity;
   memoryKind?: MemoryFactKind;
   /** When true, any existing currently-valid fact for (subject, predicate) is invalidated. */
   supersedePrior?: boolean;

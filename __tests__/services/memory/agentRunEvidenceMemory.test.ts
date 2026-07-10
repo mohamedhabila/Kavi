@@ -59,6 +59,7 @@ describe('recordAgentRunEvidenceMemory', () => {
     expect(facts.filter((fact) => fact.memoryKind === 'agent_run')).toHaveLength(1);
     expect(facts.filter((fact) => fact.memoryKind === 'evidence_span').length).toBeGreaterThan(0);
     expect(facts.every((fact) => fact.sourceRunId === 'run-1')).toBe(true);
+    expect(facts.every((fact) => fact.sourceAuthority === 'assistant_inferred')).toBe(true);
     expect(facts.some((fact) => fact.objectText.includes('reports/analysis.json'))).toBe(true);
   });
 

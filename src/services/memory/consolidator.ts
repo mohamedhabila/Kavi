@@ -22,6 +22,7 @@
 
 import type { Message } from '../../types/message';
 import type { MemoryFactScope } from './facts/types';
+import type { SealedFactApplicabilityProvenance } from './facts/applicabilityProvenance';
 import { applyConsolidatorResult } from './consolidation/persistence';
 export { applyConsolidatorResult } from './consolidation/persistence';
 export type {
@@ -64,12 +65,17 @@ export type ConsolidatorAssertionClass =
   | 'third_party'
   | 'uncertain';
 
-export interface AdmittedFactWrite {
-  operation: 'replace_current';
+interface AdmittedFactWriteBase {
   authority: 'grounded_user_statement';
   evidenceMessageId: string;
-  expectedCurrentFactId: string;
 }
+
+export type AdmittedFactWrite =
+  | (AdmittedFactWriteBase & { operation: 'insert' })
+  | (AdmittedFactWriteBase & {
+      operation: 'replace_current';
+      expectedCurrentFactId: string;
+    });
 
 export interface ConsolidatorFact {
   subject: string;
@@ -85,6 +91,8 @@ export interface ConsolidatorFact {
   evidenceQuote?: string;
   /** Internal authority created only by deterministic product code. */
   admittedWrite?: AdmittedFactWrite;
+  /** Internal applicability provenance created only by deterministic product code. */
+  sealedApplicability?: SealedFactApplicabilityProvenance;
   /** Provider confidence score in the canonical 0..1 range. */
   confidence?: number;
 }

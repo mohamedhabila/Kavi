@@ -97,22 +97,26 @@ function sameDurableIdentity(row: FactRow, target: FactRow): boolean {
     row.content_hash === target.content_hash &&
     hasExactFactContentIdentity(
       {
+        memoryOwnerId: row.memory_owner_id,
         memoryKind: row.memory_kind,
         scope: row.scope,
         originConversationId: row.origin_conversation_id,
         originThreadId: row.origin_thread_id,
         originTaskId: row.origin_task_id,
+        personaId: row.persona_id,
         subjectId: row.subject_id,
         predicate: row.predicate,
         objectText: row.object_text,
         objectEntityId: row.object_entity_id,
       },
       {
+        memoryOwnerId: target.memory_owner_id,
         memoryKind: target.memory_kind,
         scope: target.scope,
         originConversationId: target.origin_conversation_id,
         originThreadId: target.origin_thread_id,
         originTaskId: target.origin_task_id,
+        personaId: target.persona_id,
         subjectId: target.subject_id,
         predicate: target.predicate,
         objectText: target.object_text,
@@ -237,7 +241,7 @@ export function factWithdrawalScope(target: FactRow): MemoryWithdrawalScope {
   return {
     memoryConversationId,
     sourceThreadId: target.origin_thread_id?.trim() || memoryConversationId,
-    taskId: target.origin_task_id?.trim() || target.task_id?.trim() || '',
+    taskId: target.origin_task_id?.trim() || '',
   };
 }
 

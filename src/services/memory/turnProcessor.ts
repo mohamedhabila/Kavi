@@ -449,13 +449,24 @@ function resolveCurrentFactsForReplacement(
   const entity = findEntityByName(subject);
   if (!entity) return { currentFacts: [], hasAnyCurrentFact: false };
 
+  const scope = fact.scope ?? 'conversation';
+  if (scope === 'persona' || (scope === 'session' && !context.taskId)) {
+    return {
+      currentFacts: [],
+      hasAnyCurrentFact: true,
+    };
+  }
   const currentFacts = listCurrentFactsForReplacement({
     subjectId: entity.id,
     predicate,
-    scope: fact.scope ?? 'conversation',
-    originConversationId: context.memoryConversationId,
-    originThreadId: context.threadId,
-    originTaskId: context.taskId,
+    scope,
+    ...(scope === 'project' || scope === 'conversation' || scope === 'session'
+      ? {
+          originConversationId: context.memoryConversationId,
+          originThreadId: context.threadId,
+        }
+      : {}),
+    ...(scope === 'session' ? { originTaskId: context.taskId } : {}),
   });
   return {
     currentFacts,

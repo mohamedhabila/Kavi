@@ -107,7 +107,10 @@ export const MEMORY_REMEMBER_TOOL: ToolDefinition = {
         description:
           'Exact object text/value supplied by the user (≤ 200 chars); preserve opaque labels, codes, tokens, and contact names.',
       },
-      confidence: { type: 'number', description: '0..1; ≥ 0.85 marks a verified fact.' },
+      confidence: {
+        type: 'number',
+        description: '0..1 confidence estimate; review state and evidence authority are separate.',
+      },
       scope: {
         type: 'string',
         enum: ['global', 'project', 'conversation', 'session', 'persona'],
@@ -120,7 +123,7 @@ export const MEMORY_REMEMBER_TOOL: ToolDefinition = {
         description: 'Pin the new fact so it always appears in the focus header.',
       },
     },
-    required: ['subject', 'predicate', 'value'],
+    required: ['subject', 'predicate', 'value', 'scope'],
   },
   contract: {
     category: 'memory',

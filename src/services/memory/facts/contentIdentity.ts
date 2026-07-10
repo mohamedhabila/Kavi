@@ -1,22 +1,28 @@
 export interface FactContentIdentityInput {
+  memoryOwnerId?: string | null;
   memoryKind?: string | null;
-  scope?: string | null;
+  scope: string;
   originConversationId?: string | null;
   originThreadId?: string | null;
   originTaskId?: string | null;
+  personaId?: string | null;
   subjectId: string;
   predicate: string;
   objectText: string;
   objectEntityId?: string | null;
 }
 
-function normalizeScope(value: string | null | undefined): string {
-  return value === 'project' ||
+function normalizeScope(value: string): string {
+  if (
+    value === 'global' ||
+    value === 'project' ||
     value === 'conversation' ||
     value === 'session' ||
     value === 'persona'
-    ? value
-    : 'global';
+  ) {
+    return value;
+  }
+  return `invalid:${value}`;
 }
 
 function normalizeMemoryKind(value: string | null | undefined): string {
@@ -32,13 +38,19 @@ function normalizeObjectText(value: string): string {
 }
 
 function identityOrigin(input: FactContentIdentityInput, scope: string): Array<string | null> {
-  if (scope === 'global') return [null, null, null];
-  if (scope === 'conversation') return [input.originConversationId ?? null, null, null];
-  return [
-    input.originConversationId ?? null,
-    input.originThreadId ?? input.originConversationId ?? null,
-    input.originTaskId ?? null,
-  ];
+  if (scope === 'global') return [null, null, null, null];
+  if (scope === 'persona') return [null, null, null, input.personaId ?? null];
+  if (scope === 'conversation' || scope === 'project') {
+    return [input.originConversationId ?? null, null, null, null];
+  }
+  if (scope === 'session')
+    return [
+      input.originConversationId ?? null,
+      input.originThreadId ?? null,
+      input.originTaskId ?? null,
+      null,
+    ];
+  return [null, null, null, null];
 }
 
 /** Exact identity guard used after the non-cryptographic hash narrows candidates. */
@@ -52,6 +64,7 @@ export function hasExactFactContentIdentity(
   const leftOrigin = identityOrigin(left, leftScope);
   const rightOrigin = identityOrigin(right, rightScope);
   return (
+    (left.memoryOwnerId ?? null) === (right.memoryOwnerId ?? null) &&
     normalizeMemoryKind(left.memoryKind) === normalizeMemoryKind(right.memoryKind) &&
     leftOrigin.every((value, index) => value === rightOrigin[index]) &&
     left.subjectId === right.subjectId &&
@@ -89,6 +102,7 @@ export function buildFactContentHash(input: FactContentIdentityInput): string {
   const scope = normalizeScope(input.scope);
   const origin = identityOrigin(input, scope);
   const payload = JSON.stringify([
+    input.memoryOwnerId ?? null,
     normalizeMemoryKind(input.memoryKind),
     scope,
     ...origin,
@@ -97,5 +111,5 @@ export function buildFactContentHash(input: FactContentIdentityInput): string {
     normalizeObjectText(input.objectText),
     input.objectEntityId ?? null,
   ]);
-  return `v2_${stableFingerprint128(payload)}`;
+  return `v3_${stableFingerprint128(payload)}`;
 }

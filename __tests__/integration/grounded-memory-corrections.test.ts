@@ -37,8 +37,12 @@ function seedCurrent(
     predicate,
     objectText: value,
     scope,
-    originConversationId: 'conversation-1',
-    originThreadId: 'thread-1',
+    ...(scope === 'conversation'
+      ? {
+          originConversationId: 'conversation-1',
+          originThreadId: 'thread-1',
+        }
+      : {}),
     now: 100,
   }).fact;
 }
@@ -230,9 +234,9 @@ describe('grounded passive memory corrections', () => {
       scope: 'global',
     });
 
-    expect(
-      listFacts({ subjectId: old.subjectId, predicate: 'lives_in', scope: 'global' }),
-    ).toEqual([expect.objectContaining({ objectText: 'Utrecht' })]);
+    expect(listFacts({ subjectId: old.subjectId, predicate: 'lives_in', scope: 'global' })).toEqual(
+      [expect.objectContaining({ objectText: 'Utrecht' })],
+    );
   });
 
   it('rejects a contradictory provider replacement group without order dependence', async () => {
@@ -278,7 +282,6 @@ describe('grounded passive memory corrections', () => {
       scope: 'conversation',
       originConversationId: 'conversation-1',
       originThreadId: 'older-thread',
-      originTaskId: 'older-task',
       now: 100,
     }).fact;
 

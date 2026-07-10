@@ -2,15 +2,28 @@ import { getSchemaReadyMemoryDb } from '../access/schemaGuard';
 import { runMemoryStatement } from '../access/crud';
 import { newId, safeParseObject } from '../schema';
 import { notifyStructuredMemoryChanged } from '../store';
-import { runMemoryTransaction } from '../access/transaction';
+import { runAfterMemoryTransactionCommit, runMemoryTransaction } from '../access/transaction';
+import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
+import { isExactMemoryScopeId } from '../memoryScopeIdentity';
 import { replaceFactRetrievalTerms } from './retrievalIndex';
 import { buildFactContentHash, hasExactFactContentIdentity } from './contentIdentity';
+import { requireFactMutationScope, requireFactMutationTimestamp } from './mutationValidation';
+import { requireFactScopeIdentity } from './scopeIdentity';
 import { hasPersistedSourceEvidence } from './sourceEvidence';
+import {
+  closedMemoryFactClass,
+  closedMemoryFactReviewState,
+  closedMemoryFactSensitivity,
+  closedMemorySourceAuthority,
+  requireMemoryFactReviewState,
+  requireMemoryFactSensitivity,
+  resolveFactApplicabilityProvenance,
+  type SealedFactApplicabilityProvenance,
+} from './applicabilityProvenance';
 import {
   clamp01,
   normalizeDecayPolicy,
   normalizeFactKind,
-  normalizeScope,
   rowToFact,
   type FactRow,
   type MemoryFact,
@@ -22,33 +35,46 @@ type MemorySqlBindValue = string | number | null;
 
 function buildSupersedePriorQuery(
   input: RecordFactInput,
-  scope: ReturnType<typeof normalizeScope>,
+  scope: NonNullable<RecordFactInput['scope']>,
+  memoryOwnerId: string,
+  personaId: string | null,
 ): { sql: string; params: MemorySqlBindValue[] } {
   const clauses = [
     'subject_id = ?',
     'predicate = ? COLLATE NOCASE',
     'invalid_at IS NULL',
     'deleted_at IS NULL',
+    'memory_owner_id = ?',
   ];
-  const params: MemorySqlBindValue[] = [input.subjectId, input.predicate];
+  const params: MemorySqlBindValue[] = [input.subjectId, input.predicate, memoryOwnerId];
 
-  if (scope === 'session') {
-    clauses.push('scope = ?');
-    params.push(scope);
-    clauses.push("COALESCE(origin_conversation_id, '') = COALESCE(?, '')");
-    params.push(input.originConversationId ?? null);
-    clauses.push("COALESCE(origin_thread_id, '') = COALESCE(?, '')");
-    params.push(input.originThreadId ?? input.originConversationId ?? null);
-    clauses.push("COALESCE(origin_task_id, '') = COALESCE(?, '')");
-    params.push(input.originTaskId ?? null);
-  } else {
-    clauses.push("scope != 'session'");
-    if ((scope === 'conversation' || scope === 'project') && input.originConversationId) {
-      clauses.push(
-        "(scope NOT IN ('conversation', 'project') OR COALESCE(origin_conversation_id, '') = COALESCE(?, '') OR origin_conversation_id IS NULL)",
-      );
-      params.push(input.originConversationId);
-    }
+  clauses.push('scope = ?');
+  params.push(scope);
+
+  if (scope === 'global') {
+    clauses.push('persona_id IS NULL');
+    clauses.push('origin_conversation_id IS NULL');
+    clauses.push('origin_thread_id IS NULL');
+    clauses.push('origin_task_id IS NULL');
+  } else if (scope === 'persona') {
+    clauses.push('persona_id = ?');
+    params.push(personaId);
+    clauses.push('origin_conversation_id IS NULL');
+    clauses.push('origin_thread_id IS NULL');
+    clauses.push('origin_task_id IS NULL');
+  } else if (scope === 'session') {
+    clauses.push('persona_id IS NULL');
+    clauses.push('origin_conversation_id = ?');
+    params.push(input.originConversationId!);
+    clauses.push('origin_thread_id = ?');
+    params.push(input.originThreadId!);
+    clauses.push('origin_task_id = ?');
+    params.push(input.originTaskId!);
+  } else if (scope === 'conversation' || scope === 'project') {
+    clauses.push('persona_id IS NULL');
+    clauses.push('origin_conversation_id = ?');
+    params.push(input.originConversationId!);
+    clauses.push('origin_task_id IS NULL');
   }
 
   return {
@@ -57,12 +83,51 @@ function buildSupersedePriorQuery(
   };
 }
 
+function hasExactSupersessionScopeIdentity(
+  fact: FactRow,
+  input: RecordFactInput,
+  scope: NonNullable<RecordFactInput['scope']>,
+  memoryOwnerId: string,
+  personaId: string | null,
+): boolean {
+  if (fact.memory_owner_id !== memoryOwnerId || fact.scope !== scope) return false;
+  if (scope === 'global') {
+    return (
+      fact.persona_id === null &&
+      fact.origin_conversation_id === null &&
+      fact.origin_thread_id === null &&
+      fact.origin_task_id === null
+    );
+  }
+  if (scope === 'persona') {
+    return (
+      fact.persona_id === personaId &&
+      fact.origin_conversation_id === null &&
+      fact.origin_thread_id === null &&
+      fact.origin_task_id === null
+    );
+  }
+  if (fact.persona_id !== null || fact.origin_conversation_id !== input.originConversationId) {
+    return false;
+  }
+  if (scope === 'conversation' || scope === 'project') {
+    return (
+      fact.origin_task_id === null &&
+      (fact.origin_thread_id === null || isExactMemoryScopeId(fact.origin_thread_id))
+    );
+  }
+  return (
+    fact.origin_thread_id === input.originThreadId &&
+    fact.origin_task_id === input.originTaskId &&
+    isExactMemoryScopeId(fact.origin_task_id)
+  );
+}
+
 /**
  * Record (or dedupe) a fact. When `supersedePrior` is true any currently-valid
  * fact with the same (subject_id, predicate) is invalidated at `now` first.
- * Durable non-session scopes supersede each other because providers may choose
- * different scopes for the same current-state update across long conversations.
- * Session facts remain isolated by conversation/thread/task.
+ * Supersession is exact to the persisted owner and scope identity. A write can
+ * never invalidate facts from another scope, persona, root, thread, or task.
  * Uses `content_hash` only to narrow active-row candidates; exact persisted
  * identity decides idempotency so a hash collision cannot merge two facts.
  */
@@ -70,18 +135,42 @@ export function recordFact(input: RecordFactInput): RecordFactResult {
   return runMemoryTransaction(() => recordFactInTransaction(input));
 }
 
-function recordFactInTransaction(input: RecordFactInput): RecordFactResult {
+/** Product-code boundary for provenance that must never come from generic fact input. */
+export function recordFactWithApplicability(
+  input: RecordFactInput,
+  applicability: SealedFactApplicabilityProvenance,
+): RecordFactResult {
+  return runMemoryTransaction(() => recordFactInTransaction(input, applicability));
+}
+
+function recordFactInTransaction(
+  input: RecordFactInput,
+  sealedApplicability?: SealedFactApplicabilityProvenance,
+): RecordFactResult {
   const db = getSchemaReadyMemoryDb();
-  const now = input.now ?? Date.now();
+  const now = requireFactMutationTimestamp(
+    input.now ?? Date.now(),
+    'memory_fact_mutation_clock_invalid',
+  );
   if (!input.subjectId) throw new Error('recordFact: subjectId required');
   const predicate = input.predicate.trim();
   const objectText = input.objectText.trim();
   if (!predicate) throw new Error('recordFact: predicate required');
   if (!objectText) throw new Error('recordFact: objectText required');
 
-  const normalizedInput = { ...input, predicate, objectText };
-  const hash = buildFactContentHash(normalizedInput);
-  const scope = normalizeScope(input.scope);
+  const scope = requireFactMutationScope(input.scope);
+  requireFactScopeIdentity(input, scope);
+  const validAt = requireFactMutationTimestamp(
+    input.validAt ?? now,
+    'memory_fact_valid_at_invalid',
+  );
+  const expiresAt =
+    input.expiresAt === null || input.expiresAt === undefined
+      ? null
+      : requireFactMutationTimestamp(input.expiresAt, 'memory_fact_expires_at_invalid');
+  if (expiresAt !== null && expiresAt <= validAt) {
+    throw new Error('memory_fact_validity_order_invalid');
+  }
   const confidence = clamp01(input.confidence ?? 1.0);
   const importance = clamp01(input.importance ?? 0.5);
   const retrievability = clamp01(input.retrievability ?? 1);
@@ -89,15 +178,30 @@ function recordFactInTransaction(input: RecordFactInput): RecordFactResult {
   const decayRate = Math.max(0, input.decayRate ?? 0.03);
   const decayPolicy = normalizeDecayPolicy(input.decayPolicy);
   const memoryKind = normalizeFactKind(input.memoryKind);
-  const reviewState = input.reviewState?.trim() || 'auto';
-  const sensitivity = input.sensitivity?.trim() || 'normal';
-
+  const reviewState = requireMemoryFactReviewState(input.reviewState ?? 'auto');
+  const sensitivity = requireMemoryFactSensitivity(input.sensitivity ?? 'normal');
+  const provenance = resolveFactApplicabilityProvenance({
+    scope,
+    memoryKind,
+    ...(sealedApplicability ? { sealed: sealedApplicability } : {}),
+  });
+  const memoryOwnerId = getLocalMemoryVaultOwnerId(db);
+  const normalizedInput = {
+    ...input,
+    predicate,
+    objectText,
+    memoryOwnerId,
+    personaId: provenance.personaId,
+  };
+  const hash = buildFactContentHash(normalizedInput);
   const existing = db
     .getAllSync<FactRow>(
       `SELECT * FROM memory_facts
-       WHERE content_hash = ? AND invalid_at IS NULL AND deleted_at IS NULL
+       WHERE content_hash = ? AND memory_owner_id = ?
+         AND invalid_at IS NULL AND deleted_at IS NULL
        ORDER BY created_at ASC, id ASC`,
       hash,
+      memoryOwnerId,
     )
     .find((row) =>
       hasExactFactContentIdentity(
@@ -107,6 +211,8 @@ function recordFactInTransaction(input: RecordFactInput): RecordFactResult {
           originConversationId: row.origin_conversation_id,
           originThreadId: row.origin_thread_id,
           originTaskId: row.origin_task_id,
+          memoryOwnerId: row.memory_owner_id,
+          personaId: row.persona_id,
           subjectId: row.subject_id,
           predicate: row.predicate,
           objectText: row.object_text,
@@ -138,6 +244,16 @@ function recordFactInTransaction(input: RecordFactInput): RecordFactResult {
       };
     }
     const merged = { ...safeParseObject(existing.attributes), ...(input.attributes ?? {}) };
+    const nextReviewState =
+      input.reviewState ?? closedMemoryFactReviewState(existing.review_state) ?? 'rejected';
+    const nextSensitivity =
+      input.sensitivity ?? closedMemoryFactSensitivity(existing.sensitivity) ?? 'restricted';
+    const nextFactClass = sealedApplicability
+      ? provenance.factClass
+      : (closedMemoryFactClass(existing.fact_class) ?? provenance.factClass);
+    const nextSourceAuthority = sealedApplicability
+      ? provenance.sourceAuthority
+      : (closedMemorySourceAuthority(existing.source_authority) ?? provenance.sourceAuthority);
     db.runSync(
       `UPDATE memory_facts
          SET attributes = ?,
@@ -149,6 +265,8 @@ function recordFactInTransaction(input: RecordFactInput): RecordFactResult {
              decay_rate = MIN(decay_rate, ?),
              review_state = ?,
              sensitivity = ?,
+             fact_class = ?,
+             source_authority = ?,
              memory_kind = ?,
              repeated_mention_count = repeated_mention_count + 1,
              last_reinforced_at = ?,
@@ -161,8 +279,10 @@ function recordFactInTransaction(input: RecordFactInput): RecordFactResult {
       retrievability,
       stability,
       decayRate,
-      reviewState,
-      sensitivity,
+      nextReviewState,
+      nextSensitivity,
+      nextFactClass,
+      nextSourceAuthority,
       memoryKind,
       now,
       now,
@@ -177,15 +297,19 @@ function recordFactInTransaction(input: RecordFactInput): RecordFactResult {
       retrievability: Math.max(existing.retrievability ?? 1, retrievability),
       stability: Math.max(existing.stability ?? 0.5, stability),
       decay_rate: Math.min(existing.decay_rate ?? 0.03, decayRate),
-      review_state: reviewState,
-      sensitivity,
+      review_state: nextReviewState,
+      sensitivity: nextSensitivity,
+      fact_class: nextFactClass,
+      source_authority: nextSourceAuthority,
       memory_kind: memoryKind,
       repeated_mention_count: (existing.repeated_mention_count ?? 0) + 1,
       last_reinforced_at: now,
       last_accessed_at: now,
     });
     replaceFactRetrievalTerms(fact);
-    notifyStructuredMemoryChanged(existing.origin_conversation_id);
+    runAfterMemoryTransactionCommit(() =>
+      notifyStructuredMemoryChanged(existing.origin_conversation_id),
+    );
     return {
       fact,
       status: 'duplicate',
@@ -195,8 +319,23 @@ function recordFactInTransaction(input: RecordFactInput): RecordFactResult {
 
   const superseded: MemoryFact[] = [];
   if (input.supersedePrior) {
-    const query = buildSupersedePriorQuery(normalizedInput, scope);
-    const priors = db.getAllSync<FactRow>(query.sql, ...query.params);
+    const query = buildSupersedePriorQuery(
+      normalizedInput,
+      scope,
+      memoryOwnerId,
+      provenance.personaId,
+    );
+    const priors = db
+      .getAllSync<FactRow>(query.sql, ...query.params)
+      .filter((prior) =>
+        hasExactSupersessionScopeIdentity(
+          prior,
+          normalizedInput,
+          scope,
+          memoryOwnerId,
+          provenance.personaId,
+        ),
+      );
     for (const prior of priors) {
       db.runSync(
         `UPDATE memory_facts
@@ -221,9 +360,13 @@ function recordFactInTransaction(input: RecordFactInput): RecordFactResult {
     confidence,
     sourceMessageId: input.sourceMessageId ?? null,
     sourceRunId: input.sourceRunId ?? null,
+    memoryOwnerId,
+    personaId: provenance.personaId,
+    factClass: provenance.factClass,
+    sourceAuthority: provenance.sourceAuthority,
     scope,
     originConversationId: input.originConversationId ?? null,
-    originThreadId: input.originThreadId ?? input.originConversationId ?? null,
+    originThreadId: input.originThreadId ?? null,
     originTaskId: input.originTaskId ?? null,
     sourceTurnId: input.sourceTurnId ?? null,
     sourceSummary: input.sourceSummary ?? null,
@@ -234,17 +377,16 @@ function recordFactInTransaction(input: RecordFactInput): RecordFactResult {
     lastReinforcedAt: null,
     lastAccessedAt: null,
     decayPolicy,
-    expiresAt: input.expiresAt ?? null,
+    expiresAt,
     contentHash: hash,
     embedding: null,
-    validAt: input.validAt ?? now,
+    validAt,
     invalidAt: null,
     createdAt: now,
     updatedAt: now,
     deletedAt: null,
     pinned: input.pinned ?? false,
     sourceActorId: input.sourceActorId ?? null,
-    taskId: input.taskId ?? input.originTaskId ?? null,
     retrievability,
     stability,
     decayRate,
@@ -258,15 +400,16 @@ function recordFactInTransaction(input: RecordFactInput): RecordFactResult {
   db.runSync(
     `INSERT INTO memory_facts
        (id, subject_id, predicate, object_text, object_entity_id, attributes,
-        confidence, source_message_id, source_run_id, scope, origin_conversation_id,
+        confidence, source_message_id, source_run_id, memory_owner_id, persona_id,
+        fact_class, source_authority, scope, origin_conversation_id,
         origin_thread_id, origin_task_id, source_turn_id, source_summary, importance,
         access_count, repeated_mention_count, last_recalled_at, last_reinforced_at,
         last_accessed_at, decay_policy, expires_at, content_hash, embedding, valid_at,
-        invalid_at, created_at, updated_at, deleted_at, pinned, source_actor_id, task_id,
+        invalid_at, created_at, updated_at, deleted_at, pinned, source_actor_id,
         retrievability, stability, decay_rate, last_presented_at, last_confirmed_at,
         last_conflicted_at, review_state, sensitivity, memory_kind)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, NULL, NULL, NULL,
-        ?, ?, ?, NULL, ?, NULL, ?, ?, NULL, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, NULL, NULL, NULL,
+        ?, ?, ?, NULL, ?, NULL, ?, ?, NULL, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?)`,
     fact.id,
     fact.subjectId,
     fact.predicate,
@@ -276,6 +419,10 @@ function recordFactInTransaction(input: RecordFactInput): RecordFactResult {
     fact.confidence,
     fact.sourceMessageId,
     fact.sourceRunId,
+    fact.memoryOwnerId,
+    fact.personaId,
+    fact.factClass,
+    fact.sourceAuthority,
     fact.scope,
     fact.originConversationId,
     fact.originThreadId,
@@ -291,7 +438,6 @@ function recordFactInTransaction(input: RecordFactInput): RecordFactResult {
     fact.updatedAt,
     fact.pinned ? 1 : 0,
     fact.sourceActorId,
-    fact.taskId,
     fact.retrievability,
     fact.stability,
     fact.decayRate,
@@ -300,11 +446,12 @@ function recordFactInTransaction(input: RecordFactInput): RecordFactResult {
     fact.memoryKind,
   );
   replaceFactRetrievalTerms(fact);
-  notifyStructuredMemoryChanged(fact.originConversationId);
+  runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged(fact.originConversationId));
   return { fact, status: 'created', superseded };
 }
 
 export function markFactsRecalled(ids: string[], now = Date.now()): number {
+  requireFactMutationTimestamp(now, 'memory_fact_mutation_clock_invalid');
   getSchemaReadyMemoryDb();
   const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
   if (uniqueIds.length === 0) return 0;
@@ -325,6 +472,7 @@ export function markFactsRecalled(ids: string[], now = Date.now()): number {
 }
 
 export function invalidateFact(id: string, now = Date.now()): boolean {
+  requireFactMutationTimestamp(now, 'memory_fact_mutation_clock_invalid');
   const result = runMemoryStatement(
     `UPDATE memory_facts
        SET invalid_at = ?, updated_at = ?
@@ -335,12 +483,13 @@ export function invalidateFact(id: string, now = Date.now()): boolean {
   );
   const changed = (result.changes ?? 0) > 0;
   if (changed) {
-    notifyStructuredMemoryChanged();
+    runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged());
   }
   return changed;
 }
 
 export function setFactPinned(id: string, pinned: boolean, now = Date.now()): boolean {
+  requireFactMutationTimestamp(now, 'memory_fact_mutation_clock_invalid');
   const result = runMemoryStatement(
     `UPDATE memory_facts
        SET pinned = ?, updated_at = ?
@@ -350,7 +499,7 @@ export function setFactPinned(id: string, pinned: boolean, now = Date.now()): bo
     id,
   );
   const changed = (result.changes ?? 0) > 0;
-  if (changed) notifyStructuredMemoryChanged();
+  if (changed) runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged());
   return changed;
 }
 
@@ -365,6 +514,7 @@ export function setFactEmbedding(
   embedding: number[] | null,
   now = Date.now(),
 ): boolean {
+  requireFactMutationTimestamp(now, 'memory_fact_mutation_clock_invalid');
   const serialized = embedding && embedding.length > 0 ? JSON.stringify(embedding) : null;
   const result = runMemoryStatement(
     `UPDATE memory_facts
@@ -375,6 +525,6 @@ export function setFactEmbedding(
     id,
   );
   const changed = (result.changes ?? 0) > 0;
-  if (changed) notifyStructuredMemoryChanged();
+  if (changed) runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged());
   return changed;
 }

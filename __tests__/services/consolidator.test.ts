@@ -381,7 +381,7 @@ describe('applyConsolidatorResult', () => {
     expect(facts).toHaveLength(1);
     expect(facts[0].objectText).toBe('Berlin');
     expect(facts[0].scope).toBe('global');
-    expect(facts[0].originConversationId).toBe('conv-1');
+    expect(facts[0].originConversationId).toBeNull();
     expect(facts[0].importance).toBe(0.8);
     expect(listFactEvidence(facts[0].id)).toHaveLength(1);
 
@@ -636,8 +636,16 @@ describe('applyConsolidatorResult', () => {
       openThreads: [],
       notable: [],
     };
-    const first = applyConsolidatorResult(result, { now: 1 });
-    const second = applyConsolidatorResult(result, { now: 2 });
+    const first = applyConsolidatorResult(result, {
+      conversationId: 'conv-idempotent',
+      threadId: 'thread-idempotent',
+      now: 1,
+    });
+    const second = applyConsolidatorResult(result, {
+      conversationId: 'conv-idempotent',
+      threadId: 'thread-idempotent',
+      now: 2,
+    });
     expect(first.recordedFacts).toHaveLength(1);
     expect(second.recordedFacts).toHaveLength(0);
     const userEntity = findEntityByName('user');

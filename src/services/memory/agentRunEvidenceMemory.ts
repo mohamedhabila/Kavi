@@ -18,7 +18,7 @@ import {
   type JsonRecord,
 } from './agentRunEvidenceRecordCompaction';
 import { upsertEntity } from './entities';
-import { recordFact } from './facts/mutations';
+import { recordFactWithApplicability } from './facts/mutations';
 import type { MemoryFactKind } from './facts/types';
 import { ensureFactSchema } from './schema';
 
@@ -26,7 +26,7 @@ export interface AgentRunEvidenceMemoryInput {
   messages?: ReadonlyArray<Message>;
   evidence?: ReadonlyArray<string>;
   conversationId: string;
-  threadId?: string;
+  threadId: string;
   taskId?: string;
   sourceRunId?: string;
   sourceTurnId?: string;
@@ -370,25 +370,30 @@ function recordBundleFact(
   const authorityMultiplier = bundleHasObservedSourceEvidence(bundle)
     ? 1
     : agentRunAuthorityMultiplier(bundle);
-  const recorded = recordFact({
-    subjectId,
-    predicate,
-    objectText: trimmed,
-    memoryKind: kind,
-    sourceRunId: bundle.sourceRunId,
-    sourceTurnId: input.sourceTurnId,
-    originConversationId: input.conversationId,
-    originThreadId: input.threadId ?? input.conversationId,
-    originTaskId: input.taskId,
-    taskId: input.taskId,
-    scope: input.taskId ? 'session' : 'conversation',
-    confidence: 0.82 * authorityMultiplier,
-    importance,
-    retrievability: retrievability * authorityMultiplier,
-    stability: 0.72,
-    attributes,
-    now: input.now,
-  });
+  const recorded = recordFactWithApplicability(
+    {
+      subjectId,
+      predicate,
+      objectText: trimmed,
+      memoryKind: kind,
+      sourceRunId: bundle.sourceRunId,
+      sourceTurnId: input.sourceTurnId,
+      originConversationId: input.conversationId,
+      originThreadId: input.threadId,
+      originTaskId: input.taskId,
+      scope: input.taskId ? 'session' : 'conversation',
+      confidence: 0.82 * authorityMultiplier,
+      importance,
+      retrievability: retrievability * authorityMultiplier,
+      stability: 0.72,
+      attributes,
+      now: input.now,
+    },
+    {
+      factClass: 'workflow',
+      sourceAuthority: 'assistant_inferred',
+    },
+  );
   return recorded.fact.id;
 }
 
@@ -484,33 +489,38 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
 
   evidenceSpanSteps.forEach((step, index) => {
     const stepStateIndex = scalarField(step, 'stateIndex') ?? scalarField(step, 'state_index');
-    const recorded = recordFact({
-      subjectId: subject.id,
-      predicate: 'evidence_span',
-      objectText: evidenceSpanRecordForStep(bundle, step as AgentRunStep, index),
-      memoryKind: 'evidence_span',
-      sourceRunId: bundle.sourceRunId,
-      sourceTurnId: input.sourceTurnId,
-      originConversationId: input.conversationId,
-      originThreadId: input.threadId ?? input.conversationId,
-      originTaskId: input.taskId,
-      taskId: input.taskId,
-      scope: input.taskId ? 'session' : 'conversation',
-      confidence: 0.9,
-      importance: 0.86,
-      retrievability: 0.94,
-      stability: 0.66,
-      attributes: {
-        ...baseAttributes,
-        evidenceType: 'evidence_span',
-        sequence: index,
-        stateIndex: stepStateIndex,
-        status: stringField(step, 'status'),
-        toolName: stringField(step, 'toolName') ?? stringField(step, 'tool_name'),
-        url: stringField(step, 'url'),
+    const recorded = recordFactWithApplicability(
+      {
+        subjectId: subject.id,
+        predicate: 'evidence_span',
+        objectText: evidenceSpanRecordForStep(bundle, step as AgentRunStep, index),
+        memoryKind: 'evidence_span',
+        sourceRunId: bundle.sourceRunId,
+        sourceTurnId: input.sourceTurnId,
+        originConversationId: input.conversationId,
+        originThreadId: input.threadId,
+        originTaskId: input.taskId,
+        scope: input.taskId ? 'session' : 'conversation',
+        confidence: 0.9,
+        importance: 0.86,
+        retrievability: 0.94,
+        stability: 0.66,
+        attributes: {
+          ...baseAttributes,
+          evidenceType: 'evidence_span',
+          sequence: index,
+          stateIndex: stepStateIndex,
+          status: stringField(step, 'status'),
+          toolName: stringField(step, 'toolName') ?? stringField(step, 'tool_name'),
+          url: stringField(step, 'url'),
+        },
+        now: input.now,
       },
-      now: input.now,
-    });
+      {
+        factClass: 'workflow',
+        sourceAuthority: 'assistant_inferred',
+      },
+    );
     factIds.push(recorded.fact.id);
   });
 

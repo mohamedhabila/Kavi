@@ -1,14 +1,24 @@
 import { getSchemaReadyMemoryDb } from '../access/schemaGuard';
-import { runMemoryTransaction } from '../access/transaction';
+import { runAfterMemoryTransactionCommit, runMemoryTransaction } from '../access/transaction';
+import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
+import { isExactMemoryScopeId } from '../memoryScopeIdentity';
 import { safeParseObject } from '../schema';
 import { notifyStructuredMemoryChanged } from '../store';
-import { recordFact } from './mutations';
+import {
+  closedMemoryFactClass,
+  closedMemorySourceAuthority,
+  requireMemoryFactReviewState,
+  requireMemoryFactSensitivity,
+  type SealedFactApplicabilityProvenance,
+} from './applicabilityProvenance';
+import { recordFactWithApplicability } from './mutations';
+import { requireFactMutationScope, requireFactMutationTimestamp } from './mutationValidation';
 import { replaceFactRetrievalTerms } from './retrievalIndex';
+import { requireFactScopeIdentity } from './scopeIdentity';
 import { hasPersistedSourceEvidence } from './sourceEvidence';
 import {
   clamp01,
   normalizeFactKind,
-  normalizeScope,
   rowToFact,
   type FactRow,
   type MemoryFact,
@@ -23,25 +33,43 @@ class ExactReplacementConflict extends Error {
   }
 }
 
-function nullableId(value: string | null | undefined): string | null {
-  return value?.trim() || null;
-}
-
-function replacementScopeMatches(row: FactRow, input: ReplaceCurrentFactInput): boolean {
-  const scope = normalizeScope(input.scope);
-  if (normalizeScope(row.scope) !== scope) return false;
-  if (scope === 'global') return true;
-
-  const conversationId = nullableId(input.originConversationId);
-  if (scope === 'conversation') {
-    return nullableId(row.origin_conversation_id) === conversationId;
+function replacementScopeMatches(
+  row: FactRow,
+  input: ReplaceCurrentFactInput,
+  personaId: string | null,
+): boolean {
+  const scope = requireFactMutationScope(input.scope);
+  if (row.scope !== scope) return false;
+  if (scope === 'global') {
+    return (
+      row.persona_id === null &&
+      row.origin_conversation_id === null &&
+      row.origin_thread_id === null &&
+      row.origin_task_id === null
+    );
   }
-  const threadId = nullableId(input.originThreadId ?? input.originConversationId);
-  const taskId = nullableId(input.originTaskId);
+  if (scope === 'persona') {
+    return (
+      row.persona_id === personaId &&
+      isExactMemoryScopeId(row.persona_id) &&
+      row.origin_conversation_id === null &&
+      row.origin_thread_id === null &&
+      row.origin_task_id === null
+    );
+  }
+  if (row.persona_id !== null || row.origin_conversation_id !== input.originConversationId) {
+    return false;
+  }
+  if (scope === 'conversation' || scope === 'project') {
+    return (
+      row.origin_task_id === null &&
+      (row.origin_thread_id === null || isExactMemoryScopeId(row.origin_thread_id))
+    );
+  }
   return (
-    nullableId(row.origin_conversation_id) === conversationId &&
-    nullableId(row.origin_thread_id) === threadId &&
-    nullableId(row.origin_task_id) === taskId
+    row.origin_thread_id === input.originThreadId &&
+    row.origin_task_id === input.originTaskId &&
+    isExactMemoryScopeId(row.origin_task_id)
   );
 }
 
@@ -90,7 +118,7 @@ function reinforceExactDuplicate(
     last_accessed_at: now,
   });
   replaceFactRetrievalTerms(fact);
-  notifyStructuredMemoryChanged(row.origin_conversation_id);
+  runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged(row.origin_conversation_id));
   return fact;
 }
 
@@ -100,6 +128,21 @@ function reinforceExactDuplicate(
  * broadened into an insert or subject/predicate-wide invalidation.
  */
 export function replaceCurrentFact(input: ReplaceCurrentFactInput): ReplaceCurrentFactResult {
+  return replaceCurrentFactInternal(input);
+}
+
+/** Product-code boundary for a replacement with newly admitted provenance. */
+export function replaceCurrentFactWithApplicability(
+  input: ReplaceCurrentFactInput,
+  applicability: SealedFactApplicabilityProvenance,
+): ReplaceCurrentFactResult {
+  return replaceCurrentFactInternal(input, applicability);
+}
+
+function replaceCurrentFactInternal(
+  input: ReplaceCurrentFactInput,
+  sealedApplicability?: SealedFactApplicabilityProvenance,
+): ReplaceCurrentFactResult {
   const expectedCurrentFactId = input.expectedCurrentFactId.trim();
   if (!expectedCurrentFactId) {
     return { fact: null, status: 'conflict', superseded: [], conflict: 'target_missing' };
@@ -109,7 +152,23 @@ export function replaceCurrentFact(input: ReplaceCurrentFactInput): ReplaceCurre
   if (!input.subjectId) throw new Error('replaceCurrentFact: subjectId required');
   if (!predicate) throw new Error('replaceCurrentFact: predicate required');
   if (!objectText) throw new Error('replaceCurrentFact: objectText required');
-  const now = input.now ?? Date.now();
+  const now = requireFactMutationTimestamp(
+    input.now ?? Date.now(),
+    'memory_fact_mutation_clock_invalid',
+  );
+  const validAt = requireFactMutationTimestamp(
+    input.validAt ?? now,
+    'memory_fact_valid_at_invalid',
+  );
+  const expiresAt =
+    input.expiresAt === null || input.expiresAt === undefined
+      ? null
+      : requireFactMutationTimestamp(input.expiresAt, 'memory_fact_expires_at_invalid');
+  if (expiresAt !== null && expiresAt <= validAt) {
+    throw new Error('memory_fact_validity_order_invalid');
+  }
+  const scope = requireFactMutationScope(input.scope);
+  requireFactScopeIdentity(input, scope);
 
   try {
     return runMemoryTransaction(() => {
@@ -121,13 +180,22 @@ export function replaceCurrentFact(input: ReplaceCurrentFactInput): ReplaceCurre
         expectedCurrentFactId,
       );
       if (!current) throw new ExactReplacementConflict('target_changed');
+      if (current.memory_owner_id !== getLocalMemoryVaultOwnerId(db)) {
+        throw new ExactReplacementConflict('target_scope_mismatch');
+      }
       if (
         current.subject_id !== input.subjectId ||
         current.predicate.trim().toLowerCase() !== predicate.toLowerCase()
       ) {
         throw new ExactReplacementConflict('target_changed');
       }
-      if (!replacementScopeMatches(current, input)) {
+      if (
+        !replacementScopeMatches(
+          current,
+          input,
+          sealedApplicability?.personaId ?? current.persona_id ?? null,
+        )
+      ) {
         throw new ExactReplacementConflict('target_scope_mismatch');
       }
 
@@ -139,24 +207,57 @@ export function replaceCurrentFact(input: ReplaceCurrentFactInput): ReplaceCurre
             superseded: [],
           };
         }
-        return {
-          fact: reinforceExactDuplicate(current, input, now),
-          status: 'duplicate' as const,
-          superseded: [],
-        };
+        if (!sealedApplicability) {
+          return {
+            fact: reinforceExactDuplicate(current, input, now),
+            status: 'duplicate' as const,
+            superseded: [],
+          };
+        }
+        return recordFactWithApplicability(
+          {
+            ...input,
+            predicate,
+            objectText,
+            supersedePrior: false,
+            now,
+          },
+          sealedApplicability,
+        );
       }
 
-      const created = recordFact({
-        ...input,
-        predicate,
-        objectText,
-        pinned: input.pinned ?? current.pinned !== 0,
-        sensitivity: input.sensitivity ?? current.sensitivity ?? 'normal',
-        reviewState: input.reviewState ?? current.review_state ?? 'auto',
-        memoryKind: input.memoryKind ?? normalizeFactKind(current.memory_kind),
-        supersedePrior: false,
-        now,
-      });
+      const inheritedReviewState = requireMemoryFactReviewState(
+        input.reviewState ?? current.review_state,
+      );
+      const inheritedSensitivity = requireMemoryFactSensitivity(
+        input.sensitivity ?? current.sensitivity,
+      );
+      const inheritedFactClass = closedMemoryFactClass(current.fact_class);
+      const inheritedSourceAuthority = closedMemorySourceAuthority(current.source_authority);
+      if (!sealedApplicability && (!inheritedFactClass || !inheritedSourceAuthority)) {
+        throw new Error('memory_fact_provenance_invalid');
+      }
+      const replacementApplicability =
+        sealedApplicability ??
+        ({
+          factClass: inheritedFactClass!,
+          sourceAuthority: inheritedSourceAuthority!,
+          ...(current.persona_id ? { personaId: current.persona_id } : {}),
+        } as const);
+      const created = recordFactWithApplicability(
+        {
+          ...input,
+          predicate,
+          objectText,
+          pinned: input.pinned ?? current.pinned !== 0,
+          sensitivity: inheritedSensitivity,
+          reviewState: inheritedReviewState,
+          memoryKind: input.memoryKind ?? normalizeFactKind(current.memory_kind),
+          supersedePrior: false,
+          now,
+        },
+        replacementApplicability,
+      );
       if (created.status !== 'created') {
         throw new ExactReplacementConflict('replacement_collision');
       }

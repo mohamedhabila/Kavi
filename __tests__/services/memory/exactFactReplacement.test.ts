@@ -3,15 +3,27 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { replaceCurrentFact } from '../../../src/services/memory/facts/exactReplacement';
-import { invalidateFact, recordFact } from '../../../src/services/memory/facts/mutations';
+import {
+  replaceCurrentFact,
+  replaceCurrentFactWithApplicability,
+} from '../../../src/services/memory/facts/exactReplacement';
+import {
+  invalidateFact,
+  recordFact,
+  recordFactWithApplicability,
+} from '../../../src/services/memory/facts/mutations';
 import { addFactEvidence } from '../../../src/services/memory/episodes/mutations';
-import { listFacts } from '../../../src/services/memory/facts/queries';
+import {
+  listCurrentFactsForReplacement,
+  MEMORY_FACT_REPLACEMENT_SCAN_LIMIT,
+} from '../../../src/services/memory/facts/exactReplacementQueries';
+import { getFactById, listFacts } from '../../../src/services/memory/facts/queries';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
-import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { subscribeToMemoryChanges } from '../../../src/services/memory/store';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -38,8 +50,6 @@ function replacement(
     predicate: 'lives_in',
     objectText: value,
     scope: 'global',
-    originConversationId: 'conversation-1',
-    originThreadId: 'thread-1',
     sourceMessageId,
     now,
   });
@@ -89,6 +99,7 @@ describe('replaceCurrentFact', () => {
       subjectId: 'entity-user',
       predicate: 'lives_in',
       objectText: 'Amsterdam',
+      scope: 'global',
       now: 100,
     });
     invalidateFact(old.fact.id, 150);
@@ -122,7 +133,7 @@ describe('replaceCurrentFact', () => {
     ]);
   });
 
-  it('replaces conversation memory across thread and task changes in one namespace', () => {
+  it('replaces conversation memory across thread changes in one root namespace', () => {
     const old = recordFact({
       subjectId: 'entity-user',
       predicate: 'preferred_name',
@@ -130,7 +141,6 @@ describe('replaceCurrentFact', () => {
       scope: 'conversation',
       originConversationId: 'conversation-1',
       originThreadId: 'older-thread',
-      originTaskId: 'older-task',
       now: 100,
     });
 
@@ -142,11 +152,270 @@ describe('replaceCurrentFact', () => {
       scope: 'conversation',
       originConversationId: 'conversation-1',
       originThreadId: 'new-thread',
-      originTaskId: 'new-task',
       now: 200,
     });
 
     expect(result).toMatchObject({ status: 'created', fact: { objectText: 'Mohamed' } });
+  });
+
+  it('replaces project memory across thread changes in one root namespace', () => {
+    const old = recordFact({
+      subjectId: 'entity-project',
+      predicate: 'release_target',
+      objectText: 'staging',
+      scope: 'project',
+      originConversationId: 'project-root',
+      originThreadId: 'older-thread',
+      now: 100,
+    });
+
+    expect(
+      replaceCurrentFact({
+        expectedCurrentFactId: old.fact.id,
+        subjectId: 'entity-project',
+        predicate: 'release_target',
+        objectText: 'production',
+        scope: 'project',
+        originConversationId: 'project-root',
+        originThreadId: 'new-thread',
+        now: 200,
+      }),
+    ).toMatchObject({ status: 'created', fact: { objectText: 'production' } });
+  });
+
+  it('rejects structurally malformed persisted scope bindings without collateral mutation', () => {
+    const global = recordFact({
+      subjectId: 'entity-global',
+      predicate: 'state',
+      objectText: 'old',
+      scope: 'global',
+      now: 100,
+    }).fact;
+    const persona = recordFactWithApplicability(
+      {
+        subjectId: 'entity-persona',
+        predicate: 'state',
+        objectText: 'old',
+        scope: 'persona',
+        now: 100,
+      },
+      { factClass: 'subjective_user', sourceAuthority: 'grounded_user', personaId: 'persona-1' },
+    ).fact;
+    const conversation = recordFact({
+      subjectId: 'entity-conversation',
+      predicate: 'state',
+      objectText: 'old',
+      scope: 'conversation',
+      originConversationId: 'root-1',
+      now: 100,
+    }).fact;
+    const project = recordFact({
+      subjectId: 'entity-project-malformed',
+      predicate: 'state',
+      objectText: 'old',
+      scope: 'project',
+      originConversationId: 'root-1',
+      now: 100,
+    }).fact;
+    const session = recordFact({
+      subjectId: 'entity-session',
+      predicate: 'state',
+      objectText: 'old',
+      scope: 'session',
+      originConversationId: 'root-1',
+      originThreadId: 'thread-1',
+      originTaskId: 'task-1',
+      now: 100,
+    }).fact;
+    const db = getMemoryDb();
+    db.runSync(
+      'UPDATE memory_facts SET origin_conversation_id = ? WHERE id = ?',
+      'root-1',
+      global.id,
+    );
+    db.runSync('UPDATE memory_facts SET origin_thread_id = ? WHERE id = ?', 'thread-1', persona.id);
+    db.runSync(
+      'UPDATE memory_facts SET origin_task_id = ? WHERE id = ?',
+      'task-1',
+      conversation.id,
+    );
+    db.runSync('UPDATE memory_facts SET persona_id = ? WHERE id = ?', 'persona-1', project.id);
+    db.runSync('UPDATE memory_facts SET origin_task_id = NULL WHERE id = ?', session.id);
+
+    const results = [
+      replaceCurrentFact({
+        expectedCurrentFactId: global.id,
+        subjectId: global.subjectId,
+        predicate: global.predicate,
+        objectText: 'new',
+        scope: 'global',
+        now: 200,
+      }),
+      replaceCurrentFactWithApplicability(
+        {
+          expectedCurrentFactId: persona.id,
+          subjectId: persona.subjectId,
+          predicate: persona.predicate,
+          objectText: 'new',
+          scope: 'persona',
+          now: 200,
+        },
+        {
+          factClass: 'subjective_user',
+          sourceAuthority: 'grounded_user',
+          personaId: 'persona-1',
+        },
+      ),
+      replaceCurrentFact({
+        expectedCurrentFactId: conversation.id,
+        subjectId: conversation.subjectId,
+        predicate: conversation.predicate,
+        objectText: 'new',
+        scope: 'conversation',
+        originConversationId: 'root-1',
+        now: 200,
+      }),
+      replaceCurrentFact({
+        expectedCurrentFactId: project.id,
+        subjectId: project.subjectId,
+        predicate: project.predicate,
+        objectText: 'new',
+        scope: 'project',
+        originConversationId: 'root-1',
+        now: 200,
+      }),
+      replaceCurrentFact({
+        expectedCurrentFactId: session.id,
+        subjectId: session.subjectId,
+        predicate: session.predicate,
+        objectText: 'new',
+        scope: 'session',
+        originConversationId: 'root-1',
+        originThreadId: 'thread-1',
+        originTaskId: 'task-1',
+        now: 200,
+      }),
+    ];
+
+    expect(results).toEqual(
+      results.map(() =>
+        expect.objectContaining({ status: 'conflict', conflict: 'target_scope_mismatch' }),
+      ),
+    );
+    const rows = db.getAllSync<{ invalid_at: number | null }>(
+      `SELECT invalid_at FROM memory_facts
+        WHERE id IN (?, ?, ?, ?, ?)`,
+      global.id,
+      persona.id,
+      conversation.id,
+      project.id,
+      session.id,
+    );
+    expect(rows).toHaveLength(5);
+    expect(rows.every((row) => row.invalid_at === null)).toBe(true);
+  });
+
+  it('filters foreign and malformed rows before the two-row replacement bound', () => {
+    const target = recordFact({
+      subjectId: 'entity-saturated',
+      predicate: 'state',
+      objectText: 'valid',
+      scope: 'conversation',
+      originConversationId: 'root-1',
+      originThreadId: 'thread-1',
+      now: 100,
+    }).fact;
+    if (!target.memoryOwnerId) throw new Error('expected local memory owner');
+    const db = getMemoryDb();
+    for (let index = 0; index < 300; index += 1) {
+      const timestamp = 1_000 + index;
+      db.runSync(
+        `INSERT INTO memory_facts(
+          id, subject_id, predicate, object_text, content_hash, valid_at, created_at,
+          updated_at, scope, origin_conversation_id, origin_thread_id, origin_task_id,
+          memory_owner_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'conversation', 'root-1', 'thread-1', ?, ?)`,
+        `foreign-${index}`,
+        target.subjectId,
+        target.predicate,
+        `foreign-${index}`,
+        `foreign-hash-${index}`,
+        timestamp,
+        timestamp,
+        timestamp,
+        null,
+        'foreign-owner',
+      );
+      db.runSync(
+        `INSERT INTO memory_facts(
+          id, subject_id, predicate, object_text, content_hash, valid_at, created_at,
+          updated_at, scope, origin_conversation_id, origin_thread_id, origin_task_id,
+          memory_owner_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'conversation', 'root-1', 'thread-1', ?, ?)`,
+        `malformed-${index}`,
+        target.subjectId,
+        target.predicate,
+        `malformed-${index}`,
+        `malformed-hash-${index}`,
+        timestamp,
+        timestamp,
+        timestamp,
+        null,
+        target.memoryOwnerId,
+      );
+      db.runSync(
+        "UPDATE memory_facts SET origin_thread_id = ' invalid-thread ' WHERE id = ?",
+        `malformed-${index}`,
+      );
+    }
+
+    expect(
+      listCurrentFactsForReplacement({
+        subjectId: target.subjectId,
+        predicate: target.predicate,
+        scope: 'conversation',
+        originConversationId: 'root-1',
+        originThreadId: 'thread-1',
+      }).map((fact) => fact.id),
+    ).toEqual([target.id]);
+  });
+
+  it('fails closed when exact replacement corruption scanning saturates', () => {
+    const target = recordFact({
+      subjectId: 'entity-corruption-saturation',
+      predicate: 'state',
+      objectText: 'valid',
+      scope: 'conversation',
+      originConversationId: 'root-1',
+      now: 100,
+    }).fact;
+    if (!target.memoryOwnerId) throw new Error('expected local memory owner');
+    const db = getMemoryDb();
+    for (let index = 0; index <= MEMORY_FACT_REPLACEMENT_SCAN_LIMIT; index += 1) {
+      db.runSync(
+        `INSERT INTO memory_facts(
+          id, subject_id, predicate, object_text, content_hash, valid_at, created_at,
+          updated_at, scope, origin_conversation_id, origin_thread_id, origin_task_id,
+          memory_owner_id
+        ) VALUES (?, ?, ?, ?, ?, 200, 200, 200, 'conversation', 'root-1',
+                  ' invalid-thread ', NULL, ?)`,
+        `saturated-${index}`,
+        target.subjectId,
+        target.predicate,
+        `saturated-${index}`,
+        `saturated-hash-${index}`,
+        target.memoryOwnerId,
+      );
+    }
+
+    expect(() =>
+      listCurrentFactsForReplacement({
+        subjectId: target.subjectId,
+        predicate: target.predicate,
+        scope: 'conversation',
+        originConversationId: 'root-1',
+      }),
+    ).toThrow('memory_fact_replacement_scan_saturated');
   });
 
   it('keeps session replacements isolated to their exact thread and task', () => {
@@ -320,6 +589,8 @@ describe('replaceCurrentFact', () => {
       scope: 'global',
       now: 110,
     });
+    const listener = jest.fn();
+    const unsubscribe = subscribeToMemoryChanges(listener);
 
     expect(replacement(old.fact.id, 'Utrecht', 200)).toEqual({
       fact: null,
@@ -333,5 +604,8 @@ describe('replaceCurrentFact', () => {
         expect.objectContaining({ id: alreadyCurrent.fact.id }),
       ]),
     );
+    expect(getFactById(alreadyCurrent.fact.id)?.repeatedMentionCount).toBe(0);
+    expect(listener).not.toHaveBeenCalled();
+    unsubscribe();
   });
 });

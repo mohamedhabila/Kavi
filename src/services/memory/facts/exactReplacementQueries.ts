@@ -1,12 +1,18 @@
 import { getMany } from '../access/crud';
+import { getSchemaReadyMemoryDb } from '../access/schemaGuard';
+import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
+import { isExactMemoryScopeId } from '../memoryScopeIdentity';
 import type { SqlBindValue } from './queryFilter';
+import { requireFactScopeIdentity } from './scopeIdentity';
 import {
-  normalizeScope,
+  requireMemoryFactScope,
   rowToFact,
   type FactRow,
   type MemoryFact,
   type MemoryFactScope,
 } from './types';
+
+export const MEMORY_FACT_REPLACEMENT_SCAN_LIMIT = 512;
 
 export interface CurrentReplacementFactQuery {
   subjectId: string;
@@ -15,6 +21,7 @@ export interface CurrentReplacementFactQuery {
   originConversationId?: string | null;
   originThreadId?: string | null;
   originTaskId?: string | null;
+  personaId?: string | null;
 }
 
 /**
@@ -23,32 +30,73 @@ export interface CurrentReplacementFactQuery {
  * the key is ambiguous and must be rejected.
  */
 export function listCurrentFactsForReplacement(input: CurrentReplacementFactQuery): MemoryFact[] {
+  const scope = requireMemoryFactScope(input.scope);
+  requireFactScopeIdentity(input, scope);
+  const memoryOwnerId = getLocalMemoryVaultOwnerId(getSchemaReadyMemoryDb());
   const clauses = [
     'subject_id = ?',
     'predicate = ? COLLATE NOCASE',
+    'memory_owner_id = ?',
     'scope = ?',
     'invalid_at IS NULL',
     'deleted_at IS NULL',
   ];
-  const params: SqlBindValue[] = [input.subjectId, input.predicate, normalizeScope(input.scope)];
+  const params: SqlBindValue[] = [input.subjectId, input.predicate, memoryOwnerId, scope];
 
-  if (input.scope === 'conversation') {
-    clauses.push("COALESCE(origin_conversation_id, '') = ?");
-    params.push(input.originConversationId?.trim() ?? '');
-  } else if (input.scope !== 'global') {
-    clauses.push("COALESCE(origin_conversation_id, '') = ?");
-    params.push(input.originConversationId?.trim() ?? '');
-    clauses.push("COALESCE(origin_thread_id, '') = ?");
-    params.push(input.originThreadId?.trim() ?? input.originConversationId?.trim() ?? '');
-    clauses.push("COALESCE(origin_task_id, '') = ?");
-    params.push(input.originTaskId?.trim() ?? '');
+  if (scope === 'global') {
+    clauses.push('persona_id IS NULL');
+    clauses.push('origin_conversation_id IS NULL');
+    clauses.push('origin_thread_id IS NULL');
+    clauses.push('origin_task_id IS NULL');
+  } else if (scope === 'persona') {
+    if (!isExactMemoryScopeId(input.personaId)) {
+      throw new Error('memory_fact_persona_id_required');
+    }
+    clauses.push('persona_id = ?');
+    params.push(input.personaId);
+    clauses.push('origin_conversation_id IS NULL');
+    clauses.push('origin_thread_id IS NULL');
+    clauses.push('origin_task_id IS NULL');
+  } else {
+    if (!isExactMemoryScopeId(input.originConversationId)) {
+      throw new Error('memory_fact_origin_conversation_id_required');
+    }
+    clauses.push('persona_id IS NULL');
+    clauses.push('origin_conversation_id = ?');
+    params.push(input.originConversationId);
+    if (scope === 'conversation' || scope === 'project') {
+      clauses.push('origin_task_id IS NULL');
+    } else {
+      if (!isExactMemoryScopeId(input.originThreadId)) {
+        throw new Error('memory_fact_origin_thread_id_required');
+      }
+      if (!isExactMemoryScopeId(input.originTaskId)) {
+        throw new Error('memory_fact_origin_task_id_required');
+      }
+      clauses.push('origin_thread_id = ?');
+      params.push(input.originThreadId);
+      clauses.push('origin_task_id = ?');
+      params.push(input.originTaskId);
+    }
   }
 
-  return getMany<FactRow>(
+  const rows = getMany<FactRow>(
     `SELECT * FROM memory_facts
       WHERE ${clauses.join(' AND ')}
       ORDER BY updated_at DESC, id ASC
-      LIMIT 2`,
+      LIMIT ${MEMORY_FACT_REPLACEMENT_SCAN_LIMIT + 1}`,
     ...params,
-  ).map(rowToFact);
+  );
+  if (rows.length > MEMORY_FACT_REPLACEMENT_SCAN_LIMIT) {
+    throw new Error('memory_fact_replacement_scan_saturated');
+  }
+  return rows
+    .filter(
+      (row) =>
+        (scope !== 'conversation' && scope !== 'project') ||
+        row.origin_thread_id === null ||
+        isExactMemoryScopeId(row.origin_thread_id),
+    )
+    .slice(0, 2)
+    .map(rowToFact);
 }

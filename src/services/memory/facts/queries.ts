@@ -21,7 +21,6 @@ const DEFAULT_RECALL_ELIGIBLE_SCAN_LIMIT = 256;
 const MAX_RECALL_CANDIDATE_LIMIT = 2_000;
 const DEFAULT_RECALL_PINNED_LIMIT = 64;
 const DEFAULT_RECALL_SCOPED_RECENT_LIMIT = 192;
-
 function clampLimit(value: number | undefined, fallback: number, max: number): number {
   const requested = value === undefined || !Number.isFinite(value) ? fallback : Math.floor(value);
   return Math.max(1, Math.min(requested, max));

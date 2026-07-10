@@ -9,6 +9,7 @@ import {
   executeMemoryBlockEdit as editMemoryBlock,
   type MemoryRecallArgs,
   type MemoryRememberArgs,
+  type MemoryRememberExecutionContext,
   type MemoryPinArgs,
   type MemoryForgetArgs,
   type MemoryInvalidateArgs,
@@ -156,8 +157,11 @@ export function executeMemoryRecall(args: MemoryRecallArgs): string {
   return wrapMemoryToolResult(recallFacts(args));
 }
 
-export function executeMemoryRemember(args: MemoryRememberArgs): string {
-  return wrapMemoryToolResult(rememberFact(args));
+export function executeMemoryRemember(
+  args: MemoryRememberArgs,
+  context?: MemoryRememberExecutionContext,
+): string {
+  return wrapMemoryToolResult(rememberFact(args, context));
 }
 
 export function executeMemoryPin(args: MemoryPinArgs): string {

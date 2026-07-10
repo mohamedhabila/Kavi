@@ -1,4 +1,6 @@
 import { useSettingsStore } from '../../store/useSettingsStore';
+import { useChatStore } from '../../store/useChatStore';
+import { resolveCodeOwnedMemoryPersonaId } from '../../services/memory/memoryScopeIdentity';
 import { resolveGraphTaskId } from '../goals/graphTaskScope';
 import { executeProviderAwareTool } from './providerAwareToolExecution';
 import {
@@ -11,7 +13,10 @@ import {
   executeMemoryRemember,
   executeMemoryUnpin,
 } from './builtin-memory';
-import type { MemoryRememberArgs } from '../../services/memory/memoryTools';
+import type {
+  MemoryRememberArgs,
+  MemoryRememberExecutionContext,
+} from '../../services/memory/memoryTools';
 import type { BuiltinToolExecutionParams } from './toolBuiltinExecutionTypes';
 import type { ToolExecutionContext } from './toolExecutionContext';
 
@@ -59,29 +64,61 @@ function withExecutionMemoryContext(
   conversationId: string,
   workspaceConversationId: string,
   context?: ToolExecutionContext,
-): MemoryRememberArgs {
+): { args: MemoryRememberArgs; context: MemoryRememberExecutionContext } {
   const source =
     args && typeof args === 'object' && !Array.isArray(args)
       ? (args as Partial<MemoryRememberArgs>)
       : {};
   const sourceRunId = context?.agentRunId?.trim() ? context.agentRunId.trim() : null;
   const taskId = resolveGraphTaskId({ goals: context?.controlGraphGoals });
-  return {
+  const scope = source.scope as MemoryRememberArgs['scope'];
+  const conversation = useChatStore
+    .getState()
+    .conversations.find((candidate) => candidate.id === conversationId);
+  const common = {
     subject: source.subject as string,
     subjectType: source.subjectType,
     predicate: source.predicate as string,
     value: source.value as string,
     confidence: source.confidence,
     pinned: source.pinned,
-    scope: source.scope ?? 'conversation',
+    scope,
     sourceSummary: source.sourceSummary,
     importance: source.importance,
-    originConversationId: workspaceConversationId,
-    originThreadId: conversationId,
-    originTaskId: taskId ?? null,
     sourceMessageId: null,
     sourceRunId,
   };
+  if (scope === 'global') return { args: common, context: {} };
+  if (scope === 'persona') {
+    return {
+      args: common,
+      context: {
+        personaId: resolveCodeOwnedMemoryPersonaId(conversation?.personaId),
+      },
+    };
+  }
+  if (scope === 'conversation' || scope === 'project') {
+    return {
+      args: {
+        ...common,
+        originConversationId: workspaceConversationId,
+        originThreadId: conversationId,
+      },
+      context: {},
+    };
+  }
+  if (scope === 'session') {
+    return {
+      args: {
+        ...common,
+        originConversationId: workspaceConversationId,
+        originThreadId: conversationId,
+        originTaskId: taskId ?? null,
+      },
+      context: {},
+    };
+  }
+  return { args: common, context: {} };
 }
 
 export async function executeBuiltinMemoryTool(
@@ -124,9 +161,13 @@ export async function executeBuiltinMemoryTool(
 
   if (name === 'memory_recall') return executeMemoryRecall(args);
   if (name === 'memory_remember') {
-    return executeMemoryRemember(
-      withExecutionMemoryContext(args, conversationId, workspaceConversationId, context),
+    const request = withExecutionMemoryContext(
+      args,
+      conversationId,
+      workspaceConversationId,
+      context,
     );
+    return executeMemoryRemember(request.args, request.context);
   }
   if (name === 'memory_pin') return executeMemoryPin(args);
   if (name === 'memory_unpin') return executeMemoryUnpin(args);

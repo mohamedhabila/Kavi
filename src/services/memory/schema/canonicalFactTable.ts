@@ -10,7 +10,115 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
   const table = db.getFirstSync<{ sql: string | null }>(
     "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'memory_facts'",
   );
-  if (!table?.sql || !/UNIQUE\s*\(\s*content_hash\s*\)/i.test(table.sql)) return;
+  if (!table?.sql) return;
+  const columns = db.getAllSync<{ name: string }>('PRAGMA table_info(memory_facts)');
+  const hasLegacyTaskId = columns.some((column) => column.name === 'task_id');
+  const hasUniqueContentHash = /UNIQUE\s*\(\s*content_hash\s*\)/i.test(table.sql);
+  if (!hasLegacyTaskId && !hasUniqueContentHash) return;
+  if (
+    hasLegacyTaskId &&
+    db.getFirstSync<{ id: string }>(
+      `SELECT id
+         FROM memory_facts
+        WHERE origin_task_id IS NOT NULL
+          AND task_id IS NOT NULL
+          AND origin_task_id != task_id
+        LIMIT 1`,
+    )
+  ) {
+    throw new Error('memory_fact_task_identity_conflict');
+  }
+  const canonicalColumns = new Set([
+    'id',
+    'subject_id',
+    'predicate',
+    'object_text',
+    'object_entity_id',
+    'attributes',
+    'confidence',
+    'source_message_id',
+    'source_run_id',
+    'memory_owner_id',
+    'persona_id',
+    'fact_class',
+    'source_authority',
+    'content_hash',
+    'embedding',
+    'valid_at',
+    'invalid_at',
+    'created_at',
+    'updated_at',
+    'deleted_at',
+    'pinned',
+    'scope',
+    'origin_conversation_id',
+    'origin_thread_id',
+    'origin_task_id',
+    'source_turn_id',
+    'source_summary',
+    'importance',
+    'access_count',
+    'repeated_mention_count',
+    'last_recalled_at',
+    'last_reinforced_at',
+    'last_accessed_at',
+    'decay_policy',
+    'expires_at',
+    'source_actor_id',
+    'retrievability',
+    'stability',
+    'decay_rate',
+    'last_presented_at',
+    'last_confirmed_at',
+    'last_conflicted_at',
+    'review_state',
+    'sensitivity',
+    'memory_kind',
+  ]);
+  if (columns.some((column) => column.name !== 'task_id' && !canonicalColumns.has(column.name))) {
+    throw new Error('memory_fact_schema_column_unsupported');
+  }
+  const canonicalSchemaObjects = new Set([
+    'idx_facts_subject',
+    'idx_facts_subject_predicate',
+    'idx_facts_subject_predicate_nocase',
+    'idx_facts_valid',
+    'idx_facts_pinned',
+    'idx_facts_scope_origin',
+    'idx_facts_evidence_scope',
+    'idx_facts_scope_task',
+    'idx_facts_subject_predicate_scope',
+    'idx_facts_content_hash',
+    'idx_facts_active_content_hash',
+    'idx_facts_last_recalled',
+    'idx_facts_importance',
+    'idx_facts_live_kind_rank',
+    'idx_facts_scope_origin_kind_rank',
+    'idx_facts_scope_task_kind_rank',
+    'idx_facts_scope_kind_rank',
+    'idx_facts_source_kind_rank',
+    'idx_facts_applicability_scope',
+  ]);
+  const schemaObjects = db.getAllSync<{ type: string; name: string; sql: string }>(
+    `SELECT type, name, sql
+       FROM sqlite_master
+      WHERE tbl_name = 'memory_facts'
+        AND type IN ('index', 'trigger')
+        AND sql IS NOT NULL
+        AND name NOT LIKE 'sqlite_autoindex_%'
+      ORDER BY type, name`,
+  );
+  for (const schemaObject of schemaObjects) {
+    if (/\btask_id\b/i.test(schemaObject.sql)) {
+      throw new Error('memory_fact_legacy_task_schema_object_unsupported');
+    }
+    if (schemaObject.type !== 'index' || !canonicalSchemaObjects.has(schemaObject.name)) {
+      throw new Error('memory_fact_schema_object_unsupported');
+    }
+  }
+  const originTaskProjection = hasLegacyTaskId
+    ? 'COALESCE(origin_task_id, task_id)'
+    : 'origin_task_id';
 
   db.execSync('BEGIN IMMEDIATE TRANSACTION');
   try {
@@ -26,6 +134,14 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
         confidence REAL NOT NULL DEFAULT 1.0,
         source_message_id TEXT,
         source_run_id TEXT,
+        memory_owner_id TEXT,
+        persona_id TEXT,
+        fact_class TEXT NOT NULL DEFAULT 'unknown'
+          CHECK(fact_class IN ('subjective_user', 'objective', 'workflow', 'unknown')),
+        source_authority TEXT NOT NULL DEFAULT 'unknown'
+          CHECK(source_authority IN (
+            'grounded_user', 'tool_observed', 'external_source', 'assistant_inferred', 'unknown'
+          )),
         content_hash TEXT NOT NULL,
         embedding TEXT,
         valid_at INTEGER NOT NULL,
@@ -49,7 +165,6 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
         decay_policy TEXT NOT NULL DEFAULT 'normal',
         expires_at INTEGER,
         source_actor_id TEXT,
-        task_id TEXT,
         retrievability REAL NOT NULL DEFAULT 1.0,
         stability REAL NOT NULL DEFAULT 0.5,
         decay_rate REAL NOT NULL DEFAULT 0.03,
@@ -62,23 +177,25 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
       );
       INSERT INTO memory_facts_without_hash_constraint (
         id, subject_id, predicate, object_text, object_entity_id, attributes,
-        confidence, source_message_id, source_run_id, content_hash, embedding,
+        confidence, source_message_id, source_run_id, memory_owner_id, persona_id,
+        fact_class, source_authority, content_hash, embedding,
         valid_at, invalid_at, created_at, updated_at, deleted_at, pinned, scope,
         origin_conversation_id, origin_thread_id, origin_task_id, source_turn_id,
         source_summary, importance, access_count, repeated_mention_count,
         last_recalled_at, last_reinforced_at, last_accessed_at, decay_policy,
-        expires_at, source_actor_id, task_id, retrievability, stability,
+        expires_at, source_actor_id, retrievability, stability,
         decay_rate, last_presented_at, last_confirmed_at, last_conflicted_at,
         review_state, sensitivity, memory_kind
       )
       SELECT
         id, subject_id, predicate, object_text, object_entity_id, attributes,
-        confidence, source_message_id, source_run_id, content_hash, embedding,
+        confidence, source_message_id, source_run_id, memory_owner_id, persona_id,
+        fact_class, source_authority, content_hash, embedding,
         valid_at, invalid_at, created_at, updated_at, deleted_at, pinned, scope,
-        origin_conversation_id, origin_thread_id, origin_task_id, source_turn_id,
+        origin_conversation_id, origin_thread_id, ${originTaskProjection}, source_turn_id,
         source_summary, importance, access_count, repeated_mention_count,
         last_recalled_at, last_reinforced_at, last_accessed_at, decay_policy,
-        expires_at, source_actor_id, task_id, retrievability, stability,
+        expires_at, source_actor_id, retrievability, stability,
         decay_rate, last_presented_at, last_confirmed_at, last_conflicted_at,
         review_state, sensitivity, memory_kind
       FROM memory_facts;

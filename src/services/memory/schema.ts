@@ -19,6 +19,7 @@ import { ensureRetrievalEventSchema } from './retrievalEventSchema';
 import { CLEARED_STRUCTURED_MEMORY_TABLES } from './structuredMemoryTableRegistry';
 import { ensureWithdrawalSchema } from './withdrawalSchema';
 import { ensureCanonicalFactTable } from './schema/canonicalFactTable';
+import { ensureMemoryVaultIdentitySchema, getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
 
 let schemaReady = false;
 
@@ -51,6 +52,14 @@ export function ensureFactSchema(): void {
       confidence REAL NOT NULL DEFAULT 1.0,
       source_message_id TEXT,
       source_run_id TEXT,
+      memory_owner_id TEXT,
+      persona_id TEXT,
+      fact_class TEXT NOT NULL DEFAULT 'unknown'
+        CHECK(fact_class IN ('subjective_user', 'objective', 'workflow', 'unknown')),
+      source_authority TEXT NOT NULL DEFAULT 'unknown'
+        CHECK(source_authority IN (
+          'grounded_user', 'tool_observed', 'external_source', 'assistant_inferred', 'unknown'
+        )),
       content_hash TEXT NOT NULL,
       embedding TEXT,
       valid_at INTEGER NOT NULL,
@@ -243,11 +252,12 @@ export function ensureFactSchema(): void {
   ensureWithdrawalSchema(db);
   ensureMigrationStateSchema(db);
   ensureIngestionQueueSchema(db);
+  ensureMemoryVaultIdentitySchema(db);
   ensureFactColumns(db);
   ensureEpisodeSourceIdentity(db);
   ensureFactEvidenceIdentity(db);
   ensureCanonicalFactTable(db);
-  ensureFactContentIdentityV2(db);
+  ensureFactContentIdentityV3(db);
   ensureFactTermStats(db);
   db.execSync(`
     DROP INDEX IF EXISTS idx_fact_terms_unit_kind;
@@ -330,6 +340,15 @@ export function ensureFactSchema(): void {
         deleted_at,
         updated_at DESC
       );
+    CREATE INDEX IF NOT EXISTS idx_facts_applicability_scope
+      ON memory_facts(
+        memory_owner_id,
+        persona_id,
+        fact_class,
+        source_authority,
+        deleted_at,
+        invalid_at
+      );
   `);
   schemaReady = true;
 }
@@ -367,7 +386,20 @@ function ensureFactColumns(db: ReturnType<typeof getMemoryDb>): void {
   ensureColumn(db, 'memory_episodes', 'source_start_message_id', 'source_start_message_id TEXT');
   ensureColumn(db, 'memory_episodes', 'source_end_message_id', 'source_end_message_id TEXT');
   ensureColumn(db, 'memory_facts', 'source_actor_id', 'source_actor_id TEXT');
-  ensureColumn(db, 'memory_facts', 'task_id', 'task_id TEXT');
+  ensureColumn(db, 'memory_facts', 'memory_owner_id', 'memory_owner_id TEXT');
+  ensureColumn(db, 'memory_facts', 'persona_id', 'persona_id TEXT');
+  ensureColumn(
+    db,
+    'memory_facts',
+    'fact_class',
+    "fact_class TEXT NOT NULL DEFAULT 'unknown' CHECK(fact_class IN ('subjective_user', 'objective', 'workflow', 'unknown'))",
+  );
+  ensureColumn(
+    db,
+    'memory_facts',
+    'source_authority',
+    "source_authority TEXT NOT NULL DEFAULT 'unknown' CHECK(source_authority IN ('grounded_user', 'tool_observed', 'external_source', 'assistant_inferred', 'unknown'))",
+  );
   ensureColumn(db, 'memory_facts', 'retrievability', 'retrievability REAL NOT NULL DEFAULT 1.0');
   ensureColumn(db, 'memory_facts', 'stability', 'stability REAL NOT NULL DEFAULT 0.5');
   ensureColumn(db, 'memory_facts', 'decay_rate', 'decay_rate REAL NOT NULL DEFAULT 0.03');
@@ -417,11 +449,13 @@ function ensureFactEvidenceIdentity(db: ReturnType<typeof getMemoryDb>): void {
 
 interface FactContentIdentityRow {
   id: string;
+  memory_owner_id: string | null;
   memory_kind: string | null;
   scope: string | null;
   origin_conversation_id: string | null;
   origin_thread_id: string | null;
   origin_task_id: string | null;
+  persona_id: string | null;
   subject_id: string;
   predicate: string;
   object_text: string;
@@ -429,28 +463,66 @@ interface FactContentIdentityRow {
 }
 
 /**
- * Migrate only facts written with the pre-v2 identity. Stored predicate and
+ * Migrate only facts written with the pre-v3 identity. Stored predicate and
  * object text remain untouched because they are user-visible, case-sensitive
  * data; normalization belongs in the derived identity only.
  */
-function ensureFactContentIdentityV2(db: ReturnType<typeof getMemoryDb>): void {
-  const rows = db.getAllSync<FactContentIdentityRow>(
-    `SELECT id, memory_kind, scope, origin_conversation_id, origin_thread_id,
-            origin_task_id, subject_id, predicate, object_text, object_entity_id
-       FROM memory_facts
-      WHERE SUBSTR(content_hash, 1, 3) != 'v2_'`,
-  );
-  if (rows.length === 0) return;
-
+function ensureFactContentIdentityV3(db: ReturnType<typeof getMemoryDb>): void {
   db.execSync('BEGIN IMMEDIATE TRANSACTION');
   try {
+    db.runSync(
+      `UPDATE memory_facts
+          SET memory_owner_id = ?
+        WHERE memory_owner_id IS NULL
+          AND scope IN ('global', 'project', 'conversation', 'session')`,
+      getLocalMemoryVaultOwnerId(db),
+    );
+    db.runSync(
+      `UPDATE memory_facts
+          SET fact_class = 'subjective_user',
+              source_authority = 'assistant_inferred'
+        WHERE fact_class = 'unknown'
+          AND source_authority = 'unknown'
+          AND memory_owner_id IS NOT NULL
+          AND scope != 'persona'
+          AND EXISTS (
+            SELECT 1
+              FROM memory_entities AS subject
+             WHERE subject.id = memory_facts.subject_id
+               AND subject.type = 'self'
+          )`,
+    );
+    db.runSync(
+      `UPDATE memory_facts
+          SET fact_class = 'workflow',
+              source_authority = 'assistant_inferred'
+        WHERE fact_class = 'unknown'
+          AND source_authority = 'unknown'
+          AND memory_owner_id IS NOT NULL
+          AND scope != 'persona'
+          AND memory_kind IN (
+            'episodic_event', 'goal', 'tool_result', 'decision', 'risk', 'artifact',
+            'summary', 'evidence_span', 'agent_run', 'gotcha'
+          )`,
+    );
+    const rows = db.getAllSync<FactContentIdentityRow>(
+      `SELECT id, memory_owner_id, memory_kind, scope, origin_conversation_id, origin_thread_id,
+              origin_task_id, persona_id, subject_id, predicate, object_text, object_entity_id
+         FROM memory_facts
+        WHERE SUBSTR(content_hash, 1, 3) != 'v3_'`,
+    );
     for (const row of rows) {
+      if (typeof row.scope !== 'string') {
+        throw new Error('memory_fact_content_identity_scope_invalid');
+      }
       const contentHash = buildFactContentHash({
+        memoryOwnerId: row.memory_owner_id,
         memoryKind: row.memory_kind,
         scope: row.scope,
         originConversationId: row.origin_conversation_id,
         originThreadId: row.origin_thread_id,
         originTaskId: row.origin_task_id,
+        personaId: row.persona_id,
         subjectId: row.subject_id,
         predicate: row.predicate,
         objectText: row.object_text,

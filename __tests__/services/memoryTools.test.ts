@@ -10,6 +10,7 @@ jest.mock('expo-sqlite', () => {
 import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { ensureDefaultBlocks } from '../../src/services/memory/blocks';
+import { findEntityByName } from '../../src/services/memory/entities';
 import {
   executeMemoryRecall,
   executeMemoryRemember,
@@ -44,15 +45,25 @@ function rememberOk(args: Parameters<typeof executeMemoryRemember>[0]) {
 
 describe('executeMemoryRemember', () => {
   it('records a new fact and creates the entity', () => {
-    const result = rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin' });
+    const result = rememberOk({
+      subject: 'user',
+      predicate: 'lives_in',
+      value: 'Berlin',
+      scope: 'global',
+    });
     expect(result.status).toBe('created');
     expect(result.fact.value).toBe('Berlin');
     expect(result.superseded).toEqual([]);
   });
 
   it('reports duplicate on identical re-record', () => {
-    rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin' });
-    const second = rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin' });
+    rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin', scope: 'global' });
+    const second = rememberOk({
+      subject: 'user',
+      predicate: 'lives_in',
+      value: 'Berlin',
+      scope: 'global',
+    });
     expect(second.status).toBe('duplicate');
   });
 
@@ -61,6 +72,7 @@ describe('executeMemoryRemember', () => {
       subject: 'user',
       predicate: 'Preferred_Display_Name',
       value: 'Mo',
+      scope: 'global',
     });
     expect(remembered.fact.predicate).toBe('Preferred_Display_Name');
 
@@ -77,11 +89,12 @@ describe('executeMemoryRemember', () => {
   });
 
   it('supersedes prior fact by default for the same subject and predicate', () => {
-    rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin' });
+    rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin', scope: 'global' });
     const next = rememberOk({
       subject: 'user',
       predicate: 'lives_in',
       value: 'Munich',
+      scope: 'global',
     });
 
     expect(next.status).toBe('created');
@@ -96,11 +109,12 @@ describe('executeMemoryRemember', () => {
   });
 
   it('ignores provider-supplied supersedePrior=false and keeps current state singular', () => {
-    rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin' });
+    rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin', scope: 'global' });
     const next = rememberOk({
       subject: 'user',
       predicate: 'lives_in',
       value: 'Munich',
+      scope: 'global',
       supersedePrior: false,
     } as Parameters<typeof executeMemoryRemember>[0] & { supersedePrior: false });
 
@@ -116,18 +130,19 @@ describe('executeMemoryRemember', () => {
   });
 
   it('supersedes prior fact on current-state updates', () => {
-    rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin' });
+    rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin', scope: 'global' });
     const next = rememberOk({
       subject: 'user',
       predicate: 'lives_in',
       value: 'Munich',
+      scope: 'global',
     });
     expect(next.status).toBe('created');
     expect(next.superseded).toHaveLength(1);
     expect(next.superseded[0].value).toBe('Berlin');
   });
 
-  it('supersedes prior durable facts across provider-selected non-session scopes', () => {
+  it('keeps durable scopes isolated during supersession', () => {
     rememberOk({
       subject: 'user',
       predicate: 'lives_in',
@@ -143,12 +158,12 @@ describe('executeMemoryRemember', () => {
     });
 
     expect(next.status).toBe('created');
-    expect(next.superseded.map((fact) => fact.value)).toEqual(['Berlin']);
+    expect(next.superseded).toEqual([]);
 
     const recall = executeMemoryRecall({ subject: 'user', predicate: 'lives_in' });
     expect(recall.ok).toBe(true);
     if (recall.ok) {
-      expect(recall.facts.map((fact) => fact.value)).toEqual(['Munich']);
+      expect(recall.facts.map((fact) => fact.value).sort()).toEqual(['Berlin', 'Munich']);
     }
   });
 
@@ -159,6 +174,7 @@ describe('executeMemoryRemember', () => {
       value: 'Run staging validation',
       scope: 'session',
       originConversationId: 'conv-1',
+      originThreadId: 'thread-1',
       originTaskId: 'task-1',
     });
     const next = rememberOk({
@@ -187,9 +203,48 @@ describe('executeMemoryRemember', () => {
       subject: '',
       predicate: 'p',
       value: 'v',
+      scope: 'global',
     } as any);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.code).toBe('invalid_args');
+  });
+
+  it('requires code-owned persona identity and serializes the exact binding', () => {
+    const missing = executeMemoryRemember({
+      subject: 'user',
+      predicate: 'assistant_tone',
+      value: 'warm',
+      scope: 'persona',
+    });
+    expect(missing).toMatchObject({ ok: false, code: 'invalid_args' });
+    expect(findEntityByName('user')).toBeNull();
+
+    const recorded = executeMemoryRemember(
+      {
+        subject: 'user',
+        predicate: 'assistant_tone',
+        value: 'warm',
+        scope: 'persona',
+      },
+      { personaId: 'assistant-persona' },
+    );
+    expect(recorded).toMatchObject({
+      ok: true,
+      fact: { scope: 'persona', personaId: 'assistant-persona' },
+    });
+  });
+
+  it('rejects an incomplete session before creating its subject entity', () => {
+    const result = executeMemoryRemember({
+      subject: 'rejected-session',
+      predicate: 'draft_state',
+      value: 'open',
+      scope: 'session',
+      originConversationId: 'conversation-1',
+    });
+
+    expect(result).toMatchObject({ ok: false, code: 'invalid_args' });
+    expect(findEntityByName('rejected-session')).toBeNull();
   });
 });
 
@@ -201,16 +256,16 @@ describe('executeMemoryRecall', () => {
   });
 
   it('lists facts for a known subject', () => {
-    rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin' });
-    rememberOk({ subject: 'user', predicate: 'role', value: 'Engineer' });
+    rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin', scope: 'global' });
+    rememberOk({ subject: 'user', predicate: 'role', value: 'Engineer', scope: 'global' });
     const result = executeMemoryRecall({ subject: 'user' });
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.facts).toHaveLength(2);
   });
 
   it('filters by predicate', () => {
-    rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin' });
-    rememberOk({ subject: 'user', predicate: 'role', value: 'Engineer' });
+    rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin', scope: 'global' });
+    rememberOk({ subject: 'user', predicate: 'role', value: 'Engineer', scope: 'global' });
     const result = executeMemoryRecall({ subject: 'user', predicate: 'role' });
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -228,7 +283,12 @@ describe('executeMemoryRecall', () => {
 
 describe('executeMemoryPin / executeMemoryUnpin', () => {
   it('pins then unpins an existing fact', () => {
-    const created = rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin' });
+    const created = rememberOk({
+      subject: 'user',
+      predicate: 'lives_in',
+      value: 'Berlin',
+      scope: 'global',
+    });
     const pinned = executeMemoryPin({ factId: created.fact.id });
     expect(pinned.ok).toBe(true);
     if (pinned.ok) expect(pinned.fact.pinned).toBe(true);
@@ -247,7 +307,12 @@ describe('executeMemoryPin / executeMemoryUnpin', () => {
 
 describe('executeMemoryForget', () => {
   it('withdraws the fact without echoing its private value', () => {
-    const created = rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin' });
+    const created = rememberOk({
+      subject: 'user',
+      predicate: 'lives_in',
+      value: 'Berlin',
+      scope: 'global',
+    });
     const forgotten = executeMemoryForget({ factId: created.fact.id });
     expect(forgotten.ok).toBe(true);
     if (forgotten.ok) {
@@ -261,13 +326,23 @@ describe('executeMemoryForget', () => {
   });
 
   it.each(['delete', 'invalidate'])('rejects the removed mode=%s contract', (mode) => {
-    const created = rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin' });
+    const created = rememberOk({
+      subject: 'user',
+      predicate: 'lives_in',
+      value: 'Berlin',
+      scope: 'global',
+    });
     const result = executeMemoryForget({ factId: created.fact.id, mode } as never);
     expect(result).toEqual(expect.objectContaining({ ok: false, code: 'invalid_args' }));
   });
 
   it('keeps correction history through the separate invalidation action', () => {
-    const created = rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin' });
+    const created = rememberOk({
+      subject: 'user',
+      predicate: 'lives_in',
+      value: 'Berlin',
+      scope: 'global',
+    });
     const result = executeMemoryInvalidate({ factId: created.fact.id });
     expect(result).toEqual(
       expect.objectContaining({

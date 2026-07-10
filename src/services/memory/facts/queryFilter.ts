@@ -1,4 +1,4 @@
-import { normalizeScope, type ListFactsOptions } from './types';
+import { requireMemoryFactScope, type ListFactsOptions } from './types';
 
 export type SqlBindValue = string | number;
 
@@ -22,10 +22,7 @@ function normalizedIdentityValue(value: string | undefined): string | undefined 
   return normalized ? normalized : undefined;
 }
 
-function buildRecallScopeFilter(
-  identity: RecallFactScopeIdentity,
-  alias?: string,
-): FactFilter {
+function buildRecallScopeFilter(identity: RecallFactScopeIdentity, alias?: string): FactFilter {
   const scopeColumn = column('scope', alias);
   const conversationColumn = column('origin_conversation_id', alias);
   const threadColumn = column('origin_thread_id', alias);
@@ -46,11 +43,7 @@ function buildRecallScopeFilter(
   }
 
   if (conversationId && taskId) {
-    const clauses = [
-      `${scopeColumn} = ?`,
-      `${conversationColumn} = ?`,
-      `${taskColumn} = ?`,
-    ];
+    const clauses = [`${scopeColumn} = ?`, `${conversationColumn} = ?`, `${taskColumn} = ?`];
     const branchParams: SqlBindValue[] = ['session', conversationId, taskId];
     if (threadId) {
       clauses.push(`${threadColumn} = ?`);
@@ -83,7 +76,7 @@ export function buildFactFilter(
   }
   if (options.scope) {
     const scopes = Array.isArray(options.scope) ? options.scope : [options.scope];
-    const normalizedScopes = scopes.map(normalizeScope);
+    const normalizedScopes = scopes.map(requireMemoryFactScope);
     clauses.push(`${column('scope', alias)} IN (${normalizedScopes.map(() => '?').join(', ')})`);
     params.push(...normalizedScopes);
   }

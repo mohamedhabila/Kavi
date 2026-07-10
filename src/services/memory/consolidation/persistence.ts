@@ -3,8 +3,8 @@ import { createLogger } from '../../../utils/logger';
 import { runMemoryTransaction } from '../access/transaction';
 import { upsertEntity } from '../entities';
 import { addFactEvidence, recordEpisode } from '../episodes/mutations';
-import { replaceCurrentFact } from '../facts/exactReplacement';
-import { recordFact } from '../facts/mutations';
+import { replaceCurrentFactWithApplicability } from '../facts/exactReplacement';
+import { recordFactWithApplicability } from '../facts/mutations';
 import { composeActiveFocusContent } from '../focus';
 import { ensureFactSchema } from '../schema';
 import { editWorkingBlock } from '../workingBlocks';
@@ -131,7 +131,9 @@ function applyConsolidatorResultInTransaction(
           operation: fact.admittedWrite.operation,
           authority: fact.admittedWrite.authority,
           evidenceMessageId: fact.admittedWrite.evidenceMessageId,
-          expectedCurrentFactId: fact.admittedWrite.expectedCurrentFactId,
+          ...(fact.admittedWrite.operation === 'replace_current'
+            ? { expectedCurrentFactId: fact.admittedWrite.expectedCurrentFactId }
+            : {}),
           assertionClass: fact.assertionClass ?? null,
           evidenceQuote: fact.evidenceQuote ?? null,
         }
@@ -140,15 +142,20 @@ function applyConsolidatorResultInTransaction(
       ...(fact.reason ? { reason: fact.reason } : {}),
       ...(memoryWrite ? { memoryWrite } : {}),
     };
+    const scope = fact.scope ?? 'conversation';
     const factInput = {
       subjectId: subject.id,
       predicate: fact.predicate,
       objectText: fact.value,
       confidence: confidenceToScore(fact.confidence),
-      scope: fact.scope ?? 'conversation',
-      originConversationId: options.conversationId,
-      originThreadId: options.threadId,
-      originTaskId: options.taskId ?? null,
+      scope,
+      ...(scope === 'project' || scope === 'conversation' || scope === 'session'
+        ? {
+            originConversationId: options.conversationId,
+            originThreadId: options.threadId,
+          }
+        : {}),
+      ...(scope === 'session' ? { originTaskId: options.taskId } : {}),
       sourceRunId: options.sourceRunId ?? null,
       sourceMessageId: fact.admittedWrite?.evidenceMessageId ?? sourceMessageId,
       sourceTurnId: options.sourceAssistantMessageId ?? options.sourceUserMessageId ?? null,
@@ -157,12 +164,26 @@ function applyConsolidatorResultInTransaction(
       attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
       now,
     };
-    const recorded = fact.admittedWrite
-      ? replaceCurrentFact({
-          ...factInput,
-          expectedCurrentFactId: fact.admittedWrite.expectedCurrentFactId,
-        })
-      : recordFact({ ...factInput, supersedePrior: false });
+    const sealedApplicability =
+      fact.admittedWrite !== undefined
+        ? {
+            factClass: 'subjective_user' as const,
+            sourceAuthority: 'grounded_user' as const,
+          }
+        : (fact.sealedApplicability ?? {
+            factClass: subjectType === 'self' ? ('subjective_user' as const) : ('unknown' as const),
+            sourceAuthority: 'assistant_inferred' as const,
+          });
+    const recorded =
+      fact.admittedWrite?.operation === 'replace_current'
+        ? replaceCurrentFactWithApplicability(
+            {
+              ...factInput,
+              expectedCurrentFactId: fact.admittedWrite.expectedCurrentFactId,
+            },
+            sealedApplicability,
+          )
+        : recordFactWithApplicability({ ...factInput, supersedePrior: false }, sealedApplicability);
     if (recorded.status === 'conflict') {
       logger.devWarn(`Grounded replacement rejected at persistence: ${recorded.conflict}`);
       continue;

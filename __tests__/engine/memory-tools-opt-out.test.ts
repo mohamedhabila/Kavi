@@ -24,6 +24,7 @@ import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/servic
 import { ensureDefaultBlocks } from '../../src/services/memory/blocks';
 import { listFacts } from '../../src/services/memory/facts/queries';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
+import { useChatStore } from '../../src/store/useChatStore';
 import { executeTool } from '../../src/engine/tools';
 import { createGoal } from '../../src/engine/goals/types';
 
@@ -47,10 +48,12 @@ beforeEach(() => {
   ensureFactSchema();
   ensureDefaultBlocks();
   useSettingsStore.setState({ disableLongTermMemory: false });
+  useChatStore.setState({ conversations: [] } as never);
 });
 
 afterEach(() => {
   useSettingsStore.setState({ disableLongTermMemory: false });
+  useChatStore.setState({ conversations: [] } as never);
 });
 
 describe('memory tools — opt-out gate', () => {
@@ -70,7 +73,12 @@ describe('memory tools — opt-out gate', () => {
     const remembered = JSON.parse(
       await executeTool(
         'memory_remember',
-        JSON.stringify({ subject: 'user', predicate: 'private_code', value: 'secret-42' }),
+        JSON.stringify({
+          subject: 'user',
+          predicate: 'private_code',
+          value: 'secret-42',
+          scope: 'global',
+        }),
         'conv-1',
       ),
     );
@@ -92,7 +100,12 @@ describe('memory tools — opt-out gate', () => {
     const remembered = JSON.parse(
       await executeTool(
         'memory_remember',
-        JSON.stringify({ subject: 'user', predicate: 'private_code', value: 'secret-43' }),
+        JSON.stringify({
+          subject: 'user',
+          predicate: 'private_code',
+          value: 'secret-43',
+          scope: 'global',
+        }),
         'conv-1',
       ),
     );
@@ -159,6 +172,7 @@ describe('memory tools — opt-out gate', () => {
         subject: 'user',
         predicate: 'timezone',
         value: 'UTC+1',
+        scope: 'conversation',
       }),
       'conv-runtime-memory',
     );
@@ -177,6 +191,7 @@ describe('memory tools — opt-out gate', () => {
         subject: 'project',
         predicate: 'release_artifact',
         value: 'build-42',
+        scope: 'conversation',
       }),
       'child-runtime-memory',
       { workspaceConversationId: 'parent-runtime-memory' },
@@ -226,6 +241,7 @@ describe('memory tools — opt-out gate', () => {
         subject: 'project',
         predicate: 'build_marker',
         value: 'artifact-hostile',
+        scope: 'conversation',
         originConversationId: 'wrong-parent',
         originThreadId: 'wrong-child',
         originTaskId: 'wrong-run',
@@ -253,6 +269,7 @@ describe('memory tools — opt-out gate', () => {
         subject: 'project',
         predicate: 'release_artifact',
         value: 'artifact-task',
+        scope: 'session',
       }),
       'child-runtime-memory',
       {
@@ -274,7 +291,79 @@ describe('memory tools — opt-out gate', () => {
     expect(parsed.ok).toBe(true);
     expect(parsed.fact.originTaskId).toBe('task-active');
     expect(storedFact?.originTaskId).toBe('task-active');
-    expect(storedFact?.taskId).toBe('task-active');
     expect(storedFact?.sourceRunId).toBe('runtime-run');
+  });
+
+  it('keeps global and persona writes free of conversation and task bindings', async () => {
+    useChatStore.setState({
+      conversations: [{ id: 'persona-thread', personaId: 'assistant-persona' }],
+    } as never);
+    const global = JSON.parse(
+      await executeTool(
+        'memory_remember',
+        JSON.stringify({
+          subject: 'user',
+          predicate: 'stable_timezone',
+          value: 'UTC+1',
+          scope: 'global',
+        }),
+        'persona-thread',
+        { workspaceConversationId: 'workspace-root' },
+      ),
+    );
+    const persona = JSON.parse(
+      await executeTool(
+        'memory_remember',
+        JSON.stringify({
+          subject: 'user',
+          predicate: 'assistant_tone',
+          value: 'warm',
+          scope: 'persona',
+        }),
+        'persona-thread',
+        { workspaceConversationId: 'workspace-root' },
+      ),
+    );
+
+    expect(global).toMatchObject({
+      ok: true,
+      fact: {
+        scope: 'global',
+        personaId: null,
+        originConversationId: null,
+        originThreadId: null,
+        originTaskId: null,
+      },
+    });
+    expect(persona).toMatchObject({
+      ok: true,
+      fact: {
+        scope: 'persona',
+        personaId: 'assistant-persona',
+        originConversationId: null,
+        originThreadId: null,
+        originTaskId: null,
+      },
+    });
+  });
+
+  it('rejects session memory without an active task instead of changing scope', async () => {
+    const parsed = JSON.parse(
+      await executeTool(
+        'memory_remember',
+        JSON.stringify({
+          subject: 'project',
+          predicate: 'draft_state',
+          value: 'open',
+          scope: 'session',
+        }),
+        'thread-1',
+        { workspaceConversationId: 'workspace-root' },
+      ),
+    );
+
+    expect(parsed).toMatchObject({ ok: false, code: 'invalid_args' });
+    expect(parsed.error).toContain('memory_fact_origin_task_id_required');
+    expect(listFacts()).toEqual([]);
   });
 });
