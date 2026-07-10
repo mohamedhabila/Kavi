@@ -1,5 +1,6 @@
 import { executeToolCallLifecycle } from '../../src/engine/toolExecution/toolCallLifecycle';
 import { executeTool } from '../../src/engine/tools';
+import { recordVerifiedToolEffectExperience } from '../../src/services/memory/verifiedToolEffectExperience';
 import type { ToolExecutionLifecycleParams } from '../../src/engine/toolExecution/toolCallLifecycleTypes';
 import type { ToolDefinition } from '../../src/types/tool';
 
@@ -11,7 +12,14 @@ jest.mock('../../src/engine/tools', () => ({
   executeTool: jest.fn(),
 }));
 
+jest.mock('../../src/services/memory/verifiedToolEffectExperience', () => ({
+  recordVerifiedToolEffectExperience: jest.fn(),
+}));
+
 const mockedExecuteTool = jest.mocked(executeTool);
+const mockedRecordVerifiedToolEffectExperience = jest.mocked(
+  recordVerifiedToolEffectExperience,
+);
 
 const calendarCreateTool: ToolDefinition = {
   name: 'calendar_create_event',
@@ -98,6 +106,11 @@ function buildLifecycle(
 describe('executeToolCallLifecycle', () => {
   beforeEach(() => {
     mockedExecuteTool.mockReset();
+    mockedRecordVerifiedToolEffectExperience.mockReset();
+    mockedRecordVerifiedToolEffectExperience.mockResolvedValue({
+      status: 'skipped',
+      reason: 'non_terminal_outcome',
+    });
   });
 
   it('returns schema-grounded retry details for structured missing required arguments', async () => {
@@ -182,6 +195,84 @@ describe('executeToolCallLifecycle', () => {
       }),
     );
     expect(result.toolMessage.toolCalls?.[0]?.effectReceipts).toBeUndefined();
+  });
+
+  it('preserves the primary receipt when ancillary experience storage fails unexpectedly', async () => {
+    mockedExecuteTool.mockResolvedValueOnce(
+      JSON.stringify({ status: 'created_verified', eventId: 'event-1' }),
+    );
+    mockedRecordVerifiedToolEffectExperience.mockRejectedValueOnce(
+      new Error('experience storage unavailable'),
+    );
+
+    const result = await executeToolCallLifecycle(
+      buildLifecycle({
+        tc: {
+          id: 'tc-calendar-create',
+          name: calendarCreateTool.name,
+          arguments: JSON.stringify({
+            title: 'Planning',
+            startDate: '2026-06-14T09:00:00',
+            endDate: '2026-06-14T10:00:00',
+          }),
+        },
+        memoryConversationId: 'memory-conversation-1',
+        conversationId: 'source-thread-1',
+        agentRunId: 'agent-run-1',
+      }),
+    );
+
+    expect(result.effectReceipt).toEqual(
+      expect.objectContaining({
+        runId: 'agent-run-1',
+        effectKind: 'calendar.create',
+        effectState: 'applied',
+        verificationState: 'verified',
+      }),
+    );
+    expect(result.toolMessage.isError).not.toBe(true);
+    expect(mockedRecordVerifiedToolEffectExperience).toHaveBeenCalledWith({
+      memoryConversationId: 'memory-conversation-1',
+      sourceThreadId: 'source-thread-1',
+      sourceRunId: 'agent-run-1',
+      toolCallId: 'tc-calendar-create',
+      toolName: 'calendar_create_event',
+      receipt: result.effectReceipt,
+    });
+  });
+
+  it('does not await an indefinitely pending experience collector', async () => {
+    mockedExecuteTool.mockResolvedValueOnce(
+      JSON.stringify({ status: 'created_verified', eventId: 'event-1' }),
+    );
+    mockedRecordVerifiedToolEffectExperience.mockReturnValueOnce(
+      new Promise<never>(() => undefined),
+    );
+
+    const result = await executeToolCallLifecycle(
+      buildLifecycle({
+        tc: {
+          id: 'tc-calendar-create',
+          name: calendarCreateTool.name,
+          arguments: JSON.stringify({
+            title: 'Planning',
+            startDate: '2026-06-14T09:00:00',
+            endDate: '2026-06-14T10:00:00',
+          }),
+        },
+        memoryConversationId: 'memory-conversation-1',
+        conversationId: 'source-thread-1',
+        agentRunId: 'agent-run-1',
+      }),
+    );
+
+    expect(result.effectReceipt).toEqual(
+      expect.objectContaining({
+        effectState: 'applied',
+        verificationState: 'verified',
+      }),
+    );
+    expect(result.toolMessage.isError).not.toBe(true);
   });
 
   it('records a code-owned workspace artifact ref and digest end to end', async () => {

@@ -31,6 +31,7 @@ import {
   buildUntrackedExternalToolResult,
   observeExternalToolResultDurability,
 } from '../../services/executionJournal/externalToolDurabilityLifecycle';
+import { recordVerifiedToolEffectExperience } from '../../services/memory/verifiedToolEffectExperience';
 
 async function appendExecutionReceipt(params: {
   lifecycle: ToolExecutionLifecycleParams;
@@ -41,8 +42,9 @@ async function appendExecutionReceipt(params: {
   terminalEffectState?: 'cancelled' | 'failed';
   recordedAt: number;
 }): Promise<ToolEffectReceipt | undefined> {
+  let receipt: ToolEffectReceipt;
   try {
-    const receipt = await buildToolEffectReceipt({
+    receipt = await buildToolEffectReceipt({
       toolCallId: params.toolCall.id,
       toolName: params.toolCall.name,
       argumentsText: params.toolCall.arguments,
@@ -58,11 +60,25 @@ async function appendExecutionReceipt(params: {
       receipt,
       { toolCallId: params.toolCall.id, toolName: params.toolCall.name },
     );
-    return receipt;
   } catch {
     // Receipt creation is fail-closed: absence remains unknown and never becomes success evidence.
     return undefined;
   }
+
+  // Experience collection is ancillary. A hashing or storage failure must not
+  // erase the authoritative receipt or alter the primary tool outcome.
+  void recordVerifiedToolEffectExperience({
+    memoryConversationId: params.lifecycle.memoryConversationId,
+    sourceThreadId: params.lifecycle.conversationId,
+    sourceRunId: params.lifecycle.agentRunId,
+    toolCallId: params.toolCall.id,
+    toolName: params.toolCall.name,
+    receipt,
+  }).catch(() => {
+    // The producer is fail-closed internally; this guard preserves completion
+    // if an unexpected implementation error escapes that boundary.
+  });
+  return receipt;
 }
 
 export type {
