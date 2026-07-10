@@ -217,26 +217,55 @@ describe('paired E2E condition contract', () => {
     const memoryOff = makeCondition('memory_off', invariant);
     const plan = buildE2EPairedExecutionPlan({
       pairId: 'memory-ablation',
+      comparison: {
+        referenceCondition: 'production_auto',
+        candidateCondition: 'memory_off',
+      },
       conditions: [production, memoryOff],
     });
     expect(plan.conditions).toHaveLength(2);
     expect(Object.isFrozen(plan.conditions)).toBe(true);
 
     expect(() =>
-      buildE2EPairedExecutionPlan({ pairId: 'missing', conditions: [production] }),
+      buildE2EPairedExecutionPlan({
+        pairId: 'missing',
+        comparison: {
+          referenceCondition: 'production_auto',
+          candidateCondition: 'memory_off',
+        },
+        conditions: [production],
+      }),
     ).toThrow('exactly two conditions');
     expect(() =>
       buildE2EPairedExecutionPlan({
         pairId: 'duplicate',
+        comparison: {
+          referenceCondition: 'production_auto',
+          candidateCondition: 'production_auto',
+        },
         conditions: [production, production],
       }),
     ).toThrow('must not duplicate');
     expect(() =>
       buildE2EPairedExecutionPlan({
         pairId: 'mismatch',
+        comparison: {
+          referenceCondition: 'production_auto',
+          candidateCondition: 'memory_off',
+        },
         conditions: [production, makeCondition('memory_off', makeInvariant({ seed: 43 }))],
       }),
     ).toThrow('identical invariant configuration');
+    expect(() =>
+      buildE2EPairedExecutionPlan({
+        pairId: 'reversed-role-declaration',
+        comparison: {
+          referenceCondition: 'memory_off',
+          candidateCondition: 'production_auto',
+        },
+        conditions: [production, memoryOff],
+      }),
+    ).toThrow('order must match its declared comparison roles');
   });
 
   it('rejects stale hashes instead of accepting a mutated condition', () => {
@@ -247,8 +276,12 @@ describe('paired E2E condition contract', () => {
       conditionConfigHash: 'sha256:stale',
     } as E2EPairedConditionPlan;
     const plan = {
-      schemaVersion: 'e2e-paired-plan-v1',
+      schemaVersion: 'e2e-paired-plan-v2',
       pairId: 'tampered',
+      comparison: {
+        referenceCondition: 'production_auto',
+        candidateCondition: 'memory_off',
+      },
       conditions: [production, tampered],
     } as E2EPairedExecutionPlan;
     expect(() => validateE2EPairedExecutionPlan(plan)).toThrow('stale condition config hash');
@@ -336,6 +369,10 @@ describe('paired E2E condition contract', () => {
     expect(() =>
       buildE2EPairedExecutionPlan({
         pairId: ' padded ',
+        comparison: {
+          referenceCondition: 'production_auto',
+          candidateCondition: 'memory_off',
+        },
         conditions: [makeCondition('production_auto'), makeCondition('memory_off')],
       }),
     ).toThrow('canonical string');

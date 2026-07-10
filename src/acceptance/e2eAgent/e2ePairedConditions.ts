@@ -7,7 +7,7 @@ import {
 import { stableHash, stableStringify } from './e2eTraceRedaction';
 
 export const E2E_PAIRED_CONDITION_SCHEMA_VERSION = 'e2e-paired-condition-v1' as const;
-export const E2E_PAIRED_PLAN_SCHEMA_VERSION = 'e2e-paired-plan-v1' as const;
+export const E2E_PAIRED_PLAN_SCHEMA_VERSION = 'e2e-paired-plan-v2' as const;
 
 export const E2E_PAIRED_CONDITIONS = [
   ...E2E_PAIRED_ROUTE_CONDITIONS,
@@ -76,6 +76,10 @@ export type E2EPairedConditionPlan = Readonly<{
 export type E2EPairedExecutionPlan = Readonly<{
   schemaVersion: typeof E2E_PAIRED_PLAN_SCHEMA_VERSION;
   pairId: string;
+  comparison: Readonly<{
+    referenceCondition: E2EPairedCondition;
+    candidateCondition: E2EPairedCondition;
+  }>;
   conditions: ReadonlyArray<E2EPairedConditionPlan>;
 }>;
 
@@ -129,7 +133,7 @@ function canonicalNullableString(
   return requireTrimmed(value, label, maxLength);
 }
 
-function validateOracleEvidence(
+export function validateE2EOracleEvidenceDeclaration(
   evidence: E2EOracleEvidenceDeclaration | undefined,
 ): E2EOracleEvidenceDeclaration {
   if (!evidence || evidence.interface !== 'memory_remember' || evidence.allowSeeding !== true) {
@@ -235,7 +239,10 @@ function buildConditionBehavior(
   condition: E2EPairedCondition,
   oracleEvidence: E2EOracleEvidenceDeclaration | undefined,
 ): E2EPairedConditionBehavior {
-  const oracle = condition === 'oracle_evidence' ? validateOracleEvidence(oracleEvidence) : undefined;
+  const oracle =
+    condition === 'oracle_evidence'
+      ? validateE2EOracleEvidenceDeclaration(oracleEvidence)
+      : undefined;
   if (condition !== 'oracle_evidence' && oracleEvidence !== undefined) {
     throw new Error('Oracle evidence may only be supplied to the oracle_evidence condition.');
   }
@@ -266,7 +273,7 @@ export function buildE2EPairedConditionPlan(input: {
   const conditionConfig = buildConditionBehavior(input.condition, input.oracleEvidence);
   const oracleEvidence =
     input.condition === 'oracle_evidence'
-      ? validateOracleEvidence(input.oracleEvidence)
+      ? validateE2EOracleEvidenceDeclaration(input.oracleEvidence)
       : undefined;
   return deepFreeze({
     schemaVersion: E2E_PAIRED_CONDITION_SCHEMA_VERSION,
@@ -304,7 +311,7 @@ function validateConditionPlan(plan: E2EPairedConditionPlan): void {
   }
   validateE2EPairedInvariantConfig(plan.invariantConfig);
   if (plan.condition === 'oracle_evidence') {
-    const canonicalOracle = validateOracleEvidence(plan.oracleEvidence);
+    const canonicalOracle = validateE2EOracleEvidenceDeclaration(plan.oracleEvidence);
     if (stableStringify(plan.oracleEvidence) !== stableStringify(canonicalOracle)) {
       throw new Error('oracle_evidence has a non-canonical declaration.');
     }
@@ -325,7 +332,11 @@ export function validateE2EPairedExecutionPlan(plan: E2EPairedExecutionPlan): vo
   if (!plan || typeof plan !== 'object' || Array.isArray(plan)) {
     throw new Error('Paired execution plan must be an object.');
   }
-  requireExactKeys(plan, ['schemaVersion', 'pairId', 'conditions'], 'Paired execution plan');
+  requireExactKeys(
+    plan,
+    ['schemaVersion', 'pairId', 'comparison', 'conditions'],
+    'Paired execution plan',
+  );
   if (plan.schemaVersion !== E2E_PAIRED_PLAN_SCHEMA_VERSION) {
     throw new Error('Paired execution plan uses an unsupported schema version.');
   }
@@ -336,6 +347,20 @@ export function validateE2EPairedExecutionPlan(plan: E2EPairedExecutionPlan): vo
   for (const condition of plan.conditions) validateConditionPlan(condition);
   if (new Set(plan.conditions.map((condition) => condition.condition)).size !== 2) {
     throw new Error('A paired execution plan must not duplicate a condition.');
+  }
+  if (!plan.comparison || typeof plan.comparison !== 'object' || Array.isArray(plan.comparison)) {
+    throw new Error('Paired execution plan comparison must be an object.');
+  }
+  requireExactKeys(
+    plan.comparison,
+    ['referenceCondition', 'candidateCondition'],
+    'Paired execution plan comparison',
+  );
+  if (
+    plan.comparison.referenceCondition !== plan.conditions[0].condition ||
+    plan.comparison.candidateCondition !== plan.conditions[1].condition
+  ) {
+    throw new Error('Paired execution plan order must match its declared comparison roles.');
   }
   const [left, right] = plan.conditions;
   if (
@@ -348,11 +373,13 @@ export function validateE2EPairedExecutionPlan(plan: E2EPairedExecutionPlan): vo
 
 export function buildE2EPairedExecutionPlan(input: {
   pairId: string;
+  comparison: E2EPairedExecutionPlan['comparison'];
   conditions: ReadonlyArray<E2EPairedConditionPlan>;
 }): E2EPairedExecutionPlan {
   const plan = deepFreeze({
     schemaVersion: E2E_PAIRED_PLAN_SCHEMA_VERSION,
     pairId: requireTrimmed(input.pairId, 'pairId', 256),
+    comparison: cloneJson(input.comparison),
     conditions: cloneJson(input.conditions),
   }) as E2EPairedExecutionPlan;
   validateE2EPairedExecutionPlan(plan);
