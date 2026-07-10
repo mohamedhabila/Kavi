@@ -1,6 +1,6 @@
 import {
   continuePersistedAndroidExternalRecoveryRun,
-  schedulePersistedAndroidExternalRecoveryCandidates,
+  schedulePersistedAndroidExternalRecoveryCandidateSlice,
   schedulePersistedAndroidExternalRecoveryRun,
 } from '../../src/services/executionJournal/androidDurableRecoveryScheduling';
 import type { PersistedExternalRecoveryCandidate } from '../../src/services/executionJournal/productionRecovery';
@@ -76,9 +76,7 @@ describe('Android durable recovery scheduling', () => {
         record: nativeRecord({ state: 'running' }),
       },
     });
-    await expect(
-      schedulePersistedAndroidExternalRecoveryRun('run-1', active),
-    ).resolves.toEqual({
+    await expect(schedulePersistedAndroidExternalRecoveryRun('run-1', active)).resolves.toEqual({
       kind: 'deferred',
       runId: 'run-1',
       reason: 'older_native_generation_active',
@@ -103,32 +101,39 @@ describe('Android durable recovery scheduling', () => {
     });
   });
 
-  it('scans bounded deterministic pages and re-reads every run before enqueue', async () => {
+  it('schedules one bounded cursor slice and re-reads every run before enqueue', async () => {
     const dependencies = harness();
-    dependencies.listCandidates
-      .mockResolvedValueOnce({
-        kind: 'candidates',
-        candidates: [candidate()],
-        nextAfter: '[150,"run-1"]',
-      })
-      .mockResolvedValueOnce({
-        kind: 'candidates',
-        candidates: [],
-        nextAfter: null,
-      });
+    dependencies.listCandidates.mockResolvedValueOnce({
+      kind: 'candidates',
+      candidates: [candidate()],
+      nextAfter: '[150,"run-1"]',
+    });
 
     await expect(
-      schedulePersistedAndroidExternalRecoveryCandidates(
-        { pageSize: 1, maxPages: 2 },
+      schedulePersistedAndroidExternalRecoveryCandidateSlice({ limit: 1 }, dependencies),
+    ).resolves.toEqual({
+      outcomes: [{ kind: 'scheduled', runId: 'run-1' }],
+      nextAfter: '[150,"run-1"]',
+    });
+    expect(dependencies.listCandidates).toHaveBeenCalledWith({ limit: 1 });
+    expect(dependencies.readCandidate).toHaveBeenCalledWith('run-1');
+  });
+
+  it('rejects a stalled candidate cursor instead of looping or truncating', async () => {
+    const dependencies = harness();
+    dependencies.listCandidates.mockResolvedValue({
+      kind: 'candidates',
+      candidates: [],
+      nextAfter: '[150,"run-1"]',
+    });
+
+    await expect(
+      schedulePersistedAndroidExternalRecoveryCandidateSlice(
+        { limit: 25, after: '[150,"run-1"]' },
         dependencies,
       ),
-    ).resolves.toEqual([{ kind: 'scheduled', runId: 'run-1' }]);
-    expect(dependencies.listCandidates).toHaveBeenNthCalledWith(1, { limit: 1 });
-    expect(dependencies.listCandidates).toHaveBeenNthCalledWith(2, {
-      limit: 1,
-      after: '[150,"run-1"]',
-    });
-    expect(dependencies.readCandidate).toHaveBeenCalledWith('run-1');
+    ).rejects.toThrow('android-durable-scan-cursor-stalled');
+    expect(dependencies.readCandidate).not.toHaveBeenCalled();
   });
 
   it('releases the exact terminal predecessor when the journal has no successor', async () => {
@@ -155,14 +160,18 @@ describe('Android durable recovery scheduling', () => {
     expect(dependencies.enqueueNative).not.toHaveBeenCalled();
   });
 
-  function harness(options: {
-    candidate?: PersistedExternalRecoveryCandidate;
-    nativeRead?: ReturnType<typeof missingNativeRead> | {
-      schema: 1;
-      status: 'found';
-      record: AndroidDurableExecutionRecord;
-    };
-  } = {}) {
+  function harness(
+    options: {
+      candidate?: PersistedExternalRecoveryCandidate;
+      nativeRead?:
+        | ReturnType<typeof missingNativeRead>
+        | {
+            schema: 1;
+            status: 'found';
+            record: AndroidDurableExecutionRecord;
+          };
+    } = {},
+  ) {
     const exactCandidate = options.candidate ?? candidate();
     return {
       now: jest.fn(() => 200),
@@ -191,11 +200,13 @@ describe('Android durable recovery scheduling', () => {
     return { schema: 1 as const, status: 'missing' as const, record: null };
   }
 
-  function candidate(options: {
-    generationUpdatedAt?: number;
-    snapshotDigest?: string;
-    commandDigest?: string;
-  } = {}): PersistedExternalRecoveryCandidate {
+  function candidate(
+    options: {
+      generationUpdatedAt?: number;
+      snapshotDigest?: string;
+      commandDigest?: string;
+    } = {},
+  ): PersistedExternalRecoveryCandidate {
     const snapshotDigest = (options.snapshotDigest ?? 'c').repeat(64);
     const commandDigest = (options.commandDigest ?? 'd').repeat(64);
     return {
@@ -217,9 +228,9 @@ describe('Android durable recovery scheduling', () => {
     };
   }
 
-  function nativeRecord(
-    options: { state: AndroidDurableExecutionRecord['state'] },
-  ): AndroidDurableExecutionRecord {
+  function nativeRecord(options: {
+    state: AndroidDurableExecutionRecord['state'];
+  }): AndroidDurableExecutionRecord {
     return {
       request: {
         schema: 1,

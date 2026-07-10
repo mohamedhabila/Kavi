@@ -15,7 +15,7 @@ jest.mock('expo-crypto', () => {
 
 import { resolveExternalToolResultDurability } from '../../src/engine/durability/externalToolResult';
 import { scheduleAndroidDurableRecoveryRepair } from '../../src/services/executionJournal/androidDurableRecoveryLifecycle';
-import { schedulePersistedAndroidExternalRecoveryCandidates } from '../../src/services/executionJournal/androidDurableRecoveryScheduling';
+import { schedulePersistedAndroidExternalRecoveryCandidateSlice } from '../../src/services/executionJournal/androidDurableRecoveryScheduling';
 import { closeExecutionJournalDb } from '../../src/services/executionJournal/database';
 import { observeExternalToolResultDurability } from '../../src/services/executionJournal/externalToolDurabilityLifecycle';
 import { persistExternalToolObservation } from '../../src/services/executionJournal/externalToolObservationStore';
@@ -111,18 +111,19 @@ describe('production external tool recovery lifecycle', () => {
       releaseNative: jest.fn(),
       enqueueNative,
     };
-    const scheduleCandidates = jest.fn(() =>
-      schedulePersistedAndroidExternalRecoveryCandidates({}, schedulerDependencies),
+    const scheduleSlice = jest.fn((input) =>
+      schedulePersistedAndroidExternalRecoveryCandidateSlice(input, schedulerDependencies),
     );
 
     scheduleAndroidDurableRecoveryRepair('startup', {
       platform: 'android',
-      scheduleCandidates,
+      scheduleSlice,
+      continueAfterYield: (continuation) => setTimeout(continuation, 0),
     });
     await new Promise<void>((resolve) => setImmediate(resolve));
     await new Promise<void>((resolve) => setImmediate(resolve));
 
-    expect(scheduleCandidates).toHaveBeenCalledTimes(1);
+    expect(scheduleSlice).toHaveBeenCalledTimes(1);
     expect(enqueueNative).toHaveBeenCalledTimes(1);
     expect(enqueueNative).toHaveBeenCalledWith(
       expect.objectContaining({

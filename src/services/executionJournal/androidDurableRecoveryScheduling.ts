@@ -15,8 +15,8 @@ import {
   type PersistedExternalRecoveryCandidate,
 } from './productionRecovery';
 
-const DEFAULT_PAGE_SIZE = 25;
-const DEFAULT_MAX_PAGES = 4;
+const DEFAULT_CANDIDATE_SLICE_SIZE = 25;
+const MAX_CANDIDATE_SLICE_SIZE = 100;
 const MAX_ANDROID_RECOVERY_ATTEMPTS = 5;
 const INITIAL_BACKOFF_MILLIS = 30_000;
 
@@ -52,9 +52,7 @@ const DEFAULT_DEPENDENCIES: AndroidDurableRecoverySchedulingDependencies = {
   enqueueNative: enqueueAndroidDurableExecution,
 };
 
-function generationPointer(
-  record: AndroidDurableExecutionRecord,
-): AndroidDurableExecutionPointer {
+function generationPointer(record: AndroidDurableExecutionRecord): AndroidDurableExecutionPointer {
   const identity = record.request.identity;
   return {
     schema: 1,
@@ -103,10 +101,7 @@ function buildRequest(
     throw new Error('android-durable-scheduler-clock-invalid');
   }
   const requestedAtMillis = Math.max(now, candidate.generation.updatedAt);
-  const earliestStartAtMillis = Math.max(
-    requestedAtMillis,
-    candidate.retryAt ?? requestedAtMillis,
-  );
+  const earliestStartAtMillis = Math.max(requestedAtMillis, candidate.retryAt ?? requestedAtMillis);
   return {
     schema: 1,
     durabilityClass: 'external_durable_operation',
@@ -304,51 +299,57 @@ async function releaseFinishedPredecessor(
   return { kind: 'deferred', runId, reason: 'native_release_race' };
 }
 
-export interface SchedulePersistedAndroidExternalRecoveryCandidatesInput {
-  pageSize?: number;
-  maxPages?: number;
+export interface SchedulePersistedAndroidExternalRecoveryCandidateSliceInput {
+  limit?: number;
+  after?: string;
 }
 
-/** Bounded startup/foreground repair scan. Every run is re-read before native scheduling. */
-export async function schedulePersistedAndroidExternalRecoveryCandidates(
-  input: SchedulePersistedAndroidExternalRecoveryCandidatesInput = {},
+export interface SchedulePersistedAndroidExternalRecoveryCandidateSliceResult {
+  outcomes: AndroidDurableRecoveryScheduleOutcome[];
+  nextAfter: string | null;
+}
+
+/**
+ * Schedules one bounded repair slice. The lifecycle owns continuation so long journals yield
+ * between slices instead of monopolizing the JS event loop or silently stopping at a fixed page.
+ */
+export async function schedulePersistedAndroidExternalRecoveryCandidateSlice(
+  input: SchedulePersistedAndroidExternalRecoveryCandidateSliceInput = {},
   dependencies: AndroidDurableRecoverySchedulingDependencies = DEFAULT_DEPENDENCIES,
-): Promise<AndroidDurableRecoveryScheduleOutcome[]> {
-  const pageSize = input.pageSize ?? DEFAULT_PAGE_SIZE;
-  const maxPages = input.maxPages ?? DEFAULT_MAX_PAGES;
+): Promise<SchedulePersistedAndroidExternalRecoveryCandidateSliceResult> {
+  const limit = input.limit ?? DEFAULT_CANDIDATE_SLICE_SIZE;
   if (
-    !Number.isSafeInteger(pageSize) ||
-    pageSize < 1 ||
-    pageSize > 100 ||
-    !Number.isSafeInteger(maxPages) ||
-    maxPages < 1 ||
-    maxPages > 100
+    !Number.isSafeInteger(limit) ||
+    limit < 1 ||
+    limit > MAX_CANDIDATE_SLICE_SIZE ||
+    (input.after !== undefined && typeof input.after !== 'string')
   ) {
     throw new Error('android-durable-scan-contract-invalid');
   }
 
-  const outcomes: AndroidDurableRecoveryScheduleOutcome[] = [];
-  let after: string | undefined;
-  for (let page = 0; page < maxPages; page += 1) {
-    const listed = await dependencies.listCandidates({
-      limit: pageSize,
-      ...(after === undefined ? {} : { after }),
-    });
-    if (listed.kind === 'blocked') {
-      outcomes.push({
-        kind: listed.reason === 'journal_unavailable' ? 'deferred' : 'blocked',
-        runId: '*',
-        reason: listed.reason,
-      });
-      break;
-    }
-    for (const candidate of listed.candidates) {
-      outcomes.push(
-        await schedulePersistedAndroidExternalRecoveryRun(candidate.runId, dependencies),
-      );
-    }
-    if (listed.nextAfter === null) break;
-    after = listed.nextAfter;
+  const listed = await dependencies.listCandidates({
+    limit,
+    ...(input.after === undefined ? {} : { after: input.after }),
+  });
+  if (listed.kind === 'blocked') {
+    return {
+      outcomes: [
+        {
+          kind: listed.reason === 'journal_unavailable' ? 'deferred' : 'blocked',
+          runId: '*',
+          reason: listed.reason,
+        },
+      ],
+      nextAfter: null,
+    };
   }
-  return outcomes;
+  if (listed.nextAfter !== null && listed.nextAfter === input.after) {
+    throw new Error('android-durable-scan-cursor-stalled');
+  }
+
+  const outcomes: AndroidDurableRecoveryScheduleOutcome[] = [];
+  for (const candidate of listed.candidates) {
+    outcomes.push(await schedulePersistedAndroidExternalRecoveryRun(candidate.runId, dependencies));
+  }
+  return { outcomes, nextAfter: listed.nextAfter };
 }
