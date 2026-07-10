@@ -46,6 +46,12 @@ function readRepairFields(repair: JsonRecord): string[] {
   return readStringArray(repair.fields);
 }
 
+function readRepairTool(repair: JsonRecord): string | undefined {
+  return typeof repair.tool === 'string' && repair.tool.trim()
+    ? repair.tool.trim()
+    : undefined;
+}
+
 export function extractRecentToolRepairHints(
   history: ReadonlyArray<ToolCallRecord> | undefined,
   limit: number = 3,
@@ -62,7 +68,9 @@ export function extractRecentToolRepairHints(
 
     const fields = readRepairFields(repair);
     const fieldSuffix = fields.length > 0 ? ` fields ${fields.join(', ')}` : '';
-    const hint = `${entry.name}: ${repair.code}${fieldSuffix}`;
+    const repairTool = readRepairTool(repair);
+    const toolSuffix = repairTool ? ` via ${repairTool}` : '';
+    const hint = `${entry.name}: ${repair.code}${fieldSuffix}${toolSuffix}`;
     if (!hints.includes(hint)) {
       hints.push(hint);
     }

@@ -55,7 +55,7 @@ function buildToolErrorRepairHoldPrompt(repairHints: ReadonlyArray<string>): str
     lines.push(`Recent tool repair hints: ${repairHints.join('; ')}.`);
   }
   lines.push(
-    'Do not finalize. Repair the failed step using corrected top-level arguments, available tool results, or discovery tools for any missing capability. If repair is impossible, report the concrete blocker on the next pass.',
+    'Do not finalize. Follow repair.retryArguments or repair.expectedShape using corrected top-level arguments and available tool results. If repair.tool is update_goals, commit that graph mutation first, then retry the original effect on the following iteration. Use discovery tools for any missing capability. If repair is impossible, report the concrete blocker on the next pass.',
   );
   return lines.join('\n');
 }

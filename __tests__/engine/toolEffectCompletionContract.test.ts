@@ -148,13 +148,29 @@ describe('tool effect completion contracts', () => {
       tool: 'write_file',
       requiredCriterion: requirement.serializedCriterion,
       repair: {
+        retryable: true,
+        code: 'completion_contract_required',
         tool: 'update_goals',
-        completionPolicy: 'blocking',
-        status: 'active',
-        successCriteria: [requirement.serializedCriterion],
+        expectedShape: {
+          action: 'add',
+          id: expect.stringMatching(/^effect-write-file-[a-f0-9]{24}$/u),
+          name: 'Verify write_file effect',
+          completionPolicy: 'blocking',
+          status: 'active',
+          successCriteria: [requirement.serializedCriterion],
+        },
+        retryArguments: {
+          action: 'add',
+          id: expect.stringMatching(/^effect-write-file-[a-f0-9]{24}$/u),
+          name: 'Verify write_file effect',
+          completionPolicy: 'blocking',
+          status: 'active',
+          successCriteria: [requirement.serializedCriterion],
+        },
+        sideEffectApplied: false,
       },
       message:
-        'Create or update an active blocking goal with the exact required criterion before retrying this effect.',
+        'Call update_goals with repair.retryArguments. After that graph mutation commits, retry the original effect on the following iteration.',
     });
   });
 

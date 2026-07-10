@@ -8,6 +8,10 @@ import type { AgentControlTurnDirectives } from '../../src/engine/graph/agentCon
 import type { AgentGoal } from '../../src/types/agentRun';
 import type { TrackedAsyncOperation } from '../../src/engine/pendingAsyncOperations';
 import type { ToolEffectReceipt } from '../../src/types/toolEffectReceipt';
+import {
+  buildEffectCompletionContractBlock,
+  resolveToolEffectCompletionRequirement,
+} from '../../src/engine/toolExecution/toolEffectCompletionContract';
 
 const EFFECT_REQUEST_DIGEST = `sha256:${'1'.repeat(64)}` as const;
 const EFFECT_RESULT_DIGEST = `sha256:${'2'.repeat(64)}` as const;
@@ -149,6 +153,51 @@ describe('completionGate', () => {
     });
 
     expect(decision).toEqual({ type: 'ready' });
+  });
+  it('holds an empty finalization after an effect completion contract rejection', async () => {
+    const argumentsText = JSON.stringify({
+      subject: 'user',
+      predicate: 'city',
+      value: 'Utrecht',
+      scope: 'global',
+    });
+    const requirement = await resolveToolEffectCompletionRequirement({
+      toolName: 'memory_remember',
+      argumentsText,
+    });
+    if (requirement.kind !== 'effectful') {
+      throw new Error('memory_remember must have an effect completion contract');
+    }
+
+    const decision = evaluateCompletionGate({
+      ...buildBaseParams(),
+      hasDraftContent: false,
+      fullContent: '',
+      selectedToolNames: new Set([GOAL_BOOTSTRAP_TOOL_NAME, 'memory_remember']),
+      toolCallHistory: [
+        {
+          id: 'tc-memory',
+          name: 'memory_remember',
+          arguments: argumentsText,
+          timestamp: 1,
+          result: buildEffectCompletionContractBlock(requirement),
+        },
+      ],
+    });
+
+    expect(decision).toEqual(
+      expect.objectContaining({
+        type: 'hold',
+        reason: 'tool_error_repair',
+        nextConsecutivePendingAsyncNoToolTurns: 1,
+      }),
+    );
+    const prompt = decision.type === 'hold' ? decision.systemPrompts.join('\n') : '';
+    expect(prompt).toContain(
+      'memory_remember: completion_contract_required via update_goals',
+    );
+    expect(prompt).toContain('commit that graph mutation first');
+    expect(prompt).toContain('retry the original effect on the following iteration');
   });
   it('holds for bounded workflow continuation when downstream tools remain', () => {
     const decision = evaluateCompletionGate({

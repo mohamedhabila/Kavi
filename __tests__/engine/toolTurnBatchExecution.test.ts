@@ -215,9 +215,15 @@ describe('toolTurnBatchExecution', () => {
       code: 'completion_contract_required',
       tool: 'write_file',
       repair: {
+        retryable: true,
+        code: 'completion_contract_required',
         tool: GOAL_BOOTSTRAP_TOOL_NAME,
-        completionPolicy: 'blocking',
-        status: 'active',
+        retryArguments: {
+          action: 'add',
+          completionPolicy: 'blocking',
+          status: 'active',
+        },
+        sideEffectApplied: false,
       },
     });
     expect(blocked.requiredCriterion).toEqual(expect.stringMatching(/^evidence\.effect:/u));

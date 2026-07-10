@@ -207,19 +207,36 @@ export function buildEffectCompletionContractBlock(
         'The code-owned effect contract cannot prove this mutation. Do not execute or claim completion.',
     });
   }
+  const toolToken =
+    requirement.toolName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/gu, '-')
+      .replace(/^-+|-+$/gu, '')
+      .slice(0, 32) || 'tool';
+  const requestToken = requirement.criterion.requestDigest.slice('sha256:'.length, 31);
+  const retryArguments = {
+    action: 'add',
+    id: `effect-${toolToken}-${requestToken}`,
+    name: `Verify ${requirement.toolName} effect`,
+    completionPolicy: 'blocking',
+    status: 'active',
+    successCriteria: [requirement.serializedCriterion],
+  };
   return JSON.stringify({
     status: 'error',
     code: 'completion_contract_required',
     tool: requirement.toolName,
     requiredCriterion: requirement.serializedCriterion,
     repair: {
+      retryable: true,
+      code: 'completion_contract_required',
       tool: 'update_goals',
-      completionPolicy: 'blocking',
-      status: 'active',
-      successCriteria: [requirement.serializedCriterion],
+      expectedShape: retryArguments,
+      retryArguments,
+      sideEffectApplied: false,
     },
     message:
-      'Create or update an active blocking goal with the exact required criterion before retrying this effect.',
+      'Call update_goals with repair.retryArguments. After that graph mutation commits, retry the original effect on the following iteration.',
   });
 }
 
