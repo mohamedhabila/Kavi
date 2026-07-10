@@ -59,7 +59,7 @@ describe('ToolEffectReceipt', () => {
     }
 
     for (const operationalName of ['ssh_exec', 'expo_eas_build']) {
-      expect(getCodeOwnedToolEffectContract(operationalName)?.effectMode).toBe('operational');
+      expect(getCodeOwnedToolEffectContract(operationalName)?.completionMode).toBe('operational');
     }
 
     for (const deferredName of ['shell', 'skill__github__commit_files', 'mcp__filesystem__write_file']) {
@@ -194,11 +194,11 @@ describe('ToolEffectReceipt', () => {
     [
       'calendar creation',
       'calendar_create_event',
-      { status: 'created', eventId: 'event-42' },
+      { status: 'created_verified', eventId: 'event-42' },
       {
         effectKind: 'calendar.create',
         effectState: 'applied',
-        verificationState: 'acknowledged',
+        verificationState: 'verified',
         resource: { kind: 'calendar_event', id: 'event-42' },
       },
     ],

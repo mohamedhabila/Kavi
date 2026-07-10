@@ -10,8 +10,9 @@ import type {
 } from '../../types/toolEffectReceipt';
 
 export interface CodeOwnedToolEffectContract {
-  readonly effectMode: 'none' | 'effectful' | 'operational';
+  readonly effectMode: 'none' | 'effectful';
   readonly effectKind: ToolEffectKind;
+  readonly completionMode?: 'operational';
   readonly tracksExecution?: true;
   readonly result?: ToolEffectResultContract;
   readonly completion?: {
@@ -138,7 +139,17 @@ function effectful(
 }
 
 function operational(effectKind: ToolEffectKind): CodeOwnedToolEffectContract {
-  return Object.freeze({ effectMode: 'operational', effectKind });
+  return Object.freeze({ effectMode: 'effectful', effectKind, completionMode: 'operational' });
+}
+
+function operationalExecution(
+  effectKind: ToolEffectKind,
+  outcomes: Readonly<Record<string, ToolEffectResultOutcome>>,
+): CodeOwnedToolEffectContract {
+  return Object.freeze({
+    ...effectful(effectKind, outcomes, { tracksExecution: true }),
+    completionMode: 'operational',
+  });
 }
 
 function nativeOutcomes(
@@ -176,16 +187,15 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
   Object.freeze({
     // A successful interpreter exit proves execution, not the completeness or
     // verification of arbitrary side effects produced by user-authored code.
-    javascript: effectful(
+    javascript: operationalExecution(
       'compute.execute',
       {
         completed: executionOutcome('completed'),
         effect_failed: executionOutcome('completed'),
         failed: executionOutcome('failed'),
       },
-      { tracksExecution: true },
     ),
-    python: effectful(
+    python: operationalExecution(
       'compute.execute',
       {
         completed: executionOutcome('completed'),
@@ -193,7 +203,6 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
         failed: executionOutcome('failed'),
         timed_out: executionOutcome('timed_out'),
       },
-      { tracksExecution: true },
     ),
     // Workspace writes read the exact resource back after mutation. A result
     // is verified only when that readback matches the requested content.
@@ -326,12 +335,12 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
     ...READ_ONLY_CONTRACTS,
     calendar_create_event: effectful(
       'calendar.create',
-      { created: APPLIED },
+      { created_verified: VERIFIED, created_unverified: APPLIED },
       { resource: selector('calendar_event', 'result', ['eventId']) },
     ),
     calendar_update_event: effectful(
       'calendar.update',
-      { updated: APPLIED },
+      { updated_verified: VERIFIED, updated_unverified: APPLIED },
       { resource: selector('calendar_event', 'result', ['eventId']) },
     ),
     clipboard_write: effectful('clipboard.write', { written: APPLIED }),

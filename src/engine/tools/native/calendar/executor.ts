@@ -6,6 +6,35 @@ async function loadCalendarModule() {
   }
 }
 
+export type CalendarMutationRuntime = Pick<
+  typeof import('expo-calendar'),
+  | 'EntityTypes'
+  | 'requestCalendarPermissionsAsync'
+  | 'getCalendarsAsync'
+  | 'createEventAsync'
+  | 'updateEventAsync'
+  | 'getEventAsync'
+>;
+
+function calendarDateMatches(actual: unknown, expected: Date): boolean {
+  const actualDate = actual instanceof Date ? actual : new Date(String(actual));
+  return !isNaN(actualDate.getTime()) && actualDate.getTime() === expected.getTime();
+}
+
+function calendarEventMatches(
+  event: Record<string, unknown> | null | undefined,
+  expected: Record<string, unknown>,
+): boolean {
+  if (!event || typeof event.id !== 'string' || event.id !== expected.id) {
+    return false;
+  }
+  return Object.entries(expected).every(([field, value]) => {
+    if (field === 'id') return true;
+    if (value instanceof Date) return calendarDateMatches(event[field], value);
+    return event[field] === value;
+  });
+}
+
 export async function executeCalendarList(): Promise<string> {
   const Calendar = await loadCalendarModule();
   if (!Calendar) return JSON.stringify({ error: 'Calendar module not available' });
@@ -66,8 +95,8 @@ export async function executeCalendarCreate(args: {
   notes?: string;
   calendarId?: string;
   allDay?: boolean;
-}): Promise<string> {
-  const Calendar = await loadCalendarModule();
+}, runtime?: CalendarMutationRuntime): Promise<string> {
+  const Calendar = runtime ?? (await loadCalendarModule());
   if (!Calendar) return JSON.stringify({ error: 'Calendar module not available' });
 
   const { status } = await Calendar.requestCalendarPermissionsAsync();
@@ -117,14 +146,41 @@ export async function executeCalendarCreate(args: {
       title: args.title,
       startDate: start,
       endDate: end,
-      location: args.location,
-      notes: args.notes,
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       allDay: isAllDay,
+      ...(args.location !== undefined ? { location: args.location } : {}),
+      ...(args.notes !== undefined ? { notes: args.notes } : {}),
     };
 
     const eventId = await Calendar.createEventAsync(calendarId, eventDetails);
-    return JSON.stringify({ status: 'created', eventId, calendarId });
+    try {
+      const persisted = (await Calendar.getEventAsync(eventId)) as unknown as Record<
+        string,
+        unknown
+      >;
+      const verified = calendarEventMatches(persisted, {
+        id: eventId,
+        title: args.title,
+        startDate: start,
+        endDate: end,
+        allDay: isAllDay,
+        ...(args.location !== undefined ? { location: args.location } : {}),
+        ...(args.notes !== undefined ? { notes: args.notes } : {}),
+      });
+      return JSON.stringify({
+        status: verified ? 'created_verified' : 'created_unverified',
+        eventId,
+        calendarId,
+        ...(verified ? {} : { verificationError: 'calendar_readback_mismatch' }),
+      });
+    } catch {
+      return JSON.stringify({
+        status: 'created_unverified',
+        eventId,
+        calendarId,
+        verificationError: 'calendar_readback_failed',
+      });
+    }
   } catch (err: unknown) {
     // Provide actionable error messages
     const msg = err instanceof Error ? err.message : String(err);
@@ -146,8 +202,8 @@ export async function executeCalendarUpdate(args: {
   location?: string;
   notes?: string;
   allDay?: boolean;
-}): Promise<string> {
-  const Calendar = await loadCalendarModule();
+}, runtime?: CalendarMutationRuntime): Promise<string> {
+  const Calendar = runtime ?? (await loadCalendarModule());
   if (!Calendar) return JSON.stringify({ error: 'Calendar module not available' });
 
   const { status } = await Calendar.requestCalendarPermissionsAsync();
@@ -193,7 +249,24 @@ export async function executeCalendarUpdate(args: {
 
   try {
     await Calendar.updateEventAsync(args.id, eventDetails);
-    return JSON.stringify({ status: 'updated', eventId: args.id });
+    try {
+      const persisted = (await Calendar.getEventAsync(args.id)) as unknown as Record<
+        string,
+        unknown
+      >;
+      const verified = calendarEventMatches(persisted, { id: args.id, ...eventDetails });
+      return JSON.stringify({
+        status: verified ? 'updated_verified' : 'updated_unverified',
+        eventId: args.id,
+        ...(verified ? {} : { verificationError: 'calendar_readback_mismatch' }),
+      });
+    } catch {
+      return JSON.stringify({
+        status: 'updated_unverified',
+        eventId: args.id,
+        verificationError: 'calendar_readback_failed',
+      });
+    }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return JSON.stringify({ error: `Failed to update event: ${msg}` });

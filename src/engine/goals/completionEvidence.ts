@@ -58,6 +58,12 @@ export function formatSuccessCriteriaFormsDescription(): string {
   return SUCCESS_CRITERION_FORMS.join(', ');
 }
 
+export function formatModelAuthoredSuccessCriteriaFormsDescription(): string {
+  return SUCCESS_CRITERION_FORMS.filter(
+    (form) => form !== 'evidence.effect:<closed-json-contract>',
+  ).join(', ');
+}
+
 export function isRecognizedSuccessCriterionForm(criterion: string): boolean {
   return (
     EVIDENCE_MIN_PATTERN.test(criterion) ||
@@ -305,6 +311,9 @@ export function evaluateRequiredEffectEvidenceGaps(
   const gaps: GoalEvidenceGap[] = [];
 
   for (const goal of goals) {
+    if (goal.status !== 'active' && goal.status !== 'completed') {
+      continue;
+    }
     for (const criterion of goal.successCriteria ?? []) {
       if (
         parseEffectCompletionCriterion(criterion) &&

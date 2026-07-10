@@ -3,7 +3,11 @@ import {
   findGoalForEffectCompletionRequirement,
   resolveToolEffectCompletionRequirement,
 } from '../../src/engine/toolExecution/toolEffectCompletionContract';
-import { digestToolEffectText } from '../../src/engine/toolExecution/toolEffectReceipt';
+import {
+  buildToolEffectReceipt,
+  digestToolEffectRequest,
+  digestToolEffectText,
+} from '../../src/engine/toolExecution/toolEffectReceipt';
 import { createGoal } from '../../src/engine/goals/types';
 
 describe('tool effect completion contracts', () => {
@@ -25,6 +29,15 @@ describe('tool effect completion contracts', () => {
     ).resolves.toEqual({ kind: 'operational', toolName: 'sessions_spawn' });
   });
 
+  it('permits an untrusted dynamic tool only as non-completing operational work', async () => {
+    await expect(
+      resolveToolEffectCompletionRequirement({
+        toolName: 'mcp__docs__fetch',
+        argumentsText: JSON.stringify({ path: '/docs' }),
+      }),
+    ).resolves.toEqual({ kind: 'operational', toolName: 'mcp__docs__fetch' });
+  });
+
   it('classifies the read branch of a mixed memory tool as effect-free', async () => {
     await expect(
       resolveToolEffectCompletionRequirement({
@@ -32,6 +45,27 @@ describe('tool effect completion contracts', () => {
         argumentsText: JSON.stringify({ action: 'read' }),
       }),
     ).resolves.toEqual({ kind: 'effect_free', toolName: 'memory_block' });
+  });
+
+  it.each(['phone_call', 'share_text'])(
+    'keeps the handed-off %s action operational and non-completing',
+    async (toolName) => {
+      await expect(
+        resolveToolEffectCompletionRequirement({
+          toolName,
+          argumentsText: JSON.stringify({ value: 'test' }),
+        }),
+      ).resolves.toEqual({ kind: 'operational', toolName });
+    },
+  );
+
+  it('keeps an acknowledged but unverifiable canvas mutation operational', async () => {
+    await expect(
+      resolveToolEffectCompletionRequirement({
+        toolName: 'canvas_create',
+        argumentsText: JSON.stringify({ html: '<p>test</p>' }),
+      }),
+    ).resolves.toEqual({ kind: 'operational', toolName: 'canvas_create' });
   });
 
   it('derives an exact request-bound file resource and content digest', async () => {
@@ -50,7 +84,7 @@ describe('tool effect completion contracts', () => {
         toolName: 'write_file',
         criterion: {
           effectKind: 'artifact.write',
-          requestDigest: await digestToolEffectText(argumentsText),
+          requestDigest: await digestToolEffectRequest(argumentsText),
           resource: {
             kind: 'workspace_file',
             id: 'artifacts/out.txt',
@@ -143,7 +177,7 @@ describe('tool effect completion contracts', () => {
         toolName: 'memory_remember',
         criterion: {
           effectKind: 'memory.write',
-          requestDigest: await digestToolEffectText(argumentsText),
+          requestDigest: await digestToolEffectRequest(argumentsText),
           resource: { kind: 'memory_fact', id: '*' },
           verificationState: 'verified',
         },
@@ -151,16 +185,47 @@ describe('tool effect completion contracts', () => {
     );
   });
 
-  it('fails closed when a mutating builtin lacks a code-owned result contract', async () => {
+  it('keeps request identity stable across reordered and whitespace-varied JSON retries', async () => {
+    const first = await resolveToolEffectCompletionRequirement({
+      toolName: 'write_file',
+      argumentsText: '{"path":"artifacts/out.txt","content":"EXPECTED"}',
+    });
+    const retry = await resolveToolEffectCompletionRequirement({
+      toolName: 'write_file',
+      argumentsText: '{  "content" : "EXPECTED", "path" : "artifacts/out.txt" }',
+    });
+
+    expect(first.kind).toBe('effectful');
+    expect(retry.kind).toBe('effectful');
+    if (first.kind !== 'effectful' || retry.kind !== 'effectful') {
+      throw new Error('write_file must have an effect completion contract');
+    }
+    expect(retry.serializedCriterion).toBe(first.serializedCriterion);
+    const contentDigest = await digestToolEffectText('EXPECTED');
+    const receipt = await buildToolEffectReceipt({
+      toolCallId: 'tc-write-retry',
+      toolName: 'write_file',
+      argumentsText: '{  "content" : "EXPECTED", "path" : "artifacts/out.txt" }',
+      resultText: JSON.stringify({
+        status: 'written',
+        path: 'artifacts/out.txt',
+        sha256: contentDigest.slice(7),
+      }),
+      transportState: 'returned',
+    });
+    expect(receipt.requestDigest).toBe(first.criterion.requestDigest);
+  });
+
+  it('fails closed when effect arguments are not a structured object', async () => {
     await expect(
       resolveToolEffectCompletionRequirement({
-        toolName: 'unknown_mutation',
-        argumentsText: JSON.stringify({ action: 'edit' }),
+        toolName: 'write_file',
+        argumentsText: 'not-json',
       }),
     ).resolves.toEqual({
       kind: 'unsupported',
-      toolName: 'unknown_mutation',
-      code: 'effect_contract_unavailable',
+      toolName: 'write_file',
+      code: 'effect_arguments_invalid',
     });
   });
 });

@@ -138,7 +138,7 @@ describe('executeToolCallLifecycle', () => {
 
   it('records a code-owned calendar receipt without exposing it to the provider transcript', async () => {
     mockedExecuteTool.mockResolvedValueOnce(
-      JSON.stringify({ status: 'created', eventId: 'event-1' }),
+      JSON.stringify({ status: 'created_verified', eventId: 'event-1' }),
     );
     const onToolCallComplete = jest.fn();
     const result = await executeToolCallLifecycle(
@@ -169,7 +169,7 @@ describe('executeToolCallLifecycle', () => {
             transportState: 'returned',
             effectKind: 'calendar.create',
             effectState: 'applied',
-            verificationState: 'acknowledged',
+            verificationState: 'verified',
             resource: { kind: 'calendar_event', id: 'event-1' },
           }),
         ],
@@ -178,7 +178,7 @@ describe('executeToolCallLifecycle', () => {
     expect(result.effectReceipt).toEqual(
       expect.objectContaining({
         effectState: 'applied',
-        verificationState: 'acknowledged',
+        verificationState: 'verified',
       }),
     );
     expect(result.toolMessage.toolCalls?.[0]?.effectReceipts).toBeUndefined();

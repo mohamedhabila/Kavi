@@ -6,14 +6,16 @@ import {
 } from '../../src/utils/toolEffectReceipt';
 
 describe('ToolEffectReceipt code execution truth', () => {
-  it('covers JavaScript and Python while deferring unowned execution runtimes', () => {
+  it('covers JavaScript and Python while keeping unowned runtimes non-evidentiary', () => {
     expect(getCodeOwnedToolEffectContract('javascript')).toBeDefined();
     expect(getCodeOwnedToolEffectContract('python')).toBeDefined();
+    expect(getCodeOwnedToolEffectContract('ssh_exec')?.completionMode).toBe('operational');
+    expect(getCodeOwnedToolEffectContract('expo_eas_build')?.completionMode).toBe(
+      'operational',
+    );
 
     for (const deferredName of [
       'shell',
-      'ssh_exec',
-      'expo_eas_build',
       'skill__github__commit_files',
       'mcp__filesystem__write_file',
     ]) {

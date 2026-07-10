@@ -16,7 +16,12 @@ import type { AgentControlGraphWorkflowToolResultProgress } from './workflowTool
 import { normalizeToolName, resolveRegisteredToolName } from '../tools/toolNameNormalization';
 import { buildToolGoalEvidenceStrings } from '../goals/toolEvidence';
 import { routeToolEvidenceToActiveGoals } from '../goals/evidenceRouting';
-import { buildToolEffectReceiptEvidence } from '../goals/effectCompletionEvidence';
+import {
+  buildToolEffectReceiptEvidence,
+  effectReceiptEvidenceTargetsCriterion,
+  parseEffectCompletionCriterion,
+  parseToolEffectReceiptEvidence,
+} from '../goals/effectCompletionEvidence';
 import { isBlockingGoal, type AgentGoal } from '../goals/types';
 import { buildDelegationToolTerminalGraphEvents } from './delegationToolTerminalGraphEffects';
 import {
@@ -121,6 +126,57 @@ function hasNewlyCompletedBlockingGoal(params: {
       goal.status === 'completed' &&
       !params.before.has(goal.id),
   );
+}
+
+function buildAppliedUnverifiedEffectGoalBlockEvent(params: {
+  goals: ReadonlyArray<AgentGoal>;
+  receiptEvidence: string | undefined;
+}): AgentControlGraphEvent | null {
+  const receipt = params.receiptEvidence
+    ? parseToolEffectReceiptEvidence(params.receiptEvidence)
+    : null;
+  if (
+    !receipt ||
+    receipt.effectState !== 'applied' ||
+    receipt.verificationState === 'verified'
+  ) {
+    return null;
+  }
+
+  const timestamp = Date.now();
+  const targetGoalIds = new Set(
+    params.goals
+      .filter(
+        (goal) =>
+          goal.status === 'active' &&
+          (goal.successCriteria ?? []).some((criterion) => {
+            const effectCriterion = parseEffectCompletionCriterion(criterion);
+            return effectCriterion
+              ? effectReceiptEvidenceTargetsCriterion(receipt, effectCriterion)
+              : false;
+          }),
+      )
+      .map((goal) => goal.id),
+  );
+  if (targetGoalIds.size === 0) {
+    return null;
+  }
+
+  return {
+    type: 'GOALS_UPDATED',
+    goals: params.goals.map((goal) =>
+      targetGoalIds.has(goal.id)
+        ? {
+            ...goal,
+            status: 'blocked' as const,
+            blockedReason: `Effect applied but verification was incomplete (${receipt.receiptId}). Do not repeat the mutation.`,
+            updatedAt: timestamp,
+          }
+        : goal,
+    ),
+    reason: 'effect_verification_incomplete',
+    timestamp,
+  };
 }
 
 export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
@@ -328,6 +384,13 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
               timestamp: Date.now(),
             },
           ]);
+        }
+        const unverifiedEffectBlockEvent = buildAppliedUnverifiedEffectGoalBlockEvent({
+          goals: params.getGraphSnapshot().goals ?? [],
+          receiptEvidence: effectReceiptEvidenceStrings[0],
+        });
+        if (unverifiedEffectBlockEvent) {
+          params.applyGraphEvents([unverifiedEffectBlockEvent]);
         }
         if (routedEvidence.length > 0) {
           const satisfiedGoals = findEvidenceSatisfiedGoals(params.getGraphSnapshot().goals ?? []);

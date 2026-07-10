@@ -330,6 +330,7 @@ describe('tool execution outcome resolution', () => {
       label: 'acknowledged',
       receipt: buildReceipt({ verificationState: 'acknowledged' }),
       isError: false,
+      expectedGoalStatus: 'blocked',
     },
     {
       label: 'failed',
@@ -340,6 +341,7 @@ describe('tool execution outcome resolution', () => {
         resource: undefined,
       }),
       isError: true,
+      expectedGoalStatus: 'active',
     },
     {
       label: 'cancelled',
@@ -350,10 +352,12 @@ describe('tool execution outcome resolution', () => {
         resource: undefined,
       }),
       isError: true,
+      expectedGoalStatus: 'active',
     },
   ])('persists and routes a $label effect receipt without completing the goal', async ({
     receipt,
     isError,
+    expectedGoalStatus,
   }) => {
     const params = buildBaseParams();
     let graph = {
@@ -399,7 +403,10 @@ describe('tool execution outcome resolution', () => {
       verificationState: receipt.verificationState,
       requestDigest: REQUEST_DIGEST,
     });
-    expect(graph.goals[0]?.status).toBe('active');
+    expect(graph.goals[0]?.status).toBe(expectedGoalStatus);
+    if (expectedGoalStatus === 'blocked') {
+      expect(graph.goals[0]?.blockedReason).toContain('Do not repeat the mutation');
+    }
     expect(
       params.applyGraphEvents.mock.calls
         .flatMap(([events]) => events)

@@ -10,7 +10,7 @@ import { isBlockingGoal } from '../goals/types';
 import { normalizeToolName } from '../tools/toolNameNormalization';
 import type { AgentGoal } from '../../types/agentRun';
 import type { ToolEffectIdentitySelector } from '../../types/toolEffectReceipt';
-import { digestToolEffectText } from './toolEffectReceipt';
+import { digestToolEffectRequest, digestToolEffectText } from './toolEffectReceipt';
 import { getCodeOwnedToolEffectContract } from './toolEffectReceiptContracts';
 
 export type ToolEffectCompletionRequirement =
@@ -89,6 +89,15 @@ function completionContractIsEffectFree(
   return typeof value === 'string' && condition.values.includes(value);
 }
 
+function completionContractCanVerifyEffect(
+  contract: NonNullable<ReturnType<typeof getCodeOwnedToolEffectContract>>,
+): boolean {
+  return Object.values(contract.result?.outcomes ?? {}).some(
+    (outcome) =>
+      outcome.effectState === 'applied' && outcome.verificationState === 'verified',
+  );
+}
+
 async function resolveCompletionResource(params: {
   argumentsValue: Record<string, unknown>;
   requestDigest: `sha256:${string}`;
@@ -119,19 +128,21 @@ export async function resolveToolEffectCompletionRequirement(params: {
 }): Promise<ToolEffectCompletionRequirement> {
   const toolName = normalizeToolName(params.toolName);
   const policy = resolveToolEffectPolicy(toolName);
-  if (policy.source !== 'unknown' && policy.effects.every((effect) => effect === 'none')) {
+  if (policy.source === 'unknown') {
+    return { kind: 'operational', toolName };
+  }
+  if (policy.effects.every((effect) => effect === 'none')) {
     return { kind: 'effect_free', toolName };
   }
 
   const contract = getCodeOwnedToolEffectContract(toolName);
   if (
-    policy.source === 'unknown' ||
     policy.effects.includes('unknown') ||
     !contract
   ) {
     return { kind: 'unsupported', toolName, code: 'effect_contract_unavailable' };
   }
-  if (contract.effectMode === 'operational') {
+  if (contract.completionMode === 'operational') {
     return { kind: 'operational', toolName };
   }
   if (contract.effectMode !== 'effectful') {
@@ -144,8 +155,11 @@ export async function resolveToolEffectCompletionRequirement(params: {
   if (completionContractIsEffectFree(contract, argumentsValue)) {
     return { kind: 'effect_free', toolName };
   }
+  if (!completionContractCanVerifyEffect(contract)) {
+    return { kind: 'operational', toolName };
+  }
 
-  const requestDigest = await digestToolEffectText(params.argumentsText);
+  const requestDigest = await digestToolEffectRequest(params.argumentsText);
   const criterion: EffectCompletionCriterion = {
     effectKind: contract.effectKind,
     requestDigest,

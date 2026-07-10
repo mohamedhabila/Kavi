@@ -324,9 +324,6 @@ function resolveReturnedOutcome(params: BuildToolEffectReceiptParams): ResolvedE
     }
     return { effectKind, effectState: 'none', verificationState: 'not_applicable' };
   }
-  if (codeOwnedContract?.effectMode === 'operational') {
-    return unknownResolvedOutcome(effectKind, unknownExecutionState);
-  }
   if (codeOwnedContract?.effectMode !== 'effectful') {
     return unknownResolvedOutcome('unknown');
   }
@@ -371,6 +368,32 @@ export async function digestToolEffectText(value: string): Promise<`sha256:${str
   return `sha256:${digest.toLowerCase()}`;
 }
 
+function canonicalizeJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalizeJsonValue);
+  }
+  if (isPlainRecord(value)) {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonicalizeJsonValue(value[key])]),
+    );
+  }
+  return value;
+}
+
+export function canonicalizeToolEffectArguments(argumentsText: string): string | null {
+  const argumentsValue = parseJsonRecord(argumentsText);
+  return argumentsValue ? JSON.stringify(canonicalizeJsonValue(argumentsValue)) : null;
+}
+
+export async function digestToolEffectRequest(
+  argumentsText: string,
+): Promise<`sha256:${string}`> {
+  const canonical = canonicalizeToolEffectArguments(argumentsText);
+  return digestToolEffectText(canonical ?? argumentsText);
+}
+
 export async function buildToolEffectReceipt(
   params: BuildToolEffectReceiptParams,
 ): Promise<ToolEffectReceipt> {
@@ -380,7 +403,7 @@ export async function buildToolEffectReceipt(
   }
 
   const [requestDigest, resultDigest] = await Promise.all([
-    digestToolEffectText(params.argumentsText),
+    digestToolEffectRequest(params.argumentsText),
     digestToolEffectText(params.resultText),
   ]);
   const codeOwnedContract = getCodeOwnedToolEffectContract(params.toolName);

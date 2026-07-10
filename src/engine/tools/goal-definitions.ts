@@ -6,7 +6,7 @@
 // snapshot remains the single source of truth.
 // ---------------------------------------------------------------------------
 
-import { formatSuccessCriteriaFormsDescription } from '../goals/completionEvidence';
+import { formatModelAuthoredSuccessCriteriaFormsDescription } from '../goals/completionEvidence';
 import type { ToolDefinition } from '../../types/tool';
 
 export const UPDATE_GOALS_TOOL: ToolDefinition = {
@@ -83,7 +83,7 @@ export const UPDATE_GOALS_TOOL: ToolDefinition = {
           description:
             'Structural completion criterion. evidence.prefix tokens must reference registered evidence sources such as tool names or worker.',
         },
-        description: `Blocking deliverables only. Omit for persistent focus goals. Structural completion tokens for this goal. Supported forms: ${formatSuccessCriteriaFormsDescription()}.`,
+        description: `Blocking deliverables only. Omit for persistent focus goals. Structural completion tokens for this goal. Supported forms: ${formatModelAuthoredSuccessCriteriaFormsDescription()}.`,
       },
       blockedReason: {
         type: 'string',

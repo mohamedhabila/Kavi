@@ -1,6 +1,7 @@
 import {
   buildMissingRequiredEvidenceLabels,
   evaluateGoalEvidenceGaps,
+  formatModelAuthoredSuccessCriteriaFormsDescription,
   formatSuccessCriteriaFormsDescription,
   isRecognizedSuccessCriterionForm,
   isSuccessCriterionMet,
@@ -20,6 +21,12 @@ describe('completionEvidence', () => {
     expect(formatSuccessCriteriaFormsDescription()).toContain('evidence.exit_code:<n>');
     expect(formatSuccessCriteriaFormsDescription()).toContain(
       'evidence.effect:<closed-json-contract>',
+    );
+  });
+
+  it('reserves request-bound effect criteria for code-owned repair contracts', () => {
+    expect(formatModelAuthoredSuccessCriteriaFormsDescription()).not.toContain(
+      'evidence.effect:',
     );
   });
 

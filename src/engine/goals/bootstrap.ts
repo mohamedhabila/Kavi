@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import type { AgentGoal } from './types';
-import { formatSuccessCriteriaFormsDescription } from './completionEvidence';
+import { formatModelAuthoredSuccessCriteriaFormsDescription } from './completionEvidence';
 
 export const GOAL_BOOTSTRAP_TOOL_NAME = 'update_goals';
 
@@ -39,7 +39,7 @@ export function renderGoalBootstrapPromptSection(): string {
     'If no blocking deliverable or persistent focus is needed, continue without creating goals.',
     'Call shape: {"action":"add","id":"stable-id","name":"Visible name","completionPolicy":"blocking|persistent","status":"active|pending"}.',
     'add requires id, name, and completionPolicy (`blocking` finite deliverable, `persistent` ongoing focus).',
-    `blocking add requires structural successCriteria (${formatSuccessCriteriaFormsDescription()}) with at least one specific criterion beyond evidence.min/evidence.count.`,
+    `blocking add requires structural successCriteria (${formatModelAuthoredSuccessCriteriaFormsDescription()}) with at least one specific criterion beyond evidence.min/evidence.count.`,
     'persistent add omits successCriteria; persistent goals are ongoing focus, not deliverables.',
     `Do not use ${GOAL_BOOTSTRAP_TOOL_NAME} or natural-language labels as successCriteria evidence.`,
   ].join('\n');
@@ -62,7 +62,7 @@ export function renderGoalMutationContractSection(): string {
     `- ${GOAL_BOOTSTRAP_TOOL_NAME} is internal graph bookkeeping and is not valid deliverable evidence.`,
     'Compound bootstrap: action `add` with status `active` creates and activates in one call.',
     'Missing goals: use `add` with id + name + status `active` instead of `activate` on unknown ids.',
-    `Supported successCriteria forms: ${formatSuccessCriteriaFormsDescription()}.`,
+    `Supported successCriteria forms: ${formatModelAuthoredSuccessCriteriaFormsDescription()}.`,
     'For evidence.prefix, use a registered evidence source such as a tool name or worker.',
     'Use structural forms only; do not put natural-language labels in successCriteria.',
   ].join('\n');

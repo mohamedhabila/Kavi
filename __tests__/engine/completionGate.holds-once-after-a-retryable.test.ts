@@ -296,6 +296,22 @@ describe('completionGate', () => {
       }),
     );
   });
+  it('allows an explicit blocker report after an applied effect cannot be verified', () => {
+    const decision = evaluateCompletionGate({
+      ...buildBaseParams(),
+      goals: [
+        createGoal({
+          status: 'blocked',
+          completionPolicy: 'blocking',
+          blockedReason: 'Effect applied but verification was incomplete. Do not repeat.',
+          successCriteria: [EFFECT_CRITERION],
+          evidence: [buildToolEffectReceiptEvidence(buildEffectReceipt('acknowledged'))],
+        }),
+      ],
+    });
+
+    expect(decision).toEqual({ type: 'ready' });
+  });
   it('allows finalization after the exact effect resource is verified', () => {
     const decision = evaluateCompletionGate({
       ...buildBaseParams(),
