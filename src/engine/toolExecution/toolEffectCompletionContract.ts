@@ -15,6 +15,7 @@ import { getCodeOwnedToolEffectContract } from './toolEffectReceiptContracts';
 
 export type ToolEffectCompletionRequirement =
   | { kind: 'effect_free'; toolName: string }
+  | { kind: 'operational'; toolName: string }
   | {
       kind: 'effectful';
       toolName: string;
@@ -76,6 +77,18 @@ function readCompletionResource(
   return id ? { kind: selector.kind, id } : null;
 }
 
+function completionContractIsEffectFree(
+  contract: NonNullable<ReturnType<typeof getCodeOwnedToolEffectContract>>,
+  argumentsValue: Record<string, unknown>,
+): boolean {
+  const condition = contract.completion?.effectFreeWhen;
+  if (!condition) {
+    return false;
+  }
+  const value = readPath(argumentsValue, condition.argumentPath);
+  return typeof value === 'string' && condition.values.includes(value);
+}
+
 async function resolveCompletionResource(params: {
   argumentsValue: Record<string, unknown>;
   requestDigest: `sha256:${string}`;
@@ -114,14 +127,22 @@ export async function resolveToolEffectCompletionRequirement(params: {
   if (
     policy.source === 'unknown' ||
     policy.effects.includes('unknown') ||
-    !contract ||
-    contract.effectMode !== 'effectful'
+    !contract
   ) {
+    return { kind: 'unsupported', toolName, code: 'effect_contract_unavailable' };
+  }
+  if (contract.effectMode === 'operational') {
+    return { kind: 'operational', toolName };
+  }
+  if (contract.effectMode !== 'effectful') {
     return { kind: 'unsupported', toolName, code: 'effect_contract_unavailable' };
   }
   const argumentsValue = parseArguments(params.argumentsText);
   if (!argumentsValue) {
     return { kind: 'unsupported', toolName, code: 'effect_arguments_invalid' };
+  }
+  if (completionContractIsEffectFree(contract, argumentsValue)) {
+    return { kind: 'effect_free', toolName };
   }
 
   const requestDigest = await digestToolEffectText(params.argumentsText);
@@ -161,7 +182,7 @@ export function findGoalForEffectCompletionRequirement(
 }
 
 export function buildEffectCompletionContractBlock(
-  requirement: Exclude<ToolEffectCompletionRequirement, { kind: 'effect_free' }>,
+  requirement: Extract<ToolEffectCompletionRequirement, { kind: 'effectful' | 'unsupported' }>,
 ): string {
   if (requirement.kind === 'unsupported') {
     return JSON.stringify({

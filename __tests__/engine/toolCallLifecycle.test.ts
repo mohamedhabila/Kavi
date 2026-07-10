@@ -224,7 +224,7 @@ describe('executeToolCallLifecycle', () => {
           expect.objectContaining({
             effectKind: 'artifact.write',
             effectState: 'applied',
-            verificationState: 'acknowledged',
+            verificationState: 'verified',
             resource: {
               kind: 'workspace_file',
               id: 'reports/final.md',

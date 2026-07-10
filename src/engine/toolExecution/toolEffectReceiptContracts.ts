@@ -10,13 +10,17 @@ import type {
 } from '../../types/toolEffectReceipt';
 
 export interface CodeOwnedToolEffectContract {
-  readonly effectMode: 'none' | 'effectful';
+  readonly effectMode: 'none' | 'effectful' | 'operational';
   readonly effectKind: ToolEffectKind;
   readonly tracksExecution?: true;
   readonly result?: ToolEffectResultContract;
   readonly completion?: {
     readonly resource?: ToolEffectIdentitySelector;
     readonly sha256ArgumentPath?: readonly string[];
+    readonly effectFreeWhen?: {
+      readonly argumentPath: readonly string[];
+      readonly values: readonly string[];
+    };
   };
 }
 
@@ -111,6 +115,16 @@ function effectful(
                   ]),
                 }
               : {}),
+            ...(options.completion.effectFreeWhen
+              ? {
+                  effectFreeWhen: Object.freeze({
+                    argumentPath: Object.freeze([
+                      ...options.completion.effectFreeWhen.argumentPath,
+                    ]),
+                    values: Object.freeze([...options.completion.effectFreeWhen.values]),
+                  }),
+                }
+              : {}),
           }),
         }
       : {}),
@@ -121,6 +135,10 @@ function effectful(
       ...(options.operationHandle ? { operationHandle: options.operationHandle } : {}),
     }),
   });
+}
+
+function operational(effectKind: ToolEffectKind): CodeOwnedToolEffectContract {
+  return Object.freeze({ effectMode: 'operational', effectKind });
 }
 
 function nativeOutcomes(
@@ -177,11 +195,11 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
       },
       { tracksExecution: true },
     ),
-    // Workspace writes expose a code-computed content digest, but do not read
-    // the file back; their successful result is an acknowledgement, not proof.
+    // Workspace writes read the exact resource back after mutation. A result
+    // is verified only when that readback matches the requested content.
     write_file: effectful(
       'artifact.write',
-      { written: APPLIED },
+      { written: VERIFIED, written_unverified: APPLIED },
       {
         resource: resourceSelector('workspace_file', 'result', ['path'], ['sha256']),
         completion: {
@@ -192,11 +210,46 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
     ),
     file_edit: effectful(
       'artifact.write',
-      { edited: APPLIED },
+      { edited: VERIFIED, edited_unverified: APPLIED },
       {
         resource: resourceSelector('workspace_file', 'result', ['path'], ['sha256']),
         completion: {
           resource: selector('workspace_file', 'arguments', ['path']),
+        },
+      },
+    ),
+    memory_remember: effectful(
+      'memory.write',
+      { created: VERIFIED, duplicate: VERIFIED },
+      { resource: selector('memory_fact', 'result', ['fact', 'id']) },
+    ),
+    memory_forget: effectful(
+      'memory.delete',
+      { withdrawn: VERIFIED, already_withdrawn: VERIFIED },
+      {
+        resource: selector('memory_fact', 'result', ['factId']),
+        completion: { resource: selector('memory_fact', 'arguments', ['factId']) },
+      },
+    ),
+    memory_manage: effectful(
+      'memory.update',
+      { pinned: VERIFIED, unpinned: VERIFIED, invalidated: VERIFIED },
+      {
+        resource: selector('memory_fact', 'arguments', ['factId']),
+        completion: { resource: selector('memory_fact', 'arguments', ['factId']) },
+      },
+    ),
+    memory_block: effectful(
+      'memory.write',
+      {
+        read: outcome('none', 'not_applicable', 'observation.read'),
+        edited: VERIFIED,
+      },
+      {
+        resource: selector('memory_block', 'result', ['resourceId']),
+        completion: {
+          resource: selector('memory_block', 'arguments', ['label']),
+          effectFreeWhen: { argumentPath: ['action'], values: ['read'] },
         },
       },
     ),
@@ -234,6 +287,42 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
       { deleted: APPLIED },
       { resource: resourceSelector('canvas_surface', 'result', ['surfaceId']) },
     ),
+    // Operational mutations are explicit code-owned effects, but their return
+    // values never prove user-level completion. A later graph terminal event
+    // or independent observation must provide completion evidence.
+    sessions_spawn: operational('workflow.start'),
+    sessions_send: operational('workflow.mutate'),
+    sessions_cancel: operational('workflow.mutate'),
+    workspace_delegate_task: operational('workflow.start'),
+    cron: operational('workflow.mutate'),
+    canvas_eval: operational('compute.execute'),
+    ssh_exec: operational('remote.mutate'),
+    ssh_fs: operational('remote.mutate'),
+    expo_eas_create_project: operational('remote.mutate'),
+    expo_eas_build: operational('workflow.start'),
+    expo_eas_update: operational('workflow.start'),
+    expo_eas_submit: operational('workflow.start'),
+    expo_eas_deploy_web: operational('workflow.start'),
+    expo_eas_graphql: operational('remote.mutate'),
+    browser_launch: operational('workflow.start'),
+    browser_stop: operational('workflow.mutate'),
+    browser_navigate: operational('navigation.open'),
+    browser_click: operational('remote.mutate'),
+    browser_type: operational('remote.mutate'),
+    browser_press_key: operational('remote.mutate'),
+    browser_hover: operational('remote.mutate'),
+    browser_select: operational('remote.mutate'),
+    browser_drag: operational('remote.mutate'),
+    browser_screenshot: operational('observation.read'),
+    browser_cookies: operational('remote.mutate'),
+    browser_storage: operational('remote.mutate'),
+    browser_evaluate: operational('compute.execute'),
+    browser_upload: operational('remote.mutate'),
+    browser_download: operational('artifact.write'),
+    browser_pdf: operational('artifact.write'),
+    browser_fill_form: operational('remote.mutate'),
+    browser_dialog: operational('remote.mutate'),
+    workspace_launch_browser: operational('workflow.start'),
     ...READ_ONLY_CONTRACTS,
     calendar_create_event: effectful(
       'calendar.create',

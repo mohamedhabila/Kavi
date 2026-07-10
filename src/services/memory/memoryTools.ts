@@ -511,6 +511,7 @@ export interface MemoryPinArgs {
 
 export interface MemoryPinResult {
   ok: true;
+  status: 'pinned' | 'unpinned';
   fact: ReturnType<typeof serializeFact>;
 }
 
@@ -523,7 +524,7 @@ function setPin(factId: string, pinned: boolean): MemoryPinResult | MemoryToolEr
     if (!updated) return err('not_found', `fact ${id} not found or deleted`);
     const fact = getFactById(id);
     if (!fact) return err('not_found', `fact ${id} not found after update`);
-    return { ok: true, fact: serializeFact(fact) };
+    return { ok: true, status: pinned ? 'pinned' : 'unpinned', fact: serializeFact(fact) };
   } catch (e) {
     return err('internal', e instanceof Error ? e.message : 'pin update failed');
   }
@@ -546,6 +547,8 @@ export interface MemoryForgetArgs {
 export interface MemoryForgetResult {
   ok: true;
   action: 'withdrawal';
+  status: 'withdrawn' | 'already_withdrawn';
+  factId: string;
   receipt: MemoryWithdrawalReceipt;
 }
 
@@ -558,7 +561,13 @@ export function executeMemoryForget(args: MemoryForgetArgs): MemoryForgetResult 
   try {
     const result = withdrawMemoryFact(id);
     if (result.status === 'not_found') return err('not_found', `fact ${id} not found`);
-    return { ok: true, action: 'withdrawal', receipt: result.receipt };
+    return {
+      ok: true,
+      action: 'withdrawal',
+      status: result.status,
+      factId: id,
+      receipt: result.receipt,
+    };
   } catch {
     return err('internal', 'Memory withdrawal failed.');
   }
@@ -606,6 +615,8 @@ export interface MemoryBlockReadArgs {
 
 export interface MemoryBlockReadResult {
   ok: true;
+  status: 'read';
+  resourceId: string;
   blocks: Array<{
     label: string;
     content: string;
@@ -630,6 +641,8 @@ export function executeMemoryBlockRead(
   }
   return {
     ok: true,
+    status: 'read',
+    resourceId: label ?? '*',
     blocks: blocks.map((b) => ({
       label: b.label,
       content: b.content,
@@ -652,6 +665,8 @@ export interface MemoryBlockEditArgs {
 
 export interface MemoryBlockEditResult {
   ok: true;
+  status: 'edited';
+  resourceId: string;
   block: {
     label: string;
     content: string;
@@ -675,6 +690,8 @@ export function executeMemoryBlockEdit(
     const updated = editBlock(label, args.content, { replace });
     return {
       ok: true,
+      status: 'edited',
+      resourceId: updated.label,
       block: {
         label: updated.label,
         content: updated.content,

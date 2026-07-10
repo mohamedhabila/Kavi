@@ -78,11 +78,17 @@ export async function executeAgentControlGraphToolBatch(params: {
     if (!requirement || requirement.kind === 'effect_free') {
       continue;
     }
-    if (hasGoalMutation && requirement.kind === 'effectful') {
+    if (
+      hasGoalMutation &&
+      (requirement.kind === 'effectful' || requirement.kind === 'operational')
+    ) {
       workflowBlockerByCallId.set(
         toolCall.id,
         buildGoalMutationBoundaryBlock(requirement.toolName),
       );
+      continue;
+    }
+    if (requirement.kind === 'operational') {
       continue;
     }
     if (

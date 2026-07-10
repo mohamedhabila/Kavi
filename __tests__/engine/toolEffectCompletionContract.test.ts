@@ -16,6 +16,24 @@ describe('tool effect completion contracts', () => {
     ).resolves.toEqual({ kind: 'effect_free', toolName: 'read_file' });
   });
 
+  it('permits an explicit operational effect without treating its acknowledgement as completion', async () => {
+    await expect(
+      resolveToolEffectCompletionRequirement({
+        toolName: 'sessions_spawn',
+        argumentsText: JSON.stringify({ prompt: 'Research the release.' }),
+      }),
+    ).resolves.toEqual({ kind: 'operational', toolName: 'sessions_spawn' });
+  });
+
+  it('classifies the read branch of a mixed memory tool as effect-free', async () => {
+    await expect(
+      resolveToolEffectCompletionRequirement({
+        toolName: 'memory_block',
+        argumentsText: JSON.stringify({ action: 'read' }),
+      }),
+    ).resolves.toEqual({ kind: 'effect_free', toolName: 'memory_block' });
+  });
+
   it('derives an exact request-bound file resource and content digest', async () => {
     const argumentsText = JSON.stringify({
       path: 'artifacts/out.txt',
@@ -106,20 +124,42 @@ describe('tool effect completion contracts', () => {
     });
   });
 
-  it('fails closed when a mutating builtin lacks a code-owned result contract', async () => {
+  it('derives a request-bound verified memory fact contract', async () => {
+    const argumentsText = JSON.stringify({
+      subject: 'user',
+      predicate: 'city',
+      value: 'Utrecht',
+      scope: 'global',
+    });
+
     await expect(
       resolveToolEffectCompletionRequirement({
         toolName: 'memory_remember',
-        argumentsText: JSON.stringify({
-          subject: 'user',
-          predicate: 'city',
-          value: 'Utrecht',
-          scope: 'global',
-        }),
+        argumentsText,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        kind: 'effectful',
+        toolName: 'memory_remember',
+        criterion: {
+          effectKind: 'memory.write',
+          requestDigest: await digestToolEffectText(argumentsText),
+          resource: { kind: 'memory_fact', id: '*' },
+          verificationState: 'verified',
+        },
+      }),
+    );
+  });
+
+  it('fails closed when a mutating builtin lacks a code-owned result contract', async () => {
+    await expect(
+      resolveToolEffectCompletionRequirement({
+        toolName: 'unknown_mutation',
+        argumentsText: JSON.stringify({ action: 'edit' }),
       }),
     ).resolves.toEqual({
       kind: 'unsupported',
-      toolName: 'memory_remember',
+      toolName: 'unknown_mutation',
       code: 'effect_contract_unavailable',
     });
   });

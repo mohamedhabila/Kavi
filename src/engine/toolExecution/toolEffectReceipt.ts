@@ -324,6 +324,9 @@ function resolveReturnedOutcome(params: BuildToolEffectReceiptParams): ResolvedE
     }
     return { effectKind, effectState: 'none', verificationState: 'not_applicable' };
   }
+  if (codeOwnedContract?.effectMode === 'operational') {
+    return unknownResolvedOutcome(effectKind, unknownExecutionState);
+  }
   if (codeOwnedContract?.effectMode !== 'effectful') {
     return unknownResolvedOutcome('unknown');
   }
