@@ -26,6 +26,10 @@ import {
   type ForegroundModelExecutionLease,
 } from './foregroundModelExecutionTypes';
 import { maintainForegroundModelExecutionRetention } from './foregroundModelExecutionRetention';
+import {
+  markForegroundModelExecutionOwnedByCurrentProcess,
+  relinquishForegroundModelExecutionProcessOwnership,
+} from './foregroundModelExecutionProcessOwnership';
 
 const FOREGROUND_MODEL_JOURNAL_FORMAT = 'kavi.foreground-model-execution.v1';
 export function foregroundModelProjectionOwnerForLease(
@@ -260,7 +264,7 @@ export async function activateForegroundModelExecution(
   );
   const database = (options.getDatabase ?? getExecutionJournalDb)();
 
-  return withImmediateTransaction(database, () => {
+  const activated = withImmediateTransaction(database, () => {
     const run = readRun(database, input.lease.runId);
     assertLease(run, input.lease);
     const latestRaw = database.getFirstSync<unknown>(
@@ -316,6 +320,8 @@ export async function activateForegroundModelExecution(
     }
     return toLease(readRun(database, run.id), checkpoint);
   });
+  markForegroundModelExecutionOwnedByCurrentProcess(activated.runId);
+  return activated;
 }
 
 function assertEmptyEffectState(database: SQLite.SQLiteDatabase, runId: string): void {
@@ -478,6 +484,7 @@ export async function completeForegroundModelExecution(
     }
     return readRun(database, run.id);
   });
+  relinquishForegroundModelExecutionProcessOwnership(completed.id);
   try {
     (options.maintainRetention ?? maintainForegroundModelExecutionRetention)({
       now: completed.terminalAt ?? requestedAt,

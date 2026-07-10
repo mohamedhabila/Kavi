@@ -181,6 +181,7 @@ export interface ExecuteForegroundConversationRunParams {
         conversationId: string;
         owner: ForegroundModelProjectionOwner;
       }) => ForegroundModelProjectionReleaseResult;
+      relinquishModelExecutionProcessOwnership: (runId: string) => void;
     };
     helpers: ForegroundConversationRunHelpers;
     refs: ForegroundConversationRunRefs;

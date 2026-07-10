@@ -16,6 +16,7 @@ import {
   completeForegroundModelExecution,
   foregroundModelProjectionOwnerForLease,
 } from './foregroundModelExecutionJournal';
+import { isForegroundModelExecutionOwnedByCurrentProcess } from './foregroundModelExecutionProcessOwnership';
 import { listPendingForegroundModelExecutions } from './foregroundModelExecutionQueries';
 import type {
   CompleteForegroundModelExecutionInput,
@@ -82,6 +83,7 @@ export interface ForegroundModelRecoveryDependencies {
   releaseProjection(
     lease: ForegroundModelExecutionLease,
   ): 'released' | 'conversation_missing' | 'owner_changed';
+  isCurrentProcessRun(lease: ForegroundModelExecutionLease): boolean;
   clock(): number;
 }
 
@@ -98,6 +100,8 @@ const DEFAULT_DEPENDENCIES: ForegroundModelRecoveryDependencies = {
   mutateProjection: mutateForegroundModelProjectionForRecovery,
   flushChatState: flushChatStorePersistenceNow,
   complete: completeForegroundModelExecution,
+  isCurrentProcessRun: (lease) =>
+    isForegroundModelExecutionOwnedByCurrentProcess(lease.runId),
   releaseProjection: (lease) =>
     releaseForegroundModelProjection({
       conversationId: lease.conversationId,
@@ -361,6 +365,7 @@ export async function recoverInterruptedForegroundModelExecutions(
     });
     if (leases.length === 0) break;
     for (const lease of leases) {
+    if (dependencies.isCurrentProcessRun(lease)) continue;
     const mutation = dependencies.mutateProjection(lease, timestamp);
     if (mutation.kind === 'blocked') {
       if (PERMANENT_PROJECTION_BLOCK_REASONS.has(mutation.reason)) {

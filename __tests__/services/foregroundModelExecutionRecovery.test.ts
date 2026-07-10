@@ -122,6 +122,7 @@ function harness(initialConversation: Conversation, leases = [lease()]) {
   const dependencies: ForegroundModelRecoveryDependencies = {
     listPending,
     mutateProjection,
+    isCurrentProcessRun: () => false,
     flushChatState,
     complete,
     releaseProjection,

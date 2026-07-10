@@ -14,6 +14,7 @@ import {
   completeForegroundModelExecution,
   createForegroundModelExecution,
 } from '../../services/executionJournal/foregroundModelExecutionJournal';
+import { relinquishForegroundModelExecutionProcessOwnership } from '../../services/executionJournal/foregroundModelExecutionProcessOwnership';
 import {
   claimForegroundModelProjection,
   ownsForegroundModelProjection,
@@ -470,6 +471,8 @@ export function createForegroundScenarioRuntime(
       flushChatState: flushChatStorePersistenceNow,
       ownsModelProjection: ownsForegroundModelProjection,
       releaseModelProjection: releaseForegroundModelProjection,
+      relinquishModelExecutionProcessOwnership:
+        relinquishForegroundModelExecutionProcessOwnership,
     },
     helpers: {
       appendConversationLog: (conversationId, entry) =>

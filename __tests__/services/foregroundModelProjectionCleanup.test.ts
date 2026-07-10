@@ -10,6 +10,7 @@ import {
   createForegroundModelExecution,
   foregroundModelProjectionOwnerForLease,
 } from '../../src/services/executionJournal/foregroundModelExecutionJournal';
+import { _resetForegroundModelExecutionProcessOwnershipForTests } from '../../src/services/executionJournal/foregroundModelExecutionProcessOwnership';
 import { releaseStaleForegroundModelProjectionOwners } from '../../src/services/executionJournal/foregroundModelProjectionCleanup';
 import { recoverInterruptedForegroundModelExecutions } from '../../src/services/executionJournal/foregroundModelExecutionRecovery';
 import {
@@ -107,8 +108,26 @@ it('keeps an active owner but releases a terminal owner left by a crash', async 
   ).toBeUndefined();
 });
 
+it('does not recover a live generation still owned by the current process', async () => {
+  const seeded = await seedOwnedGeneration();
+
+  await expect(recoverInterruptedForegroundModelExecutions()).resolves.toEqual([]);
+  expect(
+    getExecutionJournalDb().getFirstSync<{ status: string }>(
+      'SELECT status FROM execution_runs WHERE id = ?',
+      seeded.active.runId,
+    ),
+  ).toEqual({ status: 'running' });
+  expect(
+    useChatStore.getState().conversations.find((conversation) =>
+      conversation.id === seeded.conversationId
+    )?.foregroundModelProjectionOwner,
+  ).toEqual(seeded.owner);
+});
+
 it('CAS-recovers the exact owned projection and releases it only after journal completion', async () => {
   const seeded = await seedOwnedGeneration();
+  _resetForegroundModelExecutionProcessOwnershipForTests();
   useChatStore.setState((state) => ({
     conversations: state.conversations.map((conversation) =>
       conversation.id !== seeded.conversationId
@@ -158,6 +177,7 @@ it('CAS-recovers the exact owned projection and releases it only after journal c
 
 it('terminalizes permanently orphaned active rows so later recovery sweeps do not rescan them', async () => {
   const seeded = await seedOwnedGeneration();
+  _resetForegroundModelExecutionProcessOwnershipForTests();
   useChatStore.setState((state) => ({
     conversations: state.conversations.map((conversation) =>
       conversation.id !== seeded.conversationId

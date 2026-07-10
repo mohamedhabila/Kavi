@@ -110,6 +110,7 @@ function createExecutionContext(params: {
       ownsModelProjection: jest.fn((conversationId, owner) =>
         projectionOwners.get(conversationId)?.runId === owner.runId
       ),
+      relinquishModelExecutionProcessOwnership: jest.fn(),
       releaseModelProjection: jest.fn(({ conversationId, owner }) => {
         if (projectionOwners.get(conversationId)?.runId !== owner.runId) {
           return 'owner_changed' as const;
@@ -404,6 +405,44 @@ describe('foreground run target-conversation execution context', () => {
     expect(context.durability.completeModelExecution).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'failed' }),
     );
+  });
+
+  it('relinquishes process ownership when terminal journal completion fails', async () => {
+    const conversation = createConversation({ mode: 'chitchat' });
+    const provider = createProvider('target-provider', 'target-model');
+    const context = createExecutionContext({
+      conversation,
+      providers: [provider],
+      ensureCanonicalConversation: jest.fn(),
+      recordConversationTurnMemory: jest.fn(),
+    });
+    mockedResolveForegroundRunPreflight.mockResolvedValue({
+      kind: 'ready',
+      provider,
+      providerWithApiKey: provider,
+      model: provider.model,
+      finalizationProviderContext: {
+        provider,
+        model: provider.model,
+        systemPromptText: conversation.systemPrompt,
+        conversationId: conversation.id,
+      },
+    });
+    mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
+      callbacks.onDone();
+    });
+    context.durability.completeModelExecution.mockRejectedValueOnce(
+      new Error('journal unavailable'),
+    );
+
+    await expect(
+      executeForegroundConversationRun({ context, conversationId: conversation.id }),
+    ).rejects.toThrow('journal unavailable');
+
+    expect(
+      context.durability.relinquishModelExecutionProcessOwnership,
+    ).toHaveBeenCalledWith(expect.stringMatching(/^journal-/u));
+    expect(context.durability.releaseModelProjection).not.toHaveBeenCalled();
   });
 
   it('does not call the model when the journal-first boundary cannot be persisted', async () => {

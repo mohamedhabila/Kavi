@@ -250,12 +250,17 @@ export async function executeForegroundConversationRun(
           throw new Error('foreground_model_projection_ownership_changed');
         }
       }
-      await context.durability.completeModelExecution({
-        lease: executionLease,
-        status,
-        projectionMessageId,
-        projectionState,
-      });
+      try {
+        await context.durability.completeModelExecution({
+          lease: executionLease,
+          status,
+          projectionMessageId,
+          projectionState,
+        });
+      } catch (error) {
+        context.durability.relinquishModelExecutionProcessOwnership(executionLease.runId);
+        throw error;
+      }
       journalTerminal = true;
     }
     if (projectionOwner && !projectionReleased) {
