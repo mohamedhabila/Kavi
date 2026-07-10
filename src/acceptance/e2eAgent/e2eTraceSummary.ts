@@ -1,9 +1,5 @@
-import { getE2ENativeMobileFixtureStateSnapshot } from '../../engine/tools/e2eNativeCalendarFixtures';
-import type {
-  E2ERubric,
-  E2EScenarioResult,
-  E2EScenarioTurnTrace,
-} from './types';
+import { getE2ENativeMobileFixtureStateSnapshot } from './e2eNativeMobileFixtures';
+import type { E2ERubric, E2EScenarioResult, E2EScenarioTurnTrace } from './types';
 import {
   buildValuePreview,
   hashString,

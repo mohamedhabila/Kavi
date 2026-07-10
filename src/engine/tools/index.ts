@@ -7,7 +7,6 @@ import { readConversationMemory } from '../../services/memory/store';
 import { logToolCall } from '../../services/security/audit';
 import { useToolPermissionsStore } from '../../services/security/permissions';
 import { needsApprovalWithContext, requestToolApproval } from '../../services/remote/approvalStore';
-import { isE2EAgentEvalRuntime } from './e2eNativeCalendarFixtures';
 import { normalizeToolName, resolveRegisteredToolName } from './toolNameNormalization';
 import { executeToolInner } from './toolDispatchRouter';
 import type { ToolExecutionContext } from './toolExecutionContext';
@@ -37,7 +36,7 @@ export async function executeTool(
   }
 
   // Approval gate — blocks destructive/sensitive tools until human approves
-  if (!isE2EAgentEvalRuntime() && needsApprovalWithContext(normalizedName, parsedArgs)) {
+  if (needsApprovalWithContext(normalizedName, parsedArgs)) {
     const truncatedArgs = argsString.length > 200 ? argsString.slice(0, 200) + '…' : argsString;
     const decision = await requestToolApproval({
       toolName: normalizedName,

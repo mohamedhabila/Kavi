@@ -202,28 +202,28 @@ E2E_SCENARIO_IDS="direct-agentdojo-untrusted-workspace-note direct-bfcl-v4-paral
 
 ### Environment variables
 
-| Variable                   | Required       | Purpose                                                                   |
-| -------------------------- | -------------- | ------------------------------------------------------------------------- |
-| `RUN_E2E_AGENT_EVAL`       | Yes            | Set to `1` in `.env.local` (harness loads it automatically)               |
+| Variable                   | Required       | Purpose                                                                                |
+| -------------------------- | -------------- | -------------------------------------------------------------------------------------- |
+| `RUN_E2E_AGENT_EVAL`       | Yes            | Set to `1` in `.env.local` (harness loads it automatically)                            |
 | `E2E_PROVIDER`             | No             | `gemini` by default; supports `openai`, `anthropic`, `openrouter`, `openai-compatible` |
-| `GEMINI_API_KEY`           | For Gemini     | Same key as emulator Gemini provider                                      |
-| `GEMINI_BASE_URL`          | If Vertex      | Match app provider settings                                               |
-| `E2E_GEMINI_MODEL`         | No             | Override Gemini model (default: capable flash from catalog)               |
-| `OPENAI_API_KEY`           | For OpenAI     | OpenAI API key                                                            |
-| `E2E_OPENAI_MODEL`         | For OpenAI     | OpenAI model used by live E2E                                             |
-| `OPENAI_BASE_URL`          | No             | Defaults to `https://api.openai.com/v1`                                   |
-| `ANTHROPIC_API_KEY`        | For Anthropic  | Anthropic API key                                                         |
-| `E2E_ANTHROPIC_MODEL`      | For Anthropic  | Anthropic model used by live E2E                                          |
-| `ANTHROPIC_BASE_URL`       | No             | Defaults to `https://api.anthropic.com/v1`                                |
-| `OPENROUTER_API_KEY`       | For OpenRouter | OpenRouter API key                                                        |
-| `E2E_OPENROUTER_MODEL`     | For OpenRouter | OpenRouter model id                                                       |
-| `E2E_COMPATIBLE_API_KEY`   | For compatible | Generic OpenAI-compatible API key                                         |
-| `E2E_COMPATIBLE_BASE_URL`  | For compatible | Generic OpenAI-compatible base URL                                        |
-| `E2E_COMPATIBLE_MODEL`     | For compatible | Generic OpenAI-compatible model id                                        |
-| `E2E_MAX_SCENARIO_RETRIES` | No             | Per-scenario retry budget (default `0`; nightly uses `1`)                 |
-| `E2E_REPORT_PATH`          | No             | JSON run report path (default `.artifacts/e2e-agent-report.json`)         |
-| `E2E_REPORT_SUMMARY_PATH`  | No             | Markdown summary path (default `.artifacts/e2e-agent-report.md`)          |
-| `E2E_SCENARIO_IDS`         | No             | Comma/whitespace-separated scenario IDs for targeted assessment           |
+| `GEMINI_API_KEY`           | For Gemini     | Same key as emulator Gemini provider                                                   |
+| `GEMINI_BASE_URL`          | If Vertex      | Match app provider settings                                                            |
+| `E2E_GEMINI_MODEL`         | No             | Override Gemini model (default: capable flash from catalog)                            |
+| `OPENAI_API_KEY`           | For OpenAI     | OpenAI API key                                                                         |
+| `E2E_OPENAI_MODEL`         | For OpenAI     | OpenAI model used by live E2E                                                          |
+| `OPENAI_BASE_URL`          | No             | Defaults to `https://api.openai.com/v1`                                                |
+| `ANTHROPIC_API_KEY`        | For Anthropic  | Anthropic API key                                                                      |
+| `E2E_ANTHROPIC_MODEL`      | For Anthropic  | Anthropic model used by live E2E                                                       |
+| `ANTHROPIC_BASE_URL`       | No             | Defaults to `https://api.anthropic.com/v1`                                             |
+| `OPENROUTER_API_KEY`       | For OpenRouter | OpenRouter API key                                                                     |
+| `E2E_OPENROUTER_MODEL`     | For OpenRouter | OpenRouter model id                                                                    |
+| `E2E_COMPATIBLE_API_KEY`   | For compatible | Generic OpenAI-compatible API key                                                      |
+| `E2E_COMPATIBLE_BASE_URL`  | For compatible | Generic OpenAI-compatible base URL                                                     |
+| `E2E_COMPATIBLE_MODEL`     | For compatible | Generic OpenAI-compatible model id                                                     |
+| `E2E_MAX_SCENARIO_RETRIES` | No             | Per-scenario retry budget (default `0`; nightly uses `1`)                              |
+| `E2E_REPORT_PATH`          | No             | JSON run report path (default `.artifacts/e2e-agent-report.json`)                      |
+| `E2E_REPORT_SUMMARY_PATH`  | No             | Markdown summary path (default `.artifacts/e2e-agent-report.md`)                       |
+| `E2E_SCENARIO_IDS`         | No             | Comma/whitespace-separated scenario IDs for targeted assessment                        |
 
 The harness scripts (`eval:e2e`, `verify:strict:e2e`) load `.env.local` via
 `scripts/load-local-env.js`. They are never bundled into the app.
@@ -300,10 +300,10 @@ scenario-specific gating.
 
 ### Scenarios and pass bar
 
-| Suite             | Test file                      | Scenarios                                                            | Pass bar                                    |
-| ----------------- | ------------------------------ | -------------------------------------------------------------------- | ------------------------------------------- |
+| Suite             | Test file                      | Scenarios                                                            | Pass bar                                     |
+| ----------------- | ------------------------------ | -------------------------------------------------------------------- | -------------------------------------------- |
 | Core + benchmarks | `e2eAgentMetrics.test.ts`      | 55 (16 core + 27 adapted benchmark + 12 direct benchmark shards)     | >=90% per run (`E2E_SCENARIO_MIN_PASS_RATE`) |
-| Delegation        | `e2eDelegationMetrics.test.ts` | 2 (`delegation-worker-finalize`, `delegation-worker-evidence-chain`) | 100% (mocked worker, structural rubrics)    |
+| Delegation        | `e2eDelegationMetrics.test.ts` | 2 (`delegation-worker-finalize`, `delegation-worker-evidence-chain`) | 100% (mocked worker, structural rubrics)     |
 
 **Core scenarios (personal-assistant scope):** file write + read, goal evidence
 completion, gate recovery, `tool_catalog` + `agents`, memory remember + recall,
@@ -345,11 +345,11 @@ E2E scenarios do not declare `allowedTools` and do not score `tool_called`,
 `tool_sequence`, `tool_call_max`, `first_turn_tool_called`,
 `graph_session_tools`, or tool-result `json_field` rubrics. Redacted traces
 still include tool calls/results for debugging. Native mobile scenarios use
-deterministic dispatch fixtures (`e2eNativeCalendarFixtures.ts`) when
-`RUN_E2E_AGENT_EVAL=1`. Assistant prose is not evaluated with English
+deterministic fixtures (`e2eNativeMobileFixtures.ts`) installed by the scoped
+acceptance environment. Assistant prose is not evaluated with English
 regular-expression checks. Unit tests: `e2eAgentRubricEvaluators.test.ts`,
 `e2eScenarioRunner.test.ts`, `e2eBenchmarkRegistry.test.ts`,
-`e2eAssessmentReport.test.ts`, `e2eNativeCalendarFixtures.test.ts`,
+`e2eAssessmentReport.test.ts`, `e2eNativeMobileFixtures.test.ts`,
 `graphTaskScope.test.ts`.
 
 **Delegation scenario:** supervisor spawns worker (`sessions_spawn` +

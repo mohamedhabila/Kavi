@@ -1,15 +1,11 @@
 // ---------------------------------------------------------------------------
-// Kavi — E2E native mobile fixtures (dispatch seam)
+// Kavi — E2E native mobile fixtures
 // ---------------------------------------------------------------------------
-// Node live E2E lacks Expo native modules. Fixtures inject at dispatch, not in
-// device executors, so benchmark runs still exercise normal tool routing.
+// Node live E2E lacks Expo native modules. The acceptance environment installs
+// this fixture at the generic native-tool boundary for the duration of a run.
 
-import { ALL_NATIVE_TOOL_DEFINITIONS } from './native/definitions';
+import { ALL_NATIVE_TOOL_DEFINITIONS } from '../../engine/tools/native/definitions';
 import { normalizePhoneNumberList } from '../../services/nativeActions/builders/phone';
-
-export function isE2EAgentEvalRuntime(): boolean {
-  return process.env.RUN_E2E_AGENT_EVAL === '1';
-}
 
 /** Deterministic calendar list for live E2E (Node lacks expo-calendar). */
 export const E2E_FIXTURE_CALENDAR_LIST_JSON = JSON.stringify([
@@ -71,8 +67,7 @@ export const E2E_FIXTURE_DEVICE_PERMISSIONS_JSON = JSON.stringify({
 });
 
 function applyE2EPermissionFixtureState(): void {
-  e2eNativeFixtureState.permissions.location =
-    E2E_NATIVE_PERMISSION_STATES.denied.location.status;
+  e2eNativeFixtureState.permissions.location = E2E_NATIVE_PERMISSION_STATES.denied.location.status;
   e2eNativeFixtureState.permissions.mediaLibrary =
     E2E_NATIVE_PERMISSION_STATES.revokedMidTask.mediaLibrary.status;
   e2eNativeFixtureState.permissions.screenCapture =
@@ -217,7 +212,11 @@ function buildMissingRequiredArgsError(name: string, missing: string[]): string 
   });
 }
 
-function buildInvalidFixtureArgsError(name: string, message: string, code = 'invalid_arguments'): string {
+function buildInvalidFixtureArgsError(
+  name: string,
+  message: string,
+  code = 'invalid_arguments',
+): string {
   return JSON.stringify({
     status: 'error',
     code,
@@ -226,10 +225,7 @@ function buildInvalidFixtureArgsError(name: string, message: string, code = 'inv
   });
 }
 
-function validateE2ENativeRequiredArgs(
-  name: string,
-  args: Record<string, unknown>,
-): string | null {
+function validateE2ENativeRequiredArgs(name: string, args: Record<string, unknown>): string | null {
   const definition = e2eNativeToolDefinitionsByName.get(name);
   const required = definition?.input_schema?.required;
   if (!Array.isArray(required) || required.length === 0) {
@@ -261,10 +257,6 @@ export async function tryExecuteE2ENativeCalendarTool(
   name: string,
   argsString: string,
 ): Promise<string | null> {
-  if (!isE2EAgentEvalRuntime()) {
-    return null;
-  }
-
   const args = parseFixtureArgs(argsString);
   const validationError = validateE2ENativeRequiredArgs(name, args);
   if (validationError) {
@@ -284,19 +276,12 @@ export async function tryExecuteE2ENativeCalendarTool(
   }
 }
 
-function readStringArg(
-  args: Record<string, unknown>,
-  key: string,
-  fallback: string,
-): string {
+function readStringArg(args: Record<string, unknown>, key: string, fallback: string): string {
   const value = args[key];
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : fallback;
 }
 
-function readOptionalStringArg(
-  args: Record<string, unknown>,
-  key: string,
-): string | undefined {
+function readOptionalStringArg(args: Record<string, unknown>, key: string): string | undefined {
   const value = args[key];
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
 }
@@ -378,10 +363,6 @@ export async function tryExecuteE2ENativeMobileTool(
   name: string,
   argsString: string,
 ): Promise<string | null> {
-  if (!isE2EAgentEvalRuntime()) {
-    return null;
-  }
-
   const calendarResult = await tryExecuteE2ENativeCalendarTool(name, argsString);
   if (calendarResult !== null) {
     return calendarResult;
@@ -403,11 +384,7 @@ export async function tryExecuteE2ENativeMobileTool(
         calendarId: readStringArg(args, 'calendarId', 'e2e-cal-1'),
         title: readStringArg(args, 'title', `E2E Event ${e2eCalendarEventId}`),
         startDate,
-        endDate: normalizeFixtureEndDate(
-          startDate,
-          args.endDate,
-          '2026-06-12T11:00:00.000Z',
-        ),
+        endDate: normalizeFixtureEndDate(startDate, args.endDate, '2026-06-12T11:00:00.000Z'),
         ...(readOptionalStringArg(args, 'location')
           ? { location: readOptionalStringArg(args, 'location') }
           : {}),

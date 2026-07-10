@@ -1,4 +1,4 @@
-import { resetE2ENativeMobileFixtures } from '../../src/engine/tools/e2eNativeCalendarFixtures';
+import { resetE2ENativeMobileFixtures } from '../../src/acceptance/e2eAgent/e2eNativeMobileFixtures';
 import type { E2EScenarioResult } from '../../src/acceptance/e2eAgent/types';
 import type { UsageTokenBuckets } from '../../src/types/usage';
 
@@ -11,9 +11,7 @@ export const TOKEN_BUCKETS: UsageTokenBuckets = {
   toolResultTokens: 66,
 };
 
-export function buildFixtureResult(
-  overrides?: Partial<E2EScenarioResult>,
-): E2EScenarioResult {
+export function buildFixtureResult(overrides?: Partial<E2EScenarioResult>): E2EScenarioResult {
   return {
     fixtureId: 'file-write-read',
     conversationId: 'e2e-file-write-read',

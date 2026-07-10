@@ -5,8 +5,11 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 import { resetE2EMemorySandbox } from '../../src/acceptance/e2eAgent/sandboxMemory';
-import { resetE2EWorkspaceSandbox, writeWorkspaceRelativeFile } from '../../src/acceptance/e2eAgent/sandboxWorkspace';
-import { resetE2ENativeMobileFixtures } from '../../src/engine/tools/e2eNativeCalendarFixtures';
+import {
+  resetE2EWorkspaceSandbox,
+  writeWorkspaceRelativeFile,
+} from '../../src/acceptance/e2eAgent/sandboxWorkspace';
+import { resetE2ENativeMobileFixtures } from '../../src/acceptance/e2eAgent/e2eNativeMobileFixtures';
 function buildResult(overrides: Partial<E2EScenarioResult> = {}): E2EScenarioResult {
   return {
     fixtureId: 'fixture-a',

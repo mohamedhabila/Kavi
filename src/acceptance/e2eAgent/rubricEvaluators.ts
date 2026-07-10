@@ -7,7 +7,7 @@ import {
   evaluateGoalEvidenceGaps,
   isSuccessCriterionMet,
 } from '../../engine/goals/completionEvidence';
-import { getE2ENativeMobileFixtureStateSnapshot } from '../../engine/tools/e2eNativeCalendarFixtures';
+import { getE2ENativeMobileFixtureStateSnapshot } from './e2eNativeMobileFixtures';
 import {
   readJsonFieldAtPath,
   structuralValuesMatch,

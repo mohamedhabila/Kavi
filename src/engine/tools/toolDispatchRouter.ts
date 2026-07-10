@@ -5,8 +5,8 @@
 
 import { executeWebFetch } from './web-fetch';
 import { executeFileEdit, executeGlobSearch, executeTextSearch } from './extended';
-import { tryExecuteE2ENativeMobileTool } from './e2eNativeCalendarFixtures';
 import { executeNativeTool } from './native/executor';
+import { tryExecuteNativeToolInEnvironment } from './native/executionEnvironment';
 import { parseMcpToolName, executeMcpTool } from '../../services/mcp/bridge';
 import { mcpManager } from '../../services/mcp/manager';
 import { parseSkillToolName, executeSkillTool } from '../../services/skills/manager';
@@ -169,9 +169,14 @@ export async function executeToolInner(
 
   // ── Native device tools ────────────────────────────────────────────
   if (NATIVE_TOOL_NAMES.has(name)) {
-    const e2eNativeFixture = await tryExecuteE2ENativeMobileTool(name, argsString);
-    if (e2eNativeFixture !== null) {
-      return e2eNativeFixture;
+    const environmentResult = await tryExecuteNativeToolInEnvironment({
+      name,
+      argsString,
+      conversationId,
+      context,
+    });
+    if (environmentResult !== null) {
+      return environmentResult;
     }
     return executeNativeTool(name, argsString);
   }

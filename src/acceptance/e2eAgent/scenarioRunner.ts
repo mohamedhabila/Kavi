@@ -4,11 +4,12 @@
 
 import { prepareE2EOrchestratorTurnResume } from '../../engine/graph/runResumePreparation';
 import { runOrchestrator } from '../../engine/orchestrator';
-import { resetE2ENativeMobileFixtures } from '../../engine/tools/e2eNativeCalendarFixtures';
 import { SUPER_AGENT_PERSONA_ID } from '../../services/agents/personas';
 import type { Message } from '../../types/message';
+import { resetE2ENativeMobileFixtures } from './e2eNativeMobileFixtures';
 import { buildE2EProvider, isE2EAgentEvalEnabled } from './providerConfig';
 import { finalizeE2EScenarioTurnMemory } from './e2eMemoryFinalize';
+import { installE2EScenarioEnvironment } from './e2eScenarioEnvironment';
 import { resetE2EMemorySandbox } from './sandboxMemory';
 import { resetE2EWorkspaceSandbox, seedE2EWorkspaceSandbox } from './sandboxWorkspace';
 import { resolveE2EScenarioTimeoutMs } from './scenarioTimeout';
@@ -49,7 +50,10 @@ function resolveErrorMessage(error: unknown): string {
 }
 
 function sanitizeConversationIdPart(value: string): string {
-  return value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48);
+  return value
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
 }
 
 function resolveScenarioConversationId(baseConversationId: string): string {
@@ -82,6 +86,7 @@ export async function runE2EScenario(scenario: E2EScenario): Promise<E2EScenario
   let messageSequence = 0;
   const scenarioAbortController = new AbortController();
   const scenarioTimeoutMs = resolveE2EScenarioTimeoutMs(scenario);
+  const uninstallScenarioEnvironment = installE2EScenarioEnvironment();
   const scenarioTimeout = setTimeout(() => {
     scenarioAbortController.abort();
   }, scenarioTimeoutMs);
@@ -178,6 +183,7 @@ export async function runE2EScenario(scenario: E2EScenario): Promise<E2EScenario
     }
   } finally {
     clearTimeout(scenarioTimeout);
+    uninstallScenarioEnvironment();
   }
 
   return {

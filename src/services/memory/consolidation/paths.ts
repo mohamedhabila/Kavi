@@ -14,7 +14,6 @@ import {
   deriveMemoryConsolidationModeFromSettings,
   isMemoryConsolidationEnrichmentEnabled,
 } from '../memoryConsolidationMode';
-import { isE2EAgentEvalRuntime } from '../../../engine/tools/e2eNativeCalendarFixtures';
 import { createTimeoutSignal } from '../../../utils/runtime';
 import { LlmService } from '../../llm/LlmService';
 import { isOnDeviceLlmProvider } from '../../localLlm/provider';
@@ -126,10 +125,6 @@ export async function resolveConsolidationPath(
   activeChatProvider?: LlmProviderConfig,
   options: ConsolidationPathOptions = {},
 ): Promise<ResolvedConsolidationPath> {
-  if (isE2EAgentEvalRuntime() && !activeChatProvider) {
-    return resolveDeterministicPath();
-  }
-
   const settings = useSettingsStore.getState();
   if (settings.disableLongTermMemory) {
     return resolveDeterministicPath();

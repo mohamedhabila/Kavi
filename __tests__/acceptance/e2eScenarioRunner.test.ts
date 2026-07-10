@@ -13,7 +13,7 @@ import { readWorkspaceRelativeFile } from '../../src/acceptance/e2eAgent/sandbox
 import {
   getE2ENativeMobileFixtureStateSnapshot,
   tryExecuteE2ENativeMobileTool,
-} from '../../src/engine/tools/e2eNativeCalendarFixtures';
+} from '../../src/acceptance/e2eAgent/e2eNativeMobileFixtures';
 import type { E2EScenario } from '../../src/acceptance/e2eAgent/types';
 
 const mockRunOrchestrator = jest.fn();

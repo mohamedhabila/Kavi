@@ -336,7 +336,8 @@ export function needsApprovalWithContext(
   if (
     allowlist.some(
       (entry) =>
-        entry.key === allowKey && (entry.personaId === undefined || entry.personaId === personaId),
+        (entry.key === allowKey || entry.key === toolName) &&
+        (entry.personaId === undefined || entry.personaId === personaId),
     )
   ) {
     return false;

@@ -128,7 +128,16 @@ describe('allowlist management', () => {
 
   it('allowlisted tools skip approval', () => {
     useApprovalStore.getState().addToAllowlist('ssh_exec', undefined);
-    expect(needsApprovalWithContext('ssh_exec', {}, undefined)).toBe(false);
+    expect(needsApprovalWithContext('ssh_exec', { command: 'pwd' }, undefined)).toBe(false);
+  });
+
+  it('keeps executable-scoped SSH approval limited to that executable', () => {
+    useApprovalStore.getState().addToAllowlist('ssh_exec:pwd', undefined);
+
+    expect(needsApprovalWithContext('ssh_exec', { command: 'pwd' }, undefined)).toBe(false);
+    expect(needsApprovalWithContext('ssh_exec', { command: 'rm -rf /tmp/data' }, undefined)).toBe(
+      true,
+    );
   });
 });
 

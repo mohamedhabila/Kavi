@@ -1,4 +1,3 @@
-import { executeToolInner } from '../../src/engine/tools/toolDispatchRouter';
 import {
   E2E_FIXTURE_DEVICE_PERMISSIONS_JSON,
   E2E_FIXTURE_CALENDAR_EVENTS_JSON,
@@ -7,22 +6,22 @@ import {
   resetE2ENativeMobileFixtures,
   tryExecuteE2ENativeCalendarTool,
   tryExecuteE2ENativeMobileTool,
-} from '../../src/engine/tools/e2eNativeCalendarFixtures';
+} from '../../src/acceptance/e2eAgent/e2eNativeMobileFixtures';
+import { installNativeToolExecutionEnvironment } from '../../src/engine/tools/native/executionEnvironment';
+import { executeToolInner } from '../../src/engine/tools/toolDispatchRouter';
 
-describe('E2E native calendar fixtures', () => {
-  const previous = process.env.RUN_E2E_AGENT_EVAL;
+describe('E2E native mobile fixtures', () => {
+  let uninstallEnvironment: () => void;
 
   beforeEach(() => {
-    process.env.RUN_E2E_AGENT_EVAL = '1';
     resetE2ENativeMobileFixtures();
+    uninstallEnvironment = installNativeToolExecutionEnvironment({
+      tryExecute: ({ name, argsString }) => tryExecuteE2ENativeMobileTool(name, argsString),
+    });
   });
 
   afterEach(() => {
-    if (previous === undefined) {
-      delete process.env.RUN_E2E_AGENT_EVAL;
-    } else {
-      process.env.RUN_E2E_AGENT_EVAL = previous;
-    }
+    uninstallEnvironment();
   });
 
   it('returns deterministic calendar_list JSON at the dispatch seam', async () => {
@@ -231,10 +230,14 @@ describe('E2E native calendar fixtures', () => {
         phoneNumbers: [expect.objectContaining({ number: '+15550101001' })],
       }),
     ]);
-    const smsRaw = await executeToolInner('sms_compose', JSON.stringify({
-      recipients: ['+15550101001'],
-      message: 'Hello Avery',
-    }), 'conv-mobile-contact-e2e');
+    const smsRaw = await executeToolInner(
+      'sms_compose',
+      JSON.stringify({
+        recipients: ['+15550101001'],
+        message: 'Hello Avery',
+      }),
+      'conv-mobile-contact-e2e',
+    );
     expect(JSON.parse(smsRaw)).toEqual({
       status: 'sms_composer_opened',
       recipientCount: 1,
@@ -248,10 +251,14 @@ describe('E2E native calendar fixtures', () => {
   });
 
   it('rejects non-phone SMS recipients without mutating fixture state', async () => {
-    const raw = await executeToolInner('sms_compose', JSON.stringify({
-      recipients: ['Avery'],
-      message: 'Hello Avery',
-    }), 'conv-mobile-contact-e2e');
+    const raw = await executeToolInner(
+      'sms_compose',
+      JSON.stringify({
+        recipients: ['Avery'],
+        message: 'Hello Avery',
+      }),
+      'conv-mobile-contact-e2e',
+    );
 
     expect(JSON.parse(raw)).toEqual({
       status: 'error',

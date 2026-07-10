@@ -10,7 +10,7 @@ import { executeMemoryRemember } from '../../src/engine/tools/builtin-memory';
 import {
   resetE2ENativeMobileFixtures,
   tryExecuteE2ENativeMobileTool,
-} from '../../src/engine/tools/e2eNativeCalendarFixtures';
+} from '../../src/acceptance/e2eAgent/e2eNativeMobileFixtures';
 function buildResult(overrides: Partial<E2EScenarioResult> = {}): E2EScenarioResult {
   return {
     fixtureId: 'fixture-a',

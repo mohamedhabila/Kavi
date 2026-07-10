@@ -9,8 +9,6 @@ import {
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { LlmProviderConfig } from '../../../src/types/provider';
 
-const ORIGINAL_E2E_ENV = process.env.RUN_E2E_AGENT_EVAL;
-
 function makeProvider(overrides: Partial<LlmProviderConfig> = {}): LlmProviderConfig {
   return {
     id: 'active-chat',
@@ -26,7 +24,6 @@ function makeProvider(overrides: Partial<LlmProviderConfig> = {}): LlmProviderCo
 }
 
 beforeEach(() => {
-  process.env.RUN_E2E_AGENT_EVAL = undefined;
   useSettingsStore.setState({
     disableLongTermMemory: false,
     memoryConsolidationMode: 'auto',
@@ -37,22 +34,15 @@ beforeEach(() => {
   } as never);
 });
 
-afterEach(() => {
-  process.env.RUN_E2E_AGENT_EVAL = ORIGINAL_E2E_ENV;
-});
-
 describe('resolveConsolidationPath', () => {
-  it('keeps E2E deterministic when no active provider is supplied', async () => {
-    process.env.RUN_E2E_AGENT_EVAL = '1';
-
+  it('uses structural consolidation when no provider path is configured', async () => {
     const path = await resolveConsolidationPath();
 
     expect(path.tier).toBe('deterministic');
     expect(path.extractor).toBeNull();
   });
 
-  it('allows live E2E semantic consolidation with an explicit active provider', async () => {
-    process.env.RUN_E2E_AGENT_EVAL = '1';
+  it('uses semantic consolidation with an explicit active provider', async () => {
     const provider = makeProvider();
 
     const path = await resolveConsolidationPath(provider);
