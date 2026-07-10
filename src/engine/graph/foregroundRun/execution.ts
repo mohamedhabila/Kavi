@@ -235,53 +235,58 @@ export async function executeForegroundConversationRun(
     await context.durability.flushChatState();
     return;
   }
-  const inferenceLease = acquireMainInferenceLease(
-    `foreground:${conversationId}:${foregroundRequestId}`,
-  );
   let terminalStatus: 'succeeded' | 'failed' | 'cancelled';
-  try {
-    await runOrchestrator(
-      {
-        provider: providerWithApiKey,
-        model,
-        conversationId,
-        memoryConversationId: workspaceTarget.workspaceConversationId,
-        workspaceConversationId: workspaceTarget.workspaceConversationId,
-        workspaceReadFallbackConversationId: workspaceTarget.workspaceReadFallbackConversationId,
-        systemPrompt: resolvedSystemPrompt,
-        messages: orchestratorMessages,
-        maxTokens: options?.maxTokens,
-        signal: abortController,
-        personaId: executionContext.personaId,
-        taskId: resumePreparation.initialAgentControlGraphState?.activeTaskId ?? null,
-        allProviders: context.state.providers.map((candidate) => ({ ...candidate })),
-        enableCompaction: options?.enableCompaction ?? true,
-        enableFailover: true,
-        thinkingLevel: context.state.thinkingLevel,
-        linkUnderstandingEnabled: context.state.linkUnderstandingEnabled,
-        mediaUnderstandingEnabled: context.state.mediaUnderstandingEnabled,
-        maxLinks: context.state.maxLinks,
-        toolFilter: options?.disableTools
-          ? () => false
-          : allowedToolNames
-            ? (toolName) => allowedToolNames.has(toolName)
-            : undefined,
-        internalUserMessageCount: 0,
-        initialPendingAsyncOperations: options?.initialPendingAsyncOperations,
-        initialAgentControlGraphState: resumePreparation.initialAgentControlGraphState,
-        workflowScopeUserMessageId: resumePreparation.workflowScopeUserMessageId,
-        agentRunId: bootstrapResult.trackedAgentRunId,
-        memoryRetrievalStrategy: options?.memoryRetrievalStrategy,
-        memoryContextStrategy: options?.memoryContextStrategy,
-      },
-      runtime.callbacks,
+  if (!isCurrentRunInvocation()) {
+    terminalStatus = runtime.terminalLifecycle.handleCatch(new Error('Request cancelled'));
+  } else {
+    const inferenceLease = acquireMainInferenceLease(
+      `foreground:${conversationId}:${foregroundRequestId}`,
     );
-    terminalStatus = await runtime.terminalLifecycle.awaitCompletion();
-  } catch (error: unknown) {
-    terminalStatus = runtime.terminalLifecycle.handleCatch(error);
-  } finally {
-    if (inferenceLease.release()) {
-      requestScheduledIngestionDrain();
+    try {
+      await runOrchestrator(
+        {
+          provider: providerWithApiKey,
+          model,
+          conversationId,
+          memoryConversationId: workspaceTarget.workspaceConversationId,
+          workspaceConversationId: workspaceTarget.workspaceConversationId,
+          workspaceReadFallbackConversationId:
+            workspaceTarget.workspaceReadFallbackConversationId,
+          systemPrompt: resolvedSystemPrompt,
+          messages: orchestratorMessages,
+          maxTokens: options?.maxTokens,
+          signal: abortController,
+          personaId: executionContext.personaId,
+          taskId: resumePreparation.initialAgentControlGraphState?.activeTaskId ?? null,
+          allProviders: context.state.providers.map((candidate) => ({ ...candidate })),
+          enableCompaction: options?.enableCompaction ?? true,
+          enableFailover: true,
+          thinkingLevel: context.state.thinkingLevel,
+          linkUnderstandingEnabled: context.state.linkUnderstandingEnabled,
+          mediaUnderstandingEnabled: context.state.mediaUnderstandingEnabled,
+          maxLinks: context.state.maxLinks,
+          toolFilter: options?.disableTools
+            ? () => false
+            : allowedToolNames
+              ? (toolName) => allowedToolNames.has(toolName)
+              : undefined,
+          internalUserMessageCount: 0,
+          initialPendingAsyncOperations: options?.initialPendingAsyncOperations,
+          initialAgentControlGraphState: resumePreparation.initialAgentControlGraphState,
+          workflowScopeUserMessageId: resumePreparation.workflowScopeUserMessageId,
+          agentRunId: bootstrapResult.trackedAgentRunId,
+          memoryRetrievalStrategy: options?.memoryRetrievalStrategy,
+          memoryContextStrategy: options?.memoryContextStrategy,
+        },
+        runtime.callbacks,
+      );
+      terminalStatus = await runtime.terminalLifecycle.awaitCompletion();
+    } catch (error: unknown) {
+      terminalStatus = runtime.terminalLifecycle.handleCatch(error);
+    } finally {
+      if (inferenceLease.release()) {
+        requestScheduledIngestionDrain();
+      }
     }
   }
   await context.durability.flushChatState();

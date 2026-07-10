@@ -387,6 +387,52 @@ describe('foreground run target-conversation execution context', () => {
     expect(context.durability.completeModelExecution).not.toHaveBeenCalled();
   });
 
+  it('closes a superseded generation without starting inference after the journal boundary', async () => {
+    const conversation = createConversation({ mode: 'chitchat' });
+    const provider = createProvider('target-provider', 'target-model');
+    const context = createExecutionContext({
+      conversation,
+      providers: [provider],
+      ensureCanonicalConversation: jest.fn(),
+      recordConversationTurnMemory: jest.fn(),
+    });
+    mockedResolveForegroundRunPreflight.mockResolvedValue({
+      kind: 'ready',
+      provider,
+      providerWithApiKey: provider,
+      model: provider.model,
+      finalizationProviderContext: {
+        provider,
+        model: provider.model,
+        systemPromptText: conversation.systemPrompt,
+        conversationId: conversation.id,
+      },
+    });
+    context.durability.beginModelExecution.mockImplementationOnce(async (input) => {
+      context.requests.isCurrentForegroundRequest.mockReturnValue(false);
+      return {
+        runId: 'journal-cancelled',
+        conversationId: input.conversationId,
+        requestMessageId: input.requestMessageId,
+        assistantMessageId: input.assistantMessageId,
+        taskId: input.taskId ?? null,
+        expectedStatus: 'running',
+        controlEpoch: 0,
+        updatedAt: 10,
+        checkpointId: 'checkpoint-cancelled',
+        checkpointStateDigest: 'a'.repeat(64),
+      };
+    });
+
+    await executeForegroundConversationRun({ context, conversationId: conversation.id });
+
+    expect(mockedRunOrchestrator).not.toHaveBeenCalled();
+    expect(isMainInferenceActive()).toBe(false);
+    expect(context.durability.completeModelExecution).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'cancelled' }),
+    );
+  });
+
   it('keeps callbacks and cleanup owned by each concurrent conversation', async () => {
     const firstConversation = createConversation({
       id: 'conversation-a',
