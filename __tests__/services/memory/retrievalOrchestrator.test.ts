@@ -4,10 +4,11 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { upsertEntity } from '../../../src/services/memory/entities';
+import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
 import {
-  recordFactWithApplicability,
-  setFactEmbedding,
-} from '../../../src/services/memory/facts/mutations';
+  buildFactLocalSimilarityText,
+  createCurrentLocalSimilarityVector,
+} from '../../../src/services/memory/localSimilarity';
 import type { RecordFactInput } from '../../../src/services/memory/facts/types';
 import { getFactById } from '../../../src/services/memory/facts/queries';
 import { recordThreadLocalEpisode } from '../../../src/services/memory/episodes/mutations';
@@ -32,7 +33,9 @@ function memoryScope(taskId: string | null = null) {
   };
 }
 
-function recordObservedFact(input: Omit<RecordFactInput, 'scope'> & { scope?: RecordFactInput['scope'] }) {
+function recordObservedFact(
+  input: Omit<RecordFactInput, 'scope'> & { scope?: RecordFactInput['scope'] },
+) {
   return recordFactWithApplicability(
     { ...input, scope: input.scope ?? 'global' },
     { factClass: 'workflow', sourceAuthority: 'tool_observed' },
@@ -201,20 +204,22 @@ describe('orchestrateMemoryRetrieval', () => {
       objectText: 'violet-handoff',
       now: 2,
     });
-    setFactEmbedding(target.fact.id, [1, 0], 3);
+    const queryVector = createCurrentLocalSimilarityVector(
+      buildFactLocalSimilarityText(target.fact),
+    );
 
     const lexical = await orchestrateMemoryRetrieval({
       userMessage: 'conceptually related evidence',
       memoryScope: memoryScope(),
       candidateStrategy: 'lexical',
-      localSemantic: { queryEmbedding: [1, 0] },
+      localSemantic: { queryVector },
       now: 4,
     });
     const hybrid = await orchestrateMemoryRetrieval({
       userMessage: 'conceptually related evidence',
       memoryScope: memoryScope(),
       candidateStrategy: 'hybrid',
-      localSemantic: { queryEmbedding: [1, 0] },
+      localSemantic: { queryVector },
       now: 4,
     });
 

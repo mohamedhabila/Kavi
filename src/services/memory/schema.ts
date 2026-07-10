@@ -63,7 +63,9 @@ export function ensureFactSchema(): void {
           'grounded_user', 'tool_observed', 'external_source', 'assistant_inferred', 'unknown'
         )),
       content_hash TEXT NOT NULL,
-      embedding TEXT,
+      local_similarity_model TEXT,
+      local_similarity_dimensions INTEGER,
+      local_similarity_vector TEXT,
       valid_at INTEGER NOT NULL,
       invalid_at INTEGER,
       created_at INTEGER NOT NULL,
@@ -412,6 +414,14 @@ function ensureFactColumns(db: ReturnType<typeof getMemoryDb>): void {
   ensureColumn(db, 'memory_facts', 'origin_task_id', 'origin_task_id TEXT');
   ensureColumn(db, 'memory_facts', 'source_turn_id', 'source_turn_id TEXT');
   ensureColumn(db, 'memory_facts', 'source_summary', 'source_summary TEXT');
+  ensureColumn(db, 'memory_facts', 'local_similarity_model', 'local_similarity_model TEXT');
+  ensureColumn(
+    db,
+    'memory_facts',
+    'local_similarity_dimensions',
+    'local_similarity_dimensions INTEGER',
+  );
+  ensureColumn(db, 'memory_facts', 'local_similarity_vector', 'local_similarity_vector TEXT');
   ensureColumn(db, 'memory_facts', 'importance', 'importance REAL NOT NULL DEFAULT 0.5');
   ensureColumn(db, 'memory_facts', 'access_count', 'access_count INTEGER NOT NULL DEFAULT 0');
   ensureColumn(

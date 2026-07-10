@@ -32,9 +32,9 @@ import {
   getIndexSize,
   CACHE_CONFIG,
   DEFAULT_LOCAL_EMBEDDING_CONFIG,
-  getLocalTextEmbedding,
   isLocalEmbeddingConfig,
 } from '../../src/services/memory/embeddings';
+import { createCharacterNgramVector } from '../../src/services/memory/localSimilarity';
 
 const {
   readConversationMemory,
@@ -115,8 +115,8 @@ describe('Embeddings Service', () => {
     });
 
     it('keeps local embeddings language-agnostic at the feature level', () => {
-      const arabic = getLocalTextEmbedding('القهوة السادة', 96);
-      const japanese = getLocalTextEmbedding('東京の会議場所', 96);
+      const arabic = createCharacterNgramVector('القهوة السادة', 96);
+      const japanese = createCharacterNgramVector('東京の会議場所', 96);
 
       expect(arabic).toHaveLength(96);
       expect(japanese).toHaveLength(96);

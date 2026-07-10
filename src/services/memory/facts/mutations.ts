@@ -16,6 +16,12 @@ import { requireFactMutationScope, requireFactMutationTimestamp } from './mutati
 import { requireFactScopeIdentity } from './scopeIdentity';
 import { hasPersistedSourceEvidence } from './sourceEvidence';
 import {
+  buildFactLocalSimilarityText,
+  createCurrentLocalSimilarityVector,
+  requireCurrentLocalSimilarityVector,
+  type LocalSimilarityVector,
+} from '../localSimilarity';
+import {
   closedMemoryFactClass,
   closedMemoryFactReviewState,
   closedMemoryFactSensitivity,
@@ -191,6 +197,13 @@ function recordFactInTransaction(
     ...(sealedApplicability ? { sealed: sealedApplicability } : {}),
   });
   const memoryOwnerId = getLocalMemoryVaultOwnerId(db);
+  const localSimilarity = createCurrentLocalSimilarityVector(
+    buildFactLocalSimilarityText({
+      predicate,
+      objectText,
+      sourceSummary: input.sourceSummary,
+    }),
+  );
   const normalizedInput = {
     ...input,
     predicate,
@@ -284,6 +297,9 @@ function recordFactInTransaction(
              fact_class = ?,
              source_authority = ?,
              memory_kind = ?,
+             local_similarity_model = ?,
+             local_similarity_dimensions = ?,
+             local_similarity_vector = ?,
              repeated_mention_count = repeated_mention_count + ?,
              last_reinforced_at = ?,
              last_accessed_at = ?
@@ -300,6 +316,9 @@ function recordFactInTransaction(
       nextProvenance.factClass,
       nextProvenance.sourceAuthority,
       memoryKind,
+      localSimilarity.model,
+      localSimilarity.dimensions,
+      JSON.stringify(localSimilarity.values),
       reinforcementIncrement,
       lastReinforcedAt,
       lastAccessedAt,
@@ -319,6 +338,9 @@ function recordFactInTransaction(
       fact_class: nextProvenance.factClass,
       source_authority: nextProvenance.sourceAuthority,
       memory_kind: memoryKind,
+      local_similarity_model: localSimilarity.model,
+      local_similarity_dimensions: localSimilarity.dimensions,
+      local_similarity_vector: JSON.stringify(localSimilarity.values),
       repeated_mention_count: (existing.repeated_mention_count ?? 0) + reinforcementIncrement,
       last_reinforced_at: lastReinforcedAt,
       last_accessed_at: lastAccessedAt,
@@ -396,7 +418,7 @@ function recordFactInTransaction(
     decayPolicy,
     expiresAt,
     contentHash: hash,
-    embedding: null,
+    localSimilarity,
     validAt,
     invalidAt: null,
     createdAt: now,
@@ -421,12 +443,13 @@ function recordFactInTransaction(
         fact_class, source_authority, scope, origin_conversation_id,
         origin_thread_id, origin_task_id, source_turn_id, source_summary, importance,
         access_count, repeated_mention_count, last_recalled_at, last_reinforced_at,
-        last_accessed_at, decay_policy, expires_at, content_hash, embedding, valid_at,
+        last_accessed_at, decay_policy, expires_at, content_hash, local_similarity_model,
+        local_similarity_dimensions, local_similarity_vector, valid_at,
         invalid_at, created_at, updated_at, deleted_at, pinned, source_actor_id,
         retrievability, stability, decay_rate, last_presented_at, last_confirmed_at,
         last_conflicted_at, review_state, sensitivity, memory_kind)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, NULL, NULL, NULL,
-        ?, ?, ?, NULL, ?, NULL, ?, ?, NULL, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?)`,
+        ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?)`,
     fact.id,
     fact.subjectId,
     fact.predicate,
@@ -450,6 +473,9 @@ function recordFactInTransaction(
     fact.decayPolicy,
     fact.expiresAt,
     fact.contentHash,
+    localSimilarity.model,
+    localSimilarity.dimensions,
+    JSON.stringify(localSimilarity.values),
     fact.validAt,
     fact.createdAt,
     fact.updatedAt,
@@ -521,23 +547,25 @@ export function setFactPinned(id: string, pinned: boolean, now = Date.now()): bo
 }
 
 /**
- * Persist an embedding vector for a fact. The vector is stored as a JSON
- * array in the `embedding` TEXT column. Used by the query-time recall
- * pipeline (see `factRecall.ts`) and by the consolidator backfill pass.
- * Returns true if a row was updated.
+ * Persist one current, validated local-similarity vector for a fact.
  */
-export function setFactEmbedding(
+export function setFactLocalSimilarity(
   id: string,
-  embedding: number[] | null,
+  localSimilarity: LocalSimilarityVector,
   now = Date.now(),
 ): boolean {
   requireFactMutationTimestamp(now, 'memory_fact_mutation_clock_invalid');
-  const serialized = embedding && embedding.length > 0 ? JSON.stringify(embedding) : null;
+  const validated = requireCurrentLocalSimilarityVector(localSimilarity);
   const result = runMemoryStatement(
     `UPDATE memory_facts
-       SET embedding = ?, updated_at = ?
+       SET local_similarity_model = ?,
+           local_similarity_dimensions = ?,
+           local_similarity_vector = ?,
+           updated_at = ?
        WHERE id = ? AND deleted_at IS NULL`,
-    serialized,
+    validated.model,
+    validated.dimensions,
+    JSON.stringify(validated.values),
     now,
     id,
   );

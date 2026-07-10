@@ -43,7 +43,7 @@ function agentRunFact(overrides: Partial<MemoryFact> = {}): MemoryFact {
     decayPolicy: 'normal',
     expiresAt: null,
     contentHash: 'hash-1',
-    embedding: null,
+    localSimilarity: null,
     validAt: 10,
     invalidAt: null,
     createdAt: 10,

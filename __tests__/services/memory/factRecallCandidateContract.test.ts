@@ -31,7 +31,6 @@ describe('hybrid recall candidate contract', () => {
       entityLane: 32,
       temporalLane: 24,
       localSemanticLane: 32,
-      maximumEmbeddingDimensions: 2_048,
       reciprocalRankConstant: 60,
     });
   });

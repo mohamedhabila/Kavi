@@ -8,6 +8,7 @@ import type { RecallCandidateLaneEntry } from './factRecallCandidateUnion';
 import type { MemoryFact } from './facts/types';
 import { tokenizeLexicalUnits } from './ranking/lexical';
 import { cosineSimilarity } from './ranking/similarity';
+import { isCurrentLocalSimilarityVector } from './localSimilarity';
 
 const YEAR_PATTERN = /(?:^|[^\p{N}])((?:19|20)\d{2})(?=$|[^\p{N}])/gu;
 
@@ -85,14 +86,6 @@ function temporalLane(facts: ReadonlyArray<MemoryFact>, query: string): RecallCa
     .map((fact) => ({ fact }));
 }
 
-function validEmbedding(values: ReadonlyArray<number>): boolean {
-  return (
-    values.length > 0 &&
-    values.length <= RECALL_CANDIDATE_LIMITS.maximumEmbeddingDimensions &&
-    values.every((value) => Number.isFinite(value))
-  );
-}
-
 function localSemanticLane(
   facts: ReadonlyArray<MemoryFact>,
   input: RecallLocalSemanticInput | undefined,
@@ -101,12 +94,11 @@ function localSemanticLane(
   outcome: RecallLocalSemanticOutcome;
 } {
   if (!input) return { entries: [], outcome: 'not_requested' };
-  if (!validEmbedding(input.queryEmbedding)) return { entries: [], outcome: 'unavailable' };
+  if (!isCurrentLocalSimilarityVector(input.queryVector)) {
+    return { entries: [], outcome: 'unavailable' };
+  }
   const compatibleFacts = facts.filter(
-    (fact) =>
-      Array.isArray(fact.embedding) &&
-      fact.embedding.length === input.queryEmbedding.length &&
-      validEmbedding(fact.embedding),
+    (fact) => fact.localSimilarity !== null && isCurrentLocalSimilarityVector(fact.localSimilarity),
   );
   if (compatibleFacts.length === 0) return { entries: [], outcome: 'unavailable' };
   const requestedMinimum = input.minimumSimilarity;
@@ -116,7 +108,10 @@ function localSemanticLane(
   const entries = compatibleFacts
     .map((fact) => ({
       fact,
-      semanticSimilarity: cosineSimilarity(input.queryEmbedding, fact.embedding ?? []),
+      semanticSimilarity: cosineSimilarity(
+        input.queryVector.values,
+        fact.localSimilarity?.values ?? [],
+      ),
     }))
     .filter((entry) => entry.semanticSimilarity >= minimumSimilarity)
     .sort(

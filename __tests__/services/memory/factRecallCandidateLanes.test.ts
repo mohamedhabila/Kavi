@@ -4,6 +4,11 @@ import {
   extractTemporalRecallYears,
 } from '../../../src/services/memory/factRecallCandidateLanes';
 import type { MemoryFact } from '../../../src/services/memory/facts/types';
+import {
+  createCurrentLocalSimilarityVector,
+  LOCAL_SIMILARITY_DIMENSIONS,
+  LOCAL_SIMILARITY_MODEL,
+} from '../../../src/services/memory/localSimilarity';
 import { tokenizeLexicalUnits } from '../../../src/services/memory/ranking/lexical';
 
 function fact(id: string, updatedAt: number, overrides: Partial<MemoryFact> = {}): MemoryFact {
@@ -15,7 +20,7 @@ function fact(id: string, updatedAt: number, overrides: Partial<MemoryFact> = {}
     createdAt: updatedAt,
     validAt: updatedAt,
     importance: 0.5,
-    embedding: null,
+    localSimilarity: null,
     ...overrides,
   } as MemoryFact;
 }
@@ -74,10 +79,19 @@ describe('supplemental hybrid recall lanes', () => {
     expect(lanes.temporal.map((entry) => entry.fact.id)).toEqual(['newer-2024', 'older-2024']);
   });
 
-  it('applies only compatible finite local embeddings and reports absence explicitly', () => {
-    const matching = fact('matching', 1, { embedding: [1, 0] });
-    const weak = fact('weak', 2, { embedding: [0, 1] });
-    const incompatible = fact('incompatible', 3, { embedding: [1, 0, 0] });
+  it('applies only compatible finite local vectors and reports absence explicitly', () => {
+    const queryVector = createCurrentLocalSimilarityVector('violet release cipher');
+    const matching = fact('matching', 1, { localSimilarity: queryVector });
+    const weak = fact('weak', 2, {
+      localSimilarity: createCurrentLocalSimilarityVector('orange travel schedule'),
+    });
+    const incompatible = fact('incompatible', 3, {
+      localSimilarity: {
+        model: LOCAL_SIMILARITY_MODEL,
+        dimensions: LOCAL_SIMILARITY_DIMENSIONS,
+        values: [1, 0, 0],
+      },
+    });
     const base = {
       query: 'semantic query',
       queryUnits: tokenizeLexicalUnits('semantic query'),
@@ -89,7 +103,7 @@ describe('supplemental hybrid recall lanes', () => {
     expect(
       buildSupplementalRecallCandidateLanes({
         ...base,
-        localSemantic: { queryEmbedding: [1, 0], minimumSimilarity: 0.8 },
+        localSemantic: { queryVector, minimumSimilarity: 0.99 },
       }),
     ).toMatchObject({
       localSemanticOutcome: 'applied',
@@ -98,14 +112,14 @@ describe('supplemental hybrid recall lanes', () => {
     expect(
       buildSupplementalRecallCandidateLanes({
         ...base,
-        localSemantic: { queryEmbedding: [1, 0], minimumSimilarity: Number.NaN },
+        localSemantic: { queryVector, minimumSimilarity: Number.NaN },
       }).localSemantic.map((entry) => entry.fact.id),
     ).toEqual(['matching']);
     expect(
       buildSupplementalRecallCandidateLanes({
         ...base,
         eligibleFacts: [incompatible],
-        localSemantic: { queryEmbedding: [1, 0] },
+        localSemantic: { queryVector },
       }).localSemanticOutcome,
     ).toBe('unavailable');
   });

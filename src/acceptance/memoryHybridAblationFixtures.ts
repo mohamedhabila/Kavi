@@ -2,7 +2,7 @@ import type { EntityType } from '../services/memory/entities';
 
 export const MEMORY_HYBRID_ABLATION_FIXTURE_VERSION = 'memory-hybrid-ablation-v1' as const;
 export const MEMORY_HYBRID_ABLATION_FIXTURE_SIGNATURE =
-  'sha256:759fe1b05e0bdc255f5dc640a7c55f9a2dfd7d5bc104b82f60dfe16314a942e3' as const;
+  'sha256:f734c9f3b07f995256ebc6eefcb2ae6898b56c3bd25f9fe80e78d20dc99e0036' as const;
 
 export type MemoryHybridAblationFamily =
   | 'lexical_control'
@@ -28,7 +28,6 @@ export type MemoryHybridAblationFactSeed = Readonly<{
   now: number;
   validAt?: number;
   expiresAt?: number;
-  embedding?: ReadonlyArray<number>;
   origin: 'active' | 'other';
   deleted?: boolean;
 }>;
@@ -49,7 +48,6 @@ export type MemoryHybridAblationCase = Readonly<{
     objectPrefix: string;
     startAt: number;
   }>;
-  queryEmbedding?: ReadonlyArray<number>;
 }>;
 
 function deepFreeze<T>(value: T): T {
@@ -156,7 +154,7 @@ export const MEMORY_HYBRID_ABLATION_CASES: ReadonlyArray<MemoryHybridAblationCas
     id: 'compatible-local-semantic',
     family: 'local_semantic',
     path: 'component_only',
-    query: 'conceptually related memory',
+    query: 'opaqueness signalling violett ciphered',
     now: 1_000,
     expectedFactKey: 'target',
     entities: [{ key: 'semantic', name: 'Semantic Project', type: 'project' }],
@@ -166,7 +164,6 @@ export const MEMORY_HYBRID_ABLATION_CASES: ReadonlyArray<MemoryHybridAblationCas
         entityKey: 'semantic',
         predicate: 'opaque_signal',
         objectText: 'violet-cipher',
-        embedding: [1, 0],
         now: 100,
         origin: 'active',
       },
@@ -175,12 +172,10 @@ export const MEMORY_HYBRID_ABLATION_CASES: ReadonlyArray<MemoryHybridAblationCas
         entityKey: 'semantic',
         predicate: 'other_signal',
         objectText: 'orange-cipher',
-        embedding: [0, 1],
         now: 101,
         origin: 'active',
       },
     ],
-    queryEmbedding: [1, 0],
   },
   {
     id: 'eligibility-negative',

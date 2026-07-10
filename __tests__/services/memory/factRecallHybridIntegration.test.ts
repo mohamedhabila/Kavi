@@ -4,7 +4,11 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { upsertEntity } from '../../../src/services/memory/entities';
-import { invalidateFact, setFactEmbedding } from '../../../src/services/memory/facts/mutations';
+import {
+  invalidateFact,
+  setFactLocalSimilarity,
+} from '../../../src/services/memory/facts/mutations';
+import { createCurrentLocalSimilarityVector } from '../../../src/services/memory/localSimilarity';
 import type { RecallFactsTiming } from '../../../src/services/memory/factRecall';
 import {
   recallScoredTestFacts as recallScoredFactsForQuery,
@@ -114,15 +118,14 @@ describe('hybrid fact recall integration', () => {
       objectText: 'violet-cipher',
       now: 1_000,
     });
-    const distractor = recordFact({
+    recordFact({
       subjectId: project.id,
       predicate: 'other_signal',
       objectText: 'orange-cipher',
       supersedePrior: false,
       now: 1_001,
     });
-    setFactEmbedding(target.fact.id, [1, 0], 1_002);
-    setFactEmbedding(distractor.fact.id, [0, 1], 1_002);
+    const queryVector = target.fact.localSimilarity!;
     let timing: RecallFactsTiming | undefined;
 
     const lexical = await recallScoredFactsForQuery('conceptually related memory', {
@@ -131,7 +134,7 @@ describe('hybrid fact recall integration', () => {
     });
     const hybrid = await recallScoredFactsForQuery('conceptually related memory', {
       candidateStrategy: 'hybrid',
-      localSemantic: { queryEmbedding: [1, 0], minimumSimilarity: 0.8 },
+      localSemantic: { queryVector, minimumSimilarity: 0.99 },
       now: 1_003,
       onTiming: (value) => {
         timing = value;
@@ -140,10 +143,10 @@ describe('hybrid fact recall integration', () => {
 
     expect(lexical).toHaveLength(0);
     expect(hybrid.map((entry) => entry.fact.id)).toEqual([target.fact.id]);
-    expect(hybrid[0].candidateProvenance).toMatchObject({
-      reasons: expect.arrayContaining(['local_semantic']),
-      semanticSimilarity: 1,
-    });
+    expect(hybrid[0].candidateProvenance.reasons).toEqual(
+      expect.arrayContaining(['local_semantic']),
+    );
+    expect(hybrid[0].candidateProvenance.semanticSimilarity).toBeCloseTo(1);
     expect(timing?.candidateStages).toMatchObject({
       localSemanticOutcome: 'applied',
       localSemanticCount: 1,
@@ -158,6 +161,14 @@ describe('hybrid fact recall integration', () => {
       objectText: 'ocean teal',
       now: 100,
     });
+    getMemoryDb().runSync(
+      `UPDATE memory_facts
+          SET local_similarity_model = NULL,
+              local_similarity_dimensions = NULL,
+              local_similarity_vector = NULL
+        WHERE id = ?`,
+      target.fact.id,
+    );
     let timing: RecallFactsTiming | undefined;
 
     const lexical = await recallScoredFactsForQuery('ocean teal preference', {
@@ -166,7 +177,7 @@ describe('hybrid fact recall integration', () => {
     });
     const hybrid = await recallScoredFactsForQuery('ocean teal preference', {
       candidateStrategy: 'hybrid',
-      localSemantic: { queryEmbedding: [1, 0] },
+      localSemantic: { queryVector: createCurrentLocalSimilarityVector('ocean teal preference') },
       now: 101,
       onTiming: (value) => {
         timing = value;
@@ -219,7 +230,7 @@ describe('hybrid fact recall integration', () => {
       now: 1_000,
     });
     for (const fact of [allowed, expired, invalidated, deleted, otherConversation]) {
-      setFactEmbedding(fact.fact.id, [1, 0], 1_100);
+      setFactLocalSimilarity(fact.fact.id, allowed.fact.localSimilarity!, 1_100);
     }
     invalidateFact(invalidated.fact.id, 1_200);
     getMemoryDb().runSync(
@@ -232,7 +243,7 @@ describe('hybrid fact recall integration', () => {
       'unindexed conceptual query',
       {
         candidateStrategy: 'hybrid',
-        localSemantic: { queryEmbedding: [1, 0], minimumSimilarity: 0.8 },
+        localSemantic: { queryVector: allowed.fact.localSimilarity!, minimumSimilarity: 0.99 },
         asOf: 2_000,
         now: 2_000,
       },

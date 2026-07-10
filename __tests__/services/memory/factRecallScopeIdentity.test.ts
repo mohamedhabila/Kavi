@@ -7,7 +7,6 @@ import { upsertEntity } from '../../../src/services/memory/entities';
 import {
   invalidateFact,
   recordFactWithApplicability,
-  setFactEmbedding,
   setFactPinned,
 } from '../../../src/services/memory/facts/mutations';
 import {
@@ -443,7 +442,6 @@ describe('fact recall SQL scope identity', () => {
       originThreadId: 'another-thread-in-the-same-root',
       now: 1,
     });
-    setFactEmbedding(target.fact.id, [1, 0], 2);
     const blockedIds = new Set<string>();
     for (let index = 0; index < 300; index += 1) {
       const blocked = recordFact({
@@ -482,7 +480,7 @@ describe('fact recall SQL scope identity', () => {
       candidateStrategy: 'hybrid',
       memoryScope: activeScope(),
       useIntent: 'automatic_prompt',
-      localSemantic: { queryEmbedding: [1, 0], minimumSimilarity: 0.8 },
+      localSemantic: { queryVector: target.fact.localSimilarity!, minimumSimilarity: 0.99 },
       candidatePoolLimit: 128,
       eligibleScanLimit: 256,
       limit: 1,

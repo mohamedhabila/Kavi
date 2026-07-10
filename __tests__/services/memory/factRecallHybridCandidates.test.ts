@@ -1,6 +1,7 @@
 import type { MemoryEntity } from '../../../src/services/memory/entities';
 import { buildRecallCandidateSet } from '../../../src/services/memory/factRecallHybridCandidates';
 import type { MemoryFact } from '../../../src/services/memory/facts/types';
+import { createCurrentLocalSimilarityVector } from '../../../src/services/memory/localSimilarity';
 
 function fact(id: string, overrides: Partial<MemoryFact> = {}): MemoryFact {
   return {
@@ -12,7 +13,7 @@ function fact(id: string, overrides: Partial<MemoryFact> = {}): MemoryFact {
     createdAt: 1,
     validAt: 1,
     importance: 0.5,
-    embedding: null,
+    localSimilarity: null,
     sourceRunId: null,
     originTaskId: null,
     taskId: null,
@@ -71,9 +72,10 @@ describe('hybrid recall candidate set', () => {
   it('unions entity, temporal, and compatible semantic lanes with bounded provenance', () => {
     const lexical = fact('lexical');
     const entityOnly = fact('entity-only', { updatedAt: 3 });
+    const queryVector = createCurrentLocalSimilarityVector('violet release cipher');
     const semanticOnly = fact('semantic-only', {
       subjectId: 'entity-2',
-      embedding: [1, 0],
+      localSimilarity: queryVector,
       updatedAt: 2,
     });
     const result = buildRecallCandidateSet({
@@ -85,7 +87,7 @@ describe('hybrid recall candidate set', () => {
       candidateUnitHits: new Map([['lexical', new Set(['1970'])]]),
       eligibleFacts: [entityOnly, semanticOnly, lexical],
       entities: [entity],
-      localSemantic: { queryEmbedding: [1, 0], minimumSimilarity: 0.9 },
+      localSemantic: { queryVector, minimumSimilarity: 0.99 },
       limit: 8,
     });
 

@@ -13,8 +13,9 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
   if (!table?.sql) return;
   const columns = db.getAllSync<{ name: string }>('PRAGMA table_info(memory_facts)');
   const hasLegacyTaskId = columns.some((column) => column.name === 'task_id');
+  const hasLegacyEmbedding = columns.some((column) => column.name === 'embedding');
   const hasUniqueContentHash = /UNIQUE\s*\(\s*content_hash\s*\)/i.test(table.sql);
-  if (!hasLegacyTaskId && !hasUniqueContentHash) return;
+  if (!hasLegacyTaskId && !hasLegacyEmbedding && !hasUniqueContentHash) return;
   if (
     hasLegacyTaskId &&
     db.getFirstSync<{ id: string }>(
@@ -43,7 +44,9 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
     'fact_class',
     'source_authority',
     'content_hash',
-    'embedding',
+    'local_similarity_model',
+    'local_similarity_dimensions',
+    'local_similarity_vector',
     'valid_at',
     'invalid_at',
     'created_at',
@@ -75,7 +78,14 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
     'sensitivity',
     'memory_kind',
   ]);
-  if (columns.some((column) => column.name !== 'task_id' && !canonicalColumns.has(column.name))) {
+  if (
+    columns.some(
+      (column) =>
+        column.name !== 'task_id' &&
+        column.name !== 'embedding' &&
+        !canonicalColumns.has(column.name),
+    )
+  ) {
     throw new Error('memory_fact_schema_column_unsupported');
   }
   const canonicalSchemaObjects = new Set([
@@ -143,7 +153,9 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
             'grounded_user', 'tool_observed', 'external_source', 'assistant_inferred', 'unknown'
           )),
         content_hash TEXT NOT NULL,
-        embedding TEXT,
+        local_similarity_model TEXT,
+        local_similarity_dimensions INTEGER,
+        local_similarity_vector TEXT,
         valid_at INTEGER NOT NULL,
         invalid_at INTEGER,
         created_at INTEGER NOT NULL,
@@ -178,7 +190,8 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
       INSERT INTO memory_facts_without_hash_constraint (
         id, subject_id, predicate, object_text, object_entity_id, attributes,
         confidence, source_message_id, source_run_id, memory_owner_id, persona_id,
-        fact_class, source_authority, content_hash, embedding,
+        fact_class, source_authority, content_hash, local_similarity_model,
+        local_similarity_dimensions, local_similarity_vector,
         valid_at, invalid_at, created_at, updated_at, deleted_at, pinned, scope,
         origin_conversation_id, origin_thread_id, origin_task_id, source_turn_id,
         source_summary, importance, access_count, repeated_mention_count,
@@ -190,7 +203,8 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
       SELECT
         id, subject_id, predicate, object_text, object_entity_id, attributes,
         confidence, source_message_id, source_run_id, memory_owner_id, persona_id,
-        fact_class, source_authority, content_hash, embedding,
+        fact_class, source_authority, content_hash, local_similarity_model,
+        local_similarity_dimensions, local_similarity_vector,
         valid_at, invalid_at, created_at, updated_at, deleted_at, pinned, scope,
         origin_conversation_id, origin_thread_id, ${originTaskProjection}, source_turn_id,
         source_summary, importance, access_count, repeated_mention_count,

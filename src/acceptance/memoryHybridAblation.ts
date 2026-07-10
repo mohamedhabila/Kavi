@@ -1,9 +1,6 @@
 import type { Message } from '../types/message';
 import { upsertEntity } from '../services/memory/entities';
-import {
-  recordFactWithApplicability,
-  setFactEmbedding,
-} from '../services/memory/facts/mutations';
+import { recordFactWithApplicability } from '../services/memory/facts/mutations';
 import { recallScoredFactsForQuery } from '../services/memory/factRecall';
 import { buildUnifiedMemoryAccessContext } from '../services/memory/memoryAccessGateway';
 import { resolveLocalMemoryAccessScope } from '../services/memory/memoryScopeStore';
@@ -13,6 +10,7 @@ import {
 } from '../services/memory/retrievalLog';
 import { getMemoryDb } from '../services/memory/sqlite-store';
 import { stableHash, stableStringify } from './e2eAgent/e2eTraceRedaction';
+import { createCurrentLocalSimilarityVector } from '../services/memory/localSimilarity';
 import { runInIsolatedStructuredMemoryEvaluation } from './structuredMemoryEvaluation';
 import {
   MEMORY_HYBRID_ABLATION_CASES,
@@ -136,7 +134,6 @@ function seedFixture(
       { factClass: 'workflow', sourceAuthority: 'tool_observed' },
     );
     factKeysById.set(recorded.fact.id, seed.key);
-    if (seed.embedding) setFactEmbedding(recorded.fact.id, [...seed.embedding], seed.now);
     if (seed.deleted) {
       getMemoryDb().runSync(
         'UPDATE memory_facts SET deleted_at = ? WHERE id = ?',
@@ -236,9 +233,7 @@ async function runLocalSemanticCase(
     useIntent: 'explicit_user_request',
     limit: 1,
     now: fixture.now,
-    ...(fixture.queryEmbedding
-      ? { localSemantic: { queryEmbedding: fixture.queryEmbedding } }
-      : {}),
+    localSemantic: { queryVector: createCurrentLocalSimilarityVector(fixture.query) },
   });
   return evaluateSelection(
     fixture,
@@ -348,7 +343,8 @@ async function runAblationOnEmptyDatabase(): Promise<MemoryHybridAblationReport>
       hybridOnlyRegressionCount: pairs.filter(
         ({ lexical, hybrid }) => hybrid.pollution && !lexical.pollution,
       ).length,
-      lexicalNegativeFalsePositiveCount: negatives.filter(({ lexical }) => lexical.pollution).length,
+      lexicalNegativeFalsePositiveCount: negatives.filter(({ lexical }) => lexical.pollution)
+        .length,
       hybridNegativeFalsePositiveCount: negatives.filter(({ hybrid }) => hybrid.pollution).length,
     },
     families: {

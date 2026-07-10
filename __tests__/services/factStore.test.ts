@@ -15,7 +15,7 @@ import {
   markFactsRecalled,
   recordFact,
   recordFactWithApplicability,
-  setFactEmbedding,
+  setFactLocalSimilarity,
   setFactPinned,
 } from '../../src/services/memory/facts/mutations';
 import { replaceCurrentFact } from '../../src/services/memory/facts/exactReplacement';
@@ -27,6 +27,7 @@ import {
   getFactById,
   listFacts,
 } from '../../src/services/memory/facts/queries';
+import { createCurrentLocalSimilarityVector } from '../../src/services/memory/localSimilarity';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -431,9 +432,13 @@ describe('recordFact', () => {
     expect(() => setFactPinned(fact.id, true, Number.NaN)).toThrow(
       'memory_fact_mutation_clock_invalid',
     );
-    expect(() => setFactEmbedding(fact.id, [0.5], Number.POSITIVE_INFINITY)).toThrow(
-      'memory_fact_mutation_clock_invalid',
-    );
+    expect(() =>
+      setFactLocalSimilarity(
+        fact.id,
+        createCurrentLocalSimilarityVector('safe'),
+        Number.POSITIVE_INFINITY,
+      ),
+    ).toThrow('memory_fact_mutation_clock_invalid');
     expect(() => markFactsRecalled([fact.id], Number.MAX_SAFE_INTEGER + 1)).toThrow(
       'memory_fact_mutation_clock_invalid',
     );

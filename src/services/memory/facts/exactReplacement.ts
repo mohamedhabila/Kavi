@@ -17,6 +17,10 @@ import { replaceFactRetrievalTerms } from './retrievalIndex';
 import { requireFactScopeIdentity } from './scopeIdentity';
 import { hasPersistedSourceEvidence } from './sourceEvidence';
 import {
+  buildFactLocalSimilarityText,
+  createCurrentLocalSimilarityVector,
+} from '../localSimilarity';
+import {
   clamp01,
   normalizeFactKind,
   rowToFact,
@@ -85,13 +89,22 @@ function reinforceExactDuplicate(
   const stability = clamp01(input.stability ?? row.stability ?? 0.5);
   const decayRate = Math.max(0, input.decayRate ?? row.decay_rate ?? 0.03);
   const attributes = { ...safeParseObject(row.attributes), ...(input.attributes ?? {}) };
+  const localSimilarity = createCurrentLocalSimilarityVector(
+    buildFactLocalSimilarityText({
+      predicate: row.predicate,
+      objectText: row.object_text,
+      sourceSummary: row.source_summary,
+    }),
+  );
   db.runSync(
     `UPDATE memory_facts
        SET attributes = ?, updated_at = ?, confidence = MAX(confidence, ?),
            importance = MAX(importance, ?), retrievability = MAX(retrievability, ?),
            stability = MAX(stability, ?), decay_rate = MIN(decay_rate, ?),
            repeated_mention_count = repeated_mention_count + 1,
-           last_reinforced_at = ?, last_accessed_at = ?
+           last_reinforced_at = ?, last_accessed_at = ?,
+           local_similarity_model = ?, local_similarity_dimensions = ?,
+           local_similarity_vector = ?
      WHERE id = ? AND invalid_at IS NULL AND deleted_at IS NULL`,
     JSON.stringify(attributes),
     now,
@@ -102,6 +115,9 @@ function reinforceExactDuplicate(
     decayRate,
     now,
     now,
+    localSimilarity.model,
+    localSimilarity.dimensions,
+    JSON.stringify(localSimilarity.values),
     row.id,
   );
   const fact = rowToFact({
@@ -116,6 +132,9 @@ function reinforceExactDuplicate(
     repeated_mention_count: (row.repeated_mention_count ?? 0) + 1,
     last_reinforced_at: now,
     last_accessed_at: now,
+    local_similarity_model: localSimilarity.model,
+    local_similarity_dimensions: localSimilarity.dimensions,
+    local_similarity_vector: JSON.stringify(localSimilarity.values),
   });
   replaceFactRetrievalTerms(fact);
   runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged(row.origin_conversation_id));

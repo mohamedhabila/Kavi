@@ -20,7 +20,7 @@ function fact(overrides: Partial<MemoryFact> & { id: string; objectText?: string
     sourceMessageId: null,
     sourceRunId: null,
     contentHash: overrides.id,
-    embedding: null,
+    localSimilarity: null,
     validAt: 0,
     invalidAt: null,
     createdAt: 0,

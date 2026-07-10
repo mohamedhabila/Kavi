@@ -1,5 +1,6 @@
-import { safeParseArray, safeParseObject } from '../schema';
+import { safeParseObject } from '../schema';
 import type { MemoryFactReviewState, MemoryFactSensitivity } from './applicabilityProvenance';
+import { parseCurrentLocalSimilarityVector, type LocalSimilarityVector } from '../localSimilarity';
 
 export type MemoryFactScope = 'global' | 'project' | 'conversation' | 'session' | 'persona';
 
@@ -48,7 +49,7 @@ export interface MemoryFact {
   decayPolicy: MemoryDecayPolicy;
   expiresAt: number | null;
   contentHash: string;
-  embedding: number[] | null;
+  localSimilarity: LocalSimilarityVector | null;
   validAt: number;
   invalidAt: number | null;
   createdAt: number;
@@ -96,7 +97,9 @@ export interface FactRow {
   decay_policy: string;
   expires_at: number | null;
   content_hash: string;
-  embedding: string | null;
+  local_similarity_model?: string | null;
+  local_similarity_dimensions?: number | null;
+  local_similarity_vector?: string | null;
   valid_at: number;
   invalid_at: number | null;
   created_at: number;
@@ -187,7 +190,11 @@ export function rowToFact(row: FactRow): MemoryFact {
     decayPolicy: normalizeDecayPolicy(row.decay_policy),
     expiresAt: row.expires_at,
     contentHash: row.content_hash,
-    embedding: row.embedding ? safeParseArray<number>(row.embedding) : null,
+    localSimilarity: parseCurrentLocalSimilarityVector({
+      model: row.local_similarity_model,
+      dimensions: row.local_similarity_dimensions,
+      serializedValues: row.local_similarity_vector,
+    }),
     validAt: row.valid_at,
     invalidAt: row.invalid_at,
     createdAt: row.created_at,

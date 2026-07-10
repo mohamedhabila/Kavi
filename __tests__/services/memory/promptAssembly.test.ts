@@ -31,7 +31,7 @@ function memoryFact(
     decayPolicy: 'normal',
     expiresAt: null,
     contentHash: `hash-${id}`,
-    embedding: null,
+    localSimilarity: null,
     validAt: 1,
     invalidAt: null,
     createdAt: 1,

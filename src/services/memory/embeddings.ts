@@ -5,11 +5,7 @@
 // Supports: local Unicode n-gram hashing, OpenAI, Gemini, Voyage, Mistral, Ollama.
 // Scoring: vectorWeight * cosine + textWeight * bm25 + temporal_decay + mmr
 
-import type {
-  EmbeddingConfig,
-  EmbeddingResult,
-  MemorySearchResult,
-} from '../../types/memory';
+import type { EmbeddingConfig, EmbeddingResult, MemorySearchResult } from '../../types/memory';
 import {
   DEFAULT_GEMINI_AI_STUDIO_BASE_URL,
   isVertexNativeGeminiBaseUrl,
@@ -25,19 +21,20 @@ import {
 } from './store';
 import { createTimeoutSignal } from '../../utils/runtime';
 import { createArrayChunkIndex, searchChunkIndex } from './ranking/chunkIndex';
+import {
+  createCharacterNgramVector,
+  LOCAL_SIMILARITY_DIMENSIONS,
+  LOCAL_SIMILARITY_MAXIMUM_DIMENSIONS,
+  LOCAL_SIMILARITY_MINIMUM_DIMENSIONS,
+  LOCAL_SIMILARITY_MODEL,
+} from './localSimilarity';
 
 const EMBEDDING_TIMEOUT_MS = 30_000;
-const LOCAL_EMBEDDING_MODEL = 'unicode-char-ngram-v1';
-const LOCAL_EMBEDDING_DIMENSIONS = 384;
-const LOCAL_EMBEDDING_MIN_DIMENSIONS = 64;
-const LOCAL_EMBEDDING_MAX_DIMENSIONS = 2_048;
-const LOCAL_FEATURE_SEQUENCE_PATTERN = /[\p{L}\p{M}\p{N}]+/gu;
-const LOCAL_FEATURE_CODE_POINT_PATTERN = /[\p{L}\p{N}]/u;
 
 export const DEFAULT_LOCAL_EMBEDDING_CONFIG: EmbeddingConfig = {
   provider: 'local',
-  model: LOCAL_EMBEDDING_MODEL,
-  dimensions: LOCAL_EMBEDDING_DIMENSIONS,
+  model: LOCAL_SIMILARITY_MODEL,
+  dimensions: LOCAL_SIMILARITY_DIMENSIONS,
 };
 
 export { cosineSimilarity } from './ranking/similarity';
@@ -51,10 +48,13 @@ function timeoutSignal(ms: number = EMBEDDING_TIMEOUT_MS): AbortSignal {
 // ── Provider-specific embedding fetchers ─────────────────────────────────
 
 function clampLocalDimensions(dimensions: number | undefined): number {
-  if (!Number.isFinite(dimensions ?? NaN)) return LOCAL_EMBEDDING_DIMENSIONS;
+  if (!Number.isFinite(dimensions ?? NaN)) return LOCAL_SIMILARITY_DIMENSIONS;
   return Math.max(
-    LOCAL_EMBEDDING_MIN_DIMENSIONS,
-    Math.min(Math.floor(dimensions ?? LOCAL_EMBEDDING_DIMENSIONS), LOCAL_EMBEDDING_MAX_DIMENSIONS),
+    LOCAL_SIMILARITY_MINIMUM_DIMENSIONS,
+    Math.min(
+      Math.floor(dimensions ?? LOCAL_SIMILARITY_DIMENSIONS),
+      LOCAL_SIMILARITY_MAXIMUM_DIMENSIONS,
+    ),
   );
 }
 
@@ -67,57 +67,14 @@ function hashString32(value: string): number {
   return hash >>> 0;
 }
 
-function addHashedFeature(vector: number[], feature: string, weight: number): void {
-  const hash = hashString32(feature);
-  const index = hash % vector.length;
-  const sign = (hash & 0x80000000) === 0 ? 1 : -1;
-  vector[index] += sign * weight;
-}
-
-function normalizeLocalEmbeddingText(text: string): string {
-  return text.normalize('NFKC').toLocaleLowerCase();
-}
-
-function sequenceCodePoints(sequence: string): string[] {
-  return Array.from(sequence).filter((char) => LOCAL_FEATURE_CODE_POINT_PATTERN.test(char));
-}
-
-export function getLocalTextEmbedding(text: string, dimensions = LOCAL_EMBEDDING_DIMENSIONS): number[] {
-  const resolvedDimensions = clampLocalDimensions(dimensions);
-  const vector = Array.from({ length: resolvedDimensions }, () => 0);
-  const normalized = normalizeLocalEmbeddingText(text);
-  let featureCount = 0;
-
-  LOCAL_FEATURE_SEQUENCE_PATTERN.lastIndex = 0;
-  for (const match of normalized.matchAll(LOCAL_FEATURE_SEQUENCE_PATTERN)) {
-    const sequence = match[0];
-    const chars = sequenceCodePoints(sequence);
-    if (chars.length === 0) continue;
-    addHashedFeature(vector, `seq:${sequence}`, 0.8);
-    featureCount += 1;
-    for (const width of [2, 3, 4]) {
-      if (chars.length < width) continue;
-      const weight = 1 / width;
-      for (let index = 0; index <= chars.length - width; index += 1) {
-        addHashedFeature(vector, `${width}:${chars.slice(index, index + width).join('')}`, weight);
-        featureCount += 1;
-      }
-    }
-  }
-
-  if (featureCount === 0) return vector;
-  let norm = 0;
-  for (const value of vector) norm += value * value;
-  norm = Math.sqrt(norm);
-  if (norm === 0) return vector;
-  return vector.map((value) => value / norm);
-}
-
-async function fetchLocalEmbedding(text: string, config: EmbeddingConfig): Promise<EmbeddingResult> {
+async function fetchLocalEmbedding(
+  text: string,
+  config: EmbeddingConfig,
+): Promise<EmbeddingResult> {
   const dimensions = clampLocalDimensions(config.dimensions);
   return {
-    embedding: getLocalTextEmbedding(text, dimensions),
-    model: config.model || LOCAL_EMBEDDING_MODEL,
+    embedding: createCharacterNgramVector(text, dimensions),
+    model: config.model || LOCAL_SIMILARITY_MODEL,
   };
 }
 

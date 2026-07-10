@@ -31,7 +31,7 @@ export function makeMemoryFact(overrides: Partial<MemoryFact> = {}): MemoryFact 
     decayPolicy: 'normal',
     expiresAt: null,
     contentHash: 'hash-1',
-    embedding: null,
+    localSimilarity: null,
     validAt: 1,
     invalidAt: null,
     createdAt: 1,
