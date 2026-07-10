@@ -139,6 +139,32 @@ describe('foreground model restart recovery planning', () => {
       lease({ taskId: 'agent-run-1' }),
       conversation({ agentRuns: [] }),
     ],
+    [
+      'task_ownership_missing',
+      lease({ taskId: 'agent-run-1' }),
+      conversation({
+        agentRuns: [
+          {
+            id: 'agent-run-1',
+            userMessageId: 'different-request',
+            goal: 'Unrelated work',
+            status: 'running',
+            createdAt: 1,
+            updatedAt: 2,
+            currentPhase: 'work',
+            phases: [],
+            checkpoints: [],
+            summary: {
+              assistantTurns: 0,
+              startedTools: 0,
+              completedTools: 0,
+              failedTools: 0,
+              spawnedSubAgents: 0,
+            },
+          },
+        ],
+      }),
+    ],
   ] as const)('blocks %s without mutating a different projection', (reason, runLease, chat) => {
     expect(planForegroundModelRestartRecovery(runLease, chat)).toEqual({
       kind: 'blocked',
@@ -181,6 +207,35 @@ describe('foreground model restart recovery planning', () => {
     };
     expect(planForegroundModelRestartRecovery(lease(), completeConversation)).toEqual(
       expect.objectContaining({ status: 'failed' }),
+    );
+  });
+
+  it('does not trust an older final when a newer assistant projection is incomplete', () => {
+    const recoveryPlan = planForegroundModelRestartRecovery(
+      lease(),
+      conversation({
+        messages: [
+          { id: 'request-1', role: 'user', content: 'Do the work.', timestamp: 1 },
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: 'Earlier answer.',
+            timestamp: 2,
+            assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+          },
+          {
+            id: 'assistant-2',
+            role: 'assistant',
+            content: 'Newer partial answer',
+            timestamp: 3,
+            assistantMetadata: { kind: 'final', completionStatus: 'incomplete' },
+          },
+        ],
+      }),
+    );
+
+    expect(recoveryPlan).toEqual(
+      expect.objectContaining({ status: 'failed', projectionMessageId: 'assistant-2' }),
     );
   });
 });

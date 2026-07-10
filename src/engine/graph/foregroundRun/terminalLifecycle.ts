@@ -90,7 +90,7 @@ export function createForegroundRunTerminalLifecycleController(params: {
       return;
     }
 
-    terminalStatus = 'succeeded';
+    terminalStatus = params.isAborted() ? 'cancelled' : 'succeeded';
     completionPromise = params.completeOnce(async () => {
       params.flushPendingSurfacedOutputs();
       params.ensureAssistantTurn();
@@ -102,6 +102,7 @@ export function createForegroundRunTerminalLifecycleController(params: {
       if (!params.isAborted()) {
         await params.handleSuccessfulCompletion();
       }
+      terminalStatus = params.isAborted() ? 'cancelled' : 'succeeded';
       params.clearForegroundRequestIfCurrent();
     });
   };

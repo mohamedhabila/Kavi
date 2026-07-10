@@ -100,6 +100,35 @@ describe('foregroundRun terminal lifecycle controller', () => {
     expect(clearForegroundRequestIfCurrent).toHaveBeenCalledTimes(1);
   });
 
+  it('does not classify a late done callback as success after cancellation', async () => {
+    const handleSuccessfulCompletion = jest.fn();
+
+    const controller = createForegroundRunTerminalLifecycleController({
+      clearForegroundRequestIfCurrent: jest.fn(),
+      clearStreamingDraft: jest.fn(),
+      commitAssistantBuffers: jest.fn(),
+      completeOnce: async (task) => {
+        await task();
+      },
+      ensureAssistantTurn: jest.fn(),
+      finalizeCaughtAbort: jest.fn(),
+      finalizeCaughtFailure: jest.fn(),
+      flushPendingSurfacedOutputs: jest.fn(),
+      getCurrentAssistantMessageId: () => 'assistant-cancelled',
+      getVisibleAssistantContent: () => 'Partial answer',
+      markCurrentAssistantPendingReview: jest.fn(),
+      handleInterruptedError: jest.fn(),
+      handleSuccessfulCompletion,
+      isAbortErrorLike: () => true,
+      isAborted: () => true,
+      requestPersistenceCheckpoint: jest.fn(),
+    });
+
+    controller.handleDone();
+    await expect(controller.awaitCompletion()).resolves.toBe('cancelled');
+    expect(handleSuccessfulCompletion).not.toHaveBeenCalled();
+  });
+
   it('routes caught failures through the failure finalizer and clears the draft', () => {
     const clearForegroundRequestIfCurrent = jest.fn();
     const clearStreamingDraft = jest.fn();

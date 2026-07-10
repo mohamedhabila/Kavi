@@ -164,28 +164,28 @@ export function planForegroundModelRestartRecovery(
   if (absoluteAnchorIndex <= requestIndex) return blocked(lease, 'message_order_invalid');
   if (
     lease.taskId !== null &&
-    !conversation.agentRuns?.some((agentRun) => agentRun.id === lease.taskId)
+    !conversation.agentRuns?.some(
+      (agentRun) =>
+        agentRun.id === lease.taskId && agentRun.userMessageId === lease.requestMessageId,
+    )
   ) {
     return blocked(lease, 'task_ownership_missing');
   }
 
   const interruptedTools = activeToolCalls(assistantMessages);
-  const completeFinal = [...assistantMessages]
-    .reverse()
-    .find(hasCompleteFinalAssistantMetadata);
-  if (completeFinal && interruptedTools.length === 0) {
+  const projection =
+    [...assistantMessages].reverse().find((message) => !message.subAgentEvent) ??
+    assistantMessages.at(-1)!;
+  if (hasCompleteFinalAssistantMetadata(projection) && interruptedTools.length === 0) {
     return {
       lease,
       status: 'succeeded',
-      projectionMessageId: completeFinal.id,
+      projectionMessageId: projection.id,
       shouldInsertInterruptionText: false,
       interruptedTools: [],
     };
   }
 
-  const projection =
-    [...assistantMessages].reverse().find((message) => !message.subAgentEvent) ??
-    assistantMessages.at(-1)!;
   return {
     lease,
     status: 'failed',
