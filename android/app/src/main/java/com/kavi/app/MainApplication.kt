@@ -10,6 +10,7 @@ import com.facebook.react.ReactPackage
 import com.facebook.react.ReactHost
 import com.facebook.react.common.ReleaseLevel
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint
+import com.kavi.mobile.durability.AndroidDurableExecutionRuntime
 
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ExpoReactHostFactory
@@ -23,12 +24,14 @@ class MainApplication : Application(), ReactApplication {
         PackageList(this).packages.apply {
           add(KaviTermuxPackage())
           add(KaviLocalLlmPackage())
+          add(KaviDurableExecutionPackage())
         }
     )
   }
 
   override fun onCreate() {
     super.onCreate()
+    AndroidDurableExecutionRuntime.reconcileProcessStart(this)
     DefaultNewArchitectureEntryPoint.releaseLevel = try {
       ReleaseLevel.valueOf(BuildConfig.REACT_NATIVE_RELEASE_LEVEL.uppercase())
     } catch (e: IllegalArgumentException) {
