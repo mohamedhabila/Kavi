@@ -56,7 +56,11 @@ function enqueueSourceTurn(
 function setJobState(
   jobId: string,
   status: string,
-  options: { nextAttemptAt?: number | null; leaseExpiresAt?: number | null } = {},
+  options: {
+    nextAttemptAt?: number | null;
+    leaseExpiresAt?: number | null;
+    structuralCompletedAt?: number | null;
+  } = {},
 ): void {
   const isProcessing = status === 'processing';
   const hasStructuralState = ['degraded', 'completed_structural', 'completed_enriched'].includes(
@@ -80,7 +84,11 @@ function setJobState(
     options.nextAttemptAt ?? null,
     options.leaseExpiresAt ?? null,
     isProcessing ? `claim-${jobId}` : null,
-    hasStructuralState ? 100 : null,
+    options.structuralCompletedAt !== undefined
+      ? options.structuralCompletedAt
+      : hasStructuralState
+        ? 100
+        : null,
     isTerminal ? 100 : null,
     status === 'completed_structural'
       ? 'structural_only'
@@ -247,6 +255,34 @@ describe('next-turn memory consistency', () => {
       finalJobStatus: 'completed_enriched',
     });
   });
+
+  it.each(['processing', 'retrying'] as const)(
+    'treats a durable structural checkpoint as readable while enrichment is %s',
+    async (status) => {
+      const job = enqueueSourceTurn(`thread-${status}-checkpoint`, `assistant-${status}`);
+      setJobState(job!.id, status, {
+        structuralCompletedAt: 77,
+        leaseExpiresAt: status === 'processing' ? 1_000 : null,
+        nextAttemptAt: status === 'retrying' ? 1_000 : null,
+      });
+      const wait = jest.fn(async () => undefined);
+
+      await expect(
+        waitForNextTurnMemoryConsistency({
+          memoryConversationId: 'shared-memory',
+          sourceThreadId: `thread-${status}-checkpoint`,
+          sourceEndMessageId: `assistant-${status}`,
+          clock: { now: () => 100, wait },
+        }),
+      ).resolves.toMatchObject({
+        outcome: 'completed',
+        waitedMs: 0,
+        initialJobStatus: status,
+        finalJobStatus: status,
+      });
+      expect(wait).not.toHaveBeenCalled();
+    },
+  );
 
   it('allows a due pending job to settle but never processes it itself', async () => {
     const job = enqueueSourceTurn('thread-pending', 'assistant-pending');

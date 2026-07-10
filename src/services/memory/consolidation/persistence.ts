@@ -30,6 +30,8 @@ export interface ApplyConsolidatorResultOptions {
 
 export interface ApplyConsolidatorResultResult {
   recordedFacts: Array<{ inputIndex: number; factId: string }>;
+  /** Every input fact resolved to its durable row, including idempotent replays. */
+  resolvedFacts: Array<{ inputIndex: number; factId: string }>;
   invalidatedFactIds: string[];
   activeFocusUpdated: boolean;
   openThreadsUpdated: boolean;
@@ -89,6 +91,7 @@ function applyConsolidatorResultInTransaction(
     : null;
 
   const recordedFacts: ApplyConsolidatorResultResult['recordedFacts'] = [];
+  const resolvedFacts: ApplyConsolidatorResultResult['resolvedFacts'] = [];
   const invalidatedFactIds: string[] = [];
   for (const [inputIndex, fact] of result.newFacts.entries()) {
     const subjectType = fact.subject.toLowerCase() === 'user' ? 'self' : 'concept';
@@ -142,6 +145,7 @@ function applyConsolidatorResultInTransaction(
     if (recorded.status === 'created') {
       recordedFacts.push({ inputIndex, factId: recorded.fact.id });
     }
+    resolvedFacts.push({ inputIndex, factId: recorded.fact.id });
     invalidatedFactIds.push(...recorded.superseded.map((superseded) => superseded.id));
     const evidenceIds = fact.admittedWrite
       ? [fact.admittedWrite.evidenceMessageId]
@@ -203,6 +207,7 @@ function applyConsolidatorResultInTransaction(
 
   return {
     recordedFacts,
+    resolvedFacts,
     invalidatedFactIds,
     activeFocusUpdated,
     openThreadsUpdated,

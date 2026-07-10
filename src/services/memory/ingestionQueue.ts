@@ -278,6 +278,8 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
       now: job.sourceAt,
       skipWorkingMemorySync: true,
       canPersist: () => ownsIngestionClaim(job.id, claimToken, input.now ?? Date.now()),
+      commitStructuralCheckpoint: () =>
+        markIngestionJobStructuralComplete(job.id, input.now ?? Date.now(), claimToken),
       commitPersistenceReceipt: ({ providerOutcome, ...writeSet }) => {
         const receiptAt = input.now ?? Date.now();
         commitIngestionPersistenceReceipt({

@@ -17,21 +17,17 @@ import type {
   ConsolidatorResult,
   ConsolidatorTurnInput,
 } from './consolidator';
-import { applyConsolidatorResult } from './consolidator';
 import { extractStructuralMemory } from './deterministicExtractor';
 import { extractProviderEnrichment } from './providerExtractor';
-import { upsertState } from './consolidation/schedulerState';
 import { ensureFactSchema } from './schema';
-import { bridgeGraphGoalEvidence } from './evidenceBridge';
 import { editWorkingBlock } from './workingBlocks';
 import { composeActiveFocusContent } from './focus';
 import { findEntityByName } from './entities';
 import { hasCurrentFactForSubjectPredicate, listCurrentFactsForReplacement } from './facts/queries';
 import type { MemoryFact } from './facts/types';
-import { recordAgentRunEvidenceMemory } from './agentRunEvidenceMemory';
 import { evaluateGroundedReplacement } from './groundedFactReplacement';
 import { canWriteLongTermMemory } from './policy';
-import { runMemoryTransaction } from './access/transaction';
+import { finalizeProviderTurn, persistStructuralTurn } from './turnPersistence';
 
 const logger = createLogger('memory.turnProcessor');
 
@@ -51,6 +47,8 @@ export interface ProcessTurnInput {
   canPersist?: () => boolean;
   /** Queue receipt committed atomically with the source-bound memory transaction. */
   commitPersistenceReceipt?: (receipt: TurnPersistenceReceipt) => void;
+  /** Queue structural checkpoint committed atomically before optional provider work. */
+  commitStructuralCheckpoint?: () => boolean;
 }
 
 function resolveMemoryConversationId(
@@ -109,6 +107,25 @@ function skippedProcessTurnResult(
     providerOutcome,
     bridgedEvidenceFactIds: [],
     agentRunMemoryFactIds: [],
+  };
+}
+
+function completedProcessTurnResult(
+  receipt: TurnPersistenceReceipt,
+  enriched: boolean,
+): ProcessTurnResult {
+  return {
+    processed: true,
+    episodeId: receipt.episodeId,
+    deterministicFactIds: receipt.deterministicFactIds,
+    providerFactIds: receipt.providerFactIds,
+    invalidatedFactIds: receipt.invalidatedFactIds,
+    activeFocusUpdated: receipt.activeFocusUpdated,
+    openThreadsUpdated: receipt.openThreadsUpdated,
+    enriched,
+    providerOutcome: receipt.providerOutcome,
+    bridgedEvidenceFactIds: receipt.bridgedEvidenceFactIds,
+    agentRunMemoryFactIds: receipt.agentRunMemoryFactIds,
   };
 }
 
@@ -291,17 +308,6 @@ function fitBlockLines(lines: string[], maxChars: number): string {
   return joined.length <= maxChars ? joined : joined.slice(0, maxChars);
 }
 
-function isJsonEvidenceCandidate(evidence: string): boolean {
-  const trimmed = evidence.trim();
-  const colonIndex = trimmed.indexOf(':');
-  if (colonIndex <= 0) {
-    return false;
-  }
-
-  const payload = trimmed.slice(colonIndex + 1).trimStart();
-  return payload.startsWith('{') || payload.startsWith('[');
-}
-
 function applyWorkingMemoryFromStructural(
   structural: ReturnType<typeof extractStructuralMemory>,
   input: ProcessTurnInput,
@@ -427,16 +433,6 @@ function mergeProviderIntoStructural(
   };
 }
 
-function factIdsForInputRange(
-  recordedFacts: ReadonlyArray<{ inputIndex: number; factId: string }>,
-  startIndex: number,
-  endIndex: number,
-): string[] {
-  return recordedFacts
-    .filter(({ inputIndex }) => inputIndex >= startIndex && inputIndex < endIndex)
-    .map(({ factId }) => factId);
-}
-
 function resolveCurrentFactsForReplacement(
   fact: ConsolidatorResult['newFacts'][number],
   context: {
@@ -529,34 +525,47 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
     applyWorkingMemoryFromStructural(structural, input, now);
   }
 
-  let enriched = false;
-  let providerOutcome: TurnProviderOutcome = { status: 'not_requested' };
-  let mergedResult: ConsolidatorResult = {
+  const structuralResult: ConsolidatorResult = {
     episodeSummary: structural.episodeSummary || null,
     newFacts: structural.facts,
     activeFocus: structural.activeFocus,
     openThreads: structural.openThreads,
     notable: [],
   };
-
-  if (input.extractor) {
-    const outcome = await extractProviderEnrichment(turnInput, {
-      extractor: input.extractor,
-      now: () => now,
-    });
-    providerOutcome = summarizeProviderOutcome(outcome);
-    if (outcome.status === 'valid' || outcome.status === 'empty_valid') {
-      enriched = outcome.status === 'valid';
-      mergedResult = mergeProviderIntoStructural(structural, outcome.result, {
-        currentUserMessageId: user?.id,
-        currentUserMessage: user?.content ?? '',
-        memoryConversationId,
-        threadId: input.threadId,
-        taskId: input.taskId,
-      });
-    }
+  if (!canWriteLongTermMemory()) {
+    return skippedProcessTurnResult('opt_out');
+  }
+  if (!ownsPersistenceFence(input.canPersist)) {
+    return skippedProcessTurnResult('claim_lost');
   }
 
+  const persistenceContext = {
+    result: structuralResult,
+    finalize: !input.extractor,
+    now,
+    conversationId: memoryConversationId,
+    threadId: input.threadId,
+    taskId: input.taskId,
+    sourceRunId: input.sourceRunId,
+    threadTitle: input.threadTitle,
+    sourceUserMessageId: user?.id,
+    sourceAssistantMessageId: assistant.id,
+    messages: input.messages,
+    graphGoalEvidence: input.graphGoalEvidence,
+    canPersist: input.canPersist,
+    commitStructuralCheckpoint: input.commitStructuralCheckpoint,
+    commitPersistenceReceipt: input.commitPersistenceReceipt,
+  };
+  const structuralReceipt = persistStructuralTurn(persistenceContext);
+  if (!input.extractor) {
+    return completedProcessTurnResult(structuralReceipt, false);
+  }
+
+  const outcome = await extractProviderEnrichment(turnInput, {
+    extractor: input.extractor,
+    now: () => now,
+  });
+  const providerOutcome = summarizeProviderOutcome(outcome);
   if (!canWriteLongTermMemory()) {
     return skippedProcessTurnResult('opt_out', providerOutcome);
   }
@@ -564,103 +573,39 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
     return skippedProcessTurnResult('claim_lost', providerOutcome);
   }
 
-  const persisted = runMemoryTransaction(() => {
-    const persistResult = applyConsolidatorResult(mergedResult, {
-      now,
-      conversationId: memoryConversationId,
+  let providerResult: ConsolidatorResult | null = null;
+  let enriched = false;
+  if (outcome.status === 'valid' || outcome.status === 'empty_valid') {
+    enriched = outcome.status === 'valid';
+    const mergedResult = mergeProviderIntoStructural(structural, outcome.result, {
+      currentUserMessageId: user?.id,
+      currentUserMessage: user?.content ?? '',
+      memoryConversationId,
       threadId: input.threadId,
       taskId: input.taskId,
-      sourceRunId: input.sourceRunId,
-      threadTitle: input.threadTitle,
-      sourceUserMessageId: user?.id,
-      sourceAssistantMessageId: assistant?.id,
-      messages: input.messages,
-      skipWorkingMemoryWrites: true,
-      canPersist: input.canPersist,
     });
-
-    const agentRunMemory = recordAgentRunEvidenceMemory({
-      messages: turnInput.messages ?? [],
-      evidence: input.graphGoalEvidence ?? [],
-      conversationId: memoryConversationId,
-      threadId: input.threadId,
-      taskId: input.taskId,
-      sourceRunId: input.sourceRunId,
-      sourceTurnId: assistant.id,
-      now,
-    });
-    const agentRunMemoryFactIds = agentRunMemory.factIds;
-    const consumedAgentRunEvidence = new Set(agentRunMemory.consumedEvidence);
-
-    let bridgedEvidenceFactIds: string[] = [];
-    if (input.graphGoalEvidence?.length) {
-      const bridgeableEvidence = input.graphGoalEvidence.filter(
-        (evidence) => !consumedAgentRunEvidence.has(evidence) && !isJsonEvidenceCandidate(evidence),
-      );
-      const bridgeResult = bridgeGraphGoalEvidence(bridgeableEvidence, {
-        subjectName: input.taskId ?? input.threadId,
-        subjectType: 'project',
-        sourceRunId: input.sourceRunId,
-        sourceTurnId: assistant.id,
-        originConversationId: memoryConversationId,
-        originThreadId: input.threadId,
-        originTaskId: input.taskId,
-        now,
-      });
-      bridgedEvidenceFactIds = bridgeResult.bridged.map((entry) => entry.fact.id);
-    }
-
-    if (
-      providerOutcome.status === 'not_requested' ||
-      providerOutcome.status === 'valid' ||
-      providerOutcome.status === 'empty_valid'
-    ) {
-      upsertState({
-        threadId: input.threadId,
-        lastConsolidatedMessageId: assistant.id,
-        lastConsolidatedAt: now,
-        turnsSinceLast: 0,
-        now,
-      });
-    }
-
-    const deterministicFactIds = factIdsForInputRange(
-      persistResult.recordedFacts,
-      0,
-      structural.facts.length,
-    );
-    const providerFactIds = factIdsForInputRange(
-      persistResult.recordedFacts,
-      structural.facts.length,
-      mergedResult.newFacts.length,
-    );
-    const receipt: TurnPersistenceReceipt = {
-      episodeId: persistResult.episodeId,
-      deterministicFactIds,
-      providerFactIds,
-      invalidatedFactIds: persistResult.invalidatedFactIds,
-      activeFocusUpdated: persistResult.activeFocusUpdated,
-      openThreadsUpdated: persistResult.openThreadsUpdated,
-      providerOutcome,
-      bridgedEvidenceFactIds,
-      agentRunMemoryFactIds,
+    providerResult = {
+      ...mergedResult,
+      newFacts: mergedResult.newFacts.slice(structural.facts.length),
     };
-    input.commitPersistenceReceipt?.(receipt);
+  }
 
-    return { persistResult, receipt };
+  const receipt = finalizeProviderTurn({
+    structuralReceipt,
+    providerResult,
+    providerOutcome,
+    now,
+    conversationId: memoryConversationId,
+    threadId: input.threadId,
+    taskId: input.taskId,
+    sourceRunId: input.sourceRunId,
+    threadTitle: input.threadTitle,
+    sourceUserMessageId: user?.id,
+    sourceAssistantMessageId: assistant.id,
+    messages: input.messages,
+    graphGoalEvidence: input.graphGoalEvidence,
+    canPersist: input.canPersist,
+    commitPersistenceReceipt: input.commitPersistenceReceipt,
   });
-
-  return {
-    processed: true,
-    episodeId: persisted.receipt.episodeId,
-    deterministicFactIds: persisted.receipt.deterministicFactIds,
-    providerFactIds: persisted.receipt.providerFactIds,
-    invalidatedFactIds: persisted.receipt.invalidatedFactIds,
-    activeFocusUpdated: persisted.receipt.activeFocusUpdated,
-    openThreadsUpdated: persisted.receipt.openThreadsUpdated,
-    enriched,
-    providerOutcome: persisted.receipt.providerOutcome,
-    bridgedEvidenceFactIds: persisted.receipt.bridgedEvidenceFactIds,
-    agentRunMemoryFactIds: persisted.receipt.agentRunMemoryFactIds,
-  };
+  return completedProcessTurnResult(receipt, enriched);
 }

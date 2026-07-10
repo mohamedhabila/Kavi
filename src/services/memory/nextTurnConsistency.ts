@@ -50,6 +50,9 @@ function classifyJob(job: IngestionJob, now: number): JobDisposition {
   if (job.status === 'degraded' || job.status === 'failed') {
     return 'degraded';
   }
+  if (job.structuralCompletedAt !== null) {
+    return 'completed';
+  }
   if (job.status === 'processing') {
     return job.leaseExpiresAt !== null && job.leaseExpiresAt <= now ? 'degraded' : 'wait';
   }

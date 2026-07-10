@@ -75,6 +75,7 @@ describe('turnProcessor memory namespace contract', () => {
     });
     mockApplyConsolidatorResult.mockReturnValue({
       recordedFacts: [],
+      resolvedFacts: [],
       invalidatedFactIds: [],
       activeFocusUpdated: false,
       openThreadsUpdated: false,

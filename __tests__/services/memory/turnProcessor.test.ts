@@ -210,6 +210,7 @@ describe('processIngestionTurn', () => {
     });
     mockApplyConsolidatorResult.mockReturnValue({
       recordedFacts: [],
+      resolvedFacts: [],
       invalidatedFactIds: [],
       activeFocusUpdated: false,
       openThreadsUpdated: false,
@@ -306,6 +307,7 @@ describe('processIngestionTurn', () => {
     });
     mockApplyConsolidatorResult.mockReturnValue({
       recordedFacts: [{ inputIndex: 0, factId: 'f1' }],
+      resolvedFacts: [{ inputIndex: 0, factId: 'f1' }],
       invalidatedFactIds: [],
       activeFocusUpdated: true,
       openThreadsUpdated: true,
@@ -344,75 +346,6 @@ describe('processIngestionTurn', () => {
       expect.any(Object),
       expect.objectContaining({ sourceRunId: 'run-persisted' }),
     );
-  });
-
-  it('enriches with provider when extractor is provided', async () => {
-    mockExtractStructuralMemory.mockReturnValue({
-      episodeSummary: 'Structural summary',
-      facts: [{ subject: 'user', predicate: 'name', value: 'Mo' }],
-      activeFocus: null,
-      openThreads: [],
-    });
-    mockExtractProviderEnrichment.mockResolvedValue({
-      status: 'valid',
-      result: {
-        episodeSummary: 'Provider summary',
-        newFacts: [{ subject: 'user', predicate: 'location', value: 'NYC' }],
-        activeFocus: 'Provider focus',
-        openThreads: ['Thread from provider'],
-        notable: [],
-      },
-    });
-    mockApplyConsolidatorResult.mockReturnValue({
-      recordedFacts: [
-        { inputIndex: 0, factId: 'f1' },
-        { inputIndex: 1, factId: 'f2' },
-      ],
-      invalidatedFactIds: [],
-      activeFocusUpdated: true,
-      openThreadsUpdated: true,
-      episodeId: 'ep1',
-    });
-
-    const extractor = jest.fn();
-    const commitPersistenceReceipt = jest.fn();
-    const result = await processIngestionTurn({
-      threadId: 'conv-1',
-      messages: [
-        makeMsg({ role: 'user', content: 'Hey' }),
-        makeMsg({
-          role: 'assistant',
-          content: 'Hi',
-          assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
-        }),
-      ],
-      extractor,
-      commitPersistenceReceipt,
-    });
-
-    expect(result.enriched).toBe(true);
-    expect(result.deterministicFactIds).toEqual(['f1']);
-    expect(result.providerFactIds).toEqual(['f2']);
-    expect(commitPersistenceReceipt).toHaveBeenCalledWith({
-      episodeId: 'ep1',
-      deterministicFactIds: ['f1'],
-      providerFactIds: ['f2'],
-      invalidatedFactIds: [],
-      activeFocusUpdated: true,
-      openThreadsUpdated: true,
-      providerOutcome: { status: 'valid' },
-      bridgedEvidenceFactIds: [],
-      agentRunMemoryFactIds: [],
-    });
-    expect(mockExtractProviderEnrichment).toHaveBeenCalledWith(
-      expect.any(Object),
-      expect.objectContaining({ extractor, now: expect.any(Function) }),
-    );
-    // Merged result should contain both structural and provider facts
-    const persisted = mockApplyConsolidatorResult.mock.calls[0][0];
-    expect(persisted.newFacts).toHaveLength(2);
-    expect(persisted.episodeSummary).toBe('Provider summary');
-    expect(persisted.activeFocus).toBe('Provider focus');
   });
 
   it('persists structural memory but leaves the cursor retryable on provider failure', async () => {
@@ -489,8 +422,8 @@ describe('processIngestionTurn', () => {
       extractor: jest.fn(),
     });
 
-    const persisted = mockApplyConsolidatorResult.mock.calls[0][0];
-    expect(persisted.newFacts).toHaveLength(2);
+    const persisted = mockApplyConsolidatorResult.mock.calls[1][0];
+    expect(persisted.newFacts).toEqual([{ subject: 'user', predicate: 'age', value: '30' }]);
   });
 
   it('preserves structural subject/predicate facts over provider variants in the same turn', async () => {
@@ -591,7 +524,7 @@ describe('processIngestionTurn', () => {
       extractor: jest.fn(),
     });
 
-    const persisted = mockApplyConsolidatorResult.mock.calls[0][0];
+    const persisted = mockApplyConsolidatorResult.mock.calls[1][0];
     expect(persisted.newFacts).toEqual([
       { subject: 'direct-longmem-user', predicate: 'last_sms_message', value: 'drafted' },
     ]);

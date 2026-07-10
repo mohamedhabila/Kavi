@@ -62,7 +62,7 @@ function expectNoFencedWrites(threadId: string): void {
   expect(listFacts({ originConversationId: threadId })).toEqual([]);
 }
 
-it('does not persist when the user opts out during provider enrichment', async () => {
+it('keeps the pre-provider structural checkpoint but rejects enrichment after opt-out', async () => {
   const result = await processIngestionTurn({
     threadId: 'conv-opt-out-fence',
     messages,
@@ -73,7 +73,8 @@ it('does not persist when the user opts out during provider enrichment', async (
   });
 
   expect(result).toEqual(expect.objectContaining({ processed: false, skipped: 'opt_out' }));
-  expectNoFencedWrites('conv-opt-out-fence');
+  expect(listEpisodes({ threadId: 'conv-opt-out-fence' })).toHaveLength(1);
+  expect(listFacts({ originConversationId: 'conv-opt-out-fence' })).toEqual([]);
 });
 
 it('does not persist when the durable queue claim is no longer owned', async () => {
@@ -86,4 +87,21 @@ it('does not persist when the durable queue claim is no longer owned', async () 
 
   expect(result).toEqual(expect.objectContaining({ processed: false, skipped: 'claim_lost' }));
   expectNoFencedWrites('conv-claim-fence');
+});
+
+it('rolls back every structural lane when the atomic checkpoint is rejected', async () => {
+  const extractor = jest.fn(async () => validPayload());
+
+  await expect(
+    processIngestionTurn({
+      threadId: 'conv-checkpoint-fence',
+      messages,
+      extractor,
+      canPersist: () => true,
+      commitStructuralCheckpoint: () => false,
+    }),
+  ).rejects.toThrow('Memory structural checkpoint rejected');
+
+  expect(extractor).not.toHaveBeenCalled();
+  expectNoFencedWrites('conv-checkpoint-fence');
 });
