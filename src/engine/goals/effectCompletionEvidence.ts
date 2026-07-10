@@ -226,6 +226,20 @@ export function effectReceiptEvidenceTargetsCriterion(
   );
 }
 
+export function effectCompletionCriteriaEqual(
+  left: EffectCompletionCriterion,
+  right: EffectCompletionCriterion,
+): boolean {
+  return (
+    left.effectKind === right.effectKind &&
+    left.requestDigest === right.requestDigest &&
+    left.resource.kind === right.resource.kind &&
+    left.resource.id === right.resource.id &&
+    left.resource.digest === right.resource.digest &&
+    left.verificationState === right.verificationState
+  );
+}
+
 export function effectReceiptEvidenceSatisfiesCriterion(
   evidence: EffectReceiptEvidence,
   criterion: EffectCompletionCriterion,

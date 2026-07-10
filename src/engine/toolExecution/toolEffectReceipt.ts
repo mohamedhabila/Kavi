@@ -363,7 +363,7 @@ function resolveReturnedOutcome(params: BuildToolEffectReceiptParams): ResolvedE
   };
 }
 
-async function sha256(value: string): Promise<`sha256:${string}`> {
+export async function digestToolEffectText(value: string): Promise<`sha256:${string}`> {
   const digest = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, value);
   return `sha256:${digest.toLowerCase()}`;
 }
@@ -377,8 +377,8 @@ export async function buildToolEffectReceipt(
   }
 
   const [requestDigest, resultDigest] = await Promise.all([
-    sha256(params.argumentsText),
-    sha256(params.resultText),
+    digestToolEffectText(params.argumentsText),
+    digestToolEffectText(params.resultText),
   ]);
   const codeOwnedContract = getCodeOwnedToolEffectContract(params.toolName);
   const codeOwnedEffectKind = codeOwnedContract?.effectKind ?? 'unknown';
@@ -404,7 +404,7 @@ export async function buildToolEffectReceipt(
             effectState: 'unknown',
             verificationState: 'unverified',
           };
-  const identityDigest = await sha256(
+  const identityDigest = await digestToolEffectText(
     [
       'tool-effect-receipt-v1',
       params.runId ?? '',

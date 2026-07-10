@@ -14,6 +14,10 @@ export interface CodeOwnedToolEffectContract {
   readonly effectKind: ToolEffectKind;
   readonly tracksExecution?: true;
   readonly result?: ToolEffectResultContract;
+  readonly completion?: {
+    readonly resource?: ToolEffectIdentitySelector;
+    readonly sha256ArgumentPath?: readonly string[];
+  };
 }
 
 function outcome(
@@ -87,12 +91,29 @@ function effectful(
     resource?: ToolEffectResourceSelector;
     operationHandle?: ToolEffectIdentitySelector;
     tracksExecution?: boolean;
+    completion?: CodeOwnedToolEffectContract['completion'];
   } = {},
 ): CodeOwnedToolEffectContract {
   return Object.freeze({
     effectMode: 'effectful',
     effectKind,
     ...(options.tracksExecution ? { tracksExecution: true as const } : {}),
+    ...(options.completion
+      ? {
+          completion: Object.freeze({
+            ...(options.completion.resource
+              ? { resource: options.completion.resource }
+              : {}),
+            ...(options.completion.sha256ArgumentPath
+              ? {
+                  sha256ArgumentPath: Object.freeze([
+                    ...options.completion.sha256ArgumentPath,
+                  ]),
+                }
+              : {}),
+          }),
+        }
+      : {}),
     result: Object.freeze({
       statusPath: Object.freeze([...(options.statusPath ?? ['status'])]),
       outcomes: Object.freeze({ ...outcomes }),
@@ -163,6 +184,10 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
       { written: APPLIED },
       {
         resource: resourceSelector('workspace_file', 'result', ['path'], ['sha256']),
+        completion: {
+          resource: selector('workspace_file', 'arguments', ['path']),
+          sha256ArgumentPath: ['content'],
+        },
       },
     ),
     file_edit: effectful(
@@ -170,6 +195,9 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
       { edited: APPLIED },
       {
         resource: resourceSelector('workspace_file', 'result', ['path'], ['sha256']),
+        completion: {
+          resource: selector('workspace_file', 'arguments', ['path']),
+        },
       },
     ),
     // Image persistence checks file existence and exact byte count before
