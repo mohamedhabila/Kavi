@@ -1,6 +1,11 @@
 import type { ToolDefinition } from '../../types/tool';
 import { normalizeToolName } from '../tools/toolNameNormalization';
 import { isCountOnlySuccessCriterion, isSuccessCriterionMet } from './completionEvidence';
+import {
+  effectReceiptEvidenceTargetsCriterion,
+  parseEffectCompletionCriterion,
+  parseToolEffectReceiptEvidence,
+} from './effectCompletionEvidence';
 import type { AgentGoal } from './types';
 
 export type RoutedGoalEvidence = {
@@ -48,6 +53,19 @@ function goalCriterionMatchesEvidence(goal: AgentGoal, evidence: string): boolea
   );
 }
 
+function goalEffectCriterionTargetsEvidence(goal: AgentGoal, evidence: string): boolean {
+  const receipt = parseToolEffectReceiptEvidence(evidence);
+  if (!receipt) {
+    return false;
+  }
+  return (goal.successCriteria ?? []).some((criterion) => {
+    const effectCriterion = parseEffectCompletionCriterion(criterion);
+    return effectCriterion
+      ? effectReceiptEvidenceTargetsCriterion(receipt, effectCriterion)
+      : false;
+  });
+}
+
 function goalMatchesToolContract(goal: AgentGoal, tool: Pick<ToolDefinition, 'contract'>): boolean {
   const requiredCapabilities = normalizeTags(goal.requiredCapabilities);
   const requiredResourceKinds = normalizeTags(goal.requiredResourceKinds);
@@ -79,6 +97,9 @@ function routeEvidenceToGoal(params: {
   evidence: string;
 }): boolean {
   if (goalCriterionMatchesEvidence(params.goal, params.evidence)) {
+    return true;
+  }
+  if (goalEffectCriterionTargetsEvidence(params.goal, params.evidence)) {
     return true;
   }
   if (params.toolDefinition && goalMatchesToolContract(params.goal, params.toolDefinition)) {

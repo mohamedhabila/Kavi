@@ -18,6 +18,9 @@ describe('completionEvidence', () => {
       'evidence.file_hash:<path>:<algo>[:<hex>]',
     );
     expect(formatSuccessCriteriaFormsDescription()).toContain('evidence.exit_code:<n>');
+    expect(formatSuccessCriteriaFormsDescription()).toContain(
+      'evidence.effect:<closed-json-contract>',
+    );
   });
 
   it('recognizes only formal structural success criterion forms', () => {

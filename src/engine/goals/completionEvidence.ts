@@ -4,6 +4,11 @@ import {
   readJsonFieldAtPath,
   structuralValuesMatch,
 } from './structuralCriterionValues';
+import {
+  effectReceiptEvidenceSatisfiesCriterion,
+  parseEffectCompletionCriterion,
+  parseToolEffectReceiptEvidence,
+} from './effectCompletionEvidence';
 
 export interface GoalEvidenceGap {
   goalId: string;
@@ -26,6 +31,7 @@ export const SUCCESS_CRITERION_FORMS = [
   'evidence.json_field:<path>:<value>',
   'evidence.file_hash:<path>:<algo>[:<hex>]',
   'evidence.exit_code:<n>',
+  'evidence.effect:<closed-json-contract>',
 ] as const;
 
 const EVIDENCE_MIN_PATTERN = /^evidence\.min:(\d+)$/;
@@ -61,7 +67,8 @@ export function isRecognizedSuccessCriterionForm(criterion: string): boolean {
     EVIDENCE_ARTIFACT_PATTERN.test(criterion) ||
     EVIDENCE_JSON_FIELD_PATTERN.test(criterion) ||
     EVIDENCE_FILE_HASH_PATTERN.test(criterion) ||
-    EVIDENCE_EXIT_CODE_PATTERN.test(criterion)
+    EVIDENCE_EXIT_CODE_PATTERN.test(criterion) ||
+    parseEffectCompletionCriterion(criterion) !== null
   );
 }
 
@@ -195,6 +202,16 @@ function meetsEvidenceExitCodeCriterion(goal: AgentGoal, expectedExitCode: numbe
 }
 
 export function isSuccessCriterionMet(goal: AgentGoal, criterion: string): boolean {
+  const effectCriterion = parseEffectCompletionCriterion(criterion);
+  if (effectCriterion) {
+    return goal.evidence.some((entry) => {
+      const receipt = parseToolEffectReceiptEvidence(entry);
+      return receipt
+        ? effectReceiptEvidenceSatisfiesCriterion(receipt, effectCriterion)
+        : false;
+    });
+  }
+
   const minMatch = criterion.match(EVIDENCE_MIN_PATTERN);
   if (minMatch) {
     return meetsEvidenceCountCriterion(goal, Number.parseInt(minMatch[1], 10));
