@@ -1,6 +1,14 @@
 import type { Message } from '../../src/types/message';
 import type { SubAgentSnapshot } from '../../src/types/subAgent';
-import { cloneSubAgentSnapshot, collectSubAgentSnapshotsFromMessages, getSubAgentsForConversation, getSubAgentsForAgentRun, resolveOwningConversationId, resolveAgentRunIdForSubAgent, resolveDisplayedSubAgentSnapshot } from '../../src/services/agents/lifecycle/stateMachine';
+import {
+  cloneSubAgentSnapshot,
+  collectSubAgentSnapshotsFromMessages,
+  getSubAgentsForConversation,
+  getSubAgentsForAgentRun,
+  resolveOwningConversationId,
+  resolveAgentRunIdForSubAgent,
+  resolveDisplayedSubAgentSnapshot,
+} from '../../src/services/agents/lifecycle/stateMachine';
 import { getAgentRunMessageSlice } from '../../src/services/agents/lifecycle/agentRunStateMachine';
 function makeSnapshot(overrides: Partial<SubAgentSnapshot> = {}): SubAgentSnapshot {
   return {
@@ -228,6 +236,30 @@ describe('getSubAgentsForAgentRun', () => {
     ).toEqual(['sub-root', 'sub-child']);
   });
 
+  it('never normalizes malformed ownership identities into another worker scope', () => {
+    const workers = [
+      makeSnapshot({ sessionId: 'sub-root', parentConversationId: 'conv-1', status: 'running' }),
+      makeSnapshot({
+        sessionId: ' sub-root',
+        parentConversationId: 'conv-private',
+        status: 'running',
+      }),
+      makeSnapshot({
+        sessionId: 'sub-invalid-parent',
+        parentConversationId: ' conv-private',
+        status: 'running',
+      }),
+    ];
+
+    expect(resolveOwningConversationId('sub-root', workers)).toBe('conv-1');
+    expect(resolveOwningConversationId(' sub-root', workers)).toBeUndefined();
+    expect(resolveOwningConversationId('sub-invalid-parent', workers)).toBe('sub-invalid-parent');
+    expect(getSubAgentsForConversation(' conv-1', workers)).toEqual([]);
+    expect(
+      getSubAgentsForConversation('conv-1', workers).map((worker) => worker.sessionId),
+    ).toEqual(['sub-root']);
+  });
+
   it('reuses the shared fallback agent-run resolver for orphan workers', () => {
     const runId = resolveAgentRunIdForSubAgent(
       {
@@ -394,5 +426,36 @@ describe('collectSubAgentSnapshotsFromMessages', () => {
         parentSessionId: 'sub-root',
       }),
     );
+  });
+
+  it('drops malformed session identities instead of merging their snapshots', () => {
+    const messages: Message[] = [
+      {
+        id: 'msg-exact',
+        role: 'assistant',
+        content: 'Exact worker.',
+        timestamp: 1,
+        subAgentEvent: {
+          type: 'sub-agent',
+          event: 'started',
+          snapshot: makeSnapshot({ sessionId: 'sub-child', status: 'running', updatedAt: 1 }),
+        },
+      },
+      {
+        id: 'msg-malformed',
+        role: 'assistant',
+        content: 'Malformed worker.',
+        timestamp: 2,
+        subAgentEvent: {
+          type: 'sub-agent',
+          event: 'completed',
+          snapshot: makeSnapshot({ sessionId: ' sub-child', status: 'completed', updatedAt: 2 }),
+        },
+      },
+    ];
+
+    expect(collectSubAgentSnapshotsFromMessages(messages)).toEqual([
+      expect.objectContaining({ sessionId: 'sub-child', status: 'running' }),
+    ]);
   });
 });

@@ -1,6 +1,7 @@
 import type { Conversation } from '../../../types/conversation';
 import type { Message } from '../../../types/message';
 import type { SubAgentSnapshot, SubAgentStatus } from '../../../types/subAgent';
+import { isExactDurableScopeId } from '../../../utils/durableScopeIdentity';
 
 export function isTerminalSubAgentStatus(status: SubAgentStatus): boolean {
   return status !== 'running';
@@ -16,22 +17,20 @@ function createOwningConversationResolver(
   const bySessionId = new Map(
     subAgents
       .map((agent) => {
-        const sessionId = agent.sessionId.trim();
-        return sessionId ? [sessionId, { ...agent, sessionId }] : null;
+        return isExactDurableScopeId(agent.sessionId) ? [agent.sessionId, agent] : null;
       })
       .filter((entry): entry is [string, SubAgentConversationLink] => entry !== null),
   );
   const resolvedIds = new Map<string, string>();
 
   return (candidateId: string | undefined): string | undefined => {
-    const trimmedCandidateId = candidateId?.trim();
-    if (!trimmedCandidateId) {
+    if (!isExactDurableScopeId(candidateId)) {
       return undefined;
     }
 
     const visitedInChain: string[] = [];
     const visitedIds = new Set<string>();
-    let currentId = trimmedCandidateId;
+    let currentId = candidateId;
 
     while (true) {
       const cachedId = resolvedIds.get(currentId);
@@ -41,7 +40,7 @@ function createOwningConversationResolver(
       }
 
       if (visitedIds.has(currentId)) {
-        currentId = trimmedCandidateId;
+        currentId = candidateId;
         break;
       }
 
@@ -49,8 +48,8 @@ function createOwningConversationResolver(
       visitedInChain.push(currentId);
 
       const currentAgent = bySessionId.get(currentId);
-      const nextId = currentAgent?.parentConversationId?.trim();
-      if (!currentAgent || !nextId) {
+      const nextId = currentAgent?.parentConversationId;
+      if (!currentAgent || !isExactDurableScopeId(nextId)) {
         break;
       }
 
@@ -103,15 +102,12 @@ export function getSubAgentsForConversation(
   conversationId: string,
   subAgents: ReadonlyArray<SubAgentSnapshot>,
 ): SubAgentSnapshot[] {
-  const trimmedConversationId = conversationId.trim();
-  if (!trimmedConversationId) {
+  if (!isExactDurableScopeId(conversationId)) {
     return [];
   }
 
   const resolveOwningConversation = createOwningConversationResolver(subAgents);
-  return subAgents.filter(
-    (agent) => resolveOwningConversation(agent.sessionId) === trimmedConversationId,
-  );
+  return subAgents.filter((agent) => resolveOwningConversation(agent.sessionId) === conversationId);
 }
 
 export function collectSubAgentSnapshotsFromMessages(
@@ -121,10 +117,10 @@ export function collectSubAgentSnapshotsFromMessages(
 
   for (const message of messages) {
     const snapshot = message.subAgentEvent?.snapshot;
-    const sessionId = snapshot?.sessionId?.trim();
-    if (!snapshot || !sessionId) {
+    if (!snapshot || !isExactDurableScopeId(snapshot.sessionId)) {
       continue;
     }
+    const sessionId = snapshot.sessionId;
 
     const existingSnapshot = snapshotsBySessionId.get(sessionId);
     snapshotsBySessionId.set(
