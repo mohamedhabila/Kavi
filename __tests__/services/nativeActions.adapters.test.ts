@@ -371,7 +371,7 @@ describe('native action adapters and helpers', () => {
       status: 'granted',
     });
     expect(await manageLimitedContactAccess()).toEqual(
-      expect.objectContaining({ status: 'completed', code: 'contacts_access_updated' }),
+      expect.objectContaining({ status: 'updated', code: 'contacts_access_updated' }),
     );
 
     mockedPlatform.OS = 'android';
@@ -403,9 +403,9 @@ describe('native action adapters and helpers', () => {
     expect(result).toEqual(expect.objectContaining({ code: 'contacts_share_failed' }));
   });
 
-  it('covers actionService legacy and unknown-action branches', async () => {
+  it('rejects removed composite and unknown native action aliases', async () => {
     expect(await executeNativeAction('share', {})).toEqual(
-      expect.objectContaining({ code: 'invalid_arguments' }),
+      expect.objectContaining({ code: 'unknown_native_action' }),
     );
 
     expect(await executeNativeAction('contacts_manage_access', {})).toEqual(

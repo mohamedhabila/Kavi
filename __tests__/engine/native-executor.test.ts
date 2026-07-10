@@ -115,7 +115,6 @@ import {
 import { executeNativeTool } from '../../src/engine/tools/native/executor';
 import { executeLocationCurrent } from '../../src/engine/tools/native/location/executor';
 import {
-  executeShare,
   executeShareContact,
   executeShareFile,
   executeShareText,
@@ -199,21 +198,21 @@ beforeEach(() => {
 describe('executeClipboardRead', () => {
   it('returns clipboard text', async () => {
     mockGetStringAsync.mockResolvedValue('Hello from clipboard');
-    const result = await executeClipboardRead();
-    expect(result).toBe('Hello from clipboard');
+    const result = JSON.parse(await executeClipboardRead());
+    expect(result).toEqual({ status: 'read', text: 'Hello from clipboard', empty: false });
   });
 
-  it('returns empty message when clipboard is empty', async () => {
+  it('returns a structured empty clipboard result', async () => {
     mockGetStringAsync.mockResolvedValue('');
-    const result = await executeClipboardRead();
-    expect(result).toBe('(clipboard is empty)');
+    const result = JSON.parse(await executeClipboardRead());
+    expect(result).toEqual({ status: 'read', text: '', empty: true });
   });
 });
 
 describe('executeClipboardWrite', () => {
   it('copies text and returns confirmation', async () => {
-    const result = await executeClipboardWrite({ text: 'Copy me' });
-    expect(result).toBe('Copied 7 characters to clipboard');
+    const result = JSON.parse(await executeClipboardWrite({ text: 'Copy me' }));
+    expect(result).toEqual({ status: 'written', characterCount: 7 });
     expect(mockSetStringAsync).toHaveBeenCalledWith('Copy me');
   });
 });
@@ -348,7 +347,7 @@ describe('typed native actions', () => {
     });
 
     const parsed = JSON.parse(await executeContactsManageAccess());
-    expect(parsed.status).toBe('completed');
+    expect(parsed.status).toBe('updated');
     expect(parsed.code).toBe('contacts_access_updated');
     expect(mockContactsPresentAccessPickerAsync).toHaveBeenCalled();
   });
@@ -400,7 +399,7 @@ describe('typed native actions', () => {
     const parsed = JSON.parse(
       await executeContactsShare({ id: 'contact-1', message: 'Reach out' }),
     );
-    expect(parsed.status).toBe('shared');
+    expect(parsed.status).toBe('handed_off');
     expect(mockContactsShareContactAsync).toHaveBeenCalledWith('contact-1', 'Reach out');
   });
 
@@ -414,10 +413,10 @@ describe('typed native actions', () => {
     );
     const contactResult = JSON.parse(await executeShareContact({ id: 'contact-1' }));
 
-    expect(textResult.status).toBe('shared');
-    expect(urlResult.status).toBe('shared');
-    expect(fileResult.status).toBe('shared');
-    expect(contactResult.status).toBe('shared');
+    expect(textResult.status).toBe('handed_off');
+    expect(urlResult.status).toBe('handed_off');
+    expect(fileResult.status).toBe('handed_off');
+    expect(contactResult.status).toBe('handed_off');
     expect(mockShare).toHaveBeenNthCalledWith(1, expect.objectContaining({ message: 'Hello' }));
     expect(mockShare).toHaveBeenNthCalledWith(
       2,
@@ -427,16 +426,6 @@ describe('typed native actions', () => {
       'file:///tmp/report.pdf',
       expect.objectContaining({ mimeType: 'application/pdf' }),
     );
-  });
-
-  it('keeps legacy share compatible for text and URLs', async () => {
-    const textParsed = JSON.parse(await executeShare({ text: 'Legacy text' }));
-    const urlParsed = JSON.parse(
-      await executeShare({ text: 'Legacy URL', url: 'https://example.com' }),
-    );
-
-    expect(textParsed.status).toBe('shared');
-    expect(urlParsed.status).toBe('shared');
   });
 });
 
@@ -493,7 +482,12 @@ describe('executeNativeTool', () => {
     expect(smsResult.status).toBe('sent');
     expect(contactResult.status).toBe('picked');
     expect(accessResult.status).toBe('unavailable');
-    expect(shareResult.status).toBe('shared');
+    expect(shareResult.status).toBe('handed_off');
+  });
+
+  it('rejects composite share calls without an explicit kind', async () => {
+    const result = await executeNativeTool('share', '{}');
+    expect(result).toContain('share requires kind');
   });
 
   it('routes calendar update through the dispatcher', async () => {

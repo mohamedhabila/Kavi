@@ -1,9 +1,5 @@
 import { executeStructuredNativeAction } from '../structuredAction';
 
-export async function executeShare(args: { text?: string; url?: string }): Promise<string> {
-  return executeStructuredNativeAction('share', args as Record<string, unknown>);
-}
-
 export async function executeShareText(args: { text: string; title?: string }): Promise<string> {
   return executeStructuredNativeAction('share_text', args as Record<string, unknown>);
 }

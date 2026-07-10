@@ -249,7 +249,7 @@ jest.mock('../../src/engine/tools/native/executor', () => ({
     if (name === 'notification_send') {
       return Promise.resolve(
         JSON.stringify({
-          status: 'notification_displayed',
+          status: 'notification_accepted',
           id: 'notification-id',
           title: 'Test',
           body: 'Hello',

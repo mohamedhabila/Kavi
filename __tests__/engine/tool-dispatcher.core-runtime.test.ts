@@ -124,7 +124,7 @@ describe('executeTool — core tools routing', () => {
   it('routes notify', async () => {
     const result = await executeTool('notification_send', '{"title":"hi","body":"there"}', CONV_ID);
     const parsed = JSON.parse(result);
-    expect(parsed.status).toBe('notification_displayed');
+    expect(parsed.status).toBe('notification_accepted');
     expect(executeNativeTool).toHaveBeenCalledWith(
       'notification_send',
       '{"title":"hi","body":"there"}',

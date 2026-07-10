@@ -44,10 +44,10 @@ async function shareWithNativeSheet(
   }
 
   return makeActionResult(
-    'shared',
+    'handed_off',
     summary,
     { activityType: result.activityType || null },
-    'share_completed',
+    'share_handed_off',
   );
 }
 
@@ -108,14 +108,14 @@ export async function shareFile(
     });
 
     return makeActionResult(
-      'shared',
+      'handed_off',
       'Opened the native share sheet for a file.',
       {
         fileUri: resolvedFile.fileUri,
         contentUri: resolvedFile.contentUri || null,
         mimeType: mimeType || null,
       },
-      'share_file_completed',
+      'share_file_handed_off',
     );
   } catch (error) {
     return errorToNativeActionResult(error, 'share_file_failed', 'File sharing failed');

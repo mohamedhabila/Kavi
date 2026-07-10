@@ -44,15 +44,15 @@ export const CAMERA_CLIP_TOOL: ToolDefinition = {
   },
   contract: nativeContract({
     category: 'media',
-    capabilities: ['write', 'verify'],
+    capabilities: ['write'],
     resourceKinds: ['device'],
     sideEffects: ['local_artifact'],
     riskLevel: 'critical',
     permissionPrerequisites: ['camera.record_video'],
     recoverableErrors: [...RECOVERABLE_PLATFORM_ERRORS],
     riskHints: ['requires_approval'],
-    providesEvidence: ['local_artifact', 'verification'],
-    workflowStages: ['persist_artifact', 'verify_evidence'],
+    providesEvidence: ['local_artifact'],
+    workflowStages: ['persist_artifact'],
   }),
 };
 
@@ -68,14 +68,14 @@ export const SCREEN_RECORD_TOOL: ToolDefinition = {
   },
   contract: nativeContract({
     category: 'media',
-    capabilities: ['write', 'verify'],
+    capabilities: ['write'],
     resourceKinds: ['device'],
     sideEffects: ['local_artifact'],
     riskLevel: 'critical',
     permissionPrerequisites: ['screen.capture'],
     recoverableErrors: [...RECOVERABLE_PLATFORM_ERRORS],
     riskHints: ['requires_approval'],
-    providesEvidence: ['local_artifact', 'verification'],
-    workflowStages: ['persist_artifact', 'verify_evidence'],
+    providesEvidence: ['local_artifact'],
+    workflowStages: ['persist_artifact'],
   }),
 };

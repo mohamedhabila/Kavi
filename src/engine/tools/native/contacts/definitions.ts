@@ -32,15 +32,15 @@ export const CONTACTS_MANAGE_ACCESS_TOOL: ToolDefinition = {
   input_schema: { type: 'object', properties: {}, required: [] },
   contract: nativeContract({
     category: 'contacts',
-    capabilities: ['read'],
+    capabilities: ['write'],
     resourceKinds: ['device'],
-    sideEffects: ['none'],
-    riskLevel: 'medium',
+    sideEffects: ['local_artifact'],
+    riskLevel: 'high',
     permissionPrerequisites: ['contacts.limited_access.manage'],
     recoverableErrors: [...RECOVERABLE_PLATFORM_ERRORS],
-    riskHints: ['read_only', 'idempotent'],
-    providesEvidence: ['verification'],
-    workflowStages: ['inspect_resource', 'verify_evidence'],
+    riskHints: ['requires_approval'],
+    providesEvidence: ['local_artifact'],
+    workflowStages: ['persist_artifact'],
   }),
 };
 
@@ -82,15 +82,15 @@ export const CONTACTS_EDIT_TOOL: ToolDefinition = {
   },
   contract: nativeContract({
     category: 'contacts',
-    capabilities: ['write', 'verify'],
+    capabilities: ['write'],
     resourceKinds: ['device'],
-    sideEffects: ['local_artifact'],
+    sideEffects: ['external_run'],
     riskLevel: 'high',
     permissionPrerequisites: ['contacts.write'],
     recoverableErrors: [...RECOVERABLE_PLATFORM_ERRORS, 'not_found'],
     riskHints: ['requires_approval'],
-    providesEvidence: ['local_artifact', 'verification'],
-    workflowStages: ['persist_artifact', 'verify_evidence'],
+    providesEvidence: ['external_run'],
+    workflowStages: ['start_external_execution'],
   }),
 };
 
@@ -103,15 +103,15 @@ export const CONTACTS_CREATE_TOOL: ToolDefinition = {
   },
   contract: nativeContract({
     category: 'contacts',
-    capabilities: ['write', 'verify'],
+    capabilities: ['write'],
     resourceKinds: ['device'],
-    sideEffects: ['local_artifact'],
+    sideEffects: ['external_run'],
     riskLevel: 'high',
     permissionPrerequisites: ['contacts.write'],
     recoverableErrors: [...RECOVERABLE_PLATFORM_ERRORS],
     riskHints: ['requires_approval'],
-    providesEvidence: ['local_artifact', 'verification'],
-    workflowStages: ['persist_artifact', 'verify_evidence'],
+    providesEvidence: ['external_run'],
+    workflowStages: ['start_external_execution'],
   }),
 };
 
@@ -138,15 +138,15 @@ export const CONTACTS_FORM_TOOL: ToolDefinition = {
   },
   contract: nativeContract({
     category: 'contacts',
-    capabilities: ['write', 'verify'],
+    capabilities: ['write'],
     resourceKinds: ['device'],
-    sideEffects: ['local_artifact'],
+    sideEffects: ['external_run'],
     riskLevel: 'high',
     permissionPrerequisites: ['contacts.read', 'contacts.write'],
     recoverableErrors: [...RECOVERABLE_PLATFORM_ERRORS, 'not_found'],
     riskHints: ['requires_approval'],
-    providesEvidence: ['local_artifact', 'verification'],
-    workflowStages: ['persist_artifact', 'verify_evidence'],
+    providesEvidence: ['external_run'],
+    workflowStages: ['start_external_execution'],
   }),
 };
 
@@ -166,15 +166,15 @@ export const CONTACTS_SHARE_TOOL: ToolDefinition = {
   },
   contract: nativeContract({
     category: 'contacts',
-    capabilities: ['write', 'verify'],
+    capabilities: ['write'],
     resourceKinds: ['device'],
-    sideEffects: ['local_artifact'],
+    sideEffects: ['external_run'],
     riskLevel: 'high',
     permissionPrerequisites: ['contacts.read', 'share_sheet.available'],
     recoverableErrors: [...RECOVERABLE_EXTERNAL_ERRORS, 'not_found'],
     riskHints: ['requires_approval'],
-    providesEvidence: ['local_artifact', 'verification'],
-    workflowStages: ['persist_artifact', 'verify_evidence'],
+    providesEvidence: ['external_run'],
+    workflowStages: ['start_external_execution'],
   }),
 };
 

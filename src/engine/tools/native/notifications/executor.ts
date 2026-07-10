@@ -12,7 +12,7 @@ export async function executeNotificationSend(args: {
     body: args.body,
   });
   return JSON.stringify({
-    status: 'notification_displayed',
+    status: 'notification_accepted',
     id: result.id,
     title: args.title,
     body: args.body,

@@ -280,7 +280,7 @@ jest.mock('../../src/engine/tools/native/executor', () => ({
   executeNativeTool: jest.fn().mockImplementation((name: string) => {
     if (name === 'notification_send') {
       return Promise.resolve(
-        JSON.stringify({ status: 'notification_displayed', id: 'notification-id' }),
+        JSON.stringify({ status: 'notification_accepted', id: 'notification-id' }),
       );
     }
     if (name === 'notification_schedule') {

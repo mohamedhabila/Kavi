@@ -16,14 +16,14 @@ export const HAPTIC_FEEDBACK_TOOL: ToolDefinition = {
   },
   contract: nativeContract({
     category: 'device',
-    capabilities: ['write', 'verify'],
+    capabilities: ['write'],
     resourceKinds: ['device'],
     sideEffects: ['external_run'],
     riskLevel: 'low',
     permissionPrerequisites: ['haptics.available'],
     recoverableErrors: ['platform_unavailable', 'transient_native_error'],
     riskHints: ['requires_approval'],
-    providesEvidence: ['verification'],
-    workflowStages: ['start_external_execution', 'verify_evidence'],
+    providesEvidence: ['external_run'],
+    workflowStages: ['start_external_execution'],
   }),
 };

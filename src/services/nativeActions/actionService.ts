@@ -75,18 +75,6 @@ export async function executeNativeAction(
         return shareUrl(args as any);
       case 'share_file':
         return shareFile(args as any);
-      case 'share':
-        if (typeof args.url === 'string') {
-          return shareUrl({
-            url: args.url,
-            message: typeof args.text === 'string' ? args.text : undefined,
-            title: typeof args.title === 'string' ? args.title : undefined,
-          });
-        }
-        return shareText({
-          text: String(args.text || ''),
-          title: typeof args.title === 'string' ? args.title : undefined,
-        });
       case 'open_url': {
         const normalized = normalizeUrlWithAllowlist(args.url);
         return openExternalUrl(normalized.url, {

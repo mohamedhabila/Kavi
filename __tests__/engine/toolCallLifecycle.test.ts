@@ -111,9 +111,9 @@ describe('executeToolCallLifecycle', () => {
     );
   });
 
-  it('records an unknown receipt for an uncontracted effectful result without exposing it to the provider transcript', async () => {
+  it('records a code-owned calendar receipt without exposing it to the provider transcript', async () => {
     mockedExecuteTool.mockResolvedValueOnce(
-      JSON.stringify({ status: 'created', id: 'event-uncontracted-1' }),
+      JSON.stringify({ status: 'created', eventId: 'event-1' }),
     );
     const onToolCallComplete = jest.fn();
     const result = await executeToolCallLifecycle(
@@ -142,17 +142,18 @@ describe('executeToolCallLifecycle', () => {
           expect.objectContaining({
             runId: 'run-uncontracted-1',
             transportState: 'returned',
-            effectKind: 'unknown',
-            effectState: 'unknown',
-            verificationState: 'unverified',
+            effectKind: 'calendar.create',
+            effectState: 'applied',
+            verificationState: 'acknowledged',
+            resource: { kind: 'calendar_event', id: 'event-1' },
           }),
         ],
       }),
     );
     expect(result.effectReceipt).toEqual(
       expect.objectContaining({
-        effectState: 'unknown',
-        verificationState: 'unverified',
+        effectState: 'applied',
+        verificationState: 'acknowledged',
       }),
     );
     expect(result.toolMessage.toolCalls?.[0]?.effectReceipts).toBeUndefined();

@@ -39,7 +39,6 @@ import {
   executeNotificationSend,
 } from './notifications/executor';
 import {
-  executeShare,
   executeShareContact,
   executeShareFile,
   executeShareText,
@@ -124,8 +123,7 @@ export async function executeNativeTool(name: string, argsString: string): Promi
       if (kind === 'url') return executeShareUrl(args);
       if (kind === 'file') return executeShareFile(args);
       if (kind === 'contact') return executeShareContact(args);
-      // Legacy back-compat: bare share() with no kind delegates to existing executor.
-      return executeShare(args);
+      return 'Error: share requires kind ∈ {text, url, file, contact}';
     }
     case 'open_url':
       return executeOpenUrl(args);

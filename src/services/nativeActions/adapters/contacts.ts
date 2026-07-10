@@ -294,10 +294,10 @@ export async function shareContact(
     if (Contacts.shareContactAsync) {
       await Contacts.shareContactAsync(id, message);
       return makeActionResult(
-        'shared',
+        'handed_off',
         'Opened the native share flow for a contact.',
         { id },
-        'contacts_share_completed',
+        'contacts_share_handed_off',
       );
     }
 
@@ -356,7 +356,7 @@ export async function manageLimitedContactAccess(
     invalidateContactCaches();
 
     return makeActionResult(
-      'completed',
+      grantedContactIds.length > 0 ? 'updated' : 'unchanged',
       grantedContactIds.length > 0
         ? `Updated limited contact access for ${grantedContactIds.length} contact(s).`
         : 'Contact access picker completed without adding new contacts.',

@@ -378,9 +378,9 @@ describe('tool capability contracts', () => {
     expect(inferToolCapabilityDescriptor({ name: 'share_url', description: 'share_url' })).toEqual(
       expect.objectContaining({
         category: 'communication',
-        capabilities: ['write', 'verify'],
-        sideEffects: ['local_artifact'],
-        workflowStages: ['persist_artifact', 'verify_evidence'],
+        capabilities: ['write'],
+        sideEffects: ['external_run'],
+        workflowStages: ['start_external_execution'],
       }),
     );
 

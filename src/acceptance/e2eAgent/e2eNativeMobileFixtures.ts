@@ -611,7 +611,7 @@ async function executeE2ENativeMobileTool(
     case 'notification_send':
       e2eNativeFixtureState.notification.displayed = true;
       return JSON.stringify({
-        status: 'notification_displayed',
+        status: 'notification_accepted',
         id: 'e2e-notification-now',
         titleLength: typeof args.title === 'string' ? args.title.length : 0,
         bodyLength: typeof args.body === 'string' ? args.body.length : 0,

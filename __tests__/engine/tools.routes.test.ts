@@ -69,7 +69,7 @@ describe('executeTool additional routes', () => {
         CONV_ID,
       );
       const parsed = JSON.parse(result);
-      expect(parsed.status).toBe('notification_displayed');
+      expect(parsed.status).toBe('notification_accepted');
       expect(parsed.title).toBe('Test');
       expect(parsed.body).toBe('Hello');
       expect(executeNativeTool).toHaveBeenCalledWith(
