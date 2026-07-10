@@ -405,6 +405,19 @@ function hasCompleteEnabledRetrieval(condition: CompletedPublicCondition): boole
   );
 }
 
+function hasCandidateStrategyCoverage(
+  condition: CompletedPublicCondition,
+  strategy: 'lexical' | 'hybrid',
+): boolean {
+  const { eventCount, candidateStages } = condition.metrics.retrieval;
+  return (
+    eventCount > 0 &&
+    candidateStages.strategyCounts[strategy] === eventCount &&
+    candidateStages.strategyCounts.notRequested === 0 &&
+    candidateStages.strategyCounts[strategy === 'lexical' ? 'hybrid' : 'lexical'] === 0
+  );
+}
+
 function hasExpectedMemoryControlRetrieval(condition: CompletedPublicCondition): boolean {
   const { retrieval, userTurnCount } = condition.metrics;
   if (condition.condition === 'memory_off') {
@@ -418,6 +431,7 @@ function hasExpectedMemoryControlRetrieval(condition: CompletedPublicCondition):
   return (
     condition.condition === 'lexical_baseline' &&
     hasCompleteEnabledRetrieval(condition) &&
+    hasCandidateStrategyCoverage(condition, 'lexical') &&
     retrieval.selectorCounts.notRequested === retrieval.eventCount &&
     retrieval.selectorCounts.applied === 0 &&
     retrieval.selectorCounts.deterministicFallback === 0
@@ -452,6 +466,7 @@ function buildMemoryPairedObservation(
     !hasProductionAutoDirectiveCoverage(product) ||
     !hasExpectedMemoryControlRetrieval(control) ||
     !hasCompleteEnabledRetrieval(product) ||
+    !hasCandidateStrategyCoverage(product, 'hybrid') ||
     (product.metrics.retrieval.selectedFactCount === 0 &&
       product.metrics.retrieval.selectedEpisodeCount === 0) ||
     (control.condition === 'lexical_baseline' &&

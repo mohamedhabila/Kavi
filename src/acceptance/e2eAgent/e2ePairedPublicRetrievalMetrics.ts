@@ -10,6 +10,12 @@ import {
   MEMORY_RETRIEVAL_SELECTOR_OUTCOMES,
 } from '../../services/memory/retrievalEventTypes';
 import type { E2EScenarioTurnTrace } from './types';
+import {
+  createE2EPairedCandidateStageAccumulator,
+  projectE2EPairedCandidateStages,
+  validateAndAccumulateE2EPairedCandidateStages,
+  type E2EPairedPublicCandidateStages,
+} from './e2ePairedPublicCandidateStages';
 import { stableHash, stableStringify } from './e2eTraceRedaction';
 
 const MAX_QUERY_LENGTH = 20_000;
@@ -50,6 +56,7 @@ export type E2EPairedPublicRetrievalMetrics = Readonly<{
     deterministicFallback: number;
     notRequested: number;
   }>;
+  candidateStages: E2EPairedPublicCandidateStages;
   expansionOutcomeCounts: Readonly<{
     notRequested: number;
     completed: number;
@@ -166,6 +173,7 @@ export function buildE2EPairedPublicRetrievalMetrics(
   const modeCounts = { query: 0, recent: 0, disabled: 0 };
   const outcomeCounts = { completed: 0, degraded: 0, failed: 0, disabled: 0 };
   const selectorCounts = { applied: 0, deterministicFallback: 0, notRequested: 0 };
+  const candidateStageAccumulator = createE2EPairedCandidateStageAccumulator();
   const expansionOutcomeCounts = {
     notRequested: 0,
     completed: 0,
@@ -389,6 +397,12 @@ export function buildE2EPairedPublicRetrievalMetrics(
           MAX_TIMING_MS,
         ),
       };
+      const candidateStrategy = validateAndAccumulateE2EPairedCandidateStages({
+        candidates: event.candidates,
+        candidateFactCount: candidateFacts,
+        factRecallMs: normalizedTimings.factRecallMs,
+        accumulator: candidateStageAccumulator,
+      });
       if (
         !event.expansion ||
         typeof event.expansion !== 'object' ||
@@ -480,6 +494,7 @@ export function buildE2EPairedPublicRetrievalMetrics(
             selectedEpisodes !== 0 ||
             event.counts.selectedEpisodeIds.length !== 0 ||
             Object.values(normalizedTimings).some((value) => value !== 0) ||
+            candidateStrategy !== 'not_requested' ||
             expansionOutcome !== 'not_requested' ||
             selectorMode !== 'deterministic' ||
             selectorOutcome !== 'not_requested' ||
@@ -646,6 +661,7 @@ export function buildE2EPairedPublicRetrievalMetrics(
     modeCounts,
     outcomeCounts,
     selectorCounts,
+    candidateStages: projectE2EPairedCandidateStages(candidateStageAccumulator),
     expansionOutcomeCounts,
     expansionTotals,
     barrierOutcomeCounts,

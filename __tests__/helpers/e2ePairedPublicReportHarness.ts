@@ -12,6 +12,30 @@ import {
 } from './e2ePairedRunHarness';
 import { buildFixtureResult } from './e2eRunReportHarness';
 
+function defaultRetrievalEvent(
+  condition: Extract<E2EPairedConditionExecution, { status: 'completed' }>['condition'],
+) {
+  const event = buildPairedRetrievalEvent();
+  if (condition !== 'lexical_baseline') return event;
+  return {
+    ...event,
+    candidates: {
+      strategy: 'lexical' as const,
+      localSemanticOutcome: 'not_requested' as const,
+      eligibleScanCount: 0,
+      pinnedCount: 0,
+      exactQuotedCount: 0,
+      lexicalCount: 1,
+      entityCount: 0,
+      temporalCount: 0,
+      localSemanticCount: 0,
+      unionCount: 1,
+      diversifiedCount: 1,
+      unionMs: 0,
+    },
+  };
+}
+
 export function completedCondition(input: {
   condition: Extract<E2EPairedConditionExecution, { status: 'completed' }>['condition'];
   rubricPassed: number;
@@ -37,7 +61,7 @@ export function completedCondition(input: {
         : {
             sourceThreadIdHash: PAIRED_TEST_SOURCE_THREAD_HASH,
             instrumentationStatus: 'recorded',
-            events: [buildPairedRetrievalEvent()],
+            events: [defaultRetrievalEvent(input.condition)],
           },
       { route: defaultRoute },
     ),

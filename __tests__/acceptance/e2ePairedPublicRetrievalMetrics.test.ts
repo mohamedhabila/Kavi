@@ -6,6 +6,21 @@ import {
 
 type RetrievalTurns = Parameters<typeof buildE2EPairedPublicRetrievalMetrics>[0];
 
+const NOT_REQUESTED_CANDIDATES = {
+  strategy: 'not_requested' as const,
+  localSemanticOutcome: 'not_requested' as const,
+  eligibleScanCount: 0,
+  pinnedCount: 0,
+  exactQuotedCount: 0,
+  lexicalCount: 0,
+  entityCount: 0,
+  temporalCount: 0,
+  localSemanticCount: 0,
+  unionCount: 0,
+  diversifiedCount: 0,
+  unionMs: 0,
+};
+
 function recordedTurn(
   events: RetrievalTurns[number]['retrieval']['events'] = [buildPairedRetrievalEvent()],
 ): RetrievalTurns[number] {
@@ -29,6 +44,14 @@ describe('paired public retrieval metrics', () => {
       counts: {
         ...buildPairedRetrievalEvent().counts,
         candidateFactCount: 2,
+      },
+      candidates: {
+        ...buildPairedRetrievalEvent().candidates,
+        eligibleScanCount: 2,
+        lexicalCount: 2,
+        temporalCount: 2,
+        unionCount: 2,
+        diversifiedCount: 2,
       },
       selector: { mode: 'semantic', outcome: 'deterministic_fallback' },
       barrier: { outcome: 'completed', waitMs: 7, queueAgeMs: 11 },
@@ -54,6 +77,7 @@ describe('paired public retrieval metrics', () => {
         evidenceExpansionMs: 0,
         totalMs: 6,
       },
+      candidates: NOT_REQUESTED_CANDIDATES,
       expansion: {
         outcome: 'not_requested',
         requestedSourceCount: 0,
@@ -89,6 +113,7 @@ describe('paired public retrieval metrics', () => {
         evidenceExpansionMs: 0,
         totalMs: 0,
       },
+      candidates: NOT_REQUESTED_CANDIDATES,
       expansion: {
         outcome: 'not_requested',
         requestedSourceCount: 0,
@@ -136,6 +161,23 @@ describe('paired public retrieval metrics', () => {
       modeCounts: { query: 1, recent: 1, disabled: 1 },
       outcomeCounts: { completed: 1, degraded: 1, failed: 0, disabled: 1 },
       selectorCounts: { applied: 1, deterministicFallback: 1, notRequested: 1 },
+      candidateStages: {
+        strategyCounts: { notRequested: 2, lexical: 0, hybrid: 1 },
+        localSemanticOutcomeCounts: { notRequested: 3, unavailable: 0, applied: 0 },
+        totals: {
+          eligibleScanCount: 2,
+          pinnedCount: 0,
+          exactQuotedCount: 0,
+          lexicalCount: 2,
+          entityCount: 0,
+          temporalCount: 2,
+          localSemanticCount: 0,
+          unionCount: 2,
+          diversifiedCount: 2,
+          unionMs: 1,
+        },
+        unionMsMax: 1,
+      },
       expansionOutcomeCounts: {
         notRequested: 2,
         completed: 1,
@@ -197,6 +239,14 @@ describe('paired public retrieval metrics', () => {
             selectedFactCount: 2,
             candidateEpisodeCount: 2,
             selectedEpisodeCount: 2,
+          },
+          candidates: {
+            ...event.candidates,
+            eligibleScanCount: 2,
+            lexicalCount: 2,
+            temporalCount: 2,
+            unionCount: 2,
+            diversifiedCount: 2,
           },
         },
       ]),
@@ -369,5 +419,48 @@ describe('paired public retrieval metrics', () => {
       ]),
     ]);
     expect(JSON.stringify(metrics)).not.toContain('PRIVATE EXPANSION PAYLOAD');
+  });
+
+  it('rejects malformed candidate stages and excludes open-ended candidate fields', () => {
+    const event = buildPairedRetrievalEvent();
+    const malformed = [
+      {
+        ...event,
+        candidates: { ...event.candidates, strategy: 'private_strategy' },
+      },
+      {
+        ...event,
+        candidates: { ...event.candidates, pinnedCount: 65 },
+      },
+      {
+        ...event,
+        candidates: { ...event.candidates, unionMs: event.timings.factRecallMs + 1 },
+      },
+      {
+        ...event,
+        candidates: { ...NOT_REQUESTED_CANDIDATES, lexicalCount: 1 },
+      },
+    ];
+    for (const invalidEvent of malformed) {
+      expect(() =>
+        buildE2EPairedPublicRetrievalMetrics([
+          recordedTurn([invalidEvent as unknown as typeof event]),
+        ]),
+      ).toThrow(/candidate/u);
+    }
+
+    expect(() =>
+      buildE2EPairedPublicRetrievalMetrics([
+        recordedTurn([
+          {
+            ...event,
+            candidates: {
+              ...event.candidates,
+              privatePayload: 'PRIVATE CANDIDATE PAYLOAD',
+            },
+          } as typeof event,
+        ]),
+      ]),
+    ).toThrow('closed candidate-stage fields');
   });
 });
