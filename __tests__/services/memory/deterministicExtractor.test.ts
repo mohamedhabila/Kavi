@@ -217,7 +217,7 @@ describe('extractStructuralMemory — open threads', () => {
     const result = extractStructuralMemory({
       ...baseInput,
       messages: [
-        msg({ role: 'assistant', content: '- [ ] Fix auth\n- [x] Done item\n- [ ] Update docs' }),
+        msg({ role: 'user', content: '- [ ] Fix auth\n- [x] Done item\n- [ ] Update docs' }),
       ],
     });
     expect(result.openThreads).toContain('Fix auth');
@@ -228,9 +228,7 @@ describe('extractStructuralMemory — open threads', () => {
   it('extracts numbered list items as potential steps', () => {
     const result = extractStructuralMemory({
       ...baseInput,
-      messages: [
-        msg({ role: 'assistant', content: '1. First step\n2. Second step\n3. Third step' }),
-      ],
+      messages: [msg({ role: 'user', content: '1. First step\n2. Second step\n3. Third step' })],
     });
     expect(result.openThreads).toContain('First step');
     expect(result.openThreads).toContain('Second step');
@@ -240,7 +238,7 @@ describe('extractStructuralMemory — open threads', () => {
     const items = Array.from({ length: 10 }, (_, i) => `- [ ] Task ${i}`).join('\n');
     const result = extractStructuralMemory({
       ...baseInput,
-      messages: [msg({ role: 'assistant', content: items })],
+      messages: [msg({ role: 'user', content: items })],
     });
     expect(result.openThreads.length).toBeLessThanOrEqual(5);
   });
@@ -248,7 +246,7 @@ describe('extractStructuralMemory — open threads', () => {
   it('drops very short or very long items', () => {
     const result = extractStructuralMemory({
       ...baseInput,
-      messages: [msg({ role: 'assistant', content: '- [ ] OK\n- [ ] ' + 'x'.repeat(100) })],
+      messages: [msg({ role: 'user', content: '- [ ] OK\n- [ ] ' + 'x'.repeat(100) })],
     });
     expect(result.openThreads).toHaveLength(0);
   });
@@ -257,6 +255,19 @@ describe('extractStructuralMemory — open threads', () => {
     const result = extractStructuralMemory({
       ...baseInput,
       messages: [msg({ role: 'assistant', content: 'Just some text' })],
+    });
+    expect(result.openThreads).toEqual([]);
+  });
+
+  it('does not promote assistant-authored lists into prompt-visible open threads', () => {
+    const result = extractStructuralMemory({
+      ...baseInput,
+      messages: [
+        msg({
+          role: 'assistant',
+          content: '- [ ] unsupported assistant suggestion\n1. unsupported assistant step',
+        }),
+      ],
     });
     expect(result.openThreads).toEqual([]);
   });

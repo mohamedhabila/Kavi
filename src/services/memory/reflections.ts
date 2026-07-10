@@ -7,14 +7,25 @@
 
 import { createLogger } from '../../utils/logger';
 import type { MemoryEpisode } from './episodes/types';
-import { listEpisodes } from './episodes/queries';
 import type { MemoryFact } from './facts/types';
-import { listFacts } from './facts/queries';
+import { getFactById, listFacts } from './facts/queries';
 import { isMainInferenceActive, shouldAbortIngestionDueToMemoryPressure } from './onDeviceGuards';
 import { getOne } from './access/crud';
 import { getSchemaReadyMemoryDb } from './access/schemaGuard';
 import { newId, safeParseArray } from './schema';
 import { notifyStructuredMemoryChanged } from './store';
+import {
+  canFactEnterRecallCandidates,
+  requireFactRecallAccessContext,
+} from './factRecallAccessPolicy';
+import { loadActiveMemoryFactConflictSignals } from './facts/observations';
+import { applyMemoryApplicabilityPolicy } from './memoryApplicabilityPolicy';
+import {
+  DEFAULT_MEMORY_PERSONA_ID,
+  isExactMemoryScopeId,
+  type RequiredMemoryAccessScopeIdentity,
+} from './memoryScopeIdentity';
+import { resolveLocalMemoryAccessScope } from './memoryScopeStore';
 
 const logger = createLogger('memory.reflections');
 
@@ -22,6 +33,27 @@ const DAY_MS = 86_400_000;
 const MAX_REFLECTION_CONTENT_CHARS = 2_400;
 const MAX_EPISODE_LINES = 6;
 const MAX_FACT_LINES = 8;
+
+function requireReflectionTimestamp(value: unknown, code: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0) throw new Error(code);
+  return value as number;
+}
+
+function requireUniqueReflectionSourceIds(
+  values: ReadonlyArray<string>,
+  limit: number,
+  code: string,
+): string[] {
+  if (
+    !Array.isArray(values) ||
+    values.length > limit ||
+    !values.every(isExactMemoryScopeId) ||
+    new Set(values).size !== values.length
+  ) {
+    throw new Error(code);
+  }
+  return [...values];
+}
 
 export type MemoryReflectionScope = 'thread' | 'task';
 export type MemoryReflectionKind = 'daily_focus' | 'task_period';
@@ -124,11 +156,39 @@ export interface UpsertReflectionInput {
 }
 
 export function upsertReflection(input: UpsertReflectionInput): MemoryReflection | null {
-  const db = getSchemaReadyMemoryDb();
+  if (!isExactMemoryScopeId(input.threadId)) {
+    throw new Error('memory_reflection_thread_id_invalid');
+  }
+  if (input.taskId !== null && input.taskId !== undefined && !isExactMemoryScopeId(input.taskId)) {
+    throw new Error('memory_reflection_task_id_invalid');
+  }
+  const periodStart = requireReflectionTimestamp(
+    input.periodStart,
+    'memory_reflection_period_start_invalid',
+  );
+  const periodEnd = requireReflectionTimestamp(
+    input.periodEnd,
+    'memory_reflection_period_end_invalid',
+  );
+  if (periodEnd <= periodStart) throw new Error('memory_reflection_period_order_invalid');
+  const now = requireReflectionTimestamp(
+    input.now ?? Date.now(),
+    'memory_reflection_timestamp_invalid',
+  );
+  const sourceEpisodeIds = requireUniqueReflectionSourceIds(
+    input.sourceEpisodeIds,
+    MAX_EPISODE_LINES,
+    'memory_reflection_episode_sources_invalid',
+  );
+  const sourceFactIds = requireUniqueReflectionSourceIds(
+    input.sourceFactIds,
+    MAX_FACT_LINES,
+    'memory_reflection_fact_sources_invalid',
+  );
   const content = input.content.trim();
   if (!content) return null;
 
-  const now = input.now ?? Date.now();
+  const db = getSchemaReadyMemoryDb();
   const existing = db.getFirstSync<ReflectionRow>(
     `SELECT * FROM memory_reflections
        WHERE thread_id = ?
@@ -151,8 +211,8 @@ export function upsertReflection(input: UpsertReflectionInput): MemoryReflection
              updated_at = ?
        WHERE id = ?`,
       content,
-      JSON.stringify(input.sourceEpisodeIds),
-      JSON.stringify(input.sourceFactIds),
+      JSON.stringify(sourceEpisodeIds),
+      JSON.stringify(sourceFactIds),
       input.taskId ?? null,
       now,
       existing.id,
@@ -161,8 +221,8 @@ export function upsertReflection(input: UpsertReflectionInput): MemoryReflection
     return rowToReflection({
       ...existing,
       content,
-      source_episode_ids_json: JSON.stringify(input.sourceEpisodeIds),
-      source_fact_ids_json: JSON.stringify(input.sourceFactIds),
+      source_episode_ids_json: JSON.stringify(sourceEpisodeIds),
+      source_fact_ids_json: JSON.stringify(sourceFactIds),
       task_id: input.taskId ?? null,
       updated_at: now,
     });
@@ -173,12 +233,12 @@ export function upsertReflection(input: UpsertReflectionInput): MemoryReflection
     scope: input.scope,
     threadId: input.threadId,
     taskId: input.taskId ?? null,
-    periodStart: input.periodStart,
-    periodEnd: input.periodEnd,
+    periodStart,
+    periodEnd,
     kind: input.kind,
     content,
-    sourceEpisodeIds: input.sourceEpisodeIds,
-    sourceFactIds: input.sourceFactIds,
+    sourceEpisodeIds,
+    sourceFactIds,
     createdAt: now,
     updatedAt: now,
     deletedAt: null,
@@ -210,6 +270,9 @@ export function getLatestReflection(params: {
   threadId: string;
   kind?: MemoryReflectionKind;
 }): MemoryReflection | null {
+  if (!isExactMemoryScopeId(params.threadId)) {
+    throw new Error('memory_reflection_thread_id_invalid');
+  }
   const clauses = ['thread_id = ?', 'deleted_at IS NULL'];
   const queryParams: Array<string | number> = [params.threadId];
   if (params.kind) {
@@ -226,6 +289,80 @@ export function getLatestReflection(params: {
   return row ? rowToReflection(row) : null;
 }
 
+function directlyApplicableReflectionFacts(input: {
+  facts: ReadonlyArray<MemoryFact>;
+  currentScope: RequiredMemoryAccessScopeIdentity;
+  asOf: number;
+}): MemoryFact[] {
+  const access = requireFactRecallAccessContext({
+    memoryScope: input.currentScope,
+    useIntent: 'automatic_prompt',
+    asOf: input.asOf,
+  });
+  const candidates = input.facts.filter((fact) =>
+    canFactEnterRecallCandidates(fact, access, 'direct_use'),
+  );
+  const persistedConflicts = loadActiveMemoryFactConflictSignals({
+    factIds: candidates.map((fact) => fact.id),
+    currentScope: input.currentScope,
+    asOf: input.asOf,
+  });
+  const policy = applyMemoryApplicabilityPolicy({
+    facts: candidates,
+    context: {
+      enabled: true,
+      now: input.asOf,
+      useIntent: 'automatic_prompt',
+      scope: input.currentScope,
+      conflictObservationReadState: 'available',
+      ...(persistedConflicts.length > 0 ? { externalEvidence: persistedConflicts } : {}),
+    },
+  });
+  const usableIds = new Set(
+    policy.factDecisions
+      .filter((decision) => decision.action === 'use')
+      .map((decision) => decision.factId),
+  );
+  return candidates.filter((fact) => usableIds.has(fact.id));
+}
+
+export function getApplicableLatestReflectionContent(input: {
+  currentScope: RequiredMemoryAccessScopeIdentity;
+  asOf: number;
+}): string | null {
+  try {
+    if (!Number.isSafeInteger(input.asOf) || input.asOf < 0) return null;
+    const reflection = getLatestReflection({
+      threadId: input.currentScope.memoryConversationId,
+      kind: 'daily_focus',
+    });
+    if (!reflection) return null;
+    const sourceFactIds = requireUniqueReflectionSourceIds(
+      reflection.sourceFactIds,
+      MAX_FACT_LINES,
+      'memory_reflection_fact_sources_invalid',
+    );
+    const facts = sourceFactIds.flatMap((factId) => {
+      const fact = getFactById(factId);
+      return fact ? [fact] : [];
+    });
+    return buildReflectionContent({
+      episodes: [],
+      facts: directlyApplicableReflectionFacts({
+        facts,
+        currentScope: input.currentScope,
+        asOf: input.asOf,
+      }),
+    });
+  } catch (error) {
+    logger.devWarn(
+      'getApplicableLatestReflectionContent failed:',
+      error instanceof Error ? error.message : String(error),
+    );
+    return null;
+  }
+}
+
 export function refreshThreadReflection(input: {
   threadId: string;
   taskId?: string | null;
@@ -235,19 +372,27 @@ export function refreshThreadReflection(input: {
     return null;
   }
 
-  const threadId = input.threadId.trim();
-  if (!threadId) return null;
+  const threadId = input.threadId;
+  if (!isExactMemoryScopeId(threadId)) return null;
 
   try {
     const now = input.now ?? Date.now();
     const { start, end } = dayPeriodBounds(now);
-    const episodes = listEpisodes({ conversationId: threadId, limit: 24 }).filter(
-      (episode) => episode.endedAt >= start && episode.endedAt < end,
-    );
-    const facts = listFacts({ originConversationId: threadId, limit: 24 }).filter(
+    const currentScope = resolveLocalMemoryAccessScope({
+      memoryConversationId: threadId,
+      sourceThreadId: threadId,
+      personaId: DEFAULT_MEMORY_PERSONA_ID,
+      taskId: input.taskId ?? null,
+    });
+    const facts = listFacts({ originConversationId: threadId, asOf: now, limit: 24 }).filter(
       (fact) => fact.createdAt >= start && fact.createdAt < end,
     );
-    const content = buildReflectionContent({ episodes, facts });
+    const applicableFacts = directlyApplicableReflectionFacts({
+      facts,
+      currentScope,
+      asOf: now,
+    });
+    const content = buildReflectionContent({ episodes: [], facts: applicableFacts });
     if (!content) {
       return null;
     }
@@ -260,8 +405,8 @@ export function refreshThreadReflection(input: {
       periodEnd: end,
       kind: 'daily_focus',
       content,
-      sourceEpisodeIds: episodes.map((episode) => episode.id),
-      sourceFactIds: facts.map((fact) => fact.id),
+      sourceEpisodeIds: [],
+      sourceFactIds: applicableFacts.map((fact) => fact.id),
       now,
     });
   } catch (error) {

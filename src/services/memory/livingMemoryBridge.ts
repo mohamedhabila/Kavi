@@ -20,7 +20,6 @@ import { listBlocks, type MemoryBlock } from './blocks';
 import { getEntityById } from './entities';
 import type { AgentGoal } from '../../engine/goals/types';
 import type { AgentRunControlGraphAsyncWorkState } from '../../types/agentRun';
-import type { MemoryFact } from './facts/types';
 import type { RecallCandidateStrategy } from './factRecallCandidateContract';
 import {
   orchestrateMemoryRetrieval,
@@ -31,7 +30,7 @@ import { renderFocusBlock, type FocusGap } from './focus';
 import { assemblePrompt, type PromptMemoryFact, type SystemPromptSection } from './promptAssembly';
 import { getWorkingBlock, type WorkingMemoryBlock } from './workingBlocks';
 import { readTaskStack } from './taskStack';
-import { getLatestReflection } from './reflections';
+import { getApplicableLatestReflectionContent } from './reflections';
 import { createLlmMemoryFactSelector } from './llmFactSelector';
 import {
   recordPromptAssemblyRetrievalEvent,
@@ -540,11 +539,14 @@ export async function buildLivingMemorySections(
     try {
       reflectionBlock =
         readLatestReflectionOverride?.(conversationId) ??
-        getLatestReflection({ threadId: conversationId, kind: 'daily_focus' })?.content ??
+        getApplicableLatestReflectionContent({
+          currentScope: applicabilityScope,
+          asOf: now,
+        }) ??
         '';
     } catch (error) {
       logger.devWarn(
-        'livingMemoryBridge.getLatestReflection failed:',
+        'livingMemoryBridge.getApplicableLatestReflectionContent failed:',
         error instanceof Error ? error.message : String(error),
       );
     }

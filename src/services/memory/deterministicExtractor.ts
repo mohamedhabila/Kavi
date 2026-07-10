@@ -163,6 +163,7 @@ function extractStructuredOpenThreads(messages: Message[]): string[] {
   const threads: string[] = [];
 
   for (const m of messages) {
+    if (m.role !== 'user') continue;
     const content = m.content ?? '';
     // Check for explicit checklist items (markdown task lists)
     const checklistMatches = content.match(/- \[ \]\s*(.+)/g);

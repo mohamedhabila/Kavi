@@ -9,7 +9,7 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { recordEpisode } from '../../../src/services/memory/episodes/mutations';
-import { recordFact } from '../../../src/services/memory/facts/mutations';
+import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
 import { upsertEntity } from '../../../src/services/memory/entities';
 import {
   __resetOnDeviceGuardsForTests,
@@ -69,6 +69,10 @@ describe('memory reflections', () => {
           confidence: 1,
           sourceMessageId: null,
           sourceRunId: null,
+          memoryOwnerId: 'owner-1',
+          personaId: null,
+          factClass: 'workflow',
+          sourceAuthority: 'tool_observed',
           scope: 'conversation',
           originConversationId: 'conv-1',
           originThreadId: 'conv-1',
@@ -131,6 +135,25 @@ describe('memory reflections', () => {
     expect(latest?.content).toContain('episode:ep-1');
   });
 
+  it('rejects normalized aliases and malformed reflection lineage ids', () => {
+    expect(() =>
+      upsertReflection({
+        scope: 'thread',
+        threadId: 'conv-exact-reflection',
+        periodStart: 0,
+        periodEnd: 100,
+        kind: 'daily_focus',
+        content: 'content',
+        sourceEpisodeIds: [],
+        sourceFactIds: [' fact-with-leading-space'],
+        now: 50,
+      }),
+    ).toThrow('memory_reflection_fact_sources_invalid');
+    expect(() => getLatestReflection({ threadId: ' conv-exact-reflection' })).toThrow(
+      'memory_reflection_thread_id_invalid',
+    );
+  });
+
   it('refreshes thread reflections from ingested episodes and facts', () => {
     const now = dayPeriodBounds(1_700_000_000_000).start + 3_600_000;
     const threadId = 'conv-refresh';
@@ -143,19 +166,62 @@ describe('memory reflections', () => {
       now,
     });
     const entity = upsertEntity({ name: 'workspace', type: 'artifact' });
-    recordFact({
-      subjectId: entity.id,
-      predicate: 'wrote_file',
-      objectText: 'configs/nebula/runtime.json',
-      scope: 'conversation',
-      originConversationId: threadId,
-      validAt: now,
-      now,
-    });
+    recordFactWithApplicability(
+      {
+        subjectId: entity.id,
+        predicate: 'wrote_file',
+        objectText: 'configs/nebula/runtime.json',
+        scope: 'conversation',
+        originConversationId: threadId,
+        validAt: now,
+        now,
+      },
+      { factClass: 'workflow', sourceAuthority: 'tool_observed' },
+    );
 
     const reflection = refreshThreadReflection({ threadId, now });
     expect(reflection?.kind).toBe('daily_focus');
     expect(reflection?.content).toContain('configs/nebula/runtime.json');
+  });
+
+  it('materializes only directly applicable facts into a reflection', () => {
+    const now = dayPeriodBounds(1_700_000_000_000).start + 3_600_000;
+    const threadId = 'conv-reflection-authority';
+    const entity = upsertEntity({ name: 'user', type: 'self' });
+    const supported = recordFactWithApplicability(
+      {
+        subjectId: entity.id,
+        predicate: 'prefers_editor',
+        objectText: 'supported-user-stated-editor',
+        scope: 'conversation',
+        originConversationId: threadId,
+        sourceMessageId: 'supported-user-message',
+        validAt: now,
+        now,
+      },
+      { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
+    ).fact;
+    const unsupported = recordFactWithApplicability(
+      {
+        subjectId: entity.id,
+        predicate: 'prefers_theme',
+        objectText: 'unsupported-assistant-inference',
+        scope: 'conversation',
+        originConversationId: threadId,
+        sourceMessageId: 'unsupported-assistant-message',
+        validAt: now,
+        now: now + 1,
+      },
+      { factClass: 'subjective_user', sourceAuthority: 'assistant_inferred' },
+    ).fact;
+
+    const reflection = refreshThreadReflection({ threadId, now: now + 2 });
+
+    expect(reflection?.sourceEpisodeIds).toEqual([]);
+    expect(reflection?.sourceFactIds).toEqual([supported.id]);
+    expect(reflection?.sourceFactIds).not.toContain(unsupported.id);
+    expect(reflection?.content).toContain('supported-user-stated-editor');
+    expect(reflection?.content).not.toContain('unsupported-assistant-inference');
   });
 
   it('defers reflection refresh while main inference is active', () => {
