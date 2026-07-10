@@ -228,8 +228,19 @@ describe('evaluateE2ERubric', () => {
     const conversationId = 'conv-ingest';
     const { enqueueIngestionJob } = require('../../src/services/memory/ingestionQueue');
     const job = enqueueIngestionJob({
+      personaId: 'default',
       threadId: conversationId,
+      threadTitle: null,
+      memoryConversationId: conversationId,
+      taskId: null,
+      sourceStartMessageId: null,
       sourceEndMessageId: 'a-1',
+      sourceRunId: null,
+      sourceAt: 100,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 100,
     });
     const db = require('../../src/services/memory/sqlite-store').getMemoryDb();
@@ -255,8 +266,8 @@ describe('evaluateE2ERubric', () => {
   });
   it('checks memory_episode_count for the scenario conversation', () => {
     const conversationId = 'conv-episodes';
-    const { recordEpisode } = require('../../src/services/memory/episodes/mutations');
-    recordEpisode({
+    const { recordThreadLocalEpisode } = require('../../src/services/memory/episodes/mutations');
+    recordThreadLocalEpisode({
       threadId: conversationId,
       conversationId,
       summary: 'episode-a',
@@ -487,6 +498,7 @@ describe('evaluateE2ERubric', () => {
       subject: 'e2e-entity-i1',
       predicate: 'artifact_token',
       value: 'E2E-MEM-42',
+      scope: 'conversation',
       originConversationId: conversationId,
       originThreadId: conversationId,
     });
@@ -508,6 +520,7 @@ describe('evaluateE2ERubric', () => {
         subject: 'e2e-entity-update',
         predicate: 'artifact_token',
         value: 'E2E-OLD',
+        scope: 'conversation',
         originConversationId: conversationId,
         originThreadId: conversationId,
       }),
@@ -518,6 +531,7 @@ describe('evaluateE2ERubric', () => {
         subject: 'e2e-entity-update',
         predicate: 'artifact_token',
         value: 'E2E-NEW',
+        scope: 'conversation',
         supersedePrior: true,
         originConversationId: conversationId,
         originThreadId: conversationId,

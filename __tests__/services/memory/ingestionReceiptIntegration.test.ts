@@ -87,10 +87,18 @@ function closedFileTurn(suffix: string): Message[] {
 describe('memory ingestion receipt integration', () => {
   it('commits the production turn write set with its queue transition', async () => {
     const job = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'conversation-integrated-receipt',
+      threadTitle: null,
+      memoryConversationId: 'conversation-integrated-receipt',
+      taskId: null,
       sourceStartMessageId: 'user-integrated',
       sourceEndMessageId: 'assistant-integrated',
       sourceRunId: 'run-integrated',
+      sourceAt: 100,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
       providerEnrichment: false,
       now: 100,
     })!;
@@ -117,9 +125,9 @@ describe('memory ingestion receipt integration', () => {
         persistedAt: 100,
       }),
     );
-    expect(listFacts({ originConversationId: job.memoryConversationId }).map((fact) => fact.id)).toEqual(
-      expect.arrayContaining(receipt!.deterministicFactIds),
-    );
+    expect(
+      listFacts({ originConversationId: job.memoryConversationId }).map((fact) => fact.id),
+    ).toEqual(expect.arrayContaining(receipt!.deterministicFactIds));
     expect(getIngestionJob(job.id)).toEqual(
       expect.objectContaining({ status: 'completed_structural', attemptCount: 1 }),
     );
@@ -127,9 +135,18 @@ describe('memory ingestion receipt integration', () => {
 
   it('rolls memory writes back when receipt ownership is lost at commit time', async () => {
     const job = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'conversation-receipt-race',
+      threadTitle: null,
+      memoryConversationId: 'conversation-receipt-race',
+      taskId: null,
       sourceStartMessageId: 'user-race',
       sourceEndMessageId: 'assistant-race',
+      sourceRunId: null,
+      sourceAt: 200,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
       providerEnrichment: false,
       now: 200,
     })!;
@@ -137,6 +154,7 @@ describe('memory ingestion receipt integration', () => {
 
     await expect(
       processIngestionTurn({
+        episodeAccess: { personaId: 'default', shareability: 'thread_only' },
         threadId: job.threadId,
         memoryConversationId: job.memoryConversationId,
         messages: closedFileTurn('race'),

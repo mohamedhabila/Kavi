@@ -29,6 +29,7 @@ import {
 } from '../../../src/services/memory/ingestionQueue';
 import { claimIngestionJob } from '../../../src/services/memory/ingestionQueueStore';
 import { __resetOnDeviceGuardsForTests } from '../../../src/services/memory/onDeviceGuards';
+import { initializeMemoryPolicyObservation } from '../../../src/services/memory/policy';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
@@ -94,6 +95,7 @@ beforeEach(() => {
   ensureFactSchema();
   __resetOnDeviceGuardsForTests();
   __resetIngestionQueueForTests();
+  initializeMemoryPolicyObservation();
   useSettingsStore.setState({ disableLongTermMemory: false } as never);
   mockedProcessIngestionTurn.mockResolvedValue(processResult({ status: 'not_requested' }));
 });
@@ -113,10 +115,19 @@ describe('ingestion queue scheduling and job context', () => {
       )
       .mockResolvedValueOnce(processResult({ status: 'valid' }));
     const job = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'conv-auto-retry',
+      threadTitle: null,
+      memoryConversationId: 'conv-auto-retry',
+      taskId: null,
       sourceStartMessageId: 'user-auto-retry',
       sourceEndMessageId: 'assistant-auto-retry',
+      sourceRunId: null,
       sourceAt: 7,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 100,
     })!;
 
@@ -145,9 +156,19 @@ describe('ingestion queue scheduling and job context', () => {
   it('continues due work beyond the three-job mobile batch without idle polling', async () => {
     for (let index = 0; index < 5; index += 1) {
       enqueueIngestionJob({
+        personaId: 'default',
         threadId: `conv-backlog-${index}`,
+        threadTitle: null,
+        memoryConversationId: `conv-backlog-${index}`,
+        taskId: null,
         sourceStartMessageId: `user-backlog-${index}`,
         sourceEndMessageId: `assistant-backlog-${index}`,
+        sourceRunId: null,
+        sourceAt: 100,
+        chatProviderId: null,
+        chatModel: null,
+        reason: 'turn_completed',
+        providerEnrichment: true,
         now: 100,
       });
     }
@@ -166,16 +187,37 @@ describe('ingestion queue scheduling and job context', () => {
     for (let index = 0; index < 3; index += 1) {
       missingJobs.push(
         enqueueIngestionJob({
+          personaId: 'default',
           threadId: `conv-missing-${index}`,
+          threadTitle: null,
+          memoryConversationId: `conv-missing-${index}`,
+          taskId: null,
+          sourceStartMessageId: null,
           sourceEndMessageId: `assistant-missing-${index}`,
+          sourceRunId: null,
+          sourceAt: 100,
+          chatProviderId: null,
+          chatModel: null,
+          reason: 'turn_completed',
+          providerEnrichment: true,
           now: 100,
         })!,
       );
     }
     const healthy = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'conv-healthy-after-missing',
+      threadTitle: null,
+      memoryConversationId: 'conv-healthy-after-missing',
+      taskId: null,
       sourceStartMessageId: 'user-healthy-after-missing',
       sourceEndMessageId: 'assistant-healthy-after-missing',
+      sourceRunId: null,
+      sourceAt: 100,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 100,
     })!;
 
@@ -215,35 +257,45 @@ describe('ingestion queue scheduling and job context', () => {
       enabled: true,
     };
     enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'conv-context-a',
+      threadTitle: 'Title A',
+      memoryConversationId: 'conv-context-a',
+      taskId: null,
       sourceStartMessageId: 'user-context-a',
       sourceEndMessageId: 'assistant-context-a',
       sourceRunId: 'run-a',
+      sourceAt: 100,
       chatProviderId: providerA.id,
       chatModel: providerA.model,
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 100,
     });
     enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'conv-context-b',
+      threadTitle: 'Title B',
+      memoryConversationId: 'conv-context-b',
+      taskId: null,
       sourceStartMessageId: 'user-context-b',
       sourceEndMessageId: 'assistant-context-b',
       sourceRunId: 'run-b',
+      sourceAt: 100,
       chatProviderId: providerB.id,
       chatModel: providerB.model,
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 100,
     });
     const loadRuntimeContextForJob = jest.fn((job) =>
       job.threadId.endsWith('-a')
         ? {
-            threadTitle: 'Title A',
             activeChatProvider: providerA,
-            sourceRunId: 'run-a',
             graphGoalEvidence: ['tool:a'],
           }
         : {
-            threadTitle: 'Title B',
             activeChatProvider: providerB,
-            sourceRunId: 'run-b',
             graphGoalEvidence: ['tool:b'],
           },
     );
@@ -282,9 +334,19 @@ describe('ingestion queue scheduling and job context', () => {
 
   it('cancels queued work synchronously when the user opts out', async () => {
     const job = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'conv-opt-out-race',
+      threadTitle: null,
+      memoryConversationId: 'conv-opt-out-race',
+      taskId: null,
       sourceStartMessageId: 'user-opt-out-race',
       sourceEndMessageId: 'assistant-opt-out-race',
+      sourceRunId: null,
+      sourceAt: 100,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 100,
     })!;
     scheduleIngestionDrain({ loadMessagesForThread: () => closedTurn('opt-out-race') });
@@ -314,9 +376,19 @@ describe('ingestion queue scheduling and job context', () => {
         : { ...processResult({ status: 'valid' }), processed: false, skipped: 'claim_lost' };
     });
     const job = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'conv-in-flight-opt-out',
+      threadTitle: null,
+      memoryConversationId: 'conv-in-flight-opt-out',
+      taskId: null,
       sourceStartMessageId: 'user-in-flight-opt-out',
       sourceEndMessageId: 'assistant-in-flight-opt-out',
+      sourceRunId: null,
+      sourceAt: 100,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 100,
     })!;
 
@@ -336,9 +408,19 @@ describe('ingestion queue scheduling and job context', () => {
 
   it('computes provider backoff from attempt completion rather than claim time', async () => {
     const job = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'conv-completion-clock',
+      threadTitle: null,
+      memoryConversationId: 'conv-completion-clock',
+      taskId: null,
       sourceStartMessageId: 'user-completion-clock',
       sourceEndMessageId: 'assistant-completion-clock',
+      sourceRunId: null,
+      sourceAt: 100,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 100,
     })!;
     mockedProcessIngestionTurn.mockImplementationOnce(async () => {
@@ -356,9 +438,19 @@ describe('ingestion queue scheduling and job context', () => {
 
   it('recovers an attempt that resumes after its lease expires', async () => {
     const job = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'conv-expired-live-attempt',
+      threadTitle: null,
+      memoryConversationId: 'conv-expired-live-attempt',
+      taskId: null,
       sourceStartMessageId: 'user-expired-live-attempt',
       sourceEndMessageId: 'assistant-expired-live-attempt',
+      sourceRunId: null,
+      sourceAt: 100,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 100,
     })!;
     mockedProcessIngestionTurn.mockImplementationOnce(async (input) => {
@@ -380,17 +472,26 @@ describe('ingestion queue scheduling and job context', () => {
       expect.objectContaining({
         status: 'retrying',
         outcomeCode: 'stale_processing_lease',
-        nextAttemptAt:
-          100 + INGESTION_PROCESSING_LEASE_MS + INGESTION_RETRY_BASE_DELAY_MS,
+        nextAttemptAt: 100 + INGESTION_PROCESSING_LEASE_MS + INGESTION_RETRY_BASE_DELAY_MS,
       }),
     );
   });
 
   it('wakes at a dead process lease expiry after cold-start recovery runs early', async () => {
     const job = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'conv-cold-start-lease',
+      threadTitle: null,
+      memoryConversationId: 'conv-cold-start-lease',
+      taskId: null,
       sourceStartMessageId: 'user-cold-start-lease',
       sourceEndMessageId: 'assistant-cold-start-lease',
+      sourceRunId: null,
+      sourceAt: 100,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 100,
     })!;
     expect(claimIngestionJob(job.id, 100)).not.toBeNull();

@@ -55,15 +55,35 @@ it('consolidates each queued turn from its recorded source window', async () => 
   ];
 
   enqueueIngestionJob({
+    personaId: 'default',
     threadId,
+    threadTitle: null,
+    memoryConversationId: threadId,
+    taskId: null,
     sourceStartMessageId: 'u-window-1',
     sourceEndMessageId: 'a-window-1',
+    sourceRunId: null,
+    sourceAt: 10,
+    chatProviderId: null,
+    chatModel: null,
+    reason: 'turn_completed',
+    providerEnrichment: true,
     now: 10,
   });
   enqueueIngestionJob({
+    personaId: 'default',
     threadId,
+    threadTitle: null,
+    memoryConversationId: threadId,
+    taskId: null,
     sourceStartMessageId: 'u-window-2',
     sourceEndMessageId: 'a-window-2',
+    sourceRunId: null,
+    sourceAt: 20,
+    chatProviderId: null,
+    chatModel: null,
+    reason: 'turn_completed',
+    providerEnrichment: true,
     now: 20,
   });
 

@@ -34,6 +34,7 @@ import { getBlock } from '../../../src/services/memory/blocks';
 import { listFacts } from '../../../src/services/memory/facts/queries';
 import { executeMemoryRemember } from '../../../src/services/memory/memoryTools';
 import { listEpisodes } from '../../../src/services/memory/episodes/queries';
+import { getEpisodeAccessPolicy } from '../../../src/services/memory/episodes/accessPolicyStore';
 import {
   drainIngestionQueue,
   countPendingIngestionJobs,
@@ -49,7 +50,7 @@ import {
   runMemoryMigrationTick,
 } from '../../../src/services/memory/lifecycle';
 import { __resetOnDeviceGuardsForTests } from '../../../src/services/memory/onDeviceGuards';
-import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
 import { getWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import { buildLivingMemorySections } from '../../../src/services/memory/livingMemoryBridge';
 import { useChatStore } from '../../../src/store/useChatStore';
@@ -154,6 +155,11 @@ describe('recordCompletedTurnForMemory', () => {
     // Episode was created
     const episodes = listEpisodes({ threadId: 'conv-live' });
     expect(episodes.length).toBeGreaterThanOrEqual(1);
+    expect(getEpisodeAccessPolicy(getMemoryDb(), episodes[0].id)).toMatchObject({
+      scope: { personaId: 'default', taskId: null },
+      shareability: 'thread_only',
+      sensitivity: 'normal',
+    });
 
     // Focus block updated
     expect(
@@ -171,14 +177,26 @@ describe('recordCompletedTurnForMemory', () => {
     const toolMessages: Message[] = [
       { id: 'u-1', role: 'user', content: 'Create app.tsx', timestamp: 1 },
       {
-        id: 'a-1',
+        id: 'a-tool-1',
         role: 'assistant',
-        content: 'Created the file.',
+        content: '',
         timestamp: 2,
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+        assistantMetadata: {
+          kind: 'intermediate',
+          completionStatus: 'complete',
+          finishReason: 'tool_calls',
+        },
         toolCalls: [
           { name: 'write_file', arguments: JSON.stringify({ path: 'app.tsx' }), id: 'tc-1' },
         ],
+      },
+      { id: 'tool-1', role: 'tool', content: 'ok', timestamp: 3, toolCallId: 'tc-1' },
+      {
+        id: 'a-1',
+        role: 'assistant',
+        content: 'Created the file.',
+        timestamp: 4,
+        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
       },
     ];
 
@@ -193,6 +211,48 @@ describe('recordCompletedTurnForMemory', () => {
     await drainRecordedTurn('conv-tools', toolMessages);
     expect(listEpisodes({ threadId: 'conv-tools' }).length).toBeGreaterThanOrEqual(1);
     expect(listFacts({ limit: 20 }).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('binds task episodes thread-only and seals the enqueue-time conversation persona', async () => {
+    useChatStore.setState({
+      conversations: [
+        {
+          id: 'conv-sealed-persona',
+          title: 'Scoped task',
+          personaId: 'coder',
+          messages,
+        },
+      ],
+    } as any);
+    const result = await recordCompletedTurnForMemory({
+      threadId: 'conv-sealed-persona',
+      messages,
+      taskId: 'task-private',
+      now: 10,
+    });
+    expect(getIngestionJob(result.jobId!)?.personaId).toBe('coder');
+
+    useChatStore.setState((state) => ({
+      conversations: state.conversations.map((conversation) =>
+        conversation.id === 'conv-sealed-persona'
+          ? { ...conversation, personaId: 'writer' }
+          : conversation,
+      ),
+    }));
+    await drainRecordedTurn('conv-sealed-persona', messages);
+
+    const episode = listEpisodes({ threadId: 'conv-sealed-persona' })[0];
+    expect(episode).toBeDefined();
+    expect(getEpisodeAccessPolicy(getMemoryDb(), episode.id)).toMatchObject({
+      scope: {
+        memoryConversationId: 'conv-sealed-persona',
+        sourceThreadId: 'conv-sealed-persona',
+        personaId: 'coder',
+        taskId: 'task-private',
+      },
+      shareability: 'thread_only',
+      sensitivity: 'normal',
+    });
   });
 
   it('keeps the tool-owned child write in the parent namespace without post-turn duplication', async () => {
@@ -283,7 +343,9 @@ describe('recordCompletedTurnForMemory', () => {
       now: toolWrite.fact.createdAt + 10,
       recallLimit: 4,
     });
+    const memoryText = memory.sections.map((section) => section.text).join('\n\n');
     expect(memory.recalledFactCount).toBe(0);
+    expect(memoryText).not.toContain('/workspace/release-checklist.md');
   });
 
   it('enriches with provider when configured', async () => {
@@ -482,9 +544,19 @@ describe('recordCompletedTurnForMemory', () => {
       ],
     } as any);
     enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'conv-background-provider',
+      threadTitle: null,
+      memoryConversationId: 'conv-background-provider',
+      taskId: null,
       sourceStartMessageId: 'u-1',
       sourceEndMessageId: 'a-1',
+      sourceRunId: null,
+      sourceAt: 2,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
     });
 
     await runMemoryBackgroundFlush();

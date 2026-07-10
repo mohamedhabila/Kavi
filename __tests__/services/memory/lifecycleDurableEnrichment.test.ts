@@ -168,11 +168,10 @@ describe('durable memory enrichment retries', () => {
         timestamp: 1,
       },
       {
-        id: 'a-retry',
+        id: 'a-retry-tool-request',
         role: 'assistant',
-        content: 'Created the release artifact.',
+        content: '',
         timestamp: 2,
-        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
         toolCalls: [
           {
             id: 'tool-retry',
@@ -180,6 +179,20 @@ describe('durable memory enrichment retries', () => {
             arguments: JSON.stringify({ path: '/workspace/release.aab' }),
           },
         ],
+      },
+      {
+        id: 'tool-retry-result',
+        role: 'tool',
+        toolCallId: 'tool-retry',
+        content: JSON.stringify({ ok: true, path: '/workspace/release.aab' }),
+        timestamp: 2,
+      },
+      {
+        id: 'a-retry',
+        role: 'assistant',
+        content: 'Created the release artifact.',
+        timestamp: 2,
+        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
       },
     ];
     mockSendMessage.mockRejectedValueOnce(new Error('temporary timeout'));

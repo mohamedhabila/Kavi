@@ -30,15 +30,15 @@ import {
   __resetIngestionQueueForTests,
   drainIngestionQueue,
   enqueueIngestionJob,
-  getIngestionQueueDiagnostics,
   getIngestionJob,
   INGESTION_PROCESSING_LEASE_MS,
   INGESTION_RETRY_BASE_DELAY_MS,
   recoverStaleIngestionJobs,
 } from '../../../src/services/memory/ingestionQueue';
+import { getIngestionQueueDiagnostics } from '../../../src/services/memory/ingestionQueueDiagnostics';
 import { __resetOnDeviceGuardsForTests } from '../../../src/services/memory/onDeviceGuards';
 import { upsertEntity } from '../../../src/services/memory/entities';
-import { recordEpisode } from '../../../src/services/memory/episodes/mutations';
+import { recordThreadLocalEpisode } from '../../../src/services/memory/episodes/mutations';
 import { recordFact } from '../../../src/services/memory/facts/mutations';
 import {
   ensureFactSchema,
@@ -117,10 +117,19 @@ afterEach(() => {
 describe('ingestion queue recovery and diagnostics', () => {
   it('reconciles an exact committed episode before terminal stale recovery', () => {
     const job = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'thread-crash-window',
+      threadTitle: null,
       memoryConversationId: 'memory-crash-window',
+      taskId: null,
       sourceStartMessageId: 'user-crash-window',
       sourceEndMessageId: 'assistant-crash-window',
+      sourceRunId: null,
+      sourceAt: 10,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 10,
     })!;
     getMemoryDb().runSync(
@@ -131,7 +140,7 @@ describe('ingestion queue recovery and diagnostics', () => {
         WHERE id = ?`,
       job.id,
     );
-    const episode = recordEpisode({
+    const episode = recordThreadLocalEpisode({
       conversationId: 'memory-crash-window',
       threadId: 'thread-crash-window',
       sourceStartMessageId: 'user-crash-window',
@@ -153,9 +162,19 @@ describe('ingestion queue recovery and diagnostics', () => {
 
   it('reconciles an exact committed fact when the turn produced no episode', () => {
     const job = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'thread-fact-crash-window',
+      threadTitle: null,
       memoryConversationId: 'memory-fact-crash-window',
+      taskId: null,
+      sourceStartMessageId: null,
       sourceEndMessageId: 'assistant-fact-crash-window',
+      sourceRunId: null,
+      sourceAt: 10,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 10,
     })!;
     getMemoryDb().runSync(
@@ -171,6 +190,7 @@ describe('ingestion queue recovery and diagnostics', () => {
       subjectId: subject.id,
       predicate: 'prefers',
       objectText: 'quiet mornings',
+      scope: 'conversation',
       originConversationId: 'memory-fact-crash-window',
       originThreadId: 'thread-fact-crash-window',
       sourceTurnId: 'assistant-fact-crash-window',
@@ -189,18 +209,51 @@ describe('ingestion queue recovery and diagnostics', () => {
 
   it('accounts for retrying, failed, and structurally completed stale leases', () => {
     const retryable = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'conv-stale-retry',
+      threadTitle: null,
+      memoryConversationId: 'conv-stale-retry',
+      taskId: null,
+      sourceStartMessageId: null,
       sourceEndMessageId: 'assistant-stale-retry',
+      sourceRunId: null,
+      sourceAt: 10,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 10,
     });
     const exhausted = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'conv-stale-failed',
+      threadTitle: null,
+      memoryConversationId: 'conv-stale-failed',
+      taskId: null,
+      sourceStartMessageId: null,
       sourceEndMessageId: 'assistant-stale-failed',
+      sourceRunId: null,
+      sourceAt: 10,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 10,
     });
     const structurallyCompleted = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'conv-stale-degraded',
+      threadTitle: null,
+      memoryConversationId: 'conv-stale-degraded',
+      taskId: null,
+      sourceStartMessageId: null,
       sourceEndMessageId: 'assistant-stale-degraded',
+      sourceRunId: null,
+      sourceAt: 10,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 10,
     });
     getMemoryDb().runSync(
@@ -262,8 +315,19 @@ describe('ingestion queue recovery and diagnostics', () => {
 
   it('fences every stale owner transition after a new attempt claims the job', () => {
     const job = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'thread-claim-fence',
+      threadTitle: null,
+      memoryConversationId: 'thread-claim-fence',
+      taskId: null,
+      sourceStartMessageId: null,
       sourceEndMessageId: 'assistant-claim-fence',
+      sourceRunId: null,
+      sourceAt: 10,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 10,
     })!;
     const firstClaim = claimIngestionJob(job.id, 10)!;
@@ -278,13 +342,7 @@ describe('ingestion queue recovery and diagnostics', () => {
       false,
     );
     expect(
-      completeIngestionJob(
-        job.id,
-        'completed_enriched',
-        'valid',
-        retry.nextAttemptAt!,
-        firstClaim,
-      ),
+      completeIngestionJob(job.id, 'completed_enriched', 'valid', retry.nextAttemptAt!, firstClaim),
     ).toBe(false);
     expect(
       retryOrCompleteIngestionJob({
@@ -311,9 +369,18 @@ describe('ingestion queue recovery and diagnostics', () => {
 
   it('reports bounded state and provider-outcome aggregates', async () => {
     const structural = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'conv-diagnostics-structural',
+      threadTitle: null,
+      memoryConversationId: 'conv-diagnostics-structural',
+      taskId: null,
       sourceStartMessageId: 'user-diagnostics-structural',
       sourceEndMessageId: 'assistant-diagnostics-structural',
+      sourceRunId: null,
+      sourceAt: 100,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
       providerEnrichment: false,
       now: 100,
     });
@@ -326,9 +393,19 @@ describe('ingestion queue recovery and diagnostics', () => {
       processResult({ status: 'provider_error', code: 'provider_request_failed' }),
     );
     const retrying = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'conv-diagnostics-retrying',
+      threadTitle: null,
+      memoryConversationId: 'conv-diagnostics-retrying',
+      taskId: null,
       sourceStartMessageId: 'user-diagnostics-retrying',
       sourceEndMessageId: 'assistant-diagnostics-retrying',
+      sourceRunId: null,
+      sourceAt: 200,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 200,
     });
     await drainIngestionQueue({

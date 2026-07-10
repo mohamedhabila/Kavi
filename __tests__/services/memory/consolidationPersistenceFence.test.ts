@@ -3,7 +3,7 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { applyConsolidatorResult } from '../../../src/services/memory/consolidator';
+import { applyThreadLocalConsolidatorResult } from '../../../src/services/memory/consolidator';
 import { listEpisodes } from '../../../src/services/memory/episodes/queries';
 import { listFacts } from '../../../src/services/memory/facts/queries';
 import {
@@ -37,7 +37,7 @@ afterEach(() => {
 
 it('checks queue ownership inside the same transaction as memory persistence', () => {
   expect(() =>
-    applyConsolidatorResult(
+    applyThreadLocalConsolidatorResult(
       {
         episodeSummary: 'This stale attempt must not persist.',
         newFacts: [
@@ -67,17 +67,25 @@ it('checks queue ownership inside the same transaction as memory persistence', (
 
 it('commits a final enriched-attempt receipt atomically with memory writes', () => {
   const job = enqueueIngestionJob({
+    personaId: 'default',
     threadId: 'conv-enriched-receipt',
+    threadTitle: null,
+    memoryConversationId: 'conv-enriched-receipt',
+    taskId: null,
+    sourceStartMessageId: null,
     sourceEndMessageId: 'assistant-enriched-receipt',
+    sourceRunId: null,
+    sourceAt: 100,
+    chatProviderId: null,
+    chatModel: null,
+    reason: 'turn_completed',
+    providerEnrichment: true,
     now: 100,
   })!;
-  getMemoryDb().runSync(
-    'UPDATE memory_ingestion_jobs SET attempt_count = 4 WHERE id = ?',
-    job.id,
-  );
+  getMemoryDb().runSync('UPDATE memory_ingestion_jobs SET attempt_count = 4 WHERE id = ?', job.id);
   const claimToken = claimIngestionJob(job.id, 100)!;
 
-  applyConsolidatorResult(
+  applyThreadLocalConsolidatorResult(
     {
       episodeSummary: 'The validated enrichment committed.',
       newFacts: [],

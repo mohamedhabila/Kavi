@@ -3,7 +3,7 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { applyConsolidatorResult } from '../../../src/services/memory/consolidator';
+import { applyThreadLocalConsolidatorResult } from '../../../src/services/memory/consolidator';
 import { listFacts } from '../../../src/services/memory/facts/queries';
 import {
   ensureFactSchema,
@@ -26,7 +26,7 @@ afterEach(() => {
 
 describe('memory consolidator source-run provenance', () => {
   it('persists sourceRunId on consolidated semantic facts', () => {
-    const result = applyConsolidatorResult(
+    const result = applyThreadLocalConsolidatorResult(
       {
         episodeSummary: null,
         newFacts: [
@@ -66,7 +66,7 @@ describe('memory consolidator source-run provenance', () => {
     `);
 
     expect(() =>
-      applyConsolidatorResult(
+      applyThreadLocalConsolidatorResult(
         {
           episodeSummary: 'Prepared the release artifact.',
           newFacts: [

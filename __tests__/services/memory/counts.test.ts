@@ -15,7 +15,7 @@ import {
 } from '../../../src/services/memory/schema';
 import { recordFact } from '../../../src/services/memory/facts/mutations';
 import { countFacts } from '../../../src/services/memory/facts/queries';
-import { recordEpisode } from '../../../src/services/memory/episodes/mutations';
+import { recordThreadLocalEpisode } from '../../../src/services/memory/episodes/mutations';
 import { countEpisodes } from '../../../src/services/memory/episodes/queries';
 import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
 import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
@@ -35,21 +35,36 @@ describe('countFacts', () => {
   });
 
   it('counts all non-deleted facts', () => {
-    recordFact({ subjectId: 'user', predicate: 'name', objectText: 'A' });
-    recordFact({ subjectId: 'user', predicate: 'age', objectText: '20' });
+    recordFact({ subjectId: 'user', predicate: 'name', objectText: 'A', scope: 'global' });
+    recordFact({ subjectId: 'user', predicate: 'age', objectText: '20', scope: 'global' });
     expect(countFacts()).toBe(2);
   });
 
   it('excludes withdrawn facts', () => {
-    const result = recordFact({ subjectId: 'user', predicate: 'name', objectText: 'A' });
+    const result = recordFact({
+      subjectId: 'user',
+      predicate: 'name',
+      objectText: 'A',
+      scope: 'global',
+    });
     expect(withdrawMemoryFact(result.fact.id).status).toBe('withdrawn');
     expect(countFacts()).toBe(0);
   });
 
   it('counts only pinned facts when pinnedOnly is true', () => {
     const { setFactPinned } = require('../../../src/services/memory/facts/mutations');
-    const a = recordFact({ subjectId: 'user', predicate: 'name', objectText: 'A' });
-    const b = recordFact({ subjectId: 'user', predicate: 'age', objectText: '20' });
+    const a = recordFact({
+      subjectId: 'user',
+      predicate: 'name',
+      objectText: 'A',
+      scope: 'global',
+    });
+    const b = recordFact({
+      subjectId: 'user',
+      predicate: 'age',
+      objectText: '20',
+      scope: 'global',
+    });
     setFactPinned(a.fact.id, true);
     expect(countFacts({ pinnedOnly: true })).toBe(1);
     expect(countFacts()).toBe(2);
@@ -58,7 +73,14 @@ describe('countFacts', () => {
 
   it('counts only facts matching scope when scope is provided', () => {
     recordFact({ subjectId: 'user', predicate: 'name', objectText: 'A', scope: 'global' });
-    recordFact({ subjectId: 'user', predicate: 'age', objectText: '20', scope: 'conversation' });
+    recordFact({
+      subjectId: 'user',
+      predicate: 'age',
+      objectText: '20',
+      scope: 'conversation',
+      originConversationId: 'count-conversation',
+      originThreadId: 'count-conversation',
+    });
     expect(countFacts({ scope: 'global' })).toBe(1);
     expect(countFacts({ scope: 'conversation' })).toBe(1);
   });
@@ -83,14 +105,14 @@ describe('countEpisodes', () => {
   });
 
   it('counts all non-deleted episodes', () => {
-    recordEpisode({
+    recordThreadLocalEpisode({
       conversationId: 'c1',
       threadId: 'c1',
       summary: 'First',
       startedAt: 1000,
       endedAt: 2000,
     });
-    recordEpisode({
+    recordThreadLocalEpisode({
       conversationId: 'c1',
       threadId: 'c1',
       summary: 'Second',
@@ -101,14 +123,14 @@ describe('countEpisodes', () => {
   });
 
   it('filters by conversationId', () => {
-    recordEpisode({
+    recordThreadLocalEpisode({
       conversationId: 'c1',
       threadId: 'c1',
       summary: 'A',
       startedAt: 1000,
       endedAt: 2000,
     });
-    recordEpisode({
+    recordThreadLocalEpisode({
       conversationId: 'c2',
       threadId: 'c2',
       summary: 'B',
@@ -120,14 +142,14 @@ describe('countEpisodes', () => {
   });
 
   it('filters by threadId', () => {
-    recordEpisode({
+    recordThreadLocalEpisode({
       conversationId: 'c1',
       threadId: 't1',
       summary: 'A',
       startedAt: 1000,
       endedAt: 2000,
     });
-    recordEpisode({
+    recordThreadLocalEpisode({
       conversationId: 'c1',
       threadId: 't2',
       summary: 'B',
@@ -138,7 +160,7 @@ describe('countEpisodes', () => {
   });
 
   it('filters by taskId', () => {
-    recordEpisode({
+    recordThreadLocalEpisode({
       conversationId: 'c1',
       threadId: 'c1',
       taskId: 'task-a',
@@ -146,7 +168,7 @@ describe('countEpisodes', () => {
       startedAt: 1000,
       endedAt: 2000,
     });
-    recordEpisode({
+    recordThreadLocalEpisode({
       conversationId: 'c1',
       threadId: 'c1',
       taskId: 'task-b',

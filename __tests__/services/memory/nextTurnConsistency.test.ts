@@ -45,10 +45,19 @@ function enqueueSourceTurn(
   now = 100,
 ) {
   return enqueueIngestionJob({
+    personaId: 'default',
     threadId: sourceThreadId,
+    threadTitle: null,
     memoryConversationId,
+    taskId: null,
     sourceStartMessageId: `user-${sourceEndMessageId}`,
     sourceEndMessageId,
+    sourceRunId: null,
+    sourceAt: now,
+    chatProviderId: null,
+    chatModel: null,
+    reason: 'turn_completed',
+    providerEnrichment: true,
     now,
   });
 }

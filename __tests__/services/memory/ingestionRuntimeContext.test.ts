@@ -97,38 +97,50 @@ afterEach(() => {
 describe('ingestion runtime context', () => {
   it('resolves the persisted provider model and exact source run, not the latest run', () => {
     const job = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'thread-context',
       threadTitle: 'Persisted thread title',
+      memoryConversationId: 'thread-context',
+      taskId: null,
+      sourceStartMessageId: null,
       sourceEndMessageId: 'assistant-old',
       sourceRunId: 'run-old',
+      sourceAt: 5,
       chatProviderId: 'provider-context',
       chatModel: 'persisted-job-model',
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 5,
     })!;
 
     expect(loadIngestionJobRuntimeContext(job)).toEqual({
-      threadTitle: 'Persisted thread title',
       activeChatProvider: expect.objectContaining({
         id: 'provider-context',
         model: 'persisted-job-model',
       }),
-      sourceRunId: 'run-old',
       graphGoalEvidence: ['tool:old-evidence'],
     });
   });
 
   it('does not attach mutable latest-run evidence when the job has no source run', () => {
     const job = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'thread-context',
       threadTitle: 'Persisted chitchat title',
+      memoryConversationId: 'thread-context',
+      taskId: null,
+      sourceStartMessageId: null,
       sourceEndMessageId: 'assistant-chitchat',
+      sourceRunId: null,
+      sourceAt: 6,
       chatProviderId: 'provider-context',
       chatModel: 'persisted-job-model',
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 6,
     })!;
 
     expect(loadIngestionJobRuntimeContext(job)).toEqual({
-      threadTitle: 'Persisted chitchat title',
       activeChatProvider: expect.objectContaining({
         id: 'provider-context',
         model: 'persisted-job-model',
@@ -138,22 +150,28 @@ describe('ingestion runtime context', () => {
 
   it('retains source-run provenance when the original run is no longer available', () => {
     const job = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'thread-context',
       threadTitle: 'Historical title',
+      memoryConversationId: 'thread-context',
+      taskId: null,
+      sourceStartMessageId: null,
       sourceEndMessageId: 'assistant-removed-run',
       sourceRunId: 'run-removed',
+      sourceAt: 7,
       chatProviderId: 'provider-context',
       chatModel: 'persisted-job-model',
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 7,
     })!;
 
+    expect(job.sourceRunId).toBe('run-removed');
     expect(loadIngestionJobRuntimeContext(job)).toEqual({
-      threadTitle: 'Historical title',
       activeChatProvider: expect.objectContaining({
         id: 'provider-context',
         model: 'persisted-job-model',
       }),
-      sourceRunId: 'run-removed',
     });
   });
 });

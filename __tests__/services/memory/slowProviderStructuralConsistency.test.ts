@@ -33,6 +33,7 @@ import {
   type TurnProviderOutcome,
 } from '../../../src/services/memory/turnProcessor';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
+import { initializeMemoryPolicyObservation } from '../../../src/services/memory/policy';
 import type { Message } from '../../../src/types/message';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -148,6 +149,7 @@ function processClaimedTurn(input: {
   extractor: (prompt: string) => Promise<string>;
 }) {
   return processIngestionTurn({
+    episodeAccess: { personaId: 'default', shareability: 'thread_only' },
     threadId: input.job.threadId,
     memoryConversationId: input.job.memoryConversationId,
     messages: input.messages,
@@ -195,6 +197,7 @@ beforeEach(() => {
   resetFactSchemaCacheForTests();
   ensureFactSchema();
   __resetIngestionQueueForTests();
+  initializeMemoryPolicyObservation();
   useSettingsStore.setState({ disableLongTermMemory: false } as never);
 });
 
@@ -208,11 +211,19 @@ describe('slow provider structural consistency', () => {
   it('makes every provider-independent lane readable before enrichment settles', async () => {
     const messages = closedToolTurn('slow');
     const job = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'thread-slow-provider',
+      threadTitle: null,
       memoryConversationId: 'memory-slow-provider',
+      taskId: null,
       sourceStartMessageId: messages[0].id,
       sourceEndMessageId: messages.at(-1)!.id,
       sourceRunId: 'run-structural-consistency',
+      sourceAt: 100,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 100,
     })!;
     const claimToken = claimIngestionJob(job.id, 100)!;
@@ -286,11 +297,19 @@ describe('slow provider structural consistency', () => {
   it('reconciles a checkpoint gap on retry without duplicate memory or a stale-owner receipt', async () => {
     const messages = closedToolTurn('retry');
     const job = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'thread-checkpoint-retry',
+      threadTitle: null,
       memoryConversationId: 'memory-checkpoint-retry',
+      taskId: null,
       sourceStartMessageId: messages[0].id,
       sourceEndMessageId: messages.at(-1)!.id,
       sourceRunId: 'run-structural-consistency',
+      sourceAt: 100,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 100,
     })!;
     const firstClaim = claimIngestionJob(job.id, 100)!;
@@ -364,10 +383,19 @@ describe('slow provider structural consistency', () => {
   it('keeps the committed structural checkpoint but rejects provider writes after opt-out', async () => {
     const messages = closedToolTurn('opt-out');
     const job = enqueueIngestionJob({
+      personaId: 'default',
       threadId: 'thread-checkpoint-opt-out',
+      threadTitle: null,
       memoryConversationId: 'memory-checkpoint-opt-out',
+      taskId: null,
       sourceStartMessageId: messages[0].id,
       sourceEndMessageId: messages.at(-1)!.id,
+      sourceRunId: null,
+      sourceAt: 100,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 100,
     })!;
     const claimToken = claimIngestionJob(job.id, 100)!;

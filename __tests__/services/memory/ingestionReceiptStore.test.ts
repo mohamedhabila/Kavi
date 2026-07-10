@@ -41,9 +41,19 @@ afterEach(() => {
 
 function claimedJob(suffix: string, now = 100): { jobId: string; claimToken: string } {
   const job = enqueueIngestionJob({
+    personaId: 'default',
     threadId: `conversation-${suffix}`,
+    threadTitle: null,
+    memoryConversationId: `conversation-${suffix}`,
+    taskId: null,
     sourceStartMessageId: `user-${suffix}`,
     sourceEndMessageId: `assistant-${suffix}`,
+    sourceRunId: null,
+    sourceAt: now,
+    chatProviderId: null,
+    chatModel: null,
+    reason: 'turn_completed',
+    providerEnrichment: true,
     now,
   });
   const claimToken = claimIngestionJob(job!.id, now);
@@ -111,7 +121,9 @@ describe('memory ingestion persistence receipts', () => {
 
     expect(() =>
       commitIngestionPersistenceReceipt(receiptInput(jobId, 'wrong-claim-token')),
-    ).toThrow(expect.objectContaining<Partial<IngestionReceiptCommitError>>({ code: 'claim_lost' }));
+    ).toThrow(
+      expect.objectContaining<Partial<IngestionReceiptCommitError>>({ code: 'claim_lost' }),
+    );
     expect(listIngestionPersistenceReceipts(jobId)).toEqual([]);
     expect(getIngestionJob(jobId)?.status).toBe('processing');
   });

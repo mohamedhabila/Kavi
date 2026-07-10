@@ -13,6 +13,8 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { listFacts } from '../../../src/services/memory/facts/queries';
+import { listEpisodes } from '../../../src/services/memory/episodes/queries';
+import { getEpisodeAccessPolicy } from '../../../src/services/memory/episodes/accessPolicyStore';
 import {
   extractSeedTurns,
   runMigrationSeedPass,
@@ -29,6 +31,7 @@ import { getWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import type { Conversation } from '../../../src/types/conversation';
 import type { Message } from '../../../src/types/message';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
+import { initializeMemoryPolicyObservation } from '../../../src/services/memory/policy';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -38,6 +41,7 @@ beforeEach(() => {
   resetFactSchemaCacheForTests();
   ensureFactSchema();
   ensureDefaultBlocks();
+  initializeMemoryPolicyObservation();
   useSettingsStore.setState({ disableLongTermMemory: false } as never);
 });
 
@@ -228,6 +232,35 @@ describe('seedConversation', () => {
     expect(state?.status).toBe('completed');
     // Facts persisted (idempotent dedupe — at least one seeded fact).
     expect(listFacts({ limit: 10 }).length).toBeGreaterThan(0);
+  });
+
+  it('binds historical migration episodes thread-only without inferring session sharing', async () => {
+    const conversation = buildConversation('historical-policy', 1);
+    conversation.personaId = 'historical-persona';
+    const extractor = jest.fn(async () =>
+      JSON.stringify({
+        new_facts: [],
+        episode_summary: 'Historical release context',
+        active_focus: null,
+        open_threads: [],
+        notable: [],
+      }),
+    );
+
+    await seedConversation({ conversation, extractor, now: 3_000 });
+
+    const episode = listEpisodes({ conversationId: conversation.id })[0];
+    expect(episode).toBeDefined();
+    expect(getEpisodeAccessPolicy(getMemoryDb(), episode.id)).toMatchObject({
+      scope: {
+        memoryConversationId: conversation.id,
+        sourceThreadId: conversation.id,
+        personaId: 'historical-persona',
+        taskId: null,
+      },
+      shareability: 'thread_only',
+      sensitivity: 'normal',
+    });
   });
 
   it('honours maxTurnsPerCall and resumes from cursor on second call', async () => {
