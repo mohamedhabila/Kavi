@@ -35,6 +35,12 @@ Bounds:
 
 Semantic input is optional and provider-neutral. Retrieval never creates an embedding, calls an embedding provider, calls an LLM, or falls back to a remote service. It consumes a compatible query vector only when the caller already has one and compares it only with stored vectors of the same dimension.
 
+## Episodic sharing boundary
+
+Automatic cross-thread episode recall is limited to a single durable local vault owner, one root/workspace conversation, and one sealed persona. A newly completed non-task turn may be bound as `session_threads` with `normal` sensitivity only when its root conversation, actual source thread, persona, complete message lineage, and immutable policy are recorded atomically. Task-owned turns are always `thread_only`; private, sensitive, incomplete, expired, deleted, withdrawn, unbound, historical-migration, cross-owner, cross-root, and cross-persona episodes never cross threads.
+
+Current-thread recall is a separate explicit lane and may read an unbound thread-local episode. Missing policy is never interpreted as permission to enter the cross-thread lane. Historical migration writes an explicit `thread_only` policy and does not infer past sharing authorization. Every selected cross-thread origin is re-read and re-authorized against the episode, policy, vault owner, and all source-message/turn withdrawal tombstones before local evidence expansion.
+
 ## Measurement and claim guardrails
 
 Per-turn telemetry contains only strategy, semantic availability, lane counts, eligible-scan count, union/diversified counts, and bounded stage timings. It contains no query text, entity/fact/source identifiers, embeddings, or memory content.

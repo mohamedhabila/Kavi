@@ -10,6 +10,7 @@ import {
 } from '../../../src/services/memory/facts/mutations';
 import type { RecordFactInput } from '../../../src/services/memory/facts/types';
 import { getFactById } from '../../../src/services/memory/facts/queries';
+import { recordThreadLocalEpisode } from '../../../src/services/memory/episodes/mutations';
 import { orchestrateMemoryRetrieval } from '../../../src/services/memory/retrievalOrchestrator';
 import { getLocalMemoryVaultOwnerId } from '../../../src/services/memory/memoryVaultIdentity';
 import { DEFAULT_MEMORY_PERSONA_ID } from '../../../src/services/memory/memoryScopeIdentity';
@@ -31,10 +32,17 @@ function memoryScope(taskId: string | null = null) {
   };
 }
 
-function recordFact(input: RecordFactInput) {
+function recordObservedFact(input: Omit<RecordFactInput, 'scope'> & { scope?: RecordFactInput['scope'] }) {
+  return recordFactWithApplicability(
+    { ...input, scope: input.scope ?? 'global' },
+    { factClass: 'workflow', sourceAuthority: 'tool_observed' },
+  );
+}
+
+function recordInferredFact(input: RecordFactInput) {
   return recordFactWithApplicability(input, {
     factClass: 'workflow',
-    sourceAuthority: 'tool_observed',
+    sourceAuthority: 'assistant_inferred',
   });
 }
 
@@ -50,9 +58,9 @@ afterEach(() => {
 });
 
 describe('orchestrateMemoryRetrieval', () => {
-  it('retrieves compact agent-run evidence once', async () => {
+  it('routes inferred run summaries to the resolution lane instead of direct use', async () => {
     const subject = upsertEntity({ name: 'analysis task', type: 'project', now: 1 });
-    recordFact({
+    const aggregate = recordInferredFact({
       subjectId: subject.id,
       predicate: 'agent_run',
       objectText: JSON.stringify({
@@ -77,8 +85,8 @@ describe('orchestrateMemoryRetrieval', () => {
       now: 4,
     });
 
-    expect(result.facts.filter((fact) => fact.memoryKind === 'agent_run')).toHaveLength(1);
-    expect(result.facts.every((fact) => fact.memoryKind !== 'semantic_fact')).toBe(true);
+    expect(result.facts).toEqual([]);
+    expect(result.resolutionFacts.map((fact) => fact.id)).toEqual([aggregate.fact.id]);
     expect(result.timings?.episodes).toMatchObject({
       candidateCount: 0,
       resultCount: 0,
@@ -87,7 +95,7 @@ describe('orchestrateMemoryRetrieval', () => {
 
   it('can retrieve a direct evidence span without relying on a broader run summary', async () => {
     const subject = upsertEntity({ name: 'release task', type: 'project', now: 1 });
-    const span = recordFact({
+    const span = recordObservedFact({
       subjectId: subject.id,
       predicate: 'evidence_span',
       objectText: JSON.stringify({
@@ -103,7 +111,7 @@ describe('orchestrateMemoryRetrieval', () => {
       importance: 0.86,
       now: 2,
     });
-    recordFact({
+    recordInferredFact({
       subjectId: subject.id,
       predicate: 'agent_run',
       objectText: JSON.stringify({
@@ -134,12 +142,12 @@ describe('orchestrateMemoryRetrieval', () => {
   it('uses quoted observations as recall signals alongside the primary request', async () => {
     const subject = upsertEntity({ name: 'quoted label task', type: 'project', now: 1 });
     for (let index = 0; index < 12; index += 1) {
-      recordFact({
+      recordObservedFact({
         subjectId: subject.id,
         predicate: `noise_${index}`,
         objectText:
           'workspace action detail page toolbar visible control candidate summary repeated context',
-        memoryKind: 'agent_run',
+        memoryKind: 'evidence_span',
         sourceRunId: `run-noise-${index}`,
         originConversationId: 'conv-retrieval',
         scope: 'conversation',
@@ -148,9 +156,9 @@ describe('orchestrateMemoryRetrieval', () => {
         now: 10 + index,
       });
     }
-    const target = recordFact({
+    const target = recordObservedFact({
       subjectId: subject.id,
-      predicate: 'agent_run',
+      predicate: 'evidence_span',
       objectText: JSON.stringify({
         sourceRunId: 'run-target',
         evidenceSlices: [
@@ -160,7 +168,7 @@ describe('orchestrateMemoryRetrieval', () => {
           },
         ],
       }),
-      memoryKind: 'agent_run',
+      memoryKind: 'evidence_span',
       sourceRunId: 'run-target',
       originConversationId: 'conv-retrieval',
       scope: 'conversation',
@@ -187,11 +195,10 @@ describe('orchestrateMemoryRetrieval', () => {
 
   it('forwards the closed strategy and caller-supplied local semantic input', async () => {
     const subject = upsertEntity({ name: 'semantic handoff', type: 'project', now: 1 });
-    const target = recordFact({
+    const target = recordObservedFact({
       subjectId: subject.id,
       predicate: 'opaque_result',
       objectText: 'violet-handoff',
-      scope: 'global',
       now: 2,
     });
     setFactEmbedding(target.fact.id, [1, 0], 3);
@@ -226,11 +233,10 @@ describe('orchestrateMemoryRetrieval', () => {
 
   it('rejects invalid public bounds before recall and never reinforces raw selections', async () => {
     const subject = upsertEntity({ name: 'boundary target', type: 'project', now: 1 });
-    const target = recordFact({
+    const target = recordObservedFact({
       subjectId: subject.id,
       predicate: 'boundary_result',
       objectText: 'stable boundary target',
-      scope: 'global',
       now: 2,
     });
 
@@ -262,5 +268,30 @@ describe('orchestrateMemoryRetrieval', () => {
     });
     expect(selected.facts.map((fact) => fact.id)).toContain(target.fact.id);
     expect(getFactById(target.fact.id)?.lastRecalledAt).toBeNull();
+  });
+
+  it('excludes current-thread episodes that are incomplete at the retrieval boundary', async () => {
+    const episode = recordThreadLocalEpisode({
+      conversationId: 'conv-retrieval',
+      threadId: 'conv-retrieval',
+      summary: 'future release episode',
+      messageIds: ['future-start', 'future-end'],
+      sourceStartMessageId: 'future-start',
+      sourceEndMessageId: 'future-end',
+      startedAt: 290,
+      endedAt: 300,
+      now: 300,
+    });
+    expect(episode).not.toBeNull();
+
+    const result = await orchestrateMemoryRetrieval({
+      userMessage: 'future release',
+      memoryScope: memoryScope(),
+      now: 200,
+    });
+
+    expect(result.episodes).toEqual([]);
+    expect(result.episodeSelections).toEqual([]);
+    expect(result.timings?.episodes).toMatchObject({ candidateCount: 0, resultCount: 0 });
   });
 });

@@ -16,7 +16,12 @@ import {
 import { recordFact } from '../../../src/services/memory/facts/mutations';
 import { getFactById } from '../../../src/services/memory/facts/queries';
 import { upsertEntity } from '../../../src/services/memory/entities';
-import { recordEpisode, addFactEvidence } from '../../../src/services/memory/episodes/mutations';
+import {
+  recordEpisode,
+  recordThreadLocalEpisode,
+  addFactEvidence,
+} from '../../../src/services/memory/episodes/mutations';
+import { getLocalMemoryVaultOwnerId } from '../../../src/services/memory/memoryVaultIdentity';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -436,6 +441,7 @@ describe('ensureFactSchema', () => {
     expect(columnNames('memory_ingestion_jobs')).toEqual(
       expect.arrayContaining([
         'thread_title',
+        'persona_id',
         'claim_token',
         'source_at',
         'provider_outcome',
@@ -462,8 +468,9 @@ describe('ensureFactSchema', () => {
         outcome_code: string | null;
         next_attempt_at: number | null;
         structural_completed_at: number | null;
+        persona_id: string | null;
       }>(
-        `SELECT id, status, provider_outcome, outcome_code, next_attempt_at,
+        `SELECT id, status, provider_outcome, outcome_code, next_attempt_at, persona_id,
                 structural_completed_at
            FROM memory_ingestion_jobs
           ORDER BY id`,
@@ -476,22 +483,25 @@ describe('ensureFactSchema', () => {
         outcome_code: null,
         next_attempt_at: null,
         structural_completed_at: 7,
+        persona_id: null,
       },
       {
         id: 'pending-job',
-        status: 'pending',
+        status: 'failed',
         provider_outcome: null,
-        outcome_code: null,
-        next_attempt_at: 2,
+        outcome_code: 'persona_scope_missing',
+        next_attempt_at: null,
         structural_completed_at: null,
+        persona_id: null,
       },
       {
         id: 'stale-job',
-        status: 'retrying',
+        status: 'failed',
         provider_outcome: null,
-        outcome_code: 'stale_processing_lease',
-        next_attempt_at: 4,
+        outcome_code: 'persona_scope_missing',
+        next_attempt_at: null,
         structural_completed_at: null,
+        persona_id: null,
       },
     ]);
     expect(() =>
@@ -519,6 +529,177 @@ describe('ensureFactSchema', () => {
     ).toThrow();
   });
 
+  it('rebuilds an intermediate queue schema without adopting unsealed active identity', () => {
+    ensureFactSchema();
+    closeMemoryDb();
+    expoSqlite.__resetExpoSqliteForTests();
+    resetFactSchemaCacheForTests();
+    getMemoryDb().execSync(`
+      CREATE TABLE memory_ingestion_jobs (
+        id TEXT PRIMARY KEY,
+        thread_id TEXT NOT NULL,
+        thread_title TEXT,
+        memory_conversation_id TEXT NOT NULL,
+        persona_id TEXT,
+        task_id TEXT,
+        source_run_id TEXT,
+        chat_provider_id TEXT,
+        chat_model TEXT,
+        source_start_message_id TEXT,
+        source_end_message_id TEXT NOT NULL,
+        source_at INTEGER,
+        reason TEXT NOT NULL,
+        status TEXT NOT NULL,
+        attempt_count INTEGER NOT NULL,
+        provider_enrichment INTEGER NOT NULL,
+        provider_outcome TEXT,
+        outcome_code TEXT,
+        next_attempt_at INTEGER,
+        lease_expires_at INTEGER,
+        claim_token TEXT,
+        structural_completed_at INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        completed_at INTEGER
+      );
+      INSERT INTO memory_ingestion_jobs (
+        id, thread_id, thread_title, memory_conversation_id, persona_id, task_id,
+        source_run_id, chat_provider_id, chat_model, source_start_message_id,
+        source_end_message_id, source_at, reason, status, attempt_count,
+        provider_enrichment, provider_outcome, outcome_code, next_attempt_at,
+        lease_expires_at, claim_token, structural_completed_at, created_at, updated_at,
+        completed_at
+      ) VALUES
+        ('valid-pending', 'thread-valid', NULL, 'root-valid', 'default', NULL,
+         NULL, NULL, NULL, 'user-valid', 'assistant-valid', 10, 'turn_completed',
+         'pending', 0, 1, NULL, NULL, 10, NULL, NULL, NULL, 10, 10, NULL),
+        ('blank-root', 'thread-blank-root', NULL, '', 'default', NULL,
+         NULL, NULL, NULL, 'user-blank-root', 'assistant-blank-root', 11,
+         'turn_completed', 'pending', 0, 1, NULL, NULL, 11, NULL, NULL, NULL,
+         11, 11, NULL),
+        ('missing-source-clock', 'thread-missing-clock', NULL, 'root-missing-clock',
+         'default', NULL, NULL, NULL, NULL, 'user-missing-clock',
+         'assistant-missing-clock', NULL, 'turn_completed', 'pending', 0, 1,
+         NULL, NULL, 12, NULL, NULL, NULL, 12, 12, NULL),
+        ('provider-pair-mismatch', 'thread-provider-mismatch', NULL,
+         'root-provider-mismatch', 'default', NULL, NULL, NULL, 'orphan-model',
+         'user-provider-mismatch', 'assistant-provider-mismatch', 13,
+         'turn_completed', 'pending', 0, 1, NULL, NULL, 13, NULL, NULL, NULL,
+         13, 13, NULL),
+        ('invalid-policy', 'thread-invalid-policy', NULL, 'root-invalid-policy',
+         'default', NULL, NULL, NULL, NULL, 'user-invalid-policy',
+         'assistant-invalid-policy', 14, 'future_reason', 'pending', 0, 2,
+         NULL, NULL, 14, NULL, NULL, NULL, 14, 14, NULL),
+        ('existing-invalid', 'thread-existing-invalid', NULL, 'root-existing-invalid',
+         'default', NULL, NULL, NULL, NULL, 'user-existing-invalid',
+         'assistant-existing-invalid', 15, 'manual', 'failed', 1, 0, NULL,
+         'source_identity_invalid', NULL, NULL, NULL, NULL, 15, 15, 15),
+        ('existing-conflict', 'thread-existing-conflict', NULL, 'root-existing-conflict',
+         'default', NULL, NULL, NULL, NULL, 'user-existing-conflict',
+         'assistant-existing-conflict', 16, 'manual', 'failed', 1, 0, NULL,
+         'source_identity_conflict', NULL, NULL, NULL, NULL, 16, 16, 16);
+    `);
+
+    ensureFactSchema();
+
+    expect(
+      getMemoryDb().getAllSync<{
+        id: string;
+        status: string;
+        outcome_code: string | null;
+        memory_conversation_id: string;
+        source_at: number;
+        reason: string;
+        provider_enrichment: number;
+        chat_provider_id: string | null;
+        chat_model: string | null;
+      }>(
+        `SELECT id, status, outcome_code, memory_conversation_id, source_at, reason,
+                provider_enrichment, chat_provider_id, chat_model
+           FROM memory_ingestion_jobs
+          ORDER BY id`,
+      ),
+    ).toEqual([
+      {
+        id: 'blank-root',
+        status: 'failed',
+        outcome_code: 'source_identity_invalid',
+        memory_conversation_id: 'thread-blank-root',
+        source_at: 11,
+        reason: 'turn_completed',
+        provider_enrichment: 1,
+        chat_provider_id: null,
+        chat_model: null,
+      },
+      {
+        id: 'existing-conflict',
+        status: 'failed',
+        outcome_code: 'source_identity_conflict',
+        memory_conversation_id: 'root-existing-conflict',
+        source_at: 16,
+        reason: 'manual',
+        provider_enrichment: 0,
+        chat_provider_id: null,
+        chat_model: null,
+      },
+      {
+        id: 'existing-invalid',
+        status: 'failed',
+        outcome_code: 'source_identity_invalid',
+        memory_conversation_id: 'root-existing-invalid',
+        source_at: 15,
+        reason: 'manual',
+        provider_enrichment: 0,
+        chat_provider_id: null,
+        chat_model: null,
+      },
+      {
+        id: 'invalid-policy',
+        status: 'failed',
+        outcome_code: 'source_identity_invalid',
+        memory_conversation_id: 'root-invalid-policy',
+        source_at: 14,
+        reason: 'manual',
+        provider_enrichment: 0,
+        chat_provider_id: null,
+        chat_model: null,
+      },
+      {
+        id: 'missing-source-clock',
+        status: 'failed',
+        outcome_code: 'source_identity_invalid',
+        memory_conversation_id: 'root-missing-clock',
+        source_at: 12,
+        reason: 'turn_completed',
+        provider_enrichment: 1,
+        chat_provider_id: null,
+        chat_model: null,
+      },
+      {
+        id: 'provider-pair-mismatch',
+        status: 'failed',
+        outcome_code: 'source_identity_invalid',
+        memory_conversation_id: 'root-provider-mismatch',
+        source_at: 13,
+        reason: 'turn_completed',
+        provider_enrichment: 1,
+        chat_provider_id: null,
+        chat_model: null,
+      },
+      {
+        id: 'valid-pending',
+        status: 'pending',
+        outcome_code: null,
+        memory_conversation_id: 'root-valid',
+        source_at: 10,
+        reason: 'turn_completed',
+        provider_enrichment: 1,
+        chat_provider_id: null,
+        chat_model: null,
+      },
+    ]);
+  });
+
   it('is idempotent and preserves existing rows across migration calls', () => {
     ensureFactSchema();
     const entity = upsertEntity({ name: 'user', type: 'self', now: 1 });
@@ -529,7 +710,7 @@ describe('ensureFactSchema', () => {
       scope: 'global',
       now: 2,
     });
-    const episode = recordEpisode({
+    const episode = recordThreadLocalEpisode({
       conversationId: 'conv-schema',
       summary: 'User prefers brief answers.',
       now: 3,
@@ -624,6 +805,48 @@ describe('ensureFactSchema', () => {
       'SELECT COUNT(*) AS count FROM memory_fact_term_stats',
     );
     expect(statsAfterClear?.count).toBe(0);
+  });
+
+  it('clears episode access policy state while preserving the local vault identity', () => {
+    ensureFactSchema();
+    const ownerId = getLocalMemoryVaultOwnerId(getMemoryDb());
+    const episode = recordEpisode({
+      conversationId: 'clear-root',
+      threadId: 'clear-thread',
+      taskId: null,
+      summary: 'Clear this authorized episode.',
+      messageIds: ['clear-user', 'clear-assistant'],
+      sourceStartMessageId: 'clear-user',
+      sourceEndMessageId: 'clear-assistant',
+      accessPolicy: {
+        memoryConversationId: 'clear-root',
+        sourceThreadId: 'clear-thread',
+        personaId: 'default',
+        taskId: null,
+        shareability: 'thread_only',
+        sensitivity: 'normal',
+      },
+      now: 10,
+    });
+    expect(episode).not.toBeNull();
+    expect(
+      getMemoryDb().getFirstSync<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM memory_episode_access_policies',
+      )?.count,
+    ).toBe(1);
+
+    clearStructuredMemory();
+
+    expect(
+      getMemoryDb().getFirstSync<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM memory_episode_access_policies',
+      )?.count,
+    ).toBe(0);
+    expect(
+      getMemoryDb().getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM memory_episodes')
+        ?.count,
+    ).toBe(0);
+    expect(getLocalMemoryVaultOwnerId(getMemoryDb())).toBe(ownerId);
   });
 
   it('indexes direct evidence span memories as first-class recall records', () => {

@@ -3,11 +3,19 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { addFactEvidence, recordEpisode } from '../../../src/services/memory/episodes/mutations';
+import {
+  addFactEvidence,
+  recordThreadLocalEpisode,
+} from '../../../src/services/memory/episodes/mutations';
 import { recordFact } from '../../../src/services/memory/facts/mutations';
 import type { MemoryFactKind, RecordFactInput } from '../../../src/services/memory/facts/types';
 import { expandLocalEvidence } from '../../../src/services/memory/localEvidenceExpansion';
-import { LOCAL_EVIDENCE_EXPANSION_LIMITS } from '../../../src/services/memory/localEvidenceExpansionTypes';
+import {
+  LOCAL_EVIDENCE_EXPANSION_LIMITS,
+  type ExpandLocalEvidenceInput,
+  type LocalEvidenceSource,
+} from '../../../src/services/memory/localEvidenceExpansionTypes';
+import { resolveLocalMemoryAccessScope } from '../../../src/services/memory/memoryScopeStore';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
@@ -20,6 +28,33 @@ const SCOPE = {
   memoryConversationId: 'memory-conversation-1',
   sourceThreadId: 'source-thread-1',
 };
+
+function expandCurrentThreadEvidence(
+  input: Omit<ExpandLocalEvidenceInput, 'currentScope' | 'selectedSources'> & {
+    selectedSources: ReadonlyArray<unknown>;
+  },
+) {
+  const currentScope = resolveLocalMemoryAccessScope({
+    ...SCOPE,
+    personaId: 'default',
+    taskId: null,
+  });
+  const selectedSources = input.selectedSources.map((source) =>
+    source && typeof source === 'object'
+      ? {
+          ...(source as LocalEvidenceSource),
+          ...SCOPE,
+          lane: 'current_thread' as const,
+          authorizedOrigin: null,
+        }
+      : source,
+  );
+  return expandLocalEvidence({
+    ...input,
+    currentScope,
+    selectedSources: selectedSources as ExpandLocalEvidenceInput['selectedSources'],
+  });
+}
 
 beforeEach(() => {
   closeMemoryDb();
@@ -49,7 +84,7 @@ function makeFact(
 }
 
 function makeEpisode(summary: string, threadId = SCOPE.sourceThreadId) {
-  const episode = recordEpisode({
+  const episode = recordThreadLocalEpisode({
     conversationId: SCOPE.memoryConversationId,
     threadId,
     summary,
@@ -58,7 +93,7 @@ function makeEpisode(summary: string, threadId = SCOPE.sourceThreadId) {
     sourceEndMessageId: `${threadId}-${summary}`,
     now: 20,
   });
-  if (!episode) throw new Error('recordEpisode returned null');
+  if (!episode) throw new Error('recordThreadLocalEpisode returned null');
   return episode;
 }
 
@@ -91,14 +126,14 @@ describe('expandLocalEvidence', () => {
     const localEpisode = makeEpisode('The user selected compact layout.');
     const unrelatedEpisode = makeEpisode('Private work from another thread.', 'source-thread-2');
     const deletedEpisode = makeEpisode('Deleted local episode.');
-    const futureEpisode = recordEpisode({
+    const futureEpisode = recordThreadLocalEpisode({
       conversationId: SCOPE.memoryConversationId,
       threadId: SCOPE.sourceThreadId,
       summary: 'Future local episode.',
       sourceEndMessageId: 'future-message',
       now: 120,
     });
-    if (!futureEpisode) throw new Error('recordEpisode returned null');
+    if (!futureEpisode) throw new Error('recordThreadLocalEpisode returned null');
     addFactEvidence({
       factId: fact.id,
       episodeId: localEpisode.id,
@@ -139,8 +174,7 @@ describe('expandLocalEvidence', () => {
       fact.id,
     );
 
-    const result = expandLocalEvidence({
-      scope: SCOPE,
+    const result = expandCurrentThreadEvidence({
       selectedSources: [{ kind: 'fact', factId: fact.id }],
       asOf: 100,
     });
@@ -191,8 +225,7 @@ describe('expandLocalEvidence', () => {
     getMemoryDb().runSync('UPDATE memory_facts SET invalid_at = ? WHERE id = ?', 50, invalid.id);
     getMemoryDb().runSync('UPDATE memory_facts SET deleted_at = ? WHERE id = ?', 50, deleted.id);
 
-    const result = expandLocalEvidence({
-      scope: SCOPE,
+    const result = expandCurrentThreadEvidence({
       selectedSources: [{ kind: 'episode', episodeId: episode.id }],
       asOf: 100,
     });
@@ -266,8 +299,7 @@ describe('expandLocalEvidence', () => {
       spanZero.id,
     );
 
-    const result = expandLocalEvidence({
-      scope: SCOPE,
+    const result = expandCurrentThreadEvidence({
       selectedSources: [{ kind: 'run', sourceRunId: runId }],
       asOf: 100,
     });
@@ -290,8 +322,7 @@ describe('expandLocalEvidence', () => {
     expect(result.promptPayload).not.toContain('Future run');
 
     const firstItemBudget = JSON.stringify([result.evidence[0]]).length;
-    const tight = expandLocalEvidence({
-      scope: SCOPE,
+    const tight = expandCurrentThreadEvidence({
       selectedSources: [{ kind: 'run', sourceRunId: runId }],
       asOf: 100,
       promptBudgetChars: firstItemBudget,
@@ -329,8 +360,7 @@ describe('expandLocalEvidence', () => {
       },
     );
 
-    const result = expandLocalEvidence({
-      scope: SCOPE,
+    const result = expandCurrentThreadEvidence({
       selectedSources: [{ kind: 'run', sourceRunId: runId }],
       asOf: 100,
     });
@@ -368,8 +398,7 @@ describe('expandLocalEvidence', () => {
       createdAt: 31,
     });
 
-    const result = expandLocalEvidence({
-      scope: SCOPE,
+    const result = expandCurrentThreadEvidence({
       selectedSources: [
         { kind: 'fact', factId: 'f'.repeat(LOCAL_EVIDENCE_EXPANSION_LIMITS.identifierChars + 1) },
         { kind: 'fact', factId: fact.id },
@@ -396,7 +425,6 @@ describe('expandLocalEvidence', () => {
     insertEvidence({ id: 'evidence-a', factId: first.id, quote: 'a', createdAt: 30 });
     insertEvidence({ id: 'evidence-c', factId: second.id, quote: 'c', createdAt: 20 });
     const input = {
-      scope: SCOPE,
       selectedSources: [
         { kind: 'fact' as const, factId: first.id },
         { kind: 'fact' as const, factId: second.id },
@@ -405,8 +433,8 @@ describe('expandLocalEvidence', () => {
       asOf: 100,
     };
 
-    const firstRead = expandLocalEvidence(input);
-    const secondRead = expandLocalEvidence(input);
+    const firstRead = expandCurrentThreadEvidence(input);
+    const secondRead = expandCurrentThreadEvidence(input);
 
     expect(firstRead.promptPayload).toBe(secondRead.promptPayload);
     expect(firstRead.evidence.map((item) => item.provenance.evidenceId)).toEqual([
@@ -422,14 +450,13 @@ describe('expandLocalEvidence', () => {
     const fact = makeFact('Valid source after malformed inputs.');
     insertEvidence({ id: 'evidence-valid-runtime-source', factId: fact.id, quote: 'valid' });
 
-    const result = expandLocalEvidence({
-      scope: SCOPE,
+    const result = expandCurrentThreadEvidence({
       selectedSources: [
         null,
         { kind: 'unknown', factId: fact.id },
         { kind: 'fact' },
         { kind: 'fact', factId: fact.id },
-      ] as unknown as Parameters<typeof expandLocalEvidence>[0]['selectedSources'],
+      ] as unknown as Parameters<typeof expandCurrentThreadEvidence>[0]['selectedSources'],
       asOf: 100,
     });
 
@@ -457,8 +484,7 @@ describe('expandLocalEvidence', () => {
       return { kind: 'fact' as const, factId: fact.id };
     });
 
-    const result = expandLocalEvidence({
-      scope: SCOPE,
+    const result = expandCurrentThreadEvidence({
       selectedSources,
       asOf: 1_000,
       promptBudgetChars: 1_200,
@@ -481,8 +507,7 @@ describe('expandLocalEvidence', () => {
 
   it('returns an empty bounded payload and content-free diagnostics when no evidence matches', () => {
     const fact = makeFact('Fact without local evidence.');
-    const result = expandLocalEvidence({
-      scope: SCOPE,
+    const result = expandCurrentThreadEvidence({
       selectedSources: [
         { kind: 'fact', factId: fact.id },
         { kind: 'episode', episodeId: 'missing-episode' },
@@ -515,8 +540,7 @@ describe('expandLocalEvidence', () => {
       const fact = makeFact(`kind-${memoryKind}`, { memoryKind });
       insertEvidence({ id: `kind-evidence-${memoryKind}`, factId: fact.id, quote: memoryKind });
 
-      const result = expandLocalEvidence({
-        scope: SCOPE,
+      const result = expandCurrentThreadEvidence({
         selectedSources: [{ kind: 'fact', factId: fact.id }],
         asOf: 100,
       });

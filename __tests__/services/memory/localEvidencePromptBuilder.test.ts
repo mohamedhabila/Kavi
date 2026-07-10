@@ -12,7 +12,14 @@ describe('local evidence prompt builder', () => {
   it('performs no local query for zero selected evidence', () => {
     const expansion = jest.spyOn(expansionModule, 'expandLocalEvidence');
 
-    expect(buildLocalEvidencePrompt({ facts: [], episodes: [], asOf: 1 })).toEqual({
+    expect(
+      buildLocalEvidencePrompt({
+        facts: [],
+        episodeSelections: [],
+        currentScope: null,
+        asOf: 1,
+      }),
+    ).toEqual({
       section: null,
       diagnostics: {
         outcome: 'not_requested',
@@ -30,7 +37,12 @@ describe('local evidence prompt builder', () => {
 
   it('fails closed without querying when exact scope is unavailable', () => {
     const expansion = jest.spyOn(expansionModule, 'expandLocalEvidence');
-    const result = buildLocalEvidencePrompt({ facts: [fact('fact-1')], episodes: [], asOf: 1 });
+    const result = buildLocalEvidencePrompt({
+      facts: [fact('fact-1')],
+      episodeSelections: [],
+      currentScope: null,
+      asOf: 1,
+    });
 
     expect(result).toMatchObject({
       section: null,
@@ -51,9 +63,14 @@ describe('local evidence prompt builder', () => {
     });
     const result = buildLocalEvidencePrompt({
       facts: [fact('fact-1')],
-      episodes: [],
-      memoryConversationId: 'conversation-1',
-      sourceThreadId: 'thread-1',
+      episodeSelections: [],
+      currentScope: {
+        memoryOwnerId: 'owner-1',
+        memoryConversationId: 'conversation-1',
+        sourceThreadId: 'thread-1',
+        personaId: 'default',
+        taskId: null,
+      },
       asOf: 1,
     });
 
