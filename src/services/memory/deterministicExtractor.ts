@@ -190,12 +190,26 @@ function extractStructuredOpenThreads(messages: Message[]): string[] {
 
 function extractStructuralFacts(messages: Message[]): ConsolidatorFact[] {
   const facts: ConsolidatorFact[] = [];
+  const observedToolResults = new Map<string, string>();
+  for (const message of messages) {
+    if (
+      message.role === 'tool' &&
+      typeof message.toolCallId === 'string' &&
+      message.toolCallId.length > 0 &&
+      typeof message.id === 'string' &&
+      message.id.length > 0 &&
+      !observedToolResults.has(message.toolCallId)
+    ) {
+      observedToolResults.set(message.toolCallId, message.id);
+    }
+  }
 
   // Fact 1: File operations — detected by tool name, not language
   const fileTools = ['write_file', 'file_edit', 'apply_patch', 'read_file'];
   for (const m of messages) {
     for (const tc of m.toolCalls ?? []) {
-      if (tc.name && fileTools.includes(tc.name)) {
+      const evidenceMessageId = tc.id ? observedToolResults.get(tc.id) : undefined;
+      if (tc.name && fileTools.includes(tc.name) && evidenceMessageId) {
         try {
           const args = JSON.parse(tc.arguments ?? '{}');
           const path = args.path ?? args.filePath ?? args.file_path;
@@ -207,7 +221,12 @@ function extractStructuralFacts(messages: Message[]): ConsolidatorFact[] {
               scope: 'conversation',
               importance: 0.6,
               confidence: 0.9,
-              reason: 'File operation detected.',
+              evidenceMessageIds: [evidenceMessageId],
+              reason: 'Tool invocation and matching result observed.',
+              sealedApplicability: {
+                factClass: 'workflow',
+                sourceAuthority: 'tool_observed',
+              },
             });
             if (facts.length >= MAX_STRUCTURAL_FACTS) return facts;
           }
@@ -221,7 +240,8 @@ function extractStructuralFacts(messages: Message[]): ConsolidatorFact[] {
   // Fact 2: Sub-agent spawning — structural
   for (const m of messages) {
     for (const tc of m.toolCalls ?? []) {
-      if (tc.name === 'sessions_spawn') {
+      const evidenceMessageId = tc.id ? observedToolResults.get(tc.id) : undefined;
+      if (tc.name === 'sessions_spawn' && evidenceMessageId) {
         try {
           const args = JSON.parse(tc.arguments ?? '{}');
           const prompt = args.prompt ?? '';
@@ -232,7 +252,12 @@ function extractStructuralFacts(messages: Message[]): ConsolidatorFact[] {
             scope: 'conversation',
             importance: 0.65,
             confidence: 0.85,
-            reason: 'Sub-agent delegated.',
+            evidenceMessageIds: [evidenceMessageId],
+            reason: 'Sub-agent invocation and matching result observed.',
+            sealedApplicability: {
+              factClass: 'workflow',
+              sourceAuthority: 'tool_observed',
+            },
           });
           if (facts.length >= MAX_STRUCTURAL_FACTS) return facts;
         } catch {

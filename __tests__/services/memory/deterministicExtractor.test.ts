@@ -333,20 +333,50 @@ describe('extractStructuralMemory — structural facts', () => {
     expect(fact).toBeUndefined();
   });
 
-  it('extracts file operation facts from known file tool names', () => {
+  it('extracts file operation facts only from calls with an exact tool result', () => {
     const result = extractStructuralMemory({
       ...baseInput,
       messages: [
         msg({
           role: 'assistant',
           content: '',
-          toolCalls: [{ name: 'file_edit', arguments: JSON.stringify({ path: '/src/app.ts' }) }],
+          toolCalls: [
+            {
+              id: 'file-edit-1',
+              name: 'file_edit',
+              arguments: JSON.stringify({ path: '/src/app.ts' }),
+            },
+          ],
         }),
+        msg({ id: 'file-edit-result-1', role: 'tool', toolCallId: 'file-edit-1', content: 'ok' }),
       ],
     });
     const fact = result.facts.find((f) => f.predicate === 'file_operation');
     expect(fact).toBeDefined();
     expect(fact!.value).toContain('/src/app.ts');
+    expect(fact).toMatchObject({
+      evidenceMessageIds: ['file-edit-result-1'],
+      sealedApplicability: { factClass: 'workflow', sourceAuthority: 'tool_observed' },
+    });
+  });
+
+  it('does not treat an unobserved tool request as a completed structural fact', () => {
+    const result = extractStructuralMemory({
+      ...baseInput,
+      messages: [
+        msg({
+          role: 'assistant',
+          toolCalls: [
+            {
+              id: 'unobserved-edit',
+              name: 'file_edit',
+              arguments: JSON.stringify({ path: '/src/app.ts' }),
+            },
+          ],
+        }),
+      ],
+    });
+    expect(result.facts).toEqual([]);
   });
 
   it('extracts sub-agent delegation facts', () => {
@@ -357,9 +387,14 @@ describe('extractStructuralMemory — structural facts', () => {
           role: 'assistant',
           content: '',
           toolCalls: [
-            { name: 'sessions_spawn', arguments: JSON.stringify({ prompt: 'Write tests' }) },
+            {
+              id: 'spawn-1',
+              name: 'sessions_spawn',
+              arguments: JSON.stringify({ prompt: 'Write tests' }),
+            },
           ],
         }),
+        msg({ id: 'spawn-result-1', role: 'tool', toolCallId: 'spawn-1', content: 'created' }),
       ],
     });
     const fact = result.facts.find((f) => f.predicate === 'delegated_task');
@@ -374,7 +409,19 @@ describe('extractStructuralMemory — structural facts', () => {
         msg({
           role: 'assistant',
           content: '',
-          toolCalls: [{ name: 'file_edit', arguments: JSON.stringify({ path: `/file${i}.ts` }) }],
+          toolCalls: [
+            {
+              id: `file-edit-${i}`,
+              name: 'file_edit',
+              arguments: JSON.stringify({ path: `/file${i}.ts` }),
+            },
+          ],
+        }),
+        msg({
+          id: `file-edit-result-${i}`,
+          role: 'tool',
+          toolCallId: `file-edit-${i}`,
+          content: 'ok',
         }),
       );
     }
