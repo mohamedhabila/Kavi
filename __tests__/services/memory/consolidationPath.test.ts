@@ -2,7 +2,10 @@ jest.mock('../../../src/services/storage/SecureStorage', () => ({
   getProviderApiKey: jest.fn(async () => ''),
 }));
 
-import { resolveConsolidationPath } from '../../../src/services/memory/consolidation/paths';
+import {
+  extractConsolidationAssistantText,
+  resolveConsolidationPath,
+} from '../../../src/services/memory/consolidation/paths';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { LlmProviderConfig } from '../../../src/types/provider';
 
@@ -58,5 +61,26 @@ describe('resolveConsolidationPath', () => {
     expect(path.provider?.id).toBe(provider.id);
     expect(path.model).toBe(provider.model);
     expect(path.extractor).toEqual(expect.any(Function));
+  });
+});
+
+describe('extractConsolidationAssistantText', () => {
+  it('extracts normalized provider text shapes', () => {
+    expect(
+      extractConsolidationAssistantText({
+        choices: [{ message: { content: [{ text: '{"new_' }, { output_text: 'facts":[]}' }] } }],
+      }),
+    ).toBe('{"new_facts":[]}');
+  });
+
+  it.each([
+    null,
+    {},
+    { choices: [] },
+    { choices: [{ message: { content: [{ type: 'image' }] } }] },
+  ])('throws for unsupported provider response shape %p', (response) => {
+    expect(() => extractConsolidationAssistantText(response)).toThrow(
+      'Unsupported consolidation provider response shape',
+    );
   });
 });

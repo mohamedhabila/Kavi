@@ -19,7 +19,7 @@ import { createTimeoutSignal } from '../../../utils/runtime';
 import { LlmService } from '../../llm/LlmService';
 import { isOnDeviceLlmProvider } from '../../localLlm/provider';
 import { resolveConversationModel, resolveProviderApiKey } from '../../llm/support/providerSupport';
-import type { ConsolidatorExtractor } from '../consolidator';
+import { UnsupportedConsolidatorResponseError, type ConsolidatorExtractor } from '../consolidator';
 
 const MEMORY_EXTRACTOR_TIMEOUT_MS = 30_000;
 const MEMORY_EXTRACTOR_MAX_TOKENS = 32_000;
@@ -33,27 +33,29 @@ export interface ResolvedConsolidationPath {
   extractor: ConsolidatorExtractor | null;
 }
 
-function extractAssistantText(response: unknown): string {
+export function extractConsolidationAssistantText(response: unknown): string {
   if (typeof response === 'string') return response;
-  if (!response || typeof response !== 'object') return '';
+  if (!response || typeof response !== 'object') {
+    throw new UnsupportedConsolidatorResponseError();
+  }
   const value = response as Record<string, unknown>;
   const choiceContent = (
     value.choices as Array<{ message?: { content?: unknown } }> | undefined
   )?.[0]?.message?.content;
   if (typeof choiceContent === 'string') return choiceContent;
   if (Array.isArray(choiceContent)) {
-    return choiceContent
-      .map((part) =>
-        typeof part === 'string'
-          ? part
-          : ((part as { text?: string; output_text?: string })?.text ??
-            (part as { output_text?: string })?.output_text ??
-            ''),
-      )
-      .join('');
+    const parts = choiceContent.map((part) => {
+      if (typeof part === 'string') return part;
+      if (!part || typeof part !== 'object') throw new UnsupportedConsolidatorResponseError();
+      const textPart = part as Record<string, unknown>;
+      if (typeof textPart.text === 'string') return textPart.text;
+      if (typeof textPart.output_text === 'string') return textPart.output_text;
+      throw new UnsupportedConsolidatorResponseError();
+    });
+    return parts.join('');
   }
   if (typeof value.output_text === 'string') return value.output_text;
-  return '';
+  throw new UnsupportedConsolidatorResponseError();
 }
 
 function buildProviderExtractor(
@@ -68,7 +70,7 @@ function buildProviderExtractor(
       maxTokens: MEMORY_EXTRACTOR_MAX_TOKENS,
       signal: createTimeoutSignal(MEMORY_EXTRACTOR_TIMEOUT_MS),
     });
-    return extractAssistantText(response);
+    return extractConsolidationAssistantText(response);
   };
 }
 

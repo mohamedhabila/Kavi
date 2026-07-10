@@ -208,79 +208,137 @@ describe('buildConsolidatorPrompt', () => {
 });
 
 describe('parseConsolidatorOutput', () => {
-  it('parses a clean JSON payload', () => {
+  const validPayload = (overrides: Record<string, unknown> = {}) => ({
+    episode_summary: null,
+    new_facts: [],
+    active_focus: null,
+    open_threads: [],
+    notable: [],
+    ...overrides,
+  });
+
+  it('returns valid for a strict canonical JSON payload', () => {
     const raw = JSON.stringify({
-      new_facts: [{ subject: 'user', predicate: 'lives_in', value: 'Berlin', confidence: 'high' }],
+      ...validPayload(),
+      new_facts: [{ subject: 'user', predicate: 'lives_in', value: 'Berlin', confidence: 0.9 }],
       active_focus: 'Setting up after relocating.',
       open_threads: ['Suggest a SIM card provider'],
       notable: ['User just moved to Berlin'],
     });
-    const result = parseConsolidatorOutput(raw);
-    expect(result.newFacts).toHaveLength(1);
-    expect(result.newFacts[0]).toMatchObject({
+    const outcome = parseConsolidatorOutput(raw);
+    expect(outcome.status).toBe('valid');
+    if (outcome.status !== 'valid') throw new Error('expected valid outcome');
+    expect(outcome.result.newFacts).toHaveLength(1);
+    expect(outcome.result.newFacts[0]).toMatchObject({
       subject: 'user',
       predicate: 'lives_in',
       value: 'Berlin',
-      confidence: 'high',
+      confidence: 0.9,
     });
-    expect(result.activeFocus).toBe('Setting up after relocating.');
-    expect(result.openThreads).toEqual(['Suggest a SIM card provider']);
-    expect(result.notable).toEqual(['User just moved to Berlin']);
+    expect(outcome.result.activeFocus).toBe('Setting up after relocating.');
+    expect(outcome.result.openThreads).toEqual(['Suggest a SIM card provider']);
+    expect(outcome.result.notable).toEqual(['User just moved to Berlin']);
   });
 
-  it('strips a ```json fence', () => {
-    const raw =
-      '```json\n{"new_facts":[],"active_focus":"hello","open_threads":[],"notable":[]}\n```';
-    const result = parseConsolidatorOutput(raw);
-    expect(result.activeFocus).toBe('hello');
-  });
-
-  it('returns an empty result on malformed JSON', () => {
-    const result = parseConsolidatorOutput('not json at all');
-    expect(result).toEqual({
-      episodeSummary: null,
-      newFacts: [],
-      activeFocus: null,
-      openThreads: [],
-      notable: [],
+  it('distinguishes a valid intentionally empty payload', () => {
+    expect(parseConsolidatorOutput(JSON.stringify(validPayload()))).toEqual({
+      status: 'empty_valid',
+      result: {
+        episodeSummary: null,
+        newFacts: [],
+        activeFocus: null,
+        openThreads: [],
+        notable: [],
+      },
     });
   });
 
-  it('drops facts missing required fields', () => {
-    const raw = JSON.stringify({
-      new_facts: [
-        { subject: 'user', predicate: 'has_name' },
-        { subject: '', predicate: 'x', value: 'y' },
-        { subject: 'user', predicate: 'has_name', value: 'Mo' },
-      ],
-    });
-    const result = parseConsolidatorOutput(raw);
-    expect(result.newFacts).toHaveLength(1);
-    expect(result.newFacts[0].value).toBe('Mo');
+  it.each([
+    ['', 'empty_response'],
+    ['not json at all', 'invalid_json'],
+    ['```json\n{}\n```', 'invalid_json'],
+    ['null', 'non_object'],
+    ['[]', 'non_object'],
+    ['"text"', 'non_object'],
+  ])('returns a bounded malformed outcome for %p', (raw, code) => {
+    expect(parseConsolidatorOutput(raw)).toEqual({ status: 'malformed', code });
   });
 
-  it('caps facts at 5, open_threads at 5, notable at 2', () => {
-    const raw = JSON.stringify({
-      new_facts: Array.from({ length: 10 }, (_, i) => ({
+  it.each([
+    [{}, 'missing_required_field'],
+    [validPayload({ episodeSummary: null }), 'unexpected_field'],
+    [validPayload({ open_threads: null }), 'invalid_field_type'],
+    [validPayload({ active_focus: '' }), 'invalid_field_value'],
+    [validPayload({ notable: ['x'.repeat(201)] }), 'limit_exceeded'],
+  ])('returns a bounded schema outcome instead of coercing %p', (payload, code) => {
+    expect(parseConsolidatorOutput(JSON.stringify(payload))).toEqual({
+      status: 'schema_invalid',
+      code,
+    });
+  });
+
+  it('rejects an oversized payload instead of truncating it', () => {
+    const raw = JSON.stringify(
+      validPayload({
+        new_facts: Array.from({ length: 6 }, (_, i) => ({
+          subject: 'user',
+          predicate: `p${i}`,
+          value: `v${i}`,
+        })),
+      }),
+    );
+    expect(parseConsolidatorOutput(raw)).toEqual({
+      status: 'schema_invalid',
+      code: 'limit_exceeded',
+    });
+  });
+
+  it('invalidates the whole payload when any fact is invalid', () => {
+    const raw = JSON.stringify(
+      validPayload({
+        new_facts: [
+          { subject: 'user', predicate: 'has_name', value: 'Mo' },
+          { subject: 'user', predicate: 'lives_in' },
+        ],
+      }),
+    );
+    expect(parseConsolidatorOutput(raw)).toEqual({
+      status: 'schema_invalid',
+      code: 'missing_required_field',
+    });
+  });
+
+  it.each([
+    [{ subject: 'user', predicate: 'p', object: 'v' }, 'unexpected_field'],
+    [
+      {
         subject: 'user',
-        predicate: `p${i}`,
-        value: `v${i}`,
-      })),
-      open_threads: Array.from({ length: 10 }, (_, i) => `t${i}`),
-      notable: ['a', 'b', 'c', 'd'],
+        predicate: 'p',
+        value: 'v',
+        assertionClass: 'current_direct',
+      },
+      'unexpected_field',
+    ],
+    [
+      {
+        subject: 'user',
+        predicate: 'p',
+        value: 'v',
+        evidenceQuote: 'v',
+      },
+      'unexpected_field',
+    ],
+    [{ subject: 'user', predicate: 'p', value: 'v', confidence: 'high' }, 'invalid_field_value'],
+    [{ subject: 'user', predicate: 'p', value: 'v', confidence: 2 }, 'invalid_field_value'],
+    [
+      { subject: 'user', predicate: 'p', value: 'v', evidence_message_ids: ['ok', 2] },
+      'invalid_field_type',
+    ],
+  ])('rejects aliases and invalid fact field values: %p', (fact, code) => {
+    expect(parseConsolidatorOutput(JSON.stringify(validPayload({ new_facts: [fact] })))).toEqual({
+      status: 'schema_invalid',
+      code,
     });
-    const result = parseConsolidatorOutput(raw);
-    expect(result.newFacts).toHaveLength(5);
-    expect(result.openThreads).toHaveLength(5);
-    expect(result.notable).toHaveLength(2);
-  });
-
-  it('coerces unknown confidence to undefined', () => {
-    const raw = JSON.stringify({
-      new_facts: [{ subject: 'user', predicate: 'p', value: 'v', confidence: 'unsure' }],
-    });
-    const result = parseConsolidatorOutput(raw);
-    expect(result.newFacts[0].confidence).toBeUndefined();
   });
 });
 
@@ -294,7 +352,7 @@ describe('applyConsolidatorResult', () => {
             subject: 'user',
             predicate: 'lives_in',
             value: 'Berlin',
-            confidence: 'high',
+            confidence: 0.9,
             scope: 'global',
             importance: 0.8,
             evidenceMessageIds: ['u-1'],

@@ -29,11 +29,14 @@ describe('extractProviderEnrichment', () => {
     };
     const extractor = jest.fn().mockResolvedValue('{"newFacts":[]}');
     mockConsolidateTurn.mockResolvedValue({
-      episodeSummary: 'Greeting',
-      newFacts: [],
-      activeFocus: null,
-      openThreads: [],
-      notable: [],
+      status: 'empty_valid',
+      result: {
+        episodeSummary: null,
+        newFacts: [],
+        activeFocus: null,
+        openThreads: [],
+        notable: [],
+      },
     });
 
     await extractProviderEnrichment(turnInput, { extractor, now: () => 42 });
@@ -46,41 +49,42 @@ describe('extractProviderEnrichment', () => {
 
   it('returns the consolidated result on success', async () => {
     const expected = {
-      episodeSummary: 'User likes tea',
-      newFacts: [{ subject: 'user', predicate: 'prefers', value: 'tea' }],
-      activeFocus: 'Beverage preferences',
-      openThreads: [],
-      notable: [],
+      status: 'valid',
+      result: {
+        episodeSummary: 'User likes tea',
+        newFacts: [{ subject: 'user', predicate: 'prefers', value: 'tea' }],
+        activeFocus: 'Beverage preferences',
+        openThreads: [],
+        notable: [],
+      },
     };
     mockConsolidateTurn.mockResolvedValue(expected);
 
     const result = await extractProviderEnrichment(
-      { userMessage: 'I like tea', assistantMessage: 'Great', conversationId: 'c1', threadId: 'c1' },
+      {
+        userMessage: 'I like tea',
+        assistantMessage: 'Great',
+        conversationId: 'c1',
+        threadId: 'c1',
+      },
       { extractor: jest.fn() },
     );
 
     expect(result).toEqual(expected);
   });
 
-  it('propagates consolidateTurn failures', async () => {
-    mockConsolidateTurn.mockRejectedValue(new Error('Provider timeout'));
+  it.each([
+    { status: 'provider_error', code: 'provider_request_failed' },
+    { status: 'malformed', code: 'invalid_json' },
+    { status: 'schema_invalid', code: 'invalid_field_type' },
+  ])('returns the explicit $status outcome', async (expected) => {
+    mockConsolidateTurn.mockResolvedValue(expected);
 
     await expect(
       extractProviderEnrichment(
         { userMessage: 'x', assistantMessage: 'y', conversationId: 'c1', threadId: 'c1' },
         { extractor: jest.fn() },
       ),
-    ).rejects.toThrow('Provider timeout');
-  });
-
-  it('propagates non-Error consolidateTurn failures', async () => {
-    mockConsolidateTurn.mockRejectedValue('string-error');
-
-    await expect(
-      extractProviderEnrichment(
-        { userMessage: 'x', assistantMessage: 'y', conversationId: 'c1', threadId: 'c1' },
-        { extractor: jest.fn() },
-      ),
-    ).rejects.toBe('string-error');
+    ).resolves.toEqual(expected);
   });
 });

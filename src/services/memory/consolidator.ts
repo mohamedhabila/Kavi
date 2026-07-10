@@ -16,8 +16,8 @@
 //     content_hash inside facts.recordFact).
 //   • Provider-agnostic: the extractor is just an `(prompt) => Promise<json>`
 //     callback so we can swap mocked / on-device / cloud LLMs without edits.
-//   • Fail-safe: any parse / network failure yields an empty result; we never
-//     pollute memory with junk and never throw out of the chat path.
+//   • Parse and provider failures are explicit outcomes. Callers decide whether
+//     to retry or degrade; malformed output is never treated as empty memory.
 // ---------------------------------------------------------------------------
 
 import type { Message } from '../../types/message';
@@ -86,16 +86,54 @@ export interface ConsolidatorFact {
   evidenceQuote?: string;
   /** Internal authority created only by deterministic product code. */
   admittedWrite?: AdmittedFactWrite;
-  /** Plain-language confidence label from the model: "high" | "medium" | "low". */
-  confidence?: 'high' | 'medium' | 'low' | number;
+  /** Provider confidence score in the canonical 0..1 range. */
+  confidence?: number;
 }
 
 export interface ConsolidatorResult {
-  episodeSummary?: string | null;
+  episodeSummary: string | null;
   newFacts: ConsolidatorFact[];
   activeFocus: string | null;
   openThreads: string[];
   notable: string[];
+}
+
+export type ConsolidatorMalformedCode = 'empty_response' | 'invalid_json' | 'non_object';
+
+export type ConsolidatorSchemaInvalidCode =
+  | 'missing_required_field'
+  | 'unexpected_field'
+  | 'invalid_field_type'
+  | 'invalid_field_value'
+  | 'limit_exceeded';
+
+export type ConsolidatorProviderErrorCode =
+  | 'provider_request_failed'
+  | 'unsupported_response_shape';
+
+export type ConsolidatorOutcome =
+  | {
+      status: 'valid' | 'empty_valid';
+      result: ConsolidatorResult;
+    }
+  | {
+      status: 'malformed';
+      code: ConsolidatorMalformedCode;
+    }
+  | {
+      status: 'schema_invalid';
+      code: ConsolidatorSchemaInvalidCode;
+    }
+  | {
+      status: 'provider_error';
+      code: ConsolidatorProviderErrorCode;
+    };
+
+export class UnsupportedConsolidatorResponseError extends Error {
+  constructor() {
+    super('Unsupported consolidation provider response shape');
+    this.name = 'UnsupportedConsolidatorResponseError';
+  }
 }
 
 export type ConsolidatorExtractor = (prompt: string) => Promise<string>;
@@ -144,6 +182,8 @@ Return STRICT JSON only — no prose, no markdown fences. Schema:
 }
 
 Rules:
+- Every top-level field shown above is required and must use its exact
+  snake_case name. Do not add fields outside the schema.
 - Skip ephemeral chit-chat. Do not extract greetings, jokes, or filler.
 - new_facts: only durable assertions. Reject opinions stated as facts.
 - Default operation to insert. Use replace_current only when the latest user
@@ -238,101 +278,156 @@ function truncateForPrompt(value: string, max: number): string {
   return `${trimmed.slice(0, max - 1).trimEnd()}\u2026`;
 }
 
-interface RawConsolidatorPayload {
-  episode_summary?: unknown;
-  new_facts?: unknown;
-  active_focus?: unknown;
-  open_threads?: unknown;
-  notable?: unknown;
-}
+const TOP_LEVEL_FIELDS = new Set([
+  'episode_summary',
+  'new_facts',
+  'active_focus',
+  'open_threads',
+  'notable',
+]);
 
-export function parseConsolidatorOutput(raw: string): ConsolidatorResult {
-  const fallback: ConsolidatorResult = {
-    episodeSummary: null,
-    newFacts: [],
-    activeFocus: null,
-    openThreads: [],
-    notable: [],
-  };
-  const cleaned = stripCodeFence(raw).trim();
-  if (!cleaned) return fallback;
-  let parsed: RawConsolidatorPayload;
+const FACT_FIELDS = new Set([
+  'subject',
+  'predicate',
+  'value',
+  'scope',
+  'importance',
+  'confidence',
+  'evidence_message_ids',
+  'operation',
+  'assertion_class',
+  'evidence_quote',
+  'reason',
+]);
+
+const REQUIRED_TOP_LEVEL_FIELDS = [...TOP_LEVEL_FIELDS];
+const REQUIRED_FACT_FIELDS = ['subject', 'predicate', 'value'];
+
+type SchemaValidation<T> =
+  | { valid: true; value: T }
+  | { valid: false; code: ConsolidatorSchemaInvalidCode };
+
+export function parseConsolidatorOutput(raw: string): ConsolidatorOutcome {
+  const cleaned = raw.trim();
+  if (!cleaned) return { status: 'malformed', code: 'empty_response' };
+
+  let parsed: unknown;
   try {
-    parsed = JSON.parse(cleaned) as RawConsolidatorPayload;
+    parsed = JSON.parse(cleaned);
   } catch {
-    return fallback;
+    return { status: 'malformed', code: 'invalid_json' };
   }
-  if (!parsed || typeof parsed !== 'object') return fallback;
+  if (!isPlainRecord(parsed)) return { status: 'malformed', code: 'non_object' };
+
+  const validated = validatePayload(parsed);
+  if (!validated.valid) return { status: 'schema_invalid', code: validated.code };
 
   return {
-    episodeSummary: normalizeBoundedString(parsed.episode_summary, 1200),
-    newFacts: normalizeFacts(parsed.new_facts),
-    activeFocus: normalizeActiveFocus(parsed.active_focus),
-    openThreads: normalizeStringArray(parsed.open_threads, 80, 5),
-    notable: normalizeStringArray(parsed.notable, 200, 2),
+    status: isEmptyConsolidatorResult(validated.value) ? 'empty_valid' : 'valid',
+    result: validated.value,
   };
 }
 
-function stripCodeFence(value: string): string {
-  const trimmed = value.trim();
-  const fenceMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  return fenceMatch ? fenceMatch[1] : trimmed;
+function validatePayload(payload: Record<string, unknown>): SchemaValidation<ConsolidatorResult> {
+  if (Object.keys(payload).some((field) => !TOP_LEVEL_FIELDS.has(field))) {
+    return schemaInvalid('unexpected_field');
+  }
+  if (REQUIRED_TOP_LEVEL_FIELDS.some((field) => !hasOwn(payload, field))) {
+    return schemaInvalid('missing_required_field');
+  }
+
+  const episodeSummary = validateNullableString(payload.episode_summary, 1200);
+  if (!episodeSummary.valid) return episodeSummary;
+  const activeFocus = validateNullableString(payload.active_focus, 600);
+  if (!activeFocus.valid) return activeFocus;
+  const openThreads = validateStringArray(payload.open_threads, 80, 5);
+  if (!openThreads.valid) return openThreads;
+  const notable = validateStringArray(payload.notable, 200, 2);
+  if (!notable.valid) return notable;
+  const newFacts = validateFacts(payload.new_facts);
+  if (!newFacts.valid) return newFacts;
+
+  return {
+    valid: true,
+    value: {
+      episodeSummary: episodeSummary.value,
+      newFacts: newFacts.value,
+      activeFocus: activeFocus.value,
+      openThreads: openThreads.value,
+      notable: notable.value,
+    },
+  };
 }
 
-function normalizeFacts(raw: unknown): ConsolidatorFact[] {
-  if (!Array.isArray(raw)) return [];
-  const out: ConsolidatorFact[] = [];
+function validateFacts(raw: unknown): SchemaValidation<ConsolidatorFact[]> {
+  if (!Array.isArray(raw)) return schemaInvalid('invalid_field_type');
+  if (raw.length > 5) return schemaInvalid('limit_exceeded');
+
+  const facts: ConsolidatorFact[] = [];
   for (const item of raw) {
-    if (out.length >= 5) break;
-    if (!item || typeof item !== 'object') continue;
-    const candidate = item as Record<string, unknown>;
-    const subject = typeof candidate.subject === 'string' ? candidate.subject.trim() : '';
-    const predicate = typeof candidate.predicate === 'string' ? candidate.predicate.trim() : '';
-    const value = typeof candidate.value === 'string' ? candidate.value.trim() : '';
-    const objectValue = typeof candidate.object === 'string' ? candidate.object.trim() : '';
-    const finalValue = value || objectValue;
-    if (!subject || !predicate || !finalValue) continue;
-    if (subject.length > 80 || predicate.length > 80 || finalValue.length > 200) continue;
-    const confidenceRaw =
-      typeof candidate.confidence === 'string' ? candidate.confidence.trim().toLowerCase() : '';
-    const numericConfidence =
-      typeof candidate.confidence === 'number' ? clamp01(candidate.confidence) : undefined;
-    const confidence: ConsolidatorFact['confidence'] =
-      numericConfidence ??
-      (confidenceRaw === 'high' || confidenceRaw === 'medium' || confidenceRaw === 'low'
-        ? (confidenceRaw as ConsolidatorFact['confidence'])
-        : undefined);
-    const scope = parseFactScope(candidate.scope);
-    const importance =
-      typeof candidate.importance === 'number' ? clamp01(candidate.importance) : undefined;
-    const evidenceMessageIds = Array.isArray(candidate.evidence_message_ids)
-      ? candidate.evidence_message_ids
-          .filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
-          .map((id) => id.trim())
-          .slice(0, 8)
-      : undefined;
-    const reason = normalizeBoundedString(candidate.reason, 240) ?? undefined;
-    const operation = parseFactOperation(candidate.operation);
-    const assertionClass = parseAssertionClass(
-      candidate.assertion_class ?? candidate.assertionClass,
-    );
-    const evidenceQuote =
-      normalizeBoundedString(candidate.evidence_quote ?? candidate.evidenceQuote, 600) ?? undefined;
-    out.push({
-      subject,
-      predicate,
-      value: finalValue,
-      ...(scope ? { scope } : {}),
-      ...(typeof importance === 'number' ? { importance } : {}),
-      ...(confidence !== undefined ? { confidence } : {}),
-      ...(evidenceMessageIds?.length ? { evidenceMessageIds } : {}),
-      ...(reason ? { reason } : {}),
-      ...(operation ? { operation } : {}),
-      ...(assertionClass ? { assertionClass } : {}),
-      ...(evidenceQuote ? { evidenceQuote } : {}),
-    });
+    if (!isPlainRecord(item)) return schemaInvalid('invalid_field_type');
+    if (Object.keys(item).some((field) => !FACT_FIELDS.has(field))) {
+      return schemaInvalid('unexpected_field');
+    }
+    if (REQUIRED_FACT_FIELDS.some((field) => !hasOwn(item, field))) {
+      return schemaInvalid('missing_required_field');
+    }
+
+    const subject = validateRequiredString(item.subject, 80);
+    if (!subject.valid) return subject;
+    const predicate = validateRequiredString(item.predicate, 80);
+    if (!predicate.valid) return predicate;
+    const value = validateRequiredString(item.value, 200);
+    if (!value.valid) return value;
+
+    const fact: ConsolidatorFact = {
+      subject: subject.value,
+      predicate: predicate.value,
+      value: value.value,
+    };
+
+    if (hasOwn(item, 'scope')) {
+      const scope = parseFactScope(item.scope);
+      if (!scope) return schemaInvalid('invalid_field_value');
+      fact.scope = scope;
+    }
+    if (hasOwn(item, 'importance')) {
+      if (!isUnitNumber(item.importance)) return schemaInvalid('invalid_field_value');
+      fact.importance = item.importance;
+    }
+    if (hasOwn(item, 'confidence')) {
+      if (!isUnitNumber(item.confidence)) return schemaInvalid('invalid_field_value');
+      fact.confidence = item.confidence;
+    }
+    if (hasOwn(item, 'evidence_message_ids')) {
+      const evidence = validateStringArray(item.evidence_message_ids, 120, 8);
+      if (!evidence.valid) return evidence;
+      fact.evidenceMessageIds = evidence.value;
+    }
+    if (hasOwn(item, 'reason')) {
+      const reason = validateRequiredString(item.reason, 240);
+      if (!reason.valid) return reason;
+      fact.reason = reason.value;
+    }
+    if (hasOwn(item, 'operation')) {
+      const operation = parseFactOperation(item.operation);
+      if (!operation) return schemaInvalid('invalid_field_value');
+      fact.operation = operation;
+    }
+    if (hasOwn(item, 'assertion_class')) {
+      const assertionClass = parseAssertionClass(item.assertion_class);
+      if (!assertionClass) return schemaInvalid('invalid_field_value');
+      fact.assertionClass = assertionClass;
+    }
+    if (hasOwn(item, 'evidence_quote')) {
+      const evidenceQuote = validateRequiredString(item.evidence_quote, 600);
+      if (!evidenceQuote.valid) return evidenceQuote;
+      fact.evidenceQuote = evidenceQuote.value;
+    }
+
+    facts.push(fact);
   }
-  return out;
+  return { valid: true, value: facts };
 }
 
 function parseFactOperation(raw: unknown): ConsolidatorFactOperation | undefined {
@@ -351,47 +446,70 @@ function parseAssertionClass(raw: unknown): ConsolidatorAssertionClass | undefin
 }
 
 function parseFactScope(raw: unknown): MemoryFactScope | undefined {
-  return raw === 'global' ||
-    raw === 'project' ||
-    raw === 'conversation' ||
-    raw === 'session' ||
-    raw === 'persona'
+  return raw === 'global' || raw === 'project' || raw === 'conversation' || raw === 'session'
     ? raw
     : undefined;
 }
 
-function normalizeBoundedString(raw: unknown, maxLen: number): string | null {
-  if (typeof raw !== 'string') return null;
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  return trimmed.length > maxLen ? `${trimmed.slice(0, maxLen - 3).trimEnd()}...` : trimmed;
+function validateNullableString(raw: unknown, maxLen: number): SchemaValidation<string | null> {
+  if (raw === null) return { valid: true, value: null };
+  return validateRequiredString(raw, maxLen);
 }
 
-function normalizeActiveFocus(raw: unknown): string | null {
-  if (typeof raw !== 'string') return null;
+function validateRequiredString(raw: unknown, maxLen: number): SchemaValidation<string> {
+  if (typeof raw !== 'string') return schemaInvalid('invalid_field_type');
   const trimmed = raw.trim();
-  if (!trimmed) return null;
-  return trimmed.length > 600 ? `${trimmed.slice(0, 599).trimEnd()}\u2026` : trimmed;
+  if (!trimmed) return schemaInvalid('invalid_field_value');
+  if (trimmed.length > maxLen) return schemaInvalid('limit_exceeded');
+  return { valid: true, value: trimmed };
 }
 
-function normalizeStringArray(raw: unknown, maxLen: number, max: number): string[] {
-  if (!Array.isArray(raw)) return [];
-  const out: string[] = [];
+function validateStringArray(
+  raw: unknown,
+  maxLen: number,
+  maxItems: number,
+): SchemaValidation<string[]> {
+  if (!Array.isArray(raw)) return schemaInvalid('invalid_field_type');
+  if (raw.length > maxItems) return schemaInvalid('limit_exceeded');
+  const values: string[] = [];
   for (const item of raw) {
-    if (out.length >= max) break;
-    if (typeof item !== 'string') continue;
-    const trimmed = item.trim();
-    if (!trimmed) continue;
-    out.push(trimmed.length > maxLen ? `${trimmed.slice(0, maxLen - 1).trimEnd()}\u2026` : trimmed);
+    const value = validateRequiredString(item, maxLen);
+    if (!value.valid) return value;
+    values.push(value.value);
   }
-  return out;
+  return { valid: true, value: values };
+}
+
+function schemaInvalid<T>(code: ConsolidatorSchemaInvalidCode): SchemaValidation<T> {
+  return { valid: false, code };
+}
+
+function hasOwn(value: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function isUnitNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+function isEmptyConsolidatorResult(result: ConsolidatorResult): boolean {
+  return (
+    result.episodeSummary === null &&
+    result.newFacts.length === 0 &&
+    result.activeFocus === null &&
+    result.openThreads.length === 0 &&
+    result.notable.length === 0
+  );
 }
 
 function confidenceToScore(confidence: ConsolidatorFact['confidence']): number {
-  if (typeof confidence === 'number') return clamp01(confidence);
-  if (confidence === 'high') return 0.9;
-  if (confidence === 'low') return 0.45;
-  return 0.7; // medium / unknown
+  return typeof confidence === 'number' ? clamp01(confidence) : 0.7;
 }
 
 /**
@@ -602,19 +720,30 @@ function fitBlockLines(lines: string[], maxChars: number): string {
 
 /**
  * One-shot consolidation: build the prompt, call the extractor, parse, and
- * (optionally) persist. Extractor failures propagate to the async queue so
- * failed enrichment is retryable instead of being recorded as empty success.
+ * (optionally) persist. Provider and parse failures become explicit outcomes
+ * so async callers can retry without recording malformed output as success.
  */
 export async function consolidateTurn(
   input: ConsolidatorTurnInput,
   options: ConsolidatorOptions,
-): Promise<ConsolidatorResult> {
+): Promise<ConsolidatorOutcome> {
   const persist = options.persist !== false;
   const prompt = buildConsolidatorPrompt(input);
-  const raw = await options.extractor(prompt);
-  const result = parseConsolidatorOutput(raw);
-  if (persist) {
-    applyConsolidatorResult(result, {
+  let raw: string;
+  try {
+    raw = await options.extractor(prompt);
+  } catch (error) {
+    return {
+      status: 'provider_error',
+      code:
+        error instanceof UnsupportedConsolidatorResponseError
+          ? 'unsupported_response_shape'
+          : 'provider_request_failed',
+    };
+  }
+  const outcome = parseConsolidatorOutput(raw);
+  if (persist && (outcome.status === 'valid' || outcome.status === 'empty_valid')) {
+    applyConsolidatorResult(outcome.result, {
       now: input.now ?? options.now?.(),
       conversationId: input.conversationId,
       threadId: input.threadId,
@@ -626,5 +755,5 @@ export async function consolidateTurn(
       messages: input.messages,
     });
   }
-  return result;
+  return outcome;
 }

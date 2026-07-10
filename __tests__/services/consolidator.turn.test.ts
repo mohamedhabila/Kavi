@@ -11,6 +11,7 @@ import { getBlock, ensureDefaultBlocks } from '../../src/services/memory/blocks'
 import {
   consolidateTurn,
   type ConsolidatorExtractor,
+  UnsupportedConsolidatorResponseError,
 } from '../../src/services/memory/consolidator';
 import { findEntityByName } from '../../src/services/memory/entities';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
@@ -37,6 +38,7 @@ describe('consolidateTurn', () => {
 
   it('runs end-to-end and persists by default', async () => {
     const extractor = buildExtractor({
+      episode_summary: null,
       new_facts: [{ subject: 'user', predicate: 'has_name', value: 'Mo' }],
       active_focus: 'Saying hello.',
       open_threads: [],
@@ -50,12 +52,15 @@ describe('consolidateTurn', () => {
       },
       { extractor },
     );
-    expect(result.newFacts).toHaveLength(1);
+    expect(result.status).toBe('valid');
+    if (result.status !== 'valid') throw new Error('expected valid outcome');
+    expect(result.result.newFacts).toHaveLength(1);
     expect(getBlock('active_focus')?.content).toBe('Saying hello.');
   });
 
   it('skips persistence when persist=false', async () => {
     const extractor = buildExtractor({
+      episode_summary: null,
       new_facts: [{ subject: 'user', predicate: 'has_name', value: 'Mo' }],
       active_focus: 'noop',
       open_threads: [],
@@ -65,16 +70,26 @@ describe('consolidateTurn', () => {
       { userMessage: 'hi', assistantMessage: 'hi back' },
       { extractor, persist: false },
     );
-    expect(result.newFacts).toHaveLength(1);
+    expect(result.status).toBe('valid');
+    if (result.status !== 'valid') throw new Error('expected valid outcome');
+    expect(result.result.newFacts).toHaveLength(1);
     const userEntity = findEntityByName('user');
     expect(userEntity).toBeNull();
     expect(getBlock('active_focus')?.content).toBe('');
   });
 
-  it('propagates extractor failures so callers can retry the turn', async () => {
+  it('returns a provider error outcome so callers can retry the turn', async () => {
     const extractor: ConsolidatorExtractor = () => Promise.reject(new Error('network'));
     await expect(
       consolidateTurn({ userMessage: 'hi', assistantMessage: 'hi back' }, { extractor }),
-    ).rejects.toThrow('network');
+    ).resolves.toEqual({ status: 'provider_error', code: 'provider_request_failed' });
+  });
+
+  it('distinguishes unsupported provider response shapes', async () => {
+    const extractor: ConsolidatorExtractor = () =>
+      Promise.reject(new UnsupportedConsolidatorResponseError());
+    await expect(
+      consolidateTurn({ userMessage: 'hi', assistantMessage: 'hi back' }, { extractor }),
+    ).resolves.toEqual({ status: 'provider_error', code: 'unsupported_response_shape' });
   });
 });

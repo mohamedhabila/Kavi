@@ -9,7 +9,7 @@
 
 import type {
   ConsolidatorExtractor,
-  ConsolidatorResult,
+  ConsolidatorOutcome,
   ConsolidatorTurnInput,
 } from './consolidator';
 import { consolidateTurn } from './consolidator';
@@ -22,7 +22,7 @@ export interface ProviderEnrichmentOptions {
 export async function extractProviderEnrichment(
   input: ConsolidatorTurnInput,
   options: ProviderEnrichmentOptions,
-): Promise<ConsolidatorResult> {
+): Promise<ConsolidatorOutcome> {
   return consolidateTurn(input, {
     extractor: options.extractor,
     persist: false,
