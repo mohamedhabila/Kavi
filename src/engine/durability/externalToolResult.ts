@@ -105,14 +105,14 @@ function githubStatus(status: unknown, conclusion: unknown): ExecutionExternalHa
   if (status !== 'completed') return 'unknown';
   if (conclusion === 'success') return 'succeeded';
   if (conclusion === 'cancelled') return 'cancelled';
+  if (conclusion === 'action_required') return 'unknown';
   if (
     conclusion === 'failure' ||
     conclusion === 'timed_out' ||
     conclusion === 'startup_failure' ||
     conclusion === 'stale' ||
     conclusion === 'neutral' ||
-    conclusion === 'skipped' ||
-    conclusion === 'action_required'
+    conclusion === 'skipped'
   ) {
     return 'failed';
   }

@@ -92,6 +92,31 @@ describe('external tool result durability resolution', () => {
     });
   });
 
+  it('keeps GitHub action-required runs unresolved for authoritative reconciliation', () => {
+    expect(
+      resolveExternalToolResultDurability(
+        {
+          toolName: 'expo_eas_submit',
+          argumentsText: JSON.stringify({ projectId: 'local-project' }),
+          resultText: JSON.stringify({
+            mode: 'github-workflow',
+            workflowRun: { id: 123456789, status: 'completed', conclusion: 'action_required' },
+          }),
+        },
+        {
+          resolveExpoProjectContext: () => ({
+            ...expoContext,
+            project: {
+              ...expoContext.project,
+              mode: 'github-workflow',
+              repoFullName: 'openai/kavi-mobile',
+            },
+          }),
+        },
+      ),
+    ).toMatchObject({ kind: 'external', observedStatus: 'unknown' });
+  });
+
   it('maps an exact terminal monitor result without selecting a list entry', () => {
     expect(
       resolveExternalToolResultDurability(
