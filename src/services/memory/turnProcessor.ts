@@ -415,6 +415,16 @@ function mergeProviderIntoStructural(
   };
 }
 
+function factIdsForInputRange(
+  recordedFacts: ReadonlyArray<{ inputIndex: number; factId: string }>,
+  startIndex: number,
+  endIndex: number,
+): string[] {
+  return recordedFacts
+    .filter(({ inputIndex }) => inputIndex >= startIndex && inputIndex < endIndex)
+    .map(({ factId }) => factId);
+}
+
 function resolveCurrentFactsForReplacement(
   fact: ConsolidatorResult['newFacts'][number],
   context: {
@@ -615,8 +625,16 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
   return {
     processed: true,
     episodeId: persisted.persistResult.episodeId,
-    deterministicFactIds: persisted.persistResult.recordedFactIds,
-    providerFactIds: enriched ? persisted.persistResult.recordedFactIds : [],
+    deterministicFactIds: factIdsForInputRange(
+      persisted.persistResult.recordedFacts,
+      0,
+      structural.facts.length,
+    ),
+    providerFactIds: factIdsForInputRange(
+      persisted.persistResult.recordedFacts,
+      structural.facts.length,
+      mergedResult.newFacts.length,
+    ),
     invalidatedFactIds: persisted.persistResult.invalidatedFactIds,
     activeFocusUpdated: persisted.persistResult.activeFocusUpdated,
     openThreadsUpdated: persisted.persistResult.openThreadsUpdated,

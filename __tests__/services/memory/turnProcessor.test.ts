@@ -209,7 +209,7 @@ describe('processIngestionTurn', () => {
       openThreads: [],
     });
     mockApplyConsolidatorResult.mockReturnValue({
-      recordedFactIds: [],
+      recordedFacts: [],
       invalidatedFactIds: [],
       activeFocusUpdated: false,
       openThreadsUpdated: false,
@@ -305,7 +305,7 @@ describe('processIngestionTurn', () => {
       openThreads: ['Verify staging'],
     });
     mockApplyConsolidatorResult.mockReturnValue({
-      recordedFactIds: ['f1'],
+      recordedFacts: [{ inputIndex: 0, factId: 'f1' }],
       invalidatedFactIds: [],
       activeFocusUpdated: true,
       openThreadsUpdated: true,
@@ -364,7 +364,10 @@ describe('processIngestionTurn', () => {
       },
     });
     mockApplyConsolidatorResult.mockReturnValue({
-      recordedFactIds: ['f1', 'f2'],
+      recordedFacts: [
+        { inputIndex: 0, factId: 'f1' },
+        { inputIndex: 1, factId: 'f2' },
+      ],
       invalidatedFactIds: [],
       activeFocusUpdated: true,
       openThreadsUpdated: true,
@@ -386,6 +389,8 @@ describe('processIngestionTurn', () => {
     });
 
     expect(result.enriched).toBe(true);
+    expect(result.deterministicFactIds).toEqual(['f1']);
+    expect(result.providerFactIds).toEqual(['f2']);
     expect(mockExtractProviderEnrichment).toHaveBeenCalledWith(
       expect.any(Object),
       expect.objectContaining({ extractor, now: expect.any(Function) }),

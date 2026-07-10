@@ -49,7 +49,7 @@ describe('memory consolidator source-run provenance', () => {
       },
     );
 
-    expect(result.recordedFactIds).toHaveLength(1);
+    expect(result.recordedFacts).toHaveLength(1);
     const facts = listFacts({ originConversationId: 'conv-source-run' });
     expect(facts).toHaveLength(1);
     expect(facts[0]?.sourceRunId).toBe('run-source-run');

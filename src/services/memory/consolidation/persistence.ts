@@ -29,7 +29,7 @@ export interface ApplyConsolidatorResultOptions {
 }
 
 export interface ApplyConsolidatorResultResult {
-  recordedFactIds: string[];
+  recordedFacts: Array<{ inputIndex: number; factId: string }>;
   invalidatedFactIds: string[];
   activeFocusUpdated: boolean;
   openThreadsUpdated: boolean;
@@ -88,9 +88,9 @@ function applyConsolidatorResultInTransaction(
       })
     : null;
 
-  const recordedFactIds: string[] = [];
+  const recordedFacts: ApplyConsolidatorResultResult['recordedFacts'] = [];
   const invalidatedFactIds: string[] = [];
-  for (const fact of result.newFacts) {
+  for (const [inputIndex, fact] of result.newFacts.entries()) {
     const subjectType = fact.subject.toLowerCase() === 'user' ? 'self' : 'concept';
     const subject = upsertEntity({ type: subjectType, name: fact.subject, now });
     const sourceMessageId =
@@ -139,7 +139,9 @@ function applyConsolidatorResultInTransaction(
       logger.devWarn(`Grounded replacement rejected at persistence: ${recorded.conflict}`);
       continue;
     }
-    if (recorded.status === 'created') recordedFactIds.push(recorded.fact.id);
+    if (recorded.status === 'created') {
+      recordedFacts.push({ inputIndex, factId: recorded.fact.id });
+    }
     invalidatedFactIds.push(...recorded.superseded.map((superseded) => superseded.id));
     const evidenceIds = fact.admittedWrite
       ? [fact.admittedWrite.evidenceMessageId]
@@ -200,7 +202,7 @@ function applyConsolidatorResultInTransaction(
   }
 
   return {
-    recordedFactIds,
+    recordedFacts,
     invalidatedFactIds,
     activeFocusUpdated,
     openThreadsUpdated,

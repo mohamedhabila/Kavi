@@ -371,7 +371,7 @@ describe('applyConsolidatorResult', () => {
         sourceAssistantMessageId: 'a-1',
       },
     );
-    expect(result.recordedFactIds).toHaveLength(1);
+    expect(result.recordedFacts).toHaveLength(1);
     expect(result.activeFocusUpdated).toBe(true);
     expect(result.openThreadsUpdated).toBe(true);
 
@@ -638,8 +638,8 @@ describe('applyConsolidatorResult', () => {
     };
     const first = applyConsolidatorResult(result, { now: 1 });
     const second = applyConsolidatorResult(result, { now: 2 });
-    expect(first.recordedFactIds).toHaveLength(1);
-    expect(second.recordedFactIds).toHaveLength(0);
+    expect(first.recordedFacts).toHaveLength(1);
+    expect(second.recordedFacts).toHaveLength(0);
     const userEntity = findEntityByName('user');
     expect(listFacts({ subjectId: userEntity!.id })).toHaveLength(1);
   });
