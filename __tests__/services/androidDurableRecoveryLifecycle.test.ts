@@ -25,7 +25,11 @@ describe('Android durable recovery lifecycle', () => {
         platform: 'ios',
         scheduleRun,
       }),
-    ).resolves.toEqual({ kind: 'not_android', runId: 'run-1' });
+    ).resolves.toEqual({
+      kind: 'not_supported',
+      runId: 'run-1',
+      reason: 'unsupported_platform',
+    });
     expect(scheduleRun).not.toHaveBeenCalled();
   });
 

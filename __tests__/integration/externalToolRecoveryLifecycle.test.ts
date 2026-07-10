@@ -88,12 +88,16 @@ describe('production external tool recovery lifecycle', () => {
           }),
         }),
       persist: persistExternalToolObservation,
-      schedule: async (runId) => ({ kind: 'not_android', runId }),
+      schedule: async (runId) => ({
+        kind: 'not_supported',
+        runId,
+        reason: 'unsupported_platform',
+      }),
     });
     expect(observed).toMatchObject({
       kind: 'persisted',
       observation: { kind: 'created', status: 'pending', terminal: false },
-      scheduling: { kind: 'not_android' },
+      scheduling: { kind: 'not_supported', reason: 'unsupported_platform' },
     });
     if (observed.kind !== 'persisted') throw new Error('expected persisted observation');
 

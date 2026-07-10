@@ -1,9 +1,9 @@
 import { Platform } from 'react-native';
 import type {
-  AndroidDurableRecoveryScheduleOutcome,
   SchedulePersistedAndroidExternalRecoveryCandidateSliceInput,
   SchedulePersistedAndroidExternalRecoveryCandidateSliceResult,
 } from './androidDurableRecoveryScheduling';
+import type { DurableRecoveryScheduleOutcome } from './durableRecoverySchedulingTypes';
 
 type AndroidDurableRecoveryRepairSource = 'startup' | 'foreground';
 const REPAIR_SLICE_SIZE = 25;
@@ -18,7 +18,7 @@ interface AndroidDurableRecoveryLifecycleDependencies {
 
 interface AndroidImmediateRecoveryDependencies {
   platform: string;
-  scheduleRun(runId: string): Promise<AndroidDurableRecoveryScheduleOutcome>;
+  scheduleRun(runId: string): Promise<DurableRecoveryScheduleOutcome>;
 }
 
 const DEFAULT_DEPENDENCIES: AndroidDurableRecoveryLifecycleDependencies = {
@@ -42,18 +42,14 @@ const DEFAULT_IMMEDIATE_DEPENDENCIES: AndroidImmediateRecoveryDependencies = {
   },
 };
 
-export type AndroidImmediateRecoveryOutcome =
-  | AndroidDurableRecoveryScheduleOutcome
-  | { kind: 'not_android'; runId: string };
-
 /** Schedule a just-persisted generation before the foreground process can disappear. */
 export function scheduleAndroidDurableRecoveryRunImmediately(
   runId: string,
   dependencies: AndroidImmediateRecoveryDependencies = DEFAULT_IMMEDIATE_DEPENDENCIES,
-): Promise<AndroidImmediateRecoveryOutcome> {
+): Promise<DurableRecoveryScheduleOutcome> {
   return dependencies.platform === 'android'
     ? dependencies.scheduleRun(runId)
-    : Promise.resolve({ kind: 'not_android', runId });
+    : Promise.resolve({ kind: 'not_supported', runId, reason: 'unsupported_platform' });
 }
 
 export function scheduleAndroidDurableRecoveryRepair(

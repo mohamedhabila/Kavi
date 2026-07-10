@@ -3,7 +3,8 @@ import {
   type ExternalToolRemoteIdentity,
   type ExternalToolResultDurabilityResolution,
 } from '../../engine/durability/externalToolResult';
-import { scheduleAndroidDurableRecoveryRunImmediately } from './androidDurableRecoveryLifecycle';
+import { scheduleDurableRecoveryRunImmediately } from './durableRecoveryLifecycle';
+import type { DurableRecoveryScheduleOutcome } from './durableRecoverySchedulingTypes';
 import {
   persistExternalToolObservation,
   type PersistExternalToolObservationResult,
@@ -33,13 +34,13 @@ interface ExternalToolDurabilityLifecycleDependencies {
       observedStatus: ExternalResolution['observedStatus'];
     },
   ): Promise<PersistExternalToolObservationResult>;
-  schedule(runId: string): Promise<{ kind: string; runId: string; reason?: string }>;
+  schedule(runId: string): Promise<DurableRecoveryScheduleOutcome>;
 }
 
 const DEFAULT_DEPENDENCIES: ExternalToolDurabilityLifecycleDependencies = {
   resolve: resolveExternalToolResultDurability,
   persist: persistExternalToolObservation,
-  schedule: scheduleAndroidDurableRecoveryRunImmediately,
+  schedule: scheduleDurableRecoveryRunImmediately,
 };
 
 export type ObserveExternalToolResultOutcome =
@@ -53,7 +54,7 @@ export type ObserveExternalToolResultOutcome =
   | {
       kind: 'persisted';
       observation: PersistExternalToolObservationResult;
-      scheduling: { kind: string; runId: string; reason?: string } | { kind: 'not_required' };
+      scheduling: DurableRecoveryScheduleOutcome | { kind: 'not_required' };
       remote: ExternalToolRemoteIdentity;
     };
 
@@ -89,7 +90,7 @@ export async function observeExternalToolResultDurability(
     };
   }
 
-  let scheduling: { kind: string; runId: string; reason?: string };
+  let scheduling: DurableRecoveryScheduleOutcome;
   try {
     scheduling = await dependencies.schedule(observation.runId);
   } catch {
