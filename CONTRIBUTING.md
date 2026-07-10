@@ -69,6 +69,7 @@ from `.github/workflows/ci.yml`. The gate currently runs, in order:
 - `npm run check:public-language`
 - `npm run check:links`
 - `npm run check:licenses`
+- `npm run check:evaluation-contract`
 - `npm run check:app-metadata`
 - `npm run check:i18n`
 - `npm run check:no-legacy-planning-imports`
@@ -93,6 +94,7 @@ npm run check:public-hygiene
 npm run check:public-language
 npm run check:links
 npm run check:licenses
+npm run check:evaluation-contract
 npm run check:app-metadata
 npm run check:i18n
 npm run check:no-legacy-planning-imports

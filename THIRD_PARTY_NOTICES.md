@@ -368,9 +368,9 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | acorn-walk | 8.3.5 | transitive | MIT |
 | agent-base | 6.0.2 | transitive | MIT |
 | agent-base | 7.1.4 | transitive | MIT |
-| ajv | 6.14.0 | transitive | MIT |
-| ajv | 8.18.0 | transitive | MIT |
-| ajv-formats | 3.0.1 | transitive | MIT |
+| ajv | 6.14.0 | development | MIT |
+| ajv | 8.18.0 | development | MIT |
+| ajv-formats | 3.0.1 | development | MIT |
 | anser | 1.4.10 | transitive | MIT |
 | ansi-escapes | 4.3.2 | transitive | MIT |
 | ansi-escapes | 6.2.1 | transitive | MIT |
