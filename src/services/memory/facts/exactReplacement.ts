@@ -104,7 +104,7 @@ function reinforceExactDuplicate(
            repeated_mention_count = repeated_mention_count + 1,
            last_reinforced_at = ?, last_accessed_at = ?,
            local_similarity_model = ?, local_similarity_dimensions = ?,
-           local_similarity_vector = ?
+           local_similarity_vector = ?, local_similarity_updated_at = ?
      WHERE id = ? AND invalid_at IS NULL AND deleted_at IS NULL`,
     JSON.stringify(attributes),
     now,
@@ -118,6 +118,7 @@ function reinforceExactDuplicate(
     localSimilarity.model,
     localSimilarity.dimensions,
     JSON.stringify(localSimilarity.values),
+    now,
     row.id,
   );
   const fact = rowToFact({
@@ -135,6 +136,7 @@ function reinforceExactDuplicate(
     local_similarity_model: localSimilarity.model,
     local_similarity_dimensions: localSimilarity.dimensions,
     local_similarity_vector: JSON.stringify(localSimilarity.values),
+    local_similarity_updated_at: now,
   });
   replaceFactRetrievalTerms(fact);
   runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged(row.origin_conversation_id));

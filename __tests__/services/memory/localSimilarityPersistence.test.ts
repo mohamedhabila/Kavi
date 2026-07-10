@@ -43,8 +43,10 @@ describe('fact local-similarity persistence', () => {
       local_similarity_model: string;
       local_similarity_dimensions: number;
       local_similarity_vector: string;
+      local_similarity_updated_at: number;
     }>(
-      `SELECT local_similarity_model, local_similarity_dimensions, local_similarity_vector
+      `SELECT local_similarity_model, local_similarity_dimensions, local_similarity_vector,
+              local_similarity_updated_at
          FROM memory_facts
         WHERE id = ?`,
       created.fact.id,
@@ -58,6 +60,7 @@ describe('fact local-similarity persistence', () => {
     expect(row).toMatchObject({
       local_similarity_model: LOCAL_SIMILARITY_MODEL,
       local_similarity_dimensions: LOCAL_SIMILARITY_DIMENSIONS,
+      local_similarity_updated_at: 10,
     });
     expect(JSON.parse(row!.local_similarity_vector)).toEqual(created.fact.localSimilarity?.values);
   });
@@ -108,6 +111,30 @@ describe('fact local-similarity persistence', () => {
       'memory_local_similarity_vector_invalid',
     );
     expect(getFactById(fact.id)?.localSimilarity).toEqual(current);
+  });
+
+  it('updates derived-index time without changing fact recency', () => {
+    const fact = recordFact({
+      subjectId: 'profile',
+      predicate: 'preferred_editor',
+      objectText: 'Neovim',
+      scope: 'global',
+      now: 10,
+    }).fact;
+
+    expect(
+      setFactLocalSimilarity(
+        fact.id,
+        createCurrentLocalSimilarityVector('preferred_editor\nNeovim'),
+        20,
+      ),
+    ).toBe(true);
+    expect(
+      getMemoryDb().getFirstSync<{ updated_at: number; local_similarity_updated_at: number }>(
+        `SELECT updated_at, local_similarity_updated_at FROM memory_facts WHERE id = ?`,
+        fact.id,
+      ),
+    ).toEqual({ updated_at: 10, local_similarity_updated_at: 20 });
   });
 
   it('has no fact-level legacy embedding column or read alias', () => {

@@ -22,6 +22,7 @@ import {
 } from './memoryAccessPolicy';
 import { createCurrentLocalSimilarityVector } from './localSimilarity';
 import { buildRecentUserRetrievalQuery } from './retrievalQueryText';
+import { maintainCurrentFactLocalSimilarity } from './localSimilarityBackfill';
 
 type MemoryAccessMode = 'chat' | 'agentic' | 'pilot';
 
@@ -89,6 +90,12 @@ export async function buildUnifiedMemoryAccessContext(
       livingMemory: null,
       consistencyBarrier,
     };
+  }
+
+  if (retrievalStrategy === 'production') {
+    maintainCurrentFactLocalSimilarity({
+      ...(typeof request.now === 'number' ? { now: request.now } : {}),
+    });
   }
 
   const localSimilarityQuery = buildRecentUserRetrievalQuery(scopedMessages);

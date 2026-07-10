@@ -812,6 +812,9 @@ export const de: TranslationMap = mergeTranslations(en, {
     consolidationFallbackActive: 'Automatischer Fallback aktiv',
     ingestionPendingJobs: '{count} Konsolidierungsaufträge in Warteschlange',
     diagnosticsTitle: 'Diagnose',
+    diagnosticsSimilarityTitle: 'Lokaler Ähnlichkeitsindex',
+    diagnosticsSimilarityStatus:
+      '{current}/{total} aktuell · {pending} ausstehend · {model}/{dimensions}',
     diagnosticsBudgetTitle: 'Kontextbudget',
     diagnosticsBudgetEmpty: 'Noch keine Budget-Audit-Einträge.',
     diagnosticsBudgetEntry: 'iter {iteration} · {model} · {total}/{window}',

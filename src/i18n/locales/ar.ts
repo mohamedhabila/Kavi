@@ -792,6 +792,9 @@ export const ar: TranslationMap = mergeTranslations(en, {
     consolidationFallbackActive: 'البديل التلقائي نشط',
     ingestionPendingJobs: '{count} مهام توطيد في قائمة الانتظار',
     diagnosticsTitle: 'التشخيص',
+    diagnosticsSimilarityTitle: 'فهرس التشابه المحلي',
+    diagnosticsSimilarityStatus:
+      '{current}/{total} محدث · {pending} قيد الانتظار · {model}/{dimensions}',
     diagnosticsBudgetTitle: 'ميزانية السياق',
     diagnosticsBudgetEmpty: 'لا توجد إدخالات تدقيق للميزانية بعد.',
     diagnosticsBudgetEntry: 'iter {iteration} · {model} · {total}/{window}',

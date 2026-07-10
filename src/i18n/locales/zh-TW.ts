@@ -782,6 +782,9 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     consolidationFallbackActive: '自動後援已啟用',
     ingestionPendingJobs: '{count} 個整合工作排隊中',
     diagnosticsTitle: '診斷',
+    diagnosticsSimilarityTitle: '本機相似度索引',
+    diagnosticsSimilarityStatus:
+      '{current}/{total} 筆已更新 · {pending} 筆待處理 · {model}/{dimensions}',
     diagnosticsBudgetTitle: '上下文預算',
     diagnosticsBudgetEmpty: '尚無預算稽核記錄。',
     diagnosticsBudgetEntry: 'iter {iteration} · {model} · {total}/{window}',

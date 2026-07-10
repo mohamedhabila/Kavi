@@ -801,6 +801,9 @@ export const ja: TranslationMap = mergeTranslations(en, {
     consolidationFallbackActive: '自動フォールバックが有効',
     ingestionPendingJobs: '統合ジョブ {count} 件がキューにあります',
     diagnosticsTitle: '診断',
+    diagnosticsSimilarityTitle: 'ローカル類似度インデックス',
+    diagnosticsSimilarityStatus:
+      '{current}/{total} 件が最新 · {pending} 件が保留中 · {model}/{dimensions}',
     diagnosticsBudgetTitle: 'コンテキスト予算',
     diagnosticsBudgetEmpty: '予算監査エントリはまだありません。',
     diagnosticsBudgetEntry: 'iter {iteration} · {model} · {total}/{window}',

@@ -159,6 +159,13 @@ describe('memoryDiagnostics', () => {
     expect(snapshot.retrievalEntries).toHaveLength(1);
     expect(snapshot.retrievalEntries[0].counts.selectedFactIds).toEqual(['fact-1', 'fact-2']);
     expect(snapshot.retrievalEntries[0].scope.taskScopePresent).toBe(true);
+    expect(snapshot.localSimilarity).toMatchObject({
+      model: 'unicode-char-ngram-v1',
+      dimensions: 384,
+      currentFactCount: 0,
+      currentVectorCount: 0,
+      pendingVectorCount: 0,
+    });
     expect(JSON.stringify(snapshot.retrievalEntries)).not.toContain('private query sentinel');
   });
 
@@ -167,6 +174,7 @@ describe('memoryDiagnostics', () => {
 
     expect(snapshot.threadId).toBeNull();
     expect(snapshot.retrievalEntries).toEqual([]);
+    expect(snapshot.localSimilarity).toMatchObject({ currentFactCount: 0, pendingVectorCount: 0 });
   });
 
   it('does not hash or access the retrieval store after long-term-memory opt-out', async () => {
@@ -178,6 +186,7 @@ describe('memoryDiagnostics', () => {
       const snapshot = await loadMemoryDiagnosticsSnapshot({ threadId: 'private-thread' });
 
       expect(snapshot.retrievalEntries).toEqual([]);
+      expect(snapshot.localSimilarity).toBeNull();
       expect(hashSpy).not.toHaveBeenCalled();
       expect(readSpy).not.toHaveBeenCalled();
       expect(databaseSpy).not.toHaveBeenCalled();

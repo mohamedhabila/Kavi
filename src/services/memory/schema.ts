@@ -66,6 +66,7 @@ export function ensureFactSchema(): void {
       local_similarity_model TEXT,
       local_similarity_dimensions INTEGER,
       local_similarity_vector TEXT,
+      local_similarity_updated_at INTEGER,
       valid_at INTEGER NOT NULL,
       invalid_at INTEGER,
       created_at INTEGER NOT NULL,
@@ -393,6 +394,14 @@ export function ensureFactSchema(): void {
         deleted_at,
         invalid_at
       );
+    CREATE INDEX IF NOT EXISTS idx_facts_local_similarity_current
+      ON memory_facts(
+        memory_owner_id,
+        invalid_at,
+        deleted_at,
+        local_similarity_model,
+        local_similarity_dimensions
+      );
   `);
   schemaReady = true;
 }
@@ -422,6 +431,12 @@ function ensureFactColumns(db: ReturnType<typeof getMemoryDb>): void {
     'local_similarity_dimensions INTEGER',
   );
   ensureColumn(db, 'memory_facts', 'local_similarity_vector', 'local_similarity_vector TEXT');
+  ensureColumn(
+    db,
+    'memory_facts',
+    'local_similarity_updated_at',
+    'local_similarity_updated_at INTEGER',
+  );
   ensureColumn(db, 'memory_facts', 'importance', 'importance REAL NOT NULL DEFAULT 0.5');
   ensureColumn(db, 'memory_facts', 'access_count', 'access_count INTEGER NOT NULL DEFAULT 0');
   ensureColumn(

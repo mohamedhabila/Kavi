@@ -100,6 +100,7 @@ export interface FactRow {
   local_similarity_model?: string | null;
   local_similarity_dimensions?: number | null;
   local_similarity_vector?: string | null;
+  local_similarity_updated_at?: number | null;
   valid_at: number;
   invalid_at: number | null;
   created_at: number;

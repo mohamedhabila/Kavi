@@ -816,6 +816,9 @@ export const en: TranslationMap = {
     consolidationFallbackActive: 'Automatic fallback active',
     ingestionPendingJobs: '{count} consolidation jobs queued',
     diagnosticsTitle: 'Diagnostics',
+    diagnosticsSimilarityTitle: 'Local similarity index',
+    diagnosticsSimilarityStatus:
+      '{current}/{total} current · {pending} pending · {model}/{dimensions}',
     diagnosticsBudgetTitle: 'Context budget',
     diagnosticsBudgetEmpty: 'No budget audit entries yet.',
     diagnosticsBudgetEntry: 'iter {iteration} · {model} · {total}/{window}',

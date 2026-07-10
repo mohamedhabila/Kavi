@@ -58,6 +58,21 @@ export const MemoryDiagnosticsPanel: React.FC<MemoryDiagnosticsPanelProps> = ({ 
     <View style={styles.container} testID="memory-diagnostics-panel">
       <Text style={styles.sectionTitle}>{t('memory.diagnosticsTitle')}</Text>
 
+      {diagnostics.localSimilarity ? (
+        <View style={styles.row} testID="memory-diagnostics-local-similarity">
+          <Text style={styles.sectionTitle}>{t('memory.diagnosticsSimilarityTitle')}</Text>
+          <Text style={styles.rowSecondary}>
+            {t('memory.diagnosticsSimilarityStatus', {
+              current: diagnostics.localSimilarity.currentVectorCount,
+              total: diagnostics.localSimilarity.currentFactCount,
+              pending: diagnostics.localSimilarity.pendingVectorCount,
+              model: diagnostics.localSimilarity.model,
+              dimensions: diagnostics.localSimilarity.dimensions,
+            })}
+          </Text>
+        </View>
+      ) : null}
+
       <Text style={styles.sectionTitle}>{t('memory.diagnosticsBudgetTitle')}</Text>
       {diagnostics.budgetEntries.length === 0 ? (
         <Text style={styles.emptyText} testID="memory-diagnostics-budget-empty">

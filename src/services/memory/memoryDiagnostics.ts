@@ -13,6 +13,10 @@ import {
 import { buildMemoryRetrievalScopeHash, readRecentMemoryRetrievalEvents } from './retrievalLog';
 import type { MemoryRetrievalEvent } from './retrievalEventTypes';
 import { canReadLongTermMemory } from './policy';
+import {
+  getLocalSimilarityDiagnostics,
+  type LocalSimilarityDiagnostics,
+} from './localSimilarityBackfill';
 
 const DEFAULT_DIAGNOSTICS_LIMIT = 32;
 const MAX_DIAGNOSTICS_LIMIT = 32;
@@ -21,12 +25,14 @@ export interface MemoryDiagnosticsSnapshot {
   threadId: string | null;
   budgetEntries: BudgetAuditEntry[];
   retrievalEntries: MemoryRetrievalEvent[];
+  localSimilarity: LocalSimilarityDiagnostics | null;
 }
 
 export async function loadMemoryDiagnosticsSnapshot(
   options: {
     threadId?: string | null;
     limit?: number;
+    now?: number;
   } = {},
 ): Promise<MemoryDiagnosticsSnapshot> {
   const limit = Math.max(
@@ -40,8 +46,18 @@ export async function loadMemoryDiagnosticsSnapshot(
     ? recentBudget.filter((entry) => entry.conversationId === threadId)
     : recentBudget;
 
+  const memoryEnabled = canReadLongTermMemory();
+  let localSimilarity: LocalSimilarityDiagnostics | null = null;
+  if (memoryEnabled) {
+    try {
+      localSimilarity = getLocalSimilarityDiagnostics(options.now);
+    } catch {
+      localSimilarity = null;
+    }
+  }
+
   let retrievalEntries: MemoryRetrievalEvent[] = [];
-  if (threadId && canReadLongTermMemory()) {
+  if (threadId && memoryEnabled) {
     try {
       const sourceThreadIdHash = await buildMemoryRetrievalScopeHash('source_thread', threadId);
       if (sourceThreadIdHash) {
@@ -56,6 +72,7 @@ export async function loadMemoryDiagnosticsSnapshot(
     threadId,
     budgetEntries,
     retrievalEntries,
+    localSimilarity,
   };
 }
 

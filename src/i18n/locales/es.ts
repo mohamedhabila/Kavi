@@ -809,6 +809,9 @@ export const es: TranslationMap = mergeTranslations(en, {
     consolidationFallbackActive: 'Respaldo automático activo',
     ingestionPendingJobs: '{count} trabajos de consolidación en cola',
     diagnosticsTitle: 'Diagnóstico',
+    diagnosticsSimilarityTitle: 'Índice de similitud local',
+    diagnosticsSimilarityStatus:
+      '{current}/{total} actuales · {pending} pendientes · {model}/{dimensions}',
     diagnosticsBudgetTitle: 'Presupuesto de contexto',
     diagnosticsBudgetEmpty: 'Aún no hay entradas de auditoría de presupuesto.',
     diagnosticsBudgetEntry: 'iter {iteration} · {model} · {total}/{window}',

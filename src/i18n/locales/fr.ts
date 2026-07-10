@@ -809,6 +809,9 @@ export const fr: TranslationMap = mergeTranslations(en, {
     consolidationFallbackActive: 'Repli automatique actif',
     ingestionPendingJobs: '{count} tâches de consolidation en file d’attente',
     diagnosticsTitle: 'Diagnostics',
+    diagnosticsSimilarityTitle: 'Index de similarité locale',
+    diagnosticsSimilarityStatus:
+      '{current}/{total} a jour · {pending} en attente · {model}/{dimensions}',
     diagnosticsBudgetTitle: 'Budget de contexte',
     diagnosticsBudgetEmpty: 'Aucune entrée d’audit de budget pour le moment.',
     diagnosticsBudgetEntry: 'iter {iteration} · {model} · {total}/{window}',

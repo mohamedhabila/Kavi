@@ -98,6 +98,13 @@ describe('MemoryDiagnosticsPanel', () => {
         },
       ],
       retrievalEntries: [retrievalEvent],
+      localSimilarity: {
+        model: 'unicode-char-ngram-v1',
+        dimensions: 384,
+        currentFactCount: 12,
+        currentVectorCount: 10,
+        pendingVectorCount: 2,
+      },
     };
 
     const { getByTestId, queryByText } = render(
@@ -107,6 +114,7 @@ describe('MemoryDiagnosticsPanel', () => {
     expect(getByTestId('memory-diagnostics-panel')).toBeTruthy();
     expect(getByTestId('memory-diagnostics-budget-2')).toBeTruthy();
     expect(getByTestId('memory-diagnostics-retrieval-rl-1')).toBeTruthy();
+    expect(getByTestId('memory-diagnostics-local-similarity')).toBeTruthy();
     expect(getByTestId('memory-diagnostics-scope')).toBeTruthy();
     expect(queryByText('hidden query text')).toBeNull();
     expect(queryByText(retrievalEvent.queryFingerprint.hash)).toBeNull();
@@ -117,6 +125,7 @@ describe('MemoryDiagnosticsPanel', () => {
       threadId: null,
       budgetEntries: [],
       retrievalEntries: [],
+      localSimilarity: null,
     };
 
     const { getByTestId } = render(<MemoryDiagnosticsPanel diagnostics={diagnostics} />);

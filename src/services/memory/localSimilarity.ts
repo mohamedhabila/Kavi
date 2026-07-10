@@ -5,6 +5,7 @@ export const LOCAL_SIMILARITY_MODEL = 'unicode-char-ngram-v1';
 export const LOCAL_SIMILARITY_DIMENSIONS = 384;
 export const LOCAL_SIMILARITY_MINIMUM_DIMENSIONS = 64;
 export const LOCAL_SIMILARITY_MAXIMUM_DIMENSIONS = 2_048;
+export const LOCAL_SIMILARITY_MAXIMUM_INPUT_CHARS = 4_096;
 
 export interface LocalSimilarityVector {
   model: typeof LOCAL_SIMILARITY_MODEL;
@@ -66,7 +67,7 @@ export function createCharacterNgramVector(
 ): number[] {
   const resolvedDimensions = clampDimensions(dimensions);
   const vector = Array.from({ length: resolvedDimensions }, () => 0);
-  const normalized = normalizeText(text);
+  const normalized = normalizeText(text.slice(0, LOCAL_SIMILARITY_MAXIMUM_INPUT_CHARS));
   let featureCount = 0;
 
   LOCAL_SIMILARITY_SEQUENCE_PATTERN.lastIndex = 0;

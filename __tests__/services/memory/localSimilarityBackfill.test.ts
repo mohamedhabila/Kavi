@@ -1,0 +1,203 @@
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
+});
+
+import { invalidateFact, recordFact } from '../../../src/services/memory/facts/mutations';
+import {
+  backfillCurrentFactLocalSimilarity,
+  getLocalSimilarityDiagnostics,
+  maintainCurrentFactLocalSimilarity,
+} from '../../../src/services/memory/localSimilarityBackfill';
+import {
+  LOCAL_SIMILARITY_DIMENSIONS,
+  LOCAL_SIMILARITY_MODEL,
+} from '../../../src/services/memory/localSimilarity';
+import {
+  ensureFactSchema,
+  resetFactSchemaCacheForTests,
+} from '../../../src/services/memory/schema';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
+
+const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
+
+beforeEach(() => {
+  closeMemoryDb();
+  expoSqlite.__resetExpoSqliteForTests();
+  resetFactSchemaCacheForTests();
+  ensureFactSchema();
+});
+
+afterEach(() => {
+  closeMemoryDb();
+});
+
+function removeLocalSimilarity(factId: string): void {
+  getMemoryDb().runSync(
+    `UPDATE memory_facts
+        SET local_similarity_model = NULL,
+            local_similarity_dimensions = NULL,
+            local_similarity_vector = NULL,
+            local_similarity_updated_at = NULL
+      WHERE id = ?`,
+    factId,
+  );
+}
+
+describe('local-similarity backfill', () => {
+  it('resumes in bounded batches without touching inactive or foreign-owned facts', () => {
+    const activeOne = recordFact({
+      subjectId: 'profile',
+      predicate: 'first_preference',
+      objectText: 'alpha',
+      scope: 'global',
+      now: 10,
+    }).fact;
+    const activeTwo = recordFact({
+      subjectId: 'profile',
+      predicate: 'second_preference',
+      objectText: 'beta',
+      scope: 'global',
+      supersedePrior: false,
+      now: 20,
+    }).fact;
+    const invalid = recordFact({
+      subjectId: 'profile',
+      predicate: 'invalid_preference',
+      objectText: 'gamma',
+      scope: 'global',
+      supersedePrior: false,
+      now: 30,
+    }).fact;
+    const expired = recordFact({
+      subjectId: 'profile',
+      predicate: 'expired_preference',
+      objectText: 'delta',
+      scope: 'global',
+      supersedePrior: false,
+      expiresAt: 900,
+      now: 40,
+    }).fact;
+    const deleted = recordFact({
+      subjectId: 'profile',
+      predicate: 'deleted_preference',
+      objectText: 'epsilon',
+      scope: 'global',
+      supersedePrior: false,
+      now: 50,
+    }).fact;
+    const foreign = recordFact({
+      subjectId: 'profile',
+      predicate: 'foreign_preference',
+      objectText: 'zeta',
+      scope: 'global',
+      supersedePrior: false,
+      now: 60,
+    }).fact;
+    for (const fact of [activeOne, activeTwo, invalid, expired, deleted, foreign]) {
+      removeLocalSimilarity(fact.id);
+    }
+    invalidateFact(invalid.id, 100);
+    getMemoryDb().runSync('UPDATE memory_facts SET deleted_at = ? WHERE id = ?', 100, deleted.id);
+    getMemoryDb().runSync(
+      'UPDATE memory_facts SET memory_owner_id = ? WHERE id = ?',
+      'foreign-owner',
+      foreign.id,
+    );
+
+    expect(getLocalSimilarityDiagnostics(1_000)).toEqual({
+      model: LOCAL_SIMILARITY_MODEL,
+      dimensions: LOCAL_SIMILARITY_DIMENSIONS,
+      currentFactCount: 2,
+      currentVectorCount: 0,
+      pendingVectorCount: 2,
+    });
+    expect(backfillCurrentFactLocalSimilarity({ limit: 1, now: 1_000 })).toEqual({
+      processedCount: 1,
+      hasMore: true,
+      model: LOCAL_SIMILARITY_MODEL,
+      dimensions: LOCAL_SIMILARITY_DIMENSIONS,
+    });
+    expect(backfillCurrentFactLocalSimilarity({ limit: 1, now: 1_001 })).toEqual({
+      processedCount: 1,
+      hasMore: false,
+      model: LOCAL_SIMILARITY_MODEL,
+      dimensions: LOCAL_SIMILARITY_DIMENSIONS,
+    });
+    expect(getLocalSimilarityDiagnostics(1_002)).toMatchObject({
+      currentFactCount: 2,
+      currentVectorCount: 2,
+      pendingVectorCount: 0,
+    });
+
+    const rows = getMemoryDb().getAllSync<{
+      id: string;
+      updated_at: number;
+      local_similarity_model: string | null;
+      local_similarity_updated_at: number | null;
+    }>(
+      `SELECT id, updated_at, local_similarity_model, local_similarity_updated_at
+         FROM memory_facts
+        ORDER BY created_at ASC`,
+    );
+    expect(rows[0]).toMatchObject({
+      id: activeOne.id,
+      updated_at: 10,
+      local_similarity_model: LOCAL_SIMILARITY_MODEL,
+      local_similarity_updated_at: 1_000,
+    });
+    expect(rows[1]).toMatchObject({
+      id: activeTwo.id,
+      updated_at: 20,
+      local_similarity_model: LOCAL_SIMILARITY_MODEL,
+      local_similarity_updated_at: 1_001,
+    });
+    expect(rows.slice(2).every((row) => row.local_similarity_model === null)).toBe(true);
+  });
+
+  it('detects and replaces malformed current-identity payloads', () => {
+    const fact = recordFact({
+      subjectId: 'profile',
+      predicate: 'preferred_editor',
+      objectText: 'Neovim',
+      scope: 'global',
+      now: 10,
+    }).fact;
+    getMemoryDb().runSync(
+      `UPDATE memory_facts
+          SET local_similarity_vector = ?, local_similarity_updated_at = ?
+        WHERE id = ?`,
+      '["not-a-number"]',
+      11,
+      fact.id,
+    );
+
+    expect(getLocalSimilarityDiagnostics(20)).toMatchObject({
+      currentFactCount: 1,
+      currentVectorCount: 0,
+      pendingVectorCount: 1,
+    });
+    expect(backfillCurrentFactLocalSimilarity({ now: 20 })).toMatchObject({
+      processedCount: 1,
+      hasMore: false,
+    });
+    expect(getLocalSimilarityDiagnostics(21)).toMatchObject({
+      currentVectorCount: 1,
+      pendingVectorCount: 0,
+    });
+  });
+
+  it('rejects invalid batch boundaries instead of silently expanding work', () => {
+    for (const limit of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => backfillCurrentFactLocalSimilarity({ limit })).toThrow(
+        'memory_local_similarity_backfill_limit_invalid',
+      );
+    }
+  });
+
+  it('fails maintenance closed without taking down lexical retrieval callers', () => {
+    getMemoryDb().execSync('DROP TABLE memory_facts');
+
+    expect(maintainCurrentFactLocalSimilarity({ now: 20 })).toBeNull();
+  });
+});

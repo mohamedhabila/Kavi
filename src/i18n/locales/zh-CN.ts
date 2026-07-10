@@ -783,6 +783,9 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     consolidationFallbackActive: '自动回退已启用',
     ingestionPendingJobs: '{count} 个整合任务排队中',
     diagnosticsTitle: '诊断',
+    diagnosticsSimilarityTitle: '本地相似度索引',
+    diagnosticsSimilarityStatus:
+      '{current}/{total} 条已更新 · {pending} 条待处理 · {model}/{dimensions}',
     diagnosticsBudgetTitle: '上下文预算',
     diagnosticsBudgetEmpty: '尚无预算审计记录。',
     diagnosticsBudgetEntry: 'iter {iteration} · {model} · {total}/{window}',

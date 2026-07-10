@@ -47,6 +47,7 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
     'local_similarity_model',
     'local_similarity_dimensions',
     'local_similarity_vector',
+    'local_similarity_updated_at',
     'valid_at',
     'invalid_at',
     'created_at',
@@ -108,6 +109,7 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
     'idx_facts_scope_kind_rank',
     'idx_facts_source_kind_rank',
     'idx_facts_applicability_scope',
+    'idx_facts_local_similarity_current',
   ]);
   const schemaObjects = db.getAllSync<{ type: string; name: string; sql: string }>(
     `SELECT type, name, sql
@@ -156,6 +158,7 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
         local_similarity_model TEXT,
         local_similarity_dimensions INTEGER,
         local_similarity_vector TEXT,
+        local_similarity_updated_at INTEGER,
         valid_at INTEGER NOT NULL,
         invalid_at INTEGER,
         created_at INTEGER NOT NULL,
@@ -191,7 +194,7 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
         id, subject_id, predicate, object_text, object_entity_id, attributes,
         confidence, source_message_id, source_run_id, memory_owner_id, persona_id,
         fact_class, source_authority, content_hash, local_similarity_model,
-        local_similarity_dimensions, local_similarity_vector,
+        local_similarity_dimensions, local_similarity_vector, local_similarity_updated_at,
         valid_at, invalid_at, created_at, updated_at, deleted_at, pinned, scope,
         origin_conversation_id, origin_thread_id, origin_task_id, source_turn_id,
         source_summary, importance, access_count, repeated_mention_count,
@@ -204,7 +207,7 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
         id, subject_id, predicate, object_text, object_entity_id, attributes,
         confidence, source_message_id, source_run_id, memory_owner_id, persona_id,
         fact_class, source_authority, content_hash, local_similarity_model,
-        local_similarity_dimensions, local_similarity_vector,
+        local_similarity_dimensions, local_similarity_vector, local_similarity_updated_at,
         valid_at, invalid_at, created_at, updated_at, deleted_at, pinned, scope,
         origin_conversation_id, origin_thread_id, ${originTaskProjection}, source_turn_id,
         source_summary, importance, access_count, repeated_mention_count,

@@ -810,6 +810,9 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     consolidationFallbackActive: 'Fallback automático ativo',
     ingestionPendingJobs: '{count} trabalhos de consolidação na fila',
     diagnosticsTitle: 'Diagnóstico',
+    diagnosticsSimilarityTitle: 'Índice de similaridade local',
+    diagnosticsSimilarityStatus:
+      '{current}/{total} atuais · {pending} pendentes · {model}/{dimensions}',
     diagnosticsBudgetTitle: 'Orçamento de contexto',
     diagnosticsBudgetEmpty: 'Ainda não há entradas de auditoria de orçamento.',
     diagnosticsBudgetEntry: 'iter {iteration} · {model} · {total}/{window}',
