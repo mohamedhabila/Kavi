@@ -50,7 +50,7 @@ describe('detectOrphans', () => {
       sandboxPolicy: 'inherit',
     };
 
-    writePersistedJson(REGISTRY_KEY, [staleAgent]);
+    await writePersistedJson(REGISTRY_KEY, [staleAgent]);
 
     const orphanCount = await detectOrphans();
     expect(orphanCount).toBe(1);
@@ -71,7 +71,7 @@ describe('detectOrphans', () => {
       sandboxPolicy: 'inherit',
     };
 
-    writePersistedJson(REGISTRY_KEY, [recentAgent]);
+    await writePersistedJson(REGISTRY_KEY, [recentAgent]);
 
     const orphanCount = await detectOrphans();
     expect(orphanCount).toBeGreaterThanOrEqual(1);
@@ -93,8 +93,8 @@ describe('detectOrphans', () => {
       sandboxPolicy: 'safe-only',
     };
 
-    writePersistedJson(REGISTRY_KEY, [runningAgent]);
-    writePersistedJson(REGISTRY_CONTEXTS_KEY, {
+    await writePersistedJson(REGISTRY_KEY, [runningAgent]);
+    await writePersistedJson(REGISTRY_CONTEXTS_KEY, {
       'recoverable-1': {
         config: {
           parentConversationId: 'conv-recover',
@@ -147,8 +147,8 @@ describe('detectOrphans', () => {
       sandboxPolicy: 'inherit',
     };
 
-    writePersistedJson(REGISTRY_KEY, [runningAgent]);
-    writePersistedJson(REGISTRY_CONTEXTS_KEY, {
+    await writePersistedJson(REGISTRY_KEY, [runningAgent]);
+    await writePersistedJson(REGISTRY_CONTEXTS_KEY, {
       'redacted-1': {
         config: {
           parentConversationId: 'conv-redacted',
@@ -214,7 +214,7 @@ describe('detectOrphans', () => {
       toolsUsed: ['read_file'],
     };
 
-    writePersistedJson(REGISTRY_KEY, [runningAgent]);
+    await writePersistedJson(REGISTRY_KEY, [runningAgent]);
 
     await initSubAgentRegistry([
       {
@@ -248,14 +248,14 @@ describe('detectOrphans', () => {
 
 describe('initSubAgentRegistry', () => {
   it('loads from storage and detects orphans', async () => {
-    writePersistedJson(REGISTRY_KEY, []);
+    await writePersistedJson(REGISTRY_KEY, []);
     await initSubAgentRegistry();
     expect(listActiveSubAgents()).toEqual([]);
   });
 
   it('skips only malformed persisted session contexts and keeps valid siblings', async () => {
     const now = Date.now();
-    writePersistedJson(REGISTRY_KEY, [
+    await writePersistedJson(REGISTRY_KEY, [
       {
         sessionId: 'recover-good',
         parentConversationId: 'conv-recover',
@@ -275,7 +275,7 @@ describe('initSubAgentRegistry', () => {
         sandboxPolicy: 'inherit',
       },
     ]);
-    writePersistedJson(REGISTRY_CONTEXTS_KEY, {
+    await writePersistedJson(REGISTRY_CONTEXTS_KEY, {
       'recover-good': {
         config: {
           parentConversationId: 'conv-recover',

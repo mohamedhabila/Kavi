@@ -28,7 +28,6 @@ jest.mock('../../src/utils/id', () => ({
   generateId: jest.fn(() => `mock-id-${++mockIdCounter}`),
 }));
 
-import { File } from 'expo-file-system';
 import { runOrchestrator } from '../../src/engine/orchestrator';
 import {
   __resetSubAgentStateForTests,
@@ -85,15 +84,19 @@ function createAsyncEventStream(events: any[] = []) {
   })();
 }
 
-export function writePersistedJson(key: string, value: unknown): void {
-  const { primary } = _getStorageFileUris(key);
-  new File(primary).write(JSON.stringify(value));
+export async function writePersistedJson(key: string, value: unknown): Promise<void> {
+  await throttledStorageModule.throttledAsyncStorage.setItem(key, JSON.stringify(value));
+  await flushPendingStorageWrites(key);
 }
 
 export function readPersistedJson<T>(key: string): T | undefined {
   const { primary } = _getStorageFileUris(key);
   const value = expoFileSystemMock.__getStore()[primary];
-  return typeof value === 'string' ? (JSON.parse(value) as T) : undefined;
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const envelope = JSON.parse(value) as { payload?: unknown };
+  return typeof envelope.payload === 'string' ? (JSON.parse(envelope.payload) as T) : undefined;
 }
 
 export const mockProvider = {

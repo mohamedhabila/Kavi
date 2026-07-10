@@ -18,7 +18,7 @@ installSubAgentDurabilityHarness();
 describe('cleanupSubAgents', () => {
   it('retains recently updated terminal workers and only removes stale ones', async () => {
     const now = Date.now();
-    writePersistedJson(REGISTRY_KEY, [
+    await writePersistedJson(REGISTRY_KEY, [
       {
         sessionId: 'cleanup-keep-recent',
         parentConversationId: 'conv-cleanup',
@@ -134,7 +134,7 @@ describe('sessionContext eviction', () => {
 
   it('cancels eviction when cleanupSubAgents removes the agent', async () => {
     const now = Date.now();
-    writePersistedJson(REGISTRY_KEY, [
+    await writePersistedJson(REGISTRY_KEY, [
       {
         sessionId: 'evict-cleanup-1',
         parentConversationId: 'conv-evict-3',

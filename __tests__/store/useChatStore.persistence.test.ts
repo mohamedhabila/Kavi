@@ -16,7 +16,9 @@ const expoFileSystemMock = jest.requireMock('expo-file-system') as {
 function readPersistedChatState(): any {
   const { primary } = _getStorageFileUris(STORAGE_KEYS.CONVERSATIONS);
   const raw = expoFileSystemMock.__getStore()[primary];
-  return typeof raw === 'string' ? JSON.parse(raw) : undefined;
+  if (typeof raw !== 'string') return undefined;
+  const envelope = JSON.parse(raw) as { payload?: unknown };
+  return typeof envelope.payload === 'string' ? JSON.parse(envelope.payload) : undefined;
 }
 
 async function advanceAndSettle(ms: number): Promise<void> {

@@ -7,10 +7,7 @@ import { STORAGE_KEYS } from '../../src/constants/storage';
 import { relaunchForegroundScenarioApp } from '../../src/acceptance/e2eAgent/foregroundScenarioLifecycle';
 import { captureScopedMemoryEvidence } from '../../src/services/memory/evidenceSnapshot';
 import { recordFact } from '../../src/services/memory/facts/mutations';
-import {
-  ensureFactSchema,
-  resetFactSchemaCacheForTests,
-} from '../../src/services/memory/schema';
+import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
 import { flushChatStorePersistenceNow } from '../../src/store/chatStorePersistence';
 import {
@@ -52,7 +49,9 @@ function readPersistedConversationIds(): string[] {
   const { primary } = _getStorageFileUris(STORAGE_KEYS.CONVERSATIONS);
   const raw = expoFileSystemMock.__getStore()[primary];
   if (typeof raw !== 'string') return [];
-  const parsed = JSON.parse(raw) as { state?: { conversations?: Conversation[] } };
+  const envelope = JSON.parse(raw) as { payload?: unknown };
+  if (typeof envelope.payload !== 'string') return [];
+  const parsed = JSON.parse(envelope.payload) as { state?: { conversations?: Conversation[] } };
   return parsed.state?.conversations?.map((conversation) => conversation.id) ?? [];
 }
 
