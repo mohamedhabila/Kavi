@@ -434,7 +434,12 @@ export async function dispatchEffectExactlyOnce(
     return { kind: 'blocked', reason: 'state_unavailable' };
   }
 
-  const decision = planEffectDispatch({ identity, snapshot: state.snapshot, evaluatedAt });
+  let decision: ReturnType<typeof planEffectDispatch>;
+  try {
+    decision = planEffectDispatch({ identity, snapshot: state.snapshot, evaluatedAt });
+  } catch {
+    return { kind: 'blocked', reason: 'state_unavailable' };
+  }
   if (decision.kind === 'blocked') {
     if (decision.reason === 'effect_already_started') {
       return state.existingClaim

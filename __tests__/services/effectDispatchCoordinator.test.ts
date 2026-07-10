@@ -471,6 +471,13 @@ describe('exactly-once effect dispatch coordinator', () => {
     await expect(
       dispatchEffectExactlyOnce(unavailable.identity, unavailable.ports),
     ).resolves.toEqual({ kind: 'blocked', reason: 'state_unavailable' });
+
+    const malformed = harness();
+    malformed.ports.readState = async () => ({ snapshot: {}, existingClaim: null }) as never;
+    await expect(dispatchEffectExactlyOnce(malformed.identity, malformed.ports)).resolves.toEqual({
+      kind: 'blocked',
+      reason: 'state_unavailable',
+    });
   });
 
   it('keeps a started effect without claim evidence in reconciliation', async () => {
