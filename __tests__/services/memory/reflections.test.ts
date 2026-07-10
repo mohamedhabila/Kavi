@@ -8,7 +8,6 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
-import { recordEpisode } from '../../../src/services/memory/episodes/mutations';
 import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
 import { upsertEntity } from '../../../src/services/memory/entities';
 import {
@@ -154,17 +153,10 @@ describe('memory reflections', () => {
     );
   });
 
-  it('refreshes thread reflections from ingested episodes and facts', () => {
+  it('refreshes thread reflections from directly applicable facts', () => {
     const now = dayPeriodBounds(1_700_000_000_000).start + 3_600_000;
     const threadId = 'conv-refresh';
 
-    recordEpisode({
-      threadId,
-      conversationId: threadId,
-      summary: 'Created configs/nebula/runtime.json',
-      endedAt: now,
-      now,
-    });
     const entity = upsertEntity({ name: 'workspace', type: 'artifact' });
     recordFactWithApplicability(
       {
@@ -182,6 +174,40 @@ describe('memory reflections', () => {
     const reflection = refreshThreadReflection({ threadId, now });
     expect(reflection?.kind).toBe('daily_focus');
     expect(reflection?.content).toContain('configs/nebula/runtime.json');
+  });
+
+  it('buckets delayed refreshes by source day while recording the actual refresh time', () => {
+    const sourceAt = dayPeriodBounds(1_700_000_000_000).start + 3_600_000;
+    const refreshedAt = sourceAt + 2 * 86_400_000;
+    const threadId = 'conv-delayed-reflection';
+    const entity = upsertEntity({ name: 'delayed artifact', type: 'artifact' });
+    recordFactWithApplicability(
+      {
+        subjectId: entity.id,
+        predicate: 'created_artifact',
+        objectText: 'source-day-artifact',
+        scope: 'conversation',
+        originConversationId: threadId,
+        validAt: sourceAt,
+        now: sourceAt,
+      },
+      { factClass: 'workflow', sourceAuthority: 'tool_observed' },
+    );
+
+    const reflection = refreshThreadReflection({
+      threadId,
+      periodAt: sourceAt,
+      now: refreshedAt,
+    });
+
+    expect(reflection).toEqual(
+      expect.objectContaining({
+        periodStart: dayPeriodBounds(sourceAt).start,
+        createdAt: refreshedAt,
+        updatedAt: refreshedAt,
+      }),
+    );
+    expect(reflection?.content).toContain('source-day-artifact');
   });
 
   it('materializes only directly applicable facts into a reflection', () => {

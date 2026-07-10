@@ -17,7 +17,7 @@ import { listEpisodes, listFactEvidence } from '../../src/services/memory/episod
 import {
   buildConsolidatorPrompt,
   parseConsolidatorOutput,
-  applyConsolidatorResult,
+  applyThreadLocalConsolidatorResult,
 } from '../../src/services/memory/consolidator';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -342,9 +342,9 @@ describe('parseConsolidatorOutput', () => {
   });
 });
 
-describe('applyConsolidatorResult', () => {
+describe('applyThreadLocalConsolidatorResult', () => {
   it('records new facts and updates the active_focus block', () => {
-    const result = applyConsolidatorResult(
+    const result = applyThreadLocalConsolidatorResult(
       {
         episodeSummary: null,
         newFacts: [
@@ -400,7 +400,7 @@ describe('applyConsolidatorResult', () => {
   });
 
   it('preserves thread title metadata when provider focus omits it', () => {
-    const result = applyConsolidatorResult(
+    const result = applyThreadLocalConsolidatorResult(
       {
         episodeSummary: null,
         newFacts: [],
@@ -432,7 +432,7 @@ describe('applyConsolidatorResult', () => {
       taskId: 'scope-b',
     });
 
-    const result = applyConsolidatorResult(
+    const result = applyThreadLocalConsolidatorResult(
       {
         episodeSummary: null,
         newFacts: [],
@@ -468,7 +468,7 @@ describe('applyConsolidatorResult', () => {
       threadId: 'conv-delayed',
     });
 
-    const result = applyConsolidatorResult(
+    const result = applyThreadLocalConsolidatorResult(
       {
         episodeSummary: 'Delayed ingestion finished.',
         newFacts: [],
@@ -504,7 +504,7 @@ describe('applyConsolidatorResult', () => {
   });
 
   it('does not grant ordinary consolidation broad cross-task supersession', () => {
-    applyConsolidatorResult(
+    applyThreadLocalConsolidatorResult(
       {
         episodeSummary: null,
         newFacts: [
@@ -528,7 +528,7 @@ describe('applyConsolidatorResult', () => {
         sourceAssistantMessageId: 'a-1',
       },
     );
-    applyConsolidatorResult(
+    applyThreadLocalConsolidatorResult(
       {
         episodeSummary: null,
         newFacts: [
@@ -572,7 +572,7 @@ describe('applyConsolidatorResult', () => {
   });
 
   it('clears scoped open_threads when the consolidator returns an empty list', () => {
-    applyConsolidatorResult(
+    applyThreadLocalConsolidatorResult(
       {
         episodeSummary: null,
         newFacts: [],
@@ -583,7 +583,7 @@ describe('applyConsolidatorResult', () => {
       { now: 1, conversationId: 'conv-clear', threadId: 'conv-clear' },
     );
 
-    const result = applyConsolidatorResult(
+    const result = applyThreadLocalConsolidatorResult(
       {
         episodeSummary: null,
         newFacts: [],
@@ -604,7 +604,7 @@ describe('applyConsolidatorResult', () => {
   });
 
   it('persists episode summaries as searchable episodic memory', () => {
-    const result = applyConsolidatorResult(
+    const result = applyThreadLocalConsolidatorResult(
       {
         episodeSummary: 'The user compared local model runtime options.',
         newFacts: [],
@@ -636,12 +636,12 @@ describe('applyConsolidatorResult', () => {
       openThreads: [],
       notable: [],
     };
-    const first = applyConsolidatorResult(result, {
+    const first = applyThreadLocalConsolidatorResult(result, {
       conversationId: 'conv-idempotent',
       threadId: 'thread-idempotent',
       now: 1,
     });
-    const second = applyConsolidatorResult(result, {
+    const second = applyThreadLocalConsolidatorResult(result, {
       conversationId: 'conv-idempotent',
       threadId: 'thread-idempotent',
       now: 2,
@@ -653,7 +653,7 @@ describe('applyConsolidatorResult', () => {
   });
 
   it('skips active_focus update when null', () => {
-    const result = applyConsolidatorResult(
+    const result = applyThreadLocalConsolidatorResult(
       { newFacts: [], activeFocus: null, openThreads: [], notable: [] },
       { now: 1 },
     );
@@ -663,11 +663,11 @@ describe('applyConsolidatorResult', () => {
 
   it('does not throw when active_focus would overflow', () => {
     expect(() =>
-      applyConsolidatorResult(
+      applyThreadLocalConsolidatorResult(
         {
           episodeSummary: null,
           newFacts: [],
-          // 600 chars max enforced at parse, but applyConsolidatorResult must
+          // 600 chars max enforced at parse, but applyThreadLocalConsolidatorResult must
           // also tolerate a caller that hands it raw oversize content.
           activeFocus: 'x'.repeat(5_000),
           openThreads: [],

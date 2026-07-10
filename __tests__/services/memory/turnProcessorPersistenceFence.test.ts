@@ -64,6 +64,7 @@ function expectNoFencedWrites(threadId: string): void {
 
 it('keeps the pre-provider structural checkpoint but rejects enrichment after opt-out', async () => {
   const result = await processIngestionTurn({
+    episodeAccess: { personaId: 'default', shareability: 'thread_only' },
     threadId: 'conv-opt-out-fence',
     messages,
     extractor: async () => {
@@ -79,6 +80,7 @@ it('keeps the pre-provider structural checkpoint but rejects enrichment after op
 
 it('does not persist when the durable queue claim is no longer owned', async () => {
   const result = await processIngestionTurn({
+    episodeAccess: { personaId: 'default', shareability: 'thread_only' },
     threadId: 'conv-claim-fence',
     messages,
     extractor: async () => validPayload(),
@@ -94,6 +96,7 @@ it('rolls back every structural lane when the atomic checkpoint is rejected', as
 
   await expect(
     processIngestionTurn({
+      episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       threadId: 'conv-checkpoint-fence',
       messages,
       extractor,

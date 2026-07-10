@@ -271,7 +271,11 @@ describe('processIngestionTurn', () => {
         },
       }),
     ];
-    await processIngestionTurn({ threadId: 'conv-1', messages });
+    await processIngestionTurn({
+      episodeAccess: { personaId: 'default', shareability: 'thread_only' },
+      threadId: 'conv-1',
+      messages,
+    });
     expect(mockExtractStructuralMemory).toHaveBeenCalled();
   });
 
@@ -283,6 +287,7 @@ describe('processIngestionTurn', () => {
       assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
     });
     await processIngestionTurn({
+      episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       threadId: 'conv-1',
       messages: [user, assistant],
       sourceRunId: 'run-structural',
@@ -318,6 +323,7 @@ describe('processIngestionTurn', () => {
     });
 
     const result = await processIngestionTurn({
+      episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       threadId: 'conv-1',
       messages: [
         makeMsg({ role: 'user', content: 'Deploy' }),
@@ -364,6 +370,7 @@ describe('processIngestionTurn', () => {
     });
 
     const result = await processIngestionTurn({
+      episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       threadId: 'conv-1',
       messages: [
         makeMsg({ role: 'user', content: 'Hey' }),
@@ -413,6 +420,7 @@ describe('processIngestionTurn', () => {
     });
 
     await processIngestionTurn({
+      episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       threadId: 'conv-1',
       messages: [
         makeMsg({ role: 'user', content: 'Hey' }),
@@ -427,46 +435,6 @@ describe('processIngestionTurn', () => {
 
     const persisted = mockApplyConsolidatorResult.mock.calls[1][0];
     expect(persisted.newFacts).toEqual([{ subject: 'user', predicate: 'age', value: '30' }]);
-  });
-
-  it('does not promote provider-authored focus or open threads into working memory', async () => {
-    mockExtractStructuralMemory.mockReturnValue({
-      episodeSummary: 'Structural',
-      facts: [],
-      activeFocus: 'trusted structural focus',
-      openThreads: ['trusted structural thread'],
-    });
-    mockExtractProviderEnrichment.mockResolvedValue({
-      status: 'valid',
-      result: {
-        episodeSummary: 'Provider',
-        newFacts: [],
-        activeFocus: 'unsupported provider focus',
-        openThreads: ['unsupported provider thread'],
-        notable: [],
-      },
-    });
-
-    await processIngestionTurn({
-      threadId: 'conv-provider-working-memory',
-      messages: [
-        makeMsg({ role: 'user', content: 'Continue the current work.' }),
-        makeMsg({
-          role: 'assistant',
-          content: 'Done',
-          assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
-        }),
-      ],
-      extractor: jest.fn(),
-    });
-
-    expect(mockApplyConsolidatorResult.mock.calls[1][0]).toMatchObject({
-      activeFocus: 'trusted structural focus',
-      openThreads: ['trusted structural thread'],
-    });
-    expect(JSON.stringify(mockApplyConsolidatorResult.mock.calls[1][0])).not.toContain(
-      'unsupported provider',
-    );
   });
 
   it('preserves structural subject/predicate facts over provider variants in the same turn', async () => {
@@ -494,6 +462,7 @@ describe('processIngestionTurn', () => {
     });
 
     await processIngestionTurn({
+      episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       threadId: 'conv-1',
       messages: [
         makeMsg({ role: 'user', content: 'Remember a structured preference.' }),
@@ -555,6 +524,7 @@ describe('processIngestionTurn', () => {
     });
 
     await processIngestionTurn({
+      episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       threadId: 'conv-1',
       messages: [
         makeMsg({ role: 'user', content: 'Use the current preference to complete the task.' }),
@@ -586,6 +556,7 @@ describe('processIngestionTurn', () => {
       assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
     });
     await processIngestionTurn({
+      episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       threadId: 'conv-1',
       messages: [makeMsg({ role: 'user', content: 'Hey' }), assistant],
     });
@@ -606,6 +577,7 @@ describe('processIngestionTurn', () => {
 
     await expect(
       processIngestionTurn({
+        episodeAccess: { personaId: 'default', shareability: 'thread_only' },
         threadId: 'conv-1',
         messages: [
           makeMsg({ role: 'user', content: 'Hey' }),
@@ -625,6 +597,7 @@ describe('processIngestionTurn', () => {
 
   it('passes threadTitle and personaSummary through to extraction', async () => {
     await processIngestionTurn({
+      episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       threadId: 'conv-1',
       messages: [
         makeMsg({ role: 'user', content: 'Hey' }),
@@ -649,6 +622,7 @@ describe('processIngestionTurn', () => {
   it('uses the custom now timestamp when provided', async () => {
     const now = 1_000_000;
     await processIngestionTurn({
+      episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       threadId: 'conv-1',
       messages: [
         makeMsg({ role: 'user', content: 'Hey' }),

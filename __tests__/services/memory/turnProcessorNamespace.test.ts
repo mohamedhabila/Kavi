@@ -96,6 +96,7 @@ describe('turnProcessor memory namespace contract', () => {
     });
 
     await processIngestionTurn({
+      episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       threadId: 'child-conv-1',
       memoryConversationId: 'parent-conv-1',
       messages: [makeMsg({ role: 'user', content: 'Remember this.' }), assistant],
@@ -135,6 +136,7 @@ describe('turnProcessor memory namespace contract', () => {
 
     await expect(
       processIngestionTurn({
+        episodeAccess: { personaId: 'default', shareability: 'thread_only' },
         threadId: 'conv-required-graph',
         messages: [makeMsg({ role: 'user', content: 'Remember this.' }), assistant],
         graphGoalEvidence: ['tool:required-evidence'],

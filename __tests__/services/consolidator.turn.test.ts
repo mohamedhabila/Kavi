@@ -49,6 +49,7 @@ describe('consolidateTurn', () => {
         assistantMessage: 'Nice to meet you, Mo.',
         conversationId: 'conv-persist',
         threadId: 'thread-persist',
+        episodeAccess: { personaId: 'default', shareability: 'thread_only' },
         now: 42,
       },
       { extractor },

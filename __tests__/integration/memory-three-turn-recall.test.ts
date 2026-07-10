@@ -6,6 +6,7 @@ jest.mock('expo-sqlite', () => {
 import { drainIngestionQueue } from '../../src/services/memory/ingestionQueue';
 import { recordCompletedTurnForMemory } from '../../src/services/memory/lifecycle';
 import { orchestrateMemoryRetrieval } from '../../src/services/memory/retrievalOrchestrator';
+import { resolveLocalMemoryAccessScope } from '../../src/services/memory/memoryScopeStore';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
@@ -50,18 +51,31 @@ describe('memory three-turn recall fixture', () => {
     const threadId = 'conv-three-turn';
     const turn1: Message[] = [
       { id: 'u-1', role: 'user', content: 'Persist project metadata', createdAt: 1 },
-      closedAssistant('a-1', 'Saved project metadata.', 2, [
-        {
-          id: 'tc-1',
-          name: 'write_file',
-          arguments: JSON.stringify({ path: 'projects/atlas/metadata.json' }),
+      {
+        id: 'a-tool-1',
+        role: 'assistant',
+        content: '',
+        createdAt: 2,
+        toolCalls: [
+          {
+            id: 'tc-1',
+            name: 'write_file',
+            arguments: JSON.stringify({ path: 'projects/atlas/metadata.json' }),
+          },
+        ],
+        assistantMetadata: {
+          kind: 'intermediate',
+          completionStatus: 'complete',
+          finishReason: 'tool_calls',
         },
-      ]),
+      },
+      { id: 'tool-1', role: 'tool', content: 'ok', createdAt: 3, toolCallId: 'tc-1' },
+      closedAssistant('a-1', 'Saved project metadata.', 4),
     ];
     const turn2: Message[] = [
       ...turn1,
-      { id: 'u-2', role: 'user', content: 'Continue setup', createdAt: 3 },
-      closedAssistant('a-2', 'Setup continues.', 4),
+      { id: 'u-2', role: 'user', content: 'Continue setup', createdAt: 5 },
+      closedAssistant('a-2', 'Setup continues.', 6),
     ];
 
     await recordCompletedTurnForMemory({ threadId, messages: turn1, now: 10 });
@@ -72,7 +86,12 @@ describe('memory three-turn recall fixture', () => {
 
     const retrieval = await orchestrateMemoryRetrieval({
       userMessage: 'Which atlas metadata file did we write?',
-      conversationId: threadId,
+      memoryScope: resolveLocalMemoryAccessScope({
+        memoryConversationId: threadId,
+        sourceThreadId: threadId,
+        personaId: 'default',
+        taskId: null,
+      }),
       limit: 6,
       now: 30,
     });

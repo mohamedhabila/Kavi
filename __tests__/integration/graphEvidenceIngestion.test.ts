@@ -6,7 +6,8 @@ jest.mock('expo-sqlite', () => {
 import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { listFacts } from '../../src/services/memory/facts/queries';
-import { recallFactsForQuery } from '../../src/services/memory/factRecall';
+import { recallFactSelectionForQuery } from '../../src/services/memory/factRecall';
+import { resolveLocalMemoryAccessScope } from '../../src/services/memory/memoryScopeStore';
 import { processIngestionTurn } from '../../src/services/memory/turnProcessor';
 import type { Message } from '../../src/types/message';
 
@@ -49,10 +50,11 @@ afterEach(() => {
 });
 
 describe('graph evidence ingestion bridge', () => {
-  it('bridges graph goal evidence during ingestion and recalls it on a later query', async () => {
+  it('bridges uncorroborated graph evidence into the resolution lane', async () => {
     const evidence = 'python:artifact:reports/analysis.json';
 
     const result = await processIngestionTurn({
+      episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       threadId: THREAD_ID,
       messages: buildClosedTurnMessages(),
       taskId: TASK_ID,
@@ -68,18 +70,26 @@ describe('graph evidence ingestion bridge', () => {
     expect(storedFacts.some((fact) => fact.objectText.includes(evidence))).toBe(true);
     expect(storedFacts.some((fact) => fact.originTaskId === TASK_ID)).toBe(true);
 
-    const recalled = await recallFactsForQuery('python artifact reports analysis json', {
-      conversationId: THREAD_ID,
+    const recalled = await recallFactSelectionForQuery('python artifact reports analysis json', {
+      memoryScope: resolveLocalMemoryAccessScope({
+        memoryConversationId: THREAD_ID,
+        sourceThreadId: THREAD_ID,
+        personaId: 'default',
+        taskId: TASK_ID,
+      }),
+      useIntent: 'explicit_user_request',
       threshold: 0.05,
     });
 
-    expect(recalled.some((fact) => fact.objectText.includes(evidence))).toBe(true);
+    expect(recalled.facts).toEqual([]);
+    expect(recalled.resolutionFacts.some((fact) => fact.objectText.includes(evidence))).toBe(true);
   });
 
   it('does not reinforce graph evidence on turn replay but does on a later turn', async () => {
     const evidence = 'python:artifact:reports/analysis.json';
     const firstTurn = buildClosedTurnMessages('user-replay-1', 'assistant-replay-1');
     const input = {
+      episodeAccess: { personaId: 'default', shareability: 'thread_only' as const },
       threadId: THREAD_ID,
       messages: firstTurn,
       taskId: TASK_ID,
@@ -101,12 +111,14 @@ describe('graph evidence ingestion bridge', () => {
     });
 
     await processIngestionTurn({
+      episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       ...input,
       messages: buildClosedTurnMessages('user-replay-2', 'assistant-replay-2'),
       sourceRunId: 'run-graph-later',
       now: 300,
     });
     await processIngestionTurn({
+      episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       ...input,
       messages: buildClosedTurnMessages('user-replay-2', 'assistant-replay-2'),
       sourceRunId: 'run-graph-later',
@@ -135,6 +147,7 @@ describe('graph evidence ingestion bridge', () => {
       });
 
     const result = await processIngestionTurn({
+      episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       threadId: THREAD_ID,
       messages: buildClosedTurnMessages(),
       taskId: TASK_ID,
@@ -169,6 +182,7 @@ describe('graph evidence ingestion bridge', () => {
       'agent:{"kind":"state","trajectory_id":"traj-agent","state_index":4,';
 
     const result = await processIngestionTurn({
+      episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       threadId: THREAD_ID,
       messages: buildClosedTurnMessages(),
       taskId: TASK_ID,

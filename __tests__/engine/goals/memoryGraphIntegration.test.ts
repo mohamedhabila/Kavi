@@ -4,7 +4,10 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { orchestrateMemoryRetrieval } from '../../../src/services/memory/retrievalOrchestrator';
-import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../../src/services/memory/schema';
+import {
+  ensureFactSchema,
+  resetFactSchemaCacheForTests,
+} from '../../../src/services/memory/schema';
 import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
 import { applyGoalMutation } from '../../../src/engine/goals/graphState';
 import {
@@ -17,6 +20,7 @@ import {
 import { getActiveTaskTitle } from '../../../src/services/memory/taskStack';
 import { editWorkingBlock, getWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import type { AgentGoal } from '../../../src/engine/goals/types';
+import { resolveLocalMemoryAccessScope } from '../../../src/services/memory/memoryScopeStore';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -51,12 +55,22 @@ describe('goals/memoryGraphIntegration', () => {
       userMessage: 'any updates?',
       goals,
       activeTaskId: 'goal-1',
-      conversationId: 'conv-1',
+      memoryScope: resolveLocalMemoryAccessScope({
+        memoryConversationId: 'conv-1',
+        sourceThreadId: 'conv-1',
+        personaId: 'default',
+        taskId: 'goal-1',
+      }),
       limit: 4,
     });
 
     expect(result.querySignals).toEqual(
-      expect.arrayContaining(['any updates?', 'Book flights', 'Find nonstop options', 'web_search']),
+      expect.arrayContaining([
+        'any updates?',
+        'Book flights',
+        'Find nonstop options',
+        'web_search',
+      ]),
     );
   });
 
@@ -145,11 +159,13 @@ describe('goals/memoryGraphIntegration', () => {
     });
 
     expect(getActiveTaskTitle('conv-1')).toBe('Apply fix');
-    expect(getWorkingBlock('active_focus', {
-      conversationId: 'conv-1',
-      threadId: 'conv-1',
-      taskId: 'goal-b',
-    })?.content).toBe('Apply fix');
+    expect(
+      getWorkingBlock('active_focus', {
+        conversationId: 'conv-1',
+        threadId: 'conv-1',
+        taskId: 'goal-b',
+      })?.content,
+    ).toBe('Apply fix');
     expect(getMemoryTask('goal-b')).toMatchObject({
       threadId: 'conv-1',
       title: 'Apply fix',
@@ -236,11 +252,13 @@ describe('goals/memoryGraphIntegration', () => {
       goals,
       now: 100,
     });
-    expect(getWorkingBlock('active_focus', {
-      conversationId: 'conv-1',
-      threadId: 'conv-1',
-      taskId: 'scope-a',
-    })?.content).toBe('scope-a-planning');
+    expect(
+      getWorkingBlock('active_focus', {
+        conversationId: 'conv-1',
+        threadId: 'conv-1',
+        taskId: 'scope-a',
+      })?.content,
+    ).toBe('scope-a-planning');
 
     const switched = applyGoalMutation(
       goals,
@@ -264,11 +282,13 @@ describe('goals/memoryGraphIntegration', () => {
       now: 200,
     });
 
-    expect(getWorkingBlock('active_focus', {
-      conversationId: 'conv-1',
-      threadId: 'conv-1',
-      taskId: 'scope-b',
-    })?.content).toBe('scope-b-planning');
+    expect(
+      getWorkingBlock('active_focus', {
+        conversationId: 'conv-1',
+        threadId: 'conv-1',
+        taskId: 'scope-b',
+      })?.content,
+    ).toBe('scope-b-planning');
   });
 
   it('repairs active_focus when the active graph goal id is unchanged', () => {
@@ -294,11 +314,13 @@ describe('goals/memoryGraphIntegration', () => {
       now: 200,
     });
 
-    expect(getWorkingBlock('active_focus', {
-      conversationId: 'conv-1',
-      threadId: 'conv-1',
-      taskId: 'scope-b',
-    })?.content).toBe('scope-b-planning');
+    expect(
+      getWorkingBlock('active_focus', {
+        conversationId: 'conv-1',
+        threadId: 'conv-1',
+        taskId: 'scope-b',
+      })?.content,
+    ).toBe('scope-b-planning');
   });
 
   it('overwrites stale active_focus from the graph-owned active goal', () => {
@@ -334,11 +356,13 @@ describe('goals/memoryGraphIntegration', () => {
       now: 200,
     });
 
-    expect(getWorkingBlock('active_focus', {
-      conversationId: 'conv-1',
-      threadId: 'conv-1',
-      taskId: 'scope-b',
-    })?.content).toBe('scope-b-planning');
+    expect(
+      getWorkingBlock('active_focus', {
+        conversationId: 'conv-1',
+        threadId: 'conv-1',
+        taskId: 'scope-b',
+      })?.content,
+    ).toBe('scope-b-planning');
   });
 
   it('syncs the active goal into memory_tasks and pauses prior active tasks', () => {
@@ -377,10 +401,12 @@ describe('goals/memoryGraphIntegration', () => {
       now: 100,
     });
 
-    expect(getWorkingBlock('active_focus', {
-      conversationId: 'conv-1',
-      threadId: 'conv-1',
-      taskId: 'goal-a',
-    })?.content).toBe('longmem-delayed-recall\nlongmem-delayed-thread');
+    expect(
+      getWorkingBlock('active_focus', {
+        conversationId: 'conv-1',
+        threadId: 'conv-1',
+        taskId: 'goal-a',
+      })?.content,
+    ).toBe('longmem-delayed-recall\nlongmem-delayed-thread');
   });
 });

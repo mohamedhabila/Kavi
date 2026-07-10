@@ -83,6 +83,7 @@ async function ingest(input: {
 }) {
   const turnMessages = messages(input.userContent, input.enrichedContent);
   return processIngestionTurn({
+    episodeAccess: { personaId: 'default', shareability: 'thread_only' },
     threadId: 'thread-1',
     memoryConversationId: 'conversation-1',
     messages: turnMessages,
@@ -244,6 +245,7 @@ describe('grounded passive memory corrections', () => {
     const turnMessages = messages('I am considering Utrecht or Paris.');
 
     await processIngestionTurn({
+      episodeAccess: { personaId: 'default', shareability: 'thread_only' },
       threadId: 'thread-1',
       memoryConversationId: 'conversation-1',
       messages: turnMessages,
@@ -327,7 +329,7 @@ describe('grounded passive memory corrections', () => {
     ]);
   });
 
-  it('stores a no-target proposal as an ordinary fact without replacement authority', async () => {
+  it('stores a grounded no-target insert without replacement authority', async () => {
     await ingest({
       userContent: 'I moved to Utrecht.',
       predicate: 'lives_in',
@@ -338,7 +340,14 @@ describe('grounded passive memory corrections', () => {
     const current = listFacts({ subjectId: user.id, predicate: 'lives_in' });
     expect(current).toHaveLength(1);
     expect(current[0].objectText).toBe('Utrecht');
-    expect(current[0].attributes).not.toHaveProperty('memoryWrite');
+    expect(current[0].attributes).toMatchObject({
+      memoryWrite: {
+        operation: 'insert',
+        authority: 'grounded_user_statement',
+        evidenceMessageId: 'user-current',
+      },
+    });
+    expect(current[0].attributes.memoryWrite).not.toHaveProperty('expectedCurrentFactId');
   });
 
   it.each(['historical', 'hypothetical', 'quoted', 'third_party', 'uncertain'] as const)(
