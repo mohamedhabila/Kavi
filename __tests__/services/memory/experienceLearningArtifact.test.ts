@@ -121,8 +121,8 @@ describe('experience learning artifacts', () => {
         artifact,
         query: 'Create a return',
         domainId: 'travel',
-      }).join('\n'),
-    ).not.toContain('create_return');
+      }),
+    ).toEqual([]);
   });
 
   it('rejects malformed persisted artifacts instead of partially loading them', () => {

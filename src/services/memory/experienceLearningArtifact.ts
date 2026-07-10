@@ -387,8 +387,9 @@ export function retrieveExperienceLearnings(input: {
       const text = renderRecord(record);
       const overlap = lexicalUnits(text).filter((unit) => queryUnits.has(unit)).length;
       const support = Math.min(1, record.evidence.runIds.length / 5);
-      return { record, text, score: overlap * 2 + record.confidence + support };
+      return { record, text, overlap, score: overlap * 2 + record.confidence + support };
     })
+    .filter(({ overlap }) => overlap > 0)
     .sort((left, right) =>
       right.score !== left.score
         ? right.score - left.score
