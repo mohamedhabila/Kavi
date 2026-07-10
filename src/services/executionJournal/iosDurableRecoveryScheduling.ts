@@ -234,9 +234,30 @@ async function scheduleExactRun(
       return { kind: 'blocked', runId, reason: 'candidate_generation_stale' };
     }
     if (ordering === 0) {
-      return ACTIVE_NATIVE_STATES.has(record.state)
-        ? { kind: 'already_scheduled', runId }
-        : { kind: 'blocked', runId, reason: 'candidate_generation_terminal' };
+      if (ACTIVE_NATIVE_STATES.has(record.state)) {
+        return { kind: 'already_scheduled', runId };
+      }
+      if (predecessor === null || !samePointer(generationPointer(record), predecessor)) {
+        return { kind: 'blocked', runId, reason: 'candidate_generation_terminal' };
+      }
+      let released: DurablePlatformAdapterResult;
+      try {
+        released = await bridge.releaseTerminal(predecessor);
+      } catch {
+        return { kind: 'deferred', runId, reason: 'native_bridge_unavailable' };
+      }
+      if (released.status === 'released') {
+        try {
+          return classifyAdapterResult(runId, await bridge.enqueue(request));
+        } catch {
+          return { kind: 'deferred', runId, reason: 'native_bridge_unavailable' };
+        }
+      }
+      if (released.status === 'deferred') {
+        return { kind: 'deferred', runId, reason: released.reason };
+      }
+      if (released.status === 'rejected' && released.reason === 'record_not_found') continue;
+      return { kind: 'blocked', runId, reason: 'native_release_contract_failure' };
     }
     if (ACTIVE_NATIVE_STATES.has(record.state)) {
       return { kind: 'deferred', runId, reason: 'older_native_generation_active' };

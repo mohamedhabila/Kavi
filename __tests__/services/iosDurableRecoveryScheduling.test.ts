@@ -259,6 +259,28 @@ describe('iOS durable recovery scheduling', () => {
     expect(nativeBridge.releaseTerminal).not.toHaveBeenCalled();
   });
 
+  it('replaces an exact expired lease only when named as the predecessor', async () => {
+    const expired = record('expired');
+    const nativeBridge = bridge({
+      getRecord: jest.fn().mockResolvedValue({
+        schema: 1,
+        status: 'found',
+        record: expired,
+      }),
+      releaseTerminal: jest.fn().mockResolvedValue(adapterResult('released', expired)),
+    });
+
+    await expect(
+      continuePersistedIOSExternalRecoveryRun(
+        'run-1',
+        pointer(expired),
+        dependencies(nativeBridge),
+      ),
+    ).resolves.toEqual({ kind: 'scheduled', runId: 'run-1' });
+    expect(nativeBridge.releaseTerminal).toHaveBeenCalledWith(pointer(expired));
+    expect(nativeBridge.enqueue).toHaveBeenCalledTimes(1);
+  });
+
   it('releases an exact terminal predecessor when the journal has no successor', async () => {
     const terminal = record('completed');
     const nativeBridge = bridge({
