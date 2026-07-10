@@ -1,11 +1,15 @@
 import { type MemoryFact } from './facts/types';
 import { type RecallFactsOptions, type ScoredFact } from './factRecallTypes';
+import type { RecallCandidateProvenance } from './factRecallCandidateContract';
 import { exponentialDecayMultiplier } from './ranking/scoring';
 
 const PINNED_BOOST = 0.25;
 const RELEVANCE_EPSILON = 1e-6;
 const QUOTED_ANCHOR_MATCH_BOOST = 0.18;
 const QUOTED_ANCHOR_FULL_MATCH_BOOST = 0.12;
+const EXPLICIT_TEMPORAL_RELEVANCE = 0.12;
+const SEMANTIC_CANDIDATE_WEIGHT = 0.5;
+const FUSION_SCORE_WEIGHT = 0.025;
 
 export function buildQueryUnitWeightsFromHits(
   queryUnits: ReadonlySet<string>,
@@ -38,6 +42,8 @@ export function buildScoredFact(params: {
   factUnitHits: ReadonlySet<string> | undefined;
   unitWeights: ReadonlyMap<string, number>;
   anchorUnitSets: ReadonlyArray<Set<string>>;
+  candidateProvenance?: RecallCandidateProvenance;
+  explicitTemporalSignal: boolean;
   query: string;
   alwaysIncludePinned: boolean;
   options: RecallFactsOptions;
@@ -48,25 +54,47 @@ export function buildScoredFact(params: {
     queryUnits,
     factUnitHits,
     anchorUnitSets,
+    candidateProvenance = { reasons: [], fusionScore: 0, semanticSimilarity: null },
+    explicitTemporalSignal,
     alwaysIncludePinned,
     options,
     now,
   } = params;
   const lexicalScore = lexicalOverlapFromUnitHits(queryUnits, factUnitHits, params.unitWeights);
   const textScore = lexicalScore;
+  const candidateRelevanceScore = Math.max(
+    explicitTemporalSignal && candidateProvenance.reasons.includes('temporal')
+      ? EXPLICIT_TEMPORAL_RELEVANCE
+      : 0,
+    candidateProvenance.reasons.includes('local_semantic') &&
+      candidateProvenance.semanticSimilarity !== null
+      ? Math.max(0, candidateProvenance.semanticSimilarity) * SEMANTIC_CANDIDATE_WEIGHT
+      : 0,
+  );
   const pinnedBoost = alwaysIncludePinned && fact.pinned ? PINNED_BOOST : 0;
   const decayMultiplier = scoreDecay(fact, now);
   const scopeBoost = scoreScope(fact, options);
   const reinforcementBoost = scoreReinforcement(fact);
   const importanceScore = fact.importance * 0.04;
   const retrievabilityScore = scoreRetrievability(fact);
-  const relevanceScore = textScore * fact.confidence * decayMultiplier * retrievabilityScore;
+  const relevanceScore =
+    Math.max(textScore, candidateRelevanceScore) *
+    fact.confidence *
+    decayMultiplier *
+    retrievabilityScore;
   const anchorBoost = anchorMatchBoost(anchorUnitSets, factUnitHits);
   const hasRelevance = relevanceScore > RELEVANCE_EPSILON;
+  const hasApplicableFusionSignal =
+    candidateProvenance.reasons.includes('entity') ||
+    candidateProvenance.reasons.includes('local_semantic') ||
+    (explicitTemporalSignal && candidateProvenance.reasons.includes('temporal'));
   const score =
     relevanceScore +
     anchorBoost +
     pinnedBoost +
+    (hasRelevance && hasApplicableFusionSignal
+      ? candidateProvenance.fusionScore * FUSION_SCORE_WEIGHT
+      : 0) +
     (hasRelevance || anchorBoost > 0 ? scopeBoost + reinforcementBoost + importanceScore : 0);
   return {
     fact,
@@ -80,6 +108,8 @@ export function buildScoredFact(params: {
     importanceScore,
     retrievabilityScore,
     relevanceScore,
+    candidateRelevanceScore,
+    candidateProvenance,
   };
 }
 

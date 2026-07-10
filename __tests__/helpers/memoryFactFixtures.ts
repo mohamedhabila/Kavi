@@ -65,5 +65,11 @@ export function makeScoredFact(
     importanceScore: overrides.importanceScore ?? 0.8,
     retrievabilityScore: overrides.retrievabilityScore ?? 1,
     relevanceScore: overrides.relevanceScore ?? score,
+    candidateRelevanceScore: overrides.candidateRelevanceScore ?? 0,
+    candidateProvenance: overrides.candidateProvenance ?? {
+      reasons: [],
+      fusionScore: 0,
+      semanticSimilarity: null,
+    },
   };
 }

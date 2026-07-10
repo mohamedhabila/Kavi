@@ -1,4 +1,10 @@
 import { type MemoryFact, type MemoryFactKind, type MemoryFactScope } from './facts/types';
+import type {
+  RecallCandidateProvenance,
+  RecallCandidateStageTelemetry,
+  RecallCandidateStrategy,
+  RecallLocalSemanticInput,
+} from './factRecallCandidateContract';
 
 export interface RecallFactsOptions {
   /** Maximum facts returned. Default 8. */
@@ -31,6 +37,12 @@ export interface RecallFactsOptions {
   candidatePoolLimit?: number;
   /** Maximum query lexical units used for indexed recall fanout. */
   lexicalUnitLimit?: number;
+  /** Candidate union strategy. Production uses hybrid; lexical is the same-path ablation. */
+  candidateStrategy?: RecallCandidateStrategy;
+  /** Optional compatible local query vector. Retrieval never creates or fetches one. */
+  localSemantic?: RecallLocalSemanticInput;
+  /** Maximum already-eligible facts inspected by supplemental local lanes. */
+  eligibleScanLimit?: number;
   /** Optional recall-stage telemetry for product diagnostics. */
   onTiming?: (timing: RecallFactsTiming) => void;
   /**
@@ -59,6 +71,7 @@ export interface RecallFactsTiming {
   selectorCandidateCount?: number;
   selectorSelectedCount?: number;
   selectorApplied?: boolean;
+  candidateStages?: RecallCandidateStageTelemetry;
   totalMs: number;
 }
 
@@ -74,6 +87,8 @@ export interface ScoredFact {
   importanceScore: number;
   retrievabilityScore: number;
   relevanceScore: number;
+  candidateRelevanceScore: number;
+  candidateProvenance: RecallCandidateProvenance;
 }
 
 export interface MemoryFactSelectionCandidate {

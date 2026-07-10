@@ -1,12 +1,21 @@
-// Kavi query-time fact recall. This path is deterministic and local: build one
-// indexed lexical candidate pool, score it once, and return the best matching
-// memories. Agent-run structure belongs in compact memory records, not in
-// query-time repair lanes.
+// Kavi query-time fact recall. This path is deterministic and local: fuse a
+// bounded set of already-eligible lexical, entity, temporal, and compatible
+// local-semantic candidates, score it once, and return the best memories.
+// Agent-run structure belongs in compact memory records, not query-time repair.
 
 import { markFactsRecalled } from './facts/mutations';
-import { listFactTermUnitHitsForFacts, listFactsForRecallCandidates } from './facts/queries';
+import {
+  listFacts,
+  listFactTermUnitHitsForFacts,
+  listFactsForRecallCandidates,
+} from './facts/queries';
 import { type MemoryFact, type MemoryFactScope } from './facts/types';
+import { getEntitiesByIds } from './entities';
 import { selectIndexedRecallLexicalUnits } from './factRecallCandidateUnits';
+import { RECALL_CANDIDATE_LIMITS } from './factRecallCandidateContract';
+import { recallCandidateDiversityKey } from './factRecallCandidateUnion';
+import { extractTemporalRecallYears } from './factRecallCandidateLanes';
+import { buildRecallCandidateSet } from './factRecallHybridCandidates';
 import { buildRecallLexicalUnits, selectScoringQueryUnits } from './factRecallQueryUnits';
 import {
   type RecallFactsOptions,
@@ -33,6 +42,15 @@ const CANDIDATE_POOL_LIMIT = 128;
 const CANDIDATE_POOL_MAX = 2_000;
 const QUOTED_ANCHOR_LIMIT = 12;
 const DEFAULT_SELECTOR_CANDIDATE_LIMIT = 48;
+
+function normalizePositiveIntegerLimit(
+  value: number | undefined,
+  fallback: number,
+  maximum: number,
+): number {
+  const requested = value === undefined || !Number.isFinite(value) ? fallback : Math.floor(value);
+  return Math.max(1, Math.min(requested, maximum));
+}
 
 function getCandidateScopes(options: RecallFactsOptions): MemoryFactScope[] | undefined {
   if (options.scopeFilter) {
@@ -67,20 +85,6 @@ function uniqueFactsById(facts: ReadonlyArray<MemoryFact>): MemoryFact[] {
 
 function factDedupeKey(fact: MemoryFact): string {
   return `${fact.memoryKind}\u0000${fact.contentHash || fact.objectText.trim()}`;
-}
-
-function selectorDiversityKey(fact: MemoryFact): string {
-  const sourceRunId = fact.sourceRunId?.trim();
-  if (sourceRunId) return `run:${sourceRunId}`;
-  const taskId = fact.originTaskId?.trim() || fact.taskId?.trim();
-  if (taskId) return `task:${taskId}`;
-  const turnId = fact.sourceTurnId?.trim();
-  if (turnId) return `turn:${turnId}`;
-  const conversationId = fact.originConversationId?.trim() || fact.originThreadId?.trim();
-  if (conversationId) {
-    return `conversation:${conversationId}:${fact.memoryKind}:${fact.subjectId}:${fact.predicate}`;
-  }
-  return `fact:${fact.memoryKind}:${fact.subjectId}:${fact.predicate}`;
 }
 
 function selectTopFacts(
@@ -123,12 +127,14 @@ async function selectFactsWithSemanticSelector(params: {
   const selector = params.options.selector;
   if (!selector) return [...params.deterministicSelected];
 
+  const requestedSelectorCandidateLimit = normalizePositiveIntegerLimit(
+    params.options.selectorCandidateLimit,
+    DEFAULT_SELECTOR_CANDIDATE_LIMIT,
+    Math.max(1, params.scored.length),
+  );
   const selectorCandidateLimit = Math.max(
     params.limit,
-    Math.min(
-      params.options.selectorCandidateLimit ?? DEFAULT_SELECTOR_CANDIDATE_LIMIT,
-      params.scored.length,
-    ),
+    Math.min(requestedSelectorCandidateLimit, params.scored.length),
   );
   const candidates = selectSelectorCandidates({
     scored: params.scored,
@@ -147,7 +153,7 @@ async function selectFactsWithSemanticSelector(params: {
   const appendSelected = (entry: ScoredFact, requireNewDiversityKey = false): boolean => {
     if (selected.length >= params.limit) return false;
     if (seenIds.has(entry.fact.id)) return false;
-    const diversityKey = selectorDiversityKey(entry.fact);
+    const diversityKey = recallCandidateDiversityKey(entry.fact);
     if (requireNewDiversityKey && seenDiversityKeys.has(diversityKey)) return false;
     const key = factDedupeKey(entry.fact);
     if (seenKeys.has(key)) return false;
@@ -212,7 +218,7 @@ function selectSelectorCandidates(params: {
   const firstStageRank = new Map(params.scored.map((entry, index) => [entry.fact.id, index]));
   const append = (entry: ScoredFact | undefined, requireNewDiversityKey = false): boolean => {
     if (!entry || selected.size >= params.limit || selected.has(entry.fact.id)) return false;
-    const diversityKey = selectorDiversityKey(entry.fact);
+    const diversityKey = recallCandidateDiversityKey(entry.fact);
     if (requireNewDiversityKey && selectedDiversityKeys.has(diversityKey)) return false;
     selected.set(entry.fact.id, entry);
     selectedDiversityKeys.add(diversityKey);
@@ -270,19 +276,31 @@ async function buildRecallSelection(
     selectMs: 0,
     totalMs: 0,
   };
-  const limit = Math.max(1, Math.min(options.limit ?? DEFAULT_LIMIT, 50));
+  const limit = normalizePositiveIntegerLimit(options.limit, DEFAULT_LIMIT, 50);
+  const requestedCandidatePool = normalizePositiveIntegerLimit(
+    options.candidatePoolLimit,
+    CANDIDATE_POOL_LIMIT,
+    CANDIDATE_POOL_MAX,
+  );
   const candidatePool = Math.max(
     limit,
-    Math.min(options.candidatePoolLimit ?? CANDIDATE_POOL_LIMIT, CANDIDATE_POOL_MAX),
+    requestedCandidatePool,
   );
   const alwaysIncludePinned = options.alwaysIncludePinned !== false;
   const trimmedQuery = query.trim();
   const now = options.now ?? options.asOf ?? Date.now();
   const candidateScopes = getCandidateScopes(options);
+  const candidateStrategy = options.candidateStrategy ?? 'hybrid';
+  const eligibleScanLimit = normalizePositiveIntegerLimit(
+    options.eligibleScanLimit,
+    RECALL_CANDIDATE_LIMITS.defaultEligibleScan,
+    RECALL_CANDIDATE_LIMITS.maximumEligibleScan,
+  );
 
   const tokenizeStarted = Date.now();
   const queryUnitCounts = countLexicalUnits(trimmedQuery);
   const queryUnits = new Set(queryUnitCounts.keys());
+  const explicitTemporalSignal = extractTemporalRecallYears(trimmedQuery).size > 0;
   const anchorUnitSets = quotedSpanUnitSets(trimmedQuery, QUOTED_ANCHOR_LIMIT);
   const anchorLexicalUnits = Array.from(
     new Set(anchorUnitSets.flatMap((anchorUnits) => Array.from(anchorUnits))),
@@ -300,7 +318,7 @@ async function buildRecallSelection(
     recallLexicalUnits,
     anchorLexicalUnits,
   );
-  const candidates = uniqueFactsById(
+  const lexicalCandidates = uniqueFactsById(
     listFactsForRecallCandidates({
       limit: candidatePool,
       selectedLexicalUnits: indexedRecallLexicalUnits,
@@ -313,16 +331,52 @@ async function buildRecallSelection(
       anchorLexicalUnitSets: anchorUnitSets.map((anchorUnits) => Array.from(anchorUnits)),
     }),
   ).filter((fact) => isFactEligibleForRecall(fact, options));
+  const eligibleFacts =
+    candidateStrategy === 'hybrid' && trimmedQuery
+      ? listFacts({
+          limit: eligibleScanLimit,
+          ...(candidateScopes ? { scope: candidateScopes } : {}),
+          ...(options.memoryKind ? { memoryKind: options.memoryKind } : {}),
+          ...(options.includeHistorical ? { includeInvalidated: true } : {}),
+          ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
+        }).filter((fact) => isFactEligibleForRecall(fact, options))
+      : [];
+  const entities =
+    eligibleFacts.length > 0
+      ? getEntitiesByIds(
+          eligibleFacts.flatMap((fact) =>
+            fact.objectEntityId ? [fact.subjectId, fact.objectEntityId] : [fact.subjectId],
+          ),
+        )
+      : [];
   timing.candidateFetchMs = Date.now() - candidateFetchStarted;
-  timing.candidateCount = candidates.length;
 
   const candidateTermHitsStarted = Date.now();
-  const candidateUnitHits = listFactTermUnitHitsForFacts(
-    candidates.map((fact) => fact.id),
+  const allCandidateUnitHits = listFactTermUnitHitsForFacts(
+    uniqueFactsById([...lexicalCandidates, ...eligibleFacts]).map((fact) => fact.id),
     recallLexicalUnits,
   );
+  const candidateSet = buildRecallCandidateSet({
+    strategy: candidateStrategy,
+    query: trimmedQuery,
+    queryUnits,
+    anchorUnitSets,
+    lexicalCandidates,
+    candidateUnitHits: allCandidateUnitHits,
+    eligibleFacts,
+    entities,
+    ...(options.localSemantic ? { localSemantic: options.localSemantic } : {}),
+    limit: candidatePool,
+  });
+  const candidates = candidateSet.candidates;
+  const candidateIds = new Set(candidates.map((fact) => fact.id));
+  const candidateUnitHits = new Map(
+    Array.from(allCandidateUnitHits).filter(([factId]) => candidateIds.has(factId)),
+  );
   timing.candidateTermHitsMs = Date.now() - candidateTermHitsStarted;
+  timing.candidateCount = candidates.length;
   timing.candidateHitFactCount = candidateUnitHits.size;
+  timing.candidateStages = candidateSet.telemetry;
   const scoringQueryUnits = selectScoringQueryUnits(
     recallLexicalUnits,
     queryUnits,
@@ -346,6 +400,8 @@ async function buildRecallSelection(
       unitWeights,
       query: trimmedQuery,
       anchorUnitSets,
+      candidateProvenance: candidateSet.provenanceByFactId.get(fact.id),
+      explicitTemporalSignal,
       alwaysIncludePinned,
       options,
       now,

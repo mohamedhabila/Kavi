@@ -26,7 +26,7 @@ const LANE_WEIGHTS: Readonly<Record<RecallCandidateReasonCode, number>> = Object
   exact_quoted: 1.4,
   lexical: 1,
   entity: 1.1,
-  temporal: 0.65,
+  temporal: 0.2,
   local_semantic: 1.05,
 });
 
