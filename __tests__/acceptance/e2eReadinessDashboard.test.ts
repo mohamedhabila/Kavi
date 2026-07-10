@@ -363,9 +363,7 @@ describe('e2eReadinessDashboard', () => {
       'bench-androidworld-calendar-mutation',
       'direct-toolsandbox-state-dependency',
     ]);
-    expect(clusters.get('memory_retrieval_miss')?.scenarioIds).toEqual([
-      'bench-bfcl-sequential-memory-chain',
-    ]);
+    expect(clusters.get('memory_retrieval_miss')?.scenarioIds).toEqual([]);
     expect(clusters.get('cache_prefix_drift')?.scenarioIds).toEqual([
       'bench-prompt-cache-convergence-long-run',
       'bench-prompt-cache-long-horizon',
@@ -384,7 +382,10 @@ describe('e2eReadinessDashboard', () => {
     expect(clusters.get('final_response_failure')?.scenarioIds).toEqual([
       'multi-turn-inventory-readback',
     ]);
-    expect(clusters.get('memory_write_failure')?.scenarioIds).toEqual(['memory-remember-recall']);
+    expect(clusters.get('memory_write_failure')?.scenarioIds).toEqual([
+      'bench-bfcl-sequential-memory-chain',
+      'memory-remember-recall',
+    ]);
     expect(clusters.get('lifecycle_recovery_failure')?.scenarioIds).toEqual([
       'multi-turn-trip-artifact',
     ]);
