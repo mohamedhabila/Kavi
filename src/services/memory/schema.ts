@@ -146,6 +146,8 @@ export function ensureFactSchema(): void {
       content TEXT NOT NULL DEFAULT '',
       char_limit INTEGER NOT NULL,
       description TEXT NOT NULL DEFAULT '',
+      prompt_eligibility TEXT NOT NULL DEFAULT 'untrusted'
+        CHECK(prompt_eligibility IN ('trusted_structural', 'untrusted')),
       updated_at INTEGER NOT NULL,
       PRIMARY KEY (label, scope_key)
     );
@@ -207,6 +209,30 @@ export function ensureFactSchema(): void {
     CREATE INDEX IF NOT EXISTS idx_fact_evidence_episode
       ON memory_fact_evidence(episode_id);
 
+    CREATE TABLE IF NOT EXISTS memory_fact_observations (
+      id TEXT PRIMARY KEY,
+      fact_id TEXT NOT NULL,
+      relation TEXT NOT NULL CHECK(relation IN ('supports', 'conflicts')),
+      memory_owner_id TEXT NOT NULL,
+      fact_class TEXT NOT NULL
+        CHECK(fact_class IN ('subjective_user', 'objective', 'workflow', 'unknown')),
+      source_authority TEXT NOT NULL
+        CHECK(source_authority IN ('grounded_user', 'tool_observed', 'external_source')),
+      source_kind TEXT NOT NULL
+        CHECK(source_kind IN ('user_message', 'tool_run', 'external_record')),
+      source_id TEXT NOT NULL,
+      source_conversation_id TEXT NOT NULL,
+      source_thread_id TEXT NOT NULL,
+      source_persona_id TEXT NOT NULL,
+      source_task_id TEXT,
+      observed_at INTEGER NOT NULL CHECK(observed_at >= 0),
+      created_at INTEGER NOT NULL CHECK(created_at >= observed_at)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_fact_observations_identity
+      ON memory_fact_observations(fact_id, memory_owner_id, source_kind, source_id);
+    CREATE INDEX IF NOT EXISTS idx_fact_observations_active
+      ON memory_fact_observations(fact_id, relation, observed_at DESC, created_at, id);
+
     CREATE TABLE IF NOT EXISTS memory_tasks (
       id TEXT PRIMARY KEY,
       thread_id TEXT NOT NULL,
@@ -254,6 +280,12 @@ export function ensureFactSchema(): void {
   ensureIngestionQueueSchema(db);
   ensureMemoryVaultIdentitySchema(db);
   ensureFactColumns(db);
+  ensureColumn(
+    db,
+    'memory_working_blocks',
+    'prompt_eligibility',
+    "prompt_eligibility TEXT NOT NULL DEFAULT 'untrusted' CHECK(prompt_eligibility IN ('trusted_structural', 'untrusted'))",
+  );
   ensureEpisodeSourceIdentity(db);
   ensureFactEvidenceIdentity(db);
   ensureCanonicalFactTable(db);

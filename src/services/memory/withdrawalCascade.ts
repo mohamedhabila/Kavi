@@ -25,6 +25,11 @@ interface RetrievalTermLineageRow {
   memory_kind: string;
 }
 
+interface FactObservationLineageRow {
+  id: string;
+  fact_id: string;
+}
+
 export interface MemoryWithdrawalTransactionResult {
   result: WithdrawMemoryFactResult;
   notificationScope: string | null;
@@ -118,6 +123,74 @@ function isOrphanEntity(db: MemoryDatabase, entityId: string): boolean {
   );
 }
 
+function collectFactObservations(
+  db: MemoryDatabase,
+  lineage: MemoryWithdrawalLineage,
+): FactObservationLineageRow[] {
+  const observations = new Map<string, FactObservationLineageRow>();
+  for (let offset = 0; offset < lineage.factIds.length; offset += DELETE_BATCH_SIZE) {
+    const batch = lineage.factIds.slice(offset, offset + DELETE_BATCH_SIZE);
+    for (const row of db.getAllSync<FactObservationLineageRow>(
+      `SELECT id, fact_id FROM memory_fact_observations
+        WHERE fact_id IN (${batch.map(() => '?').join(', ')})`,
+      ...batch,
+    )) {
+      observations.set(row.id, row);
+    }
+  }
+  for (const source of lineage.scopedSources) {
+    const sourceKind =
+      source.sourceKind === 'message'
+        ? 'user_message'
+        : source.sourceKind === 'run'
+          ? 'tool_run'
+          : null;
+    if (!sourceKind) continue;
+    for (const row of db.getAllSync<FactObservationLineageRow>(
+      `SELECT id, fact_id FROM memory_fact_observations
+        WHERE source_conversation_id = ?
+          AND source_thread_id = ?
+          AND COALESCE(source_task_id, '') = ?
+          AND source_kind = ?
+          AND source_id = ?`,
+      source.memoryConversationId,
+      source.sourceThreadId,
+      source.taskId,
+      sourceKind,
+      source.sourceId,
+    )) {
+      observations.set(row.id, row);
+    }
+  }
+  return Array.from(observations.values()).sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function recomputeFactObservationState(
+  db: MemoryDatabase,
+  factIds: ReadonlyArray<string>,
+  now: number,
+): void {
+  for (const factId of factIds) {
+    db.runSync(
+      `UPDATE memory_facts
+          SET last_conflicted_at = (
+                SELECT MAX(observed_at)
+                  FROM memory_fact_observations
+                 WHERE fact_id = memory_facts.id AND relation = 'conflicts'
+              ),
+              last_confirmed_at = (
+                SELECT MAX(observed_at)
+                  FROM memory_fact_observations
+                 WHERE fact_id = memory_facts.id AND relation = 'supports'
+              ),
+              updated_at = MAX(updated_at, ?)
+        WHERE id = ? AND deleted_at IS NULL`,
+      now,
+      factId,
+    );
+  }
+}
+
 export function executeMemoryWithdrawalCascade(
   db: MemoryDatabase,
   factId: string,
@@ -182,6 +255,15 @@ export function executeMemoryWithdrawalCascade(
   );
   const factIds = new Set(lineage.factIds);
   const episodeIds = new Set(lineage.episodeIds);
+  const observations = collectFactObservations(db, lineage);
+  const observationIds = observations.map((row) => row.id);
+  const survivingObservationFactIds = Array.from(
+    new Set(
+      observations
+        .map((row) => row.fact_id)
+        .filter((observationFactId) => !factIds.has(observationFactId)),
+    ),
+  ).sort();
 
   const countsBase: MemoryWithdrawalCounts = {
     ...EMPTY_MEMORY_WITHDRAWAL_COUNTS,
@@ -192,6 +274,7 @@ export function executeMemoryWithdrawalCascade(
       'id',
       lineage.evidence.map((row) => row.id),
     ),
+    factObservations: deleteIds(db, 'memory_fact_observations', 'id', observationIds),
     retrievalTerms: retrievalTermRows.length,
     chunks: deleteIds(
       db,
@@ -228,6 +311,7 @@ export function executeMemoryWithdrawalCascade(
     orphanEntities: 0,
     embeddingCacheEntries: 0,
   };
+  recomputeFactObservationState(db, survivingObservationFactIds, now);
   const deletedEntityIds: string[] = [];
   let orphanEntities = 0;
   for (const entityId of lineage.candidateEntityIds) {
@@ -241,6 +325,7 @@ export function executeMemoryWithdrawalCascade(
     factIds: lineage.factIds,
     retrievalTermStats,
     evidenceIds: lineage.evidence.map((row) => row.id),
+    observationIds,
     episodeIds: lineage.episodeIds,
     chunkIds: lineage.chunks.map((row) => row.id),
     reflectionIds: lineage.reflections.map((row) => row.id),

@@ -10,6 +10,7 @@ export const MEMORY_WITHDRAWAL_RESIDUAL_SURFACES = [
   'retrievalTerms',
   'retrievalTermStats',
   'factEvidence',
+  'factObservations',
   'episodes',
   'chunks',
   'reflections',
@@ -47,6 +48,7 @@ export interface MemoryWithdrawalResidualPlan {
   factIds: ReadonlyArray<string>;
   retrievalTermStats: ReadonlyArray<{ unit: string; memoryKind: string }>;
   evidenceIds: ReadonlyArray<string>;
+  observationIds: ReadonlyArray<string>;
   episodeIds: ReadonlyArray<string>;
   chunkIds: ReadonlyArray<number>;
   reflectionIds: ReadonlyArray<string>;
@@ -240,6 +242,45 @@ function queueReplayFenceResiduals(
   return missing;
 }
 
+function factObservationResiduals(db: MemoryDatabase, plan: MemoryWithdrawalResidualPlan): number {
+  const ids = new Set<string>();
+  for (let offset = 0; offset < plan.observationIds.length; offset += PROBE_BATCH_SIZE) {
+    const batch = plan.observationIds.slice(offset, offset + PROBE_BATCH_SIZE);
+    for (const row of db.getAllSync<{ id: string }>(
+      `SELECT id FROM memory_fact_observations
+        WHERE id IN (${batch.map(() => '?').join(', ')})`,
+      ...batch,
+    )) {
+      ids.add(row.id);
+    }
+  }
+  for (const source of plan.sources) {
+    const sourceKind =
+      source.sourceKind === 'message'
+        ? 'user_message'
+        : source.sourceKind === 'run'
+          ? 'tool_run'
+          : null;
+    if (!sourceKind) continue;
+    for (const row of db.getAllSync<{ id: string }>(
+      `SELECT id FROM memory_fact_observations
+        WHERE source_conversation_id = ?
+          AND source_thread_id = ?
+          AND COALESCE(source_task_id, '') = ?
+          AND source_kind = ?
+          AND source_id = ?`,
+      source.memoryConversationId,
+      source.sourceThreadId,
+      source.taskId,
+      sourceKind,
+      source.sourceId,
+    )) {
+      ids.add(row.id);
+    }
+  }
+  return ids.size;
+}
+
 export function probeMemoryWithdrawalResiduals(
   db: MemoryDatabase,
   plan: MemoryWithdrawalResidualPlan,
@@ -256,6 +297,7 @@ export function probeMemoryWithdrawalResiduals(
     retrievalTerms: countIds(db, 'memory_fact_terms', 'fact_id', plan.factIds),
     retrievalTermStats: retrievalTermStatResiduals(db, plan),
     factEvidence: countIds(db, 'memory_fact_evidence', 'id', plan.evidenceIds),
+    factObservations: factObservationResiduals(db, plan),
     episodes: countIds(db, 'memory_episodes', 'id', plan.episodeIds),
     chunks: countIds(db, 'memory_chunks', 'id', plan.chunkIds),
     reflections: countIds(db, 'memory_reflections', 'id', plan.reflectionIds),
