@@ -33,17 +33,14 @@ import { type MigrationErrorCode, type MigrationStatus } from './migrationStateS
 import type { Conversation } from '../../types/conversation';
 import type { Message } from '../../types/message';
 import { createLogger } from '../../utils/logger';
-import {
-  canWriteLongTermMemory,
-  getMemoryPolicyEpoch,
-  isMemoryPolicyEpochCurrent,
-} from './policy';
+import { canWriteLongTermMemory, getMemoryPolicyEpoch, isMemoryPolicyEpochCurrent } from './policy';
 import {
   checkpointMigrationTurn,
   getMigrationState,
   MIGRATION_CLAIM_LEASE_MS,
   type MigrationStateRow,
 } from './migrationStateStore';
+import { resolveCodeOwnedMemoryPersonaId } from './memoryScopeIdentity';
 
 const logger = createLogger('memory.migrationSeedPass');
 
@@ -226,7 +223,7 @@ export function extractSeedTurns(
 // ── Per-conversation seeder ─────────────────────────────────────────────────
 
 export interface SeedConversationInput {
-  conversation: Pick<Conversation, 'id' | 'title' | 'messages'>;
+  conversation: Pick<Conversation, 'id' | 'title' | 'messages' | 'personaId'>;
   extractor: ConsolidatorExtractor;
   /** When true, do not record consolidated results — return parsed payloads only. */
   dryRun?: boolean;
@@ -474,6 +471,10 @@ async function seedClaimedConversation(
           sourceUserMessageId: turn.userMessage.id,
           sourceAssistantMessageId: turn.assistantMessage.id,
           messages: [turn.userMessage, turn.assistantMessage],
+          episodeAccess: {
+            personaId: resolveCodeOwnedMemoryPersonaId(conv.personaId),
+            shareability: 'thread_only',
+          },
           canPersist: () => isMemoryPolicyEpochCurrent(policyEpoch),
           commitReceipt: () =>
             checkpointMigrationTurn({

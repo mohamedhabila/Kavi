@@ -22,8 +22,11 @@ import {
   completeIngestionJob,
   discardIngestionJob,
   discardPendingIngestionJobs,
+  failIngestionJobForInvalidIdentity,
   getIngestionJob,
+  getIngestionJobForProcessing,
   getNextPendingIngestionAttemptAt,
+  hasSealedIngestionJobIdentity,
   INGESTION_RETRY_BASE_DELAY_MS,
   listPendingIngestionJobs,
   markIngestionJobStructuralComplete,
@@ -59,7 +62,6 @@ export {
   discardPendingIngestionJobs,
   enqueueIngestionJob,
   getIngestionJob,
-  getIngestionQueueDiagnostics,
   getNextPendingIngestionAttemptAt,
   INGESTION_PROCESSING_LEASE_MS,
   INGESTION_RETRY_BASE_DELAY_MS,
@@ -82,7 +84,6 @@ export type {
   IngestionJobStatus,
   IngestionOutcomeCode,
   IngestionProviderOutcome,
-  IngestionQueueDiagnostics,
 } from './ingestionQueueStore';
 export type { StaleIngestionRecoveryResult } from './ingestionQueueRecovery';
 
@@ -113,12 +114,26 @@ function preserveThreadTitleFocus(input: {
 export interface ProcessIngestionJobInput {
   jobId: string;
   messages: Message[];
-  threadTitle?: string;
   personaSummary?: string;
   activeChatProvider?: LlmProviderConfig;
   graphGoalEvidence?: string[];
-  sourceRunId?: string;
   now?: number;
+}
+
+function resolveSealedActiveChatProvider(
+  job: IngestionJob,
+  runtimeProvider: LlmProviderConfig | undefined,
+): LlmProviderConfig | undefined {
+  if (
+    !job.providerEnrichment ||
+    !job.chatProviderId ||
+    !job.chatModel ||
+    !runtimeProvider?.enabled ||
+    runtimeProvider.id !== job.chatProviderId
+  ) {
+    return undefined;
+  }
+  return { ...runtimeProvider, model: job.chatModel };
 }
 
 type IngestionOutcomeDecision =
@@ -225,6 +240,8 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
     | 'not_due'
     | 'claim_lost'
     | 'processing_error'
+    | 'persona_scope_missing'
+    | 'source_identity_invalid'
     | 'opt_out';
 }> {
   const startedAt = input.now ?? Date.now();
@@ -233,12 +250,24 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
     return { processed: false, skipped: 'opt_out' };
   }
   recoverStaleIngestionJobs(startedAt);
-  const job = getIngestionJob(input.jobId);
-  if (
-    !job ||
-    ['degraded', 'completed_structural', 'completed_enriched', 'failed'].includes(job.status)
-  ) {
+  const job = getIngestionJobForProcessing(input.jobId);
+  if (!job) {
     return { processed: false, skipped: 'missing_or_terminal' };
+  }
+  if (['degraded', 'completed_structural', 'completed_enriched', 'failed'].includes(job.status)) {
+    return { processed: false, status: job.status, skipped: 'missing_or_terminal' };
+  }
+  if (!hasSealedIngestionJobIdentity(job)) {
+    const identityFailure = job.personaId
+      ? ('source_identity_invalid' as const)
+      : ('persona_scope_missing' as const);
+    failIngestionJobForInvalidIdentity(job.id, identityFailure, startedAt);
+    const persistedStatus = getIngestionJobForProcessing(job.id)?.status;
+    return {
+      processed: false,
+      ...(persistedStatus ? { status: persistedStatus } : {}),
+      skipped: persistedStatus === 'failed' ? identityFailure : 'missing_or_terminal',
+    };
   }
   if (job.status === 'processing' || (job.nextAttemptAt ?? Number.POSITIVE_INFINITY) > startedAt) {
     return { processed: false, status: job.status, skipped: 'not_due' };
@@ -265,14 +294,18 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
       threadId: job.threadId,
       memoryConversationId: job.memoryConversationId,
       messages: sourceWindow,
-      threadTitle: input.threadTitle,
+      threadTitle: job.threadTitle ?? undefined,
       personaSummary: input.personaSummary,
-      activeChatProvider: job.providerEnrichment ? input.activeChatProvider : undefined,
+      activeChatProvider: resolveSealedActiveChatProvider(job, input.activeChatProvider),
       requireExplicitChatProvider: Boolean(job.chatProviderId),
       ...(job.providerEnrichment ? {} : { extractor: null }),
       taskId: job.taskId ?? undefined,
       graphGoalEvidence: input.graphGoalEvidence,
-      sourceRunId: input.sourceRunId,
+      sourceRunId: job.sourceRunId ?? undefined,
+      episodeAccess: {
+        personaId: job.personaId,
+        shareability: 'thread_only',
+      },
       now: job.sourceAt,
       skipWorkingMemorySync: true,
       canPersist: () => ownsIngestionClaim(job.id, claimToken, input.now ?? Date.now()),
@@ -356,7 +389,7 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
       try {
         preserveThreadTitleFocus({
           memoryConversationId: job.memoryConversationId,
-          threadTitle: input.threadTitle,
+          threadTitle: job.threadTitle ?? undefined,
           now: transitionAt,
         });
       } catch {
@@ -366,6 +399,7 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
         refreshThreadReflection({
           threadId: job.memoryConversationId,
           taskId: job.taskId,
+          periodAt: job.sourceAt,
           now: transitionAt,
         });
       } catch {
@@ -397,11 +431,9 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
 }
 
 export interface IngestionJobRuntimeContext {
-  threadTitle?: string;
   personaSummary?: string;
   activeChatProvider?: LlmProviderConfig;
   graphGoalEvidence?: string[];
-  sourceRunId?: string;
 }
 
 export interface DrainIngestionQueueInput {
@@ -466,11 +498,9 @@ export async function drainIngestionQueue(
     const processed = await processIngestionJob({
       jobId: job.id,
       messages,
-      threadTitle: runtimeContext.threadTitle,
       personaSummary: runtimeContext.personaSummary,
       activeChatProvider: runtimeContext.activeChatProvider,
       graphGoalEvidence: runtimeContext.graphGoalEvidence,
-      sourceRunId: runtimeContext.sourceRunId,
       ...(input.now === undefined ? {} : { now }),
     });
     if (processed.status === 'completed_structural') {

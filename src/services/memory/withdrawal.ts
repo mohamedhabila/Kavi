@@ -1,5 +1,8 @@
 import { getSchemaReadyMemoryDb } from './access/schemaGuard';
-import { runMemoryTransaction } from './access/transaction';
+import {
+  runAfterMemoryTransactionCommit,
+  runMemoryTransaction,
+} from './access/transaction';
 import { clearEmbeddingCache, getEmbeddingCacheEntryCount } from './embeddings';
 import type { FactRow } from './facts/types';
 import { notifyStructuredMemoryChanged } from './store';
@@ -95,7 +98,9 @@ export function withdrawMemoryFact(factId: string, now = Date.now()): WithdrawMe
         counts: { ...result.receipt.counts, embeddingCacheEntries },
       },
     };
-    notifyStructuredMemoryChanged(transaction.notificationScope);
+    runAfterMemoryTransactionCommit(() =>
+      notifyStructuredMemoryChanged(transaction.notificationScope),
+    );
   }
   return result;
 }

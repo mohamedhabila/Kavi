@@ -419,6 +419,9 @@ export async function buildLivingMemorySections(
   let resolutionFacts: Awaited<ReturnType<typeof orchestrateMemoryRetrieval>>['resolutionFacts'] =
     [];
   let recalledEpisodes: Awaited<ReturnType<typeof orchestrateMemoryRetrieval>>['episodes'] = [];
+  let recalledEpisodeSelections: Awaited<
+    ReturnType<typeof orchestrateMemoryRetrieval>
+  >['episodeSelections'] = [];
   let retrievalTimings: RetrievalOrchestratorTimings | undefined;
   let retrievalState: PromptAssemblyRetrievalState = disableRecall ? 'disabled' : 'completed';
   const factSelector = !disableRecall ? createLlmMemoryFactSelector(retrievalLlm) : null;
@@ -441,6 +444,7 @@ export async function buildLivingMemorySections(
       recalledFacts = retrieval.facts;
       resolutionFacts = retrieval.resolutionFacts;
       recalledEpisodes = retrieval.episodes;
+      recalledEpisodeSelections = retrieval.episodeSelections;
       retrievalTimings = retrieval.timings;
     } catch (error) {
       logger.devWarn(
@@ -450,6 +454,7 @@ export async function buildLivingMemorySections(
       recalledFacts = [];
       resolutionFacts = [];
       recalledEpisodes = [];
+      recalledEpisodeSelections = [];
       retrievalState = 'degraded';
     }
     timings.retrievalMs += Date.now() - retrievalStarted;
@@ -519,9 +524,8 @@ export async function buildLivingMemorySections(
   );
   const localEvidencePrompt = buildLocalEvidencePrompt({
     facts: directlyUsableFacts,
-    episodes: recalledEpisodes,
-    memoryConversationId: conversationId,
-    sourceThreadId,
+    episodeSelections: recalledEpisodeSelections,
+    currentScope: applicabilityScope,
     asOf: now,
   });
   timings.evidenceExpansionMs = localEvidencePrompt.diagnostics.durationMs;
@@ -563,7 +567,7 @@ export async function buildLivingMemorySections(
     focusBlock: focusRendered.text,
     reflectionBlock: reflectionBlock.trim() || undefined,
     retrievedFacts: factsForPrompt,
-    recentEpisodes: recalledEpisodes,
+    recentEpisodeSelections: recalledEpisodeSelections,
     retrievalQuery: query,
     ...(dynamicAddenda.length > 0 ? { dynamicAddenda } : {}),
   });

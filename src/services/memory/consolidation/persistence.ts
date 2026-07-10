@@ -2,7 +2,8 @@ import type { Message } from '../../../types/message';
 import { createLogger } from '../../../utils/logger';
 import { runMemoryTransaction } from '../access/transaction';
 import { upsertEntity } from '../entities';
-import { addFactEvidence, recordEpisode } from '../episodes/mutations';
+import { addFactEvidence, recordEpisode, recordThreadLocalEpisode } from '../episodes/mutations';
+import type { EpisodeShareability } from '../episodes/accessPolicyTypes';
 import { replaceCurrentFactWithApplicability } from '../facts/exactReplacement';
 import { recordFactWithApplicability } from '../facts/mutations';
 import { composeActiveFocusContent } from '../focus';
@@ -10,10 +11,11 @@ import { ensureFactSchema } from '../schema';
 import { editWorkingBlock } from '../workingBlocks';
 import type { ConsolidatorFact, ConsolidatorResult } from '../consolidator';
 import { assertMemoryPersistenceSourcesAreWritable } from '../withdrawalFence';
+import { resolveCodeOwnedMemoryTaskId } from '../memoryScopeIdentity';
 
 const logger = createLogger('memory.consolidation.persistence');
 
-export interface ApplyConsolidatorResultOptions {
+interface ApplyConsolidatorResultBaseOptions {
   conversationId: string;
   threadId: string;
   now?: number;
@@ -30,6 +32,13 @@ export interface ApplyConsolidatorResultOptions {
   commitReceipt?: () => boolean;
 }
 
+export interface ApplyConsolidatorResultOptions extends ApplyConsolidatorResultBaseOptions {
+  episodeAccess: {
+    personaId: string;
+    shareability: EpisodeShareability;
+  };
+}
+
 export interface ApplyConsolidatorResultResult {
   recordedFacts: Array<{ inputIndex: number; factId: string }>;
   /** Every input fact resolved to its durable row, including idempotent replays. */
@@ -44,6 +53,25 @@ export interface ApplyConsolidatorResultResult {
 export function applyConsolidatorResult(
   result: ConsolidatorResult,
   options: ApplyConsolidatorResultOptions,
+): ApplyConsolidatorResultResult {
+  return applyConsolidatorResultWithPolicy(result, options);
+}
+
+/**
+ * Low-level current-thread persistence for isolated tests and import tooling.
+ * Episodes written here have no access-policy row and can never enter cross-thread recall.
+ */
+export function applyThreadLocalConsolidatorResult(
+  result: ConsolidatorResult,
+  options: ApplyConsolidatorResultBaseOptions,
+): ApplyConsolidatorResultResult {
+  return applyConsolidatorResultWithPolicy(result, options);
+}
+
+function applyConsolidatorResultWithPolicy(
+  result: ConsolidatorResult,
+  options: ApplyConsolidatorResultBaseOptions &
+    Partial<Pick<ApplyConsolidatorResultOptions, 'episodeAccess'>>,
 ): ApplyConsolidatorResultResult {
   return runMemoryTransaction(() => {
     if (options.canPersist && !options.canPersist()) {
@@ -82,7 +110,8 @@ export function applyConsolidatorResult(
 
 function applyConsolidatorResultInTransaction(
   result: ConsolidatorResult,
-  options: ApplyConsolidatorResultOptions,
+  options: ApplyConsolidatorResultBaseOptions &
+    Partial<Pick<ApplyConsolidatorResultOptions, 'episodeAccess'>>,
 ): ApplyConsolidatorResultResult {
   ensureFactSchema();
   const now = options.now ?? Date.now();
@@ -97,8 +126,8 @@ function applyConsolidatorResultInTransaction(
     .map((message) => message.timestamp)
     .filter((timestamp): timestamp is number => typeof timestamp === 'number');
   const episodeSummary = result.episodeSummary ?? null;
-  const episode = episodeSummary
-    ? recordEpisode({
+  const episodeInput = episodeSummary
+    ? {
         conversationId: options.conversationId,
         threadId: options.threadId,
         taskId: options.taskId,
@@ -112,7 +141,22 @@ function applyConsolidatorResultInTransaction(
         toolNames,
         importance: Math.max(0.5, ...result.newFacts.map((fact) => fact.importance ?? 0.5)),
         now,
-      })
+      }
+    : null;
+  const episode = episodeInput
+    ? options.episodeAccess
+      ? recordEpisode({
+          ...episodeInput,
+          accessPolicy: {
+            memoryConversationId: options.conversationId,
+            sourceThreadId: options.threadId,
+            personaId: options.episodeAccess.personaId,
+            taskId: resolveCodeOwnedMemoryTaskId(options.taskId),
+            shareability: options.episodeAccess.shareability,
+            sensitivity: 'normal',
+          },
+        })
+      : recordThreadLocalEpisode(episodeInput)
     : null;
 
   const recordedFacts: ApplyConsolidatorResultResult['recordedFacts'] = [];
@@ -210,7 +254,7 @@ function applyConsolidatorResultInTransaction(
   }
 
   let activeFocusUpdated = false;
-  const taskId = options.taskId?.trim();
+  const taskId = resolveCodeOwnedMemoryTaskId(options.taskId);
   if (!options.skipWorkingMemoryWrites && result.activeFocus !== null && !taskId) {
     try {
       const activeFocus = composeActiveFocusContent({

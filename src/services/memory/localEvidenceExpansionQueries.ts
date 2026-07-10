@@ -33,8 +33,12 @@ export interface LocalRunFactRow {
 }
 
 function currentFactSql(alias: string): string {
-  return `${alias}.origin_conversation_id = ?
+  return `${alias}.memory_owner_id = ?
+      AND ${alias}.scope IN ('conversation', 'project', 'session')
+      AND ${alias}.origin_conversation_id = ?
       AND ${alias}.origin_thread_id = ?
+      AND (${alias}.scope != 'session'
+        OR COALESCE(${alias}.origin_task_id, '') = COALESCE(?, ''))
       AND ${alias}.deleted_at IS NULL
       AND ${alias}.valid_at <= ?
       AND (${alias}.invalid_at IS NULL OR ${alias}.invalid_at > ?)
@@ -43,8 +47,10 @@ function currentFactSql(alias: string): string {
 
 export function listLocalFactNeighborhood(input: {
   factId: string;
+  memoryOwnerId: string;
   memoryConversationId: string;
   sourceThreadId: string;
+  taskId: string | null;
   asOf: number;
 }): LocalEvidenceEdgeRow[] {
   return getMany<LocalEvidenceEdgeRow>(
@@ -80,8 +86,10 @@ export function listLocalFactNeighborhood(input: {
       ORDER BY e.created_at ASC, e.id ASC
       LIMIT ${ROW_LIMIT}`,
     input.factId,
+    input.memoryOwnerId,
     input.memoryConversationId,
     input.sourceThreadId,
+    input.taskId,
     input.asOf,
     input.asOf,
     input.asOf,
@@ -94,8 +102,10 @@ export function listLocalFactNeighborhood(input: {
 
 export function listLocalEpisodeNeighborhood(input: {
   episodeId: string;
+  memoryOwnerId: string;
   memoryConversationId: string;
   sourceThreadId: string;
+  taskId: string | null;
   asOf: number;
 }): LocalEvidenceEdgeRow[] {
   return getMany<LocalEvidenceEdgeRow>(
@@ -130,8 +140,10 @@ export function listLocalEpisodeNeighborhood(input: {
     input.sourceThreadId,
     input.asOf,
     input.asOf,
+    input.memoryOwnerId,
     input.memoryConversationId,
     input.sourceThreadId,
+    input.taskId,
     input.asOf,
     input.asOf,
     input.asOf,
@@ -140,8 +152,10 @@ export function listLocalEpisodeNeighborhood(input: {
 
 export function listLocalRunNeighborhood(input: {
   sourceRunId: string;
+  memoryOwnerId: string;
   memoryConversationId: string;
   sourceThreadId: string;
+  taskId: string | null;
   asOf: number;
 }): LocalRunFactRow[] {
   return getMany<LocalRunFactRow>(
@@ -160,8 +174,10 @@ export function listLocalRunNeighborhood(input: {
       ORDER BY f.created_at ASC, f.id ASC
       LIMIT ${ROW_LIMIT}`,
     input.sourceRunId,
+    input.memoryOwnerId,
     input.memoryConversationId,
     input.sourceThreadId,
+    input.taskId,
     input.asOf,
     input.asOf,
     input.asOf,

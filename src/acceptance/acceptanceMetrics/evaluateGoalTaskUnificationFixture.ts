@@ -5,13 +5,12 @@
 import { applyGoalMutation } from '../../engine/goals/graphState';
 import type { AgentGoal } from '../../engine/goals/types';
 import { orchestrateMemoryRetrieval } from '../../services/memory/retrievalOrchestrator';
-import { recordFact } from '../../services/memory/facts/mutations';
+import { recordFactWithApplicability } from '../../services/memory/facts/mutations';
 import { syncGoalTasksFromMutation } from '../../services/memory/tasks';
 import { getActiveTaskTitle } from '../../services/memory/taskStack';
+import { resolveLocalMemoryAccessScope } from '../../services/memory/memoryScopeStore';
 import type { AcceptanceFixtureOutcome } from './types';
 import type { GoalTaskUnificationFixture } from './goalTaskUnificationFixtures';
-import { resolveLocalMemoryAccessScope } from '../../services/memory/memoryScopeStore';
-import { DEFAULT_MEMORY_PERSONA_ID } from '../../services/memory/memoryScopeIdentity';
 
 function recallIncludesToken(facts: ReadonlyArray<{ objectText: string }>, token: string): boolean {
   return facts.some((fact) => fact.objectText.includes(token));
@@ -63,15 +62,19 @@ export async function evaluateGoalTaskUnificationFixture(
     now,
   });
 
-  recordFact({
-    subjectId: 'entity-scope-a',
-    predicate: 'scope_token',
-    objectText: fixture.tokenA,
-    scope: 'session',
-    originThreadId: fixture.threadId,
-    originTaskId: fixture.goalAId,
-    now,
-  });
+  recordFactWithApplicability(
+    {
+      subjectId: 'entity-scope-a',
+      predicate: 'scope_token',
+      objectText: fixture.tokenA,
+      scope: 'session',
+      originConversationId: fixture.threadId,
+      originThreadId: fixture.threadId,
+      originTaskId: fixture.goalAId,
+      now,
+    },
+    { factClass: 'workflow', sourceAuthority: 'tool_observed' },
+  );
 
   const addGoalB = applyGoalMutation(
     goals,
@@ -133,15 +136,19 @@ export async function evaluateGoalTaskUnificationFixture(
     now: now + 20,
   });
 
-  recordFact({
-    subjectId: 'entity-scope-b',
-    predicate: 'scope_token',
-    objectText: fixture.tokenB,
-    scope: 'session',
-    originThreadId: fixture.threadId,
-    originTaskId: fixture.goalBId,
-    now: now + 20,
-  });
+  recordFactWithApplicability(
+    {
+      subjectId: 'entity-scope-b',
+      predicate: 'scope_token',
+      objectText: fixture.tokenB,
+      scope: 'session',
+      originConversationId: fixture.threadId,
+      originThreadId: fixture.threadId,
+      originTaskId: fixture.goalBId,
+      now: now + 20,
+    },
+    { factClass: 'workflow', sourceAuthority: 'tool_observed' },
+  );
 
   if (getActiveTaskTitle(fixture.threadId) !== fixture.goalBTitle) {
     return {
@@ -156,7 +163,7 @@ export async function evaluateGoalTaskUnificationFixture(
     memoryScope: resolveLocalMemoryAccessScope({
       memoryConversationId: fixture.threadId,
       sourceThreadId: fixture.threadId,
-      personaId: DEFAULT_MEMORY_PERSONA_ID,
+      personaId: 'default',
       taskId: fixture.goalBId,
     }),
     goals,
@@ -213,7 +220,7 @@ export async function evaluateGoalTaskUnificationFixture(
     memoryScope: resolveLocalMemoryAccessScope({
       memoryConversationId: fixture.threadId,
       sourceThreadId: fixture.threadId,
-      personaId: DEFAULT_MEMORY_PERSONA_ID,
+      personaId: 'default',
       taskId: fixture.goalAId,
     }),
     goals,

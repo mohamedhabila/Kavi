@@ -9,7 +9,10 @@
 // ---------------------------------------------------------------------------
 
 import type { MemoryBlock } from './blocks';
-import type { MemoryEpisode } from './episodes/types';
+import {
+  renderEpisodePromptSection,
+  type EpisodePromptSelection,
+} from './episodes/promptRendering';
 import { compactJsonFields, parseJsonRecord } from './factJson';
 import { promptFieldsForMemoryKind } from './promptFactFields';
 import { tokenizeLexicalUnits } from './ranking/lexical';
@@ -60,8 +63,8 @@ export interface AssemblePromptInput {
   reflectionBlock?: string;
   /** L3 - facts retrieved for this turn. Listed in caller-provided order. */
   retrievedFacts?: PromptMemoryFact[];
-  /** L3 - recent episodes for this thread/conversation. */
-  recentEpisodes?: MemoryEpisode[];
+  /** L3 - authorized episode selections rendered only as bounded untrusted data. */
+  recentEpisodeSelections?: EpisodePromptSelection[];
   /** L3 - additional dynamic context from the orchestrator. */
   dynamicAddenda?: string[];
   /**
@@ -92,7 +95,6 @@ const MAX_RENDERED_FACT_CHARS = 3_200;
 const MAX_RENDERED_EVIDENCE_SPAN_FACT_CHARS = 3_800;
 const MAX_RENDERED_AGENT_RUN_FACT_CHARS = 5_000;
 const MAX_RETRIEVED_FACT_SECTION_CHARS = 3_800;
-const MAX_RENDERED_EPISODE_CHARS = 200;
 const MAX_FIELD_TEXT_CHARS = 700;
 const MAX_QUERY_FOCUSED_LINES = 8;
 const QUERY_RELEVANT_STEP_LIMIT = 6;
@@ -547,13 +549,6 @@ function renderFact(
   return `- ${subject} ${fact.predicate}: ${fitText(renderableFactText(fact, queryUnits, anchorUnitSets), maxChars)}${conf}${meta}`;
 }
 
-function renderEpisode(episode: MemoryEpisode): string {
-  const summary = episode.summary.trim();
-  if (!summary) return '';
-  const tools = episode.toolNames.length > 0 ? ` [${episode.toolNames.join(', ')}]` : '';
-  return `- ${fitText(summary, MAX_RENDERED_EPISODE_CHARS)}${tools}`;
-}
-
 function factGroupHeader(fact: PromptMemoryFact): string {
   const memoryKind = fact.memoryKind ?? 'semantic_fact';
   if (memoryKind === 'evidence_span') return L3_EVIDENCE_SPANS_HEADER;
@@ -637,7 +632,7 @@ function renderL3Sections(input: AssemblePromptInput): string[] {
   const anchorUnitSets = input.retrievalQuery?.trim()
     ? quotedSpanUnitSets(input.retrievalQuery, QUERY_ANCHOR_LIMIT)
     : [];
-  const episodes = (input.recentEpisodes ?? []).map(renderEpisode).filter((r) => r.length > 0);
+  const episodeSection = renderEpisodePromptSection(input.recentEpisodeSelections ?? []);
   const addenda = joinNonEmpty(input.dynamicAddenda ?? []);
 
   const preludeParts: string[] = [];
@@ -657,9 +652,7 @@ function renderL3Sections(input: AssemblePromptInput): string[] {
       renderFact(fact, queryUnits, anchorUnitSets),
     ),
   );
-  if (episodes.length > 0) {
-    sections.push(`${L3_HEADER}\n### Recent Activity\n${episodes.join('\n')}`);
-  }
+  if (episodeSection) sections.push(episodeSection);
   return sections;
 }
 

@@ -30,7 +30,11 @@ import { syncWorkingMemoryFromTurn } from './turnProcessor';
 import { editPromptEligibleWorkingBlock, getWorkingBlock } from './workingBlocks';
 import { ACTIVE_FOCUS_MEMORY_CHAR_LIMIT, composeActiveFocusContent } from './focus';
 import { resolveConversationModel } from '../llm/support/providerSupport';
-import { isExactMemoryScopeId } from './memoryScopeIdentity';
+import {
+  requireExactMemoryScopeId,
+  resolveCodeOwnedMemoryConversationId,
+  resolveCodeOwnedMemoryPersonaId,
+} from './memoryScopeIdentity';
 
 const logger = createLogger('memory.lifecycle');
 
@@ -91,11 +95,9 @@ export function loadIngestionJobRuntimeContext(job: IngestionJob): IngestionJobR
     : undefined;
 
   return {
-    ...(job.threadTitle ? { threadTitle: job.threadTitle } : {}),
     ...(provider
       ? { activeChatProvider: job.chatModel ? { ...provider, model: job.chatModel } : provider }
       : {}),
-    ...(job.sourceRunId ? { sourceRunId: job.sourceRunId } : {}),
     ...(sourceRun
       ? {
           graphGoalEvidence: Array.from(new Set(goals.flatMap((goal) => goal.evidence))),
@@ -203,9 +205,12 @@ function syncConversationFocusFromThreadTitle(input: {
   threadTitle?: string;
   now?: number;
 }): boolean {
-  const threadId = input.memoryConversationId;
+  const threadId = requireExactMemoryScopeId(
+    input.memoryConversationId,
+    'memory_scope_conversation_id_invalid',
+  );
   const threadTitle = input.threadTitle?.trim();
-  if (!isExactMemoryScopeId(threadId) || !threadTitle) return false;
+  if (!threadId || !threadTitle) return false;
 
   const scope = { conversationId: threadId, threadId };
   try {
@@ -248,11 +253,14 @@ export async function recordCompletedTurnForMemory(
     };
   }
 
-  const threadId = input.threadId.trim();
-  const memoryConversationId = input.memoryConversationId?.trim() || threadId;
+  const threadId = requireExactMemoryScopeId(input.threadId, 'memory_scope_thread_id_invalid');
+  const memoryConversationId = resolveCodeOwnedMemoryConversationId(
+    input.memoryConversationId,
+    threadId,
+  );
   const conversation = findConversation(threadId);
-  const sourceRunId =
-    input.sourceRunId?.trim() || conversation?.activeAgentRunId?.trim() || undefined;
+  const personaId = resolveCodeOwnedMemoryPersonaId(conversation?.personaId);
+  const sourceRunId = input.sourceRunId ?? conversation?.activeAgentRunId ?? undefined;
   const chatProvider = input.activeChatProvider ?? resolveActiveMemoryChatProvider(conversation);
 
   const conversationFocusUpdated = syncConversationFocusFromThreadTitle({
@@ -284,20 +292,25 @@ export async function recordCompletedTurnForMemory(
     };
   }
 
+  const sourceEndMessage = input.messages.find(
+    (message) => message.id === syncResult.sourceEndMessageId,
+  );
+  const sourceAt = sourceEndMessage?.timestamp ?? input.now ?? Date.now();
+
   const job = enqueueIngestionJob({
     threadId: input.threadId,
     threadTitle: input.threadTitle ?? conversation?.title ?? null,
     memoryConversationId,
+    personaId,
     sourceEndMessageId: syncResult.sourceEndMessageId,
-    sourceAt:
-      input.messages.find((message) => message.id === syncResult.sourceEndMessageId)?.timestamp ??
-      input.now,
+    sourceAt,
     sourceStartMessageId: syncResult.sourceStartMessageId,
     taskId: input.taskId ?? null,
     sourceRunId: sourceRunId ?? null,
     chatProviderId: chatProvider?.id ?? null,
     chatModel: chatProvider?.model ?? null,
-    providerEnrichment: input.providerEnrichment,
+    reason: 'turn_completed',
+    providerEnrichment: input.providerEnrichment ?? true,
     now: input.now,
   });
 

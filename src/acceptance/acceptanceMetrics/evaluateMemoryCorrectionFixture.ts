@@ -61,6 +61,7 @@ export async function evaluateMemoryCorrectionFixture(
       }),
     now: now + 2,
     skipWorkingMemorySync: true,
+    episodeAccess: { personaId: 'default', shareability: 'thread_only' },
   });
 
   const current = listFacts({ subjectId: user.id, predicate: fixture.predicate });

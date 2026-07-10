@@ -1,5 +1,6 @@
 import { useCallback, type MutableRefObject } from 'react';
 import { recordCompletedTurnForMemory } from '../../services/memory/lifecycle';
+import { resolveCodeOwnedMemoryConversationId } from '../../services/memory/memoryScopeIdentity';
 import { useChatStore } from '../../store/useChatStore';
 import type { ConversationLogEntry } from '../../types/conversation';
 import type { LlmProviderConfig } from '../../types/provider';
@@ -92,7 +93,10 @@ export function useChatScreenRuntimeHelpers(params: UseChatScreenRuntimeHelpersP
         return;
       }
 
-      const memoryConversationId = options.memoryConversationId?.trim() || conversationId;
+      const memoryConversationId = resolveCodeOwnedMemoryConversationId(
+        options.memoryConversationId,
+        conversationId,
+      );
       void recordCompletedTurnForMemory({
         threadId: conversationId,
         memoryConversationId,

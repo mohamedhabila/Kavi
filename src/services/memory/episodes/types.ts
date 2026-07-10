@@ -1,4 +1,5 @@
 import { safeParseArray } from '../schema';
+import type { EpisodeSensitivity, EpisodeShareability } from './accessPolicyTypes';
 
 export interface MemoryEpisode {
   id: string;
@@ -121,6 +122,20 @@ export interface RecordEpisodeInput {
   sourceStartMessageId?: string | null;
   sourceEndMessageId?: string | null;
   now?: number;
+}
+
+export interface RecordScopedEpisodeInput extends RecordEpisodeInput {
+  accessPolicy: RecordEpisodeAccessPolicyInput;
+}
+
+export interface RecordEpisodeAccessPolicyInput {
+  memoryConversationId: string;
+  sourceThreadId: string;
+  personaId: string;
+  taskId: string | null;
+  shareability: EpisodeShareability;
+  sensitivity: EpisodeSensitivity;
+  expiresAt?: number | null;
 }
 
 export interface AddFactEvidenceInput {

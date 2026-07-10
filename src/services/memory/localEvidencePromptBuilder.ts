@@ -1,4 +1,4 @@
-import type { MemoryEpisode } from './episodes/types';
+import type { EpisodeRecallSelection } from './episodes/accessPolicyTypes';
 import type { MemoryFact } from './facts/types';
 import { expandLocalEvidence } from './localEvidenceExpansion';
 import {
@@ -6,6 +6,7 @@ import {
   renderLocalEvidencePromptSection,
 } from './localEvidencePrompt';
 import { deriveLocalEvidenceSources } from './localEvidenceSources';
+import type { RequiredMemoryAccessScopeIdentity } from './memoryScopeIdentity';
 
 export const LOCAL_EVIDENCE_PROMPT_OUTCOMES = [
   'not_requested',
@@ -28,9 +29,8 @@ export interface LocalEvidencePromptDiagnostics {
 
 export interface BuildLocalEvidencePromptInput {
   facts: ReadonlyArray<MemoryFact>;
-  episodes: ReadonlyArray<MemoryEpisode>;
-  memoryConversationId?: string;
-  sourceThreadId?: string;
+  episodeSelections: ReadonlyArray<EpisodeRecallSelection>;
+  currentScope: RequiredMemoryAccessScopeIdentity | null;
   asOf: number;
 }
 
@@ -60,23 +60,27 @@ export function buildLocalEvidencePrompt(
   input: BuildLocalEvidencePromptInput,
 ): LocalEvidencePromptBuildResult {
   const startedAt = Date.now();
-  const selectedSources = deriveLocalEvidenceSources(input.facts, input.episodes);
+  if (!input.currentScope) {
+    const requestedSourceCount = input.facts.length + input.episodeSelections.length;
+    return {
+      section: null,
+      diagnostics: emptyDiagnostics(
+        requestedSourceCount === 0 ? 'not_requested' : 'scope_unavailable',
+        requestedSourceCount,
+      ),
+    };
+  }
+  const selectedSources = deriveLocalEvidenceSources(
+    input.facts,
+    input.episodeSelections,
+    input.currentScope,
+  );
   if (selectedSources.length === 0) {
     return { section: null, diagnostics: emptyDiagnostics('not_requested', 0) };
   }
-  if (!input.memoryConversationId || !input.sourceThreadId) {
-    return {
-      section: null,
-      diagnostics: emptyDiagnostics('scope_unavailable', selectedSources.length),
-    };
-  }
-
   try {
     const expansion = expandLocalEvidence({
-      scope: {
-        memoryConversationId: input.memoryConversationId,
-        sourceThreadId: input.sourceThreadId,
-      },
+      currentScope: input.currentScope,
       selectedSources,
       asOf: input.asOf,
       promptBudgetChars: LOCAL_EVIDENCE_PROMPT_PAYLOAD_LIMIT,

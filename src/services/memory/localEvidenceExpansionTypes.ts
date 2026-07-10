@@ -1,3 +1,4 @@
+import type { AuthorizedEpisodeOrigin } from './episodes/accessPolicyTypes';
 import type { MemoryFactKind } from './facts/types';
 
 export const LOCAL_EVIDENCE_EXPANSION_LIMITS = Object.freeze({
@@ -23,9 +24,25 @@ export interface LocalEvidenceExpansionScope {
   sourceThreadId: string;
 }
 
+type CurrentThreadLocalEvidenceSource = LocalEvidenceSource &
+  LocalEvidenceExpansionScope & {
+    lane: 'current_thread';
+    authorizedOrigin: null;
+  };
+
+export type ScopedLocalEvidenceSource =
+  | CurrentThreadLocalEvidenceSource
+  | (Extract<LocalEvidenceSource, { kind: 'episode' }> &
+      LocalEvidenceExpansionScope & {
+        lane: 'cross_thread';
+        authorizedOrigin: AuthorizedEpisodeOrigin;
+        accessDecision: Readonly<{ authorized: true; reason: 'eligible' }>;
+        relevanceScore: number;
+      });
+
 export interface ExpandLocalEvidenceInput {
-  scope: LocalEvidenceExpansionScope;
-  selectedSources: ReadonlyArray<LocalEvidenceSource>;
+  currentScope: import('./memoryScopeIdentity').MemoryAccessScopeIdentity;
+  selectedSources: ReadonlyArray<ScopedLocalEvidenceSource>;
   /** Bi-temporal read boundary. Defaults to the current wall clock. */
   asOf?: number;
   /** May reduce, but never increase, the frozen expansion prompt budget. */

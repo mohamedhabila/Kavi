@@ -1,5 +1,6 @@
 import type { MemoryDatabase } from './access/schemaGuard';
 import { deleteFactRetrievalTerms } from './facts/retrievalIndex';
+import { deleteEpisodeAccessPolicies } from './episodes/accessPolicySchema';
 import { newId } from './schema';
 import type { MemoryWithdrawalLineage } from './withdrawalLineage';
 import { normalizeWithdrawalOpaqueId } from './withdrawalLineage';
@@ -288,6 +289,7 @@ export function executeMemoryWithdrawalCascade(
       'id',
       lineage.reflections.map((row) => row.id),
     ),
+    episodeAccessPolicies: deleteEpisodeAccessPolicies(db, lineage.episodeIds),
     episodes: deleteIds(db, 'memory_episodes', 'id', lineage.episodeIds),
     workingBlocks: lineage.workingBlocks.reduce(
       (count, row) =>

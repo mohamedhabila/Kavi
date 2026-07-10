@@ -24,7 +24,10 @@ import type { Message } from '../../types/message';
 import type { MemoryFactScope } from './facts/types';
 import type { SealedFactApplicabilityProvenance } from './facts/applicabilityProvenance';
 import { applyConsolidatorResult } from './consolidation/persistence';
-export { applyConsolidatorResult } from './consolidation/persistence';
+export {
+  applyConsolidatorResult,
+  applyThreadLocalConsolidatorResult,
+} from './consolidation/persistence';
 export type {
   ApplyConsolidatorResultOptions,
   ApplyConsolidatorResultResult,
@@ -53,6 +56,10 @@ export interface ConsolidatorTurnInput extends ConsolidatorPromptInput {
   threadId: string;
   taskId?: string;
   sourceRunId?: string;
+  episodeAccess?: {
+    personaId: string;
+    shareability: import('./episodes/accessPolicyTypes').EpisodeShareability;
+  };
 }
 
 export type ConsolidatorFactOperation = 'insert' | 'replace_current';
@@ -544,6 +551,7 @@ export async function consolidateTurn(
   }
   const outcome = parseConsolidatorOutput(raw);
   if (persist && (outcome.status === 'valid' || outcome.status === 'empty_valid')) {
+    if (!input.episodeAccess) throw new Error('episode_access_policy_required');
     applyConsolidatorResult(outcome.result, {
       now: input.now ?? options.now?.(),
       conversationId: input.conversationId,
@@ -554,6 +562,7 @@ export async function consolidateTurn(
       sourceUserMessageId: input.sourceUserMessageId,
       sourceAssistantMessageId: input.sourceAssistantMessageId,
       messages: input.messages,
+      episodeAccess: input.episodeAccess,
     });
   }
   return outcome;

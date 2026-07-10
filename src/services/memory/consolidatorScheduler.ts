@@ -43,6 +43,10 @@ import {
   upsertState,
 } from './consolidation/schedulerState';
 import { type ConsolidatorExtractor } from './consolidator';
+import {
+  resolveCodeOwnedMemoryConversationId,
+  resolveCodeOwnedMemoryPersonaId,
+} from './memoryScopeIdentity';
 import type { TurnProviderOutcome } from './turnProcessor';
 
 const logger = createLogger('memory.consolidatorScheduler');
@@ -129,6 +133,7 @@ export interface RunConsolidationInput {
   /** Optional thread title / persona context to include in the prompt. */
   threadTitle?: string;
   personaSummary?: string;
+  personaId?: string | null;
   now?: number;
   turnThreshold?: number;
   idleThresholdMs?: number;
@@ -218,7 +223,10 @@ export async function maybeRunConsolidation(
     extractor = await resolveConsolidationExtractor();
   }
 
-  const memoryConversationId = input.memoryConversationId?.trim() || input.threadId.trim();
+  const memoryConversationId = resolveCodeOwnedMemoryConversationId(
+    input.memoryConversationId,
+    input.threadId,
+  );
   let ingestionResult: Awaited<ReturnType<typeof runConsolidation>>;
   try {
     ingestionResult = await runConsolidation({
@@ -227,6 +235,10 @@ export async function maybeRunConsolidation(
       messages: messageWindow,
       threadTitle: input.threadTitle,
       personaSummary: input.personaSummary,
+      episodeAccess: {
+        personaId: resolveCodeOwnedMemoryPersonaId(input.personaId),
+        shareability: 'thread_only',
+      },
       now: input.now,
       extractor: extractor ?? null,
     });

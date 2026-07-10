@@ -126,6 +126,11 @@ export function evaluateGroundedReplacement(
         ...proposal,
         operation: 'insert',
         evidenceMessageIds: [currentUserMessageId],
+        admittedWrite: {
+          operation: 'insert',
+          authority: 'grounded_user_statement',
+          evidenceMessageId: currentUserMessageId,
+        },
       },
     };
   }

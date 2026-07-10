@@ -10,6 +10,11 @@ import { INGESTION_BATCH_LIMIT, MAX_INGESTION_ATTEMPTS } from './onDeviceGuards'
 import { runMemoryTransaction } from './access/transaction';
 import { ensureFactSchema, newId } from './schema';
 import { isMemoryIngestionSourceWithdrawn } from './withdrawalFence';
+import { isExactMemoryScopeId } from './memoryScopeIdentity';
+import {
+  isExactMemoryProvenanceId,
+  requireExactMemoryProvenanceId,
+} from './memoryProvenanceIdentity';
 import { getMemoryDb } from './sqlite-store';
 
 export const INGESTION_RETRY_BASE_DELAY_MS = 15_000;
@@ -46,6 +51,9 @@ export type IngestionOutcomeCode =
   | 'unsupported_response_shape'
   | 'processing_incomplete'
   | 'processing_error'
+  | 'persona_scope_missing'
+  | 'source_identity_invalid'
+  | 'source_identity_conflict'
   | 'source_window_unavailable'
   | 'stale_processing_lease';
 
@@ -54,6 +62,7 @@ export interface IngestionJob {
   threadId: string;
   threadTitle: string | null;
   memoryConversationId: string;
+  personaId: string | null;
   taskId: string | null;
   sourceRunId: string | null;
   chatProviderId: string | null;
@@ -81,6 +90,7 @@ interface IngestionJobRow {
   thread_id: string;
   thread_title: string | null;
   memory_conversation_id: string;
+  persona_id: string | null;
   task_id: string | null;
   source_run_id: string | null;
   chat_provider_id: string | null;
@@ -91,7 +101,7 @@ interface IngestionJobRow {
   reason: string;
   status: string;
   attempt_count: number;
-  provider_enrichment?: number;
+  provider_enrichment: number;
   provider_outcome: string | null;
   outcome_code: string | null;
   next_attempt_at: number | null;
@@ -103,6 +113,95 @@ interface IngestionJobRow {
   completed_at: number | null;
 }
 
+function requireIngestionScopeIdentity(value: unknown, code: string): string {
+  if (!isExactMemoryScopeId(value)) throw new Error(code);
+  return value;
+}
+
+function requireIngestionProvenanceIdentity(value: unknown, code: string): string {
+  return requireExactMemoryProvenanceId(value, code);
+}
+
+function optionalIngestionScopeIdentity(
+  value: string | null | undefined,
+  code: string,
+): string | null {
+  if (value === null || value === undefined) return null;
+  return requireIngestionScopeIdentity(value, code);
+}
+
+function optionalIngestionProvenanceIdentity(
+  value: string | null | undefined,
+  code: string,
+): string | null {
+  if (value === null || value === undefined) return null;
+  return requireIngestionProvenanceIdentity(value, code);
+}
+
+function requireIngestionTimestamp(value: unknown, code: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0) throw new Error(code);
+  return value as number;
+}
+
+function isValidIngestionThreadTitle(value: unknown): value is string | null {
+  return (
+    value === null ||
+    (typeof value === 'string' &&
+      value.length > 0 &&
+      value.length <= 500 &&
+      value.trim() === value &&
+      !/[\u0000-\u001f\u007f]/u.test(value))
+  );
+}
+
+function isOptionalIngestionScopeIdentity(value: unknown): value is string | null {
+  return value === null || isExactMemoryScopeId(value);
+}
+
+function isOptionalIngestionProvenanceIdentity(value: unknown): value is string | null {
+  return value === null || isExactMemoryProvenanceId(value);
+}
+
+interface IngestionSourceIdentity {
+  threadId: string;
+  threadTitle: string | null;
+  memoryConversationId: string;
+  personaId: string;
+  taskId: string | null;
+  sourceStartMessageId: string | null;
+  sourceEndMessageId: string;
+  sourceRunId: string | null;
+  sourceAt: number;
+  chatProviderId: string | null;
+  chatModel: string | null;
+  reason: IngestionJobReason;
+  providerEnrichment: boolean;
+}
+
+function requireMatchingIngestionSourceIdentity(
+  row: IngestionJobRow,
+  identity: IngestionSourceIdentity,
+): IngestionJob {
+  if (
+    row.thread_id !== identity.threadId ||
+    row.thread_title !== identity.threadTitle ||
+    row.memory_conversation_id !== identity.memoryConversationId ||
+    row.persona_id !== identity.personaId ||
+    row.task_id !== identity.taskId ||
+    row.source_start_message_id !== identity.sourceStartMessageId ||
+    row.source_end_message_id !== identity.sourceEndMessageId ||
+    row.source_run_id !== identity.sourceRunId ||
+    row.source_at !== identity.sourceAt ||
+    row.chat_provider_id !== identity.chatProviderId ||
+    row.chat_model !== identity.chatModel ||
+    row.reason !== identity.reason ||
+    (row.provider_enrichment !== 0) !== identity.providerEnrichment
+  ) {
+    throw new Error('memory_ingestion_source_identity_conflict');
+  }
+  return rowToJob(row);
+}
+
 function rowToJob(row: IngestionJobRow): IngestionJob {
   const threadId = row.thread_id;
   return {
@@ -110,6 +209,7 @@ function rowToJob(row: IngestionJobRow): IngestionJob {
     threadId,
     threadTitle: row.thread_title,
     memoryConversationId: row.memory_conversation_id,
+    personaId: isExactMemoryScopeId(row.persona_id) ? row.persona_id : null,
     taskId: row.task_id,
     sourceRunId: row.source_run_id,
     chatProviderId: row.chat_provider_id,
@@ -135,38 +235,126 @@ function rowToJob(row: IngestionJobRow): IngestionJob {
 
 export interface EnqueueIngestionJobInput {
   threadId: string;
-  threadTitle?: string | null;
-  memoryConversationId?: string | null;
+  threadTitle: string | null;
+  memoryConversationId: string;
+  personaId: string;
   sourceEndMessageId: string;
-  sourceAt?: number;
-  sourceStartMessageId?: string | null;
-  taskId?: string | null;
-  sourceRunId?: string | null;
-  chatProviderId?: string | null;
-  chatModel?: string | null;
-  reason?: IngestionJobReason;
-  providerEnrichment?: boolean;
+  sourceAt: number;
+  sourceStartMessageId: string | null;
+  taskId: string | null;
+  sourceRunId: string | null;
+  chatProviderId: string | null;
+  chatModel: string | null;
+  reason: IngestionJobReason;
+  providerEnrichment: boolean;
   now?: number;
+}
+
+export function hasSealedIngestionJobIdentity(
+  job: IngestionJob,
+): job is IngestionJob & { personaId: string } {
+  return (
+    isExactMemoryScopeId(job.id) &&
+    isExactMemoryScopeId(job.threadId) &&
+    isValidIngestionThreadTitle(job.threadTitle) &&
+    isExactMemoryScopeId(job.memoryConversationId) &&
+    isExactMemoryScopeId(job.personaId) &&
+    isOptionalIngestionScopeIdentity(job.taskId) &&
+    isOptionalIngestionProvenanceIdentity(job.sourceRunId) &&
+    isOptionalIngestionScopeIdentity(job.chatProviderId) &&
+    isOptionalIngestionProvenanceIdentity(job.chatModel) &&
+    isOptionalIngestionProvenanceIdentity(job.sourceStartMessageId) &&
+    isExactMemoryProvenanceId(job.sourceEndMessageId) &&
+    Number.isSafeInteger(job.sourceAt) &&
+    job.sourceAt >= 0 &&
+    (job.reason === 'turn_completed' || job.reason === 'migration' || job.reason === 'manual') &&
+    (job.chatProviderId === null) === (job.chatModel === null)
+  );
+}
+
+function ingestionIdentityFailureCode(
+  job: IngestionJob,
+): 'persona_scope_missing' | 'source_identity_invalid' {
+  return job.personaId === null ? 'persona_scope_missing' : 'source_identity_invalid';
 }
 
 export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJob | null {
   ensureFactSchema();
   const db = getMemoryDb();
-  const now = input.now ?? Date.now();
-  const threadId = input.threadId.trim();
-  const memoryConversationId = input.memoryConversationId?.trim() || threadId;
-  const sourceEndMessageId = input.sourceEndMessageId.trim();
-  const threadTitle = input.threadTitle?.trim() || null;
-  const sourceStartMessageId = input.sourceStartMessageId?.trim() || null;
-  const taskId = input.taskId?.trim() || null;
-  const sourceRunId = input.sourceRunId?.trim() || null;
-  const chatProviderId = input.chatProviderId?.trim() || null;
-  const chatModel = chatProviderId ? input.chatModel?.trim() || null : null;
-  const sourceAt =
-    typeof input.sourceAt === 'number' && Number.isFinite(input.sourceAt) && input.sourceAt >= 0
-      ? input.sourceAt
-      : now;
-  if (!threadId || !sourceEndMessageId) return null;
+  const now = requireIngestionTimestamp(input.now ?? Date.now(), 'memory_ingestion_clock_invalid');
+  const threadId = requireIngestionScopeIdentity(
+    input.threadId,
+    'memory_ingestion_thread_scope_invalid',
+  );
+  const memoryConversationId = requireIngestionScopeIdentity(
+    input.memoryConversationId,
+    'memory_ingestion_conversation_scope_invalid',
+  );
+  const personaId = isExactMemoryScopeId(input.personaId) ? input.personaId : null;
+  const sourceEndMessageId = requireIngestionProvenanceIdentity(
+    input.sourceEndMessageId,
+    'memory_ingestion_source_end_invalid',
+  );
+  const threadTitle = input.threadTitle;
+  if (!isValidIngestionThreadTitle(threadTitle)) {
+    throw new Error('memory_ingestion_thread_title_invalid');
+  }
+  const sourceStartMessageId = optionalIngestionProvenanceIdentity(
+    input.sourceStartMessageId,
+    'memory_ingestion_source_start_invalid',
+  );
+  const taskId = optionalIngestionScopeIdentity(
+    input.taskId,
+    'memory_ingestion_task_scope_invalid',
+  );
+  const sourceRunId = optionalIngestionProvenanceIdentity(
+    input.sourceRunId,
+    'memory_ingestion_run_invalid',
+  );
+  const chatProviderId = optionalIngestionScopeIdentity(
+    input.chatProviderId,
+    'memory_ingestion_chat_provider_invalid',
+  );
+  const chatModel = optionalIngestionProvenanceIdentity(
+    input.chatModel,
+    'memory_ingestion_chat_model_invalid',
+  );
+  if (chatProviderId === null && chatModel !== null) {
+    throw new Error('memory_ingestion_chat_model_without_provider');
+  }
+  if (chatProviderId !== null && chatModel === null) {
+    throw new Error('memory_ingestion_chat_model_missing');
+  }
+  if (
+    input.reason !== 'turn_completed' &&
+    input.reason !== 'migration' &&
+    input.reason !== 'manual'
+  ) {
+    throw new Error('memory_ingestion_reason_invalid');
+  }
+  if (typeof input.providerEnrichment !== 'boolean') {
+    throw new Error('memory_ingestion_provider_policy_invalid');
+  }
+  const sourceAt = requireIngestionTimestamp(
+    input.sourceAt,
+    'memory_ingestion_source_timestamp_invalid',
+  );
+  if (!personaId) throw new Error('memory_ingestion_persona_scope_invalid');
+  const sourceIdentity: IngestionSourceIdentity = {
+    threadId,
+    threadTitle,
+    memoryConversationId,
+    personaId,
+    taskId,
+    sourceStartMessageId,
+    sourceEndMessageId,
+    sourceRunId,
+    sourceAt,
+    chatProviderId,
+    chatModel,
+    reason: input.reason,
+    providerEnrichment: input.providerEnrichment,
+  };
   if (
     isMemoryIngestionSourceWithdrawn({
       memoryConversationId,
@@ -188,20 +376,21 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
     threadId,
     sourceEndMessageId,
   );
-  if (duplicate) return rowToJob(duplicate);
+  if (duplicate) return requireMatchingIngestionSourceIdentity(duplicate, sourceIdentity);
 
   const id = newId('ingest');
   const inserted = db.runSync(
     `INSERT OR IGNORE INTO memory_ingestion_jobs
-       (id, thread_id, thread_title, memory_conversation_id, task_id, source_run_id,
+       (id, thread_id, thread_title, memory_conversation_id, persona_id, task_id, source_run_id,
         chat_provider_id, chat_model, source_start_message_id, source_end_message_id,
         source_at, reason, status, attempt_count, provider_enrichment, provider_outcome, outcome_code,
         next_attempt_at, lease_expires_at, structural_completed_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, NULL, NULL, ?, NULL, NULL, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, NULL, NULL, ?, NULL, NULL, ?, ?)`,
     id,
     threadId,
     threadTitle,
     memoryConversationId,
+    personaId,
     taskId,
     sourceRunId,
     chatProviderId,
@@ -209,8 +398,8 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
     sourceStartMessageId,
     sourceEndMessageId,
     sourceAt,
-    input.reason ?? 'turn_completed',
-    input.providerEnrichment === false ? 0 : 1,
+    input.reason,
+    input.providerEnrichment ? 1 : 0,
     now,
     now,
     now,
@@ -223,13 +412,14 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
       threadId,
       sourceEndMessageId,
     );
-    return existing ? rowToJob(existing) : null;
+    return existing ? requireMatchingIngestionSourceIdentity(existing, sourceIdentity) : null;
   }
   return rowToJob({
     id,
     thread_id: threadId,
     thread_title: threadTitle,
     memory_conversation_id: memoryConversationId,
+    persona_id: personaId,
     task_id: taskId,
     source_run_id: sourceRunId,
     chat_provider_id: chatProviderId,
@@ -237,10 +427,10 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
     source_start_message_id: sourceStartMessageId,
     source_end_message_id: sourceEndMessageId,
     source_at: sourceAt,
-    reason: input.reason ?? 'turn_completed',
+    reason: input.reason,
     status: 'pending',
     attempt_count: 0,
-    provider_enrichment: input.providerEnrichment === false ? 0 : 1,
+    provider_enrichment: input.providerEnrichment ? 1 : 0,
     provider_outcome: null,
     outcome_code: null,
     next_attempt_at: now,
@@ -320,16 +510,47 @@ export function discardIngestionJob(jobId: string): boolean {
   });
 }
 
+export function failIngestionJobForInvalidIdentity(
+  jobId: string,
+  outcomeCode: 'persona_scope_missing' | 'source_identity_invalid',
+  now: number,
+): boolean {
+  ensureFactSchema();
+  const failedAt = requireIngestionTimestamp(now, 'memory_ingestion_clock_invalid');
+  return runMemoryTransaction(() => {
+    const db = getMemoryDb();
+    db.runSync('DELETE FROM memory_ingestion_receipts WHERE job_id = ?', jobId);
+    const result = db.runSync(
+      `UPDATE memory_ingestion_jobs
+          SET status = 'failed',
+              provider_outcome = NULL,
+              outcome_code = ?,
+              next_attempt_at = NULL,
+              lease_expires_at = NULL,
+              claim_token = NULL,
+              structural_completed_at = NULL,
+              completed_at = ?,
+              updated_at = ?
+        WHERE id = ?
+          AND status IN ('pending', 'processing', 'retrying')`,
+      outcomeCode,
+      failedAt,
+      failedAt,
+      jobId,
+    );
+    return (result.changes ?? 0) === 1;
+  });
+}
+
 export function countCompletedIngestionJobsForThread(threadId: string): number {
   ensureFactSchema();
-  const trimmed = threadId.trim();
-  if (!trimmed) return 0;
+  if (!isExactMemoryScopeId(threadId)) return 0;
   const row = getMemoryDb().getFirstSync<{ count: number }>(
     `SELECT COUNT(*) AS count
        FROM memory_ingestion_jobs
       WHERE thread_id = ?
         AND status IN ('completed_structural', 'completed_enriched')`,
-    trimmed,
+    threadId,
   );
   return Math.max(0, row?.count ?? 0);
 }
@@ -348,11 +569,31 @@ export function listPendingIngestionJobs(
     now,
     Math.max(1, limit),
   );
-  return rows.map(rowToJob);
+  const jobs: IngestionJob[] = [];
+  for (const row of rows) {
+    const job = rowToJob(row);
+    if (hasSealedIngestionJobIdentity(job)) {
+      jobs.push(job);
+      continue;
+    }
+    failIngestionJobForInvalidIdentity(job.id, ingestionIdentityFailureCode(job), now);
+  }
+  return jobs;
 }
 
 export function getIngestionJob(jobId: string): IngestionJob | null {
   ensureFactSchema();
+  if (!isExactMemoryScopeId(jobId)) return null;
+  const row = getMemoryDb().getFirstSync<IngestionJobRow>(
+    `SELECT * FROM memory_ingestion_jobs WHERE id = ? LIMIT 1`,
+    jobId,
+  );
+  return row ? rowToJob(row) : null;
+}
+
+export function getIngestionJobForProcessing(jobId: string): IngestionJob | null {
+  ensureFactSchema();
+  if (typeof jobId !== 'string') return null;
   const row = getMemoryDb().getFirstSync<IngestionJobRow>(
     `SELECT * FROM memory_ingestion_jobs WHERE id = ? LIMIT 1`,
     jobId,
@@ -366,10 +607,11 @@ export function getIngestionJobForSourceTurn(input: {
   sourceEndMessageId: string;
 }): IngestionJob | null {
   ensureFactSchema();
-  const memoryConversationId = input.memoryConversationId.trim();
-  const sourceThreadId = input.sourceThreadId.trim();
-  const sourceEndMessageId = input.sourceEndMessageId.trim();
-  if (!memoryConversationId || !sourceThreadId || !sourceEndMessageId) {
+  if (
+    !isExactMemoryScopeId(input.memoryConversationId) ||
+    !isExactMemoryScopeId(input.sourceThreadId) ||
+    !isExactMemoryProvenanceId(input.sourceEndMessageId)
+  ) {
     return null;
   }
   const row = getMemoryDb().getFirstSync<IngestionJobRow>(
@@ -378,9 +620,9 @@ export function getIngestionJobForSourceTurn(input: {
         AND thread_id = ?
         AND source_end_message_id = ?
       LIMIT 1`,
-    memoryConversationId,
-    sourceThreadId,
-    sourceEndMessageId,
+    input.memoryConversationId,
+    input.sourceThreadId,
+    input.sourceEndMessageId,
   );
   return row ? rowToJob(row) : null;
 }
@@ -395,6 +637,16 @@ export function computeNextIngestionAttemptAt(now: number, attemptCount: number)
 }
 
 export function claimIngestionJob(jobId: string, now: number): string | null {
+  const row = getMemoryDb().getFirstSync<IngestionJobRow>(
+    `SELECT * FROM memory_ingestion_jobs WHERE id = ? LIMIT 1`,
+    jobId,
+  );
+  if (!row) return null;
+  const job = rowToJob(row);
+  if (!hasSealedIngestionJobIdentity(job)) {
+    failIngestionJobForInvalidIdentity(job.id, ingestionIdentityFailureCode(job), now);
+    return null;
+  }
   const claimToken = newId('ingestion_claim');
   const result = getMemoryDb().runSync(
     `UPDATE memory_ingestion_jobs
@@ -604,82 +856,4 @@ export function retryOrCompleteIngestionJob(input: {
     input.claimToken,
   );
   return { status, applied: updated.changes === 1 };
-}
-
-const ALL_INGESTION_STATUSES: IngestionJobStatus[] = [
-  'pending',
-  'processing',
-  'retrying',
-  'degraded',
-  'completed_structural',
-  'completed_enriched',
-  'failed',
-];
-
-const ALL_PROVIDER_OUTCOMES: IngestionProviderOutcome[] = [
-  'structural_only',
-  'valid',
-  'empty_valid',
-  'malformed',
-  'schema_invalid',
-  'provider_error',
-];
-
-export interface IngestionQueueDiagnostics {
-  total: number;
-  byStatus: Record<IngestionJobStatus, number>;
-  byProviderOutcome: Record<IngestionProviderOutcome, number>;
-  dueRetryCount: number;
-  staleProcessingCount: number;
-}
-
-export function getIngestionQueueDiagnostics(now = Date.now()): IngestionQueueDiagnostics {
-  ensureFactSchema();
-  const db = getMemoryDb();
-  const statusRows = db.getAllSync<{ status: IngestionJobStatus; count: number }>(
-    'SELECT status, COUNT(*) AS count FROM memory_ingestion_jobs GROUP BY status',
-  );
-  const providerRows = db.getAllSync<{
-    provider_outcome: IngestionProviderOutcome;
-    count: number;
-  }>(
-    `SELECT provider_outcome, COUNT(*) AS count
-       FROM memory_ingestion_jobs
-      WHERE provider_outcome IS NOT NULL
-      GROUP BY provider_outcome`,
-  );
-  const byStatus = Object.fromEntries(
-    ALL_INGESTION_STATUSES.map((status) => [status, 0]),
-  ) as Record<IngestionJobStatus, number>;
-  const byProviderOutcome = Object.fromEntries(
-    ALL_PROVIDER_OUTCOMES.map((outcome) => [outcome, 0]),
-  ) as Record<IngestionProviderOutcome, number>;
-  for (const row of statusRows) byStatus[row.status] = Math.max(0, row.count);
-  for (const row of providerRows) {
-    byProviderOutcome[row.provider_outcome] = Math.max(0, row.count);
-  }
-  const dueRetryCount =
-    db.getFirstSync<{ count: number }>(
-      `SELECT COUNT(*) AS count
-         FROM memory_ingestion_jobs
-        WHERE status IN ('pending', 'retrying')
-          AND next_attempt_at <= ?`,
-      now,
-    )?.count ?? 0;
-  const staleProcessingCount =
-    db.getFirstSync<{ count: number }>(
-      `SELECT COUNT(*) AS count
-         FROM memory_ingestion_jobs
-        WHERE status = 'processing'
-          AND lease_expires_at <= ?`,
-      now,
-    )?.count ?? 0;
-
-  return {
-    total: statusRows.reduce((sum, row) => sum + Math.max(0, row.count), 0),
-    byStatus,
-    byProviderOutcome,
-    dueRetryCount: Math.max(0, dueRetryCount),
-    staleProcessingCount: Math.max(0, staleProcessingCount),
-  };
 }

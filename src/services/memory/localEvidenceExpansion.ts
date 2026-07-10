@@ -1,5 +1,12 @@
+import { revalidateAuthorizedCrossThreadEpisodeOrigin } from './episodes/accessPolicyStore';
+import type { AuthorizedEpisodeOrigin } from './episodes/accessPolicyTypes';
 import { normalizeFactKind, type MemoryFactKind } from './facts/types';
+import {
+  requireMemoryAccessScopeIdentity,
+  type RequiredMemoryAccessScopeIdentity,
+} from './memoryScopeIdentity';
 import { ensureFactSchema } from './schema';
+import { getMemoryDb } from './sqlite-store';
 import {
   listLocalEpisodeNeighborhood,
   listLocalFactNeighborhood,
@@ -20,25 +27,16 @@ import {
 type SelectedSource = {
   kind: LocalEvidenceSource['kind'];
   id: string;
+  memoryConversationId: string;
+  sourceThreadId: string;
+  lane: 'current_thread' | 'cross_thread';
+  authorizedOrigin: AuthorizedEpisodeOrigin | null;
   sourceIndex: number;
 };
 
 type ClosedEvidenceRole = ExpandedLocalEvidenceItem['provenance']['actor']['role'];
 
 const IDENTIFIER_CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/u;
-
-function requireScopeId(value: unknown, label: string): string {
-  if (typeof value !== 'string') throw new Error(`${label} must be a string.`);
-  const normalized = value.trim();
-  if (!normalized) throw new Error(`${label} must not be empty.`);
-  if (
-    normalized.length > LOCAL_EVIDENCE_EXPANSION_LIMITS.identifierChars ||
-    IDENTIFIER_CONTROL_CHARACTERS.test(normalized)
-  ) {
-    throw new Error(`${label} is not a valid bounded identifier.`);
-  }
-  return normalized;
-}
 
 function boundedIdentifier(value: unknown): string | null {
   if (value === null) return null;
@@ -51,20 +49,119 @@ function boundedIdentifier(value: unknown): string | null {
     : null;
 }
 
-function normalizedSource(value: unknown): Omit<SelectedSource, 'sourceIndex'> | null {
+function crossThreadSourceIsCurrentlyAuthorized(
+  source: Omit<SelectedSource, 'sourceIndex'>,
+  currentScope: RequiredMemoryAccessScopeIdentity,
+  asOf: number,
+): boolean {
+  if (source.kind !== 'episode' || !source.authorizedOrigin) return false;
+  return Boolean(
+    revalidateAuthorizedCrossThreadEpisodeOrigin({
+      db: getMemoryDb(),
+      episodeId: source.id,
+      authorizedOrigin: source.authorizedOrigin,
+      currentScope,
+      asOf,
+    }),
+  );
+}
+
+function normalizedSource(
+  value: unknown,
+  currentScope: RequiredMemoryAccessScopeIdentity,
+  asOf: number,
+): Omit<SelectedSource, 'sourceIndex'> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const source = value as Record<string, unknown>;
+  const memoryConversationId = boundedIdentifier(source.memoryConversationId);
+  const sourceThreadId = boundedIdentifier(source.sourceThreadId);
+  if (!memoryConversationId || !sourceThreadId) return null;
+  const currentLane =
+    source.lane === 'current_thread' &&
+    source.authorizedOrigin === null &&
+    memoryConversationId === currentScope.memoryConversationId &&
+    sourceThreadId === currentScope.sourceThreadId;
   if (source.kind === 'fact') {
     const id = boundedIdentifier(source.factId);
-    return id ? { kind: 'fact', id } : null;
+    return id && currentLane
+      ? {
+          kind: 'fact',
+          id,
+          memoryConversationId,
+          sourceThreadId,
+          lane: 'current_thread',
+          authorizedOrigin: null,
+        }
+      : null;
   }
   if (source.kind === 'episode') {
     const id = boundedIdentifier(source.episodeId);
-    return id ? { kind: 'episode', id } : null;
+    if (!id) return null;
+    if (currentLane) {
+      return {
+        kind: 'episode',
+        id,
+        memoryConversationId,
+        sourceThreadId,
+        lane: 'current_thread',
+        authorizedOrigin: null,
+      };
+    }
+    if (
+      source.lane !== 'cross_thread' ||
+      !source.accessDecision ||
+      typeof source.accessDecision !== 'object' ||
+      (source.accessDecision as Record<string, unknown>).authorized !== true ||
+      (source.accessDecision as Record<string, unknown>).reason !== 'eligible' ||
+      typeof source.relevanceScore !== 'number' ||
+      !Number.isFinite(source.relevanceScore) ||
+      !source.authorizedOrigin ||
+      typeof source.authorizedOrigin !== 'object' ||
+      Array.isArray(source.authorizedOrigin)
+    ) {
+      return null;
+    }
+    const rawOrigin = source.authorizedOrigin as Record<string, unknown>;
+    let authorizedOrigin: AuthorizedEpisodeOrigin;
+    try {
+      const scope = requireMemoryAccessScopeIdentity({
+        memoryOwnerId: rawOrigin.memoryOwnerId as string,
+        memoryConversationId: rawOrigin.memoryConversationId as string,
+        sourceThreadId: rawOrigin.sourceThreadId as string,
+        personaId: rawOrigin.personaId as string,
+        taskId: rawOrigin.taskId as string | null,
+      });
+      if (scope.taskId !== null || rawOrigin.policyVersion !== 1) return null;
+      authorizedOrigin = { ...scope, taskId: null, policyVersion: 1 };
+    } catch {
+      return null;
+    }
+    const normalized = {
+      kind: 'episode' as const,
+      id,
+      memoryConversationId,
+      sourceThreadId,
+      lane: 'cross_thread' as const,
+      authorizedOrigin,
+    };
+    return memoryConversationId === authorizedOrigin.memoryConversationId &&
+      sourceThreadId === authorizedOrigin.sourceThreadId &&
+      crossThreadSourceIsCurrentlyAuthorized(normalized, currentScope, asOf)
+      ? normalized
+      : null;
   }
   if (source.kind === 'run') {
     const id = boundedIdentifier(source.sourceRunId);
-    return id ? { kind: 'run', id } : null;
+    return id && currentLane
+      ? {
+          kind: 'run',
+          id,
+          memoryConversationId,
+          sourceThreadId,
+          lane: 'current_thread',
+          authorizedOrigin: null,
+        }
+      : null;
   }
   return null;
 }
@@ -72,16 +169,18 @@ function normalizedSource(value: unknown): Omit<SelectedSource, 'sourceIndex'> |
 function normalizeSources(
   sources: ReadonlyArray<unknown>,
   diagnostics: LocalEvidenceExpansionDiagnostics,
+  currentScope: RequiredMemoryAccessScopeIdentity,
+  asOf: number,
 ): SelectedSource[] {
   const selected: SelectedSource[] = [];
   const seen = new Set<string>();
   for (const source of sources) {
-    const normalized = normalizedSource(source);
+    const normalized = normalizedSource(source, currentScope, asOf);
     if (!normalized) {
       diagnostics.rejectedSourceCount += 1;
       continue;
     }
-    const key = `${normalized.kind}:${normalized.id}`;
+    const key = `${normalized.memoryConversationId}:${normalized.sourceThreadId}:${normalized.kind}:${normalized.id}`;
     if (seen.has(key)) {
       diagnostics.duplicateSourceCount += 1;
       continue;
@@ -319,43 +418,47 @@ function promptBudget(input: ExpandLocalEvidenceInput): number {
 
 export function expandLocalEvidence(input: ExpandLocalEvidenceInput): LocalEvidenceExpansionResult {
   const startedAt = Date.now();
-  const memoryConversationId = requireScopeId(
-    input?.scope?.memoryConversationId,
-    'memoryConversationId',
-  );
-  const sourceThreadId = requireScopeId(input?.scope?.sourceThreadId, 'sourceThreadId');
+  const currentScope = requireMemoryAccessScopeIdentity(input.currentScope);
   const asOf = input.asOf ?? Date.now();
-  if (!Number.isFinite(asOf) || asOf < 0) throw new Error('asOf must be a finite timestamp.');
+  if (!Number.isSafeInteger(asOf) || asOf < 0) {
+    throw new Error('asOf must be a safe timestamp.');
+  }
   const sourceInputs: ReadonlyArray<unknown> = Array.isArray(input.selectedSources)
     ? input.selectedSources
     : [];
   const diagnostics = emptyDiagnostics(sourceInputs.length);
-  const selectedSources = normalizeSources(sourceInputs, diagnostics);
-  const candidates: ExpandedLocalEvidenceItem[] = [];
   ensureFactSchema();
+  const selectedSources = normalizeSources(sourceInputs, diagnostics, currentScope, asOf);
+  const candidates: ExpandedLocalEvidenceItem[] = [];
 
   for (const source of selectedSources) {
     diagnostics.queryCount += 1;
     const rows =
-      source.kind === 'fact'
+          source.kind === 'fact'
         ? listLocalFactNeighborhood({
             factId: source.id,
-            memoryConversationId,
-            sourceThreadId,
+            memoryOwnerId: currentScope.memoryOwnerId,
+            memoryConversationId: source.memoryConversationId,
+            sourceThreadId: source.sourceThreadId,
+            taskId: source.lane === 'cross_thread' ? null : currentScope.taskId,
             asOf,
           })
         : source.kind === 'episode'
           ? listLocalEpisodeNeighborhood({
               episodeId: source.id,
-              memoryConversationId,
-              sourceThreadId,
+              memoryOwnerId: currentScope.memoryOwnerId,
+              memoryConversationId: source.memoryConversationId,
+              sourceThreadId: source.sourceThreadId,
+              taskId: source.lane === 'cross_thread' ? null : currentScope.taskId,
               asOf,
             })
           : sortRunRows(
               listLocalRunNeighborhood({
                 sourceRunId: source.id,
-                memoryConversationId,
-                sourceThreadId,
+                memoryOwnerId: currentScope.memoryOwnerId,
+                memoryConversationId: source.memoryConversationId,
+                sourceThreadId: source.sourceThreadId,
+                taskId: currentScope.taskId,
                 asOf,
               }),
             );

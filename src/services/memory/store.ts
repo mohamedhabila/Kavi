@@ -315,7 +315,13 @@ export async function flushToMemory(facts: string[]): Promise<void> {
 
 export function clearAllMemory(): void {
   const { clearStructuredMemory } = require('./schema') as typeof import('./schema');
+  const { clearEmbeddingCache, getEmbeddingCacheEntryCount } =
+    require('./embeddings') as typeof import('./embeddings');
   clearStructuredMemory();
+  clearEmbeddingCache();
+  if (getEmbeddingCacheEntryCount() !== 0) {
+    throw new Error('memory_clear_embedding_cache_residual');
+  }
   const dirs = [getMemoryDir(), getConversationMemoryRootDir()];
   for (const dir of dirs) {
     if (dir.exists) {

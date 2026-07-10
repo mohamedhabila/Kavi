@@ -16,7 +16,11 @@ import {
   type MemoryFactSelector,
   type ScoredFact,
 } from './factRecall';
-import { recallEpisodesForQuery, type RecallEpisodesTiming } from './episodeRecall';
+import { recallScopedEpisodesForQuery, type RecallEpisodesTiming } from './episodeRecall';
+import type {
+  CrossThreadEpisodeRecallDiagnostics,
+  EpisodeRecallSelection,
+} from './episodes/accessPolicyTypes';
 import type { MemoryEpisode } from './episodes/types';
 import type {
   RecallCandidateStrategy,
@@ -51,6 +55,7 @@ export interface RetrievalOrchestratorResult {
   facts: MemoryFact[];
   resolutionFacts: MemoryFact[];
   episodes: MemoryEpisode[];
+  episodeSelections: EpisodeRecallSelection[];
   querySignals: string[];
   scoredFacts: ScoredFact[];
   timings?: RetrievalOrchestratorTimings;
@@ -63,6 +68,7 @@ export interface RetrievalOrchestratorTimings {
   totalMs: number;
   recall?: RecallFactsTiming;
   episodes?: RecallEpisodesTiming;
+  crossThreadEpisodes?: CrossThreadEpisodeRecallDiagnostics;
 }
 
 const DEFAULT_LIMIT = 8;
@@ -201,21 +207,23 @@ export async function orchestrateMemoryRetrieval(
 
   const episodesStarted = Date.now();
   let episodeTiming: RecallEpisodesTiming | undefined;
-  const episodes = recallEpisodesForQuery(query, {
-    conversationId: scope.memoryScope.memoryConversationId,
-    threadId: scope.memoryScope.sourceThreadId,
-    ...(scope.taskId ? { taskId: scope.taskId } : {}),
+  const recalledEpisodes = recallScopedEpisodesForQuery(query, {
+    currentScope: scope.memoryScope,
     limit: 4,
+    now,
     onTiming: (timing) => {
       episodeTiming = timing;
     },
   });
+  const episodeSelections = recalledEpisodes.selections;
+  const episodes = episodeSelections.map((episodeSelection) => episodeSelection.episode);
   const episodesMs = Date.now() - episodesStarted;
 
   return {
     facts,
     resolutionFacts,
     episodes,
+    episodeSelections,
     querySignals,
     scoredFacts,
     timings: {
@@ -225,6 +233,7 @@ export async function orchestrateMemoryRetrieval(
       totalMs: Date.now() - totalStarted,
       recall: recallTimings[0],
       episodes: episodeTiming,
+      crossThreadEpisodes: recalledEpisodes.diagnostics,
     },
   };
 }

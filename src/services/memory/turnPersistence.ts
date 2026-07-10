@@ -5,6 +5,7 @@ import { bridgeGraphGoalEvidence } from './evidenceBridge';
 import { recordAgentRunEvidenceMemory } from './agentRunEvidenceMemory';
 import { runMemoryTransaction } from './access/transaction';
 import type { TurnPersistenceReceipt, TurnProviderOutcome } from './turnProcessor';
+import type { EpisodeShareability } from './episodes/accessPolicyTypes';
 
 interface TurnPersistenceContext {
   now: number;
@@ -17,6 +18,10 @@ interface TurnPersistenceContext {
   sourceAssistantMessageId: string;
   messages: Message[];
   graphGoalEvidence?: string[];
+  episodeAccess: {
+    personaId: string;
+    shareability: EpisodeShareability;
+  };
   canPersist?: () => boolean;
 }
 
@@ -69,6 +74,7 @@ function persistenceOptions(context: TurnPersistenceContext) {
     sourceAssistantMessageId: context.sourceAssistantMessageId,
     messages: context.messages,
     skipWorkingMemoryWrites: true,
+    episodeAccess: context.episodeAccess,
     canPersist: context.canPersist,
   };
 }

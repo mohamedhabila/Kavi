@@ -366,6 +366,7 @@ export function getApplicableLatestReflectionContent(input: {
 export function refreshThreadReflection(input: {
   threadId: string;
   taskId?: string | null;
+  periodAt?: number;
   now?: number;
 }): MemoryReflection | null {
   if (shouldAbortIngestionDueToMemoryPressure() || isMainInferenceActive()) {
@@ -377,7 +378,7 @@ export function refreshThreadReflection(input: {
 
   try {
     const now = input.now ?? Date.now();
-    const { start, end } = dayPeriodBounds(now);
+    const { start, end } = dayPeriodBounds(input.periodAt ?? now);
     const currentScope = resolveLocalMemoryAccessScope({
       memoryConversationId: threadId,
       sourceThreadId: threadId,

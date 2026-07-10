@@ -12,7 +12,10 @@ function requireVaultTimestamp(value: number): number {
   return value;
 }
 
-export function ensureMemoryVaultIdentitySchema(db: MemoryDatabase, now = Date.now()): void {
+export function ensureMemoryVaultIdentitySchema(
+  db: MemoryDatabase,
+  now = Date.now(),
+): void {
   const createdAt = requireVaultTimestamp(now);
   db.execSync(`
     CREATE TABLE IF NOT EXISTS memory_vault_identity (

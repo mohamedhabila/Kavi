@@ -18,6 +18,8 @@ import { ensureMigrationStateSchema } from './migrationStateSchema';
 import { ensureRetrievalEventSchema } from './retrievalEventSchema';
 import { CLEARED_STRUCTURED_MEMORY_TABLES } from './structuredMemoryTableRegistry';
 import { ensureWithdrawalSchema } from './withdrawalSchema';
+import { ensureEpisodeAccessPolicySchema } from './episodes/accessPolicySchema';
+import { ensureEpisodeRetrievalIndexSchema } from './episodes/retrievalIndex';
 import { ensureCanonicalFactTable } from './schema/canonicalFactTable';
 import { ensureMemoryVaultIdentitySchema, getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
 
@@ -228,10 +230,16 @@ export function ensureFactSchema(): void {
       observed_at INTEGER NOT NULL CHECK(observed_at >= 0),
       created_at INTEGER NOT NULL CHECK(created_at >= observed_at)
     );
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_fact_observations_identity
-      ON memory_fact_observations(fact_id, memory_owner_id, source_kind, source_id);
+    DROP INDEX IF EXISTS idx_fact_observations_identity;
+    CREATE UNIQUE INDEX idx_fact_observations_identity
+      ON memory_fact_observations(
+        fact_id,
+        memory_owner_id,
+        source_kind,
+        source_id
+      );
     CREATE INDEX IF NOT EXISTS idx_fact_observations_active
-      ON memory_fact_observations(fact_id, relation, observed_at DESC, created_at, id);
+      ON memory_fact_observations(fact_id, relation, observed_at DESC, id);
 
     CREATE TABLE IF NOT EXISTS memory_tasks (
       id TEXT PRIMARY KEY,
@@ -277,9 +285,11 @@ export function ensureFactSchema(): void {
   ensureRetrievalEventSchema(db);
   ensureWithdrawalSchema(db);
   ensureMigrationStateSchema(db);
-  ensureIngestionQueueSchema(db);
   ensureMemoryVaultIdentitySchema(db);
+  ensureEpisodeAccessPolicySchema(db);
+  ensureEpisodeRetrievalIndexSchema(db);
   ensureFactColumns(db);
+  ensureIngestionQueueSchema(db);
   ensureColumn(
     db,
     'memory_working_blocks',

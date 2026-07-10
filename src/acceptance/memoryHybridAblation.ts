@@ -1,8 +1,12 @@
 import type { Message } from '../types/message';
 import { upsertEntity } from '../services/memory/entities';
-import { recordFact, setFactEmbedding } from '../services/memory/facts/mutations';
+import {
+  recordFactWithApplicability,
+  setFactEmbedding,
+} from '../services/memory/facts/mutations';
 import { recallScoredFactsForQuery } from '../services/memory/factRecall';
 import { buildUnifiedMemoryAccessContext } from '../services/memory/memoryAccessGateway';
+import { resolveLocalMemoryAccessScope } from '../services/memory/memoryScopeStore';
 import {
   buildMemoryRetrievalScopeHash,
   readRecentMemoryRetrievalEvents,
@@ -10,8 +14,6 @@ import {
 import { getMemoryDb } from '../services/memory/sqlite-store';
 import { stableHash, stableStringify } from './e2eAgent/e2eTraceRedaction';
 import { runInIsolatedStructuredMemoryEvaluation } from './structuredMemoryEvaluation';
-import { resolveLocalMemoryAccessScope } from '../services/memory/memoryScopeStore';
-import { DEFAULT_MEMORY_PERSONA_ID } from '../services/memory/memoryScopeIdentity';
 import {
   MEMORY_HYBRID_ABLATION_CASES,
   MEMORY_HYBRID_ABLATION_FIXTURE_SIGNATURE,
@@ -118,18 +120,21 @@ function seedFixture(
   const addFact = (seed: MemoryHybridAblationCase['facts'][number]) => {
     const subjectId = entityIds.get(seed.entityKey);
     if (!subjectId) throw new Error(`Unknown hybrid ablation entity key: ${seed.entityKey}`);
-    const recorded = recordFact({
-      subjectId,
-      predicate: seed.predicate,
-      objectText: seed.objectText,
-      scope: 'conversation',
-      originConversationId:
-        seed.origin === 'active' ? namespace : `${namespace}-other-conversation`,
-      supersedePrior: false,
-      now: seed.now,
-      ...(seed.validAt !== undefined ? { validAt: seed.validAt } : {}),
-      ...(seed.expiresAt !== undefined ? { expiresAt: seed.expiresAt } : {}),
-    });
+    const recorded = recordFactWithApplicability(
+      {
+        subjectId,
+        predicate: seed.predicate,
+        objectText: seed.objectText,
+        scope: 'conversation',
+        originConversationId:
+          seed.origin === 'active' ? namespace : `${namespace}-other-conversation`,
+        supersedePrior: false,
+        now: seed.now,
+        ...(seed.validAt !== undefined ? { validAt: seed.validAt } : {}),
+        ...(seed.expiresAt !== undefined ? { expiresAt: seed.expiresAt } : {}),
+      },
+      { factClass: 'workflow', sourceAuthority: 'tool_observed' },
+    );
     factKeysById.set(recorded.fact.id, seed.key);
     if (seed.embedding) setFactEmbedding(recorded.fact.id, [...seed.embedding], seed.now);
     if (seed.deleted) {
@@ -193,8 +198,8 @@ async function runForegroundCase(
     messages: [message],
     memoryConversationId: namespace,
     sourceThreadId,
+    personaId: 'memory-hybrid-ablation',
     taskId: null,
-    personaId: DEFAULT_MEMORY_PERSONA_ID,
     mode: 'chat',
     now: fixture.now,
     recallLimit: 1,
@@ -219,15 +224,16 @@ async function runLocalSemanticCase(
 ): Promise<CaseResult> {
   const namespace = namespaceFor(fixture, strategy);
   const factKeysById = seedFixture(fixture, strategy);
+  const memoryScope = resolveLocalMemoryAccessScope({
+    memoryConversationId: namespace,
+    sourceThreadId: `${namespace}-source`,
+    personaId: 'memory-hybrid-ablation',
+    taskId: null,
+  });
   const scored = await recallScoredFactsForQuery(fixture.query, {
     candidateStrategy: strategy,
-    memoryScope: resolveLocalMemoryAccessScope({
-      memoryConversationId: namespace,
-      sourceThreadId: namespace,
-      personaId: DEFAULT_MEMORY_PERSONA_ID,
-      taskId: null,
-    }),
-    useIntent: 'automatic_prompt',
+    memoryScope,
+    useIntent: 'explicit_user_request',
     limit: 1,
     now: fixture.now,
     ...(fixture.queryEmbedding
@@ -342,8 +348,7 @@ async function runAblationOnEmptyDatabase(): Promise<MemoryHybridAblationReport>
       hybridOnlyRegressionCount: pairs.filter(
         ({ lexical, hybrid }) => hybrid.pollution && !lexical.pollution,
       ).length,
-      lexicalNegativeFalsePositiveCount: negatives.filter(({ lexical }) => lexical.pollution)
-        .length,
+      lexicalNegativeFalsePositiveCount: negatives.filter(({ lexical }) => lexical.pollution).length,
       hybridNegativeFalsePositiveCount: negatives.filter(({ hybrid }) => hybrid.pollution).length,
     },
     families: {

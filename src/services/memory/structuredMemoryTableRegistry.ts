@@ -3,6 +3,7 @@ export const CLEARED_STRUCTURED_MEMORY_TABLES = [
   'memory_fact_evidence',
   'memory_fact_terms',
   'memory_fact_term_stats',
+  'memory_episode_terms',
   'memory_episode_access_policies',
   'memory_episodes',
   'memory_facts',
@@ -22,4 +23,7 @@ export const CLEARED_STRUCTURED_MEMORY_TABLES = [
   'memory_entities',
 ] as const;
 
-export const PRESERVED_STRUCTURED_MEMORY_TABLES = ['memory_vault_identity'] as const;
+export const PRESERVED_STRUCTURED_MEMORY_TABLES = [
+  'memory_vault_identity',
+  'memory_episode_retrieval_index_meta',
+] as const;

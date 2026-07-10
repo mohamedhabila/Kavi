@@ -2,6 +2,10 @@ import { getSchemaReadyMemoryDb } from '../access/schemaGuard';
 import { runMemoryTransaction } from '../access/transaction';
 import { newId } from '../schema';
 import { replaceChunksForSource } from '../sqlite-store';
+import { ensureEpisodeAccessPolicySchema } from './accessPolicySchema';
+import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
+import { bindEpisodeAccessPolicy } from './accessPolicyStore';
+import { replaceEpisodeRetrievalTerms } from './retrievalIndex';
 import {
   clamp01,
   type AddFactEvidenceInput,
@@ -10,12 +14,48 @@ import {
   type MemoryEpisode,
   type MemoryFactEvidence,
   type RecordEpisodeInput,
+  type RecordScopedEpisodeInput,
   rowToEpisode,
   rowToEvidence,
 } from './types';
 
-export function recordEpisode(input: RecordEpisodeInput): MemoryEpisode | null {
-  return runMemoryTransaction(() => recordEpisodeInTransaction(input));
+export function recordThreadLocalEpisode(input: RecordEpisodeInput): MemoryEpisode | null {
+  const now = input.now ?? Date.now();
+  return runMemoryTransaction(() => recordEpisodeInTransaction({ ...input, now }));
+}
+
+export function recordEpisode(input: RecordScopedEpisodeInput): MemoryEpisode | null {
+  if (!input.accessPolicy) throw new Error('episode_access_policy_required');
+  const now = input.now ?? Date.now();
+  return runMemoryTransaction(() => {
+    const episode = recordEpisodeInTransaction({
+      ...input,
+      taskId: input.accessPolicy.taskId,
+      now,
+    });
+    if (!episode) return episode;
+    const db = getSchemaReadyMemoryDb();
+    ensureEpisodeAccessPolicySchema(db, now);
+    bindEpisodeAccessPolicy(
+      db,
+      {
+        episodeId: episode.id,
+        memoryOwnerId: getLocalMemoryVaultOwnerId(db),
+        memoryConversationId: input.accessPolicy.memoryConversationId,
+        sourceThreadId: input.accessPolicy.sourceThreadId,
+        personaId: input.accessPolicy.personaId,
+        taskId: input.accessPolicy.taskId,
+        shareability: input.accessPolicy.shareability,
+        sensitivity: input.accessPolicy.sensitivity,
+        ...(input.accessPolicy.expiresAt === undefined
+          ? {}
+          : { expiresAt: input.accessPolicy.expiresAt }),
+        boundAt: now,
+      },
+      now,
+    );
+    return episode;
+  });
 }
 
 function episodeSource(episode: MemoryEpisode): string {
@@ -77,59 +117,58 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
 
   if (existing) {
     const current = rowToEpisode(existing);
+    const replayTaskId = input.taskId ?? null;
+    if (
+      current.taskId !== replayTaskId ||
+      current.startedAt !== startedAt ||
+      current.endedAt !== endedAt ||
+      current.sourceStartMessageId !== sourceStartMessageId ||
+      JSON.stringify(current.messageIds) !== JSON.stringify(messageIds)
+    ) {
+      throw new Error('episode_source_identity_conflict');
+    }
     const episode = {
       ...current,
-      taskId: input.taskId === undefined ? current.taskId : input.taskId,
-      startedAt: input.startedAt ?? input.endedAt ?? current.startedAt,
-      endedAt: input.endedAt ?? input.startedAt ?? current.endedAt,
       summary: normalizedSummary,
       entities:
         input.entities === undefined
           ? current.entities
           : Array.from(new Set(input.entities)).slice(0, 24),
-      messageIds: input.messageIds === undefined ? current.messageIds : messageIds,
       toolNames:
         input.toolNames === undefined
           ? current.toolNames
           : Array.from(new Set(input.toolNames)).slice(0, 64),
       importance: input.importance === undefined ? current.importance : clamp01(input.importance),
       embedding: input.embedding === undefined ? current.embedding : input.embedding,
-      sourceStartMessageId: sourceStartMessageId ?? current.sourceStartMessageId,
-      sourceEndMessageId,
     } satisfies MemoryEpisode;
     if (JSON.stringify(episode) !== JSON.stringify(current)) {
       db.runSync(
         `UPDATE memory_episodes
-            SET task_id = ?,
-                started_at = ?,
-                ended_at = ?,
-                summary = ?,
+            SET summary = ?,
                 entities_json = ?,
-                message_ids_json = ?,
                 tool_names_json = ?,
                 importance = ?,
-                embedding = ?,
-                source_start_message_id = ?
+                embedding = ?
           WHERE id = ?`,
-        episode.taskId,
-        episode.startedAt,
-        episode.endedAt,
         episode.summary,
         JSON.stringify(episode.entities),
-        JSON.stringify(episode.messageIds),
         JSON.stringify(episode.toolNames),
         episode.importance,
         episode.embedding ? JSON.stringify(episode.embedding) : null,
-        episode.sourceStartMessageId,
         episode.id,
       );
       if (
         episode.summary !== current.summary ||
-        episode.endedAt !== current.endedAt ||
-        episode.taskId !== current.taskId ||
         JSON.stringify(episode.embedding) !== JSON.stringify(current.embedding)
       ) {
         replaceEpisodeChunk(episode);
+      }
+      if (
+        episode.summary !== current.summary ||
+        JSON.stringify(episode.entities) !== JSON.stringify(current.entities) ||
+        JSON.stringify(episode.toolNames) !== JSON.stringify(current.toolNames)
+      ) {
+        replaceEpisodeRetrievalTerms(db, episode);
       }
     }
     return episode;
@@ -175,6 +214,7 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
     episode.sourceStartMessageId,
     episode.sourceEndMessageId,
   );
+  replaceEpisodeRetrievalTerms(db, episode);
   replaceEpisodeChunk(episode);
   return episode;
 }

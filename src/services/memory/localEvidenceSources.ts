@@ -1,6 +1,7 @@
-import type { MemoryEpisode } from './episodes/types';
+import type { EpisodeRecallSelection } from './episodes/accessPolicyTypes';
 import type { MemoryFact } from './facts/types';
-import type { LocalEvidenceSource } from './localEvidenceExpansionTypes';
+import type { LocalEvidenceSource, ScopedLocalEvidenceSource } from './localEvidenceExpansionTypes';
+import type { RequiredMemoryAccessScopeIdentity } from './memoryScopeIdentity';
 
 function sourceKey(source: LocalEvidenceSource): string {
   if (source.kind === 'fact') return `fact:${source.factId}`;
@@ -15,25 +16,52 @@ function sourceKey(source: LocalEvidenceSource): string {
  */
 export function deriveLocalEvidenceSources(
   facts: ReadonlyArray<MemoryFact>,
-  episodes: ReadonlyArray<MemoryEpisode>,
-): LocalEvidenceSource[] {
-  const sources: LocalEvidenceSource[] = [];
+  episodeSelections: ReadonlyArray<EpisodeRecallSelection>,
+  currentScope: RequiredMemoryAccessScopeIdentity,
+): ScopedLocalEvidenceSource[] {
+  const sources: ScopedLocalEvidenceSource[] = [];
   const seen = new Set<string>();
-  const append = (source: LocalEvidenceSource): void => {
-    const key = sourceKey(source);
+  const appendCurrent = (source: LocalEvidenceSource): void => {
+    const scope = currentScope;
+    const key = `${scope.memoryConversationId}:${scope.sourceThreadId}:${sourceKey(source)}`;
     if (seen.has(key)) return;
     seen.add(key);
-    sources.push(source);
+    sources.push({
+      ...source,
+      memoryConversationId: scope.memoryConversationId,
+      sourceThreadId: scope.sourceThreadId,
+      lane: 'current_thread',
+      authorizedOrigin: null,
+    });
   };
 
-  const rankCount = Math.max(facts.length, episodes.length);
+  const rankCount = Math.max(facts.length, episodeSelections.length);
   for (let index = 0; index < rankCount; index += 1) {
     const fact = facts[index];
-    if (fact) append({ kind: 'fact', factId: fact.id });
-    const episode = episodes[index];
-    if (episode) append({ kind: 'episode', episodeId: episode.id });
+    if (fact) appendCurrent({ kind: 'fact', factId: fact.id });
+    const selection = episodeSelections[index];
+    if (selection) {
+      if (selection.lane === 'cross_thread') {
+        const key = `${selection.authorizedOrigin.memoryConversationId}:${selection.authorizedOrigin.sourceThreadId}:episode:${selection.episode.id}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          sources.push({
+            kind: 'episode',
+            episodeId: selection.episode.id,
+            memoryConversationId: selection.authorizedOrigin.memoryConversationId,
+            sourceThreadId: selection.authorizedOrigin.sourceThreadId,
+            lane: 'cross_thread',
+            authorizedOrigin: selection.authorizedOrigin,
+            accessDecision: selection.accessDecision,
+            relevanceScore: selection.relevanceScore,
+          });
+        }
+      } else {
+        appendCurrent({ kind: 'episode', episodeId: selection.episode.id });
+      }
+    }
     const sourceRunId = fact?.sourceRunId?.trim();
-    if (sourceRunId) append({ kind: 'run', sourceRunId });
+    if (sourceRunId) appendCurrent({ kind: 'run', sourceRunId });
   }
   return sources;
 }

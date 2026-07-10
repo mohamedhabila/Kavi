@@ -5,11 +5,10 @@
 import { drainIngestionQueue } from '../../services/memory/ingestionQueue';
 import { recordCompletedTurnForMemory } from '../../services/memory/lifecycle';
 import { orchestrateMemoryRetrieval } from '../../services/memory/retrievalOrchestrator';
+import { resolveLocalMemoryAccessScope } from '../../services/memory/memoryScopeStore';
 import { evaluateMemoryRecallResult } from './evaluateMemoryRecallResult';
 import type { MemoryRecallFixture } from './memoryRecallFixtures';
 import type { AcceptanceFixtureOutcome } from './types';
-import { resolveLocalMemoryAccessScope } from '../../services/memory/memoryScopeStore';
-import { DEFAULT_MEMORY_PERSONA_ID } from '../../services/memory/memoryScopeIdentity';
 
 export async function runMemoryRecallScenario(
   fixture: MemoryRecallFixture,
@@ -43,7 +42,7 @@ export async function runMemoryRecallScenario(
     memoryScope: resolveLocalMemoryAccessScope({
       memoryConversationId: fixture.threadId,
       sourceThreadId: fixture.threadId,
-      personaId: DEFAULT_MEMORY_PERSONA_ID,
+      personaId: 'default',
       taskId: null,
     }),
     limit: 8,

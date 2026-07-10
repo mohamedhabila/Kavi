@@ -29,6 +29,11 @@ import type { MemoryFact } from './facts/types';
 import { evaluateGroundedReplacement } from './groundedFactReplacement';
 import { canWriteLongTermMemory } from './policy';
 import { finalizeProviderTurn, persistStructuralTurn } from './turnPersistence';
+import type { EpisodeShareability } from './episodes/accessPolicyTypes';
+import {
+  resolveCodeOwnedMemoryConversationId,
+  resolveCodeOwnedMemoryTaskId,
+} from './memoryScopeIdentity';
 
 const logger = createLogger('memory.turnProcessor');
 
@@ -44,6 +49,10 @@ export interface ProcessTurnInput {
   now?: number;
   extractor?: ConsolidatorExtractor;
   skipWorkingMemorySync?: boolean;
+  episodeAccess?: {
+    personaId: string;
+    shareability: EpisodeShareability;
+  };
   /** Queue ownership fence checked after async enrichment and before any durable write. */
   canPersist?: () => boolean;
   /** Queue receipt committed atomically with the source-bound memory transaction. */
@@ -55,7 +64,7 @@ export interface ProcessTurnInput {
 function resolveMemoryConversationId(
   input: Pick<ProcessTurnInput, 'threadId' | 'memoryConversationId'>,
 ): string {
-  return input.memoryConversationId?.trim() || input.threadId.trim();
+  return resolveCodeOwnedMemoryConversationId(input.memoryConversationId, input.threadId);
 }
 
 export interface ProcessTurnResult {
@@ -322,7 +331,7 @@ function applyWorkingMemoryFromStructural(
     taskId: input.taskId,
   };
 
-  const taskId = input.taskId?.trim();
+  const taskId = resolveCodeOwnedMemoryTaskId(input.taskId);
   if (structural.activeFocus && !taskId) {
     try {
       const activeFocus = composeActiveFocusContent({
@@ -427,13 +436,14 @@ function mergeProviderIntoStructural(
     mergedFacts.push(decision.fact);
     seen.add(key);
   }
+  const threadSet = new Set(structural.openThreads);
+  for (const thread of provider.openThreads) threadSet.add(thread);
+
   return {
     episodeSummary: episodeSummary || null,
     newFacts: mergedFacts,
-    // Prompt-visible working blocks accept only deterministic structural
-    // material. Provider summaries are persisted only as sealed facts.
-    activeFocus: structural.activeFocus,
-    openThreads: structural.openThreads,
+    activeFocus: provider.activeFocus ?? structural.activeFocus,
+    openThreads: Array.from(threadSet).slice(0, 5),
     notable: provider.notable ?? [],
   };
 }
@@ -532,6 +542,9 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
   if (!assistant) {
     return skippedProcessTurnResult('no_closed_turn');
   }
+  if (!input.episodeAccess) {
+    throw new Error('episode_access_policy_required');
+  }
 
   const turnInput = buildTurnInput(user, assistant, input);
   const structural = extractStructuralMemory(turnInput);
@@ -568,6 +581,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
     sourceAssistantMessageId: assistant.id,
     messages: input.messages,
     graphGoalEvidence: input.graphGoalEvidence,
+    episodeAccess: input.episodeAccess,
     canPersist: input.canPersist,
     commitStructuralCheckpoint: input.commitStructuralCheckpoint,
     commitPersistenceReceipt: input.commitPersistenceReceipt,
@@ -620,6 +634,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
     sourceAssistantMessageId: assistant.id,
     messages: input.messages,
     graphGoalEvidence: input.graphGoalEvidence,
+    episodeAccess: input.episodeAccess,
     canPersist: input.canPersist,
     commitPersistenceReceipt: input.commitPersistenceReceipt,
   });
