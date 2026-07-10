@@ -145,16 +145,17 @@ public enum IOSDurableSchedulerKind: String, Codable, Sendable {
 public struct IOSDurablePlatformCapabilities: Equatable, Sendable {
   public let supportsContinuedProcessing: Bool
   public let appIsForeground: Bool
-  public let hasFreshUserInitiatedAction: Bool
+  /// Anti-replay signal only; the caller must still originate continued work from audited UI code.
+  public let requestTimestampIsFresh: Bool
 
   public init(
     supportsContinuedProcessing: Bool,
     appIsForeground: Bool,
-    hasFreshUserInitiatedAction: Bool = false
+    requestTimestampIsFresh: Bool = false
   ) {
     self.supportsContinuedProcessing = supportsContinuedProcessing
     self.appIsForeground = appIsForeground
-    self.hasFreshUserInitiatedAction = hasFreshUserInitiatedAction
+    self.requestTimestampIsFresh = requestTimestampIsFresh
   }
 }
 
@@ -163,7 +164,7 @@ public enum IOSDurableUnsupportedReason: String, Codable, Sendable {
   case processBoundInteractiveWork = "process_bound_interactive_work"
   case continuedProcessingUnavailable = "continued_processing_unavailable"
   case foregroundUserActionRequired = "foreground_user_action_required"
-  case freshUserActionRequired = "fresh_user_action_required"
+  case staleRequestTimestamp = "stale_request_timestamp"
   case continuedProcessingDelayUnsupported = "continued_processing_delay_unsupported"
   case unsupportedNetworkConstraint = "unsupported_network_constraint"
   case unsupportedPlatformConstraint = "unsupported_platform_constraint"

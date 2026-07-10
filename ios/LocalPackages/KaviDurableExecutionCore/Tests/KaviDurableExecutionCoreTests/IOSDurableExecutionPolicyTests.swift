@@ -6,7 +6,7 @@ final class IOSDurableExecutionPolicyTests: XCTestCase {
   private let foregroundIOS26 = IOSDurablePlatformCapabilities(
     supportsContinuedProcessing: true,
     appIsForeground: true,
-    hasFreshUserInitiatedAction: true
+    requestTimestampIsFresh: true
   )
 
   func testDurabilityTaxonomyMatchesJournalContract() {
@@ -58,7 +58,7 @@ final class IOSDurableExecutionPolicyTests: XCTestCase {
         candidate,
         capabilities: .init(supportsContinuedProcessing: true, appIsForeground: true)
       ).unsupportedReason,
-      .freshUserActionRequired
+      .staleRequestTimestamp
     )
     XCTAssertEqual(
       IOSDurableExecutionPolicy.decide(

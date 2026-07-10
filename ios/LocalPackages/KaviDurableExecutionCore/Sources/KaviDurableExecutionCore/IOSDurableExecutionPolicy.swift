@@ -33,8 +33,8 @@ public enum IOSDurableExecutionPolicy {
       guard capabilities.appIsForeground else {
         return .unsupported(.foregroundUserActionRequired)
       }
-      guard capabilities.hasFreshUserInitiatedAction else {
-        return .unsupported(.freshUserActionRequired)
+      guard capabilities.requestTimestampIsFresh else {
+        return .unsupported(.staleRequestTimestamp)
       }
       guard request.constraints.earliestStartAtMillis == request.requestedAtMillis else {
         return .unsupported(.continuedProcessingDelayUnsupported)

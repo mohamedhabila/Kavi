@@ -195,7 +195,7 @@ func foregroundIOS26() -> IOSDurablePlatformCapabilities {
   .init(
     supportsContinuedProcessing: true,
     appIsForeground: true,
-    hasFreshUserInitiatedAction: true
+    requestTimestampIsFresh: true
   )
 }
 

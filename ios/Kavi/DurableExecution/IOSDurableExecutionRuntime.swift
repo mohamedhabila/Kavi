@@ -104,7 +104,7 @@ final class IOSDurableExecutionRuntime: IOSBackgroundTaskSchedulerDelegate, @unc
         return false
       }(),
       appIsForeground: Self.readApplicationIsForeground(),
-      hasFreshUserInitiatedAction: !actionAge.overflow
+      requestTimestampIsFresh: !actionAge.overflow
         && actionAge.partialValue >= 0
         && actionAge.partialValue <= 5_000
     )

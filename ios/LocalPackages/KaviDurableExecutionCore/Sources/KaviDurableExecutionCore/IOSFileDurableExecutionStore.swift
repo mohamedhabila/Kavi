@@ -162,7 +162,7 @@ public final class IOSFileDurableExecutionStore: IOSDurableExecutionStore, @unch
       capabilities: .init(
         supportsContinuedProcessing: true,
         appIsForeground: true,
-        hasFreshUserInitiatedAction: true
+        requestTimestampIsFresh: true
       )
     )
     let progressValid: Bool
