@@ -1,0 +1,308 @@
+import type * as SQLite from 'expo-sqlite';
+import {
+  EXECUTION_APPROVAL_STATES,
+  EXECUTION_CAPABILITIES,
+  EXECUTION_CHECKPOINT_BOUNDARIES,
+  EXECUTION_CHECKPOINT_PHASES,
+  EXECUTION_DURABILITY_CLASSES,
+  EXECUTION_EFFECT_CLASSES,
+  EXECUTION_EFFECT_STATUSES,
+  EXECUTION_EXTERNAL_HANDLE_KINDS,
+  EXECUTION_EXTERNAL_HANDLE_STATUSES,
+  EXECUTION_IDEMPOTENCY_CLASSES,
+  EXECUTION_RESUME_STRATEGIES,
+  EXECUTION_RETRY_POLICIES,
+  EXECUTION_RUN_STATUSES,
+  EXECUTION_SURFACES,
+  RETENTION_DELETABLE_RUN_STATUSES,
+} from './types';
+
+export const EXECUTION_JOURNAL_SCHEMA_VERSION = 1;
+export const EXECUTION_JOURNAL_APPLICATION_ID = 1_263_164_492;
+
+function sqlEnum(values: readonly string[]): string {
+  return values.map((value) => `'${value}'`).join(', ');
+}
+
+const ID_CHECK = (column: string) =>
+  `length(${column}) BETWEEN 1 AND 200 AND ${column} = trim(${column})`;
+const DIGEST_CHECK = (column: string) =>
+  `length(${column}) = 64 AND ${column} NOT GLOB '*[^0-9a-f]*'`;
+
+const CREATE_EXECUTION_RUNS = `
+  CREATE TABLE execution_runs (
+    id TEXT PRIMARY KEY CHECK (${ID_CHECK('id')}),
+    conversation_id TEXT NOT NULL CHECK (${ID_CHECK('conversation_id')}),
+    thread_id TEXT NOT NULL CHECK (${ID_CHECK('thread_id')}),
+    task_id TEXT CHECK (task_id IS NULL OR (${ID_CHECK('task_id')})),
+    goal_id TEXT CHECK (goal_id IS NULL OR (${ID_CHECK('goal_id')})),
+    request_message_id TEXT NOT NULL CHECK (${ID_CHECK('request_message_id')}),
+    durability_class TEXT NOT NULL CHECK (durability_class IN (${sqlEnum(EXECUTION_DURABILITY_CLASSES)})),
+    requested_capability TEXT NOT NULL CHECK (requested_capability IN (${sqlEnum(EXECUTION_CAPABILITIES)})),
+    execution_surface TEXT NOT NULL CHECK (execution_surface IN (${sqlEnum(EXECUTION_SURFACES)})),
+    status TEXT NOT NULL CHECK (status IN (${sqlEnum(EXECUTION_RUN_STATUSES)})),
+    resume_strategy TEXT NOT NULL CHECK (resume_strategy IN (${sqlEnum(EXECUTION_RESUME_STRATEGIES)})),
+    approval_state TEXT NOT NULL CHECK (approval_state IN (${sqlEnum(EXECUTION_APPROVAL_STATES)})),
+    permission_state TEXT NOT NULL CHECK (permission_state IN (${sqlEnum(EXECUTION_APPROVAL_STATES)})),
+    input_digest TEXT NOT NULL CHECK (${DIGEST_CHECK('input_digest')}),
+    model_config_digest TEXT NOT NULL CHECK (${DIGEST_CHECK('model_config_digest')}),
+    retry_count INTEGER NOT NULL DEFAULT 0 CHECK (retry_count >= 0),
+    next_retry_policy TEXT NOT NULL CHECK (next_retry_policy IN (${sqlEnum(EXECUTION_RETRY_POLICIES)})),
+    control_epoch INTEGER NOT NULL DEFAULT 0 CHECK (control_epoch >= 0),
+    created_at INTEGER NOT NULL CHECK (created_at >= 0),
+    updated_at INTEGER NOT NULL CHECK (updated_at >= created_at),
+    terminal_at INTEGER,
+    CHECK (
+      (status IN (${sqlEnum(RETENTION_DELETABLE_RUN_STATUSES)})
+        AND terminal_at IS NOT NULL
+        AND terminal_at >= created_at
+        AND terminal_at <= updated_at)
+      OR
+      (status NOT IN (${sqlEnum(RETENTION_DELETABLE_RUN_STATUSES)}) AND terminal_at IS NULL)
+    )
+  ) STRICT
+`;
+
+const CREATE_EXECUTION_CHECKPOINTS = `
+  CREATE TABLE execution_checkpoints (
+    id TEXT PRIMARY KEY CHECK (${ID_CHECK('id')}),
+    run_id TEXT NOT NULL CHECK (${ID_CHECK('run_id')}),
+    sequence INTEGER NOT NULL CHECK (sequence >= 0),
+    task_id TEXT CHECK (task_id IS NULL OR (${ID_CHECK('task_id')})),
+    goal_id TEXT CHECK (goal_id IS NULL OR (${ID_CHECK('goal_id')})),
+    phase TEXT NOT NULL CHECK (phase IN (${sqlEnum(EXECUTION_CHECKPOINT_PHASES)})),
+    boundary TEXT NOT NULL CHECK (boundary IN (${sqlEnum(EXECUTION_CHECKPOINT_BOUNDARIES)})),
+    state_ref_id TEXT NOT NULL CHECK (${ID_CHECK('state_ref_id')}),
+    state_digest TEXT NOT NULL CHECK (${DIGEST_CHECK('state_digest')}),
+    resume_strategy TEXT NOT NULL CHECK (resume_strategy IN (${sqlEnum(EXECUTION_RESUME_STRATEGIES)})),
+    approval_state TEXT NOT NULL CHECK (approval_state IN (${sqlEnum(EXECUTION_APPROVAL_STATES)})),
+    permission_state TEXT NOT NULL CHECK (permission_state IN (${sqlEnum(EXECUTION_APPROVAL_STATES)})),
+    control_epoch INTEGER NOT NULL CHECK (control_epoch >= 0),
+    created_at INTEGER NOT NULL CHECK (created_at >= 0),
+    UNIQUE (run_id, sequence),
+    UNIQUE (run_id, id),
+    FOREIGN KEY (run_id) REFERENCES execution_runs(id) ON DELETE CASCADE
+  ) STRICT
+`;
+
+const CREATE_EXECUTION_EFFECTS = `
+  CREATE TABLE execution_effects (
+    id TEXT PRIMARY KEY CHECK (${ID_CHECK('id')}),
+    run_id TEXT NOT NULL CHECK (${ID_CHECK('run_id')}),
+    checkpoint_id TEXT,
+    tool_call_id TEXT NOT NULL CHECK (${ID_CHECK('tool_call_id')}),
+    tool_name_digest TEXT NOT NULL CHECK (${DIGEST_CHECK('tool_name_digest')}),
+    effect_class TEXT NOT NULL CHECK (effect_class IN (${sqlEnum(EXECUTION_EFFECT_CLASSES)})),
+    idempotency_class TEXT NOT NULL CHECK (idempotency_class IN (${sqlEnum(EXECUTION_IDEMPOTENCY_CLASSES)})),
+    idempotency_key_digest TEXT CHECK (idempotency_key_digest IS NULL OR (${DIGEST_CHECK('idempotency_key_digest')})),
+    request_digest TEXT NOT NULL CHECK (${DIGEST_CHECK('request_digest')}),
+    outcome_digest TEXT CHECK (outcome_digest IS NULL OR (${DIGEST_CHECK('outcome_digest')})),
+    status TEXT NOT NULL CHECK (status IN (${sqlEnum(EXECUTION_EFFECT_STATUSES)})),
+    retry_policy TEXT NOT NULL CHECK (retry_policy IN (${sqlEnum(EXECUTION_RETRY_POLICIES)})),
+    attempt INTEGER NOT NULL CHECK (attempt >= 1),
+    created_at INTEGER NOT NULL CHECK (created_at >= 0),
+    started_at INTEGER CHECK (
+      started_at IS NULL OR (started_at >= created_at AND started_at <= updated_at)
+    ),
+    completed_at INTEGER CHECK (
+      completed_at IS NULL
+      OR (started_at IS NOT NULL AND completed_at >= started_at AND completed_at <= updated_at)
+    ),
+    updated_at INTEGER NOT NULL CHECK (updated_at >= created_at),
+    CHECK (
+      (status = 'planned' AND started_at IS NULL AND completed_at IS NULL)
+      OR (status = 'started' AND started_at IS NOT NULL AND completed_at IS NULL)
+      OR (status = 'ambiguous' AND started_at IS NOT NULL)
+      OR (status IN ('applied', 'verified', 'failed', 'cancelled')
+        AND started_at IS NOT NULL AND completed_at IS NOT NULL)
+    ),
+    UNIQUE (run_id, tool_call_id, attempt),
+    UNIQUE (run_id, id),
+    FOREIGN KEY (run_id) REFERENCES execution_runs(id) ON DELETE CASCADE,
+    FOREIGN KEY (run_id, checkpoint_id)
+      REFERENCES execution_checkpoints(run_id, id) ON DELETE CASCADE
+  ) STRICT
+`;
+
+const CREATE_EXECUTION_EXTERNAL_HANDLES = `
+  CREATE TABLE execution_external_handles (
+    id TEXT PRIMARY KEY CHECK (${ID_CHECK('id')}),
+    run_id TEXT NOT NULL CHECK (${ID_CHECK('run_id')}),
+    effect_id TEXT NOT NULL CHECK (${ID_CHECK('effect_id')}),
+    handle_kind TEXT NOT NULL CHECK (handle_kind IN (${sqlEnum(EXECUTION_EXTERNAL_HANDLE_KINDS)})),
+    scope_digest TEXT NOT NULL CHECK (${DIGEST_CHECK('scope_digest')}),
+    external_id TEXT NOT NULL CHECK (${ID_CHECK('external_id')}),
+    source_tool_name_digest TEXT NOT NULL CHECK (${DIGEST_CHECK('source_tool_name_digest')}),
+    status TEXT NOT NULL CHECK (status IN (${sqlEnum(EXECUTION_EXTERNAL_HANDLE_STATUSES)})),
+    created_at INTEGER NOT NULL CHECK (created_at >= 0),
+    updated_at INTEGER NOT NULL CHECK (updated_at >= created_at),
+    last_verified_at INTEGER CHECK (
+      last_verified_at IS NULL
+      OR (last_verified_at >= created_at AND last_verified_at <= updated_at)
+    ),
+    UNIQUE (run_id, handle_kind, external_id),
+    FOREIGN KEY (run_id, effect_id)
+      REFERENCES execution_effects(run_id, id) ON DELETE CASCADE
+  ) STRICT
+`;
+
+const SCHEMA_OBJECT_SQL = new Map<string, string>([
+  ['execution_runs', CREATE_EXECUTION_RUNS],
+  ['execution_checkpoints', CREATE_EXECUTION_CHECKPOINTS],
+  ['execution_effects', CREATE_EXECUTION_EFFECTS],
+  ['execution_external_handles', CREATE_EXECUTION_EXTERNAL_HANDLES],
+  [
+    'trg_execution_runs_protect_unresolved_delete',
+    `CREATE TRIGGER trg_execution_runs_protect_unresolved_delete
+       BEFORE DELETE ON execution_runs
+       WHEN OLD.status NOT IN (${sqlEnum(RETENTION_DELETABLE_RUN_STATUSES)})
+       BEGIN
+         SELECT RAISE(ABORT, 'execution_journal_protected_run');
+       END`,
+  ],
+  [
+    'idx_execution_runs_status_updated',
+    `CREATE INDEX idx_execution_runs_status_updated
+       ON execution_runs(status, updated_at, id)`,
+  ],
+  [
+    'idx_execution_checkpoints_run_sequence',
+    `CREATE INDEX idx_execution_checkpoints_run_sequence
+       ON execution_checkpoints(run_id, sequence)`,
+  ],
+  [
+    'idx_execution_effects_run_status',
+    `CREATE INDEX idx_execution_effects_run_status
+       ON execution_effects(run_id, status, updated_at)`,
+  ],
+  [
+    'ux_execution_effects_idempotency_key',
+    `CREATE UNIQUE INDEX ux_execution_effects_idempotency_key
+       ON execution_effects(run_id, idempotency_key_digest)
+       WHERE idempotency_key_digest IS NOT NULL`,
+  ],
+  [
+    'idx_execution_external_handles_run_status',
+    `CREATE INDEX idx_execution_external_handles_run_status
+       ON execution_external_handles(run_id, status, updated_at)`,
+  ],
+]);
+
+const TABLE_NAMES = [
+  'execution_runs',
+  'execution_checkpoints',
+  'execution_effects',
+  'execution_external_handles',
+] as const;
+
+const TRIGGER_NAMES = ['trg_execution_runs_protect_unresolved_delete'] as const;
+
+function pragmaNumber(database: SQLite.SQLiteDatabase, name: string): number {
+  const row = database.getFirstSync<Record<string, unknown>>(`PRAGMA ${name}`);
+  const value = row?.[name];
+  if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
+    throw new Error(`execution_journal_invalid_pragma:${name}`);
+  }
+  return value;
+}
+
+function userTableNames(database: SQLite.SQLiteDatabase): string[] {
+  return database
+    .getAllSync<{ name: string }>(
+      `SELECT name FROM sqlite_master
+       WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+       ORDER BY name`,
+    )
+    .map((row) => row.name);
+}
+
+function normalizeSql(value: string): string {
+  return value.trim().replace(/;$/, '').replace(/\s+/g, ' ');
+}
+
+function assertExactSchema(database: SQLite.SQLiteDatabase): void {
+  const actualTables = userTableNames(database);
+  const expectedTables = [...TABLE_NAMES].sort();
+  if (JSON.stringify(actualTables) !== JSON.stringify(expectedTables)) {
+    throw new Error('execution_journal_schema_table_mismatch');
+  }
+
+  const actualObjects = database
+    .getAllSync<{ name: string; type: string }>(
+      `SELECT name, type FROM sqlite_master
+       WHERE type IN ('table', 'index', 'trigger', 'view')
+         AND name NOT LIKE 'sqlite_%'
+       ORDER BY name`,
+    )
+    .map((row) => `${row.type}:${row.name}`)
+    .sort();
+  const expectedObjects = [...SCHEMA_OBJECT_SQL.keys()]
+    .map((name) => {
+      const type = TABLE_NAMES.includes(name as (typeof TABLE_NAMES)[number])
+        ? 'table'
+        : TRIGGER_NAMES.includes(name as (typeof TRIGGER_NAMES)[number])
+          ? 'trigger'
+          : 'index';
+      return `${type}:${name}`;
+    })
+    .sort();
+  if (JSON.stringify(actualObjects) !== JSON.stringify(expectedObjects)) {
+    throw new Error('execution_journal_schema_object_set_mismatch');
+  }
+
+  for (const [name, expectedSql] of SCHEMA_OBJECT_SQL) {
+    const row = database.getFirstSync<{ sql: string | null }>(
+      `SELECT sql FROM sqlite_master
+       WHERE name = ? AND type IN ('table', 'index', 'trigger')`,
+      name,
+    );
+    if (!row?.sql || normalizeSql(row.sql) !== normalizeSql(expectedSql)) {
+      throw new Error(`execution_journal_schema_object_mismatch:${name}`);
+    }
+  }
+
+  const foreignKeysEnabled = pragmaNumber(database, 'foreign_keys');
+  if (foreignKeysEnabled !== 1) {
+    throw new Error('execution_journal_foreign_keys_disabled');
+  }
+}
+
+function createFreshSchema(database: SQLite.SQLiteDatabase): void {
+  database.execSync('BEGIN IMMEDIATE');
+  try {
+    for (const sql of SCHEMA_OBJECT_SQL.values()) {
+      database.execSync(sql);
+    }
+    database.execSync(`PRAGMA application_id = ${EXECUTION_JOURNAL_APPLICATION_ID}`);
+    database.execSync(`PRAGMA user_version = ${EXECUTION_JOURNAL_SCHEMA_VERSION}`);
+    database.execSync('COMMIT');
+  } catch (error) {
+    try {
+      database.execSync('ROLLBACK');
+    } catch {
+      // Preserve the original schema error.
+    }
+    throw error;
+  }
+}
+
+export function ensureExecutionJournalSchema(database: SQLite.SQLiteDatabase): void {
+  database.execSync('PRAGMA foreign_keys = ON');
+  database.execSync('PRAGMA busy_timeout = 5000');
+
+  const version = pragmaNumber(database, 'user_version');
+  const applicationId = pragmaNumber(database, 'application_id');
+  if (version === 0) {
+    if (applicationId !== 0 || userTableNames(database).length > 0) {
+      throw new Error('execution_journal_unversioned_schema');
+    }
+    createFreshSchema(database);
+  } else if (version !== EXECUTION_JOURNAL_SCHEMA_VERSION) {
+    throw new Error(`execution_journal_unsupported_schema_version:${version}`);
+  }
+
+  if (pragmaNumber(database, 'application_id') !== EXECUTION_JOURNAL_APPLICATION_ID) {
+    throw new Error('execution_journal_application_id_mismatch');
+  }
+  assertExactSchema(database);
+}
