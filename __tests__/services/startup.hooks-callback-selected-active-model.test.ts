@@ -17,6 +17,7 @@ const mockInitSubAgentRegistry = jest.fn().mockResolvedValue(undefined);
 const mockListActiveSubAgents = jest.fn().mockReturnValue([]);
 const mockRepairTerminalAgentRunsMissingFinalResponses = jest.fn().mockResolvedValue([]);
 const mockRecoverInterruptedForegroundModelExecutions = jest.fn().mockResolvedValue([]);
+const mockMaintainForegroundModelExecutionRetention = jest.fn();
 const mockHydrateCanvasSurfaces = jest.fn().mockResolvedValue(undefined);
 const mockEmitAppEvent = jest.fn().mockResolvedValue(undefined);
 const mockRunMemoryMigrationTick = jest.fn().mockResolvedValue(undefined);
@@ -101,6 +102,10 @@ jest.mock('../../src/services/executionJournal/durableRecoveryLifecycle', () => 
 jest.mock('../../src/services/executionJournal/foregroundModelExecutionRecovery', () => ({
   recoverInterruptedForegroundModelExecutions: (...args: any[]) =>
     mockRecoverInterruptedForegroundModelExecutions(...args),
+}));
+jest.mock('../../src/services/executionJournal/foregroundModelExecutionRetention', () => ({
+  maintainForegroundModelExecutionRetention: (...args: any[]) =>
+    mockMaintainForegroundModelExecutionRetention(...args),
 }));
 jest.mock('../../src/services/mcp/manager', () => ({
   mcpManager: {

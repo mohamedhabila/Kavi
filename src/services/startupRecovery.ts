@@ -3,6 +3,7 @@ import { useChatStore } from '../store/useChatStore';
 import { repairTerminalAgentRunsMissingFinalResponses } from './agents/agentRunRepair';
 import { initSubAgentRegistry, listActiveSubAgents } from './agents/subAgent';
 import { recoverInterruptedForegroundModelExecutions } from './executionJournal/foregroundModelExecutionRecovery';
+import { maintainForegroundModelExecutionRetention } from './executionJournal/foregroundModelExecutionRetention';
 
 async function waitForChatHydration(timeoutMs = 3000): Promise<void> {
   await waitForStoreHydration(
@@ -28,4 +29,9 @@ export async function recoverPersistedAgentState(): Promise<void> {
   await repairTerminalAgentRunsMissingFinalResponses({
     activeSubAgents,
   });
+  try {
+    maintainForegroundModelExecutionRetention({ now: Date.now() });
+  } catch (error) {
+    console.warn('[startup] foreground model journal retention failed:', error);
+  }
 }
