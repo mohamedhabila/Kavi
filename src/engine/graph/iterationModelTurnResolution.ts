@@ -70,6 +70,7 @@ export async function resolvePreparedAgentControlGraphModelTurnResult(params: {
           .filter(Boolean),
       ),
       selectedTools: params.modelTurnPreparation.preparedTurn.selectedTools,
+      allTools: params.iterationParams.allTools,
       effectiveForceTextThisTurn: params.modelTurnPreparation.effectiveForceTextThisTurn,
       recoveryDirectives: params.iterationParams.graph.getCurrentTurnDirectives(),
       toolCallHistory: params.iterationParams.toolRuntime.toolCallHistory,

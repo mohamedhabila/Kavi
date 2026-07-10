@@ -165,7 +165,7 @@ export function evaluateWorkflowContinuationHold(params: {
     !params.toolingEnabledForProvider ||
     params.selectedToolCount <= 0 ||
     params.forceTextThisTurn ||
-    params.consecutiveNoToolTurns > 1 ||
+    params.consecutiveNoToolTurns > 0 ||
     pendingToolNames.length === 0
   ) {
     return null;

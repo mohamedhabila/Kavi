@@ -113,45 +113,64 @@ function resolveEmptyToolCallRetryReason(params: {
 }
 
 function resolvePendingWorkflowContinuationToolNames(params: {
+  allTools: ReadonlyArray<ToolDefinition>;
   selectedTools: ReadonlyArray<ToolDefinition>;
   toolCallHistory?: ReadonlyArray<ToolCallRecord>;
 }): string[] {
-  const selectedToolByName = new Map(
-    params.selectedTools
-      .map((tool): [string, ToolDefinition] => [normalizeToolName(tool.name), tool])
-      .filter(([toolName]) => Boolean(toolName)),
-  );
-  if (selectedToolByName.size === 0) {
+  if (params.selectedTools.length === 0) {
     return [];
   }
 
-  const successfulToolNames = new Set<string>();
-  const observedProductions: ToolWorkflowProduction[] = [];
+  const registeredToolByName = new Map(
+    params.allTools
+      .map((tool): [string, ToolDefinition] => [normalizeToolName(tool.name), tool])
+      .filter(([toolName]) => Boolean(toolName)),
+  );
+  const unconsumedProductions: Array<{
+    producerName: string;
+    production: ToolWorkflowProduction;
+  }> = [];
+
   for (const entry of params.toolCallHistory ?? []) {
     const toolName = normalizeToolName(entry.name);
-    const tool = selectedToolByName.get(toolName);
+    const tool = registeredToolByName.get(toolName);
     if (!tool || isToolResultErrorLike(entry.result)) {
       continue;
     }
-    successfulToolNames.add(toolName);
-    for (const production of normalizeToolWorkflowContract(tool.contract).produces) {
-      observedProductions.push(production);
+
+    const contract = normalizeToolWorkflowContract(tool.contract);
+    for (let index = unconsumedProductions.length - 1; index >= 0; index -= 1) {
+      const observedProduction = unconsumedProductions[index];
+      if (
+        observedProduction &&
+        contract.consumes.some((consumption) =>
+          workflowProductionSatisfiesConsumption(observedProduction.production, consumption),
+        )
+      ) {
+        unconsumedProductions.splice(index, 1);
+      }
+    }
+
+    for (const production of contract.produces) {
+      unconsumedProductions.push({ producerName: toolName, production });
     }
   }
-  if (observedProductions.length === 0) {
+  if (unconsumedProductions.length === 0) {
     return [];
   }
 
   const pendingToolNames: string[] = [];
   for (const tool of params.selectedTools) {
     const toolName = normalizeToolName(tool.name);
-    if (!toolName || successfulToolNames.has(toolName)) {
+    if (!toolName) {
       continue;
     }
     const consumesObservedResource = normalizeToolWorkflowContract(tool.contract).consumes.some(
       (consumption) =>
-        observedProductions.some((production) =>
-          workflowProductionSatisfiesConsumption(production, consumption),
+        unconsumedProductions.some(
+          ({ producerName, production }) =>
+            producerName !== toolName &&
+            workflowProductionSatisfiesConsumption(production, consumption),
         ),
     );
     if (consumesObservedResource) {
@@ -187,6 +206,7 @@ export async function resolveAgentControlGraphNoToolTurn(params: {
   selectedToolCount: number;
   selectedToolNames: ReadonlySet<string>;
   selectedTools: ReadonlyArray<ToolDefinition>;
+  allTools: ReadonlyArray<ToolDefinition>;
   effectiveForceTextThisTurn: boolean;
   recoveryDirectives: AgentControlTurnDirectives;
   toolCallHistory?: ReadonlyArray<ToolCallRecord>;
@@ -280,6 +300,7 @@ export async function resolveAgentControlGraphNoToolTurn(params: {
       recoveryDirectives: params.recoveryDirectives,
       toolCallHistory: params.toolCallHistory,
       pendingWorkflowContinuationToolNames: resolvePendingWorkflowContinuationToolNames({
+        allTools: params.allTools,
         selectedTools: params.selectedTools,
         toolCallHistory: params.toolCallHistory,
       }),

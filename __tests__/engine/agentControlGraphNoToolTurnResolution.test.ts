@@ -67,6 +67,7 @@ function buildBaseParams() {
     selectedToolCount: tools.length,
     selectedToolNames: new Set(tools.map((tool) => tool.name)),
     selectedTools: tools,
+    allTools: tools,
     effectiveForceTextThisTurn: false,
     recoveryDirectives: baseTurnDirectives,
     nextFinalizationMaxTokens: 4096,
@@ -450,6 +451,7 @@ describe('agent control graph no-tool turn resolution', () => {
       },
     ];
     const params = buildBaseParams();
+    params.allTools = workflowTools;
     params.selectedTools = workflowTools;
     params.selectedToolNames = new Set(workflowTools.map((tool) => tool.name));
     params.selectedToolCount = workflowTools.length;

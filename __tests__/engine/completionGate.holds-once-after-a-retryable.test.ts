@@ -231,10 +231,10 @@ describe('completionGate', () => {
     expect(prompt).toContain('downstream workflow tools');
     expect(prompt).toContain('calendar_update_event');
   });
-  it('bounds workflow continuation after the second no-tool recovery pass', () => {
+  it('bounds workflow continuation to one no-tool recovery pass', () => {
     const decision = evaluateCompletionGate({
       ...buildBaseParams(),
-      consecutivePendingAsyncNoToolTurns: 2,
+      consecutivePendingAsyncNoToolTurns: 1,
       goals: [],
       selectedToolNames: new Set(['calendar_create_event', 'calendar_update_event']),
       pendingWorkflowContinuationToolNames: ['calendar_update_event'],
