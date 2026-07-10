@@ -40,10 +40,11 @@ export function createMessageStoreActions(
       set((state) => ({
         conversations: state.conversations.map((c) => {
           if (c.id !== conversationId) return c;
+          const timestamp = message.timestamp ?? Date.now();
           const newMessage: Message = {
             ...message,
             id: message.id || generateId(),
-            timestamp: Date.now(),
+            timestamp,
           };
           const shouldAutoTitle =
             message.role === 'user' && !!message.content?.trim() && isPlaceholderTitle(c.title);
@@ -51,7 +52,7 @@ export function createMessageStoreActions(
             ...c,
             title: shouldAutoTitle ? generateConversationTitle(message.content) : c.title,
             messages: capMessages([...c.messages, newMessage]),
-            updatedAt: Date.now(),
+            updatedAt: timestamp,
           };
         }),
       }));

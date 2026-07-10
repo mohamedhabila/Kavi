@@ -59,6 +59,20 @@ describe('useChatStore', () => {
       expect(conv.messages[0].id).toBe('custom-id');
     });
 
+    it('preserves an explicit source timestamp for replay and import', () => {
+      const convId = useChatStore.getState().createConversation('p1', 's');
+      useChatStore.getState().addMessage(convId, {
+        id: 'historical-message',
+        role: 'user',
+        content: 'Historical turn',
+        timestamp: 123_456,
+      });
+
+      const conv = useChatStore.getState().conversations.find((c) => c.id === convId)!;
+      expect(conv.messages[0].timestamp).toBe(123_456);
+      expect(conv.updatedAt).toBe(123_456);
+    });
+
     it('should not modify other conversations', () => {
       const convId1 = useChatStore.getState().createConversation('p1', 's');
       const convId2 = useChatStore.getState().createConversation('p2', 's');

@@ -64,7 +64,7 @@ export interface ChatState {
   updateModeInConversation: (conversationId: string, mode: ConversationMode) => void;
   addMessage: (
     conversationId: string,
-    message: Omit<Message, 'timestamp' | 'id'> & { id?: string },
+    message: Omit<Message, 'timestamp' | 'id'> & { id?: string; timestamp?: number },
   ) => void;
   applyConversationCompaction: (conversationId: string, messages: Message[]) => void;
   updateMessage: (conversationId: string, messageId: string, content: string) => void;
