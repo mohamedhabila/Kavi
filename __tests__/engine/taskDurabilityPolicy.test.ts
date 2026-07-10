@@ -64,6 +64,34 @@ describe('task durability policy', () => {
     });
   });
 
+  it('qualifies the exact GitHub run created by an Expo action tool', () => {
+    expect(
+      classifyCurrentToolTaskDurability({
+        toolName: 'expo_eas_build',
+        externalHandle: {
+          version: 1,
+          kind: 'github_workflow_run',
+          sourceToolName: 'expo_eas_build',
+          repository: 'OpenAI/Kavi-Mobile',
+          workflowRunId: 123456789,
+          credentialRef: 'PROJECT_GITHUB_TOKEN',
+        },
+      }),
+    ).toEqual({
+      taskClass: 'external_durable_operation',
+      localExecution: 'process_bound',
+      recovery: 'reconcile_external_handle',
+      externalHandle: {
+        version: 1,
+        kind: 'github_workflow_run',
+        sourceToolName: 'expo_eas_build',
+        repository: 'openai/kavi-mobile',
+        workflowRunId: '123456789',
+        credentialRef: 'PROJECT_GITHUB_TOKEN',
+      },
+    });
+  });
+
   it.each([
     [
       'missing handle version',

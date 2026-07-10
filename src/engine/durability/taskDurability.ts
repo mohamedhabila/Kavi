@@ -84,7 +84,10 @@ export function qualifyExternalDurableHandle(candidate: unknown): ExternalDurabl
   }
 
   if (locator.kind === 'github_workflow_run') {
-    if (!GITHUB_WORKFLOW_HANDLE_SOURCES.has(sourceToolName)) {
+    if (
+      !EXPO_WORKFLOW_HANDLE_SOURCES.has(sourceToolName) &&
+      !GITHUB_WORKFLOW_HANDLE_SOURCES.has(sourceToolName)
+    ) {
       return null;
     }
     return { ...locator, sourceToolName };
