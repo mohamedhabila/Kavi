@@ -84,7 +84,8 @@ function whereSql(filter: FactFilter): string {
 }
 
 function clampLimit(value: number | undefined, fallback: number, max: number): number {
-  return Math.max(1, Math.min(value ?? fallback, max));
+  const requested = value === undefined || !Number.isFinite(value) ? fallback : Math.floor(value);
+  return Math.max(1, Math.min(requested, max));
 }
 
 export function listFacts(options: ListFactsOptions = {}): MemoryFact[] {

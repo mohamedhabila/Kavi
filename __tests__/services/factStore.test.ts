@@ -11,6 +11,7 @@ import { closeMemoryDb, getMemoryDb } from '../../src/services/memory/sqlite-sto
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import {
   findEntityByName,
+  getEntitiesByIds,
   getEntityById,
   softDeleteEntity,
   upsertEntity,
@@ -92,6 +93,27 @@ describe('upsertEntity', () => {
     expect(findEntityByName('Bob', 'person')).toBeNull();
     // but findable by id
     expect(getEntityById(e.id)?.deletedAt).not.toBeNull();
+  });
+
+  it('resolves every requested current entity across bounded SQL batches', () => {
+    const entities = Array.from({ length: 520 }, (_, index) =>
+      upsertEntity({ name: `batch entity ${index}`, type: 'thing' }),
+    );
+
+    const resolved = getEntitiesByIds([
+      ...entities.map((entity) => entity.id).reverse(),
+      entities[0].id,
+      ' ',
+      'missing-entity',
+    ]);
+
+    expect(resolved).toHaveLength(entities.length);
+    expect(new Set(resolved.map((entity) => entity.id))).toEqual(
+      new Set(entities.map((entity) => entity.id)),
+    );
+    expect(resolved.map((entity) => entity.id)).toEqual(
+      [...resolved.map((entity) => entity.id)].sort(),
+    );
   });
 });
 
@@ -392,6 +414,35 @@ describe('recordFact', () => {
       semantic_fact: 1,
       agent_run: 1,
     });
+  });
+});
+
+describe('listFacts limit normalization', () => {
+  beforeEach(() => {
+    const userId = upsertEntity({ name: 'limit-test-user', type: 'self' }).id;
+    for (let index = 0; index < 4; index += 1) {
+      recordFact({
+        subjectId: userId,
+        predicate: `limit_${index}`,
+        objectText: `value ${index}`,
+        supersedePrior: false,
+      });
+    }
+  });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    'uses the default for non-finite limit %s',
+    (limit) => {
+      expect(listFacts({ limit })).toHaveLength(4);
+    },
+  );
+
+  it.each([
+    [0, 1],
+    [-5, 1],
+    [2.9, 2],
+  ])('clamps finite limit %s to %s', (limit, expected) => {
+    expect(listFacts({ limit })).toHaveLength(expected);
   });
 });
 

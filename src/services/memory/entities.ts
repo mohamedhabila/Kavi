@@ -187,6 +187,33 @@ export function getEntityById(id: string): MemoryEntity | null {
   return row ? rowToEntity(row) : null;
 }
 
+export function getEntitiesByIds(ids: ReadonlyArray<string>): MemoryEntity[] {
+  ensureFactSchema();
+  const uniqueIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean))).sort((a, b) =>
+    a < b ? -1 : a > b ? 1 : 0,
+  );
+  if (uniqueIds.length === 0) return [];
+
+  const db = getMemoryDb();
+  const entities: MemoryEntity[] = [];
+  const batchSize = 200;
+  for (let offset = 0; offset < uniqueIds.length; offset += batchSize) {
+    const batch = uniqueIds.slice(offset, offset + batchSize);
+    entities.push(
+      ...db
+        .getAllSync<EntityRow>(
+          `SELECT * FROM memory_entities
+        WHERE id IN (${batch.map(() => '?').join(', ')})
+          AND deleted_at IS NULL
+        ORDER BY id ASC`,
+          ...batch,
+        )
+        .map(rowToEntity),
+    );
+  }
+  return entities;
+}
+
 export function findEntityByName(name: string, type?: EntityType): MemoryEntity | null {
   ensureFactSchema();
   const canonical = normalizeName(name);
