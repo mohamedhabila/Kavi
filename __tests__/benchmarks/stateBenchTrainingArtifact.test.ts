@@ -113,6 +113,23 @@ describe('STATE-Bench training-only artifact', () => {
     expect(() => buildStateBenchLearningArtifact({ filesByDomain: fixtureFiles() })).toThrow(
       'state_bench_travel_official_train_count_invalid',
     );
+
+    const wrongOfficialFiles = fixtureFiles();
+    for (const domain of STATE_BENCH_DOMAINS) {
+      wrongOfficialFiles[domain] = Array.from({ length: 100 }, (_, index) => ({
+        name: `${index + 1}-${domain}.json`,
+        content: trajectory(
+          domain === 'travel'
+            ? ['get_booking', 'cancel_booking']
+            : domain === 'customer_support'
+              ? ['get_order', 'create_return']
+              : ['search_products', 'add_to_cart'],
+        ),
+      }));
+    }
+    expect(() => buildStateBenchLearningArtifact({ filesByDomain: wrongOfficialFiles })).toThrow(
+      'state_bench_travel_official_train_digest_invalid',
+    );
   });
 
   it('records failed trajectories as direct negative evidence instead of success', () => {

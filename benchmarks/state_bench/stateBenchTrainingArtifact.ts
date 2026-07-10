@@ -13,6 +13,12 @@ export const STATE_BENCH_DOMAINS = ['travel', 'customer_support', 'shopping_assi
 
 export type StateBenchDomain = (typeof STATE_BENCH_DOMAINS)[number];
 
+export const STATE_BENCH_TRAIN_SHA256: Readonly<Record<StateBenchDomain, string>> = {
+  travel: '915dbae9f879ab937ef6a3de029fdf2c7c587b1fd1050ff92d6635a85f8c7d43',
+  customer_support: '3a623cdda6f703263c3ae7ba800f3af6c913cfc8e47e6a1545ae525f9af4fb1c',
+  shopping_assistant: '0d7ec7a35aeb5bf9e641efad56536fa2439b6d58d40e56c1c285e12831fdf50a',
+};
+
 export interface StateBenchTrainingFile {
   name: string;
   content: string;
@@ -120,7 +126,11 @@ function observedToolCalls(conversation: ReadonlyArray<unknown>): ObservedToolCa
 
 function trajectorySucceeded(conversation: ReadonlyArray<unknown>): boolean {
   const last = asObject(conversation[conversation.length - 1]);
-  return last?.role === 'user' && last.content === '[TASK_DONE]';
+  return (
+    last?.role === 'user' &&
+    typeof last.content === 'string' &&
+    /\[TASK_DONE\]\s*$/u.test(last.content)
+  );
 }
 
 function observationIdentity(input: {
@@ -165,8 +175,10 @@ function trajectoryObservations(input: {
     domainId: input.domain,
     environmentId: `state-bench-${STATE_BENCH_ADAPTER_RELEASE}`,
     outcome: succeeded ? ('success' as const) : ('failure' as const),
-    authority: succeeded ? ('verified' as const) : ('tool_observed' as const),
-    confidence: succeeded ? 0.9 : 0.82,
+    // Released train trajectories are direct tool evidence, but they are not
+    // official held-out judge verdicts and must not be upgraded to verified.
+    authority: 'tool_observed' as const,
+    confidence: succeeded ? 0.82 : 0.72,
     observedAt: input.fileOrdinal,
   };
   const byIdentity = new Map<string, ExperienceProcedureObservation>();
@@ -250,7 +262,11 @@ export function buildStateBenchLearningArtifact(input: {
       left.name.localeCompare(right.name),
     );
     validateFiles(domain, files, input.allowPartial === true);
-    domainSources.push({ domain, fileCount: files.length, sha256: domainDigest(files) });
+    const sha256 = domainDigest(files);
+    if (!input.allowPartial && sha256 !== STATE_BENCH_TRAIN_SHA256[domain]) {
+      throw new Error(`state_bench_${domain}_official_train_digest_invalid`);
+    }
+    domainSources.push({ domain, fileCount: files.length, sha256 });
     for (const file of files) {
       const conversation = parseConversation(file.content);
       const calls = observedToolCalls(conversation);
