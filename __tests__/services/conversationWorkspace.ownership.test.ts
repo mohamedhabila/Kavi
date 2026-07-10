@@ -48,4 +48,28 @@ describe('conversation workspace ownership', () => {
       workspaceReadFallbackConversationId: 'sub-child',
     });
   });
+
+  it('rejects malformed ownership identities instead of normalizing them across workspaces', () => {
+    expect(() => resolveConversationWorkspaceTarget({ conversationId: ' conv-root' })).toThrow(
+      'conversation_workspace_id_invalid',
+    );
+    expect(() =>
+      resolveConversationWorkspaceTarget({
+        conversationId: 'conv-side',
+        conversations: [
+          {
+            id: 'conv-side',
+            isSideThread: true,
+            parentConversationId: ' conv-private',
+          } as any,
+        ],
+      }),
+    ).toThrow('conversation_workspace_parent_id_invalid');
+    expect(() =>
+      resolveConversationWorkspaceTarget({
+        conversationId: 'sub-child',
+        subAgents: [{ sessionId: ' sub-child', parentConversationId: 'conv-private' } as any],
+      }),
+    ).toThrow('conversation_workspace_session_id_invalid');
+  });
 });

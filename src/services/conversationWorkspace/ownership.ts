@@ -1,12 +1,13 @@
 import type { Conversation } from '../../types/conversation';
 import type { SubAgentSnapshot } from '../../types/subAgent';
+import { requireExactDurableScopeId } from '../../utils/durableScopeIdentity';
 
 type ConversationOwnershipLink = Pick<Conversation, 'id' | 'parentConversationId' | 'isSideThread'>;
 type SubAgentOwnershipLink = Pick<SubAgentSnapshot, 'sessionId' | 'parentConversationId'>;
 
-function normalizeId(value: string | undefined | null): string | undefined {
-  const trimmed = typeof value === 'string' ? value.trim() : '';
-  return trimmed || undefined;
+function optionalExactId(value: string | undefined | null, code: string): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  return requireExactDurableScopeId(value, code);
 }
 
 export type ConversationWorkspaceTarget = {
@@ -19,26 +20,22 @@ export function resolveConversationWorkspaceTarget(params: {
   conversations?: ReadonlyArray<ConversationOwnershipLink>;
   subAgents?: ReadonlyArray<SubAgentOwnershipLink>;
 }): ConversationWorkspaceTarget {
-  const initialConversationId = normalizeId(params.conversationId);
-  if (!initialConversationId) {
-    throw new Error('conversationId is required');
-  }
+  const initialConversationId = requireExactDurableScopeId(
+    params.conversationId,
+    'conversation_workspace_id_invalid',
+  );
 
   const conversationsById = new Map(
-    (params.conversations ?? [])
-      .map((conversation) => {
-        const id = normalizeId(conversation.id);
-        return id ? [id, conversation] : null;
-      })
-      .filter((entry): entry is [string, ConversationOwnershipLink] => entry !== null),
+    (params.conversations ?? []).map((conversation): [string, ConversationOwnershipLink] => [
+      requireExactDurableScopeId(conversation.id, 'conversation_workspace_link_id_invalid'),
+      conversation,
+    ]),
   );
   const subAgentsBySessionId = new Map(
-    (params.subAgents ?? [])
-      .map((subAgent) => {
-        const sessionId = normalizeId(subAgent.sessionId);
-        return sessionId ? [sessionId, subAgent] : null;
-      })
-      .filter((entry): entry is [string, SubAgentOwnershipLink] => entry !== null),
+    (params.subAgents ?? []).map((subAgent): [string, SubAgentOwnershipLink] => [
+      requireExactDurableScopeId(subAgent.sessionId, 'conversation_workspace_session_id_invalid'),
+      subAgent,
+    ]),
   );
 
   const visitedIds = new Set<string>();
@@ -47,8 +44,9 @@ export function resolveConversationWorkspaceTarget(params: {
   while (!visitedIds.has(workspaceConversationId)) {
     visitedIds.add(workspaceConversationId);
 
-    const subAgentParentConversationId = normalizeId(
+    const subAgentParentConversationId = optionalExactId(
       subAgentsBySessionId.get(workspaceConversationId)?.parentConversationId,
+      'conversation_workspace_parent_id_invalid',
     );
     if (subAgentParentConversationId) {
       workspaceConversationId = subAgentParentConversationId;
@@ -57,7 +55,10 @@ export function resolveConversationWorkspaceTarget(params: {
 
     const conversation = conversationsById.get(workspaceConversationId);
     const sideThreadParentConversationId = conversation?.isSideThread
-      ? normalizeId(conversation.parentConversationId)
+      ? optionalExactId(
+          conversation.parentConversationId,
+          'conversation_workspace_parent_id_invalid',
+        )
       : undefined;
     if (sideThreadParentConversationId) {
       workspaceConversationId = sideThreadParentConversationId;
