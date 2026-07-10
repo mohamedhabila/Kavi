@@ -1,4 +1,5 @@
 import type { ExecutionRecoveryCoordinatorOutcome } from './recoveryCoordinatorTypes';
+import { coordinateExactRecoveryAttempt } from './exactRecoveryAttempt';
 import { coordinatePersistedExecutionRecovery } from './productionRecovery';
 import {
   blockAndroidDurableExecution,
@@ -86,9 +87,7 @@ function validInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0;
 }
 
-export function decodeAndroidDurableHeadlessPayload(
-  value: unknown,
-): AndroidDurableHeadlessPayload {
+export function decodeAndroidDurableHeadlessPayload(value: unknown): AndroidDurableHeadlessPayload {
   if (
     !isRecord(value) ||
     !hasExactKeys(value, [
@@ -158,32 +157,6 @@ function exactNativeRecord(
   );
 }
 
-function exactCoordinatorOutcome(
-  payload: AndroidDurableHeadlessPayload,
-  outcome: Extract<ExecutionRecoveryCoordinatorOutcome, { kind: 'completed' | 'pending' }>,
-): boolean {
-  return (
-    outcome.runId === payload.runId &&
-    outcome.controlEpoch === payload.controlEpoch &&
-    outcome.snapshotDigest === payload.snapshotDigest &&
-    outcome.commandKind === payload.commandKind &&
-    outcome.commandDigest === payload.commandDigest
-  );
-}
-
-function coordinatorPointerConflicts(
-  payload: AndroidDurableHeadlessPayload,
-  outcome: ExecutionRecoveryCoordinatorOutcome,
-): boolean {
-  return (
-    (outcome.runId !== null && outcome.runId !== payload.runId) ||
-    (outcome.controlEpoch !== null && outcome.controlEpoch !== payload.controlEpoch) ||
-    (outcome.snapshotDigest !== null && outcome.snapshotDigest !== payload.snapshotDigest) ||
-    (outcome.commandKind !== null && outcome.commandKind !== payload.commandKind) ||
-    (outcome.commandDigest !== null && outcome.commandDigest !== payload.commandDigest)
-  );
-}
-
 function retryBackoffMillis(record: AndroidDurableExecutionRecord): number {
   let backoff = record.request.retryPolicy.initialBackoffMillis;
   for (let completedAttempts = 1; completedAttempts < record.attempt; completedAttempts += 1) {
@@ -216,30 +189,8 @@ async function reportTransientRetry(
   const minimumRetryAt = safeAdd(updatedAt, retryBackoffMillis(record));
   const nextAttemptAt = Math.max(requestedRetryAt ?? minimumRetryAt, minimumRetryAt);
   requireAcceptedReport(
-    await dependencies.retry(
-      attemptPointer(payload),
-      nextAttemptAt,
-      reason,
-      updatedAt,
-    ),
+    await dependencies.retry(attemptPointer(payload), nextAttemptAt, reason, updatedAt),
   );
-}
-
-function blockReason(
-  outcome: Extract<ExecutionRecoveryCoordinatorOutcome, { kind: 'blocked' }>,
-): 'generation_changed' | 'authority_changed' | 'handler_rejected' | 'handler_failed' {
-  if (
-    outcome.reason === 'revalidation_mismatch' ||
-    outcome.reason === 'control_epoch_changed' ||
-    outcome.sourceReason === 'generation_mismatch'
-  ) {
-    return 'generation_changed';
-  }
-  if (outcome.reason === 'invalid_authority' || outcome.reason === 'authority_revoked') {
-    return 'authority_changed';
-  }
-  if (outcome.reason === 'handler_failed') return 'handler_failed';
-  return 'handler_rejected';
 }
 
 export async function runAndroidDurableRecoveryHeadlessTask(
@@ -256,79 +207,31 @@ export async function runAndroidDurableRecoveryHeadlessTask(
     return;
   }
 
-  let outcome: ExecutionRecoveryCoordinatorOutcome;
-  try {
-    outcome = await dependencies.coordinate({
-      runId: payload.runId,
-      expectedGeneration: {
-        controlEpoch: payload.controlEpoch,
-        updatedAt: payload.snapshotUpdatedAtMillis,
-        snapshotDigest: payload.snapshotDigest,
-      },
-    });
-  } catch {
-    await reportTransientRetry(payload, record, dependencies);
-    return;
-  }
-
-  if (coordinatorPointerConflicts(payload, outcome)) {
-    requireAcceptedReport(
-      await dependencies.block(
-        attemptPointer(payload),
-        'generation_changed',
-        dependencies.now(),
-      ),
-    );
-    return;
-  }
-
-  if (outcome.kind === 'completed') {
-    if (!exactCoordinatorOutcome(payload, outcome)) {
-      throw new Error('android-durable-coordinator-generation-mismatch');
-    }
-    requireAcceptedReport(
-      await dependencies.complete(attemptPointer(payload), outcome.receiptDigest, dependencies.now()),
-    );
-    return;
-  }
-
-  if (outcome.kind === 'pending') {
-    if (!exactCoordinatorOutcome(payload, outcome)) {
-      throw new Error('android-durable-coordinator-generation-mismatch');
-    }
+  const decision = await coordinateExactRecoveryAttempt(payload, {
+    coordinate: dependencies.coordinate,
+  });
+  if (decision.kind === 'complete') {
     requireAcceptedReport(
       await dependencies.complete(
         attemptPointer(payload),
-        outcome.receiptDigest,
+        decision.receiptDigest,
         dependencies.now(),
       ),
     );
     return;
   }
-
-  if (outcome.kind === 'deferred') {
-    if (outcome.reason === 'generation_changed') {
-      requireAcceptedReport(
-        await dependencies.block(
-          attemptPointer(payload),
-          'generation_changed',
-          dependencies.now(),
-        ),
-      );
-      return;
-    }
+  if (decision.kind === 'retry') {
     await reportTransientRetry(payload, record, dependencies);
     return;
   }
-
-  if (outcome.reason === 'cancelled') {
+  if (decision.kind === 'cancel') {
     requireAcceptedReport(
       await dependencies.cancel(generationPointer(payload), dependencies.now()),
     );
     return;
   }
   requireAcceptedReport(
-    await dependencies.block(attemptPointer(payload), blockReason(outcome), dependencies.now()),
+    await dependencies.block(attemptPointer(payload), decision.reason, dependencies.now()),
   );
 }
 
