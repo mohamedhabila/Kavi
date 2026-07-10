@@ -31,6 +31,21 @@ const DEFAULT_DEPENDENCIES: RecoveryCancellationDependencies = {
   },
 };
 
+export function abortPersistedExecutionRecoveryOwner(runId: string, reason?: unknown): boolean {
+  if (!validId(runId)) return false;
+  try {
+    const run = readRun(getExecutionJournalDb(), runId);
+    cancelAgentRunOperations(
+      run.conversationId,
+      run.taskId ?? run.id,
+      reason ?? 'Durable recovery was cancelled.',
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function validId(value: unknown): value is string {
   return (
     typeof value === 'string' &&
