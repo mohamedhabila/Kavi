@@ -87,6 +87,7 @@ describe('builtin-executor wrapper coverage', () => {
     expect(build).toEqual(
       expect.objectContaining({
         status: 'ok',
+        projectId: 'expo-1',
         jobId: 'job-build',
         preferredFlow: 'commit-driven-eas-workflow',
       }),

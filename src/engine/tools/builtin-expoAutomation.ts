@@ -21,12 +21,14 @@ export function withExpoAutomation<T extends object>(
   projectId: string,
   payload: T,
 ): T & {
+  projectId: string;
   preferredFlow: ReturnType<typeof getExpoAutomationSummary>['preferredFlow'];
   automation: ReturnType<typeof getExpoAutomationSummary>;
 } {
   const { automation } = getExpoProjectAutomationContext(projectId);
   return {
     ...payload,
+    projectId,
     preferredFlow: automation.preferredFlow,
     automation,
   };
