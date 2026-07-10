@@ -221,6 +221,80 @@ describe('ingestion queue scheduling and job context', () => {
     expect(jest.getTimerCount()).toBe(0);
   });
 
+  it('keeps the newest source loader when an older drain completes later', async () => {
+    let releaseFirstAttempt: (() => void) | undefined;
+    let markFirstAttemptStarted: (() => void) | undefined;
+    const firstAttemptHeld = new Promise<void>((resolve) => {
+      releaseFirstAttempt = resolve;
+    });
+    const firstAttemptStarted = new Promise<void>((resolve) => {
+      markFirstAttemptStarted = resolve;
+    });
+    mockedProcessIngestionTurn.mockImplementationOnce(async () => {
+      markFirstAttemptStarted?.();
+      await firstAttemptHeld;
+      return processResult({ status: 'not_requested' });
+    });
+    const firstJob = enqueueIngestionJob({
+      personaId: 'default',
+      threadId: 'conv-runtime-a',
+      threadTitle: null,
+      memoryConversationId: 'conv-runtime-a',
+      taskId: null,
+      sourceStartMessageId: 'user-runtime-a',
+      sourceEndMessageId: 'assistant-runtime-a',
+      sourceRunId: null,
+      sourceAt: 100,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
+      now: 100,
+    })!;
+
+    scheduleIngestionDrain({
+      loadMessagesForThread: (threadId) =>
+        threadId === firstJob.threadId ? closedTurn('runtime-a') : [],
+    });
+    jest.runAllTicks();
+    await firstAttemptStarted;
+
+    jest.setSystemTime(101);
+    const secondJob = enqueueIngestionJob({
+      personaId: 'default',
+      threadId: 'conv-runtime-b',
+      threadTitle: null,
+      memoryConversationId: 'conv-runtime-b',
+      taskId: null,
+      sourceStartMessageId: 'user-runtime-b',
+      sourceEndMessageId: 'assistant-runtime-b',
+      sourceRunId: null,
+      sourceAt: 101,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
+      now: 101,
+    })!;
+    scheduleIngestionDrain({
+      loadMessagesForThread: (threadId) =>
+        threadId === secondJob.threadId ? closedTurn('runtime-b') : [],
+    });
+
+    releaseFirstAttempt?.();
+    await flushScheduledIngestion();
+
+    expect(getIngestionJob(firstJob.id)?.status).toBe('completed_structural');
+    expect(getIngestionJob(secondJob.id)).toEqual(
+      expect.objectContaining({
+        status: 'completed_structural',
+        attemptCount: 1,
+        outcomeCode: null,
+      }),
+    );
+    expect(mockedProcessIngestionTurn).toHaveBeenCalledTimes(2);
+  });
+
   it('backs off unavailable sources so healthy work behind the batch can run', async () => {
     const missingJobs = [];
     for (let index = 0; index < 3; index += 1) {

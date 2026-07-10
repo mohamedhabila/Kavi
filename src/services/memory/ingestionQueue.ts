@@ -536,6 +536,7 @@ export async function drainIngestionQueue(
 export type ScheduledIngestionDrainInput = Omit<DrainIngestionQueueInput, 'now'>;
 
 let scheduledRuntime: ScheduledIngestionDrainInput | null = null;
+let scheduledRuntimeGeneration = 0;
 let drainMicrotaskScheduled = false;
 let drainRunning = false;
 let drainRequested = false;
@@ -561,11 +562,18 @@ function scheduleRetryWake(delayMs: number): void {
   unrefTimerIfSupported(retryWakeTimer);
 }
 
-function scheduleNextDrain(
-  runtime: ScheduledIngestionDrainInput,
-  result: DrainIngestionQueueResult,
-): void {
+function installScheduledRuntime(input: ScheduledIngestionDrainInput): number {
+  scheduledRuntime = input;
+  scheduledRuntimeGeneration += 1;
+  return scheduledRuntimeGeneration;
+}
+
+function scheduleNextDrain(result: DrainIngestionQueueResult, runtimeGeneration: number): void {
   if (!canWriteLongTermMemory() || scheduledRuntime === null) return;
+  if (runtimeGeneration !== scheduledRuntimeGeneration) {
+    requestScheduledIngestionDrain();
+    return;
+  }
   const nextAttemptAt = getNextPendingIngestionAttemptAt();
   if (nextAttemptAt === null) return;
   const now = Date.now();
@@ -576,7 +584,7 @@ function scheduleNextDrain(
 
   const madeProgress = result.completed + result.retrying + result.degraded + result.failed > 0;
   if (madeProgress) {
-    scheduleIngestionDrain(runtime);
+    requestScheduledIngestionDrain();
   } else if (result.resourceDeferred > 0) {
     scheduleRetryWake(INGESTION_RETRY_BASE_DELAY_MS);
   }
@@ -585,9 +593,9 @@ function scheduleNextDrain(
 export async function drainIngestionQueueWithWakeup(
   input: ScheduledIngestionDrainInput,
 ): Promise<DrainIngestionQueueResult> {
-  scheduledRuntime = input;
+  const runtimeGeneration = installScheduledRuntime(input);
   const result = await drainIngestionQueue(input);
-  scheduleNextDrain(input, result);
+  scheduleNextDrain(result, runtimeGeneration);
   return result;
 }
 
@@ -615,18 +623,17 @@ async function runScheduledDrain(): Promise<void> {
 
 export function scheduleIngestionDrain(input: ScheduledIngestionDrainInput): void {
   if (!canWriteLongTermMemory()) return;
-  scheduledRuntime = input;
-  drainRequested = true;
-  clearRetryWakeTimer();
-  if (drainRunning || drainMicrotaskScheduled) return;
-  drainMicrotaskScheduled = true;
-  queueMicrotask(() => void runScheduledDrain());
+  installScheduledRuntime(input);
+  requestScheduledIngestionDrain();
 }
 
 export function requestScheduledIngestionDrain(): boolean {
-  const runtime = scheduledRuntime;
-  if (!runtime || !canWriteLongTermMemory()) return false;
-  scheduleIngestionDrain(runtime);
+  if (!scheduledRuntime || !canWriteLongTermMemory()) return false;
+  drainRequested = true;
+  clearRetryWakeTimer();
+  if (drainRunning || drainMicrotaskScheduled) return true;
+  drainMicrotaskScheduled = true;
+  queueMicrotask(() => void runScheduledDrain());
   return true;
 }
 
@@ -644,5 +651,6 @@ registerMemoryOptOutHandler(() => {
 
 export function __resetIngestionQueueForTests(): void {
   cancelScheduledIngestionDrain();
+  scheduledRuntimeGeneration = 0;
   drainRunning = false;
 }
