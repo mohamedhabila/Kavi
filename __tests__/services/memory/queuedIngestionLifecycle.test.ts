@@ -69,7 +69,16 @@ it('consolidates each queued turn from its recorded source window', async () => 
 
   const result = await drainIngestionQueue({ loadMessagesForThread: () => transcript });
 
-  expect(result).toEqual({ attempted: 2, completed: 2, deferred: 0, failed: 0 });
+  expect(result).toEqual({
+    attempted: 2,
+    completed: 2,
+    completedStructural: 2,
+    completedEnriched: 0,
+    retrying: 0,
+    degraded: 0,
+    deferred: 0,
+    failed: 0,
+  });
   expect(
     listEpisodes({ threadId }).map((episode) => ({
       messageIds: episode.messageIds,

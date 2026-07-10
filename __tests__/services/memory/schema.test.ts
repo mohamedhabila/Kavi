@@ -133,6 +133,111 @@ describe('ensureFactSchema', () => {
     expect(columnNames('memory_ingestion_jobs')).toContain('provider_enrichment');
   });
 
+  it('migrates ingestion jobs to bounded durable states without retaining raw errors', () => {
+    ensureFactSchema();
+    const freshIndexes = indexNames('memory_ingestion_jobs').sort();
+
+    closeMemoryDb();
+    expoSqlite.__resetExpoSqliteForTests();
+    resetFactSchemaCacheForTests();
+    getMemoryDb().execSync(`
+      CREATE TABLE memory_ingestion_jobs (
+        id TEXT PRIMARY KEY,
+        thread_id TEXT NOT NULL,
+        memory_conversation_id TEXT,
+        task_id TEXT,
+        source_start_message_id TEXT,
+        source_end_message_id TEXT NOT NULL,
+        reason TEXT NOT NULL DEFAULT 'turn_completed',
+        status TEXT NOT NULL DEFAULT 'pending',
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        provider_enrichment INTEGER NOT NULL DEFAULT 1,
+        error TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        completed_at INTEGER
+      );
+      INSERT INTO memory_ingestion_jobs VALUES
+        ('pending-job', 'thread-1', NULL, NULL, 'u-1', 'a-1', 'turn_completed',
+         'pending', 0, 1, 'raw provider response', 1, 2, NULL),
+        ('stale-job', 'thread-2', 'memory-2', NULL, 'u-2', 'a-2', 'turn_completed',
+         'processing', 2, 1, 'secret exception text', 3, 4, NULL),
+        ('completed-job', 'thread-3', 'memory-3', NULL, 'u-3', 'a-3', 'turn_completed',
+         'completed', 1, 1, 'old silent success', 5, 6, 7),
+        ('duplicate-pending-job', 'thread-3', 'memory-3', NULL, 'u-3', 'a-3', 'turn_completed',
+         'pending', 0, 1, 'duplicate callback', 5, 8, NULL);
+    `);
+
+    ensureFactSchema();
+
+    expect(indexNames('memory_ingestion_jobs').sort()).toEqual(freshIndexes);
+    expect(columnNames('memory_ingestion_jobs')).toEqual(
+      expect.arrayContaining([
+        'provider_outcome',
+        'outcome_code',
+        'next_attempt_at',
+        'lease_expires_at',
+        'structural_completed_at',
+      ]),
+    );
+    expect(columnNames('memory_ingestion_jobs')).not.toContain('error');
+    expect(
+      getMemoryDb().getAllSync<{
+        id: string;
+        status: string;
+        provider_outcome: string | null;
+        outcome_code: string | null;
+        next_attempt_at: number | null;
+        structural_completed_at: number | null;
+      }>(
+        `SELECT id, status, provider_outcome, outcome_code, next_attempt_at,
+                structural_completed_at
+           FROM memory_ingestion_jobs
+          ORDER BY id`,
+      ),
+    ).toEqual([
+      {
+        id: 'completed-job',
+        status: 'completed_structural',
+        provider_outcome: 'structural_only',
+        outcome_code: null,
+        next_attempt_at: null,
+        structural_completed_at: 7,
+      },
+      {
+        id: 'pending-job',
+        status: 'pending',
+        provider_outcome: null,
+        outcome_code: null,
+        next_attempt_at: 2,
+        structural_completed_at: null,
+      },
+      {
+        id: 'stale-job',
+        status: 'retrying',
+        provider_outcome: null,
+        outcome_code: 'stale_processing_lease',
+        next_attempt_at: 4,
+        structural_completed_at: null,
+      },
+    ]);
+    expect(() =>
+      getMemoryDb().runSync(
+        "UPDATE memory_ingestion_jobs SET outcome_code = 'raw exception text' WHERE id = 'pending-job'",
+      ),
+    ).toThrow();
+    expect(() =>
+      getMemoryDb().runSync(
+        "UPDATE memory_ingestion_jobs SET status = 'completed' WHERE id = 'pending-job'",
+      ),
+    ).toThrow();
+    expect(() =>
+      getMemoryDb().runSync(
+        "UPDATE memory_ingestion_jobs SET status = 'completed_structural' WHERE id = 'pending-job'",
+      ),
+    ).toThrow();
+  });
+
   it('is idempotent and preserves existing rows across migration calls', () => {
     ensureFactSchema();
     const entity = upsertEntity({ name: 'user', type: 'self', now: 1 });

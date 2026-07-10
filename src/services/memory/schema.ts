@@ -12,6 +12,7 @@
 
 import { getMemoryDb } from './sqlite-store';
 import { buildFactContentHash } from './facts/contentIdentity';
+import { ensureIngestionQueueSchema } from './ingestionQueueSchema';
 
 let schemaReady = false;
 
@@ -173,7 +174,9 @@ export function ensureFactSchema(): void {
       importance REAL NOT NULL DEFAULT 0.5,
       embedding TEXT,
       created_at INTEGER NOT NULL,
-      deleted_at INTEGER
+      deleted_at INTEGER,
+      source_start_message_id TEXT,
+      source_end_message_id TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_episodes_conversation
       ON memory_episodes(conversation_id, deleted_at);
@@ -195,27 +198,6 @@ export function ensureFactSchema(): void {
       ON memory_fact_evidence(fact_id);
     CREATE INDEX IF NOT EXISTS idx_fact_evidence_episode
       ON memory_fact_evidence(episode_id);
-
-    CREATE TABLE IF NOT EXISTS memory_ingestion_jobs (
-      id TEXT PRIMARY KEY,
-      thread_id TEXT NOT NULL,
-      memory_conversation_id TEXT,
-      task_id TEXT,
-      source_start_message_id TEXT,
-      source_end_message_id TEXT NOT NULL,
-      reason TEXT NOT NULL DEFAULT 'turn_completed',
-      status TEXT NOT NULL DEFAULT 'pending',
-      attempt_count INTEGER NOT NULL DEFAULT 0,
-      provider_enrichment INTEGER NOT NULL DEFAULT 1,
-      error TEXT,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      completed_at INTEGER
-    );
-    CREATE INDEX IF NOT EXISTS idx_ingestion_jobs_status
-      ON memory_ingestion_jobs(status, created_at);
-    CREATE INDEX IF NOT EXISTS idx_ingestion_jobs_thread
-      ON memory_ingestion_jobs(thread_id, source_end_message_id);
 
     CREATE TABLE IF NOT EXISTS memory_tasks (
       id TEXT PRIMARY KEY,
@@ -258,7 +240,10 @@ export function ensureFactSchema(): void {
     CREATE INDEX IF NOT EXISTS idx_memory_reflections_task
       ON memory_reflections(task_id, deleted_at);
   `);
+  ensureIngestionQueueSchema(db);
   ensureFactColumns(db);
+  ensureEpisodeSourceIdentity(db);
+  ensureFactEvidenceIdentity(db);
   ensureRepeatableFactHistory(db);
   ensureFactContentIdentityV2(db);
   ensureFactTermStats(db);
@@ -449,7 +434,6 @@ function ensureColumn(
   if (rows.some((row) => row.name === column)) return;
   db.execSync(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
 }
-
 function ensureFactColumns(db: ReturnType<typeof getMemoryDb>): void {
   ensureColumn(db, 'memory_facts', 'scope', "scope TEXT NOT NULL DEFAULT 'global'");
   ensureColumn(db, 'memory_facts', 'origin_conversation_id', 'origin_conversation_id TEXT');
@@ -488,21 +472,37 @@ function ensureFactColumns(db: ReturnType<typeof getMemoryDb>): void {
     'memory_kind',
     "memory_kind TEXT NOT NULL DEFAULT 'semantic_fact'",
   );
-  ensureColumn(
-    db,
-    'memory_ingestion_jobs',
-    'provider_enrichment',
-    'provider_enrichment INTEGER NOT NULL DEFAULT 1',
-  );
-  ensureColumn(
-    db,
-    'memory_ingestion_jobs',
-    'memory_conversation_id',
-    'memory_conversation_id TEXT',
-  );
   db.execSync(
     "UPDATE memory_facts SET memory_kind = 'semantic_fact' WHERE memory_kind = 'semantic'",
   );
+}
+
+function ensureEpisodeSourceIdentity(db: ReturnType<typeof getMemoryDb>): void {
+  db.execSync(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_episodes_active_source_window
+      ON memory_episodes(
+        COALESCE(conversation_id, ''),
+        COALESCE(thread_id, ''),
+        source_end_message_id
+      )
+      WHERE deleted_at IS NULL AND source_end_message_id IS NOT NULL;
+  `);
+}
+
+function ensureFactEvidenceIdentity(db: ReturnType<typeof getMemoryDb>): void {
+  db.execSync(`
+    DELETE FROM memory_fact_evidence
+      WHERE message_id IS NOT NULL
+        AND rowid NOT IN (
+          SELECT MIN(rowid)
+            FROM memory_fact_evidence
+           WHERE message_id IS NOT NULL
+           GROUP BY fact_id, message_id
+        );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_fact_evidence_fact_message
+      ON memory_fact_evidence(fact_id, message_id)
+      WHERE message_id IS NOT NULL;
+  `);
 }
 
 interface FactContentIdentityRow {

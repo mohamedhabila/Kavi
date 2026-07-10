@@ -22,6 +22,7 @@ jest.mock('../../../src/services/memory/turnProcessor', () => ({
     activeFocusUpdated: true,
     openThreadsUpdated: false,
     enriched: false,
+    providerOutcome: { status: 'not_requested' },
   })),
 }));
 
@@ -29,7 +30,9 @@ import {
   __resetIngestionQueueForTests,
   drainIngestionQueue,
   enqueueIngestionJob,
+  getIngestionQueueDiagnostics,
   getIngestionJob,
+  INGESTION_RETRY_BASE_DELAY_MS,
   listPendingIngestionJobs,
   scheduleIngestionDrain,
 } from '../../../src/services/memory/ingestionQueue';
@@ -41,7 +44,7 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
-import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
 import type { Message } from '../../../src/types/message';
 import type { LlmProviderConfig } from '../../../src/types/provider';
 
@@ -52,6 +55,52 @@ const mockedResolveConsolidationPath = resolveConsolidationPath as jest.MockedFu
 const mockedProcessIngestionTurn = processIngestionTurn as jest.MockedFunction<
   typeof processIngestionTurn
 >;
+
+function processResult(
+  providerOutcome: Awaited<ReturnType<typeof processIngestionTurn>>['providerOutcome'],
+): Awaited<ReturnType<typeof processIngestionTurn>> {
+  return {
+    processed: true,
+    episodeId: 'ep-1',
+    deterministicFactIds: ['fact-1'],
+    providerFactIds: [],
+    invalidatedFactIds: [],
+    activeFocusUpdated: true,
+    openThreadsUpdated: false,
+    enriched: providerOutcome.status === 'valid',
+    providerOutcome,
+    bridgedEvidenceFactIds: [],
+    agentRunMemoryFactIds: [],
+  };
+}
+
+function closedTurn(suffix: string): Message[] {
+  return [
+    {
+      id: `user-${suffix}`,
+      role: 'user',
+      content: 'Remember this',
+      createdAt: 1,
+    },
+    {
+      id: `assistant-${suffix}`,
+      role: 'assistant',
+      content: 'Done',
+      createdAt: 2,
+      assistantMetadata: {
+        kind: 'final',
+        completionStatus: 'complete',
+        finishReason: 'stop',
+      },
+    },
+  ];
+}
+
+function columnNamesForQueue(): string[] {
+  return getMemoryDb()
+    .getAllSync<{ name: string }>('PRAGMA table_info(memory_ingestion_jobs)')
+    .map((column) => column.name);
+}
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -83,6 +132,31 @@ describe('ingestionQueue', () => {
     expect(first?.id).toBeTruthy();
     expect(second?.id).toBe(first?.id);
     expect(listPendingIngestionJobs()).toHaveLength(1);
+  });
+
+  it('does not re-enqueue a source turn after durable completion', async () => {
+    const first = enqueueIngestionJob({
+      threadId: 'conv-completed-dedupe',
+      sourceStartMessageId: 'user-completed-dedupe',
+      sourceEndMessageId: 'assistant-completed-dedupe',
+      now: 100,
+    });
+    await drainIngestionQueue({
+      loadMessagesForThread: () => closedTurn('completed-dedupe'),
+      now: 100,
+    });
+
+    const replay = enqueueIngestionJob({
+      threadId: 'conv-completed-dedupe',
+      sourceStartMessageId: 'user-completed-dedupe',
+      sourceEndMessageId: 'assistant-completed-dedupe',
+      now: 200,
+    });
+
+    expect(replay).toEqual(
+      expect.objectContaining({ id: first!.id, status: 'completed_structural' }),
+    );
+    expect(getIngestionQueueDiagnostics().total).toBe(1);
   });
 
   it('keeps the source thread separate from the memory namespace while draining', async () => {
@@ -171,7 +245,14 @@ describe('ingestionQueue', () => {
 
     expect(result.attempted).toBe(1);
     expect(result.completed).toBe(1);
-    expect(getIngestionJob(job!.id)?.status).toBe('completed');
+    expect(getIngestionJob(job!.id)).toEqual(
+      expect.objectContaining({
+        status: 'completed_structural',
+        providerOutcome: 'structural_only',
+        outcomeCode: null,
+        structuralCompletedAt: expect.any(Number),
+      }),
+    );
   });
 
   it('defers a job when its recorded source window is not loaded', async () => {
@@ -204,14 +285,21 @@ describe('ingestionQueue', () => {
       loadMessagesForThread: () => latestTurn,
     });
 
-    expect(result).toEqual({ attempted: 1, completed: 0, deferred: 1, failed: 0 });
+    expect(result).toEqual(
+      expect.objectContaining({ attempted: 1, completed: 0, deferred: 1, failed: 0 }),
+    );
     expect(mockedProcessIngestionTurn).not.toHaveBeenCalled();
     expect(getIngestionJob(job!.id)).toEqual(
-      expect.objectContaining({ status: 'pending', attemptCount: 0, error: null }),
+      expect.objectContaining({
+        status: 'pending',
+        attemptCount: 0,
+        providerOutcome: null,
+        outcomeCode: null,
+      }),
     );
   });
 
-  it('keeps failed enrichment jobs pending for retry', async () => {
+  it('schedules processing failures for a deterministic bounded retry', async () => {
     mockedProcessIngestionTurn.mockRejectedValueOnce(new Error('Provider timeout'));
     const job = enqueueIngestionJob({
       threadId: 'conv-fail',
@@ -243,10 +331,163 @@ describe('ingestionQueue', () => {
 
     expect(result.attempted).toBe(1);
     expect(result.completed).toBe(0);
-    expect(result.failed).toBe(1);
-    expect(getIngestionJob(job!.id)?.status).toBe('pending');
-    expect(getIngestionJob(job!.id)?.attemptCount).toBe(1);
-    expect(getIngestionJob(job!.id)?.error).toContain('Provider timeout');
+    expect(result.retrying).toBe(1);
+    expect(result.failed).toBe(0);
+    expect(getIngestionJob(job!.id)).toEqual(
+      expect.objectContaining({
+        status: 'retrying',
+        attemptCount: 1,
+        providerOutcome: null,
+        outcomeCode: 'processing_error',
+        structuralCompletedAt: null,
+      }),
+    );
+  });
+
+  it.each(['valid', 'empty_valid'] as const)(
+    'records %s provider validation separately from structural-only completion',
+    async (providerStatus) => {
+      mockedProcessIngestionTurn.mockResolvedValueOnce(processResult({ status: providerStatus }));
+      const job = enqueueIngestionJob({
+        threadId: `conv-${providerStatus}`,
+        sourceStartMessageId: `user-${providerStatus}`,
+        sourceEndMessageId: `assistant-${providerStatus}`,
+        now: 100,
+      });
+
+      const result = await drainIngestionQueue({
+        loadMessagesForThread: () => closedTurn(providerStatus),
+        now: 100,
+      });
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          attempted: 1,
+          completed: 1,
+          completedStructural: 0,
+          completedEnriched: 1,
+        }),
+      );
+      expect(getIngestionJob(job!.id)).toEqual(
+        expect.objectContaining({
+          status: 'completed_enriched',
+          providerOutcome: providerStatus,
+          outcomeCode: null,
+          attemptCount: 1,
+          structuralCompletedAt: 100,
+        }),
+      );
+    },
+  );
+
+  it('retries malformed provider output with a deterministic due time', async () => {
+    mockedProcessIngestionTurn.mockResolvedValueOnce(
+      processResult({ status: 'malformed', code: 'invalid_json' }),
+    );
+    const job = enqueueIngestionJob({
+      threadId: 'conv-malformed',
+      sourceStartMessageId: 'user-malformed',
+      sourceEndMessageId: 'assistant-malformed',
+      now: 100,
+    });
+
+    const result = await drainIngestionQueue({
+      loadMessagesForThread: () => closedTurn('malformed'),
+      now: 100,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({ completed: 0, retrying: 1, degraded: 0, failed: 0 }),
+    );
+    expect(getIngestionJob(job!.id)).toEqual(
+      expect.objectContaining({
+        status: 'retrying',
+        providerOutcome: 'malformed',
+        outcomeCode: 'invalid_json',
+        nextAttemptAt: 100 + INGESTION_RETRY_BASE_DELAY_MS,
+        structuralCompletedAt: 100,
+      }),
+    );
+    expect(listPendingIngestionJobs(3, 100 + INGESTION_RETRY_BASE_DELAY_MS - 1)).toHaveLength(0);
+    expect(listPendingIngestionJobs(3, 100 + INGESTION_RETRY_BASE_DELAY_MS)).toEqual([
+      expect.objectContaining({ id: job!.id }),
+    ]);
+  });
+
+  it('degrades only after exactly the maximum provider attempts', async () => {
+    const job = enqueueIngestionJob({
+      threadId: 'conv-degraded',
+      sourceStartMessageId: 'user-degraded',
+      sourceEndMessageId: 'assistant-degraded',
+      now: 100,
+    });
+    let now = 100;
+
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
+      mockedProcessIngestionTurn.mockResolvedValueOnce(
+        processResult({ status: 'schema_invalid', code: 'invalid_field_type' }),
+      );
+      const result = await drainIngestionQueue({
+        loadMessagesForThread: () => closedTurn('degraded'),
+        now,
+      });
+      const current = getIngestionJob(job!.id)!;
+      expect(current.attemptCount).toBe(attempt);
+      if (attempt < 5) {
+        expect(current.status).toBe('retrying');
+        expect(result.retrying).toBe(1);
+        now = current.nextAttemptAt!;
+      } else {
+        expect(current).toEqual(
+          expect.objectContaining({
+            status: 'degraded',
+            providerOutcome: 'schema_invalid',
+            outcomeCode: 'invalid_field_type',
+            nextAttemptAt: null,
+            completedAt: now,
+            structuralCompletedAt: 100,
+          }),
+        );
+        expect(result.degraded).toBe(1);
+      }
+    }
+  });
+
+  it('fails after exactly the maximum processing attempts without persisting exception text', async () => {
+    const job = enqueueIngestionJob({
+      threadId: 'conv-processing-failed',
+      sourceStartMessageId: 'user-processing-failed',
+      sourceEndMessageId: 'assistant-processing-failed',
+      now: 100,
+    });
+    let now = 100;
+
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
+      mockedProcessIngestionTurn.mockRejectedValueOnce(
+        new Error(`sensitive provider exception ${attempt}`),
+      );
+      const result = await drainIngestionQueue({
+        loadMessagesForThread: () => closedTurn('processing-failed'),
+        now,
+      });
+      const current = getIngestionJob(job!.id)!;
+      expect(current.attemptCount).toBe(attempt);
+      if (attempt < 5) {
+        expect(current.status).toBe('retrying');
+        now = current.nextAttemptAt!;
+      } else {
+        expect(current).toEqual(
+          expect.objectContaining({
+            status: 'failed',
+            providerOutcome: null,
+            outcomeCode: 'processing_error',
+            nextAttemptAt: null,
+          }),
+        );
+        expect(result.failed).toBe(1);
+      }
+    }
+    expect(columnNamesForQueue()).not.toContain('error');
   });
 
   it('forwards active chat provider context into consolidation', async () => {
@@ -368,7 +609,7 @@ describe('ingestionQueue', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(job).not.toBeNull();
-    expect(getIngestionJob(job!.id)?.status).toBe('completed');
+    expect(getIngestionJob(job!.id)?.status).toBe('completed_structural');
     expect(mockedProcessIngestionTurn).toHaveBeenCalledWith(
       expect.objectContaining({
         threadId: 'conv-scheduled-title',
