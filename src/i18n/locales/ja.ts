@@ -762,6 +762,11 @@ export const ja: TranslationMap = mergeTranslations(en, {
     factSourceGlobal: 'グローバルソース',
     factLastRecalled: '· 想起 {date}',
     factForget: '忘れる',
+    factForgetTitle: 'この事実を忘れますか？',
+    factForgetConfirm:
+      'この事実と、そこから派生した記憶を完全に削除します。この操作は元に戻せません。',
+    factForgetFailedTitle: '事実を削除できませんでした',
+    factForgetFailedMessage: '記憶を再読み込みして、もう一度お試しください。',
     factPin: 'ピン留め',
     factUnpin: 'ピン解除',
     blocksEmpty: 'メモリーブロックが定義されていません。',

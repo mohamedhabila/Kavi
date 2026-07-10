@@ -8,6 +8,7 @@
 // ---------------------------------------------------------------------------
 
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 import { MemoryScreen } from '../../src/screens/MemoryScreen';
 
 const mockExecuteMemoryRecall = jest.fn();
@@ -162,8 +163,14 @@ describe('MemoryScreen — Facts & Blocks tabs', () => {
     mockExecuteMemoryUnpin.mockReturnValue({ ok: true, fact: sampleFact({ pinned: false }) });
     mockExecuteMemoryForget.mockReturnValue({
       ok: true,
-      fact: sampleFact(),
-      mode: 'invalidate',
+      action: 'withdrawal',
+      receipt: {
+        status: 'withdrawn',
+        withdrawalId: 'withdrawal-1',
+        factId: 'fact-1',
+        withdrawnAt: 1_000,
+        counts: {},
+      },
     });
     mockExecuteMemoryBlockEdit.mockReturnValue({ ok: true, block: sampleBlock() });
   });
@@ -234,7 +241,8 @@ describe('MemoryScreen — Facts & Blocks tabs', () => {
     expect(mockExecuteMemoryPin).not.toHaveBeenCalled();
   });
 
-  it('Forget button calls executeMemoryForget with invalidate mode', async () => {
+  it('Forget confirmation cancels safely and executes withdrawal exactly once on confirm', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
     mockExecuteMemoryRecall.mockReturnValue({
       ok: true,
       subject: null,
@@ -247,10 +255,49 @@ describe('MemoryScreen — Facts & Blocks tabs', () => {
     await waitFor(() => expect(getByTestId('memory-fact-forget-fact-1')).toBeTruthy());
 
     fireEvent.press(getByTestId('memory-fact-forget-fact-1'));
-    expect(mockExecuteMemoryForget).toHaveBeenCalledWith({
-      factId: 'fact-1',
-      mode: 'invalidate',
+    expect(mockExecuteMemoryForget).not.toHaveBeenCalled();
+
+    const buttons = alertSpy.mock.calls.at(-1)?.[2];
+    expect(buttons?.[0]).toEqual(expect.objectContaining({ style: 'cancel' }));
+    act(() => buttons?.[0]?.onPress?.());
+    expect(mockExecuteMemoryForget).not.toHaveBeenCalled();
+
+    expect(buttons?.[1]).toEqual(expect.objectContaining({ style: 'destructive' }));
+    act(() => buttons?.[1]?.onPress?.());
+    expect(mockExecuteMemoryForget).toHaveBeenCalledTimes(1);
+    expect(mockExecuteMemoryForget).toHaveBeenCalledWith({ factId: 'fact-1' });
+
+    alertSpy.mockRestore();
+  });
+
+  it('shows a content-free failure alert and does not refresh when withdrawal fails', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    mockExecuteMemoryRecall.mockReturnValue({
+      ok: true,
+      subject: null,
+      facts: [sampleFact()],
     });
+    mockExecuteMemoryForget.mockReturnValue({
+      ok: false,
+      code: 'internal',
+      error: 'sensitive database detail',
+    });
+
+    const { getByText, getByTestId } = render(<MemoryScreen />);
+    fireEvent.press(getByText('Facts'));
+    await waitFor(() => expect(getByTestId('memory-fact-forget-fact-1')).toBeTruthy());
+
+    fireEvent.press(getByTestId('memory-fact-forget-fact-1'));
+    const recallCountBeforeConfirm = mockExecuteMemoryRecall.mock.calls.length;
+    const buttons = alertSpy.mock.calls.at(-1)?.[2];
+    act(() => buttons?.[1]?.onPress?.());
+
+    expect(mockExecuteMemoryForget).toHaveBeenCalledTimes(1);
+    expect(mockExecuteMemoryRecall).toHaveBeenCalledTimes(recallCountBeforeConfirm);
+    expect(alertSpy).toHaveBeenLastCalledWith('Fact not removed', 'Reload memory and try again.');
+    expect(JSON.stringify(alertSpy.mock.calls.at(-1))).not.toContain('sensitive database detail');
+
+    alertSpy.mockRestore();
   });
 
   it('typing in the search filter passes subject to executeMemoryRecall', async () => {

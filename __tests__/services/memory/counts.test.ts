@@ -18,6 +18,7 @@ import { countFacts } from '../../../src/services/memory/facts/queries';
 import { recordEpisode } from '../../../src/services/memory/episodes/mutations';
 import { countEpisodes } from '../../../src/services/memory/episodes/queries';
 import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -39,10 +40,9 @@ describe('countFacts', () => {
     expect(countFacts()).toBe(2);
   });
 
-  it('excludes soft-deleted facts', () => {
+  it('excludes withdrawn facts', () => {
     const result = recordFact({ subjectId: 'user', predicate: 'name', objectText: 'A' });
-    const { softDeleteFact } = require('../../../src/services/memory/facts/mutations');
-    softDeleteFact(result.fact.id);
+    expect(withdrawMemoryFact(result.fact.id).status).toBe('withdrawn');
     expect(countFacts()).toBe(0);
   });
 

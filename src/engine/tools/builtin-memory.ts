@@ -4,12 +4,14 @@ import {
   executeMemoryPin as pinFact,
   executeMemoryUnpin as unpinFact,
   executeMemoryForget as forgetFact,
+  executeMemoryInvalidate as invalidateFact,
   executeMemoryBlockRead as readMemoryBlock,
   executeMemoryBlockEdit as editMemoryBlock,
   type MemoryRecallArgs,
   type MemoryRememberArgs,
   type MemoryPinArgs,
   type MemoryForgetArgs,
+  type MemoryInvalidateArgs,
   type MemoryBlockReadArgs,
   type MemoryBlockEditArgs,
 } from '../../services/memory/memoryTools';
@@ -168,6 +170,10 @@ export function executeMemoryUnpin(args: MemoryPinArgs): string {
 
 export function executeMemoryForget(args: MemoryForgetArgs): string {
   return wrapMemoryToolResult(forgetFact(args));
+}
+
+export function executeMemoryInvalidate(args: MemoryInvalidateArgs): string {
+  return wrapMemoryToolResult(invalidateFact(args));
 }
 
 export function executeMemoryBlockRead(args: MemoryBlockReadArgs = {}): string {

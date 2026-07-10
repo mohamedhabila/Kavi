@@ -16,6 +16,7 @@ import {
   executeMemoryPin,
   executeMemoryUnpin,
   executeMemoryForget,
+  executeMemoryInvalidate,
   executeMemoryBlockRead,
   executeMemoryBlockEdit,
 } from '../../src/services/memory/memoryTools';
@@ -245,26 +246,43 @@ describe('executeMemoryPin / executeMemoryUnpin', () => {
 });
 
 describe('executeMemoryForget', () => {
-  it('soft-deletes by default and the fact disappears from default recall', () => {
+  it('withdraws the fact without echoing its private value', () => {
     const created = rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin' });
     const forgotten = executeMemoryForget({ factId: created.fact.id });
     expect(forgotten.ok).toBe(true);
     if (forgotten.ok) {
-      expect(forgotten.mode).toBe('delete');
-      expect(forgotten.fact.deletedAt).toBeGreaterThan(0);
+      expect(forgotten.action).toBe('withdrawal');
+      expect(forgotten.receipt.status).toBe('withdrawn');
+      expect(forgotten.receipt.factId).toBe(created.fact.id);
+      expect(JSON.stringify(forgotten)).not.toContain('Berlin');
     }
-    const recall = executeMemoryRecall({ subject: 'user' });
+    const recall = executeMemoryRecall({ all: true, includeHistory: true });
     if (recall.ok) expect(recall.facts).toHaveLength(0);
   });
 
-  it('invalidates without deleting when mode=invalidate', () => {
+  it.each(['delete', 'invalidate'])('rejects the removed mode=%s contract', (mode) => {
     const created = rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin' });
-    const result = executeMemoryForget({ factId: created.fact.id, mode: 'invalidate' });
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.mode).toBe('invalidate');
-      expect(result.fact.invalidAt).toBeGreaterThan(0);
-      expect(result.fact.deletedAt).toBeNull();
+    const result = executeMemoryForget({ factId: created.fact.id, mode } as never);
+    expect(result).toEqual(expect.objectContaining({ ok: false, code: 'invalid_args' }));
+  });
+
+  it('keeps correction history through the separate invalidation action', () => {
+    const created = rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin' });
+    const result = executeMemoryInvalidate({ factId: created.fact.id });
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: true,
+        action: 'invalidation',
+        factId: created.fact.id,
+        status: 'invalidated',
+      }),
+    );
+    const recall = executeMemoryRecall({ all: true, includeHistory: true });
+    expect(recall.ok).toBe(true);
+    if (recall.ok) {
+      expect(recall.facts).toEqual([
+        expect.objectContaining({ value: 'Berlin', invalidAt: expect.any(Number) }),
+      ]);
     }
   });
 });

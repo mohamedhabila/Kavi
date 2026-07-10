@@ -95,6 +95,7 @@ export const DEFAULT_POLICY: ApprovalPolicy = {
     'camera_clip',
     'screen_record',
     'haptic_feedback',
+    'memory_forget',
   ],
   autoApproveTools: [
     'web_search',
@@ -119,10 +120,7 @@ export const DEFAULT_POLICY: ApprovalPolicy = {
   personaOverrides: [],
 };
 
-export function requiresActionApproval(
-  toolName: string,
-  args?: Record<string, unknown>,
-): boolean {
+export function requiresActionApproval(toolName: string, args?: Record<string, unknown>): boolean {
   if (DEFAULT_POLICY.alwaysApproveTools.includes(toolName)) {
     return true;
   }

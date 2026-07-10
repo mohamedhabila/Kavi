@@ -160,15 +160,26 @@ export const MEMORY_UNPIN_TOOL: ToolDefinition = {
 export const MEMORY_FORGET_TOOL: ToolDefinition = {
   name: 'memory_forget',
   description:
-    'Forget a fact. mode="invalidate" (default behaviour for corrections) closes the fact at now without removing the row, preserving the audit trail. mode="delete" soft-deletes the fact entirely. ' +
-    'Prefer "invalidate" when the user contradicts a previous fact; reserve "delete" for facts the user explicitly asks to be removed.',
+    'Permanently withdraw a fact when the user explicitly asks for it to be forgotten or removed. ' +
+    'Withdrawal removes the fact and its authoritative derived memory while retaining only a content-free audit receipt. ' +
+    'For a correction, record the replacement with memory_remember or use memory_manage action=invalidate; do not withdraw it.',
   input_schema: {
     type: 'object',
     properties: {
       factId: { type: 'string' },
-      mode: { type: 'string', enum: ['invalidate', 'delete'], description: 'Default "delete".' },
     },
     required: ['factId'],
+    additionalProperties: false,
+  },
+  contract: {
+    category: 'memory',
+    capabilities: ['write'],
+    resourceKinds: ['memory'],
+    sideEffects: ['destructive'],
+    riskHints: ['destructive', 'requires_approval'],
+    riskLevel: 'high',
+    providesEvidence: ['verification'],
+    workflowStages: ['persist_artifact', 'verify_evidence'],
   },
 };
 
@@ -177,24 +188,20 @@ export const MEMORY_MANAGE_TOOL: ToolDefinition = {
   description:
     'Manage a fact by id. ' +
     'Use action=pin to keep a fact in the focus header, action=unpin to release it, ' +
-    'or action=forget to invalidate (default for corrections, preserves audit trail) or delete it.',
+    'or action=invalidate to close an incorrect fact while preserving audit history. ' +
+    'Explicit withdrawal is available only through memory_forget.',
   input_schema: {
     type: 'object',
     properties: {
       action: {
         type: 'string',
-        enum: ['pin', 'unpin', 'forget'],
+        enum: ['pin', 'unpin', 'invalidate'],
         description: 'Operation to perform.',
       },
       factId: { type: 'string', description: 'ID returned by memory_recall or memory_remember.' },
-      mode: {
-        type: 'string',
-        enum: ['invalidate', 'delete'],
-        description:
-          'For action=forget: "invalidate" (default) closes the fact, "delete" soft-deletes it.',
-      },
     },
     required: ['action', 'factId'],
+    additionalProperties: false,
   },
   contract: {
     category: 'memory',
@@ -293,6 +300,7 @@ export const BUILTIN_MEMORY_REGISTERED_TOOL_DEFINITIONS: ToolDefinition[] = [
   MEMORY_SEARCH_TOOL,
   MEMORY_RECALL_TOOL,
   MEMORY_REMEMBER_TOOL,
+  MEMORY_FORGET_TOOL,
   MEMORY_MANAGE_TOOL,
   MEMORY_BLOCK_TOOL,
 ];

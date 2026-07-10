@@ -12,7 +12,7 @@
 //   • memory_remember    — record a single fact (with supersession optional).
 //   • memory_pin         — pin an existing fact so retrieval always shows it.
 //   • memory_unpin       — opposite of memory_pin.
-//   • memory_forget      — soft-delete a fact (or invalidate, see args).
+//   • memory_forget      — withdraw a fact and its derived memory.
 //   • memory_block_edit  — replace/append a memory block's content.
 //   • memory_block_read  — read one or all memory blocks (no args = all).
 //
@@ -21,18 +21,27 @@
 // ---------------------------------------------------------------------------
 
 import { upsertEntity, findEntityByName, getEntityById, type EntityType } from './entities';
-import { recordFact, invalidateFact, softDeleteFact, setFactPinned } from './facts/mutations';
+import { recordFact, invalidateFact, setFactPinned } from './facts/mutations';
 import { listFacts, getFactById } from './facts/queries';
 import { type MemoryFact, type MemoryFactScope } from './facts/types';
 import { editBlock, ensureDefaultBlocks, getBlock, listBlocks, BlockOverflowError } from './blocks';
 import { ensureFactSchema } from './schema';
+import { canWriteLongTermMemory } from './policy';
+import { withdrawMemoryFact } from './withdrawal';
+import type { MemoryWithdrawalReceipt } from './withdrawalTypes';
 
 // ── Common types ─────────────────────────────────────────────────────────
 
 export interface MemoryToolError {
   ok: false;
   error: string;
-  code: 'invalid_args' | 'not_found' | 'block_overflow' | 'unknown_block' | 'internal';
+  code:
+    | 'invalid_args'
+    | 'not_found'
+    | 'memory_disabled'
+    | 'block_overflow'
+    | 'unknown_block'
+    | 'internal';
 }
 
 function err(code: MemoryToolError['code'], message: string): MemoryToolError {
@@ -280,29 +289,59 @@ export function executeMemoryUnpin(args: MemoryPinArgs): MemoryPinResult | Memor
 
 export interface MemoryForgetArgs {
   factId: string;
-  /** When 'invalidate', the fact is closed at `now` but not deleted. Default 'delete'. */
-  mode?: 'invalidate' | 'delete';
 }
 
 export interface MemoryForgetResult {
   ok: true;
-  fact: ReturnType<typeof serializeFact>;
-  mode: 'invalidate' | 'delete';
+  action: 'withdrawal';
+  receipt: MemoryWithdrawalReceipt;
 }
 
 export function executeMemoryForget(args: MemoryForgetArgs): MemoryForgetResult | MemoryToolError {
+  if (!args || typeof args !== 'object' || Object.keys(args).some((key) => key !== 'factId')) {
+    return err('invalid_args', 'memory_forget accepts only factId.');
+  }
+  const id = trimNonEmpty(args.factId, 64);
+  if (!id) return err('invalid_args', 'factId is required');
+  try {
+    const result = withdrawMemoryFact(id);
+    if (result.status === 'not_found') return err('not_found', `fact ${id} not found`);
+    return { ok: true, action: 'withdrawal', receipt: result.receipt };
+  } catch {
+    return err('internal', 'Memory withdrawal failed.');
+  }
+}
+
+export interface MemoryInvalidateArgs {
+  factId: string;
+}
+
+export interface MemoryInvalidateResult {
+  ok: true;
+  action: 'invalidation';
+  factId: string;
+  invalidatedAt: number;
+  status: 'invalidated';
+}
+
+export function executeMemoryInvalidate(
+  args: MemoryInvalidateArgs,
+): MemoryInvalidateResult | MemoryToolError {
+  if (!args || typeof args !== 'object' || Object.keys(args).some((key) => key !== 'factId')) {
+    return err('invalid_args', 'memory_manage action=invalidate accepts only factId.');
+  }
+  if (!canWriteLongTermMemory()) return err('memory_disabled', 'Long-term memory is disabled.');
   ensureFactSchema();
   const id = trimNonEmpty(args.factId, 64);
   if (!id) return err('invalid_args', 'factId is required');
-  const mode: 'invalidate' | 'delete' = args.mode === 'invalidate' ? 'invalidate' : 'delete';
   try {
-    const updated = mode === 'invalidate' ? invalidateFact(id) : softDeleteFact(id);
-    if (!updated) return err('not_found', `fact ${id} not found or already ${mode}d`);
-    const fact = getFactById(id);
-    if (!fact) return err('not_found', `fact ${id} not found after ${mode}`);
-    return { ok: true, fact: serializeFact(fact), mode };
-  } catch (e) {
-    return err('internal', e instanceof Error ? e.message : 'forget failed');
+    const invalidatedAt = Date.now();
+    if (!invalidateFact(id, invalidatedAt)) {
+      return err('not_found', `fact ${id} not found or already invalidated`);
+    }
+    return { ok: true, action: 'invalidation', factId: id, invalidatedAt, status: 'invalidated' };
+  } catch {
+    return err('internal', 'Memory invalidation failed.');
   }
 }
 

@@ -89,7 +89,17 @@ jest.mock('../../src/services/memory/memoryTools', () => ({
   executeMemoryRemember: () => ({ ok: true, fact: null, status: 'created', superseded: [] }),
   executeMemoryPin: () => ({ ok: true, fact: null }),
   executeMemoryUnpin: () => ({ ok: true, fact: null }),
-  executeMemoryForget: () => ({ ok: true, fact: null, mode: 'invalidate' }),
+  executeMemoryForget: () => ({
+    ok: true,
+    action: 'withdrawal',
+    receipt: {
+      status: 'withdrawn',
+      withdrawalId: 'withdrawal-screen-test',
+      factId: 'fact-screen-test',
+      withdrawnAt: 1,
+      counts: {},
+    },
+  }),
   executeMemoryBlockRead: () => ({ ok: true, blocks: [] }),
   executeMemoryBlockEdit: () => ({ ok: true, block: null }),
 }));

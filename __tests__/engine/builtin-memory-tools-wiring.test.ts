@@ -16,6 +16,7 @@ import {
   executeMemoryPin,
   executeMemoryUnpin,
   executeMemoryForget,
+  executeMemoryInvalidate,
   executeMemoryBlockRead,
   executeMemoryBlockEdit,
 } from '../../src/engine/tools/builtin-memory';
@@ -45,6 +46,7 @@ const NEW_MEMORY_TOOL_NAMES = [
 const REGISTERED_MEMORY_TOOL_NAMES = [
   'memory_recall',
   'memory_remember',
+  'memory_forget',
   'memory_manage',
   'memory_block',
 ];
@@ -53,6 +55,7 @@ const STRUCTURED_MEMORY_CATALOG_TOOL_NAMES = [
   'memory_search',
   'memory_recall',
   'memory_remember',
+  'memory_forget',
   'memory_manage',
 ];
 
@@ -109,6 +112,24 @@ describe('living-memory tool wiring', () => {
     expect(MEMORY_REMEMBER_TOOL.input_schema.properties.value.description).toContain(
       'Exact object text/value supplied by the user',
     );
+  });
+
+  it('keeps withdrawal and correction as separate strict contracts', () => {
+    expect(MEMORY_FORGET_TOOL.input_schema.properties).not.toHaveProperty('mode');
+    expect(MEMORY_FORGET_TOOL.input_schema.additionalProperties).toBe(false);
+    expect(MEMORY_FORGET_TOOL.contract).toEqual(
+      expect.objectContaining({
+        sideEffects: ['destructive'],
+        riskHints: expect.arrayContaining(['destructive', 'requires_approval']),
+      }),
+    );
+    expect(MEMORY_MANAGE_TOOL.input_schema.properties).not.toHaveProperty('mode');
+    expect(MEMORY_MANAGE_TOOL.input_schema.properties.action.enum).toEqual([
+      'pin',
+      'unpin',
+      'invalidate',
+    ]);
+    expect(MEMORY_MANAGE_TOOL.input_schema.additionalProperties).toBe(false);
   });
 
   it('keeps runtime-owned memory provenance out of the provider-facing write schema', () => {
@@ -181,15 +202,26 @@ describe('living-memory tool wiring', () => {
     expect(unpinned.fact.pinned).toBe(false);
   });
 
-  it('memory_forget invalidates by default-delete and supports invalidate mode', () => {
+  it('memory_forget withdraws without returning the private value', () => {
     const r = JSON.parse(
       executeMemoryRemember({ subject: 'user', predicate: 'name', value: 'Alice' }),
     );
     const factId = r.fact.id;
 
-    const invalidated = JSON.parse(executeMemoryForget({ factId, mode: 'invalidate' }));
-    expect(invalidated.ok).toBe(true);
-    expect(invalidated.mode).toBe('invalidate');
+    const withdrawn = JSON.parse(executeMemoryForget({ factId }));
+    expect(withdrawn.ok).toBe(true);
+    expect(withdrawn.action).toBe('withdrawal');
+    expect(JSON.stringify(withdrawn)).not.toContain('Alice');
+  });
+
+  it('memory invalidation preserves correction history through its own executor', () => {
+    const r = JSON.parse(
+      executeMemoryRemember({ subject: 'user', predicate: 'name', value: 'Alice' }),
+    );
+    const invalidated = JSON.parse(executeMemoryInvalidate({ factId: r.fact.id }));
+    expect(invalidated).toEqual(
+      expect.objectContaining({ ok: true, action: 'invalidation', status: 'invalidated' }),
+    );
   });
 
   it('memory_block_read returns blocks; memory_block_edit replaces content', () => {

@@ -773,6 +773,11 @@ export const de: TranslationMap = mergeTranslations(en, {
     factSourceGlobal: 'globale Quelle',
     factLastRecalled: '· abgerufen {date}',
     factForget: 'Vergessen',
+    factForgetTitle: 'Diese Tatsache vergessen?',
+    factForgetConfirm:
+      'Dadurch werden diese Tatsache und die daraus abgeleiteten Erinnerungen dauerhaft entfernt. Dies kann nicht rückgängig gemacht werden.',
+    factForgetFailedTitle: 'Tatsache nicht entfernt',
+    factForgetFailedMessage: 'Lade den Speicher neu und versuche es erneut.',
     factPin: 'Anheften',
     factUnpin: 'Lösen',
     blocksEmpty: 'Keine Speicherblöcke definiert.',

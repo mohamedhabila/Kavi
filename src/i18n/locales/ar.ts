@@ -753,6 +753,11 @@ export const ar: TranslationMap = mergeTranslations(en, {
     factSourceGlobal: 'مصدر عام',
     factLastRecalled: '· تم التذكر {date}',
     factForget: 'نسيان',
+    factForgetTitle: 'هل تريد نسيان هذه الحقيقة؟',
+    factForgetConfirm:
+      'سيؤدي هذا إلى إزالة هذه الحقيقة والذاكرة المشتقة منها نهائياً. لا يمكن التراجع عن هذا الإجراء.',
+    factForgetFailedTitle: 'لم تتم إزالة الحقيقة',
+    factForgetFailedMessage: 'أعد تحميل الذاكرة وحاول مرة أخرى.',
     factPin: 'تثبيت',
     factUnpin: 'إلغاء التثبيت',
     blocksEmpty: 'لم يتم تعريف أي كتل ذاكرة.',

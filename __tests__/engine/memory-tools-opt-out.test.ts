@@ -11,6 +11,14 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
+jest.mock('../../src/services/remote/approvalStore', () => {
+  const actual = jest.requireActual('../../src/services/remote/approvalStore');
+  return {
+    ...actual,
+    requestToolApproval: jest.fn(async () => 'approved'),
+  };
+});
+
 import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { ensureDefaultBlocks } from '../../src/services/memory/blocks';
@@ -27,10 +35,8 @@ const MEMORY_TOOLS = [
   'memory_remember',
   'memory_pin',
   'memory_unpin',
-  'memory_forget',
   'memory_block_read',
   'memory_block_edit',
-  'memory_manage',
   'memory_block',
 ];
 
@@ -57,6 +63,81 @@ describe('memory tools — opt-out gate', () => {
       expect(parsed.ok).toBe(false);
       expect(parsed.code).toBe('permission_denied');
       expect(typeof parsed.error).toBe('string');
+    },
+  );
+
+  it('still honors explicit memory_forget withdrawal while memory is disabled', async () => {
+    const remembered = JSON.parse(
+      await executeTool(
+        'memory_remember',
+        JSON.stringify({ subject: 'user', predicate: 'private_code', value: 'secret-42' }),
+        'conv-1',
+      ),
+    );
+    useSettingsStore.setState({ disableLongTermMemory: true });
+
+    const raw = await executeTool(
+      'memory_forget',
+      JSON.stringify({ factId: remembered.fact.id }),
+      'conv-1',
+    );
+    const result = JSON.parse(raw);
+
+    expect(result).toEqual(expect.objectContaining({ ok: true, action: 'withdrawal' }));
+    expect(JSON.stringify(result)).not.toContain('secret-42');
+    expect(listFacts({ includeInvalidated: true })).toEqual([]);
+  });
+
+  it('rejects memory_manage withdrawal aliases and keeps correction gated under opt-out', async () => {
+    const remembered = JSON.parse(
+      await executeTool(
+        'memory_remember',
+        JSON.stringify({ subject: 'user', predicate: 'private_code', value: 'secret-43' }),
+        'conv-1',
+      ),
+    );
+    useSettingsStore.setState({ disableLongTermMemory: true });
+
+    const withdrawnAlias = JSON.parse(
+      await executeTool(
+        'memory_manage',
+        JSON.stringify({ action: 'forget', factId: remembered.fact.id }),
+        'conv-1',
+      ),
+    );
+    const invalidated = JSON.parse(
+      await executeTool(
+        'memory_manage',
+        JSON.stringify({ action: 'invalidate', factId: remembered.fact.id }),
+        'conv-1',
+      ),
+    );
+
+    expect(withdrawnAlias).toEqual(expect.objectContaining({ ok: false, code: 'invalid_args' }));
+    expect(invalidated).toEqual(expect.objectContaining({ ok: false, code: 'permission_denied' }));
+  });
+
+  it.each(['PIN', 'UNPIN', 'INVALIDATE', 'FORGET'])(
+    'rejects non-canonical memory_manage action %s',
+    async (action) => {
+      const raw = await executeTool(
+        'memory_manage',
+        JSON.stringify({ action, factId: 'fact-1' }),
+        'conv-1',
+      );
+      expect(JSON.parse(raw)).toEqual(expect.objectContaining({ ok: false, code: 'invalid_args' }));
+    },
+  );
+
+  it.each(['pin', 'unpin', 'invalidate'])(
+    'rejects extra runtime fields for memory_manage action=%s',
+    async (action) => {
+      const raw = await executeTool(
+        'memory_manage',
+        JSON.stringify({ action, factId: 'fact-1', mode: 'delete' }),
+        'conv-1',
+      );
+      expect(JSON.parse(raw)).toEqual(expect.objectContaining({ ok: false, code: 'invalid_args' }));
     },
   );
 

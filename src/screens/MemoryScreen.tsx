@@ -358,12 +358,27 @@ export const MemoryScreen: React.FC = () => {
 
   const handleFactForget = useCallback(
     (fact: FactRow) => {
-      const result = executeMemoryForget({ factId: fact.id, mode: 'invalidate' });
-      if ('ok' in result && result.ok) {
-        loadFacts();
-      }
+      Alert.alert(t('memory.factForgetTitle'), t('memory.factForgetConfirm'), [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('memory.factForget'),
+          style: 'destructive',
+          onPress: () => {
+            try {
+              const result = executeMemoryForget({ factId: fact.id });
+              if ('ok' in result && result.ok) {
+                loadFacts();
+                return;
+              }
+            } catch {
+              // The user-facing alert below is deliberately content-free.
+            }
+            Alert.alert(t('memory.factForgetFailedTitle'), t('memory.factForgetFailedMessage'));
+          },
+        },
+      ]);
     },
-    [loadFacts],
+    [loadFacts, t],
   );
 
   const handleBlockDraftChange = useCallback((label: string, content: string) => {

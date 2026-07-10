@@ -777,6 +777,11 @@ export const en: TranslationMap = {
     factSourceGlobal: 'source global',
     factLastRecalled: '· recalled {date}',
     factForget: 'Forget',
+    factForgetTitle: 'Forget this fact?',
+    factForgetConfirm:
+      'This permanently removes this fact and the memory derived from it. This cannot be undone.',
+    factForgetFailedTitle: 'Fact not removed',
+    factForgetFailedMessage: 'Reload memory and try again.',
     factPin: 'Pin',
     factUnpin: 'Unpin',
     blocksEmpty: 'No memory blocks defined.',

@@ -19,8 +19,8 @@ import {
   invalidateFact,
   recordFact,
   setFactPinned,
-  softDeleteFact,
 } from '../../src/services/memory/facts/mutations';
+import { withdrawMemoryFact } from '../../src/services/memory/withdrawal';
 import {
   countFacts,
   countFactsByKind,
@@ -125,6 +125,84 @@ describe('recordFact', () => {
     expect(listFacts({ subjectId: userId, predicate: 'works_at' })).toHaveLength(1);
   });
 
+  it('uses scope-aware exact identity after the hash candidate lookup', () => {
+    const global = recordFact({
+      subjectId: userId,
+      predicate: 'timezone',
+      objectText: 'UTC+1',
+      scope: 'global',
+      originConversationId: 'global-origin-a',
+      originThreadId: 'global-thread-a',
+      originTaskId: 'global-task-a',
+    });
+    const globalReplay = recordFact({
+      subjectId: userId,
+      predicate: 'timezone',
+      objectText: 'UTC+1',
+      scope: 'global',
+      originConversationId: 'global-origin-b',
+      originThreadId: 'global-thread-b',
+      originTaskId: 'global-task-b',
+    });
+    expect(globalReplay.status).toBe('duplicate');
+    expect(globalReplay.fact.id).toBe(global.fact.id);
+
+    const conversation = recordFact({
+      subjectId: userId,
+      predicate: 'display_name',
+      objectText: 'Mo',
+      scope: 'conversation',
+      originConversationId: 'conversation-a',
+      originThreadId: 'thread-a',
+      originTaskId: 'task-a',
+    });
+    const conversationReplay = recordFact({
+      subjectId: userId,
+      predicate: 'display_name',
+      objectText: 'Mo',
+      scope: 'conversation',
+      originConversationId: 'conversation-a',
+      originThreadId: 'thread-b',
+      originTaskId: 'task-b',
+    });
+    expect(conversationReplay.status).toBe('duplicate');
+    expect(conversationReplay.fact.id).toBe(conversation.fact.id);
+
+    const canonicalText = recordFact({
+      subjectId: userId,
+      predicate: 'favorite_cafe',
+      objectText: 'Cafe\u0301',
+    });
+    const canonicalTextReplay = recordFact({
+      subjectId: userId,
+      predicate: 'favorite_cafe',
+      objectText: 'Caf\u00e9',
+    });
+    expect(canonicalTextReplay.status).toBe('duplicate');
+    expect(canonicalTextReplay.fact.id).toBe(canonicalText.fact.id);
+
+    const projectA = recordFact({
+      subjectId: userId,
+      predicate: 'release',
+      objectText: 'v1',
+      scope: 'project',
+      originConversationId: 'conversation-a',
+      originThreadId: 'thread-a',
+      originTaskId: 'task-a',
+    });
+    const projectB = recordFact({
+      subjectId: userId,
+      predicate: 'release',
+      objectText: 'v1',
+      scope: 'project',
+      originConversationId: 'conversation-a',
+      originThreadId: 'thread-b',
+      originTaskId: 'task-b',
+    });
+    expect(projectB.status).toBe('created');
+    expect(projectB.fact.id).not.toBe(projectA.fact.id);
+  });
+
   it('supersedes a prior fact when supersedePrior=true and stamps invalid_at', () => {
     const t0 = 1_000_000;
     const t1 = 2_000_000;
@@ -175,12 +253,12 @@ describe('recordFact', () => {
     expect(invalidateFact(f.fact.id)).toBe(false);
   });
 
-  it('softDeleteFact hides from default listFacts but is fetchable by id', () => {
+  it('withdrawMemoryFact removes the row from current and historical reads', () => {
     const f = recordFact({ subjectId: userId, predicate: 'p', objectText: 'o' });
-    expect(softDeleteFact(f.fact.id)).toBe(true);
+    expect(withdrawMemoryFact(f.fact.id).status).toBe('withdrawn');
     expect(listFacts({ subjectId: userId })).toHaveLength(0);
-    expect(getFactById(f.fact.id)?.deletedAt).not.toBeNull();
-    expect(listFacts({ subjectId: userId, includeDeleted: true })).toHaveLength(1);
+    expect(getFactById(f.fact.id)).toBeNull();
+    expect(listFacts({ subjectId: userId, includeDeleted: true })).toHaveLength(0);
   });
 
   it('setFactPinned bubbles pinned facts to the top of listFacts', () => {
@@ -230,7 +308,7 @@ describe('recordFact', () => {
       )?.count,
     ).toBe(1);
 
-    expect(softDeleteFact(r.fact.id)).toBe(true);
+    expect(withdrawMemoryFact(r.fact.id).status).toBe('withdrawn');
     expect(
       db.getFirstSync<{ count: number }>(
         'SELECT COUNT(*) AS count FROM memory_fact_terms WHERE fact_id = ?',

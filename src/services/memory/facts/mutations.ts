@@ -3,7 +3,7 @@ import { runMemoryStatement } from '../access/crud';
 import { newId, safeParseObject } from '../schema';
 import { notifyStructuredMemoryChanged } from '../store';
 import { runMemoryTransaction } from '../access/transaction';
-import { deleteFactRetrievalTerms, replaceFactRetrievalTerms } from './retrievalIndex';
+import { replaceFactRetrievalTerms } from './retrievalIndex';
 import { buildFactContentHash, hasExactFactContentIdentity } from './contentIdentity';
 import {
   clamp01,
@@ -521,23 +521,6 @@ export function invalidateFact(id: string, now = Date.now()): boolean {
   );
   const changed = (result.changes ?? 0) > 0;
   if (changed) {
-    notifyStructuredMemoryChanged();
-  }
-  return changed;
-}
-
-export function softDeleteFact(id: string, now = Date.now()): boolean {
-  const result = runMemoryStatement(
-    `UPDATE memory_facts
-       SET deleted_at = ?, updated_at = ?
-       WHERE id = ? AND deleted_at IS NULL`,
-    now,
-    now,
-    id,
-  );
-  const changed = (result.changes ?? 0) > 0;
-  if (changed) {
-    deleteFactRetrievalTerms(id);
     notifyStructuredMemoryChanged();
   }
   return changed;

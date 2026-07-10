@@ -770,6 +770,11 @@ export const es: TranslationMap = mergeTranslations(en, {
     factSourceGlobal: 'origen global',
     factLastRecalled: '· recordado {date}',
     factForget: 'Olvidar',
+    factForgetTitle: '¿Olvidar este hecho?',
+    factForgetConfirm:
+      'Esto elimina permanentemente este hecho y la memoria derivada de él. Esta acción no se puede deshacer.',
+    factForgetFailedTitle: 'El hecho no se eliminó',
+    factForgetFailedMessage: 'Vuelve a cargar la memoria e inténtalo de nuevo.',
     factPin: 'Fijar',
     factUnpin: 'Desfijar',
     blocksEmpty: 'No hay bloques de memoria definidos.',

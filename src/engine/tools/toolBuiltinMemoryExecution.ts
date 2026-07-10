@@ -5,6 +5,7 @@ import {
   executeMemoryBlockEdit,
   executeMemoryBlockRead,
   executeMemoryForget,
+  executeMemoryInvalidate,
   executeMemoryPin,
   executeMemoryRecall,
   executeMemoryRemember,
@@ -27,12 +28,30 @@ export const BUILTIN_MEMORY_TOOL_NAMES = new Set([
   'memory_block',
 ]);
 
+const MEMORY_MANAGE_KEYS = new Set(['action', 'factId']);
+const MEMORY_MANAGE_ACTIONS = new Set(['pin', 'unpin', 'invalidate']);
+
 function buildMemoryPermissionDenied(): string {
   return JSON.stringify({
     ok: false,
     code: 'permission_denied',
     error: 'Long-term memory is disabled in settings.',
   });
+}
+
+function memoryManageAction(args: unknown): string {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return '';
+  const action = (args as { action?: unknown }).action;
+  return typeof action === 'string' ? action : '';
+}
+
+function hasOnlyKeys(args: unknown, allowed: ReadonlySet<string>): args is Record<string, unknown> {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return false;
+  return Object.keys(args).every((key) => allowed.has(key));
+}
+
+function buildInvalidMemoryManageArgs(message: string): string {
+  return JSON.stringify({ ok: false, code: 'invalid_args', error: message });
 }
 
 function withExecutionMemoryContext(
@@ -74,6 +93,20 @@ export async function executeBuiltinMemoryTool(
     return null;
   }
 
+  if (name === 'memory_forget') return executeMemoryForget(args);
+
+  const manageAction = name === 'memory_manage' ? memoryManageAction(args) : '';
+  if (name === 'memory_manage') {
+    if (!hasOnlyKeys(args, MEMORY_MANAGE_KEYS)) {
+      return buildInvalidMemoryManageArgs('memory_manage accepts only action and factId.');
+    }
+    if (!MEMORY_MANAGE_ACTIONS.has(manageAction)) {
+      return buildInvalidMemoryManageArgs(
+        'memory_manage: action must be one of pin, unpin, invalidate.',
+      );
+    }
+  }
+
   if (useSettingsStore.getState().disableLongTermMemory) {
     return buildMemoryPermissionDenied();
   }
@@ -97,24 +130,16 @@ export async function executeBuiltinMemoryTool(
   }
   if (name === 'memory_pin') return executeMemoryPin(args);
   if (name === 'memory_unpin') return executeMemoryUnpin(args);
-  if (name === 'memory_forget') return executeMemoryForget(args);
   if (name === 'memory_block_read') return executeMemoryBlockRead(args);
   if (name === 'memory_block_edit') return executeMemoryBlockEdit(args);
 
   if (name === 'memory_manage') {
-    const action = args && typeof args.action === 'string' ? String(args.action).toLowerCase() : '';
+    const action = manageAction;
     if (action === 'pin') return executeMemoryPin({ factId: args?.factId as string });
     if (action === 'unpin') return executeMemoryUnpin({ factId: args?.factId as string });
-    if (action === 'forget') {
-      return executeMemoryForget({
-        factId: args?.factId as string,
-        mode: args?.mode as 'invalidate' | 'delete' | undefined,
-      });
+    if (action === 'invalidate') {
+      return executeMemoryInvalidate({ factId: args.factId as string });
     }
-    return JSON.stringify({
-      ok: false,
-      error: 'memory_manage: action must be one of pin, unpin, forget.',
-    });
   }
 
   if (name === 'memory_block') {
