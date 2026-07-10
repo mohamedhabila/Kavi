@@ -258,6 +258,11 @@ model call to the request path, inject a frame into prompts, or change graph
 behavior. Gold labels remain under evaluator control and are never mounted into
 the app process.
 
+The private source attestation requires `candidateCapturePhase=pre_execution`,
+no candidate access to execution evidence or a final answer, and no app-runtime
+access to gold. Violating any attestation invalidates the input; omitting leaked
+fields from a post-execution frame is not a valid substitute.
+
 The closed frame has ten fields:
 
 | Field                  | Meaning                                                                    |

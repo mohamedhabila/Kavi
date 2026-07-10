@@ -256,16 +256,19 @@ function aggregateIntentFrameEvaluation(input, options) {
   const eligibilityFailures = INTENT_FRAME_ELIGIBILITY_FAILURES.filter((failure) =>
     failures.has(failure),
   );
-  const counts = fields.reduce(
+  const evidenceCounts = fields.reduce(
     (summary, field) => ({
-      cases: cases.length,
-      fieldLabels: cases.length * INTENT_FRAME_FIELDS.length,
       scorable: summary.scorable + field.scorable,
       ambiguous: summary.ambiguous + field.ambiguous,
       unscorable: summary.unscorable + field.unscorable,
     }),
-    { cases: cases.length, fieldLabels: 0, scorable: 0, ambiguous: 0, unscorable: 0 },
+    { scorable: 0, ambiguous: 0, unscorable: 0 },
   );
+  const counts = {
+    cases: cases.length,
+    fieldLabels: cases.length * INTENT_FRAME_FIELDS.length,
+    ...evidenceCounts,
+  };
   const report = {
     $schema: INTENT_FRAME_SCHEMA_URL,
     kind: 'intent_frame_evaluation_report',
@@ -291,7 +294,8 @@ function aggregateIntentFrameEvaluation(input, options) {
       rawRequestExcluded: true,
       executionEvidenceExcluded: true,
       finalAnswerExcluded: true,
-      appRuntimeAccess: false,
+      goldAppRuntimeAccess: false,
+      candidateCapturePhase: 'pre_execution',
     },
   };
   return {

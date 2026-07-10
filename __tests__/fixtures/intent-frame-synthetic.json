@@ -14,7 +14,10 @@
     "candidateArtifactSha256": "f1deb0b572b75fabad801087a57a2b4688b557d35de326a63913aabd2d47edcc",
     "goldLabelsSha256": "3ad66a7c5bac895b7a95cff1e715356557d3d174ccf6b7c6fd7e0b346bf3c8ba",
     "goldLabelsAccess": "evaluator_only",
-    "appRuntimeAccess": false
+    "goldAppRuntimeAccess": false,
+    "candidateCapturePhase": "pre_execution",
+    "candidateExecutionEvidenceAccess": false,
+    "candidateFinalAnswerAccess": false
   },
   "cases": [
     {

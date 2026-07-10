@@ -398,7 +398,10 @@
             "candidateArtifactSha256",
             "goldLabelsSha256",
             "goldLabelsAccess",
-            "appRuntimeAccess"
+            "goldAppRuntimeAccess",
+            "candidateCapturePhase",
+            "candidateExecutionEvidenceAccess",
+            "candidateFinalAnswerAccess"
           ],
           "properties": {
             "candidateArtifactSha256": {
@@ -410,7 +413,16 @@
             "goldLabelsAccess": {
               "const": "evaluator_only"
             },
-            "appRuntimeAccess": {
+            "goldAppRuntimeAccess": {
+              "const": false
+            },
+            "candidateCapturePhase": {
+              "const": "pre_execution"
+            },
+            "candidateExecutionEvidenceAccess": {
+              "const": false
+            },
+            "candidateFinalAnswerAccess": {
               "const": false
             }
           }
@@ -659,7 +671,7 @@
               "items": {
                 "$ref": "#/$defs/coverageEntry"
               },
-              "maxItems": 1000
+              "maxItems": 100000
             },
             "productAreas": {
               "type": "array",
@@ -678,7 +690,8 @@
             "rawRequestExcluded",
             "executionEvidenceExcluded",
             "finalAnswerExcluded",
-            "appRuntimeAccess"
+            "goldAppRuntimeAccess",
+            "candidateCapturePhase"
           ],
           "properties": {
             "closedCandidateFrame": {
@@ -693,8 +706,11 @@
             "finalAnswerExcluded": {
               "const": true
             },
-            "appRuntimeAccess": {
+            "goldAppRuntimeAccess": {
               "const": false
+            },
+            "candidateCapturePhase": {
+              "const": "pre_execution"
             }
           }
         }

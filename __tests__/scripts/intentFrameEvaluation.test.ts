@@ -76,7 +76,8 @@ describe('evaluator-only intent frame', () => {
         rawRequestExcluded: true,
         executionEvidenceExcluded: true,
         finalAnswerExcluded: true,
-        appRuntimeAccess: false,
+        goldAppRuntimeAccess: false,
+        candidateCapturePhase: 'pre_execution',
       },
     });
     expect(result.report.fields.map((field: any) => field.field)).toEqual(INTENT_FRAME_FIELDS);
@@ -186,6 +187,24 @@ describe('evaluator-only intent frame', () => {
     expect(validateIntentFrameInput(rawRequest, schema)).toEqual(
       expect.arrayContaining([
         expect.stringContaining('input.cases[0]: must NOT have additional properties'),
+      ]),
+    );
+
+    const postExecutionCapture = loadFixture();
+    postExecutionCapture.source.candidateCapturePhase = 'post_execution';
+    postExecutionCapture.source.candidateExecutionEvidenceAccess = true;
+    postExecutionCapture.source.candidateFinalAnswerAccess = true;
+    postExecutionCapture.source.goldAppRuntimeAccess = true;
+    expect(validateIntentFrameInput(postExecutionCapture, schema)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('input.source.candidateCapturePhase: must be equal to constant'),
+        expect.stringContaining(
+          'input.source.candidateExecutionEvidenceAccess: must be equal to constant',
+        ),
+        expect.stringContaining(
+          'input.source.candidateFinalAnswerAccess: must be equal to constant',
+        ),
+        expect.stringContaining('input.source.goldAppRuntimeAccess: must be equal to constant'),
       ]),
     );
   });
