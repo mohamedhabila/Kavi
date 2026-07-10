@@ -265,7 +265,7 @@ describe('extractStructuralMemory — open threads', () => {
 // ── Structural facts ────────────────────────────────────────────────────────
 
 describe('extractStructuralMemory — structural facts', () => {
-  it('extracts exact facts from memory_remember tool calls', () => {
+  it('does not duplicate writes already owned by the memory_remember executor', () => {
     const result = extractStructuralMemory({
       ...baseInput,
       messages: [
@@ -289,18 +289,7 @@ describe('extractStructuralMemory — structural facts', () => {
       ],
     });
 
-    expect(result.facts).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          subject: 'knowu-user',
-          predicate: 'preferred_message_contact',
-          value: 'Avery',
-          scope: 'global',
-          confidence: 0.92,
-          importance: 0.8,
-        }),
-      ]),
-    );
+    expect(result.facts).toEqual([]);
   });
 
   it('does not turn generic JSON tool responses into semantic facts', () => {

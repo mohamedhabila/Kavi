@@ -19,6 +19,8 @@ import { formatAcceptanceMetricEvaluation } from '../../src/acceptance/acceptanc
 import { MEMORY_RECALL_FIXTURES } from '../../src/acceptance/acceptanceMetrics/memoryRecallFixtures';
 import { runMemoryRecallScenario } from '../../src/acceptance/acceptanceMetrics/runMemoryRecallScenario';
 import { MEMORY_RECALL_MIN_PASS_RATE } from '../../src/acceptance/acceptanceMetrics/thresholds';
+import { MEMORY_CORRECTION_FIXTURES } from '../../src/acceptance/acceptanceMetrics/memoryCorrectionFixtures';
+import { evaluateMemoryCorrectionFixture } from '../../src/acceptance/acceptanceMetrics/evaluateMemoryCorrectionFixture';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -35,6 +37,18 @@ afterEach(() => {
 });
 
 describe('quality memory metrics harness', () => {
+  it('versions grounded multilingual corrections and rejects a hypothetical control', async () => {
+    const outcomes = [];
+    for (const [index, fixture] of MEMORY_CORRECTION_FIXTURES.entries()) {
+      outcomes.push(await evaluateMemoryCorrectionFixture(fixture, 1_000 + index * 100));
+    }
+    expect(outcomes).toEqual(
+      MEMORY_CORRECTION_FIXTURES.map((fixture) =>
+        expect.objectContaining({ fixtureId: fixture.id, passed: true }),
+      ),
+    );
+  });
+
   it('meets the 3-turn interdependent recall threshold across fixtures', async () => {
     const outcomes = [];
     for (const [index, fixture] of MEMORY_RECALL_FIXTURES.entries()) {

@@ -12,10 +12,8 @@
 
 import type { Message } from '../../types/message';
 import type { ConsolidatorFact, ConsolidatorTurnInput } from './consolidator';
-import { parseJsonRecord } from './factJson';
 
 const MAX_STRUCTURAL_FACTS = 5;
-const DIRECT_MEMORY_TOOL_REASON = 'Direct memory_remember tool call arguments.';
 
 export interface StructuralExtraction {
   /** Always created from the turn structure */
@@ -192,19 +190,7 @@ function extractStructuredOpenThreads(messages: Message[]): string[] {
 function extractStructuralFacts(messages: Message[]): ConsolidatorFact[] {
   const facts: ConsolidatorFact[] = [];
 
-  // Fact 1: Direct structured memory writes from executed tool calls.
-  for (const m of messages) {
-    for (const tc of m.toolCalls ?? []) {
-      if (tc.name !== 'memory_remember') continue;
-      const fact = memoryRememberToolCallToFact(tc.arguments);
-      if (fact) {
-        facts.push(fact);
-        if (facts.length >= MAX_STRUCTURAL_FACTS) return facts;
-      }
-    }
-  }
-
-  // Fact 2: File operations — detected by tool name, not language
+  // Fact 1: File operations — detected by tool name, not language
   const fileTools = ['write_file', 'file_edit', 'apply_patch', 'read_file'];
   for (const m of messages) {
     for (const tc of m.toolCalls ?? []) {
@@ -231,7 +217,7 @@ function extractStructuralFacts(messages: Message[]): ConsolidatorFact[] {
     }
   }
 
-  // Fact 3: Sub-agent spawning — structural
+  // Fact 2: Sub-agent spawning — structural
   for (const m of messages) {
     for (const tc of m.toolCalls ?? []) {
       if (tc.name === 'sessions_spawn') {
@@ -256,50 +242,4 @@ function extractStructuralFacts(messages: Message[]): ConsolidatorFact[] {
   }
 
   return facts;
-}
-
-function memoryRememberToolCallToFact(argumentsJson: string | undefined): ConsolidatorFact | null {
-  const args = parseJsonRecord(argumentsJson ?? '{}');
-  if (!args) return null;
-
-  const subject = normalizedBoundedString(args.subject, 80);
-  const predicate = normalizedBoundedString(args.predicate, 80);
-  const value = normalizedBoundedString(args.value, 200);
-  if (!subject || !predicate || !value) return null;
-
-  const scope = parseStructuralFactScope(args.scope);
-  const confidence = typeof args.confidence === 'number' ? clamp01(args.confidence) : undefined;
-  const importance = typeof args.importance === 'number' ? clamp01(args.importance) : undefined;
-
-  return {
-    subject,
-    predicate,
-    value,
-    ...(scope ? { scope } : {}),
-    ...(confidence !== undefined ? { confidence } : {}),
-    ...(importance !== undefined ? { importance } : {}),
-    reason: DIRECT_MEMORY_TOOL_REASON,
-  };
-}
-
-function normalizedBoundedString(value: unknown, maxLength: number): string | null {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  if (!trimmed || trimmed.length > maxLength) return null;
-  return trimmed;
-}
-
-function parseStructuralFactScope(value: unknown): ConsolidatorFact['scope'] | undefined {
-  return value === 'global' ||
-    value === 'project' ||
-    value === 'conversation' ||
-    value === 'session' ||
-    value === 'persona'
-    ? value
-    : undefined;
-}
-
-function clamp01(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.min(1, Math.max(0, value));
 }

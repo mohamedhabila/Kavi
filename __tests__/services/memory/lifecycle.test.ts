@@ -32,6 +32,7 @@ import {
 import { findEntityByName } from '../../../src/services/memory/entities';
 import { getBlock } from '../../../src/services/memory/blocks';
 import { listFacts } from '../../../src/services/memory/facts/queries';
+import { executeMemoryRemember } from '../../../src/services/memory/memoryTools';
 import { listEpisodes } from '../../../src/services/memory/episodes/queries';
 import {
   drainIngestionQueue,
@@ -186,7 +187,7 @@ describe('recordCompletedTurnForMemory', () => {
     expect(listFacts({ limit: 20 }).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('ingests a child source turn into the parent memory namespace used by retrieval', async () => {
+  it('keeps the tool-owned child write in the parent namespace without post-turn duplication', async () => {
     const childMessages: Message[] = [
       {
         id: 'u-shared-1',
@@ -216,6 +217,18 @@ describe('recordCompletedTurnForMemory', () => {
       },
     ];
 
+    const toolWrite = executeMemoryRemember({
+      subject: 'release-artifact',
+      predicate: 'checklist_path',
+      value: '/workspace/release-checklist.md',
+      scope: 'conversation',
+      confidence: 0.95,
+      originConversationId: 'parent-conv-shared',
+      originThreadId: 'child-conv-shared',
+      sourceMessageId: 'a-shared-1',
+    });
+    expect(toolWrite.ok).toBe(true);
+
     const result = await recordCompletedTurnForMemory({
       threadId: 'child-conv-shared',
       memoryConversationId: 'parent-conv-shared',
@@ -234,6 +247,7 @@ describe('recordCompletedTurnForMemory', () => {
     expect(checklistFact?.objectText).toBe('/workspace/release-checklist.md');
     expect(checklistFact?.originConversationId).toBe('parent-conv-shared');
     expect(checklistFact?.originThreadId).toBe('child-conv-shared');
+    expect(parentFacts.filter((fact) => fact.predicate === 'checklist_path')).toHaveLength(1);
     expect(
       listFacts({ originConversationId: 'child-conv-shared', limit: 20 }).some(
         (fact) => fact.predicate === 'checklist_path',
