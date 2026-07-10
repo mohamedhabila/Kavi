@@ -127,6 +127,7 @@ jest.mock('../../src/store/useSettingsStore', () => ({
       mediaUnderstandingEnabled: true,
       maxLinks: 3,
     }),
+    subscribe: () => () => undefined,
     persist: {
       hasHydrated: () => true,
       onFinishHydration: () => () => {},
@@ -311,6 +312,7 @@ describe('initializeServices', () => {
           mediaUnderstandingEnabled: true,
           maxLinks: 3,
         }),
+        subscribe: () => () => undefined,
       },
     }));
 
@@ -327,6 +329,7 @@ describe('initializeServices', () => {
     jest.doMock('../../src/store/useSettingsStore', () => ({
       useSettingsStore: {
         getState: () => ({ activeProviderId: 'missing', providers: [] }),
+        subscribe: () => () => undefined,
       },
     }));
     const { initializeServices } = require('../../src/services/startup');
@@ -345,6 +348,7 @@ describe('initializeServices', () => {
             { id: 'openai', name: 'OpenAI', apiKey: '', model: 'gpt-5.4', enabled: true },
           ],
         }),
+        subscribe: () => () => undefined,
       },
     }));
     const { initializeServices } = require('../../src/services/startup');
@@ -361,6 +365,7 @@ describe('initializeServices', () => {
           activeProviderId: 'openai',
           providers: [{ ...mockProvider, enabled: true }],
         }),
+        subscribe: () => () => undefined,
       },
     }));
     const { initializeServices } = require('../../src/services/startup');
@@ -386,6 +391,7 @@ describe('initializeServices', () => {
             },
           ],
         }),
+        subscribe: () => () => undefined,
       },
     }));
 
@@ -407,6 +413,7 @@ describe('initializeServices', () => {
           activeProviderId: 'openai',
           providers: [{ ...mockProvider, enabled: true }],
         }),
+        subscribe: () => () => undefined,
       },
     }));
     const { initializeServices } = require('../../src/services/startup');

@@ -29,6 +29,7 @@ import { unrefTimerIfSupported } from '../utils/timers';
 import { initSubAgentRegistry, listActiveSubAgents } from './agents/subAgent';
 import { repairTerminalAgentRunsMissingFinalResponses } from './agents/agentRunRepair';
 import { runMemoryMigrationTick, runMemoryBackgroundFlush } from './memory/lifecycle';
+import { initializeMemoryPolicyObservation } from './memory/policy';
 import { editWorkingBlock } from './memory/workingBlocks';
 import {
   buildSurfacedSubAgentOutputToolResultSummary,
@@ -45,6 +46,7 @@ import {
   resolveProviderApiKey,
 } from './llm/support/providerSupport';
 import { SUPER_AGENT_PERSONA_ID } from './agents/personas';
+import { resolveConversationPersonaForMode } from '../engine/graph/conversation/modeTransitions';
 
 function shouldDeliverNotification(job: CronJob): boolean {
   const mode = job.delivery?.mode || 'both';
@@ -174,6 +176,10 @@ async function runStartupHooksAndEmitLaunchEvent(): Promise<void> {
           provider: { ...provider, apiKey },
           model,
           conversationId: `hook-${Date.now()}`,
+          personaId: resolveConversationPersonaForMode({
+            nextMode: settings.defaultConversationMode,
+          }),
+          taskId: null,
           systemPrompt:
             settings.systemPrompt ||
             'You are a helpful personal AI assistant with access to tools.',
@@ -553,6 +559,17 @@ async function executeScheduledJob(job: CronJob): Promise<string> {
         provider: { ...provider, apiKey },
         model,
         conversationId,
+        personaId: resolveConversationPersonaForMode({
+          conversationPersonaId: useChatStore
+            .getState()
+            .conversations.find((conversation) => conversation.id === conversationId)?.personaId,
+          nextMode:
+            useChatStore
+              .getState()
+              .conversations.find((conversation) => conversation.id === conversationId)?.mode ??
+            settings.defaultConversationMode,
+        }),
+        taskId: null,
         systemPrompt:
           settings.systemPrompt || 'You are a helpful personal AI assistant with access to tools.',
         messages,
@@ -609,6 +626,10 @@ async function executeScheduledJob(job: CronJob): Promise<string> {
 export function initializeServices(): void {
   if (initialized) return;
   initialized = true;
+
+  if (!initializeMemoryPolicyObservation()) {
+    console.warn('[startup] memory policy observation unavailable; durable memory is disabled');
+  }
 
   void recoverPersistedAgentState().catch((e) =>
     console.warn('[startup] recoverPersistedAgentState failed:', e),

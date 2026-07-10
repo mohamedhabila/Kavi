@@ -128,6 +128,7 @@ jest.mock('../../src/store/useSettingsStore', () => ({
       mediaUnderstandingEnabled: true,
       maxLinks: 3,
     }),
+    subscribe: () => () => undefined,
     persist: {
       hasHydrated: () => true,
       onFinishHydration: () => () => {},
