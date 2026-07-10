@@ -16,6 +16,8 @@ import type {
   ForegroundScenarioCompletionSnapshot,
   ForegroundScenarioExecutionContextSnapshot,
   ForegroundScenarioFinalAssistantSnapshot,
+  ForegroundScenarioLifecycleBoundary,
+  ForegroundScenarioLifecycleSnapshot,
   ForegroundScenarioMemoryFinalState,
   ForegroundScenarioMemorySnapshot,
   ForegroundScenarioMemoryTurnEvidence,
@@ -101,6 +103,7 @@ export type E2EAgentRunTrace = {
 
 export type E2EScenarioTurnTrace = {
   turnIndex: number;
+  lifecycleBefore: ForegroundScenarioLifecycleSnapshot | null;
   user: ForegroundScenarioUserSnapshot;
   route: Readonly<{
     directive: ForegroundScenarioRouteDirective;
@@ -141,6 +144,7 @@ export type E2EScenarioResult = {
 export type E2EUserTurn = {
   content: string;
   route?: ForegroundScenarioRouteDirective;
+  lifecycleBefore?: ForegroundScenarioLifecycleBoundary;
 };
 
 export type E2EScenarioContentClass = 'private' | 'synthetic_public';
@@ -181,6 +185,29 @@ export type E2ERubric =
       afterWarmupTurns?: number;
     }
   | { kind: 'min_user_turns'; min: number }
+  | {
+      kind: 'turn_route';
+      turnIndex: number;
+      directive: ForegroundScenarioRouteDirective;
+      mode: ConversationMode;
+    }
+  | {
+      kind: 'turn_completion';
+      turnIndex: number;
+      executionCompleted: boolean;
+      finalResponseCompleted: boolean;
+      runCompleted: boolean | null;
+    }
+  | {
+      kind: 'turn_memory_receipt';
+      turnIndex: number;
+      providerOutcome?: ForegroundScenarioMemorySnapshot['receipts'][number]['providerOutcome'];
+    }
+  | {
+      kind: 'turn_lifecycle_boundary';
+      turnIndex: number;
+      boundary: ForegroundScenarioLifecycleBoundary;
+    }
   | { kind: 'goal_status'; goalId: string; status: AgentGoalStatus }
   | { kind: 'ingestion_job_completed'; minCount?: number }
   | { kind: 'memory_episode_count'; min: number }

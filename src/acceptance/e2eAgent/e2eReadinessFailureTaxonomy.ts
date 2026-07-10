@@ -26,6 +26,10 @@ const RUBRIC_KINDS: ReadonlySet<E2ERubricKind> = new Set([
   'cache_prefix_readiness',
   'cache_eligible_read_rate',
   'min_user_turns',
+  'turn_route',
+  'turn_completion',
+  'turn_memory_receipt',
+  'turn_lifecycle_boundary',
   'goal_status',
   'ingestion_job_completed',
   'memory_episode_count',
@@ -123,12 +127,15 @@ function rubricFailureCategories(
     case 'goal_criterion':
     case 'goals_bootstrapped':
     case 'graph_audit_observed':
+    case 'turn_route':
+    case 'turn_completion':
       return ['goal_state_bug'];
     case 'memory_fact':
     case 'memory_fact_absent':
     case 'memory_episode_count':
     case 'ingestion_job_completed':
     case 'working_block_token':
+    case 'turn_memory_receipt':
       return ['memory_retrieval_miss'];
     case 'cache_read_tokens':
     case 'cache_prefix_readiness':
@@ -138,6 +145,8 @@ function rubricFailureCategories(
       return ['token_budget_overrun'];
     case 'min_user_turns':
       return ['missing_clarification'];
+    case 'turn_lifecycle_boundary':
+      return ['native_side_effect_failure'];
   }
 }
 

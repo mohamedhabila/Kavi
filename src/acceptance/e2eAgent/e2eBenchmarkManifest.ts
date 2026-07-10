@@ -22,7 +22,7 @@ import {
 import type { E2EAssessmentDimension } from './e2eAssessmentDimensions';
 import type { E2ERubric, E2EScenario } from './types';
 
-export const E2E_BENCHMARK_MANIFEST_VERSION = '2026-07-10.product-route-v1';
+export const E2E_BENCHMARK_MANIFEST_VERSION = '2026-07-10.stage-attribution-v1';
 export const E2E_BENCHMARK_SOURCE_REFRESH_DATE = '2026-06-14';
 
 type E2ERubricKind = E2ERubric['kind'];
@@ -45,7 +45,10 @@ export type E2EBenchmarkStructuralEvidenceKind =
   | 'memory_store'
   | 'native_fixture_state'
   | 'token_accounting'
-  | 'cache_event';
+  | 'cache_event'
+  | 'execution_state'
+  | 'memory_receipt'
+  | 'lifecycle_event';
 
 export type E2EBenchmarkEvaluatorKind = 'final_state' | 'trajectory' | 'resource_budget';
 
@@ -180,6 +183,10 @@ const TRAJECTORY_RUBRICS: ReadonlySet<E2ERubricKind> = new Set([
   'cache_read_tokens',
   'cache_prefix_readiness',
   'cache_eligible_read_rate',
+  'turn_route',
+  'turn_completion',
+  'turn_memory_receipt',
+  'turn_lifecycle_boundary',
 ]);
 
 const RESOURCE_BUDGET_RUBRICS: ReadonlySet<E2ERubricKind> = new Set(['token_budget']);
@@ -243,6 +250,13 @@ function structuralEvidenceKindForRubric(rubric: E2ERubric): E2EBenchmarkStructu
     case 'cache_prefix_readiness':
     case 'cache_eligible_read_rate':
       return 'cache_event';
+    case 'turn_route':
+    case 'turn_completion':
+      return 'execution_state';
+    case 'turn_memory_receipt':
+      return 'memory_receipt';
+    case 'turn_lifecycle_boundary':
+      return 'lifecycle_event';
     case 'goals_bootstrapped':
     case 'goal_evidence_satisfied':
     case 'graph_status':
@@ -429,9 +443,9 @@ export function buildE2EBenchmarkManifest(scenario: E2EScenario): E2EBenchmarkMa
       nativeFixtureRequired: environmentKind === 'native_fixture',
       execution: {
         ...scenario.execution,
-        turnRoutes:
-          scenario.userTurns?.map((turn) => turn.route ?? scenario.execution.route) ??
-          [scenario.execution.route],
+        turnRoutes: scenario.userTurns?.map((turn) => turn.route ?? scenario.execution.route) ?? [
+          scenario.execution.route,
+        ],
       },
     },
     hiddenGroundTruth: {

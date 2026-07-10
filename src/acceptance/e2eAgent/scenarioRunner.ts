@@ -74,6 +74,7 @@ export async function runE2EScenario(scenario: E2EScenario): Promise<E2EScenario
       defaultMode: scenario.execution.initialMode,
       turns: userTurns.map((turn) => ({
         content: turn.content,
+        lifecycleBefore: turn.lifecycleBefore,
         route: turn.route ?? scenario.execution.route,
         timeoutMs: perTurnTimeoutMs,
       })),

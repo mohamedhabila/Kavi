@@ -17,6 +17,7 @@ import type { AcceptanceFixtureOutcome } from '../acceptanceMetrics/types';
 import { estimateUsageCacheEligibleInputTokens } from './evaluateE2EAgentMetrics';
 import { buildWorkingBlockScopeKey } from '../../services/memory/workingBlocks';
 import { readWorkspaceRelativeFile, workspaceFileExists } from './sandboxWorkspace';
+import { evaluateE2ETurnStageRubric } from './e2eTurnStageRubricEvaluators';
 import type { E2ERubric, E2EScenarioResult, E2ETokenUsageSummary } from './types';
 import type { UsagePromptCacheTelemetry } from '../../types/usage';
 
@@ -469,6 +470,12 @@ export function evaluateE2ERubric(
       }
       return { fixtureId, passed: true };
     }
+
+    case 'turn_route':
+    case 'turn_completion':
+    case 'turn_memory_receipt':
+    case 'turn_lifecycle_boundary':
+      return evaluateE2ETurnStageRubric(result, rubric);
 
     case 'goal_status': {
       const goal = findGoalById(result, rubric.goalId);

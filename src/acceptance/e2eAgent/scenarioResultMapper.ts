@@ -98,6 +98,7 @@ function buildTurnTrace(turn: ForegroundScenarioTurnSnapshot): E2EScenarioTurnTr
     : [];
   return cloneAndFreeze({
     turnIndex: turn.turnIndex,
+    lifecycleBefore: cloneJson(turn.lifecycleBefore),
     user: cloneJson(turn.user),
     route: cloneJson(turn.route),
     finalAssistant: turn.finalAssistant ? cloneJson(turn.finalAssistant) : null,
