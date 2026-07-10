@@ -73,7 +73,7 @@ export async function executeWriteFile(
       path: readback.path,
       size: readback.size,
       sha256,
-      summary: `Wrote and verified ${readback.size} chars at ${readback.path}`,
+      summary: `Wrote ${readback.size} chars to ${readback.path} and verified readback`,
     });
   } catch {
     return JSON.stringify({

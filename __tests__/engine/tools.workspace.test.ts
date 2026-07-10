@@ -259,6 +259,11 @@ describe('executeTool', () => {
         path: 'src/app.ts',
         size: 17,
       });
+      mockReadWorkspaceFile.mockResolvedValue({
+        path: 'src/app.ts',
+        content: 'export default 1;',
+        size: 17,
+      });
 
       const result = await executeTool(
         'write_file',
@@ -297,11 +302,17 @@ describe('executeTool', () => {
     });
 
     it('routes file_edit through the attached workspace target', async () => {
-      mockReadWorkspaceFile.mockResolvedValue({
-        path: 'src/app.ts',
-        content: 'const value = 1;\n',
-        size: 17,
-      });
+      mockReadWorkspaceFile
+        .mockResolvedValueOnce({
+          path: 'src/app.ts',
+          content: 'const value = 1;\n',
+          size: 17,
+        })
+        .mockResolvedValueOnce({
+          path: 'src/app.ts',
+          content: 'const value = 2;\n',
+          size: 17,
+        });
       mockWriteWorkspaceFile.mockResolvedValue({
         path: 'src/app.ts',
         size: 17,
