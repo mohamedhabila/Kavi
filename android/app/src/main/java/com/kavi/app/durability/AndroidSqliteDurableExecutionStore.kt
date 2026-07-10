@@ -10,6 +10,7 @@ import android.database.sqlite.SQLiteException
 import android.database.sqlite.SQLiteOpenHelper
 import java.io.File
 import java.io.FileOutputStream
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 import org.json.JSONObject
 
@@ -20,6 +21,7 @@ private const val RECORD_SCHEMA_VERSION = 1
 private const val DATABASE_SCHEMA_VERSION = 1
 private const val RECORD_TABLE = "durable_execution_records"
 private const val COLUMN_RUN_ID = "run_id"
+private const val COLUMN_PLATFORM_WORK_ID = "platform_work_id"
 private const val COLUMN_REVISION = "revision"
 private const val COLUMN_STATE = "state"
 private const val COLUMN_UPDATED_AT = "updated_at"
@@ -27,6 +29,7 @@ private const val COLUMN_RECORD = "record_json"
 private const val MAX_SCHEDULING_LIST_LIMIT = 1_000
 private val RECORD_COLUMNS = arrayOf(
   COLUMN_RUN_ID,
+  COLUMN_PLATFORM_WORK_ID,
   COLUMN_REVISION,
   COLUMN_STATE,
   COLUMN_UPDATED_AT,
@@ -59,6 +62,20 @@ internal class AndroidSqliteDurableExecutionStore(
     AndroidDurableStoreReadResult.Unavailable
   } else try {
     readFrom(helper.readableDatabase, runId)
+  } catch (_: Exception) {
+    AndroidDurableStoreReadResult.Unavailable
+  }
+
+  override fun readByWorkId(platformWorkId: String): AndroidDurableStoreReadResult = if (
+    !validUuid(platformWorkId) || databaseHealth.isCorrupted()
+  ) {
+    AndroidDurableStoreReadResult.Unavailable
+  } else try {
+    readSingle(
+      database = helper.readableDatabase,
+      selection = "$COLUMN_PLATFORM_WORK_ID = ?",
+      selectionArgs = arrayOf(platformWorkId),
+    )
   } catch (_: Exception) {
     AndroidDurableStoreReadResult.Unavailable
   }
@@ -194,6 +211,18 @@ internal class AndroidSqliteDurableExecutionStore(
   private fun readFrom(
     database: SQLiteDatabase,
     runId: String,
+  ): AndroidDurableStoreReadResult = readSingle(
+    database = database,
+    selection = "$COLUMN_RUN_ID = ?",
+    selectionArgs = arrayOf(runId),
+    expectedRunId = runId,
+  )
+
+  private fun readSingle(
+    database: SQLiteDatabase,
+    selection: String,
+    selectionArgs: Array<String>,
+    expectedRunId: String? = null,
   ): AndroidDurableStoreReadResult {
     if (databaseHealth.isCorrupted()) {
       return AndroidDurableStoreReadResult.Unavailable
@@ -202,8 +231,8 @@ internal class AndroidSqliteDurableExecutionStore(
       database.query(
         RECORD_TABLE,
         RECORD_COLUMNS,
-        "$COLUMN_RUN_ID = ?",
-        arrayOf(runId),
+        selection,
+        selectionArgs,
         null,
         null,
         null,
@@ -218,7 +247,10 @@ internal class AndroidSqliteDurableExecutionStore(
     }
     return if (databaseHealth.isCorrupted()) {
       AndroidDurableStoreReadResult.Unavailable
-    } else if (record?.request?.identity?.runId == runId) {
+    } else if (
+      record != null &&
+      (expectedRunId == null || record.request.identity.runId == expectedRunId)
+    ) {
       AndroidDurableStoreReadResult.Found(record)
     } else {
       AndroidDurableStoreReadResult.Unavailable
@@ -261,12 +293,14 @@ internal class AndroidSqliteDurableExecutionStore(
 
 private fun decodeCursorRecord(cursor: android.database.Cursor): AndroidDurableExecutionRecord? {
   val runIdIndex = cursor.getColumnIndexOrThrow(COLUMN_RUN_ID)
+  val platformWorkIdIndex = cursor.getColumnIndexOrThrow(COLUMN_PLATFORM_WORK_ID)
   val revisionIndex = cursor.getColumnIndexOrThrow(COLUMN_REVISION)
   val stateIndex = cursor.getColumnIndexOrThrow(COLUMN_STATE)
   val updatedAtIndex = cursor.getColumnIndexOrThrow(COLUMN_UPDATED_AT)
   val recordIndex = cursor.getColumnIndexOrThrow(COLUMN_RECORD)
   if (
     cursor.getType(runIdIndex) != android.database.Cursor.FIELD_TYPE_STRING ||
+    cursor.getType(platformWorkIdIndex) != android.database.Cursor.FIELD_TYPE_STRING ||
     cursor.getType(revisionIndex) != android.database.Cursor.FIELD_TYPE_INTEGER ||
     cursor.getType(stateIndex) != android.database.Cursor.FIELD_TYPE_STRING ||
     cursor.getType(updatedAtIndex) != android.database.Cursor.FIELD_TYPE_INTEGER ||
@@ -275,12 +309,14 @@ private fun decodeCursorRecord(cursor: android.database.Cursor): AndroidDurableE
     return null
   }
   val runId = cursor.getString(runIdIndex)
+  val platformWorkId = cursor.getString(platformWorkIdIndex)
   val revision = cursor.getLong(revisionIndex)
   val state = cursor.getString(stateIndex)
   val updatedAtMillis = cursor.getLong(updatedAtIndex)
   val decoded = decodeRecord(JSONObject(cursor.getString(recordIndex)))
   return decoded?.takeIf {
     it.request.identity.runId == runId &&
+      it.platformWorkId == platformWorkId &&
       it.revision == revision &&
       it.state.name == state &&
       it.updatedAtMillis == updatedAtMillis
@@ -289,6 +325,7 @@ private fun decodeCursorRecord(cursor: android.database.Cursor): AndroidDurableE
 
 private fun values(record: AndroidDurableExecutionRecord) = ContentValues().apply {
   put(COLUMN_RUN_ID, record.request.identity.runId)
+  put(COLUMN_PLATFORM_WORK_ID, record.platformWorkId)
   put(COLUMN_REVISION, record.revision)
   put(COLUMN_STATE, record.state.name)
   put(COLUMN_UPDATED_AT, record.updatedAtMillis)
@@ -314,6 +351,7 @@ private class DurableDatabaseHelper(
       """
       CREATE TABLE $RECORD_TABLE (
         $COLUMN_RUN_ID TEXT PRIMARY KEY NOT NULL,
+        $COLUMN_PLATFORM_WORK_ID TEXT NOT NULL UNIQUE,
         $COLUMN_REVISION INTEGER NOT NULL CHECK ($COLUMN_REVISION >= 0),
         $COLUMN_STATE TEXT NOT NULL,
         $COLUMN_UPDATED_AT INTEGER NOT NULL CHECK ($COLUMN_UPDATED_AT >= 0),
@@ -441,6 +479,7 @@ private fun encodeRecord(record: AndroidDurableExecutionRecord): JSONObject = JS
   .put("request", encodeRequest(record.request))
   .put("scheduler_kind", record.schedulerKind.name)
   .put("unique_work_name", record.uniqueWorkName)
+  .put("platform_work_id", record.platformWorkId)
   .put("state", record.state.name)
   .put("attempt", record.attempt)
   .putNullable("next_attempt_at", record.nextAttemptAtMillis)
@@ -487,6 +526,7 @@ private fun decodeRecord(json: JSONObject): AndroidDurableExecutionRecord? {
       "request",
       "scheduler_kind",
       "unique_work_name",
+      "platform_work_id",
       "state",
       "attempt",
       "next_attempt_at",
@@ -503,6 +543,7 @@ private fun decodeRecord(json: JSONObject): AndroidDurableExecutionRecord? {
     request = decodeRequest(json.getJSONObject("request")) ?: return null,
     schedulerKind = enumValue(json.strictString("scheduler_kind")) ?: return null,
     uniqueWorkName = json.strictString("unique_work_name"),
+    platformWorkId = json.strictString("platform_work_id"),
     state = enumValue(json.strictString("state")) ?: return null,
     attempt = json.strictInt("attempt"),
     nextAttemptAtMillis = json.nullableLong("next_attempt_at"),
@@ -598,6 +639,7 @@ private fun validRecord(record: AndroidDurableExecutionRecord): Boolean {
     decision !is AndroidDurableExecutionDecision.Supported ||
     record.schedulerKind != decision.schedulerKind ||
     record.uniqueWorkName != decision.uniqueWorkName ||
+    !validUuid(record.platformWorkId) ||
     record.revision < 0 ||
     record.updatedAtMillis < record.request.requestedAtMillis ||
     record.attempt !in 0..record.request.retryPolicy.maxAttempts ||
@@ -631,6 +673,12 @@ private fun validRecord(record: AndroidDurableExecutionRecord): Boolean {
         record.failureReason != AndroidDurableFailureReason.TRANSIENT_UNAVAILABLE &&
         record.receiptDigest == null
   }
+}
+
+private fun validUuid(value: String): Boolean = try {
+  UUID.fromString(value).toString() == value
+} catch (_: IllegalArgumentException) {
+  false
 }
 
 private fun AndroidDurableExecutionRecord.hasNoOutcome(): Boolean =

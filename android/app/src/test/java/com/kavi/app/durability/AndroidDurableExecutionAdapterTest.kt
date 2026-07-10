@@ -16,6 +16,8 @@ class AndroidDurableExecutionAdapterTest {
       assertEquals(request, spec.request)
       assertEquals(request.constraints, store.record?.request?.constraints)
       assertEquals(request.retryPolicy, store.record?.request?.retryPolicy)
+      assertEquals(WORK_ID, spec.platformWorkId)
+      assertEquals(WORK_ID, store.record?.platformWorkId)
     }
 
     val accepted = adapter.enqueue(request).acceptedRecord()
@@ -50,6 +52,22 @@ class AndroidDurableExecutionAdapterTest {
     assertEquals(request.identity.runId, reconciliation.outcomes.single().runId)
     assertEquals(2, scheduler.enqueued.size)
     assertEquals(1L, accepted.revision)
+  }
+
+  @Test
+  fun `terminal platform work without a native receipt blocks the exact generation`() {
+    val store = FakeStore()
+    val scheduler = FakeScheduler(enqueueResult = AndroidDurableScheduleResult.TERMINAL)
+    val adapter = AndroidDurableExecutionAdapter(store, scheduler)
+
+    val blocked = adapter.enqueue(request()).acceptedRecord()
+
+    assertEquals(AndroidDurableExecutionState.BLOCKED, blocked.state)
+    assertEquals(
+      AndroidDurableFailureReason.PLATFORM_TERMINATED_WITHOUT_RECEIPT,
+      blocked.failureReason,
+    )
+    assertEquals(WORK_ID, blocked.platformWorkId)
   }
 
   @Test
@@ -286,13 +304,6 @@ class AndroidDurableExecutionAdapterTest {
       adapter.markRunning(pointer, attempt = 1, updatedAtMillis = 201),
     )
 
-    scheduler.cancelResult = AndroidDurableCancellationResult.NOT_FOUND
-    val reconciliation = adapter.reconcileCancellationRequests(10)
-      as AndroidDurableOutboxReconciliationResult.Completed
-    val cancellationAccepted = reconciliation.outcomes.single().result.acceptedRecord()
-    assertEquals(AndroidDurableExecutionState.CANCEL_REQUESTED, cancellationAccepted.state)
-    assertEquals(request.identity.runId, reconciliation.outcomes.single().runId)
-
     val nextRequest = request(
       identity = identity(controlEpoch = 3, snapshotDigest = "e".repeat(64)),
       requestedAtMillis = 300,
@@ -303,15 +314,18 @@ class AndroidDurableExecutionAdapterTest {
       adapter.enqueue(nextRequest),
     )
 
-    val cancelled = adapter.confirmCancelled(
-      attemptPointer(pointer, 0),
-      updatedAtMillis = 203,
-    ).acceptedRecord()
-    assertEquals(AndroidDurableExecutionState.CANCELLED, cancelled.state)
+    scheduler.cancelResult = AndroidDurableCancellationResult.MISSING
+    val reconciliation = adapter.reconcileCancellationRequests(10)
+      as AndroidDurableOutboxReconciliationResult.Completed
+    val cancellationAccepted = reconciliation.outcomes.single().result.acceptedRecord()
+    assertEquals(AndroidDurableExecutionState.CANCELLED, cancellationAccepted.state)
+    assertEquals(request.identity.runId, reconciliation.outcomes.single().runId)
+    assertEquals(listOf(WORK_ID, WORK_ID), scheduler.cancelledIds)
 
     val next = adapter.enqueue(nextRequest).acceptedRecord()
     assertEquals(3L, next.request.identity.controlEpoch)
     assertEquals(AndroidDurableExecutionState.ENQUEUED, next.state)
+    assertTrue(next.platformWorkId != cancellationAccepted.platformWorkId)
   }
 
   @Test
@@ -450,6 +464,11 @@ class AndroidDurableExecutionAdapterTest {
     override fun read(runId: String): AndroidDurableStoreReadResult =
       record?.let(AndroidDurableStoreReadResult::Found) ?: AndroidDurableStoreReadResult.Missing
 
+    override fun readByWorkId(platformWorkId: String): AndroidDurableStoreReadResult =
+      record?.takeIf { it.platformWorkId == platformWorkId }
+        ?.let(AndroidDurableStoreReadResult::Found)
+        ?: AndroidDurableStoreReadResult.Missing
+
     override fun listScheduling(limit: Int): AndroidDurableStoreListResult = if (limit <= 0) {
       AndroidDurableStoreListResult.Unavailable
     } else {
@@ -513,8 +532,13 @@ class AndroidDurableExecutionAdapterTest {
     var cancelResult: AndroidDurableCancellationResult = AndroidDurableCancellationResult.ACCEPTED,
   ) : AndroidDurablePlatformScheduler {
     val enqueued = mutableListOf<AndroidDurableWorkSpec>()
+    val cancelledIds = mutableListOf<String>()
     val events = mutableListOf<String>()
     var onEnqueue: (AndroidDurableWorkSpec) -> Unit = {}
+    private var nextWorkId = 1
+
+    override fun allocateWorkId(): String =
+      "00000000-0000-4000-8000-${nextWorkId++.toString().padStart(12, '0')}"
 
     override fun enqueue(spec: AndroidDurableWorkSpec): AndroidDurableScheduleResult {
       events += "enqueue"
@@ -523,9 +547,14 @@ class AndroidDurableExecutionAdapterTest {
       return enqueueResult
     }
 
-    override fun cancel(uniqueWorkName: String): AndroidDurableCancellationResult {
+    override fun cancel(platformWorkId: String): AndroidDurableCancellationResult {
+      cancelledIds += platformWorkId
       events += "cancel"
       return cancelResult
     }
+  }
+
+  private companion object {
+    const val WORK_ID = "00000000-0000-4000-8000-000000000001"
   }
 }

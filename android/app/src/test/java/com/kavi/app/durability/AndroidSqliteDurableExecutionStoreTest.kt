@@ -5,6 +5,7 @@ import android.database.sqlite.SQLiteDatabase
 import androidx.test.core.app.ApplicationProvider
 import java.io.File
 import java.util.Collections
+import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
@@ -79,6 +80,30 @@ class AndroidSqliteDurableExecutionStoreTest {
     assertEquals(
       AndroidDurableStoreReadResult.Found(retry),
       store().read("run-1"),
+    )
+    assertEquals(
+      AndroidDurableStoreReadResult.Found(retry),
+      store().readByWorkId(retry.platformWorkId),
+    )
+  }
+
+  @Test
+  fun `one platform work id cannot belong to two runs`() {
+    val store = store()
+    val first = record(runId = "run-1")
+    val conflicting = record(runId = "run-2", platformWorkId = first.platformWorkId)
+
+    assertEquals(
+      AndroidDurableStoreWriteResult.STORED,
+      store.compareAndSet("run-1", null, first),
+    )
+    assertEquals(
+      AndroidDurableStoreWriteResult.CONFLICT,
+      store.compareAndSet("run-2", null, conflicting),
+    )
+    assertEquals(
+      AndroidDurableStoreReadResult.Found(first),
+      store.readByWorkId(first.platformWorkId),
     )
   }
 
@@ -354,6 +379,7 @@ class AndroidSqliteDurableExecutionStoreTest {
   private fun record(
     runId: String = "run-1",
     updatedAtMillis: Long = 100,
+    platformWorkId: String = UUID.nameUUIDFromBytes(runId.toByteArray()).toString(),
   ) = AndroidDurableExecutionRecord(
     request = AndroidDurableExecutionRequest(
       durabilityClass = AndroidTaskDurabilityClass.EXTERNAL_DURABLE_OPERATION,
@@ -382,6 +408,7 @@ class AndroidSqliteDurableExecutionStoreTest {
     ),
     schedulerKind = AndroidDurableSchedulerKind.WORK_MANAGER_ONE_TIME,
     uniqueWorkName = "$ANDROID_DURABLE_WORK_NAME_PREFIX$runId",
+    platformWorkId = platformWorkId,
     state = AndroidDurableExecutionState.SCHEDULING,
     attempt = 0,
     nextAttemptAtMillis = null,

@@ -18,12 +18,14 @@ internal enum class AndroidDurableFailureReason {
   HANDLER_REJECTED,
   HANDLER_FAILED,
   RETRY_EXHAUSTED,
+  PLATFORM_TERMINATED_WITHOUT_RECEIPT,
 }
 
 internal data class AndroidDurableExecutionRecord(
   val request: AndroidDurableExecutionRequest,
   val schedulerKind: AndroidDurableSchedulerKind,
   val uniqueWorkName: String,
+  val platformWorkId: String,
   val state: AndroidDurableExecutionState,
   val attempt: Int,
   val nextAttemptAtMillis: Long?,
@@ -73,6 +75,8 @@ internal enum class AndroidDurableStoreWriteResult {
 internal interface AndroidDurableExecutionStore {
   fun read(runId: String): AndroidDurableStoreReadResult
 
+  fun readByWorkId(platformWorkId: String): AndroidDurableStoreReadResult
+
   /** Lists persisted outbox rows that may have crashed before platform enqueue. */
   fun listScheduling(limit: Int): AndroidDurableStoreListResult
 
@@ -95,17 +99,21 @@ internal interface AndroidDurableExecutionStore {
 internal data class AndroidDurableWorkSpec(
   val schedulerKind: AndroidDurableSchedulerKind,
   val uniqueWorkName: String,
+  val platformWorkId: String,
   val request: AndroidDurableExecutionRequest,
 )
 
 internal enum class AndroidDurableScheduleResult {
   ACCEPTED,
+  TERMINAL,
+  CONFLICT,
   UNAVAILABLE,
 }
 
 internal enum class AndroidDurableCancellationResult {
   ACCEPTED,
-  NOT_FOUND,
+  TERMINAL,
+  MISSING,
   UNAVAILABLE,
 }
 
@@ -119,10 +127,12 @@ internal enum class AndroidDurableCancellationResult {
  * WorkManager cannot combine idle-mode jobs with an explicit backoff policy.
  */
 internal interface AndroidDurablePlatformScheduler {
+  fun allocateWorkId(): String
+
   fun enqueue(spec: AndroidDurableWorkSpec): AndroidDurableScheduleResult
 
   /** ACCEPTED means the platform recorded cancellation, not that running code has already stopped. */
-  fun cancel(uniqueWorkName: String): AndroidDurableCancellationResult
+  fun cancel(platformWorkId: String): AndroidDurableCancellationResult
 }
 
 internal enum class AndroidDurableRejectionReason {
@@ -141,6 +151,7 @@ internal enum class AndroidDurableDeferReason {
   STORE_UNAVAILABLE,
   STORE_CONFLICT,
   SCHEDULER_UNAVAILABLE,
+  SCHEDULER_CONFLICT,
 }
 
 internal sealed interface AndroidDurableAdapterResult {

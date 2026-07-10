@@ -93,11 +93,24 @@ internal class AndroidDurableExecutionAdapter(
       AndroidDurableWorkSpec(
         schedulerKind = schedulingRecord.schedulerKind,
         uniqueWorkName = schedulingRecord.uniqueWorkName,
+        platformWorkId = schedulingRecord.platformWorkId,
         request = schedulingRecord.request,
       ),
     )
-    if (scheduleResult == AndroidDurableScheduleResult.UNAVAILABLE) {
-      return AndroidDurableAdapterResult.Deferred(AndroidDurableDeferReason.SCHEDULER_UNAVAILABLE)
+    when (scheduleResult) {
+      AndroidDurableScheduleResult.ACCEPTED -> Unit
+      AndroidDurableScheduleResult.TERMINAL ->
+        return blockSchedulingRecord(
+          schedulingRecord,
+          AndroidDurableFailureReason.PLATFORM_TERMINATED_WITHOUT_RECEIPT,
+          request.requestedAtMillis,
+        )
+      AndroidDurableScheduleResult.CONFLICT ->
+        return AndroidDurableAdapterResult.Deferred(AndroidDurableDeferReason.SCHEDULER_CONFLICT)
+      AndroidDurableScheduleResult.UNAVAILABLE ->
+        return AndroidDurableAdapterResult.Deferred(
+          AndroidDurableDeferReason.SCHEDULER_UNAVAILABLE,
+        )
     }
 
     val enqueued = schedulingRecord.next(
@@ -166,30 +179,16 @@ internal class AndroidDurableExecutionAdapter(
     failureReason: AndroidDurableFailureReason,
     updatedAtMillis: Long,
   ): AndroidDurableAdapterResult = updateAttemptProgress(pointer) { current ->
-    if (current.state != AndroidDurableExecutionState.RUNNING) {
-      return@updateAttemptProgress ProgressResult.Rejected(
-        AndroidDurableRejectionReason.INVALID_PROGRESS_TRANSITION,
-      )
-    }
-    val minimumBackoff = exponentialBackoffMillis(current)
-    if (
-      current.attempt >= current.request.retryPolicy.maxAttempts ||
-      failureReason != AndroidDurableFailureReason.TRANSIENT_UNAVAILABLE ||
-      updatedAtMillis < current.updatedAtMillis ||
-      nextAttemptAtMillis < saturatingAdd(updatedAtMillis, minimumBackoff)
-    ) {
-      return@updateAttemptProgress ProgressResult.Rejected(
-        AndroidDurableRejectionReason.INVALID_PROGRESS,
-      )
-    }
-    ProgressResult.Next(
-      current.next(
-        state = AndroidDurableExecutionState.RETRY_WAITING,
-        nextAttemptAtMillis = nextAttemptAtMillis,
-        failureReason = failureReason,
-        updatedAtMillis = updatedAtMillis,
-      ),
-    )
+    retryProgress(current, nextAttemptAtMillis, failureReason, updatedAtMillis)
+  }
+
+  fun scheduleRetry(
+    pointer: AndroidDurableExecutionAttemptPointer,
+    failureReason: AndroidDurableFailureReason,
+    updatedAtMillis: Long,
+  ): AndroidDurableAdapterResult = updateAttemptProgress(pointer) { current ->
+    val nextAttemptAtMillis = saturatingAdd(updatedAtMillis, exponentialBackoffMillis(current))
+    retryProgress(current, nextAttemptAtMillis, failureReason, updatedAtMillis)
   }
 
   fun complete(
@@ -279,10 +278,13 @@ internal class AndroidDurableExecutionAdapter(
       }
     }
 
-    return when (scheduler.cancel(cancelRequested.uniqueWorkName)) {
-      AndroidDurableCancellationResult.ACCEPTED,
-      AndroidDurableCancellationResult.NOT_FOUND,
-      -> AndroidDurableAdapterResult.Accepted(cancelRequested)
+    return when (scheduler.cancel(cancelRequested.platformWorkId)) {
+      AndroidDurableCancellationResult.ACCEPTED ->
+        AndroidDurableAdapterResult.Accepted(cancelRequested)
+      AndroidDurableCancellationResult.TERMINAL,
+      AndroidDurableCancellationResult.MISSING,
+      ->
+        confirmCancelledRecord(cancelRequested, updatedAtMillis)
       AndroidDurableCancellationResult.UNAVAILABLE ->
         AndroidDurableAdapterResult.Deferred(AndroidDurableDeferReason.SCHEDULER_UNAVAILABLE)
     }
@@ -303,12 +305,7 @@ internal class AndroidDurableExecutionAdapter(
         AndroidDurableRejectionReason.INVALID_PROGRESS,
       )
     }
-    ProgressResult.Next(
-      current.next(
-        state = AndroidDurableExecutionState.CANCELLED,
-        updatedAtMillis = updatedAtMillis,
-      ),
-    )
+    ProgressResult.Next(cancelledRecord(current, updatedAtMillis))
   }
 
   /**
@@ -405,6 +402,7 @@ internal class AndroidDurableExecutionAdapter(
     request = request,
     schedulerKind = decision.schedulerKind,
     uniqueWorkName = decision.uniqueWorkName,
+    platformWorkId = scheduler.allocateWorkId(),
     state = AndroidDurableExecutionState.SCHEDULING,
     attempt = 0,
     nextAttemptAtMillis = null,
@@ -496,6 +494,47 @@ internal class AndroidDurableExecutionAdapter(
     }
   }
 
+  private fun blockSchedulingRecord(
+    current: AndroidDurableExecutionRecord,
+    failureReason: AndroidDurableFailureReason,
+    updatedAtMillis: Long,
+  ): AndroidDurableAdapterResult {
+    val blocked = current.next(
+      state = AndroidDurableExecutionState.BLOCKED,
+      failureReason = failureReason,
+      updatedAtMillis = maxOf(current.updatedAtMillis, updatedAtMillis),
+    )
+    return when (store.compareAndSet(current.request.identity.runId, current.revision, blocked)) {
+      AndroidDurableStoreWriteResult.STORED -> AndroidDurableAdapterResult.Accepted(blocked)
+      AndroidDurableStoreWriteResult.CONFLICT ->
+        AndroidDurableAdapterResult.Deferred(AndroidDurableDeferReason.STORE_CONFLICT)
+      AndroidDurableStoreWriteResult.UNAVAILABLE ->
+        AndroidDurableAdapterResult.Deferred(AndroidDurableDeferReason.STORE_UNAVAILABLE)
+    }
+  }
+
+  private fun confirmCancelledRecord(
+    current: AndroidDurableExecutionRecord,
+    updatedAtMillis: Long,
+  ): AndroidDurableAdapterResult {
+    val cancelled = cancelledRecord(current, maxOf(current.updatedAtMillis, updatedAtMillis))
+    return when (store.compareAndSet(current.request.identity.runId, current.revision, cancelled)) {
+      AndroidDurableStoreWriteResult.STORED -> AndroidDurableAdapterResult.Accepted(cancelled)
+      AndroidDurableStoreWriteResult.CONFLICT ->
+        AndroidDurableAdapterResult.Deferred(AndroidDurableDeferReason.STORE_CONFLICT)
+      AndroidDurableStoreWriteResult.UNAVAILABLE ->
+        AndroidDurableAdapterResult.Deferred(AndroidDurableDeferReason.STORE_UNAVAILABLE)
+    }
+  }
+
+  private fun cancelledRecord(
+    current: AndroidDurableExecutionRecord,
+    updatedAtMillis: Long,
+  ) = current.next(
+    state = AndroidDurableExecutionState.CANCELLED,
+    updatedAtMillis = updatedAtMillis,
+  )
+
   private fun pointer(identity: AndroidRecoveryCommandIdentity) = AndroidDurableExecutionPointer(
     runId = identity.runId,
     controlEpoch = identity.controlEpoch,
@@ -527,6 +566,36 @@ internal class AndroidDurableExecutionAdapter(
       backoff = (backoff * 2).coerceAtMost(WORK_MANAGER_MAX_BACKOFF_MILLIS)
     }
     return backoff
+  }
+
+  private fun retryProgress(
+    current: AndroidDurableExecutionRecord,
+    nextAttemptAtMillis: Long,
+    failureReason: AndroidDurableFailureReason,
+    updatedAtMillis: Long,
+  ): ProgressResult {
+    if (current.state != AndroidDurableExecutionState.RUNNING) {
+      return ProgressResult.Rejected(
+        AndroidDurableRejectionReason.INVALID_PROGRESS_TRANSITION,
+      )
+    }
+    val minimumBackoff = exponentialBackoffMillis(current)
+    if (
+      current.attempt >= current.request.retryPolicy.maxAttempts ||
+      failureReason != AndroidDurableFailureReason.TRANSIENT_UNAVAILABLE ||
+      updatedAtMillis < current.updatedAtMillis ||
+      nextAttemptAtMillis < saturatingAdd(updatedAtMillis, minimumBackoff)
+    ) {
+      return ProgressResult.Rejected(AndroidDurableRejectionReason.INVALID_PROGRESS)
+    }
+    return ProgressResult.Next(
+      current.next(
+        state = AndroidDurableExecutionState.RETRY_WAITING,
+        nextAttemptAtMillis = nextAttemptAtMillis,
+        failureReason = failureReason,
+        updatedAtMillis = updatedAtMillis,
+      ),
+    )
   }
 
   private fun saturatingAdd(value: Long, increment: Long): Long =
