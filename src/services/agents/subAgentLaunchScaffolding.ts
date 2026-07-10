@@ -2,6 +2,7 @@ import type { SubAgentConfig, SubAgentResult, SubAgentSnapshot } from '../../typ
 import { isExactDurableScopeId } from '../../utils/durableScopeIdentity';
 import { evaluateMobileSpawnPreflight } from './mobileSpawnPolicy';
 import type { ScheduledSubAgentLaunchControl } from './subAgentRuntimeSignals';
+import { isValidSubAgentToolConfiguration } from './lifecycle/runConfig';
 
 export interface PreparedSubAgentSession<TAgent extends { sessionId: string; status: string }> {
   sessionId: string;
@@ -57,6 +58,19 @@ export async function prepareSubAgentSession<
   const invalidScopeField = invalidSubAgentScopeField(params.config);
   if (invalidScopeField) {
     const error = `Sub-agent ${invalidScopeField} must be an exact durable identity.`;
+    return {
+      sessionId: '',
+      output: `Error: ${error}`,
+      toolsUsed: [],
+      iterations: 0,
+      status: 'error',
+      error,
+      depth,
+    };
+  }
+
+  if (!isValidSubAgentToolConfiguration(params.config.tools)) {
+    const error = 'Sub-agent tools must be an array of tool-name strings.';
     return {
       sessionId: '',
       output: `Error: ${error}`,

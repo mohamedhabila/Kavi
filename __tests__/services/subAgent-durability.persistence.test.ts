@@ -191,7 +191,7 @@ describe('persistence', () => {
     );
   });
 
-  it('normalizes string tool selections before persisting and launching workers', async () => {
+  it('rejects string tool selections instead of applying a compatibility parser', async () => {
     const result = await spawnSubAgent(
       {
         parentConversationId: 'conv-1',
@@ -201,36 +201,13 @@ describe('persistence', () => {
       mockProvider,
     );
 
-    expect(result.status).toBe('completed');
-    expect(runOrchestrator).toHaveBeenCalledWith(
+    expect(result).toEqual(
       expect.objectContaining({
-        toolFilter: expect.any(Function),
-      }),
-      expect.anything(),
-    );
-
-    const callOptions = (runOrchestrator as jest.Mock).mock.calls[0][0];
-    expect(callOptions.toolFilter('web_search')).toBe(true);
-    expect(callOptions.toolFilter('web_fetch')).toBe(true);
-    expect(callOptions.toolFilter('read_file')).toBe(false);
-
-    await flushPendingStorageWrites(REGISTRY_CONTEXTS_KEY);
-    expect(
-      readPersistedJson<Record<string, unknown>>(REGISTRY_CONTEXTS_KEY)?.[result.sessionId],
-    ).toEqual(
-      expect.objectContaining({
-        config: expect.objectContaining({
-          tools: ['web_search', 'web_fetch'],
-        }),
+        status: 'error',
+        error: 'Sub-agent tools must be an array of tool-name strings.',
       }),
     );
-    expect(getSessionContext(result.sessionId)).toEqual(
-      expect.objectContaining({
-        config: expect.objectContaining({
-          tools: ['web_search', 'web_fetch'],
-        }),
-      }),
-    );
+    expect(runOrchestrator).not.toHaveBeenCalled();
   });
 
   it('continues bootstrapping a deferred worker even when the initial persistence flush is slow', async () => {
@@ -269,6 +246,8 @@ describe('persistence', () => {
 
       const started = await startedPromise;
       expect(started.status).toBe('running');
+      resolvePersist?.();
+      await jest.advanceTimersByTimeAsync(0);
       await expect(started.resultPromise).resolves.toMatchObject({ status: 'completed' });
     } finally {
       resolvePersist?.();

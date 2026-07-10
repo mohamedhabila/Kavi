@@ -399,7 +399,7 @@ describe('sub-agent toolFilter pass-through', () => {
     expect(callOptions.toolFilter('record_workflow_evidence')).toBe(false);
   });
 
-  it('does not pass a worker toolFilter when config.tools is not provided', async () => {
+  it('always blocks parent-memory tools when config.tools is not provided', async () => {
     (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
       callbacks.onDone();
       return Promise.resolve();
@@ -415,9 +415,12 @@ describe('sub-agent toolFilter pass-through', () => {
 
     expect(runOrchestrator).toHaveBeenCalledWith(
       expect.objectContaining({
-        toolFilter: undefined,
+        toolFilter: expect.any(Function),
       }),
       expect.any(Object),
     );
+    const callOptions = (runOrchestrator as jest.Mock).mock.calls[0][0];
+    expect(callOptions.toolFilter('web_search')).toBe(true);
+    expect(callOptions.toolFilter('memory_search')).toBe(false);
   });
 });

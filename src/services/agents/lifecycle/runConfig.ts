@@ -52,39 +52,17 @@ export function normalizeSubAgentMaxIterations(value?: number): number {
   return Math.max(MIN_SUB_AGENT_MAX_ITERATIONS, normalized);
 }
 
-function coerceConfiguredToolNameInputs(tools: unknown): string[] {
-  if (Array.isArray(tools)) {
-    return tools.filter((toolName): toolName is string => typeof toolName === 'string');
-  }
-
-  if (typeof tools !== 'string') {
-    return [];
-  }
-
-  const trimmed = tools.trim();
-  if (!trimmed) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(trimmed) as unknown;
-    if (parsed !== tools) {
-      return coerceConfiguredToolNameInputs(parsed);
-    }
-  } catch {
-    // Fall back to delimiter-based parsing below.
-  }
-
-  return trimmed
-    .split(/[\n,;|]+/)
-    .map((toolName) => toolName.trim())
-    .filter((toolName) => toolName.length > 0);
+export function isValidSubAgentToolConfiguration(tools: unknown): tools is string[] | undefined {
+  return (
+    tools === undefined || (Array.isArray(tools) && tools.every((tool) => typeof tool === 'string'))
+  );
 }
 
 export function normalizeConfiguredToolNames(tools?: unknown): string[] | undefined {
+  if (!isValidSubAgentToolConfiguration(tools) || tools === undefined) return undefined;
   const normalized = Array.from(
     new Set(
-      coerceConfiguredToolNameInputs(tools)
+      tools
         .map((toolName) => normalizeToolName(toolName))
         .filter((toolName) => toolName.length > 0),
     ),
@@ -94,16 +72,13 @@ export function normalizeConfiguredToolNames(tools?: unknown): string[] | undefi
 }
 
 export function hasExplicitToolConfiguration(tools: unknown): boolean {
-  if (Array.isArray(tools)) {
-    return true;
-  }
-  if (typeof tools === 'string') {
-    return tools.trim().length > 0;
-  }
-  return tools != null;
+  return Array.isArray(tools);
 }
 
 export function cloneSubAgentConfig(config: SubAgentConfig): SubAgentConfig {
+  if (!isValidSubAgentToolConfiguration(config.tools)) {
+    throw new Error('sub_agent_tools_invalid');
+  }
   const normalizedTools = normalizeConfiguredToolNames(config.tools);
   const hasExplicitToolsConfig = hasExplicitToolConfiguration(config.tools);
   const prompt = normalizeSubAgentPrompt(config.prompt) || '';
