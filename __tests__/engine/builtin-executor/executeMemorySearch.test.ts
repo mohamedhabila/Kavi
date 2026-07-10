@@ -2,12 +2,18 @@
 // Tests - Builtin Tool Executor: executeMemorySearch
 // ---------------------------------------------------------------------------
 
-const mockRecallScoredFactsForQuery = jest.fn();
+const mockRecallFactSelectionForQuery = jest.fn();
 const mockMarkFactsRecalled = jest.fn();
 const mockGetEntityById = jest.fn();
+const mockLoadActiveMemoryFactConflictSignals = jest.fn();
 
 jest.mock('../../../src/services/memory/factRecall', () => ({
-  recallScoredFactsForQuery: (...args: any[]) => mockRecallScoredFactsForQuery(...args),
+  recallFactSelectionForQuery: (...args: any[]) => mockRecallFactSelectionForQuery(...args),
+}));
+
+jest.mock('../../../src/services/memory/facts/observations', () => ({
+  loadActiveMemoryFactConflictSignals: (...args: any[]) =>
+    mockLoadActiveMemoryFactConflictSignals(...args),
 }));
 
 jest.mock('../../../src/services/memory/facts/mutations', () => ({
@@ -38,8 +44,14 @@ const MEMORY_SEARCH_SCOPE = {
 describe('Builtin Tool Executor', () => {
   describe('executeMemorySearch', () => {
     beforeEach(() => {
-      mockRecallScoredFactsForQuery.mockReset();
-      mockRecallScoredFactsForQuery.mockResolvedValue([]);
+      mockRecallFactSelectionForQuery.mockReset();
+      mockRecallFactSelectionForQuery.mockResolvedValue({
+        facts: [],
+        resolutionFacts: [],
+        scoredFacts: [],
+      });
+      mockLoadActiveMemoryFactConflictSignals.mockReset();
+      mockLoadActiveMemoryFactConflictSignals.mockReturnValue([]);
       mockMarkFactsRecalled.mockReset();
       mockGetEntityById.mockReset();
     });
@@ -50,7 +62,7 @@ describe('Builtin Tool Executor', () => {
       expect(parsed).toHaveProperty('results');
       expect(parsed.method).toBe('living_memory');
       expect(parsed.index).toBe('memory_facts');
-      expect(mockRecallScoredFactsForQuery).toHaveBeenCalledWith(
+      expect(mockRecallFactSelectionForQuery).toHaveBeenCalledWith(
         'test search',
         expect.objectContaining({
           limit: 10,
@@ -70,7 +82,7 @@ describe('Builtin Tool Executor', () => {
           totalFound: 0,
         }),
       );
-      expect(mockRecallScoredFactsForQuery).not.toHaveBeenCalled();
+      expect(mockRecallFactSelectionForQuery).not.toHaveBeenCalled();
     });
 
     it('returns citation-formatted living-memory facts', async () => {
@@ -78,7 +90,7 @@ describe('Builtin Tool Executor', () => {
         id: 'subject-1',
         canonicalName: 'project alpha',
       });
-      mockRecallScoredFactsForQuery.mockResolvedValueOnce([
+      const scoredFacts = [
         makeScoredFact({
           fact: {
             id: 'fact-1',
@@ -86,6 +98,9 @@ describe('Builtin Tool Executor', () => {
             predicate: 'decision',
             objectText: 'Use the local queue for durable enrichment.',
             sourceMessageId: 'message-1',
+            memoryOwnerId: 'test-memory-owner',
+            factClass: 'workflow',
+            sourceAuthority: 'grounded_user',
             scope: 'conversation',
             originConversationId: 'conversation-1',
             originThreadId: 'conversation-1',
@@ -94,7 +109,12 @@ describe('Builtin Tool Executor', () => {
           score: 0.92,
           relevanceScore: 0.9,
         }),
-      ]);
+      ];
+      mockRecallFactSelectionForQuery.mockResolvedValueOnce({
+        facts: scoredFacts.map((entry) => entry.fact),
+        resolutionFacts: [],
+        scoredFacts,
+      });
 
       const result = await executeMemorySearch(
         { query: 'durable enrichment', maxResults: 5 },
@@ -113,13 +133,14 @@ describe('Builtin Tool Executor', () => {
           snippet: 'Use the local queue for durable enrichment.',
           citation: '[1] message-1',
           relevance: '92%',
+          policy: { action: 'use', reason: 'eligible' },
         }),
       );
       expect(mockMarkFactsRecalled).toHaveBeenCalledWith(['fact-1'], expect.any(Number));
     });
 
     it('returns a degraded living-memory result on recall error', async () => {
-      mockRecallScoredFactsForQuery.mockRejectedValueOnce(new Error('recall fail'));
+      mockRecallFactSelectionForQuery.mockRejectedValueOnce(new Error('recall fail'));
       const result = await executeMemorySearch(
         { query: 'fallback', maxResults: 5 },
         MEMORY_SEARCH_SCOPE,
@@ -129,6 +150,74 @@ describe('Builtin Tool Executor', () => {
       expect(parsed.index).toBe('memory_facts');
       expect(parsed.degraded).toBe(true);
       expect(parsed.error).toBe('recall fail');
+    });
+
+    it('fails closed when persisted contradiction observations cannot be read', async () => {
+      const scored = makeScoredFact({
+        fact: {
+          id: 'fact-observation-read-failure',
+          memoryOwnerId: 'test-memory-owner',
+          factClass: 'workflow',
+          sourceAuthority: 'tool_observed',
+          scope: 'conversation',
+          originConversationId: 'conversation-1',
+          originThreadId: 'conversation-1',
+          originTaskId: null,
+        },
+      });
+      mockRecallFactSelectionForQuery.mockResolvedValueOnce({
+        facts: [scored.fact],
+        resolutionFacts: [],
+        scoredFacts: [scored],
+      });
+      mockLoadActiveMemoryFactConflictSignals.mockImplementationOnce(() => {
+        throw new Error('injected observation read failure');
+      });
+
+      const parsed = JSON.parse(
+        await executeMemorySearch({ query: 'remembered workflow' }, MEMORY_SEARCH_SCOPE),
+      );
+
+      expect(parsed.degraded).toBe(true);
+      expect(parsed.results[0].policy).toEqual({
+        action: 'abstain',
+        reason: 'conflict_observation_read_failed',
+      });
+      expect(parsed.policyInstruction).toContain('never assert or act on action=abstain');
+    });
+
+    it('returns assistant-inferred subjective memory only as an ask decision', async () => {
+      const inferred = makeScoredFact({
+        fact: {
+          id: 'fact-subjective-inference',
+          memoryOwnerId: 'test-memory-owner',
+          factClass: 'subjective_user',
+          sourceAuthority: 'assistant_inferred',
+          scope: 'conversation',
+          originConversationId: 'conversation-1',
+          originThreadId: 'conversation-1',
+          originTaskId: null,
+        },
+      }).fact;
+      mockRecallFactSelectionForQuery.mockResolvedValueOnce({
+        facts: [],
+        resolutionFacts: [inferred],
+        scoredFacts: [],
+      });
+
+      const parsed = JSON.parse(
+        await executeMemorySearch({ query: 'possible preference' }, MEMORY_SEARCH_SCOPE),
+      );
+
+      expect(parsed.results).toHaveLength(1);
+      expect(parsed.results[0]).toMatchObject({
+        factId: inferred.id,
+        relevance: null,
+        policy: {
+          action: 'ask',
+          reason: 'subjective_authority_confirmation_required',
+        },
+      });
     });
   });
 });

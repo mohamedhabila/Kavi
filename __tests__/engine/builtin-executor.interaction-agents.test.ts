@@ -1,8 +1,12 @@
-const mockRecallScoredFactsForQuery = jest.fn();
+const mockRecallFactSelectionForQuery = jest.fn();
 const mockMarkFactsRecalled = jest.fn();
 
 jest.mock('../../src/services/memory/factRecall', () => ({
-  recallScoredFactsForQuery: (...args: any[]) => mockRecallScoredFactsForQuery(...args),
+  recallFactSelectionForQuery: (...args: any[]) => mockRecallFactSelectionForQuery(...args),
+}));
+
+jest.mock('../../src/services/memory/facts/observations', () => ({
+  loadActiveMemoryFactConflictSignals: jest.fn().mockReturnValue([]),
 }));
 
 jest.mock('../../src/services/memory/facts/mutations', () => ({
@@ -36,8 +40,12 @@ describe('builtin executor interaction, agent, and memory tools', () => {
   installBuiltinExecutorRuntimeReset();
 
   beforeEach(() => {
-    mockRecallScoredFactsForQuery.mockReset();
-    mockRecallScoredFactsForQuery.mockResolvedValue([]);
+    mockRecallFactSelectionForQuery.mockReset();
+    mockRecallFactSelectionForQuery.mockResolvedValue({
+      facts: [],
+      resolutionFacts: [],
+      scoredFacts: [],
+    });
     mockMarkFactsRecalled.mockReset();
   });
 
@@ -153,7 +161,7 @@ describe('builtin executor interaction, agent, and memory tools', () => {
 
   describe('executeMemorySearch (with citations)', () => {
     it('returns citation-formatted results', async () => {
-      mockRecallScoredFactsForQuery.mockResolvedValueOnce([
+      const scoredFacts = [
         makeScoredFact({
           fact: {
             id: 'fact-1',
@@ -161,9 +169,13 @@ describe('builtin executor interaction, agent, and memory tools', () => {
             predicate: 'preference',
             objectText: 'User prefers dark mode',
             sourceRunId: 'run-1',
+            memoryOwnerId: 'test-memory-owner',
+            factClass: 'workflow',
+            sourceAuthority: 'tool_observed',
             scope: 'global',
             originConversationId: null,
             originThreadId: null,
+            originTaskId: null,
             memoryKind: 'semantic_fact',
           },
           score: 0.9,
@@ -175,6 +187,9 @@ describe('builtin executor interaction, agent, and memory tools', () => {
             predicate: 'event',
             objectText: 'Discussed project setup',
             sourceMessageId: 'message-2',
+            memoryOwnerId: 'test-memory-owner',
+            factClass: 'workflow',
+            sourceAuthority: 'tool_observed',
             scope: 'conversation',
             originConversationId: 'conversation-1',
             originThreadId: 'conversation-1',
@@ -184,7 +199,12 @@ describe('builtin executor interaction, agent, and memory tools', () => {
           score: 0.6,
           importanceScore: 0.7,
         }),
-      ]);
+      ];
+      mockRecallFactSelectionForQuery.mockResolvedValueOnce({
+        facts: scoredFacts.map((entry) => entry.fact),
+        resolutionFacts: [],
+        scoredFacts,
+      });
 
       const result = await executeMemorySearch(
         { query: 'preferences' },
@@ -200,6 +220,7 @@ describe('builtin executor interaction, agent, and memory tools', () => {
       expect(parsed.results).toHaveLength(2);
       expect(parsed.results[0].citation).toBe('[1] run-1');
       expect(parsed.results[0].relevance).toBe('90%');
+      expect(parsed.results[0].policy).toEqual({ action: 'use', reason: 'eligible' });
       expect(parsed.results[1].citation).toBe('[2] message-2');
       expect(mockMarkFactsRecalled).toHaveBeenCalledWith(['fact-1', 'fact-2'], expect.any(Number));
     });

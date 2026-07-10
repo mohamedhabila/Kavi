@@ -18,10 +18,17 @@ import {
 } from '../../services/memory/memoryTools';
 import { markFactsRecalled } from '../../services/memory/facts/mutations';
 import { getEntityById } from '../../services/memory/entities';
-import { recallScoredFactsForQuery } from '../../services/memory/factRecall';
-import type { MemoryFactScope } from '../../services/memory/facts/types';
+import { recallFactSelectionForQuery } from '../../services/memory/factRecall';
+import type { MemoryFact, MemoryFactScope } from '../../services/memory/facts/types';
 import type { ScoredFact } from '../../services/memory/factRecallTypes';
 import { resolveLocalMemoryAccessScope } from '../../services/memory/memoryScopeStore';
+import { loadActiveMemoryFactConflictSignals } from '../../services/memory/facts/observations';
+import { applyMemoryApplicabilityPolicy } from '../../services/memory/memoryApplicabilityPolicy';
+import { selectMemoryApplicabilityResolutionFactIds } from '../../services/memory/memoryApplicabilityPrompt';
+import type {
+  MemoryApplicabilityAnnotation,
+  MemoryApplicabilitySummary,
+} from '../../services/memory/memoryApplicabilityTypes';
 
 type MemorySearchScope = 'all' | 'conversation' | 'global';
 
@@ -60,16 +67,20 @@ function scopeFilterForSearch(
   return undefined;
 }
 
-function searchSourceForFact(entry: ScoredFact): string {
-  return entry.fact.sourceRunId || entry.fact.sourceMessageId || entry.fact.id;
-}
-
 function subjectLabel(subjectId: string): string {
   return getEntityById(subjectId)?.canonicalName ?? subjectId;
 }
 
-function formatSearchResult(entry: ScoredFact, index: number): object {
-  const fact = entry.fact;
+interface MemorySearchCandidate {
+  id: string;
+  fact: MemoryFact;
+  score: number | null;
+  relevanceScore: number | null;
+  applicability: MemoryApplicabilityAnnotation;
+}
+
+function formatSearchResult(entry: MemorySearchCandidate, index: number): object {
+  const { fact, applicability } = entry;
   const source = searchSourceForFact(entry);
   return {
     factId: fact.id,
@@ -82,9 +93,49 @@ function formatSearchResult(entry: ScoredFact, index: number): object {
     score: entry.score,
     relevanceScore: entry.relevanceScore,
     citation: `[${index + 1}] ${source}`,
-    relevance: `${Math.round(entry.score * 100)}%`,
+    relevance: entry.score === null ? null : `${Math.round(entry.score * 100)}%`,
+    policy: applicability,
   };
 }
+
+function searchSourceForFact(entry: Pick<MemorySearchCandidate, 'fact'>): string {
+  return entry.fact.sourceRunId || entry.fact.sourceMessageId || entry.fact.id;
+}
+
+function selectSearchCandidates(input: {
+  scoredFacts: ReadonlyArray<ScoredFact>;
+  resolutionFacts: ReadonlyArray<MemoryFact>;
+  decisions: ReturnType<typeof applyMemoryApplicabilityPolicy>['factDecisions'];
+  limit: number;
+}): MemorySearchCandidate[] {
+  const scoredById = new Map(input.scoredFacts.map((entry) => [entry.fact.id, entry] as const));
+  const factsById = new Map<string, MemoryFact>();
+  for (const entry of input.scoredFacts) factsById.set(entry.fact.id, entry.fact);
+  for (const fact of input.resolutionFacts) factsById.set(fact.id, fact);
+  const annotated = input.decisions.flatMap((decision) => {
+    const fact = factsById.get(decision.factId);
+    if (!fact || decision.action === 'silent') return [];
+    const scored = scoredById.get(fact.id);
+    return [
+      {
+        id: fact.id,
+        fact,
+        score: scored?.score ?? null,
+        relevanceScore: scored?.relevanceScore ?? null,
+        applicability: { action: decision.action, reason: decision.reason },
+      } satisfies MemorySearchCandidate,
+    ];
+  });
+  const resolutionIds = selectMemoryApplicabilityResolutionFactIds(annotated);
+  const policyResolution = annotated.filter((entry) => resolutionIds.has(entry.fact.id));
+  const directlyUsable = annotated.filter(
+    (entry) => entry.applicability.action === 'use' && !resolutionIds.has(entry.fact.id),
+  );
+  return [...policyResolution, ...directlyUsable].slice(0, input.limit);
+}
+
+const MEMORY_SEARCH_POLICY_INSTRUCTION =
+  'Memory result policy is binding: use only action=use; ask the user before relying on action=ask; never assert or act on action=abstain.';
 
 export async function executeMemorySearch(
   args: { query: string; maxResults?: number; scope?: 'all' | 'conversation' | 'global' },
@@ -120,23 +171,62 @@ export async function executeMemorySearch(
       personaId: options.personaId,
       taskId: options.taskId,
     });
-    const scored = await recallScoredFactsForQuery(query, {
+    const now = Date.now();
+    const selection = await recallFactSelectionForQuery(query, {
       limit: maxResults,
       threshold: 0.01,
       memoryScope,
       useIntent: 'explicit_user_request',
+      now,
       ...(scopeFilter ? { scopeFilter } : {}),
     });
+    const candidateFacts = [...selection.facts, ...selection.resolutionFacts];
+    let conflictObservationReadState: 'available' | 'failed' = 'available';
+    let persistedConflicts: ReturnType<typeof loadActiveMemoryFactConflictSignals> = [];
+    try {
+      persistedConflicts = loadActiveMemoryFactConflictSignals({
+        factIds: candidateFacts.map((fact) => fact.id),
+        currentScope: memoryScope,
+        asOf: now,
+      });
+    } catch {
+      conflictObservationReadState = 'failed';
+    }
+    const applicability = applyMemoryApplicabilityPolicy({
+      facts: candidateFacts,
+      context: {
+        enabled: true,
+        now,
+        useIntent: 'explicit_user_request',
+        scope: memoryScope,
+        conflictObservationReadState,
+        ...(persistedConflicts.length > 0 ? { externalEvidence: persistedConflicts } : {}),
+      },
+    });
+    const selected = selectSearchCandidates({
+      scoredFacts: selection.scoredFacts,
+      resolutionFacts: selection.resolutionFacts,
+      decisions: applicability.factDecisions,
+      limit: maxResults,
+    });
+    const applicabilitySummary: MemoryApplicabilitySummary = {
+      ...applicability.summary,
+      promptVisibleFactCount: selected.length,
+      promptBudgetDroppedFactCount: applicability.summary.promptVisibleFactCount - selected.length,
+    };
     markFactsRecalled(
-      scored.map((entry) => entry.fact.id),
-      Date.now(),
+      selected.map((entry) => entry.fact.id),
+      now,
     );
     return JSON.stringify({
-      results: scored.map(formatSearchResult),
+      results: selected.map(formatSearchResult),
       method: 'living_memory',
       index: 'memory_facts',
-      totalFound: scored.length,
+      totalFound: selected.length,
       scope: requestedScope,
+      policyInstruction: MEMORY_SEARCH_POLICY_INSTRUCTION,
+      applicabilityPolicy: applicabilitySummary,
+      ...(applicabilitySummary.state === 'degraded' ? { degraded: true } : {}),
     });
   } catch (error) {
     return JSON.stringify({

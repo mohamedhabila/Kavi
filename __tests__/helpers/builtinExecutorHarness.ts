@@ -69,6 +69,7 @@ const mockSettingsState = {
 jest.mock('../../src/store/useSettingsStore', () => ({
   useSettingsStore: {
     getState: () => mockSettingsState,
+    subscribe: jest.fn(() => () => undefined),
   },
 }));
 
