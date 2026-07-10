@@ -8,7 +8,7 @@ import type { RequestFrame, RequiredRequestInformation } from '../../services/ag
 export interface RequestDecisionToolAuthority {
   isAvailable: (toolName: string) => boolean;
   isAllowed: (toolName: string) => boolean;
-  requiresApproval: (toolName: string) => boolean;
+  requiresApproval: (toolName: string, args?: Record<string, unknown>) => boolean;
 }
 
 function activeOperations(graphSnapshot: AgentRunControlGraphState): AgentRunAsyncOperation[] {
@@ -23,6 +23,13 @@ function uniqueMonitorToolNames(operation: AgentRunAsyncOperation): string[] {
   );
 }
 
+function monitorToolArgs(
+  operation: AgentRunAsyncOperation,
+  toolName: string,
+): Record<string, unknown> | undefined {
+  return operation.waitToolName === toolName ? operation.waitArgs : operation.statusArgs;
+}
+
 function resolveMonitorPolicyDisposition(
   operations: ReadonlyArray<AgentRunAsyncOperation>,
   authority: RequestDecisionToolAuthority,
@@ -35,7 +42,11 @@ function resolveMonitorPolicyDisposition(
     if (allowedTools.length === 0) {
       return 'prohibited';
     }
-    if (allowedTools.every(authority.requiresApproval)) {
+    if (
+      allowedTools.every((toolName) =>
+        authority.requiresApproval(toolName, monitorToolArgs(operation, toolName)),
+      )
+    ) {
       approvalRequired = true;
     }
   }

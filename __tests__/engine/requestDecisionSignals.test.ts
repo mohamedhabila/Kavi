@@ -134,6 +134,26 @@ describe('graph entry request decision signals', () => {
     });
   });
 
+  it('evaluates approval against the persisted monitor arguments', () => {
+    const requiresApproval = jest.fn().mockReturnValue(false);
+    const graphSnapshot = waitingGraph();
+    graphSnapshot.asyncWork.pendingOperations[0].statusArgs = { sessionId: 'worker-1' };
+
+    resolveGraphEntryRequestDecision({
+      frame: frame(),
+      graphSnapshot,
+      toolAuthority: {
+        isAvailable: () => true,
+        isAllowed: () => true,
+        requiresApproval,
+      },
+    });
+
+    expect(requiresApproval).toHaveBeenCalledWith('sessions_status', {
+      sessionId: 'worker-1',
+    });
+  });
+
   it('keeps structural clarification ahead of async authority', () => {
     const clarificationFrame = buildGraphEntryRequestFrame({
       text: '...',

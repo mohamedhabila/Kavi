@@ -4,6 +4,7 @@ import { createLogger } from '../../utils/logger';
 import { isJestRuntime } from '../../utils/runtime';
 
 import { createOrchestratorGraphBindings } from '../graph/orchestratorGraphBindings';
+import { resolveGraphEntryRequestDecision } from '../graph/requestDecisionSignals';
 import { executeAgentControlGraphSession } from '../graph/sessionExecution';
 import { prepareOrchestratorRequestBundle } from '../orchestratorRequestPreparation';
 import { buildRuntimeContextNote } from '../prompts/orchestratorPromptSections';
@@ -14,6 +15,7 @@ import {
   resolveCodeOwnedMemoryConversationId,
   resolveCodeOwnedMemoryPersonaId,
 } from '../../services/memory/memoryScopeIdentity';
+import { buildRuntimeRequestDecisionToolAuthority } from './requestDecisionAuthority';
 
 const logger = createLogger('Orchestrator');
 
@@ -68,28 +70,41 @@ export async function runOrchestratorGraphSession(params: {
   );
   const runtimeContextNote = buildRuntimeContextNote();
 
-  const { latestUserMessageText, livingMemory, requestFrame, skillPrompts, workingMessages } =
-    await prepareOrchestratorRequestBundle({
-      activeModel,
-      activeProvider,
-      callbacks,
-      conversationId,
-      graphOwnedRun: isSuperAgent,
-      internalUserMessageCount,
-      isSuperAgent,
-      linkUnderstandingEnabled,
-      logger,
-      maxLinks,
-      mediaUnderstandingEnabled,
-      memoryConversationId: sharedConversationId,
-      messages: options.messages,
+  const {
+    latestUserMessageText,
+    livingMemory,
+    requestFrame: structuralRequestFrame,
+    skillPrompts,
+    workingMessages,
+  } = await prepareOrchestratorRequestBundle({
+    activeModel,
+    activeProvider,
+    callbacks,
+    conversationId,
+    graphOwnedRun: isSuperAgent,
+    internalUserMessageCount,
+    isSuperAgent,
+    linkUnderstandingEnabled,
+    logger,
+    maxLinks,
+    mediaUnderstandingEnabled,
+    memoryConversationId: sharedConversationId,
+    messages: options.messages,
+    personaId,
+    taskId,
+    workflowScopeUserMessageId: options.workflowScopeUserMessageId,
+    graphSnapshot: options.initialAgentControlGraphState,
+    memoryRetrievalStrategy: options.memoryRetrievalStrategy,
+    memoryContextStrategy: options.memoryContextStrategy,
+  });
+  const requestFrame = resolveGraphEntryRequestDecision({
+    frame: structuralRequestFrame,
+    graphSnapshot: options.initialAgentControlGraphState,
+    toolAuthority: buildRuntimeRequestDecisionToolAuthority({
+      availableToolNames,
       personaId,
-      taskId,
-      workflowScopeUserMessageId: options.workflowScopeUserMessageId,
-      graphSnapshot: options.initialAgentControlGraphState,
-      memoryRetrievalStrategy: options.memoryRetrievalStrategy,
-      memoryContextStrategy: options.memoryContextStrategy,
-    });
+    }),
+  });
 
   const graph = createOrchestratorGraphBindings({
     callbacks,
