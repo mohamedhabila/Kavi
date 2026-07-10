@@ -196,10 +196,12 @@ public final class IOSSqliteDurableExecutionStore: IOSDurableExecutionStore, @un
       else {
         return .conflict
       }
-      guard let statement = prepare(
-        "DELETE FROM ios_durable_execution_records WHERE run_id = ? AND revision = ?",
-        values: [.text(runId), .integer(expectedRevision)]
-      ) else {
+      guard
+        let statement = prepare(
+          "DELETE FROM ios_durable_execution_records WHERE run_id = ? AND revision = ?",
+          values: [.text(runId), .integer(expectedRevision)]
+        )
+      else {
         return .unavailable
       }
       defer { sqlite3_finalize(statement) }
@@ -249,27 +251,30 @@ public final class IOSSqliteDurableExecutionStore: IOSDurableExecutionStore, @un
   private func prepareSchema() -> Bool {
     guard let version = scalarInt("PRAGMA user_version") else { return false }
     if version == 0 {
-      guard execute("""
-        CREATE TABLE ios_durable_execution_records (
-          run_id TEXT PRIMARY KEY NOT NULL CHECK(length(run_id) BETWEEN 1 AND 200),
-          revision INTEGER NOT NULL CHECK(revision >= 0),
-          state TEXT NOT NULL CHECK(state IN (
-            'scheduling', 'submitted', 'running', 'retry_waiting', 'cancel_requested',
-            'cancelled', 'completed', 'expired', 'blocked'
-          )),
-          scheduler_kind TEXT NOT NULL CHECK(scheduler_kind IN (
-            'continued_processing', 'background_processing'
-          )),
-          task_identifier TEXT NOT NULL CHECK(length(task_identifier) BETWEEN 1 AND 200),
-          next_attempt_at_millis INTEGER CHECK(
-            next_attempt_at_millis IS NULL OR next_attempt_at_millis >= 0
-          ),
-          earliest_start_at_millis INTEGER NOT NULL CHECK(earliest_start_at_millis >= 0),
-          updated_at_millis INTEGER NOT NULL CHECK(updated_at_millis >= 0),
-          record_blob BLOB NOT NULL
-        )
-        """),
-        execute("""
+      guard
+        execute(
+          """
+          CREATE TABLE ios_durable_execution_records (
+            run_id TEXT PRIMARY KEY NOT NULL CHECK(length(run_id) BETWEEN 1 AND 200),
+            revision INTEGER NOT NULL CHECK(revision >= 0),
+            state TEXT NOT NULL CHECK(state IN (
+              'scheduling', 'submitted', 'running', 'retry_waiting', 'cancel_requested',
+              'cancelled', 'completed', 'expired', 'blocked'
+            )),
+            scheduler_kind TEXT NOT NULL CHECK(scheduler_kind IN (
+              'continued_processing', 'background_processing'
+            )),
+            task_identifier TEXT NOT NULL CHECK(length(task_identifier) BETWEEN 1 AND 200),
+            next_attempt_at_millis INTEGER CHECK(
+              next_attempt_at_millis IS NULL OR next_attempt_at_millis >= 0
+            ),
+            earliest_start_at_millis INTEGER NOT NULL CHECK(earliest_start_at_millis >= 0),
+            updated_at_millis INTEGER NOT NULL CHECK(updated_at_millis >= 0),
+            record_blob BLOB NOT NULL
+          )
+          """),
+        execute(
+          """
           CREATE INDEX ios_durable_execution_schedule
           ON ios_durable_execution_records (
             state, scheduler_kind, next_attempt_at_millis,
@@ -287,9 +292,11 @@ public final class IOSSqliteDurableExecutionStore: IOSDurableExecutionStore, @un
   }
 
   private func hasExactSchema() -> Bool {
-    guard let statement = prepare(
-      "SELECT name, type, \"notnull\", pk FROM pragma_table_info('ios_durable_execution_records') ORDER BY cid"
-    ) else {
+    guard
+      let statement = prepare(
+        "SELECT name, type, \"notnull\", pk FROM pragma_table_info('ios_durable_execution_records') ORDER BY cid"
+      )
+    else {
       return false
     }
     defer { sqlite3_finalize(statement) }
@@ -318,10 +325,12 @@ public final class IOSSqliteDurableExecutionStore: IOSDurableExecutionStore, @un
   }
 
   private func readRow(runId: String) -> RowRead {
-    guard let statement = prepare(
-      Self.rowSelect + " WHERE run_id = ?",
-      values: [.text(runId)]
-    ) else {
+    guard
+      let statement = prepare(
+        Self.rowSelect + " WHERE run_id = ?",
+        values: [.text(runId)]
+      )
+    else {
       return .unavailable
     }
     defer { sqlite3_finalize(statement) }
@@ -395,17 +404,21 @@ public final class IOSSqliteDurableExecutionStore: IOSDurableExecutionStore, @un
     data: Data,
     expectedRevision: Int64
   ) -> Bool {
-    guard let statement = prepare("""
-      UPDATE ios_durable_execution_records
-      SET revision = ?, state = ?, scheduler_kind = ?, task_identifier = ?,
-          next_attempt_at_millis = ?, earliest_start_at_millis = ?,
-          updated_at_millis = ?, record_blob = ?
-      WHERE run_id = ? AND revision = ?
-      """) else {
+    guard
+      let statement = prepare(
+        """
+        UPDATE ios_durable_execution_records
+        SET revision = ?, state = ?, scheduler_kind = ?, task_identifier = ?,
+            next_attempt_at_millis = ?, earliest_start_at_millis = ?,
+            updated_at_millis = ?, record_blob = ?
+        WHERE run_id = ? AND revision = ?
+        """)
+    else {
       return false
     }
     defer { sqlite3_finalize(statement) }
-    let values = recordValues(record, data: data, includeRunIdFirst: false)
+    let values =
+      recordValues(record, data: data, includeRunIdFirst: false)
       + [.text(record.request.identity.runId), .integer(expectedRevision)]
     guard bind(values, to: statement), sqlite3_step(statement) == SQLITE_DONE else {
       return false

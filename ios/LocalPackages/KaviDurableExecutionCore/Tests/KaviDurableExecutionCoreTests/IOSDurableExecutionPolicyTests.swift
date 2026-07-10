@@ -35,8 +35,7 @@ final class IOSDurableExecutionPolicyTests: XCTestCase {
     XCTAssertTrue(supported.requiresFreshAuthorityAndFence)
 
     for commandKind in IOSRecoveryCommandKind.allCases
-    where commandKind != .reconcileExternalHandles
-    {
+    where commandKind != .reconcileExternalHandles {
       XCTAssertEqual(
         IOSDurableExecutionPolicy.decide(
           request(durabilityClass: .userInitiatedContinuable, commandKind: commandKind),

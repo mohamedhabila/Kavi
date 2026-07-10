@@ -271,8 +271,9 @@ final class IOSSqliteDurableExecutionStoreTests: XCTestCase {
 
   private func executeSQL(at url: URL, sql: String) throws {
     var database: OpaquePointer?
-    guard sqlite3_open_v2(url.path, &database, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE, nil)
-      == SQLITE_OK
+    guard
+      sqlite3_open_v2(url.path, &database, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE, nil)
+        == SQLITE_OK
     else {
       throw SQLiteTestError.open
     }
