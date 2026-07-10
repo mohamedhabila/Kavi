@@ -29,6 +29,8 @@ export interface AgentRunEvidenceMemoryInput {
   threadId: string;
   taskId?: string;
   sourceRunId?: string;
+  sourceActorId?: string;
+  parentRunId?: string;
   sourceTurnId?: string;
   now?: number;
 }
@@ -387,6 +389,7 @@ function recordBundleFact(
       objectText: trimmed,
       memoryKind: kind,
       sourceRunId: bundle.sourceRunId,
+      sourceActorId: input.sourceActorId,
       sourceTurnId: input.sourceTurnId,
       originConversationId: input.conversationId,
       originThreadId: input.threadId,
@@ -424,6 +427,8 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
   const summaries = Array.from(bundle.summaries).slice(0, 12);
   const baseAttributes: JsonRecord = {
     sourceRunId: bundle.sourceRunId,
+    sourceActorId: input.sourceActorId,
+    parentRunId: input.parentRunId,
     goal: bundle.goal,
     status: bundle.status,
     outcome: bundle.outcome,
@@ -434,6 +439,8 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
   const agentRunRecord = compactAgentRunRecord({
     base: {
       sourceRunId: bundle.sourceRunId,
+      sourceActorId: input.sourceActorId,
+      parentRunId: input.parentRunId,
       goal: bundle.goal,
       status: bundle.status,
       outcome: bundle.outcome,
@@ -481,6 +488,7 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
         objectText: evidenceSpanRecordForStep(bundle, step, index),
         memoryKind: 'evidence_span',
         sourceRunId: bundle.sourceRunId,
+        sourceActorId: input.sourceActorId,
         sourceTurnId: input.sourceTurnId,
         originConversationId: input.conversationId,
         originThreadId: input.threadId,
@@ -517,8 +525,11 @@ export function recordAgentRunEvidenceMemory(
 ): AgentRunEvidenceMemoryResult {
   ensureFactSchema();
   const bundles = new Map<string, AgentRunBundle>();
-  ingestMessages(bundles, input.messages ?? [], input.sourceRunId);
   const consumedEvidence = ingestEvidence(bundles, input.evidence ?? [], input.sourceRunId);
+  // Code-routed run evidence owns run-level metadata. Transcript tool records
+  // still contribute observed steps, but a step status must not replace the
+  // terminal status supplied by the execution boundary.
+  ingestMessages(bundles, input.messages ?? [], input.sourceRunId);
   const factIds = Array.from(bundles.values()).flatMap((bundle) => persistBundle(bundle, input));
   return { factIds, consumedEvidence };
 }

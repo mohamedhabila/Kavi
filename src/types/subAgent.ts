@@ -5,6 +5,27 @@ import type { Message } from './message';
 export type SubAgentStatus = 'running' | 'completed' | 'timeout' | 'error' | 'cancelled';
 export type SubAgentCompletionState = 'verified_success' | 'blocked' | 'incomplete';
 
+export type SubAgentOutcomeReconciliationCode =
+  | 'pending'
+  | 'recorded_verified'
+  | 'recorded_candidate'
+  | 'memory_disabled'
+  | 'source_scope_missing'
+  | 'source_scope_mismatch'
+  | 'source_context_missing'
+  | 'invalid_identity'
+  | 'write_failed'
+  | 'retry_exhausted';
+
+export interface SubAgentOutcomeReconciliationState {
+  status: 'pending' | 'completed' | 'blocked';
+  code: SubAgentOutcomeReconciliationCode;
+  attemptCount: number;
+  updatedAt: number;
+  completedAt?: number;
+  factIds?: string[];
+}
+
 export type SubAgentSandboxPolicy = 'full' | 'safe-only' | 'inherit';
 
 export type SubAgentLaunchState = 'queued' | 'bootstrapping' | 'active' | 'finalizing' | 'terminal';
@@ -33,6 +54,7 @@ export interface SubAgentSnapshot {
   launchState?: SubAgentLaunchState;
   output?: string;
   completionState?: SubAgentCompletionState;
+  outcomeReconciliation?: SubAgentOutcomeReconciliationState;
   toolsUsed?: string[];
   iterations?: number;
   lastProgressAt?: number;
