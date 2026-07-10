@@ -21,6 +21,10 @@
       "type": "string",
       "pattern": "^[a-f0-9]{64}$"
     },
+    "nonZeroSha256": {
+      "type": "string",
+      "pattern": "^(?!0{64}$)[a-f0-9]{64}$"
+    },
     "canonicalAtom": {
       "type": "string",
       "maxLength": 128,
@@ -321,7 +325,7 @@
           ]
         },
         "requestSha256": {
-          "$ref": "#/$defs/sha256"
+          "$ref": "#/$defs/nonZeroSha256"
         },
         "candidate": {
           "$ref": "#/$defs/candidateFrame"
