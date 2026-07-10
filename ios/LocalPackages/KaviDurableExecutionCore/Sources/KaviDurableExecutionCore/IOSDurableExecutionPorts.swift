@@ -21,7 +21,7 @@ public enum IOSDurableExecutionState: String, Codable, CaseIterable, Hashable, S
   }
 }
 
-public enum IOSDurableFailureReason: String, Codable, CaseIterable, Sendable {
+public enum IOSDurableFailureReason: String, Codable, CaseIterable, Hashable, Sendable {
   case transientUnavailable = "transient_unavailable"
   case remoteStillPending = "remote_still_pending"
   case providerTemporarilyUnavailable = "provider_temporarily_unavailable"
@@ -31,6 +31,7 @@ public enum IOSDurableFailureReason: String, Codable, CaseIterable, Sendable {
   case handlerFailed = "handler_failed"
   case retryExhausted = "retry_exhausted"
   case platformExpired = "platform_expired"
+  case continuedProcessingInterrupted = "continued_processing_interrupted"
   case platformRequestMissing = "platform_request_missing"
   case platformTerminatedWithoutReceipt = "platform_terminated_without_receipt"
 
@@ -39,7 +40,8 @@ public enum IOSDurableFailureReason: String, Codable, CaseIterable, Sendable {
     case .transientUnavailable, .remoteStillPending, .providerTemporarilyUnavailable:
       return true
     case .generationChanged, .authorityChanged, .handlerRejected, .handlerFailed,
-      .retryExhausted, .platformExpired, .platformRequestMissing,
+      .retryExhausted, .platformExpired, .continuedProcessingInterrupted,
+      .platformRequestMissing,
       .platformTerminatedWithoutReceipt:
       return false
     }
@@ -190,19 +192,22 @@ public struct IOSDurableStoreQuery: Equatable, Sendable {
   public let taskIdentifier: String?
   public let excludingRunId: String?
   public let nextAttemptAtOrBeforeMillis: Int64?
+  public let earliestStartAtOrBeforeMillis: Int64?
 
   public init(
     states: Set<IOSDurableExecutionState>? = nil,
     schedulerKind: IOSDurableSchedulerKind? = nil,
     taskIdentifier: String? = nil,
     excludingRunId: String? = nil,
-    nextAttemptAtOrBeforeMillis: Int64? = nil
+    nextAttemptAtOrBeforeMillis: Int64? = nil,
+    earliestStartAtOrBeforeMillis: Int64? = nil
   ) {
     self.states = states
     self.schedulerKind = schedulerKind
     self.taskIdentifier = taskIdentifier
     self.excludingRunId = excludingRunId
     self.nextAttemptAtOrBeforeMillis = nextAttemptAtOrBeforeMillis
+    self.earliestStartAtOrBeforeMillis = earliestStartAtOrBeforeMillis
   }
 
   public func matches(_ record: IOSDurableExecutionRecord) -> Bool {
@@ -213,6 +218,9 @@ public struct IOSDurableStoreQuery: Equatable, Sendable {
       && (nextAttemptAtOrBeforeMillis == nil
         || (record.nextAttemptAtMillis != nil
           && record.nextAttemptAtMillis! <= nextAttemptAtOrBeforeMillis!))
+      && (earliestStartAtOrBeforeMillis == nil
+        || record.request.constraints.earliestStartAtMillis
+          <= earliestStartAtOrBeforeMillis!)
   }
 }
 

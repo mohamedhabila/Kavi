@@ -33,13 +33,16 @@ public enum IOSDurableExecutionPolicy {
       guard capabilities.appIsForeground else {
         return .unsupported(.foregroundUserActionRequired)
       }
+      guard capabilities.hasFreshUserInitiatedAction else {
+        return .unsupported(.freshUserActionRequired)
+      }
       guard request.constraints.earliestStartAtMillis == request.requestedAtMillis else {
         return .unsupported(.continuedProcessingDelayUnsupported)
       }
       guard !request.constraints.requiresCharging else {
         return .unsupported(.unsupportedPlatformConstraint)
       }
-      guard request.constraints.network != .unmetered else {
+      guard request.constraints.network == .notRequired else {
         return .unsupported(.unsupportedNetworkConstraint)
       }
       return .supported(.continuedProcessing)

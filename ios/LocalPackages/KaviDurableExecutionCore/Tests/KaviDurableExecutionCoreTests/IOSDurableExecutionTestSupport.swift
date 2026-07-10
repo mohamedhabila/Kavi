@@ -192,7 +192,11 @@ func durableRecord(
 }
 
 func foregroundIOS26() -> IOSDurablePlatformCapabilities {
-  .init(supportsContinuedProcessing: true, appIsForeground: true)
+  .init(
+    supportsContinuedProcessing: true,
+    appIsForeground: true,
+    hasFreshUserInitiatedAction: true
+  )
 }
 
 func acceptedRecord(_ result: IOSDurableAdapterResult) -> IOSDurableExecutionRecord {

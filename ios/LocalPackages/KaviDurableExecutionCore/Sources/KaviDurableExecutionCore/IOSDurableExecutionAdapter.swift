@@ -76,16 +76,41 @@ public final class IOSDurableExecutionAdapter: @unchecked Sendable {
   }
 
   public func reconcileScheduling(limit: Int) -> IOSDurableOutboxResult {
-    switch store.list(query: .init(states: [.scheduling]), limit: limit) {
-    case .unavailable:
-      return .storeUnavailable
-    case .records(let records):
-      return .completed(
-        records.map { record in
-          IOSDurableOutboxOutcome(runId: record.request.identity.runId, result: submit(record))
-        }
+    guard limit >= 1 && limit <= 1_000 else { return .storeUnavailable }
+    guard
+      case .records(let scheduling) = store.list(
+        query: .init(states: [.scheduling]),
+        limit: limit
       )
+    else {
+      return .storeUnavailable
     }
+    let remaining = limit - scheduling.count
+    let processing: [IOSDurableExecutionRecord]
+    if remaining > 0 {
+      guard
+        case .records(let records) = store.list(
+          query: .init(
+            states: [.submitted, .retryWaiting],
+            schedulerKind: .backgroundProcessing
+          ),
+          limit: remaining
+        )
+      else {
+        return .storeUnavailable
+      }
+      processing = records
+    } else {
+      processing = []
+    }
+    return .completed(
+      (scheduling + processing).map { record in
+        IOSDurableOutboxOutcome(
+          runId: record.request.identity.runId,
+          result: reconcileSchedulingRecord(record)
+        )
+      }
+    )
   }
 
   public func reconcileCancellationRequests(limit: Int) -> IOSDurableOutboxResult {
@@ -137,7 +162,8 @@ public final class IOSDurableExecutionAdapter: @unchecked Sendable {
     let immediateResult = store.list(
       query: .init(
         states: [.scheduling, .submitted],
-        schedulerKind: .backgroundProcessing
+        schedulerKind: .backgroundProcessing,
+        earliestStartAtOrBeforeMillis: updatedAtMillis
       ),
       limit: limit
     )
@@ -301,12 +327,19 @@ public final class IOSDurableExecutionAdapter: @unchecked Sendable {
     failureReason: IOSDurableFailureReason,
     updatedAtMillis: Int64
   ) -> IOSDurableAdapterResult {
-    guard failureReason.isRetryable,
-      nextAttemptAtMillis >= updatedAtMillis + IOSDurableExecutionPolicy.minimumBackoffMillis
-    else {
+    guard failureReason.isRetryable else {
       return .rejected(.invalidProgress)
     }
     return updateRunning(pointer) { current in
+      guard
+        Self.isValidRetrySchedule(
+          current: current,
+          nextAttemptAtMillis: nextAttemptAtMillis,
+          updatedAtMillis: updatedAtMillis
+        )
+      else {
+        return .result(.rejected(.invalidProgress))
+      }
       guard current.schedulerKind == .backgroundProcessing else {
         return .record(
           current.next(
@@ -330,7 +363,17 @@ public final class IOSDurableExecutionAdapter: @unchecked Sendable {
             failureReason: .some(.retryExhausted),
             updatedAtMillis: updatedAtMillis
           )
-        )
+        ) { [store, scheduler] in
+          let completeShared = !Self.hasOtherRunningBackgroundRecord(
+            store: store,
+            excludingRunId: current.request.identity.runId
+          )
+          return scheduler.complete(
+            Self.spec(current),
+            success: false,
+            completeSharedTask: completeShared
+          ) == .accepted ? nil : .deferred(.schedulerUnavailable)
+        }
       }
       let waiting = current.next(
         state: .retryWaiting,
@@ -338,11 +381,15 @@ public final class IOSDurableExecutionAdapter: @unchecked Sendable {
         failureReason: .some(failureReason),
         updatedAtMillis: updatedAtMillis
       )
-      return .record(waiting) { [scheduler] in
+      return .record(waiting) { [store, scheduler] in
+        let completeShared = !Self.hasOtherRunningBackgroundRecord(
+          store: store,
+          excludingRunId: current.request.identity.runId
+        )
         _ = scheduler.complete(
           Self.spec(current),
           success: false,
-          completeSharedTask: false
+          completeSharedTask: completeShared
         )
         switch scheduler.submit(Self.spec(waiting)) {
         case .accepted: return nil
@@ -355,9 +402,62 @@ public final class IOSDurableExecutionAdapter: @unchecked Sendable {
 
   public func expireTask(
     taskIdentifier: String,
+    schedulerKind: IOSDurableSchedulerKind,
     updatedAtMillis: Int64
   ) -> IOSDurableStoreListResult {
-    switch matchingRecords(taskIdentifier: taskIdentifier, limit: 1_000) {
+    let states: Set<IOSDurableExecutionState> =
+      schedulerKind == .continuedProcessing ? [.scheduling, .submitted, .running] : [.running]
+    let failureReason: IOSDurableFailureReason =
+      schedulerKind == .continuedProcessing
+      ? .continuedProcessingInterrupted : .platformExpired
+    return interruptRecords(
+      taskIdentifier: taskIdentifier,
+      schedulerKind: schedulerKind,
+      states: states,
+      failureReason: failureReason,
+      updatedAtMillis: updatedAtMillis
+    )
+  }
+
+  public func markMissingContinuedRequest(
+    taskIdentifier: String,
+    updatedAtMillis: Int64
+  ) -> IOSDurableStoreListResult {
+    interruptRecords(
+      taskIdentifier: taskIdentifier,
+      schedulerKind: .continuedProcessing,
+      states: [.submitted],
+      failureReason: .platformRequestMissing,
+      updatedAtMillis: updatedAtMillis
+    )
+  }
+
+  public func markOrphanedContinuedExecution(
+    taskIdentifier: String,
+    updatedAtMillis: Int64
+  ) -> IOSDurableStoreListResult {
+    interruptRecords(
+      taskIdentifier: taskIdentifier,
+      schedulerKind: .continuedProcessing,
+      states: [.running],
+      failureReason: .continuedProcessingInterrupted,
+      updatedAtMillis: updatedAtMillis
+    )
+  }
+
+  private func interruptRecords(
+    taskIdentifier: String,
+    schedulerKind: IOSDurableSchedulerKind,
+    states: Set<IOSDurableExecutionState>,
+    failureReason: IOSDurableFailureReason,
+    updatedAtMillis: Int64
+  ) -> IOSDurableStoreListResult {
+    switch matchingRecords(
+      taskIdentifier: taskIdentifier,
+      states: states,
+      schedulerKind: schedulerKind,
+      limit: 1_000
+    ) {
     case .unavailable:
       return .unavailable
     case .records(let records):
@@ -365,7 +465,7 @@ public final class IOSDurableExecutionAdapter: @unchecked Sendable {
       for current in records where !current.state.isTerminal {
         let next = current.next(
           state: .expired,
-          failureReason: .some(.platformExpired),
+          failureReason: .some(failureReason),
           updatedAtMillis: updatedAtMillis
         )
         if store.compareAndSet(
@@ -424,6 +524,38 @@ public final class IOSDurableExecutionAdapter: @unchecked Sendable {
       case .conflict: return resolvePostScheduleConflict(scheduling.request)
       case .unavailable: return .deferred(.storeUnavailable)
       }
+    }
+  }
+
+  private func reconcileSchedulingRecord(
+    _ record: IOSDurableExecutionRecord
+  ) -> IOSDurableAdapterResult {
+    switch record.state {
+    case .scheduling:
+      return submit(record)
+    case .submitted where record.schedulerKind == .backgroundProcessing,
+      .retryWaiting where record.schedulerKind == .backgroundProcessing:
+      switch scheduler.submit(Self.spec(record)) {
+      case .accepted:
+        return .noOp(record)
+      case .conflict:
+        return .deferred(.schedulerConflict)
+      case .unavailable:
+        return .deferred(.schedulerUnavailable)
+      case .terminal:
+        return write(
+          current: record,
+          next: record.next(
+            state: .blocked,
+            nextAttemptAtMillis: .some(nil),
+            failureReason: .some(.platformTerminatedWithoutReceipt),
+            updatedAtMillis: record.updatedAtMillis
+          )
+        )
+      }
+    case .submitted, .running, .retryWaiting, .cancelRequested, .cancelled, .completed, .expired,
+      .blocked:
+      return .rejected(.invalidProgressTransition)
     }
   }
 
@@ -567,6 +699,8 @@ public final class IOSDurableExecutionAdapter: @unchecked Sendable {
     case .accepted, .terminal, .missing:
       let cancelled = requested.next(
         state: .cancelled,
+        nextAttemptAtMillis: .some(nil),
+        failureReason: .some(nil),
         updatedAtMillis: updatedAtMillis
       )
       return write(current: requested, next: cancelled)
@@ -575,13 +709,19 @@ public final class IOSDurableExecutionAdapter: @unchecked Sendable {
 
   private func matchingRecords(
     taskIdentifier: String,
+    states: Set<IOSDurableExecutionState>? = nil,
+    schedulerKind: IOSDurableSchedulerKind? = nil,
     limit: Int
   ) -> IOSDurableStoreListResult {
     guard IOSDurableExecutionPolicy.isValidIdentifier(taskIdentifier) else {
       return .unavailable
     }
     switch store.list(
-      query: .init(taskIdentifier: taskIdentifier),
+      query: .init(
+        states: states,
+        schedulerKind: schedulerKind,
+        taskIdentifier: taskIdentifier
+      ),
       limit: limit
     ) {
     case .unavailable: return .unavailable
@@ -665,6 +805,28 @@ public final class IOSDurableExecutionAdapter: @unchecked Sendable {
       )
     else { return true }
     return !records.isEmpty
+  }
+
+  private static func isValidRetrySchedule(
+    current: IOSDurableExecutionRecord,
+    nextAttemptAtMillis: Int64,
+    updatedAtMillis: Int64
+  ) -> Bool {
+    let effectiveUpdatedAt = max(current.updatedAtMillis, updatedAtMillis)
+    let (delay, overflow) = nextAttemptAtMillis.subtractingReportingOverflow(effectiveUpdatedAt)
+    guard !overflow, delay >= 0 else { return false }
+    var minimumDelay = current.request.retryPolicy.initialBackoffMillis
+    if current.attempt > 1 {
+      for _ in 1..<current.attempt {
+        if minimumDelay >= IOSDurableExecutionPolicy.maximumBackoffMillis / 2 {
+          minimumDelay = IOSDurableExecutionPolicy.maximumBackoffMillis
+          break
+        }
+        minimumDelay *= 2
+      }
+    }
+    return delay >= minimumDelay
+      && delay <= IOSDurableExecutionPolicy.maximumBackoffMillis
   }
 
   private static func hasOtherActiveBackgroundRecord(

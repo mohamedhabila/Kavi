@@ -8,13 +8,20 @@ public final class IOSFileDurableExecutionStore: IOSDurableExecutionStore, @unch
 
   private let fileURL: URL
   private let fileManager: FileManager
+  private let maximumRecordCount: Int
   private let lock = NSLock()
   private let encoder: JSONEncoder
   private let decoder: JSONDecoder
 
-  public init(directoryURL: URL, fileManager: FileManager = .default) {
+  public init(
+    directoryURL: URL,
+    fileManager: FileManager = .default,
+    maximumRecordCount: Int = 1_000
+  ) {
+    precondition(maximumRecordCount >= 1 && maximumRecordCount <= 1_000)
     fileURL = directoryURL.appendingPathComponent("kavi-durable-execution-v1.json")
     self.fileManager = fileManager
+    self.maximumRecordCount = maximumRecordCount
     encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
     decoder = JSONDecoder()
@@ -70,6 +77,9 @@ public final class IOSFileDurableExecutionStore: IOSDurableExecutionStore, @unch
         } else if existing != nil {
           return .conflict
         }
+        guard existing != nil || envelope.records.count < maximumRecordCount else {
+          return .unavailable
+        }
         guard next.revision == (existing?.revision ?? -1) + 1 else { return .conflict }
         envelope.records[runId] = next
         return persist(envelope) ? .stored : .unavailable
@@ -110,6 +120,7 @@ public final class IOSFileDurableExecutionStore: IOSDurableExecutionStore, @unch
       let data = try Data(contentsOf: fileURL, options: .mappedIfSafe)
       let envelope = try decoder.decode(Envelope.self, from: data)
       guard envelope.schema == iosDurableBridgeSchema,
+        envelope.records.count <= maximumRecordCount,
         envelope.records.allSatisfy({ key, record in
           key == record.request.identity.runId && validate(record)
         })
@@ -146,6 +157,14 @@ public final class IOSFileDurableExecutionStore: IOSDurableExecutionStore, @unch
   private func validate(_ record: IOSDurableExecutionRecord) -> Bool {
     let request = record.request
     let identity = request.identity
+    let schedulerDecision = IOSDurableExecutionPolicy.decide(
+      request,
+      capabilities: .init(
+        supportsContinuedProcessing: true,
+        appIsForeground: true,
+        hasFreshUserInitiatedAction: true
+      )
+    )
     let progressValid: Bool
     if record.progressCompleted == nil && record.progressTotal == nil {
       progressValid = true
@@ -154,7 +173,8 @@ public final class IOSFileDurableExecutionStore: IOSDurableExecutionStore, @unch
     } else {
       progressValid = false
     }
-    return IOSDurableExecutionPolicy.isValidIdentity(identity)
+    return IOSDurableExecutionPolicy.isValid(request)
+      && schedulerDecision.schedulerKind == record.schedulerKind
       && IOSDurableExecutionPolicy.isValidIdentifier(record.taskIdentifier)
       && request.requestedAtMillis >= 0
       && request.constraints.earliestStartAtMillis >= request.requestedAtMillis
@@ -173,6 +193,40 @@ public final class IOSFileDurableExecutionStore: IOSDurableExecutionStore, @unch
         || (record.lastCheckpointAtMillis! >= request.requestedAtMillis
           && record.lastCheckpointAtMillis! <= record.updatedAtMillis))
       && progressValid
+      && validateState(record)
+  }
+
+  private func validateState(_ record: IOSDurableExecutionRecord) -> Bool {
+    switch record.state {
+    case .scheduling, .submitted:
+      return record.attempt == 0 && record.nextAttemptAtMillis == nil
+        && record.failureReason == nil && record.receiptDigest == nil
+    case .running:
+      return record.attempt >= 1 && record.nextAttemptAtMillis == nil
+        && record.failureReason == nil && record.receiptDigest == nil
+    case .retryWaiting:
+      return record.attempt >= 1 && record.nextAttemptAtMillis != nil
+        && record.failureReason?.isRetryable == true && record.receiptDigest == nil
+    case .cancelRequested:
+      return record.receiptDigest == nil
+    case .cancelled:
+      return record.nextAttemptAtMillis == nil && record.failureReason == nil
+        && record.receiptDigest == nil
+    case .completed:
+      return record.nextAttemptAtMillis == nil && record.failureReason == nil
+        && record.receiptDigest != nil
+    case .expired:
+      let interruptionReasons: Set<IOSDurableFailureReason> = [
+        .platformExpired,
+        .continuedProcessingInterrupted,
+        .platformRequestMissing,
+      ]
+      return record.nextAttemptAtMillis == nil && record.receiptDigest == nil
+        && record.failureReason.map(interruptionReasons.contains) == true
+    case .blocked:
+      return record.nextAttemptAtMillis == nil && record.failureReason != nil
+        && record.receiptDigest == nil
+    }
   }
 
   private func withLock<T>(_ operation: () -> T) -> T {

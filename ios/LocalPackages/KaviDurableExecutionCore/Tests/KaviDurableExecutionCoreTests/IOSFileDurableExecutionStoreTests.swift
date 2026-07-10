@@ -88,7 +88,11 @@ final class IOSFileDurableExecutionStoreTests: XCTestCase {
       .stored
     )
     XCTAssertEqual(store.deleteTerminal(runId: "run-1", expectedRevision: 0), .conflict)
-    let terminal = active.next(state: .completed, updatedAtMillis: 2_000)
+    let terminal = active.next(
+      state: .completed,
+      receiptDigest: .some(String(repeating: "e", count: 64)),
+      updatedAtMillis: 2_000
+    )
     XCTAssertEqual(
       store.compareAndSet(runId: "run-1", expectedRevision: 0, next: terminal),
       .stored
@@ -100,11 +104,56 @@ final class IOSFileDurableExecutionStoreTests: XCTestCase {
     }
   }
 
+  func testFailsClosedAtBoundedRecordCapacityUntilTerminalRelease() {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let store = IOSFileDurableExecutionStore(
+      directoryURL: directory,
+      maximumRecordCount: 1
+    )
+    XCTAssertEqual(
+      store.compareAndSet(
+        runId: "run-1",
+        expectedRevision: nil,
+        next: initialRecord(runId: "run-1")
+      ),
+      .stored
+    )
+    XCTAssertEqual(
+      store.compareAndSet(
+        runId: "run-2",
+        expectedRevision: nil,
+        next: initialRecord(runId: "run-2")
+      ),
+      .unavailable
+    )
+  }
+
+  func testRejectsImpossibleTerminalStateWithoutReceipt() {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let store = IOSFileDurableExecutionStore(directoryURL: directory)
+    let active = initialRecord()
+    XCTAssertEqual(
+      store.compareAndSet(runId: "run-1", expectedRevision: nil, next: active),
+      .stored
+    )
+    XCTAssertEqual(
+      store.compareAndSet(
+        runId: "run-1",
+        expectedRevision: 0,
+        next: active.next(state: .completed, updatedAtMillis: 2_000)
+      ),
+      .unavailable
+    )
+  }
+
   private func initialRecord(
+    runId: String = "run-1",
     taskIdentifier: String = "com.kavi.test.continued.run-1"
   ) -> IOSDurableExecutionRecord {
     IOSDurableExecutionRecord(
-      request: durableRequest(),
+      request: durableRequest(runId: runId),
       schedulerKind: .continuedProcessing,
       taskIdentifier: taskIdentifier,
       state: .scheduling,

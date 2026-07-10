@@ -193,6 +193,7 @@ final class IOSDurableExecutionAdapterTests: XCTestCase {
     guard
       case .records(let expired) = adapter.expireTask(
         taskIdentifier: submitted.taskIdentifier,
+        schedulerKind: .continuedProcessing,
         updatedAtMillis: 2_100
       )
     else {
@@ -200,13 +201,35 @@ final class IOSDurableExecutionAdapterTests: XCTestCase {
     }
     XCTAssertEqual(expired.count, 1)
     XCTAssertEqual(expired[0].state, .expired)
-    XCTAssertEqual(expired[0].failureReason, .platformExpired)
+    XCTAssertEqual(expired[0].failureReason, .continuedProcessingInterrupted)
 
     guard case .records(let pending) = adapter.listPendingRecoveryRecords(limit: 10) else {
       return XCTFail("Expired record must be available for reconciliation")
     }
     XCTAssertEqual(pending, expired)
     XCTAssertNotNil(store.records["run-1"])
+  }
+
+  func testRelaunchMarksMissingContinuedRequestWithoutInventingCompletion() {
+    let store = InMemoryDurableStore()
+    let scheduler = FakeDurableScheduler()
+    let adapter = IOSDurableExecutionAdapter(store: store, scheduler: scheduler)
+    let submitted = acceptedRecord(
+      adapter.enqueue(durableRequest(), capabilities: foregroundIOS26())
+    )
+
+    guard
+      case .records(let interrupted) = adapter.markMissingContinuedRequest(
+        taskIdentifier: submitted.taskIdentifier,
+        updatedAtMillis: 2_000
+      )
+    else {
+      return XCTFail("Missing request reconciliation unavailable")
+    }
+    XCTAssertEqual(interrupted.count, 1)
+    XCTAssertEqual(interrupted[0].state, .expired)
+    XCTAssertEqual(interrupted[0].failureReason, .platformRequestMissing)
+    XCTAssertNil(interrupted[0].receiptDigest)
   }
 
   func testProcessingWakeDrainsIndependentDueRecords() {
@@ -248,6 +271,118 @@ final class IOSDurableExecutionAdapterTests: XCTestCase {
       updatedAtMillis: 2_200
     )
     XCTAssertEqual(scheduler.completions.last?.2, true)
+  }
+
+  func testProcessingExpirationOnlyInterruptsLaunchedRecords() {
+    let store = InMemoryDurableStore()
+    let scheduler = FakeDurableScheduler()
+    let adapter = IOSDurableExecutionAdapter(store: store, scheduler: scheduler)
+    for runId in ["run-1", "run-2"] {
+      _ = adapter.enqueue(
+        durableRequest(
+          runId: runId,
+          durabilityClass: .externalDurableOperation,
+          commandKind: .reconcileExternalHandles,
+          network: .connected
+        ),
+        capabilities: .init(supportsContinuedProcessing: false, appIsForeground: false)
+      )
+    }
+    guard
+      case .records(let running) = adapter.launchBackgroundProcessing(
+        updatedAtMillis: 2_000,
+        limit: 1
+      ), running.count == 1
+    else {
+      return XCTFail("Processing queue unavailable")
+    }
+
+    guard
+      case .records(let expired) = adapter.expireTask(
+        taskIdentifier: running[0].taskIdentifier,
+        schedulerKind: .backgroundProcessing,
+        updatedAtMillis: 2_100
+      )
+    else {
+      return XCTFail("Processing expiration unavailable")
+    }
+
+    XCTAssertEqual(expired.map { $0.request.identity.runId }, ["run-1"])
+    XCTAssertEqual(store.records["run-1"]?.state, .expired)
+    XCTAssertEqual(store.records["run-2"]?.state, .submitted)
+  }
+
+  func testProcessingRetryClosesSharedTaskAndPersistsNextWake() {
+    let store = InMemoryDurableStore()
+    let scheduler = FakeDurableScheduler()
+    let adapter = IOSDurableExecutionAdapter(store: store, scheduler: scheduler)
+    _ = adapter.enqueue(
+      durableRequest(
+        durabilityClass: .externalDurableOperation,
+        commandKind: .reconcileExternalHandles,
+        network: .connected
+      ),
+      capabilities: .init(supportsContinuedProcessing: false, appIsForeground: false)
+    )
+    guard
+      case .records(let running) = adapter.launchBackgroundProcessing(
+        updatedAtMillis: 2_000,
+        limit: 1
+      ), let record = running.first
+    else {
+      return XCTFail("Processing queue unavailable")
+    }
+
+    let waiting = acceptedRecord(
+      adapter.scheduleRetry(
+        pointer: attemptPointer(record),
+        nextAttemptAtMillis: 12_100,
+        failureReason: .remoteStillPending,
+        updatedAtMillis: 2_100
+      )
+    )
+
+    XCTAssertEqual(waiting.state, .retryWaiting)
+    XCTAssertEqual(waiting.nextAttemptAtMillis, 12_100)
+    XCTAssertEqual(scheduler.completions.last?.2, true)
+    XCTAssertEqual(scheduler.submitted.count, 2)
+  }
+
+  func testExhaustedProcessingRetryClosesSharedTaskWithoutResubmission() {
+    let store = InMemoryDurableStore()
+    let scheduler = FakeDurableScheduler()
+    let adapter = IOSDurableExecutionAdapter(store: store, scheduler: scheduler)
+    _ = adapter.enqueue(
+      durableRequest(
+        durabilityClass: .externalDurableOperation,
+        commandKind: .reconcileExternalHandles,
+        network: .connected,
+        maxAttempts: 1
+      ),
+      capabilities: .init(supportsContinuedProcessing: false, appIsForeground: false)
+    )
+    guard
+      case .records(let running) = adapter.launchBackgroundProcessing(
+        updatedAtMillis: 2_000,
+        limit: 1
+      ), let record = running.first
+    else {
+      return XCTFail("Processing queue unavailable")
+    }
+
+    let blocked = acceptedRecord(
+      adapter.scheduleRetry(
+        pointer: attemptPointer(record),
+        nextAttemptAtMillis: 12_100,
+        failureReason: .remoteStillPending,
+        updatedAtMillis: 2_100
+      )
+    )
+
+    XCTAssertEqual(blocked.state, .blocked)
+    XCTAssertEqual(blocked.failureReason, .retryExhausted)
+    XCTAssertEqual(scheduler.completions.last?.2, true)
+    XCTAssertEqual(scheduler.submitted.count, 1)
   }
 
   func testCancellationIsPersistedBeforePlatformAndSharedRequestStaysForPeers() {
@@ -431,5 +566,145 @@ final class IOSDurableExecutionAdapterTests: XCTestCase {
       return XCTFail("Processing outbox unavailable")
     }
     XCTAssertEqual(launched.map { $0.request.identity.runId }, ["zz-due"])
+  }
+
+  func testProcessingWakeHonorsIndependentEarliestStartTimes() {
+    let store = InMemoryDurableStore()
+    let scheduler = FakeDurableScheduler()
+    let adapter = IOSDurableExecutionAdapter(store: store, scheduler: scheduler)
+    for (runId, earliestStart) in [("run-1", 1_000), ("run-2", 5_000)] {
+      _ = adapter.enqueue(
+        durableRequest(
+          runId: runId,
+          durabilityClass: .externalDurableOperation,
+          commandKind: .reconcileExternalHandles,
+          network: .connected,
+          earliestStartAtMillis: Int64(earliestStart)
+        ),
+        capabilities: .init(supportsContinuedProcessing: false, appIsForeground: false)
+      )
+    }
+
+    guard
+      case .records(let firstWake) = adapter.launchBackgroundProcessing(
+        updatedAtMillis: 2_000,
+        limit: 10
+      )
+    else {
+      return XCTFail("First processing wake unavailable")
+    }
+    XCTAssertEqual(firstWake.map { $0.request.identity.runId }, ["run-1"])
+    XCTAssertEqual(store.records["run-2"]?.state, .submitted)
+
+    guard
+      case .records(let secondWake) = adapter.launchBackgroundProcessing(
+        updatedAtMillis: 5_000,
+        limit: 10
+      )
+    else {
+      return XCTFail("Second processing wake unavailable")
+    }
+    XCTAssertEqual(secondWake.map { $0.request.identity.runId }, ["run-2"])
+  }
+
+  func testRetryAndSubmittedProcessingRowsRemainRepairableSchedulingOutboxes() {
+    let store = InMemoryDurableStore()
+    let scheduler = FakeDurableScheduler()
+    let adapter = IOSDurableExecutionAdapter(store: store, scheduler: scheduler)
+    _ = adapter.enqueue(
+      durableRequest(
+        durabilityClass: .externalDurableOperation,
+        commandKind: .reconcileExternalHandles,
+        network: .connected
+      ),
+      capabilities: .init(supportsContinuedProcessing: false, appIsForeground: false)
+    )
+    guard
+      case .records(let running) = adapter.launchBackgroundProcessing(
+        updatedAtMillis: 2_000,
+        limit: 1
+      ), let record = running.first
+    else {
+      return XCTFail("Processing queue unavailable")
+    }
+    scheduler.submitResult = .unavailable
+    guard
+      case .deferred = adapter.scheduleRetry(
+        pointer: attemptPointer(record),
+        nextAttemptAtMillis: 12_100,
+        failureReason: .remoteStillPending,
+        updatedAtMillis: 2_100
+      )
+    else {
+      return XCTFail("Unavailable retry submission must remain deferred")
+    }
+    XCTAssertEqual(store.records["run-1"]?.state, .retryWaiting)
+
+    scheduler.submitResult = .accepted
+    guard case .completed(let retryOutcomes) = adapter.reconcileScheduling(limit: 10) else {
+      return XCTFail("Retry scheduling outbox unavailable")
+    }
+    XCTAssertEqual(retryOutcomes.count, 1)
+    XCTAssertEqual(store.records["run-1"]?.state, .retryWaiting)
+    XCTAssertEqual(scheduler.submitted.count, 3)
+  }
+
+  func testRetryScheduleEnforcesExponentialBounds() {
+    let store = InMemoryDurableStore()
+    let scheduler = FakeDurableScheduler()
+    let adapter = IOSDurableExecutionAdapter(store: store, scheduler: scheduler)
+    _ = adapter.enqueue(
+      durableRequest(
+        durabilityClass: .externalDurableOperation,
+        commandKind: .reconcileExternalHandles,
+        network: .connected
+      ),
+      capabilities: .init(supportsContinuedProcessing: false, appIsForeground: false)
+    )
+    guard
+      case .records(let firstAttempt) = adapter.launchBackgroundProcessing(
+        updatedAtMillis: 2_000,
+        limit: 1
+      ), let first = firstAttempt.first
+    else {
+      return XCTFail("First attempt unavailable")
+    }
+    _ = adapter.scheduleRetry(
+      pointer: attemptPointer(first),
+      nextAttemptAtMillis: 12_000,
+      failureReason: .transientUnavailable,
+      updatedAtMillis: 2_000
+    )
+    guard
+      case .records(let secondAttempt) = adapter.launchBackgroundProcessing(
+        updatedAtMillis: 12_000,
+        limit: 1
+      ), let second = secondAttempt.first
+    else {
+      return XCTFail("Second attempt unavailable")
+    }
+
+    guard
+      case .rejected(let tooSoon) = adapter.scheduleRetry(
+        pointer: attemptPointer(second),
+        nextAttemptAtMillis: 22_000,
+        failureReason: .transientUnavailable,
+        updatedAtMillis: 12_000
+      )
+    else {
+      return XCTFail("Second retry must apply exponential backoff")
+    }
+    XCTAssertEqual(tooSoon, .invalidProgress)
+    XCTAssertEqual(
+      acceptedRecord(
+        adapter.scheduleRetry(
+          pointer: attemptPointer(second),
+          nextAttemptAtMillis: 32_000,
+          failureReason: .transientUnavailable,
+          updatedAtMillis: 12_000
+        )
+      ).nextAttemptAtMillis,
+      32_000
+    )
   }
 }
