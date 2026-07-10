@@ -59,7 +59,9 @@ export type {
 } from './foregroundScenarioDriverTypes';
 
 const DEFAULT_TURN_TIMEOUT_MS = 120_000;
-const DEFAULT_MEMORY_TIMEOUT_MS = 120_000;
+// Provider enrichment owns a 30-second request deadline; keep settlement
+// independently bounded while allowing persistence and polling to finish.
+const DEFAULT_MEMORY_TIMEOUT_MS = 45_000;
 const FOREGROUND_PRODUCT_TOOL_NAMES = new Set(TOOL_DEFINITIONS.map((tool) => tool.name));
 
 let scenarioRunTail: Promise<void> = Promise.resolve();

@@ -108,7 +108,9 @@ export async function runE2EScenario(
         timeoutMs: perTurnTimeoutMs,
       })),
       maxTokens: options.maxTokens ?? scenario.maxTokens ?? E2E_DEFAULT_MAX_TOKENS,
-      memoryTimeoutMs: options.memoryTimeoutMs ?? perTurnTimeoutMs,
+      ...(options.memoryTimeoutMs !== undefined
+        ? { memoryTimeoutMs: options.memoryTimeoutMs }
+        : {}),
       disableLongTermMemory: options.disableLongTermMemory,
       allowedToolNames: options.allowedToolNames,
       beforeTurns: options.beforeTurns,
