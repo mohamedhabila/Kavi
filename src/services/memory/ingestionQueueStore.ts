@@ -9,6 +9,7 @@
 import { INGESTION_BATCH_LIMIT, MAX_INGESTION_ATTEMPTS } from './onDeviceGuards';
 import { runMemoryTransaction } from './access/transaction';
 import { ensureFactSchema, newId } from './schema';
+import { isMemoryIngestionSourceWithdrawn } from './withdrawalFence';
 import { getMemoryDb } from './sqlite-store';
 
 export const INGESTION_RETRY_BASE_DELAY_MS = 15_000;
@@ -166,6 +167,18 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
       ? input.sourceAt
       : now;
   if (!threadId || !sourceEndMessageId) return null;
+  if (
+    isMemoryIngestionSourceWithdrawn({
+      memoryConversationId,
+      sourceThreadId: threadId,
+      taskId,
+      sourceStartMessageId,
+      sourceEndMessageId,
+      sourceRunId,
+    })
+  ) {
+    return null;
+  }
 
   const duplicate = db.getFirstSync<IngestionJobRow>(
     `SELECT * FROM memory_ingestion_jobs

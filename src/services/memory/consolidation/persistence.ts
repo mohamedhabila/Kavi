@@ -8,6 +8,7 @@ import { composeActiveFocusContent } from '../focus';
 import { ensureFactSchema } from '../schema';
 import { editWorkingBlock } from '../workingBlocks';
 import type { ConsolidatorFact, ConsolidatorResult } from '../consolidator';
+import { assertMemoryPersistenceSourcesAreWritable } from '../withdrawalFence';
 
 const logger = createLogger('memory.consolidation.persistence');
 
@@ -47,6 +48,29 @@ export function applyConsolidatorResult(
     if (options.canPersist && !options.canPersist()) {
       throw new Error('Memory persistence claim lost');
     }
+    const sources = [
+      { sourceKind: 'message' as const, sourceId: options.sourceUserMessageId },
+      { sourceKind: 'turn' as const, sourceId: options.sourceAssistantMessageId },
+      { sourceKind: 'run' as const, sourceId: options.sourceRunId },
+      ...result.newFacts.flatMap((fact) =>
+        (fact.evidenceMessageIds ?? []).map((sourceId) => ({
+          sourceKind: 'message' as const,
+          sourceId,
+        })),
+      ),
+      ...result.newFacts
+        .map((fact) => fact.admittedWrite?.evidenceMessageId)
+        .filter((sourceId): sourceId is string => Boolean(sourceId))
+        .map((sourceId) => ({ sourceKind: 'message' as const, sourceId })),
+    ];
+    assertMemoryPersistenceSourcesAreWritable(
+      {
+        memoryConversationId: options.conversationId,
+        sourceThreadId: options.threadId,
+        taskId: options.taskId,
+      },
+      sources,
+    );
     const persisted = applyConsolidatorResultInTransaction(result, options);
     if (options.commitReceipt && !options.commitReceipt()) {
       throw new Error('Memory persistence receipt rejected');
