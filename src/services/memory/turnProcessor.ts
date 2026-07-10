@@ -31,6 +31,7 @@ import type { MemoryFact } from './facts/types';
 import { recordAgentRunEvidenceMemory } from './agentRunEvidenceMemory';
 import { evaluateGroundedReplacement } from './groundedFactReplacement';
 import { canWriteLongTermMemory } from './policy';
+import { runMemoryTransaction } from './access/transaction';
 
 const logger = createLogger('memory.turnProcessor');
 
@@ -541,26 +542,21 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
     return skippedProcessTurnResult('claim_lost', providerOutcome);
   }
 
-  const persistResult = applyConsolidatorResult(mergedResult, {
-    now,
-    conversationId: memoryConversationId,
-    threadId: input.threadId,
-    taskId: input.taskId,
-    sourceRunId: input.sourceRunId,
-    threadTitle: input.threadTitle,
-    sourceUserMessageId: user?.id,
-    sourceAssistantMessageId: assistant?.id,
-    messages: input.messages,
-    skipWorkingMemoryWrites: true,
-    canPersist: input.canPersist,
-    commitReceipt: input.commitPersistenceReceipt
-      ? () => input.commitPersistenceReceipt!(providerOutcome)
-      : undefined,
-  });
+  const persisted = runMemoryTransaction(() => {
+    const persistResult = applyConsolidatorResult(mergedResult, {
+      now,
+      conversationId: memoryConversationId,
+      threadId: input.threadId,
+      taskId: input.taskId,
+      sourceRunId: input.sourceRunId,
+      threadTitle: input.threadTitle,
+      sourceUserMessageId: user?.id,
+      sourceAssistantMessageId: assistant?.id,
+      messages: input.messages,
+      skipWorkingMemoryWrites: true,
+      canPersist: input.canPersist,
+    });
 
-  let agentRunMemoryFactIds: string[] = [];
-  let consumedAgentRunEvidence = new Set<string>();
-  try {
     const agentRunMemory = recordAgentRunEvidenceMemory({
       messages: turnInput.messages ?? [],
       evidence: input.graphGoalEvidence ?? [],
@@ -571,18 +567,11 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
       sourceTurnId: assistant.id,
       now,
     });
-    agentRunMemoryFactIds.push(...agentRunMemory.factIds);
-    consumedAgentRunEvidence = new Set(agentRunMemory.consumedEvidence);
-  } catch (error) {
-    logger.devWarn(
-      'Agent-run memory ingestion failed:',
-      error instanceof Error ? error.message : String(error),
-    );
-  }
+    const agentRunMemoryFactIds = agentRunMemory.factIds;
+    const consumedAgentRunEvidence = new Set(agentRunMemory.consumedEvidence);
 
-  let bridgedEvidenceFactIds: string[] = [];
-  if (input.graphGoalEvidence?.length) {
-    try {
+    let bridgedEvidenceFactIds: string[] = [];
+    if (input.graphGoalEvidence?.length) {
       const bridgeableEvidence = input.graphGoalEvidence.filter(
         (evidence) => !consumedAgentRunEvidence.has(evidence) && !isJsonEvidenceCandidate(evidence),
       );
@@ -597,20 +586,13 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
         now,
       });
       bridgedEvidenceFactIds = bridgeResult.bridged.map((entry) => entry.fact.id);
-    } catch (error) {
-      logger.devWarn(
-        'Graph evidence bridge failed:',
-        error instanceof Error ? error.message : String(error),
-      );
     }
-  }
 
-  if (
-    providerOutcome.status === 'not_requested' ||
-    providerOutcome.status === 'valid' ||
-    providerOutcome.status === 'empty_valid'
-  ) {
-    try {
+    if (
+      providerOutcome.status === 'not_requested' ||
+      providerOutcome.status === 'valid' ||
+      providerOutcome.status === 'empty_valid'
+    ) {
       upsertState({
         threadId: input.threadId,
         lastConsolidatedMessageId: assistant.id,
@@ -618,25 +600,29 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
         turnsSinceLast: 0,
         now,
       });
-    } catch (error) {
-      logger.devWarn(
-        'Cursor update failed:',
-        error instanceof Error ? error.message : String(error),
-      );
     }
-  }
+
+    if (
+      input.commitPersistenceReceipt &&
+      !input.commitPersistenceReceipt(providerOutcome)
+    ) {
+      throw new Error('Memory persistence receipt rejected');
+    }
+
+    return { persistResult, agentRunMemoryFactIds, bridgedEvidenceFactIds };
+  });
 
   return {
     processed: true,
-    episodeId: persistResult.episodeId,
-    deterministicFactIds: persistResult.recordedFactIds,
-    providerFactIds: enriched ? persistResult.recordedFactIds : [],
-    invalidatedFactIds: persistResult.invalidatedFactIds,
-    activeFocusUpdated: persistResult.activeFocusUpdated,
-    openThreadsUpdated: persistResult.openThreadsUpdated,
+    episodeId: persisted.persistResult.episodeId,
+    deterministicFactIds: persisted.persistResult.recordedFactIds,
+    providerFactIds: enriched ? persisted.persistResult.recordedFactIds : [],
+    invalidatedFactIds: persisted.persistResult.invalidatedFactIds,
+    activeFocusUpdated: persisted.persistResult.activeFocusUpdated,
+    openThreadsUpdated: persisted.persistResult.openThreadsUpdated,
     enriched,
     providerOutcome,
-    bridgedEvidenceFactIds,
-    agentRunMemoryFactIds,
+    bridgedEvidenceFactIds: persisted.bridgedEvidenceFactIds,
+    agentRunMemoryFactIds: persisted.agentRunMemoryFactIds,
   };
 }

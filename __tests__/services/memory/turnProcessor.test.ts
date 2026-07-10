@@ -27,6 +27,10 @@ jest.mock('../../../src/services/memory/consolidator', () => ({
   applyConsolidatorResult: (...args: any[]) => mockApplyConsolidatorResult(...args),
 }));
 
+jest.mock('../../../src/services/memory/access/transaction', () => ({
+  runMemoryTransaction: (callback: () => unknown) => callback(),
+}));
+
 jest.mock('../../../src/services/memory/consolidation/schedulerState', () => ({
   getConsolidationState: (...args: any[]) => mockGetConsolidationState(...args),
   upsertState: (...args: any[]) => mockUpsertState(...args),
@@ -211,6 +215,7 @@ describe('processIngestionTurn', () => {
       openThreadsUpdated: false,
       episodeId: null,
     });
+    mockUpsertState.mockImplementation(() => undefined);
     mockGetConsolidationState.mockReturnValue({
       threadId: 'conv-1',
       lastConsolidatedMessageId: null,
@@ -600,24 +605,28 @@ describe('processIngestionTurn', () => {
     );
   });
 
-  it('still returns processed=true when cursor update fails', async () => {
+  it('does not complete the durable turn when its cursor update fails', async () => {
     mockUpsertState.mockImplementation(() => {
       throw new Error('Cursor write failed');
     });
 
-    const result = await processIngestionTurn({
-      threadId: 'conv-1',
-      messages: [
-        makeMsg({ role: 'user', content: 'Hey' }),
-        makeMsg({
-          role: 'assistant',
-          content: 'Hi',
-          assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
-        }),
-      ],
-    });
-
-    expect(result.processed).toBe(true);
+    await expect(
+      processIngestionTurn({
+        threadId: 'conv-1',
+        messages: [
+          makeMsg({ role: 'user', content: 'Hey' }),
+          makeMsg({
+            role: 'assistant',
+            content: 'Hi',
+            assistantMetadata: {
+              finishReason: 'stop',
+              kind: 'final',
+              completionStatus: 'complete',
+            },
+          }),
+        ],
+      }),
+    ).rejects.toThrow('Cursor write failed');
   });
 
   it('passes threadTitle and personaSummary through to extraction', async () => {

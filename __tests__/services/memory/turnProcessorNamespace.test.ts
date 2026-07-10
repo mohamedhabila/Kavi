@@ -20,6 +20,10 @@ jest.mock('../../../src/services/memory/consolidator', () => ({
   applyConsolidatorResult: (...args: any[]) => mockApplyConsolidatorResult(...args),
 }));
 
+jest.mock('../../../src/services/memory/access/transaction', () => ({
+  runMemoryTransaction: (callback: () => unknown) => callback(),
+}));
+
 jest.mock('../../../src/services/memory/schema', () => ({
   ensureFactSchema: (...args: any[]) => mockEnsureFactSchema(...args),
 }));
@@ -115,5 +119,28 @@ describe('turnProcessor memory namespace contract', () => {
         lastConsolidatedMessageId: assistant.id,
       }),
     );
+  });
+
+  it('does not commit a terminal receipt when required graph evidence persistence fails', async () => {
+    mockBridgeGraphGoalEvidence.mockImplementationOnce(() => {
+      throw new Error('graph persistence failed');
+    });
+    const commitPersistenceReceipt = jest.fn(() => true);
+    const assistant = makeMsg({
+      role: 'assistant',
+      content: 'Recorded.',
+      assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
+    });
+
+    await expect(
+      processIngestionTurn({
+        threadId: 'conv-required-graph',
+        messages: [makeMsg({ role: 'user', content: 'Remember this.' }), assistant],
+        graphGoalEvidence: ['tool:required-evidence'],
+        commitPersistenceReceipt,
+      }),
+    ).rejects.toThrow('graph persistence failed');
+    expect(commitPersistenceReceipt).not.toHaveBeenCalled();
+    expect(mockUpsertState).not.toHaveBeenCalled();
   });
 });
