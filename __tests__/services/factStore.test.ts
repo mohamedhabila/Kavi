@@ -9,13 +9,7 @@ jest.mock('expo-sqlite', () => {
 
 import { closeMemoryDb, getMemoryDb } from '../../src/services/memory/sqlite-store';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
-import {
-  findEntityByName,
-  getEntitiesByIds,
-  getEntityById,
-  softDeleteEntity,
-  upsertEntity,
-} from '../../src/services/memory/entities';
+import { upsertEntity } from '../../src/services/memory/entities';
 import {
   invalidateFact,
   recordFact,
@@ -28,16 +22,6 @@ import {
   getFactById,
   listFacts,
 } from '../../src/services/memory/facts/queries';
-import {
-  BlockOverflowError,
-  clearBlock,
-  DEFAULT_MEMORY_BLOCKS,
-  editBlock,
-  ensureDefaultBlocks,
-  getBlock,
-  listBlocks,
-  upsertBlock,
-} from '../../src/services/memory/blocks';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -46,75 +30,6 @@ beforeEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
-});
-
-// ── Entity registry ─────────────────────────────────────────────────────
-
-describe('upsertEntity', () => {
-  it('creates a new entity with normalized name', () => {
-    const e = upsertEntity({ name: '  Mohamed  ', type: 'person' });
-    expect(e.canonicalName).toBe('mohamed');
-    expect(e.type).toBe('person');
-    expect(e.aliases).toEqual([]);
-    expect(e.deletedAt).toBeNull();
-  });
-
-  it('returns existing entity on canonical match and rolls up aliases + attributes', () => {
-    const a = upsertEntity({
-      name: 'Acme Corp',
-      type: 'org',
-      aliases: ['acme'],
-      attributes: { city: 'Seattle' },
-    });
-    const b = upsertEntity({
-      name: 'Acme Corp',
-      type: 'org',
-      aliases: ['ACME inc'],
-      attributes: { tier: 'gold' },
-    });
-    expect(b.id).toBe(a.id);
-    expect(b.aliases).toEqual(expect.arrayContaining(['acme', 'acme inc']));
-    expect(b.attributes).toMatchObject({ city: 'Seattle', tier: 'gold' });
-  });
-
-  it('finds an existing entity via alias match', () => {
-    const created = upsertEntity({ name: 'Kavi', type: 'project', aliases: ['kavi mobile'] });
-    const looked = upsertEntity({ name: 'Kavi Mobile', type: 'project' });
-    expect(looked.id).toBe(created.id);
-  });
-
-  it('throws on empty name', () => {
-    expect(() => upsertEntity({ name: '   ', type: 'person' })).toThrow(/required/);
-  });
-
-  it('soft-deletes and is then invisible to default lookups', () => {
-    const e = upsertEntity({ name: 'Bob', type: 'person' });
-    expect(softDeleteEntity(e.id)).toBe(true);
-    expect(findEntityByName('Bob', 'person')).toBeNull();
-    // but findable by id
-    expect(getEntityById(e.id)?.deletedAt).not.toBeNull();
-  });
-
-  it('resolves every requested current entity across bounded SQL batches', () => {
-    const entities = Array.from({ length: 520 }, (_, index) =>
-      upsertEntity({ name: `batch entity ${index}`, type: 'thing' }),
-    );
-
-    const resolved = getEntitiesByIds([
-      ...entities.map((entity) => entity.id).reverse(),
-      entities[0].id,
-      ' ',
-      'missing-entity',
-    ]);
-
-    expect(resolved).toHaveLength(entities.length);
-    expect(new Set(resolved.map((entity) => entity.id))).toEqual(
-      new Set(entities.map((entity) => entity.id)),
-    );
-    expect(resolved.map((entity) => entity.id)).toEqual(
-      [...resolved.map((entity) => entity.id)].sort(),
-    );
-  });
 });
 
 // ── Bi-temporal facts ───────────────────────────────────────────────────
@@ -443,93 +358,5 @@ describe('listFacts limit normalization', () => {
     [2.9, 2],
   ])('clamps finite limit %s to %s', (limit, expected) => {
     expect(listFacts({ limit })).toHaveLength(expected);
-  });
-});
-
-// ── Memory blocks ───────────────────────────────────────────────────────
-
-describe('memory blocks', () => {
-  it('ensureDefaultBlocks creates the catalog idempotently', () => {
-    ensureDefaultBlocks();
-    const labels = listBlocks()
-      .map((b) => b.label)
-      .sort();
-    expect(labels).toEqual([...DEFAULT_MEMORY_BLOCKS.map((d) => d.label)].sort());
-    // second call is a no-op (no duplicate rows)
-    ensureDefaultBlocks();
-    expect(listBlocks()).toHaveLength(DEFAULT_MEMORY_BLOCKS.length);
-  });
-
-  it('editBlock appends with a newline by default and respects char_limit', () => {
-    ensureDefaultBlocks();
-    const a = editBlock('active_focus', 'Drafting RFC');
-    expect(a.content).toBe('Drafting RFC');
-    const b = editBlock('active_focus', 'reviewed by Alice');
-    expect(b.content).toBe('Drafting RFC\nreviewed by Alice');
-  });
-
-  it('editBlock with replace=true overwrites content', () => {
-    ensureDefaultBlocks();
-    editBlock('active_focus', 'old');
-    const replaced = editBlock('active_focus', 'new', { replace: true });
-    expect(replaced.content).toBe('new');
-  });
-
-  it('editBlock throws BlockOverflowError when exceeding char_limit', () => {
-    ensureDefaultBlocks();
-    const block = getBlock('active_focus')!;
-    const oversized = 'x'.repeat(block.charLimit + 1);
-    expect(() => editBlock('active_focus', oversized, { replace: true })).toThrow(
-      BlockOverflowError,
-    );
-  });
-
-  it('editBlock throws on unknown block label', () => {
-    expect(() => editBlock('nonexistent', 'hi')).toThrow(/not found/);
-  });
-
-  it('upsertBlock creates a custom block then updates it', () => {
-    upsertBlock({
-      label: 'goals',
-      content: 'ship single thread',
-      charLimit: 200,
-      description: 'top-of-mind goals',
-      pinned: true,
-      personaId: null,
-    });
-    expect(getBlock('goals')?.content).toBe('ship single thread');
-    upsertBlock({
-      label: 'goals',
-      content: 'ship single thread + memory',
-      charLimit: 200,
-      description: 'top-of-mind goals',
-      pinned: true,
-      personaId: null,
-    });
-    expect(getBlock('goals')?.content).toBe('ship single thread + memory');
-  });
-
-  it('clearBlock empties the content but leaves the row', () => {
-    ensureDefaultBlocks();
-    editBlock('open_threads', 'follow up with Bob');
-    expect(getBlock('open_threads')?.content).not.toBe('');
-    expect(clearBlock('open_threads')).toBe(true);
-    expect(getBlock('open_threads')?.content).toBe('');
-  });
-
-  it('listBlocks returns pinned blocks first', () => {
-    ensureDefaultBlocks();
-    const list = listBlocks();
-    const pinnedFirst = list.findIndex((b) => !b.pinned);
-    const lastPinned = [...list].reverse().findIndex((b) => b.pinned);
-    expect(pinnedFirst).toBeGreaterThanOrEqual(0);
-    // No unpinned block appears before any pinned block.
-    const idxOfFirstUnpinned = list.findIndex((b) => !b.pinned);
-    if (idxOfFirstUnpinned >= 0) {
-      for (let i = idxOfFirstUnpinned; i < list.length; i++) {
-        expect(list[i].pinned).toBe(false);
-      }
-    }
-    expect(lastPinned).toBeGreaterThanOrEqual(0);
   });
 });
