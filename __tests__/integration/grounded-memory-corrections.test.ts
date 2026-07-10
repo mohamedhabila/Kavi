@@ -4,7 +4,7 @@ jest.mock('expo-sqlite', () => {
 });
 
 import type { ConsolidatorAssertionClass } from '../../src/services/memory/consolidator';
-import { upsertEntity } from '../../src/services/memory/entities';
+import { findEntityByName, upsertEntity } from '../../src/services/memory/entities';
 import { listFactEvidence } from '../../src/services/memory/episodes/queries';
 import { recordFact } from '../../src/services/memory/facts/mutations';
 import { listFacts } from '../../src/services/memory/facts/queries';
@@ -209,6 +209,94 @@ describe('grounded passive memory corrections', () => {
     ]);
   });
 
+  it('finds an exact global target despite many newer incompatible facts', async () => {
+    const old = seedCurrent('lives_in', 'Amsterdam');
+    for (let index = 0; index < 20; index += 1) {
+      recordFact({
+        subjectId: old.subjectId,
+        predicate: 'lives_in',
+        objectText: `Temporary place ${index}`,
+        scope: 'conversation',
+        originConversationId: `other-conversation-${index}`,
+        originThreadId: `other-thread-${index}`,
+        now: 200 + index,
+      });
+    }
+
+    await ingest({
+      userContent: 'I moved to Utrecht.',
+      predicate: 'lives_in',
+      value: 'Utrecht',
+      scope: 'global',
+    });
+
+    expect(
+      listFacts({ subjectId: old.subjectId, predicate: 'lives_in', scope: 'global' }),
+    ).toEqual([expect.objectContaining({ objectText: 'Utrecht' })]);
+  });
+
+  it('rejects a contradictory provider replacement group without order dependence', async () => {
+    const old = seedCurrent('lives_in', 'Amsterdam');
+    const turnMessages = messages('I am considering Utrecht or Paris.');
+
+    await processIngestionTurn({
+      threadId: 'thread-1',
+      memoryConversationId: 'conversation-1',
+      messages: turnMessages,
+      extractor: async () =>
+        JSON.stringify({
+          new_facts: ['Utrecht', 'Paris'].map((value) => ({
+            subject: 'user',
+            predicate: 'lives_in',
+            value,
+            scope: 'global',
+            operation: 'replace_current',
+            assertion_class: 'current_direct',
+            evidence_message_ids: ['user-current'],
+            evidence_quote: 'I am considering Utrecht or Paris.',
+          })),
+          episode_summary: null,
+          active_focus: null,
+          open_threads: [],
+          notable: [],
+        }),
+      now: 300,
+      skipWorkingMemorySync: true,
+    });
+
+    expect(listFacts({ subjectId: old.subjectId, predicate: 'lives_in' })).toEqual([
+      expect.objectContaining({ id: old.id, objectText: 'Amsterdam' }),
+    ]);
+  });
+
+  it('updates conversation memory after the app changes thread and task', async () => {
+    const user = upsertEntity({ name: 'user', type: 'self', now: 10 });
+    const old = recordFact({
+      subjectId: user.id,
+      predicate: 'preferred_name',
+      objectText: 'Mo',
+      scope: 'conversation',
+      originConversationId: 'conversation-1',
+      originThreadId: 'older-thread',
+      originTaskId: 'older-task',
+      now: 100,
+    }).fact;
+
+    await ingest({
+      userContent: 'Call me Mohamed now.',
+      predicate: 'preferred_name',
+      value: 'Mohamed',
+      scope: 'conversation',
+    });
+
+    expect(listFacts({ subjectId: user.id, predicate: 'preferred_name' })).toEqual([
+      expect.objectContaining({ objectText: 'Mohamed' }),
+    ]);
+    expect(listFacts({ subjectId: user.id, predicate: 'preferred_name', asOf: 150 })).toEqual([
+      expect.objectContaining({ id: old.id, objectText: 'Mo' }),
+    ]);
+  });
+
   it('rejects evidence that appears only in enriched, assistant, or tool-visible text', async () => {
     const old = seedCurrent('lives_in', 'Amsterdam');
     await ingest({
@@ -248,5 +336,33 @@ describe('grounded passive memory corrections', () => {
     expect(current).toHaveLength(1);
     expect(current[0].objectText).toBe('Utrecht');
     expect(current[0].attributes).not.toHaveProperty('memoryWrite');
+  });
+
+  it.each(['historical', 'hypothetical', 'quoted', 'third_party', 'uncertain'] as const)(
+    'rejects a no-target %s replacement proposal',
+    async (assertionClass) => {
+      await ingest({
+        userContent: 'If I moved to Utrecht, I would cycle more.',
+        predicate: 'lives_in',
+        value: 'Utrecht',
+        assertionClass,
+      });
+      expect(findEntityByName('user')).toBeNull();
+    },
+  );
+
+  it.each([
+    { evidenceMessageIds: ['assistant-current'], label: 'wrong source message' },
+    { quote: 'I moved to Paris.', label: 'quote absent from user text' },
+    { value: 'Paris', label: 'value absent from grounded quote' },
+  ])('rejects a no-target proposal with $label', async (overrides) => {
+    await ingest({
+      userContent: 'I moved to Utrecht.',
+      predicate: 'lives_in',
+      value: overrides.value ?? 'Utrecht',
+      quote: overrides.quote,
+      evidenceMessageIds: overrides.evidenceMessageIds,
+    });
+    expect(findEntityByName('user')).toBeNull();
   });
 });

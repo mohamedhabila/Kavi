@@ -25,7 +25,11 @@ import { bridgeGraphGoalEvidence } from './evidenceBridge';
 import { editWorkingBlock } from './workingBlocks';
 import { composeActiveFocusContent } from './focus';
 import { findEntityByName } from './entities';
-import { listFacts } from './facts/queries';
+import {
+  hasCurrentFactForSubjectPredicate,
+  listCurrentFactsForReplacement,
+} from './facts/queries';
+import type { MemoryFact } from './facts/types';
 import { recordAgentRunEvidenceMemory } from './agentRunEvidenceMemory';
 import { evaluateGroundedReplacement } from './groundedFactReplacement';
 
@@ -303,22 +307,51 @@ function mergeProviderIntoStructural(
     `${keyPart(fact.subject)}:${keyPart(fact.predicate)}`;
   const seen = new Set(structural.facts.map(factKey));
   const structuralSubjectsAndPredicates = new Set(structural.facts.map(subjectPredicateKey));
+  const replacementGroups = new Map<string, ConsolidatorResult['newFacts']>();
+  for (const fact of provider.newFacts) {
+    const groupKey = subjectPredicateKey(fact);
+    const group = replacementGroups.get(groupKey) ?? [];
+    group.push(fact);
+    replacementGroups.set(groupKey, group);
+  }
+  const ambiguousReplacementKeys = new Set<string>();
+  for (const [groupKey, facts] of replacementGroups) {
+    if (!facts.some((fact) => fact.operation === 'replace_current')) continue;
+    const signatures = new Set(
+      facts.map((fact) =>
+        JSON.stringify([
+          fact.value.normalize('NFKC').trim(),
+          fact.scope ?? 'conversation',
+          fact.operation ?? 'insert',
+        ]),
+      ),
+    );
+    if (signatures.size > 1) ambiguousReplacementKeys.add(groupKey);
+  }
   const mergedFacts = [...structural.facts];
   for (const fact of provider.newFacts) {
     const key = factKey(fact);
-    if (structuralSubjectsAndPredicates.has(subjectPredicateKey(fact))) {
+    const currentKey = subjectPredicateKey(fact);
+    if (
+      structuralSubjectsAndPredicates.has(currentKey) ||
+      ambiguousReplacementKeys.has(currentKey)
+    ) {
       continue;
     }
     if (seen.has(key)) continue;
 
-    const currentFacts = listCurrentFactsForSubjectPredicate(fact.subject, fact.predicate);
-    if (currentFacts.length === 0) {
+    const resolution = resolveCurrentFactsForReplacement(fact, context);
+    if (!resolution.hasAnyCurrentFact && fact.operation !== 'replace_current') {
       mergedFacts.push(fact);
       seen.add(key);
       continue;
     }
 
-    const decision = evaluateGroundedReplacement(fact, { ...context, currentFacts });
+    const decision = evaluateGroundedReplacement(fact, {
+      ...context,
+      currentFacts: resolution.currentFacts,
+      hasAnyCurrentFact: resolution.hasAnyCurrentFact,
+    });
     if (!decision.accepted) continue;
     mergedFacts.push(decision.fact);
     seen.add(key);
@@ -335,24 +368,34 @@ function mergeProviderIntoStructural(
   };
 }
 
-function listCurrentFactsForSubjectPredicate(subject: string, predicate: string) {
-  const normalizedSubject = subject.trim();
-  const normalizedPredicate = predicate.trim().toLowerCase();
-  if (!normalizedSubject || !normalizedPredicate) {
-    return [];
-  }
+function resolveCurrentFactsForReplacement(
+  fact: ConsolidatorResult['newFacts'][number],
+  context: {
+    memoryConversationId: string;
+    threadId: string;
+    taskId?: string;
+  },
+): { currentFacts: MemoryFact[]; hasAnyCurrentFact: boolean } {
+  const subject = fact.subject.trim();
+  const predicate = fact.predicate.trim();
+  if (!subject || !predicate) return { currentFacts: [], hasAnyCurrentFact: false };
 
-  const entity = findEntityByName(normalizedSubject);
-  if (!entity) {
-    return [];
-  }
+  const entity = findEntityByName(subject);
+  if (!entity) return { currentFacts: [], hasAnyCurrentFact: false };
 
-  return listFacts({
+  const currentFacts = listCurrentFactsForReplacement({
     subjectId: entity.id,
-    predicate: normalizedPredicate,
-    includeInvalidated: false,
-    limit: 16,
+    predicate,
+    scope: fact.scope ?? 'conversation',
+    originConversationId: context.memoryConversationId,
+    originThreadId: context.threadId,
+    originTaskId: context.taskId,
   });
+  return {
+    currentFacts,
+    hasAnyCurrentFact:
+      currentFacts.length > 0 || hasCurrentFactForSubjectPredicate(entity.id, predicate),
+  };
 }
 
 /**

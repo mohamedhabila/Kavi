@@ -36,13 +36,15 @@ function decide(
   fact: ConsolidatorFact,
   overrides: Partial<Parameters<typeof evaluateGroundedReplacement>[1]> = {},
 ) {
+  const currentFacts = overrides.currentFacts ?? [currentFact()];
   return evaluateGroundedReplacement(fact, {
     currentUserMessageId: 'user-current',
     currentUserMessage: 'I moved to Utrecht last week.',
     memoryConversationId: 'conversation-1',
     threadId: 'thread-1',
-    currentFacts: [currentFact()],
     ...overrides,
+    currentFacts,
+    hasAnyCurrentFact: overrides.hasAnyCurrentFact ?? currentFacts.length > 0,
   });
 }
 
@@ -58,6 +60,7 @@ describe('evaluateGroundedReplacement', () => {
 
     expect(decision).toMatchObject({
       accepted: true,
+      operation: 'replace_current',
       target: { id: 'fact-current' },
       fact: {
         admittedWrite: {
@@ -122,6 +125,19 @@ describe('evaluateGroundedReplacement', () => {
     });
   });
 
+  it('preserves opaque value casing while grounding corrections', () => {
+    expect(
+      decide(proposal({ value: 'abc', evidenceQuote: 'The token is AbC.' }), {
+        currentUserMessage: 'The token is AbC.',
+      }),
+    ).toEqual({ accepted: false, reason: 'value_not_in_current_user_message' });
+    expect(
+      decide(proposal({ value: 'AbC', evidenceQuote: 'The token is AbC.' }), {
+        currentUserMessage: 'The token is AbC.',
+      }).accepted,
+    ).toBe(true);
+  });
+
   it('never grounds against assistant, tool, or enriched content', () => {
     expect(
       decide(proposal(), {
@@ -145,7 +161,20 @@ describe('evaluateGroundedReplacement', () => {
     expect(decision).toMatchObject({ accepted: true, target: { id: 'global' } });
   });
 
-  it('requires exact conversation and session provenance', () => {
+  it('shares conversation facts across threads but keeps session provenance exact', () => {
+    expect(
+      decide(proposal({ scope: 'conversation' }), {
+        currentFacts: [
+          currentFact({
+            scope: 'conversation',
+            originConversationId: 'conversation-1',
+            originThreadId: 'older-thread',
+            originTaskId: 'older-task',
+          }),
+        ],
+      }).accepted,
+    ).toBe(true);
+
     expect(
       decide(proposal({ scope: 'conversation' }), {
         currentFacts: [
@@ -183,13 +212,49 @@ describe('evaluateGroundedReplacement', () => {
     });
   });
 
-  it('abstains when the compatible current target is missing or ambiguous', () => {
-    expect(decide(proposal(), { currentFacts: [] })).toEqual({
-      accepted: false,
-      reason: 'no_compatible_current_fact',
+  it('downgrades only a grounded direct no-target replacement to insert', () => {
+    expect(decide(proposal(), { currentFacts: [] })).toMatchObject({
+      accepted: true,
+      operation: 'insert',
+      fact: { operation: 'insert' },
     });
+  });
+
+  it('never downgrades when the key exists in an incompatible namespace', () => {
+    expect(
+      decide(proposal({ scope: 'conversation' }), {
+        currentFacts: [],
+        hasAnyCurrentFact: true,
+      }),
+    ).toEqual({ accepted: false, reason: 'no_compatible_current_fact' });
+  });
+
+  it('abstains when the compatible current target is ambiguous', () => {
     expect(
       decide(proposal(), { currentFacts: [currentFact(), currentFact({ id: 'fact-second' })] }),
     ).toEqual({ accepted: false, reason: 'ambiguous_current_fact' });
+  });
+
+  it.each(['historical', 'hypothetical', 'quoted', 'third_party', 'uncertain'] as const)(
+    'rejects a no-target %s proposal before it can downgrade to insert',
+    (assertionClass) => {
+      expect(decide(proposal({ assertionClass }), { currentFacts: [] })).toEqual({
+        accepted: false,
+        reason: 'not_current_direct',
+      });
+    },
+  );
+
+  it('rejects ungrounded no-target replacement proposals', () => {
+    expect(
+      decide(proposal({ evidenceMessageIds: ['assistant-current'] }), { currentFacts: [] }),
+    ).toEqual({ accepted: false, reason: 'wrong_evidence_message' });
+    expect(
+      decide(proposal({ evidenceQuote: 'I moved to Paris.' }), { currentFacts: [] }),
+    ).toEqual({ accepted: false, reason: 'quote_not_in_current_user_message' });
+    expect(decide(proposal({ value: 'Paris' }), { currentFacts: [] })).toEqual({
+      accepted: false,
+      reason: 'value_not_in_current_user_message',
+    });
   });
 });

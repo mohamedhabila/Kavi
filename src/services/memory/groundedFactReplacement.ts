@@ -17,8 +17,14 @@ export type GroundedReplacementRejection =
 export type GroundedReplacementDecision =
   | {
       accepted: true;
+      operation: 'replace_current';
       fact: ConsolidatorFact;
       target: MemoryFact;
+    }
+  | {
+      accepted: true;
+      operation: 'insert';
+      fact: ConsolidatorFact;
     }
   | {
       accepted: false;
@@ -32,10 +38,11 @@ export interface GroundedReplacementContext {
   threadId: string;
   taskId?: string;
   currentFacts: readonly MemoryFact[];
+  hasAnyCurrentFact: boolean;
 }
 
 function normalizeGroundingText(value: string): string {
-  return value.normalize('NFKC').replace(/\s+/gu, ' ').trim().toLowerCase();
+  return value.normalize('NFKC').replace(/\s+/gu, ' ').trim();
 }
 
 function normalizeId(value: string | null | undefined): string | null {
@@ -53,6 +60,10 @@ function isCompatibleTarget(
 ): boolean {
   if (fact.scope !== scope) return false;
   if (scope === 'global') return true;
+
+  if (scope === 'conversation') {
+    return normalizeId(fact.originConversationId) === normalizeId(context.memoryConversationId);
+  }
 
   return (
     normalizeId(fact.originConversationId) === normalizeId(context.memoryConversationId) &&
@@ -104,6 +115,21 @@ export function evaluateGroundedReplacement(
     return { accepted: false, reason: 'persona_identity_unavailable' };
   }
 
+  if (context.currentFacts.length === 0) {
+    if (context.hasAnyCurrentFact) {
+      return { accepted: false, reason: 'no_compatible_current_fact' };
+    }
+    return {
+      accepted: true,
+      operation: 'insert',
+      fact: {
+        ...proposal,
+        operation: 'insert',
+        evidenceMessageIds: [currentUserMessageId],
+      },
+    };
+  }
+
   const compatible = context.currentFacts.filter((fact) =>
     isCompatibleTarget(fact, scope, context),
   );
@@ -117,6 +143,7 @@ export function evaluateGroundedReplacement(
   const target = compatible[0]!;
   return {
     accepted: true,
+    operation: 'replace_current',
     target,
     fact: {
       ...proposal,
