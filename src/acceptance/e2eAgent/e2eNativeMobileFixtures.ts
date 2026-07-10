@@ -96,6 +96,9 @@ export type E2ENativeMobileFixtureStateSnapshot = {
     allowsModifications: boolean;
     createdEventCount: number;
     updatedEventCount: number;
+    lastCreatedStartDate: string;
+    lastCreatedEndDate: string;
+    lastCreatedDurationMinutes: number;
   };
   permissions: {
     location: string;
@@ -147,6 +150,9 @@ function createEmptyNativeFixtureState(): E2ENativeMobileFixtureStateSnapshot {
       allowsModifications: false,
       createdEventCount: 0,
       updatedEventCount: 0,
+      lastCreatedStartDate: '',
+      lastCreatedEndDate: '',
+      lastCreatedDurationMinutes: 0,
     },
     permissions: {
       location: '',
@@ -195,6 +201,7 @@ function createEmptyNativeFixtureState(): E2ENativeMobileFixtureStateSnapshot {
 let e2eClipboardText = '';
 let e2eCalendarEventId = 0;
 let e2eCalendarEvents: E2ECalendarEvent[] = [];
+let e2eLastCreatedCalendarEventId: string | null = null;
 let e2eNativeFixtureState = createEmptyNativeFixtureState();
 const e2eNativeToolDefinitionsByName = new Map(
   ALL_NATIVE_TOOL_DEFINITIONS.map((tool) => [tool.name, tool]),
@@ -253,6 +260,7 @@ export function resetE2ENativeMobileFixtures(): void {
   e2eClipboardText = '';
   e2eCalendarEventId = 0;
   e2eCalendarEvents = [];
+  e2eLastCreatedCalendarEventId = null;
   e2eNativeFixtureState = createEmptyNativeFixtureState();
   resetE2ENativeMobileInvocationEvidence();
 }
@@ -343,6 +351,16 @@ function e2eCalendarEventsEqual(left: E2ECalendarEvent, right: E2ECalendarEvent)
   );
 }
 
+function recordLastCreatedCalendarTiming(event: E2ECalendarEvent): void {
+  const durationMinutes = (Date.parse(event.endDate) - Date.parse(event.startDate)) / 60_000;
+  e2eNativeFixtureState.calendar.lastCreatedStartDate = event.startDate;
+  e2eNativeFixtureState.calendar.lastCreatedEndDate = event.endDate;
+  e2eNativeFixtureState.calendar.lastCreatedDurationMinutes = Math.max(
+    0,
+    Math.min(10_080, durationMinutes),
+  );
+}
+
 function readE2ECalendarEvents(args: Record<string, unknown>): Record<string, unknown>[] {
   const calendarId = readOptionalStringArg(args, 'calendarId');
   const startMs = readDateMs(args.startDate);
@@ -402,6 +420,8 @@ async function executeE2ENativeMobileTool(
         allDay: typeof args.allDay === 'boolean' ? args.allDay : false,
       };
       e2eCalendarEvents.push(event);
+      e2eLastCreatedCalendarEventId = event.id;
+      recordLastCreatedCalendarTiming(event);
       return JSON.stringify({
         status: 'created',
         eventId: event.id,
@@ -450,6 +470,9 @@ async function executeE2ENativeMobileTool(
       }
       e2eCalendarEvents[eventIndex] = updated;
       e2eNativeFixtureState.calendar.updatedEventCount += 1;
+      if (e2eLastCreatedCalendarEventId === updated.id) {
+        recordLastCreatedCalendarTiming(updated);
+      }
       return JSON.stringify({
         status: 'updated',
         eventId,

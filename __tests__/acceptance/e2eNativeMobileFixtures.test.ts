@@ -125,7 +125,7 @@ describe('E2E native mobile fixtures', () => {
       JSON.stringify({
         title: 'E2E Native Review',
         startDate: '2026-06-12T10:00:00Z',
-        endDate: '2026-06-12T11:00:00Z',
+        endDate: '2026-06-12T10:45:00Z',
       }),
       'conv-mobile-calendar-e2e',
     );
@@ -166,6 +166,11 @@ describe('E2E native mobile fixtures', () => {
       }),
     });
     expect(getE2ENativeMobileFixtureStateSnapshot().calendar.updatedEventCount).toBe(1);
+    expect(getE2ENativeMobileFixtureStateSnapshot().calendar).toMatchObject({
+      lastCreatedStartDate: '2026-06-12T10:00:00.000Z',
+      lastCreatedEndDate: '2026-06-12T10:45:00.000Z',
+      lastCreatedDurationMinutes: 45,
+    });
 
     const mapsRaw = await executeToolInner(
       'maps_open',
@@ -240,6 +245,11 @@ describe('E2E native mobile fixtures', () => {
         notes: 'verified',
       }),
     ]);
+    expect(getE2ENativeMobileFixtureStateSnapshot().calendar).toMatchObject({
+      lastCreatedStartDate: '2026-06-12T10:00:00.000Z',
+      lastCreatedEndDate: '2026-06-12T11:00:00.000Z',
+      lastCreatedDurationMinutes: 60,
+    });
   });
 
   it('returns contacts with phone numbers usable by SMS composition', async () => {
