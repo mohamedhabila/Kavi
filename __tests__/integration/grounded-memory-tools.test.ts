@@ -218,6 +218,13 @@ describe('grounded memory_remember product writes', () => {
       value: 'Signal',
       text: 'Morgan prefers Signal.',
     },
+    {
+      label: 'subject embedded in another label',
+      subject: 'Avery',
+      subjectType: 'person' as const,
+      value: 'Signal',
+      text: 'Averyson prefers Signal.',
+    },
   ])('rejects $label without creating an actionable candidate', async (fixture) => {
     const result = await remember({
       subject: fixture.subject,

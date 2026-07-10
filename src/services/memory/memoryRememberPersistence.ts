@@ -77,13 +77,33 @@ function isCanonicalSelfSubject(subject: string): boolean {
   return normalizedGroundingText(subject).toLowerCase() === 'user';
 }
 
+function isIdentifierCodePoint(value: string | undefined): boolean {
+  return value !== undefined && /[\p{L}\p{M}\p{N}_]/u.test(value);
+}
+
+function containsExactSubjectLabel(message: string, subject: string): boolean {
+  let offset = 0;
+  while (offset <= message.length - subject.length) {
+    const index = message.indexOf(subject, offset);
+    if (index < 0) return false;
+    const before = Array.from(message.slice(0, index)).at(-1);
+    const after = Array.from(message.slice(index + subject.length))[0];
+    if (!isIdentifierCodePoint(before) && !isIdentifierCodePoint(after)) return true;
+    offset = index + Math.max(subject.length, 1);
+  }
+  return false;
+}
+
 function hasRequiredSubjectGrounding(
   input: MemoryRememberPersistenceInput,
   evidence: MemoryRememberRequestEvidence | undefined,
 ): boolean {
   if (!evidence || isCanonicalSelfSubject(input.subject)) return true;
   const subject = normalizedGroundingText(input.subject);
-  return Boolean(subject) && normalizedGroundingText(evidence.userMessageText).includes(subject);
+  return (
+    Boolean(subject) &&
+    containsExactSubjectLabel(normalizedGroundingText(evidence.userMessageText), subject)
+  );
 }
 
 function buildRecordInput(
