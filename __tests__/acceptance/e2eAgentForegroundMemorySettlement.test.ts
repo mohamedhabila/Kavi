@@ -121,6 +121,9 @@ describe('foreground scenario memory settlement', () => {
         expect.objectContaining({ job: completed }),
       ]);
       expect(mockedDrainIngestionQueueWithWakeup).toHaveBeenCalledTimes(1);
+      expect(mockedDrainIngestionQueueWithWakeup).toHaveBeenCalledWith(
+        expect.objectContaining({ maxJobs: 1 }),
+      );
     } finally {
       jest.useRealTimers();
     }

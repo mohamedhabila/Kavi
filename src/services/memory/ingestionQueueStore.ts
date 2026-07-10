@@ -398,7 +398,9 @@ export function listPendingIngestionJobs(
     `SELECT * FROM memory_ingestion_jobs
        WHERE status IN ('pending', 'retrying')
          AND next_attempt_at <= ?
-       ORDER BY next_attempt_at ASC, created_at ASC
+       ORDER BY CASE WHEN structural_completed_at IS NULL THEN 0 ELSE 1 END ASC,
+                next_attempt_at ASC,
+                created_at ASC
        LIMIT ?`,
     now,
     Math.max(1, limit),

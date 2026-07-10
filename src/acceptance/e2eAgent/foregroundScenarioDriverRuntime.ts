@@ -285,7 +285,7 @@ async function awaitMemoryJob(jobId: string, deadline: number): Promise<Ingestio
             .getState()
             .conversations.find((candidate) => candidate.id === threadId)?.messages ?? [],
         loadRuntimeContextForJob: loadIngestionJobRuntimeContext,
-        maxJobs: Number.MAX_SAFE_INTEGER,
+        maxJobs: 1,
       });
       const afterDrain = getIngestionJob(jobId);
       if (
