@@ -1,5 +1,8 @@
 package com.kavi.mobile.durability
 
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+
 private const val MAX_IDENTIFIER_LENGTH = 200
 private const val MAX_ATTEMPTS = 10
 private val SHA256_DIGEST = Regex("^[a-f0-9]{64}$")
@@ -44,15 +47,34 @@ internal object AndroidDurableExecutionPolicy {
 
     return AndroidDurableExecutionDecision.Supported(
       schedulerKind = AndroidDurableSchedulerKind.WORK_MANAGER_ONE_TIME,
-      uniqueWorkName = buildString {
-        append(ANDROID_DURABLE_WORK_NAME_PREFIX)
-        append(request.identity.runId)
-        append('.')
-        append(request.identity.commandDigest)
-      },
+      uniqueWorkName = uniqueWorkName(request.identity),
       requiresFreshRecoveryQuery = true,
       requiresFreshAuthorityAndFence = true,
     )
+  }
+
+  internal fun uniqueWorkName(identity: AndroidRecoveryCommandIdentity): String {
+    val canonicalIdentity = buildString {
+      append(identity.runId.length)
+      append(':')
+      append(identity.runId)
+      append('|')
+      append(identity.controlEpoch)
+      append('|')
+      append(identity.snapshotUpdatedAtMillis)
+      append('|')
+      append(identity.snapshotDigest)
+      append('|')
+      append(identity.commandKind.name)
+      append('|')
+      append(identity.commandDigest)
+    }
+    val digest = MessageDigest.getInstance("SHA-256")
+      .digest(canonicalIdentity.toByteArray(StandardCharsets.UTF_8))
+      .joinToString(separator = "") { byte ->
+        byte.toUByte().toString(radix = 16).padStart(length = 2, padChar = '0')
+      }
+    return ANDROID_DURABLE_WORK_NAME_PREFIX + digest
   }
 
   private fun isValid(request: AndroidDurableExecutionRequest): Boolean {

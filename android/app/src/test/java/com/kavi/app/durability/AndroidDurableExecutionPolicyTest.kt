@@ -1,6 +1,7 @@
 package com.kavi.mobile.durability
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class AndroidDurableExecutionPolicyTest {
@@ -16,12 +17,30 @@ class AndroidDurableExecutionPolicyTest {
     assertEquals(
       AndroidDurableExecutionDecision.Supported(
         schedulerKind = AndroidDurableSchedulerKind.WORK_MANAGER_ONE_TIME,
-        uniqueWorkName = "${ANDROID_DURABLE_WORK_NAME_PREFIX}run-1.${"b".repeat(64)}",
+        uniqueWorkName =
+          "${ANDROID_DURABLE_WORK_NAME_PREFIX}3722bcfbf3215a3d4dc257ff8ed6ff530a82f73846503c49c977ba79d822abc8",
         requiresFreshRecoveryQuery = true,
         requiresFreshAuthorityAndFence = true,
       ),
       decision,
     )
+  }
+
+  @Test
+  fun `every exact journal generation receives a distinct bounded work name`() {
+    val current = AndroidDurableExecutionPolicy.decide(request())
+      as AndroidDurableExecutionDecision.Supported
+    val successor = AndroidDurableExecutionPolicy.decide(
+      request(
+        identity = identity(
+          snapshotUpdatedAtMillis = 91,
+          snapshotDigest = "c".repeat(64),
+        ),
+      ),
+    ) as AndroidDurableExecutionDecision.Supported
+
+    assertEquals(ANDROID_DURABLE_WORK_NAME_PREFIX.length + 64, current.uniqueWorkName.length)
+    assertNotEquals(current.uniqueWorkName, successor.uniqueWorkName)
   }
 
   @Test

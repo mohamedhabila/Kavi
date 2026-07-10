@@ -220,7 +220,7 @@ class AndroidDurableWorkManagerSchedulerTest {
   private companion object {
     const val NOW_MILLIS = 1_000L
     val UNIQUE_WORK_NAME =
-      "${ANDROID_DURABLE_WORK_NAME_PREFIX}run-work-manager.${"b".repeat(64)}"
+      "${ANDROID_DURABLE_WORK_NAME_PREFIX}5b5d53bbb19061b00c4debae024e39cf929ef68d14bdf28251e179c29cb0367f"
     const val WORK_ID = "00000000-0000-4000-8000-000000000011"
     const val OTHER_WORK_ID = "00000000-0000-4000-8000-000000000012"
   }
