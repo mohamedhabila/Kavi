@@ -462,6 +462,7 @@ export async function buildLivingMemorySections(
     state: retrievalState,
     selectedFactIds: recalledFacts.map((fact) => fact.id),
     selectedEpisodeIds: recalledEpisodes.map((episode) => episode.id),
+    expansion: localEvidencePrompt.diagnostics,
     ...(retrievalTimings ? { retrievalTimings } : {}),
     ...(consistencyBarrier ? { consistencyBarrier } : {}),
     createdAt: now,

@@ -3,6 +3,7 @@ import { runMemoryTransaction } from './access/transaction';
 import {
   MEMORY_RETRIEVAL_BARRIER_OUTCOMES,
   MEMORY_RETRIEVAL_EVENT_RETENTION_LIMIT,
+  MEMORY_RETRIEVAL_EXPANSION_OUTCOMES,
   MEMORY_RETRIEVAL_MODES,
   MEMORY_RETRIEVAL_OPERATIONS,
   MEMORY_RETRIEVAL_OUTCOMES,
@@ -14,6 +15,7 @@ import type {
   MemoryRetrievalBarrierOutcome,
   MemoryRetrievalEvent,
   MemoryRetrievalEventRejectionCode,
+  MemoryRetrievalExpansion,
   MemoryRetrievalMode,
   MemoryRetrievalOperation,
   MemoryRetrievalOutcome,
@@ -61,7 +63,15 @@ interface MemoryRetrievalEventRow {
   candidate_fetch_ms: number;
   score_ms: number;
   selector_ms: number;
+  evidence_expansion_ms: number;
   total_ms: number;
+  expansion_outcome: MemoryRetrievalExpansion['outcome'];
+  expansion_requested_source_count: number;
+  expansion_accepted_source_count: number;
+  expansion_source_with_evidence_count: number;
+  expansion_emitted_evidence_count: number;
+  expansion_prompt_budget_dropped_count: number;
+  expansion_prompt_chars: number;
   selector_mode: MemoryRetrievalSelectorMode;
   selector_outcome: MemoryRetrievalSelectorOutcome;
   barrier_outcome: MemoryRetrievalBarrierOutcome | null;
@@ -163,6 +173,66 @@ function selectedIds(values: ReadonlyArray<string>, selectedCount: number): stri
   return [...values];
 }
 
+function normalizeExpansion(
+  input: RecordMemoryRetrievalEventInput['expansion'],
+  evidenceExpansionMs: number,
+  totalMs: number,
+): MemoryRetrievalExpansion {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new RetrievalEventValidationError('invalid_expansion');
+  }
+  const outcome = requireEnum(
+    input.outcome,
+    MEMORY_RETRIEVAL_EXPANSION_OUTCOMES,
+    'invalid_expansion',
+  );
+  const count = (value: number, maximum = MAX_COUNT) =>
+    requireBoundedInteger(value, maximum, 'invalid_expansion');
+  const requestedSourceCount = count(input.requestedSourceCount);
+  const acceptedSourceCount = count(input.acceptedSourceCount, 12);
+  const sourceWithEvidenceCount = count(input.sourceWithEvidenceCount, 12);
+  const emittedEvidenceCount = count(input.emittedEvidenceCount, 24);
+  const promptBudgetDroppedCount = count(input.promptBudgetDroppedCount);
+  const promptChars = count(input.promptChars, 3_200);
+  const durationMs = count(input.durationMs, MAX_TIMING_MS);
+  if (
+    acceptedSourceCount > requestedSourceCount ||
+    sourceWithEvidenceCount > acceptedSourceCount ||
+    durationMs !== evidenceExpansionMs ||
+    totalMs < durationMs ||
+    (emittedEvidenceCount === 0) !== (promptChars === 0) ||
+    (emittedEvidenceCount > 0 && sourceWithEvidenceCount === 0)
+  ) {
+    throw new RetrievalEventValidationError('invalid_expansion');
+  }
+  const zeroResult =
+    acceptedSourceCount === 0 &&
+    sourceWithEvidenceCount === 0 &&
+    emittedEvidenceCount === 0 &&
+    promptBudgetDroppedCount === 0 &&
+    promptChars === 0;
+  if (
+    (outcome === 'not_requested' &&
+      (requestedSourceCount !== 0 || !zeroResult || durationMs !== 0)) ||
+    (outcome === 'scope_unavailable' &&
+      (requestedSourceCount === 0 || !zeroResult || durationMs !== 0)) ||
+    (outcome === 'failed' && (requestedSourceCount === 0 || !zeroResult)) ||
+    (outcome === 'completed' && requestedSourceCount === 0)
+  ) {
+    throw new RetrievalEventValidationError('invalid_expansion');
+  }
+  return {
+    outcome,
+    requestedSourceCount,
+    acceptedSourceCount,
+    sourceWithEvidenceCount,
+    emittedEvidenceCount,
+    promptBudgetDroppedCount,
+    promptChars,
+    durationMs,
+  };
+}
+
 function normalizeEvent(input: RecordMemoryRetrievalEventInput): NormalizedEvent {
   const operation = requireEnum(input.operation, MEMORY_RETRIEVAL_OPERATIONS, 'invalid_operation');
   const mode = requireEnum(input.mode, MEMORY_RETRIEVAL_MODES, 'invalid_mode');
@@ -212,8 +282,17 @@ function normalizeEvent(input: RecordMemoryRetrievalEventInput): NormalizedEvent
     candidateFetchMs: timing(input.timings.candidateFetchMs),
     scoreMs: timing(input.timings.scoreMs),
     selectorMs: timing(input.timings.selectorMs),
+    evidenceExpansionMs: timing(input.timings.evidenceExpansionMs),
     totalMs: timing(input.timings.totalMs),
   };
+  const expansion = normalizeExpansion(
+    input.expansion,
+    timings.evidenceExpansionMs,
+    timings.totalMs,
+  );
+  if (expansion.outcome === 'failed' && outcome !== 'degraded' && outcome !== 'failed') {
+    throw new RetrievalEventValidationError('invalid_state_combination');
+  }
   const selectorMode = requireEnum(
     input.selector.mode,
     MEMORY_RETRIEVAL_SELECTOR_MODES,
@@ -238,6 +317,7 @@ function normalizeEvent(input: RecordMemoryRetrievalEventInput): NormalizedEvent
         selectedEpisodeCount !== 0 ||
         input.counts.selectedEpisodeIds.length !== 0 ||
         Object.values(timings).some((value) => value !== 0) ||
+        expansion.outcome !== 'not_requested' ||
         selectorMode !== 'deterministic' ||
         selectorOutcome !== 'not_requested' ||
         input.barrier != null))
@@ -279,6 +359,7 @@ function normalizeEvent(input: RecordMemoryRetrievalEventInput): NormalizedEvent
       selectedEpisodeIds: selectedIds(input.counts.selectedEpisodeIds, selectedEpisodeCount),
     },
     timings,
+    expansion,
     selector: { mode: selectorMode, outcome: selectorOutcome },
     barrier,
     createdAt: requireBoundedInteger(
@@ -329,7 +410,18 @@ function rowToEvent(row: MemoryRetrievalEventRow): MemoryRetrievalEvent {
       candidateFetchMs: row.candidate_fetch_ms,
       scoreMs: row.score_ms,
       selectorMs: row.selector_ms,
+      evidenceExpansionMs: row.evidence_expansion_ms,
       totalMs: row.total_ms,
+    },
+    expansion: {
+      outcome: row.expansion_outcome,
+      requestedSourceCount: row.expansion_requested_source_count,
+      acceptedSourceCount: row.expansion_accepted_source_count,
+      sourceWithEvidenceCount: row.expansion_source_with_evidence_count,
+      emittedEvidenceCount: row.expansion_emitted_evidence_count,
+      promptBudgetDroppedCount: row.expansion_prompt_budget_dropped_count,
+      promptChars: row.expansion_prompt_chars,
+      durationMs: row.evidence_expansion_ms,
     },
     selector: { mode: row.selector_mode, outcome: row.selector_outcome },
     barrier: row.barrier_outcome
@@ -369,9 +461,13 @@ export async function recordMemoryRetrievalEvent(
            candidate_fact_count, selected_fact_count, selected_fact_ids_json,
            candidate_episode_count, selected_episode_count, selected_episode_ids_json,
            plan_ms, fact_recall_ms, episode_recall_ms, candidate_fetch_ms, score_ms,
-           selector_ms, total_ms, selector_mode, selector_outcome, barrier_outcome,
-           barrier_wait_ms, barrier_queue_age_ms, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           selector_ms, evidence_expansion_ms, total_ms, expansion_outcome,
+           expansion_requested_source_count, expansion_accepted_source_count,
+           expansion_source_with_evidence_count, expansion_emitted_evidence_count,
+           expansion_prompt_budget_dropped_count, expansion_prompt_chars,
+           selector_mode, selector_outcome, barrier_outcome, barrier_wait_ms,
+           barrier_queue_age_ms, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         eventId,
         event.operation,
         event.mode,
@@ -394,7 +490,15 @@ export async function recordMemoryRetrievalEvent(
         event.timings.candidateFetchMs,
         event.timings.scoreMs,
         event.timings.selectorMs,
+        event.timings.evidenceExpansionMs,
         event.timings.totalMs,
+        event.expansion.outcome,
+        event.expansion.requestedSourceCount,
+        event.expansion.acceptedSourceCount,
+        event.expansion.sourceWithEvidenceCount,
+        event.expansion.emittedEvidenceCount,
+        event.expansion.promptBudgetDroppedCount,
+        event.expansion.promptChars,
         event.selector.mode,
         event.selector.outcome,
         event.barrier?.outcome ?? null,

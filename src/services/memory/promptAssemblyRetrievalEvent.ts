@@ -9,6 +9,7 @@ import { MEMORY_RETRIEVAL_SELECTED_ID_LIMIT } from './retrievalEventTypes';
 import type {
   MemoryRetrievalBarrier,
   MemoryRetrievalEventRejectionCode,
+  MemoryRetrievalExpansion,
   MemoryRetrievalSelector,
 } from './retrievalEventTypes';
 
@@ -26,6 +27,7 @@ export type PromptAssemblyRetrievalEventInput = Readonly<{
   selectedFactIds: ReadonlyArray<string>;
   selectedEpisodeIds: ReadonlyArray<string>;
   retrievalTimings?: RetrievalOrchestratorTimings;
+  expansion: MemoryRetrievalExpansion;
   consistencyBarrier?: NextTurnMemoryConsistencyResult;
   createdAt?: number;
 }>;
@@ -95,6 +97,8 @@ export async function recordPromptAssemblyRetrievalEvent(
     const candidateEpisodeCount = disabled
       ? 0
       : Math.max(episodeIds.length, boundedInteger(episodeTiming?.candidateCount, MAX_EVENT_COUNT));
+    const evidenceExpansionMs = disabled ? 0 : boundedInteger(input.expansion.durationMs);
+    const retrievalTotalMs = disabled ? 0 : boundedInteger(input.retrievalTimings?.totalMs);
 
     const result = await recordMemoryRetrievalEvent({
       operation: 'prompt_assembly',
@@ -131,8 +135,10 @@ export async function recordPromptAssemblyRetrievalEvent(
           ? 0
           : boundedInteger((factTiming?.scoreMs ?? 0) + (episodeTiming?.scoreMs ?? 0)),
         selectorMs: disabled ? 0 : boundedInteger(factTiming?.selectorMs),
-        totalMs: disabled ? 0 : boundedInteger(input.retrievalTimings?.totalMs),
+        evidenceExpansionMs,
+        totalMs: disabled ? 0 : boundedInteger(retrievalTotalMs + evidenceExpansionMs),
       },
+      expansion: input.expansion,
       selector: disabled
         ? { mode: 'deterministic', outcome: 'not_requested' }
         : selectorFromTiming(input.retrievalTimings),

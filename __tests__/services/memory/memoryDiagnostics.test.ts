@@ -97,7 +97,18 @@ describe('memoryDiagnostics', () => {
         candidateFetchMs: 1,
         scoreMs: 1,
         selectorMs: 0,
+        evidenceExpansionMs: 0,
         totalMs: 4,
+      },
+      expansion: {
+        outcome: 'not_requested' as const,
+        requestedSourceCount: 0,
+        acceptedSourceCount: 0,
+        sourceWithEvidenceCount: 0,
+        emittedEvidenceCount: 0,
+        promptBudgetDroppedCount: 0,
+        promptChars: 0,
+        durationMs: 0,
       },
       selector: { mode: 'deterministic' as const, outcome: 'not_requested' as const },
     };

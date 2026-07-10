@@ -66,7 +66,18 @@ async function makeEventInput(
       candidateFetchMs: 1,
       scoreMs: 1,
       selectorMs: 0,
+      evidenceExpansionMs: 0,
       totalMs: 6,
+    },
+    expansion: {
+      outcome: 'not_requested',
+      requestedSourceCount: 0,
+      acceptedSourceCount: 0,
+      sourceWithEvidenceCount: 0,
+      emittedEvidenceCount: 0,
+      promptBudgetDroppedCount: 0,
+      promptChars: 0,
+      durationMs: 0,
     },
     selector: { mode: 'deterministic', outcome: 'not_requested' },
     barrier: { outcome: 'completed', waitMs: 10, queueAgeMs: 25 },
@@ -108,6 +119,26 @@ describe('structured memory retrieval event store', () => {
     const rawSentinel = 'PRIVATE RAW RETRIEVAL QUERY SENTINEL';
     const input = await makeEventInput({
       queryFingerprint: await buildMemoryRetrievalQueryFingerprint(rawSentinel),
+      timings: {
+        planMs: 1,
+        factRecallMs: 2,
+        episodeRecallMs: 3,
+        candidateFetchMs: 1,
+        scoreMs: 1,
+        selectorMs: 0,
+        evidenceExpansionMs: 3,
+        totalMs: 9,
+      },
+      expansion: {
+        outcome: 'completed',
+        requestedSourceCount: 3,
+        acceptedSourceCount: 3,
+        sourceWithEvidenceCount: 2,
+        emittedEvidenceCount: 2,
+        promptBudgetDroppedCount: 1,
+        promptChars: 640,
+        durationMs: 3,
+      },
     });
 
     await expect(recordMemoryRetrievalEvent(input)).resolves.toMatchObject({
@@ -133,6 +164,17 @@ describe('structured memory retrieval event store', () => {
         selectedEpisodeIds: ['episode-1'],
       },
       selector: { mode: 'deterministic', outcome: 'not_requested' },
+      timings: expect.objectContaining({ evidenceExpansionMs: 3, totalMs: 9 }),
+      expansion: {
+        outcome: 'completed',
+        requestedSourceCount: 3,
+        acceptedSourceCount: 3,
+        sourceWithEvidenceCount: 2,
+        emittedEvidenceCount: 2,
+        promptBudgetDroppedCount: 1,
+        promptChars: 640,
+        durationMs: 3,
+      },
       barrier: null,
       barrier: { outcome: 'completed', waitMs: 10, queueAgeMs: 25 },
     });
@@ -178,6 +220,50 @@ describe('structured memory retrieval event store', () => {
     );
   });
 
+  it('additively migrates pre-expansion rows without losing retained evidence', async () => {
+    await expect(
+      recordMemoryRetrievalEvent(await makeEventInput({ createdAt: 77 })),
+    ).resolves.toMatchObject({
+      status: 'recorded',
+    });
+    const originalId = readRecentMemoryRetrievalEvents()[0]?.id;
+    const db = getMemoryDb();
+    db.execSync(`
+      ALTER TABLE memory_retrieval_events RENAME TO memory_retrieval_events_current;
+      CREATE TABLE memory_retrieval_events AS
+        SELECT id, operation, mode, outcome, query_hash, query_length, query_unit_count,
+               memory_conversation_id_hash, source_thread_id_hash, task_scope_present,
+               candidate_fact_count, selected_fact_count, selected_fact_ids_json,
+               candidate_episode_count, selected_episode_count, selected_episode_ids_json,
+               plan_ms, fact_recall_ms, episode_recall_ms, candidate_fetch_ms, score_ms,
+               selector_ms, total_ms, selector_mode, selector_outcome, barrier_outcome,
+               barrier_wait_ms, barrier_queue_age_ms, created_at
+          FROM memory_retrieval_events_current;
+      DROP TABLE memory_retrieval_events_current;
+    `);
+    resetFactSchemaCacheForTests();
+
+    ensureFactSchema();
+
+    expect(readRecentMemoryRetrievalEvents()).toEqual([
+      expect.objectContaining({
+        id: originalId,
+        createdAt: 77,
+        timings: expect.objectContaining({ evidenceExpansionMs: 0 }),
+        expansion: {
+          outcome: 'not_requested',
+          requestedSourceCount: 0,
+          acceptedSourceCount: 0,
+          sourceWithEvidenceCount: 0,
+          emittedEvidenceCount: 0,
+          promptBudgetDroppedCount: 0,
+          promptChars: 0,
+          durationMs: 0,
+        },
+      }),
+    ]);
+  });
+
   it('rejects malformed, open-ended, and out-of-bound fields without writing', async () => {
     const base = await makeEventInput();
     const disabledBase: RecordMemoryRetrievalEventInput = {
@@ -199,6 +285,7 @@ describe('structured memory retrieval event store', () => {
         candidateFetchMs: 0,
         scoreMs: 0,
         selectorMs: 0,
+        evidenceExpansionMs: 0,
         totalMs: 0,
       },
       selector: { mode: 'deterministic', outcome: 'not_requested' },
@@ -250,6 +337,40 @@ describe('structured memory retrieval event store', () => {
       {
         input: { ...base, timings: { ...base.timings, totalMs: 600_001 } },
         code: 'invalid_timings',
+      },
+      {
+        input: {
+          ...base,
+          timings: { ...base.timings, evidenceExpansionMs: 1 },
+        },
+        code: 'invalid_expansion',
+      },
+      {
+        input: {
+          ...base,
+          expansion: {
+            ...base.expansion,
+            outcome: 'failed',
+            requestedSourceCount: 1,
+          },
+        },
+        code: 'invalid_state_combination',
+      },
+      {
+        input: {
+          ...base,
+          expansion: {
+            outcome: 'completed',
+            requestedSourceCount: 1,
+            acceptedSourceCount: 1,
+            sourceWithEvidenceCount: 0,
+            emittedEvidenceCount: 1,
+            promptBudgetDroppedCount: 0,
+            promptChars: 10,
+            durationMs: 0,
+          },
+        },
+        code: 'invalid_expansion',
       },
       {
         input: { ...base, selector: { mode: 'deterministic', outcome: 'applied' } },
@@ -351,9 +472,7 @@ describe('structured memory retrieval event store', () => {
     expect(fullRetentionWindow[0]?.createdAt).toBe(MEMORY_RETRIEVAL_EVENT_RETENTION_LIMIT);
     expect(fullRetentionWindow.at(-1)?.createdAt).toBe(1);
     expect(fullRetentionWindow.map((entry) => entry.createdAt)).toEqual(
-      [...fullRetentionWindow.map((entry) => entry.createdAt)].sort(
-        (left, right) => right - left,
-      ),
+      [...fullRetentionWindow.map((entry) => entry.createdAt)].sort((left, right) => right - left),
     );
     const entries = readRecentMemoryRetrievalEvents({
       sourceThreadIdHash: threadAHash ?? undefined,

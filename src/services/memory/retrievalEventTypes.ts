@@ -32,6 +32,14 @@ export const MEMORY_RETRIEVAL_BARRIER_OUTCOMES = [
 ] as const;
 export type MemoryRetrievalBarrierOutcome = (typeof MEMORY_RETRIEVAL_BARRIER_OUTCOMES)[number];
 
+export const MEMORY_RETRIEVAL_EXPANSION_OUTCOMES = [
+  'not_requested',
+  'completed',
+  'scope_unavailable',
+  'failed',
+] as const;
+export type MemoryRetrievalExpansionOutcome = (typeof MEMORY_RETRIEVAL_EXPANSION_OUTCOMES)[number];
+
 export type MemoryRetrievalQueryFingerprint = Readonly<{
   hashAlgorithm: 'sha256';
   hash: string;
@@ -61,7 +69,19 @@ export type MemoryRetrievalTimings = Readonly<{
   candidateFetchMs: number;
   scoreMs: number;
   selectorMs: number;
+  evidenceExpansionMs: number;
   totalMs: number;
+}>;
+
+export type MemoryRetrievalExpansion = Readonly<{
+  outcome: MemoryRetrievalExpansionOutcome;
+  requestedSourceCount: number;
+  acceptedSourceCount: number;
+  sourceWithEvidenceCount: number;
+  emittedEvidenceCount: number;
+  promptBudgetDroppedCount: number;
+  promptChars: number;
+  durationMs: number;
 }>;
 
 export type MemoryRetrievalSelector = Readonly<{
@@ -83,6 +103,7 @@ export type RecordMemoryRetrievalEventInput = Readonly<{
   scope: MemoryRetrievalScopeInput;
   counts: MemoryRetrievalCountsInput;
   timings: MemoryRetrievalTimings;
+  expansion: MemoryRetrievalExpansion;
   selector: MemoryRetrievalSelector;
   barrier?: MemoryRetrievalBarrier | null;
   createdAt?: number;
@@ -108,6 +129,7 @@ export type MemoryRetrievalEvent = Readonly<{
     selectedEpisodeIds: string[];
   };
   timings: MemoryRetrievalTimings;
+  expansion: MemoryRetrievalExpansion;
   selector: MemoryRetrievalSelector;
   barrier: MemoryRetrievalBarrier | null;
   createdAt: number;
@@ -122,6 +144,7 @@ export type MemoryRetrievalEventRejectionCode =
   | 'invalid_counts'
   | 'invalid_selected_ids'
   | 'invalid_timings'
+  | 'invalid_expansion'
   | 'invalid_selector'
   | 'invalid_barrier'
   | 'invalid_state_combination'
