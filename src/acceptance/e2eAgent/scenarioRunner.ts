@@ -14,6 +14,10 @@ import { resolveE2EScenarioTimeoutMs } from './scenarioTimeout';
 import { E2E_DEFAULT_MAX_TOKENS } from './thresholds';
 import type { E2EScenario, E2EScenarioContentClass, E2EScenarioResult, E2EUserTurn } from './types';
 import type { LlmProviderConfig } from '../../types/provider';
+import type {
+  MemoryContextStrategy,
+  MemoryRetrievalStrategy,
+} from '../../services/memory/memoryAccessPolicy';
 
 const DEFAULT_E2E_SYSTEM_PROMPT =
   'You are Kavi, a graph-controlled personal assistant. Use tools to complete tasks. ' +
@@ -32,6 +36,9 @@ export type E2EScenarioRunOptions = Readonly<{
     conversationId: string;
     workspaceConversationId: string;
   }) => Promise<void> | void;
+  memoryRetrievalStrategy?: MemoryRetrievalStrategy;
+  memoryContextStrategy?: MemoryContextStrategy;
+  enableCompaction?: boolean;
 }>;
 
 export function resolveE2EScenarioSystemPrompt(scenario: E2EScenario): string {
@@ -105,6 +112,9 @@ export async function runE2EScenario(
       disableLongTermMemory: options.disableLongTermMemory,
       allowedToolNames: options.allowedToolNames,
       beforeTurns: options.beforeTurns,
+      memoryRetrievalStrategy: options.memoryRetrievalStrategy,
+      memoryContextStrategy: options.memoryContextStrategy,
+      enableCompaction: options.enableCompaction,
     });
     const result = mapForegroundScenarioResult({
       contentClass,

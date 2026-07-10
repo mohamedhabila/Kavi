@@ -191,7 +191,7 @@ export async function executeForegroundConversationRun(
         signal: abortController,
         personaId: executionContext.personaId,
         allProviders: context.state.providers.map((candidate) => ({ ...candidate })),
-        enableCompaction: true,
+        enableCompaction: options?.enableCompaction ?? true,
         enableFailover: true,
         thinkingLevel: context.state.thinkingLevel,
         linkUnderstandingEnabled: context.state.linkUnderstandingEnabled,
@@ -207,6 +207,8 @@ export async function executeForegroundConversationRun(
         initialAgentControlGraphState: resumePreparation.initialAgentControlGraphState,
         workflowScopeUserMessageId: resumePreparation.workflowScopeUserMessageId,
         agentRunId: bootstrapResult.trackedAgentRunId,
+        memoryRetrievalStrategy: options?.memoryRetrievalStrategy,
+        memoryContextStrategy: options?.memoryContextStrategy,
       },
       runtime.callbacks,
     );

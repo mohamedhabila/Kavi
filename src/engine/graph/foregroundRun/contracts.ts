@@ -1,5 +1,9 @@
 import { AgentRun, AgentRunAsyncOperation } from '../../../types/agentRun';
 import { LlmProviderConfig } from '../../../types/provider';
+import type {
+  MemoryContextStrategy,
+  MemoryRetrievalStrategy,
+} from '../../../services/memory/memoryAccessPolicy';
 
 export type ResolvedFinalizationProviderContext = {
   provider: LlmProviderConfig;
@@ -18,6 +22,9 @@ export type RunChatOptions = {
   additionalUserPrompt?: string;
   disableTools?: boolean;
   allowedToolNames?: ReadonlyArray<string>;
+  memoryRetrievalStrategy?: MemoryRetrievalStrategy;
+  memoryContextStrategy?: MemoryContextStrategy;
+  enableCompaction?: boolean;
   initialPendingAsyncOperations?: AgentRunAsyncOperation[];
 };
 

@@ -12,6 +12,10 @@ import type { OrchestratorState } from '../../types/conversation';
 import type { TokenUsage } from '../../types/usage';
 import type { ThinkingLevel } from '../thinking';
 import type { OrchestratorCompactionEvent } from '../orchestratorCompaction';
+import type {
+  MemoryContextStrategy,
+  MemoryRetrievalStrategy,
+} from '../../services/memory/memoryAccessPolicy';
 
 export interface OrchestratorCallbacks {
   onStateChange: (state: OrchestratorState) => void;
@@ -67,4 +71,6 @@ export interface OrchestratorOptions {
   workflowScopeUserMessageId?: string;
   taskId?: string;
   agentRunId?: string;
+  memoryRetrievalStrategy?: MemoryRetrievalStrategy;
+  memoryContextStrategy?: MemoryContextStrategy;
 }

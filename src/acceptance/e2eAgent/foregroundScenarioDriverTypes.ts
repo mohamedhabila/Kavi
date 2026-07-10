@@ -15,6 +15,10 @@ import type {
   E2ENativeMobileInvocationSnapshot,
 } from './e2eNativeMobileFixtures';
 import type { ForegroundScenarioRetrievalEvidence } from './foregroundScenarioRetrievalEvidence';
+import type {
+  MemoryContextStrategy,
+  MemoryRetrievalStrategy,
+} from '../../services/memory/memoryAccessPolicy';
 
 export type ForegroundScenarioRouteDirective =
   | 'production_auto'
@@ -55,6 +59,9 @@ export type ForegroundScenarioDriverInput = {
     conversationId: string;
     workspaceConversationId: string;
   }) => Promise<void> | void;
+  memoryRetrievalStrategy?: MemoryRetrievalStrategy;
+  memoryContextStrategy?: MemoryContextStrategy;
+  enableCompaction?: boolean;
 };
 
 export type DeepReadonly<T> = T extends (...args: never[]) => unknown

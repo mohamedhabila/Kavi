@@ -90,13 +90,7 @@ const DEFAULT_DEPENDENCIES: E2EPairedRuntimeDependencies = {
     resetAndVerifyE2EScenarioSandboxes();
   },
   withStoreIsolation: withE2EPairedStoreIsolation,
-  executeCondition: async ({ conditionPlan, scenario, runOptions }) => {
-    if (conditionPlan.conditionConfig.retrievalMode !== 'production') {
-      throw new Error('lexical_baseline runtime wiring is not installed.');
-    }
-    if (conditionPlan.conditionConfig.contextMode !== 'production') {
-      throw new Error('diagnostic_full_context runtime wiring is not installed.');
-    }
+  executeCondition: async ({ scenario, runOptions }) => {
     return runE2EScenario(scenario, runOptions);
   },
 };
@@ -118,6 +112,9 @@ function buildConditionRunOptions(
       ? { routeOverride: conditionPlan.conditionConfig.routeOverride }
       : {}),
     disableLongTermMemory: conditionPlan.conditionConfig.memoryMode === 'off',
+    memoryRetrievalStrategy: conditionPlan.conditionConfig.retrievalMode,
+    memoryContextStrategy: conditionPlan.conditionConfig.contextMode,
+    enableCompaction: conditionPlan.conditionConfig.contextMode !== 'full_context',
     allowedToolNames: invariant.toolSurface,
     ...(oracleEvidence
       ? {

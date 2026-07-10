@@ -214,6 +214,9 @@ async function runScenarioIsolated(
           options: {
             maxTokens: turn.maxTokens ?? input.maxTokens,
             ...(input.allowedToolNames ? { allowedToolNames: input.allowedToolNames } : {}),
+            memoryRetrievalStrategy: input.memoryRetrievalStrategy,
+            memoryContextStrategy: input.memoryContextStrategy,
+            enableCompaction: input.enableCompaction,
           },
         });
       } finally {

@@ -225,32 +225,32 @@ describe('paired E2E runtime coordinator', () => {
     expect(restorationFailure.validForDeltaClaims).toBe(false);
   });
 
-  it('fails closed for condition modes whose product hooks are not installed', async () => {
+  it('wires lexical retrieval and full-context diagnostics through product run options', async () => {
     const resetConditionState = jest.fn(async () => undefined);
+    const executeCondition = jest.fn(async () => successfulResult());
     const result = await runE2EPairedConditions({
       plan: buildPlan('lexical_baseline', 'diagnostic_full_context'),
       scenario: SCENARIO,
       provider: PROVIDER,
       dependencies: {
+        executeCondition,
         resetConditionState,
         cleanupConditionState: async () => undefined,
         withStoreIsolation: passthroughIsolation,
       },
     });
     expect(resetConditionState).toHaveBeenCalledTimes(2);
-    expect(result.conditions).toEqual([
-      expect.objectContaining({
-        condition: 'lexical_baseline',
-        status: 'failed',
-        category: 'condition_execution',
-      }),
-      expect.objectContaining({
-        condition: 'diagnostic_full_context',
-        status: 'failed',
-        category: 'condition_execution',
-      }),
-    ]);
-    expect(result.validForDeltaClaims).toBe(false);
+    expect(executeCondition.mock.calls[0][0].runOptions).toMatchObject({
+      memoryRetrievalStrategy: 'lexical_only',
+      memoryContextStrategy: 'production',
+      enableCompaction: true,
+    });
+    expect(executeCondition.mock.calls[1][0].runOptions).toMatchObject({
+      memoryRetrievalStrategy: 'production',
+      memoryContextStrategy: 'full_context',
+      enableCompaction: false,
+    });
+    expect(result.validForDeltaClaims).toBe(true);
   });
 
   it('restores chat, agent-run, settings, and persistence after the first condition fails', async () => {

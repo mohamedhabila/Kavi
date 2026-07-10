@@ -396,6 +396,9 @@ describe('runForegroundScenario', () => {
       conversationTitle: 'Scenario title',
       systemPrompt: 'Scenario prompt',
       defaultMode: 'chitchat',
+      memoryRetrievalStrategy: 'lexical_only',
+      memoryContextStrategy: 'full_context',
+      enableCompaction: false,
       turns: [{ content: 'How are you?', route: 'production_auto', maxTokens: 321 }],
     });
 
@@ -405,7 +408,13 @@ describe('runForegroundScenario', () => {
       personaId: 'default',
     });
     expect(mockedRunOrchestrator).toHaveBeenCalledWith(
-      expect.objectContaining({ maxTokens: 321, personaId: 'default' }),
+      expect.objectContaining({
+        maxTokens: 321,
+        personaId: 'default',
+        memoryRetrievalStrategy: 'lexical_only',
+        memoryContextStrategy: 'full_context',
+        enableCompaction: false,
+      }),
       expect.any(Object),
     );
     expect(result.turns[0].memory).toHaveLength(1);

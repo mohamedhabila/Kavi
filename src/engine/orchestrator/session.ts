@@ -84,6 +84,8 @@ export async function runOrchestratorGraphSession(params: {
     taskId: options.taskId,
     workflowScopeUserMessageId: options.workflowScopeUserMessageId,
     graphSnapshot: options.initialAgentControlGraphState,
+    memoryRetrievalStrategy: options.memoryRetrievalStrategy,
+    memoryContextStrategy: options.memoryContextStrategy,
   });
 
   const graph = createOrchestratorGraphBindings({
