@@ -89,6 +89,29 @@ describe('evaluateMobileSpawnPreflight', () => {
 
     expect(result).toEqual({ status: 'ready' });
   });
+
+  it('fails closed on malformed current or live worker identities', () => {
+    expect(
+      evaluateMobileSpawnPreflight({
+        depth: 0,
+        parentConversationId: ' conv-1',
+        liveWorkers: [],
+      }),
+    ).toEqual(expect.objectContaining({ status: 'blocked', code: 'invalid_identity' }));
+    expect(
+      evaluateMobileSpawnPreflight({
+        depth: 0,
+        parentConversationId: 'conv-1',
+        liveWorkers: [
+          {
+            sessionId: ' sub-running',
+            parentConversationId: 'conv-1',
+            status: 'running',
+          },
+        ],
+      }),
+    ).toEqual(expect.objectContaining({ status: 'blocked', code: 'invalid_identity' }));
+  });
 });
 
 describe('resolveSpawnGoalScope', () => {
@@ -157,5 +180,26 @@ describe('resolveSpawnGoalScope', () => {
         status: 'error',
       }),
     );
+  });
+
+  it('rejects malformed or duplicate goal identities without normalizing them', () => {
+    expect(
+      resolveSpawnGoalScope({
+        goalIds: [' goal-a'],
+        goals,
+      }),
+    ).toEqual(expect.objectContaining({ status: 'error' }));
+    expect(
+      resolveSpawnGoalScope({
+        goalIds: ['goal-a', 'goal-a'],
+        goals,
+      }),
+    ).toEqual(expect.objectContaining({ status: 'error' }));
+    expect(
+      resolveSpawnGoalScope({
+        workstreamId: '',
+        goals,
+      }),
+    ).toEqual(expect.objectContaining({ status: 'error' }));
   });
 });

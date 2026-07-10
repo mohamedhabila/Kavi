@@ -107,7 +107,7 @@ describe('resolveDelegatedWorkerSpawnPlan', () => {
     });
   });
 
-  it('does not throw when optional goal scope fields have malformed runtime shapes', () => {
+  it('returns a repairable error when optional goal scope fields have malformed runtime shapes', () => {
     const conversation = buildConversation([
       {
         id: 'worker-goal',
@@ -132,7 +132,14 @@ describe('resolveDelegatedWorkerSpawnPlan', () => {
       liveWorkers: [],
     });
 
-    expect(plan.status).toBe('ready');
-    expect(plan.spawnGate.workstreamId).toBe('worker-goal');
+    expect(plan.status).toBe('error');
+    expect(plan.response).toMatchObject({
+      status: 'error',
+      code: 'invalid_goal_scope',
+      repair: {
+        retryable: true,
+        invalidFields: ['goalScope', 'workstreamId'],
+      },
+    });
   });
 });

@@ -1,11 +1,16 @@
 import type { AgentGoal } from '../../types/agentRun';
 import type { SubAgentSnapshot } from '../../types/subAgent';
+import { isExactDurableScopeId } from '../../utils/durableScopeIdentity';
 
 /** Mobile-bounded spawn limits (single concurrent child, shallow nesting). */
 export const MAX_SPAWN_DEPTH = 2;
 export const MAX_CONCURRENT_SUB_AGENTS = 1;
 
-export type MobileSpawnBlockCode = 'max_depth' | 'max_concurrent' | 'invalid_goal_scope';
+export type MobileSpawnBlockCode =
+  | 'max_depth'
+  | 'max_concurrent'
+  | 'invalid_goal_scope'
+  | 'invalid_identity';
 
 export interface MobileSpawnPreflightRequest {
   depth: number;
@@ -36,18 +41,17 @@ export interface SpawnGoalScopeResolution {
   error?: string;
 }
 
-function normalizeOptionalGoalId(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
-}
-
-function normalizeGoalIdList(goalIds: unknown): string[] {
-  if (!Array.isArray(goalIds)) {
-    return [];
+function resolveGoalIdList(goalIds: unknown): { values: string[]; error?: string } {
+  if (goalIds === undefined) {
+    return { values: [] };
   }
-
-  return Array.from(
-    new Set(goalIds.map((goalId) => normalizeOptionalGoalId(goalId) ?? '').filter(Boolean)),
-  );
+  if (!Array.isArray(goalIds) || !goalIds.every(isExactDurableScopeId)) {
+    return { values: [], error: 'goalScope.goalIds must contain exact durable goal ids.' };
+  }
+  if (new Set(goalIds).size !== goalIds.length) {
+    return { values: [], error: 'goalScope.goalIds must not contain duplicate goal ids.' };
+  }
+  return { values: goalIds };
 }
 
 export function evaluateMobileSpawnPreflight(
@@ -61,16 +65,44 @@ export function evaluateMobileSpawnPreflight(
     };
   }
 
-  const parentConversationId = request.parentConversationId.trim();
-  const agentRunId = request.agentRunId?.trim();
+  if (
+    !isExactDurableScopeId(request.parentConversationId) ||
+    (request.agentRunId !== undefined && !isExactDurableScopeId(request.agentRunId))
+  ) {
+    return {
+      status: 'blocked',
+      code: 'invalid_identity',
+      error: 'Worker spawn scope contains a malformed durable identity.',
+    };
+  }
+  const invalidRunningWorker = request.liveWorkers.find(
+    (worker) =>
+      worker.status === 'running' &&
+      (!isExactDurableScopeId(worker.sessionId) ||
+        !isExactDurableScopeId(worker.parentConversationId) ||
+        (worker.agentRunId !== undefined && !isExactDurableScopeId(worker.agentRunId))),
+  );
+  if (invalidRunningWorker) {
+    return {
+      status: 'blocked',
+      code: 'invalid_identity',
+      error: 'A running worker has malformed durable ownership state.',
+      sessionId: isExactDurableScopeId(invalidRunningWorker.sessionId)
+        ? invalidRunningWorker.sessionId
+        : undefined,
+    };
+  }
+
+  const parentConversationId = request.parentConversationId;
+  const agentRunId = request.agentRunId;
   const runningWorkers = request.liveWorkers.filter((worker) => {
     if (worker.status !== 'running') {
       return false;
     }
-    if (worker.parentConversationId?.trim() !== parentConversationId) {
+    if (worker.parentConversationId !== parentConversationId) {
       return false;
     }
-    if (agentRunId && worker.agentRunId?.trim() !== agentRunId) {
+    if (agentRunId && worker.agentRunId !== agentRunId) {
       return false;
     }
     return true;
@@ -90,8 +122,15 @@ export function evaluateMobileSpawnPreflight(
 }
 
 export function resolveSpawnGoalScope(request: SpawnGoalScopeRequest): SpawnGoalScopeResolution {
-  const scopedGoalIds = normalizeGoalIdList(request.goalIds);
-  const workstreamId = normalizeOptionalGoalId(request.workstreamId);
+  const scopedGoalIdResolution = resolveGoalIdList(request.goalIds);
+  if (scopedGoalIdResolution.error) {
+    return { status: 'error', error: scopedGoalIdResolution.error };
+  }
+  if (request.workstreamId !== undefined && !isExactDurableScopeId(request.workstreamId)) {
+    return { status: 'error', error: 'workstreamId must be an exact durable goal id.' };
+  }
+  const scopedGoalIds = scopedGoalIdResolution.values;
+  const workstreamId = request.workstreamId;
 
   if (scopedGoalIds.length === 0) {
     if (!workstreamId) {
