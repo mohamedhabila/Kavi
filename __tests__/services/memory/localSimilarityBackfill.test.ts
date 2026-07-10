@@ -7,6 +7,7 @@ import { invalidateFact, recordFact } from '../../../src/services/memory/facts/m
 import {
   backfillCurrentFactLocalSimilarity,
   getLocalSimilarityDiagnostics,
+  LOCAL_SIMILARITY_BACKFILL_P95_BUDGET_MS,
   maintainCurrentFactLocalSimilarity,
 } from '../../../src/services/memory/localSimilarityBackfill';
 import {
@@ -45,6 +46,11 @@ function removeLocalSimilarity(factId: string): void {
 }
 
 describe('local-similarity backfill', () => {
+  function p95(values: ReadonlyArray<number>): number {
+    const sorted = [...values].sort((left, right) => left - right);
+    return sorted[Math.ceil(sorted.length * 0.95) - 1]!;
+  }
+
   it('resumes in bounded batches without touching inactive or foreign-owned facts', () => {
     const activeOne = recordFact({
       subjectId: 'profile',
@@ -185,6 +191,43 @@ describe('local-similarity backfill', () => {
       currentVectorCount: 1,
       pendingVectorCount: 0,
     });
+
+    getMemoryDb().runSync(
+      `UPDATE memory_facts
+          SET local_similarity_vector = ?, local_similarity_updated_at = ?
+        WHERE id = ?`,
+      JSON.stringify(
+        Array.from({ length: LOCAL_SIMILARITY_DIMENSIONS }, (_, index) => (index === 0 ? 2 : 0)),
+      ),
+      22,
+      fact.id,
+    );
+
+    expect(getLocalSimilarityDiagnostics(23)).toMatchObject({
+      currentVectorCount: 0,
+      pendingVectorCount: 1,
+    });
+    expect(backfillCurrentFactLocalSimilarity({ now: 23 })).toMatchObject({
+      processedCount: 1,
+      hasMore: false,
+    });
+
+    getMemoryDb().runSync(
+      `UPDATE memory_facts
+          SET local_similarity_model = NULL, local_similarity_updated_at = ?
+        WHERE id = ?`,
+      24,
+      fact.id,
+    );
+
+    expect(getLocalSimilarityDiagnostics(25)).toMatchObject({
+      currentVectorCount: 0,
+      pendingVectorCount: 1,
+    });
+    expect(backfillCurrentFactLocalSimilarity({ now: 25 })).toMatchObject({
+      processedCount: 1,
+      hasMore: false,
+    });
   });
 
   it('rejects invalid batch boundaries instead of silently expanding work', () => {
@@ -199,5 +242,35 @@ describe('local-similarity backfill', () => {
     getMemoryDb().execSync('DROP TABLE memory_facts');
 
     expect(maintainCurrentFactLocalSimilarity({ now: 20 })).toBeNull();
+  });
+
+  it('keeps full bounded batches within the recorded local maintenance budget', () => {
+    for (let index = 0; index < 160; index += 1) {
+      recordFact({
+        subjectId: 'performance-profile',
+        predicate: `preference_${index}`,
+        objectText: `bounded local similarity value ${index}`,
+        scope: 'global',
+        supersedePrior: false,
+        now: 100 + index,
+      });
+    }
+    getMemoryDb().runSync(
+      `UPDATE memory_facts
+          SET local_similarity_model = NULL,
+              local_similarity_dimensions = NULL,
+              local_similarity_vector = NULL,
+              local_similarity_updated_at = NULL`,
+    );
+    const durations: number[] = [];
+    for (let index = 0; index < 10; index += 1) {
+      const startedAt = performance.now();
+      const result = backfillCurrentFactLocalSimilarity({ limit: 16, now: 1_000 + index });
+      durations.push(performance.now() - startedAt);
+      expect(result.processedCount).toBe(16);
+      expect(result.hasMore).toBe(index < 9);
+    }
+
+    expect(p95(durations)).toBeLessThanOrEqual(LOCAL_SIMILARITY_BACKFILL_P95_BUDGET_MS);
   });
 });

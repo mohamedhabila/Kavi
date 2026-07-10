@@ -1,8 +1,9 @@
 import type { EntityType } from '../services/memory/entities';
+import type { MemoryFactSensitivity } from '../services/memory/facts/applicabilityProvenance';
 
 export const MEMORY_HYBRID_ABLATION_FIXTURE_VERSION = 'memory-hybrid-ablation-v2' as const;
 export const MEMORY_HYBRID_ABLATION_FIXTURE_SIGNATURE =
-  'sha256:7c68654d5db2b6185c0f52ada8d736ec314f939145db6eff98df6059df3cd6af' as const;
+  'sha256:2a277760be1cd2483bacb576a872d5bcd5f937cd239db0fc67a76a71bce03693' as const;
 
 export type MemoryHybridAblationFamily =
   | 'lexical_control'
@@ -10,8 +11,6 @@ export type MemoryHybridAblationFamily =
   | 'temporal'
   | 'local_similarity'
   | 'eligibility_negative';
-
-export type MemoryHybridAblationPath = 'foreground_prompt_visible' | 'component_only';
 
 export type MemoryHybridAblationEntitySeed = Readonly<{
   key: string;
@@ -28,6 +27,7 @@ export type MemoryHybridAblationFactSeed = Readonly<{
   now: number;
   validAt?: number;
   expiresAt?: number;
+  sensitivity?: MemoryFactSensitivity;
   origin: 'active' | 'other';
   deleted?: boolean;
 }>;
@@ -35,7 +35,6 @@ export type MemoryHybridAblationFactSeed = Readonly<{
 export type MemoryHybridAblationCase = Readonly<{
   id: string;
   family: MemoryHybridAblationFamily;
-  path: MemoryHybridAblationPath;
   query: string;
   now: number;
   expectedFactKey: string | null;
@@ -64,7 +63,6 @@ export const MEMORY_HYBRID_ABLATION_CASES: ReadonlyArray<MemoryHybridAblationCas
   {
     id: 'lexical-parity-editor',
     family: 'lexical_control',
-    path: 'foreground_prompt_visible',
     query: 'Which editor preference uses Neovim with Lua?',
     now: 1_000,
     expectedFactKey: 'target',
@@ -91,7 +89,6 @@ export const MEMORY_HYBRID_ABLATION_CASES: ReadonlyArray<MemoryHybridAblationCas
   {
     id: 'entity-alias-prefix',
     family: 'entity',
-    path: 'foreground_prompt_visible',
     query: 'Northern Lights deployment status',
     now: 2_000,
     expectedFactKey: 'target',
@@ -125,7 +122,6 @@ export const MEMORY_HYBRID_ABLATION_CASES: ReadonlyArray<MemoryHybridAblationCas
   {
     id: 'explicit-year-temporal',
     family: 'temporal',
-    path: 'foreground_prompt_visible',
     query: 'What happened in 2021?',
     now: Date.UTC(2021, 6, 1),
     expectedFactKey: 'target',
@@ -153,7 +149,6 @@ export const MEMORY_HYBRID_ABLATION_CASES: ReadonlyArray<MemoryHybridAblationCas
   {
     id: 'compatible-local-similarity',
     family: 'local_similarity',
-    path: 'foreground_prompt_visible',
     query: 'opaqueness signalling violett ciphered',
     now: 1_000,
     expectedFactKey: 'target',
@@ -180,7 +175,6 @@ export const MEMORY_HYBRID_ABLATION_CASES: ReadonlyArray<MemoryHybridAblationCas
   {
     id: 'eligibility-negative',
     family: 'eligibility_negative',
-    path: 'foreground_prompt_visible',
     query: 'FILTER-SENTINEL',
     now: 500,
     expectedFactKey: null,
@@ -211,6 +205,25 @@ export const MEMORY_HYBRID_ABLATION_CASES: ReadonlyArray<MemoryHybridAblationCas
         objectText: 'FILTER-SENTINEL',
         now: 100,
         origin: 'other',
+      },
+    ],
+  },
+  {
+    id: 'restricted-sensitivity-negative',
+    family: 'eligibility_negative',
+    query: 'RESTRICTED-SENTINEL',
+    now: 600,
+    expectedFactKey: null,
+    entities: [{ key: 'restricted', name: 'Restricted Subject', type: 'concept' }],
+    facts: [
+      {
+        key: 'restricted',
+        entityKey: 'restricted',
+        predicate: 'private_signal',
+        objectText: 'RESTRICTED-SENTINEL',
+        sensitivity: 'restricted',
+        now: 100,
+        origin: 'active',
       },
     ],
   },

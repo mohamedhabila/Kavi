@@ -10,6 +10,7 @@ import {
   createCurrentLocalSimilarityVector,
   LOCAL_SIMILARITY_DIMENSIONS,
   LOCAL_SIMILARITY_MODEL,
+  LOCAL_SIMILARITY_MAXIMUM_SERIALIZED_CHARS,
 } from '../../../src/services/memory/localSimilarity';
 import {
   ensureFactSchema,
@@ -91,6 +92,34 @@ describe('fact local-similarity persistence', () => {
     expect(getFactById(current.id)?.invalidAt).toBe(20);
   });
 
+  it('keeps duplicate vectors aligned with persisted fact content', () => {
+    const created = recordFact({
+      subjectId: 'profile',
+      predicate: 'preferred_editor',
+      objectText: 'Neovim',
+      sourceSummary: 'Configured in the terminal',
+      scope: 'global',
+      now: 10,
+    }).fact;
+    const duplicate = recordFact({
+      subjectId: 'profile',
+      predicate: 'preferred_editor',
+      objectText: 'Neovim',
+      sourceSummary: 'Unpersisted incoming summary',
+      scope: 'global',
+      now: 20,
+    }).fact;
+
+    expect(duplicate.sourceSummary).toBe('Configured in the terminal');
+    expect(duplicate.localSimilarity).toEqual(
+      createCurrentLocalSimilarityVector('preferred_editor\nNeovim\nConfigured in the terminal'),
+    );
+    expect(duplicate.localSimilarity).not.toEqual(
+      createCurrentLocalSimilarityVector('preferred_editor\nNeovim\nUnpersisted incoming summary'),
+    );
+    expect(duplicate.id).toBe(created.id);
+  });
+
   it('rejects incompatible identities and malformed values before touching storage', () => {
     const fact = recordFact({
       subjectId: 'profile',
@@ -135,6 +164,29 @@ describe('fact local-similarity persistence', () => {
         fact.id,
       ),
     ).toEqual({ updated_at: 10, local_similarity_updated_at: 20 });
+  });
+
+  it('rejects oversized injected vectors while generated vectors stay bounded', () => {
+    const fact = recordFact({
+      subjectId: 'profile',
+      predicate: 'preferred_editor',
+      objectText: 'Neovim',
+      scope: 'global',
+      now: 10,
+    }).fact;
+    const oversized = {
+      ...fact.localSimilarity!,
+      values: Array.from({ length: LOCAL_SIMILARITY_DIMENSIONS }, () => 0.12345678901234568),
+    };
+
+    expect(() => setFactLocalSimilarity(fact.id, oversized, 20)).toThrow(
+      'memory_local_similarity_storage_budget_exceeded',
+    );
+    const stored = getMemoryDb().getFirstSync<{ vector_chars: number }>(
+      `SELECT LENGTH(local_similarity_vector) AS vector_chars FROM memory_facts WHERE id = ?`,
+      fact.id,
+    );
+    expect(stored!.vector_chars).toBeLessThanOrEqual(LOCAL_SIMILARITY_MAXIMUM_SERIALIZED_CHARS);
   });
 
   it('has no fact-level legacy embedding column or read alias', () => {

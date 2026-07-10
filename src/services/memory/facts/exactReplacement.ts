@@ -19,6 +19,7 @@ import { hasPersistedSourceEvidence } from './sourceEvidence';
 import {
   buildFactLocalSimilarityText,
   createCurrentLocalSimilarityVector,
+  serializeCurrentLocalSimilarityVector,
 } from '../localSimilarity';
 import {
   clamp01,
@@ -96,6 +97,7 @@ function reinforceExactDuplicate(
       sourceSummary: row.source_summary,
     }),
   );
+  const serializedLocalSimilarity = serializeCurrentLocalSimilarityVector(localSimilarity);
   db.runSync(
     `UPDATE memory_facts
        SET attributes = ?, updated_at = ?, confidence = MAX(confidence, ?),
@@ -117,7 +119,7 @@ function reinforceExactDuplicate(
     now,
     localSimilarity.model,
     localSimilarity.dimensions,
-    JSON.stringify(localSimilarity.values),
+    serializedLocalSimilarity,
     now,
     row.id,
   );
@@ -135,7 +137,7 @@ function reinforceExactDuplicate(
     last_accessed_at: now,
     local_similarity_model: localSimilarity.model,
     local_similarity_dimensions: localSimilarity.dimensions,
-    local_similarity_vector: JSON.stringify(localSimilarity.values),
+    local_similarity_vector: serializedLocalSimilarity,
     local_similarity_updated_at: now,
   });
   replaceFactRetrievalTerms(fact);

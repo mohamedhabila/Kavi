@@ -19,6 +19,7 @@ import {
   buildFactLocalSimilarityText,
   createCurrentLocalSimilarityVector,
   requireCurrentLocalSimilarityVector,
+  serializeCurrentLocalSimilarityVector,
   type LocalSimilarityVector,
 } from '../localSimilarity';
 import {
@@ -197,13 +198,6 @@ function recordFactInTransaction(
     ...(sealedApplicability ? { sealed: sealedApplicability } : {}),
   });
   const memoryOwnerId = getLocalMemoryVaultOwnerId(db);
-  const localSimilarity = createCurrentLocalSimilarityVector(
-    buildFactLocalSimilarityText({
-      predicate,
-      objectText,
-      sourceSummary: input.sourceSummary,
-    }),
-  );
   const normalizedInput = {
     ...input,
     predicate,
@@ -283,6 +277,14 @@ function recordFactInTransaction(
     const reinforcementIncrement = isSourceReplay ? 0 : 1;
     const lastReinforcedAt = isSourceReplay ? existing.last_reinforced_at : now;
     const lastAccessedAt = isSourceReplay ? existing.last_accessed_at : now;
+    const localSimilarity = createCurrentLocalSimilarityVector(
+      buildFactLocalSimilarityText({
+        predicate: existing.predicate,
+        objectText: existing.object_text,
+        sourceSummary: existing.source_summary,
+      }),
+    );
+    const serializedLocalSimilarity = serializeCurrentLocalSimilarityVector(localSimilarity);
     db.runSync(
       `UPDATE memory_facts
          SET attributes = ?,
@@ -319,7 +321,7 @@ function recordFactInTransaction(
       memoryKind,
       localSimilarity.model,
       localSimilarity.dimensions,
-      JSON.stringify(localSimilarity.values),
+      serializedLocalSimilarity,
       now,
       reinforcementIncrement,
       lastReinforcedAt,
@@ -342,7 +344,7 @@ function recordFactInTransaction(
       memory_kind: memoryKind,
       local_similarity_model: localSimilarity.model,
       local_similarity_dimensions: localSimilarity.dimensions,
-      local_similarity_vector: JSON.stringify(localSimilarity.values),
+      local_similarity_vector: serializedLocalSimilarity,
       local_similarity_updated_at: now,
       repeated_mention_count: (existing.repeated_mention_count ?? 0) + reinforcementIncrement,
       last_reinforced_at: lastReinforcedAt,
@@ -358,6 +360,15 @@ function recordFactInTransaction(
       superseded: [],
     };
   }
+
+  const localSimilarity = createCurrentLocalSimilarityVector(
+    buildFactLocalSimilarityText({
+      predicate,
+      objectText,
+      sourceSummary: input.sourceSummary,
+    }),
+  );
+  const serializedLocalSimilarity = serializeCurrentLocalSimilarityVector(localSimilarity);
 
   const superseded: MemoryFact[] = [];
   if (input.supersedePrior) {
@@ -478,7 +489,7 @@ function recordFactInTransaction(
     fact.contentHash,
     localSimilarity.model,
     localSimilarity.dimensions,
-    JSON.stringify(localSimilarity.values),
+    serializedLocalSimilarity,
     now,
     fact.validAt,
     fact.createdAt,
@@ -560,6 +571,7 @@ export function setFactLocalSimilarity(
 ): boolean {
   requireFactMutationTimestamp(now, 'memory_fact_mutation_clock_invalid');
   const validated = requireCurrentLocalSimilarityVector(localSimilarity);
+  const serialized = serializeCurrentLocalSimilarityVector(validated);
   const result = runMemoryStatement(
     `UPDATE memory_facts
        SET local_similarity_model = ?,
@@ -569,7 +581,7 @@ export function setFactLocalSimilarity(
        WHERE id = ? AND deleted_at IS NULL`,
     validated.model,
     validated.dimensions,
-    JSON.stringify(validated.values),
+    serialized,
     now,
     id,
   );

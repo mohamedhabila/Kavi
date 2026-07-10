@@ -1,16 +1,13 @@
 import type { Message } from '../types/message';
 import { upsertEntity } from '../services/memory/entities';
 import { recordFactWithApplicability } from '../services/memory/facts/mutations';
-import { recallScoredFactsForQuery } from '../services/memory/factRecall';
 import { buildUnifiedMemoryAccessContext } from '../services/memory/memoryAccessGateway';
-import { resolveLocalMemoryAccessScope } from '../services/memory/memoryScopeStore';
 import {
   buildMemoryRetrievalScopeHash,
   readRecentMemoryRetrievalEvents,
 } from '../services/memory/retrievalLog';
 import { getMemoryDb } from '../services/memory/sqlite-store';
 import { stableHash, stableStringify } from './e2eAgent/e2eTraceRedaction';
-import { createCurrentLocalSimilarityVector } from '../services/memory/localSimilarity';
 import { runInIsolatedStructuredMemoryEvaluation } from './structuredMemoryEvaluation';
 import {
   MEMORY_HYBRID_ABLATION_CASES,
@@ -18,14 +15,12 @@ import {
   MEMORY_HYBRID_ABLATION_FIXTURE_VERSION,
   type MemoryHybridAblationCase,
   type MemoryHybridAblationFamily,
-  type MemoryHybridAblationPath,
 } from './memoryHybridAblationFixtures';
 
 type CandidateStrategy = 'lexical' | 'hybrid';
 
 type CaseResult = Readonly<{
   family: MemoryHybridAblationFamily;
-  path: MemoryHybridAblationPath;
   expected: boolean;
   targetHit: boolean;
   pollution: boolean;
@@ -38,25 +33,19 @@ export type MemoryHybridAblationReport = Readonly<{
   fixtureSignature: typeof MEMORY_HYBRID_ABLATION_FIXTURE_SIGNATURE;
   claimClass: 'diagnostic_only';
   downstreamAnswerEvaluated: false;
+  executionPath: 'foreground_product';
   caseCount: number;
-  foregroundPromptVisibleCaseCount: number;
-  componentOnlyCaseCount: number;
   lexicalControl: Readonly<{
     caseCount: number;
     identicalSelectionCount: number;
     lexicalRecallAtOne: number;
     hybridRecallAtOne: number;
   }>;
-  foregroundPositiveRetrieval: Readonly<{
+  productRetrieval: Readonly<{
     caseCount: number;
     lexicalRecallAtOne: number;
     hybridRecallAtOne: number;
     hybridRecallGain: number;
-  }>;
-  componentOnly: Readonly<{
-    caseCount: number;
-    lexicalRecallAtOne: number;
-    hybridRecallAtOne: number;
   }>;
   diagnosticTarget: Readonly<{
     minimumHybridRecallGain: 0.2;
@@ -74,7 +63,6 @@ export type MemoryHybridAblationReport = Readonly<{
     Record<
       'entity' | 'temporal' | 'local_similarity',
       Readonly<{
-        evidenceClass: 'foreground_prompt_visible' | 'component_only';
         caseCount: number;
         lexicalTargetHitCount: number;
         hybridTargetHitCount: number;
@@ -130,6 +118,7 @@ function seedFixture(
         now: seed.now,
         ...(seed.validAt !== undefined ? { validAt: seed.validAt } : {}),
         ...(seed.expiresAt !== undefined ? { expiresAt: seed.expiresAt } : {}),
+        ...(seed.sensitivity ? { sensitivity: seed.sensitivity } : {}),
       },
       { factClass: 'workflow', sourceAuthority: 'tool_observed' },
     );
@@ -168,7 +157,6 @@ function evaluateSelection(
   const expected = fixture.expectedFactKey !== null;
   return {
     family: fixture.family,
-    path: fixture.path,
     expected,
     targetHit: expected ? selectedKeys[0] === fixture.expectedFactKey : false,
     pollution: expected
@@ -215,42 +203,6 @@ async function runForegroundCase(
   return evaluateSelection(fixture, factKeysById, event.counts.selectedFactIds);
 }
 
-async function runLocalSimilarityCase(
-  fixture: MemoryHybridAblationCase,
-  strategy: CandidateStrategy,
-): Promise<CaseResult> {
-  const namespace = namespaceFor(fixture, strategy);
-  const factKeysById = seedFixture(fixture, strategy);
-  const memoryScope = resolveLocalMemoryAccessScope({
-    memoryConversationId: namespace,
-    sourceThreadId: `${namespace}-source`,
-    personaId: 'memory-hybrid-ablation',
-    taskId: null,
-  });
-  const scored = await recallScoredFactsForQuery(fixture.query, {
-    candidateStrategy: strategy,
-    memoryScope,
-    useIntent: 'explicit_user_request',
-    limit: 1,
-    now: fixture.now,
-    localSimilarity: { queryVector: createCurrentLocalSimilarityVector(fixture.query) },
-  });
-  return evaluateSelection(
-    fixture,
-    factKeysById,
-    scored.map((entry) => entry.fact.id),
-  );
-}
-
-async function runCase(
-  fixture: MemoryHybridAblationCase,
-  strategy: CandidateStrategy,
-): Promise<CaseResult> {
-  return fixture.path === 'foreground_prompt_visible'
-    ? runForegroundCase(fixture, strategy)
-    : runLocalSimilarityCase(fixture, strategy);
-}
-
 async function runAblationOnEmptyDatabase(): Promise<MemoryHybridAblationReport> {
   const pairs: Array<{
     fixture: MemoryHybridAblationCase;
@@ -258,52 +210,41 @@ async function runAblationOnEmptyDatabase(): Promise<MemoryHybridAblationReport>
     hybrid: CaseResult;
   }> = [];
   for (const fixture of MEMORY_HYBRID_ABLATION_CASES) {
-    const lexical = await runCase(fixture, 'lexical');
-    const hybrid = await runCase(fixture, 'hybrid');
+    const lexical = await runForegroundCase(fixture, 'lexical');
+    const hybrid = await runForegroundCase(fixture, 'hybrid');
     pairs.push({ fixture, lexical, hybrid });
   }
   const controls = pairs.filter(({ fixture }) => fixture.family === 'lexical_control');
-  const foregroundPositives = pairs.filter(
+  const productPositives = pairs.filter(
     ({ fixture }) =>
-      fixture.path === 'foreground_prompt_visible' &&
-      fixture.family !== 'lexical_control' &&
-      fixture.family !== 'eligibility_negative',
+      fixture.family !== 'lexical_control' && fixture.family !== 'eligibility_negative',
   );
-  const componentOnly = pairs.filter(({ fixture }) => fixture.path === 'component_only');
   const negatives = pairs.filter(({ fixture }) => fixture.family === 'eligibility_negative');
-  const foregroundLexicalRecallAtOne = rate(
-    foregroundPositives.filter(({ lexical }) => lexical.targetHit).length,
-    foregroundPositives.length,
+  const productLexicalRecallAtOne = rate(
+    productPositives.filter(({ lexical }) => lexical.targetHit).length,
+    productPositives.length,
   );
-  const foregroundHybridRecallAtOne = rate(
-    foregroundPositives.filter(({ hybrid }) => hybrid.targetHit).length,
-    foregroundPositives.length,
+  const productHybridRecallAtOne = rate(
+    productPositives.filter(({ hybrid }) => hybrid.targetHit).length,
+    productPositives.length,
   );
   const family = (name: 'entity' | 'temporal' | 'local_similarity') => {
     const entries = pairs.filter(({ fixture }) => fixture.family === name);
-    const evidenceClass = entries[0]?.fixture.path ?? 'component_only';
-    if (entries.some(({ fixture }) => fixture.path !== evidenceClass)) {
-      throw new Error(`Hybrid ablation family mixes evidence classes: ${name}`);
-    }
     return {
-      evidenceClass,
       caseCount: entries.length,
       lexicalTargetHitCount: entries.filter(({ lexical }) => lexical.targetHit).length,
       hybridTargetHitCount: entries.filter(({ hybrid }) => hybrid.targetHit).length,
     };
   };
-  const hybridRecallGain = foregroundHybridRecallAtOne - foregroundLexicalRecallAtOne;
+  const hybridRecallGain = productHybridRecallAtOne - productLexicalRecallAtOne;
   return {
     schemaVersion: 'memory-hybrid-ablation-report-v2',
     fixtureVersion: MEMORY_HYBRID_ABLATION_FIXTURE_VERSION,
     fixtureSignature: MEMORY_HYBRID_ABLATION_FIXTURE_SIGNATURE,
     claimClass: 'diagnostic_only',
     downstreamAnswerEvaluated: false,
+    executionPath: 'foreground_product',
     caseCount: pairs.length,
-    foregroundPromptVisibleCaseCount: pairs.filter(
-      ({ fixture }) => fixture.path === 'foreground_prompt_visible',
-    ).length,
-    componentOnlyCaseCount: pairs.filter(({ fixture }) => fixture.path === 'component_only').length,
     lexicalControl: {
       caseCount: controls.length,
       identicalSelectionCount: controls.filter(
@@ -319,22 +260,11 @@ async function runAblationOnEmptyDatabase(): Promise<MemoryHybridAblationReport>
         controls.length,
       ),
     },
-    foregroundPositiveRetrieval: {
-      caseCount: foregroundPositives.length,
-      lexicalRecallAtOne: foregroundLexicalRecallAtOne,
-      hybridRecallAtOne: foregroundHybridRecallAtOne,
+    productRetrieval: {
+      caseCount: productPositives.length,
+      lexicalRecallAtOne: productLexicalRecallAtOne,
+      hybridRecallAtOne: productHybridRecallAtOne,
       hybridRecallGain,
-    },
-    componentOnly: {
-      caseCount: componentOnly.length,
-      lexicalRecallAtOne: rate(
-        componentOnly.filter(({ lexical }) => lexical.targetHit).length,
-        componentOnly.length,
-      ),
-      hybridRecallAtOne: rate(
-        componentOnly.filter(({ hybrid }) => hybrid.targetHit).length,
-        componentOnly.length,
-      ),
     },
     diagnosticTarget: {
       minimumHybridRecallGain: 0.2,

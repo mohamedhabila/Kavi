@@ -6,6 +6,11 @@ export const LOCAL_SIMILARITY_DIMENSIONS = 384;
 export const LOCAL_SIMILARITY_MINIMUM_DIMENSIONS = 64;
 export const LOCAL_SIMILARITY_MAXIMUM_DIMENSIONS = 2_048;
 export const LOCAL_SIMILARITY_MAXIMUM_INPUT_CHARS = 4_096;
+export const LOCAL_SIMILARITY_MAXIMUM_SERIALIZED_CHARS = 5_000;
+export const LOCAL_SIMILARITY_VECTOR_P95_BUDGET_MS = 25;
+export const LOCAL_SIMILARITY_PRODUCT_RETRIEVAL_P95_BUDGET_MS = 150;
+
+const LOCAL_SIMILARITY_QUANTIZATION_SCALE = 1_000_000;
 
 export interface LocalSimilarityVector {
   model: typeof LOCAL_SIMILARITY_MODEL;
@@ -36,7 +41,7 @@ function addHashedFeature(vector: number[], feature: string, weight: number): vo
 }
 
 function normalizeText(text: string): string {
-  return text.normalize('NFKC').toLocaleLowerCase();
+  return text.normalize('NFKC').toLowerCase();
 }
 
 function sequenceCodePoints(sequence: string): string[] {
@@ -94,7 +99,11 @@ export function createCharacterNgramVector(
   if (featureCount === 0) return vector;
   const norm = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));
   if (norm === 0) return vector;
-  return vector.map((value) => value / norm);
+  return vector.map(
+    (value) =>
+      Math.round((value / norm) * LOCAL_SIMILARITY_QUANTIZATION_SCALE) /
+      LOCAL_SIMILARITY_QUANTIZATION_SCALE,
+  );
 }
 
 export function createCurrentLocalSimilarityVector(text: string): LocalSimilarityVector {
@@ -127,7 +136,7 @@ export function requireCurrentLocalSimilarityVector(
   }
   if (
     vector.values.length !== LOCAL_SIMILARITY_DIMENSIONS ||
-    !vector.values.every((value) => Number.isFinite(value))
+    !vector.values.every((value) => Number.isFinite(value) && Math.abs(value) <= 1)
   ) {
     throw new Error('memory_local_similarity_vector_invalid');
   }
@@ -141,8 +150,17 @@ export function isCurrentLocalSimilarityVector(
     vector.model === LOCAL_SIMILARITY_MODEL &&
     vector.dimensions === LOCAL_SIMILARITY_DIMENSIONS &&
     vector.values.length === LOCAL_SIMILARITY_DIMENSIONS &&
-    vector.values.every((value) => Number.isFinite(value))
+    vector.values.every((value) => Number.isFinite(value) && Math.abs(value) <= 1)
   );
+}
+
+export function serializeCurrentLocalSimilarityVector(vector: LocalSimilarityVector): string {
+  const validated = requireCurrentLocalSimilarityVector(vector);
+  const serialized = JSON.stringify(validated.values);
+  if (serialized.length > LOCAL_SIMILARITY_MAXIMUM_SERIALIZED_CHARS) {
+    throw new Error('memory_local_similarity_storage_budget_exceeded');
+  }
+  return serialized;
 }
 
 export function parseCurrentLocalSimilarityVector(
@@ -151,7 +169,8 @@ export function parseCurrentLocalSimilarityVector(
   if (
     stored.model !== LOCAL_SIMILARITY_MODEL ||
     stored.dimensions !== LOCAL_SIMILARITY_DIMENSIONS ||
-    !stored.serializedValues
+    !stored.serializedValues ||
+    stored.serializedValues.length > LOCAL_SIMILARITY_MAXIMUM_SERIALIZED_CHARS
   ) {
     return null;
   }
@@ -160,7 +179,9 @@ export function parseCurrentLocalSimilarityVector(
     if (
       !Array.isArray(values) ||
       values.length !== LOCAL_SIMILARITY_DIMENSIONS ||
-      !values.every((value) => typeof value === 'number' && Number.isFinite(value))
+      !values.every(
+        (value) => typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 1,
+      )
     ) {
       return null;
     }

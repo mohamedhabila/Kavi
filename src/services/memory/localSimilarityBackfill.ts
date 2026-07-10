@@ -6,7 +6,9 @@ import {
   buildFactLocalSimilarityText,
   createCurrentLocalSimilarityVector,
   LOCAL_SIMILARITY_DIMENSIONS,
+  LOCAL_SIMILARITY_MAXIMUM_SERIALIZED_CHARS,
   LOCAL_SIMILARITY_MODEL,
+  serializeCurrentLocalSimilarityVector,
 } from './localSimilarity';
 import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
 import { notifyStructuredMemoryChanged } from './store';
@@ -14,6 +16,7 @@ import { notifyStructuredMemoryChanged } from './store';
 const logger = createLogger('memory.localSimilarityBackfill');
 const DEFAULT_BACKFILL_LIMIT = 16;
 const MAXIMUM_BACKFILL_LIMIT = 64;
+export const LOCAL_SIMILARITY_BACKFILL_P95_BUDGET_MS = 100;
 
 type BackfillRow = {
   id: string;
@@ -38,9 +41,10 @@ export interface LocalSimilarityBackfillResult {
 }
 
 const CURRENT_VECTOR_SQL = `
-  local_similarity_model = ?
-  AND local_similarity_dimensions = ?
+  local_similarity_model IS ?
+  AND local_similarity_dimensions IS ?
   AND local_similarity_vector IS NOT NULL
+  AND length(local_similarity_vector) <= ${LOCAL_SIMILARITY_MAXIMUM_SERIALIZED_CHARS}
   AND local_similarity_updated_at IS NOT NULL
   AND local_similarity_updated_at >= 0
   AND json_valid(local_similarity_vector) = 1
@@ -52,10 +56,11 @@ const CURRENT_VECTOR_SQL = `
   ) = ?
   AND NOT EXISTS (
     SELECT 1
-      FROM json_each(
+     FROM json_each(
         CASE WHEN json_valid(local_similarity_vector) = 1 THEN local_similarity_vector ELSE '[]' END
       )
      WHERE type NOT IN ('integer', 'real')
+        OR ABS(CAST(value AS REAL)) > 1
   )
 `;
 
@@ -138,6 +143,7 @@ export function backfillCurrentFactLocalSimilarity(
           sourceSummary: row.source_summary,
         }),
       );
+      const serializedVector = serializeCurrentLocalSimilarityVector(vector);
       const result = db.runSync(
         `UPDATE memory_facts
             SET local_similarity_model = ?,
@@ -148,7 +154,7 @@ export function backfillCurrentFactLocalSimilarity(
             AND ${currentFactWhereSql()}`,
         vector.model,
         vector.dimensions,
-        JSON.stringify(vector.values),
+        serializedVector,
         now,
         row.id,
         memoryOwnerId,
