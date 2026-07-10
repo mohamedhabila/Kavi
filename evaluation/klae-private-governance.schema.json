@@ -49,13 +49,7 @@
     "frozenBaseline": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "id",
-        "appCommitSha",
-        "configurationSha256",
-        "promptSha256",
-        "frozenAt"
-      ],
+      "required": ["id", "appCommitSha", "configurationSha256", "promptSha256", "frozenAt"],
       "properties": {
         "id": {
           "$ref": "#/$defs/safeId"
@@ -246,12 +240,7 @@
     "privateProvenance": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "origin",
-        "redistributable",
-        "containsUserData",
-        "derivedFromBenchmarkItems"
-      ],
+      "required": ["origin", "redistributable", "containsUserData", "derivedFromBenchmarkItems"],
       "properties": {
         "origin": {
           "const": "original_synthetic_private_cases"
@@ -283,6 +272,52 @@
         }
       }
     },
+    "personaTimePeriod": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "startsAt", "endsAt"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^period-[0-9]{2}$"
+        },
+        "startsAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "endsAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "longitudinalPersona": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "caseIds", "timePeriods"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^persona-[a-f0-9]{16}$"
+        },
+        "caseIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/safeId"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "timePeriods": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/personaTimePeriod"
+          },
+          "minItems": 4,
+          "uniqueItems": true
+        }
+      }
+    },
     "privateCasePack": {
       "type": "object",
       "additionalProperties": false,
@@ -299,6 +334,7 @@
         "baselineId",
         "provenance",
         "execution",
+        "personas",
         "cases"
       ],
       "properties": {
@@ -339,6 +375,14 @@
         },
         "execution": {
           "$ref": "#/$defs/privateExecution"
+        },
+        "personas": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/longitudinalPersona"
+          },
+          "minItems": 1,
+          "uniqueItems": true
         },
         "cases": {
           "type": "array",
