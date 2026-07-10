@@ -39,6 +39,14 @@ export interface PersonaSwitchEvent {
   to: string;
 }
 
+/** Persisted exclusive owner of one conversation's in-flight foreground model projection. */
+export interface ForegroundModelProjectionOwner {
+  runId: string;
+  requestMessageId: string;
+  assistantMessageId: string;
+  controlEpoch: number;
+}
+
 export interface Conversation {
   id: string;
   title: string;
@@ -58,6 +66,7 @@ export interface Conversation {
   agentRuns?: AgentRun[];
   activeAgentRunId?: string;
   workspaceTargetId?: string;
+  foregroundModelProjectionOwner?: ForegroundModelProjectionOwner;
 
   parentConversationId?: string;
   isSideThread?: boolean;

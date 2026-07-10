@@ -6,6 +6,7 @@ import { normalizePersistedAgentRun } from './agentRuns/shared';
 import { sanitizeConversationForPersistence } from './chatPersistence';
 import { capMessages } from './chatStoreHelpers';
 import type { ChatState } from './chatStoreTypes';
+import { isValidForegroundModelProjectionOwner } from '../utils/foregroundModelProjectionOwner';
 
 function normalizePersistedMessages(messages: Message[] | undefined): Message[] {
   return normalizeLegacyAssistantMessages(messages ?? []);
@@ -23,6 +24,11 @@ function normalizePersistedConversation(conversation: Conversation): Conversatio
 
   const rawMode = (conversation as { mode?: string }).mode;
   const normalizedMode = rawMode === 'direct' ? 'chitchat' : conversation.mode;
+  const foregroundModelProjectionOwner = isValidForegroundModelProjectionOwner(
+    conversation.foregroundModelProjectionOwner,
+  )
+    ? conversation.foregroundModelProjectionOwner
+    : undefined;
 
   return sanitizeConversationForPersistence({
     ...conversation,
@@ -30,6 +36,7 @@ function normalizePersistedConversation(conversation: Conversation): Conversatio
     logs: conversation.logs ?? [],
     agentRuns: normalizedRuns,
     activeAgentRunId,
+    foregroundModelProjectionOwner,
     ...(normalizedMode !== undefined ? { mode: normalizedMode as ConversationMode } : {}),
   });
 }
