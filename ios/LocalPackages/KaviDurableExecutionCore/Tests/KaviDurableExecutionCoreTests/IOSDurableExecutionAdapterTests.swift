@@ -24,6 +24,47 @@ final class IOSDurableExecutionAdapterTests: XCTestCase {
     XCTAssertEqual(scheduler.submitted.count, 1)
   }
 
+  func testTerminalSchedulerPersistsEvidenceWithoutReportingScheduled() {
+    let store = InMemoryDurableStore()
+    let scheduler = FakeDurableScheduler()
+    scheduler.submitResult = .terminal
+    let adapter = IOSDurableExecutionAdapter(store: store, scheduler: scheduler)
+
+    guard
+      case .rejected(let directReason) = adapter.enqueue(
+        durableRequest(),
+        capabilities: foregroundIOS26()
+      )
+    else {
+      return XCTFail("Terminal scheduler result must not report an accepted schedule")
+    }
+    XCTAssertEqual(directReason, .platformTerminatedWithoutReceipt)
+    XCTAssertEqual(store.records["run-1"]?.state, .blocked)
+    XCTAssertEqual(
+      store.records["run-1"]?.failureReason,
+      .platformTerminatedWithoutReceipt
+    )
+
+    scheduler.submitResult = .unavailable
+    guard
+      case .deferred = adapter.enqueue(
+        durableRequest(runId: "run-2"),
+        capabilities: foregroundIOS26()
+      )
+    else {
+      return XCTFail("Unavailable scheduler must retain the scheduling outbox")
+    }
+    scheduler.submitResult = .terminal
+    guard case .completed(let outcomes) = adapter.reconcileScheduling(limit: 10),
+      outcomes.count == 1,
+      case .rejected(let replayReason) = outcomes[0].result
+    else {
+      return XCTFail("Outbox replay must preserve terminal scheduling failure")
+    }
+    XCTAssertEqual(replayReason, .platformTerminatedWithoutReceipt)
+    XCTAssertEqual(store.records["run-2"]?.state, .blocked)
+  }
+
   func testExactReplayIsNoOpAndConflictingIdentityIsClosed() {
     let store = InMemoryDurableStore()
     let scheduler = FakeDurableScheduler()

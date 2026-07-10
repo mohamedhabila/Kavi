@@ -543,15 +543,7 @@ public final class IOSDurableExecutionAdapter: @unchecked Sendable {
       case .unavailable:
         return .deferred(.schedulerUnavailable)
       case .terminal:
-        return write(
-          current: record,
-          next: record.next(
-            state: .blocked,
-            nextAttemptAtMillis: .some(nil),
-            failureReason: .some(.platformTerminatedWithoutReceipt),
-            updatedAtMillis: record.updatedAtMillis
-          )
-        )
+        return terminalizeScheduling(record)
       }
     case .submitted, .running, .retryWaiting, .cancelRequested, .cancelled, .completed, .expired,
       .blocked:
@@ -572,7 +564,7 @@ public final class IOSDurableExecutionAdapter: @unchecked Sendable {
       expectedRevision: current.revision,
       next: blocked
     ) {
-    case .stored: return .accepted(blocked)
+    case .stored: return .rejected(.platformTerminatedWithoutReceipt)
     case .conflict: return .deferred(.storeConflict)
     case .unavailable: return .deferred(.storeUnavailable)
     }

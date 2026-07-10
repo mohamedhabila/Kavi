@@ -305,6 +305,7 @@ public enum IOSDurableRejectionReason: String, Codable, Sendable {
   case invalidCheckpoint = "invalid_checkpoint"
   case staleAttempt = "stale_attempt"
   case continuedRetryRequiresUserAction = "continued_retry_requires_user_action"
+  case platformTerminatedWithoutReceipt = "platform_terminated_without_receipt"
 }
 
 public enum IOSDurableDeferReason: String, Codable, Sendable {
