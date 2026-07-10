@@ -281,7 +281,7 @@ describe('typed native actions', () => {
     expect(parsed.status).toBe('unknown');
   });
 
-  it('treats Android unknown SMS status as a successful composer handoff and normalizes attachment URIs', async () => {
+  it('keeps Android unknown SMS send status unverified and normalizes attachment URIs', async () => {
     const reactNative = jest.requireMock('react-native') as { Platform: { OS: string } };
     reactNative.Platform.OS = 'android';
     mockSmsSendAsync.mockResolvedValue({ result: 'unknown' });
@@ -296,7 +296,13 @@ describe('typed native actions', () => {
       }),
     );
 
-    expect(parsed.status).toBe('sent');
+    expect(parsed).toEqual(
+      expect.objectContaining({
+        status: 'unknown',
+        code: 'sms_compose_unknown',
+        summary: expect.stringMatching(/unverified/i),
+      }),
+    );
     expect(mockSmsSendAsync).toHaveBeenCalledWith(
       ['+12125550101'],
       'Hello',

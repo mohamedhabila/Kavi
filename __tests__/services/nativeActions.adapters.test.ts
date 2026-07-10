@@ -195,7 +195,11 @@ describe('native action adapters and helpers', () => {
 
     mockMailComposeAsync.mockResolvedValueOnce({ status: 'undetermined' });
     expect(await composeEmail({ recipients: ['jane@example.com'] })).toEqual(
-      expect.objectContaining({ status: 'sent', code: 'email_compose_completed' }),
+      expect.objectContaining({
+        status: 'unknown',
+        code: 'email_compose_unknown',
+        summary: expect.stringMatching(/unverified/i),
+      }),
     );
 
     mockMailIsAvailable.mockResolvedValueOnce(false);
@@ -271,7 +275,13 @@ describe('native action adapters and helpers', () => {
           { uri: 'file:///tmp/report.pdf', mimeType: 'application/pdf', filename: 'report.pdf' },
         ],
       }),
-    ).toEqual(expect.objectContaining({ status: 'sent', code: 'sms_compose_unknown' }));
+    ).toEqual(
+      expect.objectContaining({
+        status: 'unknown',
+        code: 'sms_compose_unknown',
+        summary: expect.stringMatching(/unverified/i),
+      }),
+    );
 
     expect(mockSmsSendAsync).toHaveBeenLastCalledWith(
       ['+12125550101'],

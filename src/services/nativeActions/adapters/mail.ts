@@ -54,16 +54,16 @@ export async function composeEmail(
         case MailComposer.MailComposerStatus.SENT:
           return makeActionResult(
             'sent',
-            'Email composer completed successfully.',
+            'Email composer reported the message as sent.',
             { rawStatus: composerResult.status },
             'email_compose_sent',
           );
         default:
           return makeActionResult(
-            'sent',
-            'Email composer completed successfully.',
+            'unknown',
+            'Email composer returned without confirming whether the message was sent. Send status is unverified.',
             { rawStatus: composerResult.status },
-            'email_compose_completed',
+            'email_compose_unknown',
           );
       }
     }

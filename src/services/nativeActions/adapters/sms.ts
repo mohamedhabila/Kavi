@@ -101,16 +101,16 @@ export async function composeSms(
       case 'sent':
         return makeActionResult(
           'sent',
-          'SMS composer completed successfully.',
+          'SMS composer reported the message as sent.',
           { rawResult: smsResult.result },
           'sms_compose_sent',
         );
       default:
         return makeActionResult(
-          Platform.OS === 'android' ? 'sent' : 'unknown',
+          'unknown',
           Platform.OS === 'android'
-            ? 'SMS composer opened successfully. Android does not report final send status.'
-            : 'SMS composer completed without a final delivery status.',
+            ? 'Android does not report final SMS send status. Sending is unverified.'
+            : 'SMS composer returned without a final send status. Sending is unverified.',
           { rawResult: smsResult.result, platformReportedUnknown: smsResult.result === 'unknown' },
           'sms_compose_unknown',
         );
