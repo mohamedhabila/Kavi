@@ -26,8 +26,6 @@ import { emitAppEvent } from './events/bus';
 import { isToolResultErrorLike } from '../utils/toolResultErrors';
 import { buildAssistantMessageMetadata } from '../utils/assistantMessageMetadata';
 import { unrefTimerIfSupported } from '../utils/timers';
-import { initSubAgentRegistry, listActiveSubAgents } from './agents/subAgent';
-import { repairTerminalAgentRunsMissingFinalResponses } from './agents/agentRunRepair';
 import { runMemoryMigrationTick, runMemoryBackgroundFlush } from './memory/lifecycle';
 import { initializeMemoryPolicyObservation } from './memory/policy';
 import { editWorkingBlock } from './memory/workingBlocks';
@@ -51,7 +49,7 @@ import {
   initializeDurableRecoveryLifecycle,
   reconcileDurableRecoveryLifecycle,
 } from './executionJournal/durableRecoveryLifecycle';
-import { recoverInterruptedForegroundModelExecutions } from './executionJournal/foregroundModelExecutionRecovery';
+import { recoverPersistedAgentState } from './startupRecovery';
 
 function shouldDeliverNotification(job: CronJob): boolean {
   const mode = job.delivery?.mode || 'both';
@@ -90,13 +88,6 @@ async function waitForSettingsHydration(timeoutMs = 3000): Promise<void> {
   );
 }
 
-async function waitForChatHydration(timeoutMs = 3000): Promise<void> {
-  await waitForStoreHydration(
-    useChatStore as typeof useChatStore & PersistHydratableStore,
-    timeoutMs,
-  );
-}
-
 async function waitForMemoryStoresHydration(): Promise<void> {
   await Promise.all([
     waitForStoreHydration(
@@ -113,25 +104,6 @@ async function runHydratedMemoryMaintenance(includeMigration: boolean): Promise<
   if (includeMigration) {
     await runMemoryMigrationTick();
   }
-}
-
-async function recoverPersistedAgentState(): Promise<void> {
-  await waitForChatHydration();
-
-  const chatState = useChatStore.getState();
-  await initSubAgentRegistry(chatState.conversations);
-  const activeSubAgents = listActiveSubAgents();
-  chatState.recoverInterruptedAgentRuns(activeSubAgents, {
-    timestamp: Date.now(),
-  });
-  try {
-    await recoverInterruptedForegroundModelExecutions();
-  } catch (error) {
-    console.warn('[startup] foreground model recovery failed:', error);
-  }
-  await repairTerminalAgentRunsMissingFinalResponses({
-    activeSubAgents,
-  });
 }
 
 async function reconnectPersistedMcpServers(): Promise<void> {
