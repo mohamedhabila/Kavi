@@ -9,3 +9,12 @@ export function requireExactDurableScopeId(value: unknown, code: string): string
   if (!isExactDurableScopeId(value)) throw new Error(code);
   return value;
 }
+
+export function resolveOptionalExactDurableScopeId(
+  value: string | null | undefined,
+  code: string,
+): string | undefined {
+  return value === null || value === undefined
+    ? undefined
+    : requireExactDurableScopeId(value, code);
+}

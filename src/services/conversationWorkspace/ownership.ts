@@ -1,14 +1,12 @@
 import type { Conversation } from '../../types/conversation';
 import type { SubAgentSnapshot } from '../../types/subAgent';
-import { requireExactDurableScopeId } from '../../utils/durableScopeIdentity';
+import {
+  requireExactDurableScopeId,
+  resolveOptionalExactDurableScopeId,
+} from '../../utils/durableScopeIdentity';
 
 type ConversationOwnershipLink = Pick<Conversation, 'id' | 'parentConversationId' | 'isSideThread'>;
 type SubAgentOwnershipLink = Pick<SubAgentSnapshot, 'sessionId' | 'parentConversationId'>;
-
-function optionalExactId(value: string | undefined | null, code: string): string | undefined {
-  if (value === null || value === undefined) return undefined;
-  return requireExactDurableScopeId(value, code);
-}
 
 export type ConversationWorkspaceTarget = {
   workspaceConversationId: string;
@@ -44,7 +42,7 @@ export function resolveConversationWorkspaceTarget(params: {
   while (!visitedIds.has(workspaceConversationId)) {
     visitedIds.add(workspaceConversationId);
 
-    const subAgentParentConversationId = optionalExactId(
+    const subAgentParentConversationId = resolveOptionalExactDurableScopeId(
       subAgentsBySessionId.get(workspaceConversationId)?.parentConversationId,
       'conversation_workspace_parent_id_invalid',
     );
@@ -55,7 +53,7 @@ export function resolveConversationWorkspaceTarget(params: {
 
     const conversation = conversationsById.get(workspaceConversationId);
     const sideThreadParentConversationId = conversation?.isSideThread
-      ? optionalExactId(
+      ? resolveOptionalExactDurableScopeId(
           conversation.parentConversationId,
           'conversation_workspace_parent_id_invalid',
         )

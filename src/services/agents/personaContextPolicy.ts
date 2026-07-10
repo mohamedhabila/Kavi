@@ -1,4 +1,5 @@
 import { SUPER_AGENT_PERSONA_ID } from './personas';
+import { requireExactDurableScopeId } from '../../utils/durableScopeIdentity';
 
 export type ContextAccessMode = 'chat' | 'agentic' | 'pilot';
 
@@ -85,7 +86,10 @@ export function resolvePersonaContextPolicy(
   personaId: string | undefined,
   mode: ContextAccessMode,
 ): PersonaContextPolicy {
-  const normalizedPersonaId = personaId?.trim() || 'default';
+  const normalizedPersonaId =
+    personaId === undefined
+      ? 'default'
+      : requireExactDurableScopeId(personaId, 'persona_context_id_invalid');
   const merged: PersonaContextPolicy = {
     ...BASE_POLICY,
     ...(POLICY_OVERRIDES[normalizedPersonaId] ?? {}),
