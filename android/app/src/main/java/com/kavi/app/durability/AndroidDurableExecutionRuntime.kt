@@ -14,16 +14,32 @@ internal class AndroidDurableExecutionRuntime private constructor(context: Conte
   val store = AndroidSqliteDurableExecutionStore(context)
   val scheduler = AndroidWorkManagerDurablePlatformScheduler(context)
   val adapter = AndroidDurableExecutionAdapter(store, scheduler)
+  val candidateWakeTracker = AndroidDurableCandidateWakeTracker()
+  private val headlessDispatcher = AndroidReactHeadlessRecoveryDispatcher(context)
   private val workerRunner = AndroidDurableWorkerRunner(
     store = store,
     adapter = adapter,
-    dispatcher = AndroidReactHeadlessRecoveryDispatcher(context),
+    dispatcher = headlessDispatcher,
+  )
+  private val candidateWakeRunner = AndroidDurableCandidateWakeRunner(
+    dispatcher = headlessDispatcher,
+    tracker = candidateWakeTracker,
   )
 
   suspend fun runWorker(
     platformWorkId: String,
     inputData: androidx.work.Data,
   ): AndroidDurableWorkerResult = workerRunner.run(platformWorkId, inputData)
+
+  suspend fun runCandidateWake(
+    actualWakeWorkId: String,
+    inputData: androidx.work.Data,
+    runAttemptCount: Int,
+  ): AndroidDurableWorkerResult = candidateWakeRunner.run(
+    actualWakeWorkId = actualWakeWorkId,
+    inputData = inputData,
+    runAttemptCount = runAttemptCount,
+  )
 
   fun reconcileOutboxes(limit: Int = DEFAULT_RECONCILIATION_LIMIT) =
     AndroidDurableOutboxReconciliation(

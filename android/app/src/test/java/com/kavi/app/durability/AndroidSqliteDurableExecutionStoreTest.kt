@@ -407,7 +407,7 @@ class AndroidSqliteDurableExecutionStoreTest {
       requestedAtMillis = 100,
     ),
     schedulerKind = AndroidDurableSchedulerKind.WORK_MANAGER_ONE_TIME,
-    uniqueWorkName = "$ANDROID_DURABLE_WORK_NAME_PREFIX$runId",
+    uniqueWorkName = "$ANDROID_DURABLE_WORK_NAME_PREFIX$runId.${"b".repeat(64)}",
     platformWorkId = platformWorkId,
     state = AndroidDurableExecutionState.SCHEDULING,
     attempt = 0,

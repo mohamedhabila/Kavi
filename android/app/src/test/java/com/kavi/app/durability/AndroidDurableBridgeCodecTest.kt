@@ -69,6 +69,26 @@ class AndroidDurableBridgeCodecTest {
     }
   }
 
+  @Test
+  fun `candidate acknowledgement identity and outcome are closed`() {
+    val workId = "00000000-0000-4000-8000-000000000081"
+    assertEquals(workId, AndroidDurableBridgeCodec.decodeWorkId(workId))
+    assertEquals("run-bridge", AndroidDurableBridgeCodec.decodeRunId("run-bridge"))
+    assertEquals(
+      AndroidDurableCandidateWakeOutcome.COMPLETED,
+      AndroidDurableBridgeCodec.decodeCandidateWakeOutcome("completed"),
+    )
+    assertThrows(AndroidDurableBridgeContractException::class.java) {
+      AndroidDurableBridgeCodec.decodeWorkId("AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA")
+    }
+    assertThrows(AndroidDurableBridgeContractException::class.java) {
+      AndroidDurableBridgeCodec.decodeRunId("run\nbridge")
+    }
+    assertThrows(AndroidDurableBridgeContractException::class.java) {
+      AndroidDurableBridgeCodec.decodeCandidateWakeOutcome("success")
+    }
+  }
+
   private fun assertContractFailure(map: JavaOnlyMap) {
     assertThrows(AndroidDurableBridgeContractException::class.java) {
       AndroidDurableBridgeCodec.decodeRequest(map)

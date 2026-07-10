@@ -27,6 +27,7 @@ internal class KaviDurableExecutionModule(
   override fun getConstants(): Map<String, Any> = mapOf(
     "bridgeSchema" to ANDROID_DURABLE_BRIDGE_SCHEMA,
     "headlessTaskKey" to ANDROID_DURABLE_HEADLESS_TASK_KEY,
+    "candidateTaskKey" to ANDROID_DURABLE_CANDIDATE_TASK_KEY,
   )
 
   @ReactMethod
@@ -155,6 +156,32 @@ internal class KaviDurableExecutionModule(
     AndroidDurableBridgeCodec.encodeReconciliation(runtime.reconcileOutboxes(exactLimit))
   }
 
+  @ReactMethod
+  fun acknowledgeCandidateWake(
+    wakeWorkId: String,
+    predecessorWorkId: String,
+    runId: String,
+    outcome: String,
+    promise: Promise,
+  ) = decodeAndSubmit(
+    promise = promise,
+    decode = {
+      CandidateWakeAcknowledgement(
+        wakeWorkId = AndroidDurableBridgeCodec.decodeWorkId(wakeWorkId),
+        predecessorWorkId = AndroidDurableBridgeCodec.decodeWorkId(predecessorWorkId),
+        runId = AndroidDurableBridgeCodec.decodeRunId(runId),
+        outcome = AndroidDurableBridgeCodec.decodeCandidateWakeOutcome(outcome),
+      )
+    },
+  ) { acknowledgement ->
+    runtime.candidateWakeTracker.acknowledge(
+      wakeWorkId = acknowledgement.wakeWorkId,
+      predecessorWorkId = acknowledgement.predecessorWorkId,
+      runId = acknowledgement.runId,
+      outcome = acknowledgement.outcome,
+    )
+  }
+
   override fun invalidate() {
     executor.shutdownNow()
     super.invalidate()
@@ -198,6 +225,13 @@ internal class KaviDurableExecutionModule(
     val pointer: AndroidDurableExecutionAttemptPointer,
     val failureReason: AndroidDurableFailureReason,
     val updatedAtMillis: Long,
+  )
+
+  private data class CandidateWakeAcknowledgement(
+    val wakeWorkId: String,
+    val predecessorWorkId: String,
+    val runId: String,
+    val outcome: AndroidDurableCandidateWakeOutcome,
   )
 
   private companion object {

@@ -16,7 +16,7 @@ class AndroidDurableExecutionPolicyTest {
     assertEquals(
       AndroidDurableExecutionDecision.Supported(
         schedulerKind = AndroidDurableSchedulerKind.WORK_MANAGER_ONE_TIME,
-        uniqueWorkName = "${ANDROID_DURABLE_WORK_NAME_PREFIX}run-1",
+        uniqueWorkName = "${ANDROID_DURABLE_WORK_NAME_PREFIX}run-1.${"b".repeat(64)}",
         requiresFreshRecoveryQuery = true,
         requiresFreshAuthorityAndFence = true,
       ),

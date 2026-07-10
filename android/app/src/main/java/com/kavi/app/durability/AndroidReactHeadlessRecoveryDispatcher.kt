@@ -22,11 +22,26 @@ internal const val ANDROID_DURABLE_HEADLESS_PAYLOAD_SCHEMA = 1
 /** Starts the existing ReactHost directly; WorkManager already owns wake and process lifetime. */
 internal class AndroidReactHeadlessRecoveryDispatcher(
   context: Context,
-) : AndroidDurableHeadlessDispatcher {
+) : AndroidDurableHeadlessDispatcher, AndroidDurableCandidateHeadlessDispatcher {
   private val application = context.applicationContext as? ReactApplication
 
   override suspend fun dispatch(
     payload: AndroidDurableHeadlessPayload,
+  ): AndroidDurableHeadlessDispatchResult = dispatchTask(
+    recoveryTaskConfig(payload),
+    HEADLESS_TASK_TIMEOUT_MILLIS + TASK_FINISH_GRACE_MILLIS,
+  )
+
+  override suspend fun dispatchCandidateWake(
+    payload: AndroidDurableCandidateHeadlessPayload,
+  ): AndroidDurableHeadlessDispatchResult = dispatchTask(
+    candidateTaskConfig(payload),
+    CANDIDATE_HEADLESS_TASK_TIMEOUT_MILLIS + TASK_FINISH_GRACE_MILLIS,
+  )
+
+  private suspend fun dispatchTask(
+    config: HeadlessJsTaskConfig,
+    awaitTimeoutMillis: Long,
   ): AndroidDurableHeadlessDispatchResult {
     val reactApplication = application ?: return AndroidDurableHeadlessDispatchResult.UNAVAILABLE
     val reactHost = reactApplication.reactHost
@@ -58,13 +73,13 @@ internal class AndroidReactHeadlessRecoveryDispatcher(
     return try {
       withContext(Dispatchers.Main.immediate) {
         taskContext.addTaskEventListener(listener)
-        val taskId = taskContext.startTask(taskConfig(payload))
+        val taskId = taskContext.startTask(config)
         expectedTaskId.set(taskId)
         if (earlyFinishes.remove(taskId)) {
           finished.complete(Unit)
         }
       }
-      if (withTimeoutOrNull(HEADLESS_AWAIT_TIMEOUT_MILLIS) { finished.await() } != null) {
+      if (withTimeoutOrNull(awaitTimeoutMillis) { finished.await() } != null) {
         AndroidDurableHeadlessDispatchResult.FINISHED
       } else {
         AndroidDurableHeadlessDispatchResult.TIMED_OUT
@@ -80,7 +95,7 @@ internal class AndroidReactHeadlessRecoveryDispatcher(
     }
   }
 
-  private fun taskConfig(payload: AndroidDurableHeadlessPayload): HeadlessJsTaskConfig {
+  private fun recoveryTaskConfig(payload: AndroidDurableHeadlessPayload): HeadlessJsTaskConfig {
     val identity = payload.work.identity
     val data = Arguments.createMap().apply {
       putInt("schema", ANDROID_DURABLE_HEADLESS_PAYLOAD_SCHEMA)
@@ -101,10 +116,28 @@ internal class AndroidReactHeadlessRecoveryDispatcher(
     )
   }
 
+  private fun candidateTaskConfig(
+    payload: AndroidDurableCandidateHeadlessPayload,
+  ): HeadlessJsTaskConfig {
+    val data = Arguments.createMap().apply {
+      putInt("schema", ANDROID_DURABLE_HEADLESS_PAYLOAD_SCHEMA)
+      putString("wakeWorkId", payload.wakeWorkId)
+      putString("predecessorWorkId", payload.predecessorWorkId)
+      putString("runId", payload.runId)
+    }
+    return HeadlessJsTaskConfig(
+      ANDROID_DURABLE_CANDIDATE_TASK_KEY,
+      data,
+      CANDIDATE_HEADLESS_TASK_TIMEOUT_MILLIS,
+      true,
+    )
+  }
+
   private companion object {
     const val NO_TASK_ID = -1
     const val REACT_START_TIMEOUT_SECONDS = 60L
     const val HEADLESS_TASK_TIMEOUT_MILLIS = 8 * 60 * 1_000L
-    const val HEADLESS_AWAIT_TIMEOUT_MILLIS = HEADLESS_TASK_TIMEOUT_MILLIS + 5_000L
+    const val CANDIDATE_HEADLESS_TASK_TIMEOUT_MILLIS = 2 * 60 * 1_000L
+    const val TASK_FINISH_GRACE_MILLIS = 5_000L
   }
 }

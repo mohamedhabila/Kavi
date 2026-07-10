@@ -140,7 +140,12 @@ internal class AndroidDurableWorkerRunner(
     AndroidDurableExecutionState.COMPLETED,
     AndroidDurableExecutionState.CANCELLED,
     -> AndroidDurableWorkerResult.SUCCESS
-    AndroidDurableExecutionState.BLOCKED -> AndroidDurableWorkerResult.FAILURE
+    AndroidDurableExecutionState.BLOCKED ->
+      if (record.failureReason == AndroidDurableFailureReason.GENERATION_CHANGED) {
+        AndroidDurableWorkerResult.SUCCESS
+      } else {
+        AndroidDurableWorkerResult.FAILURE
+      }
     else -> null
   }
 

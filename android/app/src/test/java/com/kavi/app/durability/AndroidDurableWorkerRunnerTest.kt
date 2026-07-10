@@ -43,6 +43,31 @@ class AndroidDurableWorkerRunnerTest {
   }
 
   @Test
+  fun `superseded generation completes its platform chain for a fresh candidate scan`() =
+    runBlocking {
+      val fixture = fixture()
+      val enqueued = fixture.enqueue()
+      val runner = fixture.runner { payload ->
+        fixture.adapter.block(
+          pointer = AndroidDurableExecutionAttemptPointer(
+            payload.work.pointer(),
+            payload.attempt,
+          ),
+          failureReason = AndroidDurableFailureReason.GENERATION_CHANGED,
+          updatedAtMillis = 201,
+        )
+        AndroidDurableHeadlessDispatchResult.FINISHED
+      }
+
+      assertEquals(AndroidDurableWorkerResult.SUCCESS, runner.run(WORK_ID, input(enqueued)))
+      assertEquals(AndroidDurableExecutionState.BLOCKED, fixture.store.record?.state)
+      assertEquals(
+        AndroidDurableFailureReason.GENERATION_CHANGED,
+        fixture.store.record?.failureReason,
+      )
+    }
+
+  @Test
   fun `transient dispatcher unavailability persists retry before asking WorkManager`() =
     runBlocking {
       val fixture = fixture()

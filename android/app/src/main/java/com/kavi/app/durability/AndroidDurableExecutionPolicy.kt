@@ -44,7 +44,12 @@ internal object AndroidDurableExecutionPolicy {
 
     return AndroidDurableExecutionDecision.Supported(
       schedulerKind = AndroidDurableSchedulerKind.WORK_MANAGER_ONE_TIME,
-      uniqueWorkName = ANDROID_DURABLE_WORK_NAME_PREFIX + request.identity.runId,
+      uniqueWorkName = buildString {
+        append(ANDROID_DURABLE_WORK_NAME_PREFIX)
+        append(request.identity.runId)
+        append('.')
+        append(request.identity.commandDigest)
+      },
       requiresFreshRecoveryQuery = true,
       requiresFreshAuthorityAndFence = true,
     )

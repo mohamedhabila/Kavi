@@ -42,8 +42,11 @@ internal class AndroidWorkManagerDurablePlatformScheduler(
       }
 
       val request = buildWorkRequest(spec, clock())
+      val candidateWake = buildCandidateWakeRequest(spec)
       workManager
-        .enqueueUniqueWork(spec.uniqueWorkName, ExistingWorkPolicy.KEEP, request)
+        .beginUniqueWork(spec.uniqueWorkName, ExistingWorkPolicy.KEEP, request)
+        .then(candidateWake)
+        .enqueue()
         .result
         .get(PLATFORM_TIMEOUT_SECONDS, TimeUnit.SECONDS)
       val enqueued = workManager
@@ -126,6 +129,33 @@ internal class AndroidWorkManagerDurablePlatformScheduler(
       .build()
   }
 
+  internal fun buildCandidateWakeRequest(spec: AndroidDurableWorkSpec): OneTimeWorkRequest {
+    val wakeWorkId = UUID.randomUUID()
+    val input = Data.Builder()
+      .putInt(
+        ANDROID_DURABLE_CANDIDATE_INPUT_SCHEMA_KEY,
+        ANDROID_DURABLE_CANDIDATE_INPUT_SCHEMA,
+      )
+      .putString(ANDROID_DURABLE_CANDIDATE_INPUT_WAKE_ID_KEY, wakeWorkId.toString())
+      .putString(
+        ANDROID_DURABLE_CANDIDATE_INPUT_PREDECESSOR_ID_KEY,
+        spec.platformWorkId,
+      )
+      .putString(ANDROID_DURABLE_CANDIDATE_INPUT_RUN_ID_KEY, spec.request.identity.runId)
+      .build()
+    return OneTimeWorkRequestBuilder<AndroidDurableCandidateWakeWorker>()
+      .setId(wakeWorkId)
+      .setInputData(input)
+      .setBackoffCriteria(
+        BackoffPolicy.EXPONENTIAL,
+        CANDIDATE_INITIAL_BACKOFF_MILLIS,
+        TimeUnit.MILLISECONDS,
+      )
+      .addTag(ANDROID_DURABLE_CANDIDATE_WORK_TAG)
+      .addTag(spec.uniqueWorkName)
+      .build()
+  }
+
   private fun classifyExisting(
     info: WorkInfo,
     spec: AndroidDurableWorkSpec,
@@ -158,5 +188,6 @@ internal class AndroidWorkManagerDurablePlatformScheduler(
 
   private companion object {
     const val PLATFORM_TIMEOUT_SECONDS = 10L
+    const val CANDIDATE_INITIAL_BACKOFF_MILLIS = 30_000L
   }
 }

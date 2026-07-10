@@ -80,6 +80,39 @@ class AndroidDurableWorkManagerSchedulerTest {
   }
 
   @Test
+  fun `candidate continuation carries only the exact predecessor and run identity`() {
+    val spec = spec()
+
+    val request = scheduler.buildCandidateWakeRequest(spec)
+    val parsed = AndroidDurableCandidateWakeInput.parse(
+      request.workSpec.input,
+      request.id.toString(),
+    )
+
+    assertEquals(
+      AndroidDurableCandidateWakeInput(
+        wakeWorkId = request.id.toString(),
+        predecessorWorkId = WORK_ID,
+        runId = "run-work-manager",
+      ),
+      parsed,
+    )
+    assertEquals(
+      setOf(
+        AndroidDurableCandidateWakeWorker::class.java.name,
+        ANDROID_DURABLE_CANDIDATE_WORK_TAG,
+        UNIQUE_WORK_NAME,
+      ),
+      request.tags,
+    )
+    assertFalse(request.workSpec.isPeriodic)
+    assertFalse(request.workSpec.expedited)
+    assertEquals(BackoffPolicy.EXPONENTIAL, request.workSpec.backoffPolicy)
+    assertEquals(30_000L, request.workSpec.backoffDelayDuration)
+    assertEquals(NetworkType.NOT_REQUIRED, request.workSpec.constraints.requiredNetworkType)
+  }
+
+  @Test
   fun `exact enqueue deduplicates and rejects another active work id`() {
     val exact = spec()
 
@@ -91,8 +124,9 @@ class AndroidDurableWorkManagerSchedulerTest {
     )
 
     val infos = workManager.getWorkInfosForUniqueWork(UNIQUE_WORK_NAME).get()
-    assertEquals(1, infos.size)
-    assertEquals(UUID.fromString(WORK_ID), infos.single().id)
+    assertEquals(2, infos.size)
+    assertTrue(infos.any { it.id == UUID.fromString(WORK_ID) })
+    assertTrue(infos.any { ANDROID_DURABLE_CANDIDATE_WORK_TAG in it.tags })
   }
 
   @Test
@@ -185,7 +219,8 @@ class AndroidDurableWorkManagerSchedulerTest {
 
   private companion object {
     const val NOW_MILLIS = 1_000L
-    const val UNIQUE_WORK_NAME = "${ANDROID_DURABLE_WORK_NAME_PREFIX}run-work-manager"
+    val UNIQUE_WORK_NAME =
+      "${ANDROID_DURABLE_WORK_NAME_PREFIX}run-work-manager.${"b".repeat(64)}"
     const val WORK_ID = "00000000-0000-4000-8000-000000000011"
     const val OTHER_WORK_ID = "00000000-0000-4000-8000-000000000012"
   }

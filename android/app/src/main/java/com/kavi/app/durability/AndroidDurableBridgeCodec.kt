@@ -6,6 +6,7 @@ import com.facebook.react.bridge.ReadableType
 import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.WritableMap
 import java.util.Locale
+import java.util.UUID
 
 internal const val ANDROID_DURABLE_BRIDGE_SCHEMA = 1
 private const val JS_MAX_SAFE_INTEGER = 9_007_199_254_740_991L
@@ -143,11 +144,37 @@ internal object AndroidDurableBridgeCodec {
   }
 
   fun decodeRunId(value: String): String {
-    if (value.isEmpty() || value.length > 200 || value != value.trim()) {
+    if (
+      value.isEmpty() ||
+      value.length > 200 ||
+      value != value.trim() ||
+      value.any { it.code < 0x20 || it.code == 0x7f }
+    ) {
       throw AndroidDurableBridgeContractException("runId is invalid")
     }
     return value
   }
+
+  fun decodeWorkId(value: String): String {
+    val parsed = try {
+      UUID.fromString(value)
+    } catch (_: IllegalArgumentException) {
+      null
+    }
+    if (parsed?.toString() != value) {
+      throw AndroidDurableBridgeContractException("workId is invalid")
+    }
+    return value
+  }
+
+  fun decodeCandidateWakeOutcome(value: String): AndroidDurableCandidateWakeOutcome =
+    when (value) {
+      "completed" -> AndroidDurableCandidateWakeOutcome.COMPLETED
+      "retry" -> AndroidDurableCandidateWakeOutcome.RETRY
+      else -> throw AndroidDurableBridgeContractException(
+        "candidate wake outcome is unsupported",
+      )
+    }
 
   fun decodeRetryReason(value: String): AndroidDurableFailureReason = when (value) {
     "transient_unavailable" -> AndroidDurableFailureReason.TRANSIENT_UNAVAILABLE
