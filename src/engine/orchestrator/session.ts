@@ -16,6 +16,7 @@ import {
   resolveCodeOwnedMemoryPersonaId,
 } from '../../services/memory/memoryScopeIdentity';
 import { buildRuntimeRequestDecisionToolAuthority } from './requestDecisionAuthority';
+import { createMemoryAttributedOrchestratorCallbacks } from './memoryRetrievalAttribution';
 
 const logger = createLogger('Orchestrator');
 
@@ -105,9 +106,13 @@ export async function runOrchestratorGraphSession(params: {
       personaId,
     }),
   });
+  const graphCallbacks = createMemoryAttributedOrchestratorCallbacks({
+    callbacks,
+    livingMemory,
+  });
 
   const graph = createOrchestratorGraphBindings({
-    callbacks,
+    callbacks: graphCallbacks,
     conversationId,
     initialMessages: workingMessages,
     initialSnapshot: options.initialAgentControlGraphState,
@@ -135,7 +140,7 @@ export async function runOrchestratorGraphSession(params: {
       allProviders,
       allTools,
       agentRunId: options.agentRunId,
-      callbacks,
+      callbacks: graphCallbacks,
       compactionEngine,
       conversationId,
       disableTooling: options.disableTooling,

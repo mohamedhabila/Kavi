@@ -5,6 +5,12 @@ import {
   Message,
 } from '../types/message';
 
+const MEMORY_RETRIEVAL_EVENT_ID_PATTERN = /^retrieval_event_[A-Za-z0-9][A-Za-z0-9._:-]{0,111}$/u;
+
+export function isMemoryRetrievalEventId(value: unknown): value is string {
+  return typeof value === 'string' && MEMORY_RETRIEVAL_EVENT_ID_PATTERN.test(value);
+}
+
 export function buildAssistantMessageMetadata(
   kind: AssistantMessageKind,
   completion?: AssistantCompletionMetadata,
@@ -14,6 +20,20 @@ export function buildAssistantMessageMetadata(
     completionStatus: completion?.completionStatus ?? 'complete',
     ...(completion?.finishReason ? { finishReason: completion.finishReason } : {}),
     ...(completion?.terminalReason ? { terminalReason: completion.terminalReason } : {}),
+  };
+}
+
+export function mergeAssistantMessageMetadata(
+  current: AssistantMessageMetadata | undefined,
+  next: AssistantMessageMetadata | undefined,
+): AssistantMessageMetadata | undefined {
+  if (!next || next.memoryRetrievalEventId || !current?.memoryRetrievalEventId) {
+    return next;
+  }
+
+  return {
+    ...next,
+    memoryRetrievalEventId: current.memoryRetrievalEventId,
   };
 }
 

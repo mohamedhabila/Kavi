@@ -53,6 +53,8 @@ export type AssistantMessageKind = 'intermediate' | 'final';
 
 export interface AssistantMessageMetadata extends AssistantCompletionMetadata {
   kind: AssistantMessageKind;
+  /** Exact code-owned retrieval event that supplied selected memory to this final response. */
+  memoryRetrievalEventId?: string;
 }
 
 export interface SubAgentMessageEvent {

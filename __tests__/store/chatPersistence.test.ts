@@ -37,6 +37,42 @@ function makePersistedEffectReceipt(
 }
 
 describe('chatPersistence', () => {
+  it('persists only bounded code-owned memory retrieval attribution', () => {
+    const valid = makeConversation({
+      messages: [
+        makeMessage(1, {
+          role: 'assistant',
+          assistantMetadata: {
+            kind: 'final',
+            completionStatus: 'complete',
+            memoryRetrievalEventId: 'retrieval_event_m123_1_abc',
+          },
+        }),
+      ],
+    });
+    const invalid = makeConversation({
+      id: 'invalid-conversation',
+      messages: [
+        makeMessage(2, {
+          role: 'assistant',
+          assistantMetadata: {
+            kind: 'final',
+            completionStatus: 'complete',
+            memoryRetrievalEventId: '../private-query',
+          },
+        }),
+      ],
+    });
+
+    expect(
+      sanitizeConversationForPersistence(valid).messages[0].assistantMetadata
+        ?.memoryRetrievalEventId,
+    ).toBe('retrieval_event_m123_1_abc');
+    expect(
+      sanitizeConversationForPersistence(invalid).messages[0].assistantMetadata,
+    ).not.toHaveProperty('memoryRetrievalEventId');
+  });
+
   it('strips attachment base64 blobs from persisted conversations', () => {
     const conversation = makeConversation({
       messages: [

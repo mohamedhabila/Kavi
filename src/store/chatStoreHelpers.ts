@@ -43,7 +43,8 @@ export function areAssistantMessageMetadataEqual(
     left.kind === right.kind &&
     left.completionStatus === right.completionStatus &&
     left.finishReason === right.finishReason &&
-    left.terminalReason === right.terminalReason
+    left.terminalReason === right.terminalReason &&
+    left.memoryRetrievalEventId === right.memoryRetrievalEventId
   );
 }
 

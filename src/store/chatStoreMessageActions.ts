@@ -4,7 +4,10 @@ import { generateId } from '../utils/id';
 import { generateConversationTitle, isPlaceholderTitle } from '../utils/conversation';
 import { findMatchingToolCallIndexWithinMessage } from '../utils/toolCallMatching';
 import { extractToolCallAttachments, mergeAttachmentLists } from '../utils/messageAttachments';
-import { normalizeLegacyAssistantMessages } from '../utils/assistantMessageMetadata';
+import {
+  mergeAssistantMessageMetadata,
+  normalizeLegacyAssistantMessages,
+} from '../utils/assistantMessageMetadata';
 import { requestChatStorePersistenceCheckpoint } from './chatStorePersistence';
 import {
   areAssistantMessageMetadataEqual,
@@ -147,10 +150,15 @@ export function createMessageStoreActions(
           state.conversations,
           conversationId,
           messageId,
-          (message) =>
-            areAssistantMessageMetadataEqual(message.assistantMetadata, assistantMetadata)
+          (message) => {
+            const nextMetadata = mergeAssistantMessageMetadata(
+              message.assistantMetadata,
+              assistantMetadata,
+            );
+            return areAssistantMessageMetadataEqual(message.assistantMetadata, nextMetadata)
               ? message
-              : { ...message, assistantMetadata },
+              : { ...message, assistantMetadata: nextMetadata };
+          },
         );
         return conversations ? { conversations } : state;
       }),

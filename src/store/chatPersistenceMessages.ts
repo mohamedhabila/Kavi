@@ -26,6 +26,20 @@ import {
 } from './chatPersistencePrimitives';
 import { compactPersistedToolContent } from './persistedToolContent';
 import { sanitizeToolEffectReceipts } from '../utils/toolEffectReceipt';
+import { isMemoryRetrievalEventId } from '../utils/assistantMessageMetadata';
+
+function sanitizeAssistantMetadata(
+  metadata: Message['assistantMetadata'],
+): Message['assistantMetadata'] {
+  if (!metadata) {
+    return undefined;
+  }
+  const { memoryRetrievalEventId, ...completionMetadata } = metadata;
+  return {
+    ...completionMetadata,
+    ...(isMemoryRetrievalEventId(memoryRetrievalEventId) ? { memoryRetrievalEventId } : {}),
+  };
+}
 
 function sanitizeProviderReplay(
   providerReplay: MessageProviderReplay | undefined,
@@ -177,6 +191,7 @@ export function sanitizeMessage(
   const providerReplay = options.preserveReplay
     ? sanitizeProviderReplay(message.providerReplay)
     : undefined;
+  const assistantMetadata = sanitizeAssistantMetadata(message.assistantMetadata);
 
   return {
     id: message.id,
@@ -207,7 +222,7 @@ export function sanitizeMessage(
       ? { reasoning: truncateText(message.reasoning, MAX_PERSISTED_REASONING_CHARS) }
       : {}),
     ...(providerReplay ? { providerReplay } : {}),
-    ...(message.assistantMetadata ? { assistantMetadata: { ...message.assistantMetadata } } : {}),
+    ...(assistantMetadata ? { assistantMetadata } : {}),
     ...(message.effectId ? { effectId: message.effectId } : {}),
     ...(message.subAgentEvent
       ? {
