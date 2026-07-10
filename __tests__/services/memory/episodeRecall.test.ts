@@ -13,8 +13,13 @@ import {
 } from '../../../src/services/memory/schema';
 import { recordEpisode } from '../../../src/services/memory/episodes/mutations';
 import {
+  EPISODE_PRESENTATION_MAX,
+  EPISODE_QUERY_CANDIDATE_MAX,
+  EPISODE_QUERY_CANDIDATE_MIN,
+  EPISODE_RECALL_LOCAL_P95_BUDGET_MS,
   recallEpisodesForQuery,
   recallRecentEpisodes,
+  type RecallEpisodesTiming,
 } from '../../../src/services/memory/episodeRecall';
 import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
 
@@ -73,7 +78,7 @@ describe('recallRecentEpisodes', () => {
     expect(episodes[1].summary).toBe('Episode 1');
   });
 
-  it('caps limit to 20', () => {
+  it('caps direct presentation at the named safe maximum', () => {
     const now = Date.now();
     for (let i = 0; i < 25; i++) {
       makeEpisode({
@@ -84,7 +89,7 @@ describe('recallRecentEpisodes', () => {
     }
 
     const episodes = recallRecentEpisodes({ threadId: 'conv-1', limit: 100 });
-    expect(episodes).toHaveLength(20);
+    expect(episodes).toHaveLength(EPISODE_PRESENTATION_MAX);
   });
 
   it('filters by threadId', () => {
@@ -205,5 +210,177 @@ describe('recallEpisodesForQuery', () => {
 
     expect(episodes).toHaveLength(1);
     expect(episodes[0].summary).toBe('Fraud status filter investigation');
+  });
+
+  it('uses recency as the deterministic tie-breaker after relevance and importance', () => {
+    makeEpisode({
+      summary: 'equal relevance older',
+      importance: 0.5,
+      endedAt: 1_000,
+      startedAt: 1_000,
+    });
+    makeEpisode({
+      summary: 'equal relevance newer',
+      importance: 0.5,
+      endedAt: 2_000,
+      startedAt: 2_000,
+    });
+
+    const episodes = recallEpisodesForQuery('equal relevance', {
+      threadId: 'conv-1',
+      limit: 2,
+    });
+
+    expect(episodes.map((episode) => episode.summary)).toEqual([
+      'equal relevance newer',
+      'equal relevance older',
+    ]);
+  });
+
+  it('admits locked relevant episodes across the real product candidate window', () => {
+    expect(EPISODE_QUERY_CANDIDATE_MIN).toBeGreaterThan(40);
+    const anchor = 100_000;
+    const relevantByPosition = new Map([
+      [4, { summary: 'locked recall early', importance: 0.2 }],
+      [31, { summary: 'locked recall middle', importance: 0.5 }],
+      [63, { summary: 'locked recall late', importance: 0.9 }],
+    ]);
+    for (let position = 0; position < EPISODE_QUERY_CANDIDATE_MIN; position += 1) {
+      const relevant = relevantByPosition.get(position);
+      makeEpisode({
+        summary: relevant?.summary ?? `unrelated distractor ${position}`,
+        importance: relevant?.importance ?? 0.1,
+        endedAt: anchor - position,
+        startedAt: anchor - position,
+      });
+    }
+
+    let timing: RecallEpisodesTiming | undefined;
+    const episodes = recallEpisodesForQuery('locked recall', {
+      threadId: 'conv-1',
+      limit: 4,
+      onTiming: (value) => {
+        timing = value;
+      },
+    });
+
+    expect(episodes.map((episode) => episode.summary)).toEqual([
+      'locked recall late',
+      'locked recall middle',
+      'locked recall early',
+    ]);
+    expect(timing).toMatchObject({
+      queryUnitCount: 2,
+      candidateLimit: EPISODE_QUERY_CANDIDATE_MIN,
+      candidateCount: EPISODE_QUERY_CANDIDATE_MIN,
+      resultLimit: 4,
+      resultCount: 3,
+    });
+  });
+
+  it('keeps query results presentation-bounded while candidate fetch reaches its ceiling', () => {
+    const anchor = 200_000;
+    for (let position = 0; position < 100; position += 1) {
+      makeEpisode({
+        summary: `bounded candidate ${position}`,
+        endedAt: anchor - position,
+        startedAt: anchor - position,
+      });
+    }
+
+    let timing: RecallEpisodesTiming | undefined;
+    const episodes = recallEpisodesForQuery('bounded candidate', {
+      threadId: 'conv-1',
+      limit: 100,
+      onTiming: (value) => {
+        timing = value;
+      },
+    });
+
+    expect(episodes).toHaveLength(EPISODE_PRESENTATION_MAX);
+    expect(timing).toMatchObject({
+      candidateLimit: EPISODE_QUERY_CANDIDATE_MAX,
+      candidateCount: EPISODE_QUERY_CANDIDATE_MAX,
+      resultLimit: EPISODE_PRESENTATION_MAX,
+      resultCount: EPISODE_PRESENTATION_MAX,
+    });
+  });
+
+  it('preserves query scope, deletion, task, and age filters', () => {
+    const now = Date.now();
+    makeEpisode({
+      threadId: 'other-thread',
+      taskId: 'task-1',
+      summary: 'filtered anchor wrong thread',
+      endedAt: now,
+      startedAt: now,
+    });
+    makeEpisode({
+      taskId: 'task-2',
+      summary: 'filtered anchor wrong task',
+      endedAt: now,
+      startedAt: now,
+    });
+    makeEpisode({
+      taskId: 'task-1',
+      summary: 'filtered anchor too old',
+      endedAt: now - 20_000,
+      startedAt: now - 20_000,
+    });
+    const deleted = makeEpisode({
+      taskId: 'task-1',
+      summary: 'filtered anchor deleted',
+      endedAt: now - 2,
+      startedAt: now - 2,
+    });
+    makeEpisode({
+      taskId: 'task-1',
+      summary: 'filtered anchor eligible',
+      endedAt: now - 1,
+      startedAt: now - 1,
+    });
+    const { getMemoryDb } = require('../../../src/services/memory/sqlite-store');
+    getMemoryDb().runSync(
+      'UPDATE memory_episodes SET deleted_at = ? WHERE id = ?',
+      now,
+      deleted.id,
+    );
+
+    const episodes = recallEpisodesForQuery('filtered anchor', {
+      threadId: 'conv-1',
+      taskId: 'task-1',
+      maxAgeMs: 10_000,
+      limit: 4,
+    });
+
+    expect(episodes.map((episode) => episode.summary)).toEqual(['filtered anchor eligible']);
+  });
+
+  it('keeps warmed local episode-query p95 within the recorded budget', () => {
+    const anchor = 300_000;
+    for (let position = 0; position < EPISODE_QUERY_CANDIDATE_MAX; position += 1) {
+      makeEpisode({
+        summary:
+          position === EPISODE_QUERY_CANDIDATE_MAX - 1
+            ? 'latency target episode'
+            : `latency distractor ${position}`,
+        endedAt: anchor - position,
+        startedAt: anchor - position,
+      });
+    }
+    const recall = () =>
+      recallEpisodesForQuery('latency target', { threadId: 'conv-1', limit: 20 });
+    for (let warmup = 0; warmup < 5; warmup += 1) recall();
+
+    const durations: number[] = [];
+    for (let sample = 0; sample < 40; sample += 1) {
+      const started = performance.now();
+      expect(recall()[0]?.summary).toBe('latency target episode');
+      durations.push(performance.now() - started);
+    }
+    durations.sort((left, right) => left - right);
+    const p95 = durations[Math.ceil(durations.length * 0.95) - 1]!;
+
+    expect(p95).toBeLessThanOrEqual(EPISODE_RECALL_LOCAL_P95_BUDGET_MS);
   });
 });

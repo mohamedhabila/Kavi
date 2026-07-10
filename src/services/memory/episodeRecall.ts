@@ -16,7 +16,28 @@ export interface RecallEpisodesOptions {
   taskId?: string;
   limit?: number;
   maxAgeMs?: number;
+  onTiming?: (timing: RecallEpisodesTiming) => void;
 }
+
+export interface RecallEpisodesTiming {
+  queryUnitCount: number;
+  candidateLimit: number;
+  candidateCount: number;
+  resultLimit: number;
+  resultCount: number;
+  fetchMs: number;
+  scoreMs: number;
+  sortMs: number;
+  totalMs: number;
+}
+
+export const EPISODE_PRESENTATION_MAX = 20;
+export const EPISODE_QUERY_CANDIDATE_MIN = 64;
+export const EPISODE_QUERY_CANDIDATE_MAX = 80;
+export const EPISODE_RECALL_LOCAL_P95_BUDGET_MS = 100;
+
+const EPISODE_PRESENTATION_DEFAULT = 6;
+const EPISODE_QUERY_CANDIDATE_MULTIPLIER = 8;
 
 const WORD_LIKE_SEQUENCE_PATTERN = /[\p{L}\p{M}\p{N}]+/gu;
 
@@ -42,7 +63,24 @@ function lexicalOverlap(query: Set<string>, haystack: string): number {
   return hits / query.size;
 }
 
-export function recallRecentEpisodes(options: RecallEpisodesOptions = {}): MemoryEpisode[] {
+function presentationLimit(requestedLimit: number | undefined): number {
+  return Math.max(
+    1,
+    Math.min(requestedLimit ?? EPISODE_PRESENTATION_DEFAULT, EPISODE_PRESENTATION_MAX),
+  );
+}
+
+function queryCandidateLimit(resultLimit: number): number {
+  return Math.max(
+    EPISODE_QUERY_CANDIDATE_MIN,
+    Math.min(resultLimit * EPISODE_QUERY_CANDIDATE_MULTIPLIER, EPISODE_QUERY_CANDIDATE_MAX),
+  );
+}
+
+function fetchRecentEpisodeCandidates(
+  options: RecallEpisodesOptions,
+  limit: number,
+): MemoryEpisode[] {
   ensureFactSchema();
   const clauses: string[] = ['deleted_at IS NULL'];
   const params: Array<string | number> = [];
@@ -65,13 +103,12 @@ export function recallRecentEpisodes(options: RecallEpisodesOptions = {}): Memor
     params.push(Date.now() - options.maxAgeMs);
   }
 
-  const limit = Math.max(1, Math.min(options.limit ?? 6, 20));
   const where = clauses.join(' AND ');
 
   const rows = getMemoryDb().getAllSync<EpisodeRow>(
     `SELECT * FROM memory_episodes
        WHERE ${where}
-       ORDER BY ended_at DESC
+       ORDER BY ended_at DESC, id ASC
        LIMIT ${limit}`,
     ...params,
   );
@@ -79,16 +116,41 @@ export function recallRecentEpisodes(options: RecallEpisodesOptions = {}): Memor
   return rows.map(rowToEpisode);
 }
 
+export function recallRecentEpisodes(options: RecallEpisodesOptions = {}): MemoryEpisode[] {
+  const totalStarted = Date.now();
+  const limit = presentationLimit(options.limit);
+  const fetchStarted = Date.now();
+  const episodes = fetchRecentEpisodeCandidates(options, limit);
+  const fetchMs = Date.now() - fetchStarted;
+  options.onTiming?.({
+    queryUnitCount: 0,
+    candidateLimit: limit,
+    candidateCount: episodes.length,
+    resultLimit: limit,
+    resultCount: episodes.length,
+    fetchMs,
+    scoreMs: 0,
+    sortMs: 0,
+    totalMs: Date.now() - totalStarted,
+  });
+  return episodes;
+}
+
 export function recallEpisodesForQuery(
   query: string,
   options: RecallEpisodesOptions = {},
 ): MemoryEpisode[] {
+  const totalStarted = Date.now();
   const trimmed = query.trim();
   if (!trimmed) return recallRecentEpisodes(options);
-  const candidateLimit = Math.max(20, Math.min((options.limit ?? 6) * 8, 80));
-  const candidates = recallRecentEpisodes({ ...options, limit: candidateLimit });
+  const resultLimit = presentationLimit(options.limit);
+  const candidateLimit = queryCandidateLimit(resultLimit);
+  const fetchStarted = Date.now();
+  const candidates = fetchRecentEpisodeCandidates(options, candidateLimit);
+  const fetchMs = Date.now() - fetchStarted;
   const queryUnits = lexicalUnits(trimmed);
-  return candidates
+  const scoreStarted = Date.now();
+  const scored = candidates
     .map((episode) => ({
       episode,
       score: lexicalOverlap(
@@ -96,14 +158,31 @@ export function recallEpisodesForQuery(
         `${episode.summary} ${episode.entities.join(' ')} ${episode.toolNames.join(' ')}`,
       ),
     }))
-    .filter((entry) => entry.score > 0)
-    .sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      if (b.episode.importance !== a.episode.importance) {
-        return b.episode.importance - a.episode.importance;
-      }
+    .filter((entry) => entry.score > 0);
+  const scoreMs = Date.now() - scoreStarted;
+  const sortStarted = Date.now();
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    if (b.episode.importance !== a.episode.importance) {
+      return b.episode.importance - a.episode.importance;
+    }
+    if (b.episode.endedAt !== a.episode.endedAt) {
       return b.episode.endedAt - a.episode.endedAt;
-    })
-    .slice(0, Math.max(1, Math.min(options.limit ?? 6, 20)))
-    .map((entry) => entry.episode);
+    }
+    return a.episode.id.localeCompare(b.episode.id);
+  });
+  const sortMs = Date.now() - sortStarted;
+  const episodes = scored.slice(0, resultLimit).map((entry) => entry.episode);
+  options.onTiming?.({
+    queryUnitCount: queryUnits.size,
+    candidateLimit,
+    candidateCount: candidates.length,
+    resultLimit,
+    resultCount: episodes.length,
+    fetchMs,
+    scoreMs,
+    sortMs,
+    totalMs: Date.now() - totalStarted,
+  });
+  return episodes;
 }
