@@ -1,0 +1,210 @@
+{
+  "$schema": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/intent-frame.schema.json",
+  "kind": "intent_frame_evaluation_input",
+  "schemaVersion": "1.0.0",
+  "id": "synthetic-multilingual-intent-v1",
+  "frozenAt": "2026-07-10T10:00:00.000Z",
+  "evaluator": {
+    "kind": "deterministic_structural",
+    "implementationSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "rubricSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "minimumScorableCoverage": 0.8
+  },
+  "source": {
+    "candidateArtifactSha256": "f1deb0b572b75fabad801087a57a2b4688b557d35de326a63913aabd2d47edcc",
+    "goldLabelsSha256": "3ad66a7c5bac895b7a95cff1e715356557d3d174ccf6b7c6fd7e0b346bf3c8ba",
+    "goldLabelsAccess": "evaluator_only",
+    "appRuntimeAccess": false
+  },
+  "cases": [
+    {
+      "id": "calendar-en-001",
+      "language": "en",
+      "productArea": "mobile_native",
+      "requestSha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "candidate": {
+        "goal": ["create_calendar_event"],
+        "entities": ["calendar:work", "person:maya"],
+        "constraints": ["no_guest_invites"],
+        "preferences": ["default_calendar"],
+        "missingInformation": ["event_time"],
+        "requestedAction": "clarify",
+        "requestedMode": "clarify_before_routing",
+        "approvalRisk": "approval_required",
+        "temporalRequirements": ["date:tomorrow"],
+        "successCriteria": ["event_created"]
+      },
+      "gold": {
+        "goal": { "status": "scorable", "values": ["create_calendar_event"] },
+        "entities": {
+          "status": "scorable",
+          "values": ["calendar:work", "person:maya"]
+        },
+        "constraints": { "status": "scorable", "values": ["no_guest_invites"] },
+        "preferences": { "status": "scorable", "values": ["default_calendar"] },
+        "missingInformation": { "status": "scorable", "values": ["event_time"] },
+        "requestedAction": { "status": "scorable", "value": "clarify" },
+        "requestedMode": { "status": "scorable", "value": "clarify_before_routing" },
+        "approvalRisk": { "status": "scorable", "value": "approval_required" },
+        "temporalRequirements": { "status": "scorable", "values": ["date:tomorrow"] },
+        "successCriteria": { "status": "scorable", "values": ["event_created"] }
+      }
+    },
+    {
+      "id": "chat-ar-001",
+      "language": "ar",
+      "productArea": "chat",
+      "requestSha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "candidate": {
+        "goal": ["discuss_book"],
+        "entities": ["book:dune"],
+        "constraints": ["language:ar"],
+        "preferences": ["tone:casual"],
+        "missingInformation": ["none"],
+        "requestedAction": "converse",
+        "requestedMode": "either",
+        "approvalRisk": "none",
+        "temporalRequirements": ["none"],
+        "successCriteria": ["helpful_conversation"]
+      },
+      "gold": {
+        "goal": { "status": "scorable", "values": ["discuss_book"] },
+        "entities": { "status": "scorable", "values": ["book:dune"] },
+        "constraints": { "status": "scorable", "values": ["language:ar"] },
+        "preferences": { "status": "scorable", "values": ["tone:casual"] },
+        "missingInformation": { "status": "scorable", "values": ["none"] },
+        "requestedAction": { "status": "scorable", "value": "converse" },
+        "requestedMode": { "status": "scorable", "value": "chitchat" },
+        "approvalRisk": { "status": "scorable", "value": "none" },
+        "temporalRequirements": { "status": "scorable", "values": ["none"] },
+        "successCriteria": { "status": "scorable", "values": ["helpful_conversation"] }
+      }
+    },
+    {
+      "id": "memory-es-001",
+      "language": "es",
+      "productArea": "memory",
+      "requestSha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "candidate": {
+        "goal": ["remember_preference"],
+        "entities": ["preference:vegetarian"],
+        "constraints": ["scope:user"],
+        "preferences": ["none"],
+        "missingInformation": ["none"],
+        "requestedAction": "remember",
+        "requestedMode": "either",
+        "approvalRisk": "none",
+        "temporalRequirements": ["future_sessions"],
+        "successCriteria": ["memory_persisted"]
+      },
+      "gold": {
+        "goal": { "status": "scorable", "values": ["remember_preference"] },
+        "entities": { "status": "scorable", "values": ["preference:vegetarian"] },
+        "constraints": { "status": "scorable", "values": ["scope:user"] },
+        "preferences": { "status": "scorable", "values": ["none"] },
+        "missingInformation": { "status": "scorable", "values": ["none"] },
+        "requestedAction": { "status": "scorable", "value": "remember" },
+        "requestedMode": { "status": "scorable", "value": "either" },
+        "approvalRisk": { "status": "scorable", "value": "none" },
+        "temporalRequirements": { "status": "scorable", "values": ["future_sessions"] },
+        "successCriteria": { "status": "scorable", "values": ["memory_persisted"] }
+      }
+    },
+    {
+      "id": "message-ja-001",
+      "language": "ja",
+      "productArea": "agentic_workflow",
+      "requestSha256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "candidate": {
+        "goal": ["send_message"],
+        "entities": ["contact:tanaka"],
+        "constraints": ["channel:sms"],
+        "preferences": ["none"],
+        "missingInformation": ["none"],
+        "requestedAction": "execute",
+        "requestedMode": "agentic",
+        "approvalRisk": "approval_required",
+        "temporalRequirements": ["none"],
+        "successCriteria": ["message_sent_after_approval"]
+      },
+      "gold": {
+        "goal": { "status": "scorable", "values": ["send_message"] },
+        "entities": { "status": "scorable", "values": ["contact:tanaka"] },
+        "constraints": { "status": "scorable", "values": ["channel:sms"] },
+        "preferences": { "status": "scorable", "values": ["none"] },
+        "missingInformation": { "status": "scorable", "values": ["message_body"] },
+        "requestedAction": { "status": "scorable", "value": "clarify" },
+        "requestedMode": { "status": "scorable", "value": "clarify_before_routing" },
+        "approvalRisk": { "status": "scorable", "value": "approval_required" },
+        "temporalRequirements": { "status": "scorable", "values": ["none"] },
+        "successCriteria": {
+          "status": "scorable",
+          "values": ["message_sent_after_approval"]
+        }
+      }
+    },
+    {
+      "id": "research-de-001",
+      "language": "de",
+      "productArea": "long_task",
+      "requestSha256": "5555555555555555555555555555555555555555555555555555555555555555",
+      "candidate": {
+        "goal": ["research_trip"],
+        "entities": ["city:lisbon"],
+        "constraints": ["budget:low"],
+        "preferences": ["format:stepwise"],
+        "missingInformation": ["none"],
+        "requestedAction": "plan",
+        "requestedMode": "agentic",
+        "approvalRisk": "none",
+        "temporalRequirements": ["duration:week"],
+        "successCriteria": ["plan_complete"]
+      },
+      "gold": {
+        "goal": { "status": "scorable", "values": ["research_trip"] },
+        "entities": { "status": "scorable", "values": ["city:lisbon"] },
+        "constraints": { "status": "scorable", "values": ["budget:low"] },
+        "preferences": {
+          "status": "ambiguous",
+          "reason": "multiple_valid_interpretations"
+        },
+        "missingInformation": { "status": "scorable", "values": ["none"] },
+        "requestedAction": { "status": "scorable", "value": "plan" },
+        "requestedMode": { "status": "scorable", "value": "agentic" },
+        "approvalRisk": { "status": "scorable", "value": "none" },
+        "temporalRequirements": { "status": "scorable", "values": ["duration:week"] },
+        "successCriteria": { "status": "scorable", "values": ["plan_complete"] }
+      }
+    },
+    {
+      "id": "privacy-pt-001",
+      "language": "pt-BR",
+      "productArea": "privacy_safety",
+      "requestSha256": "6666666666666666666666666666666666666666666666666666666666666666",
+      "candidate": {
+        "goal": ["forget_sensitive_memory"],
+        "entities": ["memory:health"],
+        "constraints": ["delete:derived_records"],
+        "preferences": ["none"],
+        "missingInformation": ["none"],
+        "requestedAction": "forget",
+        "requestedMode": "agentic",
+        "approvalRisk": "approval_required",
+        "temporalRequirements": ["immediate"],
+        "successCriteria": ["memory_erased"]
+      },
+      "gold": {
+        "goal": { "status": "scorable", "values": ["forget_sensitive_memory"] },
+        "entities": { "status": "unscorable", "reason": "missing_gold" },
+        "constraints": { "status": "scorable", "values": ["delete:derived_records"] },
+        "preferences": { "status": "scorable", "values": ["none"] },
+        "missingInformation": { "status": "scorable", "values": ["none"] },
+        "requestedAction": { "status": "scorable", "value": "forget" },
+        "requestedMode": { "status": "scorable", "value": "agentic" },
+        "approvalRisk": { "status": "scorable", "value": "approval_required" },
+        "temporalRequirements": { "status": "scorable", "values": ["immediate"] },
+        "successCriteria": { "status": "scorable", "values": ["memory_erased"] }
+      }
+    }
+  ]
+}
