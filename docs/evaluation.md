@@ -208,6 +208,19 @@ arguments, scenario counts, metrics, classified failures, and artifact
 checksums. Commands and public metadata must not contain credentials, raw
 endpoint URLs, absolute local paths, or private hostnames.
 
+For app E2E reports, endpoint and runtime model-locator provenance are canonical
+SHA-256 digests plus provider, hosted-model family, and a validated path-free
+public model identity. Public readiness and redacted-trace indexes contain only
+references explicitly based at `retention_root`; each path includes its run id.
+The uploaded artifact includes that retention tree. It may contain structural
+redacted traces, but never raw or private traces.
+
+Partial report exchange is a private, current-schema-only transaction. Writers
+lock and atomically replace `e2e-partial-report-v2`; flush rejects legacy or
+unversioned entries. Public runs are built in staging directories and atomically
+published with their index, so a crash or colliding run cannot preserve stale
+trace files or silently produce a mixed-schema artifact.
+
 The public pack contains only original synthetic content and is licensed under
 the repository's MIT license. Raw user data is never evaluation material
 without explicit informed opt-in. Public reports exclude private transcripts,

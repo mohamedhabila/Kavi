@@ -54,6 +54,7 @@ jobs:
           E2E_COMPATIBLE_API_KEY: ${{ secrets.E2E_COMPATIBLE_API_KEY }}
           E2E_COMPATIBLE_BASE_URL: ${{ vars.E2E_COMPATIBLE_BASE_URL }}
           E2E_COMPATIBLE_MODEL: ${{ vars.E2E_COMPATIBLE_MODEL }}
+          E2E_PUBLIC_MODEL_ID: ${{ vars.E2E_PUBLIC_MODEL_ID }}
           RUN_E2E_AGENT_EVAL: '1'
           E2E_MAX_SCENARIO_RETRIES: '1'
           E2E_REPORT_PATH: .artifacts/e2e-agent-report.json
@@ -84,8 +85,8 @@ jobs:
               fi
               ;;
             compatible|openai-compatible|custom)
-              if [ -z "${E2E_COMPATIBLE_API_KEY}" ] || [ -z "${E2E_COMPATIBLE_BASE_URL}" ] || [ -z "${E2E_COMPATIBLE_MODEL}" ]; then
-                echo 'Selected compatible E2E provider is missing key, base URL, or model; skipping live E2E.'
+              if [ -z "${E2E_COMPATIBLE_API_KEY}" ] || [ -z "${E2E_COMPATIBLE_BASE_URL}" ] || [ -z "${E2E_COMPATIBLE_MODEL}" ] || [ -z "${E2E_PUBLIC_MODEL_ID}" ]; then
+                echo 'Selected compatible E2E provider is missing key, base URL, runtime model, or public model ID; skipping live E2E.'
                 exit 0
               fi
               ;;
@@ -102,4 +103,5 @@ jobs:
             .artifacts/e2e-agent-report.json
             .artifacts/e2e-agent-report.md
             .artifacts/e2e-agent-report.json.dashboard.json
+            .artifacts/e2e-readiness-runs/
           if-no-files-found: ignore

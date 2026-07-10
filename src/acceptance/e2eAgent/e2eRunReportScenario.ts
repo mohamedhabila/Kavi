@@ -16,6 +16,7 @@ import { evaluateE2EScenarioRubrics } from './rubricEvaluators';
 import type { E2ERubric, E2EScenarioResult, E2ETokenUsageSummary } from './types';
 import type { AcceptanceFixtureOutcome } from '../acceptanceMetrics/types';
 import type { UsageTokenBuckets } from '../../types/usage';
+import { SCENARIO_ENTRY_SCHEMA_VERSION } from '../../../scripts/e2eReport/partialReport';
 
 const ASSISTANT_PROSE_RUBRIC_KIND_HINTS = new Set([
   'assistant_text',
@@ -245,6 +246,7 @@ export function buildE2ERunReportScenarioEntry(params: {
   const lastGraph = params.result.graphSnapshots[params.result.graphSnapshots.length - 1];
   const benchmarkMeta = lookupE2EScenarioBenchmarkMeta(params.result.fixtureId);
   return {
+    schemaVersion: SCENARIO_ENTRY_SCHEMA_VERSION,
     suite: params.suite,
     fixtureId: params.result.fixtureId,
     passed: params.outcome.passed,

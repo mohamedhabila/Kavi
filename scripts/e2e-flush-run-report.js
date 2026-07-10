@@ -5,11 +5,12 @@
 
 const {
   buildRunMetadata,
-  normalizeEntry,
-  readEntries,
+  RUN_REPORT_SCHEMA_VERSION,
   resolveMaxRetries,
   resolvePartialPath,
 } = require('./e2eReport/parser');
+const { withFileLockSync } = require('./e2eReport/fileTransaction');
+const { readPartialReportFile } = require('./e2eReport/partialReport');
 const { buildCache } = require('./e2eReport/cache');
 const {
   buildAssessment,
@@ -44,6 +45,7 @@ function buildE2eRunReport(entries, options = {}) {
   });
 
   return {
+    schemaVersion: RUN_REPORT_SCHEMA_VERSION,
     generatedAt,
     maxScenarioRetries,
     runMetadata,
@@ -66,39 +68,42 @@ function flushE2eRunReport() {
   }
 
   const partialPath = resolvePartialPath(reportPath);
-  const entries = readEntries(partialPath).map(normalizeEntry);
-  if (entries.length === 0) {
-    return undefined;
-  }
+  return withFileLockSync(`${partialPath}.lock`, () => {
+    const entries = readPartialReportFile(partialPath).entries;
+    if (entries.length === 0) {
+      return undefined;
+    }
 
-  const report = buildE2eRunReport(entries);
-  const { resolvedReportPath, readinessArtifacts, summaryPath } = writeReportArtifacts(
-    reportPath,
-    partialPath,
-    report,
-  );
-  const { totals, cache, reliability, assessment, readiness, readinessDashboard } = report;
+    const report = buildE2eRunReport(entries);
+    const {
+      resolvedReportPath,
+      readinessArtifacts,
+      summaryPath,
+      report: publicReport,
+    } = writeReportArtifacts(reportPath, partialPath, report);
+    const { totals, cache, reliability, assessment, readiness, readinessDashboard } = report;
 
-  console.log(
-    `[e2e-run-report] scenarios=${totals.passedCount}/${totals.scenarioCount} passed tokens=${totals.totalTokens} cacheR=${totals.cacheReadTokens} eligibleCacheRate=${cache.eligibleCacheReadRate.toFixed(3)}`,
-  );
-  console.log(
-    `[e2e-run-report] reliability pass1=${reliability.pass1PassedCount}/${reliability.scenarioCount} pass^${reliability.k}=${reliability.passKPassedCount}/${reliability.scenarioCount} retried=${reliability.retriedScenarioCount}`,
-  );
-  console.log(
-    `[e2e-run-report] assessment evidenceScore=${assessment.evidenceScore.toFixed(3)} dimensionsPassing=${assessment.dimensionsPassing}`,
-  );
-  console.log(
-    `[e2e-run-report] readiness=${readiness.passing} failedCriteria=${readiness.failedCriteria.join(',') || 'none'}`,
-  );
-  console.log(
-    `[e2e-readiness-dashboard] passing=${readinessDashboard.overall.passing} minedEvalCandidates=${readinessDashboard.minedEvalCandidates.length} externalRequirements=${readinessDashboard.benchmarkRequirements.externalRequired}`,
-  );
-  console.log(`[e2e-run-report] wrote ${resolvedReportPath}`);
-  console.log(`[e2e-run-report] summary wrote ${summaryPath}`);
-  console.log(`[e2e-readiness-dashboard] wrote ${readinessArtifacts.dashboardPath}`);
+    console.log(
+      `[e2e-run-report] scenarios=${totals.passedCount}/${totals.scenarioCount} passed tokens=${totals.totalTokens} cacheR=${totals.cacheReadTokens} eligibleCacheRate=${cache.eligibleCacheReadRate.toFixed(3)}`,
+    );
+    console.log(
+      `[e2e-run-report] reliability pass1=${reliability.pass1PassedCount}/${reliability.scenarioCount} pass^${reliability.k}=${reliability.passKPassedCount}/${reliability.scenarioCount} retried=${reliability.retriedScenarioCount}`,
+    );
+    console.log(
+      `[e2e-run-report] assessment evidenceScore=${assessment.evidenceScore.toFixed(3)} dimensionsPassing=${assessment.dimensionsPassing}`,
+    );
+    console.log(
+      `[e2e-run-report] readiness=${readiness.passing} failedCriteria=${readiness.failedCriteria.join(',') || 'none'}`,
+    );
+    console.log(
+      `[e2e-readiness-dashboard] passing=${readinessDashboard.overall.passing} minedEvalCandidates=${readinessDashboard.minedEvalCandidates.length} externalRequirements=${readinessDashboard.benchmarkRequirements.externalRequired}`,
+    );
+    console.log(`[e2e-run-report] wrote ${resolvedReportPath}`);
+    console.log(`[e2e-run-report] summary wrote ${summaryPath}`);
+    console.log(`[e2e-readiness-dashboard] wrote ${readinessArtifacts.dashboardPath}`);
 
-  return { report, resolvedReportPath, readinessArtifacts, summaryPath };
+    return { report: publicReport, resolvedReportPath, readinessArtifacts, summaryPath };
+  });
 }
 
 if (require.main === module) {

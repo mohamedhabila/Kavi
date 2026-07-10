@@ -94,8 +94,10 @@ function buildReadinessDashboard(params) {
       gitSha: params.runMetadata.gitSha,
       provider: params.runMetadata.provider,
       ...(params.runMetadata.providerId ? { providerId: params.runMetadata.providerId } : {}),
+      hostedFamily: params.runMetadata.hostedFamily,
       model: params.runMetadata.model,
       ...(params.runMetadata.modelVersion ? { modelVersion: params.runMetadata.modelVersion } : {}),
+      endpointSha256: params.runMetadata.endpointSha256,
       collectMode: params.runMetadata.collectMode,
     },
     overall: {
@@ -165,7 +167,13 @@ function buildReadinessDashboard(params) {
     },
     artifactRetention: {
       defaultRetainedRuns: READINESS_ARTIFACT_RETENTION_RUNS,
-      artifactKinds: ['run_report', 'readiness_dashboard', 'stdout_stderr_log'],
+      artifactKinds: [
+        'run_report',
+        'readiness_dashboard',
+        'redacted_trace',
+        'trace_index',
+        'stdout_stderr_log',
+      ],
     },
     refreshCadence: [
       {

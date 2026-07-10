@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { RUN_REPORT_SCHEMA_VERSION } = require('./e2eReport/constants');
 const { writeE2eReportSummaryArtifact } = require('./e2eReport/summary');
 
 function resolveProjectRoot() {
@@ -24,6 +25,9 @@ function main() {
   }
 
   const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+  if (report?.schemaVersion !== RUN_REPORT_SCHEMA_VERSION) {
+    throw new Error(`Summary input must use ${RUN_REPORT_SCHEMA_VERSION}.`);
+  }
   const summaryPath = writeE2eReportSummaryArtifact(reportPath, report);
   console.log(`[e2e-report-summary] wrote ${summaryPath}`);
 }

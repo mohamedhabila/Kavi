@@ -175,6 +175,7 @@
     "jest-expo": "~55.0.14",
     "patch-package": "^8.0.1",
     "prettier": "^3.8.3",
+    "proper-lockfile": "^4.1.2",
     "react-test-renderer": "19.2.0",
     "typescript": "~5.9.2",
     "typescript-eslint": "^8.58.2"

@@ -1,7 +1,9 @@
 import {
   buildE2ERunReport,
   buildE2ERunReportScenarioEntry,
+  digestE2EProviderEndpoint,
   formatE2ERunReportSummary,
+  resolveE2ERunMetadata,
 } from '../../src/acceptance/e2eAgent/e2eRunReport';
 import { E2E_SCENARIO_MANIFEST_VERSION } from '../../src/acceptance/e2eAgent/thresholds';
 
@@ -10,8 +12,120 @@ import {
   installE2ERunReportFixtureReset,
 } from '../helpers/e2eRunReportHarness';
 
+const {
+  digestModelLocator: digestNodeModelLocator,
+  digestProviderEndpoint: digestNodeProviderEndpoint,
+  resolvePublicModelIdentity: resolveNodePublicModelIdentity,
+  resolveHostedFamily: resolveNodeHostedFamily,
+} = require('../../scripts/e2eReport/provenance');
+
 describe('e2eRunReport scoring and reliability', () => {
   installE2ERunReportFixtureReset();
+
+  it('fingerprints a canonical endpoint without credential or query variance', () => {
+    const privateEndpoint =
+      'https://private-user:private-password@example.invalid/v1/?token=private#fragment';
+    const canonicalDigest = digestE2EProviderEndpoint('https://example.invalid/v1');
+    expect(digestE2EProviderEndpoint(privateEndpoint)).toBe(canonicalDigest);
+    expect(digestNodeProviderEndpoint(privateEndpoint)).toBe(canonicalDigest);
+
+    const metadata = resolveE2ERunMetadata(
+      {
+        providerKey: 'openrouter',
+        modelLocator: 'openrouter/anthropic/claude-test',
+        providerEndpoint: privateEndpoint,
+      },
+      { E2E_GIT_SHA: 'a'.repeat(40) },
+    );
+    expect(metadata).toMatchObject({
+      hostedFamily: resolveNodeHostedFamily('openrouter/anthropic/claude-test'),
+      model: 'claude-test',
+      modelIdentitySource: 'provider-model-id',
+      modelLocatorSha256: digestNodeModelLocator('openrouter/anthropic/claude-test'),
+      endpointSha256: canonicalDigest,
+    });
+  });
+
+  it('publishes an explicit compatible model identity and only a runtime locator digest', () => {
+    const privateModelLocator =
+      'file:///Users/private-model-owner/models/qwen-private.gguf?token=private-model-token';
+    const metadata = resolveE2ERunMetadata(
+      {
+        providerKey: 'compatible',
+        gitSha: 'b'.repeat(40),
+        hostedFamily: 'qwen',
+        model: 'qwen2.5-mobile-eval',
+        modelLocator: privateModelLocator,
+        modelVersion: 'revision-2026.07',
+        providerEndpoint: 'https://private-user:private-pass@example.invalid/v1?token=private',
+        promptCacheMode: 'disabled',
+        seed: 42,
+      },
+      {},
+    );
+    const nodeIdentity = resolveNodePublicModelIdentity({
+      providerKey: 'compatible',
+      modelLocator: privateModelLocator,
+      publicModelId: 'qwen2.5-mobile-eval',
+    });
+
+    expect(metadata).toMatchObject({
+      provider: 'custom',
+      providerId: 'e2e-compatible',
+      hostedFamily: 'qwen',
+      model: 'qwen2.5-mobile-eval',
+      modelIdentitySource: 'explicit-public-id',
+      modelLocatorSha256: digestNodeModelLocator(privateModelLocator),
+      modelVersion: 'revision-2026.07',
+      promptCacheMode: 'disabled',
+      seed: 42,
+    });
+    expect(metadata).toMatchObject(nodeIdentity);
+    const serialized = JSON.stringify(metadata);
+    expect(serialized).not.toContain('private-model-owner');
+    expect(serialized).not.toContain('qwen-private.gguf');
+    expect(serialized).not.toContain('private-model-token');
+    expect(serialized).not.toContain('private-user');
+    expect(serialized).not.toContain('private-pass');
+  });
+
+  it('rejects unsafe or ambiguous public provenance metadata', () => {
+    const compatibleBase = {
+      providerKey: 'compatible' as const,
+      gitSha: 'c'.repeat(40),
+      modelLocator: '/Users/private/model.gguf',
+      providerEndpoint: 'http://127.0.0.1:11434/v1',
+    };
+
+    expect(() => resolveE2ERunMetadata(compatibleBase, {})).toThrow('require E2E_PUBLIC_MODEL_ID');
+    expect(() =>
+      resolveE2ERunMetadata({ ...compatibleBase, model: '../private/model.gguf' }, {}),
+    ).toThrow('path-free model identifier');
+    expect(() =>
+      resolveE2ERunMetadata({ ...compatibleBase, model: 'safe-model', gitSha: 'private-sha' }, {}),
+    ).toThrow('hexadecimal revision');
+    expect(() =>
+      resolveE2ERunMetadata(
+        { ...compatibleBase, model: 'safe-model', modelVersion: 'private/version?token=secret' },
+        {},
+      ),
+    ).toThrow('public revision token');
+    expect(() =>
+      resolveE2ERunMetadata({ ...compatibleBase, model: 'safe-model' }, { E2E_SEED: 'secret' }),
+    ).toThrow('unsigned 32-bit integer');
+    expect(() =>
+      resolveE2ERunMetadata(
+        { ...compatibleBase, model: 'safe-model' },
+        { E2E_PROMPT_CACHE_MODE: 'private-cache-mode' },
+      ),
+    ).toThrow('provider-default, enabled, or disabled');
+    expect(() =>
+      resolveE2ERunMetadata(
+        { ...compatibleBase, model: 'safe-model' },
+        { E2E_PUBLIC_HOSTED_FAMILY: 'private-family' },
+      ),
+    ).toThrow('supported public family');
+  });
 
   it('buildE2ERunReport aggregates totals and pass counts', () => {
     const passEntry = buildE2ERunReportScenarioEntry({
@@ -45,9 +159,10 @@ describe('e2eRunReport scoring and reliability', () => {
       generatedAt: '2026-06-10T00:00:00.000Z',
       maxScenarioRetries: 1,
       runMetadata: {
-        gitSha: 'test-sha',
-        model: 'gemini-3.5-flash',
-        providerBaseUrl: 'https://aiplatform.googleapis.com/v1',
+        providerKey: 'gemini',
+        gitSha: 'd'.repeat(40),
+        modelLocator: 'gemini-3.5-flash',
+        providerEndpoint: 'https://aiplatform.googleapis.com/v1',
         collectMode: true,
       },
     });
@@ -63,11 +178,17 @@ describe('e2eRunReport scoring and reliability', () => {
     });
     expect(report.maxScenarioRetries).toBe(1);
     expect(report.runMetadata).toMatchObject({
-      gitSha: 'test-sha',
+      gitSha: 'd'.repeat(40),
+      hostedFamily: 'gemini',
       model: 'gemini-3.5-flash',
+      modelIdentitySource: 'provider-model-id',
+      modelLocatorSha256: digestNodeModelLocator('gemini-3.5-flash'),
+      endpointSha256: digestE2EProviderEndpoint('https://aiplatform.googleapis.com/v1'),
       collectMode: true,
       scenarioManifestVersion: E2E_SCENARIO_MANIFEST_VERSION,
     });
+    expect(JSON.stringify(report.runMetadata)).not.toContain('aiplatform.googleapis.com');
+    expect(report.runMetadata).not.toHaveProperty('providerBaseUrl');
     expect(report.cache).toMatchObject({
       inputTokens: 150,
       eligibleInputTokens: 0,

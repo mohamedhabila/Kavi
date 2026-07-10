@@ -1,10 +1,19 @@
-const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const constants = require('./constants');
 const { readFirstEnvValue, resolveE2eProviderSpec } = require('./provider');
 const {
-  EMPTY_TOKEN_BUCKETS,
+  assertGitSha,
+  assertPublicHostedFamily,
+  assertPublicRevision,
+  digestProviderEndpoint,
+  resolveHostedFamily,
+  resolveOptionalPublicRevision,
+  resolveOptionalSeed,
+  resolvePromptCacheMode,
+  resolvePublicModelIdentity,
+} = require('./provenance');
+const {
   NATIVE_TOOL_FIXTURE_VERSION,
   PROMPT_CACHE_ELIGIBLE_INPUT_TOKENS,
   SCENARIO_MANIFEST_VERSION,
@@ -16,18 +25,6 @@ function resolvePartialPath(reportPath) {
     return path.resolve(configured);
   }
   return `${path.resolve(reportPath)}.partial.json`;
-}
-
-function readEntries(partialPath) {
-  if (!fs.existsSync(partialPath)) {
-    return [];
-  }
-  const raw = fs.readFileSync(partialPath, 'utf8').trim();
-  if (!raw) {
-    return [];
-  }
-  const parsed = JSON.parse(raw);
-  return Array.isArray(parsed) ? parsed : [];
 }
 
 function safeRate(numerator, denominator) {
@@ -100,63 +97,21 @@ function scenarioEligibleInputTokens(entry) {
   return inputTokens >= PROMPT_CACHE_ELIGIBLE_INPUT_TOKENS ? inputTokens : 0;
 }
 
-function buildScenarioCache(entry) {
-  const inputTokens = entry.usage?.inputTokens ?? 0;
-  const cacheReadTokens = entry.usage?.cacheReadTokens ?? 0;
-  const eligibleInputTokens = scenarioEligibleInputTokens(entry);
-  const eligibleReadTokens = eligibleCacheReadTokens(cacheReadTokens, eligibleInputTokens);
-  return {
-    inputTokens,
-    eligibleInputTokens,
-    cacheReadTokens,
-    cacheWriteTokens: entry.usage?.cacheWriteTokens ?? 0,
-    cacheReadRate: safeRate(cacheReadTokens, inputTokens),
-    eligibleCacheReadRate: safeRate(eligibleReadTokens, eligibleInputTokens),
-    eligible: eligibleInputTokens > 0,
-  };
-}
-
-function normalizeEntry(entry) {
-  return {
-    ...entry,
-    tokenBuckets: entry.tokenBuckets ?? entry.usage?.tokenBuckets ?? EMPTY_TOKEN_BUCKETS,
-    ...((entry.promptCache ?? entry.usage?.promptCache)
-      ? { promptCache: entry.promptCache ?? entry.usage.promptCache }
-      : {}),
-    cache: entry.cache ?? buildScenarioCache(entry),
-    rubricAudit: entry.rubricAudit ?? {
-      rubricCount: 0,
-      assistantProseRubricCount: 0,
-      weakPatternRubricCount: 0,
-      structuralSubstringRubricCount: 0,
-      risks: [],
-    },
-    loopDiagnostics: entry.loopDiagnostics ?? {
-      repeatedToolCalls: [],
-      repeatedCatalogAfterActivationCount: 0,
-      repeatedHoldReasons: [],
-      passing: true,
-    },
-    benchmarkFamilies: Array.isArray(entry.benchmarkFamilies) ? entry.benchmarkFamilies : [],
-    assessmentDimensions: Array.isArray(entry.assessmentDimensions)
-      ? entry.assessmentDimensions
-      : [],
-  };
-}
-
 function resolveGitSha() {
   const configured =
     process.env.E2E_GIT_SHA?.trim() ||
     process.env.GITHUB_SHA?.trim() ||
     process.env.CI_COMMIT_SHA?.trim();
   if (configured) {
-    return configured;
+    return assertGitSha(configured);
   }
   try {
-    return execFileSync('git', ['rev-parse', 'HEAD'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
+    return assertGitSha(
+      execFileSync('git', ['rev-parse', 'HEAD'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim(),
+    );
   } catch {
     return 'unknown';
   }
@@ -167,32 +122,63 @@ function resolveOptionalNumber(raw) {
     return undefined;
   }
   const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : undefined;
+  if (!Number.isFinite(parsed)) {
+    throw new Error('E2E temperature must be a finite number');
+  }
+  return parsed;
+}
+
+function requireMetadataValue(value, label) {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) {
+    throw new Error(`${label} is required for public E2E run provenance`);
+  }
+  return normalized;
 }
 
 function buildRunMetadata() {
-  const modelVersion = process.env.E2E_MODEL_VERSION?.trim();
+  const modelVersion = resolveOptionalPublicRevision(
+    process.env.E2E_MODEL_VERSION,
+    'Model version',
+  );
   const temperature = resolveOptionalNumber(process.env.E2E_TEMPERATURE);
-  const seed = process.env.E2E_SEED?.trim();
+  const seed = resolveOptionalSeed(process.env.E2E_SEED);
   const providerSpec = resolveE2eProviderSpec();
+  const modelLocator = requireMetadataValue(
+    readFirstEnvValue(process.env, providerSpec.modelEnv) || providerSpec.defaultModel,
+    'Model locator',
+  );
+  const modelIdentity = resolvePublicModelIdentity({
+    providerKey: providerSpec.key,
+    modelLocator,
+    publicModelId: process.env.E2E_PUBLIC_MODEL_ID,
+  });
+  const hostedFamily = process.env.E2E_PUBLIC_HOSTED_FAMILY?.trim()
+    ? assertPublicHostedFamily(process.env.E2E_PUBLIC_HOSTED_FAMILY)
+    : resolveHostedFamily(modelLocator);
+  const endpoint = requireMetadataValue(
+    readFirstEnvValue(process.env, providerSpec.baseUrlEnv) || providerSpec.defaultBaseUrl,
+    'Provider endpoint',
+  );
   return {
     gitSha: resolveGitSha(),
     provider: providerSpec.provider,
     providerId: providerSpec.id,
-    model:
-      readFirstEnvValue(process.env, providerSpec.modelEnv) ||
-      providerSpec.defaultModel ||
-      `unknown-${providerSpec.key}-model`,
+    hostedFamily,
+    ...modelIdentity,
     ...(modelVersion ? { modelVersion } : {}),
-    providerBaseUrl:
-      readFirstEnvValue(process.env, providerSpec.baseUrlEnv) ||
-      providerSpec.defaultBaseUrl ||
-      'unknown',
+    endpointSha256: digestProviderEndpoint(endpoint),
     ...(temperature !== undefined ? { temperature } : {}),
-    ...(seed ? { seed } : {}),
-    scenarioManifestVersion: SCENARIO_MANIFEST_VERSION,
-    promptCacheMode: process.env.E2E_PROMPT_CACHE_MODE?.trim() || 'provider-default',
-    nativeToolFixtureVersion: NATIVE_TOOL_FIXTURE_VERSION,
+    ...(seed !== undefined ? { seed } : {}),
+    scenarioManifestVersion: assertPublicRevision(
+      SCENARIO_MANIFEST_VERSION,
+      'Scenario manifest version',
+    ),
+    promptCacheMode: resolvePromptCacheMode(process.env.E2E_PROMPT_CACHE_MODE),
+    nativeToolFixtureVersion: assertPublicRevision(
+      NATIVE_TOOL_FIXTURE_VERSION,
+      'Native tool fixture version',
+    ),
     collectMode: process.env.E2E_COLLECT_MODE === '1',
   };
 }
@@ -212,15 +198,12 @@ function resolveMaxRetries() {
 module.exports = {
   ...constants,
   resolvePartialPath,
-  readEntries,
   safeRate,
   eligibleCacheReadTokens,
   parseNonNegativeInteger,
   parseCacheFailureBuckets,
   readCacheCreateTelemetryFromEnv,
   scenarioEligibleInputTokens,
-  buildScenarioCache,
-  normalizeEntry,
   resolveGitSha,
   resolveOptionalNumber,
   buildRunMetadata,

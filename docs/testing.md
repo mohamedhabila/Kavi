@@ -220,6 +220,7 @@ E2E_SCENARIO_IDS="direct-agentdojo-untrusted-workspace-note direct-bfcl-v4-paral
 | `E2E_COMPATIBLE_API_KEY`   | For compatible | Generic OpenAI-compatible API key                                                      |
 | `E2E_COMPATIBLE_BASE_URL`  | For compatible | Generic OpenAI-compatible base URL                                                     |
 | `E2E_COMPATIBLE_MODEL`     | For compatible | Generic OpenAI-compatible model id                                                     |
+| `E2E_PUBLIC_MODEL_ID`      | For compatible | Path-free public model identity; runtime locator is published only as a SHA-256 digest |
 | `E2E_MAX_SCENARIO_RETRIES` | No             | Per-scenario retry budget (default `0`; nightly uses `1`)                              |
 | `E2E_REPORT_PATH`          | No             | JSON run report path (default `.artifacts/e2e-agent-report.json`)                      |
 | `E2E_REPORT_SUMMARY_PATH`  | No             | Markdown summary path (default `.artifacts/e2e-agent-report.md`)                       |
@@ -235,6 +236,26 @@ per-scenario pass/fail, attempt count, token usage, cache reads, duration, and
 an **`assessment`** block with dimensional and benchmark-family pass rates.
 Default path: `.artifacts/e2e-agent-report.json` (gitignored). Nightly CI
 uploads this file and the derived Markdown summary as workflow artifacts.
+
+Public run metadata records the provider family, hosted model family, a
+validated path-free model identity, and canonical SHA-256 endpoint and runtime
+model-locator digests. It never records a raw endpoint URL or local model path.
+The current JSON contract is `e2e-run-report-v2`; removed v1 URL and absolute
+path fields have no compatibility aliases.
+Every redacted-trace reference declares `referenceBase: retention_root`; its
+path includes the retained run id and is resolved from
+`.artifacts/e2e-readiness-runs/`. Nightly artifacts upload that retention tree
+with the root report, so references do not dangle. Absolute workstation paths
+are not part of the public schema. Raw or private traces are excluded by the
+public artifact writer and must remain outside the public E2E retention
+directory.
+
+Parallel scenario workers exchange entries through the private
+`e2e-partial-report-v2` envelope. The writer accepts only
+`e2e-run-report-scenario-v2` entries, uses a lock and atomic replacement, and
+rejects unversioned or legacy arrays instead of relabeling them as current.
+Final retained runs are assembled in a staging directory and atomically
+replace a colliding run, preventing stale traces and partial public reports.
 
 `eval:e2e` also writes `.artifacts/e2e-agent-report.md`, a sanitized Markdown
 summary for quick review. It includes aggregate pass rates, cache/reliability

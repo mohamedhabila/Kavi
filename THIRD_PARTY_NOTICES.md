@@ -58,7 +58,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | CC-BY-4.0 | 1 |
 | CC0-1.0 | 1 |
 | ISC | 46 |
-| MIT | 881 |
+| MIT | 883 |
 | MPL-2.0 | 12 |
 | Public Domain | 1 |
 | Python-2.0 | 1 |
@@ -893,6 +893,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | progress | 2.0.3 | transitive | MIT |
 | promise | 8.3.0 | transitive | MIT |
 | prompts | 2.4.2 | transitive | MIT |
+| proper-lockfile | 4.1.2 | development | MIT |
 | proxy-addr | 2.0.7 | transitive | MIT |
 | psl | 1.15.0 | transitive | MIT |
 | pump | 3.0.4 | transitive | MIT |
@@ -945,6 +946,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | resolve-workspace-root | 2.0.1 | transitive | MIT |
 | resolve.exports | 2.0.3 | transitive | MIT |
 | restore-cursor | 2.0.0 | transitive | MIT |
+| retry | 0.12.0 | transitive | MIT |
 | rimraf | 3.0.2 | transitive | ISC |
 | router | 2.2.0 | transitive | MIT |
 | safe-buffer | 5.2.1 | transitive | MIT |

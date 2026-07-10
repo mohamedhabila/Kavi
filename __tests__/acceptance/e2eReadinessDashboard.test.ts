@@ -97,10 +97,10 @@ describe('e2eReadinessDashboard', () => {
       generatedAt: '2026-06-12T00:00:00.000Z',
       maxScenarioRetries: 0,
       runMetadata: {
-        gitSha: 'test-sha',
-        provider: 'gemini',
-        model: 'gemini-3.5-flash',
-        providerBaseUrl: 'https://aiplatform.googleapis.com/v1',
+        providerKey: 'gemini',
+        gitSha: 'e'.repeat(40),
+        modelLocator: 'gemini-3.5-flash',
+        providerEndpoint: 'https://aiplatform.googleapis.com/v1',
         collectMode: true,
       },
       cacheTelemetry: {
@@ -135,6 +135,14 @@ describe('e2eReadinessDashboard', () => {
       expect.arrayContaining(['agentdojo-prompt-injection', 'mcptox-tool-poisoning']),
     );
     expect(report.readinessDashboard.minedEvalCandidates).toHaveLength(1);
+    expect(report.readinessDashboard.runMetadata).toMatchObject({
+      provider: 'gemini',
+      hostedFamily: 'gemini',
+      endpointSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+    });
+    expect(JSON.stringify(report.readinessDashboard.runMetadata)).not.toContain(
+      'aiplatform.googleapis.com',
+    );
     expect(report.readinessDashboard.minedEvalCandidates[0]).toMatchObject({
       sourceScenarioId: 'tool-catalog-agents',
       categories: expect.arrayContaining(['wrong_args', 'goal_state_bug']),

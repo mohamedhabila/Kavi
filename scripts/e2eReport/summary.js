@@ -1,5 +1,6 @@
-const fs = require('fs');
 const path = require('path');
+
+const { atomicWriteFileSync } = require('./fileTransaction');
 
 function asNumber(value, fallback = 0) {
   return Number.isFinite(value) ? value : fallback;
@@ -63,7 +64,7 @@ function buildScenarioRows(report) {
     const failedRubricCount = Array.isArray(scenario.failedRubrics)
       ? scenario.failedRubrics.length
       : 0;
-    const errorCount = Array.isArray(scenario.errors) ? scenario.errors.length : 0;
+    const errorCount = asNumber(scenario.errorCount);
     const issueCount = failedRubricCount + errorCount;
     lines.push(
       [
@@ -76,7 +77,10 @@ function buildScenarioRows(report) {
         formatInteger(usage.cacheReadTokens),
         formatDuration(scenario.durationMs),
         formatInteger(issueCount),
-      ].join(' | ').replace(/^/, '| ').replace(/$/, ' |'),
+      ]
+        .join(' | ')
+        .replace(/^/, '| ')
+        .replace(/$/, ' |'),
     );
   }
 
@@ -99,12 +103,13 @@ function buildFailedScenarioRows(report) {
     const failedRubricCount = Array.isArray(scenario.failedRubrics)
       ? scenario.failedRubrics.length
       : 0;
-    const errorCount = Array.isArray(scenario.errors) ? scenario.errors.length : 0;
+    const errorCount = asNumber(scenario.errorCount);
     const repeatedToolCalls = scenario.loopDiagnostics?.repeatedToolCalls;
     const repeatedToolCallCount = Array.isArray(repeatedToolCalls) ? repeatedToolCalls.length : 0;
-    const loopStatus = scenario.loopDiagnostics?.passing === false
-      ? `${repeatedToolCallCount} repeated-tool-call groups`
-      : 'pass';
+    const loopStatus =
+      scenario.loopDiagnostics?.passing === false
+        ? `${repeatedToolCallCount} repeated-tool-call groups`
+        : 'pass';
     lines.push(
       [
         markdownCell(scenario.fixtureId || 'unknown'),
@@ -113,7 +118,10 @@ function buildFailedScenarioRows(report) {
         formatInteger(errorCount),
         formatInteger(failedRubricCount),
         markdownCell(loopStatus),
-      ].join(' | ').replace(/^/, '| ').replace(/$/, ' |'),
+      ]
+        .join(' | ')
+        .replace(/^/, '| ')
+        .replace(/$/, ' |'),
     );
   }
 
@@ -202,8 +210,7 @@ function resolveSummaryPath(reportPath, env = process.env) {
 
 function writeE2eReportSummaryArtifact(reportPath, report, env = process.env) {
   const summaryPath = resolveSummaryPath(reportPath, env);
-  fs.mkdirSync(path.dirname(summaryPath), { recursive: true });
-  fs.writeFileSync(summaryPath, buildE2eReportSummaryMarkdown(report), 'utf8');
+  atomicWriteFileSync(summaryPath, buildE2eReportSummaryMarkdown(report), 'utf8');
   return summaryPath;
 }
 

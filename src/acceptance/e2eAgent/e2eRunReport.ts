@@ -2,14 +2,25 @@
 // Kavi — E2E run report (JSON artifact for nightly trend tracking)
 // ---------------------------------------------------------------------------
 
-import { execFileSync } from 'child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, unlinkSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 
+import { parseOptionalStrictPositiveInteger } from '../../../scripts/e2eReport/configParsing';
 import {
-  evaluateE2EAgentOutcomes,
-  isE2EAgentMetricsPassing,
-} from './evaluateE2EAgentMetrics';
+  atomicWriteFileSync,
+  removeManagedTransactionResidueSync,
+  replaceDirectoryFromStagingSync,
+  uniqueManagedPath,
+  withFileLockSync,
+} from '../../../scripts/e2eReport/fileTransaction';
+import {
+  readPartialReportFile,
+  SCENARIO_ENTRY_SCHEMA_VERSION,
+  writePartialReportFile,
+} from '../../../scripts/e2eReport/partialReport';
+import type { PublicE2ERunReport } from '../../../scripts/e2eReport/publicRunReport';
+
+import { evaluateE2EAgentOutcomes, isE2EAgentMetricsPassing } from './evaluateE2EAgentMetrics';
 import { buildE2EAssessmentReport, type E2EAssessmentReport } from './e2eAssessmentReport';
 import type { E2EAssessmentDimension } from './e2eAssessmentDimensions';
 import type { E2EBenchmarkFamily } from './e2eBenchmarkRegistry';
@@ -30,20 +41,15 @@ import {
 } from './e2eRunReportReadiness';
 import { buildE2ERunReportScenarioEntry } from './e2eRunReportScenario';
 import {
+  resolveE2ERunMetadata,
+  type E2ERunMetadataOverrides,
+  type E2ERunReportRunMetadata,
+} from './e2eRunMetadata';
+import {
   type E2ERunReportScenarioTraceArtifact,
   type E2EScenarioTraceSummary,
   writeE2ERedactedTraceArtifacts,
 } from './e2eTraceArtifacts';
-import {
-  resolveE2EProviderBaseUrl,
-  resolveE2EProviderKey,
-  resolveE2EProviderModel,
-  resolveE2EProviderSpec,
-} from './providerConfig';
-import {
-  E2E_NATIVE_TOOL_FIXTURE_VERSION,
-  E2E_SCENARIO_MANIFEST_VERSION,
-} from './thresholds';
 import type { AcceptanceFixtureOutcome } from '../acceptanceMetrics/types';
 import type {
   E2EPromptCachePrefixStability,
@@ -57,8 +63,11 @@ export const E2E_REPORT_PATH_ENV = 'E2E_REPORT_PATH';
 export const E2E_REPORT_PARTIAL_PATH_ENV = 'E2E_REPORT_PARTIAL_PATH';
 export const E2E_READINESS_ARTIFACT_RETENTION_DIR_ENV = 'E2E_READINESS_ARTIFACT_RETENTION_DIR';
 export const E2E_READINESS_ARTIFACT_RETENTION_LIMIT_ENV = 'E2E_READINESS_ARTIFACT_RETENTION_LIMIT';
+export const E2E_RUN_REPORT_SCHEMA_VERSION = 'e2e-run-report-v2';
 
 export { buildE2ERunReportScenarioEntry };
+export { digestE2EProviderEndpoint, resolveE2ERunMetadata } from './e2eRunMetadata';
+export type { E2ERunMetadataOverrides, E2ERunReportRunMetadata } from './e2eRunMetadata';
 
 export type E2ERunReportRubricFailure = {
   fixtureId: string;
@@ -105,6 +114,7 @@ export type E2ERunReportScenarioLoopDiagnostics = {
 };
 
 export type E2ERunReportScenarioEntry = {
+  schemaVersion: typeof SCENARIO_ENTRY_SCHEMA_VERSION;
   suite: string;
   fixtureId: string;
   passed: boolean;
@@ -130,21 +140,6 @@ export type E2ERunReportScenarioEntry = {
   traceArtifact?: E2ERunReportScenarioTraceArtifact;
   detail?: string;
   errors: ReadonlyArray<string>;
-};
-
-export type E2ERunReportRunMetadata = {
-  gitSha: string;
-  provider: string;
-  providerId?: string;
-  model: string;
-  modelVersion?: string;
-  providerBaseUrl: string;
-  temperature?: number;
-  seed?: string;
-  scenarioManifestVersion: string;
-  promptCacheMode: string;
-  nativeToolFixtureVersion: string;
-  collectMode: boolean;
 };
 
 export type E2ERunReportCacheFailureBucket = {
@@ -251,6 +246,7 @@ export type E2ERunReportReliability = {
 };
 
 export type E2ERunReport = {
+  schemaVersion: typeof E2E_RUN_REPORT_SCHEMA_VERSION;
   generatedAt: string;
   maxScenarioRetries: number;
   runMetadata: E2ERunReportRunMetadata;
@@ -275,69 +271,13 @@ export type E2ERunReport = {
   metricsPassing: boolean;
 };
 
-function resolveOptionalNumber(raw: string | undefined): number | undefined {
-  if (!raw?.trim()) {
-    return undefined;
-  }
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function resolveGitSha(env: NodeJS.ProcessEnv = process.env): string {
-  const configured = env.E2E_GIT_SHA?.trim() || env.GITHUB_SHA?.trim() || env.CI_COMMIT_SHA?.trim();
-  if (configured) {
-    return configured;
-  }
-  try {
-    return execFileSync('git', ['rev-parse', 'HEAD'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-  } catch {
-    return 'unknown';
-  }
-}
-
-export function resolveE2ERunMetadata(
-  overrides?: Partial<E2ERunReportRunMetadata>,
-  env: NodeJS.ProcessEnv = process.env,
-): E2ERunReportRunMetadata {
-  const modelVersion = overrides?.modelVersion ?? env.E2E_MODEL_VERSION?.trim();
-  const temperature = overrides?.temperature ?? resolveOptionalNumber(env.E2E_TEMPERATURE);
-  const seed = overrides?.seed ?? env.E2E_SEED?.trim();
-  const promptCacheMode =
-    overrides?.promptCacheMode ?? env.E2E_PROMPT_CACHE_MODE?.trim() ?? 'provider-default';
-  const providerKey = resolveE2EProviderKey(env);
-  const providerSpec = resolveE2EProviderSpec(providerKey);
-  const provider = overrides?.provider ?? providerSpec.family;
-  const model =
-    overrides?.model ?? resolveE2EProviderModel(providerKey, env) ?? `unknown-${providerKey}-model`;
-  const providerBaseUrl =
-    overrides?.providerBaseUrl ?? resolveE2EProviderBaseUrl(providerKey, env) ?? 'unknown';
-
-  return {
-    gitSha: overrides?.gitSha ?? resolveGitSha(env),
-    provider,
-    providerId: overrides?.providerId ?? providerSpec.id,
-    model,
-    ...(modelVersion ? { modelVersion } : {}),
-    providerBaseUrl,
-    ...(temperature !== undefined ? { temperature } : {}),
-    ...(seed ? { seed } : {}),
-    scenarioManifestVersion: overrides?.scenarioManifestVersion ?? E2E_SCENARIO_MANIFEST_VERSION,
-    promptCacheMode,
-    nativeToolFixtureVersion:
-      overrides?.nativeToolFixtureVersion ?? E2E_NATIVE_TOOL_FIXTURE_VERSION,
-    collectMode: overrides?.collectMode ?? env.E2E_COLLECT_MODE === '1',
-  };
-}
-
 export function buildE2ERunReport(
   entries: ReadonlyArray<E2ERunReportScenarioEntry>,
   options?: {
     generatedAt?: string;
     maxScenarioRetries?: number;
-    runMetadata?: Partial<E2ERunReportRunMetadata>;
+    runMetadata?: E2ERunMetadataOverrides;
+    runMetadataEnv?: NodeJS.ProcessEnv;
     metricOutcomes?: ReadonlyArray<AcceptanceFixtureOutcome>;
     metricResults?: ReadonlyArray<E2EScenarioResult>;
     cacheTelemetry?: E2EPromptCacheCreateTelemetrySnapshot;
@@ -383,7 +323,7 @@ export function buildE2ERunReport(
   const graderAudit = buildGraderAudit(entries);
   const reliability = buildReliabilityReport(entries, maxScenarioRetries);
   const generatedAt = options?.generatedAt ?? new Date().toISOString();
-  const runMetadata = resolveE2ERunMetadata(options?.runMetadata);
+  const runMetadata = resolveE2ERunMetadata(options?.runMetadata, options?.runMetadataEnv);
   const readiness = buildReadinessReport({
     entries,
     assessment,
@@ -404,6 +344,7 @@ export function buildE2ERunReport(
   });
 
   return {
+    schemaVersion: E2E_RUN_REPORT_SCHEMA_VERSION,
     generatedAt,
     maxScenarioRetries,
     runMetadata,
@@ -432,18 +373,7 @@ function resolvePartialReportPath(env: NodeJS.ProcessEnv = process.env): string 
 }
 
 function readPartialEntries(partialPath: string): E2ERunReportScenarioEntry[] {
-  if (!existsSync(partialPath)) {
-    return [];
-  }
-  const raw = readFileSync(partialPath, 'utf8').trim();
-  if (!raw) {
-    return [];
-  }
-  const parsed = JSON.parse(raw) as unknown;
-  if (!Array.isArray(parsed)) {
-    return [];
-  }
-  return parsed as E2ERunReportScenarioEntry[];
+  return readPartialReportFile<E2ERunReportScenarioEntry>(partialPath).entries;
 }
 
 type E2EReadinessArtifactIndexEntry = {
@@ -452,25 +382,19 @@ type E2EReadinessArtifactIndexEntry = {
   gitSha: string;
   provider: string;
   model: string;
-  reportPath: string;
-  dashboardPath: string;
+  reportRelativePath: string;
+  dashboardRelativePath: string;
   passing: boolean;
   scenarioPassRate: number;
   pass1Rate: number;
 };
 
-function parseNonNegativeInteger(value: string | undefined): number | null {
-  if (!value?.trim()) {
-    return null;
-  }
-  const parsed = Number.parseInt(value.trim(), 10);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-}
-
 function resolveReadinessArtifactRetentionLimit(env: NodeJS.ProcessEnv): number {
   return (
-    parseNonNegativeInteger(env[E2E_READINESS_ARTIFACT_RETENTION_LIMIT_ENV]) ??
-    E2E_READINESS_ARTIFACT_RETENTION_RUNS
+    parseOptionalStrictPositiveInteger(
+      env[E2E_READINESS_ARTIFACT_RETENTION_LIMIT_ENV],
+      'E2E readiness artifact retention limit',
+    ) ?? E2E_READINESS_ARTIFACT_RETENTION_RUNS
   );
 }
 
@@ -478,95 +402,182 @@ function sanitizeRunIdPart(value: string | undefined): string {
   return String(value || 'unknown').replace(/[^a-zA-Z0-9_.-]+/g, '-');
 }
 
+function isSafeRunId(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value !== '.' &&
+    value !== '..' &&
+    value.length > 0 &&
+    sanitizeRunIdPart(value) === value
+  );
+}
+
+function normalizeCurrentReadinessIndexEntry(
+  value: unknown,
+): E2EReadinessArtifactIndexEntry | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const entry = value as Partial<E2EReadinessArtifactIndexEntry>;
+  if (
+    !isSafeRunId(entry.runId) ||
+    entry.reportRelativePath !== `${entry.runId}/report.json` ||
+    entry.dashboardRelativePath !== `${entry.runId}/dashboard.json` ||
+    typeof entry.generatedAt !== 'string' ||
+    typeof entry.gitSha !== 'string' ||
+    typeof entry.provider !== 'string' ||
+    typeof entry.model !== 'string' ||
+    typeof entry.passing !== 'boolean' ||
+    !Number.isFinite(entry.scenarioPassRate) ||
+    !Number.isFinite(entry.pass1Rate)
+  ) {
+    return null;
+  }
+  return {
+    runId: entry.runId,
+    generatedAt: entry.generatedAt,
+    gitSha: entry.gitSha,
+    provider: entry.provider,
+    model: entry.model,
+    reportRelativePath: entry.reportRelativePath,
+    dashboardRelativePath: entry.dashboardRelativePath,
+    passing: entry.passing,
+    scenarioPassRate: entry.scenarioPassRate!,
+    pass1Rate: entry.pass1Rate!,
+  };
+}
+
 function readJsonFile<T>(filePath: string, fallback: T): T {
-  try {
-    if (!existsSync(filePath)) {
-      return fallback;
-    }
-    return JSON.parse(readFileSync(filePath, 'utf8')) as T;
-  } catch {
+  if (!existsSync(filePath)) {
     return fallback;
   }
+  return JSON.parse(readFileSync(filePath, 'utf8')) as T;
+}
+
+function readReadinessIndexState(indexPath: string): {
+  currentRuns: E2EReadinessArtifactIndexEntry[];
+  discardedRunIds: string[];
+} {
+  const index = readJsonFile<{ version?: string; runs?: unknown[] }>(indexPath, {
+    version: E2E_READINESS_DASHBOARD_VERSION,
+    runs: [],
+  });
+  if (!index || typeof index !== 'object' || !Array.isArray(index.runs)) {
+    throw new Error('E2E readiness index is malformed.');
+  }
+  if (index.version !== E2E_READINESS_DASHBOARD_VERSION) {
+    return {
+      currentRuns: [],
+      discardedRunIds: index.runs
+        .map((run) =>
+          run && typeof run === 'object' ? (run as { runId?: unknown }).runId : undefined,
+        )
+        .filter(isSafeRunId),
+    };
+  }
+  const currentRuns = index.runs.map(normalizeCurrentReadinessIndexEntry);
+  if (currentRuns.some((run) => run === null)) {
+    throw new Error('E2E readiness index contains an invalid current-schema run.');
+  }
+  const validRuns = currentRuns as E2EReadinessArtifactIndexEntry[];
+  const runIds = validRuns.map((run) => run.runId);
+  if (new Set(runIds).size !== runIds.length) {
+    throw new Error('E2E readiness index contains duplicate run ids.');
+  }
+  return { currentRuns: validRuns, discardedRunIds: [] };
 }
 
 export function writeE2EReadinessDashboardArtifacts(
   resolvedReportPath: string,
   report: E2ERunReport,
   env: NodeJS.ProcessEnv = process.env,
-): { dashboardPath: string; runDir: string; indexPath: string; report: E2ERunReport } {
+): { dashboardPath: string; runDir: string; indexPath: string; report: PublicE2ERunReport } {
   const dashboardPath = `${resolvedReportPath}.dashboard.json`;
-
   const retentionDir = resolve(
     env[E2E_READINESS_ARTIFACT_RETENTION_DIR_ENV]?.trim() ||
       join(dirname(resolvedReportPath), 'e2e-readiness-runs'),
   );
-  const runId = `${sanitizeRunIdPart(report.generatedAt)}-${sanitizeRunIdPart(
+  const runId = `run-${sanitizeRunIdPart(report.generatedAt)}-${sanitizeRunIdPart(
     report.runMetadata.gitSha,
   ).slice(0, 12)}`;
   const runDir = join(retentionDir, runId);
-  mkdirSync(runDir, { recursive: true });
-  const reportWithTraceArtifacts = writeE2ERedactedTraceArtifacts(report, runDir);
-  writeFileSync(
-    dashboardPath,
-    JSON.stringify(reportWithTraceArtifacts.readinessDashboard, null, 2),
-    'utf8',
-  );
-  writeFileSync(
-    join(runDir, 'report.json'),
-    JSON.stringify(reportWithTraceArtifacts, null, 2),
-    'utf8',
-  );
-  writeFileSync(
-    join(runDir, 'dashboard.json'),
-    JSON.stringify(reportWithTraceArtifacts.readinessDashboard, null, 2),
-    'utf8',
-  );
-
   const indexPath = join(retentionDir, 'index.json');
-  const previousIndex = readJsonFile<{ runs?: E2EReadinessArtifactIndexEntry[] }>(indexPath, {
-    runs: [],
+  const retentionLimit = resolveReadinessArtifactRetentionLimit(env);
+  return withFileLockSync(join(retentionDir, '.artifact.lock'), () => {
+    mkdirSync(retentionDir, { recursive: true });
+    const indexState = readReadinessIndexState(indexPath);
+    removeManagedTransactionResidueSync(retentionDir, runId);
+    const stagingDir = uniqueManagedPath(retentionDir, runId, 'staging');
+    mkdirSync(stagingDir, { recursive: true });
+    try {
+      const reportWithTraceArtifacts = writeE2ERedactedTraceArtifacts(report, stagingDir, runId);
+      atomicWriteFileSync(
+        join(stagingDir, 'report.json'),
+        JSON.stringify(reportWithTraceArtifacts, null, 2),
+        'utf8',
+      );
+      atomicWriteFileSync(
+        join(stagingDir, 'dashboard.json'),
+        JSON.stringify(reportWithTraceArtifacts.readinessDashboard, null, 2),
+        'utf8',
+      );
+      replaceDirectoryFromStagingSync(stagingDir, runDir);
+
+      const withoutDuplicate = indexState.currentRuns.filter(
+        (previousRun) => previousRun.runId !== runId,
+      );
+      const runs: E2EReadinessArtifactIndexEntry[] = [
+        {
+          runId,
+          generatedAt: report.generatedAt,
+          gitSha: report.runMetadata.gitSha,
+          provider: report.runMetadata.provider,
+          model: report.runMetadata.model,
+          reportRelativePath: `${runId}/report.json`,
+          dashboardRelativePath: `${runId}/dashboard.json`,
+          passing: report.readinessDashboard.overall.passing,
+          scenarioPassRate: report.readinessDashboard.overall.scenarioPassRate,
+          pass1Rate: report.readinessDashboard.overall.pass1Rate,
+        },
+        ...withoutDuplicate,
+      ];
+      const retainedRuns = runs.slice(0, retentionLimit);
+      const retainedRunIds = new Set(retainedRuns.map((run) => run.runId));
+      atomicWriteFileSync(
+        indexPath,
+        JSON.stringify(
+          {
+            version: E2E_READINESS_DASHBOARD_VERSION,
+            retainedRunCount: retainedRuns.length,
+            retentionLimit,
+            runs: retainedRuns,
+          },
+          null,
+          2,
+        ),
+        'utf8',
+      );
+      for (const run of runs.slice(retainedRuns.length)) {
+        rmSync(join(retentionDir, run.runId), { recursive: true, force: true });
+      }
+      for (const discardedRunId of indexState.discardedRunIds) {
+        rmSync(join(retentionDir, discardedRunId), { recursive: true, force: true });
+      }
+      for (const candidate of readdirSync(retentionDir)) {
+        if (candidate.startsWith('run-') && !retainedRunIds.has(candidate)) {
+          rmSync(join(retentionDir, candidate), { recursive: true, force: true });
+        }
+      }
+      atomicWriteFileSync(
+        dashboardPath,
+        JSON.stringify(reportWithTraceArtifacts.readinessDashboard, null, 2),
+        'utf8',
+      );
+      return { dashboardPath, runDir, indexPath, report: reportWithTraceArtifacts };
+    } finally {
+      rmSync(stagingDir, { recursive: true, force: true });
+    }
   });
-  const withoutDuplicate = Array.isArray(previousIndex.runs)
-    ? previousIndex.runs.filter((run) => run.runId !== runId)
-    : [];
-  const runs: E2EReadinessArtifactIndexEntry[] = [
-    {
-      runId,
-      generatedAt: report.generatedAt,
-      gitSha: report.runMetadata.gitSha,
-      provider: report.runMetadata.provider,
-      model: report.runMetadata.model,
-      reportPath: join(runDir, 'report.json'),
-      dashboardPath: join(runDir, 'dashboard.json'),
-      passing: report.readinessDashboard.overall.passing,
-      scenarioPassRate: report.readinessDashboard.overall.scenarioPassRate,
-      pass1Rate: report.readinessDashboard.overall.pass1Rate,
-    },
-    ...withoutDuplicate,
-  ].sort((left, right) => right.generatedAt.localeCompare(left.generatedAt));
-
-  const retainedRuns = runs.slice(0, resolveReadinessArtifactRetentionLimit(env));
-  for (const run of runs.slice(retainedRuns.length)) {
-    rmSync(join(retentionDir, run.runId), { recursive: true, force: true });
-  }
-
-  mkdirSync(retentionDir, { recursive: true });
-  writeFileSync(
-    indexPath,
-    JSON.stringify(
-      {
-        version: E2E_READINESS_DASHBOARD_VERSION,
-        retainedRunCount: retainedRuns.length,
-        retentionLimit: resolveReadinessArtifactRetentionLimit(env),
-        runs: retainedRuns,
-      },
-      null,
-      2,
-    ),
-    'utf8',
-  );
-
-  return { dashboardPath, runDir, indexPath, report: reportWithTraceArtifacts };
 }
 
 export function recordE2ERunReportEntry(
@@ -577,37 +588,39 @@ export function recordE2ERunReportEntry(
   if (!partialPath) {
     return;
   }
-  mkdirSync(dirname(partialPath), { recursive: true });
-  const existing = readPartialEntries(partialPath);
-  const withoutDuplicate = existing.filter(
-    (candidate) => !(candidate.suite === entry.suite && candidate.fixtureId === entry.fixtureId),
-  );
-  writeFileSync(partialPath, JSON.stringify([...withoutDuplicate, entry], null, 2), 'utf8');
+  withFileLockSync(`${partialPath}.lock`, () => {
+    const existing = readPartialEntries(partialPath);
+    const withoutDuplicate = existing.filter(
+      (candidate) => !(candidate.suite === entry.suite && candidate.fixtureId === entry.fixtureId),
+    );
+    writePartialReportFile(partialPath, [...withoutDuplicate, entry]);
+  });
 }
 
-export function flushE2ERunReport(env: NodeJS.ProcessEnv = process.env): E2ERunReport | null {
+export function flushE2ERunReport(env: NodeJS.ProcessEnv = process.env): PublicE2ERunReport | null {
   const reportPath = env[E2E_REPORT_PATH_ENV]?.trim();
   const partialPath = resolvePartialReportPath(env);
   if (!reportPath || !partialPath) {
     return null;
   }
+  return withFileLockSync(`${partialPath}.lock`, () => {
+    const entries = readPartialEntries(partialPath);
+    if (entries.length === 0) {
+      return null;
+    }
+    const report = buildE2ERunReport(entries, {
+      maxScenarioRetries: resolveE2EScenarioMaxRetries(env),
+      runMetadataEnv: env,
+    });
 
-  const entries = readPartialEntries(partialPath);
-  const report = buildE2ERunReport(entries, {
-    maxScenarioRetries: resolveE2EScenarioMaxRetries(env),
-    runMetadata: resolveE2ERunMetadata(undefined, env),
+    const resolvedReportPath = resolve(reportPath);
+    const artifacts = writeE2EReadinessDashboardArtifacts(resolvedReportPath, report, env);
+    atomicWriteFileSync(resolvedReportPath, JSON.stringify(artifacts.report, null, 2), 'utf8');
+    if (existsSync(partialPath)) {
+      unlinkSync(partialPath);
+    }
+    return artifacts.report;
   });
-
-  mkdirSync(dirname(resolve(reportPath)), { recursive: true });
-  const resolvedReportPath = resolve(reportPath);
-  const artifacts = writeE2EReadinessDashboardArtifacts(resolvedReportPath, report, env);
-  writeFileSync(resolvedReportPath, JSON.stringify(artifacts.report, null, 2), 'utf8');
-
-  if (existsSync(partialPath)) {
-    unlinkSync(partialPath);
-  }
-
-  return artifacts.report;
 }
 
 export function formatE2ERunReportSummary(report: E2ERunReport): string {

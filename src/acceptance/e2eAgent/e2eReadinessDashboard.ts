@@ -13,10 +13,7 @@ import {
   listE2EBenchmarkRequirements,
   type E2EBenchmarkRequirement,
 } from './e2eBenchmarkManifest';
-import {
-  buildFailureTaxonomy,
-  buildMinedEvalCandidates,
-} from './e2eReadinessFailureTaxonomy';
+import { buildFailureTaxonomy, buildMinedEvalCandidates } from './e2eReadinessFailureTaxonomy';
 import type { E2EAssessmentAxisSummary, E2EAssessmentReport } from './e2eAssessmentReport';
 import type { E2EAssessmentDimension } from './e2eAssessmentDimensions';
 import type { E2EBenchmarkFamily } from './e2eBenchmarkRegistry';
@@ -29,7 +26,7 @@ import type {
   E2ERunReportReadiness,
 } from './e2eRunReport';
 
-export const E2E_READINESS_DASHBOARD_VERSION = '2026-06-12.phase8';
+export const E2E_READINESS_DASHBOARD_VERSION = '2026-07-10.phase9';
 export const E2E_READINESS_ARTIFACT_RETENTION_RUNS = 90;
 
 export type E2EReadinessFailureCategory =
@@ -102,7 +99,14 @@ export type E2EReadinessDashboard = {
   benchmarkManifestVersion: string;
   runMetadata: Pick<
     E2ERunReportRunMetadata,
-    'gitSha' | 'provider' | 'providerId' | 'model' | 'modelVersion' | 'collectMode'
+    | 'gitSha'
+    | 'provider'
+    | 'providerId'
+    | 'hostedFamily'
+    | 'model'
+    | 'modelVersion'
+    | 'endpointSha256'
+    | 'collectMode'
   >;
   overall: {
     passing: boolean;
@@ -331,8 +335,10 @@ export function buildE2EReadinessDashboard(
       gitSha: params.runMetadata.gitSha,
       provider: params.runMetadata.provider,
       ...(params.runMetadata.providerId ? { providerId: params.runMetadata.providerId } : {}),
+      hostedFamily: params.runMetadata.hostedFamily,
       model: params.runMetadata.model,
       ...(params.runMetadata.modelVersion ? { modelVersion: params.runMetadata.modelVersion } : {}),
+      endpointSha256: params.runMetadata.endpointSha256,
       collectMode: params.runMetadata.collectMode,
     },
     overall: {
@@ -394,7 +400,13 @@ export function buildE2EReadinessDashboard(
     },
     artifactRetention: {
       defaultRetainedRuns: E2E_READINESS_ARTIFACT_RETENTION_RUNS,
-      artifactKinds: ['run_report', 'readiness_dashboard', 'stdout_stderr_log'],
+      artifactKinds: [
+        'run_report',
+        'readiness_dashboard',
+        'redacted_trace',
+        'trace_index',
+        'stdout_stderr_log',
+      ],
     },
     refreshCadence: [
       {

@@ -1,12 +1,13 @@
+import { createHash } from 'crypto';
 import { mkdirSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { join, posix } from 'path';
 
 import type { E2EScenarioTraceSummary } from './e2eTraceSummary';
 
 export type E2ETraceRetentionReason = 'failed' | 'sampled_pass';
 
 export type E2ERunReportScenarioTraceArtifact = {
-  path: string;
+  referenceBase: 'retention_root';
   relativePath: string;
   retentionReason: E2ETraceRetentionReason;
 };
@@ -14,16 +15,19 @@ export type E2ERunReportScenarioTraceArtifact = {
 export type E2ETraceArtifactRunMetadata = {
   gitSha: string;
   provider: string;
+  hostedFamily: string;
   model: string;
+  endpointSha256: string;
 };
 
 export type E2ETraceArtifactIndexEntry = {
   fixtureId: string;
+  referenceBase: 'retention_root';
   retentionReason: E2ETraceRetentionReason;
-  path: string;
+  relativePath: string;
 };
 
-export const TRACE_ARTIFACT_DIR_NAME = 'failed-traces';
+export const TRACE_ARTIFACT_DIR_NAME = 'redacted-traces';
 
 export function sanitizeTraceFileName(value: string): string {
   return (
@@ -34,8 +38,13 @@ export function sanitizeTraceFileName(value: string): string {
   );
 }
 
+function fixtureIdDigest(value: string): string {
+  return createHash('sha256').update(value, 'utf8').digest('hex').slice(0, 12);
+}
+
 export function writeRetainedScenarioTraceArtifact(params: {
   runDir: string;
+  retentionRunId: string;
   generatedAt: string;
   runMetadata: E2ETraceArtifactRunMetadata;
   fixtureId: string;
@@ -48,15 +57,20 @@ export function writeRetainedScenarioTraceArtifact(params: {
   const traceDir = join(params.runDir, TRACE_ARTIFACT_DIR_NAME);
   mkdirSync(traceDir, { recursive: true });
 
-  const filename = `${params.retentionReason}-${sanitizeTraceFileName(params.fixtureId)}.json`;
-  const relativePath = join(TRACE_ARTIFACT_DIR_NAME, filename);
+  const filename = `${params.retentionReason}-${sanitizeTraceFileName(
+    params.fixtureId,
+  )}-${fixtureIdDigest(params.fixtureId)}.json`;
+  const relativePath = posix.join(params.retentionRunId, TRACE_ARTIFACT_DIR_NAME, filename);
   const path = join(traceDir, filename);
   const artifact = {
+    schemaVersion: 'e2e-redacted-trace-v2',
     traceId: `${sanitizeTraceFileName(params.generatedAt)}:${params.fixtureId}`,
     generatedAt: params.generatedAt,
     retentionReason: params.retentionReason,
     provider: params.runMetadata.provider,
+    hostedFamily: params.runMetadata.hostedFamily,
     model: params.runMetadata.model,
+    endpointSha256: params.runMetadata.endpointSha256,
     gitSha: params.runMetadata.gitSha,
     trace: params.trace,
   };
@@ -65,14 +79,15 @@ export function writeRetainedScenarioTraceArtifact(params: {
 
   return {
     traceArtifact: {
-      path,
+      referenceBase: 'retention_root',
       relativePath,
       retentionReason: params.retentionReason,
     },
     indexEntry: {
       fixtureId: params.fixtureId,
+      referenceBase: 'retention_root',
       retentionReason: params.retentionReason,
-      path,
+      relativePath,
     },
   };
 }
@@ -92,7 +107,7 @@ export function writeTraceArtifactIndex(params: {
     join(traceDir, 'index.json'),
     JSON.stringify(
       {
-        schemaVersion: 'e2e-redacted-trace-index-v1',
+        schemaVersion: 'e2e-redacted-trace-index-v2',
         generatedAt: params.generatedAt,
         traces: params.traces,
       },

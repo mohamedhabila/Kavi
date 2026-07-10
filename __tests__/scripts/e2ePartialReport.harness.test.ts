@@ -10,6 +10,14 @@ import {
 } from '../../scripts/e2eReport/partialReport';
 
 function buildEntry() {
+  const tokenBuckets = {
+    systemPromptTokens: 0,
+    toolDeclarationTokens: 0,
+    memoryContextTokens: 0,
+    conversationHistoryTokens: 0,
+    userTurnTokens: 0,
+    toolResultTokens: 0,
+  };
   return {
     schemaVersion: 'e2e-run-report-scenario-v2',
     suite: 'core',
@@ -22,13 +30,41 @@ function buildEntry() {
     toolCallCount: 0,
     turnCount: 1,
     graphStatus: 'finalized',
-    usage: {},
-    tokenBuckets: {},
-    cache: {},
-    loopDiagnostics: {},
+    usage: {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens: 0,
+      eventCount: 0,
+      tokenBuckets,
+    },
+    tokenBuckets,
+    cache: {
+      inputTokens: 0,
+      eligibleInputTokens: 0,
+      providerManagedReadinessTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      cacheReadRate: 0,
+      eligibleCacheReadRate: 0,
+      eligible: false,
+    },
+    loopDiagnostics: {
+      repeatedToolCalls: [],
+      repeatedCatalogAfterActivationCount: 0,
+      repeatedHoldReasons: [],
+      passing: true,
+    },
     benchmarkFamilies: ['kavi-core'],
     assessmentDimensions: ['task_completion'],
-    rubricAudit: {},
+    rubricAudit: {
+      rubricCount: 0,
+      assistantProseRubricCount: 0,
+      weakPatternRubricCount: 0,
+      structuralSubstringRubricCount: 0,
+      risks: [],
+    },
     errors: [],
   };
 }
@@ -74,6 +110,30 @@ describe('current evaluation partial report contract', () => {
         entries: [{ ...entry, legacyPrivatePayload: 'never-normalize-me' }],
       }),
     ).toThrow('Unknown entries[0] fields');
+    expect(() =>
+      parsePartialReport({
+        schemaVersion: PARTIAL_REPORT_SCHEMA_VERSION,
+        entries: [{ ...entry, usage: { ...entry.usage, legacyCounter: 1 } }],
+      }),
+    ).toThrow('Unknown entries[0].usage fields');
+    const { toolResultTokens: _toolResultTokens, ...incompleteBuckets } = entry.tokenBuckets;
+    expect(() =>
+      parsePartialReport({
+        schemaVersion: PARTIAL_REPORT_SCHEMA_VERSION,
+        entries: [{ ...entry, tokenBuckets: incompleteBuckets }],
+      }),
+    ).toThrow('Missing entries[0].tokenBuckets.toolResultTokens');
+    expect(() =>
+      parsePartialReport({
+        schemaVersion: PARTIAL_REPORT_SCHEMA_VERSION,
+        entries: [
+          {
+            ...entry,
+            trace: { schemaVersion: 'e2e-redacted-trace-v2', privatePayload: 'not-a-trace' },
+          },
+        ],
+      }),
+    ).toThrow('Invalid entries[0].trace');
   });
 
   it('rejects an existing empty partial instead of treating it as a successful run', () => {

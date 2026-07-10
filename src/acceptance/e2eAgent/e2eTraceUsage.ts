@@ -159,6 +159,9 @@ function buildPromptCacheTrace(
             SAFE_PREFIX_DIVERGENCE_REASON_SET,
           )
         : undefined;
+      const prefixDivergenceReasonHash = rawPrefixDivergenceReason
+        ? hashString(rawPrefixDivergenceReason)
+        : undefined;
       return {
         eligible: event.eligible,
         enabled: event.enabled,
@@ -189,10 +192,10 @@ function buildPromptCacheTrace(
         ...(event.toolDeclarationDigest
           ? { toolDeclarationDigestHash: hashString(event.toolDeclarationDigest) }
           : {}),
-        ...(rawPrefixDivergenceReason && prefixDivergenceReason
+        ...(prefixDivergenceReason && prefixDivergenceReasonHash
           ? {
               prefixDivergenceReason,
-              prefixDivergenceReasonHash: hashString(rawPrefixDivergenceReason),
+              prefixDivergenceReasonHash,
             }
           : {}),
       };

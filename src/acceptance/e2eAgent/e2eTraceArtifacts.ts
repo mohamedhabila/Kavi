@@ -5,6 +5,12 @@ import {
   type E2ETraceArtifactIndexEntry,
   type E2ETraceRetentionReason,
 } from './e2eTraceArtifactFiles';
+import {
+  projectPublicRunReport,
+  type PublicE2ERunReport,
+  type PublicE2EScenarioEntry,
+} from '../../../scripts/e2eReport/publicRunReport';
+import { projectPublicRedactedTrace } from '../../../scripts/e2eReport/publicTraceSchema';
 import type { E2EScenarioTraceSummary } from './e2eTraceSummary';
 
 export { buildE2EScenarioTraceSummary } from './e2eTraceSummary';
@@ -46,20 +52,24 @@ type TraceableScenarioEntry = {
 };
 
 type TraceableReport<TScenario extends TraceableScenarioEntry> = {
+  schemaVersion: 'e2e-run-report-v2';
   generatedAt: string;
   runMetadata: {
     gitSha: string;
     provider: string;
+    hostedFamily: string;
     model: string;
+    endpointSha256: string;
   };
   scenarios: TScenario[];
 };
 
 function shouldRetainScenarioTrace(
   scenario: TraceableScenarioEntry,
+  trace: E2EScenarioTraceSummary | null,
   sampledPassAlreadyRetained: boolean,
 ): E2ETraceRetentionReason | null {
-  if (!scenario.trace) {
+  if (!trace) {
     return null;
   }
   if (!scenario.passed) {
@@ -68,21 +78,21 @@ function shouldRetainScenarioTrace(
   return sampledPassAlreadyRetained ? null : 'sampled_pass';
 }
 
-function omitInlineTrace<TScenario extends TraceableScenarioEntry>(scenario: TScenario): TScenario {
-  const { trace: _trace, ...scenarioWithoutTrace } = scenario;
-  return scenarioWithoutTrace as TScenario;
-}
-
 export function writeE2ERedactedTraceArtifacts<
   TScenario extends TraceableScenarioEntry,
   TReport extends TraceableReport<TScenario>,
->(report: TReport, runDir: string): TReport {
+>(report: TReport, runDir: string, retentionRunId: string): PublicE2ERunReport {
+  const publicReport = projectPublicRunReport(report);
   const traceIndex: E2ETraceArtifactIndexEntry[] = [];
   let sampledPassRetained = false;
-  const scenarios = report.scenarios.map((scenario) => {
-    const retentionReason = shouldRetainScenarioTrace(scenario, sampledPassRetained);
-    if (!retentionReason || !scenario.trace) {
-      return omitInlineTrace(scenario);
+  const scenarios = publicReport.scenarios.map((publicScenario, index) => {
+    const sourceScenario = report.scenarios[index];
+    const trace = projectPublicRedactedTrace(sourceScenario?.trace);
+    const retentionReason = sourceScenario
+      ? shouldRetainScenarioTrace(sourceScenario, trace, sampledPassRetained)
+      : null;
+    if (!retentionReason || !trace) {
+      return publicScenario;
     }
     if (retentionReason === 'sampled_pass') {
       sampledPassRetained = true;
@@ -90,28 +100,26 @@ export function writeE2ERedactedTraceArtifacts<
 
     const { traceArtifact, indexEntry } = writeRetainedScenarioTraceArtifact({
       runDir,
-      generatedAt: report.generatedAt,
-      runMetadata: report.runMetadata,
-      fixtureId: scenario.fixtureId,
+      retentionRunId,
+      generatedAt: publicReport.generatedAt,
+      runMetadata: publicReport.runMetadata,
+      fixtureId: publicScenario.fixtureId,
       retentionReason,
-      trace: scenario.trace,
+      trace,
     });
     traceIndex.push(indexEntry);
 
     return {
-      ...omitInlineTrace(scenario),
+      ...publicScenario,
       traceArtifact,
-    };
+    } satisfies PublicE2EScenarioEntry;
   });
 
   writeTraceArtifactIndex({
     runDir,
-    generatedAt: report.generatedAt,
+    generatedAt: publicReport.generatedAt,
     traces: traceIndex,
   });
 
-  return {
-    ...report,
-    scenarios,
-  } as TReport;
+  return { ...publicReport, scenarios };
 }

@@ -15,8 +15,9 @@ function createReport() {
     runMetadata: {
       gitSha: 'abcdef1234567890',
       provider: 'gemini',
+      hostedFamily: 'gemini',
       model: 'gemini-test',
-      providerBaseUrl: 'https://example.invalid/private-endpoint',
+      endpointSha256: 'a'.repeat(64),
       scenarioManifestVersion: '2026-06-12.phase0',
     },
     totals: {
@@ -64,7 +65,7 @@ function createReport() {
           totalTokens: 40,
           cacheReadTokens: 5,
         },
-        errors: [],
+        errorCount: 0,
       },
       {
         fixtureId: 'core-fail',
@@ -77,7 +78,7 @@ function createReport() {
           totalTokens: 110,
           cacheReadTokens: 20,
         },
-        errors: ['raw provider error with secret-value'],
+        errorCount: 1,
         failedRubrics: [{ fixtureId: 'criterion', detail: 'raw rubric detail secret-value' }],
         loopDiagnostics: {
           passing: false,

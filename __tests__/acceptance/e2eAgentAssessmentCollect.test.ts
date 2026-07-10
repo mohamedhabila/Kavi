@@ -10,11 +10,7 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { mkdirSync, writeFileSync } from 'fs';
-import { dirname, resolve } from 'path';
-
 import { formatE2EAssessmentReportSummary } from '../../src/acceptance/e2eAgent/e2eAssessmentReport';
-import { E2E_REPORT_PATH_ENV } from '../../src/acceptance/e2eAgent/e2eRunReport';
 import {
   buildE2ERunReport,
   buildE2ERunReportScenarioEntry,
@@ -25,6 +21,7 @@ import {
 import { runE2EScenarioWithRetry } from '../../src/acceptance/e2eAgent/e2eScenarioRetry';
 import {
   buildE2EProvider,
+  resolveE2EProviderKey,
   shouldRunE2EAgentEval,
 } from '../../src/acceptance/e2eAgent/providerConfig';
 import {
@@ -109,10 +106,12 @@ describeE2E('E2E assessment collect — full suite evidence', () => {
       metricOutcomes: scenarioOutcomes,
       metricResults: scenarioResults,
       runMetadata: {
-        provider: provider.providerFamily ?? provider.name.toLowerCase(),
-        providerId: provider.id,
-        model: provider.model,
-        providerBaseUrl: provider.baseUrl,
+        providerKey: resolveE2EProviderKey(),
+        ...(process.env.E2E_PUBLIC_MODEL_ID?.trim()
+          ? { model: process.env.E2E_PUBLIC_MODEL_ID.trim() }
+          : {}),
+        modelLocator: provider.model,
+        providerEndpoint: provider.baseUrl,
         collectMode: true,
       },
     });
@@ -120,16 +119,9 @@ describeE2E('E2E assessment collect — full suite evidence', () => {
     expect(runReport.scenarios).toHaveLength(COLLECT_SCENARIOS.length);
     expect(runReport.totals.scenarioCount).toBe(COLLECT_SCENARIOS.length);
     expect(runReport.runMetadata).toMatchObject({
-      model: provider.model,
+      model: expect.any(String),
       collectMode: true,
     });
-
-    const reportPath = process.env[E2E_REPORT_PATH_ENV]?.trim();
-    if (reportPath) {
-      const absoluteReportPath = resolve(reportPath);
-      mkdirSync(dirname(absoluteReportPath), { recursive: true });
-      writeFileSync(absoluteReportPath, JSON.stringify(runReport, null, 2), 'utf8');
-    }
 
     const flushed = flushE2ERunReport();
     expect(flushed).not.toBeNull();
