@@ -1,6 +1,7 @@
 import {
   MEMORY_RETRIEVAL_BARRIER_OUTCOMES,
   MEMORY_RETRIEVAL_EVENT_RETENTION_LIMIT,
+  MEMORY_RETRIEVAL_EXPANSION_OUTCOMES,
   MEMORY_RETRIEVAL_MODES,
   MEMORY_RETRIEVAL_OPERATIONS,
   MEMORY_RETRIEVAL_OUTCOMES,
@@ -49,6 +50,21 @@ export type E2EPairedPublicRetrievalMetrics = Readonly<{
     deterministicFallback: number;
     notRequested: number;
   }>;
+  expansionOutcomeCounts: Readonly<{
+    notRequested: number;
+    completed: number;
+    scopeUnavailable: number;
+    failed: number;
+  }>;
+  expansionTotals: Readonly<{
+    requestedSourceCount: number;
+    acceptedSourceCount: number;
+    sourceWithEvidenceCount: number;
+    emittedEvidenceCount: number;
+    promptBudgetDroppedCount: number;
+    promptChars: number;
+    durationMs: number;
+  }>;
   barrierOutcomeCounts: Readonly<{
     none: number;
     noJob: number;
@@ -67,6 +83,7 @@ export type E2EPairedPublicRetrievalMetrics = Readonly<{
     candidateFetchMs: number;
     scoreMs: number;
     selectorMs: number;
+    evidenceExpansionMs: number;
     totalMs: number;
   }>;
 }>;
@@ -149,6 +166,21 @@ export function buildE2EPairedPublicRetrievalMetrics(
   const modeCounts = { query: 0, recent: 0, disabled: 0 };
   const outcomeCounts = { completed: 0, degraded: 0, failed: 0, disabled: 0 };
   const selectorCounts = { applied: 0, deterministicFallback: 0, notRequested: 0 };
+  const expansionOutcomeCounts = {
+    notRequested: 0,
+    completed: 0,
+    scopeUnavailable: 0,
+    failed: 0,
+  };
+  const expansionTotals = {
+    requestedSourceCount: 0,
+    acceptedSourceCount: 0,
+    sourceWithEvidenceCount: 0,
+    emittedEvidenceCount: 0,
+    promptBudgetDroppedCount: 0,
+    promptChars: 0,
+    durationMs: 0,
+  };
   const barrierOutcomeCounts = {
     none: 0,
     noJob: 0,
@@ -163,6 +195,7 @@ export function buildE2EPairedPublicRetrievalMetrics(
     candidateFetchMs: 0,
     scoreMs: 0,
     selectorMs: 0,
+    evidenceExpansionMs: 0,
     totalMs: 0,
   };
   const factIds = new Set<string>();
@@ -345,12 +378,95 @@ export function buildE2EPairedPublicRetrievalMetrics(
           'retrieval.timings.selectorMs',
           MAX_TIMING_MS,
         ),
+        evidenceExpansionMs: requireBoundedInteger(
+          event.timings.evidenceExpansionMs,
+          'retrieval.timings.evidenceExpansionMs',
+          MAX_TIMING_MS,
+        ),
         totalMs: requireBoundedInteger(
           event.timings.totalMs,
           'retrieval.timings.totalMs',
           MAX_TIMING_MS,
         ),
       };
+      if (
+        !event.expansion ||
+        typeof event.expansion !== 'object' ||
+        Array.isArray(event.expansion)
+      ) {
+        throw new Error('retrieval.expansion must be a closed object.');
+      }
+      const expansionOutcome = requireEnum(
+        event.expansion.outcome,
+        MEMORY_RETRIEVAL_EXPANSION_OUTCOMES,
+        'retrieval.expansion.outcome',
+      );
+      const expansion = {
+        requestedSourceCount: requireBoundedInteger(
+          event.expansion.requestedSourceCount,
+          'retrieval.expansion.requestedSourceCount',
+          MAX_RETRIEVAL_COUNT,
+        ),
+        acceptedSourceCount: requireBoundedInteger(
+          event.expansion.acceptedSourceCount,
+          'retrieval.expansion.acceptedSourceCount',
+          12,
+        ),
+        sourceWithEvidenceCount: requireBoundedInteger(
+          event.expansion.sourceWithEvidenceCount,
+          'retrieval.expansion.sourceWithEvidenceCount',
+          12,
+        ),
+        emittedEvidenceCount: requireBoundedInteger(
+          event.expansion.emittedEvidenceCount,
+          'retrieval.expansion.emittedEvidenceCount',
+          24,
+        ),
+        promptBudgetDroppedCount: requireBoundedInteger(
+          event.expansion.promptBudgetDroppedCount,
+          'retrieval.expansion.promptBudgetDroppedCount',
+          MAX_RETRIEVAL_COUNT,
+        ),
+        promptChars: requireBoundedInteger(
+          event.expansion.promptChars,
+          'retrieval.expansion.promptChars',
+          3_200,
+        ),
+        durationMs: requireBoundedInteger(
+          event.expansion.durationMs,
+          'retrieval.expansion.durationMs',
+          MAX_TIMING_MS,
+        ),
+      };
+      const zeroExpansionResult =
+        expansion.acceptedSourceCount === 0 &&
+        expansion.sourceWithEvidenceCount === 0 &&
+        expansion.emittedEvidenceCount === 0 &&
+        expansion.promptBudgetDroppedCount === 0 &&
+        expansion.promptChars === 0;
+      if (
+        expansion.acceptedSourceCount > expansion.requestedSourceCount ||
+        expansion.sourceWithEvidenceCount > expansion.acceptedSourceCount ||
+        expansion.durationMs !== normalizedTimings.evidenceExpansionMs ||
+        normalizedTimings.totalMs < expansion.durationMs ||
+        (expansion.emittedEvidenceCount === 0) !== (expansion.promptChars === 0) ||
+        (expansion.emittedEvidenceCount > 0 && expansion.sourceWithEvidenceCount === 0) ||
+        (expansionOutcome === 'not_requested' &&
+          (expansion.requestedSourceCount !== 0 ||
+            !zeroExpansionResult ||
+            expansion.durationMs !== 0)) ||
+        (expansionOutcome === 'scope_unavailable' &&
+          (expansion.requestedSourceCount === 0 ||
+            !zeroExpansionResult ||
+            expansion.durationMs !== 0)) ||
+        (expansionOutcome === 'failed' &&
+          (expansion.requestedSourceCount === 0 ||
+            !zeroExpansionResult ||
+            (outcome !== 'degraded' && outcome !== 'failed'))) ||
+        (expansionOutcome === 'completed' && expansion.requestedSourceCount === 0)
+      ) {
+        throw new Error('Paired retrieval expansion state is inconsistent.');
+      }
       requireBoundedInteger(event.createdAt, 'retrieval.createdAt');
 
       const disabled = mode === 'disabled';
@@ -364,6 +480,7 @@ export function buildE2EPairedPublicRetrievalMetrics(
             selectedEpisodes !== 0 ||
             event.counts.selectedEpisodeIds.length !== 0 ||
             Object.values(normalizedTimings).some((value) => value !== 0) ||
+            expansionOutcome !== 'not_requested' ||
             selectorMode !== 'deterministic' ||
             selectorOutcome !== 'not_requested' ||
             event.barrier !== null))
@@ -390,6 +507,32 @@ export function buildE2EPairedPublicRetrievalMetrics(
           selectorCounts.notRequested,
           1,
           'selectorCounts.notRequested',
+        );
+      }
+      if (expansionOutcome === 'not_requested') {
+        expansionOutcomeCounts.notRequested = addBounded(
+          expansionOutcomeCounts.notRequested,
+          1,
+          'expansionOutcomeCounts.notRequested',
+        );
+      } else if (expansionOutcome === 'scope_unavailable') {
+        expansionOutcomeCounts.scopeUnavailable = addBounded(
+          expansionOutcomeCounts.scopeUnavailable,
+          1,
+          'expansionOutcomeCounts.scopeUnavailable',
+        );
+      } else {
+        expansionOutcomeCounts[expansionOutcome] = addBounded(
+          expansionOutcomeCounts[expansionOutcome],
+          1,
+          `expansionOutcomeCounts.${expansionOutcome}`,
+        );
+      }
+      for (const key of Object.keys(expansionTotals) as Array<keyof typeof expansionTotals>) {
+        expansionTotals[key] = addBounded(
+          expansionTotals[key],
+          expansion[key],
+          `expansionTotals.${key}`,
         );
       }
       candidateFactCount = addBounded(candidateFactCount, candidateFacts, 'candidateFactCount');
@@ -503,6 +646,8 @@ export function buildE2EPairedPublicRetrievalMetrics(
     modeCounts,
     outcomeCounts,
     selectorCounts,
+    expansionOutcomeCounts,
+    expansionTotals,
     barrierOutcomeCounts,
     barrierWaitMsTotal,
     barrierQueueAgeMsTotal,

@@ -49,7 +49,18 @@ function event(id: string, createdAt: number): MemoryRetrievalEvent {
       candidateFetchMs: 1,
       scoreMs: 1,
       selectorMs: 0,
+      evidenceExpansionMs: 1,
       totalMs: 5,
+    },
+    expansion: {
+      outcome: 'completed',
+      requestedSourceCount: 2,
+      acceptedSourceCount: 2,
+      sourceWithEvidenceCount: 1,
+      emittedEvidenceCount: 1,
+      promptBudgetDroppedCount: 0,
+      promptChars: 300,
+      durationMs: 1,
     },
     selector: { mode: 'deterministic', outcome: 'not_requested' },
     barrier: { outcome: 'completed', waitMs: 1, queueAgeMs: 2 },
@@ -68,6 +79,10 @@ describe('foreground retrieval evidence capture', () => {
     const newEvent = {
       ...event('new-event', 2),
       privatePayload: 'PRIVATE-RETRIEVAL-PAYLOAD',
+      expansion: {
+        ...event('new-event', 2).expansion,
+        privatePayload: 'PRIVATE-EXPANSION-PAYLOAD',
+      },
     } as MemoryRetrievalEvent;
     mockedReadRecentMemoryRetrievalEvents
       .mockReturnValueOnce([oldEvent])
@@ -91,6 +106,7 @@ describe('foreground retrieval evidence capture', () => {
       events: [{ id: 'new-event' }],
     });
     expect(JSON.stringify(evidence)).not.toContain('PRIVATE-RETRIEVAL-PAYLOAD');
+    expect(JSON.stringify(evidence)).not.toContain('PRIVATE-EXPANSION-PAYLOAD');
   });
 
   it('performs literal zero-access capture for product memory opt-out', async () => {
@@ -121,12 +137,10 @@ describe('foreground retrieval evidence capture', () => {
 
   it('marks retention churn as overflow when a captured baseline event is evicted', async () => {
     const baseline = Array.from({ length: 499 }, (_, index) => event(`old-${index}`, index));
-    const current = [
-      event('new-1', 500),
-      event('new-2', 501),
-      ...baseline.slice(1),
-    ];
-    mockedReadRecentMemoryRetrievalEvents.mockReturnValueOnce(baseline).mockReturnValueOnce(current);
+    const current = [event('new-1', 500), event('new-2', 501), ...baseline.slice(1)];
+    mockedReadRecentMemoryRetrievalEvents
+      .mockReturnValueOnce(baseline)
+      .mockReturnValueOnce(current);
     const capture = await beginForegroundScenarioRetrievalCapture({
       sourceThreadId: 'conversation-1',
       memoryOptOut: false,

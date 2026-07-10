@@ -36,6 +36,16 @@ function projectClosedEvent(event: MemoryRetrievalEvent): MemoryRetrievalEvent {
       selectedEpisodeIds: [...event.counts.selectedEpisodeIds],
     },
     timings: { ...event.timings },
+    expansion: {
+      outcome: event.expansion.outcome,
+      requestedSourceCount: event.expansion.requestedSourceCount,
+      acceptedSourceCount: event.expansion.acceptedSourceCount,
+      sourceWithEvidenceCount: event.expansion.sourceWithEvidenceCount,
+      emittedEvidenceCount: event.expansion.emittedEvidenceCount,
+      promptBudgetDroppedCount: event.expansion.promptBudgetDroppedCount,
+      promptChars: event.expansion.promptChars,
+      durationMs: event.expansion.durationMs,
+    },
     selector: { ...event.selector },
     barrier: event.barrier ? { ...event.barrier } : null,
     createdAt: event.createdAt,
@@ -50,9 +60,10 @@ function readScopedEvents(sourceThreadIdHash: string): MemoryRetrievalEvent[] {
   });
 }
 
-export async function beginForegroundScenarioRetrievalCapture(
-  input: { sourceThreadId: string; memoryOptOut: boolean },
-): Promise<ForegroundScenarioRetrievalCapture> {
+export async function beginForegroundScenarioRetrievalCapture(input: {
+  sourceThreadId: string;
+  memoryOptOut: boolean;
+}): Promise<ForegroundScenarioRetrievalCapture> {
   if (input.memoryOptOut) {
     return {
       sourceThreadIdHash: null,
@@ -69,9 +80,7 @@ export async function beginForegroundScenarioRetrievalCapture(
   }
   return {
     sourceThreadIdHash,
-    existingEventIds: new Set(
-      readScopedEvents(sourceThreadIdHash).map((event) => event.id),
-    ),
+    existingEventIds: new Set(readScopedEvents(sourceThreadIdHash).map((event) => event.id)),
     memoryOptOut: input.memoryOptOut,
   };
 }

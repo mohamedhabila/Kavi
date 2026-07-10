@@ -51,7 +51,18 @@ describe('paired public retrieval metrics', () => {
         candidateFetchMs: 1,
         scoreMs: 1,
         selectorMs: 2,
+        evidenceExpansionMs: 0,
         totalMs: 6,
+      },
+      expansion: {
+        outcome: 'not_requested',
+        requestedSourceCount: 0,
+        acceptedSourceCount: 0,
+        sourceWithEvidenceCount: 0,
+        emittedEvidenceCount: 0,
+        promptBudgetDroppedCount: 0,
+        promptChars: 0,
+        durationMs: 0,
       },
       selector: { mode: 'semantic', outcome: 'applied' },
       barrier: { outcome: 'no_job', waitMs: 0, queueAgeMs: null },
@@ -75,7 +86,18 @@ describe('paired public retrieval metrics', () => {
         candidateFetchMs: 0,
         scoreMs: 0,
         selectorMs: 0,
+        evidenceExpansionMs: 0,
         totalMs: 0,
+      },
+      expansion: {
+        outcome: 'not_requested',
+        requestedSourceCount: 0,
+        acceptedSourceCount: 0,
+        sourceWithEvidenceCount: 0,
+        emittedEvidenceCount: 0,
+        promptBudgetDroppedCount: 0,
+        promptChars: 0,
+        durationMs: 0,
       },
       selector: { mode: 'deterministic', outcome: 'not_requested' },
       barrier: null,
@@ -114,6 +136,21 @@ describe('paired public retrieval metrics', () => {
       modeCounts: { query: 1, recent: 1, disabled: 1 },
       outcomeCounts: { completed: 1, degraded: 1, failed: 0, disabled: 1 },
       selectorCounts: { applied: 1, deterministicFallback: 1, notRequested: 1 },
+      expansionOutcomeCounts: {
+        notRequested: 2,
+        completed: 1,
+        scopeUnavailable: 0,
+        failed: 0,
+      },
+      expansionTotals: {
+        requestedSourceCount: 2,
+        acceptedSourceCount: 2,
+        sourceWithEvidenceCount: 1,
+        emittedEvidenceCount: 1,
+        promptBudgetDroppedCount: 0,
+        promptChars: 400,
+        durationMs: 1,
+      },
       barrierOutcomeCounts: {
         none: 1,
         noJob: 1,
@@ -132,6 +169,7 @@ describe('paired public retrieval metrics', () => {
         candidateFetchMs: 2,
         scoreMs: 2,
         selectorMs: 2,
+        evidenceExpansionMs: 1,
         totalMs: 11,
       },
     });
@@ -189,6 +227,31 @@ describe('paired public retrieval metrics', () => {
       turnStatusCounts: { recorded: 0, missing: 0, optOut: 0, overflow: 1 },
       eventCount: 0,
       instrumentationFailureTurnCount: 1,
+    });
+  });
+
+  it('projects unavailable exact scope as valid zero expansion evidence', () => {
+    const event = buildPairedRetrievalEvent({
+      timings: {
+        ...buildPairedRetrievalEvent().timings,
+        evidenceExpansionMs: 0,
+      },
+      expansion: {
+        outcome: 'scope_unavailable',
+        requestedSourceCount: 2,
+        acceptedSourceCount: 0,
+        sourceWithEvidenceCount: 0,
+        emittedEvidenceCount: 0,
+        promptBudgetDroppedCount: 0,
+        promptChars: 0,
+        durationMs: 0,
+      },
+    });
+
+    expect(buildE2EPairedPublicRetrievalMetrics([recordedTurn([event])])).toMatchObject({
+      retrievalFailureCount: 0,
+      expansionOutcomeCounts: { scopeUnavailable: 1 },
+      expansionTotals: { requestedSourceCount: 2, emittedEvidenceCount: 0 },
     });
   });
 
@@ -262,5 +325,49 @@ describe('paired public retrieval metrics', () => {
     expect(() => buildE2EPairedPublicRetrievalMetrics([recordedTurn([event])])).toThrow(
       'disabled-event state is inconsistent',
     );
+  });
+
+  it('rejects inconsistent expansion evidence and excludes open-ended fields', () => {
+    const event = buildPairedRetrievalEvent();
+    expect(() =>
+      buildE2EPairedPublicRetrievalMetrics([
+        recordedTurn([
+          {
+            ...event,
+            expansion: { ...event.expansion, sourceWithEvidenceCount: 0 },
+          },
+        ]),
+      ]),
+    ).toThrow('expansion state is inconsistent');
+
+    expect(() =>
+      buildE2EPairedPublicRetrievalMetrics([
+        recordedTurn([
+          {
+            ...event,
+            expansion: {
+              outcome: 'failed',
+              requestedSourceCount: 1,
+              acceptedSourceCount: 0,
+              sourceWithEvidenceCount: 0,
+              emittedEvidenceCount: 0,
+              promptBudgetDroppedCount: 0,
+              promptChars: 0,
+              durationMs: event.timings.evidenceExpansionMs,
+            },
+          },
+        ]),
+      ]),
+    ).toThrow('expansion state is inconsistent');
+
+    const metrics = buildE2EPairedPublicRetrievalMetrics([
+      recordedTurn([
+        {
+          ...event,
+          expansion: { ...event.expansion, privatePayload: 'PRIVATE EXPANSION PAYLOAD' },
+        } as typeof event,
+      ]),
+    ]);
+    expect(JSON.stringify(metrics)).not.toContain('PRIVATE EXPANSION PAYLOAD');
   });
 });
