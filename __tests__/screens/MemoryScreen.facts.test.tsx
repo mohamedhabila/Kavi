@@ -20,7 +20,10 @@ const mockExecuteMemoryBlockEdit = jest.fn();
 const mockSubscribeToMemoryChanges = jest.fn();
 let mockRouteParams: Record<string, unknown> = {};
 let memoryListener:
-  | ((event: { scope: 'global' | 'conversation' | 'daily' | 'structured' | 'all'; updatedAt: number }) => void)
+  | ((event: {
+      scope: 'global' | 'conversation' | 'daily' | 'structured' | 'all';
+      updatedAt: number;
+    }) => void)
   | null = null;
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -118,6 +121,7 @@ jest.mock('../../src/store/useChatStore', () => ({
 
 jest.mock('../../src/services/memory/memoryTools', () => ({
   executeMemoryRecall: (...args: any[]) => mockExecuteMemoryRecall(...args),
+  queryMemoryFactsForManagement: (...args: any[]) => mockExecuteMemoryRecall(...args),
   executeMemoryRemember: jest.fn(),
   executeMemoryPin: (...args: any[]) => mockExecuteMemoryPin(...args),
   executeMemoryUnpin: (...args: any[]) => mockExecuteMemoryUnpin(...args),
@@ -183,7 +187,9 @@ describe('MemoryScreen — Facts & Blocks tabs', () => {
     await waitFor(() => {
       expect(getByTestId('memory-facts-tab')).toBeTruthy();
     });
-    expect(getByText('No facts recorded yet. The AI will remember structured facts here.')).toBeTruthy();
+    expect(
+      getByText('No facts recorded yet. The AI will remember structured facts here.'),
+    ).toBeTruthy();
   });
 
   it('lists facts returned by executeMemoryRecall', async () => {
@@ -336,7 +342,9 @@ describe('MemoryScreen — Facts & Blocks tabs', () => {
     const { getByText } = render(<MemoryScreen />);
 
     await waitFor(() => {
-      expect(getByText('No facts recorded yet. The AI will remember structured facts here.')).toBeTruthy();
+      expect(
+        getByText('No facts recorded yet. The AI will remember structured facts here.'),
+      ).toBeTruthy();
     });
 
     await act(async () => {
@@ -401,12 +409,19 @@ describe('MemoryScreen — Facts & Blocks tabs', () => {
 
     await waitFor(() => expect(getByTestId('memory-facts-tab')).toBeTruthy());
     expect(getByText('Episodes')).toBeTruthy();
-    expect(getByText('No episodes recorded yet. Episodes capture context from completed tasks.')).toBeTruthy();
+    expect(
+      getByText('No episodes recorded yet. Episodes capture context from completed tasks.'),
+    ).toBeTruthy();
   });
 
   it('lists episodes returned by recallRecentEpisodes', async () => {
     mockRecallRecentEpisodes.mockReturnValue([
-      { id: 'ep-1', summary: 'Deployed to staging', messageIds: ['m1', 'm2'], toolNames: ['deploy'] },
+      {
+        id: 'ep-1',
+        summary: 'Deployed to staging',
+        messageIds: ['m1', 'm2'],
+        toolNames: ['deploy'],
+      },
       { id: 'ep-2', summary: 'Fixed auth bug', messageIds: ['m3'], toolNames: [] },
     ]);
 
@@ -423,13 +438,17 @@ describe('MemoryScreen — Facts & Blocks tabs', () => {
   it('reloads episodes when structured memory changes', async () => {
     mockRecallRecentEpisodes
       .mockReturnValueOnce([])
-      .mockReturnValue([{ id: 'ep-fresh', summary: 'Fresh episode', messageIds: [], toolNames: [] }]);
+      .mockReturnValue([
+        { id: 'ep-fresh', summary: 'Fresh episode', messageIds: [], toolNames: [] },
+      ]);
 
     const { getByText } = render(<MemoryScreen />);
     fireEvent.press(getByText('Facts'));
 
     await waitFor(() => {
-      expect(getByText('No episodes recorded yet. Episodes capture context from completed tasks.')).toBeTruthy();
+      expect(
+        getByText('No episodes recorded yet. Episodes capture context from completed tasks.'),
+      ).toBeTruthy();
     });
 
     await act(async () => {

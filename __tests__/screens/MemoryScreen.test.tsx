@@ -86,6 +86,7 @@ jest.mock('../../src/services/memory/store', () => ({
 // tab tests live in MemoryScreen.facts.test.tsx.
 jest.mock('../../src/services/memory/memoryTools', () => ({
   executeMemoryRecall: () => ({ ok: true, subject: null, facts: [] }),
+  queryMemoryFactsForManagement: () => ({ ok: true, subject: null, facts: [] }),
   executeMemoryRemember: () => ({ ok: true, fact: null, status: 'created', superseded: [] }),
   executeMemoryPin: () => ({ ok: true, fact: null }),
   executeMemoryUnpin: () => ({ ok: true, fact: null }),
@@ -147,7 +148,10 @@ jest.mock('../../src/store/useChatStore', () => ({
 }));
 
 let memoryListener:
-  | ((event: { scope: 'global' | 'conversation' | 'daily' | 'structured' | 'all'; updatedAt: number }) => void)
+  | ((event: {
+      scope: 'global' | 'conversation' | 'daily' | 'structured' | 'all';
+      updatedAt: number;
+    }) => void)
   | null = null;
 let focusEffectCallback: (() => void | (() => void)) | null = null;
 let currentGlobalMemory = 'First memory';
@@ -258,7 +262,9 @@ describe('MemoryScreen', () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     currentGlobalMemory = 'Saved memory';
 
-    const { getByDisplayValue, getByLabelText, getByText, queryByLabelText } = render(<MemoryScreen />);
+    const { getByDisplayValue, getByLabelText, getByText, queryByLabelText } = render(
+      <MemoryScreen />,
+    );
     fireEvent.press(getByText('Global'));
 
     await waitFor(() => {

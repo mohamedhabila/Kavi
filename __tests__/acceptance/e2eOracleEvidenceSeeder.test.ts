@@ -128,7 +128,7 @@ describe('paired oracle evidence seeding', () => {
     const declaration: E2EOracleEvidenceDeclaration = {
       interface: 'memory_remember',
       allowSeeding: true,
-      facts: [{ subject: 'user', predicate: 'preference', value: 'tea' }],
+      facts: [{ subject: 'user', predicate: 'preference', value: 'tea', scope: 'global' }],
     };
     await expect(
       seedE2EOracleEvidence({

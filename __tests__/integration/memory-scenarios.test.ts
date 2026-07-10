@@ -25,7 +25,7 @@ jest.mock('expo-sqlite', () => {
 
 import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
-import { recordFact } from '../../src/services/memory/facts/mutations';
+import { recordFactWithApplicability } from '../../src/services/memory/facts/mutations';
 import { getFactById, listFacts } from '../../src/services/memory/facts/queries';
 import { upsertEntity } from '../../src/services/memory/entities';
 import { ensureDefaultBlocks } from '../../src/services/memory/blocks';
@@ -41,11 +41,21 @@ import {
 import { recallFactsForQuery } from '../../src/services/memory/factRecall';
 import { renderFocusBlock } from '../../src/services/memory/focus';
 import { assemblePrompt } from '../../src/services/memory/promptAssembly';
+import { resolveLocalMemoryAccessScope } from '../../src/services/memory/memoryScopeStore';
 import type { Message } from '../../src/types/message';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
 const THREAD = 'integration-thread';
+
+function explicitRecallScope() {
+  return resolveLocalMemoryAccessScope({
+    memoryConversationId: THREAD,
+    sourceThreadId: THREAD,
+    personaId: 'default',
+    taskId: null,
+  });
+}
 
 beforeEach(() => {
   closeMemoryDb();
@@ -110,6 +120,12 @@ function makeExtractor(): jest.Mock {
             predicate: 'deploys_to',
             value: 'acme-prod-cluster',
             confidence: 0.9,
+            scope: 'conversation',
+            operation: 'replace_current',
+            assertion_class: 'current_direct',
+            evidence_message_ids: ['u-7'],
+            evidence_quote:
+              'I just deployed the dashboard service to production at acme-prod-cluster.',
           },
         ],
         episode_summary: 'Deployed the dashboard service to acme-prod-cluster.',
@@ -187,7 +203,11 @@ describe('memory integration: 200-message thread', () => {
       // exists for prompt-budget reasons, not correctness).
       const recalled = await recallFactsForQuery(
         'Where do I deploy the dashboard service to acme-prod-cluster?',
-        { threshold: 0, conversationId: THREAD },
+        {
+          threshold: 0,
+          memoryScope: explicitRecallScope(),
+          useIntent: 'explicit_user_request',
+        },
       );
       const objects = recalled.map((f) => f.objectText);
       expect(objects).toContain('acme-prod-cluster');
@@ -271,7 +291,8 @@ describe('memory integration: returning user after 8-hour gap', () => {
     // Recall against the returning-user query also surfaces the prior fact.
     const recalled = await recallFactsForQuery('any update on the acme-prod-cluster deploy?', {
       threshold: 0,
-      conversationId: THREAD,
+      memoryScope: explicitRecallScope(),
+      useIntent: 'explicit_user_request',
     });
     expect(recalled.map((f) => f.objectText)).toContain('acme-prod-cluster');
   });
@@ -285,25 +306,33 @@ describe('memory integration: contradiction supersession', () => {
     const user = upsertEntity({ name: 'user', type: 'self', now: t0 });
 
     // Initial preference recorded by an early turn.
-    const first = recordFact({
-      subjectId: user.id,
-      predicate: 'prefers_tone',
-      objectText: 'formal',
-      now: t0,
-    });
+    const first = recordFactWithApplicability(
+      {
+        subjectId: user.id,
+        predicate: 'prefers_tone',
+        objectText: 'formal',
+        scope: 'global',
+        now: t0,
+      },
+      { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
+    );
     expect(first.status).toBe('created');
     expect(first.fact.invalidAt).toBeNull();
 
     // User changes their mind mid-thread; new fact is recorded with
     // `supersedePrior: true` (matches what the memoryTools API does).
     const t1 = t0 + 5 * 60 * 1000;
-    const second = recordFact({
-      subjectId: user.id,
-      predicate: 'prefers_tone',
-      objectText: 'casual',
-      supersedePrior: true,
-      now: t1,
-    });
+    const second = recordFactWithApplicability(
+      {
+        subjectId: user.id,
+        predicate: 'prefers_tone',
+        objectText: 'casual',
+        scope: 'global',
+        supersedePrior: true,
+        now: t1,
+      },
+      { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
+    );
     expect(second.status).toBe('created');
     expect(second.fact.objectText).toBe('casual');
     expect(second.fact.invalidAt).toBeNull();
@@ -323,7 +352,11 @@ describe('memory integration: contradiction supersession', () => {
     // Recall after the change returns the new fact only.
     const recalled = await recallFactsForQuery(
       'what tone does the user prefer? casual or formal?',
-      { threshold: 0 },
+      {
+        threshold: 0,
+        memoryScope: explicitRecallScope(),
+        useIntent: 'explicit_user_request',
+      },
     );
     const tones = recalled.filter((f) => f.predicate === 'prefers_tone').map((f) => f.objectText);
     expect(tones).toEqual(['casual']);
@@ -340,13 +373,17 @@ describe('memory integration: contradiction supersession', () => {
 
     // Re-running the same supersede call is a no-op (content_hash dedupe on
     // the active row); no extra superseded entries.
-    const replay = recordFact({
-      subjectId: user.id,
-      predicate: 'prefers_tone',
-      objectText: 'casual',
-      supersedePrior: true,
-      now: t1 + 1_000,
-    });
+    const replay = recordFactWithApplicability(
+      {
+        subjectId: user.id,
+        predicate: 'prefers_tone',
+        objectText: 'casual',
+        scope: 'global',
+        supersedePrior: true,
+        now: t1 + 1_000,
+      },
+      { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
+    );
     expect(replay.status).toBe('duplicate');
     expect(replay.superseded).toHaveLength(0);
   });

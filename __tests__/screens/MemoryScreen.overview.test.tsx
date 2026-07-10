@@ -71,6 +71,7 @@ jest.mock('../../src/store/useChatStore', () => ({
 
 jest.mock('../../src/services/memory/memoryTools', () => ({
   executeMemoryRecall: (...args: unknown[]) => mockExecuteMemoryRecall(...args),
+  queryMemoryFactsForManagement: (...args: unknown[]) => mockExecuteMemoryRecall(...args),
   executeMemoryForget: jest.fn(),
   executeMemoryPin: jest.fn(),
   executeMemoryUnpin: jest.fn(),

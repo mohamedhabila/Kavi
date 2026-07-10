@@ -8,17 +8,11 @@ import {
   MEMORY_HYBRID_ABLATION_CASES,
   MEMORY_HYBRID_ABLATION_FIXTURE_SIGNATURE,
 } from '../../src/acceptance/memoryHybridAblationFixtures';
-import {
-  stableHash,
-  stableStringify,
-} from '../../src/acceptance/e2eAgent/e2eTraceRedaction';
+import { stableHash, stableStringify } from '../../src/acceptance/e2eAgent/e2eTraceRedaction';
 import { upsertEntity } from '../../src/services/memory/entities';
 import { recordFact } from '../../src/services/memory/facts/mutations';
 import { listFacts } from '../../src/services/memory/facts/queries';
-import {
-  ensureFactSchema,
-  resetFactSchemaCacheForTests,
-} from '../../src/services/memory/schema';
+import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../src/services/memory/sqlite-store';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -116,11 +110,10 @@ describe('frozen hybrid memory ablation', () => {
       subjectId: subject.id,
       predicate: 'must_survive',
       objectText: 'user-owned value',
+      scope: 'global',
     });
 
-    await expect(runMemoryHybridAblation()).rejects.toThrow(
-      'isolated empty evaluation database',
-    );
+    await expect(runMemoryHybridAblation()).rejects.toThrow('isolated empty evaluation database');
     expect(listFacts().map((fact) => fact.id)).toEqual([existing.fact.id]);
   });
 });

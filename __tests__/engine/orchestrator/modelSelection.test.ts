@@ -247,8 +247,7 @@ describe('Orchestrator', () => {
         conversationId: 'conv-control-graph-resume',
         systemPrompt: 'You are helpful',
         messages: [{ id: 'msg1', role: 'user', content: 'Continue', timestamp: Date.now() }],
-        initialAgentControlGraphState: {
-          version: 1,
+        initialAgentControlGraphState: createInitialAgentControlGraphSnapshot({
           status: 'awaiting_tool_results',
           iteration: 3,
           expectedToolCalls: [{ id: 'call-missing', name: 'generic_external_tool' }],
@@ -257,7 +256,7 @@ describe('Orchestrator', () => {
           lastModelToolNames: ['generic_external_tool'],
           audit: [],
           updatedAt: 1234,
-        },
+        }),
       };
 
       await runOrchestrator(options, callbacks);
