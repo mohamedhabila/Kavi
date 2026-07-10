@@ -30,7 +30,7 @@ export function subscribeToStoreHydration(
 
 export async function waitForStoreHydration(
   store: PersistHydratableStore,
-  timeoutMs = 3000,
+  timeoutMs: number | null = 3000,
 ): Promise<void> {
   if (isStoreHydrated(store)) {
     return;
@@ -55,7 +55,9 @@ export async function waitForStoreHydration(
     };
 
     unsubscribe = subscribeToStoreHydration(store, finish);
-    timer = setTimeout(finish, timeoutMs);
-    unrefTimerIfSupported(timer);
+    if (timeoutMs !== null) {
+      timer = setTimeout(finish, timeoutMs);
+      unrefTimerIfSupported(timer);
+    }
   });
 }

@@ -20,6 +20,10 @@ const mockHydrateCanvasSurfaces = jest.fn().mockResolvedValue(undefined);
 const mockEmitAppEvent = jest.fn().mockResolvedValue(undefined);
 const mockRunMemoryMigrationTick = jest.fn().mockResolvedValue(undefined);
 const mockRunMemoryBackgroundFlush = jest.fn().mockResolvedValue(undefined);
+let mockSettingsHydrated = true;
+let mockChatHydrated = true;
+const mockSettingsHydrationListeners = new Set<() => void>();
+const mockChatHydrationListeners = new Set<() => void>();
 const originalRequestIdleCallback = (global as any).requestIdleCallback;
 const { waitFor } = require('@testing-library/react-native');
 const mockChatStoreState = {
@@ -129,8 +133,11 @@ jest.mock('../../src/store/useSettingsStore', () => ({
       maxLinks: 3,
     }),
     persist: {
-      hasHydrated: () => true,
-      onFinishHydration: () => () => {},
+      hasHydrated: () => mockSettingsHydrated,
+      onFinishHydration: (listener: () => void) => {
+        mockSettingsHydrationListeners.add(listener);
+        return () => mockSettingsHydrationListeners.delete(listener);
+      },
     },
   },
 }));
@@ -138,8 +145,11 @@ jest.mock('../../src/store/useChatStore', () => ({
   useChatStore: {
     getState: () => mockChatStoreState,
     persist: {
-      hasHydrated: () => true,
-      onFinishHydration: () => () => {},
+      hasHydrated: () => mockChatHydrated,
+      onFinishHydration: (listener: () => void) => {
+        mockChatHydrationListeners.add(listener);
+        return () => mockChatHydrationListeners.delete(listener);
+      },
     },
   },
 }));
@@ -162,6 +172,10 @@ beforeEach(() => {
   mockRepairTerminalAgentRunsMissingFinalResponses.mockResolvedValue([]);
   mockEvaluateJobsOnce.mockResolvedValue(undefined);
   mockSyncSchedulerWakeNotifications.mockResolvedValue(undefined);
+  mockSettingsHydrated = true;
+  mockChatHydrated = true;
+  mockSettingsHydrationListeners.clear();
+  mockChatHydrationListeners.clear();
   mockChatStoreState.createConversation.mockImplementation(
     (providerId, systemPrompt, modelOverride, options) => {
       const id = `conv-${mockChatStoreState.conversations.length + 1}`;
@@ -322,7 +336,29 @@ describe('initializeServices', () => {
 
     expect(mockEvaluateJobsOnce).toHaveBeenCalledWith({ trigger: 'foreground-reconcile' });
     expect(mockSyncSchedulerWakeNotifications).toHaveBeenCalledWith({ force: true });
-    expect(mockRunMemoryMigrationTick).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mockRunMemoryMigrationTick).toHaveBeenCalledTimes(1));
+    expect(mockRunMemoryBackgroundFlush).toHaveBeenCalledTimes(1);
+  });
+  it('does not touch memory until both persisted stores finish hydrating', async () => {
+    mockSettingsHydrated = false;
+    mockChatHydrated = false;
+    const { handleAppForeground } = require('../../src/services/startup');
+
+    handleAppForeground();
+    await Promise.resolve();
+    expect(mockRunMemoryMigrationTick).not.toHaveBeenCalled();
+    expect(mockRunMemoryBackgroundFlush).not.toHaveBeenCalled();
+
+    mockSettingsHydrated = true;
+    for (const listener of [...mockSettingsHydrationListeners]) listener();
+    await Promise.resolve();
+    expect(mockRunMemoryMigrationTick).not.toHaveBeenCalled();
+    expect(mockRunMemoryBackgroundFlush).not.toHaveBeenCalled();
+
+    mockChatHydrated = true;
+    for (const listener of [...mockChatHydrationListeners]) listener();
+    await waitFor(() => expect(mockRunMemoryMigrationTick).toHaveBeenCalledTimes(1));
+    expect(mockRunMemoryBackgroundFlush).toHaveBeenCalledTimes(1);
   });
   it('recovers persisted worker and workflow state on startup', async () => {
     const { initializeServices } = require('../../src/services/startup');

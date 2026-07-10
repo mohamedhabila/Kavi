@@ -106,4 +106,32 @@ describe('persistHydration', () => {
     await expect(hydrationPromise).resolves.toBeUndefined();
     expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
+
+  it('waits without a timeout when noncritical work requires persisted state', async () => {
+    jest.useFakeTimers();
+    let hydrationListener: (() => void) | undefined;
+    let resolved = false;
+    const hydrationPromise = waitForStoreHydration(
+      {
+        persist: {
+          hasHydrated: () => false,
+          onFinishHydration: (listener) => {
+            hydrationListener = listener;
+            return jest.fn();
+          },
+        },
+      },
+      null,
+    ).then(() => {
+      resolved = true;
+    });
+
+    await jest.advanceTimersByTimeAsync(60_000);
+    expect(resolved).toBe(false);
+    expect(mockUnrefTimerIfSupported).not.toHaveBeenCalled();
+
+    hydrationListener?.();
+    await hydrationPromise;
+    expect(resolved).toBe(true);
+  });
 });

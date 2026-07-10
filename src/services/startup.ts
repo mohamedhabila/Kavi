@@ -90,6 +90,24 @@ async function waitForChatHydration(timeoutMs = 3000): Promise<void> {
   );
 }
 
+async function waitForMemoryStoresHydration(): Promise<void> {
+  await Promise.all([
+    waitForStoreHydration(
+      useSettingsStore as typeof useSettingsStore & PersistHydratableStore,
+      null,
+    ),
+    waitForStoreHydration(useChatStore as typeof useChatStore & PersistHydratableStore, null),
+  ]);
+}
+
+async function runHydratedMemoryMaintenance(includeMigration: boolean): Promise<void> {
+  await waitForMemoryStoresHydration();
+  if (includeMigration) {
+    await runMemoryMigrationTick();
+  }
+  await runMemoryBackgroundFlush();
+}
+
 async function recoverPersistedAgentState(): Promise<void> {
   await waitForChatHydration();
 
@@ -232,11 +250,8 @@ function initializeDeferredStartupServices(): void {
     );
     void runStartupHooksAndEmitLaunchEvent();
     void runBootOnLaunchIfPresent();
-    void runMemoryMigrationTick().catch((e) =>
-      console.warn('[startup] runMemoryMigrationTick failed:', e),
-    );
-    void runMemoryBackgroundFlush().catch((e) =>
-      console.warn('[startup] runMemoryBackgroundFlush failed:', e),
+    void runHydratedMemoryMaintenance(true).catch((e) =>
+      console.warn('[startup] hydrated memory maintenance failed:', e),
     );
   });
 }
@@ -636,11 +651,8 @@ export function handleAppForeground(): void {
   void syncSchedulerWakeNotifications({ force: true }).catch((e) =>
     console.warn('[startup] foreground wake notification sync failed:', e),
   );
-  void runMemoryMigrationTick().catch((e) =>
-    console.warn('[startup] foreground memory tick failed:', e),
-  );
-  void runMemoryBackgroundFlush().catch((e) =>
-    console.warn('[startup] foreground memory flush failed:', e),
+  void runHydratedMemoryMaintenance(true).catch((e) =>
+    console.warn('[startup] foreground hydrated memory maintenance failed:', e),
   );
 }
 
@@ -649,7 +661,7 @@ export function handleAppForeground(): void {
  * consolidator threads via the configured `consolidationProvider`.
  */
 export function handleAppBackground(): void {
-  void runMemoryBackgroundFlush().catch((e) =>
-    console.warn('[startup] background memory flush failed:', e),
+  void runHydratedMemoryMaintenance(false).catch((e) =>
+    console.warn('[startup] background hydrated memory flush failed:', e),
   );
 }
