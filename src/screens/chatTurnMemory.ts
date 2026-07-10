@@ -12,6 +12,12 @@ export interface RecordConversationTurnMemoryOptions {
   sourceRunId?: string;
 }
 
+export type RecordConversationTurnMemory = (
+  conversationId: string,
+  activeChatProvider?: LlmProviderConfig,
+  options?: RecordConversationTurnMemoryOptions,
+) => void;
+
 function resolveMemoryTaskContext(conversationId: string): {
   taskId?: string;
   goalTitle?: string;

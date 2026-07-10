@@ -3,11 +3,13 @@ import { selectTerminalBackgroundReviewCandidates } from '../terminalBackgroundR
 import {
   selectTerminalConversationsWithFinalResponseGaps,
   selectTerminalFinalResponseRecoveryCandidates,
+  type TerminalFinalResponseRecoveryCandidate,
 } from '../terminalFinalResponseRecovery';
 import type { EnsureAgentRunFinalResponse, ResolvedFinalizationProviderContext } from './contracts';
 import { getReviewableSubAgentsForRun } from '../../../services/agents/subAgentRunTracking';
 import { resolveConversationWorkspaceTarget } from '../../../services/conversationWorkspace/ownership';
 import type { Conversation } from '../../../types/conversation';
+import type { RecordConversationTurnMemory } from '../../../screens/chatTurnMemory';
 
 type ResolveConversationFinalizationContext = (
   conversation: Conversation,
@@ -19,10 +21,44 @@ type QueueTerminalBackgroundReview = (params: {
   timestamp?: number;
 }) => Promise<void>;
 
+export async function recoverTerminalFinalResponse(params: {
+  candidate: TerminalFinalResponseRecoveryCandidate;
+  conversations: ReadonlyArray<Conversation>;
+  ensureAgentRunFinalResponse: EnsureAgentRunFinalResponse;
+  providerContext: ResolvedFinalizationProviderContext | undefined;
+  recordConversationTurnMemory: RecordConversationTurnMemory;
+}): Promise<string | undefined> {
+  const workspaceTarget = resolveConversationWorkspaceTarget({
+    conversationId: params.candidate.conversationId,
+    conversations: params.conversations,
+  });
+  const preview = await params.ensureAgentRunFinalResponse({
+    conversationId: params.candidate.conversationId,
+    runId: params.candidate.runId,
+    status: params.candidate.status,
+    providerContext: params.providerContext,
+    timestamp: params.candidate.timestamp,
+  });
+  if (preview) {
+    params.recordConversationTurnMemory(
+      params.candidate.conversationId,
+      params.providerContext
+        ? { ...params.providerContext.provider, model: params.providerContext.model }
+        : undefined,
+      {
+        memoryConversationId: workspaceTarget.workspaceConversationId,
+        sourceRunId: params.candidate.runId,
+      },
+    );
+  }
+  return preview;
+}
+
 export function useForegroundRunRecoveryEffects(params: {
   conversations: Conversation[];
   ensureAgentRunFinalResponse: EnsureAgentRunFinalResponse;
   queueTerminalBackgroundReview: QueueTerminalBackgroundReview;
+  recordConversationTurnMemory: RecordConversationTurnMemory;
   resolveConversationFinalizationContext: ResolveConversationFinalizationContext;
   subAgentActivityVersion: number;
 }) {
@@ -30,6 +66,7 @@ export function useForegroundRunRecoveryEffects(params: {
     conversations,
     ensureAgentRunFinalResponse,
     queueTerminalBackgroundReview,
+    recordConversationTurnMemory,
     resolveConversationFinalizationContext,
     subAgentActivityVersion,
   } = params;
@@ -61,17 +98,12 @@ export function useForegroundRunRecoveryEffects(params: {
           conversation,
           hasProviderContext: !!providerContext,
         })) {
-          const workspaceTarget = resolveConversationWorkspaceTarget({
-            conversationId: candidate.conversationId,
+          await recoverTerminalFinalResponse({
+            candidate,
             conversations,
-          });
-          await ensureAgentRunFinalResponse({
-            conversationId: candidate.conversationId,
-            runId: candidate.runId,
-            status: candidate.status,
+            ensureAgentRunFinalResponse,
             providerContext,
-            memoryConversationId: workspaceTarget.workspaceConversationId,
-            timestamp: candidate.timestamp,
+            recordConversationTurnMemory,
           });
 
           if (cancelled) {
@@ -84,5 +116,10 @@ export function useForegroundRunRecoveryEffects(params: {
     return () => {
       cancelled = true;
     };
-  }, [conversations, ensureAgentRunFinalResponse, resolveConversationFinalizationContext]);
+  }, [
+    conversations,
+    ensureAgentRunFinalResponse,
+    recordConversationTurnMemory,
+    resolveConversationFinalizationContext,
+  ]);
 }

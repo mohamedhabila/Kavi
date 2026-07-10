@@ -15,6 +15,7 @@ import type {
 import { getReviewableSubAgentsForRun } from '../services/agents/subAgentRunTracking';
 import type { QueueTerminalBackgroundReview } from './subAgentRunBridgeTypes';
 import { handleTerminalBackgroundReview } from './terminalBackgroundReviewHandler';
+import type { RecordConversationTurnMemory } from './chatTurnMemory';
 
 type ChatStore = ReturnType<typeof useChatStore.getState>;
 
@@ -23,6 +24,7 @@ export function useTerminalBackgroundReviewQueue(params: {
   completeAgentRun: ChatStore['completeAgentRun'];
   ensureAgentRunFinalResponseRef: MutableRefObject<EnsureAgentRunFinalResponse | null>;
   pendingAgentRunTerminalReviewsRef: MutableRefObject<Map<string, Promise<void>>>;
+  recordConversationTurnMemory: RecordConversationTurnMemory;
   resolveConversationFinalizationContextRef: MutableRefObject<
     | ((conversation: Conversation) => Promise<ResolvedFinalizationProviderContext | undefined>)
     | null
@@ -39,6 +41,7 @@ export function useTerminalBackgroundReviewQueue(params: {
     completeAgentRun,
     ensureAgentRunFinalResponseRef,
     pendingAgentRunTerminalReviewsRef,
+    recordConversationTurnMemory,
     resolveConversationFinalizationContextRef,
     resumeAgentRunRef,
     setAgentRunPhase,
@@ -61,6 +64,7 @@ export function useTerminalBackgroundReviewQueue(params: {
         completeAgentRun,
         ensureAgentRunFinalResponseRef,
         pendingAgentRunTerminalReviewsRef,
+        recordConversationTurnMemory,
         resolveConversationFinalizationContextRef,
         resumeAgentRunRef,
         setAgentRunPhase,
@@ -77,6 +81,7 @@ export function useTerminalBackgroundReviewQueue(params: {
       completeAgentRun,
       ensureAgentRunFinalResponseRef,
       pendingAgentRunTerminalReviewsRef,
+      recordConversationTurnMemory,
       resolveConversationFinalizationContextRef,
       resumeAgentRunRef,
       setAgentRunPhase,
@@ -94,6 +99,7 @@ async function runTerminalBackgroundReview(params: {
   completeAgentRun: ChatStore['completeAgentRun'];
   ensureAgentRunFinalResponseRef: MutableRefObject<EnsureAgentRunFinalResponse | null>;
   pendingAgentRunTerminalReviewsRef: MutableRefObject<Map<string, Promise<void>>>;
+  recordConversationTurnMemory: RecordConversationTurnMemory;
   resolveConversationFinalizationContextRef: MutableRefObject<
     | ((conversation: Conversation) => Promise<ResolvedFinalizationProviderContext | undefined>)
     | null
@@ -145,6 +151,7 @@ async function runTerminalBackgroundReview(params: {
       context: reviewCommand.context,
       conversationId: candidate.conversationId,
       ensureAgentRunFinalResponse: params.ensureAgentRunFinalResponseRef.current,
+      recordConversationTurnMemory: params.recordConversationTurnMemory,
       resumeAgentRun,
       reviewTimestamp,
       runId: candidate.runId,

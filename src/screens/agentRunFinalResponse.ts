@@ -32,12 +32,6 @@ export type ResolveConversationFinalizationContext = (
   conversation: Conversation,
 ) => Promise<ResolvedFinalizationProviderContext | undefined>;
 
-export type RecordAgentRunFinalResponseMemory = (
-  conversationId: string,
-  activeChatProvider?: ResolvedFinalizationProviderContext['provider'],
-  options?: { memoryConversationId?: string | null; sourceRunId?: string },
-) => void;
-
 export type CreateAgentRunFinalResponseParams = {
   appendAgentRunCheckpoint: ChatStore['appendAgentRunCheckpoint'];
   appendConversationLog: (
@@ -45,7 +39,6 @@ export type CreateAgentRunFinalResponseParams = {
     entry: Parameters<ChatStore['addConversationLog']>[1],
   ) => void;
   pendingAgentRunFinalizations: PendingAgentRunFinalizations;
-  recordConversationTurnMemory: RecordAgentRunFinalResponseMemory;
   getResolveConversationFinalizationContext: () =>
     | ResolveConversationFinalizationContext
     | undefined;
@@ -60,7 +53,6 @@ export function createAgentRunFinalResponse({
   appendAgentRunCheckpoint,
   appendConversationLog,
   pendingAgentRunFinalizations,
-  recordConversationTurnMemory,
   getResolveConversationFinalizationContext,
   setAgentRunPhase,
   updateAgentRunSummary,
@@ -93,17 +85,12 @@ export function createAgentRunFinalResponse({
           return undefined;
         }
         const runMessageScope = buildAgentRunMessageScope(run);
-        const memoryProvider = params.providerContext?.provider;
 
         const existingPreview = getLatestFinalAssistantResponsePreview(
           conversation.messages,
           runMessageScope,
         );
         if (hasDeliveredFinalAssistantResponse(conversation.messages, runMessageScope)) {
-          recordConversationTurnMemory(params.conversationId, memoryProvider, {
-            memoryConversationId: params.memoryConversationId,
-            sourceRunId: params.runId,
-          });
           return existingPreview;
         }
 
@@ -128,10 +115,6 @@ export function createAgentRunFinalResponse({
           },
         });
         if (preferredPreview) {
-          recordConversationTurnMemory(params.conversationId, memoryProvider, {
-            memoryConversationId: params.memoryConversationId,
-            sourceRunId: params.runId,
-          });
           return preferredPreview;
         }
 
@@ -209,11 +192,6 @@ export function createAgentRunFinalResponse({
             appendConversationLog,
             updateAgentRunSummary,
           },
-        });
-
-        recordConversationTurnMemory(params.conversationId, memoryProvider, {
-          memoryConversationId: params.memoryConversationId,
-          sourceRunId: params.runId,
         });
 
         return preview;

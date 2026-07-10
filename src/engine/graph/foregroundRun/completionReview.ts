@@ -36,7 +36,7 @@ type RecoverAgentRunFinalPreview = (
 ) => Promise<{ preview?: string; recovered: boolean }>;
 
 export type ForegroundRunCompletionReviewResult =
-  | { handled: true }
+  | { handled: true; terminalized: boolean }
   | {
       handled: false;
       completionStatus: Exclude<AgentRun['status'], 'running'>;
@@ -111,7 +111,7 @@ export async function reviewForegroundRunCompletion(params: {
       title: terminalCompletion.logTitle,
       detail: terminalCompletion.logDetail,
     });
-    return { handled: true };
+    return { handled: true, terminalized: true };
   }
 
   const finalDeliveryResult = await handleForegroundRunReviewFinalDelivery({
@@ -132,7 +132,7 @@ export async function reviewForegroundRunCompletion(params: {
     context: reviewContext,
   });
   if (finalDeliveryResult.handled) {
-    return { handled: true };
+    return finalDeliveryResult;
   }
 
   reviewContext = finalDeliveryResult;

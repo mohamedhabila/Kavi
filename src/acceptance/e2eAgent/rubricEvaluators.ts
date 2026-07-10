@@ -12,12 +12,12 @@ import {
   readJsonFieldAtPath,
   structuralValuesMatch,
 } from '../../engine/goals/structuralCriterionValues';
-import type { AgentRunControlGraphState } from '../../types/agentRun';
 import type { AcceptanceFixtureOutcome } from '../acceptanceMetrics/types';
 import { estimateUsageCacheEligibleInputTokens } from './evaluateE2EAgentMetrics';
 import { buildWorkingBlockScopeKey } from '../../services/memory/workingBlocks';
 import { readWorkspaceRelativeFile, workspaceFileExists } from './sandboxWorkspace';
 import { evaluateE2ETurnStageRubric } from './e2eTurnStageRubricEvaluators';
+import { isE2EGraphExecutionComplete } from './e2eGraphCompletion';
 import type { E2ERubric, E2EScenarioResult, E2ETokenUsageSummary } from './types';
 import type { UsagePromptCacheTelemetry } from '../../types/usage';
 
@@ -50,11 +50,6 @@ function findGoalById(result: E2EScenarioResult, goalId: string) {
   const goals = getLatestGraphSnapshot(result)?.goals ?? [];
   return goals.find((goal) => goal.id.trim() === normalizedGoalId);
 }
-
-const E2E_GRAPH_TERMINAL_SUCCESS_STATUSES = new Set<AgentRunControlGraphState['status']>([
-  'finalized',
-  'awaiting_review',
-]);
 
 function getLatestGraphSnapshot(result: E2EScenarioResult) {
   return result.graphSnapshots[result.graphSnapshots.length - 1];
@@ -348,7 +343,7 @@ export function evaluateE2ERubric(
 
     case 'graph_terminal_success': {
       const status = getLatestGraphSnapshot(result)?.status;
-      if (!status || !E2E_GRAPH_TERMINAL_SUCCESS_STATUSES.has(status)) {
+      if (!isE2EGraphExecutionComplete(status)) {
         return {
           fixtureId,
           passed: false,

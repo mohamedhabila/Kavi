@@ -34,6 +34,7 @@ import type { Message } from '../../types/message';
 import type { ConversationUsageSummary } from '../../types/usage';
 import { generateId } from '../../utils/id';
 import { cloneAndFreeze } from './foregroundScenarioDriverTypes';
+import { isE2EGraphExecutionComplete } from './e2eGraphCompletion';
 import type {
   ForegroundScenarioCompletionSnapshot,
   ForegroundScenarioDriverInput,
@@ -162,15 +163,19 @@ export function buildForegroundScenarioCompletionSnapshot(params: {
 }): ForegroundScenarioCompletionSnapshot {
   const runStatus =
     params.route.mode === 'agentic' ? (params.run?.status ?? 'missing') : 'not_applicable';
+  const graphStatus = params.run?.controlGraph?.status ?? null;
   return {
     assistantStatus: params.finalAssistant?.completionStatus ?? 'missing',
-    executionCompleted: !params.error && !params.timedOut,
+    executionCompleted:
+      !params.error &&
+      !params.timedOut &&
+      (params.route.mode === 'chitchat' || isE2EGraphExecutionComplete(graphStatus)),
     finalResponseCompleted: params.finalAssistant?.completionStatus === 'complete',
     runStatus,
     runCompleted: runStatus === 'not_applicable' ? null : runStatus === 'completed',
     runCompletedAt: params.run?.completedAt ?? null,
     runTerminalReason: params.run?.terminalReason ?? null,
-    graphStatus: params.run?.controlGraph?.status ?? null,
+    graphStatus,
     graphTerminalReason: params.run?.controlGraph?.terminalReason ?? null,
   };
 }
@@ -404,7 +409,6 @@ export function createForegroundScenarioRuntime(
         detail: truncateLogDetail(entry.detail),
       }),
     pendingAgentRunFinalizations: pendingFinalizations,
-    recordConversationTurnMemory,
     getResolveConversationFinalizationContext: () => async (conversation) => {
       const settings = useSettingsStore.getState();
       const providerContext = await resolveConversationProviderContext({

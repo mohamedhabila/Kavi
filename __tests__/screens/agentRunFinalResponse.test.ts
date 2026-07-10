@@ -10,7 +10,6 @@ import {
 } from '../../src/screens/agentRunFinalResponseDelivery';
 import { resolvePreferredAgentRunFinalResponseMessageId } from '../../src/screens/agentRunFinalResponseSelection';
 import { tryDeliverPreferredFinalResponse } from '../../src/screens/agentRunPreferredFinalResponse';
-import { recordConversationTurnMemory } from '../../src/screens/chatTurnMemory';
 import {
   getLatestFinalAssistantResponsePreview,
   hasDeliveredFinalAssistantResponse,
@@ -32,9 +31,6 @@ jest.mock('../../src/screens/agentRunFinalResponseSelection', () => ({
 }));
 jest.mock('../../src/screens/agentRunPreferredFinalResponse', () => ({
   tryDeliverPreferredFinalResponse: jest.fn(),
-}));
-jest.mock('../../src/screens/chatTurnMemory', () => ({
-  recordConversationTurnMemory: jest.fn(),
 }));
 jest.mock('../../src/services/agents/lifecycle/agentRunStateMachine', () => {
   const actual = jest.requireActual('../../src/services/agents/lifecycle/agentRunStateMachine');
@@ -101,7 +97,6 @@ function createDependencies(params: {
     appendAgentRunCheckpoint: jest.fn(),
     appendConversationLog: jest.fn(),
     pendingAgentRunFinalizations: params.pending,
-    recordConversationTurnMemory,
     getResolveConversationFinalizationContext: params.getResolver ?? (() => undefined),
     setAgentRunPhase: jest.fn(),
     updateAgentRunSummary: jest.fn(),
@@ -125,7 +120,7 @@ describe('createAgentRunFinalResponse', () => {
     jest.mocked(tryDeliverPreferredFinalResponse).mockReturnValue(undefined);
   });
 
-  it('shares one in-flight synthesis and records one final delivery and memory closeout', async () => {
+  it('shares one in-flight synthesis and records one final delivery', async () => {
     seedConversation();
     const pending = new Map<string, Promise<string | undefined>>();
     const dependencies = createDependencies({ pending });
@@ -146,7 +141,6 @@ describe('createAgentRunFinalResponse', () => {
       conversationId: 'conversation-1',
       runId: 'run-1',
       status: 'completed' as const,
-      memoryConversationId: 'memory-conversation-1',
     };
 
     const first = ensureFinalResponse(request);
@@ -159,10 +153,6 @@ describe('createAgentRunFinalResponse', () => {
     await expect(Promise.all([first, second])).resolves.toEqual(['Final preview', 'Final preview']);
     expect(writeSynthesizedFinalResponse).toHaveBeenCalledTimes(1);
     expect(recordAgentRunFinalResponseDelivery).toHaveBeenCalledTimes(1);
-    expect(recordConversationTurnMemory).toHaveBeenCalledWith('conversation-1', undefined, {
-      memoryConversationId: 'memory-conversation-1',
-      sourceRunId: 'run-1',
-    });
     expect(pending.has('run-1')).toBe(false);
   });
 
@@ -198,7 +188,7 @@ describe('createAgentRunFinalResponse', () => {
     );
   });
 
-  it('keeps an existing delivered response and closes memory with the run provider', async () => {
+  it('keeps an existing delivered response without synthesizing another one', async () => {
     const conversation = seedConversation(makeRun({ status: 'completed' }));
     const provider = makeTestProviderConfig({ id: 'provider-1' });
     jest.mocked(hasDeliveredFinalAssistantResponse).mockReturnValue(true);
@@ -223,9 +213,5 @@ describe('createAgentRunFinalResponse', () => {
 
     expect(synthesizeAgentRunCompletion).not.toHaveBeenCalled();
     expect(writeSynthesizedFinalResponse).not.toHaveBeenCalled();
-    expect(recordConversationTurnMemory).toHaveBeenCalledWith(conversation.id, provider, {
-      memoryConversationId: undefined,
-      sourceRunId: 'run-1',
-    });
   });
 });

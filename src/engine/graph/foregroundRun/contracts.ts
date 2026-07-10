@@ -33,7 +33,6 @@ export type EnsureAgentRunFinalResponse = (params: {
   runId: string;
   status: Exclude<AgentRun['status'], 'running'>;
   providerContext?: ResolvedFinalizationProviderContext;
-  memoryConversationId?: string;
   timestamp?: number;
   preferredAssistantMessageId?: string;
   signal?: AbortSignal;

@@ -16,7 +16,6 @@ export async function recoverForegroundAgentRunFinalPreview(params: {
   conversationId: string;
   ensureAgentRunFinalResponse: EnsureAgentRunFinalResponse;
   finalizationProviderContext: ResolvedFinalizationProviderContext;
-  memoryConversationId?: string;
   preferredAssistantMessageId?: string;
   runId?: string;
   signal?: AbortSignal;
@@ -72,7 +71,6 @@ export async function recoverForegroundAgentRunFinalPreview(params: {
     runId: params.runId,
     status: params.status,
     providerContext: params.finalizationProviderContext,
-    memoryConversationId: params.memoryConversationId,
     timestamp: params.timestamp,
     preferredAssistantMessageId: params.preferredAssistantMessageId,
     signal: params.signal,

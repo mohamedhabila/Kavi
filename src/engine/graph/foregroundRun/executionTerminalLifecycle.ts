@@ -77,7 +77,6 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
       conversationId,
       ensureAgentRunFinalResponse: shared.helpers.ensureAgentRunFinalResponse,
       finalizationProviderContext,
-      memoryConversationId,
       preferredAssistantMessageId,
       runId,
       signal,

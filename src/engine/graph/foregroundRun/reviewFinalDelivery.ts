@@ -46,7 +46,9 @@ export async function handleForegroundRunReviewFinalDelivery(params: {
   setAgentRunPhase: ChatStore['setAgentRunPhase'];
   updateAgentRunSummary: ChatStore['updateAgentRunSummary'];
   context: ForegroundRunReviewContext;
-}): Promise<{ handled: true } | ({ handled: false } & ForegroundRunReviewContext)> {
+}): Promise<
+  { handled: true; terminalized: boolean } | ({ handled: false } & ForegroundRunReviewContext)
+> {
   if (params.context.finalReviewGate.type !== 'recover') {
     return { handled: false, ...params.context };
   }
@@ -124,7 +126,7 @@ export async function handleForegroundRunReviewFinalDelivery(params: {
       reuseAssistantDraft: false,
     });
     params.assertNotAborted();
-    return { handled: true };
+    return { handled: true, terminalized: false };
   }
 
   params.finalizeTrackedRun(
@@ -141,5 +143,5 @@ export async function handleForegroundRunReviewFinalDelivery(params: {
     detail: `${finalReviewGate.checkpointDetail} Supervisor recovery was unavailable.`,
     timestamp: recoveryTimestamp,
   });
-  return { handled: true };
+  return { handled: true, terminalized: true };
 }

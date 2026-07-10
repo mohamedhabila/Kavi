@@ -12,6 +12,7 @@ import {
   ResumeAgentRun,
 } from '../engine/graph/foregroundRun/contracts';
 import { completeTerminalBackgroundReviewRun } from './terminalBackgroundCompletion';
+import type { RecordConversationTurnMemory } from './chatTurnMemory';
 
 type ChatStore = ReturnType<typeof useChatStore.getState>;
 
@@ -26,6 +27,7 @@ export async function handleTerminalBackgroundReview(params: {
   conversationId: string;
   context: AgentControlGraphTerminalBackgroundReviewContext;
   ensureAgentRunFinalResponse?: EnsureAgentRunFinalResponse | null;
+  recordConversationTurnMemory: RecordConversationTurnMemory;
   resumeAgentRun?: ResumeAgentRun | null;
   reviewTimestamp: number;
   runId: string;
@@ -72,15 +74,10 @@ export async function handleTerminalBackgroundReview(params: {
       conversation.messages,
       runMessageScope,
     );
-    const workspaceTarget = resolveConversationWorkspaceTarget({
-      conversationId: params.conversationId,
-      conversations: useChatStore.getState().conversations,
-    });
     const finalResponsePreview = await params.ensureAgentRunFinalResponse?.({
       conversationId: params.conversationId,
       runId: params.runId,
       status,
-      memoryConversationId: workspaceTarget.workspaceConversationId,
       preferredAssistantMessageId,
       timestamp: params.reviewTimestamp,
       signal: params.signal,
@@ -91,7 +88,7 @@ export async function handleTerminalBackgroundReview(params: {
     }
   }
 
-  completeTerminalBackgroundReviewRun({
+  const completed = completeTerminalBackgroundReviewRun({
     appendConversationLog: params.appendConversationLog,
     completeAgentRun: params.completeAgentRun,
     completion: {
@@ -107,5 +104,14 @@ export async function handleTerminalBackgroundReview(params: {
     reviewTimestamp: params.reviewTimestamp,
     runId: params.runId,
     targetRun,
+  });
+  if (!completed) return;
+  const workspaceTarget = resolveConversationWorkspaceTarget({
+    conversationId: params.conversationId,
+    conversations: useChatStore.getState().conversations,
+  });
+  params.recordConversationTurnMemory(params.conversationId, undefined, {
+    memoryConversationId: workspaceTarget.workspaceConversationId,
+    sourceRunId: params.runId,
   });
 }

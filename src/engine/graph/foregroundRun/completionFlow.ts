@@ -50,6 +50,9 @@ export async function handleForegroundRunCompletionFlow(params: {
 
   const completionReview = await params.reviewCompletion();
   if (completionReview.handled) {
+    if (completionReview.terminalized) {
+      params.recordConversationTurnMemory();
+    }
     return;
   }
 

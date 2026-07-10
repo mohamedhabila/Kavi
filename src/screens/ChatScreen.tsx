@@ -250,6 +250,7 @@ export const ChatScreen: React.FC = () => {
     completeAgentRun,
     ensureAgentRunFinalResponseRef,
     pendingAgentRunTerminalReviewsRef,
+    recordConversationTurnMemory,
     resolveConversationFinalizationContextRef,
     resumeAgentRunRef,
     setAgentRunPhase,
@@ -328,6 +329,7 @@ export const ChatScreen: React.FC = () => {
     conversations,
     ensureAgentRunFinalResponse,
     queueTerminalBackgroundReview,
+    recordConversationTurnMemory,
     resolveConversationFinalizationContext,
     subAgentActivityVersion,
   });
