@@ -6,14 +6,12 @@ jest.mock('expo-sqlite', () => {
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
 import { recordCompletedTurnForMemory } from '../../src/services/memory/lifecycle';
-import {
-  drainIngestionQueue,
-  listPendingIngestionJobs,
-} from '../../src/services/memory/ingestionQueue';
+import { __resetIngestionQueueForTests } from '../../src/services/memory/ingestionQueue';
 import { getWorkingBlock } from '../../src/services/memory/workingBlocks';
 import { listEpisodes } from '../../src/services/memory/episodes/queries';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import type { Message } from '../../src/types/message';
+import { waitForIngestionJobTerminal } from '../helpers/ingestionQueueHarness';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -23,13 +21,13 @@ function makeClosedTurn(userContent: string, assistantContent: string): Message[
       id: 'user-1',
       role: 'user',
       content: userContent,
-      createdAt: 1,
+      timestamp: 1,
     },
     {
       id: 'assistant-1',
       role: 'assistant',
       content: assistantContent,
-      createdAt: 2,
+      timestamp: 2,
       assistantMetadata: {
         kind: 'final',
         completionStatus: 'complete',
@@ -44,22 +42,27 @@ beforeEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
+  __resetIngestionQueueForTests();
   useSettingsStore.setState({ disableLongTermMemory: false } as never);
 });
 
 afterEach(() => {
+  __resetIngestionQueueForTests();
   closeMemoryDb();
 });
 
 describe('memory always-on turn integration', () => {
-  it('enqueues ingestion for chitchat and agentic turns without blocking', async () => {
+  it('records and asynchronously ingests chitchat and agentic turns', async () => {
     const chitchat = await recordCompletedTurnForMemory({
       threadId: 'conv-chit',
       messages: makeClosedTurn('hello', 'hi there'),
     });
     expect(chitchat.processed).toBe(true);
     expect(chitchat.enqueued).toBe(true);
-    expect(listPendingIngestionJobs()).toHaveLength(1);
+    expect(chitchat.jobId).not.toBeNull();
+    await expect(waitForIngestionJobTerminal(chitchat.jobId!)).resolves.toEqual(
+      expect.objectContaining({ status: 'completed_structural' }),
+    );
 
     const agentic = await recordCompletedTurnForMemory({
       threadId: 'conv-agent',
@@ -67,6 +70,10 @@ describe('memory always-on turn integration', () => {
     });
     expect(agentic.processed).toBe(true);
     expect(agentic.enqueued).toBe(true);
+    expect(agentic.jobId).not.toBeNull();
+    await expect(waitForIngestionJobTerminal(agentic.jobId!)).resolves.toEqual(
+      expect.objectContaining({ status: 'completed_structural' }),
+    );
   });
 
   it('updates working memory synchronously before queue drain', async () => {
@@ -86,9 +93,8 @@ describe('memory always-on turn integration', () => {
     });
     expect((focus?.content ?? '').length).toBeGreaterThan(0);
 
-    await drainIngestionQueue({
-      loadMessagesForThread: () => messages,
-    });
+    expect(recorded.jobId).not.toBeNull();
+    await waitForIngestionJobTerminal(recorded.jobId!);
     expect(listEpisodes({ threadId: 'conv-sync' }).length).toBeGreaterThan(0);
   });
 });
