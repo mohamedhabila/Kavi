@@ -3,6 +3,7 @@ import {
   E2E_FIXTURE_CALENDAR_EVENTS_JSON,
   E2E_FIXTURE_CALENDAR_LIST_JSON,
   getE2ENativeMobileFixtureStateSnapshot,
+  getE2ENativeMobileInvocationSnapshots,
   resetE2ENativeMobileFixtures,
   tryExecuteE2ENativeCalendarTool,
   tryExecuteE2ENativeMobileTool,
@@ -42,6 +43,29 @@ describe('E2E native mobile fixtures', () => {
     expect(raw).toBe(E2E_FIXTURE_CALENDAR_EVENTS_JSON);
     expect(JSON.parse(raw!)).toEqual([]);
     expect(getE2ENativeMobileFixtureStateSnapshot().calendar.listed).toBe(true);
+  });
+
+  it('records argument-free before and after evidence for native invocations', async () => {
+    await tryExecuteE2ENativeMobileTool(
+      'clipboard_write',
+      JSON.stringify({ text: 'PRIVATE-NATIVE-ARGUMENT' }),
+    );
+
+    const invocations = getE2ENativeMobileInvocationSnapshots();
+    expect(invocations).toHaveLength(1);
+    expect(invocations[0]).toMatchObject({
+      sequence: 1,
+      toolName: 'clipboard_write',
+      handled: true,
+      resultStatus: 'clipboard_written',
+      errorClass: null,
+      stateBefore: { clipboard: { text: '', writeCount: 0 } },
+      stateAfter: { clipboard: { text: 'PRIVATE-NATIVE-ARGUMENT', writeCount: 1 } },
+    });
+    expect(invocations[0]).not.toHaveProperty('argsString');
+
+    resetE2ENativeMobileFixtures();
+    expect(getE2ENativeMobileInvocationSnapshots()).toEqual([]);
   });
 
   it('routes calendar_list through executeToolInner without touching native executors', async () => {

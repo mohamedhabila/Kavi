@@ -6,6 +6,13 @@
 
 import { ALL_NATIVE_TOOL_DEFINITIONS } from '../../engine/tools/native/definitions';
 import { normalizePhoneNumberList } from '../../services/nativeActions/builders/phone';
+import {
+  recordE2ENativeMobileInvocation,
+  resetE2ENativeMobileInvocationEvidence,
+} from './e2eNativeMobileEvidence';
+
+export { getE2ENativeMobileInvocationSnapshots } from './e2eNativeMobileEvidence';
+export type { E2ENativeMobileInvocationSnapshot } from './e2eNativeMobileEvidence';
 
 /** Deterministic calendar list for live E2E (Node lacks expo-calendar). */
 export const E2E_FIXTURE_CALENDAR_LIST_JSON = JSON.stringify([
@@ -247,6 +254,7 @@ export function resetE2ENativeMobileFixtures(): void {
   e2eCalendarEventId = 0;
   e2eCalendarEvents = [];
   e2eNativeFixtureState = createEmptyNativeFixtureState();
+  resetE2ENativeMobileInvocationEvidence();
 }
 
 export function getE2ENativeMobileFixtureStateSnapshot(): E2ENativeMobileFixtureStateSnapshot {
@@ -359,7 +367,7 @@ function readE2ECalendarEvents(args: Record<string, unknown>): Record<string, un
     .map(serializeE2ECalendarEvent);
 }
 
-export async function tryExecuteE2ENativeMobileTool(
+async function executeE2ENativeMobileTool(
   name: string,
   argsString: string,
 ): Promise<string | null> {
@@ -648,4 +656,20 @@ export async function tryExecuteE2ENativeMobileTool(
     default:
       return null;
   }
+}
+
+export async function tryExecuteE2ENativeMobileTool(
+  name: string,
+  argsString: string,
+): Promise<string | null> {
+  const stateBefore = getE2ENativeMobileFixtureStateSnapshot();
+  const result = await executeE2ENativeMobileTool(name, argsString);
+  const stateAfter = getE2ENativeMobileFixtureStateSnapshot();
+  recordE2ENativeMobileInvocation({
+    toolName: name,
+    result,
+    stateBefore,
+    stateAfter,
+  });
+  return result;
 }

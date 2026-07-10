@@ -8,6 +8,10 @@ import { useChatStore } from '../../store/useChatStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { generateId } from '../../utils/id';
 import {
+  getE2ENativeMobileFixtureStateSnapshot,
+  getE2ENativeMobileInvocationSnapshots,
+} from './e2eNativeMobileFixtures';
+import {
   applyForegroundScenarioRoute,
   buildForegroundScenarioCompletionSnapshot,
   buildForegroundScenarioUsageDelta,
@@ -33,6 +37,7 @@ export type {
   ForegroundScenarioExecutionContextSnapshot,
   ForegroundScenarioFinalAssistantSnapshot,
   ForegroundScenarioMemorySnapshot,
+  ForegroundScenarioNativeEvidenceSnapshot,
   ForegroundScenarioRouteDirective,
   ForegroundScenarioTurnInput,
   ForegroundScenarioTurnSnapshot,
@@ -111,6 +116,8 @@ async function runScenarioIsolated(
     const turnSnapshots: ForegroundScenarioTurnSnapshot[] = [];
     for (const [turnIndex, turn] of input.turns.entries()) {
       const startedAt = Date.now();
+      const nativeStateBefore = getE2ENativeMobileFixtureStateSnapshot();
+      const nativeInvocationStart = getE2ENativeMobileInvocationSnapshots().length;
       const route = applyForegroundScenarioRoute(
         input.conversationId,
         turn.route,
@@ -167,6 +174,8 @@ async function runScenarioIsolated(
       const turnMessages = conversation.messages.slice(messageStartIndex);
       const finalAssistantResolution = resolveForegroundScenarioFinalAssistant(turnMessages);
       const finalAssistant = finalAssistantResolution.selected;
+      const nativeInvocations =
+        getE2ENativeMobileInvocationSnapshots().slice(nativeInvocationStart);
       const chatError = runtime.getChatError();
       const memoryInvariantError =
         !timedOut && !chatError && memory.length !== 1
@@ -191,6 +200,11 @@ async function runScenarioIsolated(
           finalAssistantCandidateCount: finalAssistantResolution.candidateCount,
           memory,
           messages: turnMessages,
+          native: {
+            stateBefore: nativeStateBefore,
+            stateAfter: getE2ENativeMobileFixtureStateSnapshot(),
+            invocations: nativeInvocations,
+          },
           route: { directive: turn.route, ...route },
           run,
           timedOut,

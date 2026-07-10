@@ -17,6 +17,7 @@ import type {
   ForegroundScenarioExecutionContextSnapshot,
   ForegroundScenarioFinalAssistantSnapshot,
   ForegroundScenarioMemorySnapshot,
+  ForegroundScenarioNativeEvidenceSnapshot,
   ForegroundScenarioRouteDirective,
 } from './foregroundScenarioDriverTypes';
 
@@ -106,6 +107,7 @@ export type E2EScenarioTurnTrace = {
   completion: ForegroundScenarioCompletionSnapshot;
   agentRun: E2EAgentRunTrace | null;
   memory: ReadonlyArray<ForegroundScenarioMemorySnapshot>;
+  native: ForegroundScenarioNativeEvidenceSnapshot;
   toolCalls: ReadonlyArray<E2EToolCallRecord>;
   toolResults: ReadonlyArray<E2EToolResultRecord>;
   graphSnapshots: ReadonlyArray<AgentRunControlGraphState>;

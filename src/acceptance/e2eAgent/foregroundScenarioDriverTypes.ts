@@ -5,6 +5,10 @@ import type { Conversation, ConversationMode } from '../../types/conversation';
 import type { AssistantCompletionStatus, Message } from '../../types/message';
 import type { LlmProviderConfig } from '../../types/provider';
 import type { ConversationUsageSummary } from '../../types/usage';
+import type {
+  E2ENativeMobileFixtureStateSnapshot,
+  E2ENativeMobileInvocationSnapshot,
+} from './e2eNativeMobileFixtures';
 
 export type ForegroundScenarioRouteDirective =
   | 'production_auto'
@@ -47,6 +51,12 @@ export type ForegroundScenarioMemorySnapshot = Readonly<{
   status: IngestionJob['status'] | 'not_enqueued';
 }>;
 
+export type ForegroundScenarioNativeEvidenceSnapshot = Readonly<{
+  stateBefore: DeepReadonly<E2ENativeMobileFixtureStateSnapshot>;
+  stateAfter: DeepReadonly<E2ENativeMobileFixtureStateSnapshot>;
+  invocations: ReadonlyArray<DeepReadonly<E2ENativeMobileInvocationSnapshot>>;
+}>;
+
 export type ForegroundScenarioExecutionContextSnapshot = Readonly<{
   mode: ConversationMode;
   personaId: string;
@@ -80,10 +90,12 @@ export type ForegroundScenarioTurnSnapshot = Readonly<{
   finalAssistant: ForegroundScenarioFinalAssistantSnapshot | null;
   finalAssistantCandidateCount: number;
   memory: ReadonlyArray<ForegroundScenarioMemorySnapshot>;
+  native: ForegroundScenarioNativeEvidenceSnapshot;
   messages: DeepReadonly<Message[]>;
   route: Readonly<{
     directive: ForegroundScenarioRouteDirective;
-  }> & ForegroundScenarioExecutionContextSnapshot;
+  }> &
+    ForegroundScenarioExecutionContextSnapshot;
   run: DeepReadonly<AgentRun> | null;
   timedOut: boolean;
   turnIndex: number;

@@ -9,6 +9,8 @@ import { resetE2EWorkspaceSandbox } from '../../src/acceptance/e2eAgent/sandboxW
 import { executeMemoryRemember } from '../../src/engine/tools/builtin-memory';
 import {
   resetE2ENativeMobileFixtures,
+  getE2ENativeMobileFixtureStateSnapshot,
+  getE2ENativeMobileInvocationSnapshots,
   tryExecuteE2ENativeMobileTool,
 } from '../../src/acceptance/e2eAgent/e2eNativeMobileFixtures';
 function buildResult(overrides: Partial<E2EScenarioResult> = {}): E2EScenarioResult {
@@ -228,13 +230,25 @@ describe('evaluateE2ERubric', () => {
   });
   it('checks native_fixture_state from deterministic native side effects', async () => {
     process.env.RUN_E2E_AGENT_EVAL = '1';
+    const stateBefore = getE2ENativeMobileFixtureStateSnapshot();
     await tryExecuteE2ENativeMobileTool('device_permissions', '{}');
+    const native = {
+      stateBefore,
+      stateAfter: getE2ENativeMobileFixtureStateSnapshot(),
+      invocations: getE2ENativeMobileInvocationSnapshots(),
+    };
+    resetE2ENativeMobileFixtures();
 
-    const outcome = evaluateE2ERubric(buildResult(), {
-      kind: 'native_fixture_state',
-      path: 'permissions.location',
-      expectedValue: 'denied',
-    });
+    const outcome = evaluateE2ERubric(
+      buildResult({
+        turnTraces: [{ native } as E2EScenarioResult['turnTraces'][number]],
+      }),
+      {
+        kind: 'native_fixture_state',
+        path: 'permissions.location',
+        expectedValue: 'denied',
+      },
+    );
     expect(outcome.passed).toBe(true);
   });
   it('checks working_block_token in conversation-scoped working memory', () => {

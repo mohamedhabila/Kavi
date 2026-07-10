@@ -4,8 +4,11 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { runE2EScenario } from '../../src/acceptance/e2eAgent/scenarioRunner';
+import { buildE2EScenarioTraceSummary } from '../../src/acceptance/e2eAgent/e2eTraceSummary';
+import { evaluateE2ERubric } from '../../src/acceptance/e2eAgent/rubricEvaluators';
 import {
   getE2ENativeMobileFixtureStateSnapshot,
+  resetE2ENativeMobileFixtures,
   tryExecuteE2ENativeMobileTool,
 } from '../../src/acceptance/e2eAgent/e2eNativeMobileFixtures';
 import { readWorkspaceRelativeFile } from '../../src/acceptance/e2eAgent/sandboxWorkspace';
@@ -485,5 +488,53 @@ describe('runE2EScenario product foreground integration', () => {
     await expect(runE2EScenario(invalidScenario)).rejects.toThrow(
       'Scenario contentClass must be private or synthetic_public.',
     );
+  });
+
+  it('grades and reports native side effects from immutable per-turn evidence', async () => {
+    mockedRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
+      await tryExecuteE2ENativeMobileTool(
+        'clipboard_write',
+        JSON.stringify({ text: 'PRIVATE-NATIVE-EVIDENCE' }),
+      );
+      callbacks.onAssistantMessage(
+        'Clipboard updated.',
+        undefined,
+        undefined,
+        buildAssistantMessageMetadata('final'),
+      );
+      callbacks.onAgentControlGraphStateChange(buildFinalizedGraphSnapshot());
+      callbacks.onDone();
+    });
+
+    const result = await runE2EScenario(scenario({ contentClass: 'private' }));
+    const traceBeforeGlobalMutation = buildE2EScenarioTraceSummary({ result });
+
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Object.isFrozen(result.turnTraces[0]?.native)).toBe(true);
+    expect(result.turnTraces[0]?.native).toMatchObject({
+      stateBefore: { clipboard: { text: '', writeCount: 0 } },
+      stateAfter: { clipboard: { text: 'PRIVATE-NATIVE-EVIDENCE', writeCount: 1 } },
+      invocations: [
+        {
+          sequence: 1,
+          toolName: 'clipboard_write',
+          handled: true,
+          resultStatus: 'clipboard_written',
+          errorClass: null,
+        },
+      ],
+    });
+
+    resetE2ENativeMobileFixtures();
+    await tryExecuteE2ENativeMobileTool('calendar_list', '{}');
+    expect(
+      evaluateE2ERubric(result, {
+        kind: 'native_fixture_state',
+        path: 'clipboard.writeCount',
+        expectedValue: '1',
+      }),
+    ).toMatchObject({ passed: true });
+    expect(buildE2EScenarioTraceSummary({ result })).toEqual(traceBeforeGlobalMutation);
+    expect(JSON.stringify(traceBeforeGlobalMutation)).not.toContain('PRIVATE-NATIVE-EVIDENCE');
   });
 });

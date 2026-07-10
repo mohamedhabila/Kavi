@@ -7,7 +7,6 @@ import {
   evaluateGoalEvidenceGaps,
   isSuccessCriterionMet,
 } from '../../engine/goals/completionEvidence';
-import { getE2ENativeMobileFixtureStateSnapshot } from './e2eNativeMobileFixtures';
 import {
   readJsonFieldAtPath,
   structuralValuesMatch,
@@ -498,7 +497,7 @@ export function evaluateE2ERubric(
     }
 
     case 'native_fixture_state': {
-      const snapshot = getE2ENativeMobileFixtureStateSnapshot();
+      const snapshot = result.turnTraces[result.turnTraces.length - 1]?.native?.stateAfter;
       const actual = readJsonFieldAtPath(snapshot, rubric.path);
       if (!structuralValuesMatch(actual, rubric.expectedValue)) {
         return {

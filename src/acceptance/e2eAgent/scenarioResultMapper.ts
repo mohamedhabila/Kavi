@@ -7,6 +7,7 @@ import type {
   ForegroundScenarioDriverResult,
   ForegroundScenarioTurnSnapshot,
 } from './foregroundScenarioDriver';
+import { cloneAndFreeze } from './foregroundScenarioDriverTypes';
 import { aggregateE2ETokenUsage } from './tokenUsage';
 import type {
   E2EScenarioContentClass,
@@ -95,7 +96,7 @@ function buildTurnTrace(turn: ForegroundScenarioTurnSnapshot): E2EScenarioTurnTr
   const graphSnapshots: AgentRunControlGraphState[] = turn.run?.controlGraph
     ? [cloneJson(turn.run.controlGraph) as AgentRunControlGraphState]
     : [];
-  return {
+  return cloneAndFreeze({
     turnIndex: turn.turnIndex,
     route: cloneJson(turn.route),
     finalAssistant: turn.finalAssistant ? cloneJson(turn.finalAssistant) : null,
@@ -115,12 +116,13 @@ function buildTurnTrace(turn: ForegroundScenarioTurnSnapshot): E2EScenarioTurnTr
         }
       : null,
     memory: cloneJson(turn.memory),
+    native: cloneJson(turn.native),
     toolCalls: collectToolCalls(turn.messages),
     toolResults: collectToolResults(turn.messages),
     graphSnapshots,
     usage: aggregateE2ETokenUsage(buildUsageEvents(turn)),
     completed: turn.completion.executionCompleted,
-  };
+  }) as E2EScenarioTurnTrace;
 }
 
 export function mapForegroundScenarioResult(params: {
@@ -134,7 +136,7 @@ export function mapForegroundScenarioResult(params: {
   const usageEvents = params.driverResult.turns.flatMap(buildUsageEvents);
   const errors = params.driverResult.turns.flatMap((turn) => (turn.error ? [turn.error] : []));
 
-  return {
+  return cloneAndFreeze({
     contentClass: params.contentClass,
     fixtureId: params.fixtureId,
     conversationId: params.driverResult.conversationId,
@@ -149,5 +151,5 @@ export function mapForegroundScenarioResult(params: {
       turnTraces.every((turn) => turn.completed),
     durationMs: params.durationMs,
     userTurnCount: params.requestedUserTurnCount,
-  };
+  }) as E2EScenarioResult;
 }

@@ -1,5 +1,7 @@
 import { buildE2ERunReportScenarioEntry } from '../../src/acceptance/e2eAgent/e2eRunReport';
 import {
+  getE2ENativeMobileFixtureStateSnapshot,
+  getE2ENativeMobileInvocationSnapshots,
   resetE2ENativeMobileFixtures,
   tryExecuteE2ENativeMobileTool,
 } from '../../src/acceptance/e2eAgent/e2eNativeMobileFixtures';
@@ -467,17 +469,56 @@ describe('e2eRunReport scenario entries', () => {
     const previousRuntimeFlag = process.env.RUN_E2E_AGENT_EVAL;
     process.env.RUN_E2E_AGENT_EVAL = '1';
     try {
+      const stateBefore = getE2ENativeMobileFixtureStateSnapshot();
       await tryExecuteE2ENativeMobileTool('contacts_search', '{"query":"Avery"}');
       await tryExecuteE2ENativeMobileTool(
         'sms_compose',
         '{"recipients":["+15550100"],"message":"TRACE-MESSAGE"}',
       );
+      const native = {
+        stateBefore,
+        stateAfter: getE2ENativeMobileFixtureStateSnapshot(),
+        invocations: getE2ENativeMobileInvocationSnapshots(),
+      };
+      resetE2ENativeMobileFixtures();
+      const baseResult = buildFixtureResult({
+        fixtureId: 'native-fixture-diagnostics',
+        conversationId: 'native-fixture-diagnostics',
+      });
+      const result = buildFixtureResult({
+        fixtureId: baseResult.fixtureId,
+        conversationId: baseResult.conversationId,
+        turnTraces: [
+          {
+            turnIndex: 0,
+            route: { directive: 'forced_agentic', mode: 'agentic', personaId: 'super-agent' },
+            finalAssistant: null,
+            finalAssistantCandidateCount: 0,
+            completion: {
+              assistantStatus: 'missing',
+              executionCompleted: true,
+              finalResponseCompleted: false,
+              runStatus: 'completed',
+              runCompleted: true,
+              runCompletedAt: null,
+              runTerminalReason: null,
+              graphStatus: 'finalized',
+              graphTerminalReason: null,
+            },
+            agentRun: null,
+            memory: [],
+            native,
+            toolCalls: [],
+            toolResults: [],
+            graphSnapshots: [],
+            usage: baseResult.usage,
+            completed: true,
+          },
+        ],
+      });
       const entry = buildE2ERunReportScenarioEntry({
         suite: 'core',
-        result: buildFixtureResult({
-          fixtureId: 'native-fixture-diagnostics',
-          conversationId: 'native-fixture-diagnostics',
-        }),
+        result,
         outcome: { fixtureId: 'native-fixture-diagnostics', passed: false },
         attemptCount: 1,
       });

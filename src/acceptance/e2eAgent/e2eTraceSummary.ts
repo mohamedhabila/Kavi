@@ -1,4 +1,3 @@
-import { getE2ENativeMobileFixtureStateSnapshot } from './e2eNativeMobileFixtures';
 import type { E2ERubric, E2EScenarioResult, E2EScenarioTurnTrace } from './types';
 import {
   buildValueFingerprint,
@@ -93,9 +92,10 @@ function collectPrimitiveValueFingerprints(
   }
 }
 
-function buildNativeFixtureStateTrace(): E2ERedactedValueFingerprint[] {
+function buildNativeFixtureStateTrace(result: E2EScenarioResult): E2ERedactedValueFingerprint[] {
   const fingerprints: E2ERedactedValueFingerprint[] = [];
-  collectPrimitiveValueFingerprints(getE2ENativeMobileFixtureStateSnapshot(), [], fingerprints);
+  const finalState = result.turnTraces[result.turnTraces.length - 1]?.native?.stateAfter;
+  if (finalState) collectPrimitiveValueFingerprints(finalState, [], fingerprints);
   return fingerprints;
 }
 
@@ -135,7 +135,7 @@ export function buildE2EScenarioTraceSummary(params: {
     graphSnapshots: tailItems(result.graphSnapshots, MAX_SCENARIO_GRAPH_SNAPSHOTS).map(
       buildGraphSnapshotTrace,
     ),
-    nativeFixtureStateFingerprints: buildNativeFixtureStateTrace(),
+    nativeFixtureStateFingerprints: buildNativeFixtureStateTrace(result),
     turns: result.turnTraces.map(buildTurnTrace),
   };
 }
