@@ -4,7 +4,12 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { recordAgentRunEvidenceMemory } from '../../../src/services/memory/agentRunEvidenceMemory';
-import { listFacts } from '../../../src/services/memory/facts/queries';
+import {
+  listFacts,
+  listFactsForRecallEligibleScan,
+} from '../../../src/services/memory/facts/queries';
+import { applyMemoryApplicabilityPolicy } from '../../../src/services/memory/memoryApplicabilityPolicy';
+import { resolveLocalMemoryAccessScope } from '../../../src/services/memory/memoryScopeStore';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
@@ -40,6 +45,8 @@ describe('recordAgentRunEvidenceMemory', () => {
         state_index: 2,
         outcome: 'reports/analysis.json was created',
         artifact: 'reports/analysis.json',
+        toolName: 'python',
+        toolResult: 'reports/analysis.json was created',
       })}`,
     ];
 
@@ -59,8 +66,106 @@ describe('recordAgentRunEvidenceMemory', () => {
     expect(facts.filter((fact) => fact.memoryKind === 'agent_run')).toHaveLength(1);
     expect(facts.filter((fact) => fact.memoryKind === 'evidence_span').length).toBeGreaterThan(0);
     expect(facts.every((fact) => fact.sourceRunId === 'run-1')).toBe(true);
-    expect(facts.every((fact) => fact.sourceAuthority === 'assistant_inferred')).toBe(true);
+    expect(facts.find((fact) => fact.memoryKind === 'agent_run')?.sourceAuthority).toBe(
+      'assistant_inferred',
+    );
+    expect(
+      facts
+        .filter((fact) => fact.memoryKind === 'evidence_span')
+        .every((fact) => fact.sourceAuthority === 'tool_observed'),
+    ).toBe(true);
     expect(facts.some((fact) => fact.objectText.includes('reports/analysis.json'))).toBe(true);
+
+    const memoryScope = resolveLocalMemoryAccessScope({
+      memoryConversationId: 'conv-agent-memory',
+      sourceThreadId: 'conv-agent-memory',
+      personaId: 'default',
+      taskId: 'task-analysis',
+    });
+    const direct = listFactsForRecallEligibleScan({
+      recallScopeIdentity: {
+        ...memoryScope,
+        useIntent: 'automatic_prompt',
+        candidateLane: 'direct_use',
+      },
+      originConversationId: 'conv-agent-memory',
+      asOf: 20,
+      limit: 10,
+    });
+    expect(direct.map((fact) => fact.memoryKind)).toEqual(['evidence_span']);
+    expect(direct[0]?.sourceAuthority).toBe('tool_observed');
+  });
+
+  it('keeps summary-only runs assistant-inferred and ineligible for automatic use', () => {
+    const result = recordAgentRunEvidenceMemory({
+      evidence: [
+        `agent:${JSON.stringify({
+          trajectory_id: 'run-summary-only',
+          goal: 'Summarize a run without direct observations',
+          summary: 'Assistant-composed summary without observed evidence.',
+          status: 'completed',
+        })}`,
+      ],
+      conversationId: 'conv-summary-only',
+      threadId: 'conv-summary-only',
+      taskId: null,
+      now: 10,
+    });
+
+    expect(result.factIds).toHaveLength(1);
+    const persisted = listFacts({ originConversationId: 'conv-summary-only' });
+    expect(persisted).toEqual([
+      expect.objectContaining({
+        memoryKind: 'agent_run',
+        sourceAuthority: 'assistant_inferred',
+        reviewState: 'auto',
+      }),
+    ]);
+    const memoryScope = resolveLocalMemoryAccessScope({
+      memoryConversationId: 'conv-summary-only',
+      sourceThreadId: 'conv-summary-only',
+      personaId: 'default',
+      taskId: null,
+    });
+    const direct = listFactsForRecallEligibleScan({
+      recallScopeIdentity: {
+        ...memoryScope,
+        useIntent: 'automatic_prompt',
+        candidateLane: 'direct_use',
+      },
+      originConversationId: 'conv-summary-only',
+      asOf: 20,
+      limit: 10,
+    });
+    const resolution = listFactsForRecallEligibleScan({
+      recallScopeIdentity: {
+        ...memoryScope,
+        useIntent: 'automatic_prompt',
+        candidateLane: 'resolution',
+      },
+      originConversationId: 'conv-summary-only',
+      asOf: 20,
+      limit: 10,
+    });
+    expect(direct).toEqual([]);
+    expect(resolution.map((fact) => fact.id)).toEqual([persisted[0]?.id]);
+    expect(
+      applyMemoryApplicabilityPolicy({
+        facts: resolution,
+        context: {
+          enabled: true,
+          now: 20,
+          useIntent: 'automatic_prompt',
+          scope: memoryScope,
+          conflictObservationReadState: 'available',
+        },
+      }).factDecisions,
+    ).toEqual([
+      expect.objectContaining({
+        action: 'silent',
+        reason: 'workflow_authority_confirmation_required',
+      }),
+    ]);
   });
 
   it('does not consume non-json graph evidence that belongs to durable fact bridging', () => {
@@ -617,10 +722,18 @@ describe('recordAgentRunEvidenceMemory', () => {
     ).toBe(true);
     for (const fact of facts) {
       expect(fact.objectText.length).toBeLessThanOrEqual(10_000);
-      expect(JSON.parse(fact.objectText)).toMatchObject({
-        sourceRunId: 'run-long',
-        goal: 'Complete a long approval workflow and preserve why each observed state mattered.',
-      });
+      const record = JSON.parse(fact.objectText) as Record<string, unknown>;
+      expect(record).toMatchObject({ sourceRunId: 'run-long' });
+      if (fact.memoryKind === 'agent_run') {
+        expect(record.goal).toBe(
+          'Complete a long approval workflow and preserve why each observed state mattered.',
+        );
+      } else {
+        expect(record).not.toHaveProperty('goal');
+        expect(record).not.toHaveProperty('thought');
+        expect(record).not.toHaveProperty('action');
+        expect(record).not.toHaveProperty('outcome');
+      }
     }
   });
 

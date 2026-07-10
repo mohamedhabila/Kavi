@@ -103,14 +103,28 @@ function evidenceSliceForRecord(step: AgentRunStep): JsonRecord {
   );
 }
 
-function stepHasDirectEvidence(step: AgentRunStep): boolean {
+function directlyObservedEvidenceSlice(step: AgentRunStep): JsonRecord {
+  return Object.fromEntries(
+    Object.entries({
+      stateIndex: step.stateIndex,
+      url: step.url,
+      navigationAnchor: step.navigationAnchor,
+      observedControlSequence: step.observedControlSequence,
+      observedAffordances: step.observedAffordances,
+      inputControlsPresent: step.inputControlsPresent,
+      observation: step.observation,
+      toolResult: step.toolResult,
+      status: step.status,
+      toolName: step.toolName,
+    }).filter(([, value]) => value !== undefined && value !== null && value !== ''),
+  );
+}
+
+function stepHasStructurallyDirectEvidence(step: AgentRunStep): boolean {
   if (step.observation || step.toolResult) return true;
   if ((step.observedControlSequence?.length ?? 0) > 0) return true;
   if ((step.observedAffordances?.length ?? 0) > 0) return true;
-  return Boolean(
-    step.outcome &&
-    (step.stateIndex !== undefined || step.action || step.toolName || step.url || step.status),
-  );
+  return false;
 }
 
 function evidenceSpanRecordForStep(
@@ -120,9 +134,8 @@ function evidenceSpanRecordForStep(
 ): string {
   return compactRecord({
     sourceRunId: bundle.sourceRunId,
-    goal: bundle.goal,
     sequence,
-    ...evidenceSliceForRecord(step),
+    ...directlyObservedEvidenceSlice(step),
   });
 }
 
@@ -404,9 +417,8 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
     now: input.now,
   });
   const factIds: string[] = [];
-  const evidenceSlices = boundedSteps(bundle.steps, MAX_EVIDENCE_SLICES_PER_RUN).map(
-    evidenceSliceForRecord,
-  );
+  const boundedEvidenceSteps = boundedSteps(bundle.steps, MAX_EVIDENCE_SLICES_PER_RUN);
+  const evidenceSlices = boundedEvidenceSteps.map(evidenceSliceForRecord);
   const tools = Array.from(bundle.tools).slice(0, 16);
   const sources = Array.from(bundle.sources).slice(0, 12);
   const artifacts = Array.from(bundle.artifacts).slice(0, 12);
@@ -460,40 +472,16 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
   );
   if (agentRunId) factIds.push(agentRunId);
 
-  const evidenceSpanSteps = evidenceSlices
-    .filter((step): step is JsonRecord => Boolean(step && typeof step === 'object'))
-    .filter((step) =>
-      stepHasDirectEvidence({
-        stateIndex: scalarField(step, 'stateIndex') ?? scalarField(step, 'state_index'),
-        action: stringField(step, 'action'),
-        thought: stringField(step, 'thought'),
-        url: stringField(step, 'url'),
-        navigationAnchor:
-          typeof step.navigationAnchor === 'boolean' ? step.navigationAnchor : undefined,
-        observation: stringField(step, 'observation'),
-        observedControlSequence: Array.isArray(step.observedControlSequence)
-          ? (step.observedControlSequence as AgentRunStep['observedControlSequence'])
-          : undefined,
-        observedAffordances: Array.isArray(step.observedAffordances)
-          ? (step.observedAffordances as AgentRunStep['observedAffordances'])
-          : undefined,
-        inputControlsPresent:
-          typeof step.inputControlsPresent === 'boolean' ? step.inputControlsPresent : undefined,
-        outcome: stringField(step, 'outcome'),
-        status: stringField(step, 'status'),
-        toolName: stringField(step, 'toolName') ?? stringField(step, 'tool_name'),
-        toolResult: stringField(step, 'toolResult') ?? stringField(step, 'tool_result'),
-      }),
-    )
+  const evidenceSpanSteps = boundedEvidenceSteps
+    .filter(stepHasStructurallyDirectEvidence)
     .slice(0, MAX_EVIDENCE_SPAN_FACTS_PER_RUN);
 
   evidenceSpanSteps.forEach((step, index) => {
-    const stepStateIndex = scalarField(step, 'stateIndex') ?? scalarField(step, 'state_index');
     const recorded = recordFactWithApplicability(
       {
         subjectId: subject.id,
         predicate: 'evidence_span',
-        objectText: evidenceSpanRecordForStep(bundle, step as AgentRunStep, index),
+        objectText: evidenceSpanRecordForStep(bundle, step, index),
         memoryKind: 'evidence_span',
         sourceRunId: bundle.sourceRunId,
         sourceTurnId: input.sourceTurnId,
@@ -509,16 +497,16 @@ function persistBundle(bundle: AgentRunBundle, input: AgentRunEvidenceMemoryInpu
           ...baseAttributes,
           evidenceType: 'evidence_span',
           sequence: index,
-          stateIndex: stepStateIndex,
-          status: stringField(step, 'status'),
-          toolName: stringField(step, 'toolName') ?? stringField(step, 'tool_name'),
-          url: stringField(step, 'url'),
+          stateIndex: step.stateIndex,
+          status: step.status,
+          toolName: step.toolName,
+          url: step.url,
         },
         now: input.now,
       },
       {
         factClass: 'workflow',
-        sourceAuthority: 'assistant_inferred',
+        sourceAuthority: 'tool_observed',
       },
     );
     factIds.push(recorded.fact.id);
