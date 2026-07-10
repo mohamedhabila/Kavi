@@ -21,6 +21,12 @@ DATA_CHECKSUM_MANIFEST_SHA256 = (
 )
 EXPECTED_READER = "qwen3.5-9b"
 EXPECTED_EVALUATOR = "gpt-5.2"
+REQUIRED_SCORE_DATA_FILES = {
+    "questions.jsonl",
+    "trajectories.jsonl",
+    "haystacks/lme_v2_small.json",
+    "haystacks/lme_v2_medium.json",
+}
 HARNESS_SHARED_HAYSTACK_LINE = "    shared_haystack = all_haystacks_shared(question_ids, haystack_mapping)\n"
 HARNESS_KAVI_ISOLATED_LINE = (
     "    shared_haystack = all_haystacks_shared(question_ids, haystack_mapping) "
@@ -224,7 +230,15 @@ def install_adapter(upstream: Path, adapter_source: Path) -> None:
         target.write_bytes(content)
 
 
-def verify_data_snapshot(data_root: Path) -> dict[str, str]:
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_data_snapshot(data_root: Path) -> dict[str, Any]:
     checksum_manifest = data_root / "checksums.sha256"
     require(checksum_manifest.is_file(), f"Missing dataset checksum manifest: {checksum_manifest}")
     digest = hashlib.sha256(checksum_manifest.read_bytes()).hexdigest()
@@ -232,10 +246,67 @@ def verify_data_snapshot(data_root: Path) -> dict[str, str]:
         digest == DATA_CHECKSUM_MANIFEST_SHA256,
         "LongMemEval-V2 dataset checksum manifest does not match the pinned revision",
     )
+    verified_files = 0
+    verified_paths: set[str] = set()
+    skipped_metadata_files = 0
+    data_root_resolved = data_root.resolve()
+    for line_number, raw_line in enumerate(
+        checksum_manifest.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        if not raw_line.strip():
+            continue
+        parts = raw_line.split("  ", maxsplit=1)
+        require(
+            len(parts) == 2
+            and len(parts[0]) == 64
+            and all(character in "0123456789abcdef" for character in parts[0]),
+            f"Invalid dataset checksum entry at line {line_number}",
+        )
+        relative_path = Path(parts[1])
+        require(
+            not relative_path.is_absolute() and ".." not in relative_path.parts,
+            f"Unsafe dataset checksum path at line {line_number}",
+        )
+        relative_name = relative_path.as_posix()
+        if (
+            relative_name not in REQUIRED_SCORE_DATA_FILES
+            and not relative_name.startswith("question_screenshots/")
+        ):
+            skipped_metadata_files += 1
+            continue
+        snapshot_file = data_root / relative_path
+        resolved_file = snapshot_file.resolve()
+        current_path = data_root
+        contains_symlink = False
+        for path_part in relative_path.parts:
+            current_path = current_path / path_part
+            contains_symlink = contains_symlink or current_path.is_symlink()
+        require(
+            resolved_file != data_root_resolved
+            and data_root_resolved in resolved_file.parents
+            and snapshot_file.is_file()
+            and not contains_symlink,
+            f"Missing or unsafe dataset file listed at line {line_number}",
+        )
+        actual_digest = sha256_file(snapshot_file)
+        require(
+            actual_digest == parts[0],
+            f"Dataset file checksum mismatch at line {line_number}: {relative_path.as_posix()}",
+        )
+        verified_files += 1
+        verified_paths.add(relative_name)
+    require(verified_files > 0, "Dataset checksum manifest is empty")
+    missing_score_files = sorted(REQUIRED_SCORE_DATA_FILES - verified_paths)
+    require(
+        not missing_score_files,
+        f"Dataset checksum manifest is missing score-bearing files: {missing_score_files}",
+    )
     return {
         "repository": "https://huggingface.co/datasets/xiaowu0162/longmemeval-v2",
         "revision": DATA_REVISION,
         "checksum_manifest_sha256": digest,
+        "verified_files": verified_files,
+        "skipped_metadata_files": skipped_metadata_files,
     }
 
 

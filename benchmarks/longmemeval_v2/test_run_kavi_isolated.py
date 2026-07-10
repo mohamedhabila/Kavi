@@ -38,11 +38,14 @@ class RunKaviIsolatedProvenanceTest(unittest.TestCase):
         self.commit = self.git("rev-parse", "HEAD").stdout.strip()
         self.original_commit = runner.UPSTREAM_COMMIT
         self.original_checksum = runner.DATA_CHECKSUM_MANIFEST_SHA256
+        self.original_required_files = runner.REQUIRED_SCORE_DATA_FILES
         runner.UPSTREAM_COMMIT = self.commit
+        runner.REQUIRED_SCORE_DATA_FILES = {"questions.jsonl"}
 
     def tearDown(self) -> None:
         runner.UPSTREAM_COMMIT = self.original_commit
         runner.DATA_CHECKSUM_MANIFEST_SHA256 = self.original_checksum
+        runner.REQUIRED_SCORE_DATA_FILES = self.original_required_files
         self.temp.cleanup()
 
     def git(self, *args: str) -> subprocess.CompletedProcess[str]:
@@ -83,8 +86,11 @@ class RunKaviIsolatedProvenanceTest(unittest.TestCase):
     def test_verifies_the_pinned_dataset_checksum_manifest(self) -> None:
         data_root = self.root / "data"
         data_root.mkdir()
+        questions = data_root / "questions.jsonl"
+        questions.write_text('{"id":"fixture"}\n')
         manifest = data_root / "checksums.sha256"
-        manifest.write_text("fixture  questions.jsonl\n")
+        questions_digest = hashlib.sha256(questions.read_bytes()).hexdigest()
+        manifest.write_text(f"{questions_digest}  questions.jsonl\n")
         runner.DATA_CHECKSUM_MANIFEST_SHA256 = hashlib.sha256(manifest.read_bytes()).hexdigest()
 
         snapshot = runner.verify_data_snapshot(data_root)
@@ -93,6 +99,21 @@ class RunKaviIsolatedProvenanceTest(unittest.TestCase):
         self.assertEqual(
             snapshot["checksum_manifest_sha256"], runner.DATA_CHECKSUM_MANIFEST_SHA256
         )
+        self.assertEqual(snapshot["verified_files"], 1)
+
+    def test_rejects_dataset_content_that_does_not_match_the_manifest(self) -> None:
+        data_root = self.root / "data"
+        data_root.mkdir()
+        questions = data_root / "questions.jsonl"
+        questions.write_text("original\n")
+        manifest = data_root / "checksums.sha256"
+        questions_digest = hashlib.sha256(questions.read_bytes()).hexdigest()
+        manifest.write_text(f"{questions_digest}  questions.jsonl\n")
+        runner.DATA_CHECKSUM_MANIFEST_SHA256 = hashlib.sha256(manifest.read_bytes()).hexdigest()
+        questions.write_text("modified\n")
+
+        with self.assertRaisesRegex(RuntimeError, "file checksum mismatch"):
+            runner.verify_data_snapshot(data_root)
 
 
 if __name__ == "__main__":
