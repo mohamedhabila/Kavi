@@ -43,6 +43,12 @@ describe('E2E benchmark manifest stage attribution', () => {
         turnIndex: 1,
         boundary: 'app_relaunch',
       },
+      {
+        kind: 'turn_final_response_token',
+        turnIndex: 1,
+        token: 'OPAQUE-OUTCOME-42',
+      },
+      { kind: 'ingestion_job_checkpointed', minCount: 1 },
     ];
     const scenario: E2EScenario = {
       ...sourceScenario,
@@ -94,6 +100,16 @@ describe('E2E benchmark manifest stage attribution', () => {
         rubricKind: 'turn_lifecycle_boundary',
         evaluatorKind: 'trajectory',
         evidenceKind: 'lifecycle_event',
+      },
+      {
+        rubricKind: 'turn_final_response_token',
+        evaluatorKind: 'trajectory',
+        evidenceKind: 'assistant_response',
+      },
+      {
+        rubricKind: 'ingestion_job_checkpointed',
+        evaluatorKind: 'trajectory',
+        evidenceKind: 'memory_store',
       },
     ]);
     const completionFingerprints = manifest.trajectoryEvaluators

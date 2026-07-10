@@ -21,8 +21,9 @@ import {
 } from './thresholds';
 import type { E2EAssessmentDimension } from './e2eAssessmentDimensions';
 import type { E2ERubric, E2EScenario, E2EUserTurn } from './types';
+import { assertE2EScenarioArtifactTargetsObservable } from './e2eScenarioArtifactContract';
 
-export const E2E_BENCHMARK_MANIFEST_VERSION = '2026-07-10.stage-attribution-v2';
+export const E2E_BENCHMARK_MANIFEST_VERSION = '2026-07-10.stage-attribution-v3';
 export const E2E_BENCHMARK_SOURCE_REFRESH_DATE = '2026-06-14';
 
 type E2ERubricKind = E2ERubric['kind'];
@@ -415,6 +416,7 @@ function resetProcedureForManifest(
 }
 
 export function buildE2EBenchmarkManifest(scenario: E2EScenario): E2EBenchmarkManifest {
+  assertE2EScenarioArtifactTargetsObservable(scenario);
   const benchmarkMeta = lookupE2EScenarioBenchmarkMeta(scenario.id);
   const environmentKind = resolveEnvironmentKind(
     benchmarkMeta.benchmarkFamilies,

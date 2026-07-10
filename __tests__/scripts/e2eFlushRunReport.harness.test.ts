@@ -159,7 +159,7 @@ describe('e2e-flush-run-report harness', () => {
           modelIdentitySource: 'provider-model-id',
           modelLocatorSha256: 'a'.repeat(64),
           endpointSha256: 'b'.repeat(64),
-          scenarioManifestVersion: '2026-07-10.longitudinal-v1',
+          scenarioManifestVersion: '2026-07-10.longitudinal-v2',
           promptCacheMode: 'provider-default',
           nativeToolFixtureVersion: 'native-tools-2026-07-10',
           collectMode: false,
@@ -428,7 +428,7 @@ describe('e2e-flush-run-report harness', () => {
       );
       expect(report.runMetadata.promptCacheMode).toBe('disabled');
       expect(report.runMetadata.seed).toBe(42);
-      expect(report.runMetadata.scenarioManifestVersion).toBe('2026-07-10.longitudinal-v1');
+      expect(report.runMetadata.scenarioManifestVersion).toBe('2026-07-10.longitudinal-v2');
       expect(report.reliability).toMatchObject({
         k: 2,
         pass1PassedCount: 1,

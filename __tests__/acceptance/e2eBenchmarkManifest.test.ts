@@ -11,8 +11,32 @@ import {
 } from '../../src/acceptance/e2eAgent/scenarios';
 import { E2E_BENCHMARK_SCENARIOS } from '../../src/acceptance/e2eAgent/benchmarkScenarios';
 import { listE2EBenchmarkRequirements as listRequirementCatalog } from '../../src/acceptance/e2eAgent/e2eBenchmarkRequirements';
+import {
+  assertE2EScenarioArtifactTargetsObservable,
+  listUnobservableArtifactTargets,
+} from '../../src/acceptance/e2eAgent/e2eScenarioArtifactContract';
+import type { E2EScenario } from '../../src/acceptance/e2eAgent/types';
 
 describe('e2eBenchmarkManifest', () => {
+  it('rejects artifact scorers whose target is absent from the observable task contract', () => {
+    const scenario: E2EScenario = {
+      id: 'hidden-artifact-target',
+      conversationId: 'hidden-artifact-conversation',
+      contentClass: 'synthetic_public',
+      execution: { initialMode: 'agentic', route: 'forced_agentic' },
+      prompt: 'Create the requested report in reports/summary.txt.',
+      rubrics: [
+        { kind: 'workspace_file', path: 'artifacts/secret-output.txt' },
+        { kind: 'token_budget', maxTotalTokens: 1_000 },
+      ],
+    };
+
+    expect(listUnobservableArtifactTargets(scenario)).toEqual(['artifacts/secret-output.txt']);
+    expect(() => assertE2EScenarioArtifactTargetsObservable(scenario)).toThrow(
+      'e2e_unobservable_artifact_target:hidden-artifact-target:artifacts/secret-output.txt',
+    );
+  });
+
   it('keeps the benchmark scenario catalog order stable across implementation modules', () => {
     expect(E2E_BENCHMARK_SCENARIOS.map((scenario) => scenario.id)).toEqual([
       'bench-gaia-file-hop-chain',

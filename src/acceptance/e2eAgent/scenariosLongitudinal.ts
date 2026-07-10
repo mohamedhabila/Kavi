@@ -50,6 +50,14 @@ const AGENTIC_TURN = {
   agentRunCompleted: true,
 } as const;
 
+const OUTCOME_CONTINUITY_TOKEN = 'OUTCOME-CONTINUITY-E2E-42';
+const FAILURE_ARTIFACT_DIRECTORY = 'artifacts';
+const FAILURE_ARTIFACT_BASE_NAME = 'release-candidate';
+const FAILURE_ARTIFACT_SUFFIX = '.approved.txt';
+const FAILURE_ARTIFACT_CONTENT = 'RELEASE-CANDIDATE-E2E-42';
+const FAILURE_ARTIFACT_PATH = `${FAILURE_ARTIFACT_DIRECTORY}/${FAILURE_ARTIFACT_BASE_NAME}${FAILURE_ARTIFACT_SUFFIX}`;
+const FAILURE_INVALID_ARTIFACT_PATH = `${FAILURE_ARTIFACT_DIRECTORY}/${FAILURE_ARTIFACT_BASE_NAME}.txt`;
+
 export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
   {
     id: 'profile-correction-chitchat',
@@ -146,8 +154,7 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
     userTurns: [
       {
         route: 'forced_agentic',
-        content:
-          'Record the completed project outcome by writing `artifacts/project-status.txt` with exact content `OUTCOME-CONTINUITY-E2E-42`.',
+        content: `Record the completed project outcome by writing \`artifacts/project-status.txt\` with exact content \`${OUTCOME_CONTINUITY_TOKEN}\`.`,
       },
       {
         route: 'forced_chitchat',
@@ -161,10 +168,15 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
       {
         kind: 'workspace_file',
         path: 'artifacts/project-status.txt',
-        contains: 'OUTCOME-CONTINUITY-E2E-42',
+        contains: OUTCOME_CONTINUITY_TOKEN,
       },
-      { kind: 'ingestion_job_completed', minCount: 2 },
+      { kind: 'ingestion_job_checkpointed', minCount: 2 },
       { kind: 'memory_episode_count', min: 2 },
+      {
+        kind: 'turn_final_response_token',
+        turnIndex: 1,
+        token: OUTCOME_CONTINUITY_TOKEN,
+      },
       {
         kind: 'token_budget',
         maxTotalTokens: E2E_SCENARIO_TOKEN_BUDGETS['agent-outcome-to-chitchat'],
@@ -182,8 +194,7 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
     initialWorkspaceFiles: [
       {
         path: 'policies/release-artifact-rules.txt',
-        content:
-          'The previous release failed validation because bare .txt candidate names are invalid. Release candidates must end in .approved.txt. Durable fact labels: subject mobile-release-workflow, predicate required_artifact_suffix, value .approved.txt.',
+        content: `The previous release failed validation because bare .txt candidate names are invalid. Release candidates must end in ${FAILURE_ARTIFACT_SUFFIX}. Durable fact labels: subject mobile-release-workflow, predicate required_artifact_suffix, value ${FAILURE_ARTIFACT_SUFFIX}.`,
       },
     ],
     userTurns: [
@@ -194,8 +205,7 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
       },
       {
         route: 'forced_agentic',
-        content:
-          'Prepare the release candidate now. Its base name is `release-candidate` and its exact content must be `RELEASE-CANDIDATE-E2E-42`. Apply the remembered workflow constraint and leave no invalid alternative.',
+        content: `Prepare the release candidate now inside \`${FAILURE_ARTIFACT_DIRECTORY}/\`. Its base name is \`${FAILURE_ARTIFACT_BASE_NAME}\` and its exact content must be \`${FAILURE_ARTIFACT_CONTENT}\`. Apply the remembered workflow constraint and leave no invalid alternative.`,
       },
     ],
     rubrics: [
@@ -205,14 +215,14 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
       {
         kind: 'memory_fact',
         predicate: 'required_artifact_suffix',
-        value: '.approved.txt',
+        value: FAILURE_ARTIFACT_SUFFIX,
       },
       {
         kind: 'workspace_file',
-        path: 'artifacts/release-candidate.approved.txt',
-        contains: 'RELEASE-CANDIDATE-E2E-42',
+        path: FAILURE_ARTIFACT_PATH,
+        contains: FAILURE_ARTIFACT_CONTENT,
       },
-      { kind: 'workspace_file_absent', path: 'artifacts/release-candidate.txt' },
+      { kind: 'workspace_file_absent', path: FAILURE_INVALID_ARTIFACT_PATH },
       {
         kind: 'token_budget',
         maxTotalTokens: E2E_SCENARIO_TOKEN_BUDGETS['failure-gotcha-reuse'],

@@ -129,7 +129,13 @@ describe('E2E longitudinal product scenarios', () => {
           path: 'artifacts/project-status.txt',
           contains: 'OUTCOME-CONTINUITY-E2E-42',
         },
+        { kind: 'ingestion_job_checkpointed', minCount: 2 },
         { kind: 'memory_episode_count', min: 2 },
+        {
+          kind: 'turn_final_response_token',
+          turnIndex: 1,
+          token: 'OUTCOME-CONTINUITY-E2E-42',
+        },
       ]),
     );
     expect(requireScenario('failure-gotcha-reuse').rubrics).toEqual(
@@ -139,6 +145,25 @@ describe('E2E longitudinal product scenarios', () => {
           predicate: 'required_artifact_suffix',
           value: '.approved.txt',
         },
+        {
+          kind: 'workspace_file',
+          path: 'artifacts/release-candidate.approved.txt',
+          contains: 'RELEASE-CANDIDATE-E2E-42',
+        },
+        { kind: 'workspace_file_absent', path: 'artifacts/release-candidate.txt' },
+      ]),
+    );
+  });
+
+  it('keeps the failure artifact directory, base name, suffix, and scorer aligned', () => {
+    const scenario = requireScenario('failure-gotcha-reuse');
+    const visibleTask = scenario.userTurns?.map((turn) => turn.content).join('\n') ?? '';
+
+    expect(visibleTask).toContain('artifacts/');
+    expect(visibleTask).toContain('release-candidate');
+    expect(scenario.initialWorkspaceFiles?.[0]?.content).toContain('.approved.txt');
+    expect(scenario.rubrics).toEqual(
+      expect.arrayContaining([
         {
           kind: 'workspace_file',
           path: 'artifacts/release-candidate.approved.txt',
