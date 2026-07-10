@@ -3,6 +3,7 @@ import { executeForegroundConversationRun } from '../../src/engine/graph/foregro
 import { resolveForegroundRunPreflight } from '../../src/engine/graph/foregroundRun/preflight';
 import { createForegroundRequestRegistry } from '../../src/engine/graph/foregroundRun/requestRegistry';
 import { __resetOnDeviceGuardsForTests } from '../../src/services/memory/onDeviceGuards';
+import type { AgentRun } from '../../src/types/agentRun';
 import {
   createConversation,
   createExecutionContext,
@@ -149,5 +150,73 @@ describe('foreground run supersession', () => {
       expect.objectContaining({ status: 'cancelled' }),
       'run-first',
     );
+  });
+
+  it('drops a stale resume when its requested run terminalizes during projection wait', async () => {
+    const runningRun: AgentRun = {
+      id: 'run-to-resume',
+      userMessageId: 'user-1',
+      goal: 'Finish the task',
+      status: 'running',
+      createdAt: 1,
+      updatedAt: 1,
+      currentPhase: 'work',
+      phases: [],
+      checkpoints: [],
+      summary: {
+        assistantTurns: 1,
+        startedTools: 0,
+        completedTools: 0,
+        failedTools: 0,
+        spawnedSubAgents: 0,
+      },
+    };
+    const conversation = createConversation({
+      mode: 'agentic',
+      activeAgentRunId: runningRun.id,
+      agentRuns: [runningRun],
+    });
+    let latestConversation = conversation;
+    const provider = createProvider('target-provider', 'target-model');
+    const context = createExecutionContext({
+      conversation,
+      providers: [provider],
+      ensureCanonicalConversation: jest.fn(),
+      recordConversationTurnMemory: jest.fn(),
+    });
+    context.helpers.getConversation = () => latestConversation;
+    context.helpers.getConversations = () => [latestConversation];
+    const clearTrackedRunCancellation = jest.fn();
+    context.helpers.clearTrackedRunCancellation = clearTrackedRunCancellation;
+    let releaseAvailability = () => {};
+    context.durability.waitForProjectionAvailability.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseAvailability = resolve;
+        }),
+    );
+    configureReadyPreflight(conversation, provider);
+
+    const execution = executeForegroundConversationRun({
+      context,
+      conversationId: conversation.id,
+      options: { reuseAgentRunId: runningRun.id },
+    });
+    while (context.durability.waitForProjectionAvailability.mock.calls.length < 1) {
+      await Promise.resolve();
+    }
+    latestConversation = {
+      ...conversation,
+      activeAgentRunId: undefined,
+      agentRuns: [{ ...runningRun, status: 'completed', updatedAt: 2 }],
+    };
+    releaseAvailability();
+
+    await execution;
+
+    expect(clearTrackedRunCancellation).not.toHaveBeenCalled();
+    expect(context.store.startAgentRun).not.toHaveBeenCalled();
+    expect(context.durability.createModelExecution).not.toHaveBeenCalled();
+    expect(mockedRunOrchestrator).not.toHaveBeenCalled();
   });
 });

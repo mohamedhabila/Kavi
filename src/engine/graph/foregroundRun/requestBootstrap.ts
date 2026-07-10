@@ -17,27 +17,25 @@ export type ForegroundRunRequestBootstrapResult = {
 
 export type ForegroundRunRequestClaim = Pick<
   ForegroundRunRequestBootstrapResult,
-  'abortController' | 'assistantMessageId' | 'bootstrap' | 'foregroundRequestId'
+  'abortController' | 'foregroundRequestId'
 >;
 
+export type ForegroundRunRequestBootstrapCompletion =
+  | { kind: 'ready'; result: ForegroundRunRequestBootstrapResult }
+  | { kind: 'reuse_unavailable'; runId: string };
+
+function normalizedReuseRunId(options: RunChatOptions | undefined): string | undefined {
+  const value = options?.reuseAgentRunId?.trim();
+  return value || undefined;
+}
+
 export function prepareForegroundRunRequestClaim(params: {
-  conversation: Conversation | undefined;
-  createAssistantMessageId: () => string;
   createForegroundRequestId: () => string;
-  defaultConversationMode: Conversation['mode'];
   options?: RunChatOptions;
   registerForegroundRequest: (requestId: string, abortController: AbortController) => void;
   shouldAutoAbortPreviousForegroundRequest: (reason: string) => void;
 }): ForegroundRunRequestClaim {
-  const bootstrap = buildForegroundRunBootstrapSelection({
-    conversation: params.conversation,
-    createAssistantMessageId: params.createAssistantMessageId,
-    defaultConversationMode: params.defaultConversationMode,
-    reuseAgentRunId: params.options?.reuseAgentRunId,
-    reuseAssistantDraft: params.options?.reuseAssistantDraft,
-  });
-
-  if (bootstrap.shouldAbortPreviousForegroundRequest) {
+  if (!normalizedReuseRunId(params.options)) {
     params.shouldAutoAbortPreviousForegroundRequest('Superseded by a new user turn.');
   }
 
@@ -47,8 +45,6 @@ export function prepareForegroundRunRequestClaim(params: {
 
   return {
     abortController,
-    assistantMessageId: bootstrap.assistantMessageId,
-    bootstrap,
     foregroundRequestId,
   };
 }
@@ -56,25 +52,43 @@ export function prepareForegroundRunRequestClaim(params: {
 export function completeForegroundRunRequestBootstrap(params: {
   claim: ForegroundRunRequestClaim;
   conversation: Conversation | undefined;
+  createAssistantMessageId: () => string;
+  defaultConversationMode: Conversation['mode'];
+  options?: RunChatOptions;
   startTrackedRun: (bootstrap: ForegroundRunBootstrapSelection) => string | undefined;
   supersedeExistingRun: (runId: string, runningWorkerCount: number) => void;
-}): ForegroundRunRequestBootstrapResult {
-  const { bootstrap } = params.claim;
+}): ForegroundRunRequestBootstrapCompletion {
+  const requestedReuseRunId = normalizedReuseRunId(params.options);
+  const bootstrap = buildForegroundRunBootstrapSelection({
+    conversation: params.conversation,
+    createAssistantMessageId: params.createAssistantMessageId,
+    defaultConversationMode: params.defaultConversationMode,
+    reuseAgentRunId: requestedReuseRunId,
+    reuseAssistantDraft: params.options?.reuseAssistantDraft,
+  });
+  if (requestedReuseRunId && bootstrap.existingRun?.id !== requestedReuseRunId) {
+    return { kind: 'reuse_unavailable', runId: requestedReuseRunId };
+  }
 
   if (bootstrap.supersededRun && params.conversation) {
     params.supersedeExistingRun(bootstrap.supersededRun.id, bootstrap.supersededRunningWorkerCount);
   }
 
   return {
-    ...params.claim,
-    initialCounters: {
-      assistantTurns: (bootstrap.existingRun?.summary.assistantTurns ?? 0) + 1,
-      startedTools: bootstrap.existingRun?.summary.startedTools ?? 0,
-      completedTools: bootstrap.existingRun?.summary.completedTools ?? 0,
-      failedTools: bootstrap.existingRun?.summary.failedTools ?? 0,
-      spawnedSubAgents: bootstrap.existingRun?.summary.spawnedSubAgents ?? 0,
-      runStartedAt: bootstrap.existingRun?.createdAt ?? Date.now(),
+    kind: 'ready',
+    result: {
+      ...params.claim,
+      assistantMessageId: bootstrap.assistantMessageId,
+      bootstrap,
+      initialCounters: {
+        assistantTurns: (bootstrap.existingRun?.summary.assistantTurns ?? 0) + 1,
+        startedTools: bootstrap.existingRun?.summary.startedTools ?? 0,
+        completedTools: bootstrap.existingRun?.summary.completedTools ?? 0,
+        failedTools: bootstrap.existingRun?.summary.failedTools ?? 0,
+        spawnedSubAgents: bootstrap.existingRun?.summary.spawnedSubAgents ?? 0,
+        runStartedAt: bootstrap.existingRun?.createdAt ?? Date.now(),
+      },
+      trackedAgentRunId: params.startTrackedRun(bootstrap),
     },
-    trackedAgentRunId: params.startTrackedRun(bootstrap),
   };
 }

@@ -73,10 +73,7 @@ describe('foreground run request bootstrap', () => {
     const supersedeExistingRun = jest.fn();
 
     const claim = prepareForegroundRunRequestClaim({
-      conversation,
-      createAssistantMessageId: () => 'assistant-new',
       createForegroundRequestId: () => 'request-1',
-      defaultConversationMode: 'agentic',
       registerForegroundRequest,
       shouldAutoAbortPreviousForegroundRequest,
     });
@@ -94,9 +91,15 @@ describe('foreground run request bootstrap', () => {
     const result = completeForegroundRunRequestBootstrap({
       claim,
       conversation,
+      createAssistantMessageId: () => 'assistant-new',
+      defaultConversationMode: 'agentic',
       startTrackedRun,
       supersedeExistingRun,
     });
+
+    expect(result.kind).toBe('ready');
+    if (result.kind !== 'ready') throw new Error('Expected a ready bootstrap');
+    const bootstrapResult = result.result;
 
     expect(supersedeExistingRun).toHaveBeenCalledWith('run-1', 0);
     expect(startTrackedRun).toHaveBeenCalledWith(
@@ -106,9 +109,9 @@ describe('foreground run request bootstrap', () => {
         supersededRun: expect.objectContaining({ id: 'run-1' }),
       }),
     );
-    expect(result.foregroundRequestId).toBe('request-1');
-    expect(result.trackedAgentRunId).toBe('run-2');
-    expect(result.initialCounters).toEqual({
+    expect(bootstrapResult.foregroundRequestId).toBe('request-1');
+    expect(bootstrapResult.trackedAgentRunId).toBe('run-2');
+    expect(bootstrapResult.initialCounters).toEqual({
       assistantTurns: 1,
       startedTools: 0,
       completedTools: 0,
@@ -135,10 +138,7 @@ describe('foreground run request bootstrap', () => {
     const shouldAutoAbortPreviousForegroundRequest = jest.fn();
 
     const claim = prepareForegroundRunRequestClaim({
-      conversation,
-      createAssistantMessageId: () => 'assistant-new',
       createForegroundRequestId: () => 'request-2',
-      defaultConversationMode: 'agentic',
       options: { reuseAgentRunId: 'run-1', reuseAssistantDraft: true },
       registerForegroundRequest: jest.fn(),
       shouldAutoAbortPreviousForegroundRequest,
@@ -146,11 +146,52 @@ describe('foreground run request bootstrap', () => {
     const result = completeForegroundRunRequestBootstrap({
       claim,
       conversation,
+      createAssistantMessageId: () => 'assistant-new',
+      defaultConversationMode: 'agentic',
+      options: { reuseAgentRunId: 'run-1', reuseAssistantDraft: true },
       startTrackedRun: jest.fn(() => 'run-1'),
       supersedeExistingRun: jest.fn(),
     });
 
     expect(shouldAutoAbortPreviousForegroundRequest).not.toHaveBeenCalled();
-    expect(result.bootstrap.existingRun?.id).toBe('run-1');
+    expect(result).toEqual(
+      expect.objectContaining({
+        kind: 'ready',
+        result: expect.objectContaining({
+          bootstrap: expect.objectContaining({
+            existingRun: expect.objectContaining({ id: 'run-1' }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('rejects an explicit reuse after the requested run becomes terminal', () => {
+    const terminalConversation = createConversation({
+      activeAgentRunId: undefined,
+      agentRuns: [createRunningAgentRun({ status: 'completed' })],
+    });
+    const startTrackedRun = jest.fn();
+    const supersedeExistingRun = jest.fn();
+    const claim = prepareForegroundRunRequestClaim({
+      createForegroundRequestId: () => 'request-3',
+      options: { reuseAgentRunId: 'run-1' },
+      registerForegroundRequest: jest.fn(),
+      shouldAutoAbortPreviousForegroundRequest: jest.fn(),
+    });
+
+    expect(
+      completeForegroundRunRequestBootstrap({
+        claim,
+        conversation: terminalConversation,
+        createAssistantMessageId: () => 'assistant-new',
+        defaultConversationMode: 'agentic',
+        options: { reuseAgentRunId: 'run-1' },
+        startTrackedRun,
+        supersedeExistingRun,
+      }),
+    ).toEqual({ kind: 'reuse_unavailable', runId: 'run-1' });
+    expect(startTrackedRun).not.toHaveBeenCalled();
+    expect(supersedeExistingRun).not.toHaveBeenCalled();
   });
 });

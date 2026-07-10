@@ -30,10 +30,6 @@ export async function executeForegroundConversationRun(
   const { context, conversationId, options } = params;
   await context.durability.waitForRecoveryReadiness();
   const conversation = context.helpers.getConversation(conversationId);
-  const executionContext = resolveForegroundConversationExecutionContext({
-    conversation,
-    defaultConversationMode: context.state.defaultConversationMode,
-  });
   const preflight = await resolveForegroundRunPreflight({
     activeModel: context.state.activeModel,
     activeProviderId: context.state.activeProviderId,
@@ -59,10 +55,7 @@ export async function executeForegroundConversationRun(
 
   const { finalizationProviderContext, model, provider, providerWithApiKey } = preflight;
   const requestClaim = prepareForegroundRunRequestClaim({
-    conversation,
-    createAssistantMessageId: context.helpers.createId,
     createForegroundRequestId: context.helpers.createId,
-    defaultConversationMode: context.state.defaultConversationMode,
     options,
     registerForegroundRequest: (requestId, abortController) => {
       context.requests.registerForegroundRequest(requestId, conversationId, abortController);
@@ -72,14 +65,7 @@ export async function executeForegroundConversationRun(
     },
   });
 
-  const { abortController, assistantMessageId, foregroundRequestId } = requestClaim;
-  context.refs.forceNextScrollRef.current = true;
-  context.requests.setStreamingMessageId(
-    conversationId,
-    foregroundRequestId,
-    abortController,
-    assistantMessageId,
-  );
+  const { abortController, foregroundRequestId } = requestClaim;
 
   const clearForegroundRequestIfCurrent = () => {
     if (
@@ -116,11 +102,19 @@ export async function executeForegroundConversationRun(
     clearForegroundRequestIfCurrent();
     return;
   }
+  const runConversation = context.helpers.getConversation(conversationId);
+  const executionContext = resolveForegroundConversationExecutionContext({
+    conversation: runConversation,
+    defaultConversationMode: context.state.defaultConversationMode,
+  });
   let bootstrapResult: ForegroundRunRequestBootstrapResult;
   try {
-    bootstrapResult = completeForegroundRunRequestBootstrap({
+    const completion = completeForegroundRunRequestBootstrap({
       claim: requestClaim,
-      conversation,
+      conversation: runConversation,
+      createAssistantMessageId: context.helpers.createId,
+      defaultConversationMode: context.state.defaultConversationMode,
+      options,
       startTrackedRun: (bootstrap) =>
         startOrReuseForegroundTrackedRun({
           bootstrap,
@@ -130,7 +124,7 @@ export async function executeForegroundConversationRun(
           startAgentRun: context.store.startAgentRun,
         }),
       supersedeExistingRun: (runId, runningWorkerCount) => {
-        if (!conversation) {
+        if (!runConversation) {
           return;
         }
 
@@ -142,19 +136,31 @@ export async function executeForegroundConversationRun(
             getLatestConversation: context.helpers.getConversation,
             updateAgentRunControlGraph: context.store.updateAgentRunControlGraph,
           },
-          conversation,
+          conversation: runConversation,
           conversationId,
           runId,
           runningWorkerCount,
         });
       },
     });
+    if (completion.kind === 'reuse_unavailable') {
+      clearForegroundRequestIfCurrent();
+      return;
+    }
+    bootstrapResult = completion.result;
   } catch (error: unknown) {
     clearForegroundRequestIfCurrent();
     context.helpers.setChatError(error instanceof Error ? error.message : String(error));
     return;
   }
-  const { bootstrap } = bootstrapResult;
+  const { assistantMessageId, bootstrap } = bootstrapResult;
+  context.refs.forceNextScrollRef.current = true;
+  context.requests.setStreamingMessageId(
+    conversationId,
+    foregroundRequestId,
+    abortController,
+    assistantMessageId,
+  );
   let executionLease: ForegroundModelExecutionLease | null = null;
   let projectionOwner: ForegroundModelProjectionOwner | null = null;
   let projectionClaimed = false;
@@ -188,7 +194,7 @@ export async function executeForegroundConversationRun(
     bootstrapResult,
     clearForegroundRequestIfCurrent,
     completeRunOnce,
-    conversation,
+    conversation: runConversation,
     conversationId,
     executionContext,
     finalizationProviderContext,
@@ -211,7 +217,7 @@ export async function executeForegroundConversationRun(
 
   const latestConversationForRequest = context.helpers.getConversation(conversationId);
   const modelReadyMessages = buildModelReadyMessages(
-    latestConversationForRequest?.messages ?? conversation?.messages ?? [],
+    latestConversationForRequest?.messages ?? runConversation?.messages ?? [],
   );
   const additionalInternalPrompt = options?.additionalUserPrompt?.trim() || '';
   const allowedToolNames = options?.allowedToolNames
@@ -234,10 +240,10 @@ export async function executeForegroundConversationRun(
     messages: orchestratorMessages,
   });
   const resolvedSystemPrompt = options?.additionalSystemPrompt
-    ? [conversation?.systemPrompt || context.state.systemPrompt, options.additionalSystemPrompt]
+    ? [runConversation?.systemPrompt || context.state.systemPrompt, options.additionalSystemPrompt]
         .filter(Boolean)
         .join('\n\n')
-    : conversation?.systemPrompt || context.state.systemPrompt;
+    : runConversation?.systemPrompt || context.state.systemPrompt;
   const requestMessageId = resumePreparation.workflowScopeUserMessageId;
   if (!requestMessageId) {
     runtime.terminalLifecycle.handleCatch(
