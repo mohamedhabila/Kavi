@@ -56,7 +56,7 @@ interface AuthorityAnchor {
 export interface ExecutionRecoveryControlStoreOptions {
   getDatabase?: () => SQLite.SQLiteDatabase;
   clock?: () => number;
-  createId?: (kind: 'dispatch' | 'fence') => string;
+  createId?: (kind: 'dispatch' | 'fence' | 'receipt') => string;
   digest?: (value: string) => Promise<string>;
   fenceLeaseMs?: number;
 }
@@ -294,7 +294,7 @@ export function createExecutionRecoveryControlStore(
     return result;
   };
 
-  const checkedId = (kind: 'dispatch' | 'fence'): string => {
+  const checkedId = (kind: 'dispatch' | 'fence' | 'receipt'): string => {
     const result = createId(kind);
     if (!validId(result)) throw new Error('execution_recovery_invalid_id');
     return result;
@@ -518,5 +518,9 @@ export function createExecutionRecoveryControlStore(
     });
   };
 
-  return { readAuthority, acquireDispatchFence, requestCancellation };
+  return {
+    readAuthority,
+    acquireDispatchFence,
+    requestCancellation,
+  };
 }
