@@ -13,6 +13,8 @@ internal enum class AndroidDurableExecutionState {
 
 internal enum class AndroidDurableFailureReason {
   TRANSIENT_UNAVAILABLE,
+  REMOTE_STILL_PENDING,
+  PROVIDER_TEMPORARILY_UNAVAILABLE,
   GENERATION_CHANGED,
   AUTHORITY_CHANGED,
   HANDLER_REJECTED,

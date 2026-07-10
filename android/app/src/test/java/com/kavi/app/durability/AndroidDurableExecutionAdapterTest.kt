@@ -164,12 +164,12 @@ class AndroidDurableExecutionAdapterTest {
     val retry = adapter.scheduleRetry(
       pointer = attemptPointer(pointer, 1),
       nextAttemptAtMillis = 10_300,
-      failureReason = AndroidDurableFailureReason.TRANSIENT_UNAVAILABLE,
+      failureReason = AndroidDurableFailureReason.REMOTE_STILL_PENDING,
       updatedAtMillis = 300,
     ).acceptedRecord()
     assertEquals(AndroidDurableExecutionState.RETRY_WAITING, retry.state)
     assertEquals(10_300L, retry.nextAttemptAtMillis)
-    assertEquals(AndroidDurableFailureReason.TRANSIENT_UNAVAILABLE, retry.failureReason)
+    assertEquals(AndroidDurableFailureReason.REMOTE_STILL_PENDING, retry.failureReason)
 
     assertRejected(
       AndroidDurableRejectionReason.INVALID_PROGRESS,

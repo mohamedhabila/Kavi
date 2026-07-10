@@ -656,7 +656,7 @@ private fun validRecord(record: AndroidDurableExecutionRecord): Boolean {
         record.attempt in 1 until record.request.retryPolicy.maxAttempts &&
         record.nextAttemptAtMillis != null &&
         record.nextAttemptAtMillis >= minimumRetryAt(record) &&
-        record.failureReason == AndroidDurableFailureReason.TRANSIENT_UNAVAILABLE &&
+        record.failureReason in RETRYABLE_FAILURE_REASONS &&
         record.receiptDigest == null
     AndroidDurableExecutionState.CANCEL_REQUESTED,
     AndroidDurableExecutionState.CANCELLED -> record.nextAttemptAtMillis == null &&
@@ -670,7 +670,7 @@ private fun validRecord(record: AndroidDurableExecutionRecord): Boolean {
     AndroidDurableExecutionState.BLOCKED ->
       record.nextAttemptAtMillis == null &&
         record.failureReason != null &&
-        record.failureReason != AndroidDurableFailureReason.TRANSIENT_UNAVAILABLE &&
+        record.failureReason !in RETRYABLE_FAILURE_REASONS &&
         record.receiptDigest == null
   }
 }
@@ -683,6 +683,12 @@ private fun validUuid(value: String): Boolean = try {
 
 private fun AndroidDurableExecutionRecord.hasNoOutcome(): Boolean =
   nextAttemptAtMillis == null && failureReason == null && receiptDigest == null
+
+private val RETRYABLE_FAILURE_REASONS = setOf(
+  AndroidDurableFailureReason.TRANSIENT_UNAVAILABLE,
+  AndroidDurableFailureReason.REMOTE_STILL_PENDING,
+  AndroidDurableFailureReason.PROVIDER_TEMPORARILY_UNAVAILABLE,
+)
 
 private fun minimumRetryAt(record: AndroidDurableExecutionRecord): Long {
   var backoff = record.request.retryPolicy.initialBackoffMillis

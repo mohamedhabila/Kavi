@@ -222,7 +222,7 @@ internal class AndroidDurableExecutionAdapter(
   ): AndroidDurableAdapterResult = updateAttemptProgress(pointer) { current ->
     if (
       current.state != AndroidDurableExecutionState.RUNNING ||
-      failureReason == AndroidDurableFailureReason.TRANSIENT_UNAVAILABLE ||
+      failureReason in RETRYABLE_FAILURE_REASONS ||
       updatedAtMillis < current.updatedAtMillis
     ) {
       return@updateAttemptProgress ProgressResult.Rejected(
@@ -582,7 +582,7 @@ internal class AndroidDurableExecutionAdapter(
     val minimumBackoff = exponentialBackoffMillis(current)
     if (
       current.attempt >= current.request.retryPolicy.maxAttempts ||
-      failureReason != AndroidDurableFailureReason.TRANSIENT_UNAVAILABLE ||
+      failureReason !in RETRYABLE_FAILURE_REASONS ||
       updatedAtMillis < current.updatedAtMillis ||
       nextAttemptAtMillis < saturatingAdd(updatedAtMillis, minimumBackoff)
     ) {
@@ -635,6 +635,11 @@ internal class AndroidDurableExecutionAdapter(
       AndroidDurableExecutionState.CANCELLED,
       AndroidDurableExecutionState.COMPLETED,
       AndroidDurableExecutionState.BLOCKED,
+    )
+    val RETRYABLE_FAILURE_REASONS = setOf(
+      AndroidDurableFailureReason.TRANSIENT_UNAVAILABLE,
+      AndroidDurableFailureReason.REMOTE_STILL_PENDING,
+      AndroidDurableFailureReason.PROVIDER_TEMPORARILY_UNAVAILABLE,
     )
   }
 }
