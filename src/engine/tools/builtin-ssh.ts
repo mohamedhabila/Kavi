@@ -157,6 +157,8 @@ export async function executeSshBackgroundJobWait(args: {
     shouldContinue: (currentJob) => currentJob?.status === 'running',
     poll: () => Promise.resolve(getBackgroundJob(jobId)),
     pollIntervalMs,
+    maxPollIntervalMs: Math.min(10_000, pollIntervalMs * 4),
+    backoffFactor: 1.5,
     deadlineMs: deadline,
   });
 

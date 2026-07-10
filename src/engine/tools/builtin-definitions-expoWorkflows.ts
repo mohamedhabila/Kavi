@@ -112,7 +112,8 @@ export const EXPO_EAS_WORKFLOW_WAIT_TOOL: ToolDefinition = {
       },
       pollIntervalMs: {
         type: 'number',
-        description: 'Polling interval in milliseconds (default: 5000).',
+        description:
+          'Initial polling interval in milliseconds; checks back off to a bounded maximum (default: 5000).',
       },
       includeJobs: {
         type: 'boolean',

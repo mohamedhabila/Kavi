@@ -71,7 +71,8 @@ export const SSH_BACKGROUND_JOB_WAIT_TOOL: ToolDefinition = {
       },
       pollIntervalMs: {
         type: 'number',
-        description: 'Polling interval in milliseconds while waiting (default: 2000).',
+        description:
+          'Initial polling interval in milliseconds while waiting; checks back off to a bounded maximum (default: 2000).',
       },
     },
     required: ['jobId'],

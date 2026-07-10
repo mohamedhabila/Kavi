@@ -387,6 +387,8 @@ export async function waitForExpoWorkflowRun(
     },
     poll: () => inspectExpoWorkflowRun(projectId, args),
     pollIntervalMs,
+    maxPollIntervalMs: Math.min(60_000, pollIntervalMs * 6),
+    backoffFactor: 1.5,
     deadlineMs: deadline,
   });
 
