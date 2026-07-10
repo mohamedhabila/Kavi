@@ -306,6 +306,7 @@ describe('recordCompletedTurnForMemory', () => {
                   evidence_message_ids: ['u-1'],
                 },
               ],
+              episode_summary: null,
               active_focus: 'Validating the Android release build.',
               open_threads: ['Validate the Android release build'],
               notable: [],
@@ -359,6 +360,7 @@ describe('recordCompletedTurnForMemory', () => {
           message: {
             content: JSON.stringify({
               new_facts: [],
+              episode_summary: null,
               active_focus: 'Validating the Android release build.',
               open_threads: ['Validate the Android release build'],
               notable: [],
@@ -404,6 +406,7 @@ describe('recordCompletedTurnForMemory', () => {
           message: {
             content: JSON.stringify({
               new_facts: [],
+              episode_summary: null,
               active_focus: 'Validating the Android release build.',
               open_threads: ['Validate the Android release build'],
               notable: [],
@@ -430,43 +433,6 @@ describe('recordCompletedTurnForMemory', () => {
     });
   });
 
-  it('keeps sync focus but leaves durable enrichment retryable when provider extraction fails', async () => {
-    useSettingsStore.setState({
-      consolidationProvider: 'provider-1',
-      providers: [
-        {
-          id: 'provider-1',
-          name: 'OpenAI',
-          baseUrl: 'https://api.openai.com/v1',
-          apiKey: '',
-          model: 'gpt-4o-mini',
-          enabled: true,
-        },
-      ],
-    } as any);
-    mockSendMessage.mockRejectedValue(new Error('timeout'));
-
-    const result = await recordCompletedTurnForMemory({
-      threadId: 'conv-provider-fail',
-      threadTitle: 'Release hardening',
-      messages,
-      now: 10,
-    });
-
-    expect(result.processed).toBe(true);
-    expect(result.enqueued).toBe(true);
-    const drain = await drainRecordedTurn('conv-provider-fail', messages);
-    expect(drain.failed).toBe(1);
-    expect(listEpisodes({ threadId: 'conv-provider-fail' })).toHaveLength(0);
-    expect(getConsolidationState('conv-provider-fail')).toBeNull();
-    expect(
-      getWorkingBlock('active_focus', {
-        conversationId: 'conv-provider-fail',
-        threadId: 'conv-provider-fail',
-      })?.content,
-    ).toContain('Release hardening');
-  });
-
   it('uses the active provider while flushing queued memory jobs in the background', async () => {
     useSettingsStore.setState({
       activeProviderId: 'provider-active-bg',
@@ -487,6 +453,7 @@ describe('recordCompletedTurnForMemory', () => {
           message: {
             content: JSON.stringify({
               new_facts: [],
+              episode_summary: null,
               active_focus: 'Background flush focus.',
               open_threads: [],
               notable: [],

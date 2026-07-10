@@ -8,7 +8,7 @@
 
 import { ensureFactSchema } from './schema';
 import { getMemoryDb } from './sqlite-store';
-import type { MemoryEpisode } from './episodes/types';
+import { rowToEpisode, type EpisodeRow, type MemoryEpisode } from './episodes/types';
 
 export interface RecallEpisodesOptions {
   threadId?: string;
@@ -68,25 +68,6 @@ export function recallRecentEpisodes(options: RecallEpisodesOptions = {}): Memor
   const limit = Math.max(1, Math.min(options.limit ?? 6, 20));
   const where = clauses.join(' AND ');
 
-  interface EpisodeRow {
-    id: string;
-    conversation_id: string | null;
-    thread_id: string | null;
-    task_id: string | null;
-    started_at: number;
-    ended_at: number;
-    summary: string;
-    entities_json: string;
-    message_ids_json: string;
-    tool_names_json: string;
-    importance: number;
-    embedding: string | null;
-    created_at: number;
-    deleted_at: number | null;
-    source_start_message_id: string | null;
-    source_end_message_id: string | null;
-  }
-
   const rows = getMemoryDb().getAllSync<EpisodeRow>(
     `SELECT * FROM memory_episodes
        WHERE ${where}
@@ -95,22 +76,7 @@ export function recallRecentEpisodes(options: RecallEpisodesOptions = {}): Memor
     ...params,
   );
 
-  return rows.map((row) => ({
-    id: row.id,
-    conversationId: row.conversation_id,
-    threadId: row.thread_id,
-    taskId: row.task_id,
-    startedAt: row.started_at,
-    endedAt: row.ended_at,
-    summary: row.summary,
-    entities: safeParseJsonArray<string>(row.entities_json),
-    messageIds: safeParseJsonArray<string>(row.message_ids_json),
-    toolNames: safeParseJsonArray<string>(row.tool_names_json),
-    importance: row.importance,
-    embedding: parseEmbedding(row.embedding),
-    createdAt: row.created_at,
-    deletedAt: row.deleted_at,
-  }));
+  return rows.map(rowToEpisode);
 }
 
 export function recallEpisodesForQuery(
@@ -140,23 +106,4 @@ export function recallEpisodesForQuery(
     })
     .slice(0, Math.max(1, Math.min(options.limit ?? 6, 20)))
     .map((entry) => entry.episode);
-}
-
-function safeParseJsonArray<T>(raw: string): T[] {
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function parseEmbedding(raw: string | null): number[] | null {
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((n) => typeof n === 'number') : null;
-  } catch {
-    return null;
-  }
 }

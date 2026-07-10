@@ -15,6 +15,8 @@ export interface MemoryEpisode {
   embedding: number[] | null;
   createdAt: number;
   deletedAt: number | null;
+  sourceStartMessageId: string | null;
+  sourceEndMessageId: string | null;
 }
 
 export interface MemoryFactEvidence {
@@ -42,6 +44,8 @@ export interface EpisodeRow {
   embedding: string | null;
   created_at: number;
   deleted_at: number | null;
+  source_start_message_id: string | null;
+  source_end_message_id: string | null;
 }
 
 export interface EvidenceRow {
@@ -85,6 +89,8 @@ export function rowToEpisode(row: EpisodeRow): MemoryEpisode {
     embedding: parseEmbedding(row.embedding),
     createdAt: row.created_at,
     deletedAt: row.deleted_at,
+    sourceStartMessageId: row.source_start_message_id,
+    sourceEndMessageId: row.source_end_message_id,
   };
 }
 
@@ -112,6 +118,8 @@ export interface RecordEpisodeInput {
   toolNames?: string[];
   importance?: number;
   embedding?: number[] | null;
+  sourceStartMessageId?: string | null;
+  sourceEndMessageId?: string | null;
   now?: number;
 }
 

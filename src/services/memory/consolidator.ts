@@ -21,19 +21,15 @@
 // ---------------------------------------------------------------------------
 
 import type { Message } from '../../types/message';
-import { recordFact, replaceCurrentFact } from './facts/mutations';
 import type { MemoryFactScope } from './facts/types';
-import { upsertEntity } from './entities';
-import { editBlock, ensureDefaultBlocks } from './blocks';
-import { ensureFactSchema } from './schema';
-import { addFactEvidence, recordEpisode } from './episodes/mutations';
-import { editWorkingBlock } from './workingBlocks';
-import { composeActiveFocusContent } from './focus';
-import { createLogger } from '../../utils/logger';
+import { applyConsolidatorResult } from './consolidation/persistence';
+export { applyConsolidatorResult } from './consolidation/persistence';
+export type {
+  ApplyConsolidatorResultOptions,
+  ApplyConsolidatorResultResult,
+} from './consolidation/persistence';
 
-const logger = createLogger('memory.consolidator');
-
-export interface ConsolidatorTurnInput {
+export interface ConsolidatorPromptInput {
   /** Most recent user message that led to this assistant turn. */
   userMessage: string;
   /** Final assistant response delivered to the user. */
@@ -44,15 +40,18 @@ export interface ConsolidatorTurnInput {
   threadTitle?: string;
   /** Wall-clock for the turn (defaults to Date.now()). */
   now?: number;
-  /** Conversation/thread provenance for scoped facts and episode summaries. */
-  conversationId?: string;
-  threadId?: string;
-  taskId?: string;
-  sourceRunId?: string;
   sourceUserMessageId?: string;
   sourceAssistantMessageId?: string;
   /** All user/assistant/tool messages since the previous consolidation cursor. */
   messages?: Message[];
+}
+
+export interface ConsolidatorTurnInput extends ConsolidatorPromptInput {
+  /** Required provenance for every persisted or provider-enriched turn. */
+  conversationId: string;
+  threadId: string;
+  taskId?: string;
+  sourceRunId?: string;
 }
 
 export type ConsolidatorFactOperation = 'insert' | 'replace_current';
@@ -113,7 +112,11 @@ export type ConsolidatorProviderErrorCode =
 
 export type ConsolidatorOutcome =
   | {
-      status: 'valid' | 'empty_valid';
+      status: 'valid';
+      result: ConsolidatorResult;
+    }
+  | {
+      status: 'empty_valid';
       result: ConsolidatorResult;
     }
   | {
@@ -203,7 +206,7 @@ Rules:
 - If nothing is worth recording, return empty arrays and null active_focus.
 `;
 
-export function buildConsolidatorPrompt(input: ConsolidatorTurnInput): string {
+export function buildConsolidatorPrompt(input: ConsolidatorPromptInput): string {
   const lines: string[] = [PROMPT_HEADER];
   if (input.threadTitle) {
     lines.push(`<thread_title>${input.threadTitle.trim()}</thread_title>`);
@@ -227,7 +230,7 @@ export function buildConsolidatorPrompt(input: ConsolidatorTurnInput): string {
   return lines.join('\n\n');
 }
 
-function selectPromptMessageWindow(input: ConsolidatorTurnInput): Message[] {
+function selectPromptMessageWindow(input: ConsolidatorPromptInput): Message[] {
   const messages = input.messages ?? [];
   if (!messages.length) return messages;
   if (!input.sourceUserMessageId && !input.sourceAssistantMessageId) return messages;
@@ -506,216 +509,6 @@ function isEmptyConsolidatorResult(result: ConsolidatorResult): boolean {
     result.openThreads.length === 0 &&
     result.notable.length === 0
   );
-}
-
-function confidenceToScore(confidence: ConsolidatorFact['confidence']): number {
-  return typeof confidence === 'number' ? clamp01(confidence) : 0.7;
-}
-
-/**
- * Persist a parsed consolidator result to the memory store.
- * Returns the IDs of newly recorded facts (skipping duplicates) and a flag
- * for whether the active_focus block was updated.
- */
-export function applyConsolidatorResult(
-  result: ConsolidatorResult,
-  options: {
-    now?: number;
-    conversationId?: string;
-    threadId?: string;
-    taskId?: string;
-    sourceRunId?: string;
-    threadTitle?: string;
-    sourceUserMessageId?: string;
-    sourceAssistantMessageId?: string;
-    messages?: Message[];
-    skipWorkingMemoryWrites?: boolean;
-  } = {},
-): {
-  recordedFactIds: string[];
-  invalidatedFactIds: string[];
-  activeFocusUpdated: boolean;
-  openThreadsUpdated: boolean;
-  episodeId: string | null;
-} {
-  ensureFactSchema();
-  ensureDefaultBlocks();
-  const now = options.now ?? Date.now();
-
-  const messageIds = (options.messages ?? [])
-    .map((message) => message.id)
-    .filter((id): id is string => typeof id === 'string' && id.length > 0);
-  const toolNames = (options.messages ?? [])
-    .flatMap((message) => message.toolCalls?.map((toolCall) => toolCall.name) ?? [])
-    .filter((name): name is string => typeof name === 'string' && name.length > 0);
-  const timestamps = (options.messages ?? [])
-    .map((message) => message.timestamp)
-    .filter((timestamp): timestamp is number => typeof timestamp === 'number');
-  const episodeSummary = result.episodeSummary ?? null;
-  const episode = episodeSummary
-    ? recordEpisode({
-        conversationId: options.conversationId,
-        threadId: options.threadId ?? options.conversationId,
-        taskId: options.taskId,
-        startedAt: timestamps.length ? Math.min(...timestamps) : now,
-        endedAt: timestamps.length ? Math.max(...timestamps) : now,
-        summary: episodeSummary,
-        messageIds,
-        toolNames,
-        importance: Math.max(0.5, ...result.newFacts.map((fact) => fact.importance ?? 0.5)),
-        now,
-      })
-    : null;
-
-  const recordedFactIds: string[] = [];
-  const invalidatedFactIds: string[] = [];
-  for (const fact of result.newFacts) {
-    const subjectType = fact.subject.toLowerCase() === 'user' ? 'self' : 'concept';
-    const subject = upsertEntity({ type: subjectType, name: fact.subject, now });
-    const sourceMessageId =
-      fact.evidenceMessageIds?.[0] ??
-      options.sourceUserMessageId ??
-      options.sourceAssistantMessageId ??
-      null;
-    const memoryWrite = fact.admittedWrite
-      ? {
-          operation: fact.admittedWrite.operation,
-          authority: fact.admittedWrite.authority,
-          evidenceMessageId: fact.admittedWrite.evidenceMessageId,
-          expectedCurrentFactId: fact.admittedWrite.expectedCurrentFactId,
-          assertionClass: fact.assertionClass ?? null,
-          evidenceQuote: fact.evidenceQuote ?? null,
-        }
-      : undefined;
-    const attributes = {
-      ...(fact.reason ? { reason: fact.reason } : {}),
-      ...(memoryWrite ? { memoryWrite } : {}),
-    };
-    const factInput = {
-      subjectId: subject.id,
-      predicate: fact.predicate,
-      objectText: fact.value,
-      confidence: confidenceToScore(fact.confidence),
-      scope: fact.scope ?? 'conversation',
-      originConversationId: options.conversationId ?? null,
-      originThreadId: options.threadId ?? options.conversationId ?? null,
-      originTaskId: options.taskId ?? null,
-      sourceRunId: options.sourceRunId ?? null,
-      sourceMessageId: fact.admittedWrite?.evidenceMessageId ?? sourceMessageId,
-      sourceTurnId: options.sourceAssistantMessageId ?? options.sourceUserMessageId ?? null,
-      sourceSummary: fact.reason ?? episodeSummary ?? null,
-      importance: fact.importance ?? inferFactImportance(fact),
-      attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
-      now,
-    };
-    const recorded = fact.admittedWrite
-      ? replaceCurrentFact({
-          ...factInput,
-          expectedCurrentFactId: fact.admittedWrite.expectedCurrentFactId,
-        })
-      : recordFact({ ...factInput, supersedePrior: false });
-    if (recorded.status === 'conflict') {
-      logger.devWarn(`Grounded replacement rejected at persistence: ${recorded.conflict}`);
-      continue;
-    }
-    if (recorded.status === 'created') recordedFactIds.push(recorded.fact.id);
-    invalidatedFactIds.push(...recorded.superseded.map((superseded) => superseded.id));
-    const evidenceIds = fact.admittedWrite
-      ? [fact.admittedWrite.evidenceMessageId]
-      : fact.evidenceMessageIds?.length
-        ? fact.evidenceMessageIds
-        : [sourceMessageId].filter((id): id is string => typeof id === 'string');
-    for (const messageId of evidenceIds) {
-      addFactEvidence({
-        factId: recorded.fact.id,
-        episodeId: episode?.id ?? null,
-        messageId,
-        quote: fact.evidenceQuote ?? fact.reason ?? fact.value,
-        now,
-      });
-    }
-  }
-
-  let activeFocusUpdated = false;
-  const taskId = options.taskId?.trim();
-  if (!options.skipWorkingMemoryWrites && result.activeFocus !== null && !taskId) {
-    try {
-      const activeFocus = composeActiveFocusContent({
-        threadTitle: options.threadTitle,
-        activeFocus: result.activeFocus,
-      });
-      writeWorkingOrLegacyBlock('active_focus', activeFocus, options, now);
-      activeFocusUpdated = true;
-    } catch {
-      // BlockOverflowError or unknown block — never throw out of the chat path.
-    }
-  }
-
-  let openThreadsUpdated = false;
-  if (!options.skipWorkingMemoryWrites) {
-    try {
-      writeWorkingOrLegacyBlock(
-        'open_threads',
-        fitBlockLines(result.openThreads, 800),
-        options,
-        now,
-      );
-      openThreadsUpdated = true;
-    } catch {
-      // BlockOverflowError or unknown block - never throw out of the chat path.
-    }
-  }
-
-  return {
-    recordedFactIds,
-    invalidatedFactIds,
-    activeFocusUpdated,
-    openThreadsUpdated,
-    episodeId: episode?.id ?? null,
-  };
-}
-
-function writeWorkingOrLegacyBlock(
-  label: 'active_focus' | 'open_threads',
-  content: string,
-  options: { conversationId?: string; threadId?: string; taskId?: string },
-  now: number,
-): void {
-  if (options.conversationId || options.threadId || options.taskId) {
-    editWorkingBlock(
-      label,
-      content,
-      {
-        conversationId: options.conversationId,
-        threadId: options.threadId ?? options.conversationId,
-        taskId: options.taskId,
-      },
-      { now },
-    );
-    return;
-  }
-  editBlock(label, content, { replace: true, now });
-}
-
-function clamp01(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(value, 1));
-}
-
-function inferFactImportance(fact: ConsolidatorFact): number {
-  if (fact.scope === 'global') return 0.75;
-  if (fact.scope === 'project') return 0.65;
-  return 0.55;
-}
-
-function fitBlockLines(lines: string[], maxChars: number): string {
-  const out: string[] = [];
-  for (const line of lines) {
-    const next = [...out, line].join('\n');
-    if (next.length > maxChars) break;
-    out.push(line);
-  }
-  return out.join('\n');
 }
 
 /**

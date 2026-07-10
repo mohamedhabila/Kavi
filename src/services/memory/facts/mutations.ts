@@ -100,6 +100,22 @@ function recordFactInTransaction(input: RecordFactInput): RecordFactResult {
     hash,
   );
   if (existing) {
+    const sourceTurnId = input.sourceTurnId?.trim();
+    const sourceMessageId = input.sourceMessageId?.trim();
+    const isSourceReplay = Boolean(
+      (sourceTurnId && existing.source_turn_id === sourceTurnId) ||
+      (!sourceTurnId &&
+        sourceMessageId &&
+        !existing.source_turn_id &&
+        existing.source_message_id === sourceMessageId),
+    );
+    if (isSourceReplay) {
+      return {
+        fact: rowToFact(existing),
+        status: 'duplicate',
+        superseded: [],
+      };
+    }
     const merged = { ...safeParseObject(existing.attributes), ...(input.attributes ?? {}) };
     db.runSync(
       `UPDATE memory_facts
