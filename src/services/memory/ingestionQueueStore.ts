@@ -347,6 +347,31 @@ export function getIngestionJob(jobId: string): IngestionJob | null {
   return row ? rowToJob(row) : null;
 }
 
+export function getIngestionJobForSourceTurn(input: {
+  memoryConversationId: string;
+  sourceThreadId: string;
+  sourceEndMessageId: string;
+}): IngestionJob | null {
+  ensureFactSchema();
+  const memoryConversationId = input.memoryConversationId.trim();
+  const sourceThreadId = input.sourceThreadId.trim();
+  const sourceEndMessageId = input.sourceEndMessageId.trim();
+  if (!memoryConversationId || !sourceThreadId || !sourceEndMessageId) {
+    return null;
+  }
+  const row = getMemoryDb().getFirstSync<IngestionJobRow>(
+    `SELECT * FROM memory_ingestion_jobs
+      WHERE memory_conversation_id = ?
+        AND thread_id = ?
+        AND source_end_message_id = ?
+      LIMIT 1`,
+    memoryConversationId,
+    sourceThreadId,
+    sourceEndMessageId,
+  );
+  return row ? rowToJob(row) : null;
+}
+
 export function computeNextIngestionAttemptAt(now: number, attemptCount: number): number {
   const exponent = Math.max(0, Math.min(MAX_INGESTION_ATTEMPTS - 1, attemptCount - 1));
   const delay = Math.min(
@@ -526,11 +551,7 @@ export function retryOrCompleteIngestionJob(input: {
       LIMIT 1`,
     input.jobId,
   );
-  if (
-    !current ||
-    current.status !== 'processing' ||
-    current.claim_token !== input.claimToken
-  ) {
+  if (!current || current.status !== 'processing' || current.claim_token !== input.claimToken) {
     return {
       status: (current?.status as IngestionJobStatus | undefined) ?? 'failed',
       applied: false,

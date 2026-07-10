@@ -1,0 +1,316 @@
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
+});
+
+import {
+  enqueueIngestionJob,
+  getIngestionJobForSourceTurn,
+} from '../../../src/services/memory/ingestionQueueStore';
+import * as ingestionQueueStore from '../../../src/services/memory/ingestionQueueStore';
+import {
+  NEXT_TURN_MEMORY_CONSISTENCY_BUDGET_MS,
+  waitForNextTurnMemoryConsistency,
+  type NextTurnMemoryConsistencyClock,
+} from '../../../src/services/memory/nextTurnConsistency';
+import {
+  ensureFactSchema,
+  resetFactSchemaCacheForTests,
+} from '../../../src/services/memory/schema';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { useSettingsStore } from '../../../src/store/useSettingsStore';
+
+const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
+
+function deterministicClock(
+  startAt = 100,
+  onWait?: (now: number, waitCount: number) => void,
+): NextTurnMemoryConsistencyClock {
+  let now = startAt;
+  let waitCount = 0;
+  return {
+    now: () => now,
+    wait: async (delayMs) => {
+      now += delayMs;
+      waitCount += 1;
+      onWait?.(now, waitCount);
+    },
+  };
+}
+
+function enqueueSourceTurn(
+  sourceThreadId: string,
+  sourceEndMessageId: string,
+  memoryConversationId = 'shared-memory',
+) {
+  return enqueueIngestionJob({
+    threadId: sourceThreadId,
+    memoryConversationId,
+    sourceStartMessageId: `user-${sourceEndMessageId}`,
+    sourceEndMessageId,
+    now: 100,
+  });
+}
+
+function setJobState(
+  jobId: string,
+  status: string,
+  options: { nextAttemptAt?: number | null; leaseExpiresAt?: number | null } = {},
+): void {
+  const isProcessing = status === 'processing';
+  const hasStructuralState = ['degraded', 'completed_structural', 'completed_enriched'].includes(
+    status,
+  );
+  const isTerminal = ['degraded', 'completed_structural', 'completed_enriched', 'failed'].includes(
+    status,
+  );
+  getMemoryDb().runSync(
+    `UPDATE memory_ingestion_jobs
+        SET status = ?,
+            next_attempt_at = ?,
+            lease_expires_at = ?,
+            claim_token = ?,
+            structural_completed_at = ?,
+            completed_at = ?,
+            provider_outcome = ?,
+            updated_at = ?
+      WHERE id = ?`,
+    status,
+    options.nextAttemptAt ?? null,
+    options.leaseExpiresAt ?? null,
+    isProcessing ? `claim-${jobId}` : null,
+    hasStructuralState ? 100 : null,
+    isTerminal ? 100 : null,
+    status === 'completed_structural'
+      ? 'structural_only'
+      : status === 'completed_enriched'
+        ? 'valid'
+        : null,
+    100,
+    jobId,
+  );
+}
+
+beforeEach(() => {
+  jest.restoreAllMocks();
+  closeMemoryDb();
+  expoSqlite.__resetExpoSqliteForTests();
+  resetFactSchemaCacheForTests();
+  ensureFactSchema();
+  useSettingsStore.setState({ disableLongTermMemory: false } as never);
+});
+
+afterEach(() => {
+  useSettingsStore.setState({ disableLongTermMemory: false } as never);
+  closeMemoryDb();
+});
+
+describe('next-turn memory consistency', () => {
+  it('queries only the exact memory conversation, source thread, and source end message', () => {
+    const target = enqueueSourceTurn('thread-a', 'assistant-a');
+    enqueueSourceTurn('thread-b', 'assistant-b');
+
+    expect(
+      getIngestionJobForSourceTurn({
+        memoryConversationId: 'shared-memory',
+        sourceThreadId: 'thread-a',
+        sourceEndMessageId: 'assistant-a',
+      })?.id,
+    ).toBe(target?.id);
+    expect(
+      getIngestionJobForSourceTurn({
+        memoryConversationId: 'shared-memory',
+        sourceThreadId: 'thread-b',
+        sourceEndMessageId: 'assistant-a',
+      }),
+    ).toBeNull();
+    expect(
+      getIngestionJobForSourceTurn({
+        memoryConversationId: 'other-memory',
+        sourceThreadId: 'thread-a',
+        sourceEndMessageId: 'assistant-a',
+      }),
+    ).toBeNull();
+  });
+
+  it('ignores unrelated shared-memory jobs when the exact source turn is complete', async () => {
+    const target = enqueueSourceTurn('thread-a', 'assistant-a');
+    const unrelated = enqueueSourceTurn('thread-b', 'assistant-b');
+    setJobState(target!.id, 'completed_structural');
+    setJobState(unrelated!.id, 'processing', { leaseExpiresAt: 1_000 });
+
+    await expect(
+      waitForNextTurnMemoryConsistency({
+        memoryConversationId: 'shared-memory',
+        sourceThreadId: 'thread-a',
+        sourceEndMessageId: 'assistant-a',
+        clock: deterministicClock(),
+      }),
+    ).resolves.toEqual({
+      outcome: 'completed',
+      durationMs: 0,
+      waitedMs: 0,
+      queryCount: 1,
+      matchedJobCount: 1,
+      initialJobStatus: 'completed_structural',
+      finalJobStatus: 'completed_structural',
+    });
+  });
+
+  it('returns no-job and terminal outcomes without waiting', async () => {
+    const degraded = enqueueSourceTurn('thread-degraded', 'assistant-degraded');
+    const failed = enqueueSourceTurn('thread-failed', 'assistant-failed');
+    setJobState(degraded!.id, 'degraded');
+    setJobState(failed!.id, 'failed');
+
+    const inputs = [
+      { thread: 'thread-missing', message: 'assistant-missing', outcome: 'no_job' },
+      { thread: 'thread-degraded', message: 'assistant-degraded', outcome: 'degraded' },
+      { thread: 'thread-failed', message: 'assistant-failed', outcome: 'degraded' },
+    ] as const;
+    for (const input of inputs) {
+      const result = await waitForNextTurnMemoryConsistency({
+        memoryConversationId: 'shared-memory',
+        sourceThreadId: input.thread,
+        sourceEndMessageId: input.message,
+        clock: deterministicClock(),
+      });
+      expect(result).toMatchObject({ outcome: input.outcome, durationMs: 0, waitedMs: 0 });
+    }
+  });
+
+  it('observes an asynchronously processing job settle inside the budget', async () => {
+    const job = enqueueSourceTurn('thread-processing', 'assistant-processing');
+    setJobState(job!.id, 'processing', { leaseExpiresAt: 1_000 });
+    const clock = deterministicClock(100, (_now, waitCount) => {
+      if (waitCount === 1) setJobState(job!.id, 'completed_enriched');
+    });
+
+    await expect(
+      waitForNextTurnMemoryConsistency({
+        memoryConversationId: 'shared-memory',
+        sourceThreadId: 'thread-processing',
+        sourceEndMessageId: 'assistant-processing',
+        budgetMs: 30,
+        pollIntervalMs: 10,
+        clock,
+      }),
+    ).resolves.toMatchObject({
+      outcome: 'completed',
+      durationMs: 10,
+      waitedMs: 10,
+      queryCount: 2,
+      initialJobStatus: 'processing',
+      finalJobStatus: 'completed_enriched',
+    });
+  });
+
+  it('allows a due pending job to settle but never processes it itself', async () => {
+    const job = enqueueSourceTurn('thread-pending', 'assistant-pending');
+    const clock = deterministicClock(100, (_now, waitCount) => {
+      if (waitCount === 2) setJobState(job!.id, 'completed_structural');
+    });
+
+    const result = await waitForNextTurnMemoryConsistency({
+      memoryConversationId: 'shared-memory',
+      sourceThreadId: 'thread-pending',
+      sourceEndMessageId: 'assistant-pending',
+      budgetMs: 30,
+      pollIntervalMs: 10,
+      clock,
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'completed',
+      waitedMs: 20,
+      queryCount: 3,
+      initialJobStatus: 'pending',
+      finalJobStatus: 'completed_structural',
+    });
+  });
+
+  it('does not wait for a future retry', async () => {
+    const job = enqueueSourceTurn('thread-retry', 'assistant-retry');
+    setJobState(job!.id, 'retrying', { nextAttemptAt: 500 });
+
+    await expect(
+      waitForNextTurnMemoryConsistency({
+        memoryConversationId: 'shared-memory',
+        sourceThreadId: 'thread-retry',
+        sourceEndMessageId: 'assistant-retry',
+        clock: deterministicClock(),
+      }),
+    ).resolves.toMatchObject({
+      outcome: 'degraded',
+      durationMs: 0,
+      waitedMs: 0,
+      queryCount: 1,
+      initialJobStatus: 'retrying',
+      finalJobStatus: 'retrying',
+    });
+  });
+
+  it('returns a hard timeout within the declared wait budget', async () => {
+    enqueueSourceTurn('thread-timeout', 'assistant-timeout');
+
+    const result = await waitForNextTurnMemoryConsistency({
+      memoryConversationId: 'shared-memory',
+      sourceThreadId: 'thread-timeout',
+      sourceEndMessageId: 'assistant-timeout',
+      budgetMs: 25,
+      pollIntervalMs: 10,
+      clock: deterministicClock(),
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'timed_out',
+      durationMs: 25,
+      waitedMs: 25,
+      queryCount: 4,
+      initialJobStatus: 'pending',
+      finalJobStatus: 'pending',
+    });
+    expect(result.waitedMs).toBeLessThanOrEqual(NEXT_TURN_MEMORY_CONSISTENCY_BUDGET_MS);
+  });
+
+  it('keeps the p95 wait at or below the configured mobile budget', async () => {
+    enqueueSourceTurn('thread-p95', 'assistant-p95');
+    const waits: number[] = [];
+    for (let run = 0; run < 20; run += 1) {
+      const result = await waitForNextTurnMemoryConsistency({
+        memoryConversationId: 'shared-memory',
+        sourceThreadId: 'thread-p95',
+        sourceEndMessageId: 'assistant-p95',
+        budgetMs: 25,
+        pollIntervalMs: 10,
+        clock: deterministicClock(),
+      });
+      waits.push(result.waitedMs);
+    }
+    waits.sort((left, right) => left - right);
+    const p95 = waits[Math.ceil(waits.length * 0.95) - 1]!;
+    expect(p95).toBeLessThanOrEqual(25);
+    expect(p95).toBeLessThanOrEqual(NEXT_TURN_MEMORY_CONSISTENCY_BUDGET_MS);
+  });
+
+  it('avoids the durable database entirely when memory is opted out', async () => {
+    useSettingsStore.setState({ disableLongTermMemory: true } as never);
+    const query = jest.spyOn(ingestionQueueStore, 'getIngestionJobForSourceTurn');
+
+    const result = await waitForNextTurnMemoryConsistency({
+      memoryConversationId: 'shared-memory',
+      sourceThreadId: 'thread-opt-out',
+      sourceEndMessageId: 'assistant-opt-out',
+      clock: deterministicClock(),
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'opt_out',
+      durationMs: 0,
+      waitedMs: 0,
+      queryCount: 0,
+      matchedJobCount: 0,
+    });
+    expect(query).not.toHaveBeenCalled();
+  });
+});
