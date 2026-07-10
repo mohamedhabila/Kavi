@@ -185,11 +185,16 @@ async function fetchExpoWorkflowRunByIdAsync(
   ) {
     throw new ExpoGraphqlRequestError('expo-workflow-run-invalid-response', 'contract', 200);
   }
-  const failureLogs = extractFailureLogsFromErrorEntries(run.errors, 'expo-workflow-error');
+  const exactRun = run as {
+    id: string;
+    status: string;
+    errors?: Array<{ title?: string | null; message?: string | null }>;
+  };
+  const failureLogs = extractFailureLogsFromErrorEntries(exactRun.errors, 'expo-workflow-error');
   const errorMessage = failureLogs?.map((entry) => entry.excerpt).join('; ') || undefined;
   return {
-    id: run.id,
-    status: run.status,
+    id: exactRun.id,
+    status: exactRun.status,
     conclusion: errorMessage || null,
     failureLogs,
   };
