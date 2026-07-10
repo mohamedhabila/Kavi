@@ -134,6 +134,7 @@ const DEFAULT_CONFIG = {
     'docs/dynamic-code-execution.md',
     'docs/evaluation.md',
     'docs/feature-matrix.md',
+    'docs/memory-hybrid-retrieval.md',
     'docs/privacy-and-permissions.md',
     'docs/privacy-policy.md',
     'docs/release.md',

@@ -38,6 +38,7 @@ describe('public readiness checks', () => {
       [
         'docs/dynamic-code-execution.md',
         'docs/evaluation.md',
+        'docs/memory-hybrid-retrieval.md',
         'docs/testing.md',
         'docs/release.md',
         'docs/private-surprise.md',
