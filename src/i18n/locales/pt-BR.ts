@@ -215,6 +215,13 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     agentWorkflow: {
       currentWork: 'Trabalho atual',
     },
+    proactiveTaskSuggestionTitle: 'Retomar a tarefa pendente?',
+    proactiveTaskSuggestionBody:
+      'Uma tarefa que você iniciou explicitamente nesta conversa terminou sem ser concluída. Posso ajudar a continuá-la quando você quiser.',
+    proactiveTaskSuggestionContinue: 'Preparar continuação',
+    proactiveTaskSuggestionDismiss: 'Não sugerir novamente',
+    proactiveTaskSuggestionContinuationPrompt:
+      'Continue a tarefa pendente desta conversa. Revise primeiro o estado atual antes de realizar uma nova ação.',
   },
   errorBoundary: {
     title: 'Something went wrong',

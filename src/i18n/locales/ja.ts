@@ -214,6 +214,13 @@ export const ja: TranslationMap = mergeTranslations(en, {
     agentWorkflow: {
       currentWork: '現在の作業',
     },
+    proactiveTaskSuggestionTitle: '未完了のタスクを再開しますか？',
+    proactiveTaskSuggestionBody:
+      'このチャットで明示的に開始したタスクが、完了前に終了しました。準備ができたら続きからお手伝いできます。',
+    proactiveTaskSuggestionContinue: '再開内容を準備',
+    proactiveTaskSuggestionDismiss: '今後は提案しない',
+    proactiveTaskSuggestionContinuationPrompt:
+      'この会話の未完了タスクを続けてください。新しい操作を行う前に、まず現在の状態を確認してください。',
   },
   errorBoundary: {
     title: 'Something went wrong',

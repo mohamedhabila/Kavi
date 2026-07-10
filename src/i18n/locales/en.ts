@@ -217,6 +217,13 @@ export const en: TranslationMap = {
     agentWorkflow: {
       currentWork: 'Current work',
     },
+    proactiveTaskSuggestionTitle: 'Pick up unfinished work?',
+    proactiveTaskSuggestionBody:
+      'A task you explicitly started in this chat ended before it was complete. I can help you continue when you are ready.',
+    proactiveTaskSuggestionContinue: 'Prepare continuation',
+    proactiveTaskSuggestionDismiss: "Don't suggest this again",
+    proactiveTaskSuggestionContinuationPrompt:
+      'Continue the unfinished task from this conversation. Review its current state before taking any new action.',
   },
 
   errorBoundary: {

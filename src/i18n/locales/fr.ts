@@ -215,6 +215,13 @@ export const fr: TranslationMap = mergeTranslations(en, {
     agentWorkflow: {
       currentWork: 'Travail en cours',
     },
+    proactiveTaskSuggestionTitle: 'Reprendre la tâche inachevée ?',
+    proactiveTaskSuggestionBody:
+      "Une tâche que vous avez explicitement lancée dans cette conversation s'est arrêtée avant la fin. Je peux vous aider à la reprendre.",
+    proactiveTaskSuggestionContinue: 'Préparer la reprise',
+    proactiveTaskSuggestionDismiss: 'Ne plus proposer',
+    proactiveTaskSuggestionContinuationPrompt:
+      "Poursuis la tâche inachevée de cette conversation. Vérifie d'abord son état actuel avant d'effectuer une nouvelle action.",
   },
   errorBoundary: {
     title: 'Something went wrong',

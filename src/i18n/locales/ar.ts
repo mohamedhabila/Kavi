@@ -213,6 +213,13 @@ export const ar: TranslationMap = mergeTranslations(en, {
     agentWorkflow: {
       currentWork: 'العمل الحالي',
     },
+    proactiveTaskSuggestionTitle: 'هل تريد متابعة المهمة غير المكتملة؟',
+    proactiveTaskSuggestionBody:
+      'انتهت مهمة بدأتَها صراحةً في هذه المحادثة قبل اكتمالها. يمكنني مساعدتك في متابعتها عندما تكون جاهزًا.',
+    proactiveTaskSuggestionContinue: 'تحضير المتابعة',
+    proactiveTaskSuggestionDismiss: 'عدم اقتراحها مجددًا',
+    proactiveTaskSuggestionContinuationPrompt:
+      'تابع المهمة غير المكتملة من هذه المحادثة. راجع حالتها الحالية أولًا قبل تنفيذ أي إجراء جديد.',
   },
   errorBoundary: {
     title: 'حدث خطأ ما',

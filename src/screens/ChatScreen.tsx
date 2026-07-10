@@ -13,6 +13,7 @@ import { useChatStore } from '../store/useChatStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { SubAgentDetailModal } from '../components/agents/SubAgentDetailModal';
 import { ApprovalBanner } from '../components/approval/ApprovalBanner';
+import { ProactiveTaskSuggestionBanner } from '../components/chat/ProactiveTaskSuggestionBanner';
 import { type EnsureAgentRunFinalResponse } from '../engine/graph/foregroundRun/contracts';
 import { useConversationGraphController } from '../engine/graph/conversation/useConversationGraphController';
 import { useForegroundConversationActions } from '../engine/graph/foregroundRun/useForegroundConversationActions';
@@ -533,6 +534,15 @@ export const ChatScreen: React.FC = () => {
       )}
 
       <ApprovalBanner />
+
+      <ProactiveTaskSuggestionBanner
+        conversation={activeConversation ?? undefined}
+        disabled={isConversationBusy || editingMessageId !== null || composerText.trim().length > 0}
+        enabled={isFocused}
+        onContinue={() =>
+          handleComposerTextChange(t('chat.proactiveTaskSuggestionContinuationPrompt'))
+        }
+      />
 
       <ChatScreenTelemetryPanel
         activeConversation={activeConversation ?? undefined}

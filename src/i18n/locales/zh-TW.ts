@@ -213,6 +213,13 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     agentWorkflow: {
       currentWork: '目前工作',
     },
+    proactiveTaskSuggestionTitle: '繼續未完成的任務？',
+    proactiveTaskSuggestionBody:
+      '你在此對話中明確發起的一項任務尚未完成。我可以在你準備好後協助繼續。',
+    proactiveTaskSuggestionContinue: '準備繼續',
+    proactiveTaskSuggestionDismiss: '不再建議',
+    proactiveTaskSuggestionContinuationPrompt:
+      '繼續此對話中未完成的任務。在執行任何新操作前，先檢查任務目前的狀態。',
   },
   errorBoundary: {
     title: 'Something went wrong',

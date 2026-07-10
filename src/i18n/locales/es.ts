@@ -215,6 +215,13 @@ export const es: TranslationMap = mergeTranslations(en, {
     agentWorkflow: {
       currentWork: 'Trabajo actual',
     },
+    proactiveTaskSuggestionTitle: '¿Retomar la tarea pendiente?',
+    proactiveTaskSuggestionBody:
+      'Una tarea que iniciaste explícitamente en este chat terminó sin completarse. Puedo ayudarte a continuarla cuando quieras.',
+    proactiveTaskSuggestionContinue: 'Preparar continuación',
+    proactiveTaskSuggestionDismiss: 'No volver a sugerirlo',
+    proactiveTaskSuggestionContinuationPrompt:
+      'Continúa la tarea pendiente de esta conversación. Revisa primero su estado actual antes de realizar una acción nueva.',
   },
   errorBoundary: {
     title: 'Something went wrong',

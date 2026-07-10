@@ -41,6 +41,36 @@ describe('proactive proposal persistence state', () => {
     });
   });
 
+  it('allows one post-cooldown reminder and permanently caps further presentations', () => {
+    useProactiveProposalStore.getState().markPresented(proposal, NOW);
+    const firstReceipt = useProactiveProposalStore.getState().receipts;
+    useProactiveProposalStore.setState({
+      receipts: firstReceipt,
+      presentedThisSession: {},
+    });
+    useProactiveProposalStore
+      .getState()
+      .markPresented(proposal, NOW + PROACTIVE_TASK_PROPOSAL_COOLDOWN_MS);
+
+    const secondReceipt = useProactiveProposalStore.getState().receipts;
+    expect(secondReceipt[proposal.identityKey]).toMatchObject({
+      disposition: 'presented',
+      presentationCount: 2,
+      lastPresentedAt: NOW + PROACTIVE_TASK_PROPOSAL_COOLDOWN_MS,
+    });
+
+    useProactiveProposalStore.setState({
+      receipts: secondReceipt,
+      presentedThisSession: {},
+    });
+    useProactiveProposalStore
+      .getState()
+      .markPresented(proposal, NOW + 2 * PROACTIVE_TASK_PROPOSAL_COOLDOWN_MS);
+
+    expect(useProactiveProposalStore.getState().receipts).toEqual(secondReceipt);
+    expect(useProactiveProposalStore.getState().presentedThisSession).toEqual({});
+  });
+
   it.each(['dismissed', 'accepted'] as const)(
     'persists %s suppression and never reopens it',
     (disposition) => {

@@ -91,8 +91,8 @@ function deriveProposalEvidence(
     sourceMessage.role !== 'user' ||
     !isFiniteTimestamp(sourceMessage.timestamp) ||
     sourceMessage.timestamp > run.createdAt ||
-    (typeof sourceMessage.content !== 'string' ||
-      (!sourceMessage.content.trim() && !sourceMessage.attachments?.length))
+    typeof sourceMessage.content !== 'string' ||
+    (!sourceMessage.content.trim() && !sourceMessage.attachments?.length)
   ) {
     return undefined;
   }

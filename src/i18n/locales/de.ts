@@ -215,6 +215,13 @@ export const de: TranslationMap = mergeTranslations(en, {
     agentWorkflow: {
       currentWork: 'Aktuelle Arbeit',
     },
+    proactiveTaskSuggestionTitle: 'Unerledigte Aufgabe fortsetzen?',
+    proactiveTaskSuggestionBody:
+      'Eine Aufgabe, die du in diesem Chat ausdrücklich gestartet hast, wurde nicht abgeschlossen. Ich kann dir helfen, sie fortzusetzen.',
+    proactiveTaskSuggestionContinue: 'Fortsetzung vorbereiten',
+    proactiveTaskSuggestionDismiss: 'Nicht erneut vorschlagen',
+    proactiveTaskSuggestionContinuationPrompt:
+      'Setze die unerledigte Aufgabe aus diesem Gespräch fort. Prüfe zuerst den aktuellen Stand, bevor du eine neue Aktion ausführst.',
   },
   errorBoundary: {
     title: 'Something went wrong',
