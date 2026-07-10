@@ -130,9 +130,10 @@ npm test -- --runInBand --testNamePattern="workspace"
 
 `npm run check:evaluation-contract` validates the canonical evaluation schema,
 contract, 12-case synthetic KLAE development pack, private-pack governance
-schema, and metadata-only registry template. It is deterministic, keyless,
-network-free, and never reads `.private/evals`. The command validates artifact
-structure and governance; it does not execute the scenarios or create a score.
+schema, metadata-only registry template, and evaluator-only intent-frame
+contract. It is deterministic, keyless, network-free, and never reads
+`.private/evals`. The command validates artifact structure and governance; it
+does not execute the scenarios or create a score.
 
 Maintainers and independent evaluators use the opt-in, fail-closed
 `npm run check:evaluation-release -- <all release flags>` gate only on a
@@ -143,24 +144,36 @@ incomplete private material is a failure, never a skip. The complete private
 layout, ownership handoff, digest command, reset procedure, invocation, and
 publication boundary are in [evaluation.md](evaluation.md#private-klae-release-procedure).
 
-LLM-judge calibration and trial aggregation are separate, keyless evidence
-gates over private evaluator inputs; neither invokes the app runner:
+LLM-judge calibration, intent-frame scoring, and trial aggregation are
+separate, keyless evidence gates over private evaluator inputs; none invokes
+the app runner:
 
 ```bash
 npm run check:judge-calibration -- \
   --input .private/evals/<release-id>/judge-calibration.json \
   --output .artifacts/judge-calibration-report.json
 
+npm run evaluate:intent-frame -- \
+  --input .private/evals/<release-id>/intent-frames.json \
+  --output .artifacts/intent-frame-report.json
+
 npm run aggregate:evaluation -- \
   --input .private/evals/<release-id>/trial-set.json \
   --output .artifacts/evaluation-statistics-report.json
 ```
 
-Both commands write content-free aggregate reports and return nonzero when the
+All three commands write content-free aggregate reports and return nonzero when the
 evidence is not claim-eligible. Exact freeze ordering, digest commands, metric
 definitions, bootstrap semantics, and publication rules are documented in
-[evaluation.md](evaluation.md#evaluator-calibration-gate) and
-[evaluation.md](evaluation.md#deterministic-trial-statistics).
+[evaluator calibration](evaluation.md#evaluator-calibration-gate),
+[intent-frame baseline](evaluation.md#evaluator-only-intent-frame-baseline),
+and [trial statistics](evaluation.md#deterministic-trial-statistics).
+
+`__tests__/scripts/intentFrameEvaluation.test.ts` uses original synthetic
+multilingual/product fixtures to validate the scorer, coverage gate, digest
+binding, and leakage controls. It does not run the assistant and is not a
+multilingual product-understanding score. A product baseline requires a frozen
+pre-execution candidate-frame artifact from a real evaluation run.
 
 See [evaluation.md](evaluation.md) for evaluation lanes, verification labels,
 split ownership, structural assertion semantics, metrics, failure categories,

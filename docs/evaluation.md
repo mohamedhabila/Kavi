@@ -21,6 +21,8 @@ The machine-readable sources are:
   private calibration-input and content-free aggregate-report contract.
 - [`evaluation/statistics.schema.json`](../evaluation/statistics.schema.json):
   deterministic trial-set and public statistics-report contract.
+- [`evaluation/intent-frame.schema.json`](../evaluation/intent-frame.schema.json):
+  evaluator-only intent-frame input and content-free aggregate-report contract.
 
 Validate all public governance artifacts without a provider key, private pack,
 or network access:
@@ -247,6 +249,99 @@ coverage, disagreement rate, evaluator fingerprints, and the input digest. It
 contains no examples, labels, prompts, identities, or private paths. Reference
 this report from the existing `evaluation_run` manifest; it is a calibration
 artifact, not another product runner.
+
+### Evaluator-only intent-frame baseline
+
+The intent-frame scorer measures whether a separately produced, pre-execution
+candidate frame matches evaluator-owned labels. It does not run the app, add a
+model call to the request path, inject a frame into prompts, or change graph
+behavior. Gold labels remain under evaluator control and are never mounted into
+the app process.
+
+The closed frame has ten fields:
+
+| Field                  | Meaning                                                                    |
+| ---------------------- | -------------------------------------------------------------------------- |
+| `goal`                 | Requested outcome or subgoals.                                             |
+| `entities`             | People, objects, apps, locations, records, or other referenced entities.   |
+| `constraints`          | Hard limits the result or execution must respect.                          |
+| `preferences`          | Soft choices that should guide an otherwise valid result.                  |
+| `missingInformation`   | Facts that must be clarified before a safe or correct next action.         |
+| `requestedAction`      | Closed action class such as answer, clarify, plan, execute, or remember.   |
+| `requestedMode`        | Chitchat, agentic, either, or clarification before routing.                |
+| `approvalRisk`         | No approval, approval required, prohibited, or unknown.                    |
+| `temporalRequirements` | Deadlines, ordering, recurrence, duration, or explicit absence of timing.  |
+| `successCriteria`      | Observable conditions that make the requested outcome complete.           |
+
+Multi-value fields contain bounded canonical atoms. Use the sole atom `none`
+for an explicit absence; combining `none` with another atom invalidates the
+input. Action, mode, and approval risk use closed enums. Candidate frames
+cannot contain request text, tool calls, execution traces, assistant output,
+final answers, artifacts, or arbitrary extra properties. This prevents the
+scorer from rewarding post-execution or answer leakage.
+
+Build a real baseline in this order:
+
+1. Freeze the implementation that produces candidate frames and its rubric.
+   Candidate production must happen before tools execute and before a final
+   answer exists. Run it as a separate evaluator adapter until a product change
+   is independently justified; do not add it to the app's hot path for this
+   evaluation.
+2. Freeze the exact request-context artifact presented to that producer. Put a
+   nonzero byte SHA-256 in `requestSha256`; do not put raw request text in the
+   scoring input.
+3. Have the gold custodian label each field as `scorable`, `ambiguous`, or
+   `unscorable`. Ambiguous and unscorable fields require a reason and carry no
+   forced target value.
+4. Join candidate and gold records only on the evaluator machine. Record the
+   original case ID, request digest, language, and product area. Freeze a
+   `minimumScorableCoverage` between 0.5 and 1 before inspecting scores.
+5. Compute both canonical projection digests. Each projection is sorted by case
+   ID and binds case ID, request digest, language, product area, and either the
+   candidate frame or gold frame. Reassociation or coverage relabeling then
+   changes the digest.
+6. Run the scorer and attach its public report to the corresponding
+   `evaluation_run` evidence. A real product baseline additionally requires the
+   frozen candidate artifact and product-run provenance; the checked-in
+   synthetic fixture is not such a baseline.
+
+Compute the projections without printing case content:
+
+```bash
+node -e 'const f=require("node:fs"),m=require("./scripts/lib/intentFrameEvaluation"),v=JSON.parse(f.readFileSync(process.argv[1],"utf8"));process.stdout.write(JSON.stringify({candidateArtifactSha256:m.digestIntentFrameProjection(v.cases,"candidate"),goldLabelsSha256:m.digestIntentFrameProjection(v.cases,"gold")})+"\n")' -- .private/evals/<release-id>/intent-frames.json
+```
+
+Copy those values into `source`, then run:
+
+```bash
+npm run evaluate:intent-frame -- \
+  --input .private/evals/<release-id>/intent-frames.json \
+  --output .artifacts/intent-frame-report.json
+```
+
+For every field, the scorer aggregates set-based true positives, false
+positives, and false negatives over scorable labels, then derives precision,
+recall, and F1. Enum fields are singleton sets. `macroF1` is the unweighted
+mean of field F1 values, so fields with more atoms cannot dominate it.
+Ambiguous and unscorable labels are excluded from confusion counts but remain
+visible as exact per-field and total counts. Every field also publishes
+`coverageRate = scorable / cases`; any field below the frozen minimum makes the
+report ineligible even when its resolved subset has perfect F1.
+
+`claimEligible` means that the scoring evidence, frozen digests, closed
+contract, and minimum coverage rule are valid. It is not a capability pass bar
+and does not mean the app reached a product-quality target. Set capability
+targets in the versioned evaluation plan and apply them to an eligible real
+run. The content-free report contains only digests, counts, coverage metadata,
+and aggregate metrics—never case IDs, request digests, atoms, labels, or local
+paths.
+
+The multilingual, multi-product JSON fixture under `__tests__/fixtures` is
+original synthetic data. It validates scoring math, ambiguity handling,
+selection-bias resistance, digest binding, and leakage rejection. It does not
+demonstrate multilingual intent understanding by the app. Do not describe a
+product intent baseline until a real separately produced pre-execution
+candidate artifact has been scored.
 
 ### Deterministic trial statistics
 
