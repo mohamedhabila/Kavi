@@ -75,6 +75,23 @@ describe('exactly-once effect dispatch coordinator', () => {
     expect(test.calls.dispatches).toHaveLength(1);
   });
 
+  it('lets one concurrent claimant dispatch the deterministic effect', async () => {
+    const test = harness();
+
+    const outcomes = await Promise.all([
+      dispatchEffectExactlyOnce(test.identity, test.ports),
+      dispatchEffectExactlyOnce(test.identity, test.ports),
+    ]);
+
+    expect(outcomes.map((outcome) => outcome.kind).sort()).toEqual([
+      'reconciliation_required',
+      'settled',
+    ]);
+    expect(test.calls.claims).toHaveLength(2);
+    expect(test.calls.dispatches).toHaveLength(1);
+    expect(test.calls.settlements).toHaveLength(1);
+  });
+
   it('makes duplicate settlement callbacks idempotent', async () => {
     const test = harness();
     const claim = claimFor(test.identity);
