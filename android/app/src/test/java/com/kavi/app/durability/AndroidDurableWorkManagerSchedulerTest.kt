@@ -126,7 +126,8 @@ class AndroidDurableWorkManagerSchedulerTest {
     val infos = workManager.getWorkInfosForUniqueWork(UNIQUE_WORK_NAME).get()
     assertEquals(2, infos.size)
     assertTrue(infos.any { it.id == UUID.fromString(WORK_ID) })
-    assertTrue(infos.any { ANDROID_DURABLE_CANDIDATE_WORK_TAG in it.tags })
+    val candidate = infos.single { ANDROID_DURABLE_CANDIDATE_WORK_TAG in it.tags }
+    assertEquals(androidx.work.WorkInfo.State.BLOCKED, candidate.state)
   }
 
   @Test
@@ -139,6 +140,11 @@ class AndroidDurableWorkManagerSchedulerTest {
     assertEquals(
       androidx.work.WorkInfo.State.CANCELLED,
       workManager.getWorkInfoById(UUID.fromString(WORK_ID)).get()?.state,
+    )
+    assertTrue(
+      workManager.getWorkInfosForUniqueWork(UNIQUE_WORK_NAME).get().all {
+        it.state == androidx.work.WorkInfo.State.CANCELLED
+      },
     )
   }
 
