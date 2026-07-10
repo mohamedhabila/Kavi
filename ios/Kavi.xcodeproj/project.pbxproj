@@ -23,6 +23,12 @@
 		D4F410000000000000000009 /* LocalLlmRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F410000000000000000019 /* LocalLlmRuntime.swift */; };
 		D4F41000000000000000000A /* LiteRTLM in Frameworks */ = {isa = PBXBuildFile; productRef = D4F410000000000000000021 /* LiteRTLM */; };
 		D4F41000000000000000000B /* LocalLlmBackgroundTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F41000000000000000001B /* LocalLlmBackgroundTask.swift */; };
+		D5F500000000000000000001 /* IOSBackgroundTaskScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5F500000000000000000011 /* IOSBackgroundTaskScheduler.swift */; };
+		D5F500000000000000000002 /* IOSDurableExecutionRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5F500000000000000000012 /* IOSDurableExecutionRuntime.swift */; };
+		D5F500000000000000000003 /* KaviDurableExecutionCore in Frameworks */ = {isa = PBXBuildFile; productRef = D5F500000000000000000021 /* KaviDurableExecutionCore */; };
+		D5F500000000000000000004 /* IOSDurableBridgeCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5F500000000000000000013 /* IOSDurableBridgeCodec.swift */; };
+		D5F500000000000000000005 /* KaviDurableExecution.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5F500000000000000000014 /* KaviDurableExecution.swift */; };
+		D5F500000000000000000006 /* KaviDurableExecution.m in Sources */ = {isa = PBXBuildFile; fileRef = D5F500000000000000000015 /* KaviDurableExecution.m */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 		F9326BBB3E2717BDA9337454 /* libPods-Kavi.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A920E20845CBF419427F22DF /* libPods-Kavi.a */; };
 /* End PBXBuildFile section */
@@ -47,6 +53,11 @@
 		D4F410000000000000000018 /* LocalLlmMessageAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLlmMessageAdapter.swift; sourceTree = "<group>"; };
 		D4F410000000000000000019 /* LocalLlmRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLlmRuntime.swift; sourceTree = "<group>"; };
 		D4F41000000000000000001B /* LocalLlmBackgroundTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLlmBackgroundTask.swift; sourceTree = "<group>"; };
+		D5F500000000000000000011 /* IOSBackgroundTaskScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSBackgroundTaskScheduler.swift; sourceTree = "<group>"; };
+		D5F500000000000000000012 /* IOSDurableExecutionRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSDurableExecutionRuntime.swift; sourceTree = "<group>"; };
+		D5F500000000000000000013 /* IOSDurableBridgeCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSDurableBridgeCodec.swift; sourceTree = "<group>"; };
+		D5F500000000000000000014 /* KaviDurableExecution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = KaviDurableExecution.swift; path = Kavi/KaviDurableExecution.swift; sourceTree = "<group>"; };
+		D5F500000000000000000015 /* KaviDurableExecution.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = KaviDurableExecution.m; path = Kavi/KaviDurableExecution.m; sourceTree = "<group>"; };
 		E483BDAB6DAC516BA685370D /* Pods-Kavi.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Kavi.release.xcconfig"; path = "Target Support Files/Pods-Kavi/Pods-Kavi.release.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Kavi/AppDelegate.swift; sourceTree = "<group>"; };
@@ -60,6 +71,7 @@
 			files = (
 				F9326BBB3E2717BDA9337454 /* libPods-Kavi.a in Frameworks */,
 				D4F41000000000000000000A /* LiteRTLM in Frameworks */,
+				D5F500000000000000000003 /* KaviDurableExecutionCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -72,7 +84,10 @@
 				F11748412D0307B40044C1D9 /* AppDelegate.swift */,
 				D4F410000000000000000011 /* KaviLocalLlm.swift */,
 				D4F410000000000000000012 /* KaviLocalLlm.m */,
+				D5F500000000000000000014 /* KaviDurableExecution.swift */,
+				D5F500000000000000000015 /* KaviDurableExecution.m */,
 				D4F41000000000000000001A /* LocalLlm */,
+				D5F50000000000000000001A /* DurableExecution */,
 				F11748442D0722820044C1D9 /* Kavi-Bridging-Header.h */,
 				BB2F792B24A3F905000567C9 /* Supporting */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
@@ -163,6 +178,17 @@
 			path = Kavi/LocalLlm;
 			sourceTree = "<group>";
 		};
+		D5F50000000000000000001A /* DurableExecution */ = {
+			isa = PBXGroup;
+			children = (
+				D5F500000000000000000011 /* IOSBackgroundTaskScheduler.swift */,
+				D5F500000000000000000012 /* IOSDurableExecutionRuntime.swift */,
+				D5F500000000000000000013 /* IOSDurableBridgeCodec.swift */,
+			);
+			name = DurableExecution;
+			path = Kavi/DurableExecution;
+			sourceTree = "<group>";
+		};
 		D616C8D9AAF6D71DE2FC3D9F /* Pods */ = {
 			isa = PBXGroup;
 			children = (
@@ -196,6 +222,7 @@
 			name = Kavi;
 			packageProductDependencies = (
 				D4F410000000000000000021 /* LiteRTLM */,
+				D5F500000000000000000021 /* KaviDurableExecutionCore */,
 			);
 			productName = Kavi;
 			productReference = 13B07F961A680F5B00A75B9A /* Kavi.app */;
@@ -225,6 +252,7 @@
 			mainGroup = 83CBB9F61A601CBA00E9B192;
 			packageReferences = (
 				D4F410000000000000000020 /* XCLocalSwiftPackageReference "LiteRTLM" */,
+				D5F500000000000000000020 /* XCLocalSwiftPackageReference "KaviDurableExecutionCore" */,
 			);
 			productRefGroup = 83CBBA001A601CBA00E9B192 /* Products */;
 			projectDirPath = "";
@@ -396,6 +424,11 @@
 				D4F410000000000000000008 /* LocalLlmMessageAdapter.swift in Sources */,
 				D4F410000000000000000009 /* LocalLlmRuntime.swift in Sources */,
 				D4F41000000000000000000B /* LocalLlmBackgroundTask.swift in Sources */,
+				D5F500000000000000000001 /* IOSBackgroundTaskScheduler.swift in Sources */,
+				D5F500000000000000000002 /* IOSDurableExecutionRuntime.swift in Sources */,
+				D5F500000000000000000004 /* IOSDurableBridgeCodec.swift in Sources */,
+				D5F500000000000000000005 /* KaviDurableExecution.swift in Sources */,
+				D5F500000000000000000006 /* KaviDurableExecution.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -614,6 +647,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = LocalPackages/LiteRTLM;
 		};
+		D5F500000000000000000020 /* XCLocalSwiftPackageReference "KaviDurableExecutionCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = LocalPackages/KaviDurableExecutionCore;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -621,6 +658,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D4F410000000000000000020 /* XCLocalSwiftPackageReference "LiteRTLM" */;
 			productName = LiteRTLM;
+		};
+		D5F500000000000000000021 /* KaviDurableExecutionCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D5F500000000000000000020 /* XCLocalSwiftPackageReference "KaviDurableExecutionCore" */;
+			productName = KaviDurableExecutionCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
