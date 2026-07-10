@@ -5,6 +5,8 @@ export interface ToolExecutionContext {
   provider?: LlmProviderConfig;
   allProviders?: LlmProviderConfig[];
   model?: string;
+  /** Exact memory boundary; independent from the file workspace. */
+  memoryConversationId?: string;
   workspaceConversationId?: string;
   workspaceReadFallbackConversationId?: string;
   availableToolNames?: string[];

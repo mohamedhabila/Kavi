@@ -60,7 +60,7 @@ describe('Orchestrator', () => {
       expect(callbacks.onDone).toHaveBeenCalled();
     });
 
-    it('uses the shared workspace conversation id for canonical memory recall', async () => {
+    it('uses the explicit memory boundary independently from the file workspace', async () => {
       mockStreamMessage.mockImplementationOnce(() =>
         createStreamGenerator([
           { type: 'token', content: 'Shared memory works' },
@@ -73,7 +73,8 @@ describe('Orchestrator', () => {
         provider: makeProvider(),
         model: 'gpt-5.4',
         conversationId: 'worker-session-1',
-        workspaceConversationId: 'parent-conv-7',
+        memoryConversationId: 'parent-memory-7',
+        workspaceConversationId: 'parent-files-7',
         systemPrompt: 'You are helpful',
         messages: [{ id: 'msg1', role: 'user', content: 'Hello', timestamp: Date.now() }],
       };
@@ -83,7 +84,7 @@ describe('Orchestrator', () => {
       expect(getConversationMemoryForSystemPrompt).not.toHaveBeenCalled();
       expect(buildLivingMemorySections).toHaveBeenCalledWith(
         expect.objectContaining({
-          conversationId: 'parent-conv-7',
+          conversationId: 'parent-memory-7',
         }),
       );
     });

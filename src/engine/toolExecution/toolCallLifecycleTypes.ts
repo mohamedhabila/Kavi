@@ -34,6 +34,7 @@ export type ToolExecutionLifecycleParams = {
   provider: LlmProviderConfig;
   allProviders?: LlmProviderConfig[];
   model: string;
+  memoryConversationId: string;
   workspaceConversationId?: string;
   workspaceReadFallbackConversationId?: string;
   availableToolNames: ReadonlySet<string>;

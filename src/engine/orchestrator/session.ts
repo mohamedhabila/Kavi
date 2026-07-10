@@ -63,7 +63,7 @@ export async function runOrchestratorGraphSession(params: {
   const availableToolNames = new Set(allTools.map((tool) => tool.name));
   const compactionEngine = enableCompaction ? new DefaultContextEngine() : null;
   const sharedConversationId = resolveCodeOwnedMemoryConversationId(
-    options.workspaceConversationId,
+    options.memoryConversationId,
     conversationId,
   );
   const runtimeContextNote = buildRuntimeContextNote();
@@ -162,6 +162,7 @@ export async function runOrchestratorGraphSession(params: {
       thinkingLevel,
       toolRuntime: {
         availableToolNames,
+        memoryConversationId: sharedConversationId,
         runtimeToolAvailability,
         toolCallHistory,
         stagnationSignatures,

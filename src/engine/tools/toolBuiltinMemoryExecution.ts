@@ -62,14 +62,14 @@ function buildInvalidMemoryManageArgs(message: string): string {
 
 function resolveExecutionMemoryContext(
   conversationId: string,
-  workspaceConversationId: string,
+  memoryConversationId: string,
   context?: ToolExecutionContext,
 ): MemoryRecallExecutionContext {
   const conversation = useChatStore
     .getState()
     .conversations.find((candidate) => candidate.id === conversationId);
   return {
-    memoryConversationId: workspaceConversationId,
+    memoryConversationId,
     sourceThreadId: conversationId,
     personaId: resolveCodeOwnedMemoryPersonaId(conversation?.personaId),
     taskId: resolveGraphTaskId({ goals: context?.controlGraphGoals }) ?? null,
@@ -79,7 +79,7 @@ function resolveExecutionMemoryContext(
 function withExecutionMemoryContext(
   args: unknown,
   conversationId: string,
-  workspaceConversationId: string,
+  memoryConversationId: string,
   context?: ToolExecutionContext,
 ): { args: MemoryRememberArgs; context: MemoryRememberExecutionContext } {
   const source =
@@ -89,7 +89,7 @@ function withExecutionMemoryContext(
   const sourceRunId = context?.agentRunId?.trim() ? context.agentRunId.trim() : null;
   const executionMemoryContext = resolveExecutionMemoryContext(
     conversationId,
-    workspaceConversationId,
+    memoryConversationId,
     context,
   );
   const taskId = executionMemoryContext.taskId;
@@ -120,7 +120,7 @@ function withExecutionMemoryContext(
     return {
       args: {
         ...common,
-        originConversationId: workspaceConversationId,
+        originConversationId: memoryConversationId,
         originThreadId: conversationId,
       },
       context: {},
@@ -130,7 +130,7 @@ function withExecutionMemoryContext(
     return {
       args: {
         ...common,
-        originConversationId: workspaceConversationId,
+        originConversationId: memoryConversationId,
         originThreadId: conversationId,
         originTaskId: taskId ?? null,
       },
@@ -143,7 +143,8 @@ function withExecutionMemoryContext(
 export async function executeBuiltinMemoryTool(
   params: BuiltinToolExecutionParams,
 ): Promise<string | null> {
-  const { name, args, conversationId, workspaceConversationId, context } = params;
+  const { name, args, conversationId, context } = params;
+  const memoryConversationId = context?.memoryConversationId ?? conversationId;
 
   if (!BUILTIN_MEMORY_TOOL_NAMES.has(name)) {
     return null;
@@ -170,21 +171,21 @@ export async function executeBuiltinMemoryTool(
   if (name === 'memory_search') {
     return executeMemorySearch(
       args,
-      resolveExecutionMemoryContext(conversationId, workspaceConversationId, context),
+      resolveExecutionMemoryContext(conversationId, memoryConversationId, context),
     );
   }
 
   if (name === 'memory_recall') {
     return executeMemoryRecall(
       args,
-      resolveExecutionMemoryContext(conversationId, workspaceConversationId, context),
+      resolveExecutionMemoryContext(conversationId, memoryConversationId, context),
     );
   }
   if (name === 'memory_remember') {
     const request = withExecutionMemoryContext(
       args,
       conversationId,
-      workspaceConversationId,
+      memoryConversationId,
       context,
     );
     return executeMemoryRemember(request.args, request.context);

@@ -119,6 +119,7 @@ export async function runSubAgentOrchestratorLoop<TAgent extends SubAgentSnapsho
         provider: params.provider,
         model: params.model,
         conversationId: params.sessionId,
+        memoryConversationId: params.sessionId,
         personaId: SUPER_AGENT_PERSONA_ID,
         taskId: params.taskId ?? null,
         usageConversationId: params.usageConversationId,

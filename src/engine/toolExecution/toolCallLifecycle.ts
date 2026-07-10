@@ -130,6 +130,7 @@ export async function executeToolCallLifecycle(
         provider: params.provider,
         allProviders: params.allProviders,
         model: params.model,
+        memoryConversationId: params.memoryConversationId,
         workspaceConversationId: params.workspaceConversationId,
         workspaceReadFallbackConversationId: params.workspaceReadFallbackConversationId,
         availableToolNames: Array.from(params.availableToolNames),

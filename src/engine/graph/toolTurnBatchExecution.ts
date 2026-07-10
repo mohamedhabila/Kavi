@@ -25,6 +25,7 @@ export async function executeAgentControlGraphToolBatch(params: {
   activeProvider: LlmProviderConfig;
   allProviders?: LlmProviderConfig[];
   activeModel: string;
+  memoryConversationId: string;
   workspaceConversationId?: string;
   workspaceReadFallbackConversationId?: string;
   availableToolNames: ReadonlySet<string>;
@@ -66,6 +67,7 @@ export async function executeAgentControlGraphToolBatch(params: {
       provider: params.activeProvider,
       allProviders: params.allProviders,
       model: params.activeModel,
+      memoryConversationId: params.memoryConversationId,
       workspaceConversationId: params.workspaceConversationId,
       workspaceReadFallbackConversationId: params.workspaceReadFallbackConversationId,
       availableToolNames: params.availableToolNames,

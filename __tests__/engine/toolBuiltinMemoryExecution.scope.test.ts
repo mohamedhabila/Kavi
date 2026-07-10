@@ -37,7 +37,7 @@ const BASE_PARAMS = {
   conversationId: 'child-thread',
   workspaceConversationId: 'workspace-root',
   conversationFileContext: {} as never,
-  context: { controlGraphGoals: [] },
+  context: { controlGraphGoals: [], memoryConversationId: 'delegated-memory-scope' },
 };
 
 beforeEach(() => {
@@ -54,10 +54,29 @@ describe('builtin memory execution scope', () => {
     await executeBuiltinMemoryTool({ ...BASE_PARAMS, name, args });
 
     expect(executor).toHaveBeenCalledWith(args, {
-      memoryConversationId: 'workspace-root',
+      memoryConversationId: 'delegated-memory-scope',
       sourceThreadId: 'child-thread',
       personaId: 'coder',
       taskId: 'active-task',
     });
+  });
+
+  it('defaults memory to the executing conversation instead of the file workspace', async () => {
+    await executeBuiltinMemoryTool({
+      ...BASE_PARAMS,
+      context: { controlGraphGoals: [] },
+      name: 'memory_search',
+      args: { query: 'private parent context' },
+    });
+
+    expect(mockExecuteMemorySearch).toHaveBeenCalledWith(
+      { query: 'private parent context' },
+      {
+        memoryConversationId: 'child-thread',
+        sourceThreadId: 'child-thread',
+        personaId: 'coder',
+        taskId: 'active-task',
+      },
+    );
   });
 });

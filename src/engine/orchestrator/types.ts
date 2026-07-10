@@ -48,6 +48,8 @@ export interface OrchestratorOptions {
   disableTooling?: boolean;
   conversationId: string;
   usageConversationId?: string;
+  /** Durable memory boundary. Defaults to the current conversation, never the file workspace. */
+  memoryConversationId?: string;
   workspaceConversationId?: string;
   workspaceReadFallbackConversationId?: string;
   systemPrompt: string;

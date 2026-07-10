@@ -176,6 +176,7 @@ export async function executeForegroundConversationRun(
         provider: providerWithApiKey,
         model,
         conversationId,
+        memoryConversationId: workspaceTarget.workspaceConversationId,
         workspaceConversationId: workspaceTarget.workspaceConversationId,
         workspaceReadFallbackConversationId: workspaceTarget.workspaceReadFallbackConversationId,
         systemPrompt: options?.additionalSystemPrompt

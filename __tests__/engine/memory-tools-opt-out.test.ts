@@ -184,7 +184,7 @@ describe('memory tools — opt-out gate', () => {
     expect(parsed.fact.originThreadId).toBe('conv-runtime-memory');
   });
 
-  it('writes memory_remember facts to the workspace namespace with source-thread provenance', async () => {
+  it('writes memory_remember facts to the explicit memory namespace with source-thread provenance', async () => {
     const raw = await executeTool(
       'memory_remember',
       JSON.stringify({
@@ -194,7 +194,10 @@ describe('memory tools — opt-out gate', () => {
         scope: 'conversation',
       }),
       'child-runtime-memory',
-      { workspaceConversationId: 'parent-runtime-memory' },
+      {
+        memoryConversationId: 'parent-runtime-memory',
+        workspaceConversationId: 'parent-runtime-files',
+      },
     );
     const parsed = JSON.parse(raw);
 
@@ -219,7 +222,11 @@ describe('memory tools — opt-out gate', () => {
         sourceRunId: 'model-run',
       }),
       'child-runtime-memory',
-      { workspaceConversationId: 'parent-runtime-memory', agentRunId: 'runtime-run' },
+      {
+        memoryConversationId: 'parent-runtime-memory',
+        workspaceConversationId: 'parent-runtime-files',
+        agentRunId: 'runtime-run',
+      },
     );
     const parsed = JSON.parse(raw);
 
@@ -249,7 +256,10 @@ describe('memory tools — opt-out gate', () => {
         sourceRunId: 'wrong-run',
       }),
       'child-runtime-memory',
-      { workspaceConversationId: 'parent-runtime-memory' },
+      {
+        memoryConversationId: 'parent-runtime-memory',
+        workspaceConversationId: 'parent-runtime-files',
+      },
     );
     const parsed = JSON.parse(raw);
 
@@ -273,7 +283,8 @@ describe('memory tools — opt-out gate', () => {
       }),
       'child-runtime-memory',
       {
-        workspaceConversationId: 'parent-runtime-memory',
+        memoryConversationId: 'parent-runtime-memory',
+        workspaceConversationId: 'parent-runtime-files',
         agentRunId: 'runtime-run',
         controlGraphGoals: [
           createGoal({
@@ -308,7 +319,7 @@ describe('memory tools — opt-out gate', () => {
           scope: 'global',
         }),
         'persona-thread',
-        { workspaceConversationId: 'workspace-root' },
+        { memoryConversationId: 'memory-root', workspaceConversationId: 'workspace-root' },
       ),
     );
     const persona = JSON.parse(
@@ -321,7 +332,7 @@ describe('memory tools — opt-out gate', () => {
           scope: 'persona',
         }),
         'persona-thread',
-        { workspaceConversationId: 'workspace-root' },
+        { memoryConversationId: 'memory-root', workspaceConversationId: 'workspace-root' },
       ),
     );
 
@@ -358,7 +369,7 @@ describe('memory tools — opt-out gate', () => {
           scope: 'session',
         }),
         'thread-1',
-        { workspaceConversationId: 'workspace-root' },
+        { memoryConversationId: 'memory-root', workspaceConversationId: 'workspace-root' },
       ),
     );
 
