@@ -8,6 +8,7 @@ import type {
 import type { ResumeAgentRun } from '../../engine/graph/foregroundRun/contracts';
 import { createForegroundRequestRegistry } from '../../engine/graph/foregroundRun/requestRegistry';
 import { clearAgentRunCancellation } from '../../services/agents/agentRunCancellation';
+import { createAgentRunIdentityKey } from '../../services/agents/agentRunIdentity';
 import { resolveConversationProviderContext } from '../../services/llm/support/providerSupport';
 import {
   drainIngestionQueueWithWakeup,
@@ -454,10 +455,11 @@ export function createForegroundScenarioRuntime(
           ...entry,
           detail: truncateLogDetail(entry.detail),
         }),
-      clearPendingRunState: (runId) => {
-        pendingFinalizations.delete(runId);
-        pendingTerminalReviews.delete(runId);
-        pendingAsyncResumes.delete(runId);
+      clearPendingRunState: (conversationId, runId) => {
+        const runIdentityKey = createAgentRunIdentityKey({ conversationId, runId });
+        pendingFinalizations.delete(runIdentityKey);
+        pendingTerminalReviews.delete(runIdentityKey);
+        pendingAsyncResumes.delete(runIdentityKey);
       },
       clearTrackedRunCancellation: clearAgentRunCancellation,
       createId: generateId,

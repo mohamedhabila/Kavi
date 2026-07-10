@@ -14,6 +14,7 @@ import {
   getLatestFinalAssistantResponsePreview,
   hasDeliveredFinalAssistantResponse,
 } from '../../src/services/agents/lifecycle/agentRunStateMachine';
+import { createAgentRunIdentityKey } from '../../src/services/agents/agentRunIdentity';
 import { useChatStore } from '../../src/store/useChatStore';
 import type { AgentRun } from '../../src/types/agentRun';
 import type { Conversation } from '../../src/types/conversation';
@@ -147,13 +148,76 @@ describe('createAgentRunFinalResponse', () => {
     const second = ensureFinalResponse(request);
 
     expect(synthesizeAgentRunCompletion).toHaveBeenCalledTimes(1);
-    expect(pending.has('run-1')).toBe(true);
+    const runIdentityKey = createAgentRunIdentityKey(request);
+    expect(pending.has(runIdentityKey)).toBe(true);
     resolveSynthesis?.({ output: 'Final answer', source: 'graph' });
 
     await expect(Promise.all([first, second])).resolves.toEqual(['Final preview', 'Final preview']);
     expect(writeSynthesizedFinalResponse).toHaveBeenCalledTimes(1);
     expect(recordAgentRunFinalResponseDelivery).toHaveBeenCalledTimes(1);
-    expect(pending.has('run-1')).toBe(false);
+    expect(pending.has(runIdentityKey)).toBe(false);
+  });
+
+  it('runs identical run ids independently across conversations', async () => {
+    const firstConversation = seedConversation();
+    const secondConversation: Conversation = {
+      ...firstConversation,
+      id: 'conversation-2',
+      title: 'Second conversation',
+      messages: firstConversation.messages.map((message) => ({ ...message })),
+      agentRuns: [makeRun()],
+    };
+    useChatStore.setState({
+      conversations: [firstConversation, secondConversation],
+      activeConversationId: firstConversation.id,
+      isLoading: false,
+    });
+
+    const pending = new Map<string, Promise<string | undefined>>();
+    const ensureFinalResponse = createAgentRunFinalResponse(createDependencies({ pending }));
+    const synthesisResolvers = new Map<
+      string,
+      (value: { output: string; source: 'graph' }) => void
+    >();
+    jest.mocked(synthesizeAgentRunCompletion).mockImplementation(
+      ({ conversationId }) =>
+        new Promise((resolve) => {
+          synthesisResolvers.set(conversationId, resolve);
+        }),
+    );
+    jest
+      .mocked(writeSynthesizedFinalResponse)
+      .mockImplementation(({ conversation }) => `Final preview for ${conversation.id}`);
+
+    const first = ensureFinalResponse({
+      conversationId: firstConversation.id,
+      runId: 'run-1',
+      status: 'completed',
+    });
+    const second = ensureFinalResponse({
+      conversationId: secondConversation.id,
+      runId: 'run-1',
+      status: 'completed',
+    });
+
+    expect(synthesizeAgentRunCompletion).toHaveBeenCalledTimes(2);
+    expect(pending.size).toBe(2);
+    synthesisResolvers.get(firstConversation.id)?.({ output: 'First', source: 'graph' });
+    await expect(first).resolves.toBe('Final preview for conversation-1');
+    expect(pending.size).toBe(1);
+    expect(
+      pending.has(
+        createAgentRunIdentityKey({
+          conversationId: secondConversation.id,
+          runId: 'run-1',
+        }),
+      ),
+    ).toBe(true);
+
+    synthesisResolvers.get(secondConversation.id)?.({ output: 'Second', source: 'graph' });
+    await expect(second).resolves.toBe('Final preview for conversation-2');
+    expect(pending.size).toBe(0);
+    expect(recordAgentRunFinalResponseDelivery).toHaveBeenCalledTimes(2);
   });
 
   it('reads the current finalization resolver when a run reaches synthesis', async () => {

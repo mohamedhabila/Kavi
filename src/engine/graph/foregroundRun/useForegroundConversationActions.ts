@@ -1,6 +1,7 @@
 import { useCallback, type MutableRefObject } from 'react';
 import { SUPER_AGENT_PERSONA_ID } from '../../../services/agents/personas';
 import { importConversationWorkspaceAttachment } from '../../../services/conversationWorkspace/attachments';
+import { createAgentRunIdentityKey } from '../../../services/agents/agentRunIdentity';
 import { getComposerDraftKey } from '../../../screens/chatComposerDrafts';
 import { useChatStore } from '../../../store/useChatStore';
 import type { Attachment } from '../../../types/attachment';
@@ -87,12 +88,17 @@ export function useForegroundConversationActions(params: UseForegroundConversati
   } = params;
 
   const clearPendingRunState = useCallback(
-    (runId: string) => {
-      pendingAgentRunFinalizationsRef.current.delete(runId);
-      pendingAgentRunTerminalReviewsRef.current.delete(runId);
-      pendingAgentRunAsyncResumesRef.current.delete(runId);
+    (conversationId: string, runId: string) => {
+      const runIdentityKey = createAgentRunIdentityKey({ conversationId, runId });
+      pendingAgentRunFinalizationsRef.current.delete(runIdentityKey);
+      pendingAgentRunTerminalReviewsRef.current.delete(runIdentityKey);
+      pendingAgentRunAsyncResumesRef.current.delete(runIdentityKey);
     },
-    [pendingAgentRunAsyncResumesRef, pendingAgentRunFinalizationsRef, pendingAgentRunTerminalReviewsRef],
+    [
+      pendingAgentRunAsyncResumesRef,
+      pendingAgentRunFinalizationsRef,
+      pendingAgentRunTerminalReviewsRef,
+    ],
   );
 
   const getConversation = useCallback(

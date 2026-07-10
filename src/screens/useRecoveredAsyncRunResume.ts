@@ -15,6 +15,7 @@ import {
   isAbortErrorLike,
   throwIfAbortSignalTriggered,
 } from '../services/agents/agentRunCancellation';
+import { createAgentRunIdentityKey } from '../services/agents/agentRunIdentity';
 import { ResumeAgentRun } from '../engine/graph/foregroundRun/contracts';
 
 type AppendConversationLog = (
@@ -48,7 +49,8 @@ export function useRecoveredAsyncRunResume({
 }): QueueRecoveredAsyncRunResume {
   const queueRecoveredAsyncRunResume = useCallback<QueueRecoveredAsyncRunResume>(
     (params) => {
-      const inFlight = pendingAgentRunAsyncResumesRef.current.get(params.runId);
+      const runIdentityKey = createAgentRunIdentityKey(params);
+      const inFlight = pendingAgentRunAsyncResumesRef.current.get(runIdentityKey);
       if (inFlight) {
         return inFlight;
       }
@@ -138,11 +140,11 @@ export function useRecoveredAsyncRunResume({
           throw error;
         } finally {
           operation.dispose();
-          pendingAgentRunAsyncResumesRef.current.delete(params.runId);
+          pendingAgentRunAsyncResumesRef.current.delete(runIdentityKey);
         }
       })();
 
-      pendingAgentRunAsyncResumesRef.current.set(params.runId, resumePromise);
+      pendingAgentRunAsyncResumesRef.current.set(runIdentityKey, resumePromise);
       return resumePromise;
     },
     [

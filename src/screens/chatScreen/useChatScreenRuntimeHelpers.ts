@@ -1,6 +1,7 @@
 import { useCallback, type MutableRefObject } from 'react';
 import { recordCompletedTurnForMemory } from '../../services/memory/lifecycle';
 import { resolveCodeOwnedMemoryConversationId } from '../../services/memory/memoryScopeIdentity';
+import { createAgentRunIdentityKey } from '../../services/agents/agentRunIdentity';
 import { useChatStore } from '../../store/useChatStore';
 import type { ConversationLogEntry } from '../../types/conversation';
 import type { LlmProviderConfig } from '../../types/provider';
@@ -31,7 +32,7 @@ export function useChatScreenRuntimeHelpers(params: UseChatScreenRuntimeHelpersP
       timestamp?: number;
     },
   ) => void;
-  clearPendingRunState: (runId: string) => void;
+  clearPendingRunState: (conversationId: string, runId: string) => void;
   getConversation: (conversationId: string) => ReturnType<ChatStoreState['conversations']['find']>;
   getConversations: () => ChatStoreState['conversations'];
   recordConversationTurnMemory: (
@@ -68,10 +69,11 @@ export function useChatScreenRuntimeHelpers(params: UseChatScreenRuntimeHelpersP
   const getConversations = useCallback(() => useChatStore.getState().conversations, []);
 
   const clearPendingRunState = useCallback(
-    (runId: string) => {
-      params.pendingAgentRunFinalizationsRef.current.delete(runId);
-      params.pendingAgentRunTerminalReviewsRef.current.delete(runId);
-      params.pendingAgentRunAsyncResumesRef.current.delete(runId);
+    (conversationId: string, runId: string) => {
+      const runIdentityKey = createAgentRunIdentityKey({ conversationId, runId });
+      params.pendingAgentRunFinalizationsRef.current.delete(runIdentityKey);
+      params.pendingAgentRunTerminalReviewsRef.current.delete(runIdentityKey);
+      params.pendingAgentRunAsyncResumesRef.current.delete(runIdentityKey);
     },
     [
       params.pendingAgentRunAsyncResumesRef,

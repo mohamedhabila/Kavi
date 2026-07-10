@@ -110,7 +110,7 @@ export interface ForegroundConversationRunRefs {
 
 export interface ForegroundConversationRunHelpers {
   appendConversationLog: (conversationId: string, entry: ForegroundRunLogEntryInput) => void;
-  clearPendingRunState: (runId: string) => void;
+  clearPendingRunState: (conversationId: string, runId: string) => void;
   clearTrackedRunCancellation: (conversationId: string, runId: string) => void;
   createId: () => string;
   ensureAgentRunFinalResponse: EnsureAgentRunFinalResponse;

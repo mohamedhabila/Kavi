@@ -10,6 +10,7 @@ import {
   createAgentRunOperationController,
   throwIfAbortSignalTriggered,
 } from '../services/agents/agentRunCancellation';
+import { createAgentRunIdentityKey } from '../services/agents/agentRunIdentity';
 import {
   buildAgentRunMessageScope,
   getLatestFinalAssistantResponsePreview,
@@ -61,7 +62,8 @@ export function createAgentRunFinalResponse({
   updateMessageProviderReplay,
 }: CreateAgentRunFinalResponseParams): EnsureAgentRunFinalResponse {
   return async (params) => {
-    const inFlightFinalization = pendingAgentRunFinalizations.get(params.runId);
+    const runIdentityKey = createAgentRunIdentityKey(params);
+    const inFlightFinalization = pendingAgentRunFinalizations.get(runIdentityKey);
     if (inFlightFinalization) {
       return inFlightFinalization;
     }
@@ -197,11 +199,11 @@ export function createAgentRunFinalResponse({
         return preview;
       } finally {
         operation.dispose();
-        pendingAgentRunFinalizations.delete(params.runId);
+        pendingAgentRunFinalizations.delete(runIdentityKey);
       }
     })();
 
-    pendingAgentRunFinalizations.set(params.runId, finalizationPromise);
+    pendingAgentRunFinalizations.set(runIdentityKey, finalizationPromise);
     return finalizationPromise;
   };
 }

@@ -79,7 +79,7 @@ describe('foregroundConversationCancellation', () => {
     });
 
     expect(abortForegroundRequestForConversation).toHaveBeenCalledWith('conv1', 'rewind reason');
-    expect(clearPendingRunState).toHaveBeenCalledWith('run-1');
+    expect(clearPendingRunState).toHaveBeenCalledWith('conv1', 'run-1');
   });
 
   it('builds and applies stop/supersede effects through shared completion actions', () => {
@@ -142,7 +142,7 @@ describe('foregroundConversationCancellation', () => {
       runningWorkerCount: 0,
     });
 
-    expect(clearPendingRunState).toHaveBeenCalledWith('run-1');
+    expect(clearPendingRunState).toHaveBeenCalledWith('conv1', 'run-1');
     expect(completeAgentRun).toHaveBeenCalledWith(
       'conv1',
       expect.objectContaining({

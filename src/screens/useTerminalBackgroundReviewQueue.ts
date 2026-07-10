@@ -5,6 +5,7 @@ import {
   isAbortErrorLike,
   throwIfAbortSignalTriggered,
 } from '../services/agents/agentRunCancellation';
+import { createAgentRunIdentityKey } from '../services/agents/agentRunIdentity';
 import { useChatStore } from '../store/useChatStore';
 import type { Conversation } from '../types/conversation';
 import type {
@@ -53,7 +54,8 @@ export function useTerminalBackgroundReviewQueue(params: {
 
   return useCallback(
     (candidate): Promise<void> => {
-      const inFlight = pendingAgentRunTerminalReviewsRef.current.get(candidate.runId);
+      const runIdentityKey = createAgentRunIdentityKey(candidate);
+      const inFlight = pendingAgentRunTerminalReviewsRef.current.get(runIdentityKey);
       if (inFlight) {
         return inFlight;
       }
@@ -73,7 +75,7 @@ export function useTerminalBackgroundReviewQueue(params: {
         updateAgentRunSummary,
         updateMessageAssistantMetadata,
       });
-      pendingAgentRunTerminalReviewsRef.current.set(candidate.runId, reviewPromise);
+      pendingAgentRunTerminalReviewsRef.current.set(runIdentityKey, reviewPromise);
       return reviewPromise;
     },
     [
@@ -112,6 +114,7 @@ async function runTerminalBackgroundReview(params: {
   updateMessageAssistantMetadata: ChatStore['updateMessageAssistantMetadata'];
 }): Promise<void> {
   const { candidate } = params;
+  const runIdentityKey = createAgentRunIdentityKey(candidate);
   const operation = createAgentRunOperationController({
     conversationId: candidate.conversationId,
     runId: candidate.runId,
@@ -167,6 +170,6 @@ async function runTerminalBackgroundReview(params: {
     }
   } finally {
     operation.dispose();
-    params.pendingAgentRunTerminalReviewsRef.current.delete(candidate.runId);
+    params.pendingAgentRunTerminalReviewsRef.current.delete(runIdentityKey);
   }
 }

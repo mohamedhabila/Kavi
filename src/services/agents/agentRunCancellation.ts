@@ -1,3 +1,5 @@
+import { createAgentRunIdentityKey } from './agentRunIdentity';
+
 const DEFAULT_ABORT_MESSAGE = 'Request cancelled';
 
 type AgentRunOperationControllerParams = {
@@ -15,10 +17,6 @@ export type AgentRunOperationControllerHandle = {
 
 const cancelledRunReasons = new Map<string, Error>();
 const runOperationControllers = new Map<string, Map<string, AbortController>>();
-
-function buildAgentRunKey(conversationId: string, runId: string): string {
-  return `${conversationId.trim()}::${runId.trim()}`;
-}
 
 function normalizeAbortMessage(reason: unknown): string {
   if (reason instanceof Error) {
@@ -111,7 +109,12 @@ export function clearAgentRunCancellation(conversationId: string, runId: string)
     return;
   }
 
-  cancelledRunReasons.delete(buildAgentRunKey(normalizedConversationId, normalizedRunId));
+  cancelledRunReasons.delete(
+    createAgentRunIdentityKey({
+      conversationId: normalizedConversationId,
+      runId: normalizedRunId,
+    }),
+  );
 }
 
 export function cancelAgentRunOperations(
@@ -125,7 +128,10 @@ export function cancelAgentRunOperations(
     return undefined;
   }
 
-  const runKey = buildAgentRunKey(normalizedConversationId, normalizedRunId);
+  const runKey = createAgentRunIdentityKey({
+    conversationId: normalizedConversationId,
+    runId: normalizedRunId,
+  });
   const abortReason = toAbortError(reason);
   cancelledRunReasons.set(runKey, abortReason);
 
@@ -146,7 +152,10 @@ export function createAgentRunOperationController(
   const normalizedConversationId = params.conversationId.trim();
   const normalizedRunId = params.runId.trim();
   const normalizedOperationId = params.operationId.trim();
-  const runKey = buildAgentRunKey(normalizedConversationId, normalizedRunId);
+  const runKey = createAgentRunIdentityKey({
+    conversationId: normalizedConversationId,
+    runId: normalizedRunId,
+  });
   const controller = new AbortController();
   const operations = runOperationControllers.get(runKey) ?? new Map<string, AbortController>();
 

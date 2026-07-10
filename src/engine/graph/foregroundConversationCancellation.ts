@@ -35,7 +35,7 @@ type EnsureAgentRunFinalResponse = (params: {
 type ForegroundConversationCancellationActions = ConversationRunCompletionActions & {
   appendConversationLog: (conversationId: string, entry: AppendConversationLogEntry) => void;
   clearForegroundRequestForConversation?: (conversationId: string) => boolean;
-  clearPendingRunState: (runId: string) => void;
+  clearPendingRunState: (conversationId: string, runId: string) => void;
   ensureAgentRunFinalResponse?: EnsureAgentRunFinalResponse;
   getLatestConversation: (conversationId: string) => Conversation | undefined;
 };
@@ -77,7 +77,7 @@ export function selectForegroundSupersededRun(params: {
 
 export function rewindForegroundConversationRun(params: {
   abortForegroundRequestForConversation: (conversationId: string, reason?: string) => boolean;
-  clearPendingRunState: (runId: string) => void;
+  clearPendingRunState: (conversationId: string, runId: string) => void;
   conversation?: Conversation;
   conversationId: string;
   reason: string;
@@ -91,7 +91,7 @@ export function rewindForegroundConversationRun(params: {
 
   cancelAgentRunOperations(params.conversationId, activeRunId, params.reason);
   cancelRunningSubAgentsForRun(params.conversation, activeRunId, params.reason);
-  params.clearPendingRunState(activeRunId);
+  params.clearPendingRunState(params.conversationId, activeRunId);
 }
 
 export function supersedeForegroundConversationRun(params: {
@@ -104,7 +104,7 @@ export function supersedeForegroundConversationRun(params: {
   const supersedeEffect = buildForegroundRunSupersededEffect(params.runningWorkerCount);
 
   cancelAgentRunOperations(params.conversationId, params.runId, supersedeEffect.operationReason);
-  params.actions.clearPendingRunState(params.runId);
+  params.actions.clearPendingRunState(params.conversationId, params.runId);
   applyConversationRunCompletionEffect({
     actions: params.actions,
     conversationId: params.conversationId,
@@ -132,7 +132,7 @@ export function stopForegroundConversationRuns(params: {
     const cancellationEffect = buildForegroundRunUserStopCompletionEffect(runWorkers.length);
 
     cancelAgentRunOperations(params.conversationId, run.id, cancellationEffect.operationReason);
-    params.actions.clearPendingRunState(run.id);
+    params.actions.clearPendingRunState(params.conversationId, run.id);
     applyConversationRunCompletionEffect({
       actions: params.actions,
       conversationId: params.conversationId,

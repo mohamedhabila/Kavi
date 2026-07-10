@@ -254,7 +254,7 @@ describe('ChatScreen agent run resume', () => {
     );
   });
 
-  it('queues recovered async monitoring for every resumable run instead of only the first one', async () => {
+  it('queues same-id recovered runs independently for every conversation', async () => {
     const pendingOperation = {
       key: 'expo-workflow:workflow-201',
       kind: 'expo-workflow',
@@ -288,10 +288,10 @@ describe('ChatScreen agent run resume', () => {
       {
         ...baseConversation,
         id: 'conv2',
-        activeAgentRunId: 'run-async-2',
+        activeAgentRunId: 'run-async-1',
         agentRuns: [
           createRunningAgentRun({
-            id: 'run-async-2',
+            id: 'run-async-1',
             userMessageId: 'msg1',
             controlGraph: createAgentRunAsyncWorkControlGraph({
               pendingOperations: [
@@ -328,7 +328,7 @@ describe('ChatScreen agent run resume', () => {
             conversationId === 'conv2' &&
             phase === 'work' &&
             params?.checkpointTitle === 'Recovered async workflow monitoring' &&
-            runId === 'run-async-2',
+            runId === 'run-async-1',
         ),
       ).toBe(true);
     });
