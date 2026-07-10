@@ -6,14 +6,19 @@ import { createGoal } from '../../src/engine/goals/types';
 import type { ToolDefinition } from '../../src/types/tool';
 
 describe('tool batch execution policy', () => {
-  it('runs independent read, wait, and compute tools in parallel batches', () => {
+  it('runs independent read and wait tools in parallel batches', () => {
     expect(
-      shouldExecuteToolBatchInParallel([
-        { name: 'read_file' },
-        { name: 'sessions_wait' },
-        { name: 'python' },
-      ]),
+      shouldExecuteToolBatchInParallel([{ name: 'read_file' }, { name: 'sessions_wait' }]),
     ).toBe(true);
+  });
+
+  it('does not parallelize arbitrary code that can mutate shared workspace state', () => {
+    expect(shouldExecuteToolBatchInParallel([{ name: 'read_file' }, { name: 'javascript' }])).toBe(
+      false,
+    );
+    expect(shouldExecuteToolBatchInParallel([{ name: 'read_file' }, { name: 'python' }])).toBe(
+      false,
+    );
   });
 
   it('does not parallelize single tool calls', () => {
