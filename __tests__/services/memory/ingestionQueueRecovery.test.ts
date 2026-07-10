@@ -32,6 +32,7 @@ import {
   enqueueIngestionJob,
   getIngestionQueueDiagnostics,
   getIngestionJob,
+  INGESTION_PROCESSING_LEASE_MS,
   INGESTION_RETRY_BASE_DELAY_MS,
   recoverStaleIngestionJobs,
 } from '../../../src/services/memory/ingestionQueue';
@@ -45,6 +46,13 @@ import {
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
 import { processIngestionTurn } from '../../../src/services/memory/turnProcessor';
+import {
+  claimIngestionJob,
+  completeIngestionJob,
+  markIngestionJobStructuralComplete,
+  ownsIngestionClaim,
+  retryOrCompleteIngestionJob,
+} from '../../../src/services/memory/ingestionQueueStore';
 import type { Message } from '../../../src/types/message';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -118,7 +126,8 @@ describe('ingestion queue recovery and diagnostics', () => {
     getMemoryDb().runSync(
       `UPDATE memory_ingestion_jobs
           SET status = 'processing', attempt_count = 5,
-              next_attempt_at = NULL, lease_expires_at = 100
+              next_attempt_at = NULL, lease_expires_at = 100,
+              claim_token = 'claim-episode-crash'
         WHERE id = ?`,
       job.id,
     );
@@ -152,7 +161,8 @@ describe('ingestion queue recovery and diagnostics', () => {
     getMemoryDb().runSync(
       `UPDATE memory_ingestion_jobs
           SET status = 'processing', attempt_count = 5,
-              next_attempt_at = NULL, lease_expires_at = 100
+              next_attempt_at = NULL, lease_expires_at = 100,
+              claim_token = 'claim-fact-crash'
         WHERE id = ?`,
       job.id,
     );
@@ -196,14 +206,16 @@ describe('ingestion queue recovery and diagnostics', () => {
     getMemoryDb().runSync(
       `UPDATE memory_ingestion_jobs
           SET status = 'processing', attempt_count = 1,
-              next_attempt_at = NULL, lease_expires_at = 100
+              next_attempt_at = NULL, lease_expires_at = 100,
+              claim_token = 'claim-retryable'
         WHERE id = ?`,
       retryable!.id,
     );
     getMemoryDb().runSync(
       `UPDATE memory_ingestion_jobs
           SET status = 'processing', attempt_count = 5,
-              next_attempt_at = NULL, lease_expires_at = 100
+              next_attempt_at = NULL, lease_expires_at = 100,
+              claim_token = 'claim-exhausted'
         WHERE id = ?`,
       exhausted!.id,
     );
@@ -211,6 +223,7 @@ describe('ingestion queue recovery and diagnostics', () => {
       `UPDATE memory_ingestion_jobs
           SET status = 'processing', attempt_count = 5,
               next_attempt_at = NULL, lease_expires_at = 100,
+              claim_token = 'claim-structural',
               structural_completed_at = 50
         WHERE id = ?`,
       structurallyCompleted!.id,
@@ -245,6 +258,55 @@ describe('ingestion queue recovery and diagnostics', () => {
         completedAt: 100,
       }),
     );
+  });
+
+  it('fences every stale owner transition after a new attempt claims the job', () => {
+    const job = enqueueIngestionJob({
+      threadId: 'thread-claim-fence',
+      sourceEndMessageId: 'assistant-claim-fence',
+      now: 10,
+    })!;
+    const firstClaim = claimIngestionJob(job.id, 10)!;
+    expect(ownsIngestionClaim(job.id, firstClaim, 11)).toBe(true);
+    expect(ownsIngestionClaim(job.id, firstClaim, 10 + INGESTION_PROCESSING_LEASE_MS)).toBe(false);
+
+    recoverStaleIngestionJobs(10 + INGESTION_PROCESSING_LEASE_MS);
+    const retry = getIngestionJob(job.id)!;
+    const secondClaim = claimIngestionJob(job.id, retry.nextAttemptAt!)!;
+
+    expect(markIngestionJobStructuralComplete(job.id, retry.nextAttemptAt!, firstClaim)).toBe(
+      false,
+    );
+    expect(
+      completeIngestionJob(
+        job.id,
+        'completed_enriched',
+        'valid',
+        retry.nextAttemptAt!,
+        firstClaim,
+      ),
+    ).toBe(false);
+    expect(
+      retryOrCompleteIngestionJob({
+        jobId: job.id,
+        providerOutcome: 'provider_error',
+        outcomeCode: 'provider_request_failed',
+        now: retry.nextAttemptAt!,
+        claimToken: firstClaim,
+      }),
+    ).toEqual({ status: 'processing', applied: false });
+    expect(getIngestionJob(job.id)).toEqual(
+      expect.objectContaining({ status: 'processing', claimToken: secondClaim }),
+    );
+    expect(
+      completeIngestionJob(
+        job.id,
+        'completed_enriched',
+        'valid',
+        retry.nextAttemptAt!,
+        secondClaim,
+      ),
+    ).toBe(true);
   });
 
   it('reports bounded state and provider-outcome aggregates', async () => {

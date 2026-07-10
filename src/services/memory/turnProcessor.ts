@@ -46,6 +46,10 @@ export interface ProcessTurnInput {
   now?: number;
   extractor?: ConsolidatorExtractor;
   skipWorkingMemorySync?: boolean;
+  /** Queue ownership fence checked after async enrichment and before any durable write. */
+  canPersist?: () => boolean;
+  /** Queue receipt committed atomically with the source-bound memory transaction. */
+  commitPersistenceReceipt?: (outcome: TurnProviderOutcome) => boolean;
 }
 
 function resolveMemoryConversationId(
@@ -66,7 +70,7 @@ export interface ProcessTurnResult {
   providerOutcome: TurnProviderOutcome;
   bridgedEvidenceFactIds: string[];
   agentRunMemoryFactIds: string[];
-  skipped?: 'opt_out' | 'no_closed_turn';
+  skipped?: 'opt_out' | 'no_closed_turn' | 'claim_lost';
 }
 
 export type TurnProviderOutcome =
@@ -76,7 +80,7 @@ export type TurnProviderOutcome =
   | Exclude<ConsolidatorOutcome, { status: 'valid' | 'empty_valid' }>;
 
 function skippedProcessTurnResult(
-  skipped: 'opt_out' | 'no_closed_turn',
+  skipped: 'opt_out' | 'no_closed_turn' | 'claim_lost',
   providerOutcome: TurnProviderOutcome = { status: 'not_requested' },
 ): ProcessTurnResult {
   return {
@@ -93,6 +97,15 @@ function skippedProcessTurnResult(
     bridgedEvidenceFactIds: [],
     agentRunMemoryFactIds: [],
   };
+}
+
+function ownsPersistenceFence(canPersist: (() => boolean) | undefined): boolean {
+  if (!canPersist) return true;
+  try {
+    return canPersist();
+  } catch {
+    return false;
+  }
 }
 
 function summarizeProviderOutcome(outcome: ConsolidatorOutcome): TurnProviderOutcome {
@@ -524,6 +537,9 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
   if (!canWriteLongTermMemory()) {
     return skippedProcessTurnResult('opt_out', providerOutcome);
   }
+  if (!ownsPersistenceFence(input.canPersist)) {
+    return skippedProcessTurnResult('claim_lost', providerOutcome);
+  }
 
   const persistResult = applyConsolidatorResult(mergedResult, {
     now,
@@ -536,6 +552,10 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
     sourceAssistantMessageId: assistant?.id,
     messages: input.messages,
     skipWorkingMemoryWrites: true,
+    canPersist: input.canPersist,
+    commitReceipt: input.commitPersistenceReceipt
+      ? () => input.commitPersistenceReceipt!(providerOutcome)
+      : undefined,
   });
 
   let agentRunMemoryFactIds: string[] = [];

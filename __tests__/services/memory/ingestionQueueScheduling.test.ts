@@ -21,10 +21,13 @@ import {
   __resetIngestionQueueForTests,
   enqueueIngestionJob,
   getIngestionJob,
+  INGESTION_PROCESSING_LEASE_MS,
   INGESTION_RETRY_BASE_DELAY_MS,
   processIngestionJob,
+  drainIngestionQueueWithWakeup,
   scheduleIngestionDrain,
 } from '../../../src/services/memory/ingestionQueue';
+import { claimIngestionJob } from '../../../src/services/memory/ingestionQueueStore';
 import { __resetOnDeviceGuardsForTests } from '../../../src/services/memory/onDeviceGuards';
 import {
   ensureFactSchema,
@@ -113,6 +116,7 @@ describe('ingestion queue scheduling and job context', () => {
       threadId: 'conv-auto-retry',
       sourceStartMessageId: 'user-auto-retry',
       sourceEndMessageId: 'assistant-auto-retry',
+      sourceAt: 7,
       now: 100,
     })!;
 
@@ -133,6 +137,7 @@ describe('ingestion queue scheduling and job context', () => {
     await flushScheduledIngestion();
 
     expect(mockedProcessIngestionTurn).toHaveBeenCalledTimes(2);
+    expect(mockedProcessIngestionTurn.mock.calls.map(([input]) => input.now)).toEqual([7, 7]);
     expect(getIngestionJob(job.id)?.status).toBe('completed_enriched');
     expect(jest.getTimerCount()).toBe(0);
   });
@@ -154,6 +159,44 @@ describe('ingestion queue scheduling and job context', () => {
 
     expect(mockedProcessIngestionTurn).toHaveBeenCalledTimes(5);
     expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('backs off unavailable sources so healthy work behind the batch can run', async () => {
+    const missingJobs = [];
+    for (let index = 0; index < 3; index += 1) {
+      missingJobs.push(
+        enqueueIngestionJob({
+          threadId: `conv-missing-${index}`,
+          sourceEndMessageId: `assistant-missing-${index}`,
+          now: 100,
+        })!,
+      );
+    }
+    const healthy = enqueueIngestionJob({
+      threadId: 'conv-healthy-after-missing',
+      sourceStartMessageId: 'user-healthy-after-missing',
+      sourceEndMessageId: 'assistant-healthy-after-missing',
+      now: 100,
+    })!;
+
+    scheduleIngestionDrain({
+      loadMessagesForThread: (threadId) =>
+        threadId === healthy.threadId ? closedTurn('healthy-after-missing') : [],
+    });
+    await flushScheduledIngestion();
+
+    expect(mockedProcessIngestionTurn).toHaveBeenCalledTimes(1);
+    expect(getIngestionJob(healthy.id)?.status).toBe('completed_structural');
+    for (const missingJob of missingJobs) {
+      expect(getIngestionJob(missingJob.id)).toEqual(
+        expect.objectContaining({
+          status: 'retrying',
+          attemptCount: 1,
+          outcomeCode: 'source_window_unavailable',
+        }),
+      );
+    }
+    expect(jest.getTimerCount()).toBe(1);
   });
 
   it('resolves title, provider, run, and evidence independently for coalesced jobs', async () => {
@@ -254,6 +297,43 @@ describe('ingestion queue scheduling and job context', () => {
     expect(jest.getTimerCount()).toBe(0);
   });
 
+  it('fences in-flight work across an opt-out and re-enable cycle', async () => {
+    let releaseAttempt: (() => void) | undefined;
+    let markAttemptStarted: (() => void) | undefined;
+    const attemptHeld = new Promise<void>((resolve) => {
+      releaseAttempt = resolve;
+    });
+    const attemptStarted = new Promise<void>((resolve) => {
+      markAttemptStarted = resolve;
+    });
+    mockedProcessIngestionTurn.mockImplementationOnce(async (input) => {
+      markAttemptStarted?.();
+      await attemptHeld;
+      return input.canPersist?.()
+        ? processResult({ status: 'valid' })
+        : { ...processResult({ status: 'valid' }), processed: false, skipped: 'claim_lost' };
+    });
+    const job = enqueueIngestionJob({
+      threadId: 'conv-in-flight-opt-out',
+      sourceStartMessageId: 'user-in-flight-opt-out',
+      sourceEndMessageId: 'assistant-in-flight-opt-out',
+      now: 100,
+    })!;
+
+    scheduleIngestionDrain({ loadMessagesForThread: () => closedTurn('in-flight-opt-out') });
+    jest.runAllTicks();
+    await attemptStarted;
+    expect(mockedProcessIngestionTurn).toHaveBeenCalledTimes(1);
+
+    useSettingsStore.getState().setDisableLongTermMemory(true);
+    useSettingsStore.getState().setDisableLongTermMemory(false);
+    releaseAttempt?.();
+    await flushScheduledIngestion();
+
+    expect(getIngestionJob(job.id)).toBeNull();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
   it('computes provider backoff from attempt completion rather than claim time', async () => {
     const job = enqueueIngestionJob({
       threadId: 'conv-completion-clock',
@@ -272,5 +352,64 @@ describe('ingestion queue scheduling and job context', () => {
     });
 
     expect(getIngestionJob(job.id)?.nextAttemptAt).toBe(30_100 + INGESTION_RETRY_BASE_DELAY_MS);
+  });
+
+  it('recovers an attempt that resumes after its lease expires', async () => {
+    const job = enqueueIngestionJob({
+      threadId: 'conv-expired-live-attempt',
+      sourceStartMessageId: 'user-expired-live-attempt',
+      sourceEndMessageId: 'assistant-expired-live-attempt',
+      now: 100,
+    })!;
+    mockedProcessIngestionTurn.mockImplementationOnce(async (input) => {
+      jest.setSystemTime(100 + INGESTION_PROCESSING_LEASE_MS);
+      return input.canPersist?.()
+        ? processResult({ status: 'valid' })
+        : { ...processResult({ status: 'valid' }), processed: false, skipped: 'claim_lost' };
+    });
+
+    const result = await processIngestionJob({
+      jobId: job.id,
+      messages: closedTurn('expired-live-attempt'),
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({ processed: false, status: 'retrying', skipped: 'claim_lost' }),
+    );
+    expect(getIngestionJob(job.id)).toEqual(
+      expect.objectContaining({
+        status: 'retrying',
+        outcomeCode: 'stale_processing_lease',
+        nextAttemptAt:
+          100 + INGESTION_PROCESSING_LEASE_MS + INGESTION_RETRY_BASE_DELAY_MS,
+      }),
+    );
+  });
+
+  it('wakes at a dead process lease expiry after cold-start recovery runs early', async () => {
+    const job = enqueueIngestionJob({
+      threadId: 'conv-cold-start-lease',
+      sourceStartMessageId: 'user-cold-start-lease',
+      sourceEndMessageId: 'assistant-cold-start-lease',
+      now: 100,
+    })!;
+    expect(claimIngestionJob(job.id, 100)).not.toBeNull();
+
+    await drainIngestionQueueWithWakeup({
+      loadMessagesForThread: () => closedTurn('cold-start-lease'),
+    });
+    expect(jest.getTimerCount()).toBe(1);
+
+    await jest.advanceTimersByTimeAsync(INGESTION_PROCESSING_LEASE_MS - 1);
+    expect(mockedProcessIngestionTurn).not.toHaveBeenCalled();
+    await jest.advanceTimersByTimeAsync(1);
+    await flushScheduledIngestion();
+    expect(getIngestionJob(job.id)?.status).toBe('retrying');
+    await jest.advanceTimersByTimeAsync(INGESTION_RETRY_BASE_DELAY_MS);
+    await flushScheduledIngestion();
+
+    expect(mockedProcessIngestionTurn).toHaveBeenCalledTimes(1);
+    expect(getIngestionJob(job.id)?.status).toBe('completed_structural');
+    expect(jest.getTimerCount()).toBe(0);
   });
 });

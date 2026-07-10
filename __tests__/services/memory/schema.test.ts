@@ -174,6 +174,8 @@ describe('ensureFactSchema', () => {
     expect(columnNames('memory_ingestion_jobs')).toEqual(
         expect.arrayContaining([
           'thread_title',
+          'claim_token',
+          'source_at',
           'provider_outcome',
         'outcome_code',
         'next_attempt_at',

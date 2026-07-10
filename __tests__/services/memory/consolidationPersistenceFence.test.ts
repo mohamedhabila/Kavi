@@ -1,0 +1,114 @@
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
+});
+
+import { applyConsolidatorResult } from '../../../src/services/memory/consolidator';
+import { listEpisodes } from '../../../src/services/memory/episodes/queries';
+import { listFacts } from '../../../src/services/memory/facts/queries';
+import {
+  enqueueIngestionJob,
+  getIngestionJob,
+  INGESTION_PROCESSING_LEASE_MS,
+  recoverStaleIngestionJobs,
+} from '../../../src/services/memory/ingestionQueue';
+import {
+  claimIngestionJob,
+  completeIngestionJob,
+} from '../../../src/services/memory/ingestionQueueStore';
+import {
+  ensureFactSchema,
+  resetFactSchemaCacheForTests,
+} from '../../../src/services/memory/schema';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
+
+const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
+
+beforeEach(() => {
+  closeMemoryDb();
+  expoSqlite.__resetExpoSqliteForTests();
+  resetFactSchemaCacheForTests();
+  ensureFactSchema();
+});
+
+afterEach(() => {
+  closeMemoryDb();
+});
+
+it('checks queue ownership inside the same transaction as memory persistence', () => {
+  expect(() =>
+    applyConsolidatorResult(
+      {
+        episodeSummary: 'This stale attempt must not persist.',
+        newFacts: [
+          {
+            subject: 'user',
+            predicate: 'prefers',
+            value: 'quiet mornings',
+            confidence: 0.9,
+          },
+        ],
+        activeFocus: null,
+        openThreads: [],
+        notable: [],
+      },
+      {
+        conversationId: 'conv-fenced-persistence',
+        threadId: 'conv-fenced-persistence',
+        sourceAssistantMessageId: 'assistant-fenced-persistence',
+        canPersist: () => false,
+        now: 10,
+      },
+    ),
+  ).toThrow('Memory persistence claim lost');
+  expect(listEpisodes({ conversationId: 'conv-fenced-persistence' })).toEqual([]);
+  expect(listFacts({ originConversationId: 'conv-fenced-persistence' })).toEqual([]);
+});
+
+it('commits a final enriched-attempt receipt atomically with memory writes', () => {
+  const job = enqueueIngestionJob({
+    threadId: 'conv-enriched-receipt',
+    sourceEndMessageId: 'assistant-enriched-receipt',
+    now: 100,
+  })!;
+  getMemoryDb().runSync(
+    'UPDATE memory_ingestion_jobs SET attempt_count = 4 WHERE id = ?',
+    job.id,
+  );
+  const claimToken = claimIngestionJob(job.id, 100)!;
+
+  applyConsolidatorResult(
+    {
+      episodeSummary: 'The validated enrichment committed.',
+      newFacts: [],
+      activeFocus: null,
+      openThreads: [],
+      notable: [],
+    },
+    {
+      conversationId: job.memoryConversationId,
+      threadId: job.threadId,
+      sourceAssistantMessageId: job.sourceEndMessageId,
+      canPersist: () => true,
+      commitReceipt: () =>
+        completeIngestionJob(job.id, 'completed_enriched', 'valid', 101, claimToken),
+      now: 101,
+    },
+  );
+
+  expect(getIngestionJob(job.id)).toEqual(
+    expect.objectContaining({
+      status: 'completed_enriched',
+      attemptCount: 5,
+      providerOutcome: 'valid',
+      structuralCompletedAt: 101,
+    }),
+  );
+  expect(listEpisodes({ conversationId: job.memoryConversationId })).toHaveLength(1);
+  expect(recoverStaleIngestionJobs(100 + INGESTION_PROCESSING_LEASE_MS)).toEqual({
+    retrying: 0,
+    degraded: 0,
+    failed: 0,
+  });
+  expect(getIngestionJob(job.id)?.status).toBe('completed_enriched');
+});

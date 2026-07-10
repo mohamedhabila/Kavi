@@ -286,15 +286,22 @@ describe('ingestionQueue', () => {
     });
 
     expect(result).toEqual(
-      expect.objectContaining({ attempted: 1, completed: 0, deferred: 1, failed: 0 }),
+      expect.objectContaining({
+        attempted: 1,
+        completed: 0,
+        retrying: 1,
+        deferred: 0,
+        sourceDeferred: 1,
+        failed: 0,
+      }),
     );
     expect(mockedProcessIngestionTurn).not.toHaveBeenCalled();
     expect(getIngestionJob(job!.id)).toEqual(
       expect.objectContaining({
-        status: 'pending',
-        attemptCount: 0,
+        status: 'retrying',
+        attemptCount: 1,
         providerOutcome: null,
-        outcomeCode: null,
+        outcomeCode: 'source_window_unavailable',
       }),
     );
   });

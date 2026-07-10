@@ -23,7 +23,7 @@ import {
   INGESTION_RETRY_BASE_DELAY_MS,
   listPendingIngestionJobs,
   markIngestionJobStructuralComplete,
-  recoverStaleIngestionJobs,
+  ownsIngestionClaim,
   retryOrCompleteIngestionJob,
 } from './ingestionQueueStore';
 import type {
@@ -32,6 +32,10 @@ import type {
   IngestionOutcomeCode,
   IngestionProviderOutcome,
 } from './ingestionQueueStore';
+import {
+  deferIngestionJobForMissingSource,
+  recoverStaleIngestionJobs,
+} from './ingestionQueueRecovery';
 import {
   acquireIngestionSlot,
   INGESTION_BATCH_LIMIT,
@@ -56,8 +60,8 @@ export {
   INGESTION_RETRY_BASE_DELAY_MS,
   INGESTION_RETRY_MAX_DELAY_MS,
   listPendingIngestionJobs,
-  recoverStaleIngestionJobs,
 } from './ingestionQueueStore';
+export { recoverStaleIngestionJobs } from './ingestionQueueRecovery';
 export type {
   EnqueueIngestionJobInput,
   IngestionJob,
@@ -66,8 +70,8 @@ export type {
   IngestionOutcomeCode,
   IngestionProviderOutcome,
   IngestionQueueDiagnostics,
-  StaleIngestionRecoveryResult,
 } from './ingestionQueueStore';
+export type { StaleIngestionRecoveryResult } from './ingestionQueueRecovery';
 
 const logger = createLogger('memory.ingestionQueue');
 
@@ -224,7 +228,8 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
     return { processed: false, skipped: 'slot_unavailable' };
   }
 
-  if (!claimIngestionJob(job.id, startedAt)) {
+  const claimToken = claimIngestionJob(job.id, startedAt);
+  if (!claimToken) {
     releaseIngestionSlot(job.id);
     return { processed: false, skipped: 'claim_lost' };
   }
@@ -242,29 +247,93 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
       taskId: job.taskId ?? undefined,
       graphGoalEvidence: input.graphGoalEvidence,
       sourceRunId: input.sourceRunId,
-      now: startedAt,
+      now: job.sourceAt,
       skipWorkingMemorySync: true,
+      canPersist: () => ownsIngestionClaim(job.id, claimToken, input.now ?? Date.now()),
+      commitPersistenceReceipt: (providerOutcome) => {
+        const receiptAt = input.now ?? Date.now();
+        if (providerOutcome.status === 'not_requested') {
+          return completeIngestionJob(
+            job.id,
+            'completed_structural',
+            'structural_only',
+            receiptAt,
+            claimToken,
+          );
+        }
+        if (providerOutcome.status === 'valid' || providerOutcome.status === 'empty_valid') {
+          return completeIngestionJob(
+            job.id,
+            'completed_enriched',
+            providerOutcome.status,
+            receiptAt,
+            claimToken,
+          );
+        }
+        return markIngestionJobStructuralComplete(job.id, receiptAt, claimToken);
+      },
     });
     if (turnResult.skipped === 'opt_out' || !canWriteLongTermMemory()) {
       discardIngestionJob(job.id);
       return { processed: false, skipped: 'opt_out' };
     }
-    const transitionAt = input.now ?? Date.now();
-    if (turnResult.processed) {
-      markIngestionJobStructuralComplete(job.id, transitionAt);
+    if (turnResult.skipped === 'claim_lost') {
+      recoverStaleIngestionJobs(input.now ?? Date.now());
+      return {
+        processed: false,
+        status: getIngestionJob(job.id)?.status,
+        skipped: 'claim_lost',
+      };
     }
-    const decision = classifyIngestionOutcome(turnResult, job.providerEnrichment);
+    const transitionAt = input.now ?? Date.now();
+    const receiptJob = getIngestionJob(job.id);
     let status: IngestionJobStatus;
-    if (decision.kind === 'complete') {
-      completeIngestionJob(job.id, decision.status, decision.providerOutcome, transitionAt);
-      status = decision.status;
+    if (
+      receiptJob?.status === 'completed_structural' ||
+      receiptJob?.status === 'completed_enriched'
+    ) {
+      status = receiptJob.status;
     } else {
-      status = retryOrCompleteIngestionJob({
-        jobId: job.id,
-        providerOutcome: decision.providerOutcome,
-        outcomeCode: decision.outcomeCode,
-        now: transitionAt,
-      });
+      if (
+        turnResult.processed &&
+        !markIngestionJobStructuralComplete(job.id, transitionAt, claimToken)
+      ) {
+        return {
+          processed: false,
+          status: getIngestionJob(job.id)?.status,
+          skipped: 'claim_lost',
+        };
+      }
+      const decision = classifyIngestionOutcome(turnResult, job.providerEnrichment);
+      if (decision.kind === 'complete') {
+        const completed = completeIngestionJob(
+          job.id,
+          decision.status,
+          decision.providerOutcome,
+          transitionAt,
+          claimToken,
+        );
+        if (!completed) {
+          return {
+            processed: false,
+            status: getIngestionJob(job.id)?.status,
+            skipped: 'claim_lost',
+          };
+        }
+        status = decision.status;
+      } else {
+        const transition = retryOrCompleteIngestionJob({
+          jobId: job.id,
+          providerOutcome: decision.providerOutcome,
+          outcomeCode: decision.outcomeCode,
+          now: transitionAt,
+          claimToken,
+        });
+        if (!transition.applied) {
+          return { processed: false, status: transition.status, skipped: 'claim_lost' };
+        }
+        status = transition.status;
+      }
     }
 
     if (turnResult.processed) {
@@ -294,14 +363,18 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
       return { processed: false, skipped: 'opt_out' };
     }
     const transitionAt = input.now ?? Date.now();
-    const status = retryOrCompleteIngestionJob({
+    const transition = retryOrCompleteIngestionJob({
       jobId: job.id,
       providerOutcome: null,
       outcomeCode: 'processing_error',
       now: transitionAt,
+      claimToken,
     });
+    if (!transition.applied) {
+      return { processed: false, status: transition.status, skipped: 'claim_lost' };
+    }
     logger.devWarn(`Ingestion job ${job.id} failed with processing_error`);
-    return { processed: false, status, skipped: 'processing_error' };
+    return { processed: false, status: transition.status, skipped: 'processing_error' };
   } finally {
     releaseIngestionSlot(job.id);
   }
@@ -335,6 +408,22 @@ export interface DrainIngestionQueueResult {
   failed: number;
 }
 
+function recordSourceDeferral(
+  result: DrainIngestionQueueResult,
+  jobId: string,
+  now: number,
+): void {
+  result.sourceDeferred += 1;
+  const transition = deferIngestionJobForMissingSource(jobId, now);
+  if (transition.applied && transition.status === 'retrying') {
+    result.retrying += 1;
+  } else if (transition.applied && transition.status === 'failed') {
+    result.failed += 1;
+  } else {
+    result.deferred += 1;
+  }
+}
+
 export async function drainIngestionQueue(
   input: DrainIngestionQueueInput,
 ): Promise<DrainIngestionQueueResult> {
@@ -352,13 +441,13 @@ export async function drainIngestionQueue(
   };
 
   const now = input.now ?? Date.now();
+  recoverStaleIngestionJobs(now);
   const jobs = listPendingIngestionJobs(input.maxJobs ?? INGESTION_BATCH_LIMIT, now);
   for (const job of jobs) {
     result.attempted += 1;
     const messages = input.loadMessagesForThread(job.threadId);
     if (messages.length === 0) {
-      result.deferred += 1;
-      result.sourceDeferred += 1;
+      recordSourceDeferral(result, job.id, now);
       continue;
     }
     const runtimeContext = input.loadRuntimeContextForJob?.(job) ?? {};
@@ -385,14 +474,16 @@ export async function drainIngestionQueue(
     } else if (processed.status === 'failed') {
       result.failed += 1;
     } else {
-      result.deferred += 1;
       if (processed.skipped === 'source_window_unavailable') {
-        result.sourceDeferred += 1;
+        recordSourceDeferral(result, job.id, now);
       } else if (
         processed.skipped === 'memory_pressure' ||
         processed.skipped === 'slot_unavailable'
       ) {
+        result.deferred += 1;
         result.resourceDeferred += 1;
+      } else {
+        result.deferred += 1;
       }
     }
   }

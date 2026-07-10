@@ -22,6 +22,10 @@ export interface ApplyConsolidatorResultOptions {
   sourceAssistantMessageId?: string;
   messages?: Message[];
   skipWorkingMemoryWrites?: boolean;
+  /** Evaluated inside the SQLite write transaction to fence stale queue owners. */
+  canPersist?: () => boolean;
+  /** Commits the source-bound queue receipt in the same transaction as memory writes. */
+  commitReceipt?: () => boolean;
 }
 
 export interface ApplyConsolidatorResultResult {
@@ -37,7 +41,16 @@ export function applyConsolidatorResult(
   result: ConsolidatorResult,
   options: ApplyConsolidatorResultOptions,
 ): ApplyConsolidatorResultResult {
-  return runMemoryTransaction(() => applyConsolidatorResultInTransaction(result, options));
+  return runMemoryTransaction(() => {
+    if (options.canPersist && !options.canPersist()) {
+      throw new Error('Memory persistence claim lost');
+    }
+    const persisted = applyConsolidatorResultInTransaction(result, options);
+    if (options.commitReceipt && !options.commitReceipt()) {
+      throw new Error('Memory persistence receipt rejected');
+    }
+    return persisted;
+  });
 }
 
 function applyConsolidatorResultInTransaction(

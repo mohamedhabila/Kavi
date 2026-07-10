@@ -67,6 +67,22 @@ beforeEach(() => {
   useChatStore.setState({ conversations: [] } as any);
 });
 
+afterEach(() => {
+  __resetIngestionQueueForTests();
+  closeMemoryDb();
+});
+
+async function waitForJobStatus(
+  jobId: string,
+  status: 'retrying' | 'completed_structural' | 'completed_enriched' | 'failed',
+): Promise<void> {
+  for (let round = 0; round < 50; round += 1) {
+    if (getIngestionJob(jobId)?.status === status) return;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  throw new Error(`Timed out waiting for ingestion job ${jobId} to become ${status}`);
+}
+
 describe('durable memory enrichment retries', () => {
   const messages: Message[] = [
     { id: 'u-1', role: 'user', content: 'Please remember the release follow-up.', timestamp: 1 },
@@ -94,6 +110,18 @@ describe('durable memory enrichment retries', () => {
       ],
     } as any);
     mockSendMessage.mockRejectedValue(new Error('timeout'));
+    useChatStore.setState({
+      conversations: [
+        {
+          id: 'conv-provider-fail',
+          title: 'Release hardening',
+          messages,
+          createdAt: 1,
+          updatedAt: 2,
+          agentRuns: [],
+        },
+      ],
+    } as any);
 
     const result = await recordCompletedTurnForMemory({
       threadId: 'conv-provider-fail',
@@ -104,11 +132,10 @@ describe('durable memory enrichment retries', () => {
 
     expect(result.processed).toBe(true);
     expect(result.enqueued).toBe(true);
-    const drain = await drainIngestionQueue({
-      loadMessagesForThread: (id) => (id === 'conv-provider-fail' ? messages : []),
-    });
-    expect(drain.retrying).toBe(1);
-    expect(drain.failed).toBe(0);
+    await waitForJobStatus(result.jobId!, 'retrying');
+    expect(getIngestionJob(result.jobId!)).toEqual(
+      expect.objectContaining({ status: 'retrying', outcomeCode: 'provider_request_failed' }),
+    );
     expect(listEpisodes({ threadId: 'conv-provider-fail' })).toHaveLength(1);
     expect(getConsolidationState('conv-provider-fail')).toBeNull();
     expect(
@@ -156,16 +183,25 @@ describe('durable memory enrichment retries', () => {
       },
     ];
     mockSendMessage.mockRejectedValueOnce(new Error('temporary timeout'));
+    useChatStore.setState({
+      conversations: [
+        {
+          id: 'conv-provider-retry',
+          title: 'Release artifact',
+          messages: retryMessages,
+          createdAt: 1,
+          updatedAt: 2,
+          agentRuns: [],
+        },
+      ],
+    } as any);
     const recorded = await recordCompletedTurnForMemory({
       threadId: 'conv-provider-retry',
       messages: retryMessages,
       now: 100,
     });
 
-    const firstDrain = await drainIngestionQueue({
-      loadMessagesForThread: () => retryMessages,
-      now: 100,
-    });
+    await waitForJobStatus(recorded.jobId!, 'retrying');
     const retryingJob = getIngestionJob(recorded.jobId!);
     const firstEpisode = listEpisodes({ threadId: 'conv-provider-retry' })[0]!;
     const firstFacts = listFacts({ originConversationId: 'conv-provider-retry', limit: 20 });
@@ -173,7 +209,6 @@ describe('durable memory enrichment retries', () => {
       'SELECT COUNT(*) AS count FROM memory_fact_evidence',
     )!.count;
 
-    expect(firstDrain.retrying).toBe(1);
     expect(retryingJob?.status).toBe('retrying');
     expect(firstFacts.some((fact) => fact.predicate === 'file_operation')).toBe(true);
 

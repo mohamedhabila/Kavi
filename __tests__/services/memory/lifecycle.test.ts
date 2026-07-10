@@ -36,7 +36,9 @@ import { executeMemoryRemember } from '../../../src/services/memory/memoryTools'
 import { listEpisodes } from '../../../src/services/memory/episodes/queries';
 import {
   drainIngestionQueue,
+  countPendingIngestionJobs,
   enqueueIngestionJob,
+  getIngestionJob,
   __resetIngestionQueueForTests,
 } from '../../../src/services/memory/ingestionQueue';
 import {
@@ -111,10 +113,14 @@ async function drainRecordedTurn(
   threadId: string,
   messages: Message[],
 ): Promise<Awaited<ReturnType<typeof drainIngestionQueue>>> {
-  return drainIngestionQueue({
+  const result = await drainIngestionQueue({
     loadMessagesForThread: (id) => (id === threadId ? messages : []),
     loadRuntimeContextForJob: loadIngestionJobRuntimeContext,
   });
+  for (let round = 0; round < 50 && countPendingIngestionJobs() > 0; round += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  return result;
 }
 
 describe('recordCompletedTurnForMemory', () => {
@@ -508,10 +514,10 @@ describe('recordCompletedTurnForMemory', () => {
       threadTitle: 'Structural acceptance flow',
       providerEnrichment: false,
     });
-    const drain = await drainRecordedTurn('conv-structural-only', messages);
+    await drainRecordedTurn('conv-structural-only', messages);
 
     expect(result.enqueued).toBe(true);
-    expect(drain.completed).toBe(1);
+    expect(getIngestionJob(result.jobId!)?.status).toBe('completed_structural');
     expect(mockSendMessage).not.toHaveBeenCalled();
     expect(getConsolidationState('conv-structural-only')?.lastConsolidatedMessageId).toBe('a-1');
   });

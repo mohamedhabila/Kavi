@@ -288,6 +288,9 @@ export async function recordCompletedTurnForMemory(
     threadTitle: input.threadTitle ?? conversation?.title ?? null,
     memoryConversationId,
     sourceEndMessageId: syncResult.sourceEndMessageId,
+    sourceAt:
+      input.messages.find((message) => message.id === syncResult.sourceEndMessageId)?.timestamp ??
+      input.now,
     sourceStartMessageId: syncResult.sourceStartMessageId,
     taskId: input.taskId ?? null,
     sourceRunId: sourceRunId ?? null,
@@ -298,7 +301,8 @@ export async function recordCompletedTurnForMemory(
   });
 
   scheduleIngestionDrain({
-    loadMessagesForThread,
+    loadMessagesForThread: (candidateThreadId) =>
+      candidateThreadId === threadId ? input.messages : loadMessagesForThread(candidateThreadId),
     loadRuntimeContextForJob: loadIngestionJobRuntimeContext,
   });
 

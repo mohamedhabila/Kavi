@@ -22,6 +22,7 @@ function createDurableIngestionJobsTable(
       chat_model TEXT,
       source_start_message_id TEXT,
       source_end_message_id TEXT NOT NULL,
+      source_at INTEGER NOT NULL,
       reason TEXT NOT NULL DEFAULT 'turn_completed',
       status TEXT NOT NULL DEFAULT 'pending'
         CHECK(status IN (
@@ -58,10 +59,12 @@ function createDurableIngestionJobsTable(
           'unsupported_response_shape',
           'processing_incomplete',
           'processing_error',
+          'source_window_unavailable',
           'stale_processing_lease'
         )),
       next_attempt_at INTEGER,
       lease_expires_at INTEGER,
+      claim_token TEXT,
       structural_completed_at INTEGER,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
@@ -71,7 +74,13 @@ function createDurableIngestionJobsTable(
         OR structural_completed_at IS NOT NULL
       ),
       CHECK(status != 'failed' OR structural_completed_at IS NULL),
-      CHECK(chat_provider_id IS NOT NULL OR chat_model IS NULL)
+      CHECK(chat_provider_id IS NOT NULL OR chat_model IS NULL),
+      CHECK(source_at >= 0),
+      CHECK(claim_token IS NULL OR LENGTH(TRIM(claim_token)) > 0),
+      CHECK(
+        (status = 'processing' AND claim_token IS NOT NULL AND lease_expires_at IS NOT NULL)
+        OR (status != 'processing' AND claim_token IS NULL AND lease_expires_at IS NULL)
+      )
     );
   `);
 }
@@ -98,8 +107,10 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
     'outcome_code',
     'next_attempt_at',
     'lease_expires_at',
+    'claim_token',
     'structural_completed_at',
     'thread_title',
+    'source_at',
     'source_run_id',
     'chat_provider_id',
     'chat_model',
@@ -120,8 +131,10 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
   ensureColumn(db, 'outcome_code', 'outcome_code TEXT');
   ensureColumn(db, 'next_attempt_at', 'next_attempt_at INTEGER');
   ensureColumn(db, 'lease_expires_at', 'lease_expires_at INTEGER');
+  ensureColumn(db, 'claim_token', 'claim_token TEXT');
   ensureColumn(db, 'structural_completed_at', 'structural_completed_at INTEGER');
   ensureColumn(db, 'thread_title', 'thread_title TEXT');
+  ensureColumn(db, 'source_at', 'source_at INTEGER');
   ensureColumn(db, 'source_run_id', 'source_run_id TEXT');
   ensureColumn(db, 'chat_provider_id', 'chat_provider_id TEXT');
   ensureColumn(db, 'chat_model', 'chat_model TEXT');
@@ -134,9 +147,9 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
       INSERT INTO ${DURABLE_INGESTION_JOBS_TABLE} (
         id, thread_id, thread_title, memory_conversation_id, task_id, source_run_id,
         chat_provider_id, chat_model,
-        source_start_message_id, source_end_message_id, reason, status,
+        source_start_message_id, source_end_message_id, source_at, reason, status,
         attempt_count, provider_enrichment, provider_outcome, outcome_code,
-        next_attempt_at, lease_expires_at, structural_completed_at,
+        next_attempt_at, lease_expires_at, claim_token, structural_completed_at,
         created_at, updated_at, completed_at
       )
       SELECT
@@ -150,6 +163,7 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
         CASE WHEN chat_provider_id IS NOT NULL THEN chat_model ELSE NULL END,
         source_start_message_id,
         source_end_message_id,
+        COALESCE(source_at, created_at),
         reason,
         CASE
           WHEN status = 'completed' THEN 'completed_structural'
@@ -195,6 +209,7 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
             'unsupported_response_shape',
             'processing_incomplete',
             'processing_error',
+            'source_window_unavailable',
             'stale_processing_lease'
           ) THEN outcome_code
           ELSE NULL
@@ -204,6 +219,7 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
           WHEN status = 'processing' AND attempt_count < 5 THEN updated_at
           ELSE NULL
         END,
+        NULL,
         NULL,
         CASE
           WHEN status IN (

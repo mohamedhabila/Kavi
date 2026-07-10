@@ -12,11 +12,13 @@ import type { MemoryFactScope } from './facts/types';
 type MemoryOptOutHandler = () => void;
 
 const optOutHandlers = new Set<MemoryOptOutHandler>();
+let memoryPolicyEpoch = 0;
 
 useSettingsStore.subscribe((state, previousState) => {
   if (state.disableLongTermMemory !== true || previousState.disableLongTermMemory === true) {
     return;
   }
+  memoryPolicyEpoch += 1;
   for (const handler of optOutHandlers) {
     try {
       handler();
@@ -50,6 +52,15 @@ export function canWriteLongTermMemory(context: MemoryPolicyContext = {}): boole
 
 export function canUseNetworkMemoryProvider(context: MemoryPolicyContext = {}): boolean {
   return isLongTermMemoryEnabled(context);
+}
+
+/** Monotonic cancellation epoch; an opt-out invalidates work started in any earlier epoch. */
+export function getMemoryPolicyEpoch(): number {
+  return memoryPolicyEpoch;
+}
+
+export function isMemoryPolicyEpochCurrent(epoch: number): boolean {
+  return epoch === memoryPolicyEpoch && canWriteLongTermMemory();
 }
 
 export function registerMemoryOptOutHandler(handler: MemoryOptOutHandler): () => void {

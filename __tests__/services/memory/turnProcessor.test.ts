@@ -225,37 +225,6 @@ describe('processIngestionTurn', () => {
     expect(result.skipped).toBe('no_closed_turn');
   });
 
-  it('does not persist when the user opts out while provider enrichment is in flight', async () => {
-    mockExtractProviderEnrichment.mockImplementationOnce(async () => {
-      useSettingsStore.getState().setDisableLongTermMemory(true);
-      return {
-        status: 'valid',
-        result: {
-          episodeSummary: 'Must not persist.',
-          newFacts: [],
-          activeFocus: null,
-          openThreads: [],
-          notable: [],
-        },
-      };
-    });
-    const messages = [
-      makeMsg({ id: 'user-opt-out', role: 'user', content: 'Remember this.' }),
-      makeMsg({ id: 'assistant-opt-out', role: 'assistant', content: 'Okay.' }),
-    ];
-
-    const result = await processIngestionTurn({
-      threadId: 'conv-opt-out',
-      messages,
-      extractor: jest.fn(),
-    });
-
-    expect(result).toEqual(expect.objectContaining({ processed: false, skipped: 'opt_out' }));
-    expect(mockApplyConsolidatorResult).not.toHaveBeenCalled();
-    expect(mockUpsertState).not.toHaveBeenCalled();
-    useSettingsStore.getState().setDisableLongTermMemory(false);
-  });
-
   it('returns processed=false when the only assistant message is a placeholder', async () => {
     const messages: Message[] = [
       makeMsg({ role: 'user', content: 'Hello' }),
