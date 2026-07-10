@@ -97,6 +97,7 @@ export function useAgentRunFinalResponse({
           if (hasDeliveredFinalAssistantResponse(conversation.messages, runMessageScope)) {
             recordConversationTurnMemory(params.conversationId, memoryProvider, {
               memoryConversationId: params.memoryConversationId,
+              sourceRunId: params.runId,
             });
             return existingPreview;
           }
@@ -124,6 +125,7 @@ export function useAgentRunFinalResponse({
           if (preferredPreview) {
             recordConversationTurnMemory(params.conversationId, memoryProvider, {
               memoryConversationId: params.memoryConversationId,
+              sourceRunId: params.runId,
             });
             return preferredPreview;
           }
@@ -207,6 +209,7 @@ export function useAgentRunFinalResponse({
 
           recordConversationTurnMemory(params.conversationId, memoryProvider, {
             memoryConversationId: params.memoryConversationId,
+            sourceRunId: params.runId,
           });
 
           return preview;

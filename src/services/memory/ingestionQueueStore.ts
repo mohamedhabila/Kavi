@@ -49,8 +49,12 @@ export type IngestionOutcomeCode =
 export interface IngestionJob {
   id: string;
   threadId: string;
+  threadTitle: string | null;
   memoryConversationId: string;
   taskId: string | null;
+  sourceRunId: string | null;
+  chatProviderId: string | null;
+  chatModel: string | null;
   sourceStartMessageId: string | null;
   sourceEndMessageId: string;
   reason: IngestionJobReason;
@@ -70,8 +74,12 @@ export interface IngestionJob {
 interface IngestionJobRow {
   id: string;
   thread_id: string;
-  memory_conversation_id?: string | null;
+  thread_title: string | null;
+  memory_conversation_id: string;
   task_id: string | null;
+  source_run_id: string | null;
+  chat_provider_id: string | null;
+  chat_model: string | null;
   source_start_message_id: string | null;
   source_end_message_id: string;
   reason: string;
@@ -90,12 +98,15 @@ interface IngestionJobRow {
 
 function rowToJob(row: IngestionJobRow): IngestionJob {
   const threadId = row.thread_id;
-  const memoryConversationId = row.memory_conversation_id?.trim() || threadId;
   return {
     id: row.id,
     threadId,
-    memoryConversationId,
+    threadTitle: row.thread_title,
+    memoryConversationId: row.memory_conversation_id,
     taskId: row.task_id,
+    sourceRunId: row.source_run_id,
+    chatProviderId: row.chat_provider_id,
+    chatModel: row.chat_model,
     sourceStartMessageId: row.source_start_message_id,
     sourceEndMessageId: row.source_end_message_id,
     reason: row.reason as IngestionJobReason,
@@ -115,10 +126,14 @@ function rowToJob(row: IngestionJobRow): IngestionJob {
 
 export interface EnqueueIngestionJobInput {
   threadId: string;
+  threadTitle?: string | null;
   memoryConversationId?: string | null;
   sourceEndMessageId: string;
   sourceStartMessageId?: string | null;
   taskId?: string | null;
+  sourceRunId?: string | null;
+  chatProviderId?: string | null;
+  chatModel?: string | null;
   reason?: IngestionJobReason;
   providerEnrichment?: boolean;
   now?: number;
@@ -131,6 +146,12 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
   const threadId = input.threadId.trim();
   const memoryConversationId = input.memoryConversationId?.trim() || threadId;
   const sourceEndMessageId = input.sourceEndMessageId.trim();
+  const threadTitle = input.threadTitle?.trim() || null;
+  const sourceStartMessageId = input.sourceStartMessageId?.trim() || null;
+  const taskId = input.taskId?.trim() || null;
+  const sourceRunId = input.sourceRunId?.trim() || null;
+  const chatProviderId = input.chatProviderId?.trim() || null;
+  const chatModel = chatProviderId ? input.chatModel?.trim() || null : null;
   if (!threadId || !sourceEndMessageId) return null;
 
   const duplicate = db.getFirstSync<IngestionJobRow>(
@@ -146,15 +167,20 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
   const id = newId('ingest');
   const inserted = db.runSync(
     `INSERT OR IGNORE INTO memory_ingestion_jobs
-       (id, thread_id, memory_conversation_id, task_id, source_start_message_id, source_end_message_id,
+       (id, thread_id, thread_title, memory_conversation_id, task_id, source_run_id,
+        chat_provider_id, chat_model, source_start_message_id, source_end_message_id,
         reason, status, attempt_count, provider_enrichment, provider_outcome, outcome_code,
         next_attempt_at, lease_expires_at, structural_completed_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, NULL, NULL, ?, NULL, NULL, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, NULL, NULL, ?, NULL, NULL, ?, ?)`,
     id,
     threadId,
+    threadTitle,
     memoryConversationId,
-    input.taskId ?? null,
-    input.sourceStartMessageId ?? null,
+    taskId,
+    sourceRunId,
+    chatProviderId,
+    chatModel,
+    sourceStartMessageId,
     sourceEndMessageId,
     input.reason ?? 'turn_completed',
     input.providerEnrichment === false ? 0 : 1,
@@ -175,9 +201,13 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
   return rowToJob({
     id,
     thread_id: threadId,
+    thread_title: threadTitle,
     memory_conversation_id: memoryConversationId,
-    task_id: input.taskId ?? null,
-    source_start_message_id: input.sourceStartMessageId ?? null,
+    task_id: taskId,
+    source_run_id: sourceRunId,
+    chat_provider_id: chatProviderId,
+    chat_model: chatModel,
+    source_start_message_id: sourceStartMessageId,
     source_end_message_id: sourceEndMessageId,
     reason: input.reason ?? 'turn_completed',
     status: 'pending',
@@ -202,6 +232,35 @@ export function countPendingIngestionJobs(): number {
       WHERE status IN ('pending', 'processing', 'retrying')`,
   );
   return Math.max(0, row?.count ?? 0);
+}
+
+export function getNextPendingIngestionAttemptAt(): number | null {
+  ensureFactSchema();
+  const row = getMemoryDb().getFirstSync<{ next_attempt_at: number | null }>(
+    `SELECT MIN(next_attempt_at) AS next_attempt_at
+       FROM memory_ingestion_jobs
+      WHERE status IN ('pending', 'retrying')`,
+  );
+  return row?.next_attempt_at ?? null;
+}
+
+export function discardPendingIngestionJobs(): number {
+  ensureFactSchema();
+  const result = getMemoryDb().runSync(
+    `DELETE FROM memory_ingestion_jobs
+      WHERE status IN ('pending', 'processing', 'retrying')`,
+  );
+  return Math.max(0, result.changes ?? 0);
+}
+
+export function discardIngestionJob(jobId: string): boolean {
+  ensureFactSchema();
+  const result = getMemoryDb().runSync(
+    `DELETE FROM memory_ingestion_jobs
+      WHERE id = ? AND status IN ('pending', 'processing', 'retrying')`,
+    jobId,
+  );
+  return (result.changes ?? 0) === 1;
 }
 
 export function countCompletedIngestionJobsForThread(threadId: string): number {
@@ -317,12 +376,57 @@ export function markIngestionJobStructuralComplete(jobId: string, now: number): 
   );
 }
 
+function reconcileStructuralCompletion(jobId: string): void {
+  getMemoryDb().runSync(
+    `UPDATE memory_ingestion_jobs
+        SET structural_completed_at = COALESCE(
+          structural_completed_at,
+          (
+            SELECT episode.created_at
+              FROM memory_episodes AS episode
+             WHERE episode.deleted_at IS NULL
+               AND episode.conversation_id = memory_ingestion_jobs.memory_conversation_id
+               AND episode.thread_id = memory_ingestion_jobs.thread_id
+               AND episode.source_end_message_id = memory_ingestion_jobs.source_end_message_id
+             LIMIT 1
+          ),
+          (
+            SELECT fact.created_at
+              FROM memory_facts AS fact
+             WHERE fact.invalid_at IS NULL
+               AND fact.deleted_at IS NULL
+               AND fact.origin_conversation_id = memory_ingestion_jobs.memory_conversation_id
+               AND fact.origin_thread_id = memory_ingestion_jobs.thread_id
+               AND (
+                 fact.source_turn_id = memory_ingestion_jobs.source_end_message_id
+                 OR fact.source_message_id = memory_ingestion_jobs.source_end_message_id
+               )
+             LIMIT 1
+          ),
+          (
+            SELECT evidence.created_at
+              FROM memory_fact_evidence AS evidence
+              JOIN memory_facts AS fact ON fact.id = evidence.fact_id
+             WHERE fact.invalid_at IS NULL
+               AND fact.deleted_at IS NULL
+               AND fact.origin_conversation_id = memory_ingestion_jobs.memory_conversation_id
+               AND fact.origin_thread_id = memory_ingestion_jobs.thread_id
+               AND evidence.message_id = memory_ingestion_jobs.source_end_message_id
+             LIMIT 1
+          )
+        )
+      WHERE id = ? AND status = 'processing'`,
+    jobId,
+  );
+}
+
 export function retryOrCompleteIngestionJob(input: {
   jobId: string;
   providerOutcome: IngestionProviderOutcome | null;
   outcomeCode: IngestionOutcomeCode;
   now: number;
 }): IngestionJobStatus {
+  reconcileStructuralCompletion(input.jobId);
   const current = getMemoryDb().getFirstSync<{
     attempt_count: number;
     status: string;

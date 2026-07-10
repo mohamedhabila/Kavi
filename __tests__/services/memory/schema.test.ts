@@ -172,14 +172,23 @@ describe('ensureFactSchema', () => {
 
     expect(indexNames('memory_ingestion_jobs').sort()).toEqual(freshIndexes);
     expect(columnNames('memory_ingestion_jobs')).toEqual(
-      expect.arrayContaining([
-        'provider_outcome',
+        expect.arrayContaining([
+          'thread_title',
+          'provider_outcome',
         'outcome_code',
         'next_attempt_at',
         'lease_expires_at',
         'structural_completed_at',
+        'source_run_id',
+        'chat_provider_id',
+        'chat_model',
       ]),
     );
+    expect(
+      getMemoryDb()
+        .getAllSync<{ name: string; notnull: number }>('PRAGMA table_info(memory_ingestion_jobs)')
+        .find((column) => column.name === 'memory_conversation_id')?.notnull,
+    ).toBe(1);
     expect(columnNames('memory_ingestion_jobs')).not.toContain('error');
     expect(
       getMemoryDb().getAllSync<{
@@ -234,6 +243,14 @@ describe('ensureFactSchema', () => {
     expect(() =>
       getMemoryDb().runSync(
         "UPDATE memory_ingestion_jobs SET status = 'completed_structural' WHERE id = 'pending-job'",
+      ),
+    ).toThrow();
+    expect(() =>
+      getMemoryDb().runSync(
+        `INSERT INTO memory_ingestion_jobs (
+           id, thread_id, memory_conversation_id, source_end_message_id,
+           created_at, updated_at
+         ) VALUES ('invalid-null-memory', 'thread-null', NULL, 'assistant-null', 1, 1)`,
       ),
     ).toThrow();
   });

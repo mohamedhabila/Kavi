@@ -41,6 +41,7 @@ import {
 } from '../../../src/services/memory/ingestionQueue';
 import {
   __resetMemoryLifecycleForTests,
+  loadIngestionJobRuntimeContext,
   recordCompletedTurnForMemory,
   runMemoryBackgroundFlush,
   runMemoryMigrationTick,
@@ -112,6 +113,7 @@ async function drainRecordedTurn(
 ): Promise<Awaited<ReturnType<typeof drainIngestionQueue>>> {
   return drainIngestionQueue({
     loadMessagesForThread: (id) => (id === threadId ? messages : []),
+    loadRuntimeContextForJob: loadIngestionJobRuntimeContext,
   });
 }
 

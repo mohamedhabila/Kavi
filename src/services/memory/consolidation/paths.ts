@@ -33,6 +33,11 @@ export interface ResolvedConsolidationPath {
   extractor: ConsolidatorExtractor | null;
 }
 
+export interface ConsolidationPathOptions {
+  /** Do not substitute mutable global chat settings when a queued turn lost its provider. */
+  requireExplicitChatProvider?: boolean;
+}
+
 export function extractConsolidationAssistantText(response: unknown): string {
   if (typeof response === 'string') return response;
   if (!response || typeof response !== 'object') {
@@ -92,12 +97,15 @@ function findFirstOnDeviceProvider(
 async function resolveProviderPath(
   provider: LlmProviderConfig,
   tier: ConsolidationProviderTier,
+  requestedModel?: string,
 ): Promise<ResolvedConsolidationPath> {
   const settings = useSettingsStore.getState();
-  const model = resolveConversationModel(provider, {
-    activeProviderId: settings.activeProviderId,
-    activeModel: settings.activeModel,
-  });
+  const model =
+    requestedModel?.trim() ||
+    resolveConversationModel(provider, {
+      activeProviderId: settings.activeProviderId,
+      activeModel: settings.activeModel,
+    });
   if (!model) {
     return { tier: 'deterministic', provider: null, model: null, extractor: null };
   }
@@ -116,6 +124,7 @@ function resolveDeterministicPath(): ResolvedConsolidationPath {
 
 export async function resolveConsolidationPath(
   activeChatProvider?: LlmProviderConfig,
+  options: ConsolidationPathOptions = {},
 ): Promise<ResolvedConsolidationPath> {
   if (isE2EAgentEvalRuntime() && !activeChatProvider) {
     return resolveDeterministicPath();
@@ -153,9 +162,11 @@ export async function resolveConsolidationPath(
   if (mode === 'active_provider') {
     const chatProvider =
       activeChatProvider ??
-      findEnabledProvider(settings.providers, settings.activeProviderId ?? '');
+      (options.requireExplicitChatProvider
+        ? null
+        : findEnabledProvider(settings.providers, settings.activeProviderId ?? ''));
     if (chatProvider) {
-      return resolveProviderPath(chatProvider, 'chat');
+      return resolveProviderPath(chatProvider, 'chat', activeChatProvider?.model);
     }
     return resolveDeterministicPath();
   }
@@ -172,9 +183,12 @@ export async function resolveConsolidationPath(
   }
 
   const chatProvider =
-    activeChatProvider ?? findEnabledProvider(settings.providers, settings.activeProviderId ?? '');
+    activeChatProvider ??
+    (options.requireExplicitChatProvider
+      ? null
+      : findEnabledProvider(settings.providers, settings.activeProviderId ?? ''));
   if (chatProvider) {
-    return resolveProviderPath(chatProvider, 'chat');
+    return resolveProviderPath(chatProvider, 'chat', activeChatProvider?.model);
   }
 
   return resolveDeterministicPath();

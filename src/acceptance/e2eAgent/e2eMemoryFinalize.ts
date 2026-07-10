@@ -56,7 +56,12 @@ export async function finalizeE2EScenarioTurnMemory(params: {
 
   await drainIngestionQueue({
     loadMessagesForThread: () => normalizedMessages,
-    threadTitle: params.threadTitle,
-    activeChatProvider: activeMemoryProvider,
+    loadRuntimeContextForJob: () => ({
+      threadTitle: params.threadTitle,
+      activeChatProvider: activeMemoryProvider,
+      graphGoalEvidence: Array.from(
+        new Set((params.graphState?.goals ?? []).flatMap((goal) => goal.evidence)),
+      ),
+    }),
   });
 }

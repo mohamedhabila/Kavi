@@ -11,7 +11,6 @@
 // None of these calls ever throw out of the lifecycle hook.
 // ---------------------------------------------------------------------------
 
-import { resolveGraphTaskId } from '../../engine/goals/graphTaskScope';
 import { useChatStore } from '../../store/useChatStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import type { Conversation } from '../../types/conversation';
@@ -19,16 +18,18 @@ import type { Message } from '../../types/message';
 import type { LlmProviderConfig } from '../../types/provider';
 import { createLogger } from '../../utils/logger';
 import {
-  drainIngestionQueue,
+  drainIngestionQueueWithWakeup,
   enqueueIngestionJob,
   scheduleIngestionDrain,
-  type GraphGoalEvidenceContext,
+  type IngestionJob,
+  type IngestionJobRuntimeContext,
 } from './ingestionQueue';
 import { runMigrationSeedPass, type RunSeedPassResult } from './migrationSeedPass';
 import { resolveConsolidationExtractor } from './consolidation/turnPipeline';
 import { syncWorkingMemoryFromTurn } from './turnProcessor';
 import { editWorkingBlock, getWorkingBlock } from './workingBlocks';
 import { ACTIVE_FOCUS_MEMORY_CHAR_LIMIT, composeActiveFocusContent } from './focus';
+import { resolveConversationModel } from '../llm/support/providerSupport';
 
 const logger = createLogger('memory.lifecycle');
 
@@ -54,36 +55,51 @@ function loadMessagesForThread(threadId: string): Message[] {
   return conversation?.messages ?? [];
 }
 
-function resolveActiveMemoryChatProvider(): LlmProviderConfig | undefined {
-  const settings = useSettingsStore.getState();
-  const activeProviderId = settings.activeProviderId?.trim();
-  if (!activeProviderId) return undefined;
-  return settings.providers.find(
-    (provider) => provider.id === activeProviderId && provider.enabled,
-  );
+function findConversation(threadId: string): Conversation | undefined {
+  return useChatStore.getState().conversations.find((entry: Conversation) => entry.id === threadId);
 }
 
-export function loadGraphGoalEvidenceContext(threadId: string): GraphGoalEvidenceContext {
-  const conversation = useChatStore
-    .getState()
-    .conversations.find((entry: Conversation) => entry.id === threadId);
-  if (!conversation) {
-    return { evidence: [] };
-  }
-
-  const latestRun = [...(conversation.agentRuns ?? [])].sort(
-    (left, right) => right.updatedAt - left.updatedAt,
-  )[0];
-  const goals = latestRun?.controlGraph?.goals ?? [];
-  const taskId = resolveGraphTaskId({
-    goals,
-    activeTaskId: latestRun?.controlGraph?.activeTaskId,
+function resolveActiveMemoryChatProvider(
+  conversation?: Conversation,
+): LlmProviderConfig | undefined {
+  const settings = useSettingsStore.getState();
+  const providerId = conversation?.providerId?.trim() || settings.activeProviderId?.trim();
+  if (!providerId) return undefined;
+  const provider = settings.providers.find(
+    (candidate) => candidate.id === providerId && candidate.enabled,
+  );
+  if (!provider) return undefined;
+  const model = resolveConversationModel(provider, {
+    conversationModel: conversation?.modelOverride,
+    activeProviderId: settings.activeProviderId,
+    activeModel: settings.activeModel,
   });
+  return model ? { ...provider, model } : provider;
+}
+
+export function loadIngestionJobRuntimeContext(job: IngestionJob): IngestionJobRuntimeContext {
+  const conversation = findConversation(job.threadId);
+  const sourceRun = job.sourceRunId
+    ? conversation?.agentRuns?.find((run) => run.id === job.sourceRunId)
+    : undefined;
+  const goals = sourceRun?.controlGraph?.goals ?? [];
+  const provider = job.chatProviderId
+    ? useSettingsStore
+        .getState()
+        .providers.find((candidate) => candidate.id === job.chatProviderId && candidate.enabled)
+    : undefined;
 
   return {
-    evidence: Array.from(new Set(goals.flatMap((goal) => goal.evidence))),
-    ...(latestRun?.id ? { sourceRunId: latestRun.id } : {}),
-    ...(taskId ? { taskId } : {}),
+    ...(job.threadTitle ? { threadTitle: job.threadTitle } : {}),
+    ...(provider
+      ? { activeChatProvider: job.chatModel ? { ...provider, model: job.chatModel } : provider }
+      : {}),
+    ...(job.sourceRunId ? { sourceRunId: job.sourceRunId } : {}),
+    ...(sourceRun
+      ? {
+          graphGoalEvidence: Array.from(new Set(goals.flatMap((goal) => goal.evidence))),
+        }
+      : {}),
   };
 }
 
@@ -137,10 +153,9 @@ export async function runMemoryBackgroundFlush(): Promise<void> {
   const settings = useSettingsStore.getState();
   if (settings.disableLongTermMemory) return;
 
-  await drainIngestionQueue({
+  await drainIngestionQueueWithWakeup({
     loadMessagesForThread,
-    loadGraphGoalEvidenceForThread: loadGraphGoalEvidenceContext,
-    activeChatProvider: resolveActiveMemoryChatProvider(),
+    loadRuntimeContextForJob: loadIngestionJobRuntimeContext,
   });
 }
 
@@ -155,6 +170,7 @@ export interface RecordCompletedTurnForMemoryInput {
   activeChatProvider?: LlmProviderConfig;
   providerEnrichment?: boolean;
   taskId?: string;
+  sourceRunId?: string;
   now?: number;
 }
 
@@ -233,6 +249,10 @@ export async function recordCompletedTurnForMemory(
 
   const threadId = input.threadId.trim();
   const memoryConversationId = input.memoryConversationId?.trim() || threadId;
+  const conversation = findConversation(threadId);
+  const sourceRunId =
+    input.sourceRunId?.trim() || conversation?.activeAgentRunId?.trim() || undefined;
+  const chatProvider = input.activeChatProvider ?? resolveActiveMemoryChatProvider(conversation);
 
   const conversationFocusUpdated = syncConversationFocusFromThreadTitle({
     memoryConversationId,
@@ -265,22 +285,22 @@ export async function recordCompletedTurnForMemory(
 
   const job = enqueueIngestionJob({
     threadId: input.threadId,
+    threadTitle: input.threadTitle ?? conversation?.title ?? null,
     memoryConversationId,
     sourceEndMessageId: syncResult.sourceEndMessageId,
     sourceStartMessageId: syncResult.sourceStartMessageId,
     taskId: input.taskId ?? null,
+    sourceRunId: sourceRunId ?? null,
+    chatProviderId: chatProvider?.id ?? null,
+    chatModel: chatProvider?.model ?? null,
     providerEnrichment: input.providerEnrichment,
     now: input.now,
   });
 
-  scheduleIngestionDrain(
+  scheduleIngestionDrain({
     loadMessagesForThread,
-    loadGraphGoalEvidenceContext,
-    input.providerEnrichment === false
-      ? undefined
-      : (input.activeChatProvider ?? resolveActiveMemoryChatProvider()),
-    input.threadTitle,
-  );
+    loadRuntimeContextForJob: loadIngestionJobRuntimeContext,
+  });
 
   return {
     processed: true,

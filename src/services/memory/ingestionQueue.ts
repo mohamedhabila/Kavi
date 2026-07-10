@@ -9,13 +9,18 @@
 import type { Message } from '../../types/message';
 import type { LlmProviderConfig } from '../../types/provider';
 import { createLogger } from '../../utils/logger';
+import { unrefTimerIfSupported } from '../../utils/timers';
 import { runConsolidation } from './consolidation/orchestrator';
 import { sliceClosedTurnMessages } from './deterministicExtractor';
 import { composeActiveFocusContent } from './focus';
 import {
   claimIngestionJob,
   completeIngestionJob,
+  discardIngestionJob,
+  discardPendingIngestionJobs,
   getIngestionJob,
+  getNextPendingIngestionAttemptAt,
+  INGESTION_RETRY_BASE_DELAY_MS,
   listPendingIngestionJobs,
   markIngestionJobStructuralComplete,
   recoverStaleIngestionJobs,
@@ -33,6 +38,7 @@ import {
   releaseIngestionSlot,
   shouldAbortIngestionDueToMemoryPressure,
 } from './onDeviceGuards';
+import { canWriteLongTermMemory, registerMemoryOptOutHandler } from './policy';
 import { refreshThreadReflection } from './reflections';
 import type { ProcessTurnResult } from './turnProcessor';
 import { editWorkingBlock, getWorkingBlock } from './workingBlocks';
@@ -41,9 +47,11 @@ export {
   computeNextIngestionAttemptAt,
   countCompletedIngestionJobsForThread,
   countPendingIngestionJobs,
+  discardPendingIngestionJobs,
   enqueueIngestionJob,
   getIngestionJob,
   getIngestionQueueDiagnostics,
+  getNextPendingIngestionAttemptAt,
   INGESTION_PROCESSING_LEASE_MS,
   INGESTION_RETRY_BASE_DELAY_MS,
   INGESTION_RETRY_MAX_DELAY_MS,
@@ -186,10 +194,15 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
     | 'slot_unavailable'
     | 'not_due'
     | 'claim_lost'
-    | 'processing_error';
+    | 'processing_error'
+    | 'opt_out';
 }> {
-  const now = input.now ?? Date.now();
-  recoverStaleIngestionJobs(now);
+  const startedAt = input.now ?? Date.now();
+  if (!canWriteLongTermMemory()) {
+    discardIngestionJob(input.jobId);
+    return { processed: false, skipped: 'opt_out' };
+  }
+  recoverStaleIngestionJobs(startedAt);
   const job = getIngestionJob(input.jobId);
   if (
     !job ||
@@ -197,7 +210,7 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
   ) {
     return { processed: false, skipped: 'missing_or_terminal' };
   }
-  if (job.status === 'processing' || (job.nextAttemptAt ?? Number.POSITIVE_INFINITY) > now) {
+  if (job.status === 'processing' || (job.nextAttemptAt ?? Number.POSITIVE_INFINITY) > startedAt) {
     return { processed: false, status: job.status, skipped: 'not_due' };
   }
   const sourceWindow = resolveJobSourceWindow(job, input.messages);
@@ -211,7 +224,7 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
     return { processed: false, skipped: 'slot_unavailable' };
   }
 
-  if (!claimIngestionJob(job.id, now)) {
+  if (!claimIngestionJob(job.id, startedAt)) {
     releaseIngestionSlot(job.id);
     return { processed: false, skipped: 'claim_lost' };
   }
@@ -224,27 +237,33 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
       threadTitle: input.threadTitle,
       personaSummary: input.personaSummary,
       activeChatProvider: job.providerEnrichment ? input.activeChatProvider : undefined,
+      requireExplicitChatProvider: Boolean(job.chatProviderId),
       ...(job.providerEnrichment ? {} : { extractor: null }),
       taskId: job.taskId ?? undefined,
       graphGoalEvidence: input.graphGoalEvidence,
       sourceRunId: input.sourceRunId,
-      now,
+      now: startedAt,
       skipWorkingMemorySync: true,
     });
+    if (turnResult.skipped === 'opt_out' || !canWriteLongTermMemory()) {
+      discardIngestionJob(job.id);
+      return { processed: false, skipped: 'opt_out' };
+    }
+    const transitionAt = input.now ?? Date.now();
     if (turnResult.processed) {
-      markIngestionJobStructuralComplete(job.id, now);
+      markIngestionJobStructuralComplete(job.id, transitionAt);
     }
     const decision = classifyIngestionOutcome(turnResult, job.providerEnrichment);
     let status: IngestionJobStatus;
     if (decision.kind === 'complete') {
-      completeIngestionJob(job.id, decision.status, decision.providerOutcome, now);
+      completeIngestionJob(job.id, decision.status, decision.providerOutcome, transitionAt);
       status = decision.status;
     } else {
       status = retryOrCompleteIngestionJob({
         jobId: job.id,
         providerOutcome: decision.providerOutcome,
         outcomeCode: decision.outcomeCode,
-        now,
+        now: transitionAt,
       });
     }
 
@@ -253,7 +272,7 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
         preserveThreadTitleFocus({
           memoryConversationId: job.memoryConversationId,
           threadTitle: input.threadTitle,
-          now,
+          now: transitionAt,
         });
       } catch {
         logger.devWarn(`Ingestion job ${job.id} focus refresh skipped`);
@@ -262,7 +281,7 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
         refreshThreadReflection({
           threadId: job.memoryConversationId,
           taskId: job.taskId,
-          now,
+          now: transitionAt,
         });
       } catch {
         logger.devWarn(`Ingestion job ${job.id} reflection refresh skipped`);
@@ -270,11 +289,16 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
     }
     return { processed: turnResult.processed, status };
   } catch {
+    if (!canWriteLongTermMemory()) {
+      discardIngestionJob(job.id);
+      return { processed: false, skipped: 'opt_out' };
+    }
+    const transitionAt = input.now ?? Date.now();
     const status = retryOrCompleteIngestionJob({
       jobId: job.id,
       providerOutcome: null,
       outcomeCode: 'processing_error',
-      now,
+      now: transitionAt,
     });
     logger.devWarn(`Ingestion job ${job.id} failed with processing_error`);
     return { processed: false, status, skipped: 'processing_error' };
@@ -283,17 +307,17 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
   }
 }
 
-export interface GraphGoalEvidenceContext {
-  evidence: string[];
+export interface IngestionJobRuntimeContext {
+  threadTitle?: string;
+  personaSummary?: string;
+  activeChatProvider?: LlmProviderConfig;
+  graphGoalEvidence?: string[];
   sourceRunId?: string;
-  taskId?: string;
 }
 
 export interface DrainIngestionQueueInput {
   loadMessagesForThread: (threadId: string) => Message[];
-  loadGraphGoalEvidenceForThread?: (threadId: string) => GraphGoalEvidenceContext;
-  activeChatProvider?: LlmProviderConfig;
-  threadTitle?: string;
+  loadRuntimeContextForJob?: (job: IngestionJob) => IngestionJobRuntimeContext;
   maxJobs?: number;
   now?: number;
 }
@@ -306,6 +330,8 @@ export interface DrainIngestionQueueResult {
   retrying: number;
   degraded: number;
   deferred: number;
+  sourceDeferred: number;
+  resourceDeferred: number;
   failed: number;
 }
 
@@ -320,6 +346,8 @@ export async function drainIngestionQueue(
     retrying: 0,
     degraded: 0,
     deferred: 0,
+    sourceDeferred: 0,
+    resourceDeferred: 0,
     failed: 0,
   };
 
@@ -330,17 +358,19 @@ export async function drainIngestionQueue(
     const messages = input.loadMessagesForThread(job.threadId);
     if (messages.length === 0) {
       result.deferred += 1;
+      result.sourceDeferred += 1;
       continue;
     }
-    const graphContext = input.loadGraphGoalEvidenceForThread?.(job.threadId);
+    const runtimeContext = input.loadRuntimeContextForJob?.(job) ?? {};
     const processed = await processIngestionJob({
       jobId: job.id,
       messages,
-      threadTitle: input.threadTitle,
-      activeChatProvider: input.activeChatProvider,
-      graphGoalEvidence: graphContext?.evidence,
-      sourceRunId: graphContext?.sourceRunId,
-      now,
+      threadTitle: runtimeContext.threadTitle,
+      personaSummary: runtimeContext.personaSummary,
+      activeChatProvider: runtimeContext.activeChatProvider,
+      graphGoalEvidence: runtimeContext.graphGoalEvidence,
+      sourceRunId: runtimeContext.sourceRunId,
+      ...(input.now === undefined ? {} : { now }),
     });
     if (processed.status === 'completed_structural') {
       result.completed += 1;
@@ -356,35 +386,123 @@ export async function drainIngestionQueue(
       result.failed += 1;
     } else {
       result.deferred += 1;
+      if (processed.skipped === 'source_window_unavailable') {
+        result.sourceDeferred += 1;
+      } else if (
+        processed.skipped === 'memory_pressure' ||
+        processed.skipped === 'slot_unavailable'
+      ) {
+        result.resourceDeferred += 1;
+      }
     }
   }
 
   return result;
 }
 
-let drainScheduled = false;
+export type ScheduledIngestionDrainInput = Omit<DrainIngestionQueueInput, 'now'>;
 
-export function scheduleIngestionDrain(
-  loadMessagesForThread: (threadId: string) => Message[],
-  loadGraphGoalEvidenceForThread?: (threadId: string) => GraphGoalEvidenceContext,
-  activeChatProvider?: LlmProviderConfig,
-  threadTitle?: string,
-): void {
-  if (drainScheduled) return;
-  drainScheduled = true;
-  queueMicrotask(() => {
-    drainScheduled = false;
-    void drainIngestionQueue({
-      loadMessagesForThread,
-      loadGraphGoalEvidenceForThread,
-      activeChatProvider,
-      threadTitle,
-    }).catch(() => {
-      logger.devWarn('Ingestion drain failed with processing_error');
-    });
-  });
+let scheduledRuntime: ScheduledIngestionDrainInput | null = null;
+let drainMicrotaskScheduled = false;
+let drainRunning = false;
+let drainRequested = false;
+let retryWakeTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearRetryWakeTimer(): void {
+  if (retryWakeTimer !== null) {
+    clearTimeout(retryWakeTimer);
+    retryWakeTimer = null;
+  }
 }
 
+function scheduleRetryWake(delayMs: number): void {
+  clearRetryWakeTimer();
+  retryWakeTimer = setTimeout(
+    () => {
+      retryWakeTimer = null;
+      const runtime = scheduledRuntime;
+      if (runtime) scheduleIngestionDrain(runtime);
+    },
+    Math.max(0, delayMs),
+  );
+  unrefTimerIfSupported(retryWakeTimer);
+}
+
+function scheduleNextDrain(
+  runtime: ScheduledIngestionDrainInput,
+  result: DrainIngestionQueueResult,
+): void {
+  if (!canWriteLongTermMemory() || scheduledRuntime === null) return;
+  const nextAttemptAt = getNextPendingIngestionAttemptAt();
+  if (nextAttemptAt === null) return;
+  const now = Date.now();
+  if (nextAttemptAt > now) {
+    scheduleRetryWake(nextAttemptAt - now);
+    return;
+  }
+
+  const madeProgress = result.completed + result.retrying + result.degraded + result.failed > 0;
+  if (madeProgress) {
+    scheduleIngestionDrain(runtime);
+  } else if (result.resourceDeferred > 0) {
+    scheduleRetryWake(INGESTION_RETRY_BASE_DELAY_MS);
+  }
+}
+
+export async function drainIngestionQueueWithWakeup(
+  input: ScheduledIngestionDrainInput,
+): Promise<DrainIngestionQueueResult> {
+  scheduledRuntime = input;
+  const result = await drainIngestionQueue(input);
+  scheduleNextDrain(input, result);
+  return result;
+}
+
+async function runScheduledDrain(): Promise<void> {
+  drainMicrotaskScheduled = false;
+  if (drainRunning || !drainRequested) return;
+  const runtime = scheduledRuntime;
+  if (!runtime || !canWriteLongTermMemory()) return;
+
+  drainRequested = false;
+  drainRunning = true;
+  try {
+    await drainIngestionQueueWithWakeup(runtime);
+  } catch {
+    logger.devWarn('Ingestion drain failed with processing_error');
+  } finally {
+    drainRunning = false;
+  }
+
+  if (drainRequested && !drainMicrotaskScheduled) {
+    drainMicrotaskScheduled = true;
+    queueMicrotask(() => void runScheduledDrain());
+  }
+}
+
+export function scheduleIngestionDrain(input: ScheduledIngestionDrainInput): void {
+  if (!canWriteLongTermMemory()) return;
+  scheduledRuntime = input;
+  drainRequested = true;
+  clearRetryWakeTimer();
+  if (drainRunning || drainMicrotaskScheduled) return;
+  drainMicrotaskScheduled = true;
+  queueMicrotask(() => void runScheduledDrain());
+}
+
+export function cancelScheduledIngestionDrain(): void {
+  scheduledRuntime = null;
+  drainRequested = false;
+  drainMicrotaskScheduled = false;
+  clearRetryWakeTimer();
+}
+
+registerMemoryOptOutHandler(() => {
+  cancelScheduledIngestionDrain();
+  discardPendingIngestionJobs();
+});
+
 export function __resetIngestionQueueForTests(): void {
-  drainScheduled = false;
+  cancelScheduledIngestionDrain();
+  drainRunning = false;
 }

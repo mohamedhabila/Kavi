@@ -16,6 +16,7 @@ type UseChatScreenRuntimeHelpersParams = {
 
 type RecordConversationTurnMemoryOptions = {
   memoryConversationId?: string | null;
+  sourceRunId?: string;
 };
 
 export function useChatScreenRuntimeHelpers(params: UseChatScreenRuntimeHelpersParams): {
@@ -98,6 +99,7 @@ export function useChatScreenRuntimeHelpers(params: UseChatScreenRuntimeHelpersP
         messages: latestConversation.messages,
         threadTitle: latestConversation.title,
         activeChatProvider,
+        sourceRunId: options.sourceRunId,
       }).catch(() => undefined);
     },
     [],

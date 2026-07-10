@@ -77,6 +77,8 @@ it('consolidates each queued turn from its recorded source window', async () => 
     retrying: 0,
     degraded: 0,
     deferred: 0,
+    sourceDeferred: 0,
+    resourceDeferred: 0,
     failed: 0,
   });
   expect(

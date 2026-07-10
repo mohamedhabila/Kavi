@@ -9,6 +9,23 @@
 import { useSettingsStore } from '../../store/useSettingsStore';
 import type { MemoryFactScope } from './facts/types';
 
+type MemoryOptOutHandler = () => void;
+
+const optOutHandlers = new Set<MemoryOptOutHandler>();
+
+useSettingsStore.subscribe((state, previousState) => {
+  if (state.disableLongTermMemory !== true || previousState.disableLongTermMemory === true) {
+    return;
+  }
+  for (const handler of optOutHandlers) {
+    try {
+      handler();
+    } catch {
+      // Privacy setting changes must not be blocked by cleanup failures.
+    }
+  }
+});
+
 export interface MemoryPolicyContext {
   disableLongTermMemory?: boolean;
   scope?: MemoryFactScope | 'all' | 'daily';
@@ -33,4 +50,9 @@ export function canWriteLongTermMemory(context: MemoryPolicyContext = {}): boole
 
 export function canUseNetworkMemoryProvider(context: MemoryPolicyContext = {}): boolean {
   return isLongTermMemoryEnabled(context);
+}
+
+export function registerMemoryOptOutHandler(handler: MemoryOptOutHandler): () => void {
+  optOutHandlers.add(handler);
+  return () => optOutHandlers.delete(handler);
 }

@@ -104,7 +104,7 @@ export interface ForegroundConversationRunHelpers {
   recordConversationTurnMemory: (
     conversationId: string,
     activeChatProvider?: LlmProviderConfig,
-    options?: { memoryConversationId?: string | null },
+    options?: { memoryConversationId?: string | null; sourceRunId?: string },
   ) => void;
   requestPersistenceCheckpoint: (delayMs?: number) => void;
   setChatError: (message: string | null) => void;

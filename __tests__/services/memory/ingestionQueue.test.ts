@@ -191,7 +191,7 @@ describe('ingestionQueue', () => {
 
     const result = await drainIngestionQueue({
       loadMessagesForThread,
-      threadTitle: 'Shared workspace',
+      loadRuntimeContextForJob: () => ({ threadTitle: 'Shared workspace' }),
     });
 
     expect(result.completed).toBe(1);
@@ -525,11 +525,13 @@ describe('ingestionQueue', () => {
 
     await drainIngestionQueue({
       loadMessagesForThread: () => messages,
-      activeChatProvider: provider,
+      loadRuntimeContextForJob: () => ({ activeChatProvider: provider }),
     });
 
     expect(job).not.toBeNull();
-    expect(mockedResolveConsolidationPath).toHaveBeenCalledWith(provider);
+    expect(mockedResolveConsolidationPath).toHaveBeenCalledWith(provider, {
+      requireExplicitChatProvider: false,
+    });
   });
 
   it('keeps provider enrichment scoped to each queued job', async () => {
@@ -568,7 +570,7 @@ describe('ingestionQueue', () => {
 
     await drainIngestionQueue({
       loadMessagesForThread: () => messages,
-      activeChatProvider: provider,
+      loadRuntimeContextForJob: () => ({ activeChatProvider: provider }),
     });
 
     expect(job?.providerEnrichment).toBe(false);
@@ -605,7 +607,10 @@ describe('ingestionQueue', () => {
       },
     ];
 
-    scheduleIngestionDrain(() => messages, undefined, undefined, 'longmem-delayed-thread');
+    scheduleIngestionDrain({
+      loadMessagesForThread: () => messages,
+      loadRuntimeContextForJob: () => ({ threadTitle: 'longmem-delayed-thread' }),
+    });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(job).not.toBeNull();

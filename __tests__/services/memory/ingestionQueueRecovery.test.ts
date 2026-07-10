@@ -36,6 +36,9 @@ import {
   recoverStaleIngestionJobs,
 } from '../../../src/services/memory/ingestionQueue';
 import { __resetOnDeviceGuardsForTests } from '../../../src/services/memory/onDeviceGuards';
+import { upsertEntity } from '../../../src/services/memory/entities';
+import { recordEpisode } from '../../../src/services/memory/episodes/mutations';
+import { recordFact } from '../../../src/services/memory/facts/mutations';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
@@ -104,6 +107,76 @@ afterEach(() => {
 });
 
 describe('ingestion queue recovery and diagnostics', () => {
+  it('reconciles an exact committed episode before terminal stale recovery', () => {
+    const job = enqueueIngestionJob({
+      threadId: 'thread-crash-window',
+      memoryConversationId: 'memory-crash-window',
+      sourceStartMessageId: 'user-crash-window',
+      sourceEndMessageId: 'assistant-crash-window',
+      now: 10,
+    })!;
+    getMemoryDb().runSync(
+      `UPDATE memory_ingestion_jobs
+          SET status = 'processing', attempt_count = 5,
+              next_attempt_at = NULL, lease_expires_at = 100
+        WHERE id = ?`,
+      job.id,
+    );
+    const episode = recordEpisode({
+      conversationId: 'memory-crash-window',
+      threadId: 'thread-crash-window',
+      sourceStartMessageId: 'user-crash-window',
+      sourceEndMessageId: 'assistant-crash-window',
+      messageIds: ['user-crash-window', 'assistant-crash-window'],
+      summary: 'The structural write committed before the queue transition.',
+      now: 50,
+    });
+
+    expect(recoverStaleIngestionJobs(100)).toEqual({ retrying: 0, degraded: 1, failed: 0 });
+    expect(getIngestionJob(job.id)).toEqual(
+      expect.objectContaining({
+        status: 'degraded',
+        structuralCompletedAt: episode!.createdAt,
+        outcomeCode: 'stale_processing_lease',
+      }),
+    );
+  });
+
+  it('reconciles an exact committed fact when the turn produced no episode', () => {
+    const job = enqueueIngestionJob({
+      threadId: 'thread-fact-crash-window',
+      memoryConversationId: 'memory-fact-crash-window',
+      sourceEndMessageId: 'assistant-fact-crash-window',
+      now: 10,
+    })!;
+    getMemoryDb().runSync(
+      `UPDATE memory_ingestion_jobs
+          SET status = 'processing', attempt_count = 5,
+              next_attempt_at = NULL, lease_expires_at = 100
+        WHERE id = ?`,
+      job.id,
+    );
+    const subject = upsertEntity({ type: 'self', name: 'user', now: 50 });
+    const persisted = recordFact({
+      subjectId: subject.id,
+      predicate: 'prefers',
+      objectText: 'quiet mornings',
+      originConversationId: 'memory-fact-crash-window',
+      originThreadId: 'thread-fact-crash-window',
+      sourceTurnId: 'assistant-fact-crash-window',
+      now: 50,
+    });
+
+    expect(recoverStaleIngestionJobs(100)).toEqual({ retrying: 0, degraded: 1, failed: 0 });
+    expect(getIngestionJob(job.id)).toEqual(
+      expect.objectContaining({
+        status: 'degraded',
+        structuralCompletedAt: persisted.fact.createdAt,
+        outcomeCode: 'stale_processing_lease',
+      }),
+    );
+  });
+
   it('accounts for retrying, failed, and structurally completed stale leases', () => {
     const retryable = enqueueIngestionJob({
       threadId: 'conv-stale-retry',

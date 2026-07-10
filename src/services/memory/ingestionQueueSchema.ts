@@ -14,8 +14,12 @@ function createDurableIngestionJobsTable(
     CREATE TABLE ${ifNotExists ? 'IF NOT EXISTS ' : ''}${table} (
       id TEXT PRIMARY KEY,
       thread_id TEXT NOT NULL,
-      memory_conversation_id TEXT,
+      thread_title TEXT,
+      memory_conversation_id TEXT NOT NULL,
       task_id TEXT,
+      source_run_id TEXT,
+      chat_provider_id TEXT,
+      chat_model TEXT,
       source_start_message_id TEXT,
       source_end_message_id TEXT NOT NULL,
       reason TEXT NOT NULL DEFAULT 'turn_completed',
@@ -66,7 +70,8 @@ function createDurableIngestionJobsTable(
         status NOT IN ('degraded', 'completed_structural', 'completed_enriched')
         OR structural_completed_at IS NOT NULL
       ),
-      CHECK(status != 'failed' OR structural_completed_at IS NULL)
+      CHECK(status != 'failed' OR structural_completed_at IS NULL),
+      CHECK(chat_provider_id IS NOT NULL OR chat_model IS NULL)
     );
   `);
 }
@@ -84,7 +89,9 @@ function ensureColumn(db: MemoryDb, column: string, definition: string): void {
  * exception text.
  */
 function migrateLegacyIngestionQueue(db: MemoryDb): void {
-  const columns = db.getAllSync<{ name: string }>(`PRAGMA table_info(${INGESTION_JOBS_TABLE})`);
+  const columns = db.getAllSync<{ name: string; notnull: number }>(
+    `PRAGMA table_info(${INGESTION_JOBS_TABLE})`,
+  );
   const names = new Set(columns.map((column) => column.name));
   const durableColumns = [
     'provider_outcome',
@@ -92,9 +99,18 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
     'next_attempt_at',
     'lease_expires_at',
     'structural_completed_at',
+    'thread_title',
+    'source_run_id',
+    'chat_provider_id',
+    'chat_model',
   ];
+  const memoryConversationColumn = columns.find(
+    (column) => column.name === 'memory_conversation_id',
+  );
   const isDurableSchema =
-    durableColumns.every((column) => names.has(column)) && !names.has('error');
+    durableColumns.every((column) => names.has(column)) &&
+    memoryConversationColumn?.notnull === 1 &&
+    !names.has('error');
 
   if (isDurableSchema) return;
 
@@ -105,6 +121,10 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
   ensureColumn(db, 'next_attempt_at', 'next_attempt_at INTEGER');
   ensureColumn(db, 'lease_expires_at', 'lease_expires_at INTEGER');
   ensureColumn(db, 'structural_completed_at', 'structural_completed_at INTEGER');
+  ensureColumn(db, 'thread_title', 'thread_title TEXT');
+  ensureColumn(db, 'source_run_id', 'source_run_id TEXT');
+  ensureColumn(db, 'chat_provider_id', 'chat_provider_id TEXT');
+  ensureColumn(db, 'chat_model', 'chat_model TEXT');
 
   db.execSync('BEGIN IMMEDIATE TRANSACTION');
   try {
@@ -112,7 +132,8 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
     createDurableIngestionJobsTable(db, DURABLE_INGESTION_JOBS_TABLE, false);
     db.execSync(`
       INSERT INTO ${DURABLE_INGESTION_JOBS_TABLE} (
-        id, thread_id, memory_conversation_id, task_id,
+        id, thread_id, thread_title, memory_conversation_id, task_id, source_run_id,
+        chat_provider_id, chat_model,
         source_start_message_id, source_end_message_id, reason, status,
         attempt_count, provider_enrichment, provider_outcome, outcome_code,
         next_attempt_at, lease_expires_at, structural_completed_at,
@@ -121,8 +142,12 @@ function migrateLegacyIngestionQueue(db: MemoryDb): void {
       SELECT
         id,
         thread_id,
+        thread_title,
         COALESCE(NULLIF(TRIM(memory_conversation_id), ''), thread_id),
         task_id,
+        source_run_id,
+        chat_provider_id,
+        CASE WHEN chat_provider_id IS NOT NULL THEN chat_model ELSE NULL END,
         source_start_message_id,
         source_end_message_id,
         reason,

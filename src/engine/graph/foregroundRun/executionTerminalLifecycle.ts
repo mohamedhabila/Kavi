@@ -226,7 +226,7 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
             shared.state.providers.find(
               (provider) => provider.id === shared.state.activeProviderId && provider.enabled,
             ),
-            { memoryConversationId },
+            { memoryConversationId, sourceRunId: runId },
           ),
         reviewCompletion: () =>
           reviewForegroundRunCompletion({

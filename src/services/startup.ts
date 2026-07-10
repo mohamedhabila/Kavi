@@ -639,6 +639,9 @@ export function handleAppForeground(): void {
   void runMemoryMigrationTick().catch((e) =>
     console.warn('[startup] foreground memory tick failed:', e),
   );
+  void runMemoryBackgroundFlush().catch((e) =>
+    console.warn('[startup] foreground memory flush failed:', e),
+  );
 }
 
 /**

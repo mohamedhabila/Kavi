@@ -8,6 +8,7 @@ import type { LlmProviderConfig } from '../types/provider';
 
 export interface RecordConversationTurnMemoryOptions {
   memoryConversationId?: string | null;
+  sourceRunId?: string;
 }
 
 function resolveMemoryTaskContext(conversationId: string): {
@@ -56,6 +57,7 @@ export function recordConversationTurnMemory(
     messages: latestConversation.messages,
     threadTitle: latestConversation.title,
     activeChatProvider,
+    sourceRunId: options.sourceRunId,
     ...(taskId ? { taskId } : {}),
   })
     .then(() => {
