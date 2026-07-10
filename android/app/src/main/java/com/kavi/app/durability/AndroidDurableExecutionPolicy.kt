@@ -5,8 +5,8 @@ private const val MAX_ATTEMPTS = 10
 private val SHA256_DIGEST = Regex("^[a-f0-9]{64}$")
 
 /**
- * Closed Android scheduling policy. It describes the scheduler a future executor must use; it
- * does not claim that a native/headless executor is currently wired.
+ * Closed Android scheduling policy. Only commands with a production headless handler may cross
+ * this boundary; every other known recovery command remains foreground-owned.
  */
 internal object AndroidDurableExecutionPolicy {
   fun decide(request: AndroidDurableExecutionRequest): AndroidDurableExecutionDecision {
@@ -29,8 +29,7 @@ internal object AndroidDurableExecutionPolicy {
       AndroidTaskDurabilityClass.EVENT_DRIVEN_MONITOR ->
         AndroidDurableUnsupportedReason.MISSING_EVENT_TRIGGER_CONTRACT
       AndroidTaskDurabilityClass.DEFERRABLE_MAINTENANCE ->
-        if (request.identity.commandKind in DEFERRABLE_COMMANDS) null
-        else AndroidDurableUnsupportedReason.UNSAFE_RECOVERY_COMMAND
+        AndroidDurableUnsupportedReason.UNSAFE_RECOVERY_COMMAND
       AndroidTaskDurabilityClass.EXTERNAL_DURABLE_OPERATION -> when {
         request.identity.commandKind != AndroidRecoveryCommandKind.RECONCILE_EXTERNAL_HANDLES ->
           AndroidDurableUnsupportedReason.UNSAFE_RECOVERY_COMMAND
@@ -73,9 +72,4 @@ internal object AndroidDurableExecutionPolicy {
       value.length <= MAX_IDENTIFIER_LENGTH &&
       value == value.trim() &&
       value.none { it.code < 0x20 || it.code == 0x7f }
-
-  private val DEFERRABLE_COMMANDS = setOf(
-    AndroidRecoveryCommandKind.RESUME_REVIEW,
-    AndroidRecoveryCommandKind.FINALIZE_EXISTING_TERMINAL_PROJECTION,
-  )
 }

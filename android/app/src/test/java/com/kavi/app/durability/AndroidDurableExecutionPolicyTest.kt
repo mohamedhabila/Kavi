@@ -1,7 +1,6 @@
 package com.kavi.mobile.durability
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AndroidDurableExecutionPolicyTest {
@@ -26,39 +25,36 @@ class AndroidDurableExecutionPolicyTest {
   }
 
   @Test
-  fun `only review and terminal projection commands map to deferrable work`() {
-    for (
-      commandKind in listOf(
-        AndroidRecoveryCommandKind.RESUME_REVIEW,
-        AndroidRecoveryCommandKind.FINALIZE_EXISTING_TERMINAL_PROJECTION,
-      )
-    ) {
-      assertTrue(
+  fun `commands without a production headless handler fail closed`() {
+    for (commandKind in AndroidRecoveryCommandKind.entries) {
+      assertEquals(
+        AndroidDurableExecutionDecision.Unsupported(
+          AndroidDurableUnsupportedReason.UNSAFE_RECOVERY_COMMAND,
+        ),
         AndroidDurableExecutionPolicy.decide(
           request(
             durabilityClass = AndroidTaskDurabilityClass.DEFERRABLE_MAINTENANCE,
             commandKind = commandKind,
           ),
-        ) is AndroidDurableExecutionDecision.Supported,
+        ),
       )
     }
-  }
-
-  @Test
-  fun `persisted tool effects never map directly to Android background execution`() {
-    val decision = AndroidDurableExecutionPolicy.decide(
-      request(
-        durabilityClass = AndroidTaskDurabilityClass.DEFERRABLE_MAINTENANCE,
-        commandKind = AndroidRecoveryCommandKind.RESUME_PERSISTED_TOOL_BATCH,
-      ),
-    )
-
-    assertEquals(
-      AndroidDurableExecutionDecision.Unsupported(
-        AndroidDurableUnsupportedReason.UNSAFE_RECOVERY_COMMAND,
-      ),
-      decision,
-    )
+    for (
+      commandKind in AndroidRecoveryCommandKind.entries
+        .filterNot { it == AndroidRecoveryCommandKind.RECONCILE_EXTERNAL_HANDLES }
+    ) {
+      assertEquals(
+        AndroidDurableExecutionDecision.Unsupported(
+          AndroidDurableUnsupportedReason.UNSAFE_RECOVERY_COMMAND,
+        ),
+        AndroidDurableExecutionPolicy.decide(
+          request(
+            durabilityClass = AndroidTaskDurabilityClass.EXTERNAL_DURABLE_OPERATION,
+            commandKind = commandKind,
+          ),
+        ),
+      )
+    }
   }
 
   @Test
