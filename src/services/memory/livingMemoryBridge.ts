@@ -25,6 +25,7 @@ import {
   orchestrateMemoryRetrieval,
   type RetrievalOrchestratorTimings,
 } from './retrievalOrchestrator';
+import type { NextTurnMemoryConsistencyResult } from './nextTurnConsistency';
 import { renderFocusBlock, type FocusGap } from './focus';
 import { assemblePrompt, type PromptMemoryFact, type SystemPromptSection } from './promptAssembly';
 import { getWorkingBlock, type WorkingMemoryBlock } from './workingBlocks';
@@ -107,6 +108,8 @@ export interface LivingMemoryBridgeOutput {
   recalledEpisodeCount: number;
   /** Internal timing breakdown for product telemetry and benchmark diagnostics. */
   timings?: LivingMemoryBridgeTimings;
+  /** Structured next-turn consistency state for graph observability. */
+  consistencyBarrier?: NextTurnMemoryConsistencyResult;
 }
 
 export interface LivingMemoryBridgeTimings {

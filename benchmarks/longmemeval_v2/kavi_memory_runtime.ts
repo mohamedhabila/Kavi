@@ -464,7 +464,8 @@ async function queryMemory(request: RuntimeRequest): Promise<JsonObject> {
   const retrievalLlm = buildRetrievalLlmConfig(resolved);
   const memoryAccess = await buildUnifiedMemoryAccessContext({
     messages: queryMessages.messages,
-    conversationId: resolved.conversationId,
+    memoryConversationId: resolved.conversationId,
+    sourceThreadId: resolved.conversationId,
     mode: 'agentic',
     recallLimit: resolved.maxItems,
     goals: buildQueryGoals(query, request.questionId ?? null, now),

@@ -9,13 +9,18 @@ import {
 } from '../context/contextStartSelector';
 import { excludeTrailingInternalUserMessages } from '../context/messageScoping';
 import { buildLivingMemorySections, type LivingMemoryBridgeOutput } from './livingMemoryBridge';
-import { canReadLongTermMemory } from './policy';
+import {
+  waitForNextTurnMemoryConsistency,
+  type NextTurnMemoryConsistencyResult,
+} from './nextTurnConsistency';
+import { findLastClosedTurn } from './turnProcessor';
 
 type MemoryAccessMode = 'chat' | 'agentic' | 'pilot';
 
 export interface UnifiedMemoryAccessRequest {
   messages: Message[];
-  conversationId?: string;
+  memoryConversationId: string;
+  sourceThreadId: string;
   taskId?: string;
   personaId?: string;
   mode: MemoryAccessMode;
@@ -35,6 +40,7 @@ export interface UnifiedMemoryAccessResult {
   boundary: ContextStartSelection;
   scopedMessages: Message[];
   livingMemory: LivingMemoryBridgeOutput | null;
+  consistencyBarrier: NextTurnMemoryConsistencyResult;
 }
 
 export async function buildUnifiedMemoryAccessContext(
@@ -56,30 +62,42 @@ export async function buildUnifiedMemoryAccessContext(
 
   const scopedMessages =
     boundary.startIndex > 0 ? normalizedMessages.slice(boundary.startIndex) : normalizedMessages;
+  const precedingClosedTurn = findLastClosedTurn(normalizedMessages);
+  const consistencyBarrier = await waitForNextTurnMemoryConsistency({
+    memoryConversationId: request.memoryConversationId,
+    sourceThreadId: request.sourceThreadId,
+    sourceEndMessageId: precedingClosedTurn.assistant?.id ?? null,
+  });
 
-  if (!canReadLongTermMemory()) {
+  if (consistencyBarrier.outcome === 'opt_out') {
     return {
       boundary,
       scopedMessages,
       livingMemory: null,
+      consistencyBarrier,
     };
   }
 
-  const livingMemory = await buildLivingMemorySections({
+  const livingMemoryResult = await buildLivingMemorySections({
     messages: scopedMessages,
     ...(typeof request.now === 'number' ? { now: request.now } : {}),
     ...(typeof request.recallLimit === 'number' ? { recallLimit: request.recallLimit } : {}),
-    ...(request.conversationId ? { conversationId: request.conversationId } : {}),
+    conversationId: request.memoryConversationId,
     ...(request.taskId ? { taskId: request.taskId } : {}),
     ...(request.goals ? { goals: request.goals } : {}),
     ...(request.activeTaskId ? { activeTaskId: request.activeTaskId } : {}),
     ...(request.asyncWork ? { asyncWork: request.asyncWork } : {}),
     ...(request.retrievalLlm ? { retrievalLlm: request.retrievalLlm } : {}),
   });
+  const livingMemory: LivingMemoryBridgeOutput = {
+    ...livingMemoryResult,
+    consistencyBarrier,
+  };
 
   return {
     boundary,
     scopedMessages,
     livingMemory,
+    consistencyBarrier,
   };
 }

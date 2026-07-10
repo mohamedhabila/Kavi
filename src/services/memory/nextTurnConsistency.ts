@@ -3,7 +3,8 @@ import type { IngestionJob, IngestionJobStatus } from './ingestionQueueStore';
 import { canReadLongTermMemory } from './policy';
 
 export const NEXT_TURN_MEMORY_CONSISTENCY_BUDGET_MS = 120;
-export const NEXT_TURN_MEMORY_CONSISTENCY_POLL_MS = 10;
+export const NEXT_TURN_MEMORY_CONSISTENCY_INITIAL_BACKOFF_MS = 8;
+export const NEXT_TURN_MEMORY_CONSISTENCY_MAX_BACKOFF_MS = 32;
 
 export type NextTurnMemoryConsistencyOutcome =
   | 'opt_out'
@@ -31,8 +32,6 @@ export type NextTurnMemoryConsistencyInput = Readonly<{
   memoryConversationId: string;
   sourceThreadId: string;
   sourceEndMessageId: string | null;
-  budgetMs?: number;
-  pollIntervalMs?: number;
   clock?: NextTurnMemoryConsistencyClock;
 }>;
 
@@ -56,32 +55,12 @@ function classifyJob(job: IngestionJob, now: number): JobDisposition {
   return job.nextAttemptAt !== null && job.nextAttemptAt <= now ? 'wait' : 'degraded';
 }
 
-function boundedPositiveInteger(
-  value: number | undefined,
-  fallback: number,
-  maximum: number,
-): number {
-  if (!Number.isFinite(value)) {
-    return fallback;
-  }
-  return Math.min(maximum, Math.max(1, Math.floor(value!)));
-}
-
 export async function waitForNextTurnMemoryConsistency(
   input: NextTurnMemoryConsistencyInput,
 ): Promise<NextTurnMemoryConsistencyResult> {
   const clock = input.clock ?? DEFAULT_CLOCK;
   const startedAt = clock.now();
-  const budgetMs = boundedPositiveInteger(
-    input.budgetMs,
-    NEXT_TURN_MEMORY_CONSISTENCY_BUDGET_MS,
-    NEXT_TURN_MEMORY_CONSISTENCY_BUDGET_MS,
-  );
-  const pollIntervalMs = boundedPositiveInteger(
-    input.pollIntervalMs,
-    NEXT_TURN_MEMORY_CONSISTENCY_POLL_MS,
-    budgetMs,
-  );
+  let nextBackoffMs = NEXT_TURN_MEMORY_CONSISTENCY_INITIAL_BACKOFF_MS;
   let waitedMs = 0;
   let queryCount = 0;
 
@@ -109,16 +88,27 @@ export async function waitForNextTurnMemoryConsistency(
     return result('no_job', null, null, 0);
   }
 
-  const readJob = (): IngestionJob | null => {
+  const readJob = (): { job: IngestionJob | null; failed: boolean } => {
     queryCount += 1;
-    return getIngestionJobForSourceTurn({
-      memoryConversationId: input.memoryConversationId,
-      sourceThreadId: input.sourceThreadId,
-      sourceEndMessageId,
-    });
+    try {
+      return {
+        job: getIngestionJobForSourceTurn({
+          memoryConversationId: input.memoryConversationId,
+          sourceThreadId: input.sourceThreadId,
+          sourceEndMessageId,
+        }),
+        failed: false,
+      };
+    } catch {
+      return { job: null, failed: true };
+    }
   };
 
-  let job = readJob();
+  let read = readJob();
+  if (read.failed) {
+    return result('degraded', null, null, 0);
+  }
+  let job = read.job;
   if (!job) {
     return result('no_job', null, null, 0);
   }
@@ -131,11 +121,16 @@ export async function waitForNextTurnMemoryConsistency(
     return result('degraded', initialJobStatus, job.status, 1);
   }
 
-  while (waitedMs < budgetMs) {
-    const delayMs = Math.min(pollIntervalMs, budgetMs - waitedMs);
+  while (waitedMs < NEXT_TURN_MEMORY_CONSISTENCY_BUDGET_MS) {
+    const delayMs = Math.min(nextBackoffMs, NEXT_TURN_MEMORY_CONSISTENCY_BUDGET_MS - waitedMs);
     waitedMs += delayMs;
     await clock.wait(delayMs);
-    job = readJob();
+    nextBackoffMs = Math.min(NEXT_TURN_MEMORY_CONSISTENCY_MAX_BACKOFF_MS, nextBackoffMs * 2);
+    read = readJob();
+    if (read.failed) {
+      return result('degraded', initialJobStatus, job.status, 1);
+    }
+    job = read.job;
     if (!job) {
       return result('degraded', initialJobStatus, null, 1);
     }

@@ -24,7 +24,7 @@ const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => 
 
 function deterministicClock(
   startAt = 100,
-  onWait?: (now: number, waitCount: number) => void,
+  onWait?: (now: number, waitCount: number, delayMs: number) => void,
 ): NextTurnMemoryConsistencyClock {
   let now = startAt;
   let waitCount = 0;
@@ -33,7 +33,7 @@ function deterministicClock(
     wait: async (delayMs) => {
       now += delayMs;
       waitCount += 1;
-      onWait?.(now, waitCount);
+      onWait?.(now, waitCount, delayMs);
     },
   };
 }
@@ -42,13 +42,14 @@ function enqueueSourceTurn(
   sourceThreadId: string,
   sourceEndMessageId: string,
   memoryConversationId = 'shared-memory',
+  now = 100,
 ) {
   return enqueueIngestionJob({
     threadId: sourceThreadId,
     memoryConversationId,
     sourceStartMessageId: `user-${sourceEndMessageId}`,
     sourceEndMessageId,
-    now: 100,
+    now,
   });
 }
 
@@ -157,6 +158,32 @@ describe('next-turn memory consistency', () => {
     });
   });
 
+  it('does not let a newer completed shared-memory job satisfy the exact pending source turn', async () => {
+    enqueueSourceTurn('thread-target', 'assistant-target');
+    const newerUnrelated = enqueueSourceTurn(
+      'thread-newer',
+      'assistant-newer',
+      'shared-memory',
+      200,
+    );
+    setJobState(newerUnrelated!.id, 'completed_enriched');
+
+    const result = await waitForNextTurnMemoryConsistency({
+      memoryConversationId: 'shared-memory',
+      sourceThreadId: 'thread-target',
+      sourceEndMessageId: 'assistant-target',
+      clock: deterministicClock(),
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'timed_out',
+      waitedMs: 120,
+      queryCount: 6,
+      initialJobStatus: 'pending',
+      finalJobStatus: 'pending',
+    });
+  });
+
   it('returns no-job and terminal outcomes without waiting', async () => {
     const degraded = enqueueSourceTurn('thread-degraded', 'assistant-degraded');
     const failed = enqueueSourceTurn('thread-failed', 'assistant-failed');
@@ -191,14 +218,12 @@ describe('next-turn memory consistency', () => {
         memoryConversationId: 'shared-memory',
         sourceThreadId: 'thread-processing',
         sourceEndMessageId: 'assistant-processing',
-        budgetMs: 30,
-        pollIntervalMs: 10,
         clock,
       }),
     ).resolves.toMatchObject({
       outcome: 'completed',
-      durationMs: 10,
-      waitedMs: 10,
+      durationMs: 8,
+      waitedMs: 8,
       queryCount: 2,
       initialJobStatus: 'processing',
       finalJobStatus: 'completed_enriched',
@@ -215,14 +240,12 @@ describe('next-turn memory consistency', () => {
       memoryConversationId: 'shared-memory',
       sourceThreadId: 'thread-pending',
       sourceEndMessageId: 'assistant-pending',
-      budgetMs: 30,
-      pollIntervalMs: 10,
       clock,
     });
 
     expect(result).toMatchObject({
       outcome: 'completed',
-      waitedMs: 20,
+      waitedMs: 24,
       queryCount: 3,
       initialJobStatus: 'pending',
       finalJobStatus: 'completed_structural',
@@ -252,25 +275,26 @@ describe('next-turn memory consistency', () => {
 
   it('returns a hard timeout within the declared wait budget', async () => {
     enqueueSourceTurn('thread-timeout', 'assistant-timeout');
+    const delays: number[] = [];
 
     const result = await waitForNextTurnMemoryConsistency({
       memoryConversationId: 'shared-memory',
       sourceThreadId: 'thread-timeout',
       sourceEndMessageId: 'assistant-timeout',
-      budgetMs: 25,
-      pollIntervalMs: 10,
-      clock: deterministicClock(),
+      clock: deterministicClock(100, (_now, _waitCount, delayMs) => delays.push(delayMs)),
     });
+    expect(delays).toEqual([8, 16, 32, 32, 32]);
 
     expect(result).toMatchObject({
       outcome: 'timed_out',
-      durationMs: 25,
-      waitedMs: 25,
-      queryCount: 4,
+      durationMs: 120,
+      waitedMs: 120,
+      queryCount: 6,
       initialJobStatus: 'pending',
       finalJobStatus: 'pending',
     });
     expect(result.waitedMs).toBeLessThanOrEqual(NEXT_TURN_MEMORY_CONSISTENCY_BUDGET_MS);
+    expect(result.queryCount).toBeLessThanOrEqual(6);
   });
 
   it('keeps the p95 wait at or below the configured mobile budget', async () => {
@@ -281,15 +305,12 @@ describe('next-turn memory consistency', () => {
         memoryConversationId: 'shared-memory',
         sourceThreadId: 'thread-p95',
         sourceEndMessageId: 'assistant-p95',
-        budgetMs: 25,
-        pollIntervalMs: 10,
         clock: deterministicClock(),
       });
       waits.push(result.waitedMs);
     }
     waits.sort((left, right) => left - right);
     const p95 = waits[Math.ceil(waits.length * 0.95) - 1]!;
-    expect(p95).toBeLessThanOrEqual(25);
     expect(p95).toBeLessThanOrEqual(NEXT_TURN_MEMORY_CONSISTENCY_BUDGET_MS);
   });
 
@@ -312,5 +333,28 @@ describe('next-turn memory consistency', () => {
       matchedJobCount: 0,
     });
     expect(query).not.toHaveBeenCalled();
+  });
+
+  it('degrades without throwing when the exact durable query is unavailable', async () => {
+    jest.spyOn(ingestionQueueStore, 'getIngestionJobForSourceTurn').mockImplementation(() => {
+      throw new Error('database unavailable');
+    });
+
+    await expect(
+      waitForNextTurnMemoryConsistency({
+        memoryConversationId: 'shared-memory',
+        sourceThreadId: 'thread-db-error',
+        sourceEndMessageId: 'assistant-db-error',
+        clock: deterministicClock(),
+      }),
+    ).resolves.toMatchObject({
+      outcome: 'degraded',
+      durationMs: 0,
+      waitedMs: 0,
+      queryCount: 1,
+      matchedJobCount: 0,
+      initialJobStatus: null,
+      finalJobStatus: null,
+    });
   });
 });

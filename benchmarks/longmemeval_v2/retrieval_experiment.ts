@@ -227,7 +227,8 @@ async function main(): Promise<void> {
           timestamp: now,
         },
       ],
-      conversationId,
+      memoryConversationId: conversationId,
+      sourceThreadId: conversationId,
       mode: 'agentic',
       recallLimit: args.limit,
       goals: [

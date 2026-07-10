@@ -121,6 +121,9 @@ export async function prepareOrchestratorRequestBundle(params: {
 }): Promise<{
   latestUserMessageText: string;
   livingMemory: LivingMemoryBridgeOutput | null;
+  memoryConsistencyBarrier: Awaited<
+    ReturnType<typeof buildUnifiedMemoryAccessContext>
+  >['consistencyBarrier'];
   requestAssessment: RequestAssessment;
   skillPrompts: Awaited<ReturnType<typeof getSkillSystemPrompts>>;
   workingMessages: Message[];
@@ -142,7 +145,8 @@ export async function prepareOrchestratorRequestBundle(params: {
   try {
     memoryAccessContext = await buildUnifiedMemoryAccessContext({
       messages: enrichedRequest.messages,
-      conversationId: params.memoryConversationId,
+      memoryConversationId: params.memoryConversationId,
+      sourceThreadId: params.conversationId,
       personaId: params.personaId,
       mode: memoryAccessMode,
       internalUserMessageCount: params.internalUserMessageCount,
@@ -159,12 +163,23 @@ export async function prepareOrchestratorRequestBundle(params: {
       'Unified memory access unavailable for this request:',
       memoryAccessError instanceof Error ? memoryAccessError.message : String(memoryAccessError),
     );
-    memoryAccessContext = buildScopedFallbackMemoryAccessContext({
-      messages: enrichedRequest.messages,
-      personaId: params.personaId,
-      mode: memoryAccessMode,
-      internalUserMessageCount: params.internalUserMessageCount,
-    });
+    memoryAccessContext = {
+      ...buildScopedFallbackMemoryAccessContext({
+        messages: enrichedRequest.messages,
+        personaId: params.personaId,
+        mode: memoryAccessMode,
+        internalUserMessageCount: params.internalUserMessageCount,
+      }),
+      consistencyBarrier: {
+        outcome: 'degraded',
+        durationMs: 0,
+        waitedMs: 0,
+        queryCount: 0,
+        matchedJobCount: 0,
+        initialJobStatus: null,
+        finalJobStatus: null,
+      },
+    };
   }
 
   if (memoryAccessContext.boundary.startIndex > 0) {
@@ -227,6 +242,7 @@ export async function prepareOrchestratorRequestBundle(params: {
   return {
     latestUserMessageText: requestContext.lastUserMessageText,
     livingMemory: memoryAccessContext.livingMemory,
+    memoryConsistencyBarrier: memoryAccessContext.consistencyBarrier,
     requestAssessment: requestContext.requestAssessment,
     skillPrompts,
     workingMessages,
