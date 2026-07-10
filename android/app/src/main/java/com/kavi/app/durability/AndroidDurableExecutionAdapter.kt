@@ -178,6 +178,7 @@ internal class AndroidDurableExecutionAdapter(
     ProgressResult.Next(
       current.next(
         state = AndroidDurableExecutionState.BLOCKED,
+        nextAttemptAtMillis = null,
         failureReason = failureReason,
         updatedAtMillis = updatedAtMillis,
       ),
@@ -207,6 +208,8 @@ internal class AndroidDurableExecutionAdapter(
     } else {
       current.next(
         state = AndroidDurableExecutionState.CANCEL_REQUESTED,
+        nextAttemptAtMillis = null,
+        failureReason = null,
         updatedAtMillis = updatedAtMillis,
       ).also { next ->
         when (store.compareAndSet(pointer.runId, current.revision, next)) {
