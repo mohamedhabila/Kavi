@@ -1,5 +1,7 @@
 import { ensureFactSchema } from './schema';
 import { getMemoryDb } from './sqlite-store';
+import { requireExactMemoryProvenanceId } from './memoryProvenanceIdentity';
+import { requireExactMemoryScopeId } from './memoryScopeIdentity';
 
 export type MemoryWithdrawalSourceKind = 'message' | 'turn' | 'run';
 
@@ -23,17 +25,42 @@ export interface MemoryIngestionSourceIdentity extends MemoryPersistenceSourceSc
   sourceRunId?: string | null;
 }
 
-const OPAQUE_ID_PATTERN = /^[^\p{Z}\p{C}]{1,512}$/u;
+function requireSourceKind(value: unknown): MemoryWithdrawalSourceKind {
+  if (value !== 'message' && value !== 'turn' && value !== 'run') {
+    throw new Error('memory_withdrawal_source_kind_invalid');
+  }
+  return value;
+}
 
-function normalizedOpaqueId(value: string | null | undefined): string | null {
-  const normalized = value?.trim() ?? '';
-  return OPAQUE_ID_PATTERN.test(normalized) ? normalized : null;
+function requireSourceScope(input: MemoryPersistenceSourceScope): {
+  memoryConversationId: string;
+  sourceThreadId: string;
+  taskId: string;
+} {
+  return {
+    memoryConversationId: requireExactMemoryScopeId(
+      input.memoryConversationId,
+      'memory_withdrawal_conversation_scope_invalid',
+    ),
+    sourceThreadId: requireExactMemoryScopeId(
+      input.sourceThreadId,
+      'memory_withdrawal_thread_scope_invalid',
+    ),
+    taskId:
+      input.taskId === null || input.taskId === undefined
+        ? ''
+        : requireExactMemoryScopeId(input.taskId, 'memory_withdrawal_task_scope_invalid'),
+  };
 }
 
 /** Exact scope + source-kind replay fence. It never matches memory value text. */
 export function isMemorySourceWithdrawn(input: MemoryWithdrawalSourceIdentity): boolean {
-  const sourceId = normalizedOpaqueId(input.sourceId);
-  if (!sourceId) return false;
+  const scope = requireSourceScope(input);
+  const sourceKind = requireSourceKind(input.sourceKind);
+  const sourceId = requireExactMemoryProvenanceId(
+    input.sourceId,
+    'memory_withdrawal_source_id_invalid',
+  );
   ensureFactSchema();
   return Boolean(
     getMemoryDb().getFirstSync<{ present: number }>(
@@ -45,10 +72,10 @@ export function isMemorySourceWithdrawn(input: MemoryWithdrawalSourceIdentity): 
           AND source_kind = ?
           AND source_id = ?
         LIMIT 1`,
-      input.memoryConversationId.trim(),
-      input.sourceThreadId.trim(),
-      input.taskId?.trim() ?? '',
-      input.sourceKind,
+      scope.memoryConversationId,
+      scope.sourceThreadId,
+      scope.taskId,
+      sourceKind,
       sourceId,
     ),
   );
@@ -62,7 +89,7 @@ export function assertMemoryPersistenceSourcesAreWritable(
   }>,
 ): void {
   for (const source of sources) {
-    if (!source.sourceId) continue;
+    if (source.sourceId === null || source.sourceId === undefined) continue;
     if (isMemorySourceWithdrawn({ ...scope, ...source, sourceId: source.sourceId })) {
       throw new Error('Memory persistence source withdrawn');
     }
@@ -82,7 +109,8 @@ export function isMemoryIngestionSourceWithdrawn(input: MemoryIngestionSourceIde
       sourceId: input.sourceEndMessageId,
     }) ||
     Boolean(
-      input.sourceStartMessageId &&
+      input.sourceStartMessageId !== null &&
+      input.sourceStartMessageId !== undefined &&
       isMemorySourceWithdrawn({
         ...scope,
         sourceKind: 'message',
@@ -90,7 +118,8 @@ export function isMemoryIngestionSourceWithdrawn(input: MemoryIngestionSourceIde
       }),
     ) ||
     Boolean(
-      input.sourceRunId &&
+      input.sourceRunId !== null &&
+      input.sourceRunId !== undefined &&
       isMemorySourceWithdrawn({
         ...scope,
         sourceKind: 'run',

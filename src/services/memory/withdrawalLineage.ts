@@ -2,8 +2,9 @@ import type { MemoryDatabase } from './access/schemaGuard';
 import type { EpisodeRow, EvidenceRow } from './episodes/types';
 import { hasExactFactContentIdentity } from './facts/contentIdentity';
 import type { FactRow } from './facts/types';
+import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
+import { isExactMemoryScopeId } from './memoryScopeIdentity';
 
-const OPAQUE_ID_PATTERN = /^[^\p{Z}\p{C}]{1,512}$/u;
 const SELECT_BATCH_SIZE = 200;
 const MAX_LINEAGE_IDS = 512;
 const REBUILDABLE_SUMMARY_LABELS = ['active_focus', 'open_threads', 'compaction_summary'] as const;
@@ -88,8 +89,7 @@ export interface MemoryWithdrawalLineage {
 }
 
 export function normalizeWithdrawalOpaqueId(value: string | null | undefined): string | null {
-  const normalized = value?.trim() ?? '';
-  return OPAQUE_ID_PATTERN.test(normalized) ? normalized : null;
+  return isExactMemoryProvenanceId(value) ? value : null;
 }
 
 function sameDurableIdentity(row: FactRow, target: FactRow): boolean {
@@ -237,24 +237,55 @@ function parseOwnedLineageIds(raw: string): string[] {
 }
 
 export function factWithdrawalScope(target: FactRow): MemoryWithdrawalScope {
-  const memoryConversationId = target.origin_conversation_id?.trim() ?? '';
+  const memoryConversationId = target.origin_conversation_id ?? '';
+  if (memoryConversationId && !isExactMemoryScopeId(memoryConversationId)) {
+    throw new Error('memory_withdrawal_conversation_scope_invalid');
+  }
+  const sourceThreadId = target.origin_thread_id ?? memoryConversationId;
+  if (sourceThreadId && !isExactMemoryScopeId(sourceThreadId)) {
+    throw new Error('memory_withdrawal_thread_scope_invalid');
+  }
+  const taskId = target.origin_task_id ?? '';
+  if (taskId && !isExactMemoryScopeId(taskId)) {
+    throw new Error('memory_withdrawal_task_scope_invalid');
+  }
   return {
     memoryConversationId,
-    sourceThreadId: target.origin_thread_id?.trim() || memoryConversationId,
-    taskId: target.origin_task_id?.trim() || '',
+    sourceThreadId,
+    taskId,
   };
 }
 
 function episodeScope(episode: EpisodeRow): MemoryWithdrawalScope {
-  const memoryConversationId = episode.conversation_id?.trim() ?? '';
+  const memoryConversationId = episode.conversation_id ?? '';
+  if (memoryConversationId && !isExactMemoryScopeId(memoryConversationId)) {
+    throw new Error('memory_withdrawal_conversation_scope_invalid');
+  }
+  const sourceThreadId = episode.thread_id ?? memoryConversationId;
+  if (sourceThreadId && !isExactMemoryScopeId(sourceThreadId)) {
+    throw new Error('memory_withdrawal_thread_scope_invalid');
+  }
+  const taskId = episode.task_id ?? '';
+  if (taskId && !isExactMemoryScopeId(taskId)) {
+    throw new Error('memory_withdrawal_task_scope_invalid');
+  }
   return {
     memoryConversationId,
-    sourceThreadId: episode.thread_id?.trim() || memoryConversationId,
-    taskId: episode.task_id?.trim() || '',
+    sourceThreadId,
+    taskId,
   };
 }
 
 function ingestionJobScope(job: WithdrawalIngestionJobRow): MemoryWithdrawalScope {
+  if (!isExactMemoryScopeId(job.memory_conversation_id)) {
+    throw new Error('memory_withdrawal_conversation_scope_invalid');
+  }
+  if (!isExactMemoryScopeId(job.thread_id)) {
+    throw new Error('memory_withdrawal_thread_scope_invalid');
+  }
+  if (job.task_id !== null && !isExactMemoryScopeId(job.task_id)) {
+    throw new Error('memory_withdrawal_task_scope_invalid');
+  }
   return {
     memoryConversationId: job.memory_conversation_id,
     sourceThreadId: job.thread_id,
