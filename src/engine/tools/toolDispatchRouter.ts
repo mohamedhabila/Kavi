@@ -181,17 +181,15 @@ export async function executeToolInner(
     return executeNativeTool(name, argsString);
   }
 
-  if (name !== 'memory_search') {
-    const providerAwareResult = await executeProviderAwareTool({
-      name,
-      args,
-      conversationId,
-      workspaceConversationId,
-      context,
-    });
-    if (providerAwareResult !== null) {
-      return providerAwareResult;
-    }
+  const providerAwareResult = await executeProviderAwareTool({
+    name,
+    args,
+    conversationId,
+    workspaceConversationId,
+    context,
+  });
+  if (providerAwareResult !== null) {
+    return providerAwareResult;
   }
 
   // ── Builtin tools ──────────────────────────────────────────────────

@@ -1,17 +1,10 @@
 import { executeSessionSend } from './builtin-session-send';
 import { executeSessionSpawn } from './builtin-session-spawn';
-import { executeMemorySearch } from './builtin-memory';
 import { resolveToolProviderContext, type ToolProviderContextInput } from './toolProviderContext';
 import type { ToolExecutionContext } from './toolExecutionContext';
 import { executeWebSearch } from './web-search';
-import { DEFAULT_MEMORY_PERSONA_ID } from '../../services/memory/memoryScopeIdentity';
 
-export const PROVIDER_AWARE_TOOL_NAMES = new Set([
-  'memory_search',
-  'sessions_send',
-  'sessions_spawn',
-  'web_search',
-]);
+export const PROVIDER_AWARE_TOOL_NAMES = new Set(['sessions_send', 'sessions_spawn', 'web_search']);
 
 export async function executeProviderAwareTool(params: {
   name: string;
@@ -22,15 +15,6 @@ export async function executeProviderAwareTool(params: {
 }): Promise<string | null> {
   if (!PROVIDER_AWARE_TOOL_NAMES.has(params.name)) {
     return null;
-  }
-
-  if (params.name === 'memory_search') {
-    return executeMemorySearch(params.args, {
-      memoryConversationId: params.workspaceConversationId,
-      sourceThreadId: params.conversationId,
-      personaId: DEFAULT_MEMORY_PERSONA_ID,
-      taskId: null,
-    });
   }
 
   const providerContext = await resolveToolProviderContext(

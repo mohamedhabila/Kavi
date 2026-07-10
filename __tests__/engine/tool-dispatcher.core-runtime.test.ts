@@ -40,7 +40,12 @@ describe('executeTool — core tools routing', () => {
     expect(result).toBe(JSON.stringify({ status: 'ok' }));
     expect(builtinMod.executeMemorySearch).toHaveBeenCalledWith(
       { query: 'state' },
-      { conversationId: CONV_ID },
+      {
+        memoryConversationId: CONV_ID,
+        sourceThreadId: CONV_ID,
+        personaId: 'default',
+        taskId: null,
+      },
     );
     expect(memoryStore.searchMemory).not.toHaveBeenCalledWith('state', {
       scope: 'all',

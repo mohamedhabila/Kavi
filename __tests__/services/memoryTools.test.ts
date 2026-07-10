@@ -12,7 +12,7 @@ import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/servic
 import { ensureDefaultBlocks } from '../../src/services/memory/blocks';
 import { findEntityByName } from '../../src/services/memory/entities';
 import {
-  executeMemoryRecall,
+  queryMemoryFactsForManagement,
   executeMemoryRemember,
   executeMemoryPin,
   executeMemoryUnpin,
@@ -76,7 +76,7 @@ describe('executeMemoryRemember', () => {
     });
     expect(remembered.fact.predicate).toBe('Preferred_Display_Name');
 
-    const recall = executeMemoryRecall({
+    const recall = queryMemoryFactsForManagement({
       subject: 'user',
       predicate: 'Preferred_Display_Name',
     });
@@ -101,7 +101,7 @@ describe('executeMemoryRemember', () => {
     expect(next.superseded).toHaveLength(1);
     expect(next.superseded[0].value).toBe('Berlin');
 
-    const recall = executeMemoryRecall({ subject: 'user', predicate: 'lives_in' });
+    const recall = queryMemoryFactsForManagement({ subject: 'user', predicate: 'lives_in' });
     expect(recall.ok).toBe(true);
     if (recall.ok) {
       expect(recall.facts.map((fact) => fact.value)).toEqual(['Munich']);
@@ -122,7 +122,7 @@ describe('executeMemoryRemember', () => {
     expect(next.superseded).toHaveLength(1);
     expect(next.superseded[0].value).toBe('Berlin');
 
-    const recall = executeMemoryRecall({ subject: 'user', predicate: 'lives_in' });
+    const recall = queryMemoryFactsForManagement({ subject: 'user', predicate: 'lives_in' });
     expect(recall.ok).toBe(true);
     if (recall.ok) {
       expect(recall.facts.map((fact) => fact.value)).toEqual(['Munich']);
@@ -160,7 +160,7 @@ describe('executeMemoryRemember', () => {
     expect(next.status).toBe('created');
     expect(next.superseded).toEqual([]);
 
-    const recall = executeMemoryRecall({ subject: 'user', predicate: 'lives_in' });
+    const recall = queryMemoryFactsForManagement({ subject: 'user', predicate: 'lives_in' });
     expect(recall.ok).toBe(true);
     if (recall.ok) {
       expect(recall.facts.map((fact) => fact.value).sort()).toEqual(['Berlin', 'Munich']);
@@ -188,7 +188,10 @@ describe('executeMemoryRemember', () => {
     expect(next.status).toBe('created');
     expect(next.superseded).toEqual([]);
 
-    const recall = executeMemoryRecall({ subject: 'release-task', predicate: 'next_step' });
+    const recall = queryMemoryFactsForManagement({
+      subject: 'release-task',
+      predicate: 'next_step',
+    });
     expect(recall.ok).toBe(true);
     if (recall.ok) {
       expect(recall.facts.map((fact) => fact.value).sort()).toEqual([
@@ -250,7 +253,7 @@ describe('executeMemoryRemember', () => {
 
 describe('executeMemoryRecall', () => {
   it('returns empty facts for unknown subject (not error)', () => {
-    const result = executeMemoryRecall({ subject: 'ghost' });
+    const result = queryMemoryFactsForManagement({ subject: 'ghost' });
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.facts).toEqual([]);
   });
@@ -258,7 +261,7 @@ describe('executeMemoryRecall', () => {
   it('lists facts for a known subject', () => {
     rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin', scope: 'global' });
     rememberOk({ subject: 'user', predicate: 'role', value: 'Engineer', scope: 'global' });
-    const result = executeMemoryRecall({ subject: 'user' });
+    const result = queryMemoryFactsForManagement({ subject: 'user' });
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.facts).toHaveLength(2);
   });
@@ -266,7 +269,7 @@ describe('executeMemoryRecall', () => {
   it('filters by predicate', () => {
     rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin', scope: 'global' });
     rememberOk({ subject: 'user', predicate: 'role', value: 'Engineer', scope: 'global' });
-    const result = executeMemoryRecall({ subject: 'user', predicate: 'role' });
+    const result = queryMemoryFactsForManagement({ subject: 'user', predicate: 'role' });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.facts).toHaveLength(1);
@@ -275,7 +278,7 @@ describe('executeMemoryRecall', () => {
   });
 
   it('rejects empty filter set', () => {
-    const result = executeMemoryRecall({});
+    const result = queryMemoryFactsForManagement({});
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.code).toBe('invalid_args');
   });
@@ -321,7 +324,7 @@ describe('executeMemoryForget', () => {
       expect(forgotten.receipt.factId).toBe(created.fact.id);
       expect(JSON.stringify(forgotten)).not.toContain('Berlin');
     }
-    const recall = executeMemoryRecall({ all: true, includeHistory: true });
+    const recall = queryMemoryFactsForManagement({ all: true, includeHistory: true });
     if (recall.ok) expect(recall.facts).toHaveLength(0);
   });
 
@@ -352,7 +355,7 @@ describe('executeMemoryForget', () => {
         status: 'invalidated',
       }),
     );
-    const recall = executeMemoryRecall({ all: true, includeHistory: true });
+    const recall = queryMemoryFactsForManagement({ all: true, includeHistory: true });
     expect(recall.ok).toBe(true);
     if (recall.ok) {
       expect(recall.facts).toEqual([

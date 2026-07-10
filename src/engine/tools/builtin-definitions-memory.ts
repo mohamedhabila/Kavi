@@ -33,7 +33,7 @@ export const MEMORY_RECALL_TOOL: ToolDefinition = {
   name: 'memory_recall',
   description:
     'Recall structured facts from the living-memory fact store. Filter by subject (entity name), predicate (relation), or pinnedOnly. ' +
-    'Returns the current set of valid facts plus optionally invalidated/historical rows when includeHistory is true. ' +
+    'Returns only facts authorized for the exact current owner, workspace, thread, persona, and task. Each result has a binding use, ask, or abstain policy. ' +
     'Use this when you need exact, structured recall of what is known about a subject; use memory_search when the subject or predicate is not known yet. ' +
     'If recall supports a same-turn request to write, create, send, update, open, or otherwise act, continue to the action tool with the recalled facts before final delivery.',
   input_schema: {
@@ -52,20 +52,15 @@ export const MEMORY_RECALL_TOOL: ToolDefinition = {
         enum: ['global', 'project', 'conversation', 'session', 'persona'],
         description: 'Optional fact scope filter.',
       },
-      originConversationId: {
-        type: 'string',
-        description: 'Optional source conversation id filter.',
-      },
-      originTaskId: { type: 'string', description: 'Optional source task/run id filter.' },
       all: {
         type: 'boolean',
         description: 'When true, list all valid facts without another filter.',
       },
       pinnedOnly: { type: 'boolean', description: 'Return only pinned facts.' },
-      limit: { type: 'number', description: 'Max facts to return (default 50, hard cap 100).' },
-      includeHistory: { type: 'boolean', description: 'Include invalidated/superseded facts.' },
+      limit: { type: 'number', description: 'Max facts to return (default 50, hard cap 50).' },
     },
     required: [],
+    additionalProperties: false,
   },
   contract: {
     category: 'memory_search',

@@ -20,6 +20,7 @@ import {
   executeMemoryBlockRead,
   executeMemoryBlockEdit,
 } from '../../src/engine/tools/builtin-memory';
+
 import { executeToolCatalog } from '../../src/engine/tools/builtin-tool-catalog';
 
 jest.mock('expo-sqlite', () => {
@@ -30,6 +31,13 @@ jest.mock('expo-sqlite', () => {
 import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { ensureDefaultBlocks } from '../../src/services/memory/blocks';
+
+const MEMORY_EXECUTION_SCOPE = {
+  memoryConversationId: 'memory-tools-conversation',
+  sourceThreadId: 'memory-tools-thread',
+  personaId: 'default',
+  taskId: null,
+} as const;
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -142,6 +150,10 @@ describe('living-memory tool wiring', () => {
     expect(MEMORY_REMEMBER_TOOL.input_schema.properties).not.toHaveProperty('sourceMessageId');
     expect(MEMORY_REMEMBER_TOOL.input_schema.properties).not.toHaveProperty('sourceRunId');
     expect(MEMORY_REMEMBER_TOOL.input_schema.properties).toHaveProperty('sourceSummary');
+    expect(MEMORY_RECALL_TOOL.input_schema.properties).not.toHaveProperty('originConversationId');
+    expect(MEMORY_RECALL_TOOL.input_schema.properties).not.toHaveProperty('originTaskId');
+    expect(MEMORY_RECALL_TOOL.input_schema.properties).not.toHaveProperty('includeHistory');
+    expect(MEMORY_RECALL_TOOL.input_schema.additionalProperties).toBe(false);
   });
 
   it('lists structured fact-memory tools under the memory category', async () => {
@@ -171,11 +183,17 @@ describe('living-memory tool wiring', () => {
     expect(remembered.fact.scope).toBe('global');
     expect(remembered.fact.importance).toBe(0.8);
 
-    const recalled = JSON.parse(executeMemoryRecall({ subject: 'user', predicate: 'prefers' }));
+    const recalled = JSON.parse(
+      executeMemoryRecall({ subject: 'user', predicate: 'prefers' }, MEMORY_EXECUTION_SCOPE),
+    );
     expect(recalled.ok).toBe(true);
     expect(recalled.facts).toHaveLength(1);
     expect(recalled.facts[0].value).toBe('dark mode');
     expect(recalled.facts[0].sourceSummary).toBe('User confirmed directly.');
+    expect(recalled.facts[0].policy).toEqual({
+      action: 'ask',
+      reason: 'subjective_authority_confirmation_required',
+    });
   });
 
   it('memory_recall can list all valid facts without a subject hint', () => {
@@ -191,10 +209,13 @@ describe('living-memory tool wiring', () => {
       }),
     );
 
-    const recalled = JSON.parse(executeMemoryRecall({ all: true, limit: 10 }));
+    const recalled = JSON.parse(
+      executeMemoryRecall({ all: true, limit: 10 }, MEMORY_EXECUTION_SCOPE),
+    );
 
     expect(recalled.ok).toBe(true);
-    expect(recalled.facts).toHaveLength(2);
+    expect(recalled.facts).toHaveLength(1);
+    expect(recalled.facts[0].policy.action).toBe('ask');
   });
 
   it('memory_pin / memory_unpin flip the pinned flag', () => {

@@ -19,7 +19,7 @@ import {
   subscribeToMemoryChanges,
 } from '../services/memory/store';
 import {
-  executeMemoryRecall,
+  queryMemoryFactsForManagement,
   executeMemoryForget,
   executeMemoryPin,
   executeMemoryUnpin,
@@ -149,7 +149,7 @@ export const MemoryScreen: React.FC = () => {
 
   const loadFacts = useCallback(() => {
     const subject = factsFilter.trim();
-    const result = executeMemoryRecall({
+    const result = queryMemoryFactsForManagement({
       ...(subject ? { subject } : {}),
       ...(factsPinnedOnly ? { pinnedOnly: true } : {}),
       ...(!subject && !factsPinnedOnly ? { all: true } : {}),
@@ -191,7 +191,7 @@ export const MemoryScreen: React.FC = () => {
 
   const loadOverviewFacts = useCallback((query: string) => {
     const subject = query.trim();
-    const result = executeMemoryRecall({
+    const result = queryMemoryFactsForManagement({
       ...(subject ? { subject } : { all: true }),
       limit: 8,
     });

@@ -21,16 +21,32 @@
 // ---------------------------------------------------------------------------
 
 import { upsertEntity, findEntityByName, getEntityById, type EntityType } from './entities';
-import { recordFactWithApplicability, invalidateFact, setFactPinned } from './facts/mutations';
+import {
+  recordFactWithApplicability,
+  invalidateFact,
+  markFactsRecalled,
+  setFactPinned,
+} from './facts/mutations';
 import { requireFactScopeIdentity } from './facts/scopeIdentity';
-import { listFacts, getFactById } from './facts/queries';
+import { getFactById, listFacts, listFactsForRecallEligibleScan } from './facts/queries';
 import { requireMemoryFactScope, type MemoryFact, type MemoryFactScope } from './facts/types';
 import { isExactMemoryScopeId } from './memoryScopeIdentity';
+import { resolveLocalMemoryAccessScope } from './memoryScopeStore';
 import { editBlock, ensureDefaultBlocks, getBlock, listBlocks, BlockOverflowError } from './blocks';
 import { ensureFactSchema } from './schema';
-import { canWriteLongTermMemory } from './policy';
+import { canReadLongTermMemory, canWriteLongTermMemory } from './policy';
 import { withdrawMemoryFact } from './withdrawal';
 import type { MemoryWithdrawalReceipt } from './withdrawalTypes';
+import { loadActiveMemoryFactConflictSignals } from './facts/observations';
+import {
+  applyMemoryApplicabilityPolicy,
+  emptyMemoryApplicabilitySummary,
+} from './memoryApplicabilityPolicy';
+import { selectMemoryApplicabilityResolutionFactIds } from './memoryApplicabilityPrompt';
+import type {
+  MemoryApplicabilityAnnotation,
+  MemoryApplicabilitySummary,
+} from './memoryApplicabilityTypes';
 
 // ── Common types ─────────────────────────────────────────────────────────
 
@@ -118,7 +134,7 @@ function serializeFact(fact: MemoryFact): SerializedMemoryFact {
 
 // ── memory_recall ────────────────────────────────────────────────────────
 
-export interface MemoryRecallArgs {
+export interface MemoryFactManagementQueryArgs {
   subject?: string;
   predicate?: string;
   scope?: MemoryFactScope;
@@ -131,13 +147,15 @@ export interface MemoryRecallArgs {
   includeHistory?: boolean;
 }
 
-export interface MemoryRecallResult {
+export interface MemoryFactManagementQueryResult {
   ok: true;
   subject: string | null;
   facts: ReturnType<typeof serializeFact>[];
 }
 
-export function executeMemoryRecall(args: MemoryRecallArgs): MemoryRecallResult | MemoryToolError {
+export function queryMemoryFactsForManagement(
+  args: MemoryFactManagementQueryArgs,
+): MemoryFactManagementQueryResult | MemoryToolError {
   ensureFactSchema();
   const subject = trimNonEmpty(args.subject, 80);
   const predicate = trimNonEmpty(args.predicate, 80);
@@ -181,6 +199,212 @@ export function executeMemoryRecall(args: MemoryRecallArgs): MemoryRecallResult 
     subject,
     facts: facts.map(serializeFact),
   };
+}
+
+export interface MemoryRecallArgs {
+  subject?: string;
+  predicate?: string;
+  scope?: MemoryFactScope;
+  all?: boolean;
+  pinnedOnly?: boolean;
+  limit?: number;
+}
+
+export interface MemoryRecallExecutionContext {
+  memoryConversationId: string;
+  sourceThreadId: string;
+  personaId: string;
+  taskId: string | null;
+  now?: number;
+}
+
+export interface SerializedApplicableMemoryFact extends SerializedMemoryFact {
+  policy: MemoryApplicabilityAnnotation;
+}
+
+export interface MemoryRecallResult {
+  ok: true;
+  subject: string | null;
+  facts: SerializedApplicableMemoryFact[];
+  policyInstruction: string;
+  applicabilityPolicy: MemoryApplicabilitySummary;
+  degraded?: true;
+}
+
+const MEMORY_RECALL_DIRECT_LIMIT = 50;
+const MEMORY_RECALL_RESOLUTION_LIMIT = 14;
+const MEMORY_RECALL_ARG_KEYS = new Set([
+  'subject',
+  'predicate',
+  'scope',
+  'all',
+  'pinnedOnly',
+  'limit',
+]);
+const MEMORY_RECALL_POLICY_INSTRUCTION =
+  'Memory fact policy is binding: use only action=use; ask the user before relying on action=ask; never assert or act on action=abstain.';
+
+function recallLimit(value: number | undefined): number {
+  if (value === undefined) return 50;
+  if (!Number.isFinite(value) || value < 1) throw new Error('memory_recall_limit_invalid');
+  return Math.min(Math.floor(value), MEMORY_RECALL_DIRECT_LIMIT);
+}
+
+/** Agent-facing exact recall. Management/UI reads use queryMemoryFactsForManagement. */
+export function executeMemoryRecall(
+  args: MemoryRecallArgs,
+  execution: MemoryRecallExecutionContext,
+): MemoryRecallResult | MemoryToolError {
+  if (!canReadLongTermMemory()) return err('memory_disabled', 'Long-term memory is disabled.');
+  if (
+    !args ||
+    typeof args !== 'object' ||
+    Array.isArray(args) ||
+    Object.keys(args).some((key) => !MEMORY_RECALL_ARG_KEYS.has(key))
+  ) {
+    return err('invalid_args', 'memory_recall received unsupported arguments.');
+  }
+  if (
+    !execution ||
+    !isExactMemoryScopeId(execution.memoryConversationId) ||
+    !isExactMemoryScopeId(execution.sourceThreadId) ||
+    !isExactMemoryScopeId(execution.personaId) ||
+    (execution.taskId !== null && !isExactMemoryScopeId(execution.taskId))
+  ) {
+    return err('invalid_args', 'memory_recall execution scope is invalid.');
+  }
+  const now = execution.now ?? Date.now();
+  if (!Number.isSafeInteger(now) || now < 0) {
+    return err('invalid_args', 'memory_recall timestamp is invalid.');
+  }
+  let limit: number;
+  try {
+    limit = recallLimit(args.limit);
+    if (args.scope !== undefined) requireMemoryFactScope(args.scope);
+  } catch {
+    return err('invalid_args', 'memory_recall limit or scope is invalid.');
+  }
+  const subject = trimNonEmpty(args.subject, 80);
+  const predicate = trimNonEmpty(args.predicate, 80);
+  if (!subject && !predicate && !args.scope && !args.pinnedOnly && args.all !== true) {
+    return err('invalid_args', 'Provide a filter or set all=true to list all facts.');
+  }
+
+  try {
+    ensureFactSchema();
+    let subjectId: string | undefined;
+    if (subject) {
+      const entity = findEntityByName(subject);
+      if (!entity) {
+        return {
+          ok: true,
+          subject,
+          facts: [],
+          policyInstruction: MEMORY_RECALL_POLICY_INSTRUCTION,
+          applicabilityPolicy: emptyMemoryApplicabilitySummary('applied'),
+        };
+      }
+      subjectId = entity.id;
+    }
+    const memoryScope = resolveLocalMemoryAccessScope({
+      memoryConversationId: execution.memoryConversationId,
+      sourceThreadId: execution.sourceThreadId,
+      personaId: execution.personaId,
+      taskId: execution.taskId,
+    });
+    const queryOptions = {
+      ...(subjectId ? { subjectId } : {}),
+      ...(predicate ? { predicate } : {}),
+      ...(args.scope ? { scope: args.scope } : {}),
+      ...(args.pinnedOnly ? { pinnedOnly: true } : {}),
+      asOf: now,
+    };
+    const directFacts = listFactsForRecallEligibleScan({
+      ...queryOptions,
+      recallScopeIdentity: {
+        ...memoryScope,
+        useIntent: 'explicit_user_request',
+        candidateLane: 'direct_use',
+      },
+      limit,
+    });
+    const resolutionFacts = listFactsForRecallEligibleScan({
+      ...queryOptions,
+      recallScopeIdentity: {
+        ...memoryScope,
+        useIntent: 'explicit_user_request',
+        candidateLane: 'resolution',
+      },
+      limit: MEMORY_RECALL_RESOLUTION_LIMIT,
+    });
+    const candidates = [...directFacts, ...resolutionFacts];
+    let conflictObservationReadState: 'available' | 'failed' = 'available';
+    let persistedConflicts: ReturnType<typeof loadActiveMemoryFactConflictSignals> = [];
+    try {
+      persistedConflicts = loadActiveMemoryFactConflictSignals({
+        factIds: candidates.map((fact) => fact.id),
+        currentScope: memoryScope,
+        asOf: now,
+      });
+    } catch {
+      conflictObservationReadState = 'failed';
+    }
+    const applicability = applyMemoryApplicabilityPolicy({
+      facts: candidates,
+      context: {
+        enabled: true,
+        now,
+        useIntent: 'explicit_user_request',
+        scope: memoryScope,
+        conflictObservationReadState,
+        ...(persistedConflicts.length > 0 ? { externalEvidence: persistedConflicts } : {}),
+      },
+    });
+    const factById = new Map(candidates.map((fact) => [fact.id, fact] as const));
+    const annotated = applicability.factDecisions.flatMap((decision) => {
+      const fact = factById.get(decision.factId);
+      if (!fact || decision.action === 'silent') return [];
+      return [
+        {
+          id: fact.id,
+          fact,
+          applicability: { action: decision.action, reason: decision.reason },
+        },
+      ];
+    });
+    const resolutionIds = selectMemoryApplicabilityResolutionFactIds(annotated);
+    const selected = [
+      ...annotated.filter((entry) => resolutionIds.has(entry.id)),
+      ...annotated.filter(
+        (entry) => entry.applicability.action === 'use' && !resolutionIds.has(entry.id),
+      ),
+    ].slice(0, limit);
+    const facts = selected.map(
+      (entry): SerializedApplicableMemoryFact => ({
+        ...serializeFact(entry.fact),
+        policy: entry.applicability,
+      }),
+    );
+    const applicabilityPolicy: MemoryApplicabilitySummary = {
+      ...applicability.summary,
+      promptVisibleFactCount: facts.length,
+      promptBudgetDroppedFactCount: applicability.summary.promptVisibleFactCount - facts.length,
+    };
+    markFactsRecalled(
+      selected.map((entry) => entry.id),
+      now,
+    );
+    return {
+      ok: true,
+      subject,
+      facts,
+      policyInstruction: MEMORY_RECALL_POLICY_INSTRUCTION,
+      applicabilityPolicy,
+      ...(applicabilityPolicy.state === 'degraded' ? { degraded: true } : {}),
+    };
+  } catch {
+    return err('internal', 'memory_recall failed.');
+  }
 }
 
 // ── memory_remember ──────────────────────────────────────────────────────

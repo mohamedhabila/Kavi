@@ -8,6 +8,7 @@ import {
   executeMemoryBlockRead as readMemoryBlock,
   executeMemoryBlockEdit as editMemoryBlock,
   type MemoryRecallArgs,
+  type MemoryRecallExecutionContext,
   type MemoryRememberArgs,
   type MemoryRememberExecutionContext,
   type MemoryPinArgs,
@@ -254,8 +255,11 @@ function wrapMemoryToolResult(result: unknown): string {
   return JSON.stringify(result);
 }
 
-export function executeMemoryRecall(args: MemoryRecallArgs): string {
-  return wrapMemoryToolResult(recallFacts(args));
+export function executeMemoryRecall(
+  args: MemoryRecallArgs,
+  context: MemoryRecallExecutionContext,
+): string {
+  return wrapMemoryToolResult(recallFacts(args, context));
 }
 
 export function executeMemoryRemember(

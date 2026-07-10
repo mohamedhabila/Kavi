@@ -2,7 +2,6 @@ import { useSettingsStore } from '../../store/useSettingsStore';
 import { useChatStore } from '../../store/useChatStore';
 import { resolveCodeOwnedMemoryPersonaId } from '../../services/memory/memoryScopeIdentity';
 import { resolveGraphTaskId } from '../goals/graphTaskScope';
-import { executeProviderAwareTool } from './providerAwareToolExecution';
 import {
   executeMemoryBlockEdit,
   executeMemoryBlockRead,
@@ -11,11 +10,13 @@ import {
   executeMemoryPin,
   executeMemoryRecall,
   executeMemoryRemember,
+  executeMemorySearch,
   executeMemoryUnpin,
 } from './builtin-memory';
 import type {
   MemoryRememberArgs,
   MemoryRememberExecutionContext,
+  MemoryRecallExecutionContext,
 } from '../../services/memory/memoryTools';
 import type { BuiltinToolExecutionParams } from './toolBuiltinExecutionTypes';
 import type { ToolExecutionContext } from './toolExecutionContext';
@@ -59,6 +60,22 @@ function buildInvalidMemoryManageArgs(message: string): string {
   return JSON.stringify({ ok: false, code: 'invalid_args', error: message });
 }
 
+function resolveExecutionMemoryContext(
+  conversationId: string,
+  workspaceConversationId: string,
+  context?: ToolExecutionContext,
+): MemoryRecallExecutionContext {
+  const conversation = useChatStore
+    .getState()
+    .conversations.find((candidate) => candidate.id === conversationId);
+  return {
+    memoryConversationId: workspaceConversationId,
+    sourceThreadId: conversationId,
+    personaId: resolveCodeOwnedMemoryPersonaId(conversation?.personaId),
+    taskId: resolveGraphTaskId({ goals: context?.controlGraphGoals }) ?? null,
+  };
+}
+
 function withExecutionMemoryContext(
   args: unknown,
   conversationId: string,
@@ -70,11 +87,13 @@ function withExecutionMemoryContext(
       ? (args as Partial<MemoryRememberArgs>)
       : {};
   const sourceRunId = context?.agentRunId?.trim() ? context.agentRunId.trim() : null;
-  const taskId = resolveGraphTaskId({ goals: context?.controlGraphGoals });
+  const executionMemoryContext = resolveExecutionMemoryContext(
+    conversationId,
+    workspaceConversationId,
+    context,
+  );
+  const taskId = executionMemoryContext.taskId;
   const scope = source.scope as MemoryRememberArgs['scope'];
-  const conversation = useChatStore
-    .getState()
-    .conversations.find((candidate) => candidate.id === conversationId);
   const common = {
     subject: source.subject as string,
     subjectType: source.subjectType,
@@ -93,7 +112,7 @@ function withExecutionMemoryContext(
     return {
       args: common,
       context: {
-        personaId: resolveCodeOwnedMemoryPersonaId(conversation?.personaId),
+        personaId: executionMemoryContext.personaId,
       },
     };
   }
@@ -149,17 +168,18 @@ export async function executeBuiltinMemoryTool(
   }
 
   if (name === 'memory_search') {
-    const memorySearchResult = await executeProviderAwareTool({
-      name,
+    return executeMemorySearch(
       args,
-      conversationId,
-      workspaceConversationId,
-      context,
-    });
-    return memorySearchResult ?? `Error: unhandled memory_* tool "${name}"`;
+      resolveExecutionMemoryContext(conversationId, workspaceConversationId, context),
+    );
   }
 
-  if (name === 'memory_recall') return executeMemoryRecall(args);
+  if (name === 'memory_recall') {
+    return executeMemoryRecall(
+      args,
+      resolveExecutionMemoryContext(conversationId, workspaceConversationId, context),
+    );
+  }
   if (name === 'memory_remember') {
     const request = withExecutionMemoryContext(
       args,
