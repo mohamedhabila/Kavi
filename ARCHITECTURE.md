@@ -86,6 +86,15 @@ The main request lifecycle is:
 - `src/services/scheduler` and `src/screens/SchedulerScreen.tsx` manage scheduled runs and background workflows.
 - `src/services/notifications` handles local notification delivery and scheduling.
 
+### Durable Execution And Restart Reconciliation
+
+- `src/services/executionJournal` owns persisted execution generations, checkpoints, cancellation epochs, effect receipts, external handles, recovery policy, and bounded retention.
+- Foreground model streams are process-bound and are never blindly replayed after a restart. Each generation first acquires a journal lease and an exclusive conversation-projection owner; the owned projection is flushed before model execution becomes recoverable.
+- Initial startup recovery waits for chat hydration before a new foreground generation can start. A same-conversation replacement waits for the prior owner to close, then rebuilds its request from the latest conversation state so a stale resume cannot restart a terminal run.
+- Restart reconciliation preserves a fully completed final projection as successful. An incomplete projection is closed explicitly, any in-flight tool projections are marked interrupted, and the user-visible transcript states that execution stopped instead of claiming completion or duplicating effects.
+- Android durable work is scheduled through the WorkManager adapter under `android/app/src/main/java/com/kavi/app/durability`. Eligible iOS work uses the BackgroundTasks-backed runtime under `ios/Kavi/DurableExecution` and the `KaviDurableExecutionCore` package. Platform scheduling is an adapter over the journal; the journal remains authoritative when the OS delays, expires, retries, or cancels work.
+- Foreground interaction, continuable user work, maintenance, monitors, and external durable operations have separate policies. The app does not promise indefinite background execution for work that a mobile OS cannot legally or reliably continue.
+
 ## Native And WebView Runtimes
 
 Kavi includes non-trivial runtime surfaces beyond standard React Native UI:
@@ -156,4 +165,5 @@ If you are new to the codebase, start here:
 4. `src/store/useChatStore.ts` and `src/store/useSettingsStore.ts`
 5. `src/engine/orchestrator.ts`
 6. `src/services/llm/LlmService.ts`
-7. `src/screens/ChatScreen.tsx` and `src/screens/RemoteWorkScreen.tsx`
+7. `src/services/executionJournal` for lifecycle, recovery, and side-effect durability
+8. `src/screens/ChatScreen.tsx` and `src/screens/RemoteWorkScreen.tsx`
