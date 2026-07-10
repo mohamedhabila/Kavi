@@ -11,6 +11,7 @@
 // ---------------------------------------------------------------------------
 
 import { getMemoryDb } from './sqlite-store';
+import { buildFactContentHash } from './facts/contentIdentity';
 
 let schemaReady = false;
 
@@ -56,6 +57,8 @@ export function ensureFactSchema(): void {
       ON memory_facts(subject_id);
     CREATE INDEX IF NOT EXISTS idx_facts_subject_predicate
       ON memory_facts(subject_id, predicate);
+    CREATE INDEX IF NOT EXISTS idx_facts_subject_predicate_nocase
+      ON memory_facts(subject_id, predicate COLLATE NOCASE);
     CREATE INDEX IF NOT EXISTS idx_facts_valid
       ON memory_facts(invalid_at, deleted_at);
     CREATE INDEX IF NOT EXISTS idx_facts_pinned
@@ -257,10 +260,21 @@ export function ensureFactSchema(): void {
   `);
   ensureFactColumns(db);
   ensureRepeatableFactHistory(db);
+  ensureFactContentIdentityV2(db);
   ensureFactTermStats(db);
   db.execSync(`
     DROP INDEX IF EXISTS idx_fact_terms_unit_kind;
     DROP INDEX IF EXISTS idx_fact_terms_source;
+    CREATE INDEX IF NOT EXISTS idx_facts_subject
+      ON memory_facts(subject_id);
+    CREATE INDEX IF NOT EXISTS idx_facts_subject_predicate
+      ON memory_facts(subject_id, predicate);
+    CREATE INDEX IF NOT EXISTS idx_facts_subject_predicate_nocase
+      ON memory_facts(subject_id, predicate COLLATE NOCASE);
+    CREATE INDEX IF NOT EXISTS idx_facts_valid
+      ON memory_facts(invalid_at, deleted_at);
+    CREATE INDEX IF NOT EXISTS idx_facts_pinned
+      ON memory_facts(pinned);
     CREATE INDEX IF NOT EXISTS idx_fact_terms_source_unit_fact
       ON memory_fact_terms(source_run_id, unit, fact_id, weight);
     CREATE INDEX IF NOT EXISTS idx_facts_scope_origin
@@ -271,6 +285,9 @@ export function ensureFactSchema(): void {
       ON memory_facts(subject_id, predicate, scope);
     CREATE INDEX IF NOT EXISTS idx_facts_content_hash
       ON memory_facts(content_hash);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_facts_active_content_hash
+      ON memory_facts(content_hash)
+      WHERE invalid_at IS NULL AND deleted_at IS NULL;
     CREATE INDEX IF NOT EXISTS idx_facts_last_recalled
       ON memory_facts(last_recalled_at);
     CREATE INDEX IF NOT EXISTS idx_facts_importance
@@ -486,7 +503,56 @@ function ensureFactColumns(db: ReturnType<typeof getMemoryDb>): void {
   db.execSync(
     "UPDATE memory_facts SET memory_kind = 'semantic_fact' WHERE memory_kind = 'semantic'",
   );
-  db.execSync('UPDATE memory_facts SET predicate = LOWER(TRIM(predicate))');
+}
+
+interface FactContentIdentityRow {
+  id: string;
+  memory_kind: string | null;
+  scope: string | null;
+  origin_conversation_id: string | null;
+  origin_thread_id: string | null;
+  origin_task_id: string | null;
+  subject_id: string;
+  predicate: string;
+  object_text: string;
+  object_entity_id: string | null;
+}
+
+/**
+ * Migrate only facts written with the pre-v2 identity. Stored predicate and
+ * object text remain untouched because they are user-visible, case-sensitive
+ * data; normalization belongs in the derived identity only.
+ */
+function ensureFactContentIdentityV2(db: ReturnType<typeof getMemoryDb>): void {
+  const rows = db.getAllSync<FactContentIdentityRow>(
+    `SELECT id, memory_kind, scope, origin_conversation_id, origin_thread_id,
+            origin_task_id, subject_id, predicate, object_text, object_entity_id
+       FROM memory_facts
+      WHERE SUBSTR(content_hash, 1, 3) != 'v2_'`,
+  );
+  if (rows.length === 0) return;
+
+  db.execSync('BEGIN IMMEDIATE TRANSACTION');
+  try {
+    for (const row of rows) {
+      const contentHash = buildFactContentHash({
+        memoryKind: row.memory_kind,
+        scope: row.scope,
+        originConversationId: row.origin_conversation_id,
+        originThreadId: row.origin_thread_id,
+        originTaskId: row.origin_task_id,
+        subjectId: row.subject_id,
+        predicate: row.predicate,
+        objectText: row.object_text,
+        objectEntityId: row.object_entity_id,
+      });
+      db.runSync('UPDATE memory_facts SET content_hash = ? WHERE id = ?', contentHash, row.id);
+    }
+    db.execSync('COMMIT');
+  } catch (error) {
+    db.execSync('ROLLBACK');
+    throw error;
+  }
 }
 
 export function resetFactSchemaCacheForTests(): void {
@@ -532,15 +598,6 @@ function ensureFactTermStats(db: ReturnType<typeof getMemoryDb>): void {
 }
 
 // ── Shared internal helpers ──────────────────────────────────────────────
-
-export function fnv1aHash(str: string): string {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < str.length; i++) {
-    hash ^= str.charCodeAt(i);
-    hash = (hash * 0x01000193) >>> 0;
-  }
-  return hash.toString(16).padStart(8, '0');
-}
 
 let idCounter = 0;
 export function newId(prefix: string): string {

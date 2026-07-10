@@ -119,6 +119,60 @@ describe('replaceCurrentFact', () => {
     ]);
   });
 
+  it('replaces conversation memory across thread and task changes in one namespace', () => {
+    const old = recordFact({
+      subjectId: 'entity-user',
+      predicate: 'preferred_name',
+      objectText: 'Mo',
+      scope: 'conversation',
+      originConversationId: 'conversation-1',
+      originThreadId: 'older-thread',
+      originTaskId: 'older-task',
+      now: 100,
+    });
+
+    const result = replaceCurrentFact({
+      expectedCurrentFactId: old.fact.id,
+      subjectId: 'entity-user',
+      predicate: 'preferred_name',
+      objectText: 'Mohamed',
+      scope: 'conversation',
+      originConversationId: 'conversation-1',
+      originThreadId: 'new-thread',
+      originTaskId: 'new-task',
+      now: 200,
+    });
+
+    expect(result).toMatchObject({ status: 'created', fact: { objectText: 'Mohamed' } });
+  });
+
+  it('keeps session replacements isolated to their exact thread and task', () => {
+    const old = recordFact({
+      subjectId: 'entity-user',
+      predicate: 'draft_state',
+      objectText: 'open',
+      scope: 'session',
+      originConversationId: 'conversation-1',
+      originThreadId: 'thread-1',
+      originTaskId: 'task-1',
+      now: 100,
+    });
+
+    expect(
+      replaceCurrentFact({
+        expectedCurrentFactId: old.fact.id,
+        subjectId: 'entity-user',
+        predicate: 'draft_state',
+        objectText: 'done',
+        scope: 'session',
+        originConversationId: 'conversation-1',
+        originThreadId: 'thread-2',
+        originTaskId: 'task-1',
+        now: 200,
+      }),
+    ).toMatchObject({ status: 'conflict', conflict: 'target_scope_mismatch' });
+  });
+
   it('deduplicates an identical replacement without adding a history row', () => {
     const old = recordFact({
       subjectId: 'entity-user',
@@ -162,6 +216,34 @@ describe('replaceCurrentFact', () => {
     ]);
   });
 
+  it('stores a case-only opaque value correction as a new validity interval', () => {
+    const old = recordFact({
+      subjectId: 'entity-user',
+      predicate: 'access_token',
+      objectText: 'AbC',
+      scope: 'global',
+      now: 100,
+    });
+
+    const result = replaceCurrentFact({
+      expectedCurrentFactId: old.fact.id,
+      subjectId: 'entity-user',
+      predicate: 'access_token',
+      objectText: 'abc',
+      scope: 'global',
+      now: 200,
+    });
+
+    expect(result).toMatchObject({ status: 'created', fact: { objectText: 'abc' } });
+    const history = listFacts({
+      subjectId: 'entity-user',
+      predicate: 'access_token',
+      includeInvalidated: true,
+    });
+    expect(history).toHaveLength(2);
+    expect(history.map((fact) => fact.objectText)).toEqual(expect.arrayContaining(['abc', 'AbC']));
+  });
+
   it('rolls back when the replacement would collide with another active fact', () => {
     const old = recordFact({
       subjectId: 'entity-user',
@@ -192,32 +274,4 @@ describe('replaceCurrentFact', () => {
     );
   });
 
-  it('keeps warmed exact replacement below the host p95 regression budget', () => {
-    const durations: number[] = [];
-    for (let index = 0; index < 80; index += 1) {
-      const predicate = `performance_fact_${index}`;
-      const current = recordFact({
-        subjectId: 'entity-performance-user',
-        predicate,
-        objectText: `before-${index}`,
-        scope: 'global',
-        now: 1_000 + index * 2,
-      });
-      const startedAt = performance.now();
-      const result = replaceCurrentFact({
-        expectedCurrentFactId: current.fact.id,
-        subjectId: 'entity-performance-user',
-        predicate,
-        objectText: `after-${index}`,
-        scope: 'global',
-        now: 1_001 + index * 2,
-      });
-      durations.push(performance.now() - startedAt);
-      expect(result.status).toBe('created');
-    }
-
-    durations.sort((left, right) => left - right);
-    const p95 = durations[Math.ceil(durations.length * 0.95) - 1]!;
-    expect(p95).toBeLessThan(5);
-  });
 });

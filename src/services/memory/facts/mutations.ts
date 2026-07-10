@@ -1,9 +1,10 @@
 import { getSchemaReadyMemoryDb } from '../access/schemaGuard';
 import { runMemoryStatement } from '../access/crud';
-import { fnv1aHash, newId, safeParseObject } from '../schema';
+import { newId, safeParseObject } from '../schema';
 import { notifyStructuredMemoryChanged } from '../store';
 import { runMemoryTransaction } from '../access/transaction';
 import { deleteFactRetrievalTerms, replaceFactRetrievalTerms } from './retrievalIndex';
+import { buildFactContentHash } from './contentIdentity';
 import {
   clamp01,
   normalizeDecayPolicy,
@@ -19,71 +20,18 @@ import {
   type ReplaceCurrentFactResult,
 } from './types';
 
-function factContentHash(input: RecordFactInput): string {
-  const scope = normalizeScope(input.scope);
-  const scopedOrigin =
-    scope === 'global'
-      ? [null, null, null]
-      : [
-          input.originConversationId ?? null,
-          input.originThreadId ?? input.originConversationId ?? null,
-          input.originTaskId ?? null,
-        ];
-  const payload = JSON.stringify([
-    normalizeFactKind(input.memoryKind),
-    scope,
-    ...scopedOrigin,
-    input.subjectId,
-    input.predicate.toLowerCase(),
-    input.objectText.trim().toLowerCase(),
-    input.objectEntityId ?? null,
-  ]);
-  return fnv1aHash(payload);
-}
-
 type MemorySqlBindValue = string | number | null;
-
-function buildActiveDuplicateQuery(
-  input: RecordFactInput,
-  scope: ReturnType<typeof normalizeScope>,
-): { sql: string; params: MemorySqlBindValue[] } {
-  const clauses = [
-    'subject_id = ?',
-    'predicate = ?',
-    'object_text = ?',
-    "COALESCE(object_entity_id, '') = COALESCE(?, '')",
-    'scope = ?',
-    'memory_kind = ?',
-    'invalid_at IS NULL',
-    'deleted_at IS NULL',
-  ];
-  const params: MemorySqlBindValue[] = [
-    input.subjectId,
-    input.predicate,
-    input.objectText,
-    input.objectEntityId ?? null,
-    scope,
-    normalizeFactKind(input.memoryKind),
-  ];
-  if (scope !== 'global') {
-    clauses.push("COALESCE(origin_conversation_id, '') = COALESCE(?, '')");
-    params.push(input.originConversationId ?? null);
-    clauses.push("COALESCE(origin_thread_id, '') = COALESCE(?, '')");
-    params.push(input.originThreadId ?? input.originConversationId ?? null);
-    clauses.push("COALESCE(origin_task_id, '') = COALESCE(?, '')");
-    params.push(input.originTaskId ?? null);
-  }
-  return {
-    sql: `SELECT * FROM memory_facts WHERE ${clauses.join(' AND ')} LIMIT 1`,
-    params,
-  };
-}
 
 function buildSupersedePriorQuery(
   input: RecordFactInput,
   scope: ReturnType<typeof normalizeScope>,
 ): { sql: string; params: MemorySqlBindValue[] } {
-  const clauses = ['subject_id = ?', 'predicate = ?', 'invalid_at IS NULL', 'deleted_at IS NULL'];
+  const clauses = [
+    'subject_id = ?',
+    'predicate = ? COLLATE NOCASE',
+    'invalid_at IS NULL',
+    'deleted_at IS NULL',
+  ];
   const params: MemorySqlBindValue[] = [input.subjectId, input.predicate];
 
   if (scope === 'session') {
@@ -120,16 +68,20 @@ function buildSupersedePriorQuery(
  * Idempotent on `content_hash` for active rows.
  */
 export function recordFact(input: RecordFactInput): RecordFactResult {
+  return runMemoryTransaction(() => recordFactInTransaction(input));
+}
+
+function recordFactInTransaction(input: RecordFactInput): RecordFactResult {
   const db = getSchemaReadyMemoryDb();
   const now = input.now ?? Date.now();
   if (!input.subjectId) throw new Error('recordFact: subjectId required');
-  const predicate = input.predicate.trim().toLowerCase();
+  const predicate = input.predicate.trim();
   const objectText = input.objectText.trim();
   if (!predicate) throw new Error('recordFact: predicate required');
   if (!objectText) throw new Error('recordFact: objectText required');
 
   const normalizedInput = { ...input, predicate, objectText };
-  const hash = factContentHash(normalizedInput);
+  const hash = buildFactContentHash(normalizedInput);
   const scope = normalizeScope(input.scope);
   const confidence = clamp01(input.confidence ?? 1.0);
   const importance = clamp01(input.importance ?? 0.5);
@@ -141,8 +93,12 @@ export function recordFact(input: RecordFactInput): RecordFactResult {
   const reviewState = input.reviewState?.trim() || 'auto';
   const sensitivity = input.sensitivity?.trim() || 'normal';
 
-  const duplicateQuery = buildActiveDuplicateQuery(normalizedInput, scope);
-  const existing = db.getFirstSync<FactRow>(duplicateQuery.sql, ...duplicateQuery.params);
+  const existing = db.getFirstSync<FactRow>(
+    `SELECT * FROM memory_facts
+       WHERE content_hash = ? AND invalid_at IS NULL AND deleted_at IS NULL
+       LIMIT 1`,
+    hash,
+  );
   if (existing) {
     const merged = { ...safeParseObject(existing.attributes), ...(input.attributes ?? {}) };
     db.runSync(
@@ -327,6 +283,9 @@ function replacementScopeMatches(row: FactRow, input: ReplaceCurrentFactInput): 
   if (scope === 'global') return true;
 
   const conversationId = nullableId(input.originConversationId);
+  if (scope === 'conversation') {
+    return nullableId(row.origin_conversation_id) === conversationId;
+  }
   const threadId = nullableId(input.originThreadId ?? input.originConversationId);
   const taskId = nullableId(input.originTaskId);
   return (
@@ -422,7 +381,7 @@ export function replaceCurrentFact(input: ReplaceCurrentFactInput): ReplaceCurre
         throw new ExactReplacementConflict('target_scope_mismatch');
       }
 
-      if (current.object_text.trim().toLowerCase() === objectText.toLowerCase()) {
+      if (current.object_text.normalize('NFKC').trim() === objectText.normalize('NFKC')) {
         return {
           fact: reinforceExactDuplicate(current, input, now),
           status: 'duplicate' as const,

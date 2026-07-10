@@ -55,6 +55,26 @@ describe('executeMemoryRemember', () => {
     expect(second.status).toBe('duplicate');
   });
 
+  it('preserves a mixed-case predicate label through remember and recall', () => {
+    const remembered = rememberOk({
+      subject: 'user',
+      predicate: 'Preferred_Display_Name',
+      value: 'Mo',
+    });
+    expect(remembered.fact.predicate).toBe('Preferred_Display_Name');
+
+    const recall = executeMemoryRecall({
+      subject: 'user',
+      predicate: 'Preferred_Display_Name',
+    });
+    expect(recall.ok).toBe(true);
+    if (recall.ok) {
+      expect(recall.facts).toEqual([
+        expect.objectContaining({ predicate: 'Preferred_Display_Name', value: 'Mo' }),
+      ]);
+    }
+  });
+
   it('supersedes prior fact by default for the same subject and predicate', () => {
     rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin' });
     const next = rememberOk({

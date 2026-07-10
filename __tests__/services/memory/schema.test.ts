@@ -49,6 +49,12 @@ function indexedColumns(index: string): string[] {
 
 describe('ensureFactSchema', () => {
   it('migrates legacy unique hashes without losing fact history rows', () => {
+    ensureFactSchema();
+    const freshIndexes = indexNames('memory_facts').sort();
+
+    closeMemoryDb();
+    expoSqlite.__resetExpoSqliteForTests();
+    resetFactSchemaCacheForTests();
     getMemoryDb().execSync(`
       CREATE TABLE memory_facts (
         id TEXT PRIMARY KEY,
@@ -82,12 +88,27 @@ describe('ensureFactSchema', () => {
       "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'memory_facts'",
     )?.sql;
     expect(tableSql).not.toMatch(/UNIQUE\s*\(\s*content_hash\s*\)/i);
-    expect(indexNames('memory_facts')).toContain('idx_facts_content_hash');
+    expect(indexNames('memory_facts').sort()).toEqual(freshIndexes);
+    expect(indexNames('memory_facts')).toEqual(
+      expect.arrayContaining([
+        'idx_facts_content_hash',
+        'idx_facts_active_content_hash',
+        'idx_facts_subject',
+        'idx_facts_subject_predicate',
+        'idx_facts_subject_predicate_nocase',
+        'idx_facts_valid',
+        'idx_facts_pinned',
+      ]),
+    );
     expect(
-      getMemoryDb().getFirstSync<{ id: string; predicate: string }>(
-        "SELECT id, predicate FROM memory_facts WHERE id = 'legacy-fact'",
+      getMemoryDb().getFirstSync<{ id: string; predicate: string; content_hash: string }>(
+        "SELECT id, predicate, content_hash FROM memory_facts WHERE id = 'legacy-fact'",
       ),
-    ).toEqual({ id: 'legacy-fact', predicate: 'lives_in' });
+    ).toEqual({
+      id: 'legacy-fact',
+      predicate: 'LIVES_IN',
+      content_hash: expect.stringMatching(/^v2_[0-9a-f]{32}$/),
+    });
   });
 
   it('creates scoped fact provenance columns and episodic tables', () => {
@@ -144,6 +165,32 @@ describe('ensureFactSchema', () => {
     expect(factCount?.count).toBe(1);
     expect(episodeCount?.count).toBe(1);
     expect(evidenceCount?.count).toBe(1);
+  });
+
+  it('enforces exact active fact identity in SQLite', () => {
+    ensureFactSchema();
+    const recorded = recordFact({
+      subjectId: 'entity-user',
+      predicate: 'opaque_token',
+      objectText: 'AbC',
+      now: 10,
+    });
+
+    expect(() =>
+      getMemoryDb().runSync(
+        `INSERT INTO memory_facts
+           (id, subject_id, predicate, object_text, content_hash, valid_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        'duplicate-active-fact',
+        'entity-user',
+        'opaque_token',
+        'AbC',
+        recorded.fact.contentHash,
+        11,
+        11,
+        11,
+      ),
+    ).toThrow();
   });
 
   it('maintains retrieval term statistics with fact term writes and clears', () => {
