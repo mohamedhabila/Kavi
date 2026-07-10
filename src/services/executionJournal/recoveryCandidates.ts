@@ -153,6 +153,24 @@ function readCurrentGenerationReceipt(
 }
 
 async function readCandidate(runId: string): Promise<ReadPersistedExternalRecoveryCandidateResult> {
+  const control = getExecutionJournalDb().getFirstSync<unknown>(
+    'SELECT cancellation_state FROM execution_recovery_controls WHERE run_id = ?',
+    runId,
+  );
+  if (
+    !control ||
+    typeof control !== 'object' ||
+    Array.isArray(control) ||
+    Object.keys(control).join(',') !== 'cancellation_state' ||
+    !['active', 'cancel_requested', 'cancelled'].includes(
+      String((control as Record<string, unknown>).cancellation_state),
+    )
+  ) {
+    throw new Error('execution_recovery_invalid_control_state');
+  }
+  if ((control as { cancellation_state: string }).cancellation_state !== 'active') {
+    return { kind: 'not_candidate', runId };
+  }
   const result = await queryExecutionRecovery({ runId });
   if (result.kind === 'query_blocked') {
     return result.reason === 'run_unavailable'

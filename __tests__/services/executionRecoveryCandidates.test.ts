@@ -29,6 +29,7 @@ import {
   listPersistedExternalRecoveryCandidates,
   readPersistedExternalRecoveryCandidate,
 } from '../../src/services/executionJournal/productionRecovery';
+import { createExecutionRecoveryControlStore } from '../../src/services/executionJournal/recoveryControlStore';
 import {
   DIGEST_A,
   DIGEST_B,
@@ -216,6 +217,25 @@ describe('persisted external recovery candidate scan', () => {
     await expect(readPersistedExternalRecoveryCandidate('run-a')).resolves.toEqual({
       kind: 'not_candidate',
       runId: 'run-a',
+    });
+  });
+
+  it('does not reschedule a journal-cancelled recovery generation', async () => {
+    seedCandidate('a', 10);
+    createExecutionRecoveryControlStore().requestCancellation({
+      runId: 'run-a',
+      expectedControlEpoch: 0,
+      occurredAt: 16,
+    });
+
+    await expect(readPersistedExternalRecoveryCandidate('run-a')).resolves.toEqual({
+      kind: 'not_candidate',
+      runId: 'run-a',
+    });
+    await expect(listPersistedExternalRecoveryCandidates({ limit: 10 })).resolves.toEqual({
+      kind: 'candidates',
+      candidates: [],
+      nextAfter: null,
     });
   });
 
