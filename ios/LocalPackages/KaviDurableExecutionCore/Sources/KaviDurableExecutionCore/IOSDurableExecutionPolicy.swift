@@ -13,8 +13,8 @@ public enum IOSDurableExecutionPolicy {
       return .unsupported(.invalidRequest)
     }
 
-    if request.constraints.requiresBatteryNotLow || request.constraints.requiresStorageNotLow ||
-      request.constraints.requiresDeviceIdle
+    if request.constraints.requiresBatteryNotLow || request.constraints.requiresStorageNotLow
+      || request.constraints.requiresDeviceIdle
     {
       return .unsupported(.unsupportedPlatformConstraint)
     }
@@ -66,41 +66,35 @@ public enum IOSDurableExecutionPolicy {
 
   public static func isValid(_ request: IOSDurableExecutionRequest) -> Bool {
     let identity = request.identity
-    return isValidIdentifier(identity.runId) &&
-      identity.controlEpoch >= 0 &&
-      identity.snapshotUpdatedAtMillis >= 0 &&
-      isSHA256Digest(identity.snapshotDigest) &&
-      isSHA256Digest(identity.commandDigest) &&
-      request.requestedAtMillis >= 0 &&
-      identity.snapshotUpdatedAtMillis <= request.requestedAtMillis &&
-      request.constraints.earliestStartAtMillis >= request.requestedAtMillis &&
-      request.retryPolicy.maxAttempts >= 1 &&
-      request.retryPolicy.maxAttempts <= maximumAttempts &&
-      request.retryPolicy.initialBackoffMillis >= minimumBackoffMillis &&
-      request.retryPolicy.initialBackoffMillis <= maximumBackoffMillis
+    return isValidIdentifier(identity.runId) && identity.controlEpoch >= 0
+      && identity.snapshotUpdatedAtMillis >= 0 && isSHA256Digest(identity.snapshotDigest)
+      && isSHA256Digest(identity.commandDigest) && request.requestedAtMillis >= 0
+      && identity.snapshotUpdatedAtMillis <= request.requestedAtMillis
+      && request.constraints.earliestStartAtMillis >= request.requestedAtMillis
+      && request.retryPolicy.maxAttempts >= 1 && request.retryPolicy.maxAttempts <= maximumAttempts
+      && request.retryPolicy.initialBackoffMillis >= minimumBackoffMillis
+      && request.retryPolicy.initialBackoffMillis <= maximumBackoffMillis
   }
 
   public static func isValidIdentity(_ identity: IOSRecoveryCommandIdentity) -> Bool {
-    isValidIdentifier(identity.runId) &&
-      identity.controlEpoch >= 0 &&
-      identity.snapshotUpdatedAtMillis >= 0 &&
-      isSHA256Digest(identity.snapshotDigest) &&
-      isSHA256Digest(identity.commandDigest)
+    isValidIdentifier(identity.runId) && identity.controlEpoch >= 0
+      && identity.snapshotUpdatedAtMillis >= 0 && isSHA256Digest(identity.snapshotDigest)
+      && isSHA256Digest(identity.commandDigest)
   }
 
   public static func isValidIdentifier(_ value: String) -> Bool {
-    !value.isEmpty &&
-      value.count <= 200 &&
-      value == value.trimmingCharacters(in: .whitespacesAndNewlines) &&
-      value.unicodeScalars.allSatisfy { scalar in
+    !value.isEmpty && value.count <= 200
+      && value == value.trimmingCharacters(in: .whitespacesAndNewlines)
+      && value.unicodeScalars.allSatisfy { scalar in
         scalar.value >= 0x20 && scalar.value != 0x7f
       }
   }
 
   public static func isSHA256Digest(_ value: String) -> Bool {
-    value.count == 64 && value.unicodeScalars.allSatisfy { scalar in
-      (scalar.value >= 0x30 && scalar.value <= 0x39) ||
-        (scalar.value >= 0x61 && scalar.value <= 0x66)
-    }
+    value.count == 64
+      && value.unicodeScalars.allSatisfy { scalar in
+        (scalar.value >= 0x30 && scalar.value <= 0x39)
+          || (scalar.value >= 0x61 && scalar.value <= 0x66)
+      }
   }
 }

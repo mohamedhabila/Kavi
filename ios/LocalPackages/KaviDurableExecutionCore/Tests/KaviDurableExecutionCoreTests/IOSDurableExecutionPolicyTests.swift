@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import KaviDurableExecutionCore
 
 final class IOSDurableExecutionPolicyTests: XCTestCase {
@@ -92,7 +93,8 @@ final class IOSDurableExecutionPolicyTests: XCTestCase {
     )
     XCTAssertEqual(supported.schedulerKind, .backgroundProcessing)
 
-    for commandKind in IOSRecoveryCommandKind.allCases where
+    for commandKind in IOSRecoveryCommandKind.allCases
+    where
       commandKind != .finalizeExistingTerminalProjection
     {
       XCTAssertEqual(

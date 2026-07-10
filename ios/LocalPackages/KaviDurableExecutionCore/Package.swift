@@ -9,7 +9,7 @@ let package = Package(
     .macOS(.v12),
   ],
   products: [
-    .library(name: "KaviDurableExecutionCore", targets: ["KaviDurableExecutionCore"]),
+    .library(name: "KaviDurableExecutionCore", targets: ["KaviDurableExecutionCore"])
   ],
   targets: [
     .target(name: "KaviDurableExecutionCore"),
