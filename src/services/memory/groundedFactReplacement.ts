@@ -1,5 +1,7 @@
 import type { ConsolidatorFact } from './consolidator';
 import type { MemoryFact, MemoryFactScope } from './facts/types';
+import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
+import { isExactMemoryScopeId } from './memoryScopeIdentity';
 
 export type GroundedReplacementRejection =
   | 'not_replace_operation'
@@ -11,8 +13,10 @@ export type GroundedReplacementRejection =
   | 'value_not_in_current_user_message'
   | 'no_compatible_current_fact'
   | 'ambiguous_current_fact'
+  | 'conversation_identity_unavailable'
   | 'project_identity_unavailable'
-  | 'persona_identity_unavailable';
+  | 'persona_identity_unavailable'
+  | 'session_identity_unavailable';
 
 export type GroundedReplacementDecision =
   | {
@@ -36,17 +40,14 @@ export interface GroundedReplacementContext {
   currentUserMessage: string;
   memoryConversationId: string;
   threadId: string;
-  taskId?: string;
+  taskId?: string | null;
+  personaId?: string | null;
   currentFacts: readonly MemoryFact[];
   hasAnyCurrentFact: boolean;
 }
 
 function normalizeGroundingText(value: string): string {
   return value.normalize('NFKC').replace(/\s+/gu, ' ').trim();
-}
-
-function normalizeId(value: string | null | undefined): string | null {
-  return value?.trim() || null;
 }
 
 function proposedScope(fact: ConsolidatorFact): MemoryFactScope {
@@ -59,17 +60,61 @@ function isCompatibleTarget(
   context: GroundedReplacementContext,
 ): boolean {
   if (fact.scope !== scope) return false;
-  if (scope === 'global') return true;
+  if (scope === 'global') {
+    return (
+      fact.personaId === null &&
+      fact.originConversationId === null &&
+      fact.originThreadId === null &&
+      fact.originTaskId === null
+    );
+  }
 
-  if (scope === 'conversation') {
-    return normalizeId(fact.originConversationId) === normalizeId(context.memoryConversationId);
+  if (scope === 'persona') {
+    return (
+      isExactMemoryScopeId(context.personaId) &&
+      fact.personaId === context.personaId &&
+      fact.originConversationId === null &&
+      fact.originThreadId === null &&
+      fact.originTaskId === null
+    );
+  }
+
+  if (scope === 'conversation' || scope === 'project') {
+    return (
+      fact.personaId === null &&
+      fact.originConversationId === context.memoryConversationId &&
+      fact.originTaskId === null &&
+      (fact.originThreadId === null || isExactMemoryScopeId(fact.originThreadId))
+    );
   }
 
   return (
-    normalizeId(fact.originConversationId) === normalizeId(context.memoryConversationId) &&
-    normalizeId(fact.originThreadId) === normalizeId(context.threadId) &&
-    normalizeId(fact.originTaskId) === normalizeId(context.taskId)
+    fact.personaId === null &&
+    fact.originConversationId === context.memoryConversationId &&
+    fact.originThreadId === context.threadId &&
+    fact.originTaskId === context.taskId
   );
+}
+
+function unavailableScopeIdentity(
+  scope: MemoryFactScope,
+  context: GroundedReplacementContext,
+): GroundedReplacementRejection | null {
+  if (scope === 'global') return null;
+  if (scope === 'persona') {
+    return isExactMemoryScopeId(context.personaId) ? null : 'persona_identity_unavailable';
+  }
+  if (!isExactMemoryScopeId(context.memoryConversationId)) {
+    return scope === 'project'
+      ? 'project_identity_unavailable'
+      : scope === 'session'
+        ? 'session_identity_unavailable'
+        : 'conversation_identity_unavailable';
+  }
+  if (scope === 'project' || scope === 'conversation') return null;
+  return isExactMemoryScopeId(context.threadId) && isExactMemoryScopeId(context.taskId)
+    ? null
+    : 'session_identity_unavailable';
 }
 
 export function evaluateGroundedReplacement(
@@ -83,8 +128,8 @@ export function evaluateGroundedReplacement(
     return { accepted: false, reason: 'not_current_direct' };
   }
 
-  const currentUserMessageId = context.currentUserMessageId?.trim();
-  if (!currentUserMessageId) {
+  const currentUserMessageId = context.currentUserMessageId;
+  if (!isExactMemoryProvenanceId(currentUserMessageId)) {
     return { accepted: false, reason: 'missing_current_user_message' };
   }
   if (
@@ -108,12 +153,8 @@ export function evaluateGroundedReplacement(
   }
 
   const scope = proposedScope(proposal);
-  if (scope === 'project') {
-    return { accepted: false, reason: 'project_identity_unavailable' };
-  }
-  if (scope === 'persona') {
-    return { accepted: false, reason: 'persona_identity_unavailable' };
-  }
+  const scopeIdentityRejection = unavailableScopeIdentity(scope, context);
+  if (scopeIdentityRejection) return { accepted: false, reason: scopeIdentityRejection };
 
   if (context.currentFacts.length === 0) {
     if (context.hasAnyCurrentFact) {

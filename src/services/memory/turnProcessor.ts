@@ -22,10 +22,7 @@ import { extractProviderEnrichment } from './providerExtractor';
 import { ensureFactSchema } from './schema';
 import { editPromptEligibleWorkingBlock } from './workingBlocks';
 import { composeActiveFocusContent } from './focus';
-import { findEntityByName } from './entities';
-import { listCurrentFactsForReplacement } from './facts/exactReplacementQueries';
-import { hasCurrentFactForSubjectPredicate } from './facts/queries';
-import type { MemoryFact } from './facts/types';
+import { resolveCurrentFactsForReplacement } from './facts/currentReplacementResolution';
 import { evaluateGroundedReplacement } from './groundedFactReplacement';
 import { canWriteLongTermMemory } from './policy';
 import { finalizeProviderTurn, persistStructuralTurn } from './turnPersistence';
@@ -421,7 +418,18 @@ function mergeProviderIntoStructural(
     }
     if (seen.has(key)) continue;
 
-    const resolution = resolveCurrentFactsForReplacement(fact, context);
+    const resolution = resolveCurrentFactsForReplacement(
+      {
+        subject: fact.subject,
+        predicate: fact.predicate,
+        scope: fact.scope ?? 'conversation',
+      },
+      {
+        memoryConversationId: context.memoryConversationId,
+        sourceThreadId: context.threadId,
+        taskId: context.taskId,
+      },
+    );
     if (!resolution.hasAnyCurrentFact && fact.operation !== 'replace_current') {
       mergedFacts.push(fact);
       seen.add(key);
@@ -446,47 +454,6 @@ function mergeProviderIntoStructural(
     activeFocus: provider.activeFocus ?? structural.activeFocus,
     openThreads: Array.from(threadSet).slice(0, 5),
     notable: provider.notable ?? [],
-  };
-}
-
-function resolveCurrentFactsForReplacement(
-  fact: ConsolidatorResult['newFacts'][number],
-  context: {
-    memoryConversationId: string;
-    threadId: string;
-    taskId?: string;
-  },
-): { currentFacts: MemoryFact[]; hasAnyCurrentFact: boolean } {
-  const subject = fact.subject.trim();
-  const predicate = fact.predicate.trim();
-  if (!subject || !predicate) return { currentFacts: [], hasAnyCurrentFact: false };
-
-  const entity = findEntityByName(subject);
-  if (!entity) return { currentFacts: [], hasAnyCurrentFact: false };
-
-  const scope = fact.scope ?? 'conversation';
-  if (scope === 'persona' || (scope === 'session' && !context.taskId)) {
-    return {
-      currentFacts: [],
-      hasAnyCurrentFact: true,
-    };
-  }
-  const currentFacts = listCurrentFactsForReplacement({
-    subjectId: entity.id,
-    predicate,
-    scope,
-    ...(scope === 'project' || scope === 'conversation' || scope === 'session'
-      ? {
-          originConversationId: context.memoryConversationId,
-          originThreadId: context.threadId,
-        }
-      : {}),
-    ...(scope === 'session' ? { originTaskId: context.taskId } : {}),
-  });
-  return {
-    currentFacts,
-    hasAnyCurrentFact:
-      currentFacts.length > 0 || hasCurrentFactForSubjectPredicate(entity.id, predicate),
   };
 }
 

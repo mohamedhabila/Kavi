@@ -9,8 +9,9 @@ function currentFact(overrides: Partial<MemoryFact> = {}): MemoryFact {
     predicate: 'lives_in',
     objectText: 'Amsterdam',
     scope: 'global',
-    originConversationId: 'conversation-1',
-    originThreadId: 'thread-1',
+    personaId: null,
+    originConversationId: null,
+    originThreadId: null,
     originTaskId: null,
     invalidAt: null,
     deletedAt: null,
@@ -105,6 +106,11 @@ describe('evaluateGroundedReplacement', () => {
     expect(decide(proposal({ evidenceMessageIds: ['user-current', 'assistant-current'] }))).toEqual(
       { accepted: false, reason: 'wrong_evidence_message' },
     );
+    expect(
+      decide(proposal({ evidenceMessageIds: [' user-current '] }), {
+        currentUserMessageId: ' user-current ',
+      }),
+    ).toEqual({ accepted: false, reason: 'missing_current_user_message' });
   });
 
   it('rejects missing or ungrounded quotes', () => {
@@ -149,7 +155,7 @@ describe('evaluateGroundedReplacement', () => {
   it('accepts a global target without promoting another scope', () => {
     const decision = decide(proposal(), {
       currentFacts: [
-        currentFact({ id: 'global', originConversationId: 'older-conversation' }),
+        currentFact({ id: 'global' }),
         currentFact({
           id: 'other-scope',
           scope: 'conversation',
@@ -169,7 +175,7 @@ describe('evaluateGroundedReplacement', () => {
             scope: 'conversation',
             originConversationId: 'conversation-1',
             originThreadId: 'older-thread',
-            originTaskId: 'older-task',
+            originTaskId: null,
           }),
         ],
       }).accepted,
@@ -201,15 +207,52 @@ describe('evaluateGroundedReplacement', () => {
     expect(sessionDecision.accepted).toBe(true);
   });
 
-  it('rejects project and persona replacement until those identities are explicit', () => {
-    expect(decide(proposal({ scope: 'project' }))).toEqual({
-      accepted: false,
-      reason: 'project_identity_unavailable',
-    });
+  it('admits project and persona replacements only with exact code-owned identities', () => {
+    expect(
+      decide(proposal({ scope: 'project' }), {
+        currentFacts: [
+          currentFact({
+            scope: 'project',
+            originConversationId: 'conversation-1',
+            originThreadId: 'older-thread',
+          }),
+        ],
+      }).accepted,
+    ).toBe(true);
     expect(decide(proposal({ scope: 'persona' }))).toEqual({
       accepted: false,
       reason: 'persona_identity_unavailable',
     });
+    expect(
+      decide(proposal({ scope: 'persona' }), {
+        personaId: 'persona-1',
+        currentFacts: [
+          currentFact({
+            scope: 'persona',
+            personaId: 'persona-1',
+            originConversationId: null,
+            originThreadId: null,
+          }),
+        ],
+      }).accepted,
+    ).toBe(true);
+  });
+
+  it('rejects missing exact conversation and session identities before insertion', () => {
+    expect(
+      decide(proposal({ scope: 'conversation' }), {
+        memoryConversationId: ' conversation-1 ',
+        currentFacts: [],
+        hasAnyCurrentFact: false,
+      }),
+    ).toEqual({ accepted: false, reason: 'conversation_identity_unavailable' });
+    expect(
+      decide(proposal({ scope: 'session' }), {
+        taskId: null,
+        currentFacts: [],
+        hasAnyCurrentFact: false,
+      }),
+    ).toEqual({ accepted: false, reason: 'session_identity_unavailable' });
   });
 
   it('downgrades only a grounded direct no-target replacement to insert', () => {
