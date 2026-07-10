@@ -12,6 +12,7 @@ import { prepareForegroundRunRequestBootstrap } from './requestBootstrap';
 import { resolveForegroundConversationExecutionContext } from './executionContext';
 import { acquireMainInferenceLease } from '../../../services/memory/onDeviceGuards';
 import { requestScheduledIngestionDrain } from '../../../services/memory/ingestionQueue';
+import type { ForegroundModelExecutionLease } from '../../../services/executionJournal/foregroundModelExecutionJournal';
 
 function buildModelReadyMessages(messages: Message[]): Message[] {
   return deduplicateToolResults(ensureToolResultPairing(messages));
@@ -184,9 +185,60 @@ export async function executeForegroundConversationRun(
     fallbackUserMessageId: bootstrap.latestUserMessage?.id,
     messages: orchestratorMessages,
   });
+  const resolvedSystemPrompt = options?.additionalSystemPrompt
+    ? [conversation?.systemPrompt || context.state.systemPrompt, options.additionalSystemPrompt]
+        .filter(Boolean)
+        .join('\n\n')
+    : conversation?.systemPrompt || context.state.systemPrompt;
+  const requestMessageId = resumePreparation.workflowScopeUserMessageId;
+  if (!requestMessageId) {
+    runtime.terminalLifecycle.handleCatch(
+      new Error('foreground_model_journal_request_message_missing'),
+    );
+    await context.durability.flushChatState();
+    return;
+  }
+  let executionLease: ForegroundModelExecutionLease;
+  try {
+    await context.durability.flushChatState();
+    executionLease = await context.durability.beginModelExecution({
+      conversationId,
+      requestMessageId,
+      assistantMessageId,
+      ...(bootstrapResult.trackedAgentRunId
+        ? { taskId: bootstrapResult.trackedAgentRunId }
+        : {}),
+      requestState: {
+        messages: orchestratorMessages,
+        workflowScopeUserMessageId: requestMessageId,
+        initialAgentControlGraphState: resumePreparation.initialAgentControlGraphState,
+        initialPendingAsyncOperations: options?.initialPendingAsyncOperations,
+        memoryConversationId: workspaceTarget.workspaceConversationId,
+        workspaceReadFallbackConversationId: workspaceTarget.workspaceReadFallbackConversationId,
+        disableTools: options?.disableTools ?? false,
+        allowedToolNames: options?.allowedToolNames,
+        memoryRetrievalStrategy: options?.memoryRetrievalStrategy,
+        memoryContextStrategy: options?.memoryContextStrategy,
+      },
+      modelState: {
+        providerId: provider.id,
+        model,
+        personaId: executionContext.personaId,
+        systemPrompt: resolvedSystemPrompt,
+        maxTokens: options?.maxTokens,
+        enableCompaction: options?.enableCompaction ?? true,
+        thinkingLevel: context.state.thinkingLevel,
+      },
+    });
+  } catch (error: unknown) {
+    runtime.terminalLifecycle.handleCatch(error);
+    await context.durability.flushChatState();
+    return;
+  }
   const inferenceLease = acquireMainInferenceLease(
     `foreground:${conversationId}:${foregroundRequestId}`,
   );
+  let terminalStatus: 'succeeded' | 'failed' | 'cancelled';
   try {
     await runOrchestrator(
       {
@@ -196,14 +248,7 @@ export async function executeForegroundConversationRun(
         memoryConversationId: workspaceTarget.workspaceConversationId,
         workspaceConversationId: workspaceTarget.workspaceConversationId,
         workspaceReadFallbackConversationId: workspaceTarget.workspaceReadFallbackConversationId,
-        systemPrompt: options?.additionalSystemPrompt
-          ? [
-              conversation?.systemPrompt || context.state.systemPrompt,
-              options.additionalSystemPrompt,
-            ]
-              .filter(Boolean)
-              .join('\n\n')
-          : conversation?.systemPrompt || context.state.systemPrompt,
+        systemPrompt: resolvedSystemPrompt,
         messages: orchestratorMessages,
         maxTokens: options?.maxTokens,
         signal: abortController,
@@ -231,12 +276,34 @@ export async function executeForegroundConversationRun(
       },
       runtime.callbacks,
     );
-    await runtime.terminalLifecycle.awaitCompletion();
+    terminalStatus = await runtime.terminalLifecycle.awaitCompletion();
   } catch (error: unknown) {
-    runtime.terminalLifecycle.handleCatch(error);
+    terminalStatus = runtime.terminalLifecycle.handleCatch(error);
   } finally {
     if (inferenceLease.release()) {
       requestScheduledIngestionDrain();
     }
   }
+  await context.durability.flushChatState();
+  const projectionMessageId = runtime.getCurrentAssistantMessageId();
+  const projectedConversation = context.helpers.getConversation(conversationId);
+  await context.durability.completeModelExecution({
+    lease: executionLease,
+    status: terminalStatus,
+    projectionMessageId,
+    projectionState: {
+      conversationId,
+      requestMessageId,
+      projectionMessageId,
+      terminalStatus,
+      assistantMessage: projectedConversation?.messages.find(
+        (message) => message.id === projectionMessageId,
+      ),
+      agentRun: bootstrapResult.trackedAgentRunId
+        ? projectedConversation?.agentRuns?.find(
+            (run) => run.id === bootstrapResult.trackedAgentRunId,
+          )
+        : undefined,
+    },
+  });
 }

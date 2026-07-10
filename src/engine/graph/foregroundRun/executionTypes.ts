@@ -16,6 +16,11 @@ import type {
 } from './contracts';
 import type { ForegroundRunRequestBootstrapResult } from './requestBootstrap';
 import type { ForegroundConversationExecutionContext } from './executionContext';
+import type {
+  BeginForegroundModelExecutionInput,
+  CompleteForegroundModelExecutionInput,
+  ForegroundModelExecutionLease,
+} from '../../../services/executionJournal/foregroundModelExecutionJournal';
 
 export type EnsureCanonicalConversationOptions = {
   providerId?: string;
@@ -148,6 +153,13 @@ export interface ForegroundConversationRunState {
 
 export interface ExecuteForegroundConversationRunParams {
   context: {
+    durability: {
+      beginModelExecution: (
+        input: BeginForegroundModelExecutionInput,
+      ) => Promise<ForegroundModelExecutionLease>;
+      completeModelExecution: (input: CompleteForegroundModelExecutionInput) => Promise<unknown>;
+      flushChatState: () => Promise<void>;
+    };
     helpers: ForegroundConversationRunHelpers;
     refs: ForegroundConversationRunRefs;
     requests: ForegroundConversationRunRequestActions;

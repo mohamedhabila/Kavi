@@ -41,7 +41,7 @@ describe('foregroundRun terminal lifecycle controller', () => {
 
     controller.handleError(new Error('stream closed'));
     controller.handleDone();
-    await controller.awaitCompletion();
+    await expect(controller.awaitCompletion()).resolves.toBe('failed');
 
     expect(flushPendingSurfacedOutputs).toHaveBeenCalledTimes(1);
     expect(ensureAssistantTurn).toHaveBeenCalledTimes(1);
@@ -88,7 +88,7 @@ describe('foregroundRun terminal lifecycle controller', () => {
     });
 
     controller.handleDone();
-    await controller.awaitCompletion();
+    await expect(controller.awaitCompletion()).resolves.toBe('succeeded');
 
     expect(flushPendingSurfacedOutputs).toHaveBeenCalledTimes(1);
     expect(markCurrentAssistantPendingReview).toHaveBeenCalledWith({
@@ -127,7 +127,7 @@ describe('foregroundRun terminal lifecycle controller', () => {
       requestPersistenceCheckpoint: jest.fn(),
     });
 
-    controller.handleCatch(new Error('tool failed'));
+    expect(controller.handleCatch(new Error('tool failed'))).toBe('failed');
 
     expect(commitAssistantBuffers).toHaveBeenCalledTimes(1);
     expect(clearStreamingDraft).toHaveBeenCalledWith('assistant-2');
@@ -163,7 +163,7 @@ describe('foregroundRun terminal lifecycle controller', () => {
       requestPersistenceCheckpoint: jest.fn(),
     });
 
-    controller.handleCatch(new Error('aborted'));
+    expect(controller.handleCatch(new Error('aborted'))).toBe('cancelled');
 
     expect(finalizeCaughtAbort).toHaveBeenCalledTimes(1);
   });

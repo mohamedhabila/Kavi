@@ -4,13 +4,10 @@ import { generateId } from '../../utils/id';
 import { getExecutionJournalDb } from './database';
 import { decodeExecutionCheckpointRow, decodeExecutionRunRow } from './decoders';
 import {
-  appendExecutionCheckpoint,
-  createExecutionRun,
-  transitionExecutionRun,
-} from './mutations';
-import {
   assertMonotonicTime,
+  checkpointRow,
   insertCheckpoint,
+  insertRun,
   readRun,
   runRow,
   withImmediateTransaction,
@@ -33,7 +30,7 @@ const ACTIVE_RUN_STATUSES = [
   'ambiguous',
 ] as const;
 
-type ForegroundModelTerminalStatus = Extract<
+export type ForegroundModelTerminalStatus = Extract<
   ExecutionRunStatus,
   'succeeded' | 'failed' | 'cancelled'
 >;
@@ -224,9 +221,8 @@ export async function beginForegroundModelExecution(
     updatedAt: createdAt,
     terminalAt: null,
   };
-  createExecutionRun({
-    run,
-    initialCheckpoint: {
+  const initialCheckpoint = decodeExecutionCheckpointRow(
+    checkpointRow({
       id: initialCheckpointId,
       runId,
       sequence: 0,
@@ -241,32 +237,48 @@ export async function beginForegroundModelExecution(
       permissionState: 'granted',
       controlEpoch: 0,
       createdAt,
-    },
+    }),
+  );
+  const beforeModelCheckpoint = decodeExecutionCheckpointRow(
+    checkpointRow({
+      id: beforeModelCheckpointId,
+      runId,
+      sequence: 1,
+      taskId: run.taskId,
+      goalId: null,
+      phase: 'work',
+      boundary: 'before_model',
+      stateRefId: input.assistantMessageId,
+      stateDigest: beforeModelStateDigest,
+      resumeStrategy: 'not_resumable',
+      approvalState: 'not_required',
+      permissionState: 'granted',
+      controlEpoch: 0,
+      createdAt,
+    }),
+  );
+  const database = (options.getDatabase ?? getExecutionJournalDb)();
+  return withImmediateTransaction(database, () => {
+    insertRun(database, decodeExecutionRunRow(runRow(run)));
+    database.runSync(
+      `INSERT INTO execution_recovery_controls (run_id, cancellation_state, updated_at)
+       VALUES (?, 'active', ?)`,
+      run.id,
+      createdAt,
+    );
+    insertCheckpoint(database, initialCheckpoint);
+    const transition = database.runSync(
+      `UPDATE execution_runs SET status = 'running'
+       WHERE id = ? AND status = 'queued' AND control_epoch = 0 AND updated_at = ?`,
+      run.id,
+      createdAt,
+    );
+    if (transition.changes !== 1) {
+      throw new Error('foreground_model_journal_generation_changed');
+    }
+    insertCheckpoint(database, beforeModelCheckpoint);
+    return toLease(readRun(database, run.id), beforeModelCheckpoint);
   });
-  transitionExecutionRun({
-    runId,
-    expectedStatus: 'queued',
-    nextStatus: 'running',
-    expectedControlEpoch: 0,
-    nextControlEpoch: 0,
-    occurredAt: createdAt,
-  });
-  const checkpoint = appendExecutionCheckpoint({
-    id: beforeModelCheckpointId,
-    runId,
-    expectedControlEpoch: 0,
-    taskId: run.taskId,
-    goalId: null,
-    phase: 'work',
-    boundary: 'before_model',
-    stateRefId: input.assistantMessageId,
-    stateDigest: beforeModelStateDigest,
-    resumeStrategy: 'not_resumable',
-    approvalState: 'not_required',
-    permissionState: 'granted',
-    createdAt,
-  });
-  return toLease({ ...run, status: 'running' }, checkpoint);
 }
 
 function assertEmptyEffectState(database: SQLite.SQLiteDatabase, runId: string): void {

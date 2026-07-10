@@ -63,8 +63,27 @@ function createExecutionContext(params: {
 }) {
   let idSequence = 0;
   const noOp = jest.fn();
+  const flushChatState = jest.fn().mockResolvedValue(undefined);
+  const beginModelExecution = jest.fn(async (input) => ({
+    runId: `journal-${input.assistantMessageId}`,
+    conversationId: input.conversationId,
+    requestMessageId: input.requestMessageId,
+    assistantMessageId: input.assistantMessageId,
+    taskId: input.taskId ?? null,
+    expectedStatus: 'running' as const,
+    controlEpoch: 0,
+    updatedAt: 10,
+    checkpointId: `checkpoint-${input.assistantMessageId}`,
+    checkpointStateDigest: 'a'.repeat(64),
+  }));
+  const completeModelExecution = jest.fn().mockResolvedValue(undefined);
 
   return {
+    durability: {
+      beginModelExecution,
+      completeModelExecution,
+      flushChatState,
+    },
     helpers: {
       appendConversationLog: noOp,
       clearPendingRunState: noOp,
@@ -253,6 +272,18 @@ describe('foreground run target-conversation execution context', () => {
         memoryConversationId: conversation.id,
       }),
     );
+    expect(context.durability.beginModelExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: conversation.id,
+        requestMessageId: 'user-1',
+      }),
+    );
+    expect(context.durability.completeModelExecution).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'succeeded' }),
+    );
+    expect(
+      context.durability.beginModelExecution.mock.invocationCallOrder[0],
+    ).toBeLessThan(mockedRunOrchestrator.mock.invocationCallOrder[0]);
   });
 
   it('holds the inference lease through terminal lifecycle and releases it after completion', async () => {
@@ -319,6 +350,41 @@ describe('foreground run target-conversation execution context', () => {
     await executeForegroundConversationRun({ context, conversationId: conversation.id });
 
     expect(isMainInferenceActive()).toBe(false);
+    expect(context.durability.completeModelExecution).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'failed' }),
+    );
+  });
+
+  it('does not call the model when the journal-first boundary cannot be persisted', async () => {
+    const conversation = createConversation({ mode: 'chitchat' });
+    const provider = createProvider('target-provider', 'target-model');
+    const context = createExecutionContext({
+      conversation,
+      providers: [provider],
+      ensureCanonicalConversation: jest.fn(),
+      recordConversationTurnMemory: jest.fn(),
+    });
+    mockedResolveForegroundRunPreflight.mockResolvedValue({
+      kind: 'ready',
+      provider,
+      providerWithApiKey: provider,
+      model: provider.model,
+      finalizationProviderContext: {
+        provider,
+        model: provider.model,
+        systemPromptText: conversation.systemPrompt,
+        conversationId: conversation.id,
+      },
+    });
+    context.durability.beginModelExecution.mockRejectedValueOnce(
+      new Error('journal unavailable'),
+    );
+
+    await executeForegroundConversationRun({ context, conversationId: conversation.id });
+
+    expect(mockedRunOrchestrator).not.toHaveBeenCalled();
+    expect(context.durability.flushChatState).toHaveBeenCalledTimes(2);
+    expect(context.durability.completeModelExecution).not.toHaveBeenCalled();
   });
 
   it('keeps callbacks and cleanup owned by each concurrent conversation', async () => {
@@ -390,8 +456,9 @@ describe('foreground run target-conversation execution context', () => {
       context,
       conversationId: secondConversation.id,
     });
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let attempt = 0; attempt < 10 && callbacksByConversation.size < 2; attempt += 1) {
+      await Promise.resolve();
+    }
 
     expect(callbacksByConversation.size).toBe(2);
     expect(isMainInferenceActive()).toBe(true);

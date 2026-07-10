@@ -105,6 +105,7 @@ export function createForegroundConversationRunRuntime(
 
   return {
     callbacks,
+    getCurrentAssistantMessageId,
     terminalLifecycle,
   };
 }

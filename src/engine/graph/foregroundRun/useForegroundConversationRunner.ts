@@ -10,6 +10,11 @@ import type {
   ForegroundConversationRunStoreActions,
   ForegroundConversationRunStreamingActions,
 } from './executionTypes';
+import {
+  beginForegroundModelExecution,
+  completeForegroundModelExecution,
+} from '../../../services/executionJournal/foregroundModelExecutionJournal';
+import { flushChatStorePersistenceNow } from '../../../store/chatStorePersistence';
 
 type UseForegroundConversationRunnerParams = {
   appendConversationLog: ForegroundConversationRunHelpers['appendConversationLog'];
@@ -44,6 +49,11 @@ export function useForegroundConversationRunner(
 ): (conversationId: string, options?: RunChatOptions) => Promise<void> {
   const context = useMemo(
     () => ({
+      durability: {
+        beginModelExecution: beginForegroundModelExecution,
+        completeModelExecution: completeForegroundModelExecution,
+        flushChatState: flushChatStorePersistenceNow,
+      },
       helpers: {
         appendConversationLog: params.appendConversationLog,
         clearPendingRunState: params.clearPendingRunState,

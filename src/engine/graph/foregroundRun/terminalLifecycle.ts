@@ -1,6 +1,7 @@
 import { buildAssistantMessageMetadata } from '../../../utils/assistantMessageMetadata';
 
 type AssistantDraftFinishReason = 'response_failed' | 'terminal_review_pending';
+export type ForegroundRunTerminalStatus = 'succeeded' | 'failed' | 'cancelled';
 
 export function buildForegroundAssistantIncompleteMetadata(
   finishReason: AssistantDraftFinishReason,
@@ -59,9 +60,11 @@ export function createForegroundRunTerminalLifecycleController(params: {
 }) {
   let didEncounterTerminalError = false;
   let completionPromise: Promise<void> | null = null;
+  let terminalStatus: ForegroundRunTerminalStatus | null = null;
 
   const handleError = (error: Error) => {
     didEncounterTerminalError = true;
+    terminalStatus = 'failed';
     completionPromise = completionPromise
       ? completionPromise
       : params.completeOnce(async () => {
@@ -87,6 +90,7 @@ export function createForegroundRunTerminalLifecycleController(params: {
       return;
     }
 
+    terminalStatus = 'succeeded';
     completionPromise = params.completeOnce(async () => {
       params.flushPendingSurfacedOutputs();
       params.ensureAssistantTurn();
@@ -108,22 +112,29 @@ export function createForegroundRunTerminalLifecycleController(params: {
     params.clearStreamingDraft(currentAssistantMessageId);
 
     if (!params.isAbortErrorLike(error)) {
+      terminalStatus = 'failed';
       params.finalizeCaughtFailure({
         currentAssistantMessageId,
         errorMessage: error instanceof Error ? error.message : String(error),
         visibleContent: params.getVisibleAssistantContent(),
       });
     } else {
+      terminalStatus = 'cancelled';
       params.finalizeCaughtAbort();
     }
 
     params.clearForegroundRequestIfCurrent();
+    return terminalStatus;
   };
 
   const awaitCompletion = async () => {
     if (completionPromise) {
       await completionPromise;
     }
+    if (!terminalStatus) {
+      throw new Error('foreground_run_terminal_status_missing');
+    }
+    return terminalStatus;
   };
 
   return {

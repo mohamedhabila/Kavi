@@ -9,6 +9,10 @@ import type { ResumeAgentRun } from '../../engine/graph/foregroundRun/contracts'
 import { createForegroundRequestRegistry } from '../../engine/graph/foregroundRun/requestRegistry';
 import { clearAgentRunCancellation } from '../../services/agents/agentRunCancellation';
 import { createAgentRunIdentityKey } from '../../services/agents/agentRunIdentity';
+import {
+  beginForegroundModelExecution,
+  completeForegroundModelExecution,
+} from '../../services/executionJournal/foregroundModelExecutionJournal';
 import { resolveConversationProviderContext } from '../../services/llm/support/providerSupport';
 import {
   drainIngestionQueueWithWakeup,
@@ -27,7 +31,10 @@ import {
   STREAM_UI_DRAFT_PUBLISH_INTERVAL_MS,
   TOOL_RESULT_PERSISTENCE_CHECKPOINT_DELAY_MS,
 } from '../../screens/chatScreenConstants';
-import { requestChatStorePersistenceCheckpoint } from '../../store/chatStorePersistence';
+import {
+  flushChatStorePersistenceNow,
+  requestChatStorePersistenceCheckpoint,
+} from '../../store/chatStorePersistence';
 import { useChatStore } from '../../store/useChatStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import type { AgentRun } from '../../types/agentRun';
@@ -449,6 +456,11 @@ export function createForegroundScenarioRuntime(
   const store = useChatStore.getState();
   const settings = useSettingsStore.getState();
   context = {
+    durability: {
+      beginModelExecution: beginForegroundModelExecution,
+      completeModelExecution: completeForegroundModelExecution,
+      flushChatState: flushChatStorePersistenceNow,
+    },
     helpers: {
       appendConversationLog: (conversationId, entry) =>
         useChatStore.getState().addConversationLog(conversationId, {
