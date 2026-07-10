@@ -87,7 +87,7 @@ internal class AndroidReactHeadlessRecoveryDispatcher(
       putString("workId", payload.work.platformWorkId)
       putString("runId", identity.runId)
       putDouble("controlEpoch", identity.controlEpoch.toDouble())
-      putDouble("snapshotUpdatedAt", identity.snapshotUpdatedAtMillis.toDouble())
+      putDouble("snapshotUpdatedAtMillis", identity.snapshotUpdatedAtMillis.toDouble())
       putString("snapshotDigest", identity.snapshotDigest)
       putString("commandKind", identity.commandKind.name.lowercase())
       putString("commandDigest", identity.commandDigest)
