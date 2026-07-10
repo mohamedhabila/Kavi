@@ -18,7 +18,7 @@ import { AppPalette } from '../theme/useAppTheme';
 
 function safeListStates(): { pending: number; total: number } {
   try {
-    const { listMigrationStates } = require('../services/memory/migrationSeedPass');
+    const { listMigrationStates } = require('../services/memory/migrationStateStore');
     const rows = listMigrationStates();
     let pending = 0;
     let done = 0;

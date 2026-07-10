@@ -14,18 +14,21 @@ import {
 } from '../../../src/services/memory/schema';
 import { listFacts } from '../../../src/services/memory/facts/queries';
 import {
-  clearMigrationState,
   extractSeedTurns,
-  getMigrationState,
-  listMigrationStates,
   MIGRATION_CLAIM_LEASE_MS,
   runMigrationSeedPass,
   seedConversation,
 } from '../../../src/services/memory/migrationSeedPass';
+import {
+  clearMigrationState,
+  getMigrationState,
+  listMigrationStates,
+} from '../../../src/services/memory/migrationStateStore';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
 import { getWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import type { Conversation } from '../../../src/types/conversation';
 import type { Message } from '../../../src/types/message';
+import { useSettingsStore } from '../../../src/store/useSettingsStore';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -35,9 +38,11 @@ beforeEach(() => {
   resetFactSchemaCacheForTests();
   ensureFactSchema();
   ensureDefaultBlocks();
+  useSettingsStore.setState({ disableLongTermMemory: false } as never);
 });
 
 afterEach(() => {
+  useSettingsStore.setState({ disableLongTermMemory: false } as never);
   closeMemoryDb();
 });
 
@@ -154,6 +159,47 @@ describe('extractSeedTurns', () => {
 // ── seedConversation ────────────────────────────────────────────────────────
 
 describe('seedConversation', () => {
+  it('cancels an in-flight seed across opt-out and re-enable without persisting', async () => {
+    let resolveExtractor: ((value: string) => void) | undefined;
+    const extractor = jest.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveExtractor = resolve;
+        }),
+    );
+    const conversation = buildConversation('in-flight-opt-out', 1);
+    const pending = seedConversation({ conversation, extractor });
+    for (let round = 0; round < 5; round += 1) await Promise.resolve();
+    expect(extractor).toHaveBeenCalledTimes(1);
+
+    useSettingsStore.setState({ disableLongTermMemory: true } as never);
+    useSettingsStore.setState({ disableLongTermMemory: false } as never);
+    resolveExtractor?.(
+      JSON.stringify({
+        new_facts: [
+          {
+            subject: 'user',
+            predicate: 'likes',
+            value: 'must-not-persist',
+            confidence: 0.9,
+          },
+        ],
+        episode_summary: null,
+        active_focus: null,
+        open_threads: [],
+        notable: [],
+      }),
+    );
+
+    await expect(pending).resolves.toEqual(
+      expect.objectContaining({ status: 'pending', claimOutcome: 'cancelled', seededTurns: 0 }),
+    );
+    expect(listFacts({ originConversationId: conversation.id })).toEqual([]);
+    expect(getMigrationState(conversation.id)).toEqual(
+      expect.objectContaining({ status: 'pending', claimExpiresAt: null }),
+    );
+  });
+
   it('returns "completed" with no work when conversation has no turns', async () => {
     const conv = buildConversation('empty', 0);
     const result = await seedConversation({

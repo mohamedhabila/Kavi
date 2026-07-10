@@ -21,7 +21,7 @@
 //     re-seeding produces zero new facts.
 // ---------------------------------------------------------------------------
 
-import { getMany, getOne, runMemoryStatement } from './access/crud';
+import { runMemoryStatement } from './access/crud';
 import { ensureFactSchema, newId } from './schema';
 import {
   applyConsolidatorResult,
@@ -33,61 +33,19 @@ import { type MigrationErrorCode, type MigrationStatus } from './migrationStateS
 import type { Conversation } from '../../types/conversation';
 import type { Message } from '../../types/message';
 import { createLogger } from '../../utils/logger';
+import {
+  canWriteLongTermMemory,
+  getMemoryPolicyEpoch,
+  isMemoryPolicyEpochCurrent,
+} from './policy';
+import { getMigrationState, type MigrationStateRow } from './migrationStateStore';
 
 const logger = createLogger('memory.migrationSeedPass');
-
-export interface MigrationStateRow {
-  conversationId: string;
-  lastSeededMessageId: string | null;
-  seededTurns: number;
-  status: MigrationStatus;
-  error: MigrationErrorCode | null;
-  claimExpiresAt: number | null;
-  updatedAt: number;
-}
-
-interface MigrationStateRowDb {
-  conversation_id: string;
-  last_seeded_message_id: string | null;
-  seeded_turns: number;
-  status: string;
-  error: string | null;
-  claim_token: string | null;
-  claim_expires_at: number | null;
-  updated_at: number;
-}
 
 export const DEFAULT_MAX_TURNS_PER_CALL = 4;
 export const DEFAULT_MAX_CONVERSATIONS_PER_CALL = 8;
 
 // ── State CRUD ──────────────────────────────────────────────────────────────
-
-function rowToState(row: MigrationStateRowDb): MigrationStateRow {
-  return {
-    conversationId: row.conversation_id,
-    lastSeededMessageId: row.last_seeded_message_id,
-    seededTurns: row.seeded_turns,
-    status: row.status as MigrationStatus,
-    error: row.error as MigrationErrorCode | null,
-    claimExpiresAt: row.claim_expires_at,
-    updatedAt: row.updated_at,
-  };
-}
-
-export function getMigrationState(conversationId: string): MigrationStateRow | null {
-  const row = getOne<MigrationStateRowDb>(
-    `SELECT * FROM memory_migration_state WHERE conversation_id = ? LIMIT 1`,
-    conversationId,
-  );
-  return row ? rowToState(row) : null;
-}
-
-export function listMigrationStates(): MigrationStateRow[] {
-  const rows = getMany<MigrationStateRowDb>(
-    `SELECT * FROM memory_migration_state ORDER BY updated_at DESC`,
-  );
-  return rows.map(rowToState);
-}
 
 export const MIGRATION_CLAIM_LEASE_MS = 5 * 60_000;
 const MIGRATION_CLAIM_HEARTBEAT_MS = 60_000;
@@ -199,11 +157,22 @@ function finalizeMigrationClaim(input: FinalizeMigrationClaimInput): boolean {
   return finalized.changes === 1;
 }
 
-export function clearMigrationState(conversationId: string): void {
-  runMemoryStatement(
-    `DELETE FROM memory_migration_state WHERE conversation_id = ?`,
+function cancelMigrationClaim(conversationId: string, token: string, now: number): boolean {
+  const cancelled = runMemoryStatement(
+    `UPDATE memory_migration_state
+        SET status = 'pending',
+            error = NULL,
+            claim_token = NULL,
+            claim_expires_at = NULL,
+            updated_at = ?
+      WHERE conversation_id = ?
+        AND claim_token = ?
+        AND status = 'in_progress'`,
+    now,
     conversationId,
+    token,
   );
+  return cancelled.changes === 1;
 }
 
 // ── Turn extraction ─────────────────────────────────────────────────────────
@@ -266,7 +235,7 @@ export interface SeedConversationResult {
   seededTurns: number;
   remainingTurns: number;
   status: MigrationStatus;
-  claimOutcome: 'acquired' | 'busy' | 'not_required';
+  claimOutcome: 'acquired' | 'busy' | 'not_required' | 'cancelled';
   results: ConsolidatorResult[];
   error?: MigrationErrorCode;
 }
@@ -287,6 +256,17 @@ export async function seedConversation(
       error: 'invalid_conversation',
     };
   }
+  if (!canWriteLongTermMemory()) {
+    return {
+      conversationId: conv.id,
+      seededTurns: 0,
+      remainingTurns: extractSeedTurns(conv.messages ?? [], null).length,
+      status: 'pending',
+      claimOutcome: 'cancelled',
+      results: [],
+    };
+  }
+  const policyEpoch = getMemoryPolicyEpoch();
   const now = input.now ?? Date.now();
   const cap = Math.max(1, input.maxTurnsPerCall ?? DEFAULT_MAX_TURNS_PER_CALL);
 
@@ -342,6 +322,7 @@ export async function seedConversation(
       turns,
       now,
       cap,
+      policyEpoch,
     });
   } finally {
     if (heartbeat !== null) clearInterval(heartbeat);
@@ -354,17 +335,34 @@ interface SeedClaimedConversationInput {
   turns: SeedTurn[];
   now: number;
   cap: number;
+  policyEpoch: number;
 }
 
 async function seedClaimedConversation(
   claimed: SeedClaimedConversationInput,
 ): Promise<SeedConversationResult> {
-  const { input, claim, turns, now, cap } = claimed;
+  const { input, claim, turns, now, cap, policyEpoch } = claimed;
   const conv = input.conversation;
   const startingSeededTurns = claim.state.seededTurns;
   let lastSeededMessageId = claim.state.lastSeededMessageId;
   let seededTurns = startingSeededTurns;
   const results: ConsolidatorResult[] = [];
+
+  const cancelForPolicy = (): SeedConversationResult => {
+    cancelMigrationClaim(conv.id, claim.token, input.now ?? Date.now());
+    return {
+      conversationId: conv.id,
+      seededTurns: seededTurns - startingSeededTurns,
+      remainingTurns: turns.length - results.length,
+      status: 'pending',
+      claimOutcome: 'cancelled',
+      results,
+    };
+  };
+
+  if (!isMemoryPolicyEpochCurrent(policyEpoch)) {
+    return cancelForPolicy();
+  }
 
   if (turns.length === 0) {
     const finalized = finalizeMigrationClaim({
@@ -390,6 +388,9 @@ async function seedClaimedConversation(
 
   const slice = turns.slice(0, cap);
   for (const turn of slice) {
+    if (!isMemoryPolicyEpochCurrent(policyEpoch)) {
+      return cancelForPolicy();
+    }
     const leaseNow = input.now ?? Date.now();
     if (!renewMigrationClaim(conv.id, claim.token, leaseNow)) {
       return claimLostResult(
@@ -419,6 +420,9 @@ async function seedClaimedConversation(
           now: () => turnNow,
         },
       );
+      if (!isMemoryPolicyEpochCurrent(policyEpoch)) {
+        return cancelForPolicy();
+      }
       if (outcome.status !== 'valid' && outcome.status !== 'empty_valid') {
         const code: MigrationErrorCode = outcome.code;
         const finalized = finalizeMigrationClaim({
@@ -464,6 +468,7 @@ async function seedClaimedConversation(
           sourceUserMessageId: turn.userMessage.id,
           sourceAssistantMessageId: turn.assistantMessage.id,
           messages: [turn.userMessage, turn.assistantMessage],
+          canPersist: () => isMemoryPolicyEpochCurrent(policyEpoch),
         });
       }
       results.push(outcome.result);
@@ -581,7 +586,7 @@ const ZERO_RESULT: RunSeedPassResult = {
  * (e.g. on each app foreground) until `remainingConversations === 0`.
  */
 export async function runMigrationSeedPass(input: RunSeedPassInput): Promise<RunSeedPassResult> {
-  if (input.disableLongTermMemory) {
+  if (input.disableLongTermMemory || !canWriteLongTermMemory()) {
     return { ...ZERO_RESULT, skipped: countArchivedPending(input.conversations) };
   }
   if (typeof input.extractor !== 'function') {

@@ -6,7 +6,7 @@ import { render, fireEvent } from '@testing-library/react-native';
 import { MigrationProgressBanner } from '../../src/components/MigrationProgressBanner';
 import type { AppPalette } from '../../src/theme/useAppTheme';
 
-jest.mock('../../src/services/memory/migrationSeedPass', () => {
+jest.mock('../../src/services/memory/migrationStateStore', () => {
   const states: any[] = [];
   return {
     listMigrationStates: jest.fn(() => states),
@@ -17,7 +17,7 @@ jest.mock('../../src/services/memory/migrationSeedPass', () => {
   };
 });
 
-const seed = require('../../src/services/memory/migrationSeedPass') as {
+const seed = require('../../src/services/memory/migrationStateStore') as {
   __setMigrationStates: (rows: any[]) => void;
 };
 
