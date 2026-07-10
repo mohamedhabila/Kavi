@@ -218,5 +218,45 @@ describe('Builtin Tool Executor', () => {
         undefined,
       );
     });
+
+    it('returns a closed error for a malformed persisted workspace identity', async () => {
+      const {
+        getSessionContext,
+        launchSubAgent,
+      } = require('../../../src/services/agents/subAgent');
+      getSessionContext.mockReturnValueOnce({
+        config: {
+          parentConversationId: 'parent-conv-1',
+          workspaceConversationId: ' parent-conv-1',
+        },
+      });
+
+      const parsed = JSON.parse(
+        await executeSessionSpawn(
+          { prompt: 'Research the task' },
+          'parent-conv-1',
+          {
+            id: 'test',
+            name: 'Test',
+            type: 'openai',
+            apiKey: 'k',
+            baseUrl: 'u',
+            model: 'gpt-5.4',
+            models: ['gpt-5.4'],
+            enabled: true,
+          },
+          undefined,
+        ),
+      );
+
+      expect(parsed).toEqual(
+        expect.objectContaining({
+          status: 'error',
+          code: 'session_spawn_error',
+          error: 'conversation_workspace_configured_id_invalid',
+        }),
+      );
+      expect(launchSubAgent).not.toHaveBeenCalled();
+    });
   });
 });

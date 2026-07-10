@@ -7,7 +7,10 @@ import {
   observeBackgroundSubAgentResult,
   startSubAgent,
 } from '../../services/agents/subAgent';
-import { resolveConversationWorkspaceTarget } from '../../services/conversationWorkspace/ownership';
+import {
+  resolveConfiguredConversationWorkspaceTarget,
+  resolveConversationWorkspaceTarget,
+} from '../../services/conversationWorkspace/ownership';
 import { resolveOwningConversationId } from '../../services/agents/lifecycle/stateMachine';
 import { buildGraphDelegatedWorkerContract } from '../graph/delegatedWorkerContract';
 import { resolveDelegatedWorkerSpawnPlan } from '../graph/delegatedWorkerSpawn';
@@ -30,12 +33,16 @@ import {
   resolveChildSessionDepth,
   sanitizeWorkerName,
 } from './builtin-session-config';
+import {
+  requireExactDurableScopeId,
+  resolveOptionalExactDurableScopeId,
+} from '../../utils/durableScopeIdentity';
 
 function selectExactSubAgentSession<T extends { sessionId?: string }>(
   session: T | undefined,
   sessionId: string,
 ): T | undefined {
-  return session?.sessionId?.trim() === sessionId.trim() ? session : undefined;
+  return session?.sessionId === sessionId ? session : undefined;
 }
 
 function normalizeOptionalStringList(value: unknown): string[] | undefined {
@@ -70,6 +77,10 @@ export async function executeSessionSpawn(
   executionContext?: Pick<ToolExecutionContext, 'controlGraphGoals' | 'agentRunId'>,
 ): Promise<string> {
   try {
+    const exactConversationId = requireExactDurableScopeId(
+      conversationId,
+      'session_spawn_conversation_id_invalid',
+    );
     const normalizedPrompt = normalizeDelegatedWorkerPrompt(args);
     if (!normalizedPrompt.value) {
       return JSON.stringify({ status: 'error', error: normalizedPrompt.error });
@@ -81,29 +92,40 @@ export async function executeSessionSpawn(
     const sanitizedWorkerTools = normalizeOptionalStringList(args.tools);
     const sanitizedWorkstreamId = normalizeOptionalString(args.workstreamId);
 
-    const currentSession = selectExactSubAgentSession(getSubAgent(conversationId), conversationId);
-    const currentSessionContext = getSessionContext(conversationId);
+    const currentSession = selectExactSubAgentSession(
+      getSubAgent(exactConversationId),
+      exactConversationId,
+    );
+    const currentSessionContext = getSessionContext(exactConversationId);
     const liveWorkers = listActiveSubAgents();
     const conversations = useChatStore.getState().conversations;
+    const currentSessionParentConversationId = resolveOptionalExactDurableScopeId(
+      currentSession?.parentConversationId,
+      'session_spawn_agent_parent_id_invalid',
+    );
+    const contextParentConversationId = resolveOptionalExactDurableScopeId(
+      currentSessionContext?.config.parentConversationId,
+      'session_spawn_context_parent_id_invalid',
+    );
     const parentConversationId =
       resolveOwningConversationId(
-        currentSession?.parentConversationId ?? currentSessionContext?.config.parentConversationId,
+        currentSessionParentConversationId ?? contextParentConversationId,
         liveWorkers,
       ) ??
-      currentSession?.parentConversationId?.trim() ??
-      currentSessionContext?.config.parentConversationId?.trim() ??
-      conversationId;
-    const workspaceTarget = currentSessionContext?.config.workspaceConversationId?.trim()
-      ? {
-          workspaceConversationId: currentSessionContext.config.workspaceConversationId.trim(),
-          workspaceReadFallbackConversationId:
-            currentSessionContext.config.workspaceReadFallbackConversationId?.trim() || undefined,
-        }
-      : resolveConversationWorkspaceTarget({
-          conversationId: parentConversationId,
-          conversations,
-          subAgents: liveWorkers,
-        });
+      currentSessionParentConversationId ??
+      contextParentConversationId ??
+      exactConversationId;
+    const workspaceTarget = resolveConfiguredConversationWorkspaceTarget({
+      workspaceConversationId: currentSessionContext?.config.workspaceConversationId,
+      workspaceReadFallbackConversationId:
+        currentSessionContext?.config.workspaceReadFallbackConversationId,
+      derivedTarget: resolveConversationWorkspaceTarget({
+        conversationId: parentConversationId,
+        conversations,
+        subAgents: liveWorkers,
+      }),
+    });
+    if (!workspaceTarget) throw new Error('session_spawn_workspace_target_missing');
     const activeConversation = useChatStore
       .getState()
       .conversations.find((conversation) => conversation.id === parentConversationId);

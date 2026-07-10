@@ -22,5 +22,34 @@ describe('Builtin Tool Executor', () => {
       expect(parsed.status).toBe('error');
       expect(parsed.error).toBe('string error');
     });
+
+    it('returns a closed error for a malformed persisted workspace identity', async () => {
+      const {
+        getSessionContext,
+        getSubAgent,
+        launchSubAgent,
+      } = require('../../../src/services/agents/subAgent');
+      getSubAgent.mockReturnValueOnce({
+        sessionId: 'old-789',
+        status: 'completed',
+        parentConversationId: 'conv-1',
+      });
+      getSessionContext.mockReturnValueOnce({
+        config: {
+          parentConversationId: 'conv-1',
+          workspaceConversationId: ' conv-private',
+        },
+      });
+
+      const parsed = JSON.parse(
+        await executeSessionSend({ sessionId: 'old-789', message: 'more' }, MOCK_PROVIDER),
+      );
+
+      expect(parsed).toEqual({
+        status: 'error',
+        error: 'conversation_workspace_configured_id_invalid',
+      });
+      expect(launchSubAgent).not.toHaveBeenCalled();
+    });
   });
 });

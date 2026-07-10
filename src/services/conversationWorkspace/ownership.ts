@@ -13,6 +13,42 @@ export type ConversationWorkspaceTarget = {
   workspaceReadFallbackConversationId?: string;
 };
 
+export function resolveConfiguredConversationWorkspaceTarget(params: {
+  workspaceConversationId?: string | null;
+  workspaceReadFallbackConversationId?: string | null;
+  derivedTarget?: ConversationWorkspaceTarget;
+}): ConversationWorkspaceTarget | undefined {
+  const workspaceConversationId =
+    resolveOptionalExactDurableScopeId(
+      params.workspaceConversationId,
+      'conversation_workspace_configured_id_invalid',
+    ) ??
+    resolveOptionalExactDurableScopeId(
+      params.derivedTarget?.workspaceConversationId,
+      'conversation_workspace_derived_id_invalid',
+    );
+  const workspaceReadFallbackConversationId =
+    resolveOptionalExactDurableScopeId(
+      params.workspaceReadFallbackConversationId,
+      'conversation_workspace_fallback_id_invalid',
+    ) ??
+    resolveOptionalExactDurableScopeId(
+      params.derivedTarget?.workspaceReadFallbackConversationId,
+      'conversation_workspace_derived_fallback_id_invalid',
+    );
+
+  if (!workspaceConversationId) {
+    if (workspaceReadFallbackConversationId) {
+      throw new Error('conversation_workspace_target_missing');
+    }
+    return undefined;
+  }
+  return {
+    workspaceConversationId,
+    ...(workspaceReadFallbackConversationId ? { workspaceReadFallbackConversationId } : {}),
+  };
+}
+
 export function resolveConversationWorkspaceTarget(params: {
   conversationId: string;
   conversations?: ReadonlyArray<ConversationOwnershipLink>;

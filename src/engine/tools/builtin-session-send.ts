@@ -8,7 +8,10 @@ import {
   observeBackgroundSubAgentResult,
   startSubAgent,
 } from '../../services/agents/subAgent';
-import { resolveConversationWorkspaceTarget } from '../../services/conversationWorkspace/ownership';
+import {
+  resolveConfiguredConversationWorkspaceTarget,
+  resolveConversationWorkspaceTarget,
+} from '../../services/conversationWorkspace/ownership';
 import { resolveOwningConversationId } from '../../services/agents/lifecycle/stateMachine';
 import { useChatStore } from '../../store/useChatStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
@@ -32,6 +35,7 @@ import {
   resolveFollowUpWorkerModel,
 } from './builtin-session-provider';
 import { normalizeRequiredSessionText } from './builtin-session-prompt';
+import { resolveOptionalExactDurableScopeId } from '../../utils/durableScopeIdentity';
 
 export async function executeSessionSend(
   args: {
@@ -63,53 +67,64 @@ export async function executeSessionSend(
   }
 
   const message = normalizedMessage.value;
-  const previousContext = getSessionContext(args.sessionId);
-  const conversations = useChatStore.getState().conversations;
-  const parentConversationId = (() => {
-    const resolvedFromSession = resolveOwningConversationId(args.sessionId, listActiveSubAgents());
-    if (resolvedFromSession && resolvedFromSession !== args.sessionId) {
-      return resolvedFromSession;
-    }
-
-    return (
-      resolveOwningConversationId(
-        previousContext?.config.parentConversationId ?? agent.parentConversationId,
-        listActiveSubAgents(),
-      ) ??
-      previousContext?.config.parentConversationId ??
-      agent.parentConversationId
-    );
-  })();
-  const activeConversation = parentConversationId
-    ? conversations.find((conversation) => conversation.id === parentConversationId)
-    : undefined;
-  const workspaceTarget = previousContext?.config.workspaceConversationId?.trim()
-    ? {
-        workspaceConversationId: previousContext.config.workspaceConversationId.trim(),
-        workspaceReadFallbackConversationId:
-          previousContext.config.workspaceReadFallbackConversationId?.trim() || undefined,
-      }
-    : parentConversationId
-      ? resolveConversationWorkspaceTarget({
-          conversationId: parentConversationId,
-          conversations,
-          subAgents: listActiveSubAgents(),
-        })
-      : undefined;
-  const settings = useSettingsStore.getState();
-  const previousOutput = previousContext?.conversationSummary || agent.output?.slice(0, 4000) || '';
-  const followUpMessages: Message[] | undefined = buildFollowUpMessages(
-    previousContext?.messages,
-    message,
-  );
-  const followUpPrompt = buildFollowUpPrompt({
-    message,
-    previousContextExists: Boolean(previousContext),
-    previousOutput,
-    hasFollowUpMessages: Boolean(followUpMessages),
-  });
-
   try {
+    const previousContext = getSessionContext(args.sessionId);
+    const conversations = useChatStore.getState().conversations;
+    const contextParentConversationId = resolveOptionalExactDurableScopeId(
+      previousContext?.config.parentConversationId,
+      'session_send_context_parent_id_invalid',
+    );
+    const agentParentConversationId = resolveOptionalExactDurableScopeId(
+      agent.parentConversationId,
+      'session_send_agent_parent_id_invalid',
+    );
+    const parentConversationId = (() => {
+      const resolvedFromSession = resolveOwningConversationId(
+        args.sessionId,
+        listActiveSubAgents(),
+      );
+      if (resolvedFromSession && resolvedFromSession !== args.sessionId) {
+        return resolvedFromSession;
+      }
+
+      return (
+        resolveOwningConversationId(
+          contextParentConversationId ?? agentParentConversationId,
+          listActiveSubAgents(),
+        ) ??
+        contextParentConversationId ??
+        agentParentConversationId
+      );
+    })();
+    const activeConversation = parentConversationId
+      ? conversations.find((conversation) => conversation.id === parentConversationId)
+      : undefined;
+    const workspaceTarget = resolveConfiguredConversationWorkspaceTarget({
+      workspaceConversationId: previousContext?.config.workspaceConversationId,
+      workspaceReadFallbackConversationId:
+        previousContext?.config.workspaceReadFallbackConversationId,
+      derivedTarget: parentConversationId
+        ? resolveConversationWorkspaceTarget({
+            conversationId: parentConversationId,
+            conversations,
+            subAgents: listActiveSubAgents(),
+          })
+        : undefined,
+    });
+    const settings = useSettingsStore.getState();
+    const previousOutput =
+      previousContext?.conversationSummary || agent.output?.slice(0, 4000) || '';
+    const followUpMessages: Message[] | undefined = buildFollowUpMessages(
+      previousContext?.messages,
+      message,
+    );
+    const followUpPrompt = buildFollowUpPrompt({
+      message,
+      previousContextExists: Boolean(previousContext),
+      previousOutput,
+      hasFollowUpMessages: Boolean(followUpMessages),
+    });
+
     const storedProvider = previousContext?.provider;
     const followUpProvider = storedProvider
       ? await hydrateProviderForRequest(storedProvider)
