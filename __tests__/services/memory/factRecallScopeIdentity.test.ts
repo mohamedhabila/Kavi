@@ -100,6 +100,8 @@ describe('fact recall SQL scope identity', () => {
       persist('workflow_verified_inference', 'workflow', 'assistant_inferred', 'verified'),
     ];
     const resolutionIds = [
+      persist('subjective_tool', 'subjective_user', 'tool_observed'),
+      persist('subjective_external', 'subjective_user', 'external_source'),
       persist('subjective_inference', 'subjective_user', 'assistant_inferred'),
       persist('objective_inference', 'objective', 'assistant_inferred'),
       persist('workflow_inference', 'workflow', 'assistant_inferred'),

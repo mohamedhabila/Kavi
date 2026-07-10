@@ -61,7 +61,7 @@ function buildRecallScopeFilter(
     ))
   )`;
   const resolutionAuthorityClause = `(
-    (${factClassColumn} = 'subjective_user' AND ${authorityColumn} = 'assistant_inferred')
+    (${factClassColumn} = 'subjective_user' AND ${authorityColumn} IN ('tool_observed', 'external_source', 'assistant_inferred'))
     OR (${factClassColumn} = 'objective' AND ${authorityColumn} = 'assistant_inferred')
     OR (${factClassColumn} = 'workflow' AND ${authorityColumn} = 'assistant_inferred' AND ${reviewColumn} <> 'verified')
   )`;
