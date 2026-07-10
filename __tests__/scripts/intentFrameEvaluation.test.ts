@@ -21,6 +21,15 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function removeEmptyDirectory(directory: string): void {
+  try {
+    fs.rmdirSync(directory);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT' && code !== 'ENOTEMPTY') throw error;
+  }
+}
+
 function loadFixture(): any {
   return JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
 }
@@ -319,6 +328,7 @@ describe('evaluator-only intent frame', () => {
     } finally {
       fs.rmSync(directory, { recursive: true, force: true });
       fs.rmSync(outputPath, { force: true });
+      removeEmptyDirectory(path.dirname(outputPath));
     }
   });
 });
