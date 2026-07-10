@@ -444,7 +444,7 @@ describe('e2e-flush-run-report harness', () => {
       expect(report.graderAudit.passing).toBe(true);
       expect(report.readiness.passing).toBe(false);
       expect(report.readinessDashboard).toMatchObject({
-        version: '2026-07-10.phase9',
+        version: '2026-07-10.phase10',
         overall: { passing: false },
         artifactRetention: { defaultRetainedRuns: 90 },
       });

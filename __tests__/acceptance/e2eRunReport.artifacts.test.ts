@@ -4,10 +4,11 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from 'fs';
-import { isAbsolute, join } from 'path';
+import { basename, isAbsolute, join } from 'path';
 import { tmpdir } from 'os';
 
 import {
@@ -340,6 +341,127 @@ describe('e2eRunReport artifacts', () => {
       ).toThrow();
       expect(readFileSync(markerPath, 'utf8')).toBe('unchanged');
       expect(readdirSync(retentionDir).sort()).toEqual(['existing-marker.txt', 'index.json']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('recovers a stranded indexed backup when the retry has a different run id', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kavi-e2e-cross-run-recovery-'));
+    const reportPath = join(dir, 'e2e-agent-report.json');
+    const retentionDir = join(dir, 'e2e-readiness-runs');
+    const entry = buildE2ERunReportScenarioEntry({
+      suite: 'core',
+      result: buildFixtureResult(),
+      outcome: { fixtureId: 'file-write-read', passed: true },
+      attemptCount: 1,
+    });
+    const firstReport = buildE2ERunReport([entry], {
+      generatedAt: '2026-07-10T12:00:00.000Z',
+      runMetadata: { gitSha: 'a'.repeat(40) },
+    });
+    const secondReport = buildE2ERunReport([entry], {
+      generatedAt: '2026-07-10T12:01:00.000Z',
+      runMetadata: { gitSha: 'b'.repeat(40) },
+    });
+
+    try {
+      const first = writeE2EReadinessDashboardArtifacts(reportPath, firstReport, {
+        E2E_READINESS_ARTIFACT_RETENTION_DIR: retentionDir,
+      });
+      const strandedBackup = join(retentionDir, `.${basename(first.runDir)}.backup-test`);
+      renameSync(first.runDir, strandedBackup);
+
+      writeE2EReadinessDashboardArtifacts(reportPath, secondReport, {
+        E2E_READINESS_ARTIFACT_RETENTION_DIR: retentionDir,
+      });
+
+      expect(existsSync(join(first.runDir, 'report.json'))).toBe(true);
+      expect(existsSync(join(first.runDir, 'dashboard.json'))).toBe(true);
+      expect(existsSync(strandedBackup)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('purges non-canonical history and closes the uploaded retention root', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kavi-e2e-closed-retention-'));
+    const reportPath = join(dir, 'e2e-agent-report.json');
+    const retentionDir = join(dir, 'e2e-readiness-runs');
+    const entry = buildE2ERunReportScenarioEntry({
+      suite: 'core',
+      result: buildFixtureResult(),
+      outcome: { fixtureId: 'file-write-read', passed: true },
+      attemptCount: 1,
+    });
+    const firstReport = buildE2ERunReport([entry], {
+      generatedAt: '2026-07-10T12:00:00.000Z',
+      runMetadata: { gitSha: 'a'.repeat(40) },
+    });
+    const secondReport = buildE2ERunReport([entry], {
+      generatedAt: '2026-07-10T12:01:00.000Z',
+      runMetadata: { gitSha: 'b'.repeat(40) },
+    });
+
+    try {
+      const first = writeE2EReadinessDashboardArtifacts(reportPath, firstReport, {
+        E2E_READINESS_ARTIFACT_RETENTION_DIR: retentionDir,
+      });
+      const tamperedReport = JSON.parse(readFileSync(join(first.runDir, 'report.json'), 'utf8'));
+      tamperedReport.privateHistory = 'private-history-sentinel';
+      writeFileSync(join(first.runDir, 'report.json'), JSON.stringify(tamperedReport), 'utf8');
+      writeFileSync(join(first.runDir, 'unmanifested-private.txt'), 'private', 'utf8');
+      writeFileSync(join(retentionDir, 'unmanaged-private.txt'), 'private', 'utf8');
+      mkdirSync(join(retentionDir, 'unmanaged-private-dir'));
+
+      const second = writeE2EReadinessDashboardArtifacts(reportPath, secondReport, {
+        E2E_READINESS_ARTIFACT_RETENTION_DIR: retentionDir,
+      });
+
+      expect(existsSync(first.runDir)).toBe(false);
+      expect(readdirSync(retentionDir).sort()).toEqual(
+        ['index.json', basename(second.runDir)].sort(),
+      );
+      expect(existsSync(join(second.runDir, 'artifact-manifest.json'))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not delete a replacement run whose id also appears in a legacy index', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kavi-e2e-legacy-collision-'));
+    const reportPath = join(dir, 'e2e-agent-report.json');
+    const retentionDir = join(dir, 'e2e-readiness-runs');
+    const entry = buildE2ERunReportScenarioEntry({
+      suite: 'core',
+      result: buildFixtureResult(),
+      outcome: { fixtureId: 'file-write-read', passed: true },
+      attemptCount: 1,
+    });
+    const report = buildE2ERunReport([entry], {
+      generatedAt: '2026-07-10T12:00:00.000Z',
+      runMetadata: { gitSha: 'a'.repeat(40) },
+    });
+
+    try {
+      const first = writeE2EReadinessDashboardArtifacts(reportPath, report, {
+        E2E_READINESS_ARTIFACT_RETENTION_DIR: retentionDir,
+      });
+      writeFileSync(
+        first.indexPath,
+        JSON.stringify({ version: 'legacy-index', runs: [{ runId: basename(first.runDir) }] }),
+        'utf8',
+      );
+
+      const replacement = writeE2EReadinessDashboardArtifacts(reportPath, report, {
+        E2E_READINESS_ARTIFACT_RETENTION_DIR: retentionDir,
+      });
+      const index = JSON.parse(readFileSync(replacement.indexPath, 'utf8')) as {
+        runs: Array<{ runId: string }>;
+      };
+
+      expect(existsSync(join(replacement.runDir, 'report.json'))).toBe(true);
+      expect(index.runs.map((run) => run.runId)).toEqual([basename(replacement.runDir)]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

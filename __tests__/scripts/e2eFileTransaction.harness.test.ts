@@ -6,6 +6,7 @@ import {
   readdirSync,
   renameSync,
   rmSync,
+  statSync,
   utimesSync,
   writeFileSync,
 } from 'fs';
@@ -101,6 +102,24 @@ describe('evaluation artifact file transactions', () => {
       release();
       release();
 
+      expect(readdirSync(directory)).toEqual([]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps a synchronous lock heartbeat fresh while the event loop is blocked', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'kavi-e2e-lock-heartbeat-'));
+    const lockPath = join(directory, '.artifact.lock');
+
+    try {
+      const release = acquireFileLockSync(lockPath, { timeoutMs: 250, staleMs: 5_000 });
+      const lockDirectory = `${lockPath}.lock`;
+      const initialMtimeMs = statSync(lockDirectory).mtimeMs;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 3_000);
+
+      expect(statSync(lockDirectory).mtimeMs).toBeGreaterThan(initialMtimeMs);
+      release();
       expect(readdirSync(directory)).toEqual([]);
     } finally {
       rmSync(directory, { recursive: true, force: true });

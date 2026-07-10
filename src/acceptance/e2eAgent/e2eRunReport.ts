@@ -19,6 +19,12 @@ import {
   writePartialReportFile,
 } from '../../../scripts/e2eReport/partialReport';
 import type { PublicE2ERunReport } from '../../../scripts/e2eReport/publicRunReport';
+import {
+  RETAINED_RUN_MANIFEST_FILE,
+  buildRetainedRunManifest,
+  sha256,
+  validateRetainedRunDirectory,
+} from '../../../scripts/e2eReport/retainedRunManifest';
 
 import { evaluateE2EAgentOutcomes, isE2EAgentMetricsPassing } from './evaluateE2EAgentMetrics';
 import { buildE2EAssessmentReport, type E2EAssessmentReport } from './e2eAssessmentReport';
@@ -382,6 +388,8 @@ type E2EReadinessArtifactIndexEntry = {
   gitSha: string;
   provider: string;
   model: string;
+  manifestRelativePath: string;
+  manifestSha256: string;
   reportRelativePath: string;
   dashboardRelativePath: string;
   passing: boolean;
@@ -427,6 +435,9 @@ function normalizeCurrentReadinessIndexEntry(
     typeof entry.gitSha !== 'string' ||
     typeof entry.provider !== 'string' ||
     typeof entry.model !== 'string' ||
+    entry.manifestRelativePath !== `${entry.runId}/${RETAINED_RUN_MANIFEST_FILE}` ||
+    typeof entry.manifestSha256 !== 'string' ||
+    !/^[a-f0-9]{64}$/u.test(entry.manifestSha256) ||
     typeof entry.passing !== 'boolean' ||
     !Number.isFinite(entry.scenarioPassRate) ||
     !Number.isFinite(entry.pass1Rate)
@@ -439,6 +450,8 @@ function normalizeCurrentReadinessIndexEntry(
     gitSha: entry.gitSha,
     provider: entry.provider,
     model: entry.model,
+    manifestRelativePath: entry.manifestRelativePath,
+    manifestSha256: entry.manifestSha256,
     reportRelativePath: entry.reportRelativePath,
     dashboardRelativePath: entry.dashboardRelativePath,
     passing: entry.passing,
@@ -487,6 +500,36 @@ function readReadinessIndexState(indexPath: string): {
   return { currentRuns: validRuns, discardedRunIds: [] };
 }
 
+function validateAndRecoverIndexedRunDirectories(
+  retentionDir: string,
+  runs: ReadonlyArray<E2EReadinessArtifactIndexEntry>,
+): { currentRuns: E2EReadinessArtifactIndexEntry[]; discardedRunIds: string[] } {
+  const currentRuns: E2EReadinessArtifactIndexEntry[] = [];
+  const discardedRunIds: string[] = [];
+  for (const run of runs) {
+    try {
+      removeManagedTransactionResidueSync(retentionDir, run.runId);
+      if (validateRetainedRunDirectory(retentionDir, run)) {
+        currentRuns.push(run);
+      } else {
+        discardedRunIds.push(run.runId);
+      }
+    } catch {
+      discardedRunIds.push(run.runId);
+    }
+  }
+  return { currentRuns, discardedRunIds };
+}
+
+function closeRetentionRoot(retentionDir: string, retainedRunIds: ReadonlySet<string>): void {
+  const allowedEntries = new Set(['.artifact.lock.lock', 'index.json', ...retainedRunIds]);
+  for (const entry of readdirSync(retentionDir)) {
+    if (!allowedEntries.has(entry)) {
+      rmSync(join(retentionDir, entry), { recursive: true, force: true });
+    }
+  }
+}
+
 export function writeE2EReadinessDashboardArtifacts(
   resolvedReportPath: string,
   report: E2ERunReport,
@@ -506,6 +549,10 @@ export function writeE2EReadinessDashboardArtifacts(
   return withFileLockSync(join(retentionDir, '.artifact.lock'), () => {
     mkdirSync(retentionDir, { recursive: true });
     const indexState = readReadinessIndexState(indexPath);
+    const retainedHistory = validateAndRecoverIndexedRunDirectories(
+      retentionDir,
+      indexState.currentRuns,
+    );
     removeManagedTransactionResidueSync(retentionDir, runId);
     const stagingDir = uniqueManagedPath(retentionDir, runId, 'staging');
     mkdirSync(stagingDir, { recursive: true });
@@ -521,9 +568,16 @@ export function writeE2EReadinessDashboardArtifacts(
         JSON.stringify(reportWithTraceArtifacts.readinessDashboard, null, 2),
         'utf8',
       );
+      const manifestContent = JSON.stringify(
+        buildRetainedRunManifest(stagingDir, runId, report.generatedAt),
+        null,
+        2,
+      );
+      atomicWriteFileSync(join(stagingDir, RETAINED_RUN_MANIFEST_FILE), manifestContent, 'utf8');
+      const manifestSha256 = sha256(manifestContent);
       replaceDirectoryFromStagingSync(stagingDir, runDir);
 
-      const withoutDuplicate = indexState.currentRuns.filter(
+      const withoutDuplicate = retainedHistory.currentRuns.filter(
         (previousRun) => previousRun.runId !== runId,
       );
       const runs: E2EReadinessArtifactIndexEntry[] = [
@@ -533,6 +587,8 @@ export function writeE2EReadinessDashboardArtifacts(
           gitSha: report.runMetadata.gitSha,
           provider: report.runMetadata.provider,
           model: report.runMetadata.model,
+          manifestRelativePath: `${runId}/${RETAINED_RUN_MANIFEST_FILE}`,
+          manifestSha256,
           reportRelativePath: `${runId}/report.json`,
           dashboardRelativePath: `${runId}/dashboard.json`,
           passing: report.readinessDashboard.overall.passing,
@@ -557,17 +613,15 @@ export function writeE2EReadinessDashboardArtifacts(
         ),
         'utf8',
       );
-      for (const run of runs.slice(retainedRuns.length)) {
-        rmSync(join(retentionDir, run.runId), { recursive: true, force: true });
-      }
-      for (const discardedRunId of indexState.discardedRunIds) {
-        rmSync(join(retentionDir, discardedRunId), { recursive: true, force: true });
-      }
-      for (const candidate of readdirSync(retentionDir)) {
-        if (candidate.startsWith('run-') && !retainedRunIds.has(candidate)) {
-          rmSync(join(retentionDir, candidate), { recursive: true, force: true });
+      for (const discardedRunId of [
+        ...indexState.discardedRunIds,
+        ...retainedHistory.discardedRunIds,
+      ]) {
+        if (!retainedRunIds.has(discardedRunId)) {
+          rmSync(join(retentionDir, discardedRunId), { recursive: true, force: true });
         }
       }
+      closeRetentionRoot(retentionDir, retainedRunIds);
       atomicWriteFileSync(
         dashboardPath,
         JSON.stringify(reportWithTraceArtifacts.readinessDashboard, null, 2),

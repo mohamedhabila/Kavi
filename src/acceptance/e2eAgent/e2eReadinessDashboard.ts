@@ -26,7 +26,7 @@ import type {
   E2ERunReportReadiness,
 } from './e2eRunReport';
 
-export const E2E_READINESS_DASHBOARD_VERSION = '2026-07-10.phase9';
+export const E2E_READINESS_DASHBOARD_VERSION = '2026-07-10.phase10';
 export const E2E_READINESS_ARTIFACT_RETENTION_RUNS = 90;
 
 export type E2EReadinessFailureCategory =

@@ -2,10 +2,17 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const properLockfile = require('proper-lockfile');
+const { Worker } = require('worker_threads');
 
 const DEFAULT_LOCK_TIMEOUT_MS = 30_000;
 const DEFAULT_LOCK_STALE_MS = 10_000;
 const LOCK_POLL_MS = 25;
+const HEARTBEAT_READY_TIMEOUT_MS = 5_000;
+const HEARTBEAT_STOP_TIMEOUT_MS = 5_000;
+const HEARTBEAT_READY_INDEX = 0;
+const HEARTBEAT_STOP_INDEX = 1;
+const HEARTBEAT_STOPPED_INDEX = 2;
+const HEARTBEAT_ERROR_INDEX = 3;
 
 function sleepSync(durationMs) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, durationMs);
@@ -39,6 +46,41 @@ function atomicWriteFileSync(filePath, content, encoding = 'utf8') {
   }
 }
 
+function startLockHeartbeat(lockDirectoryPath, staleMs) {
+  const stateBuffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 4);
+  const state = new Int32Array(stateBuffer);
+  const worker = new Worker(path.join(__dirname, 'fileLockHeartbeat.js'), {
+    workerData: {
+      intervalMs: Math.max(1_000, Math.floor(staleMs / 3)),
+      lockDirectoryPath,
+      stateBuffer,
+    },
+  });
+  worker.unref();
+  const ready = Atomics.wait(state, HEARTBEAT_READY_INDEX, 0, HEARTBEAT_READY_TIMEOUT_MS);
+  if (ready === 'timed-out' || Atomics.load(state, HEARTBEAT_READY_INDEX) !== 1) {
+    void worker.terminate();
+    throw new Error(`Timed out starting evaluation artifact lock heartbeat: ${lockDirectoryPath}`);
+  }
+
+  let stopped = false;
+  return () => {
+    if (stopped) return;
+    stopped = true;
+    Atomics.store(state, HEARTBEAT_STOP_INDEX, 1);
+    Atomics.notify(state, HEARTBEAT_STOP_INDEX);
+    const stopResult = Atomics.wait(state, HEARTBEAT_STOPPED_INDEX, 0, HEARTBEAT_STOP_TIMEOUT_MS);
+    void worker.terminate();
+    if (
+      stopResult === 'timed-out' ||
+      Atomics.load(state, HEARTBEAT_STOPPED_INDEX) !== 1 ||
+      Atomics.load(state, HEARTBEAT_ERROR_INDEX) !== 0
+    ) {
+      throw new Error(`Evaluation artifact lock heartbeat failed: ${lockDirectoryPath}`);
+    }
+  };
+}
+
 function acquireFileLockSync(lockPath, options = {}) {
   const resolvedPath = path.resolve(lockPath);
   const timeoutMs = options.timeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS;
@@ -64,11 +106,27 @@ function acquireFileLockSync(lockPath, options = {}) {
       sleepSync(Math.min(LOCK_POLL_MS, timeoutMs - elapsedMs));
     }
   }
+  let stopHeartbeat;
+  try {
+    stopHeartbeat = startLockHeartbeat(`${resolvedPath}.lock`, staleMs);
+  } catch (error) {
+    releaseLock();
+    throw error;
+  }
   let released = false;
   return () => {
     if (released) return;
     released = true;
+    let heartbeatError;
+    try {
+      stopHeartbeat();
+    } catch (error) {
+      heartbeatError = error;
+    }
     releaseLock();
+    if (heartbeatError) {
+      throw heartbeatError;
+    }
   };
 }
 
