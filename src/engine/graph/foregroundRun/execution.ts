@@ -9,6 +9,7 @@ import { createForegroundConversationRunRuntime } from './executionRuntime';
 import type { ExecuteForegroundConversationRunParams } from './executionTypes';
 import { resolveForegroundRunPreflight } from './preflight';
 import { prepareForegroundRunRequestBootstrap } from './requestBootstrap';
+import { resolveForegroundConversationExecutionContext } from './executionContext';
 
 function buildModelReadyMessages(messages: Message[]): Message[] {
   return deduplicateToolResults(ensureToolResultPairing(messages));
@@ -20,6 +21,10 @@ export async function executeForegroundConversationRun(
   const { context, conversationId, options } = params;
   const runInvocationId = ++context.refs.runInvocationSequenceRef.current;
   const conversation = context.helpers.getConversation(conversationId);
+  const executionContext = resolveForegroundConversationExecutionContext({
+    conversation,
+    defaultConversationMode: context.state.defaultConversationMode,
+  });
   const preflight = await resolveForegroundRunPreflight({
     activeModel: context.state.activeModel,
     activeProviderId: context.state.activeProviderId,
@@ -129,6 +134,7 @@ export async function executeForegroundConversationRun(
     completeRunOnce,
     conversation,
     conversationId,
+    executionContext,
     finalizationProviderContext,
     getCurrentConversation: () => context.helpers.getConversation(conversationId),
     guardRunCallback,
@@ -179,7 +185,7 @@ export async function executeForegroundConversationRun(
           : conversation?.systemPrompt || context.state.systemPrompt,
         messages: orchestratorMessages,
         signal: abortController,
-        personaId: context.state.effectivePersonaId,
+        personaId: executionContext.personaId,
         allProviders: context.state.providers.map((candidate) => ({ ...candidate })),
         enableCompaction: true,
         enableFailover: true,

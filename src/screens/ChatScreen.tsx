@@ -370,8 +370,6 @@ export const ChatScreen: React.FC = () => {
       chatNoModelMessage: t('chat.noModel'),
       chatNoProviderMessage: t('chat.noProvider'),
       defaultConversationMode,
-      effectiveMode,
-      effectivePersonaId,
       exportDialogTitle: t('chat.exportConversation'),
       linkUnderstandingEnabled,
       maxLinks,

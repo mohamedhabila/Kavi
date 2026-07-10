@@ -21,7 +21,12 @@ import {
 
 type RuntimeControllersParams = Pick<
   ForegroundConversationRunRuntimeParams,
-  'bootstrapResult' | 'conversationId' | 'getCurrentConversation' | 'provider' | 'shared'
+  | 'bootstrapResult'
+  | 'conversationId'
+  | 'executionContext'
+  | 'getCurrentConversation'
+  | 'provider'
+  | 'shared'
 > & {
   appendConversationLog: (entry: ForegroundRunLogEntryInput) => void;
   mutableState: ForegroundRunMutableState;
@@ -34,6 +39,7 @@ export function createForegroundRunRuntimeControllers(params: RuntimeControllers
     appendConversationLog,
     bootstrapResult,
     conversationId,
+    executionContext,
     getCurrentConversation,
     mutableState,
     provider,
@@ -263,8 +269,8 @@ export function createForegroundRunRuntimeControllers(params: RuntimeControllers
         shared.store.updateMessage(conversationId, messageId, content),
     },
     exportDialogTitle: shared.state.exportDialogTitle,
-    mode: shared.state.effectiveMode,
-    personaId: shared.state.effectivePersonaId,
+    mode: executionContext.mode,
+    personaId: executionContext.personaId,
   });
 
   return {

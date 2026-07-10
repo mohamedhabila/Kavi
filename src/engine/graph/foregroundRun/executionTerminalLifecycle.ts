@@ -223,9 +223,10 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
         recordConversationTurnMemory: () =>
           shared.helpers.recordConversationTurnMemory(
             conversationId,
-            shared.state.providers.find(
-              (provider) => provider.id === shared.state.activeProviderId && provider.enabled,
-            ),
+            {
+              ...finalizationProviderContext.provider,
+              model: finalizationProviderContext.model,
+            },
             { memoryConversationId, sourceRunId: runId },
           ),
         reviewCompletion: () =>

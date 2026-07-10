@@ -11,6 +11,7 @@ import type {
   RunChatOptions,
 } from './contracts';
 import type { ForegroundRunRequestBootstrapResult } from './requestBootstrap';
+import type { ForegroundConversationExecutionContext } from './executionContext';
 
 export type EnsureCanonicalConversationOptions = {
   providerId?: string;
@@ -117,8 +118,6 @@ export interface ForegroundConversationRunState {
   chatNoModelMessage: string | null;
   chatNoProviderMessage: string | null;
   defaultConversationMode: Conversation['mode'];
-  effectiveMode: Conversation['mode'];
-  effectivePersonaId: string;
   exportDialogTitle: string;
   linkUnderstandingEnabled: boolean;
   maxLinks: number;
@@ -150,6 +149,7 @@ export interface ForegroundConversationRunRuntimeParams {
   completeRunOnce: (task: () => Promise<void> | void) => Promise<void>;
   conversation: Conversation | undefined;
   conversationId: string;
+  executionContext: ForegroundConversationExecutionContext;
   finalizationProviderContext: ResolvedFinalizationProviderContext;
   getCurrentConversation: () => Conversation | undefined;
   guardRunCallback: () => boolean;
