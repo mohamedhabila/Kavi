@@ -517,6 +517,49 @@ describe('replaceCurrentFact', () => {
     expect(listFacts({ subjectId: 'entity-user', includeInvalidated: true })).toHaveLength(1);
   });
 
+  it('applies a sealed grounded upgrade even when same-value source evidence already exists', () => {
+    const inferred = recordFactWithApplicability(
+      {
+        subjectId: 'entity-user',
+        predicate: 'timezone',
+        objectText: 'Europe/Amsterdam',
+        scope: 'global',
+        sourceMessageId: 'user-timezone-1',
+        now: 100,
+      },
+      { factClass: 'workflow', sourceAuthority: 'assistant_inferred' },
+    );
+    addFactEvidence({
+      factId: inferred.fact.id,
+      messageId: 'user-timezone-1',
+      quote: 'My timezone is Europe/Amsterdam.',
+      now: 110,
+    });
+
+    const grounded = replaceCurrentFactWithApplicability(
+      {
+        expectedCurrentFactId: inferred.fact.id,
+        subjectId: 'entity-user',
+        predicate: 'timezone',
+        objectText: 'Europe/Amsterdam',
+        scope: 'global',
+        sourceMessageId: 'user-timezone-1',
+        now: 200,
+      },
+      { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
+    );
+
+    expect(grounded).toMatchObject({
+      status: 'duplicate',
+      fact: {
+        id: inferred.fact.id,
+        factClass: 'subjective_user',
+        sourceAuthority: 'grounded_user',
+        repeatedMentionCount: 0,
+      },
+    });
+  });
+
   it('supports repeated A to B to A validity intervals', () => {
     const firstA = recordFact({
       subjectId: 'entity-user',

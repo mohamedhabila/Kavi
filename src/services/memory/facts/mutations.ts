@@ -7,6 +7,11 @@ import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import { isExactMemoryScopeId } from '../memoryScopeIdentity';
 import { replaceFactRetrievalTerms } from './retrievalIndex';
 import { buildFactContentHash, hasExactFactContentIdentity } from './contentIdentity';
+import {
+  mergeDuplicateProvenance,
+  mergeDuplicateReviewState,
+  mergeDuplicateSensitivity,
+} from './duplicateMetadata';
 import { requireFactMutationScope, requireFactMutationTimestamp } from './mutationValidation';
 import { requireFactScopeIdentity } from './scopeIdentity';
 import { hasPersistedSourceEvidence } from './sourceEvidence';
@@ -236,7 +241,25 @@ function recordFactInTransaction(
         !existing.source_turn_id &&
         existing.source_message_id === sourceMessageId),
     );
-    if (isSourceReplay) {
+    const existingReviewState = closedMemoryFactReviewState(existing.review_state) ?? 'rejected';
+    const existingSensitivity = closedMemoryFactSensitivity(existing.sensitivity) ?? 'restricted';
+    const existingFactClass = closedMemoryFactClass(existing.fact_class) ?? 'unknown';
+    const existingSourceAuthority =
+      closedMemorySourceAuthority(existing.source_authority) ?? 'unknown';
+    const nextReviewState = mergeDuplicateReviewState(existingReviewState, reviewState);
+    const nextSensitivity = mergeDuplicateSensitivity(existingSensitivity, sensitivity);
+    const nextProvenance = mergeDuplicateProvenance({
+      existingFactClass,
+      existingSourceAuthority,
+      incoming: provenance,
+      incomingIsSealed: sealedApplicability !== undefined,
+    });
+    const metadataChanged =
+      nextReviewState !== existingReviewState ||
+      nextSensitivity !== existingSensitivity ||
+      nextProvenance.factClass !== existingFactClass ||
+      nextProvenance.sourceAuthority !== existingSourceAuthority;
+    if (isSourceReplay && !metadataChanged) {
       return {
         fact: rowToFact(existing),
         status: 'duplicate',
@@ -244,16 +267,9 @@ function recordFactInTransaction(
       };
     }
     const merged = { ...safeParseObject(existing.attributes), ...(input.attributes ?? {}) };
-    const nextReviewState =
-      input.reviewState ?? closedMemoryFactReviewState(existing.review_state) ?? 'rejected';
-    const nextSensitivity =
-      input.sensitivity ?? closedMemoryFactSensitivity(existing.sensitivity) ?? 'restricted';
-    const nextFactClass = sealedApplicability
-      ? provenance.factClass
-      : (closedMemoryFactClass(existing.fact_class) ?? provenance.factClass);
-    const nextSourceAuthority = sealedApplicability
-      ? provenance.sourceAuthority
-      : (closedMemorySourceAuthority(existing.source_authority) ?? provenance.sourceAuthority);
+    const reinforcementIncrement = isSourceReplay ? 0 : 1;
+    const lastReinforcedAt = isSourceReplay ? existing.last_reinforced_at : now;
+    const lastAccessedAt = isSourceReplay ? existing.last_accessed_at : now;
     db.runSync(
       `UPDATE memory_facts
          SET attributes = ?,
@@ -268,7 +284,7 @@ function recordFactInTransaction(
              fact_class = ?,
              source_authority = ?,
              memory_kind = ?,
-             repeated_mention_count = repeated_mention_count + 1,
+             repeated_mention_count = repeated_mention_count + ?,
              last_reinforced_at = ?,
              last_accessed_at = ?
          WHERE id = ?`,
@@ -281,11 +297,12 @@ function recordFactInTransaction(
       decayRate,
       nextReviewState,
       nextSensitivity,
-      nextFactClass,
-      nextSourceAuthority,
+      nextProvenance.factClass,
+      nextProvenance.sourceAuthority,
       memoryKind,
-      now,
-      now,
+      reinforcementIncrement,
+      lastReinforcedAt,
+      lastAccessedAt,
       existing.id,
     );
     const fact = rowToFact({
@@ -299,12 +316,12 @@ function recordFactInTransaction(
       decay_rate: Math.min(existing.decay_rate ?? 0.03, decayRate),
       review_state: nextReviewState,
       sensitivity: nextSensitivity,
-      fact_class: nextFactClass,
-      source_authority: nextSourceAuthority,
+      fact_class: nextProvenance.factClass,
+      source_authority: nextProvenance.sourceAuthority,
       memory_kind: memoryKind,
-      repeated_mention_count: (existing.repeated_mention_count ?? 0) + 1,
-      last_reinforced_at: now,
-      last_accessed_at: now,
+      repeated_mention_count: (existing.repeated_mention_count ?? 0) + reinforcementIncrement,
+      last_reinforced_at: lastReinforcedAt,
+      last_accessed_at: lastAccessedAt,
     });
     replaceFactRetrievalTerms(fact);
     runAfterMemoryTransactionCommit(() =>

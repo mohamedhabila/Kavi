@@ -200,6 +200,18 @@ function replaceCurrentFactInternal(
       }
 
       if (current.object_text.normalize('NFKC').trim() === objectText.normalize('NFKC')) {
+        if (sealedApplicability) {
+          return recordFactWithApplicability(
+            {
+              ...input,
+              predicate,
+              objectText,
+              supersedePrior: false,
+              now,
+            },
+            sealedApplicability,
+          );
+        }
         if (hasPersistedSourceEvidence(current.id, input.sourceMessageId)) {
           return {
             fact: rowToFact(current),
@@ -207,23 +219,11 @@ function replaceCurrentFactInternal(
             superseded: [],
           };
         }
-        if (!sealedApplicability) {
-          return {
-            fact: reinforceExactDuplicate(current, input, now),
-            status: 'duplicate' as const,
-            superseded: [],
-          };
-        }
-        return recordFactWithApplicability(
-          {
-            ...input,
-            predicate,
-            objectText,
-            supersedePrior: false,
-            now,
-          },
-          sealedApplicability,
-        );
+        return {
+          fact: reinforceExactDuplicate(current, input, now),
+          status: 'duplicate' as const,
+          superseded: [],
+        };
       }
 
       const inheritedReviewState = requireMemoryFactReviewState(
