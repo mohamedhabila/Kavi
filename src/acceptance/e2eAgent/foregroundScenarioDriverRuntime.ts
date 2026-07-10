@@ -1,0 +1,498 @@
+import { resolveConversationPersonaForMode } from '../../engine/graph/conversation/modeTransitions';
+import { executeForegroundConversationRun } from '../../engine/graph/foregroundRun/execution';
+import { resolveForegroundConversationExecutionContext } from '../../engine/graph/foregroundRun/executionContext';
+import type {
+  ExecuteForegroundConversationRunParams,
+  ForegroundStreamingDraft,
+} from '../../engine/graph/foregroundRun/executionTypes';
+import type { ResumeAgentRun } from '../../engine/graph/foregroundRun/contracts';
+import { clearAgentRunCancellation } from '../../services/agents/agentRunCancellation';
+import { resolveConversationProviderContext } from '../../services/llm/support/providerSupport';
+import {
+  drainIngestionQueueWithWakeup,
+  getIngestionJob,
+  type IngestionJob,
+} from '../../services/memory/ingestionQueue';
+import {
+  loadIngestionJobRuntimeContext,
+  recordCompletedTurnForMemory,
+} from '../../services/memory/lifecycle';
+import { createAgentRunFinalResponse } from '../../screens/agentRunFinalResponse';
+import { truncateLogDetail } from '../../screens/chatFormatting';
+import {
+  STREAM_STORE_CHECKPOINT_INTERVAL_MS,
+  STREAM_UI_DRAFT_PUBLISH_INTERVAL_MS,
+  TOOL_RESULT_PERSISTENCE_CHECKPOINT_DELAY_MS,
+} from '../../screens/chatScreenConstants';
+import { requestChatStorePersistenceCheckpoint } from '../../store/chatStorePersistence';
+import { useChatStore } from '../../store/useChatStore';
+import { useSettingsStore } from '../../store/useSettingsStore';
+import type { AgentRun } from '../../types/agentRun';
+import type { Conversation, ConversationMode } from '../../types/conversation';
+import type { ConversationUsageSummary } from '../../types/usage';
+import { generateId } from '../../utils/id';
+import type {
+  ForegroundScenarioDriverInput,
+  ForegroundScenarioMemoryRecord,
+  ForegroundScenarioMemorySnapshot,
+  ForegroundScenarioRouteDirective,
+} from './foregroundScenarioDriverTypes';
+
+const MEMORY_JOB_POLL_MS = 10;
+
+export type ForegroundScenarioRequestRegistry = ReturnType<typeof createRequestRegistry>;
+
+export type ForegroundScenarioRuntime = {
+  context: ExecuteForegroundConversationRunParams['context'];
+  getChatError: () => string | null;
+  requests: ForegroundScenarioRequestRegistry;
+  resetChatError: () => void;
+  setActiveTurnMaxTokens: (maxTokens: number | undefined) => void;
+};
+
+export async function ensureForegroundScenarioStoresHydrated(): Promise<void> {
+  if (!useChatStore.persist.hasHydrated()) await useChatStore.persist.rehydrate();
+  if (!useSettingsStore.persist.hasHydrated()) await useSettingsStore.persist.rehydrate();
+}
+
+export function createSeedConversation(input: ForegroundScenarioDriverInput): Conversation {
+  const now = Date.now();
+  return {
+    id: input.conversationId,
+    title: input.conversationTitle.trim(),
+    messages: JSON.parse(JSON.stringify(input.initialMessages ?? [])),
+    providerId: input.provider.id,
+    modelOverride: input.provider.model,
+    systemPrompt: input.systemPrompt,
+    createdAt: now,
+    updatedAt: now,
+    personaId: resolveConversationPersonaForMode({ nextMode: input.defaultMode }),
+    mode: input.defaultMode,
+    usage: {
+      entries: [],
+      totalInput: 0,
+      totalOutput: 0,
+      totalCacheRead: 0,
+      totalCacheWrite: 0,
+      totalTokens: 0,
+      totalCost: 0,
+      totalCalls: 0,
+    },
+    logs: [],
+    agentRuns: [],
+  };
+}
+
+export function applyForegroundScenarioRoute(
+  conversationId: string,
+  directive: ForegroundScenarioRouteDirective,
+  defaultMode: ConversationMode,
+): { mode: ConversationMode; personaId: string } {
+  const before = useChatStore
+    .getState()
+    .conversations.find((candidate) => candidate.id === conversationId);
+  if (!before) throw new Error(`Conversation ${conversationId} is unavailable.`);
+
+  if (directive !== 'production_auto') {
+    const mode = directive === 'forced_agentic' ? 'agentic' : 'chitchat';
+    const personaId = resolveConversationPersonaForMode({
+      conversationPersonaId: before.personaId,
+      nextMode: mode,
+    });
+    const store = useChatStore.getState();
+    store.updateModeInConversation(conversationId, mode);
+    store.updatePersonaInConversation(conversationId, personaId);
+  }
+
+  const conversation = useChatStore
+    .getState()
+    .conversations.find((candidate) => candidate.id === conversationId);
+  return resolveForegroundConversationExecutionContext({
+    conversation,
+    defaultConversationMode: defaultMode,
+  });
+}
+
+function createRequestRegistry() {
+  const requests = new Map<string, { conversationId: string; controller: AbortController }>();
+  const currentRequestIds = new Map<string, string>();
+  const pendingAbortReasons = new Map<string, string | undefined>();
+  let streamingMessageId: string | null = null;
+
+  return {
+    abortForegroundRequestForConversation: (conversationId: string, reason?: string) => {
+      const requestId = currentRequestIds.get(conversationId);
+      const request = requestId ? requests.get(requestId) : undefined;
+      if (!request) return false;
+      if (!request.controller.signal.aborted) request.controller.abort(reason);
+      return true;
+    },
+    abortCurrentOrNextForegroundRequest: (conversationId: string, reason?: string) => {
+      const requestId = currentRequestIds.get(conversationId);
+      const request = requestId ? requests.get(requestId) : undefined;
+      if (request) {
+        if (!request.controller.signal.aborted) request.controller.abort(reason);
+      } else {
+        pendingAbortReasons.set(conversationId, reason);
+      }
+    },
+    clearForegroundRequest: (requestId: string, controller: AbortController) => {
+      const request = requests.get(requestId);
+      if (request?.controller !== controller) return false;
+      requests.delete(requestId);
+      currentRequestIds.delete(request.conversationId);
+      pendingAbortReasons.delete(request.conversationId);
+      streamingMessageId = null;
+      useChatStore.getState().setLoading(false);
+      return true;
+    },
+    isCurrentForegroundRequest: (requestId: string, controller: AbortController) => {
+      const request = requests.get(requestId);
+      return (
+        request?.controller === controller &&
+        currentRequestIds.get(request.conversationId) === requestId
+      );
+    },
+    registerForegroundRequest: (
+      requestId: string,
+      conversationId: string,
+      controller: AbortController,
+    ) => {
+      const previousRequestId = currentRequestIds.get(conversationId);
+      if (previousRequestId) requests.delete(previousRequestId);
+      requests.set(requestId, { conversationId, controller });
+      currentRequestIds.set(conversationId, requestId);
+      useChatStore.getState().setLoading(true);
+      if (pendingAbortReasons.has(conversationId)) {
+        controller.abort(pendingAbortReasons.get(conversationId));
+        pendingAbortReasons.delete(conversationId);
+      }
+    },
+    setStreamingMessageId: (messageId: string | null) => {
+      streamingMessageId = messageId;
+    },
+    getStreamingMessageId: () => streamingMessageId,
+  };
+}
+
+function createStreamingState() {
+  const drafts: Record<string, ForegroundStreamingDraft | undefined> = {};
+  return {
+    drafts,
+    clearStreamingDraft: (messageId: string) => {
+      delete drafts[messageId];
+    },
+    mergeStreamingDraft: (messageId: string, patch: Partial<ForegroundStreamingDraft>) => {
+      drafts[messageId] = { ...(drafts[messageId] ?? {}), ...patch };
+    },
+    updateStreamingDraft: (
+      messageId: string,
+      updater: (
+        currentDraft: ForegroundStreamingDraft | undefined,
+      ) => ForegroundStreamingDraft | undefined,
+    ) => {
+      const next = updater(drafts[messageId]);
+      if (next) drafts[messageId] = next;
+      else delete drafts[messageId];
+    },
+  };
+}
+
+function sleep(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+async function awaitMemoryJob(jobId: string, deadline: number): Promise<IngestionJob> {
+  let requestedDrain = false;
+  while (Date.now() <= deadline) {
+    const job = getIngestionJob(jobId);
+    if (!job) throw new Error(`Memory ingestion job ${jobId} disappeared before completion.`);
+    if (!['pending', 'processing'].includes(job.status)) return job;
+
+    if (job.status === 'pending' && !requestedDrain) {
+      requestedDrain = true;
+      const drainResult = await drainIngestionQueueWithWakeup({
+        loadMessagesForThread: (threadId) =>
+          useChatStore
+            .getState()
+            .conversations.find((candidate) => candidate.id === threadId)?.messages ?? [],
+        loadRuntimeContextForJob: loadIngestionJobRuntimeContext,
+        maxJobs: Number.MAX_SAFE_INTEGER,
+      });
+      const afterDrain = getIngestionJob(jobId);
+      if (
+        afterDrain?.status === 'pending' &&
+        (drainResult.resourceDeferred > 0 ||
+          (afterDrain.nextAttemptAt !== null && afterDrain.nextAttemptAt > Date.now()))
+      ) {
+        return afterDrain;
+      }
+      continue;
+    }
+
+    await sleep(MEMORY_JOB_POLL_MS);
+  }
+  throw new Error(`Timed out waiting for memory ingestion job ${jobId}.`);
+}
+
+export async function settleForegroundScenarioMemory(
+  records: ReadonlyArray<ForegroundScenarioMemoryRecord>,
+  timeoutMs: number,
+): Promise<ForegroundScenarioMemorySnapshot[]> {
+  const results = await Promise.all(records.map((record) => record.promise));
+  const deadline = Date.now() + timeoutMs;
+  return Promise.all(
+    results.map(async (result) => {
+      const job = result.jobId ? await awaitMemoryJob(result.jobId, deadline) : null;
+      return {
+        enqueued: result.enqueued,
+        jobId: result.jobId,
+        processed: result.processed,
+        status: job?.status ?? 'not_enqueued',
+      };
+    }),
+  );
+}
+
+export function resolveForegroundScenarioTurnRun(
+  conversation: Conversation,
+  userMessageId: string,
+  priorRunIds: ReadonlySet<string>,
+): AgentRun | null {
+  const runs = (conversation.agentRuns ?? []).filter(
+    (run) => run.userMessageId === userMessageId && !priorRunIds.has(run.id),
+  );
+  if (runs.length > 1) {
+    throw new Error(`Foreground turn created ${runs.length} AgentRuns; expected at most one.`);
+  }
+  return runs[0] ?? null;
+}
+
+export function buildForegroundScenarioUsageDelta(
+  before: ConversationUsageSummary | undefined,
+  after: ConversationUsageSummary | undefined,
+): ConversationUsageSummary | null {
+  if (!after) return null;
+  const totalCalls = Math.max(0, after.totalCalls - (before?.totalCalls ?? 0));
+  const entries = totalCalls > 0 ? after.entries.slice(-totalCalls) : [];
+  const latestEntry = entries[entries.length - 1];
+  return {
+    entries,
+    totalInput: Math.max(0, after.totalInput - (before?.totalInput ?? 0)),
+    totalOutput: Math.max(0, after.totalOutput - (before?.totalOutput ?? 0)),
+    totalCacheRead: Math.max(0, after.totalCacheRead - (before?.totalCacheRead ?? 0)),
+    totalCacheWrite: Math.max(0, after.totalCacheWrite - (before?.totalCacheWrite ?? 0)),
+    totalTokens: Math.max(0, after.totalTokens - (before?.totalTokens ?? 0)),
+    totalCost: Math.max(0, after.totalCost - (before?.totalCost ?? 0)),
+    totalCalls,
+    ...(latestEntry
+      ? {
+          lastModel: latestEntry.model,
+          lastProviderId: latestEntry.providerId,
+          lastUpdatedAt: latestEntry.timestamp,
+        }
+      : {}),
+  };
+}
+
+export function createForegroundScenarioRuntime(
+  input: ForegroundScenarioDriverInput,
+  memoryRecords: ForegroundScenarioMemoryRecord[],
+): ForegroundScenarioRuntime {
+  const requests = createRequestRegistry();
+  const streaming = createStreamingState();
+  const pendingFinalizations = new Map<string, Promise<string | undefined>>();
+  const pendingTerminalReviews = new Map<string, Promise<void>>();
+  const pendingAsyncResumes = new Map<string, Promise<void>>();
+  let chatError: string | null = null;
+  let activeTurnMaxTokens = input.maxTokens;
+  let context: ExecuteForegroundConversationRunParams['context'];
+
+  const recordConversationTurnMemory: ExecuteForegroundConversationRunParams['context']['helpers']['recordConversationTurnMemory'] = (
+    conversationId,
+    activeChatProvider,
+    options = {},
+  ) => {
+    const conversation = useChatStore
+      .getState()
+      .conversations.find((candidate) => candidate.id === conversationId);
+    if (!conversation) return;
+    memoryRecords.push({
+      promise: recordCompletedTurnForMemory({
+        threadId: conversationId,
+        memoryConversationId: options.memoryConversationId,
+        messages: conversation.messages,
+        threadTitle: conversation.title,
+        activeChatProvider,
+        sourceRunId: options.sourceRunId,
+      }),
+    });
+  };
+
+  const ensureAgentRunFinalResponse = createAgentRunFinalResponse({
+    appendAgentRunCheckpoint: (...args) =>
+      useChatStore.getState().appendAgentRunCheckpoint(...args),
+    appendConversationLog: (conversationId, entry) =>
+      useChatStore.getState().addConversationLog(conversationId, {
+        ...entry,
+        detail: truncateLogDetail(entry.detail),
+      }),
+    pendingAgentRunFinalizations: pendingFinalizations,
+    recordConversationTurnMemory,
+    getResolveConversationFinalizationContext: () => async (conversation) => {
+      const settings = useSettingsStore.getState();
+      const providerContext = await resolveConversationProviderContext({
+        activeModel: settings.activeModel,
+        activeProviderId: settings.activeProviderId,
+        conversation,
+        providers: settings.providers,
+        systemPrompt: settings.systemPrompt,
+      });
+      if (!providerContext) return undefined;
+      const route = resolveForegroundConversationExecutionContext({
+        conversation,
+        defaultConversationMode: settings.defaultConversationMode,
+      });
+      return {
+        ...providerContext,
+        conversationId: conversation.id,
+        personaId: route.personaId,
+        internalUserMessageCount: 0,
+      };
+    },
+    setAgentRunPhase: (...args) => useChatStore.getState().setAgentRunPhase(...args),
+    updateAgentRunSummary: (...args) => useChatStore.getState().updateAgentRunSummary(...args),
+    updateMessage: (...args) => useChatStore.getState().updateMessage(...args),
+    updateMessageAssistantMetadata: (...args) =>
+      useChatStore.getState().updateMessageAssistantMetadata(...args),
+    updateMessageProviderReplay: (...args) =>
+      useChatStore.getState().updateMessageProviderReplay(...args),
+  });
+
+  const resumeAgentRun: ResumeAgentRun = async (params) => {
+    await executeForegroundConversationRun({
+      conversationId: params.conversationId,
+      context,
+      options: {
+        reuseAgentRunId: params.runId,
+        reuseAssistantDraft: params.reuseAssistantDraft,
+        additionalSystemPrompt: params.additionalSystemPrompt,
+        additionalUserPrompt: params.additionalUserPrompt,
+        disableTools: params.disableTools,
+        initialPendingAsyncOperations: params.initialPendingAsyncOperations,
+        maxTokens: activeTurnMaxTokens,
+      },
+    });
+  };
+
+  const store = useChatStore.getState();
+  const settings = useSettingsStore.getState();
+  context = {
+    helpers: {
+      appendConversationLog: (conversationId, entry) =>
+        useChatStore.getState().addConversationLog(conversationId, {
+          ...entry,
+          detail: truncateLogDetail(entry.detail),
+        }),
+      clearPendingRunState: (runId) => {
+        pendingFinalizations.delete(runId);
+        pendingTerminalReviews.delete(runId);
+        pendingAsyncResumes.delete(runId);
+      },
+      clearTrackedRunCancellation: clearAgentRunCancellation,
+      createId: generateId,
+      ensureAgentRunFinalResponse,
+      ensureCanonicalConversation: (options = {}) => {
+        const currentSettings = useSettingsStore.getState();
+        const providerId = options.providerId ?? currentSettings.activeProviderId;
+        if (!providerId) {
+          if (options.reportMissingProvider) chatError = 'No provider configured.';
+          return null;
+        }
+        const provider = currentSettings.providers.find((candidate) => candidate.id === providerId);
+        return useChatStore.getState().getOrCreateCanonicalThread(
+          providerId,
+          currentSettings.systemPrompt,
+          options.model ?? provider?.model,
+          {
+            activate: options.activate,
+            personaId: options.personaId,
+            mode: options.mode,
+          },
+        );
+      },
+      getConversation: (conversationId) =>
+        useChatStore
+          .getState()
+          .conversations.find((candidate) => candidate.id === conversationId),
+      getConversations: () => useChatStore.getState().conversations,
+      getResumeAgentRun: () => resumeAgentRun,
+      recordConversationTurnMemory,
+      requestPersistenceCheckpoint: requestChatStorePersistenceCheckpoint,
+      setChatError: (message) => {
+        chatError = message;
+      },
+    },
+    refs: {
+      forceNextScrollRef: { current: false },
+      pendingAgentRunAsyncResumesRef: { current: pendingAsyncResumes },
+      pendingAgentRunFinalizationsRef: { current: pendingFinalizations },
+      pendingAgentRunTerminalReviewsRef: { current: pendingTerminalReviews },
+      runInvocationSequenceRef: { current: 0 },
+      shouldAutoFollowRef: { current: true },
+      streamingDraftsRef: { current: streaming.drafts },
+    },
+    requests,
+    state: {
+      activeModel: settings.activeModel,
+      activeProviderId: settings.activeProviderId,
+      chatNoApiKeyMessage: 'The selected provider has no API key.',
+      chatNoModelMessage: 'The selected provider has no model.',
+      chatNoProviderMessage: 'No provider configured.',
+      defaultConversationMode: settings.defaultConversationMode,
+      exportDialogTitle: 'Export conversation',
+      linkUnderstandingEnabled: settings.linkUnderstandingEnabled,
+      maxLinks: settings.maxLinks,
+      mediaUnderstandingEnabled: settings.mediaUnderstandingEnabled,
+      providers: settings.providers,
+      streamStoreCheckpointIntervalMs: STREAM_STORE_CHECKPOINT_INTERVAL_MS,
+      streamUiDraftPublishIntervalMs: STREAM_UI_DRAFT_PUBLISH_INTERVAL_MS,
+      systemPrompt: settings.systemPrompt,
+      thinkingLevel: settings.thinkingLevel,
+      toolResultPersistenceCheckpointDelayMs: TOOL_RESULT_PERSISTENCE_CHECKPOINT_DELAY_MS,
+    },
+    store: {
+      addMessage: store.addMessage,
+      addToolCall: store.addToolCall,
+      appendAgentRunCheckpoint: store.appendAgentRunCheckpoint,
+      applyConversationCompaction: store.applyConversationCompaction,
+      completeAgentRun: store.completeAgentRun,
+      setAgentRunPhase: store.setAgentRunPhase,
+      startAgentRun: store.startAgentRun,
+      updateAgentRunAsyncWork: store.updateAgentRunAsyncWork,
+      updateAgentRunControlGraph: store.updateAgentRunControlGraph,
+      updateAgentRunPlan: store.updateAgentRunPlan,
+      updateAgentRunSummary: store.updateAgentRunSummary,
+      updateMessage: store.updateMessage,
+      updateMessageAssistantMetadata: store.updateMessageAssistantMetadata,
+      updateMessageEffect: store.updateMessageEffect,
+      updateMessageEnrichedContent: store.updateMessageEnrichedContent,
+      updateMessageProviderReplay: store.updateMessageProviderReplay,
+      updateMessageReasoning: store.updateMessageReasoning,
+      updateToolCallStatus: store.updateToolCallStatus,
+    },
+    streaming,
+  };
+
+  return {
+    context,
+    getChatError: () => chatError,
+    requests,
+    resetChatError: () => {
+      chatError = null;
+    },
+    setActiveTurnMaxTokens: (maxTokens) => {
+      activeTurnMaxTokens = maxTokens;
+    },
+  };
+}

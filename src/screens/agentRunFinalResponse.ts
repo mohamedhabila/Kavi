@@ -24,7 +24,6 @@ import {
 } from './agentRunFinalResponseDelivery';
 import { resolvePreferredAgentRunFinalResponseMessageId } from './agentRunFinalResponseSelection';
 import { tryDeliverPreferredFinalResponse } from './agentRunPreferredFinalResponse';
-import { recordConversationTurnMemory } from './chatTurnMemory';
 
 type ChatStore = ReturnType<typeof useChatStore.getState>;
 export type PendingAgentRunFinalizations = Map<string, Promise<string | undefined>>;
@@ -33,6 +32,12 @@ export type ResolveConversationFinalizationContext = (
   conversation: Conversation,
 ) => Promise<ResolvedFinalizationProviderContext | undefined>;
 
+export type RecordAgentRunFinalResponseMemory = (
+  conversationId: string,
+  activeChatProvider?: ResolvedFinalizationProviderContext['provider'],
+  options?: { memoryConversationId?: string | null; sourceRunId?: string },
+) => void;
+
 export type CreateAgentRunFinalResponseParams = {
   appendAgentRunCheckpoint: ChatStore['appendAgentRunCheckpoint'];
   appendConversationLog: (
@@ -40,6 +45,7 @@ export type CreateAgentRunFinalResponseParams = {
     entry: Parameters<ChatStore['addConversationLog']>[1],
   ) => void;
   pendingAgentRunFinalizations: PendingAgentRunFinalizations;
+  recordConversationTurnMemory: RecordAgentRunFinalResponseMemory;
   getResolveConversationFinalizationContext: () =>
     | ResolveConversationFinalizationContext
     | undefined;
@@ -54,6 +60,7 @@ export function createAgentRunFinalResponse({
   appendAgentRunCheckpoint,
   appendConversationLog,
   pendingAgentRunFinalizations,
+  recordConversationTurnMemory,
   getResolveConversationFinalizationContext,
   setAgentRunPhase,
   updateAgentRunSummary,

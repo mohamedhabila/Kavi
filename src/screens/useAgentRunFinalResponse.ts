@@ -5,6 +5,7 @@ import {
   createAgentRunFinalResponse,
   type ResolveConversationFinalizationContext,
 } from './agentRunFinalResponse';
+import { recordConversationTurnMemory } from './chatTurnMemory';
 
 type UseAgentRunFinalResponseParams = {
   appendAgentRunCheckpoint: ReturnType<typeof useChatStore.getState>['appendAgentRunCheckpoint'];
@@ -44,6 +45,7 @@ export function useAgentRunFinalResponse({
         appendAgentRunCheckpoint,
         appendConversationLog,
         pendingAgentRunFinalizations: pendingAgentRunFinalizationsRef.current,
+        recordConversationTurnMemory,
         getResolveConversationFinalizationContext: () =>
           resolveConversationFinalizationContextRef.current ?? undefined,
         setAgentRunPhase,

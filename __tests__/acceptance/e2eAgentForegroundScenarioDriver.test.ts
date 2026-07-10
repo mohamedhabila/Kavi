@@ -1,0 +1,389 @@
+import { runOrchestrator } from '../../src/engine/orchestrator';
+import {
+  cancelScheduledIngestionDrain,
+  drainIngestionQueueWithWakeup,
+  getIngestionJob,
+  type IngestionJob,
+} from '../../src/services/memory/ingestionQueue';
+import { recordCompletedTurnForMemory } from '../../src/services/memory/lifecycle';
+import { runForegroundScenario } from '../../src/acceptance/e2eAgent/foregroundScenarioDriver';
+import { settleForegroundScenarioMemory } from '../../src/acceptance/e2eAgent/foregroundScenarioDriverRuntime';
+import { useChatStore } from '../../src/store/useChatStore';
+import { useSettingsStore } from '../../src/store/useSettingsStore';
+import type { Conversation } from '../../src/types/conversation';
+import type { LlmProviderConfig } from '../../src/types/provider';
+import { buildAssistantMessageMetadata } from '../../src/utils/assistantMessageMetadata';
+
+jest.mock('../../src/engine/orchestrator', () => ({
+  runOrchestrator: jest.fn(),
+}));
+jest.mock('../../src/services/memory/ingestionQueue', () => ({
+  cancelScheduledIngestionDrain: jest.fn(),
+  drainIngestionQueueWithWakeup: jest.fn(async () => ({
+    attempted: 0,
+    completed: 0,
+    completedStructural: 0,
+    completedEnriched: 0,
+    retrying: 0,
+    degraded: 0,
+    deferred: 0,
+    sourceDeferred: 0,
+    resourceDeferred: 0,
+    failed: 0,
+  })),
+  getIngestionJob: jest.fn(),
+}));
+jest.mock('../../src/services/memory/lifecycle', () => ({
+  loadIngestionJobRuntimeContext: jest.fn(() => ({})),
+  recordCompletedTurnForMemory: jest.fn(),
+}));
+jest.mock('../../src/store/chatStorePersistence', () => ({
+  flushChatStorePersistenceNow: jest.fn(async () => undefined),
+  requestChatStorePersistenceCheckpoint: jest.fn(),
+}));
+
+const mockedRunOrchestrator = jest.mocked(runOrchestrator);
+const mockedRecordCompletedTurnForMemory = jest.mocked(recordCompletedTurnForMemory);
+const mockedGetIngestionJob = jest.mocked(getIngestionJob);
+const mockedDrainIngestionQueueWithWakeup = jest.mocked(drainIngestionQueueWithWakeup);
+const mockedCancelScheduledIngestionDrain = jest.mocked(cancelScheduledIngestionDrain);
+
+function makeProvider(id: string): LlmProviderConfig {
+  return {
+    id,
+    name: id,
+    enabled: true,
+    kind: 'remote',
+    protocol: 'openai-chat',
+    providerFamily: 'custom',
+    baseUrl: `https://${id}.example.com`,
+    apiKey: `${id}-key`,
+    model: `${id}-model`,
+  };
+}
+
+function makeOriginalConversation(): Conversation {
+  return {
+    id: 'original-conversation',
+    title: 'Original conversation',
+    messages: [],
+    providerId: 'original-provider',
+    systemPrompt: 'Original prompt',
+    createdAt: 1,
+    updatedAt: 1,
+  };
+}
+
+function makeCompletedJob(id: string): IngestionJob {
+  return {
+    id,
+    threadId: 'scenario-conversation',
+    threadTitle: 'Scenario title',
+    memoryConversationId: 'scenario-conversation',
+    taskId: null,
+    sourceRunId: null,
+    chatProviderId: 'scenario-provider',
+    chatModel: 'scenario-provider-model',
+    sourceStartMessageId: null,
+    sourceEndMessageId: `assistant-${id}`,
+    sourceAt: 1,
+    reason: 'turn_completed',
+    status: 'completed_enriched',
+    attemptCount: 1,
+    providerEnrichment: true,
+    providerOutcome: 'valid',
+    outcomeCode: null,
+    nextAttemptAt: null,
+    leaseExpiresAt: null,
+    claimToken: null,
+    structuralCompletedAt: 2,
+    createdAt: 1,
+    updatedAt: 2,
+    completedAt: 2,
+  };
+}
+
+describe('runForegroundScenario', () => {
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    await useChatStore.persist.rehydrate();
+    await useSettingsStore.persist.rehydrate();
+
+    const originalProvider = makeProvider('original-provider');
+    useChatStore.setState({
+      conversations: [makeOriginalConversation()],
+      activeConversationId: 'original-conversation',
+      isLoading: false,
+    });
+    useSettingsStore.setState({
+      providers: [originalProvider],
+      activeProviderId: originalProvider.id,
+      activeModel: originalProvider.model,
+      systemPrompt: 'Original prompt',
+      defaultConversationMode: 'agentic',
+    });
+
+    let memorySequence = 0;
+    const jobs = new Map<string, IngestionJob>();
+    mockedRecordCompletedTurnForMemory.mockImplementation(async () => {
+      const jobId = `job-${++memorySequence}`;
+      jobs.set(jobId, makeCompletedJob(jobId));
+      return {
+        processed: true,
+        enqueued: true,
+        jobId,
+        episodeId: null,
+        factIds: [],
+        activeFocusUpdated: true,
+        openThreadsUpdated: false,
+        enriched: false,
+      };
+    });
+    mockedGetIngestionJob.mockImplementation((jobId) => jobs.get(jobId) ?? null);
+
+    let responseSequence = 0;
+    mockedRunOrchestrator.mockImplementation(async (options, callbacks) => {
+      responseSequence += 1;
+      expect(useSettingsStore.getState()).toMatchObject({
+        memoryConsolidationMode: 'active_provider',
+        consolidationProvider: null,
+      });
+      callbacks.onAssistantMessage(
+        `Response ${responseSequence}`,
+        undefined,
+        undefined,
+        buildAssistantMessageMetadata('final'),
+      );
+      callbacks.onUsage?.({
+        inputTokens: 10,
+        outputTokens: 5,
+        totalTokens: 15,
+        model: options.model,
+      });
+      callbacks.onDone();
+    });
+  });
+
+  it('covers chitchat-to-chitchat and chitchat-to-agentic route rotations', async () => {
+    const provider = makeProvider('scenario-provider');
+    const result = await runForegroundScenario({
+      provider,
+      conversationId: 'scenario-conversation',
+      conversationTitle: 'Scenario title',
+      systemPrompt: 'Scenario prompt',
+      defaultMode: 'chitchat',
+      maxTokens: 777,
+      turns: [
+        { content: 'Hello there.', route: 'forced_chitchat', timestamp: 10 },
+        {
+          content: 'Create a calendar event tomorrow at noon.',
+          route: 'forced_agentic',
+          timestamp: 20,
+        },
+      ],
+    });
+
+    expect(mockedRunOrchestrator).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        conversationId: 'scenario-conversation',
+        maxTokens: 777,
+        personaId: 'default',
+      }),
+      expect.any(Object),
+    );
+    expect(mockedRunOrchestrator).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        conversationId: 'scenario-conversation',
+        maxTokens: 777,
+        personaId: 'super-agent',
+      }),
+      expect.any(Object),
+    );
+    expect(mockedRecordCompletedTurnForMemory).toHaveBeenCalledTimes(2);
+    expect(result.turns).toHaveLength(2);
+    expect(result.turns[0]).toMatchObject({
+      route: { directive: 'forced_chitchat', mode: 'chitchat', personaId: 'default' },
+      run: null,
+      timedOut: false,
+      memory: [{ processed: true, enqueued: true, status: 'completed_enriched' }],
+    });
+    expect(result.turns[1].route).toEqual({
+      directive: 'forced_agentic',
+      mode: 'agentic',
+      personaId: 'super-agent',
+    });
+    expect(result.turns[1].run).toMatchObject({
+      userMessageId: result.turns[1].userMessageId,
+      status: 'completed',
+    });
+    expect(result.turns[1].memory).toHaveLength(1);
+    expect(result.turns[0].usage?.totalTokens).toBe(15);
+    expect(result.turns[1].usage?.totalTokens).toBe(15);
+    expect(Object.isFrozen(result.turns[1].messages)).toBe(true);
+    expect(result.turns[1].messages.filter((message) => message.role === 'user')).toHaveLength(1);
+    expect(Object.isFrozen(result.finalConversation)).toBe(true);
+
+    expect(useChatStore.getState().conversations).toEqual([makeOriginalConversation()]);
+    expect(useChatStore.getState().activeConversationId).toBe('original-conversation');
+    expect(useSettingsStore.getState().providers.map((entry) => entry.id)).toEqual([
+      'original-provider',
+    ]);
+    expect(useSettingsStore.getState().systemPrompt).toBe('Original prompt');
+    expect(mockedCancelScheduledIngestionDrain).toHaveBeenCalledTimes(1);
+  });
+
+  it('covers agentic-to-agentic and agentic-to-chitchat route rotations', async () => {
+    const provider = makeProvider('scenario-provider');
+    const result = await runForegroundScenario({
+      provider,
+      conversationId: 'scenario-conversation',
+      conversationTitle: 'Scenario title',
+      systemPrompt: 'Scenario prompt',
+      defaultMode: 'agentic',
+      turns: [
+        {
+          content: 'Create a calendar event tomorrow at noon.',
+          route: 'forced_agentic',
+        },
+        { content: 'Thanks, how are you?', route: 'forced_chitchat' },
+      ],
+    });
+
+    expect(mockedRunOrchestrator).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ personaId: 'super-agent' }),
+      expect.any(Object),
+    );
+    expect(mockedRunOrchestrator).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ personaId: 'default' }),
+      expect.any(Object),
+    );
+    expect(result.turns[0].route).toEqual({
+      directive: 'forced_agentic',
+      mode: 'agentic',
+      personaId: 'super-agent',
+    });
+    expect(result.turns[0].run).toMatchObject({
+      userMessageId: result.turns[0].userMessageId,
+      status: 'completed',
+    });
+    expect(result.turns[0].memory).toHaveLength(1);
+    expect(result.turns[1]).toMatchObject({
+      route: { directive: 'forced_chitchat', mode: 'chitchat', personaId: 'default' },
+      run: null,
+      memory: [{ processed: true, enqueued: true, status: 'completed_enriched' }],
+    });
+    expect(mockedRecordCompletedTurnForMemory).toHaveBeenCalledTimes(2);
+    expect(result.turns.every((turn) => turn.error === null)).toBe(true);
+  });
+
+  it('does not mutate the configured route for production_auto turns', async () => {
+    const provider = makeProvider('scenario-provider');
+    const result = await runForegroundScenario({
+      provider,
+      conversationId: 'scenario-conversation',
+      conversationTitle: 'Scenario title',
+      systemPrompt: 'Scenario prompt',
+      defaultMode: 'chitchat',
+      turns: [{ content: 'How are you?', route: 'production_auto', maxTokens: 321 }],
+    });
+
+    expect(result.turns[0].route).toEqual({
+      directive: 'production_auto',
+      mode: 'chitchat',
+      personaId: 'default',
+    });
+    expect(mockedRunOrchestrator).toHaveBeenCalledWith(
+      expect.objectContaining({ maxTokens: 321, personaId: 'default' }),
+      expect.any(Object),
+    );
+    expect(result.turns[0].memory).toHaveLength(1);
+  });
+
+  it('aborts timed-out turns and restores both global stores', async () => {
+    mockedRunOrchestrator.mockImplementationOnce(async (options) => {
+      await new Promise<never>((_resolve, reject) => {
+        const signal = options.signal?.signal;
+        const rejectAbort = () => {
+          const error = new Error('Timed out');
+          error.name = 'AbortError';
+          reject(error);
+        };
+        if (signal?.aborted) rejectAbort();
+        else signal?.addEventListener('abort', rejectAbort, { once: true });
+      });
+    });
+
+    const result = await runForegroundScenario({
+      provider: makeProvider('scenario-provider'),
+      conversationId: 'scenario-conversation',
+      conversationTitle: 'Scenario title',
+      systemPrompt: 'Scenario prompt',
+      defaultMode: 'chitchat',
+      timeoutMs: 5,
+      turns: [{ content: 'Wait forever.', route: 'production_auto' }],
+    });
+
+    expect(result.turns).toHaveLength(1);
+    expect(result.turns[0]).toMatchObject({
+      timedOut: true,
+      error: 'Foreground scenario turn timed out after 5ms.',
+      memory: [],
+    });
+    expect(useChatStore.getState().conversations).toEqual([makeOriginalConversation()]);
+    expect(useSettingsStore.getState().activeProviderId).toBe('original-provider');
+    expect(mockedCancelScheduledIngestionDrain).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts a future pending memory attempt as a stable deferred outcome', async () => {
+    const pendingJob: IngestionJob = {
+      ...makeCompletedJob('job-deferred'),
+      status: 'pending',
+      nextAttemptAt: Date.now() + 60_000,
+      completedAt: null,
+    };
+    mockedGetIngestionJob.mockReturnValue(pendingJob);
+    mockedDrainIngestionQueueWithWakeup.mockResolvedValueOnce({
+      attempted: 1,
+      completed: 0,
+      completedStructural: 0,
+      completedEnriched: 0,
+      retrying: 0,
+      degraded: 0,
+      deferred: 1,
+      sourceDeferred: 0,
+      resourceDeferred: 0,
+      failed: 0,
+    });
+
+    await expect(
+      settleForegroundScenarioMemory(
+        [
+          {
+            promise: Promise.resolve({
+              processed: true,
+              enqueued: true,
+              jobId: pendingJob.id,
+              episodeId: null,
+              factIds: [],
+              activeFocusUpdated: true,
+              openThreadsUpdated: false,
+              enriched: false,
+            }),
+          },
+        ],
+        100,
+      ),
+    ).resolves.toEqual([
+      {
+        processed: true,
+        enqueued: true,
+        jobId: pendingJob.id,
+        status: 'pending',
+      },
+    ]);
+  });
+});

@@ -184,6 +184,7 @@ export async function executeForegroundConversationRun(
               .join('\n\n')
           : conversation?.systemPrompt || context.state.systemPrompt,
         messages: orchestratorMessages,
+        maxTokens: options?.maxTokens,
         signal: abortController,
         personaId: executionContext.personaId,
         allProviders: context.state.providers.map((candidate) => ({ ...candidate })),

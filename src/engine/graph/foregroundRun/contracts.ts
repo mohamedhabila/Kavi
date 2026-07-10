@@ -11,6 +11,7 @@ export type ResolvedFinalizationProviderContext = {
 };
 
 export type RunChatOptions = {
+  maxTokens?: number;
   reuseAgentRunId?: string;
   reuseAssistantDraft?: boolean;
   additionalSystemPrompt?: string;

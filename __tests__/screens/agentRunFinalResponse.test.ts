@@ -101,6 +101,7 @@ function createDependencies(params: {
     appendAgentRunCheckpoint: jest.fn(),
     appendConversationLog: jest.fn(),
     pendingAgentRunFinalizations: params.pending,
+    recordConversationTurnMemory,
     getResolveConversationFinalizationContext: params.getResolver ?? (() => undefined),
     setAgentRunPhase: jest.fn(),
     updateAgentRunSummary: jest.fn(),
