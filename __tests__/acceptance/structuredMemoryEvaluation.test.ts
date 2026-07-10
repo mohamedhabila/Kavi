@@ -144,6 +144,10 @@ describe('isolated structured memory evaluation', () => {
       INSERT OR IGNORE INTO memory_vault_identity (singleton, owner_id, created_at)
       VALUES (1, 'owner-ret02-compatible', 1);
     `);
+    const ownerBefore = database.getFirstSync<{ owner_id: string }>(
+      'SELECT owner_id FROM memory_vault_identity WHERE singleton = 1',
+    )?.owner_id;
+    expect(ownerBefore).toBeTruthy();
 
     await runInIsolatedStructuredMemoryEvaluation((evaluationDatabase) => {
       expect(evaluationDatabase).toBe(database);
@@ -154,7 +158,7 @@ describe('isolated structured memory evaluation', () => {
       database.getFirstSync<{ owner_id: string }>(
         'SELECT owner_id FROM memory_vault_identity WHERE singleton = 1',
       )?.owner_id,
-    ).toBe('owner-ret02-compatible');
+    ).toBe(ownerBefore);
     expect(
       database.getFirstSync<{ count: number }>(
         'SELECT COUNT(*) AS count FROM memory_entities',
