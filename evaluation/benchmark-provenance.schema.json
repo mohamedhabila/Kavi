@@ -1,0 +1,348 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/benchmark-provenance.schema.json",
+  "title": "Kavi enabled benchmark provenance registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "kind",
+    "schemaVersion",
+    "reviewedAt",
+    "claimPolicy",
+    "adapters"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/benchmark-provenance.schema.json"
+    },
+    "kind": { "const": "benchmark_provenance_registry" },
+    "schemaVersion": { "const": "1.0.0" },
+    "reviewedAt": { "type": "string", "format": "date" },
+    "claimPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "localExecutionIsOfficial",
+        "maintainerAcceptanceRequired",
+        "unresolvedLicenseBlocksExecution",
+        "runManifestRequired"
+      ],
+      "properties": {
+        "localExecutionIsOfficial": { "const": false },
+        "maintainerAcceptanceRequired": { "const": true },
+        "unresolvedLicenseBlocksExecution": { "const": true },
+        "runManifestRequired": { "const": true }
+      }
+    },
+    "adapters": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/adapter" }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "commitSha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)[A-Za-z0-9._/-]+$",
+      "minLength": 1
+    },
+    "license": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["spdxId", "scope", "sourceUrl", "redistribution"],
+      "properties": {
+        "spdxId": {
+          "type": "string",
+          "enum": ["Apache-2.0", "MIT"]
+        },
+        "scope": {
+          "type": "string",
+          "enum": ["upstream_repository", "released_dataset"]
+        },
+        "sourceUrl": { "type": "string", "format": "uri" },
+        "redistribution": {
+          "type": "string",
+          "enum": [
+            "permitted_with_apache_2_0_conditions",
+            "permitted_with_mit_notice"
+          ]
+        }
+      }
+    },
+    "integrityDigest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "scope", "sha256"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,79}$"
+        },
+        "scope": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "dependencyFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relativePath" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "modelRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "protocolRequirement",
+        "bundled",
+        "credentialsRequired",
+        "termsPolicy",
+        "termsUrl"
+      ],
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": ["reader", "judge", "simulator_and_judge", "agent_under_test"]
+        },
+        "protocolRequirement": { "type": "string", "minLength": 1, "maxLength": 180 },
+        "bundled": { "const": false },
+        "credentialsRequired": { "type": "boolean" },
+        "termsPolicy": {
+          "type": "string",
+          "enum": [
+            "model_and_endpoint_terms_must_be_recorded_for_run",
+            "openai_api_terms_apply",
+            "selected_agent_provider_terms_must_be_recorded_for_run"
+          ]
+        },
+        "termsUrl": {
+          "type": ["string", "null"],
+          "format": "uri"
+        }
+      }
+    },
+    "adapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "displayName",
+        "status",
+        "capabilityClaims",
+        "adapter",
+        "upstream",
+        "licenses",
+        "data",
+        "dependencyReproducibility",
+        "models",
+        "privacy",
+        "submission",
+        "runRequirements"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{1,63}$"
+        },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "status": { "const": "enabled" },
+        "capabilityClaims": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "long_term_agent_memory",
+              "procedural_experience_learning",
+              "task_completion",
+              "conversation_quality"
+            ]
+          }
+        },
+        "adapter": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "integrationKind",
+            "roots",
+            "sourceDigestAlgorithm",
+            "sourceSha256",
+            "modifiesUpstream"
+          ],
+          "properties": {
+            "integrationKind": {
+              "type": "string",
+              "enum": ["upstream_memory_backend_patch", "upstream_agent_learning_hook"]
+            },
+            "roots": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/relativePath" }
+            },
+            "sourceDigestAlgorithm": { "const": "sha256_path_nul_bytes_nul_v1" },
+            "sourceSha256": { "$ref": "#/$defs/sha256" },
+            "modifiesUpstream": { "const": true }
+          }
+        },
+        "upstream": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "repositoryUrl",
+            "releaseTag",
+            "commitSha",
+            "immutableSourceUrl",
+            "checkoutPath",
+            "cleanBaseRequired",
+            "allowedInstalledChanges"
+          ],
+          "properties": {
+            "repositoryUrl": { "type": "string", "format": "uri" },
+            "releaseTag": {
+              "type": ["string", "null"],
+              "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
+            },
+            "commitSha": { "$ref": "#/$defs/commitSha" },
+            "immutableSourceUrl": { "type": "string", "format": "uri" },
+            "checkoutPath": { "$ref": "#/$defs/relativePath" },
+            "cleanBaseRequired": { "const": true },
+            "allowedInstalledChanges": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/relativePath" }
+            }
+          }
+        },
+        "licenses": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "data"],
+          "properties": {
+            "code": { "$ref": "#/$defs/license" },
+            "data": { "$ref": "#/$defs/license" }
+          }
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sourceUrl", "revision", "integrity"],
+          "properties": {
+            "sourceUrl": { "type": "string", "format": "uri" },
+            "revision": { "$ref": "#/$defs/commitSha" },
+            "integrity": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/integrityDigest" }
+            }
+          }
+        },
+        "dependencyReproducibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "files", "container"],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": ["locked", "constraint_files_only"]
+            },
+            "files": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/dependencyFile" }
+            },
+            "container": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status", "digest"],
+              "properties": {
+                "status": { "const": "not_provided_by_upstream" },
+                "digest": { "const": null }
+              }
+            }
+          }
+        },
+        "models": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/modelRequirement" }
+        },
+        "privacy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "containsRealUserData",
+            "containsSyntheticPersonalData",
+            "screenshots",
+            "publicationHandling"
+          ],
+          "properties": {
+            "containsRealUserData": { "const": false },
+            "containsSyntheticPersonalData": { "type": "boolean" },
+            "screenshots": {
+              "type": "string",
+              "enum": ["released_benchmark_screenshots", "not_present"]
+            },
+            "publicationHandling": {
+              "type": "string",
+              "enum": [
+                "publish_only_upstream_submission_package_after_secret_scan",
+                "publish_scored_synthetic_trajectories_after_secret_scan"
+              ]
+            }
+          }
+        },
+        "submission": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "route",
+            "url",
+            "instructionsUrl",
+            "maintainerAcceptanceRequired",
+            "resultStatus",
+            "submissionRecordUrl"
+          ],
+          "properties": {
+            "route": {
+              "type": "string",
+              "enum": ["web_form", "github_issue"]
+            },
+            "url": { "type": "string", "format": "uri" },
+            "instructionsUrl": { "type": "string", "format": "uri" },
+            "maintainerAcceptanceRequired": { "const": true },
+            "resultStatus": {
+              "type": "string",
+              "enum": ["not_submitted", "submitted_pending_review", "accepted", "rejected"]
+            },
+            "submissionRecordUrl": {
+              "type": ["string", "null"],
+              "format": "uri"
+            }
+          }
+        },
+        "runRequirements": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 220 }
+        }
+      }
+    }
+  }
+}

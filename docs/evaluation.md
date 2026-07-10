@@ -23,6 +23,12 @@ The machine-readable sources are:
   deterministic trial-set and public statistics-report contract.
 - [`evaluation/intent-frame.schema.json`](../evaluation/intent-frame.schema.json):
   evaluator-only intent-frame input and content-free aggregate-report contract.
+- [`evaluation/benchmark-provenance.schema.json`](../evaluation/benchmark-provenance.schema.json):
+  strict contract for enabled upstream adapters, licenses, immutable inputs,
+  model terms, privacy, reproducibility, and submission state.
+- [`evaluation/benchmark-provenance.json`](../evaluation/benchmark-provenance.json):
+  reviewed provenance for the LongMemEval-V2 and STATE-Bench adapters that are
+  actually executable from this repository.
 
 Validate all public governance artifacts without a provider key, private pack,
 or network access:
@@ -34,6 +40,30 @@ npm run check:evaluation-contract
 This command validates governance artifacts. It does not execute KLAE or
 create a result claim. Scenario execution must use a product-real runner and
 emit a conforming `evaluation_run` manifest.
+
+### Enabled benchmark provenance
+
+An adapter is enabled only when it appears in the provenance registry. The
+registry pins the upstream code and data revisions, distinguishes code and data
+licenses, records dependency-lock and container status, names every permitted
+upstream installation change, and identifies the upstream submission route.
+The validator also hashes every checked-in adapter source file using the sorted
+project-relative path, a NUL byte, the file bytes, and a trailing NUL byte.
+Source changes therefore require an explicit provenance review.
+
+The default validation remains network-free and does not inspect ignored
+`.private` checkouts. A candidate run must separately prove that its app and
+upstream base are clean, that only the declared adapter patch was installed,
+and that its run manifest records the actual models, endpoints, terms, pricing,
+and environment. LongMemEval-V2 supplies constraint files but no transitive
+lock or container; STATE-Bench supplies `uv.lock` but no upstream container.
+Those facts must remain visible rather than being presented as equivalent
+reproducibility.
+
+A local score is never official. LongMemEval-V2 accepts a validated package
+through its submission form; STATE-Bench accepts scored trajectories and
+metrics through a GitHub issue. `resultStatus` stays `not_submitted` until a
+submission exists and cannot become `accepted` without its public review URL.
 
 ### Explicit pricing snapshots
 

@@ -1,0 +1,239 @@
+{
+  "$schema": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/benchmark-provenance.schema.json",
+  "kind": "benchmark_provenance_registry",
+  "schemaVersion": "1.0.0",
+  "reviewedAt": "2026-07-10",
+  "claimPolicy": {
+    "localExecutionIsOfficial": false,
+    "maintainerAcceptanceRequired": true,
+    "unresolvedLicenseBlocksExecution": true,
+    "runManifestRequired": true
+  },
+  "adapters": [
+    {
+      "id": "longmemeval-v2",
+      "displayName": "LongMemEval-V2 isolated memory",
+      "status": "enabled",
+      "capabilityClaims": ["conversation_quality", "long_term_agent_memory"],
+      "adapter": {
+        "integrationKind": "upstream_memory_backend_patch",
+        "roots": ["benchmarks/longmemeval_v2"],
+        "sourceDigestAlgorithm": "sha256_path_nul_bytes_nul_v1",
+        "sourceSha256": "88f90121c4e9be6f67a2d0365592726ff503097e93f3e4cc41e251b595adaf8b",
+        "modifiesUpstream": true
+      },
+      "upstream": {
+        "repositoryUrl": "https://github.com/xiaowu0162/LongMemEval-V2",
+        "releaseTag": null,
+        "commitSha": "be15ea6e995462f3391c1a610892df3f67dfa7bd",
+        "immutableSourceUrl": "https://github.com/xiaowu0162/LongMemEval-V2/tree/be15ea6e995462f3391c1a610892df3f67dfa7bd",
+        "checkoutPath": ".private/evals/upstream/LongMemEval-V2",
+        "cleanBaseRequired": true,
+        "allowedInstalledChanges": [
+          "evaluation/harness.py",
+          "memory_modules/kavi_isolated_memory.py",
+          "memory_modules/memory.py"
+        ]
+      },
+      "licenses": {
+        "code": {
+          "spdxId": "Apache-2.0",
+          "scope": "upstream_repository",
+          "sourceUrl": "https://github.com/xiaowu0162/LongMemEval-V2/blob/be15ea6e995462f3391c1a610892df3f67dfa7bd/LICENSE",
+          "redistribution": "permitted_with_apache_2_0_conditions"
+        },
+        "data": {
+          "spdxId": "Apache-2.0",
+          "scope": "released_dataset",
+          "sourceUrl": "https://huggingface.co/datasets/xiaowu0162/longmemeval-v2/blob/f152293e235517d504809563c833d7190b8c713b/LICENSE",
+          "redistribution": "permitted_with_apache_2_0_conditions"
+        }
+      },
+      "data": {
+        "sourceUrl": "https://huggingface.co/datasets/xiaowu0162/longmemeval-v2/tree/f152293e235517d504809563c833d7190b8c713b",
+        "revision": "f152293e235517d504809563c833d7190b8c713b",
+        "integrity": [
+          {
+            "id": "released-checksum-manifest",
+            "scope": "SHA-256 of the released checksums.sha256 file",
+            "sha256": "b17a18daa52873f915808502217c3c5fab39d20638544f986401155c9e8d67a6"
+          }
+        ]
+      },
+      "dependencyReproducibility": {
+        "status": "constraint_files_only",
+        "files": [
+          {
+            "path": "pyproject.toml",
+            "sha256": "06ef6a2b995126b1fb0d91f1a50ee1152a150c1754884db5a6e0fba2a09f434e"
+          },
+          {
+            "path": "requirements-torch.txt",
+            "sha256": "153494bc63ebb19e0c824c27d2a5b60858f2d106d0565424778554932bba69ff"
+          },
+          {
+            "path": "requirements.txt",
+            "sha256": "939f04fd42c639d9d14120500c7a0170939dd3e47e19b86d5586a800b319d035"
+          }
+        ],
+        "container": {
+          "status": "not_provided_by_upstream",
+          "digest": null
+        }
+      },
+      "models": [
+        {
+          "role": "judge",
+          "protocolRequirement": "Evaluator model identifier contains gpt-5.2 with medium reasoning",
+          "bundled": false,
+          "credentialsRequired": true,
+          "termsPolicy": "openai_api_terms_apply",
+          "termsUrl": "https://openai.com/policies/service-terms/"
+        },
+        {
+          "role": "reader",
+          "protocolRequirement": "Reader model identifier contains qwen3.5-9b and follows upstream decoding settings",
+          "bundled": false,
+          "credentialsRequired": true,
+          "termsPolicy": "model_and_endpoint_terms_must_be_recorded_for_run",
+          "termsUrl": null
+        }
+      ],
+      "privacy": {
+        "containsRealUserData": false,
+        "containsSyntheticPersonalData": true,
+        "screenshots": "released_benchmark_screenshots",
+        "publicationHandling": "publish_only_upstream_submission_package_after_secret_scan"
+      },
+      "submission": {
+        "route": "web_form",
+        "url": "https://forms.gle/rxUpiuRKDERqpqSi9",
+        "instructionsUrl": "https://github.com/xiaowu0162/LongMemEval-V2/blob/be15ea6e995462f3391c1a610892df3f67dfa7bd/leaderboard/README.md",
+        "maintainerAcceptanceRequired": true,
+        "resultStatus": "not_submitted",
+        "submissionRecordUrl": null
+      },
+      "runRequirements": [
+        "App commit and working tree must be frozen and recorded in the evaluation run manifest.",
+        "Both web and enterprise domains must complete for one tier and one method configuration.",
+        "Dataset checksum manifest must match the pinned revision before execution.",
+        "Reader, judge, decoding parameters, latency points, and pricing provenance must be recorded.",
+        "Upstream checkout must start clean and contain only the exact declared adapter patch during execution."
+      ]
+    },
+    {
+      "id": "state-bench-agent-learning",
+      "displayName": "STATE-Bench Agent Learning track",
+      "status": "enabled",
+      "capabilityClaims": [
+        "conversation_quality",
+        "procedural_experience_learning",
+        "task_completion"
+      ],
+      "adapter": {
+        "integrationKind": "upstream_agent_learning_hook",
+        "roots": ["benchmarks/state_bench"],
+        "sourceDigestAlgorithm": "sha256_path_nul_bytes_nul_v1",
+        "sourceSha256": "c0c3197abe45cd9c9e4c5f4dbd29c7b006991c5ed8d3bd60152f4b5f268f2387",
+        "modifiesUpstream": true
+      },
+      "upstream": {
+        "repositoryUrl": "https://github.com/microsoft/STATE-Bench",
+        "releaseTag": "v0.8.0",
+        "commitSha": "e2c8d7af51ef48fbbea51bb2ce1fb859af36b423",
+        "immutableSourceUrl": "https://github.com/microsoft/STATE-Bench/tree/e2c8d7af51ef48fbbea51bb2ce1fb859af36b423",
+        "checkoutPath": ".private/evals/upstream/STATE-Bench",
+        "cleanBaseRequired": true,
+        "allowedInstalledChanges": ["agents/kavi_state_bench_agent.py"]
+      },
+      "licenses": {
+        "code": {
+          "spdxId": "MIT",
+          "scope": "upstream_repository",
+          "sourceUrl": "https://github.com/microsoft/STATE-Bench/blob/e2c8d7af51ef48fbbea51bb2ce1fb859af36b423/LICENSE",
+          "redistribution": "permitted_with_mit_notice"
+        },
+        "data": {
+          "spdxId": "MIT",
+          "scope": "released_dataset",
+          "sourceUrl": "https://github.com/microsoft/STATE-Bench/blob/e2c8d7af51ef48fbbea51bb2ce1fb859af36b423/LICENSE",
+          "redistribution": "permitted_with_mit_notice"
+        }
+      },
+      "data": {
+        "sourceUrl": "https://github.com/microsoft/STATE-Bench/tree/e2c8d7af51ef48fbbea51bb2ce1fb859af36b423/datasets/train_task_trajectories",
+        "revision": "e2c8d7af51ef48fbbea51bb2ce1fb859af36b423",
+        "integrity": [
+          {
+            "id": "customer-support-train",
+            "scope": "Canonical digest of 100 released customer support training trajectories",
+            "sha256": "3a623cdda6f703263c3ae7ba800f3af6c913cfc8e47e6a1545ae525f9af4fb1c"
+          },
+          {
+            "id": "shopping-assistant-train",
+            "scope": "Canonical digest of 100 released shopping assistant training trajectories",
+            "sha256": "0d7ec7a35aeb5bf9e641efad56536fa2439b6d58d40e56c1c285e12831fdf50a"
+          },
+          {
+            "id": "travel-train",
+            "scope": "Canonical digest of 100 released travel training trajectories",
+            "sha256": "915dbae9f879ab937ef6a3de029fdf2c7c587b1fd1050ff92d6635a85f8c7d43"
+          }
+        ]
+      },
+      "dependencyReproducibility": {
+        "status": "locked",
+        "files": [
+          {
+            "path": "uv.lock",
+            "sha256": "ac635f069ba1ceaa854f266ea6c9aa77e73ca9cb05f5e70b50d2cdbc18104ce3"
+          }
+        ],
+        "container": {
+          "status": "not_provided_by_upstream",
+          "digest": null
+        }
+      },
+      "models": [
+        {
+          "role": "agent_under_test",
+          "protocolRequirement": "Agent model and reportable reasoning level are candidate-controlled and frozen per paired run",
+          "bundled": false,
+          "credentialsRequired": true,
+          "termsPolicy": "selected_agent_provider_terms_must_be_recorded_for_run",
+          "termsUrl": null
+        },
+        {
+          "role": "simulator_and_judge",
+          "protocolRequirement": "Protocol-locked GPT-5.4 evaluation client",
+          "bundled": false,
+          "credentialsRequired": true,
+          "termsPolicy": "openai_api_terms_apply",
+          "termsUrl": "https://openai.com/policies/service-terms/"
+        }
+      ],
+      "privacy": {
+        "containsRealUserData": false,
+        "containsSyntheticPersonalData": true,
+        "screenshots": "not_present",
+        "publicationHandling": "publish_scored_synthetic_trajectories_after_secret_scan"
+      },
+      "submission": {
+        "route": "github_issue",
+        "url": "https://github.com/microsoft/STATE-Bench/issues/new",
+        "instructionsUrl": "https://github.com/microsoft/STATE-Bench/blob/e2c8d7af51ef48fbbea51bb2ce1fb859af36b423/docs/SUBMIT.md",
+        "maintainerAcceptanceRequired": true,
+        "resultStatus": "not_submitted",
+        "submissionRecordUrl": null
+      },
+      "runRequirements": [
+        "All three domains must contain every held-out task and metrics.json.",
+        "App commit and working tree must be frozen and recorded in the evaluation run manifest.",
+        "Exactly five runs per task and retrieval top-k three are required.",
+        "Learning extraction may read only the released training trajectories.",
+        "Locked simulator, judge, tools, tasks, environments, prompts, and protocol files must remain unchanged.",
+        "Upstream checkout must start clean and contain only the exact declared agent hook during execution."
+      ]
+    }
+  ]
+}
