@@ -123,6 +123,7 @@ describe('memoryAccessGateway', () => {
         messages,
         conversationId: 'memory-1',
         sourceThreadId: 'thread-1',
+        candidateStrategy: 'hybrid',
         consistencyBarrier: expect.objectContaining({ outcome: 'no_job', queryCount: 1 }),
       }),
     );
@@ -196,6 +197,7 @@ describe('memoryAccessGateway', () => {
     expect(result.scopedMessages).toEqual(messages);
     const livingMemoryInput = jest.mocked(buildLivingMemorySections).mock.calls[0][0];
     expect(livingMemoryInput).not.toHaveProperty('retrievalLlm');
+    expect(livingMemoryInput.candidateStrategy).toBe('lexical');
 
     await buildUnifiedMemoryAccessContext({
       messages,
@@ -207,6 +209,7 @@ describe('memoryAccessGateway', () => {
     });
     expect(jest.mocked(buildLivingMemorySections).mock.calls[1][0]).toMatchObject({
       retrievalLlm: { provider: RETRIEVAL_PROVIDER, model: RETRIEVAL_PROVIDER.model },
+      candidateStrategy: 'hybrid',
     });
   });
 

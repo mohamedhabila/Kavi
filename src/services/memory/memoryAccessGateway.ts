@@ -94,6 +94,7 @@ export async function buildUnifiedMemoryAccessContext(
     ...(typeof request.recallLimit === 'number' ? { recallLimit: request.recallLimit } : {}),
     conversationId: request.memoryConversationId,
     sourceThreadId: request.sourceThreadId,
+    candidateStrategy: retrievalStrategy === 'lexical_only' ? 'lexical' : 'hybrid',
     consistencyBarrier,
     ...(request.taskId ? { taskId: request.taskId } : {}),
     ...(request.goals ? { goals: request.goals } : {}),

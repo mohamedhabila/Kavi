@@ -18,6 +18,7 @@ import type { LlmProviderConfig } from '../../types/provider';
 import { createLogger } from '../../utils/logger';
 import { listBlocks, type MemoryBlock } from './blocks';
 import { getEntityById } from './entities';
+import type { RecallCandidateStrategy } from './factRecallCandidateContract';
 import type { AgentGoal } from '../../engine/goals/types';
 import type { AgentRunControlGraphAsyncWorkState } from '../../types/agentRun';
 import type { MemoryFact } from './facts/types';
@@ -99,6 +100,8 @@ export interface BuildLivingMemorySectionsOptions {
   };
   /** Exact bounded consistency result observed before this retrieval. */
   consistencyBarrier?: NextTurnMemoryConsistencyResult;
+  /** Candidate strategy selected by the product memory-access policy. */
+  candidateStrategy?: RecallCandidateStrategy;
 }
 
 export interface LivingMemoryBridgeOutput {
@@ -288,6 +291,7 @@ export async function buildLivingMemorySections(
     asyncWork,
     retrievalLlm,
     consistencyBarrier,
+    candidateStrategy,
   } = options;
 
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -381,6 +385,7 @@ export async function buildLivingMemorySections(
         taskId: resolvedTaskId ?? undefined,
         limit: recallLimit,
         now,
+        ...(candidateStrategy ? { candidateStrategy } : {}),
       });
       recalledFacts = retrieval.facts;
       recalledEpisodes = retrieval.episodes;
