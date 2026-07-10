@@ -1,10 +1,13 @@
 const { hashPrivateString, safePublicToolName } = require('./publicTraceSchema');
 const {
   ASSESSMENT_DIMENSIONS,
+  BENCHMARK_FAMILY_PUBLIC_META,
   BENCHMARK_FAMILIES,
   FAILURE_CATEGORIES,
   GRAPH_STATUSES,
+  isPublicEvaluationId,
   MAX_PUBLIC_ITEMS,
+  READINESS_CRITERIA,
   RUBRIC_KINDS,
 } = require('./publicProjectionPolicy');
 
@@ -42,11 +45,32 @@ function projectNumericObject(value, keys) {
   return Object.fromEntries(keys.map((key) => [key, finiteNumber(source[key])]));
 }
 
+function publicEvaluationIdArray(value, fieldName, maxItems = MAX_PUBLIC_ITEMS) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  if (value.some((entry) => !isPublicEvaluationId(entry))) {
+    throw new Error(`Public E2E dashboard contains an invalid ${fieldName}.`);
+  }
+  return publicStringArray(value, undefined, maxItems);
+}
+
+function publicEvaluationId(value, fieldName) {
+  if (!isPublicEvaluationId(value)) {
+    throw new Error(`Public E2E dashboard contains an invalid ${fieldName}.`);
+  }
+  return value;
+}
+
 function projectFamilyReadiness(value) {
   const source = asRecord(value);
+  const meta = BENCHMARK_FAMILY_PUBLIC_META[source.id];
+  if (!meta) {
+    throw new Error('Public E2E dashboard contains an invalid benchmark family.');
+  }
   return {
-    id: boundedString(source.id),
-    label: boundedString(source.label),
+    id: source.id,
+    label: meta.label,
     ...projectNumericObject(source, [
       'passRate',
       'pass1Rate',
@@ -55,7 +79,10 @@ function projectFamilyReadiness(value) {
       'p95TotalTokens',
       'cacheEligibleReadRate',
     ]),
-    failedScenarioIds: publicStringArray(source.failedScenarioIds),
+    failedScenarioIds: publicEvaluationIdArray(
+      source.failedScenarioIds,
+      'family readiness scenario id',
+    ),
   };
 }
 
@@ -66,7 +93,7 @@ function projectFailureCluster(value) {
       ? source.category
       : 'unknown_structural_failure',
     count: finiteNumber(source.count),
-    scenarioIds: publicStringArray(source.scenarioIds),
+    scenarioIds: publicEvaluationIdArray(source.scenarioIds, 'failure taxonomy scenario id'),
     failedRubricKinds: publicStringArray(source.failedRubricKinds, RUBRIC_KINDS),
     benchmarkFamilies: publicStringArray(source.benchmarkFamilies, BENCHMARK_FAMILIES),
     assessmentDimensions: publicStringArray(source.assessmentDimensions, ASSESSMENT_DIMENSIONS),
@@ -82,7 +109,7 @@ function projectMinedCandidate(value) {
   const graphStatus = GRAPH_STATUSES.has(source.graphStatus) ? source.graphStatus : null;
   return {
     id: boundedString(source.id),
-    sourceScenarioId: boundedString(source.sourceScenarioId),
+    sourceScenarioId: publicEvaluationId(source.sourceScenarioId, 'mined candidate scenario id'),
     traceFingerprintHash: hashPrivateString(source.traceFingerprint),
     categories: publicStringArray(source.categories, FAILURE_CATEGORIES),
     benchmarkFamilies: publicStringArray(source.benchmarkFamilies, BENCHMARK_FAMILIES),
@@ -119,7 +146,7 @@ function projectReadinessDashboard(value, projectRunMetadata) {
     runMetadata: projectRunMetadata(source.runMetadata),
     overall: {
       passing: booleanValue(overall.passing),
-      failedCriteria: publicStringArray(overall.failedCriteria),
+      failedCriteria: publicStringArray(overall.failedCriteria, READINESS_CRITERIA),
       ...projectNumericObject(overall, [
         'scenarioPassRate',
         'pass1Rate',

@@ -22,6 +22,7 @@ function buildEntry() {
     schemaVersion: 'e2e-run-report-scenario-v2',
     suite: 'core',
     fixtureId: 'file-write-read',
+    contentClass: 'synthetic_public',
     passed: true,
     attemptCount: 1,
     durationMs: 10,
@@ -134,6 +135,37 @@ describe('current evaluation partial report contract', () => {
         ],
       }),
     ).toThrow('Invalid entries[0].trace');
+    expect(() =>
+      parsePartialReport({
+        schemaVersion: PARTIAL_REPORT_SCHEMA_VERSION,
+        entries: [{ ...entry, benchmarkFamilies: ['PRIVATE_FAMILY_SENTINEL'] }],
+      }),
+    ).toThrow('Invalid entries[0].benchmarkFamilies');
+    expect(() =>
+      parsePartialReport({
+        schemaVersion: PARTIAL_REPORT_SCHEMA_VERSION,
+        entries: [{ ...entry, assessmentDimensions: ['PRIVATE_AXIS_SENTINEL'] }],
+      }),
+    ).toThrow('Invalid entries[0].assessmentDimensions');
+    expect(() =>
+      parsePartialReport({
+        schemaVersion: PARTIAL_REPORT_SCHEMA_VERSION,
+        entries: [{ ...entry, fixtureId: '/Users/private/PRIVATE_FIXTURE_SENTINEL' }],
+      }),
+    ).toThrow('Invalid entries[0].fixtureId');
+    expect(() =>
+      parsePartialReport({
+        schemaVersion: PARTIAL_REPORT_SCHEMA_VERSION,
+        entries: [{ ...entry, contentClass: 'PRIVATE_CONTENT_CLASS_SENTINEL' }],
+      }),
+    ).toThrow('Invalid entries[0].contentClass');
+    const { contentClass: _contentClass, ...unclassifiedEntry } = entry;
+    expect(() =>
+      parsePartialReport({
+        schemaVersion: PARTIAL_REPORT_SCHEMA_VERSION,
+        entries: [unclassifiedEntry],
+      }),
+    ).toThrow('Missing entries[0].contentClass');
   });
 
   it('rejects an existing empty partial instead of treating it as a successful run', () => {

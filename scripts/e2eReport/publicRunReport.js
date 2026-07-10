@@ -1,9 +1,14 @@
 const { hashPrivateString, safePublicToolName } = require('./publicTraceSchema');
 const {
+  ASSESSMENT_DIMENSION_PUBLIC_META,
   ASSESSMENT_DIMENSIONS,
+  BENCHMARK_FAMILY_PUBLIC_META,
   BENCHMARK_FAMILIES,
+  CONTENT_CLASSES,
   GRAPH_STATUSES,
+  isPublicEvaluationId,
   MAX_PUBLIC_ITEMS,
+  READINESS_CRITERIA,
   RUBRIC_KINDS,
 } = require('./publicProjectionPolicy');
 const { projectReadinessDashboard } = require('./publicReadinessDashboardProjection');
@@ -43,6 +48,33 @@ function publicStringArray(value, allowedValues, maxItems = MAX_PUBLIC_ITEMS) {
     .filter((entry) => !allowedValues || allowedValues.has(entry))
     .slice(0, maxItems);
   return Array.from(new Set(strings)).sort((left, right) => left.localeCompare(right));
+}
+
+function canonicalStringArray(value, allowedValues, fieldName, maxItems = MAX_PUBLIC_ITEMS) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  if (value.some((entry) => typeof entry !== 'string' || !allowedValues.has(entry))) {
+    throw new Error(`Public E2E report contains an invalid ${fieldName}.`);
+  }
+  return publicStringArray(value, allowedValues, maxItems);
+}
+
+function publicEvaluationId(value, fieldName) {
+  if (!isPublicEvaluationId(value)) {
+    throw new Error(`Public E2E report contains an invalid ${fieldName}.`);
+  }
+  return value;
+}
+
+function publicEvaluationIdArray(value, fieldName, maxItems = MAX_PUBLIC_ITEMS) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  if (value.some((entry) => !isPublicEvaluationId(entry))) {
+    throw new Error(`Public E2E report contains an invalid ${fieldName}.`);
+  }
+  return publicStringArray(value, undefined, maxItems);
 }
 
 function projectNumericObject(value, keys) {
@@ -256,6 +288,9 @@ function projectScenarioCache(value) {
 
 function projectScenario(value) {
   const source = asRecord(value);
+  if (!CONTENT_CLASSES.has(source.contentClass)) {
+    throw new Error('Public E2E report contains an invalid scenario contentClass.');
+  }
   const detail = optionalString(source.detail, 65_536);
   const errors = Array.isArray(source.errors)
     ? source.errors.filter((error) => typeof error === 'string').slice(0, 128)
@@ -265,8 +300,9 @@ function projectScenario(value) {
     ? source.failedRubrics.slice(0, MAX_PUBLIC_ITEMS).map(projectRubricFailure)
     : [];
   return {
-    suite: boundedString(source.suite),
-    fixtureId: boundedString(source.fixtureId),
+    suite: publicEvaluationId(source.suite, 'scenario suite'),
+    fixtureId: publicEvaluationId(source.fixtureId, 'scenario fixtureId'),
+    contentClass: source.contentClass,
     passed: booleanValue(source.passed),
     attemptCount: finiteNumber(source.attemptCount, 1),
     durationMs: finiteNumber(source.durationMs),
@@ -279,8 +315,16 @@ function projectScenario(value) {
     tokenBuckets: projectTokenBuckets(source.tokenBuckets ?? asRecord(source.usage).tokenBuckets),
     cache: projectScenarioCache(source.cache),
     loopDiagnostics: projectLoopDiagnostics(source.loopDiagnostics),
-    benchmarkFamilies: publicStringArray(source.benchmarkFamilies, BENCHMARK_FAMILIES),
-    assessmentDimensions: publicStringArray(source.assessmentDimensions, ASSESSMENT_DIMENSIONS),
+    benchmarkFamilies: canonicalStringArray(
+      source.benchmarkFamilies,
+      BENCHMARK_FAMILIES,
+      'scenario benchmark family',
+    ),
+    assessmentDimensions: canonicalStringArray(
+      source.assessmentDimensions,
+      ASSESSMENT_DIMENSIONS,
+      'scenario assessment dimension',
+    ),
     ...(source.rubricPassed !== undefined
       ? { rubricPassed: finiteNumber(source.rubricPassed) }
       : {}),
@@ -371,7 +415,7 @@ function projectCacheTelemetry(value) {
 function projectCacheScenario(value) {
   const source = asRecord(value);
   return {
-    fixtureId: boundedString(source.fixtureId),
+    fixtureId: publicEvaluationId(source.fixtureId, 'cache scenario fixtureId'),
     ...projectNumericObject(source, [
       'inputTokens',
       'eligibleInputTokens',
@@ -426,7 +470,10 @@ function projectGraderAudit(value) {
       'weakPatternRubricCount',
       'structuralSubstringRubricCount',
     ]),
-    missingRubricAuditScenarioIds: publicStringArray(source.missingRubricAuditScenarioIds),
+    missingRubricAuditScenarioIds: publicEvaluationIdArray(
+      source.missingRubricAuditScenarioIds,
+      'grader audit scenario id',
+    ),
     risks: Array.isArray(source.risks)
       ? source.risks.slice(0, MAX_PUBLIC_ITEMS).map(projectRubricRisk)
       : [],
@@ -434,17 +481,24 @@ function projectGraderAudit(value) {
   };
 }
 
-function projectAssessmentAxis(value) {
+function projectAssessmentAxis(value, publicMeta, fieldName) {
   const source = asRecord(value);
-  const externalReference = optionalString(source.externalReference, 2048);
+  const id = source.id;
+  if (typeof id !== 'string' || !Object.prototype.hasOwnProperty.call(publicMeta, id)) {
+    throw new Error(`Public E2E report contains an invalid ${fieldName}.`);
+  }
+  const meta = publicMeta[id];
   return {
-    id: boundedString(source.id),
-    label: boundedString(source.label),
+    id,
+    label: typeof meta === 'string' ? meta : meta.label,
     ...projectNumericObject(source, ['passed', 'total', 'passRate', 'targetPassRate']),
     passing: booleanValue(source.passing),
-    scenarioIds: publicStringArray(source.scenarioIds),
-    failedScenarioIds: publicStringArray(source.failedScenarioIds),
-    ...(externalReference ? { externalReference } : {}),
+    scenarioIds: publicEvaluationIdArray(source.scenarioIds, `${fieldName} scenario id`),
+    failedScenarioIds: publicEvaluationIdArray(
+      source.failedScenarioIds,
+      `${fieldName} failed scenario id`,
+    ),
+    ...(typeof meta === 'object' ? { externalReference: meta.externalReference } : {}),
   };
 }
 
@@ -454,10 +508,18 @@ function projectAssessment(value) {
     generatedAt: boundedString(source.generatedAt),
     ...projectNumericObject(source, ['scenarioCount', 'overallScenarioPassRate', 'evidenceScore']),
     dimensions: Array.isArray(source.dimensions)
-      ? source.dimensions.slice(0, 128).map(projectAssessmentAxis)
+      ? source.dimensions
+          .slice(0, 128)
+          .map((axis) =>
+            projectAssessmentAxis(axis, ASSESSMENT_DIMENSION_PUBLIC_META, 'assessment dimension'),
+          )
       : [],
     benchmarkFamilies: Array.isArray(source.benchmarkFamilies)
-      ? source.benchmarkFamilies.slice(0, 128).map(projectAssessmentAxis)
+      ? source.benchmarkFamilies
+          .slice(0, 128)
+          .map((axis) =>
+            projectAssessmentAxis(axis, BENCHMARK_FAMILY_PUBLIC_META, 'benchmark family'),
+          )
       : [],
     dimensionsPassing: booleanValue(source.dimensionsPassing),
     benchmarkFamiliesPassing: booleanValue(source.benchmarkFamiliesPassing),
@@ -467,7 +529,7 @@ function projectAssessment(value) {
 function projectReliabilityScenario(value) {
   const source = asRecord(value);
   return {
-    fixtureId: boundedString(source.fixtureId),
+    fixtureId: publicEvaluationId(source.fixtureId, 'reliability scenario fixtureId'),
     passed: booleanValue(source.passed),
     ...projectNumericObject(source, ['attemptCount', 'k', 'retriesUsed']),
     passAt1: booleanValue(source.passAt1),
@@ -509,8 +571,15 @@ function projectReadiness(value) {
     ]),
     cachePassing: booleanValue(source.cachePassing),
     graderAuditPassing: booleanValue(source.graderAuditPassing),
-    criticalFailedScenarioIds: publicStringArray(source.criticalFailedScenarioIds),
-    failedCriteria: publicStringArray(source.failedCriteria),
+    criticalFailedScenarioIds: publicEvaluationIdArray(
+      source.criticalFailedScenarioIds,
+      'critical failed scenario id',
+    ),
+    failedCriteria: canonicalStringArray(
+      source.failedCriteria,
+      READINESS_CRITERIA,
+      'readiness criterion',
+    ),
   };
 }
 

@@ -42,6 +42,7 @@ export type PublicE2ELoopToolCall = {
 export type PublicE2EScenarioEntry = {
   suite: string;
   fixtureId: string;
+  contentClass: 'private' | 'synthetic_public';
   passed: boolean;
   attemptCount: number;
   durationMs: number;

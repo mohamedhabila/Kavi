@@ -1,45 +1,35 @@
 const MAX_PUBLIC_ITEMS = 1024;
+const CONTENT_CLASSES = new Set(['private', 'synthetic_public']);
 
-const ASSESSMENT_DIMENSIONS = new Set([
-  'task_understanding',
-  'task_completion',
-  'tool_usage',
-  'tool_discovery',
-  'token_efficiency',
-  'memory',
-  'delegation',
-  'outcome_validators',
-  'control_graph',
-  'mobile_native',
-  'privacy_safety',
-]);
+const { E2E_ASSESSMENT_DIMENSION_LABELS } = require('../../src/acceptance/e2eAgent/e2eAssessmentDimensions.ts');
+const { E2E_BENCHMARK_FAMILY_META } = require('../../src/acceptance/e2eAgent/e2eBenchmarkRegistry.ts');
 
-const BENCHMARK_FAMILIES = new Set([
-  'kavi-core',
-  'gaia-adapted',
-  'tau-bench-adapted',
-  'agentbench-adapted',
-  'memory-agent-bench-adapted',
-  'state-bench-adapted',
-  'tool-discovery-adapted',
-  'bfcl-adapted',
-  'longmem-adapted',
-  'androidworld-adapted',
-  'mobile-agent-bench-adapted',
-  'mobileworld-adapted',
-  'knowu-bench-adapted',
-  'androidworld-direct',
-  'mobileworld-direct',
-  'spa-bench-direct',
-  'bfcl-v4-direct',
-  'longmemeval-v2-direct',
-  'tau-bench-direct',
-  'toolsandbox-direct',
-  'agentdojo-direct',
-  'locomo-direct',
-  'beam-direct',
-  'provider-prompt-cache-direct',
-]);
+const ASSESSMENT_DIMENSION_PUBLIC_META = E2E_ASSESSMENT_DIMENSION_LABELS;
+const BENCHMARK_FAMILY_PUBLIC_META = Object.freeze(
+  Object.fromEntries(
+    Object.entries(E2E_BENCHMARK_FAMILY_META).map(([id, meta]) => [
+      id,
+      { label: meta.label, externalReference: meta.externalReference },
+    ]),
+  ),
+);
+
+const ASSESSMENT_DIMENSIONS = new Set(Object.keys(ASSESSMENT_DIMENSION_PUBLIC_META));
+const BENCHMARK_FAMILIES = new Set(Object.keys(BENCHMARK_FAMILY_PUBLIC_META));
+
+const PUBLIC_EVALUATION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/ -]{0,255}$/u;
+
+function isPublicEvaluationId(value) {
+  if (
+    typeof value !== 'string' ||
+    value !== value.trim() ||
+    !PUBLIC_EVALUATION_ID_PATTERN.test(value) ||
+    value.includes('//')
+  ) {
+    return false;
+  }
+  return value.split('/').every((segment) => segment !== '.' && segment !== '..');
+}
 
 const RUBRIC_KINDS = new Set([
   'workspace_file',
@@ -98,11 +88,31 @@ const FAILURE_CATEGORIES = new Set([
   'unknown_structural_failure',
 ]);
 
+const READINESS_CRITERIA = new Set([
+  'scenario_coverage',
+  'scenario_pass_rate',
+  'pass1_reliability',
+  'assessment_axis_coverage',
+  'dimension_pass_rates',
+  'benchmark_family_pass_rates',
+  'critical_dimension_failures',
+  'cache_readiness',
+  'cache_create_telemetry',
+  'grader_audit',
+  'loop_diagnostics',
+]);
+
 module.exports = {
+  ASSESSMENT_DIMENSION_PUBLIC_META,
   ASSESSMENT_DIMENSIONS,
+  BENCHMARK_FAMILY_PUBLIC_META,
   BENCHMARK_FAMILIES,
+  CONTENT_CLASSES,
   FAILURE_CATEGORIES,
   GRAPH_STATUSES,
+  isPublicEvaluationId,
   MAX_PUBLIC_ITEMS,
+  PUBLIC_EVALUATION_ID_PATTERN,
+  READINESS_CRITERIA,
   RUBRIC_KINDS,
 };

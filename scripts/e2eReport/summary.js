@@ -1,6 +1,7 @@
 const path = require('path');
 
 const { atomicWriteFileSync } = require('./fileTransaction');
+const { parsePublicE2eReportSummaryInput } = require('./publicSummaryReport');
 
 function asNumber(value, fallback = 0) {
   return Number.isFinite(value) ? value : fallback;
@@ -61,9 +62,7 @@ function buildScenarioRows(report) {
 
   for (const scenario of scenarios) {
     const usage = scenario.usage || {};
-    const failedRubricCount = Array.isArray(scenario.failedRubrics)
-      ? scenario.failedRubrics.length
-      : 0;
+    const failedRubricCount = asNumber(scenario.failedRubricCount);
     const errorCount = asNumber(scenario.errorCount);
     const issueCount = failedRubricCount + errorCount;
     lines.push(
@@ -100,14 +99,11 @@ function buildFailedScenarioRows(report) {
   ];
 
   for (const scenario of failedScenarios) {
-    const failedRubricCount = Array.isArray(scenario.failedRubrics)
-      ? scenario.failedRubrics.length
-      : 0;
+    const failedRubricCount = asNumber(scenario.failedRubricCount);
     const errorCount = asNumber(scenario.errorCount);
-    const repeatedToolCalls = scenario.loopDiagnostics?.repeatedToolCalls;
-    const repeatedToolCallCount = Array.isArray(repeatedToolCalls) ? repeatedToolCalls.length : 0;
+    const repeatedToolCallCount = asNumber(scenario.repeatedToolCallCount);
     const loopStatus =
-      scenario.loopDiagnostics?.passing === false
+      scenario.loopDiagnosticsPassing === false
         ? `${repeatedToolCallCount} repeated-tool-call groups`
         : 'pass';
     lines.push(
@@ -128,7 +124,8 @@ function buildFailedScenarioRows(report) {
   return lines;
 }
 
-function buildE2eReportSummaryMarkdown(report, options = {}) {
+function buildE2eReportSummaryMarkdown(input, options = {}) {
+  const report = parsePublicE2eReportSummaryInput(input);
   const totals = report.totals || {};
   const cache = report.cache || {};
   const reliability = report.reliability || {};
@@ -209,6 +206,7 @@ function resolveSummaryPath(reportPath, env = process.env) {
 }
 
 function writeE2eReportSummaryArtifact(reportPath, report, env = process.env) {
+  parsePublicE2eReportSummaryInput(report);
   const summaryPath = resolveSummaryPath(reportPath, env);
   atomicWriteFileSync(summaryPath, buildE2eReportSummaryMarkdown(report), 'utf8');
   return summaryPath;

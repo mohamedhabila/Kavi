@@ -43,6 +43,7 @@ function currentPartialEntry(overrides: Record<string, any>) {
     schemaVersion: SCENARIO_ENTRY_SCHEMA_VERSION,
     suite: 'core',
     fixtureId: 'fixture',
+    contentClass: 'synthetic_public',
     passed: true,
     attemptCount: 1,
     durationMs: 0,

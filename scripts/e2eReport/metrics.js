@@ -6,6 +6,10 @@ const {
   READINESS_MIN_PASS_RATE,
 } = require('./constants');
 const { safeRate } = require('./parser');
+const {
+  ASSESSMENT_DIMENSION_PUBLIC_META,
+  BENCHMARK_FAMILY_PUBLIC_META,
+} = require('./publicProjectionPolicy');
 
 function buildTotals(entries) {
   return entries.reduce(
@@ -105,12 +109,15 @@ function buildReliability(entries, maxScenarioRetries) {
   };
 }
 
-function groupAxisOutcomes(entries, axisKey) {
+function groupAxisOutcomes(entries, axisKey, publicMeta) {
   const axisScenarioIds = new Map();
 
   for (const entry of entries) {
     const axes = Array.isArray(entry[axisKey]) ? entry[axisKey] : [];
     for (const axisId of axes) {
+      if (!Object.prototype.hasOwnProperty.call(publicMeta, axisId)) {
+        throw new Error(`Unsupported public evaluation axis: ${axisId}`);
+      }
       if (!axisScenarioIds.has(axisId)) {
         axisScenarioIds.set(axisId, { scenarioIds: new Set(), failedScenarioIds: new Set() });
       }
@@ -131,7 +138,10 @@ function groupAxisOutcomes(entries, axisKey) {
       const passRate = total > 0 ? passed / total : 0;
       return {
         id: axisId,
-        label: axisId,
+        label:
+          typeof publicMeta[axisId] === 'string'
+            ? publicMeta[axisId]
+            : publicMeta[axisId].label,
         passed,
         total,
         passRate,
@@ -139,6 +149,9 @@ function groupAxisOutcomes(entries, axisKey) {
         passing: passRate >= ASSESSMENT_MIN_DIMENSION_PASS_RATE,
         scenarioIds,
         failedScenarioIds,
+        ...(typeof publicMeta[axisId] === 'object'
+          ? { externalReference: publicMeta[axisId].externalReference }
+          : {}),
       };
     })
     .sort((left, right) => left.id.localeCompare(right.id));
@@ -148,8 +161,16 @@ function buildAssessment(entries) {
   const scenarioCount = entries.length;
   const passedCount = entries.filter((entry) => entry.passed).length;
   const overallScenarioPassRate = scenarioCount > 0 ? passedCount / scenarioCount : 0;
-  const dimensions = groupAxisOutcomes(entries, 'assessmentDimensions');
-  const benchmarkFamilies = groupAxisOutcomes(entries, 'benchmarkFamilies');
+  const dimensions = groupAxisOutcomes(
+    entries,
+    'assessmentDimensions',
+    ASSESSMENT_DIMENSION_PUBLIC_META,
+  );
+  const benchmarkFamilies = groupAxisOutcomes(
+    entries,
+    'benchmarkFamilies',
+    BENCHMARK_FAMILY_PUBLIC_META,
+  );
   const rates = [...dimensions, ...benchmarkFamilies].map((summary) => summary.passRate);
   const evidenceScore =
     rates.length > 0

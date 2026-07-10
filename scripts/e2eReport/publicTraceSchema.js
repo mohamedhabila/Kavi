@@ -1,8 +1,8 @@
 const { SAFE_GRAPH_STATUSES, projectGraphSnapshot } = require('./publicTraceGraph');
+const { isPublicEvaluationId } = require('./publicProjectionPolicy');
 const {
   SHA256_PATTERN,
   asRecord,
-  boundedString,
   finiteNumber,
   hashPrivateString,
   nonNegativeInteger,
@@ -51,7 +51,7 @@ function projectPublicRedactedTrace(value) {
   if (!source || source.schemaVersion !== 'e2e-redacted-trace-v2') {
     return null;
   }
-  const fixtureId = boundedString(source.fixtureId, 256);
+  const fixtureId = isPublicEvaluationId(source.fixtureId) ? source.fixtureId : null;
   const conversationIdHash = projectHash(source.conversationIdHash);
   const durationMs = finiteNumber(source.durationMs);
   const usage = projectPublicUsageTrace(source.usage);

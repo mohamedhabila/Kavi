@@ -2,6 +2,12 @@ const fs = require('fs');
 const { isDeepStrictEqual } = require('util');
 
 const { atomicWriteFileSync } = require('./fileTransaction');
+const {
+  ASSESSMENT_DIMENSIONS,
+  BENCHMARK_FAMILIES,
+  CONTENT_CLASSES,
+  isPublicEvaluationId,
+} = require('./publicProjectionPolicy');
 const { projectPublicRedactedTrace } = require('./publicTraceSchema');
 
 const PARTIAL_REPORT_SCHEMA_VERSION = 'e2e-partial-report-v2';
@@ -11,6 +17,7 @@ const REQUIRED_ENTRY_FIELDS = [
   'schemaVersion',
   'suite',
   'fixtureId',
+  'contentClass',
   'passed',
   'attemptCount',
   'durationMs',
@@ -98,8 +105,13 @@ function assertFiniteNumber(value, fieldPath, { integer = false, minimum = 0 } =
   }
 }
 
-function assertStringArray(value, fieldPath) {
-  if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) {
+function assertStringArray(value, fieldPath, allowedValues) {
+  if (
+    !Array.isArray(value) ||
+    value.some(
+      (entry) => typeof entry !== 'string' || (allowedValues && !allowedValues.has(entry)),
+    )
+  ) {
     throw new Error(`Invalid ${fieldPath} in current evaluation partial report.`);
   }
 }
@@ -330,9 +342,12 @@ function assertScenarioEntry(entry, index) {
     throw new Error(`Unsupported ${prefix}.schemaVersion in evaluation partial report.`);
   }
   for (const field of ['suite', 'fixtureId']) {
-    if (typeof entry[field] !== 'string' || entry[field].trim().length === 0) {
+    if (!isPublicEvaluationId(entry[field])) {
       throw new Error(`Invalid ${prefix}.${field} in current evaluation partial report.`);
     }
+  }
+  if (!CONTENT_CLASSES.has(entry.contentClass)) {
+    throw new Error(`Invalid ${prefix}.contentClass in current evaluation partial report.`);
   }
   for (const field of ['passed', 'completed']) {
     if (typeof entry[field] !== 'boolean') {
@@ -365,8 +380,12 @@ function assertScenarioEntry(entry, index) {
   ) {
     throw new Error(`Mismatched ${prefix}.tokenBuckets in current evaluation partial report.`);
   }
-  assertStringArray(entry.benchmarkFamilies, `${prefix}.benchmarkFamilies`);
-  assertStringArray(entry.assessmentDimensions, `${prefix}.assessmentDimensions`);
+  assertStringArray(entry.benchmarkFamilies, `${prefix}.benchmarkFamilies`, BENCHMARK_FAMILIES);
+  assertStringArray(
+    entry.assessmentDimensions,
+    `${prefix}.assessmentDimensions`,
+    ASSESSMENT_DIMENSIONS,
+  );
   assertStringArray(entry.errors, `${prefix}.errors`);
   if (entry.promptCache !== undefined) {
     assertPromptCache(entry.promptCache, `${prefix}.promptCache`);
@@ -393,6 +412,9 @@ function assertScenarioEntry(entry, index) {
     const projectedTrace = projectPublicRedactedTrace(entry.trace);
     if (!projectedTrace) {
       throw new Error(`Invalid ${prefix}.trace in current evaluation partial report.`);
+    }
+    if (projectedTrace.fixtureId !== entry.fixtureId) {
+      throw new Error(`Mismatched ${prefix}.trace.fixtureId in current evaluation partial report.`);
     }
   }
   if (entry.detail !== undefined && typeof entry.detail !== 'string') {
