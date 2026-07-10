@@ -411,10 +411,12 @@ describe('expo eas github workflow execution and monitoring', () => {
       sshTargets: [],
     };
 
-    await runExpoProjectAction('expo-project-custom-token', 'submit', {
-      platform: 'ios',
-      waitTimeoutMs: 1,
-    });
+    await expect(
+      runExpoProjectAction('expo-project-custom-token', 'submit', {
+        platform: 'ios',
+        waitTimeoutMs: 1,
+      }),
+    ).rejects.toThrow('github-workflow-dispatch-uncorrelated');
 
     expect(global.fetch).toHaveBeenCalled();
     for (const [url, init] of (global.fetch as jest.Mock).mock.calls) {

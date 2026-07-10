@@ -197,7 +197,9 @@ async function dispatchGitHubWorkflow(
   }
 
   if (!run) {
-    return { mode: 'github-workflow' };
+    throw new Error(
+      'github-workflow-dispatch-uncorrelated: GitHub acknowledged the workflow dispatch, but no exact run could be correlated. Do not retry automatically; inspect Actions for the target ref before dispatching again.',
+    );
   }
 
   if (args.waitForCompletion) {
