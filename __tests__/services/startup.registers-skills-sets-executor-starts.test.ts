@@ -369,7 +369,18 @@ describe('initializeServices', () => {
     expect(mockInitializeDurableRecoveryLifecycle).toHaveBeenCalledTimes(1);
   });
   it('repairs durable recovery candidates on foreground', async () => {
-    const { handleAppForeground } = require('../../src/services/startup');
+    const { handleAppForeground, initializeServices } = require('../../src/services/startup');
+
+    initializeServices();
+    await waitFor(() =>
+      expect(mockRecoverInterruptedForegroundModelExecutions).toHaveBeenCalledTimes(1),
+    );
+    await waitFor(() =>
+      expect(mockMaintainForegroundModelExecutionRetention).toHaveBeenCalledTimes(1),
+    );
+    await Promise.resolve();
+    mockRecoverInterruptedForegroundModelExecutions.mockClear();
+    mockChatStoreState.recoverInterruptedAgentRuns.mockClear();
 
     handleAppForeground();
 
@@ -377,6 +388,7 @@ describe('initializeServices', () => {
     await waitFor(() =>
       expect(mockRecoverInterruptedForegroundModelExecutions).toHaveBeenCalledTimes(1),
     );
+    expect(mockChatStoreState.recoverInterruptedAgentRuns).not.toHaveBeenCalled();
   });
   it('flushes durable memory work before waiting for migration', async () => {
     mockRunMemoryMigrationTick.mockImplementation(() => new Promise(() => undefined));

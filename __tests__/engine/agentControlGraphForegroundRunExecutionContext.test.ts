@@ -1,11 +1,13 @@
 import { runOrchestrator } from '../../src/engine/orchestrator';
 import { executeForegroundConversationRun } from '../../src/engine/graph/foregroundRun/execution';
-import { resolveForegroundConversationExecutionContext } from '../../src/engine/graph/foregroundRun/executionContext';
 import { resolveForegroundRunPreflight } from '../../src/engine/graph/foregroundRun/preflight';
 import { resolveForegroundInterruptedResponseOutcome } from '../../src/engine/graph/foregroundRun/foregroundInterruptedResponse';
 import { createForegroundRequestRegistry } from '../../src/engine/graph/foregroundRun/requestRegistry';
-import type { Conversation } from '../../src/types/conversation';
-import type { LlmProviderConfig } from '../../src/types/provider';
+import {
+  createConversation,
+  createExecutionContext,
+  createProvider,
+} from '../helpers/foregroundRunExecutionContextHarness';
 import {
   __resetOnDeviceGuardsForTests,
   isMainInferenceActive,
@@ -32,169 +34,6 @@ const mockedResolveForegroundInterruptedResponseOutcome =
     typeof resolveForegroundInterruptedResponseOutcome
   >;
 
-function createConversation(overrides: Partial<Conversation> = {}): Conversation {
-  return {
-    id: 'target-conversation',
-    title: 'Target conversation',
-    messages: [
-      {
-        id: 'user-1',
-        role: 'user',
-        content: 'Continue this conversation.',
-        timestamp: 1,
-      },
-    ],
-    providerId: 'target-provider',
-    systemPrompt: 'Target system prompt',
-    createdAt: 1,
-    updatedAt: 1,
-    ...overrides,
-  };
-}
-
-function createProvider(id: string, model: string): LlmProviderConfig {
-  return {
-    id,
-    name: id,
-    enabled: true,
-    kind: 'remote',
-    baseUrl: `https://${id}.example.com`,
-    apiKey: `${id}-key`,
-    model,
-  };
-}
-
-function createExecutionContext(params: {
-  conversation: Conversation;
-  providers: LlmProviderConfig[];
-  recordConversationTurnMemory: jest.Mock;
-  ensureCanonicalConversation: jest.Mock;
-}) {
-  let idSequence = 0;
-  const projectionOwners = new Map<string, { runId: string }>();
-  const noOp = jest.fn();
-  const flushChatState = jest.fn().mockResolvedValue(undefined);
-  const createModelExecution = jest.fn(async (input) => ({
-    runId: `journal-${input.assistantMessageId}`,
-    conversationId: input.conversationId,
-    requestMessageId: input.requestMessageId,
-    assistantMessageId: input.assistantMessageId,
-    taskId: input.taskId ?? null,
-    createdAt: 10,
-    expectedStatus: 'queued' as const,
-    controlEpoch: 0,
-    updatedAt: 10,
-    checkpointId: `created-${input.assistantMessageId}`,
-    checkpointStateDigest: 'a'.repeat(64),
-  }));
-  const activateModelExecution = jest.fn(async ({ lease }) => ({
-    ...lease,
-    expectedStatus: 'running' as const,
-    updatedAt: 11,
-    checkpointId: `before-${lease.assistantMessageId}`,
-  }));
-  const completeModelExecution = jest.fn().mockResolvedValue(undefined);
-
-  return {
-    durability: {
-      activateModelExecution,
-      claimModelProjection: jest.fn(({ conversationId, owner }) => {
-        const current = projectionOwners.get(conversationId);
-        if (current && current.runId !== owner.runId) return 'owner_conflict' as const;
-        projectionOwners.set(conversationId, owner);
-        return 'claimed' as const;
-      }),
-      completeModelExecution,
-      createModelExecution,
-      flushChatState,
-      ownsModelProjection: jest.fn((conversationId, owner) =>
-        projectionOwners.get(conversationId)?.runId === owner.runId
-      ),
-      relinquishModelExecutionProcessOwnership: jest.fn(),
-      releaseModelProjection: jest.fn(({ conversationId, owner }) => {
-        if (projectionOwners.get(conversationId)?.runId !== owner.runId) {
-          return 'owner_changed' as const;
-        }
-        projectionOwners.delete(conversationId);
-        return 'released' as const;
-      }),
-    },
-    helpers: {
-      appendConversationLog: noOp,
-      clearPendingRunState: noOp,
-      clearTrackedRunCancellation: noOp,
-      createId: () => `generated-${++idSequence}`,
-      ensureAgentRunFinalResponse: jest.fn(),
-      ensureCanonicalConversation: params.ensureCanonicalConversation,
-      getConversation: (conversationId: string) =>
-        conversationId === params.conversation.id ? params.conversation : undefined,
-      getConversations: () => [params.conversation],
-      getResumeAgentRun: () => null,
-      recordConversationTurnMemory: params.recordConversationTurnMemory,
-      requestPersistenceCheckpoint: noOp,
-      setChatError: noOp,
-    },
-    refs: {
-      forceNextScrollRef: { current: false },
-      pendingAgentRunAsyncResumesRef: { current: new Map() },
-      pendingAgentRunFinalizationsRef: { current: new Map() },
-      pendingAgentRunTerminalReviewsRef: { current: new Map() },
-      shouldAutoFollowRef: { current: true },
-      streamingDraftsRef: { current: {} },
-    },
-    requests: {
-      abortForegroundRequestForConversation: jest.fn(() => false),
-      clearForegroundRequest: jest.fn(() => true),
-      isCurrentForegroundRequest: jest.fn(() => true),
-      registerForegroundRequest: noOp,
-      setStreamingMessageId: noOp,
-    },
-    state: {
-      activeModel: 'stale-model',
-      activeProviderId: 'stale-provider',
-      chatNoApiKeyMessage: 'Missing API key',
-      chatNoModelMessage: 'Missing model',
-      chatNoProviderMessage: 'Missing provider',
-      defaultConversationMode: 'agentic' as const,
-      exportDialogTitle: 'Export',
-      linkUnderstandingEnabled: true,
-      maxLinks: 4,
-      mediaUnderstandingEnabled: true,
-      providers: params.providers,
-      streamStoreCheckpointIntervalMs: 100,
-      streamUiDraftPublishIntervalMs: 16,
-      systemPrompt: 'Global system prompt',
-      thinkingLevel: 'medium' as const,
-      toolResultPersistenceCheckpointDelayMs: 50,
-    },
-    store: {
-      addMessage: noOp,
-      addToolCall: noOp,
-      appendAgentRunCheckpoint: noOp,
-      applyConversationCompaction: noOp,
-      completeAgentRun: noOp,
-      setAgentRunPhase: noOp,
-      startAgentRun: jest.fn(() => 'run-1'),
-      updateAgentRunAsyncWork: noOp,
-      updateAgentRunControlGraph: noOp,
-      updateAgentRunPlan: noOp,
-      updateAgentRunSummary: noOp,
-      updateMessage: noOp,
-      updateMessageAssistantMetadata: noOp,
-      updateMessageEffect: noOp,
-      updateMessageEnrichedContent: noOp,
-      updateMessageProviderReplay: noOp,
-      updateMessageReasoning: noOp,
-      updateToolCallStatus: noOp,
-    },
-    streaming: {
-      clearStreamingDraft: noOp,
-      mergeStreamingDraft: noOp,
-      updateStreamingDraft: noOp,
-    },
-  };
-}
-
 describe('foreground run target-conversation execution context', () => {
   beforeEach(() => {
     jest.resetAllMocks();
@@ -203,54 +42,6 @@ describe('foreground run target-conversation execution context', () => {
       status: 'failed',
       checkpointTitle: 'Turn failed',
       checkpointDetail: 'stream closed',
-    });
-  });
-
-  it('uses the configured default mode when the target conversation has no mode', () => {
-    expect(
-      resolveForegroundConversationExecutionContext({
-        conversation: createConversation({ mode: undefined, personaId: 'reviewer' }),
-        defaultConversationMode: 'chitchat',
-      }),
-    ).toEqual({
-      mode: 'chitchat',
-      personaId: 'reviewer',
-    });
-  });
-
-  it('resolves agentic targets to the super-agent persona', () => {
-    expect(
-      resolveForegroundConversationExecutionContext({
-        conversation: createConversation({ mode: 'agentic', personaId: 'stale-persona' }),
-        defaultConversationMode: 'chitchat',
-      }),
-    ).toEqual({
-      mode: 'agentic',
-      personaId: 'super-agent',
-    });
-  });
-
-  it('preserves a non-super-agent persona for chitchat targets', () => {
-    expect(
-      resolveForegroundConversationExecutionContext({
-        conversation: createConversation({ mode: 'chitchat', personaId: 'reviewer' }),
-        defaultConversationMode: 'agentic',
-      }),
-    ).toEqual({
-      mode: 'chitchat',
-      personaId: 'reviewer',
-    });
-  });
-
-  it('drops a stale super-agent persona when the target is chitchat', () => {
-    expect(
-      resolveForegroundConversationExecutionContext({
-        conversation: createConversation({ mode: 'chitchat', personaId: 'super-agent' }),
-        defaultConversationMode: 'agentic',
-      }),
-    ).toEqual({
-      mode: 'chitchat',
-      personaId: 'default',
     });
   });
 
@@ -336,6 +127,89 @@ describe('foreground run target-conversation execution context', () => {
     expect(
       context.durability.completeModelExecution.mock.invocationCallOrder[0],
     ).toBeLessThan(context.durability.releaseModelProjection.mock.invocationCallOrder[0]);
+  });
+
+  it('waits for slow startup recovery readiness before creating exactly one generation', async () => {
+    const conversation = createConversation({ mode: 'chitchat' });
+    const provider = createProvider('target-provider', 'target-model');
+    const context = createExecutionContext({
+      conversation,
+      providers: [provider],
+      ensureCanonicalConversation: jest.fn(),
+      recordConversationTurnMemory: jest.fn(),
+    });
+    let markReady = () => {};
+    context.durability.waitForRecoveryReadiness.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          markReady = resolve;
+        }),
+    );
+    mockedResolveForegroundRunPreflight.mockResolvedValue({
+      kind: 'ready',
+      provider,
+      providerWithApiKey: provider,
+      model: provider.model,
+      finalizationProviderContext: {
+        provider,
+        model: provider.model,
+        systemPromptText: conversation.systemPrompt,
+        conversationId: conversation.id,
+      },
+    });
+    mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
+      callbacks.onDone();
+    });
+
+    const execution = executeForegroundConversationRun({
+      context,
+      conversationId: conversation.id,
+    });
+    await Promise.resolve();
+    expect(context.durability.createModelExecution).not.toHaveBeenCalled();
+    expect(mockedRunOrchestrator).not.toHaveBeenCalled();
+
+    markReady();
+    await execution;
+
+    expect(context.durability.waitForRecoveryReadiness).toHaveBeenCalledTimes(1);
+    expect(context.durability.createModelExecution).toHaveBeenCalledTimes(1);
+    expect(mockedRunOrchestrator).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not create a tracked run when projection availability fails', async () => {
+    const conversation = createConversation({ mode: 'agentic' });
+    const provider = createProvider('target-provider', 'target-model');
+    const context = createExecutionContext({
+      conversation,
+      providers: [provider],
+      ensureCanonicalConversation: jest.fn(),
+      recordConversationTurnMemory: jest.fn(),
+    });
+    mockedResolveForegroundRunPreflight.mockResolvedValue({
+      kind: 'ready',
+      provider,
+      providerWithApiKey: provider,
+      model: provider.model,
+      finalizationProviderContext: {
+        provider,
+        model: provider.model,
+        systemPromptText: conversation.systemPrompt,
+        conversationId: conversation.id,
+      },
+    });
+    context.durability.waitForProjectionAvailability.mockRejectedValueOnce(
+      new Error('foreground_model_projection_wait_timeout'),
+    );
+
+    await executeForegroundConversationRun({ context, conversationId: conversation.id });
+
+    expect(context.store.startAgentRun).not.toHaveBeenCalled();
+    expect(context.durability.createModelExecution).not.toHaveBeenCalled();
+    expect(mockedRunOrchestrator).not.toHaveBeenCalled();
+    expect(context.helpers.setChatError).toHaveBeenCalledWith(
+      'foreground_model_projection_wait_timeout',
+    );
   });
 
   it('holds the inference lease through terminal lifecycle and releases it after completion', async () => {
@@ -600,6 +474,81 @@ describe('foreground run target-conversation execution context', () => {
       context.durability.releaseModelProjection.mock.invocationCallOrder[0],
     ).toBeLessThan(resumeAgentRun.mock.invocationCallOrder[0]);
     expect(context.durability.completeModelExecution).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for an aborted same-conversation owner to release before running the new turn', async () => {
+    const conversation = createConversation({ mode: 'chitchat' });
+    const provider = createProvider('target-provider', 'target-model');
+    const context = createExecutionContext({
+      conversation,
+      providers: [provider],
+      ensureCanonicalConversation: jest.fn(),
+      recordConversationTurnMemory: jest.fn(),
+    });
+    const registry = createForegroundRequestRegistry();
+    context.requests = {
+      abortForegroundRequestForConversation: (conversationId, reason) =>
+        registry.abortForConversation(conversationId, reason),
+      clearForegroundRequest: (conversationId, requestId, controller) =>
+        registry.clear({ conversationId, requestId, controller }),
+      isCurrentForegroundRequest: (conversationId, requestId, controller) =>
+        registry.isCurrent({ conversationId, requestId, controller }),
+      registerForegroundRequest: (requestId, conversationId, controller) =>
+        registry.register({ conversationId, requestId, controller }),
+      setStreamingMessageId: (conversationId, requestId, controller, messageId) =>
+        registry.setStreamingMessageId(
+          { conversationId, requestId, controller },
+          messageId,
+        ),
+    };
+    mockedResolveForegroundRunPreflight.mockResolvedValue({
+      kind: 'ready',
+      provider,
+      providerWithApiKey: provider,
+      model: provider.model,
+      finalizationProviderContext: {
+        provider,
+        model: provider.model,
+        systemPromptText: conversation.systemPrompt,
+        conversationId: conversation.id,
+      },
+    });
+    let invocation = 0;
+    mockedRunOrchestrator.mockImplementation(async (options, callbacks) => {
+      invocation += 1;
+      if (invocation === 1) {
+        await new Promise<void>((_resolve, reject) => {
+          options.signal.signal.addEventListener(
+            'abort',
+            () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+            { once: true },
+          );
+        });
+        return;
+      }
+      callbacks.onDone();
+    });
+
+    const first = executeForegroundConversationRun({
+      context,
+      conversationId: conversation.id,
+    });
+    while (mockedRunOrchestrator.mock.calls.length < 1) await Promise.resolve();
+    const second = executeForegroundConversationRun({
+      context,
+      conversationId: conversation.id,
+    });
+
+    await Promise.all([first, second]);
+
+    expect(mockedRunOrchestrator).toHaveBeenCalledTimes(2);
+    expect(context.durability.waitForProjectionAvailability).toHaveBeenCalledTimes(2);
+    expect(context.durability.completeModelExecution).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'cancelled' }),
+    );
+    expect(context.durability.completeModelExecution).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'succeeded' }),
+    );
   });
 
   it('keeps callbacks and cleanup owned by each concurrent conversation', async () => {

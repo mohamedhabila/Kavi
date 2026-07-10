@@ -10,6 +10,9 @@ import {
 import { capMessages } from './chatStoreHelpers';
 import { requestChatStorePersistenceCheckpoint } from './chatStorePersistence';
 import { useChatStore } from './useChatStore';
+import { unrefTimerIfSupported } from '../utils/timers';
+
+const FOREGROUND_MODEL_PROJECTION_RELEASE_TIMEOUT_MS = 30_000;
 
 export type ForegroundModelProjectionClaimResult =
   | 'claimed'
@@ -50,6 +53,53 @@ export function ownsForegroundModelProjection(
     conversation?.foregroundModelProjectionOwner,
     owner,
   );
+}
+
+/** Wait for an earlier generation to release the exclusive conversation projection. */
+export async function waitForForegroundModelProjectionAvailability(input: {
+  conversationId: string;
+  signal: AbortSignal;
+  timeoutMs?: number;
+}): Promise<void> {
+  const timeoutMs = input.timeoutMs ?? FOREGROUND_MODEL_PROJECTION_RELEASE_TIMEOUT_MS;
+  if (!validId(input.conversationId) || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1) {
+    throw new Error('foreground_model_projection_invalid_wait');
+  }
+  const hasOwner = () =>
+    Boolean(
+      useChatStore
+        .getState()
+        .conversations.find((conversation) => conversation.id === input.conversationId)
+        ?.foregroundModelProjectionOwner,
+    );
+  if (!hasOwner()) return;
+  if (input.signal.aborted) throw new Error('foreground_model_projection_wait_cancelled');
+
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    let unsubscribe = () => {};
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onAbort = () => finish(new Error('foreground_model_projection_wait_cancelled'));
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      unsubscribe();
+      input.signal.removeEventListener('abort', onAbort);
+      if (timer) clearTimeout(timer);
+      if (error) reject(error);
+      else resolve();
+    };
+    unsubscribe = useChatStore.subscribe(() => {
+      if (!hasOwner()) finish();
+    });
+    input.signal.addEventListener('abort', onAbort, { once: true });
+    timer = setTimeout(
+      () => finish(new Error('foreground_model_projection_wait_timeout')),
+      timeoutMs,
+    );
+    unrefTimerIfSupported(timer);
+    if (!hasOwner()) finish();
+  });
 }
 
 export function claimForegroundModelProjection(input: {

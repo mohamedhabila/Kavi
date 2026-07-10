@@ -14,16 +14,10 @@ async function waitForChatHydration(): Promise<void> {
 }
 
 let recoveryPromise: Promise<void> | null = null;
+let hasCompletedInitialRecovery = false;
 
-export async function recoverPersistedAgentState(): Promise<void> {
+async function recoverForegroundJournalState(): Promise<void> {
   await waitForChatHydration();
-
-  const chatState = useChatStore.getState();
-  await initSubAgentRegistry(chatState.conversations);
-  const activeSubAgents = listActiveSubAgents();
-  chatState.recoverInterruptedAgentRuns(activeSubAgents, {
-    timestamp: Date.now(),
-  });
   try {
     await recoverInterruptedForegroundModelExecutions();
   } catch (error) {
@@ -34,9 +28,6 @@ export async function recoverPersistedAgentState(): Promise<void> {
   } catch (error) {
     console.warn('[startup] foreground model projection cleanup failed:', error);
   }
-  await repairTerminalAgentRunsMissingFinalResponses({
-    activeSubAgents,
-  });
   try {
     maintainAllForegroundModelExecutionRetention({ now: Date.now() });
   } catch (error) {
@@ -44,10 +35,45 @@ export async function recoverPersistedAgentState(): Promise<void> {
   }
 }
 
+export async function recoverPersistedAgentState(): Promise<void> {
+  await waitForChatHydration();
+
+  const chatState = useChatStore.getState();
+  await initSubAgentRegistry(chatState.conversations);
+  const activeSubAgents = listActiveSubAgents();
+  chatState.recoverInterruptedAgentRuns(activeSubAgents, {
+    timestamp: Date.now(),
+  });
+  await recoverForegroundJournalState();
+  await repairTerminalAgentRunsMissingFinalResponses({
+    activeSubAgents,
+  });
+}
+
 /** Single-flight recovery that retries on later foreground events after each completed sweep. */
 export function triggerPersistedAgentRecovery(): Promise<void> {
   if (recoveryPromise) return recoveryPromise;
-  recoveryPromise = recoverPersistedAgentState().finally(() => {
+  recoveryPromise = recoverPersistedAgentState()
+    .then(() => {
+      hasCompletedInitialRecovery = true;
+    })
+    .finally(() => {
+      recoveryPromise = null;
+    });
+  return recoveryPromise;
+}
+
+/** Block new foreground generations until the initial hydrated recovery sweep is complete. */
+export function waitForPersistedAgentRecoveryReadiness(): Promise<void> {
+  if (recoveryPromise) return recoveryPromise;
+  return hasCompletedInitialRecovery ? Promise.resolve() : triggerPersistedAgentRecovery();
+}
+
+/** Retry only journal-owned projection cleanup on foreground; live AgentRuns remain untouched. */
+export function triggerForegroundJournalRecovery(): Promise<void> {
+  if (recoveryPromise) return recoveryPromise;
+  if (!hasCompletedInitialRecovery) return triggerPersistedAgentRecovery();
+  recoveryPromise = recoverForegroundJournalState().finally(() => {
     recoveryPromise = null;
   });
   return recoveryPromise;

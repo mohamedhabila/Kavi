@@ -182,6 +182,11 @@ export interface ExecuteForegroundConversationRunParams {
         owner: ForegroundModelProjectionOwner;
       }) => ForegroundModelProjectionReleaseResult;
       relinquishModelExecutionProcessOwnership: (runId: string) => void;
+      waitForRecoveryReadiness: () => Promise<void>;
+      waitForProjectionAvailability: (input: {
+        conversationId: string;
+        signal: AbortSignal;
+      }) => Promise<void>;
     };
     helpers: ForegroundConversationRunHelpers;
     refs: ForegroundConversationRunRefs;

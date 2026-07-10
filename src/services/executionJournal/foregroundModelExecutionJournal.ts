@@ -220,7 +220,7 @@ export async function createForegroundModelExecution(
     }),
   );
   const database = (options.getDatabase ?? getExecutionJournalDb)();
-  return withImmediateTransaction(database, () => {
+  const created = withImmediateTransaction(database, () => {
     insertRun(database, decodeExecutionRunRow(runRow(run)));
     database.runSync(
       `INSERT INTO execution_recovery_controls (run_id, cancellation_state, updated_at)
@@ -231,6 +231,8 @@ export async function createForegroundModelExecution(
     insertCheckpoint(database, initialCheckpoint);
     return toLease(readRun(database, run.id), initialCheckpoint);
   });
+  markForegroundModelExecutionOwnedByCurrentProcess(created.runId);
+  return created;
 }
 
 /** Arm one exact claimed generation after its projection owner has been durably flushed. */
@@ -264,7 +266,7 @@ export async function activateForegroundModelExecution(
   );
   const database = (options.getDatabase ?? getExecutionJournalDb)();
 
-  const activated = withImmediateTransaction(database, () => {
+  return withImmediateTransaction(database, () => {
     const run = readRun(database, input.lease.runId);
     assertLease(run, input.lease);
     const latestRaw = database.getFirstSync<unknown>(
@@ -320,8 +322,6 @@ export async function activateForegroundModelExecution(
     }
     return toLease(readRun(database, run.id), checkpoint);
   });
-  markForegroundModelExecutionOwnedByCurrentProcess(activated.runId);
-  return activated;
 }
 
 function assertEmptyEffectState(database: SQLite.SQLiteDatabase, runId: string): void {

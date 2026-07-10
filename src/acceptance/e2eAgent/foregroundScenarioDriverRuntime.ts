@@ -19,6 +19,7 @@ import {
   claimForegroundModelProjection,
   ownsForegroundModelProjection,
   releaseForegroundModelProjection,
+  waitForForegroundModelProjectionAvailability,
 } from '../../store/foregroundModelProjectionOwnership';
 import { resolveConversationProviderContext } from '../../services/llm/support/providerSupport';
 import {
@@ -44,6 +45,7 @@ import {
 } from '../../store/chatStorePersistence';
 import { useChatStore } from '../../store/useChatStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
+import { waitForPersistedAgentRecoveryReadiness } from '../../services/startupRecovery';
 import type { AgentRun } from '../../types/agentRun';
 import type { Conversation, ConversationMode } from '../../types/conversation';
 import type { Message } from '../../types/message';
@@ -473,6 +475,8 @@ export function createForegroundScenarioRuntime(
       releaseModelProjection: releaseForegroundModelProjection,
       relinquishModelExecutionProcessOwnership:
         relinquishForegroundModelExecutionProcessOwnership,
+      waitForRecoveryReadiness: waitForPersistedAgentRecoveryReadiness,
+      waitForProjectionAvailability: waitForForegroundModelProjectionAvailability,
     },
     helpers: {
       appendConversationLog: (conversationId, entry) =>

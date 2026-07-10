@@ -49,7 +49,10 @@ import {
   initializeDurableRecoveryLifecycle,
   reconcileDurableRecoveryLifecycle,
 } from './executionJournal/durableRecoveryLifecycle';
-import { triggerPersistedAgentRecovery } from './startupRecovery';
+import {
+  triggerForegroundJournalRecovery,
+  triggerPersistedAgentRecovery,
+} from './startupRecovery';
 
 function shouldDeliverNotification(job: CronJob): boolean {
   const mode = job.delivery?.mode || 'both';
@@ -651,7 +654,7 @@ export function initializeServices(): void {
  */
 export function handleAppForeground(): void {
   reconcileDurableRecoveryLifecycle('foreground');
-  void triggerPersistedAgentRecovery().catch((e) =>
+  void triggerForegroundJournalRecovery().catch((e) =>
     console.warn('[startup] foreground persisted-agent recovery failed:', e),
   );
   void evaluateJobsOnce({ trigger: 'foreground-reconcile' }).catch((e) =>

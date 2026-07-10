@@ -17,10 +17,12 @@ import {
 } from '../../../services/executionJournal/foregroundModelExecutionJournal';
 import { relinquishForegroundModelExecutionProcessOwnership } from '../../../services/executionJournal/foregroundModelExecutionProcessOwnership';
 import { flushChatStorePersistenceNow } from '../../../store/chatStorePersistence';
+import { waitForPersistedAgentRecoveryReadiness } from '../../../services/startupRecovery';
 import {
   claimForegroundModelProjection,
   ownsForegroundModelProjection,
   releaseForegroundModelProjection,
+  waitForForegroundModelProjectionAvailability,
 } from '../../../store/foregroundModelProjectionOwnership';
 
 type UseForegroundConversationRunnerParams = {
@@ -66,6 +68,8 @@ export function useForegroundConversationRunner(
         releaseModelProjection: releaseForegroundModelProjection,
         relinquishModelExecutionProcessOwnership:
           relinquishForegroundModelExecutionProcessOwnership,
+        waitForRecoveryReadiness: waitForPersistedAgentRecoveryReadiness,
+        waitForProjectionAvailability: waitForForegroundModelProjectionAvailability,
       },
       helpers: {
         appendConversationLog: params.appendConversationLog,

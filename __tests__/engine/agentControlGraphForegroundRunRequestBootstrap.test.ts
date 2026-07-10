@@ -1,4 +1,7 @@
-import { prepareForegroundRunRequestBootstrap } from '../../src/engine/graph/foregroundRun/requestBootstrap';
+import {
+  completeForegroundRunRequestBootstrap,
+  prepareForegroundRunRequestClaim,
+} from '../../src/engine/graph/foregroundRun/requestBootstrap';
 import type { AgentRun } from '../../src/types/agentRun';
 import type { Conversation } from '../../src/types/conversation';
 import type { Message } from '../../src/types/message';
@@ -69,26 +72,33 @@ describe('foreground run request bootstrap', () => {
     const startTrackedRun = jest.fn(() => 'run-2');
     const supersedeExistingRun = jest.fn();
 
-    const result = prepareForegroundRunRequestBootstrap({
+    const claim = prepareForegroundRunRequestClaim({
       conversation,
-      conversationId: 'conv1',
       createAssistantMessageId: () => 'assistant-new',
       createForegroundRequestId: () => 'request-1',
       defaultConversationMode: 'agentic',
       registerForegroundRequest,
       shouldAutoAbortPreviousForegroundRequest,
-      startTrackedRun,
-      supersedeExistingRun,
     });
 
     expect(shouldAutoAbortPreviousForegroundRequest).toHaveBeenCalledWith(
       'Superseded by a new user turn.',
     );
-    expect(supersedeExistingRun).toHaveBeenCalledWith('run-1', 0);
+    expect(supersedeExistingRun).not.toHaveBeenCalled();
+    expect(startTrackedRun).not.toHaveBeenCalled();
     expect(registerForegroundRequest).toHaveBeenCalledWith(
       'request-1',
       expect.any(AbortController),
     );
+
+    const result = completeForegroundRunRequestBootstrap({
+      claim,
+      conversation,
+      startTrackedRun,
+      supersedeExistingRun,
+    });
+
+    expect(supersedeExistingRun).toHaveBeenCalledWith('run-1', 0);
     expect(startTrackedRun).toHaveBeenCalledWith(
       expect.objectContaining({
         assistantMessageId: 'assistant-new',
@@ -124,15 +134,18 @@ describe('foreground run request bootstrap', () => {
 
     const shouldAutoAbortPreviousForegroundRequest = jest.fn();
 
-    const result = prepareForegroundRunRequestBootstrap({
+    const claim = prepareForegroundRunRequestClaim({
       conversation,
-      conversationId: 'conv1',
       createAssistantMessageId: () => 'assistant-new',
       createForegroundRequestId: () => 'request-2',
       defaultConversationMode: 'agentic',
       options: { reuseAgentRunId: 'run-1', reuseAssistantDraft: true },
       registerForegroundRequest: jest.fn(),
       shouldAutoAbortPreviousForegroundRequest,
+    });
+    const result = completeForegroundRunRequestBootstrap({
+      claim,
+      conversation,
       startTrackedRun: jest.fn(() => 'run-1'),
       supersedeExistingRun: jest.fn(),
     });

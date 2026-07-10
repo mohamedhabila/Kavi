@@ -15,18 +15,20 @@ export type ForegroundRunRequestBootstrapResult = {
   trackedAgentRunId: string | undefined;
 };
 
-export function prepareForegroundRunRequestBootstrap(params: {
+export type ForegroundRunRequestClaim = Pick<
+  ForegroundRunRequestBootstrapResult,
+  'abortController' | 'assistantMessageId' | 'bootstrap' | 'foregroundRequestId'
+>;
+
+export function prepareForegroundRunRequestClaim(params: {
   conversation: Conversation | undefined;
-  conversationId: string;
   createAssistantMessageId: () => string;
   createForegroundRequestId: () => string;
   defaultConversationMode: Conversation['mode'];
   options?: RunChatOptions;
   registerForegroundRequest: (requestId: string, abortController: AbortController) => void;
   shouldAutoAbortPreviousForegroundRequest: (reason: string) => void;
-  startTrackedRun: (bootstrap: ForegroundRunBootstrapSelection) => string | undefined;
-  supersedeExistingRun: (runId: string, runningWorkerCount: number) => void;
-}): ForegroundRunRequestBootstrapResult {
+}): ForegroundRunRequestClaim {
   const bootstrap = buildForegroundRunBootstrapSelection({
     conversation: params.conversation,
     createAssistantMessageId: params.createAssistantMessageId,
@@ -39,10 +41,6 @@ export function prepareForegroundRunRequestBootstrap(params: {
     params.shouldAutoAbortPreviousForegroundRequest('Superseded by a new user turn.');
   }
 
-  if (bootstrap.supersededRun && params.conversation) {
-    params.supersedeExistingRun(bootstrap.supersededRun.id, bootstrap.supersededRunningWorkerCount);
-  }
-
   const abortController = new AbortController();
   const foregroundRequestId = params.createForegroundRequestId();
   params.registerForegroundRequest(foregroundRequestId, abortController);
@@ -52,6 +50,23 @@ export function prepareForegroundRunRequestBootstrap(params: {
     assistantMessageId: bootstrap.assistantMessageId,
     bootstrap,
     foregroundRequestId,
+  };
+}
+
+export function completeForegroundRunRequestBootstrap(params: {
+  claim: ForegroundRunRequestClaim;
+  conversation: Conversation | undefined;
+  startTrackedRun: (bootstrap: ForegroundRunBootstrapSelection) => string | undefined;
+  supersedeExistingRun: (runId: string, runningWorkerCount: number) => void;
+}): ForegroundRunRequestBootstrapResult {
+  const { bootstrap } = params.claim;
+
+  if (bootstrap.supersededRun && params.conversation) {
+    params.supersedeExistingRun(bootstrap.supersededRun.id, bootstrap.supersededRunningWorkerCount);
+  }
+
+  return {
+    ...params.claim,
     initialCounters: {
       assistantTurns: (bootstrap.existingRun?.summary.assistantTurns ?? 0) + 1,
       startedTools: bootstrap.existingRun?.summary.startedTools ?? 0,

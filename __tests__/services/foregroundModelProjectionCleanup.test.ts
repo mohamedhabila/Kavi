@@ -17,7 +17,9 @@ import {
   closeExecutionJournalDb,
   getExecutionJournalDb,
 } from '../../src/services/executionJournal/database';
+import { flushChatStorePersistenceNow } from '../../src/store/chatStorePersistence';
 import { claimForegroundModelProjection } from '../../src/store/foregroundModelProjectionOwnership';
+import { _resetThrottledStorageStateForTests } from '../../src/store/throttledStorage';
 
 const DIGEST = 'a'.repeat(64);
 const sqliteMock = jest.requireMock('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -31,7 +33,7 @@ function journalOptions() {
   };
 }
 
-async function seedOwnedGeneration() {
+async function seedOwnedGeneration(shouldActivate = true) {
   const conversationId = useChatStore.getState().createConversation('provider-1', 'Be helpful.');
   useChatStore.getState().addMessage(conversationId, {
     id: 'request-1',
@@ -63,7 +65,9 @@ async function seedOwnedGeneration() {
       },
     }),
   ).toBe('claimed');
-  const active = await activateForegroundModelExecution({ lease: created }, options);
+  const active = shouldActivate
+    ? await activateForegroundModelExecution({ lease: created }, options)
+    : created;
   return { active, conversationId, owner };
 }
 
@@ -125,6 +129,23 @@ it('does not recover a live generation still owned by the current process', asyn
   ).toEqual(seeded.owner);
 });
 
+it('does not recover a live queued generation during its claim and flush phase', async () => {
+  const seeded = await seedOwnedGeneration(false);
+
+  await expect(recoverInterruptedForegroundModelExecutions()).resolves.toEqual([]);
+  expect(
+    getExecutionJournalDb().getFirstSync<{ status: string }>(
+      'SELECT status FROM execution_runs WHERE id = ?',
+      seeded.active.runId,
+    ),
+  ).toEqual({ status: 'queued' });
+  expect(
+    useChatStore.getState().conversations.find((conversation) =>
+      conversation.id === seeded.conversationId
+    )?.foregroundModelProjectionOwner,
+  ).toEqual(seeded.owner);
+});
+
 it('CAS-recovers the exact owned projection and releases it only after journal completion', async () => {
   const seeded = await seedOwnedGeneration();
   _resetForegroundModelExecutionProcessOwnershipForTests();
@@ -161,6 +182,72 @@ it('CAS-recovers the exact owned projection and releases it only after journal c
     .conversations.find((candidate) => candidate.id === seeded.conversationId);
   expect(conversation?.foregroundModelProjectionOwner).toBeUndefined();
   expect(conversation?.messages.find((message) => message.id === 'assistant-1')).toEqual(
+    expect.objectContaining({
+      content: 'Response interrupted because the app restarted before completion.',
+      assistantMetadata: expect.objectContaining({ finishReason: 'app_restarted' }),
+      toolCalls: [expect.objectContaining({ status: 'failed' })],
+    }),
+  );
+  expect(
+    getExecutionJournalDb().getFirstSync<{ status: string }>(
+      'SELECT status FROM execution_runs WHERE id = ?',
+      seeded.active.runId,
+    ),
+  ).toEqual({ status: 'failed' });
+});
+
+it('recovers a flushed projection after fresh hydration and durably persists the repair', async () => {
+  const seeded = await seedOwnedGeneration();
+  useChatStore.setState((state) => ({
+    conversations: state.conversations.map((conversation) =>
+      conversation.id !== seeded.conversationId
+        ? conversation
+        : {
+            ...conversation,
+            messages: conversation.messages.map((message) =>
+              message.id !== 'assistant-1'
+                ? message
+                : {
+                    ...message,
+                    toolCalls: [
+                      {
+                        id: 'tool-1',
+                        name: 'send_email',
+                        arguments: '{}',
+                        status: 'running' as const,
+                      },
+                    ],
+                  },
+            ),
+          },
+    ),
+  }));
+  await flushChatStorePersistenceNow();
+
+  closeExecutionJournalDb();
+  _resetForegroundModelExecutionProcessOwnershipForTests();
+  useChatStore.setState({ conversations: [], activeConversationId: null });
+  _resetThrottledStorageStateForTests();
+  await useChatStore.persist.rehydrate();
+
+  expect(
+    useChatStore.getState().conversations.find((conversation) =>
+      conversation.id === seeded.conversationId
+    )?.foregroundModelProjectionOwner,
+  ).toEqual(seeded.owner);
+  await expect(recoverInterruptedForegroundModelExecutions()).resolves.toEqual([
+    { kind: 'recovered', runId: seeded.active.runId, status: 'failed' },
+  ]);
+
+  useChatStore.setState({ conversations: [], activeConversationId: null });
+  _resetThrottledStorageStateForTests();
+  await useChatStore.persist.rehydrate();
+
+  const recovered = useChatStore
+    .getState()
+    .conversations.find((conversation) => conversation.id === seeded.conversationId);
+  expect(recovered?.foregroundModelProjectionOwner).toBeUndefined();
+  expect(recovered?.messages.find((message) => message.id === 'assistant-1')).toEqual(
     expect.objectContaining({
       content: 'Response interrupted because the app restarted before completion.',
       assistantMetadata: expect.objectContaining({ finishReason: 'app_restarted' }),
