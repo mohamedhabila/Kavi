@@ -1,3 +1,8 @@
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
+});
+
 import { runOrchestrator } from '../../src/engine/orchestrator';
 import {
   cancelScheduledIngestionDrain,
@@ -7,6 +12,7 @@ import {
 } from '../../src/services/memory/ingestionQueue';
 import { recordCompletedTurnForMemory } from '../../src/services/memory/lifecycle';
 import { runForegroundScenario } from '../../src/acceptance/e2eAgent/foregroundScenarioDriver';
+import { resetE2EMemorySandbox } from '../../src/acceptance/e2eAgent/sandboxMemory';
 import {
   resolveForegroundScenarioFinalAssistant,
   settleForegroundScenarioMemory,
@@ -109,6 +115,7 @@ function makeCompletedJob(id: string): IngestionJob {
 describe('runForegroundScenario', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
+    resetE2EMemorySandbox();
     await useChatStore.persist.rehydrate();
     await useSettingsStore.persist.rehydrate();
 
@@ -224,7 +231,12 @@ describe('runForegroundScenario', () => {
       route: { directive: 'forced_chitchat', mode: 'chitchat', personaId: 'default' },
       run: null,
       timedOut: false,
-      memory: [{ processed: true, enqueued: true, status: 'completed_enriched' }],
+      memory: [
+        {
+          lifecycle: { processed: true, enqueued: true },
+          job: { status: 'completed_enriched' },
+        },
+      ],
     });
     expect(result.turns[1].route).toEqual({
       directive: 'forced_agentic',
@@ -248,6 +260,15 @@ describe('runForegroundScenario', () => {
     expect(Object.isFrozen(result.turns[1].messages)).toBe(true);
     expect(Object.isFrozen(result.turns[1].finalAssistant)).toBe(true);
     expect(Object.isFrozen(result.turns[1].completion)).toBe(true);
+    expect(Object.isFrozen(result.memoryFinalState)).toBe(true);
+    expect(result.memoryFinalState.scope).toEqual({
+      memoryConversationId: 'scenario-conversation',
+      sourceThreadId: 'scenario-conversation',
+    });
+    expect(result.turns[0].memoryEvidence.delta).toMatchObject({
+      facts: { createdIds: [], updatedIds: [], removedIds: [] },
+      episodes: { createdIds: [], updatedIds: [], removedIds: [] },
+    });
     expect(result.turns[1].messages.filter((message) => message.role === 'user')).toHaveLength(1);
     expect(Object.isFrozen(result.finalConversation)).toBe(true);
 
@@ -300,7 +321,12 @@ describe('runForegroundScenario', () => {
     expect(result.turns[1]).toMatchObject({
       route: { directive: 'forced_chitchat', mode: 'chitchat', personaId: 'default' },
       run: null,
-      memory: [{ processed: true, enqueued: true, status: 'completed_enriched' }],
+      memory: [
+        {
+          lifecycle: { processed: true, enqueued: true },
+          job: { status: 'completed_enriched' },
+        },
+      ],
     });
     expect(mockedRecordCompletedTurnForMemory).toHaveBeenCalledTimes(2);
     expect(result.turns.every((turn) => turn.error === null)).toBe(true);
@@ -507,10 +533,17 @@ describe('runForegroundScenario', () => {
       ),
     ).resolves.toEqual([
       {
-        processed: true,
-        enqueued: true,
-        jobId: pendingJob.id,
-        status: 'pending',
+        lifecycle: {
+          processed: true,
+          enqueued: true,
+          jobId: pendingJob.id,
+          episodeId: null,
+          factIds: [],
+          activeFocusUpdated: true,
+          openThreadsUpdated: false,
+          enriched: false,
+        },
+        job: pendingJob,
       },
     ]);
   });

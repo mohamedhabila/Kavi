@@ -1,5 +1,10 @@
 import { executeForegroundConversationRun } from '../../engine/graph/foregroundRun/execution';
+import { resolveConversationWorkspaceTarget } from '../../services/conversationWorkspace/ownership';
 import { cancelScheduledIngestionDrain } from '../../services/memory/ingestionQueue';
+import {
+  buildScopedMemoryEvidenceDelta,
+  captureScopedMemoryEvidence,
+} from '../../services/memory/evidenceSnapshot';
 import {
   flushChatStorePersistenceNow,
   requestChatStorePersistenceCheckpoint,
@@ -37,6 +42,7 @@ export type {
   ForegroundScenarioExecutionContextSnapshot,
   ForegroundScenarioFinalAssistantSnapshot,
   ForegroundScenarioMemorySnapshot,
+  ForegroundScenarioMemoryTurnEvidence,
   ForegroundScenarioNativeEvidenceSnapshot,
   ForegroundScenarioRouteDirective,
   ForegroundScenarioTurnInput,
@@ -112,6 +118,14 @@ async function runScenarioIsolated(
     requestChatStorePersistenceCheckpoint(0);
     await flushChatStorePersistenceNow();
 
+    const memoryScope = {
+      memoryConversationId: resolveConversationWorkspaceTarget({
+        conversationId: input.conversationId,
+        conversations: useChatStore.getState().conversations,
+      }).workspaceConversationId,
+      sourceThreadId: input.conversationId,
+    };
+    let previousMemoryState = captureScopedMemoryEvidence(memoryScope);
     const runtime = createForegroundScenarioRuntime(input, memoryRecords);
     const turnSnapshots: ForegroundScenarioTurnSnapshot[] = [];
     for (const [turnIndex, turn] of input.turns.entries()) {
@@ -166,6 +180,7 @@ async function runScenarioIsolated(
         memoryRecords.slice(memoryRecordStart),
         input.memoryTimeoutMs ?? DEFAULT_MEMORY_TIMEOUT_MS,
       );
+      const memoryStateAfter = captureScopedMemoryEvidence(memoryScope);
       const conversation = useChatStore
         .getState()
         .conversations.find((candidate) => candidate.id === input.conversationId);
@@ -199,6 +214,9 @@ async function runScenarioIsolated(
           finalAssistant,
           finalAssistantCandidateCount: finalAssistantResolution.candidateCount,
           memory,
+          memoryEvidence: {
+            delta: buildScopedMemoryEvidenceDelta(previousMemoryState, memoryStateAfter),
+          },
           messages: turnMessages,
           native: {
             stateBefore: nativeStateBefore,
@@ -213,6 +231,7 @@ async function runScenarioIsolated(
           userMessageId,
         }) as ForegroundScenarioTurnSnapshot,
       );
+      previousMemoryState = memoryStateAfter;
       if (turnError) break;
     }
 
@@ -223,6 +242,7 @@ async function runScenarioIsolated(
     return cloneAndFreeze({
       conversationId: input.conversationId,
       finalConversation,
+      memoryFinalState: previousMemoryState,
       turns: turnSnapshots,
     }) as ForegroundScenarioDriverResult;
   } finally {

@@ -8,6 +8,10 @@ import { resetE2EMemorySandbox } from '../../src/acceptance/e2eAgent/sandboxMemo
 import { resetE2EWorkspaceSandbox } from '../../src/acceptance/e2eAgent/sandboxWorkspace';
 import { executeMemoryRemember } from '../../src/engine/tools/builtin-memory';
 import {
+  buildScopedMemoryEvidenceDelta,
+  captureScopedMemoryEvidence,
+} from '../../src/services/memory/evidenceSnapshot';
+import {
   resetE2ENativeMobileFixtures,
   getE2ENativeMobileFixtureStateSnapshot,
   getE2ENativeMobileInvocationSnapshots,
@@ -21,6 +25,14 @@ function buildResult(overrides: Partial<E2EScenarioResult> = {}): E2EScenarioRes
     toolCalls: [],
     toolResults: [],
     graphSnapshots: [],
+    memoryFinalState: {
+      capturedAt: 1,
+      scope: { memoryConversationId: 'conv-a', sourceThreadId: 'conv-a' },
+      facts: [],
+      episodes: [],
+      workingBlocks: [],
+      ingestionJobs: [],
+    },
     usage: {
       inputTokens: 0,
       outputTokens: 0,
@@ -36,6 +48,34 @@ function buildResult(overrides: Partial<E2EScenarioResult> = {}): E2EScenarioRes
     turnTraces: [],
     ...overrides,
   };
+}
+
+function buildResultWithMemoryEvidence(
+  conversationId: string,
+  overrides: Partial<E2EScenarioResult> = {},
+): E2EScenarioResult {
+  const scope = { memoryConversationId: conversationId, sourceThreadId: conversationId };
+  const before = {
+    capturedAt: 0,
+    scope,
+    facts: [],
+    episodes: [],
+    workingBlocks: [],
+    ingestionJobs: [],
+  };
+  const after = captureScopedMemoryEvidence(scope);
+  return buildResult({
+    conversationId,
+    memoryFinalState: after,
+    ...overrides,
+    turnTraces: [
+      {
+        memoryEvidence: {
+          delta: buildScopedMemoryEvidenceDelta(before, after),
+        },
+      } as E2EScenarioResult['turnTraces'][number],
+    ],
+  });
 }
 
 describe('evaluateE2ERubric', () => {
@@ -205,7 +245,9 @@ describe('evaluateE2ERubric', () => {
       job!.id,
     );
 
-    const outcome = evaluateE2ERubric(buildResult({ conversationId }), {
+    const result = buildResultWithMemoryEvidence(conversationId);
+    resetE2EMemorySandbox();
+    const outcome = evaluateE2ERubric(result, {
       kind: 'ingestion_job_completed',
       minCount: 1,
     });
@@ -222,7 +264,9 @@ describe('evaluateE2ERubric', () => {
       endedAt: 2,
     });
 
-    const outcome = evaluateE2ERubric(buildResult({ conversationId }), {
+    const result = buildResultWithMemoryEvidence(conversationId);
+    resetE2EMemorySandbox();
+    const outcome = evaluateE2ERubric(result, {
       kind: 'memory_episode_count',
       min: 1,
     });
@@ -259,7 +303,9 @@ describe('evaluateE2ERubric', () => {
       threadId: conversationId,
     });
 
-    const outcome = evaluateE2ERubric(buildResult({ conversationId }), {
+    const result = buildResultWithMemoryEvidence(conversationId);
+    resetE2EMemorySandbox();
+    const outcome = evaluateE2ERubric(result, {
       kind: 'working_block_token',
       label: 'active_focus',
       token: 'weekend-planning-thread',
@@ -280,8 +326,7 @@ describe('evaluateE2ERubric', () => {
     });
 
     const outcome = evaluateE2ERubric(
-      buildResult({
-        conversationId,
+      buildResultWithMemoryEvidence(conversationId, {
         graphSnapshots: [
           {
             version: 1,
@@ -437,14 +482,19 @@ describe('evaluateE2ERubric', () => {
     expect(outcome.passed).toBe(true);
   });
   it('checks memory_fact from sqlite store', () => {
+    const conversationId = 'conv-memory-fact';
     const rememberResult = executeMemoryRemember({
       subject: 'e2e-entity-i1',
       predicate: 'artifact_token',
       value: 'E2E-MEM-42',
+      originConversationId: conversationId,
+      originThreadId: conversationId,
     });
     expect(JSON.parse(rememberResult).ok).toBe(true);
 
-    const outcome = evaluateE2ERubric(buildResult(), {
+    const result = buildResultWithMemoryEvidence(conversationId);
+    resetE2EMemorySandbox();
+    const outcome = evaluateE2ERubric(result, {
       kind: 'memory_fact',
       predicate: 'artifact_token',
       value: 'E2E-MEM-42',
@@ -452,11 +502,14 @@ describe('evaluateE2ERubric', () => {
     expect(outcome.passed).toBe(true);
   });
   it('checks memory_fact_absent from currently valid sqlite facts', () => {
+    const conversationId = 'conv-memory-fact-update';
     const oldResult = JSON.parse(
       executeMemoryRemember({
         subject: 'e2e-entity-update',
         predicate: 'artifact_token',
         value: 'E2E-OLD',
+        originConversationId: conversationId,
+        originThreadId: conversationId,
       }),
     );
     expect(oldResult.ok).toBe(true);
@@ -466,16 +519,19 @@ describe('evaluateE2ERubric', () => {
         predicate: 'artifact_token',
         value: 'E2E-NEW',
         supersedePrior: true,
+        originConversationId: conversationId,
+        originThreadId: conversationId,
       }),
     );
     expect(newResult.ok).toBe(true);
 
-    const absent = evaluateE2ERubric(buildResult(), {
+    const result = buildResultWithMemoryEvidence(conversationId);
+    const absent = evaluateE2ERubric(result, {
       kind: 'memory_fact_absent',
       predicate: 'artifact_token',
       value: 'E2E-OLD',
     });
-    const present = evaluateE2ERubric(buildResult(), {
+    const present = evaluateE2ERubric(result, {
       kind: 'memory_fact_absent',
       predicate: 'artifact_token',
       value: 'E2E-NEW',
@@ -483,5 +539,38 @@ describe('evaluateE2ERubric', () => {
 
     expect(absent.passed).toBe(true);
     expect(present.passed).toBe(false);
+  });
+
+  it('does not treat an expired fact as current memory evidence', () => {
+    const conversationId = 'conv-memory-expired';
+    executeMemoryRemember({
+      subject: 'e2e-expired-subject',
+      predicate: 'temporary_code',
+      value: 'EXPIRED-CODE',
+      originConversationId: conversationId,
+      originThreadId: conversationId,
+    });
+    const { getMemoryDb } = require('../../src/services/memory/sqlite-store');
+    getMemoryDb().runSync(
+      `UPDATE memory_facts SET expires_at = ? WHERE origin_conversation_id = ?`,
+      1,
+      conversationId,
+    );
+
+    const result = buildResultWithMemoryEvidence(conversationId);
+    expect(
+      evaluateE2ERubric(result, {
+        kind: 'memory_fact',
+        predicate: 'temporary_code',
+        value: 'EXPIRED-CODE',
+      }),
+    ).toMatchObject({ passed: false });
+    expect(
+      evaluateE2ERubric(result, {
+        kind: 'memory_fact_absent',
+        predicate: 'temporary_code',
+        value: 'EXPIRED-CODE',
+      }),
+    ).toMatchObject({ passed: true });
   });
 });

@@ -213,6 +213,10 @@ describe('runE2EScenario product foreground integration', () => {
     expect(mockedRunOrchestrator).toHaveBeenCalledTimes(2);
     expect(mockedRecordCompletedTurnForMemory).toHaveBeenCalledTimes(2);
     expect(result).toMatchObject({ completed: true, userTurnCount: 2 });
+    expect(result.memoryFinalState.scope).toEqual({
+      memoryConversationId: 'scenario-conversation',
+      sourceThreadId: 'scenario-conversation',
+    });
     expect(result.turnTraces).toHaveLength(2);
     expect(result.turnTraces[0]).toMatchObject({
       route: { directive: 'forced_agentic', mode: 'agentic', personaId: 'super-agent' },
@@ -231,7 +235,12 @@ describe('runE2EScenario product foreground integration', () => {
         currentPhase: 'deliver',
         terminalReason: null,
       },
-      memory: [{ status: 'completed_enriched' }],
+      memory: [
+        {
+          lifecycle: { processed: true, enqueued: true },
+          job: { status: 'completed_enriched' },
+        },
+      ],
     });
     expect(result.graphSnapshots.at(-1)?.status).toBe('finalized');
   });

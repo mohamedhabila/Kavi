@@ -304,10 +304,8 @@ export async function settleForegroundScenarioMemory(
     results.map(async (result) => {
       const job = result.jobId ? await awaitMemoryJob(result.jobId, deadline) : null;
       return {
-        enqueued: result.enqueued,
-        jobId: result.jobId,
-        processed: result.processed,
-        status: job?.status ?? 'not_enqueued',
+        lifecycle: result,
+        job,
       };
     }),
   );

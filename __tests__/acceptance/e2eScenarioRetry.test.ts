@@ -34,6 +34,17 @@ function buildResult(completed: boolean) {
     toolCalls: [],
     toolResults: [],
     graphSnapshots: completed ? [{ status: 'finalized' }] : [],
+    memoryFinalState: {
+      capturedAt: 1,
+      scope: {
+        memoryConversationId: scenario.conversationId,
+        sourceThreadId: scenario.conversationId,
+      },
+      facts: [],
+      episodes: [],
+      workingBlocks: [],
+      ingestionJobs: [],
+    },
     usage: {
       inputTokens: 1,
       outputTokens: 1,

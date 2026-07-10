@@ -7,6 +7,7 @@ import {
   evaluateGoalEvidenceGaps,
   isSuccessCriterionMet,
 } from '../../engine/goals/completionEvidence';
+import { resolveGraphWorkingBlockScope } from '../../engine/goals/graphTaskScope';
 import {
   readJsonFieldAtPath,
   structuralValuesMatch,
@@ -14,12 +15,7 @@ import {
 import type { AgentRunControlGraphState } from '../../types/agentRun';
 import type { AcceptanceFixtureOutcome } from '../acceptanceMetrics/types';
 import { estimateUsageCacheEligibleInputTokens } from './evaluateE2EAgentMetrics';
-import {
-  countE2ECompletedIngestionJobs,
-  countE2EEpisodes,
-  findMemoryFactsMatching,
-  readE2EWorkingBlockContent,
-} from './sandboxMemory';
+import { buildWorkingBlockScopeKey } from '../../services/memory/workingBlocks';
 import { readWorkspaceRelativeFile, workspaceFileExists } from './sandboxWorkspace';
 import type { E2ERubric, E2EScenarioResult, E2ETokenUsageSummary } from './types';
 import type { UsagePromptCacheTelemetry } from '../../types/usage';
@@ -382,10 +378,21 @@ export function evaluateE2ERubric(
     }
 
     case 'memory_fact': {
-      const matches = findMemoryFactsMatching({
-        predicate: rubric.predicate,
-        value: rubric.value,
-      });
+      const memory = result.memoryFinalState;
+      if (!memory) {
+        return { fixtureId, passed: false, detail: 'memory evidence unavailable' };
+      }
+      const predicate = rubric.predicate.trim().toLowerCase();
+      const value = rubric.value.trim().toLowerCase();
+      const matches = memory.facts.filter(
+        (fact) =>
+          fact.predicate.trim().toLowerCase() === predicate &&
+          fact.objectText.trim().toLowerCase() === value &&
+          fact.deletedAt === null &&
+          fact.invalidAt === null &&
+          fact.validAt <= memory.capturedAt &&
+          (fact.expiresAt === null || fact.expiresAt > memory.capturedAt),
+      );
       if (matches.length === 0) {
         return {
           fixtureId,
@@ -397,10 +404,21 @@ export function evaluateE2ERubric(
     }
 
     case 'memory_fact_absent': {
-      const matches = findMemoryFactsMatching({
-        predicate: rubric.predicate,
-        value: rubric.value,
-      });
+      const memory = result.memoryFinalState;
+      if (!memory) {
+        return { fixtureId, passed: false, detail: 'memory evidence unavailable' };
+      }
+      const predicate = rubric.predicate.trim().toLowerCase();
+      const value = rubric.value.trim().toLowerCase();
+      const matches = memory.facts.filter(
+        (fact) =>
+          fact.predicate.trim().toLowerCase() === predicate &&
+          fact.objectText.trim().toLowerCase() === value &&
+          fact.deletedAt === null &&
+          fact.invalidAt === null &&
+          fact.validAt <= memory.capturedAt &&
+          (fact.expiresAt === null || fact.expiresAt > memory.capturedAt),
+      );
       if (matches.length > 0) {
         return {
           fixtureId,
@@ -472,7 +490,15 @@ export function evaluateE2ERubric(
     }
 
     case 'ingestion_job_completed': {
-      const count = countE2ECompletedIngestionJobs(result.conversationId);
+      const memory = result.memoryFinalState;
+      if (!memory) {
+        return { fixtureId, passed: false, detail: 'memory evidence unavailable' };
+      }
+      const count = memory.ingestionJobs.filter(
+        (job) =>
+          job.threadId === memory.scope.sourceThreadId &&
+          ['completed_structural', 'completed_enriched'].includes(job.status),
+      ).length;
       const minimum = rubric.minCount ?? 1;
       if (count < minimum) {
         return {
@@ -485,7 +511,16 @@ export function evaluateE2ERubric(
     }
 
     case 'memory_episode_count': {
-      const count = countE2EEpisodes(result.conversationId);
+      const memory = result.memoryFinalState;
+      if (!memory) {
+        return { fixtureId, passed: false, detail: 'memory evidence unavailable' };
+      }
+      const count = memory.episodes.filter(
+        (episode) =>
+          episode.conversationId === memory.scope.memoryConversationId &&
+          episode.threadId === memory.scope.sourceThreadId &&
+          episode.deletedAt === null,
+      ).length;
       if (count < rubric.min) {
         return {
           fixtureId,
@@ -510,11 +545,19 @@ export function evaluateE2ERubric(
     }
 
     case 'working_block_token': {
-      const content = readE2EWorkingBlockContent(
-        result.conversationId,
-        rubric.label,
-        result.graphSnapshots,
-      );
+      const memory = result.memoryFinalState;
+      if (!memory) {
+        return { fixtureId, passed: false, detail: 'memory evidence unavailable' };
+      }
+      const scope = resolveGraphWorkingBlockScope({
+        conversationId: memory.scope.memoryConversationId,
+        graphState: getLatestGraphSnapshot(result),
+      });
+      const scopeKey = buildWorkingBlockScopeKey(scope);
+      const content =
+        memory.workingBlocks.find(
+          (block) => block.label === rubric.label && block.scopeKey === scopeKey,
+        )?.content ?? '';
       if (!content.includes(rubric.token)) {
         return {
           fixtureId,

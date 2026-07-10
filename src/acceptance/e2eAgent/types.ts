@@ -16,7 +16,9 @@ import type {
   ForegroundScenarioCompletionSnapshot,
   ForegroundScenarioExecutionContextSnapshot,
   ForegroundScenarioFinalAssistantSnapshot,
+  ForegroundScenarioMemoryFinalState,
   ForegroundScenarioMemorySnapshot,
+  ForegroundScenarioMemoryTurnEvidence,
   ForegroundScenarioNativeEvidenceSnapshot,
   ForegroundScenarioRouteDirective,
 } from './foregroundScenarioDriverTypes';
@@ -107,6 +109,7 @@ export type E2EScenarioTurnTrace = {
   completion: ForegroundScenarioCompletionSnapshot;
   agentRun: E2EAgentRunTrace | null;
   memory: ReadonlyArray<ForegroundScenarioMemorySnapshot>;
+  memoryEvidence: ForegroundScenarioMemoryTurnEvidence;
   native: ForegroundScenarioNativeEvidenceSnapshot;
   toolCalls: ReadonlyArray<E2EToolCallRecord>;
   toolResults: ReadonlyArray<E2EToolResultRecord>;
@@ -122,6 +125,7 @@ export type E2EScenarioResult = {
   toolCalls: ReadonlyArray<E2EToolCallRecord>;
   toolResults: ReadonlyArray<E2EToolResultRecord>;
   graphSnapshots: ReadonlyArray<AgentRunControlGraphState>;
+  memoryFinalState: ForegroundScenarioMemoryFinalState;
   /** Per-orchestrator-invocation traces for turn-scoped rubrics. */
   turnTraces: ReadonlyArray<E2EScenarioTurnTrace>;
   usage: E2ETokenUsageSummary;

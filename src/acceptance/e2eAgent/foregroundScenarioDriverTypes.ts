@@ -6,6 +6,10 @@ import type { AssistantCompletionStatus, Message } from '../../types/message';
 import type { LlmProviderConfig } from '../../types/provider';
 import type { ConversationUsageSummary } from '../../types/usage';
 import type {
+  ScopedMemoryEvidenceDelta,
+  ScopedMemoryEvidenceSnapshot,
+} from '../../services/memory/evidenceSnapshot';
+import type {
   E2ENativeMobileFixtureStateSnapshot,
   E2ENativeMobileInvocationSnapshot,
 } from './e2eNativeMobileFixtures';
@@ -45,11 +49,15 @@ export type DeepReadonly<T> = T extends (...args: never[]) => unknown
       : T;
 
 export type ForegroundScenarioMemorySnapshot = Readonly<{
-  enqueued: boolean;
-  jobId: string | null;
-  processed: boolean;
-  status: IngestionJob['status'] | 'not_enqueued';
+  lifecycle: DeepReadonly<RecordCompletedTurnForMemoryResult>;
+  job: DeepReadonly<IngestionJob> | null;
 }>;
+
+export type ForegroundScenarioMemoryTurnEvidence = Readonly<{
+  delta: DeepReadonly<ScopedMemoryEvidenceDelta>;
+}>;
+
+export type ForegroundScenarioMemoryFinalState = DeepReadonly<ScopedMemoryEvidenceSnapshot>;
 
 export type ForegroundScenarioNativeEvidenceSnapshot = Readonly<{
   stateBefore: DeepReadonly<E2ENativeMobileFixtureStateSnapshot>;
@@ -90,6 +98,7 @@ export type ForegroundScenarioTurnSnapshot = Readonly<{
   finalAssistant: ForegroundScenarioFinalAssistantSnapshot | null;
   finalAssistantCandidateCount: number;
   memory: ReadonlyArray<ForegroundScenarioMemorySnapshot>;
+  memoryEvidence: ForegroundScenarioMemoryTurnEvidence;
   native: ForegroundScenarioNativeEvidenceSnapshot;
   messages: DeepReadonly<Message[]>;
   route: Readonly<{
@@ -106,6 +115,7 @@ export type ForegroundScenarioTurnSnapshot = Readonly<{
 export type ForegroundScenarioDriverResult = Readonly<{
   conversationId: string;
   finalConversation: DeepReadonly<Conversation>;
+  memoryFinalState: ForegroundScenarioMemoryFinalState;
   turns: ReadonlyArray<ForegroundScenarioTurnSnapshot>;
 }>;
 

@@ -16,6 +16,17 @@ function buildFixtureResult(overrides?: Partial<E2EScenarioResult>): E2EScenario
     toolCalls: [{ id: 'tc-1', name: 'tool_catalog', arguments: '{"category":"agents"}' }],
     toolResults: [],
     graphSnapshots: [{ status: 'running' } as E2EScenarioResult['graphSnapshots'][number]],
+    memoryFinalState: {
+      capturedAt: 1,
+      scope: {
+        memoryConversationId: 'e2e-tool-catalog',
+        sourceThreadId: 'e2e-tool-catalog',
+      },
+      facts: [],
+      episodes: [],
+      workingBlocks: [],
+      ingestionJobs: [],
+    },
     turnTraces: [],
     usage: {
       inputTokens: 4096,

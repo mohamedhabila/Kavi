@@ -19,6 +19,17 @@ export function buildFixtureResult(overrides?: Partial<E2EScenarioResult>): E2ES
     toolCalls: [{ id: 'tc-1', name: 'write_file', arguments: '{}' }],
     toolResults: [],
     graphSnapshots: [{ status: 'finalized' } as E2EScenarioResult['graphSnapshots'][number]],
+    memoryFinalState: {
+      capturedAt: 1,
+      scope: {
+        memoryConversationId: 'e2e-file-write-read',
+        sourceThreadId: 'e2e-file-write-read',
+      },
+      facts: [],
+      episodes: [],
+      workingBlocks: [],
+      ingestionJobs: [],
+    },
     usage: {
       inputTokens: 100,
       outputTokens: 20,

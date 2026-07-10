@@ -18,6 +18,14 @@ function buildResult(overrides: Partial<E2EScenarioResult> = {}): E2EScenarioRes
     toolCalls: [],
     toolResults: [],
     graphSnapshots: [],
+    memoryFinalState: {
+      capturedAt: 1,
+      scope: { memoryConversationId: 'conv-a', sourceThreadId: 'conv-a' },
+      facts: [],
+      episodes: [],
+      workingBlocks: [],
+      ingestionJobs: [],
+    },
     usage: {
       inputTokens: 0,
       outputTokens: 0,

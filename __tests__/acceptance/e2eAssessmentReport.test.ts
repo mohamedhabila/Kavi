@@ -6,7 +6,10 @@ import {
 import { buildE2ERunReportScenarioEntry } from '../../src/acceptance/e2eAgent/e2eRunReport';
 import type { E2EScenarioResult } from '../../src/acceptance/e2eAgent/types';
 
-function buildFixtureResult(fixtureId: string, overrides?: Partial<E2EScenarioResult>): E2EScenarioResult {
+function buildFixtureResult(
+  fixtureId: string,
+  overrides?: Partial<E2EScenarioResult>,
+): E2EScenarioResult {
   return {
     contentClass: 'synthetic_public',
     fixtureId,
@@ -14,6 +17,17 @@ function buildFixtureResult(fixtureId: string, overrides?: Partial<E2EScenarioRe
     toolCalls: [],
     toolResults: [],
     graphSnapshots: [{ status: 'finalized' } as E2EScenarioResult['graphSnapshots'][number]],
+    memoryFinalState: {
+      capturedAt: 1,
+      scope: {
+        memoryConversationId: `conv-${fixtureId}`,
+        sourceThreadId: `conv-${fixtureId}`,
+      },
+      facts: [],
+      episodes: [],
+      workingBlocks: [],
+      ingestionJobs: [],
+    },
     turnTraces: [],
     usage: {
       inputTokens: 10,
