@@ -90,6 +90,8 @@ function rubricFailureCategories(entry, rubricKind, turnCompletionField = null) 
       return ['unknown_structural_failure'];
     case 'memory_fact':
     case 'memory_episode_count':
+    case 'ingestion_job_checkpointed':
+      return ['memory_write_failure'];
     case 'ingestion_job_completed':
     case 'working_block_token':
       return ['memory_retrieval_miss'];

@@ -38,6 +38,7 @@ const RUBRIC_KINDS: ReadonlySet<E2ERubricKind> = new Set([
   'turn_memory_receipt',
   'turn_lifecycle_boundary',
   'goal_status',
+  'ingestion_job_checkpointed',
   'ingestion_job_completed',
   'memory_episode_count',
   'native_fixture_state',
@@ -166,6 +167,8 @@ function rubricFailureCategories(
     case 'memory_fact':
     case 'memory_fact_absent':
     case 'memory_episode_count':
+    case 'ingestion_job_checkpointed':
+      return ['memory_write_failure'];
     case 'ingestion_job_completed':
     case 'working_block_token':
       return ['memory_retrieval_miss'];

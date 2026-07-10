@@ -29,7 +29,8 @@ E2E and live-provider tests are skipped unless explicitly opted in.
 **Tier 3 (`verify:strict:e2e`)** runs Tier 2, then `eval:e2e`: live
 selected-provider multi-turn scenarios through the real graph orchestrator.
 Requires `.env.local` setup below. Structural E2E rubrics such as
-`ingestion_job_completed`, `memory_episode_count`, `native_fixture_state`, and
+`ingestion_job_checkpointed`, `ingestion_job_completed`, `memory_episode_count`,
+`native_fixture_state`, and
 `working_block_token` are unit-tested in
 `e2eAgentRubricEvaluators.test.ts`; offline scenario checks live in
 `e2eStructuralScenarioRubrics.test.ts`. The live suite pass bar is **>=90%**

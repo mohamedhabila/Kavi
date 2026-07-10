@@ -264,6 +264,54 @@ describe('evaluateE2ERubric', () => {
     });
     expect(outcome.passed).toBe(true);
   });
+  it('separates durable structural checkpoints from optional enrichment completion', () => {
+    const conversationId = 'conv-checkpointed';
+    const { enqueueIngestionJob } = require('../../src/services/memory/ingestionQueue');
+    const job = enqueueIngestionJob({
+      personaId: 'default',
+      threadId: conversationId,
+      threadTitle: null,
+      memoryConversationId: conversationId,
+      taskId: null,
+      sourceStartMessageId: 'u-1',
+      sourceEndMessageId: 'a-1',
+      sourceRunId: null,
+      sourceAt: 100,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
+      now: 100,
+    });
+    const db = require('../../src/services/memory/sqlite-store').getMemoryDb();
+    db.runSync(
+      `UPDATE memory_ingestion_jobs
+          SET status = 'retrying',
+              attempt_count = 1,
+              provider_outcome = 'provider_error',
+              outcome_code = 'provider_request_failed',
+              structural_completed_at = ?,
+              next_attempt_at = ?,
+              completed_at = NULL
+        WHERE id = ?`,
+      200,
+      300,
+      job!.id,
+    );
+
+    const result = buildResultWithMemoryEvidence(conversationId);
+    resetE2EMemorySandbox();
+
+    expect(evaluateE2ERubric(result, { kind: 'ingestion_job_checkpointed', minCount: 1 })).toEqual(
+      expect.objectContaining({ passed: true }),
+    );
+    expect(evaluateE2ERubric(result, { kind: 'ingestion_job_completed', minCount: 1 })).toEqual(
+      expect.objectContaining({
+        passed: false,
+        detail: 'completed ingestion jobs 0 (expected >= 1)',
+      }),
+    );
+  });
   it('checks memory_episode_count for the scenario conversation', () => {
     const conversationId = 'conv-episodes';
     const { recordThreadLocalEpisode } = require('../../src/services/memory/episodes/mutations');

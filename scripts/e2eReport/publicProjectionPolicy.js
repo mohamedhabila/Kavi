@@ -55,6 +55,7 @@ const RUBRIC_KINDS = new Set([
   'turn_memory_receipt',
   'turn_lifecycle_boundary',
   'goal_status',
+  'ingestion_job_checkpointed',
   'ingestion_job_completed',
   'memory_episode_count',
   'native_fixture_state',

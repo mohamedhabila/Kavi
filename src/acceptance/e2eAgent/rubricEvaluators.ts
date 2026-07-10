@@ -491,6 +491,25 @@ export function evaluateE2ERubric(
       return { fixtureId, passed: true };
     }
 
+    case 'ingestion_job_checkpointed': {
+      const memory = result.memoryFinalState;
+      if (!memory) {
+        return { fixtureId, passed: false, detail: 'memory evidence unavailable' };
+      }
+      const count = memory.ingestionJobs.filter(
+        (job) => job.threadId === memory.scope.sourceThreadId && job.structuralCompletedAt !== null,
+      ).length;
+      const minimum = rubric.minCount ?? 1;
+      if (count < minimum) {
+        return {
+          fixtureId,
+          passed: false,
+          detail: `structurally checkpointed ingestion jobs ${count} (expected >= ${minimum})`,
+        };
+      }
+      return { fixtureId, passed: true };
+    }
+
     case 'ingestion_job_completed': {
       const memory = result.memoryFinalState;
       if (!memory) {

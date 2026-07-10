@@ -179,6 +179,7 @@ const TRAJECTORY_RUBRICS: ReadonlySet<E2ERubricKind> = new Set([
   'goals_bootstrapped',
   'completion_gate_hold',
   'min_user_turns',
+  'ingestion_job_checkpointed',
   'ingestion_job_completed',
   'memory_episode_count',
   'cache_read_tokens',
@@ -242,6 +243,7 @@ function structuralEvidenceKindForRubric(rubric: E2ERubric): E2EBenchmarkStructu
     case 'memory_fact':
     case 'memory_fact_absent':
     case 'memory_episode_count':
+    case 'ingestion_job_checkpointed':
     case 'ingestion_job_completed':
     case 'working_block_token':
       return 'memory_store';

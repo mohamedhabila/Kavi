@@ -216,6 +216,7 @@ export type E2ERubric =
       boundary: ForegroundScenarioLifecycleBoundary;
     }
   | { kind: 'goal_status'; goalId: string; status: AgentGoalStatus }
+  | { kind: 'ingestion_job_checkpointed'; minCount?: number }
   | { kind: 'ingestion_job_completed'; minCount?: number }
   | { kind: 'memory_episode_count'; min: number }
   | {
