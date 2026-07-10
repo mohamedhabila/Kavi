@@ -36,7 +36,7 @@ export KAVI_STATE_BENCH_ARTIFACT="<absolute artifact path>"
 Run the no-provider retrieval smoke inside the upstream environment:
 
 ```bash
-rtk uv run python \
+rtk uv run --project <kavi-repo>/.private/evals/upstream/STATE-Bench python \
   <kavi-repo>/benchmarks/state_bench/smoke_kavi_state_bench_adapter.py \
   --upstream <kavi-repo>/.private/evals/upstream/STATE-Bench \
   --runtime "$KAVI_STATE_BENCH_RUNTIME" \
