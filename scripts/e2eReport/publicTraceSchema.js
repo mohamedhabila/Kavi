@@ -133,9 +133,8 @@ function projectPublicRedactedTrace(value) {
     return null;
   }
   const graphStatus =
-    source.graphStatus === null
-      ? null
-      : (safeEnum(source.graphStatus, SAFE_GRAPH_STATUSES) ?? null);
+    source.graphStatus === null ? null : safeEnum(source.graphStatus, SAFE_GRAPH_STATUSES);
+  if (graphStatus === undefined) return null;
   return {
     schemaVersion: 'e2e-redacted-trace-v2',
     fixtureId,

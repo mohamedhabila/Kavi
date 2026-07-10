@@ -7,6 +7,10 @@ import type {
 } from '../../types/usage';
 import type { E2EPromptCacheSummary, E2ETokenUsageSummary } from './types';
 import { hashString, type E2ERedactedHash } from './e2eTraceRedaction';
+import {
+  requireNonNegativeFiniteNumber,
+  requireNonNegativeSafeInteger,
+} from './e2eTraceValidation';
 
 const SAFE_PROMPT_CACHE_REASONS = [
   'automatic_prompt_cache',
@@ -39,9 +43,9 @@ export type E2ERedactedPromptCacheEvent = {
   providerFamilyHash: E2ERedactedHash;
   hostedFamily?: LlmProviderFamily;
   hostedFamilyHash?: E2ERedactedHash;
-  mode: UsagePromptCacheMode | 'OTHER';
+  mode: UsagePromptCacheMode;
   modeHash: E2ERedactedHash;
-  event: UsagePromptCacheEvent | 'OTHER';
+  event: UsagePromptCacheEvent;
   eventHash: E2ERedactedHash;
   reason?: E2ESafePromptCacheReason;
   reasonHash: E2ERedactedHash;
@@ -50,7 +54,7 @@ export type E2ERedactedPromptCacheEvent = {
   stableToolDeclarationDigestHash?: E2ERedactedHash;
   cacheablePrefixDigestHash?: E2ERedactedHash;
   toolDeclarationDigestHash?: E2ERedactedHash;
-  prefixDivergenceReason?: UsagePromptCachePrefixDivergenceReason | 'OTHER';
+  prefixDivergenceReason?: UsagePromptCachePrefixDivergenceReason;
   prefixDivergenceReasonHash?: E2ERedactedHash;
 };
 
@@ -115,11 +119,45 @@ function safePromptCacheReason(value: string): E2ESafePromptCacheReason | undefi
   return SAFE_PROMPT_CACHE_REASON_SET.has(value) ? (value as E2ESafePromptCacheReason) : undefined;
 }
 
-function safeEnumOrOther<T extends string>(
+function requireEnum<T extends string>(
   value: string,
   values: ReadonlySet<string>,
-): T | 'OTHER' {
-  return values.has(value) ? (value as T) : 'OTHER';
+  label: string,
+): T {
+  if (!values.has(value)) throw new Error(`${label} contains an unsupported enum value.`);
+  return value as T;
+}
+
+function validatePrefixStability(
+  value: NonNullable<E2EPromptCacheSummary['prefixStability']>,
+): NonNullable<E2EPromptCacheSummary['prefixStability']> {
+  const result = { ...value };
+  for (const key of [
+    'eventCount',
+    'stableSystemPromptDigestEventCount',
+    'stableToolDeclarationDigestEventCount',
+    'cacheablePrefixDigestEventCount',
+    'toolDeclarationDigestEventCount',
+    'uniqueStableSystemPromptDigestCount',
+    'uniqueStableToolDeclarationDigestCount',
+    'uniqueCacheablePrefixDigestCount',
+    'uniqueToolDeclarationDigestCount',
+    'longestStableSystemPromptRun',
+    'longestStableToolDeclarationRun',
+    'longestCacheablePrefixRun',
+    'longestToolDeclarationRun',
+  ] as const) {
+    result[key] = requireNonNegativeSafeInteger(value[key], `promptCache.prefixStability.${key}`);
+  }
+  for (const key of [
+    'stableSystemPromptDigestPerEvent',
+    'stableToolDeclarationDigestPerEvent',
+    'cacheablePrefixDigestPerEvent',
+    'toolDeclarationDigestPerEvent',
+  ] as const) {
+    result[key] = requireNonNegativeFiniteNumber(value[key], `promptCache.prefixStability.${key}`);
+  }
+  return result;
 }
 
 function buildPromptCacheTrace(
@@ -129,34 +167,62 @@ function buildPromptCacheTrace(
     return undefined;
   }
   return {
-    eligibleTurnCount: promptCache.eligibleTurnCount,
-    enabledTurnCount: promptCache.enabledTurnCount,
-    skippedTurnCount: promptCache.skippedTurnCount,
-    createEventCount: promptCache.createEventCount,
-    reuseEventCount: promptCache.reuseEventCount,
-    providerManagedEventCount: promptCache.providerManagedEventCount,
-    thresholdTokens: [...promptCache.thresholdTokens],
+    eligibleTurnCount: requireNonNegativeSafeInteger(
+      promptCache.eligibleTurnCount,
+      'promptCache.eligibleTurnCount',
+    ),
+    enabledTurnCount: requireNonNegativeSafeInteger(
+      promptCache.enabledTurnCount,
+      'promptCache.enabledTurnCount',
+    ),
+    skippedTurnCount: requireNonNegativeSafeInteger(
+      promptCache.skippedTurnCount,
+      'promptCache.skippedTurnCount',
+    ),
+    createEventCount: requireNonNegativeSafeInteger(
+      promptCache.createEventCount,
+      'promptCache.createEventCount',
+    ),
+    reuseEventCount: requireNonNegativeSafeInteger(
+      promptCache.reuseEventCount,
+      'promptCache.reuseEventCount',
+    ),
+    providerManagedEventCount: requireNonNegativeSafeInteger(
+      promptCache.providerManagedEventCount,
+      'promptCache.providerManagedEventCount',
+    ),
+    thresholdTokens: promptCache.thresholdTokens.map((value) =>
+      requireNonNegativeSafeInteger(value, 'promptCache.thresholdTokens'),
+    ),
     explicitCacheNameHashes: promptCache.explicitCacheNames.map(hashString),
     reasonCounts: promptCache.reasonCounts.map(({ reason, count }) => ({
       ...(safePromptCacheReason(reason) ? { reason: safePromptCacheReason(reason) } : {}),
       reasonHash: hashString(reason),
-      count,
+      count: requireNonNegativeSafeInteger(count, 'promptCache.reasonCount'),
     })),
-    ...(promptCache.prefixStability ? { prefixStability: promptCache.prefixStability } : {}),
+    ...(promptCache.prefixStability
+      ? { prefixStability: validatePrefixStability(promptCache.prefixStability) }
+      : {}),
     events: promptCache.events.map((event) => {
       const providerFamily = safeProviderFamily(event.providerFamily);
       const hostedFamily = event.hostedFamily ? safeProviderFamily(event.hostedFamily) : undefined;
       const reason = safePromptCacheReason(event.reason);
-      const mode = safeEnumOrOther<UsagePromptCacheMode>(event.mode, SAFE_PROMPT_CACHE_MODE_SET);
-      const cacheEvent = safeEnumOrOther<UsagePromptCacheEvent>(
+      const mode = requireEnum<UsagePromptCacheMode>(
+        event.mode,
+        SAFE_PROMPT_CACHE_MODE_SET,
+        'promptCache.event.mode',
+      );
+      const cacheEvent = requireEnum<UsagePromptCacheEvent>(
         event.event,
         SAFE_PROMPT_CACHE_EVENT_SET,
+        'promptCache.event.event',
       );
       const rawPrefixDivergenceReason = event.prefixDivergenceReason;
       const prefixDivergenceReason = rawPrefixDivergenceReason
-        ? safeEnumOrOther<UsagePromptCachePrefixDivergenceReason>(
+        ? requireEnum<UsagePromptCachePrefixDivergenceReason>(
             rawPrefixDivergenceReason,
             SAFE_PREFIX_DIVERGENCE_REASON_SET,
+            'promptCache.event.prefixDivergenceReason',
           )
         : undefined;
       const prefixDivergenceReasonHash = rawPrefixDivergenceReason
@@ -165,8 +231,14 @@ function buildPromptCacheTrace(
       return {
         eligible: event.eligible,
         enabled: event.enabled,
-        estimatedInputTokens: event.estimatedInputTokens,
-        thresholdTokens: event.thresholdTokens,
+        estimatedInputTokens: requireNonNegativeSafeInteger(
+          event.estimatedInputTokens,
+          'promptCache.event.estimatedInputTokens',
+        ),
+        thresholdTokens: requireNonNegativeSafeInteger(
+          event.thresholdTokens,
+          'promptCache.event.thresholdTokens',
+        ),
         ...(providerFamily ? { providerFamily } : {}),
         providerFamilyHash: hashString(event.providerFamily),
         ...(hostedFamily ? { hostedFamily } : {}),
@@ -204,14 +276,43 @@ function buildPromptCacheTrace(
 }
 
 export function buildUsageTrace(usage: E2ETokenUsageSummary): E2ERedactedUsageTrace {
+  const counter = (value: number, label: string) => requireNonNegativeSafeInteger(value, label);
+  const tokenBuckets = usage.tokenBuckets
+    ? {
+        systemPromptTokens: counter(
+          usage.tokenBuckets.systemPromptTokens,
+          'usage.tokenBuckets.systemPromptTokens',
+        ),
+        toolDeclarationTokens: counter(
+          usage.tokenBuckets.toolDeclarationTokens,
+          'usage.tokenBuckets.toolDeclarationTokens',
+        ),
+        memoryContextTokens: counter(
+          usage.tokenBuckets.memoryContextTokens,
+          'usage.tokenBuckets.memoryContextTokens',
+        ),
+        conversationHistoryTokens: counter(
+          usage.tokenBuckets.conversationHistoryTokens,
+          'usage.tokenBuckets.conversationHistoryTokens',
+        ),
+        userTurnTokens: counter(
+          usage.tokenBuckets.userTurnTokens,
+          'usage.tokenBuckets.userTurnTokens',
+        ),
+        toolResultTokens: counter(
+          usage.tokenBuckets.toolResultTokens,
+          'usage.tokenBuckets.toolResultTokens',
+        ),
+      } satisfies UsageTokenBuckets
+    : undefined;
   return {
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
-    cacheReadTokens: usage.cacheReadTokens,
-    cacheWriteTokens: usage.cacheWriteTokens,
-    totalTokens: usage.totalTokens,
-    eventCount: usage.eventCount,
-    ...(usage.tokenBuckets ? { tokenBuckets: { ...usage.tokenBuckets } } : {}),
+    inputTokens: counter(usage.inputTokens, 'usage.inputTokens'),
+    outputTokens: counter(usage.outputTokens, 'usage.outputTokens'),
+    cacheReadTokens: counter(usage.cacheReadTokens, 'usage.cacheReadTokens'),
+    cacheWriteTokens: counter(usage.cacheWriteTokens, 'usage.cacheWriteTokens'),
+    totalTokens: counter(usage.totalTokens, 'usage.totalTokens'),
+    eventCount: counter(usage.eventCount, 'usage.eventCount'),
+    ...(tokenBuckets ? { tokenBuckets } : {}),
     ...(usage.promptCache ? { promptCache: buildPromptCacheTrace(usage.promptCache) } : {}),
   };
 }

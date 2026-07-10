@@ -16,6 +16,7 @@ import {
   E2E_PUBLIC_INGESTION_PROVIDER_OUTCOMES,
   E2E_PUBLIC_INGESTION_RECEIPT_OUTCOME_CODES,
 } from './e2eTraceMemoryPolicy';
+import { requirePositiveSafeInteger } from './e2eTraceValidation';
 
 export type E2ERedactedEnumCount<T extends string> = {
   value: T;
@@ -99,10 +100,14 @@ type IngestionState = {
 function enumCounts<T extends string>(
   values: ReadonlyArray<string | null>,
   allowed: ReadonlySet<T>,
+  label: string,
 ): E2ERedactedEnumCount<T>[] {
   const counts = new Map<T, number>();
   for (const value of values) {
-    if (value === null || !allowed.has(value as T)) continue;
+    if (value === null) continue;
+    if (typeof value !== 'string' || !allowed.has(value as T)) {
+      throw new Error(`${label} contains an unsupported enum value.`);
+    }
     const typedValue = value as T;
     counts.set(typedValue, (counts.get(typedValue) ?? 0) + 1);
   }
@@ -119,14 +124,17 @@ function buildIngestionEvidence(
     statusCounts: enumCounts(
       jobs.map((job) => job.status),
       INGESTION_JOB_STATUSES,
+      'memory.ingestion.status',
     ),
     providerOutcomeCounts: enumCounts(
       jobs.map((job) => job.providerOutcome),
       INGESTION_PROVIDER_OUTCOMES,
+      'memory.ingestion.providerOutcome',
     ),
     outcomeCodeCounts: enumCounts(
       jobs.map((job) => job.outcomeCode),
       INGESTION_OUTCOME_CODES,
+      'memory.ingestion.outcomeCode',
     ),
   };
 }
@@ -156,6 +164,9 @@ function sumReceiptArrayLengths(
 function buildMemoryReceiptEvidence(
   receipts: ForegroundScenarioMemorySnapshot['receipts'],
 ): E2ERedactedMemoryReceiptEvidence {
+  for (const receipt of receipts) {
+    requirePositiveSafeInteger(receipt.attemptNumber, 'memory.receipt.attemptNumber');
+  }
   return {
     receiptCount: receipts.length,
     maxAttemptNumber: receipts.reduce(
@@ -173,12 +184,29 @@ function buildMemoryReceiptEvidence(
     providerOutcomeCounts: enumCounts(
       receipts.map((receipt) => receipt.providerOutcome),
       INGESTION_PROVIDER_OUTCOMES,
+      'memory.receipt.providerOutcome',
     ),
     providerOutcomeCodeCounts: enumCounts(
       receipts.map((receipt) => receipt.providerOutcomeCode),
       INGESTION_RECEIPT_OUTCOME_CODES,
+      'memory.receipt.providerOutcomeCode',
     ),
   };
+}
+
+function collectAttributedReceipts(
+  records: E2EScenarioTurnTrace['memory'],
+): ForegroundScenarioMemorySnapshot['receipts'] {
+  const receipts: ForegroundScenarioMemorySnapshot['receipts'][number][] = [];
+  for (const record of records) {
+    for (const receipt of record.receipts) {
+      if (record.lifecycle.jobId === null || receipt.jobId !== record.lifecycle.jobId) {
+        throw new Error('Memory receipt jobId does not match its closeout lifecycle jobId.');
+      }
+      receipts.push(receipt);
+    }
+  }
+  return receipts;
 }
 
 export function buildMemoryDeltaEvidence(
@@ -188,7 +216,7 @@ export function buildMemoryDeltaEvidence(
   const jobs = turn.memory
     .map((record) => record.job)
     .filter((job): job is NonNullable<typeof job> => job !== null);
-  const receipts = turn.memory.flatMap((record) => record.receipts);
+  const receipts = collectAttributedReceipts(turn.memory);
   return {
     facts: buildCollectionDelta(delta.facts),
     episodes: buildCollectionDelta(delta.episodes),
@@ -210,7 +238,11 @@ export function buildMemoryFinalEvidence(
   return {
     factCount: state.facts.length,
     activeFactCount: state.facts.filter(
-      (fact) => fact.invalidAt === null && fact.deletedAt === null,
+      (fact) =>
+        fact.invalidAt === null &&
+        fact.deletedAt === null &&
+        fact.validAt <= state.capturedAt &&
+        (fact.expiresAt === null || fact.expiresAt > state.capturedAt),
     ).length,
     invalidatedFactCount: state.facts.filter((fact) => fact.invalidAt !== null).length,
     deletedFactCount: state.facts.filter((fact) => fact.deletedAt !== null).length,

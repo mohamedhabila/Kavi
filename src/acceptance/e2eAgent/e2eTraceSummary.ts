@@ -41,6 +41,10 @@ import {
   type E2ERedactedToolResultTrace,
 } from './e2eTraceToolResults';
 import { buildUsageTrace, type E2ERedactedUsageTrace } from './e2eTraceUsage';
+import {
+  requireNonNegativeFiniteNumber,
+  requireNonNegativeSafeInteger,
+} from './e2eTraceValidation';
 
 export type E2ERedactedTurnTrace = {
   turnIndex: number;
@@ -85,13 +89,16 @@ const MAX_TURN_GRAPH_SNAPSHOTS = 6;
 
 function buildTurnTrace(turn: E2EScenarioTurnTrace): E2ERedactedTurnTrace {
   return {
-    turnIndex: turn.turnIndex,
+    turnIndex: requireNonNegativeSafeInteger(turn.turnIndex, 'turn.turnIndex'),
     completed: turn.completed,
     lifecycleBefore: buildLifecycleBoundaryEvidence(turn.lifecycleBefore),
     user: buildUserEvidence(turn),
     route: buildRouteEvidence(turn),
     finalAssistant: buildFinalAssistantEvidence(turn),
-    finalAssistantCandidateCount: turn.finalAssistantCandidateCount,
+    finalAssistantCandidateCount: requireNonNegativeSafeInteger(
+      turn.finalAssistantCandidateCount,
+      'turn.finalAssistantCandidateCount',
+    ),
     completion: buildCompletionEvidence(turn.completion),
     agentRun: buildAgentRunEvidence(turn.agentRun),
     memoryDelta: buildMemoryDeltaEvidence(turn),
@@ -116,8 +123,8 @@ export function buildE2EScenarioTraceSummary(params: {
     fixtureId: result.fixtureId,
     conversationIdHash: hashString(result.conversationId),
     completed: result.completed,
-    durationMs: result.durationMs,
-    userTurnCount: result.userTurnCount,
+    durationMs: requireNonNegativeFiniteNumber(result.durationMs, 'result.durationMs'),
+    userTurnCount: requireNonNegativeSafeInteger(result.userTurnCount, 'result.userTurnCount'),
     turnCount: result.turnTraces.length,
     toolCallCount: result.toolCalls.length,
     graphStatus: lastGraph?.status ?? null,

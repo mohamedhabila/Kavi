@@ -95,3 +95,5 @@ export const E2E_PUBLIC_FINISH_REASONS = [
   'tool_use',
   'yielded',
 ] as const;
+
+export const E2E_PUBLIC_MAX_FINAL_ASSISTANT_TEXT_LENGTH = 1_000_000;

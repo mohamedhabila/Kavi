@@ -4,6 +4,7 @@ const {
   E2E_PUBLIC_CONVERSATION_MODES,
   E2E_PUBLIC_FINISH_REASONS,
   E2E_PUBLIC_GRAPH_STATUSES,
+  E2E_PUBLIC_MAX_FINAL_ASSISTANT_TEXT_LENGTH,
   E2E_PUBLIC_ROUTE_DIRECTIVES,
   E2E_PUBLIC_RUN_PHASES,
   E2E_PUBLIC_RUN_STATUSES,
@@ -17,13 +18,13 @@ const {
   safeEnum,
 } = require('./publicTracePrimitives');
 
-const ROUTE_DIRECTIVES = new Set([...E2E_PUBLIC_ROUTE_DIRECTIVES, 'OTHER']);
-const CONVERSATION_MODES = new Set([...E2E_PUBLIC_CONVERSATION_MODES, 'OTHER']);
+const ROUTE_DIRECTIVES = new Set(E2E_PUBLIC_ROUTE_DIRECTIVES);
+const CONVERSATION_MODES = new Set(E2E_PUBLIC_CONVERSATION_MODES);
 const BUILT_IN_PERSONA_IDS = new Set(E2E_PUBLIC_BUILT_IN_PERSONA_IDS);
-const ASSISTANT_STATUSES = new Set([...E2E_PUBLIC_ASSISTANT_STATUSES, 'OTHER']);
-const RUN_STATUSES = new Set([...E2E_PUBLIC_RUN_STATUSES, 'OTHER']);
-const GRAPH_STATUSES = new Set([...E2E_PUBLIC_GRAPH_STATUSES, 'OTHER']);
-const RUN_PHASES = new Set([...E2E_PUBLIC_RUN_PHASES, 'OTHER']);
+const ASSISTANT_STATUSES = new Set(E2E_PUBLIC_ASSISTANT_STATUSES);
+const RUN_STATUSES = new Set(E2E_PUBLIC_RUN_STATUSES);
+const GRAPH_STATUSES = new Set(E2E_PUBLIC_GRAPH_STATUSES);
+const RUN_PHASES = new Set(E2E_PUBLIC_RUN_PHASES);
 const TERMINAL_REASONS = new Set(E2E_PUBLIC_TERMINAL_REASONS);
 const FINISH_REASONS = new Set(E2E_PUBLIC_FINISH_REASONS);
 
@@ -92,7 +93,17 @@ function projectFinalAssistantEvidence(value) {
     ? safeEnum(source.completionStatus, ASSISTANT_STATUSES)
     : undefined;
   const completionStatusHash = source ? projectHash(source.completionStatusHash) : null;
-  if (!source || !messageIdHash || !textHash || !completionStatus || !completionStatusHash) {
+  const textLength = source ? nonNegativeInteger(source.textLength) : null;
+  if (
+    !source ||
+    !messageIdHash ||
+    !textHash ||
+    textLength === null ||
+    textLength > E2E_PUBLIC_MAX_FINAL_ASSISTANT_TEXT_LENGTH ||
+    textLength !== textHash.length ||
+    !completionStatus ||
+    !completionStatusHash
+  ) {
     return undefined;
   }
   const finishReason = projectOptionalClassifiedString(
@@ -111,6 +122,7 @@ function projectFinalAssistantEvidence(value) {
   return {
     messageIdHash,
     textHash,
+    textLength,
     completionStatus,
     completionStatusHash,
     ...finishReason,

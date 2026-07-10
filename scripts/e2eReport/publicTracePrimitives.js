@@ -16,11 +16,11 @@ function asRecord(value) {
 }
 
 function finiteNumber(value) {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
 function nonNegativeInteger(value) {
-  return Number.isInteger(value) && value >= 0 ? value : null;
+  return Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
 function boundedString(value, maxLength = 512) {
@@ -71,7 +71,7 @@ function projectArray(value, projector, limit = MAX_TRACE_ITEMS) {
   const projected = [];
   for (const item of value.slice(0, limit)) {
     const next = projector(item);
-    if (next === null) {
+    if (next === null || next === undefined) {
       return null;
     }
     projected.push(next);

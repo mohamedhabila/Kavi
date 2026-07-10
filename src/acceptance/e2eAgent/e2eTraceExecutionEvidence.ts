@@ -16,15 +16,19 @@ import {
   E2E_PUBLIC_CONVERSATION_MODES,
   E2E_PUBLIC_FINISH_REASONS,
   E2E_PUBLIC_GRAPH_STATUSES,
+  E2E_PUBLIC_MAX_FINAL_ASSISTANT_TEXT_LENGTH,
   E2E_PUBLIC_ROUTE_DIRECTIVES,
   E2E_PUBLIC_RUN_PHASES,
   E2E_PUBLIC_RUN_STATUSES,
   E2E_PUBLIC_TERMINAL_REASONS,
 } from './e2eTraceExecutionPolicy';
 import { hashString, type E2ERedactedHash } from './e2eTraceRedaction';
+import {
+  requireNonNegativeFiniteNumber,
+  requireNonNegativeSafeInteger,
+} from './e2eTraceValidation';
 import type { E2EScenarioTurnTrace } from './types';
 
-type PublicEnum<T extends string> = T | 'OTHER';
 type PublicBuiltInPersonaId = (typeof E2E_PUBLIC_BUILT_IN_PERSONA_IDS)[number];
 type PublicFinishReason = (typeof E2E_PUBLIC_FINISH_REASONS)[number];
 
@@ -38,9 +42,9 @@ export type E2ERedactedLifecycleBoundaryEvidence = NonNullable<
 >;
 
 export type E2ERedactedRouteEvidence = {
-  directive: PublicEnum<ForegroundScenarioRouteDirective>;
+  directive: ForegroundScenarioRouteDirective;
   directiveHash: E2ERedactedHash;
-  mode: PublicEnum<ConversationMode>;
+  mode: ConversationMode;
   modeHash: E2ERedactedHash;
   personaId?: PublicBuiltInPersonaId;
   personaIdHash: E2ERedactedHash;
@@ -49,7 +53,8 @@ export type E2ERedactedRouteEvidence = {
 export type E2ERedactedFinalAssistantEvidence = {
   messageIdHash: E2ERedactedHash;
   textHash: E2ERedactedHash;
-  completionStatus: PublicEnum<AssistantCompletionStatus>;
+  textLength: number;
+  completionStatus: AssistantCompletionStatus;
   completionStatusHash: E2ERedactedHash;
   finishReason?: PublicFinishReason;
   finishReasonHash?: E2ERedactedHash;
@@ -58,14 +63,14 @@ export type E2ERedactedFinalAssistantEvidence = {
 };
 
 export type E2ERedactedCompletionEvidence = {
-  assistantStatus: PublicEnum<ForegroundScenarioCompletionSnapshot['assistantStatus']>;
+  assistantStatus: ForegroundScenarioCompletionSnapshot['assistantStatus'];
   assistantStatusHash: E2ERedactedHash;
   executionCompleted: boolean;
   finalResponseCompleted: boolean;
-  runStatus: PublicEnum<ForegroundScenarioCompletionSnapshot['runStatus']>;
+  runStatus: ForegroundScenarioCompletionSnapshot['runStatus'];
   runStatusHash: E2ERedactedHash;
   runCompleted: boolean | null;
-  graphStatus: PublicEnum<NonNullable<ForegroundScenarioCompletionSnapshot['graphStatus']>> | null;
+  graphStatus: ForegroundScenarioCompletionSnapshot['graphStatus'];
   graphStatusHash?: E2ERedactedHash;
   runTerminalReason?: AgentRunTerminalReason;
   runTerminalReasonHash?: E2ERedactedHash;
@@ -80,9 +85,9 @@ export type E2ERedactedAgentRunSummary = Required<Omit<AgentRunSummary, 'duratio
 export type E2ERedactedAgentRunEvidence = {
   runIdHash: E2ERedactedHash;
   userMessageIdHash: E2ERedactedHash;
-  status: PublicEnum<AgentRunStatus>;
+  status: AgentRunStatus;
   statusHash: E2ERedactedHash;
-  phase: PublicEnum<AgentRunPhaseKey>;
+  phase: AgentRunPhaseKey;
   phaseHash: E2ERedactedHash;
   completed: boolean;
   terminalReason?: AgentRunTerminalReason;
@@ -100,8 +105,13 @@ const RUN_PHASES = new Set<string>(E2E_PUBLIC_RUN_PHASES);
 const TERMINAL_REASONS = new Set<string>(E2E_PUBLIC_TERMINAL_REASONS);
 const FINISH_REASONS = new Set<string>(E2E_PUBLIC_FINISH_REASONS);
 
-function publicEnum<T extends string>(value: string, allowed: ReadonlySet<string>): PublicEnum<T> {
-  return allowed.has(value) ? (value as T) : 'OTHER';
+function requirePublicEnum<T extends string>(
+  value: string,
+  allowed: ReadonlySet<string>,
+  label: string,
+): T {
+  if (!allowed.has(value)) throw new Error(`${label} contains an unsupported enum value.`);
+  return value as T;
 }
 
 function optionalClassifiedString<T extends string>(
@@ -115,22 +125,33 @@ function optionalClassifiedString<T extends string>(
   };
 }
 
-function count(value: number): number {
-  return Number.isSafeInteger(value) && value >= 0 ? value : 0;
-}
-
-function duration(value: number | undefined): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
-}
-
 function buildRunSummary(summary: AgentRunSummary): E2ERedactedAgentRunSummary {
+  const durationMs =
+    summary.durationMs === undefined
+      ? undefined
+      : requireNonNegativeFiniteNumber(summary.durationMs, 'agentRun.summary.durationMs');
   return {
-    assistantTurns: count(summary.assistantTurns),
-    startedTools: count(summary.startedTools),
-    completedTools: count(summary.completedTools),
-    failedTools: count(summary.failedTools),
-    spawnedSubAgents: count(summary.spawnedSubAgents),
-    ...(duration(summary.durationMs) !== undefined ? { durationMs: duration(summary.durationMs) } : {}),
+    assistantTurns: requireNonNegativeSafeInteger(
+      summary.assistantTurns,
+      'agentRun.summary.assistantTurns',
+    ),
+    startedTools: requireNonNegativeSafeInteger(
+      summary.startedTools,
+      'agentRun.summary.startedTools',
+    ),
+    completedTools: requireNonNegativeSafeInteger(
+      summary.completedTools,
+      'agentRun.summary.completedTools',
+    ),
+    failedTools: requireNonNegativeSafeInteger(
+      summary.failedTools,
+      'agentRun.summary.failedTools',
+    ),
+    spawnedSubAgents: requireNonNegativeSafeInteger(
+      summary.spawnedSubAgents,
+      'agentRun.summary.spawnedSubAgents',
+    ),
+    ...(durationMs === undefined ? {} : { durationMs }),
   };
 }
 
@@ -162,9 +183,17 @@ export function buildLifecycleBoundaryEvidence(
 
 export function buildRouteEvidence(turn: E2EScenarioTurnTrace): E2ERedactedRouteEvidence {
   return {
-    directive: publicEnum<ForegroundScenarioRouteDirective>(turn.route.directive, ROUTE_DIRECTIVES),
+    directive: requirePublicEnum<ForegroundScenarioRouteDirective>(
+      turn.route.directive,
+      ROUTE_DIRECTIVES,
+      'turn.route.directive',
+    ),
     directiveHash: hashString(turn.route.directive),
-    mode: publicEnum<ConversationMode>(turn.route.mode, CONVERSATION_MODES),
+    mode: requirePublicEnum<ConversationMode>(
+      turn.route.mode,
+      CONVERSATION_MODES,
+      'turn.route.mode',
+    ),
     modeHash: hashString(turn.route.mode),
     ...(BUILT_IN_PERSONA_IDS.has(turn.route.personaId)
       ? { personaId: turn.route.personaId as PublicBuiltInPersonaId }
@@ -186,12 +215,18 @@ export function buildFinalAssistantEvidence(
     assistant.terminalReason,
     TERMINAL_REASONS,
   );
+  const textLength = assistant.text.length;
+  if (textLength > E2E_PUBLIC_MAX_FINAL_ASSISTANT_TEXT_LENGTH) {
+    throw new Error('finalAssistant.text exceeds the public trace length bound.');
+  }
   return {
     messageIdHash: hashString(assistant.messageId),
     textHash: hashString(assistant.text),
-    completionStatus: publicEnum<AssistantCompletionStatus>(
+    textLength,
+    completionStatus: requirePublicEnum<AssistantCompletionStatus>(
       assistant.completionStatus,
       ASSISTANT_STATUSES,
+      'finalAssistant.completionStatus',
     ),
     completionStatusHash: hashString(assistant.completionStatus),
     ...(finishReason.value ? { finishReason: finishReason.value } : {}),
@@ -213,19 +248,30 @@ export function buildCompletionEvidence(
     TERMINAL_REASONS,
   );
   return {
-    assistantStatus: publicEnum(completion.assistantStatus, ASSISTANT_STATUSES),
+    assistantStatus: requirePublicEnum(
+      completion.assistantStatus,
+      ASSISTANT_STATUSES,
+      'completion.assistantStatus',
+    ),
     assistantStatusHash: hashString(completion.assistantStatus),
     executionCompleted: completion.executionCompleted,
     finalResponseCompleted: completion.finalResponseCompleted,
-    runStatus: publicEnum(completion.runStatus, RUN_STATUSES),
+    runStatus: requirePublicEnum(
+      completion.runStatus,
+      RUN_STATUSES,
+      'completion.runStatus',
+    ),
     runStatusHash: hashString(completion.runStatus),
     runCompleted: completion.runCompleted,
     graphStatus:
       completion.graphStatus === null
         ? null
-        : publicEnum<NonNullable<ForegroundScenarioCompletionSnapshot['graphStatus']>>(
+        : requirePublicEnum<
+            NonNullable<ForegroundScenarioCompletionSnapshot['graphStatus']>
+          >(
             completion.graphStatus,
             GRAPH_STATUSES,
+            'completion.graphStatus',
           ),
     ...(completion.graphStatus === null
       ? {}
@@ -250,9 +296,9 @@ export function buildAgentRunEvidence(
   return {
     runIdHash: hashString(run.runId),
     userMessageIdHash: hashString(run.userMessageId),
-    status: publicEnum(run.status, RUN_STATUSES),
+    status: requirePublicEnum(run.status, RUN_STATUSES, 'agentRun.status'),
     statusHash: hashString(run.status),
-    phase: publicEnum(run.currentPhase, RUN_PHASES),
+    phase: requirePublicEnum(run.currentPhase, RUN_PHASES, 'agentRun.phase'),
     phaseHash: hashString(run.currentPhase),
     completed: run.completedAt !== null,
     ...(terminalReason.value ? { terminalReason: terminalReason.value } : {}),

@@ -28,9 +28,8 @@ const SAFE_CACHE_MODES = new Set([
   'gemini_native',
   'openrouter_compatible',
   'unsupported',
-  'OTHER',
 ]);
-const SAFE_CACHE_EVENTS = new Set(['create', 'reuse', 'skip', 'provider_managed', 'OTHER']);
+const SAFE_CACHE_EVENTS = new Set(['create', 'reuse', 'skip', 'provider_managed']);
 const SAFE_CACHE_REASONS = new Set([
   'automatic_prompt_cache',
   'below_threshold',
@@ -49,7 +48,6 @@ const SAFE_PREFIX_DIVERGENCE_REASONS = new Set([
   'no_stable_tool_prefix',
   'stable_prefix_with_dynamic_suffix',
   'fully_stable_prefix',
-  'OTHER',
 ]);
 
 const SAFE_NATIVE_FIXTURE_PATHS = new Set([
@@ -57,6 +55,9 @@ const SAFE_NATIVE_FIXTURE_PATHS = new Set([
   'calendar.allowsModifications',
   'calendar.createdEventCount',
   'calendar.updatedEventCount',
+  'calendar.lastCreatedStartDate',
+  'calendar.lastCreatedEndDate',
+  'calendar.lastCreatedDurationMinutes',
   'permissions.location',
   'permissions.mediaLibrary',
   'permissions.screenCapture',
@@ -99,7 +100,7 @@ function projectTokenBuckets(value) {
   ];
   const projected = {};
   for (const key of keys) {
-    const number = finiteNumber(source[key]);
+    const number = nonNegativeInteger(source[key]);
     if (number === null) {
       return null;
     }
@@ -134,7 +135,9 @@ function projectPrefixStability(value) {
   ];
   const projected = {};
   for (const key of keys) {
-    const number = finiteNumber(source[key]);
+    const number = key.endsWith('PerEvent')
+      ? finiteNumber(source[key])
+      : nonNegativeInteger(source[key]);
     if (number === null) {
       return null;
     }
@@ -163,8 +166,8 @@ function projectPromptCacheEvent(value) {
   if (!source || typeof source.eligible !== 'boolean' || typeof source.enabled !== 'boolean') {
     return null;
   }
-  const estimatedInputTokens = finiteNumber(source.estimatedInputTokens);
-  const thresholdTokens = finiteNumber(source.thresholdTokens);
+  const estimatedInputTokens = nonNegativeInteger(source.estimatedInputTokens);
+  const thresholdTokens = nonNegativeInteger(source.thresholdTokens);
   const providerFamilyHash = projectHash(source.providerFamilyHash);
   const modeHash = projectHash(source.modeHash);
   const eventHash = projectHash(source.eventHash);
@@ -250,7 +253,7 @@ function projectPromptCacheTrace(value) {
     }
     projected[key] = count;
   }
-  const thresholdTokens = projectArray(source.thresholdTokens, finiteNumber, 64);
+  const thresholdTokens = projectArray(source.thresholdTokens, nonNegativeInteger, 64);
   const explicitCacheNameHashes = projectHashArray(source.explicitCacheNameHashes, 128);
   const reasonCounts = projectArray(source.reasonCounts, projectPromptCacheReasonCount, 128);
   const events = projectArray(source.events, projectPromptCacheEvent, MAX_TRACE_ITEMS);
@@ -288,7 +291,7 @@ function projectPublicUsageTrace(value) {
   ];
   const projected = {};
   for (const key of keys) {
-    const number = finiteNumber(source[key]);
+    const number = nonNegativeInteger(source[key]);
     if (number === null) {
       return null;
     }
