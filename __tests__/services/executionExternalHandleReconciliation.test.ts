@@ -282,7 +282,7 @@ describe('production external handle recovery vertical slice', () => {
     seedExternalHandle({
       version: 1,
       kind: 'github_workflow_run',
-      repository: 'openclaw/mobile',
+      repository: 'kavi/mobile',
       workflowRunId: '12345',
       credentialRef: 'PROJECT_GITHUB_TOKEN',
     });
@@ -302,7 +302,7 @@ describe('production external handle recovery vertical slice', () => {
     expect(provider.readSecret).toHaveBeenCalledWith('PROJECT_GITHUB_TOKEN');
     expect(provider.inspectGitHubWorkflowRun).toHaveBeenCalledWith(
       'resolved-token',
-      'openclaw/mobile',
+      'kavi/mobile',
       '12345',
     );
     expect(provider.inspectExpoWorkflowRun).not.toHaveBeenCalled();
@@ -460,7 +460,7 @@ describe('production external handle recovery vertical slice', () => {
     seedExternalHandle({
       version: 1,
       kind: 'github_workflow_run',
-      repository: 'openclaw/mobile',
+      repository: 'kavi/mobile',
       workflowRunId: '12345',
       credentialRef: 'GITHUB_TOKEN',
     });
