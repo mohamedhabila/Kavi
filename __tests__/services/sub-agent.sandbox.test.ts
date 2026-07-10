@@ -32,7 +32,7 @@ describe('Sub-Agent Service', () => {
       expect(typeof capturedOptions.toolFilter).toBe('function');
     });
 
-    it('does not pass toolFilter for full sandbox policy', async () => {
+    it('preserves full sandbox access while blocking parent-memory tools', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
       let capturedOptions: any = null;
       runOrchestrator.mockImplementationOnce((opts: any, callbacks: any) => {
@@ -52,10 +52,13 @@ describe('Sub-Agent Service', () => {
       );
 
       expect(capturedOptions).toBeDefined();
-      expect(capturedOptions.toolFilter).toBeUndefined();
+      expect(typeof capturedOptions.toolFilter).toBe('function');
+      expect(capturedOptions.toolFilter('read_file')).toBe(true);
+      expect(capturedOptions.toolFilter('write_file')).toBe(true);
+      expect(capturedOptions.toolFilter('memory_search')).toBe(false);
     });
 
-    it('does not pass toolFilter for inherit sandbox policy', async () => {
+    it('preserves inherited sandbox access while blocking parent-memory tools', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
       let capturedOptions: any = null;
       runOrchestrator.mockImplementationOnce((opts: any, callbacks: any) => {
@@ -75,7 +78,10 @@ describe('Sub-Agent Service', () => {
       );
 
       expect(capturedOptions).toBeDefined();
-      expect(capturedOptions.toolFilter).toBeUndefined();
+      expect(typeof capturedOptions.toolFilter).toBe('function');
+      expect(capturedOptions.toolFilter('read_file')).toBe(true);
+      expect(capturedOptions.toolFilter('write_file')).toBe(true);
+      expect(capturedOptions.toolFilter('memory_search')).toBe(false);
     });
 
     it('treats an explicit empty worker tools list as a no-tools whitelist', async () => {
@@ -180,15 +186,8 @@ describe('Sub-Agent Service', () => {
       ]);
     });
 
-    it('treats an explicit empty serialized worker tools list as a no-tools whitelist', async () => {
+    it('rejects a serialized worker tools list instead of parsing a legacy whitelist', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
-      let capturedOptions: any = null;
-      runOrchestrator.mockImplementationOnce((opts: any, callbacks: any) => {
-        capturedOptions = opts;
-        callbacks.onToken?.('direct output');
-        callbacks.onDone?.();
-        return Promise.resolve();
-      });
 
       const result = await spawnSubAgent(
         {
@@ -199,10 +198,13 @@ describe('Sub-Agent Service', () => {
         mockProvider,
       );
 
-      expect(result.status).toBe('completed');
-      expect(capturedOptions).toBeDefined();
-      expect(typeof capturedOptions.toolFilter).toBe('function');
-      expect(capturedOptions.toolFilter('web_search')).toBe(false);
+      expect(result).toEqual(
+        expect.objectContaining({
+          status: 'error',
+          error: 'Sub-agent tools must be an array of tool-name strings.',
+        }),
+      );
+      expect(runOrchestrator).not.toHaveBeenCalled();
     });
 
     it('safe-only toolFilter blocks non-safe tools', async () => {
