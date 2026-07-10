@@ -191,4 +191,33 @@ describe('replaceCurrentFact', () => {
       ]),
     );
   });
+
+  it('keeps warmed exact replacement below the host p95 regression budget', () => {
+    const durations: number[] = [];
+    for (let index = 0; index < 80; index += 1) {
+      const predicate = `performance_fact_${index}`;
+      const current = recordFact({
+        subjectId: 'entity-performance-user',
+        predicate,
+        objectText: `before-${index}`,
+        scope: 'global',
+        now: 1_000 + index * 2,
+      });
+      const startedAt = performance.now();
+      const result = replaceCurrentFact({
+        expectedCurrentFactId: current.fact.id,
+        subjectId: 'entity-performance-user',
+        predicate,
+        objectText: `after-${index}`,
+        scope: 'global',
+        now: 1_001 + index * 2,
+      });
+      durations.push(performance.now() - startedAt);
+      expect(result.status).toBe('created');
+    }
+
+    durations.sort((left, right) => left - right);
+    const p95 = durations[Math.ceil(durations.length * 0.95) - 1]!;
+    expect(p95).toBeLessThan(5);
+  });
 });
