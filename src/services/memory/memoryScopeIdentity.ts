@@ -27,8 +27,29 @@ export function isExactMemoryScopeId(value: unknown): value is string {
   return typeof value === 'string' && value === value.trim() && MEMORY_SCOPE_ID_PATTERN.test(value);
 }
 
+export function requireExactMemoryScopeId(value: unknown, code: string): string {
+  if (!isExactMemoryScopeId(value)) throw new Error(code);
+  return value;
+}
+
+export function resolveCodeOwnedMemoryConversationId(
+  value: string | null | undefined,
+  fallback: string,
+): string {
+  const exactFallback = requireExactMemoryScopeId(fallback, 'memory_scope_conversation_id_invalid');
+  return value === null || value === undefined
+    ? exactFallback
+    : requireExactMemoryScopeId(value, 'memory_scope_conversation_id_invalid');
+}
+
+export function resolveCodeOwnedMemoryTaskId(value: string | null | undefined): string | null {
+  return value === null || value === undefined
+    ? null
+    : requireExactMemoryScopeId(value, 'memory_scope_task_id_invalid');
+}
+
 export function resolveCodeOwnedMemoryPersonaId(value: string | null | undefined): string {
-  if (value === null || value === undefined || value.trim() === '') {
+  if (value === null || value === undefined) {
     return DEFAULT_MEMORY_PERSONA_ID;
   }
   if (!isExactMemoryScopeId(value)) throw new Error('memory_scope_persona_id_invalid');
@@ -36,8 +57,7 @@ export function resolveCodeOwnedMemoryPersonaId(value: string | null | undefined
 }
 
 function requireScopeId(value: unknown, field: string): string {
-  if (!isExactMemoryScopeId(value)) throw new Error(`memory_scope_${field}_invalid`);
-  return value;
+  return requireExactMemoryScopeId(value, `memory_scope_${field}_invalid`);
 }
 
 export function requireMemoryAccessScopeIdentity(

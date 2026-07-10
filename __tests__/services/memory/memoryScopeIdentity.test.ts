@@ -1,6 +1,10 @@
 import {
   isExactMemoryScopeId,
+  requireExactMemoryScopeId,
   requireMemoryAccessScopeIdentity,
+  resolveCodeOwnedMemoryConversationId,
+  resolveCodeOwnedMemoryPersonaId,
+  resolveCodeOwnedMemoryTaskId,
 } from '../../../src/services/memory/memoryScopeIdentity';
 
 describe('memory scope identity', () => {
@@ -30,5 +34,24 @@ describe('memory scope identity', () => {
     expect(() => requireMemoryAccessScopeIdentity(missingTask as typeof scope)).toThrow(
       'memory_scope_task_id_invalid',
     );
+  });
+
+  it('defaults code-owned scope only when the optional identity is absent', () => {
+    expect(resolveCodeOwnedMemoryConversationId(undefined, 'conversation-1')).toBe(
+      'conversation-1',
+    );
+    expect(resolveCodeOwnedMemoryTaskId(undefined)).toBeNull();
+    expect(resolveCodeOwnedMemoryPersonaId(undefined)).toBe('default');
+
+    expect(() => resolveCodeOwnedMemoryConversationId('', 'conversation-1')).toThrow(
+      'memory_scope_conversation_id_invalid',
+    );
+    expect(() => resolveCodeOwnedMemoryTaskId(' task-1')).toThrow('memory_scope_task_id_invalid');
+    expect(() => resolveCodeOwnedMemoryPersonaId('')).toThrow('memory_scope_persona_id_invalid');
+  });
+
+  it('exposes a strict reusable scope assertion with caller-owned error codes', () => {
+    expect(requireExactMemoryScopeId('scope-1', 'scope_invalid')).toBe('scope-1');
+    expect(() => requireExactMemoryScopeId(' scope-1', 'scope_invalid')).toThrow('scope_invalid');
   });
 });
