@@ -332,7 +332,7 @@ scenario-specific gating.
 
 | Suite             | Test file                      | Scenarios                                                            | Pass bar                                     |
 | ----------------- | ------------------------------ | -------------------------------------------------------------------- | -------------------------------------------- |
-| Core + benchmarks | `e2eAgentMetrics.test.ts`      | 55 (16 core + 27 adapted benchmark + 12 direct benchmark shards)     | >=90% per run (`E2E_SCENARIO_MIN_PASS_RATE`) |
+| Core + benchmarks | `e2eAgentMetrics.test.ts`      | 60 (21 core + 27 adapted benchmark + 12 direct benchmark shards)     | >=90% per run (`E2E_SCENARIO_MIN_PASS_RATE`) |
 | Delegation        | `e2eDelegationMetrics.test.ts` | 2 (`delegation-worker-finalize`, `delegation-worker-evidence-chain`) | 100% (mocked worker, structural rubrics)     |
 
 **Core scenarios (personal-assistant scope):** file write + read, goal evidence
@@ -343,6 +343,13 @@ trip artifact, inventory readback, catalog to memory, catalog query to memory
 recall, gate follow-up). Multi-turn scenarios invoke `runOrchestrator` once
 per user message with accumulated history and graph resume, matching the
 foreground conversation path.
+
+The core suite also includes five longitudinal product flows: chitchat profile
+correction, chitchat-to-calendar preference application, agent-outcome
+continuity into chitchat, reusable failure-constraint recovery, and profile
+continuity across a persisted app relaunch. These flows score route,
+execution, final-response, agent-run, durable-memory, lifecycle, and verified
+end-state evidence independently.
 
 **Benchmark-adapted scenarios (`bench-*`):** GAIA file-hop chain, session
 memory cache, prompt-cache long-horizon probes, describe-then-use, 3-turn memory
@@ -392,7 +399,7 @@ selected E2E provider drives the supervisor tool loop. Goal pins
 
 | Scope                           | Typical duration | Token budget (ceiling)                                |
 | ------------------------------- | ---------------- | ----------------------------------------------------- |
-| Core + benchmark (55 scenarios) | 30–60+ minutes   | ≤4M total (`E2E_PROGRAM_MAX_TOTAL_TOKENS`)            |
+| Core + benchmark (60 scenarios) | 30–60+ minutes   | ≤4.4M total (`E2E_PROGRAM_MAX_TOTAL_TOKENS`)          |
 | Delegation only                 | ~10 seconds      | ≤200K (`E2E_DELEGATION_PROGRAM_MAX_TOTAL_TOKENS`)     |
 | Full `eval:e2e`                 | 30–60+ minutes   | Per-scenario ceilings in `E2E_SCENARIO_TOKEN_BUDGETS` |
 

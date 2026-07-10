@@ -30,9 +30,9 @@ function buildRawReport() {
       modelIdentitySource: 'provider-model-id',
       modelLocatorSha256: 'a'.repeat(64),
       endpointSha256: 'b'.repeat(64),
-      scenarioManifestVersion: '2026-06-12.phase0',
+      scenarioManifestVersion: '2026-07-10.longitudinal-v1',
       promptCacheMode: 'provider-default',
-      nativeToolFixtureVersion: 'native-tools-2026-06-12',
+      nativeToolFixtureVersion: 'native-tools-2026-07-10',
       collectMode: false,
     },
   });

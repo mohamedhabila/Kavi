@@ -10,6 +10,7 @@ import {
   recordE2ENativeMobileInvocation,
   resetE2ENativeMobileInvocationEvidence,
 } from './e2eNativeMobileEvidence';
+import { E2E_NATIVE_TOOL_FIXTURE_VERSION } from './thresholds';
 
 export { getE2ENativeMobileInvocationSnapshots } from './e2eNativeMobileEvidence';
 export type { E2ENativeMobileInvocationSnapshot } from './e2eNativeMobileEvidence';
@@ -60,7 +61,7 @@ type E2ECalendarEvent = {
 };
 
 export const E2E_FIXTURE_DEVICE_PERMISSIONS_JSON = JSON.stringify({
-  version: 'native-tools-2026-06-12',
+  version: E2E_NATIVE_TOOL_FIXTURE_VERSION,
   states: E2E_NATIVE_PERMISSION_STATES,
   current: {
     calendar: 'granted',

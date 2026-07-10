@@ -47,7 +47,9 @@ const LONGITUDINAL_ROUTE_SCENARIO_IDS = new Set([
 
 describe('E2E scenario taxonomy', () => {
   it('covers all registered scenarios without duplicate ids', () => {
-    expect(ALL_SCENARIOS.length).toBeGreaterThanOrEqual(51);
+    expect(E2E_AGENT_SCENARIOS).toHaveLength(60);
+    expect(DELEGATION_E2E_SCENARIOS).toHaveLength(2);
+    expect(ALL_SCENARIOS).toHaveLength(62);
     expect(new Set(ALL_SCENARIOS.map((scenario) => scenario.id)).size).toBe(ALL_SCENARIOS.length);
   });
 
@@ -84,6 +86,10 @@ describe('E2E scenario taxonomy', () => {
         initialMode: 'agentic',
         route: 'forced_agentic',
       });
+      for (const turn of scenario.userTurns ?? []) {
+        expect(turn.route ?? scenario.execution.route).toBe('forced_agentic');
+        expect(turn.lifecycleBefore).toBeUndefined();
+      }
     }
   });
 

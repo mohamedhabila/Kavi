@@ -22,9 +22,9 @@ export const E2E_PROMPT_CACHE_ELIGIBLE_INPUT_TOKENS = 4_096;
 
 export const E2E_PROMPT_CACHE_MIN_ELIGIBLE_READ_RATE = 0.25;
 
-export const E2E_SCENARIO_MANIFEST_VERSION = '2026-07-10.product-route-v1';
+export const E2E_SCENARIO_MANIFEST_VERSION = '2026-07-10.longitudinal-v1';
 
-export const E2E_NATIVE_TOOL_FIXTURE_VERSION = 'native-tools-2026-06-12';
+export const E2E_NATIVE_TOOL_FIXTURE_VERSION = 'native-tools-2026-07-10';
 
 /** Per-scenario total token ceilings (input + output), set from baseline runs with headroom. */
 export const E2E_SCENARIO_TOKEN_BUDGETS: Readonly<Record<string, number>> = {
@@ -46,6 +46,11 @@ export const E2E_SCENARIO_TOKEN_BUDGETS: Readonly<Record<string, number>> = {
   'multi-turn-passive-chitchat-memory': 180_000,
   'multi-turn-goal-passive-recall': 220_000,
   'native-calendar-json-field': 120_000,
+  'profile-correction-chitchat': 180_000,
+  'preference-to-calendar-action': 240_000,
+  'agent-outcome-to-chitchat': 220_000,
+  'failure-gotcha-reuse': 260_000,
+  'relaunch-profile-continuity': 200_000,
   'bench-gaia-file-hop-chain': 180_000,
   'bench-session-tool-cache': 200_000,
   'bench-prompt-cache-long-horizon': 500_000,
@@ -88,7 +93,7 @@ export const E2E_SCENARIO_TOKEN_BUDGETS: Readonly<Record<string, number>> = {
 };
 
 /** Program-level regression guard across all scenarios in one harness run. */
-export const E2E_PROGRAM_MAX_TOTAL_TOKENS = 4_000_000;
+export const E2E_PROGRAM_MAX_TOTAL_TOKENS = 4_400_000;
 
 /** Delegation scenario runs in a separate opt-in test file. */
 export const E2E_DELEGATION_PROGRAM_MAX_TOTAL_TOKENS = 200_000;

@@ -270,6 +270,32 @@ export const E2E_SCENARIO_BENCHMARK_REGISTRY: Readonly<
     benchmarkFamilies: ['kavi-core', 'tau-bench-adapted'],
     assessmentDimensions: ['outcome_validators', 'tool_usage'],
   },
+  'profile-correction-chitchat': {
+    benchmarkFamilies: ['kavi-core', 'longmem-adapted', 'memory-agent-bench-adapted'],
+    assessmentDimensions: ['memory', 'task_understanding'],
+  },
+  'preference-to-calendar-action': {
+    benchmarkFamilies: ['kavi-core', 'knowu-bench-adapted', 'memory-agent-bench-adapted'],
+    assessmentDimensions: [
+      'memory',
+      'task_understanding',
+      'task_completion',
+      'mobile_native',
+      'outcome_validators',
+    ],
+  },
+  'agent-outcome-to-chitchat': {
+    benchmarkFamilies: ['kavi-core', 'state-bench-adapted', 'memory-agent-bench-adapted'],
+    assessmentDimensions: ['memory', 'task_understanding', 'task_completion'],
+  },
+  'failure-gotcha-reuse': {
+    benchmarkFamilies: ['kavi-core', 'longmem-adapted', 'memory-agent-bench-adapted'],
+    assessmentDimensions: ['memory', 'task_understanding', 'task_completion', 'outcome_validators'],
+  },
+  'relaunch-profile-continuity': {
+    benchmarkFamilies: ['kavi-core', 'longmem-adapted', 'memory-agent-bench-adapted'],
+    assessmentDimensions: ['memory', 'task_understanding', 'task_completion'],
+  },
   'multi-turn-gate-followup': {
     benchmarkFamilies: ['kavi-core'],
     assessmentDimensions: ['control_graph', 'outcome_validators', 'task_completion'],

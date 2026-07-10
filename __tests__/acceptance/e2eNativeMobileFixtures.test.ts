@@ -77,6 +77,7 @@ describe('E2E native mobile fixtures', () => {
     const raw = await tryExecuteE2ENativeMobileTool('device_permissions', '{}');
     expect(raw).toBe(E2E_FIXTURE_DEVICE_PERMISSIONS_JSON);
     const parsed = JSON.parse(raw!);
+    expect(parsed.version).toBe('native-tools-2026-07-10');
     expect(parsed.states.denied.location.status).toBe('denied');
     expect(parsed.states.askEveryTime.camera.scope).toBe('ephemeral');
     expect(parsed.states.unavailable.screenCapture.status).toBe('unavailable');
