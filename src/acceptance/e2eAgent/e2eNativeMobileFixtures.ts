@@ -74,6 +74,38 @@ export const E2E_FIXTURE_DEVICE_PERMISSIONS_JSON = JSON.stringify({
   },
 });
 
+export const E2E_FIXTURE_DEVICE_STATUS_JSON = JSON.stringify({
+  fixtureVersion: E2E_NATIVE_TOOL_FIXTURE_VERSION,
+  battery: { level: 72, state: 'unplugged' },
+  network: { isConnected: true, type: 'WIFI', isInternetReachable: true },
+  screen: { width: 390, height: 844 },
+});
+
+export const E2E_FIXTURE_DEVICE_INFO_JSON = JSON.stringify({
+  fixtureVersion: E2E_NATIVE_TOOL_FIXTURE_VERSION,
+  brand: 'Kavi Fixture',
+  modelName: 'Deterministic Mobile Device',
+  osName: 'fixture-os',
+  osVersion: '1',
+  totalMemory: 8_000_000_000,
+  isDevice: true,
+  platform: 'fixture',
+});
+
+export const E2E_FIXTURE_DEVICE_HEALTH_JSON = JSON.stringify({
+  schemaVersion: 1,
+  collectedAt: 1_000,
+  memory: { systemTotalBytes: 8_000_000_000, appLimitBytes: 2_000_000_000 },
+  storage: {
+    totalBytes: 128_000_000_000,
+    availableBytes: 64_000_000_000,
+    usedBytes: 64_000_000_000,
+  },
+  battery: { levelPercent: 72 },
+  runtime: { uptimeMs: 50_000 },
+  observedMetricCount: 6,
+});
+
 function applyE2EPermissionFixtureState(): void {
   e2eNativeFixtureState.permissions.location = E2E_NATIVE_PERMISSION_STATES.denied.location.status;
   e2eNativeFixtureState.permissions.mediaLibrary =
@@ -492,16 +524,25 @@ async function executeE2ENativeMobileTool(
         targetKind,
       });
     }
+    case 'device_status':
+      return E2E_FIXTURE_DEVICE_STATUS_JSON;
+    case 'device_info':
+      return E2E_FIXTURE_DEVICE_INFO_JSON;
     case 'device_permissions':
       applyE2EPermissionFixtureState();
       return E2E_FIXTURE_DEVICE_PERMISSIONS_JSON;
+    case 'device_health':
+      return E2E_FIXTURE_DEVICE_HEALTH_JSON;
     case 'device_query': {
       const kind = typeof args.kind === 'string' ? args.kind.toLowerCase() : '';
-      if (kind !== 'permissions') {
-        return null;
+      if (kind === 'status') return E2E_FIXTURE_DEVICE_STATUS_JSON;
+      if (kind === 'info') return E2E_FIXTURE_DEVICE_INFO_JSON;
+      if (kind === 'health') return E2E_FIXTURE_DEVICE_HEALTH_JSON;
+      if (kind === 'permissions') {
+        applyE2EPermissionFixtureState();
+        return E2E_FIXTURE_DEVICE_PERMISSIONS_JSON;
       }
-      applyE2EPermissionFixtureState();
-      return E2E_FIXTURE_DEVICE_PERMISSIONS_JSON;
+      return null;
     }
     case 'location_current':
       return JSON.stringify({

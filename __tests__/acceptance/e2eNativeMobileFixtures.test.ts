@@ -1,5 +1,8 @@
 import {
+  E2E_FIXTURE_DEVICE_HEALTH_JSON,
+  E2E_FIXTURE_DEVICE_INFO_JSON,
   E2E_FIXTURE_DEVICE_PERMISSIONS_JSON,
+  E2E_FIXTURE_DEVICE_STATUS_JSON,
   E2E_FIXTURE_CALENDAR_EVENTS_JSON,
   E2E_FIXTURE_CALENDAR_LIST_JSON,
   getE2ENativeMobileFixtureStateSnapshot,
@@ -83,6 +86,25 @@ describe('E2E native mobile fixtures', () => {
     expect(parsed.states.unavailable.screenCapture.status).toBe('unavailable');
     expect(parsed.states.revokedMidTask.mediaLibrary.status).toBe('revoked');
   });
+
+  it.each([
+    ['status', E2E_FIXTURE_DEVICE_STATUS_JSON],
+    ['info', E2E_FIXTURE_DEVICE_INFO_JSON],
+    ['health', E2E_FIXTURE_DEVICE_HEALTH_JSON],
+    ['permissions', E2E_FIXTURE_DEVICE_PERMISSIONS_JSON],
+  ])(
+    'routes deterministic device_query %s evidence without loading Expo modules',
+    async (kind, expected) => {
+      const raw = await executeToolInner(
+        'device_query',
+        JSON.stringify({ kind }),
+        'conv-mobile-device-e2e',
+      );
+
+      expect(raw).toBe(expected);
+      expect(JSON.parse(raw)).not.toHaveProperty('error');
+    },
+  );
 
   it('routes mobile-native fixtures through executeToolInner with state evidence', async () => {
     const writeRaw = await executeToolInner(
