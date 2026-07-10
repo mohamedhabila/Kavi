@@ -18,13 +18,14 @@ import {
 } from './types';
 import {
   DISPATCHABLE_EXECUTION_RECOVERY_COMMAND_KINDS,
+  EXECUTION_RECOVERY_ATTENTION_REASONS,
   EXECUTION_RECOVERY_AUTHORITY_STATES,
   EXECUTION_RECOVERY_CANCELLATION_STATES,
   EXECUTION_RECOVERY_DISPATCH_STATES,
   EXECUTION_RECOVERY_RECEIPT_REASONS,
 } from './recoveryCoordinatorTypes';
 
-export const EXECUTION_JOURNAL_SCHEMA_VERSION = 4;
+export const EXECUTION_JOURNAL_SCHEMA_VERSION = 5;
 export const EXECUTION_JOURNAL_APPLICATION_ID = 1_263_164_492;
 
 function sqlEnum(values: readonly string[]): string {
@@ -179,6 +180,19 @@ const CREATE_EXECUTION_RECOVERY_CONTROLS = `
   ) STRICT
 `;
 
+const CREATE_EXECUTION_RECOVERY_ATTENTION = `
+  CREATE TABLE execution_recovery_attention (
+    run_id TEXT PRIMARY KEY CHECK (${ID_CHECK('run_id')}),
+    control_epoch INTEGER NOT NULL CHECK (control_epoch >= 0),
+    source_generation_updated_at INTEGER NOT NULL CHECK (source_generation_updated_at >= 0),
+    reason TEXT NOT NULL CHECK (
+      reason IN (${sqlEnum(EXECUTION_RECOVERY_ATTENTION_REASONS)})
+    ),
+    created_at INTEGER NOT NULL CHECK (created_at > source_generation_updated_at),
+    FOREIGN KEY (run_id) REFERENCES execution_runs(id) ON DELETE CASCADE
+  ) STRICT
+`;
+
 const CREATE_EXECUTION_RECOVERY_DISPATCHES = `
   CREATE TABLE execution_recovery_dispatches (
     dispatch_id TEXT PRIMARY KEY CHECK (${ID_CHECK('dispatch_id')}),
@@ -247,6 +261,7 @@ const SCHEMA_OBJECT_SQL = new Map<string, string>([
   ['execution_effects', CREATE_EXECUTION_EFFECTS],
   ['execution_external_handles', CREATE_EXECUTION_EXTERNAL_HANDLES],
   ['execution_recovery_controls', CREATE_EXECUTION_RECOVERY_CONTROLS],
+  ['execution_recovery_attention', CREATE_EXECUTION_RECOVERY_ATTENTION],
   ['execution_recovery_dispatches', CREATE_EXECUTION_RECOVERY_DISPATCHES],
   [
     'trg_execution_runs_protect_unresolved_delete',
@@ -327,6 +342,7 @@ const TABLE_NAMES = [
   'execution_effects',
   'execution_external_handles',
   'execution_recovery_controls',
+  'execution_recovery_attention',
   'execution_recovery_dispatches',
 ] as const;
 

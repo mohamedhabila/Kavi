@@ -54,6 +54,11 @@ export const EXECUTION_RECOVERY_CANCELLATION_STATES = [
   'cancel_requested',
   'cancelled',
 ] as const;
+export const EXECUTION_RECOVERY_ATTENTION_REASONS = [
+  'continued_processing_expired',
+  'platform_retry_requires_user_action',
+  'recovery_blocked',
+] as const;
 export const EXECUTION_RECOVERY_AUTHORITY_STATES = [
   'granted',
   'pending',
@@ -81,6 +86,8 @@ export const EXECUTION_RECOVERY_HANDLER_REJECTION_REASONS = [
 
 export type ExecutionRecoveryCancellationState =
   (typeof EXECUTION_RECOVERY_CANCELLATION_STATES)[number];
+export type ExecutionRecoveryAttentionReason =
+  (typeof EXECUTION_RECOVERY_ATTENTION_REASONS)[number];
 export type ExecutionRecoveryAuthorityState = (typeof EXECUTION_RECOVERY_AUTHORITY_STATES)[number];
 export type ExecutionRecoveryControlDeferReason =
   (typeof EXECUTION_RECOVERY_CONTROL_DEFER_REASONS)[number];

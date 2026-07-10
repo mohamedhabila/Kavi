@@ -214,6 +214,7 @@ describe('execution journal schema bootstrap', () => {
       'execution_checkpoints',
       'execution_effects',
       'execution_external_handles',
+      'execution_recovery_attention',
       'execution_recovery_controls',
       'execution_recovery_dispatches',
       'execution_runs',
@@ -221,7 +222,7 @@ describe('execution journal schema bootstrap', () => {
     const strictTables = db
       .getAllSync<{ name: string; strict: number }>('PRAGMA table_list')
       .filter((row) => row.name.startsWith('execution_'));
-    expect(strictTables).toHaveLength(6);
+    expect(strictTables).toHaveLength(7);
     expect(strictTables.every((row) => row.strict === 1)).toBe(true);
   });
 
@@ -245,6 +246,7 @@ describe('execution journal schema bootstrap', () => {
       'execution_checkpoints',
       'execution_effects',
       'execution_external_handles',
+      'execution_recovery_attention',
       'execution_recovery_controls',
       'execution_recovery_dispatches',
     ].flatMap((table) =>
@@ -491,6 +493,7 @@ describe('idempotency and relational integrity', () => {
       'execution_checkpoints',
       'execution_effects',
       'execution_external_handles',
+      'execution_recovery_attention',
       'execution_recovery_controls',
       'execution_recovery_dispatches',
     ]) {

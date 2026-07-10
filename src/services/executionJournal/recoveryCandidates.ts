@@ -1,5 +1,6 @@
 import { getExecutionJournalDb } from './database';
 import { digestExecutionRecoveryCommand } from './recoveryCoordinator';
+import { EXECUTION_RECOVERY_ATTENTION_REASONS } from './recoveryCoordinatorTypes';
 import type { ExecutionRecoveryCommand } from './recoveryPlanner';
 import { queryExecutionRecovery, type ExecutionRecoveryGeneration } from './recoveryQuery';
 
@@ -154,21 +155,33 @@ function readCurrentGenerationReceipt(
 
 async function readCandidate(runId: string): Promise<ReadPersistedExternalRecoveryCandidateResult> {
   const control = getExecutionJournalDb().getFirstSync<unknown>(
-    'SELECT cancellation_state FROM execution_recovery_controls WHERE run_id = ?',
+    `SELECT c.cancellation_state, a.reason AS attention_reason
+     FROM execution_recovery_controls c
+     LEFT JOIN execution_recovery_attention a ON a.run_id = c.run_id
+     WHERE c.run_id = ?`,
     runId,
   );
   if (
     !control ||
     typeof control !== 'object' ||
     Array.isArray(control) ||
-    Object.keys(control).join(',') !== 'cancellation_state' ||
+    Object.keys(control).sort().join(',') !== 'attention_reason,cancellation_state' ||
     !['active', 'cancel_requested', 'cancelled'].includes(
       String((control as Record<string, unknown>).cancellation_state),
+    ) ||
+    !(
+      (control as Record<string, unknown>).attention_reason === null ||
+      EXECUTION_RECOVERY_ATTENTION_REASONS.includes(
+        (control as Record<string, unknown>).attention_reason as never,
+      )
     )
   ) {
     throw new Error('execution_recovery_invalid_control_state');
   }
-  if ((control as { cancellation_state: string }).cancellation_state !== 'active') {
+  if (
+    (control as { cancellation_state: string }).cancellation_state !== 'active' ||
+    (control as { attention_reason: string | null }).attention_reason !== null
+  ) {
     return { kind: 'not_candidate', runId };
   }
   const result = await queryExecutionRecovery({ runId });
