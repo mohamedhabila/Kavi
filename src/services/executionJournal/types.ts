@@ -132,6 +132,10 @@ export const EXECUTION_EXTERNAL_HANDLE_STATUSES = [
   'cancelled',
 ] as const;
 
+export const EXECUTION_MONITOR_CONDITIONS = ['external_handle_terminal'] as const;
+export const EXECUTION_MONITOR_ACTIONS = ['reconcile_external_handle'] as const;
+export const EXECUTION_MONITOR_STATES = ['armed', 'acted', 'blocked'] as const;
+
 export type ExecutionDurabilityClass = (typeof EXECUTION_DURABILITY_CLASSES)[number];
 export type ExecutionRunStatus = (typeof EXECUTION_RUN_STATUSES)[number];
 export type ExecutionResumeStrategy = (typeof EXECUTION_RESUME_STRATEGIES)[number];
@@ -146,6 +150,9 @@ export type ExecutionIdempotencyClass = (typeof EXECUTION_IDEMPOTENCY_CLASSES)[n
 export type ExecutionEffectStatus = (typeof EXECUTION_EFFECT_STATUSES)[number];
 export type ExecutionExternalHandleKind = (typeof EXECUTION_EXTERNAL_HANDLE_KINDS)[number];
 export type ExecutionExternalHandleStatus = (typeof EXECUTION_EXTERNAL_HANDLE_STATUSES)[number];
+export type ExecutionMonitorCondition = (typeof EXECUTION_MONITOR_CONDITIONS)[number];
+export type ExecutionMonitorAction = (typeof EXECUTION_MONITOR_ACTIONS)[number];
+export type ExecutionMonitorState = (typeof EXECUTION_MONITOR_STATES)[number];
 
 export interface ExecutionRunRecord {
   id: string;
@@ -219,5 +226,23 @@ export interface ExecutionExternalHandleRecord {
   updatedAt: number;
   lastAttemptedAt: number;
   lastVerifiedAt: number | null;
+}
+
+export interface ExecutionMonitorRecord {
+  id: string;
+  runId: string;
+  externalHandleId: string;
+  baselineStatus: ExecutionExternalHandleStatus;
+  condition: ExecutionMonitorCondition;
+  action: ExecutionMonitorAction;
+  state: ExecutionMonitorState;
+  nextLegalCheckAt: number | null;
+  lastObservedStatus: ExecutionExternalHandleStatus;
+  observationCount: number;
+  lastObservedAt: number;
+  conditionMetAt: number | null;
+  actedAt: number | null;
+  createdAt: number;
+  updatedAt: number;
 }
 import type { ExecutionExternalHandleLocator } from './externalLocators';

@@ -9,6 +9,9 @@ import {
   EXECUTION_EXTERNAL_HANDLE_KINDS,
   EXECUTION_EXTERNAL_HANDLE_STATUSES,
   EXECUTION_IDEMPOTENCY_CLASSES,
+  EXECUTION_MONITOR_ACTIONS,
+  EXECUTION_MONITOR_CONDITIONS,
+  EXECUTION_MONITOR_STATES,
   EXECUTION_RESUME_STRATEGIES,
   EXECUTION_RETRY_POLICIES,
   EXECUTION_RUN_STATUSES,
@@ -17,6 +20,7 @@ import {
   type ExecutionCheckpointRecord,
   type ExecutionEffectRecord,
   type ExecutionExternalHandleRecord,
+  type ExecutionMonitorRecord,
   type ExecutionRunRecord,
 } from './types';
 import {
@@ -380,5 +384,92 @@ export function decodeExecutionExternalHandleRow(value: unknown): ExecutionExter
     updatedAt,
     lastAttemptedAt,
     lastVerifiedAt,
+  };
+}
+
+const MONITOR_COLUMNS = [
+  'id',
+  'run_id',
+  'external_handle_id',
+  'baseline_status',
+  'condition_kind',
+  'action_kind',
+  'state',
+  'next_legal_check_at',
+  'last_observed_status',
+  'observation_count',
+  'last_observed_at',
+  'condition_met_at',
+  'acted_at',
+  'created_at',
+  'updated_at',
+] as const;
+
+export function decodeExecutionMonitorRow(value: unknown): ExecutionMonitorRecord {
+  const row = requireRecord(value, 'monitor');
+  requireExactKeys(row, MONITOR_COLUMNS, 'monitor');
+  const createdAt = requireInteger(row.created_at, 'monitor.created_at');
+  const updatedAt = requireInteger(row.updated_at, 'monitor.updated_at');
+  const nextLegalCheckAt = nullableInteger(row.next_legal_check_at, 'monitor.next_legal_check_at');
+  const lastObservedAt = requireInteger(row.last_observed_at, 'monitor.last_observed_at');
+  const conditionMetAt = nullableInteger(row.condition_met_at, 'monitor.condition_met_at');
+  const actedAt = nullableInteger(row.acted_at, 'monitor.acted_at');
+  const state = requireEnum(row.state, EXECUTION_MONITOR_STATES, 'monitor.state');
+  const lastObservedStatus = requireEnum(
+    row.last_observed_status,
+    EXECUTION_EXTERNAL_HANDLE_STATUSES,
+    'monitor.last_observed_status',
+  );
+  const timelineValid =
+    updatedAt >= createdAt &&
+    lastObservedAt >= createdAt &&
+    lastObservedAt <= updatedAt &&
+    (nextLegalCheckAt === null || nextLegalCheckAt >= updatedAt) &&
+    (conditionMetAt === null ||
+      (conditionMetAt >= lastObservedAt && conditionMetAt <= updatedAt)) &&
+    (actedAt === null ||
+      (conditionMetAt !== null && actedAt >= conditionMetAt && actedAt <= updatedAt));
+  const stateValid =
+    (state === 'armed' &&
+      nextLegalCheckAt !== null &&
+      conditionMetAt === null &&
+      actedAt === null) ||
+    (state === 'acted' &&
+      nextLegalCheckAt === null &&
+      conditionMetAt !== null &&
+      actedAt !== null &&
+      ['succeeded', 'failed', 'cancelled'].includes(lastObservedStatus)) ||
+    (state === 'blocked' &&
+      nextLegalCheckAt === null &&
+      conditionMetAt === null &&
+      actedAt === null);
+  if (!timelineValid || !stateValid) {
+    throw new Error('execution_journal_malformed_row:monitor:timeline');
+  }
+
+  return {
+    id: requireId(row.id, 'monitor.id'),
+    runId: requireId(row.run_id, 'monitor.run_id'),
+    externalHandleId: requireId(row.external_handle_id, 'monitor.external_handle_id'),
+    baselineStatus: requireEnum(
+      row.baseline_status,
+      EXECUTION_EXTERNAL_HANDLE_STATUSES,
+      'monitor.baseline_status',
+    ),
+    condition: requireEnum(
+      row.condition_kind,
+      EXECUTION_MONITOR_CONDITIONS,
+      'monitor.condition_kind',
+    ),
+    action: requireEnum(row.action_kind, EXECUTION_MONITOR_ACTIONS, 'monitor.action_kind'),
+    state,
+    nextLegalCheckAt,
+    lastObservedStatus,
+    observationCount: requireInteger(row.observation_count, 'monitor.observation_count', 1),
+    lastObservedAt,
+    conditionMetAt,
+    actedAt,
+    createdAt,
+    updatedAt,
   };
 }

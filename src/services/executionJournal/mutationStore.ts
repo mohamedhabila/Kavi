@@ -3,6 +3,7 @@ import {
   decodeExecutionCheckpointRow,
   decodeExecutionEffectRow,
   decodeExecutionExternalHandleRow,
+  decodeExecutionMonitorRow,
   decodeExecutionRunRow,
 } from './decoders';
 import {
@@ -10,6 +11,7 @@ import {
   type ExecutionCheckpointRecord,
   type ExecutionEffectRecord,
   type ExecutionExternalHandleRecord,
+  type ExecutionMonitorRecord,
   type ExecutionRunRecord,
 } from './types';
 
@@ -110,6 +112,26 @@ export function handleRow(
   };
 }
 
+export function monitorRow(record: ExecutionMonitorRecord): Record<string, SQLite.SQLiteBindValue> {
+  return {
+    id: record.id,
+    run_id: record.runId,
+    external_handle_id: record.externalHandleId,
+    baseline_status: record.baselineStatus,
+    condition_kind: record.condition,
+    action_kind: record.action,
+    state: record.state,
+    next_legal_check_at: record.nextLegalCheckAt,
+    last_observed_status: record.lastObservedStatus,
+    observation_count: record.observationCount,
+    last_observed_at: record.lastObservedAt,
+    condition_met_at: record.conditionMetAt,
+    acted_at: record.actedAt,
+    created_at: record.createdAt,
+    updated_at: record.updatedAt,
+  };
+}
+
 export function withImmediateTransaction<T>(database: SQLite.SQLiteDatabase, work: () => T): T {
   database.execSync('BEGIN IMMEDIATE');
   try {
@@ -180,6 +202,22 @@ export function readHandle(
     throw new Error('execution_journal_external_handle_not_found');
   }
   return decodeExecutionExternalHandleRow(row);
+}
+
+export function readMonitor(
+  database: SQLite.SQLiteDatabase,
+  runId: string,
+  monitorId: string,
+): ExecutionMonitorRecord {
+  const row = database.getFirstSync<unknown>(
+    'SELECT * FROM execution_monitors WHERE run_id = ? AND id = ?',
+    runId,
+    monitorId,
+  );
+  if (!row) {
+    throw new Error('execution_journal_monitor_not_found');
+  }
+  return decodeExecutionMonitorRow(row);
 }
 
 export function assertWritableRun(run: ExecutionRunRecord, expectedControlEpoch: number): void {
@@ -256,5 +294,20 @@ export function insertCheckpoint(
        control_epoch, created_at
      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ...Object.values(checkpointRow(checkpoint)),
+  );
+}
+
+export function insertMonitor(
+  database: SQLite.SQLiteDatabase,
+  monitor: ExecutionMonitorRecord,
+): void {
+  database.runSync(
+    `INSERT INTO execution_monitors (
+       id, run_id, external_handle_id, baseline_status, condition_kind,
+       action_kind, state, next_legal_check_at, last_observed_status,
+       observation_count, last_observed_at, condition_met_at, acted_at,
+       created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ...Object.values(monitorRow(monitor)),
   );
 }

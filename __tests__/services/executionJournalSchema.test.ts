@@ -12,6 +12,7 @@ import {
   decodeExecutionCheckpointRow,
   decodeExecutionEffectRow,
   decodeExecutionExternalHandleRow,
+  decodeExecutionMonitorRow,
   decodeExecutionRunRow,
 } from '../../src/services/executionJournal/decoders';
 import {
@@ -170,11 +171,43 @@ function insertHandle(db: Db, overrides: Partial<RawRow> = {}): RawRow {
   return row;
 }
 
+function insertMonitor(db: Db, overrides: Partial<RawRow> = {}): RawRow {
+  const row: RawRow = {
+    id: 'monitor-1',
+    run_id: 'run-1',
+    external_handle_id: 'handle-1',
+    baseline_status: 'pending',
+    condition_kind: 'external_handle_terminal',
+    action_kind: 'reconcile_external_handle',
+    state: 'armed',
+    next_legal_check_at: 10,
+    last_observed_status: 'pending',
+    observation_count: 1,
+    last_observed_at: 10,
+    condition_met_at: null,
+    acted_at: null,
+    created_at: 10,
+    updated_at: 10,
+    ...overrides,
+  };
+  db.runSync(
+    `INSERT INTO execution_monitors (
+       id, run_id, external_handle_id, baseline_status, condition_kind,
+       action_kind, state, next_legal_check_at, last_observed_status,
+       observation_count, last_observed_at, condition_met_at, acted_at,
+       created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ...Object.values(row),
+  );
+  return row;
+}
+
 function seedCompleteRun(db: Db): void {
   insertRun(db);
   insertCheckpoint(db);
   insertEffect(db);
   insertHandle(db);
+  insertMonitor(db);
 }
 
 beforeEach(() => {
@@ -215,6 +248,7 @@ describe('execution journal schema bootstrap', () => {
       'execution_effects',
       'execution_external_handles',
       'execution_recovery_attention',
+      'execution_monitors',
       'execution_recovery_controls',
       'execution_recovery_dispatches',
       'execution_runs',
@@ -222,7 +256,7 @@ describe('execution journal schema bootstrap', () => {
     const strictTables = db
       .getAllSync<{ name: string; strict: number }>('PRAGMA table_list')
       .filter((row) => row.name.startsWith('execution_'));
-    expect(strictTables).toHaveLength(7);
+    expect(strictTables).toHaveLength(8);
     expect(strictTables.every((row) => row.strict === 1)).toBe(true);
   });
 
@@ -247,6 +281,7 @@ describe('execution journal schema bootstrap', () => {
       'execution_effects',
       'execution_external_handles',
       'execution_recovery_attention',
+      'execution_monitors',
       'execution_recovery_controls',
       'execution_recovery_dispatches',
     ].flatMap((table) =>
@@ -440,6 +475,53 @@ describe('closed SQL constraints', () => {
     db.runSync('DELETE FROM execution_external_handles');
     expect(() => insertHandle(db, { last_verified_at: 11, updated_at: 10 })).toThrow();
   });
+
+  it.each([
+    ['baseline_status', 'unsupported'],
+    ['condition_kind', 'unsupported'],
+    ['action_kind', 'unsupported'],
+    ['state', 'unsupported'],
+    ['observation_count', 0],
+    ['last_observed_at', 11],
+    ['next_legal_check_at', 9],
+  ])('rejects invalid execution_monitors.%s', (column, value) => {
+    const db = getExecutionJournalDb();
+    seedCompleteRun(db);
+    db.runSync('DELETE FROM execution_monitors');
+    expect(() => insertMonitor(db, { [column]: value })).toThrow();
+  });
+
+  it('enforces monitor ownership and closed state timelines', () => {
+    const db = getExecutionJournalDb();
+    seedCompleteRun(db);
+    expect(() => insertMonitor(db, { id: 'monitor-duplicate' })).toThrow();
+    db.runSync('DELETE FROM execution_monitors');
+    expect(() =>
+      insertMonitor(db, {
+        state: 'acted',
+        next_legal_check_at: null,
+        last_observed_status: 'succeeded',
+        condition_met_at: 10,
+        acted_at: 10,
+      }),
+    ).not.toThrow();
+    db.runSync('DELETE FROM execution_monitors');
+    expect(() =>
+      insertMonitor(db, {
+        state: 'acted',
+        next_legal_check_at: null,
+        last_observed_status: 'running',
+        condition_met_at: 10,
+        acted_at: 10,
+      }),
+    ).toThrow();
+    expect(() =>
+      insertMonitor(db, {
+        run_id: 'missing-run',
+        external_handle_id: 'handle-1',
+      }),
+    ).toThrow();
+  });
 });
 
 describe('idempotency and relational integrity', () => {
@@ -494,6 +576,7 @@ describe('idempotency and relational integrity', () => {
       'execution_effects',
       'execution_external_handles',
       'execution_recovery_attention',
+      'execution_monitors',
       'execution_recovery_controls',
       'execution_recovery_dispatches',
     ]) {
@@ -519,7 +602,7 @@ describe('idempotency and relational integrity', () => {
 });
 
 describe('strict row decoders', () => {
-  it('decodes exact rows from all four normalized tables', () => {
+  it('decodes exact rows from every normalized execution record', () => {
     const db = getExecutionJournalDb();
     seedCompleteRun(db);
     expect(decodeExecutionRunRow(db.getFirstSync('SELECT * FROM execution_runs'))).toEqual(
@@ -543,6 +626,16 @@ describe('strict row decoders', () => {
           workflowRunId: 'workflow-run-1',
           credentialRef: 'EXPO_TOKEN',
         },
+      }),
+    );
+    expect(decodeExecutionMonitorRow(db.getFirstSync('SELECT * FROM execution_monitors'))).toEqual(
+      expect.objectContaining({
+        id: 'monitor-1',
+        baselineStatus: 'pending',
+        condition: 'external_handle_terminal',
+        action: 'reconcile_external_handle',
+        state: 'armed',
+        nextLegalCheckAt: 10,
       }),
     );
   });
@@ -573,11 +666,16 @@ describe('strict row decoders', () => {
       decodeExecutionExternalHandleRow,
       () => seedCompleteRun(getExecutionJournalDb()),
     ],
+    ['monitor', decodeExecutionMonitorRow, () => seedCompleteRun(getExecutionJournalDb())],
   ])('rejects extra raw payload fields in %s rows', (table, decoder, seed) => {
     seed();
     const db = getExecutionJournalDb();
     const tableName =
-      table === 'external_handle' ? 'execution_external_handles' : `execution_${table}s`;
+      table === 'external_handle'
+        ? 'execution_external_handles'
+        : table === 'monitor'
+          ? 'execution_monitors'
+          : `execution_${table}s`;
     const row = db.getFirstSync<Record<string, unknown>>(`SELECT * FROM ${tableName}`)!;
     expect(() => decoder({ ...row, raw_prompt: 'must never be stored' })).toThrow(
       `execution_journal_malformed_row:${table}:columns`,
@@ -595,6 +693,7 @@ describe('strict row decoders', () => {
     const handle = db.getFirstSync<Record<string, unknown>>(
       'SELECT * FROM execution_external_handles',
     )!;
+    const monitor = db.getFirstSync<Record<string, unknown>>('SELECT * FROM execution_monitors')!;
     expect(() => decodeExecutionRunRow({ ...run, status: 'mystery' })).toThrow();
     expect(() => decodeExecutionRunRow({ ...run, input_digest: 'bad' })).toThrow();
     expect(() => decodeExecutionRunRow({ ...run, retry_count: 1.5 })).toThrow();
@@ -622,6 +721,16 @@ describe('strict row decoders', () => {
         updated_at: 10,
       }),
     ).toThrow('execution_journal_malformed_row:external_handle:timeline');
+    expect(() =>
+      decodeExecutionMonitorRow({
+        ...monitor,
+        state: 'acted',
+        next_legal_check_at: null,
+        last_observed_status: 'running',
+        condition_met_at: 10,
+        acted_at: 10,
+      }),
+    ).toThrow('execution_journal_malformed_row:monitor:timeline');
   });
 });
 

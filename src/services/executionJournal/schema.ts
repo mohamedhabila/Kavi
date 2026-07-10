@@ -10,6 +10,9 @@ import {
   EXECUTION_EXTERNAL_HANDLE_KINDS,
   EXECUTION_EXTERNAL_HANDLE_STATUSES,
   EXECUTION_IDEMPOTENCY_CLASSES,
+  EXECUTION_MONITOR_ACTIONS,
+  EXECUTION_MONITOR_CONDITIONS,
+  EXECUTION_MONITOR_STATES,
   EXECUTION_RESUME_STRATEGIES,
   EXECUTION_RETRY_POLICIES,
   EXECUTION_RUN_STATUSES,
@@ -25,7 +28,7 @@ import {
   EXECUTION_RECOVERY_RECEIPT_REASONS,
 } from './recoveryCoordinatorTypes';
 
-export const EXECUTION_JOURNAL_SCHEMA_VERSION = 5;
+export const EXECUTION_JOURNAL_SCHEMA_VERSION = 6;
 export const EXECUTION_JOURNAL_APPLICATION_ID = 1_263_164_492;
 
 function sqlEnum(values: readonly string[]): string {
@@ -164,8 +167,68 @@ const CREATE_EXECUTION_EXTERNAL_HANDLES = `
         AND github_repository IS NOT NULL
         AND github_repository = lower(github_repository))
     ),
+    UNIQUE (run_id, id),
     FOREIGN KEY (run_id, effect_id)
       REFERENCES execution_effects(run_id, id) ON DELETE CASCADE
+  ) STRICT
+`;
+
+const CREATE_EXECUTION_MONITORS = `
+  CREATE TABLE execution_monitors (
+    id TEXT PRIMARY KEY CHECK (${ID_CHECK('id')}),
+    run_id TEXT NOT NULL CHECK (${ID_CHECK('run_id')}),
+    external_handle_id TEXT NOT NULL CHECK (${ID_CHECK('external_handle_id')}),
+    baseline_status TEXT NOT NULL CHECK (
+      baseline_status IN (${sqlEnum(EXECUTION_EXTERNAL_HANDLE_STATUSES)})
+    ),
+    condition_kind TEXT NOT NULL CHECK (
+      condition_kind IN (${sqlEnum(EXECUTION_MONITOR_CONDITIONS)})
+    ),
+    action_kind TEXT NOT NULL CHECK (
+      action_kind IN (${sqlEnum(EXECUTION_MONITOR_ACTIONS)})
+    ),
+    state TEXT NOT NULL CHECK (state IN (${sqlEnum(EXECUTION_MONITOR_STATES)})),
+    next_legal_check_at INTEGER CHECK (
+      next_legal_check_at IS NULL OR next_legal_check_at >= updated_at
+    ),
+    last_observed_status TEXT NOT NULL CHECK (
+      last_observed_status IN (${sqlEnum(EXECUTION_EXTERNAL_HANDLE_STATUSES)})
+    ),
+    observation_count INTEGER NOT NULL CHECK (observation_count >= 1),
+    last_observed_at INTEGER NOT NULL CHECK (
+      last_observed_at >= created_at AND last_observed_at <= updated_at
+    ),
+    condition_met_at INTEGER CHECK (
+      condition_met_at IS NULL
+      OR (condition_met_at >= last_observed_at AND condition_met_at <= updated_at)
+    ),
+    acted_at INTEGER CHECK (
+      acted_at IS NULL
+      OR (condition_met_at IS NOT NULL AND acted_at >= condition_met_at AND acted_at <= updated_at)
+    ),
+    created_at INTEGER NOT NULL CHECK (created_at >= 0),
+    updated_at INTEGER NOT NULL CHECK (updated_at >= created_at),
+    CHECK (
+      (state = 'armed'
+        AND next_legal_check_at IS NOT NULL
+        AND condition_met_at IS NULL
+        AND acted_at IS NULL)
+      OR
+      (state = 'acted'
+        AND next_legal_check_at IS NULL
+        AND condition_met_at IS NOT NULL
+        AND acted_at IS NOT NULL
+        AND last_observed_status IN ('succeeded', 'failed', 'cancelled'))
+      OR
+      (state = 'blocked'
+        AND next_legal_check_at IS NULL
+        AND condition_met_at IS NULL
+        AND acted_at IS NULL)
+    ),
+    UNIQUE (run_id, external_handle_id),
+    FOREIGN KEY (run_id) REFERENCES execution_runs(id) ON DELETE CASCADE,
+    FOREIGN KEY (run_id, external_handle_id)
+      REFERENCES execution_external_handles(run_id, id) ON DELETE CASCADE
   ) STRICT
 `;
 
@@ -260,6 +323,7 @@ const SCHEMA_OBJECT_SQL = new Map<string, string>([
   ['execution_checkpoints', CREATE_EXECUTION_CHECKPOINTS],
   ['execution_effects', CREATE_EXECUTION_EFFECTS],
   ['execution_external_handles', CREATE_EXECUTION_EXTERNAL_HANDLES],
+  ['execution_monitors', CREATE_EXECUTION_MONITORS],
   ['execution_recovery_controls', CREATE_EXECUTION_RECOVERY_CONTROLS],
   ['execution_recovery_attention', CREATE_EXECUTION_RECOVERY_ATTENTION],
   ['execution_recovery_dispatches', CREATE_EXECUTION_RECOVERY_DISPATCHES],
@@ -334,6 +398,11 @@ const SCHEMA_OBJECT_SQL = new Map<string, string>([
     `CREATE INDEX idx_execution_external_handles_run_status
        ON execution_external_handles(run_id, status, updated_at)`,
   ],
+  [
+    'idx_execution_monitors_state_next_check',
+    `CREATE INDEX idx_execution_monitors_state_next_check
+       ON execution_monitors(state, next_legal_check_at, run_id, id)`,
+  ],
 ]);
 
 const TABLE_NAMES = [
@@ -341,6 +410,7 @@ const TABLE_NAMES = [
   'execution_checkpoints',
   'execution_effects',
   'execution_external_handles',
+  'execution_monitors',
   'execution_recovery_controls',
   'execution_recovery_attention',
   'execution_recovery_dispatches',
