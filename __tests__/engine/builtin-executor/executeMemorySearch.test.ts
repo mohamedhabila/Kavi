@@ -219,5 +219,79 @@ describe('Builtin Tool Executor', () => {
         },
       });
     });
+
+    it('exposes bounded typed experience views with the selected run policy and provenance', async () => {
+      const runFact = makeScoredFact({
+        fact: {
+          id: 'fact-agent-run-1',
+          subjectId: 'subject-run-1',
+          predicate: 'agent_run',
+          objectText: JSON.stringify({
+            status: 'completed',
+            outcome: 'Release receipt verified',
+            evidenceSlices: [
+              { action: 'Inspect release receipt', toolName: 'read_file', status: 'completed' },
+            ],
+            artifacts: ['artifacts/release-receipt.json'],
+            gotchas: ['Refresh authorization before retrying'],
+          }),
+          attributes: {},
+          sourceRunId: 'run-1',
+          sourceTurnId: 'turn-1',
+          sourceMessageId: 'message-1',
+          contentHash: 'hash-1',
+          memoryOwnerId: 'test-memory-owner',
+          factClass: 'workflow',
+          sourceAuthority: 'assistant_inferred',
+          scope: 'conversation',
+          originConversationId: 'conversation-1',
+          originThreadId: 'conversation-1',
+          originTaskId: null,
+          memoryKind: 'agent_run',
+        },
+      }).fact;
+      mockRecallFactSelectionForQuery.mockResolvedValueOnce({
+        facts: [],
+        resolutionFacts: [runFact],
+        scoredFacts: [],
+      });
+
+      const parsed = JSON.parse(
+        await executeMemorySearch({ query: 'release receipt procedure' }, MEMORY_SEARCH_SCOPE),
+      );
+
+      expect(parsed.results).toHaveLength(1);
+      expect(parsed.results[0].policy).toEqual({
+        action: 'ask',
+        reason: 'workflow_authority_confirmation_required',
+      });
+      expect(parsed.results[0].experienceViews).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'procedure',
+            evidence: expect.objectContaining({
+              factId: 'fact-agent-run-1',
+              sourceRunId: 'run-1',
+              sourceTurnId: 'turn-1',
+              sourceMessageId: 'message-1',
+            }),
+            applicability: expect.objectContaining({
+              conversationId: 'conversation-1',
+              threadId: 'conversation-1',
+              generalization: 'single_run',
+            }),
+          }),
+          expect.objectContaining({
+            kind: 'artifact',
+            values: ['artifacts/release-receipt.json'],
+          }),
+          expect.objectContaining({
+            kind: 'gotcha',
+            values: ['Refresh authorization before retrying'],
+          }),
+        ]),
+      );
+      expect(parsed.policyInstruction).toContain('ask the user before relying on action=ask');
+    });
   });
 });

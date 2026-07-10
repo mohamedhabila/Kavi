@@ -30,6 +30,7 @@ import type {
   MemoryApplicabilityAnnotation,
   MemoryApplicabilitySummary,
 } from '../../services/memory/memoryApplicabilityTypes';
+import { projectAgentRunExperienceViews } from '../../services/memory/experienceRecords';
 
 type MemorySearchScope = 'all' | 'conversation' | 'global';
 
@@ -83,6 +84,7 @@ interface MemorySearchCandidate {
 function formatSearchResult(entry: MemorySearchCandidate, index: number): object {
   const { fact, applicability } = entry;
   const source = searchSourceForFact(entry);
+  const experienceViews = projectAgentRunExperienceViews(fact);
   return {
     factId: fact.id,
     source,
@@ -96,6 +98,7 @@ function formatSearchResult(entry: MemorySearchCandidate, index: number): object
     citation: `[${index + 1}] ${source}`,
     relevance: entry.score === null ? null : `${Math.round(entry.score * 100)}%`,
     policy: applicability,
+    ...(experienceViews.length > 0 ? { experienceViews } : {}),
   };
 }
 
