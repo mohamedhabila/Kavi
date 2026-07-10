@@ -7,7 +7,10 @@ jest.mock('expo-sqlite', () => {
 import { resetE2EMemorySandbox } from '../../src/acceptance/e2eAgent/sandboxMemory';
 import { resetE2EWorkspaceSandbox } from '../../src/acceptance/e2eAgent/sandboxWorkspace';
 import { executeMemoryRemember } from '../../src/engine/tools/builtin-memory';
-import { resetE2ENativeMobileFixtures, tryExecuteE2ENativeMobileTool } from '../../src/engine/tools/e2eNativeCalendarFixtures';
+import {
+  resetE2ENativeMobileFixtures,
+  tryExecuteE2ENativeMobileTool,
+} from '../../src/engine/tools/e2eNativeCalendarFixtures';
 function buildResult(overrides: Partial<E2EScenarioResult> = {}): E2EScenarioResult {
   return {
     fixtureId: 'fixture-a',
@@ -188,7 +191,13 @@ describe('evaluateE2ERubric', () => {
     });
     const db = require('../../src/services/memory/sqlite-store').getMemoryDb();
     db.runSync(
-      `UPDATE memory_ingestion_jobs SET status = 'completed', completed_at = ? WHERE id = ?`,
+      `UPDATE memory_ingestion_jobs
+          SET status = 'completed_structural',
+              provider_outcome = 'structural_only',
+              structural_completed_at = ?,
+              completed_at = ?
+        WHERE id = ?`,
+      200,
       200,
       job!.id,
     );
