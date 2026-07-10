@@ -13,6 +13,7 @@ function makeWorker(overrides: Partial<SubAgentSnapshot> = {}): SubAgentSnapshot
     startedAt: 10,
     updatedAt: 20,
     status: 'completed',
+    completionState: 'verified_success',
     sandboxPolicy: 'inherit',
     output: 'Verified implementation details.',
     toolsUsed: ['read_file', 'python'],
@@ -74,6 +75,30 @@ describe('automatic workflow evidence helpers', () => {
         content: expect.stringContaining('pytest failed with a schema mismatch.'),
       }),
     ]);
+  });
+
+  it('does not promote a transport-completed but semantically incomplete worker', () => {
+    const entries = buildAutomaticSubAgentEvidenceEntries(
+      makeWorker({ completionState: 'incomplete' }),
+      'completed',
+    );
+
+    expect(entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'risk',
+          status: 'open',
+          title: 'Worker incomplete: worker-1',
+        }),
+        expect.objectContaining({
+          kind: 'artifact',
+          status: 'candidate',
+        }),
+      ]),
+    );
+    expect(entries).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ status: 'verified' })]),
+    );
   });
 
   it('creates Python summary and artifact evidence entries', () => {

@@ -23,6 +23,10 @@ function isSuccessfulTerminalStatus(value: unknown): boolean {
   return typeof value === 'string' && SUCCESSFUL_TERMINAL_STATUSES.has(value.trim().toLowerCase());
 }
 
+function isVerifiedCompletionState(value: unknown): boolean {
+  return value === 'verified_success';
+}
+
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
@@ -44,13 +48,20 @@ function readNumber(value: unknown): number | undefined {
 function parseTerminalDelegationRecord(
   parsed: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
-  if (isSuccessfulTerminalStatus(parsed.status)) {
+  if (
+    isSuccessfulTerminalStatus(parsed.status) &&
+    isVerifiedCompletionState(parsed.completionState)
+  ) {
     return parsed;
   }
 
   if (Array.isArray(parsed.sessions)) {
     for (const session of parsed.sessions) {
-      if (isRecord(session) && isSuccessfulTerminalStatus(session.status)) {
+      if (
+        isRecord(session) &&
+        isSuccessfulTerminalStatus(session.status) &&
+        isVerifiedCompletionState(session.completionState)
+      ) {
         return session;
       }
     }
@@ -80,6 +91,7 @@ function buildWorkerSnapshotFromTerminalRecord(
     startedAt: Date.now(),
     updatedAt: Date.now(),
     status: 'completed',
+    completionState: 'verified_success',
     sandboxPolicy: 'inherit',
     launchState: 'terminal',
     output,

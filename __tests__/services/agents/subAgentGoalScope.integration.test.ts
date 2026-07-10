@@ -13,6 +13,7 @@ function buildWorker(overrides: Partial<SubAgentSnapshot> = {}): SubAgentSnapsho
     startedAt: 10,
     updatedAt: 20,
     status: 'completed',
+    completionState: 'verified_success',
     sandboxPolicy: 'inherit',
     launchState: 'terminal',
     output: 'Verified worker findings.',
@@ -153,5 +154,37 @@ describe('subAgent goal scope integration', () => {
     expect(nextGraph?.asyncWork.pendingOperations).toEqual([]);
     expect(nextGraph?.asyncWork.awaitingBackgroundWorkers).toBe(true);
     expect(nextGraph?.status).toBe('ready');
+  });
+
+  it('clears terminal async work without turning incomplete worker prose into goal evidence', () => {
+    const baseGraph = reduceAgentControlGraph(
+      createInitialAgentRunControlGraphState({ updatedAt: 100 }),
+      [
+        {
+          type: 'GOALS_UPDATED',
+          goals: [
+            {
+              id: 'goal-a',
+              title: 'Collect sources',
+              status: 'active',
+              dependencies: [],
+              evidence: [],
+              createdAt: 1,
+              updatedAt: 1,
+            },
+          ],
+          timestamp: 100,
+        },
+      ],
+    );
+
+    const nextGraph = applySubAgentTerminalControlGraphEffects({
+      run: { controlGraph: baseGraph },
+      agent: buildWorker({ completionState: 'incomplete', output: 'I think this is done.' }),
+      event: 'completed',
+      timestamp: 200,
+    });
+
+    expect(nextGraph?.goals?.[0]?.evidence).toEqual([]);
   });
 });

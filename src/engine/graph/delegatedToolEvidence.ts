@@ -1,12 +1,7 @@
 import { normalizeToolName } from '../tools/toolNameNormalization';
 
 const DELEGATION_RESULT_TOOL_NAMES = new Set(['sessions_spawn', 'sessions_send', 'sessions_wait']);
-const SUCCESSFUL_TERMINAL_STATUSES = new Set([
-  'completed',
-  'complete',
-  'success',
-  'succeeded',
-]);
+const SUCCESSFUL_TERMINAL_STATUSES = new Set(['completed', 'complete', 'success', 'succeeded']);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -27,6 +22,10 @@ function parseJsonRecord(value: string | undefined): Record<string, unknown> | u
 
 function isSuccessfulTerminalStatus(value: unknown): boolean {
   return typeof value === 'string' && SUCCESSFUL_TERMINAL_STATUSES.has(value.trim().toLowerCase());
+}
+
+function isVerifiedCompletionState(value: unknown): boolean {
+  return value === 'verified_success';
 }
 
 function readToolNames(value: unknown): string[] {
@@ -65,13 +64,20 @@ export function collectAgentControlGraphDelegatedCompletedToolNames(params: {
   }
 
   const completedToolNames = new Set<string>();
-  if (isSuccessfulTerminalStatus(parsed.status)) {
+  if (
+    isSuccessfulTerminalStatus(parsed.status) &&
+    isVerifiedCompletionState(parsed.completionState)
+  ) {
     addToolNames(completedToolNames, parsed.toolsUsed);
   }
 
   if (Array.isArray(parsed.sessions)) {
     for (const session of parsed.sessions) {
-      if (isRecord(session) && isSuccessfulTerminalStatus(session.status)) {
+      if (
+        isRecord(session) &&
+        isSuccessfulTerminalStatus(session.status) &&
+        isVerifiedCompletionState(session.completionState)
+      ) {
         addToolNames(completedToolNames, session.toolsUsed);
       }
     }

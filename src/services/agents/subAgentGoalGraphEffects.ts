@@ -24,7 +24,9 @@ function buildWorkerGoalEvidence(
   event: SubAgentLifecycleEvent,
 ): string | undefined {
   const entries = buildAutomaticSubAgentEvidenceEntries(agent, event);
-  const primaryEntry = entries.find((entry) => entry.kind === 'summary' || entry.kind === 'risk');
+  const primaryEntry = entries.find(
+    (entry) => entry.status === 'verified' && entry.kind === 'summary',
+  );
   if (!primaryEntry?.content) {
     return undefined;
   }

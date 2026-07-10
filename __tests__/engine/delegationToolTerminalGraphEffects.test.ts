@@ -31,6 +31,7 @@ describe('delegationToolTerminalGraphEffects', () => {
       resultContent: JSON.stringify({
         sessionId: 'sub-worker',
         status: 'completed',
+        completionState: 'verified_success',
         output: 'E2E-WORKER-EVIDENCE-42',
         workstreamId: 'worker-goal',
         toolsUsed: ['write_file'],
@@ -61,6 +62,7 @@ describe('delegationToolTerminalGraphEffects', () => {
       resultContent: JSON.stringify({
         sessionId: 'sub-worker',
         status: 'completed',
+        completionState: 'verified_success',
         output: 'E2E-WORKER-CHAIN-77',
         workstreamId: 'worker-chain',
         toolsUsed: ['write_file'],
@@ -95,6 +97,24 @@ describe('delegationToolTerminalGraphEffects', () => {
     const { events, applied } = buildDelegationToolTerminalGraphEvents({
       toolName: 'sessions_spawn',
       resultContent: JSON.stringify({ status: 'running', sessionId: 'sub-worker' }),
+      run: { controlGraph },
+    });
+
+    expect(applied).toBe(false);
+    expect(events).toEqual([]);
+  });
+
+  it('does not accept completed worker prose without verified semantic completion', () => {
+    const controlGraph = createInitialAgentRunControlGraphState({ updatedAt: 100 });
+    const { events, applied } = buildDelegationToolTerminalGraphEvents({
+      toolName: 'sessions_spawn',
+      resultContent: JSON.stringify({
+        status: 'completed',
+        completionState: 'incomplete',
+        sessionId: 'sub-worker',
+        output: 'Looks done to me.',
+        workstreamId: 'worker-goal',
+      }),
       run: { controlGraph },
     });
 

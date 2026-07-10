@@ -115,6 +115,31 @@ export function buildAutomaticSubAgentEvidenceEntries(
   const workerSessionId = normalizeText(agent.sessionId);
 
   if (event === 'completed') {
+    if (agent.completionState !== 'verified_success') {
+      const content =
+        summaryContent ||
+        `Worker ${workerLabel} ended without verified completion of the assigned task.`;
+      return [
+        {
+          kind: 'risk',
+          status: 'open',
+          recorder: 'worker',
+          title: `Worker incomplete: ${workerLabel}`,
+          content,
+          dedupeKey: `worker-terminal:${agent.sessionId}`,
+          ...(workerSessionId ? { workerSessionId } : {}),
+          tags: ['worker', 'incomplete'],
+        },
+        ...buildArtifactDrafts(agent.artifacts, {
+          recorder: 'worker',
+          workerSessionId,
+          status: 'candidate',
+          titlePrefix: `${workerLabel} artifact: `,
+          dedupeKeyPrefix: `worker-artifact:${agent.sessionId}`,
+          content: `Candidate artifact retained from incomplete worker ${workerLabel}.`,
+        }),
+      ];
+    }
     const content = summaryContent || `Worker ${workerLabel} completed with verified output.`;
     return [
       {
