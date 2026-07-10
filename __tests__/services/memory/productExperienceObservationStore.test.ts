@@ -4,6 +4,7 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { getLocalMemoryVaultOwnerId } from '../../../src/services/memory/memoryVaultIdentity';
+import * as memoryPolicy from '../../../src/services/memory/policy';
 import {
   recordProductExperienceObservation,
   type ProductExperienceObservationInput,
@@ -13,6 +14,10 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
+import * as memorySchema from '../../../src/services/memory/schema';
+import * as sqliteStore from '../../../src/services/memory/sqlite-store';
+import * as Crypto from 'expo-crypto';
+import { useSettingsStore } from '../../../src/store/useSettingsStore';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -24,10 +29,13 @@ beforeEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
+  useSettingsStore.setState({ disableLongTermMemory: false } as never);
 });
 
 afterEach(() => {
+  useSettingsStore.setState({ disableLongTermMemory: false } as never);
   closeMemoryDb();
+  jest.restoreAllMocks();
 });
 
 function observation(
@@ -53,6 +61,24 @@ function observation(
 }
 
 describe('product experience observation collection boundary', () => {
+  it('rejects memory opt-out before hashing or touching schema storage', async () => {
+    useSettingsStore.setState({ disableLongTermMemory: true } as never);
+    const policySpy = jest.spyOn(memoryPolicy, 'canWriteLongTermMemory');
+    const hashMock = jest.mocked(Crypto.digestStringAsync);
+    hashMock.mockClear();
+    const schemaSpy = jest.spyOn(memorySchema, 'ensureFactSchema');
+    const databaseSpy = jest.spyOn(sqliteStore, 'getMemoryDb');
+
+    await expect(recordProductExperienceObservation(observation(), RECORDED_AT)).resolves.toEqual({
+      status: 'rejected',
+      code: 'memory_disabled',
+    });
+    expect(policySpy).toHaveBeenCalled();
+    expect(hashMock).not.toHaveBeenCalled();
+    expect(schemaSpy).not.toHaveBeenCalled();
+    expect(databaseSpy).not.toHaveBeenCalled();
+  });
+
   it('stores only exact code identities and hashed private provenance', async () => {
     const input = observation();
     const result = await recordProductExperienceObservation(input, RECORDED_AT);

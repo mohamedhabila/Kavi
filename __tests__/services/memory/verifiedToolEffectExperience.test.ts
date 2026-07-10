@@ -4,6 +4,7 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { Platform } from 'react-native';
+import * as Crypto from 'expo-crypto';
 import { buildToolEffectReceipt } from '../../../src/engine/toolExecution/toolEffectReceipt';
 import {
   recordVerifiedToolEffectExperience,
@@ -13,7 +14,9 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
+import * as sqliteStore from '../../../src/services/memory/sqlite-store';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { ToolEffectReceipt } from '../../../src/types/toolEffectReceipt';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -75,11 +78,13 @@ beforeEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
+  useSettingsStore.setState({ disableLongTermMemory: false } as never);
   mutablePlatform.OS = 'ios';
   jest.spyOn(Date, 'now').mockReturnValue(NOW);
 });
 
 afterEach(() => {
+  useSettingsStore.setState({ disableLongTermMemory: false } as never);
   closeMemoryDb();
   jest.restoreAllMocks();
 });
@@ -296,6 +301,32 @@ describe('verified tool effect experience producer', () => {
       reason: 'unsupported_contract',
     });
     expect(observationRows()).toHaveLength(0);
+  });
+
+  it('does not hash, initialize schema, or store anything after memory opt-out', async () => {
+    const effectReceipt = await receipt();
+    closeMemoryDb();
+    expoSqlite.__resetExpoSqliteForTests();
+    resetFactSchemaCacheForTests();
+    useSettingsStore.setState({ disableLongTermMemory: true } as never);
+    const hashMock = jest.mocked(Crypto.digestStringAsync);
+    hashMock.mockClear();
+    const databaseSpy = jest.spyOn(sqliteStore, 'getMemoryDb');
+
+    await expect(recordVerifiedToolEffectExperience(input(effectReceipt))).resolves.toEqual({
+      status: 'skipped',
+      reason: 'memory_disabled',
+    });
+    expect(hashMock).not.toHaveBeenCalled();
+    expect(databaseSpy).not.toHaveBeenCalled();
+
+    databaseSpy.mockRestore();
+    useSettingsStore.setState({ disableLongTermMemory: false } as never);
+    expect(
+      getMemoryDb().getFirstSync<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memory_product_experience_observations'",
+      ),
+    ).toBeNull();
   });
 
   it('returns a storage failure without throwing', async () => {

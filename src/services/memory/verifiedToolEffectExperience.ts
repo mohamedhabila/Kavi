@@ -9,6 +9,7 @@ import type {
   ToolEffectResultOutcome,
 } from '../../types/toolEffectReceipt';
 import { decodeToolEffectReceipt } from '../../utils/toolEffectReceipt';
+import { canWriteLongTermMemory } from './policy';
 import {
   recordProductExperienceObservation,
   type RecordProductExperienceObservationResult,
@@ -19,6 +20,7 @@ const PROCEDURE_CONTRACT_VERSION = 1;
 export type VerifiedToolEffectExperienceSkipReason =
   | 'invalid_identity'
   | 'invalid_receipt'
+  | 'memory_disabled'
   | 'unsupported_platform'
   | 'unsupported_contract'
   | 'non_terminal_outcome';
@@ -128,6 +130,9 @@ async function buildProcedureId(
 export async function recordVerifiedToolEffectExperience(
   input: VerifiedToolEffectExperienceInput,
 ): Promise<RecordVerifiedToolEffectExperienceResult> {
+  if (!canWriteLongTermMemory()) {
+    return { status: 'skipped', reason: 'memory_disabled' };
+  }
   const receipt = decodeToolEffectReceipt(input.receipt);
   if (!receipt) {
     return { status: 'skipped', reason: 'invalid_receipt' };

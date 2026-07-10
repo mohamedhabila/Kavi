@@ -4,6 +4,11 @@ import { runMemoryTransaction } from './access/transaction';
 import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
 import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
 import { isExactMemoryScopeId } from './memoryScopeIdentity';
+import {
+  canWriteLongTermMemory,
+  getMemoryPolicyEpoch,
+  isMemoryPolicyEpochCurrent,
+} from './policy';
 import { ensureFactSchema } from './schema';
 import { getMemoryDb } from './sqlite-store';
 
@@ -66,7 +71,7 @@ export type RecordProductExperienceObservationResult =
     }
   | {
       status: 'rejected';
-      code: 'invalid_input' | 'conflicting_run_evidence';
+      code: 'invalid_input' | 'conflicting_run_evidence' | 'memory_disabled';
     }
   | { status: 'failed'; code: 'hashing_error' | 'storage_error' };
 
@@ -321,6 +326,10 @@ export async function recordProductExperienceObservation(
   input: ProductExperienceObservationInput,
   recordedAt = Date.now(),
 ): Promise<RecordProductExperienceObservationResult> {
+  if (!canWriteLongTermMemory()) {
+    return { status: 'rejected', code: 'memory_disabled' };
+  }
+  const memoryPolicyEpoch = getMemoryPolicyEpoch();
   if (!Number.isSafeInteger(recordedAt) || recordedAt < 0 || !validInput(input, recordedAt)) {
     return { status: 'rejected', code: 'invalid_input' };
   }
@@ -330,6 +339,9 @@ export async function recordProductExperienceObservation(
     hashed = await hashObservation(input);
   } catch {
     return { status: 'failed', code: 'hashing_error' };
+  }
+  if (!isMemoryPolicyEpochCurrent(memoryPolicyEpoch)) {
+    return { status: 'rejected', code: 'memory_disabled' };
   }
 
   try {
