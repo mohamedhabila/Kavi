@@ -17,10 +17,16 @@ import type {
 import type { ForegroundRunRequestBootstrapResult } from './requestBootstrap';
 import type { ForegroundConversationExecutionContext } from './executionContext';
 import type {
+  ActivateForegroundModelExecutionInput,
   BeginForegroundModelExecutionInput,
   CompleteForegroundModelExecutionInput,
   ForegroundModelExecutionLease,
-} from '../../../services/executionJournal/foregroundModelExecutionJournal';
+} from '../../../services/executionJournal/foregroundModelExecutionTypes';
+import type { ForegroundModelProjectionOwner } from '../../../types/conversation';
+import type {
+  ForegroundModelProjectionClaimResult,
+  ForegroundModelProjectionReleaseResult,
+} from '../../../store/foregroundModelProjectionOwnership';
 
 export type EnsureCanonicalConversationOptions = {
   providerId?: string;
@@ -154,11 +160,27 @@ export interface ForegroundConversationRunState {
 export interface ExecuteForegroundConversationRunParams {
   context: {
     durability: {
-      beginModelExecution: (
+      createModelExecution: (
         input: BeginForegroundModelExecutionInput,
       ) => Promise<ForegroundModelExecutionLease>;
+      activateModelExecution: (
+        input: ActivateForegroundModelExecutionInput,
+      ) => Promise<ForegroundModelExecutionLease>;
+      claimModelProjection: (input: {
+        conversationId: string;
+        owner: ForegroundModelProjectionOwner;
+        assistantMessage?: Message;
+      }) => ForegroundModelProjectionClaimResult;
       completeModelExecution: (input: CompleteForegroundModelExecutionInput) => Promise<unknown>;
       flushChatState: () => Promise<void>;
+      ownsModelProjection: (
+        conversationId: string,
+        owner: ForegroundModelProjectionOwner,
+      ) => boolean;
+      releaseModelProjection: (input: {
+        conversationId: string;
+        owner: ForegroundModelProjectionOwner;
+      }) => ForegroundModelProjectionReleaseResult;
     };
     helpers: ForegroundConversationRunHelpers;
     refs: ForegroundConversationRunRefs;
@@ -186,5 +208,9 @@ export interface ForegroundConversationRunRuntimeParams {
   memoryConversationId: string;
   options?: RunChatOptions;
   provider: LlmProviderConfig;
+  wrapResumeAgentRun: (
+    resume: ResumeAgentRun | null,
+    terminalStatus: 'succeeded' | 'failed',
+  ) => ResumeAgentRun | null;
   shared: ExecuteForegroundConversationRunParams['context'];
 }

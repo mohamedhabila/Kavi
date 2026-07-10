@@ -4,10 +4,14 @@ jest.mock('expo-sqlite', () => {
 });
 
 import {
-  beginForegroundModelExecution,
+  activateForegroundModelExecution,
   completeForegroundModelExecution,
+  createForegroundModelExecution,
 } from '../../src/services/executionJournal/foregroundModelExecutionJournal';
-import { maintainForegroundModelExecutionRetention } from '../../src/services/executionJournal/foregroundModelExecutionRetention';
+import {
+  maintainAllForegroundModelExecutionRetention,
+  maintainForegroundModelExecutionRetention,
+} from '../../src/services/executionJournal/foregroundModelExecutionRetention';
 import {
   closeExecutionJournalDb,
   getExecutionJournalDb,
@@ -26,7 +30,8 @@ function options(prefix: string, clock: number) {
 }
 
 async function seedTerminal(prefix: string, createdAt: number) {
-  const execution = await beginForegroundModelExecution(
+  const journalOptions = options(prefix, createdAt);
+  const created = await createForegroundModelExecution(
     {
       conversationId: `conversation-${prefix}`,
       requestMessageId: `request-${prefix}`,
@@ -34,7 +39,11 @@ async function seedTerminal(prefix: string, createdAt: number) {
       requestState: {},
       modelState: {},
     },
-    options(prefix, createdAt),
+    journalOptions,
+  );
+  const execution = await activateForegroundModelExecution(
+    { lease: created },
+    journalOptions,
   );
   await completeForegroundModelExecution(
     {
@@ -64,7 +73,7 @@ afterEach(() => {
 it('removes aged terminal foreground rows without touching active work', async () => {
   const oldRunId = await seedTerminal('old', 10);
   const recentRunId = await seedTerminal('recent', 900);
-  const active = await beginForegroundModelExecution(
+  const active = await createForegroundModelExecution(
     {
       conversationId: 'conversation-active',
       requestMessageId: 'request-active',
@@ -134,4 +143,25 @@ it('bounds each cleanup pass and rejects invalid policy inputs', async () => {
   expect(() =>
     maintainForegroundModelExecutionRetention({ now: 1_000, maxRetained: 0 }),
   ).toThrow('foreground_model_retention_invalid_max_retained');
+});
+
+it('drains overflow through bounded passes until the hard retained maximum is reached', async () => {
+  await seedTerminal('one', 10);
+  await seedTerminal('two', 20);
+  await seedTerminal('three', 30);
+
+  expect(
+    maintainAllForegroundModelExecutionRetention({
+      now: 40,
+      maxAgeMs: 1_000,
+      maxRetained: 1,
+      limit: 1,
+    }),
+  ).toBe(2);
+  expect(
+    getExecutionJournalDb().getFirstSync<{ count: number }>(
+      `SELECT COUNT(*) AS count FROM execution_runs
+       WHERE status IN ('succeeded', 'failed', 'cancelled')`,
+    )?.count,
+  ).toBe(1);
 });

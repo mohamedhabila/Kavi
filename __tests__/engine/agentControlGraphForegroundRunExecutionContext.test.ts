@@ -2,6 +2,7 @@ import { runOrchestrator } from '../../src/engine/orchestrator';
 import { executeForegroundConversationRun } from '../../src/engine/graph/foregroundRun/execution';
 import { resolveForegroundConversationExecutionContext } from '../../src/engine/graph/foregroundRun/executionContext';
 import { resolveForegroundRunPreflight } from '../../src/engine/graph/foregroundRun/preflight';
+import { resolveForegroundInterruptedResponseOutcome } from '../../src/engine/graph/foregroundRun/foregroundInterruptedResponse';
 import { createForegroundRequestRegistry } from '../../src/engine/graph/foregroundRun/requestRegistry';
 import type { Conversation } from '../../src/types/conversation';
 import type { LlmProviderConfig } from '../../src/types/provider';
@@ -18,10 +19,18 @@ jest.mock('../../src/engine/graph/foregroundRun/preflight', () => ({
   resolveForegroundRunPreflight: jest.fn(),
 }));
 
+jest.mock('../../src/engine/graph/foregroundRun/foregroundInterruptedResponse', () => ({
+  resolveForegroundInterruptedResponseOutcome: jest.fn(),
+}));
+
 const mockedRunOrchestrator = runOrchestrator as jest.MockedFunction<typeof runOrchestrator>;
 const mockedResolveForegroundRunPreflight = resolveForegroundRunPreflight as jest.MockedFunction<
   typeof resolveForegroundRunPreflight
 >;
+const mockedResolveForegroundInterruptedResponseOutcome =
+  resolveForegroundInterruptedResponseOutcome as jest.MockedFunction<
+    typeof resolveForegroundInterruptedResponseOutcome
+  >;
 
 function createConversation(overrides: Partial<Conversation> = {}): Conversation {
   return {
@@ -62,27 +71,52 @@ function createExecutionContext(params: {
   ensureCanonicalConversation: jest.Mock;
 }) {
   let idSequence = 0;
+  const projectionOwners = new Map<string, { runId: string }>();
   const noOp = jest.fn();
   const flushChatState = jest.fn().mockResolvedValue(undefined);
-  const beginModelExecution = jest.fn(async (input) => ({
+  const createModelExecution = jest.fn(async (input) => ({
     runId: `journal-${input.assistantMessageId}`,
     conversationId: input.conversationId,
     requestMessageId: input.requestMessageId,
     assistantMessageId: input.assistantMessageId,
     taskId: input.taskId ?? null,
-    expectedStatus: 'running' as const,
+    createdAt: 10,
+    expectedStatus: 'queued' as const,
     controlEpoch: 0,
     updatedAt: 10,
-    checkpointId: `checkpoint-${input.assistantMessageId}`,
+    checkpointId: `created-${input.assistantMessageId}`,
     checkpointStateDigest: 'a'.repeat(64),
+  }));
+  const activateModelExecution = jest.fn(async ({ lease }) => ({
+    ...lease,
+    expectedStatus: 'running' as const,
+    updatedAt: 11,
+    checkpointId: `before-${lease.assistantMessageId}`,
   }));
   const completeModelExecution = jest.fn().mockResolvedValue(undefined);
 
   return {
     durability: {
-      beginModelExecution,
+      activateModelExecution,
+      claimModelProjection: jest.fn(({ conversationId, owner }) => {
+        const current = projectionOwners.get(conversationId);
+        if (current && current.runId !== owner.runId) return 'owner_conflict' as const;
+        projectionOwners.set(conversationId, owner);
+        return 'claimed' as const;
+      }),
       completeModelExecution,
+      createModelExecution,
       flushChatState,
+      ownsModelProjection: jest.fn((conversationId, owner) =>
+        projectionOwners.get(conversationId)?.runId === owner.runId
+      ),
+      releaseModelProjection: jest.fn(({ conversationId, owner }) => {
+        if (projectionOwners.get(conversationId)?.runId !== owner.runId) {
+          return 'owner_changed' as const;
+        }
+        projectionOwners.delete(conversationId);
+        return 'released' as const;
+      }),
     },
     helpers: {
       appendConversationLog: noOp,
@@ -164,6 +198,11 @@ describe('foreground run target-conversation execution context', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     __resetOnDeviceGuardsForTests();
+    mockedResolveForegroundInterruptedResponseOutcome.mockResolvedValue({
+      status: 'failed',
+      checkpointTitle: 'Turn failed',
+      checkpointDetail: 'stream closed',
+    });
   });
 
   it('uses the configured default mode when the target conversation has no mode', () => {
@@ -272,7 +311,7 @@ describe('foreground run target-conversation execution context', () => {
         memoryConversationId: conversation.id,
       }),
     );
-    expect(context.durability.beginModelExecution).toHaveBeenCalledWith(
+    expect(context.durability.createModelExecution).toHaveBeenCalledWith(
       expect.objectContaining({
         conversationId: conversation.id,
         requestMessageId: 'user-1',
@@ -282,8 +321,20 @@ describe('foreground run target-conversation execution context', () => {
       expect.objectContaining({ status: 'succeeded' }),
     );
     expect(
-      context.durability.beginModelExecution.mock.invocationCallOrder[0],
+      context.durability.createModelExecution.mock.invocationCallOrder[0],
     ).toBeLessThan(mockedRunOrchestrator.mock.invocationCallOrder[0]);
+    expect(
+      context.durability.createModelExecution.mock.invocationCallOrder[0],
+    ).toBeLessThan(context.durability.claimModelProjection.mock.invocationCallOrder[0]);
+    expect(
+      context.durability.claimModelProjection.mock.invocationCallOrder[0],
+    ).toBeLessThan(context.durability.flushChatState.mock.invocationCallOrder[0]);
+    expect(
+      context.durability.flushChatState.mock.invocationCallOrder[0],
+    ).toBeLessThan(context.durability.activateModelExecution.mock.invocationCallOrder[0]);
+    expect(
+      context.durability.completeModelExecution.mock.invocationCallOrder[0],
+    ).toBeLessThan(context.durability.releaseModelProjection.mock.invocationCallOrder[0]);
   });
 
   it('holds the inference lease through terminal lifecycle and releases it after completion', async () => {
@@ -376,15 +427,51 @@ describe('foreground run target-conversation execution context', () => {
         conversationId: conversation.id,
       },
     });
-    context.durability.beginModelExecution.mockRejectedValueOnce(
+    context.durability.createModelExecution.mockRejectedValueOnce(
       new Error('journal unavailable'),
     );
 
     await executeForegroundConversationRun({ context, conversationId: conversation.id });
 
     expect(mockedRunOrchestrator).not.toHaveBeenCalled();
-    expect(context.durability.flushChatState).toHaveBeenCalledTimes(2);
+    expect(context.durability.flushChatState).toHaveBeenCalledTimes(1);
     expect(context.durability.completeModelExecution).not.toHaveBeenCalled();
+  });
+
+  it('terminalizes an unclaimed journal generation when projection claim fails', async () => {
+    const conversation = createConversation({ mode: 'chitchat' });
+    const provider = createProvider('target-provider', 'target-model');
+    const context = createExecutionContext({
+      conversation,
+      providers: [provider],
+      ensureCanonicalConversation: jest.fn(),
+      recordConversationTurnMemory: jest.fn(),
+    });
+    mockedResolveForegroundRunPreflight.mockResolvedValue({
+      kind: 'ready',
+      provider,
+      providerWithApiKey: provider,
+      model: provider.model,
+      finalizationProviderContext: {
+        provider,
+        model: provider.model,
+        systemPromptText: conversation.systemPrompt,
+        conversationId: conversation.id,
+      },
+    });
+    context.durability.claimModelProjection.mockReturnValueOnce('owner_conflict');
+
+    await executeForegroundConversationRun({ context, conversationId: conversation.id });
+
+    expect(mockedRunOrchestrator).not.toHaveBeenCalled();
+    expect(context.durability.activateModelExecution).not.toHaveBeenCalled();
+    expect(context.durability.completeModelExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lease: expect.objectContaining({ expectedStatus: 'queued' }),
+        status: 'failed',
+      }),
+    );
+    expect(context.durability.releaseModelProjection).not.toHaveBeenCalled();
   });
 
   it('closes a superseded generation without starting inference after the journal boundary', async () => {
@@ -408,19 +495,13 @@ describe('foreground run target-conversation execution context', () => {
         conversationId: conversation.id,
       },
     });
-    context.durability.beginModelExecution.mockImplementationOnce(async (input) => {
+    context.durability.activateModelExecution.mockImplementationOnce(async ({ lease }) => {
       context.requests.isCurrentForegroundRequest.mockReturnValue(false);
       return {
-        runId: 'journal-cancelled',
-        conversationId: input.conversationId,
-        requestMessageId: input.requestMessageId,
-        assistantMessageId: input.assistantMessageId,
-        taskId: input.taskId ?? null,
+        ...lease,
         expectedStatus: 'running',
-        controlEpoch: 0,
-        updatedAt: 10,
+        updatedAt: 11,
         checkpointId: 'checkpoint-cancelled',
-        checkpointStateDigest: 'a'.repeat(64),
       };
     });
 
@@ -431,6 +512,55 @@ describe('foreground run target-conversation execution context', () => {
     expect(context.durability.completeModelExecution).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'cancelled' }),
     );
+  });
+
+  it('closes and releases the old generation before a nested resume may begin', async () => {
+    const conversation = createConversation({ mode: 'agentic' });
+    const provider = createProvider('target-provider', 'target-model');
+    const context = createExecutionContext({
+      conversation,
+      providers: [provider],
+      ensureCanonicalConversation: jest.fn(),
+      recordConversationTurnMemory: jest.fn(),
+    });
+    const resumeAgentRun = jest.fn().mockResolvedValue(undefined);
+    context.helpers.getResumeAgentRun = () => resumeAgentRun;
+    mockedResolveForegroundRunPreflight.mockResolvedValue({
+      kind: 'ready',
+      provider,
+      providerWithApiKey: provider,
+      model: provider.model,
+      finalizationProviderContext: {
+        provider,
+        model: provider.model,
+        systemPromptText: conversation.systemPrompt,
+        conversationId: conversation.id,
+      },
+    });
+    mockedResolveForegroundInterruptedResponseOutcome.mockResolvedValue({
+      status: 'failed',
+      checkpointTitle: 'Goals still open',
+      checkpointDetail: 'stream closed',
+      resumePrompt: 'Continue the interrupted run.',
+      resumeUserPrompt: 'Continue.',
+    });
+    mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
+      callbacks.onError(new Error('stream closed'));
+      callbacks.onDone();
+    });
+
+    await executeForegroundConversationRun({ context, conversationId: conversation.id });
+
+    expect(context.durability.completeModelExecution).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'failed' }),
+    );
+    expect(
+      context.durability.completeModelExecution.mock.invocationCallOrder[0],
+    ).toBeLessThan(context.durability.releaseModelProjection.mock.invocationCallOrder[0]);
+    expect(
+      context.durability.releaseModelProjection.mock.invocationCallOrder[0],
+    ).toBeLessThan(resumeAgentRun.mock.invocationCallOrder[0]);
+    expect(context.durability.completeModelExecution).toHaveBeenCalledTimes(1);
   });
 
   it('keeps callbacks and cleanup owned by each concurrent conversation', async () => {

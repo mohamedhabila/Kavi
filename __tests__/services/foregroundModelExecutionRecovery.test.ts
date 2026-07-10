@@ -3,7 +3,7 @@ import {
   recoverInterruptedForegroundModelExecutions,
   type ForegroundModelRecoveryDependencies,
 } from '../../src/services/executionJournal/foregroundModelExecutionRecovery';
-import type { ForegroundModelExecutionLease } from '../../src/services/executionJournal/foregroundModelExecutionJournal';
+import type { ForegroundModelExecutionLease } from '../../src/services/executionJournal/foregroundModelExecutionTypes';
 import type { Conversation } from '../../src/types/conversation';
 
 const DIGEST = 'a'.repeat(64);
@@ -17,6 +17,7 @@ function lease(
     requestMessageId: 'request-1',
     assistantMessageId: 'assistant-1',
     taskId: null,
+    createdAt: 1,
     expectedStatus: 'running',
     controlEpoch: 0,
     updatedAt: 10,
@@ -38,6 +39,12 @@ function conversation(overrides: Partial<Conversation> = {}): Conversation {
       { id: 'request-1', role: 'user', content: 'Do the work.', timestamp: 1 },
       { id: 'assistant-1', role: 'assistant', content: '', timestamp: 2 },
     ],
+    foregroundModelProjectionOwner: {
+      runId: 'run-1',
+      requestMessageId: 'request-1',
+      assistantMessageId: 'assistant-1',
+      controlEpoch: 0,
+    },
     ...overrides,
   };
 }
@@ -46,72 +53,88 @@ function harness(initialConversation: Conversation, leases = [lease()]) {
   let currentConversation = structuredClone(initialConversation);
   const flushChatState = jest.fn().mockResolvedValue(undefined);
   const complete = jest.fn().mockResolvedValue(undefined);
-  const updateMessage = jest.fn((conversationId: string, messageId: string, content: string) => {
-    if (currentConversation.id !== conversationId) return;
-    currentConversation = {
-      ...currentConversation,
-      messages: currentConversation.messages.map((message) =>
-        message.id === messageId ? { ...message, content } : message,
-      ),
-    };
-  });
-  const updateAssistantMetadata = jest.fn((conversationId, messageId, metadata) => {
-    if (currentConversation.id !== conversationId) return;
-    currentConversation = {
-      ...currentConversation,
-      messages: currentConversation.messages.map((message) =>
-        message.id === messageId ? { ...message, assistantMetadata: metadata } : message,
-      ),
-    };
-  });
-  const failToolCall = jest.fn(
-    (conversationId: string, assistantMessageId: string, toolCallId: string, completedAt: number) => {
-      if (currentConversation.id !== conversationId) return;
+  const listPending = jest.fn(
+    ({ limit, after }: { limit: number; after?: { createdAt: number; runId: string } }) => {
+      const start = after
+        ? leases.findIndex(
+            (candidate) =>
+              candidate.createdAt === after.createdAt && candidate.runId === after.runId,
+          ) + 1
+        : 0;
+      return leases.slice(Math.max(0, start), Math.max(0, start) + limit);
+    },
+  );
+  const mutateProjection = jest.fn((runLease: ForegroundModelExecutionLease, timestamp: number) => {
+    const plan = planForegroundModelRestartRecovery(runLease, currentConversation);
+    if ('kind' in plan) return plan;
+    if (plan.status === 'failed') {
+      const interrupted = new Set(
+        plan.interruptedTools.map((tool) => `${tool.assistantMessageId}:${tool.toolCallId}`),
+      );
       currentConversation = {
         ...currentConversation,
-        messages: currentConversation.messages.map((message) =>
-          message.id === assistantMessageId
+        messages: currentConversation.messages.map((message) => ({
+          ...message,
+          ...(message.id === plan.projectionMessageId
             ? {
-                ...message,
-                toolCalls: message.toolCalls?.map((toolCall) =>
-                  toolCall.id === toolCallId
+                ...(plan.shouldInsertInterruptionText
+                  ? {
+                      content:
+                        'Response interrupted because the app restarted before completion.',
+                    }
+                  : {}),
+                assistantMetadata: plan.interruptedAssistantMetadata,
+              }
+            : {}),
+          ...(message.toolCalls
+            ? {
+                toolCalls: message.toolCalls.map((toolCall) =>
+                  interrupted.has(`${message.id}:${toolCall.id}`)
                     ? {
                         ...toolCall,
                         status: 'failed' as const,
                         error:
                           'Tool execution was interrupted by an app restart. Verify any external effect before retrying.',
-                        completedAt,
+                        updatedAt: timestamp,
+                        completedAt: timestamp,
                       }
                     : toolCall,
                 ),
               }
-            : message,
-        ),
+            : {}),
+        })),
       };
-    },
-  );
-  const appendRecoveryLog = jest.fn();
+    }
+    return { kind: 'applied' as const, plan, conversation: currentConversation };
+  });
+  const releaseProjection = jest.fn((runLease: ForegroundModelExecutionLease) => {
+    if (
+      currentConversation.foregroundModelProjectionOwner?.runId !== runLease.runId
+    ) {
+      return 'owner_changed' as const;
+    }
+    currentConversation = {
+      ...currentConversation,
+      foregroundModelProjectionOwner: undefined,
+    };
+    return 'released' as const;
+  });
   const dependencies: ForegroundModelRecoveryDependencies = {
-    listPending: () => leases,
-    getConversation: (conversationId) =>
-      currentConversation.id === conversationId ? currentConversation : undefined,
-    updateMessage,
-    updateAssistantMetadata,
-    failToolCall,
-    appendRecoveryLog,
+    listPending,
+    mutateProjection,
     flushChatState,
     complete,
+    releaseProjection,
     clock: () => 20,
   };
   return {
-    appendRecoveryLog,
     complete,
     dependencies,
-    failToolCall,
     flushChatState,
     getConversation: () => currentConversation,
-    updateAssistantMetadata,
-    updateMessage,
+    listPending,
+    mutateProjection,
+    releaseProjection,
   };
 }
 
@@ -163,6 +186,23 @@ describe('foreground model restart recovery planning', () => {
             },
           },
         ],
+      }),
+    ],
+    [
+      'projection_owner_missing',
+      lease(),
+      conversation({ foregroundModelProjectionOwner: undefined }),
+    ],
+    [
+      'projection_owner_changed',
+      lease(),
+      conversation({
+        foregroundModelProjectionOwner: {
+          runId: 'newer-run',
+          requestMessageId: 'request-1',
+          assistantMessageId: 'assistant-1',
+          controlEpoch: 0,
+        },
       }),
     ],
   ] as const)('blocks %s without mutating a different projection', (reason, runLease, chat) => {
@@ -238,6 +278,47 @@ describe('foreground model restart recovery planning', () => {
       expect.objectContaining({ status: 'failed', projectionMessageId: 'assistant-2' }),
     );
   });
+
+  it('never claims an active tool call that precedes this generation assistant anchor', () => {
+    const anchoredLease = lease({ assistantMessageId: 'assistant-2' });
+    const recoveryPlan = planForegroundModelRestartRecovery(
+      anchoredLease,
+      conversation({
+        foregroundModelProjectionOwner: {
+          runId: anchoredLease.runId,
+          requestMessageId: anchoredLease.requestMessageId,
+          assistantMessageId: anchoredLease.assistantMessageId,
+          controlEpoch: anchoredLease.controlEpoch,
+        },
+        messages: [
+          { id: 'request-1', role: 'user', content: 'Do the work.', timestamp: 1 },
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: '',
+            timestamp: 2,
+            toolCalls: [
+              { id: 'older-tool', name: 'send_email', arguments: '{}', status: 'running' },
+            ],
+          },
+          {
+            id: 'assistant-2',
+            role: 'assistant',
+            content: 'Current partial answer',
+            timestamp: 3,
+          },
+        ],
+      }),
+    );
+
+    expect(recoveryPlan).toEqual(
+      expect.objectContaining({
+        status: 'failed',
+        projectionMessageId: 'assistant-2',
+        interruptedTools: [],
+      }),
+    );
+  });
 });
 
 describe('foreground model restart recovery execution', () => {
@@ -268,27 +349,10 @@ describe('foreground model restart recovery execution', () => {
       { kind: 'recovered', runId: 'run-1', status: 'failed' },
     ]);
 
-    expect(test.failToolCall).toHaveBeenCalledWith(
-      'conversation-1',
-      'assistant-1',
-      'tool-1',
+    expect(test.mutateProjection).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: 'run-1' }),
       20,
     );
-    expect(test.updateMessage).toHaveBeenCalledWith(
-      'conversation-1',
-      'assistant-1',
-      'Response interrupted because the app restarted before completion.',
-    );
-    expect(test.updateAssistantMetadata).toHaveBeenCalledWith(
-      'conversation-1',
-      'assistant-1',
-      expect.objectContaining({
-        kind: 'intermediate',
-        completionStatus: 'incomplete',
-        finishReason: 'app_restarted',
-      }),
-    );
-    expect(test.appendRecoveryLog).toHaveBeenCalledWith('conversation-1', 20);
     expect(test.complete).toHaveBeenCalledWith(
       expect.objectContaining({
         lease: expect.objectContaining({ runId: 'run-1' }),
@@ -300,6 +364,10 @@ describe('foreground model restart recovery execution', () => {
     expect(test.flushChatState.mock.invocationCallOrder[0]).toBeLessThan(
       test.complete.mock.invocationCallOrder[0],
     );
+    expect(test.complete.mock.invocationCallOrder[0]).toBeLessThan(
+      test.releaseProjection.mock.invocationCallOrder[0],
+    );
+    expect(test.flushChatState).toHaveBeenCalledTimes(2);
     expect(test.getConversation().messages[1]).toEqual(
       expect.objectContaining({
         content: 'Response interrupted because the app restarted before completion.',
@@ -328,13 +396,12 @@ describe('foreground model restart recovery execution', () => {
     await expect(recoverInterruptedForegroundModelExecutions(test.dependencies)).resolves.toEqual([
       { kind: 'recovered', runId: 'run-1', status: 'succeeded' },
     ]);
-    expect(test.updateMessage).not.toHaveBeenCalled();
-    expect(test.updateAssistantMetadata).not.toHaveBeenCalled();
-    expect(test.failToolCall).not.toHaveBeenCalled();
-    expect(test.flushChatState).toHaveBeenCalledTimes(1);
+    expect(test.mutateProjection).toHaveBeenCalledTimes(1);
+    expect(test.flushChatState).toHaveBeenCalledTimes(2);
     expect(test.complete).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'succeeded' }),
     );
+    expect(test.releaseProjection).toHaveBeenCalledTimes(1);
   });
 
   it('does not close the journal when the repaired chat projection cannot be flushed', async () => {
@@ -345,6 +412,7 @@ describe('foreground model restart recovery execution', () => {
       { kind: 'blocked', runId: 'run-1', reason: 'journal_unavailable' },
     ]);
     expect(test.complete).not.toHaveBeenCalled();
+    expect(test.releaseProjection).not.toHaveBeenCalled();
   });
 
   it('reports a stale generation without retrying model or tool execution', async () => {
@@ -357,6 +425,7 @@ describe('foreground model restart recovery execution', () => {
       { kind: 'blocked', runId: 'run-1', reason: 'generation_changed' },
     ]);
     expect(test.complete).toHaveBeenCalledTimes(1);
+    expect(test.releaseProjection).not.toHaveBeenCalled();
   });
 
   it('propagates an unavailable candidate query instead of claiming no recovery work', async () => {
@@ -367,5 +436,55 @@ describe('foreground model restart recovery execution', () => {
     await expect(recoverInterruptedForegroundModelExecutions(test.dependencies)).rejects.toThrow(
       'journal unavailable',
     );
+  });
+
+  it('cancels an unclaimed queued generation without mutating or flushing chat state', async () => {
+    const queuedLease = lease({ expectedStatus: 'queued' });
+    const test = harness(
+      conversation({ foregroundModelProjectionOwner: undefined }),
+      [queuedLease],
+    );
+
+    await expect(recoverInterruptedForegroundModelExecutions(test.dependencies)).resolves.toEqual([
+      { kind: 'recovered', runId: 'run-1', status: 'cancelled' },
+    ]);
+    expect(test.complete).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'cancelled' }),
+    );
+    expect(test.flushChatState).not.toHaveBeenCalled();
+    expect(test.releaseProjection).toHaveBeenCalledTimes(1);
+  });
+
+  it('advances a fair cursor past a full blocked page to recover later generations', async () => {
+    const leases = Array.from({ length: 33 }, (_, index) =>
+      lease({ runId: `run-${index + 1}`, createdAt: index + 1 }),
+    );
+    const last = leases.at(-1)!;
+    const ownedConversation = conversation({
+      foregroundModelProjectionOwner: {
+        runId: last.runId,
+        requestMessageId: last.requestMessageId,
+        assistantMessageId: last.assistantMessageId,
+        controlEpoch: last.controlEpoch,
+      },
+    });
+    const test = harness(ownedConversation, leases);
+    test.dependencies.mutateProjection = (candidate) => {
+      if (candidate.runId !== last.runId) {
+        return { kind: 'blocked', runId: candidate.runId, reason: 'projection_owner_changed' };
+      }
+      const plan = planForegroundModelRestartRecovery(candidate, ownedConversation);
+      if ('kind' in plan) return plan;
+      return { kind: 'applied', plan, conversation: ownedConversation };
+    };
+
+    const results = await recoverInterruptedForegroundModelExecutions(test.dependencies);
+
+    expect(test.listPending).toHaveBeenCalledTimes(2);
+    expect(results).toContainEqual({
+      kind: 'recovered',
+      runId: last.runId,
+      status: 'failed',
+    });
   });
 });

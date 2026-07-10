@@ -1,5 +1,6 @@
 import * as Crypto from 'expo-crypto';
 import type * as SQLite from 'expo-sqlite';
+import type { ForegroundModelProjectionOwner } from '../../types/conversation';
 import { generateId } from '../../utils/id';
 import { getExecutionJournalDb } from './database';
 import { decodeExecutionCheckpointRow, decodeExecutionRunRow } from './decoders';
@@ -16,52 +17,29 @@ import { canTransitionExecutionRun } from './transitions';
 import type {
   ExecutionCheckpointRecord,
   ExecutionRunRecord,
-  ExecutionRunStatus,
 } from './types';
+import {
+  FOREGROUND_MODEL_ACTIVE_RUN_STATUSES,
+  type ActivateForegroundModelExecutionInput,
+  type BeginForegroundModelExecutionInput,
+  type CompleteForegroundModelExecutionInput,
+  type ForegroundModelExecutionLease,
+} from './foregroundModelExecutionTypes';
+import { maintainForegroundModelExecutionRetention } from './foregroundModelExecutionRetention';
 
 const FOREGROUND_MODEL_JOURNAL_FORMAT = 'kavi.foreground-model-execution.v1';
-const MAX_PENDING_FOREGROUND_MODEL_RUNS = 64;
-const ACTIVE_RUN_STATUSES = [
-  'queued',
-  'running',
-  'waiting',
-  'blocked',
-  'interrupted',
-  'ambiguous',
-] as const;
-
-export type ForegroundModelTerminalStatus = Extract<
-  ExecutionRunStatus,
-  'succeeded' | 'failed' | 'cancelled'
->;
-
-export interface ForegroundModelExecutionLease {
-  runId: string;
-  conversationId: string;
-  requestMessageId: string;
-  assistantMessageId: string;
-  taskId: string | null;
-  expectedStatus: ExecutionRunStatus;
-  controlEpoch: number;
-  updatedAt: number;
-  checkpointId: string;
-  checkpointStateDigest: string;
-}
-
-export interface BeginForegroundModelExecutionInput {
-  conversationId: string;
-  requestMessageId: string;
-  assistantMessageId: string;
-  taskId?: string;
-  requestState: unknown;
-  modelState: unknown;
-}
-
-export interface CompleteForegroundModelExecutionInput {
-  lease: ForegroundModelExecutionLease;
-  status: ForegroundModelTerminalStatus;
-  projectionMessageId: string;
-  projectionState: unknown;
+export function foregroundModelProjectionOwnerForLease(
+  lease: ForegroundModelExecutionLease,
+): ForegroundModelProjectionOwner {
+  if (!validLease(lease)) {
+    throw new Error('foreground_model_journal_invalid_lease');
+  }
+  return {
+    runId: lease.runId,
+    requestMessageId: lease.requestMessageId,
+    assistantMessageId: lease.assistantMessageId,
+    controlEpoch: lease.controlEpoch,
+  };
 }
 
 interface ForegroundModelJournalOptions {
@@ -69,6 +47,7 @@ interface ForegroundModelJournalOptions {
   digest?: (value: string) => Promise<string>;
   generateId?: () => string;
   getDatabase?: () => SQLite.SQLiteDatabase;
+  maintainRetention?: (input: { now: number }) => number;
 }
 
 function validId(value: unknown): value is string {
@@ -137,7 +116,10 @@ function validLease(lease: ForegroundModelExecutionLease): boolean {
     validId(lease.requestMessageId) &&
     validId(lease.assistantMessageId) &&
     (lease.taskId === null || validId(lease.taskId)) &&
-    ACTIVE_RUN_STATUSES.includes(lease.expectedStatus as (typeof ACTIVE_RUN_STATUSES)[number]) &&
+    validTimestamp(lease.createdAt) &&
+    FOREGROUND_MODEL_ACTIVE_RUN_STATUSES.includes(
+      lease.expectedStatus as (typeof FOREGROUND_MODEL_ACTIVE_RUN_STATUSES)[number],
+    ) &&
     Number.isSafeInteger(lease.controlEpoch) &&
     lease.controlEpoch >= 0 &&
     validTimestamp(lease.updatedAt) &&
@@ -156,6 +138,7 @@ function toLease(
     requestMessageId: run.requestMessageId,
     assistantMessageId: checkpoint.stateRefId,
     taskId: run.taskId,
+    createdAt: run.createdAt,
     expectedStatus: run.status,
     controlEpoch: run.controlEpoch,
     updatedAt: run.updatedAt,
@@ -164,8 +147,8 @@ function toLease(
   };
 }
 
-/** Persist a process-bound foreground turn before any model request is allowed to start. */
-export async function beginForegroundModelExecution(
+/** Create a process-bound generation before its assistant projection may be persisted. */
+export async function createForegroundModelExecution(
   input: BeginForegroundModelExecutionInput,
   options: ForegroundModelJournalOptions = {},
 ): Promise<ForegroundModelExecutionLease> {
@@ -180,8 +163,7 @@ export async function beginForegroundModelExecution(
     options.digest ??
     ((value: string) =>
       Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, value) as Promise<string>);
-  const [inputDigest, modelConfigDigest, createdStateDigest, beforeModelStateDigest] =
-    await Promise.all([
+  const [inputDigest, modelConfigDigest, createdStateDigest] = await Promise.all([
       digestValue('request', input.requestState, digest),
       digestValue('model', input.modelState, digest),
       digestValue(
@@ -189,15 +171,9 @@ export async function beginForegroundModelExecution(
         [input.conversationId, input.requestMessageId, input.assistantMessageId],
         digest,
       ),
-      digestValue(
-        'before_model',
-        [input.conversationId, input.requestMessageId, input.assistantMessageId],
-        digest,
-      ),
     ]);
   const runId = generatedId('foreground-model', createId);
   const initialCheckpointId = generatedId('foreground-created', createId);
-  const beforeModelCheckpointId = generatedId('foreground-before-model', createId);
   const run: ExecutionRunRecord = {
     id: runId,
     conversationId: input.conversationId,
@@ -239,24 +215,6 @@ export async function beginForegroundModelExecution(
       createdAt,
     }),
   );
-  const beforeModelCheckpoint = decodeExecutionCheckpointRow(
-    checkpointRow({
-      id: beforeModelCheckpointId,
-      runId,
-      sequence: 1,
-      taskId: run.taskId,
-      goalId: null,
-      phase: 'work',
-      boundary: 'before_model',
-      stateRefId: input.assistantMessageId,
-      stateDigest: beforeModelStateDigest,
-      resumeStrategy: 'not_resumable',
-      approvalState: 'not_required',
-      permissionState: 'granted',
-      controlEpoch: 0,
-      createdAt,
-    }),
-  );
   const database = (options.getDatabase ?? getExecutionJournalDb)();
   return withImmediateTransaction(database, () => {
     insertRun(database, decodeExecutionRunRow(runRow(run)));
@@ -267,17 +225,96 @@ export async function beginForegroundModelExecution(
       createdAt,
     );
     insertCheckpoint(database, initialCheckpoint);
-    const transition = database.runSync(
-      `UPDATE execution_runs SET status = 'running'
-       WHERE id = ? AND status = 'queued' AND control_epoch = 0 AND updated_at = ?`,
+    return toLease(readRun(database, run.id), initialCheckpoint);
+  });
+}
+
+/** Arm one exact claimed generation after its projection owner has been durably flushed. */
+export async function activateForegroundModelExecution(
+  input: ActivateForegroundModelExecutionInput,
+  options: ForegroundModelJournalOptions = {},
+): Promise<ForegroundModelExecutionLease> {
+  if (!input || !validLease(input.lease) || input.lease.expectedStatus !== 'queued') {
+    throw new Error('foreground_model_journal_invalid_activation');
+  }
+  const clock = options.clock ?? Date.now;
+  const requestedAt = clock();
+  if (!validTimestamp(requestedAt)) {
+    throw new Error('foreground_model_journal_invalid_clock');
+  }
+  const createId = options.generateId ?? generateId;
+  const checkpointId = generatedId('foreground-before-model', createId);
+  const digest =
+    options.digest ??
+    ((value: string) =>
+      Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, value) as Promise<string>);
+  const stateDigest = await digestValue(
+    'before_model',
+    [
+      input.lease.conversationId,
+      input.lease.requestMessageId,
+      input.lease.assistantMessageId,
+      input.lease.runId,
+    ],
+    digest,
+  );
+  const database = (options.getDatabase ?? getExecutionJournalDb)();
+
+  return withImmediateTransaction(database, () => {
+    const run = readRun(database, input.lease.runId);
+    assertLease(run, input.lease);
+    const latestRaw = database.getFirstSync<unknown>(
+      `SELECT * FROM execution_checkpoints
+       WHERE run_id = ? ORDER BY sequence DESC, id ASC LIMIT 1`,
       run.id,
-      createdAt,
+    );
+    if (!latestRaw) throw new Error('foreground_model_journal_history_missing');
+    const latest = decodeExecutionCheckpointRow(latestRaw);
+    if (
+      latest.id !== input.lease.checkpointId ||
+      latest.stateDigest !== input.lease.checkpointStateDigest ||
+      latest.stateRefId !== input.lease.assistantMessageId ||
+      latest.controlEpoch !== run.controlEpoch ||
+      latest.boundary !== 'run_created'
+    ) {
+      throw new Error('foreground_model_journal_generation_changed');
+    }
+    assertEmptyEffectState(database, run.id);
+    if (!canTransitionExecutionRun(run.status, 'running')) {
+      throw new Error('foreground_model_journal_activation_transition_invalid');
+    }
+    const occurredAt = Math.max(requestedAt, run.updatedAt, latest.createdAt);
+    const checkpoint = decodeExecutionCheckpointRow(
+      checkpointRow({
+        id: checkpointId,
+        runId: run.id,
+        sequence: latest.sequence + 1,
+        taskId: run.taskId,
+        goalId: run.goalId,
+        phase: 'work',
+        boundary: 'before_model',
+        stateRefId: input.lease.assistantMessageId,
+        stateDigest,
+        resumeStrategy: 'not_resumable',
+        approvalState: run.approvalState,
+        permissionState: run.permissionState,
+        controlEpoch: run.controlEpoch,
+        createdAt: occurredAt,
+      }),
+    );
+    insertCheckpoint(database, checkpoint);
+    const transition = database.runSync(
+      `UPDATE execution_runs SET status = 'running', updated_at = ?
+       WHERE id = ? AND status = 'queued' AND control_epoch = ? AND updated_at = ?`,
+      occurredAt,
+      run.id,
+      run.controlEpoch,
+      run.updatedAt,
     );
     if (transition.changes !== 1) {
       throw new Error('foreground_model_journal_generation_changed');
     }
-    insertCheckpoint(database, beforeModelCheckpoint);
-    return toLease(readRun(database, run.id), beforeModelCheckpoint);
+    return toLease(readRun(database, run.id), checkpoint);
   });
 }
 
@@ -311,6 +348,7 @@ function assertLease(run: ExecutionRunRecord, lease: ForegroundModelExecutionLea
     run.threadId !== lease.conversationId ||
     run.requestMessageId !== lease.requestMessageId ||
     run.taskId !== lease.taskId ||
+    run.createdAt !== lease.createdAt ||
     run.durabilityClass !== 'foreground_interactive' ||
     run.executionSurface !== 'model' ||
     run.resumeStrategy !== 'not_resumable'
@@ -353,7 +391,7 @@ export async function completeForegroundModelExecution(
   const terminalStateDigest = await digestValue('terminal_projection', input.projectionState, digest);
   const database = (options.getDatabase ?? getExecutionJournalDb)();
 
-  return withImmediateTransaction(database, () => {
+  const completed = withImmediateTransaction(database, () => {
     const run = readRun(database, input.lease.runId);
     assertLease(run, input.lease);
     if (!canTransitionExecutionRun(run.status, input.status)) {
@@ -440,39 +478,12 @@ export async function completeForegroundModelExecution(
     }
     return readRun(database, run.id);
   });
-}
-
-/** List a bounded set of process-bound model generations left open by a prior process. */
-export function listPendingForegroundModelExecutions(
-  limit = 32,
-  options: Pick<ForegroundModelJournalOptions, 'getDatabase'> = {},
-): ForegroundModelExecutionLease[] {
-  if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_PENDING_FOREGROUND_MODEL_RUNS) {
-    throw new Error('foreground_model_journal_invalid_limit');
+  try {
+    (options.maintainRetention ?? maintainForegroundModelExecutionRetention)({
+      now: completed.terminalAt ?? requestedAt,
+    });
+  } catch (error) {
+    console.warn('[execution-journal] foreground model retention failed:', error);
   }
-  const database = (options.getDatabase ?? getExecutionJournalDb)();
-  const placeholders = ACTIVE_RUN_STATUSES.map(() => '?').join(', ');
-  const rows = database.getAllSync<unknown>(
-    `SELECT * FROM execution_runs
-     WHERE durability_class = 'foreground_interactive'
-       AND execution_surface = 'model'
-       AND resume_strategy = 'not_resumable'
-       AND status IN (${placeholders})
-     ORDER BY created_at ASC, id ASC
-     LIMIT ?`,
-    ...ACTIVE_RUN_STATUSES,
-    limit,
-  );
-  return rows.map((rawRun) => {
-    const run = decodeExecutionRunRow(rawRun);
-    const rawCheckpoint = database.getFirstSync<unknown>(
-      `SELECT * FROM execution_checkpoints
-       WHERE run_id = ? ORDER BY sequence DESC, id ASC LIMIT 1`,
-      run.id,
-    );
-    if (!rawCheckpoint) {
-      throw new Error('foreground_model_journal_history_missing');
-    }
-    return toLease(run, decodeExecutionCheckpointRow(rawCheckpoint));
-  });
+  return completed;
 }

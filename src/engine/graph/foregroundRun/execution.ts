@@ -12,7 +12,9 @@ import { prepareForegroundRunRequestBootstrap } from './requestBootstrap';
 import { resolveForegroundConversationExecutionContext } from './executionContext';
 import { acquireMainInferenceLease } from '../../../services/memory/onDeviceGuards';
 import { requestScheduledIngestionDrain } from '../../../services/memory/ingestionQueue';
-import type { ForegroundModelExecutionLease } from '../../../services/executionJournal/foregroundModelExecutionJournal';
+import { foregroundModelProjectionOwnerForLease } from '../../../services/executionJournal/foregroundModelExecutionJournal';
+import type { ForegroundModelExecutionLease } from '../../../services/executionJournal/foregroundModelExecutionTypes';
+import type { ForegroundModelProjectionOwner } from '../../../types/conversation';
 
 function buildModelReadyMessages(messages: Message[]): Message[] {
   return deduplicateToolResults(ensureToolResultPairing(messages));
@@ -95,13 +97,6 @@ export async function executeForegroundConversationRun(
 
   const { abortController, assistantMessageId, bootstrap, foregroundRequestId } = bootstrapResult;
   context.refs.forceNextScrollRef.current = true;
-  if (bootstrap.shouldInsertPlaceholderAssistant) {
-    context.store.addMessage(conversationId, {
-      id: assistantMessageId,
-      role: 'assistant',
-      content: '',
-    });
-  }
   context.requests.setStreamingMessageId(
     conversationId,
     foregroundRequestId,
@@ -129,7 +124,14 @@ export async function executeForegroundConversationRun(
       foregroundRequestId,
       abortController,
     ) && !abortController.signal.aborted;
-  const guardRunCallback = () => isCurrentRunInvocation();
+  let executionLease: ForegroundModelExecutionLease | null = null;
+  let projectionOwner: ForegroundModelProjectionOwner | null = null;
+  let journalTerminal = false;
+  let projectionReleased = false;
+  const guardRunCallback = () =>
+    isCurrentRunInvocation() &&
+    (!projectionOwner ||
+      context.durability.ownsModelProjection(conversationId, projectionOwner));
   const workspaceTarget = resolveConversationWorkspaceTarget({
     conversationId,
     conversations: context.helpers.getConversations(),
@@ -141,6 +143,12 @@ export async function executeForegroundConversationRun(
     }
     hasCompletedRunCallbacks = true;
     await task();
+  };
+
+  let closeModelGenerationForHandoff: (
+    status: 'succeeded' | 'failed',
+  ) => Promise<void> = async () => {
+    throw new Error('foreground_model_journal_handoff_not_ready');
   };
 
   const runtime = createForegroundConversationRunRuntime({
@@ -158,6 +166,13 @@ export async function executeForegroundConversationRun(
     memoryConversationId: workspaceTarget.workspaceConversationId,
     options,
     provider,
+    wrapResumeAgentRun: (resume, terminalStatus) =>
+      resume
+        ? async (resumeParams) => {
+            await closeModelGenerationForHandoff(terminalStatus);
+            await resume(resumeParams);
+          }
+        : null,
     shared: context,
   });
 
@@ -198,10 +213,66 @@ export async function executeForegroundConversationRun(
     await context.durability.flushChatState();
     return;
   }
-  let executionLease: ForegroundModelExecutionLease;
+  const closeModelGeneration = async (
+    status: 'succeeded' | 'failed' | 'cancelled',
+  ): Promise<void> => {
+    if (!executionLease) {
+      throw new Error('foreground_model_journal_generation_missing');
+    }
+    const projectionMessageId = runtime.getCurrentAssistantMessageId();
+    if (!journalTerminal) {
+      if (
+        projectionOwner &&
+        !context.durability.ownsModelProjection(conversationId, projectionOwner)
+      ) {
+        throw new Error('foreground_model_projection_ownership_changed');
+      }
+      const projectedConversation = context.helpers.getConversation(conversationId);
+      const projectionState = {
+        conversationId,
+        requestMessageId,
+        projectionMessageId,
+        terminalStatus: status,
+        projectionOwner,
+        assistantMessage: projectedConversation?.messages.find(
+          (message) => message.id === projectionMessageId,
+        ),
+        agentRun: bootstrapResult.trackedAgentRunId
+          ? projectedConversation?.agentRuns?.find(
+              (run) => run.id === bootstrapResult.trackedAgentRunId,
+            )
+          : undefined,
+      };
+      if (projectionOwner) {
+        await context.durability.flushChatState();
+        if (!context.durability.ownsModelProjection(conversationId, projectionOwner)) {
+          throw new Error('foreground_model_projection_ownership_changed');
+        }
+      }
+      await context.durability.completeModelExecution({
+        lease: executionLease,
+        status,
+        projectionMessageId,
+        projectionState,
+      });
+      journalTerminal = true;
+    }
+    if (projectionOwner && !projectionReleased) {
+      const release = context.durability.releaseModelProjection({
+        conversationId,
+        owner: projectionOwner,
+      });
+      if (release !== 'released') {
+        throw new Error(`foreground_model_projection_${release}`);
+      }
+      await context.durability.flushChatState();
+      projectionReleased = true;
+    }
+  };
+  closeModelGenerationForHandoff = (status) => closeModelGeneration(status);
+
   try {
-    await context.durability.flushChatState();
-    executionLease = await context.durability.beginModelExecution({
+    executionLease = await context.durability.createModelExecution({
       conversationId,
       requestMessageId,
       assistantMessageId,
@@ -230,9 +301,45 @@ export async function executeForegroundConversationRun(
         thinkingLevel: context.state.thinkingLevel,
       },
     });
-  } catch (error: unknown) {
-    runtime.terminalLifecycle.handleCatch(error);
+    projectionOwner = foregroundModelProjectionOwnerForLease(executionLease);
+    const claim = context.durability.claimModelProjection({
+      conversationId,
+      owner: projectionOwner,
+      ...(bootstrap.shouldInsertPlaceholderAssistant
+        ? {
+            assistantMessage: {
+              id: assistantMessageId,
+              role: 'assistant' as const,
+              content: '',
+              timestamp: Date.now(),
+            },
+          }
+        : {}),
+    });
+    if (claim !== 'claimed') {
+      projectionOwner = null;
+      throw new Error(`foreground_model_projection_${claim}`);
+    }
     await context.durability.flushChatState();
+    if (!context.durability.ownsModelProjection(conversationId, projectionOwner)) {
+      throw new Error('foreground_model_projection_ownership_changed');
+    }
+    executionLease = await context.durability.activateModelExecution({
+      lease: executionLease,
+    });
+  } catch (error: unknown) {
+    if (
+      projectionOwner &&
+      !context.durability.ownsModelProjection(conversationId, projectionOwner)
+    ) {
+      throw new Error('foreground_model_projection_ownership_changed');
+    }
+    runtime.terminalLifecycle.handleCatch(error);
+    if (executionLease) {
+      await closeModelGeneration('failed');
+    } else {
+      await context.durability.flushChatState();
+    }
     return;
   }
   let terminalStatus: 'succeeded' | 'failed' | 'cancelled';
@@ -282,6 +389,12 @@ export async function executeForegroundConversationRun(
       );
       terminalStatus = await runtime.terminalLifecycle.awaitCompletion();
     } catch (error: unknown) {
+      if (
+        projectionOwner &&
+        !context.durability.ownsModelProjection(conversationId, projectionOwner)
+      ) {
+        throw new Error('foreground_model_projection_ownership_changed');
+      }
       terminalStatus = runtime.terminalLifecycle.handleCatch(error);
     } finally {
       if (inferenceLease.release()) {
@@ -289,26 +402,7 @@ export async function executeForegroundConversationRun(
       }
     }
   }
-  await context.durability.flushChatState();
-  const projectionMessageId = runtime.getCurrentAssistantMessageId();
-  const projectedConversation = context.helpers.getConversation(conversationId);
-  await context.durability.completeModelExecution({
-    lease: executionLease,
-    status: terminalStatus,
-    projectionMessageId,
-    projectionState: {
-      conversationId,
-      requestMessageId,
-      projectionMessageId,
-      terminalStatus,
-      assistantMessage: projectedConversation?.messages.find(
-        (message) => message.id === projectionMessageId,
-      ),
-      agentRun: bootstrapResult.trackedAgentRunId
-        ? projectedConversation?.agentRuns?.find(
-            (run) => run.id === bootstrapResult.trackedAgentRunId,
-          )
-        : undefined,
-    },
-  });
+  if (!journalTerminal) {
+    await closeModelGeneration(terminalStatus);
+  }
 }

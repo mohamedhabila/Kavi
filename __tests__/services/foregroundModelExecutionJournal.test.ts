@@ -4,15 +4,17 @@ jest.mock('expo-sqlite', () => {
 });
 
 import {
-  beginForegroundModelExecution,
+  activateForegroundModelExecution,
   completeForegroundModelExecution,
-  listPendingForegroundModelExecutions,
+  createForegroundModelExecution,
 } from '../../src/services/executionJournal/foregroundModelExecutionJournal';
+import { listPendingForegroundModelExecutions } from '../../src/services/executionJournal/foregroundModelExecutionQueries';
 import {
   closeExecutionJournalDb,
   getExecutionJournalDb,
 } from '../../src/services/executionJournal/database';
 import { appendExecutionCheckpoint } from '../../src/services/executionJournal/mutations';
+import { insertRun } from '../../src/services/executionJournal/mutationStore';
 
 const DIGEST = 'a'.repeat(64);
 const sqliteMock = jest.requireMock('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -31,7 +33,8 @@ function options(clock = 10) {
 }
 
 async function begin() {
-  return beginForegroundModelExecution(
+  const journalOptions = options();
+  const created = await createForegroundModelExecution(
     {
       conversationId: 'conversation-1',
       requestMessageId: 'request-1',
@@ -40,8 +43,9 @@ async function begin() {
       requestState: { messages: ['private request text'] },
       modelState: { providerId: 'provider-1', model: 'model-1' },
     },
-    options(),
+    journalOptions,
   );
+  return activateForegroundModelExecution({ lease: created }, journalOptions);
 }
 
 beforeEach(() => {
@@ -58,9 +62,37 @@ afterEach(() => {
 });
 
 describe('foreground model execution journal', () => {
-  it('creates a non-resumable running generation before model execution', async () => {
-    const lease = await begin();
+  it('creates a queued generation before atomically arming model execution', async () => {
+    const journalOptions = options();
+    const created = await createForegroundModelExecution(
+      {
+        conversationId: 'conversation-1',
+        requestMessageId: 'request-1',
+        assistantMessageId: 'assistant-1',
+        taskId: 'task-1',
+        requestState: { messages: ['private request text'] },
+        modelState: { providerId: 'provider-1', model: 'model-1' },
+      },
+      journalOptions,
+    );
     const database = getExecutionJournalDb();
+
+    expect(created).toEqual(
+      expect.objectContaining({
+        expectedStatus: 'queued',
+        checkpointId: 'foreground-created-id-2',
+        createdAt: 10,
+      }),
+    );
+    expect(
+      database.getAllSync<Record<string, unknown>>(
+        `SELECT sequence, boundary FROM execution_checkpoints
+         WHERE run_id = ? ORDER BY sequence ASC`,
+        created.runId,
+      ),
+    ).toEqual([{ sequence: 0, boundary: 'run_created' }]);
+
+    const lease = await activateForegroundModelExecution({ lease: created }, journalOptions);
 
     expect(lease).toEqual({
       runId: 'foreground-model-id-1',
@@ -68,6 +100,7 @@ describe('foreground model execution journal', () => {
       requestMessageId: 'request-1',
       assistantMessageId: 'assistant-1',
       taskId: 'task-1',
+      createdAt: 10,
       expectedStatus: 'running',
       controlEpoch: 0,
       updatedAt: 10,
@@ -281,9 +314,94 @@ describe('foreground model execution journal', () => {
     ).toBe(1);
   });
 
+  it('keeps a committed terminal result when bounded retention maintenance fails', async () => {
+    const lease = await begin();
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const maintainRetention = jest.fn(() => {
+      throw new Error('retention unavailable');
+    });
+
+    await expect(
+      completeForegroundModelExecution(
+        {
+          lease,
+          status: 'succeeded',
+          projectionMessageId: 'assistant-1',
+          projectionState: { complete: true },
+        },
+        { ...options(20), maintainRetention },
+      ),
+    ).resolves.toEqual(expect.objectContaining({ status: 'succeeded' }));
+    expect(maintainRetention).toHaveBeenCalledWith({ now: 20 });
+    expect(warn).toHaveBeenCalledWith(
+      '[execution-journal] foreground model retention failed:',
+      expect.any(Error),
+    );
+    warn.mockRestore();
+  });
+
+  it('enforces the retained-row cap from the normal terminal completion path', async () => {
+    const database = getExecutionJournalDb();
+    for (let index = 0; index < 2_000; index += 1) {
+      insertRun(database, {
+        id: `old-${String(index).padStart(4, '0')}`,
+        conversationId: 'old-conversation',
+        threadId: 'old-conversation',
+        taskId: null,
+        goalId: null,
+        requestMessageId: 'old-request',
+        durabilityClass: 'foreground_interactive',
+        requestedCapability: 'compute',
+        executionSurface: 'model',
+        status: 'succeeded',
+        resumeStrategy: 'not_resumable',
+        approvalState: 'not_required',
+        permissionState: 'granted',
+        inputDigest: DIGEST,
+        modelConfigDigest: DIGEST,
+        retryCount: 0,
+        nextRetryPolicy: 'none',
+        controlEpoch: 1,
+        createdAt: 0,
+        updatedAt: 1,
+        terminalAt: 1,
+      });
+    }
+    const lease = await begin();
+
+    await completeForegroundModelExecution(
+      {
+        lease,
+        status: 'succeeded',
+        projectionMessageId: 'assistant-1',
+        projectionState: { complete: true },
+      },
+      options(20),
+    );
+
+    expect(
+      database.getFirstSync<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM execution_runs
+         WHERE durability_class = 'foreground_interactive'
+           AND execution_surface = 'model'
+           AND status IN ('succeeded', 'failed', 'cancelled')`,
+      )?.count,
+    ).toBe(2_000);
+    expect(
+      database.getFirstSync<{ id: string }>('SELECT id FROM execution_runs WHERE id = ?', lease.runId),
+    ).toEqual({ id: lease.runId });
+  });
+
   it('lists pending generations in bounded creation order', async () => {
     const first = await begin();
-    const second = await beginForegroundModelExecution(
+    const secondOptions = {
+      ...options(11),
+      generateId: (() => {
+        let sequence = 0;
+        return () => `second-${++sequence}`;
+      })(),
+    };
+    const secondCreated = await createForegroundModelExecution(
       {
         conversationId: 'conversation-2',
         requestMessageId: 'request-2',
@@ -291,17 +409,21 @@ describe('foreground model execution journal', () => {
         requestState: {},
         modelState: {},
       },
-      {
-        ...options(11),
-        generateId: (() => {
-          let sequence = 0;
-          return () => `second-${++sequence}`;
-        })(),
-      },
+      secondOptions,
     );
-    expect(listPendingForegroundModelExecutions(1)).toEqual([first]);
-    expect(listPendingForegroundModelExecutions(2)).toEqual([first, second]);
-    expect(() => listPendingForegroundModelExecutions(65)).toThrow(
+    const second = await activateForegroundModelExecution(
+      { lease: secondCreated },
+      secondOptions,
+    );
+    expect(listPendingForegroundModelExecutions({ limit: 1 })).toEqual([first]);
+    expect(listPendingForegroundModelExecutions({ limit: 2 })).toEqual([first, second]);
+    expect(
+      listPendingForegroundModelExecutions({
+        limit: 2,
+        after: { createdAt: first.createdAt, runId: first.runId },
+      }),
+    ).toEqual([second]);
+    expect(() => listPendingForegroundModelExecutions({ limit: 65 })).toThrow(
       'foreground_model_journal_invalid_limit',
     );
   });

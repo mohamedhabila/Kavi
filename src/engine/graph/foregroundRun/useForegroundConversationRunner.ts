@@ -11,10 +11,16 @@ import type {
   ForegroundConversationRunStreamingActions,
 } from './executionTypes';
 import {
-  beginForegroundModelExecution,
+  activateForegroundModelExecution,
   completeForegroundModelExecution,
+  createForegroundModelExecution,
 } from '../../../services/executionJournal/foregroundModelExecutionJournal';
 import { flushChatStorePersistenceNow } from '../../../store/chatStorePersistence';
+import {
+  claimForegroundModelProjection,
+  ownsForegroundModelProjection,
+  releaseForegroundModelProjection,
+} from '../../../store/foregroundModelProjectionOwnership';
 
 type UseForegroundConversationRunnerParams = {
   appendConversationLog: ForegroundConversationRunHelpers['appendConversationLog'];
@@ -50,9 +56,13 @@ export function useForegroundConversationRunner(
   const context = useMemo(
     () => ({
       durability: {
-        beginModelExecution: beginForegroundModelExecution,
+        activateModelExecution: activateForegroundModelExecution,
+        claimModelProjection: claimForegroundModelProjection,
         completeModelExecution: completeForegroundModelExecution,
+        createModelExecution: createForegroundModelExecution,
         flushChatState: flushChatStorePersistenceNow,
+        ownsModelProjection: ownsForegroundModelProjection,
+        releaseModelProjection: releaseForegroundModelProjection,
       },
       helpers: {
         appendConversationLog: params.appendConversationLog,

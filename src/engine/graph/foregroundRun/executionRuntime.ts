@@ -25,6 +25,7 @@ export function createForegroundConversationRunRuntime(
     model,
     options,
     provider,
+    wrapResumeAgentRun,
     shared,
   } = params;
   const appendConversationLog = (entry: ForegroundRunLogEntryInput) =>
@@ -70,6 +71,7 @@ export function createForegroundConversationRunRuntime(
     memoryConversationId,
     runId,
     runStartedAt,
+    wrapResumeAgentRun,
     shared,
     trackedRunStore,
   });

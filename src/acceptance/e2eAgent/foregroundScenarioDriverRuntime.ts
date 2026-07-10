@@ -10,9 +10,15 @@ import { createForegroundRequestRegistry } from '../../engine/graph/foregroundRu
 import { clearAgentRunCancellation } from '../../services/agents/agentRunCancellation';
 import { createAgentRunIdentityKey } from '../../services/agents/agentRunIdentity';
 import {
-  beginForegroundModelExecution,
+  activateForegroundModelExecution,
   completeForegroundModelExecution,
+  createForegroundModelExecution,
 } from '../../services/executionJournal/foregroundModelExecutionJournal';
+import {
+  claimForegroundModelProjection,
+  ownsForegroundModelProjection,
+  releaseForegroundModelProjection,
+} from '../../store/foregroundModelProjectionOwnership';
 import { resolveConversationProviderContext } from '../../services/llm/support/providerSupport';
 import {
   drainIngestionQueueWithWakeup,
@@ -457,9 +463,13 @@ export function createForegroundScenarioRuntime(
   const settings = useSettingsStore.getState();
   context = {
     durability: {
-      beginModelExecution: beginForegroundModelExecution,
+      activateModelExecution: activateForegroundModelExecution,
+      claimModelProjection: claimForegroundModelProjection,
       completeModelExecution: completeForegroundModelExecution,
+      createModelExecution: createForegroundModelExecution,
       flushChatState: flushChatStorePersistenceNow,
+      ownsModelProjection: ownsForegroundModelProjection,
+      releaseModelProjection: releaseForegroundModelProjection,
     },
     helpers: {
       appendConversationLog: (conversationId, entry) =>

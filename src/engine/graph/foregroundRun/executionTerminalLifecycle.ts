@@ -33,6 +33,7 @@ type RuntimeTerminalLifecycleParams = Pick<
   | 'conversationId'
   | 'finalizationProviderContext'
   | 'getCurrentConversation'
+  | 'wrapResumeAgentRun'
   | 'shared'
 > & {
   abort: AbortController;
@@ -63,6 +64,7 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
     memoryConversationId,
     runId,
     runStartedAt,
+    wrapResumeAgentRun,
     shared,
     trackedRunStore,
   } = params;
@@ -176,7 +178,7 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
         outcome: interruptedOutcome,
         recoverAgentRunFinalPreview,
         requestPersistenceCheckpoint: shared.helpers.requestPersistenceCheckpoint,
-        resumeAgentRun: shared.helpers.getResumeAgentRun(),
+        resumeAgentRun: wrapResumeAgentRun(shared.helpers.getResumeAgentRun(), 'failed'),
         runId,
         setAgentRunPhase: shared.store.setAgentRunPhase,
         setChatError: shared.helpers.setChatError,
@@ -235,7 +237,10 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
             conversationId,
             finalizeTrackedRun: trackedRunStore.finalizeRun,
             recoverAgentRunFinalPreview,
-            resumeAgentRun: shared.helpers.getResumeAgentRun(),
+            resumeAgentRun: wrapResumeAgentRun(
+              shared.helpers.getResumeAgentRun(),
+              'succeeded',
+            ),
             runId,
             signal: abort.signal,
             turnSummary,
