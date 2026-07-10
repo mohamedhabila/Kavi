@@ -1,0 +1,676 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/intent-frame.schema.json",
+  "title": "Kavi evaluator-only intent frame",
+  "description": "Closed contracts for scoring frozen intent-frame candidates against evaluator-owned gold labels without exposing case content in the public report.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/intentFrameInput"
+    },
+    {
+      "$ref": "#/$defs/intentFrameReport"
+    }
+  ],
+  "$defs": {
+    "safeId": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "canonicalAtom": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._:-]*$"
+    },
+    "canonicalAtomSet": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/canonicalAtom"
+      },
+      "minItems": 1,
+      "maxItems": 32,
+      "uniqueItems": true
+    },
+    "requestedAction": {
+      "type": "string",
+      "enum": [
+        "answer",
+        "clarify",
+        "plan",
+        "execute",
+        "remember",
+        "forget",
+        "monitor",
+        "converse",
+        "abstain"
+      ]
+    },
+    "requestedMode": {
+      "type": "string",
+      "enum": ["chitchat", "agentic", "either", "clarify_before_routing"]
+    },
+    "approvalRisk": {
+      "type": "string",
+      "enum": ["none", "approval_required", "prohibited", "unknown"]
+    },
+    "candidateFrame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goal",
+        "entities",
+        "constraints",
+        "preferences",
+        "missingInformation",
+        "requestedAction",
+        "requestedMode",
+        "approvalRisk",
+        "temporalRequirements",
+        "successCriteria"
+      ],
+      "properties": {
+        "goal": {
+          "$ref": "#/$defs/canonicalAtomSet"
+        },
+        "entities": {
+          "$ref": "#/$defs/canonicalAtomSet"
+        },
+        "constraints": {
+          "$ref": "#/$defs/canonicalAtomSet"
+        },
+        "preferences": {
+          "$ref": "#/$defs/canonicalAtomSet"
+        },
+        "missingInformation": {
+          "$ref": "#/$defs/canonicalAtomSet"
+        },
+        "requestedAction": {
+          "$ref": "#/$defs/requestedAction"
+        },
+        "requestedMode": {
+          "$ref": "#/$defs/requestedMode"
+        },
+        "approvalRisk": {
+          "$ref": "#/$defs/approvalRisk"
+        },
+        "temporalRequirements": {
+          "$ref": "#/$defs/canonicalAtomSet"
+        },
+        "successCriteria": {
+          "$ref": "#/$defs/canonicalAtomSet"
+        }
+      }
+    },
+    "ambiguousGoldField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason"],
+      "properties": {
+        "status": {
+          "const": "ambiguous"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "multiple_valid_interpretations",
+            "annotator_disagreement",
+            "insufficient_context"
+          ]
+        }
+      }
+    },
+    "unscorableGoldField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason"],
+      "properties": {
+        "status": {
+          "const": "unscorable"
+        },
+        "reason": {
+          "type": "string",
+          "enum": ["corrupt_source", "unsupported_language", "missing_gold", "invalid_source"]
+        }
+      }
+    },
+    "scorableAtomGoldField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "values"],
+      "properties": {
+        "status": {
+          "const": "scorable"
+        },
+        "values": {
+          "$ref": "#/$defs/canonicalAtomSet"
+        }
+      }
+    },
+    "atomGoldField": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/scorableAtomGoldField"
+        },
+        {
+          "$ref": "#/$defs/ambiguousGoldField"
+        },
+        {
+          "$ref": "#/$defs/unscorableGoldField"
+        }
+      ]
+    },
+    "scorableActionGoldField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "value"],
+      "properties": {
+        "status": {
+          "const": "scorable"
+        },
+        "value": {
+          "$ref": "#/$defs/requestedAction"
+        }
+      }
+    },
+    "actionGoldField": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/scorableActionGoldField"
+        },
+        {
+          "$ref": "#/$defs/ambiguousGoldField"
+        },
+        {
+          "$ref": "#/$defs/unscorableGoldField"
+        }
+      ]
+    },
+    "scorableModeGoldField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "value"],
+      "properties": {
+        "status": {
+          "const": "scorable"
+        },
+        "value": {
+          "$ref": "#/$defs/requestedMode"
+        }
+      }
+    },
+    "modeGoldField": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/scorableModeGoldField"
+        },
+        {
+          "$ref": "#/$defs/ambiguousGoldField"
+        },
+        {
+          "$ref": "#/$defs/unscorableGoldField"
+        }
+      ]
+    },
+    "scorableApprovalGoldField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "value"],
+      "properties": {
+        "status": {
+          "const": "scorable"
+        },
+        "value": {
+          "$ref": "#/$defs/approvalRisk"
+        }
+      }
+    },
+    "approvalGoldField": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/scorableApprovalGoldField"
+        },
+        {
+          "$ref": "#/$defs/ambiguousGoldField"
+        },
+        {
+          "$ref": "#/$defs/unscorableGoldField"
+        }
+      ]
+    },
+    "goldFrame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goal",
+        "entities",
+        "constraints",
+        "preferences",
+        "missingInformation",
+        "requestedAction",
+        "requestedMode",
+        "approvalRisk",
+        "temporalRequirements",
+        "successCriteria"
+      ],
+      "properties": {
+        "goal": {
+          "$ref": "#/$defs/atomGoldField"
+        },
+        "entities": {
+          "$ref": "#/$defs/atomGoldField"
+        },
+        "constraints": {
+          "$ref": "#/$defs/atomGoldField"
+        },
+        "preferences": {
+          "$ref": "#/$defs/atomGoldField"
+        },
+        "missingInformation": {
+          "$ref": "#/$defs/atomGoldField"
+        },
+        "requestedAction": {
+          "$ref": "#/$defs/actionGoldField"
+        },
+        "requestedMode": {
+          "$ref": "#/$defs/modeGoldField"
+        },
+        "approvalRisk": {
+          "$ref": "#/$defs/approvalGoldField"
+        },
+        "temporalRequirements": {
+          "$ref": "#/$defs/atomGoldField"
+        },
+        "successCriteria": {
+          "$ref": "#/$defs/atomGoldField"
+        }
+      }
+    },
+    "intentFrameCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "language",
+        "productArea",
+        "requestSha256",
+        "candidate",
+        "gold"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "language": {
+          "type": "string",
+          "maxLength": 35,
+          "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$"
+        },
+        "productArea": {
+          "type": "string",
+          "enum": [
+            "chat",
+            "memory",
+            "mobile_native",
+            "agentic_workflow",
+            "long_task",
+            "privacy_safety"
+          ]
+        },
+        "requestSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "candidate": {
+          "$ref": "#/$defs/candidateFrame"
+        },
+        "gold": {
+          "$ref": "#/$defs/goldFrame"
+        }
+      }
+    },
+    "intentFrameInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "$schema",
+        "kind",
+        "schemaVersion",
+        "id",
+        "frozenAt",
+        "evaluator",
+        "source",
+        "cases"
+      ],
+      "properties": {
+        "$schema": {
+          "const": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/intent-frame.schema.json"
+        },
+        "kind": {
+          "const": "intent_frame_evaluation_input"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "frozenAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "evaluator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "implementationSha256", "rubricSha256"],
+          "properties": {
+            "kind": {
+              "const": "deterministic_structural"
+            },
+            "implementationSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "rubricSha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "candidateArtifactSha256",
+            "goldLabelsSha256",
+            "goldLabelsAccess",
+            "appRuntimeAccess"
+          ],
+          "properties": {
+            "candidateArtifactSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "goldLabelsSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "goldLabelsAccess": {
+              "const": "evaluator_only"
+            },
+            "appRuntimeAccess": {
+              "const": false
+            }
+          }
+        },
+        "cases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/intentFrameCase"
+          },
+          "minItems": 1,
+          "maxItems": 100000
+        }
+      }
+    },
+    "nullableRate": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "fieldScore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field",
+        "scorable",
+        "ambiguous",
+        "unscorable",
+        "truePositive",
+        "falsePositive",
+        "falseNegative",
+        "precision",
+        "recall",
+        "f1"
+      ],
+      "properties": {
+        "field": {
+          "type": "string",
+          "enum": [
+            "goal",
+            "entities",
+            "constraints",
+            "preferences",
+            "missingInformation",
+            "requestedAction",
+            "requestedMode",
+            "approvalRisk",
+            "temporalRequirements",
+            "successCriteria"
+          ]
+        },
+        "scorable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ambiguous": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unscorable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "truePositive": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "falsePositive": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "falseNegative": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "precision": {
+          "$ref": "#/$defs/nullableRate"
+        },
+        "recall": {
+          "$ref": "#/$defs/nullableRate"
+        },
+        "f1": {
+          "$ref": "#/$defs/nullableRate"
+        }
+      }
+    },
+    "coverageEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "caseCount"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "caseCount": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "intentFrameReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "$schema",
+        "kind",
+        "schemaVersion",
+        "generatedAt",
+        "inputSha256",
+        "evaluator",
+        "source",
+        "claimEligible",
+        "eligibilityFailures",
+        "counts",
+        "macroF1",
+        "fields",
+        "coverage",
+        "leakageControls"
+      ],
+      "properties": {
+        "$schema": {
+          "const": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/intent-frame.schema.json"
+        },
+        "kind": {
+          "const": "intent_frame_evaluation_report"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "generatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "inputSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "evaluator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "implementationSha256", "rubricSha256"],
+          "properties": {
+            "kind": {
+              "const": "deterministic_structural"
+            },
+            "implementationSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "rubricSha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["candidateArtifactSha256", "goldLabelsSha256"],
+          "properties": {
+            "candidateArtifactSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "goldLabelsSha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "claimEligible": {
+          "type": "boolean"
+        },
+        "eligibilityFailures": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "invalid_contract",
+              "invalid_configuration",
+              "candidate_digest_mismatch",
+              "gold_digest_mismatch",
+              "duplicate_case",
+              "invalid_none_atom",
+              "incomplete_field_coverage"
+            ]
+          },
+          "maxItems": 7,
+          "uniqueItems": true
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cases", "fieldLabels", "scorable", "ambiguous", "unscorable"],
+          "properties": {
+            "cases": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "fieldLabels": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "scorable": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "ambiguous": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unscorable": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "macroF1": {
+          "$ref": "#/$defs/nullableRate"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/fieldScore"
+          },
+          "minItems": 10,
+          "maxItems": 10
+        },
+        "coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["languages", "productAreas"],
+          "properties": {
+            "languages": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/coverageEntry"
+              },
+              "maxItems": 1000
+            },
+            "productAreas": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/coverageEntry"
+              },
+              "maxItems": 6
+            }
+          }
+        },
+        "leakageControls": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "closedCandidateFrame",
+            "rawRequestExcluded",
+            "executionEvidenceExcluded",
+            "finalAnswerExcluded",
+            "appRuntimeAccess"
+          ],
+          "properties": {
+            "closedCandidateFrame": {
+              "const": true
+            },
+            "rawRequestExcluded": {
+              "const": true
+            },
+            "executionEvidenceExcluded": {
+              "const": true
+            },
+            "finalAnswerExcluded": {
+              "const": true
+            },
+            "appRuntimeAccess": {
+              "const": false
+            }
+          }
+        }
+      }
+    }
+  }
+}
