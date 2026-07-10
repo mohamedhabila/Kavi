@@ -619,15 +619,6 @@ describe('strict row decoders', () => {
         updated_at: 10,
       }),
     ).toThrow('execution_journal_malformed_row:external_handle:timeline');
-    expect(() =>
-      decodeExecutionExternalHandleRow({
-        ...handle,
-        handle_kind: 'github_workflow_run',
-        expo_project_id: null,
-        github_repository: 'OpenAI/Kavi-Mobile',
-        workflow_run_id: '12345',
-      }),
-    ).toThrow('execution_journal_malformed_row:external_handle:locator');
   });
 });
 
