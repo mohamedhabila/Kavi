@@ -17,6 +17,7 @@ import {
   commitIngestionPersistenceReceipt,
   type IngestionReceiptProviderOutcomeCode,
 } from './ingestionReceiptStore';
+import { hasSealedIngestionJobIdentity } from './ingestionQueueIdentity';
 import {
   claimIngestionJob,
   completeIngestionJob,
@@ -26,7 +27,6 @@ import {
   getIngestionJob,
   getIngestionJobForProcessing,
   getNextPendingIngestionAttemptAt,
-  hasSealedIngestionJobIdentity,
   INGESTION_RETRY_BASE_DELAY_MS,
   listPendingIngestionJobs,
   markIngestionJobStructuralComplete,

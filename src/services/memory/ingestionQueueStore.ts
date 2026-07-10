@@ -11,11 +11,21 @@ import { runMemoryTransaction } from './access/transaction';
 import { ensureFactSchema, newId } from './schema';
 import { isMemoryIngestionSourceWithdrawn } from './withdrawalFence';
 import { isExactMemoryScopeId } from './memoryScopeIdentity';
-import {
-  isExactMemoryProvenanceId,
-  requireExactMemoryProvenanceId,
-} from './memoryProvenanceIdentity';
+import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
 import { getMemoryDb } from './sqlite-store';
+import {
+  hasSealedIngestionJobIdentity,
+  ingestionIdentityFailureCode,
+  isValidIngestionThreadTitle,
+  optionalIngestionProvenanceIdentity,
+  optionalIngestionScopeIdentity,
+  requireIngestionProvenanceIdentity,
+  requireIngestionScopeIdentity,
+  requireIngestionTimestamp,
+  requireMatchingIngestionSourceIdentity,
+  rowToIngestionJob,
+} from './ingestionQueueIdentity';
+import type { IngestionJobRow, IngestionSourceIdentity } from './ingestionQueueIdentity';
 
 export const INGESTION_RETRY_BASE_DELAY_MS = 15_000;
 export const INGESTION_RETRY_MAX_DELAY_MS = 5 * 60_000;
@@ -85,154 +95,6 @@ export interface IngestionJob {
   completedAt: number | null;
 }
 
-interface IngestionJobRow {
-  id: string;
-  thread_id: string;
-  thread_title: string | null;
-  memory_conversation_id: string;
-  persona_id: string | null;
-  task_id: string | null;
-  source_run_id: string | null;
-  chat_provider_id: string | null;
-  chat_model: string | null;
-  source_start_message_id: string | null;
-  source_end_message_id: string;
-  source_at: number;
-  reason: string;
-  status: string;
-  attempt_count: number;
-  provider_enrichment: number;
-  provider_outcome: string | null;
-  outcome_code: string | null;
-  next_attempt_at: number | null;
-  lease_expires_at: number | null;
-  claim_token: string | null;
-  structural_completed_at: number | null;
-  created_at: number;
-  updated_at: number;
-  completed_at: number | null;
-}
-
-function requireIngestionScopeIdentity(value: unknown, code: string): string {
-  if (!isExactMemoryScopeId(value)) throw new Error(code);
-  return value;
-}
-
-function requireIngestionProvenanceIdentity(value: unknown, code: string): string {
-  return requireExactMemoryProvenanceId(value, code);
-}
-
-function optionalIngestionScopeIdentity(
-  value: string | null | undefined,
-  code: string,
-): string | null {
-  if (value === null || value === undefined) return null;
-  return requireIngestionScopeIdentity(value, code);
-}
-
-function optionalIngestionProvenanceIdentity(
-  value: string | null | undefined,
-  code: string,
-): string | null {
-  if (value === null || value === undefined) return null;
-  return requireIngestionProvenanceIdentity(value, code);
-}
-
-function requireIngestionTimestamp(value: unknown, code: string): number {
-  if (!Number.isSafeInteger(value) || (value as number) < 0) throw new Error(code);
-  return value as number;
-}
-
-function isValidIngestionThreadTitle(value: unknown): value is string | null {
-  return (
-    value === null ||
-    (typeof value === 'string' &&
-      value.length > 0 &&
-      value.length <= 500 &&
-      value.trim() === value &&
-      !/[\u0000-\u001f\u007f]/u.test(value))
-  );
-}
-
-function isOptionalIngestionScopeIdentity(value: unknown): value is string | null {
-  return value === null || isExactMemoryScopeId(value);
-}
-
-function isOptionalIngestionProvenanceIdentity(value: unknown): value is string | null {
-  return value === null || isExactMemoryProvenanceId(value);
-}
-
-interface IngestionSourceIdentity {
-  threadId: string;
-  threadTitle: string | null;
-  memoryConversationId: string;
-  personaId: string;
-  taskId: string | null;
-  sourceStartMessageId: string | null;
-  sourceEndMessageId: string;
-  sourceRunId: string | null;
-  sourceAt: number;
-  chatProviderId: string | null;
-  chatModel: string | null;
-  reason: IngestionJobReason;
-  providerEnrichment: boolean;
-}
-
-function requireMatchingIngestionSourceIdentity(
-  row: IngestionJobRow,
-  identity: IngestionSourceIdentity,
-): IngestionJob {
-  if (
-    row.thread_id !== identity.threadId ||
-    row.thread_title !== identity.threadTitle ||
-    row.memory_conversation_id !== identity.memoryConversationId ||
-    row.persona_id !== identity.personaId ||
-    row.task_id !== identity.taskId ||
-    row.source_start_message_id !== identity.sourceStartMessageId ||
-    row.source_end_message_id !== identity.sourceEndMessageId ||
-    row.source_run_id !== identity.sourceRunId ||
-    row.source_at !== identity.sourceAt ||
-    row.chat_provider_id !== identity.chatProviderId ||
-    row.chat_model !== identity.chatModel ||
-    row.reason !== identity.reason ||
-    (row.provider_enrichment !== 0) !== identity.providerEnrichment
-  ) {
-    throw new Error('memory_ingestion_source_identity_conflict');
-  }
-  return rowToJob(row);
-}
-
-function rowToJob(row: IngestionJobRow): IngestionJob {
-  const threadId = row.thread_id;
-  return {
-    id: row.id,
-    threadId,
-    threadTitle: row.thread_title,
-    memoryConversationId: row.memory_conversation_id,
-    personaId: isExactMemoryScopeId(row.persona_id) ? row.persona_id : null,
-    taskId: row.task_id,
-    sourceRunId: row.source_run_id,
-    chatProviderId: row.chat_provider_id,
-    chatModel: row.chat_model,
-    sourceStartMessageId: row.source_start_message_id,
-    sourceEndMessageId: row.source_end_message_id,
-    sourceAt: row.source_at,
-    reason: row.reason as IngestionJobReason,
-    status: row.status as IngestionJobStatus,
-    attemptCount: row.attempt_count,
-    providerEnrichment: row.provider_enrichment !== 0,
-    providerOutcome: row.provider_outcome as IngestionProviderOutcome | null,
-    outcomeCode: row.outcome_code as IngestionOutcomeCode | null,
-    nextAttemptAt: row.next_attempt_at,
-    leaseExpiresAt: row.lease_expires_at,
-    claimToken: row.claim_token,
-    structuralCompletedAt: row.structural_completed_at,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    completedAt: row.completed_at,
-  };
-}
-
 export interface EnqueueIngestionJobInput {
   threadId: string;
   threadTitle: string | null;
@@ -248,34 +110,6 @@ export interface EnqueueIngestionJobInput {
   reason: IngestionJobReason;
   providerEnrichment: boolean;
   now?: number;
-}
-
-export function hasSealedIngestionJobIdentity(
-  job: IngestionJob,
-): job is IngestionJob & { personaId: string } {
-  return (
-    isExactMemoryScopeId(job.id) &&
-    isExactMemoryScopeId(job.threadId) &&
-    isValidIngestionThreadTitle(job.threadTitle) &&
-    isExactMemoryScopeId(job.memoryConversationId) &&
-    isExactMemoryScopeId(job.personaId) &&
-    isOptionalIngestionScopeIdentity(job.taskId) &&
-    isOptionalIngestionProvenanceIdentity(job.sourceRunId) &&
-    isOptionalIngestionScopeIdentity(job.chatProviderId) &&
-    isOptionalIngestionProvenanceIdentity(job.chatModel) &&
-    isOptionalIngestionProvenanceIdentity(job.sourceStartMessageId) &&
-    isExactMemoryProvenanceId(job.sourceEndMessageId) &&
-    Number.isSafeInteger(job.sourceAt) &&
-    job.sourceAt >= 0 &&
-    (job.reason === 'turn_completed' || job.reason === 'migration' || job.reason === 'manual') &&
-    (job.chatProviderId === null) === (job.chatModel === null)
-  );
-}
-
-function ingestionIdentityFailureCode(
-  job: IngestionJob,
-): 'persona_scope_missing' | 'source_identity_invalid' {
-  return job.personaId === null ? 'persona_scope_missing' : 'source_identity_invalid';
 }
 
 export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJob | null {
@@ -414,7 +248,7 @@ export function enqueueIngestionJob(input: EnqueueIngestionJobInput): IngestionJ
     );
     return existing ? requireMatchingIngestionSourceIdentity(existing, sourceIdentity) : null;
   }
-  return rowToJob({
+  return rowToIngestionJob({
     id,
     thread_id: threadId,
     thread_title: threadTitle,
@@ -571,7 +405,7 @@ export function listPendingIngestionJobs(
   );
   const jobs: IngestionJob[] = [];
   for (const row of rows) {
-    const job = rowToJob(row);
+    const job = rowToIngestionJob(row);
     if (hasSealedIngestionJobIdentity(job)) {
       jobs.push(job);
       continue;
@@ -588,7 +422,7 @@ export function getIngestionJob(jobId: string): IngestionJob | null {
     `SELECT * FROM memory_ingestion_jobs WHERE id = ? LIMIT 1`,
     jobId,
   );
-  return row ? rowToJob(row) : null;
+  return row ? rowToIngestionJob(row) : null;
 }
 
 export function getIngestionJobForProcessing(jobId: string): IngestionJob | null {
@@ -598,7 +432,7 @@ export function getIngestionJobForProcessing(jobId: string): IngestionJob | null
     `SELECT * FROM memory_ingestion_jobs WHERE id = ? LIMIT 1`,
     jobId,
   );
-  return row ? rowToJob(row) : null;
+  return row ? rowToIngestionJob(row) : null;
 }
 
 export function getIngestionJobForSourceTurn(input: {
@@ -624,7 +458,7 @@ export function getIngestionJobForSourceTurn(input: {
     input.sourceThreadId,
     input.sourceEndMessageId,
   );
-  return row ? rowToJob(row) : null;
+  return row ? rowToIngestionJob(row) : null;
 }
 
 export function computeNextIngestionAttemptAt(now: number, attemptCount: number): number {
@@ -642,7 +476,7 @@ export function claimIngestionJob(jobId: string, now: number): string | null {
     jobId,
   );
   if (!row) return null;
-  const job = rowToJob(row);
+  const job = rowToIngestionJob(row);
   if (!hasSealedIngestionJobIdentity(job)) {
     failIngestionJobForInvalidIdentity(job.id, ingestionIdentityFailureCode(job), now);
     return null;
