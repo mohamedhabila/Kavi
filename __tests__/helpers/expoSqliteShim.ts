@@ -20,9 +20,20 @@ interface ShimDb {
   closeSync: () => void;
 }
 
-function adapt(db: Database.Database): ShimDb {
-  return {
+interface ControlledShimDb {
+  api: ShimDb;
+  forceClose: () => void;
+  reopen: () => void;
+}
+
+function adapt(db: Database.Database): ControlledShimDb {
+  let open = true;
+  const requireOpen = (): void => {
+    if (!open) throw new TypeError('The database connection is not open');
+  };
+  const api: ShimDb = {
     runSync: (sql: string, ...params: Param[]) => {
+      requireOpen();
       const result = db.prepare(sql).run(...params);
       return {
         changes: result.changes,
@@ -30,20 +41,30 @@ function adapt(db: Database.Database): ShimDb {
       };
     },
     getFirstSync: <T,>(sql: string, ...params: Param[]) => {
+      requireOpen();
       return (db.prepare(sql).get(...params) as T | undefined) ?? null;
     },
     getAllSync: <T,>(sql: string, ...params: Param[]) => {
+      requireOpen();
       return db.prepare(sql).all(...params) as T[];
     },
     execSync: (sql: string) => {
+      requireOpen();
       db.exec(sql);
     },
     closeSync: () => {
-      try {
-        db.close();
-      } catch {
-        // ignore double-close
-      }
+      open = false;
+    },
+  };
+  return {
+    api,
+    forceClose: () => {
+      if (db.open) db.close();
+      open = false;
+    },
+    reopen: () => {
+      if (!db.open) throw new TypeError('The database connection cannot be reopened');
+      open = true;
     },
   };
 }
@@ -57,7 +78,7 @@ export function makeExpoSqliteMock(): {
   openDatabaseSync: (name: string) => ShimDb;
   __resetExpoSqliteForTests: () => void;
 } {
-  const handles = new Map<string, ShimDb>();
+  const handles = new Map<string, ControlledShimDb>();
   return {
     openDatabaseSync: (name: string) => {
       let h = handles.get(name);
@@ -65,12 +86,13 @@ export function makeExpoSqliteMock(): {
         h = adapt(new Database(':memory:'));
         handles.set(name, h);
       }
-      return h;
+      h.reopen();
+      return h.api;
     },
     __resetExpoSqliteForTests: () => {
       for (const h of handles.values()) {
         try {
-          h.closeSync();
+          h.forceClose();
         } catch {
           // ignore
         }

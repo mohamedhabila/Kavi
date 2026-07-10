@@ -16,6 +16,7 @@ import {
   getE2ENativeMobileFixtureStateSnapshot,
   getE2ENativeMobileInvocationSnapshots,
 } from './e2eNativeMobileFixtures';
+import { relaunchForegroundScenarioApp } from './foregroundScenarioLifecycle';
 import {
   applyForegroundScenarioRoute,
   buildForegroundScenarioCompletionSnapshot,
@@ -41,6 +42,8 @@ export type {
   ForegroundScenarioDriverResult,
   ForegroundScenarioExecutionContextSnapshot,
   ForegroundScenarioFinalAssistantSnapshot,
+  ForegroundScenarioLifecycleBoundary,
+  ForegroundScenarioLifecycleSnapshot,
   ForegroundScenarioMemorySnapshot,
   ForegroundScenarioMemoryTurnEvidence,
   ForegroundScenarioNativeEvidenceSnapshot,
@@ -85,6 +88,9 @@ function validateInput(input: ForegroundScenarioDriverInput): void {
   validatePositiveNumber(input.memoryTimeoutMs, 'memoryTimeoutMs');
   for (const [index, turn] of input.turns.entries()) {
     requireTrimmed(turn.content, `turns[${index}].content`);
+    if (turn.lifecycleBefore !== undefined && turn.lifecycleBefore !== 'app_relaunch') {
+      throw new Error(`turns[${index}].lifecycleBefore must be app_relaunch.`);
+    }
     validatePositiveNumber(turn.maxTokens, `turns[${index}].maxTokens`);
     validatePositiveNumber(turn.timeoutMs, `turns[${index}].timeoutMs`);
   }
@@ -127,10 +133,18 @@ async function runScenarioIsolated(
       sourceThreadId: input.conversationId,
     };
     let previousMemoryState = captureScopedMemoryEvidence(memoryScope);
-    const runtime = createForegroundScenarioRuntime(input, memoryRecords);
+    let runtime = createForegroundScenarioRuntime(input, memoryRecords);
     const turnSnapshots: ForegroundScenarioTurnSnapshot[] = [];
     for (const [turnIndex, turn] of input.turns.entries()) {
       const startedAt = Date.now();
+      const lifecycleBefore = turn.lifecycleBefore
+        ? await relaunchForegroundScenarioApp({
+            conversationId: input.conversationId,
+            memoryScope,
+            memoryStateBefore: previousMemoryState,
+          })
+        : null;
+      if (lifecycleBefore) runtime = createForegroundScenarioRuntime(input, memoryRecords);
       const nativeStateBefore = getE2ENativeMobileFixtureStateSnapshot();
       const nativeInvocationStart = getE2ENativeMobileInvocationSnapshots().length;
       const route = applyForegroundScenarioRoute(
@@ -220,6 +234,7 @@ async function runScenarioIsolated(
           error: turnError,
           finalAssistant,
           finalAssistantCandidateCount: finalAssistantResolution.candidateCount,
+          lifecycleBefore,
           memory,
           memoryEvidence: {
             delta: buildScopedMemoryEvidenceDelta(previousMemoryState, memoryStateAfter),

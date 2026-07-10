@@ -20,8 +20,17 @@ export type ForegroundScenarioRouteDirective =
   | 'forced_chitchat'
   | 'forced_agentic';
 
+export type ForegroundScenarioLifecycleBoundary = 'app_relaunch';
+
+export type ForegroundScenarioLifecycleSnapshot = Readonly<{
+  boundary: ForegroundScenarioLifecycleBoundary;
+  chatStore: 'rehydrated';
+  memoryStore: 'reopened';
+}>;
+
 export type ForegroundScenarioTurnInput = {
   content: string;
+  lifecycleBefore?: ForegroundScenarioLifecycleBoundary;
   route: ForegroundScenarioRouteDirective;
   maxTokens?: number;
   timeoutMs?: number;
@@ -105,6 +114,7 @@ export type ForegroundScenarioTurnSnapshot = Readonly<{
   error: string | null;
   finalAssistant: ForegroundScenarioFinalAssistantSnapshot | null;
   finalAssistantCandidateCount: number;
+  lifecycleBefore: ForegroundScenarioLifecycleSnapshot | null;
   memory: ReadonlyArray<ForegroundScenarioMemorySnapshot>;
   memoryEvidence: ForegroundScenarioMemoryTurnEvidence;
   native: ForegroundScenarioNativeEvidenceSnapshot;
