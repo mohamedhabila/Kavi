@@ -43,6 +43,7 @@ LOCAL_PATH_PATTERNS = (
     re.compile(r"(?i)\b[A-Z]:\\Users\\[^\s\"']+"),
 )
 NETWORK_FIELD_MARKERS = ("base_url", "endpoint", "host", "url")
+PATH_FIELD_SUFFIXES = ("path", "paths", "dir", "root")
 
 
 @dataclass(frozen=True)
@@ -162,7 +163,12 @@ def sanitize_string(
         raise SubmissionReadinessError(f"Unmapped file URL remains at {field_path}")
     if any(pattern.search(sanitized) for pattern in LOCAL_PATH_PATTERNS):
         raise SubmissionReadinessError(f"Unmapped local path remains at {field_path}")
-    if any(marker in field_path.lower().split(".")[-1] for marker in NETWORK_FIELD_MARKERS):
+    field_name = re.sub(r"\[[0-9]+\]$", "", field_path.lower().split(".")[-1])
+    if field_name.endswith(PATH_FIELD_SUFFIXES) and (
+        sanitized.startswith("/") or re.match(r"(?i)^[A-Z]:\\", sanitized)
+    ):
+        raise SubmissionReadinessError(f"Unmapped absolute path remains at {field_path}")
+    if any(marker in field_name for marker in NETWORK_FIELD_MARKERS):
         require_safe_network_value(sanitized, field_path)
     return sanitized, replacement_count
 

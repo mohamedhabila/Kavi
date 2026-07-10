@@ -127,6 +127,22 @@ class SubmissionStagingTest(unittest.TestCase):
                 self.run_dir, self.root / "staged", self.replacements()
             )
 
+    def test_rejects_unmapped_absolute_tool_paths(self) -> None:
+        write_json(
+            self.run_dir / "run_args.json",
+            {
+                "base_url": "https://reader.example.test/v1",
+                "runtime_bundle_path": "/opt/private/runtime.cjs",
+            },
+        )
+
+        with self.assertRaisesRegex(
+            staging.SubmissionReadinessError, "Unmapped absolute path"
+        ):
+            staging.stage_domain_run(
+                self.run_dir, self.root / "staged", self.replacements()
+            )
+
     def test_rejects_private_network_metadata(self) -> None:
         write_json(
             self.run_dir / "run_args.json",
