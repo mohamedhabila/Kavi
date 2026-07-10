@@ -16,8 +16,14 @@ export function buildAgentControlGraphForcedTextOnlyTurnPrompt(
       return '[SYSTEM FINAL DELIVERY]\nTool use is disabled for this turn.\nThe active context is updated and no blocking goal remains; answer from the current graph and memory state now.';
     case 'incomplete_delivery_continuation':
       return '[SYSTEM FINAL ANSWER CONTINUE]\nTool use is disabled for this turn.\nContinue the interrupted final answer from where it stopped.\nPreserve the existing answer and finish cleanly.';
-    case 'request_governance':
+    case 'request_clarification':
       return '[SYSTEM CLARIFICATION REQUIRED]\nTool use is disabled for this turn.\nAsk one concise clarification question for the missing required information.';
+    case 'request_consent':
+      return '[SYSTEM CONSENT REQUIRED]\nTool use is disabled for this turn.\nState the specific proposed action, why approval is required, and ask for focused consent without claiming the action occurred.';
+    case 'request_decline':
+      return '[SYSTEM REQUEST DECLINED]\nTool use is disabled for this turn.\nState the policy or capability boundary plainly, do not claim execution, and offer a safe alternative only when one is genuinely available.';
+    case 'request_wait':
+      return '[SYSTEM WAITING FOR VERIFIED RESULT]\nTool use is disabled for this turn.\nState what is still pending and that no verified completion is available yet; do not repeat or invent the side effect.';
     case 'execution_loop_recovery':
       return '[SYSTEM EXECUTION BLOCKED]\nTool use is disabled for this turn.\nState the unverified requested side effect, the blocker, and the smallest missing input if autonomous progress is no longer possible.';
     case 'loop_recovery':

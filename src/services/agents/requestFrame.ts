@@ -10,8 +10,10 @@ export type RequestDecisionReason =
   | 'missing_input'
   | 'punctuation_only'
   | 'required_information_missing'
+  | 'information_lookup_required'
   | 'waiting_for_async'
   | 'permission_missing'
+  | 'policy_information_unavailable'
   | 'prohibited'
   | 'authorization_required';
 

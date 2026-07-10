@@ -84,7 +84,7 @@ describe('prepareAgentTurn', () => {
       groundedRequestScopedTools: tools,
       promptBundleContext: {
         conversationMemory: null,
-        effectiveForceTextReasonThisTurn: 'request_governance',
+        effectiveForceTextReasonThisTurn: 'request_clarification',
         globalMemory: null,
         groundedRequestScopedTools: tools,
         iteration: 2,

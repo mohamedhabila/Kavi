@@ -10,6 +10,23 @@ import { hasModelVisibleAttachments } from '../../../utils/messageAttachments';
 import type { ThinkingLevel } from '../../thinking';
 import type { AgentControlTurnDirectives } from '../agentControlGraph';
 
+function requestDecisionForcedTextReason(
+  action: RequestFrame['decision']['action'],
+): AgentControlTurnDirectives['forcedTextReason'] {
+  switch (action) {
+    case 'clarify':
+      return 'request_clarification';
+    case 'consent':
+      return 'request_consent';
+    case 'decline':
+      return 'request_decline';
+    case 'wait':
+      return 'request_wait';
+    case 'act':
+      return undefined;
+  }
+}
+
 export function resolveModelTurnIterationRequest(params: {
   activeModel: string;
   activeProvider: LlmProviderConfig;
@@ -60,9 +77,7 @@ export function resolveModelTurnIterationRequest(params: {
 
   const effectiveForceTextReasonThisTurn = params.turnDirectives.forceFinalText
     ? params.turnDirectives.forcedTextReason
-    : params.requestFrame.decision.action !== 'act'
-      ? 'request_governance'
-      : undefined;
+    : requestDecisionForcedTextReason(params.requestFrame.decision.action);
 
   return {
     effectiveForceTextThisTurn,

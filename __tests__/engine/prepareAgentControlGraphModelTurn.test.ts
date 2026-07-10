@@ -178,14 +178,18 @@ function expectPreparedGroundedTools(
   expected: Array<{ name: string; placement: 'stable_prefix' | 'dynamic_suffix' }>,
 ) {
   const params = mockedPrepareAgentTurn.mock.calls[0]?.[0];
-  expect(params?.groundedRequestScopedTools.map((tool) => ({
-    name: tool.name,
-    placement: tool.promptCache?.placement,
-  }))).toEqual(expected);
-  expect(params?.promptBundleContext.groundedRequestScopedTools.map((tool) => ({
-    name: tool.name,
-    placement: tool.promptCache?.placement,
-  }))).toEqual(expected);
+  expect(
+    params?.groundedRequestScopedTools.map((tool) => ({
+      name: tool.name,
+      placement: tool.promptCache?.placement,
+    })),
+  ).toEqual(expected);
+  expect(
+    params?.promptBundleContext.groundedRequestScopedTools.map((tool) => ({
+      name: tool.name,
+      placement: tool.promptCache?.placement,
+    })),
+  ).toEqual(expected);
 }
 
 describe('prepareAgentControlGraphModelTurn', () => {
@@ -222,9 +226,44 @@ describe('prepareAgentControlGraphModelTurn', () => {
     expect(result.requestModel).toBe('gpt-5-mini');
     expect(result.requestMaxTokens).toBe(2048);
     expect(result.effectiveForceTextThisTurn).toBe(true);
-    expect(result.effectiveForceTextReasonThisTurn).toBe('request_governance');
+    expect(result.effectiveForceTextReasonThisTurn).toBe('request_clarification');
     expect(mockedPrepareAgentTurn).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    ['clarify', 'required_information_missing', 'request_clarification'],
+    ['consent', 'authorization_required', 'request_consent'],
+    ['decline', 'prohibited', 'request_decline'],
+    ['wait', 'waiting_for_async', 'request_wait'],
+  ] as const)(
+    'maps the %s request decision to its exact forced-text contract',
+    async (action, reason, forcedTextReason) => {
+      mockedPlanIterationModel.mockReturnValue({
+        model: 'gpt-5-mini',
+        maxTokens: 1024,
+        thinkingLevel: 'minimal',
+        reason: 'test',
+      } as any);
+      mockPreparedTurn();
+      const requestFrame = buildGraphEntryRequestFrame({
+        text: 'Run the task',
+        attachmentCount: 0,
+        mode: 'agentic',
+        continuation: 'new',
+      });
+
+      const result = await prepareAgentControlGraphModelTurn({
+        ...createBaseParams(),
+        requestFrame: {
+          ...requestFrame,
+          decision: { action, reason },
+        },
+      });
+
+      expect(result.effectiveForceTextThisTurn).toBe(true);
+      expect(result.effectiveForceTextReasonThisTurn).toBe(forcedTextReason);
+    },
+  );
 
   it('treats forced-text proceed turns as non-actionable for budgeting and prompt memory', async () => {
     mockedPlanIterationModel.mockReturnValue({
@@ -244,7 +283,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
       },
       turnDirectives: {
         forceFinalText: true,
-        forcedTextReason: 'request_governance',
+        forcedTextReason: 'request_clarification',
         requireWorkflowTool: false,
         incompleteFinalTextRecoveryCount: 0,
       },

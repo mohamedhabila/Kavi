@@ -5,11 +5,7 @@ import {
 
 describe('agent control graph forced text turns', () => {
   it.each<
-    [
-      reason: AgentControlGraphForcedTextReason,
-      expectedHeading: string,
-      expectedContract: string,
-    ]
+    [reason: AgentControlGraphForcedTextReason, expectedHeading: string, expectedContract: string]
   >([
     [
       'async_terminal_completion',
@@ -32,9 +28,20 @@ describe('agent control graph forced text turns', () => {
       'Continue the interrupted final answer from where it stopped.',
     ],
     [
-      'request_governance',
+      'request_clarification',
       '[SYSTEM CLARIFICATION REQUIRED]',
       'Ask one concise clarification question for the missing required information.',
+    ],
+    [
+      'request_consent',
+      '[SYSTEM CONSENT REQUIRED]',
+      'ask for focused consent without claiming the action occurred.',
+    ],
+    ['request_decline', '[SYSTEM REQUEST DECLINED]', 'do not claim execution'],
+    [
+      'request_wait',
+      '[SYSTEM WAITING FOR VERIFIED RESULT]',
+      'no verified completion is available yet',
     ],
     [
       'persistent_context_settled',
@@ -51,16 +58,13 @@ describe('agent control graph forced text turns', () => {
       '[SYSTEM DIRECT RESPONSE REQUIRED]',
       'Answer from gathered evidence, or state the blocker clearly',
     ],
-  ])(
-    'builds the forced text prompt for %s',
-    (reason, expectedHeading, expectedContract) => {
-      const prompt = buildAgentControlGraphForcedTextOnlyTurnPrompt(reason);
+  ])('builds the forced text prompt for %s', (reason, expectedHeading, expectedContract) => {
+    const prompt = buildAgentControlGraphForcedTextOnlyTurnPrompt(reason);
 
-      expect(prompt).toContain(expectedHeading);
-      expect(prompt).toContain(expectedContract);
-      expect(prompt).toContain('Tool use is disabled for this turn');
-    },
-  );
+    expect(prompt).toContain(expectedHeading);
+    expect(prompt).toContain(expectedContract);
+    expect(prompt).toContain('Tool use is disabled for this turn');
+  });
 
   it('uses loop recovery as the fail-closed fallback', () => {
     expect(buildAgentControlGraphForcedTextOnlyTurnPrompt()).toBe(
