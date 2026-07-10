@@ -265,6 +265,8 @@ function ensureIndexes(db: MemoryDb): void {
       ON memory_ingestion_jobs(status, next_attempt_at, created_at);
     CREATE INDEX IF NOT EXISTS idx_ingestion_jobs_lease
       ON memory_ingestion_jobs(status, lease_expires_at);
+    CREATE INDEX IF NOT EXISTS idx_ingestion_jobs_evidence_scope
+      ON memory_ingestion_jobs(memory_conversation_id, thread_id, created_at, id);
   `);
 }
 

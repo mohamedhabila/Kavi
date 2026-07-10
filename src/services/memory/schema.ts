@@ -139,6 +139,8 @@ export function ensureFactSchema(): void {
       ON memory_working_blocks(conversation_id, label, updated_at);
     CREATE INDEX IF NOT EXISTS idx_working_blocks_thread
       ON memory_working_blocks(thread_id, label, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_working_blocks_evidence_scope
+      ON memory_working_blocks(conversation_id, thread_id, label, scope_key);
     CREATE INDEX IF NOT EXISTS idx_working_blocks_recent
       ON memory_working_blocks(label, updated_at);
 
@@ -170,6 +172,8 @@ export function ensureFactSchema(): void {
     );
     CREATE INDEX IF NOT EXISTS idx_episodes_conversation
       ON memory_episodes(conversation_id, deleted_at);
+    CREATE INDEX IF NOT EXISTS idx_episodes_evidence_scope
+      ON memory_episodes(conversation_id, thread_id, id);
     CREATE INDEX IF NOT EXISTS idx_episodes_task
       ON memory_episodes(task_id, deleted_at);
     CREATE INDEX IF NOT EXISTS idx_episodes_ended
@@ -255,6 +259,8 @@ export function ensureFactSchema(): void {
       ON memory_fact_terms(source_run_id, unit, fact_id, weight);
     CREATE INDEX IF NOT EXISTS idx_facts_scope_origin
       ON memory_facts(scope, origin_conversation_id, deleted_at, invalid_at);
+    CREATE INDEX IF NOT EXISTS idx_facts_evidence_scope
+      ON memory_facts(origin_conversation_id, origin_thread_id, id);
     CREATE INDEX IF NOT EXISTS idx_facts_scope_task
       ON memory_facts(scope, origin_task_id, deleted_at, invalid_at);
     CREATE INDEX IF NOT EXISTS idx_facts_subject_predicate_scope
