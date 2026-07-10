@@ -1,3 +1,5 @@
+import { collectDeviceResourceHealth } from '../../../../services/deviceResourceHealth';
+
 export async function executeDeviceStatus(): Promise<string> {
   try {
     const Battery = await import('expo-battery');
@@ -117,25 +119,5 @@ export async function executeDevicePermissions(): Promise<string> {
 // ── Device Health Tool ───────────────────────────────────────────────────
 
 export async function executeDeviceHealth(): Promise<string> {
-  try {
-    const Device = await import('expo-device');
-    const Battery = await import('expo-battery');
-    const { Paths } = await import('expo-file-system');
-
-    const batteryLevel = await Battery.getBatteryLevelAsync().catch(() => -1);
-    const uptime = Device.getUptimeAsync ? await Device.getUptimeAsync().catch(() => -1) : -1;
-
-    return JSON.stringify({
-      totalMemory: Device.totalMemory,
-      batteryLevel: Math.round((batteryLevel as number) * 100),
-      isDevice: Device.isDevice,
-      supportedCpuArchitectures: Device.supportedCpuArchitectures,
-      uptime,
-      documentsDir: Paths.document?.uri,
-    });
-  } catch (err: unknown) {
-    return JSON.stringify({
-      error: `Device health check failed: ${err instanceof Error ? err.message : String(err)}`,
-    });
-  }
+  return JSON.stringify(await collectDeviceResourceHealth());
 }

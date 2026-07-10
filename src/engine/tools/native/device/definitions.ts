@@ -66,7 +66,8 @@ export const DEVICE_PERMISSIONS_TOOL: ToolDefinition = {
 
 export const DEVICE_HEALTH_TOOL: ToolDefinition = {
   name: 'device_health',
-  description: 'Get device health metrics: memory usage, storage usage, thermal state, uptime.',
+  description:
+    'Get a bounded device resource snapshot: memory capacity, app memory limit when available, storage capacity and availability, battery level, and uptime. This is not an energy or thermal profile.',
   input_schema: { type: 'object', properties: {} },
   contract: nativeContract({
     category: 'device',
@@ -89,7 +90,7 @@ export const DEVICE_QUERY_TOOL: ToolDefinition = {
     'status (battery, network, brightness, volume), ' +
     'info (hardware/software model, OS, memory, storage, screen), ' +
     'permissions (app permission grants), or ' +
-    'health (memory/storage usage, thermal state, uptime).',
+    'health (bounded memory/storage capacity, battery level, and uptime evidence).',
   input_schema: {
     type: 'object',
     properties: {

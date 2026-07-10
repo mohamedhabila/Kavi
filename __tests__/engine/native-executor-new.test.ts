@@ -70,10 +70,32 @@ describe('Device Permissions Tool', () => {
 });
 
 describe('Device Health Tool', () => {
-  it('returns health metrics or error', async () => {
+  it('returns the bounded resource-health contract', async () => {
     const result = await executeDeviceHealth();
     const parsed = JSON.parse(result);
-    expect(parsed.isDevice !== undefined || parsed.error).toBeTruthy();
+    expect(parsed).toEqual(
+      expect.objectContaining({
+        schemaVersion: 1,
+        memory: expect.any(Object),
+        storage: expect.any(Object),
+        battery: expect.any(Object),
+        runtime: expect.any(Object),
+        observedMetricCount: expect.any(Number),
+      }),
+    );
+    for (const metric of [
+      parsed.memory.systemTotalBytes,
+      parsed.memory.appLimitBytes,
+      parsed.storage.totalBytes,
+      parsed.storage.availableBytes,
+      parsed.storage.usedBytes,
+      parsed.battery.levelPercent,
+      parsed.runtime.uptimeMs,
+    ]) {
+      expect(metric === null || typeof metric === 'number').toBe(true);
+    }
+    expect(result).not.toContain('documentsDir');
+    expect(result).not.toContain('supportedCpuArchitectures');
   });
 });
 
