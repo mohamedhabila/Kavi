@@ -2,7 +2,12 @@ import { isExactDurableScopeId } from '../../utils/durableScopeIdentity';
 
 export type AssistantInitiative = 'user_requested' | 'assistant_initiated';
 export type PreferenceDisposition = 'accepted' | 'rejected' | 'unknown';
-export type PreferenceSource = 'current_turn' | 'explicit_memory' | 'inferred' | 'none';
+export type PreferenceSource =
+  | 'current_turn'
+  | 'explicit_request'
+  | 'explicit_memory'
+  | 'inferred'
+  | 'none';
 export type ProposedEffect =
   | 'none'
   | 'read_only'
@@ -72,6 +77,7 @@ function isValidInput(input: ProactiveAssistantPolicyInput): boolean {
       input.preference.disposition === 'rejected' ||
       input.preference.disposition === 'unknown') &&
     (input.preference.source === 'current_turn' ||
+      input.preference.source === 'explicit_request' ||
       input.preference.source === 'explicit_memory' ||
       input.preference.source === 'inferred' ||
       input.preference.source === 'none') &&
@@ -103,7 +109,9 @@ function isValidInput(input: ProactiveAssistantPolicyInput): boolean {
 function hasExplicitAcceptedPreference(input: ProactiveAssistantPolicyInput): boolean {
   return (
     input.preference.disposition === 'accepted' &&
-    (input.preference.source === 'current_turn' || input.preference.source === 'explicit_memory') &&
+    (input.preference.source === 'current_turn' ||
+      input.preference.source === 'explicit_request' ||
+      input.preference.source === 'explicit_memory') &&
     input.preference.confidence >= MIN_EXPLICIT_PREFERENCE_CONFIDENCE
   );
 }
@@ -163,6 +171,9 @@ export function decideProactiveAssistantAction(
   }
 
   if (input.effect === 'none') {
+    if (input.initiative === 'assistant_initiated' && !hasExplicitAcceptedPreference(input)) {
+      return { action: 'silence', reason: 'insufficient_preference_confidence' };
+    }
     return meetsSuggestionBar(input)
       ? { action: 'suggest', reason: 'helpful_suggestion' }
       : { action: 'silence', reason: lowValueSilenceReason(input) };

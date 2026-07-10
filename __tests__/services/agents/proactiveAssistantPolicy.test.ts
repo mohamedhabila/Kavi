@@ -208,4 +208,21 @@ describe('proactive assistant policy', () => {
       reason: 'high_user_burden',
     });
   });
+
+  it('accepts a persisted explicit request but never inferred preference for suggestions', () => {
+    expect(
+      decideProactiveAssistantAction(
+        policyInput({
+          preference: { disposition: 'accepted', source: 'explicit_request', confidence: 1 },
+        }),
+      ),
+    ).toEqual({ action: 'suggest', reason: 'helpful_suggestion' });
+    expect(
+      decideProactiveAssistantAction(
+        policyInput({
+          preference: { disposition: 'accepted', source: 'inferred', confidence: 1 },
+        }),
+      ),
+    ).toEqual({ action: 'silence', reason: 'insufficient_preference_confidence' });
+  });
 });
