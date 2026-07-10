@@ -534,6 +534,17 @@ describe('runE2EScenario product foreground integration', () => {
         },
       ],
     });
+    expect(traceBeforeGlobalMutation.turns[0]?.native).toMatchObject({
+      invocationCount: 1,
+      handledInvocationCount: 1,
+      changedStateFieldCount: 2,
+      toolInvocations: [
+        expect.objectContaining({
+          nameHash: expect.objectContaining({ hash: expect.stringContaining('sha256:') }),
+          count: 1,
+        }),
+      ],
+    });
 
     resetE2ENativeMobileFixtures();
     await tryExecuteE2ENativeMobileTool('calendar_list', '{}');

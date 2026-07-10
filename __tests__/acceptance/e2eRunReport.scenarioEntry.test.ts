@@ -491,6 +491,12 @@ describe('e2eRunReport scenario entries', () => {
         turnTraces: [
           {
             turnIndex: 0,
+            lifecycleBefore: null,
+            user: {
+              messageId: 'native-fixture-user',
+              text: 'Exercise native fixture diagnostics.',
+              timestamp: 1,
+            },
             route: { directive: 'forced_agentic', mode: 'agentic', personaId: 'super-agent' },
             finalAssistant: null,
             finalAssistantCandidateCount: 0,
@@ -507,6 +513,20 @@ describe('e2eRunReport scenario entries', () => {
             },
             agentRun: null,
             memory: [],
+            memoryEvidence: {
+              delta: {
+                capturedAt: 1,
+                facts: { createdIds: [], updatedIds: [], removedIds: [] },
+                episodes: { createdIds: [], updatedIds: [], removedIds: [] },
+                workingBlocks: { createdIds: [], updatedIds: [], removedIds: [] },
+                ingestionJobs: { createdIds: [], updatedIds: [], removedIds: [] },
+                invalidatedFactIds: [],
+                deletedFactIds: [],
+                deletedEpisodeIds: [],
+                clearedWorkingBlockIds: [],
+                completedIngestionJobIds: [],
+              },
+            },
             native,
             toolCalls: [],
             toolResults: [],

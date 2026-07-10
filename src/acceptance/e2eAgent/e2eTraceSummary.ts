@@ -1,15 +1,39 @@
 import type { E2ERubric, E2EScenarioResult, E2EScenarioTurnTrace } from './types';
 import {
-  buildValueFingerprint,
   hashString,
   tailItems,
   type E2ERedactedHash,
   type E2ERedactedValueFingerprint,
 } from './e2eTraceRedaction';
 import {
+  buildAgentRunEvidence,
+  buildCompletionEvidence,
+  buildFinalAssistantEvidence,
+  buildLifecycleBoundaryEvidence,
+  buildRouteEvidence,
+  buildUserEvidence,
+  type E2ERedactedAgentRunEvidence,
+  type E2ERedactedCompletionEvidence,
+  type E2ERedactedFinalAssistantEvidence,
+  type E2ERedactedLifecycleBoundaryEvidence,
+  type E2ERedactedRouteEvidence,
+  type E2ERedactedUserEvidence,
+} from './e2eTraceExecutionEvidence';
+import {
   buildGraphSnapshotTrace,
   type E2ERedactedGraphSnapshotTrace,
 } from './e2eTraceGraphSnapshots';
+import {
+  buildMemoryDeltaEvidence,
+  buildMemoryFinalEvidence,
+  type E2ERedactedMemoryDeltaEvidence,
+  type E2ERedactedMemoryFinalEvidence,
+} from './e2eTraceMemoryEvidence';
+import {
+  buildFinalNativeStateTrace,
+  buildNativeTurnEvidence,
+  type E2ERedactedNativeTurnEvidence,
+} from './e2eTraceNativeEvidence';
 import {
   buildToolCallTrace,
   buildToolResultTrace,
@@ -21,6 +45,15 @@ import { buildUsageTrace, type E2ERedactedUsageTrace } from './e2eTraceUsage';
 export type E2ERedactedTurnTrace = {
   turnIndex: number;
   completed: boolean;
+  lifecycleBefore: E2ERedactedLifecycleBoundaryEvidence | null;
+  user: E2ERedactedUserEvidence;
+  route: E2ERedactedRouteEvidence;
+  finalAssistant: E2ERedactedFinalAssistantEvidence | null;
+  finalAssistantCandidateCount: number;
+  completion: E2ERedactedCompletionEvidence;
+  agentRun: E2ERedactedAgentRunEvidence | null;
+  memoryDelta: E2ERedactedMemoryDeltaEvidence;
+  native: E2ERedactedNativeTurnEvidence;
   usage: E2ERedactedUsageTrace;
   toolCalls: E2ERedactedToolCallTrace[];
   toolResults: E2ERedactedToolResultTrace[];
@@ -42,67 +75,27 @@ export type E2EScenarioTraceSummary = {
   toolCalls: E2ERedactedToolCallTrace[];
   toolResults: E2ERedactedToolResultTrace[];
   graphSnapshots: E2ERedactedGraphSnapshotTrace[];
+  memoryFinal: E2ERedactedMemoryFinalEvidence;
   nativeFixtureStateFingerprints: E2ERedactedValueFingerprint[];
   turns: E2ERedactedTurnTrace[];
 };
 
 const MAX_SCENARIO_GRAPH_SNAPSHOTS = 12;
 const MAX_TURN_GRAPH_SNAPSHOTS = 6;
-const MAX_NATIVE_FIXTURE_STATE_FIELDS = 96;
-
-function collectPrimitiveValueFingerprints(
-  value: unknown,
-  path: string[],
-  fingerprints: E2ERedactedValueFingerprint[],
-): void {
-  if (fingerprints.length >= MAX_NATIVE_FIXTURE_STATE_FIELDS) {
-    return;
-  }
-  if (value && typeof value === 'object') {
-    if (Array.isArray(value)) {
-      const fingerprint = buildValueFingerprint(path.join('.'), value, {
-        count: value.length,
-      });
-      if (fingerprint) {
-        fingerprints.push(fingerprint);
-      }
-      return;
-    }
-    const record = value as Record<string, unknown>;
-    for (const key of Object.keys(record).sort()) {
-      collectPrimitiveValueFingerprints(record[key], [...path, key], fingerprints);
-      if (fingerprints.length >= MAX_NATIVE_FIXTURE_STATE_FIELDS) {
-        return;
-      }
-    }
-    return;
-  }
-
-  const fieldPath = path.join('.');
-  if (!fieldPath) {
-    return;
-  }
-  const isCount =
-    typeof value === 'number' && Number.isInteger(value) && value >= 0 && /Count$/.test(fieldPath);
-  const fingerprint = buildValueFingerprint(fieldPath, value, {
-    ...(isCount ? { count: value } : {}),
-  });
-  if (fingerprint) {
-    fingerprints.push(fingerprint);
-  }
-}
-
-function buildNativeFixtureStateTrace(result: E2EScenarioResult): E2ERedactedValueFingerprint[] {
-  const fingerprints: E2ERedactedValueFingerprint[] = [];
-  const finalState = result.turnTraces[result.turnTraces.length - 1]?.native?.stateAfter;
-  if (finalState) collectPrimitiveValueFingerprints(finalState, [], fingerprints);
-  return fingerprints;
-}
 
 function buildTurnTrace(turn: E2EScenarioTurnTrace): E2ERedactedTurnTrace {
   return {
     turnIndex: turn.turnIndex,
     completed: turn.completed,
+    lifecycleBefore: buildLifecycleBoundaryEvidence(turn.lifecycleBefore),
+    user: buildUserEvidence(turn),
+    route: buildRouteEvidence(turn),
+    finalAssistant: buildFinalAssistantEvidence(turn),
+    finalAssistantCandidateCount: turn.finalAssistantCandidateCount,
+    completion: buildCompletionEvidence(turn.completion),
+    agentRun: buildAgentRunEvidence(turn.agentRun),
+    memoryDelta: buildMemoryDeltaEvidence(turn),
+    native: buildNativeTurnEvidence(turn.native),
     usage: buildUsageTrace(turn.usage),
     toolCalls: turn.toolCalls.map(buildToolCallTrace),
     toolResults: turn.toolResults.map(buildToolResultTrace),
@@ -135,7 +128,8 @@ export function buildE2EScenarioTraceSummary(params: {
     graphSnapshots: tailItems(result.graphSnapshots, MAX_SCENARIO_GRAPH_SNAPSHOTS).map(
       buildGraphSnapshotTrace,
     ),
-    nativeFixtureStateFingerprints: buildNativeFixtureStateTrace(result),
+    memoryFinal: buildMemoryFinalEvidence(result.memoryFinalState),
+    nativeFixtureStateFingerprints: buildFinalNativeStateTrace(result),
     turns: result.turnTraces.map(buildTurnTrace),
   };
 }

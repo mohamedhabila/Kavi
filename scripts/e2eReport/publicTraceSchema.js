@@ -1,4 +1,17 @@
 const { SAFE_GRAPH_STATUSES, projectGraphSnapshot } = require('./publicTraceGraph');
+const {
+  projectAgentRunEvidence,
+  projectCompletionEvidence,
+  projectFinalAssistantEvidence,
+  projectLifecycleBoundaryEvidence,
+  projectRouteEvidence,
+  projectUserEvidence,
+} = require('./publicTraceExecution');
+const {
+  projectMemoryDeltaEvidence,
+  projectMemoryFinalEvidence,
+} = require('./publicTraceMemory');
+const { projectNativeTurnEvidence, projectStateFingerprints } = require('./publicTraceNative');
 const { isPublicEvaluationId } = require('./publicProjectionPolicy');
 const {
   SHA256_PATTERN,
@@ -13,12 +26,24 @@ const {
   safePublicToolName,
 } = require('./publicTracePrimitives');
 const { projectToolCall, projectToolResult } = require('./publicTraceTools');
-const { SAFE_NATIVE_FIXTURE_PATHS, projectPublicUsageTrace } = require('./publicTraceUsage');
-const { projectValueFingerprint } = require('./publicTraceValues');
+const { projectPublicUsageTrace } = require('./publicTraceUsage');
 
 function projectTurn(value) {
   const source = asRecord(value);
   const turnIndex = source ? nonNegativeInteger(source.turnIndex) : null;
+  const lifecycleBefore = source
+    ? projectLifecycleBoundaryEvidence(source.lifecycleBefore)
+    : undefined;
+  const user = source ? projectUserEvidence(source.user) : null;
+  const route = source ? projectRouteEvidence(source.route) : null;
+  const finalAssistant = source ? projectFinalAssistantEvidence(source.finalAssistant) : undefined;
+  const finalAssistantCandidateCount = source
+    ? nonNegativeInteger(source.finalAssistantCandidateCount)
+    : null;
+  const completion = source ? projectCompletionEvidence(source.completion) : null;
+  const agentRun = source ? projectAgentRunEvidence(source.agentRun) : undefined;
+  const memoryDelta = source ? projectMemoryDeltaEvidence(source.memoryDelta) : null;
+  const native = source ? projectNativeTurnEvidence(source.native) : null;
   const usage = source ? projectPublicUsageTrace(source.usage) : null;
   const toolCalls = source ? projectArray(source.toolCalls, projectToolCall) : null;
   const toolResults = source ? projectArray(source.toolResults, projectToolResult) : null;
@@ -29,6 +54,15 @@ function projectTurn(value) {
     !source ||
     turnIndex === null ||
     typeof source.completed !== 'boolean' ||
+    lifecycleBefore === undefined ||
+    !user ||
+    !route ||
+    finalAssistant === undefined ||
+    finalAssistantCandidateCount === null ||
+    !completion ||
+    agentRun === undefined ||
+    !memoryDelta ||
+    !native ||
     !usage ||
     !toolCalls ||
     !toolResults ||
@@ -39,6 +73,15 @@ function projectTurn(value) {
   return {
     turnIndex,
     completed: source.completed,
+    lifecycleBefore,
+    user,
+    route,
+    finalAssistant,
+    finalAssistantCandidateCount,
+    completion,
+    agentRun,
+    memoryDelta,
+    native,
     usage,
     toolCalls,
     toolResults,
@@ -59,10 +102,9 @@ function projectPublicRedactedTrace(value) {
   const toolCalls = projectArray(source.toolCalls, projectToolCall);
   const toolResults = projectArray(source.toolResults, projectToolResult);
   const graphSnapshots = projectArray(source.graphSnapshots, projectGraphSnapshot, 12);
-  const nativeFixtureStateFingerprints = projectArray(
+  const memoryFinal = projectMemoryFinalEvidence(source.memoryFinal);
+  const nativeFixtureStateFingerprints = projectStateFingerprints(
     source.nativeFixtureStateFingerprints,
-    (fingerprint) => projectValueFingerprint(fingerprint, SAFE_NATIVE_FIXTURE_PATHS),
-    SAFE_NATIVE_FIXTURE_PATHS.size,
   );
   const turns = projectArray(source.turns, projectTurn, 256);
   const countKeys = ['userTurnCount', 'turnCount', 'toolCallCount'];
@@ -84,6 +126,7 @@ function projectPublicRedactedTrace(value) {
     !toolCalls ||
     !toolResults ||
     !graphSnapshots ||
+    !memoryFinal ||
     !nativeFixtureStateFingerprints ||
     !turns
   ) {
@@ -106,6 +149,7 @@ function projectPublicRedactedTrace(value) {
     toolCalls,
     toolResults,
     graphSnapshots,
+    memoryFinal,
     nativeFixtureStateFingerprints,
     turns,
   };
