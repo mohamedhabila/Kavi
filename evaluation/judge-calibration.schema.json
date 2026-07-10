@@ -14,6 +14,7 @@
   "$defs": {
     "safeId": {
       "type": "string",
+      "maxLength": 128,
       "pattern": "^[a-z0-9][a-z0-9._-]*$"
     },
     "sha256": {
@@ -38,6 +39,7 @@
             "$ref": "#/$defs/safeId"
           },
           "minItems": 1,
+          "maxItems": 50,
           "uniqueItems": true
         }
       }
@@ -48,8 +50,11 @@
       "required": [
         "ownerId",
         "reviewerId",
+        "humanLabelsSha256",
+        "judgePredictionsSha256",
         "candidateAccessDetected",
         "humanLabelsExposedBeforeJudgeFreeze",
+        "humanLabelsFrozenAt",
         "judgePredictionsFrozenAt",
         "humanLabelsReleasedAt",
         "accessReviewedAt"
@@ -61,11 +66,21 @@
         "reviewerId": {
           "$ref": "#/$defs/safeId"
         },
+        "humanLabelsSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "judgePredictionsSha256": {
+          "$ref": "#/$defs/sha256"
+        },
         "candidateAccessDetected": {
           "type": "boolean"
         },
         "humanLabelsExposedBeforeJudgeFreeze": {
           "type": "boolean"
+        },
+        "humanLabelsFrozenAt": {
+          "type": "string",
+          "format": "date-time"
         },
         "judgePredictionsFrozenAt": {
           "type": "string",
@@ -211,13 +226,15 @@
             "$ref": "#/$defs/safeId"
           },
           "minItems": 1,
+          "maxItems": 100,
           "uniqueItems": true
         },
         "examples": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/calibrationExample"
-          }
+          },
+          "maxItems": 10000
         }
       },
       "allOf": [

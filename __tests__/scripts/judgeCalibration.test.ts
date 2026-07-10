@@ -3,8 +3,10 @@ import fs from 'fs';
 import path from 'path';
 
 const {
+  digestCalibrationProjection,
   evaluateJudgeCalibration,
   loadJudgeCalibrationSchema,
+  validateJudgeCalibrationInput,
   validateJudgeCalibrationReport,
 } = require('../../scripts/lib/judgeCalibration');
 
@@ -12,9 +14,23 @@ const projectRoot = path.resolve(__dirname, '../..');
 const schema = loadJudgeCalibrationSchema(projectRoot);
 const digest = 'a'.repeat(64);
 
+type ProjectionInput = {
+  custody: { humanLabelsSha256: string; judgePredictionsSha256: string };
+  examples: Array<{ id: string; family: string; humanLabel: string; judgeLabel: string }>;
+};
+
 function buildInput(options: { mismatchCount?: number } = {}) {
   const mismatchCount = options.mismatchCount ?? 4;
-  return {
+  const examples = Array.from({ length: 100 }, (_, index) => {
+    const humanLabel = index < 50 ? 'pass' : 'fail';
+    return {
+      id: `cal-${index.toString(16).padStart(16, '0')}`,
+      family: index % 2 === 0 ? 'memory' : 'task_completion',
+      humanLabel,
+      judgeLabel: index < mismatchCount ? (humanLabel === 'pass' ? 'fail' : 'pass') : humanLabel,
+    };
+  });
+  const input = {
     $schema:
       'https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/judge-calibration.schema.json',
     kind: 'judge_calibration_input',
@@ -28,8 +44,11 @@ function buildInput(options: { mismatchCount?: number } = {}) {
     custody: {
       ownerId: 'calibration-owner',
       reviewerId: 'calibration-reviewer',
+      humanLabelsSha256: '',
+      judgePredictionsSha256: '',
       candidateAccessDetected: false,
       humanLabelsExposedBeforeJudgeFreeze: false,
+      humanLabelsFrozenAt: '2025-01-01T12:00:00.000Z',
       judgePredictionsFrozenAt: '2025-01-02T00:00:00.000Z',
       humanLabelsReleasedAt: '2025-01-03T00:00:00.000Z',
       accessReviewedAt: '2025-01-04T00:00:00.000Z',
@@ -44,16 +63,15 @@ function buildInput(options: { mismatchCount?: number } = {}) {
       rubricSha256: 'd'.repeat(64),
     },
     requiredFamilies: ['memory', 'task_completion'],
-    examples: Array.from({ length: 100 }, (_, index) => {
-      const humanLabel = index < 50 ? 'pass' : 'fail';
-      return {
-        id: `cal-${index.toString(16).padStart(16, '0')}`,
-        family: index % 2 === 0 ? 'memory' : 'task_completion',
-        humanLabel,
-        judgeLabel: index < mismatchCount ? (humanLabel === 'pass' ? 'fail' : 'pass') : humanLabel,
-      };
-    }),
+    examples,
   };
+  refreshProjectionDigests(input);
+  return input;
+}
+
+function refreshProjectionDigests(input: ProjectionInput) {
+  input.custody.humanLabelsSha256 = digestCalibrationProjection(input.examples, 'human');
+  input.custody.judgePredictionsSha256 = digestCalibrationProjection(input.examples, 'judge');
 }
 
 function evaluate(input: ReturnType<typeof buildInput>) {
@@ -96,6 +114,16 @@ describe('judge calibration contract', () => {
     });
   });
 
+  it('fingerprints label projections independently of private file ordering', () => {
+    const input = buildInput({ mismatchCount: 0 });
+    const reversed = [...input.examples].reverse();
+
+    expect(digestCalibrationProjection(reversed, 'human')).toBe(input.custody.humanLabelsSha256);
+    expect(digestCalibrationProjection(reversed, 'judge')).toBe(
+      input.custody.judgePredictionsSha256,
+    );
+  });
+
   it('keeps human ambiguity separate and counts judge ambiguity as disagreement', () => {
     const input = buildInput({ mismatchCount: 0 });
     input.examples.push(
@@ -107,6 +135,7 @@ describe('judge calibration contract', () => {
       })),
     );
     input.examples[0].judgeLabel = 'ambiguous';
+    refreshProjectionDigests(input);
     const result = evaluate(input);
 
     expect(result.report.counts).toMatchObject({
@@ -124,6 +153,7 @@ describe('judge calibration contract', () => {
     abstaining.examples.forEach((example) => {
       example.judgeLabel = 'ambiguous';
     });
+    refreshProjectionDigests(abstaining);
     expect(evaluate(abstaining).report).toMatchObject({
       claimEligible: false,
       disagreement: { count: 100, rate: 1 },
@@ -135,6 +165,7 @@ describe('judge calibration contract', () => {
       example.humanLabel = index < 95 ? 'pass' : 'fail';
       example.judgeLabel = example.humanLabel;
     });
+    refreshProjectionDigests(imbalanced);
     expect(evaluate(imbalanced).report.failures).toContain('class_imbalance');
   });
 
@@ -161,6 +192,59 @@ describe('judge calibration contract', () => {
         'invalid_custody',
       ]),
     });
+  });
+
+  it('rejects post-hoc label edits and non-strict freeze chronology', () => {
+    const digestMismatch = buildInput({ mismatchCount: 0 });
+    digestMismatch.examples[0].humanLabel = 'fail';
+    expect(evaluate(digestMismatch).report).toMatchObject({
+      custodyValid: false,
+      claimEligible: false,
+      failures: expect.arrayContaining(['invalid_custody']),
+    });
+
+    const predictionDigestMismatch = buildInput({ mismatchCount: 0 });
+    predictionDigestMismatch.examples[0].judgeLabel = 'ambiguous';
+    expect(evaluate(predictionDigestMismatch).report.failures).toContain('invalid_custody');
+
+    const equalLabelFreeze = buildInput({ mismatchCount: 0 });
+    equalLabelFreeze.custody.humanLabelsFrozenAt =
+      equalLabelFreeze.custody.judgePredictionsFrozenAt;
+    expect(evaluate(equalLabelFreeze).report.failures).toContain('invalid_custody');
+
+    const labelsFrozenAfterPredictions = buildInput({ mismatchCount: 0 });
+    labelsFrozenAfterPredictions.custody.humanLabelsFrozenAt = '2025-01-02T00:00:01.000Z';
+    expect(evaluate(labelsFrozenAfterPredictions).report.failures).toContain('invalid_custody');
+
+    const equalConfigFreeze = buildInput({ mismatchCount: 0 });
+    equalConfigFreeze.frozenAt = equalConfigFreeze.custody.judgePredictionsFrozenAt;
+    expect(evaluate(equalConfigFreeze).report.failures).toContain('invalid_custody');
+
+    const equalRelease = buildInput({ mismatchCount: 0 });
+    equalRelease.custody.humanLabelsReleasedAt = equalRelease.custody.judgePredictionsFrozenAt;
+    expect(evaluate(equalRelease).report.failures).toContain('invalid_custody');
+  });
+
+  it('bounds identifiers, maintainers, families, and private examples', () => {
+    const input = buildInput({ mismatchCount: 0 });
+    input.candidate.id = 'a'.repeat(129);
+    input.candidate.maintainerIds = Array.from({ length: 51 }, (_, index) => `maintainer-${index}`);
+    input.requiredFamilies = Array.from({ length: 101 }, (_, index) => `family-${index}`);
+    input.examples = Array.from({ length: 10001 }, (_, index) => ({
+      id: `cal-${index.toString(16).padStart(16, '0')}`,
+      family: 'family-0',
+      humanLabel: index % 2 === 0 ? 'pass' : 'fail',
+      judgeLabel: index % 2 === 0 ? 'pass' : 'fail',
+    }));
+
+    expect(validateJudgeCalibrationInput(input, schema)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('input.candidate.id: must NOT have more than 128 characters'),
+        expect.stringContaining('input.candidate.maintainerIds: must NOT have more than 50 items'),
+        expect.stringContaining('input.requiredFamilies: must NOT have more than 100 items'),
+        expect.stringContaining('input.examples: must NOT have more than 10000 items'),
+      ]),
+    );
   });
 
   it('identifies deterministic structural evaluators without requiring LLM calibration', () => {

@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const Ajv2020 = require('ajv/dist/2020');
@@ -13,9 +14,48 @@ const MINIMUM_RESOLVED_PER_FAMILY = 5;
 const MINIMUM_CLASS_FRACTION = 0.2;
 const DISAGREEMENT_FAILURE_THRESHOLD = 0.05;
 const ZERO_SHA_256 = '0'.repeat(64);
+const HUMAN_LABEL_PROJECTION_VERSION = 'judge-calibration-human-labels-v1';
+const JUDGE_PREDICTION_PROJECTION_VERSION = 'judge-calibration-predictions-v1';
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
+
+function canonicalStringify(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalStringify).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalStringify(value[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function digestCalibrationProjection(examples, kind) {
+  if (kind !== 'human' && kind !== 'judge') {
+    throw new Error('Calibration projection kind must be human or judge.');
+  }
+  const isHuman = kind === 'human';
+  const schemaVersion = isHuman
+    ? HUMAN_LABEL_PROJECTION_VERSION
+    : JUDGE_PREDICTION_PROJECTION_VERSION;
+  const labelField = isHuman ? 'humanLabel' : 'judgeLabel';
+  const projection = {
+    schemaVersion,
+    examples: [...examples]
+      .sort((left, right) => {
+        const leftId = String(left?.id);
+        const rightId = String(right?.id);
+        return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
+      })
+      .map((example) => ({
+        family: example?.family,
+        id: example?.id,
+        label: example?.[labelField],
+      })),
+  };
+  return crypto.createHash('sha256').update(canonicalStringify(projection)).digest('hex');
 }
 
 function loadJudgeCalibrationSchema(projectRoot) {
@@ -142,19 +182,25 @@ function validateCustody(input) {
     candidateIds.has(custody.ownerId) ||
     candidateIds.has(custody.reviewerId) ||
     custody.ownerId === custody.reviewerId ||
+    custody.humanLabelsSha256 !== digestCalibrationProjection(input?.examples ?? [], 'human') ||
+    custody.judgePredictionsSha256 !==
+      digestCalibrationProjection(input?.examples ?? [], 'judge') ||
     custody.candidateAccessDetected !== false ||
     custody.humanLabelsExposedBeforeJudgeFreeze !== false
   ) {
     return false;
   }
   const frozenAt = Date.parse(input.frozenAt);
+  const humanLabelsFrozenAt = Date.parse(custody.humanLabelsFrozenAt);
   const predictionsFrozenAt = Date.parse(custody.judgePredictionsFrozenAt);
   const labelsReleasedAt = Date.parse(custody.humanLabelsReleasedAt);
   const reviewedAt = Date.parse(custody.accessReviewedAt);
   return (
     Number.isFinite(frozenAt) &&
-    predictionsFrozenAt >= frozenAt &&
-    labelsReleasedAt >= predictionsFrozenAt &&
+    Number.isFinite(humanLabelsFrozenAt) &&
+    frozenAt < predictionsFrozenAt &&
+    humanLabelsFrozenAt < predictionsFrozenAt &&
+    predictionsFrozenAt < labelsReleasedAt &&
     reviewedAt >= labelsReleasedAt
   );
 }
@@ -312,6 +358,7 @@ module.exports = {
   MINIMUM_CLASS_FRACTION,
   MINIMUM_RESOLVED_EXAMPLES,
   MINIMUM_RESOLVED_PER_FAMILY,
+  digestCalibrationProjection,
   checkPublicJudgeCalibrationContract,
   evaluateJudgeCalibration,
   evaluatePrivateJudgeCalibrationFile,
