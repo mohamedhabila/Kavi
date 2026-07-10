@@ -102,10 +102,10 @@ async function waitForMemoryStoresHydration(): Promise<void> {
 
 async function runHydratedMemoryMaintenance(includeMigration: boolean): Promise<void> {
   await waitForMemoryStoresHydration();
+  await runMemoryBackgroundFlush();
   if (includeMigration) {
     await runMemoryMigrationTick();
   }
-  await runMemoryBackgroundFlush();
 }
 
 async function recoverPersistedAgentState(): Promise<void> {

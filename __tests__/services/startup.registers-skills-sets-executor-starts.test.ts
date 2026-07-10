@@ -172,6 +172,8 @@ beforeEach(() => {
   mockRepairTerminalAgentRunsMissingFinalResponses.mockResolvedValue([]);
   mockEvaluateJobsOnce.mockResolvedValue(undefined);
   mockSyncSchedulerWakeNotifications.mockResolvedValue(undefined);
+  mockRunMemoryMigrationTick.mockResolvedValue(undefined);
+  mockRunMemoryBackgroundFlush.mockResolvedValue(undefined);
   mockSettingsHydrated = true;
   mockChatHydrated = true;
   mockSettingsHydrationListeners.clear();
@@ -338,6 +340,18 @@ describe('initializeServices', () => {
     expect(mockSyncSchedulerWakeNotifications).toHaveBeenCalledWith({ force: true });
     await waitFor(() => expect(mockRunMemoryMigrationTick).toHaveBeenCalledTimes(1));
     expect(mockRunMemoryBackgroundFlush).toHaveBeenCalledTimes(1);
+  });
+  it('flushes durable memory work before waiting for migration', async () => {
+    mockRunMemoryMigrationTick.mockImplementation(() => new Promise(() => undefined));
+    const { handleAppForeground } = require('../../src/services/startup');
+
+    handleAppForeground();
+
+    await waitFor(() => expect(mockRunMemoryBackgroundFlush).toHaveBeenCalledTimes(1));
+    expect(mockRunMemoryMigrationTick).toHaveBeenCalledTimes(1);
+    expect(mockRunMemoryBackgroundFlush.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRunMemoryMigrationTick.mock.invocationCallOrder[0],
+    );
   });
   it('does not touch memory until both persisted stores finish hydrating', async () => {
     mockSettingsHydrated = false;
