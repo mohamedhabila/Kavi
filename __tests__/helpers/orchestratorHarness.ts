@@ -39,6 +39,15 @@ jest.mock('../../src/services/events/bus', () => ({
   emitSessionEvent: jest.fn().mockResolvedValue(undefined),
   emitAgentEvent: jest.fn().mockResolvedValue(undefined),
 }));
+jest.mock('../../src/services/executionJournal/externalToolDurabilityLifecycle', () => {
+  const actual = jest.requireActual(
+    '../../src/services/executionJournal/externalToolDurabilityLifecycle',
+  );
+  return {
+    ...actual,
+    observeExternalToolResultDurability: jest.fn().mockResolvedValue({ kind: 'not_external' }),
+  };
+});
 jest.mock('../../src/services/usage/tracker', () => ({
   recordUsage: jest.fn(),
   normalizeUsage: jest.fn().mockReturnValue({
@@ -109,6 +118,7 @@ import { buildLivingMemorySections } from '../../src/services/memory/livingMemor
 import { getProviderApiKey } from '../../src/services/storage/SecureStorage';
 import { getPersona } from '../../src/services/agents/registry';
 import * as memoryAccessGateway from '../../src/services/memory/memoryAccessGateway';
+import { observeExternalToolResultDurability } from '../../src/services/executionJournal/externalToolDurabilityLifecycle';
 
 const legacyFileSystem = jest.requireMock('expo-file-system/legacy') as {
   readAsStringAsync: jest.Mock;
@@ -315,6 +325,8 @@ beforeEach(() => {
   (getSkillToolDefinitions as jest.Mock).mockReturnValue([]);
   (executeTool as jest.Mock).mockReset();
   (executeTool as jest.Mock).mockResolvedValue('tool result');
+  (observeExternalToolResultDurability as jest.Mock).mockReset();
+  (observeExternalToolResultDurability as jest.Mock).mockResolvedValue({ kind: 'not_external' });
   (getProviderApiKey as jest.Mock).mockReset();
   (getProviderApiKey as jest.Mock).mockResolvedValue('sk-test');
   (getPersona as jest.Mock).mockReset();
