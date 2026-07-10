@@ -413,10 +413,6 @@ export async function buildLivingMemorySections(
   if (activeTaskTitle) {
     dynamicAddenda.push(`Active task: ${activeTaskTitle}`);
   }
-  if (localEvidencePrompt.section) {
-    dynamicAddenda.push(localEvidencePrompt.section);
-  }
-
   let reflectionBlock = '';
   if (conversationId) {
     const reflectionStarted = Date.now();
@@ -449,6 +445,9 @@ export async function buildLivingMemorySections(
     ...(dynamicAddenda.length > 0 ? { dynamicAddenda } : {}),
   });
   timings.assembleMs += Date.now() - assembleStarted;
+  const sections = localEvidencePrompt.section
+    ? [...assembled.sections, { text: localEvidencePrompt.section }]
+    : assembled.sections;
 
   const idleAnchor = lastAssistantAt ?? lastUserAt;
   const idleSinceLastTurnMs =
@@ -472,7 +471,7 @@ export async function buildLivingMemorySections(
   if (retrievalTimings) timings.retrieval = retrievalTimings;
 
   return {
-    sections: assembled.sections,
+    sections,
     cacheableSignature: assembled.cacheableSignature,
     focusBlockText,
     openThreadLabels,

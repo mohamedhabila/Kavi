@@ -1,8 +1,11 @@
 import {
+  LOCAL_EVIDENCE_PROMPT_ADDITIVE_LIMIT,
+  LOCAL_EVIDENCE_PROMPT_FLATTEN_SEPARATOR_CHARS,
   LOCAL_EVIDENCE_PROMPT_PAYLOAD_LIMIT,
   LOCAL_EVIDENCE_PROMPT_SECTION_LIMIT,
   renderLocalEvidencePromptSection,
 } from '../../../src/services/memory/localEvidencePrompt';
+import { flattenPromptSections } from '../../../src/services/memory/promptAssembly';
 import type { ExpandedLocalEvidenceItem } from '../../../src/services/memory/localEvidenceExpansionTypes';
 
 function evidence(statement: string): ExpandedLocalEvidenceItem {
@@ -63,7 +66,15 @@ describe('local evidence prompt rendering', () => {
     });
 
     expect(section?.length).toBeLessThanOrEqual(LOCAL_EVIDENCE_PROMPT_SECTION_LIMIT);
-    expect(LOCAL_EVIDENCE_PROMPT_SECTION_LIMIT).toBe(3_200);
+    const baseline = [{ text: 'existing memory' }];
+    const additiveChars =
+      flattenPromptSections([...baseline, { text: section ?? '' }]).length -
+      flattenPromptSections(baseline).length;
+    expect(additiveChars).toBeLessThanOrEqual(LOCAL_EVIDENCE_PROMPT_ADDITIVE_LIMIT);
+    expect(LOCAL_EVIDENCE_PROMPT_ADDITIVE_LIMIT).toBe(3_200);
+    expect(LOCAL_EVIDENCE_PROMPT_SECTION_LIMIT).toBe(
+      3_200 - LOCAL_EVIDENCE_PROMPT_FLATTEN_SEPARATOR_CHARS,
+    );
   });
 
   it('omits zero evidence and rejects non-canonical or over-budget payloads', () => {
