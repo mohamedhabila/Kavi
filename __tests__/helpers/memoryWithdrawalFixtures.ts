@@ -86,7 +86,22 @@ export function insertMemoryRetrievalEventForWithdrawal(
 export function requireMemoryIngestionJob(
   input: Parameters<typeof enqueueIngestionJob>[0],
 ): NonNullable<ReturnType<typeof enqueueIngestionJob>> {
-  const job = enqueueIngestionJob(input);
+  const job = enqueueIngestionJob({
+    threadId: input.threadId,
+    threadTitle: input.threadTitle,
+    memoryConversationId: input.memoryConversationId,
+    personaId: input.personaId,
+    taskId: input.taskId,
+    sourceStartMessageId: input.sourceStartMessageId,
+    sourceEndMessageId: input.sourceEndMessageId,
+    sourceRunId: input.sourceRunId,
+    sourceAt: input.sourceAt,
+    chatProviderId: input.chatProviderId,
+    chatModel: input.chatModel,
+    reason: input.reason,
+    providerEnrichment: input.providerEnrichment,
+    now: input.now,
+  });
   if (!job) throw new Error('test ingestion job missing');
   return job;
 }

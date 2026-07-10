@@ -10,7 +10,11 @@ import {
 } from '../../../src/services/memory/schema';
 import { upsertEntity } from '../../../src/services/memory/entities';
 import { recordFact } from '../../../src/services/memory/facts/mutations';
-import { addFactEvidence, recordEpisode } from '../../../src/services/memory/episodes/mutations';
+import {
+  addFactEvidence,
+  recordEpisode,
+  recordThreadLocalEpisode,
+} from '../../../src/services/memory/episodes/mutations';
 import { upsertReflection } from '../../../src/services/memory/reflections';
 import {
   buildWorkingBlockScopeKey,
@@ -85,12 +89,19 @@ function requireJob(
   overrides: Partial<Parameters<typeof enqueueIngestionJob>[0]>,
 ): NonNullable<ReturnType<typeof enqueueIngestionJob>> {
   return requireMemoryIngestionJob({
+    personaId: 'default',
     threadId: THREAD_ID,
+    threadTitle: null,
     memoryConversationId: CONVERSATION_ID,
     taskId: TASK_ID,
     sourceStartMessageId: 'message-unrelated',
     sourceEndMessageId: 'turn-unrelated',
     sourceRunId: 'run-unrelated',
+    sourceAt: 1_999,
+    chatProviderId: null,
+    chatModel: null,
+    reason: 'turn_completed',
+    providerEnrichment: true,
     now: 2_000,
     ...overrides,
   });
@@ -104,7 +115,7 @@ function seedAuthoritativeLineage(): SeededLineage {
     predicate: 'private_preference',
     objectText: PRIVATE_VALUE,
     objectEntityId: orphanEntity.id,
-    scope: 'conversation',
+    scope: 'session',
     originConversationId: CONVERSATION_ID,
     originThreadId: THREAD_ID,
     originTaskId: TASK_ID,
@@ -123,7 +134,7 @@ function seedAuthoritativeLineage(): SeededLineage {
     subjectId: sharedEntity.id,
     predicate: 'private_preference',
     objectText: 'different retained value',
-    scope: 'conversation',
+    scope: 'session',
     originConversationId: CONVERSATION_ID,
     originThreadId: THREAD_ID,
     originTaskId: TASK_ID,
@@ -148,6 +159,14 @@ function seedAuthoritativeLineage(): SeededLineage {
     messageIds: [MESSAGE_ID],
     sourceStartMessageId: MESSAGE_ID,
     sourceEndMessageId: TURN_ID,
+    accessPolicy: {
+      memoryConversationId: CONVERSATION_ID,
+      sourceThreadId: THREAD_ID,
+      personaId: 'default',
+      taskId: TASK_ID,
+      shareability: 'thread_only',
+      sensitivity: 'normal',
+    },
     now: 1_200,
   });
   const otherThreadEpisode = recordEpisode({
@@ -158,9 +177,17 @@ function seedAuthoritativeLineage(): SeededLineage {
     messageIds: [MESSAGE_ID],
     sourceStartMessageId: MESSAGE_ID,
     sourceEndMessageId: TURN_ID,
+    accessPolicy: {
+      memoryConversationId: CONVERSATION_ID,
+      sourceThreadId: 'thread-other',
+      personaId: 'default',
+      taskId: TASK_ID,
+      shareability: 'thread_only',
+      sensitivity: 'normal',
+    },
     now: 1_210,
   });
-  const otherKindEpisode = recordEpisode({
+  const otherKindEpisode = recordThreadLocalEpisode({
     conversationId: CONVERSATION_ID,
     threadId: THREAD_ID,
     taskId: TASK_ID,
@@ -357,6 +384,7 @@ describe('atomic memory withdrawal', () => {
         facts: 2,
         graphRelations: 2,
         factEvidence: 2,
+        episodeAccessPolicies: 1,
         episodes: 1,
         chunks: 1,
         reflections: 2,
@@ -377,6 +405,18 @@ describe('atomic memory withdrawal', () => {
       expect.arrayContaining([seeded.otherThreadEpisodeId, seeded.otherKindEpisodeId]),
     );
     expect(ids('memory_episodes')).not.toContain(seeded.targetEpisodeId);
+    expect(
+      getMemoryDb().getFirstSync(
+        'SELECT episode_id FROM memory_episode_access_policies WHERE episode_id = ?',
+        seeded.targetEpisodeId,
+      ),
+    ).toBeNull();
+    expect(
+      getMemoryDb().getFirstSync(
+        'SELECT episode_id FROM memory_episode_access_policies WHERE episode_id = ?',
+        seeded.otherThreadEpisodeId,
+      ),
+    ).toEqual({ episode_id: seeded.otherThreadEpisodeId });
     expect(ids('memory_reflections')).toEqual(
       expect.arrayContaining([seeded.unrelatedMalformedReflectionId]),
     );
@@ -489,6 +529,7 @@ describe('atomic memory withdrawal', () => {
       factIds: [seeded.targetFactId, seeded.historyFactId],
       retrievalTermStats: [],
       evidenceIds: seeded.evidenceIds,
+      observationIds: [],
       episodeIds: [seeded.targetEpisodeId],
       chunkIds: seeded.targetChunkIds,
       reflectionIds: [seeded.targetReflectionId, seeded.linkedMalformedReflectionId],

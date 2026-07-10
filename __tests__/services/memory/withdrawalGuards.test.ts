@@ -10,7 +10,10 @@ import {
 } from '../../../src/services/memory/schema';
 import { upsertEntity } from '../../../src/services/memory/entities';
 import { recordFact } from '../../../src/services/memory/facts/mutations';
-import { recordEpisode, addFactEvidence } from '../../../src/services/memory/episodes/mutations';
+import {
+  recordThreadLocalEpisode,
+  addFactEvidence,
+} from '../../../src/services/memory/episodes/mutations';
 import {
   clearEmbeddingCache,
   DEFAULT_LOCAL_EMBEDDING_CONFIG,
@@ -36,7 +39,7 @@ function recordScopedFact(value: string, sourceMessageId = 'message-old') {
     subjectId: entity.id,
     predicate: 'private_value',
     objectText: value,
-    scope: 'conversation',
+    scope: 'session',
     originConversationId: 'conversation-1',
     originThreadId: 'thread-1',
     originTaskId: 'task-1',
@@ -111,7 +114,7 @@ describe('memory withdrawal guards', () => {
   it('rolls every database surface back and returns only a generic tool error', async () => {
     const privateValue = 'PRIVATE-ROLLBACK-SENTINEL';
     const fact = recordScopedFact(privateValue);
-    const episode = recordEpisode({
+    const episode = recordThreadLocalEpisode({
       conversationId: 'conversation-1',
       threadId: 'thread-1',
       taskId: 'task-1',
@@ -197,7 +200,7 @@ describe('memory withdrawal guards', () => {
       supersedePrior: false,
       now: 300,
     }).fact;
-    const episode = recordEpisode({
+    const episode = recordThreadLocalEpisode({
       summary: 'private global episode',
       messageIds: ['global-message'],
       sourceStartMessageId: 'global-message',
@@ -246,7 +249,7 @@ describe('memory withdrawal guards', () => {
       subjectId: newEntity.id,
       predicate: 'private_value',
       objectText: privateValue,
-      scope: 'conversation',
+      scope: 'session',
       originConversationId: 'conversation-1',
       originThreadId: 'thread-1',
       originTaskId: 'task-1',
@@ -274,7 +277,7 @@ describe('memory withdrawal guards', () => {
       subjectId: entity.id,
       predicate: 'source_less_value',
       objectText: 'source-less private value',
-      scope: 'conversation',
+      scope: 'session',
       originConversationId: 'conversation-source-less',
       originThreadId: 'thread-source-less',
       originTaskId: 'task-source-less',

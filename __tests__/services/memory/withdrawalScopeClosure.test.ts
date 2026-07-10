@@ -10,7 +10,10 @@ import {
 } from '../../../src/services/memory/schema';
 import { upsertEntity } from '../../../src/services/memory/entities';
 import { recordFact } from '../../../src/services/memory/facts/mutations';
-import { addFactEvidence, recordEpisode } from '../../../src/services/memory/episodes/mutations';
+import {
+  addFactEvidence,
+  recordThreadLocalEpisode,
+} from '../../../src/services/memory/episodes/mutations';
 import { editWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import { upsertMemoryTask } from '../../../src/services/memory/tasks';
 import { enqueueIngestionJob } from '../../../src/services/memory/ingestionQueueStore';
@@ -34,7 +37,14 @@ function requireJob(input: {
   sourceRunId: string;
 }) {
   return requireMemoryIngestionJob({
+    personaId: 'default',
+    threadTitle: null,
     memoryConversationId: CONVERSATION_ID,
+    sourceAt: 2_000,
+    chatProviderId: null,
+    chatModel: null,
+    reason: 'turn_completed',
+    providerEnrichment: true,
     now: 2_000,
     ...input,
   });
@@ -58,13 +68,13 @@ afterEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
 });
 
-it('closes multi-scope fact and receipt-job lineage to a bounded fixed point', () => {
+it('closes exact fact and receipt lineage without deleting a different task scope', () => {
   const subject = upsertEntity({ name: 'closure-user', type: 'self', now: 100 });
   const target = recordFact({
     subjectId: subject.id,
     predicate: 'private_value',
     objectText: 'private closure value',
-    scope: 'conversation',
+    scope: 'session',
     originConversationId: CONVERSATION_ID,
     originThreadId: 'thread-a',
     originTaskId: 'task-a',
@@ -88,7 +98,7 @@ it('closes multi-scope fact and receipt-job lineage to a bounded fixed point', (
     subjectId: subject.id,
     predicate: 'unrelated_value',
     objectText: 'retain this fact',
-    scope: 'conversation',
+    scope: 'session',
     originConversationId: CONVERSATION_ID,
     originThreadId: 'thread-a',
     originTaskId: 'task-retained',
@@ -100,7 +110,7 @@ it('closes multi-scope fact and receipt-job lineage to a bounded fixed point', (
     now: 201,
   }).fact;
 
-  const episodeA = recordEpisode({
+  const episodeA = recordThreadLocalEpisode({
     conversationId: CONVERSATION_ID,
     threadId: 'thread-a',
     taskId: 'task-a',
@@ -110,7 +120,7 @@ it('closes multi-scope fact and receipt-job lineage to a bounded fixed point', (
     sourceEndMessageId: 'turn-a',
     now: 300,
   });
-  const episodeB = recordEpisode({
+  const episodeB = recordThreadLocalEpisode({
     conversationId: CONVERSATION_ID,
     threadId: 'thread-b',
     taskId: 'task-b',
@@ -120,7 +130,7 @@ it('closes multi-scope fact and receipt-job lineage to a bounded fixed point', (
     sourceEndMessageId: 'turn-b',
     now: 301,
   });
-  const chainedEpisode = recordEpisode({
+  const chainedEpisode = recordThreadLocalEpisode({
     conversationId: CONVERSATION_ID,
     threadId: 'thread-a',
     taskId: 'task-a',
@@ -130,7 +140,7 @@ it('closes multi-scope fact and receipt-job lineage to a bounded fixed point', (
     sourceEndMessageId: 'turn-a-chain',
     now: 302,
   });
-  const unrelatedEpisode = recordEpisode({
+  const unrelatedEpisode = recordThreadLocalEpisode({
     conversationId: CONVERSATION_ID,
     threadId: 'thread-unrelated',
     taskId: 'task-a',
@@ -280,16 +290,20 @@ it('closes multi-scope fact and receipt-job lineage to a bounded fixed point', (
   if (result.status !== 'withdrawn') throw new Error('expected withdrawal');
   expect(result.receipt.counts).toEqual(
     expect.objectContaining({
-      facts: 2,
-      episodes: 3,
-      chunks: 3,
-      workingBlocks: 9,
-      ingestionJobs: 6,
+      facts: 1,
+      episodes: 2,
+      chunks: 2,
+      workingBlocks: 6,
+      ingestionJobs: 5,
     }),
   );
   expect(notificationSpy).toHaveBeenLastCalledWith(null);
-  expect(ids('memory_facts')).toEqual([retainedFact.id]);
-  expect(ids('memory_episodes')).toEqual([unrelatedEpisode.id]);
+  expect(ids('memory_facts')).toEqual(expect.arrayContaining([duplicateFactId, retainedFact.id]));
+  expect(ids('memory_facts')).toHaveLength(2);
+  expect(ids('memory_episodes')).toEqual(
+    expect.arrayContaining([episodeB.id, unrelatedEpisode.id]),
+  );
+  expect(ids('memory_episodes')).toHaveLength(2);
   expect(ids('memory_tasks')).toEqual(
     expect.arrayContaining(['task-a', 'task-b', 'task-c', 'task-unrelated']),
   );
@@ -300,7 +314,8 @@ it('closes multi-scope fact and receipt-job lineage to a bounded fixed point', (
       "SELECT task_id FROM memory_working_blocks WHERE label = 'active_focus'",
     )
     .map((row) => row.task_id);
-  expect(remainingWorkingTaskIds).toEqual(['task-unrelated']);
+  expect(remainingWorkingTaskIds).toEqual(expect.arrayContaining(['task-b', 'task-unrelated']));
+  expect(remainingWorkingTaskIds).toHaveLength(2);
   const remainingTaskStackIds = getMemoryDb()
     .getAllSync<{ task_id: string | null }>(
       "SELECT task_id FROM memory_working_blocks WHERE label = 'task_stack'",
@@ -311,17 +326,18 @@ it('closes multi-scope fact and receipt-job lineage to a bounded fixed point', (
   );
   expect(remainingTaskStackIds).toHaveLength(4);
   expect(
-    getMemoryDb().getFirstSync(
-      "SELECT label FROM memory_working_blocks WHERE label IN ('open_threads', 'compaction_summary') LIMIT 1",
-    ),
-  ).toBeNull();
+    getMemoryDb()
+      .getAllSync<{ label: string; task_id: string | null }>(
+        "SELECT label, task_id FROM memory_working_blocks WHERE label IN ('open_threads', 'compaction_summary')",
+      )
+      .map((row) => row.task_id),
+  ).toEqual(['task-b', 'task-b']);
   const remainingJobIds = ids('memory_ingestion_jobs');
   expect(remainingJobIds).toEqual(
-    expect.arrayContaining([unrelatedJob.id, otherScopeSameIdsJob.id]),
+    expect.arrayContaining([jobB.id, unrelatedJob.id, otherScopeSameIdsJob.id]),
   );
   for (const removedId of [
     jobA.id,
-    jobB.id,
     chainedEpisodeJob.id,
     evidenceSourceJob.id,
     receiptJob.id,
@@ -335,20 +351,22 @@ it('closes multi-scope fact and receipt-job lineage to a bounded fixed point', (
       `SELECT source_thread_id, task_id FROM memory_withdrawal_sources
         WHERE source_kind = 'run' AND source_id IN ('run-b', 'run-c')`,
     ),
-  ).toEqual(
-    expect.arrayContaining([
-      { source_thread_id: 'thread-b', task_id: 'task-b' },
-      { source_thread_id: 'thread-c', task_id: 'task-c' },
-    ]),
-  );
+  ).toEqual([{ source_thread_id: 'thread-c', task_id: 'task-c' }]);
   expect(
     enqueueIngestionJob({
+      personaId: 'default',
       memoryConversationId: CONVERSATION_ID,
       threadId: 'thread-c',
+      threadTitle: null,
       taskId: 'task-c',
       sourceStartMessageId: 'message-c-new',
       sourceEndMessageId: 'turn-c-new',
       sourceRunId: 'run-c',
+      sourceAt: 3_100,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
       now: 3_100,
     }),
   ).toBeNull();

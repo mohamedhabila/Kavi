@@ -18,7 +18,7 @@ import {
   ownsIngestionClaim,
 } from '../../../src/services/memory/ingestionQueueStore';
 import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
-import { applyConsolidatorResult } from '../../../src/services/memory/consolidator';
+import { applyThreadLocalConsolidatorResult } from '../../../src/services/memory/consolidator';
 import { listEpisodes } from '../../../src/services/memory/episodes/queries';
 import { listFacts } from '../../../src/services/memory/facts/queries';
 import { seedConversation } from '../../../src/services/memory/migrationSeedPass';
@@ -35,10 +35,19 @@ const SCOPE = {
 
 function enqueue(overrides: Partial<Parameters<typeof enqueueIngestionJob>[0]> = {}) {
   return enqueueIngestionJob({
-    ...SCOPE,
+    personaId: 'default',
+    memoryConversationId: SCOPE.memoryConversationId,
+    threadId: SCOPE.threadId,
+    threadTitle: null,
+    taskId: SCOPE.taskId,
     sourceStartMessageId: 'message-old',
     sourceEndMessageId: 'turn-old',
     sourceRunId: 'run-old',
+    sourceAt: 500,
+    chatProviderId: null,
+    chatModel: null,
+    reason: 'turn_completed',
+    providerEnrichment: true,
     now: 500,
     ...overrides,
   });
@@ -63,7 +72,7 @@ describe('withdrawal ingestion replay fence', () => {
       subjectId: entity.id,
       predicate: 'private_value',
       objectText: 'withdraw me',
-      scope: 'conversation',
+      scope: 'session',
       originConversationId: SCOPE.memoryConversationId,
       originThreadId: SCOPE.threadId,
       originTaskId: SCOPE.taskId,
@@ -101,7 +110,7 @@ describe('withdrawal ingestion replay fence', () => {
       subjectId: entity.id,
       predicate: 'private_value',
       objectText: 'withdraw me',
-      scope: 'conversation',
+      scope: 'session',
       originConversationId: SCOPE.memoryConversationId,
       originThreadId: SCOPE.threadId,
       originTaskId: SCOPE.taskId,
@@ -151,7 +160,7 @@ describe('withdrawal ingestion replay fence', () => {
       subjectId: entity.id,
       predicate: 'private_value',
       objectText: 'withdraw me',
-      scope: 'conversation',
+      scope: 'session',
       originConversationId: SCOPE.memoryConversationId,
       originThreadId: SCOPE.threadId,
       originTaskId: SCOPE.taskId,
@@ -179,7 +188,7 @@ describe('withdrawal ingestion replay fence', () => {
     };
 
     expect(() =>
-      applyConsolidatorResult(replayResult, {
+      applyThreadLocalConsolidatorResult(replayResult, {
         conversationId: SCOPE.memoryConversationId,
         threadId: SCOPE.threadId,
         taskId: SCOPE.taskId,
@@ -193,7 +202,7 @@ describe('withdrawal ingestion replay fence', () => {
     expect(listEpisodes({ conversationId: SCOPE.memoryConversationId })).toEqual([]);
 
     expect(() =>
-      applyConsolidatorResult(
+      applyThreadLocalConsolidatorResult(
         {
           ...replayResult,
           newFacts: replayResult.newFacts.map((fact) => ({
