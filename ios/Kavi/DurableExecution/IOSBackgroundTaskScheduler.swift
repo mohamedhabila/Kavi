@@ -248,6 +248,13 @@ final class IOSBackgroundTaskScheduler: IOSDurablePlatformScheduler, @unchecked 
     }
   }
 
+  func isTaskActive(_ identifier: String) -> Bool {
+    activeTaskLock.lock()
+    defer { activeTaskLock.unlock() }
+    return activeContinuedTasks[identifier] != nil
+      || (identifier == processingIdentifier && activeProcessingTask != nil)
+  }
+
   private func registerProcessingHandler() -> Bool {
     register(identifier: processingIdentifier) { [weak self] task in
       guard let self, let processingTask = task as? BGProcessingTask else {

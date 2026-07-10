@@ -470,6 +470,7 @@ enum IOSDurableBridgeCodec {
     guard let value = value as? NSNumber,
       CFGetTypeID(value) != CFBooleanGetTypeID(),
       value.doubleValue.isFinite,
+      value.doubleValue >= 0,
       value.doubleValue.rounded(.towardZero) == value.doubleValue,
       abs(value.doubleValue) <= 9_007_199_254_740_991
     else {

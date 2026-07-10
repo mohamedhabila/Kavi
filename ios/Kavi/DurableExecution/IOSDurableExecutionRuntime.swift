@@ -279,6 +279,7 @@ final class IOSDurableExecutionRuntime: IOSBackgroundTaskSchedulerDelegate, @unc
     for record in submitted
     where !firstObservation.contains(record.taskIdentifier)
       && !secondObservation.contains(record.taskIdentifier)
+      && !scheduler.isTaskActive(record.taskIdentifier)
     {
       if record.state == .running {
         _ = adapter.markOrphanedContinuedExecution(
