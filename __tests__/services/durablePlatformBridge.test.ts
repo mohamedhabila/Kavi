@@ -37,11 +37,11 @@ describe('durable platform native bridge', () => {
         controlEpoch: 1,
         snapshotUpdatedAtMillis: 900,
         snapshotDigest: 'a'.repeat(64),
-        commandKind: 'resume_model_step',
+        commandKind: 'reconcile_external_handles',
         commandDigest: 'b'.repeat(64),
       },
       constraints: {
-        network: 'connected',
+        network: 'not_required',
         requiresCharging: false,
         requiresBatteryNotLow: false,
         requiresStorageNotLow: false,
@@ -73,6 +73,15 @@ describe('durable platform native bridge', () => {
       lastCheckpointAtMillis: 1_100,
       revision: 3,
       updatedAtMillis: 1_100,
+    };
+  }
+
+  function androidRequest() {
+    const base = request();
+    return {
+      ...base,
+      durabilityClass: 'external_durable_operation',
+      constraints: { ...base.constraints, network: 'connected' },
     };
   }
 
@@ -138,6 +147,76 @@ describe('durable platform native bridge', () => {
     await expect(bridge.getRecord('run-1')).rejects.toThrow(
       'durable-platform-bridge-invalid-record',
     );
+  });
+
+  it.each([
+    ['unsupported', 'unsafe_recovery_command'],
+    ['rejected', 'platform_terminated_without_receipt'],
+    ['deferred', 'scheduler_unavailable'],
+  ])('accepts only closed %s reasons', async (status, reason) => {
+    const valid = nativeModule({
+      enqueue: jest.fn().mockResolvedValue({ schema: 1, status, reason, record: null }),
+    });
+    await expect(
+      loadBridge(valid).mod.getDurablePlatformExecutionBridge().enqueue(request()),
+    ).resolves.toEqual({ schema: 1, status, reason, record: null });
+
+    jest.resetModules();
+    const widened = nativeModule({
+      enqueue: jest
+        .fn()
+        .mockResolvedValue({ schema: 1, status, reason: 'future_reason', record: null }),
+    });
+    await expect(
+      loadBridge(widened).mod.getDurablePlatformExecutionBridge().enqueue(request()),
+    ).rejects.toThrow('durable-platform-bridge-invalid-result');
+  });
+
+  it.each([
+    ['submitted attempt', { state: 'submitted', attempt: 1 }],
+    ['running attempt', { state: 'running', attempt: 0 }],
+    [
+      'retry backoff',
+      {
+        state: 'retry_waiting',
+        attempt: 1,
+        nextAttemptAtMillis: 2_000,
+        failureReason: 'transient_unavailable',
+      },
+    ],
+    ['completed receipt', { state: 'completed', receiptDigest: null }],
+    ['expiration reason', { state: 'expired', failureReason: 'handler_failed' }],
+  ])('rejects impossible iOS %s state', async (_name, overrides) => {
+    const native = nativeModule({
+      getRecord: jest.fn().mockResolvedValue({
+        schema: 1,
+        status: 'found',
+        record: { ...iosRecord(), ...overrides },
+      }),
+    });
+    await expect(
+      loadBridge(native).mod.getDurablePlatformExecutionBridge().getRecord('run-1'),
+    ).rejects.toThrow('durable-platform-bridge-invalid-record');
+  });
+
+  it('rejects a record for a command without a production recovery handler', async () => {
+    const record = iosRecord();
+    const native = nativeModule({
+      getRecord: jest.fn().mockResolvedValue({
+        schema: 1,
+        status: 'found',
+        record: {
+          ...record,
+          request: {
+            ...record.request,
+            identity: { ...record.request.identity, commandKind: 'resume_model_step' },
+          },
+        },
+      }),
+    });
+    await expect(
+      loadBridge(native).mod.getDurablePlatformExecutionBridge().getRecord('run-1'),
+    ).rejects.toThrow('durable-platform-bridge-invalid-record');
   });
 
   it('exposes progress, checkpoint, and pending launch methods only when native supports them', async () => {
@@ -232,7 +311,7 @@ describe('durable platform native bridge', () => {
 
   it('accepts the existing Android record shape through the same common boundary', async () => {
     const androidRecord = {
-      request: request({ durabilityClass: 'external_durable_operation' }),
+      request: androidRequest(),
       schedulerKind: 'work_manager_one_time',
       uniqueWorkName: 'kavi.durable-recovery.v1.run-1',
       platformWorkId: '76095f07-a8c9-4fb1-a54c-e303bb1f08ac',

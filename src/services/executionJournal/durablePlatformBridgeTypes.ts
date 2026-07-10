@@ -80,6 +80,41 @@ export type DurablePlatformFailureReason =
   | 'platform_request_missing'
   | 'platform_terminated_without_receipt';
 
+export type DurablePlatformUnsupportedReason =
+  | 'invalid_request'
+  | 'process_bound_interactive_work'
+  | 'no_general_agent_foreground_service_contract'
+  | 'continued_processing_unavailable'
+  | 'foreground_user_action_required'
+  | 'stale_request_timestamp'
+  | 'continued_processing_delay_unsupported'
+  | 'unsupported_network_constraint'
+  | 'unsupported_platform_constraint'
+  | 'missing_event_trigger_contract'
+  | 'missing_required_network_constraint'
+  | 'device_idle_backoff_unsupported'
+  | 'unsafe_recovery_command';
+
+export type DurablePlatformRejectionReason =
+  | 'stale_control_epoch'
+  | 'command_identity_conflict'
+  | 'request_contract_conflict'
+  | 'active_older_generation'
+  | 'terminal_generation'
+  | 'record_not_found'
+  | 'invalid_progress_transition'
+  | 'invalid_progress'
+  | 'invalid_checkpoint'
+  | 'stale_attempt'
+  | 'continued_retry_requires_user_action'
+  | 'platform_terminated_without_receipt';
+
+export type DurablePlatformDeferReason =
+  | 'store_unavailable'
+  | 'store_conflict'
+  | 'scheduler_unavailable'
+  | 'scheduler_conflict';
+
 interface DurablePlatformRecordBase {
   request: DurablePlatformExecutionRequest;
   state: DurablePlatformExecutionState;
@@ -118,8 +153,20 @@ export type DurablePlatformAdapterResult =
     }
   | {
       schema: typeof DURABLE_PLATFORM_BRIDGE_SCHEMA;
-      status: 'unsupported' | 'rejected' | 'deferred';
-      reason: string;
+      status: 'unsupported';
+      reason: DurablePlatformUnsupportedReason;
+      record: null;
+    }
+  | {
+      schema: typeof DURABLE_PLATFORM_BRIDGE_SCHEMA;
+      status: 'rejected';
+      reason: DurablePlatformRejectionReason;
+      record: null;
+    }
+  | {
+      schema: typeof DURABLE_PLATFORM_BRIDGE_SCHEMA;
+      status: 'deferred';
+      reason: DurablePlatformDeferReason;
       record: null;
     };
 
