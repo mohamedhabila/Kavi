@@ -98,8 +98,8 @@ export interface EffectDispatchPorts {
   readState(identity: EffectDispatchIdentity): Promise<EffectDispatchReadState | null>;
   /**
    * Atomically revalidates every expected field, checks the authority lease against
-   * the store clock, inserts the unique exact-identity claim, and moves planned to
-   * started. Only `claimed` authorizes the caller to invoke the external executor.
+   * the store clock (not `evaluatedAt`), inserts the unique exact-identity claim, and
+   * moves planned to started. Only `claimed` authorizes the external executor.
    */
   claimAndStart(
     candidate: AtomicEffectDispatchClaimCandidate,
@@ -107,8 +107,9 @@ export interface EffectDispatchPorts {
   /** Dispatches only the durable command whose exact digest and target are in the claim. */
   dispatch(claim: EffectDispatchClaimEvidence): Promise<unknown>;
   /**
-   * Atomically appends receipt evidence and advances the journal effect once,
-   * including both applied and verified transitions when verification is final.
+   * Atomically appends receipt evidence and advances the journal effect once.
+   * `replayed` is valid only for the exact immutable receipt; conflicting evidence
+   * is rejected. Final verification performs both applied and verified transitions.
    */
   settle(
     candidate: EffectDispatchSettlementCandidate,

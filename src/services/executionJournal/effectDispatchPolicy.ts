@@ -70,6 +70,9 @@ export interface AtomicEffectDispatchClaimCandidate {
   identity: EffectDispatchIdentity;
   expectedRunStatus: 'running';
   expectedEffectStatus: 'planned';
+  expectedControlEpoch: number;
+  expectedApprovalState: 'granted' | 'not_required';
+  expectedPermissionState: 'granted' | 'not_required';
   expectedRunUpdatedAt: number;
   expectedEffectUpdatedAt: number;
   expectedPlanningCheckpointId: string;
@@ -199,6 +202,10 @@ function hasSafeIdempotencyContract(effect: ExecutionEffectRecord): boolean {
   return effect.idempotencyKeyDigest === null && effect.retryPolicy !== 'replay_safe';
 }
 
+function isGrantedAuthorityState(value: string): value is 'granted' | 'not_required' {
+  return AUTHORITY_GRANTED_STATES.has(value);
+}
+
 export function planEffectDispatch(input: {
   identity: EffectDispatchIdentity;
   snapshot: EffectDispatchSnapshot;
@@ -237,10 +244,10 @@ export function planEffectDispatch(input: {
   ) {
     return { kind: 'blocked', reason: 'stale_authority' };
   }
-  if (!AUTHORITY_GRANTED_STATES.has(authorityCheckpoint.approvalState)) {
+  if (!isGrantedAuthorityState(authorityCheckpoint.approvalState)) {
     return { kind: 'blocked', reason: 'approval_not_granted' };
   }
-  if (!AUTHORITY_GRANTED_STATES.has(authorityCheckpoint.permissionState)) {
+  if (!isGrantedAuthorityState(authorityCheckpoint.permissionState)) {
     return { kind: 'blocked', reason: 'permission_not_granted' };
   }
   if (authorizationExpiresAt !== null && input.evaluatedAt >= authorizationExpiresAt) {
@@ -256,6 +263,9 @@ export function planEffectDispatch(input: {
       identity: input.identity,
       expectedRunStatus: 'running',
       expectedEffectStatus: 'planned',
+      expectedControlEpoch: run.controlEpoch,
+      expectedApprovalState: authorityCheckpoint.approvalState,
+      expectedPermissionState: authorityCheckpoint.permissionState,
       expectedRunUpdatedAt: run.updatedAt,
       expectedEffectUpdatedAt: effect.updatedAt,
       expectedPlanningCheckpointId: input.snapshot.planningCheckpoint.id,
