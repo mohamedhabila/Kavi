@@ -18,7 +18,6 @@ import {
 import {
   appendBeforeEffectCheckpoint as appendBeforeEffect,
   DIGEST_A,
-  DIGEST_B,
   DIGEST_C,
   DIGEST_D,
   executionCheckpointRecord as checkpointRecord,
