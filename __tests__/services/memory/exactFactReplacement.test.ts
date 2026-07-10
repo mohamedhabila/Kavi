@@ -3,11 +3,8 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import {
-  invalidateFact,
-  recordFact,
-  replaceCurrentFact,
-} from '../../../src/services/memory/facts/mutations';
+import { replaceCurrentFact } from '../../../src/services/memory/facts/exactReplacement';
+import { invalidateFact, recordFact } from '../../../src/services/memory/facts/mutations';
 import { addFactEvidence } from '../../../src/services/memory/episodes/mutations';
 import { listFacts } from '../../../src/services/memory/facts/queries';
 import {

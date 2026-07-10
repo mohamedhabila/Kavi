@@ -45,8 +45,11 @@ jest.mock('../../../src/services/memory/entities', () => ({
 }));
 
 jest.mock('../../../src/services/memory/facts/queries', () => ({
-  listCurrentFactsForReplacement: (...args: any[]) => mockListFacts(...args),
   hasCurrentFactForSubjectPredicate: () => false,
+}));
+
+jest.mock('../../../src/services/memory/facts/exactReplacementQueries', () => ({
+  listCurrentFactsForReplacement: (...args: any[]) => mockListFacts(...args),
 }));
 
 import {
