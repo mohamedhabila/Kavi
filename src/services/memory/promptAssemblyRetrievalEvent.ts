@@ -8,6 +8,7 @@ import {
 import { MEMORY_RETRIEVAL_SELECTED_ID_LIMIT } from './retrievalEventTypes';
 import type {
   MemoryRetrievalBarrier,
+  MemoryRetrievalCandidates,
   MemoryRetrievalEventRejectionCode,
   MemoryRetrievalExpansion,
   MemoryRetrievalSelector,
@@ -45,6 +46,43 @@ function boundedInteger(value: number | undefined, maximum = MAX_EVENT_TIMING_MS
 
 function selectedIds(ids: ReadonlyArray<string>): string[] {
   return Array.from(new Set(ids)).slice(0, MEMORY_RETRIEVAL_SELECTED_ID_LIMIT);
+}
+
+function candidatesFromTiming(
+  timings: RetrievalOrchestratorTimings | undefined,
+  disabled: boolean,
+): MemoryRetrievalCandidates {
+  const stages = disabled ? undefined : timings?.recall?.candidateStages;
+  if (!stages) {
+    return {
+      strategy: 'not_requested',
+      localSemanticOutcome: 'not_requested',
+      eligibleScanCount: 0,
+      pinnedCount: 0,
+      exactQuotedCount: 0,
+      lexicalCount: 0,
+      entityCount: 0,
+      temporalCount: 0,
+      localSemanticCount: 0,
+      unionCount: 0,
+      diversifiedCount: 0,
+      unionMs: 0,
+    };
+  }
+  return {
+    strategy: stages.strategy,
+    localSemanticOutcome: stages.localSemanticOutcome,
+    eligibleScanCount: stages.eligibleScanCount,
+    pinnedCount: stages.pinnedCount,
+    exactQuotedCount: stages.exactQuotedCount,
+    lexicalCount: stages.lexicalCount,
+    entityCount: stages.entityCount,
+    temporalCount: stages.temporalCount,
+    localSemanticCount: stages.localSemanticCount,
+    unionCount: stages.unionCount,
+    diversifiedCount: stages.diversifiedCount,
+    unionMs: stages.unionMs,
+  };
 }
 
 function selectorFromTiming(
@@ -138,6 +176,7 @@ export async function recordPromptAssemblyRetrievalEvent(
         evidenceExpansionMs,
         totalMs: disabled ? 0 : boundedInteger(retrievalTotalMs + evidenceExpansionMs),
       },
+      candidates: candidatesFromTiming(input.retrievalTimings, disabled),
       expansion: input.expansion,
       selector: disabled
         ? { mode: 'deterministic', outcome: 'not_requested' }

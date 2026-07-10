@@ -1,5 +1,6 @@
 import type { MemoryEntity } from './entities';
 import {
+  RECALL_CANDIDATE_LIMITS,
   type RecallCandidateProvenance,
   type RecallCandidateStageTelemetry,
   type RecallCandidateStrategy,
@@ -112,13 +113,17 @@ export function buildRecallCandidateSet(input: {
   if (input.strategy === 'lexical') return lexical;
 
   const startedAt = Date.now();
-  const exactFacts = input.lexicalCandidates.filter((fact) =>
-    exactQuotedMatch(input.candidateUnitHits.get(fact.id), input.anchorUnitSets),
-  );
+  const exactFacts = input.lexicalCandidates
+    .filter((fact) =>
+      exactQuotedMatch(input.candidateUnitHits.get(fact.id), input.anchorUnitSets),
+    )
+    .slice(0, RECALL_CANDIDATE_LIMITS.exactQuotedLane);
   const lexicalFacts = input.lexicalCandidates.filter(
     (fact) => (input.candidateUnitHits.get(fact.id)?.size ?? 0) > 0,
   );
-  const pinnedFacts = input.lexicalCandidates.filter((fact) => fact.pinned);
+  const pinnedFacts = input.lexicalCandidates
+    .filter((fact) => fact.pinned)
+    .slice(0, RECALL_CANDIDATE_LIMITS.pinnedLane);
   const supplemental = buildSupplementalRecallCandidateLanes({
     query: input.query,
     queryUnits: input.queryUnits,

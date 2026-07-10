@@ -40,6 +40,22 @@ export const MEMORY_RETRIEVAL_EXPANSION_OUTCOMES = [
 ] as const;
 export type MemoryRetrievalExpansionOutcome = (typeof MEMORY_RETRIEVAL_EXPANSION_OUTCOMES)[number];
 
+export const MEMORY_RETRIEVAL_CANDIDATE_STRATEGIES = [
+  'not_requested',
+  'lexical',
+  'hybrid',
+] as const;
+export type MemoryRetrievalCandidateStrategy =
+  (typeof MEMORY_RETRIEVAL_CANDIDATE_STRATEGIES)[number];
+
+export const MEMORY_RETRIEVAL_LOCAL_SEMANTIC_OUTCOMES = [
+  'not_requested',
+  'unavailable',
+  'applied',
+] as const;
+export type MemoryRetrievalLocalSemanticOutcome =
+  (typeof MEMORY_RETRIEVAL_LOCAL_SEMANTIC_OUTCOMES)[number];
+
 export type MemoryRetrievalQueryFingerprint = Readonly<{
   hashAlgorithm: 'sha256';
   hash: string;
@@ -84,6 +100,21 @@ export type MemoryRetrievalExpansion = Readonly<{
   durationMs: number;
 }>;
 
+export type MemoryRetrievalCandidates = Readonly<{
+  strategy: MemoryRetrievalCandidateStrategy;
+  localSemanticOutcome: MemoryRetrievalLocalSemanticOutcome;
+  eligibleScanCount: number;
+  pinnedCount: number;
+  exactQuotedCount: number;
+  lexicalCount: number;
+  entityCount: number;
+  temporalCount: number;
+  localSemanticCount: number;
+  unionCount: number;
+  diversifiedCount: number;
+  unionMs: number;
+}>;
+
 export type MemoryRetrievalSelector = Readonly<{
   mode: MemoryRetrievalSelectorMode;
   outcome: MemoryRetrievalSelectorOutcome;
@@ -103,6 +134,7 @@ export type RecordMemoryRetrievalEventInput = Readonly<{
   scope: MemoryRetrievalScopeInput;
   counts: MemoryRetrievalCountsInput;
   timings: MemoryRetrievalTimings;
+  candidates: MemoryRetrievalCandidates;
   expansion: MemoryRetrievalExpansion;
   selector: MemoryRetrievalSelector;
   barrier?: MemoryRetrievalBarrier | null;
@@ -129,6 +161,7 @@ export type MemoryRetrievalEvent = Readonly<{
     selectedEpisodeIds: string[];
   };
   timings: MemoryRetrievalTimings;
+  candidates: MemoryRetrievalCandidates;
   expansion: MemoryRetrievalExpansion;
   selector: MemoryRetrievalSelector;
   barrier: MemoryRetrievalBarrier | null;
@@ -144,6 +177,7 @@ export type MemoryRetrievalEventRejectionCode =
   | 'invalid_counts'
   | 'invalid_selected_ids'
   | 'invalid_timings'
+  | 'invalid_candidates'
   | 'invalid_expansion'
   | 'invalid_selector'
   | 'invalid_barrier'

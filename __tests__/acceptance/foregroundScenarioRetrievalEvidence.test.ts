@@ -52,6 +52,20 @@ function event(id: string, createdAt: number): MemoryRetrievalEvent {
       evidenceExpansionMs: 1,
       totalMs: 5,
     },
+    candidates: {
+      strategy: 'hybrid',
+      localSemanticOutcome: 'not_requested',
+      eligibleScanCount: 2,
+      pinnedCount: 0,
+      exactQuotedCount: 0,
+      lexicalCount: 2,
+      entityCount: 0,
+      temporalCount: 2,
+      localSemanticCount: 0,
+      unionCount: 2,
+      diversifiedCount: 2,
+      unionMs: 1,
+    },
     expansion: {
       outcome: 'completed',
       requestedSourceCount: 2,
@@ -83,6 +97,10 @@ describe('foreground retrieval evidence capture', () => {
         ...event('new-event', 2).expansion,
         privatePayload: 'PRIVATE-EXPANSION-PAYLOAD',
       },
+      candidates: {
+        ...event('new-event', 2).candidates,
+        privatePayload: 'PRIVATE-CANDIDATE-PAYLOAD',
+      },
     } as MemoryRetrievalEvent;
     mockedReadRecentMemoryRetrievalEvents
       .mockReturnValueOnce([oldEvent])
@@ -107,6 +125,7 @@ describe('foreground retrieval evidence capture', () => {
     });
     expect(JSON.stringify(evidence)).not.toContain('PRIVATE-RETRIEVAL-PAYLOAD');
     expect(JSON.stringify(evidence)).not.toContain('PRIVATE-EXPANSION-PAYLOAD');
+    expect(JSON.stringify(evidence)).not.toContain('PRIVATE-CANDIDATE-PAYLOAD');
   });
 
   it('performs literal zero-access capture for product memory opt-out', async () => {

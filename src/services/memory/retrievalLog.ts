@@ -1,9 +1,12 @@
 import * as Crypto from 'expo-crypto';
 import { runMemoryTransaction } from './access/transaction';
+import { RECALL_CANDIDATE_LIMITS } from './factRecallCandidateContract';
 import {
   MEMORY_RETRIEVAL_BARRIER_OUTCOMES,
+  MEMORY_RETRIEVAL_CANDIDATE_STRATEGIES,
   MEMORY_RETRIEVAL_EVENT_RETENTION_LIMIT,
   MEMORY_RETRIEVAL_EXPANSION_OUTCOMES,
+  MEMORY_RETRIEVAL_LOCAL_SEMANTIC_OUTCOMES,
   MEMORY_RETRIEVAL_MODES,
   MEMORY_RETRIEVAL_OPERATIONS,
   MEMORY_RETRIEVAL_OUTCOMES,
@@ -13,9 +16,12 @@ import {
 } from './retrievalEventTypes';
 import type {
   MemoryRetrievalBarrierOutcome,
+  MemoryRetrievalCandidates,
+  MemoryRetrievalCandidateStrategy,
   MemoryRetrievalEvent,
   MemoryRetrievalEventRejectionCode,
   MemoryRetrievalExpansion,
+  MemoryRetrievalLocalSemanticOutcome,
   MemoryRetrievalMode,
   MemoryRetrievalOperation,
   MemoryRetrievalOutcome,
@@ -65,6 +71,18 @@ interface MemoryRetrievalEventRow {
   selector_ms: number;
   evidence_expansion_ms: number;
   total_ms: number;
+  candidate_strategy: MemoryRetrievalCandidateStrategy;
+  local_semantic_outcome: MemoryRetrievalLocalSemanticOutcome;
+  candidate_eligible_scan_count: number;
+  candidate_pinned_count: number;
+  candidate_exact_quoted_count: number;
+  candidate_lexical_count: number;
+  candidate_entity_count: number;
+  candidate_temporal_count: number;
+  candidate_local_semantic_count: number;
+  candidate_union_count: number;
+  candidate_diversified_count: number;
+  candidate_union_ms: number;
   expansion_outcome: MemoryRetrievalExpansion['outcome'];
   expansion_requested_source_count: number;
   expansion_accepted_source_count: number;
@@ -171,6 +189,103 @@ function selectedIds(values: ReadonlyArray<string>, selectedCount: number): stri
     throw new RetrievalEventValidationError('invalid_selected_ids');
   }
   return [...values];
+}
+
+function normalizeCandidates(
+  input: RecordMemoryRetrievalEventInput['candidates'],
+  candidateFactCount: number,
+  factRecallMs: number,
+): MemoryRetrievalCandidates {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new RetrievalEventValidationError('invalid_candidates');
+  }
+  const strategy = requireEnum(
+    input.strategy,
+    MEMORY_RETRIEVAL_CANDIDATE_STRATEGIES,
+    'invalid_candidates',
+  );
+  const localSemanticOutcome = requireEnum(
+    input.localSemanticOutcome,
+    MEMORY_RETRIEVAL_LOCAL_SEMANTIC_OUTCOMES,
+    'invalid_candidates',
+  );
+  const count = (value: number, maximum: number) =>
+    requireBoundedInteger(value, maximum, 'invalid_candidates');
+  const candidates: MemoryRetrievalCandidates = {
+    strategy,
+    localSemanticOutcome,
+    eligibleScanCount: count(
+      input.eligibleScanCount,
+      RECALL_CANDIDATE_LIMITS.maximumEligibleScan,
+    ),
+    pinnedCount: count(input.pinnedCount, RECALL_CANDIDATE_LIMITS.maximumUnion),
+    exactQuotedCount: count(input.exactQuotedCount, RECALL_CANDIDATE_LIMITS.maximumUnion),
+    lexicalCount: count(input.lexicalCount, RECALL_CANDIDATE_LIMITS.maximumUnion),
+    entityCount: count(input.entityCount, RECALL_CANDIDATE_LIMITS.entityLane),
+    temporalCount: count(input.temporalCount, RECALL_CANDIDATE_LIMITS.temporalLane),
+    localSemanticCount: count(
+      input.localSemanticCount,
+      RECALL_CANDIDATE_LIMITS.localSemanticLane,
+    ),
+    unionCount: count(input.unionCount, RECALL_CANDIDATE_LIMITS.maximumUnion),
+    diversifiedCount: count(input.diversifiedCount, RECALL_CANDIDATE_LIMITS.maximumUnion),
+    unionMs: count(input.unionMs, MAX_TIMING_MS),
+  };
+  const stageCounts = [
+    candidates.eligibleScanCount,
+    candidates.pinnedCount,
+    candidates.exactQuotedCount,
+    candidates.lexicalCount,
+    candidates.entityCount,
+    candidates.temporalCount,
+    candidates.localSemanticCount,
+    candidates.unionCount,
+    candidates.diversifiedCount,
+    candidates.unionMs,
+  ];
+  if (
+    (strategy === 'not_requested' &&
+      (localSemanticOutcome !== 'not_requested' || stageCounts.some((value) => value !== 0))) ||
+    (localSemanticOutcome !== 'applied' && candidates.localSemanticCount !== 0) ||
+    candidates.unionMs > factRecallMs
+  ) {
+    throw new RetrievalEventValidationError('invalid_candidates');
+  }
+  if (
+    strategy === 'lexical' &&
+    (localSemanticOutcome !== 'not_requested' ||
+      candidates.eligibleScanCount !== 0 ||
+      candidates.entityCount !== 0 ||
+      candidates.temporalCount !== 0 ||
+      candidates.localSemanticCount !== 0 ||
+      candidates.unionCount !== candidateFactCount ||
+      candidates.diversifiedCount !== candidateFactCount ||
+      candidates.unionMs !== 0)
+  ) {
+    throw new RetrievalEventValidationError('invalid_candidates');
+  }
+  const supplementalLaneCount =
+    candidates.pinnedCount +
+    candidates.exactQuotedCount +
+    candidates.lexicalCount +
+    candidates.entityCount +
+    candidates.temporalCount +
+    candidates.localSemanticCount;
+  if (
+    strategy === 'hybrid' &&
+    (candidateFactCount > RECALL_CANDIDATE_LIMITS.maximumUnion ||
+      candidates.pinnedCount > RECALL_CANDIDATE_LIMITS.pinnedLane ||
+      candidates.exactQuotedCount > RECALL_CANDIDATE_LIMITS.exactQuotedLane ||
+      candidates.entityCount > candidates.eligibleScanCount ||
+      candidates.temporalCount > candidates.eligibleScanCount ||
+      candidates.localSemanticCount > candidates.eligibleScanCount ||
+      candidates.unionCount < candidateFactCount ||
+      candidates.unionCount > supplementalLaneCount ||
+      candidates.diversifiedCount > candidateFactCount)
+  ) {
+    throw new RetrievalEventValidationError('invalid_candidates');
+  }
+  return candidates;
 }
 
 function normalizeExpansion(
@@ -285,6 +400,11 @@ function normalizeEvent(input: RecordMemoryRetrievalEventInput): NormalizedEvent
     evidenceExpansionMs: timing(input.timings.evidenceExpansionMs),
     totalMs: timing(input.timings.totalMs),
   };
+  const candidates = normalizeCandidates(
+    input.candidates,
+    candidateFactCount,
+    timings.factRecallMs,
+  );
   const expansion = normalizeExpansion(
     input.expansion,
     timings.evidenceExpansionMs,
@@ -317,6 +437,7 @@ function normalizeEvent(input: RecordMemoryRetrievalEventInput): NormalizedEvent
         selectedEpisodeCount !== 0 ||
         input.counts.selectedEpisodeIds.length !== 0 ||
         Object.values(timings).some((value) => value !== 0) ||
+        candidates.strategy !== 'not_requested' ||
         expansion.outcome !== 'not_requested' ||
         selectorMode !== 'deterministic' ||
         selectorOutcome !== 'not_requested' ||
@@ -359,6 +480,7 @@ function normalizeEvent(input: RecordMemoryRetrievalEventInput): NormalizedEvent
       selectedEpisodeIds: selectedIds(input.counts.selectedEpisodeIds, selectedEpisodeCount),
     },
     timings,
+    candidates,
     expansion,
     selector: { mode: selectorMode, outcome: selectorOutcome },
     barrier,
@@ -413,6 +535,20 @@ function rowToEvent(row: MemoryRetrievalEventRow): MemoryRetrievalEvent {
       evidenceExpansionMs: row.evidence_expansion_ms,
       totalMs: row.total_ms,
     },
+    candidates: {
+      strategy: row.candidate_strategy,
+      localSemanticOutcome: row.local_semantic_outcome,
+      eligibleScanCount: row.candidate_eligible_scan_count,
+      pinnedCount: row.candidate_pinned_count,
+      exactQuotedCount: row.candidate_exact_quoted_count,
+      lexicalCount: row.candidate_lexical_count,
+      entityCount: row.candidate_entity_count,
+      temporalCount: row.candidate_temporal_count,
+      localSemanticCount: row.candidate_local_semantic_count,
+      unionCount: row.candidate_union_count,
+      diversifiedCount: row.candidate_diversified_count,
+      unionMs: row.candidate_union_ms,
+    },
     expansion: {
       outcome: row.expansion_outcome,
       requestedSourceCount: row.expansion_requested_source_count,
@@ -461,13 +597,24 @@ export async function recordMemoryRetrievalEvent(
            candidate_fact_count, selected_fact_count, selected_fact_ids_json,
            candidate_episode_count, selected_episode_count, selected_episode_ids_json,
            plan_ms, fact_recall_ms, episode_recall_ms, candidate_fetch_ms, score_ms,
-           selector_ms, evidence_expansion_ms, total_ms, expansion_outcome,
+           selector_ms, evidence_expansion_ms, total_ms,
+           candidate_strategy, local_semantic_outcome, candidate_eligible_scan_count,
+           candidate_pinned_count, candidate_exact_quoted_count, candidate_lexical_count,
+           candidate_entity_count, candidate_temporal_count, candidate_local_semantic_count,
+           candidate_union_count, candidate_diversified_count, candidate_union_ms,
+           expansion_outcome,
            expansion_requested_source_count, expansion_accepted_source_count,
            expansion_source_with_evidence_count, expansion_emitted_evidence_count,
            expansion_prompt_budget_dropped_count, expansion_prompt_chars,
            selector_mode, selector_outcome, barrier_outcome, barrier_wait_ms,
            barrier_queue_age_ms, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         ) VALUES (
+           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+           ?, ?, ?, ?, ?, ?, ?, ?, ?
+         )`,
         eventId,
         event.operation,
         event.mode,
@@ -492,6 +639,18 @@ export async function recordMemoryRetrievalEvent(
         event.timings.selectorMs,
         event.timings.evidenceExpansionMs,
         event.timings.totalMs,
+        event.candidates.strategy,
+        event.candidates.localSemanticOutcome,
+        event.candidates.eligibleScanCount,
+        event.candidates.pinnedCount,
+        event.candidates.exactQuotedCount,
+        event.candidates.lexicalCount,
+        event.candidates.entityCount,
+        event.candidates.temporalCount,
+        event.candidates.localSemanticCount,
+        event.candidates.unionCount,
+        event.candidates.diversifiedCount,
+        event.candidates.unionMs,
         event.expansion.outcome,
         event.expansion.requestedSourceCount,
         event.expansion.acceptedSourceCount,

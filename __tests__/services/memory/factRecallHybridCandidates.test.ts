@@ -105,4 +105,30 @@ describe('hybrid recall candidate set', () => {
       unionCount: 3,
     });
   });
+
+  it('reports the exact bounded pinned and quoted lane inputs used by fusion', () => {
+    const candidates = Array.from({ length: 80 }, (_, index) =>
+      fact(`fact-${index}`, { pinned: true }),
+    );
+    const result = buildRecallCandidateSet({
+      strategy: 'hybrid',
+      query: 'quoted',
+      queryUnits: new Set(['quoted']),
+      anchorUnitSets: [new Set(['quoted'])],
+      lexicalCandidates: candidates,
+      candidateUnitHits: new Map(
+        candidates.map((candidate) => [candidate.id, new Set(['quoted'])]),
+      ),
+      eligibleFacts: [],
+      entities: [],
+      limit: 128,
+    });
+
+    expect(result.telemetry).toMatchObject({
+      pinnedCount: 64,
+      exactQuotedCount: 24,
+      lexicalCount: 80,
+      unionCount: 80,
+    });
+  });
 });
