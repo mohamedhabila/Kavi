@@ -20,7 +20,8 @@ const mockHydrateCanvasSurfaces = jest.fn().mockResolvedValue(undefined);
 const mockEmitAppEvent = jest.fn().mockResolvedValue(undefined);
 const mockRunMemoryMigrationTick = jest.fn().mockResolvedValue(undefined);
 const mockRunMemoryBackgroundFlush = jest.fn().mockResolvedValue(undefined);
-const mockScheduleAndroidDurableRecoveryRepair = jest.fn();
+const mockInitializeDurableRecoveryLifecycle = jest.fn();
+const mockReconcileDurableRecoveryLifecycle = jest.fn();
 let mockSettingsHydrated = true;
 let mockChatHydrated = true;
 const mockSettingsHydrationListeners = new Set<() => void>();
@@ -99,9 +100,11 @@ jest.mock('../../src/services/memory/lifecycle', () => ({
   runMemoryMigrationTick: (...args: any[]) => mockRunMemoryMigrationTick(...args),
   runMemoryBackgroundFlush: (...args: any[]) => mockRunMemoryBackgroundFlush(...args),
 }));
-jest.mock('../../src/services/executionJournal/androidDurableRecoveryLifecycle', () => ({
-  scheduleAndroidDurableRecoveryRepair: (...args: any[]) =>
-    mockScheduleAndroidDurableRecoveryRepair(...args),
+jest.mock('../../src/services/executionJournal/durableRecoveryLifecycle', () => ({
+  initializeDurableRecoveryLifecycle: (...args: any[]) =>
+    mockInitializeDurableRecoveryLifecycle(...args),
+  reconcileDurableRecoveryLifecycle: (...args: any[]) =>
+    mockReconcileDurableRecoveryLifecycle(...args),
 }));
 jest.mock('../../src/services/mcp/manager', () => ({
   mcpManager: {
@@ -347,12 +350,19 @@ describe('initializeServices', () => {
     await waitFor(() => expect(mockRunMemoryMigrationTick).toHaveBeenCalledTimes(1));
     expect(mockRunMemoryBackgroundFlush).toHaveBeenCalledTimes(1);
   });
-  it('repairs Android durable recovery candidates on foreground', async () => {
+  it('initializes durable recovery ownership synchronously on startup', () => {
+    const { initializeServices } = require('../../src/services/startup');
+
+    initializeServices();
+
+    expect(mockInitializeDurableRecoveryLifecycle).toHaveBeenCalledTimes(1);
+  });
+  it('repairs durable recovery candidates on foreground', async () => {
     const { handleAppForeground } = require('../../src/services/startup');
 
     handleAppForeground();
 
-    expect(mockScheduleAndroidDurableRecoveryRepair).toHaveBeenCalledWith('foreground');
+    expect(mockReconcileDurableRecoveryLifecycle).toHaveBeenCalledWith('foreground');
   });
   it('flushes durable memory work before waiting for migration', async () => {
     mockRunMemoryMigrationTick.mockImplementation(() => new Promise(() => undefined));

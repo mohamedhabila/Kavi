@@ -94,6 +94,10 @@ jest.mock('../../src/services/memory/lifecycle', () => ({
   runMemoryMigrationTick: (...args: any[]) => mockRunMemoryMigrationTick(...args),
   runMemoryBackgroundFlush: (...args: any[]) => mockRunMemoryBackgroundFlush(...args),
 }));
+jest.mock('../../src/services/executionJournal/durableRecoveryLifecycle', () => ({
+  initializeDurableRecoveryLifecycle: jest.fn(),
+  reconcileDurableRecoveryLifecycle: jest.fn(),
+}));
 jest.mock('../../src/services/mcp/manager', () => ({
   mcpManager: {
     connectAll: (...args: any[]) => mockConnectAll(...args),
