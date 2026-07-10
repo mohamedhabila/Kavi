@@ -17,7 +17,7 @@ export const E2E_PAIRED_CONDITIONS = [
   'oracle_evidence',
 ] as const;
 
-const E2E_MAX_ORACLE_FACTS = 32;
+export const E2E_MAX_ORACLE_FACTS = 32;
 const MEMORY_ENTITY_TYPES = [
   'person',
   'place',
