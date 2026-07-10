@@ -201,6 +201,32 @@ describe('effect dispatch policy', () => {
     });
   });
 
+  it('blocks a non-running planned effect', () => {
+    const input = fixture();
+    input.snapshot = {
+      ...input.snapshot,
+      run: { ...input.snapshot.run, status: 'waiting' },
+    };
+
+    expect(planEffectDispatch(input)).toEqual({
+      kind: 'blocked',
+      reason: 'run_not_executing',
+    });
+  });
+
+  it('blocks stale authority identity and in-place authority state drift', () => {
+    const staleId = fixture();
+    staleId.identity = { ...staleId.identity, authorityCheckpointId: 'checkpoint-older' };
+    expect(planEffectDispatch(staleId)).toEqual({ kind: 'blocked', reason: 'stale_authority' });
+
+    const stateDrift = fixture();
+    stateDrift.snapshot = {
+      ...stateDrift.snapshot,
+      run: { ...stateDrift.snapshot.run, approvalState: 'granted' },
+    };
+    expect(planEffectDispatch(stateDrift)).toEqual({ kind: 'blocked', reason: 'stale_authority' });
+  });
+
   it.each(['pending', 'denied', 'expired', 'unknown'] as const)(
     'blocks %s approval at execution time',
     (approvalState) => {
@@ -262,6 +288,14 @@ describe('effect dispatch policy', () => {
         idempotencyClass: 'effect_free',
         idempotencyKeyDigest: DIGEST_D,
         retryPolicy: 'replay_safe',
+      },
+    ],
+    [
+      'mutation mislabeled effect-free',
+      {
+        effectClass: 'remote_mutation',
+        idempotencyClass: 'effect_free',
+        idempotencyKeyDigest: null,
       },
     ],
   ] as const)('blocks an unsafe idempotency contract: %s', (_label, effectOverride) => {

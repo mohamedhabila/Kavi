@@ -1,188 +1,15 @@
 import {
   dispatchEffectExactlyOnce,
   settleEffectDispatchCallback,
-  type AtomicEffectDispatchClaimResult,
-  type AtomicEffectDispatchSettlementResult,
-  type EffectDispatchAmbiguityCandidate,
-  type EffectDispatchClaimEvidence,
-  type EffectDispatchPorts,
-  type EffectDispatchReadState,
-  type EffectDispatchSettlementCandidate,
 } from '../../src/services/executionJournal/effectDispatchCoordinator';
-import type {
-  EffectDispatchIdentity,
-  EffectDispatchSnapshot,
-} from '../../src/services/executionJournal/effectDispatchPolicy';
-import type { ExecutionEffectRecord } from '../../src/services/executionJournal/types';
-import type { ToolEffectReceipt } from '../../src/types/toolEffectReceipt';
-import { decodeToolEffectReceipt } from '../../src/utils/toolEffectReceipt';
+import { DIGEST_A, DIGEST_C, DIGEST_D } from '../helpers/executionJournalMutationFixtures';
 import {
-  DIGEST_A,
-  DIGEST_B,
-  DIGEST_C,
-  DIGEST_D,
-  executionCheckpointRecord,
-  executionRunRecord,
-} from '../helpers/executionJournalMutationFixtures';
-
-function dispatchFixture(): {
-  identity: EffectDispatchIdentity;
-  snapshot: EffectDispatchSnapshot;
-} {
-  const run = executionRunRecord({
-    status: 'running',
-    updatedAt: 14,
-    resumeStrategy: 'reconcile_first',
-    nextRetryPolicy: 'reconcile_before_retry',
-  });
-  const planningCheckpoint = executionCheckpointRecord(run, {
-    id: 'checkpoint-planning',
-    sequence: 1,
-    phase: 'work',
-    boundary: 'before_effect',
-    stateRefId: 'state-planning',
-    resumeStrategy: 'reconcile_first',
-    createdAt: 12,
-  });
-  const effect: ExecutionEffectRecord = {
-    id: 'effect-1',
-    runId: run.id,
-    checkpointId: planningCheckpoint.id,
-    toolCallId: 'tool-call-1',
-    toolNameDigest: DIGEST_A,
-    effectClass: 'remote_mutation',
-    idempotencyClass: 'declared_idempotent',
-    idempotencyKeyDigest: DIGEST_D,
-    requestDigest: DIGEST_B,
-    outcomeDigest: null,
-    status: 'planned',
-    retryPolicy: 'reconcile_before_retry',
-    attempt: 1,
-    createdAt: 13,
-    startedAt: null,
-    completedAt: null,
-    updatedAt: 13,
-  };
-  const authorityCheckpoint = executionCheckpointRecord(run, {
-    id: 'checkpoint-authority',
-    sequence: 2,
-    phase: 'work',
-    boundary: 'before_effect',
-    stateRefId: 'state-authority',
-    resumeStrategy: 'reconcile_first',
-    createdAt: 14,
-  });
-  return {
-    identity: {
-      runId: run.id,
-      effectId: effect.id,
-      toolCallId: effect.toolCallId,
-      toolName: 'calendar_update',
-      toolNameDigest: effect.toolNameDigest,
-      requestDigest: effect.requestDigest,
-      idempotencyKeyDigest: effect.idempotencyKeyDigest,
-      dispatchTargetDigest: DIGEST_C,
-      expectedEffectKind: 'calendar.update',
-      expectedResource: { kind: 'calendar_event', id: 'event-1' },
-      attempt: effect.attempt,
-      controlEpoch: run.controlEpoch,
-      authorityCheckpointId: authorityCheckpoint.id,
-    },
-    snapshot: {
-      run,
-      effect,
-      planningCheckpoint,
-      authorityCheckpoint,
-      latestCheckpointId: authorityCheckpoint.id,
-      authorizationExpiresAt: 30,
-    },
-  };
-}
-
-function effectReceipt(overrides: Partial<ToolEffectReceipt> = {}): ToolEffectReceipt {
-  const receipt = decodeToolEffectReceipt({
-    version: 1,
-    receiptId: 'ter_0123456789abcdef0123456789abcdef',
-    toolCallId: 'tool-call-1',
-    toolName: 'calendar_update',
-    runId: 'run-1',
-    transportState: 'returned',
-    effectKind: 'calendar.update',
-    effectState: 'applied',
-    verificationState: 'verified',
-    requestDigest: `sha256:${DIGEST_B}`,
-    resultDigest: `sha256:${DIGEST_C}`,
-    resource: { kind: 'calendar_event', id: 'event-1' },
-    recordedAt: 16,
-    ...overrides,
-  });
-  if (!receipt) throw new Error('invalid test receipt');
-  return receipt;
-}
-
-function claimFor(identity: EffectDispatchIdentity): EffectDispatchClaimEvidence {
-  return { claimToken: 'claim-1', identity, claimedAt: 15 };
-}
-
-function harness(
-  options: {
-    state?: EffectDispatchReadState | null;
-    claimResult?: AtomicEffectDispatchClaimResult;
-    dispatchResult?: unknown;
-    dispatchError?: Error;
-    settlementResult?: AtomicEffectDispatchSettlementResult;
-    settlementError?: Error;
-    now?: number[];
-  } = {},
-) {
-  const fixture = dispatchFixture();
-  const calls = {
-    claims: [] as Parameters<EffectDispatchPorts['claimAndStart']>,
-    dispatches: [] as EffectDispatchClaimEvidence[],
-    settlements: [] as EffectDispatchSettlementCandidate[],
-    ambiguities: [] as EffectDispatchAmbiguityCandidate[],
-  };
-  let durableClaim: EffectDispatchClaimEvidence | null =
-    options.state?.existingClaim?.claim ?? null;
-  let durableReceipt: unknown | null = options.state?.existingClaim?.receipt ?? null;
-  const times = [...(options.now ?? [15, 16, 17, 18])];
-  const ports: EffectDispatchPorts = {
-    now: () => times.shift() ?? 18,
-    readState: async () =>
-      options.state === null
-        ? null
-        : {
-            snapshot: options.state?.snapshot ?? fixture.snapshot,
-            existingClaim: durableClaim ? { claim: durableClaim, receipt: durableReceipt } : null,
-          },
-    claimAndStart: async (candidate) => {
-      calls.claims.push(candidate);
-      if (options.claimResult) return options.claimResult;
-      if (durableClaim) {
-        return { kind: 'existing', claim: durableClaim, receipt: durableReceipt };
-      }
-      durableClaim = claimFor(candidate.identity);
-      return { kind: 'claimed', claim: durableClaim };
-    },
-    dispatch: async (claim) => {
-      calls.dispatches.push(claim);
-      if (options.dispatchError) throw options.dispatchError;
-      return options.dispatchResult ?? effectReceipt();
-    },
-    settle: async (candidate) => {
-      calls.settlements.push(candidate);
-      if (options.settlementError) throw options.settlementError;
-      if (options.settlementResult) return options.settlementResult;
-      if (durableReceipt) return { kind: 'replayed' };
-      durableReceipt = candidate.receipt;
-      return { kind: 'recorded' };
-    },
-    markAmbiguous: async (candidate) => {
-      calls.ambiguities.push(candidate);
-    },
-  };
-  return { ...fixture, calls, ports };
-}
+  claimFor,
+  dispatchFixture,
+  effectDispatchHarness as harness,
+  effectFreeHarness,
+  effectReceipt,
+} from '../helpers/effectDispatchCoordinatorFixtures';
 
 describe('exactly-once effect dispatch coordinator', () => {
   it('dispatches only after an exact atomic claim and settles verified evidence', async () => {
@@ -255,6 +82,19 @@ describe('exactly-once effect dispatch coordinator', () => {
     expect(test.calls.dispatches).toHaveLength(0);
   });
 
+  it('settles an effect-free dispatch without inventing a mutation', async () => {
+    const test = effectFreeHarness();
+
+    await expect(dispatchEffectExactlyOnce(test.identity, test.ports)).resolves.toEqual(
+      expect.objectContaining({
+        kind: 'settled',
+        disposition: 'verified',
+        requiresReconciliation: false,
+      }),
+    );
+    expect(test.calls.settlements[0]?.nextEffectStatus).toBe('verified');
+  });
+
   it.each([
     [
       'timeout or unknown outcome',
@@ -286,6 +126,48 @@ describe('exactly-once effect dispatch coordinator', () => {
       }),
     );
     expect(test.calls.dispatches).toHaveLength(1);
+  });
+
+  it('keeps an existing claim without a receipt in reconciliation', async () => {
+    const fixture = dispatchFixture();
+    const test = harness({
+      state: {
+        snapshot: fixture.snapshot,
+        existingClaim: { claim: claimFor(fixture.identity), receipt: null },
+      },
+    });
+
+    await expect(dispatchEffectExactlyOnce(test.identity, test.ports)).resolves.toEqual({
+      kind: 'reconciliation_required',
+      reason: 'claim_in_flight',
+    });
+    expect(test.calls.dispatches).toHaveLength(0);
+  });
+
+  it('fails a malformed existing claim closed', async () => {
+    const fixture = dispatchFixture();
+    const test = harness({
+      state: {
+        snapshot: {
+          ...fixture.snapshot,
+          effect: {
+            ...fixture.snapshot.effect,
+            status: 'started',
+            startedAt: 14,
+            updatedAt: 14,
+          },
+        },
+        existingClaim: {
+          claim: { ...claimFor(fixture.identity), claimToken: ' invalid' },
+          receipt: null,
+        },
+      },
+    });
+
+    await expect(dispatchEffectExactlyOnce(test.identity, test.ports)).resolves.toEqual({
+      kind: 'reconciliation_required',
+      reason: 'claim_contract_violation',
+    });
   });
 
   it('blocks provider failover after a target has claimed the exact effect', async () => {
@@ -381,6 +263,17 @@ describe('exactly-once effect dispatch coordinator', () => {
     expect(test.calls.dispatches).toHaveLength(0);
   });
 
+  it('fails closed on an unknown claim result variant', async () => {
+    const test = harness();
+    test.ports.claimAndStart = async () => ({ kind: 'legacy_claimed' }) as never;
+
+    await expect(dispatchEffectExactlyOnce(test.identity, test.ports)).resolves.toEqual({
+      kind: 'reconciliation_required',
+      reason: 'claim_contract_violation',
+    });
+    expect(test.calls.dispatches).toHaveLength(0);
+  });
+
   it('rejects a claim acquired at the authorization expiry boundary', async () => {
     const test = harness({
       claimResult: {
@@ -414,6 +307,39 @@ describe('exactly-once effect dispatch coordinator', () => {
     expect(test.calls.ambiguities).toEqual([
       expect.objectContaining({ reason: 'receipt_invalid' }),
     ]);
+  });
+
+  it('rejects a no-effect receipt for a mutating command', async () => {
+    const test = harness({
+      dispatchResult: effectReceipt({
+        effectState: 'none',
+        verificationState: 'not_applicable',
+        resource: undefined,
+      }),
+    });
+
+    await expect(dispatchEffectExactlyOnce(test.identity, test.ports)).resolves.toEqual({
+      kind: 'reconciliation_required',
+      reason: 'receipt_invalid',
+    });
+    expect(test.calls.settlements).toHaveLength(0);
+  });
+
+  it('rejects a malformed callback claim before persistence', async () => {
+    const test = harness();
+
+    await expect(
+      settleEffectDispatchCallback(
+        {
+          claim: { ...claimFor(test.identity), claimToken: ' invalid' },
+          effectClass: 'remote_mutation',
+          receipt: effectReceipt(),
+          observedAt: 17,
+        },
+        test.ports,
+      ),
+    ).resolves.toEqual({ kind: 'reconciliation_required', reason: 'receipt_invalid' });
+    expect(test.calls.settlements).toHaveLength(0);
   });
 
   it('records thrown dispatch as ambiguous instead of retryable failure', async () => {
@@ -452,6 +378,20 @@ describe('exactly-once effect dispatch coordinator', () => {
     await expect(dispatchEffectExactlyOnce(test.identity, test.ports)).resolves.toEqual({
       kind: 'reconciliation_required',
       reason: 'settlement_unavailable',
+    });
+    expect(test.calls.ambiguities).toEqual([
+      expect.objectContaining({ reason: 'settlement_unavailable' }),
+    ]);
+  });
+
+  it('keeps an explicitly rejected settlement in reconciliation', async () => {
+    const test = harness({
+      settlementResult: { kind: 'rejected', reason: 'receipt_conflict' },
+    });
+
+    await expect(dispatchEffectExactlyOnce(test.identity, test.ports)).resolves.toEqual({
+      kind: 'reconciliation_required',
+      reason: 'receipt_conflict',
     });
     expect(test.calls.ambiguities).toEqual([
       expect.objectContaining({ reason: 'settlement_unavailable' }),
@@ -502,5 +442,77 @@ describe('exactly-once effect dispatch coordinator', () => {
         requiresReconciliation: false,
       }),
     );
+  });
+
+  it('blocks when the state cannot be read', async () => {
+    const missing = harness({ state: null });
+    await expect(dispatchEffectExactlyOnce(missing.identity, missing.ports)).resolves.toEqual({
+      kind: 'blocked',
+      reason: 'state_unavailable',
+    });
+
+    const unavailable = harness();
+    unavailable.ports.readState = async () => {
+      throw new Error('journal unavailable');
+    };
+    await expect(
+      dispatchEffectExactlyOnce(unavailable.identity, unavailable.ports),
+    ).resolves.toEqual({ kind: 'blocked', reason: 'state_unavailable' });
+  });
+
+  it('keeps a started effect without claim evidence in reconciliation', async () => {
+    const fixture = dispatchFixture();
+    const test = harness({
+      state: {
+        snapshot: {
+          ...fixture.snapshot,
+          effect: {
+            ...fixture.snapshot.effect,
+            status: 'started',
+            startedAt: 14,
+            updatedAt: 14,
+          },
+        },
+        existingClaim: null,
+      },
+    });
+
+    await expect(dispatchEffectExactlyOnce(test.identity, test.ports)).resolves.toEqual({
+      kind: 'reconciliation_required',
+      reason: 'effect_already_started',
+    });
+    expect(test.calls.dispatches).toHaveLength(0);
+  });
+
+  it('fails closed when the clock is unavailable after dispatch', async () => {
+    const test = harness();
+    test.ports.now = jest
+      .fn()
+      .mockReturnValueOnce(15)
+      .mockImplementationOnce(() => {
+        throw new Error('clock unavailable');
+      });
+
+    await expect(dispatchEffectExactlyOnce(test.identity, test.ports)).resolves.toEqual({
+      kind: 'reconciliation_required',
+      reason: 'settlement_unavailable',
+    });
+    expect(test.calls.settlements).toHaveLength(0);
+  });
+
+  it('uses the claim timestamp if both dispatch and clock fail', async () => {
+    const test = harness({ dispatchError: new Error('dispatch unknown') });
+    test.ports.now = jest
+      .fn()
+      .mockReturnValueOnce(15)
+      .mockImplementationOnce(() => {
+        throw new Error('clock unavailable');
+      });
+
+    await expect(dispatchEffectExactlyOnce(test.identity, test.ports)).resolves.toEqual({
+      kind: 'reconciliation_required',
+      reason: 'dispatch_threw',
+    });
+    expect(test.calls.ambiguities[0]?.observedAt).toBe(15);
   });
 });
