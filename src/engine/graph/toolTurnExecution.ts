@@ -37,6 +37,7 @@ import {
   buildToolBatchIncompleteObservabilityDetail,
   GRAPH_OBSERVABILITY_AUDIT_TYPES,
 } from './graphObservability';
+import { materializeToolEffectCompletionGoals } from './toolEffectGoalMaterialization';
 import type { AgentControlGraphWorkflowToolResultProgress } from './workflowToolResultProgress';
 
 type TerminalGraphEvent = Extract<
@@ -206,6 +207,21 @@ export async function executeAgentControlGraphToolTurn(
   const executableToolCalls = toolTurnPreparation.executableToolCalls;
   let workingMessages = toolTurnPreparation.workingMessages;
   const warningInjectedThisRound = toolTurnPreparation.warningInjectedThisRound;
+
+  const effectGoalMaterialization = await materializeToolEffectCompletionGoals({
+    toolCalls: executableToolCalls,
+    goals: params.getGraphSnapshot().goals,
+  });
+  if (effectGoalMaterialization.status === 'materialized') {
+    params.applyGraphEvents([
+      {
+        type: 'GOALS_UPDATED',
+        goals: effectGoalMaterialization.goals,
+        reason: effectGoalMaterialization.reason,
+        timestamp: effectGoalMaterialization.timestamp,
+      },
+    ]);
+  }
 
   const toolExecutionOutcomes = await executeAgentControlGraphToolBatch({
     executableToolCalls,

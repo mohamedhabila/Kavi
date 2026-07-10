@@ -230,6 +230,46 @@ describe('toolTurnExecution', () => {
     );
   });
 
+  it('commits code-owned effect completion goals before the tool batch begins', async () => {
+    mockedDetectLoops.mockReturnValue({ loopDetected: false });
+    mockedExecuteToolExecutionBatch.mockResolvedValue([]);
+    let snapshot = { goals: [] as any[] };
+    const applyGraphEvents = jest.fn((events: any[]) => {
+      const goalsUpdated = events.find((event) => event.type === 'GOALS_UPDATED');
+      if (goalsUpdated) snapshot = { goals: goalsUpdated.goals };
+    });
+    const params = createParams({
+      pendingToolCalls: [
+        createPendingToolCall({
+          arguments: JSON.stringify({ path: 'draft.txt', content: 'done' }),
+        }),
+      ],
+      getGraphSnapshot: () => snapshot as any,
+      applyGraphEvents,
+    });
+
+    await executeAgentControlGraphToolTurn(params);
+
+    const materialization = applyGraphEvents.mock.calls
+      .flatMap(([events]) => events)
+      .find((event) => event.type === 'GOALS_UPDATED');
+    expect(materialization).toEqual(
+      expect.objectContaining({
+        reason: 'effect_completion_contract:add',
+        goals: [
+          expect.objectContaining({
+            status: 'active',
+            completionPolicy: 'blocking',
+            successCriteria: [expect.stringMatching(/^evidence\.effect:/u)],
+          }),
+        ],
+      }),
+    );
+    expect(applyGraphEvents.mock.invocationCallOrder[0]).toBeLessThan(
+      mockedExecuteToolExecutionBatch.mock.invocationCallOrder[0]!,
+    );
+  });
+
   it('records stagnation signatures after successful tool execution', async () => {
     mockedDetectLoops.mockReturnValue({ loopDetected: false });
     mockedExecuteToolExecutionBatch.mockResolvedValue([
