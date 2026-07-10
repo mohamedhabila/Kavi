@@ -338,6 +338,31 @@ describe('runForegroundScenario', () => {
     expect(mockedCancelScheduledIngestionDrain).toHaveBeenCalledTimes(1);
   });
 
+  it('stops after a preflight error instead of running later turns', async () => {
+    const provider = { ...makeProvider('scenario-provider'), apiKey: '' };
+
+    const result = await runForegroundScenario({
+      provider,
+      conversationId: 'scenario-conversation',
+      conversationTitle: 'Scenario title',
+      systemPrompt: 'Scenario prompt',
+      defaultMode: 'agentic',
+      turns: [
+        { content: 'First turn.', route: 'production_auto' },
+        { content: 'Must not run.', route: 'production_auto' },
+      ],
+    });
+
+    expect(mockedRunOrchestrator).not.toHaveBeenCalled();
+    expect(result.turns).toHaveLength(1);
+    expect(result.turns[0]).toMatchObject({
+      error: 'The selected provider has no API key.',
+      memory: [],
+      timedOut: false,
+    });
+    expect(useChatStore.getState().conversations).toEqual([makeOriginalConversation()]);
+  });
+
   it('accepts a future pending memory attempt as a stable deferred outcome', async () => {
     const pendingJob: IngestionJob = {
       ...makeCompletedJob('job-deferred'),

@@ -164,12 +164,13 @@ async function runScenarioIsolated(
         !timedOut && !chatError && memory.length !== 1
           ? `Foreground turn recorded ${memory.length} memory closeouts; expected exactly one.`
           : null;
+      const turnError = timedOut
+        ? `Foreground scenario turn timed out after ${timeoutMs}ms.`
+        : (chatError ?? memoryInvariantError);
       turnSnapshots.push(
         cloneAndFreeze({
           durationMs: Date.now() - startedAt,
-          error:
-            (timedOut ? `Foreground scenario turn timed out after ${timeoutMs}ms.` : chatError) ??
-            memoryInvariantError,
+          error: turnError,
           memory,
           messages: conversation.messages.slice(messageStartIndex),
           route: { directive: turn.route, ...route },
@@ -180,7 +181,7 @@ async function runScenarioIsolated(
           userMessageId,
         }) as ForegroundScenarioTurnSnapshot,
       );
-      if (timedOut) break;
+      if (turnError) break;
     }
 
     const finalConversation = useChatStore
