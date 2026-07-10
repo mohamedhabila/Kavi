@@ -30,6 +30,33 @@ afterEach(() => {
 });
 
 describe('agent-run evidence applicability', () => {
+  it('preserves an observation-only record as direct evidence instead of aliasing it to outcome', () => {
+    recordAgentRunEvidenceMemory({
+      evidence: [
+        `agent:${JSON.stringify({
+          trajectory_id: 'run-observation-only',
+          state_index: 1,
+          observation: 'The release manifest exists.',
+          status: 'completed',
+        })}`,
+      ],
+      conversationId: 'conv-observation-only',
+      threadId: 'conv-observation-only',
+      taskId: null,
+      now: 10,
+    });
+
+    const facts = listFacts({ originConversationId: 'conv-observation-only' });
+    const span = facts.find((fact) => fact.memoryKind === 'evidence_span');
+    expect(span?.sourceAuthority).toBe('tool_observed');
+    expect(JSON.parse(span?.objectText ?? '{}')).toMatchObject({
+      sourceRunId: 'run-observation-only',
+      observation: 'The release manifest exists.',
+      status: 'completed',
+    });
+    expect(JSON.parse(span?.objectText ?? '{}')).not.toHaveProperty('outcome');
+  });
+
   it('admits only directly observed evidence spans to automatic recall', () => {
     const result = recordAgentRunEvidenceMemory({
       evidence: [

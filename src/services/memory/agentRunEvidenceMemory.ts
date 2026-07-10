@@ -263,10 +263,7 @@ function hasAgentRunEvidence(record: JsonRecord): boolean {
 function appendStep(bundle: AgentRunBundle, record: JsonRecord): void {
   const toolName = stringField(record, 'toolName') ?? stringField(record, 'tool_name');
   const toolResult = stringField(record, 'toolResult') ?? stringField(record, 'tool_result');
-  const outcome =
-    stringField(record, 'outcome') ??
-    stringField(record, 'result') ??
-    stringField(record, 'observation');
+  const outcome = stringField(record, 'outcome') ?? stringField(record, 'result');
   const observed = observedAgentRunText(record);
   const observation = observedAgentRunOutput(observed, [outcome, toolResult]);
   const observedControlSequence = observedAgentRunControlSequence(observed);
