@@ -13,6 +13,7 @@
 import { getMemoryDb } from './sqlite-store';
 import { buildFactContentHash } from './facts/contentIdentity';
 import { ensureIngestionQueueSchema } from './ingestionQueueSchema';
+import { ensureMigrationStateSchema } from './migrationStateSchema';
 
 let schemaReady = false;
 
@@ -149,17 +150,6 @@ export function ensureFactSchema(): void {
       updated_at INTEGER NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS memory_migration_state (
-      conversation_id TEXT PRIMARY KEY,
-      last_seeded_message_id TEXT,
-      seeded_turns INTEGER NOT NULL DEFAULT 0,
-      status TEXT NOT NULL DEFAULT 'pending',
-      error TEXT,
-      updated_at INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_migration_status
-      ON memory_migration_state(status);
-
     CREATE TABLE IF NOT EXISTS memory_episodes (
       id TEXT PRIMARY KEY,
       conversation_id TEXT,
@@ -240,6 +230,7 @@ export function ensureFactSchema(): void {
     CREATE INDEX IF NOT EXISTS idx_memory_reflections_task
       ON memory_reflections(task_id, deleted_at);
   `);
+  ensureMigrationStateSchema(db);
   ensureIngestionQueueSchema(db);
   ensureFactColumns(db);
   ensureEpisodeSourceIdentity(db);

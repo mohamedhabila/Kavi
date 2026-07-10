@@ -18,10 +18,11 @@ import {
   extractSeedTurns,
   getMigrationState,
   listMigrationStates,
+  MIGRATION_CLAIM_LEASE_MS,
   runMigrationSeedPass,
   seedConversation,
 } from '../../../src/services/memory/migrationSeedPass';
-import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
 import { getWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import type { Conversation } from '../../../src/types/conversation';
 import type { Message } from '../../../src/types/message';
@@ -290,6 +291,70 @@ describe('seedConversation', () => {
     ).toBe('Scoped follow-up');
   });
 
+  it('fences an expired owner before it can persist after claim recovery', async () => {
+    const conv = buildConversation('fenced-stale-owner', 1);
+    let releaseFirst!: () => void;
+    let notifyFirstStarted!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const firstStarted = new Promise<void>((resolve) => {
+      notifyFirstStarted = resolve;
+    });
+    const firstExtractor = jest.fn(async () => {
+      notifyFirstStarted();
+      await firstGate;
+      return JSON.stringify({
+        new_facts: [],
+        episode_summary: null,
+        active_focus: null,
+        open_threads: ['stale owner write'],
+        notable: [],
+      });
+    });
+    const recoveredExtractor = jest.fn(async () =>
+      JSON.stringify({
+        new_facts: [],
+        episode_summary: null,
+        active_focus: null,
+        open_threads: ['recovered owner write'],
+        notable: [],
+      }),
+    );
+
+    const firstPromise = seedConversation({
+      conversation: conv,
+      extractor: firstExtractor,
+      now: 30_000,
+    });
+    await firstStarted;
+    const recovered = await seedConversation({
+      conversation: conv,
+      extractor: recoveredExtractor,
+      now: 30_000 + MIGRATION_CLAIM_LEASE_MS,
+    });
+    releaseFirst();
+    const staleOwner = await firstPromise;
+
+    expect(recovered).toMatchObject({ status: 'completed', seededTurns: 1 });
+    expect(staleOwner).toMatchObject({
+      status: 'error',
+      seededTurns: 0,
+      error: 'claim_lost',
+    });
+    expect(
+      getWorkingBlock('open_threads', {
+        conversationId: conv.id,
+        threadId: conv.id,
+      })?.content,
+    ).toBe('recovered owner write');
+    expect(getMigrationState(conv.id)).toMatchObject({
+      status: 'completed',
+      seededTurns: 1,
+      error: null,
+    });
+  });
+
   it('rejects an invalid conversation', async () => {
     const result = await seedConversation({
       // @ts-expect-error invalid input
@@ -304,6 +369,96 @@ describe('seedConversation', () => {
 // ── runMigrationSeedPass ────────────────────────────────────────────────────
 
 describe('runMigrationSeedPass', () => {
+  it('lets only one concurrent pass claim a conversation', async () => {
+    const conv = buildConversation('concurrent-claim', 1);
+    let releaseExtractor!: () => void;
+    let notifyStarted!: () => void;
+    const extractorGate = new Promise<void>((resolve) => {
+      releaseExtractor = resolve;
+    });
+    const extractorStarted = new Promise<void>((resolve) => {
+      notifyStarted = resolve;
+    });
+    const extractor = jest.fn(async () => {
+      notifyStarted();
+      await extractorGate;
+      return JSON.stringify({
+        new_facts: [],
+        episode_summary: null,
+        active_focus: null,
+        open_threads: [],
+        notable: [],
+      });
+    });
+
+    const firstPromise = runMigrationSeedPass({
+      conversations: [conv],
+      extractor,
+      now: 10_000,
+    });
+    await extractorStarted;
+    const second = await runMigrationSeedPass({
+      conversations: [conv],
+      extractor,
+      now: 10_000,
+    });
+
+    expect(second).toMatchObject({
+      attempted: 0,
+      skipped: 1,
+      remainingConversations: 1,
+      pending: [conv.id],
+    });
+    expect(extractor).toHaveBeenCalledTimes(1);
+
+    releaseExtractor();
+    const first = await firstPromise;
+    expect(first).toMatchObject({ attempted: 1, completed: 1, errors: 0 });
+    expect(extractor).toHaveBeenCalledTimes(1);
+    expect(getMigrationState(conv.id)).toMatchObject({
+      status: 'completed',
+      claimExpiresAt: null,
+    });
+  });
+
+  it('recovers a claim deterministically at the expiry boundary', async () => {
+    const conv = buildConversation('stale-claim', 1);
+    getMemoryDb().runSync(
+      `INSERT INTO memory_migration_state (
+         conversation_id, last_seeded_message_id, seeded_turns, status, error,
+         claim_token, claim_expires_at, updated_at
+       ) VALUES (?, NULL, 0, 'in_progress', NULL, 'abandoned-claim', ?, ?)`,
+      conv.id,
+      20_000,
+      19_000,
+    );
+
+    const result = await runMigrationSeedPass({
+      conversations: [conv],
+      extractor: PASSING_EXTRACTOR,
+      now: 20_000,
+    });
+
+    expect(result).toMatchObject({ attempted: 1, completed: 1, errors: 0 });
+    expect(PASSING_EXTRACTOR).toHaveBeenCalledTimes(1);
+    expect(
+      getMemoryDb().getFirstSync<{
+        status: string;
+        claim_token: string | null;
+        claim_expires_at: number | null;
+      }>(
+        `SELECT status, claim_token, claim_expires_at
+           FROM memory_migration_state
+          WHERE conversation_id = ?`,
+        conv.id,
+      ),
+    ).toEqual({
+      status: 'completed',
+      claim_token: null,
+      claim_expires_at: null,
+    });
+  });
+
   it('is a no-op when disableLongTermMemory is true', async () => {
     const conversations = [buildConversation('c1', 2)];
     const result = await runMigrationSeedPass({

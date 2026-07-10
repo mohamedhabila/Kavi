@@ -22,26 +22,27 @@
 // ---------------------------------------------------------------------------
 
 import { getMany, getOne, runMemoryStatement } from './access/crud';
-import { ensureFactSchema } from './schema';
+import { ensureFactSchema, newId } from './schema';
 import {
+  applyConsolidatorResult,
   consolidateTurn,
   type ConsolidatorExtractor,
   type ConsolidatorResult,
 } from './consolidator';
+import { type MigrationErrorCode, type MigrationStatus } from './migrationStateSchema';
 import type { Conversation } from '../../types/conversation';
 import type { Message } from '../../types/message';
 import { createLogger } from '../../utils/logger';
 
 const logger = createLogger('memory.migrationSeedPass');
 
-export type MigrationStatus = 'pending' | 'in_progress' | 'completed' | 'error';
-
 export interface MigrationStateRow {
   conversationId: string;
   lastSeededMessageId: string | null;
   seededTurns: number;
   status: MigrationStatus;
-  error: string | null;
+  error: MigrationErrorCode | null;
+  claimExpiresAt: number | null;
   updatedAt: number;
 }
 
@@ -51,6 +52,8 @@ interface MigrationStateRowDb {
   seeded_turns: number;
   status: string;
   error: string | null;
+  claim_token: string | null;
+  claim_expires_at: number | null;
   updated_at: number;
 }
 
@@ -64,8 +67,9 @@ function rowToState(row: MigrationStateRowDb): MigrationStateRow {
     conversationId: row.conversation_id,
     lastSeededMessageId: row.last_seeded_message_id,
     seededTurns: row.seeded_turns,
-    status: (row.status as MigrationStatus) ?? 'pending',
-    error: row.error,
+    status: row.status as MigrationStatus,
+    error: row.error as MigrationErrorCode | null,
+    claimExpiresAt: row.claim_expires_at,
     updatedAt: row.updated_at,
   };
 }
@@ -85,33 +89,114 @@ export function listMigrationStates(): MigrationStateRow[] {
   return rows.map(rowToState);
 }
 
-interface UpsertInput {
+export const MIGRATION_CLAIM_LEASE_MS = 5 * 60_000;
+const MIGRATION_CLAIM_HEARTBEAT_MS = 60_000;
+
+interface AcquiredMigrationClaim {
+  outcome: 'acquired';
+  token: string;
+  state: MigrationStateRow;
+}
+
+interface BusyMigrationClaim {
+  outcome: 'busy';
+  state: MigrationStateRow;
+}
+
+interface CompletedMigrationClaim {
+  outcome: 'completed';
+  state: MigrationStateRow;
+}
+
+type MigrationClaim = AcquiredMigrationClaim | BusyMigrationClaim | CompletedMigrationClaim;
+
+function claimMigrationState(conversationId: string, now: number): MigrationClaim {
+  runMemoryStatement(
+    `INSERT OR IGNORE INTO memory_migration_state (
+       conversation_id, last_seeded_message_id, seeded_turns, status, error,
+       claim_token, claim_expires_at, updated_at
+     ) VALUES (?, NULL, 0, 'pending', NULL, NULL, NULL, ?)`,
+    conversationId,
+    now,
+  );
+
+  const token = newId('migration_claim');
+  const claimed = runMemoryStatement(
+    `UPDATE memory_migration_state
+        SET status = 'in_progress',
+            error = NULL,
+            claim_token = ?,
+            claim_expires_at = ?,
+            updated_at = ?
+      WHERE conversation_id = ?
+        AND status != 'completed'
+        AND (
+          claim_token IS NULL
+          OR claim_expires_at IS NULL
+          OR claim_expires_at <= ?
+        )`,
+    token,
+    now + MIGRATION_CLAIM_LEASE_MS,
+    now,
+    conversationId,
+    now,
+  );
+  const state = getMigrationState(conversationId);
+  if (!state) {
+    throw new Error('Migration claim state was not persisted');
+  }
+  if (claimed.changes === 1) {
+    return { outcome: 'acquired', token, state };
+  }
+  return { outcome: state.status === 'completed' ? 'completed' : 'busy', state };
+}
+
+function renewMigrationClaim(conversationId: string, token: string, now: number): boolean {
+  const renewed = runMemoryStatement(
+    `UPDATE memory_migration_state
+        SET claim_expires_at = ?, updated_at = ?
+      WHERE conversation_id = ?
+        AND claim_token = ?
+        AND status = 'in_progress'`,
+    now + MIGRATION_CLAIM_LEASE_MS,
+    now,
+    conversationId,
+    token,
+  );
+  return renewed.changes === 1;
+}
+
+interface FinalizeMigrationClaimInput {
   conversationId: string;
+  token: string;
   lastSeededMessageId: string | null;
   seededTurns: number;
   status: MigrationStatus;
-  error: string | null;
+  error: MigrationErrorCode | null;
   now: number;
 }
 
-function upsertMigrationState(input: UpsertInput): void {
-  runMemoryStatement(
-    `INSERT INTO memory_migration_state (
-       conversation_id, last_seeded_message_id, seeded_turns, status, error, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(conversation_id) DO UPDATE SET
-       last_seeded_message_id = excluded.last_seeded_message_id,
-       seeded_turns = excluded.seeded_turns,
-       status = excluded.status,
-       error = excluded.error,
-       updated_at = excluded.updated_at`,
-    input.conversationId,
+function finalizeMigrationClaim(input: FinalizeMigrationClaimInput): boolean {
+  const finalized = runMemoryStatement(
+    `UPDATE memory_migration_state
+        SET last_seeded_message_id = ?,
+            seeded_turns = ?,
+            status = ?,
+            error = ?,
+            claim_token = NULL,
+            claim_expires_at = NULL,
+            updated_at = ?
+      WHERE conversation_id = ?
+        AND claim_token = ?`,
     input.lastSeededMessageId,
     input.seededTurns,
     input.status,
     input.error,
     input.now,
+    input.conversationId,
+    input.token,
   );
+  return finalized.changes === 1;
 }
 
 export function clearMigrationState(conversationId: string): void {
@@ -181,8 +266,9 @@ export interface SeedConversationResult {
   seededTurns: number;
   remainingTurns: number;
   status: MigrationStatus;
+  claimOutcome: 'acquired' | 'busy' | 'not_required';
   results: ConsolidatorResult[];
-  error?: string;
+  error?: MigrationErrorCode;
 }
 
 export async function seedConversation(
@@ -196,6 +282,7 @@ export async function seedConversation(
       seededTurns: 0,
       remainingTurns: 0,
       status: 'error',
+      claimOutcome: 'not_required',
       results: [],
       error: 'invalid_conversation',
     };
@@ -210,45 +297,108 @@ export async function seedConversation(
       seededTurns: 0,
       remainingTurns: 0,
       status: 'completed',
+      claimOutcome: 'not_required',
       results: [],
     };
   }
 
-  const turns = extractSeedTurns(conv.messages ?? [], existing?.lastSeededMessageId ?? null);
-  if (turns.length === 0) {
-    upsertMigrationState({
-      conversationId: conv.id,
-      lastSeededMessageId: existing?.lastSeededMessageId ?? null,
-      seededTurns: existing?.seededTurns ?? 0,
-      status: 'completed',
-      error: null,
-      now,
-    });
+  const claim = claimMigrationState(conv.id, now);
+  if (claim.outcome === 'completed') {
     return {
       conversationId: conv.id,
       seededTurns: 0,
       remainingTurns: 0,
       status: 'completed',
+      claimOutcome: 'not_required',
+      results: [],
+    };
+  }
+  const turns = extractSeedTurns(conv.messages ?? [], claim.state.lastSeededMessageId ?? null);
+  if (claim.outcome === 'busy') {
+    return {
+      conversationId: conv.id,
+      seededTurns: 0,
+      remainingTurns: turns.length,
+      status: 'in_progress',
+      claimOutcome: 'busy',
       results: [],
     };
   }
 
-  // Mark in-progress so concurrent passes can short-circuit if needed.
-  upsertMigrationState({
-    conversationId: conv.id,
-    lastSeededMessageId: existing?.lastSeededMessageId ?? null,
-    seededTurns: existing?.seededTurns ?? 0,
-    status: 'in_progress',
-    error: null,
-    now,
-  });
+  const heartbeat =
+    input.now === undefined
+      ? setInterval(() => {
+          try {
+            renewMigrationClaim(conv.id, claim.token, Date.now());
+          } catch {
+            // The fenced state transition below remains the source of truth.
+          }
+        }, MIGRATION_CLAIM_HEARTBEAT_MS)
+      : null;
+  try {
+    return await seedClaimedConversation({
+      input,
+      claim,
+      turns,
+      now,
+      cap,
+    });
+  } finally {
+    if (heartbeat !== null) clearInterval(heartbeat);
+  }
+}
+
+interface SeedClaimedConversationInput {
+  input: SeedConversationInput;
+  claim: AcquiredMigrationClaim;
+  turns: SeedTurn[];
+  now: number;
+  cap: number;
+}
+
+async function seedClaimedConversation(
+  claimed: SeedClaimedConversationInput,
+): Promise<SeedConversationResult> {
+  const { input, claim, turns, now, cap } = claimed;
+  const conv = input.conversation;
+  const startingSeededTurns = claim.state.seededTurns;
+  let lastSeededMessageId = claim.state.lastSeededMessageId;
+  let seededTurns = startingSeededTurns;
+  const results: ConsolidatorResult[] = [];
+
+  if (turns.length === 0) {
+    const finalized = finalizeMigrationClaim({
+      conversationId: conv.id,
+      token: claim.token,
+      lastSeededMessageId,
+      seededTurns,
+      status: 'completed',
+      error: null,
+      now: input.now ?? Date.now(),
+    });
+    return finalized
+      ? {
+          conversationId: conv.id,
+          seededTurns: 0,
+          remainingTurns: 0,
+          status: 'completed',
+          claimOutcome: 'acquired',
+          results,
+        }
+      : claimLostResult(conv.id, 0, 0, results);
+  }
 
   const slice = turns.slice(0, cap);
-  const results: ConsolidatorResult[] = [];
-  let lastSeededMessageId: string | null = existing?.lastSeededMessageId ?? null;
-  let seededTurns = existing?.seededTurns ?? 0;
-
   for (const turn of slice) {
+    const leaseNow = input.now ?? Date.now();
+    if (!renewMigrationClaim(conv.id, claim.token, leaseNow)) {
+      return claimLostResult(
+        conv.id,
+        seededTurns - startingSeededTurns,
+        turns.length - results.length,
+        results,
+      );
+    }
     try {
       const turnNow = turn.assistantMessage.timestamp ?? now;
       const outcome = await consolidateTurn(
@@ -265,70 +415,128 @@ export async function seedConversation(
         },
         {
           extractor: input.extractor,
-          persist: input.dryRun !== true,
+          persist: false,
           now: () => turnNow,
         },
       );
       if (outcome.status !== 'valid' && outcome.status !== 'empty_valid') {
-        const code = outcome.code;
-        upsertMigrationState({
+        const code: MigrationErrorCode = outcome.code;
+        const finalized = finalizeMigrationClaim({
           conversationId: conv.id,
+          token: claim.token,
           lastSeededMessageId,
           seededTurns,
           status: 'error',
           error: code,
-          now,
+          now: input.now ?? Date.now(),
         });
-        return {
-          conversationId: conv.id,
-          seededTurns: seededTurns - (existing?.seededTurns ?? 0),
-          remainingTurns: turns.length - results.length,
-          status: 'error',
+        return finalized
+          ? {
+              conversationId: conv.id,
+              seededTurns: seededTurns - startingSeededTurns,
+              remainingTurns: turns.length - results.length,
+              status: 'error',
+              claimOutcome: 'acquired',
+              results,
+              error: code,
+            }
+          : claimLostResult(
+              conv.id,
+              seededTurns - startingSeededTurns,
+              turns.length - results.length,
+              results,
+            );
+      }
+      if (!renewMigrationClaim(conv.id, claim.token, input.now ?? Date.now())) {
+        return claimLostResult(
+          conv.id,
+          seededTurns - startingSeededTurns,
+          turns.length - results.length,
           results,
-          error: code,
-        };
+        );
+      }
+      if (!input.dryRun) {
+        applyConsolidatorResult(outcome.result, {
+          now: turnNow,
+          conversationId: conv.id,
+          threadId: conv.id,
+          threadTitle: conv.title,
+          sourceUserMessageId: turn.userMessage.id,
+          sourceAssistantMessageId: turn.assistantMessage.id,
+          messages: [turn.userMessage, turn.assistantMessage],
+        });
       }
       results.push(outcome.result);
       lastSeededMessageId = turn.assistantMessage.id;
       seededTurns += 1;
     } catch {
-      const code = 'persistence_failed';
-      logger.warn?.(`seed persistence failed for conv ${conv.id}`);
-      upsertMigrationState({
+      const code: MigrationErrorCode = 'persistence_failed';
+      logger.warn?.('seed persistence failed (persistence_failed)');
+      const finalized = finalizeMigrationClaim({
         conversationId: conv.id,
+        token: claim.token,
         lastSeededMessageId,
         seededTurns,
         status: 'error',
         error: code,
-        now,
+        now: input.now ?? Date.now(),
       });
-      return {
-        conversationId: conv.id,
-        seededTurns: seededTurns - (existing?.seededTurns ?? 0),
-        remainingTurns: turns.length - results.length,
-        status: 'error',
-        results,
-        error: code,
-      };
+      return finalized
+        ? {
+            conversationId: conv.id,
+            seededTurns: seededTurns - startingSeededTurns,
+            remainingTurns: turns.length - results.length,
+            status: 'error',
+            claimOutcome: 'acquired',
+            results,
+            error: code,
+          }
+        : claimLostResult(
+            conv.id,
+            seededTurns - startingSeededTurns,
+            turns.length - results.length,
+            results,
+          );
     }
   }
 
   const remaining = turns.length - slice.length;
   const status: MigrationStatus = remaining === 0 ? 'completed' : 'in_progress';
-  upsertMigrationState({
+  const finalized = finalizeMigrationClaim({
     conversationId: conv.id,
+    token: claim.token,
     lastSeededMessageId,
     seededTurns,
     status,
     error: null,
-    now,
+    now: input.now ?? Date.now(),
   });
+  return finalized
+    ? {
+        conversationId: conv.id,
+        seededTurns: slice.length,
+        remainingTurns: remaining,
+        status,
+        claimOutcome: 'acquired',
+        results,
+      }
+    : claimLostResult(conv.id, seededTurns - startingSeededTurns, remaining, results);
+}
+
+function claimLostResult(
+  conversationId: string,
+  seededTurns: number,
+  remainingTurns: number,
+  results: ConsolidatorResult[],
+): SeedConversationResult {
   return {
-    conversationId: conv.id,
-    seededTurns: slice.length,
-    remainingTurns: remaining,
-    status,
+    conversationId,
+    seededTurns,
+    remainingTurns,
+    status: 'error',
+    claimOutcome: 'acquired',
     results,
+    error: 'claim_lost',
   };
 }
 
@@ -412,13 +620,21 @@ export async function runMigrationSeedPass(input: RunSeedPassInput): Promise<Run
       counters.remainingConversations += 1;
       continue;
     }
-    counters.attempted += 1;
     const result = await seedConversation({
       conversation: conv,
       extractor: input.extractor,
       maxTurnsPerCall: input.maxTurnsPerCall,
       now: input.now,
     });
+    if (result.claimOutcome !== 'acquired') {
+      counters.skipped += 1;
+      if (result.remainingTurns > 0) {
+        counters.pending.push(conv.id);
+        counters.remainingConversations += 1;
+      }
+      continue;
+    }
+    counters.attempted += 1;
     if (result.status === 'completed') counters.completed += 1;
     else if (result.status === 'error') counters.errors += 1;
     else counters.inProgress += 1;
