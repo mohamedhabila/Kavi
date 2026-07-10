@@ -14,6 +14,15 @@ import type {
 } from './recoveryCoordinatorTypes';
 import { queryExecutionRecovery, type ExecutionRecoveryGeneration } from './recoveryQuery';
 
+export {
+  listPersistedExternalRecoveryCandidates,
+  readPersistedExternalRecoveryCandidate,
+  type ListPersistedExternalRecoveryCandidatesInput,
+  type ListPersistedExternalRecoveryCandidatesResult,
+  type PersistedExternalRecoveryCandidate,
+  type ReadPersistedExternalRecoveryCandidateResult,
+} from './recoveryCandidates';
+
 export interface ProductionExecutionRecoveryOptions {
   controlStore?: ExecutionRecoveryControlStoreOptions;
   externalHandleReconciliation?: CreateExecutionExternalHandleReconciliationHandlerOptions;

@@ -28,6 +28,7 @@ import { GitHubApiError } from '../../src/services/github/api';
 import { registerExecutionExternalHandle } from '../../src/services/executionJournal/mutations';
 import {
   coordinatePersistedExecutionRecovery,
+  readPersistedExternalRecoveryCandidate,
   type ProductionExecutionRecoveryOptions,
 } from '../../src/services/executionJournal/productionRecovery';
 import {
@@ -252,6 +253,7 @@ describe('production external handle recovery vertical slice', () => {
     const options = recoveryOptions(provider, () => now);
 
     const first = await coordinatePersistedExecutionRecovery({ runId: 'run-1' }, options);
+    const fresh = await readPersistedExternalRecoveryCandidate('run-1');
     now = 200;
     const second = await coordinatePersistedExecutionRecovery({ runId: 'run-1' }, options);
 
@@ -262,6 +264,18 @@ describe('production external handle recovery vertical slice', () => {
         retryAt: 60_100,
       }),
     );
+    expect(fresh).toEqual({
+      kind: 'candidate',
+      candidate: expect.objectContaining({
+        runId: 'run-1',
+        generation: expect.objectContaining({
+          updatedAt: 100,
+          snapshotDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
+        }),
+        commandDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
+        retryAt: 60_100,
+      }),
+    });
     expect(second).toEqual(
       expect.objectContaining({
         kind: 'pending',
@@ -431,6 +445,10 @@ describe('production external handle recovery vertical slice', () => {
         'SELECT state, outcome_reason FROM execution_recovery_dispatches',
       ),
     ).toEqual({ state: 'blocked', outcome_reason: 'remote_action_required' });
+    await expect(readPersistedExternalRecoveryCandidate('run-1')).resolves.toEqual({
+      kind: 'not_candidate',
+      runId: 'run-1',
+    });
   });
 
   it('blocks a missing credential reference without invoking either provider', async () => {
