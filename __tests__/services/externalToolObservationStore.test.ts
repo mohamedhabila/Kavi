@@ -116,12 +116,41 @@ describe('external tool observation journal', () => {
     ).toBe(1);
   });
 
+  it('rejects a locator already owned by another conversation', async () => {
+    const first = await persistExternalToolObservation(pendingInput);
+
+    await expect(
+      persistExternalToolObservation({
+        ...pendingInput,
+        toolCallId: 'tool-call-other-conversation',
+        conversationId: 'conversation-2',
+        parentAgentRunId: 'agent-run-2',
+        observedStatus: 'running',
+        observedAt: 105,
+      }),
+    ).rejects.toThrow('execution_journal_external_observation_ownership_conflict');
+
+    expect(
+      getExecutionJournalDb().getFirstSync<{
+        conversation_id: string;
+        status: string;
+      }>('SELECT conversation_id, status FROM execution_runs WHERE id = ?', first.runId),
+    ).toEqual({ conversation_id: 'conversation-1', status: 'waiting' });
+    expect(
+      getExecutionJournalDb().getFirstSync<{ status: string }>(
+        'SELECT status FROM execution_external_handles WHERE run_id = ?',
+        first.runId,
+      ),
+    ).toEqual({ status: 'pending' });
+  });
+
   it('advances an exact monitor observation and closes a terminal success', async () => {
     const first = await persistExternalToolObservation(pendingInput);
     const terminal = await persistExternalToolObservation({
       ...pendingInput,
       toolName: 'expo_eas_workflow_wait',
       toolCallId: 'tool-call-wait',
+      parentAgentRunId: 'agent-run-2',
       argumentsText: JSON.stringify({ projectId: 'project-1', workflowRunId: 'workflow-run-1' }),
       resultText: JSON.stringify({
         status: 'ok',

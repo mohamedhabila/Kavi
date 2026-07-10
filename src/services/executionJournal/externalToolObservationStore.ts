@@ -417,6 +417,9 @@ function advanceExistingObservation(
   ) {
     throw new Error('execution_journal_external_observation_identity_conflict');
   }
+  if (run.conversationId !== input.conversationId || run.threadId !== input.conversationId) {
+    throw new Error('execution_journal_external_observation_ownership_conflict');
+  }
   const currentTerminal = terminalRunStatus(handle.status);
   const nextTerminal = terminalRunStatus(input.observedStatus);
   if (currentTerminal) {
