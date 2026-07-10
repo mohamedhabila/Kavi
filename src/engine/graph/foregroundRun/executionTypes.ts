@@ -1,7 +1,11 @@
 import type { MutableRefObject } from 'react';
 import type { ThinkingLevel } from '../../thinking';
 import type { ChatState } from '../../../store/chatStoreTypes';
-import type { Conversation, ConversationLogEntry } from '../../../types/conversation';
+import type {
+  Conversation,
+  ConversationLogEntry,
+  ConversationMode,
+} from '../../../types/conversation';
 import type { LlmProviderConfig } from '../../../types/provider';
 import type { Message, ToolCall } from '../../../types/message';
 import type {
@@ -117,7 +121,7 @@ export interface ForegroundConversationRunState {
   chatNoApiKeyMessage: string | null;
   chatNoModelMessage: string | null;
   chatNoProviderMessage: string | null;
-  defaultConversationMode: Conversation['mode'];
+  defaultConversationMode: ConversationMode;
   exportDialogTitle: string;
   linkUnderstandingEnabled: boolean;
   maxLinks: number;
