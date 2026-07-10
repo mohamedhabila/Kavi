@@ -20,6 +20,7 @@ const mockHydrateCanvasSurfaces = jest.fn().mockResolvedValue(undefined);
 const mockEmitAppEvent = jest.fn().mockResolvedValue(undefined);
 const mockRunMemoryMigrationTick = jest.fn().mockResolvedValue(undefined);
 const mockRunMemoryBackgroundFlush = jest.fn().mockResolvedValue(undefined);
+const mockScheduleAndroidDurableRecoveryRepair = jest.fn();
 let mockSettingsHydrated = true;
 let mockChatHydrated = true;
 const mockSettingsHydrationListeners = new Set<() => void>();
@@ -97,6 +98,10 @@ jest.mock('../../src/services/events/bus', () => ({
 jest.mock('../../src/services/memory/lifecycle', () => ({
   runMemoryMigrationTick: (...args: any[]) => mockRunMemoryMigrationTick(...args),
   runMemoryBackgroundFlush: (...args: any[]) => mockRunMemoryBackgroundFlush(...args),
+}));
+jest.mock('../../src/services/executionJournal/androidDurableRecoveryLifecycle', () => ({
+  scheduleAndroidDurableRecoveryRepair: (...args: any[]) =>
+    mockScheduleAndroidDurableRecoveryRepair(...args),
 }));
 jest.mock('../../src/services/mcp/manager', () => ({
   mcpManager: {
@@ -341,6 +346,13 @@ describe('initializeServices', () => {
     expect(mockSyncSchedulerWakeNotifications).toHaveBeenCalledWith({ force: true });
     await waitFor(() => expect(mockRunMemoryMigrationTick).toHaveBeenCalledTimes(1));
     expect(mockRunMemoryBackgroundFlush).toHaveBeenCalledTimes(1);
+  });
+  it('repairs Android durable recovery candidates on foreground', async () => {
+    const { handleAppForeground } = require('../../src/services/startup');
+
+    handleAppForeground();
+
+    expect(mockScheduleAndroidDurableRecoveryRepair).toHaveBeenCalledWith('foreground');
   });
   it('flushes durable memory work before waiting for migration', async () => {
     mockRunMemoryMigrationTick.mockImplementation(() => new Promise(() => undefined));

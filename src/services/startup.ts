@@ -47,6 +47,7 @@ import {
 } from './llm/support/providerSupport';
 import { SUPER_AGENT_PERSONA_ID } from './agents/personas';
 import { resolveConversationPersonaForMode } from '../engine/graph/conversation/modeTransitions';
+import { scheduleAndroidDurableRecoveryRepair } from './executionJournal/androidDurableRecoveryLifecycle';
 
 function shouldDeliverNotification(job: CronJob): boolean {
   const mode = job.delivery?.mode || 'both';
@@ -259,6 +260,7 @@ function initializeDeferredStartupServices(): void {
     void runHydratedMemoryMaintenance(true).catch((e) =>
       console.warn('[startup] hydrated memory maintenance failed:', e),
     );
+    scheduleAndroidDurableRecoveryRepair('startup');
   });
 }
 
@@ -666,6 +668,7 @@ export function initializeServices(): void {
  * v6→v7 archived-thread backlog drains across sessions.
  */
 export function handleAppForeground(): void {
+  scheduleAndroidDurableRecoveryRepair('foreground');
   void evaluateJobsOnce({ trigger: 'foreground-reconcile' }).catch((e) =>
     console.warn('[startup] foreground scheduler reconciliation failed:', e),
   );

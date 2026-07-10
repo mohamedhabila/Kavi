@@ -273,16 +273,20 @@ async function releaseFinishedPredecessor(
       return { kind: 'deferred', runId, reason: 'native_store_unavailable' };
     }
     if (native.status === 'missing') return { kind: 'not_candidate', runId };
-    if (native.record.platformWorkId !== predecessorWorkId) {
+    if (native.status !== 'found' || native.record === null) {
+      return { kind: 'deferred', runId, reason: 'native_store_unavailable' };
+    }
+    const record = native.record;
+    if (record.platformWorkId !== predecessorWorkId) {
       return { kind: 'blocked', runId, reason: 'predecessor_identity_conflict' };
     }
-    if (ACTIVE_NATIVE_STATES.has(native.record.state)) {
+    if (ACTIVE_NATIVE_STATES.has(record.state)) {
       return { kind: 'deferred', runId, reason: 'predecessor_not_terminal' };
     }
 
     let released: Awaited<ReturnType<typeof releaseTerminalAndroidDurableExecution>>;
     try {
-      released = await dependencies.releaseNative(generationPointer(native.record));
+      released = await dependencies.releaseNative(generationPointer(record));
     } catch {
       return { kind: 'deferred', runId, reason: 'native_bridge_unavailable' };
     }
