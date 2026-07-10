@@ -1,0 +1,71 @@
+{
+  "$schema": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/schema.json",
+  "kind": "evaluation_contract",
+  "schemaVersion": "1.0.0",
+  "artifactVersions": {
+    "contract": "1.0.0",
+    "runManifest": "1.0.0"
+  },
+  "lanes": ["product_native", "memory_isolated", "full_upstream", "official_candidate"],
+  "protocolConformance": ["product_native", "adapted", "upstream_full", "official"],
+  "verificationLabels": [
+    "local_only",
+    "self_published",
+    "maintainer_reviewed",
+    "independently_verified",
+    "hidden_test"
+  ],
+  "splitKinds": ["development", "locked_validation", "sealed_held_out", "public_benchmark"],
+  "runStatuses": ["passed", "failed", "skipped", "error"],
+  "pricingStatuses": ["not_applicable", "configured", "missing"],
+  "failureCategories": [
+    "routing_or_mode_selection",
+    "intent_misunderstanding",
+    "missing_or_unnecessary_clarification",
+    "memory_write_omission",
+    "incorrect_memory_extraction",
+    "scope_or_persona_leak",
+    "retrieval_miss",
+    "retrieval_pollution",
+    "stale_or_deleted_memory",
+    "false_memory",
+    "memory_utilization_failure",
+    "over_personalization_or_sycophancy",
+    "plan_failure",
+    "tool_discovery_or_choice",
+    "tool_execution_or_state_mutation",
+    "recovery_or_resume",
+    "premature_completion",
+    "final_response_incomplete_or_unfaithful",
+    "collateral_or_duplicate_side_effect",
+    "infrastructure_or_evaluator"
+  ],
+  "metricIds": [
+    "pass_at_1",
+    "pass_at_k",
+    "all_pass",
+    "task_understanding",
+    "task_completion",
+    "memory_write",
+    "memory_retrieval",
+    "memory_utilization",
+    "false_memory_rate",
+    "privacy_safety",
+    "latency",
+    "cost",
+    "resource_use"
+  ],
+  "claimRules": {
+    "exactlyOneVerificationLabel": true,
+    "passAt1Primary": true,
+    "reportPassAtKOnlyWithPassAt1": true,
+    "skippedSatisfiesReleaseGate": false,
+    "missingPricingAssumedZero": false,
+    "publicBenchmarkPromptDevelopmentAllowed": false,
+    "defaultContributorRequiresNetwork": false,
+    "defaultContributorRequiresPaidProvider": false,
+    "publishHiddenChainOfThought": false,
+    "rawUserDataAllowedWithoutExplicitOptIn": false,
+    "officialCandidateRequiresCleanSources": true
+  }
+}

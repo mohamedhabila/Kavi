@@ -1,0 +1,955 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/schema.json",
+  "title": "Kavi evaluation artifacts",
+  "description": "Canonical public contract and run-manifest schema for Kavi evaluations.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/evaluationContract"
+    },
+    {
+      "$ref": "#/$defs/evaluationRun"
+    }
+  ],
+  "$defs": {
+    "semanticVersion": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*\\.[0-9]+\\.[0-9]+$"
+    },
+    "safeId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "gitCommit": {
+      "type": "string",
+      "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
+    },
+    "lane": {
+      "type": "string",
+      "enum": ["product_native", "memory_isolated", "full_upstream", "official_candidate"]
+    },
+    "protocolConformance": {
+      "type": "string",
+      "enum": ["product_native", "adapted", "upstream_full", "official"]
+    },
+    "verificationLabel": {
+      "type": "string",
+      "enum": [
+        "local_only",
+        "self_published",
+        "maintainer_reviewed",
+        "independently_verified",
+        "hidden_test"
+      ]
+    },
+    "splitKind": {
+      "type": "string",
+      "enum": ["development", "locked_validation", "sealed_held_out", "public_benchmark"]
+    },
+    "runStatus": {
+      "type": "string",
+      "enum": ["passed", "failed", "skipped", "error"]
+    },
+    "pricingStatus": {
+      "type": "string",
+      "enum": ["not_applicable", "configured", "missing"]
+    },
+    "failureCategory": {
+      "type": "string",
+      "enum": [
+        "routing_or_mode_selection",
+        "intent_misunderstanding",
+        "missing_or_unnecessary_clarification",
+        "memory_write_omission",
+        "incorrect_memory_extraction",
+        "scope_or_persona_leak",
+        "retrieval_miss",
+        "retrieval_pollution",
+        "stale_or_deleted_memory",
+        "false_memory",
+        "memory_utilization_failure",
+        "over_personalization_or_sycophancy",
+        "plan_failure",
+        "tool_discovery_or_choice",
+        "tool_execution_or_state_mutation",
+        "recovery_or_resume",
+        "premature_completion",
+        "final_response_incomplete_or_unfaithful",
+        "collateral_or_duplicate_side_effect",
+        "infrastructure_or_evaluator"
+      ]
+    },
+    "metricId": {
+      "type": "string",
+      "enum": [
+        "pass_at_1",
+        "pass_at_k",
+        "all_pass",
+        "task_understanding",
+        "task_completion",
+        "memory_write",
+        "memory_retrieval",
+        "memory_utilization",
+        "false_memory_rate",
+        "privacy_safety",
+        "latency",
+        "cost",
+        "resource_use"
+      ]
+    },
+    "artifactVersions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract", "runManifest"],
+      "properties": {
+        "contract": {
+          "const": "1.0.0"
+        },
+        "runManifest": {
+          "const": "1.0.0"
+        }
+      }
+    },
+    "claimRules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "exactlyOneVerificationLabel",
+        "passAt1Primary",
+        "reportPassAtKOnlyWithPassAt1",
+        "skippedSatisfiesReleaseGate",
+        "missingPricingAssumedZero",
+        "publicBenchmarkPromptDevelopmentAllowed",
+        "defaultContributorRequiresNetwork",
+        "defaultContributorRequiresPaidProvider",
+        "publishHiddenChainOfThought",
+        "rawUserDataAllowedWithoutExplicitOptIn",
+        "officialCandidateRequiresCleanSources"
+      ],
+      "properties": {
+        "exactlyOneVerificationLabel": {
+          "const": true
+        },
+        "passAt1Primary": {
+          "const": true
+        },
+        "reportPassAtKOnlyWithPassAt1": {
+          "const": true
+        },
+        "skippedSatisfiesReleaseGate": {
+          "const": false
+        },
+        "missingPricingAssumedZero": {
+          "const": false
+        },
+        "publicBenchmarkPromptDevelopmentAllowed": {
+          "const": false
+        },
+        "defaultContributorRequiresNetwork": {
+          "const": false
+        },
+        "defaultContributorRequiresPaidProvider": {
+          "const": false
+        },
+        "publishHiddenChainOfThought": {
+          "const": false
+        },
+        "rawUserDataAllowedWithoutExplicitOptIn": {
+          "const": false
+        },
+        "officialCandidateRequiresCleanSources": {
+          "const": true
+        }
+      }
+    },
+    "evaluationContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "$schema",
+        "kind",
+        "schemaVersion",
+        "artifactVersions",
+        "lanes",
+        "protocolConformance",
+        "verificationLabels",
+        "splitKinds",
+        "runStatuses",
+        "pricingStatuses",
+        "failureCategories",
+        "metricIds",
+        "claimRules"
+      ],
+      "properties": {
+        "$schema": {
+          "const": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/schema.json"
+        },
+        "kind": {
+          "const": "evaluation_contract"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "artifactVersions": {
+          "$ref": "#/$defs/artifactVersions"
+        },
+        "lanes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/lane"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "uniqueItems": true
+        },
+        "protocolConformance": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/protocolConformance"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "uniqueItems": true
+        },
+        "verificationLabels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/verificationLabel"
+          },
+          "minItems": 5,
+          "maxItems": 5,
+          "uniqueItems": true
+        },
+        "splitKinds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/splitKind"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "uniqueItems": true
+        },
+        "runStatuses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/runStatus"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "uniqueItems": true
+        },
+        "pricingStatuses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pricingStatus"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "uniqueItems": true
+        },
+        "failureCategories": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/failureCategory"
+          },
+          "minItems": 20,
+          "maxItems": 20,
+          "uniqueItems": true
+        },
+        "metricIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/metricId"
+          },
+          "minItems": 13,
+          "maxItems": 13,
+          "uniqueItems": true
+        },
+        "claimRules": {
+          "$ref": "#/$defs/claimRules"
+        }
+      }
+    },
+    "sourceRevision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repositoryUrl", "commitSha", "dirty"],
+      "properties": {
+        "repositoryUrl": {
+          "type": "string",
+          "pattern": "^https://"
+        },
+        "commitSha": {
+          "$ref": "#/$defs/gitCommit"
+        },
+        "dirty": {
+          "type": "boolean"
+        }
+      }
+    },
+    "upstreamSource": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {
+            "status": {
+              "const": "not_applicable"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "repositoryUrl", "commitSha", "dirty"],
+          "properties": {
+            "status": {
+              "const": "recorded"
+            },
+            "repositoryUrl": {
+              "type": "string",
+              "pattern": "^https://"
+            },
+            "commitSha": {
+              "$ref": "#/$defs/gitCommit"
+            },
+            "dirty": {
+              "type": "boolean"
+            }
+          }
+        }
+      ]
+    },
+    "inputDigest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sha256"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "datasetDigest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "split", "sha256", "redistributable"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "split": {
+          "$ref": "#/$defs/safeId"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "redistributable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "modelRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "capabilityClass", "provider", "model", "revision", "endpointSha256"],
+      "properties": {
+        "role": {
+          "$ref": "#/$defs/safeId"
+        },
+        "capabilityClass": {
+          "type": "string",
+          "enum": ["deterministic_fixture", "hosted_tool_capable", "openai_compatible", "on_device"]
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "type": ["string", "null"]
+        },
+        "endpointSha256": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "deviceRecord": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {
+            "status": {
+              "const": "not_applicable"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "kind",
+            "platform",
+            "model",
+            "soc",
+            "ramBytes",
+            "osVersion",
+            "osBuild",
+            "batteryHealth",
+            "thermalState",
+            "powerSource"
+          ],
+          "properties": {
+            "status": {
+              "const": "recorded"
+            },
+            "kind": {
+              "type": "string",
+              "enum": ["physical", "emulator", "simulator"]
+            },
+            "platform": {
+              "type": "string",
+              "enum": ["android", "ios"]
+            },
+            "model": {
+              "type": "string",
+              "minLength": 1
+            },
+            "soc": {
+              "type": "string",
+              "minLength": 1
+            },
+            "ramBytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "osVersion": {
+              "type": "string",
+              "minLength": 1
+            },
+            "osBuild": {
+              "type": "string",
+              "minLength": 1
+            },
+            "batteryHealth": {
+              "type": "string",
+              "minLength": 1
+            },
+            "thermalState": {
+              "type": "string",
+              "minLength": 1
+            },
+            "powerSource": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ]
+    },
+    "pricing": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "estimatedCostUsd"],
+          "properties": {
+            "status": {
+              "const": "not_applicable"
+            },
+            "estimatedCostUsd": {
+              "const": 0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "estimatedCostUsd", "snapshotDate", "sourceUrl", "rates"],
+          "properties": {
+            "status": {
+              "const": "configured"
+            },
+            "estimatedCostUsd": {
+              "type": "number",
+              "minimum": 0
+            },
+            "snapshotDate": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            },
+            "sourceUrl": {
+              "type": "string",
+              "pattern": "^https://"
+            },
+            "rates": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "estimatedCostUsd"],
+          "properties": {
+            "status": {
+              "const": "missing"
+            },
+            "estimatedCostUsd": {
+              "type": "null"
+            }
+          }
+        }
+      ]
+    },
+    "artifactRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "path", "sha256", "visibility", "mediaType"],
+      "properties": {
+        "role": {
+          "$ref": "#/$defs/safeId"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["public", "private"]
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "evaluationRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "$schema",
+        "kind",
+        "schemaVersion",
+        "runId",
+        "generatedAt",
+        "evaluation",
+        "source",
+        "inputs",
+        "models",
+        "environment",
+        "trials",
+        "pricing",
+        "command",
+        "scenarioCounts",
+        "metrics",
+        "failures",
+        "artifacts"
+      ],
+      "properties": {
+        "$schema": {
+          "const": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/schema.json"
+        },
+        "kind": {
+          "const": "evaluation_run"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "runId": {
+          "$ref": "#/$defs/safeId"
+        },
+        "generatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "evaluation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "lane",
+            "protocolConformance",
+            "verificationLabel",
+            "profileId",
+            "splitKind",
+            "status",
+            "statusReason"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/safeId"
+            },
+            "lane": {
+              "$ref": "#/$defs/lane"
+            },
+            "protocolConformance": {
+              "$ref": "#/$defs/protocolConformance"
+            },
+            "verificationLabel": {
+              "$ref": "#/$defs/verificationLabel"
+            },
+            "profileId": {
+              "$ref": "#/$defs/safeId"
+            },
+            "splitKind": {
+              "$ref": "#/$defs/splitKind"
+            },
+            "status": {
+              "$ref": "#/$defs/runStatus"
+            },
+            "statusReason": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/safeId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["app", "upstream"],
+          "properties": {
+            "app": {
+              "$ref": "#/$defs/sourceRevision"
+            },
+            "upstream": {
+              "$ref": "#/$defs/upstreamSource"
+            }
+          }
+        },
+        "inputs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["datasets", "configurations", "prompts"],
+          "properties": {
+            "datasets": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/datasetDigest"
+              },
+              "minItems": 1
+            },
+            "configurations": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/inputDigest"
+              },
+              "minItems": 1
+            },
+            "prompts": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/inputDigest"
+              }
+            }
+          }
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/modelRecord"
+          },
+          "minItems": 1
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["host", "device"],
+          "properties": {
+            "host": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["os", "arch", "nodeVersion"],
+              "properties": {
+                "os": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "arch": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "nodeVersion": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "device": {
+              "$ref": "#/$defs/deviceRecord"
+            }
+          }
+        },
+        "trials": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["index", "count", "seeds", "temperature", "maxRetries"],
+          "properties": {
+            "index": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "seeds": {
+              "type": "array",
+              "items": {
+                "type": ["string", "number"]
+              },
+              "minItems": 1
+            },
+            "temperature": {
+              "type": ["number", "null"]
+            },
+            "maxRetries": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "pricing": {
+          "$ref": "#/$defs/pricing"
+        },
+        "command": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["argv"],
+          "properties": {
+            "argv": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minItems": 1
+            }
+          }
+        },
+        "scenarioCounts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["requested", "executed", "passed", "failed", "skipped"],
+          "properties": {
+            "requested": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "executed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "passed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "failed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "skipped": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["number", "boolean", "null"]
+          }
+        },
+        "failures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["primary", "secondary", "detailCode"],
+            "properties": {
+              "primary": {
+                "$ref": "#/$defs/failureCategory"
+              },
+              "secondary": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/failureCategory"
+                },
+                "uniqueItems": true
+              },
+              "detailCode": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/safeId"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/artifactRecord"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "evaluation": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "const": "passed"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "evaluation": {
+                "type": "object",
+                "properties": {
+                  "statusReason": {
+                    "type": "null"
+                  }
+                }
+              },
+              "scenarioCounts": {
+                "type": "object",
+                "properties": {
+                  "executed": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "failed": {
+                    "const": 0
+                  },
+                  "skipped": {
+                    "const": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "evaluation": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "const": "skipped"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "evaluation": {
+                "type": "object",
+                "properties": {
+                  "statusReason": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "scenarioCounts": {
+                "type": "object",
+                "properties": {
+                  "executed": {
+                    "const": 0
+                  },
+                  "passed": {
+                    "const": 0
+                  },
+                  "failed": {
+                    "const": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "evaluation": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "const": "error"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "evaluation": {
+                "type": "object",
+                "properties": {
+                  "statusReason": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
