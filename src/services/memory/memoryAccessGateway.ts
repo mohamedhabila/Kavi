@@ -14,6 +14,12 @@ import {
   type NextTurnMemoryConsistencyResult,
 } from './nextTurnConsistency';
 import { findLastClosedTurn } from './turnProcessor';
+import {
+  resolveMemoryContextStrategy,
+  resolveMemoryRetrievalStrategy,
+  type MemoryContextStrategy,
+  type MemoryRetrievalStrategy,
+} from './memoryAccessPolicy';
 
 type MemoryAccessMode = 'chat' | 'agentic' | 'pilot';
 
@@ -34,6 +40,8 @@ export interface UnifiedMemoryAccessRequest {
     provider: LlmProviderConfig;
     model?: string;
   };
+  retrievalStrategy?: MemoryRetrievalStrategy;
+  contextStrategy?: MemoryContextStrategy;
 }
 
 export interface UnifiedMemoryAccessResult {
@@ -50,9 +58,11 @@ export async function buildUnifiedMemoryAccessContext(
     request.messages,
     request.internalUserMessageCount ?? 0,
   );
+  const retrievalStrategy = resolveMemoryRetrievalStrategy(request.retrievalStrategy);
+  const contextStrategy = resolveMemoryContextStrategy(request.contextStrategy);
 
   const boundary =
-    request.mode === 'pilot'
+    request.mode === 'pilot' && contextStrategy === 'production'
       ? selectContextStartIndex(normalizedMessages, {
           personaId: request.personaId,
           mode: request.mode,
@@ -89,7 +99,9 @@ export async function buildUnifiedMemoryAccessContext(
     ...(request.goals ? { goals: request.goals } : {}),
     ...(request.activeTaskId ? { activeTaskId: request.activeTaskId } : {}),
     ...(request.asyncWork ? { asyncWork: request.asyncWork } : {}),
-    ...(request.retrievalLlm ? { retrievalLlm: request.retrievalLlm } : {}),
+    ...(retrievalStrategy === 'production' && request.retrievalLlm
+      ? { retrievalLlm: request.retrievalLlm }
+      : {}),
   });
   const livingMemory: LivingMemoryBridgeOutput = {
     ...livingMemoryResult,

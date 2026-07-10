@@ -23,6 +23,16 @@ import { buildLivingMemorySections } from '../../src/services/memory/livingMemor
 import { canReadLongTermMemory } from '../../src/services/memory/policy';
 import { getIngestionJobForSourceTurn } from '../../src/services/memory/ingestionQueueStore';
 import type { IngestionJob } from '../../src/services/memory/ingestionQueueStore';
+import type { LlmProviderConfig } from '../../src/types/provider';
+
+const RETRIEVAL_PROVIDER: LlmProviderConfig = {
+  id: 'retrieval-provider',
+  name: 'Retrieval provider',
+  enabled: true,
+  baseUrl: 'https://example.com',
+  apiKey: 'test-key',
+  model: 'retrieval-model',
+};
 
 const mockedGetIngestionJobForSourceTurn = getIngestionJobForSourceTurn as jest.MockedFunction<
   typeof getIngestionJobForSourceTurn
@@ -162,6 +172,54 @@ describe('memoryAccessGateway', () => {
         conversationId: 'memory-pilot',
       }),
     );
+  });
+
+  it('applies explicit full-context and deterministic lexical retrieval policies', async () => {
+    const messages: Message[] = [
+      makeMessage({ id: 'u1', role: 'user', content: 'Old topic', timestamp: 1_000 }),
+      makeMessage({ id: 'a1', role: 'assistant', content: 'Old response', timestamp: 2_000 }),
+      makeMessage({ id: 'u2', role: 'user', content: 'New topic', timestamp: 30_000_000 }),
+    ];
+
+    const result = await buildUnifiedMemoryAccessContext({
+      messages,
+      memoryConversationId: 'memory-diagnostic',
+      sourceThreadId: 'thread-diagnostic',
+      mode: 'pilot',
+      now: 30_000_000,
+      contextStrategy: 'full_context',
+      retrievalStrategy: 'lexical_only',
+      retrievalLlm: { provider: RETRIEVAL_PROVIDER, model: RETRIEVAL_PROVIDER.model },
+    });
+
+    expect(result.boundary).toMatchObject({ startIndex: 0, reason: 'full_history' });
+    expect(result.scopedMessages).toEqual(messages);
+    const livingMemoryInput = jest.mocked(buildLivingMemorySections).mock.calls[0][0];
+    expect(livingMemoryInput).not.toHaveProperty('retrievalLlm');
+
+    await buildUnifiedMemoryAccessContext({
+      messages,
+      memoryConversationId: 'memory-production',
+      sourceThreadId: 'thread-production',
+      mode: 'chat',
+      retrievalStrategy: 'production',
+      retrievalLlm: { provider: RETRIEVAL_PROVIDER, model: RETRIEVAL_PROVIDER.model },
+    });
+    expect(jest.mocked(buildLivingMemorySections).mock.calls[1][0]).toMatchObject({
+      retrievalLlm: { provider: RETRIEVAL_PROVIDER, model: RETRIEVAL_PROVIDER.model },
+    });
+  });
+
+  it('rejects unknown memory access policies instead of silently changing behavior', async () => {
+    await expect(
+      buildUnifiedMemoryAccessContext({
+        messages: [makeMessage({ id: 'u1', role: 'user', content: 'Question' })],
+        memoryConversationId: 'memory-invalid-policy',
+        sourceThreadId: 'thread-invalid-policy',
+        mode: 'chat',
+        retrievalStrategy: 'unknown' as never,
+      }),
+    ).rejects.toThrow('Unsupported memory retrieval strategy');
   });
 
   it('returns no living memory when long-term memory is disabled', async () => {
