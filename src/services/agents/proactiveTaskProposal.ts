@@ -53,7 +53,11 @@ function deriveProposalEvidence(
   if (!conversation || !isExactDurableScopeId(conversation.id) || !isFiniteTimestamp(now)) {
     return undefined;
   }
-  if (conversation.activeAgentRunId !== undefined) {
+  if (
+    conversation.activeAgentRunId !== undefined ||
+    !Array.isArray(conversation.agentRuns) ||
+    !Array.isArray(conversation.messages)
+  ) {
     return undefined;
   }
 
@@ -62,6 +66,7 @@ function deriveProposalEvidence(
   if (
     !run ||
     run.status !== 'failed' ||
+    run.terminalReason === 'user_cancelled' ||
     !isExactDurableScopeId(run.id) ||
     !isExactDurableScopeId(run.userMessageId) ||
     !isFiniteTimestamp(run.createdAt) ||
@@ -71,7 +76,7 @@ function deriveProposalEvidence(
     run.completedAt > now ||
     run.completedAt < run.createdAt ||
     now - run.completedAt > PROACTIVE_TASK_PROPOSAL_MAX_AGE_MS ||
-    (run.controlGraph?.asyncWork.pendingOperations.length ?? 0) > 0
+    (run.controlGraph?.asyncWork?.pendingOperations?.length ?? 0) > 0
   ) {
     return undefined;
   }
@@ -86,7 +91,8 @@ function deriveProposalEvidence(
     sourceMessage.role !== 'user' ||
     !isFiniteTimestamp(sourceMessage.timestamp) ||
     sourceMessage.timestamp > run.createdAt ||
-    (!sourceMessage.content.trim() && !sourceMessage.attachments?.length)
+    (typeof sourceMessage.content !== 'string' ||
+      (!sourceMessage.content.trim() && !sourceMessage.attachments?.length))
   ) {
     return undefined;
   }

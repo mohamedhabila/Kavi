@@ -1,3 +1,5 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { STORAGE_KEYS } from '../../../src/constants/storage';
 import { useProactiveProposalStore } from '../../../src/services/agents/proactiveProposalStore';
 import {
   PROACTIVE_TASK_PROPOSAL_COOLDOWN_MS,
@@ -17,8 +19,12 @@ const proposal: ProactiveTaskProposal = {
 };
 
 describe('proactive proposal persistence state', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await AsyncStorage.removeItem(STORAGE_KEYS.PROACTIVE_PROPOSALS);
+    (AsyncStorage.setItem as jest.Mock).mockClear();
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
     useProactiveProposalStore.setState({ receipts: {}, presentedThisSession: {} });
+    await useProactiveProposalStore.persist.rehydrate();
   });
 
   it('records one idempotent presentation per app session', () => {
@@ -114,5 +120,26 @@ describe('proactive proposal persistence state', () => {
         presentedThisSession: {},
       }),
     ).toBeUndefined();
+  });
+
+  it('restores a dismissed proposal from durable storage after restart', async () => {
+    useProactiveProposalStore.getState().markPresented(proposal, NOW);
+    useProactiveProposalStore.getState().dismiss(proposal, NOW + 1);
+    await Promise.resolve();
+    await Promise.resolve();
+    const persisted = (AsyncStorage.setItem as jest.Mock).mock.calls
+      .filter(([key]) => key === STORAGE_KEYS.PROACTIVE_PROPOSALS)
+      .at(-1)?.[1] as string | undefined;
+    expect(persisted).toContain('dismissed');
+
+    useProactiveProposalStore.setState({ receipts: {}, presentedThisSession: {} });
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(persisted);
+    await useProactiveProposalStore.persist.rehydrate();
+
+    expect(useProactiveProposalStore.getState().presentedThisSession).toEqual({});
+    expect(useProactiveProposalStore.getState().receipts[proposal.identityKey]).toMatchObject({
+      disposition: 'dismissed',
+      respondedAt: NOW + 1,
+    });
   });
 });

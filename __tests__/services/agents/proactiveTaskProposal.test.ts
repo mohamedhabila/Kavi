@@ -161,6 +161,13 @@ describe('proactive failed-task proposal selection', () => {
     expect(
       select({
         conversation: conversation({
+          agentRuns: [failedRun({ terminalReason: 'user_cancelled' })],
+        }),
+      }),
+    ).toBeUndefined();
+    expect(
+      select({
+        conversation: conversation({
           agentRuns: [
             failedRun({
               updatedAt: NOW + 1,
