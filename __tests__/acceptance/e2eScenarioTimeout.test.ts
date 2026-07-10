@@ -13,6 +13,7 @@ function makeScenario(overrides: Partial<E2EScenario> = {}): E2EScenario {
   return {
     id: 'timeout-test',
     conversationId: 'conv-timeout-test',
+    execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt: 'Run the scenario.',
     rubrics: [],
     ...overrides,

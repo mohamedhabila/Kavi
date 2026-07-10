@@ -5,6 +5,7 @@ export const E2E_CORE_MULTI_TURN_SCENARIOS: ReadonlyArray<E2EScenario> = [
   {
     id: 'multi-turn-trip-artifact',
     conversationId: 'e2e-trip-artifact',
+    execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt: 'Help me plan a weekend trip.',
     userTurns: [
       {
@@ -27,6 +28,7 @@ export const E2E_CORE_MULTI_TURN_SCENARIOS: ReadonlyArray<E2EScenario> = [
   {
     id: 'multi-turn-inventory-readback',
     conversationId: 'e2e-inventory-readback',
+    execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt: 'Create two personal notes in the workspace.',
     userTurns: [
       {
@@ -51,6 +53,7 @@ export const E2E_CORE_MULTI_TURN_SCENARIOS: ReadonlyArray<E2EScenario> = [
   {
     id: 'multi-turn-passive-chitchat-memory',
     conversationId: 'e2e-passive-chitchat',
+    execution: { initialMode: 'agentic', route: 'forced_agentic' },
     threadTitle: 'weekend-planning-thread',
     prompt: 'weekend-planning-thread',
     userTurns: [{ content: 'plan-weekend-trip-42' }, { content: 'confirm-weekend-plan-42' }],
@@ -73,6 +76,7 @@ export const E2E_CORE_MULTI_TURN_SCENARIOS: ReadonlyArray<E2EScenario> = [
   {
     id: 'multi-turn-goal-passive-recall',
     conversationId: 'e2e-goal-passive',
+    execution: { initialMode: 'agentic', route: 'forced_agentic' },
     threadTitle: 'meal-planning-scope',
     prompt: 'Track goals while I share planning tokens.',
     userTurns: [
@@ -105,6 +109,7 @@ export const E2E_CORE_MULTI_TURN_SCENARIOS: ReadonlyArray<E2EScenario> = [
   {
     id: 'native-calendar-json-field',
     conversationId: 'e2e-native-calendar',
+    execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt:
       'Verify the calendar configuration and events for 2026-06-10T00:00:00Z to 2026-06-11T00:00:00Z.',
     rubrics: [
@@ -123,6 +128,7 @@ export const E2E_CORE_MULTI_TURN_SCENARIOS: ReadonlyArray<E2EScenario> = [
   {
     id: 'multi-turn-gate-followup',
     conversationId: 'e2e-gate-followup',
+    execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt: 'Persist the gate artifact for the active goal.',
     userTurns: [
       {

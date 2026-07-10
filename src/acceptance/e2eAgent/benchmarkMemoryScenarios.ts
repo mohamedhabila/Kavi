@@ -8,6 +8,7 @@ import type { E2EScenario } from './types';
 export const BENCH_SESSION_TOOL_CACHE: E2EScenario = {
   id: 'bench-session-tool-cache',
   conversationId: 'e2e-bench-session-cache',
+  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt: 'Store and verify a memory token across two turns.',
   userTurns: [
     {
@@ -33,6 +34,7 @@ export const BENCH_SESSION_TOOL_CACHE: E2EScenario = {
 export const BENCH_TOOL_DESCRIBE_THEN_USE: E2EScenario = {
   id: 'bench-tool-describe-then-use',
   conversationId: 'e2e-bench-describe-use',
+  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt: 'Learn how to store a durable memory fact, then store one.',
   userTurns: [
     { content: 'Inspect the available memory capability if needed.' },
@@ -55,6 +57,7 @@ export const BENCH_TOOL_DESCRIBE_THEN_USE: E2EScenario = {
 export const BENCH_MEMORY_STATE_3TURN_RECALL: E2EScenario = {
   id: 'bench-memory-state-3turn-recall',
   conversationId: 'e2e-bench-memory-3turn',
+  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt: 'Track two preference tokens across turns.',
   userTurns: [
     {
@@ -83,6 +86,7 @@ export const BENCH_MEMORY_STATE_3TURN_RECALL: E2EScenario = {
 export const BENCH_SCOPED_RECALL_GOAL_SWITCH: E2EScenario = {
   id: 'bench-scoped-recall-goal-switch',
   conversationId: 'e2e-bench-scoped-switch',
+  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   threadTitle: 'bench-scoped-switch-thread',
   prompt: 'Track two goals with distinct scope tokens.',
   userTurns: [
@@ -113,6 +117,7 @@ export const BENCH_SCOPED_RECALL_GOAL_SWITCH: E2EScenario = {
 export const BENCH_BFCL_SEQUENTIAL_MEMORY_CHAIN: E2EScenario = {
   id: 'bench-bfcl-sequential-memory-chain',
   conversationId: 'e2e-bench-bfcl-sequential',
+  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt:
     'Remember that subject `bfcl-seq-1` has chain_token `BFCL-SEQ-E2E-9`, then verify that memory.',
   rubrics: [
@@ -129,6 +134,7 @@ export const BENCH_BFCL_SEQUENTIAL_MEMORY_CHAIN: E2EScenario = {
 export const BENCH_LONGMEM_DELAYED_RECALL: E2EScenario = {
   id: 'bench-longmem-delayed-recall',
   conversationId: 'e2e-bench-longmem-delayed',
+  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   threadTitle: 'longmem-delayed-thread',
   prompt: 'Track an access code across turns.',
   userTurns: [
@@ -161,6 +167,7 @@ export const BENCH_LONGMEM_DELAYED_RECALL: E2EScenario = {
 export const BENCH_LONGMEM_DUAL_FACT_RECALL: E2EScenario = {
   id: 'bench-longmem-dual-fact-recall',
   conversationId: 'e2e-bench-longmem-dual',
+  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   threadTitle: 'longmem-dual-thread',
   prompt: 'Track two access tokens across turns.',
   userTurns: [
@@ -190,6 +197,7 @@ export const BENCH_LONGMEM_DUAL_FACT_RECALL: E2EScenario = {
 export const BENCH_LONGMEM_KNOWLEDGE_UPDATE_RECALL: E2EScenario = {
   id: 'bench-longmem-knowledge-update-recall',
   conversationId: 'e2e-bench-longmem-update',
+  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   threadTitle: 'longmem-update-thread',
   prompt: 'Track an updated preference and recall only the current state.',
   userTurns: [
@@ -221,6 +229,7 @@ export const BENCH_LONGMEM_KNOWLEDGE_UPDATE_RECALL: E2EScenario = {
 export const BENCH_LONGMEM_ABSTENTION_EMPTY_RECALL: E2EScenario = {
   id: 'bench-longmem-abstention-empty-recall',
   conversationId: 'e2e-bench-longmem-abstention',
+  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   threadTitle: 'longmem-abstention-thread',
   prompt: 'Recall only known memory and return an empty recall for unknown subjects.',
   userTurns: [
@@ -246,6 +255,7 @@ export const BENCH_LONGMEM_ABSTENTION_EMPTY_RECALL: E2EScenario = {
 export const BENCH_KNOWU_PERSONALIZED_CONTACT_MEMORY: E2EScenario = {
   id: 'bench-knowu-personalized-contact-memory',
   conversationId: 'e2e-bench-knowu-contact-memory',
+  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   threadTitle: 'knowu-personalized-mobile-thread',
   prompt: 'Use remembered user preference to pick the mobile communication target.',
   userTurns: [

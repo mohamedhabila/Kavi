@@ -22,7 +22,7 @@ import {
 import type { E2EAssessmentDimension } from './e2eAssessmentDimensions';
 import type { E2ERubric, E2EScenario } from './types';
 
-export const E2E_BENCHMARK_MANIFEST_VERSION = '2026-06-14.long-run-direct-shards';
+export const E2E_BENCHMARK_MANIFEST_VERSION = '2026-07-10.product-route-v1';
 export const E2E_BENCHMARK_SOURCE_REFRESH_DATE = '2026-06-14';
 
 type E2ERubricKind = E2ERubric['kind'];
@@ -82,6 +82,11 @@ export type E2EBenchmarkManifest = {
     conversationId: string;
     userTurnCount: number;
     nativeFixtureRequired: boolean;
+    execution: {
+      initialMode: E2EScenario['execution']['initialMode'];
+      route: E2EScenario['execution']['route'];
+      turnRoutes: ReadonlyArray<E2EScenario['execution']['route']>;
+    };
   };
   hiddenGroundTruth: {
     visibleToAgent: false;
@@ -420,6 +425,12 @@ export function buildE2EBenchmarkManifest(scenario: E2EScenario): E2EBenchmarkMa
       conversationId: scenario.conversationId,
       userTurnCount: scenario.userTurns?.length ?? 1,
       nativeFixtureRequired: environmentKind === 'native_fixture',
+      execution: {
+        ...scenario.execution,
+        turnRoutes:
+          scenario.userTurns?.map((turn) => turn.route ?? scenario.execution.route) ??
+          [scenario.execution.route],
+      },
     },
     hiddenGroundTruth: {
       visibleToAgent: false,

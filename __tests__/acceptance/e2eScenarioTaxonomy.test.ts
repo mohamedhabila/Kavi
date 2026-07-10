@@ -37,6 +37,14 @@ const LONG_RUN_DIRECT_SCENARIO_IDS = [
   'direct-mobileworld-long-horizon-personalization',
 ] as const;
 
+const LONGITUDINAL_ROUTE_SCENARIO_IDS = new Set([
+  'profile-correction-chitchat',
+  'preference-to-calendar-action',
+  'agent-outcome-to-chitchat',
+  'failure-gotcha-reuse',
+  'relaunch-profile-continuity',
+]);
+
 describe('E2E scenario taxonomy', () => {
   it('covers all registered scenarios without duplicate ids', () => {
     expect(ALL_SCENARIOS.length).toBeGreaterThanOrEqual(51);
@@ -66,6 +74,16 @@ describe('E2E scenario taxonomy', () => {
       for (const turn of scenario.userTurns ?? []) {
         expect(turnRecord(turn)).not.toHaveProperty('graphGoals');
       }
+    }
+  });
+
+  it('keeps every pre-longitudinal scenario explicitly on the agentic product route', () => {
+    for (const scenario of ALL_SCENARIOS) {
+      if (LONGITUDINAL_ROUTE_SCENARIO_IDS.has(scenario.id)) continue;
+      expect(scenario.execution).toEqual({
+        initialMode: 'agentic',
+        route: 'forced_agentic',
+      });
     }
   });
 

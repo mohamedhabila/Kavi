@@ -20,6 +20,7 @@ const mockedRunE2EScenario = runE2EScenario as jest.MockedFunction<typeof runE2E
 const scenario: E2EScenario = {
   id: 'retry-fixture',
   conversationId: 'e2e-retry',
+  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt: 'structural prompt',
   rubrics: [{ kind: 'graph_terminal_success' }],
 };

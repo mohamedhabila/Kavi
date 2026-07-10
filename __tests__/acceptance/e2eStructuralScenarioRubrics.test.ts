@@ -28,6 +28,8 @@ import {
 } from '../../src/acceptance/e2eAgent/sandboxMemory';
 import { resetE2EWorkspaceSandbox } from '../../src/acceptance/e2eAgent/sandboxWorkspace';
 import { areGoalSuccessCriteriaSatisfied } from '../../src/engine/goals/completionEvidence';
+import { syncActiveGoalFocusFromGraphTransition } from '../../src/services/memory/tasks';
+import { buildAssistantMessageMetadata } from '../../src/utils/assistantMessageMetadata';
 
 const mockRunOrchestrator = jest.fn();
 
@@ -35,8 +37,28 @@ jest.mock('../../src/engine/orchestrator', () => ({
   runOrchestrator: (...args: unknown[]) => mockRunOrchestrator(...args),
 }));
 
+jest.mock('../../src/services/memory/lifecycle', () => {
+  const actual = jest.requireActual('../../src/services/memory/lifecycle');
+  return {
+    ...actual,
+    recordCompletedTurnForMemory: jest.fn((input) =>
+      actual.recordCompletedTurnForMemory({
+        ...input,
+        activeChatProvider: undefined,
+        providerEnrichment: false,
+      }),
+    ),
+  };
+});
+
 jest.mock('../../src/acceptance/e2eAgent/providerConfig', () => ({
   buildE2EProvider: () => ({
+    id: 'e2e-structural-provider',
+    name: 'E2E structural provider',
+    enabled: true,
+    kind: 'remote',
+    protocol: 'openai-chat',
+    providerFamily: 'custom',
     apiKey: 'test-key',
     model: 'test-model',
     baseUrl: 'https://example.com',
@@ -56,7 +78,7 @@ function buildFinalizedGraphSnapshot(
     observedToolResults: [],
     pendingAsyncCount: 0,
     lastModelToolNames: [],
-    asyncWork: { pendingOperations: [], awaitingBackgroundWorkers: false },
+    asyncWork: { pendingOperations: [], awaitingBackgroundWorkers: false, updatedAt: 1 },
     performance: {
       modelTurnCount: 1,
       modelDurationMs: 1,
@@ -65,8 +87,15 @@ function buildFinalizedGraphSnapshot(
       lastCandidateToolCount: 0,
       lastActiveToolCount: 0,
       maxActiveToolCount: 0,
+      lastActiveToolTokenEstimate: 0,
+      maxActiveToolTokenEstimate: 0,
+      updatedAt: 1,
     },
-    turnDirectives: {},
+    turnDirectives: {
+      forceFinalText: false,
+      requireWorkflowTool: false,
+      incompleteFinalTextRecoveryCount: 0,
+    },
     audit: [],
     updatedAt: 1,
     ...(goals?.length ? { goals } : {}),
@@ -139,7 +168,12 @@ describe('E2E thin runner fixtures', () => {
         );
       }
       invocation += 1;
-      callbacks.onAssistantMessage('acknowledged', []);
+      callbacks.onAssistantMessage(
+        'acknowledged',
+        [],
+        undefined,
+        buildAssistantMessageMetadata('final'),
+      );
       callbacks.onAgentControlGraphStateChange(firstGraph);
       callbacks.onDone();
     });
@@ -372,7 +406,12 @@ describe('E2E structural mobile assistant scenarios', () => {
     resetE2EMemorySandbox();
     mockRunOrchestrator.mockReset();
     mockRunOrchestrator.mockImplementation(async (_options, callbacks) => {
-      callbacks.onAssistantMessage('acknowledged', []);
+      callbacks.onAssistantMessage(
+        'acknowledged',
+        [],
+        undefined,
+        buildAssistantMessageMetadata('final'),
+      );
       callbacks.onAgentControlGraphStateChange(buildFinalizedGraphSnapshot());
       callbacks.onDone();
     });
@@ -425,26 +464,24 @@ describe('E2E structural mobile assistant scenarios', () => {
     ];
 
     let invocation = 0;
-    mockRunOrchestrator.mockImplementation(async (_options, callbacks) => {
+    mockRunOrchestrator.mockImplementation(async (options, callbacks) => {
       const turn = invocation;
       invocation += 1;
 
-      if (turn === 0 || turn === 2) {
-        const toolCall = { id: `tc-${turn}`, name: 'update_goals', arguments: '{}' };
-        callbacks.onToolCallStart(toolCall);
-        callbacks.onAssistantMessage('', [toolCall]);
-        callbacks.onAgentControlGraphStateChange(
-          buildFinalizedGraphSnapshot(
-            turn === 0 ? goalsAfterScopeA : goalsAfterScopeB,
-            turn === 0 ? 'scope-a' : 'scope-b',
-          ),
-        );
-      } else {
-        callbacks.onAssistantMessage('acknowledged', []);
-        callbacks.onAgentControlGraphStateChange(
-          buildFinalizedGraphSnapshot(goalsAfterScopeB, 'scope-b'),
-        );
-      }
+      callbacks.onAssistantMessage(
+        'acknowledged',
+        [],
+        undefined,
+        buildAssistantMessageMetadata('final'),
+      );
+      const goals = turn === 0 ? goalsAfterScopeA : goalsAfterScopeB;
+      syncActiveGoalFocusFromGraphTransition({
+        threadId: options.conversationId,
+        goals,
+      });
+      callbacks.onAgentControlGraphStateChange(
+        buildFinalizedGraphSnapshot(goals, turn === 0 ? 'scope-a' : 'scope-b'),
+      );
 
       callbacks.onDone();
     });

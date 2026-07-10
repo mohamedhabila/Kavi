@@ -50,13 +50,20 @@ describe('e2eBenchmarkManifest', () => {
   });
 
   it('generates complete versioned manifests for every live E2E scenario', () => {
-    const scenarioIds = [
-      ...E2E_AGENT_SCENARIOS.map((scenario) => scenario.id),
-      ...DELEGATION_E2E_SCENARIOS.map((scenario) => scenario.id),
-    ].sort();
+    const scenarios = [...E2E_AGENT_SCENARIOS, ...DELEGATION_E2E_SCENARIOS];
+    const scenarioIds = scenarios.map((scenario) => scenario.id).sort();
     const manifests = listE2EBenchmarkManifests();
 
     expect(manifests.map((manifest) => manifest.scenarioId).sort()).toEqual(scenarioIds);
+    for (const scenario of scenarios) {
+      const manifest = manifests.find((candidate) => candidate.scenarioId === scenario.id);
+      expect(manifest?.initialState.execution).toEqual({
+        ...scenario.execution,
+        turnRoutes:
+          scenario.userTurns?.map((turn) => turn.route ?? scenario.execution.route) ??
+          [scenario.execution.route],
+      });
+    }
 
     for (const manifest of manifests) {
       expect(manifest.version).toBe(E2E_BENCHMARK_MANIFEST_VERSION);

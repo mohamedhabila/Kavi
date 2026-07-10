@@ -8,6 +8,7 @@ function scenario(id: string): E2EScenario {
   return {
     id,
     conversationId: `conv-${id}`,
+    execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt: `Prompt ${id}`,
     rubrics: [],
   };

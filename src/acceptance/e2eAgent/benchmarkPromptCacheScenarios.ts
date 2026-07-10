@@ -18,6 +18,7 @@ const PROMPT_CACHE_STABLE_CONTEXT = Array.from({ length: 96 }, (_, index) => {
 export const BENCH_PROMPT_CACHE_LONG_HORIZON: E2EScenario = {
   id: 'bench-prompt-cache-long-horizon',
   conversationId: 'e2e-bench-prompt-cache-long-horizon',
+  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt: 'Verify provider prompt-cache reuse across a long single conversation.',
   userTurns: [
     {
@@ -58,6 +59,7 @@ export const BENCH_PROMPT_CACHE_LONG_HORIZON: E2EScenario = {
 export const BENCH_PROMPT_CACHE_CONVERGENCE_LONG_RUN: E2EScenario = {
   id: 'bench-prompt-cache-convergence-long-run',
   conversationId: 'e2e-bench-prompt-cache-convergence-long-run',
+  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt: 'Verify provider prompt-cache convergence across a sustained mobile assistant thread.',
   userTurns: [
     {

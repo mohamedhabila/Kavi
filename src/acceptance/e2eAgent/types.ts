@@ -3,8 +3,10 @@
 // ---------------------------------------------------------------------------
 
 import type { AgentGoalStatus, AgentRunControlGraphState } from '../../types/agentRun';
+import type { ConversationMode } from '../../types/conversation';
 import type { Message } from '../../types/message';
 import type { UsagePromptCacheTelemetry, UsageTokenBuckets } from '../../types/usage';
+import type { ForegroundScenarioRouteDirective } from './foregroundScenarioDriverTypes';
 
 export type E2EToolCallRecord = {
   id: string;
@@ -96,6 +98,12 @@ export type E2EScenarioResult = {
 
 export type E2EUserTurn = {
   content: string;
+  route?: ForegroundScenarioRouteDirective;
+};
+
+export type E2EScenarioExecution = {
+  initialMode: ConversationMode;
+  route: ForegroundScenarioRouteDirective;
 };
 
 export type E2EWorkspaceSeedFile = {
@@ -164,6 +172,8 @@ export type E2ERubric =
 export type E2EScenario = {
   id: string;
   conversationId: string;
+  /** Product route applied unless a turn explicitly overrides it. */
+  execution: E2EScenarioExecution;
   /** Structural thread title token used by passive memory ingestion. */
   threadTitle?: string;
   /** Single-turn prompt when `userTurns` is omitted. */
