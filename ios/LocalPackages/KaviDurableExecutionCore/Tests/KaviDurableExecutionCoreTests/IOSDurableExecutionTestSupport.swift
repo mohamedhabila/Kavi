@@ -125,7 +125,7 @@ final class FakeDurableScheduler: IOSDurablePlatformScheduler, @unchecked Sendab
 func durableRequest(
   runId: String = "run-1",
   durabilityClass: IOSTaskDurabilityClass = .userInitiatedContinuable,
-  commandKind: IOSRecoveryCommandKind = .resumeModelStep,
+  commandKind: IOSRecoveryCommandKind = .reconcileExternalHandles,
   controlEpoch: Int64 = 0,
   snapshotUpdatedAtMillis: Int64 = 900,
   snapshotDigest: String = String(repeating: "a", count: 64),

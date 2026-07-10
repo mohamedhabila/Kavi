@@ -22,96 +22,30 @@ final class IOSDurableExecutionPolicyTests: XCTestCase {
     )
   }
 
-  func testAcceptsImmediateForegroundContinuedProcessingOnIOS26() {
-    for commandKind in IOSRecoveryCommandKind.allCases {
-      let decision = IOSDurableExecutionPolicy.decide(
-        request(
-          durabilityClass: .userInitiatedContinuable,
-          commandKind: commandKind
-        ),
-        capabilities: foregroundIOS26
-      )
-      XCTAssertEqual(decision.schedulerKind, .continuedProcessing)
-      XCTAssertTrue(decision.requiresFreshRecoveryQuery)
-      XCTAssertTrue(decision.requiresFreshAuthorityAndFence)
-    }
-  }
-
-  func testContinuedProcessingRequiresIOS26ForegroundAndImmediateStart() {
-    let candidate = request(durabilityClass: .userInitiatedContinuable)
-    XCTAssertEqual(
-      IOSDurableExecutionPolicy.decide(
-        candidate,
-        capabilities: .init(supportsContinuedProcessing: false, appIsForeground: true)
-      ).unsupportedReason,
-      .continuedProcessingUnavailable
-    )
-    XCTAssertEqual(
-      IOSDurableExecutionPolicy.decide(
-        candidate,
-        capabilities: .init(supportsContinuedProcessing: true, appIsForeground: false)
-      ).unsupportedReason,
-      .foregroundUserActionRequired
-    )
-    XCTAssertEqual(
-      IOSDurableExecutionPolicy.decide(
-        candidate,
-        capabilities: .init(supportsContinuedProcessing: true, appIsForeground: true)
-      ).unsupportedReason,
-      .staleRequestTimestamp
-    )
-    XCTAssertEqual(
-      IOSDurableExecutionPolicy.decide(
-        request(
-          durabilityClass: .userInitiatedContinuable,
-          earliestStartAtMillis: 1_001
-        ),
-        capabilities: foregroundIOS26
-      ).unsupportedReason,
-      .continuedProcessingDelayUnsupported
-    )
-  }
-
-  func testContinuedProcessingRejectsConstraintsItCannotEnforce() {
-    XCTAssertEqual(
-      IOSDurableExecutionPolicy.decide(
-        request(durabilityClass: .userInitiatedContinuable, requiresCharging: true),
-        capabilities: foregroundIOS26
-      ).unsupportedReason,
-      .unsupportedPlatformConstraint
-    )
-    XCTAssertEqual(
-      IOSDurableExecutionPolicy.decide(
-        request(durabilityClass: .userInitiatedContinuable, network: .unmetered),
-        capabilities: foregroundIOS26
-      ).unsupportedReason,
-      .unsupportedNetworkConstraint
-    )
-    XCTAssertEqual(
-      IOSDurableExecutionPolicy.decide(
-        request(durabilityClass: .userInitiatedContinuable, network: .connected),
-        capabilities: foregroundIOS26
-      ).unsupportedReason,
-      .unsupportedNetworkConstraint
-    )
-  }
-
-  func testDeferrableMaintenanceOnlyFinalizesExistingTerminalProjection() {
+  func testOnlyProductionRecoveryHandlerIsSchedulable() {
     let supported = IOSDurableExecutionPolicy.decide(
       request(
-        durabilityClass: .deferrableMaintenance,
-        commandKind: .finalizeExistingTerminalProjection,
-        requiresCharging: true,
-        earliestStartAtMillis: 5_000
+        durabilityClass: .userInitiatedContinuable,
+        commandKind: .reconcileExternalHandles
       ),
-      capabilities: .init(supportsContinuedProcessing: false, appIsForeground: false)
+      capabilities: foregroundIOS26
     )
-    XCTAssertEqual(supported.schedulerKind, .backgroundProcessing)
+    XCTAssertEqual(supported.schedulerKind, .continuedProcessing)
+    XCTAssertTrue(supported.requiresFreshRecoveryQuery)
+    XCTAssertTrue(supported.requiresFreshAuthorityAndFence)
 
     for commandKind in IOSRecoveryCommandKind.allCases
-    where
-      commandKind != .finalizeExistingTerminalProjection
+    where commandKind != .reconcileExternalHandles
     {
+      XCTAssertEqual(
+        IOSDurableExecutionPolicy.decide(
+          request(durabilityClass: .userInitiatedContinuable, commandKind: commandKind),
+          capabilities: foregroundIOS26
+        ).unsupportedReason,
+        .unsafeRecoveryCommand
+      )
+    }
+    for commandKind in IOSRecoveryCommandKind.allCases {
       XCTAssertEqual(
         IOSDurableExecutionPolicy.decide(
           request(durabilityClass: .deferrableMaintenance, commandKind: commandKind),
@@ -221,7 +155,7 @@ final class IOSDurableExecutionPolicyTests: XCTestCase {
     controlEpoch: Int64 = 0,
     snapshotUpdatedAtMillis: Int64 = 999,
     snapshotDigest: String = String(repeating: "a", count: 64),
-    commandKind: IOSRecoveryCommandKind = .resumeModelStep,
+    commandKind: IOSRecoveryCommandKind = .reconcileExternalHandles,
     commandDigest: String = String(repeating: "b", count: 64),
     network: IOSNetworkConstraint = .notRequired,
     requiresCharging: Bool = false,

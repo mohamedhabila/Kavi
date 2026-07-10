@@ -18,6 +18,10 @@ public enum IOSDurableExecutionPolicy {
     {
       return .unsupported(.unsupportedPlatformConstraint)
     }
+    guard request.identity.commandKind == .reconcileExternalHandles else {
+      // This must stay aligned with createProductionExecutionRecoveryPorts.
+      return .unsupported(.unsafeRecoveryCommand)
+    }
 
     switch request.durabilityClass {
     case .foregroundInteractive:
@@ -48,13 +52,7 @@ public enum IOSDurableExecutionPolicy {
       return .supported(.continuedProcessing)
 
     case .deferrableMaintenance:
-      guard request.identity.commandKind == .finalizeExistingTerminalProjection else {
-        return .unsupported(.unsafeRecoveryCommand)
-      }
-      guard request.constraints.network != .unmetered else {
-        return .unsupported(.unsupportedNetworkConstraint)
-      }
-      return .supported(.backgroundProcessing)
+      return .unsupported(.unsafeRecoveryCommand)
 
     case .externalDurableOperation:
       guard request.identity.commandKind == .reconcileExternalHandles else {
