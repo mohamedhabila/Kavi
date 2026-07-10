@@ -230,6 +230,29 @@ export interface RecordFactResult {
   superseded: MemoryFact[];
 }
 
+export type ReplaceCurrentFactInput = Omit<RecordFactInput, 'supersedePrior'> & {
+  expectedCurrentFactId: string;
+};
+
+export type ReplaceCurrentFactConflict =
+  | 'target_missing'
+  | 'target_changed'
+  | 'target_scope_mismatch'
+  | 'replacement_collision';
+
+export type ReplaceCurrentFactResult =
+  | {
+      fact: MemoryFact;
+      status: 'created' | 'duplicate';
+      superseded: MemoryFact[];
+    }
+  | {
+      fact: null;
+      status: 'conflict';
+      superseded: [];
+      conflict: ReplaceCurrentFactConflict;
+    };
+
 export interface ListFactsOptions {
   subjectId?: string;
   predicate?: string;

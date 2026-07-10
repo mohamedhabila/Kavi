@@ -2,6 +2,7 @@ import { getSchemaReadyMemoryDb } from '../access/schemaGuard';
 import { runMemoryStatement } from '../access/crud';
 import { fnv1aHash, newId, safeParseObject } from '../schema';
 import { notifyStructuredMemoryChanged } from '../store';
+import { runMemoryTransaction } from '../access/transaction';
 import { deleteFactRetrievalTerms, replaceFactRetrievalTerms } from './retrievalIndex';
 import {
   clamp01,
@@ -13,14 +14,25 @@ import {
   type MemoryFact,
   type RecordFactInput,
   type RecordFactResult,
+  type ReplaceCurrentFactConflict,
+  type ReplaceCurrentFactInput,
+  type ReplaceCurrentFactResult,
 } from './types';
 
 function factContentHash(input: RecordFactInput): string {
+  const scope = normalizeScope(input.scope);
+  const scopedOrigin =
+    scope === 'global'
+      ? [null, null, null]
+      : [
+          input.originConversationId ?? null,
+          input.originThreadId ?? input.originConversationId ?? null,
+          input.originTaskId ?? null,
+        ];
   const payload = JSON.stringify([
     normalizeFactKind(input.memoryKind),
-    normalizeScope(input.scope),
-    input.originConversationId ?? null,
-    input.originTaskId ?? null,
+    scope,
+    ...scopedOrigin,
     input.subjectId,
     input.predicate.toLowerCase(),
     input.objectText.trim().toLowerCase(),
@@ -31,16 +43,47 @@ function factContentHash(input: RecordFactInput): string {
 
 type MemorySqlBindValue = string | number | null;
 
-function buildSupersedePriorQuery(
+function buildActiveDuplicateQuery(
   input: RecordFactInput,
   scope: ReturnType<typeof normalizeScope>,
 ): { sql: string; params: MemorySqlBindValue[] } {
   const clauses = [
     'subject_id = ?',
     'predicate = ?',
+    'object_text = ?',
+    "COALESCE(object_entity_id, '') = COALESCE(?, '')",
+    'scope = ?',
+    'memory_kind = ?',
     'invalid_at IS NULL',
     'deleted_at IS NULL',
   ];
+  const params: MemorySqlBindValue[] = [
+    input.subjectId,
+    input.predicate,
+    input.objectText,
+    input.objectEntityId ?? null,
+    scope,
+    normalizeFactKind(input.memoryKind),
+  ];
+  if (scope !== 'global') {
+    clauses.push("COALESCE(origin_conversation_id, '') = COALESCE(?, '')");
+    params.push(input.originConversationId ?? null);
+    clauses.push("COALESCE(origin_thread_id, '') = COALESCE(?, '')");
+    params.push(input.originThreadId ?? input.originConversationId ?? null);
+    clauses.push("COALESCE(origin_task_id, '') = COALESCE(?, '')");
+    params.push(input.originTaskId ?? null);
+  }
+  return {
+    sql: `SELECT * FROM memory_facts WHERE ${clauses.join(' AND ')} LIMIT 1`,
+    params,
+  };
+}
+
+function buildSupersedePriorQuery(
+  input: RecordFactInput,
+  scope: ReturnType<typeof normalizeScope>,
+): { sql: string; params: MemorySqlBindValue[] } {
+  const clauses = ['subject_id = ?', 'predicate = ?', 'invalid_at IS NULL', 'deleted_at IS NULL'];
   const params: MemorySqlBindValue[] = [input.subjectId, input.predicate];
 
   if (scope === 'session') {
@@ -80,10 +123,13 @@ export function recordFact(input: RecordFactInput): RecordFactResult {
   const db = getSchemaReadyMemoryDb();
   const now = input.now ?? Date.now();
   if (!input.subjectId) throw new Error('recordFact: subjectId required');
-  if (!input.predicate) throw new Error('recordFact: predicate required');
-  if (!input.objectText) throw new Error('recordFact: objectText required');
+  const predicate = input.predicate.trim().toLowerCase();
+  const objectText = input.objectText.trim();
+  if (!predicate) throw new Error('recordFact: predicate required');
+  if (!objectText) throw new Error('recordFact: objectText required');
 
-  const hash = factContentHash(input);
+  const normalizedInput = { ...input, predicate, objectText };
+  const hash = factContentHash(normalizedInput);
   const scope = normalizeScope(input.scope);
   const confidence = clamp01(input.confidence ?? 1.0);
   const importance = clamp01(input.importance ?? 0.5);
@@ -95,14 +141,8 @@ export function recordFact(input: RecordFactInput): RecordFactResult {
   const reviewState = input.reviewState?.trim() || 'auto';
   const sensitivity = input.sensitivity?.trim() || 'normal';
 
-  const existing = db.getFirstSync<FactRow>(
-    `SELECT * FROM memory_facts
-       WHERE content_hash = ?
-         AND deleted_at IS NULL
-         AND invalid_at IS NULL
-       LIMIT 1`,
-    hash,
-  );
+  const duplicateQuery = buildActiveDuplicateQuery(normalizedInput, scope);
+  const existing = db.getFirstSync<FactRow>(duplicateQuery.sql, ...duplicateQuery.params);
   if (existing) {
     const merged = { ...safeParseObject(existing.attributes), ...(input.attributes ?? {}) };
     db.runSync(
@@ -162,7 +202,7 @@ export function recordFact(input: RecordFactInput): RecordFactResult {
 
   const superseded: MemoryFact[] = [];
   if (input.supersedePrior) {
-    const query = buildSupersedePriorQuery(input, scope);
+    const query = buildSupersedePriorQuery(normalizedInput, scope);
     const priors = db.getAllSync<FactRow>(query.sql, ...query.params);
     for (const prior of priors) {
       db.runSync(
@@ -181,8 +221,8 @@ export function recordFact(input: RecordFactInput): RecordFactResult {
   const fact: MemoryFact = {
     id,
     subjectId: input.subjectId,
-    predicate: input.predicate,
-    objectText: input.objectText,
+    predicate,
+    objectText,
     objectEntityId: input.objectEntityId ?? null,
     attributes: input.attributes ?? {},
     confidence,
@@ -269,6 +309,161 @@ export function recordFact(input: RecordFactInput): RecordFactResult {
   replaceFactRetrievalTerms(fact);
   notifyStructuredMemoryChanged(fact.originConversationId);
   return { fact, status: 'created', superseded };
+}
+
+class ExactReplacementConflict extends Error {
+  constructor(readonly code: ReplaceCurrentFactConflict) {
+    super(code);
+  }
+}
+
+function nullableId(value: string | null | undefined): string | null {
+  return value?.trim() || null;
+}
+
+function replacementScopeMatches(row: FactRow, input: ReplaceCurrentFactInput): boolean {
+  const scope = normalizeScope(input.scope);
+  if (normalizeScope(row.scope) !== scope) return false;
+  if (scope === 'global') return true;
+
+  const conversationId = nullableId(input.originConversationId);
+  const threadId = nullableId(input.originThreadId ?? input.originConversationId);
+  const taskId = nullableId(input.originTaskId);
+  return (
+    nullableId(row.origin_conversation_id) === conversationId &&
+    nullableId(row.origin_thread_id) === threadId &&
+    nullableId(row.origin_task_id) === taskId
+  );
+}
+
+function reinforceExactDuplicate(
+  row: FactRow,
+  input: ReplaceCurrentFactInput,
+  now: number,
+): MemoryFact {
+  const db = getSchemaReadyMemoryDb();
+  const confidence = clamp01(input.confidence ?? row.confidence);
+  const importance = clamp01(input.importance ?? row.importance ?? 0.5);
+  const retrievability = clamp01(input.retrievability ?? row.retrievability ?? 1);
+  const stability = clamp01(input.stability ?? row.stability ?? 0.5);
+  const decayRate = Math.max(0, input.decayRate ?? row.decay_rate ?? 0.03);
+  const attributes = { ...safeParseObject(row.attributes), ...(input.attributes ?? {}) };
+  db.runSync(
+    `UPDATE memory_facts
+       SET attributes = ?, updated_at = ?, confidence = MAX(confidence, ?),
+           importance = MAX(importance, ?), retrievability = MAX(retrievability, ?),
+           stability = MAX(stability, ?), decay_rate = MIN(decay_rate, ?),
+           repeated_mention_count = repeated_mention_count + 1,
+           last_reinforced_at = ?, last_accessed_at = ?
+     WHERE id = ? AND invalid_at IS NULL AND deleted_at IS NULL`,
+    JSON.stringify(attributes),
+    now,
+    confidence,
+    importance,
+    retrievability,
+    stability,
+    decayRate,
+    now,
+    now,
+    row.id,
+  );
+  const fact = rowToFact({
+    ...row,
+    attributes: JSON.stringify(attributes),
+    updated_at: now,
+    confidence: Math.max(row.confidence, confidence),
+    importance: Math.max(row.importance ?? 0.5, importance),
+    retrievability: Math.max(row.retrievability ?? 1, retrievability),
+    stability: Math.max(row.stability ?? 0.5, stability),
+    decay_rate: Math.min(row.decay_rate ?? 0.03, decayRate),
+    repeated_mention_count: (row.repeated_mention_count ?? 0) + 1,
+    last_reinforced_at: now,
+    last_accessed_at: now,
+  });
+  replaceFactRetrievalTerms(fact);
+  notifyStructuredMemoryChanged(row.origin_conversation_id);
+  return fact;
+}
+
+/**
+ * Atomically replace one exact current fact. The expected target is rechecked
+ * inside the write transaction; a changed or incompatible target is never
+ * broadened into an insert or subject/predicate-wide invalidation.
+ */
+export function replaceCurrentFact(input: ReplaceCurrentFactInput): ReplaceCurrentFactResult {
+  const expectedCurrentFactId = input.expectedCurrentFactId.trim();
+  if (!expectedCurrentFactId) {
+    return { fact: null, status: 'conflict', superseded: [], conflict: 'target_missing' };
+  }
+  const predicate = input.predicate.trim();
+  const objectText = input.objectText.trim();
+  if (!input.subjectId) throw new Error('replaceCurrentFact: subjectId required');
+  if (!predicate) throw new Error('replaceCurrentFact: predicate required');
+  if (!objectText) throw new Error('replaceCurrentFact: objectText required');
+  const now = input.now ?? Date.now();
+
+  try {
+    return runMemoryTransaction(() => {
+      const db = getSchemaReadyMemoryDb();
+      const current = db.getFirstSync<FactRow>(
+        `SELECT * FROM memory_facts
+          WHERE id = ? AND invalid_at IS NULL AND deleted_at IS NULL
+          LIMIT 1`,
+        expectedCurrentFactId,
+      );
+      if (!current) throw new ExactReplacementConflict('target_changed');
+      if (
+        current.subject_id !== input.subjectId ||
+        current.predicate.trim().toLowerCase() !== predicate.toLowerCase()
+      ) {
+        throw new ExactReplacementConflict('target_changed');
+      }
+      if (!replacementScopeMatches(current, input)) {
+        throw new ExactReplacementConflict('target_scope_mismatch');
+      }
+
+      if (current.object_text.trim().toLowerCase() === objectText.toLowerCase()) {
+        return {
+          fact: reinforceExactDuplicate(current, input, now),
+          status: 'duplicate' as const,
+          superseded: [],
+        };
+      }
+
+      const created = recordFact({
+        ...input,
+        predicate,
+        objectText,
+        pinned: input.pinned ?? current.pinned !== 0,
+        sensitivity: input.sensitivity ?? current.sensitivity ?? 'normal',
+        reviewState: input.reviewState ?? current.review_state ?? 'auto',
+        memoryKind: input.memoryKind ?? normalizeFactKind(current.memory_kind),
+        supersedePrior: false,
+        now,
+      });
+      if (created.status !== 'created') {
+        throw new ExactReplacementConflict('replacement_collision');
+      }
+      const invalidated = db.runSync(
+        `UPDATE memory_facts
+           SET invalid_at = ?, updated_at = ?
+         WHERE id = ? AND invalid_at IS NULL AND deleted_at IS NULL`,
+        now,
+        now,
+        expectedCurrentFactId,
+      );
+      if ((invalidated.changes ?? 0) !== 1) {
+        throw new ExactReplacementConflict('target_changed');
+      }
+      const superseded = rowToFact({ ...current, invalid_at: now, updated_at: now });
+      return { fact: created.fact, status: 'created' as const, superseded: [superseded] };
+    });
+  } catch (error) {
+    if (error instanceof ExactReplacementConflict) {
+      return { fact: null, status: 'conflict', superseded: [], conflict: error.code };
+    }
+    throw error;
+  }
 }
 
 export function markFactsRecalled(ids: string[], now = Date.now()): number {

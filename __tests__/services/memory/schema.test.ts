@@ -48,6 +48,48 @@ function indexedColumns(index: string): string[] {
 }
 
 describe('ensureFactSchema', () => {
+  it('migrates legacy unique hashes without losing fact history rows', () => {
+    getMemoryDb().execSync(`
+      CREATE TABLE memory_facts (
+        id TEXT PRIMARY KEY,
+        subject_id TEXT NOT NULL,
+        predicate TEXT NOT NULL,
+        object_text TEXT NOT NULL,
+        object_entity_id TEXT,
+        attributes TEXT NOT NULL DEFAULT '{}',
+        confidence REAL NOT NULL DEFAULT 1.0,
+        source_message_id TEXT,
+        source_run_id TEXT,
+        content_hash TEXT NOT NULL,
+        embedding TEXT,
+        valid_at INTEGER NOT NULL,
+        invalid_at INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER,
+        pinned INTEGER NOT NULL DEFAULT 0,
+        UNIQUE(content_hash)
+      );
+      INSERT INTO memory_facts (
+        id, subject_id, predicate, object_text, content_hash,
+        valid_at, created_at, updated_at
+      ) VALUES ('legacy-fact', 'legacy-user', 'LIVES_IN', 'Amsterdam', 'hash-a', 1, 1, 1);
+    `);
+
+    ensureFactSchema();
+
+    const tableSql = getMemoryDb().getFirstSync<{ sql: string }>(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'memory_facts'",
+    )?.sql;
+    expect(tableSql).not.toMatch(/UNIQUE\s*\(\s*content_hash\s*\)/i);
+    expect(indexNames('memory_facts')).toContain('idx_facts_content_hash');
+    expect(
+      getMemoryDb().getFirstSync<{ id: string; predicate: string }>(
+        "SELECT id, predicate FROM memory_facts WHERE id = 'legacy-fact'",
+      ),
+    ).toEqual({ id: 'legacy-fact', predicate: 'lives_in' });
+  });
+
   it('creates scoped fact provenance columns and episodic tables', () => {
     ensureFactSchema();
 
