@@ -87,8 +87,20 @@ class AndroidDurableExecutionPolicyTest {
       request(identity = identity(controlEpoch = -1)),
       request(identity = identity(snapshotDigest = "not-a-digest")),
       request(constraints = constraints(earliestStartAtMillis = 99)),
-      request(retryPolicy = AndroidRetryPolicy(maxAttempts = 11, initialBackoffMillis = 10_000)),
-      request(retryPolicy = AndroidRetryPolicy(maxAttempts = 2, initialBackoffMillis = 9_999)),
+      request(
+        retryPolicy = AndroidRetryPolicy(
+          maxAttempts = 11,
+          backoffPolicy = AndroidBackoffPolicy.EXPONENTIAL,
+          initialBackoffMillis = 10_000,
+        ),
+      ),
+      request(
+        retryPolicy = AndroidRetryPolicy(
+          maxAttempts = 2,
+          backoffPolicy = AndroidBackoffPolicy.EXPONENTIAL,
+          initialBackoffMillis = 9_999,
+        ),
+      ),
     )
 
     for (invalidRequest in invalidRequests) {
@@ -110,6 +122,7 @@ class AndroidDurableExecutionPolicyTest {
     constraints: AndroidExecutionConstraints = constraints(),
     retryPolicy: AndroidRetryPolicy = AndroidRetryPolicy(
       maxAttempts = 3,
+      backoffPolicy = AndroidBackoffPolicy.EXPONENTIAL,
       initialBackoffMillis = 10_000,
     ),
   ) = AndroidDurableExecutionRequest(

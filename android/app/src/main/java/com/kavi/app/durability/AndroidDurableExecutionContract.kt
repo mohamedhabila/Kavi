@@ -39,8 +39,13 @@ internal data class AndroidExecutionConstraints(
 internal data class AndroidRetryPolicy(
   /** Includes the first execution attempt. */
   val maxAttempts: Int,
+  val backoffPolicy: AndroidBackoffPolicy,
   val initialBackoffMillis: Long,
 )
+
+internal enum class AndroidBackoffPolicy {
+  EXPONENTIAL,
+}
 
 /**
  * Stable identity of the journal generation and recovery command to wake.
