@@ -7,6 +7,7 @@ import {
   decodeExecutionRunRow,
 } from './decoders';
 import {
+  MAX_EXECUTION_CHECKPOINTS_PER_RUN,
   RETENTION_DELETABLE_RUN_STATUSES,
   type ExecutionCheckpointRecord,
   type ExecutionEffectRecord,
@@ -287,6 +288,21 @@ export function insertCheckpoint(
   database: SQLite.SQLiteDatabase,
   checkpoint: ExecutionCheckpointRecord,
 ): void {
+  const countRow = database.getFirstSync<{ count: number }>(
+    'SELECT COUNT(*) AS count FROM execution_checkpoints WHERE run_id = ?',
+    checkpoint.runId,
+  );
+  const checkpointCount = countRow?.count;
+  if (
+    typeof checkpointCount !== 'number' ||
+    !Number.isSafeInteger(checkpointCount) ||
+    checkpointCount < 0
+  ) {
+    throw new Error('execution_journal_checkpoint_count_invalid');
+  }
+  if (checkpointCount >= MAX_EXECUTION_CHECKPOINTS_PER_RUN) {
+    throw new Error('execution_journal_checkpoint_limit_exceeded');
+  }
   database.runSync(
     `INSERT INTO execution_checkpoints (
        id, run_id, sequence, task_id, goal_id, phase, boundary, state_ref_id,

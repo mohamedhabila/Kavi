@@ -30,6 +30,7 @@ export const EXECUTION_RECOVERY_BLOCK_REASONS = [
   'ambiguous_run_without_evidence',
   'missing_terminal_projection',
   'terminal_boundary_status_mismatch',
+  'resume_strategy_forbids_execution',
   'unsupported_boundary',
 ] as const;
 
@@ -469,6 +470,10 @@ export function planExecutionRecovery(
       effectIds: sortedIds(reconcileEffectIds),
       handleIds: sortedIds(reconcileHandleIds),
     };
+  }
+
+  if (latest.resumeStrategy === 'not_resumable' || latest.resumeStrategy === 'monitor_only') {
+    return block(snapshot, 'resume_strategy_forbids_execution', latest);
   }
 
   if (latest.controlEpoch !== snapshot.run.controlEpoch) {

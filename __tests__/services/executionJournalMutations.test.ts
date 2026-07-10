@@ -15,6 +15,7 @@ import {
   transitionExecutionExternalHandle,
   transitionExecutionRun,
 } from '../../src/services/executionJournal/mutations';
+import { MAX_EXECUTION_CHECKPOINTS_PER_RUN } from '../../src/services/executionJournal/types';
 import {
   readExecutionMonitorSchedule,
   readExternalHandleMonitor,
@@ -153,6 +154,52 @@ describe('execution journal run creation and checkpoints', () => {
         'SELECT COUNT(*) AS count FROM execution_checkpoints',
       )?.count,
     ).toBe(1);
+  });
+
+  it('fails closed at the bounded checkpoint history limit without truncating recovery state', () => {
+    seedRun();
+    startRun();
+    for (let sequence = 1; sequence < MAX_EXECUTION_CHECKPOINTS_PER_RUN; sequence += 1) {
+      appendExecutionCheckpoint({
+        id: `checkpoint-${sequence}`,
+        runId: 'run-1',
+        expectedControlEpoch: 0,
+        taskId: 'task-1',
+        goalId: 'goal-1',
+        phase: 'work',
+        boundary: 'safe_yield',
+        stateRefId: `state-${sequence}`,
+        stateDigest: DIGEST_C,
+        resumeStrategy: 'replay_safe',
+        approvalState: 'not_required',
+        permissionState: 'granted',
+        createdAt: 12,
+      });
+    }
+
+    expect(() =>
+      appendExecutionCheckpoint({
+        id: 'checkpoint-overflow',
+        runId: 'run-1',
+        expectedControlEpoch: 0,
+        taskId: 'task-1',
+        goalId: 'goal-1',
+        phase: 'work',
+        boundary: 'safe_yield',
+        stateRefId: 'state-overflow',
+        stateDigest: DIGEST_C,
+        resumeStrategy: 'replay_safe',
+        approvalState: 'not_required',
+        permissionState: 'granted',
+        createdAt: 12,
+      }),
+    ).toThrow('execution_journal_checkpoint_limit_exceeded');
+    expect(
+      getExecutionJournalDb().getFirstSync<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM execution_checkpoints WHERE run_id = ?',
+        'run-1',
+      )?.count,
+    ).toBe(MAX_EXECUTION_CHECKPOINTS_PER_RUN);
   });
 });
 

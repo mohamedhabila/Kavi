@@ -70,6 +70,45 @@ describe('execution recovery planner boundaries', () => {
       );
     },
   );
+
+  it.each(['not_resumable', 'monitor_only'] as const)(
+    'does not turn %s state into active execution',
+    (resumeStrategy) => {
+      const command = planExecutionRecovery(
+        recoverySnapshot({
+          checkpoints: recoveryCheckpointHistory({ resumeStrategy }),
+        }),
+      );
+      expect(command).toEqual(
+        expect.objectContaining({
+          kind: 'block',
+          reason: 'resume_strategy_forbids_execution',
+        }),
+      );
+    },
+  );
+
+  it('still reconciles an exact external handle for a non-resumable local process', () => {
+    const handle = recoveryHandle('pending');
+    expect(
+      planExecutionRecovery(
+        recoverySnapshot({
+          checkpoints: recoveryCheckpointHistory({
+            boundary: 'before_effect',
+            resumeStrategy: 'not_resumable',
+          }),
+          effects: [recoveryEffect('started')],
+          handles: [handle],
+        }),
+      ),
+    ).toEqual({
+      kind: 'reconcile_external_handles',
+      runId: 'run-1',
+      controlEpoch: 0,
+      effectIds: ['effect-1'],
+      handleIds: ['handle-1'],
+    });
+  });
 });
 
 describe('execution recovery planner effect safety', () => {

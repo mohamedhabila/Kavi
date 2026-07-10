@@ -92,6 +92,9 @@ export const EXECUTION_CHECKPOINT_BOUNDARIES = [
   'terminal',
 ] as const;
 
+/** Hard per-run history bound. Recovery rejects missing history instead of silently truncating it. */
+export const MAX_EXECUTION_CHECKPOINTS_PER_RUN = 256;
+
 export const EXECUTION_EFFECT_CLASSES = [
   'none',
   'local_artifact',
