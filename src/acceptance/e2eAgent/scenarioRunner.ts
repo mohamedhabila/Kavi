@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { resetE2ENativeMobileFixtures } from './e2eNativeMobileFixtures';
+import { writeE2EPrivateScenarioEvidence } from './e2ePrivateScenarioEvidence';
 import { installE2EScenarioEnvironment } from './e2eScenarioEnvironment';
 import { runForegroundScenario } from './foregroundScenarioDriver';
 import { buildE2EProvider, isE2EAgentEvalEnabled } from './providerConfig';
@@ -79,13 +80,15 @@ export async function runE2EScenario(scenario: E2EScenario): Promise<E2EScenario
       maxTokens: scenario.maxTokens ?? E2E_DEFAULT_MAX_TOKENS,
       memoryTimeoutMs: perTurnTimeoutMs,
     });
-    return mapForegroundScenarioResult({
+    const result = mapForegroundScenarioResult({
       contentClass,
       driverResult,
       durationMs: Date.now() - startedAt,
       fixtureId: scenario.id,
       requestedUserTurnCount: userTurns.length,
     });
+    writeE2EPrivateScenarioEvidence({ scenario, result });
+    return result;
   } finally {
     uninstallScenarioEnvironment();
   }

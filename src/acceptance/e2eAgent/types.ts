@@ -21,6 +21,7 @@ import type {
   ForegroundScenarioMemoryTurnEvidence,
   ForegroundScenarioNativeEvidenceSnapshot,
   ForegroundScenarioRouteDirective,
+  ForegroundScenarioUserSnapshot,
 } from './foregroundScenarioDriverTypes';
 
 export type E2EToolCallRecord = {
@@ -100,6 +101,7 @@ export type E2EAgentRunTrace = {
 
 export type E2EScenarioTurnTrace = {
   turnIndex: number;
+  user: ForegroundScenarioUserSnapshot;
   route: Readonly<{
     directive: ForegroundScenarioRouteDirective;
   }> &

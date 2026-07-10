@@ -79,6 +79,12 @@ export type ForegroundScenarioFinalAssistantSnapshot = Readonly<{
   terminalReason: string | null;
 }>;
 
+export type ForegroundScenarioUserSnapshot = Readonly<{
+  messageId: string;
+  text: string;
+  timestamp: number;
+}>;
+
 export type ForegroundScenarioCompletionSnapshot = Readonly<{
   assistantStatus: AssistantCompletionStatus | 'missing';
   executionCompleted: boolean;
@@ -109,6 +115,7 @@ export type ForegroundScenarioTurnSnapshot = Readonly<{
   timedOut: boolean;
   turnIndex: number;
   usage: DeepReadonly<ConversationUsageSummary> | null;
+  user: ForegroundScenarioUserSnapshot;
   userMessageId: string;
 }>;
 

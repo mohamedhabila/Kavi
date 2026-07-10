@@ -219,6 +219,7 @@ describe('runE2EScenario product foreground integration', () => {
     });
     expect(result.turnTraces).toHaveLength(2);
     expect(result.turnTraces[0]).toMatchObject({
+      user: { text: 'Turn one' },
       route: { directive: 'forced_agentic', mode: 'agentic', personaId: 'super-agent' },
       finalAssistant: { text: 'Response 1', completionStatus: 'complete' },
       finalAssistantCandidateCount: 1,

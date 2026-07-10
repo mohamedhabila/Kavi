@@ -47,6 +47,7 @@ export type {
   ForegroundScenarioRouteDirective,
   ForegroundScenarioTurnInput,
   ForegroundScenarioTurnSnapshot,
+  ForegroundScenarioUserSnapshot,
 } from './foregroundScenarioDriverTypes';
 
 const DEFAULT_TURN_TIMEOUT_MS = 120_000;
@@ -187,6 +188,12 @@ async function runScenarioIsolated(
       if (!conversation) throw new Error(`Conversation ${input.conversationId} is unavailable.`);
       const run = resolveForegroundScenarioTurnRun(conversation, userMessageId, priorRunIds);
       const turnMessages = conversation.messages.slice(messageStartIndex);
+      const persistedUserMessage = turnMessages.find(
+        (message) => message.id === userMessageId && message.role === 'user',
+      );
+      if (!persistedUserMessage) {
+        throw new Error(`Foreground turn user message ${userMessageId} was not persisted.`);
+      }
       const finalAssistantResolution = resolveForegroundScenarioFinalAssistant(turnMessages);
       const finalAssistant = finalAssistantResolution.selected;
       const nativeInvocations =
@@ -228,6 +235,11 @@ async function runScenarioIsolated(
           timedOut,
           turnIndex,
           usage: buildForegroundScenarioUsageDelta(usageBefore, conversation.usage),
+          user: {
+            messageId: persistedUserMessage.id,
+            text: persistedUserMessage.content,
+            timestamp: persistedUserMessage.timestamp,
+          },
           userMessageId,
         }) as ForegroundScenarioTurnSnapshot,
       );

@@ -231,6 +231,7 @@ describe('runForegroundScenario', () => {
       route: { directive: 'forced_chitchat', mode: 'chitchat', personaId: 'default' },
       run: null,
       timedOut: false,
+      user: { text: 'Hello there.', timestamp: 10 },
       memory: [
         {
           lifecycle: { processed: true, enqueued: true },
@@ -260,6 +261,7 @@ describe('runForegroundScenario', () => {
     expect(Object.isFrozen(result.turns[1].messages)).toBe(true);
     expect(Object.isFrozen(result.turns[1].finalAssistant)).toBe(true);
     expect(Object.isFrozen(result.turns[1].completion)).toBe(true);
+    expect(Object.isFrozen(result.turns[1].user)).toBe(true);
     expect(Object.isFrozen(result.memoryFinalState)).toBe(true);
     expect(result.memoryFinalState.scope).toEqual({
       memoryConversationId: 'scenario-conversation',
