@@ -13,11 +13,10 @@ type MemoryOptOutHandler = () => void;
 
 const optOutHandlers = new Set<MemoryOptOutHandler>();
 let memoryPolicyEpoch = 0;
+let settingsObservationState: 'uninitialized' | 'active' | 'failed' = 'uninitialized';
+let unsubscribeSettings: (() => void) | null = null;
 
-useSettingsStore.subscribe((state, previousState) => {
-  if (state.disableLongTermMemory !== true || previousState.disableLongTermMemory === true) {
-    return;
-  }
+function invalidateMemoryPolicy(): void {
   memoryPolicyEpoch += 1;
   for (const handler of optOutHandlers) {
     try {
@@ -26,7 +25,46 @@ useSettingsStore.subscribe((state, previousState) => {
       // Privacy setting changes must not be blocked by cleanup failures.
     }
   }
-});
+}
+
+function observeMemoryPolicyChange(
+  state: ReturnType<typeof useSettingsStore.getState>,
+  previousState: ReturnType<typeof useSettingsStore.getState>,
+): void {
+  if (state.disableLongTermMemory !== true || previousState.disableLongTermMemory === true) {
+    return;
+  }
+  invalidateMemoryPolicy();
+}
+
+/**
+ * Start the settings observer explicitly from app startup. Importing memory
+ * helpers must remain side-effect free so tools and tests can load policy code
+ * without constructing the entire settings runtime.
+ */
+export function initializeMemoryPolicyObservation(): boolean {
+  if (settingsObservationState === 'active') return true;
+  if (settingsObservationState === 'failed') return false;
+
+  try {
+    const unsubscribe = useSettingsStore.subscribe(observeMemoryPolicyChange);
+    if (typeof unsubscribe !== 'function') {
+      throw new Error('memory_policy_subscription_invalid');
+    }
+    unsubscribeSettings = unsubscribe;
+    settingsObservationState = 'active';
+    if (useSettingsStore.getState().disableLongTermMemory === true) {
+      invalidateMemoryPolicy();
+    }
+    return true;
+  } catch {
+    unsubscribeSettings?.();
+    unsubscribeSettings = null;
+    settingsObservationState = 'failed';
+    invalidateMemoryPolicy();
+    return false;
+  }
+}
 
 export interface MemoryPolicyContext {
   disableLongTermMemory?: boolean;
@@ -35,10 +73,11 @@ export interface MemoryPolicyContext {
 
 export function isLongTermMemoryEnabled(context: MemoryPolicyContext = {}): boolean {
   if (context.disableLongTermMemory === true) return false;
+  if (settingsObservationState === 'failed') return false;
   try {
     return useSettingsStore.getState().disableLongTermMemory !== true;
   } catch {
-    return true;
+    return false;
   }
 }
 
