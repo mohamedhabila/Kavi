@@ -15,7 +15,6 @@ import {
 import { listFacts } from '../../../src/services/memory/facts/queries';
 import {
   extractSeedTurns,
-  MIGRATION_CLAIM_LEASE_MS,
   runMigrationSeedPass,
   seedConversation,
 } from '../../../src/services/memory/migrationSeedPass';
@@ -23,6 +22,7 @@ import {
   clearMigrationState,
   getMigrationState,
   listMigrationStates,
+  MIGRATION_CLAIM_LEASE_MS,
 } from '../../../src/services/memory/migrationStateStore';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
 import { getWorkingBlock } from '../../../src/services/memory/workingBlocks';

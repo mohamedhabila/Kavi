@@ -38,7 +38,12 @@ import {
   getMemoryPolicyEpoch,
   isMemoryPolicyEpochCurrent,
 } from './policy';
-import { getMigrationState, type MigrationStateRow } from './migrationStateStore';
+import {
+  checkpointMigrationTurn,
+  getMigrationState,
+  MIGRATION_CLAIM_LEASE_MS,
+  type MigrationStateRow,
+} from './migrationStateStore';
 
 const logger = createLogger('memory.migrationSeedPass');
 
@@ -47,7 +52,6 @@ export const DEFAULT_MAX_CONVERSATIONS_PER_CALL = 8;
 
 // ── State CRUD ──────────────────────────────────────────────────────────────
 
-export const MIGRATION_CLAIM_LEASE_MS = 5 * 60_000;
 const MIGRATION_CLAIM_HEARTBEAT_MS = 60_000;
 
 interface AcquiredMigrationClaim {
@@ -460,6 +464,8 @@ async function seedClaimedConversation(
         );
       }
       if (!input.dryRun) {
+        const nextSeededTurns = seededTurns + 1;
+        const checkpointAt = input.now ?? Date.now();
         applyConsolidatorResult(outcome.result, {
           now: turnNow,
           conversationId: conv.id,
@@ -469,6 +475,14 @@ async function seedClaimedConversation(
           sourceAssistantMessageId: turn.assistantMessage.id,
           messages: [turn.userMessage, turn.assistantMessage],
           canPersist: () => isMemoryPolicyEpochCurrent(policyEpoch),
+          commitReceipt: () =>
+            checkpointMigrationTurn({
+              conversationId: conv.id,
+              claimToken: claim.token,
+              lastSeededMessageId: turn.assistantMessage.id,
+              seededTurns: nextSeededTurns,
+              now: checkpointAt,
+            }),
         });
       }
       results.push(outcome.result);
