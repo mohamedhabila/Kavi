@@ -6,6 +6,7 @@ import { E2E_PROMPT_CACHE_ELIGIBLE_INPUT_TOKENS } from '../../src/acceptance/e2e
 
 import {
   buildFixtureResult,
+  buildFixtureTurnTrace,
   installE2ERunReportFixtureReset,
 } from '../helpers/e2eRunReportHarness';
 
@@ -224,12 +225,8 @@ describe('e2eRunReport cache eligibility', () => {
     const result = buildFixtureResult({
       usage,
       turnTraces: [
-        {
+        buildFixtureTurnTrace({
           turnIndex: 0,
-          toolCalls: [],
-          toolResults: [],
-          graphSnapshots: [],
-          completed: true,
           usage: {
             ...usage,
             inputTokens: 4096,
@@ -245,13 +242,9 @@ describe('e2eRunReport cache eligibility', () => {
               events: [firstEvent],
             },
           },
-        },
-        {
+        }),
+        buildFixtureTurnTrace({
           turnIndex: 1,
-          toolCalls: [],
-          toolResults: [],
-          graphSnapshots: [],
-          completed: true,
           usage: {
             ...usage,
             inputTokens: 4096,
@@ -267,7 +260,7 @@ describe('e2eRunReport cache eligibility', () => {
               events: [secondEvent],
             },
           },
-        },
+        }),
       ],
     });
     const entry = buildE2ERunReportScenarioEntry({
