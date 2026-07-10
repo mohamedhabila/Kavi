@@ -30,6 +30,7 @@ import { hasCurrentFactForSubjectPredicate, listCurrentFactsForReplacement } fro
 import type { MemoryFact } from './facts/types';
 import { recordAgentRunEvidenceMemory } from './agentRunEvidenceMemory';
 import { evaluateGroundedReplacement } from './groundedFactReplacement';
+import { canWriteLongTermMemory } from './policy';
 
 const logger = createLogger('memory.turnProcessor');
 
@@ -74,6 +75,26 @@ export type TurnProviderOutcome =
   | { status: 'empty_valid' }
   | Exclude<ConsolidatorOutcome, { status: 'valid' | 'empty_valid' }>;
 
+function skippedProcessTurnResult(
+  skipped: 'opt_out' | 'no_closed_turn',
+  providerOutcome: TurnProviderOutcome = { status: 'not_requested' },
+): ProcessTurnResult {
+  return {
+    processed: false,
+    skipped,
+    episodeId: null,
+    deterministicFactIds: [],
+    providerFactIds: [],
+    invalidatedFactIds: [],
+    activeFocusUpdated: false,
+    openThreadsUpdated: false,
+    enriched: false,
+    providerOutcome,
+    bridgedEvidenceFactIds: [],
+    agentRunMemoryFactIds: [],
+  };
+}
+
 function summarizeProviderOutcome(outcome: ConsolidatorOutcome): TurnProviderOutcome {
   if (outcome.status === 'valid' || outcome.status === 'empty_valid') {
     return { status: outcome.status };
@@ -87,7 +108,7 @@ export interface SyncWorkingMemoryResult {
   openThreadsUpdated: boolean;
   sourceEndMessageId: string | null;
   sourceStartMessageId: string | null;
-  skipped?: 'no_closed_turn';
+  skipped?: 'opt_out' | 'no_closed_turn';
 }
 
 export function findLastClosedTurn(messages: Message[]): {
@@ -415,6 +436,16 @@ function resolveCurrentFactsForReplacement(
  */
 export function syncWorkingMemoryFromTurn(input: ProcessTurnInput): SyncWorkingMemoryResult {
   ensureFactSchema();
+  if (!canWriteLongTermMemory()) {
+    return {
+      processed: false,
+      activeFocusUpdated: false,
+      openThreadsUpdated: false,
+      sourceEndMessageId: null,
+      sourceStartMessageId: null,
+      skipped: 'opt_out',
+    };
+  }
   const now = input.now ?? Date.now();
   const { user, assistant } = findLastClosedTurn(input.messages);
   if (!assistant) {
@@ -445,23 +476,13 @@ export function syncWorkingMemoryFromTurn(input: ProcessTurnInput): SyncWorkingM
  */
 export async function processIngestionTurn(input: ProcessTurnInput): Promise<ProcessTurnResult> {
   ensureFactSchema();
+  if (!canWriteLongTermMemory()) {
+    return skippedProcessTurnResult('opt_out');
+  }
   const now = input.now ?? Date.now();
   const { user, assistant } = findLastClosedTurn(input.messages);
   if (!assistant) {
-    return {
-      processed: false,
-      skipped: 'no_closed_turn',
-      episodeId: null,
-      deterministicFactIds: [],
-      providerFactIds: [],
-      invalidatedFactIds: [],
-      activeFocusUpdated: false,
-      openThreadsUpdated: false,
-      enriched: false,
-      providerOutcome: { status: 'not_requested' },
-      bridgedEvidenceFactIds: [],
-      agentRunMemoryFactIds: [],
-    };
+    return skippedProcessTurnResult('no_closed_turn');
   }
 
   const turnInput = buildTurnInput(user, assistant, input);
@@ -498,6 +519,10 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
         taskId: input.taskId,
       });
     }
+  }
+
+  if (!canWriteLongTermMemory()) {
+    return skippedProcessTurnResult('opt_out', providerOutcome);
   }
 
   const persistResult = applyConsolidatorResult(mergedResult, {
@@ -545,6 +570,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
         subjectName: input.taskId ?? input.threadId,
         subjectType: 'project',
         sourceRunId: input.sourceRunId,
+        sourceTurnId: assistant.id,
         originConversationId: memoryConversationId,
         originThreadId: input.threadId,
         originTaskId: input.taskId,

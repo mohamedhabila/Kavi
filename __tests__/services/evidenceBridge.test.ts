@@ -161,6 +161,7 @@ describe('bridgeEvidenceToFacts', () => {
     const result = bridgeGraphGoalEvidence(['python:execution:success'], {
       subjectName: 'goal-42',
       sourceRunId: 'run-1',
+      sourceTurnId: 'assistant-1',
       originConversationId: 'conv-1',
       originThreadId: 'conv-1',
       originTaskId: 'goal-42',
@@ -168,6 +169,7 @@ describe('bridgeEvidenceToFacts', () => {
     expect(result.bridged).toHaveLength(1);
     expect(result.bridged[0].fact.originTaskId).toBe('goal-42');
     expect(result.bridged[0].fact.sourceRunId).toBe('run-1');
+    expect(result.bridged[0].fact.sourceTurnId).toBe('assistant-1');
   });
 
   it('preserves long structured evidence up to the bridge cap', () => {

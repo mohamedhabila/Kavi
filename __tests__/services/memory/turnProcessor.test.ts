@@ -52,6 +52,7 @@ import {
   syncWorkingMemoryFromTurn,
 } from '../../../src/services/memory/turnProcessor';
 import type { Message } from '../../../src/types/message';
+import { useSettingsStore } from '../../../src/store/useSettingsStore';
 
 function makeMsg(overrides: Partial<Message> = {}): Message {
   return {
@@ -137,6 +138,7 @@ describe('findLastClosedTurn', () => {
 describe('syncWorkingMemoryFromTurn', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    useSettingsStore.setState({ disableLongTermMemory: false } as never);
     mockEnsureFactSchema.mockImplementation(() => undefined);
     mockExtractStructuralMemory.mockReturnValue({
       episodeSummary: 'tool-only turn',
@@ -192,6 +194,7 @@ describe('normalizeTerminalClosedTurnMessages', () => {
 describe('processIngestionTurn', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    useSettingsStore.setState({ disableLongTermMemory: false } as never);
     mockEnsureFactSchema.mockImplementation(() => undefined);
     mockFindEntityByName.mockReturnValue(null);
     mockListFacts.mockReturnValue([]);
@@ -220,6 +223,37 @@ describe('processIngestionTurn', () => {
     const result = await processIngestionTurn({ threadId: 'conv-1', messages: [] });
     expect(result.processed).toBe(false);
     expect(result.skipped).toBe('no_closed_turn');
+  });
+
+  it('does not persist when the user opts out while provider enrichment is in flight', async () => {
+    mockExtractProviderEnrichment.mockImplementationOnce(async () => {
+      useSettingsStore.getState().setDisableLongTermMemory(true);
+      return {
+        status: 'valid',
+        result: {
+          episodeSummary: 'Must not persist.',
+          newFacts: [],
+          activeFocus: null,
+          openThreads: [],
+          notable: [],
+        },
+      };
+    });
+    const messages = [
+      makeMsg({ id: 'user-opt-out', role: 'user', content: 'Remember this.' }),
+      makeMsg({ id: 'assistant-opt-out', role: 'assistant', content: 'Okay.' }),
+    ];
+
+    const result = await processIngestionTurn({
+      threadId: 'conv-opt-out',
+      messages,
+      extractor: jest.fn(),
+    });
+
+    expect(result).toEqual(expect.objectContaining({ processed: false, skipped: 'opt_out' }));
+    expect(mockApplyConsolidatorResult).not.toHaveBeenCalled();
+    expect(mockUpsertState).not.toHaveBeenCalled();
+    useSettingsStore.getState().setDisableLongTermMemory(false);
   });
 
   it('returns processed=false when the only assistant message is a placeholder', async () => {

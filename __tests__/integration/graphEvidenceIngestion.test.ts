@@ -15,16 +15,16 @@ const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => 
 const THREAD_ID = 'conv-graph-evidence';
 const TASK_ID = 'goal-analysis';
 
-function buildClosedTurnMessages(): Message[] {
+function buildClosedTurnMessages(userId = 'user-1', assistantId = 'assistant-1'): Message[] {
   return [
     {
-      id: 'user-1',
+      id: userId,
       role: 'user',
       content: 'Analyze the dataset and write reports/analysis.json',
       timestamp: 1,
     },
     {
-      id: 'assistant-1',
+      id: assistantId,
       role: 'assistant',
       content: 'Analysis complete.',
       timestamp: 2,
@@ -74,6 +74,50 @@ describe('graph evidence ingestion bridge', () => {
     });
 
     expect(recalled.some((fact) => fact.objectText.includes(evidence))).toBe(true);
+  });
+
+  it('does not reinforce graph evidence on turn replay but does on a later turn', async () => {
+    const evidence = 'python:artifact:reports/analysis.json';
+    const firstTurn = buildClosedTurnMessages('user-replay-1', 'assistant-replay-1');
+    const input = {
+      threadId: THREAD_ID,
+      messages: firstTurn,
+      taskId: TASK_ID,
+      sourceRunId: 'run-graph-replay',
+      graphGoalEvidence: [evidence],
+      skipWorkingMemorySync: true,
+    };
+
+    await processIngestionTurn({ ...input, now: 100 });
+    await processIngestionTurn({ ...input, now: 200 });
+
+    const afterReplay = listFacts({ originConversationId: THREAD_ID }).find((fact) =>
+      fact.objectText.includes(evidence),
+    );
+    expect(afterReplay).toMatchObject({
+      sourceTurnId: 'assistant-replay-1',
+      repeatedMentionCount: 0,
+      updatedAt: 100,
+    });
+
+    await processIngestionTurn({
+      ...input,
+      messages: buildClosedTurnMessages('user-replay-2', 'assistant-replay-2'),
+      sourceRunId: 'run-graph-later',
+      now: 300,
+    });
+    await processIngestionTurn({
+      ...input,
+      messages: buildClosedTurnMessages('user-replay-2', 'assistant-replay-2'),
+      sourceRunId: 'run-graph-later',
+      now: 400,
+    });
+
+    const afterLaterTurn = listFacts({ originConversationId: THREAD_ID }).filter((fact) =>
+      fact.objectText.includes(evidence),
+    );
+    expect(afterLaterTurn).toHaveLength(1);
+    expect(afterLaterTurn[0]).toMatchObject({ repeatedMentionCount: 1, updatedAt: 300 });
   });
 
   it('routes agent-run graph observations to compact run memories instead of raw fact bridging', async () => {

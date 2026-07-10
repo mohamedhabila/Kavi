@@ -17,6 +17,8 @@
 // ---------------------------------------------------------------------------
 
 import type { AgentRunEvidenceEntry, AgentRunEvidenceRecorder } from '../../types/agentRun';
+import { runMemoryTransaction } from './access/transaction';
+import { addFactEvidence } from './episodes/mutations';
 import { recordFact } from './facts/mutations';
 import type { RecordFactResult } from './facts/types';
 import { upsertEntity, type EntityType } from './entities';
@@ -33,11 +35,17 @@ export interface EvidenceBridgeOptions {
   defaultSubject?: { name: string; type?: EntityType };
   /** Run id for traceability — written to RecordFact.sourceRunId. */
   sourceRunId?: string;
+  /** Stable closed-turn id used to make repeated ingestion idempotent. */
+  sourceTurnId?: string;
   originConversationId?: string;
   originThreadId?: string;
   originTaskId?: string;
   /** Optional now override (testing). */
   now?: number;
+}
+
+export interface GraphGoalEvidenceBridgeOptions extends EvidenceBridgeOptions {
+  sourceTurnId: string;
 }
 
 const MAX_GRAPH_EVIDENCE_BRIDGE_ENTRIES = 64;
@@ -94,6 +102,7 @@ export function bridgeEvidenceToFacts(
 
   const subjectName = options.subjectName?.trim() || options.defaultSubject?.name?.trim() || '';
   const subjectType: EntityType = options.subjectType ?? options.defaultSubject?.type ?? 'project';
+  const sourceTurnId = options.sourceTurnId?.trim() || null;
 
   const bridged: RecordFactResult[] = [];
   const skipped: Array<{ id: string; reason: string }> = [];
@@ -130,20 +139,34 @@ export function bridgeEvidenceToFacts(
         now: options.now,
       }).id;
     }
+    const factSubjectId = subjectId;
 
     try {
-      const result = recordFact({
-        subjectId,
-        predicate: buildPredicate(entry),
-        objectText,
-        confidence,
-        ...(options.sourceRunId ? { sourceRunId: options.sourceRunId } : {}),
-        ...(options.originConversationId
-          ? { originConversationId: options.originConversationId }
-          : {}),
-        ...(options.originThreadId ? { originThreadId: options.originThreadId } : {}),
-        ...(options.originTaskId ? { originTaskId: options.originTaskId } : {}),
-        now: options.now,
+      const result = runMemoryTransaction(() => {
+        const recorded = recordFact({
+          subjectId: factSubjectId,
+          predicate: buildPredicate(entry),
+          objectText,
+          confidence,
+          ...(options.sourceRunId ? { sourceRunId: options.sourceRunId } : {}),
+          ...(sourceTurnId ? { sourceMessageId: sourceTurnId, sourceTurnId } : {}),
+          ...(options.originConversationId
+            ? { originConversationId: options.originConversationId }
+            : {}),
+          ...(options.originThreadId ? { originThreadId: options.originThreadId } : {}),
+          ...(options.originTaskId ? { originTaskId: options.originTaskId } : {}),
+          now: options.now,
+        });
+        if (sourceTurnId) {
+          addFactEvidence({
+            factId: recorded.fact.id,
+            messageId: sourceTurnId,
+            role: 'assistant',
+            quote: objectText,
+            now: options.now,
+          });
+        }
+        return recorded;
       });
       bridged.push(result);
     } catch (e) {
@@ -192,11 +215,13 @@ export function mapGraphGoalEvidenceToEntries(
 
 export function bridgeGraphGoalEvidence(
   evidenceStrings: ReadonlyArray<string>,
-  options: EvidenceBridgeOptions = {},
+  options: GraphGoalEvidenceBridgeOptions,
 ): BridgeEvidenceResult {
+  const sourceTurnId = options.sourceTurnId.trim();
+  if (!sourceTurnId) throw new Error('bridgeGraphGoalEvidence: sourceTurnId required');
   const entries = mapGraphGoalEvidenceToEntries(evidenceStrings, options.now);
   if (entries.length === 0) {
     return { bridged: [], skipped: [] };
   }
-  return bridgeEvidenceToFacts(entries, options);
+  return bridgeEvidenceToFacts(entries, { ...options, sourceTurnId });
 }

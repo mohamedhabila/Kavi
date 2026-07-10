@@ -8,6 +8,7 @@ import {
   recordFact,
   replaceCurrentFact,
 } from '../../../src/services/memory/facts/mutations';
+import { addFactEvidence } from '../../../src/services/memory/episodes/mutations';
 import { listFacts } from '../../../src/services/memory/facts/queries';
 import {
   ensureFactSchema,
@@ -28,7 +29,12 @@ afterEach(() => {
   closeMemoryDb();
 });
 
-function replacement(expectedCurrentFactId: string, value: string, now: number) {
+function replacement(
+  expectedCurrentFactId: string,
+  value: string,
+  now: number,
+  sourceMessageId = `user-${now}`,
+) {
   return replaceCurrentFact({
     expectedCurrentFactId,
     subjectId: 'entity-user',
@@ -37,7 +43,7 @@ function replacement(expectedCurrentFactId: string, value: string, now: number) 
     scope: 'global',
     originConversationId: 'conversation-1',
     originThreadId: 'thread-1',
-    sourceMessageId: `user-${now}`,
+    sourceMessageId,
     now,
   });
 }
@@ -187,6 +193,64 @@ describe('replaceCurrentFact', () => {
     expect(listFacts({ subjectId: 'entity-user', includeInvalidated: true })).toHaveLength(1);
   });
 
+  it('counts one grounded same-value mention once across replay but reinforces a later source', () => {
+    const old = recordFact({
+      subjectId: 'entity-user',
+      predicate: 'lives_in',
+      objectText: 'Utrecht',
+      scope: 'global',
+      now: 100,
+    });
+    const unrelated = recordFact({
+      subjectId: 'entity-release',
+      predicate: 'target',
+      objectText: 'production',
+      scope: 'global',
+      now: 110,
+    });
+    addFactEvidence({
+      factId: unrelated.fact.id,
+      messageId: 'user-correction-1',
+      quote: 'Ship to production.',
+      now: 120,
+    });
+
+    const first = replacement(old.fact.id, 'Utrecht', 200, 'user-correction-1');
+    expect(first).toMatchObject({
+      status: 'duplicate',
+      fact: { repeatedMentionCount: 1, updatedAt: 200 },
+    });
+    addFactEvidence({
+      factId: old.fact.id,
+      messageId: 'user-correction-1',
+      quote: 'I still live in Utrecht.',
+      now: 200,
+    });
+
+    const replay = replacement(old.fact.id, 'Utrecht', 250, 'user-correction-1');
+    expect(replay).toMatchObject({
+      status: 'duplicate',
+      fact: { repeatedMentionCount: 1, updatedAt: 200 },
+    });
+
+    const laterMention = replacement(old.fact.id, 'Utrecht', 300, 'user-correction-2');
+    expect(laterMention).toMatchObject({
+      status: 'duplicate',
+      fact: { repeatedMentionCount: 2, updatedAt: 300 },
+    });
+    addFactEvidence({
+      factId: old.fact.id,
+      messageId: 'user-correction-2',
+      quote: 'I still live in Utrecht.',
+      now: 300,
+    });
+    expect(replacement(old.fact.id, 'Utrecht', 350, 'user-correction-2')).toMatchObject({
+      status: 'duplicate',
+      fact: { repeatedMentionCount: 2, updatedAt: 300 },
+    });
+    expect(listFacts({ subjectId: 'entity-user', includeInvalidated: true })).toHaveLength(1);
+  });
+
   it('supports repeated A to B to A validity intervals', () => {
     const firstA = recordFact({
       subjectId: 'entity-user',
@@ -273,5 +337,4 @@ describe('replaceCurrentFact', () => {
       ]),
     );
   });
-
 });

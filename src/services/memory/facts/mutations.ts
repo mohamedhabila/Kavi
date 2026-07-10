@@ -104,6 +104,7 @@ function recordFactInTransaction(input: RecordFactInput): RecordFactResult {
     const sourceMessageId = input.sourceMessageId?.trim();
     const isSourceReplay = Boolean(
       (sourceTurnId && existing.source_turn_id === sourceTurnId) ||
+      (sourceMessageId && hasPersistedSourceEvidence(existing.id, sourceMessageId)) ||
       (!sourceTurnId &&
         sourceMessageId &&
         !existing.source_turn_id &&
@@ -311,6 +312,25 @@ function replacementScopeMatches(row: FactRow, input: ReplaceCurrentFactInput): 
   );
 }
 
+function hasPersistedSourceEvidence(
+  factId: string,
+  sourceMessageId: string | null | undefined,
+): boolean {
+  const messageId = sourceMessageId?.trim();
+  if (!messageId) return false;
+  const db = getSchemaReadyMemoryDb();
+  return Boolean(
+    db.getFirstSync<{ present: number }>(
+      `SELECT 1 AS present
+         FROM memory_fact_evidence
+        WHERE fact_id = ? AND message_id = ?
+        LIMIT 1`,
+      factId,
+      messageId,
+    ),
+  );
+}
+
 function reinforceExactDuplicate(
   row: FactRow,
   input: ReplaceCurrentFactInput,
@@ -398,6 +418,13 @@ export function replaceCurrentFact(input: ReplaceCurrentFactInput): ReplaceCurre
       }
 
       if (current.object_text.normalize('NFKC').trim() === objectText.normalize('NFKC')) {
+        if (hasPersistedSourceEvidence(current.id, input.sourceMessageId)) {
+          return {
+            fact: rowToFact(current),
+            status: 'duplicate' as const,
+            superseded: [],
+          };
+        }
         return {
           fact: reinforceExactDuplicate(current, input, now),
           status: 'duplicate' as const,
