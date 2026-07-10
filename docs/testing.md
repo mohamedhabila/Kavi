@@ -143,6 +143,25 @@ incomplete private material is a failure, never a skip. The complete private
 layout, ownership handoff, digest command, reset procedure, invocation, and
 publication boundary are in [evaluation.md](evaluation.md#private-klae-release-procedure).
 
+LLM-judge calibration and trial aggregation are separate, keyless evidence
+gates over private evaluator inputs; neither invokes the app runner:
+
+```bash
+npm run check:judge-calibration -- \
+  --input .private/evals/<release-id>/judge-calibration.json \
+  --output .artifacts/judge-calibration-report.json
+
+npm run aggregate:evaluation -- \
+  --input .private/evals/<release-id>/trial-set.json \
+  --output .artifacts/evaluation-statistics-report.json
+```
+
+Both commands write content-free aggregate reports and return nonzero when the
+evidence is not claim-eligible. Exact freeze ordering, digest commands, metric
+definitions, bootstrap semantics, and publication rules are documented in
+[evaluation.md](evaluation.md#evaluator-calibration-gate) and
+[evaluation.md](evaluation.md#deterministic-trial-statistics).
+
 See [evaluation.md](evaluation.md) for evaluation lanes, verification labels,
 split ownership, structural assertion semantics, metrics, failure categories,
 privacy rules, and the boundary between adapted checks and official upstream

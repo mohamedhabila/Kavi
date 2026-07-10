@@ -17,6 +17,10 @@ The machine-readable sources are:
   public schema for private split registries and evaluator-controlled packs.
 - [`evaluation/klae-private-registry.template.json`](../evaluation/klae-private-registry.template.json):
   metadata-only starting point with zero digests and no cases or gold.
+- [`evaluation/judge-calibration.schema.json`](../evaluation/judge-calibration.schema.json):
+  private calibration-input and content-free aggregate-report contract.
+- [`evaluation/statistics.schema.json`](../evaluation/statistics.schema.json):
+  deterministic trial-set and public statistics-report contract.
 
 Validate all public governance artifacts without a provider key, private pack,
 or network access:
@@ -195,6 +199,111 @@ case inputs, fixtures, assertions, gold, transcripts, raw outputs, or the
 private validator command with its local arguments. A public run-manifest
 artifact reference is rejected if it points into a `.private`, `private`,
 `gold`, or `golden` path component, regardless of artifact visibility.
+
+### Evaluator calibration gate
+
+Deterministic structural evaluators identify themselves as
+`deterministic_structural` and freeze implementation and rubric digests. They
+do not need an LLM-judge agreement study. An `llm_judge` must be calibrated on
+private, independently held human labels before its results are claim-eligible.
+
+The private calibration file contains only opaque IDs, declared families, and
+human/judge labels; prompt, rubric, model, and judge configurations are present
+only as SHA-256 fingerprints. It requires at least 100 resolved human binary
+labels, at least 20% of each class, and at least five resolved labels in every
+declared family. Human `ambiguous` examples are reported separately and never
+forced into a class. A judge `ambiguous` label against a resolved human label
+counts as disagreement. A disagreement rate greater than or equal to 5% fails
+the gate.
+
+Freeze custody in this order:
+
+1. Freeze the judge/model/prompt/rubric configuration and human-label bytes.
+2. Record `humanLabelsFrozenAt`, then run and freeze judge predictions.
+3. Record `judgePredictionsFrozenAt`, which must be strictly later than both
+   configuration and human-label freezes.
+4. Release human labels only after predictions are frozen, then perform the
+   independent access review. Candidate access or pre-freeze label exposure
+   invalidates custody.
+
+The label fingerprints use versioned canonical projections sorted by opaque
+example ID. Compute them locally without printing labels:
+
+```bash
+node -e 'const f=require("node:fs"),m=require("./scripts/lib/judgeCalibration"),v=JSON.parse(f.readFileSync(process.argv[1],"utf8"));process.stdout.write(JSON.stringify({humanLabelsSha256:m.digestCalibrationProjection(v.examples,"human"),judgePredictionsSha256:m.digestCalibrationProjection(v.examples,"judge")})+"\n")' -- .private/evals/<release-id>/judge-calibration.json
+```
+
+After placing those digests in the frozen input, run the keyless gate:
+
+```bash
+npm run check:judge-calibration -- \
+  --input .private/evals/<release-id>/judge-calibration.json \
+  --output .artifacts/judge-calibration-report.json
+```
+
+The command writes the aggregate report even when the gate fails and exits
+nonzero when `claimEligible=false`. Public output contains counts, family
+coverage, disagreement rate, evaluator fingerprints, and the input digest. It
+contains no examples, labels, prompts, identities, or private paths. Reference
+this report from the existing `evaluation_run` manifest; it is a calibration
+artifact, not another product runner.
+
+### Deterministic trial statistics
+
+The statistics command consumes one private `evaluation_trial_set` associated
+with an already validated `evaluation_run` manifest. Freeze its scenario
+manifest, ordered trial seeds, `k`, comparison roles, bootstrap settings, and
+their canonical digests before execution. The input must contain exactly one
+trial for every scenario, declared trial index, and matching seed. A requested
+paired comparison likewise requires one reference/candidate pair per grid
+cell, and candidate scores must exactly match the same candidate trial.
+
+Compute the two authoring digests with the implementation used by the gate:
+
+```bash
+node -e 'const f=require("node:fs"),m=require("./scripts/lib/evaluationStatisticsMath"),v=JSON.parse(f.readFileSync(process.argv[1],"utf8"));process.stdout.write(JSON.stringify({aggregationConfigSha256:m.digestCanonicalValue(v.aggregation),scenarioManifestSha256:m.digestCanonicalValue(v.scenarioManifest)})+"\n")' -- .private/evals/<release-id>/trial-set.json
+```
+
+Then create the content-free aggregate:
+
+```bash
+npm run aggregate:evaluation -- \
+  --input .private/evals/<release-id>/trial-set.json \
+  --output .artifacts/evaluation-statistics-report.json
+```
+
+Reliability metrics are scenario-level:
+
+- `passAt1` is qualified success on the first frozen trial.
+- `passAtK` is the observed fraction with at least one qualified success among
+  the first frozen `k` trials. It is deliberately not the combinatorial
+  pass-at-k estimator used for sampling from a larger candidate pool.
+- `allPass` requires qualified success on every declared trial.
+
+A qualified success excludes accidental success and requires every declared
+safety invariant to pass. Scenarios with missing, duplicate, skipped,
+ambiguous, infrastructure-invalid, or unevaluated safety evidence are excluded
+from rate denominators and make the report claim-ineligible; they are never
+silently counted as product failures. A zero resolved denominator produces
+`null` rate and interval, not a fabricated 0%. Each binary rate includes the
+Wilson 95% interval over resolved scenarios.
+
+Paired task and rubric deltas use
+`paired_scenario_cluster_percentile_v1`. The evaluator first averages trial
+deltas within each scenario, sorts opaque scenario clusters by code point, and
+then resamples whole scenario clusters with replacement using the recorded
+Mulberry32 seed. The 2.5th and 97.5th percentiles use linear interpolation at
+position `(sampleCount - 1) * p`. Every resolved pair remains in its cluster;
+an endpoint marked accidental contributes qualified task and rubric score 0
+instead of disappearing and changing weights. Resolved, qualified, and
+accidental endpoint counts remain separate.
+
+The public report includes all 20 failure-taxonomy categories, including zero
+counts, plus skipped/missing/ambiguous/infrastructure evidence, accidental
+successes, and every safety invariant. It contains no scenario or pair IDs,
+trial seeds, text, labels, or private locators. `claimEligible=true` means the
+evidence is complete and internally valid; it does not mean a product target,
+release threshold, benchmark rank, or safety bar was attained.
 
 Production code must not branch on a case ID, family, expected value, benchmark
 name, dataset ID, question ID, answer type, golden action, or evaluator rubric.
