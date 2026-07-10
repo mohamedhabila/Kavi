@@ -146,6 +146,7 @@ describe('createAgentRunFinalResponse', () => {
 
     const first = ensureFinalResponse(request);
     const second = ensureFinalResponse(request);
+    await Promise.resolve();
 
     expect(synthesizeAgentRunCompletion).toHaveBeenCalledTimes(1);
     const runIdentityKey = createAgentRunIdentityKey(request);
@@ -199,6 +200,7 @@ describe('createAgentRunFinalResponse', () => {
       runId: 'run-1',
       status: 'completed',
     });
+    await Promise.resolve();
 
     expect(synthesizeAgentRunCompletion).toHaveBeenCalledTimes(2);
     expect(pending.size).toBe(2);
@@ -250,6 +252,22 @@ describe('createAgentRunFinalResponse', () => {
         resolveConversationFinalizationContext: latestResolver,
       }),
     );
+  });
+
+  it('removes the ownership entry when finalization exits before provider work', async () => {
+    const pending = new Map<string, Promise<string | undefined>>();
+    const ensureFinalResponse = createAgentRunFinalResponse(createDependencies({ pending }));
+
+    const finalization = ensureFinalResponse({
+      conversationId: 'missing-conversation',
+      runId: 'run-1',
+      status: 'completed',
+    });
+
+    expect(pending.size).toBe(1);
+    await expect(finalization).resolves.toBeUndefined();
+    expect(pending.size).toBe(0);
+    expect(synthesizeAgentRunCompletion).not.toHaveBeenCalled();
   });
 
   it('keeps an existing delivered response without synthesizing another one', async () => {

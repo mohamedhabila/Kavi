@@ -68,7 +68,7 @@ export function createAgentRunFinalResponse({
       return inFlightFinalization;
     }
 
-    const finalizationPromise = (async () => {
+    const finalizationPromise = Promise.resolve().then(async () => {
       const operation = createAgentRunOperationController({
         conversationId: params.conversationId,
         runId: params.runId,
@@ -199,11 +199,14 @@ export function createAgentRunFinalResponse({
         return preview;
       } finally {
         operation.dispose();
-        pendingAgentRunFinalizations.delete(runIdentityKey);
       }
-    })();
+    });
 
     pendingAgentRunFinalizations.set(runIdentityKey, finalizationPromise);
-    return finalizationPromise;
+    return finalizationPromise.finally(() => {
+      if (pendingAgentRunFinalizations.get(runIdentityKey) === finalizationPromise) {
+        pendingAgentRunFinalizations.delete(runIdentityKey);
+      }
+    });
   };
 }

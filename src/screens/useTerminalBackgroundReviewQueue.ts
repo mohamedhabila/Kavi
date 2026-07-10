@@ -60,23 +60,28 @@ export function useTerminalBackgroundReviewQueue(params: {
         return inFlight;
       }
 
-      const reviewPromise = runTerminalBackgroundReview({
-        appendConversationLog,
-        candidate,
-        completeAgentRun,
-        ensureAgentRunFinalResponseRef,
-        pendingAgentRunTerminalReviewsRef,
-        recordConversationTurnMemory,
-        resolveConversationFinalizationContextRef,
-        resumeAgentRunRef,
-        setAgentRunPhase,
-        updateAgentRunAsyncWork,
-        updateAgentRunControlGraph,
-        updateAgentRunSummary,
-        updateMessageAssistantMetadata,
-      });
+      const reviewPromise = Promise.resolve().then(() =>
+        runTerminalBackgroundReview({
+          appendConversationLog,
+          candidate,
+          completeAgentRun,
+          ensureAgentRunFinalResponseRef,
+          recordConversationTurnMemory,
+          resolveConversationFinalizationContextRef,
+          resumeAgentRunRef,
+          setAgentRunPhase,
+          updateAgentRunAsyncWork,
+          updateAgentRunControlGraph,
+          updateAgentRunSummary,
+          updateMessageAssistantMetadata,
+        }),
+      );
       pendingAgentRunTerminalReviewsRef.current.set(runIdentityKey, reviewPromise);
-      return reviewPromise;
+      return reviewPromise.finally(() => {
+        if (pendingAgentRunTerminalReviewsRef.current.get(runIdentityKey) === reviewPromise) {
+          pendingAgentRunTerminalReviewsRef.current.delete(runIdentityKey);
+        }
+      });
     },
     [
       appendConversationLog,
@@ -100,7 +105,6 @@ async function runTerminalBackgroundReview(params: {
   candidate: Parameters<QueueTerminalBackgroundReview>[0];
   completeAgentRun: ChatStore['completeAgentRun'];
   ensureAgentRunFinalResponseRef: MutableRefObject<EnsureAgentRunFinalResponse | null>;
-  pendingAgentRunTerminalReviewsRef: MutableRefObject<Map<string, Promise<void>>>;
   recordConversationTurnMemory: RecordConversationTurnMemory;
   resolveConversationFinalizationContextRef: MutableRefObject<
     | ((conversation: Conversation) => Promise<ResolvedFinalizationProviderContext | undefined>)
@@ -114,7 +118,6 @@ async function runTerminalBackgroundReview(params: {
   updateMessageAssistantMetadata: ChatStore['updateMessageAssistantMetadata'];
 }): Promise<void> {
   const { candidate } = params;
-  const runIdentityKey = createAgentRunIdentityKey(candidate);
   const operation = createAgentRunOperationController({
     conversationId: candidate.conversationId,
     runId: candidate.runId,
@@ -170,6 +173,5 @@ async function runTerminalBackgroundReview(params: {
     }
   } finally {
     operation.dispose();
-    params.pendingAgentRunTerminalReviewsRef.current.delete(runIdentityKey);
   }
 }

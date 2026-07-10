@@ -55,7 +55,7 @@ export function useRecoveredAsyncRunResume({
         return inFlight;
       }
 
-      const resumePromise = (async () => {
+      const resumePromise = Promise.resolve().then(async () => {
         const operation = createAgentRunOperationController({
           conversationId: params.conversationId,
           runId: params.runId,
@@ -140,12 +140,15 @@ export function useRecoveredAsyncRunResume({
           throw error;
         } finally {
           operation.dispose();
-          pendingAgentRunAsyncResumesRef.current.delete(runIdentityKey);
         }
-      })();
+      });
 
       pendingAgentRunAsyncResumesRef.current.set(runIdentityKey, resumePromise);
-      return resumePromise;
+      return resumePromise.finally(() => {
+        if (pendingAgentRunAsyncResumesRef.current.get(runIdentityKey) === resumePromise) {
+          pendingAgentRunAsyncResumesRef.current.delete(runIdentityKey);
+        }
+      });
     },
     [
       appendConversationLog,
