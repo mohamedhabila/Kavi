@@ -255,7 +255,7 @@ describe('evaluation contract', () => {
 
   it('rejects private paths, credentials, and raw endpoint URLs', () => {
     const run = validRunManifest();
-    run.command.argv.push('sk-proj-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+    run.command.argv.push(['sk', 'proj', 'A'.repeat(32)].join('-'));
     run.command.argv.push('--base-url=https://private.example.test/v1');
     run.artifacts[0].path = '/tmp/private-report.json';
     run.models[0].model = '/private/models/local.gguf';
