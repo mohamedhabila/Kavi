@@ -42,9 +42,12 @@ class AndroidDurableExecutionAdapterTest {
     assertEquals(0L, store.record?.revision)
 
     scheduler.enqueueResult = AndroidDurableScheduleResult.ACCEPTED
-    val accepted = adapter.enqueue(request).acceptedRecord()
+    val reconciliation = adapter.reconcileScheduling(10)
+      as AndroidDurableOutboxReconciliationResult.Completed
+    val accepted = reconciliation.outcomes.single().result.acceptedRecord()
 
     assertEquals(AndroidDurableExecutionState.ENQUEUED, accepted.state)
+    assertEquals(request.identity.runId, reconciliation.outcomes.single().runId)
     assertEquals(2, scheduler.enqueued.size)
     assertEquals(1L, accepted.revision)
   }
@@ -62,6 +65,28 @@ class AndroidDurableExecutionAdapterTest {
   }
 
   @Test
+  fun `a worker may start before enqueue confirmation without losing the work`() {
+    val store = FakeStore()
+    val scheduler = FakeScheduler()
+    lateinit var adapter: AndroidDurableExecutionAdapter
+    val request = request()
+    scheduler.onEnqueue = {
+      adapter.markRunning(
+        pointer(request.identity),
+        attempt = 1,
+        updatedAtMillis = 101,
+      ).acceptedRecord()
+    }
+    adapter = AndroidDurableExecutionAdapter(store, scheduler)
+
+    val outcome = adapter.enqueue(request)
+
+    assertTrue(outcome is AndroidDurableAdapterResult.NoOp)
+    assertEquals(AndroidDurableExecutionState.RUNNING, store.record?.state)
+    assertEquals(1, store.record?.attempt)
+  }
+
+  @Test
   fun `epochs command identities and request contracts cannot be silently replaced`() {
     val store = FakeStore()
     val scheduler = FakeScheduler()
@@ -76,6 +101,10 @@ class AndroidDurableExecutionAdapterTest {
     assertRejected(
       AndroidDurableRejectionReason.COMMAND_IDENTITY_CONFLICT,
       adapter.enqueue(request(identity = identity(commandDigest = "c".repeat(64)))),
+    )
+    assertRejected(
+      AndroidDurableRejectionReason.COMMAND_IDENTITY_CONFLICT,
+      adapter.enqueue(request(identity = identity(snapshotUpdatedAtMillis = 91))),
     )
     assertRejected(
       AndroidDurableRejectionReason.REQUEST_CONTRACT_CONFLICT,
@@ -107,7 +136,7 @@ class AndroidDurableExecutionAdapterTest {
     assertRejected(
       AndroidDurableRejectionReason.INVALID_PROGRESS,
       adapter.scheduleRetry(
-        pointer = pointer,
+        pointer = attemptPointer(pointer, 1),
         nextAttemptAtMillis = 10_300,
         failureReason = AndroidDurableFailureReason.HANDLER_FAILED,
         updatedAtMillis = 300,
@@ -115,7 +144,7 @@ class AndroidDurableExecutionAdapterTest {
     )
 
     val retry = adapter.scheduleRetry(
-      pointer = pointer,
+      pointer = attemptPointer(pointer, 1),
       nextAttemptAtMillis = 10_300,
       failureReason = AndroidDurableFailureReason.TRANSIENT_UNAVAILABLE,
       updatedAtMillis = 300,
@@ -124,25 +153,29 @@ class AndroidDurableExecutionAdapterTest {
     assertEquals(10_300L, retry.nextAttemptAtMillis)
     assertEquals(AndroidDurableFailureReason.TRANSIENT_UNAVAILABLE, retry.failureReason)
 
+    assertRejected(
+      AndroidDurableRejectionReason.INVALID_PROGRESS,
+      adapter.markRunning(pointer, attempt = 2, updatedAtMillis = 10_299),
+    )
     adapter.markRunning(pointer, attempt = 2, updatedAtMillis = 10_300).acceptedRecord()
     assertRejected(
       AndroidDurableRejectionReason.INVALID_PROGRESS,
       adapter.scheduleRetry(
-        pointer = pointer,
+        pointer = attemptPointer(pointer, 2),
         nextAttemptAtMillis = 30_299,
         failureReason = AndroidDurableFailureReason.TRANSIENT_UNAVAILABLE,
         updatedAtMillis = 10_300,
       ),
     )
     adapter.scheduleRetry(
-      pointer = pointer,
+      pointer = attemptPointer(pointer, 2),
       nextAttemptAtMillis = 30_300,
       failureReason = AndroidDurableFailureReason.TRANSIENT_UNAVAILABLE,
       updatedAtMillis = 10_300,
     ).acceptedRecord()
     adapter.markRunning(pointer, attempt = 3, updatedAtMillis = 30_300).acceptedRecord()
     val completed = adapter.complete(
-      pointer = pointer,
+      pointer = attemptPointer(pointer, 3),
       receiptDigest = "d".repeat(64),
       updatedAtMillis = 30_400,
     ).acceptedRecord()
@@ -178,8 +211,20 @@ class AndroidDurableExecutionAdapterTest {
     adapter.markRunning(pointer, attempt = 1, updatedAtMillis = 200).acceptedRecord()
     assertRejected(
       AndroidDurableRejectionReason.INVALID_PROGRESS,
+      adapter.markRunning(pointer, attempt = 2, updatedAtMillis = 201),
+    )
+    assertRejected(
+      AndroidDurableRejectionReason.INVALID_PROGRESS_TRANSITION,
+      adapter.block(
+        attemptPointer(pointer, 1),
+        failureReason = AndroidDurableFailureReason.TRANSIENT_UNAVAILABLE,
+        updatedAtMillis = 200,
+      ),
+    )
+    assertRejected(
+      AndroidDurableRejectionReason.INVALID_PROGRESS,
       adapter.scheduleRetry(
-        pointer,
+        attemptPointer(pointer, 1),
         nextAttemptAtMillis = 10_199,
         failureReason = AndroidDurableFailureReason.TRANSIENT_UNAVAILABLE,
         updatedAtMillis = 200,
@@ -187,7 +232,38 @@ class AndroidDurableExecutionAdapterTest {
     )
     assertRejected(
       AndroidDurableRejectionReason.INVALID_PROGRESS,
-      adapter.complete(pointer, receiptDigest = "invalid", updatedAtMillis = 300),
+      adapter.complete(
+        attemptPointer(pointer, 1),
+        receiptDigest = "invalid",
+        updatedAtMillis = 300,
+      ),
+    )
+  }
+
+  @Test
+  fun `a serialized platform rerun recovers an interrupted running record`() {
+    val store = FakeStore()
+    val adapter = AndroidDurableExecutionAdapter(store, FakeScheduler())
+    val request = request()
+    adapter.enqueue(request).acceptedRecord()
+    val pointer = pointer(request.identity)
+    adapter.markRunning(pointer, attempt = 1, updatedAtMillis = 200).acceptedRecord()
+
+    val recovered = adapter.markRunning(
+      pointer,
+      attempt = 2,
+      updatedAtMillis = 300,
+    ).acceptedRecord()
+
+    assertEquals(AndroidDurableExecutionState.RUNNING, recovered.state)
+    assertEquals(2, recovered.attempt)
+    assertRejected(
+      AndroidDurableRejectionReason.STALE_ATTEMPT,
+      adapter.complete(
+        attemptPointer(pointer, 1),
+        receiptDigest = "d".repeat(64),
+        updatedAtMillis = 301,
+      ),
     )
   }
 
@@ -211,17 +287,75 @@ class AndroidDurableExecutionAdapterTest {
     )
 
     scheduler.cancelResult = AndroidDurableCancellationResult.NOT_FOUND
-    val cancelled = adapter.cancel(pointer, updatedAtMillis = 202).acceptedRecord()
-    assertEquals(AndroidDurableExecutionState.CANCELLED, cancelled.state)
+    val reconciliation = adapter.reconcileCancellationRequests(10)
+      as AndroidDurableOutboxReconciliationResult.Completed
+    val cancellationAccepted = reconciliation.outcomes.single().result.acceptedRecord()
+    assertEquals(AndroidDurableExecutionState.CANCEL_REQUESTED, cancellationAccepted.state)
+    assertEquals(request.identity.runId, reconciliation.outcomes.single().runId)
 
     val nextRequest = request(
       identity = identity(controlEpoch = 3, snapshotDigest = "e".repeat(64)),
       requestedAtMillis = 300,
       constraints = constraints(earliestStartAtMillis = 300),
     )
+    assertRejected(
+      AndroidDurableRejectionReason.ACTIVE_OLDER_GENERATION,
+      adapter.enqueue(nextRequest),
+    )
+
+    val cancelled = adapter.confirmCancelled(
+      attemptPointer(pointer, 0),
+      updatedAtMillis = 203,
+    ).acceptedRecord()
+    assertEquals(AndroidDurableExecutionState.CANCELLED, cancelled.state)
+
     val next = adapter.enqueue(nextRequest).acceptedRecord()
     assertEquals(3L, next.request.identity.controlEpoch)
     assertEquals(AndroidDurableExecutionState.ENQUEUED, next.state)
+  }
+
+  @Test
+  fun `terminal records are released only through exact journal-owned cleanup`() {
+    val store = FakeStore()
+    val adapter = AndroidDurableExecutionAdapter(store, FakeScheduler())
+    val request = request()
+    adapter.enqueue(request).acceptedRecord()
+    val pointer = pointer(request.identity)
+
+    assertRejected(
+      AndroidDurableRejectionReason.INVALID_PROGRESS_TRANSITION,
+      adapter.releaseTerminal(pointer),
+    )
+    adapter.markRunning(pointer, attempt = 1, updatedAtMillis = 200).acceptedRecord()
+    val completed = adapter.complete(
+      attemptPointer(pointer, 1),
+      receiptDigest = "d".repeat(64),
+      updatedAtMillis = 300,
+    ).acceptedRecord()
+
+    assertEquals(AndroidDurableAdapterResult.Released(completed), adapter.releaseTerminal(pointer))
+    assertEquals(null, store.record)
+  }
+
+  @Test
+  fun `first execution cannot start before its persisted due time`() {
+    val store = FakeStore()
+    val adapter = AndroidDurableExecutionAdapter(store, FakeScheduler())
+    val request = request(
+      requestedAtMillis = 100,
+      constraints = constraints(earliestStartAtMillis = 300),
+    )
+    adapter.enqueue(request).acceptedRecord()
+    val pointer = pointer(request.identity)
+
+    assertRejected(
+      AndroidDurableRejectionReason.INVALID_PROGRESS,
+      adapter.markRunning(pointer, attempt = 1, updatedAtMillis = 299),
+    )
+    assertEquals(
+      AndroidDurableExecutionState.RUNNING,
+      adapter.markRunning(pointer, attempt = 1, updatedAtMillis = 300).acceptedRecord().state,
+    )
   }
 
   @Test
@@ -284,6 +418,11 @@ class AndroidDurableExecutionAdapterTest {
     commandDigest = identity.commandDigest,
   )
 
+  private fun attemptPointer(
+    pointer: AndroidDurableExecutionPointer,
+    attempt: Int,
+  ) = AndroidDurableExecutionAttemptPointer(pointer, attempt)
+
   private fun constraints(
     requiresCharging: Boolean = false,
     earliestStartAtMillis: Long = 100,
@@ -311,6 +450,26 @@ class AndroidDurableExecutionAdapterTest {
     override fun read(runId: String): AndroidDurableStoreReadResult =
       record?.let(AndroidDurableStoreReadResult::Found) ?: AndroidDurableStoreReadResult.Missing
 
+    override fun listScheduling(limit: Int): AndroidDurableStoreListResult = if (limit <= 0) {
+      AndroidDurableStoreListResult.Unavailable
+    } else {
+      AndroidDurableStoreListResult.Records(
+        listOfNotNull(record?.takeIf { it.state == AndroidDurableExecutionState.SCHEDULING }),
+      )
+    }
+
+    override fun listCancellationRequested(limit: Int): AndroidDurableStoreListResult = if (
+      limit <= 0
+    ) {
+      AndroidDurableStoreListResult.Unavailable
+    } else {
+      AndroidDurableStoreListResult.Records(
+        listOfNotNull(
+          record?.takeIf { it.state == AndroidDurableExecutionState.CANCEL_REQUESTED },
+        ),
+      )
+    }
+
     override fun compareAndSet(
       runId: String,
       expectedRevision: Long?,
@@ -327,11 +486,31 @@ class AndroidDurableExecutionAdapterTest {
       record = next
       return AndroidDurableStoreWriteResult.STORED
     }
+
+    override fun deleteTerminal(
+      runId: String,
+      expectedRevision: Long,
+    ): AndroidDurableStoreWriteResult {
+      val current = record ?: return AndroidDurableStoreWriteResult.CONFLICT
+      if (
+        current.request.identity.runId != runId ||
+        current.revision != expectedRevision ||
+        current.state !in setOf(
+          AndroidDurableExecutionState.CANCELLED,
+          AndroidDurableExecutionState.COMPLETED,
+          AndroidDurableExecutionState.BLOCKED,
+        )
+      ) {
+        return AndroidDurableStoreWriteResult.CONFLICT
+      }
+      record = null
+      return AndroidDurableStoreWriteResult.STORED
+    }
   }
 
   private class FakeScheduler(
     var enqueueResult: AndroidDurableScheduleResult = AndroidDurableScheduleResult.ACCEPTED,
-    var cancelResult: AndroidDurableCancellationResult = AndroidDurableCancellationResult.CANCELLED,
+    var cancelResult: AndroidDurableCancellationResult = AndroidDurableCancellationResult.ACCEPTED,
   ) : AndroidDurablePlatformScheduler {
     val enqueued = mutableListOf<AndroidDurableWorkSpec>()
     val events = mutableListOf<String>()

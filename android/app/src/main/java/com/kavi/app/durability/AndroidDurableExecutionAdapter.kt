@@ -13,6 +13,47 @@ internal class AndroidDurableExecutionAdapter(
   private val store: AndroidDurableExecutionStore,
   private val scheduler: AndroidDurablePlatformScheduler,
 ) {
+  /** Repairs the persistence-before-enqueue crash window from a startup or periodic bootstrap. */
+  fun reconcileScheduling(
+    limit: Int,
+  ): AndroidDurableOutboxReconciliationResult = when (
+    val listed = store.listScheduling(limit)
+  ) {
+    AndroidDurableStoreListResult.Unavailable ->
+      AndroidDurableOutboxReconciliationResult.StoreUnavailable
+    is AndroidDurableStoreListResult.Records ->
+      AndroidDurableOutboxReconciliationResult.Completed(
+        listed.records.map { record ->
+          AndroidDurableOutboxReconciliationOutcome(
+            runId = record.request.identity.runId,
+            result = enqueue(record.request),
+          )
+        },
+      )
+  }
+
+  /** Replays durable cancellation intent; terminal confirmation remains a separate observation. */
+  fun reconcileCancellationRequests(
+    limit: Int,
+  ): AndroidDurableOutboxReconciliationResult = when (
+    val listed = store.listCancellationRequested(limit)
+  ) {
+    AndroidDurableStoreListResult.Unavailable ->
+      AndroidDurableOutboxReconciliationResult.StoreUnavailable
+    is AndroidDurableStoreListResult.Records ->
+      AndroidDurableOutboxReconciliationResult.Completed(
+        listed.records.map { record ->
+          AndroidDurableOutboxReconciliationOutcome(
+            runId = record.request.identity.runId,
+            result = cancel(
+              pointer(record.request.identity),
+              updatedAtMillis = record.updatedAtMillis,
+            ),
+          )
+        },
+      )
+  }
+
   fun enqueue(request: AndroidDurableExecutionRequest): AndroidDurableAdapterResult {
     val decision = AndroidDurableExecutionPolicy.decide(request)
     if (decision is AndroidDurableExecutionDecision.Unsupported) {
@@ -72,7 +113,7 @@ internal class AndroidDurableExecutionAdapter(
     ) {
       AndroidDurableStoreWriteResult.STORED -> AndroidDurableAdapterResult.Accepted(enqueued)
       AndroidDurableStoreWriteResult.CONFLICT ->
-        AndroidDurableAdapterResult.Deferred(AndroidDurableDeferReason.STORE_CONFLICT)
+        resolvePostScheduleConflict(request.identity)
       AndroidDurableStoreWriteResult.UNAVAILABLE ->
         AndroidDurableAdapterResult.Deferred(AndroidDurableDeferReason.STORE_UNAVAILABLE)
     }
@@ -85,7 +126,9 @@ internal class AndroidDurableExecutionAdapter(
   ): AndroidDurableAdapterResult = updateProgress(pointer) { current ->
     if (
       current.state !in setOf(
+        AndroidDurableExecutionState.SCHEDULING,
         AndroidDurableExecutionState.ENQUEUED,
+        AndroidDurableExecutionState.RUNNING,
         AndroidDurableExecutionState.RETRY_WAITING,
       )
     ) {
@@ -93,7 +136,15 @@ internal class AndroidDurableExecutionAdapter(
         AndroidDurableRejectionReason.INVALID_PROGRESS_TRANSITION,
       )
     }
-    if (attempt != current.attempt + 1 || updatedAtMillis < current.updatedAtMillis) {
+    if (
+      attempt != current.attempt + 1 ||
+      attempt > current.request.retryPolicy.maxAttempts ||
+      updatedAtMillis < current.updatedAtMillis ||
+      (current.state in INITIAL_SCHEDULED_STATES &&
+        updatedAtMillis < current.request.constraints.earliestStartAtMillis) ||
+      (current.state == AndroidDurableExecutionState.RETRY_WAITING &&
+        updatedAtMillis < (current.nextAttemptAtMillis ?: Long.MAX_VALUE))
+    ) {
       return@updateProgress ProgressResult.Rejected(
         AndroidDurableRejectionReason.INVALID_PROGRESS,
       )
@@ -110,13 +161,13 @@ internal class AndroidDurableExecutionAdapter(
   }
 
   fun scheduleRetry(
-    pointer: AndroidDurableExecutionPointer,
+    pointer: AndroidDurableExecutionAttemptPointer,
     nextAttemptAtMillis: Long,
     failureReason: AndroidDurableFailureReason,
     updatedAtMillis: Long,
-  ): AndroidDurableAdapterResult = updateProgress(pointer) { current ->
+  ): AndroidDurableAdapterResult = updateAttemptProgress(pointer) { current ->
     if (current.state != AndroidDurableExecutionState.RUNNING) {
-      return@updateProgress ProgressResult.Rejected(
+      return@updateAttemptProgress ProgressResult.Rejected(
         AndroidDurableRejectionReason.INVALID_PROGRESS_TRANSITION,
       )
     }
@@ -127,7 +178,9 @@ internal class AndroidDurableExecutionAdapter(
       updatedAtMillis < current.updatedAtMillis ||
       nextAttemptAtMillis < saturatingAdd(updatedAtMillis, minimumBackoff)
     ) {
-      return@updateProgress ProgressResult.Rejected(AndroidDurableRejectionReason.INVALID_PROGRESS)
+      return@updateAttemptProgress ProgressResult.Rejected(
+        AndroidDurableRejectionReason.INVALID_PROGRESS,
+      )
     }
     ProgressResult.Next(
       current.next(
@@ -140,17 +193,19 @@ internal class AndroidDurableExecutionAdapter(
   }
 
   fun complete(
-    pointer: AndroidDurableExecutionPointer,
+    pointer: AndroidDurableExecutionAttemptPointer,
     receiptDigest: String,
     updatedAtMillis: Long,
-  ): AndroidDurableAdapterResult = updateProgress(pointer) { current ->
+  ): AndroidDurableAdapterResult = updateAttemptProgress(pointer) { current ->
     if (current.state != AndroidDurableExecutionState.RUNNING) {
-      return@updateProgress ProgressResult.Rejected(
+      return@updateAttemptProgress ProgressResult.Rejected(
         AndroidDurableRejectionReason.INVALID_PROGRESS_TRANSITION,
       )
     }
     if (!SHA256_DIGEST.matches(receiptDigest) || updatedAtMillis < current.updatedAtMillis) {
-      return@updateProgress ProgressResult.Rejected(AndroidDurableRejectionReason.INVALID_PROGRESS)
+      return@updateAttemptProgress ProgressResult.Rejected(
+        AndroidDurableRejectionReason.INVALID_PROGRESS,
+      )
     }
     ProgressResult.Next(
       current.next(
@@ -162,16 +217,16 @@ internal class AndroidDurableExecutionAdapter(
   }
 
   fun block(
-    pointer: AndroidDurableExecutionPointer,
+    pointer: AndroidDurableExecutionAttemptPointer,
     failureReason: AndroidDurableFailureReason,
     updatedAtMillis: Long,
-  ): AndroidDurableAdapterResult = updateProgress(pointer) { current ->
+  ): AndroidDurableAdapterResult = updateAttemptProgress(pointer) { current ->
     if (
-      current.state in TERMINAL_STATES ||
-      current.state == AndroidDurableExecutionState.CANCEL_REQUESTED ||
+      current.state != AndroidDurableExecutionState.RUNNING ||
+      failureReason == AndroidDurableFailureReason.TRANSIENT_UNAVAILABLE ||
       updatedAtMillis < current.updatedAtMillis
     ) {
-      return@updateProgress ProgressResult.Rejected(
+      return@updateAttemptProgress ProgressResult.Rejected(
         AndroidDurableRejectionReason.INVALID_PROGRESS_TRANSITION,
       )
     }
@@ -224,15 +279,54 @@ internal class AndroidDurableExecutionAdapter(
       }
     }
 
-    if (scheduler.cancel(cancelRequested.uniqueWorkName) == AndroidDurableCancellationResult.UNAVAILABLE) {
-      return AndroidDurableAdapterResult.Deferred(AndroidDurableDeferReason.SCHEDULER_UNAVAILABLE)
+    return when (scheduler.cancel(cancelRequested.uniqueWorkName)) {
+      AndroidDurableCancellationResult.ACCEPTED,
+      AndroidDurableCancellationResult.NOT_FOUND,
+      -> AndroidDurableAdapterResult.Accepted(cancelRequested)
+      AndroidDurableCancellationResult.UNAVAILABLE ->
+        AndroidDurableAdapterResult.Deferred(AndroidDurableDeferReason.SCHEDULER_UNAVAILABLE)
     }
-    val cancelled = cancelRequested.next(
-      state = AndroidDurableExecutionState.CANCELLED,
-      updatedAtMillis = maxOf(updatedAtMillis, cancelRequested.updatedAtMillis),
+  }
+
+  /** Called only after observing terminal platform work or an acknowledged stopped worker. */
+  fun confirmCancelled(
+    pointer: AndroidDurableExecutionAttemptPointer,
+    updatedAtMillis: Long,
+  ): AndroidDurableAdapterResult = updateAttemptProgress(pointer) { current ->
+    if (current.state != AndroidDurableExecutionState.CANCEL_REQUESTED) {
+      return@updateAttemptProgress ProgressResult.Rejected(
+        AndroidDurableRejectionReason.INVALID_PROGRESS_TRANSITION,
+      )
+    }
+    if (updatedAtMillis < current.updatedAtMillis) {
+      return@updateAttemptProgress ProgressResult.Rejected(
+        AndroidDurableRejectionReason.INVALID_PROGRESS,
+      )
+    }
+    ProgressResult.Next(
+      current.next(
+        state = AndroidDurableExecutionState.CANCELLED,
+        updatedAtMillis = updatedAtMillis,
+      ),
     )
-    return when (store.compareAndSet(pointer.runId, cancelRequested.revision, cancelled)) {
-      AndroidDurableStoreWriteResult.STORED -> AndroidDurableAdapterResult.Accepted(cancelled)
+  }
+
+  /**
+   * Releases a terminal native tombstone only after the authoritative journal has independently
+   * retained its terminal outcome and rejected future recovery for this generation.
+   */
+  fun releaseTerminal(pointer: AndroidDurableExecutionPointer): AndroidDurableAdapterResult {
+    val current = when (val result = readExact(pointer)) {
+      is ExactRead.Found -> result.record
+      is ExactRead.Result -> return result.result
+    }
+    if (current.state !in TERMINAL_STATES) {
+      return AndroidDurableAdapterResult.Rejected(
+        AndroidDurableRejectionReason.INVALID_PROGRESS_TRANSITION,
+      )
+    }
+    return when (store.deleteTerminal(pointer.runId, current.revision)) {
+      AndroidDurableStoreWriteResult.STORED -> AndroidDurableAdapterResult.Released(current)
       AndroidDurableStoreWriteResult.CONFLICT ->
         AndroidDurableAdapterResult.Deferred(AndroidDurableDeferReason.STORE_CONFLICT)
       AndroidDurableStoreWriteResult.UNAVAILABLE ->
@@ -261,6 +355,7 @@ internal class AndroidDurableExecutionAdapter(
     if (incoming.controlEpoch == current.controlEpoch) {
       if (
         incoming.commandDigest != current.commandDigest ||
+        incoming.snapshotUpdatedAtMillis != current.snapshotUpdatedAtMillis ||
         incoming.snapshotDigest != current.snapshotDigest ||
         incoming.commandKind != current.commandKind
       ) {
@@ -341,6 +436,17 @@ internal class AndroidDurableExecutionAdapter(
     }
   }
 
+  private fun updateAttemptProgress(
+    pointer: AndroidDurableExecutionAttemptPointer,
+    update: (AndroidDurableExecutionRecord) -> ProgressResult,
+  ): AndroidDurableAdapterResult = updateProgress(pointer.generation) { current ->
+    if (pointer.attempt != current.attempt) {
+      ProgressResult.Rejected(AndroidDurableRejectionReason.STALE_ATTEMPT)
+    } else {
+      update(current)
+    }
+  }
+
   private fun readExact(pointer: AndroidDurableExecutionPointer): ExactRead {
     val record = when (val result = store.read(pointer.runId)) {
       is AndroidDurableStoreReadResult.Found -> result.record
@@ -373,6 +479,30 @@ internal class AndroidDurableExecutionAdapter(
     }
     return ExactRead.Found(record)
   }
+
+  private fun resolvePostScheduleConflict(
+    identity: AndroidRecoveryCommandIdentity,
+  ): AndroidDurableAdapterResult {
+    val pointer = AndroidDurableExecutionPointer(
+      runId = identity.runId,
+      controlEpoch = identity.controlEpoch,
+      snapshotUpdatedAtMillis = identity.snapshotUpdatedAtMillis,
+      snapshotDigest = identity.snapshotDigest,
+      commandDigest = identity.commandDigest,
+    )
+    return when (val current = readExact(pointer)) {
+      is ExactRead.Found -> AndroidDurableAdapterResult.NoOp(current.record)
+      is ExactRead.Result -> current.result
+    }
+  }
+
+  private fun pointer(identity: AndroidRecoveryCommandIdentity) = AndroidDurableExecutionPointer(
+    runId = identity.runId,
+    controlEpoch = identity.controlEpoch,
+    snapshotUpdatedAtMillis = identity.snapshotUpdatedAtMillis,
+    snapshotDigest = identity.snapshotDigest,
+    commandDigest = identity.commandDigest,
+  )
 
   private fun AndroidDurableExecutionRecord.next(
     state: AndroidDurableExecutionState,
@@ -422,6 +552,10 @@ internal class AndroidDurableExecutionAdapter(
   }
 
   private companion object {
+    val INITIAL_SCHEDULED_STATES = setOf(
+      AndroidDurableExecutionState.SCHEDULING,
+      AndroidDurableExecutionState.ENQUEUED,
+    )
     val ACTIVE_SCHEDULED_STATES = setOf(
       AndroidDurableExecutionState.ENQUEUED,
       AndroidDurableExecutionState.RUNNING,

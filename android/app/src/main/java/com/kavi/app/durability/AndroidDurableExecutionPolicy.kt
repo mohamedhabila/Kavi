@@ -15,6 +15,11 @@ internal object AndroidDurableExecutionPolicy {
         AndroidDurableUnsupportedReason.INVALID_REQUEST,
       )
     }
+    if (request.constraints.requiresDeviceIdle) {
+      return AndroidDurableExecutionDecision.Unsupported(
+        AndroidDurableUnsupportedReason.DEVICE_IDLE_BACKOFF_UNSUPPORTED,
+      )
+    }
 
     val unsupportedReason = when (request.durabilityClass) {
       AndroidTaskDurabilityClass.FOREGROUND_INTERACTIVE ->
@@ -56,6 +61,7 @@ internal object AndroidDurableExecutionPolicy {
       SHA256_DIGEST.matches(identity.snapshotDigest) &&
       SHA256_DIGEST.matches(identity.commandDigest) &&
       request.requestedAtMillis >= 0 &&
+      identity.snapshotUpdatedAtMillis <= request.requestedAtMillis &&
       constraints.earliestStartAtMillis >= request.requestedAtMillis &&
       retryPolicy.maxAttempts in 1..MAX_ATTEMPTS &&
       retryPolicy.initialBackoffMillis in
