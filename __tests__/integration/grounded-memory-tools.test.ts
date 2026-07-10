@@ -219,6 +219,13 @@ describe('grounded memory_remember product writes', () => {
       text: 'Morgan prefers Signal.',
     },
     {
+      label: 'case-variant self label',
+      subject: 'USER',
+      subjectType: 'self' as const,
+      value: 'Signal',
+      text: 'Morgan prefers Signal.',
+    },
+    {
       label: 'subject embedded in another label',
       subject: 'Avery',
       subjectType: 'person' as const,
@@ -241,8 +248,11 @@ describe('grounded memory_remember product writes', () => {
       ok: true,
       facts: [],
     });
-    if (fixture.label === 'spoofed self classification') {
-      expect(findEntityByName('Avery')).toBeNull();
+    if (
+      fixture.label === 'spoofed self classification' ||
+      fixture.label === 'case-variant self label'
+    ) {
+      expect(findEntityByName(fixture.subject)).toBeNull();
     }
   });
 

@@ -74,7 +74,7 @@ function normalizedGroundingText(value: string): string {
 }
 
 function isCanonicalSelfSubject(subject: string): boolean {
-  return normalizedGroundingText(subject).toLowerCase() === 'user';
+  return normalizedGroundingText(subject) === 'user';
 }
 
 function isIdentifierCodePoint(value: string | undefined): boolean {

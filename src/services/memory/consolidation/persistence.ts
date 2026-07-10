@@ -163,7 +163,7 @@ function applyConsolidatorResultInTransaction(
   const resolvedFacts: ApplyConsolidatorResultResult['resolvedFacts'] = [];
   const invalidatedFactIds: string[] = [];
   for (const [inputIndex, fact] of result.newFacts.entries()) {
-    const subjectType = fact.subject.toLowerCase() === 'user' ? 'self' : 'concept';
+    const subjectType = fact.subject === 'user' ? 'self' : 'concept';
     const subject = upsertEntity({ type: subjectType, name: fact.subject, now });
     const sourceMessageId =
       fact.evidenceMessageIds?.[0] ??

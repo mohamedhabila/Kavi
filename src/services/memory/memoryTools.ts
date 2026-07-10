@@ -449,7 +449,7 @@ export function executeMemoryRemember(
     return err('invalid_args', 'value must be at most 200 characters');
   }
 
-  const canonicalSelfSubject = subject.normalize('NFKC').trim().toLowerCase() === 'user';
+  const canonicalSelfSubject = subject.normalize('NFKC').trim() === 'user';
   const subjectType: EntityType = canonicalSelfSubject
     ? 'self'
     : args.subjectType === 'self'
