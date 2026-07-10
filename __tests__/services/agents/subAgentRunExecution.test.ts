@@ -42,10 +42,7 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
-import {
-  readTaskStack,
-  getActiveTaskId,
-} from '../../../src/services/memory/taskStack';
+import { readTaskStack, getActiveTaskId } from '../../../src/services/memory/taskStack';
 import { runPreparedSubAgentSession } from '../../../src/services/agents/lifecycle/runPhase';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -341,42 +338,44 @@ describe('runPreparedSubAgentSession — task stack', () => {
     expect(stack[0].title.length).toBeLessThanOrEqual(80);
   });
 
-  it('does not push a task when parentConversationId is missing', async () => {
+  it('rejects a prepared worker when parentConversationId is missing', async () => {
     const subAgent = makeSubAgent();
     const config = makeConfig({ parentConversationId: '' });
 
-    await runPreparedSubAgentSession({
-      prepared: {
-        sessionId: 'session-1',
-        depth: 1,
-        maxIterations: 10,
-        sandboxPolicy: 'inherit',
-        subAgent,
-      },
-      config,
-      provider: { id: 'test', name: 'Test', enabled: true } as any,
-      activeRunControls: new Map(),
-      appendActivity: jest.fn(),
-      appendTranscriptMessage: jest.fn(),
-      announce: jest.fn(),
-      clearPendingSessionContextCheckpoint: jest.fn(),
-      clearSessionContextEviction: jest.fn(),
-      finalizationMaxTranscriptMessages: 100,
-      finalizationMessageCharLimit: 1000,
-      finalizationMinRemainingMs: 1000,
-      finalizationTimeoutCapMs: 30000,
-      finalizationToolContentCharLimit: 1000,
-      markModelResponseObserved: jest.fn(),
-      maxToolResultPreviewChars: 100,
-      persistRegistryBestEffort: jest.fn().mockResolvedValue({}),
-      refreshSubAgentArtifacts: jest.fn(),
-      sanitizeTranscriptMessage: (m: any) => m,
-      scheduleRegistryPersist: jest.fn(),
-      scheduleSessionContextCheckpoint: jest.fn(),
-      scheduleSessionContextEvictionWhenDurable: jest.fn(),
-      storeSessionContext: jest.fn(),
-      updateAgentProgress: jest.fn(),
-    });
+    await expect(
+      runPreparedSubAgentSession({
+        prepared: {
+          sessionId: 'session-1',
+          depth: 1,
+          maxIterations: 10,
+          sandboxPolicy: 'inherit',
+          subAgent,
+        },
+        config,
+        provider: { id: 'test', name: 'Test', enabled: true } as any,
+        activeRunControls: new Map(),
+        appendActivity: jest.fn(),
+        appendTranscriptMessage: jest.fn(),
+        announce: jest.fn(),
+        clearPendingSessionContextCheckpoint: jest.fn(),
+        clearSessionContextEviction: jest.fn(),
+        finalizationMaxTranscriptMessages: 100,
+        finalizationMessageCharLimit: 1000,
+        finalizationMinRemainingMs: 1000,
+        finalizationTimeoutCapMs: 30000,
+        finalizationToolContentCharLimit: 1000,
+        markModelResponseObserved: jest.fn(),
+        maxToolResultPreviewChars: 100,
+        persistRegistryBestEffort: jest.fn().mockResolvedValue({}),
+        refreshSubAgentArtifacts: jest.fn(),
+        sanitizeTranscriptMessage: (m: any) => m,
+        scheduleRegistryPersist: jest.fn(),
+        scheduleSessionContextCheckpoint: jest.fn(),
+        scheduleSessionContextEvictionWhenDurable: jest.fn(),
+        storeSessionContext: jest.fn(),
+        updateAgentProgress: jest.fn(),
+      }),
+    ).rejects.toThrow('sub_agent_parent_conversation_id_invalid');
 
     expect(readTaskStack('conv-1')).toHaveLength(0);
   });
