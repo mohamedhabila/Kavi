@@ -4,6 +4,10 @@ import { resolveForegroundConversationExecutionContext } from '../../src/engine/
 import { resolveForegroundRunPreflight } from '../../src/engine/graph/foregroundRun/preflight';
 import type { Conversation } from '../../src/types/conversation';
 import type { LlmProviderConfig } from '../../src/types/provider';
+import {
+  __resetOnDeviceGuardsForTests,
+  isMainInferenceActive,
+} from '../../src/services/memory/onDeviceGuards';
 
 jest.mock('../../src/engine/orchestrator', () => ({
   runOrchestrator: jest.fn(),
@@ -140,6 +144,7 @@ function createExecutionContext(params: {
 describe('foreground run target-conversation execution context', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    __resetOnDeviceGuardsForTests();
   });
 
   it('uses the configured default mode when the target conversation has no mode', () => {
@@ -248,5 +253,72 @@ describe('foreground run target-conversation execution context', () => {
         memoryConversationId: conversation.id,
       }),
     );
+  });
+
+  it('holds the inference lease through terminal lifecycle and releases it after completion', async () => {
+    const conversation = createConversation({ mode: 'agentic' });
+    const provider = createProvider('target-provider', 'target-model');
+    const recordConversationTurnMemory = jest.fn();
+    const context = createExecutionContext({
+      conversation,
+      providers: [provider],
+      ensureCanonicalConversation: jest.fn(),
+      recordConversationTurnMemory,
+    });
+
+    mockedResolveForegroundRunPreflight.mockResolvedValue({
+      kind: 'ready',
+      provider,
+      providerWithApiKey: provider,
+      model: provider.model,
+      finalizationProviderContext: {
+        provider,
+        model: provider.model,
+        systemPromptText: conversation.systemPrompt,
+        conversationId: conversation.id,
+      },
+    });
+    mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
+      expect(isMainInferenceActive()).toBe(true);
+      callbacks.onDone();
+      expect(isMainInferenceActive()).toBe(true);
+    });
+
+    await executeForegroundConversationRun({ context, conversationId: conversation.id });
+
+    expect(recordConversationTurnMemory).toHaveBeenCalledTimes(1);
+    expect(isMainInferenceActive()).toBe(false);
+  });
+
+  it('releases the inference lease after an orchestrator exception', async () => {
+    const conversation = createConversation({ mode: 'agentic' });
+    const provider = createProvider('target-provider', 'target-model');
+    const context = createExecutionContext({
+      conversation,
+      providers: [provider],
+      ensureCanonicalConversation: jest.fn(),
+      recordConversationTurnMemory: jest.fn(),
+    });
+
+    mockedResolveForegroundRunPreflight.mockResolvedValue({
+      kind: 'ready',
+      provider,
+      providerWithApiKey: provider,
+      model: provider.model,
+      finalizationProviderContext: {
+        provider,
+        model: provider.model,
+        systemPromptText: conversation.systemPrompt,
+        conversationId: conversation.id,
+      },
+    });
+    mockedRunOrchestrator.mockImplementation(async () => {
+      expect(isMainInferenceActive()).toBe(true);
+      throw new Error('provider failed');
+    });
+
+    await executeForegroundConversationRun({ context, conversationId: conversation.id });
+
+    expect(isMainInferenceActive()).toBe(false);
   });
 });

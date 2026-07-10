@@ -25,10 +25,14 @@ import {
   INGESTION_RETRY_BASE_DELAY_MS,
   processIngestionJob,
   drainIngestionQueueWithWakeup,
+  requestScheduledIngestionDrain,
   scheduleIngestionDrain,
 } from '../../../src/services/memory/ingestionQueue';
 import { claimIngestionJob } from '../../../src/services/memory/ingestionQueueStore';
-import { __resetOnDeviceGuardsForTests } from '../../../src/services/memory/onDeviceGuards';
+import {
+  __resetOnDeviceGuardsForTests,
+  acquireMainInferenceLease,
+} from '../../../src/services/memory/onDeviceGuards';
 import { initializeMemoryPolicyObservation } from '../../../src/services/memory/policy';
 import {
   ensureFactSchema,
@@ -108,6 +112,41 @@ afterEach(() => {
 });
 
 describe('ingestion queue scheduling and job context', () => {
+  it('resumes deferred ingestion immediately after foreground inference releases', async () => {
+    const job = enqueueIngestionJob({
+      personaId: 'default',
+      threadId: 'conv-foreground-priority',
+      threadTitle: null,
+      memoryConversationId: 'conv-foreground-priority',
+      taskId: null,
+      sourceStartMessageId: 'user-foreground-priority',
+      sourceEndMessageId: 'assistant-foreground-priority',
+      sourceRunId: null,
+      sourceAt: 100,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
+      now: 100,
+    })!;
+    const lease = acquireMainInferenceLease('foreground:conv-foreground-priority:request-1');
+
+    scheduleIngestionDrain({
+      loadMessagesForThread: () => closedTurn('foreground-priority'),
+    });
+    await flushScheduledIngestion();
+
+    expect(mockedProcessIngestionTurn).not.toHaveBeenCalled();
+    expect(getIngestionJob(job.id)?.status).toBe('pending');
+    expect(lease.release()).toBe(true);
+    expect(requestScheduledIngestionDrain()).toBe(true);
+    await flushScheduledIngestion();
+
+    expect(mockedProcessIngestionTurn).toHaveBeenCalledTimes(1);
+    expect(getIngestionJob(job.id)?.status).toBe('completed_structural');
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
   it('wakes a retry at its due time and stops scheduling after success', async () => {
     mockedProcessIngestionTurn
       .mockResolvedValueOnce(

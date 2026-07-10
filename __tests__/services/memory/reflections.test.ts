@@ -12,7 +12,7 @@ import { recordFactWithApplicability } from '../../../src/services/memory/facts/
 import { upsertEntity } from '../../../src/services/memory/entities';
 import {
   __resetOnDeviceGuardsForTests,
-  setMainInferenceActive,
+  acquireMainInferenceLease,
 } from '../../../src/services/memory/onDeviceGuards';
 import {
   buildReflectionContent,
@@ -306,7 +306,7 @@ describe('memory reflections', () => {
   });
 
   it('defers reflection refresh while main inference is active', () => {
-    setMainInferenceActive(true);
+    acquireMainInferenceLease('foreground:conv-deferred:request-1');
     const reflection = refreshThreadReflection({
       threadId: 'conv-deferred',
       now: dayPeriodBounds(1_700_000_000_000).start + 1_000,

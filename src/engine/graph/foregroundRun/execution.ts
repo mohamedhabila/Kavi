@@ -10,6 +10,8 @@ import type { ExecuteForegroundConversationRunParams } from './executionTypes';
 import { resolveForegroundRunPreflight } from './preflight';
 import { prepareForegroundRunRequestBootstrap } from './requestBootstrap';
 import { resolveForegroundConversationExecutionContext } from './executionContext';
+import { acquireMainInferenceLease } from '../../../services/memory/onDeviceGuards';
+import { requestScheduledIngestionDrain } from '../../../services/memory/ingestionQueue';
 
 function buildModelReadyMessages(messages: Message[]): Message[] {
   return deduplicateToolResults(ensureToolResultPairing(messages));
@@ -170,6 +172,9 @@ export async function executeForegroundConversationRun(
     fallbackUserMessageId: bootstrap.latestUserMessage?.id,
     messages: orchestratorMessages,
   });
+  const inferenceLease = acquireMainInferenceLease(
+    `foreground:${conversationId}:${foregroundRequestId}`,
+  );
   try {
     await runOrchestrator(
       {
@@ -217,5 +222,9 @@ export async function executeForegroundConversationRun(
     await runtime.terminalLifecycle.awaitCompletion();
   } catch (error: unknown) {
     runtime.terminalLifecycle.handleCatch(error);
+  } finally {
+    if (inferenceLease.release()) {
+      requestScheduledIngestionDrain();
+    }
   }
 }

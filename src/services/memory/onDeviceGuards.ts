@@ -11,11 +11,31 @@ export const MAX_CONCURRENT_INGESTION_JOBS = 1;
 export const MAX_INGESTION_ATTEMPTS = 5;
 
 let activeIngestionJobId: string | null = null;
-let mainInferenceActive = false;
+const activeMainInferenceLeases = new Map<symbol, string>();
 let memoryPressureAbort = false;
 
-export function setMainInferenceActive(active: boolean): void {
-  mainInferenceActive = active;
+export interface MainInferenceLease {
+  readonly ownerId: string;
+  release(): boolean;
+}
+
+export function acquireMainInferenceLease(ownerId: string): MainInferenceLease {
+  const normalizedOwnerId = ownerId.trim();
+  if (!normalizedOwnerId) {
+    throw new Error('main_inference_owner_required');
+  }
+
+  const token = Symbol(normalizedOwnerId);
+  activeMainInferenceLeases.set(token, normalizedOwnerId);
+  let released = false;
+  return {
+    ownerId: normalizedOwnerId,
+    release: () => {
+      if (released) return false;
+      released = true;
+      return activeMainInferenceLeases.delete(token);
+    },
+  };
 }
 
 export function setMemoryPressureAbort(active: boolean): void {
@@ -23,7 +43,7 @@ export function setMemoryPressureAbort(active: boolean): void {
 }
 
 export function isMainInferenceActive(): boolean {
-  return mainInferenceActive;
+  return activeMainInferenceLeases.size > 0;
 }
 
 export function shouldAbortIngestionDueToMemoryPressure(): boolean {
@@ -32,7 +52,7 @@ export function shouldAbortIngestionDueToMemoryPressure(): boolean {
 
 export function canStartIngestionJob(): boolean {
   if (memoryPressureAbort) return false;
-  if (mainInferenceActive) return false;
+  if (isMainInferenceActive()) return false;
   if (activeIngestionJobId !== null) return false;
   return true;
 }
@@ -51,6 +71,6 @@ export function releaseIngestionSlot(jobId: string): void {
 
 export function __resetOnDeviceGuardsForTests(): void {
   activeIngestionJobId = null;
-  mainInferenceActive = false;
+  activeMainInferenceLeases.clear();
   memoryPressureAbort = false;
 }

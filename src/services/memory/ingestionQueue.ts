@@ -623,6 +623,13 @@ export function scheduleIngestionDrain(input: ScheduledIngestionDrainInput): voi
   queueMicrotask(() => void runScheduledDrain());
 }
 
+export function requestScheduledIngestionDrain(): boolean {
+  const runtime = scheduledRuntime;
+  if (!runtime || !canWriteLongTermMemory()) return false;
+  scheduleIngestionDrain(runtime);
+  return true;
+}
+
 export function cancelScheduledIngestionDrain(): void {
   scheduledRuntime = null;
   drainRequested = false;
