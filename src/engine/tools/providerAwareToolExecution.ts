@@ -1,12 +1,10 @@
 import { executeSessionSend } from './builtin-session-send';
 import { executeSessionSpawn } from './builtin-session-spawn';
 import { executeMemorySearch } from './builtin-memory';
-import {
-  resolveToolProviderContext,
-  type ToolProviderContextInput,
-} from './toolProviderContext';
+import { resolveToolProviderContext, type ToolProviderContextInput } from './toolProviderContext';
 import type { ToolExecutionContext } from './toolExecutionContext';
 import { executeWebSearch } from './web-search';
+import { DEFAULT_MEMORY_PERSONA_ID } from '../../services/memory/memoryScopeIdentity';
 
 export const PROVIDER_AWARE_TOOL_NAMES = new Set([
   'memory_search',
@@ -27,7 +25,12 @@ export async function executeProviderAwareTool(params: {
   }
 
   if (params.name === 'memory_search') {
-    return executeMemorySearch(params.args, { conversationId: params.workspaceConversationId });
+    return executeMemorySearch(params.args, {
+      memoryConversationId: params.workspaceConversationId,
+      sourceThreadId: params.conversationId,
+      personaId: DEFAULT_MEMORY_PERSONA_ID,
+      taskId: null,
+    });
   }
 
   const providerContext = await resolveToolProviderContext(
@@ -60,11 +63,7 @@ export async function executeProviderAwareTool(params: {
           error: 'No enabled provider configured for sub-agent sessions.',
         });
       }
-      return executeSessionSend(
-        params.args,
-        providerContext.provider,
-        params.context?.model,
-      );
+      return executeSessionSend(params.args, providerContext.provider, params.context?.model);
     case 'web_search':
       return executeWebSearch(params.args, {
         provider: providerContext.provider ?? undefined,

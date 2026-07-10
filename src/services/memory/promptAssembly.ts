@@ -9,7 +9,6 @@
 // ---------------------------------------------------------------------------
 
 import type { MemoryBlock } from './blocks';
-import type { MemoryFact } from './facts/types';
 import type { MemoryEpisode } from './episodes/types';
 import { compactJsonFields, parseJsonRecord } from './factJson';
 import { promptFieldsForMemoryKind } from './promptFactFields';
@@ -21,8 +20,14 @@ import {
   selectOrderedEvidenceIndexes,
 } from './controlSequenceCompaction';
 import { compactObservedAffordanceComplementForPrompt } from './promptAffordanceComplement';
+import {
+  renderMemoryApplicabilityMetadata,
+  renderMemoryApplicabilityPromptSections,
+  selectDirectlyUsableMemoryFacts,
+  type PromptMemoryFact,
+} from './memoryApplicabilityPrompt';
 
-export type PromptMemoryFact = MemoryFact & { subjectLabel?: string };
+export type { PromptMemoryFact } from './memoryApplicabilityPrompt';
 
 export interface SystemPromptSection {
   text: string;
@@ -530,7 +535,9 @@ function renderFact(
   const source = fact.sourceRunId ? ` source=${fact.sourceRunId}` : '';
   const memoryKind = fact.memoryKind ?? 'semantic_fact';
   const kind = memoryKind === 'semantic_fact' ? '' : ` kind=${memoryKind}`;
-  const meta = kind || source ? ` [${`${kind}${source}`.trim()}]` : '';
+  const applicability = renderMemoryApplicabilityMetadata(fact.applicability);
+  const meta =
+    kind || source || applicability ? ` [${`${kind}${source}${applicability}`.trim()}]` : '';
   const maxChars =
     memoryKind === 'agent_run'
       ? MAX_RENDERED_AGENT_RUN_FACT_CHARS
@@ -622,7 +629,8 @@ function renderRetrievedFactGroup(
 function renderL3Sections(input: AssemblePromptInput): string[] {
   const focus = (input.focusBlock ?? '').trim();
   const reflection = (input.reflectionBlock ?? '').trim();
-  const factGroups = groupRetrievedFacts(input.retrievedFacts ?? []);
+  const retrievedFacts = input.retrievedFacts ?? [];
+  const factGroups = groupRetrievedFacts(selectDirectlyUsableMemoryFacts(retrievedFacts));
   const queryUnits = input.retrievalQuery?.trim()
     ? tokenizeLexicalUnits(input.retrievalQuery)
     : null;
@@ -644,6 +652,11 @@ function renderL3Sections(input: AssemblePromptInput): string[] {
       ...factGroups.flatMap((group) => renderRetrievedFactGroup(group, queryUnits, anchorUnitSets)),
     );
   }
+  sections.push(
+    ...renderMemoryApplicabilityPromptSections(retrievedFacts, (fact) =>
+      renderFact(fact, queryUnits, anchorUnitSets),
+    ),
+  );
   if (episodes.length > 0) {
     sections.push(`${L3_HEADER}\n### Recent Activity\n${episodes.join('\n')}`);
   }

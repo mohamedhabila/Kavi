@@ -214,7 +214,7 @@ describe('recordCompletedTurnForMemory', () => {
             id: 'tc-memory-1',
             name: 'memory_remember',
             arguments: JSON.stringify({
-              subject: 'release-artifact',
+              subject: 'user',
               predicate: 'checklist_path',
               value: '/workspace/release-checklist.md',
               scope: 'conversation',
@@ -226,7 +226,8 @@ describe('recordCompletedTurnForMemory', () => {
     ];
 
     const toolWrite = executeMemoryRemember({
-      subject: 'release-artifact',
+      subject: 'user',
+      subjectType: 'self',
       predicate: 'checklist_path',
       value: '/workspace/release-checklist.md',
       scope: 'conversation',
@@ -268,20 +269,21 @@ describe('recordCompletedTurnForMemory', () => {
 
     const memory = await buildLivingMemorySections({
       conversationId: 'parent-conv-shared',
+      sourceThreadId: 'child-conv-shared',
+      personaId: 'default',
+      taskId: null,
       messages: [
         {
           id: 'u-query-shared',
           role: 'user',
-          content: 'Find release-artifact checklist_path.',
+          content: 'Find user checklist_path.',
           timestamp: 20,
         },
       ],
-      now: 20,
+      now: toolWrite.fact.createdAt + 10,
       recallLimit: 4,
     });
-    const memoryText = memory.sections.map((section) => section.text).join('\n\n');
-    expect(memory.recalledFactCount).toBeGreaterThan(0);
-    expect(memoryText).toContain('/workspace/release-checklist.md');
+    expect(memory.recalledFactCount).toBe(0);
   });
 
   it('enriches with provider when configured', async () => {

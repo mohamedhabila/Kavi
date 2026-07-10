@@ -21,6 +21,13 @@ jest.mock('../../../src/services/memory/entities', () => ({
 import { executeMemorySearch } from '../../helpers/builtinExecutorHarness';
 import { makeScoredFact } from '../../helpers/memoryFactFixtures';
 
+const MEMORY_SEARCH_SCOPE = {
+  memoryConversationId: 'conversation-1',
+  sourceThreadId: 'conversation-1',
+  personaId: 'default',
+  taskId: null,
+} as const;
+
 describe('Builtin Tool Executor', () => {
   describe('executeMemorySearch', () => {
     beforeEach(() => {
@@ -31,7 +38,7 @@ describe('Builtin Tool Executor', () => {
     });
 
     it('searches the structured living-memory fact store for a query', async () => {
-      const result = await executeMemorySearch({ query: 'test search' });
+      const result = await executeMemorySearch({ query: 'test search' }, MEMORY_SEARCH_SCOPE);
       const parsed = JSON.parse(result);
       expect(parsed).toHaveProperty('results');
       expect(parsed.method).toBe('living_memory');
@@ -46,7 +53,7 @@ describe('Builtin Tool Executor', () => {
     });
 
     it('handles missing query gracefully', async () => {
-      const result = await executeMemorySearch({ query: '' });
+      const result = await executeMemorySearch({ query: '' }, MEMORY_SEARCH_SCOPE);
       const parsed = JSON.parse(result);
       expect(parsed).toEqual(
         expect.objectContaining({
@@ -84,7 +91,7 @@ describe('Builtin Tool Executor', () => {
 
       const result = await executeMemorySearch(
         { query: 'durable enrichment', maxResults: 5 },
-        { conversationId: 'conversation-1' },
+        MEMORY_SEARCH_SCOPE,
       );
       const parsed = JSON.parse(result);
 
@@ -108,7 +115,7 @@ describe('Builtin Tool Executor', () => {
       mockRecallScoredFactsForQuery.mockRejectedValueOnce(new Error('recall fail'));
       const result = await executeMemorySearch(
         { query: 'fallback', maxResults: 5 },
-        { conversationId: 'conversation-1' },
+        MEMORY_SEARCH_SCOPE,
       );
       const parsed = JSON.parse(result);
       expect(parsed.method).toBe('living_memory');

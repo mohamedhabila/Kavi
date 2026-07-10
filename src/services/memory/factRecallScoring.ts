@@ -146,10 +146,23 @@ function anchorMatchBoost(
 }
 
 function scoreScope(fact: MemoryFact, options: RecallFactsOptions): number {
-  if (fact.scope === 'conversation' && fact.originConversationId === options.conversationId) {
+  const scope = options.memoryScope;
+  if (
+    (fact.scope === 'conversation' || fact.scope === 'project') &&
+    fact.originConversationId === scope.memoryConversationId
+  ) {
     return 0.08;
   }
-  if (fact.scope === 'session' && fact.originTaskId === options.taskId) {
+  if (
+    fact.scope === 'session' &&
+    scope.taskId !== null &&
+    fact.originConversationId === scope.memoryConversationId &&
+    fact.originThreadId === scope.sourceThreadId &&
+    fact.originTaskId === scope.taskId
+  ) {
+    return 0.08;
+  }
+  if (fact.scope === 'persona' && fact.personaId === scope.personaId) {
     return 0.08;
   }
   if (options.scopeHints?.includes(fact.scope)) return 0.04;

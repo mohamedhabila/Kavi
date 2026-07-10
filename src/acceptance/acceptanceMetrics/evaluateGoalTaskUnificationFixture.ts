@@ -10,6 +10,8 @@ import { syncGoalTasksFromMutation } from '../../services/memory/tasks';
 import { getActiveTaskTitle } from '../../services/memory/taskStack';
 import type { AcceptanceFixtureOutcome } from './types';
 import type { GoalTaskUnificationFixture } from './goalTaskUnificationFixtures';
+import { resolveLocalMemoryAccessScope } from '../../services/memory/memoryScopeStore';
+import { DEFAULT_MEMORY_PERSONA_ID } from '../../services/memory/memoryScopeIdentity';
 
 function recallIncludesToken(facts: ReadonlyArray<{ objectText: string }>, token: string): boolean {
   return facts.some((fact) => fact.objectText.includes(token));
@@ -151,10 +153,14 @@ export async function evaluateGoalTaskUnificationFixture(
 
   const recallForB = await orchestrateMemoryRetrieval({
     userMessage: 'scope_token',
-    conversationId: fixture.threadId,
+    memoryScope: resolveLocalMemoryAccessScope({
+      memoryConversationId: fixture.threadId,
+      sourceThreadId: fixture.threadId,
+      personaId: DEFAULT_MEMORY_PERSONA_ID,
+      taskId: fixture.goalBId,
+    }),
     goals,
     activeTaskId: fixture.goalBId,
-    taskId: fixture.goalBId,
     limit: 8,
     now: now + 30,
   });
@@ -204,10 +210,14 @@ export async function evaluateGoalTaskUnificationFixture(
 
   const recallForA = await orchestrateMemoryRetrieval({
     userMessage: 'scope_token',
-    conversationId: fixture.threadId,
+    memoryScope: resolveLocalMemoryAccessScope({
+      memoryConversationId: fixture.threadId,
+      sourceThreadId: fixture.threadId,
+      personaId: DEFAULT_MEMORY_PERSONA_ID,
+      taskId: fixture.goalAId,
+    }),
     goals,
     activeTaskId: fixture.goalAId,
-    taskId: fixture.goalAId,
     limit: 8,
     now: now + 50,
   });

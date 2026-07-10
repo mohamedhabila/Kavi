@@ -9,8 +9,10 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { upsertEntity } from '../../../src/services/memory/entities';
-import { recordFact } from '../../../src/services/memory/facts/mutations';
-import { recallScoredFactsForQuery } from '../../../src/services/memory/factRecall';
+import {
+  recallScoredTestFacts as recallScoredFactsForQuery,
+  recordRecallTestFact as recordFact,
+} from '../../helpers/memoryRecallTestHarness';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 

@@ -55,7 +55,6 @@ describe('builtin executor interaction, agent, and memory tools', () => {
     });
   });
 
-
   describe('executeSpeak', () => {
     it('speaks text with default provider', async () => {
       const voice = require('../../src/services/voice/voice');
@@ -86,7 +85,6 @@ describe('builtin executor interaction, agent, and memory tools', () => {
     });
   });
 
-
   describe('executeAgentsList', () => {
     it('returns built-in personas', async () => {
       const result = await executeAgentsList();
@@ -99,7 +97,6 @@ describe('builtin executor interaction, agent, and memory tools', () => {
       expect(names).toContain('Coder');
     });
   });
-
 
   describe('executeAgentsSwitch', () => {
     it('switches to an existing persona', async () => {
@@ -116,7 +113,6 @@ describe('builtin executor interaction, agent, and memory tools', () => {
       expect(result).toContain('persona not found');
     });
   });
-
 
   describe('executeAgentsConfigure', () => {
     it('creates a new custom persona', async () => {
@@ -147,7 +143,6 @@ describe('builtin executor interaction, agent, and memory tools', () => {
       expect(parsed.persona.name).toBe('Agent B');
     });
   });
-
 
   describe('executeMemorySearch (with citations)', () => {
     it('returns citation-formatted results', async () => {
@@ -184,7 +179,15 @@ describe('builtin executor interaction, agent, and memory tools', () => {
         }),
       ]);
 
-      const result = await executeMemorySearch({ query: 'preferences' });
+      const result = await executeMemorySearch(
+        { query: 'preferences' },
+        {
+          memoryConversationId: 'conversation-1',
+          sourceThreadId: 'conversation-1',
+          personaId: 'default',
+          taskId: null,
+        },
+      );
       const parsed = JSON.parse(result);
       expect(parsed.method).toBe('living_memory');
       expect(parsed.results).toHaveLength(2);

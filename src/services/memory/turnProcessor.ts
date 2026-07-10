@@ -20,7 +20,7 @@ import type {
 import { extractStructuralMemory } from './deterministicExtractor';
 import { extractProviderEnrichment } from './providerExtractor';
 import { ensureFactSchema } from './schema';
-import { editWorkingBlock } from './workingBlocks';
+import { editPromptEligibleWorkingBlock } from './workingBlocks';
 import { composeActiveFocusContent } from './focus';
 import { findEntityByName } from './entities';
 import { listCurrentFactsForReplacement } from './facts/exactReplacementQueries';
@@ -329,7 +329,7 @@ function applyWorkingMemoryFromStructural(
         threadTitle: input.threadTitle,
         activeFocus: structural.activeFocus,
       });
-      editWorkingBlock('active_focus', activeFocus, scope, { now });
+      editPromptEligibleWorkingBlock('active_focus', activeFocus, scope, { now });
       activeFocusUpdated = true;
     } catch (error) {
       logger.devWarn(
@@ -341,7 +341,12 @@ function applyWorkingMemoryFromStructural(
 
   if (structural.openThreads.length > 0) {
     try {
-      editWorkingBlock('open_threads', fitBlockLines(structural.openThreads, 800), scope, { now });
+      editPromptEligibleWorkingBlock(
+        'open_threads',
+        fitBlockLines(structural.openThreads, 800),
+        scope,
+        { now },
+      );
       openThreadsUpdated = true;
     } catch (error) {
       logger.devWarn(
@@ -422,14 +427,13 @@ function mergeProviderIntoStructural(
     mergedFacts.push(decision.fact);
     seen.add(key);
   }
-  const threadSet = new Set(structural.openThreads);
-  for (const thread of provider.openThreads) threadSet.add(thread);
-
   return {
     episodeSummary: episodeSummary || null,
     newFacts: mergedFacts,
-    activeFocus: provider.activeFocus ?? structural.activeFocus,
-    openThreads: Array.from(threadSet).slice(0, 5),
+    // Prompt-visible working blocks accept only deterministic structural
+    // material. Provider summaries are persisted only as sealed facts.
+    activeFocus: structural.activeFocus,
+    openThreads: structural.openThreads,
     notable: provider.notable ?? [],
   };
 }

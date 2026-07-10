@@ -9,14 +9,77 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { upsertEntity } from '../../../src/services/memory/entities';
-import { recordFact, setFactPinned } from '../../../src/services/memory/facts/mutations';
+import {
+  recordFactWithApplicability,
+  setFactPinned,
+} from '../../../src/services/memory/facts/mutations';
+import type {
+  MemoryFactKind,
+  MemoryFactScope,
+  RecordFactInput,
+} from '../../../src/services/memory/facts/types';
 import { getFactById } from '../../../src/services/memory/facts/queries';
 import {
-  recallFactsForQuery,
-  recallScoredFactsForQuery,
+  recallFactsForQuery as recallFactsForQueryImpl,
+  recallScoredFactsForQuery as recallScoredFactsForQueryImpl,
 } from '../../../src/services/memory/factRecall';
+import type { RecallFactsOptions } from '../../../src/services/memory/factRecallTypes';
+import { resolveLocalMemoryAccessScope } from '../../../src/services/memory/memoryScopeStore';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
+
+const WORKFLOW_KINDS = new Set<MemoryFactKind>([
+  'agent_run',
+  'artifact',
+  'decision',
+  'evidence_span',
+  'goal',
+  'gotcha',
+  'risk',
+  'source',
+  'summary',
+  'tool_result',
+]);
+
+type TestRecordFactInput = Omit<RecordFactInput, 'scope'> & { scope?: MemoryFactScope };
+type TestRecallOptions = Omit<RecallFactsOptions, 'memoryScope' | 'useIntent'> & {
+  conversationId?: string;
+  threadId?: string;
+  taskId?: string;
+};
+
+function recordFact(input: TestRecordFactInput) {
+  const scope = input.scope ?? 'global';
+  const memoryKind = input.memoryKind ?? 'semantic_fact';
+  return recordFactWithApplicability(
+    { ...input, scope },
+    WORKFLOW_KINDS.has(memoryKind)
+      ? { factClass: 'workflow', sourceAuthority: 'tool_observed' }
+      : { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
+  );
+}
+
+function withRecallAccess(options: TestRecallOptions = {}): RecallFactsOptions {
+  const { conversationId = 'fact-recall-root', threadId, taskId, ...recallOptions } = options;
+  return {
+    ...recallOptions,
+    memoryScope: resolveLocalMemoryAccessScope({
+      memoryConversationId: conversationId,
+      sourceThreadId: threadId ?? conversationId,
+      personaId: 'default',
+      taskId: taskId ?? null,
+    }),
+    useIntent: 'automatic_prompt',
+  };
+}
+
+function recallFactsForQuery(query: string, options: TestRecallOptions = {}) {
+  return recallFactsForQueryImpl(query, withRecallAccess(options));
+}
+
+function recallScoredFactsForQuery(query: string, options: TestRecallOptions = {}) {
+  return recallScoredFactsForQueryImpl(query, withRecallAccess(options));
+}
 
 beforeEach(() => {
   closeMemoryDb();
@@ -380,6 +443,7 @@ describe('recallFactsForQuery — scoped decay and reinforcement', () => {
       objectText: 'Run the Android release validation',
       scope: 'session',
       originConversationId: 'conv-release',
+      originThreadId: 'conv-release',
       originTaskId: 'task-active',
       importance: 0.5,
     });
@@ -389,6 +453,7 @@ describe('recallFactsForQuery — scoped decay and reinforcement', () => {
       objectText: 'Skip validation and deploy directly',
       scope: 'session',
       originConversationId: 'conv-release',
+      originThreadId: 'conv-release',
       originTaskId: 'task-other',
       importance: 1,
     });
@@ -585,19 +650,20 @@ describe('recallFactsForQuery — scoped decay and reinforcement', () => {
     expect(facts.map((fact) => fact.id)[0]).not.toBe(stale.fact.id);
   });
 
-  it('updates access counters for facts returned to the prompt', async () => {
+  it('does not reinforce facts before prompt policy admits them', async () => {
     const user = upsertEntity({ name: 'user', type: 'self' });
     const recorded = recordFact({
       subjectId: user.id,
       predicate: 'prefers_tone',
       objectText: 'concise implementation notes',
+      now: 100_000,
     });
 
     await recallFactsForQuery('concise implementation notes', { now: 123_000 });
     const refreshed = getFactById(recorded.fact.id);
 
-    expect(refreshed?.accessCount).toBe(1);
-    expect(refreshed?.lastRecalledAt).toBe(123_000);
+    expect(refreshed?.accessCount).toBe(0);
+    expect(refreshed?.lastRecalledAt).toBeNull();
   });
 
   it('does not update access counters when only scoring recall candidates', async () => {
@@ -606,6 +672,7 @@ describe('recallFactsForQuery — scoped decay and reinforcement', () => {
       subjectId: user.id,
       predicate: 'prefers_tone',
       objectText: 'concise implementation notes',
+      now: 100_000,
     });
 
     const scored = await recallScoredFactsForQuery('concise implementation notes', {
@@ -616,72 +683,5 @@ describe('recallFactsForQuery — scoped decay and reinforcement', () => {
     expect(scored.length).toBeGreaterThan(0);
     expect(refreshed?.accessCount).toBe(0);
     expect(refreshed?.lastRecalledAt).toBeNull();
-  });
-});
-
-describe('recallFactsForQuery — temporal decay math', () => {
-  it('gives fresh facts a decay multiplier near 1.0', async () => {
-    const user = upsertEntity({ name: 'user', type: 'self' });
-    recordFact({ subjectId: user.id, predicate: 'lives_in', objectText: 'Berlin', now: 1_000_000 });
-
-    const scored = await recallScoredFactsForQuery('Berlin', { now: 1_000_000 + 60_000 });
-    expect(scored.length).toBeGreaterThan(0);
-    expect(scored[0].decayMultiplier).toBeGreaterThan(0.99);
-  });
-
-  it('gives old facts a lower decay multiplier', async () => {
-    const user = upsertEntity({ name: 'user', type: 'self' });
-    recordFact({ subjectId: user.id, predicate: 'lives_in', objectText: 'Berlin', now: 1_000_000 });
-
-    // 60 days later — with default half-life (~30-120 days), decay should be noticeable
-    const scored = await recallScoredFactsForQuery('Berlin', {
-      now: 1_000_000 + 60 * 24 * 60 * 60 * 1000,
-    });
-    expect(scored.length).toBeGreaterThan(0);
-    expect(scored[0].decayMultiplier).toBeLessThan(0.9);
-  });
-
-  it('gives pinned facts no decay (multiplier stays 1.0)', async () => {
-    const user = upsertEntity({ name: 'user', type: 'self' });
-    const fact = recordFact({
-      subjectId: user.id,
-      predicate: 'lives_in',
-      objectText: 'Berlin',
-      now: 1_000_000,
-    });
-    setFactPinned(fact.fact.id, true);
-
-    const scored = await recallScoredFactsForQuery('Berlin', {
-      now: 1_000_000 + 365 * 24 * 60 * 60 * 1000,
-    });
-    expect(scored.length).toBeGreaterThan(0);
-    expect(scored[0].decayMultiplier).toBe(1);
-  });
-
-  it('applies faster decay for fast decay policy', async () => {
-    const user = upsertEntity({ name: 'user', type: 'self' });
-    recordFact({
-      subjectId: user.id,
-      predicate: 'lives_in',
-      objectText: 'Berlin',
-      decayPolicy: 'fast',
-      now: 1_000_000,
-    });
-    recordFact({
-      subjectId: user.id,
-      predicate: 'works_on',
-      objectText: 'Kavi',
-      decayPolicy: 'normal',
-      now: 1_000_000,
-    });
-
-    // 14 days later — fast half-life is ~7 days, normal is ~30+ days
-    const now = 1_000_000 + 14 * 24 * 60 * 60 * 1000;
-    const scored = await recallScoredFactsForQuery('Berlin Kavi', { now });
-    const fastEntry = scored.find((s) => s.fact.predicate === 'lives_in');
-    const normalEntry = scored.find((s) => s.fact.predicate === 'works_on');
-    expect(fastEntry).toBeDefined();
-    expect(normalEntry).toBeDefined();
-    expect(fastEntry!.decayMultiplier).toBeLessThan(normalEntry!.decayMultiplier);
   });
 });

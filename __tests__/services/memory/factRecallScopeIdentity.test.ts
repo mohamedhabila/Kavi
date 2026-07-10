@@ -6,7 +6,7 @@ jest.mock('expo-sqlite', () => {
 import { upsertEntity } from '../../../src/services/memory/entities';
 import {
   invalidateFact,
-  recordFact,
+  recordFactWithApplicability,
   setFactEmbedding,
   setFactPinned,
 } from '../../../src/services/memory/facts/mutations';
@@ -15,7 +15,7 @@ import {
   listFactsForRecallEligibleScan,
 } from '../../../src/services/memory/facts/queries';
 import type { RecallFactScopeIdentity } from '../../../src/services/memory/facts/queryFilter';
-import type { MemoryFactScope } from '../../../src/services/memory/facts/types';
+import type { MemoryFactScope, RecordFactInput } from '../../../src/services/memory/facts/types';
 import {
   recallScoredFactsForQuery,
   type RecallFactsTiming,
@@ -25,24 +25,40 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { resolveLocalMemoryAccessScope } from '../../../src/services/memory/memoryScopeStore';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
-const ALL_SCOPES: MemoryFactScope[] = [
-  'global',
-  'project',
-  'conversation',
-  'session',
-  'persona',
-];
+const ALL_SCOPES: MemoryFactScope[] = ['global', 'project', 'conversation', 'session', 'persona'];
 const ACTIVE_ROOT = 'root-active';
 const ACTIVE_THREAD = 'thread-active';
 const ACTIVE_TASK = 'task-shared';
-const ACTIVE_IDENTITY: RecallFactScopeIdentity = {
-  conversationId: ACTIVE_ROOT,
-  threadId: ACTIVE_THREAD,
-  taskId: ACTIVE_TASK,
-};
+const ACTIVE_PERSONA = 'persona-active';
+
+function activeScope(taskId: string | null = ACTIVE_TASK) {
+  return resolveLocalMemoryAccessScope({
+    memoryConversationId: ACTIVE_ROOT,
+    sourceThreadId: ACTIVE_THREAD,
+    personaId: ACTIVE_PERSONA,
+    taskId,
+  });
+}
+
+function activeIdentity(taskId: string | null = ACTIVE_TASK): RecallFactScopeIdentity {
+  return {
+    ...activeScope(taskId),
+    useIntent: 'automatic_prompt',
+    candidateLane: 'direct_use',
+  };
+}
+
+function recordFact(input: RecordFactInput) {
+  return recordFactWithApplicability(input, {
+    factClass: 'workflow',
+    sourceAuthority: 'tool_observed',
+    ...(input.scope === 'persona' ? { personaId: ACTIVE_PERSONA } : {}),
+  });
+}
 
 beforeEach(() => {
   closeMemoryDb();
@@ -56,6 +72,98 @@ afterEach(() => {
 });
 
 describe('fact recall SQL scope identity', () => {
+  it('enforces the authority matrix in SQL and bounds resolution candidates separately', () => {
+    const subject = upsertEntity({ name: 'authority matrix', type: 'concept' });
+    const persist = (
+      suffix: string,
+      factClass: 'subjective_user' | 'objective' | 'workflow',
+      sourceAuthority: 'grounded_user' | 'tool_observed' | 'external_source' | 'assistant_inferred',
+      reviewState: 'auto' | 'verified' = 'auto',
+    ) =>
+      recordFactWithApplicability(
+        {
+          subjectId: subject.id,
+          predicate: `authority_${suffix}`,
+          objectText: `authority matrix ${suffix}`,
+          scope: 'global',
+          reviewState,
+          supersedePrior: false,
+          now: 100,
+        },
+        { factClass, sourceAuthority },
+      ).fact.id;
+
+    const directIds = [
+      persist('subjective_grounded', 'subjective_user', 'grounded_user'),
+      persist('objective_tool', 'objective', 'tool_observed'),
+      persist('workflow_external', 'workflow', 'external_source'),
+      persist('workflow_verified_inference', 'workflow', 'assistant_inferred', 'verified'),
+    ];
+    const resolutionIds = [
+      persist('subjective_inference', 'subjective_user', 'assistant_inferred'),
+      persist('objective_inference', 'objective', 'assistant_inferred'),
+      persist('workflow_inference', 'workflow', 'assistant_inferred'),
+    ];
+
+    const direct = listFactsForRecallEligibleScan({
+      recallScopeIdentity: activeIdentity(null),
+      asOf: 200,
+      limit: 32,
+    }).map((fact) => fact.id);
+    const resolution = listFactsForRecallEligibleScan({
+      recallScopeIdentity: {
+        ...activeIdentity(null),
+        candidateLane: 'resolution',
+      },
+      asOf: 200,
+      limit: 2,
+    }).map((fact) => fact.id);
+
+    expect(direct).toEqual(expect.arrayContaining(directIds));
+    expect(direct.some((id) => resolutionIds.includes(id))).toBe(false);
+    expect(resolution).toHaveLength(2);
+    expect(resolution.every((id) => resolutionIds.includes(id))).toBe(true);
+  });
+
+  it('does not let authority-ineligible rows consume the direct-use SQL limit', () => {
+    const subject = upsertEntity({ name: 'authority saturation', type: 'concept' });
+    for (let index = 0; index < 96; index += 1) {
+      recordFactWithApplicability(
+        {
+          subjectId: subject.id,
+          predicate: `authority_saturation_${index}`,
+          objectText: 'authority saturation target',
+          scope: 'global',
+          importance: 1,
+          supersedePrior: false,
+          now: 200 + index,
+        },
+        { factClass: 'objective', sourceAuthority: 'assistant_inferred' },
+      );
+    }
+    const eligible = recordFactWithApplicability(
+      {
+        subjectId: subject.id,
+        predicate: 'authority_saturation_eligible',
+        objectText: 'authority saturation target',
+        scope: 'global',
+        importance: 0.1,
+        supersedePrior: false,
+        now: 100,
+      },
+      { factClass: 'objective', sourceAuthority: 'external_source' },
+    );
+
+    expect(
+      listFactsForRecallCandidates({
+        recallScopeIdentity: activeIdentity(null),
+        selectedLexicalUnits: ['authority', 'saturation', 'target'],
+        asOf: 400,
+        limit: 1,
+      }).map((fact) => fact.id),
+    ).toEqual([eligible.fact.id]);
+  });
+
   it('applies raw scope, identity, validity, expiry, and deletion before every bounded lane', () => {
     const subject = upsertEntity({ name: 'scope probe subject', type: 'concept' });
     const add = (input: {
@@ -65,6 +173,8 @@ describe('fact recall SQL scope identity', () => {
       originThreadId?: string;
       originTaskId?: string;
       expiresAt?: number;
+      reviewState?: RecordFactInput['reviewState'];
+      sensitivity?: RecordFactInput['sensitivity'];
     }) =>
       recordFact({
         subjectId: subject.id,
@@ -78,8 +188,7 @@ describe('fact recall SQL scope identity', () => {
 
     const allowed = [
       add({ predicate: 'allowed_global', scope: 'global' }),
-      // RET04 has no exact persona identity column; RET05 closes this branch.
-      add({ predicate: 'allowed_persona_until_ret05', scope: 'persona' }),
+      add({ predicate: 'allowed_persona', scope: 'persona' }),
       add({
         predicate: 'allowed_project',
         scope: 'project',
@@ -100,6 +209,21 @@ describe('fact recall SQL scope identity', () => {
       }),
     ];
     const blocked = [
+      recordFactWithApplicability(
+        {
+          subjectId: subject.id,
+          predicate: 'blocked_other_persona',
+          objectText: 'scope probe blocked other persona',
+          scope: 'persona',
+          supersedePrior: false,
+          now: 100,
+        },
+        {
+          factClass: 'workflow',
+          sourceAuthority: 'tool_observed',
+          personaId: 'persona-other',
+        },
+      ),
       add({
         predicate: 'blocked_project_root',
         scope: 'project',
@@ -150,6 +274,20 @@ describe('fact recall SQL scope identity', () => {
       originConversationId: ACTIVE_ROOT,
     });
     const invalidRawScope = add({ predicate: 'blocked_invalid_raw_scope', scope: 'global' });
+    const wrongOwner = add({ predicate: 'blocked_wrong_owner', scope: 'global' });
+    const unknownClass = add({ predicate: 'blocked_unknown_class', scope: 'global' });
+    const unknownAuthority = add({ predicate: 'blocked_unknown_authority', scope: 'global' });
+    const rejected = add({
+      predicate: 'blocked_rejected',
+      scope: 'global',
+      reviewState: 'rejected',
+    });
+    const sensitive = add({
+      predicate: 'blocked_sensitive_automatic',
+      scope: 'global',
+      sensitivity: 'sensitive',
+    });
+    const unsafeExpiry = add({ predicate: 'blocked_unsafe_expiry', scope: 'global' });
     invalidateFact(invalidated.fact.id, 500);
     getMemoryDb().runSync(
       'UPDATE memory_facts SET deleted_at = ? WHERE id = ?',
@@ -161,18 +299,47 @@ describe('fact recall SQL scope identity', () => {
       'legacy_unknown_scope',
       invalidRawScope.fact.id,
     );
-    for (const entry of [...blocked, expired, invalidated, deleted, invalidRawScope]) {
+    getMemoryDb().runSync(
+      "UPDATE memory_facts SET memory_owner_id = 'owner-other' WHERE id = ?",
+      wrongOwner.fact.id,
+    );
+    getMemoryDb().runSync(
+      "UPDATE memory_facts SET fact_class = 'unknown' WHERE id = ?",
+      unknownClass.fact.id,
+    );
+    getMemoryDb().runSync(
+      "UPDATE memory_facts SET source_authority = 'unknown' WHERE id = ?",
+      unknownAuthority.fact.id,
+    );
+    getMemoryDb().runSync(
+      'UPDATE memory_facts SET expires_at = ? WHERE id = ?',
+      Number.MAX_SAFE_INTEGER + 1,
+      unsafeExpiry.fact.id,
+    );
+    for (const entry of [
+      ...blocked,
+      expired,
+      invalidated,
+      deleted,
+      invalidRawScope,
+      wrongOwner,
+      unknownClass,
+      unknownAuthority,
+      rejected,
+      sensitive,
+      unsafeExpiry,
+    ]) {
       setFactPinned(entry.fact.id, true);
     }
 
     const scan = listFactsForRecallEligibleScan({
-      recallScopeIdentity: ACTIVE_IDENTITY,
+      recallScopeIdentity: activeIdentity(),
       scope: ALL_SCOPES,
       asOf: 1_000,
       limit: 5,
     });
     const candidates = listFactsForRecallCandidates({
-      recallScopeIdentity: ACTIVE_IDENTITY,
+      recallScopeIdentity: activeIdentity(),
       scope: ALL_SCOPES,
       asOf: 1_000,
       limit: 32,
@@ -236,13 +403,13 @@ describe('fact recall SQL scope identity', () => {
     }
 
     const eligible = listFactsForRecallEligibleScan({
-      recallScopeIdentity: ACTIVE_IDENTITY,
+      recallScopeIdentity: activeIdentity(),
       scope: ALL_SCOPES,
       asOf: 1_000,
       limit: 2,
     });
     const candidates = listFactsForRecallCandidates({
-      recallScopeIdentity: ACTIVE_IDENTITY,
+      recallScopeIdentity: activeIdentity(),
       scope: ALL_SCOPES,
       asOf: 1_000,
       limit: 2,
@@ -295,8 +462,8 @@ describe('fact recall SQL scope identity', () => {
 
     const entityRecall = await recallScoredFactsForQuery('Northern Lights selector signal', {
       candidateStrategy: 'hybrid',
-      conversationId: ACTIVE_ROOT,
-      threadId: ACTIVE_THREAD,
+      memoryScope: activeScope(),
+      useIntent: 'automatic_prompt',
       candidatePoolLimit: 128,
       eligibleScanLimit: 256,
       limit: 1,
@@ -311,8 +478,8 @@ describe('fact recall SQL scope identity', () => {
     });
     const semanticRecall = await recallScoredFactsForQuery('conceptually related memory', {
       candidateStrategy: 'hybrid',
-      conversationId: ACTIVE_ROOT,
-      threadId: ACTIVE_THREAD,
+      memoryScope: activeScope(),
+      useIntent: 'automatic_prompt',
       localSemantic: { queryEmbedding: [1, 0], minimumSimilarity: 0.8 },
       candidatePoolLimit: 128,
       eligibleScanLimit: 256,
@@ -329,5 +496,85 @@ describe('fact recall SQL scope identity', () => {
     expect(selectorCandidateIds.some((id) => blockedIds.has(id))).toBe(false);
     expect(semanticRecall.map((entry) => entry.fact.id)).toEqual([target.fact.id]);
     expect(semanticRecall[0].candidateProvenance.reasons).toContain('local_semantic');
+  });
+
+  it('keeps task-null closed, permits explicit sensitive access, and honors past as-of', () => {
+    const subject = upsertEntity({ name: 'access controls', type: 'concept' });
+    const global = recordFact({
+      subjectId: subject.id,
+      predicate: 'global_control',
+      objectText: 'global control value',
+      scope: 'global',
+      now: 100,
+    });
+    const session = recordFact({
+      subjectId: subject.id,
+      predicate: 'session_control',
+      objectText: 'session control value',
+      scope: 'session',
+      originConversationId: ACTIVE_ROOT,
+      originThreadId: ACTIVE_THREAD,
+      originTaskId: ACTIVE_TASK,
+      now: 100,
+    });
+    const sensitive = recordFactWithApplicability(
+      {
+        subjectId: subject.id,
+        predicate: 'sensitive_control',
+        objectText: 'sensitive control value',
+        scope: 'global',
+        sensitivity: 'sensitive',
+        now: 100,
+      },
+      { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
+    );
+    const historical = recordFact({
+      subjectId: subject.id,
+      predicate: 'historical_control',
+      objectText: 'historical control value',
+      scope: 'global',
+      now: 100,
+    });
+    invalidateFact(historical.fact.id, 500);
+
+    const taskless = listFactsForRecallEligibleScan({
+      recallScopeIdentity: activeIdentity(null),
+      asOf: 200,
+      limit: 16,
+    });
+    expect(taskless.map((fact) => fact.id)).toContain(global.fact.id);
+    expect(taskless.map((fact) => fact.id)).not.toContain(session.fact.id);
+    expect(taskless.map((fact) => fact.id)).not.toContain(sensitive.fact.id);
+    expect(taskless.map((fact) => fact.id)).toContain(historical.fact.id);
+
+    const explicit = listFactsForRecallEligibleScan({
+      recallScopeIdentity: {
+        ...activeScope(null),
+        useIntent: 'explicit_user_request',
+        candidateLane: 'direct_use',
+      },
+      asOf: 200,
+      limit: 16,
+    });
+    expect(explicit.map((fact) => fact.id)).toContain(sensitive.fact.id);
+    expect(explicit.map((fact) => fact.id)).not.toContain(session.fact.id);
+  });
+
+  it('rejects malformed direct query scope and timestamp inputs', () => {
+    expect(() =>
+      listFactsForRecallEligibleScan({
+        recallScopeIdentity: activeIdentity(),
+        scope: ['global', 'malformed' as never],
+        asOf: 100,
+        limit: 1,
+      }),
+    ).toThrow('memory_fact_query_scope_invalid');
+    expect(() =>
+      listFactsForRecallEligibleScan({
+        recallScopeIdentity: activeIdentity(),
+        asOf: Number.NaN,
+        limit: 1,
+      }),
+    ).toThrow('memory_fact_query_timestamp_invalid');
   });
 });

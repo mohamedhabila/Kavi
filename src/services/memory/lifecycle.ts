@@ -27,9 +27,10 @@ import {
 import { runMigrationSeedPass, type RunSeedPassResult } from './migrationSeedPass';
 import { resolveConsolidationExtractor } from './consolidation/turnPipeline';
 import { syncWorkingMemoryFromTurn } from './turnProcessor';
-import { editWorkingBlock, getWorkingBlock } from './workingBlocks';
+import { editPromptEligibleWorkingBlock, getWorkingBlock } from './workingBlocks';
 import { ACTIVE_FOCUS_MEMORY_CHAR_LIMIT, composeActiveFocusContent } from './focus';
 import { resolveConversationModel } from '../llm/support/providerSupport';
+import { isExactMemoryScopeId } from './memoryScopeIdentity';
 
 const logger = createLogger('memory.lifecycle');
 
@@ -202,9 +203,9 @@ function syncConversationFocusFromThreadTitle(input: {
   threadTitle?: string;
   now?: number;
 }): boolean {
-  const threadId = input.memoryConversationId.trim();
+  const threadId = input.memoryConversationId;
   const threadTitle = input.threadTitle?.trim();
-  if (!threadId || !threadTitle) return false;
+  if (!isExactMemoryScopeId(threadId) || !threadTitle) return false;
 
   const scope = { conversationId: threadId, threadId };
   try {
@@ -214,7 +215,7 @@ function syncConversationFocusFromThreadTitle(input: {
     }
     const content = composeConversationFocusFromThreadTitle(threadTitle, existing);
     if (!content) return false;
-    editWorkingBlock('active_focus', content, scope, { now: input.now });
+    editPromptEligibleWorkingBlock('active_focus', content, scope, { now: input.now });
     return true;
   } catch (error) {
     logger.devWarn(

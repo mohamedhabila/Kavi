@@ -14,11 +14,14 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { upsertEntity } from '../../../src/services/memory/entities';
-import { recordFact, setFactPinned } from '../../../src/services/memory/facts/mutations';
+import {
+  recordFactWithApplicability,
+  setFactPinned,
+} from '../../../src/services/memory/facts/mutations';
+import type { RecordFactInput } from '../../../src/services/memory/facts/types';
 import { ensureDefaultBlocks, editBlock } from '../../../src/services/memory/blocks';
-import { editWorkingBlock } from '../../../src/services/memory/workingBlocks';
+import { editPromptEligibleWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import { buildLivingMemorySections } from '../../../src/services/memory/livingMemoryBridge';
-import { pushTask, completeTask } from '../../../src/services/memory/taskStack';
 import { recordEpisode } from '../../../src/services/memory/episodes/mutations';
 import { readRecentMemoryRetrievalEvents } from '../../../src/services/memory/retrievalLog';
 import type { Message } from '../../../src/types/message';
@@ -51,9 +54,28 @@ function assistantMessage(content: string, timestamp: number): Message {
   } as Message;
 }
 
+function memoryScope(conversationId: string) {
+  return {
+    conversationId,
+    sourceThreadId: conversationId,
+    personaId: 'default',
+    taskId: null,
+  } as const;
+}
+
+function recordFact(input: RecordFactInput) {
+  return recordFactWithApplicability(input, {
+    factClass: 'workflow',
+    sourceAuthority: 'tool_observed',
+  });
+}
+
 describe('buildLivingMemorySections', () => {
   it('returns the empty bridge when no messages are supplied', async () => {
-    const out = await buildLivingMemorySections({ messages: [] });
+    const out = await buildLivingMemorySections({
+      messages: [],
+      ...memoryScope('conv-empty'),
+    });
     expect(out.sections).toEqual([]);
     expect(out.recalledFactCount).toBe(0);
     expect(out.openThreadLabels).toEqual([]);
@@ -64,6 +86,7 @@ describe('buildLivingMemorySections', () => {
     editBlock('profile', 'Berlin-based developer named Sam.', { replace: true });
 
     const out = await buildLivingMemorySections({
+      ...memoryScope('conv-profile-block'),
       messages: [userMessage('hello', 1_000)],
       now: 2_000,
     });
@@ -78,6 +101,7 @@ describe('buildLivingMemorySections', () => {
   it('omits empty memory blocks from the L2 prefix', async () => {
     // Default blocks are seeded but empty — no L2 section should appear.
     const out = await buildLivingMemorySections({
+      ...memoryScope('conv-empty-blocks'),
       messages: [userMessage('hello', 1_000)],
       now: 2_000,
     });
@@ -94,7 +118,11 @@ describe('buildLivingMemorySections', () => {
       userMessage('back now', now),
     ];
 
-    const out = await buildLivingMemorySections({ messages, now });
+    const out = await buildLivingMemorySections({
+      messages,
+      ...memoryScope('conv-focus-gap'),
+      now,
+    });
     const dynamic = out.sections.filter((s) => !s.cacheable);
     expect(dynamic.length).toBeGreaterThan(0);
     expect(dynamic.map((s) => s.text).join('\n')).toContain('## This Turn');
@@ -102,16 +130,23 @@ describe('buildLivingMemorySections', () => {
     expect(out.focusGap?.bucket).toBe('longer_break');
   });
 
-  it('passes active_focus and open_threads block content to the focus renderer', async () => {
+  it('passes exact-thread working focus and open threads to the focus renderer', async () => {
     const now = 5_000_000;
-    editBlock('active_focus', 'Refactor the prompt assembler to use 4 layers.', {
-      replace: true,
-    });
-    editBlock('open_threads', '- Land Chunk J\n- Wire layered budget cascade\n- Add tests', {
-      replace: true,
-    });
+    editPromptEligibleWorkingBlock(
+      'active_focus',
+      'Refactor the prompt assembler to use 4 layers.',
+      { conversationId: 'conv-focus-blocks', threadId: 'conv-focus-blocks' },
+      { now },
+    );
+    editPromptEligibleWorkingBlock(
+      'open_threads',
+      '- Land Chunk J\n- Wire layered budget cascade\n- Add tests',
+      { conversationId: 'conv-focus-blocks', threadId: 'conv-focus-blocks' },
+      { now },
+    );
 
     const out = await buildLivingMemorySections({
+      ...memoryScope('conv-focus-blocks'),
       messages: [
         userMessage('q1', now - 60 * 60 * 1000),
         assistantMessage('a1', now - 50 * 60 * 1000),
@@ -134,13 +169,13 @@ describe('buildLivingMemorySections', () => {
   it('uses scoped working focus/open threads when a conversation id is supplied', async () => {
     const now = 5_000_000;
     editBlock('active_focus', 'Global focus should not leak.', { replace: true });
-    editWorkingBlock(
+    editPromptEligibleWorkingBlock(
       'active_focus',
       'Scoped focus for conversation alpha.',
       { conversationId: 'conv-alpha', threadId: 'conv-alpha' },
       { now },
     );
-    editWorkingBlock(
+    editPromptEligibleWorkingBlock(
       'open_threads',
       'Scoped follow-up only',
       { conversationId: 'conv-alpha', threadId: 'conv-alpha' },
@@ -149,7 +184,7 @@ describe('buildLivingMemorySections', () => {
 
     const out = await buildLivingMemorySections({
       messages: [userMessage('continue', now)],
-      conversationId: 'conv-alpha',
+      ...memoryScope('conv-alpha'),
       now,
     });
 
@@ -169,6 +204,8 @@ describe('buildLivingMemorySections', () => {
       subjectId: me.id,
       predicate: 'prefers_backend',
       objectText: 'LiteRT runtime',
+      scope: 'global',
+      now: 500,
     });
 
     const out = await buildLivingMemorySections({
@@ -178,6 +215,7 @@ describe('buildLivingMemorySections', () => {
           enrichedContent: 'hello\n<runtime_context>LiteRT runtime</runtime_context>',
         },
       ],
+      ...memoryScope('conv-runtime-enriched'),
       now: 2_000,
     });
 
@@ -192,6 +230,7 @@ describe('buildLivingMemorySections', () => {
       objectText: 'NEBULA-WINDOW-E2E',
       scope: 'conversation',
       originConversationId: 'conv-window',
+      now: 500,
     });
 
     const out = await buildLivingMemorySections({
@@ -200,7 +239,7 @@ describe('buildLivingMemorySections', () => {
         assistantMessage('noted', 2_000),
         userMessage('continue with that', 3_000),
       ],
-      conversationId: 'conv-window',
+      ...memoryScope('conv-window'),
       now: 4_000,
     });
 
@@ -218,12 +257,21 @@ describe('buildLivingMemorySections', () => {
       subjectId: me.id,
       predicate: 'lives_in',
       objectText: 'Berlin Berlin Berlin',
+      scope: 'global',
+      now: 500,
     });
-    setFactPinned(fact.fact.id, true);
-    recordFact({ subjectId: me.id, predicate: 'works_on', objectText: 'Kavi mobile' });
+    setFactPinned(fact.fact.id, true, 600);
+    recordFact({
+      subjectId: me.id,
+      predicate: 'works_on',
+      objectText: 'Kavi mobile',
+      scope: 'global',
+      now: 500,
+    });
 
     const out = await buildLivingMemorySections({
       messages: [userMessage('Berlin Berlin', 1_000)],
+      ...memoryScope('conv-berlin'),
       now: 2_000,
     });
 
@@ -273,7 +321,7 @@ describe('buildLivingMemorySections', () => {
       messages: [
         userMessage('Use current preferred_message_contact for direct-longmem-user', 3_000),
       ],
-      conversationId,
+      ...memoryScope(conversationId),
       now: 4_000,
     });
 
@@ -320,6 +368,7 @@ describe('buildLivingMemorySections', () => {
       conversationId: 'root-release',
       sourceThreadId: 'thread-active',
       taskId: 'task-release',
+      personaId: 'default',
       now: 4_000,
     });
     const dynamicText = out.sections
@@ -381,7 +430,7 @@ describe('buildLivingMemorySections', () => {
 
     const out = await buildLivingMemorySections({
       messages: [userMessage('Please write the current state into the requested artifact.', 6_000)],
-      conversationId,
+      ...memoryScope(conversationId),
       now: 7_000,
       recallLimit: 6,
     });
@@ -400,12 +449,19 @@ describe('buildLivingMemorySections', () => {
 
   it('skips fact recall entirely when disableRecall is true', async () => {
     const me = upsertEntity({ name: 'user', type: 'self' });
-    recordFact({ subjectId: me.id, predicate: 'lives_in', objectText: 'Berlin' });
+    recordFact({
+      subjectId: me.id,
+      predicate: 'lives_in',
+      objectText: 'Berlin',
+      scope: 'global',
+    });
 
     const out = await buildLivingMemorySections({
       messages: [userMessage('Where do I live? Berlin', 1_000)],
       conversationId: 'memory-disabled-recall',
       sourceThreadId: 'thread-disabled-recall',
+      personaId: 'default',
+      taskId: null,
       now: 2_000,
       disableRecall: true,
       consistencyBarrier: {
@@ -469,25 +525,39 @@ describe('buildLivingMemorySections', () => {
       userMessage('again', 3_000),
     ];
 
-    const a = await buildLivingMemorySections({ messages, now: 4_000 });
-    const b = await buildLivingMemorySections({ messages, now: 4_000 });
+    const a = await buildLivingMemorySections({
+      messages,
+      ...memoryScope('conv-signature'),
+      now: 4_000,
+    });
+    const b = await buildLivingMemorySections({
+      messages,
+      ...memoryScope('conv-signature'),
+      now: 4_000,
+    });
     expect(a.cacheableSignature).toBe(b.cacheableSignature);
     // Memory sections stay dynamic until a context epoch admits them, so changing
     // the dynamic now-value must not change the stable prefix signature.
-    const c = await buildLivingMemorySections({ messages, now: 999_999 });
+    const c = await buildLivingMemorySections({
+      messages,
+      ...memoryScope('conv-signature'),
+      now: 999_999,
+    });
     expect(c.cacheableSignature).toBe(a.cacheableSignature);
   });
 
   it('tolerates a recall failure by emitting zero retrieved facts (never throws)', async () => {
     const factRecall = require('../../../src/services/memory/factRecall');
     const spy = jest
-      .spyOn(factRecall, 'recallScoredFactsForQuery')
+      .spyOn(factRecall, 'recallFactSelectionForQuery')
       .mockRejectedValueOnce(new Error('embedder offline'));
     try {
       const out = await buildLivingMemorySections({
         messages: [userMessage('something', 1_000)],
         conversationId: 'memory-degraded',
         sourceThreadId: 'thread-degraded',
+        personaId: 'default',
+        taskId: null,
         now: 2_000,
       });
       expect(out.recalledFactCount).toBe(0);
@@ -503,6 +573,7 @@ describe('buildLivingMemorySections', () => {
 
   it('uses a custom block reader when supplied (test seam)', async () => {
     const out = await buildLivingMemorySections({
+      ...memoryScope('conv-custom-reader'),
       messages: [userMessage('hello', 1_000)],
       now: 2_000,
       readBlocks: () => [
@@ -524,6 +595,7 @@ describe('buildLivingMemorySections', () => {
 
   it('falls back to lastUserAt for idle gap when no assistant turn exists', async () => {
     const out = await buildLivingMemorySections({
+      ...memoryScope('conv-idle-gap'),
       messages: [userMessage('first ever turn', 1_000)],
       now: 4_000,
     });
@@ -537,11 +609,13 @@ describe('buildLivingMemorySections', () => {
       subjectId: sam.id,
       predicate: 'lives_in',
       objectText: 'Berlin',
+      scope: 'global',
     });
     setFactPinned(fact.fact.id, true);
 
     const databaseSpy = jest.spyOn(sqliteStore, 'getMemoryDb');
     const out = await buildLivingMemorySections({
+      ...memoryScope('conv-opt-out'),
       messages: [userMessage('hello sam Berlin', 1_000)],
       now: 2_000,
       disableLongTermMemory: true,
@@ -556,98 +630,11 @@ describe('buildLivingMemorySections', () => {
     databaseSpy.mockRestore();
   });
 
-  it('reads active task from task stack and renders it in the prompt', async () => {
-    pushTask('conv-task', 'Refactor the auth layer');
-    const out = await buildLivingMemorySections({
-      messages: [userMessage('continue', 1_000)],
-      conversationId: 'conv-task',
-      now: 2_000,
-    });
-    const dynamicText = out.sections
-      .filter((s) => !s.cacheable)
-      .map((s) => s.text)
-      .join('\n');
-    expect(dynamicText).toContain('Active task: Refactor the auth layer');
-  });
-
-  it('scopes recall to the active task from the task stack', async () => {
-    const me = upsertEntity({ name: 'user', type: 'self' });
-    const taskA = pushTask('conv-scope', 'Task A');
-    pushTask('conv-scope', 'Task B');
-
-    // Fact scoped to Task A
-    recordFact({
-      subjectId: me.id,
-      predicate: 'lives_in',
-      objectText: 'Berlin',
-      sourceMessageId: null,
-      sourceRunId: null,
-      originTaskId: taskA.id,
-    });
-
-    // Bridge should scope to active task (Task B), so Berlin fact should not appear
-    const out = await buildLivingMemorySections({
-      messages: [userMessage('Where do I live?', 1_000)],
-      conversationId: 'conv-scope',
-      now: 2_000,
-    });
-
-    // The fact is scoped to Task A but active task is Task B, so recall should not find it
-    // (unless lexical match is strong enough to bypass task scoping — depends on factRecall impl)
-    // We mainly verify the active task is rendered and the bridge doesn't crash.
-    expect(out.sections.length).toBeGreaterThan(0);
-  });
-
-  it('explicit taskId overrides the task stack', async () => {
-    pushTask('conv-override', 'Stack task');
-    const out = await buildLivingMemorySections({
-      messages: [userMessage('hello', 1_000)],
-      conversationId: 'conv-override',
-      taskId: 'explicit-task-id',
-      now: 2_000,
-    });
-    // The explicit taskId should be used; since no working block exists for it,
-    // the active task title from the stack should not appear.
-    const dynamicText = out.sections
-      .filter((s) => !s.cacheable)
-      .map((s) => s.text)
-      .join('\n');
-    expect(dynamicText).not.toContain('Stack task');
-  });
-
-  it('does not render active task when stack is empty', async () => {
-    const out = await buildLivingMemorySections({
-      messages: [userMessage('hello', 1_000)],
-      conversationId: 'conv-empty',
-      now: 2_000,
-    });
-    const dynamicText = out.sections
-      .filter((s) => !s.cacheable)
-      .map((s) => s.text)
-      .join('\n');
-    expect(dynamicText).not.toContain('Active task:');
-  });
-
-  it('does not render active task when all tasks are completed', async () => {
-    const task = pushTask('conv-done', 'Completed task');
-    completeTask('conv-done', task.id);
-    const out = await buildLivingMemorySections({
-      messages: [userMessage('hello', 1_000)],
-      conversationId: 'conv-done',
-      now: 2_000,
-    });
-    const dynamicText = out.sections
-      .filter((s) => !s.cacheable)
-      .map((s) => s.text)
-      .join('\n');
-    expect(dynamicText).not.toContain('Active task:');
-  });
-
   it('injects the daily reflection block into L3 when a reflection exists', async () => {
     const reflectionContent = 'episode:ep-1 Created configs/nebula/runtime.json';
     const out = await buildLivingMemorySections({
       messages: [userMessage('continue', 1_000)],
-      conversationId: 'conv-reflection-bridge',
+      ...memoryScope('conv-reflection-bridge'),
       now: 2_000,
       readLatestReflection: () => reflectionContent,
     });

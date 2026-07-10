@@ -4,8 +4,10 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { upsertEntity } from '../../../src/services/memory/entities';
-import { recallScoredFactsForQuery } from '../../../src/services/memory/factRecall';
-import { recordFact } from '../../../src/services/memory/facts/mutations';
+import {
+  recallScoredTestFacts as recallScoredFactsForQuery,
+  recordRecallTestFact as recordFact,
+} from '../../helpers/memoryRecallTestHarness';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
@@ -88,12 +90,12 @@ describe('recallFactsForQuery - indexed unit selection', () => {
     const scored = await recallScoredFactsForQuery(
       `${setupUnits.join(' ')} qworkflowstage qworkflowtarget qworkflowanswer`,
       {
-        conversationId,
         limit: 3,
         candidatePoolLimit: 64,
         threshold: 0.01,
         now: 20_000,
       },
+      { memoryConversationId: conversationId, sourceThreadId: conversationId },
     );
 
     expect(scored.some((entry) => entry.fact.id === target.fact.id)).toBe(true);

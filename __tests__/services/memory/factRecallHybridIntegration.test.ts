@@ -4,15 +4,12 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { upsertEntity } from '../../../src/services/memory/entities';
+import { invalidateFact, setFactEmbedding } from '../../../src/services/memory/facts/mutations';
+import type { RecallFactsTiming } from '../../../src/services/memory/factRecall';
 import {
-  invalidateFact,
-  recordFact,
-  setFactEmbedding,
-} from '../../../src/services/memory/facts/mutations';
-import {
-  recallScoredFactsForQuery,
-  type RecallFactsTiming,
-} from '../../../src/services/memory/factRecall';
+  recallScoredTestFacts as recallScoredFactsForQuery,
+  recordRecallTestFact as recordFact,
+} from '../../helpers/memoryRecallTestHarness';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
@@ -177,9 +174,7 @@ describe('hybrid fact recall integration', () => {
     });
 
     expect(lexical.map((entry) => entry.fact.id)).toEqual([target.fact.id]);
-    expect(hybrid.map((entry) => entry.fact.id)).toEqual(
-      lexical.map((entry) => entry.fact.id),
-    );
+    expect(hybrid.map((entry) => entry.fact.id)).toEqual(lexical.map((entry) => entry.fact.id));
     expect(hybrid.map((entry) => entry.score)).toEqual(lexical.map((entry) => entry.score));
     expect(timing?.candidateStages?.localSemanticOutcome).toBe('unavailable');
   });
@@ -233,13 +228,19 @@ describe('hybrid fact recall integration', () => {
       deleted.fact.id,
     );
 
-    const hybrid = await recallScoredFactsForQuery('unindexed conceptual query', {
-      candidateStrategy: 'hybrid',
-      localSemantic: { queryEmbedding: [1, 0], minimumSimilarity: 0.8 },
-      conversationId: 'active-conversation',
-      asOf: 2_000,
-      now: 2_000,
-    });
+    const hybrid = await recallScoredFactsForQuery(
+      'unindexed conceptual query',
+      {
+        candidateStrategy: 'hybrid',
+        localSemantic: { queryEmbedding: [1, 0], minimumSimilarity: 0.8 },
+        asOf: 2_000,
+        now: 2_000,
+      },
+      {
+        memoryConversationId: 'active-conversation',
+        sourceThreadId: 'active-conversation',
+      },
+    );
 
     expect(hybrid.map((entry) => entry.fact.id)).toEqual([allowed.fact.id]);
   });

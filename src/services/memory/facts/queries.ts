@@ -79,6 +79,7 @@ export interface ListFactsForRecallCandidatesOptions extends ListFactsOptions {
   scopedRecentConversationId?: string;
   scopedRecentTaskId?: string;
   pinnedLimit?: number;
+  includePinnedCandidates?: boolean;
   scopedRecentLimit?: number;
   includeUnanchoredCandidates?: boolean;
 }
@@ -195,12 +196,14 @@ export function listFactsForRecallCandidates(
     }
   }
 
-  addRows(
-    ['pinned = 1'],
-    [],
-    'pinned DESC, retrievability DESC, importance DESC, updated_at DESC',
-    clampLimit(options.pinnedLimit, DEFAULT_RECALL_PINNED_LIMIT, totalLimit),
-  );
+  if (options.includePinnedCandidates !== false) {
+    addRows(
+      ['pinned = 1'],
+      [],
+      'pinned DESC, retrievability DESC, importance DESC, updated_at DESC',
+      clampLimit(options.pinnedLimit, DEFAULT_RECALL_PINNED_LIMIT, totalLimit),
+    );
+  }
 
   const lexicalUnits = Array.from(
     new Set(

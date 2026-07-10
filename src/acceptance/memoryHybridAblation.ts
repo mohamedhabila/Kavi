@@ -10,6 +10,8 @@ import {
 import { getMemoryDb } from '../services/memory/sqlite-store';
 import { stableHash, stableStringify } from './e2eAgent/e2eTraceRedaction';
 import { runInIsolatedStructuredMemoryEvaluation } from './structuredMemoryEvaluation';
+import { resolveLocalMemoryAccessScope } from '../services/memory/memoryScopeStore';
+import { DEFAULT_MEMORY_PERSONA_ID } from '../services/memory/memoryScopeIdentity';
 import {
   MEMORY_HYBRID_ABLATION_CASES,
   MEMORY_HYBRID_ABLATION_FIXTURE_SIGNATURE,
@@ -191,6 +193,8 @@ async function runForegroundCase(
     messages: [message],
     memoryConversationId: namespace,
     sourceThreadId,
+    taskId: null,
+    personaId: DEFAULT_MEMORY_PERSONA_ID,
     mode: 'chat',
     now: fixture.now,
     recallLimit: 1,
@@ -217,7 +221,13 @@ async function runLocalSemanticCase(
   const factKeysById = seedFixture(fixture, strategy);
   const scored = await recallScoredFactsForQuery(fixture.query, {
     candidateStrategy: strategy,
-    conversationId: namespace,
+    memoryScope: resolveLocalMemoryAccessScope({
+      memoryConversationId: namespace,
+      sourceThreadId: namespace,
+      personaId: DEFAULT_MEMORY_PERSONA_ID,
+      taskId: null,
+    }),
+    useIntent: 'automatic_prompt',
     limit: 1,
     now: fixture.now,
     ...(fixture.queryEmbedding
@@ -332,7 +342,8 @@ async function runAblationOnEmptyDatabase(): Promise<MemoryHybridAblationReport>
       hybridOnlyRegressionCount: pairs.filter(
         ({ lexical, hybrid }) => hybrid.pollution && !lexical.pollution,
       ).length,
-      lexicalNegativeFalsePositiveCount: negatives.filter(({ lexical }) => lexical.pollution).length,
+      lexicalNegativeFalsePositiveCount: negatives.filter(({ lexical }) => lexical.pollution)
+        .length,
       hybridNegativeFalsePositiveCount: negatives.filter(({ hybrid }) => hybrid.pollution).length,
     },
     families: {

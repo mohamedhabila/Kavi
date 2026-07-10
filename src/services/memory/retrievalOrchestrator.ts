@@ -10,7 +10,7 @@
 import type { AgentGoal } from '../../engine/goals/types';
 import type { AgentRunControlGraphAsyncWorkState } from '../../types/agentRun';
 import {
-  recallScoredFactsForQuery,
+  recallFactSelectionForQuery,
   type RecallFactsOptions,
   type RecallFactsTiming,
   type MemoryFactSelector,
@@ -23,9 +23,14 @@ import type {
   RecallLocalSemanticInput,
 } from './factRecallCandidateContract';
 import type { MemoryFact } from './facts/types';
-import { markFactsRecalled } from './facts/mutations';
 import { getMemoryTask } from './tasks';
 import { planRetrievalSignals } from './retrievalQueryPlan';
+import {
+  requireMemoryAccessScopeIdentity,
+  type MemoryAccessScopeIdentity,
+  type RequiredMemoryAccessScopeIdentity,
+} from './memoryScopeIdentity';
+import type { MemoryApplicabilityUseIntent } from './memoryApplicabilityTypes';
 
 export interface RetrievalOrchestratorInput {
   userMessage: string;
@@ -33,9 +38,8 @@ export interface RetrievalOrchestratorInput {
   goals?: ReadonlyArray<AgentGoal>;
   activeTaskId?: string;
   asyncWork?: AgentRunControlGraphAsyncWorkState;
-  conversationId?: string;
-  threadId?: string;
-  taskId?: string;
+  memoryScope: MemoryAccessScopeIdentity;
+  memoryUseIntent?: MemoryApplicabilityUseIntent;
   limit?: number;
   now?: number;
   factSelector?: MemoryFactSelector;
@@ -45,6 +49,7 @@ export interface RetrievalOrchestratorInput {
 
 export interface RetrievalOrchestratorResult {
   facts: MemoryFact[];
+  resolutionFacts: MemoryFact[];
   episodes: MemoryEpisode[];
   querySignals: string[];
   scoredFacts: ScoredFact[];
@@ -54,7 +59,6 @@ export interface RetrievalOrchestratorResult {
 export interface RetrievalOrchestratorTimings {
   planMs: number;
   recallMs: number;
-  markFactsRecalledMs: number;
   episodesMs: number;
   totalMs: number;
   recall?: RecallFactsTiming;
@@ -95,7 +99,10 @@ function collectAsyncWorkSignals(
   return signals;
 }
 
-function buildQuerySignals(input: RetrievalOrchestratorInput): string[] {
+function buildQuerySignals(
+  input: RetrievalOrchestratorInput,
+  resolvedTaskId: string | undefined,
+): string[] {
   const primarySignals: string[] = [];
   const userMessage = input.userMessage.trim();
   if (userMessage) primarySignals.push(userMessage);
@@ -104,7 +111,6 @@ function buildQuerySignals(input: RetrievalOrchestratorInput): string[] {
   primarySignals.push(...collectAsyncWorkSignals(input.asyncWork));
   if (input.focusText?.trim()) primarySignals.push(input.focusText.trim());
 
-  const resolvedTaskId = input.taskId ?? input.activeTaskId;
   if (resolvedTaskId) {
     const task = getMemoryTask(resolvedTaskId);
     if (task?.title.trim()) primarySignals.push(task.title.trim());
@@ -121,10 +127,11 @@ function buildQuerySignals(input: RetrievalOrchestratorInput): string[] {
 
 function recallOptions(
   input: RetrievalOrchestratorInput,
+  memoryScope: RequiredMemoryAccessScopeIdentity,
   limit: number,
+  now: number,
   onTiming: (timing: RecallFactsTiming) => void,
 ): RecallFactsOptions {
-  const resolvedTaskId = input.taskId ?? input.activeTaskId;
   return {
     limit,
     threshold: DEFAULT_THRESHOLD,
@@ -133,47 +140,71 @@ function recallOptions(
     ...(input.factSelector ? { selector: input.factSelector } : {}),
     ...(input.candidateStrategy ? { candidateStrategy: input.candidateStrategy } : {}),
     ...(input.localSemantic ? { localSemantic: input.localSemantic } : {}),
-    ...(input.conversationId ? { conversationId: input.conversationId } : {}),
-    ...(input.threadId ? { threadId: input.threadId } : {}),
-    ...(resolvedTaskId ? { taskId: resolvedTaskId } : {}),
-    ...(typeof input.now === 'number' ? { now: input.now } : {}),
+    memoryScope,
+    useIntent: input.memoryUseIntent ?? 'automatic_prompt',
+    now,
   };
+}
+
+function normalizeRetrievalLimit(value: number | undefined): number {
+  if (value === undefined) return DEFAULT_LIMIT;
+  if (!Number.isFinite(value) || value < 1) throw new Error('memory_retrieval_limit_invalid');
+  return Math.min(Math.floor(value), MAX_LIMIT);
+}
+
+function normalizeRetrievalNow(value: number | undefined): number {
+  const now = value ?? Date.now();
+  if (!Number.isSafeInteger(now) || now < 0) {
+    throw new Error('memory_retrieval_timestamp_invalid');
+  }
+  return now;
+}
+
+function resolveRetrievalScope(input: RetrievalOrchestratorInput): {
+  memoryScope: RequiredMemoryAccessScopeIdentity;
+  taskId: string | undefined;
+} {
+  const memoryScope = requireMemoryAccessScopeIdentity(input.memoryScope);
+  const requestedTaskId = input.activeTaskId ?? null;
+  if (
+    input.activeTaskId !== undefined &&
+    memoryScope.taskId !== requestedTaskId &&
+    (memoryScope.taskId !== null || requestedTaskId !== null)
+  ) {
+    throw new Error('memory_retrieval_scope_task_mismatch');
+  }
+  return { memoryScope, taskId: memoryScope.taskId ?? undefined };
 }
 
 export async function orchestrateMemoryRetrieval(
   input: RetrievalOrchestratorInput,
 ): Promise<RetrievalOrchestratorResult> {
+  const scope = resolveRetrievalScope(input);
+  const now = normalizeRetrievalNow(input.now);
+  const limit = normalizeRetrievalLimit(input.limit);
   const totalStarted = Date.now();
   const planStarted = Date.now();
-  const querySignals = buildQuerySignals(input);
+  const querySignals = buildQuerySignals(input, scope.taskId);
   const query = querySignals.join('\n');
   const planMs = Date.now() - planStarted;
-  const limit = Math.max(1, Math.min(input.limit ?? DEFAULT_LIMIT, MAX_LIMIT));
   const recallTimings: RecallFactsTiming[] = [];
 
   const recallStarted = Date.now();
-  const scoredFacts = query
-    ? await recallScoredFactsForQuery(
+  const selection = query
+    ? await recallFactSelectionForQuery(
         query,
-        recallOptions(input, limit, (timing) => recallTimings.push(timing)),
+        recallOptions(input, scope.memoryScope, limit, now, (timing) => recallTimings.push(timing)),
       )
-    : [];
+    : { facts: [], resolutionFacts: [], scoredFacts: [] };
   const recallMs = Date.now() - recallStarted;
-  const facts = scoredFacts.map((entry) => entry.fact);
-
-  const markFactsStarted = Date.now();
-  markFactsRecalled(
-    facts.map((fact) => fact.id),
-    input.now ?? Date.now(),
-  );
-  const markFactsRecalledMs = Date.now() - markFactsStarted;
+  const { facts, resolutionFacts, scoredFacts } = selection;
 
   const episodesStarted = Date.now();
-  const resolvedTaskId = input.taskId ?? input.activeTaskId;
   let episodeTiming: RecallEpisodesTiming | undefined;
   const episodes = recallEpisodesForQuery(query, {
-    threadId: input.conversationId,
-    taskId: resolvedTaskId,
+    conversationId: scope.memoryScope.memoryConversationId,
+    threadId: scope.memoryScope.sourceThreadId,
+    ...(scope.taskId ? { taskId: scope.taskId } : {}),
     limit: 4,
     onTiming: (timing) => {
       episodeTiming = timing;
@@ -183,13 +214,13 @@ export async function orchestrateMemoryRetrieval(
 
   return {
     facts,
+    resolutionFacts,
     episodes,
     querySignals,
     scoredFacts,
     timings: {
       planMs,
       recallMs,
-      markFactsRecalledMs,
       episodesMs,
       totalMs: Date.now() - totalStarted,
       recall: recallTimings[0],

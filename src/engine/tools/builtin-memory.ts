@@ -21,11 +21,15 @@ import { getEntityById } from '../../services/memory/entities';
 import { recallScoredFactsForQuery } from '../../services/memory/factRecall';
 import type { MemoryFactScope } from '../../services/memory/facts/types';
 import type { ScoredFact } from '../../services/memory/factRecallTypes';
+import { resolveLocalMemoryAccessScope } from '../../services/memory/memoryScopeStore';
 
 type MemorySearchScope = 'all' | 'conversation' | 'global';
 
 export interface MemorySearchOptions {
-  conversationId?: string;
+  memoryConversationId: string;
+  sourceThreadId: string;
+  personaId: string;
+  taskId: string | null;
 }
 
 const DEFAULT_MEMORY_SEARCH_LIMIT = 10;
@@ -84,12 +88,12 @@ function formatSearchResult(entry: ScoredFact, index: number): object {
 
 export async function executeMemorySearch(
   args: { query: string; maxResults?: number; scope?: 'all' | 'conversation' | 'global' },
-  options: MemorySearchOptions = {},
+  options: MemorySearchOptions,
 ): Promise<string> {
   const query = typeof args.query === 'string' ? args.query.trim() : '';
   const maxResults = clampMemorySearchLimit(args.maxResults);
   const requestedScope = normalizeMemorySearchScope(args.scope);
-  const conversationId = options.conversationId?.trim() || undefined;
+  const conversationId = options.memoryConversationId;
   try {
     if (!query) {
       return JSON.stringify({
@@ -110,10 +114,17 @@ export async function executeMemorySearch(
       });
     }
     const scopeFilter = scopeFilterForSearch(requestedScope, conversationId);
+    const memoryScope = resolveLocalMemoryAccessScope({
+      memoryConversationId: options.memoryConversationId,
+      sourceThreadId: options.sourceThreadId,
+      personaId: options.personaId,
+      taskId: options.taskId,
+    });
     const scored = await recallScoredFactsForQuery(query, {
       limit: maxResults,
       threshold: 0.01,
-      ...(requestedScope !== 'global' && conversationId ? { conversationId } : {}),
+      memoryScope,
+      useIntent: 'explicit_user_request',
       ...(scopeFilter ? { scopeFilter } : {}),
     });
     markFactsRecalled(

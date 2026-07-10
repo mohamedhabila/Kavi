@@ -5,7 +5,10 @@ jest.mock('expo-sqlite', () => {
 
 import { upsertEntity } from '../../../src/services/memory/entities';
 import { addFactEvidence } from '../../../src/services/memory/episodes/mutations';
-import { recordFact, setFactPinned } from '../../../src/services/memory/facts/mutations';
+import {
+  recordFactWithApplicability,
+  setFactPinned,
+} from '../../../src/services/memory/facts/mutations';
 import { buildLivingMemorySections } from '../../../src/services/memory/livingMemoryBridge';
 import * as expansionModule from '../../../src/services/memory/localEvidenceExpansion';
 import * as llmFactSelector from '../../../src/services/memory/llmFactSelector';
@@ -41,16 +44,20 @@ function seedSelectedFact(input: {
   quote?: string;
 }): string {
   const subject = upsertEntity({ name: 'provenance target', type: 'project' });
-  const result = recordFact({
-    subjectId: subject.id,
-    predicate: 'verified_state',
-    objectText: 'local provenance target is verified',
-    originConversationId: input.conversationId,
-    originThreadId: input.threadId,
-    sourceMessageId: 'source-message-1',
-    importance: 1,
-    now: 1_000,
-  });
+  const result = recordFactWithApplicability(
+    {
+      subjectId: subject.id,
+      predicate: 'verified_state',
+      objectText: 'local provenance target is verified',
+      scope: 'conversation',
+      originConversationId: input.conversationId,
+      originThreadId: input.threadId,
+      sourceMessageId: 'source-message-1',
+      importance: 1,
+      now: 1_000,
+    },
+    { factClass: 'workflow', sourceAuthority: 'tool_observed' },
+  );
   setFactPinned(result.fact.id, true);
   if (input.quote) {
     addFactEvidence({
@@ -84,6 +91,8 @@ describe('living memory local evidence integration', () => {
       messages: [userMessage('What verified_state applies to the local provenance target?')],
       conversationId,
       sourceThreadId,
+      personaId: 'default',
+      taskId: null,
       now: 3_000,
       retrievalLlm: { provider: {} as never },
     });
@@ -128,6 +137,8 @@ describe('living memory local evidence integration', () => {
       messages: [userMessage('What verified_state applies to the local provenance target?')],
       conversationId,
       sourceThreadId: 'current-source-thread',
+      personaId: 'default',
+      taskId: null,
       now: 3_000,
     });
 
@@ -150,6 +161,8 @@ describe('living memory local evidence integration', () => {
       messages: [userMessage('What verified_state applies to the local provenance target?')],
       conversationId,
       sourceThreadId: 'source-thread-3',
+      personaId: 'default',
+      taskId: null,
       now: 3_000,
     });
 
@@ -167,6 +180,8 @@ describe('living memory local evidence integration', () => {
       messages: [userMessage('disabled')],
       conversationId: 'memory-conversation-4',
       sourceThreadId: 'source-thread-4',
+      personaId: 'default',
+      taskId: null,
       disableRecall: true,
       now: 3_000,
     });
@@ -174,6 +189,8 @@ describe('living memory local evidence integration', () => {
       messages: [userMessage('opt out')],
       conversationId: 'memory-conversation-4',
       sourceThreadId: 'source-thread-4',
+      personaId: 'default',
+      taskId: null,
       disableLongTermMemory: true,
       now: 3_000,
     });

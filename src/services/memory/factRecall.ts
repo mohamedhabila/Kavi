@@ -3,7 +3,6 @@
 // local-semantic candidates, score it once, and return the best memories.
 // Agent-run structure belongs in compact memory records, not query-time repair.
 
-import { markFactsRecalled } from './facts/mutations';
 import {
   listFactTermUnitHitsForFacts,
   listFactsForRecallEligibleScan,
@@ -22,12 +21,14 @@ import {
   type RecallFactsTiming,
   type ScoredFact,
 } from './factRecallTypes';
-import {
-  buildQueryUnitWeightsFromHits,
-  buildScoredFact,
-} from './factRecallScoring';
+import { buildQueryUnitWeightsFromHits, buildScoredFact } from './factRecallScoring';
 import { countLexicalUnits } from './ranking/lexical';
 import { quotedSpanUnitSets } from './ranking/quotedSpans';
+import {
+  canFactEnterRecallCandidates,
+  requireFactRecallAccessContext,
+  type FactRecallAccessContext,
+} from './factRecallAccessPolicy';
 
 export type {
   MemoryFactSelector,
@@ -42,6 +43,14 @@ const CANDIDATE_POOL_LIMIT = 128;
 const CANDIDATE_POOL_MAX = 2_000;
 const QUOTED_ANCHOR_LIMIT = 12;
 const DEFAULT_SELECTOR_CANDIDATE_LIMIT = 48;
+const DEFAULT_RESOLUTION_CANDIDATE_LIMIT = 14;
+const MAX_RESOLUTION_CANDIDATE_LIMIT = 14;
+
+export interface RecallFactSelection {
+  facts: MemoryFact[];
+  resolutionFacts: MemoryFact[];
+  scoredFacts: ScoredFact[];
+}
 
 function normalizePositiveIntegerLimit(
   value: number | undefined,
@@ -56,31 +65,24 @@ function getCandidateScopes(options: RecallFactsOptions): MemoryFactScope[] | un
   if (options.scopeFilter) {
     return Array.isArray(options.scopeFilter) ? options.scopeFilter : [options.scopeFilter];
   }
-  if (!options.scopeHints?.length && !options.conversationId && !options.taskId) {
+  if (!options.scopeHints?.length && !options.memoryScope) {
     return undefined;
   }
   const scopes = new Set<MemoryFactScope>(options.scopeHints ?? []);
-  if (options.conversationId) scopes.add('conversation');
-  if (options.taskId) scopes.add('session');
+  scopes.add('conversation');
+  scopes.add('session');
+  scopes.add('persona');
   scopes.add('global');
   scopes.add('project');
   return scopes.size > 0 ? Array.from(scopes) : undefined;
 }
 
-function isFactEligibleForRecall(fact: MemoryFact, options: RecallFactsOptions): boolean {
-  if (fact.scope === 'project' || fact.scope === 'conversation') {
-    return Boolean(options.conversationId && fact.originConversationId === options.conversationId);
-  }
-  if (fact.scope === 'session') {
-    return Boolean(
-      options.conversationId &&
-        fact.originConversationId === options.conversationId &&
-        options.taskId &&
-        fact.originTaskId === options.taskId &&
-        (!options.threadId || fact.originThreadId === options.threadId),
-    );
-  }
-  return true;
+function isFactEligibleForRecall(
+  fact: MemoryFact,
+  accessContext: FactRecallAccessContext,
+  lane: 'direct_use' | 'resolution',
+): boolean {
+  return canFactEnterRecallCandidates(fact, accessContext, lane);
 }
 
 function uniqueFactsById(facts: ReadonlyArray<MemoryFact>): MemoryFact[] {
@@ -266,7 +268,7 @@ function selectSelectorCandidates(params: {
 async function buildRecallSelection(
   query: string,
   options: RecallFactsOptions,
-): Promise<{ facts: MemoryFact[]; scoredFacts: ScoredFact[] }> {
+): Promise<RecallFactSelection> {
   const totalStarted = Date.now();
   const timing: RecallFactsTiming = {
     queryChars: query.length,
@@ -288,19 +290,34 @@ async function buildRecallSelection(
     CANDIDATE_POOL_LIMIT,
     CANDIDATE_POOL_MAX,
   );
-  const candidatePool = Math.max(
-    limit,
-    requestedCandidatePool,
+  const candidatePool = Math.max(limit, requestedCandidatePool);
+  const resolutionCandidateLimit = normalizePositiveIntegerLimit(
+    options.resolutionCandidateLimit,
+    DEFAULT_RESOLUTION_CANDIDATE_LIMIT,
+    MAX_RESOLUTION_CANDIDATE_LIMIT,
   );
   const alwaysIncludePinned = options.alwaysIncludePinned !== false;
   const trimmedQuery = query.trim();
-  const now = options.now ?? options.asOf ?? Date.now();
+  if (options.now !== undefined && options.asOf !== undefined && options.now !== options.asOf) {
+    throw new Error('memory_recall_access_timestamp_mismatch');
+  }
+  const now = options.asOf ?? options.now ?? Date.now();
+  const accessContext = requireFactRecallAccessContext({
+    memoryScope: options.memoryScope,
+    useIntent: options.useIntent,
+    asOf: now,
+  });
   const candidateScopes = getCandidateScopes(options);
   const candidateStrategy = options.candidateStrategy ?? 'hybrid';
-  const recallScopeIdentity = {
-    ...(options.conversationId ? { conversationId: options.conversationId } : {}),
-    ...(options.threadId ? { threadId: options.threadId } : {}),
-    ...(options.taskId ? { taskId: options.taskId } : {}),
+  const directRecallScopeIdentity = {
+    ...accessContext.scope,
+    useIntent: accessContext.useIntent,
+    candidateLane: 'direct_use' as const,
+  };
+  const resolutionRecallScopeIdentity = {
+    ...accessContext.scope,
+    useIntent: accessContext.useIntent,
+    candidateLane: 'resolution' as const,
   };
   const eligibleScanLimit = normalizePositiveIntegerLimit(
     options.eligibleScanLimit,
@@ -332,28 +349,45 @@ async function buildRecallSelection(
   const lexicalCandidates = uniqueFactsById(
     listFactsForRecallCandidates({
       limit: candidatePool,
-      recallScopeIdentity,
+      recallScopeIdentity: directRecallScopeIdentity,
       selectedLexicalUnits: indexedRecallLexicalUnits,
-      ...(options.conversationId ? { scopedRecentConversationId: options.conversationId } : {}),
-      ...(options.taskId ? { scopedRecentTaskId: options.taskId } : {}),
+      scopedRecentConversationId: accessContext.scope.memoryConversationId,
+      ...(accessContext.scope.taskId ? { scopedRecentTaskId: accessContext.scope.taskId } : {}),
       ...(candidateScopes ? { scope: candidateScopes } : {}),
       ...(options.memoryKind ? { memoryKind: options.memoryKind } : {}),
-      ...(options.includeHistorical ? { includeInvalidated: true } : {}),
-      ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
+      asOf: now,
       anchorLexicalUnitSets: anchorUnitSets.map((anchorUnits) => Array.from(anchorUnits)),
     }),
-  ).filter((fact) => isFactEligibleForRecall(fact, options));
+  ).filter((fact) => isFactEligibleForRecall(fact, accessContext, 'direct_use'));
   const eligibleFacts =
     candidateStrategy === 'hybrid' && trimmedQuery
       ? listFactsForRecallEligibleScan({
           limit: eligibleScanLimit,
-          recallScopeIdentity,
+          recallScopeIdentity: directRecallScopeIdentity,
           ...(candidateScopes ? { scope: candidateScopes } : {}),
           ...(options.memoryKind ? { memoryKind: options.memoryKind } : {}),
-          ...(options.includeHistorical ? { includeInvalidated: true } : {}),
-          ...(options.asOf !== undefined ? { asOf: options.asOf } : {}),
-        }).filter((fact) => isFactEligibleForRecall(fact, options))
+          asOf: now,
+        }).filter((fact) => isFactEligibleForRecall(fact, accessContext, 'direct_use'))
       : [];
+  const resolutionFetchStarted = Date.now();
+  const resolutionFacts =
+    trimmedQuery && indexedRecallLexicalUnits.length > 0
+      ? uniqueFactsById(
+          listFactsForRecallCandidates({
+            limit: resolutionCandidateLimit,
+            recallScopeIdentity: resolutionRecallScopeIdentity,
+            selectedLexicalUnits: indexedRecallLexicalUnits,
+            includePinnedCandidates: false,
+            includeUnanchoredCandidates: false,
+            ...(candidateScopes ? { scope: candidateScopes } : {}),
+            ...(options.memoryKind ? { memoryKind: options.memoryKind } : {}),
+            asOf: now,
+            anchorLexicalUnitSets: anchorUnitSets.map((units) => Array.from(units)),
+          }),
+        ).filter((fact) => isFactEligibleForRecall(fact, accessContext, 'resolution'))
+      : [];
+  timing.resolutionCandidateFetchMs = Date.now() - resolutionFetchStarted;
+  timing.resolutionCandidateCount = resolutionFacts.length;
   const entities =
     eligibleFacts.length > 0
       ? getEntitiesByIds(
@@ -448,27 +482,29 @@ async function buildRecallSelection(
 
   return {
     facts: selected.map((entry) => entry.fact),
+    resolutionFacts,
     scoredFacts: selected,
   };
 }
 
+export async function recallFactSelectionForQuery(
+  query: string,
+  options: RecallFactsOptions,
+): Promise<RecallFactSelection> {
+  return buildRecallSelection(query, options);
+}
+
 export async function recallFactsForQuery(
   query: string,
-  options: RecallFactsOptions = {},
+  options: RecallFactsOptions,
 ): Promise<MemoryFact[]> {
-  const now = options.now ?? options.asOf ?? Date.now();
   const selection = await buildRecallSelection(query, options);
-
-  markFactsRecalled(
-    selection.facts.map((fact) => fact.id),
-    now,
-  );
   return selection.facts;
 }
 
 export async function recallScoredFactsForQuery(
   query: string,
-  options: RecallFactsOptions = {},
+  options: RecallFactsOptions,
 ): Promise<ScoredFact[]> {
   const selection = await buildRecallSelection(query, options);
   return selection.scoredFacts;

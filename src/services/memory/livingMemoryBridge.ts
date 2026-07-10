@@ -18,10 +18,10 @@ import type { LlmProviderConfig } from '../../types/provider';
 import { createLogger } from '../../utils/logger';
 import { listBlocks, type MemoryBlock } from './blocks';
 import { getEntityById } from './entities';
-import type { RecallCandidateStrategy } from './factRecallCandidateContract';
 import type { AgentGoal } from '../../engine/goals/types';
 import type { AgentRunControlGraphAsyncWorkState } from '../../types/agentRun';
 import type { MemoryFact } from './facts/types';
+import type { RecallCandidateStrategy } from './factRecallCandidateContract';
 import {
   orchestrateMemoryRetrieval,
   type RetrievalOrchestratorTimings,
@@ -30,7 +30,7 @@ import type { NextTurnMemoryConsistencyResult } from './nextTurnConsistency';
 import { renderFocusBlock, type FocusGap } from './focus';
 import { assemblePrompt, type PromptMemoryFact, type SystemPromptSection } from './promptAssembly';
 import { getWorkingBlock, type WorkingMemoryBlock } from './workingBlocks';
-import { getActiveTaskId, readTaskStack } from './taskStack';
+import { readTaskStack } from './taskStack';
 import { getLatestReflection } from './reflections';
 import { createLlmMemoryFactSelector } from './llmFactSelector';
 import {
@@ -42,6 +42,20 @@ import {
   buildLocalEvidencePrompt,
   type LocalEvidencePromptDiagnostics,
 } from './localEvidencePromptBuilder';
+import {
+  applyMemoryApplicabilityPolicy,
+  emptyMemoryApplicabilitySummary,
+} from './memoryApplicabilityPolicy';
+import type {
+  MemoryApplicabilitySummary,
+  MemoryApplicabilityUseIntent,
+  MemoryExternalEvidenceSignal,
+} from './memoryApplicabilityTypes';
+import { selectMemoryApplicabilityResolutionFactIds } from './memoryApplicabilityPrompt';
+import { loadActiveMemoryFactConflictSignals } from './facts/observations';
+import type { RequiredMemoryAccessScopeIdentity } from './memoryScopeIdentity';
+import { resolveLocalMemoryAccessScope } from './memoryScopeStore';
+import { markFactsRecalled } from './facts/mutations';
 
 const logger = createLogger('memory.livingMemoryBridge');
 
@@ -64,10 +78,12 @@ export interface BuildLivingMemorySectionsOptions {
   /** Thread/conversation creation timestamp (ms). Falls back to first message timestamp or now. */
   threadCreatedAt?: number;
   /** Conversation/task hints used to boost scoped recall. */
-  conversationId?: string;
+  conversationId: string;
   /** Concrete chat thread that initiated this retrieval. */
-  sourceThreadId?: string;
-  taskId?: string;
+  sourceThreadId: string;
+  taskId: string | null;
+  /** Active persona identity for exact binding of persona-scoped facts. */
+  personaId: string;
   /** Now (ms). Defaults to `Date.now()`. Test seam. */
   now?: number;
   /** Recall fanout. Default 12. */
@@ -100,6 +116,10 @@ export interface BuildLivingMemorySectionsOptions {
   };
   /** Exact bounded consistency result observed before this retrieval. */
   consistencyBarrier?: NextTurnMemoryConsistencyResult;
+  /** Structural use intent supplied by trusted caller code; never inferred from request text. */
+  memoryUseIntent?: MemoryApplicabilityUseIntent;
+  /** Optional current structured evidence from trusted caller code. */
+  externalMemoryEvidence?: ReadonlyArray<MemoryExternalEvidenceSignal>;
   /** Candidate strategy selected by the product memory-access policy. */
   candidateStrategy?: RecallCandidateStrategy;
 }
@@ -129,6 +149,8 @@ export interface LivingMemoryBridgeOutput {
   retrievalEvent?: PromptAssemblyRetrievalEventResult;
   /** Content-free outcome and counts for exact-scope local provenance expansion. */
   localEvidenceExpansion?: LocalEvidencePromptDiagnostics;
+  /** Content-free post-retrieval applicability decisions and reason counts. */
+  applicabilityPolicy: MemoryApplicabilitySummary;
 }
 
 export interface LivingMemoryBridgeTimings {
@@ -137,6 +159,7 @@ export interface LivingMemoryBridgeTimings {
   workingBlockMs: number;
   focusRenderMs: number;
   retrievalMs: number;
+  applicabilityPolicyMs: number;
   evidenceExpansionMs: number;
   reflectionMs: number;
   subjectLabelsMs: number;
@@ -153,6 +176,7 @@ const EMPTY_OUTPUT: LivingMemoryBridgeOutput = {
   openThreadLabels: [],
   recalledFactCount: 0,
   recalledEpisodeCount: 0,
+  applicabilityPolicy: emptyMemoryApplicabilitySummary('disabled'),
 };
 
 function safeListBlocks(reader?: () => MemoryBlock[]): MemoryBlock[] {
@@ -173,16 +197,20 @@ function findBlock(blocks: MemoryBlock[], label: string): MemoryBlock | undefine
 
 function safeGetWorkingBlock(
   label: 'active_focus' | 'open_threads',
-  options: Pick<BuildLivingMemorySectionsOptions, 'conversationId' | 'taskId' | 'readWorkingBlock'>,
+  options: Pick<
+    BuildLivingMemorySectionsOptions,
+    'conversationId' | 'sourceThreadId' | 'taskId' | 'readWorkingBlock'
+  >,
 ): WorkingMemoryBlock | null {
   try {
-    if (options.readWorkingBlock) return options.readWorkingBlock(label);
-    if (!options.conversationId && !options.taskId) return null;
-    return getWorkingBlock(label, {
-      conversationId: options.conversationId,
-      threadId: options.conversationId,
-      taskId: options.taskId,
-    });
+    const block = options.readWorkingBlock
+      ? options.readWorkingBlock(label)
+      : getWorkingBlock(label, {
+          conversationId: options.conversationId,
+          threadId: options.sourceThreadId,
+          taskId: options.taskId,
+        });
+    return block?.promptEligibility === 'trusted_structural' ? block : null;
   } catch (error) {
     logger.devWarn(
       `livingMemoryBridge.getWorkingBlock(${label}) failed:`,
@@ -244,11 +272,25 @@ function getFactSubjectLabel(subjectId: string): string {
   }
 }
 
-function withFactSubjectLabels(facts: ReadonlyArray<MemoryFact>): PromptMemoryFact[] {
+function withFactSubjectLabels(facts: ReadonlyArray<PromptMemoryFact>): PromptMemoryFact[] {
   return facts.map((fact) => ({
     ...fact,
     subjectLabel: getFactSubjectLabel(fact.subjectId),
   }));
+}
+
+function resolveApplicabilityScope(
+  input: Pick<
+    BuildLivingMemorySectionsOptions,
+    'conversationId' | 'sourceThreadId' | 'personaId' | 'taskId'
+  >,
+): RequiredMemoryAccessScopeIdentity {
+  return resolveLocalMemoryAccessScope({
+    memoryConversationId: input.conversationId,
+    sourceThreadId: input.sourceThreadId,
+    personaId: input.personaId,
+    taskId: input.taskId,
+  });
 }
 
 /**
@@ -266,6 +308,7 @@ export async function buildLivingMemorySections(
     workingBlockMs: 0,
     focusRenderMs: 0,
     retrievalMs: 0,
+    applicabilityPolicyMs: 0,
     evidenceExpansionMs: 0,
     reflectionMs: 0,
     subjectLabelsMs: 0,
@@ -283,6 +326,7 @@ export async function buildLivingMemorySections(
     conversationId,
     sourceThreadId,
     taskId,
+    personaId,
     readBlocks,
     readWorkingBlock,
     readLatestReflection: readLatestReflectionOverride,
@@ -291,6 +335,8 @@ export async function buildLivingMemorySections(
     asyncWork,
     retrievalLlm,
     consistencyBarrier,
+    memoryUseIntent = 'automatic_prompt',
+    externalMemoryEvidence,
     candidateStrategy,
   } = options;
 
@@ -304,17 +350,13 @@ export async function buildLivingMemorySections(
     return EMPTY_OUTPUT;
   }
 
-  // Resolve active task: explicit taskId wins, otherwise read from task stack.
-  let resolvedTaskId = taskId ?? null;
+  const resolvedTaskId = taskId;
   let activeTaskTitle: string | null = null;
-  if (!resolvedTaskId && conversationId) {
+  if (resolvedTaskId) {
     const started = Date.now();
     try {
-      resolvedTaskId = getActiveTaskId(conversationId);
-      if (resolvedTaskId) {
-        activeTaskTitle =
-          readTaskStack(conversationId).find((t) => t.id === resolvedTaskId)?.title ?? null;
-      }
+      activeTaskTitle =
+        readTaskStack(conversationId).find((item) => item.id === resolvedTaskId)?.title ?? null;
     } catch (error) {
       logger.devWarn(
         'livingMemoryBridge.taskStack read failed:',
@@ -323,6 +365,12 @@ export async function buildLivingMemorySections(
     }
     timings.taskStackMs += Date.now() - started;
   }
+  const applicabilityScope = resolveApplicabilityScope({
+    conversationId,
+    sourceThreadId,
+    personaId,
+    taskId,
+  });
 
   const blockStarted = Date.now();
   const blocks = safeListBlocks(readBlocks);
@@ -332,7 +380,8 @@ export async function buildLivingMemorySections(
   const workingBlockStarted = Date.now();
   const scopedFocusBlock = safeGetWorkingBlock(FOCUS_BLOCK_LABEL, {
     conversationId,
-    taskId: resolvedTaskId ?? undefined,
+    sourceThreadId,
+    taskId: resolvedTaskId,
     readWorkingBlock,
   });
   const focusBlockSource =
@@ -341,7 +390,8 @@ export async function buildLivingMemorySections(
 
   const scopedOpenThreads = safeGetWorkingBlock(OPEN_THREADS_LABEL, {
     conversationId,
-    taskId: resolvedTaskId ?? undefined,
+    sourceThreadId,
+    taskId: resolvedTaskId,
     readWorkingBlock,
   });
   const openThreadsSource =
@@ -367,10 +417,12 @@ export async function buildLivingMemorySections(
 
   const query = recentUserTextWindow(messages);
   let recalledFacts: Awaited<ReturnType<typeof orchestrateMemoryRetrieval>>['facts'] = [];
+  let resolutionFacts: Awaited<ReturnType<typeof orchestrateMemoryRetrieval>>['resolutionFacts'] =
+    [];
   let recalledEpisodes: Awaited<ReturnType<typeof orchestrateMemoryRetrieval>>['episodes'] = [];
   let retrievalTimings: RetrievalOrchestratorTimings | undefined;
   let retrievalState: PromptAssemblyRetrievalState = disableRecall ? 'disabled' : 'completed';
-  const factSelector = createLlmMemoryFactSelector(retrievalLlm);
+  const factSelector = !disableRecall ? createLlmMemoryFactSelector(retrievalLlm) : null;
   if (!disableRecall) {
     const retrievalStarted = Date.now();
     try {
@@ -381,14 +433,14 @@ export async function buildLivingMemorySections(
         activeTaskId: activeTaskId ?? resolvedTaskId ?? undefined,
         asyncWork,
         ...(factSelector ? { factSelector } : {}),
-        conversationId,
-        threadId: sourceThreadId,
-        taskId: resolvedTaskId ?? undefined,
+        memoryScope: applicabilityScope,
+        memoryUseIntent,
         limit: recallLimit,
         now,
         ...(candidateStrategy ? { candidateStrategy } : {}),
       });
       recalledFacts = retrieval.facts;
+      resolutionFacts = retrieval.resolutionFacts;
       recalledEpisodes = retrieval.episodes;
       retrievalTimings = retrieval.timings;
     } catch (error) {
@@ -397,17 +449,80 @@ export async function buildLivingMemorySections(
         error instanceof Error ? error.message : String(error),
       );
       recalledFacts = [];
+      resolutionFacts = [];
       recalledEpisodes = [];
       retrievalState = 'degraded';
     }
     timings.retrievalMs += Date.now() - retrievalStarted;
   }
 
+  const policyStarted = Date.now();
+  let persistedConflictEvidence: MemoryExternalEvidenceSignal[] = [];
+  let conflictObservationReadState: 'available' | 'failed' = 'available';
+  const policyCandidateFacts = [...recalledFacts, ...resolutionFacts];
+  if (policyCandidateFacts.length > 0) {
+    try {
+      persistedConflictEvidence = loadActiveMemoryFactConflictSignals({
+        factIds: policyCandidateFacts.map((fact) => fact.id),
+        currentScope: applicabilityScope,
+        asOf: now,
+      });
+    } catch (error) {
+      conflictObservationReadState = 'failed';
+      retrievalState = 'degraded';
+      logger.devWarn(
+        'livingMemoryBridge.conflict observation read failed:',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+  const applicability = applyMemoryApplicabilityPolicy({
+    facts: policyCandidateFacts,
+    context: {
+      enabled: !disableRecall,
+      now,
+      useIntent: memoryUseIntent,
+      scope: applicabilityScope,
+      conflictObservationReadState,
+      ...(persistedConflictEvidence.length > 0 || externalMemoryEvidence
+        ? {
+            externalEvidence: [...persistedConflictEvidence, ...(externalMemoryEvidence ?? [])],
+          }
+        : {}),
+    },
+  });
+  const factDecisions = new Map(
+    applicability.factDecisions.map((decision) => [decision.factId, decision] as const),
+  );
+  const applicableFacts: PromptMemoryFact[] = policyCandidateFacts.flatMap((fact) => {
+    const decision = factDecisions.get(fact.id);
+    if (!decision || decision.action === 'silent') return [];
+    return [
+      {
+        ...fact,
+        applicability: { action: decision.action, reason: decision.reason },
+      },
+    ];
+  });
+  const resolutionFactIds = selectMemoryApplicabilityResolutionFactIds(applicableFacts);
+  const assemblyVisibleFacts = applicableFacts.filter(
+    (fact) => fact.applicability?.action === 'use' || resolutionFactIds.has(fact.id),
+  );
+  const applicabilitySummary: MemoryApplicabilitySummary = {
+    ...applicability.summary,
+    promptVisibleFactCount: assemblyVisibleFacts.length,
+    promptBudgetDroppedFactCount: applicableFacts.length - assemblyVisibleFacts.length,
+  };
+  timings.applicabilityPolicyMs += Date.now() - policyStarted;
+
+  const directlyUsableFacts = assemblyVisibleFacts.filter(
+    (fact) => fact.applicability?.action === 'use',
+  );
   const localEvidencePrompt = buildLocalEvidencePrompt({
-    facts: recalledFacts,
+    facts: directlyUsableFacts,
     episodes: recalledEpisodes,
-    ...(conversationId ? { memoryConversationId: conversationId } : {}),
-    ...(sourceThreadId ? { sourceThreadId } : {}),
+    memoryConversationId: conversationId,
+    sourceThreadId,
     asOf: now,
   });
   timings.evidenceExpansionMs = localEvidencePrompt.diagnostics.durationMs;
@@ -437,7 +552,7 @@ export async function buildLivingMemorySections(
   }
 
   const subjectLabelsStarted = Date.now();
-  const factsForPrompt = withFactSubjectLabels(recalledFacts);
+  const factsForPrompt = withFactSubjectLabels(assemblyVisibleFacts);
   timings.subjectLabelsMs += Date.now() - subjectLabelsStarted;
   const assembleStarted = Date.now();
   const assembled = assemblePrompt({
@@ -454,10 +569,14 @@ export async function buildLivingMemorySections(
   const sections = localEvidencePrompt.section
     ? [...assembled.sections, { text: localEvidencePrompt.section }]
     : assembled.sections;
-
   const idleAnchor = lastAssistantAt ?? lastUserAt;
   const idleSinceLastTurnMs =
     typeof idleAnchor === 'number' ? Math.max(now - idleAnchor, 0) : undefined;
+
+  markFactsRecalled(
+    assemblyVisibleFacts.map((fact) => fact.id),
+    now,
+  );
 
   const eventStarted = Date.now();
   const retrievalEvent = await recordPromptAssemblyRetrievalEvent({
@@ -466,7 +585,7 @@ export async function buildLivingMemorySections(
     ...(sourceThreadId ? { sourceThreadId } : {}),
     taskScopePresent: Boolean(resolvedTaskId ?? activeTaskId),
     state: retrievalState,
-    selectedFactIds: recalledFacts.map((fact) => fact.id),
+    selectedFactIds: assemblyVisibleFacts.map((fact) => fact.id),
     selectedEpisodeIds: recalledEpisodes.map((episode) => episode.id),
     expansion: localEvidencePrompt.diagnostics,
     ...(retrievalTimings ? { retrievalTimings } : {}),
@@ -484,10 +603,11 @@ export async function buildLivingMemorySections(
     openThreadLabels,
     ...(typeof idleSinceLastTurnMs === 'number' ? { idleSinceLastTurnMs } : {}),
     focusGap: focusRendered.gap,
-    recalledFactCount: recalledFacts.length,
+    recalledFactCount: assemblyVisibleFacts.length,
     recalledEpisodeCount: recalledEpisodes.length,
     timings,
     retrievalEvent,
     localEvidenceExpansion: localEvidencePrompt.diagnostics,
+    applicabilityPolicy: applicabilitySummary,
   };
 }

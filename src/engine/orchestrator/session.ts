@@ -10,7 +10,10 @@ import { buildRuntimeContextNote } from '../prompts/orchestratorPromptSections';
 import { yieldToUiFrame } from '../toolExecution/toolCallLifecycleRecording';
 import { prepareOrchestratorSessionBootstrap } from './bootstrap';
 import type { OrchestratorCallbacks, OrchestratorOptions } from './types';
-import { resolveCodeOwnedMemoryConversationId } from '../../services/memory/memoryScopeIdentity';
+import {
+  resolveCodeOwnedMemoryConversationId,
+  resolveCodeOwnedMemoryPersonaId,
+} from '../../services/memory/memoryScopeIdentity';
 
 const logger = createLogger('Orchestrator');
 
@@ -52,9 +55,10 @@ export async function runOrchestratorGraphSession(params: {
     temperature,
     thinkingLevel = 'off',
     signal,
-    personaId,
     allProviders,
   } = options;
+  const personaId = resolveCodeOwnedMemoryPersonaId(options.personaId);
+  const taskId = options.taskId ?? null;
 
   const availableToolNames = new Set(allTools.map((tool) => tool.name));
   const compactionEngine = enableCompaction ? new DefaultContextEngine() : null;
@@ -80,7 +84,7 @@ export async function runOrchestratorGraphSession(params: {
       memoryConversationId: sharedConversationId,
       messages: options.messages,
       personaId,
-      taskId: options.taskId,
+      taskId,
       workflowScopeUserMessageId: options.workflowScopeUserMessageId,
       graphSnapshot: options.initialAgentControlGraphState,
       memoryRetrievalStrategy: options.memoryRetrievalStrategy,

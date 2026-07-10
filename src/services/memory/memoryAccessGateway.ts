@@ -27,8 +27,8 @@ export interface UnifiedMemoryAccessRequest {
   messages: Message[];
   memoryConversationId: string;
   sourceThreadId: string;
-  taskId?: string;
-  personaId?: string;
+  taskId: string | null;
+  personaId: string;
   mode: MemoryAccessMode;
   internalUserMessageCount?: number;
   now?: number;
@@ -60,11 +60,12 @@ export async function buildUnifiedMemoryAccessContext(
   );
   const retrievalStrategy = resolveMemoryRetrievalStrategy(request.retrievalStrategy);
   const contextStrategy = resolveMemoryContextStrategy(request.contextStrategy);
+  const personaId = request.personaId;
 
   const boundary =
     request.mode === 'pilot' && contextStrategy === 'production'
       ? selectContextStartIndex(normalizedMessages, {
-          personaId: request.personaId,
+          personaId,
           mode: request.mode,
           ...(typeof request.now === 'number' ? { now: request.now } : {}),
         })
@@ -94,9 +95,10 @@ export async function buildUnifiedMemoryAccessContext(
     ...(typeof request.recallLimit === 'number' ? { recallLimit: request.recallLimit } : {}),
     conversationId: request.memoryConversationId,
     sourceThreadId: request.sourceThreadId,
+    personaId,
+    taskId: request.taskId,
     candidateStrategy: retrievalStrategy === 'lexical_only' ? 'lexical' : 'hybrid',
     consistencyBarrier,
-    ...(request.taskId ? { taskId: request.taskId } : {}),
     ...(request.goals ? { goals: request.goals } : {}),
     ...(request.activeTaskId ? { activeTaskId: request.activeTaskId } : {}),
     ...(request.asyncWork ? { asyncWork: request.asyncWork } : {}),

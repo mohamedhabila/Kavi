@@ -466,6 +466,8 @@ async function queryMemory(request: RuntimeRequest): Promise<JsonObject> {
     messages: queryMessages.messages,
     memoryConversationId: resolved.conversationId,
     sourceThreadId: resolved.conversationId,
+    personaId: 'longmemeval-v2',
+    taskId: null,
     mode: 'agentic',
     recallLimit: resolved.maxItems,
     goals: buildQueryGoals(query, request.questionId ?? null, now),

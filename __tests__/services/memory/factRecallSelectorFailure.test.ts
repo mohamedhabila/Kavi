@@ -4,11 +4,11 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { upsertEntity } from '../../../src/services/memory/entities';
+import type { RecallFactsTiming } from '../../../src/services/memory/factRecall';
 import {
-  recallScoredFactsForQuery,
-  type RecallFactsTiming,
-} from '../../../src/services/memory/factRecall';
-import { recordFact } from '../../../src/services/memory/facts/mutations';
+  recallScoredTestFacts as recallScoredFactsForQuery,
+  recordRecallTestFact as recordFact,
+} from '../../helpers/memoryRecallTestHarness';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,

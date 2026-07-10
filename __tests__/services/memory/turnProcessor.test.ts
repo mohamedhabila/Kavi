@@ -429,6 +429,46 @@ describe('processIngestionTurn', () => {
     expect(persisted.newFacts).toEqual([{ subject: 'user', predicate: 'age', value: '30' }]);
   });
 
+  it('does not promote provider-authored focus or open threads into working memory', async () => {
+    mockExtractStructuralMemory.mockReturnValue({
+      episodeSummary: 'Structural',
+      facts: [],
+      activeFocus: 'trusted structural focus',
+      openThreads: ['trusted structural thread'],
+    });
+    mockExtractProviderEnrichment.mockResolvedValue({
+      status: 'valid',
+      result: {
+        episodeSummary: 'Provider',
+        newFacts: [],
+        activeFocus: 'unsupported provider focus',
+        openThreads: ['unsupported provider thread'],
+        notable: [],
+      },
+    });
+
+    await processIngestionTurn({
+      threadId: 'conv-provider-working-memory',
+      messages: [
+        makeMsg({ role: 'user', content: 'Continue the current work.' }),
+        makeMsg({
+          role: 'assistant',
+          content: 'Done',
+          assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
+        }),
+      ],
+      extractor: jest.fn(),
+    });
+
+    expect(mockApplyConsolidatorResult.mock.calls[1][0]).toMatchObject({
+      activeFocus: 'trusted structural focus',
+      openThreads: ['trusted structural thread'],
+    });
+    expect(JSON.stringify(mockApplyConsolidatorResult.mock.calls[1][0])).not.toContain(
+      'unsupported provider',
+    );
+  });
+
   it('preserves structural subject/predicate facts over provider variants in the same turn', async () => {
     mockExtractStructuralMemory.mockReturnValue({
       episodeSummary: 'S',

@@ -8,6 +8,8 @@ import { orchestrateMemoryRetrieval } from '../../services/memory/retrievalOrche
 import { evaluateMemoryRecallResult } from './evaluateMemoryRecallResult';
 import type { MemoryRecallFixture } from './memoryRecallFixtures';
 import type { AcceptanceFixtureOutcome } from './types';
+import { resolveLocalMemoryAccessScope } from '../../services/memory/memoryScopeStore';
+import { DEFAULT_MEMORY_PERSONA_ID } from '../../services/memory/memoryScopeIdentity';
 
 export async function runMemoryRecallScenario(
   fixture: MemoryRecallFixture,
@@ -38,7 +40,12 @@ export async function runMemoryRecallScenario(
 
   const retrieval = await orchestrateMemoryRetrieval({
     userMessage: fixture.turn3Query,
-    conversationId: fixture.threadId,
+    memoryScope: resolveLocalMemoryAccessScope({
+      memoryConversationId: fixture.threadId,
+      sourceThreadId: fixture.threadId,
+      personaId: DEFAULT_MEMORY_PERSONA_ID,
+      taskId: null,
+    }),
     limit: 8,
     now: now + 20,
   });

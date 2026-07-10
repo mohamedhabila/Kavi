@@ -5,7 +5,7 @@ jest.mock('expo-sqlite', () => {
 
 import { ensureDefaultBlocks } from '../../../src/services/memory/blocks';
 import { upsertEntity } from '../../../src/services/memory/entities';
-import { recordFact } from '../../../src/services/memory/facts/mutations';
+import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
 import { buildLivingMemorySections } from '../../../src/services/memory/livingMemoryBridge';
 import * as llmFactSelector from '../../../src/services/memory/llmFactSelector';
 import { readRecentMemoryRetrievalEvents } from '../../../src/services/memory/retrievalLog';
@@ -39,12 +39,17 @@ afterEach(() => {
 describe('living memory structured retrieval evidence', () => {
   it('keeps deterministic facts when semantic selection fails and records the fallback', async () => {
     const project = upsertEntity({ name: 'selector resilience', type: 'project' });
-    const fact = recordFact({
-      subjectId: project.id,
-      predicate: 'decision',
-      objectText: 'selector resilience keeps deterministic retrieval evidence',
-      importance: 0.9,
-    });
+    const fact = recordFactWithApplicability(
+      {
+        subjectId: project.id,
+        predicate: 'decision',
+        objectText: 'selector resilience keeps deterministic retrieval evidence',
+        scope: 'global',
+        importance: 0.9,
+        now: 500,
+      },
+      { factClass: 'workflow', sourceAuthority: 'tool_observed' },
+    );
     jest.spyOn(llmFactSelector, 'createLlmMemoryFactSelector').mockReturnValue(async () => {
       throw new Error('private selector provider failure');
     });
@@ -53,6 +58,8 @@ describe('living memory structured retrieval evidence', () => {
       messages: [userMessage('selector resilience deterministic evidence', 1_000)],
       conversationId: 'memory-selector-fallback',
       sourceThreadId: 'thread-selector-fallback',
+      personaId: 'default',
+      taskId: null,
       now: 2_000,
       retrievalLlm: { provider: {} as never },
       consistencyBarrier: {
@@ -90,6 +97,8 @@ describe('living memory structured retrieval evidence', () => {
       messages: [userMessage('continue safely', 1_000)],
       conversationId: 'memory-storage-failure',
       sourceThreadId: 'thread-storage-failure',
+      personaId: 'default',
+      taskId: null,
       now: 2_000,
     });
 
@@ -99,18 +108,38 @@ describe('living memory structured retrieval evidence', () => {
     expect(readRecentMemoryRetrievalEvents()).toEqual([]);
   });
 
-  it('keeps prompt assembly available when content-free event derivation fails', async () => {
+  it('fails the trusted boundary before retrieval when the scope identity is malformed', async () => {
+    await expect(
+      buildLivingMemorySections({
+        messages: [userMessage('continue safely', 1_000)],
+        conversationId: 'memory-derivation-failure',
+        sourceThreadId: 'invalid private thread id',
+        personaId: 'default',
+        taskId: null,
+        now: 2_000,
+      }),
+    ).rejects.toThrow('memory_scope_thread_id_invalid');
+    expect(readRecentMemoryRetrievalEvents()).toEqual([]);
+  });
+
+  it('does not construct a semantic selector when recall is explicitly disabled', async () => {
+    const selectorFactory = jest.spyOn(llmFactSelector, 'createLlmMemoryFactSelector');
+
     const out = await buildLivingMemorySections({
-      messages: [userMessage('continue safely', 1_000)],
-      conversationId: 'memory-derivation-failure',
-      sourceThreadId: 'invalid private thread id',
+      messages: [userMessage('private scoped query', 1_000)],
+      conversationId: 'memory-disabled-selector',
+      sourceThreadId: 'thread-disabled-selector',
+      personaId: 'default',
+      taskId: null,
       now: 2_000,
+      disableRecall: true,
+      retrievalLlm: { provider: {} as never },
     });
 
-    expect(out.timings).toBeDefined();
-    expect(out.retrievalEvent).toEqual({ status: 'failed', code: 'derivation_error' });
-    expect(JSON.stringify(out)).not.toContain('invalid private thread id');
-    expect(readRecentMemoryRetrievalEvents()).toEqual([]);
+    expect(selectorFactory).not.toHaveBeenCalled();
+    expect(out.recalledFactCount).toBe(0);
+    expect(out.retrievalEvent).toMatchObject({ status: 'recorded', code: 'recorded' });
+    expect(readRecentMemoryRetrievalEvents()[0]).toMatchObject({ outcome: 'disabled' });
   });
 
   it('does not access durable memory or record an event for an opt-out barrier', async () => {
@@ -119,6 +148,8 @@ describe('living memory structured retrieval evidence', () => {
       messages: [userMessage('private opt-out query', 1_000)],
       conversationId: 'memory-opt-out-barrier',
       sourceThreadId: 'thread-opt-out-barrier',
+      personaId: 'default',
+      taskId: null,
       now: 2_000,
       consistencyBarrier: {
         outcome: 'opt_out',

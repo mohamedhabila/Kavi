@@ -9,6 +9,7 @@
 import { getMany, getOne, runMemoryStatement } from './access/crud';
 import { getSchemaReadyMemoryDb } from './access/schemaGuard';
 import { notifyStructuredMemoryChanged } from './store';
+import { isExactMemoryScopeId } from './memoryScopeIdentity';
 
 export type WorkingBlockLabel =
   | 'active_focus'
@@ -31,8 +32,11 @@ export interface WorkingMemoryBlock {
   content: string;
   charLimit: number;
   description: string;
+  promptEligibility: WorkingBlockPromptEligibility;
   updatedAt: number;
 }
+
+export type WorkingBlockPromptEligibility = 'trusted_structural' | 'untrusted';
 
 interface WorkingBlockRow {
   label: string;
@@ -43,6 +47,7 @@ interface WorkingBlockRow {
   content: string;
   char_limit: number;
   description: string;
+  prompt_eligibility: string;
   updated_at: number;
 }
 
@@ -65,15 +70,19 @@ const WORKING_BLOCK_DEFS: Record<WorkingBlockLabel, { charLimit: number; descrip
   },
 };
 
-function cleanId(value: string | null | undefined): string | null {
-  const trimmed = typeof value === 'string' ? value.trim() : '';
-  return trimmed.length > 0 ? trimmed : null;
+function exactOptionalId(
+  value: string | null | undefined,
+  field: 'conversation' | 'thread' | 'task',
+): string | null {
+  if (value === null || value === undefined) return null;
+  if (!isExactMemoryScopeId(value)) throw new Error(`working_block_${field}_id_invalid`);
+  return value;
 }
 
 export function buildWorkingBlockScopeKey(scope: WorkingBlockScope = {}): string {
-  const conversationId = cleanId(scope.conversationId);
-  const threadId = cleanId(scope.threadId) ?? conversationId;
-  const taskId = cleanId(scope.taskId);
+  const conversationId = exactOptionalId(scope.conversationId, 'conversation');
+  const threadId = exactOptionalId(scope.threadId, 'thread') ?? conversationId;
+  const taskId = exactOptionalId(scope.taskId, 'task');
   if (!conversationId && !threadId && !taskId) return 'global';
   return [
     `conversation:${conversationId ?? ''}`,
@@ -92,6 +101,8 @@ function rowToWorkingBlock(row: WorkingBlockRow): WorkingMemoryBlock {
     content: row.content,
     charLimit: row.char_limit,
     description: row.description,
+    promptEligibility:
+      row.prompt_eligibility === 'trusted_structural' ? 'trusted_structural' : 'untrusted',
     updatedAt: row.updated_at,
   };
 }
@@ -132,7 +143,7 @@ export function editWorkingBlock(
   label: WorkingBlockLabel,
   content: string,
   scope: WorkingBlockScope = {},
-  options: { now?: number } = {},
+  options: { now?: number; promptEligibility?: WorkingBlockPromptEligibility } = {},
 ): WorkingMemoryBlock {
   const db = getSchemaReadyMemoryDb();
   const now = options.now ?? Date.now();
@@ -141,9 +152,13 @@ export function editWorkingBlock(
   if (trimmed.length > def.charLimit) {
     throw new Error(`working block "${label}" overflow: ${trimmed.length} > ${def.charLimit}`);
   }
-  const conversationId = cleanId(scope.conversationId);
-  const threadId = cleanId(scope.threadId) ?? conversationId;
-  const taskId = cleanId(scope.taskId);
+  const conversationId = exactOptionalId(scope.conversationId, 'conversation');
+  const threadId = exactOptionalId(scope.threadId, 'thread') ?? conversationId;
+  const taskId = exactOptionalId(scope.taskId, 'task');
+  const promptEligibility = options.promptEligibility ?? 'untrusted';
+  if (promptEligibility !== 'trusted_structural' && promptEligibility !== 'untrusted') {
+    throw new Error('working_block_prompt_eligibility_invalid');
+  }
   const scopeKey = buildWorkingBlockScopeKey({ conversationId, threadId, taskId });
   const existing = db.getFirstSync<WorkingBlockRow>(
     `SELECT * FROM memory_working_blocks WHERE label = ? AND scope_key = ? LIMIT 1`,
@@ -153,7 +168,7 @@ export function editWorkingBlock(
   if (existing) {
     db.runSync(
       `UPDATE memory_working_blocks
-         SET content = ?, char_limit = ?, description = ?, conversation_id = ?, thread_id = ?, task_id = ?, updated_at = ?
+         SET content = ?, char_limit = ?, description = ?, conversation_id = ?, thread_id = ?, task_id = ?, prompt_eligibility = ?, updated_at = ?
          WHERE label = ? AND scope_key = ?`,
       trimmed,
       def.charLimit,
@@ -161,6 +176,7 @@ export function editWorkingBlock(
       conversationId,
       threadId,
       taskId,
+      promptEligibility,
       now,
       label,
       scopeKey,
@@ -168,8 +184,8 @@ export function editWorkingBlock(
   } else {
     db.runSync(
       `INSERT INTO memory_working_blocks
-         (label, scope_key, conversation_id, thread_id, task_id, content, char_limit, description, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (label, scope_key, conversation_id, thread_id, task_id, content, char_limit, description, prompt_eligibility, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       label,
       scopeKey,
       conversationId,
@@ -178,6 +194,7 @@ export function editWorkingBlock(
       trimmed,
       def.charLimit,
       def.description,
+      promptEligibility,
       now,
     );
   }
@@ -190,10 +207,23 @@ export function editWorkingBlock(
     content: trimmed,
     charLimit: def.charLimit,
     description: def.description,
+    promptEligibility,
     updatedAt: now,
   };
   notifyStructuredMemoryChanged(conversationId);
   return block;
+}
+
+export function editPromptEligibleWorkingBlock(
+  label: Extract<WorkingBlockLabel, 'active_focus' | 'open_threads'>,
+  content: string,
+  scope: WorkingBlockScope,
+  options: { now?: number } = {},
+): WorkingMemoryBlock {
+  return editWorkingBlock(label, content, scope, {
+    ...options,
+    promptEligibility: 'trusted_structural',
+  });
 }
 
 export function clearWorkingBlock(

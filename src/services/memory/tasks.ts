@@ -12,7 +12,7 @@ import { getMany, getOne, runMemoryStatement } from './access/crud';
 import { getSchemaReadyMemoryDb } from './access/schemaGuard';
 import { notifyStructuredMemoryChanged } from './store';
 import { upsertGoalTaskEntry } from './taskStack';
-import { editWorkingBlock } from './workingBlocks';
+import { editPromptEligibleWorkingBlock } from './workingBlocks';
 
 export type MemoryTaskState = 'active' | 'paused' | 'completed';
 
@@ -363,7 +363,7 @@ export function syncActiveTaskFromGoal(params: {
 
   const focusContent = buildActiveGoalFocusContent(params.goalTitle, params.threadTitle);
   if (focusContent) {
-    editWorkingBlock(
+    editPromptEligibleWorkingBlock(
       'active_focus',
       focusContent,
       {

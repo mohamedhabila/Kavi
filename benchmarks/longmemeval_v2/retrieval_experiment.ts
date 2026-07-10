@@ -164,6 +164,8 @@ async function main(): Promise<void> {
     await import('../../src/services/memory/memoryAccessGateway');
   const { orchestrateMemoryRetrieval } =
     await import('../../src/services/memory/retrievalOrchestrator');
+  const { resolveLocalMemoryAccessScope } =
+    await import('../../src/services/memory/memoryScopeStore');
   resetFactSchemaCacheForTests();
   ensureFactSchema();
 
@@ -207,13 +209,21 @@ async function main(): Promise<void> {
         LIMIT 12`,
     )
     .all();
+  const memoryScope = resolveLocalMemoryAccessScope({
+    memoryConversationId: conversationId,
+    sourceThreadId: conversationId,
+    personaId: 'longmemeval-v2',
+    taskId: null,
+  });
   const appCurrent = await recallScoredFactsForQuery(args.query, {
     limit: args.limit,
-    conversationId,
+    memoryScope,
+    useIntent: 'explicit_user_request',
   });
   const appZeroThreshold = await recallScoredFactsForQuery(args.query, {
     limit: args.limit,
-    conversationId,
+    memoryScope,
+    useIntent: 'explicit_user_request',
     threshold: 0,
   });
   const now = Date.now();
@@ -229,6 +239,8 @@ async function main(): Promise<void> {
       ],
       memoryConversationId: conversationId,
       sourceThreadId: conversationId,
+      personaId: 'longmemeval-v2',
+      taskId: null,
       mode: 'agentic',
       recallLimit: args.limit,
       goals: [
@@ -248,7 +260,8 @@ async function main(): Promise<void> {
   const appBridge = await buildBridgeDiagnostic();
   const appOrchestrator = await orchestrateMemoryRetrieval({
     userMessage: args.query,
-    conversationId,
+    memoryScope,
+    memoryUseIntent: 'explicit_user_request',
     limit: args.limit,
     goals: [
       {
@@ -269,7 +282,8 @@ async function main(): Promise<void> {
       signal,
       agentRunEvidence: (
         await recallScoredFactsForQuery(signal, {
-          conversationId,
+          memoryScope,
+          useIntent: 'explicit_user_request',
           memoryKind: [
             'agent_run',
             'evidence_span',

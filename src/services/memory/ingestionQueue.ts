@@ -48,11 +48,9 @@ import {
 } from './onDeviceGuards';
 import { canWriteLongTermMemory, registerMemoryOptOutHandler } from './policy';
 import { refreshThreadReflection } from './reflections';
-import type {
-  ProcessTurnResult,
-  TurnProviderOutcome,
-} from './turnProcessor';
-import { editWorkingBlock, getWorkingBlock } from './workingBlocks';
+import { isExactMemoryScopeId } from './memoryScopeIdentity';
+import type { ProcessTurnResult, TurnProviderOutcome } from './turnProcessor';
+import { editPromptEligibleWorkingBlock, getWorkingBlock } from './workingBlocks';
 
 export {
   computeNextIngestionAttemptAt,
@@ -95,9 +93,9 @@ function preserveThreadTitleFocus(input: {
   threadTitle?: string;
   now: number;
 }): void {
-  const threadId = input.memoryConversationId.trim();
+  const threadId = input.memoryConversationId;
   const threadTitle = input.threadTitle?.trim();
-  if (!threadId || !threadTitle) {
+  if (!isExactMemoryScopeId(threadId) || !threadTitle) {
     return;
   }
 
@@ -108,7 +106,7 @@ function preserveThreadTitleFocus(input: {
     activeFocus: existing,
   });
   if (content && content !== existing?.trim()) {
-    editWorkingBlock('active_focus', content, scope, { now: input.now });
+    editPromptEligibleWorkingBlock('active_focus', content, scope, { now: input.now });
   }
 }
 
@@ -426,11 +424,7 @@ export interface DrainIngestionQueueResult {
   failed: number;
 }
 
-function recordSourceDeferral(
-  result: DrainIngestionQueueResult,
-  jobId: string,
-  now: number,
-): void {
+function recordSourceDeferral(result: DrainIngestionQueueResult, jobId: string, now: number): void {
   result.sourceDeferred += 1;
   const transition = deferIngestionJobForMissingSource(jobId, now);
   if (transition.applied && transition.status === 'retrying') {

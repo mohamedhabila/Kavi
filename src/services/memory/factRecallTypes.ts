@@ -1,4 +1,6 @@
 import { type MemoryFact, type MemoryFactKind, type MemoryFactScope } from './facts/types';
+import type { MemoryAccessScopeIdentity } from './memoryScopeIdentity';
+import type { MemoryApplicabilityUseIntent } from './memoryApplicabilityTypes';
 import type {
   RecallCandidateProvenance,
   RecallCandidateStageTelemetry,
@@ -17,13 +19,13 @@ export interface RecallFactsOptions {
   threshold?: number;
   /** Bi-temporal anchor — facts valid at this ms timestamp. */
   asOf?: number;
-  includeHistorical?: boolean;
   scopeHints?: MemoryFactScope[];
   /** Exact scope filter for callers that expose user-visible scope controls. */
   scopeFilter?: MemoryFactScope | MemoryFactScope[];
-  conversationId?: string;
-  threadId?: string;
-  taskId?: string;
+  /** Exact code-owned access identity used before any candidate reaches scoring. */
+  memoryScope: MemoryAccessScopeIdentity;
+  /** Structural request intent; never inferred from query text. */
+  useIntent: MemoryApplicabilityUseIntent;
   memoryKind?: MemoryFactKind | MemoryFactKind[];
   now?: number;
   /**
@@ -36,6 +38,8 @@ export interface RecallFactsOptions {
    * recall, slower scoring. Default 128.
    */
   candidatePoolLimit?: number;
+  /** Separately bounded non-direct candidates that may only be asked about or abstained on. */
+  resolutionCandidateLimit?: number;
   /** Maximum query lexical units used for indexed recall fanout. */
   lexicalUnitLimit?: number;
   /** Candidate union strategy. Production uses hybrid; lexical is the same-path ablation. */
@@ -73,6 +77,8 @@ export interface RecallFactsTiming {
   selectorSelectedCount?: number;
   selectorApplied?: boolean;
   candidateStages?: RecallCandidateStageTelemetry;
+  resolutionCandidateCount?: number;
+  resolutionCandidateFetchMs?: number;
   totalMs: number;
 }
 

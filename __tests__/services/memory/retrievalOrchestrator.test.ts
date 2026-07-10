@@ -5,17 +5,38 @@ jest.mock('expo-sqlite', () => {
 
 import { upsertEntity } from '../../../src/services/memory/entities';
 import {
-  recordFact,
+  recordFactWithApplicability,
   setFactEmbedding,
 } from '../../../src/services/memory/facts/mutations';
+import type { RecordFactInput } from '../../../src/services/memory/facts/types';
+import { getFactById } from '../../../src/services/memory/facts/queries';
 import { orchestrateMemoryRetrieval } from '../../../src/services/memory/retrievalOrchestrator';
+import { getLocalMemoryVaultOwnerId } from '../../../src/services/memory/memoryVaultIdentity';
+import { DEFAULT_MEMORY_PERSONA_ID } from '../../../src/services/memory/memoryScopeIdentity';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
-import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
+
+function memoryScope(taskId: string | null = null) {
+  return {
+    memoryOwnerId: getLocalMemoryVaultOwnerId(getMemoryDb()),
+    memoryConversationId: 'conv-retrieval',
+    sourceThreadId: 'conv-retrieval',
+    personaId: DEFAULT_MEMORY_PERSONA_ID,
+    taskId,
+  };
+}
+
+function recordFact(input: RecordFactInput) {
+  return recordFactWithApplicability(input, {
+    factClass: 'workflow',
+    sourceAuthority: 'tool_observed',
+  });
+}
 
 beforeEach(() => {
   closeMemoryDb();
@@ -51,7 +72,7 @@ describe('orchestrateMemoryRetrieval', () => {
     });
     const result = await orchestrateMemoryRetrieval({
       userMessage: 'Where is the analysis json artifact?',
-      conversationId: 'conv-retrieval',
+      memoryScope: memoryScope(),
       limit: 4,
       now: 4,
     });
@@ -101,7 +122,7 @@ describe('orchestrateMemoryRetrieval', () => {
 
     const result = await orchestrateMemoryRetrieval({
       userMessage: 'What was the release manifest path?',
-      conversationId: 'conv-retrieval',
+      memoryScope: memoryScope(),
       limit: 2,
       now: 4,
     });
@@ -151,7 +172,7 @@ describe('orchestrateMemoryRetrieval', () => {
     const result = await orchestrateMemoryRetrieval({
       userMessage:
         'In the project log, what is recorded between "Target Action" and "Return Control"?',
-      conversationId: 'conv-retrieval',
+      memoryScope: memoryScope(),
       limit: 4,
       now: 40,
     });
@@ -170,18 +191,21 @@ describe('orchestrateMemoryRetrieval', () => {
       subjectId: subject.id,
       predicate: 'opaque_result',
       objectText: 'violet-handoff',
+      scope: 'global',
       now: 2,
     });
     setFactEmbedding(target.fact.id, [1, 0], 3);
 
     const lexical = await orchestrateMemoryRetrieval({
       userMessage: 'conceptually related evidence',
+      memoryScope: memoryScope(),
       candidateStrategy: 'lexical',
       localSemantic: { queryEmbedding: [1, 0] },
       now: 4,
     });
     const hybrid = await orchestrateMemoryRetrieval({
       userMessage: 'conceptually related evidence',
+      memoryScope: memoryScope(),
       candidateStrategy: 'hybrid',
       localSemantic: { queryEmbedding: [1, 0] },
       now: 4,
@@ -198,5 +222,45 @@ describe('orchestrateMemoryRetrieval', () => {
       localSemanticOutcome: 'applied',
       localSemanticCount: 1,
     });
+  });
+
+  it('rejects invalid public bounds before recall and never reinforces raw selections', async () => {
+    const subject = upsertEntity({ name: 'boundary target', type: 'project', now: 1 });
+    const target = recordFact({
+      subjectId: subject.id,
+      predicate: 'boundary_result',
+      objectText: 'stable boundary target',
+      scope: 'global',
+      now: 2,
+    });
+
+    for (const limit of [Number.NaN, Number.POSITIVE_INFINITY, -1, 0]) {
+      await expect(
+        orchestrateMemoryRetrieval({
+          userMessage: 'stable boundary target',
+          memoryScope: memoryScope(),
+          limit,
+          now: 10,
+        }),
+      ).rejects.toThrow('memory_retrieval_limit_invalid');
+    }
+    for (const now of [Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5]) {
+      await expect(
+        orchestrateMemoryRetrieval({
+          userMessage: 'stable boundary target',
+          memoryScope: memoryScope(),
+          now,
+        }),
+      ).rejects.toThrow('memory_retrieval_timestamp_invalid');
+    }
+    expect(getFactById(target.fact.id)?.lastRecalledAt).toBeNull();
+
+    const selected = await orchestrateMemoryRetrieval({
+      userMessage: 'stable boundary target',
+      memoryScope: memoryScope(),
+      now: 10,
+    });
+    expect(selected.facts.map((fact) => fact.id)).toContain(target.fact.id);
+    expect(getFactById(target.fact.id)?.lastRecalledAt).toBeNull();
   });
 });

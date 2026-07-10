@@ -27,7 +27,12 @@ describe('executeProviderAwareTool', () => {
 
     expect(mockExecuteMemorySearch).toHaveBeenCalledWith(
       { query: 'facts about codex' },
-      { conversationId: 'workspace-1' },
+      {
+        memoryConversationId: 'workspace-1',
+        sourceThreadId: 'conversation-1',
+        personaId: 'default',
+        taskId: null,
+      },
     );
     expect(mockResolveToolProviderContext).not.toHaveBeenCalled();
   });
@@ -42,7 +47,12 @@ describe('executeProviderAwareTool', () => {
 
     expect(mockExecuteMemorySearch).toHaveBeenCalledWith(
       { query: 'workspace facts' },
-      { conversationId: 'workspace-1' },
+      {
+        memoryConversationId: 'workspace-1',
+        sourceThreadId: 'conversation-1',
+        personaId: 'default',
+        taskId: null,
+      },
     );
     expect(mockResolveToolProviderContext).not.toHaveBeenCalled();
   });
