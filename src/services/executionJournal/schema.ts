@@ -17,7 +17,7 @@ import {
   RETENTION_DELETABLE_RUN_STATUSES,
 } from './types';
 
-export const EXECUTION_JOURNAL_SCHEMA_VERSION = 1;
+export const EXECUTION_JOURNAL_SCHEMA_VERSION = 2;
 export const EXECUTION_JOURNAL_APPLICATION_ID = 1_263_164_492;
 
 function sqlEnum(values: readonly string[]): string {
@@ -130,8 +130,11 @@ const CREATE_EXECUTION_EXTERNAL_HANDLES = `
     run_id TEXT NOT NULL CHECK (${ID_CHECK('run_id')}),
     effect_id TEXT NOT NULL CHECK (${ID_CHECK('effect_id')}),
     handle_kind TEXT NOT NULL CHECK (handle_kind IN (${sqlEnum(EXECUTION_EXTERNAL_HANDLE_KINDS)})),
-    scope_digest TEXT NOT NULL CHECK (${DIGEST_CHECK('scope_digest')}),
-    external_id TEXT NOT NULL CHECK (${ID_CHECK('external_id')}),
+    locator_version INTEGER NOT NULL CHECK (locator_version = 1),
+    expo_project_id TEXT CHECK (expo_project_id IS NULL OR (${ID_CHECK('expo_project_id')})),
+    github_repository TEXT CHECK (github_repository IS NULL OR (${ID_CHECK('github_repository')})),
+    workflow_run_id TEXT NOT NULL CHECK (${ID_CHECK('workflow_run_id')}),
+    credential_ref TEXT NOT NULL CHECK (${ID_CHECK('credential_ref')}),
     source_tool_name_digest TEXT NOT NULL CHECK (${DIGEST_CHECK('source_tool_name_digest')}),
     status TEXT NOT NULL CHECK (status IN (${sqlEnum(EXECUTION_EXTERNAL_HANDLE_STATUSES)})),
     created_at INTEGER NOT NULL CHECK (created_at >= 0),
@@ -140,7 +143,15 @@ const CREATE_EXECUTION_EXTERNAL_HANDLES = `
       last_verified_at IS NULL
       OR (last_verified_at >= created_at AND last_verified_at <= updated_at)
     ),
-    UNIQUE (run_id, handle_kind, external_id),
+    CHECK (
+      (handle_kind = 'expo_workflow_run'
+        AND expo_project_id IS NOT NULL
+        AND github_repository IS NULL)
+      OR
+      (handle_kind = 'github_workflow_run'
+        AND expo_project_id IS NULL
+        AND github_repository IS NOT NULL)
+    ),
     FOREIGN KEY (run_id, effect_id)
       REFERENCES execution_effects(run_id, id) ON DELETE CASCADE
   ) STRICT
@@ -180,6 +191,18 @@ const SCHEMA_OBJECT_SQL = new Map<string, string>([
     `CREATE UNIQUE INDEX ux_execution_effects_idempotency_key
        ON execution_effects(run_id, idempotency_key_digest)
        WHERE idempotency_key_digest IS NOT NULL`,
+  ],
+  [
+    'ux_execution_external_handles_expo_locator',
+    `CREATE UNIQUE INDEX ux_execution_external_handles_expo_locator
+       ON execution_external_handles(run_id, expo_project_id, workflow_run_id)
+       WHERE handle_kind = 'expo_workflow_run'`,
+  ],
+  [
+    'ux_execution_external_handles_github_locator',
+    `CREATE UNIQUE INDEX ux_execution_external_handles_github_locator
+       ON execution_external_handles(run_id, github_repository, workflow_run_id)
+       WHERE handle_kind = 'github_workflow_run'`,
   ],
   [
     'idx_execution_external_handles_run_status',

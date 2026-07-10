@@ -24,6 +24,7 @@ describe('task durability policy', () => {
       sourceToolName: 'expo_eas_workflow_wait',
       projectId: '@kavi/mobile-app',
       workflowRunId: 'e0b8db2a-30f1-445d-a6df-729402b528d1',
+      credentialRef: 'EXPO_TOKEN',
     };
 
     expect(qualifyExternalDurableHandle(candidate)).toEqual({
@@ -51,6 +52,7 @@ describe('task durability policy', () => {
         sourceToolName: 'skill__github__workflow_runs',
         repository: 'openai/kavi-mobile',
         workflowRunId: 123456789,
+        credentialRef: 'GITHUB_TOKEN',
       }),
     ).toEqual({
       version: 1,
@@ -58,6 +60,7 @@ describe('task durability policy', () => {
       sourceToolName: 'skill__github__workflow_runs',
       repository: 'openai/kavi-mobile',
       workflowRunId: '123456789',
+      credentialRef: 'GITHUB_TOKEN',
     });
   });
 
@@ -203,6 +206,7 @@ describe('task durability policy', () => {
           sourceToolName: 'expo_eas_workflow_wait',
           projectId: 'project-1',
           workflowRunId: 'run-1',
+          credentialRef: 'EXPO_TOKEN',
         },
       }).taskClass,
     ).toBe('foreground_interactive');

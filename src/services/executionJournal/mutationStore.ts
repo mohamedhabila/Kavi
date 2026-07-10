@@ -87,13 +87,20 @@ export function effectRow(record: ExecutionEffectRecord): Record<string, SQLite.
 export function handleRow(
   record: ExecutionExternalHandleRecord,
 ): Record<string, SQLite.SQLiteBindValue> {
+  const expoProjectId =
+    record.locator.kind === 'expo_workflow_run' ? record.locator.projectId : null;
+  const githubRepository =
+    record.locator.kind === 'github_workflow_run' ? record.locator.repository : null;
   return {
     id: record.id,
     run_id: record.runId,
     effect_id: record.effectId,
-    handle_kind: record.handleKind,
-    scope_digest: record.scopeDigest,
-    external_id: record.externalId,
+    handle_kind: record.locator.kind,
+    locator_version: record.locator.version,
+    expo_project_id: expoProjectId,
+    github_repository: githubRepository,
+    workflow_run_id: record.locator.workflowRunId,
+    credential_ref: record.locator.credentialRef,
     source_tool_name_digest: record.sourceToolNameDigest,
     status: record.status,
     created_at: record.createdAt,

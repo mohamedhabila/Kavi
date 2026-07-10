@@ -40,9 +40,10 @@ export function insertRecoveryHandle(
 ): void {
   database.runSync(
     `INSERT INTO execution_external_handles (
-       id, run_id, effect_id, handle_kind, scope_digest, external_id,
+       id, run_id, effect_id, handle_kind, locator_version, expo_project_id,
+       github_repository, workflow_run_id, credential_ref,
        source_tool_name_digest, status, created_at, updated_at, last_verified_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ...Object.values(handleRow(handle)),
   );
 }
@@ -78,7 +79,13 @@ export function seedOrderedRecoveryGraph(
     recoveryHandle('pending', {
       id: 'handle-a',
       effectId: 'effect-a',
-      externalId: 'workflow-run-a',
+      locator: {
+        version: 1,
+        kind: 'expo_workflow_run',
+        projectId: 'project-1',
+        workflowRunId: 'workflow-run-a',
+        credentialRef: 'EXPO_TOKEN',
+      },
       createdAt: 35,
       updatedAt: 35,
       lastVerifiedAt: null,
@@ -86,7 +93,13 @@ export function seedOrderedRecoveryGraph(
     recoveryHandle('pending', {
       id: 'handle-b',
       effectId: 'effect-b',
-      externalId: 'workflow-run-b',
+      locator: {
+        version: 1,
+        kind: 'expo_workflow_run',
+        projectId: 'project-1',
+        workflowRunId: 'workflow-run-b',
+        credentialRef: 'EXPO_TOKEN',
+      },
       createdAt: 36,
       updatedAt: 36,
       lastVerifiedAt: null,

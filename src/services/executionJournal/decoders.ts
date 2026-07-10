@@ -19,6 +19,10 @@ import {
   type ExecutionExternalHandleRecord,
   type ExecutionRunRecord,
 } from './types';
+import {
+  qualifyExecutionExternalHandleLocator,
+  type ExecutionExternalHandleLocator,
+} from './externalLocators';
 
 function requireRecord(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -303,8 +307,11 @@ const HANDLE_COLUMNS = [
   'run_id',
   'effect_id',
   'handle_kind',
-  'scope_digest',
-  'external_id',
+  'locator_version',
+  'expo_project_id',
+  'github_repository',
+  'workflow_run_id',
+  'credential_ref',
   'source_tool_name_digest',
   'status',
   'created_at',
@@ -324,17 +331,36 @@ export function decodeExecutionExternalHandleRow(value: unknown): ExecutionExter
   ) {
     throw new Error('execution_journal_malformed_row:external_handle:timeline');
   }
+  const handleKind = requireEnum(
+    row.handle_kind,
+    EXECUTION_EXTERNAL_HANDLE_KINDS,
+    'external_handle.handle_kind',
+  );
+  const locatorCandidate: unknown =
+    handleKind === 'expo_workflow_run'
+      ? {
+          version: row.locator_version,
+          kind: handleKind,
+          projectId: row.expo_project_id,
+          workflowRunId: row.workflow_run_id,
+          credentialRef: row.credential_ref,
+        }
+      : {
+          version: row.locator_version,
+          kind: handleKind,
+          repository: row.github_repository,
+          workflowRunId: row.workflow_run_id,
+          credentialRef: row.credential_ref,
+        };
+  const locator = qualifyExecutionExternalHandleLocator(locatorCandidate);
+  if (!locator) {
+    throw new Error('execution_journal_malformed_row:external_handle:locator');
+  }
   return {
     id: requireId(row.id, 'external_handle.id'),
     runId: requireId(row.run_id, 'external_handle.run_id'),
     effectId: requireId(row.effect_id, 'external_handle.effect_id'),
-    handleKind: requireEnum(
-      row.handle_kind,
-      EXECUTION_EXTERNAL_HANDLE_KINDS,
-      'external_handle.handle_kind',
-    ),
-    scopeDigest: requireDigest(row.scope_digest, 'external_handle.scope_digest'),
-    externalId: requireId(row.external_id, 'external_handle.external_id'),
+    locator: locator as ExecutionExternalHandleLocator,
     sourceToolNameDigest: requireDigest(
       row.source_tool_name_digest,
       'external_handle.source_tool_name_digest',

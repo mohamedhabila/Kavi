@@ -33,7 +33,6 @@ import {
   type ExecutionEffectClass,
   type ExecutionEffectRecord,
   type ExecutionEffectStatus,
-  type ExecutionExternalHandleKind,
   type ExecutionExternalHandleRecord,
   type ExecutionExternalHandleStatus,
   type ExecutionIdempotencyClass,
@@ -41,6 +40,7 @@ import {
   type ExecutionRunRecord,
   type ExecutionRunStatus,
 } from './types';
+import type { ExecutionExternalHandleLocator } from './externalLocators';
 
 const TERMINAL_RUN_STATUSES = new Set<string>(RETENTION_DELETABLE_RUN_STATUSES);
 const EFFECT_PLANNING_AUTHORITY_STATES = new Set(['not_required', 'granted']);
@@ -98,9 +98,7 @@ export interface RegisterExecutionExternalHandleInput {
   runId: string;
   effectId: string;
   expectedControlEpoch: number;
-  handleKind: ExecutionExternalHandleKind;
-  scopeDigest: string;
-  externalId: string;
+  locator: ExecutionExternalHandleLocator;
   sourceToolNameDigest: string;
   status: ExecutionExternalHandleStatus;
   createdAt: number;
@@ -474,9 +472,7 @@ export function registerExecutionExternalHandle(
         id: input.id,
         runId: run.id,
         effectId: effect.id,
-        handleKind: input.handleKind,
-        scopeDigest: input.scopeDigest,
-        externalId: input.externalId,
+        locator: input.locator,
         sourceToolNameDigest: input.sourceToolNameDigest,
         status: input.status,
         createdAt: input.createdAt,
@@ -486,9 +482,10 @@ export function registerExecutionExternalHandle(
     );
     database.runSync(
       `INSERT INTO execution_external_handles (
-         id, run_id, effect_id, handle_kind, scope_digest, external_id,
+         id, run_id, effect_id, handle_kind, locator_version, expo_project_id,
+         github_repository, workflow_run_id, credential_ref,
          source_tool_name_digest, status, created_at, updated_at, last_verified_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ...Object.values(handleRow(handle)),
     );
     touchRun(database, run, handle.createdAt);

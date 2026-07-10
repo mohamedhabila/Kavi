@@ -212,12 +212,11 @@ export interface ExecutionExternalHandleRecord {
   id: string;
   runId: string;
   effectId: string;
-  handleKind: ExecutionExternalHandleKind;
-  scopeDigest: string;
-  externalId: string;
+  locator: ExecutionExternalHandleLocator;
   sourceToolNameDigest: string;
   status: ExecutionExternalHandleStatus;
   createdAt: number;
   updatedAt: number;
   lastVerifiedAt: number | null;
 }
+import type { ExecutionExternalHandleLocator } from './externalLocators';

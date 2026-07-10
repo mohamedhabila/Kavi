@@ -8,21 +8,14 @@ export const TASK_DURABILITY_CLASSES = [
 
 export type TaskDurabilityClass = (typeof TASK_DURABILITY_CLASSES)[number];
 
-export type ExternalDurableHandle =
-  | {
-      version: 1;
-      kind: 'expo_workflow_run';
-      sourceToolName: string;
-      projectId: string;
-      workflowRunId: string;
-    }
-  | {
-      version: 1;
-      kind: 'github_workflow_run';
-      sourceToolName: string;
-      repository: string;
-      workflowRunId: string;
-    };
+import {
+  qualifyExecutionExternalHandleLocator,
+  type ExecutionExternalHandleLocator,
+} from '../../services/executionJournal/externalLocators';
+
+export type ExternalDurableHandle = ExecutionExternalHandleLocator & {
+  sourceToolName: string;
+};
 
 export type CurrentTaskDurabilityClassification =
   | {
@@ -52,8 +45,6 @@ const GITHUB_WORKFLOW_HANDLE_SOURCES = new Set([
   'skill__github__checks_status',
 ]);
 
-const AMBIGUOUS_HANDLE_IDS = new Set(['current', 'latest', 'newest', 'pending', 'running']);
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -68,62 +59,6 @@ function normalizeExactString(value: unknown, maxLength: number): string | null 
   return value;
 }
 
-function normalizeWorkflowRunId(value: unknown): string | null {
-  if (typeof value === 'number') {
-    return Number.isSafeInteger(value) && value > 0 ? String(value) : null;
-  }
-
-  const normalized = normalizeExactString(value, 128);
-  if (
-    !normalized ||
-    !/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(normalized) ||
-    AMBIGUOUS_HANDLE_IDS.has(normalized.toLowerCase())
-  ) {
-    return null;
-  }
-  return normalized;
-}
-
-function normalizeGitHubWorkflowRunId(value: unknown): string | null {
-  const normalized = normalizeWorkflowRunId(value);
-  if (!normalized || !/^[1-9][0-9]*$/.test(normalized)) {
-    return null;
-  }
-  return normalized;
-}
-
-function normalizeExpoProjectId(value: unknown): string | null {
-  const normalized = normalizeExactString(value, 200);
-  const isStoredId = Boolean(normalized && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(normalized));
-  const isFullName = Boolean(
-    normalized && /^@[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/.test(normalized),
-  );
-  if (!normalized || (!isStoredId && !isFullName) || normalized.includes('..')) {
-    return null;
-  }
-  return normalized;
-}
-
-function normalizeGitHubRepository(value: unknown): string | null {
-  const normalized = normalizeExactString(value, 200);
-  if (!normalized || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(normalized)) {
-    return null;
-  }
-
-  const [owner, repository] = normalized.split('/');
-  if (
-    !owner ||
-    !repository ||
-    owner === '.' ||
-    owner === '..' ||
-    repository === '.' ||
-    repository === '..'
-  ) {
-    return null;
-  }
-  return normalized;
-}
-
 /**
  * Turn an explicitly selected workflow run into a durable locator. This does
  * not select "latest" from a list and does not accept process-local session or
@@ -136,33 +71,23 @@ export function qualifyExternalDurableHandle(candidate: unknown): ExternalDurabl
   }
 
   const sourceToolName = normalizeExactString(candidate.sourceToolName, 120) ?? '';
+  const locator = qualifyExecutionExternalHandleLocator(candidate);
+  if (!locator) {
+    return null;
+  }
 
-  if (candidate.kind === 'expo_workflow_run') {
+  if (locator.kind === 'expo_workflow_run') {
     if (!EXPO_WORKFLOW_HANDLE_SOURCES.has(sourceToolName)) {
       return null;
     }
-    const projectId = normalizeExpoProjectId(candidate.projectId);
-    const workflowRunId = normalizeWorkflowRunId(candidate.workflowRunId);
-    return projectId && workflowRunId
-      ? { version: 1, kind: 'expo_workflow_run', sourceToolName, projectId, workflowRunId }
-      : null;
+    return { ...locator, sourceToolName };
   }
 
-  if (candidate.kind === 'github_workflow_run') {
+  if (locator.kind === 'github_workflow_run') {
     if (!GITHUB_WORKFLOW_HANDLE_SOURCES.has(sourceToolName)) {
       return null;
     }
-    const repository = normalizeGitHubRepository(candidate.repository);
-    const workflowRunId = normalizeGitHubWorkflowRunId(candidate.workflowRunId);
-    return repository && workflowRunId
-      ? {
-          version: 1,
-          kind: 'github_workflow_run',
-          sourceToolName,
-          repository,
-          workflowRunId,
-        }
-      : null;
+    return { ...locator, sourceToolName };
   }
 
   return null;

@@ -146,8 +146,11 @@ function insertHandle(db: Db, overrides: Partial<RawRow> = {}): RawRow {
     run_id: 'run-1',
     effect_id: 'effect-1',
     handle_kind: 'expo_workflow_run',
-    scope_digest: DIGEST_C,
-    external_id: 'workflow-run-1',
+    locator_version: 1,
+    expo_project_id: 'project-1',
+    github_repository: null,
+    workflow_run_id: 'workflow-run-1',
+    credential_ref: 'EXPO_TOKEN',
     source_tool_name_digest: DIGEST_D,
     status: 'pending',
     created_at: 10,
@@ -157,9 +160,10 @@ function insertHandle(db: Db, overrides: Partial<RawRow> = {}): RawRow {
   };
   db.runSync(
     `INSERT INTO execution_external_handles (
-       id, run_id, effect_id, handle_kind, scope_digest, external_id,
+       id, run_id, effect_id, handle_kind, locator_version, expo_project_id,
+       github_repository, workflow_run_id, credential_ref,
        source_tool_name_digest, status, created_at, updated_at, last_verified_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ...Object.values(row),
   );
   return row;
@@ -241,10 +245,13 @@ describe('execution journal schema bootstrap', () => {
     ].flatMap((table) =>
       db.getAllSync<{ name: string }>(`PRAGMA table_info(${table})`).map((row) => row.name),
     );
+    expect(columnNames).toContain('credential_ref');
     expect(
-      columnNames.some((name) =>
-        /(prompt|credential|argument|result|api_key|secret|token|raw_)/.test(name),
-      ),
+      columnNames
+        .filter((name) => name !== 'credential_ref')
+        .some((name) =>
+          /(prompt|credential|argument|result|api_key|secret|token|raw_)/u.test(name),
+        ),
     ).toBe(false);
   });
 });
@@ -369,9 +376,11 @@ describe('closed SQL constraints', () => {
   it.each([
     ['handle_kind', 'unsupported'],
     ['status', 'unsupported'],
-    ['scope_digest', 'bad'],
+    ['locator_version', 2],
+    ['expo_project_id', null],
+    ['credential_ref', ''],
     ['source_tool_name_digest', 'bad'],
-    ['external_id', ''],
+    ['workflow_run_id', ''],
     ['updated_at', 9],
   ])('rejects invalid execution_external_handles.%s', (column, value) => {
     const db = getExecutionJournalDb();
@@ -491,7 +500,18 @@ describe('strict row decoders', () => {
     );
     expect(
       decodeExecutionExternalHandleRow(db.getFirstSync('SELECT * FROM execution_external_handles')),
-    ).toEqual(expect.objectContaining({ id: 'handle-1', externalId: 'workflow-run-1' }));
+    ).toEqual(
+      expect.objectContaining({
+        id: 'handle-1',
+        locator: {
+          version: 1,
+          kind: 'expo_workflow_run',
+          projectId: 'project-1',
+          workflowRunId: 'workflow-run-1',
+          credentialRef: 'EXPO_TOKEN',
+        },
+      }),
+    );
   });
 
   it.each([
@@ -643,8 +663,11 @@ describe('schema migration policy', () => {
   }
 
   it('rejects future schema versions without attempting migration', () => {
-    rawDatabase().execSync('PRAGMA user_version = 2');
-    expect(() => getExecutionJournalDb()).toThrow('execution_journal_unsupported_schema_version:2');
+    const futureVersion = EXECUTION_JOURNAL_SCHEMA_VERSION + 1;
+    rawDatabase().execSync(`PRAGMA user_version = ${futureVersion}`);
+    expect(() => getExecutionJournalDb()).toThrow(
+      `execution_journal_unsupported_schema_version:${futureVersion}`,
+    );
   });
 
   it('rejects unversioned or legacy tables without importing them', () => {
