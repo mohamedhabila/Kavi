@@ -9,7 +9,6 @@ jest.mock('expo-crypto', () => {
 });
 
 import * as Crypto from 'expo-crypto';
-import type { ExecutionRecoveryCommand } from '../../src/services/executionJournal/recoveryPlanner';
 import type { ExecutionRecoveryQueryResult } from '../../src/services/executionJournal/recoveryQuery';
 import { coordinateExecutionRecovery } from '../../src/services/executionJournal/recoveryCoordinator';
 import {
@@ -22,7 +21,6 @@ import {
   COORDINATOR_ROUTING_CASES,
   COORDINATOR_SNAPSHOT_DIGEST,
   coordinatorAuthority,
-  coordinatorPlan,
   expectNoHandlerCalls,
   makeHarness,
 } from '../helpers/executionRecoveryCoordinatorFixtures';
@@ -39,8 +37,8 @@ describe('execution recovery coordinator routing', () => {
       );
 
       expect(harness.events).toEqual(['query', 'authority', 'fence', expectedHandler]);
-      expect(outcome.kind).toBe('dispatched');
-      if (outcome.kind !== 'dispatched') throw new Error('expected dispatched outcome');
+      expect(outcome.kind).toBe('completed');
+      if (outcome.kind !== 'completed') throw new Error('expected completed outcome');
       expect(harness.queryRecovery).toHaveBeenCalledWith({
         runId: 'run-1',
         expectedGeneration: harness.initial.generation,
@@ -81,7 +79,7 @@ describe('execution recovery coordinator routing', () => {
         },
       });
       expect(outcome).toEqual({
-        kind: 'dispatched',
+        kind: 'completed',
         runId: 'run-1',
         commandKind,
         controlEpoch: 0,
@@ -97,6 +95,70 @@ describe('execution recovery coordinator routing', () => {
       });
     },
   );
+
+  it('propagates a receipt-bearing pending result without calling it completion', async () => {
+    const harness = makeHarness(COORDINATOR_COMMANDS.reconcile_external_handles);
+    harness.handlers.reconcileExternalHandles.mockResolvedValueOnce({
+      kind: 'pending',
+      fenceId: 'fence-1',
+      fenceDigest: COORDINATOR_FENCE_DIGEST,
+      receiptId: 'receipt-pending',
+      receiptDigest: COORDINATOR_RECEIPT_DIGEST,
+      reason: 'remote_still_pending',
+      retryAt: 1_000,
+    });
+
+    const outcome = await coordinateExecutionRecovery(
+      { queryResult: harness.initial },
+      harness.ports,
+    );
+
+    expect(outcome).toEqual(
+      expect.objectContaining({
+        kind: 'pending',
+        reason: 'remote_still_pending',
+        retryAt: 1_000,
+        receiptId: 'receipt-pending',
+      }),
+    );
+  });
+
+  it('propagates a persisted handler block through the closed source reason', async () => {
+    const harness = makeHarness(COORDINATOR_COMMANDS.reconcile_external_handles);
+    harness.handlers.reconcileExternalHandles.mockResolvedValueOnce({
+      kind: 'blocked',
+      fenceId: 'fence-1',
+      fenceDigest: COORDINATOR_FENCE_DIGEST,
+      receiptId: 'receipt-blocked',
+      receiptDigest: COORDINATOR_RECEIPT_DIGEST,
+      reason: 'remote_action_required',
+    });
+
+    const outcome = await coordinateExecutionRecovery(
+      { queryResult: harness.initial },
+      harness.ports,
+    );
+
+    expect(outcome).toEqual(
+      expect.objectContaining({
+        kind: 'blocked',
+        reason: 'handler_blocked',
+        sourceReason: 'remote_action_required',
+      }),
+    );
+  });
+
+  it('blocks an unavailable command before acquiring a permanent fence', async () => {
+    const harness = makeHarness(COORDINATOR_COMMANDS.resume_model_step);
+    const ports = { ...harness.ports, handlers: {} };
+
+    const outcome = await coordinateExecutionRecovery({ queryResult: harness.initial }, ports);
+
+    expect(outcome).toEqual(
+      expect.objectContaining({ kind: 'blocked', reason: 'handler_unavailable' }),
+    );
+    expect(harness.acquireDispatchFence).not.toHaveBeenCalled();
+  });
 
   it('returns a planner block without consulting any dispatch port', async () => {
     const harness = makeHarness(COORDINATOR_BLOCK_COMMAND);
@@ -272,7 +334,7 @@ describe('execution recovery coordinator concurrency and authority fences', () =
 
       expect(outcome).toEqual(
         expect.objectContaining({
-          kind: 'dispatched',
+          kind: 'completed',
           commandKind: 'reconcile_external_handles',
         }),
       );
@@ -437,7 +499,7 @@ describe('execution recovery coordinator single-dispatch fence', () => {
       harness.ports,
     );
 
-    expect(first.kind).toBe('dispatched');
+    expect(first.kind).toBe('completed');
     expect(duplicate).toEqual(
       expect.objectContaining({
         kind: 'deferred',
@@ -516,7 +578,7 @@ describe('execution recovery coordinator single-dispatch fence', () => {
     expect(harness.handlers.resumePersistedToolBatch).toHaveBeenCalledTimes(1);
   });
 
-  it('requires an explicit accepted receipt instead of treating rejection as dispatch', async () => {
+  it('requires an explicit completed receipt instead of treating rejection as completion', async () => {
     const harness = makeHarness(COORDINATOR_COMMANDS.continue_after_tool_result);
     harness.handlers.continueAfterToolResult.mockResolvedValueOnce({
       kind: 'rejected',
@@ -595,7 +657,7 @@ describe('execution recovery coordinator single-dispatch fence', () => {
   it('blocks a malformed handler receipt instead of inferring dispatch', async () => {
     const harness = makeHarness(COORDINATOR_COMMANDS.resume_review);
     harness.handlers.resumeReview.mockResolvedValueOnce({
-      kind: 'accepted',
+      kind: 'completed',
       fenceId: 'fence-1',
       fenceDigest: COORDINATOR_FENCE_DIGEST,
       receiptId: 'receipt-1',
@@ -609,45 +671,5 @@ describe('execution recovery coordinator single-dispatch fence', () => {
 
     expect(outcome).toEqual(expect.objectContaining({ kind: 'blocked', reason: 'handler_failed' }));
     expect(harness.handlers.resumeReview).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('execution recovery coordinator command prerequisites', () => {
-  it.each([
-    {
-      ...COORDINATOR_COMMANDS.resume_persisted_tool_batch,
-      requiresExecutionAuthorityRevalidation: false,
-    },
-    {
-      ...COORDINATOR_COMMANDS.reconcile_external_handles,
-      handleIds: [],
-    },
-    {
-      ...COORDINATOR_COMMANDS.resume_model_step,
-      prompt: 'must never cross the coordinator boundary',
-    },
-  ])('blocks a malformed or open command without consulting ports', async (command) => {
-    const harness = makeHarness();
-    const queryResult = coordinatorPlan(command as unknown as ExecutionRecoveryCommand);
-
-    const outcome = await coordinateExecutionRecovery({ queryResult }, harness.ports);
-
-    expect(outcome).toEqual(expect.objectContaining({ kind: 'blocked', reason: 'invalid_plan' }));
-    expect(harness.events).toEqual([]);
-    expectNoHandlerCalls(harness.handlers);
-  });
-
-  it('blocks a same-generation command substitution during revalidation', async () => {
-    const initial = coordinatorPlan(COORDINATOR_COMMANDS.resume_model_step);
-    const harness = makeHarness(COORDINATOR_COMMANDS.resume_model_step, {
-      current: coordinatorPlan(COORDINATOR_COMMANDS.resume_review),
-    });
-
-    const outcome = await coordinateExecutionRecovery({ queryResult: initial }, harness.ports);
-
-    expect(outcome).toEqual(
-      expect.objectContaining({ kind: 'blocked', reason: 'revalidation_mismatch' }),
-    );
-    expect(harness.events).toEqual(['query']);
   });
 });

@@ -38,6 +38,16 @@ export const EXECUTION_RECOVERY_RECEIPT_REASONS = [
   'inspection_unavailable',
   'provider_contract_invalid',
 ] as const;
+export const EXECUTION_RECOVERY_PENDING_REASONS = [
+  'remote_still_pending',
+  'provider_temporarily_unavailable',
+] as const satisfies readonly ExecutionRecoveryReceiptReason[];
+export const EXECUTION_RECOVERY_HANDLER_BLOCK_REASONS = [
+  'remote_action_required',
+  'external_not_found',
+  'inspection_unavailable',
+  'provider_contract_invalid',
+] as const satisfies readonly ExecutionRecoveryReceiptReason[];
 
 export const EXECUTION_RECOVERY_CANCELLATION_STATES = [
   'active',
@@ -80,6 +90,9 @@ export type ExecutionRecoveryHandlerRejectionReason =
   (typeof EXECUTION_RECOVERY_HANDLER_REJECTION_REASONS)[number];
 export type ExecutionRecoveryDispatchState = (typeof EXECUTION_RECOVERY_DISPATCH_STATES)[number];
 export type ExecutionRecoveryReceiptReason = (typeof EXECUTION_RECOVERY_RECEIPT_REASONS)[number];
+export type ExecutionRecoveryPendingReason = (typeof EXECUTION_RECOVERY_PENDING_REASONS)[number];
+export type ExecutionRecoveryHandlerBlockReason =
+  (typeof EXECUTION_RECOVERY_HANDLER_BLOCK_REASONS)[number];
 
 export interface ExecutionRecoveryAuthoritySnapshot {
   kind: 'authority_snapshot';
@@ -141,11 +154,28 @@ export interface ExecutionRecoveryDispatchContext {
 
 export type ExecutionRecoveryHandlerResult =
   | {
-      kind: 'accepted';
+      kind: 'completed';
       fenceId: string;
       fenceDigest: string;
       receiptId: string;
       receiptDigest: string;
+    }
+  | {
+      kind: 'pending';
+      fenceId: string;
+      fenceDigest: string;
+      receiptId: string;
+      receiptDigest: string;
+      reason: ExecutionRecoveryPendingReason;
+      retryAt: number;
+    }
+  | {
+      kind: 'blocked';
+      fenceId: string;
+      fenceDigest: string;
+      receiptId: string;
+      receiptDigest: string;
+      reason: ExecutionRecoveryHandlerBlockReason;
     }
   | {
       kind: 'rejected';
@@ -154,29 +184,31 @@ export type ExecutionRecoveryHandlerResult =
       reason: ExecutionRecoveryHandlerRejectionReason;
     };
 
-type HandlerInput<K extends DispatchableExecutionRecoveryCommandKind> = {
+export type ExecutionRecoveryHandlerInput<K extends DispatchableExecutionRecoveryCommandKind> = {
   command: Extract<DispatchableExecutionRecoveryCommand, { kind: K }>;
   context: ExecutionRecoveryDispatchContext;
 };
 
 /** Every handler atomically validates and consumes the single-use fence before any effect. */
 export interface ExecutionRecoveryHandlers {
-  resumeModelStep(
-    input: HandlerInput<'resume_model_step'>,
-  ): Promise<ExecutionRecoveryHandlerResult>;
-  resumePersistedToolBatch(
-    input: HandlerInput<'resume_persisted_tool_batch'>,
-  ): Promise<ExecutionRecoveryHandlerResult>;
-  continueAfterToolResult(
-    input: HandlerInput<'continue_after_tool_result'>,
-  ): Promise<ExecutionRecoveryHandlerResult>;
-  reconcileExternalHandles(
-    input: HandlerInput<'reconcile_external_handles'>,
-  ): Promise<ExecutionRecoveryHandlerResult>;
-  resumeReview(input: HandlerInput<'resume_review'>): Promise<ExecutionRecoveryHandlerResult>;
-  finalizeExistingTerminalProjection(
-    input: HandlerInput<'finalize_existing_terminal_projection'>,
-  ): Promise<ExecutionRecoveryHandlerResult>;
+  resumeModelStep?: (
+    input: ExecutionRecoveryHandlerInput<'resume_model_step'>,
+  ) => Promise<ExecutionRecoveryHandlerResult>;
+  resumePersistedToolBatch?: (
+    input: ExecutionRecoveryHandlerInput<'resume_persisted_tool_batch'>,
+  ) => Promise<ExecutionRecoveryHandlerResult>;
+  continueAfterToolResult?: (
+    input: ExecutionRecoveryHandlerInput<'continue_after_tool_result'>,
+  ) => Promise<ExecutionRecoveryHandlerResult>;
+  reconcileExternalHandles?: (
+    input: ExecutionRecoveryHandlerInput<'reconcile_external_handles'>,
+  ) => Promise<ExecutionRecoveryHandlerResult>;
+  resumeReview?: (
+    input: ExecutionRecoveryHandlerInput<'resume_review'>,
+  ) => Promise<ExecutionRecoveryHandlerResult>;
+  finalizeExistingTerminalProjection?: (
+    input: ExecutionRecoveryHandlerInput<'finalize_existing_terminal_projection'>,
+  ) => Promise<ExecutionRecoveryHandlerResult>;
 }
 
 export interface ExecutionRecoveryCoordinatorPorts {
@@ -201,6 +233,8 @@ export const EXECUTION_RECOVERY_COORDINATOR_BLOCK_REASONS = [
   'cancelled',
   'invalid_dispatch_fence',
   'handler_rejected',
+  'handler_unavailable',
+  'handler_blocked',
   'handler_failed',
 ] as const;
 
@@ -219,7 +253,11 @@ export type ExecutionRecoveryCoordinatorBlockReason =
   (typeof EXECUTION_RECOVERY_COORDINATOR_BLOCK_REASONS)[number];
 export type ExecutionRecoveryCoordinatorDeferReason =
   (typeof EXECUTION_RECOVERY_COORDINATOR_DEFER_REASONS)[number];
-type ClosedSourceReason = ExecutionRecoveryQueryBlockReason | ExecutionRecoveryBlockReason | null;
+type ClosedSourceReason =
+  | ExecutionRecoveryQueryBlockReason
+  | ExecutionRecoveryBlockReason
+  | ExecutionRecoveryHandlerBlockReason
+  | null;
 
 interface CoordinatorOutcomePointer {
   runId: string | null;
@@ -244,7 +282,7 @@ export type ExecutionRecoveryCoordinatorOutcome =
       reason: ExecutionRecoveryCoordinatorDeferReason;
     })
   | {
-      kind: 'dispatched';
+      kind: 'completed';
       runId: string;
       commandKind: DispatchableExecutionRecoveryCommandKind;
       controlEpoch: number;
@@ -257,6 +295,23 @@ export type ExecutionRecoveryCoordinatorOutcome =
       fenceDigest: string;
       receiptId: string;
       receiptDigest: string;
+    }
+  | {
+      kind: 'pending';
+      runId: string;
+      commandKind: DispatchableExecutionRecoveryCommandKind;
+      controlEpoch: number;
+      snapshotDigest: string;
+      commandDigest: string;
+      authorityDigest: string;
+      dispatchId: string;
+      dispatchDigest: string;
+      fenceId: string;
+      fenceDigest: string;
+      receiptId: string;
+      receiptDigest: string;
+      reason: ExecutionRecoveryPendingReason;
+      retryAt: number;
     };
 
 export interface ExecutionRecoveryCoordinatorInput {

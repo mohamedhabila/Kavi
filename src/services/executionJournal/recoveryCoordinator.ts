@@ -14,7 +14,6 @@ import {
   EXECUTION_RECOVERY_CANCELLATION_STATES,
   EXECUTION_RECOVERY_CONTROL_DEFER_REASONS,
   EXECUTION_RECOVERY_FENCE_DEFER_REASONS,
-  EXECUTION_RECOVERY_HANDLER_REJECTION_REASONS,
   type DispatchableExecutionRecoveryCommand,
   type ExecutionRecoveryAuthorityResult,
   type ExecutionRecoveryAuthorityState,
@@ -29,13 +28,23 @@ import {
   type ExecutionRecoveryDispatchFenceIntent,
   type ExecutionRecoveryDispatchFenceResult,
   type ExecutionRecoveryFenceDeferReason,
+  type ExecutionRecoveryHandlerBlockReason,
   type ExecutionRecoveryHandlerRejectionReason,
   type ExecutionRecoveryHandlerResult,
-  type ExecutionRecoveryHandlers,
 } from './recoveryCoordinatorTypes';
+import {
+  executionRecoveryFenceDeferReason,
+  hasExecutionRecoveryCommandHandler,
+  routeExecutionRecoveryCommand,
+  validExecutionRecoveryHandlerResult,
+} from './recoveryCoordinatorDispatch';
 
 type RecoveryCommandKind = ExecutionRecoveryCommand['kind'];
-type ClosedSourceReason = ExecutionRecoveryQueryBlockReason | ExecutionRecoveryBlockReason | null;
+type ClosedSourceReason =
+  | ExecutionRecoveryQueryBlockReason
+  | ExecutionRecoveryBlockReason
+  | ExecutionRecoveryHandlerBlockReason
+  | null;
 
 interface CoordinatorOutcomePointer {
   runId: string | null;
@@ -332,7 +341,9 @@ function canonicalCommand(command: ExecutionRecoveryCommand): string {
   }
 }
 
-async function digestCommand(command: DispatchableExecutionRecoveryCommand): Promise<string> {
+export async function digestExecutionRecoveryCommand(
+  command: DispatchableExecutionRecoveryCommand,
+): Promise<string> {
   const digest = await Crypto.digestStringAsync(
     Crypto.CryptoDigestAlgorithm.SHA256,
     `${COMMAND_DIGEST_FORMAT}\u0000${canonicalCommand(command)}`,
@@ -427,57 +438,6 @@ function validFenceResult(value: unknown): value is ExecutionRecoveryDispatchFen
   );
 }
 
-function validHandlerResult(value: unknown): value is ExecutionRecoveryHandlerResult {
-  if (!isRecord(value) || typeof value.kind !== 'string') return false;
-  if (value.kind === 'rejected') {
-    return (
-      hasExactKeys(value, ['kind', 'fenceId', 'fenceDigest', 'reason']) &&
-      validId(value.fenceId) &&
-      validDigest(value.fenceDigest) &&
-      EXECUTION_RECOVERY_HANDLER_REJECTION_REASONS.includes(
-        value.reason as ExecutionRecoveryHandlerRejectionReason,
-      )
-    );
-  }
-  return (
-    value.kind === 'accepted' &&
-    hasExactKeys(value, ['kind', 'fenceId', 'fenceDigest', 'receiptId', 'receiptDigest']) &&
-    validId(value.fenceId) &&
-    validDigest(value.fenceDigest) &&
-    validId(value.receiptId) &&
-    validDigest(value.receiptDigest)
-  );
-}
-
-async function routeCommand(
-  command: DispatchableExecutionRecoveryCommand,
-  context: ExecutionRecoveryDispatchContext,
-  handlers: ExecutionRecoveryHandlers,
-): Promise<ExecutionRecoveryHandlerResult> {
-  switch (command.kind) {
-    case 'resume_model_step':
-      return handlers.resumeModelStep({ command, context });
-    case 'resume_persisted_tool_batch':
-      return handlers.resumePersistedToolBatch({ command, context });
-    case 'continue_after_tool_result':
-      return handlers.continueAfterToolResult({ command, context });
-    case 'reconcile_external_handles':
-      return handlers.reconcileExternalHandles({ command, context });
-    case 'resume_review':
-      return handlers.resumeReview({ command, context });
-    case 'finalize_existing_terminal_projection':
-      return handlers.finalizeExistingTerminalProjection({ command, context });
-  }
-}
-
-function fenceDeferReason(
-  reason: ExecutionRecoveryFenceDeferReason,
-): ExecutionRecoveryCoordinatorDeferReason {
-  if (reason === 'fence_contended') return 'dispatch_fence_contended';
-  if (reason === 'fence_changed') return 'dispatch_fence_changed';
-  return 'dispatch_fence_unavailable';
-}
-
 export async function coordinateExecutionRecovery(
   input: ExecutionRecoveryCoordinatorInput,
   ports: ExecutionRecoveryCoordinatorPorts,
@@ -526,7 +486,7 @@ export async function coordinateExecutionRecovery(
 
   let commandDigest: string;
   try {
-    commandDigest = await digestCommand(initial.command);
+    commandDigest = await digestExecutionRecoveryCommand(initial.command);
   } catch {
     return deferred(planPointer(initial, null), 'dispatch_fence_unavailable');
   }
@@ -562,6 +522,9 @@ export async function coordinateExecutionRecovery(
     return blocked(pointer, 'revalidation_mismatch');
   }
   const command = current.command;
+  if (!hasExecutionRecoveryCommandHandler(command, ports.handlers)) {
+    return blocked(pointer, 'handler_unavailable');
+  }
 
   const authorityInput = {
     runId: current.runId,
@@ -624,7 +587,7 @@ export async function coordinateExecutionRecovery(
     return blocked(pointer, 'invalid_dispatch_fence');
   }
   if (fenceResult.kind === 'fence_deferred') {
-    return deferred(pointer, fenceDeferReason(fenceResult.reason));
+    return deferred(pointer, executionRecoveryFenceDeferReason(fenceResult.reason));
   }
   const fencedPointer: CoordinatorOutcomePointer = {
     ...pointer,
@@ -650,12 +613,12 @@ export async function coordinateExecutionRecovery(
   };
   let handlerResult: ExecutionRecoveryHandlerResult;
   try {
-    handlerResult = await routeCommand(command, context, ports.handlers);
+    handlerResult = await routeExecutionRecoveryCommand(command, context, ports.handlers);
   } catch {
     return blocked(fencedPointer, 'handler_failed');
   }
   if (
-    !validHandlerResult(handlerResult) ||
+    !validExecutionRecoveryHandlerResult(handlerResult) ||
     handlerResult.fenceId !== fence.fenceId ||
     handlerResult.fenceDigest !== fence.fenceDigest
   ) {
@@ -672,8 +635,11 @@ export async function coordinateExecutionRecovery(
     return blocked(fencedPointer, 'handler_rejected');
   }
 
-  return {
-    kind: 'dispatched',
+  if (handlerResult.kind === 'blocked') {
+    return blocked(fencedPointer, 'handler_blocked', handlerResult.reason);
+  }
+
+  const settled = {
     runId: current.runId,
     commandKind: command.kind,
     controlEpoch: current.generation.controlEpoch,
@@ -686,5 +652,17 @@ export async function coordinateExecutionRecovery(
     fenceDigest: fenceResult.fenceDigest,
     receiptId: handlerResult.receiptId,
     receiptDigest: handlerResult.receiptDigest,
+  };
+  if (handlerResult.kind === 'pending') {
+    return {
+      kind: 'pending',
+      ...settled,
+      reason: handlerResult.reason,
+      retryAt: handlerResult.retryAt,
+    };
+  }
+  return {
+    kind: 'completed',
+    ...settled,
   };
 }

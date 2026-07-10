@@ -128,13 +128,13 @@ export function coordinatorAuthority(
   };
 }
 
-export function coordinatorAccepted(
+export function coordinatorCompleted(
   receiptId = 'receipt-1',
   fenceId = 'fence-1',
   fenceDigest = COORDINATOR_FENCE_DIGEST,
 ): ExecutionRecoveryHandlerResult {
   return {
-    kind: 'accepted',
+    kind: 'completed',
     fenceId,
     fenceDigest,
     receiptId,
@@ -154,7 +154,7 @@ function makeHandlers(events: string[]) {
   const handler = (name: HandlerName) =>
     jest.fn(async () => {
       events.push(name);
-      return coordinatorAccepted(`receipt-${name}`);
+      return coordinatorCompleted(`receipt-${name}`);
     });
   return {
     resumeModelStep: handler('resumeModelStep'),
