@@ -151,6 +151,9 @@ export async function executeForegroundConversationRun(
     latestConversationForRequest?.messages ?? conversation?.messages ?? [],
   );
   const additionalInternalPrompt = options?.additionalUserPrompt?.trim() || '';
+  const allowedToolNames = options?.allowedToolNames
+    ? new Set(options.allowedToolNames)
+    : undefined;
   const orchestratorMessages = additionalInternalPrompt
     ? [
         ...modelReadyMessages,
@@ -194,7 +197,11 @@ export async function executeForegroundConversationRun(
         linkUnderstandingEnabled: context.state.linkUnderstandingEnabled,
         mediaUnderstandingEnabled: context.state.mediaUnderstandingEnabled,
         maxLinks: context.state.maxLinks,
-        toolFilter: options?.disableTools ? () => false : undefined,
+        toolFilter: options?.disableTools
+          ? () => false
+          : allowedToolNames
+            ? (toolName) => allowedToolNames.has(toolName)
+            : undefined,
         internalUserMessageCount: 0,
         initialPendingAsyncOperations: options?.initialPendingAsyncOperations,
         initialAgentControlGraphState: resumePreparation.initialAgentControlGraphState,

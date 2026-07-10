@@ -14,6 +14,7 @@ import type {
   E2ENativeMobileFixtureStateSnapshot,
   E2ENativeMobileInvocationSnapshot,
 } from './e2eNativeMobileFixtures';
+import type { ForegroundScenarioRetrievalEvidence } from './foregroundScenarioRetrievalEvidence';
 
 export type ForegroundScenarioRouteDirective =
   | 'production_auto'
@@ -48,6 +49,12 @@ export type ForegroundScenarioDriverInput = {
   maxTokens?: number;
   timeoutMs?: number;
   memoryTimeoutMs?: number;
+  disableLongTermMemory?: boolean;
+  allowedToolNames?: ReadonlyArray<string>;
+  beforeTurns?: (identity: {
+    conversationId: string;
+    workspaceConversationId: string;
+  }) => Promise<void> | void;
 };
 
 export type DeepReadonly<T> = T extends (...args: never[]) => unknown
@@ -118,6 +125,7 @@ export type ForegroundScenarioTurnSnapshot = Readonly<{
   memory: ReadonlyArray<ForegroundScenarioMemorySnapshot>;
   memoryEvidence: ForegroundScenarioMemoryTurnEvidence;
   native: ForegroundScenarioNativeEvidenceSnapshot;
+  retrieval: DeepReadonly<ForegroundScenarioRetrievalEvidence>;
   messages: DeepReadonly<Message[]>;
   route: Readonly<{
     directive: ForegroundScenarioRouteDirective;

@@ -410,6 +410,59 @@ describe('runForegroundScenario', () => {
     );
     expect(result.turns[0].memory).toHaveLength(1);
     expect(result.turns[0].finalAssistantCandidateCount).toBe(1);
+    expect(result.turns[0].retrieval).toMatchObject({
+      instrumentationStatus: 'missing',
+      events: [],
+    });
+  });
+
+  it('applies the product memory opt-out, exact tool surface, and pre-turn identity hook', async () => {
+    const beforeTurns = jest.fn(async () => {
+      expect(useSettingsStore.getState().disableLongTermMemory).toBe(true);
+    });
+    const result = await runForegroundScenario({
+      provider: makeProvider('scenario-provider'),
+      conversationId: 'scenario-conversation',
+      conversationTitle: 'Scenario title',
+      systemPrompt: 'Scenario prompt',
+      defaultMode: 'chitchat',
+      disableLongTermMemory: true,
+      allowedToolNames: ['memory_recall'],
+      beforeTurns,
+      turns: [{ content: 'How are you?', route: 'production_auto' }],
+    });
+
+    expect(beforeTurns).toHaveBeenCalledWith({
+      conversationId: 'scenario-conversation',
+      workspaceConversationId: 'scenario-conversation',
+    });
+    const toolFilter = mockedRunOrchestrator.mock.calls[0][0].toolFilter;
+    expect(toolFilter?.('memory_recall')).toBe(true);
+    expect(toolFilter?.('memory_search')).toBe(false);
+    expect(result.turns[0].retrieval).toEqual({
+      sourceThreadIdHash: null,
+      instrumentationStatus: 'opt_out',
+      events: [],
+    });
+    expect(useSettingsStore.getState().disableLongTermMemory).toBe(false);
+  });
+
+  it('rejects unknown or duplicate tool allowlists before running a turn', async () => {
+    const base = {
+      provider: makeProvider('scenario-provider'),
+      conversationId: 'scenario-conversation',
+      conversationTitle: 'Scenario title',
+      systemPrompt: 'Scenario prompt',
+      defaultMode: 'chitchat' as const,
+      turns: [{ content: 'How are you?', route: 'production_auto' as const }],
+    };
+    await expect(
+      runForegroundScenario({ ...base, allowedToolNames: ['not_a_product_tool'] }),
+    ).rejects.toThrow('unique canonical tool names');
+    await expect(
+      runForegroundScenario({ ...base, allowedToolNames: ['memory_recall', 'memory_recall'] }),
+    ).rejects.toThrow('unique canonical tool names');
+    expect(mockedRunOrchestrator).not.toHaveBeenCalled();
   });
 
   it('does not count an incomplete final response as a completed turn', async () => {
@@ -611,4 +664,5 @@ describe('runForegroundScenario', () => {
     ]);
     expect(mockedListIngestionPersistenceReceipts).toHaveBeenCalledWith(pendingJob.id);
   });
+
 });

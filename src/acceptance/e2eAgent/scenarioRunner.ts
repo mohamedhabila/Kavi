@@ -2,21 +2,41 @@
 // Kavi — E2E agent scenario runner (live product foreground path)
 // ---------------------------------------------------------------------------
 
-import { resetE2ENativeMobileFixtures } from './e2eNativeMobileFixtures';
 import { writeE2EPrivateScenarioEvidence } from './e2ePrivateScenarioEvidence';
 import { installE2EScenarioEnvironment } from './e2eScenarioEnvironment';
 import { runForegroundScenario } from './foregroundScenarioDriver';
+import type { ForegroundScenarioRouteDirective } from './foregroundScenarioDriverTypes';
+import { resetAndVerifyE2EScenarioSandboxes } from './e2ePairedStateIsolation';
 import { buildE2EProvider, isE2EAgentEvalEnabled } from './providerConfig';
-import { resetE2EMemorySandbox } from './sandboxMemory';
-import { resetE2EWorkspaceSandbox, seedE2EWorkspaceSandbox } from './sandboxWorkspace';
+import { seedE2EWorkspaceSandbox } from './sandboxWorkspace';
 import { mapForegroundScenarioResult } from './scenarioResultMapper';
 import { resolveE2EScenarioTimeoutMs } from './scenarioTimeout';
 import { E2E_DEFAULT_MAX_TOKENS } from './thresholds';
 import type { E2EScenario, E2EScenarioContentClass, E2EScenarioResult, E2EUserTurn } from './types';
+import type { LlmProviderConfig } from '../../types/provider';
 
 const DEFAULT_E2E_SYSTEM_PROMPT =
   'You are Kavi, a graph-controlled personal assistant. Use tools to complete tasks. ' +
   'Follow active graph goals and their required capabilities.';
+
+export type E2EScenarioRunOptions = Readonly<{
+  provider?: LlmProviderConfig;
+  maxTokens?: number;
+  scenarioTimeoutMs?: number;
+  perTurnTimeoutMs?: number;
+  memoryTimeoutMs?: number;
+  routeOverride?: ForegroundScenarioRouteDirective;
+  disableLongTermMemory?: boolean;
+  allowedToolNames?: ReadonlyArray<string>;
+  beforeTurns?: (identity: {
+    conversationId: string;
+    workspaceConversationId: string;
+  }) => Promise<void> | void;
+}>;
+
+export function resolveE2EScenarioSystemPrompt(scenario: E2EScenario): string {
+  return scenario.systemPrompt ?? DEFAULT_E2E_SYSTEM_PROMPT;
+}
 
 function resolveScenarioUserTurns(scenario: E2EScenario): ReadonlyArray<E2EUserTurn> {
   if (scenario.userTurns && scenario.userTurns.length > 0) {
@@ -49,19 +69,21 @@ function requireScenarioContentClass(value: unknown): E2EScenarioContentClass {
   throw new Error('Scenario contentClass must be private or synthetic_public.');
 }
 
-export async function runE2EScenario(scenario: E2EScenario): Promise<E2EScenarioResult> {
+export async function runE2EScenario(
+  scenario: E2EScenario,
+  options: E2EScenarioRunOptions = {},
+): Promise<E2EScenarioResult> {
   const startedAt = Date.now();
   const contentClass = requireScenarioContentClass(scenario.contentClass);
   const conversationId = resolveScenarioConversationId(scenario.conversationId);
-  resetE2EWorkspaceSandbox();
-  resetE2EMemorySandbox();
-  resetE2ENativeMobileFixtures();
+  resetAndVerifyE2EScenarioSandboxes();
   seedE2EWorkspaceSandbox(conversationId, scenario.initialWorkspaceFiles ?? []);
 
-  const provider = buildE2EProvider();
+  const provider = options.provider ?? buildE2EProvider();
   const userTurns = resolveScenarioUserTurns(scenario);
-  const scenarioTimeoutMs = resolveE2EScenarioTimeoutMs(scenario);
-  const perTurnTimeoutMs = Math.max(1, Math.floor(scenarioTimeoutMs / userTurns.length));
+  const scenarioTimeoutMs = options.scenarioTimeoutMs ?? resolveE2EScenarioTimeoutMs(scenario);
+  const perTurnTimeoutMs =
+    options.perTurnTimeoutMs ?? Math.max(1, Math.floor(scenarioTimeoutMs / userTurns.length));
   const uninstallScenarioEnvironment = installE2EScenarioEnvironment();
 
   try {
@@ -69,17 +91,20 @@ export async function runE2EScenario(scenario: E2EScenario): Promise<E2EScenario
       provider,
       conversationId,
       conversationTitle: scenario.threadTitle ?? scenario.id,
-      systemPrompt: scenario.systemPrompt ?? DEFAULT_E2E_SYSTEM_PROMPT,
+      systemPrompt: resolveE2EScenarioSystemPrompt(scenario),
       initialMessages: scenario.initialMessages,
       defaultMode: scenario.execution.initialMode,
       turns: userTurns.map((turn) => ({
         content: turn.content,
         lifecycleBefore: turn.lifecycleBefore,
-        route: turn.route ?? scenario.execution.route,
+        route: options.routeOverride ?? turn.route ?? scenario.execution.route,
         timeoutMs: perTurnTimeoutMs,
       })),
-      maxTokens: scenario.maxTokens ?? E2E_DEFAULT_MAX_TOKENS,
-      memoryTimeoutMs: perTurnTimeoutMs,
+      maxTokens: options.maxTokens ?? scenario.maxTokens ?? E2E_DEFAULT_MAX_TOKENS,
+      memoryTimeoutMs: options.memoryTimeoutMs ?? perTurnTimeoutMs,
+      disableLongTermMemory: options.disableLongTermMemory,
+      allowedToolNames: options.allowedToolNames,
+      beforeTurns: options.beforeTurns,
     });
     const result = mapForegroundScenarioResult({
       contentClass,

@@ -120,6 +120,7 @@ function buildTurnTrace(turn: ForegroundScenarioTurnSnapshot): E2EScenarioTurnTr
     memory: cloneJson(turn.memory),
     memoryEvidence: cloneJson(turn.memoryEvidence),
     native: cloneJson(turn.native),
+    retrieval: cloneJson(turn.retrieval),
     toolCalls: collectToolCalls(turn.messages),
     toolResults: collectToolResults(turn.messages),
     graphSnapshots,

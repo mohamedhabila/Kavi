@@ -17,6 +17,7 @@ export type RunChatOptions = {
   additionalSystemPrompt?: string;
   additionalUserPrompt?: string;
   disableTools?: boolean;
+  allowedToolNames?: ReadonlyArray<string>;
   initialPendingAsyncOperations?: AgentRunAsyncOperation[];
 };
 

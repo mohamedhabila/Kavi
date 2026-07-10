@@ -346,6 +346,15 @@ describe('structured memory retrieval event store', () => {
         'SELECT COUNT(*) AS count FROM memory_retrieval_events',
       )?.count,
     ).toBe(MEMORY_RETRIEVAL_EVENT_RETENTION_LIMIT);
+    const fullRetentionWindow = readRecentMemoryRetrievalEvents({ limit: 10_000 });
+    expect(fullRetentionWindow).toHaveLength(MEMORY_RETRIEVAL_EVENT_RETENTION_LIMIT);
+    expect(fullRetentionWindow[0]?.createdAt).toBe(MEMORY_RETRIEVAL_EVENT_RETENTION_LIMIT);
+    expect(fullRetentionWindow.at(-1)?.createdAt).toBe(1);
+    expect(fullRetentionWindow.map((entry) => entry.createdAt)).toEqual(
+      [...fullRetentionWindow.map((entry) => entry.createdAt)].sort(
+        (left, right) => right - left,
+      ),
+    );
     const entries = readRecentMemoryRetrievalEvents({
       sourceThreadIdHash: threadAHash ?? undefined,
       operation: 'explicit_search',

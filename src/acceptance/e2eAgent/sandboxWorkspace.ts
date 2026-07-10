@@ -20,6 +20,15 @@ export function resetE2EWorkspaceSandbox(): void {
   getExpoFileSystemMock().__resetStore?.();
 }
 
+export function assertE2EWorkspaceSandboxReset(): void {
+  const remainingPaths = Object.keys(getWorkspaceStore());
+  if (remainingPaths.length > 0) {
+    throw new Error(
+      `E2E workspace reset left ${remainingPaths.length} persisted entr${remainingPaths.length === 1 ? 'y' : 'ies'}.`,
+    );
+  }
+}
+
 function getWorkspaceStore(): Record<string, string | Uint8Array> {
   return getExpoFileSystemMock().__getStore?.() ?? {};
 }

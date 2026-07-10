@@ -1,4 +1,5 @@
 import { executeForegroundConversationRun } from '../../engine/graph/foregroundRun/execution';
+import { TOOL_DEFINITIONS } from '../../engine/tools/definitions';
 import { resolveConversationWorkspaceTarget } from '../../services/conversationWorkspace/ownership';
 import { cancelScheduledIngestionDrain } from '../../services/memory/ingestionQueue';
 import {
@@ -17,6 +18,10 @@ import {
   getE2ENativeMobileInvocationSnapshots,
 } from './e2eNativeMobileFixtures';
 import { relaunchForegroundScenarioApp } from './foregroundScenarioLifecycle';
+import {
+  beginForegroundScenarioRetrievalCapture,
+  completeForegroundScenarioRetrievalCapture,
+} from './foregroundScenarioRetrievalEvidence';
 import {
   applyForegroundScenarioRoute,
   buildForegroundScenarioCompletionSnapshot,
@@ -55,6 +60,7 @@ export type {
 
 const DEFAULT_TURN_TIMEOUT_MS = 120_000;
 const DEFAULT_MEMORY_TIMEOUT_MS = 120_000;
+const FOREGROUND_PRODUCT_TOOL_NAMES = new Set(TOOL_DEFINITIONS.map((tool) => tool.name));
 
 let scenarioRunTail: Promise<void> = Promise.resolve();
 
@@ -86,6 +92,20 @@ function validateInput(input: ForegroundScenarioDriverInput): void {
   validatePositiveNumber(input.maxTokens, 'maxTokens');
   validatePositiveNumber(input.timeoutMs, 'timeoutMs');
   validatePositiveNumber(input.memoryTimeoutMs, 'memoryTimeoutMs');
+  if (
+    input.allowedToolNames !== undefined &&
+    (input.allowedToolNames.length === 0 ||
+      new Set(input.allowedToolNames).size !== input.allowedToolNames.length ||
+      input.allowedToolNames.some(
+        (name) =>
+          typeof name !== 'string' ||
+          !name.trim() ||
+          name !== name.trim() ||
+          !FOREGROUND_PRODUCT_TOOL_NAMES.has(name),
+      ))
+  ) {
+    throw new Error('allowedToolNames must contain unique canonical tool names.');
+  }
   for (const [index, turn] of input.turns.entries()) {
     requireTrimmed(turn.content, `turns[${index}].content`);
     if (turn.lifecycleBefore !== undefined && turn.lifecycleBefore !== 'app_relaunch') {
@@ -113,7 +133,7 @@ async function runScenarioIsolated(
       systemPrompt: input.systemPrompt,
       defaultConversationMode: input.defaultMode,
       thinkingLevel: 'minimal',
-      disableLongTermMemory: false,
+      disableLongTermMemory: input.disableLongTermMemory ?? false,
       memoryConsolidationMode: 'active_provider',
       consolidationProvider: null,
     });
@@ -132,6 +152,10 @@ async function runScenarioIsolated(
       }).workspaceConversationId,
       sourceThreadId: input.conversationId,
     };
+    await input.beforeTurns?.({
+      conversationId: input.conversationId,
+      workspaceConversationId: memoryScope.memoryConversationId,
+    });
     let previousMemoryState = captureScopedMemoryEvidence(memoryScope);
     let runtime = createForegroundScenarioRuntime(input, memoryRecords);
     const turnSnapshots: ForegroundScenarioTurnSnapshot[] = [];
@@ -145,6 +169,10 @@ async function runScenarioIsolated(
           })
         : null;
       if (lifecycleBefore) runtime = createForegroundScenarioRuntime(input, memoryRecords);
+      const retrievalCapture = await beginForegroundScenarioRetrievalCapture({
+        sourceThreadId: input.conversationId,
+        memoryOptOut: input.disableLongTermMemory === true,
+      });
       const nativeStateBefore = getE2ENativeMobileFixtureStateSnapshot();
       const nativeInvocationStart = getE2ENativeMobileInvocationSnapshots().length;
       const route = applyForegroundScenarioRoute(
@@ -183,7 +211,10 @@ async function runScenarioIsolated(
         await executeForegroundConversationRun({
           conversationId: input.conversationId,
           context: runtime.context,
-          options: { maxTokens: turn.maxTokens ?? input.maxTokens },
+          options: {
+            maxTokens: turn.maxTokens ?? input.maxTokens,
+            ...(input.allowedToolNames ? { allowedToolNames: input.allowedToolNames } : {}),
+          },
         });
       } finally {
         clearTimeout(timeout);
@@ -245,6 +276,7 @@ async function runScenarioIsolated(
             stateAfter: getE2ENativeMobileFixtureStateSnapshot(),
             invocations: nativeInvocations,
           },
+          retrieval: completeForegroundScenarioRetrievalCapture({ capture: retrievalCapture }),
           route: { directive: turn.route, ...route },
           run,
           timedOut,

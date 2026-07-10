@@ -25,6 +25,7 @@ import type {
   ForegroundScenarioRouteDirective,
   ForegroundScenarioUserSnapshot,
 } from './foregroundScenarioDriverTypes';
+import type { ForegroundScenarioRetrievalEvidence } from './foregroundScenarioRetrievalEvidence';
 
 export type E2EToolCallRecord = {
   id: string;
@@ -116,6 +117,7 @@ export type E2EScenarioTurnTrace = {
   memory: ReadonlyArray<ForegroundScenarioMemorySnapshot>;
   memoryEvidence: ForegroundScenarioMemoryTurnEvidence;
   native: ForegroundScenarioNativeEvidenceSnapshot;
+  retrieval: ForegroundScenarioRetrievalEvidence;
   toolCalls: ReadonlyArray<E2EToolCallRecord>;
   toolResults: ReadonlyArray<E2EToolResultRecord>;
   graphSnapshots: ReadonlyArray<AgentRunControlGraphState>;
