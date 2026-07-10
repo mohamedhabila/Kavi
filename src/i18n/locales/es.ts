@@ -142,6 +142,11 @@ export const es: TranslationMap = mergeTranslations(en, {
     shareMessage: 'Compartir respuesta',
     shareMessageFailed: 'No se puede compartir esta respuesta ahora.',
     retryMessage: 'Reintentar mensaje',
+    memoryFeedbackPrompt: '¿Te ayudó el contexto recordado?',
+    memoryFeedbackHelpful: 'Útil',
+    memoryFeedbackWrong: 'Incorrecto',
+    memoryFeedbackIrrelevant: 'No relevante',
+    memoryFeedbackFailed: 'No se pudo guardar la valoración de memoria.',
     attachmentWorkspaceImportFailed:
       'No se pudieron agregar los archivos adjuntos al espacio de trabajo. Intentalo de nuevo.',
     shareFileFailed: 'No se puede compartir este archivo del espacio de trabajo ahora.',

@@ -6,12 +6,22 @@ import type { TemporalMarker } from '../../components/chat/temporalMarkers';
 import type { ResolvedDisplayMessageItem } from '../chatScreenDisplayState';
 import type { createStyles } from '../ChatScreen.styles';
 import { ConversationMessageRow } from './ConversationMessageRow';
+import type { MemoryRetrievalFeedbackChoice } from '../../services/memory/retrievalOutcomeStore';
 
 type TranslationFn = (key: string, params?: Record<string, string | number>) => string;
 
 type RenderMessageContext = {
   handleEdit: (messageId: string, content: string) => void;
   handleOpenSubAgentDetails: (snapshot: NonNullable<Message['subAgentEvent']>['snapshot']) => void;
+  handleLoadMemoryFeedback: (
+    messageId: string,
+    eventId: string,
+  ) => Promise<MemoryRetrievalFeedbackChoice | null>;
+  handleMemoryFeedback: (
+    messageId: string,
+    eventId: string,
+    outcome: MemoryRetrievalFeedbackChoice,
+  ) => Promise<MemoryRetrievalFeedbackChoice>;
   handleRetry: (messageId: string) => void;
   handleShareWorkspaceFile: (attachment: Attachment) => Promise<void>;
   handleViewFiles: (path?: string) => void;
@@ -47,6 +57,8 @@ export function useConversationMessageRenderItem(params: UseConversationMessageR
         item={item}
         onEdit={renderContext.handleEdit}
         onOpenSubAgentDetails={renderContext.handleOpenSubAgentDetails}
+        onLoadMemoryFeedback={renderContext.handleLoadMemoryFeedback}
+        onMemoryFeedback={renderContext.handleMemoryFeedback}
         onRetry={renderContext.handleRetry}
         onShareWorkspaceFile={renderContext.handleShareWorkspaceFile}
         onViewFiles={renderContext.handleViewFiles}

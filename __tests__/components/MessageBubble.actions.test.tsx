@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import { MessageBubble } from '../../src/components/chat/MessageBubble';
 import type { Message } from '../../src/types/message';
@@ -20,6 +20,11 @@ jest.mock('../../src/i18n/useTranslation', () => ({
         'chat.editMessage': 'Edit message',
         'chat.retryMessage': 'Retry message',
         'chat.shareMessage': 'Share message',
+        'chat.memoryFeedbackPrompt': 'Did the remembered context help?',
+        'chat.memoryFeedbackHelpful': 'Helpful',
+        'chat.memoryFeedbackWrong': 'Wrong',
+        'chat.memoryFeedbackIrrelevant': 'Not relevant',
+        'chat.memoryFeedbackFailed': 'Unable to save memory feedback right now.',
         'settings.personaDisplayNamePlaceholder': 'Assistant',
       })[key] || key,
   }),
@@ -72,9 +77,7 @@ const expectMobileActionTarget = (node: { props: { style: unknown } }) => {
 
 describe('MessageBubble actions', () => {
   it('uses mobile-sized touch targets for user message actions', () => {
-    const { getByLabelText } = render(
-      <MessageBubble message={makeMessage()} onEdit={jest.fn()} />,
-    );
+    const { getByLabelText } = render(<MessageBubble message={makeMessage()} onEdit={jest.fn()} />);
 
     expectMobileActionTarget(getByLabelText('Copy message'));
     expectMobileActionTarget(getByLabelText('Edit message'));
@@ -109,5 +112,164 @@ describe('MessageBubble actions', () => {
     const { getByLabelText } = render(<MessageBubble message={makeMessage({ content: '' })} />);
 
     expect(getByLabelText('Copy message').props.accessibilityState).toEqual({ disabled: true });
+  });
+
+  it('shows explicit memory choices only for a complete attributed final response', () => {
+    const onMemoryFeedback = jest.fn().mockResolvedValue('helpful');
+    const baseMessage = makeMessage({
+      id: 'assistant-memory',
+      role: 'assistant',
+      content: 'Remembered answer.',
+    });
+    const { queryByLabelText, rerender } = render(
+      <MessageBubble message={baseMessage} onMemoryFeedback={onMemoryFeedback} />,
+    );
+    expect(queryByLabelText('Helpful')).toBeNull();
+
+    rerender(
+      <MessageBubble
+        message={{
+          ...baseMessage,
+          assistantMetadata: {
+            kind: 'final',
+            completionStatus: 'incomplete',
+            memoryRetrievalEventId: 'retrieval_event_m123_1_abc',
+          },
+        }}
+        onMemoryFeedback={onMemoryFeedback}
+      />,
+    );
+    expect(queryByLabelText('Helpful')).toBeNull();
+
+    rerender(
+      <MessageBubble
+        message={{
+          ...baseMessage,
+          assistantMetadata: {
+            kind: 'final',
+            completionStatus: 'complete',
+            memoryRetrievalEventId: 'retrieval_event_m123_1_abc',
+          },
+        }}
+        memoryFeedbackMessageId={null}
+        onMemoryFeedback={onMemoryFeedback}
+      />,
+    );
+    expect(queryByLabelText('Helpful')).toBeNull();
+  });
+
+  it('loads and records feedback against the exact persisted assistant message', async () => {
+    const onLoadMemoryFeedback = jest.fn().mockResolvedValue('helpful');
+    const onMemoryFeedback = jest.fn().mockResolvedValue('wrong');
+    const message = makeMessage({
+      id: 'assistant-group-projection',
+      role: 'assistant',
+      content: 'Remembered answer.',
+      assistantMetadata: {
+        kind: 'final',
+        completionStatus: 'complete',
+        memoryRetrievalEventId: 'retrieval_event_m123_1_abc',
+      },
+    });
+    const { getByLabelText } = render(
+      <MessageBubble
+        message={message}
+        memoryFeedbackMessageId="assistant-persisted-final"
+        onLoadMemoryFeedback={onLoadMemoryFeedback}
+        onMemoryFeedback={onMemoryFeedback}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onLoadMemoryFeedback).toHaveBeenCalledWith(
+        'assistant-persisted-final',
+        'retrieval_event_m123_1_abc',
+      );
+      expect(getByLabelText('Helpful').props.accessibilityState).toEqual({
+        disabled: false,
+        selected: true,
+      });
+    });
+
+    fireEvent.press(getByLabelText('Wrong'));
+    await waitFor(() => {
+      expect(onMemoryFeedback).toHaveBeenCalledWith(
+        'assistant-persisted-final',
+        'retrieval_event_m123_1_abc',
+        'wrong',
+      );
+      expect(getByLabelText('Wrong').props.accessibilityState).toEqual({
+        disabled: false,
+        selected: true,
+      });
+    });
+    expectMobileActionTarget(getByLabelText('Wrong'));
+  });
+
+  it('keeps a failed feedback write explicit and retryable', async () => {
+    const onMemoryFeedback = jest.fn().mockRejectedValue(new Error('storage unavailable'));
+    const message = makeMessage({
+      id: 'assistant-memory',
+      role: 'assistant',
+      content: 'Remembered answer.',
+      assistantMetadata: {
+        kind: 'final',
+        completionStatus: 'complete',
+        memoryRetrievalEventId: 'retrieval_event_m123_1_abc',
+      },
+    });
+    const { getByLabelText, getByText } = render(
+      <MessageBubble message={message} onMemoryFeedback={onMemoryFeedback} />,
+    );
+
+    fireEvent.press(getByLabelText('Not relevant'));
+
+    await waitFor(() => {
+      expect(getByText('Unable to save memory feedback right now.')).toBeTruthy();
+      expect(getByLabelText('Not relevant').props.accessibilityState).toEqual({
+        disabled: false,
+        selected: false,
+      });
+    });
+  });
+
+  it('does not let a stale feedback read overwrite a newer explicit choice', async () => {
+    let resolveLoad: (outcome: 'helpful') => void = () => undefined;
+    const onLoadMemoryFeedback = jest.fn(
+      () =>
+        new Promise<'helpful'>((resolve) => {
+          resolveLoad = resolve;
+        }),
+    );
+    const onMemoryFeedback = jest.fn().mockResolvedValue('wrong');
+    const message = makeMessage({
+      id: 'assistant-memory',
+      role: 'assistant',
+      content: 'Remembered answer.',
+      assistantMetadata: {
+        kind: 'final',
+        completionStatus: 'complete',
+        memoryRetrievalEventId: 'retrieval_event_m123_1_abc',
+      },
+    });
+    const { getByLabelText } = render(
+      <MessageBubble
+        message={message}
+        onLoadMemoryFeedback={onLoadMemoryFeedback}
+        onMemoryFeedback={onMemoryFeedback}
+      />,
+    );
+
+    fireEvent.press(getByLabelText('Wrong'));
+    await waitFor(() => {
+      expect(getByLabelText('Wrong').props.accessibilityState.selected).toBe(true);
+    });
+    await act(async () => {
+      resolveLoad('helpful');
+      await Promise.resolve();
+    });
+
+    expect(getByLabelText('Wrong').props.accessibilityState.selected).toBe(true);
+    expect(getByLabelText('Helpful').props.accessibilityState.selected).toBe(false);
   });
 });

@@ -27,6 +27,8 @@ import { shareTextExport } from '../../services/share/localShare';
 import { createAssistantBubbleStyles } from './AssistantBubble.styles';
 import { useAssistantBubbleEffects } from './useAssistantBubbleEffects';
 import { AssistantBubbleActions } from './AssistantBubbleActions';
+import { AssistantMemoryFeedback } from './AssistantMemoryFeedback';
+import type { MemoryRetrievalFeedbackChoice } from '../../services/memory/retrievalOutcomeStore';
 
 interface AssistantBubbleProps {
   message: Message;
@@ -37,6 +39,16 @@ interface AssistantBubbleProps {
   onViewFile?: (path: string) => void;
   onShareWorkspaceFile?: (attachment: Attachment) => void;
   onOpenSubAgentDetails?: (snapshot: NonNullable<Message['subAgentEvent']>['snapshot']) => void;
+  memoryFeedbackMessageId?: string | null;
+  onLoadMemoryFeedback?: (
+    messageId: string,
+    eventId: string,
+  ) => Promise<MemoryRetrievalFeedbackChoice | null>;
+  onMemoryFeedback?: (
+    messageId: string,
+    eventId: string,
+    outcome: MemoryRetrievalFeedbackChoice,
+  ) => Promise<MemoryRetrievalFeedbackChoice>;
   retryMessageId?: string;
 }
 
@@ -50,6 +62,9 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
     onViewFile,
     onShareWorkspaceFile,
     onOpenSubAgentDetails,
+    memoryFeedbackMessageId,
+    onLoadMemoryFeedback,
+    onMemoryFeedback,
     retryMessageId,
   }) => {
     const { colors } = useAppTheme();
@@ -96,6 +111,13 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
       effectId: message.effectId,
       styles,
     });
+    const memoryRetrievalEventId =
+      message.assistantMetadata?.kind === 'final' &&
+      message.assistantMetadata.completionStatus === 'complete'
+        ? message.assistantMetadata.memoryRetrievalEventId
+        : undefined;
+    const exactMemoryFeedbackMessageId =
+      memoryFeedbackMessageId === undefined ? message.id : memoryFeedbackMessageId;
 
     const handleCopy = () => {
       if (bubbleModel.copyText) {
@@ -261,16 +283,28 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
         </Animated.View>
 
         {!isStreaming ? (
-          <AssistantBubbleActions
-            canCopy={!!bubbleModel.copyText}
-            canShare={bubbleModel.timelineItems.length > 0}
-            colors={colors}
-            onCopy={handleCopy}
-            onRetry={onRetry ? () => onRetry(retryMessageId || message.id) : undefined}
-            onShare={handleShare}
-            styles={styles}
-            t={t}
-          />
+          <>
+            <AssistantBubbleActions
+              canCopy={!!bubbleModel.copyText}
+              canShare={bubbleModel.timelineItems.length > 0}
+              colors={colors}
+              onCopy={handleCopy}
+              onRetry={onRetry ? () => onRetry(retryMessageId || message.id) : undefined}
+              onShare={handleShare}
+              styles={styles}
+              t={t}
+            />
+            {memoryRetrievalEventId && exactMemoryFeedbackMessageId && onMemoryFeedback ? (
+              <AssistantMemoryFeedback
+                eventId={memoryRetrievalEventId}
+                messageId={exactMemoryFeedbackMessageId}
+                onLoad={onLoadMemoryFeedback}
+                onSubmit={onMemoryFeedback}
+                styles={styles}
+                t={t}
+              />
+            ) : null}
+          </>
         ) : null}
       </View>
     );

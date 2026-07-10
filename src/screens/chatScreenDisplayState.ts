@@ -322,6 +322,7 @@ function buildMessageDisplaySignature(message: Message): string {
           message.assistantMetadata.kind,
           message.assistantMetadata.completionStatus,
           message.assistantMetadata.finishReason ?? '',
+          message.assistantMetadata.memoryRetrievalEventId ?? '',
         ].join('\u0007')
       : '',
     message.effectId ?? '',

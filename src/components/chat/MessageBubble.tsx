@@ -14,6 +14,7 @@ import { MessageAttachments } from './MessageAttachments';
 import { MessageContentRenderer } from './MessageContentRenderer';
 import { DisplayResponseSegment } from './messageGrouping';
 import { MessageActionButton } from './MessageActionButton';
+import type { MemoryRetrievalFeedbackChoice } from '../../services/memory/retrievalOutcomeStore';
 
 interface MessageBubbleProps {
   message: Message;
@@ -25,6 +26,16 @@ interface MessageBubbleProps {
   onViewFile?: (path: string) => void;
   onShareWorkspaceFile?: (attachment: Attachment) => void;
   onOpenSubAgentDetails?: (snapshot: NonNullable<Message['subAgentEvent']>['snapshot']) => void;
+  memoryFeedbackMessageId?: string | null;
+  onLoadMemoryFeedback?: (
+    messageId: string,
+    eventId: string,
+  ) => Promise<MemoryRetrievalFeedbackChoice | null>;
+  onMemoryFeedback?: (
+    messageId: string,
+    eventId: string,
+    outcome: MemoryRetrievalFeedbackChoice,
+  ) => Promise<MemoryRetrievalFeedbackChoice>;
   retryMessageId?: string;
 }
 
@@ -39,6 +50,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(
     onViewFile,
     onShareWorkspaceFile,
     onOpenSubAgentDetails,
+    memoryFeedbackMessageId,
+    onLoadMemoryFeedback,
+    onMemoryFeedback,
     retryMessageId,
   }) => {
     const { colors } = useAppTheme();
@@ -74,6 +88,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(
           onViewFile={onViewFile}
           onShareWorkspaceFile={onShareWorkspaceFile}
           onOpenSubAgentDetails={onOpenSubAgentDetails}
+          memoryFeedbackMessageId={memoryFeedbackMessageId}
+          onLoadMemoryFeedback={onLoadMemoryFeedback}
+          onMemoryFeedback={onMemoryFeedback}
           retryMessageId={retryMessageId}
         />
       );

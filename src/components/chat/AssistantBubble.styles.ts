@@ -188,6 +188,50 @@ export const createAssistantBubbleStyles = (colors: AppPalette) =>
     actionsLeft: {
       justifyContent: 'flex-start',
     },
+    memoryFeedback: {
+      marginTop: 6,
+      gap: 6,
+      alignSelf: 'stretch',
+    },
+    memoryFeedbackPrompt: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    memoryFeedbackChoices: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+    },
+    memoryFeedbackChoice: {
+      minWidth: 44,
+      minHeight: 44,
+      justifyContent: 'center',
+      paddingHorizontal: 12,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.subtleBorder,
+      backgroundColor: colors.surfaceAlt,
+    },
+    memoryFeedbackChoiceSelected: {
+      borderColor: colors.primary,
+      backgroundColor: colors.primarySoft,
+    },
+    memoryFeedbackChoicePressed: {
+      opacity: 0.72,
+    },
+    memoryFeedbackChoiceText: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    memoryFeedbackChoiceTextSelected: {
+      color: colors.primary,
+    },
+    memoryFeedbackError: {
+      color: colors.danger,
+      fontSize: 12,
+    },
   });
 
 export type AssistantBubbleStyles = ReturnType<typeof createAssistantBubbleStyles>;

@@ -142,6 +142,11 @@ export const de: TranslationMap = mergeTranslations(en, {
     shareMessage: 'Antwort teilen',
     shareMessageFailed: 'Diese Antwort kann gerade nicht geteilt werden.',
     retryMessage: 'Nachricht erneut senden',
+    memoryFeedbackPrompt: 'Hat der gemerkte Kontext geholfen?',
+    memoryFeedbackHelpful: 'Hilfreich',
+    memoryFeedbackWrong: 'Falsch',
+    memoryFeedbackIrrelevant: 'Nicht relevant',
+    memoryFeedbackFailed: 'Das Feedback zur Erinnerung konnte nicht gespeichert werden.',
     attachmentWorkspaceImportFailed:
       'Die angehängten Dateien konnten nicht zum Workspace hinzugefügt werden. Bitte erneut versuchen.',
     shareFileFailed: 'Diese Workspace-Datei kann gerade nicht geteilt werden.',

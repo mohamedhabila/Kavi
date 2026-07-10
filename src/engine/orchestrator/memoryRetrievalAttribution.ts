@@ -25,7 +25,6 @@ export function createMemoryAttributedOrchestratorCallbacks(params: {
   if (!memoryRetrievalEventId) {
     return params.callbacks;
   }
-
   return {
     ...params.callbacks,
     onAssistantMessage: (content, toolCalls, providerReplay, assistantMetadata) => {

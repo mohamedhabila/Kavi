@@ -21,6 +21,7 @@ import type { TemporalMarker } from '../../components/chat/temporalMarkers';
 import { useConversationMessageRenderItem } from './useConversationMessageRenderItem';
 import { ChatLatestActivityButton } from './ChatLatestActivityButton';
 import { useLatestActivityPrompt } from './useLatestActivityPrompt';
+import type { MemoryRetrievalFeedbackChoice } from '../../services/memory/retrievalOutcomeStore';
 
 type TranslationFn = (key: string, params?: Record<string, string | number>) => string;
 
@@ -35,6 +36,15 @@ type ChatScreenConversationPaneProps = {
   handleEdit: (messageId: string, content: string) => void;
   handleEditSend: (text: string, attachments?: Attachment[]) => void;
   handleOpenSubAgentDetails: (snapshot: NonNullable<Message['subAgentEvent']>['snapshot']) => void;
+  handleLoadMemoryFeedback: (
+    messageId: string,
+    eventId: string,
+  ) => Promise<MemoryRetrievalFeedbackChoice | null>;
+  handleMemoryFeedback: (
+    messageId: string,
+    eventId: string,
+    outcome: MemoryRetrievalFeedbackChoice,
+  ) => Promise<MemoryRetrievalFeedbackChoice>;
   handleRetry: (messageId: string) => void;
   handleSend: (text: string, attachments?: Attachment[]) => Promise<void>;
   handleShareWorkspaceFile: (attachment: Attachment) => Promise<void>;
@@ -83,6 +93,8 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
     handleEdit,
     handleEditSend,
     handleOpenSubAgentDetails,
+    handleLoadMemoryFeedback,
+    handleMemoryFeedback,
     handleRetry,
     handleSend,
     handleShareWorkspaceFile,
@@ -113,6 +125,8 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
   const renderMessageItem = useConversationMessageRenderItem({
     handleEdit,
     handleOpenSubAgentDetails,
+    handleLoadMemoryFeedback,
+    handleMemoryFeedback,
     handleRetry,
     handleShareWorkspaceFile,
     handleViewFiles,

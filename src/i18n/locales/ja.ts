@@ -141,6 +141,11 @@ export const ja: TranslationMap = mergeTranslations(en, {
     shareMessage: '応答を共有',
     shareMessageFailed: 'この応答は現在共有できません。',
     retryMessage: 'メッセージを再試行',
+    memoryFeedbackPrompt: '記憶していた内容は役に立ちましたか？',
+    memoryFeedbackHelpful: '役に立った',
+    memoryFeedbackWrong: '間違っている',
+    memoryFeedbackIrrelevant: '関係ない',
+    memoryFeedbackFailed: 'メモリへの評価を保存できませんでした。',
     attachmentWorkspaceImportFailed:
       '添付ファイルをワークスペースに追加できませんでした。もう一度お試しください。',
     shareFileFailed: 'このワークスペースファイルは現在共有できません。',

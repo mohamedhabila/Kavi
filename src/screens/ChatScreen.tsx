@@ -475,6 +475,8 @@ export const ChatScreen: React.FC = () => {
   }, [maybeScrollToBottom, messages.length, resolvedDisplayMessages.length, streamingMessageId]);
   const {
     handleEdit,
+    handleLoadMemoryFeedback,
+    handleMemoryFeedback,
     handleOpenSubAgentDetails,
     handleShareWorkspaceFile,
     handleShowEarlierMessages,
@@ -483,6 +485,7 @@ export const ChatScreen: React.FC = () => {
   } = useChatScreenUiCallbacks({
     activeConversation: activeConversation ?? undefined,
     activeConversationId,
+    conversations,
     createSideThread,
     discardSideThread,
     navigation,
@@ -565,6 +568,8 @@ export const ChatScreen: React.FC = () => {
         handleComposerTextChange={handleComposerTextChange}
         handleEdit={handleEdit}
         handleEditSend={handleEditSend}
+        handleLoadMemoryFeedback={handleLoadMemoryFeedback}
+        handleMemoryFeedback={handleMemoryFeedback}
         handleOpenSubAgentDetails={handleOpenSubAgentDetails}
         handleRetry={handleRetry}
         handleSend={handleSend}
