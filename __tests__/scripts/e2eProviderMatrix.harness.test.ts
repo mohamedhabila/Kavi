@@ -105,6 +105,14 @@ describe('e2e provider matrix helpers', () => {
       model: 'claude-test',
       baseUrl: 'https://api.anthropic.com/v1',
     });
+
+    expect(
+      resolveProviderCredentialStatus('compatible', {
+        E2E_COMPATIBLE_API_KEY: 'key',
+        E2E_COMPATIBLE_MODEL: '/private/models/runtime.gguf',
+        E2E_COMPATIBLE_BASE_URL: 'https://compatible.invalid/v1',
+      }),
+    ).toMatchObject({ configured: false, missing: ['E2E_PUBLIC_MODEL_ID'] });
   });
 
   it('summarizes provider runs and exposes cross-provider failures', () => {
@@ -128,6 +136,7 @@ describe('e2e provider matrix helpers', () => {
 
     expect(geminiSummary).toMatchObject({
       status: 'passed',
+      reportRelativePath: 'gemini-provider-core.json',
       passedCount: 2,
       scenarioCount: 2,
       eligibleCacheReadRate: 0.5,
@@ -148,6 +157,8 @@ describe('e2e provider matrix helpers', () => {
         expect.objectContaining({ providerKey: 'openai', passing: false }),
       ]),
     );
+    expect(matrixReport).not.toHaveProperty('reportDir');
+    expect(JSON.stringify(matrixReport)).not.toContain('/repo/');
     expect(
       matrixReport.scenarioComparisons.find(
         (comparison: { fixtureId: string }) =>
@@ -219,10 +230,13 @@ function buildReport(provider: string, calendarPassed: boolean) {
   ];
 
   return {
+    schemaVersion: 'e2e-run-report-v2',
     runMetadata: {
       provider,
       providerId: `e2e-${provider}`,
+      hostedFamily: provider,
       model: `${provider}-test`,
+      endpointSha256: 'a'.repeat(64),
     },
     totals: {
       scenarioCount: 2,

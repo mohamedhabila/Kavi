@@ -1,7 +1,8 @@
 const path = require('path');
+const { RUN_REPORT_SCHEMA_VERSION } = require('./constants');
 const { E2E_PROVIDER_SPECS, readFirstEnvValue } = require('./provider');
 
-const PROVIDER_MATRIX_VERSION = '2026-06-15.provider-matrix';
+const PROVIDER_MATRIX_VERSION = '2026-07-10.provider-matrix-v2';
 const DEFAULT_PROVIDER_MATRIX_PROVIDER_KEYS = ['gemini', 'openai'];
 const DEFAULT_PROVIDER_MATRIX_BATCH_IDS = ['provider-core'];
 
@@ -68,7 +69,11 @@ function eligibleCacheReadTokens(cacheReadTokens, eligibleInputTokens) {
   return Math.min(Math.max(0, cacheReadTokens), Math.max(0, eligibleInputTokens));
 }
 
-function resolveEligibleCacheReadTokensFromCache(cache, fallbackCacheReadTokens, eligibleInputTokens) {
+function resolveEligibleCacheReadTokensFromCache(
+  cache,
+  fallbackCacheReadTokens,
+  eligibleInputTokens,
+) {
   const rate = cache?.eligibleCacheReadRate;
   if (Number.isFinite(rate) && eligibleInputTokens > 0) {
     return Math.min(eligibleInputTokens, Math.max(0, Math.round(rate * eligibleInputTokens)));
@@ -89,7 +94,9 @@ function parseCsvEnv(rawValue) {
 }
 
 function findProviderSpec(providerKeyOrAlias) {
-  const normalized = String(providerKeyOrAlias || '').trim().toLowerCase();
+  const normalized = String(providerKeyOrAlias || '')
+    .trim()
+    .toLowerCase();
   return E2E_PROVIDER_SPECS.find(
     (spec) => spec.key === normalized || spec.aliases.includes(normalized),
   );
@@ -193,6 +200,9 @@ function resolveProviderCredentialStatus(providerKey, env = process.env) {
   if (!baseUrl) {
     missing.push(spec.baseUrlEnv.join(' or '));
   }
+  if (spec.key === 'compatible' && !env.E2E_PUBLIC_MODEL_ID?.trim()) {
+    missing.push('E2E_PUBLIC_MODEL_ID');
+  }
 
   return {
     providerKey: spec.key,
@@ -208,7 +218,7 @@ function buildSkippedProviderBatchSummary(params) {
     providerKey: params.providerKey,
     batchId: params.batchId,
     scenarioIds: [...params.scenarioIds],
-    reportPath: params.reportPath,
+    reportRelativePath: path.basename(params.reportPath),
     status: 'skipped',
     metricsPassing: false,
     passing: false,
@@ -235,7 +245,7 @@ function buildProviderBatchSummary(params) {
       providerKey: params.providerKey,
       batchId: params.batchId,
       scenarioIds: [...params.scenarioIds],
-      reportPath: params.reportPath,
+      reportRelativePath: path.basename(params.reportPath),
       status: 'failed',
       exitStatus: params.exitStatus ?? 1,
       metricsPassing: false,
@@ -253,6 +263,13 @@ function buildProviderBatchSummary(params) {
       totalTokens: 0,
       scenarioOutcomes: [],
       failedScenarioIds: [],
+    };
+  }
+  if (report.schemaVersion !== RUN_REPORT_SCHEMA_VERSION) {
+    return {
+      ...buildSkippedProviderBatchSummary({ ...params, reason: 'report_version_mismatch' }),
+      status: 'failed',
+      exitStatus: params.exitStatus ?? 1,
     };
   }
 
@@ -293,10 +310,12 @@ function buildProviderBatchSummary(params) {
     providerKey: params.providerKey,
     provider: report.runMetadata?.provider || params.providerKey,
     providerId: report.runMetadata?.providerId,
+    hostedFamily: report.runMetadata?.hostedFamily,
     model: report.runMetadata?.model,
+    endpointSha256: report.runMetadata?.endpointSha256,
     batchId: params.batchId,
     scenarioIds: [...params.scenarioIds],
-    reportPath: params.reportPath,
+    reportRelativePath: path.basename(params.reportPath),
     status: metricsPassing ? 'passed' : 'failed',
     exitStatus: params.exitStatus ?? 0,
     metricsPassing,
@@ -311,10 +330,14 @@ function buildProviderBatchSummary(params) {
         : safeRate(pass1PassedCount, reliabilityScenarioCount),
     passKRate: reliability.passKRate ?? safeRate(reliability.passKPassedCount ?? 0, scenarioCount),
     retriedScenarioCount: reliability.retriedScenarioCount ?? 0,
-    cacheReadRate: cache.cacheReadRate ?? safeRate(totals.cacheReadTokens ?? 0, totals.inputTokens ?? 0),
+    cacheReadRate:
+      cache.cacheReadRate ?? safeRate(totals.cacheReadTokens ?? 0, totals.inputTokens ?? 0),
     eligibleCacheReadRate:
       cache.eligibleCacheReadRate ??
-      safeRate(cache.cacheReadTokens ?? totals.cacheReadTokens ?? 0, cache.eligibleInputTokens ?? 0),
+      safeRate(
+        cache.cacheReadTokens ?? totals.cacheReadTokens ?? 0,
+        cache.eligibleInputTokens ?? 0,
+      ),
     eligibleInputTokens: batchEligibleInputTokens,
     cacheReadTokens: batchCacheReadTokens,
     eligibleCacheReadTokens: resolveEligibleCacheReadTokensFromCache(
@@ -383,10 +406,7 @@ function buildProviderSummaries(results) {
       failedScenarioIds: unique(summary.failedScenarioIds).sort(),
       passRate: safeRate(summary.passedCount, summary.scenarioCount),
       pass1Rate: safeRate(summary.pass1PassedCount, summary.reliabilityScenarioCount),
-      eligibleCacheReadRate: safeRate(
-        summary.eligibleCacheReadTokens,
-        summary.eligibleInputTokens,
-      ),
+      eligibleCacheReadRate: safeRate(summary.eligibleCacheReadTokens, summary.eligibleInputTokens),
       cacheReadRate: safeRate(summary.cacheReadTokens, summary.inputTokens),
     }))
     .sort((left, right) => left.providerKey.localeCompare(right.providerKey));
@@ -457,7 +477,6 @@ function summarizeMatrixReport(plan, results) {
     version: plan.version,
     generatedAt: plan.generatedAt,
     runId: plan.runId,
-    reportDir: plan.reportDir,
     providerKeys: plan.providerKeys,
     batches: plan.batches,
     results,

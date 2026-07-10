@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
+const { randomUUID } = require('crypto');
 const { spawnSync } = require('child_process');
+const { ON_DEVICE_BENCHMARK_VERSION } = require('../onDeviceBenchmark/constants');
 const {
   PROVIDER_MATRIX_VERSION,
   buildMatrixRunPlan,
@@ -88,26 +90,51 @@ function buildMatrixRunPlanWithOnDeviceSelection(options) {
 
 function runOnDeviceBenchmarkForMatrix(options) {
   const reportPath = path.join(options.reportDir, 'on-device-benchmark.json');
+  const invocationReportPath = path.join(
+    options.reportDir,
+    `.on-device-benchmark-${randomUUID()}.json`,
+  );
+  fs.mkdirSync(options.reportDir, { recursive: true });
+  fs.rmSync(reportPath, { force: true });
   const env = {
     ...process.env,
     ...options.env,
-    E2E_ON_DEVICE_REPORT_PATH: reportPath,
+    E2E_ON_DEVICE_REPORT_PATH: invocationReportPath,
   };
-  const result = spawnSync(
-    process.execPath,
-    [path.join(options.projectRoot, 'scripts/on-device-benchmark.js')],
-    {
-      cwd: options.projectRoot,
-      stdio: 'inherit',
-      env,
-    },
-  );
-  const report = fs.existsSync(reportPath) ? JSON.parse(fs.readFileSync(reportPath, 'utf8')) : null;
-  return buildOnDeviceMatrixSummary({
-    report,
-    reportPath,
-    exitStatus: result.status ?? 1,
-  });
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [path.join(options.projectRoot, 'scripts/on-device-benchmark.js')],
+      {
+        cwd: options.projectRoot,
+        stdio: 'inherit',
+        env,
+      },
+    );
+    const exitStatus = result.status ?? 1;
+    if (!fs.existsSync(invocationReportPath)) {
+      return failedOnDeviceMatrixSummary(reportPath, 'report_missing', exitStatus);
+    }
+
+    let report;
+    try {
+      report = JSON.parse(fs.readFileSync(invocationReportPath, 'utf8'));
+    } catch {
+      return failedOnDeviceMatrixSummary(reportPath, 'report_invalid_json', exitStatus);
+    }
+    if (report?.version !== ON_DEVICE_BENCHMARK_VERSION) {
+      return failedOnDeviceMatrixSummary(reportPath, 'report_version_mismatch', exitStatus);
+    }
+
+    fs.renameSync(invocationReportPath, reportPath);
+    return buildOnDeviceMatrixSummary({
+      report,
+      reportPath,
+      exitStatus,
+    });
+  } finally {
+    fs.rmSync(invocationReportPath, { force: true });
+  }
 }
 
 function buildOnDeviceMatrixSummary(params) {
@@ -115,10 +142,19 @@ function buildOnDeviceMatrixSummary(params) {
   if (!report) {
     return failedOnDeviceMatrixSummary(params.reportPath, 'report_missing', params.exitStatus);
   }
+  if (report.version !== ON_DEVICE_BENCHMARK_VERSION) {
+    return failedOnDeviceMatrixSummary(
+      params.reportPath,
+      'report_version_mismatch',
+      params.exitStatus,
+    );
+  }
 
   const summary = report.summary || {};
-  const status =
+  const reportStatus =
     report.status === 'passed' ? 'passed' : report.status === 'skipped' ? 'skipped' : 'failed';
+  const processSucceeded = params.exitStatus === 0;
+  const status = processSucceeded ? reportStatus : 'failed';
   const scenarioCount = summary.scenarioCount ?? 0;
   const passedCount = summary.passedCount ?? 0;
   const failedCount = summary.failedCount ?? 0;
@@ -129,12 +165,12 @@ function buildOnDeviceMatrixSummary(params) {
     provider: ON_DEVICE_PROVIDER_KEY,
     model: report.model?.modelId || null,
     batchId: 'on-device-benchmark',
-    reportPath: params.reportPath,
+    reportRelativePath: path.basename(params.reportPath),
     status,
     exitStatus: params.exitStatus,
-    metricsPassing: status === 'passed',
-    passing: status === 'passed',
-    reason: report.reason || null,
+    metricsPassing: processSucceeded && reportStatus === 'passed',
+    passing: processSucceeded && reportStatus === 'passed',
+    reason: processSucceeded ? report.reason || null : report.reason || 'benchmark_process_failed',
     scenarioCount,
     passedCount,
     failedCount,
@@ -161,7 +197,7 @@ function failedOnDeviceMatrixSummary(reportPath, reason, exitStatus) {
     provider: ON_DEVICE_PROVIDER_KEY,
     model: null,
     batchId: 'on-device-benchmark',
-    reportPath,
+    reportRelativePath: path.basename(reportPath),
     status: 'failed',
     exitStatus,
     metricsPassing: false,

@@ -1,10 +1,16 @@
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+
 const {
   attachOnDeviceMatrixReport,
   buildMatrixRunPlanWithOnDeviceSelection,
   buildOnDeviceMatrixSummary,
+  runOnDeviceBenchmarkForMatrix,
   splitProviderSelection,
 } = require('../../scripts/e2eReport/onDeviceMatrix');
 const { summarizeMatrixReport } = require('../../scripts/e2eReport/providerMatrix');
+const { ON_DEVICE_BENCHMARK_VERSION } = require('../../scripts/onDeviceBenchmark/constants');
 
 describe('e2e provider matrix on-device integration', () => {
   it('splits cloud providers from on-device provider aliases', () => {
@@ -57,6 +63,7 @@ describe('e2e provider matrix on-device integration', () => {
       exitStatus: 0,
       reportPath: '/repo/on-device.json',
       report: {
+        version: ON_DEVICE_BENCHMARK_VERSION,
         status: 'passed',
         model: { modelId: 'gemma-4-E2B-it' },
         summary: {
@@ -89,6 +96,7 @@ describe('e2e provider matrix on-device integration', () => {
     expect(attached.providerSummaries).toEqual([
       expect.objectContaining({
         providerKey: 'on-device',
+        reportRelativePath: 'on-device.json',
         model: 'gemma-4-E2B-it',
         passRate: 1,
       }),
@@ -121,6 +129,7 @@ describe('e2e provider matrix on-device integration', () => {
       exitStatus: 0,
       reportPath: '/repo/on-device.json',
       report: {
+        version: ON_DEVICE_BENCHMARK_VERSION,
         status: 'skipped',
         reason: 'device_unavailable',
         summary: {
@@ -140,5 +149,82 @@ describe('e2e provider matrix on-device integration', () => {
       skippedBatchRunCount: 1,
       onDeviceStatus: 'skipped',
     });
+  });
+
+  it('fails a passed report when the current benchmark process failed', () => {
+    const summary = buildOnDeviceMatrixSummary({
+      exitStatus: 1,
+      reportPath: '/repo/on-device.json',
+      report: {
+        version: ON_DEVICE_BENCHMARK_VERSION,
+        status: 'passed',
+        model: { modelId: 'gemma-4-E2B-it' },
+        summary: {
+          scenarioCount: 1,
+          passedCount: 1,
+          failedCount: 0,
+          skippedCount: 0,
+          passRate: 1,
+          failedRequiredScenarioIds: [],
+          missingRequiredScenarioIds: [],
+        },
+      },
+    });
+
+    expect(summary).toMatchObject({
+      status: 'failed',
+      passing: false,
+      metricsPassing: false,
+      reason: 'benchmark_process_failed',
+      exitStatus: 1,
+    });
+  });
+
+  it('rejects reports from any previous benchmark contract', () => {
+    const summary = buildOnDeviceMatrixSummary({
+      exitStatus: 0,
+      reportPath: '/repo/on-device.json',
+      report: {
+        version: 'legacy-on-device-report',
+        status: 'passed',
+      },
+    });
+
+    expect(summary).toMatchObject({
+      status: 'failed',
+      passing: false,
+      metricsPassing: false,
+      reason: 'report_version_mismatch',
+    });
+  });
+
+  it('does not reuse a stale target report when the current process produces none', () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), 'kavi-on-device-matrix-stale-'));
+    const reportDir = join(projectRoot, 'reports');
+    const scriptsDir = join(projectRoot, 'scripts');
+    const reportPath = join(reportDir, 'on-device-benchmark.json');
+    mkdirSync(reportDir, { recursive: true });
+    mkdirSync(scriptsDir, { recursive: true });
+    writeFileSync(
+      reportPath,
+      JSON.stringify({ version: ON_DEVICE_BENCHMARK_VERSION, status: 'passed' }),
+      'utf8',
+    );
+    writeFileSync(join(scriptsDir, 'on-device-benchmark.js'), 'process.exit(1);\n', 'utf8');
+
+    try {
+      const summary = runOnDeviceBenchmarkForMatrix({ projectRoot, reportDir, env: {} });
+
+      expect(summary).toMatchObject({
+        status: 'failed',
+        passing: false,
+        metricsPassing: false,
+        reason: 'report_missing',
+        exitStatus: 1,
+      });
+      expect(existsSync(reportPath)).toBe(false);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 });

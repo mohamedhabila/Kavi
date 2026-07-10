@@ -2,14 +2,14 @@
 
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
 const { applyProjectLocalEnv, exitWithStatus, resolveProjectRoot } = require('./lib/harness');
+const { atomicWriteFileSync } = require('./e2eReport/fileTransaction');
 const {
-  buildProviderBatchSummary,
   buildSkippedProviderBatchSummary,
   resolveProviderCredentialStatus,
   summarizeMatrixReport,
 } = require('./e2eReport/providerMatrix');
+const { runProviderBatchForMatrix } = require('./e2eReport/providerMatrixRunner');
 const {
   attachOnDeviceMatrixReport,
   buildMatrixRunPlanWithOnDeviceSelection,
@@ -19,49 +19,19 @@ const {
 const label = 'e2e-provider-matrix';
 const projectRoot = resolveProjectRoot();
 
-function readJsonFile(filePath) {
-  if (!fs.existsSync(filePath)) {
-    return undefined;
-  }
-  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-}
-
 function formatRate(rate) {
   return Number(rate || 0).toFixed(3);
 }
 
 function runProviderBatch(run) {
-  const env = {
-    ...process.env,
-    RUN_E2E_AGENT_EVAL: '1',
-    E2E_PROVIDER: run.providerKey,
-    E2E_SCENARIO_IDS: run.scenarioIds.join(','),
-    E2E_REPORT_PATH: run.reportPath,
-    E2E_MAX_SCENARIO_RETRIES: process.env.E2E_MAX_SCENARIO_RETRIES?.trim() || '0',
-  };
-  delete env.E2E_REPORT_PARTIAL_PATH;
-
-  fs.mkdirSync(path.dirname(run.reportPath), { recursive: true });
   console.log(
     `[${label}] provider=${run.providerKey} batch=${run.batchId} scenarios=${run.scenarioIds.length} report=${run.reportPath}`,
   );
-
-  const result = spawnSync(
-    process.execPath,
-    [path.join(projectRoot, 'scripts/e2e-assessment-collect.js')],
-    {
-      cwd: projectRoot,
-      stdio: 'inherit',
-      env,
-    },
-  );
-  const exitStatus = result.status ?? 1;
-  const report = readJsonFile(run.reportPath);
-  const summary = buildProviderBatchSummary({
-    ...run,
-    exitStatus,
-    report,
-    reason: exitStatus === 0 ? undefined : 'assessment_collect_failed',
+  const summary = runProviderBatchForMatrix({
+    projectRoot,
+    run,
+    env: process.env,
+    stdio: 'inherit',
   });
 
   console.log(
@@ -126,7 +96,7 @@ const matrixReport = attachOnDeviceMatrixReport(
 );
 const matrixReportPath = path.join(plan.reportDir, 'matrix-report.json');
 fs.mkdirSync(plan.reportDir, { recursive: true });
-fs.writeFileSync(matrixReportPath, JSON.stringify(matrixReport, null, 2), 'utf8');
+atomicWriteFileSync(matrixReportPath, JSON.stringify(matrixReport, null, 2), 'utf8');
 
 console.log(
   `[${label}] overall passing=${matrixReport.overall.passing} pass=${matrixReport.overall.passedCount}/${matrixReport.overall.scenarioCount} cacheEligible=${formatRate(matrixReport.overall.eligibleCacheReadRate)} tokens=${matrixReport.overall.totalTokens}`,
