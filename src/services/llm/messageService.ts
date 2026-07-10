@@ -4,8 +4,12 @@ import { sendLocalLlmMessage } from '../localLlm/generateSession';
 import { isOnDeviceLlmProvider } from '../localLlm/provider';
 import { resolveProviderTransport } from './catalog/providerProtocols';
 import { buildProviderHeaders, resolveProviderBaseUrl } from './core/providerRequest';
+import { selectByteEquivalentSystemPromptSections } from './core/systemPromptSections';
 import type { LlmPerformFetch } from './core/fetchTransport';
-import { buildLocalLlmRequestOptions, resolveLocalProviderForRequest } from './localProviderRequest';
+import {
+  buildLocalLlmRequestOptions,
+  resolveLocalProviderForRequest,
+} from './localProviderRequest';
 import { sendAnthropicMessage } from './providers/anthropic/message';
 import { sendGeminiMessage } from './providers/gemini/message';
 import { sendOpenAICompatibleChatMessage } from './providers/openaiChat/message';
@@ -18,7 +22,16 @@ export function sendLlmMessage(params: {
   options?: MessageRequestOptions;
   performFetch: LlmPerformFetch;
 }): Promise<any> {
-  const options = params.options || {};
+  const requestedOptions = params.options || {};
+  const approvedSystemPromptSections = selectByteEquivalentSystemPromptSections(
+    params.messages,
+    requestedOptions.systemPromptSections,
+  );
+  const options: MessageRequestOptions = { ...requestedOptions };
+  delete options.systemPromptSections;
+  if (approvedSystemPromptSections) {
+    options.systemPromptSections = approvedSystemPromptSections;
+  }
 
   if (isOnDeviceLlmProvider(params.provider)) {
     return sendLocalLlmMessage(

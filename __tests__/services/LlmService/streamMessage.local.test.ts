@@ -33,15 +33,12 @@ describe('LlmService local streamMessage', () => {
     const service = new LlmService(makeOnDeviceConfig());
     const events: any[] = [];
 
-    for await (const event of service.streamMessage(
-      [{ role: 'user', content: 'Stream locally' }],
-      {
-        conversationId: 'conv-local-stream',
-        maxTokens: 384,
-        temperature: 0.3,
-        tools: [localTool],
-      },
-    )) {
+    for await (const event of service.streamMessage([{ role: 'user', content: 'Stream locally' }], {
+      conversationId: 'conv-local-stream',
+      maxTokens: 384,
+      temperature: 0.3,
+      tools: [localTool],
+    })) {
       events.push(event);
     }
 
@@ -74,5 +71,41 @@ describe('LlmService local streamMessage', () => {
         completionStatus: 'complete',
       },
     });
+  });
+
+  it('forwards only the approved prompt to the local serializer', async () => {
+    mockStreamLocalLlmMessage.mockImplementationOnce(async function* () {
+      yield { type: 'token', content: 'Local reply' };
+      yield { type: 'done' };
+    });
+
+    const service = new LlmService(makeOnDeviceConfig());
+    const messages = [
+      { role: 'system', content: 'Approved budget prompt.' },
+      { role: 'user', content: 'Use approved context.' },
+    ];
+
+    for await (const _event of service.streamMessage(messages, {
+      enablePromptCaching: true,
+      systemPromptSections: [
+        { text: 'Original stable prompt.', cacheable: true },
+        { text: 'Unbudgeted dynamic memory.' },
+      ],
+    })) {
+      // Drain the local stream so the request is fully observed.
+    }
+
+    expect(mockStreamLocalLlmMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'on-device' }),
+      messages,
+      undefined,
+      undefined,
+    );
+    expect(JSON.stringify(mockStreamLocalLlmMessage.mock.calls[0])).not.toContain(
+      'Unbudgeted dynamic memory.',
+    );
+    expect(JSON.stringify(mockStreamLocalLlmMessage.mock.calls[0])).not.toContain(
+      'Original stable prompt.',
+    );
   });
 });

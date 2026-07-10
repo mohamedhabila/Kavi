@@ -118,6 +118,48 @@ describe('LlmService', () => {
       expect(body.tools[2].cache_control).toEqual({ type: 'ephemeral' });
     });
 
+    it('serializes the approved Anthropic prompt when cache sections are stale', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            content: [{ type: 'text', text: 'ok' }],
+            stop_reason: 'end_turn',
+            usage: { input_tokens: 5, output_tokens: 2 },
+          }),
+      });
+
+      const service = new LlmService(
+        makeConfig({
+          id: 'anthropic',
+          name: 'Anthropic',
+          baseUrl: 'https://api.anthropic.com/v1',
+          apiKey: 'anthropic-key',
+          model: 'claude-sonnet-4-6',
+        }),
+      );
+
+      await service.sendMessage(
+        [
+          { role: 'system', content: 'Approved budget prompt.' },
+          { role: 'user', content: 'Use approved context.' },
+        ],
+        {
+          enablePromptCaching: true,
+          systemPromptSections: [
+            { text: 'Original stable prompt.', cacheable: true },
+            { text: 'Unbudgeted dynamic memory.' },
+          ],
+        },
+      );
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.system).toBe('Approved budget prompt.');
+      expect(body.messages).toEqual([{ role: 'user', content: 'Use approved context.' }]);
+      expect(JSON.stringify(body)).not.toContain('Original stable prompt.');
+      expect(JSON.stringify(body)).not.toContain('Unbudgeted dynamic memory.');
+    });
+
     it('does not mark late cacheable-looking system sections after dynamic context as prefix cacheable', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -139,14 +181,23 @@ describe('LlmService', () => {
         }),
       );
 
-      await service.sendMessage([{ role: 'user', content: 'Hello' }], {
-        enablePromptCaching: true,
-        systemPromptSections: [
-          { text: 'Stable core', cacheable: true },
-          { text: 'Dynamic turn context' },
-          { text: 'Late memory block', cacheable: true },
+      await service.sendMessage(
+        [
+          {
+            role: 'system',
+            content: 'Stable core\n\nDynamic turn context\n\nLate memory block',
+          },
+          { role: 'user', content: 'Hello' },
         ],
-      });
+        {
+          enablePromptCaching: true,
+          systemPromptSections: [
+            { text: 'Stable core', cacheable: true },
+            { text: 'Dynamic turn context' },
+            { text: 'Late memory block', cacheable: true },
+          ],
+        },
+      );
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(body.system).toEqual([
@@ -180,6 +231,7 @@ describe('LlmService', () => {
 
       await service.sendMessage(
         [
+          { role: 'system', content: 'Stable core\n\nDynamic turn context' },
           { role: 'user', content: 'First request' },
           { role: 'assistant', content: 'First response' },
           { role: 'user', content: 'Second request' },

@@ -114,6 +114,66 @@ describe('executeAgentControlGraphModelTurnAttempt replay retries', () => {
       mode: 'openai_native',
       event: 'provider_managed',
     });
+    expect(streamOptions.systemPromptSections).toBeUndefined();
+  });
+
+  it('drops original cache sections when the final budget truncates the approved prompt', async () => {
+    const streamMessage = jest.fn().mockImplementation(() => usageOnlyTurnStream());
+    const originalSystemPrompt = `Stable prefix.\n\n${'Unbudgeted dynamic context. '.repeat(2_000)}`;
+    const originalSections = [
+      { text: 'Stable prefix.', cacheable: true },
+      { text: 'Unbudgeted dynamic context. '.repeat(2_000) },
+    ];
+
+    const result = await executeAgentControlGraphModelTurnAttempt({
+      activeProvider: finalizeProviderConfig({
+        id: 'openai',
+        name: 'OpenAI',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'test-key',
+        model: 'gpt-5.4',
+        enabled: true,
+      }),
+      applyGraphEvents: jest.fn(),
+      callbacks: {
+        onStateChange: jest.fn(),
+        onToken: jest.fn(),
+        onAssistantStreamReset: jest.fn(),
+      },
+      compactionEngine: null,
+      conversationId: 'conv-budgeted-cache-sections',
+      effectiveForceTextReasonThisTurn: undefined,
+      hasPendingAsyncOperations: false,
+      iteration: 1,
+      livingMemory: undefined,
+      llm: { streamMessage, sendMessage: jest.fn() },
+      onCompaction: undefined,
+      preparedTurn: {
+        enrichedSystemPrompt: originalSystemPrompt,
+        enrichedSystemPromptSections: originalSections,
+        pinnedToolNames: [],
+        selectedToolTokenEstimate: 0,
+        selectedTools: [],
+        toolsForIteration: undefined,
+      },
+      recordPerformanceMetrics: jest.fn(),
+      reportUsage: jest.fn(),
+      requestMaxTokens: 1024,
+      requestModel: 'gpt-5.4',
+      signal: undefined,
+      temperature: 1,
+      thinkingLevel: 'off',
+      warn: jest.fn(),
+      workingMessages: [{ id: 'u1', role: 'user', content: 'Continue.', timestamp: Date.now() }],
+      yieldToUiFrame: jest.fn().mockResolvedValue(undefined),
+    });
+
+    expect(result.kind).toBe('success');
+    const [requestMessages, streamOptions] = streamMessage.mock.calls[0]!;
+    expect(requestMessages[0].content).not.toBe(originalSystemPrompt);
+    expect(requestMessages[0].content).toContain('[... context truncated to fit budget ...]');
+    expect(streamOptions.enablePromptCaching).toBe(true);
+    expect(streamOptions.systemPromptSections).toBeUndefined();
   });
 
   it('falls back to stream when non-stream reconcile returns no covered tool calls', async () => {
@@ -162,9 +222,7 @@ describe('executeAgentControlGraphModelTurnAttempt replay retries', () => {
         temperature: 1,
         thinkingLevel: 'off',
         warn: jest.fn(),
-        workingMessages: [
-          { id: 'u1', role: 'user', content: 'Read file', timestamp: Date.now() },
-        ],
+        workingMessages: [{ id: 'u1', role: 'user', content: 'Read file', timestamp: Date.now() }],
         yieldToUiFrame: jest.fn().mockResolvedValue(undefined),
       }),
     ).rejects.toThrow('missing required provider replay coverage after retries');

@@ -46,6 +46,10 @@ export interface MessageRequestOptions extends PromptCachingOptions {
   conversationId?: string;
   model?: string;
   tools?: ToolDefinition[];
+  /**
+   * Cache-boundary metadata for the single system message. Ignored unless the
+   * section texts join byte-for-byte to that approved message.
+   */
   systemPromptSections?: SystemPromptSection[];
   toolChoice?: ToolChoiceMode;
   maxTokens?: number;

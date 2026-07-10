@@ -1,5 +1,8 @@
 import { buildPromptCachingPlan } from '../../services/context/tokenOptimization';
-import { splitCacheableSystemPromptSections } from '../../services/llm/core/systemPromptSections';
+import {
+  selectByteEquivalentSystemPromptSections,
+  splitCacheableSystemPromptSections,
+} from '../../services/llm/core/systemPromptSections';
 import { resolveModelHostedFamily } from '../../services/llm/catalog/providerFamilies';
 import { resolveProviderTransport } from '../../services/llm/catalog/providerProtocols';
 import type { ToolChoiceMode } from '../../services/llm/support/contracts';
@@ -119,8 +122,12 @@ export async function executeAgentControlGraphModelTurnAttempt(
     { role: 'system', content: budgetResult.systemPrompt },
     ...budgetResult.messages,
   ];
-  const stableSystemPrompt = splitCacheableSystemPromptSections(
+  const approvedSystemPromptSections = selectByteEquivalentSystemPromptSections(
+    requestMessages,
     params.preparedTurn.enrichedSystemPromptSections,
+  );
+  const stableSystemPrompt = splitCacheableSystemPromptSections(
+    approvedSystemPromptSections,
   ).cacheableText;
   const promptCachingPlan = buildPromptCachingPlan({
     provider: params.activeProvider,
@@ -160,8 +167,8 @@ export async function executeAgentControlGraphModelTurnAttempt(
     ...thinkingParams,
   };
 
-  if (promptCachingPlan.enablePromptCaching) {
-    streamOptions.systemPromptSections = params.preparedTurn.enrichedSystemPromptSections;
+  if (promptCachingPlan.enablePromptCaching && approvedSystemPromptSections) {
+    streamOptions.systemPromptSections = approvedSystemPromptSections;
   }
   const allowQueuedToolCalls = !(
     (params.effectiveForceTextReasonThisTurn === 'async_terminal_completion' ||

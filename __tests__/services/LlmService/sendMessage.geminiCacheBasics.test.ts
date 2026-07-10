@@ -170,6 +170,53 @@ describe('LlmService', () => {
       ]);
     });
 
+    it('serializes the approved Gemini prompt when cache sections are stale', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            candidates: [
+              {
+                content: { parts: [{ text: 'ok' }] },
+                finishReason: 'STOP',
+              },
+            ],
+          }),
+      });
+
+      const service = new LlmService(
+        makeConfig({
+          id: 'gemini',
+          name: 'Gemini',
+          baseUrl: 'https://generativelanguage.googleapis.com',
+          apiKey: 'AIza-test',
+          model: 'gemini-3-flash-preview',
+        }),
+      );
+
+      await service.sendMessage(
+        [
+          { role: 'system', content: 'Approved budget prompt.' },
+          { role: 'user', content: 'Use approved context.' },
+        ],
+        {
+          enablePromptCaching: true,
+          systemPromptSections: [
+            { text: 'Original stable prompt.', cacheable: true },
+            { text: 'Unbudgeted dynamic memory.' },
+          ],
+        },
+      );
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.systemInstruction).toEqual({
+        parts: [{ text: 'Approved budget prompt.' }],
+      });
+      expect(body.contents).toEqual([{ role: 'user', parts: [{ text: 'Use approved context.' }] }]);
+      expect(JSON.stringify(body)).not.toContain('Original stable prompt.');
+      expect(JSON.stringify(body)).not.toContain('Unbudgeted dynamic memory.');
+    });
+
     it('ignores external Gemini cachedContents handles with live tools', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,

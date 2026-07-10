@@ -198,6 +198,46 @@ describe('LlmService', () => {
       ]);
     });
 
+    it('serializes the approved OpenAI-compatible prompt when cache sections are stale', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ choices: [{ message: { content: 'ok' } }] }),
+      });
+
+      const service = new LlmService(
+        makeConfig({
+          id: 'openrouter',
+          name: 'OpenRouter',
+          baseUrl: 'https://openrouter.ai/api/v1',
+          apiKey: 'sk-openrouter',
+          model: 'openai/gpt-5.4',
+        }),
+      );
+
+      await service.sendMessage(
+        [
+          { role: 'system', content: 'Approved budget prompt.' },
+          { role: 'user', content: 'Use approved context.' },
+        ],
+        {
+          enablePromptCaching: true,
+          conversationId: 'conv-openrouter-budgeted',
+          systemPromptSections: [
+            { text: 'Original stable prompt.', cacheable: true },
+            { text: 'Unbudgeted dynamic memory.' },
+          ],
+        },
+      );
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.messages).toEqual([
+        { role: 'system', content: 'Approved budget prompt.' },
+        { role: 'user', content: 'Use approved context.' },
+      ]);
+      expect(JSON.stringify(body)).not.toContain('Original stable prompt.');
+      expect(JSON.stringify(body)).not.toContain('Unbudgeted dynamic memory.');
+    });
+
     it('does not send cache fields to generic OpenAI-compatible gateways', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,

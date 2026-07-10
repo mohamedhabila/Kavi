@@ -171,6 +171,44 @@ describe('LlmService', () => {
       ]);
     });
 
+    it('serializes the approved Responses prompt when cache sections are stale', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(makeOpenAIResponsesPayload()),
+      });
+
+      const service = new LlmService(
+        makeConfig({
+          id: 'openai',
+          name: 'OpenAI',
+          baseUrl: 'https://api.openai.com/v1',
+          apiKey: 'sk-openai',
+          model: 'gpt-5.4',
+        }),
+      );
+
+      await service.sendMessage(
+        [
+          { role: 'system', content: 'Approved budget prompt.' },
+          { role: 'user', content: 'Use approved context.' },
+        ],
+        {
+          enablePromptCaching: true,
+          promptCacheKey: 'cm:approved-budget',
+          systemPromptSections: [
+            { text: 'Original stable prompt.', cacheable: true },
+            { text: 'Unbudgeted dynamic memory.' },
+          ],
+        },
+      );
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.instructions).toBe('Approved budget prompt.');
+      expect(body.input).toEqual([{ role: 'user', content: 'Use approved context.' }]);
+      expect(JSON.stringify(body)).not.toContain('Original stable prompt.');
+      expect(JSON.stringify(body)).not.toContain('Unbudgeted dynamic memory.');
+    });
+
     it('persists dynamic input context in OpenAI replay metadata for stateless cache growth', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -187,14 +225,23 @@ describe('LlmService', () => {
         }),
       );
 
-      const result = await service.sendMessage([{ role: 'user', content: 'Current request.' }], {
-        enablePromptCaching: true,
-        promptCacheKey: 'cm:test:key',
-        systemPromptSections: [
-          { text: 'Stable assistant contract.', cacheable: true },
-          { text: 'Dynamic memory and focus.' },
+      const result = await service.sendMessage(
+        [
+          {
+            role: 'system',
+            content: 'Stable assistant contract.\n\nDynamic memory and focus.',
+          },
+          { role: 'user', content: 'Current request.' },
         ],
-      });
+        {
+          enablePromptCaching: true,
+          promptCacheKey: 'cm:test:key',
+          systemPromptSections: [
+            { text: 'Stable assistant contract.', cacheable: true },
+            { text: 'Dynamic memory and focus.' },
+          ],
+        },
+      );
 
       expect(result.choices[0].message.providerReplay.openaiResponseInputContext).toEqual([
         { role: 'system', content: 'Dynamic memory and focus.' },
