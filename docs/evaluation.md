@@ -13,8 +13,13 @@ The machine-readable sources are:
   artifact versions, metrics, failure categories, and claim rules.
 - [`evaluation/klae-development.json`](../evaluation/klae-development.json):
   12 original synthetic product cases with visible structural gold state.
+- [`evaluation/klae-private-governance.schema.json`](../evaluation/klae-private-governance.schema.json):
+  public schema for private split registries and evaluator-controlled packs.
+- [`evaluation/klae-private-registry.template.json`](../evaluation/klae-private-registry.template.json):
+  metadata-only starting point with zero digests and no cases or gold.
 
-Validate all three without a provider key or network access:
+Validate all public governance artifacts without a provider key, private pack,
+or network access:
 
 ```bash
 npm run check:evaluation-contract
@@ -80,6 +85,116 @@ scenarios, and at least 100 sealed held-out scenarios with separate ownership.
 Those private packs stay outside git. The checked-in 12-case development pack
 is a representative, redistributable contract fixture, not a substitute for
 the private packs and not a leaderboard score.
+
+Every full private split independently covers all KLAE families, the four
+mode transitions derived from actual turns, positive/negative/mixed controls,
+and short (2-3 turns), medium (4-15 turns), and long (16+ turns) case histories.
+Lifecycle coverage is causal: a relevant user interaction must occur before
+and after a new conversation, background, reboot, or provider-change boundary;
+kill/relaunch and offline/online windows must be exercised end to end. Each
+opaque longitudinal persona owns exactly one set of cases, has at least 30
+strictly chronological interactions, and spans at least four non-overlapping
+time periods that each contain an interaction. Persona IDs, assignments, time
+boundaries, inputs, and gold remain private.
+
+### Private KLAE release procedure
+
+Use one owner-only directory per release attempt. Names shown here are generic;
+never copy real custodian identities or local locators into public reports.
+
+```text
+.private/evals/<release-id>/
+  registry.json
+  development.pack.json
+  locked-validation.pack.json
+  sealed-held-out.pack.json
+```
+
+The validator accepts only regular JSON files under `.private/evals`, rejects
+`..` traversal and every symlink component, and reads no file larger than
+32 MiB. The three `packPath` values are relative to `registry.json`. Keep the
+directory mode `0700` and files mode `0600`; do not mount it into the app,
+commit it, or upload it as CI evidence.
+
+Ownership is part of validity, not an administrative note:
+
+1. Candidate maintainers may inspect and iterate on the development split.
+2. A validation custodian keeps the locked pack from the candidate and returns
+   results only. Its access reviewer must also be independent from the
+   candidate.
+3. A different held-out custodian owns the sealed pack. That owner must be
+   distinct from candidate maintainers, the registry owner, and both other
+   split owners. The candidate receives aggregate results, never pack bytes.
+4. The registry owner records pack IDs, byte digests, counts, custody, and an
+   access review performed no earlier than the baseline freeze. The evaluator
+   runs the release check on a custody-controlled machine that can read all
+   three files; custody does not transfer to the candidate.
+
+Create a release without editing the public template in place:
+
+1. Copy `evaluation/klae-private-registry.template.json` to the owner-only
+   release directory as `registry.json`.
+2. Freeze a clean app commit, the complete evaluation configuration snapshot,
+   and the complete production prompt snapshot. Give the baseline a new opaque
+   ID and set `registryState` to `frozen`.
+3. Replace every template identity and timestamp. Keep `goldExposure` equal to
+   `evaluator_only`; the app process receives only chronological case inputs.
+4. Validate the case counts and coverage locally. Put the raw SHA-256 of each
+   final pack into its descriptor. Any byte change requires a new digest.
+5. Complete the independent access reviews, then hash `registry.json` last.
+   Store that registry digest in the release ledger outside the registry. Do
+   not modify a frozen registry; create a new release directory and digest.
+
+Use a byte digest, not a JSON reserialization digest. This keyless Node command
+works identically for every pack, snapshot, and registry:
+
+```bash
+node -e 'const c=require("node:crypto"),f=require("node:fs"),p=process.argv[1];process.stdout.write(c.createHash("sha256").update(f.readFileSync(p)).digest("hex")+"\n")' -- <file>
+```
+
+Run the fail-closed gate with values copied from the independent freeze ledger:
+
+```bash
+npm run check:evaluation-release -- \
+  --registry .private/evals/<release-id>/registry.json \
+  --registry-sha <registry-sha256> \
+  --candidate-id <candidate-id> \
+  --baseline-id <baseline-id> \
+  --app-sha <40-character-app-commit> \
+  --configuration-sha <configuration-sha256> \
+  --prompt-sha <prompt-sha256>
+```
+
+All flags are required. Release mode fails on missing packs, a template or zero
+digest, count/coverage drift, checksum changes, baseline mismatch, unsafe file
+resolution, invalid custody, candidate access to a restricted pack, or any
+contamination status other than `clean`. It is still a governance check, not a
+scenario runner and not evidence of a score.
+
+Treat baseline resets and contamination as append-only decisions:
+
+- Tuning after a locked-validation result creates a new baseline. Retire that
+  locked pack for further tuning loops and obtain an independently prepared
+  replacement before making another release claim.
+- If candidate access to locked or held-out bytes or gold is detected, mark the
+  current registry `invalidated`, record a reason, preserve the audit record,
+  and stop. Never change it back to `clean`.
+- A contaminated held-out pack is permanently ineligible for that candidate.
+  A separate custodian must prepare a new pack, digest, registry, and access
+  review against a newly frozen baseline.
+- Changes to app code, production prompts, evaluation configuration, pack
+  bytes, or custody metadata require a new frozen registry digest. There is no
+  compatibility alias or fallback to an older registry or pack schema.
+
+Public evidence may include the public schema and template, the checked-in
+12-case representative pack, schema versions, split sizes, aggregate coverage
+gate results, aggregate metrics, and immutable app/configuration/prompt/pack/
+registry digests. It must not include the private registry body, local custody
+paths, owner or reviewer identities, access notes, persona IDs or time periods,
+case inputs, fixtures, assertions, gold, transcripts, raw outputs, or the
+private validator command with its local arguments. A public run-manifest
+artifact reference is rejected if it points into a `.private`, `private`,
+`gold`, or `golden` path component, regardless of artifact visibility.
 
 Production code must not branch on a case ID, family, expected value, benchmark
 name, dataset ID, question ID, answer type, golden action, or evaluator rubric.

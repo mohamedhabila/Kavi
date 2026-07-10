@@ -129,9 +129,19 @@ npm test -- --runInBand --testNamePattern="workspace"
 ## Public Evaluation Contract
 
 `npm run check:evaluation-contract` validates the canonical evaluation schema,
-contract, and 12-case synthetic KLAE development pack. It is deterministic,
-keyless, and network-free. The command validates artifact structure and
-governance; it does not execute the scenarios or create a score.
+contract, 12-case synthetic KLAE development pack, private-pack governance
+schema, and metadata-only registry template. It is deterministic, keyless,
+network-free, and never reads `.private/evals`. The command validates artifact
+structure and governance; it does not execute the scenarios or create a score.
+
+Maintainers and independent evaluators use the opt-in, fail-closed
+`npm run check:evaluation-release -- <all release flags>` gate only on a
+custody-controlled machine. It validates frozen 40-case development, 40-case
+locked validation, and 100-or-more-case held-out packs, their immutable byte
+digests, coverage, baseline identity, ownership, and access review. Missing or
+incomplete private material is a failure, never a skip. The complete private
+layout, ownership handoff, digest command, reset procedure, invocation, and
+publication boundary are in [evaluation.md](evaluation.md#private-klae-release-procedure).
 
 See [evaluation.md](evaluation.md) for evaluation lanes, verification labels,
 split ownership, structural assertion semantics, metrics, failure categories,
