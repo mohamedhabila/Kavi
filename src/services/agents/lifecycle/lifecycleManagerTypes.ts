@@ -1,4 +1,8 @@
-import type { SubAgentActivityEntry, SubAgentResult, SubAgentSnapshot } from '../../../types/subAgent';
+import type {
+  SubAgentActivityEntry,
+  SubAgentResult,
+  SubAgentSnapshot,
+} from '../../../types/subAgent';
 import type { ActiveSubAgentRunControl, ProgressChanges, ProgressOptions } from './phases';
 
 type LifecyclePersistenceManager = {
@@ -48,4 +52,5 @@ export type SubAgentLifecycleManagerParams<TAgent extends SubAgentSnapshot> = {
   normalizePreviewText: (value: string | undefined, maxLength?: number) => string | undefined;
   maxToolResultPreviewChars: number;
   terminalSubAgentRetentionMs: number;
+  reconcileOutcome?: (agent: TAgent) => Promise<boolean>;
 };

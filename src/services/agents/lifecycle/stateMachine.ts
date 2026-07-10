@@ -68,6 +68,16 @@ export function cloneSubAgentSnapshot<T extends SubAgentSnapshot>(snapshot: T): 
   return {
     ...snapshot,
     ...(snapshot.toolsUsed ? { toolsUsed: [...snapshot.toolsUsed] } : {}),
+    ...(snapshot.outcomeReconciliation
+      ? {
+          outcomeReconciliation: {
+            ...snapshot.outcomeReconciliation,
+            ...(snapshot.outcomeReconciliation.factIds
+              ? { factIds: [...snapshot.outcomeReconciliation.factIds] }
+              : {}),
+          },
+        }
+      : {}),
     ...(snapshot.artifacts
       ? { artifacts: snapshot.artifacts.map((attachment) => ({ ...attachment })) }
       : {}),
@@ -217,6 +227,8 @@ function mergeTerminalSnapshot(
     name: terminalSnapshot.name ?? fallbackSnapshot.name,
     output: terminalSnapshot.output ?? fallbackSnapshot.output,
     completionState: terminalSnapshot.completionState ?? fallbackSnapshot.completionState,
+    outcomeReconciliation:
+      terminalSnapshot.outcomeReconciliation ?? fallbackSnapshot.outcomeReconciliation,
     toolsUsed: terminalSnapshot.toolsUsed ?? fallbackSnapshot.toolsUsed,
     artifacts: terminalSnapshot.artifacts ?? fallbackSnapshot.artifacts,
     iterations: terminalSnapshot.iterations ?? fallbackSnapshot.iterations,
@@ -260,6 +272,8 @@ export function resolveDisplayedSubAgentSnapshot(
     name: preferredSnapshot.name ?? fallbackSnapshot.name,
     output: preferredSnapshot.output ?? fallbackSnapshot.output,
     completionState: preferredSnapshot.completionState ?? fallbackSnapshot.completionState,
+    outcomeReconciliation:
+      preferredSnapshot.outcomeReconciliation ?? fallbackSnapshot.outcomeReconciliation,
     toolsUsed: preferredSnapshot.toolsUsed ?? fallbackSnapshot.toolsUsed,
     artifacts: preferredSnapshot.artifacts ?? fallbackSnapshot.artifacts,
     iterations: preferredSnapshot.iterations ?? fallbackSnapshot.iterations,

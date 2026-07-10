@@ -1,3 +1,8 @@
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
+});
+
 import {
   detectOrphans,
   getSessionContext,
@@ -14,6 +19,12 @@ import {
   type ActiveSubAgent,
   writePersistedJson,
 } from '../helpers/subAgentDurabilityHarness';
+import { listFacts } from '../../src/services/memory/facts/queries';
+import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
+import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
+import { useSettingsStore } from '../../src/store/useSettingsStore';
+
+const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
 installSubAgentDurabilityHarness();
 
@@ -314,5 +325,108 @@ describe('initSubAgentRegistry', () => {
       }),
     );
     expect(getSessionContext('recover-bad')).toBeUndefined();
+  });
+
+  it('reconciles a durable pending worker outcome after restart without trusting prose alone', async () => {
+    closeMemoryDb();
+    expoSqlite.__resetExpoSqliteForTests();
+    resetFactSchemaCacheForTests();
+    ensureFactSchema();
+    useSettingsStore.setState({ disableLongTermMemory: false } as never);
+    const now = Date.now();
+
+    await writePersistedJson(REGISTRY_KEY, [
+      {
+        sessionId: 'reconcile-worker-1',
+        parentConversationId: 'reconcile-thread-1',
+        agentRunId: 'reconcile-parent-run-1',
+        workstreamId: 'reconcile-task-1',
+        depth: 1,
+        startedAt: now - 60_000,
+        updatedAt: now - 1_000,
+        status: 'completed',
+        sandboxPolicy: 'safe-only',
+        launchState: 'terminal',
+        output: 'The requested file was created.',
+        completionState: 'verified_success',
+        outcomeReconciliation: {
+          status: 'pending',
+          code: 'pending',
+          attemptCount: 0,
+          updatedAt: now - 1_000,
+        },
+      },
+    ]);
+    await writePersistedJson(REGISTRY_CONTEXTS_KEY, {
+      'reconcile-worker-1': {
+        config: {
+          parentConversationId: 'reconcile-thread-1',
+          prompt: 'Create the requested file.',
+          agentRunId: 'reconcile-parent-run-1',
+          workstreamId: 'reconcile-task-1',
+          memorySelectionScope: {
+            memoryConversationId: 'reconcile-memory-root-1',
+            sourceThreadId: 'reconcile-thread-1',
+            personaId: 'super-agent',
+            taskId: 'reconcile-task-1',
+          },
+        },
+        provider: mockProvider,
+        systemPrompt: 'You are a focused worker.',
+        conversationSummary: 'The requested file was created.',
+        messages: [
+          {
+            id: 'reconcile-turn-1',
+            role: 'assistant',
+            content: '',
+            timestamp: now - 2_000,
+            toolCalls: [
+              {
+                id: 'reconcile-tool-call-1',
+                name: 'write_file',
+                arguments: '{"path":"deliverables/result.md"}',
+                status: 'completed',
+                result: '{"status":"ok","observation":"deliverables/result.md exists"}',
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    await initSubAgentRegistry();
+
+    const recovered = getSubAgent('reconcile-worker-1');
+    expect(recovered?.outcomeReconciliation).toEqual(
+      expect.objectContaining({
+        status: 'completed',
+        code: 'recorded_verified',
+        attemptCount: 1,
+      }),
+    );
+    expect(
+      listFacts({ originTaskId: 'reconcile-task-1' }).map((fact) => ({
+        kind: fact.memoryKind,
+        actor: fact.sourceActorId,
+        run: fact.sourceRunId,
+        parentRun: fact.attributes.parentRunId,
+      })),
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          kind: 'agent_run',
+          actor: 'reconcile-worker-1',
+          run: 'reconcile-worker-1',
+          parentRun: 'reconcile-parent-run-1',
+        },
+        {
+          kind: 'evidence_span',
+          actor: 'reconcile-worker-1',
+          run: 'reconcile-worker-1',
+          parentRun: 'reconcile-parent-run-1',
+        },
+      ]),
+    );
+    closeMemoryDb();
   });
 });

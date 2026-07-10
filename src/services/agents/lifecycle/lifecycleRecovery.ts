@@ -42,6 +42,15 @@ export function applyRecoveredTerminalSnapshot<TAgent extends SubAgentSnapshot>(
   agent.sandboxPolicy = snapshot.sandboxPolicy;
   agent.launchState = snapshot.launchState ?? agent.launchState;
   agent.output = snapshot.output ?? agent.output;
+  agent.completionState = snapshot.completionState ?? agent.completionState;
+  agent.outcomeReconciliation = snapshot.outcomeReconciliation
+    ? {
+        ...snapshot.outcomeReconciliation,
+        ...(snapshot.outcomeReconciliation.factIds
+          ? { factIds: [...snapshot.outcomeReconciliation.factIds] }
+          : {}),
+      }
+    : agent.outcomeReconciliation;
   agent.toolsUsed = snapshot.toolsUsed ? [...snapshot.toolsUsed] : agent.toolsUsed;
   agent.artifacts = snapshot.artifacts ? cloneAttachments(snapshot.artifacts) : agent.artifacts;
   agent.iterations = snapshot.iterations ?? agent.iterations;
