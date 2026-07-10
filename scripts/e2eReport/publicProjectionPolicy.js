@@ -1,8 +1,12 @@
 const MAX_PUBLIC_ITEMS = 1024;
 const CONTENT_CLASSES = new Set(['private', 'synthetic_public']);
 
-const { E2E_ASSESSMENT_DIMENSION_LABELS } = require('../../src/acceptance/e2eAgent/e2eAssessmentDimensions.ts');
-const { E2E_BENCHMARK_FAMILY_META } = require('../../src/acceptance/e2eAgent/e2eBenchmarkRegistry.ts');
+const {
+  E2E_ASSESSMENT_DIMENSION_LABELS,
+} = require('../../src/acceptance/e2eAgent/e2eAssessmentDimensions.ts');
+const {
+  E2E_BENCHMARK_FAMILY_META,
+} = require('../../src/acceptance/e2eAgent/e2eBenchmarkRegistry.ts');
 
 const ASSESSMENT_DIMENSION_PUBLIC_META = E2E_ASSESSMENT_DIMENSION_LABELS;
 const BENCHMARK_FAMILY_PUBLIC_META = Object.freeze(
@@ -46,6 +50,10 @@ const RUBRIC_KINDS = new Set([
   'cache_prefix_readiness',
   'cache_eligible_read_rate',
   'min_user_turns',
+  'turn_route',
+  'turn_completion',
+  'turn_memory_receipt',
+  'turn_lifecycle_boundary',
   'goal_status',
   'ingestion_job_completed',
   'memory_episode_count',
@@ -55,6 +63,7 @@ const RUBRIC_KINDS = new Set([
   'working_block_token',
   'graph_audit_observed',
 ]);
+const TURN_COMPLETION_FIELDS = new Set(['execution', 'final_response', 'agent_run']);
 
 const GRAPH_STATUSES = new Set([
   'ready',
@@ -76,13 +85,18 @@ const FAILURE_CATEGORIES = new Set([
   'wrong_args',
   'missing_clarification',
   'permission_failure',
+  'execution_route_failure',
+  'execution_failure',
+  'final_response_failure',
   'goal_state_bug',
   'memory_retrieval_miss',
+  'memory_write_failure',
   'tool_poisoning_vulnerability',
   'cache_prefix_drift',
   'token_budget_overrun',
   'loop_control',
   'native_side_effect_failure',
+  'lifecycle_recovery_failure',
   'external_runner_required',
   'grader_quality',
   'unknown_structural_failure',
@@ -115,4 +129,5 @@ module.exports = {
   PUBLIC_EVALUATION_ID_PATTERN,
   READINESS_CRITERIA,
   RUBRIC_KINDS,
+  TURN_COMPLETION_FIELDS,
 };

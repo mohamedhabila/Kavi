@@ -286,6 +286,30 @@ describe('e2eReadinessDashboard', () => {
           failedRubricKinds: ['min_user_turns'],
         }),
         buildTaxonomyEntry({
+          fixtureId: 'personal-shopping-list',
+          failedRubricKinds: ['turn_route'],
+        }),
+        buildTaxonomyEntry({
+          fixtureId: 'false-finalize-recovery',
+          failedRubricKinds: ['turn_completion:execution'],
+        }),
+        buildTaxonomyEntry({
+          fixtureId: 'goal-evidence-complete',
+          failedRubricKinds: ['turn_completion:agent_run'],
+        }),
+        buildTaxonomyEntry({
+          fixtureId: 'multi-turn-inventory-readback',
+          failedRubricKinds: ['turn_completion:final_response'],
+        }),
+        buildTaxonomyEntry({
+          fixtureId: 'memory-remember-recall',
+          failedRubricKinds: ['turn_memory_receipt'],
+        }),
+        buildTaxonomyEntry({
+          fixtureId: 'multi-turn-trip-artifact',
+          failedRubricKinds: ['turn_lifecycle_boundary'],
+        }),
+        buildTaxonomyEntry({
           fixtureId: 'tool-catalog-query-memory',
           failedRubricKinds: ['unsupported_rubric'],
         }),
@@ -349,6 +373,20 @@ describe('e2eReadinessDashboard', () => {
     expect(clusters.get('token_budget_overrun')?.scenarioIds).toEqual(['tool-catalog-agents']);
     expect(clusters.get('missing_clarification')?.scenarioIds).toEqual([
       'multi-turn-gate-followup',
+    ]);
+    expect(clusters.get('execution_route_failure')?.scenarioIds).toEqual([
+      'personal-shopping-list',
+    ]);
+    expect(clusters.get('execution_failure')?.scenarioIds).toEqual([
+      'false-finalize-recovery',
+      'goal-evidence-complete',
+    ]);
+    expect(clusters.get('final_response_failure')?.scenarioIds).toEqual([
+      'multi-turn-inventory-readback',
+    ]);
+    expect(clusters.get('memory_write_failure')?.scenarioIds).toEqual(['memory-remember-recall']);
+    expect(clusters.get('lifecycle_recovery_failure')?.scenarioIds).toEqual([
+      'multi-turn-trip-artifact',
     ]);
     expect(clusters.get('grader_quality')?.scenarioIds).toEqual(['multi-turn-catalog-memory']);
     expect(clusters.get('unknown_structural_failure')?.scenarioIds).toEqual([

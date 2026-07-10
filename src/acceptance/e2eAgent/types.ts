@@ -194,9 +194,14 @@ export type E2ERubric =
   | {
       kind: 'turn_completion';
       turnIndex: number;
-      executionCompleted: boolean;
-      finalResponseCompleted: boolean;
-      runCompleted: boolean | null;
+      field: 'execution' | 'final_response';
+      expected: boolean;
+    }
+  | {
+      kind: 'turn_completion';
+      turnIndex: number;
+      field: 'agent_run';
+      expected: boolean | null;
     }
   | {
       kind: 'turn_memory_receipt';

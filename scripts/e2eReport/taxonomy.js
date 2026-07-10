@@ -4,6 +4,8 @@ const {
   RUBRIC_KINDS,
 } = require('./constants');
 
+const TURN_COMPLETION_FIELDS = new Set(['execution', 'final_response', 'agent_run']);
+
 function stableJson(value) {
   if (Array.isArray(value)) {
     return `[${value.map(stableJson).join(',')}]`;
@@ -33,14 +35,29 @@ function stableFingerprint(value) {
     .join('');
 }
 
+function parseTurnCompletionField(fixtureId) {
+  const segments = String(fixtureId ?? '').split(':');
+  if (segments.at(-2) !== 'turn_completion') {
+    return null;
+  }
+  const field = segments.at(-1);
+  return TURN_COMPLETION_FIELDS.has(field) ? field : null;
+}
+
 function parseRubricKind(fixtureId) {
+  if (parseTurnCompletionField(fixtureId)) {
+    return 'turn_completion';
+  }
   const rawKind = String(fixtureId ?? '')
     .split(':')
     .pop();
+  if (rawKind === 'turn_completion') {
+    return null;
+  }
   return RUBRIC_KINDS.has(rawKind) ? rawKind : null;
 }
 
-function rubricFailureCategories(entry, rubricKind) {
+function rubricFailureCategories(entry, rubricKind, turnCompletionField = null) {
   switch (rubricKind) {
     case 'workspace_file':
     case 'file_hash':
@@ -61,17 +78,31 @@ function rubricFailureCategories(entry, rubricKind) {
     case 'goals_bootstrapped':
     case 'graph_audit_observed':
       return ['goal_state_bug'];
+    case 'turn_route':
+      return ['execution_route_failure'];
+    case 'turn_completion':
+      if (turnCompletionField === 'final_response') {
+        return ['final_response_failure'];
+      }
+      if (turnCompletionField === 'execution' || turnCompletionField === 'agent_run') {
+        return ['execution_failure'];
+      }
+      return ['unknown_structural_failure'];
     case 'memory_fact':
     case 'memory_episode_count':
     case 'ingestion_job_completed':
     case 'working_block_token':
       return ['memory_retrieval_miss'];
+    case 'turn_memory_receipt':
+      return ['memory_write_failure'];
     case 'cache_read_tokens':
       return ['cache_prefix_drift'];
     case 'token_budget':
       return ['token_budget_overrun'];
     case 'min_user_turns':
       return ['missing_clarification'];
+    case 'turn_lifecycle_boundary':
+      return ['lifecycle_recovery_failure'];
     default:
       return ['unknown_structural_failure'];
   }
@@ -86,7 +117,11 @@ function inferFailureCategories(entry, cacheTargetEligibleReadRate) {
       categories.add('unknown_structural_failure');
       continue;
     }
-    for (const category of rubricFailureCategories(entry, rubricKind)) {
+    for (const category of rubricFailureCategories(
+      entry,
+      rubricKind,
+      parseTurnCompletionField(failure.fixtureId),
+    )) {
       categories.add(category);
     }
   }

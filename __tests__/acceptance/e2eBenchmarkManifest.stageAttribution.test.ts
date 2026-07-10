@@ -18,9 +18,20 @@ describe('E2E benchmark manifest stage attribution', () => {
       {
         kind: 'turn_completion',
         turnIndex: 0,
-        executionCompleted: true,
-        finalResponseCompleted: true,
-        runCompleted: true,
+        field: 'execution',
+        expected: true,
+      },
+      {
+        kind: 'turn_completion',
+        turnIndex: 0,
+        field: 'final_response',
+        expected: true,
+      },
+      {
+        kind: 'turn_completion',
+        turnIndex: 0,
+        field: 'agent_run',
+        expected: true,
       },
       {
         kind: 'turn_memory_receipt',
@@ -33,12 +44,20 @@ describe('E2E benchmark manifest stage attribution', () => {
         boundary: 'app_relaunch',
       },
     ];
-    const scenario: E2EScenario = { ...sourceScenario, rubrics };
+    const scenario: E2EScenario = {
+      ...sourceScenario,
+      userTurns: [
+        { content: 'First turn.' },
+        { content: 'Continue after relaunch.', lifecycleBefore: 'app_relaunch' },
+      ],
+      rubrics,
+    };
 
     const manifest = buildE2EBenchmarkManifest(scenario);
 
     expect(manifest.finalStateEvaluators).toEqual([]);
     expect(manifest.resourceBudgetEvaluators).toEqual([]);
+    expect(manifest.initialState.execution.turnLifecycleBoundaries).toEqual([null, 'app_relaunch']);
     expect(
       manifest.trajectoryEvaluators.map(({ rubricKind, evaluatorKind, evidenceKind }) => ({
         rubricKind,
@@ -48,6 +67,16 @@ describe('E2E benchmark manifest stage attribution', () => {
     ).toEqual([
       {
         rubricKind: 'turn_route',
+        evaluatorKind: 'trajectory',
+        evidenceKind: 'execution_state',
+      },
+      {
+        rubricKind: 'turn_completion',
+        evaluatorKind: 'trajectory',
+        evidenceKind: 'execution_state',
+      },
+      {
+        rubricKind: 'turn_completion',
         evaluatorKind: 'trajectory',
         evidenceKind: 'execution_state',
       },
@@ -67,5 +96,10 @@ describe('E2E benchmark manifest stage attribution', () => {
         evidenceKind: 'lifecycle_event',
       },
     ]);
+    const completionFingerprints = manifest.trajectoryEvaluators
+      .filter((evaluator) => evaluator.rubricKind === 'turn_completion')
+      .map((evaluator) => evaluator.fingerprint);
+    expect(completionFingerprints).toHaveLength(3);
+    expect(new Set(completionFingerprints).size).toBe(3);
   });
 });

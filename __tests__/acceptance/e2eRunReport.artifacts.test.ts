@@ -44,7 +44,7 @@ describe('e2eRunReport artifacts', () => {
     writeFileSync(
       join(retentionDir, 'index.json'),
       JSON.stringify({
-        version: '2026-06-12.phase8',
+        version: '2026-07-10.phase10',
         runs: [
           {
             runId: 'legacy-run',

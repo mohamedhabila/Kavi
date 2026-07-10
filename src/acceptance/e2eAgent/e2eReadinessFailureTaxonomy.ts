@@ -10,6 +10,13 @@ import type { E2ERunReportScenarioEntry } from './e2eRunReport';
 import type { E2ERubric } from './types';
 
 type E2ERubricKind = E2ERubric['kind'];
+type E2ETurnCompletionField = Extract<E2ERubric, { kind: 'turn_completion' }>['field'];
+
+const TURN_COMPLETION_FIELDS: ReadonlySet<E2ETurnCompletionField> = new Set([
+  'execution',
+  'final_response',
+  'agent_run',
+]);
 
 const RUBRIC_KINDS: ReadonlySet<E2ERubricKind> = new Set([
   'workspace_file',
@@ -46,13 +53,18 @@ const FAILURE_CATEGORIES: ReadonlyArray<E2EReadinessFailureCategory> = [
   'wrong_args',
   'missing_clarification',
   'permission_failure',
+  'execution_route_failure',
+  'execution_failure',
+  'final_response_failure',
   'goal_state_bug',
   'memory_retrieval_miss',
+  'memory_write_failure',
   'tool_poisoning_vulnerability',
   'cache_prefix_drift',
   'token_budget_overrun',
   'loop_control',
   'native_side_effect_failure',
+  'lifecycle_recovery_failure',
   'external_runner_required',
   'grader_quality',
   'unknown_structural_failure',
@@ -87,9 +99,23 @@ function stableFingerprint(value: unknown): string {
     .join('');
 }
 
+function parseTurnCompletionField(fixtureId: string): E2ETurnCompletionField | null {
+  const segments = fixtureId.split(':');
+  if (segments.at(-2) !== 'turn_completion') {
+    return null;
+  }
+  const field = segments.at(-1);
+  return field && TURN_COMPLETION_FIELDS.has(field as E2ETurnCompletionField)
+    ? (field as E2ETurnCompletionField)
+    : null;
+}
+
 function parseRubricKind(fixtureId: string): E2ERubricKind | null {
+  if (parseTurnCompletionField(fixtureId)) {
+    return 'turn_completion';
+  }
   const rawKind = fixtureId.split(':').at(-1);
-  if (rawKind && RUBRIC_KINDS.has(rawKind as E2ERubricKind)) {
+  if (rawKind && rawKind !== 'turn_completion' && RUBRIC_KINDS.has(rawKind as E2ERubricKind)) {
     return rawKind as E2ERubricKind;
   }
   return null;
@@ -98,6 +124,7 @@ function parseRubricKind(fixtureId: string): E2ERubricKind | null {
 function rubricFailureCategories(
   entry: E2ERunReportScenarioEntry,
   rubricKind: E2ERubricKind,
+  turnCompletionField: E2ETurnCompletionField | null,
 ): E2EReadinessFailureCategory[] {
   switch (rubricKind) {
     case 'workspace_file_absent':
@@ -127,16 +154,23 @@ function rubricFailureCategories(
     case 'goal_criterion':
     case 'goals_bootstrapped':
     case 'graph_audit_observed':
-    case 'turn_route':
-    case 'turn_completion':
       return ['goal_state_bug'];
+    case 'turn_route':
+      return ['execution_route_failure'];
+    case 'turn_completion':
+      return turnCompletionField === 'final_response'
+        ? ['final_response_failure']
+        : turnCompletionField === 'execution' || turnCompletionField === 'agent_run'
+          ? ['execution_failure']
+          : ['unknown_structural_failure'];
     case 'memory_fact':
     case 'memory_fact_absent':
     case 'memory_episode_count':
     case 'ingestion_job_completed':
     case 'working_block_token':
-    case 'turn_memory_receipt':
       return ['memory_retrieval_miss'];
+    case 'turn_memory_receipt':
+      return ['memory_write_failure'];
     case 'cache_read_tokens':
     case 'cache_prefix_readiness':
     case 'cache_eligible_read_rate':
@@ -146,7 +180,7 @@ function rubricFailureCategories(
     case 'min_user_turns':
       return ['missing_clarification'];
     case 'turn_lifecycle_boundary':
-      return ['native_side_effect_failure'];
+      return ['lifecycle_recovery_failure'];
   }
 }
 
@@ -162,7 +196,11 @@ function inferFailureCategories(
       categories.add('unknown_structural_failure');
       continue;
     }
-    for (const category of rubricFailureCategories(entry, rubricKind)) {
+    for (const category of rubricFailureCategories(
+      entry,
+      rubricKind,
+      parseTurnCompletionField(failure.fixtureId),
+    )) {
       categories.add(category);
     }
   }

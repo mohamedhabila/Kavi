@@ -10,6 +10,7 @@ const {
   MAX_PUBLIC_ITEMS,
   READINESS_CRITERIA,
   RUBRIC_KINDS,
+  TURN_COMPLETION_FIELDS,
 } = require('./publicProjectionPolicy');
 const { projectReadinessDashboard } = require('./publicReadinessDashboardProjection');
 
@@ -198,7 +199,14 @@ function parseRubricKind(value) {
   if (typeof value !== 'string') {
     return undefined;
   }
-  const kind = value.split(':').at(-1);
+  const segments = value.split(':');
+  const kind = segments.at(-1);
+  if (segments.at(-2) === 'turn_completion' && TURN_COMPLETION_FIELDS.has(kind)) {
+    return 'turn_completion';
+  }
+  if (kind === 'turn_completion') {
+    return undefined;
+  }
   return RUBRIC_KINDS.has(kind) ? kind : undefined;
 }
 

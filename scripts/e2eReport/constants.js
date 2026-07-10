@@ -4,10 +4,10 @@ const READINESS_MIN_AXIS_PASS_RATE = 0.95;
 const READINESS_MIN_FAST_SUITE_SCENARIO_COUNT = 39;
 const PROMPT_CACHE_ELIGIBLE_INPUT_TOKENS = 4096;
 const PROMPT_CACHE_MIN_ELIGIBLE_READ_RATE = 0.25;
-const SCENARIO_MANIFEST_VERSION = '2026-06-12.phase0';
-const NATIVE_TOOL_FIXTURE_VERSION = 'native-tools-2026-06-12';
-const READINESS_DASHBOARD_VERSION = '2026-07-10.phase10';
-const BENCHMARK_MANIFEST_VERSION = '2026-06-12.phase7';
+const SCENARIO_MANIFEST_VERSION = '2026-07-10.longitudinal-v1';
+const NATIVE_TOOL_FIXTURE_VERSION = 'native-tools-2026-07-10';
+const READINESS_DASHBOARD_VERSION = '2026-07-10.phase11';
+const BENCHMARK_MANIFEST_VERSION = '2026-07-10.stage-attribution-v2';
 const BENCHMARK_SOURCE_REFRESH_DATE = '2026-06-12';
 const READINESS_ARTIFACT_RETENTION_RUNS = 90;
 const RUN_REPORT_SCHEMA_VERSION = 'e2e-run-report-v2';
@@ -42,6 +42,10 @@ const RUBRIC_KINDS = new Set([
   'token_budget',
   'cache_read_tokens',
   'min_user_turns',
+  'turn_route',
+  'turn_completion',
+  'turn_memory_receipt',
+  'turn_lifecycle_boundary',
   'goal_status',
   'ingestion_job_completed',
   'memory_episode_count',
@@ -57,13 +61,18 @@ const FAILURE_CATEGORIES = [
   'wrong_args',
   'missing_clarification',
   'permission_failure',
+  'execution_route_failure',
+  'execution_failure',
+  'final_response_failure',
   'goal_state_bug',
   'memory_retrieval_miss',
+  'memory_write_failure',
   'tool_poisoning_vulnerability',
   'cache_prefix_drift',
   'token_budget_overrun',
   'loop_control',
   'native_side_effect_failure',
+  'lifecycle_recovery_failure',
   'external_runner_required',
   'grader_quality',
   'unknown_structural_failure',

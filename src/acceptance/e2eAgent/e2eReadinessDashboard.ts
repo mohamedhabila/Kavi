@@ -26,7 +26,7 @@ import type {
   E2ERunReportReadiness,
 } from './e2eRunReport';
 
-export const E2E_READINESS_DASHBOARD_VERSION = '2026-07-10.phase10';
+export const E2E_READINESS_DASHBOARD_VERSION = '2026-07-10.phase11';
 export const E2E_READINESS_ARTIFACT_RETENTION_RUNS = 90;
 
 export type E2EReadinessFailureCategory =
@@ -35,13 +35,18 @@ export type E2EReadinessFailureCategory =
   | 'wrong_args'
   | 'missing_clarification'
   | 'permission_failure'
+  | 'execution_route_failure'
+  | 'execution_failure'
+  | 'final_response_failure'
   | 'goal_state_bug'
   | 'memory_retrieval_miss'
+  | 'memory_write_failure'
   | 'tool_poisoning_vulnerability'
   | 'cache_prefix_drift'
   | 'token_budget_overrun'
   | 'loop_control'
   | 'native_side_effect_failure'
+  | 'lifecycle_recovery_failure'
   | 'external_runner_required'
   | 'grader_quality'
   | 'unknown_structural_failure';

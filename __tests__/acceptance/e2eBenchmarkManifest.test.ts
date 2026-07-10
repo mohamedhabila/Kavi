@@ -61,9 +61,12 @@ describe('e2eBenchmarkManifest', () => {
       expect(manifest?.contentClass).toBe(scenario.contentClass);
       expect(manifest?.initialState.execution).toEqual({
         ...scenario.execution,
-        turnRoutes:
-          scenario.userTurns?.map((turn) => turn.route ?? scenario.execution.route) ??
-          [scenario.execution.route],
+        turnRoutes: scenario.userTurns?.map((turn) => turn.route ?? scenario.execution.route) ?? [
+          scenario.execution.route,
+        ],
+        turnLifecycleBoundaries: scenario.userTurns?.map(
+          (turn) => turn.lifecycleBefore ?? null,
+        ) ?? [null],
       });
     }
 

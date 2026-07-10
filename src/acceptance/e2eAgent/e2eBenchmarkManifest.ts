@@ -20,9 +20,9 @@ import {
   E2E_SCENARIO_TOKEN_BUDGETS,
 } from './thresholds';
 import type { E2EAssessmentDimension } from './e2eAssessmentDimensions';
-import type { E2ERubric, E2EScenario } from './types';
+import type { E2ERubric, E2EScenario, E2EUserTurn } from './types';
 
-export const E2E_BENCHMARK_MANIFEST_VERSION = '2026-07-10.stage-attribution-v1';
+export const E2E_BENCHMARK_MANIFEST_VERSION = '2026-07-10.stage-attribution-v2';
 export const E2E_BENCHMARK_SOURCE_REFRESH_DATE = '2026-06-14';
 
 type E2ERubricKind = E2ERubric['kind'];
@@ -90,6 +90,7 @@ export type E2EBenchmarkManifest = {
       initialMode: E2EScenario['execution']['initialMode'];
       route: E2EScenario['execution']['route'];
       turnRoutes: ReadonlyArray<E2EScenario['execution']['route']>;
+      turnLifecycleBoundaries: ReadonlyArray<E2EUserTurn['lifecycleBefore'] | null>;
     };
   };
   hiddenGroundTruth: {
@@ -446,6 +447,9 @@ export function buildE2EBenchmarkManifest(scenario: E2EScenario): E2EBenchmarkMa
         turnRoutes: scenario.userTurns?.map((turn) => turn.route ?? scenario.execution.route) ?? [
           scenario.execution.route,
         ],
+        turnLifecycleBoundaries: scenario.userTurns?.map(
+          (turn) => turn.lifecycleBefore ?? null,
+        ) ?? [null],
       },
     },
     hiddenGroundTruth: {

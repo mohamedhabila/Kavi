@@ -1,5 +1,5 @@
 import { evaluateE2ERubric } from '../../src/acceptance/e2eAgent/rubricEvaluators';
-import type { E2EScenarioResult } from '../../src/acceptance/e2eAgent/types';
+import type { E2ERubric, E2EScenarioResult } from '../../src/acceptance/e2eAgent/types';
 
 jest.mock('expo-sqlite', () => {
   const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
@@ -158,16 +158,40 @@ describe('turn stage-attribution rubrics', () => {
     ).toMatchObject({ passed: false });
   });
 
-  it('grades execution, final response, and nullable run completion independently', () => {
-    expect(
+  it('grades execution, final response, and nullable agent-run completion independently', () => {
+    expect([
       evaluateE2ERubric(buildResult(), {
         kind: 'turn_completion',
         turnIndex: 1,
-        executionCompleted: true,
-        finalResponseCompleted: true,
-        runCompleted: null,
+        field: 'execution',
+        expected: true,
       }),
-    ).toMatchObject({ passed: true });
+      evaluateE2ERubric(buildResult(), {
+        kind: 'turn_completion',
+        turnIndex: 1,
+        field: 'final_response',
+        expected: true,
+      }),
+      evaluateE2ERubric(buildResult(), {
+        kind: 'turn_completion',
+        turnIndex: 1,
+        field: 'agent_run',
+        expected: null,
+      }),
+    ]).toEqual([
+      expect.objectContaining({
+        fixtureId: 'stage-attribution:turn_completion:execution',
+        passed: true,
+      }),
+      expect.objectContaining({
+        fixtureId: 'stage-attribution:turn_completion:final_response',
+        passed: true,
+      }),
+      expect.objectContaining({
+        fixtureId: 'stage-attribution:turn_completion:agent_run',
+        passed: true,
+      }),
+    ]);
 
     const runTurn = buildTurn({
       completion: {
@@ -181,20 +205,39 @@ describe('turn stage-attribution rubrics', () => {
       evaluateE2ERubric(buildResult(runTurn), {
         kind: 'turn_completion',
         turnIndex: 1,
-        executionCompleted: true,
-        finalResponseCompleted: true,
-        runCompleted: true,
+        field: 'agent_run',
+        expected: true,
       }),
-    ).toMatchObject({ passed: true });
+    ).toMatchObject({
+      fixtureId: 'stage-attribution:turn_completion:agent_run',
+      passed: true,
+    });
     expect(
       evaluateE2ERubric(buildResult(), {
         kind: 'turn_completion',
         turnIndex: 1,
-        executionCompleted: true,
-        finalResponseCompleted: true,
-        runCompleted: false,
+        field: 'final_response',
+        expected: false,
       }),
-    ).toMatchObject({ passed: false });
+    ).toMatchObject({
+      fixtureId: 'stage-attribution:turn_completion:final_response',
+      passed: false,
+    });
+  });
+
+  it('rejects null expectations for boolean-only completion fields', () => {
+    const invalidRubric = {
+      kind: 'turn_completion',
+      turnIndex: 1,
+      field: 'execution',
+      expected: null,
+    } as unknown as E2ERubric;
+
+    expect(evaluateE2ERubric(buildResult(), invalidRubric)).toMatchObject({
+      fixtureId: 'stage-attribution:turn_completion:execution',
+      passed: false,
+      detail: 'turn completion field execution has an invalid expected value',
+    });
   });
 
   it('requires a durable turn receipt and optionally an exact provider outcome', () => {

@@ -8,6 +8,9 @@ type E2ETurnStageRubric = Extract<
   }
 >;
 
+type E2ETurnCompletionRubric = Extract<E2ERubric, { kind: 'turn_completion' }>;
+const TURN_COMPLETION_FIELDS = new Set(['execution', 'final_response', 'agent_run']);
+
 function findTurnTrace(
   result: E2EScenarioResult,
   turnIndex: number,
@@ -23,11 +26,33 @@ function missingTurnOutcome(fixtureId: string, turnIndex: number): AcceptanceFix
   };
 }
 
+function fixtureIdForRubric(result: E2EScenarioResult, rubric: E2ETurnStageRubric): string {
+  return rubric.kind === 'turn_completion'
+    ? `${result.fixtureId}:${rubric.kind}:${rubric.field}`
+    : `${result.fixtureId}:${rubric.kind}`;
+}
+
+function hasValidCompletionExpectation(rubric: E2ETurnCompletionRubric): boolean {
+  if (!TURN_COMPLETION_FIELDS.has(rubric.field)) {
+    return false;
+  }
+  return rubric.field === 'agent_run'
+    ? typeof rubric.expected === 'boolean' || rubric.expected === null
+    : typeof rubric.expected === 'boolean';
+}
+
 export function evaluateE2ETurnStageRubric(
   result: E2EScenarioResult,
   rubric: E2ETurnStageRubric,
 ): AcceptanceFixtureOutcome {
-  const fixtureId = `${result.fixtureId}:${rubric.kind}`;
+  const fixtureId = fixtureIdForRubric(result, rubric);
+  if (rubric.kind === 'turn_completion' && !hasValidCompletionExpectation(rubric)) {
+    return {
+      fixtureId,
+      passed: false,
+      detail: `turn completion field ${rubric.field} has an invalid expected value`,
+    };
+  }
   const turn = findTurnTrace(result, rubric.turnIndex);
   if (!turn) {
     return missingTurnOutcome(fixtureId, rubric.turnIndex);
@@ -46,15 +71,17 @@ export function evaluateE2ETurnStageRubric(
 
     case 'turn_completion': {
       const completion = turn.completion;
-      if (
-        completion.executionCompleted !== rubric.executionCompleted ||
-        completion.finalResponseCompleted !== rubric.finalResponseCompleted ||
-        completion.runCompleted !== rubric.runCompleted
-      ) {
+      const actual =
+        rubric.field === 'execution'
+          ? completion.executionCompleted
+          : rubric.field === 'final_response'
+            ? completion.finalResponseCompleted
+            : completion.runCompleted;
+      if (actual !== rubric.expected) {
         return {
           fixtureId,
           passed: false,
-          detail: `turn ${rubric.turnIndex} completion execution=${completion.executionCompleted} finalResponse=${completion.finalResponseCompleted} run=${String(completion.runCompleted)} (expected execution=${rubric.executionCompleted} finalResponse=${rubric.finalResponseCompleted} run=${String(rubric.runCompleted)})`,
+          detail: `turn ${rubric.turnIndex} completion ${rubric.field}=${String(actual)} (expected ${String(rubric.expected)})`,
         };
       }
       return { fixtureId, passed: true };
