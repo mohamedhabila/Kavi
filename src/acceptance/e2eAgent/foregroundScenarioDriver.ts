@@ -4,7 +4,7 @@ import { resolveConversationWorkspaceTarget } from '../../services/conversationW
 import { cancelScheduledIngestionDrain } from '../../services/memory/ingestionQueue';
 import {
   buildScopedMemoryEvidenceDelta,
-  captureScopedMemoryEvidence,
+  captureCompleteMemoryEvidenceForIsolatedEvaluation,
 } from '../../services/memory/evidenceSnapshot';
 import {
   flushChatStorePersistenceNow,
@@ -156,7 +156,7 @@ async function runScenarioIsolated(
       conversationId: input.conversationId,
       workspaceConversationId: memoryScope.memoryConversationId,
     });
-    let previousMemoryState = captureScopedMemoryEvidence(memoryScope);
+    let previousMemoryState = captureCompleteMemoryEvidenceForIsolatedEvaluation(memoryScope);
     let runtime = createForegroundScenarioRuntime(input, memoryRecords);
     const turnSnapshots: ForegroundScenarioTurnSnapshot[] = [];
     for (const [turnIndex, turn] of input.turns.entries()) {
@@ -229,7 +229,7 @@ async function runScenarioIsolated(
         memoryRecords.slice(memoryRecordStart),
         input.memoryTimeoutMs ?? DEFAULT_MEMORY_TIMEOUT_MS,
       );
-      const memoryStateAfter = captureScopedMemoryEvidence(memoryScope);
+      const memoryStateAfter = captureCompleteMemoryEvidenceForIsolatedEvaluation(memoryScope);
       const conversation = useChatStore
         .getState()
         .conversations.find((candidate) => candidate.id === input.conversationId);

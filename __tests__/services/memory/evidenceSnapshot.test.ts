@@ -5,6 +5,7 @@ jest.mock('expo-sqlite', () => {
 
 import {
   buildScopedMemoryEvidenceDelta,
+  captureCompleteMemoryEvidenceForIsolatedEvaluation,
   captureScopedMemoryEvidence,
 } from '../../../src/services/memory/evidenceSnapshot';
 import { recordFact } from '../../../src/services/memory/facts/mutations';
@@ -51,6 +52,37 @@ describe('scoped memory evidence', () => {
     expect(snapshot).toMatchObject({ capturedAt: 1_000, scope: SCOPE });
     expect(snapshot.facts[0]).not.toHaveProperty('embedding');
     expect(snapshot.facts[0]).not.toHaveProperty('attributes');
+  });
+
+  it('captures unscoped facts only for a freshly isolated evaluation vault', () => {
+    const global = recordFact({
+      subjectId: 'profile-owner',
+      predicate: 'home_city',
+      objectText: 'Utrecht',
+      scope: 'global',
+      now: 10,
+    });
+    const sibling = recordFact({
+      subjectId: 'sibling-subject',
+      predicate: 'sibling_fact',
+      objectText: 'scenario-owned',
+      scope: 'conversation',
+      originConversationId: 'sibling-conversation',
+      originThreadId: 'sibling-thread',
+      now: 20,
+    });
+
+    expect(captureScopedMemoryEvidence(SCOPE, 30).facts).toEqual([]);
+    expect(captureCompleteMemoryEvidenceForIsolatedEvaluation(SCOPE, 30).facts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: global.fact.id,
+          personaId: null,
+          originConversationId: null,
+        }),
+        expect.objectContaining({ id: sibling.fact.id }),
+      ]),
+    );
   });
 
   it('classifies created and invalidated facts from bounded snapshots', () => {

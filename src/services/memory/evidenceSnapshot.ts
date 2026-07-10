@@ -24,7 +24,8 @@ export type MemoryFactEvidenceRecord = {
   confidence: number;
   scope: MemoryFactScope;
   memoryKind: MemoryFactKind;
-  originConversationId: string;
+  personaId: string | null;
+  originConversationId: string | null;
   originThreadId: string | null;
   originTaskId: string | null;
   sourceMessageId: string | null;
@@ -136,7 +137,7 @@ function normalizeScope(scope: MemoryEvidenceScope): MemoryEvidenceScope {
   };
 }
 
-function listFactEvidence(scope: MemoryEvidenceScope): MemoryFactEvidenceRecord[] {
+function selectFactEvidence(whereClause: string, params: string[]): MemoryFactEvidenceRecord[] {
   return getMany<FactEvidenceRow>(
     `SELECT id,
             subject_id AS subjectId,
@@ -146,6 +147,7 @@ function listFactEvidence(scope: MemoryEvidenceScope): MemoryFactEvidenceRecord[
             confidence,
             scope,
             memory_kind AS memoryKind,
+            persona_id AS personaId,
             origin_conversation_id AS originConversationId,
             origin_thread_id AS originThreadId,
             origin_task_id AS originTaskId,
@@ -162,12 +164,21 @@ function listFactEvidence(scope: MemoryEvidenceScope): MemoryFactEvidenceRecord[
             review_state AS reviewState,
             sensitivity
        FROM memory_facts
-      WHERE origin_conversation_id = ?
-        AND COALESCE(origin_thread_id, origin_conversation_id) = ?
+      WHERE ${whereClause}
       ORDER BY id ASC`,
-    scope.memoryConversationId,
-    scope.sourceThreadId,
+    ...params,
   ).map((row) => ({ ...row, pinned: row.pinned !== 0 }));
+}
+
+function listScopedFactEvidence(scope: MemoryEvidenceScope): MemoryFactEvidenceRecord[] {
+  return selectFactEvidence(
+    'origin_conversation_id = ? AND COALESCE(origin_thread_id, origin_conversation_id) = ?',
+    [scope.memoryConversationId, scope.sourceThreadId],
+  );
+}
+
+function listCompleteFactEvidence(): MemoryFactEvidenceRecord[] {
+  return selectFactEvidence('1 = 1', []);
 }
 
 function parseStringArray(value: string): string[] {
@@ -281,7 +292,28 @@ export function captureScopedMemoryEvidence(
   return runMemoryTransaction(() => ({
     capturedAt: now,
     scope,
-    facts: listFactEvidence(scope),
+    facts: listScopedFactEvidence(scope),
+    episodes: listEpisodeEvidence(scope),
+    workingBlocks: listWorkingBlockEvidence(scope),
+    ingestionJobs: listIngestionJobEvidence(scope),
+  }));
+}
+
+/**
+ * Captures the complete fact store for an evaluation-owned, freshly reset
+ * memory vault. Production diagnostics and withdrawal checks must use the
+ * scoped collector above so unrelated user memory never enters their evidence.
+ */
+export function captureCompleteMemoryEvidenceForIsolatedEvaluation(
+  scopeInput: MemoryEvidenceScope,
+  now = Date.now(),
+): ScopedMemoryEvidenceSnapshot {
+  ensureFactSchema();
+  const scope = normalizeScope(scopeInput);
+  return runMemoryTransaction(() => ({
+    capturedAt: now,
+    scope,
+    facts: listCompleteFactEvidence(),
     episodes: listEpisodeEvidence(scope),
     workingBlocks: listWorkingBlockEvidence(scope),
     ingestionJobs: listIngestionJobEvidence(scope),

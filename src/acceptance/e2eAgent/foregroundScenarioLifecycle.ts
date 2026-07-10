@@ -1,6 +1,6 @@
 import { cancelScheduledIngestionDrain } from '../../services/memory/ingestionQueue';
 import {
-  captureScopedMemoryEvidence,
+  captureCompleteMemoryEvidenceForIsolatedEvaluation,
   type ScopedMemoryEvidenceSnapshot,
 } from '../../services/memory/evidenceSnapshot';
 import { closeMemoryDb } from '../../services/memory/sqlite-store';
@@ -74,7 +74,7 @@ export async function relaunchForegroundScenarioApp(params: {
   closeMemoryDb();
   await useChatStore.persist.rehydrate();
   requirePersistedConversation(params.conversationId, lastMessageId);
-  const reopenedMemory = captureScopedMemoryEvidence(params.memoryScope);
+  const reopenedMemory = captureCompleteMemoryEvidenceForIsolatedEvaluation(params.memoryScope);
   if (durableMemoryIdentity(reopenedMemory) !== durableMemoryIdentity(params.memoryStateBefore)) {
     throw new Error('Durable memory state changed across app relaunch.');
   }
