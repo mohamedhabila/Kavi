@@ -27,6 +27,7 @@ import { composeActiveFocusContent } from './focus';
 import { findEntityByName } from './entities';
 import { listFacts } from './facts/queries';
 import { recordAgentRunEvidenceMemory } from './agentRunEvidenceMemory';
+import { evaluateGroundedReplacement } from './groundedFactReplacement';
 
 const logger = createLogger('memory.turnProcessor');
 
@@ -286,28 +287,41 @@ function applyWorkingMemoryFromStructural(
 function mergeProviderIntoStructural(
   structural: ReturnType<typeof extractStructuralMemory>,
   provider: ConsolidatorResult,
+  context: {
+    currentUserMessageId?: string;
+    currentUserMessage: string;
+    memoryConversationId: string;
+    threadId: string;
+    taskId?: string;
+  },
 ): ConsolidatorResult {
   const episodeSummary = provider.episodeSummary ?? structural.episodeSummary;
-  const seen = new Set(
-    structural.facts.map((fact) => `${fact.subject}:${fact.predicate}:${fact.value}`),
-  );
-  const structuralSubjectsAndPredicates = new Set(
-    structural.facts.map((fact) => `${fact.subject}:${fact.predicate}`),
-  );
+  const keyPart = (value: string) => value.normalize('NFKC').trim().toLowerCase();
+  const factKey = (fact: ConsolidatorResult['newFacts'][number]) =>
+    `${keyPart(fact.subject)}:${keyPart(fact.predicate)}:${keyPart(fact.value)}`;
+  const subjectPredicateKey = (fact: ConsolidatorResult['newFacts'][number]) =>
+    `${keyPart(fact.subject)}:${keyPart(fact.predicate)}`;
+  const seen = new Set(structural.facts.map(factKey));
+  const structuralSubjectsAndPredicates = new Set(structural.facts.map(subjectPredicateKey));
   const mergedFacts = [...structural.facts];
   for (const fact of provider.newFacts) {
-    const key = `${fact.subject}:${fact.predicate}:${fact.value}`;
-    const subjectPredicateKey = `${fact.subject}:${fact.predicate}`;
-    if (structuralSubjectsAndPredicates.has(subjectPredicateKey)) {
+    const key = factKey(fact);
+    if (structuralSubjectsAndPredicates.has(subjectPredicateKey(fact))) {
       continue;
     }
-    if (hasCurrentFactForSubjectPredicate(fact.subject, fact.predicate)) {
-      continue;
-    }
-    if (!seen.has(key)) {
+    if (seen.has(key)) continue;
+
+    const currentFacts = listCurrentFactsForSubjectPredicate(fact.subject, fact.predicate);
+    if (currentFacts.length === 0) {
       mergedFacts.push(fact);
       seen.add(key);
+      continue;
     }
+
+    const decision = evaluateGroundedReplacement(fact, { ...context, currentFacts });
+    if (!decision.accepted) continue;
+    mergedFacts.push(decision.fact);
+    seen.add(key);
   }
   const threadSet = new Set(structural.openThreads);
   for (const thread of provider.openThreads) threadSet.add(thread);
@@ -315,33 +329,30 @@ function mergeProviderIntoStructural(
   return {
     episodeSummary: episodeSummary || null,
     newFacts: mergedFacts,
-    invalidatedFacts: [],
     activeFocus: provider.activeFocus ?? structural.activeFocus,
     openThreads: Array.from(threadSet).slice(0, 5),
     notable: provider.notable ?? [],
   };
 }
 
-function hasCurrentFactForSubjectPredicate(subject: string, predicate: string): boolean {
+function listCurrentFactsForSubjectPredicate(subject: string, predicate: string) {
   const normalizedSubject = subject.trim();
-  const normalizedPredicate = predicate.trim();
+  const normalizedPredicate = predicate.trim().toLowerCase();
   if (!normalizedSubject || !normalizedPredicate) {
-    return false;
+    return [];
   }
 
   const entity = findEntityByName(normalizedSubject);
   if (!entity) {
-    return false;
+    return [];
   }
 
-  return (
-    listFacts({
-      subjectId: entity.id,
-      predicate: normalizedPredicate,
-      includeInvalidated: false,
-      limit: 1,
-    }).length > 0
-  );
+  return listFacts({
+    subjectId: entity.id,
+    predicate: normalizedPredicate,
+    includeInvalidated: false,
+    limit: 16,
+  });
 }
 
 /**
@@ -409,7 +420,6 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
   let mergedResult: ConsolidatorResult = {
     episodeSummary: structural.episodeSummary || null,
     newFacts: structural.facts,
-    invalidatedFacts: [],
     activeFocus: structural.activeFocus,
     openThreads: structural.openThreads,
     notable: [],
@@ -425,7 +435,13 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
       providerResult.episodeSummary !== null ||
       !!providerResult.activeFocus ||
       providerResult.openThreads.length > 0;
-    mergedResult = mergeProviderIntoStructural(structural, providerResult);
+    mergedResult = mergeProviderIntoStructural(structural, providerResult, {
+      currentUserMessageId: user?.id,
+      currentUserMessage: user?.content ?? '',
+      memoryConversationId,
+      threadId: input.threadId,
+      taskId: input.taskId,
+    });
   }
 
   const persistResult = applyConsolidatorResult(mergedResult, {

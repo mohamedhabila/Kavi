@@ -240,7 +240,6 @@ describe('parseConsolidatorOutput', () => {
     expect(result).toEqual({
       episodeSummary: null,
       newFacts: [],
-      invalidatedFacts: [],
       activeFocus: null,
       openThreads: [],
       notable: [],
@@ -302,7 +301,6 @@ describe('applyConsolidatorResult', () => {
             reason: 'The user stated this directly.',
           },
         ],
-        invalidatedFacts: [],
         activeFocus: 'Settling into Berlin.',
         openThreads: ['Suggest a SIM card provider'],
         notable: [],
@@ -343,61 +341,11 @@ describe('applyConsolidatorResult', () => {
     ).toContain('Suggest a SIM card provider');
   });
 
-  it('ignores automatic invalidation payloads and keeps existing facts current', () => {
-    applyConsolidatorResult(
-      {
-        episodeSummary: null,
-        newFacts: [
-          {
-            subject: 'user',
-            predicate: 'preferred_message_contact',
-            value: 'Morgan',
-            confidence: 'high',
-          },
-        ],
-        invalidatedFacts: [],
-        activeFocus: null,
-        openThreads: [],
-        notable: [],
-      },
-      { now: 1_700_000_000_000, conversationId: 'conv-memory', threadId: 'conv-memory' },
-    );
-
-    const result = applyConsolidatorResult(
-      {
-        episodeSummary: null,
-        newFacts: [],
-        invalidatedFacts: [
-          {
-            subject: 'user',
-            predicate: 'preferred_message_contact',
-            reason: 'provider guessed this changed',
-          },
-        ],
-        activeFocus: null,
-        openThreads: [],
-        notable: [],
-      },
-      { now: 1_700_000_001_000, conversationId: 'conv-memory', threadId: 'conv-memory' },
-    );
-
-    const userEntity = findEntityByName('user');
-    expect(userEntity).not.toBeNull();
-    expect(result.invalidatedFactIds).toEqual([]);
-    const currentFacts = listFacts({
-      subjectId: userEntity!.id,
-      predicate: 'preferred_message_contact',
-    });
-    expect(currentFacts).toHaveLength(1);
-    expect(currentFacts[0].objectText).toBe('Morgan');
-  });
-
   it('preserves thread title metadata when provider focus omits it', () => {
     const result = applyConsolidatorResult(
       {
         episodeSummary: null,
         newFacts: [],
-        invalidatedFacts: [],
         activeFocus: 'Running: memory_recall',
         openThreads: [],
         notable: [],
@@ -430,7 +378,6 @@ describe('applyConsolidatorResult', () => {
       {
         episodeSummary: null,
         newFacts: [],
-        invalidatedFacts: [],
         activeFocus: 'Running: update_goals',
         openThreads: [],
         notable: [],
@@ -467,7 +414,6 @@ describe('applyConsolidatorResult', () => {
       {
         episodeSummary: 'Delayed ingestion finished.',
         newFacts: [],
-        invalidatedFacts: [],
         activeFocus: 'stale-delayed-focus-token',
         openThreads: ['stale delayed thread'],
         notable: [],
@@ -499,7 +445,7 @@ describe('applyConsolidatorResult', () => {
     );
   });
 
-  it('supersedes stale conversation facts across task scopes', () => {
+  it('does not grant ordinary consolidation broad cross-task supersession', () => {
     applyConsolidatorResult(
       {
         episodeSummary: null,
@@ -511,7 +457,6 @@ describe('applyConsolidatorResult', () => {
             scope: 'conversation',
           },
         ],
-        invalidatedFacts: [],
         activeFocus: null,
         openThreads: [],
         notable: [],
@@ -536,7 +481,6 @@ describe('applyConsolidatorResult', () => {
             scope: 'conversation',
           },
         ],
-        invalidatedFacts: [],
         activeFocus: null,
         openThreads: [],
         notable: [],
@@ -558,7 +502,7 @@ describe('applyConsolidatorResult', () => {
       predicate: 'preferred_message_contact',
       includeInvalidated: false,
     });
-    expect(currentFacts.map((fact) => fact.objectText)).toEqual(['Avery']);
+    expect(currentFacts.map((fact) => fact.objectText).sort()).toEqual(['Avery', 'Morgan']);
 
     const historicalFacts = listFacts({
       subjectId: subject!.id,
@@ -566,7 +510,7 @@ describe('applyConsolidatorResult', () => {
       includeInvalidated: true,
     });
     expect(historicalFacts.map((fact) => fact.objectText).sort()).toEqual(['Avery', 'Morgan']);
-    expect(historicalFacts.find((fact) => fact.objectText === 'Morgan')?.invalidAt).toBe(20);
+    expect(historicalFacts.every((fact) => fact.invalidAt === null)).toBe(true);
   });
 
   it('clears scoped open_threads when the consolidator returns an empty list', () => {
@@ -574,7 +518,6 @@ describe('applyConsolidatorResult', () => {
       {
         episodeSummary: null,
         newFacts: [],
-        invalidatedFacts: [],
         activeFocus: null,
         openThreads: ['Old follow-up'],
         notable: [],
@@ -586,7 +529,6 @@ describe('applyConsolidatorResult', () => {
       {
         episodeSummary: null,
         newFacts: [],
-        invalidatedFacts: [],
         activeFocus: null,
         openThreads: [],
         notable: [],
@@ -608,7 +550,6 @@ describe('applyConsolidatorResult', () => {
       {
         episodeSummary: 'The user compared local model runtime options.',
         newFacts: [],
-        invalidatedFacts: [],
         activeFocus: null,
         openThreads: [],
         notable: [],
@@ -633,7 +574,6 @@ describe('applyConsolidatorResult', () => {
     const result = {
       episodeSummary: null,
       newFacts: [{ subject: 'user', predicate: 'lives_in', value: 'Berlin' as const }],
-      invalidatedFacts: [],
       activeFocus: null,
       openThreads: [],
       notable: [],
@@ -661,7 +601,6 @@ describe('applyConsolidatorResult', () => {
         {
           episodeSummary: null,
           newFacts: [],
-          invalidatedFacts: [],
           // 600 chars max enforced at parse, but applyConsolidatorResult must
           // also tolerate a caller that hands it raw oversize content.
           activeFocus: 'x'.repeat(5_000),

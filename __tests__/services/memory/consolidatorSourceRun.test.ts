@@ -5,7 +5,10 @@ jest.mock('expo-sqlite', () => {
 
 import { applyConsolidatorResult } from '../../../src/services/memory/consolidator';
 import { listFacts } from '../../../src/services/memory/facts/queries';
-import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../../src/services/memory/schema';
+import {
+  ensureFactSchema,
+  resetFactSchemaCacheForTests,
+} from '../../../src/services/memory/schema';
 import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -34,7 +37,6 @@ describe('memory consolidator source-run provenance', () => {
             scope: 'project',
           },
         ],
-        invalidatedFacts: [],
         activeFocus: null,
         openThreads: [],
         notable: [],

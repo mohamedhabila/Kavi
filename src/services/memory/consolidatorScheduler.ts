@@ -253,7 +253,6 @@ export async function maybeRunConsolidation(
       result: {
         episodeSummary: null,
         newFacts: [],
-        invalidatedFacts: [],
         activeFocus: null,
         openThreads: [],
         notable: [],

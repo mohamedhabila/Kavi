@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Kavi — Memory consolidator
 // ---------------------------------------------------------------------------
-// After every closed assistant turn we run a single-pass ADD-only extractor
+// After every closed assistant turn we run a single-pass memory extractor
 // against the just-finished turn. The extractor returns:
 //   • new_facts        — durable assertions to record into the bi-temporal
 //                        fact store (entity registry rolls up names).
@@ -10,9 +10,8 @@
 //   • notable          — one-shot lines for the next turn's `<focus>` block.
 //
 // Design rules:
-//   • ADD-only: the consolidator NEVER mutates or invalidates existing facts.
-//     Supersession happens later, on-read, when a new fact lands with the
-//     same subject+predicate (handled by facts.recordFact).
+//   • Provider output proposes facts. It never receives direct invalidation
+//     authority. A replacement is applied only after deterministic admission.
 //   • Idempotent: re-running on the same turn must be a no-op (we dedupe by
 //     content_hash inside facts.recordFact).
 //   • Provider-agnostic: the extractor is just an `(prompt) => Promise<json>`
@@ -22,7 +21,7 @@
 // ---------------------------------------------------------------------------
 
 import type { Message } from '../../types/message';
-import { recordFact } from './facts/mutations';
+import { recordFact, replaceCurrentFact } from './facts/mutations';
 import type { MemoryFactScope } from './facts/types';
 import { upsertEntity } from './entities';
 import { editBlock, ensureDefaultBlocks } from './blocks';
@@ -30,6 +29,9 @@ import { ensureFactSchema } from './schema';
 import { addFactEvidence, recordEpisode } from './episodes/mutations';
 import { editWorkingBlock } from './workingBlocks';
 import { composeActiveFocusContent } from './focus';
+import { createLogger } from '../../utils/logger';
+
+const logger = createLogger('memory.consolidator');
 
 export interface ConsolidatorTurnInput {
   /** Most recent user message that led to this assistant turn. */
@@ -53,6 +55,23 @@ export interface ConsolidatorTurnInput {
   messages?: Message[];
 }
 
+export type ConsolidatorFactOperation = 'insert' | 'replace_current';
+
+export type ConsolidatorAssertionClass =
+  | 'current_direct'
+  | 'historical'
+  | 'hypothetical'
+  | 'quoted'
+  | 'third_party'
+  | 'uncertain';
+
+export interface AdmittedFactWrite {
+  operation: 'replace_current';
+  authority: 'grounded_user_statement';
+  evidenceMessageId: string;
+  expectedCurrentFactId: string;
+}
+
 export interface ConsolidatorFact {
   subject: string;
   predicate: string;
@@ -61,21 +80,19 @@ export interface ConsolidatorFact {
   importance?: number;
   evidenceMessageIds?: string[];
   reason?: string;
+  /** Untrusted provider proposal. Persistence ignores this until admission. */
+  operation?: ConsolidatorFactOperation;
+  assertionClass?: ConsolidatorAssertionClass;
+  evidenceQuote?: string;
+  /** Internal authority created only by deterministic product code. */
+  admittedWrite?: AdmittedFactWrite;
   /** Plain-language confidence label from the model: "high" | "medium" | "low". */
   confidence?: 'high' | 'medium' | 'low' | number;
-}
-
-export interface ConsolidatorInvalidation {
-  factId?: string;
-  subject?: string;
-  predicate?: string;
-  reason?: string;
 }
 
 export interface ConsolidatorResult {
   episodeSummary?: string | null;
   newFacts: ConsolidatorFact[];
-  invalidatedFacts?: ConsolidatorInvalidation[];
   activeFocus: string | null;
   openThreads: string[];
   notable: string[];
@@ -114,6 +131,9 @@ Return STRICT JSON only — no prose, no markdown fences. Schema:
       "importance": 0.0,
       "confidence": 0.0,
       "evidence_message_ids": ["message id", ...],
+      "operation": "insert" | "replace_current",
+      "assertion_class": "current_direct" | "historical" | "hypothetical" | "quoted" | "third_party" | "uncertain",
+      "evidence_quote": "verbatim quote from the current user message",
       "reason": "short grounding note"
     }
   ],
@@ -126,6 +146,13 @@ Return STRICT JSON only — no prose, no markdown fences. Schema:
 Rules:
 - Skip ephemeral chit-chat. Do not extract greetings, jokes, or filler.
 - new_facts: only durable assertions. Reject opinions stated as facts.
+- Default operation to insert. Use replace_current only when the latest user
+  directly states that a current value changed. Never use it for history,
+  hypotheticals, questions, quotations, third-party claims, assistant text, or
+  tool output.
+- Every replace_current proposal must use assertion_class current_direct,
+  include the latest user message id in evidence_message_ids, and include an
+  evidence_quote copied verbatim from that user message.
 - Extract explicit user memory-write intents in any language. Preserve supplied
   subject, predicate, and value labels when they are given, including opaque IDs,
   checksums, codes, and tokens. The assistant does not need to restate the fact.
@@ -149,6 +176,11 @@ export function buildConsolidatorPrompt(input: ConsolidatorTurnInput): string {
       `<message_window>\n${formatMessageWindow(selectPromptMessageWindow(input))}\n</message_window>`,
     );
   } else {
+    if (input.sourceUserMessageId) {
+      lines.push(
+        `<current_user_message_id>${truncateForPrompt(input.sourceUserMessageId, 120)}</current_user_message_id>`,
+      );
+    }
     lines.push(`<user>\n${truncateForPrompt(input.userMessage, 4000)}\n</user>`);
     lines.push(`<assistant>\n${truncateForPrompt(input.assistantMessage, 4000)}\n</assistant>`);
   }
@@ -209,7 +241,6 @@ function truncateForPrompt(value: string, max: number): string {
 interface RawConsolidatorPayload {
   episode_summary?: unknown;
   new_facts?: unknown;
-  invalidated_facts?: unknown;
   active_focus?: unknown;
   open_threads?: unknown;
   notable?: unknown;
@@ -219,7 +250,6 @@ export function parseConsolidatorOutput(raw: string): ConsolidatorResult {
   const fallback: ConsolidatorResult = {
     episodeSummary: null,
     newFacts: [],
-    invalidatedFacts: [],
     activeFocus: null,
     openThreads: [],
     notable: [],
@@ -237,7 +267,6 @@ export function parseConsolidatorOutput(raw: string): ConsolidatorResult {
   return {
     episodeSummary: normalizeBoundedString(parsed.episode_summary, 1200),
     newFacts: normalizeFacts(parsed.new_facts),
-    invalidatedFacts: normalizeInvalidations(parsed.invalidated_facts),
     activeFocus: normalizeActiveFocus(parsed.active_focus),
     openThreads: normalizeStringArray(parsed.open_threads, 80, 5),
     notable: normalizeStringArray(parsed.notable, 200, 2),
@@ -283,6 +312,12 @@ function normalizeFacts(raw: unknown): ConsolidatorFact[] {
           .slice(0, 8)
       : undefined;
     const reason = normalizeBoundedString(candidate.reason, 240) ?? undefined;
+    const operation = parseFactOperation(candidate.operation);
+    const assertionClass = parseAssertionClass(
+      candidate.assertion_class ?? candidate.assertionClass,
+    );
+    const evidenceQuote =
+      normalizeBoundedString(candidate.evidence_quote ?? candidate.evidenceQuote, 600) ?? undefined;
     out.push({
       subject,
       predicate,
@@ -292,9 +327,27 @@ function normalizeFacts(raw: unknown): ConsolidatorFact[] {
       ...(confidence !== undefined ? { confidence } : {}),
       ...(evidenceMessageIds?.length ? { evidenceMessageIds } : {}),
       ...(reason ? { reason } : {}),
+      ...(operation ? { operation } : {}),
+      ...(assertionClass ? { assertionClass } : {}),
+      ...(evidenceQuote ? { evidenceQuote } : {}),
     });
   }
   return out;
+}
+
+function parseFactOperation(raw: unknown): ConsolidatorFactOperation | undefined {
+  return raw === 'insert' || raw === 'replace_current' ? raw : undefined;
+}
+
+function parseAssertionClass(raw: unknown): ConsolidatorAssertionClass | undefined {
+  return raw === 'current_direct' ||
+    raw === 'historical' ||
+    raw === 'hypothetical' ||
+    raw === 'quoted' ||
+    raw === 'third_party' ||
+    raw === 'uncertain'
+    ? raw
+    : undefined;
 }
 
 function parseFactScope(raw: unknown): MemoryFactScope | undefined {
@@ -305,28 +358,6 @@ function parseFactScope(raw: unknown): MemoryFactScope | undefined {
     raw === 'persona'
     ? raw
     : undefined;
-}
-
-function normalizeInvalidations(raw: unknown): ConsolidatorInvalidation[] {
-  if (!Array.isArray(raw)) return [];
-  const out: ConsolidatorInvalidation[] = [];
-  for (const item of raw) {
-    if (out.length >= 5) break;
-    if (!item || typeof item !== 'object') continue;
-    const candidate = item as Record<string, unknown>;
-    const factId = normalizeBoundedString(candidate.fact_id ?? candidate.factId, 80) ?? undefined;
-    const subject = normalizeBoundedString(candidate.subject, 80) ?? undefined;
-    const predicate = normalizeBoundedString(candidate.predicate, 80) ?? undefined;
-    const reason = normalizeBoundedString(candidate.reason, 240) ?? undefined;
-    if (!factId && (!subject || !predicate)) continue;
-    out.push({
-      ...(factId ? { factId } : {}),
-      ...(subject ? { subject } : {}),
-      ...(predicate ? { predicate } : {}),
-      ...(reason ? { reason } : {}),
-    });
-  }
-  return out;
 }
 
 function normalizeBoundedString(raw: unknown, maxLen: number): string | null {
@@ -419,6 +450,7 @@ export function applyConsolidatorResult(
     : null;
 
   const recordedFactIds: string[] = [];
+  const invalidatedFactIds: string[] = [];
   for (const fact of result.newFacts) {
     const subjectType = fact.subject.toLowerCase() === 'user' ? 'self' : 'concept';
     const subject = upsertEntity({ type: subjectType, name: fact.subject, now });
@@ -427,7 +459,21 @@ export function applyConsolidatorResult(
       options.sourceUserMessageId ??
       options.sourceAssistantMessageId ??
       null;
-    const recorded = recordFact({
+    const memoryWrite = fact.admittedWrite
+      ? {
+          operation: fact.admittedWrite.operation,
+          authority: fact.admittedWrite.authority,
+          evidenceMessageId: fact.admittedWrite.evidenceMessageId,
+          expectedCurrentFactId: fact.admittedWrite.expectedCurrentFactId,
+          assertionClass: fact.assertionClass ?? null,
+          evidenceQuote: fact.evidenceQuote ?? null,
+        }
+      : undefined;
+    const attributes = {
+      ...(fact.reason ? { reason: fact.reason } : {}),
+      ...(memoryWrite ? { memoryWrite } : {}),
+    };
+    const factInput = {
       subjectId: subject.id,
       predicate: fact.predicate,
       objectText: fact.value,
@@ -437,24 +483,36 @@ export function applyConsolidatorResult(
       originThreadId: options.threadId ?? options.conversationId ?? null,
       originTaskId: options.taskId ?? null,
       sourceRunId: options.sourceRunId ?? null,
-      sourceMessageId,
+      sourceMessageId: fact.admittedWrite?.evidenceMessageId ?? sourceMessageId,
       sourceTurnId: options.sourceAssistantMessageId ?? options.sourceUserMessageId ?? null,
       sourceSummary: fact.reason ?? episodeSummary ?? null,
       importance: fact.importance ?? inferFactImportance(fact),
-      attributes: fact.reason ? { reason: fact.reason } : undefined,
-      supersedePrior: true,
+      attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
       now,
-    });
+    };
+    const recorded = fact.admittedWrite
+      ? replaceCurrentFact({
+          ...factInput,
+          expectedCurrentFactId: fact.admittedWrite.expectedCurrentFactId,
+        })
+      : recordFact({ ...factInput, supersedePrior: false });
+    if (recorded.status === 'conflict') {
+      logger.devWarn(`Grounded replacement rejected at persistence: ${recorded.conflict}`);
+      continue;
+    }
     if (recorded.status === 'created') recordedFactIds.push(recorded.fact.id);
-    const evidenceIds = fact.evidenceMessageIds?.length
-      ? fact.evidenceMessageIds
-      : [sourceMessageId].filter((id): id is string => typeof id === 'string');
+    invalidatedFactIds.push(...recorded.superseded.map((superseded) => superseded.id));
+    const evidenceIds = fact.admittedWrite
+      ? [fact.admittedWrite.evidenceMessageId]
+      : fact.evidenceMessageIds?.length
+        ? fact.evidenceMessageIds
+        : [sourceMessageId].filter((id): id is string => typeof id === 'string');
     for (const messageId of evidenceIds) {
       addFactEvidence({
         factId: recorded.fact.id,
         episodeId: episode?.id ?? null,
         messageId,
-        quote: fact.reason ?? fact.value,
+        quote: fact.evidenceQuote ?? fact.reason ?? fact.value,
         now,
       });
     }
@@ -478,7 +536,12 @@ export function applyConsolidatorResult(
   let openThreadsUpdated = false;
   if (!options.skipWorkingMemoryWrites) {
     try {
-      writeWorkingOrLegacyBlock('open_threads', fitBlockLines(result.openThreads, 800), options, now);
+      writeWorkingOrLegacyBlock(
+        'open_threads',
+        fitBlockLines(result.openThreads, 800),
+        options,
+        now,
+      );
       openThreadsUpdated = true;
     } catch {
       // BlockOverflowError or unknown block - never throw out of the chat path.
@@ -487,7 +550,7 @@ export function applyConsolidatorResult(
 
   return {
     recordedFactIds,
-    invalidatedFactIds: [],
+    invalidatedFactIds,
     activeFocusUpdated,
     openThreadsUpdated,
     episodeId: episode?.id ?? null,

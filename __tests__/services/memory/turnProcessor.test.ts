@@ -347,7 +347,6 @@ describe('processCompletedTurn', () => {
     mockExtractProviderEnrichment.mockResolvedValue({
       episodeSummary: 'Provider summary',
       newFacts: [{ subject: 'user', predicate: 'location', value: 'NYC' }],
-      invalidatedFacts: [],
       activeFocus: 'Provider focus',
       openThreads: ['Thread from provider'],
       notable: [],
@@ -431,7 +430,6 @@ describe('processCompletedTurn', () => {
         { subject: 'user', predicate: 'name', value: 'Mo' }, // duplicate
         { subject: 'user', predicate: 'age', value: '30' },
       ],
-      invalidatedFacts: [],
       activeFocus: null,
       openThreads: [],
       notable: [],
@@ -470,7 +468,6 @@ describe('processCompletedTurn', () => {
           value: 'e2e-contact-avery',
         },
       ],
-      invalidatedFacts: [],
       activeFocus: null,
       openThreads: [],
       notable: [],
@@ -529,7 +526,6 @@ describe('processCompletedTurn', () => {
         },
         { subject: 'direct-longmem-user', predicate: 'last_sms_message', value: 'drafted' },
       ],
-      invalidatedFacts: [],
       activeFocus: null,
       openThreads: [],
       notable: [],
@@ -558,53 +554,6 @@ describe('processCompletedTurn', () => {
         predicate: 'preferred_message_contact',
       }),
     );
-  });
-
-  it('ignores provider invalidations in automatic turn ingestion', async () => {
-    mockExtractStructuralMemory.mockReturnValue({
-      episodeSummary: 'S',
-      facts: [
-        {
-          subject: 'direct-longmem-user',
-          predicate: 'preferred_message_contact',
-          value: 'Avery',
-        },
-      ],
-      activeFocus: null,
-      openThreads: [],
-    });
-    mockExtractProviderEnrichment.mockResolvedValue({
-      episodeSummary: 'P',
-      newFacts: [],
-      invalidatedFacts: [
-        {
-          subject: 'direct-longmem-user',
-          predicate: 'preferred_message_contact',
-          reason: 'old value replaced',
-        },
-        { subject: 'other-user', predicate: 'preferred_message_contact' },
-        { factId: 'fact-explicit-id' },
-      ],
-      activeFocus: null,
-      openThreads: [],
-      notable: [],
-    });
-
-    await processCompletedTurn({
-      threadId: 'conv-1',
-      messages: [
-        makeMsg({ role: 'user', content: 'Update a structured preference.' }),
-        makeMsg({
-          role: 'assistant',
-          content: 'Done',
-          assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
-        }),
-      ],
-      extractor: jest.fn(),
-    });
-
-    const persisted = mockApplyConsolidatorResult.mock.calls[0][0];
-    expect(persisted.invalidatedFacts).toEqual([]);
   });
 
   it('updates the consolidation cursor after processing', async () => {
