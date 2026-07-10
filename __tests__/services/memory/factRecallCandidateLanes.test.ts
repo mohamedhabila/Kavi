@@ -2,7 +2,6 @@ import type { MemoryEntity } from '../../../src/services/memory/entities';
 import {
   buildSupplementalRecallCandidateLanes,
   extractTemporalRecallYears,
-  hasTemporalRecallSignal,
 } from '../../../src/services/memory/factRecallCandidateLanes';
 import type { MemoryFact } from '../../../src/services/memory/facts/types';
 import { tokenizeLexicalUnits } from '../../../src/services/memory/ranking/lexical';
@@ -36,20 +35,9 @@ function entity(overrides: Partial<MemoryEntity> = {}): MemoryEntity {
 }
 
 describe('supplemental hybrid recall lanes', () => {
-  it('detects bounded multilingual and explicit-year temporal signals', () => {
-    for (const query of [
-      'What is current?',
-      'ما هو الأحدث؟',
-      'Was war gestern?',
-      '¿Qué pasó ayer?',
-      '現在はどうですか',
-      'O que mudou recentemente?',
-      '2024 project history',
-    ]) {
-      expect(hasTemporalRecallSignal(query)).toBe(true);
-    }
-    expect(hasTemporalRecallSignal('last name is Smith')).toBe(false);
+  it('extracts language-neutral explicit years without temporal word lists', () => {
     expect(extractTemporalRecallYears('Compare 2022 with 2024')).toEqual(new Set([2022, 2024]));
+    expect(extractTemporalRecallYears('last name is Smith')).toEqual(new Set());
   });
 
   it('matches canonical entities and aliases without exposing unrelated facts', () => {
@@ -64,7 +52,7 @@ describe('supplemental hybrid recall lanes', () => {
     });
 
     expect(lanes.entity.map((entry) => entry.fact.id)).toEqual(['target']);
-    expect(lanes.temporal).toEqual([]);
+    expect(lanes.temporal.map((entry) => entry.fact.id)).toEqual(['unrelated', 'target']);
     expect(lanes.localSemanticOutcome).toBe('not_requested');
   });
 
@@ -107,6 +95,12 @@ describe('supplemental hybrid recall lanes', () => {
       localSemanticOutcome: 'applied',
       localSemantic: [{ fact: { id: 'matching' }, semanticSimilarity: 1 }],
     });
+    expect(
+      buildSupplementalRecallCandidateLanes({
+        ...base,
+        localSemantic: { queryEmbedding: [1, 0], minimumSimilarity: Number.NaN },
+      }).localSemantic.map((entry) => entry.fact.id),
+    ).toEqual(['matching']);
     expect(
       buildSupplementalRecallCandidateLanes({
         ...base,

@@ -79,4 +79,30 @@ describe('hybrid recall candidate fusion', () => {
     expect(result.candidates).toHaveLength(5);
     expect(new Set(result.candidates.map((candidate) => candidate.fact.id)).size).toBe(5);
   });
+
+  it('handles zero explicitly and rejects invalid limits or lane contracts', () => {
+    const entry = { fact: fact('fact-1', 1) };
+    expect(fuseRecallCandidateLanes([{ reason: 'lexical', entries: [entry] }], 0)).toEqual({
+      candidates: [],
+      unionCount: 0,
+      diversifiedCount: 0,
+    });
+    for (const invalidLimit of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() =>
+        fuseRecallCandidateLanes([{ reason: 'lexical', entries: [entry] }], invalidLimit),
+      ).toThrow('finite non-negative');
+    }
+    expect(() =>
+      fuseRecallCandidateLanes(
+        [
+          { reason: 'lexical', entries: [entry] },
+          { reason: 'lexical', entries: [entry] },
+        ],
+        1,
+      ),
+    ).toThrow('unique closed reason codes');
+    expect(() =>
+      fuseRecallCandidateLanes([{ reason: 'private_lane' as 'lexical', entries: [entry] }], 1),
+    ).toThrow('unique closed reason codes');
+  });
 });

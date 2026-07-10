@@ -9,8 +9,6 @@ import type { MemoryFact } from './facts/types';
 import { tokenizeLexicalUnits } from './ranking/lexical';
 import { cosineSimilarity } from './ranking/similarity';
 
-const TEMPORAL_SIGNAL_PATTERN =
-  /(?:\b(?:current(?:ly)?|now|today|latest|recent(?:ly)?|previous|yesterday|earlier|before|past|former|used\s+to)\b|\blast\s+(?:time|day|week|month|year)\b|الحالي|حاليًا|الآن|اليوم|الأحدث|مؤخرًا|السابق|أمس|aktuell|jetzt|heute|neueste|kürzlich|vorherige|gestern|actual|ahora|hoy|últim[oa]|reciente|anterior|ayer|actuel|maintenant|aujourd'hui|dernier|récent|précédent|hier|現在|今|今日|最新|最近|以前|昨日|atual|agora|hoje|últim[oa]|recente|anterior|ontem|当前|當前|现在|今天|最新|最近|以前|昨天)/iu;
 const YEAR_PATTERN = /(?:^|[^\p{N}])((?:19|20)\d{2})(?=$|[^\p{N}])/gu;
 
 export interface SupplementalRecallCandidateLanes {
@@ -24,11 +22,6 @@ function compareFacts(left: MemoryFact, right: MemoryFact): number {
   if (right.updatedAt !== left.updatedAt) return right.updatedAt - left.updatedAt;
   if (right.importance !== left.importance) return right.importance - left.importance;
   return left.id.localeCompare(right.id);
-}
-
-export function hasTemporalRecallSignal(query: string): boolean {
-  YEAR_PATTERN.lastIndex = 0;
-  return TEMPORAL_SIGNAL_PATTERN.test(query.normalize('NFKC')) || YEAR_PATTERN.test(query);
 }
 
 export function extractTemporalRecallYears(query: string): ReadonlySet<number> {
@@ -51,7 +44,7 @@ function entityMatchesQuery(
   queryUnits: ReadonlySet<string>,
   normalizedQuery: string,
 ): boolean {
-  if (normalizedQuery.includes(entity.id.normalize('NFKC').toLocaleLowerCase())) return true;
+  if (normalizedQuery.includes(entity.id.normalize('NFKC').toLowerCase())) return true;
   return [entity.canonicalName, ...entity.aliases].some((label) => {
     const units = tokenizeLexicalUnits(label);
     return units.size > 0 && Array.from(units).every((unit) => queryUnits.has(unit));
@@ -64,7 +57,7 @@ function entityLane(
   queryUnits: ReadonlySet<string>,
   query: string,
 ): RecallCandidateLaneEntry[] {
-  const normalizedQuery = query.normalize('NFKC').toLocaleLowerCase();
+  const normalizedQuery = query.normalize('NFKC').toLowerCase();
   const matchingEntityIds = new Set(
     entities
       .filter((entity) => entity.deletedAt === null)
@@ -84,7 +77,6 @@ function entityLane(
 }
 
 function temporalLane(facts: ReadonlyArray<MemoryFact>, query: string): RecallCandidateLaneEntry[] {
-  if (!hasTemporalRecallSignal(query)) return [];
   const years = extractTemporalRecallYears(query);
   return facts
     .filter((fact) => factMatchesYear(fact, years))
@@ -117,11 +109,14 @@ function localSemanticLane(
       validEmbedding(fact.embedding),
   );
   if (compatibleFacts.length === 0) return { entries: [], outcome: 'unavailable' };
-  const minimumSimilarity = Math.max(0, Math.min(input.minimumSimilarity ?? 0.55, 1));
+  const requestedMinimum = input.minimumSimilarity;
+  const minimumSimilarity = Number.isFinite(requestedMinimum ?? NaN)
+    ? Math.max(0, Math.min(requestedMinimum ?? 0.55, 1))
+    : 0.55;
   const entries = compatibleFacts
     .map((fact) => ({
       fact,
-      semanticSimilarity: cosineSimilarity([...input.queryEmbedding], fact.embedding ?? []),
+      semanticSimilarity: cosineSimilarity(input.queryEmbedding, fact.embedding ?? []),
     }))
     .filter((entry) => entry.semanticSimilarity >= minimumSimilarity)
     .sort(

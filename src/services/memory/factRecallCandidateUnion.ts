@@ -63,10 +63,18 @@ export function fuseRecallCandidateLanes(
   lanes: ReadonlyArray<RecallCandidateLane>,
   requestedLimit: number,
 ): { candidates: FusedRecallCandidate[]; unionCount: number; diversifiedCount: number } {
-  const limit = Math.max(
-    1,
-    Math.min(Math.floor(requestedLimit), RECALL_CANDIDATE_LIMITS.maximumUnion),
-  );
+  if (!Number.isFinite(requestedLimit) || requestedLimit < 0) {
+    throw new RangeError('Recall candidate union limit must be a finite non-negative number.');
+  }
+  const limit = Math.min(Math.floor(requestedLimit), RECALL_CANDIDATE_LIMITS.maximumUnion);
+  if (limit === 0) return { candidates: [], unionCount: 0, diversifiedCount: 0 };
+  const seenReasons = new Set<RecallCandidateReasonCode>();
+  for (const lane of lanes) {
+    if (!RECALL_CANDIDATE_REASON_CODES.includes(lane.reason) || seenReasons.has(lane.reason)) {
+      throw new Error('Recall candidate lanes must use unique closed reason codes.');
+    }
+    seenReasons.add(lane.reason);
+  }
   const byId = new Map<
     string,
     {
