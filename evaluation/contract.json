@@ -4,7 +4,8 @@
   "schemaVersion": "1.0.0",
   "artifactVersions": {
     "contract": "1.0.0",
-    "runManifest": "1.0.0"
+    "runManifest": "1.0.0",
+    "casePack": "1.0.0"
   },
   "lanes": ["product_native", "memory_isolated", "full_upstream", "official_candidate"],
   "protocolConformance": ["product_native", "adapted", "upstream_full", "official"],

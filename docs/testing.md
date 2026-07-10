@@ -12,10 +12,10 @@ environment-dependent or manually validated flows.
 | **3 - Strict + E2E** | `npm run verify:strict:e2e` | Selected-provider key | Full agent-quality validation before major graph/tool changes |
 
 **Tier 1 (`verify`)** is the contributor gate and matches pull request CI. It
-runs the public hygiene, public language, link, license, app metadata, i18n,
-legacy import, thin E2E harness, graph mutation, dead export, tool contract,
-maintainability, lint, typecheck, and local Jest checks listed in the default
-gate section below.
+runs the public hygiene, public language, link, license, evaluation contract,
+app metadata, i18n, legacy import, thin E2E harness, graph mutation, dead
+export, tool contract, maintainability, lint, typecheck, and local Jest checks
+listed in the default gate section below.
 E2E and live-provider tests are skipped unless explicitly opted in.
 
 **Tier 2 (`verify:strict`)** runs Tier 1, then:
@@ -59,6 +59,7 @@ That command currently runs:
 - `npm run check:public-language`
 - `npm run check:links`
 - `npm run check:licenses`
+- `npm run check:evaluation-contract`
 - `npm run check:app-metadata`
 - `npm run check:i18n`
 - `npm run check:no-legacy-planning-imports`
@@ -124,6 +125,18 @@ npm test -- --runInBand --testNamePattern="workspace"
 - `__tests__/engine`: orchestration, tool, and execution-guard coverage
 - `__tests__/android`: Android-specific contracts and release hardening checks
 - `__tests__/integration`: broader scenario tests that still run in the local Jest environment
+
+## Public Evaluation Contract
+
+`npm run check:evaluation-contract` validates the canonical evaluation schema,
+contract, and 12-case synthetic KLAE development pack. It is deterministic,
+keyless, and network-free. The command validates artifact structure and
+governance; it does not execute the scenarios or create a score.
+
+See [evaluation.md](evaluation.md) for evaluation lanes, verification labels,
+split ownership, structural assertion semantics, metrics, failure categories,
+privacy rules, and the boundary between adapted checks and official upstream
+results.
 
 ## Expectations For Contributors
 

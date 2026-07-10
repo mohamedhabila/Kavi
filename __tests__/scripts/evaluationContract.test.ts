@@ -8,11 +8,32 @@ const {
   loadEvaluationSchema,
   validateEvaluationContract,
 } = require('../../scripts/lib/evaluationContract');
-const { validateEvaluationRunManifest } = require('../../scripts/lib/evaluationRunManifest');
+const {
+  validateEvaluationArtifact,
+  validateEvaluationRunManifest,
+} = require('../../scripts/lib/evaluationRunManifest');
+const {
+  loadEvaluationCasePack,
+  validateEvaluationCasePack,
+} = require('../../scripts/lib/evaluationCasePack');
 
 const projectRoot = path.resolve(__dirname, '../..');
 const digest = 'b'.repeat(64);
 const commitSha = 'a'.repeat(40);
+
+type MutableCasePack = {
+  cases: Array<{
+    id: string;
+    assertions: Array<{
+      operator: string;
+      afterStepId: string;
+      target: string;
+    }>;
+    metricIds: string[];
+    families: string[];
+    modeTransitions: string[];
+  }>;
+};
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -118,6 +139,7 @@ function validRunManifest() {
 describe('evaluation contract', () => {
   const contract = loadEvaluationContract(projectRoot);
   const schema = loadEvaluationSchema(projectRoot);
+  const developmentPack = loadEvaluationCasePack(projectRoot);
 
   it('keeps the checked-in schema and contract synchronized', () => {
     expect(checkEvaluationContract(projectRoot)).toEqual([]);
@@ -148,6 +170,63 @@ describe('evaluation contract', () => {
 
   it('accepts one fully specified, keyless, local-only run manifest', () => {
     expect(validateEvaluationRunManifest(validRunManifest(), contract)).toEqual([]);
+  });
+
+  it('validates the public synthetic development pack as a canonical artifact', () => {
+    expect(validateEvaluationCasePack(developmentPack, contract, schema)).toEqual([]);
+    expect(validateEvaluationArtifact(developmentPack, contract, schema)).toEqual([]);
+    expect(developmentPack.cases).toHaveLength(12);
+    expect(developmentPack.provenance).toEqual({
+      origin: 'original_synthetic_product_cases',
+      license: 'MIT',
+      redistributable: true,
+      containsUserData: false,
+      derivedFromBenchmarkItems: false,
+    });
+  });
+
+  it('rejects duplicate cases, prose regex scoring, dangling steps, and unregistered metrics', () => {
+    const invalid = clone(developmentPack) as MutableCasePack;
+    invalid.cases[1].id = invalid.cases[0].id;
+    invalid.cases[0].assertions[0].operator = 'regex';
+    invalid.cases[0].assertions[1].afterStepId = 'missing-step';
+    invalid.cases[0].assertions[2].target = 'turn.probe-city.assistant-text';
+    invalid.cases[0].metricIds.push('unregistered_metric');
+
+    const failures = validateEvaluationCasePack(invalid, contract, schema);
+
+    expect(failures).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('pack.cases: must contain unique id values'),
+        expect.stringContaining('pack.cases[0].assertions[0].operator'),
+        expect.stringContaining(
+          'pack.cases[0].assertions[1].afterStepId: must reference a step in the same case',
+        ),
+        expect.stringContaining(
+          'pack.cases[0].assertions[2].target: must reference structured state, not assistant prose',
+        ),
+        expect.stringContaining(
+          'pack.cases[0].metricIds[5]: must be registered by evaluation/contract.json',
+        ),
+      ]),
+    );
+  });
+
+  it('requires every representative family and four concrete mode transitions', () => {
+    const incomplete = clone(developmentPack) as MutableCasePack;
+    incomplete.cases.forEach((caseEntry) => {
+      caseEntry.families = caseEntry.families.filter((family: string) => family !== 'delegation');
+      caseEntry.modeTransitions = caseEntry.modeTransitions.filter(
+        (transition: string) => transition !== 'agentic_to_agentic',
+      );
+    });
+
+    expect(validateEvaluationCasePack(incomplete, contract, schema)).toEqual(
+      expect.arrayContaining([
+        'pack.cases: must include the representative family delegation',
+        'pack.cases: must include the mode transition agentic_to_agentic',
+      ]),
+    );
   });
 
   it('requires one scalar verification label and truthful skipped evidence', () => {
@@ -191,7 +270,7 @@ describe('evaluation contract', () => {
 
     expect(validateEvaluationRunManifest(run, contract)).toEqual(
       expect.arrayContaining([
-        expect.stringContaining("run: must NOT have additional properties"),
+        expect.stringContaining('run: must NOT have additional properties'),
         expect.stringContaining("run.inputs.datasets[0]: must have required property 'sha256'"),
       ]),
     );
@@ -277,7 +356,9 @@ describe('evaluation contract', () => {
     });
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain('Canonical evaluation schema and contract are valid');
+    expect(result.stdout).toContain(
+      'Canonical evaluation schema, contract, and public case pack are valid',
+    );
     expect(result.stderr).toBe('');
   });
 });

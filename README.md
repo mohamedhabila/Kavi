@@ -67,7 +67,7 @@ claims; they are reproducible checks for this mobile assistant codebase.
 
 | Signal                    | Current gate                                                                                                                                   |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Contributor CI            | `npm run verify` runs public hygiene, language, links, licenses, app metadata, i18n, maintainability, lint, typecheck, and deterministic Jest. |
+| Contributor CI            | `npm run verify` runs public checks, app metadata, i18n, maintainability, lint, typecheck, and deterministic Jest.                             |
 | Local deterministic tests | Latest verification passed 6,100+ Jest tests across 700+ suites.                                                                               |
 | Coverage floor            | `npm run test:coverage` enforces statements >=83.8%, branches >=70.7%, functions >=87.6%, lines >=84.3%.                                       |
 | Strict keyless metrics    | `npm run eval:memory` passed 3/3 memory metric tests; `npm run eval:agent` passed 13/13 agent metric tests.                                    |
@@ -143,6 +143,7 @@ npm run check:public-hygiene
 npm run check:public-language
 npm run check:links
 npm run check:licenses
+npm run check:evaluation-contract
 npm run check:app-metadata
 npm run check:i18n
 npm run check:no-legacy-planning-imports
@@ -204,7 +205,9 @@ npm run verify:strict:e2e
 ```
 
 See [docs/testing.md](docs/testing.md) for gate tiers, E2E setup, benchmark
-families, pass bars, and live-provider scripts.
+families, pass bars, and live-provider scripts. See
+[docs/evaluation.md](docs/evaluation.md) for KLAE, structural case scoring,
+claim labels, split governance, and adapted-versus-official boundaries.
 
 ## Privacy And Memory
 

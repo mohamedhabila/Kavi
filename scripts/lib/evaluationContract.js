@@ -162,7 +162,11 @@ function validateSchemaShape(schema, failures) {
   const refs = Array.isArray(schema.oneOf)
     ? schema.oneOf.map((entry) => entry?.$ref).filter(Boolean)
     : [];
-  for (const requiredRef of ['#/$defs/evaluationContract', '#/$defs/evaluationRun']) {
+  for (const requiredRef of [
+    '#/$defs/evaluationContract',
+    '#/$defs/evaluationRun',
+    '#/$defs/evaluationCasePack',
+  ]) {
     if (!refs.includes(requiredRef)) {
       addFailure(failures, 'schema.oneOf', `must include ${requiredRef}`);
     }
@@ -172,6 +176,9 @@ function validateSchemaShape(schema, failures) {
   }
   if (!isRecord(schema.$defs?.evaluationRun)) {
     addFailure(failures, 'schema.$defs.evaluationRun', 'is required');
+  }
+  if (!isRecord(schema.$defs?.evaluationCasePack)) {
+    addFailure(failures, 'schema.$defs.evaluationCasePack', 'is required');
   }
 }
 
@@ -197,7 +204,7 @@ function validateEvaluationContract(contract, schema) {
 
   validateExactKeys(
     contract.artifactVersions,
-    ['contract', 'runManifest'],
+    ['contract', 'runManifest', 'casePack'],
     'contract.artifactVersions',
     failures,
   );
@@ -207,6 +214,10 @@ function validateEvaluationContract(contract, schema) {
   const runVersion = schema?.$defs?.evaluationRun?.properties?.schemaVersion?.const;
   if (contract.artifactVersions?.runManifest !== runVersion) {
     addFailure(failures, 'contract.artifactVersions.runManifest', `must be ${runVersion}`);
+  }
+  const casePackVersion = schema?.$defs?.evaluationCasePack?.properties?.schemaVersion?.const;
+  if (contract.artifactVersions?.casePack !== casePackVersion) {
+    addFailure(failures, 'contract.artifactVersions.casePack', `must be ${casePackVersion}`);
   }
 
   const enumFields = [

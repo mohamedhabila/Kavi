@@ -2,13 +2,16 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/schema.json",
   "title": "Kavi evaluation artifacts",
-  "description": "Canonical public contract and run-manifest schema for Kavi evaluations.",
+  "description": "Canonical public contract, case-pack, and run-manifest schema for Kavi evaluations.",
   "oneOf": [
     {
       "$ref": "#/$defs/evaluationContract"
     },
     {
       "$ref": "#/$defs/evaluationRun"
+    },
+    {
+      "$ref": "#/$defs/evaluationCasePack"
     }
   ],
   "$defs": {
@@ -104,12 +107,15 @@
     "artifactVersions": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["contract", "runManifest"],
+      "required": ["contract", "runManifest", "casePack"],
       "properties": {
         "contract": {
           "const": "1.0.0"
         },
         "runManifest": {
+          "const": "1.0.0"
+        },
+        "casePack": {
           "const": "1.0.0"
         }
       }
@@ -551,6 +557,403 @@
         "mediaType": {
           "type": "string",
           "minLength": 1
+        }
+      }
+    },
+    "klaeFamily": {
+      "type": "string",
+      "enum": [
+        "durable_profile",
+        "preference_application",
+        "correction_and_supersession",
+        "temporal_reasoning",
+        "episodic_continuity",
+        "open_loops",
+        "procedure_learning",
+        "failure_learning",
+        "cross_mode_transfer",
+        "interference",
+        "abstention",
+        "appropriate_silence",
+        "privacy_and_deletion",
+        "multilingual_continuity",
+        "multimodal_continuity",
+        "lifecycle",
+        "delegation",
+        "memory_safety",
+        "long_task_recovery"
+      ]
+    },
+    "modeTransition": {
+      "type": "string",
+      "enum": [
+        "chitchat_to_chitchat",
+        "chitchat_to_agentic",
+        "agentic_to_chitchat",
+        "agentic_to_agentic",
+        "either_to_either"
+      ]
+    },
+    "turnMode": {
+      "type": "string",
+      "enum": ["production_auto", "forced_chitchat", "forced_agentic"]
+    },
+    "structuralTarget": {
+      "type": "string",
+      "pattern": "^(?:turn|memory|native|workspace|run|open_loop|queue|retrieval|privacy|delegation|artifact|lifecycle)\\.[a-z0-9_-]+(?:\\.[a-z0-9_-]+)+$"
+    },
+    "syntheticScalar": {
+      "type": ["string", "number", "boolean", "null"]
+    },
+    "caseFixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "target", "value"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "target": {
+          "$ref": "#/$defs/structuralTarget"
+        },
+        "value": {
+          "$ref": "#/$defs/syntheticScalar"
+        }
+      }
+    },
+    "syntheticAttachment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "mediaType", "content"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["text_file", "image_description", "voice_transcript"]
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      }
+    },
+    "userTurnStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "at", "mode", "message"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "kind": {
+          "const": "user_turn"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "mode": {
+          "$ref": "#/$defs/turnMode"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/syntheticAttachment"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    },
+    "lifecycleStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "at", "event"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "kind": {
+          "const": "lifecycle_event"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "event": {
+          "type": "string",
+          "enum": [
+            "new_conversation",
+            "app_background",
+            "app_kill",
+            "app_relaunch",
+            "device_reboot",
+            "network_offline",
+            "network_online",
+            "provider_change"
+          ]
+        }
+      }
+    },
+    "caseStep": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/userTurnStep"
+        },
+        {
+          "$ref": "#/$defs/lifecycleStep"
+        }
+      ]
+    },
+    "valueAssertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "afterStepId", "target", "operator", "expected"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "afterStepId": {
+          "$ref": "#/$defs/safeId"
+        },
+        "target": {
+          "$ref": "#/$defs/structuralTarget"
+        },
+        "operator": {
+          "type": "string",
+          "enum": ["equals", "contains", "not_contains"]
+        },
+        "expected": {
+          "$ref": "#/$defs/syntheticScalar"
+        }
+      }
+    },
+    "presenceAssertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "afterStepId", "target", "operator"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "afterStepId": {
+          "$ref": "#/$defs/safeId"
+        },
+        "target": {
+          "$ref": "#/$defs/structuralTarget"
+        },
+        "operator": {
+          "type": "string",
+          "enum": ["exists", "absent"]
+        }
+      }
+    },
+    "structuralAssertion": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/valueAssertion"
+        },
+        {
+          "$ref": "#/$defs/presenceAssertion"
+        }
+      ]
+    },
+    "evaluationCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "controlKind",
+        "families",
+        "modeTransitions",
+        "fixtures",
+        "steps",
+        "assertions",
+        "metricIds"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "controlKind": {
+          "type": "string",
+          "enum": ["positive", "negative", "mixed"]
+        },
+        "families": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/klaeFamily"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "modeTransitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/modeTransition"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "fixtures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/caseFixture"
+          }
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/caseStep"
+          },
+          "minItems": 2
+        },
+        "assertions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/structuralAssertion"
+          },
+          "minItems": 1
+        },
+        "metricIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/metricId"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    },
+    "evaluationCasePack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "$schema",
+        "kind",
+        "schemaVersion",
+        "id",
+        "title",
+        "lane",
+        "protocolConformance",
+        "splitKind",
+        "visibility",
+        "provenance",
+        "execution",
+        "cases"
+      ],
+      "properties": {
+        "$schema": {
+          "const": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/schema.json"
+        },
+        "kind": {
+          "const": "evaluation_case_pack"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "id": {
+          "const": "klae-development"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "lane": {
+          "const": "product_native"
+        },
+        "protocolConformance": {
+          "const": "product_native"
+        },
+        "splitKind": {
+          "const": "development"
+        },
+        "visibility": {
+          "const": "public"
+        },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "origin",
+            "license",
+            "redistributable",
+            "containsUserData",
+            "derivedFromBenchmarkItems"
+          ],
+          "properties": {
+            "origin": {
+              "const": "original_synthetic_product_cases"
+            },
+            "license": {
+              "const": "MIT"
+            },
+            "redistributable": {
+              "const": true
+            },
+            "containsUserData": {
+              "const": false
+            },
+            "derivedFromBenchmarkItems": {
+              "const": false
+            }
+          }
+        },
+        "execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "inputExposure",
+            "goldExposure",
+            "scoring",
+            "requiresNetwork",
+            "requiresPaidProvider"
+          ],
+          "properties": {
+            "inputExposure": {
+              "const": "chronological_case_inputs_only"
+            },
+            "goldExposure": {
+              "const": "evaluator_only"
+            },
+            "scoring": {
+              "const": "structural_state_assertions"
+            },
+            "requiresNetwork": {
+              "const": false
+            },
+            "requiresPaidProvider": {
+              "const": false
+            }
+          }
+        },
+        "cases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evaluationCase"
+          },
+          "minItems": 12,
+          "maxItems": 12
         }
       }
     },

@@ -37,6 +37,7 @@ describe('public readiness checks', () => {
     const result = evaluateTrackedDocs(
       [
         'docs/dynamic-code-execution.md',
+        'docs/evaluation.md',
         'docs/testing.md',
         'docs/release.md',
         'docs/private-surprise.md',

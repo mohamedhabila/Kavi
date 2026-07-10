@@ -6,6 +6,7 @@ const {
   validateEvaluationContract,
   validateSchemaDefinition,
 } = require('./evaluationContract');
+const { validateEvaluationCasePack } = require('./evaluationCasePack');
 
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 const DEFAULT_SCHEMA = loadEvaluationSchema(PROJECT_ROOT);
@@ -247,7 +248,12 @@ function validateEvaluationArtifact(value, contract, schema = DEFAULT_SCHEMA) {
   if (value?.kind === 'evaluation_run') {
     return validateEvaluationRunManifest(value, contract, schema);
   }
-  return ['artifact.kind: must be evaluation_contract or evaluation_run'];
+  if (value?.kind === 'evaluation_case_pack') {
+    return validateEvaluationCasePack(value, contract, schema);
+  }
+  return [
+    'artifact.kind: must be evaluation_contract, evaluation_case_pack, or evaluation_run',
+  ];
 }
 
 module.exports = {

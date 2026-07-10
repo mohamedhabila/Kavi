@@ -132,6 +132,7 @@ const DEFAULT_CONFIG = {
   ],
   publicDocAllowlist: new Set([
     'docs/dynamic-code-execution.md',
+    'docs/evaluation.md',
     'docs/feature-matrix.md',
     'docs/privacy-and-permissions.md',
     'docs/privacy-policy.md',
