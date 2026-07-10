@@ -36,7 +36,7 @@ func iosDurableWakeDisposition(
 final class IOSDurableExecutionRuntime: IOSBackgroundTaskSchedulerDelegate, @unchecked Sendable {
   static let shared = IOSDurableExecutionRuntime()
 
-  let store: IOSFileDurableExecutionStore
+  let store: IOSSqliteDurableExecutionStore
   let scheduler: IOSBackgroundTaskScheduler
   let adapter: IOSDurableExecutionAdapter
   let operationQueue = DispatchQueue(
@@ -57,7 +57,7 @@ final class IOSDurableExecutionRuntime: IOSBackgroundTaskSchedulerDelegate, @unc
     else {
       preconditionFailure("Application Support is required for durable execution")
     }
-    let store = IOSFileDurableExecutionStore(
+    let store = IOSSqliteDurableExecutionStore(
       directoryURL: applicationSupport.appendingPathComponent(
         "KaviDurableExecution",
         isDirectory: true
