@@ -51,6 +51,7 @@ import {
   initializeDurableRecoveryLifecycle,
   reconcileDurableRecoveryLifecycle,
 } from './executionJournal/durableRecoveryLifecycle';
+import { recoverInterruptedForegroundModelExecutions } from './executionJournal/foregroundModelExecutionRecovery';
 
 function shouldDeliverNotification(job: CronJob): boolean {
   const mode = job.delivery?.mode || 'both';
@@ -123,6 +124,11 @@ async function recoverPersistedAgentState(): Promise<void> {
   chatState.recoverInterruptedAgentRuns(activeSubAgents, {
     timestamp: Date.now(),
   });
+  try {
+    await recoverInterruptedForegroundModelExecutions();
+  } catch (error) {
+    console.warn('[startup] foreground model recovery failed:', error);
+  }
   await repairTerminalAgentRunsMissingFinalResponses({
     activeSubAgents,
   });

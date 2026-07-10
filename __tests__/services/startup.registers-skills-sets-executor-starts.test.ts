@@ -16,6 +16,7 @@ const mockConnectAll = jest.fn().mockResolvedValue(undefined);
 const mockInitSubAgentRegistry = jest.fn().mockResolvedValue(undefined);
 const mockListActiveSubAgents = jest.fn().mockReturnValue([]);
 const mockRepairTerminalAgentRunsMissingFinalResponses = jest.fn().mockResolvedValue([]);
+const mockRecoverInterruptedForegroundModelExecutions = jest.fn().mockResolvedValue([]);
 const mockHydrateCanvasSurfaces = jest.fn().mockResolvedValue(undefined);
 const mockEmitAppEvent = jest.fn().mockResolvedValue(undefined);
 const mockRunMemoryMigrationTick = jest.fn().mockResolvedValue(undefined);
@@ -106,6 +107,10 @@ jest.mock('../../src/services/executionJournal/durableRecoveryLifecycle', () => 
   reconcileDurableRecoveryLifecycle: (...args: any[]) =>
     mockReconcileDurableRecoveryLifecycle(...args),
 }));
+jest.mock('../../src/services/executionJournal/foregroundModelExecutionRecovery', () => ({
+  recoverInterruptedForegroundModelExecutions: (...args: any[]) =>
+    mockRecoverInterruptedForegroundModelExecutions(...args),
+}));
 jest.mock('../../src/services/mcp/manager', () => ({
   mcpManager: {
     connectAll: (...args: any[]) => mockConnectAll(...args),
@@ -179,6 +184,7 @@ beforeEach(() => {
   mockChatStoreState.activeConversationId = 'active-conversation';
   mockListActiveSubAgents.mockReturnValue([]);
   mockRepairTerminalAgentRunsMissingFinalResponses.mockResolvedValue([]);
+  mockRecoverInterruptedForegroundModelExecutions.mockResolvedValue([]);
   mockEvaluateJobsOnce.mockResolvedValue(undefined);
   mockSyncSchedulerWakeNotifications.mockResolvedValue(undefined);
   mockRunMemoryMigrationTick.mockResolvedValue(undefined);
@@ -411,6 +417,7 @@ describe('initializeServices', () => {
     expect(mockRepairTerminalAgentRunsMissingFinalResponses).toHaveBeenCalledWith({
       activeSubAgents: [],
     });
+    expect(mockRecoverInterruptedForegroundModelExecutions).toHaveBeenCalledTimes(1);
   });
   it('only initializes once (idempotent)', () => {
     const { initializeServices } = require('../../src/services/startup');
