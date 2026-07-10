@@ -174,6 +174,43 @@ describe('ingestionQueue', () => {
     expect(getIngestionJob(job!.id)?.status).toBe('completed');
   });
 
+  it('defers a job when its recorded source window is not loaded', async () => {
+    const job = enqueueIngestionJob({
+      threadId: 'conv-missing-window',
+      sourceStartMessageId: 'user-missing',
+      sourceEndMessageId: 'assistant-missing',
+    });
+    const latestTurn: Message[] = [
+      {
+        id: 'user-latest',
+        role: 'user',
+        content: 'This later turn must not replace the queued source window.',
+        createdAt: 3,
+      },
+      {
+        id: 'assistant-latest',
+        role: 'assistant',
+        content: 'Later response',
+        createdAt: 4,
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'complete',
+          finishReason: 'stop',
+        },
+      },
+    ];
+
+    const result = await drainIngestionQueue({
+      loadMessagesForThread: () => latestTurn,
+    });
+
+    expect(result).toEqual({ attempted: 1, completed: 0, deferred: 1, failed: 0 });
+    expect(mockedProcessIngestionTurn).not.toHaveBeenCalled();
+    expect(getIngestionJob(job!.id)).toEqual(
+      expect.objectContaining({ status: 'pending', attemptCount: 0, error: null }),
+    );
+  });
+
   it('keeps failed enrichment jobs pending for retry', async () => {
     mockedProcessIngestionTurn.mockRejectedValueOnce(new Error('Provider timeout'));
     const job = enqueueIngestionJob({

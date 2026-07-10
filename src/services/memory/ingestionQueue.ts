@@ -18,6 +18,7 @@ import {
   shouldAbortIngestionDueToMemoryPressure,
 } from './onDeviceGuards';
 import { composeActiveFocusContent } from './focus';
+import { sliceClosedTurnMessages } from './deterministicExtractor';
 import { ensureFactSchema, newId } from './schema';
 import { getMemoryDb } from './sqlite-store';
 import { refreshThreadReflection } from './reflections';
@@ -265,12 +266,43 @@ export interface ProcessIngestionJobInput {
   now?: number;
 }
 
+function resolveJobSourceWindow(job: IngestionJob, messages: Message[]): Message[] | null {
+  const endIndex = messages.findIndex((message) => message.id === job.sourceEndMessageId);
+  if (endIndex < 0) {
+    return null;
+  }
+
+  if (job.sourceStartMessageId) {
+    const startIndex = messages.findIndex((message) => message.id === job.sourceStartMessageId);
+    if (startIndex < 0 || startIndex > endIndex) {
+      return null;
+    }
+  }
+
+  const window = sliceClosedTurnMessages(
+    messages,
+    job.sourceStartMessageId ?? undefined,
+    job.sourceEndMessageId,
+  );
+  if (window.at(-1)?.id !== job.sourceEndMessageId) {
+    return null;
+  }
+  if (job.sourceStartMessageId && window[0]?.id !== job.sourceStartMessageId) {
+    return null;
+  }
+  return window;
+}
+
 export async function processIngestionJob(
   input: ProcessIngestionJobInput,
 ): Promise<{ processed: boolean; skipped?: string }> {
   const job = getIngestionJob(input.jobId);
   if (!job || job.status === 'completed' || job.status === 'failed') {
     return { processed: false, skipped: 'missing_or_terminal' };
+  }
+  const sourceWindow = resolveJobSourceWindow(job, input.messages);
+  if (!sourceWindow) {
+    return { processed: false, skipped: 'source_window_unavailable' };
   }
   if (shouldAbortIngestionDueToMemoryPressure()) {
     return { processed: false, skipped: 'memory_pressure' };
@@ -286,7 +318,7 @@ export async function processIngestionJob(
     await runConsolidation({
       threadId: job.threadId,
       memoryConversationId: job.memoryConversationId,
-      messages: input.messages,
+      messages: sourceWindow,
       threadTitle: input.threadTitle,
       personaSummary: input.personaSummary,
       activeChatProvider: job.providerEnrichment ? input.activeChatProvider : undefined,
