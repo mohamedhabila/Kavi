@@ -7,6 +7,7 @@ import {
 import {
   buildMissingRequiredEvidenceLabels,
   evaluateGoalEvidenceGaps,
+  evaluateRequiredEffectEvidenceGaps,
   type GoalEvidenceGap,
 } from '../goals/completionEvidence';
 import { isBlockingGoal } from '../goals/types';
@@ -80,15 +81,21 @@ export function evaluateGoalEvidenceIncompleteHold(params: {
   forceTextThisTurn: boolean;
   toolCallHistory?: ReadonlyArray<ToolCallRecord>;
 }): CompletionGateDecision | null {
+  const blockingGoals = params.goals.filter(isBlockingGoal);
+  const requiredEffectGaps = evaluateRequiredEffectEvidenceGaps(blockingGoals);
   if (
-    !params.toolingEnabledForProvider ||
-    params.selectedToolCount <= 0 ||
-    params.forceTextThisTurn
+    requiredEffectGaps.length === 0 &&
+    (!params.toolingEnabledForProvider ||
+      params.selectedToolCount <= 0 ||
+      params.forceTextThisTurn)
   ) {
     return null;
   }
 
-  const gaps = evaluateGoalEvidenceGaps(params.goals.filter(isBlockingGoal));
+  const gaps =
+    requiredEffectGaps.length > 0
+      ? requiredEffectGaps
+      : evaluateGoalEvidenceGaps(blockingGoals);
   if (gaps.length === 0) {
     return null;
   }

@@ -402,9 +402,9 @@ describe('agent control graph no-tool turn resolution', () => {
     expect(params.onContinueThinking).toHaveBeenCalledWith('goals_incomplete');
   });
 
-  it('holds for graph-state reconciliation after successful external tool evidence without goals', async () => {
+  it('finalizes after successful read-only evidence when no goal is required', async () => {
     const params = buildBaseParams();
-    params.selectedToolNames = new Set([GOAL_BOOTSTRAP_TOOL_NAME, 'calendar_list', 'memory_remember']);
+    params.selectedToolNames = new Set([GOAL_BOOTSTRAP_TOOL_NAME, 'calendar_list', 'memory_recall']);
     params.selectedToolCount = params.selectedToolNames.size;
     params.toolCallHistory = [
       {
@@ -416,30 +416,18 @@ describe('agent control graph no-tool turn resolution', () => {
       },
       {
         id: 'tc-memory',
-        name: 'memory_remember',
-        arguments: '{"predicate":"calendar_modifiable"}',
+        name: 'memory_recall',
+        arguments: '{"query":"calendar preferences"}',
         timestamp: 2,
-        result: JSON.stringify({ status: 'remembered' }),
+        result: JSON.stringify({ facts: [] }),
       },
     ];
 
     const result = await resolveAgentControlGraphNoToolTurn(params);
 
-    expect(result).toEqual({
-      status: 'continued',
-      nextConsecutivePendingAsyncNoToolTurns: 1,
-    });
-    expect(params.applyGraphEvents).toHaveBeenCalledWith([
-      {
-        type: 'FINALIZATION_HELD',
-        reason: 'graph_state_reconciliation',
-      },
-    ]);
-    expect(params.finishWithGraphFinalCandidateEvent).not.toHaveBeenCalled();
-    expect(params.onContinueThinking).toHaveBeenCalledWith('graph_state_reconciliation');
-    expect(params.workingMessages.at(-1)?.content).toContain(
-      'control graph has no recorded goal state',
-    );
+    expect(result).toEqual({ status: 'finalized' });
+    expect(params.finishWithGraphFinalCandidateEvent).toHaveBeenCalledTimes(1);
+    expect(params.onContinueThinking).not.toHaveBeenCalled();
   });
 
   it('holds once when successful tool output can feed an unrun downstream tool', async () => {

@@ -299,6 +299,25 @@ export function evaluateGoalEvidenceGaps(goals: ReadonlyArray<AgentGoal>): GoalE
   return gaps;
 }
 
+export function evaluateRequiredEffectEvidenceGaps(
+  goals: ReadonlyArray<AgentGoal>,
+): GoalEvidenceGap[] {
+  const gaps: GoalEvidenceGap[] = [];
+
+  for (const goal of goals) {
+    for (const criterion of goal.successCriteria ?? []) {
+      if (
+        parseEffectCompletionCriterion(criterion) &&
+        !isSuccessCriterionMet(goal, criterion)
+      ) {
+        gaps.push({ goalId: goal.id, criterionId: criterion });
+      }
+    }
+  }
+
+  return gaps;
+}
+
 export function buildMissingRequiredEvidenceLabels(gaps: ReadonlyArray<GoalEvidenceGap>): string[] {
   return gaps.map((gap) => `${gap.goalId}:${gap.criterionId}`);
 }

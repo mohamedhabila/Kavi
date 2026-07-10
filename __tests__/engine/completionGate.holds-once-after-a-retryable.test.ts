@@ -1,8 +1,50 @@
 import { GOAL_BOOTSTRAP_TOOL_NAME } from '../../src/engine/goals/bootstrap';
+import {
+  buildEffectCompletionCriterion,
+  buildToolEffectReceiptEvidence,
+} from '../../src/engine/goals/effectCompletionEvidence';
 import { evaluateCompletionGate } from '../../src/engine/graph/completionGate';
 import type { AgentControlTurnDirectives } from '../../src/engine/graph/agentControlGraph';
 import type { AgentGoal } from '../../src/types/agentRun';
 import type { TrackedAsyncOperation } from '../../src/engine/pendingAsyncOperations';
+import type { ToolEffectReceipt } from '../../src/types/toolEffectReceipt';
+
+const EFFECT_REQUEST_DIGEST = `sha256:${'1'.repeat(64)}` as const;
+const EFFECT_RESULT_DIGEST = `sha256:${'2'.repeat(64)}` as const;
+const EFFECT_RESOURCE_DIGEST = `sha256:${'3'.repeat(64)}` as const;
+const EFFECT_CRITERION = buildEffectCompletionCriterion({
+  effectKind: 'artifact.write',
+  requestDigest: EFFECT_REQUEST_DIGEST,
+  resource: {
+    kind: 'workspace_file',
+    id: 'reports/final.md',
+    digest: EFFECT_RESOURCE_DIGEST,
+  },
+  verificationState: 'verified',
+});
+
+function buildEffectReceipt(
+  verificationState: ToolEffectReceipt['verificationState'],
+): ToolEffectReceipt {
+  return {
+    version: 1,
+    receiptId: `ter_${'a'.repeat(32)}`,
+    toolCallId: 'tc-write',
+    toolName: 'write_file',
+    transportState: 'returned',
+    effectKind: 'artifact.write',
+    effectState: 'applied',
+    verificationState,
+    requestDigest: EFFECT_REQUEST_DIGEST,
+    resultDigest: EFFECT_RESULT_DIGEST,
+    resource: {
+      kind: 'workspace_file',
+      id: 'reports/final.md',
+      digest: EFFECT_RESOURCE_DIGEST,
+    },
+    recordedAt: 1,
+  };
+}
 const baseTurnDirectives: AgentControlTurnDirectives = {
   forceFinalText: false,
   requireWorkflowTool: false,
@@ -185,11 +227,11 @@ describe('completionGate', () => {
 
     expect(decision).toEqual({ type: 'ready' });
   });
-  it('holds once to reconcile successful external tool evidence into graph state', () => {
+  it('allows finalization after multiple successful read-only results when no goal is required', () => {
     const decision = evaluateCompletionGate({
       ...buildBaseParams(),
       goals: [],
-      selectedToolNames: new Set([GOAL_BOOTSTRAP_TOOL_NAME, 'calendar_list', 'memory_remember']),
+      selectedToolNames: new Set([GOAL_BOOTSTRAP_TOOL_NAME, 'calendar_list', 'memory_recall']),
       toolCallHistory: [
         {
           id: 'tc-calendar',
@@ -200,113 +242,15 @@ describe('completionGate', () => {
         },
         {
           id: 'tc-memory',
-          name: 'memory_remember',
-          arguments: '{"predicate":"calendar_modifiable"}',
+          name: 'memory_recall',
+          arguments: '{"query":"calendar preferences"}',
           timestamp: 2,
-          result: JSON.stringify({ status: 'remembered' }),
-        },
-      ],
-    });
-
-    expect(decision).toEqual(
-      expect.objectContaining({
-        type: 'hold',
-        reason: 'graph_state_reconciliation',
-        graphEvent: {
-          type: 'FINALIZATION_HELD',
-          reason: 'graph_state_reconciliation',
-        },
-        nextConsecutivePendingAsyncNoToolTurns: 1,
-      }),
-    );
-    const prompt = decision.type === 'hold' ? decision.systemPrompts.join('\n') : '';
-    expect(prompt).toContain('control graph has no recorded goal state');
-    expect(prompt).toContain('call update_goals');
-  });
-  it('does not repeat graph reconciliation after the bounded retry pass', () => {
-    const decision = evaluateCompletionGate({
-      ...buildBaseParams(),
-      consecutivePendingAsyncNoToolTurns: 1,
-      goals: [],
-      selectedToolNames: new Set([GOAL_BOOTSTRAP_TOOL_NAME, 'calendar_list', 'memory_remember']),
-      toolCallHistory: [
-        {
-          id: 'tc-calendar',
-          name: 'calendar_list',
-          arguments: '{}',
-          timestamp: 1,
-          result: JSON.stringify([{ id: 'default', allowsModifications: true }]),
-        },
-        {
-          id: 'tc-memory',
-          name: 'memory_remember',
-          arguments: '{"predicate":"calendar_modifiable"}',
-          timestamp: 2,
-          result: JSON.stringify({ status: 'remembered' }),
+          result: JSON.stringify({ facts: [] }),
         },
       ],
     });
 
     expect(decision).toEqual({ type: 'ready' });
-  });
-  it('does not reconcile graph state for failed, graph-only, or single work-tool history', () => {
-    expect(
-      evaluateCompletionGate({
-        ...buildBaseParams(),
-        goals: [],
-        selectedToolNames: new Set([GOAL_BOOTSTRAP_TOOL_NAME, 'calendar_list']),
-        toolCallHistory: [
-          {
-            id: 'tc-catalog',
-            name: 'tool_catalog',
-            arguments: '{}',
-            timestamp: 1,
-            result: JSON.stringify({ status: 'ok' }),
-          },
-          {
-            id: 'tc-calendar',
-            name: 'calendar_list',
-            arguments: '{}',
-            timestamp: 2,
-            result: JSON.stringify([{ id: 'default', allowsModifications: true }]),
-          },
-        ],
-      }),
-    ).toEqual({ type: 'ready' });
-
-    expect(
-      evaluateCompletionGate({
-        ...buildBaseParams(),
-        goals: [],
-        selectedToolNames: new Set([GOAL_BOOTSTRAP_TOOL_NAME, 'calendar_list']),
-        toolCallHistory: [
-          {
-            id: 'tc-calendar',
-            name: 'calendar_list',
-            arguments: '{}',
-            timestamp: 1,
-            result: 'Error: calendar unavailable',
-          },
-        ],
-      }),
-    ).toEqual({ type: 'ready' });
-
-    expect(
-      evaluateCompletionGate({
-        ...buildBaseParams(),
-        goals: [],
-        selectedToolNames: new Set([GOAL_BOOTSTRAP_TOOL_NAME]),
-        toolCallHistory: [
-          {
-            id: 'tc-goals',
-            name: GOAL_BOOTSTRAP_TOOL_NAME,
-            arguments: '{"action":"add","id":"g1"}',
-            timestamp: 1,
-            result: JSON.stringify({ status: 'ok' }),
-          },
-        ],
-      }),
-    ).toEqual({ type: 'ready' });
   });
   it('holds when evidence.tool criteria are unmet', () => {
     const decision = evaluateCompletionGate({
@@ -327,6 +271,45 @@ describe('completionGate', () => {
         missingRequiredEvidenceLabels: ['g1:evidence.tool:write_file'],
       }),
     );
+  });
+  it('does not finalize a completed effect goal with only an unverified acknowledgement', () => {
+    const decision = evaluateCompletionGate({
+      ...buildBaseParams(),
+      toolingEnabledForProvider: false,
+      selectedToolCount: 0,
+      forceTextThisTurn: true,
+      goals: [
+        createGoal({
+          status: 'completed',
+          completionPolicy: 'blocking',
+          successCriteria: [EFFECT_CRITERION],
+          evidence: [buildToolEffectReceiptEvidence(buildEffectReceipt('acknowledged'))],
+        }),
+      ],
+    });
+
+    expect(decision).toEqual(
+      expect.objectContaining({
+        type: 'hold',
+        reason: 'goal_evidence_incomplete',
+        missingRequiredEvidenceLabels: [`g1:${EFFECT_CRITERION}`],
+      }),
+    );
+  });
+  it('allows finalization after the exact effect resource is verified', () => {
+    const decision = evaluateCompletionGate({
+      ...buildBaseParams(),
+      goals: [
+        createGoal({
+          status: 'completed',
+          completionPolicy: 'blocking',
+          successCriteria: [EFFECT_CRITERION],
+          evidence: [buildToolEffectReceiptEvidence(buildEffectReceipt('verified'))],
+        }),
+      ],
+    });
+
+    expect(decision).toEqual({ type: 'ready' });
   });
   it('keeps missing evidence as a continuation condition in hold prompts', () => {
     const decision = evaluateCompletionGate({

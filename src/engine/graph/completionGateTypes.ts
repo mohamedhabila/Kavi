@@ -4,7 +4,6 @@ export type CompletionGateHoldReason =
   | 'async_waiting_finalization_hold'
   | 'goals_incomplete'
   | 'goal_evidence_incomplete'
-  | 'graph_state_reconciliation'
   | 'graph_mutation_error'
   | 'tool_error_repair'
   | 'workflow_continuation'

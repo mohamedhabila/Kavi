@@ -1,12 +1,54 @@
 import { resolveAgentControlGraphToolExecutionOutcomes } from '../../src/engine/graph/toolExecutionOutcomeResolution';
 import { areGoalSuccessCriteriaSatisfied } from '../../src/engine/goals/completionEvidence';
 import {
+  buildEffectCompletionCriterion,
+  parseToolEffectReceiptEvidence,
+} from '../../src/engine/goals/effectCompletionEvidence';
+import type { ToolEffectReceipt } from '../../src/types/toolEffectReceipt';
+import {
+  applyGoalGraphEvents,
   buildBaseParams,
   createGoal,
   createToolMessage,
   extractGoalEvidenceEvents,
   tool,
 } from '../helpers/toolExecutionOutcomeHarness';
+
+const REQUEST_DIGEST = `sha256:${'1'.repeat(64)}` as const;
+const RESULT_DIGEST = `sha256:${'2'.repeat(64)}` as const;
+const RESOURCE_DIGEST = `sha256:${'3'.repeat(64)}` as const;
+const EFFECT_CRITERION = buildEffectCompletionCriterion({
+  effectKind: 'artifact.write',
+  requestDigest: REQUEST_DIGEST,
+  resource: {
+    kind: 'workspace_file',
+    id: 'reports/final.md',
+    digest: RESOURCE_DIGEST,
+  },
+  verificationState: 'verified',
+});
+
+function buildReceipt(patch: Partial<ToolEffectReceipt> = {}): ToolEffectReceipt {
+  return {
+    version: 1,
+    receiptId: `ter_${'a'.repeat(32)}`,
+    toolCallId: 'tc-write',
+    toolName: 'write_file',
+    transportState: 'returned',
+    effectKind: 'artifact.write',
+    effectState: 'applied',
+    verificationState: 'verified',
+    requestDigest: REQUEST_DIGEST,
+    resultDigest: RESULT_DIGEST,
+    resource: {
+      kind: 'workspace_file',
+      id: 'reports/final.md',
+      digest: RESOURCE_DIGEST,
+    },
+    recordedAt: 1,
+    ...patch,
+  };
+}
 
 describe('tool execution outcome resolution', () => {
   it('auto-links structural evidence to active goals', async () => {
@@ -281,5 +323,129 @@ describe('tool execution outcome resolution', () => {
     expect(new Set(evidenceEvents.map((event) => event.goalId))).toEqual(
       new Set(['workspace-artifact']),
     );
+  });
+
+  it.each([
+    {
+      label: 'acknowledged',
+      receipt: buildReceipt({ verificationState: 'acknowledged' }),
+      isError: false,
+    },
+    {
+      label: 'failed',
+      receipt: buildReceipt({
+        transportState: 'threw',
+        effectState: 'failed',
+        verificationState: 'unverified',
+        resource: undefined,
+      }),
+      isError: true,
+    },
+    {
+      label: 'cancelled',
+      receipt: buildReceipt({
+        transportState: 'rejected',
+        effectState: 'cancelled',
+        verificationState: 'unverified',
+        resource: undefined,
+      }),
+      isError: true,
+    },
+  ])('persists and routes a $label effect receipt without completing the goal', async ({
+    receipt,
+    isError,
+  }) => {
+    const params = buildBaseParams();
+    let graph = {
+      goals: [
+        createGoal({
+          id: 'write-final',
+          completionPolicy: 'blocking',
+          successCriteria: [EFFECT_CRITERION],
+        }),
+      ],
+    };
+    params.getGraphSnapshot = jest.fn(() => graph);
+    params.applyGraphEvents = jest.fn((events) => {
+      graph = applyGoalGraphEvents(graph, events);
+    });
+    params.executableToolCalls = [
+      {
+        name: 'write_file',
+        arguments: '{"path":"reports/final.md","content":"done"}',
+      },
+    ];
+    params.toolExecutionOutcomes = [
+      {
+        index: 0,
+        toolCallId: 'tc-write',
+        toolMessage: createToolMessage({
+          id: 'tc-write',
+          name: 'write_file',
+          content: isError ? '{"status":"error"}' : '{"status":"written"}',
+          isError,
+        }),
+        effectReceipt: receipt,
+      },
+    ];
+
+    await resolveAgentControlGraphToolExecutionOutcomes(params);
+
+    const receiptEvidence = extractGoalEvidenceEvents(params)
+      .map((event) => event.evidence)
+      .find((evidence) => parseToolEffectReceiptEvidence(evidence));
+    expect(parseToolEffectReceiptEvidence(receiptEvidence ?? '')).toMatchObject({
+      effectState: receipt.effectState,
+      verificationState: receipt.verificationState,
+      requestDigest: REQUEST_DIGEST,
+    });
+    expect(graph.goals[0]?.status).toBe('active');
+    expect(
+      params.applyGraphEvents.mock.calls
+        .flatMap(([events]) => events)
+        .find((event) => event.type === 'TOOL_RESULT_RECORDED')?.result.evidence,
+    ).toEqual(expect.arrayContaining([receiptEvidence]));
+  });
+
+  it('auto-completes the request-bound goal only after the exact resource is verified', async () => {
+    const params = buildBaseParams();
+    let graph = {
+      goals: [
+        createGoal({
+          id: 'write-final',
+          completionPolicy: 'blocking',
+          successCriteria: [EFFECT_CRITERION],
+        }),
+      ],
+    };
+    params.getGraphSnapshot = jest.fn(() => graph);
+    params.applyGraphEvents = jest.fn((events) => {
+      graph = applyGoalGraphEvents(graph, events);
+    });
+    params.executableToolCalls = [
+      {
+        name: 'write_file',
+        arguments: '{"path":"reports/final.md","content":"done"}',
+      },
+    ];
+    params.toolExecutionOutcomes = [
+      {
+        index: 0,
+        toolCallId: 'tc-write',
+        toolMessage: createToolMessage({
+          id: 'tc-write',
+          name: 'write_file',
+          content: '{"status":"written"}',
+        }),
+        effectReceipt: buildReceipt(),
+      },
+    ];
+
+    await resolveAgentControlGraphToolExecutionOutcomes(params);
+
+    expect(graph.goals[0]?.status).toBe('completed');
+    expect(
+      graph.goals[0]?.evidence.some((evidence) => parseToolEffectReceiptEvidence(evidence)),
+    ).toBe(true);
   });
 });

@@ -7,6 +7,7 @@ import { buildAssistantMessageMetadata } from '../../utils/assistantMessageMetad
 import { type TrackedAsyncOperation } from '../pendingAsyncOperations';
 import { type OrchestratorCompactionEvent } from '../orchestratorCompaction';
 import type { ToolCallRecord } from '../loopDetection';
+import { resolveToolEffectPolicy } from '../durability/toolEffectPolicy';
 import { type AgentTurnCompactionEngine } from './agentTurnRequestBudget';
 import type { AgentControlGraphEvent, AgentControlTurnDirectives } from './agentControlGraph';
 import { agentControlGraphToolMessageShowsAsyncTerminalResolution } from './asyncTerminalResolution';
@@ -15,6 +16,7 @@ import type { AgentControlGraphWorkflowToolResultProgress } from './workflowTool
 import { normalizeToolName, resolveRegisteredToolName } from '../tools/toolNameNormalization';
 import { buildToolGoalEvidenceStrings } from '../goals/toolEvidence';
 import { routeToolEvidenceToActiveGoals } from '../goals/evidenceRouting';
+import { buildToolEffectReceiptEvidence } from '../goals/effectCompletionEvidence';
 import { isBlockingGoal, type AgentGoal } from '../goals/types';
 import { buildDelegationToolTerminalGraphEvents } from './delegationToolTerminalGraphEffects';
 import {
@@ -227,13 +229,28 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
     await params.onToolMessage(canonicalOutcome.toolCallId, canonicalOutcome.toolMessage.content);
 
     const graphToolCall = canonicalOutcome.toolMessage.toolCalls?.[0];
-    const toolGoalEvidenceStrings =
-      !canonicalOutcome.toolMessage.isError && toolName !== 'update_goals'
+    const effectPolicy = resolveToolEffectPolicy(toolName);
+    const isCodeOwnedEffectFreeTool =
+      effectPolicy.source !== 'unknown' &&
+      effectPolicy.effects.every((effect) => effect === 'none');
+    const structuralGoalEvidenceStrings =
+      !canonicalOutcome.toolMessage.isError &&
+      toolName !== 'update_goals' &&
+      (!canonicalOutcome.effectReceipt ||
+        canonicalOutcome.effectReceipt.effectState === 'none' ||
+        isCodeOwnedEffectFreeTool)
         ? buildToolGoalEvidenceStrings({
             toolName,
             content: canonicalOutcome.toolMessage.content,
           })
         : [];
+    const effectReceiptEvidenceStrings = canonicalOutcome.effectReceipt
+      ? [buildToolEffectReceiptEvidence(canonicalOutcome.effectReceipt)]
+      : [];
+    const toolGoalEvidenceStrings = [
+      ...structuralGoalEvidenceStrings,
+      ...effectReceiptEvidenceStrings,
+    ];
     params.applyGraphEvents([
       {
         type: 'TOOL_RESULT_RECORDED',
@@ -266,6 +283,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
     }
 
     // ── Auto-link tool results to active goal evidence ───────────────────
+    let delegationEvidenceApplied = false;
     if (!canonicalOutcome.toolMessage.isError && toolName !== 'update_goals') {
       const snapshot = params.getGraphSnapshot();
       const delegationTerminal = buildDelegationToolTerminalGraphEvents({
@@ -275,6 +293,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
       });
       if (delegationTerminal.events.length > 0) {
         params.applyGraphEvents(delegationTerminal.events);
+        delegationEvidenceApplied = delegationTerminal.applied;
         if (delegationTerminal.applied) {
           const delegationAutoCompleteEvent = buildDelegationEvidenceAutoCompleteEvent({
             goals: params.getGraphSnapshot().goals ?? [],
@@ -284,17 +303,21 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
           }
         }
       }
+    }
 
+    if (toolName !== 'update_goals') {
       const evidenceRoutableGoals = (params.getGraphSnapshot().goals ?? []).filter(
         (goal) => goal.status === 'active' || goal.status === 'blocked',
       );
-      const skipGenericEvidence = delegationTerminal.applied;
-      if (!skipGenericEvidence && evidenceRoutableGoals.length > 0) {
+      const routableEvidenceStrings = delegationEvidenceApplied
+        ? effectReceiptEvidenceStrings
+        : toolGoalEvidenceStrings;
+      if (routableEvidenceStrings.length > 0 && evidenceRoutableGoals.length > 0) {
         const routedEvidence = routeToolEvidenceToActiveGoals({
           toolName,
           toolDefinitions: params.groundedRequestScopedTools,
           goals: evidenceRoutableGoals,
-          evidenceStrings: toolGoalEvidenceStrings,
+          evidenceStrings: routableEvidenceStrings,
         });
         for (const routed of routedEvidence) {
           params.applyGraphEvents([

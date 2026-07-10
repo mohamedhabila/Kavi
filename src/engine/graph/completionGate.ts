@@ -10,7 +10,6 @@ import {
 } from './completionGateHolds';
 import {
   evaluateGraphMutationErrorHold,
-  evaluateGraphStateReconciliationHold,
   evaluateNoToolProgressRetry,
   evaluateToolErrorRepairHold,
   evaluateWorkflowContinuationHold,
@@ -109,19 +108,6 @@ export function evaluateCompletionGate(params: {
   });
   if (noToolProgressRetry) {
     return noToolProgressRetry;
-  }
-
-  const graphStateReconciliation = evaluateGraphStateReconciliationHold({
-    consecutiveNoToolTurns: params.consecutivePendingAsyncNoToolTurns,
-    goals: params.goals,
-    toolingEnabledForProvider: params.toolingEnabledForProvider,
-    selectedToolCount: params.selectedToolCount,
-    selectedToolNames: params.selectedToolNames,
-    forceTextThisTurn: params.forceTextThisTurn,
-    toolCallHistory: params.toolCallHistory,
-  });
-  if (graphStateReconciliation) {
-    return graphStateReconciliation;
   }
 
   const goalsHold = evaluateGoalsIncompleteHold({

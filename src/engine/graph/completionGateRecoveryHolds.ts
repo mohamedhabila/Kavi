@@ -77,21 +77,6 @@ function buildWorkflowContinuationHoldPrompt(
   return lines.join('\n');
 }
 
-function hasMultipleSuccessfulWorkToolResults(
-  history: ReadonlyArray<ToolCallRecord> | undefined,
-): boolean {
-  const successfulWorkToolResultCount = (history ?? []).filter(
-    (entry) =>
-      entry.name !== GOAL_BOOTSTRAP_TOOL_NAME &&
-      !DISCOVERY_TOOL_NAMES.has(entry.name) &&
-      typeof entry.result === 'string' &&
-      entry.result.trim().length > 0 &&
-      !isToolResultErrorLike(entry.result),
-  ).length;
-
-  return successfulWorkToolResultCount >= 2;
-}
-
 function buildNoToolProgressRetryPrompt(selectedToolNames: ReadonlySet<string> | undefined): string {
   const toolNames = Array.from(selectedToolNames ?? []).filter(Boolean).sort();
   const lines: string[] = ['[SYSTEM HOLD]'];
@@ -103,16 +88,6 @@ function buildNoToolProgressRetryPrompt(selectedToolNames: ReadonlySet<string> |
     'If the request depends on app state, device state, files, memory, or another external side effect, use the appropriate discovery or action tool now. If no tool is needed, answer directly on the next pass.',
   );
   return lines.join('\n');
-}
-
-function buildGraphStateReconciliationPrompt(): string {
-  return [
-    '[SYSTEM HOLD]',
-    'The previous turn produced successful external tool evidence, but the control graph has no recorded goal state.',
-    'Review the observed tool results and reconcile the graph before finalizing.',
-    'If the user asked to track, verify, complete, or satisfy criteria for work, call update_goals with the appropriate goal state and evidence.',
-    'If no graph-tracked goal is needed, answer directly on the next pass.',
-  ].join('\n');
 }
 
 export function evaluateGraphMutationErrorHold(params: {
@@ -243,40 +218,6 @@ export function evaluateNoToolProgressRetry(params: {
       reason: 'no_tool_progress_retry',
     },
     systemPrompts: [buildNoToolProgressRetryPrompt(params.selectedToolNames)],
-    missingRequiredEvidenceLabels: [],
-    nextConsecutivePendingAsyncNoToolTurns: params.consecutiveNoToolTurns + 1,
-  };
-}
-
-export function evaluateGraphStateReconciliationHold(params: {
-  consecutiveNoToolTurns: number;
-  goals: ReadonlyArray<AgentGoal>;
-  toolingEnabledForProvider: boolean;
-  selectedToolCount: number;
-  selectedToolNames?: ReadonlySet<string>;
-  forceTextThisTurn: boolean;
-  toolCallHistory?: ReadonlyArray<ToolCallRecord>;
-}): CompletionGateDecision | null {
-  if (
-    !params.toolingEnabledForProvider ||
-    params.selectedToolCount <= 0 ||
-    params.forceTextThisTurn ||
-    params.consecutiveNoToolTurns > 0 ||
-    params.goals.length > 0 ||
-    !params.selectedToolNames?.has(GOAL_BOOTSTRAP_TOOL_NAME) ||
-    !hasMultipleSuccessfulWorkToolResults(params.toolCallHistory)
-  ) {
-    return null;
-  }
-
-  return {
-    type: 'hold',
-    reason: 'graph_state_reconciliation',
-    graphEvent: {
-      type: 'FINALIZATION_HELD',
-      reason: 'graph_state_reconciliation',
-    },
-    systemPrompts: [buildGraphStateReconciliationPrompt()],
     missingRequiredEvidenceLabels: [],
     nextConsecutivePendingAsyncNoToolTurns: params.consecutiveNoToolTurns + 1,
   };
