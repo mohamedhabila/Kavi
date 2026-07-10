@@ -277,7 +277,8 @@ export const BENCH_KNOWU_PERSONALIZED_CONTACT_MEMORY: E2EScenario = {
     },
     {
       content:
-        'Use the remembered preferred_message_contact for `knowu-user` to prepare a one-recipient SMS draft with message `E2E-KNOWU-MESSAGE`.',
+        'Use the remembered preferred_message_contact for `knowu-user` to look up that person in device contacts and open the native SMS composer with exactly one recipient. ' +
+        'Prefill the unsent draft with message `E2E-KNOWU-MESSAGE`; do not send it.',
     },
   ],
   rubrics: [

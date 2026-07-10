@@ -75,7 +75,8 @@ export const DIRECT_TOOLSANDBOX_STATE_DEPENDENCY: E2EScenario = {
   contentClass: 'synthetic_public',
   execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt:
-    'Find Avery in contacts, use the returned contact state to prepare a one-recipient SMS draft with message `TOOLSANDBOX-DIRECT-MESSAGE`, and verify the device state.',
+    'Look up Avery in device contacts, then use the returned contact state to open the native SMS composer with exactly one recipient. ' +
+    'Prefill the unsent draft with message `TOOLSANDBOX-DIRECT-MESSAGE`, verify the device state, and do not send it.',
   rubrics: [
     { kind: 'native_fixture_state', path: 'contacts.resultCount', expectedValue: '1' },
     { kind: 'native_fixture_state', path: 'sms.opened', expectedValue: 'true' },
@@ -101,7 +102,8 @@ export const DIRECT_TAU_USER_COORDINATION_STATE: E2EScenario = {
     },
     {
       content:
-        'Use recipient Avery and message `TAU-DIRECT-MESSAGE`; prepare a one-recipient SMS draft and verify the state.',
+        'Use recipient Avery and message `TAU-DIRECT-MESSAGE`: look up Avery in device contacts and open the native SMS composer with exactly one recipient. ' +
+        'Prefill the unsent draft, verify the device state, and do not send it.',
     },
   ],
   rubrics: [
@@ -149,7 +151,8 @@ export const DIRECT_MOBILEWORLD_CROSS_APP_CONTACT_MESSAGE: E2EScenario = {
     },
     {
       content:
-        'Find Avery in contacts and prepare a one-recipient SMS draft with message `MOBILEWORLD-DIRECT-MESSAGE`.',
+        'Look up Avery in device contacts and open the native SMS composer with exactly one recipient. ' +
+        'Prefill the unsent draft with message `MOBILEWORLD-DIRECT-MESSAGE`; do not send it.',
     },
   ],
   rubrics: [
@@ -203,7 +206,8 @@ export const DIRECT_LONGMEMEVAL_V2_MOBILE_PREFERENCE_UPDATE: E2EScenario = {
     },
     {
       content:
-        'Use the current preferred_message_contact for `direct-longmem-user` to prepare a one-recipient SMS draft with message `LONGMEM-DIRECT-MESSAGE`.',
+        'Use the current preferred_message_contact for `direct-longmem-user` to look up that person in device contacts and open the native SMS composer with exactly one recipient. ' +
+        'Prefill the unsent draft with message `LONGMEM-DIRECT-MESSAGE`; do not send it.',
     },
   ],
   rubrics: [
@@ -461,7 +465,8 @@ export const DIRECT_MOBILEWORLD_LONG_HORIZON_PERSONALIZATION: E2EScenario = {
     },
     {
       content:
-        'Use the current preferred_message_contact for `mobileworld-user` to prepare a one-recipient SMS draft with message `MOBILEWORLD-LONG-MESSAGE`.',
+        'Use the current preferred_message_contact for `mobileworld-user` to look up that person in device contacts and open the native SMS composer with exactly one recipient. ' +
+        'Prefill the unsent draft with message `MOBILEWORLD-LONG-MESSAGE`; do not send it.',
     },
   ],
   rubrics: [

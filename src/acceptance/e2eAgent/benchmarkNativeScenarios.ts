@@ -137,7 +137,8 @@ export const BENCH_MOBILEAGENT_CONTACT_MESSAGE_DRAFT: E2EScenario = {
   contentClass: 'synthetic_public',
   execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt:
-    'Find Avery in contacts and prepare a one-recipient SMS draft with message `E2E-MOBILE-MESSAGE`.',
+    'Look up Avery in device contacts and open the native SMS composer with exactly one recipient. ' +
+    'Prefill the unsent draft with message `E2E-MOBILE-MESSAGE`; do not send it.',
   rubrics: [
     {
       kind: 'native_fixture_state',
@@ -176,7 +177,8 @@ export const BENCH_MOBILEWORLD_DISCOVER_CONTACT_MESSAGE: E2EScenario = {
     },
     {
       content:
-        'Find Avery in contacts and prepare a one-recipient SMS draft with message `E2E-MOBILEWORLD-MESSAGE`.',
+        'Look up Avery in device contacts and open the native SMS composer with exactly one recipient. ' +
+        'Prefill the unsent draft with message `E2E-MOBILEWORLD-MESSAGE`; do not send it.',
     },
   ],
   rubrics: [

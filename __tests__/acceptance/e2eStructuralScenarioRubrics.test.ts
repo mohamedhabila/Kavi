@@ -10,7 +10,11 @@ jest.mock('expo-sqlite', () => {
 import type { AgentRunControlGraphState } from '../../src/types/agentRun';
 import { E2E_BENCHMARK_SCENARIOS } from '../../src/acceptance/e2eAgent/benchmarkScenarios';
 import { E2E_DIRECT_BENCHMARK_SCENARIOS } from '../../src/acceptance/e2eAgent/directBenchmarkScenarios';
-import { E2E_AGENT_SCENARIOS } from '../../src/acceptance/e2eAgent/scenarios';
+import {
+  DELEGATION_E2E_SCENARIOS,
+  E2E_AGENT_SCENARIOS,
+} from '../../src/acceptance/e2eAgent/scenarios';
+import type { E2EScenario } from '../../src/acceptance/e2eAgent/types';
 import {
   E2E_CALENDAR_MUTATION_SUCCESS_CRITERIA,
   E2E_CALENDAR_VERIFY_MUTATION_SUCCESS_CRITERIA,
@@ -112,6 +116,13 @@ function expectNoInternalGraphSeeds(scenario: {
   }
 }
 
+function scenarioUserRequestText(scenario: E2EScenario): string {
+  const requests = scenario.userTurns?.length
+    ? scenario.userTurns.map((turn) => turn.content)
+    : [scenario.prompt];
+  return requests.join('\n').toLowerCase();
+}
+
 describe('E2E gate-followup completion workflow fixture', () => {
   it('models follow-up completion without internal graph seeding or tool pins', () => {
     const scenario = E2E_AGENT_SCENARIOS.find((entry) => entry.id === 'multi-turn-gate-followup');
@@ -140,6 +151,41 @@ describe('E2E thin runner fixtures', () => {
     ]) {
       expectNoInternalGraphSeeds(scenario);
       expect(scenario as unknown as Record<string, unknown>).not.toHaveProperty('allowedTools');
+    }
+  });
+
+  it('makes native SMS composer expectations explicit in the user request', () => {
+    const scenarios = [...E2E_AGENT_SCENARIOS, ...DELEGATION_E2E_SCENARIOS].filter(
+      (scenario, index, entries) =>
+        scenario.contentClass === 'synthetic_public' &&
+        entries.findIndex((entry) => entry.id === scenario.id) === index,
+    );
+    const smsComposerScenarios = scenarios.filter((scenario) =>
+      scenario.rubrics.some(
+        (rubric) =>
+          rubric.kind === 'native_fixture_state' &&
+          rubric.path === 'sms.opened' &&
+          rubric.expectedValue === 'true',
+      ),
+    );
+    expect(smsComposerScenarios.length).toBeGreaterThan(0);
+
+    for (const scenario of smsComposerScenarios) {
+      const requestText = scenarioUserRequestText(scenario);
+      expect(requestText).toContain('open the native sms composer');
+      expect(requestText).toContain('exactly one recipient');
+      expect(requestText).toContain('prefill the unsent draft');
+      expect(requestText).toContain('do not send');
+
+      const expectsContactLookup = scenario.rubrics.some(
+        (rubric) =>
+          rubric.kind === 'native_fixture_state' &&
+          rubric.path === 'contacts.resultCount' &&
+          rubric.expectedValue !== '0',
+      );
+      if (expectsContactLookup) {
+        expect(requestText).toContain('device contacts');
+      }
     }
   });
 
