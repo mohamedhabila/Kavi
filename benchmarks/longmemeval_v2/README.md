@@ -63,8 +63,11 @@ confirm each trajectory is represented by compact agent-run memory records.
 
 Requirements:
 
-- Python 3.11 environment for the official LongMemEval-V2 repo.
-- Prepared LongMemEval-V2 data.
+- Python 3.11 environment for the official LongMemEval-V2 repo pinned to
+  commit `be15ea6e995462f3391c1a610892df3f67dfa7bd`.
+- LongMemEval-V2 data pinned to Hugging Face revision
+  `f152293e235517d504809563c833d7190b8c713b` and validated with the released
+  checksum manifest.
 - `READER_MODEL` containing `qwen3.5-9b`.
 - `READER_BASE_URL` and matching `READER_API_KEY_ENV`.
 - `EVALUATOR_MODEL` containing `gpt-5.2`.
@@ -79,6 +82,23 @@ Reader defaults mirror the official LongMemEval-V2 runner:
 - `--max-completion-tokens 20000`;
 - `--memory-context-max-tokens 200000`;
 - reader thinking enabled by default.
+
+Prepare immutable upstream inputs before setting provider credentials:
+
+```bash
+rtk git clone https://github.com/xiaowu0162/LongMemEval-V2.git \
+  .private/evals/upstream/LongMemEval-V2
+rtk git -C .private/evals/upstream/LongMemEval-V2 checkout \
+  be15ea6e995462f3391c1a610892df3f67dfa7bd
+
+rtk .private/evals/venv-longmemeval-py311/bin/python \
+  .private/evals/upstream/LongMemEval-V2/data/download_data.py \
+  --revision f152293e235517d504809563c833d7190b8c713b \
+  --data-root .private/evals/data/longmemeval-v2
+```
+
+The runner accepts either a clean checkout or the exact Kavi patch produced by
+the runner. Any unrelated, partial, or modified upstream file blocks execution.
 
 Run one domain:
 

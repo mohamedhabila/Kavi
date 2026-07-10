@@ -3,6 +3,8 @@
 .artifacts/
 .tmp/
 .venv/
+__pycache__/
+*.py[cod]
 node_modules/
 .expo/
 release-artifacts/

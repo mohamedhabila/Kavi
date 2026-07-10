@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -13,6 +14,11 @@ import urllib.request
 
 
 METHOD = "kavi_memory_isolated"
+UPSTREAM_COMMIT = "be15ea6e995462f3391c1a610892df3f67dfa7bd"
+DATA_REVISION = "f152293e235517d504809563c833d7190b8c713b"
+DATA_CHECKSUM_MANIFEST_SHA256 = (
+    "b17a18daa52873f915808502217c3c5fab39d20638544f986401155c9e8d67a6"
+)
 EXPECTED_READER = "qwen3.5-9b"
 EXPECTED_EVALUATOR = "gpt-5.2"
 HARNESS_SHARED_HAYSTACK_LINE = "    shared_haystack = all_haystacks_shared(question_ids, haystack_mapping)\n"
@@ -108,25 +114,31 @@ def write_json(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
 
 
-def install_adapter(upstream: Path, adapter_source: Path) -> None:
-    memory_dir = upstream / "memory_modules"
-    require(memory_dir.is_dir(), f"Missing upstream memory_modules directory: {memory_dir}")
-    target = memory_dir / "kavi_isolated_memory.py"
-    shutil.copy2(adapter_source, target)
-    memory_py = memory_dir / "memory.py"
-    text = memory_py.read_text(encoding="utf-8")
-    for legacy in [
-        "from .kavi_e2e_bridge_memory import KaviE2EBridgeMemory  # noqa: E402,F401\n",
-        "from .kavi_memory import KaviStructuredMemory  # noqa: E402,F401\n",
-    ]:
-        text = text.replace(legacy, "")
+def run_git(upstream: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=upstream,
+        check=True,
+        capture_output=True,
+    )
+
+
+def upstream_file(upstream: Path, relative_path: str) -> str:
+    return run_git(upstream, "show", f"{UPSTREAM_COMMIT}:{relative_path}").stdout.decode(
+        "utf-8"
+    )
+
+
+def render_memory_registry(base_text: str) -> str:
+    text = base_text
     import_line = "from .kavi_isolated_memory import KaviIsolatedMemory  # noqa: E402,F401\n"
     if import_line not in text:
         text = text.rstrip() + "\n" + import_line
-    memory_py.write_text(text.rstrip() + "\n", encoding="utf-8")
+    return text.rstrip() + "\n"
 
-    harness_py = upstream / "evaluation" / "harness.py"
-    harness_text = harness_py.read_text(encoding="utf-8")
+
+def render_harness(base_text: str) -> str:
+    harness_text = base_text
     if NONSHARED_KAVI_MEMORY_LINE not in harness_text:
         set_start = harness_text.find(NONSHARED_MEMORY_SET_START)
         require(set_start >= 0, "Unable to find LongMemEval non-shared memory type set")
@@ -160,7 +172,71 @@ def install_adapter(upstream: Path, adapter_source: Path) -> None:
             HARNESS_MALFORMED_PREMISE_BOXED_LINE,
             HARNESS_ESCAPED_PREMISE_BOXED_LINE,
         )
-    harness_py.write_text(harness_text, encoding="utf-8")
+    return harness_text
+
+
+def expected_installation(upstream: Path, adapter_source: Path) -> dict[str, bytes]:
+    return {
+        "evaluation/harness.py": render_harness(
+            upstream_file(upstream, "evaluation/harness.py")
+        ).encode("utf-8"),
+        "memory_modules/memory.py": render_memory_registry(
+            upstream_file(upstream, "memory_modules/memory.py")
+        ).encode("utf-8"),
+        "memory_modules/kavi_isolated_memory.py": adapter_source.read_bytes(),
+    }
+
+
+def verify_upstream(upstream: Path, adapter_source: Path) -> str:
+    require((upstream / ".git").exists(), f"LongMemEval-V2 checkout not found: {upstream}")
+    head = run_git(upstream, "rev-parse", "HEAD").stdout.decode("ascii").strip()
+    require(
+        head == UPSTREAM_COMMIT,
+        f"LongMemEval-V2 must be pinned to {UPSTREAM_COMMIT}; found {head}",
+    )
+    status = run_git(
+        upstream, "status", "--porcelain=v1", "--untracked-files=all"
+    ).stdout.decode("utf-8").splitlines()
+    if not status:
+        return "clean_base"
+
+    expected = expected_installation(upstream, adapter_source)
+    allowed_paths = set(expected)
+    changed_paths = {line[3:] for line in status if len(line) >= 4}
+    require(
+        changed_paths == allowed_paths,
+        "LongMemEval-V2 checkout must be clean or contain only the exact installed "
+        f"Kavi adapter patch; found {sorted(changed_paths)}",
+    )
+    for relative_path, expected_bytes in expected.items():
+        installed = upstream / relative_path
+        require(
+            installed.is_file() and installed.read_bytes() == expected_bytes,
+            f"Installed LongMemEval-V2 adapter differs from the pinned patch: {relative_path}",
+        )
+    return "exact_adapter_patch"
+
+
+def install_adapter(upstream: Path, adapter_source: Path) -> None:
+    for relative_path, content in expected_installation(upstream, adapter_source).items():
+        target = upstream / relative_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+
+
+def verify_data_snapshot(data_root: Path) -> dict[str, str]:
+    checksum_manifest = data_root / "checksums.sha256"
+    require(checksum_manifest.is_file(), f"Missing dataset checksum manifest: {checksum_manifest}")
+    digest = hashlib.sha256(checksum_manifest.read_bytes()).hexdigest()
+    require(
+        digest == DATA_CHECKSUM_MANIFEST_SHA256,
+        "LongMemEval-V2 dataset checksum manifest does not match the pinned revision",
+    )
+    return {
+        "repository": "https://huggingface.co/datasets/xiaowu0162/longmemeval-v2",
+        "revision": DATA_REVISION,
+        "checksum_manifest_sha256": digest,
+    }
 
 
 def validate_model_contract(args: argparse.Namespace) -> None:
@@ -204,22 +280,28 @@ def build_runtime(repo_root: Path, node_binary: str) -> Path:
 
 
 def preflight(args: argparse.Namespace, upstream: Path, repo_root: Path) -> dict[str, Any]:
+    adapter_source = repo_root / "benchmarks" / "longmemeval_v2" / "kavi_isolated_memory.py"
+    require(adapter_source.is_file(), f"Missing adapter source: {adapter_source}")
+    upstream_state = verify_upstream(upstream, adapter_source)
     validate_model_contract(args)
     reader = validate_reader_endpoint(args)
     require(os.getenv(args.evaluator_api_key_env), f"Missing evaluator API key in {args.evaluator_api_key_env}")
-    adapter_source = repo_root / "benchmarks" / "longmemeval_v2" / "kavi_isolated_memory.py"
-    require(upstream.is_dir(), f"Missing upstream checkout: {upstream}")
-    require(adapter_source.is_file(), f"Missing adapter source: {adapter_source}")
     runtime_bundle = build_runtime(repo_root, args.node_binary)
+    data_snapshot = None
     if args.data_root is not None:
-        require(args.data_root.expanduser().resolve().is_dir(), f"Missing LongMemEval-V2 data root: {args.data_root}")
+        data_root = args.data_root.expanduser().resolve()
+        require(data_root.is_dir(), f"Missing LongMemEval-V2 data root: {args.data_root}")
+        data_snapshot = verify_data_snapshot(data_root)
     return {
         "method": METHOD,
         "upstream": str(upstream),
+        "upstream_commit": UPSTREAM_COMMIT,
+        "upstream_state": upstream_state,
         "reader": reader,
         "evaluator_model": args.evaluator_model,
         "runtime_bundle": str(runtime_bundle),
         "data_root": str(args.data_root) if args.data_root else None,
+        "data_snapshot": data_snapshot,
     }
 
 

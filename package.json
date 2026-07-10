@@ -64,6 +64,7 @@
     "test:live:anthropic": "cross-env RUN_LIVE_ANTHROPIC=1 jest --runInBand __tests__/services/LlmService.anthropic.live.test.ts",
     "test:live:native-providers": "cross-env RUN_LIVE_NATIVE_PROVIDER_CHECKS=1 jest --runInBand __tests__/services/LlmService.nativeProviders.live.test.ts",
     "eval:memory": "node ./scripts/memory-eval-harness.js",
+    "test:longmemeval-adapter": "cross-env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s benchmarks/longmemeval_v2 -p 'test_*.py'",
     "eval:state-bench:prepare": "python3 benchmarks/state_bench/prepare_kavi_state_bench.py",
     "test:state-bench-adapter": "python3 -m unittest discover -s benchmarks/state_bench -p 'test_*.py'",
     "eval:agent": "node ./scripts/agent-eval-harness.js",
