@@ -39,7 +39,17 @@ import {
   SSH_BACKGROUND_JOB_WAIT_TOOL,
   SSH_EXEC_TOOL,
 } from '../../src/engine/tools/builtin-definitions-ssh';
-import { CANVAS_READ_TOOL } from '../../src/engine/tools/builtin-definitions-canvas';
+import {
+  CANVAS_CREATE_TOOL,
+  CANVAS_DELETE_TOOL,
+  CANVAS_READ_TOOL,
+} from '../../src/engine/tools/builtin-definitions-canvas';
+import {
+  FILE_EDIT_TOOL,
+  IMAGE_EDIT_TOOL,
+  IMAGE_GEN_TOOL,
+} from '../../src/engine/tools/extended-definitions';
+import { CORE_DOMAIN_TOOLS } from '../../src/engine/tools/domains/core';
 import {
   MEMORY_RECALL_TOOL,
   MEMORY_SEARCH_TOOL,
@@ -157,6 +167,31 @@ describe('tool capability contracts', () => {
         workflowStages: ['inspect_resource', 'verify_evidence'],
       }),
     );
+  });
+
+  it('distinguishes acknowledged workspace mutations from verified image persistence', () => {
+    const writeFileTool = CORE_DOMAIN_TOOLS.find((tool) => tool.name === 'write_file');
+
+    for (const tool of [writeFileTool, FILE_EDIT_TOOL, CANVAS_CREATE_TOOL, CANVAS_DELETE_TOOL]) {
+      expect(tool?.contract).toEqual(
+        expect.objectContaining({
+          capabilities: ['write'],
+          providesEvidence: ['local_artifact'],
+        }),
+      );
+      expect(tool?.contract?.workflowStages).not.toContain('verify_evidence');
+    }
+
+    for (const tool of [IMAGE_GEN_TOOL, IMAGE_EDIT_TOOL]) {
+      expect(tool.contract).toEqual(
+        expect.objectContaining({
+          capabilities: ['write', 'verify'],
+          providesEvidence: expect.arrayContaining(['local_artifact', 'verification']),
+          workflowStages: expect.arrayContaining(['persist_artifact', 'verify_evidence']),
+        }),
+      );
+      expect(tool.contract?.riskHints ?? []).not.toContain('idempotent');
+    }
   });
 
   it('keeps web contracts split between discovery and reading', () => {

@@ -8,9 +8,8 @@ export const FILE_EDIT_TOOL: ToolDefinition = {
   name: 'file_edit',
   description:
     'Edit an existing file in the current workspace with focused updates instead of rewriting the entire document. ' +
-    'Preferred usage: pass edits as an ordered array of replace, delete, insert_before, or insert_after operations. ' +
-    'Each edit must match unique surrounding context, and all edits are applied atomically. ' +
-    'Legacy oldText/newText single-replace arguments remain supported for backward compatibility.',
+    'Pass edits as an ordered array of replace, delete, insert_before, or insert_after operations. ' +
+    'Each edit must match unique surrounding context; all edits are validated before one file write.',
   input_schema: {
     type: 'object',
     properties: {
@@ -19,21 +18,10 @@ export const FILE_EDIT_TOOL: ToolDefinition = {
         minLength: 1,
         description: 'File path relative to workspace root',
       },
-      oldText: {
-        type: 'string',
-        minLength: 1,
-        description:
-          'Legacy exact text to find and replace (must match uniquely). Prefer edits[].oldText for new calls.',
-      },
-      newText: {
-        type: 'string',
-        description: 'Legacy replacement text. Prefer edits[].newText for new calls.',
-      },
       edits: {
         type: 'array',
         minItems: 1,
-        description:
-          'Ordered focused edits. Prefer this over oldText/newText for multiple changes or insert/delete operations.',
+        description: 'Ordered focused edits to apply atomically.',
         items: {
           type: 'object',
           properties: {
@@ -58,16 +46,16 @@ export const FILE_EDIT_TOOL: ToolDefinition = {
         },
       },
     },
-    required: ['path'],
+    required: ['path', 'edits'],
   },
+  strict: true,
   contract: {
     category: 'workspace_files',
-    capabilities: ['write', 'verify'],
+    capabilities: ['write'],
     resourceKinds: ['conversation_workspace'],
     sideEffects: ['local_artifact'],
-    riskHints: ['idempotent'],
-    providesEvidence: ['local_artifact', 'verification'],
-    workflowStages: ['persist_artifact', 'verify_evidence'],
+    providesEvidence: ['local_artifact'],
+    workflowStages: ['persist_artifact'],
   },
 };
 
@@ -185,10 +173,9 @@ export const IMAGE_GEN_TOOL: ToolDefinition = {
   strict: true,
   contract: {
     category: 'media',
-    capabilities: ['write'],
+    capabilities: ['write', 'verify'],
     resourceKinds: ['conversation_workspace'],
     sideEffects: ['local_artifact', 'external_run'],
-    riskHints: ['idempotent'],
     providesEvidence: ['local_artifact', 'verification'],
     workflowStages: ['prepare_artifact', 'persist_artifact', 'verify_evidence'],
   },
@@ -256,10 +243,9 @@ export const IMAGE_EDIT_TOOL: ToolDefinition = {
   strict: true,
   contract: {
     category: 'media',
-    capabilities: ['write'],
+    capabilities: ['write', 'verify'],
     resourceKinds: ['conversation_workspace'],
     sideEffects: ['local_artifact', 'external_run'],
-    riskHints: ['idempotent'],
     providesEvidence: ['local_artifact', 'verification'],
     workflowStages: ['prepare_artifact', 'persist_artifact', 'verify_evidence'],
   },

@@ -158,4 +158,57 @@ describe('executeToolCallLifecycle', () => {
     );
     expect(result.toolMessage.toolCalls?.[0]?.effectReceipts).toBeUndefined();
   });
+
+  it('records a code-owned workspace artifact ref and digest end to end', async () => {
+    mockedExecuteTool.mockResolvedValueOnce(
+      JSON.stringify({
+        status: 'written',
+        path: 'reports/final.md',
+        size: 4,
+        sha256: 'a'.repeat(64),
+      }),
+    );
+    const onToolCallComplete = jest.fn();
+    const result = await executeToolCallLifecycle(
+      buildLifecycle({
+        tc: {
+          id: 'tc-write-file',
+          name: 'write_file',
+          arguments: JSON.stringify({ path: 'reports/final.md', content: 'done' }),
+        },
+        availableToolNames: new Set(['write_file']),
+        groundedRequestScopedTools: [
+          {
+            name: 'write_file',
+            description: 'Write a workspace file.',
+            input_schema: {
+              type: 'object',
+              properties: { path: { type: 'string' }, content: { type: 'string' } },
+              required: ['path', 'content'],
+            },
+          },
+        ],
+        callbacks: { onToolCallStart: jest.fn(), onToolCallComplete },
+      }),
+    );
+
+    expect(onToolCallComplete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'completed',
+        effectReceipts: [
+          expect.objectContaining({
+            effectKind: 'artifact.write',
+            effectState: 'applied',
+            verificationState: 'acknowledged',
+            resource: {
+              kind: 'workspace_file',
+              id: 'reports/final.md',
+              digest: `sha256:${'a'.repeat(64)}`,
+            },
+          }),
+        ],
+      }),
+    );
+    expect(result.toolMessage.toolCalls?.[0]?.effectReceipts).toBeUndefined();
+  });
 });

@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 // File edit, glob search, cron management tools.
 
+import * as Crypto from 'expo-crypto';
 import {
   getOptionalToolBooleanArg,
   getOptionalToolStringArg,
@@ -14,11 +15,7 @@ import {
   normalizeTextSearchResult,
   type TextSearchMatch,
 } from './resultNormalization/webSearchResult';
-import {
-  applyFocusedTextEditOperations,
-  type FocusedTextEditOperation,
-  normalizeFocusedTextEditOperations,
-} from './focusedEdits';
+import { applyFocusedTextEditOperations, normalizeFocusedTextEditOperations } from './focusedEdits';
 import { resolveConversationWorkspaceSource } from '../../services/workspaces/source';
 import {
   readWorkspaceSourceTextFile,
@@ -39,48 +36,22 @@ export {
 export async function executeFileEdit(
   args: {
     path: string;
-    oldText?: string;
-    newText?: string;
-    edits?: Array<Record<string, unknown>>;
+    edits: Array<Record<string, unknown>>;
   },
   conversationId: string,
   fallbackConversationId?: string,
 ): Promise<string> {
   const rawArgs = args as Record<string, unknown>;
   const pathArg = requireToolStringArg(rawArgs, 'path', 'file_edit', {
-    allRequired: ['path', 'edits or oldText/newText'],
+    allRequired: ['path', 'edits'],
   });
   if (pathArg.error) return pathArg.error;
 
   const editsArg = normalizeFocusedTextEditOperations(rawArgs.edits, 'file_edit', 'edits');
   if (editsArg.error) return editsArg.error;
 
-  const hasLegacyOldText = typeof rawArgs.oldText !== 'undefined';
-  const hasLegacyNewText = typeof rawArgs.newText !== 'undefined';
-  if (editsArg.operations?.length && (hasLegacyOldText || hasLegacyNewText)) {
-    return 'Error: file_edit accepts either edits or oldText/newText, not both. Prefer edits for focused updates.';
-  }
-
-  let normalizedOperations: { value?: FocusedTextEditOperation[]; error?: string };
-  if (editsArg.operations?.length) {
-    normalizedOperations = { value: editsArg.operations };
-  } else {
-    const oldTextArg = requireToolStringArg(rawArgs, 'oldText', 'file_edit', {
-      allRequired: ['path', 'oldText', 'newText'],
-    });
-    if (oldTextArg.error) return oldTextArg.error;
-    const newTextArg = requireToolStringArg(rawArgs, 'newText', 'file_edit', {
-      allowEmpty: true,
-      allRequired: ['path', 'oldText', 'newText'],
-    });
-    if (newTextArg.error) return newTextArg.error;
-    normalizedOperations = {
-      value: [{ op: 'replace' as const, oldText: oldTextArg.value!, newText: newTextArg.value! }],
-    };
-  }
-
-  if ('error' in normalizedOperations && normalizedOperations.error) {
-    return normalizedOperations.error;
+  if (!editsArg.operations?.length) {
+    return 'Error: "edits" for file_edit must contain at least one focused update.';
   }
 
   const safePath = sanitizeWorkspaceRelativePath(pathArg.value!);
@@ -96,21 +67,25 @@ export async function executeFileEdit(
     return `Error: ${message}`;
   }
 
-  const applyResult = applyFocusedTextEditOperations(
-    content,
-    normalizedOperations.value!,
-    'file_edit',
-  );
+  const applyResult = applyFocusedTextEditOperations(content, editsArg.operations, 'file_edit');
   if (applyResult.error) return applyResult.error;
 
   const newContent = applyResult.content!;
   try {
-    await writeWorkspaceSourceTextFile(source, safePath, newContent);
+    const result = await writeWorkspaceSourceTextFile(source, safePath, newContent);
+    const sha256 = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, newContent);
+    return JSON.stringify({
+      status: 'edited',
+      path: result.path,
+      size: result.size,
+      sha256,
+      editCount: editsArg.operations.length,
+      summary: `Edited ${result.path} with ${editsArg.operations.length} focused update(s)`,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return `Error: ${message}`;
   }
-  return `Successfully edited ${safePath} with ${normalizedOperations.value!.length} focused update(s)`;
 }
 
 function globToRegex(pattern: string): RegExp {
@@ -211,10 +186,9 @@ export async function executeTextSearch(
       break;
     }
     try {
-      const content = (await readWorkspaceSourceTextFile(
-        source,
-        safePath ? `${safePath}/${filePath}` : filePath,
-      )).content;
+      const content = (
+        await readWorkspaceSourceTextFile(source, safePath ? `${safePath}/${filePath}` : filePath)
+      ).content;
       const lines = content.split('\n');
       for (let i = 0; i < lines.length; i++) {
         if (results.length >= maxResults) {

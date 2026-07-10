@@ -5,6 +5,7 @@ import {
   TOOL_EFFECT_VERIFICATION_STATES,
   type ToolEffectKind,
   type ToolEffectIdentitySelector,
+  type ToolEffectResourceSelector,
   type ToolEffectOperationHandle,
   type ToolEffectReceipt,
   type ToolEffectResourceRef,
@@ -24,7 +25,9 @@ const PATH_SEGMENT_PATTERN = /^[A-Za-z0-9_-]{1,64}$/u;
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u;
 const CONTRACT_KEYS = new Set(['statusPath', 'outcomes', 'resource', 'operationHandle']);
 const OUTCOME_KEYS = new Set(['effectKind', 'effectState', 'verificationState']);
-const SELECTOR_KEYS = new Set(['kind', 'source', 'path']);
+const IDENTITY_SELECTOR_KEYS = new Set(['kind', 'source', 'path']);
+const RESOURCE_SELECTOR_KEYS = new Set(['kind', 'source', 'path', 'digestPath']);
+const SHA256_PATTERN = /^(?:sha256:)?[a-f0-9]{64}$/u;
 
 type BuildToolEffectReceiptParams = {
   toolCallId: string;
@@ -70,8 +73,11 @@ function normalizePath(value: unknown): readonly string[] | undefined {
   return Object.freeze([...value]) as readonly string[];
 }
 
-function normalizeIdentitySelector(value: unknown): ToolEffectIdentitySelector | undefined {
-  if (!isPlainRecord(value) || !hasOnlyKeys(value, SELECTOR_KEYS)) {
+function normalizeIdentitySelectorWithKeys(
+  value: unknown,
+  allowedKeys: ReadonlySet<string>,
+): ToolEffectIdentitySelector | undefined {
+  if (!isPlainRecord(value) || !hasOnlyKeys(value, allowedKeys)) {
     return undefined;
   }
   const kind =
@@ -89,6 +95,25 @@ function normalizeIdentitySelector(value: unknown): ToolEffectIdentitySelector |
     return undefined;
   }
   return Object.freeze({ kind, source, path });
+}
+
+function normalizeIdentitySelector(value: unknown): ToolEffectIdentitySelector | undefined {
+  return normalizeIdentitySelectorWithKeys(value, IDENTITY_SELECTOR_KEYS);
+}
+
+function normalizeResourceSelector(value: unknown): ToolEffectResourceSelector | undefined {
+  const identity = normalizeIdentitySelectorWithKeys(value, RESOURCE_SELECTOR_KEYS);
+  if (!identity || !isPlainRecord(value)) {
+    return undefined;
+  }
+  const digestPath = value.digestPath === undefined ? undefined : normalizePath(value.digestPath);
+  if (value.digestPath !== undefined && !digestPath) {
+    return undefined;
+  }
+  return Object.freeze({
+    ...identity,
+    ...(digestPath ? { digestPath } : {}),
+  });
 }
 
 function isOutcomeStateValid(outcome: ToolEffectResultOutcome): boolean {
@@ -117,9 +142,7 @@ function normalizeOutcome(value: unknown): ToolEffectResultOutcome | undefined {
       : undefined;
   const verificationState =
     typeof value.verificationState === 'string' &&
-    TOOL_EFFECT_VERIFICATION_STATES.includes(
-      value.verificationState as ToolEffectVerificationState,
-    )
+    TOOL_EFFECT_VERIFICATION_STATES.includes(value.verificationState as ToolEffectVerificationState)
       ? (value.verificationState as ToolEffectVerificationState)
       : undefined;
   if (effectKind === null || !effectState || !verificationState) {
@@ -163,7 +186,7 @@ function normalizeResultContract(value: unknown): ToolEffectResultContract | und
   }
 
   const resource =
-    value.resource === undefined ? undefined : normalizeIdentitySelector(value.resource);
+    value.resource === undefined ? undefined : normalizeResourceSelector(value.resource);
   const operationHandle =
     value.operationHandle === undefined
       ? undefined
@@ -233,6 +256,40 @@ function resolveIdentity(
   return id ? Object.freeze({ kind: selector.kind, id }) : undefined;
 }
 
+function normalizeResourceDigest(value: unknown): ToolEffectResourceRef['digest'] | undefined {
+  if (typeof value !== 'string' || !SHA256_PATTERN.test(value)) {
+    return undefined;
+  }
+  return (
+    value.startsWith('sha256:') ? value : `sha256:${value}`
+  ) as ToolEffectResourceRef['digest'];
+}
+
+function resolveResource(
+  selector: ToolEffectResourceSelector | undefined,
+  argumentsValue: Record<string, unknown> | undefined,
+  resultValue: Record<string, unknown> | undefined,
+): ToolEffectResourceRef | undefined {
+  if (!selector) {
+    return undefined;
+  }
+  const identity = resolveIdentity(selector, argumentsValue, resultValue);
+  if (!identity) {
+    return undefined;
+  }
+  const source = selector.source === 'arguments' ? argumentsValue : resultValue;
+  const digest = selector.digestPath
+    ? normalizeResourceDigest(readPath(source, selector.digestPath))
+    : undefined;
+  if (selector.digestPath && !digest) {
+    return undefined;
+  }
+  return Object.freeze({
+    ...identity,
+    ...(digest ? { digest } : {}),
+  });
+}
+
 function resolveReturnedOutcome(params: BuildToolEffectReceiptParams): ResolvedEffectOutcome {
   const codeOwnedContract = getCodeOwnedToolEffectContract(params.toolName);
   const effectKind = codeOwnedContract?.effectKind ?? 'unknown';
@@ -262,16 +319,9 @@ function resolveReturnedOutcome(params: BuildToolEffectReceiptParams): ResolvedE
   }
 
   const argumentsValue = parseJsonRecord(params.argumentsText);
-  const resource = resolveIdentity(contract.resource, argumentsValue, resultValue);
-  const operationHandle = resolveIdentity(
-    contract.operationHandle,
-    argumentsValue,
-    resultValue,
-  );
-  if (
-    (contract.resource && !resource) ||
-    (contract.operationHandle && !operationHandle)
-  ) {
+  const resource = resolveResource(contract.resource, argumentsValue, resultValue);
+  const operationHandle = resolveIdentity(contract.operationHandle, argumentsValue, resultValue);
+  if ((contract.resource && !resource) || (contract.operationHandle && !operationHandle)) {
     return { effectKind, effectState: 'unknown', verificationState: 'unverified' };
   }
   return {
@@ -310,11 +360,11 @@ export async function buildToolEffectReceipt(
             effectState: params.terminalEffectState ?? 'failed',
             verificationState: 'unverified',
           }
-      : {
-          effectKind: codeOwnedEffectKind,
-          effectState: 'unknown',
-          verificationState: 'unverified',
-        };
+        : {
+            effectKind: codeOwnedEffectKind,
+            effectState: 'unknown',
+            verificationState: 'unverified',
+          };
   const identityDigest = await sha256(
     [
       'tool-effect-receipt-v1',

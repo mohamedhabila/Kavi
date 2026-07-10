@@ -311,13 +311,18 @@ describe('executeTool', () => {
         'file_edit',
         JSON.stringify({
           path: 'src/app.ts',
-          oldText: '1',
-          newText: '2',
+          edits: [{ oldText: '1', newText: '2' }],
         }),
         CONV_ID,
       );
 
-      expect(result).toContain('Successfully edited src/app.ts');
+      expect(JSON.parse(result)).toEqual(
+        expect.objectContaining({
+          status: 'edited',
+          path: 'src/app.ts',
+          editCount: 1,
+        }),
+      );
       expect(mockWriteWorkspaceFile).toHaveBeenCalledWith(
         expect.objectContaining({ id: REMOTE_WORKSPACE_TARGET.id }),
         'src/app.ts',

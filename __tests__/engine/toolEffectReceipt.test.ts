@@ -44,15 +44,52 @@ describe('ToolEffectReceipt', () => {
     expect(getCodeOwnedToolEffectContract('skill__calendar__create_event')).toBeUndefined();
   });
 
+  it('covers the reviewed workspace artifact slice while deferring other execution families', () => {
+    for (const toolName of [
+      'write_file',
+      'file_edit',
+      'image_generate',
+      'image_edit',
+      'canvas_create',
+      'canvas_update',
+      'canvas_navigate',
+      'canvas_delete',
+    ]) {
+      expect(getCodeOwnedToolEffectContract(toolName)).toBeDefined();
+    }
+
+    for (const deferredName of [
+      'shell',
+      'javascript',
+      'python',
+      'ssh_exec',
+      'expo_eas_build',
+      'skill__github__commit_files',
+      'mcp__filesystem__write_file',
+    ]) {
+      expect(getCodeOwnedToolEffectContract(deferredName)).toBeUndefined();
+    }
+  });
+
   it('strictly decodes immutable identity and reference fields without raw payloads', () => {
-    const receipt = makeAppliedReceipt();
+    const receipt = makeAppliedReceipt({
+      resource: {
+        kind: 'calendar_event',
+        id: 'event-42',
+        digest: `sha256:${'d'.repeat(64)}`,
+      },
+    });
 
     expect(receipt).toEqual(
       expect.objectContaining({
         receiptId: expect.stringMatching(/^ter_[a-f0-9]{32}$/u),
         requestDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u),
         resultDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u),
-        resource: { kind: 'calendar_event', id: 'event-42' },
+        resource: {
+          kind: 'calendar_event',
+          id: 'event-42',
+          digest: `sha256:${'d'.repeat(64)}`,
+        },
         operationHandle: { kind: 'calendar_operation', id: 'operation-9' },
       }),
     );
@@ -62,6 +99,12 @@ describe('ToolEffectReceipt', () => {
     expect(() => Object.defineProperty(receipt, 'toolCallId', { value: 'tampered' })).toThrow();
     expect(
       decodeToolEffectReceipt({ ...receipt, rawResult: 'must never be persisted' }),
+    ).toBeUndefined();
+    expect(
+      decodeToolEffectReceipt({
+        ...receipt,
+        resource: { ...receipt.resource, digest: 'sha256:not-a-digest' },
+      }),
     ).toBeUndefined();
   });
 
@@ -245,6 +288,225 @@ describe('ToolEffectReceipt', () => {
         verificationState: 'acknowledged',
       }),
     );
+  });
+
+  it.each([
+    [
+      'workspace write acknowledgement',
+      'write_file',
+      {
+        status: 'written',
+        path: 'reports/final.md',
+        size: 12,
+        sha256: 'a'.repeat(64),
+      },
+      {
+        effectKind: 'artifact.write',
+        effectState: 'applied',
+        verificationState: 'acknowledged',
+        resource: {
+          kind: 'workspace_file',
+          id: 'reports/final.md',
+          digest: `sha256:${'a'.repeat(64)}`,
+        },
+      },
+    ],
+    [
+      'focused file edit acknowledgement',
+      'file_edit',
+      {
+        status: 'edited',
+        path: 'src/app.ts',
+        size: 20,
+        sha256: 'b'.repeat(64),
+        editCount: 2,
+      },
+      {
+        effectKind: 'artifact.write',
+        effectState: 'applied',
+        verificationState: 'acknowledged',
+        resource: {
+          kind: 'workspace_file',
+          id: 'src/app.ts',
+          digest: `sha256:${'b'.repeat(64)}`,
+        },
+      },
+    ],
+    [
+      'verified generated image persistence',
+      'image_generate',
+      { status: 'generated', workspacePath: 'generated-image.png' },
+      {
+        effectKind: 'artifact.write',
+        effectState: 'applied',
+        verificationState: 'verified',
+        resource: { kind: 'workspace_file', id: 'generated-image.png' },
+      },
+    ],
+    [
+      'verified edited image persistence',
+      'image_edit',
+      { status: 'edited', workspacePath: 'edited-image.png' },
+      {
+        effectKind: 'artifact.write',
+        effectState: 'applied',
+        verificationState: 'verified',
+        resource: { kind: 'workspace_file', id: 'edited-image.png' },
+      },
+    ],
+    [
+      'canvas creation acknowledgement',
+      'canvas_create',
+      { status: 'created', surfaceId: 'surface-6' },
+      {
+        effectKind: 'artifact.write',
+        effectState: 'applied',
+        verificationState: 'acknowledged',
+        resource: { kind: 'canvas_surface', id: 'surface-6' },
+      },
+    ],
+    [
+      'canvas update acknowledgement',
+      'canvas_update',
+      { status: 'updated', surfaceId: 'surface-7' },
+      {
+        effectKind: 'artifact.write',
+        effectState: 'applied',
+        verificationState: 'acknowledged',
+        resource: { kind: 'canvas_surface', id: 'surface-7' },
+      },
+    ],
+    [
+      'canvas deletion acknowledgement',
+      'canvas_delete',
+      { status: 'deleted', surfaceId: 'surface-8' },
+      {
+        effectKind: 'artifact.delete',
+        effectState: 'applied',
+        verificationState: 'acknowledged',
+        resource: { kind: 'canvas_surface', id: 'surface-8' },
+      },
+    ],
+    [
+      'canvas navigation acknowledgement',
+      'canvas_navigate',
+      { status: 'navigated', surfaceId: 'surface-9' },
+      {
+        effectKind: 'artifact.write',
+        effectState: 'applied',
+        verificationState: 'acknowledged',
+        resource: { kind: 'canvas_surface', id: 'surface-9' },
+      },
+    ],
+  ])('maps reviewed %s semantics', async (_label, toolName, result, expected) => {
+    const receipt = await buildToolEffectReceipt({
+      toolCallId: `tc-${toolName}`,
+      toolName,
+      argumentsText: '{}',
+      resultText: JSON.stringify(result),
+      transportState: 'returned',
+      recordedAt: 228,
+    });
+
+    expect(receipt).toEqual(expect.objectContaining(expected));
+  });
+
+  it('fails malformed workspace resource identity and digest results closed', async () => {
+    const missingDigest = await buildToolEffectReceipt({
+      toolCallId: 'tc-write-missing-digest',
+      toolName: 'write_file',
+      argumentsText: '{}',
+      resultText: JSON.stringify({ status: 'written', path: 'report.md' }),
+      transportState: 'returned',
+      recordedAt: 229,
+    });
+    const malformedDigest = await buildToolEffectReceipt({
+      toolCallId: 'tc-edit-bad-digest',
+      toolName: 'file_edit',
+      argumentsText: '{}',
+      resultText: JSON.stringify({
+        status: 'edited',
+        path: 'report.md',
+        sha256: 'provider-claimed-success',
+      }),
+      transportState: 'returned',
+      recordedAt: 230,
+    });
+    const missingImagePath = await buildToolEffectReceipt({
+      toolCallId: 'tc-image-missing-path',
+      toolName: 'image_generate',
+      argumentsText: '{}',
+      resultText: JSON.stringify({ status: 'generated', fileUri: 'file:///tmp/image.png' }),
+      transportState: 'returned',
+      recordedAt: 231,
+    });
+
+    for (const receipt of [missingDigest, malformedDigest, missingImagePath]) {
+      expect(receipt.effectState).toBe('unknown');
+      expect(receipt.verificationState).toBe('unverified');
+      expect(receipt.resource).toBeUndefined();
+    }
+  });
+
+  it('keeps returned and thrown workspace mutation errors unknown', async () => {
+    const returnedError = await buildToolEffectReceipt({
+      toolCallId: 'tc-write-returned-error',
+      toolName: 'write_file',
+      argumentsText: '{}',
+      resultText: 'Error: storage unavailable after request dispatch',
+      transportState: 'returned',
+      resultIsError: true,
+      recordedAt: 232,
+    });
+    const threw = await buildToolEffectReceipt({
+      toolCallId: 'tc-image-threw',
+      toolName: 'image_generate',
+      argumentsText: '{}',
+      resultText: 'Error: image persistence interrupted',
+      transportState: 'threw',
+      recordedAt: 233,
+    });
+
+    expect(returnedError).toEqual(
+      expect.objectContaining({ effectKind: 'artifact.write', effectState: 'unknown' }),
+    );
+    expect(threw).toEqual(
+      expect.objectContaining({ effectKind: 'artifact.write', effectState: 'unknown' }),
+    );
+  });
+
+  it('deduplicates artifact receipt replay and rejects resource-digest conflict', async () => {
+    const build = (recordedAt: number) =>
+      buildToolEffectReceipt({
+        toolCallId: 'tc-write-replay',
+        toolName: 'write_file',
+        argumentsText: '{"path":"report.md","content":"done"}',
+        resultText: JSON.stringify({
+          status: 'written',
+          path: 'report.md',
+          size: 4,
+          sha256: 'c'.repeat(64),
+        }),
+        transportState: 'returned',
+        recordedAt,
+      });
+    const parent = { toolCallId: 'tc-write-replay', toolName: 'write_file' };
+    const first = await build(240);
+    const replay = await build(900);
+    const receipts = appendToolEffectReceipt(undefined, first, parent);
+
+    expect(replay.receiptId).toBe(first.receiptId);
+    expect(appendToolEffectReceipt(receipts, replay, parent)).toBe(receipts);
+    expect(() =>
+      appendToolEffectReceipt(
+        receipts,
+        {
+          ...first,
+          resource: { ...first.resource!, digest: `sha256:${'d'.repeat(64)}` },
+        },
+        parent,
+      ),
+    ).toThrow(/Conflicting tool effect receipt identity/u);
   });
 
   it('keeps first-party malformed, returned-error, and thrown outcomes unknown', async () => {

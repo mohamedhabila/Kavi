@@ -30,7 +30,8 @@ const RECEIPT_KEYS = new Set([
   'operationHandle',
   'recordedAt',
 ]);
-const REFERENCE_KEYS = new Set(['kind', 'id']);
+const RESOURCE_REFERENCE_KEYS = new Set(['kind', 'id', 'digest']);
+const OPERATION_HANDLE_KEYS = new Set(['kind', 'id']);
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -57,25 +58,34 @@ function boundedString(value: unknown, maxLength: number): string | undefined {
   return value;
 }
 
-function enumValue<T extends string>(
-  value: unknown,
-  values: ReadonlyArray<T>,
-): T | undefined {
+function enumValue<T extends string>(value: unknown, values: ReadonlyArray<T>): T | undefined {
   return typeof value === 'string' && values.includes(value as T) ? (value as T) : undefined;
 }
 
-function decodeReference<T extends ToolEffectResourceRef | ToolEffectOperationHandle>(
-  value: unknown,
-): T | undefined {
-  if (!isPlainRecord(value) || !hasOnlyKeys(value, REFERENCE_KEYS)) {
+function decodeResourceReference(value: unknown): ToolEffectResourceRef | undefined {
+  if (!isPlainRecord(value) || !hasOnlyKeys(value, RESOURCE_REFERENCE_KEYS)) {
     return undefined;
   }
   const kind = boundedString(value.kind, 128);
   const id = boundedString(value.id, 1024);
-  if (!kind || !id) {
+  const digest = value.digest === undefined ? undefined : boundedString(value.digest, 71);
+  if (!kind || !id || (value.digest !== undefined && (!digest || !SHA256_PATTERN.test(digest)))) {
     return undefined;
   }
-  return Object.freeze({ kind, id }) as T;
+  return Object.freeze({
+    kind,
+    id,
+    ...(digest ? { digest: digest as ToolEffectResourceRef['digest'] } : {}),
+  });
+}
+
+function decodeOperationHandle(value: unknown): ToolEffectOperationHandle | undefined {
+  if (!isPlainRecord(value) || !hasOnlyKeys(value, OPERATION_HANDLE_KEYS)) {
+    return undefined;
+  }
+  const kind = boundedString(value.kind, 128);
+  const id = boundedString(value.id, 1024);
+  return kind && id ? Object.freeze({ kind, id }) : undefined;
 }
 
 export function isToolEffectStateCombinationValid(params: {
@@ -94,20 +104,14 @@ export function isToolEffectStateCombinationValid(params: {
 
   switch (params.effectState) {
     case 'none':
-      return (
-        params.transportState === 'returned' && params.verificationState === 'not_applicable'
-      );
+      return params.transportState === 'returned' && params.verificationState === 'not_applicable';
     case 'accepted':
     case 'pending':
       return (
-        params.verificationState === 'unverified' ||
-        params.verificationState === 'acknowledged'
+        params.verificationState === 'unverified' || params.verificationState === 'acknowledged'
       );
     case 'applied':
-      return (
-        params.verificationState === 'acknowledged' ||
-        params.verificationState === 'verified'
-      );
+      return params.verificationState === 'acknowledged' || params.verificationState === 'verified';
     case 'handed_off':
     case 'cancelled':
     case 'failed':
@@ -128,10 +132,7 @@ export function decodeToolEffectReceipt(value: unknown): ToolEffectReceipt | und
   const transportState = enumValue(value.transportState, TOOL_EFFECT_TRANSPORT_STATES);
   const effectKind = enumValue(value.effectKind, TOOL_EFFECT_KINDS);
   const effectState = enumValue(value.effectState, TOOL_EFFECT_STATES);
-  const verificationState = enumValue(
-    value.verificationState,
-    TOOL_EFFECT_VERIFICATION_STATES,
-  );
+  const verificationState = enumValue(value.verificationState, TOOL_EFFECT_VERIFICATION_STATES);
   const requestDigest = boundedString(value.requestDigest, 71);
   const resultDigest = boundedString(value.resultDigest, 71);
   const recordedAt = value.recordedAt;
@@ -158,13 +159,9 @@ export function decodeToolEffectReceipt(value: unknown): ToolEffectReceipt | und
   }
 
   const resource =
-    value.resource === undefined
-      ? undefined
-      : decodeReference<ToolEffectResourceRef>(value.resource);
+    value.resource === undefined ? undefined : decodeResourceReference(value.resource);
   const operationHandle =
-    value.operationHandle === undefined
-      ? undefined
-      : decodeReference<ToolEffectOperationHandle>(value.operationHandle);
+    value.operationHandle === undefined ? undefined : decodeOperationHandle(value.operationHandle);
   if (
     (value.resource !== undefined && !resource) ||
     (value.operationHandle !== undefined && !operationHandle)
@@ -205,6 +202,7 @@ function receiptsMatchReplay(left: ToolEffectReceipt, right: ToolEffectReceipt):
     left.resultDigest === right.resultDigest &&
     left.resource?.kind === right.resource?.kind &&
     left.resource?.id === right.resource?.id &&
+    left.resource?.digest === right.resource?.digest &&
     left.operationHandle?.kind === right.operationHandle?.kind &&
     left.operationHandle?.id === right.operationHandle?.id
   );
@@ -254,9 +252,7 @@ export function appendToolEffectReceipt(
     if (!receiptsMatchReplay(decodedCandidate, receipt)) {
       throw new TypeError(`Conflicting tool effect receipt identity: ${receipt.receiptId}`);
     }
-    return existing && Object.isFrozen(existing)
-      ? existing
-      : Object.freeze(decodedExisting);
+    return existing && Object.isFrozen(existing) ? existing : Object.freeze(decodedExisting);
   }
 
   return Object.freeze([...decodedExisting, receipt]);

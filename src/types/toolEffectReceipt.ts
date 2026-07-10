@@ -26,6 +26,7 @@ export const TOOL_EFFECT_KINDS = [
   'observation.read',
   'compute.execute',
   'artifact.write',
+  'artifact.delete',
   'communication.draft_handoff',
   'communication.draft_save',
   'communication.send',
@@ -55,6 +56,7 @@ export type ToolEffectDigest = `sha256:${string}`;
 export interface ToolEffectResourceRef {
   readonly kind: string;
   readonly id: string;
+  readonly digest?: ToolEffectDigest;
 }
 
 export interface ToolEffectOperationHandle {
@@ -91,9 +93,13 @@ export interface ToolEffectIdentitySelector {
   readonly path: readonly string[];
 }
 
+export interface ToolEffectResourceSelector extends ToolEffectIdentitySelector {
+  readonly digestPath?: readonly string[];
+}
+
 export interface ToolEffectResultContract {
   readonly statusPath: readonly string[];
   readonly outcomes: Readonly<Record<string, ToolEffectResultOutcome>>;
-  readonly resource?: ToolEffectIdentitySelector;
+  readonly resource?: ToolEffectResourceSelector;
   readonly operationHandle?: ToolEffectIdentitySelector;
 }

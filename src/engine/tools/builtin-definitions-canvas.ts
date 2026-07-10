@@ -18,11 +18,11 @@ function canvasReadContract(overrides: Partial<ToolContract> = {}): ToolContract
 function canvasWriteContract(overrides: Partial<ToolContract> = {}): ToolContract {
   return {
     category: 'canvas',
-    capabilities: ['write', 'verify'],
+    capabilities: ['write'],
     resourceKinds: ['canvas'],
     sideEffects: ['local_artifact'],
-    providesEvidence: ['verification', 'local_artifact'],
-    workflowStages: ['prepare_artifact', 'persist_artifact', 'verify_evidence'],
+    providesEvidence: ['local_artifact'],
+    workflowStages: ['prepare_artifact', 'persist_artifact'],
     ...overrides,
   };
 }
@@ -221,11 +221,11 @@ export const CANVAS_DELETE_TOOL: ToolDefinition = {
   },
   contract: {
     category: 'canvas',
-    capabilities: ['write', 'verify'],
+    capabilities: ['write'],
     resourceKinds: ['canvas'],
     sideEffects: ['destructive'],
     riskHints: ['destructive'],
-    providesEvidence: ['verification', 'local_artifact'],
+    providesEvidence: ['local_artifact'],
     workflowStages: ['persist_artifact'],
   },
 };

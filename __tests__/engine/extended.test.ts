@@ -8,6 +8,7 @@ import {
   executeGlobSearch,
   executeTextSearch,
 } from '../../src/engine/tools/extended';
+import { executeWriteFile } from '../../src/engine/tools/toolWorkspaceCoreExecution';
 
 // Mock expo-file-system
 jest.mock('expo-file-system', () => {
@@ -111,22 +112,54 @@ function setupWorkspace(conversationId: string, files: Record<string, string>) {
   }
 }
 
+describe('executeWriteFile', () => {
+  it('returns the code-owned path and content digest after the write resolves', async () => {
+    const result = JSON.parse(
+      await executeWriteFile({ path: 'reports/final.md', content: 'done' }, 'write-test'),
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'written',
+        path: 'reports/final.md',
+        size: 4,
+        sha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      }),
+    );
+    expect(__getStore()['file:///mock/documents/workspace/write-test/reports/final.md']).toBe(
+      'done',
+    );
+  });
+});
+
 describe('executeFileEdit', () => {
   const CONV = 'edit-test';
 
   it('exposes focused edit operations in the tool definition', () => {
     expect(FILE_EDIT_TOOL.description).toContain('focused updates');
     expect(FILE_EDIT_TOOL.input_schema.properties).toHaveProperty('edits');
-    expect(FILE_EDIT_TOOL.input_schema.required).toEqual(['path']);
+    expect(FILE_EDIT_TOOL.input_schema.properties).not.toHaveProperty('oldText');
+    expect(FILE_EDIT_TOOL.input_schema.properties).not.toHaveProperty('newText');
+    expect(FILE_EDIT_TOOL.input_schema.required).toEqual(['path', 'edits']);
   });
 
   it('edits a file with unique oldText match', async () => {
     setupWorkspace(CONV, { 'app.ts': 'const x = 1;\nconst y = 2;\n' });
     const result = await executeFileEdit(
-      { path: 'app.ts', oldText: 'const x = 1;', newText: 'const x = 10;' },
+      {
+        path: 'app.ts',
+        edits: [{ oldText: 'const x = 1;', newText: 'const x = 10;' }],
+      },
       CONV,
     );
-    expect(result).toContain('Successfully edited');
+    expect(JSON.parse(result)).toEqual(
+      expect.objectContaining({
+        status: 'edited',
+        path: 'app.ts',
+        editCount: 1,
+        sha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      }),
+    );
     expect(__getStore()[`file:///mock/documents/workspace/${CONV}/app.ts`]).toContain(
       'const x = 10;',
     );
@@ -148,7 +181,9 @@ describe('executeFileEdit', () => {
       CONV,
     );
 
-    expect(result).toContain('2 focused update');
+    expect(JSON.parse(result)).toEqual(
+      expect.objectContaining({ status: 'edited', path: 'multi.ts', editCount: 2 }),
+    );
     expect(__getStore()[`file:///mock/documents/workspace/${CONV}/multi.ts`]).toBe(
       'function demo() {\n  const answer = 42;\n  return answer;\n}\n',
     );
@@ -175,7 +210,10 @@ describe('executeFileEdit', () => {
   });
 
   it('returns error if file not found', async () => {
-    const result = await executeFileEdit({ path: 'missing.ts', oldText: 'x', newText: 'y' }, CONV);
+    const result = await executeFileEdit(
+      { path: 'missing.ts', edits: [{ oldText: 'x', newText: 'y' }] },
+      CONV,
+    );
     expect(result).toContain('Error');
     expect(result).toContain('not found');
   });
@@ -183,7 +221,7 @@ describe('executeFileEdit', () => {
   it('returns error if oldText not found in file', async () => {
     setupWorkspace(CONV, { 'file.ts': 'hello world' });
     const result = await executeFileEdit(
-      { path: 'file.ts', oldText: 'goodbye', newText: 'hi' },
+      { path: 'file.ts', edits: [{ oldText: 'goodbye', newText: 'hi' }] },
       CONV,
     );
     expect(result).toContain('not found');
@@ -191,7 +229,10 @@ describe('executeFileEdit', () => {
 
   it('returns error if oldText matches multiple times', async () => {
     setupWorkspace(CONV, { 'dup.ts': 'foo bar foo baz foo' });
-    const result = await executeFileEdit({ path: 'dup.ts', oldText: 'foo', newText: 'qux' }, CONV);
+    const result = await executeFileEdit(
+      { path: 'dup.ts', edits: [{ oldText: 'foo', newText: 'qux' }] },
+      CONV,
+    );
     expect(result).toContain('3 times');
     expect(result).toContain('must be unique');
   });
@@ -199,36 +240,36 @@ describe('executeFileEdit', () => {
   it('strips path traversal from path', async () => {
     setupWorkspace(CONV, { 'safe.ts': 'content' });
     const result = await executeFileEdit(
-      { path: '../../../etc/safe.ts', oldText: 'content', newText: 'new' },
+      {
+        path: '../../../etc/safe.ts',
+        edits: [{ oldText: 'content', newText: 'new' }],
+      },
       CONV,
     );
     // Path gets sanitized — either finds the safe.ts or returns not found
     expect(typeof result).toBe('string');
   });
 
-  it('returns a friendly error when oldText is missing', async () => {
+  it('returns a friendly error when edits are missing', async () => {
     setupWorkspace(CONV, { 'safe.ts': 'content' });
-    const result = await executeFileEdit(
-      { path: 'safe.ts', oldText: undefined as any, newText: 'new' },
-      CONV,
-    );
+    const result = await executeFileEdit({ path: 'safe.ts' } as any, CONV);
     expect(result).toContain('Error');
-    expect(result).toContain('oldText');
+    expect(result).toContain('edits');
   });
 
-  it('rejects mixing legacy and focused edit arguments', async () => {
-    setupWorkspace(CONV, { 'mixed.ts': 'content' });
+  it('does not accept the removed oldText/newText fallback', async () => {
+    setupWorkspace(CONV, { 'legacy.ts': 'content' });
     const result = await executeFileEdit(
       {
-        path: 'mixed.ts',
+        path: 'legacy.ts',
         oldText: 'content',
         newText: 'updated',
-        edits: [{ oldText: 'content', newText: 'updated' }],
-      },
+      } as any,
       CONV,
     );
 
-    expect(result).toContain('either edits or oldText/newText');
+    expect(result).toContain('edits');
+    expect(__getStore()[`file:///mock/documents/workspace/${CONV}/legacy.ts`]).toBe('content');
   });
 });
 
@@ -271,9 +312,7 @@ describe('executeGlobSearch', () => {
 
     expect(parsed.path).toBe('.');
     expect(parsed.count).toBeGreaterThan(0);
-    expect(parsed.matches).toEqual(
-      expect.arrayContaining(['inbox/', 'inbox/untrusted_note.txt']),
-    );
+    expect(parsed.matches).toEqual(expect.arrayContaining(['inbox/', 'inbox/untrusted_note.txt']));
   });
 
   it('returns no matches message', async () => {
