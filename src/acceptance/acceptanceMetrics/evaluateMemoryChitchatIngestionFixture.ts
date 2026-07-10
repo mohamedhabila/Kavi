@@ -2,7 +2,7 @@
 // Kavi — Chitchat memory ingestion fixture evaluator
 // ---------------------------------------------------------------------------
 
-import { drainIngestionQueue } from '../../services/memory/ingestionQueue';
+import { drainIngestionQueue, getIngestionJob } from '../../services/memory/ingestionQueue';
 import { listEpisodes } from '../../services/memory/episodes/queries';
 import { recordCompletedTurnForMemory } from '../../services/memory/lifecycle';
 import { getWorkingBlock } from '../../services/memory/workingBlocks';
@@ -32,6 +32,20 @@ export async function evaluateMemoryChitchatIngestionFixture(
     loadMessagesForThread: () => fixture.messages,
     now,
   });
+  if (recordResult.jobId) {
+    for (let round = 0; round < 50; round += 1) {
+      const status = getIngestionJob(recordResult.jobId)?.status;
+      if (
+        status === 'completed_structural' ||
+        status === 'completed_enriched' ||
+        status === 'degraded' ||
+        status === 'failed'
+      ) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  }
 
   const episodes = listEpisodes({ threadId: fixture.threadId, limit: 5 });
   if (episodes.length === 0) {
