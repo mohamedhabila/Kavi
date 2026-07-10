@@ -109,9 +109,10 @@ function makeExtractor(): jest.Mock {
             subject: 'user',
             predicate: 'deploys_to',
             value: 'acme-prod-cluster',
-            confidence: 'high',
+            confidence: 0.9,
           },
         ],
+        episode_summary: 'Deployed the dashboard service to acme-prod-cluster.',
         active_focus: 'User is shipping the dashboard service to acme-prod-cluster.',
         open_threads: ['monitor acme-prod-cluster after deploy'],
         notable: ['Production target: acme-prod-cluster'],
@@ -119,6 +120,7 @@ function makeExtractor(): jest.Mock {
     }
     return JSON.stringify({
       new_facts: [],
+      episode_summary: null,
       active_focus: 'Walking through consolidator tuning questions.',
       open_threads: [],
       notable: [],
@@ -148,6 +150,7 @@ describe('memory integration: 200-message thread', () => {
         const lastTs = sliceMessages[sliceMessages.length - 1].timestamp ?? baseTs;
         const result = await maybeRunConsolidation({
           threadId: THREAD,
+          threadTitle: 'Dashboard deploy to acme-prod-cluster',
           messages: sliceMessages,
           consolidationProvider: 'fake-provider',
           extractor,
@@ -230,6 +233,7 @@ describe('memory integration: returning user after 8-hour gap', () => {
     const lastTs = messages[messages.length - 1].timestamp ?? baseTs;
     const flushResult = await maybeRunConsolidation({
       threadId: THREAD,
+      threadTitle: 'Dashboard deploy to acme-prod-cluster',
       messages,
       consolidationProvider: 'fake-provider',
       extractor,

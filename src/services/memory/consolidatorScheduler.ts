@@ -229,7 +229,6 @@ export async function maybeRunConsolidation(
       personaSummary: input.personaSummary,
       now: input.now,
       extractor: extractor ?? null,
-      skipWorkingMemorySync: true,
     });
   } catch {
     logger.devWarn('consolidatorScheduler processing failed');
