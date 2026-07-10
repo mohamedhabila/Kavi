@@ -16,6 +16,10 @@ import {
   transitionExecutionRun,
 } from '../../src/services/executionJournal/mutations';
 import {
+  readExecutionMonitorSchedule,
+  readExternalHandleMonitor,
+} from '../../src/services/executionJournal/monitorRecords';
+import {
   appendBeforeEffectCheckpoint as appendBeforeEffect,
   DIGEST_A,
   DIGEST_C,
@@ -480,6 +484,7 @@ describe('external handle registration and transitions', () => {
   function registerPendingHandle() {
     return registerExecutionExternalHandle({
       id: 'handle-1',
+      monitorId: 'monitor-1',
       runId: 'run-1',
       effectId: 'effect-1',
       expectedControlEpoch: 0,
@@ -505,6 +510,7 @@ describe('external handle registration and transitions', () => {
     expect(() =>
       registerExecutionExternalHandle({
         id: 'bad-handle',
+        monitorId: 'bad-monitor',
         runId: 'run-1',
         effectId: 'effect-1',
         expectedControlEpoch: 0,
@@ -522,6 +528,16 @@ describe('external handle registration and transitions', () => {
     ).toThrow('execution_journal_external_handle_tool_mismatch');
     expect(registerPendingHandle()).toEqual(
       expect.objectContaining({ status: 'pending', lastVerifiedAt: 15 }),
+    );
+    expect(readExternalHandleMonitor(getExecutionJournalDb(), 'run-1', 'handle-1')).toEqual(
+      expect.objectContaining({
+        id: 'monitor-1',
+        baselineStatus: 'pending',
+        state: 'armed',
+        nextLegalCheckAt: 15,
+        lastObservedStatus: 'pending',
+        observationCount: 1,
+      }),
     );
   });
 
@@ -547,6 +563,18 @@ describe('external handle registration and transitions', () => {
     });
     expect(running.lastVerifiedAt).toBe(16);
     expect(succeeded.lastVerifiedAt).toBe(17);
+    expect(readExternalHandleMonitor(getExecutionJournalDb(), 'run-1', 'handle-1')).toEqual(
+      expect.objectContaining({
+        baselineStatus: 'pending',
+        state: 'acted',
+        nextLegalCheckAt: null,
+        lastObservedStatus: 'succeeded',
+        observationCount: 3,
+        lastObservedAt: 17,
+        conditionMetAt: 17,
+        actedAt: 17,
+      }),
+    );
     expect(() =>
       transitionExecutionExternalHandle({
         runId: 'run-1',
@@ -557,6 +585,30 @@ describe('external handle registration and transitions', () => {
         occurredAt: 18,
       }),
     ).toThrow('execution_journal_illegal_external_handle_transition:succeeded:running');
+  });
+
+  it('returns only bounded, identity-checked schedule evidence', () => {
+    seedPlannedEffect();
+    startEffect();
+    registerPendingHandle();
+    expect(readExecutionMonitorSchedule(getExecutionJournalDb(), 'run-1', ['handle-1'])).toEqual({
+      monitorCount: 1,
+      observationCount: 1,
+      nextLegalCheckAt: 15,
+    });
+    expect(() =>
+      readExecutionMonitorSchedule(getExecutionJournalDb(), 'run-1', ['handle-1', 'handle-1']),
+    ).toThrow('execution_journal_monitor_schedule_invalid');
+    expect(() =>
+      readExecutionMonitorSchedule(getExecutionJournalDb(), ' run-1', ['handle-1']),
+    ).toThrow('execution_journal_monitor_schedule_invalid');
+    expect(() =>
+      readExecutionMonitorSchedule(
+        getExecutionJournalDb(),
+        'run-1',
+        Array.from({ length: 101 }, (_, index) => `handle-${index}`),
+      ),
+    ).toThrow('execution_journal_monitor_schedule_invalid');
   });
 
   it('rejects stale handle observations without changing the persisted status', () => {

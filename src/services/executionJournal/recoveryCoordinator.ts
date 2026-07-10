@@ -79,11 +79,12 @@ const HANDLER_REJECTION_POLICY = {
   control_epoch_changed: 'fence_changed',
   cancelled: 'fence_changed',
   duplicate_dispatch: 'duplicate',
+  monitor_not_due: 'not_due',
   prerequisite_changed: 'blocked',
   handler_unavailable: 'blocked',
 } as const satisfies Record<
   ExecutionRecoveryHandlerRejectionReason,
-  'fence_changed' | 'duplicate' | 'blocked'
+  'fence_changed' | 'duplicate' | 'not_due' | 'blocked'
 >;
 
 const KNOWN_QUERY_BLOCK_REASONS = {
@@ -631,6 +632,9 @@ export async function coordinateExecutionRecovery(
     }
     if (rejectionPolicy === 'duplicate') {
       return deferred(fencedPointer, 'duplicate_dispatch');
+    }
+    if (rejectionPolicy === 'not_due') {
+      return deferred(fencedPointer, 'monitor_not_due');
     }
     return blocked(fencedPointer, 'handler_rejected');
   }

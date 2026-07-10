@@ -23,6 +23,7 @@ import {
   runRow,
   withImmediateTransaction,
 } from './mutationStore';
+import { advanceExternalHandleMonitor, insertExternalHandleMonitor } from './monitorRecords';
 import {
   canTransitionExecutionEffect,
   canTransitionExecutionExternalHandle,
@@ -76,6 +77,7 @@ interface ObservationIdentity {
   runId: string;
   effectId: string;
   handleId: string;
+  monitorId: string;
   runCreatedCheckpointId: string;
   beforeEffectCheckpointId: string;
   currentCheckpointId: string;
@@ -157,6 +159,7 @@ async function buildIdentity(
     runId: `external-${suffix}`,
     effectId: `external-effect-${suffix}`,
     handleId: `external-handle-${suffix}`,
+    monitorId: `external-monitor-${suffix}`,
     runCreatedCheckpointId: `external-created-${suffix}`,
     beforeEffectCheckpointId: `external-before-${suffix}`,
     currentCheckpointId: `external-current-${suffix}`,
@@ -171,6 +174,7 @@ function buildInitialRecords(
   checkpoints: ExecutionCheckpointRecord[];
   effect: ExecutionEffectRecord;
   handle: ExecutionExternalHandleRecord;
+  monitorId: string;
 } {
   const terminalStatus = terminalRunStatus(input.observedStatus);
   const run = decodeExecutionRunRow(
@@ -277,7 +281,7 @@ function buildInitialRecords(
       lastVerifiedAt: input.observedStatus === 'unknown' ? null : input.observedAt,
     }),
   );
-  return { run, checkpoints, effect, handle };
+  return { run, checkpoints, effect, handle, monitorId: identity.monitorId };
 }
 
 function insertEffect(database: SQLite.SQLiteDatabase, effect: ExecutionEffectRecord): void {
@@ -320,6 +324,10 @@ function insertInitialObservation(
   for (const checkpoint of records.checkpoints) insertCheckpoint(database, checkpoint);
   insertEffect(database, records.effect);
   insertHandle(database, records.handle);
+  insertExternalHandleMonitor(database, {
+    id: records.monitorId,
+    handle: records.handle,
+  });
 }
 
 function settleEffect(
@@ -468,6 +476,14 @@ function advanceExistingObservation(
   if (handleResult.changes !== 1) {
     throw new Error('execution_journal_external_observation_concurrent_handle');
   }
+  advanceExternalHandleMonitor(database, {
+    runId: run.id,
+    externalHandleId: handle.id,
+    observedStatus: input.observedStatus,
+    outcome: nextTerminal ? 'acted' : 'pending',
+    nextLegalCheckAt: nextTerminal ? null : occurredAt,
+    occurredAt,
+  });
 
   if (nextTerminal) {
     settleEffect(database, run, identity.effectId, identity.resultDigest, occurredAt);

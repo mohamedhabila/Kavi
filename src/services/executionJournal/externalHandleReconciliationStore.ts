@@ -19,21 +19,27 @@ import {
   EXECUTION_RECOVERY_PENDING_REASONS,
   type ExecutionRecoveryAuthorityState,
   type ExecutionRecoveryCancellationState,
-  type ExecutionRecoveryHandlerBlockReason,
   type ExecutionRecoveryHandlerInput,
   type ExecutionRecoveryHandlerRejectionReason,
   type ExecutionRecoveryHandlerResult,
-  type ExecutionRecoveryPendingReason,
 } from './recoveryCoordinatorTypes';
+import type {
+  CompleteExecutionExternalHandleReconciliationInput,
+  ExecutionExternalHandleReconciliationClaimResult,
+  ExecutionExternalHandleReconciliationStore,
+} from './externalHandleReconciliationTypes';
 import {
   canTransitionExecutionEffect,
   canTransitionExecutionExternalHandle,
   canTransitionExecutionRun,
 } from './transitions';
+import {
+  assessExternalHandleMonitorReadiness,
+  recordExternalHandleMonitorObservation,
+} from './monitorRecords';
 import type {
   ExecutionApprovalState,
   ExecutionExternalHandleRecord,
-  ExecutionExternalHandleStatus,
   ExecutionRunRecord,
 } from './types';
 
@@ -58,35 +64,6 @@ interface RecoveryClaimDispatchRow {
   fence_expires_at: number;
   state: string;
   updated_at: number;
-}
-
-export type ExecutionExternalHandleReconciliationClaimResult =
-  | { kind: 'claimed'; handles: ExecutionExternalHandleRecord[] }
-  | { kind: 'rejected'; reason: ExecutionRecoveryHandlerRejectionReason };
-
-export interface ExecutionExternalHandleObservation {
-  handleId: string;
-  expectedStatus: ExecutionExternalHandleStatus;
-  observedStatus: ExecutionExternalHandleStatus | null;
-}
-
-export type ExecutionExternalHandleReconciliationDisposition =
-  | { kind: 'completed' }
-  | { kind: 'pending'; reason: ExecutionRecoveryPendingReason; retryAfterMs: number }
-  | { kind: 'blocked'; reason: ExecutionRecoveryHandlerBlockReason };
-
-export interface CompleteExecutionExternalHandleReconciliationInput extends ExecutionRecoveryHandlerInput<'reconcile_external_handles'> {
-  observations: ExecutionExternalHandleObservation[];
-  disposition: ExecutionExternalHandleReconciliationDisposition;
-}
-
-export interface ExecutionExternalHandleReconciliationStore {
-  claim(
-    input: ExecutionRecoveryHandlerInput<'reconcile_external_handles'>,
-  ): ExecutionExternalHandleReconciliationClaimResult;
-  complete(
-    input: CompleteExecutionExternalHandleReconciliationInput,
-  ): Promise<ExecutionRecoveryHandlerResult>;
 }
 
 function validId(value: unknown): value is string {
@@ -339,6 +316,13 @@ export function createExecutionExternalHandleReconciliationStore(
       ) {
         return { kind: 'rejected', reason: 'prerequisite_changed' };
       }
+      const monitorReadiness = assessExternalHandleMonitorReadiness(database, run.id, handles, now);
+      if (monitorReadiness.kind === 'unavailable') {
+        return { kind: 'rejected', reason: 'prerequisite_changed' };
+      }
+      if (monitorReadiness.kind === 'not_due') {
+        return { kind: 'rejected', reason: 'monitor_not_due' };
+      }
       const claimedAt = Math.max(now, row.updated_at);
       const result = database.runSync(
         `UPDATE execution_recovery_dispatches
@@ -506,6 +490,13 @@ export function createExecutionExternalHandleReconciliationStore(
           handle.lastAttemptedAt,
         );
         if (result.changes !== 1) throw new Error('execution_recovery_concurrent_observation');
+        recordExternalHandleMonitorObservation(database, {
+          handle,
+          observedStatus: observation.observedStatus,
+          disposition: disposition.kind,
+          retryAt,
+          occurredAt: attemptedAt,
+        });
       }
 
       if (observations.some((entry) => entry.observedStatus !== null)) {
@@ -565,7 +556,10 @@ export function createExecutionExternalHandleReconciliationStore(
         const allHandleStatuses = database
           .getAllSync<{
             status: string;
-          }>(`SELECT status FROM execution_external_handles WHERE run_id = ? ORDER BY id ASC`, run.id)
+          }>(
+            `SELECT status FROM execution_external_handles WHERE run_id = ? ORDER BY id ASC`,
+            run.id,
+          )
           .map((entry) => entry.status);
         const allEffectStatuses = database
           .getAllSync<{

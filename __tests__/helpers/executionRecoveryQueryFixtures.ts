@@ -3,6 +3,7 @@ import {
   effectRow,
   handleRow,
   insertCheckpoint,
+  insertMonitor,
   insertRun,
 } from '../../src/services/executionJournal/mutationStore';
 import type {
@@ -15,6 +16,7 @@ import {
   recoveryEffect,
   recoveryHandle,
   recoveryInitialCheckpoint,
+  recoveryMonitor,
   recoveryRun,
 } from './executionRecoveryFixtures';
 
@@ -47,6 +49,7 @@ export function insertRecoveryHandle(
      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ...Object.values(handleRow(handle)),
   );
+  insertMonitor(database, recoveryMonitor(handle));
 }
 
 export function seedOrderedRecoveryGraph(

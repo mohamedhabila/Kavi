@@ -1,4 +1,6 @@
-import { coordinateExecutionRecovery } from './recoveryCoordinator';
+import { coordinateExecutionRecovery, digestExecutionRecoveryCommand } from './recoveryCoordinator';
+import { getExecutionJournalDb } from './database';
+import { readExecutionMonitorSchedule } from './monitorRecords';
 import {
   createExecutionRecoveryControlStore,
   type ExecutionRecoveryControlStoreOptions,
@@ -64,5 +66,34 @@ export async function coordinatePersistedExecutionRecovery(
     runId: input.runId,
     ...(input.expectedGeneration ? { expectedGeneration: input.expectedGeneration } : {}),
   });
+  if (
+    queryResult.kind === 'recovery_plan' &&
+    queryResult.command.kind === 'reconcile_external_handles'
+  ) {
+    const monitorSchedule = readExecutionMonitorSchedule(
+      options.controlStore?.getDatabase?.() ?? getExecutionJournalDb(),
+      queryResult.runId,
+      queryResult.command.handleIds,
+    );
+    const now = options.controlStore?.clock?.() ?? Date.now();
+    if (!Number.isSafeInteger(now) || now < 0) {
+      throw new Error('execution_recovery_invalid_clock');
+    }
+    if (monitorSchedule.nextLegalCheckAt > now) {
+      return {
+        kind: 'deferred',
+        reason: 'monitor_not_due',
+        runId: queryResult.runId,
+        commandKind: queryResult.command.kind,
+        controlEpoch: queryResult.generation.controlEpoch,
+        snapshotDigest: queryResult.generation.snapshotDigest,
+        commandDigest: await digestExecutionRecoveryCommand(queryResult.command),
+        dispatchId: null,
+        dispatchDigest: null,
+        fenceId: null,
+        fenceDigest: null,
+      };
+    }
+  }
   return coordinateExecutionRecovery({ queryResult }, ports);
 }

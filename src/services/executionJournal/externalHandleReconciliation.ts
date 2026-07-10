@@ -9,7 +9,7 @@ import { requireSecret } from '../integrations/shared/secrets';
 import type {
   ExecutionExternalHandleObservation,
   ExecutionExternalHandleReconciliationStore,
-} from './externalHandleReconciliationStore';
+} from './externalHandleReconciliationTypes';
 import type {
   ExecutionRecoveryHandlerBlockReason,
   ExecutionRecoveryHandlerInput,

@@ -80,6 +80,7 @@ export const EXECUTION_RECOVERY_HANDLER_REJECTION_REASONS = [
   'control_epoch_changed',
   'cancelled',
   'duplicate_dispatch',
+  'monitor_not_due',
   'prerequisite_changed',
   'handler_unavailable',
 ] as const;
@@ -251,6 +252,7 @@ export const EXECUTION_RECOVERY_COORDINATOR_DEFER_REASONS = [
   'authority_pending',
   'authority_unavailable',
   'duplicate_dispatch',
+  'monitor_not_due',
   'dispatch_fence_contended',
   'dispatch_fence_unavailable',
   'dispatch_fence_changed',

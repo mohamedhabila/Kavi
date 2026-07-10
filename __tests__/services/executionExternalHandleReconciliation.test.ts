@@ -69,6 +69,7 @@ function seedExternalHandle(
   startFixtureEffect();
   registerExecutionExternalHandle({
     id: 'handle-1',
+    monitorId: 'monitor-1',
     runId: 'run-1',
     effectId: 'effect-1',
     expectedControlEpoch: 0,
@@ -308,7 +309,7 @@ describe('production external handle recovery vertical slice', () => {
     expect(provider.inspectExpoWorkflowRun).not.toHaveBeenCalled();
   });
 
-  it('records same-state pending polls and creates a fresh generation for the next attempt', async () => {
+  it('defers early checks and records a fresh no-op observation only when due', async () => {
     seedExternalHandle();
     let now = 100;
     const provider = inspectors({ id: 'workflow-run-1', status: 'NEW' });
@@ -317,6 +318,8 @@ describe('production external handle recovery vertical slice', () => {
     const first = await coordinatePersistedExecutionRecovery({ runId: 'run-1' }, options);
     const fresh = await readPersistedExternalRecoveryCandidate('run-1');
     now = 200;
+    const early = await coordinatePersistedExecutionRecovery({ runId: 'run-1' }, options);
+    now = 60_100;
     const second = await coordinatePersistedExecutionRecovery({ runId: 'run-1' }, options);
 
     expect(first).toEqual(
@@ -335,14 +338,27 @@ describe('production external handle recovery vertical slice', () => {
           snapshotDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
         }),
         commandDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
+        monitorHealth: {
+          monitorCount: 1,
+          observationCount: 2,
+          nextLegalCheckAt: 60_100,
+        },
         retryAt: 60_100,
       }),
     });
+    expect(early).toEqual(
+      expect.objectContaining({
+        kind: 'deferred',
+        reason: 'monitor_not_due',
+        dispatchId: null,
+        fenceId: null,
+      }),
+    );
     expect(second).toEqual(
       expect.objectContaining({
         kind: 'pending',
         reason: 'remote_still_pending',
-        retryAt: 60_200,
+        retryAt: 120_100,
       }),
     );
     expect(provider.inspectExpoWorkflowRun).toHaveBeenCalledTimes(2);
@@ -351,7 +367,27 @@ describe('production external handle recovery vertical slice', () => {
         `SELECT status, last_attempted_at, last_verified_at
          FROM execution_external_handles WHERE id = 'handle-1'`,
       ),
-    ).toEqual({ status: 'pending', last_attempted_at: 200, last_verified_at: 200 });
+    ).toEqual({
+      status: 'pending',
+      last_attempted_at: 60_100,
+      last_verified_at: 60_100,
+    });
+    expect(
+      getExecutionJournalDb().getFirstSync(
+        `SELECT baseline_status, state, next_legal_check_at, last_observed_status,
+                observation_count, last_observed_at, condition_met_at, acted_at
+         FROM execution_monitors WHERE id = 'monitor-1'`,
+      ),
+    ).toEqual({
+      baseline_status: 'pending',
+      state: 'armed',
+      next_legal_check_at: 120_100,
+      last_observed_status: 'pending',
+      observation_count: 3,
+      last_observed_at: 60_100,
+      condition_met_at: null,
+      acted_at: null,
+    });
     expect(
       getExecutionJournalDb().getFirstSync<{ count: number }>(
         'SELECT COUNT(*) AS count FROM execution_recovery_dispatches',
@@ -363,6 +399,7 @@ describe('production external handle recovery vertical slice', () => {
     seedExternalHandle();
     registerExecutionExternalHandle({
       id: 'handle-2',
+      monitorId: 'monitor-2',
       runId: 'run-1',
       effectId: 'effect-1',
       expectedControlEpoch: 0,

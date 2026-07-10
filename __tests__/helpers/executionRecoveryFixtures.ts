@@ -6,6 +6,7 @@ import type {
   ExecutionEffectStatus,
   ExecutionExternalHandleRecord,
   ExecutionExternalHandleStatus,
+  ExecutionMonitorRecord,
   ExecutionRunRecord,
 } from '../../src/services/executionJournal/types';
 import type { ExecutionJournalSnapshot } from '../../src/services/executionJournal/recoveryPlanner';
@@ -165,17 +166,44 @@ export function recoveryHandle(
   };
 }
 
+export function recoveryMonitor(
+  handle: ExecutionExternalHandleRecord = recoveryHandle(),
+  overrides: Partial<ExecutionMonitorRecord> = {},
+): ExecutionMonitorRecord {
+  const terminal = ['succeeded', 'failed', 'cancelled'].includes(handle.status);
+  return {
+    id: `monitor-${handle.id}`,
+    runId: handle.runId,
+    externalHandleId: handle.id,
+    baselineStatus: handle.status,
+    condition: 'external_handle_terminal',
+    action: 'reconcile_external_handle',
+    state: terminal ? 'acted' : 'armed',
+    nextLegalCheckAt: terminal ? null : handle.updatedAt,
+    lastObservedStatus: handle.status,
+    observationCount: 1,
+    lastObservedAt: handle.updatedAt,
+    conditionMetAt: terminal ? handle.updatedAt : null,
+    actedAt: terminal ? handle.updatedAt : null,
+    createdAt: handle.createdAt,
+    updatedAt: handle.updatedAt,
+    ...overrides,
+  };
+}
+
 export function recoverySnapshot(
   input: {
     run?: ExecutionRunRecord;
     checkpoints?: ExecutionCheckpointRecord[];
     effects?: ExecutionEffectRecord[];
     handles?: ExecutionExternalHandleRecord[];
+    monitors?: ExecutionMonitorRecord[];
   } = {},
 ): ExecutionJournalSnapshot {
   const checkpoints = input.checkpoints ?? recoveryCheckpointHistory();
   const latest = [...checkpoints].sort((left, right) => left.sequence - right.sequence).at(-1);
   const baseRun = input.run ?? recoveryRun();
+  const handles = input.handles ?? [];
   return {
     run: latest
       ? {
@@ -187,6 +215,7 @@ export function recoverySnapshot(
       : baseRun,
     checkpoints,
     effects: input.effects ?? [],
-    externalHandles: input.handles ?? [],
+    externalHandles: handles,
+    monitors: input.monitors ?? handles.map((handle) => recoveryMonitor(handle)),
   };
 }

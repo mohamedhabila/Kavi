@@ -81,6 +81,21 @@ describe('external tool observation journal', () => {
         persisted.runId,
       ),
     ).toEqual({ status: 'pending', credential_ref: 'PROJECT_EXPO_TOKEN' });
+    expect(
+      database.getFirstSync(
+        `SELECT baseline_status, condition_kind, action_kind, state,
+                next_legal_check_at, observation_count
+         FROM execution_monitors WHERE run_id = ?`,
+        persisted.runId,
+      ),
+    ).toEqual({
+      baseline_status: 'pending',
+      condition_kind: 'external_handle_terminal',
+      action_kind: 'reconcile_external_handle',
+      state: 'armed',
+      next_legal_check_at: 100,
+      observation_count: 1,
+    });
 
     await expect(readPersistedExternalRecoveryCandidate(persisted.runId)).resolves.toMatchObject({
       kind: 'candidate',
@@ -92,6 +107,34 @@ describe('external tool observation journal', () => {
           handleIds: [persisted.runId.replace('external-', 'external-handle-')],
         },
       },
+    });
+  });
+
+  it('reopens with the exact monitor baseline and bounded health evidence', async () => {
+    const persisted = await persistExternalToolObservation(pendingInput);
+    closeExecutionJournalDb();
+
+    await expect(readPersistedExternalRecoveryCandidate(persisted.runId)).resolves.toMatchObject({
+      kind: 'candidate',
+      candidate: {
+        runId: persisted.runId,
+        monitorHealth: {
+          monitorCount: 1,
+          observationCount: 1,
+          nextLegalCheckAt: 100,
+        },
+      },
+    });
+    expect(
+      getExecutionJournalDb().getFirstSync(
+        `SELECT baseline_status, last_observed_status, state
+         FROM execution_monitors WHERE run_id = ?`,
+        persisted.runId,
+      ),
+    ).toEqual({
+      baseline_status: 'pending',
+      last_observed_status: 'pending',
+      state: 'armed',
     });
   });
 
@@ -192,6 +235,21 @@ describe('external tool observation journal', () => {
         first.runId,
       ),
     ).toEqual({ boundary: 'terminal' });
+    expect(
+      database.getFirstSync(
+        `SELECT baseline_status, last_observed_status, state,
+                next_legal_check_at, condition_met_at, acted_at
+         FROM execution_monitors WHERE run_id = ?`,
+        first.runId,
+      ),
+    ).toEqual({
+      baseline_status: 'pending',
+      last_observed_status: 'succeeded',
+      state: 'acted',
+      next_legal_check_at: null,
+      condition_met_at: 110,
+      acted_at: 110,
+    });
     await expect(readPersistedExternalRecoveryCandidate(first.runId)).resolves.toEqual({
       kind: 'not_candidate',
       runId: first.runId,

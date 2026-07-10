@@ -41,6 +41,7 @@ import {
   type ExecutionRunStatus,
 } from './types';
 import type { ExecutionExternalHandleLocator } from './externalLocators';
+import { advanceExternalHandleMonitor, insertExternalHandleMonitor } from './monitorRecords';
 
 const TERMINAL_RUN_STATUSES = new Set<string>(RETENTION_DELETABLE_RUN_STATUSES);
 const EFFECT_PLANNING_AUTHORITY_STATES = new Set(['not_required', 'granted']);
@@ -95,6 +96,7 @@ export interface TransitionExecutionEffectInput {
 
 export interface RegisterExecutionExternalHandleInput {
   id: string;
+  monitorId: string;
   runId: string;
   effectId: string;
   expectedControlEpoch: number;
@@ -508,6 +510,7 @@ export function registerExecutionExternalHandle(
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ...Object.values(handleRow(handle)),
     );
+    insertExternalHandleMonitor(database, { id: input.monitorId, handle });
     touchRun(database, run, handle.createdAt);
     return readHandle(database, run.id, handle.id);
   });
@@ -554,6 +557,16 @@ export function transitionExecutionExternalHandle(
     if (result.changes !== 1) {
       throw new Error('execution_journal_concurrent_external_handle_mutation');
     }
+    advanceExternalHandleMonitor(database, {
+      runId: run.id,
+      externalHandleId: handle.id,
+      observedStatus: next.status,
+      outcome: ['succeeded', 'failed', 'cancelled'].includes(next.status) ? 'acted' : 'pending',
+      nextLegalCheckAt: ['succeeded', 'failed', 'cancelled'].includes(next.status)
+        ? null
+        : input.occurredAt,
+      occurredAt: input.occurredAt,
+    });
     touchRun(database, run, next.updatedAt);
     return readHandle(database, run.id, handle.id);
   });

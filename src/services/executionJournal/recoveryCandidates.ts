@@ -3,6 +3,10 @@ import { digestExecutionRecoveryCommand } from './recoveryCoordinator';
 import { EXECUTION_RECOVERY_ATTENTION_REASONS } from './recoveryCoordinatorTypes';
 import type { ExecutionRecoveryCommand } from './recoveryPlanner';
 import { queryExecutionRecovery, type ExecutionRecoveryGeneration } from './recoveryQuery';
+import {
+  readExecutionMonitorSchedule,
+  type ExecutionMonitorScheduleEvidence,
+} from './monitorRecords';
 
 const MAX_EXTERNAL_RECOVERY_CANDIDATES = 100;
 
@@ -27,6 +31,7 @@ export interface PersistedExternalRecoveryCandidate {
   generation: ExecutionRecoveryGeneration;
   command: Extract<ExecutionRecoveryCommand, { kind: 'reconcile_external_handles' }>;
   commandDigest: string;
+  monitorHealth: ExecutionMonitorScheduleEvidence;
   /** Exact persisted wake time for this generation's pending receipt, when one exists. */
   retryAt: number | null;
 }
@@ -197,6 +202,13 @@ async function readCandidate(runId: string): Promise<ReadPersistedExternalRecove
   if (receipt.kind === 'blocked' || receipt.kind === 'completed') {
     return { kind: 'not_candidate', runId };
   }
+  const monitorHealth = readExecutionMonitorSchedule(
+    getExecutionJournalDb(),
+    result.runId,
+    result.command.handleIds,
+  );
+  const receiptRetryAt = receipt.kind === 'pending' ? receipt.retryAt : 0;
+  const nextLegalCheckAt = Math.max(receiptRetryAt, monitorHealth.nextLegalCheckAt);
   return {
     kind: 'candidate',
     candidate: {
@@ -204,7 +216,8 @@ async function readCandidate(runId: string): Promise<ReadPersistedExternalRecove
       generation: result.generation,
       command: result.command,
       commandDigest: await digestExecutionRecoveryCommand(result.command),
-      retryAt: receipt.kind === 'pending' ? receipt.retryAt : null,
+      monitorHealth,
+      retryAt: nextLegalCheckAt > result.generation.updatedAt ? nextLegalCheckAt : null,
     },
   };
 }

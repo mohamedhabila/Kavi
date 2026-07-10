@@ -212,6 +212,16 @@ describe('execution recovery query contract', () => {
 });
 
 describe('execution recovery query corruption boundaries', () => {
+  it('fails closed when a durable external handle loses its monitor history', async () => {
+    const database = getExecutionJournalDb();
+    seedOrderedRecoveryGraph(database);
+    database.runSync(`DELETE FROM execution_monitors WHERE external_handle_id = 'handle-a'`);
+
+    expect(await queryExecutionRecovery({ runId: 'run-1' })).toEqual(
+      blockedResult('run-1', 'missing_history'),
+    );
+  });
+
   it.each([
     ['run', "UPDATE execution_runs SET input_digest = 'invalid' WHERE id = 'run-1'"],
     [

@@ -5,6 +5,7 @@ import {
   decodeExecutionCheckpointRow,
   decodeExecutionEffectRow,
   decodeExecutionExternalHandleRow,
+  decodeExecutionMonitorRow,
   decodeExecutionRunRow,
 } from './decoders';
 import {
@@ -12,7 +13,11 @@ import {
   type ExecutionJournalSnapshot,
   type ExecutionRecoveryCommand,
 } from './recoveryPlanner';
-import type { ExecutionCheckpointRecord, ExecutionEffectRecord } from './types';
+import type {
+  ExecutionCheckpointRecord,
+  ExecutionEffectRecord,
+  ExecutionExternalHandleRecord,
+} from './types';
 
 const SNAPSHOT_GENERATION_FORMAT = 'kavi.execution-recovery-snapshot.v1';
 
@@ -113,11 +118,22 @@ function readReferencedEffect(
   return row ? decodeExecutionEffectRow(row) : null;
 }
 
+function readReferencedHandle(
+  database: SQLite.SQLiteDatabase,
+  handleId: string,
+): ExecutionExternalHandleRecord | null {
+  const row = database.getFirstSync<unknown>(
+    'SELECT * FROM execution_external_handles WHERE id = ?',
+    handleId,
+  );
+  return row ? decodeExecutionExternalHandleRow(row) : null;
+}
+
 function assertClosedSnapshotOwnershipAndHistory(
   database: SQLite.SQLiteDatabase,
   snapshot: ExecutionJournalSnapshot,
 ): void {
-  const { run, checkpoints, effects, externalHandles } = snapshot;
+  const { run, checkpoints, effects, externalHandles, monitors } = snapshot;
   if (
     checkpoints.length === 0 ||
     checkpoints[0].sequence !== 0 ||
@@ -153,6 +169,7 @@ function assertClosedSnapshotOwnershipAndHistory(
     effectIds.add(effect.id);
   }
 
+  const handleIds = new Set<string>();
   for (const handle of externalHandles) {
     if (handle.runId !== run.id) {
       throw new ClosedRecoveryQueryError('mixed_ownership');
@@ -161,6 +178,28 @@ function assertClosedSnapshotOwnershipAndHistory(
       const referenced = readReferencedEffect(database, handle.effectId);
       throw new ClosedRecoveryQueryError(referenced ? 'mixed_ownership' : 'missing_history');
     }
+    handleIds.add(handle.id);
+  }
+
+  const monitorHandleIds = new Set<string>();
+  for (const monitor of monitors) {
+    if (monitor.runId !== run.id) {
+      throw new ClosedRecoveryQueryError('mixed_ownership');
+    }
+    if (!handleIds.has(monitor.externalHandleId)) {
+      const referenced = readReferencedHandle(database, monitor.externalHandleId);
+      throw new ClosedRecoveryQueryError(referenced ? 'mixed_ownership' : 'missing_history');
+    }
+    if (monitorHandleIds.has(monitor.externalHandleId)) {
+      throw new ClosedRecoveryQueryError('missing_history');
+    }
+    monitorHandleIds.add(monitor.externalHandleId);
+  }
+  if (
+    monitorHandleIds.size !== handleIds.size ||
+    [...handleIds].some((handleId) => !monitorHandleIds.has(handleId))
+  ) {
+    throw new ClosedRecoveryQueryError('missing_history');
   }
 }
 
@@ -201,6 +240,13 @@ function readRecoverySnapshot(
           runId,
         )
         .map(decodeExecutionExternalHandleRow),
+      monitors: database
+        .getAllSync<unknown>(
+          `SELECT * FROM execution_monitors
+           WHERE run_id = ? ORDER BY created_at ASC, id ASC`,
+          runId,
+        )
+        .map(decodeExecutionMonitorRow),
     };
     assertClosedSnapshotOwnershipAndHistory(database, snapshot);
     database.execSync('COMMIT');

@@ -6,6 +6,7 @@ import type {
   ExecutionEffectStatus,
   ExecutionExternalHandleRecord,
   ExecutionExternalHandleStatus,
+  ExecutionMonitorRecord,
   ExecutionRunRecord,
   ExecutionRunStatus,
 } from './types';
@@ -39,6 +40,7 @@ export interface ExecutionJournalSnapshot {
   checkpoints: readonly ExecutionCheckpointRecord[];
   effects: readonly ExecutionEffectRecord[];
   externalHandles: readonly ExecutionExternalHandleRecord[];
+  monitors: readonly ExecutionMonitorRecord[];
 }
 
 interface CheckpointRecoveryPointer {
@@ -195,10 +197,11 @@ function pointer(
 }
 
 function isSnapshotStructurallyValid(snapshot: ExecutionJournalSnapshot): boolean {
-  const { run, checkpoints, effects, externalHandles } = snapshot;
+  const { run, checkpoints, effects, externalHandles, monitors } = snapshot;
   const checkpointIds = new Set<string>();
   const effectIds = new Set<string>();
   const handleIds = new Set<string>();
+  const monitorHandleIds = new Set<string>();
   const checkpointById = new Map<string, ExecutionCheckpointRecord>();
   const effectById = new Map<string, ExecutionEffectRecord>();
   const orderedCheckpoints = [...checkpoints].sort((left, right) => left.sequence - right.sequence);
@@ -277,6 +280,30 @@ function isSnapshotStructurallyValid(snapshot: ExecutionJournalSnapshot): boolea
       return false;
     }
     handleIds.add(handle.id);
+  }
+  const handleById = new Map(externalHandles.map((handle) => [handle.id, handle]));
+  for (const monitor of monitors) {
+    const handle = handleById.get(monitor.externalHandleId);
+    if (
+      monitor.runId !== run.id ||
+      !handle ||
+      monitorHandleIds.has(monitor.externalHandleId) ||
+      monitor.lastObservedStatus !== handle.status ||
+      monitor.createdAt !== handle.createdAt ||
+      monitor.updatedAt > run.updatedAt ||
+      (HANDLE_RECOVERY_CLASS[handle.status] === 'unresolved' &&
+        !['armed', 'blocked'].includes(monitor.state)) ||
+      (HANDLE_RECOVERY_CLASS[handle.status] === 'terminal' && monitor.state !== 'acted')
+    ) {
+      return false;
+    }
+    monitorHandleIds.add(monitor.externalHandleId);
+  }
+  if (
+    externalHandles.length !== monitors.length ||
+    externalHandles.some((handle) => !monitorHandleIds.has(handle.id))
+  ) {
+    return false;
   }
   return true;
 }

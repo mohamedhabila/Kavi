@@ -128,6 +128,7 @@ function seedCandidate(suffix: string, createdAt: number): void {
   });
   registerExecutionExternalHandle({
     id: `handle-${suffix}`,
+    monitorId: `monitor-${suffix}`,
     runId,
     effectId: `effect-${suffix}`,
     expectedControlEpoch: 0,
@@ -208,6 +209,14 @@ describe('persisted external recovery candidate scan', () => {
        WHERE id = 'effect-a'`,
       DIGEST_C,
     );
+    getExecutionJournalDb().runSync(
+      `UPDATE execution_monitors
+       SET state = 'acted', next_legal_check_at = NULL,
+           last_observed_status = 'succeeded', observation_count = 2,
+           last_observed_at = 16, condition_met_at = 16, acted_at = 16,
+           updated_at = 16
+       WHERE id = 'monitor-a'`,
+    );
 
     await expect(listPersistedExternalRecoveryCandidates({ limit: 10 })).resolves.toEqual({
       kind: 'candidates',
@@ -267,6 +276,16 @@ describe('persisted external recovery candidate scan', () => {
       `UPDATE execution_external_handles SET workflow_run_id = 'latest' WHERE id = 'handle-a'`,
     );
     database.execSync('PRAGMA ignore_check_constraints = OFF');
+
+    await expect(listPersistedExternalRecoveryCandidates({ limit: 10 })).resolves.toEqual({
+      kind: 'blocked',
+      reason: 'journal_unavailable',
+    });
+  });
+
+  it('fails the scan closed when monitor history is missing', async () => {
+    seedCandidate('a', 10);
+    getExecutionJournalDb().runSync(`DELETE FROM execution_monitors WHERE id = 'monitor-a'`);
 
     await expect(listPersistedExternalRecoveryCandidates({ limit: 10 })).resolves.toEqual({
       kind: 'blocked',
