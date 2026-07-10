@@ -33,7 +33,7 @@ export async function executeAgentControlGraphIteration(
     maxTokens: params.maxTokens,
     personaThinkingLevel: params.personaThinkingLevel,
     promptContextSupport: params.promptContextSupport,
-    requestAction: params.requestAction,
+    requestFrame: params.requestFrame,
     thinkingLevel: params.thinkingLevel,
     trackedAsyncOperations: params.trackedAsyncOperations,
     turnDirectives: params.graph.getCurrentTurnDirectives(),

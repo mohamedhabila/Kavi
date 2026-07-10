@@ -1,13 +1,17 @@
 import type { Message } from '../../types/message';
-import { type RequestAssessment } from '../../services/agents/requestGovernance';
-import { hasModelVisibleAttachments } from '../../utils/messageAttachments';
+import type {
+  RequestContinuation,
+  RequestFrame,
+} from '../../services/agents/requestFrame';
+import { filterModelVisibleAttachments } from '../../utils/messageAttachments';
 import { getUserMessagePromptContent } from '../prompts/orchestratorPromptSections';
 import { selectAgentControlGraphModelContextMessages } from './modelContext';
-import { assessGraphEntryRequest } from './requestEntrySignals';
+import { buildGraphEntryRequestFrame } from './requestEntrySignals';
 
 type PrepareAgentControlGraphRequestContextParams = {
   graphOwnedRun: boolean;
   memoryScopedMessages: ReadonlyArray<Message>;
+  continuation: RequestContinuation;
   workflowScopeUserMessageId?: string;
 };
 
@@ -16,7 +20,7 @@ export type AgentControlGraphRequestContext = {
   hasWorkflowScopeAnchor: boolean;
   lastUserMessageText: string;
   missingWorkflowScopeAnchorId?: string;
-  requestAssessment: RequestAssessment;
+  requestFrame: RequestFrame;
   requestContextLastUserMessage?: Message;
 };
 
@@ -34,11 +38,14 @@ export function prepareAgentControlGraphRequestContext(
   const lastUserMessageText = requestContextLastUserMessage
     ? getUserMessagePromptContent(requestContextLastUserMessage)
     : '';
-  const requestAssessment = assessGraphEntryRequest({
+  const requestFrame = buildGraphEntryRequestFrame({
     text: lastUserMessageText,
-    hasAttachments: hasModelVisibleAttachments(requestContextLastUserMessage?.attachments),
+    attachmentCount:
+      filterModelVisibleAttachments(requestContextLastUserMessage?.attachments)?.length ?? 0,
+    mode: params.graphOwnedRun ? 'agentic' : 'chitchat',
+    continuation: params.continuation,
   });
-  const workflowCandidateRequest = requestAssessment.action !== 'clarify';
+  const workflowCandidateRequest = requestFrame.decision.action === 'act';
   const graphOwnedModelContextMessages =
     params.graphOwnedRun && workflowCandidateRequest
       ? selectAgentControlGraphModelContextMessages({
@@ -66,7 +73,7 @@ export function prepareAgentControlGraphRequestContext(
         ? { missingWorkflowScopeAnchorId: normalizedWorkflowScopeUserMessageId }
         : {}
       : {}),
-    requestAssessment,
+    requestFrame,
     ...(effectiveRequestContextLastUserMessage
       ? { requestContextLastUserMessage: effectiveRequestContextLastUserMessage }
       : {}),

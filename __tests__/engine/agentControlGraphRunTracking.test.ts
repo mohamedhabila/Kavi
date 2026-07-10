@@ -9,7 +9,8 @@ const userMessage = (content: string, attachmentCount = 0): Message => ({
   attachments: Array.from({ length: attachmentCount }, (_, index) => ({
     id: `attachment-${index}`,
     name: `attachment-${index}.txt`,
-    type: 'text/plain',
+    type: 'file',
+    mimeType: 'text/plain',
     uri: `file:///attachment-${index}.txt`,
     size: 1,
   })),
@@ -34,6 +35,28 @@ describe('agent control graph run tracking', () => {
         messageCount: 1,
       }),
     ).toBe(true);
+  });
+
+  it('tracks attachment-only agentic requests', () => {
+    expect(
+      shouldTrackForegroundAgentRun({
+        conversationMode: 'agentic',
+        latestUserMessage: userMessage('', 1),
+        messageCount: 1,
+      }),
+    ).toBe(true);
+  });
+
+  it('does not track structurally empty or punctuation-only input', () => {
+    for (const content of ['', ' ... ']) {
+      expect(
+        shouldTrackForegroundAgentRun({
+          conversationMode: 'agentic',
+          latestUserMessage: userMessage(content),
+          messageCount: 1,
+        }),
+      ).toBe(false);
+    }
   });
 
   it('does not track chitchat turns even when the text is actionable', () => {

@@ -74,5 +74,11 @@ describe('orchestrator request memory consistency identity', () => {
     expect(result.memoryConsistencyBarrier).toEqual(
       expect.objectContaining({ outcome: 'no_job', queryCount: 1 }),
     );
+    expect(result.requestFrame).toMatchObject({
+      mode: 'chitchat',
+      input: { kind: 'text' },
+      continuation: 'new',
+      decision: { action: 'act' },
+    });
   });
 });

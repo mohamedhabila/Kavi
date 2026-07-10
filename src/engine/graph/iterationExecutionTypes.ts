@@ -1,4 +1,4 @@
-import type { RequestAssessmentAction } from '../../services/agents/requestGovernance';
+import type { RequestFrame } from '../../services/agents/requestFrame';
 import type { GraphObservabilityAuditType } from './graphObservability';
 import type { LivingMemoryBridgeOutput } from '../../services/memory/livingMemoryBridge';
 import type { AgentRunControlGraphState } from '../../types/agentRun';
@@ -160,7 +160,7 @@ export interface ExecuteAgentControlGraphIterationParams {
   personaThinkingLevel?: ThinkingLevel;
   promptContextSupport: PromptContextSupport;
   reportUsage: (usage: TokenUsage) => void;
-  requestAction: RequestAssessmentAction;
+  requestFrame: RequestFrame;
   runtime: AgentControlGraphIterationRuntimeState;
   signal?: AbortController;
   temperature?: number;

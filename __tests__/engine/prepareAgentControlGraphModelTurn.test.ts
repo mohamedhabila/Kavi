@@ -1,4 +1,5 @@
 import { prepareAgentControlGraphModelTurn } from '../../src/engine/graph/prepareAgentControlGraphModelTurn';
+import { buildGraphEntryRequestFrame } from '../../src/engine/graph/requestEntrySignals';
 import { prepareAgentTurn } from '../../src/engine/graph/agentTurnPreparation';
 import { planIterationModel } from '../../src/services/context/tokenOptimization';
 
@@ -138,7 +139,12 @@ function createBaseParams() {
       resolvedPrompt: 'You are a test agent.',
       skillPrompts: '',
     },
-    requestAction: 'proceed' as const,
+    requestFrame: buildGraphEntryRequestFrame({
+      text: 'Run the task',
+      attachmentCount: 0,
+      mode: 'agentic',
+      continuation: 'new',
+    }),
     thinkingLevel: 'low' as const,
     trackedAsyncOperations: new Map<string, any>(),
     turnDirectives: {
@@ -199,7 +205,12 @@ describe('prepareAgentControlGraphModelTurn', () => {
 
     const result = await prepareAgentControlGraphModelTurn({
       ...createBaseParams(),
-      requestAction: 'clarify',
+      requestFrame: buildGraphEntryRequestFrame({
+        text: '',
+        attachmentCount: 0,
+        mode: 'agentic',
+        continuation: 'new',
+      }),
       turnDirectives: {
         forceFinalText: false,
         requireWorkflowTool: false,
@@ -302,7 +313,12 @@ describe('prepareAgentControlGraphModelTurn', () => {
 
     await prepareAgentControlGraphModelTurn({
       ...createBaseParams(),
-      requestAction: 'proceed',
+      requestFrame: buildGraphEntryRequestFrame({
+        text: 'Run the task',
+        attachmentCount: 0,
+        mode: 'agentic',
+        continuation: 'new',
+      }),
       promptContextSupport: {
         ...createBaseParams().promptContextSupport,
         conversationMemory: 'Prior conversation memory',

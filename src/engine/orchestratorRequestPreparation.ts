@@ -3,7 +3,10 @@ import { runMediaUnderstanding } from '../services/media/service';
 import { type LivingMemoryBridgeOutput } from '../services/memory/livingMemoryBridge';
 import { buildUnifiedMemoryAccessContext } from '../services/memory/memoryAccessGateway';
 import { excludeTrailingInternalUserMessages } from '../services/context/messageScoping';
-import type { RequestAssessment } from '../services/agents/requestGovernance';
+import type {
+  RequestContinuation,
+  RequestFrame,
+} from '../services/agents/requestFrame';
 import { getSkillSystemPrompts } from '../services/skills/manager';
 import type { AgentRunControlGraphState } from '../types/agentRun';
 import type { LlmProviderConfig } from '../types/provider';
@@ -38,6 +41,22 @@ type PreMemoryEnrichmentResult = {
   enrichedContent?: string;
   shouldPersistEnrichment?: boolean;
 };
+
+function resolveRequestContinuation(
+  graphSnapshot: AgentRunControlGraphState | undefined,
+): RequestContinuation {
+  if (!graphSnapshot) return 'new';
+  if (
+    graphSnapshot.status === 'waiting_async' ||
+    graphSnapshot.asyncWork.awaitingBackgroundWorkers ||
+    graphSnapshot.asyncWork.pendingOperations.some(
+      (operation) => operation.status === 'running' || operation.status === 'cancel_requested',
+    )
+  ) {
+    return 'resume_waiting_async';
+  }
+  return 'resume';
+}
 
 async function enrichLatestUserMessageForRequest(params: {
   activeModel: string;
@@ -132,7 +151,7 @@ export async function prepareOrchestratorRequestBundle(params: {
   memoryConsistencyBarrier: Awaited<
     ReturnType<typeof buildUnifiedMemoryAccessContext>
   >['consistencyBarrier'];
-  requestAssessment: RequestAssessment;
+  requestFrame: RequestFrame;
   skillPrompts: Awaited<ReturnType<typeof getSkillSystemPrompts>>;
   workingMessages: Message[];
 }> {
@@ -215,6 +234,7 @@ export async function prepareOrchestratorRequestBundle(params: {
     memoryScopedMessages: memoryAccessContext.scopedMessages,
     workflowScopeUserMessageId: params.workflowScopeUserMessageId,
     graphOwnedRun: params.graphOwnedRun,
+    continuation: resolveRequestContinuation(params.graphSnapshot),
   });
   if (requestContext.missingWorkflowScopeAnchorId) {
     params.logger.devWarn(
@@ -260,7 +280,7 @@ export async function prepareOrchestratorRequestBundle(params: {
     latestUserMessageText: requestContext.lastUserMessageText,
     livingMemory: memoryAccessContext.livingMemory,
     memoryConsistencyBarrier: memoryAccessContext.consistencyBarrier,
-    requestAssessment: requestContext.requestAssessment,
+    requestFrame: requestContext.requestFrame,
     skillPrompts,
     workingMessages,
   };

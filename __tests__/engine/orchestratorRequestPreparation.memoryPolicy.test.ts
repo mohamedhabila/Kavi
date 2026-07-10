@@ -116,4 +116,26 @@ describe('orchestrator request memory policy', () => {
       'memory unavailable',
     );
   });
+
+  it('captures a waiting-async resume as code-owned continuation state', async () => {
+    mockedBuildUnifiedMemoryAccessContext.mockResolvedValue(gatewayResult());
+    const result = await prepareOrchestratorRequestBundle({
+      ...baseParams(),
+      graphOwnedRun: true,
+      graphSnapshot: {
+        status: 'waiting_async',
+        goals: [],
+        asyncWork: {
+          awaitingBackgroundWorkers: false,
+          pendingOperations: [],
+          updatedAt: 1,
+        },
+      } as never,
+    });
+
+    expect(result.requestFrame).toMatchObject({
+      mode: 'agentic',
+      continuation: 'resume_waiting_async',
+    });
+  });
 });

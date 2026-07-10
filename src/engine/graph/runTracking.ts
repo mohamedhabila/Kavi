@@ -1,7 +1,7 @@
 import type { ConversationMode } from '../../types/conversation';
 import type { Message } from '../../types/message';
-import { hasModelVisibleAttachments } from '../../utils/messageAttachments';
-import { assessGraphEntryRequest } from './requestEntrySignals';
+import { filterModelVisibleAttachments } from '../../utils/messageAttachments';
+import { buildGraphEntryRequestFrame } from './requestEntrySignals';
 
 export function shouldTrackForegroundAgentRun(params: {
   conversationMode?: ConversationMode;
@@ -19,10 +19,13 @@ export function shouldTrackForegroundAgentRun(params: {
     return true;
   }
 
-  const assessment = assessGraphEntryRequest({
+  const frame = buildGraphEntryRequestFrame({
     text: params.latestUserMessage?.content,
-    hasAttachments: hasModelVisibleAttachments(params.latestUserMessage?.attachments),
+    attachmentCount:
+      filterModelVisibleAttachments(params.latestUserMessage?.attachments)?.length ?? 0,
+    mode: 'agentic',
+    continuation: 'new',
   });
 
-  return assessment.action !== 'clarify';
+  return frame.decision.action === 'act';
 }

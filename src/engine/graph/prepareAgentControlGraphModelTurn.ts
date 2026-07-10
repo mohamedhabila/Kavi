@@ -23,7 +23,7 @@ export async function prepareAgentControlGraphModelTurn(
     iteration: params.iteration,
     maxTokens: params.maxTokens,
     personaThinkingLevel: params.personaThinkingLevel,
-    requestAction: params.requestAction,
+    requestFrame: params.requestFrame,
     thinkingLevel: params.thinkingLevel,
     turnDirectives: params.turnDirectives,
     workingMessages: params.workingMessages,

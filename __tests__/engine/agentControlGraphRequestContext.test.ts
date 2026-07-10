@@ -22,6 +22,7 @@ describe('agent control graph request context', () => {
     const context = prepareAgentControlGraphRequestContext({
       graphOwnedRun: true,
       memoryScopedMessages: messages,
+      continuation: 'new',
       workflowScopeUserMessageId: 'u-current',
     });
 
@@ -46,6 +47,7 @@ describe('agent control graph request context', () => {
     const context = prepareAgentControlGraphRequestContext({
       graphOwnedRun: true,
       memoryScopedMessages: messages,
+      continuation: 'new',
       workflowScopeUserMessageId: 'missing-user',
     });
 
@@ -57,6 +59,7 @@ describe('agent control graph request context', () => {
     const context = prepareAgentControlGraphRequestContext({
       graphOwnedRun: true,
       memoryScopedMessages: [msg('u-current', 'user', 'Continue the task')],
+      continuation: 'resume',
       workflowScopeUserMessageId: 'u-current',
     });
 
@@ -67,10 +70,45 @@ describe('agent control graph request context', () => {
     const context = prepareAgentControlGraphRequestContext({
       graphOwnedRun: true,
       memoryScopedMessages: [msg('u-direct', 'user', 'CHECKNO42')],
+      continuation: 'new',
       workflowScopeUserMessageId: 'u-direct',
     });
 
-    expect(context.requestAssessment.action).toBe('proceed');
+    expect(context.requestFrame).toMatchObject({
+      version: 1,
+      mode: 'agentic',
+      input: { kind: 'text', attachmentCount: 0 },
+      continuation: 'new',
+      requiredInformation: [],
+      decision: { action: 'act', reason: 'actionable_input' },
+    });
     expect(context.lastUserMessageText).toBe('CHECKNO42');
+  });
+
+  it('treats a model-visible attachment as actionable without invented text', () => {
+    const userMessage = msg('u-attachment', 'user', '');
+    userMessage.attachments = [
+      {
+        id: 'attachment-1',
+        type: 'image',
+        uri: 'file:///photo.png',
+        name: 'photo.png',
+        mimeType: 'image/png',
+        size: 100,
+      },
+    ];
+
+    const context = prepareAgentControlGraphRequestContext({
+      graphOwnedRun: true,
+      memoryScopedMessages: [userMessage],
+      continuation: 'new',
+      workflowScopeUserMessageId: 'u-attachment',
+    });
+
+    expect(context.requestFrame).toMatchObject({
+      input: { kind: 'attachments', attachmentCount: 1 },
+      decision: { action: 'act', reason: 'actionable_input' },
+    });
+    expect(context.hasWorkflowScopeAnchor).toBe(true);
   });
 });

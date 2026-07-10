@@ -1,4 +1,4 @@
-import type { RequestAssessmentAction } from '../../../services/agents/requestGovernance';
+import type { RequestFrame } from '../../../services/agents/requestFrame';
 import { planIterationModel } from '../../../services/context/tokenOptimization';
 import {
   isOnDeviceLlmProvider,
@@ -17,7 +17,7 @@ export function resolveModelTurnIterationRequest(params: {
   iteration: number;
   maxTokens: number;
   personaThinkingLevel?: ThinkingLevel;
-  requestAction: RequestAssessmentAction;
+  requestFrame: RequestFrame;
   thinkingLevel: ThinkingLevel;
   turnDirectives: AgentControlTurnDirectives;
   workingMessages: ReadonlyArray<Message>;
@@ -30,7 +30,7 @@ export function resolveModelTurnIterationRequest(params: {
   toolingEnabledForProvider: boolean;
 } {
   const effectiveForceTextThisTurn =
-    params.turnDirectives.forceFinalText || params.requestAction === 'clarify';
+    params.turnDirectives.forceFinalText || params.requestFrame.decision.action !== 'act';
   const actionablePromptTurn = !effectiveForceTextThisTurn;
   const hasRecentToolMessages = params.workingMessages
     .slice(-6)
@@ -60,7 +60,7 @@ export function resolveModelTurnIterationRequest(params: {
 
   const effectiveForceTextReasonThisTurn = params.turnDirectives.forceFinalText
     ? params.turnDirectives.forcedTextReason
-    : params.requestAction === 'clarify'
+    : params.requestFrame.decision.action !== 'act'
       ? 'request_governance'
       : undefined;
 

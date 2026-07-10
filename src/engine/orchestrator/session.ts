@@ -64,7 +64,7 @@ export async function runOrchestratorGraphSession(params: {
   );
   const runtimeContextNote = buildRuntimeContextNote();
 
-  const { latestUserMessageText, livingMemory, requestAssessment, skillPrompts, workingMessages } =
+  const { latestUserMessageText, livingMemory, requestFrame, skillPrompts, workingMessages } =
     await prepareOrchestratorRequestBundle({
       activeModel,
       activeProvider,
@@ -152,7 +152,7 @@ export async function runOrchestratorGraphSession(params: {
         callbacks.onUsage?.(usage);
         recordUsage(usageConversationId, usage);
       },
-      requestAction: requestAssessment.action,
+      requestFrame,
       signal,
       temperature: persona?.temperature ?? temperature,
       thinkingLevel,
