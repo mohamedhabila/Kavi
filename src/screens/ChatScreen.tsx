@@ -58,7 +58,6 @@ export const ChatScreen: React.FC = () => {
   const navigation = useNavigation<DrawerNavigationProp<any>>();
   const isFocused = useIsFocused();
   const flatListRef = useRef<FlatList<ResolvedDisplayMessageItem>>(null);
-  const runInvocationSequenceRef = useRef(0);
   const { colors } = useAppTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -69,7 +68,6 @@ export const ChatScreen: React.FC = () => {
     conversations,
     activeConversation,
     activeConversationId,
-    isLoading,
     getOrCreateCanonicalThread,
     addMessage,
     updateMessage,
@@ -116,7 +114,6 @@ export const ChatScreen: React.FC = () => {
   const [chatError, setChatError] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState<string | undefined>(undefined);
-  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [visibleSourceMessageLimit, setVisibleSourceMessageLimit] = useState(
     INITIAL_CHAT_SOURCE_MESSAGE_LIMIT,
   );
@@ -130,14 +127,18 @@ export const ChatScreen: React.FC = () => {
     updateStreamingDraft,
   } = useStreamingDrafts();
   const {
+    activeForegroundConversationIds,
     abortForegroundRequestForConversation,
-    abortRef,
     clearForegroundRequest,
     clearForegroundRequestForConversation,
-    foregroundRequestConversationId,
+    foregroundStreamingMessageIds,
     isCurrentForegroundRequest,
     registerForegroundRequest,
-  } = useForegroundRequest({ setLoading, setStreamingMessageId });
+    setForegroundRequestStreamingMessageId,
+  } = useForegroundRequest({ setLoading });
+  const streamingMessageId = activeConversationId
+    ? (foregroundStreamingMessageIds.get(activeConversationId) ?? null)
+    : null;
   const previousVisibleCountRef = useRef(0);
   const previousSourceMessageCountRef = useRef(0);
   const displayStateCacheRef = useRef(createChatDisplayStateCache());
@@ -184,7 +185,9 @@ export const ChatScreen: React.FC = () => {
     activeModel,
     activeProviderId,
     defaultConversationMode,
-    foregroundRequestConversationId,
+    hasForegroundRequest: activeConversationId
+      ? activeForegroundConversationIds.has(activeConversationId)
+      : false,
     providers,
   });
 
@@ -261,10 +264,9 @@ export const ChatScreen: React.FC = () => {
   });
 
   useRecoveredAsyncRunResume({
-    abortRef,
+    activeForegroundConversationIds,
     appendConversationLog,
     conversations,
-    isLoading,
     pendingAgentRunAsyncResumesRef,
     resumeAgentRunRef,
     setAgentRunPhase,
@@ -356,13 +358,12 @@ export const ChatScreen: React.FC = () => {
       pendingAgentRunAsyncResumesRef,
       pendingAgentRunFinalizationsRef,
       pendingAgentRunTerminalReviewsRef,
-      runInvocationSequenceRef,
       shouldAutoFollowRef,
       streamingDraftsRef,
     },
     requests: {
       abortForegroundRequestForConversation,
-      setStreamingMessageId,
+      setStreamingMessageId: setForegroundRequestStreamingMessageId,
     },
     setChatError,
     state: {

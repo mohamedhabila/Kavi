@@ -47,6 +47,13 @@ export function createForegroundRunRuntimeControllers(params: RuntimeControllers
     runStartedAt,
     shared,
   } = params;
+  const setStreamingMessageId = (messageId: string | null) =>
+    shared.requests.setStreamingMessageId(
+      conversationId,
+      bootstrapResult.foregroundRequestId,
+      bootstrapResult.abortController,
+      messageId,
+    );
 
   const trackedRunStore = createForegroundTrackedRunStore({
     actions: {
@@ -82,7 +89,7 @@ export function createForegroundRunRuntimeControllers(params: RuntimeControllers
           role: 'assistant',
           content: '',
         });
-        shared.requests.setStreamingMessageId(messageId);
+        setStreamingMessageId(messageId);
         mutableState.assistantTurnCount += 1;
         trackedRunStore.syncSummary();
       },
@@ -157,7 +164,7 @@ export function createForegroundRunRuntimeControllers(params: RuntimeControllers
     assistantStream.commitBuffers(true);
     shared.refs.forceNextScrollRef.current = shared.refs.shouldAutoFollowRef.current;
     shared.store.addMessage(conversationId, surfacedOutputEffect.assistantMessage);
-    shared.requests.setStreamingMessageId(surfacedOutputEffect.assistantMessage.id);
+    setStreamingMessageId(surfacedOutputEffect.assistantMessage.id);
     mutableState.surfacedSubAgentOutputLock = surfacedOutputEffect.lock;
     trackedRunStore.syncSummary(surfacedOutputEffect.latestSummary);
     return true;

@@ -65,14 +65,27 @@ export type ForegroundConversationRunStoreActions = Pick<
 
 export interface ForegroundConversationRunRequestActions {
   abortForegroundRequestForConversation: (conversationId: string, reason?: string) => boolean;
-  clearForegroundRequest: (requestId: string, abortController: AbortController) => boolean;
-  isCurrentForegroundRequest: (requestId: string, abortController: AbortController) => boolean;
+  clearForegroundRequest: (
+    conversationId: string,
+    requestId: string,
+    abortController: AbortController,
+  ) => boolean;
+  isCurrentForegroundRequest: (
+    conversationId: string,
+    requestId: string,
+    abortController: AbortController,
+  ) => boolean;
   registerForegroundRequest: (
     requestId: string,
     conversationId: string,
     abortController: AbortController,
   ) => void;
-  setStreamingMessageId: (messageId: string | null) => void;
+  setStreamingMessageId: (
+    conversationId: string,
+    requestId: string,
+    abortController: AbortController,
+    messageId: string | null,
+  ) => boolean;
 }
 
 export interface ForegroundConversationRunStreamingActions {
@@ -91,7 +104,6 @@ export interface ForegroundConversationRunRefs {
   pendingAgentRunAsyncResumesRef: MutableRefObject<Map<string, Promise<void>>>;
   pendingAgentRunFinalizationsRef: MutableRefObject<Map<string, Promise<string | undefined>>>;
   pendingAgentRunTerminalReviewsRef: MutableRefObject<Map<string, Promise<void>>>;
-  runInvocationSequenceRef: MutableRefObject<number>;
   shouldAutoFollowRef: MutableRefObject<boolean>;
   streamingDraftsRef: MutableRefObject<Record<string, ForegroundStreamingDraft | undefined>>;
 }

@@ -30,19 +30,17 @@ type QueueRecoveredAsyncRunResume = (params: {
 }) => Promise<void>;
 
 export function useRecoveredAsyncRunResume({
-  abortRef,
+  activeForegroundConversationIds,
   appendConversationLog,
   conversations,
-  isLoading,
   pendingAgentRunAsyncResumesRef,
   resumeAgentRunRef,
   setAgentRunPhase,
   updateAgentRunSummary,
 }: {
-  abortRef: MutableRefObject<AbortController | null>;
+  activeForegroundConversationIds: ReadonlySet<string>;
   appendConversationLog: AppendConversationLog;
   conversations: Conversation[];
-  isLoading: boolean;
   pendingAgentRunAsyncResumesRef: MutableRefObject<Map<string, Promise<void>>>;
   resumeAgentRunRef: MutableRefObject<ResumeAgentRun | null>;
   setAgentRunPhase: ReturnType<typeof useChatStore.getState>['setAgentRunPhase'];
@@ -157,11 +155,11 @@ export function useRecoveredAsyncRunResume({
   );
 
   useEffect(() => {
-    if (isLoading || abortRef.current) {
-      return;
-    }
-
     for (const conversation of conversations) {
+      if (activeForegroundConversationIds.has(conversation.id)) {
+        continue;
+      }
+
       const resumableRuns = (conversation.agentRuns ?? []).filter((run) => {
         if (run.status !== 'running' || isAgentRunAwaitingBackgroundWorkers(run)) {
           return false;
@@ -178,7 +176,7 @@ export function useRecoveredAsyncRunResume({
         });
       }
     }
-  }, [abortRef, conversations, isLoading, queueRecoveredAsyncRunResume]);
+  }, [activeForegroundConversationIds, conversations, queueRecoveredAsyncRunResume]);
 
   return queueRecoveredAsyncRunResume;
 }

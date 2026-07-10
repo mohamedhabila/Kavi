@@ -2,6 +2,7 @@ import { runOrchestrator } from '../../src/engine/orchestrator';
 import { executeForegroundConversationRun } from '../../src/engine/graph/foregroundRun/execution';
 import { resolveForegroundConversationExecutionContext } from '../../src/engine/graph/foregroundRun/executionContext';
 import { resolveForegroundRunPreflight } from '../../src/engine/graph/foregroundRun/preflight';
+import { createForegroundRequestRegistry } from '../../src/engine/graph/foregroundRun/requestRegistry';
 import type { Conversation } from '../../src/types/conversation';
 import type { LlmProviderConfig } from '../../src/types/provider';
 import {
@@ -84,7 +85,6 @@ function createExecutionContext(params: {
       pendingAgentRunAsyncResumesRef: { current: new Map() },
       pendingAgentRunFinalizationsRef: { current: new Map() },
       pendingAgentRunTerminalReviewsRef: { current: new Map() },
-      runInvocationSequenceRef: { current: 0 },
       shouldAutoFollowRef: { current: true },
       streamingDraftsRef: { current: {} },
     },
@@ -299,7 +299,6 @@ describe('foreground run target-conversation execution context', () => {
       ensureCanonicalConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
-
     mockedResolveForegroundRunPreflight.mockResolvedValue({
       kind: 'ready',
       provider,
@@ -319,6 +318,120 @@ describe('foreground run target-conversation execution context', () => {
 
     await executeForegroundConversationRun({ context, conversationId: conversation.id });
 
+    expect(isMainInferenceActive()).toBe(false);
+  });
+
+  it('keeps callbacks and cleanup owned by each concurrent conversation', async () => {
+    const firstConversation = createConversation({
+      id: 'conversation-a',
+      mode: 'chitchat',
+      personaId: 'default',
+    });
+    const secondConversation = createConversation({
+      id: 'conversation-b',
+      mode: 'chitchat',
+      personaId: 'default',
+    });
+    const provider = createProvider('target-provider', 'target-model');
+    const context = createExecutionContext({
+      conversation: firstConversation,
+      providers: [provider],
+      ensureCanonicalConversation: jest.fn(),
+      recordConversationTurnMemory: jest.fn(),
+    });
+    context.helpers.getConversation = (conversationId: string) =>
+      [firstConversation, secondConversation].find(
+        (conversation) => conversation.id === conversationId,
+      );
+    context.helpers.getConversations = () => [firstConversation, secondConversation];
+
+    const registry = createForegroundRequestRegistry();
+    context.requests = {
+      abortForegroundRequestForConversation: (conversationId, reason) =>
+        registry.abortForConversation(conversationId, reason),
+      clearForegroundRequest: (conversationId, requestId, controller) =>
+        registry.clear({ conversationId, requestId, controller }),
+      isCurrentForegroundRequest: (conversationId, requestId, controller) =>
+        registry.isCurrent({ conversationId, requestId, controller }),
+      registerForegroundRequest: (requestId, conversationId, controller) =>
+        registry.register({ conversationId, requestId, controller }),
+      setStreamingMessageId: (conversationId, requestId, controller, messageId) =>
+        registry.setStreamingMessageId({ conversationId, requestId, controller }, messageId),
+    };
+
+    mockedResolveForegroundRunPreflight.mockImplementation(async ({ conversation }) => ({
+      kind: 'ready',
+      provider,
+      providerWithApiKey: provider,
+      model: provider.model,
+      finalizationProviderContext: {
+        provider,
+        model: provider.model,
+        systemPromptText: conversation?.systemPrompt ?? '',
+        conversationId: conversation?.id ?? '',
+      },
+    }));
+
+    const callbacksByConversation = new Map<string, Parameters<typeof runOrchestrator>[1]>();
+    const releaseByConversation = new Map<string, () => void>();
+    mockedRunOrchestrator.mockImplementation(
+      (options, callbacks) =>
+        new Promise<void>((resolve) => {
+          callbacksByConversation.set(options.conversationId, callbacks);
+          releaseByConversation.set(options.conversationId, resolve);
+        }),
+    );
+
+    const firstRun = executeForegroundConversationRun({
+      context,
+      conversationId: firstConversation.id,
+    });
+    const secondRun = executeForegroundConversationRun({
+      context,
+      conversationId: secondConversation.id,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(callbacksByConversation.size).toBe(2);
+    expect(isMainInferenceActive()).toBe(true);
+    callbacksByConversation
+      .get(firstConversation.id)
+      ?.onUserMessageEnriched?.('user-a', 'enriched-a');
+    callbacksByConversation
+      .get(secondConversation.id)
+      ?.onUserMessageEnriched?.('user-b', 'enriched-b');
+    expect(context.store.updateMessageEnrichedContent).toHaveBeenCalledWith(
+      firstConversation.id,
+      'user-a',
+      'enriched-a',
+    );
+    expect(context.store.updateMessageEnrichedContent).toHaveBeenCalledWith(
+      secondConversation.id,
+      'user-b',
+      'enriched-b',
+    );
+
+    callbacksByConversation.get(firstConversation.id)?.onDone();
+    releaseByConversation.get(firstConversation.id)?.();
+    await firstRun;
+
+    expect(registry.hasConversation(firstConversation.id)).toBe(false);
+    expect(registry.hasConversation(secondConversation.id)).toBe(true);
+    expect(isMainInferenceActive()).toBe(true);
+    callbacksByConversation
+      .get(secondConversation.id)
+      ?.onUserMessageEnriched?.('user-b', 'still-current');
+    expect(context.store.updateMessageEnrichedContent).toHaveBeenCalledWith(
+      secondConversation.id,
+      'user-b',
+      'still-current',
+    );
+
+    callbacksByConversation.get(secondConversation.id)?.onDone();
+    releaseByConversation.get(secondConversation.id)?.();
+    await secondRun;
+    expect(registry.size).toBe(0);
     expect(isMainInferenceActive()).toBe(false);
   });
 });

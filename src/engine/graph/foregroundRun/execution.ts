@@ -21,7 +21,6 @@ export async function executeForegroundConversationRun(
   params: ExecuteForegroundConversationRunParams,
 ): Promise<void> {
   const { context, conversationId, options } = params;
-  const runInvocationId = ++context.refs.runInvocationSequenceRef.current;
   const conversation = context.helpers.getConversation(conversationId);
   const executionContext = resolveForegroundConversationExecutionContext({
     conversation,
@@ -102,20 +101,33 @@ export async function executeForegroundConversationRun(
       content: '',
     });
   }
-  context.requests.setStreamingMessageId(assistantMessageId);
+  context.requests.setStreamingMessageId(
+    conversationId,
+    foregroundRequestId,
+    abortController,
+    assistantMessageId,
+  );
 
   const clearForegroundRequestIfCurrent = () => {
-    if (!context.requests.isCurrentForegroundRequest(foregroundRequestId, abortController)) {
+    if (
+      !context.requests.isCurrentForegroundRequest(
+        conversationId,
+        foregroundRequestId,
+        abortController,
+      )
+    ) {
       return false;
     }
 
-    context.requests.clearForegroundRequest(foregroundRequestId, abortController);
+    context.requests.clearForegroundRequest(conversationId, foregroundRequestId, abortController);
     return true;
   };
   const isCurrentRunInvocation = () =>
-    context.refs.runInvocationSequenceRef.current === runInvocationId &&
-    context.requests.isCurrentForegroundRequest(foregroundRequestId, abortController) &&
-    !abortController.signal.aborted;
+    context.requests.isCurrentForegroundRequest(
+      conversationId,
+      foregroundRequestId,
+      abortController,
+    ) && !abortController.signal.aborted;
   const guardRunCallback = () => isCurrentRunInvocation();
   const workspaceTarget = resolveConversationWorkspaceTarget({
     conversationId,

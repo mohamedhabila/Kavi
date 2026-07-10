@@ -6,6 +6,7 @@ import type {
   ForegroundStreamingDraft,
 } from '../../engine/graph/foregroundRun/executionTypes';
 import type { ResumeAgentRun } from '../../engine/graph/foregroundRun/contracts';
+import { createForegroundRequestRegistry } from '../../engine/graph/foregroundRun/requestRegistry';
 import { clearAgentRunCancellation } from '../../services/agents/agentRunCancellation';
 import { resolveConversationProviderContext } from '../../services/llm/support/providerSupport';
 import {
@@ -181,64 +182,53 @@ export function buildForegroundScenarioCompletionSnapshot(params: {
 }
 
 function createRequestRegistry() {
-  const requests = new Map<string, { conversationId: string; controller: AbortController }>();
-  const currentRequestIds = new Map<string, string>();
+  const registry = createForegroundRequestRegistry();
   const pendingAbortReasons = new Map<string, string | undefined>();
-  let streamingMessageId: string | null = null;
 
   return {
-    abortForegroundRequestForConversation: (conversationId: string, reason?: string) => {
-      const requestId = currentRequestIds.get(conversationId);
-      const request = requestId ? requests.get(requestId) : undefined;
-      if (!request) return false;
-      if (!request.controller.signal.aborted) request.controller.abort(reason);
-      return true;
-    },
+    abortForegroundRequestForConversation: (conversationId: string, reason?: string) =>
+      registry.abortForConversation(conversationId, reason),
     abortCurrentOrNextForegroundRequest: (conversationId: string, reason?: string) => {
-      const requestId = currentRequestIds.get(conversationId);
-      const request = requestId ? requests.get(requestId) : undefined;
-      if (request) {
-        if (!request.controller.signal.aborted) request.controller.abort(reason);
-      } else {
+      if (!registry.abortForConversation(conversationId, reason)) {
         pendingAbortReasons.set(conversationId, reason);
       }
     },
-    clearForegroundRequest: (requestId: string, controller: AbortController) => {
-      const request = requests.get(requestId);
-      if (request?.controller !== controller) return false;
-      requests.delete(requestId);
-      currentRequestIds.delete(request.conversationId);
-      pendingAbortReasons.delete(request.conversationId);
-      streamingMessageId = null;
-      useChatStore.getState().setLoading(false);
+    clearForegroundRequest: (
+      conversationId: string,
+      requestId: string,
+      controller: AbortController,
+    ) => {
+      if (!registry.clear({ conversationId, requestId, controller })) return false;
+      pendingAbortReasons.delete(conversationId);
+      useChatStore.getState().setLoading(registry.size > 0);
       return true;
     },
-    isCurrentForegroundRequest: (requestId: string, controller: AbortController) => {
-      const request = requests.get(requestId);
-      return (
-        request?.controller === controller &&
-        currentRequestIds.get(request.conversationId) === requestId
-      );
-    },
+    isCurrentForegroundRequest: (
+      conversationId: string,
+      requestId: string,
+      controller: AbortController,
+    ) => registry.isCurrent({ conversationId, requestId, controller }),
     registerForegroundRequest: (
       requestId: string,
       conversationId: string,
       controller: AbortController,
     ) => {
-      const previousRequestId = currentRequestIds.get(conversationId);
-      if (previousRequestId) requests.delete(previousRequestId);
-      requests.set(requestId, { conversationId, controller });
-      currentRequestIds.set(conversationId, requestId);
-      useChatStore.getState().setLoading(true);
+      registry.register({ conversationId, requestId, controller });
+      useChatStore.getState().setLoading(registry.size > 0);
       if (pendingAbortReasons.has(conversationId)) {
-        controller.abort(pendingAbortReasons.get(conversationId));
+        registry.abort(
+          { conversationId, requestId, controller },
+          pendingAbortReasons.get(conversationId),
+        );
         pendingAbortReasons.delete(conversationId);
       }
     },
-    setStreamingMessageId: (messageId: string | null) => {
-      streamingMessageId = messageId;
-    },
-    getStreamingMessageId: () => streamingMessageId,
+    setStreamingMessageId: (
+      conversationId: string,
+      requestId: string,
+      controller: AbortController,
+      messageId: string | null,
+    ) => registry.setStreamingMessageId({ conversationId, requestId, controller }, messageId),
   };
 }
 
@@ -508,7 +498,6 @@ export function createForegroundScenarioRuntime(
       pendingAgentRunAsyncResumesRef: { current: pendingAsyncResumes },
       pendingAgentRunFinalizationsRef: { current: pendingFinalizations },
       pendingAgentRunTerminalReviewsRef: { current: pendingTerminalReviews },
-      runInvocationSequenceRef: { current: 0 },
       shouldAutoFollowRef: { current: true },
       streamingDraftsRef: { current: streaming.drafts },
     },

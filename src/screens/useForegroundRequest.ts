@@ -1,26 +1,22 @@
-import { useCallback, useRef, useState, type MutableRefObject } from 'react';
-
-type ForegroundRequest = {
-  requestId: string;
-  conversationId: string;
-  abort: AbortController;
-};
+import { useCallback, useEffect, useState } from 'react';
+import { createForegroundRequestRegistry } from '../engine/graph/foregroundRun/requestRegistry';
 
 type UseForegroundRequestParams = {
   setLoading: (isLoading: boolean) => void;
-  setStreamingMessageId: (messageId: string | null) => void;
 };
 
-export function useForegroundRequest({
-  setLoading,
-  setStreamingMessageId,
-}: UseForegroundRequestParams): {
+export function useForegroundRequest({ setLoading }: UseForegroundRequestParams): {
+  activeForegroundConversationIds: ReadonlySet<string>;
   abortForegroundRequestForConversation: (conversationId: string, reason?: string) => boolean;
-  abortRef: MutableRefObject<AbortController | null>;
-  clearForegroundRequest: (requestId: string, abortController: AbortController) => boolean;
+  clearForegroundRequest: (
+    conversationId: string,
+    requestId: string,
+    abortController: AbortController,
+  ) => boolean;
   clearForegroundRequestForConversation: (conversationId: string) => boolean;
-  foregroundRequestConversationId: string | null;
+  foregroundStreamingMessageIds: ReadonlyMap<string, string>;
   isCurrentForegroundRequest: (
+    conversationId: string,
     requestId: string,
     abortController: AbortController,
   ) => boolean;
@@ -29,90 +25,128 @@ export function useForegroundRequest({
     conversationId: string,
     abortController: AbortController,
   ) => void;
+  setForegroundRequestStreamingMessageId: (
+    conversationId: string,
+    requestId: string,
+    abortController: AbortController,
+    messageId: string | null,
+  ) => boolean;
 } {
-  const abortRef = useRef<AbortController | null>(null);
-  const foregroundRequestRef = useRef<ForegroundRequest | null>(null);
-  const [foregroundRequestConversationId, setForegroundRequestConversationId] = useState<
-    string | null
-  >(null);
+  const [registry] = useState(createForegroundRequestRegistry);
+  const [activeForegroundConversationIds, setActiveForegroundConversationIds] = useState<
+    ReadonlySet<string>
+  >(new Set());
+  const [foregroundStreamingMessageIds, setForegroundStreamingMessageIds] = useState<
+    ReadonlyMap<string, string>
+  >(new Map());
+
+  const publishRegistryState = useCallback(() => {
+    const activeConversationIds = registry.getActiveConversationIds();
+    const streamingMessageIds = new Map<string, string>();
+    for (const conversationId of activeConversationIds) {
+      const messageId = registry.getStreamingMessageId(conversationId);
+      if (messageId) {
+        streamingMessageIds.set(conversationId, messageId);
+      }
+    }
+
+    setActiveForegroundConversationIds(activeConversationIds);
+    setForegroundStreamingMessageIds(streamingMessageIds);
+    setLoading(registry.size > 0);
+  }, [registry, setLoading]);
 
   const registerForegroundRequest = useCallback(
     (requestId: string, conversationId: string, abortController: AbortController) => {
-      foregroundRequestRef.current = {
+      registry.register({
         requestId,
         conversationId,
-        abort: abortController,
-      };
-      abortRef.current = abortController;
-      setForegroundRequestConversationId(conversationId);
-      setLoading(true);
+        controller: abortController,
+      });
+      publishRegistryState();
     },
-    [setLoading],
+    [publishRegistryState, registry],
   );
 
   const isCurrentForegroundRequest = useCallback(
-    (requestId: string, abortController: AbortController) => {
-      const currentRequest = foregroundRequestRef.current;
-      return (
-        !!currentRequest &&
-        currentRequest.requestId === requestId &&
-        currentRequest.abort === abortController
-      );
-    },
-    [],
+    (conversationId: string, requestId: string, abortController: AbortController) =>
+      registry.isCurrent({
+        conversationId,
+        requestId,
+        controller: abortController,
+      }),
+    [registry],
   );
 
   const clearForegroundRequest = useCallback(
-    (requestId: string, abortController: AbortController) => {
-      if (!isCurrentForegroundRequest(requestId, abortController)) {
+    (conversationId: string, requestId: string, abortController: AbortController) => {
+      const cleared = registry.clear({
+        conversationId,
+        requestId,
+        controller: abortController,
+      });
+      if (!cleared) {
         return false;
       }
 
-      foregroundRequestRef.current = null;
-      abortRef.current = null;
-      setForegroundRequestConversationId(null);
-      setStreamingMessageId(null);
-      setLoading(false);
+      publishRegistryState();
       return true;
     },
-    [isCurrentForegroundRequest, setLoading, setStreamingMessageId],
+    [publishRegistryState, registry],
   );
 
   const abortForegroundRequestForConversation = useCallback(
-    (conversationId: string, reason?: string) => {
-      const currentRequest = foregroundRequestRef.current;
-      if (!currentRequest || currentRequest.conversationId !== conversationId) {
-        return false;
-      }
-
-      if (!currentRequest.abort.signal.aborted) {
-        currentRequest.abort.abort(reason);
-      }
-
-      return true;
-    },
-    [],
+    (conversationId: string, reason?: string) =>
+      registry.abortForConversation(conversationId, reason),
+    [registry],
   );
 
   const clearForegroundRequestForConversation = useCallback(
     (conversationId: string) => {
-      const currentRequest = foregroundRequestRef.current;
-      if (!currentRequest || currentRequest.conversationId !== conversationId) {
+      if (!registry.clearForConversation(conversationId)) {
         return false;
       }
 
-      return clearForegroundRequest(currentRequest.requestId, currentRequest.abort);
+      publishRegistryState();
+      return true;
     },
-    [clearForegroundRequest],
+    [publishRegistryState, registry],
+  );
+
+  const setForegroundRequestStreamingMessageId = useCallback(
+    (
+      conversationId: string,
+      requestId: string,
+      abortController: AbortController,
+      messageId: string | null,
+    ) => {
+      const updated = registry.setStreamingMessageId(
+        { conversationId, requestId, controller: abortController },
+        messageId,
+      );
+      if (updated) {
+        publishRegistryState();
+      }
+      return updated;
+    },
+    [publishRegistryState, registry],
+  );
+
+  useEffect(
+    () => () => {
+      registry.dispose('Foreground request owner was disposed.');
+      setLoading(false);
+    },
+    [registry, setLoading],
   );
 
   return {
+    activeForegroundConversationIds,
     abortForegroundRequestForConversation,
-    abortRef,
     clearForegroundRequest,
     clearForegroundRequestForConversation,
-    foregroundRequestConversationId,
+    foregroundStreamingMessageIds,
     isCurrentForegroundRequest,
     registerForegroundRequest,
+    setForegroundRequestStreamingMessageId,
   };
 }

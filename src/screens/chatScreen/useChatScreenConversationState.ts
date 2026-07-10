@@ -9,7 +9,7 @@ type UseChatScreenConversationStateParams = {
   activeModel: string | null;
   activeProviderId: string | null;
   defaultConversationMode: Conversation['mode'];
-  foregroundRequestConversationId: string | null;
+  hasForegroundRequest: boolean;
   providers: LlmProviderConfig[];
 };
 
@@ -47,10 +47,7 @@ export function useChatScreenConversationState(
   const activeConversationHasRunningRun = (params.activeConversation?.agentRuns ?? []).some(
     (run) => run.status === 'running',
   );
-  const isConversationBusy =
-    (params.activeConversation?.id != null &&
-      params.foregroundRequestConversationId === params.activeConversation.id) ||
-    activeConversationHasRunningRun;
+  const isConversationBusy = params.hasForegroundRequest || activeConversationHasRunningRun;
   const effectivePersonaId = isAgenticMode
     ? SUPER_AGENT_PERSONA_ID
     : params.activeConversation?.personaId || 'default';
