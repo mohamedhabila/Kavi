@@ -48,6 +48,7 @@ describe('execution recovery coordinator routing', () => {
       const intent = {
         runId: 'run-1',
         controlEpoch: 0,
+        updatedAt: 100,
         snapshotDigest: COORDINATOR_SNAPSHOT_DIGEST,
         commandKind,
         commandDigest: outcome.commandDigest,

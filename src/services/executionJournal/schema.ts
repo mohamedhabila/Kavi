@@ -16,8 +16,15 @@ import {
   EXECUTION_SURFACES,
   RETENTION_DELETABLE_RUN_STATUSES,
 } from './types';
+import {
+  DISPATCHABLE_EXECUTION_RECOVERY_COMMAND_KINDS,
+  EXECUTION_RECOVERY_AUTHORITY_STATES,
+  EXECUTION_RECOVERY_CANCELLATION_STATES,
+  EXECUTION_RECOVERY_DISPATCH_STATES,
+  EXECUTION_RECOVERY_RECEIPT_REASONS,
+} from './recoveryCoordinatorTypes';
 
-export const EXECUTION_JOURNAL_SCHEMA_VERSION = 2;
+export const EXECUTION_JOURNAL_SCHEMA_VERSION = 3;
 export const EXECUTION_JOURNAL_APPLICATION_ID = 1_263_164_492;
 
 function sqlEnum(values: readonly string[]): string {
@@ -157,11 +164,86 @@ const CREATE_EXECUTION_EXTERNAL_HANDLES = `
   ) STRICT
 `;
 
+const CREATE_EXECUTION_RECOVERY_CONTROLS = `
+  CREATE TABLE execution_recovery_controls (
+    run_id TEXT PRIMARY KEY CHECK (${ID_CHECK('run_id')}),
+    cancellation_state TEXT NOT NULL CHECK (
+      cancellation_state IN (${sqlEnum(EXECUTION_RECOVERY_CANCELLATION_STATES)})
+    ),
+    updated_at INTEGER NOT NULL CHECK (updated_at >= 0),
+    FOREIGN KEY (run_id) REFERENCES execution_runs(id) ON DELETE CASCADE
+  ) STRICT
+`;
+
+const CREATE_EXECUTION_RECOVERY_DISPATCHES = `
+  CREATE TABLE execution_recovery_dispatches (
+    dispatch_id TEXT PRIMARY KEY CHECK (${ID_CHECK('dispatch_id')}),
+    run_id TEXT NOT NULL CHECK (${ID_CHECK('run_id')}),
+    control_epoch INTEGER NOT NULL CHECK (control_epoch >= 0),
+    snapshot_digest TEXT NOT NULL CHECK (${DIGEST_CHECK('snapshot_digest')}),
+    command_kind TEXT NOT NULL CHECK (
+      command_kind IN (${sqlEnum(DISPATCHABLE_EXECUTION_RECOVERY_COMMAND_KINDS)})
+    ),
+    command_digest TEXT NOT NULL CHECK (${DIGEST_CHECK('command_digest')}),
+    cancellation_state TEXT NOT NULL CHECK (
+      cancellation_state IN (${sqlEnum(EXECUTION_RECOVERY_CANCELLATION_STATES)})
+    ),
+    execution_authority TEXT NOT NULL CHECK (
+      execution_authority IN (${sqlEnum(EXECUTION_RECOVERY_AUTHORITY_STATES)})
+    ),
+    authority_digest TEXT NOT NULL CHECK (${DIGEST_CHECK('authority_digest')}),
+    dispatch_digest TEXT NOT NULL UNIQUE CHECK (${DIGEST_CHECK('dispatch_digest')}),
+    fence_id TEXT NOT NULL UNIQUE CHECK (${ID_CHECK('fence_id')}),
+    fence_digest TEXT NOT NULL UNIQUE CHECK (${DIGEST_CHECK('fence_digest')}),
+    fence_expires_at INTEGER NOT NULL CHECK (fence_expires_at >= 0),
+    state TEXT NOT NULL CHECK (state IN (${sqlEnum(EXECUTION_RECOVERY_DISPATCH_STATES)})),
+    receipt_id TEXT UNIQUE CHECK (receipt_id IS NULL OR (${ID_CHECK('receipt_id')})),
+    receipt_digest TEXT CHECK (receipt_digest IS NULL OR (${DIGEST_CHECK('receipt_digest')})),
+    outcome_reason TEXT CHECK (
+      outcome_reason IS NULL OR outcome_reason IN (${sqlEnum(EXECUTION_RECOVERY_RECEIPT_REASONS)})
+    ),
+    retry_at INTEGER CHECK (retry_at IS NULL OR retry_at >= 0),
+    created_at INTEGER NOT NULL CHECK (created_at >= 0),
+    updated_at INTEGER NOT NULL CHECK (updated_at >= created_at),
+    CHECK (fence_expires_at >= created_at),
+    CHECK (
+      (state IN ('acquired', 'claimed')
+        AND receipt_id IS NULL
+        AND receipt_digest IS NULL
+        AND outcome_reason IS NULL
+        AND retry_at IS NULL)
+      OR
+      (state = 'completed'
+        AND receipt_id IS NOT NULL
+        AND receipt_digest IS NOT NULL
+        AND outcome_reason IS NULL
+        AND retry_at IS NULL)
+      OR
+      (state = 'pending'
+        AND receipt_id IS NOT NULL
+        AND receipt_digest IS NOT NULL
+        AND outcome_reason IS NOT NULL
+        AND retry_at IS NOT NULL
+        AND retry_at > updated_at)
+      OR
+      (state = 'blocked'
+        AND receipt_id IS NOT NULL
+        AND receipt_digest IS NOT NULL
+        AND outcome_reason IS NOT NULL
+        AND retry_at IS NULL)
+    ),
+    UNIQUE (run_id, control_epoch, snapshot_digest, command_digest),
+    FOREIGN KEY (run_id) REFERENCES execution_runs(id) ON DELETE CASCADE
+  ) STRICT
+`;
+
 const SCHEMA_OBJECT_SQL = new Map<string, string>([
   ['execution_runs', CREATE_EXECUTION_RUNS],
   ['execution_checkpoints', CREATE_EXECUTION_CHECKPOINTS],
   ['execution_effects', CREATE_EXECUTION_EFFECTS],
   ['execution_external_handles', CREATE_EXECUTION_EXTERNAL_HANDLES],
+  ['execution_recovery_controls', CREATE_EXECUTION_RECOVERY_CONTROLS],
+  ['execution_recovery_dispatches', CREATE_EXECUTION_RECOVERY_DISPATCHES],
   [
     'trg_execution_runs_protect_unresolved_delete',
     `CREATE TRIGGER trg_execution_runs_protect_unresolved_delete
@@ -169,6 +251,15 @@ const SCHEMA_OBJECT_SQL = new Map<string, string>([
        WHEN OLD.status NOT IN (${sqlEnum(RETENTION_DELETABLE_RUN_STATUSES)})
        BEGIN
          SELECT RAISE(ABORT, 'execution_journal_protected_run');
+       END`,
+  ],
+  [
+    'trg_execution_recovery_dispatches_protect_receipt',
+    `CREATE TRIGGER trg_execution_recovery_dispatches_protect_receipt
+       BEFORE UPDATE ON execution_recovery_dispatches
+       WHEN OLD.state IN ('completed', 'pending', 'blocked')
+       BEGIN
+         SELECT RAISE(ABORT, 'execution_recovery_receipt_immutable');
        END`,
   ],
   [
@@ -205,6 +296,11 @@ const SCHEMA_OBJECT_SQL = new Map<string, string>([
        WHERE handle_kind = 'github_workflow_run'`,
   ],
   [
+    'idx_execution_recovery_dispatches_run_state',
+    `CREATE INDEX idx_execution_recovery_dispatches_run_state
+       ON execution_recovery_dispatches(run_id, state, updated_at, dispatch_id)`,
+  ],
+  [
     'idx_execution_external_handles_run_status',
     `CREATE INDEX idx_execution_external_handles_run_status
        ON execution_external_handles(run_id, status, updated_at)`,
@@ -216,9 +312,14 @@ const TABLE_NAMES = [
   'execution_checkpoints',
   'execution_effects',
   'execution_external_handles',
+  'execution_recovery_controls',
+  'execution_recovery_dispatches',
 ] as const;
 
-const TRIGGER_NAMES = ['trg_execution_runs_protect_unresolved_delete'] as const;
+const TRIGGER_NAMES = [
+  'trg_execution_runs_protect_unresolved_delete',
+  'trg_execution_recovery_dispatches_protect_receipt',
+] as const;
 
 function pragmaNumber(database: SQLite.SQLiteDatabase, name: string): number {
   const row = database.getFirstSync<Record<string, unknown>>(`PRAGMA ${name}`);

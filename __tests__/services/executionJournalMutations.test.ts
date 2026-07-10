@@ -58,6 +58,12 @@ describe('execution journal run creation and checkpoints', () => {
       db.getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM execution_checkpoints')
         ?.count,
     ).toBe(1);
+    expect(
+      db.getFirstSync<{ cancellation_state: string }>(
+        'SELECT cancellation_state FROM execution_recovery_controls WHERE run_id = ?',
+        run.id,
+      ),
+    ).toEqual({ cancellation_state: 'active' });
     expect(run.status).toBe('queued');
   });
 

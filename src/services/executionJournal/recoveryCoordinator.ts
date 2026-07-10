@@ -473,7 +473,9 @@ async function routeCommand(
 function fenceDeferReason(
   reason: ExecutionRecoveryFenceDeferReason,
 ): ExecutionRecoveryCoordinatorDeferReason {
-  return reason === 'fence_contended' ? 'dispatch_fence_contended' : 'dispatch_fence_unavailable';
+  if (reason === 'fence_contended') return 'dispatch_fence_contended';
+  if (reason === 'fence_changed') return 'dispatch_fence_changed';
+  return 'dispatch_fence_unavailable';
 }
 
 export async function coordinateExecutionRecovery(
@@ -564,6 +566,7 @@ export async function coordinateExecutionRecovery(
   const authorityInput = {
     runId: current.runId,
     controlEpoch: current.generation.controlEpoch,
+    updatedAt: current.generation.updatedAt,
     snapshotDigest: current.generation.snapshotDigest,
     commandKind: command.kind,
     commandDigest,
@@ -578,7 +581,10 @@ export async function coordinateExecutionRecovery(
     return blocked(pointer, 'invalid_authority');
   }
   if (authority.kind === 'control_deferred') {
-    return deferred(pointer, 'authority_unavailable');
+    return deferred(
+      pointer,
+      authority.reason === 'generation_changed' ? 'generation_changed' : 'authority_unavailable',
+    );
   }
   if (
     authority.runId !== current.runId ||

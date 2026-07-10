@@ -225,6 +225,12 @@ export function createExecutionRun(input: CreateExecutionRunInput): {
   const database = getExecutionJournalDb();
   return withImmediateTransaction(database, () => {
     insertRun(database, run);
+    database.runSync(
+      `INSERT INTO execution_recovery_controls (run_id, cancellation_state, updated_at)
+       VALUES (?, 'active', ?)`,
+      run.id,
+      run.createdAt,
+    );
     insertCheckpoint(database, initialCheckpoint);
     return {
       run: readRun(database, run.id),
@@ -305,6 +311,18 @@ export function transitionExecutionRun(input: TransitionExecutionRunInput): Exec
     );
     if (result.changes !== 1) {
       throw new Error('execution_journal_concurrent_run_mutation');
+    }
+    if (next.status === 'cancelled') {
+      const controlResult = database.runSync(
+        `UPDATE execution_recovery_controls
+         SET cancellation_state = 'cancelled', updated_at = ?
+         WHERE run_id = ? AND cancellation_state IN ('active', 'cancel_requested')`,
+        next.updatedAt,
+        run.id,
+      );
+      if (controlResult.changes !== 1) {
+        throw new Error('execution_journal_recovery_control_conflict');
+      }
     }
     return readRun(database, run.id);
   });

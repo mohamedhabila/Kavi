@@ -13,6 +13,32 @@ export type DispatchableExecutionRecoveryCommand = Exclude<
 >;
 export type DispatchableExecutionRecoveryCommandKind = DispatchableExecutionRecoveryCommand['kind'];
 
+export const DISPATCHABLE_EXECUTION_RECOVERY_COMMAND_KINDS = [
+  'resume_model_step',
+  'resume_persisted_tool_batch',
+  'continue_after_tool_result',
+  'reconcile_external_handles',
+  'resume_review',
+  'finalize_existing_terminal_projection',
+] as const satisfies readonly DispatchableExecutionRecoveryCommandKind[];
+
+export const EXECUTION_RECOVERY_DISPATCH_STATES = [
+  'acquired',
+  'claimed',
+  'completed',
+  'pending',
+  'blocked',
+] as const;
+
+export const EXECUTION_RECOVERY_RECEIPT_REASONS = [
+  'remote_still_pending',
+  'provider_temporarily_unavailable',
+  'remote_action_required',
+  'external_not_found',
+  'inspection_unavailable',
+  'provider_contract_invalid',
+] as const;
+
 export const EXECUTION_RECOVERY_CANCELLATION_STATES = [
   'active',
   'cancel_requested',
@@ -24,10 +50,14 @@ export const EXECUTION_RECOVERY_AUTHORITY_STATES = [
   'revoked',
   'unavailable',
 ] as const;
-export const EXECUTION_RECOVERY_CONTROL_DEFER_REASONS = ['control_unavailable'] as const;
+export const EXECUTION_RECOVERY_CONTROL_DEFER_REASONS = [
+  'control_unavailable',
+  'generation_changed',
+] as const;
 export const EXECUTION_RECOVERY_FENCE_DEFER_REASONS = [
   'fence_contended',
   'fence_unavailable',
+  'fence_changed',
 ] as const;
 export const EXECUTION_RECOVERY_HANDLER_REJECTION_REASONS = [
   'generation_changed',
@@ -48,6 +78,8 @@ export type ExecutionRecoveryFenceDeferReason =
   (typeof EXECUTION_RECOVERY_FENCE_DEFER_REASONS)[number];
 export type ExecutionRecoveryHandlerRejectionReason =
   (typeof EXECUTION_RECOVERY_HANDLER_REJECTION_REASONS)[number];
+export type ExecutionRecoveryDispatchState = (typeof EXECUTION_RECOVERY_DISPATCH_STATES)[number];
+export type ExecutionRecoveryReceiptReason = (typeof EXECUTION_RECOVERY_RECEIPT_REASONS)[number];
 
 export interface ExecutionRecoveryAuthoritySnapshot {
   kind: 'authority_snapshot';
@@ -66,6 +98,7 @@ export type ExecutionRecoveryAuthorityResult =
 export interface ExecutionRecoveryAuthorityInput {
   runId: string;
   controlEpoch: number;
+  updatedAt: number;
   snapshotDigest: string;
   commandKind: DispatchableExecutionRecoveryCommandKind;
   commandDigest: string;
