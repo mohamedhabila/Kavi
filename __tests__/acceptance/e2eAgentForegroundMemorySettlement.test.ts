@@ -65,6 +65,67 @@ function makeJob(status: IngestionJob['status']): IngestionJob {
 }
 
 describe('foreground scenario memory settlement', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('waits for an in-flight drain after the foreground drain loses the ingestion slot', async () => {
+    jest.useFakeTimers();
+    const pending = makeJob('pending');
+    const processing = makeJob('processing');
+    const completed = {
+      ...makeJob('completed_structural'),
+      providerOutcome: 'structural_only' as const,
+      structuralCompletedAt: 2,
+      completedAt: 2,
+    };
+    mockedGetIngestionJob
+      .mockImplementationOnce(() => pending)
+      .mockImplementationOnce(() => pending)
+      .mockImplementationOnce(() => processing)
+      .mockReturnValue(completed);
+    mockedDrainIngestionQueueWithWakeup.mockResolvedValueOnce({
+      attempted: 1,
+      completed: 0,
+      completedStructural: 0,
+      completedEnriched: 0,
+      retrying: 0,
+      degraded: 0,
+      deferred: 1,
+      sourceDeferred: 0,
+      resourceDeferred: 1,
+      failed: 0,
+    });
+
+    try {
+      const settlement = settleForegroundScenarioMemory(
+        [
+          {
+            promise: Promise.resolve({
+              processed: true,
+              enqueued: true,
+              jobId: pending.id,
+              episodeId: null,
+              factIds: [],
+              activeFocusUpdated: false,
+              openThreadsUpdated: false,
+              enriched: false,
+            }),
+          },
+        ],
+        1_000,
+      );
+      await jest.advanceTimersByTimeAsync(10);
+
+      await expect(settlement).resolves.toEqual([
+        expect.objectContaining({ job: completed }),
+      ]);
+      expect(mockedDrainIngestionQueueWithWakeup).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('uses bounded backoff and requests at most one drain while awaiting memory', async () => {
     jest.useFakeTimers();
     mockedGetIngestionJob

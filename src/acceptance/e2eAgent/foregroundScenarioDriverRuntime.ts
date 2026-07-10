@@ -274,7 +274,7 @@ async function awaitMemoryJob(jobId: string, deadline: number): Promise<Ingestio
 
     if (job.status === 'pending' && !requestedDrain) {
       requestedDrain = true;
-      const drainResult = await drainIngestionQueueWithWakeup({
+      await drainIngestionQueueWithWakeup({
         loadMessagesForThread: (threadId) =>
           useChatStore
             .getState()
@@ -285,8 +285,8 @@ async function awaitMemoryJob(jobId: string, deadline: number): Promise<Ingestio
       const afterDrain = getIngestionJob(jobId);
       if (
         afterDrain?.status === 'pending' &&
-        (drainResult.resourceDeferred > 0 ||
-          (afterDrain.nextAttemptAt !== null && afterDrain.nextAttemptAt > Date.now()))
+        afterDrain.nextAttemptAt !== null &&
+        afterDrain.nextAttemptAt > Date.now()
       ) {
         return afterDrain;
       }
