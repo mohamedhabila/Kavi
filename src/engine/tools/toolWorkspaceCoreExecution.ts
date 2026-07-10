@@ -44,22 +44,45 @@ export async function executeWriteFile(
   if (contentArg.error) return contentArg.error;
 
   const source = resolveConversationWorkspaceSource(conversationId, fallbackConversationId);
+  let sha256: string;
+  let result: Awaited<ReturnType<typeof writeWorkspaceSourceTextFile>>;
   try {
-    const result = await writeWorkspaceSourceTextFile(source, pathArg.value!, contentArg.value!);
-    const sha256 = await Crypto.digestStringAsync(
+    sha256 = await Crypto.digestStringAsync(
       Crypto.CryptoDigestAlgorithm.SHA256,
       contentArg.value!,
     );
-    return JSON.stringify({
-      status: 'written',
-      path: result.path,
-      size: result.size,
-      sha256,
-      summary: `Wrote ${result.size} chars to ${result.path}`,
-    });
+    result = await writeWorkspaceSourceTextFile(source, pathArg.value!, contentArg.value!);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return `Error: ${message}`;
+  }
+
+  try {
+    const readback = await readWorkspaceSourceTextFile(source, result.path);
+    if (readback.path !== result.path || readback.content !== contentArg.value!) {
+      return JSON.stringify({
+        status: 'written_unverified',
+        path: result.path,
+        size: result.size,
+        sha256,
+        verificationError: 'workspace_readback_mismatch',
+      });
+    }
+    return JSON.stringify({
+      status: 'written',
+      path: readback.path,
+      size: readback.size,
+      sha256,
+      summary: `Wrote and verified ${readback.size} chars at ${readback.path}`,
+    });
+  } catch {
+    return JSON.stringify({
+      status: 'written_unverified',
+      path: result.path,
+      size: result.size,
+      sha256,
+      verificationError: 'workspace_readback_failed',
+    });
   }
 }
 

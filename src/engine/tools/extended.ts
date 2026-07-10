@@ -71,20 +71,45 @@ export async function executeFileEdit(
   if (applyResult.error) return applyResult.error;
 
   const newContent = applyResult.content!;
+  let sha256: string;
+  let result: Awaited<ReturnType<typeof writeWorkspaceSourceTextFile>>;
   try {
-    const result = await writeWorkspaceSourceTextFile(source, safePath, newContent);
-    const sha256 = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, newContent);
+    sha256 = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, newContent);
+    result = await writeWorkspaceSourceTextFile(source, safePath, newContent);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return `Error: ${message}`;
+  }
+
+  try {
+    const readback = await readWorkspaceSourceTextFile(source, result.path);
+    if (readback.path !== result.path || readback.content !== newContent) {
+      return JSON.stringify({
+        status: 'edited_unverified',
+        path: result.path,
+        size: result.size,
+        sha256,
+        editCount: editsArg.operations.length,
+        verificationError: 'workspace_readback_mismatch',
+      });
+    }
     return JSON.stringify({
       status: 'edited',
+      path: readback.path,
+      size: readback.size,
+      sha256,
+      editCount: editsArg.operations.length,
+      summary: `Edited and verified ${readback.path} with ${editsArg.operations.length} focused update(s)`,
+    });
+  } catch {
+    return JSON.stringify({
+      status: 'edited_unverified',
       path: result.path,
       size: result.size,
       sha256,
       editCount: editsArg.operations.length,
-      summary: `Edited ${result.path} with ${editsArg.operations.length} focused update(s)`,
+      verificationError: 'workspace_readback_failed',
     });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return `Error: ${message}`;
   }
 }
 

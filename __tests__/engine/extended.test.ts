@@ -9,6 +9,7 @@ import {
   executeTextSearch,
 } from '../../src/engine/tools/extended';
 import { executeWriteFile } from '../../src/engine/tools/toolWorkspaceCoreExecution';
+import * as workspaceSourceFiles from '../../src/services/workspaces/sourceFiles';
 
 // Mock expo-file-system
 jest.mock('expo-file-system', () => {
@@ -102,6 +103,7 @@ const { __resetStore, __getStore, __getDirs } = require('expo-file-system');
 
 beforeEach(() => {
   __resetStore();
+  jest.restoreAllMocks();
 });
 
 function setupWorkspace(conversationId: string, files: Record<string, string>) {
@@ -113,7 +115,7 @@ function setupWorkspace(conversationId: string, files: Record<string, string>) {
 }
 
 describe('executeWriteFile', () => {
-  it('returns the code-owned path and content digest after the write resolves', async () => {
+  it('returns the code-owned path and content digest after exact readback verification', async () => {
     const result = JSON.parse(
       await executeWriteFile({ path: 'reports/final.md', content: 'done' }, 'write-test'),
     );
@@ -126,6 +128,29 @@ describe('executeWriteFile', () => {
         sha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
       }),
     );
+    expect(__getStore()['file:///mock/documents/workspace/write-test/reports/final.md']).toBe(
+      'done',
+    );
+  });
+
+  it('reports an applied but unverified write when readback does not match', async () => {
+    jest.spyOn(workspaceSourceFiles, 'readWorkspaceSourceTextFile').mockResolvedValueOnce({
+      path: 'reports/final.md',
+      content: 'corrupt',
+      size: 7,
+    });
+
+    const result = JSON.parse(
+      await executeWriteFile({ path: 'reports/final.md', content: 'done' }, 'write-test'),
+    );
+
+    expect(result).toEqual({
+      status: 'written_unverified',
+      path: 'reports/final.md',
+      size: 4,
+      sha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      verificationError: 'workspace_readback_mismatch',
+    });
     expect(__getStore()['file:///mock/documents/workspace/write-test/reports/final.md']).toBe(
       'done',
     );
