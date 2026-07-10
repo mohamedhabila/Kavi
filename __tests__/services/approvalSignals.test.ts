@@ -8,12 +8,12 @@ describe('approvalSignals', () => {
   it('classifies local artifact mutations structurally', () => {
     expect(getOperationalEvidenceKind({ sourceName: 'write_file' })).toBe('artifact');
     expect(getOperationalEvidenceKind({ sourceName: 'ssh_fs' })).toBe('artifact');
-    expect(getOperationalEvidenceKind({ sourceName: 'share_url' })).toBe('artifact');
     expect(getOperationalEvidenceKind({ sourceName: 'calendar_create_event' })).toBe('artifact');
   });
 
   it('classifies external runs structurally', () => {
     expect(getOperationalEvidenceKind({ sourceName: 'open_url' })).toBe('external_run');
+    expect(getOperationalEvidenceKind({ sourceName: 'share_url' })).toBe('external_run');
     expect(getOperationalEvidenceKind({ sourceName: 'notification_send' })).toBe('external_run');
     expect(getOperationalEvidenceKind({ sourceName: 'expo_eas_workflow_status' })).toBe(
       'external_run',
