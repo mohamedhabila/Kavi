@@ -575,15 +575,25 @@ describe('evaluateE2ERubric', () => {
     );
     expect(oldResult.ok).toBe(true);
     const newResult = JSON.parse(
-      executeMemoryRemember({
-        subject: 'e2e-entity-update',
-        predicate: 'artifact_token',
-        value: 'E2E-NEW',
-        scope: 'conversation',
-        supersedePrior: true,
-        originConversationId: conversationId,
-        originThreadId: conversationId,
-      }),
+      executeMemoryRemember(
+        {
+          subject: 'e2e-entity-update',
+          predicate: 'artifact_token',
+          value: 'E2E-NEW',
+          scope: 'conversation',
+          originConversationId: conversationId,
+          originThreadId: conversationId,
+        },
+        {
+          requestEvidence: {
+            memoryConversationId: conversationId,
+            sourceThreadId: conversationId,
+            taskId: null,
+            userMessageId: 'msg-memory-fact-update',
+            userMessageText: 'Correction: e2e-entity-update artifact_token is E2E-NEW.',
+          },
+        },
+      ),
     );
     expect(newResult.ok).toBe(true);
 
