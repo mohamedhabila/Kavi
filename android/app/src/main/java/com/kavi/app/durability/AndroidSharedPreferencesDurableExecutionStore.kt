@@ -14,7 +14,8 @@ private val SHA256_DIGEST = Regex("^[a-f0-9]{64}$")
  *
  * Android runs this app's workers in the default process. A synchronous SharedPreferences commit
  * makes each complete JSON record durable before the scheduler is called. Unknown schemas and
- * malformed records fail closed; there is intentionally no legacy decoder.
+ * malformed records fail closed; there is intentionally no legacy decoder. Callers must invoke
+ * this synchronous store away from the Android main thread.
  */
 internal class AndroidSharedPreferencesDurableExecutionStore(
   context: Context,
@@ -109,6 +110,7 @@ private fun encodeRequest(request: AndroidDurableExecutionRequest): JSONObject =
 private fun encodeIdentity(identity: AndroidRecoveryCommandIdentity): JSONObject = JSONObject()
   .put("run_id", identity.runId)
   .put("control_epoch", identity.controlEpoch)
+  .put("snapshot_updated_at", identity.snapshotUpdatedAtMillis)
   .put("snapshot_digest", identity.snapshotDigest)
   .put("command_kind", identity.commandKind.name)
   .put("command_digest", identity.commandDigest)
@@ -189,6 +191,7 @@ private fun decodeIdentity(json: JSONObject): AndroidRecoveryCommandIdentity? {
     !json.hasExactKeys(
       "run_id",
       "control_epoch",
+      "snapshot_updated_at",
       "snapshot_digest",
       "command_kind",
       "command_digest",
@@ -199,6 +202,7 @@ private fun decodeIdentity(json: JSONObject): AndroidRecoveryCommandIdentity? {
   return AndroidRecoveryCommandIdentity(
     runId = json.strictString("run_id"),
     controlEpoch = json.strictLong("control_epoch"),
+    snapshotUpdatedAtMillis = json.strictLong("snapshot_updated_at"),
     snapshotDigest = json.strictString("snapshot_digest"),
     commandKind = enumValue(json.strictString("command_kind")) ?: return null,
     commandDigest = json.strictString("command_digest"),

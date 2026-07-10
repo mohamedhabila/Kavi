@@ -56,6 +56,7 @@ internal enum class AndroidBackoffPolicy {
 internal data class AndroidRecoveryCommandIdentity(
   val runId: String,
   val controlEpoch: Long,
+  val snapshotUpdatedAtMillis: Long,
   val snapshotDigest: String,
   val commandKind: AndroidRecoveryCommandKind,
   val commandDigest: String,
@@ -79,6 +80,7 @@ internal enum class AndroidDurableUnsupportedReason {
   PROCESS_BOUND_INTERACTIVE_WORK,
   NO_GENERAL_AGENT_FOREGROUND_SERVICE_CONTRACT,
   MISSING_EVENT_TRIGGER_CONTRACT,
+  MISSING_REQUIRED_NETWORK_CONSTRAINT,
   UNSAFE_RECOVERY_COMMAND,
 }
 

@@ -26,7 +26,7 @@ class AndroidDurableExecutionPolicyTest {
   }
 
   @Test
-  fun `only effect-safe deferrable recovery commands are schedulable`() {
+  fun `only review and terminal projection commands map to deferrable work`() {
     for (
       commandKind in listOf(
         AndroidRecoveryCommandKind.RESUME_REVIEW,
@@ -62,6 +62,22 @@ class AndroidDurableExecutionPolicyTest {
   }
 
   @Test
+  fun `external reconciliation requires an Android network constraint`() {
+    val decision = AndroidDurableExecutionPolicy.decide(
+      request(
+        constraints = constraints(network = AndroidNetworkConstraint.NOT_REQUIRED),
+      ),
+    )
+
+    assertEquals(
+      AndroidDurableExecutionDecision.Unsupported(
+        AndroidDurableUnsupportedReason.MISSING_REQUIRED_NETWORK_CONSTRAINT,
+      ),
+      decision,
+    )
+  }
+
+  @Test
   fun `process bound and triggerless classes fail closed`() {
     val expected = mapOf(
       AndroidTaskDurabilityClass.FOREGROUND_INTERACTIVE to
@@ -85,6 +101,7 @@ class AndroidDurableExecutionPolicyTest {
     val invalidRequests = listOf(
       request(identity = identity(runId = " run-1")),
       request(identity = identity(controlEpoch = -1)),
+      request(identity = identity(snapshotUpdatedAtMillis = -1)),
       request(identity = identity(snapshotDigest = "not-a-digest")),
       request(constraints = constraints(earliestStartAtMillis = 99)),
       request(
@@ -136,19 +153,24 @@ class AndroidDurableExecutionPolicyTest {
   private fun identity(
     runId: String = "run-1",
     controlEpoch: Long = 2,
+    snapshotUpdatedAtMillis: Long = 90,
     snapshotDigest: String = "a".repeat(64),
     commandKind: AndroidRecoveryCommandKind =
       AndroidRecoveryCommandKind.RECONCILE_EXTERNAL_HANDLES,
   ) = AndroidRecoveryCommandIdentity(
     runId = runId,
     controlEpoch = controlEpoch,
+    snapshotUpdatedAtMillis = snapshotUpdatedAtMillis,
     snapshotDigest = snapshotDigest,
     commandKind = commandKind,
     commandDigest = "b".repeat(64),
   )
 
-  private fun constraints(earliestStartAtMillis: Long = 100) = AndroidExecutionConstraints(
-    network = AndroidNetworkConstraint.CONNECTED,
+  private fun constraints(
+    network: AndroidNetworkConstraint = AndroidNetworkConstraint.CONNECTED,
+    earliestStartAtMillis: Long = 100,
+  ) = AndroidExecutionConstraints(
+    network = network,
     requiresCharging = false,
     requiresBatteryNotLow = true,
     requiresStorageNotLow = true,

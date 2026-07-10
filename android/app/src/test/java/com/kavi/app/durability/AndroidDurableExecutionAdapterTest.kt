@@ -157,6 +157,10 @@ class AndroidDurableExecutionAdapterTest {
       AndroidDurableRejectionReason.STALE_CONTROL_EPOCH,
       adapter.markRunning(pointer.copy(controlEpoch = 1), 4, 30_500),
     )
+    assertRejected(
+      AndroidDurableRejectionReason.COMMAND_IDENTITY_CONFLICT,
+      adapter.markRunning(pointer.copy(snapshotUpdatedAtMillis = 91), 4, 30_500),
+    )
   }
 
   @Test
@@ -260,11 +264,13 @@ class AndroidDurableExecutionAdapterTest {
 
   private fun identity(
     controlEpoch: Long = 2,
+    snapshotUpdatedAtMillis: Long = 90,
     snapshotDigest: String = "a".repeat(64),
     commandDigest: String = "b".repeat(64),
   ) = AndroidRecoveryCommandIdentity(
     runId = "run-1",
     controlEpoch = controlEpoch,
+    snapshotUpdatedAtMillis = snapshotUpdatedAtMillis,
     snapshotDigest = snapshotDigest,
     commandKind = AndroidRecoveryCommandKind.RECONCILE_EXTERNAL_HANDLES,
     commandDigest = commandDigest,
@@ -273,6 +279,7 @@ class AndroidDurableExecutionAdapterTest {
   private fun pointer(identity: AndroidRecoveryCommandIdentity) = AndroidDurableExecutionPointer(
     runId = identity.runId,
     controlEpoch = identity.controlEpoch,
+    snapshotUpdatedAtMillis = identity.snapshotUpdatedAtMillis,
     snapshotDigest = identity.snapshotDigest,
     commandDigest = identity.commandDigest,
   )

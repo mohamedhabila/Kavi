@@ -134,6 +134,7 @@ class AndroidSharedPreferencesDurableExecutionStoreTest {
       identity = AndroidRecoveryCommandIdentity(
         runId = "run-1",
         controlEpoch = 2,
+        snapshotUpdatedAtMillis = 90,
         snapshotDigest = "a".repeat(64),
         commandKind = AndroidRecoveryCommandKind.RECONCILE_EXTERNAL_HANDLES,
         commandDigest = "b".repeat(64),

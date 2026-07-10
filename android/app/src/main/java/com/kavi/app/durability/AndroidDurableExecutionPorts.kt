@@ -36,6 +36,7 @@ internal data class AndroidDurableExecutionRecord(
 internal data class AndroidDurableExecutionPointer(
   val runId: String,
   val controlEpoch: Long,
+  val snapshotUpdatedAtMillis: Long,
   val snapshotDigest: String,
   val commandDigest: String,
 )

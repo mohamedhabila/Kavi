@@ -26,12 +26,13 @@ internal object AndroidDurableExecutionPolicy {
       AndroidTaskDurabilityClass.DEFERRABLE_MAINTENANCE ->
         if (request.identity.commandKind in DEFERRABLE_COMMANDS) null
         else AndroidDurableUnsupportedReason.UNSAFE_RECOVERY_COMMAND
-      AndroidTaskDurabilityClass.EXTERNAL_DURABLE_OPERATION ->
-        if (request.identity.commandKind == AndroidRecoveryCommandKind.RECONCILE_EXTERNAL_HANDLES) {
-          null
-        } else {
+      AndroidTaskDurabilityClass.EXTERNAL_DURABLE_OPERATION -> when {
+        request.identity.commandKind != AndroidRecoveryCommandKind.RECONCILE_EXTERNAL_HANDLES ->
           AndroidDurableUnsupportedReason.UNSAFE_RECOVERY_COMMAND
-        }
+        request.constraints.network == AndroidNetworkConstraint.NOT_REQUIRED ->
+          AndroidDurableUnsupportedReason.MISSING_REQUIRED_NETWORK_CONSTRAINT
+        else -> null
+      }
     }
     if (unsupportedReason != null) {
       return AndroidDurableExecutionDecision.Unsupported(unsupportedReason)
@@ -51,6 +52,7 @@ internal object AndroidDurableExecutionPolicy {
     val retryPolicy = request.retryPolicy
     return validId(identity.runId) &&
       identity.controlEpoch >= 0 &&
+      identity.snapshotUpdatedAtMillis >= 0 &&
       SHA256_DIGEST.matches(identity.snapshotDigest) &&
       SHA256_DIGEST.matches(identity.commandDigest) &&
       request.requestedAtMillis >= 0 &&

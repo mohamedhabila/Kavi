@@ -361,6 +361,7 @@ internal class AndroidDurableExecutionAdapter(
     }
     if (
       pointer.controlEpoch != identity.controlEpoch ||
+      pointer.snapshotUpdatedAtMillis != identity.snapshotUpdatedAtMillis ||
       pointer.snapshotDigest != identity.snapshotDigest ||
       pointer.commandDigest != identity.commandDigest
     ) {
