@@ -215,6 +215,7 @@ describe('e2eReadinessDashboard', () => {
       assessment,
       reliability: report.reliability,
       readiness: report.readiness,
+      pricing: { status: 'missing', snapshot: null },
     });
 
     expect(dashboard.familyReadiness.length).toBeGreaterThan(0);

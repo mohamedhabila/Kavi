@@ -45,6 +45,40 @@ function projectNumericObject(value, keys) {
   return Object.fromEntries(keys.map((key) => [key, finiteNumber(source[key])]));
 }
 
+function projectPricingSnapshot(value) {
+  if (value === null) return null;
+  const source = asRecord(value);
+  const rates = [
+    'inputUsdPerMillion',
+    'outputUsdPerMillion',
+    'cacheReadUsdPerMillion',
+    'cacheWriteUsdPerMillion',
+  ];
+  if (
+    source.currency !== 'USD' ||
+    source.unitTokens !== 1_000_000 ||
+    typeof source.snapshotDate !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}$/u.test(source.snapshotDate) ||
+    typeof source.sourceSha256 !== 'string' ||
+    !/^[a-f0-9]{64}$/u.test(source.sourceSha256) ||
+    rates.some(
+      (key) => typeof source[key] !== 'number' || !Number.isFinite(source[key]) || source[key] < 0,
+    )
+  ) {
+    return null;
+  }
+  return {
+    currency: 'USD',
+    unitTokens: 1_000_000,
+    inputUsdPerMillion: source.inputUsdPerMillion,
+    outputUsdPerMillion: source.outputUsdPerMillion,
+    cacheReadUsdPerMillion: source.cacheReadUsdPerMillion,
+    cacheWriteUsdPerMillion: source.cacheWriteUsdPerMillion,
+    snapshotDate: source.snapshotDate,
+    sourceSha256: source.sourceSha256,
+  };
+}
+
 function publicEvaluationIdArray(value, fieldName, maxItems = MAX_PUBLIC_ITEMS) {
   if (!Array.isArray(value)) {
     return [];
@@ -138,6 +172,22 @@ function projectReadinessDashboard(value, projectRunMetadata) {
   const benchmarkRequirements = asRecord(source.benchmarkRequirements);
   const artifactRetention = asRecord(source.artifactRetention);
   const humanAuditCalibration = asRecord(source.humanAuditCalibration);
+  const pricingSnapshot = projectPricingSnapshot(tokenCostLatency.pricingSnapshot);
+  const costStatus =
+    tokenCostLatency.costStatus === 'configured_rates'
+      ? 'configured_rates'
+      : 'provider_pricing_not_configured';
+  if (
+    (costStatus === 'configured_rates' &&
+      (pricingSnapshot === null ||
+        typeof tokenCostLatency.estimatedCostUsd !== 'number' ||
+        !Number.isFinite(tokenCostLatency.estimatedCostUsd) ||
+        tokenCostLatency.estimatedCostUsd < 0)) ||
+    (costStatus === 'provider_pricing_not_configured' &&
+      (pricingSnapshot !== null || tokenCostLatency.estimatedCostUsd !== null))
+  ) {
+    throw new Error('Public E2E dashboard contains inconsistent pricing evidence.');
+  }
   return {
     version: boundedString(source.version),
     generatedAt: boundedString(source.generatedAt),
@@ -175,10 +225,8 @@ function projectReadinessDashboard(value, projectRunMetadata) {
         tokenCostLatency.estimatedCostUsd === null
           ? null
           : finiteNumber(tokenCostLatency.estimatedCostUsd),
-      costStatus:
-        tokenCostLatency.costStatus === 'provider_pricing_not_configured'
-          ? tokenCostLatency.costStatus
-          : 'provider_pricing_not_configured',
+      costStatus,
+      pricingSnapshot,
     },
     cache: {
       ...projectNumericObject(cache, [

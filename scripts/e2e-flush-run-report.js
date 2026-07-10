@@ -21,6 +21,7 @@ const {
 } = require('./e2eReport/metrics');
 const { buildReadinessDashboard } = require('./e2eReport/dashboard');
 const { writeReportArtifacts } = require('./e2eReport/writer');
+const { resolveE2EPricing } = require('./e2eReport/pricing');
 
 function buildE2eRunReport(entries, options = {}) {
   const totals = buildTotals(entries);
@@ -32,6 +33,7 @@ function buildE2eRunReport(entries, options = {}) {
   const readiness = buildReadiness(entries, assessment, cache, graderAudit, reliability);
   const generatedAt = options.generatedAt || new Date().toISOString();
   const runMetadata = options.runMetadata || buildRunMetadata();
+  const pricing = resolveE2EPricing(options.pricingEnv || process.env);
   const readinessDashboard = buildReadinessDashboard({
     generatedAt,
     runMetadata,
@@ -42,6 +44,7 @@ function buildE2eRunReport(entries, options = {}) {
     assessment,
     reliability,
     readiness,
+    pricing,
   });
 
   return {

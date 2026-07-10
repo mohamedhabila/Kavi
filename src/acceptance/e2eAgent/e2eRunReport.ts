@@ -48,6 +48,7 @@ import type {
   E2ETokenUsageSummary,
 } from './types';
 import type { UsageTokenBuckets } from '../../types/usage';
+import { resolveE2EPricing } from '../../../scripts/e2eReport/pricing';
 
 export const E2E_REPORT_PATH_ENV = 'E2E_REPORT_PATH';
 export const E2E_REPORT_PARTIAL_PATH_ENV = 'E2E_REPORT_PARTIAL_PATH';
@@ -318,6 +319,7 @@ export function buildE2ERunReport(
   const reliability = buildReliabilityReport(entries, maxScenarioRetries);
   const generatedAt = options?.generatedAt ?? new Date().toISOString();
   const runMetadata = resolveE2ERunMetadata(options?.runMetadata, options?.runMetadataEnv);
+  const pricing = resolveE2EPricing(options?.runMetadataEnv ?? process.env);
   const readiness = buildReadinessReport({
     entries,
     assessment,
@@ -335,6 +337,7 @@ export function buildE2ERunReport(
     assessment,
     reliability,
     readiness,
+    pricing,
   });
 
   return {

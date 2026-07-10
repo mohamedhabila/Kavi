@@ -39,6 +39,35 @@ function buildRawReport() {
 }
 
 describe('public E2E report privacy boundaries', () => {
+  it('retains only complete reproducible pricing evidence', () => {
+    const rawReport = buildE2eRunReport([buildScenarioEntry()], {
+      generatedAt: '2026-07-10T00:00:00.000Z',
+      runMetadata: buildRawReport().runMetadata,
+      pricingEnv: {
+        E2E_PRICING_INPUT_USD_PER_MILLION: '2',
+        E2E_PRICING_OUTPUT_USD_PER_MILLION: '10',
+        E2E_PRICING_CACHE_READ_USD_PER_MILLION: '0.2',
+        E2E_PRICING_CACHE_WRITE_USD_PER_MILLION: '2.5',
+        E2E_PRICING_SNAPSHOT_DATE: '2026-07-10',
+        E2E_PRICING_SOURCE_SHA256: 'c'.repeat(64),
+      },
+    }) as any;
+
+    const publicReport = projectPublicRunReport(rawReport) as any;
+    expect(publicReport.readinessDashboard.tokenCostLatency).toMatchObject({
+      costStatus: 'configured_rates',
+      estimatedCostUsd: expect.any(Number),
+      pricingSnapshot: {
+        currency: 'USD',
+        snapshotDate: '2026-07-10',
+        sourceSha256: 'c'.repeat(64),
+      },
+    });
+
+    rawReport.readinessDashboard.tokenCostLatency.pricingSnapshot = null;
+    expect(() => projectPublicRunReport(rawReport)).toThrow('inconsistent pricing evidence');
+  });
+
   it('rebuilds canonical assessment metadata and rejects unknown public axes', () => {
     const entryWithPrivateAxis = {
       ...buildScenarioEntry(),

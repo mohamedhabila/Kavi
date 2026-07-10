@@ -35,6 +35,26 @@ This command validates governance artifacts. It does not execute KLAE or
 create a result claim. Scenario execution must use a product-real runner and
 emit a conforming `evaluation_run` manifest.
 
+### Explicit pricing snapshots
+
+Live E2E reports leave cost as `null` unless a maintainer declares a complete
+pricing snapshot. Configure all fields together; partial configuration fails
+instead of falling back to a guessed or zero price:
+
+```bash
+# Example shape only. Replace every rate and digest with reviewed provider data.
+export E2E_PRICING_INPUT_USD_PER_MILLION=1.00
+export E2E_PRICING_OUTPUT_USD_PER_MILLION=3.00
+export E2E_PRICING_CACHE_READ_USD_PER_MILLION=0.10
+export E2E_PRICING_CACHE_WRITE_USD_PER_MILLION=1.00
+export E2E_PRICING_SNAPSHOT_DATE=2026-07-10
+export E2E_PRICING_SOURCE_SHA256=<sha256-of-the-reviewed-pricing-source>
+```
+
+Rates are USD per million tokens. The report stores the declared rates, date,
+and source digest alongside the estimate so another maintainer can reproduce
+the calculation without exposing account-specific pricing material.
+
 ## Evaluation lanes
 
 Every run selects one lane, one protocol-conformance value, one split kind,

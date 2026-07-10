@@ -25,8 +25,13 @@ import type {
   E2ERunReportScenarioEntry,
   E2ERunReportReadiness,
 } from './e2eRunReport';
+import {
+  estimateE2ETokenCostUsd,
+  type E2EPricingResolution,
+  type E2EPricingSnapshot,
+} from '../../../scripts/e2eReport/pricing';
 
-export const E2E_READINESS_DASHBOARD_VERSION = '2026-07-10.phase11';
+export const E2E_READINESS_DASHBOARD_VERSION = '2026-07-10.phase12-pricing-v1';
 export const E2E_READINESS_ARTIFACT_RETENTION_RUNS = 90;
 
 export type E2EReadinessFailureCategory =
@@ -135,7 +140,8 @@ export type E2EReadinessDashboard = {
     p95ScenarioTotalTokens: number;
     p95ScenarioDurationMs: number;
     estimatedCostUsd: number | null;
-    costStatus: 'provider_pricing_not_configured';
+    costStatus: 'configured_rates' | 'provider_pricing_not_configured';
+    pricingSnapshot: E2EPricingSnapshot | null;
   };
   cache: {
     eligibleInputTokens: number;
@@ -193,6 +199,7 @@ export type BuildE2EReadinessDashboardParams = {
   assessment: E2EAssessmentReport;
   reliability: E2ERunReportReliability;
   readiness: E2ERunReportReadiness;
+  pricing: E2EPricingResolution;
 };
 
 function safeRate(numerator: number, denominator: number): number {
@@ -374,8 +381,12 @@ export function buildE2EReadinessDashboard(
       totalTokens: params.totals.totalTokens,
       p95ScenarioTotalTokens: percentile(scenarioTokenTotals, 95),
       p95ScenarioDurationMs: percentile(scenarioDurations, 95),
-      estimatedCostUsd: null,
-      costStatus: 'provider_pricing_not_configured',
+      estimatedCostUsd: estimateE2ETokenCostUsd(params.totals, params.pricing),
+      costStatus:
+        params.pricing.status === 'configured'
+          ? 'configured_rates'
+          : 'provider_pricing_not_configured',
+      pricingSnapshot: params.pricing.snapshot,
     },
     cache: {
       eligibleInputTokens: params.cache.eligibleInputTokens,
@@ -443,10 +454,14 @@ export function buildE2EReadinessDashboard(
 }
 
 export function formatE2EReadinessDashboardSummary(dashboard: E2EReadinessDashboard): string {
+  const cost =
+    dashboard.tokenCostLatency.estimatedCostUsd === null
+      ? 'missing'
+      : `$${dashboard.tokenCostLatency.estimatedCostUsd.toFixed(6)}`;
   return [
     `[e2e-readiness-dashboard] passing=${dashboard.overall.passing} failedCriteria=${dashboard.overall.failedCriteria.join(',') || 'none'}`,
     `[e2e-readiness-dashboard] passRate=${dashboard.overall.scenarioPassRate.toFixed(3)} pass1=${dashboard.overall.pass1Rate.toFixed(3)} pass^${dashboard.reliability.k}=${dashboard.overall.passKRate.toFixed(3)} evidence=${dashboard.overall.evidenceScore.toFixed(3)}`,
-    `[e2e-readiness-dashboard] tokens total=${dashboard.tokenCostLatency.totalTokens} p95ScenarioTokens=${dashboard.tokenCostLatency.p95ScenarioTotalTokens} p95DurationMs=${dashboard.tokenCostLatency.p95ScenarioDurationMs}`,
+    `[e2e-readiness-dashboard] tokens total=${dashboard.tokenCostLatency.totalTokens} p95ScenarioTokens=${dashboard.tokenCostLatency.p95ScenarioTotalTokens} p95DurationMs=${dashboard.tokenCostLatency.p95ScenarioDurationMs} cost=${cost} costStatus=${dashboard.tokenCostLatency.costStatus}`,
     `[e2e-readiness-dashboard] cache eligibleRate=${dashboard.cache.eligibleCacheReadRate.toFixed(3)} target=${dashboard.cache.targetEligibleCacheReadRate.toFixed(3)} providerManagedReadinessTokens=${dashboard.cache.providerManagedReadinessTokens} passing=${dashboard.cache.passing}`,
     `[e2e-readiness-dashboard] mobile pass=${dashboard.mobileNative.passedCount}/${dashboard.mobileNative.scenarioCount} security=${dashboard.security.status} externalRequirements=${dashboard.benchmarkRequirements.externalRequired}`,
     `[e2e-readiness-dashboard] minedEvalCandidates=${dashboard.minedEvalCandidates.length}`,

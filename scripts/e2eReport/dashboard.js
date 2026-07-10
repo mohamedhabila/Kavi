@@ -8,6 +8,7 @@ const {
 } = require('./constants');
 const { eligibleCacheReadTokens, safeRate } = require('./parser');
 const { buildFailureTaxonomy, buildMinedEvalCandidates } = require('./taxonomy');
+const { estimateE2ETokenCostUsd } = require('./pricing');
 
 function percentile(values, percentileRank) {
   const sorted = values.filter(Number.isFinite).sort((left, right) => left - right);
@@ -127,8 +128,12 @@ function buildReadinessDashboard(params) {
         params.entries.map((entry) => entry.durationMs ?? 0),
         95,
       ),
-      estimatedCostUsd: null,
-      costStatus: 'provider_pricing_not_configured',
+      estimatedCostUsd: estimateE2ETokenCostUsd(params.totals, params.pricing),
+      costStatus:
+        params.pricing.status === 'configured'
+          ? 'configured_rates'
+          : 'provider_pricing_not_configured',
+      pricingSnapshot: params.pricing.snapshot,
     },
     cache: {
       eligibleInputTokens: params.cache.eligibleInputTokens,
