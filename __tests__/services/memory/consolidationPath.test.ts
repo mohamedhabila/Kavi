@@ -2,6 +2,11 @@ jest.mock('../../../src/services/storage/SecureStorage', () => ({
   getProviderApiKey: jest.fn(async () => ''),
 }));
 
+const mockSendMessage = jest.fn();
+jest.mock('../../../src/services/llm/LlmService', () => ({
+  LlmService: jest.fn().mockImplementation(() => ({ sendMessage: mockSendMessage })),
+}));
+
 import {
   extractConsolidationAssistantText,
   resolveConsolidationPath,
@@ -24,6 +29,7 @@ function makeProvider(overrides: Partial<LlmProviderConfig> = {}): LlmProviderCo
 }
 
 beforeEach(() => {
+  jest.clearAllMocks();
   useSettingsStore.setState({
     disableLongTermMemory: false,
     memoryConsolidationMode: 'auto',
@@ -87,6 +93,27 @@ describe('resolveConsolidationPath', () => {
       model: null,
       extractor: null,
     });
+  });
+
+  it('forwards external cancellation to an active provider extractor request', async () => {
+    let observedSignal: AbortSignal | undefined;
+    mockSendMessage.mockImplementation(
+      async (_messages: unknown, options: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          observedSignal = options.signal;
+          options.signal?.addEventListener('abort', () => reject(new Error('cancelled')), {
+            once: true,
+          });
+        }),
+    );
+    const path = await resolveConsolidationPath(makeProvider());
+    const controller = new AbortController();
+    const extraction = path.extractor?.('prompt', controller.signal);
+
+    controller.abort();
+
+    await expect(extraction).rejects.toThrow('cancelled');
+    expect(observedSignal?.aborted).toBe(true);
   });
 });
 

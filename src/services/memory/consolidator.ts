@@ -154,10 +154,11 @@ export class UnsupportedConsolidatorResponseError extends Error {
   }
 }
 
-export type ConsolidatorExtractor = (prompt: string) => Promise<string>;
+export type ConsolidatorExtractor = (prompt: string, signal?: AbortSignal) => Promise<string>;
 
 export interface ConsolidatorOptions {
   extractor: ConsolidatorExtractor;
+  signal?: AbortSignal;
   /** Override clock for tests. */
   now?: () => number;
   /**
@@ -539,7 +540,7 @@ export async function consolidateTurn(
   const prompt = buildConsolidatorPrompt(input);
   let raw: string;
   try {
-    raw = await options.extractor(prompt);
+    raw = await options.extractor(prompt, options.signal);
   } catch (error) {
     return {
       status: 'provider_error',

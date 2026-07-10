@@ -592,49 +592,6 @@ describe('ingestionQueue', () => {
     ]);
   });
 
-  it('prioritizes a new structural checkpoint over an older enrichment retry', async () => {
-    mockedProcessIngestionTurn.mockResolvedValueOnce(
-      processResult({ status: 'provider_error', code: 'provider_request_failed' }),
-    );
-    const enrichmentRetry = enqueueIngestionJob({
-      personaId: 'default',
-      threadId: 'conv-enrichment-retry',
-      sourceStartMessageId: 'user-enrichment-retry',
-      sourceEndMessageId: 'assistant-enrichment-retry',
-      now: 100,
-    })!;
-    await drainIngestionQueue({
-      loadMessagesForThread: () => closedTurn('enrichment-retry'),
-      now: 100,
-    });
-    const dueAt = 100 + INGESTION_RETRY_BASE_DELAY_MS;
-    const newTurn = enqueueIngestionJob({
-      personaId: 'default',
-      threadId: 'conv-new-turn',
-      sourceStartMessageId: 'user-new-turn',
-      sourceEndMessageId: 'assistant-new-turn',
-      now: dueAt,
-    })!;
-
-    expect(listPendingIngestionJobs(1, dueAt)).toEqual([
-      expect.objectContaining({ id: newTurn.id, structuralCompletedAt: null }),
-    ]);
-    mockedProcessIngestionTurn.mockResolvedValueOnce(
-      processResult({ status: 'not_requested' }),
-    );
-    await drainIngestionQueue({
-      loadMessagesForThread: (threadId) =>
-        closedTurn(threadId === newTurn.threadId ? 'new-turn' : 'enrichment-retry'),
-      maxJobs: 1,
-      now: dueAt,
-    });
-
-    expect(getIngestionJob(newTurn.id)?.status).toBe('completed_structural');
-    expect(getIngestionJob(enrichmentRetry.id)).toEqual(
-      expect.objectContaining({ status: 'retrying', structuralCompletedAt: 100 }),
-    );
-  });
-
   it('degrades only after exactly the maximum provider attempts', async () => {
     const job = enqueueIngestionJob({
       personaId: 'default',

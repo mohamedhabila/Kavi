@@ -60,7 +60,7 @@ export async function relaunchForegroundScenarioApp(params: {
   if (!conversation) throw new Error(`Conversation ${params.conversationId} is unavailable.`);
   const lastMessageId = conversation.messages[conversation.messages.length - 1]?.id ?? null;
 
-  cancelScheduledIngestionDrain();
+  await cancelScheduledIngestionDrain();
   await flushChatStorePersistenceNow();
   await discardInMemoryChatStateWithoutPersisting();
   if (

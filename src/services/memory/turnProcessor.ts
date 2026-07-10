@@ -48,6 +48,7 @@ export interface ProcessTurnInput {
   sourceRunId?: string;
   now?: number;
   extractor?: ConsolidatorExtractor;
+  providerSignal?: AbortSignal;
   skipWorkingMemorySync?: boolean;
   episodeAccess?: {
     personaId: string;
@@ -79,7 +80,7 @@ export interface ProcessTurnResult {
   providerOutcome: TurnProviderOutcome;
   bridgedEvidenceFactIds: string[];
   agentRunMemoryFactIds: string[];
-  skipped?: 'opt_out' | 'no_closed_turn' | 'claim_lost';
+  skipped?: 'opt_out' | 'no_closed_turn' | 'claim_lost' | 'provider_preempted';
 }
 
 export type TurnProviderOutcome =
@@ -101,7 +102,7 @@ export interface TurnPersistenceReceipt {
 }
 
 function skippedProcessTurnResult(
-  skipped: 'opt_out' | 'no_closed_turn' | 'claim_lost',
+  skipped: 'opt_out' | 'no_closed_turn' | 'claim_lost' | 'provider_preempted',
   providerOutcome: TurnProviderOutcome = { status: 'not_requested' },
 ): ProcessTurnResult {
   return {
@@ -590,11 +591,18 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
   if (!input.extractor) {
     return completedProcessTurnResult(structuralReceipt, false);
   }
+  if (input.providerSignal?.aborted) {
+    return skippedProcessTurnResult('provider_preempted');
+  }
 
   const outcome = await extractProviderEnrichment(turnInput, {
     extractor: input.extractor,
     now: () => now,
+    signal: input.providerSignal,
   });
+  if (input.providerSignal?.aborted) {
+    return skippedProcessTurnResult('provider_preempted');
+  }
   const providerOutcome = summarizeProviderOutcome(outcome);
   if (!canWriteLongTermMemory()) {
     return skippedProcessTurnResult('opt_out', providerOutcome);

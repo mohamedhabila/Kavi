@@ -398,6 +398,46 @@ describe('processIngestionTurn', () => {
     expect(mockUpsertState).not.toHaveBeenCalled();
   });
 
+  it('keeps structural memory and skips provider finalization when enrichment is preempted', async () => {
+    mockExtractStructuralMemory.mockReturnValue({
+      episodeSummary: 'Structural before preemption',
+      facts: [{ subject: 'user', predicate: 'name', value: 'Mo' }],
+      activeFocus: null,
+      openThreads: [],
+    });
+    const controller = new AbortController();
+    mockExtractProviderEnrichment.mockImplementationOnce(async () => {
+      controller.abort();
+      return { status: 'provider_error', code: 'provider_request_failed' };
+    });
+
+    const result = await processIngestionTurn({
+      episodeAccess: { personaId: 'default', shareability: 'thread_only' },
+      threadId: 'conv-preempted',
+      messages: [
+        makeMsg({ role: 'user', content: 'Hey' }),
+        makeMsg({
+          role: 'assistant',
+          content: 'Hi',
+          assistantMetadata: {
+            finishReason: 'stop',
+            kind: 'final',
+            completionStatus: 'complete',
+          },
+        }),
+      ],
+      extractor: jest.fn(),
+      providerSignal: controller.signal,
+    });
+
+    expect(result).toEqual(expect.objectContaining({ processed: false, skipped: 'provider_preempted' }));
+    expect(mockApplyConsolidatorResult).toHaveBeenCalledWith(
+      expect.objectContaining({ episodeSummary: 'Structural before preemption' }),
+      expect.any(Object),
+    );
+    expect(mockUpsertState).not.toHaveBeenCalled();
+  });
+
   it('deduplicates provider facts against structural facts by key', async () => {
     mockExtractStructuralMemory.mockReturnValue({
       episodeSummary: 'S',

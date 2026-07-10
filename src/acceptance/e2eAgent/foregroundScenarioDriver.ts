@@ -310,7 +310,7 @@ async function runScenarioIsolated(
       turns: turnSnapshots,
     }) as ForegroundScenarioDriverResult;
   } finally {
-    cancelScheduledIngestionDrain();
+    await cancelScheduledIngestionDrain();
     useChatStore.setState(chatSnapshot, true);
     useSettingsStore.setState(settingsSnapshot, true);
     requestChatStorePersistenceCheckpoint(0);

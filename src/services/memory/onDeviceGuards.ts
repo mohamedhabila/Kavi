@@ -13,6 +13,25 @@ export const MAX_INGESTION_ATTEMPTS = 5;
 let activeIngestionJobId: string | null = null;
 const activeMainInferenceLeases = new Map<symbol, string>();
 let memoryPressureAbort = false;
+type IngestionPreemptionReason = 'foreground_inference' | 'memory_pressure';
+const ingestionPreemptionHandlers = new Set<(reason: IngestionPreemptionReason) => void>();
+
+function notifyIngestionPreemption(reason: IngestionPreemptionReason): void {
+  for (const handler of ingestionPreemptionHandlers) {
+    try {
+      handler(reason);
+    } catch {
+      // Resource guards are fail-open; queue ownership still fences persistence.
+    }
+  }
+}
+
+export function registerIngestionPreemptionHandler(
+  handler: (reason: IngestionPreemptionReason) => void,
+): () => void {
+  ingestionPreemptionHandlers.add(handler);
+  return () => ingestionPreemptionHandlers.delete(handler);
+}
 
 export interface MainInferenceLease {
   readonly ownerId: string;
@@ -26,7 +45,9 @@ export function acquireMainInferenceLease(ownerId: string): MainInferenceLease {
   }
 
   const token = Symbol(normalizedOwnerId);
+  const wasIdle = activeMainInferenceLeases.size === 0;
   activeMainInferenceLeases.set(token, normalizedOwnerId);
+  if (wasIdle) notifyIngestionPreemption('foreground_inference');
   let released = false;
   return {
     ownerId: normalizedOwnerId,
@@ -39,7 +60,9 @@ export function acquireMainInferenceLease(ownerId: string): MainInferenceLease {
 }
 
 export function setMemoryPressureAbort(active: boolean): void {
+  const shouldPreempt = active && !memoryPressureAbort;
   memoryPressureAbort = active;
+  if (shouldPreempt) notifyIngestionPreemption('memory_pressure');
 }
 
 export function isMainInferenceActive(): boolean {

@@ -40,12 +40,19 @@ import type {
   IngestionProviderOutcome,
 } from './ingestionQueueStore';
 import {
+  beginActiveIngestionAttempt,
+  finishActiveIngestionAttempt,
+  preemptActiveIngestionAttempt,
+  preemptActiveIngestionAttemptAndWait,
+} from './ingestionAttemptPreemption';
+import {
   deferIngestionJobForMissingSource,
   recoverStaleIngestionJobs,
 } from './ingestionQueueRecovery';
 import {
   acquireIngestionSlot,
   INGESTION_BATCH_LIMIT,
+  registerIngestionPreemptionHandler,
   releaseIngestionSlot,
   shouldAbortIngestionDueToMemoryPressure,
 } from './onDeviceGuards';
@@ -239,6 +246,7 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
     | 'slot_unavailable'
     | 'not_due'
     | 'claim_lost'
+    | 'provider_preempted'
     | 'processing_error'
     | 'persona_scope_missing'
     | 'source_identity_invalid'
@@ -288,6 +296,7 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
     releaseIngestionSlot(job.id);
     return { processed: false, skipped: 'claim_lost' };
   }
+  const activeAttempt = beginActiveIngestionAttempt(job.id);
 
   try {
     const turnResult = await runConsolidation({
@@ -308,6 +317,7 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
       },
       now: job.sourceAt,
       skipWorkingMemorySync: true,
+      providerSignal: activeAttempt.controller.signal,
       canPersist: () => ownsIngestionClaim(job.id, claimToken, input.now ?? Date.now()),
       commitStructuralCheckpoint: () =>
         markIngestionJobStructuralComplete(job.id, input.now ?? Date.now(), claimToken),
@@ -406,7 +416,13 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
         logger.devWarn(`Ingestion job ${job.id} reflection refresh skipped`);
       }
     }
-    return { processed: turnResult.processed, status };
+    return {
+      processed: turnResult.processed,
+      status,
+      ...(turnResult.skipped === 'provider_preempted'
+        ? { skipped: 'provider_preempted' as const }
+        : {}),
+    };
   } catch {
     if (!canWriteLongTermMemory()) {
       discardIngestionJob(job.id);
@@ -427,6 +443,7 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
     return { processed: false, status: transition.status, skipped: 'processing_error' };
   } finally {
     releaseIngestionSlot(job.id);
+    finishActiveIngestionAttempt(activeAttempt);
   }
 }
 
@@ -637,20 +654,23 @@ export function requestScheduledIngestionDrain(): boolean {
   return true;
 }
 
-export function cancelScheduledIngestionDrain(): void {
+export async function cancelScheduledIngestionDrain(): Promise<void> {
   scheduledRuntime = null;
   drainRequested = false;
   drainMicrotaskScheduled = false;
   clearRetryWakeTimer();
+  await preemptActiveIngestionAttemptAndWait();
 }
 
+registerIngestionPreemptionHandler(() => preemptActiveIngestionAttempt());
+
 registerMemoryOptOutHandler(() => {
-  cancelScheduledIngestionDrain();
+  void cancelScheduledIngestionDrain();
   discardPendingIngestionJobs();
 });
 
 export function __resetIngestionQueueForTests(): void {
-  cancelScheduledIngestionDrain();
+  void cancelScheduledIngestionDrain();
   scheduledRuntimeGeneration = 0;
   drainRunning = false;
 }

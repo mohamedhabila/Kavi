@@ -32,6 +32,7 @@ jest.mock('../../src/engine/orchestrator', () => ({
 }));
 jest.mock('../../src/services/memory/ingestionQueue', () => ({
   cancelScheduledIngestionDrain: jest.fn(),
+  requestScheduledIngestionDrain: jest.fn(),
   drainIngestionQueueWithWakeup: jest.fn(async () => ({
     attempted: 0,
     completed: 0,

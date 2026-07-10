@@ -68,13 +68,27 @@ function buildProviderExtractor(
   model: string,
 ): ConsolidatorExtractor {
   const llm = new LlmService(apiKey ? { ...provider, apiKey } : provider);
-  return async (prompt: string) => {
-    const response = await llm.sendMessage([{ role: 'user', content: prompt }] as never, {
-      model,
-      maxTokens: MEMORY_EXTRACTOR_MAX_TOKENS,
-      signal: createTimeoutSignal(MEMORY_EXTRACTOR_TIMEOUT_MS),
-    });
-    return extractConsolidationAssistantText(response);
+  return async (prompt: string, externalSignal?: AbortSignal) => {
+    const timeoutSignal = createTimeoutSignal(MEMORY_EXTRACTOR_TIMEOUT_MS);
+    const controller = new AbortController();
+    const forwardAbort = () => controller.abort();
+    if (timeoutSignal.aborted || externalSignal?.aborted) {
+      controller.abort();
+    } else {
+      timeoutSignal.addEventListener('abort', forwardAbort, { once: true });
+      externalSignal?.addEventListener('abort', forwardAbort, { once: true });
+    }
+    try {
+      const response = await llm.sendMessage([{ role: 'user', content: prompt }] as never, {
+        model,
+        maxTokens: MEMORY_EXTRACTOR_MAX_TOKENS,
+        signal: controller.signal,
+      });
+      return extractConsolidationAssistantText(response);
+    } finally {
+      timeoutSignal.removeEventListener('abort', forwardAbort);
+      externalSignal?.removeEventListener('abort', forwardAbort);
+    }
   };
 }
 

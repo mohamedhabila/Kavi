@@ -28,6 +28,7 @@ describe('extractProviderEnrichment', () => {
       threadId: 'conv-1',
     };
     const extractor = jest.fn().mockResolvedValue('{"newFacts":[]}');
+    const signal = new AbortController().signal;
     mockConsolidateTurn.mockResolvedValue({
       status: 'empty_valid',
       result: {
@@ -39,11 +40,16 @@ describe('extractProviderEnrichment', () => {
       },
     });
 
-    await extractProviderEnrichment(turnInput, { extractor, now: () => 42 });
+    await extractProviderEnrichment(turnInput, { extractor, now: () => 42, signal });
 
     expect(mockConsolidateTurn).toHaveBeenCalledWith(
       turnInput,
-      expect.objectContaining({ extractor, persist: false, now: expect.any(Function) }),
+      expect.objectContaining({
+        extractor,
+        persist: false,
+        now: expect.any(Function),
+        signal,
+      }),
     );
   });
 

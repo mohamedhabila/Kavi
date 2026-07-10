@@ -4,6 +4,7 @@ import {
   acquireIngestionSlot,
   canStartIngestionJob,
   isMainInferenceActive,
+  registerIngestionPreemptionHandler,
   releaseIngestionSlot,
   setMemoryPressureAbort,
 } from '../../../src/services/memory/onDeviceGuards';
@@ -45,6 +46,19 @@ describe('onDeviceGuards', () => {
 
   it('rejects anonymous inference ownership', () => {
     expect(() => acquireMainInferenceLease('   ')).toThrow('main_inference_owner_required');
+  });
+
+  it('preempts ingestion once when foreground inference starts or memory pressure rises', () => {
+    const handler = jest.fn();
+    const unregister = registerIngestionPreemptionHandler(handler);
+
+    acquireMainInferenceLease('foreground:first:request');
+    acquireMainInferenceLease('foreground:second:request');
+    setMemoryPressureAbort(true);
+    setMemoryPressureAbort(true);
+
+    expect(handler.mock.calls).toEqual([['foreground_inference'], ['memory_pressure']]);
+    unregister();
   });
 
   it('aborts ingestion under memory pressure without throwing', () => {

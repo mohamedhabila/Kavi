@@ -25,6 +25,7 @@ import {
   INGESTION_RETRY_BASE_DELAY_MS,
   processIngestionJob,
   drainIngestionQueueWithWakeup,
+  cancelScheduledIngestionDrain,
   requestScheduledIngestionDrain,
   scheduleIngestionDrain,
 } from '../../../src/services/memory/ingestionQueue';
@@ -112,6 +113,59 @@ afterEach(() => {
 });
 
 describe('ingestion queue scheduling and job context', () => {
+  it('preempts optional enrichment when foreground inference starts', async () => {
+    let markAttemptStarted: (() => void) | undefined;
+    const attemptStarted = new Promise<void>((resolve) => {
+      markAttemptStarted = resolve;
+    });
+    mockedProcessIngestionTurn.mockImplementationOnce(async (input) => {
+      input.commitStructuralCheckpoint?.();
+      markAttemptStarted?.();
+      await new Promise<void>((resolve) => {
+        input.providerSignal?.addEventListener('abort', () => resolve(), { once: true });
+      });
+      return {
+        ...processResult({ status: 'not_requested' }),
+        processed: false,
+        skipped: 'provider_preempted',
+      };
+    });
+    const job = enqueueIngestionJob({
+      personaId: 'default',
+      threadId: 'conv-provider-preempted',
+      threadTitle: null,
+      memoryConversationId: 'conv-provider-preempted',
+      taskId: null,
+      sourceStartMessageId: 'user-provider-preempted',
+      sourceEndMessageId: 'assistant-provider-preempted',
+      sourceRunId: null,
+      sourceAt: 100,
+      chatProviderId: null,
+      chatModel: null,
+      reason: 'turn_completed',
+      providerEnrichment: true,
+      now: 100,
+    })!;
+
+    scheduleIngestionDrain({
+      loadMessagesForThread: () => closedTurn('provider-preempted'),
+    });
+    jest.runAllTicks();
+    await attemptStarted;
+    const inferenceLease = acquireMainInferenceLease('foreground:conv-user:request-1');
+    await flushScheduledIngestion();
+
+    expect(getIngestionJob(job.id)).toEqual(
+      expect.objectContaining({
+        status: 'retrying',
+        outcomeCode: 'processing_incomplete',
+        structuralCompletedAt: 100,
+      }),
+    );
+    inferenceLease.release();
+    await cancelScheduledIngestionDrain();
+  });
+
   it('resumes deferred ingestion immediately after foreground inference releases', async () => {
     const job = enqueueIngestionJob({
       personaId: 'default',
