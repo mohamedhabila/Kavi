@@ -186,6 +186,7 @@ def main() -> None:
                     "questionId": question_id,
                 }
             )
+            runtime_stats = runtime.call({"op": "stats"})
             query_results.append(query_result)
             question_runs.append(
                 {
@@ -194,6 +195,7 @@ def main() -> None:
                     "reset": reset,
                     "inserts": inserts,
                     "query_result": query_result,
+                    "runtime_stats": runtime_stats,
                 }
             )
         finally:

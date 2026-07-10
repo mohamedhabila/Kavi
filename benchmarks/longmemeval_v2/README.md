@@ -56,8 +56,8 @@ The smoke writes a JSON artifact under:
 
 Inspect `query_result.selected` to confirm the returned sources are
 `living_memory/section/*`, and inspect `query_result.stats.db_dir` to confirm
-per-question isolation. Inspect `query_result.stats.fact_counts_by_kind` to
-confirm each trajectory is represented by compact agent-run memory records.
+per-question isolation. Inspect `question_runs[].runtime_stats.fact_counts_by_kind`
+to confirm each trajectory is represented by compact agent-run memory records.
 
 ## Official Run
 

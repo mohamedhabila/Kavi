@@ -30,6 +30,7 @@ async function main() {
   const reactNativeStub = path.join(__dirname, 'runtimeReactNativeStub.ts');
   const expoFileSystemStub = path.join(__dirname, 'runtimeExpoFileSystemStub.ts');
   const expoFetchStub = path.join(__dirname, 'runtimeExpoFetchStub.ts');
+  const expoCryptoStub = path.join(__dirname, 'runtimeExpoCryptoStub.ts');
 
   await esbuild.build({
     entryPoints: [path.join(__dirname, 'kavi_memory_runtime.ts')],
@@ -48,6 +49,7 @@ async function main() {
         setup(build) {
           build.onResolve({ filter: /^expo-sqlite$/ }, () => ({ path: expoSqliteShim }));
           build.onResolve({ filter: /^expo\/fetch$/ }, () => ({ path: expoFetchStub }));
+          build.onResolve({ filter: /^expo-crypto$/ }, () => ({ path: expoCryptoStub }));
           build.onResolve({ filter: /^expo-file-system$/ }, () => ({
             path: expoFileSystemStub,
           }));

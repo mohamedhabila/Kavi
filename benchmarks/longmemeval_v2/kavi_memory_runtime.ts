@@ -283,16 +283,17 @@ function buildToolMessagesForTrajectory(
   return messages;
 }
 
-function buildTrajectoryMessages(trajectory: JsonObject, id: string, now: number): Message[] {
+function buildTrajectoryMessages(trajectory: JsonObject, id: string, terminalAt: number): Message[] {
   const metadata = trajectoryMetadata(trajectory, id);
-  const toolMessages = buildToolMessagesForTrajectory(trajectory, id, now + 10);
-  const finalTimestamp = now + 10 + toolMessages.length + 1;
+  const stateCount = Array.isArray(trajectory.states) ? trajectory.states.length : 0;
+  const toolBaseTimestamp = terminalAt - stateCount * 2 - 1;
+  const toolMessages = buildToolMessagesForTrajectory(trajectory, id, toolBaseTimestamp);
   return [
     {
       id: `user-${id}`,
       role: 'user',
       content: compactJson(metadata, 2000),
-      timestamp: now,
+      timestamp: toolBaseTimestamp - 1,
     },
     ...toolMessages,
     {
@@ -306,7 +307,7 @@ function buildTrajectoryMessages(trajectory: JsonObject, id: string, now: number
         },
         1600,
       ),
-      timestamp: finalTimestamp,
+      timestamp: terminalAt,
       assistantMetadata: {
         kind: 'final',
         completionStatus: 'complete',
@@ -353,7 +354,6 @@ async function insertTrajectory(
   const messages = buildTrajectoryMessages(trajectory, id, now);
   const graphGoalEvidence = buildGraphEvidence(trajectory, id);
 
-  insertedTrajectoryIds.add(id);
   const ingestionResult = await processIngestionTurn({
     threadId: resolved.conversationId,
     messages,
@@ -362,7 +362,12 @@ async function insertTrajectory(
     sourceRunId: id,
     now,
     skipWorkingMemorySync: true,
+    episodeAccess: {
+      personaId: 'longmemeval-v2',
+      shareability: 'thread_only',
+    },
   });
+  insertedTrajectoryIds.add(id);
 
   return {
     trajectory_id: id,
