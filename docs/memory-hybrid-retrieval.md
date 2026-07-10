@@ -33,16 +33,20 @@ Bounds:
 
 Semantic input is optional and provider-neutral. Retrieval never creates an embedding, calls an embedding provider, calls an LLM, or falls back to a remote service. It consumes a compatible query vector only when the caller already has one and compares it only with stored vectors of the same dimension.
 
-## Measurement and release gates
+## Measurement and claim guardrails
 
 Per-turn telemetry contains only strategy, semantic availability, lane counts, eligible-scan count, union/diversified counts, and bounded stage timings. It contains no query text, entity/fact/source identifiers, embeddings, or memory content.
 
-The frozen synthetic ablation uses the same `recallScoredFactsForQuery` path for `lexical` and `hybrid`. It is a product regression instrument, not an official benchmark score. Release targets:
+The frozen synthetic ablation pairs `lexical` and `hybrid` through the foreground memory-access path for prompt-visible entity, temporal, parity, and eligibility diagnostics. The optional local-semantic pair is component-only because the foreground path does not manufacture or fetch a query vector. It is a public product regression instrument, not held-out evidence, an official benchmark score, a downstream-answer evaluation, or a frontier claim.
+
+Diagnostic targets and guardrails:
 
 1. lexical-control cases retain identical selected IDs and 100% recall at the tested cutoff;
-2. hybrid recall at the tested cutoff is at least 20 percentage points above lexical across entity, temporal, and compatible-local-semantic cases;
+2. hybrid recall at the tested cutoff is at least 20 percentage points above lexical across entity, temporal, and compatible-local-semantic diagnostics; this checked-fixture threshold is explicitly not a release gate;
 3. exact scope, historical validity, expiry, deletion, and no-embedding cases pass dedicated regressions;
 4. union and lane bounds never overflow, ordering is deterministic, and no extra network/model call occurs;
 5. public paired reports expose only aggregate stage counts/timings and fail closed on malformed telemetry.
 
-The checked-in synthetic set is frozen after implementation validation. It must not be presented as hidden or official held-out evidence; release claims still require evaluator-custodied packs under [the evaluation protocol](./evaluation.md).
+The report separately exposes scope/expiry/deletion false positives and hybrid-only pollution regressions. It contains no selected fact IDs or memory content. The checked-in synthetic set is frozen by a checked signature after implementation validation. Helpful-memory, completion, release, and frontier claims still require downstream-answer evaluation and evaluator-custodied packs under [the evaluation protocol](./evaluation.md).
+
+The exported runner refuses to start unless every relevant structured-memory table is empty. After a successful or failed run it clears the exact structured stores in a `finally` boundary. It never clears a nonempty user vault; execute it only against an isolated evaluation database.
