@@ -100,6 +100,14 @@ function validateFieldScore(field, index, cases, failures) {
   ) {
     failures.push(`${location}: evidence-status counts must sum to the case count`);
   }
+  const expectedCoverage = cases > 0 ? field?.scorable / cases : null;
+  if (
+    expectedCoverage === null
+      ? field?.coverageRate !== null
+      : !numbersClose(field?.coverageRate, expectedCoverage)
+  ) {
+    failures.push(`${location}.coverageRate: must equal scorable evidence divided by cases`);
+  }
   if (field?.scorable === 0) {
     if (
       field.truePositive !== 0 ||
@@ -216,7 +224,13 @@ function validateIntentFrameReportSemantics(report, failures) {
   ) {
     failures.push('report.macroF1: must be the unweighted mean of scorable field F1 values');
   }
-  const hasIncompleteField = fields.some((field) => field?.scorable === 0);
+  const minimumCoverage = report?.evaluator?.minimumScorableCoverage;
+  const hasIncompleteField = fields.some(
+    (field) =>
+      !Number.isFinite(field?.coverageRate) ||
+      !Number.isFinite(minimumCoverage) ||
+      field.coverageRate < minimumCoverage,
+  );
   if (hasIncompleteField !== eligibility.includes('incomplete_field_coverage')) {
     failures.push(
       'report.eligibilityFailures: incomplete_field_coverage must reflect zero-scorable fields',

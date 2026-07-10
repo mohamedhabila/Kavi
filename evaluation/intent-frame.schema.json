@@ -364,7 +364,12 @@
         "evaluator": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "implementationSha256", "rubricSha256"],
+          "required": [
+            "kind",
+            "implementationSha256",
+            "rubricSha256",
+            "minimumScorableCoverage"
+          ],
           "properties": {
             "kind": {
               "const": "deterministic_structural"
@@ -374,6 +379,11 @@
             },
             "rubricSha256": {
               "$ref": "#/$defs/sha256"
+            },
+            "minimumScorableCoverage": {
+              "type": "number",
+              "minimum": 0.5,
+              "maximum": 1
             }
           }
         },
@@ -424,6 +434,7 @@
         "scorable",
         "ambiguous",
         "unscorable",
+        "coverageRate",
         "truePositive",
         "falsePositive",
         "falseNegative",
@@ -458,6 +469,9 @@
         "unscorable": {
           "type": "integer",
           "minimum": 0
+        },
+        "coverageRate": {
+          "$ref": "#/$defs/nullableRate"
         },
         "truePositive": {
           "type": "integer",
@@ -537,7 +551,12 @@
         "evaluator": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "implementationSha256", "rubricSha256"],
+          "required": [
+            "kind",
+            "implementationSha256",
+            "rubricSha256",
+            "minimumScorableCoverage"
+          ],
           "properties": {
             "kind": {
               "const": "deterministic_structural"
@@ -547,6 +566,11 @@
             },
             "rubricSha256": {
               "$ref": "#/$defs/sha256"
+            },
+            "minimumScorableCoverage": {
+              "type": "number",
+              "minimum": 0.5,
+              "maximum": 1
             }
           }
         },
