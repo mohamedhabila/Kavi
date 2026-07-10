@@ -1,0 +1,70 @@
+{
+  "$schema": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/klae-private-governance.schema.json",
+  "kind": "klae_private_registry",
+  "schemaVersion": "1.0.0",
+  "registryState": "template",
+  "registryId": "klae-private-registry-v1",
+  "registryOwnerId": "replace-with-independent-registry-owner",
+  "candidate": {
+    "id": "replace-with-candidate-id",
+    "maintainerIds": ["replace-with-candidate-maintainer"]
+  },
+  "frozenBaseline": {
+    "id": "replace-with-frozen-baseline-id",
+    "appCommitSha": "0000000000000000000000000000000000000000",
+    "configurationSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "promptSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "frozenAt": "1970-01-01T00:00:00.000Z"
+  },
+  "contamination": {
+    "status": "clean",
+    "reasons": []
+  },
+  "splits": [
+    {
+      "splitKind": "development",
+      "packId": "klae-development-private-v1",
+      "packPath": "development.pack.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "caseCount": 40,
+      "baselineId": "replace-with-frozen-baseline-id",
+      "custodyOwnerId": "replace-with-development-custodian",
+      "candidateAccessPolicy": "visible_development",
+      "accessReview": {
+        "reviewerId": "replace-with-development-reviewer",
+        "reviewedAt": "1970-01-01T00:00:00.000Z",
+        "candidatePackAccessDetected": true
+      }
+    },
+    {
+      "splitKind": "locked_validation",
+      "packId": "klae-locked-validation-v1",
+      "packPath": "locked-validation.pack.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "caseCount": 40,
+      "baselineId": "replace-with-frozen-baseline-id",
+      "custodyOwnerId": "replace-with-locked-validation-custodian",
+      "candidateAccessPolicy": "results_only",
+      "accessReview": {
+        "reviewerId": "replace-with-locked-validation-reviewer",
+        "reviewedAt": "1970-01-01T00:00:00.000Z",
+        "candidatePackAccessDetected": false
+      }
+    },
+    {
+      "splitKind": "sealed_held_out",
+      "packId": "klae-sealed-held-out-v1",
+      "packPath": "sealed-held-out.pack.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "caseCount": 100,
+      "baselineId": "replace-with-frozen-baseline-id",
+      "custodyOwnerId": "replace-with-held-out-custodian",
+      "candidateAccessPolicy": "prohibited",
+      "accessReview": {
+        "reviewerId": "replace-with-held-out-reviewer",
+        "reviewedAt": "1970-01-01T00:00:00.000Z",
+        "candidatePackAccessDetected": false
+      }
+    }
+  ]
+}

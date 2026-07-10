@@ -1,0 +1,419 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/klae-private-governance.schema.json",
+  "title": "KLAE private evaluation governance",
+  "description": "Public schema for private KLAE split registries and evaluator-controlled case packs. Private case content is never checked in.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/privateRegistry"
+    },
+    {
+      "$ref": "#/$defs/privateCasePack"
+    }
+  ],
+  "$defs": {
+    "safeId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "gitCommit": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "privateSplitKind": {
+      "type": "string",
+      "enum": ["development", "locked_validation", "sealed_held_out"]
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "maintainerIds"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "maintainerIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/safeId"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    },
+    "frozenBaseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "appCommitSha",
+        "configurationSha256",
+        "promptSha256",
+        "frozenAt"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "appCommitSha": {
+          "$ref": "#/$defs/gitCommit"
+        },
+        "configurationSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "promptSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "frozenAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "contamination": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reasons"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["clean", "invalidated"]
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "uniqueItems": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "clean"
+              }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "reasons": {
+                "type": "array",
+                "maxItems": 0
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "reasons": {
+                "type": "array",
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "accessReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewerId", "reviewedAt", "candidatePackAccessDetected"],
+      "properties": {
+        "reviewerId": {
+          "$ref": "#/$defs/safeId"
+        },
+        "reviewedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "candidatePackAccessDetected": {
+          "type": "boolean"
+        }
+      }
+    },
+    "splitDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "splitKind",
+        "packId",
+        "packPath",
+        "sha256",
+        "caseCount",
+        "baselineId",
+        "custodyOwnerId",
+        "candidateAccessPolicy",
+        "accessReview"
+      ],
+      "properties": {
+        "splitKind": {
+          "$ref": "#/$defs/privateSplitKind"
+        },
+        "packId": {
+          "$ref": "#/$defs/safeId"
+        },
+        "packPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240,
+          "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+\\.json$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "caseCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "baselineId": {
+          "$ref": "#/$defs/safeId"
+        },
+        "custodyOwnerId": {
+          "$ref": "#/$defs/safeId"
+        },
+        "candidateAccessPolicy": {
+          "type": "string",
+          "enum": ["visible_development", "results_only", "prohibited"]
+        },
+        "accessReview": {
+          "$ref": "#/$defs/accessReview"
+        }
+      }
+    },
+    "privateRegistry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "$schema",
+        "kind",
+        "schemaVersion",
+        "registryState",
+        "registryId",
+        "registryOwnerId",
+        "candidate",
+        "frozenBaseline",
+        "contamination",
+        "splits"
+      ],
+      "properties": {
+        "$schema": {
+          "const": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/klae-private-governance.schema.json"
+        },
+        "kind": {
+          "const": "klae_private_registry"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "registryState": {
+          "type": "string",
+          "enum": ["template", "frozen"]
+        },
+        "registryId": {
+          "const": "klae-private-registry-v1"
+        },
+        "registryOwnerId": {
+          "$ref": "#/$defs/safeId"
+        },
+        "candidate": {
+          "$ref": "#/$defs/candidate"
+        },
+        "frozenBaseline": {
+          "$ref": "#/$defs/frozenBaseline"
+        },
+        "contamination": {
+          "$ref": "#/$defs/contamination"
+        },
+        "splits": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/splitDescriptor"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        }
+      }
+    },
+    "privateProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "origin",
+        "redistributable",
+        "containsUserData",
+        "derivedFromBenchmarkItems"
+      ],
+      "properties": {
+        "origin": {
+          "const": "original_synthetic_private_cases"
+        },
+        "redistributable": {
+          "const": false
+        },
+        "containsUserData": {
+          "const": false
+        },
+        "derivedFromBenchmarkItems": {
+          "const": false
+        }
+      }
+    },
+    "privateExecution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputExposure", "goldExposure", "scoring"],
+      "properties": {
+        "inputExposure": {
+          "const": "chronological_case_inputs_only"
+        },
+        "goldExposure": {
+          "const": "evaluator_only"
+        },
+        "scoring": {
+          "const": "structural_state_assertions"
+        }
+      }
+    },
+    "privateCasePack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "$schema",
+        "kind",
+        "schemaVersion",
+        "id",
+        "title",
+        "lane",
+        "protocolConformance",
+        "splitKind",
+        "visibility",
+        "baselineId",
+        "provenance",
+        "execution",
+        "cases"
+      ],
+      "properties": {
+        "$schema": {
+          "const": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/klae-private-governance.schema.json"
+        },
+        "kind": {
+          "const": "klae_private_case_pack"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "lane": {
+          "const": "product_native"
+        },
+        "protocolConformance": {
+          "const": "product_native"
+        },
+        "splitKind": {
+          "$ref": "#/$defs/privateSplitKind"
+        },
+        "visibility": {
+          "const": "private"
+        },
+        "baselineId": {
+          "$ref": "#/$defs/safeId"
+        },
+        "provenance": {
+          "$ref": "#/$defs/privateProvenance"
+        },
+        "execution": {
+          "$ref": "#/$defs/privateExecution"
+        },
+        "cases": {
+          "type": "array",
+          "items": {
+            "$ref": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/schema.json#/$defs/evaluationCase"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "splitKind": {
+                "const": "development"
+              }
+            },
+            "required": ["splitKind"]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "const": "klae-development-private-v1"
+              },
+              "cases": {
+                "type": "array",
+                "minItems": 40,
+                "maxItems": 40
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "splitKind": {
+                "const": "locked_validation"
+              }
+            },
+            "required": ["splitKind"]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "const": "klae-locked-validation-v1"
+              },
+              "cases": {
+                "type": "array",
+                "minItems": 40,
+                "maxItems": 40
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "splitKind": {
+                "const": "sealed_held_out"
+              }
+            },
+            "required": ["splitKind"]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "const": "klae-sealed-held-out-v1"
+              },
+              "cases": {
+                "type": "array",
+                "minItems": 100
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

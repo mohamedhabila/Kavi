@@ -16,6 +16,13 @@ const {
   loadEvaluationCasePack,
   validateEvaluationCasePack,
 } = require('../../scripts/lib/evaluationCasePack');
+const {
+  checkPublicKlaeGovernance,
+  loadPrivateGovernanceSchema,
+  loadPrivateRegistryTemplate,
+  validatePrivateRegistry,
+  validatePublicRegistryTemplate,
+} = require('../../scripts/lib/klaePrivateGovernance');
 
 const projectRoot = path.resolve(__dirname, '../..');
 const digest = 'b'.repeat(64);
@@ -140,6 +147,8 @@ describe('evaluation contract', () => {
   const contract = loadEvaluationContract(projectRoot);
   const schema = loadEvaluationSchema(projectRoot);
   const developmentPack = loadEvaluationCasePack(projectRoot);
+  const privateGovernanceSchema = loadPrivateGovernanceSchema(projectRoot);
+  const privateRegistryTemplate = loadPrivateRegistryTemplate(projectRoot);
 
   it('keeps the checked-in schema and contract synchronized', () => {
     expect(checkEvaluationContract(projectRoot)).toEqual([]);
@@ -183,6 +192,40 @@ describe('evaluation contract', () => {
       containsUserData: false,
       derivedFromBenchmarkItems: false,
     });
+  });
+
+  it('validates only a metadata template for private KLAE split governance', () => {
+    expect(checkPublicKlaeGovernance(projectRoot)).toEqual([]);
+    expect(
+      validatePrivateRegistry(privateRegistryTemplate, schema, privateGovernanceSchema),
+    ).toEqual([]);
+    expect(
+      validatePublicRegistryTemplate(privateRegistryTemplate, schema, privateGovernanceSchema),
+    ).toEqual([]);
+    expect(privateRegistryTemplate.registryState).toBe('template');
+    expect(privateRegistryTemplate.splits.map((split: { caseCount: number }) => split.caseCount)).toEqual([
+      40,
+      40,
+      100,
+    ]);
+    expect(JSON.stringify(privateRegistryTemplate)).not.toMatch(
+      /"(?:cases|fixtures|steps|assertions)"/u,
+    );
+  });
+
+  it('rejects a public registry template that pretends to be frozen or scored', () => {
+    const invalid = clone(privateRegistryTemplate);
+    invalid.registryState = 'frozen';
+    invalid.splits[0].caseCount = 12;
+    invalid.splits[1].sha256 = digest;
+
+    expect(validatePublicRegistryTemplate(invalid, schema, privateGovernanceSchema)).toEqual(
+      expect.arrayContaining([
+        'template.registryState: must be template',
+        'template.splits.development.caseCount: must be 40',
+        'template.splits.locked_validation.sha256: must be the zero placeholder',
+      ]),
+    );
   });
 
   it('rejects duplicate cases, prose regex scoring, dangling steps, and unregistered metrics', () => {

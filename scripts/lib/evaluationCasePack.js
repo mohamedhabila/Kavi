@@ -164,5 +164,6 @@ module.exports = {
   DEVELOPMENT_PACK_FILE,
   checkEvaluationCasePack,
   loadEvaluationCasePack,
+  validateCase,
   validateEvaluationCasePack,
 };
