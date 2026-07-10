@@ -14,6 +14,10 @@ import { runConsolidation } from './consolidation/orchestrator';
 import { sliceClosedTurnMessages } from './deterministicExtractor';
 import { composeActiveFocusContent } from './focus';
 import {
+  commitIngestionPersistenceReceipt,
+  type IngestionReceiptProviderOutcomeCode,
+} from './ingestionReceiptStore';
+import {
   claimIngestionJob,
   completeIngestionJob,
   discardIngestionJob,
@@ -44,7 +48,10 @@ import {
 } from './onDeviceGuards';
 import { canWriteLongTermMemory, registerMemoryOptOutHandler } from './policy';
 import { refreshThreadReflection } from './reflections';
-import type { ProcessTurnResult } from './turnProcessor';
+import type {
+  ProcessTurnResult,
+  TurnProviderOutcome,
+} from './turnProcessor';
 import { editWorkingBlock, getWorkingBlock } from './workingBlocks';
 
 export {
@@ -127,6 +134,19 @@ type IngestionOutcomeDecision =
       providerOutcome: IngestionProviderOutcome | null;
       outcomeCode: IngestionOutcomeCode;
     };
+
+function mapReceiptProviderOutcome(outcome: TurnProviderOutcome): {
+  providerOutcome: IngestionProviderOutcome;
+  providerOutcomeCode: IngestionReceiptProviderOutcomeCode | null;
+} {
+  if (outcome.status === 'not_requested') {
+    return { providerOutcome: 'structural_only', providerOutcomeCode: null };
+  }
+  if (outcome.status === 'valid' || outcome.status === 'empty_valid') {
+    return { providerOutcome: outcome.status, providerOutcomeCode: null };
+  }
+  return { providerOutcome: outcome.status, providerOutcomeCode: outcome.code };
+}
 
 function classifyIngestionOutcome(
   result: ProcessTurnResult,
@@ -258,27 +278,15 @@ export async function processIngestionJob(input: ProcessIngestionJobInput): Prom
       now: job.sourceAt,
       skipWorkingMemorySync: true,
       canPersist: () => ownsIngestionClaim(job.id, claimToken, input.now ?? Date.now()),
-      commitPersistenceReceipt: (providerOutcome) => {
+      commitPersistenceReceipt: ({ providerOutcome, ...writeSet }) => {
         const receiptAt = input.now ?? Date.now();
-        if (providerOutcome.status === 'not_requested') {
-          return completeIngestionJob(
-            job.id,
-            'completed_structural',
-            'structural_only',
-            receiptAt,
-            claimToken,
-          );
-        }
-        if (providerOutcome.status === 'valid' || providerOutcome.status === 'empty_valid') {
-          return completeIngestionJob(
-            job.id,
-            'completed_enriched',
-            providerOutcome.status,
-            receiptAt,
-            claimToken,
-          );
-        }
-        return markIngestionJobStructuralComplete(job.id, receiptAt, claimToken);
+        commitIngestionPersistenceReceipt({
+          ...writeSet,
+          ...mapReceiptProviderOutcome(providerOutcome),
+          jobId: job.id,
+          claimToken,
+          persistedAt: receiptAt,
+        });
       },
     });
     if (turnResult.skipped === 'opt_out' || !canWriteLongTermMemory()) {

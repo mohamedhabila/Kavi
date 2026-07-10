@@ -50,7 +50,7 @@ export interface ProcessTurnInput {
   /** Queue ownership fence checked after async enrichment and before any durable write. */
   canPersist?: () => boolean;
   /** Queue receipt committed atomically with the source-bound memory transaction. */
-  commitPersistenceReceipt?: (outcome: TurnProviderOutcome) => boolean;
+  commitPersistenceReceipt?: (receipt: TurnPersistenceReceipt) => void;
 }
 
 function resolveMemoryConversationId(
@@ -79,6 +79,18 @@ export type TurnProviderOutcome =
   | { status: 'valid' }
   | { status: 'empty_valid' }
   | Exclude<ConsolidatorOutcome, { status: 'valid' | 'empty_valid' }>;
+
+export interface TurnPersistenceReceipt {
+  episodeId: string | null;
+  deterministicFactIds: string[];
+  providerFactIds: string[];
+  invalidatedFactIds: string[];
+  activeFocusUpdated: boolean;
+  openThreadsUpdated: boolean;
+  providerOutcome: TurnProviderOutcome;
+  bridgedEvidenceFactIds: string[];
+  agentRunMemoryFactIds: string[];
+}
 
 function skippedProcessTurnResult(
   skipped: 'opt_out' | 'no_closed_turn' | 'claim_lost',
@@ -612,35 +624,43 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
       });
     }
 
-    if (
-      input.commitPersistenceReceipt &&
-      !input.commitPersistenceReceipt(providerOutcome)
-    ) {
-      throw new Error('Memory persistence receipt rejected');
-    }
+    const deterministicFactIds = factIdsForInputRange(
+      persistResult.recordedFacts,
+      0,
+      structural.facts.length,
+    );
+    const providerFactIds = factIdsForInputRange(
+      persistResult.recordedFacts,
+      structural.facts.length,
+      mergedResult.newFacts.length,
+    );
+    const receipt: TurnPersistenceReceipt = {
+      episodeId: persistResult.episodeId,
+      deterministicFactIds,
+      providerFactIds,
+      invalidatedFactIds: persistResult.invalidatedFactIds,
+      activeFocusUpdated: persistResult.activeFocusUpdated,
+      openThreadsUpdated: persistResult.openThreadsUpdated,
+      providerOutcome,
+      bridgedEvidenceFactIds,
+      agentRunMemoryFactIds,
+    };
+    input.commitPersistenceReceipt?.(receipt);
 
-    return { persistResult, agentRunMemoryFactIds, bridgedEvidenceFactIds };
+    return { persistResult, receipt };
   });
 
   return {
     processed: true,
-    episodeId: persisted.persistResult.episodeId,
-    deterministicFactIds: factIdsForInputRange(
-      persisted.persistResult.recordedFacts,
-      0,
-      structural.facts.length,
-    ),
-    providerFactIds: factIdsForInputRange(
-      persisted.persistResult.recordedFacts,
-      structural.facts.length,
-      mergedResult.newFacts.length,
-    ),
-    invalidatedFactIds: persisted.persistResult.invalidatedFactIds,
-    activeFocusUpdated: persisted.persistResult.activeFocusUpdated,
-    openThreadsUpdated: persisted.persistResult.openThreadsUpdated,
+    episodeId: persisted.receipt.episodeId,
+    deterministicFactIds: persisted.receipt.deterministicFactIds,
+    providerFactIds: persisted.receipt.providerFactIds,
+    invalidatedFactIds: persisted.receipt.invalidatedFactIds,
+    activeFocusUpdated: persisted.receipt.activeFocusUpdated,
+    openThreadsUpdated: persisted.receipt.openThreadsUpdated,
     enriched,
-    providerOutcome,
-    bridgedEvidenceFactIds: persisted.bridgedEvidenceFactIds,
-    agentRunMemoryFactIds: persisted.agentRunMemoryFactIds,
+    providerOutcome: persisted.receipt.providerOutcome,
+    bridgedEvidenceFactIds: persisted.receipt.bridgedEvidenceFactIds,
+    agentRunMemoryFactIds: persisted.receipt.agentRunMemoryFactIds,
   };
 }

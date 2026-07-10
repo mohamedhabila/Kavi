@@ -375,6 +375,7 @@ describe('processIngestionTurn', () => {
     });
 
     const extractor = jest.fn();
+    const commitPersistenceReceipt = jest.fn();
     const result = await processIngestionTurn({
       threadId: 'conv-1',
       messages: [
@@ -386,11 +387,23 @@ describe('processIngestionTurn', () => {
         }),
       ],
       extractor,
+      commitPersistenceReceipt,
     });
 
     expect(result.enriched).toBe(true);
     expect(result.deterministicFactIds).toEqual(['f1']);
     expect(result.providerFactIds).toEqual(['f2']);
+    expect(commitPersistenceReceipt).toHaveBeenCalledWith({
+      episodeId: 'ep1',
+      deterministicFactIds: ['f1'],
+      providerFactIds: ['f2'],
+      invalidatedFactIds: [],
+      activeFocusUpdated: true,
+      openThreadsUpdated: true,
+      providerOutcome: { status: 'valid' },
+      bridgedEvidenceFactIds: [],
+      agentRunMemoryFactIds: [],
+    });
     expect(mockExtractProviderEnrichment).toHaveBeenCalledWith(
       expect.any(Object),
       expect.objectContaining({ extractor, now: expect.any(Function) }),
