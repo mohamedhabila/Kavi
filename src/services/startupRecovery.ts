@@ -3,14 +3,17 @@ import { useChatStore } from '../store/useChatStore';
 import { repairTerminalAgentRunsMissingFinalResponses } from './agents/agentRunRepair';
 import { initSubAgentRegistry, listActiveSubAgents } from './agents/subAgent';
 import { recoverInterruptedForegroundModelExecutions } from './executionJournal/foregroundModelExecutionRecovery';
-import { maintainForegroundModelExecutionRetention } from './executionJournal/foregroundModelExecutionRetention';
+import { maintainAllForegroundModelExecutionRetention } from './executionJournal/foregroundModelExecutionRetention';
+import { releaseStaleForegroundModelProjectionOwners } from './executionJournal/foregroundModelProjectionCleanup';
 
-async function waitForChatHydration(timeoutMs = 3000): Promise<void> {
+async function waitForChatHydration(): Promise<void> {
   await waitForStoreHydration(
     useChatStore as typeof useChatStore & PersistHydratableStore,
-    timeoutMs,
+    null,
   );
 }
+
+let recoveryPromise: Promise<void> | null = null;
 
 export async function recoverPersistedAgentState(): Promise<void> {
   await waitForChatHydration();
@@ -26,12 +29,26 @@ export async function recoverPersistedAgentState(): Promise<void> {
   } catch (error) {
     console.warn('[startup] foreground model recovery failed:', error);
   }
+  try {
+    await releaseStaleForegroundModelProjectionOwners();
+  } catch (error) {
+    console.warn('[startup] foreground model projection cleanup failed:', error);
+  }
   await repairTerminalAgentRunsMissingFinalResponses({
     activeSubAgents,
   });
   try {
-    maintainForegroundModelExecutionRetention({ now: Date.now() });
+    maintainAllForegroundModelExecutionRetention({ now: Date.now() });
   } catch (error) {
     console.warn('[startup] foreground model journal retention failed:', error);
   }
+}
+
+/** Single-flight recovery that retries on later foreground events after each completed sweep. */
+export function triggerPersistedAgentRecovery(): Promise<void> {
+  if (recoveryPromise) return recoveryPromise;
+  recoveryPromise = recoverPersistedAgentState().finally(() => {
+    recoveryPromise = null;
+  });
+  return recoveryPromise;
 }

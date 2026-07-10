@@ -49,7 +49,7 @@ import {
   initializeDurableRecoveryLifecycle,
   reconcileDurableRecoveryLifecycle,
 } from './executionJournal/durableRecoveryLifecycle';
-import { recoverPersistedAgentState } from './startupRecovery';
+import { triggerPersistedAgentRecovery } from './startupRecovery';
 
 function shouldDeliverNotification(job: CronJob): boolean {
   const mode = job.delivery?.mode || 'both';
@@ -615,7 +615,7 @@ export function initializeServices(): void {
     console.warn('[startup] memory policy observation unavailable; durable memory is disabled');
   }
 
-  void recoverPersistedAgentState().catch((e) =>
+  void triggerPersistedAgentRecovery().catch((e) =>
     console.warn('[startup] recoverPersistedAgentState failed:', e),
   );
 
@@ -651,6 +651,9 @@ export function initializeServices(): void {
  */
 export function handleAppForeground(): void {
   reconcileDurableRecoveryLifecycle('foreground');
+  void triggerPersistedAgentRecovery().catch((e) =>
+    console.warn('[startup] foreground persisted-agent recovery failed:', e),
+  );
   void evaluateJobsOnce({ trigger: 'foreground-reconcile' }).catch((e) =>
     console.warn('[startup] foreground scheduler reconciliation failed:', e),
   );

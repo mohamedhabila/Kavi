@@ -6,12 +6,26 @@ export const FOREGROUND_MODEL_TERMINAL_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
 export const MAX_RETAINED_FOREGROUND_MODEL_RUNS = 2_000;
 export const MAX_FOREGROUND_MODEL_PRUNE_BATCH = 500;
 
-interface ForegroundModelRetentionInput {
+export interface ForegroundModelRetentionInput {
   now: number;
   maxAgeMs?: number;
   maxRetained?: number;
   limit?: number;
   getDatabase?: () => SQLite.SQLiteDatabase;
+}
+
+/** Drain all aged/overflow terminal rows through bounded transactions. */
+export function maintainAllForegroundModelExecutionRetention(
+  input: ForegroundModelRetentionInput,
+): number {
+  const limit = input.limit ?? MAX_FOREGROUND_MODEL_PRUNE_BATCH;
+  requireBoundedInteger(limit, 1, 1_000, 'limit');
+  let deleted = 0;
+  while (true) {
+    const passDeleted = maintainForegroundModelExecutionRetention({ ...input, limit });
+    deleted += passDeleted;
+    if (passDeleted < limit) return deleted;
+  }
 }
 
 function requireBoundedInteger(

@@ -113,7 +113,7 @@ jest.mock('../../src/services/executionJournal/foregroundModelExecutionRecovery'
     mockRecoverInterruptedForegroundModelExecutions(...args),
 }));
 jest.mock('../../src/services/executionJournal/foregroundModelExecutionRetention', () => ({
-  maintainForegroundModelExecutionRetention: (...args: any[]) =>
+  maintainAllForegroundModelExecutionRetention: (...args: any[]) =>
     mockMaintainForegroundModelExecutionRetention(...args),
 }));
 jest.mock('../../src/services/mcp/manager', () => ({
@@ -374,6 +374,9 @@ describe('initializeServices', () => {
     handleAppForeground();
 
     expect(mockReconcileDurableRecoveryLifecycle).toHaveBeenCalledWith('foreground');
+    await waitFor(() =>
+      expect(mockRecoverInterruptedForegroundModelExecutions).toHaveBeenCalledTimes(1),
+    );
   });
   it('flushes durable memory work before waiting for migration', async () => {
     mockRunMemoryMigrationTick.mockImplementation(() => new Promise(() => undefined));
