@@ -24,9 +24,7 @@
 import { getMany, getOne, runMemoryStatement } from './access/crud';
 import { ensureFactSchema } from './schema';
 import {
-  applyConsolidatorResult,
-  buildConsolidatorPrompt,
-  parseConsolidatorOutput,
+  consolidateTurn,
   type ConsolidatorExtractor,
   type ConsolidatorResult,
 } from './consolidator';
@@ -252,32 +250,56 @@ export async function seedConversation(
 
   for (const turn of slice) {
     try {
-      const prompt = buildConsolidatorPrompt({
-        userMessage: turn.userMessage.content?.toString() ?? '',
-        assistantMessage: turn.assistantMessage.content?.toString() ?? '',
-        threadTitle: conv.title,
-        now: turn.assistantMessage.timestamp ?? now,
-      });
-      const raw = await input.extractor(prompt);
-      const result = parseConsolidatorOutput(raw);
-      if (input.dryRun !== true) {
-        applyConsolidatorResult(result, {
-          now: turn.assistantMessage.timestamp ?? now,
+      const turnNow = turn.assistantMessage.timestamp ?? now;
+      const outcome = await consolidateTurn(
+        {
+          userMessage: turn.userMessage.content?.toString() ?? '',
+          assistantMessage: turn.assistantMessage.content?.toString() ?? '',
           threadTitle: conv.title,
+          conversationId: conv.id,
+          threadId: conv.id,
+          sourceUserMessageId: turn.userMessage.id,
+          sourceAssistantMessageId: turn.assistantMessage.id,
+          messages: [turn.userMessage, turn.assistantMessage],
+          now: turnNow,
+        },
+        {
+          extractor: input.extractor,
+          persist: input.dryRun !== true,
+          now: () => turnNow,
+        },
+      );
+      if (outcome.status !== 'valid' && outcome.status !== 'empty_valid') {
+        const code = outcome.code;
+        upsertMigrationState({
+          conversationId: conv.id,
+          lastSeededMessageId,
+          seededTurns,
+          status: 'error',
+          error: code,
+          now,
         });
+        return {
+          conversationId: conv.id,
+          seededTurns: seededTurns - (existing?.seededTurns ?? 0),
+          remainingTurns: turns.length - results.length,
+          status: 'error',
+          results,
+          error: code,
+        };
       }
-      results.push(result);
+      results.push(outcome.result);
       lastSeededMessageId = turn.assistantMessage.id;
       seededTurns += 1;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'unknown_error';
-      logger.warn?.(`seed extractor threw for conv ${conv.id}: ${message}`);
+    } catch {
+      const code = 'persistence_failed';
+      logger.warn?.(`seed persistence failed for conv ${conv.id}`);
       upsertMigrationState({
         conversationId: conv.id,
         lastSeededMessageId,
         seededTurns,
         status: 'error',
-        error: message,
+        error: code,
         now,
       });
       return {
@@ -286,7 +308,7 @@ export async function seedConversation(
         remainingTurns: turns.length - results.length,
         status: 'error',
         results,
-        error: message,
+        error: code,
       };
     }
   }

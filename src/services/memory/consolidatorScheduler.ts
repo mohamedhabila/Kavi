@@ -42,13 +42,8 @@ import {
   listDirtyThreadIds,
   upsertState,
 } from './consolidation/schedulerState';
-import {
-  consolidateTurn,
-  type ConsolidatorExtractor,
-  type ConsolidatorOptions,
-  type ConsolidatorResult,
-  type ConsolidatorTurnInput,
-} from './consolidator';
+import { type ConsolidatorExtractor } from './consolidator';
+import type { TurnProviderOutcome } from './turnProcessor';
 
 const logger = createLogger('memory.consolidatorScheduler');
 
@@ -138,8 +133,6 @@ export interface RunConsolidationInput {
   turnThreshold?: number;
   idleThresholdMs?: number;
   appBackgrounded?: boolean;
-  /** When true, persist the consolidator output. Defaults to true. */
-  persist?: boolean;
 }
 
 export interface RunConsolidationResult {
@@ -147,14 +140,15 @@ export interface RunConsolidationResult {
   reason?: ConsolidationTriggerReason;
   newTurns: number;
   idleMs: number;
-  result?: ConsolidatorResult;
+  providerOutcome?: TurnProviderOutcome;
   /** Why the run was skipped (when `ran === false`). */
   skipped?:
     | 'no_provider'
     | 'no_extractor'
     | 'no_trigger'
     | 'no_user_message'
-    | 'extractor_threw'
+    | 'enrichment_retryable'
+    | 'processing_failed'
     | 'opt_out';
 }
 
@@ -224,92 +218,57 @@ export async function maybeRunConsolidation(
     extractor = await resolveConsolidationExtractor();
   }
 
-  if (!extractor) {
-    const memoryConversationId = input.memoryConversationId?.trim() || input.threadId.trim();
-    const ingestionResult = await runConsolidation({
+  const memoryConversationId = input.memoryConversationId?.trim() || input.threadId.trim();
+  let ingestionResult: Awaited<ReturnType<typeof runConsolidation>>;
+  try {
+    ingestionResult = await runConsolidation({
       threadId: input.threadId,
       memoryConversationId,
-      messages: input.messages,
+      messages: messageWindow,
       threadTitle: input.threadTitle,
       personaSummary: input.personaSummary,
       now: input.now,
-      extractor: null,
+      extractor: extractor ?? null,
       skipWorkingMemorySync: true,
     });
-    if (!ingestionResult.processed) {
-      return {
-        ran: false,
-        skipped: 'no_extractor',
-        newTurns: evaluation.newTurns,
-        idleMs: evaluation.idleMs,
-      };
-    }
-
-    return {
-      ran: true,
-      ...(evaluation.reason ? { reason: evaluation.reason } : {}),
-      newTurns: evaluation.newTurns,
-      idleMs: evaluation.idleMs,
-      result: {
-        episodeSummary: null,
-        newFacts: [],
-        activeFocus: null,
-        openThreads: [],
-        notable: [],
-      },
-    };
-  }
-
-  const memoryConversationId = input.memoryConversationId?.trim() || input.threadId.trim();
-  const turnInput: ConsolidatorTurnInput = {
-    userMessage: lastUser.content ?? '',
-    assistantMessage: lastAssistant.content ?? '',
-    conversationId: memoryConversationId,
-    threadId: input.threadId,
-    sourceUserMessageId: lastUser.id,
-    sourceAssistantMessageId: lastAssistant.id,
-    messages: messageWindow,
-    ...(input.threadTitle ? { threadTitle: input.threadTitle } : {}),
-    ...(input.personaSummary ? { personaSummary: input.personaSummary } : {}),
-    ...(typeof input.now === 'number' ? { now: input.now } : {}),
-  };
-
-  const opts: ConsolidatorOptions = {
-    extractor,
-    persist: input.persist !== false,
-    ...(typeof input.now === 'number' ? { now: () => input.now! } : {}),
-  };
-
-  let result: ConsolidatorResult;
-  try {
-    result = await consolidateTurn(turnInput, opts);
-  } catch (error) {
-    logger.devWarn(
-      'consolidatorScheduler.consolidateTurn failed:',
-      error instanceof Error ? error.message : String(error),
-    );
+  } catch {
+    logger.devWarn('consolidatorScheduler processing failed');
     return {
       ran: false,
-      skipped: 'extractor_threw',
+      skipped: 'processing_failed',
       newTurns: evaluation.newTurns,
       idleMs: evaluation.idleMs,
     };
   }
-
-  upsertState({
-    threadId: input.threadId,
-    lastConsolidatedMessageId: evaluation.anchorMessageId ?? lastAssistant.id,
-    lastConsolidatedAt: input.now ?? Date.now(),
-    turnsSinceLast: 0,
-    ...(typeof input.now === 'number' ? { now: input.now } : {}),
-  });
+  if (!ingestionResult.processed) {
+    return {
+      ran: false,
+      skipped: 'no_extractor',
+      newTurns: evaluation.newTurns,
+      idleMs: evaluation.idleMs,
+      providerOutcome: ingestionResult.providerOutcome,
+    };
+  }
+  if (
+    ingestionResult.providerOutcome.status === 'malformed' ||
+    ingestionResult.providerOutcome.status === 'schema_invalid' ||
+    ingestionResult.providerOutcome.status === 'provider_error'
+  ) {
+    return {
+      ran: false,
+      skipped: 'enrichment_retryable',
+      newTurns: evaluation.newTurns,
+      idleMs: evaluation.idleMs,
+      providerOutcome: ingestionResult.providerOutcome,
+    };
+  }
 
   return {
     ran: true,
     ...(evaluation.reason ? { reason: evaluation.reason } : {}),
     newTurns: evaluation.newTurns,
     idleMs: evaluation.idleMs,
-    result,
+    providerOutcome: ingestionResult.providerOutcome,
   };
 }
 

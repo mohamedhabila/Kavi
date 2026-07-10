@@ -346,11 +346,14 @@ describe('processIngestionTurn', () => {
       openThreads: [],
     });
     mockExtractProviderEnrichment.mockResolvedValue({
-      episodeSummary: 'Provider summary',
-      newFacts: [{ subject: 'user', predicate: 'location', value: 'NYC' }],
-      activeFocus: 'Provider focus',
-      openThreads: ['Thread from provider'],
-      notable: [],
+      status: 'valid',
+      result: {
+        episodeSummary: 'Provider summary',
+        newFacts: [{ subject: 'user', predicate: 'location', value: 'NYC' }],
+        activeFocus: 'Provider focus',
+        openThreads: ['Thread from provider'],
+        notable: [],
+      },
     });
     mockApplyConsolidatorResult.mockReturnValue({
       recordedFactIds: ['f1', 'f2'],
@@ -386,35 +389,43 @@ describe('processIngestionTurn', () => {
     expect(persisted.activeFocus).toBe('Provider focus');
   });
 
-  it('propagates provider enrichment failure before durable persistence', async () => {
+  it('persists structural memory but leaves the cursor retryable on provider failure', async () => {
     mockExtractStructuralMemory.mockReturnValue({
       episodeSummary: 'Structural',
       facts: [{ subject: 'user', predicate: 'name', value: 'Mo' }],
       activeFocus: null,
       openThreads: [],
     });
-    mockExtractProviderEnrichment.mockRejectedValue(new Error('Timeout'));
+    mockExtractProviderEnrichment.mockResolvedValue({
+      status: 'provider_error',
+      code: 'provider_request_failed',
+    });
 
-    await expect(
-      processIngestionTurn({
-        threadId: 'conv-1',
-        messages: [
-          makeMsg({ role: 'user', content: 'Hey' }),
-          makeMsg({
-            role: 'assistant',
-            content: 'Hi',
-            assistantMetadata: {
-              finishReason: 'stop',
-              kind: 'final',
-              completionStatus: 'complete',
-            },
-          }),
-        ],
-        extractor: jest.fn(),
-      }),
-    ).rejects.toThrow('Timeout');
+    const result = await processIngestionTurn({
+      threadId: 'conv-1',
+      messages: [
+        makeMsg({ role: 'user', content: 'Hey' }),
+        makeMsg({
+          role: 'assistant',
+          content: 'Hi',
+          assistantMetadata: {
+            finishReason: 'stop',
+            kind: 'final',
+            completionStatus: 'complete',
+          },
+        }),
+      ],
+      extractor: jest.fn(),
+    });
 
-    expect(mockApplyConsolidatorResult).not.toHaveBeenCalled();
+    expect(result.providerOutcome).toEqual({
+      status: 'provider_error',
+      code: 'provider_request_failed',
+    });
+    expect(mockApplyConsolidatorResult).toHaveBeenCalledWith(
+      expect.objectContaining({ episodeSummary: 'Structural' }),
+      expect.any(Object),
+    );
     expect(mockUpsertState).not.toHaveBeenCalled();
   });
 
@@ -426,14 +437,17 @@ describe('processIngestionTurn', () => {
       openThreads: [],
     });
     mockExtractProviderEnrichment.mockResolvedValue({
-      episodeSummary: 'P',
-      newFacts: [
-        { subject: 'user', predicate: 'name', value: 'Mo' }, // duplicate
-        { subject: 'user', predicate: 'age', value: '30' },
-      ],
-      activeFocus: null,
-      openThreads: [],
-      notable: [],
+      status: 'valid',
+      result: {
+        episodeSummary: 'P',
+        newFacts: [
+          { subject: 'user', predicate: 'name', value: 'Mo' }, // duplicate
+          { subject: 'user', predicate: 'age', value: '30' },
+        ],
+        activeFocus: null,
+        openThreads: [],
+        notable: [],
+      },
     });
 
     await processIngestionTurn({
@@ -461,17 +475,20 @@ describe('processIngestionTurn', () => {
       openThreads: [],
     });
     mockExtractProviderEnrichment.mockResolvedValue({
-      episodeSummary: 'P',
-      newFacts: [
-        {
-          subject: 'knowu-user',
-          predicate: 'preferred_message_contact',
-          value: 'e2e-contact-avery',
-        },
-      ],
-      activeFocus: null,
-      openThreads: [],
-      notable: [],
+      status: 'valid',
+      result: {
+        episodeSummary: 'P',
+        newFacts: [
+          {
+            subject: 'knowu-user',
+            predicate: 'preferred_message_contact',
+            value: 'e2e-contact-avery',
+          },
+        ],
+        activeFocus: null,
+        openThreads: [],
+        notable: [],
+      },
     });
 
     await processIngestionTurn({
@@ -518,18 +535,21 @@ describe('processIngestionTurn', () => {
       openThreads: [],
     });
     mockExtractProviderEnrichment.mockResolvedValue({
-      episodeSummary: 'P',
-      newFacts: [
-        {
-          subject: 'direct-longmem-user',
-          predicate: 'preferred_message_contact',
-          value: 'Avery from the action request',
-        },
-        { subject: 'direct-longmem-user', predicate: 'last_sms_message', value: 'drafted' },
-      ],
-      activeFocus: null,
-      openThreads: [],
-      notable: [],
+      status: 'valid',
+      result: {
+        episodeSummary: 'P',
+        newFacts: [
+          {
+            subject: 'direct-longmem-user',
+            predicate: 'preferred_message_contact',
+            value: 'Avery from the action request',
+          },
+          { subject: 'direct-longmem-user', predicate: 'last_sms_message', value: 'drafted' },
+        ],
+        activeFocus: null,
+        openThreads: [],
+        notable: [],
+      },
     });
 
     await processIngestionTurn({

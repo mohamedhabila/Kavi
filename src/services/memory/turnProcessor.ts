@@ -13,6 +13,7 @@ import { buildAssistantMessageMetadata } from '../../utils/assistantMessageMetad
 import { createLogger } from '../../utils/logger';
 import type {
   ConsolidatorExtractor,
+  ConsolidatorOutcome,
   ConsolidatorResult,
   ConsolidatorTurnInput,
 } from './consolidator';
@@ -25,10 +26,7 @@ import { bridgeGraphGoalEvidence } from './evidenceBridge';
 import { editWorkingBlock } from './workingBlocks';
 import { composeActiveFocusContent } from './focus';
 import { findEntityByName } from './entities';
-import {
-  hasCurrentFactForSubjectPredicate,
-  listCurrentFactsForReplacement,
-} from './facts/queries';
+import { hasCurrentFactForSubjectPredicate, listCurrentFactsForReplacement } from './facts/queries';
 import type { MemoryFact } from './facts/types';
 import { recordAgentRunEvidenceMemory } from './agentRunEvidenceMemory';
 import { evaluateGroundedReplacement } from './groundedFactReplacement';
@@ -64,9 +62,23 @@ export interface ProcessTurnResult {
   activeFocusUpdated: boolean;
   openThreadsUpdated: boolean;
   enriched: boolean;
+  providerOutcome: TurnProviderOutcome;
   bridgedEvidenceFactIds: string[];
   agentRunMemoryFactIds: string[];
   skipped?: 'opt_out' | 'no_closed_turn';
+}
+
+export type TurnProviderOutcome =
+  | { status: 'not_requested' }
+  | { status: 'valid' }
+  | { status: 'empty_valid' }
+  | Exclude<ConsolidatorOutcome, { status: 'valid' | 'empty_valid' }>;
+
+function summarizeProviderOutcome(outcome: ConsolidatorOutcome): TurnProviderOutcome {
+  if (outcome.status === 'valid' || outcome.status === 'empty_valid') {
+    return { status: outcome.status };
+  }
+  return outcome;
 }
 
 export interface SyncWorkingMemoryResult {
@@ -446,6 +458,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
       activeFocusUpdated: false,
       openThreadsUpdated: false,
       enriched: false,
+      providerOutcome: { status: 'not_requested' },
       bridgedEvidenceFactIds: [],
       agentRunMemoryFactIds: [],
     };
@@ -460,6 +473,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
   }
 
   let enriched = false;
+  let providerOutcome: TurnProviderOutcome = { status: 'not_requested' };
   let mergedResult: ConsolidatorResult = {
     episodeSummary: structural.episodeSummary || null,
     newFacts: structural.facts,
@@ -469,22 +483,21 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
   };
 
   if (input.extractor) {
-    const providerResult = await extractProviderEnrichment(turnInput, {
+    const outcome = await extractProviderEnrichment(turnInput, {
       extractor: input.extractor,
       now: () => now,
     });
-    enriched =
-      providerResult.newFacts.length > 0 ||
-      providerResult.episodeSummary !== null ||
-      !!providerResult.activeFocus ||
-      providerResult.openThreads.length > 0;
-    mergedResult = mergeProviderIntoStructural(structural, providerResult, {
-      currentUserMessageId: user?.id,
-      currentUserMessage: user?.content ?? '',
-      memoryConversationId,
-      threadId: input.threadId,
-      taskId: input.taskId,
-    });
+    providerOutcome = summarizeProviderOutcome(outcome);
+    if (outcome.status === 'valid' || outcome.status === 'empty_valid') {
+      enriched = outcome.status === 'valid';
+      mergedResult = mergeProviderIntoStructural(structural, outcome.result, {
+        currentUserMessageId: user?.id,
+        currentUserMessage: user?.content ?? '',
+        memoryConversationId,
+        threadId: input.threadId,
+        taskId: input.taskId,
+      });
+    }
   }
 
   const persistResult = applyConsolidatorResult(mergedResult, {
@@ -546,16 +559,25 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
     }
   }
 
-  try {
-    upsertState({
-      threadId: input.threadId,
-      lastConsolidatedMessageId: assistant.id,
-      lastConsolidatedAt: now,
-      turnsSinceLast: 0,
-      now,
-    });
-  } catch (error) {
-    logger.devWarn('Cursor update failed:', error instanceof Error ? error.message : String(error));
+  if (
+    providerOutcome.status === 'not_requested' ||
+    providerOutcome.status === 'valid' ||
+    providerOutcome.status === 'empty_valid'
+  ) {
+    try {
+      upsertState({
+        threadId: input.threadId,
+        lastConsolidatedMessageId: assistant.id,
+        lastConsolidatedAt: now,
+        turnsSinceLast: 0,
+        now,
+      });
+    } catch (error) {
+      logger.devWarn(
+        'Cursor update failed:',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   }
 
   return {
@@ -567,6 +589,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
     activeFocusUpdated: persistResult.activeFocusUpdated,
     openThreadsUpdated: persistResult.openThreadsUpdated,
     enriched,
+    providerOutcome,
     bridgedEvidenceFactIds,
     agentRunMemoryFactIds,
   };

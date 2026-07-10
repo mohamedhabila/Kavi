@@ -7,7 +7,7 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { ensureDefaultBlocks } from '../../../src/services/memory/blocks';
+import { editBlock, ensureDefaultBlocks, getBlock } from '../../../src/services/memory/blocks';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
@@ -22,6 +22,7 @@ import {
   seedConversation,
 } from '../../../src/services/memory/migrationSeedPass';
 import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { getWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import type { Conversation } from '../../../src/types/conversation';
 import type { Message } from '../../../src/types/message';
 
@@ -49,17 +50,6 @@ function asstMsg(id: string, ts: number, content = `a-${id}`): Message {
 }
 function toolMsg(id: string, ts: number): Message {
   return { id, role: 'tool', content: 't', timestamp: ts } as Message;
-}
-
-async function withExpectedWarning<T>(action: () => Promise<T>, expectedCalls = 1): Promise<T> {
-  const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  try {
-    const result = await action();
-    expect(warnSpy).toHaveBeenCalledTimes(expectedCalls);
-    return result;
-  } finally {
-    warnSpy.mockRestore();
-  }
 }
 
 function buildConversation(
@@ -91,10 +81,11 @@ const PASSING_EXTRACTOR = jest.fn(async () =>
         subject: 'user',
         predicate: 'likes',
         value: 'fact-from-seed',
-        confidence: 'high',
+        confidence: 0.9,
       },
     ],
-    active_focus: '',
+    episode_summary: null,
+    active_focus: null,
     open_threads: [],
     notable: [],
   }),
@@ -220,14 +211,12 @@ describe('seedConversation', () => {
     const failing = jest.fn(async () => {
       throw new Error('boom');
     });
-    const result = await withExpectedWarning(() =>
-      seedConversation({ conversation: conv, extractor: failing }),
-    );
+    const result = await seedConversation({ conversation: conv, extractor: failing });
     expect(result.status).toBe('error');
-    expect(result.error).toBe('boom');
+    expect(result.error).toBe('provider_request_failed');
     const state = getMigrationState('c3');
     expect(state?.status).toBe('error');
-    expect(state?.error).toBe('boom');
+    expect(state?.error).toBe('provider_request_failed');
     expect(state?.seededTurns).toBe(0);
   });
 
@@ -236,7 +225,7 @@ describe('seedConversation', () => {
     const failing = jest.fn(async () => {
       throw new Error('first-time');
     });
-    await withExpectedWarning(() => seedConversation({ conversation: conv, extractor: failing }));
+    await seedConversation({ conversation: conv, extractor: failing });
     expect(getMigrationState('c4')?.status).toBe('error');
 
     const recovered = await seedConversation({
@@ -258,6 +247,47 @@ describe('seedConversation', () => {
     });
     expect(result.status).toBe('completed');
     expect(PASSING_EXTRACTOR).not.toHaveBeenCalled();
+  });
+
+  it('does not advance or clear global working memory on malformed enrichment', async () => {
+    const conv = buildConversation('malformed', 1);
+    editBlock('open_threads', 'global sentinel', { replace: true });
+
+    const result = await seedConversation({
+      conversation: conv,
+      extractor: async () => '{invalid',
+    });
+
+    expect(result).toMatchObject({
+      status: 'error',
+      seededTurns: 0,
+      error: 'invalid_json',
+    });
+    expect(getMigrationState(conv.id)?.lastSeededMessageId).toBeNull();
+    expect(getBlock('open_threads')?.content).toBe('global sentinel');
+  });
+
+  it('writes migration working memory only in the source conversation namespace', async () => {
+    const conv = buildConversation('scoped-migration', 1);
+    editBlock('open_threads', 'global sentinel', { replace: true });
+    const extractor = async () =>
+      JSON.stringify({
+        new_facts: [],
+        episode_summary: null,
+        active_focus: null,
+        open_threads: ['Scoped follow-up'],
+        notable: [],
+      });
+
+    await seedConversation({ conversation: conv, extractor });
+
+    expect(getBlock('open_threads')?.content).toBe('global sentinel');
+    expect(
+      getWorkingBlock('open_threads', {
+        conversationId: conv.id,
+        threadId: conv.id,
+      })?.content,
+    ).toBe('Scoped follow-up');
   });
 
   it('rejects an invalid conversation', async () => {
@@ -337,7 +367,8 @@ describe('runMigrationSeedPass', () => {
       if (flaky.mock.calls.length === 1) throw new Error('extractor down');
       return JSON.stringify({
         new_facts: [],
-        active_focus: '',
+        episode_summary: null,
+        active_focus: null,
         open_threads: [],
         notable: [],
       });
@@ -345,12 +376,10 @@ describe('runMigrationSeedPass', () => {
     // bad has older updatedAt
     bad.updatedAt = 1_000;
     ok.updatedAt = 5_000;
-    const result = await withExpectedWarning(() =>
-      runMigrationSeedPass({
-        conversations: [ok, bad],
-        extractor: flaky,
-      }),
-    );
+    const result = await runMigrationSeedPass({
+      conversations: [ok, bad],
+      extractor: flaky,
+    });
     expect(result.attempted).toBe(2);
     expect(result.errors).toBe(1);
     expect(result.completed).toBe(1);

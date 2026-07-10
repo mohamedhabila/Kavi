@@ -83,6 +83,7 @@ function seedDirtyThread(threadId: string, turns: number): Message[] {
 const STUB_EXTRACTOR = async () =>
   JSON.stringify({
     new_facts: [],
+    episode_summary: null,
     active_focus: 'still working on it',
     open_threads: [],
     notable: [],
@@ -345,7 +346,7 @@ describe('maybeRunConsolidation gating', () => {
     expect(extractor).not.toHaveBeenCalled();
   });
 
-  it('captures extractor throws as extractor_threw without persisting', async () => {
+  it('captures unexpected processing failures without advancing the cursor', async () => {
     const messages = buildTranscript(DEFAULT_TURN_THRESHOLD);
     // The base consolidateTurn already swallows extractor throws and returns
     // an empty result, so we drive the failure by making the extractor never
@@ -363,12 +364,39 @@ describe('maybeRunConsolidation gating', () => {
         extractor: STUB_EXTRACTOR,
       });
       expect(result.ran).toBe(false);
-      expect(result.skipped).toBe('extractor_threw');
+      expect(result.skipped).toBe('processing_failed');
       // Cursor must NOT have advanced — we'll retry on the next call.
       expect(getConsolidationState(THREAD)?.lastConsolidatedMessageId).toBeNull();
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it('keeps malformed enrichment retryable without advancing the cursor', async () => {
+    const messages = buildTranscript(DEFAULT_TURN_THRESHOLD);
+    const extractor = jest.fn(async () => '{invalid');
+
+    const first = await maybeRunConsolidation({
+      threadId: THREAD,
+      messages,
+      consolidationProvider: 'openai',
+      extractor,
+    });
+    const second = await maybeRunConsolidation({
+      threadId: THREAD,
+      messages,
+      consolidationProvider: 'openai',
+      extractor,
+    });
+
+    expect(first).toMatchObject({
+      ran: false,
+      skipped: 'enrichment_retryable',
+      providerOutcome: { status: 'malformed', code: 'invalid_json' },
+    });
+    expect(second.skipped).toBe('enrichment_retryable');
+    expect(extractor).toHaveBeenCalledTimes(2);
+    expect(getConsolidationState(THREAD)?.lastConsolidatedMessageId).toBeNull();
   });
 });
 
