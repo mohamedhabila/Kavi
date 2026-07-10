@@ -44,7 +44,8 @@ import type {
   ForegroundScenarioRouteDirective,
 } from './foregroundScenarioDriverTypes';
 
-const MEMORY_JOB_POLL_MS = 10;
+const MEMORY_JOB_INITIAL_POLL_MS = 10;
+const MEMORY_JOB_MAX_POLL_MS = 500;
 
 export type ForegroundScenarioRequestRegistry = ReturnType<typeof createRequestRegistry>;
 
@@ -265,6 +266,7 @@ function sleep(delayMs: number): Promise<void> {
 
 async function awaitMemoryJob(jobId: string, deadline: number): Promise<IngestionJob> {
   let requestedDrain = false;
+  let pollDelayMs = MEMORY_JOB_INITIAL_POLL_MS;
   while (Date.now() <= deadline) {
     const job = getIngestionJob(jobId);
     if (!job) throw new Error(`Memory ingestion job ${jobId} disappeared before completion.`);
@@ -291,7 +293,10 @@ async function awaitMemoryJob(jobId: string, deadline: number): Promise<Ingestio
       continue;
     }
 
-    await sleep(MEMORY_JOB_POLL_MS);
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) break;
+    await sleep(Math.min(pollDelayMs, remainingMs));
+    pollDelayMs = Math.min(pollDelayMs * 2, MEMORY_JOB_MAX_POLL_MS);
   }
   throw new Error(`Timed out waiting for memory ingestion job ${jobId}.`);
 }
