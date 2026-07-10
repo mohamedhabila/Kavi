@@ -13,6 +13,13 @@ jest.mock('../../src/services/memory/entities', () => ({
   getEntityById: () => undefined,
 }));
 
+jest.mock('../../src/services/memory/memoryScopeStore', () => ({
+  resolveLocalMemoryAccessScope: (scope: Record<string, unknown>) => ({
+    memoryOwnerId: 'test-memory-owner',
+    ...scope,
+  }),
+}));
+
 import {
   executeAgentsConfigure,
   executeAgentsList,

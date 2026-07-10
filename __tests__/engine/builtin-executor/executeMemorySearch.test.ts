@@ -18,6 +18,13 @@ jest.mock('../../../src/services/memory/entities', () => ({
   getEntityById: (...args: any[]) => mockGetEntityById(...args),
 }));
 
+jest.mock('../../../src/services/memory/memoryScopeStore', () => ({
+  resolveLocalMemoryAccessScope: (scope: Record<string, unknown>) => ({
+    memoryOwnerId: 'test-memory-owner',
+    ...scope,
+  }),
+}));
+
 import { executeMemorySearch } from '../../helpers/builtinExecutorHarness';
 import { makeScoredFact } from '../../helpers/memoryFactFixtures';
 
