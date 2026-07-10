@@ -3522,7 +3522,7 @@ SPEC CHECKSUMS:
   FBLazyVector: 82d1d7996af4c5850242966eb81e73f9a6dfab1e
   fmt: a40bb5bd0294ea969aaaba240a927bd33d878cdd
   glog: 5683914934d5b6e4240e497e0f4a3b42d1854183
-  hermes-engine: 94a333fb97b8135eae5e4fb8fab6a67d61274dd1
+  hermes-engine: b24440e3aadf7618aad77edaa5e11c9e704481c6
   libssh2-iosx: a096366b4de77f3de01bb1265e26beb2ad5b0784
   NMSSH: 39d19ff70231635ff73b75052d0f32522a2b009e
   RCT-Folly: 846fda9475e61ec7bcbf8a3fe81edfcaeb090669
