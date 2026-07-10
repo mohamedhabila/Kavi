@@ -64,7 +64,13 @@ function createReport() {
       passing: false,
       failedCriteria: ['critical_dimension_failures'],
     },
-    readinessDashboard: {},
+    readinessDashboard: {
+      tokenCostLatency: {
+        estimatedCostUsd: null,
+        costStatus: 'provider_pricing_not_configured',
+        pricingSnapshot: null,
+      },
+    },
     metricsPassing: false,
     scenarios: [
       {
