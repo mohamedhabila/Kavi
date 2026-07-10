@@ -36,7 +36,24 @@ import { editBlock, ensureDefaultBlocks, getBlock, listBlocks, BlockOverflowErro
 import { ensureFactSchema } from './schema';
 import { canReadLongTermMemory, canWriteLongTermMemory } from './policy';
 import { withdrawMemoryFact } from './withdrawal';
-import type { MemoryWithdrawalReceipt } from './withdrawalTypes';
+import type {
+  MemoryBlockEditResult,
+  MemoryBlockReadResult,
+  MemoryForgetResult,
+  MemoryInvalidateResult,
+  MemoryPinResult,
+  MemoryRememberResult,
+  SerializedMemoryFact,
+} from './memoryToolResultTypes';
+export type {
+  MemoryBlockEditResult,
+  MemoryBlockReadResult,
+  MemoryForgetResult,
+  MemoryInvalidateResult,
+  MemoryPinResult,
+  MemoryRememberResult,
+  SerializedMemoryFact,
+} from './memoryToolResultTypes';
 import { loadActiveMemoryFactConflictSignals } from './facts/observations';
 import {
   applyMemoryApplicabilityPolicy,
@@ -71,34 +88,6 @@ function trimNonEmpty(value: unknown, max = 200): string | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
   return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
-}
-
-export interface SerializedMemoryFact {
-  id: string;
-  subject: string;
-  subjectId: string;
-  predicate: string;
-  value: string;
-  confidence: number;
-  pinned: boolean;
-  validAt: number;
-  invalidAt: number | null;
-  createdAt: number;
-  updatedAt: number;
-  deletedAt: number | null;
-  scope: MemoryFactScope;
-  personaId: string | null;
-  originConversationId: string | null;
-  originThreadId: string | null;
-  originTaskId: string | null;
-  sourceMessageId: string | null;
-  sourceTurnId: string | null;
-  sourceSummary: string | null;
-  importance: number;
-  accessCount: number;
-  lastRecalledAt: number | null;
-  lastAccessedAt: number | null;
-  decayPolicy: string;
 }
 
 function serializeFact(fact: MemoryFact): SerializedMemoryFact {
@@ -427,13 +416,6 @@ export interface MemoryRememberArgs {
   importance?: number;
 }
 
-export interface MemoryRememberResult {
-  ok: true;
-  fact: ReturnType<typeof serializeFact>;
-  status: 'created' | 'duplicate';
-  superseded: ReturnType<typeof serializeFact>[];
-}
-
 export interface MemoryRememberExecutionContext {
   /** Code-owned persona identity; never accepted from provider tool arguments. */
   personaId?: string;
@@ -509,12 +491,6 @@ export interface MemoryPinArgs {
   factId: string;
 }
 
-export interface MemoryPinResult {
-  ok: true;
-  status: 'pinned' | 'unpinned';
-  fact: ReturnType<typeof serializeFact>;
-}
-
 function setPin(factId: string, pinned: boolean): MemoryPinResult | MemoryToolError {
   ensureFactSchema();
   const id = trimNonEmpty(factId, 64);
@@ -544,14 +520,6 @@ export interface MemoryForgetArgs {
   factId: string;
 }
 
-export interface MemoryForgetResult {
-  ok: true;
-  action: 'withdrawal';
-  status: 'withdrawn' | 'already_withdrawn';
-  factId: string;
-  receipt: MemoryWithdrawalReceipt;
-}
-
 export function executeMemoryForget(args: MemoryForgetArgs): MemoryForgetResult | MemoryToolError {
   if (!args || typeof args !== 'object' || Object.keys(args).some((key) => key !== 'factId')) {
     return err('invalid_args', 'memory_forget accepts only factId.');
@@ -575,14 +543,6 @@ export function executeMemoryForget(args: MemoryForgetArgs): MemoryForgetResult 
 
 export interface MemoryInvalidateArgs {
   factId: string;
-}
-
-export interface MemoryInvalidateResult {
-  ok: true;
-  action: 'invalidation';
-  factId: string;
-  invalidatedAt: number;
-  status: 'invalidated';
 }
 
 export function executeMemoryInvalidate(
@@ -611,20 +571,6 @@ export function executeMemoryInvalidate(
 export interface MemoryBlockReadArgs {
   /** Omit to return all blocks. */
   label?: string;
-}
-
-export interface MemoryBlockReadResult {
-  ok: true;
-  status: 'read';
-  resourceId: string;
-  blocks: Array<{
-    label: string;
-    content: string;
-    description: string;
-    pinned: boolean;
-    charLimit: number;
-    charsUsed: number;
-  }>;
 }
 
 export function executeMemoryBlockRead(
@@ -661,18 +607,6 @@ export interface MemoryBlockEditArgs {
   content: string;
   /** When true (default), content replaces the block. When false, appended with newline. */
   replace?: boolean;
-}
-
-export interface MemoryBlockEditResult {
-  ok: true;
-  status: 'edited';
-  resourceId: string;
-  block: {
-    label: string;
-    content: string;
-    charLimit: number;
-    charsUsed: number;
-  };
 }
 
 export function executeMemoryBlockEdit(
