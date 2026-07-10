@@ -6,7 +6,7 @@ const {
   createPrivateReleaseFixture,
   removePrivateReleaseFixture,
   savePrivateReleaseFixture,
-} = require('./klaePrivateFixture');
+} = require('../helpers/klaePrivateFixture');
 
 const projectRoot = path.resolve(__dirname, '../..');
 
