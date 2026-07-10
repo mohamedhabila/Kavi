@@ -70,10 +70,10 @@ describe('SubAgentConfig enhanced fields', () => {
 });
 
 describe('ConversationMode type', () => {
-  it('agentic and direct are valid values', () => {
-    const modes: ConversationMode[] = ['agentic', 'direct'];
+  it('agentic and chitchat are valid values', () => {
+    const modes: ConversationMode[] = ['agentic', 'chitchat'];
     expect(modes).toHaveLength(2);
     expect(modes).toContain('agentic');
-    expect(modes).toContain('direct');
+    expect(modes).toContain('chitchat');
   });
 });
