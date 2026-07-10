@@ -365,8 +365,15 @@ export async function getEmbeddingCached(text: string, config: EmbeddingConfig):
   return result.embedding;
 }
 
-export function clearEmbeddingCache(): void {
+export function clearEmbeddingCache(): number {
+  const cleared = embeddingCache.size;
   embeddingCache.clear();
+  return cleared;
+}
+
+export function getEmbeddingCacheEntryCount(): number {
+  evictExpiredCacheEntries();
+  return embeddingCache.size;
 }
 
 export function isLocalEmbeddingConfig(config: EmbeddingConfig | undefined): boolean {

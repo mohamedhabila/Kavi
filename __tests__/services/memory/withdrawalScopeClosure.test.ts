@@ -1,0 +1,356 @@
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
+});
+
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
+import {
+  ensureFactSchema,
+  resetFactSchemaCacheForTests,
+} from '../../../src/services/memory/schema';
+import { upsertEntity } from '../../../src/services/memory/entities';
+import { recordFact } from '../../../src/services/memory/facts/mutations';
+import { addFactEvidence, recordEpisode } from '../../../src/services/memory/episodes/mutations';
+import { editWorkingBlock } from '../../../src/services/memory/workingBlocks';
+import { upsertMemoryTask } from '../../../src/services/memory/tasks';
+import { enqueueIngestionJob } from '../../../src/services/memory/ingestionQueueStore';
+import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
+import * as memoryStore from '../../../src/services/memory/store';
+import {
+  cloneMemoryFactForWithdrawal,
+  insertMemoryIngestionReceiptForWithdrawal,
+  requireMemoryIngestionJob,
+} from '../../helpers/memoryWithdrawalFixtures';
+
+const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
+
+const CONVERSATION_ID = 'conversation-closure';
+
+function requireJob(input: {
+  threadId: string;
+  taskId: string;
+  sourceStartMessageId: string;
+  sourceEndMessageId: string;
+  sourceRunId: string;
+}) {
+  return requireMemoryIngestionJob({
+    memoryConversationId: CONVERSATION_ID,
+    now: 2_000,
+    ...input,
+  });
+}
+
+function ids(table: string, column = 'id'): string[] {
+  return getMemoryDb()
+    .getAllSync<Record<string, string>>(`SELECT ${column} FROM ${table}`)
+    .map((row) => row[column]);
+}
+
+beforeEach(() => {
+  closeMemoryDb();
+  expoSqlite.__resetExpoSqliteForTests();
+  resetFactSchemaCacheForTests();
+  ensureFactSchema();
+});
+
+afterEach(() => {
+  closeMemoryDb();
+  expoSqlite.__resetExpoSqliteForTests();
+});
+
+it('closes multi-scope fact and receipt-job lineage to a bounded fixed point', () => {
+  const subject = upsertEntity({ name: 'closure-user', type: 'self', now: 100 });
+  const target = recordFact({
+    subjectId: subject.id,
+    predicate: 'private_value',
+    objectText: 'private closure value',
+    scope: 'conversation',
+    originConversationId: CONVERSATION_ID,
+    originThreadId: 'thread-a',
+    originTaskId: 'task-a',
+    taskId: 'task-a',
+    sourceMessageId: 'message-a',
+    sourceTurnId: 'turn-a',
+    sourceRunId: 'run-a',
+    supersedePrior: false,
+    now: 200,
+  }).fact;
+  const duplicateFactId = 'fact-closure-thread-b';
+  cloneMemoryFactForWithdrawal(target.id, duplicateFactId, {
+    origin_thread_id: 'thread-b',
+    origin_task_id: 'task-b',
+    task_id: 'task-b',
+    source_message_id: 'message-b',
+    source_turn_id: 'turn-b',
+    source_run_id: 'run-b',
+  });
+  const retainedFact = recordFact({
+    subjectId: subject.id,
+    predicate: 'unrelated_value',
+    objectText: 'retain this fact',
+    scope: 'conversation',
+    originConversationId: CONVERSATION_ID,
+    originThreadId: 'thread-a',
+    originTaskId: 'task-retained',
+    taskId: 'task-retained',
+    sourceMessageId: 'message-unrelated-fact',
+    sourceTurnId: 'turn-unrelated-fact',
+    sourceRunId: 'run-unrelated-fact',
+    supersedePrior: false,
+    now: 201,
+  }).fact;
+
+  const episodeA = recordEpisode({
+    conversationId: CONVERSATION_ID,
+    threadId: 'thread-a',
+    taskId: 'task-a',
+    summary: 'private episode a',
+    messageIds: ['message-a', 'message-a-chain'],
+    sourceStartMessageId: 'message-a',
+    sourceEndMessageId: 'turn-a',
+    now: 300,
+  });
+  const episodeB = recordEpisode({
+    conversationId: CONVERSATION_ID,
+    threadId: 'thread-b',
+    taskId: 'task-b',
+    summary: 'private episode b',
+    messageIds: ['message-b'],
+    sourceStartMessageId: 'message-b',
+    sourceEndMessageId: 'turn-b',
+    now: 301,
+  });
+  const chainedEpisode = recordEpisode({
+    conversationId: CONVERSATION_ID,
+    threadId: 'thread-a',
+    taskId: 'task-a',
+    summary: 'private chained episode',
+    messageIds: ['message-a-chain'],
+    sourceStartMessageId: 'message-a-chain',
+    sourceEndMessageId: 'turn-a-chain',
+    now: 302,
+  });
+  const unrelatedEpisode = recordEpisode({
+    conversationId: CONVERSATION_ID,
+    threadId: 'thread-unrelated',
+    taskId: 'task-a',
+    summary: 'unrelated episode retained',
+    messageIds: ['message-a'],
+    sourceStartMessageId: 'message-a',
+    sourceEndMessageId: 'turn-a',
+    now: 303,
+  });
+  if (!episodeA || !episodeB || !chainedEpisode || !unrelatedEpisode) {
+    throw new Error('test episode missing');
+  }
+  addFactEvidence({
+    factId: retainedFact.id,
+    episodeId: episodeA.id,
+    messageId: 'message-evidence-only',
+    quote: 'evidence removed with its withdrawn episode',
+    now: 304,
+  });
+
+  for (const scope of [
+    { threadId: 'thread-a', taskId: 'task-a' },
+    { threadId: 'thread-b', taskId: 'task-b' },
+    { threadId: 'thread-c', taskId: 'task-c' },
+  ]) {
+    editWorkingBlock(
+      'active_focus',
+      'private scope state',
+      { conversationId: CONVERSATION_ID, ...scope },
+      { now: 400 },
+    );
+    editWorkingBlock(
+      'open_threads',
+      'private derived open threads',
+      { conversationId: CONVERSATION_ID, ...scope },
+      { now: 401 },
+    );
+    editWorkingBlock(
+      'compaction_summary',
+      'private derived compaction summary',
+      { conversationId: CONVERSATION_ID, ...scope },
+      { now: 402 },
+    );
+    editWorkingBlock(
+      'task_stack',
+      `structural task stack ${scope.taskId}`,
+      { conversationId: CONVERSATION_ID, ...scope },
+      { now: 403 },
+    );
+    upsertMemoryTask({
+      id: scope.taskId,
+      threadId: scope.threadId,
+      title: 'private scope task',
+      now: 500,
+    });
+  }
+  editWorkingBlock(
+    'active_focus',
+    'unrelated state retained',
+    {
+      conversationId: CONVERSATION_ID,
+      threadId: 'thread-c',
+      taskId: 'task-unrelated',
+    },
+    { now: 401 },
+  );
+  editWorkingBlock(
+    'task_stack',
+    'unrelated structural task stack',
+    {
+      conversationId: CONVERSATION_ID,
+      threadId: 'thread-c',
+      taskId: 'task-unrelated',
+    },
+    { now: 404 },
+  );
+  upsertMemoryTask({
+    id: 'task-unrelated',
+    threadId: 'thread-c',
+    title: 'unrelated task retained',
+    now: 501,
+  });
+
+  const jobA = requireJob({
+    threadId: 'thread-a',
+    taskId: 'task-a',
+    sourceStartMessageId: 'message-a',
+    sourceEndMessageId: 'turn-a',
+    sourceRunId: 'run-a',
+  });
+  const jobB = requireJob({
+    threadId: 'thread-b',
+    taskId: 'task-b',
+    sourceStartMessageId: 'message-b',
+    sourceEndMessageId: 'turn-b',
+    sourceRunId: 'run-b',
+  });
+  const chainedEpisodeJob = requireJob({
+    threadId: 'thread-a',
+    taskId: 'task-a',
+    sourceStartMessageId: 'message-a-chain',
+    sourceEndMessageId: 'turn-a-chain',
+    sourceRunId: 'run-a-chain',
+  });
+  const evidenceSourceJob = requireJob({
+    threadId: 'thread-a',
+    taskId: 'task-a',
+    sourceStartMessageId: 'message-evidence-only',
+    sourceEndMessageId: 'turn-evidence-only',
+    sourceRunId: 'run-evidence-only',
+  });
+  const receiptJob = requireJob({
+    threadId: 'thread-c',
+    taskId: 'task-c',
+    sourceStartMessageId: 'message-c',
+    sourceEndMessageId: 'turn-c',
+    sourceRunId: 'run-c',
+  });
+  insertMemoryIngestionReceiptForWithdrawal(receiptJob.id, JSON.stringify([target.id]));
+  const sameSourceSiblingJob = requireJob({
+    threadId: 'thread-c',
+    taskId: 'task-c',
+    sourceStartMessageId: 'message-c-sibling',
+    sourceEndMessageId: 'turn-c-sibling',
+    sourceRunId: 'run-c',
+  });
+  const unrelatedJob = requireJob({
+    threadId: 'thread-c',
+    taskId: 'task-unrelated',
+    sourceStartMessageId: 'message-unrelated',
+    sourceEndMessageId: 'turn-unrelated',
+    sourceRunId: 'run-unrelated',
+  });
+  const otherScopeSameIdsJob = requireJob({
+    threadId: 'thread-unrelated',
+    taskId: 'task-a',
+    sourceStartMessageId: 'message-a',
+    sourceEndMessageId: 'turn-a',
+    sourceRunId: 'run-a',
+  });
+  const notificationSpy = jest.spyOn(memoryStore, 'notifyStructuredMemoryChanged');
+  notificationSpy.mockClear();
+
+  const result = withdrawMemoryFact(target.id, 3_000);
+
+  expect(result.status).toBe('withdrawn');
+  if (result.status !== 'withdrawn') throw new Error('expected withdrawal');
+  expect(result.receipt.counts).toEqual(
+    expect.objectContaining({
+      facts: 2,
+      episodes: 3,
+      chunks: 3,
+      workingBlocks: 9,
+      ingestionJobs: 6,
+    }),
+  );
+  expect(notificationSpy).toHaveBeenLastCalledWith(null);
+  expect(ids('memory_facts')).toEqual([retainedFact.id]);
+  expect(ids('memory_episodes')).toEqual([unrelatedEpisode.id]);
+  expect(ids('memory_tasks')).toEqual(
+    expect.arrayContaining(['task-a', 'task-b', 'task-c', 'task-unrelated']),
+  );
+  expect(ids('memory_tasks')).toHaveLength(4);
+
+  const remainingWorkingTaskIds = getMemoryDb()
+    .getAllSync<{ task_id: string | null }>(
+      "SELECT task_id FROM memory_working_blocks WHERE label = 'active_focus'",
+    )
+    .map((row) => row.task_id);
+  expect(remainingWorkingTaskIds).toEqual(['task-unrelated']);
+  const remainingTaskStackIds = getMemoryDb()
+    .getAllSync<{ task_id: string | null }>(
+      "SELECT task_id FROM memory_working_blocks WHERE label = 'task_stack'",
+    )
+    .map((row) => row.task_id);
+  expect(remainingTaskStackIds).toEqual(
+    expect.arrayContaining(['task-a', 'task-b', 'task-c', 'task-unrelated']),
+  );
+  expect(remainingTaskStackIds).toHaveLength(4);
+  expect(
+    getMemoryDb().getFirstSync(
+      "SELECT label FROM memory_working_blocks WHERE label IN ('open_threads', 'compaction_summary') LIMIT 1",
+    ),
+  ).toBeNull();
+  const remainingJobIds = ids('memory_ingestion_jobs');
+  expect(remainingJobIds).toEqual(
+    expect.arrayContaining([unrelatedJob.id, otherScopeSameIdsJob.id]),
+  );
+  for (const removedId of [
+    jobA.id,
+    jobB.id,
+    chainedEpisodeJob.id,
+    evidenceSourceJob.id,
+    receiptJob.id,
+    sameSourceSiblingJob.id,
+  ]) {
+    expect(remainingJobIds).not.toContain(removedId);
+  }
+  expect(ids('memory_ingestion_receipts', 'job_id')).toEqual([]);
+  expect(
+    getMemoryDb().getAllSync<{ source_thread_id: string; task_id: string }>(
+      `SELECT source_thread_id, task_id FROM memory_withdrawal_sources
+        WHERE source_kind = 'run' AND source_id IN ('run-b', 'run-c')`,
+    ),
+  ).toEqual(
+    expect.arrayContaining([
+      { source_thread_id: 'thread-b', task_id: 'task-b' },
+      { source_thread_id: 'thread-c', task_id: 'task-c' },
+    ]),
+  );
+  expect(
+    enqueueIngestionJob({
+      memoryConversationId: CONVERSATION_ID,
+      threadId: 'thread-c',
+      taskId: 'task-c',
+      sourceStartMessageId: 'message-c-new',
+      sourceEndMessageId: 'turn-c-new',
+      sourceRunId: 'run-c',
+      now: 3_100,
+    }),
+  ).toBeNull();
+  notificationSpy.mockRestore();
+});

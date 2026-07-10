@@ -4,7 +4,7 @@ import { newId, safeParseObject } from '../schema';
 import { notifyStructuredMemoryChanged } from '../store';
 import { runMemoryTransaction } from '../access/transaction';
 import { deleteFactRetrievalTerms, replaceFactRetrievalTerms } from './retrievalIndex';
-import { buildFactContentHash } from './contentIdentity';
+import { buildFactContentHash, hasExactFactContentIdentity } from './contentIdentity';
 import {
   clamp01,
   normalizeDecayPolicy,
@@ -65,7 +65,8 @@ function buildSupersedePriorQuery(
  * Durable non-session scopes supersede each other because providers may choose
  * different scopes for the same current-state update across long conversations.
  * Session facts remain isolated by conversation/thread/task.
- * Idempotent on `content_hash` for active rows.
+ * Uses `content_hash` only to narrow active-row candidates; exact persisted
+ * identity decides idempotency so a hash collision cannot merge two facts.
  */
 export function recordFact(input: RecordFactInput): RecordFactResult {
   return runMemoryTransaction(() => recordFactInTransaction(input));
@@ -93,12 +94,33 @@ function recordFactInTransaction(input: RecordFactInput): RecordFactResult {
   const reviewState = input.reviewState?.trim() || 'auto';
   const sensitivity = input.sensitivity?.trim() || 'normal';
 
-  const existing = db.getFirstSync<FactRow>(
-    `SELECT * FROM memory_facts
+  const existing = db
+    .getAllSync<FactRow>(
+      `SELECT * FROM memory_facts
        WHERE content_hash = ? AND invalid_at IS NULL AND deleted_at IS NULL
-       LIMIT 1`,
-    hash,
-  );
+       ORDER BY created_at ASC, id ASC`,
+      hash,
+    )
+    .find((row) =>
+      hasExactFactContentIdentity(
+        {
+          memoryKind: row.memory_kind,
+          scope: row.scope,
+          originConversationId: row.origin_conversation_id,
+          originThreadId: row.origin_thread_id,
+          originTaskId: row.origin_task_id,
+          subjectId: row.subject_id,
+          predicate: row.predicate,
+          objectText: row.object_text,
+          objectEntityId: row.object_entity_id,
+        },
+        {
+          ...normalizedInput,
+          memoryKind,
+          scope,
+        },
+      ),
+    );
   if (existing) {
     const sourceTurnId = input.sourceTurnId?.trim();
     const sourceMessageId = input.sourceMessageId?.trim();

@@ -92,7 +92,6 @@ describe('ensureFactSchema', () => {
     expect(indexNames('memory_facts')).toEqual(
       expect.arrayContaining([
         'idx_facts_content_hash',
-        'idx_facts_active_content_hash',
         'idx_facts_subject',
         'idx_facts_subject_predicate',
         'idx_facts_subject_predicate_nocase',
@@ -100,6 +99,7 @@ describe('ensureFactSchema', () => {
         'idx_facts_pinned',
       ]),
     );
+    expect(indexNames('memory_facts')).not.toContain('idx_facts_active_content_hash');
     expect(
       getMemoryDb().getFirstSync<{ id: string; predicate: string; content_hash: string }>(
         "SELECT id, predicate, content_hash FROM memory_facts WHERE id = 'legacy-fact'",
@@ -311,7 +311,7 @@ describe('ensureFactSchema', () => {
     expect(evidenceCount?.count).toBe(1);
   });
 
-  it('enforces exact active fact identity in SQLite', () => {
+  it('treats content hashes as index hints and dedupes exact identity in the writer', () => {
     ensureFactSchema();
     const recorded = recordFact({
       subjectId: 'entity-user',
@@ -328,13 +328,28 @@ describe('ensureFactSchema', () => {
         'duplicate-active-fact',
         'entity-user',
         'opaque_token',
-        'AbC',
+        'different-value-with-forced-hash',
         recorded.fact.contentHash,
         11,
         11,
         11,
       ),
-    ).toThrow();
+    ).not.toThrow();
+
+    const duplicate = recordFact({
+      subjectId: 'entity-user',
+      predicate: 'opaque_token',
+      objectText: 'AbC',
+      now: 12,
+    });
+    expect(duplicate.status).toBe('duplicate');
+    expect(duplicate.fact.id).toBe(recorded.fact.id);
+    expect(
+      getMemoryDb().getFirstSync<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM memory_facts WHERE content_hash = ?',
+        recorded.fact.contentHash,
+      )?.count,
+    ).toBe(2);
   });
 
   it('maintains retrieval term statistics with fact term writes and clears', () => {

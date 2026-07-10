@@ -15,6 +15,7 @@ import { buildFactContentHash } from './facts/contentIdentity';
 import { ensureIngestionQueueSchema } from './ingestionQueueSchema';
 import { ensureMigrationStateSchema } from './migrationStateSchema';
 import { clearRetrievalEventStore, ensureRetrievalEventSchema } from './retrievalEventSchema';
+import { clearWithdrawalStore, ensureWithdrawalSchema } from './withdrawalSchema';
 
 let schemaReady = false;
 
@@ -236,6 +237,7 @@ export function ensureFactSchema(): void {
       ON memory_reflections(task_id, deleted_at);
   `);
   ensureRetrievalEventSchema(db);
+  ensureWithdrawalSchema(db);
   ensureMigrationStateSchema(db);
   ensureIngestionQueueSchema(db);
   ensureFactColumns(db);
@@ -269,9 +271,7 @@ export function ensureFactSchema(): void {
       ON memory_facts(subject_id, predicate, scope);
     CREATE INDEX IF NOT EXISTS idx_facts_content_hash
       ON memory_facts(content_hash);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_facts_active_content_hash
-      ON memory_facts(content_hash)
-      WHERE invalid_at IS NULL AND deleted_at IS NULL;
+    DROP INDEX IF EXISTS idx_facts_active_content_hash;
     CREATE INDEX IF NOT EXISTS idx_facts_last_recalled
       ON memory_facts(last_recalled_at);
     CREATE INDEX IF NOT EXISTS idx_facts_importance
@@ -579,6 +579,7 @@ export function clearStructuredMemory(): void {
     DELETE FROM memory_chunks;
   `);
   clearRetrievalEventStore(db);
+  clearWithdrawalStore(db);
 }
 
 function ensureFactTermStats(db: ReturnType<typeof getMemoryDb>): void {
