@@ -203,11 +203,9 @@ describe('evaluation contract', () => {
       validatePublicRegistryTemplate(privateRegistryTemplate, schema, privateGovernanceSchema),
     ).toEqual([]);
     expect(privateRegistryTemplate.registryState).toBe('template');
-    expect(privateRegistryTemplate.splits.map((split: { caseCount: number }) => split.caseCount)).toEqual([
-      40,
-      40,
-      100,
-    ]);
+    expect(
+      privateRegistryTemplate.splits.map((split: { caseCount: number }) => split.caseCount),
+    ).toEqual([40, 40, 100]);
     expect(JSON.stringify(privateRegistryTemplate)).not.toMatch(
       /"(?:cases|fixtures|steps|assertions)"/u,
     );
@@ -379,17 +377,31 @@ describe('evaluation contract', () => {
     const run = validRunManifest();
     run.command.argv.push(['sk', 'proj', 'A'.repeat(32)].join('-'));
     run.command.argv.push('--base-url=https://private.example.test/v1');
-    run.artifacts[0].path = '/tmp/private-report.json';
+    run.command.argv.push('.private/evals/registry.json');
+    run.artifacts[0].path = 'reports/gold/answers.json';
+    run.artifacts[0].visibility = 'private';
     run.models[0].model = '/private/models/local.gguf';
 
     expect(validateEvaluationRunManifest(run, contract)).toEqual(
       expect.arrayContaining([
         expect.stringContaining('run.command.argv[3]: must not contain a credential'),
         expect.stringContaining('run.command.argv[4]: must not contain a raw URL'),
-        expect.stringContaining('run.artifacts[0].path: must be a normalized relative path'),
+        expect.stringContaining(
+          'run.command.argv[5]: must not expose a private evaluation or evaluator-gold path',
+        ),
+        expect.stringContaining(
+          'run.artifacts[0].path: must not expose a private evaluation or evaluator-gold path',
+        ),
         expect.stringContaining('run.models[0].model: must be an identifier'),
       ]),
     );
+  });
+
+  it('allows private classification metadata when it is not a path locator', () => {
+    const run = validRunManifest();
+    run.command.argv.push('--content-class=private');
+
+    expect(validateEvaluationRunManifest(run, contract)).toEqual([]);
   });
 
   it('provides a keyless check command for contributors and CI', () => {

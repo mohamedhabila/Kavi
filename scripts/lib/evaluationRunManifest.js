@@ -15,6 +15,14 @@ const ABSOLUTE_PATH_PATTERN = /(?:^|=)(?:\/|[A-Za-z]:[\\/])/u;
 const URL_PATTERN = /https?:\/\//iu;
 const SECRET_PATTERN =
   /(?:sk-(?:proj-)?[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,}|authorization:\s*bearer)/iu;
+function containsPrivateCustodyPath(value) {
+  if (typeof value !== 'string') return false;
+  const normalized = value.replace(/\\/gu, '/').toLowerCase();
+  return (
+    /(?:^|[=:/])\.private(?:\/|$)/u.test(normalized) ||
+    /(?:^|[=:/])(?:private|gold|golden)\//u.test(normalized)
+  );
+}
 
 function addFailure(failures, location, message) {
   failures.push(`${location}: ${message}`);
@@ -31,7 +39,9 @@ function duplicateValues(values) {
 
 function validateUniqueField(entries, field, location, failures) {
   if (!Array.isArray(entries)) return;
-  const values = entries.map((entry) => entry?.[field]).filter((value) => typeof value === 'string');
+  const values = entries
+    .map((entry) => entry?.[field])
+    .filter((value) => typeof value === 'string');
   if (duplicateValues(values).length > 0) {
     addFailure(failures, location, `must contain unique ${field} values`);
   }
@@ -80,27 +90,15 @@ function validateModelAndPricing(models, pricing, failures) {
   const remoteClasses = new Set(['hosted_tool_capable', 'openai_compatible']);
   const hasRemoteModel = models.some((model) => remoteClasses.has(model?.capabilityClass));
   if (hasRemoteModel && pricing?.status === 'not_applicable') {
-    addFailure(
-      failures,
-      'run.pricing.status',
-      'cannot be not_applicable for a hosted model',
-    );
+    addFailure(failures, 'run.pricing.status', 'cannot be not_applicable for a hosted model');
   }
   if (pricing?.status === 'missing' && pricing.estimatedCostUsd !== null) {
-    addFailure(
-      failures,
-      'run.pricing.estimatedCostUsd',
-      'must be null when pricing is missing',
-    );
+    addFailure(failures, 'run.pricing.estimatedCostUsd', 'must be null when pricing is missing');
   }
   models.forEach((model, index) => {
     const isRemote = remoteClasses.has(model?.capabilityClass);
     if (isRemote && typeof model?.endpointSha256 !== 'string') {
-      addFailure(
-        failures,
-        `run.models[${index}].endpointSha256`,
-        'is required for a hosted model',
-      );
+      addFailure(failures, `run.models[${index}].endpointSha256`, 'is required for a hosted model');
     }
     if (!isRemote && model?.endpointSha256 !== null) {
       addFailure(
@@ -138,15 +136,20 @@ function validateCommand(command, failures) {
     if (URL_PATTERN.test(argument)) {
       addFailure(failures, `run.command.argv[${index}]`, 'must not contain a raw URL');
     }
+    if (containsPrivateCustodyPath(argument)) {
+      addFailure(
+        failures,
+        `run.command.argv[${index}]`,
+        'must not expose a private evaluation or evaluator-gold path',
+      );
+    }
   });
 }
 
 function validateScenarioCounts(run, failures) {
   const counts = run?.scenarioCounts;
   if (!counts || typeof counts !== 'object') return;
-  const values = ['requested', 'executed', 'passed', 'failed', 'skipped'].map(
-    (key) => counts[key],
-  );
+  const values = ['requested', 'executed', 'passed', 'failed', 'skipped'].map((key) => counts[key]);
   if (!values.every(Number.isInteger)) return;
   if (counts.executed !== counts.passed + counts.failed) {
     addFailure(failures, 'run.scenarioCounts.executed', 'must equal passed plus failed');
@@ -158,7 +161,10 @@ function validateScenarioCounts(run, failures) {
   if (status === 'failed' && (counts.executed < 1 || counts.failed < 1)) {
     addFailure(failures, 'run.scenarioCounts', 'a failed run must contain an executed failure');
   }
-  if (status === 'skipped' && (counts.executed !== 0 || counts.passed !== 0 || counts.failed !== 0)) {
+  if (
+    status === 'skipped' &&
+    (counts.executed !== 0 || counts.passed !== 0 || counts.failed !== 0)
+  ) {
     addFailure(failures, 'run.scenarioCounts', 'a skipped run must not claim execution');
   }
 }
@@ -170,10 +176,7 @@ function validateMetricsAndFailures(run, failures) {
     if (['passed', 'failed'].includes(status) && !Number.isFinite(metrics.pass_at_1)) {
       addFailure(failures, 'run.metrics.pass_at_1', 'is required for an executed run');
     }
-    if (
-      Number.isFinite(metrics.pass_at_1) &&
-      (metrics.pass_at_1 < 0 || metrics.pass_at_1 > 1)
-    ) {
+    if (Number.isFinite(metrics.pass_at_1) && (metrics.pass_at_1 < 0 || metrics.pass_at_1 > 1)) {
       addFailure(failures, 'run.metrics.pass_at_1', 'must be between zero and one');
     }
     if (
@@ -214,6 +217,13 @@ function validateArtifactPaths(artifacts, failures) {
     ) {
       addFailure(failures, `run.artifacts[${index}].path`, 'must be a normalized relative path');
     }
+    if (containsPrivateCustodyPath(artifact.path)) {
+      addFailure(
+        failures,
+        `run.artifacts[${index}].path`,
+        'must not expose a private evaluation or evaluator-gold path',
+      );
+    }
   });
 }
 
@@ -251,12 +261,11 @@ function validateEvaluationArtifact(value, contract, schema = DEFAULT_SCHEMA) {
   if (value?.kind === 'evaluation_case_pack') {
     return validateEvaluationCasePack(value, contract, schema);
   }
-  return [
-    'artifact.kind: must be evaluation_contract, evaluation_case_pack, or evaluation_run',
-  ];
+  return ['artifact.kind: must be evaluation_contract, evaluation_case_pack, or evaluation_run'];
 }
 
 module.exports = {
+  containsPrivateCustodyPath,
   validateEvaluationArtifact,
   validateEvaluationRunManifest,
 };
