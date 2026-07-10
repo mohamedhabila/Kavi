@@ -10,6 +10,10 @@ import {
   getIngestionJob,
   type IngestionJob,
 } from '../../src/services/memory/ingestionQueue';
+import {
+  listIngestionPersistenceReceipts,
+  type IngestionPersistenceReceipt,
+} from '../../src/services/memory/ingestionReceiptStore';
 import { recordCompletedTurnForMemory } from '../../src/services/memory/lifecycle';
 import { runForegroundScenario } from '../../src/acceptance/e2eAgent/foregroundScenarioDriver';
 import { resetE2EMemorySandbox } from '../../src/acceptance/e2eAgent/sandboxMemory';
@@ -46,6 +50,9 @@ jest.mock('../../src/services/memory/lifecycle', () => ({
   loadIngestionJobRuntimeContext: jest.fn(() => ({})),
   recordCompletedTurnForMemory: jest.fn(),
 }));
+jest.mock('../../src/services/memory/ingestionReceiptStore', () => ({
+  listIngestionPersistenceReceipts: jest.fn(),
+}));
 jest.mock('../../src/store/chatStorePersistence', () => ({
   flushChatStorePersistenceNow: jest.fn(async () => undefined),
   requestChatStorePersistenceCheckpoint: jest.fn(),
@@ -56,6 +63,7 @@ const mockedRecordCompletedTurnForMemory = jest.mocked(recordCompletedTurnForMem
 const mockedGetIngestionJob = jest.mocked(getIngestionJob);
 const mockedDrainIngestionQueueWithWakeup = jest.mocked(drainIngestionQueueWithWakeup);
 const mockedCancelScheduledIngestionDrain = jest.mocked(cancelScheduledIngestionDrain);
+const mockedListIngestionPersistenceReceipts = jest.mocked(listIngestionPersistenceReceipts);
 
 function makeProvider(id: string): LlmProviderConfig {
   return {
@@ -112,6 +120,28 @@ function makeCompletedJob(id: string): IngestionJob {
   };
 }
 
+function makeReceipt(
+  jobId: string,
+  overrides: Partial<IngestionPersistenceReceipt> = {},
+): IngestionPersistenceReceipt {
+  return {
+    jobId,
+    attemptNumber: 1,
+    episodeId: `episode-${jobId}`,
+    deterministicFactIds: [`deterministic-${jobId}`],
+    providerFactIds: [`provider-${jobId}`],
+    invalidatedFactIds: [],
+    bridgedEvidenceFactIds: [],
+    agentRunMemoryFactIds: [],
+    activeFocusUpdated: true,
+    openThreadsUpdated: false,
+    providerOutcome: 'valid',
+    providerOutcomeCode: null,
+    persistedAt: 2,
+    ...overrides,
+  };
+}
+
 describe('runForegroundScenario', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -150,6 +180,7 @@ describe('runForegroundScenario', () => {
       };
     });
     mockedGetIngestionJob.mockImplementation((jobId) => jobs.get(jobId) ?? null);
+    mockedListIngestionPersistenceReceipts.mockImplementation((jobId) => [makeReceipt(jobId)]);
 
     let responseSequence = 0;
     mockedRunOrchestrator.mockImplementation(async (options, callbacks) => {
@@ -236,6 +267,7 @@ describe('runForegroundScenario', () => {
         {
           lifecycle: { processed: true, enqueued: true },
           job: { status: 'completed_enriched' },
+          receipts: [{ jobId: 'job-1', attemptNumber: 1, providerOutcome: 'valid' }],
         },
       ],
     });
@@ -256,6 +288,28 @@ describe('runForegroundScenario', () => {
       runCompleted: true,
     });
     expect(result.turns[1].memory).toHaveLength(1);
+    expect(result.turns[1].memory[0]?.receipts).toEqual([makeReceipt('job-2')]);
+    expect(mockedListIngestionPersistenceReceipts.mock.calls).toEqual([['job-1'], ['job-2']]);
+    expect(Object.isFrozen(result.turns[1].memory[0]?.receipts)).toBe(true);
+    expect(Object.isFrozen(result.turns[1].memory[0]?.receipts[0])).toBe(true);
+    expect(Object.keys(result.turns[1].memory[0]?.receipts[0] ?? {}).sort()).toEqual(
+      [
+        'activeFocusUpdated',
+        'agentRunMemoryFactIds',
+        'attemptNumber',
+        'bridgedEvidenceFactIds',
+        'deterministicFactIds',
+        'episodeId',
+        'invalidatedFactIds',
+        'jobId',
+        'openThreadsUpdated',
+        'persistedAt',
+        'providerFactIds',
+        'providerOutcome',
+        'providerOutcomeCode',
+      ].sort(),
+    );
+    expect(JSON.stringify(result.turns[1].memory)).not.toContain('Response 2');
     expect(result.turns[0].usage?.totalTokens).toBe(15);
     expect(result.turns[1].usage?.totalTokens).toBe(15);
     expect(Object.isFrozen(result.turns[1].messages)).toBe(true);
@@ -502,6 +556,12 @@ describe('runForegroundScenario', () => {
       completedAt: null,
     };
     mockedGetIngestionJob.mockReturnValue(pendingJob);
+    const priorAttemptReceipt = makeReceipt(pendingJob.id, {
+      providerOutcome: 'malformed',
+      providerOutcomeCode: 'invalid_json',
+      providerFactIds: [],
+    });
+    mockedListIngestionPersistenceReceipts.mockReturnValue([priorAttemptReceipt]);
     mockedDrainIngestionQueueWithWakeup.mockResolvedValueOnce({
       attempted: 1,
       completed: 0,
@@ -546,7 +606,9 @@ describe('runForegroundScenario', () => {
           enriched: false,
         },
         job: pendingJob,
+        receipts: [priorAttemptReceipt],
       },
     ]);
+    expect(mockedListIngestionPersistenceReceipts).toHaveBeenCalledWith(pendingJob.id);
   });
 });

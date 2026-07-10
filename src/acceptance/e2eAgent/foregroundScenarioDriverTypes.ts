@@ -1,4 +1,5 @@
 import type { IngestionJob } from '../../services/memory/ingestionQueue';
+import type { IngestionPersistenceReceipt } from '../../services/memory/ingestionReceiptStore';
 import type { RecordCompletedTurnForMemoryResult } from '../../services/memory/lifecycle';
 import type { AgentRun, AgentRunControlGraphStatus, AgentRunStatus } from '../../types/agentRun';
 import type { Conversation, ConversationMode } from '../../types/conversation';
@@ -51,6 +52,7 @@ export type DeepReadonly<T> = T extends (...args: never[]) => unknown
 export type ForegroundScenarioMemorySnapshot = Readonly<{
   lifecycle: DeepReadonly<RecordCompletedTurnForMemoryResult>;
   job: DeepReadonly<IngestionJob> | null;
+  receipts: ReadonlyArray<DeepReadonly<IngestionPersistenceReceipt>>;
 }>;
 
 export type ForegroundScenarioMemoryTurnEvidence = Readonly<{

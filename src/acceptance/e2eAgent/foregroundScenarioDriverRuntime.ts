@@ -13,6 +13,7 @@ import {
   getIngestionJob,
   type IngestionJob,
 } from '../../services/memory/ingestionQueue';
+import { listIngestionPersistenceReceipts } from '../../services/memory/ingestionReceiptStore';
 import {
   loadIngestionJobRuntimeContext,
   recordCompletedTurnForMemory,
@@ -32,6 +33,7 @@ import type { Conversation, ConversationMode } from '../../types/conversation';
 import type { Message } from '../../types/message';
 import type { ConversationUsageSummary } from '../../types/usage';
 import { generateId } from '../../utils/id';
+import { cloneAndFreeze } from './foregroundScenarioDriverTypes';
 import type {
   ForegroundScenarioCompletionSnapshot,
   ForegroundScenarioDriverInput,
@@ -297,18 +299,20 @@ async function awaitMemoryJob(jobId: string, deadline: number): Promise<Ingestio
 export async function settleForegroundScenarioMemory(
   records: ReadonlyArray<ForegroundScenarioMemoryRecord>,
   timeoutMs: number,
-): Promise<ForegroundScenarioMemorySnapshot[]> {
+): Promise<ReadonlyArray<ForegroundScenarioMemorySnapshot>> {
   const results = await Promise.all(records.map((record) => record.promise));
   const deadline = Date.now() + timeoutMs;
-  return Promise.all(
+  const snapshots = await Promise.all(
     results.map(async (result) => {
       const job = result.jobId ? await awaitMemoryJob(result.jobId, deadline) : null;
       return {
         lifecycle: result,
         job,
+        receipts: result.jobId ? listIngestionPersistenceReceipts(result.jobId) : [],
       };
     }),
   );
+  return cloneAndFreeze(snapshots);
 }
 
 export function resolveForegroundScenarioTurnRun(
