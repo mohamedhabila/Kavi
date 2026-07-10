@@ -20,9 +20,8 @@
 // structured living-memory fact store.
 // ---------------------------------------------------------------------------
 
-import { upsertEntity, findEntityByName, getEntityById, type EntityType } from './entities';
+import { findEntityByName, getEntityById, type EntityType } from './entities';
 import {
-  recordFactWithApplicability,
   invalidateFact,
   markFactsRecalled,
   setFactPinned,
@@ -64,6 +63,10 @@ import type {
   MemoryApplicabilityAnnotation,
   MemoryApplicabilitySummary,
 } from './memoryApplicabilityTypes';
+import {
+  persistMemoryRemember,
+  type MemoryRememberRequestEvidence,
+} from './memoryRememberPersistence';
 
 // ── Common types ─────────────────────────────────────────────────────────
 
@@ -76,6 +79,8 @@ export interface MemoryToolError {
     | 'memory_disabled'
     | 'block_overflow'
     | 'unknown_block'
+    | 'grounding_required'
+    | 'conflict'
     | 'internal';
 }
 
@@ -419,6 +424,8 @@ export interface MemoryRememberArgs {
 export interface MemoryRememberExecutionContext {
   /** Code-owned persona identity; never accepted from provider tool arguments. */
   personaId?: string;
+  /** Exact code-owned request evidence; never accepted from provider tool arguments. */
+  requestEvidence?: MemoryRememberRequestEvidence;
 }
 
 export function executeMemoryRemember(
@@ -432,9 +439,22 @@ export function executeMemoryRemember(
   if (!subject) return err('invalid_args', 'subject is required');
   if (!predicate) return err('invalid_args', 'predicate is required');
   if (!value) return err('invalid_args', 'value is required');
+  if (typeof args.subject === 'string' && args.subject.trim().length > 80) {
+    return err('invalid_args', 'subject must be at most 80 characters');
+  }
+  if (typeof args.predicate === 'string' && args.predicate.trim().length > 80) {
+    return err('invalid_args', 'predicate must be at most 80 characters');
+  }
+  if (typeof args.value === 'string' && args.value.trim().length > 200) {
+    return err('invalid_args', 'value must be at most 200 characters');
+  }
 
-  const subjectType: EntityType =
-    args.subjectType ?? (subject.toLowerCase() === 'user' ? 'self' : 'concept');
+  const canonicalSelfSubject = subject.normalize('NFKC').trim().toLowerCase() === 'user';
+  const subjectType: EntityType = canonicalSelfSubject
+    ? 'self'
+    : args.subjectType === 'self'
+      ? 'concept'
+      : (args.subjectType ?? 'concept');
 
   let scope: MemoryFactScope;
   try {
@@ -448,14 +468,13 @@ export function executeMemoryRemember(
   }
 
   try {
-    const entity = upsertEntity({ name: subject, type: subjectType });
-    const result = recordFactWithApplicability(
+    const persisted = persistMemoryRemember(
       {
-        subjectId: entity.id,
+        subject,
+        subjectType,
         predicate,
-        objectText: value,
+        value,
         confidence: typeof args.confidence === 'number' ? args.confidence : undefined,
-        supersedePrior: true,
         pinned: args.pinned === true,
         scope,
         ...(args.originConversationId !== undefined
@@ -463,17 +482,22 @@ export function executeMemoryRemember(
           : {}),
         ...(args.originThreadId !== undefined ? { originThreadId: args.originThreadId } : {}),
         ...(args.originTaskId !== undefined ? { originTaskId: args.originTaskId } : {}),
-        ...(args.sourceMessageId !== undefined ? { sourceMessageId: args.sourceMessageId } : {}),
         ...(args.sourceRunId !== undefined ? { sourceRunId: args.sourceRunId } : {}),
         ...(args.sourceSummary !== undefined ? { sourceSummary: args.sourceSummary } : {}),
         ...(typeof args.importance === 'number' ? { importance: args.importance } : {}),
       },
-      {
-        factClass: subjectType === 'self' ? 'subjective_user' : 'unknown',
-        sourceAuthority: 'assistant_inferred',
-        ...(scope === 'persona' ? { personaId: context.personaId } : {}),
-      },
+      context,
     );
+    if (persisted.status === 'grounding_required') {
+      return err(
+        'grounding_required',
+        `memory_remember requires exact current-user grounding before changing this fact (${persisted.reason}).`,
+      );
+    }
+    if (persisted.status === 'conflict') {
+      return err('conflict', `memory_remember current fact changed (${persisted.conflict}); retry.`);
+    }
+    const result = persisted.result;
     return {
       ok: true,
       fact: serializeFact(result.fact),

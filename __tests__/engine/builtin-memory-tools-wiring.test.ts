@@ -39,6 +39,18 @@ const MEMORY_EXECUTION_SCOPE = {
   taskId: null,
 } as const;
 
+function groundedRequest(userMessageId: string, userMessageText: string) {
+  return {
+    requestEvidence: {
+      memoryConversationId: MEMORY_EXECUTION_SCOPE.memoryConversationId,
+      sourceThreadId: MEMORY_EXECUTION_SCOPE.sourceThreadId,
+      taskId: null,
+      userMessageId,
+      userMessageText,
+    },
+  };
+}
+
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
 const NEW_MEMORY_TOOL_NAMES = [
@@ -149,6 +161,8 @@ describe('living-memory tool wiring', () => {
     expect(MEMORY_REMEMBER_TOOL.input_schema.properties).not.toHaveProperty('originTaskId');
     expect(MEMORY_REMEMBER_TOOL.input_schema.properties).not.toHaveProperty('sourceMessageId');
     expect(MEMORY_REMEMBER_TOOL.input_schema.properties).not.toHaveProperty('sourceRunId');
+    expect(MEMORY_REMEMBER_TOOL.input_schema.properties).not.toHaveProperty('requestEvidence');
+    expect(MEMORY_REMEMBER_TOOL.input_schema.additionalProperties).toBe(false);
     expect(MEMORY_REMEMBER_TOOL.input_schema.properties).toHaveProperty('sourceSummary');
     expect(MEMORY_RECALL_TOOL.input_schema.properties).not.toHaveProperty('originConversationId');
     expect(MEMORY_RECALL_TOOL.input_schema.properties).not.toHaveProperty('originTaskId');
@@ -168,15 +182,18 @@ describe('living-memory tool wiring', () => {
 
   it('memory_remember → memory_recall round-trip via the wrapper executors', () => {
     const remembered = JSON.parse(
-      executeMemoryRemember({
-        subject: 'user',
-        predicate: 'prefers',
-        value: 'dark mode',
-        confidence: 0.9,
-        scope: 'global',
-        importance: 0.8,
-        sourceSummary: 'User confirmed directly.',
-      }),
+      executeMemoryRemember(
+        {
+          subject: 'user',
+          predicate: 'prefers',
+          value: 'dark mode',
+          confidence: 0.9,
+          scope: 'global',
+          importance: 0.8,
+          sourceSummary: 'User confirmed directly.',
+        },
+        groundedRequest('user-prefers', 'I prefer dark mode.'),
+      ),
     );
     expect(remembered.ok).toBe(true);
     expect(remembered.fact.predicate).toBe('prefers');
@@ -190,15 +207,15 @@ describe('living-memory tool wiring', () => {
     expect(recalled.facts).toHaveLength(1);
     expect(recalled.facts[0].value).toBe('dark mode');
     expect(recalled.facts[0].sourceSummary).toBe('User confirmed directly.');
-    expect(recalled.facts[0].policy).toEqual({
-      action: 'ask',
-      reason: 'subjective_authority_confirmation_required',
-    });
+    expect(recalled.facts[0].policy).toEqual({ action: 'use', reason: 'eligible' });
   });
 
   it('memory_recall can list all valid facts without a subject hint', () => {
     JSON.parse(
-      executeMemoryRemember({ subject: 'user', predicate: 'tz', value: 'UTC+1', scope: 'global' }),
+      executeMemoryRemember(
+        { subject: 'user', predicate: 'tz', value: 'UTC+1', scope: 'global' },
+        groundedRequest('user-timezone', 'My timezone is UTC+1.'),
+      ),
     );
     JSON.parse(
       executeMemoryRemember({
@@ -215,7 +232,7 @@ describe('living-memory tool wiring', () => {
 
     expect(recalled.ok).toBe(true);
     expect(recalled.facts).toHaveLength(1);
-    expect(recalled.facts[0].policy.action).toBe('ask');
+    expect(recalled.facts[0].policy.action).toBe('use');
   });
 
   it('memory_pin / memory_unpin flip the pinned flag', () => {

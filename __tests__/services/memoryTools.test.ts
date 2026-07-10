@@ -37,8 +37,23 @@ afterEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
 });
 
-function rememberOk(args: Parameters<typeof executeMemoryRemember>[0]) {
-  const result = executeMemoryRemember(args);
+function groundedRequest(userMessageId: string, userMessageText: string) {
+  return {
+    requestEvidence: {
+      memoryConversationId: 'conversation-request',
+      sourceThreadId: 'thread-request',
+      taskId: null,
+      userMessageId,
+      userMessageText,
+    },
+  };
+}
+
+function rememberOk(
+  args: Parameters<typeof executeMemoryRemember>[0],
+  context?: Parameters<typeof executeMemoryRemember>[1],
+) {
+  const result = executeMemoryRemember(args, context);
   if (!result.ok) throw new Error(`expected ok, got ${JSON.stringify(result)}`);
   return result;
 }
@@ -58,12 +73,15 @@ describe('executeMemoryRemember', () => {
 
   it('reports duplicate on identical re-record', () => {
     rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin', scope: 'global' });
-    const second = rememberOk({
-      subject: 'user',
-      predicate: 'lives_in',
-      value: 'Berlin',
-      scope: 'global',
-    });
+    const second = rememberOk(
+      {
+        subject: 'user',
+        predicate: 'lives_in',
+        value: 'Berlin',
+        scope: 'global',
+      },
+      groundedRequest('user-berlin', 'I live in Berlin.'),
+    );
     expect(second.status).toBe('duplicate');
   });
 
@@ -88,14 +106,17 @@ describe('executeMemoryRemember', () => {
     }
   });
 
-  it('supersedes prior fact by default for the same subject and predicate', () => {
+  it('supersedes an exact prior fact only from grounded current-user evidence', () => {
     rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin', scope: 'global' });
-    const next = rememberOk({
-      subject: 'user',
-      predicate: 'lives_in',
-      value: 'Munich',
-      scope: 'global',
-    });
+    const next = rememberOk(
+      {
+        subject: 'user',
+        predicate: 'lives_in',
+        value: 'Munich',
+        scope: 'global',
+      },
+      groundedRequest('user-munich', 'I live in Munich.'),
+    );
 
     expect(next.status).toBe('created');
     expect(next.superseded).toHaveLength(1);
@@ -110,13 +131,16 @@ describe('executeMemoryRemember', () => {
 
   it('ignores provider-supplied supersedePrior=false and keeps current state singular', () => {
     rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin', scope: 'global' });
-    const next = rememberOk({
-      subject: 'user',
-      predicate: 'lives_in',
-      value: 'Munich',
-      scope: 'global',
-      supersedePrior: false,
-    } as Parameters<typeof executeMemoryRemember>[0] & { supersedePrior: false });
+    const next = rememberOk(
+      {
+        subject: 'user',
+        predicate: 'lives_in',
+        value: 'Munich',
+        scope: 'global',
+        supersedePrior: false,
+      } as Parameters<typeof executeMemoryRemember>[0] & { supersedePrior: false },
+      groundedRequest('user-munich', 'I live in Munich.'),
+    );
 
     expect(next.status).toBe('created');
     expect(next.superseded).toHaveLength(1);
@@ -129,17 +153,18 @@ describe('executeMemoryRemember', () => {
     }
   });
 
-  it('supersedes prior fact on current-state updates', () => {
+  it('rejects an ungrounded current-state change without invalidating the prior fact', () => {
     rememberOk({ subject: 'user', predicate: 'lives_in', value: 'Berlin', scope: 'global' });
-    const next = rememberOk({
+    const next = executeMemoryRemember({
       subject: 'user',
       predicate: 'lives_in',
       value: 'Munich',
       scope: 'global',
     });
-    expect(next.status).toBe('created');
-    expect(next.superseded).toHaveLength(1);
-    expect(next.superseded[0].value).toBe('Berlin');
+    expect(next).toMatchObject({ ok: false, code: 'grounding_required' });
+    expect(queryMemoryFactsForManagement({ subject: 'user', predicate: 'lives_in' })).toMatchObject(
+      { ok: true, facts: [expect.objectContaining({ value: 'Berlin' })] },
+    );
   });
 
   it('keeps durable scopes isolated during supersession', () => {

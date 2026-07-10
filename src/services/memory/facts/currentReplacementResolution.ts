@@ -64,7 +64,9 @@ export function resolveCurrentFactsForReplacement(
     input.scope === 'session'
       ? {
           originConversationId: context.memoryConversationId,
-          originThreadId: context.sourceThreadId,
+          ...(isExactMemoryScopeId(context.sourceThreadId)
+            ? { originThreadId: context.sourceThreadId }
+            : {}),
         }
       : {}),
     ...(input.scope === 'session' ? { originTaskId: context.taskId } : {}),

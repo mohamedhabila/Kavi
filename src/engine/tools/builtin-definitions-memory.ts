@@ -78,7 +78,7 @@ export const MEMORY_REMEMBER_TOOL: ToolDefinition = {
   description:
     'Record a structured fact (subject, predicate, value) in the living-memory fact store. ' +
     'Preserve user-supplied subject, predicate, and value labels exactly, especially opaque ids, snake_case predicates, codes, contact names, and tokens; do not rename predicates or translate values. ' +
-    'The new value invalidates any currently-valid fact for the same (subject, predicate), preserving historical rows while keeping recall current. Use distinct subjects or predicates for parallel valid values. ' +
+    'A new value replaces one exact current fact only when the code-owned current user message contains the exact value and, for non-user subjects, the exact subject label. Otherwise the write fails without changing current memory. Use distinct subjects or predicates for parallel valid values. ' +
     'Use a high confidence (≥ 0.85) only when you have direct user confirmation; otherwise leave confidence at the default to mark the fact as a candidate.',
   input_schema: {
     type: 'object',
@@ -119,6 +119,7 @@ export const MEMORY_REMEMBER_TOOL: ToolDefinition = {
       },
     },
     required: ['subject', 'predicate', 'value', 'scope'],
+    additionalProperties: false,
   },
   contract: {
     category: 'memory',
