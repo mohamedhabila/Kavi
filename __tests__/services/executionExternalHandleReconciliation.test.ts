@@ -26,6 +26,7 @@ import {
 import { ExpoGraphqlRequestError } from '../../src/services/expo/providers/expoGraphql';
 import { GitHubApiError } from '../../src/services/github/api';
 import { registerExecutionExternalHandle } from '../../src/services/executionJournal/mutations';
+import { persistExternalToolObservation } from '../../src/services/executionJournal/externalToolObservationStore';
 import {
   coordinatePersistedExecutionRecovery,
   readPersistedExternalRecoveryCandidate,
@@ -215,6 +216,67 @@ describe('production external handle recovery vertical slice', () => {
       ),
     ).toThrow('execution_recovery_receipt_immutable');
   });
+
+  it.each([
+    ['SUCCESS', 'succeeded'],
+    ['FAILURE', 'failed'],
+    ['CANCELED', 'cancelled'],
+  ] as const)(
+    'closes a standalone external-operation journal after Expo %s',
+    async (providerStatus, runStatus) => {
+      const persisted = await persistExternalToolObservation({
+        toolName: 'expo_eas_build',
+        toolCallId: 'tool-call-build',
+        argumentsText: '{"projectId":"project-1"}',
+        resultText: '{"mode":"eas-workflow","workflowRun":{"id":"workflow-run-1"}}',
+        conversationId: 'conversation-1',
+        parentAgentRunId: 'agent-run-1',
+        handle: {
+          version: 1,
+          kind: 'expo_workflow_run',
+          sourceToolName: 'expo_eas_build',
+          projectId: 'project-1',
+          workflowRunId: 'workflow-run-1',
+          credentialRef: 'CUSTOM_EXPO_TOKEN',
+        },
+        observedStatus: 'pending',
+        observedAt: 10,
+      });
+      const provider = inspectors({ id: 'workflow-run-1', status: providerStatus });
+
+      const outcome = await coordinatePersistedExecutionRecovery(
+        { runId: persisted.runId },
+        recoveryOptions(provider, () => 100),
+      );
+
+      expect(outcome.kind).toBe('completed');
+      expect(
+        getExecutionJournalDb().getFirstSync<{ status: string; terminal_at: number }>(
+          'SELECT status, terminal_at FROM execution_runs WHERE id = ?',
+          persisted.runId,
+        ),
+      ).toEqual({ status: runStatus, terminal_at: 100 });
+      expect(
+        getExecutionJournalDb().getFirstSync<{ boundary: string }>(
+          `SELECT boundary FROM execution_checkpoints
+           WHERE run_id = ? ORDER BY sequence DESC LIMIT 1`,
+          persisted.runId,
+        ),
+      ).toEqual({ boundary: 'terminal' });
+      await expect(readPersistedExternalRecoveryCandidate(persisted.runId)).resolves.toEqual({
+        kind: 'not_candidate',
+        runId: persisted.runId,
+      });
+      if (runStatus === 'cancelled') {
+        expect(
+          getExecutionJournalDb().getFirstSync<{ cancellation_state: string }>(
+            'SELECT cancellation_state FROM execution_recovery_controls WHERE run_id = ?',
+            persisted.runId,
+          ),
+        ).toEqual({ cancellation_state: 'cancelled' });
+      }
+    },
+  );
 
   it('uses the persisted GitHub repository, run ID, and custom credential reference exactly', async () => {
     seedExternalHandle({

@@ -1,8 +1,14 @@
 import * as Crypto from 'expo-crypto';
 import type * as SQLite from 'expo-sqlite';
 import { getExecutionJournalDb } from './database';
-import { decodeExecutionExternalHandleRow } from './decoders';
-import { readEffect, readRun, withImmediateTransaction } from './mutationStore';
+import { decodeExecutionCheckpointRow, decodeExecutionExternalHandleRow } from './decoders';
+import {
+  checkpointRow,
+  insertCheckpoint,
+  readEffect,
+  readRun,
+  withImmediateTransaction,
+} from './mutationStore';
 import type { ExecutionRecoveryControlStoreOptions } from './recoveryControlStore';
 import {
   DISPATCHABLE_EXECUTION_RECOVERY_COMMAND_KINDS,
@@ -19,11 +25,16 @@ import {
   type ExecutionRecoveryHandlerResult,
   type ExecutionRecoveryPendingReason,
 } from './recoveryCoordinatorTypes';
-import { canTransitionExecutionEffect, canTransitionExecutionExternalHandle } from './transitions';
+import {
+  canTransitionExecutionEffect,
+  canTransitionExecutionExternalHandle,
+  canTransitionExecutionRun,
+} from './transitions';
 import type {
   ExecutionApprovalState,
   ExecutionExternalHandleRecord,
   ExecutionExternalHandleStatus,
+  ExecutionRunRecord,
 } from './types';
 
 const RECEIPT_DIGEST_FORMAT = 'kavi.execution-recovery-receipt.v1';
@@ -225,6 +236,16 @@ function readDispatch(
        FROM execution_recovery_dispatches WHERE dispatch_id = ?`,
       dispatchId,
     ),
+  );
+}
+
+function isStandaloneExternalObservationRun(run: ExecutionRunRecord): boolean {
+  return (
+    run.durabilityClass === 'external_durable_operation' &&
+    run.executionSurface === 'external_api' &&
+    run.requestedCapability === 'monitor' &&
+    run.resumeStrategy === 'reconcile_first' &&
+    run.nextRetryPolicy === 'monitor_only'
   );
 }
 
@@ -539,15 +560,101 @@ export function createExecutionExternalHandleReconciliationStore(
         }
       }
 
-      const runResult = database.runSync(
-        `UPDATE execution_runs SET updated_at = ?
-         WHERE id = ? AND control_epoch = ? AND updated_at = ?`,
-        attemptedAt,
-        run.id,
-        run.controlEpoch,
-        run.updatedAt,
-      );
+      let terminalStatus: 'succeeded' | 'failed' | 'cancelled' | null = null;
+      if (disposition.kind === 'completed' && isStandaloneExternalObservationRun(run)) {
+        const allHandleStatuses = database
+          .getAllSync<{
+            status: string;
+          }>(`SELECT status FROM execution_external_handles WHERE run_id = ? ORDER BY id ASC`, run.id)
+          .map((entry) => entry.status);
+        const allEffectStatuses = database
+          .getAllSync<{
+            status: string;
+          }>(`SELECT status FROM execution_effects WHERE run_id = ? ORDER BY id ASC`, run.id)
+          .map((entry) => entry.status);
+        if (
+          allHandleStatuses.length === 0 ||
+          !allHandleStatuses.every((status) =>
+            ['succeeded', 'failed', 'cancelled'].includes(status),
+          ) ||
+          allEffectStatuses.length === 0 ||
+          !allEffectStatuses.every((status) => ['verified', 'failed', 'cancelled'].includes(status))
+        ) {
+          throw new Error('execution_recovery_standalone_terminal_incomplete');
+        }
+        terminalStatus = allHandleStatuses.includes('failed')
+          ? 'failed'
+          : allHandleStatuses.includes('cancelled')
+            ? 'cancelled'
+            : 'succeeded';
+        if (!canTransitionExecutionRun(run.status, terminalStatus)) {
+          throw new Error('execution_recovery_standalone_terminal_conflict');
+        }
+        const latest = database.getFirstSync<{ sequence: number }>(
+          `SELECT sequence FROM execution_checkpoints
+           WHERE run_id = ? ORDER BY sequence DESC LIMIT 1`,
+          run.id,
+        );
+        if (!latest || !Number.isSafeInteger(latest.sequence)) {
+          throw new Error('execution_recovery_standalone_history_missing');
+        }
+        const terminalCheckpointId = `external-terminal-${receiptDigest.slice(0, 48)}`;
+        insertCheckpoint(
+          database,
+          decodeExecutionCheckpointRow(
+            checkpointRow({
+              id: terminalCheckpointId,
+              runId: run.id,
+              sequence: latest.sequence + 1,
+              taskId: run.taskId,
+              goalId: run.goalId,
+              phase: 'work',
+              boundary: 'terminal',
+              stateRefId: terminalCheckpointId,
+              stateDigest: receiptDigest,
+              resumeStrategy: run.resumeStrategy,
+              approvalState: run.approvalState,
+              permissionState: run.permissionState,
+              controlEpoch: run.controlEpoch,
+              createdAt: attemptedAt,
+            }),
+          ),
+        );
+      }
+
+      const runResult = terminalStatus
+        ? database.runSync(
+            `UPDATE execution_runs SET status = ?, updated_at = ?, terminal_at = ?
+             WHERE id = ? AND status = ? AND control_epoch = ? AND updated_at = ?`,
+            terminalStatus,
+            attemptedAt,
+            attemptedAt,
+            run.id,
+            run.status,
+            run.controlEpoch,
+            run.updatedAt,
+          )
+        : database.runSync(
+            `UPDATE execution_runs SET updated_at = ?
+             WHERE id = ? AND control_epoch = ? AND updated_at = ?`,
+            attemptedAt,
+            run.id,
+            run.controlEpoch,
+            run.updatedAt,
+          );
       if (runResult.changes !== 1) throw new Error('execution_recovery_concurrent_run');
+      if (terminalStatus === 'cancelled') {
+        const cancellationResult = database.runSync(
+          `UPDATE execution_recovery_controls
+           SET cancellation_state = 'cancelled', updated_at = ?
+           WHERE run_id = ? AND cancellation_state IN ('active', 'cancel_requested')`,
+          attemptedAt,
+          run.id,
+        );
+        if (cancellationResult.changes !== 1) {
+          throw new Error('execution_recovery_concurrent_cancellation');
+        }
+      }
       const dispatchResult = database.runSync(
         `UPDATE execution_recovery_dispatches
          SET state = ?, receipt_id = ?, receipt_digest = ?, outcome_reason = ?,
