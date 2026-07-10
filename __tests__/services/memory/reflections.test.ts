@@ -224,6 +224,61 @@ describe('memory reflections', () => {
     expect(reflection?.content).not.toContain('unsupported-assistant-inference');
   });
 
+  it('applies authority and period bounds before the reflection candidate limit', () => {
+    const start = dayPeriodBounds(1_700_000_000_000).start;
+    const now = start + 20_000;
+    const threadId = 'conv-reflection-saturation';
+    const entity = upsertEntity({ name: 'reflection saturation', type: 'concept' });
+    const supported = recordFactWithApplicability(
+      {
+        subjectId: entity.id,
+        predicate: 'supported_current_state',
+        objectText: 'supported-current-period-value',
+        scope: 'conversation',
+        originConversationId: threadId,
+        importance: 0.1,
+        supersedePrior: false,
+        now: start + 100,
+      },
+      { factClass: 'workflow', sourceAuthority: 'tool_observed' },
+    ).fact;
+    for (let index = 0; index < 32; index += 1) {
+      recordFactWithApplicability(
+        {
+          subjectId: entity.id,
+          predicate: `unsupported_current_${index}`,
+          objectText: `unsupported-current-value-${index}`,
+          scope: 'conversation',
+          originConversationId: threadId,
+          importance: 1,
+          supersedePrior: false,
+          now: start + 200 + index,
+        },
+        { factClass: 'subjective_user', sourceAuthority: 'assistant_inferred' },
+      );
+      recordFactWithApplicability(
+        {
+          subjectId: entity.id,
+          predicate: `eligible_previous_period_${index}`,
+          objectText: `eligible-previous-period-value-${index}`,
+          scope: 'conversation',
+          originConversationId: threadId,
+          importance: 1,
+          supersedePrior: false,
+          now: start - 1_000 - index,
+        },
+        { factClass: 'workflow', sourceAuthority: 'tool_observed' },
+      );
+    }
+
+    const reflection = refreshThreadReflection({ threadId, now });
+
+    expect(reflection?.sourceFactIds).toEqual([supported.id]);
+    expect(reflection?.content).toContain('supported-current-period-value');
+    expect(reflection?.content).not.toContain('unsupported-current-value');
+    expect(reflection?.content).not.toContain('eligible-previous-period-value');
+  });
+
   it('defers reflection refresh while main inference is active', () => {
     setMainInferenceActive(true);
     const reflection = refreshThreadReflection({

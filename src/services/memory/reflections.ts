@@ -8,7 +8,7 @@
 import { createLogger } from '../../utils/logger';
 import type { MemoryEpisode } from './episodes/types';
 import type { MemoryFact } from './facts/types';
-import { getFactById, listFacts } from './facts/queries';
+import { getFactById, listFactsForRecallPeriod } from './facts/queries';
 import { isMainInferenceActive, shouldAbortIngestionDueToMemoryPressure } from './onDeviceGuards';
 import { getOne } from './access/crud';
 import { getSchemaReadyMemoryDb } from './access/schemaGuard';
@@ -384,9 +384,18 @@ export function refreshThreadReflection(input: {
       personaId: DEFAULT_MEMORY_PERSONA_ID,
       taskId: input.taskId ?? null,
     });
-    const facts = listFacts({ originConversationId: threadId, asOf: now, limit: 24 }).filter(
-      (fact) => fact.createdAt >= start && fact.createdAt < end,
-    );
+    const facts = listFactsForRecallPeriod({
+      recallScopeIdentity: {
+        ...currentScope,
+        useIntent: 'automatic_prompt',
+        candidateLane: 'direct_use',
+      },
+      originConversationId: threadId,
+      asOf: now,
+      periodStart: start,
+      periodEnd: end,
+      limit: 24,
+    });
     const applicableFacts = directlyApplicableReflectionFacts({
       facts,
       currentScope,

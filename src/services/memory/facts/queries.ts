@@ -56,6 +56,34 @@ export function listFactsForRecallEligibleScan(
   return rows.map(rowToFact);
 }
 
+export interface ListFactsForRecallPeriodOptions extends ListFactsForRecallEligibleScanOptions {
+  periodStart: number;
+  periodEnd: number;
+}
+
+/** Exact access and time-window filtering happens in SQL before the bounded rank limit. */
+export function listFactsForRecallPeriod(options: ListFactsForRecallPeriodOptions): MemoryFact[] {
+  if (
+    !Number.isSafeInteger(options.periodStart) ||
+    options.periodStart < 0 ||
+    !Number.isSafeInteger(options.periodEnd) ||
+    options.periodEnd <= options.periodStart
+  ) {
+    throw new Error('memory_fact_recall_period_invalid');
+  }
+  const filter = buildFactFilter(options, undefined, options.recallScopeIdentity);
+  filter.clauses.push('created_at >= ?', 'created_at < ?');
+  filter.params.push(options.periodStart, options.periodEnd);
+  const limit = clampLimit(options.limit, DEFAULT_RECALL_ELIGIBLE_SCAN_LIMIT, MAX_FACT_LIMIT);
+  const rows = getMany<FactRow>(
+    `SELECT * FROM memory_facts ${whereSql(filter)}
+       ORDER BY pinned DESC, importance DESC, updated_at DESC
+       LIMIT ${limit}`,
+    ...filter.params,
+  );
+  return rows.map(rowToFact);
+}
+
 export function hasCurrentFactForSubjectPredicate(subjectId: string, predicate: string): boolean {
   return Boolean(
     getOne<{ id: string }>(
