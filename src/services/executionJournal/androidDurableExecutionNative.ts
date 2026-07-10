@@ -4,17 +4,20 @@ import type {
   AndroidDurableExecutionPointer,
   AndroidDurableExecutionRecord,
   AndroidDurableFailureReason,
+  AndroidDurableCandidateWakeOutcome,
   AndroidDurableReadResult,
   AndroidExternalDurableExecutionRequest,
 } from './androidDurableExecutionTypes';
 import {
   ANDROID_DURABLE_BRIDGE_SCHEMA,
+  ANDROID_DURABLE_CANDIDATE_TASK_KEY,
   ANDROID_DURABLE_HEADLESS_TASK_KEY,
 } from './androidDurableExecutionTypes';
 
 interface KaviDurableExecutionNativeModule {
   bridgeSchema: unknown;
   headlessTaskKey: unknown;
+  candidateTaskKey: unknown;
   enqueue(request: AndroidExternalDurableExecutionRequest): Promise<unknown>;
   cancel(pointer: AndroidDurableExecutionPointer, updatedAtMillis: number): Promise<unknown>;
   complete(
@@ -35,6 +38,12 @@ interface KaviDurableExecutionNativeModule {
   ): Promise<unknown>;
   releaseTerminal(pointer: AndroidDurableExecutionPointer): Promise<unknown>;
   getRecord(runId: string): Promise<unknown>;
+  acknowledgeCandidateWake(
+    wakeWorkId: string,
+    predecessorWorkId: string,
+    runId: string,
+    outcome: AndroidDurableCandidateWakeOutcome,
+  ): Promise<unknown>;
 }
 
 const EXECUTION_STATES = [
@@ -291,13 +300,15 @@ function getNativeModule(): KaviDurableExecutionNativeModule {
     !module ||
     module.bridgeSchema !== ANDROID_DURABLE_BRIDGE_SCHEMA ||
     module.headlessTaskKey !== ANDROID_DURABLE_HEADLESS_TASK_KEY ||
+    module.candidateTaskKey !== ANDROID_DURABLE_CANDIDATE_TASK_KEY ||
     typeof module.enqueue !== 'function' ||
     typeof module.cancel !== 'function' ||
     typeof module.complete !== 'function' ||
     typeof module.scheduleRetry !== 'function' ||
     typeof module.block !== 'function' ||
     typeof module.releaseTerminal !== 'function' ||
-    typeof module.getRecord !== 'function'
+    typeof module.getRecord !== 'function' ||
+    typeof module.acknowledgeCandidateWake !== 'function'
   ) {
     throw new Error('android-durable-execution-native-module-unavailable');
   }
@@ -378,4 +389,21 @@ export async function readAndroidDurableExecution(
   runId: string,
 ): Promise<AndroidDurableReadResult> {
   return decodeReadResult(await getNativeModule().getRecord(runId));
+}
+
+export async function acknowledgeAndroidDurableCandidateWake(
+  wakeWorkId: string,
+  predecessorWorkId: string,
+  runId: string,
+  outcome: AndroidDurableCandidateWakeOutcome,
+): Promise<void> {
+  const acknowledged = await getNativeModule().acknowledgeCandidateWake(
+    wakeWorkId,
+    predecessorWorkId,
+    runId,
+    outcome,
+  );
+  if (acknowledged !== true) {
+    throw new Error('android-durable-candidate-acknowledgement-rejected');
+  }
 }

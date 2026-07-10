@@ -1,5 +1,6 @@
 export const ANDROID_DURABLE_BRIDGE_SCHEMA = 1 as const;
 export const ANDROID_DURABLE_HEADLESS_TASK_KEY = 'KaviDurableRecovery' as const;
+export const ANDROID_DURABLE_CANDIDATE_TASK_KEY = 'KaviDurableCandidateSchedule' as const;
 
 export type AndroidDurableExecutionState =
   | 'scheduling'
@@ -115,3 +116,12 @@ export interface AndroidDurableHeadlessPayload {
   commandDigest: string;
   attempt: number;
 }
+
+export interface AndroidDurableCandidateHeadlessPayload {
+  schema: typeof ANDROID_DURABLE_BRIDGE_SCHEMA;
+  wakeWorkId: string;
+  predecessorWorkId: string;
+  runId: string;
+}
+
+export type AndroidDurableCandidateWakeOutcome = 'completed' | 'retry';

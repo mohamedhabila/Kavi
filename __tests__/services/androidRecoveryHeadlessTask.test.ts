@@ -36,7 +36,7 @@ describe('Android durable recovery headless task', () => {
     expect(dependencies.retry).not.toHaveBeenCalled();
   });
 
-  it('preserves a provider retry time and enforces native minimum backoff', async () => {
+  it('completes a pending journal generation so its continuation can schedule the successor', async () => {
     const remoteRetry = dependencyHarness({
       ...completedOutcome(),
       kind: 'pending' as const,
@@ -44,26 +44,12 @@ describe('Android durable recovery headless task', () => {
       retryAt: 60_000,
     });
     await runAndroidDurableRecoveryHeadlessTask(payload(), remoteRetry);
-    expect(remoteRetry.retry).toHaveBeenCalledWith(
+    expect(remoteRetry.complete).toHaveBeenCalledWith(
       attemptPointer(),
-      60_000,
-      'remote_still_pending',
+      'd'.repeat(64),
       200,
     );
-
-    const minimumRetry = dependencyHarness({
-      ...completedOutcome(),
-      kind: 'pending' as const,
-      reason: 'provider_temporarily_unavailable' as const,
-      retryAt: 201,
-    });
-    await runAndroidDurableRecoveryHeadlessTask(payload(), minimumRetry);
-    expect(minimumRetry.retry).toHaveBeenCalledWith(
-      attemptPointer(),
-      10_200,
-      'provider_temporarily_unavailable',
-      200,
-    );
+    expect(remoteRetry.retry).not.toHaveBeenCalled();
   });
 
   it('turns thrown and deferred transient coordination into durable retry state', async () => {

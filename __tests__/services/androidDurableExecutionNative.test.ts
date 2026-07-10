@@ -102,10 +102,45 @@ describe('Android durable execution native bridge', () => {
     expect(module.block).toHaveBeenCalledWith(attemptPointer, 'authority_changed', 200);
   });
 
+  it('requires the exact candidate task contract and acknowledgement owner', async () => {
+    const module = nativeModule();
+    const bridge = loadBridge({ nativeModule: module });
+
+    await expect(
+      bridge.acknowledgeAndroidDurableCandidateWake(
+        '00000000-0000-4000-8000-000000000032',
+        '00000000-0000-4000-8000-000000000033',
+        'run-1',
+        'completed',
+      ),
+    ).resolves.toBeUndefined();
+    expect(module.acknowledgeCandidateWake).toHaveBeenCalledWith(
+      '00000000-0000-4000-8000-000000000032',
+      '00000000-0000-4000-8000-000000000033',
+      'run-1',
+      'completed',
+    );
+
+    const rejected = loadBridge({
+      nativeModule: nativeModule({
+        acknowledgeCandidateWake: jest.fn().mockResolvedValue(false),
+      }),
+    });
+    await expect(
+      rejected.acknowledgeAndroidDurableCandidateWake(
+        '00000000-0000-4000-8000-000000000032',
+        '00000000-0000-4000-8000-000000000033',
+        'run-1',
+        'retry',
+      ),
+    ).rejects.toThrow('android-durable-candidate-acknowledgement-rejected');
+  });
+
   function nativeModule(overrides: Record<string, unknown> = {}) {
     return {
       bridgeSchema: 1,
       headlessTaskKey: 'KaviDurableRecovery',
+      candidateTaskKey: 'KaviDurableCandidateSchedule',
       enqueue: jest.fn().mockResolvedValue(adapterResult()),
       cancel: jest.fn().mockResolvedValue(adapterResult()),
       complete: jest.fn().mockResolvedValue(adapterResult()),
@@ -117,6 +152,7 @@ describe('Android durable execution native bridge', () => {
         status: 'found',
         record: durableRecord(),
       }),
+      acknowledgeCandidateWake: jest.fn().mockResolvedValue(true),
       ...overrides,
     };
   }

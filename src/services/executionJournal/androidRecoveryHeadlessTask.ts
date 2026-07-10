@@ -296,12 +296,12 @@ export async function runAndroidDurableRecoveryHeadlessTask(
     if (!exactCoordinatorOutcome(payload, outcome)) {
       throw new Error('android-durable-coordinator-generation-mismatch');
     }
-    await reportTransientRetry(
-      payload,
-      record,
-      dependencies,
-      outcome.retryAt,
-      outcome.reason,
+    requireAcceptedReport(
+      await dependencies.complete(
+        attemptPointer(payload),
+        outcome.receiptDigest,
+        dependencies.now(),
+      ),
     );
     return;
   }
