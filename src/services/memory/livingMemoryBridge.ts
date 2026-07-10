@@ -37,6 +37,10 @@ import {
   type PromptAssemblyRetrievalEventResult,
   type PromptAssemblyRetrievalState,
 } from './promptAssemblyRetrievalEvent';
+import {
+  buildLocalEvidencePrompt,
+  type LocalEvidencePromptDiagnostics,
+} from './localEvidencePromptBuilder';
 
 const logger = createLogger('memory.livingMemoryBridge');
 
@@ -120,6 +124,8 @@ export interface LivingMemoryBridgeOutput {
   consistencyBarrier?: NextTurnMemoryConsistencyResult;
   /** Content-free status of the structured retrieval evidence write. */
   retrievalEvent?: PromptAssemblyRetrievalEventResult;
+  /** Content-free outcome and counts for exact-scope local provenance expansion. */
+  localEvidenceExpansion?: LocalEvidencePromptDiagnostics;
 }
 
 export interface LivingMemoryBridgeTimings {
@@ -128,6 +134,7 @@ export interface LivingMemoryBridgeTimings {
   workingBlockMs: number;
   focusRenderMs: number;
   retrievalMs: number;
+  evidenceExpansionMs: number;
   reflectionMs: number;
   subjectLabelsMs: number;
   assembleMs: number;
@@ -256,6 +263,7 @@ export async function buildLivingMemorySections(
     workingBlockMs: 0,
     focusRenderMs: 0,
     retrievalMs: 0,
+    evidenceExpansionMs: 0,
     reflectionMs: 0,
     subjectLabelsMs: 0,
     assembleMs: 0,
@@ -389,9 +397,24 @@ export async function buildLivingMemorySections(
     timings.retrievalMs += Date.now() - retrievalStarted;
   }
 
+  const localEvidencePrompt = buildLocalEvidencePrompt({
+    facts: recalledFacts,
+    episodes: recalledEpisodes,
+    ...(conversationId ? { memoryConversationId: conversationId } : {}),
+    ...(sourceThreadId ? { sourceThreadId } : {}),
+    asOf: now,
+  });
+  timings.evidenceExpansionMs = localEvidencePrompt.diagnostics.durationMs;
+  if (localEvidencePrompt.diagnostics.outcome === 'failed' && retrievalState === 'completed') {
+    retrievalState = 'degraded';
+  }
+
   const dynamicAddenda: string[] = [];
   if (activeTaskTitle) {
     dynamicAddenda.push(`Active task: ${activeTaskTitle}`);
+  }
+  if (localEvidencePrompt.section) {
+    dynamicAddenda.push(localEvidencePrompt.section);
   }
 
   let reflectionBlock = '';
@@ -459,5 +482,6 @@ export async function buildLivingMemorySections(
     recalledEpisodeCount: recalledEpisodes.length,
     timings,
     retrievalEvent,
+    localEvidenceExpansion: localEvidencePrompt.diagnostics,
   };
 }
