@@ -11,7 +11,7 @@ import { resetE2EWorkspaceSandbox, seedE2EWorkspaceSandbox } from './sandboxWork
 import { mapForegroundScenarioResult } from './scenarioResultMapper';
 import { resolveE2EScenarioTimeoutMs } from './scenarioTimeout';
 import { E2E_DEFAULT_MAX_TOKENS } from './thresholds';
-import type { E2EScenario, E2EScenarioResult, E2EUserTurn } from './types';
+import type { E2EScenario, E2EScenarioContentClass, E2EScenarioResult, E2EUserTurn } from './types';
 
 const DEFAULT_E2E_SYSTEM_PROMPT =
   'You are Kavi, a graph-controlled personal assistant. Use tools to complete tasks. ' +
@@ -43,8 +43,14 @@ function resolveScenarioConversationId(baseConversationId: string): string {
   return `${baseConversationId}-${explicitRunId || generatedRunId}`;
 }
 
+function requireScenarioContentClass(value: unknown): E2EScenarioContentClass {
+  if (value === 'private' || value === 'synthetic_public') return value;
+  throw new Error('Scenario contentClass must be private or synthetic_public.');
+}
+
 export async function runE2EScenario(scenario: E2EScenario): Promise<E2EScenarioResult> {
   const startedAt = Date.now();
+  const contentClass = requireScenarioContentClass(scenario.contentClass);
   const conversationId = resolveScenarioConversationId(scenario.conversationId);
   resetE2EWorkspaceSandbox();
   resetE2EMemorySandbox();
@@ -74,6 +80,7 @@ export async function runE2EScenario(scenario: E2EScenario): Promise<E2EScenario
       memoryTimeoutMs: perTurnTimeoutMs,
     });
     return mapForegroundScenarioResult({
+      contentClass,
       driverResult,
       durationMs: Date.now() - startedAt,
       fixtureId: scenario.id,

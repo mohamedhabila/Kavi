@@ -99,7 +99,8 @@ export type E2EScenarioTurnTrace = {
   turnIndex: number;
   route: Readonly<{
     directive: ForegroundScenarioRouteDirective;
-  }> & ForegroundScenarioExecutionContextSnapshot;
+  }> &
+    ForegroundScenarioExecutionContextSnapshot;
   finalAssistant: ForegroundScenarioFinalAssistantSnapshot | null;
   finalAssistantCandidateCount: number;
   completion: ForegroundScenarioCompletionSnapshot;
@@ -113,6 +114,7 @@ export type E2EScenarioTurnTrace = {
 };
 
 export type E2EScenarioResult = {
+  contentClass: E2EScenarioContentClass;
   fixtureId: string;
   conversationId: string;
   toolCalls: ReadonlyArray<E2EToolCallRecord>;
@@ -132,6 +134,8 @@ export type E2EUserTurn = {
   content: string;
   route?: ForegroundScenarioRouteDirective;
 };
+
+export type E2EScenarioContentClass = 'private' | 'synthetic_public';
 
 export type E2EScenarioExecution = {
   initialMode: ConversationMode;
@@ -204,6 +208,7 @@ export type E2ERubric =
 export type E2EScenario = {
   id: string;
   conversationId: string;
+  contentClass: E2EScenarioContentClass;
   /** Product route applied unless a turn explicitly overrides it. */
   execution: E2EScenarioExecution;
   /** Structural thread title token used by passive memory ingestion. */

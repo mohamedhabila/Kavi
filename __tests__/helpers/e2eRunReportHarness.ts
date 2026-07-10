@@ -13,6 +13,7 @@ export const TOKEN_BUCKETS: UsageTokenBuckets = {
 
 export function buildFixtureResult(overrides?: Partial<E2EScenarioResult>): E2EScenarioResult {
   return {
+    contentClass: 'synthetic_public',
     fixtureId: 'file-write-read',
     conversationId: 'e2e-file-write-read',
     toolCalls: [{ id: 'tc-1', name: 'write_file', arguments: '{}' }],

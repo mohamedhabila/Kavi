@@ -6,6 +6,7 @@ jest.mock('expo-sqlite', () => {
 });
 function buildResult(overrides: Partial<E2EScenarioResult> = {}): E2EScenarioResult {
   return {
+    contentClass: 'synthetic_public',
     fixtureId: 'fixture-a',
     conversationId: 'conv-a',
     toolCalls: [],

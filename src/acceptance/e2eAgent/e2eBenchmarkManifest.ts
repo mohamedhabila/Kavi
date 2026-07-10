@@ -70,6 +70,7 @@ export type E2EBenchmarkExternalRequirement = {
 export type E2EBenchmarkManifest = {
   id: string;
   scenarioId: string;
+  contentClass: E2EScenario['contentClass'];
   version: string;
   sourceRefreshDate: string;
   scenarioManifestVersion: string;
@@ -411,6 +412,7 @@ export function buildE2EBenchmarkManifest(scenario: E2EScenario): E2EBenchmarkMa
   return {
     id: `benchmark:${scenario.id}`,
     scenarioId: scenario.id,
+    contentClass: scenario.contentClass,
     version: E2E_BENCHMARK_MANIFEST_VERSION,
     sourceRefreshDate: E2E_BENCHMARK_SOURCE_REFRESH_DATE,
     scenarioManifestVersion: E2E_SCENARIO_MANIFEST_VERSION,

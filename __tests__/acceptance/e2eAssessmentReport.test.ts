@@ -8,6 +8,7 @@ import type { E2EScenarioResult } from '../../src/acceptance/e2eAgent/types';
 
 function buildFixtureResult(fixtureId: string, overrides?: Partial<E2EScenarioResult>): E2EScenarioResult {
   return {
+    contentClass: 'synthetic_public',
     fixtureId,
     conversationId: `conv-${fixtureId}`,
     toolCalls: [],

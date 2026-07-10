@@ -9,6 +9,7 @@ import type {
 } from './foregroundScenarioDriver';
 import { aggregateE2ETokenUsage } from './tokenUsage';
 import type {
+  E2EScenarioContentClass,
   E2EScenarioResult,
   E2EScenarioTurnTrace,
   E2EToolCallRecord,
@@ -123,6 +124,7 @@ function buildTurnTrace(turn: ForegroundScenarioTurnSnapshot): E2EScenarioTurnTr
 }
 
 export function mapForegroundScenarioResult(params: {
+  contentClass: E2EScenarioContentClass;
   driverResult: ForegroundScenarioDriverResult;
   durationMs: number;
   fixtureId: string;
@@ -133,6 +135,7 @@ export function mapForegroundScenarioResult(params: {
   const errors = params.driverResult.turns.flatMap((turn) => (turn.error ? [turn.error] : []));
 
   return {
+    contentClass: params.contentClass,
     fixtureId: params.fixtureId,
     conversationId: params.driverResult.conversationId,
     toolCalls: turnTraces.flatMap((turn) => turn.toolCalls),

@@ -57,6 +57,8 @@ describe('e2eBenchmarkManifest', () => {
     expect(manifests.map((manifest) => manifest.scenarioId).sort()).toEqual(scenarioIds);
     for (const scenario of scenarios) {
       const manifest = manifests.find((candidate) => candidate.scenarioId === scenario.id);
+      expect(scenario.contentClass).toBe('synthetic_public');
+      expect(manifest?.contentClass).toBe(scenario.contentClass);
       expect(manifest?.initialState.execution).toEqual({
         ...scenario.execution,
         turnRoutes:

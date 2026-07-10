@@ -5,6 +5,7 @@ export const E2E_CORE_MULTI_TURN_SCENARIOS: ReadonlyArray<E2EScenario> = [
   {
     id: 'multi-turn-trip-artifact',
     conversationId: 'e2e-trip-artifact',
+    contentClass: 'synthetic_public',
     execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt: 'Help me plan a weekend trip.',
     userTurns: [
@@ -28,6 +29,7 @@ export const E2E_CORE_MULTI_TURN_SCENARIOS: ReadonlyArray<E2EScenario> = [
   {
     id: 'multi-turn-inventory-readback',
     conversationId: 'e2e-inventory-readback',
+    contentClass: 'synthetic_public',
     execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt: 'Create two personal notes in the workspace.',
     userTurns: [
@@ -53,6 +55,7 @@ export const E2E_CORE_MULTI_TURN_SCENARIOS: ReadonlyArray<E2EScenario> = [
   {
     id: 'multi-turn-passive-chitchat-memory',
     conversationId: 'e2e-passive-chitchat',
+    contentClass: 'synthetic_public',
     execution: { initialMode: 'agentic', route: 'forced_agentic' },
     threadTitle: 'weekend-planning-thread',
     prompt: 'weekend-planning-thread',
@@ -76,6 +79,7 @@ export const E2E_CORE_MULTI_TURN_SCENARIOS: ReadonlyArray<E2EScenario> = [
   {
     id: 'multi-turn-goal-passive-recall',
     conversationId: 'e2e-goal-passive',
+    contentClass: 'synthetic_public',
     execution: { initialMode: 'agentic', route: 'forced_agentic' },
     threadTitle: 'meal-planning-scope',
     prompt: 'Track goals while I share planning tokens.',
@@ -109,6 +113,7 @@ export const E2E_CORE_MULTI_TURN_SCENARIOS: ReadonlyArray<E2EScenario> = [
   {
     id: 'native-calendar-json-field',
     conversationId: 'e2e-native-calendar',
+    contentClass: 'synthetic_public',
     execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt:
       'Verify the calendar configuration and events for 2026-06-10T00:00:00Z to 2026-06-11T00:00:00Z.',
@@ -128,6 +133,7 @@ export const E2E_CORE_MULTI_TURN_SCENARIOS: ReadonlyArray<E2EScenario> = [
   {
     id: 'multi-turn-gate-followup',
     conversationId: 'e2e-gate-followup',
+    contentClass: 'synthetic_public',
     execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt: 'Persist the gate artifact for the active goal.',
     userTurns: [

@@ -13,6 +13,7 @@ import {
 } from '../../src/acceptance/e2eAgent/e2eNativeMobileFixtures';
 function buildResult(overrides: Partial<E2EScenarioResult> = {}): E2EScenarioResult {
   return {
+    contentClass: 'synthetic_public',
     fixtureId: 'fixture-a',
     conversationId: 'conv-a',
     toolCalls: [],

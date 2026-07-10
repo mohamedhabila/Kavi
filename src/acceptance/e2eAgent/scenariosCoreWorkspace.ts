@@ -5,6 +5,7 @@ export const E2E_CORE_WORKSPACE_SCENARIOS: ReadonlyArray<E2EScenario> = [
   {
     id: 'file-write-read',
     conversationId: 'e2e-file-write-read',
+    contentClass: 'synthetic_public',
     execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt:
       'Write workspace file `artifacts/e2e-file.txt` with exact content `E2E-FILE-42`. ' +
@@ -17,6 +18,7 @@ export const E2E_CORE_WORKSPACE_SCENARIOS: ReadonlyArray<E2EScenario> = [
   {
     id: 'goal-evidence-complete',
     conversationId: 'e2e-goal-evidence',
+    contentClass: 'synthetic_public',
     execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt:
       'Create an active goal `persist-artifact` for saving an artifact. ' +
@@ -37,6 +39,7 @@ export const E2E_CORE_WORKSPACE_SCENARIOS: ReadonlyArray<E2EScenario> = [
   {
     id: 'false-finalize-recovery',
     conversationId: 'e2e-false-finalize',
+    contentClass: 'synthetic_public',
     execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt: 'Write `artifacts/e2e-gate.txt` with content `E2E-GATE-42`.',
     rubrics: [
@@ -52,6 +55,7 @@ export const E2E_CORE_WORKSPACE_SCENARIOS: ReadonlyArray<E2EScenario> = [
   {
     id: 'tool-catalog-agents',
     conversationId: 'e2e-tool-catalog',
+    contentClass: 'synthetic_public',
     execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt:
       'Find the available agent coordination capability and use it to inspect the current agent state.',
@@ -63,6 +67,7 @@ export const E2E_CORE_WORKSPACE_SCENARIOS: ReadonlyArray<E2EScenario> = [
   {
     id: 'personal-shopping-list',
     conversationId: 'e2e-shopping-list',
+    contentClass: 'synthetic_public',
     execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt:
       'Write `artifacts/shopping.txt` with two lines: `MILK-E2E` then `EGGS-E2E` (one item per line).',
@@ -79,6 +84,7 @@ export const E2E_CORE_WORKSPACE_SCENARIOS: ReadonlyArray<E2EScenario> = [
   {
     id: 'workspace-inventory-manifest',
     conversationId: 'e2e-inventory-manifest',
+    contentClass: 'synthetic_public',
     execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt:
       'Write `artifacts/item-a.txt` with `ITEM-A-E2E` and `artifacts/item-b.txt` with `ITEM-B-E2E`. ' +

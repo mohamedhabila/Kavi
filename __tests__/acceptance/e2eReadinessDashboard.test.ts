@@ -10,6 +10,7 @@ import type { E2EScenarioResult } from '../../src/acceptance/e2eAgent/types';
 
 function buildFixtureResult(overrides?: Partial<E2EScenarioResult>): E2EScenarioResult {
   return {
+    contentClass: 'synthetic_public',
     fixtureId: 'tool-catalog-agents',
     conversationId: 'e2e-tool-catalog',
     toolCalls: [{ id: 'tc-1', name: 'tool_catalog', arguments: '{"category":"agents"}' }],

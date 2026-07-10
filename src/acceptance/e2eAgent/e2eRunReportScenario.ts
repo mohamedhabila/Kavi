@@ -249,6 +249,7 @@ export function buildE2ERunReportScenarioEntry(params: {
     schemaVersion: SCENARIO_ENTRY_SCHEMA_VERSION,
     suite: params.suite,
     fixtureId: params.result.fixtureId,
+    contentClass: params.result.contentClass,
     passed: params.outcome.passed,
     attemptCount: params.attemptCount,
     durationMs: params.result.durationMs,

@@ -123,6 +123,7 @@ export type E2ERunReportScenarioEntry = {
   schemaVersion: typeof SCENARIO_ENTRY_SCHEMA_VERSION;
   suite: string;
   fixtureId: string;
+  contentClass: E2EScenarioResult['contentClass'];
   passed: boolean;
   attemptCount: number;
   durationMs: number;

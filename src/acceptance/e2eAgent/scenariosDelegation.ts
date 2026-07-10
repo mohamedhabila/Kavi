@@ -5,6 +5,7 @@ import type { E2EScenario } from './types';
 export const DELEGATION_E2E_SCENARIO: E2EScenario = {
   id: 'delegation-worker-finalize',
   conversationId: 'e2e-delegation',
+  contentClass: 'synthetic_public',
   execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt:
     'Goal `worker-task` is active with requiredCapabilities `coordinate` and successCriteria ' +
@@ -25,6 +26,7 @@ export const DELEGATION_E2E_SCENARIO: E2EScenario = {
 export const DELEGATION_CHAIN_E2E_SCENARIO: E2EScenario = {
   id: 'delegation-worker-evidence-chain',
   conversationId: 'e2e-delegation-chain',
+  contentClass: 'synthetic_public',
   execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt:
     'Goal `worker-chain` is active with requiredCapabilities `coordinate` and successCriteria ' +

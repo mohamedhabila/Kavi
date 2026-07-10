@@ -139,6 +139,7 @@ function scenario(overrides: Partial<E2EScenario> = {}): E2EScenario {
   return {
     id: 'scenario-test',
     conversationId: 'scenario-conversation',
+    contentClass: 'synthetic_public',
     execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt: 'Run the product path.',
     rubrics: [],
@@ -235,6 +236,7 @@ describe('runE2EScenario product foreground integration', () => {
   it('supports production-auto, forced-agentic, and forced-chitchat routes per turn', async () => {
     const result = await runE2EScenario(
       scenario({
+        contentClass: 'synthetic_public',
         execution: { initialMode: 'chitchat', route: 'production_auto' },
         userTurns: [
           { content: 'Talk naturally.' },
@@ -280,9 +282,7 @@ describe('runE2EScenario product foreground integration', () => {
 
     const result = await runE2EScenario(
       scenario({
-        initialWorkspaceFiles: [
-          { path: 'inbox/seed.txt', content: 'SEEDED-WORKSPACE-CONTENT' },
-        ],
+        initialWorkspaceFiles: [{ path: 'inbox/seed.txt', content: 'SEEDED-WORKSPACE-CONTENT' }],
       }),
     );
 
@@ -305,10 +305,7 @@ describe('runE2EScenario product foreground integration', () => {
         result: JSON.stringify([{ id: 'cal-1', title: 'Work' }]),
         completedAt: 2,
       });
-      await callbacks.onToolMessage(
-        call.id,
-        JSON.stringify([{ id: 'cal-1', title: 'Work' }]),
-      );
+      await callbacks.onToolMessage(call.id, JSON.stringify([{ id: 'cal-1', title: 'Work' }]));
       callbacks.onAssistantMessage(
         'Listed calendars.',
         undefined,
@@ -475,5 +472,18 @@ describe('runE2EScenario product foreground integration', () => {
       eventCount: 1,
     });
     expect(mockedCancelScheduledIngestionDrain).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires and preserves the scenario content classification', async () => {
+    const result = await runE2EScenario(scenario({ contentClass: 'private' }));
+    expect(result.contentClass).toBe('private');
+
+    const invalidScenario = {
+      ...scenario(),
+      contentClass: undefined,
+    } as unknown as E2EScenario;
+    await expect(runE2EScenario(invalidScenario)).rejects.toThrow(
+      'Scenario contentClass must be private or synthetic_public.',
+    );
   });
 });
