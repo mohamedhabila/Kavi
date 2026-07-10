@@ -419,6 +419,9 @@ export async function dispatchEffectExactlyOnce(
   identity: EffectDispatchIdentity,
   ports: EffectDispatchPorts,
 ): Promise<EffectDispatchResult> {
+  if (!isEffectDispatchIdentity(identity)) {
+    return { kind: 'blocked', reason: 'invalid_request' };
+  }
   let evaluatedAt: number;
   let state: EffectDispatchReadState | null;
   try {

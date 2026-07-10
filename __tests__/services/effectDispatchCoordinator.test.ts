@@ -12,6 +12,19 @@ import {
 } from '../helpers/effectDispatchCoordinatorFixtures';
 
 describe('exactly-once effect dispatch coordinator', () => {
+  it('rejects malformed identity before consulting any port', async () => {
+    const test = harness();
+    test.ports.now = jest.fn(test.ports.now);
+    test.ports.readState = jest.fn(test.ports.readState);
+
+    await expect(
+      dispatchEffectExactlyOnce({ ...test.identity, runId: ' run-1' }, test.ports),
+    ).resolves.toEqual({ kind: 'blocked', reason: 'invalid_request' });
+    expect(test.ports.now).not.toHaveBeenCalled();
+    expect(test.ports.readState).not.toHaveBeenCalled();
+    expect(test.calls.claims).toHaveLength(0);
+  });
+
   it('dispatches only after an exact atomic claim and settles verified evidence', async () => {
     const test = harness();
 
