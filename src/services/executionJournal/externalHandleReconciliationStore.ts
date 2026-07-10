@@ -39,7 +39,6 @@ import {
 } from './monitorRecords';
 import type {
   ExecutionApprovalState,
-  ExecutionExternalHandleRecord,
   ExecutionRunRecord,
 } from './types';
 

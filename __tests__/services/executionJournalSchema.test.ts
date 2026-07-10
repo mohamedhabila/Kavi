@@ -29,8 +29,6 @@ import {
 } from '../../src/services/executionJournal/types';
 import {
   DIGEST_A,
-  DIGEST_B,
-  DIGEST_C,
   DIGEST_D,
   insertSchemaCheckpoint as insertCheckpoint,
   insertSchemaEffect as insertEffect,
