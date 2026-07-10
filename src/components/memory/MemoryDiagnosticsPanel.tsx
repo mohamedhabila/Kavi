@@ -49,9 +49,7 @@ function createStyles(colors: AppPalette) {
   });
 }
 
-export const MemoryDiagnosticsPanel: React.FC<MemoryDiagnosticsPanelProps> = ({
-  diagnostics,
-}) => {
+export const MemoryDiagnosticsPanel: React.FC<MemoryDiagnosticsPanelProps> = ({ diagnostics }) => {
   const { colors } = useAppTheme();
   const { t } = useTranslation();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -106,23 +104,29 @@ export const MemoryDiagnosticsPanel: React.FC<MemoryDiagnosticsPanelProps> = ({
             testID={`memory-diagnostics-retrieval-${entry.id}`}
           >
             <Text style={styles.rowPrimary}>
-              {t('memory.diagnosticsRetrievalEntry', {
-                factCount: entry.factIds.length,
-                episodeCount: entry.episodeIds.length,
-                tokenEstimate: entry.tokenEstimate,
-              })}
+              {entry.operation} · {entry.mode} · {entry.outcome}
             </Text>
             <Text style={styles.rowSecondary}>
-              facts: {formatRetrievalIdList(entry.factIds)}
+              facts {entry.counts.selectedFactCount}/{entry.counts.candidateFactCount} · episodes{' '}
+              {entry.counts.selectedEpisodeCount}/{entry.counts.candidateEpisodeCount} ·{' '}
+              {entry.timings.totalMs} ms
             </Text>
             <Text style={styles.rowSecondary}>
-              episodes: {formatRetrievalIdList(entry.episodeIds)}
+              query {entry.queryFingerprint.length} chars/{entry.queryFingerprint.unitCount} units ·
+              selector {entry.selector.mode}/{entry.selector.outcome}
             </Text>
-            {entry.taskId ? (
+            {entry.barrier ? (
               <Text style={styles.rowSecondary}>
-                {t('memory.diagnosticsRetrievalTask', { taskId: entry.taskId })}
+                barrier {entry.barrier.outcome} · wait {entry.barrier.waitMs} ms
+                {entry.barrier.queueAgeMs === null ? '' : ` · queue ${entry.barrier.queueAgeMs} ms`}
               </Text>
             ) : null}
+            <Text style={styles.rowSecondary}>
+              facts: {formatRetrievalIdList(entry.counts.selectedFactIds)}
+            </Text>
+            <Text style={styles.rowSecondary}>
+              episodes: {formatRetrievalIdList(entry.counts.selectedEpisodeIds)}
+            </Text>
           </View>
         ))
       )}

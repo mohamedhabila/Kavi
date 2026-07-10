@@ -55,6 +55,10 @@ describe('orchestrateMemoryRetrieval', () => {
 
     expect(result.facts.filter((fact) => fact.memoryKind === 'agent_run')).toHaveLength(1);
     expect(result.facts.every((fact) => fact.memoryKind !== 'semantic_fact')).toBe(true);
+    expect(result.timings?.episodes).toMatchObject({
+      candidateCount: 0,
+      resultCount: 0,
+    });
   });
 
   it('can retrieve a direct evidence span without relying on a broader run summary', async () => {

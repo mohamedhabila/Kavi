@@ -8,6 +8,7 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
+import * as sqliteStore from '../../../src/services/memory/sqlite-store';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
@@ -19,6 +20,7 @@ import { editWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import { buildLivingMemorySections } from '../../../src/services/memory/livingMemoryBridge';
 import { pushTask, completeTask } from '../../../src/services/memory/taskStack';
 import { recordEpisode } from '../../../src/services/memory/episodes/mutations';
+import { readRecentMemoryRetrievalEvents } from '../../../src/services/memory/retrievalLog';
 import type { Message } from '../../../src/types/message';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -360,11 +362,49 @@ describe('buildLivingMemorySections', () => {
 
     const out = await buildLivingMemorySections({
       messages: [userMessage('Where do I live? Berlin', 1_000)],
+      conversationId: 'memory-disabled-recall',
+      sourceThreadId: 'thread-disabled-recall',
       now: 2_000,
       disableRecall: true,
+      consistencyBarrier: {
+        outcome: 'no_job',
+        durationMs: 0,
+        waitedMs: 0,
+        queryCount: 1,
+        matchedJobCount: 0,
+        queueAgeMs: null,
+        initialJobStatus: null,
+        finalJobStatus: null,
+      },
     });
 
     expect(out.recalledFactCount).toBe(0);
+    expect(out.retrievalEvent).toMatchObject({ status: 'recorded', code: 'recorded' });
+    expect(readRecentMemoryRetrievalEvents()).toEqual([
+      expect.objectContaining({
+        mode: 'disabled',
+        outcome: 'disabled',
+        counts: {
+          candidateFactCount: 0,
+          selectedFactCount: 0,
+          selectedFactIds: [],
+          candidateEpisodeCount: 0,
+          selectedEpisodeCount: 0,
+          selectedEpisodeIds: [],
+        },
+        timings: {
+          planMs: 0,
+          factRecallMs: 0,
+          episodeRecallMs: 0,
+          candidateFetchMs: 0,
+          scoreMs: 0,
+          selectorMs: 0,
+          totalMs: 0,
+        },
+        selector: { mode: 'deterministic', outcome: 'not_requested' },
+        barrier: null,
+      }),
+    ]);
   });
 
   it('produces a stable cacheableSignature for the same inputs (cache hit safety)', async () => {
@@ -388,14 +428,21 @@ describe('buildLivingMemorySections', () => {
   it('tolerates a recall failure by emitting zero retrieved facts (never throws)', async () => {
     const factRecall = require('../../../src/services/memory/factRecall');
     const spy = jest
-      .spyOn(factRecall, 'recallFactsForQuery')
+      .spyOn(factRecall, 'recallScoredFactsForQuery')
       .mockRejectedValueOnce(new Error('embedder offline'));
     try {
       const out = await buildLivingMemorySections({
         messages: [userMessage('something', 1_000)],
+        conversationId: 'memory-degraded',
+        sourceThreadId: 'thread-degraded',
         now: 2_000,
       });
       expect(out.recalledFactCount).toBe(0);
+      expect(out.retrievalEvent).toMatchObject({ status: 'recorded', code: 'recorded' });
+      expect(readRecentMemoryRetrievalEvents()[0]).toMatchObject({
+        mode: 'query',
+        outcome: 'degraded',
+      });
     } finally {
       spy.mockRestore();
     }
@@ -440,6 +487,7 @@ describe('buildLivingMemorySections', () => {
     });
     setFactPinned(fact.fact.id, true);
 
+    const databaseSpy = jest.spyOn(sqliteStore, 'getMemoryDb');
     const out = await buildLivingMemorySections({
       messages: [userMessage('hello sam Berlin', 1_000)],
       now: 2_000,
@@ -450,6 +498,9 @@ describe('buildLivingMemorySections', () => {
     expect(out.recalledFactCount).toBe(0);
     expect(out.openThreadLabels).toEqual([]);
     expect(out.idleSinceLastTurnMs).toBeUndefined();
+    expect(out.retrievalEvent).toBeUndefined();
+    expect(databaseSpy).not.toHaveBeenCalled();
+    databaseSpy.mockRestore();
   });
 
   it('reads active task from task stack and renders it in the prompt', async () => {

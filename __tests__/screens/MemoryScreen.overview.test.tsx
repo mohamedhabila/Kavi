@@ -1,9 +1,11 @@
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { MemoryScreen } from '../../src/screens/MemoryScreen';
 
 const mockLoadOverview = jest.fn();
 const mockLoadDiagnostics = jest.fn();
 const mockExecuteMemoryRecall = jest.fn();
+let mockActiveConversationId = 'conv-overview';
+let mockFocusEffectCallback: (() => void) | null = null;
 
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: ({ children, ...props }: any) => {
@@ -63,7 +65,7 @@ jest.mock('../../src/services/memory/memoryDiagnostics', () => ({
 
 jest.mock('../../src/store/useChatStore', () => ({
   useChatStore: {
-    getState: () => ({ activeConversationId: 'conv-overview' }),
+    getState: () => ({ activeConversationId: mockActiveConversationId }),
   },
 }));
 
@@ -80,10 +82,68 @@ jest.mock('../../src/services/memory/episodeRecall', () => ({
   recallRecentEpisodes: jest.fn(() => []),
 }));
 
+function diagnosticsSnapshot(threadId: string, eventId: string) {
+  return {
+    threadId,
+    budgetEntries: [],
+    retrievalEntries: [
+      {
+        id: eventId,
+        operation: 'prompt_assembly' as const,
+        mode: 'query' as const,
+        outcome: 'completed' as const,
+        queryFingerprint: {
+          hashAlgorithm: 'sha256' as const,
+          hash: 'a'.repeat(64),
+          length: 12,
+          unitCount: 2,
+        },
+        scope: {
+          memoryConversationIdHash: 'b'.repeat(64),
+          sourceThreadIdHash: 'c'.repeat(64),
+          taskScopePresent: true,
+        },
+        counts: {
+          candidateFactCount: 2,
+          selectedFactCount: 1,
+          selectedFactIds: ['fact-9'],
+          candidateEpisodeCount: 0,
+          selectedEpisodeCount: 0,
+          selectedEpisodeIds: [],
+        },
+        timings: {
+          planMs: 1,
+          factRecallMs: 2,
+          episodeRecallMs: 0,
+          candidateFetchMs: 1,
+          scoreMs: 1,
+          selectorMs: 0,
+          totalMs: 3,
+        },
+        selector: { mode: 'deterministic' as const, outcome: 'not_requested' as const },
+        barrier: null,
+        createdAt: 2,
+      },
+    ],
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 describe('MemoryScreen overview tab', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockUseFocusEffect.mockImplementation(() => undefined);
+    mockActiveConversationId = 'conv-overview';
+    mockFocusEffectCallback = null;
+    mockUseFocusEffect.mockImplementation((callback: () => void) => {
+      mockFocusEffectCallback = callback;
+    });
     mockLoadOverview.mockReturnValue({
       focus: { content: 'Release hardening' },
       activeTask: { title: 'Ship Android build' },
@@ -101,8 +161,8 @@ describe('MemoryScreen overview tab', () => {
       ok: true,
       facts: [{ id: 'fact-1', subject: 'project', predicate: 'codename', value: 'Atlas' }],
     });
-    mockLoadDiagnostics.mockReturnValue({
-      threadId: 'conv-overview',
+    mockLoadDiagnostics.mockResolvedValue({
+      ...diagnosticsSnapshot('conv-overview', 'rl-1'),
       budgetEntries: [
         {
           conversationId: 'conv-overview',
@@ -119,18 +179,6 @@ describe('MemoryScreen overview tab', () => {
           },
           totalTokens: 61,
           contextWindow: 128000,
-        },
-      ],
-      retrievalEntries: [
-        {
-          id: 'rl-1',
-          threadId: 'conv-overview',
-          taskId: 'goal-1',
-          query: 'hidden',
-          factIds: ['fact-9'],
-          episodeIds: [],
-          tokenEstimate: 20,
-          createdAt: 2,
         },
       ],
     });
@@ -170,5 +218,35 @@ describe('MemoryScreen overview tab', () => {
         expect.objectContaining({ subject: 'metadata' }),
       );
     });
+  });
+
+  it('does not commit an out-of-order diagnostics snapshot after the active thread changes', async () => {
+    const conversationA = deferred<ReturnType<typeof diagnosticsSnapshot>>();
+    mockActiveConversationId = 'conv-a';
+    mockLoadDiagnostics.mockImplementation(({ threadId }: { threadId: string }) =>
+      threadId === 'conv-a'
+        ? conversationA.promise
+        : Promise.resolve(diagnosticsSnapshot('conv-b', 'rl-b')),
+    );
+    const { getByTestId, queryByTestId } = render(<MemoryScreen />);
+    await waitFor(() => {
+      expect(mockLoadDiagnostics).toHaveBeenCalledWith({ threadId: 'conv-a' });
+    });
+
+    mockActiveConversationId = 'conv-b';
+    await act(async () => {
+      mockFocusEffectCallback?.();
+    });
+    await waitFor(() => {
+      expect(getByTestId('memory-diagnostics-retrieval-rl-b')).toBeTruthy();
+    });
+
+    await act(async () => {
+      conversationA.resolve(diagnosticsSnapshot('conv-a', 'rl-a'));
+      await conversationA.promise;
+    });
+
+    expect(getByTestId('memory-diagnostics-retrieval-rl-b')).toBeTruthy();
+    expect(queryByTestId('memory-diagnostics-retrieval-rl-a')).toBeNull();
   });
 });

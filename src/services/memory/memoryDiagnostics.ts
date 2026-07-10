@@ -10,7 +10,9 @@ import {
   type BudgetAuditEntry,
   type BudgetAuditLayer,
 } from '../context/budgetAudit';
-import { readRecentRetrievals, type RetrievalLogEntry } from './retrievalLog';
+import { buildMemoryRetrievalScopeHash, readRecentMemoryRetrievalEvents } from './retrievalLog';
+import type { MemoryRetrievalEvent } from './retrievalEventTypes';
+import { canReadLongTermMemory } from './policy';
 
 const DEFAULT_DIAGNOSTICS_LIMIT = 32;
 const MAX_DIAGNOSTICS_LIMIT = 32;
@@ -18,14 +20,19 @@ const MAX_DIAGNOSTICS_LIMIT = 32;
 export interface MemoryDiagnosticsSnapshot {
   threadId: string | null;
   budgetEntries: BudgetAuditEntry[];
-  retrievalEntries: RetrievalLogEntry[];
+  retrievalEntries: MemoryRetrievalEvent[];
 }
 
-export function loadMemoryDiagnosticsSnapshot(options: {
-  threadId?: string | null;
-  limit?: number;
-} = {}): MemoryDiagnosticsSnapshot {
-  const limit = Math.max(1, Math.min(options.limit ?? DEFAULT_DIAGNOSTICS_LIMIT, MAX_DIAGNOSTICS_LIMIT));
+export async function loadMemoryDiagnosticsSnapshot(
+  options: {
+    threadId?: string | null;
+    limit?: number;
+  } = {},
+): Promise<MemoryDiagnosticsSnapshot> {
+  const limit = Math.max(
+    1,
+    Math.min(options.limit ?? DEFAULT_DIAGNOSTICS_LIMIT, MAX_DIAGNOSTICS_LIMIT),
+  );
   const threadId = options.threadId?.trim() || null;
 
   const recentBudget = getRecentBudgetAuditEntries(limit);
@@ -33,9 +40,17 @@ export function loadMemoryDiagnosticsSnapshot(options: {
     ? recentBudget.filter((entry) => entry.conversationId === threadId)
     : recentBudget;
 
-  const retrievalEntries = threadId
-    ? readRecentRetrievals({ threadId, limit })
-    : [];
+  let retrievalEntries: MemoryRetrievalEvent[] = [];
+  if (threadId && canReadLongTermMemory()) {
+    try {
+      const sourceThreadIdHash = await buildMemoryRetrievalScopeHash('source_thread', threadId);
+      if (sourceThreadIdHash) {
+        retrievalEntries = readRecentMemoryRetrievalEvents({ sourceThreadIdHash, limit });
+      }
+    } catch {
+      retrievalEntries = [];
+    }
+  }
 
   return {
     threadId,
@@ -44,9 +59,7 @@ export function loadMemoryDiagnosticsSnapshot(options: {
   };
 }
 
-export function formatBudgetLayerBreakdown(
-  layers: Record<BudgetAuditLayer, number>,
-): string {
+export function formatBudgetLayerBreakdown(layers: Record<BudgetAuditLayer, number>): string {
   return (Object.entries(layers) as Array<[BudgetAuditLayer, number]>)
     .filter(([, count]) => count > 0)
     .map(([layer, count]) => `${layer}:${count}`)

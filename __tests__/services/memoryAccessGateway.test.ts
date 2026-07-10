@@ -112,6 +112,8 @@ describe('memoryAccessGateway', () => {
       expect.objectContaining({
         messages,
         conversationId: 'memory-1',
+        sourceThreadId: 'thread-1',
+        consistencyBarrier: expect.objectContaining({ outcome: 'no_job', queryCount: 1 }),
       }),
     );
     expect(mockedGetIngestionJobForSourceTurn).toHaveBeenCalledWith({

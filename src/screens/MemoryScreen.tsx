@@ -85,6 +85,7 @@ export const MemoryScreen: React.FC = () => {
 
   const dirtyRef = useRef(false);
   const selectedDateRef = useRef<string | null>(null);
+  const overviewRequestEpochRef = useRef(0);
 
   useEffect(() => {
     dirtyRef.current = dirty;
@@ -201,14 +202,27 @@ export const MemoryScreen: React.FC = () => {
     }
   }, []);
 
-  const loadOverviewSnapshot = useCallback(() => {
+  const loadOverviewSnapshot = useCallback(async () => {
+    const requestEpoch = overviewRequestEpochRef.current + 1;
+    overviewRequestEpochRef.current = requestEpoch;
+    const threadId = useChatStore.getState().activeConversationId;
     try {
       setOverview(loadMemoryOverviewSnapshot({ recentFactLimit: 8 }));
-      const threadId = useChatStore.getState().activeConversationId;
-      setDiagnostics(loadMemoryDiagnosticsSnapshot({ threadId }));
+      const snapshot = await loadMemoryDiagnosticsSnapshot({ threadId });
+      if (
+        overviewRequestEpochRef.current === requestEpoch &&
+        useChatStore.getState().activeConversationId === threadId
+      ) {
+        setDiagnostics(snapshot);
+      }
     } catch {
       setOverview(null);
-      setDiagnostics(null);
+      if (
+        overviewRequestEpochRef.current === requestEpoch &&
+        useChatStore.getState().activeConversationId === threadId
+      ) {
+        setDiagnostics(null);
+      }
     }
   }, []);
 
@@ -217,7 +231,7 @@ export const MemoryScreen: React.FC = () => {
       setIsRefreshing(true);
       try {
         await Promise.all([loadGlobalMemory(preserveDirty), loadDailyList()]);
-        loadOverviewSnapshot();
+        await loadOverviewSnapshot();
         loadFacts();
         loadBlocks();
         loadEpisodes();
@@ -231,7 +245,7 @@ export const MemoryScreen: React.FC = () => {
 
   useEffect(() => {
     if (tab !== 'overview') return;
-    loadOverviewSnapshot();
+    void loadOverviewSnapshot();
     loadOverviewFacts(overviewSearch);
   }, [tab, overviewSearch, loadOverviewSnapshot, loadOverviewFacts]);
 
@@ -261,7 +275,7 @@ export const MemoryScreen: React.FC = () => {
       }
 
       if (event.scope === 'structured' || event.scope === 'conversation' || event.scope === 'all') {
-        loadOverviewSnapshot();
+        void loadOverviewSnapshot();
         if (tab === 'overview') {
           loadOverviewFacts(overviewSearch);
         }

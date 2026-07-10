@@ -83,6 +83,8 @@ export async function buildUnifiedMemoryAccessContext(
     ...(typeof request.now === 'number' ? { now: request.now } : {}),
     ...(typeof request.recallLimit === 'number' ? { recallLimit: request.recallLimit } : {}),
     conversationId: request.memoryConversationId,
+    sourceThreadId: request.sourceThreadId,
+    consistencyBarrier,
     ...(request.taskId ? { taskId: request.taskId } : {}),
     ...(request.goals ? { goals: request.goals } : {}),
     ...(request.activeTaskId ? { activeTaskId: request.activeTaskId } : {}),

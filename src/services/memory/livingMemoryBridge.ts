@@ -30,9 +30,13 @@ import { renderFocusBlock, type FocusGap } from './focus';
 import { assemblePrompt, type PromptMemoryFact, type SystemPromptSection } from './promptAssembly';
 import { getWorkingBlock, type WorkingMemoryBlock } from './workingBlocks';
 import { getActiveTaskId, readTaskStack } from './taskStack';
-import { logRetrieval } from './retrievalLog';
 import { getLatestReflection } from './reflections';
 import { createLlmMemoryFactSelector } from './llmFactSelector';
+import {
+  recordPromptAssemblyRetrievalEvent,
+  type PromptAssemblyRetrievalEventResult,
+  type PromptAssemblyRetrievalState,
+} from './promptAssemblyRetrievalEvent';
 
 const logger = createLogger('memory.livingMemoryBridge');
 
@@ -56,6 +60,8 @@ export interface BuildLivingMemorySectionsOptions {
   threadCreatedAt?: number;
   /** Conversation/task hints used to boost scoped recall. */
   conversationId?: string;
+  /** Concrete chat thread that initiated this retrieval. */
+  sourceThreadId?: string;
   taskId?: string;
   /** Now (ms). Defaults to `Date.now()`. Test seam. */
   now?: number;
@@ -87,6 +93,8 @@ export interface BuildLivingMemorySectionsOptions {
     provider: LlmProviderConfig;
     model?: string;
   };
+  /** Exact bounded consistency result observed before this retrieval. */
+  consistencyBarrier?: NextTurnMemoryConsistencyResult;
 }
 
 export interface LivingMemoryBridgeOutput {
@@ -110,6 +118,8 @@ export interface LivingMemoryBridgeOutput {
   timings?: LivingMemoryBridgeTimings;
   /** Structured next-turn consistency state for graph observability. */
   consistencyBarrier?: NextTurnMemoryConsistencyResult;
+  /** Content-free status of the structured retrieval evidence write. */
+  retrievalEvent?: PromptAssemblyRetrievalEventResult;
 }
 
 export interface LivingMemoryBridgeTimings {
@@ -121,7 +131,7 @@ export interface LivingMemoryBridgeTimings {
   reflectionMs: number;
   subjectLabelsMs: number;
   assembleMs: number;
-  logRetrievalMs: number;
+  recordRetrievalEventMs: number;
   totalMs: number;
   retrieval?: RetrievalOrchestratorTimings;
 }
@@ -249,7 +259,7 @@ export async function buildLivingMemorySections(
     reflectionMs: 0,
     subjectLabelsMs: 0,
     assembleMs: 0,
-    logRetrievalMs: 0,
+    recordRetrievalEventMs: 0,
     totalMs: 0,
   };
   const {
@@ -260,6 +270,7 @@ export async function buildLivingMemorySections(
     disableLongTermMemory = false,
     threadCreatedAt,
     conversationId,
+    sourceThreadId,
     taskId,
     readBlocks,
     readWorkingBlock,
@@ -268,6 +279,7 @@ export async function buildLivingMemorySections(
     activeTaskId,
     asyncWork,
     retrievalLlm,
+    consistencyBarrier,
   } = options;
 
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -276,7 +288,7 @@ export async function buildLivingMemorySections(
 
   // When the user has opted out of long-term memory, we bail BEFORE any block read or recall query
   // so the SQLite path is not touched and the prompt stays stateless.
-  if (disableLongTermMemory) {
+  if (disableLongTermMemory || consistencyBarrier?.outcome === 'opt_out') {
     return EMPTY_OUTPUT;
   }
 
@@ -345,6 +357,7 @@ export async function buildLivingMemorySections(
   let recalledFacts: Awaited<ReturnType<typeof orchestrateMemoryRetrieval>>['facts'] = [];
   let recalledEpisodes: Awaited<ReturnType<typeof orchestrateMemoryRetrieval>>['episodes'] = [];
   let retrievalTimings: RetrievalOrchestratorTimings | undefined;
+  let retrievalState: PromptAssemblyRetrievalState = disableRecall ? 'disabled' : 'completed';
   const factSelector = createLlmMemoryFactSelector(retrievalLlm);
   if (!disableRecall) {
     const retrievalStarted = Date.now();
@@ -371,6 +384,7 @@ export async function buildLivingMemorySections(
       );
       recalledFacts = [];
       recalledEpisodes = [];
+      retrievalState = 'degraded';
     }
     timings.retrievalMs += Date.now() - retrievalStarted;
   }
@@ -417,20 +431,20 @@ export async function buildLivingMemorySections(
   const idleSinceLastTurnMs =
     typeof idleAnchor === 'number' ? Math.max(now - idleAnchor, 0) : undefined;
 
-  // Rough telemetry estimate; provider token accounting records exact usage.
-  const assembledText = assembled.sections.map((s) => s.text).join('\n\n');
-  const tokenEstimate = Math.ceil(assembledText.length / 4);
-
-  const logStarted = Date.now();
-  logRetrieval({
-    threadId: conversationId ?? null,
-    taskId: resolvedTaskId ?? null,
-    query: query.slice(0, 500),
-    factIds: recalledFacts.map((f) => f.id),
-    episodeIds: recalledEpisodes.map((e) => e.id),
-    tokenEstimate,
+  const eventStarted = Date.now();
+  const retrievalEvent = await recordPromptAssemblyRetrievalEvent({
+    query,
+    ...(conversationId ? { memoryConversationId: conversationId } : {}),
+    ...(sourceThreadId ? { sourceThreadId } : {}),
+    taskScopePresent: Boolean(resolvedTaskId ?? activeTaskId),
+    state: retrievalState,
+    selectedFactIds: recalledFacts.map((fact) => fact.id),
+    selectedEpisodeIds: recalledEpisodes.map((episode) => episode.id),
+    ...(retrievalTimings ? { retrievalTimings } : {}),
+    ...(consistencyBarrier ? { consistencyBarrier } : {}),
+    createdAt: now,
   });
-  timings.logRetrievalMs += Date.now() - logStarted;
+  timings.recordRetrievalEventMs += Date.now() - eventStarted;
   timings.totalMs = Date.now() - totalStarted;
   if (retrievalTimings) timings.retrieval = retrievalTimings;
 
@@ -444,5 +458,6 @@ export async function buildLivingMemorySections(
     recalledFactCount: recalledFacts.length,
     recalledEpisodeCount: recalledEpisodes.length,
     timings,
+    retrievalEvent,
   };
 }

@@ -19,6 +19,7 @@ export type NextTurnMemoryConsistencyResult = Readonly<{
   waitedMs: number;
   queryCount: number;
   matchedJobCount: 0 | 1;
+  queueAgeMs: number | null;
   initialJobStatus: IngestionJobStatus | null;
   finalJobStatus: IngestionJobStatus | null;
 }>;
@@ -63,6 +64,7 @@ export async function waitForNextTurnMemoryConsistency(
   let nextBackoffMs = NEXT_TURN_MEMORY_CONSISTENCY_INITIAL_BACKOFF_MS;
   let waitedMs = 0;
   let queryCount = 0;
+  let queueAgeMs: number | null = null;
 
   const result = (
     outcome: NextTurnMemoryConsistencyOutcome,
@@ -75,6 +77,7 @@ export async function waitForNextTurnMemoryConsistency(
     waitedMs,
     queryCount,
     matchedJobCount,
+    queueAgeMs,
     initialJobStatus,
     finalJobStatus,
   });
@@ -112,6 +115,7 @@ export async function waitForNextTurnMemoryConsistency(
   if (!job) {
     return result('no_job', null, null, 0);
   }
+  queueAgeMs = Math.max(0, startedAt - job.createdAt);
   const initialJobStatus = job.status;
   let disposition = classifyJob(job, clock.now());
   if (disposition === 'completed') {

@@ -181,6 +181,10 @@ async function selectFactsWithSemanticSelector(params: {
     for (const entry of semanticSelectedEntries) {
       if (appendSelected(entry)) semanticAdmittedCount += 1;
     }
+  } catch {
+    params.timing.selectorSelectedCount = 0;
+    params.timing.selectorApplied = false;
+    return [...params.deterministicSelected];
   } finally {
     params.timing.selectorMs = Date.now() - selectorStarted;
   }

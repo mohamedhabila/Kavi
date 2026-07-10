@@ -7,8 +7,18 @@ import {
   formatRetrievalIdList,
   loadMemoryDiagnosticsSnapshot,
 } from '../../../src/services/memory/memoryDiagnostics';
-import { logRetrieval } from '../../../src/services/memory/retrievalLog';
-import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../../src/services/memory/schema';
+import {
+  buildMemoryRetrievalQueryFingerprint,
+  buildMemoryRetrievalScopeHash,
+  recordMemoryRetrievalEvent,
+} from '../../../src/services/memory/retrievalLog';
+import * as memoryPolicy from '../../../src/services/memory/policy';
+import * as retrievalLog from '../../../src/services/memory/retrievalLog';
+import {
+  ensureFactSchema,
+  resetFactSchemaCacheForTests,
+} from '../../../src/services/memory/schema';
+import * as sqliteStore from '../../../src/services/memory/sqlite-store';
 import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
 
 jest.mock('expo-sqlite', () => {
@@ -32,7 +42,7 @@ afterEach(() => {
 });
 
 describe('memoryDiagnostics', () => {
-  it('scopes budget and retrieval diagnostics to the active conversation', () => {
+  it('scopes content-free retrieval diagnostics to the active conversation hash', async () => {
     recordBudgetAuditEntry({
       conversationId: 'conv-a',
       iteration: 1,
@@ -64,45 +74,94 @@ describe('memoryDiagnostics', () => {
       contextWindow: 128000,
     });
 
-    logRetrieval({
-      threadId: 'conv-a',
-      taskId: 'goal-1',
-      query: 'secret user query text',
-      factIds: ['fact-1', 'fact-2'],
-      episodeIds: ['ep-1'],
-      tokenEstimate: 42,
+    const queryFingerprint = await buildMemoryRetrievalQueryFingerprint('private query sentinel');
+    const sourceThreadAHash = await buildMemoryRetrievalScopeHash('source_thread', 'conv-a');
+    const sourceThreadBHash = await buildMemoryRetrievalScopeHash('source_thread', 'conv-b');
+    const baseEvent = {
+      operation: 'prompt_assembly' as const,
+      mode: 'query' as const,
+      outcome: 'completed' as const,
+      queryFingerprint,
+      counts: {
+        candidateFactCount: 2,
+        selectedFactCount: 2,
+        selectedFactIds: ['fact-1', 'fact-2'],
+        candidateEpisodeCount: 1,
+        selectedEpisodeCount: 1,
+        selectedEpisodeIds: ['ep-1'],
+      },
+      timings: {
+        planMs: 1,
+        factRecallMs: 2,
+        episodeRecallMs: 1,
+        candidateFetchMs: 1,
+        scoreMs: 1,
+        selectorMs: 0,
+        totalMs: 4,
+      },
+      selector: { mode: 'deterministic' as const, outcome: 'not_requested' as const },
+    };
+    await recordMemoryRetrievalEvent({
+      ...baseEvent,
+      scope: {
+        memoryConversationIdHash: null,
+        sourceThreadIdHash: sourceThreadAHash,
+        taskScopePresent: true,
+      },
+      createdAt: 1,
     });
-    logRetrieval({
-      threadId: 'conv-b',
-      taskId: 'goal-2',
-      query: 'other query',
-      factIds: ['fact-9'],
-      episodeIds: [],
-      tokenEstimate: 12,
+    await recordMemoryRetrievalEvent({
+      ...baseEvent,
+      scope: {
+        memoryConversationIdHash: null,
+        sourceThreadIdHash: sourceThreadBHash,
+        taskScopePresent: true,
+      },
+      counts: {
+        ...baseEvent.counts,
+        selectedFactCount: 1,
+        selectedFactIds: ['fact-9'],
+        selectedEpisodeCount: 0,
+        selectedEpisodeIds: [],
+      },
+      createdAt: 2,
     });
 
-    const snapshot = loadMemoryDiagnosticsSnapshot({ threadId: 'conv-a' });
+    const snapshot = await loadMemoryDiagnosticsSnapshot({ threadId: 'conv-a' });
 
     expect(snapshot.budgetEntries).toHaveLength(1);
     expect(snapshot.budgetEntries[0].conversationId).toBe('conv-a');
     expect(snapshot.retrievalEntries).toHaveLength(1);
-    expect(snapshot.retrievalEntries[0].factIds).toEqual(['fact-1', 'fact-2']);
-    expect(snapshot.retrievalEntries[0].taskId).toBe('goal-1');
+    expect(snapshot.retrievalEntries[0].counts.selectedFactIds).toEqual(['fact-1', 'fact-2']);
+    expect(snapshot.retrievalEntries[0].scope.taskScopePresent).toBe(true);
+    expect(JSON.stringify(snapshot.retrievalEntries)).not.toContain('private query sentinel');
   });
 
-  it('returns empty retrieval rows when no conversation scope is provided', () => {
-    logRetrieval({
-      threadId: 'conv-a',
-      query: 'query',
-      factIds: ['fact-1'],
-      episodeIds: [],
-      tokenEstimate: 10,
-    });
-
-    const snapshot = loadMemoryDiagnosticsSnapshot();
+  it('returns empty retrieval rows when no conversation scope is provided', async () => {
+    const snapshot = await loadMemoryDiagnosticsSnapshot();
 
     expect(snapshot.threadId).toBeNull();
     expect(snapshot.retrievalEntries).toEqual([]);
+  });
+
+  it('does not hash or access the retrieval store after long-term-memory opt-out', async () => {
+    const policySpy = jest.spyOn(memoryPolicy, 'canReadLongTermMemory').mockReturnValue(false);
+    const hashSpy = jest.spyOn(retrievalLog, 'buildMemoryRetrievalScopeHash');
+    const readSpy = jest.spyOn(retrievalLog, 'readRecentMemoryRetrievalEvents');
+    const databaseSpy = jest.spyOn(sqliteStore, 'getMemoryDb');
+    try {
+      const snapshot = await loadMemoryDiagnosticsSnapshot({ threadId: 'private-thread' });
+
+      expect(snapshot.retrievalEntries).toEqual([]);
+      expect(hashSpy).not.toHaveBeenCalled();
+      expect(readSpy).not.toHaveBeenCalled();
+      expect(databaseSpy).not.toHaveBeenCalled();
+    } finally {
+      policySpy.mockRestore();
+      hashSpy.mockRestore();
+      readSpy.mockRestore();
+      databaseSpy.mockRestore();
+    }
   });
 
   it('formats layer breakdown and id lists structurally', () => {

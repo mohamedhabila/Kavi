@@ -176,6 +176,7 @@ export async function prepareOrchestratorRequestBundle(params: {
         waitedMs: 0,
         queryCount: 0,
         matchedJobCount: 0,
+        queueAgeMs: null,
         initialJobStatus: null,
         finalJobStatus: null,
       },

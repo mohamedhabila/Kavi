@@ -40,6 +40,7 @@ describe('orchestrator request memory consistency identity', () => {
         waitedMs: 0,
         queryCount: 1,
         matchedJobCount: 0,
+        queueAgeMs: null,
         initialJobStatus: null,
         finalJobStatus: null,
       },

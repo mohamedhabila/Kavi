@@ -153,8 +153,26 @@ describe('next-turn memory consistency', () => {
       waitedMs: 0,
       queryCount: 1,
       matchedJobCount: 1,
+      queueAgeMs: 0,
       initialJobStatus: 'completed_structural',
       finalJobStatus: 'completed_structural',
+    });
+  });
+
+  it('reports queue age from the initially matched source-turn job', async () => {
+    const target = enqueueSourceTurn('thread-aged', 'assistant-aged', 'shared-memory', 40);
+    setJobState(target!.id, 'completed_enriched');
+
+    await expect(
+      waitForNextTurnMemoryConsistency({
+        memoryConversationId: 'shared-memory',
+        sourceThreadId: 'thread-aged',
+        sourceEndMessageId: 'assistant-aged',
+        clock: deterministicClock(100),
+      }),
+    ).resolves.toMatchObject({
+      outcome: 'completed',
+      queueAgeMs: 60,
     });
   });
 

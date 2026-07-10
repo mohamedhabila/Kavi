@@ -1,0 +1,141 @@
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
+});
+
+import { ensureDefaultBlocks } from '../../../src/services/memory/blocks';
+import { upsertEntity } from '../../../src/services/memory/entities';
+import { recordFact } from '../../../src/services/memory/facts/mutations';
+import { buildLivingMemorySections } from '../../../src/services/memory/livingMemoryBridge';
+import * as llmFactSelector from '../../../src/services/memory/llmFactSelector';
+import { readRecentMemoryRetrievalEvents } from '../../../src/services/memory/retrievalLog';
+import {
+  ensureFactSchema,
+  resetFactSchemaCacheForTests,
+} from '../../../src/services/memory/schema';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
+import * as sqliteStore from '../../../src/services/memory/sqlite-store';
+import type { Message } from '../../../src/types/message';
+
+const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
+
+function userMessage(content: string, timestamp: number): Message {
+  return { id: `u-${timestamp}`, role: 'user', content, timestamp } as Message;
+}
+
+beforeEach(() => {
+  closeMemoryDb();
+  expoSqlite.__resetExpoSqliteForTests();
+  resetFactSchemaCacheForTests();
+  ensureFactSchema();
+  ensureDefaultBlocks();
+});
+
+afterEach(() => {
+  closeMemoryDb();
+  jest.restoreAllMocks();
+});
+
+describe('living memory structured retrieval evidence', () => {
+  it('keeps deterministic facts when semantic selection fails and records the fallback', async () => {
+    const project = upsertEntity({ name: 'selector resilience', type: 'project' });
+    const fact = recordFact({
+      subjectId: project.id,
+      predicate: 'decision',
+      objectText: 'selector resilience keeps deterministic retrieval evidence',
+      importance: 0.9,
+    });
+    jest.spyOn(llmFactSelector, 'createLlmMemoryFactSelector').mockReturnValue(async () => {
+      throw new Error('private selector provider failure');
+    });
+
+    const out = await buildLivingMemorySections({
+      messages: [userMessage('selector resilience deterministic evidence', 1_000)],
+      conversationId: 'memory-selector-fallback',
+      sourceThreadId: 'thread-selector-fallback',
+      now: 2_000,
+      retrievalLlm: { provider: {} as never },
+      consistencyBarrier: {
+        outcome: 'completed',
+        durationMs: 4,
+        waitedMs: 4,
+        queryCount: 2,
+        matchedJobCount: 1,
+        queueAgeMs: 20,
+        initialJobStatus: 'pending',
+        finalJobStatus: 'completed_structural',
+      },
+    });
+
+    expect(out.recalledFactCount).toBeGreaterThan(0);
+    expect(out.retrievalEvent).toMatchObject({ status: 'recorded', code: 'recorded' });
+    expect(readRecentMemoryRetrievalEvents()[0]).toMatchObject({
+      outcome: 'completed',
+      counts: { selectedFactIds: expect.arrayContaining([fact.fact.id]) },
+      selector: { mode: 'semantic', outcome: 'deterministic_fallback' },
+      barrier: { outcome: 'completed', waitMs: 4, queueAgeMs: 20 },
+    });
+  });
+
+  it('keeps prompt assembly available when structured event storage fails', async () => {
+    getMemoryDb().execSync(`
+      CREATE TRIGGER fail_prompt_retrieval_event_insert
+      BEFORE INSERT ON memory_retrieval_events
+      BEGIN
+        SELECT RAISE(FAIL, 'private storage failure prose');
+      END;
+    `);
+
+    const out = await buildLivingMemorySections({
+      messages: [userMessage('continue safely', 1_000)],
+      conversationId: 'memory-storage-failure',
+      sourceThreadId: 'thread-storage-failure',
+      now: 2_000,
+    });
+
+    expect(out.timings).toBeDefined();
+    expect(out.retrievalEvent).toEqual({ status: 'failed', code: 'storage_error' });
+    expect(JSON.stringify(out)).not.toContain('private storage failure prose');
+    expect(readRecentMemoryRetrievalEvents()).toEqual([]);
+  });
+
+  it('keeps prompt assembly available when content-free event derivation fails', async () => {
+    const out = await buildLivingMemorySections({
+      messages: [userMessage('continue safely', 1_000)],
+      conversationId: 'memory-derivation-failure',
+      sourceThreadId: 'invalid private thread id',
+      now: 2_000,
+    });
+
+    expect(out.timings).toBeDefined();
+    expect(out.retrievalEvent).toEqual({ status: 'failed', code: 'derivation_error' });
+    expect(JSON.stringify(out)).not.toContain('invalid private thread id');
+    expect(readRecentMemoryRetrievalEvents()).toEqual([]);
+  });
+
+  it('does not access durable memory or record an event for an opt-out barrier', async () => {
+    const databaseSpy = jest.spyOn(sqliteStore, 'getMemoryDb');
+    const out = await buildLivingMemorySections({
+      messages: [userMessage('private opt-out query', 1_000)],
+      conversationId: 'memory-opt-out-barrier',
+      sourceThreadId: 'thread-opt-out-barrier',
+      now: 2_000,
+      consistencyBarrier: {
+        outcome: 'opt_out',
+        durationMs: 0,
+        waitedMs: 0,
+        queryCount: 0,
+        matchedJobCount: 0,
+        queueAgeMs: null,
+        initialJobStatus: null,
+        finalJobStatus: null,
+      },
+    });
+
+    expect(out).toEqual(
+      expect.objectContaining({ sections: [], recalledFactCount: 0, recalledEpisodeCount: 0 }),
+    );
+    expect(out.retrievalEvent).toBeUndefined();
+    expect(databaseSpy).not.toHaveBeenCalled();
+  });
+});

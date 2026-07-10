@@ -17,7 +17,7 @@ import {
   type MemoryFactSelector,
   type ScoredFact,
 } from './factRecall';
-import { recallEpisodesForQuery } from './episodeRecall';
+import { recallEpisodesForQuery, type RecallEpisodesTiming } from './episodeRecall';
 import type { MemoryEpisode } from './episodes/types';
 import type { MemoryFact } from './facts/types';
 import { markFactsRecalled } from './facts/mutations';
@@ -52,6 +52,7 @@ export interface RetrievalOrchestratorTimings {
   episodesMs: number;
   totalMs: number;
   recall?: RecallFactsTiming;
+  episodes?: RecallEpisodesTiming;
 }
 
 const DEFAULT_LIMIT = 8;
@@ -160,10 +161,14 @@ export async function orchestrateMemoryRetrieval(
 
   const episodesStarted = Date.now();
   const resolvedTaskId = input.taskId ?? input.activeTaskId;
+  let episodeTiming: RecallEpisodesTiming | undefined;
   const episodes = recallEpisodesForQuery(query, {
     threadId: input.conversationId,
     taskId: resolvedTaskId,
     limit: 4,
+    onTiming: (timing) => {
+      episodeTiming = timing;
+    },
   });
   const episodesMs = Date.now() - episodesStarted;
 
@@ -179,6 +184,7 @@ export async function orchestrateMemoryRetrieval(
       episodesMs,
       totalMs: Date.now() - totalStarted,
       recall: recallTimings[0],
+      episodes: episodeTiming,
     },
   };
 }
