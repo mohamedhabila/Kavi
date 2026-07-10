@@ -38,6 +38,7 @@ describe('paired E2E state isolation', () => {
       'memory_migration_state',
       'memory_reflections',
       'memory_retrieval_events',
+      'memory_retrieval_outcomes',
       'memory_tasks',
       'memory_working_blocks',
     ]);
