@@ -177,15 +177,11 @@ async function fetchExpoWorkflowRunByIdAsync(
     workflowRuns && typeof workflowRuns === 'object'
       ? (workflowRuns as Record<string, unknown>).byId
       : null;
-  if (
-    !run ||
-    typeof run !== 'object' ||
-    typeof run.id !== 'string' ||
-    typeof run.status !== 'string'
-  ) {
+  const runRecord = run && typeof run === 'object' ? (run as Record<string, unknown>) : null;
+  if (!runRecord || typeof runRecord.id !== 'string' || typeof runRecord.status !== 'string') {
     throw new ExpoGraphqlRequestError('expo-workflow-run-invalid-response', 'contract', 200);
   }
-  const exactRun = run as {
+  const exactRun = runRecord as {
     id: string;
     status: string;
     errors?: Array<{ title?: string | null; message?: string | null }>;
