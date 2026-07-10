@@ -53,7 +53,7 @@ export const MEMORY_RETRIEVAL_LOCAL_SEMANTIC_OUTCOMES = [
   'unavailable',
   'applied',
 ] as const;
-export type MemoryRetrievalLocalSemanticOutcome =
+export type MemoryRetrievalLocalSimilarityOutcome =
   (typeof MEMORY_RETRIEVAL_LOCAL_SEMANTIC_OUTCOMES)[number];
 
 export type MemoryRetrievalQueryFingerprint = Readonly<{
@@ -102,14 +102,14 @@ export type MemoryRetrievalExpansion = Readonly<{
 
 export type MemoryRetrievalCandidates = Readonly<{
   strategy: MemoryRetrievalCandidateStrategy;
-  localSemanticOutcome: MemoryRetrievalLocalSemanticOutcome;
+  localSimilarityOutcome: MemoryRetrievalLocalSimilarityOutcome;
   eligibleScanCount: number;
   pinnedCount: number;
   exactQuotedCount: number;
   lexicalCount: number;
   entityCount: number;
   temporalCount: number;
-  localSemanticCount: number;
+  localSimilarityCount: number;
   unionCount: number;
   diversifiedCount: number;
   unionMs: number;

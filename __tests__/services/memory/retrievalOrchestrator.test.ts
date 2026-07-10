@@ -196,8 +196,8 @@ describe('orchestrateMemoryRetrieval', () => {
     expect(result.facts.some((fact) => fact.id === target.fact.id)).toBe(true);
   });
 
-  it('forwards the closed strategy and caller-supplied local semantic input', async () => {
-    const subject = upsertEntity({ name: 'semantic handoff', type: 'project', now: 1 });
+  it('forwards the closed strategy and caller-supplied local-similarity input', async () => {
+    const subject = upsertEntity({ name: 'similarity handoff', type: 'project', now: 1 });
     const target = recordObservedFact({
       subjectId: subject.id,
       predicate: 'opaque_result',
@@ -212,27 +212,27 @@ describe('orchestrateMemoryRetrieval', () => {
       userMessage: 'conceptually related evidence',
       memoryScope: memoryScope(),
       candidateStrategy: 'lexical',
-      localSemantic: { queryVector },
+      localSimilarity: { queryVector },
       now: 4,
     });
     const hybrid = await orchestrateMemoryRetrieval({
       userMessage: 'conceptually related evidence',
       memoryScope: memoryScope(),
       candidateStrategy: 'hybrid',
-      localSemantic: { queryVector },
+      localSimilarity: { queryVector },
       now: 4,
     });
 
     expect(lexical.facts).toHaveLength(0);
     expect(lexical.timings?.recall?.candidateStages).toMatchObject({
       strategy: 'lexical',
-      localSemanticOutcome: 'not_requested',
+      localSimilarityOutcome: 'not_requested',
     });
     expect(hybrid.facts.map((fact) => fact.id)).toEqual([target.fact.id]);
     expect(hybrid.timings?.recall?.candidateStages).toMatchObject({
       strategy: 'hybrid',
-      localSemanticOutcome: 'applied',
-      localSemanticCount: 1,
+      localSimilarityOutcome: 'applied',
+      localSimilarityCount: 1,
     });
   });
 

@@ -20,7 +20,10 @@ import { listBlocks, type MemoryBlock } from './blocks';
 import { getEntityById } from './entities';
 import type { AgentGoal } from '../../engine/goals/types';
 import type { AgentRunControlGraphAsyncWorkState } from '../../types/agentRun';
-import type { RecallCandidateStrategy } from './factRecallCandidateContract';
+import type {
+  RecallCandidateStrategy,
+  RecallLocalSimilarityInput,
+} from './factRecallCandidateContract';
 import {
   orchestrateMemoryRetrieval,
   type RetrievalOrchestratorTimings,
@@ -55,13 +58,12 @@ import { loadActiveMemoryFactConflictSignals } from './facts/observations';
 import type { RequiredMemoryAccessScopeIdentity } from './memoryScopeIdentity';
 import { resolveLocalMemoryAccessScope } from './memoryScopeStore';
 import { markFactsRecalled } from './facts/mutations';
+import { buildRecentUserRetrievalQuery } from './retrievalQueryText';
 
 const logger = createLogger('memory.livingMemoryBridge');
 
 const FOCUS_BLOCK_LABEL = 'active_focus';
 const OPEN_THREADS_LABEL = 'open_threads';
-const RECENT_USER_QUERY_WINDOW_TURNS = 4;
-const RECENT_USER_QUERY_WINDOW_CHARS = 2_000;
 
 const SAFE_BLOCK_LABELS_FOR_PROMPT = new Set<string>([
   'profile',
@@ -121,6 +123,8 @@ export interface BuildLivingMemorySectionsOptions {
   externalMemoryEvidence?: ReadonlyArray<MemoryExternalEvidenceSignal>;
   /** Candidate strategy selected by the product memory-access policy. */
   candidateStrategy?: RecallCandidateStrategy;
+  /** One deterministic query vector created by the memory-access gateway. */
+  localSimilarity?: RecallLocalSimilarityInput;
 }
 
 export interface LivingMemoryBridgeOutput {
@@ -238,24 +242,6 @@ function inferThreadCreatedAt(messages: Message[], fallback: number): number {
   return fallback;
 }
 
-function recentUserTextWindow(
-  messages: Message[],
-  maxTurns = RECENT_USER_QUERY_WINDOW_TURNS,
-  maxChars = RECENT_USER_QUERY_WINDOW_CHARS,
-): string {
-  const turns: string[] = [];
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const message = messages[i];
-    if (message.role !== 'user') continue;
-    const candidate = (message.enrichedContent ?? message.content ?? '').trim();
-    if (candidate.length > 0) turns.push(candidate);
-    if (turns.length >= maxTurns) break;
-  }
-  const joined = turns.reverse().join('\n');
-  if (joined.length <= maxChars) return joined;
-  return joined.slice(joined.length - maxChars).trimStart();
-}
-
 function splitThreadLabels(content: string): string[] {
   return content
     .split(/\r?\n/)
@@ -337,6 +323,7 @@ export async function buildLivingMemorySections(
     memoryUseIntent = 'automatic_prompt',
     externalMemoryEvidence,
     candidateStrategy,
+    localSimilarity,
   } = options;
 
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -414,7 +401,7 @@ export async function buildLivingMemorySections(
   const focusRendered = renderFocusBlock(focusInput);
   timings.focusRenderMs += Date.now() - focusStarted;
 
-  const query = recentUserTextWindow(messages);
+  const query = buildRecentUserRetrievalQuery(messages);
   let recalledFacts: Awaited<ReturnType<typeof orchestrateMemoryRetrieval>>['facts'] = [];
   let resolutionFacts: Awaited<ReturnType<typeof orchestrateMemoryRetrieval>>['resolutionFacts'] =
     [];
@@ -440,6 +427,7 @@ export async function buildLivingMemorySections(
         limit: recallLimit,
         now,
         ...(candidateStrategy ? { candidateStrategy } : {}),
+        ...(localSimilarity ? { localSimilarity } : {}),
       });
       recalledFacts = retrieval.facts;
       resolutionFacts = retrieval.resolutionFacts;

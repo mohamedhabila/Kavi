@@ -1,8 +1,8 @@
 import type { MemoryEntity } from './entities';
 import {
   RECALL_CANDIDATE_LIMITS,
-  type RecallLocalSemanticInput,
-  type RecallLocalSemanticOutcome,
+  type RecallLocalSimilarityInput,
+  type RecallLocalSimilarityOutcome,
 } from './factRecallCandidateContract';
 import type { RecallCandidateLaneEntry } from './factRecallCandidateUnion';
 import type { MemoryFact } from './facts/types';
@@ -15,8 +15,8 @@ const YEAR_PATTERN = /(?:^|[^\p{N}])((?:19|20)\d{2})(?=$|[^\p{N}])/gu;
 export interface SupplementalRecallCandidateLanes {
   entity: RecallCandidateLaneEntry[];
   temporal: RecallCandidateLaneEntry[];
-  localSemantic: RecallCandidateLaneEntry[];
-  localSemanticOutcome: RecallLocalSemanticOutcome;
+  localSimilarity: RecallCandidateLaneEntry[];
+  localSimilarityOutcome: RecallLocalSimilarityOutcome;
 }
 
 function compareFacts(left: MemoryFact, right: MemoryFact): number {
@@ -86,12 +86,12 @@ function temporalLane(facts: ReadonlyArray<MemoryFact>, query: string): RecallCa
     .map((fact) => ({ fact }));
 }
 
-function localSemanticLane(
+function localSimilarityLane(
   facts: ReadonlyArray<MemoryFact>,
-  input: RecallLocalSemanticInput | undefined,
+  input: RecallLocalSimilarityInput | undefined,
 ): {
   entries: RecallCandidateLaneEntry[];
-  outcome: RecallLocalSemanticOutcome;
+  outcome: RecallLocalSimilarityOutcome;
 } {
   if (!input) return { entries: [], outcome: 'not_requested' };
   if (!isCurrentLocalSimilarityVector(input.queryVector)) {
@@ -108,17 +108,18 @@ function localSemanticLane(
   const entries = compatibleFacts
     .map((fact) => ({
       fact,
-      semanticSimilarity: cosineSimilarity(
+      localSimilarityScore: cosineSimilarity(
         input.queryVector.values,
         fact.localSimilarity?.values ?? [],
       ),
     }))
-    .filter((entry) => entry.semanticSimilarity >= minimumSimilarity)
+    .filter((entry) => entry.localSimilarityScore >= minimumSimilarity)
     .sort(
       (left, right) =>
-        right.semanticSimilarity - left.semanticSimilarity || compareFacts(left.fact, right.fact),
+        right.localSimilarityScore - left.localSimilarityScore ||
+        compareFacts(left.fact, right.fact),
     )
-    .slice(0, RECALL_CANDIDATE_LIMITS.localSemanticLane);
+    .slice(0, RECALL_CANDIDATE_LIMITS.localSimilarityLane);
   return { entries, outcome: 'applied' };
 }
 
@@ -127,13 +128,13 @@ export function buildSupplementalRecallCandidateLanes(input: {
   queryUnits: ReadonlySet<string>;
   eligibleFacts: ReadonlyArray<MemoryFact>;
   entities: ReadonlyArray<MemoryEntity>;
-  localSemantic?: RecallLocalSemanticInput;
+  localSimilarity?: RecallLocalSimilarityInput;
 }): SupplementalRecallCandidateLanes {
-  const semantic = localSemanticLane(input.eligibleFacts, input.localSemantic);
+  const similarity = localSimilarityLane(input.eligibleFacts, input.localSimilarity);
   return {
     entity: entityLane(input.eligibleFacts, input.entities, input.queryUnits, input.query),
     temporal: temporalLane(input.eligibleFacts, input.query),
-    localSemantic: semantic.entries,
-    localSemanticOutcome: semantic.outcome,
+    localSimilarity: similarity.entries,
+    localSimilarityOutcome: similarity.outcome,
   };
 }

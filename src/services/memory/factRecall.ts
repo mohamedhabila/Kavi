@@ -1,6 +1,6 @@
 // Kavi query-time fact recall. This path is deterministic and local: fuse a
 // bounded set of already-eligible lexical, entity, temporal, and compatible
-// local-semantic candidates, score it once, and return the best memories.
+// local-similarity candidates, score it once, and return the best memories.
 // Agent-run structure belongs in compact memory records, not query-time repair.
 
 import {
@@ -412,7 +412,7 @@ async function buildRecallSelection(
     candidateUnitHits: allCandidateUnitHits,
     eligibleFacts,
     entities,
-    ...(options.localSemantic ? { localSemantic: options.localSemantic } : {}),
+    ...(options.localSimilarity ? { localSimilarity: options.localSimilarity } : {}),
     limit: candidatePool,
   });
   const candidates = candidateSet.candidates;

@@ -286,8 +286,8 @@ function relevantFactIds(
         }
         if (reasons.includes('temporal') && entry.candidateRelevanceScore > 0) return true;
         return (
-          reasons.includes('local_semantic') &&
-          (entry.candidateProvenance.semanticSimilarity ?? 0) >= 0.75
+          reasons.includes('local_similarity') &&
+          (entry.candidateProvenance.localSimilarityScore ?? 0) >= 0.75
         );
       })
       .map((entry) => entry.fact.id),

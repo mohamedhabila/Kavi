@@ -73,7 +73,7 @@ export function makeScoredFact(
     candidateProvenance: overrides.candidateProvenance ?? {
       reasons: [],
       fusionScore: 0,
-      semanticSimilarity: null,
+      localSimilarityScore: null,
     },
   };
 }

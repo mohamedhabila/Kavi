@@ -56,14 +56,14 @@ function candidatesFromTiming(
   if (!stages) {
     return {
       strategy: 'not_requested',
-      localSemanticOutcome: 'not_requested',
+      localSimilarityOutcome: 'not_requested',
       eligibleScanCount: 0,
       pinnedCount: 0,
       exactQuotedCount: 0,
       lexicalCount: 0,
       entityCount: 0,
       temporalCount: 0,
-      localSemanticCount: 0,
+      localSimilarityCount: 0,
       unionCount: 0,
       diversifiedCount: 0,
       unionMs: 0,
@@ -71,14 +71,14 @@ function candidatesFromTiming(
   }
   return {
     strategy: stages.strategy,
-    localSemanticOutcome: stages.localSemanticOutcome,
+    localSimilarityOutcome: stages.localSimilarityOutcome,
     eligibleScanCount: stages.eligibleScanCount,
     pinnedCount: stages.pinnedCount,
     exactQuotedCount: stages.exactQuotedCount,
     lexicalCount: stages.lexicalCount,
     entityCount: stages.entityCount,
     temporalCount: stages.temporalCount,
-    localSemanticCount: stages.localSemanticCount,
+    localSimilarityCount: stages.localSimilarityCount,
     unionCount: stages.unionCount,
     diversifiedCount: stages.diversifiedCount,
     unionMs: stages.unionMs,

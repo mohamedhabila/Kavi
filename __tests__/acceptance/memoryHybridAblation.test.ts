@@ -37,12 +37,12 @@ describe('frozen hybrid memory ablation', () => {
 
   it('measures paired retrieval improvements without making downstream-answer claims', async () => {
     await expect(runMemoryHybridAblation()).resolves.toMatchObject({
-      schemaVersion: 'memory-hybrid-ablation-report-v1',
+      schemaVersion: 'memory-hybrid-ablation-report-v2',
       claimClass: 'diagnostic_only',
       downstreamAnswerEvaluated: false,
       caseCount: 5,
-      foregroundPromptVisibleCaseCount: 4,
-      componentOnlyCaseCount: 1,
+      foregroundPromptVisibleCaseCount: 5,
+      componentOnlyCaseCount: 0,
       lexicalControl: {
         caseCount: 1,
         identicalSelectionCount: 1,
@@ -50,15 +50,15 @@ describe('frozen hybrid memory ablation', () => {
         hybridRecallAtOne: 1,
       },
       foregroundPositiveRetrieval: {
-        caseCount: 2,
+        caseCount: 3,
         lexicalRecallAtOne: 0,
         hybridRecallAtOne: 1,
         hybridRecallGain: 1,
       },
       componentOnly: {
-        caseCount: 1,
+        caseCount: 0,
         lexicalRecallAtOne: 0,
-        hybridRecallAtOne: 1,
+        hybridRecallAtOne: 0,
       },
       diagnosticTarget: {
         minimumHybridRecallGain: 0.2,
@@ -84,8 +84,8 @@ describe('frozen hybrid memory ablation', () => {
           lexicalTargetHitCount: 0,
           hybridTargetHitCount: 1,
         },
-        local_semantic: {
-          evidenceClass: 'component_only',
+        local_similarity: {
+          evidenceClass: 'foreground_prompt_visible',
           caseCount: 1,
           lexicalTargetHitCount: 0,
           hybridTargetHitCount: 1,

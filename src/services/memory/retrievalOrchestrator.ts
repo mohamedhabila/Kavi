@@ -24,7 +24,7 @@ import type {
 import type { MemoryEpisode } from './episodes/types';
 import type {
   RecallCandidateStrategy,
-  RecallLocalSemanticInput,
+  RecallLocalSimilarityInput,
 } from './factRecallCandidateContract';
 import type { MemoryFact } from './facts/types';
 import { getMemoryTask } from './tasks';
@@ -48,7 +48,7 @@ export interface RetrievalOrchestratorInput {
   now?: number;
   factSelector?: MemoryFactSelector;
   candidateStrategy?: RecallCandidateStrategy;
-  localSemantic?: RecallLocalSemanticInput;
+  localSimilarity?: RecallLocalSimilarityInput;
 }
 
 export interface RetrievalOrchestratorResult {
@@ -145,7 +145,7 @@ function recallOptions(
     onTiming,
     ...(input.factSelector ? { selector: input.factSelector } : {}),
     ...(input.candidateStrategy ? { candidateStrategy: input.candidateStrategy } : {}),
-    ...(input.localSemantic ? { localSemantic: input.localSemantic } : {}),
+    ...(input.localSimilarity ? { localSimilarity: input.localSimilarity } : {}),
     memoryScope,
     useIntent: input.memoryUseIntent ?? 'automatic_prompt',
     now,

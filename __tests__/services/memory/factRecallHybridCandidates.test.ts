@@ -65,15 +65,15 @@ describe('hybrid recall candidate set', () => {
       lexicalCount: 2,
       entityCount: 0,
       temporalCount: 0,
-      localSemanticOutcome: 'not_requested',
+      localSimilarityOutcome: 'not_requested',
     });
   });
 
-  it('unions entity, temporal, and compatible semantic lanes with bounded provenance', () => {
+  it('unions entity, temporal, and compatible local-similarity lanes with bounded provenance', () => {
     const lexical = fact('lexical');
     const entityOnly = fact('entity-only', { updatedAt: 3 });
     const queryVector = createCurrentLocalSimilarityVector('violet release cipher');
-    const semanticOnly = fact('semantic-only', {
+    const similarityOnly = fact('similarity-only', {
       subjectId: 'entity-2',
       localSimilarity: queryVector,
       updatedAt: 2,
@@ -85,25 +85,25 @@ describe('hybrid recall candidate set', () => {
       anchorUnitSets: [],
       lexicalCandidates: [lexical],
       candidateUnitHits: new Map([['lexical', new Set(['1970'])]]),
-      eligibleFacts: [entityOnly, semanticOnly, lexical],
+      eligibleFacts: [entityOnly, similarityOnly, lexical],
       entities: [entity],
-      localSemantic: { queryVector, minimumSimilarity: 0.99 },
+      localSimilarity: { queryVector, minimumSimilarity: 0.99 },
       limit: 8,
     });
 
     expect(result.candidates.map((candidate) => candidate.id)).toEqual(
-      expect.arrayContaining(['lexical', 'entity-only', 'semantic-only']),
+      expect.arrayContaining(['lexical', 'entity-only', 'similarity-only']),
     );
     expect(result.provenanceByFactId.get('entity-only')?.reasons).toEqual(['entity', 'temporal']);
-    expect(result.provenanceByFactId.get('semantic-only')?.reasons).toContain('local_semantic');
+    expect(result.provenanceByFactId.get('similarity-only')?.reasons).toContain('local_similarity');
     expect(result.telemetry).toMatchObject({
       strategy: 'hybrid',
       eligibleScanCount: 3,
       lexicalCount: 1,
       entityCount: 2,
       temporalCount: 3,
-      localSemanticCount: 1,
-      localSemanticOutcome: 'applied',
+      localSimilarityCount: 1,
+      localSimilarityOutcome: 'applied',
       unionCount: 3,
     });
   });

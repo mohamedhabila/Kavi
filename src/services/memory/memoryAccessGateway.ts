@@ -20,6 +20,8 @@ import {
   type MemoryContextStrategy,
   type MemoryRetrievalStrategy,
 } from './memoryAccessPolicy';
+import { createCurrentLocalSimilarityVector } from './localSimilarity';
+import { buildRecentUserRetrievalQuery } from './retrievalQueryText';
 
 type MemoryAccessMode = 'chat' | 'agentic' | 'pilot';
 
@@ -89,6 +91,12 @@ export async function buildUnifiedMemoryAccessContext(
     };
   }
 
+  const localSimilarityQuery = buildRecentUserRetrievalQuery(scopedMessages);
+  const localSimilarity =
+    retrievalStrategy === 'production' && localSimilarityQuery
+      ? { queryVector: createCurrentLocalSimilarityVector(localSimilarityQuery) }
+      : undefined;
+
   const livingMemoryResult = await buildLivingMemorySections({
     messages: scopedMessages,
     ...(typeof request.now === 'number' ? { now: request.now } : {}),
@@ -98,6 +106,7 @@ export async function buildUnifiedMemoryAccessContext(
     personaId,
     taskId: request.taskId,
     candidateStrategy: retrievalStrategy === 'lexical_only' ? 'lexical' : 'hybrid',
+    ...(localSimilarity ? { localSimilarity } : {}),
     consistencyBarrier,
     ...(request.goals ? { goals: request.goals } : {}),
     ...(request.activeTaskId ? { activeTaskId: request.activeTaskId } : {}),

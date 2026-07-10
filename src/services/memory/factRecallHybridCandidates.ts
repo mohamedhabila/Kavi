@@ -4,7 +4,7 @@ import {
   type RecallCandidateProvenance,
   type RecallCandidateStageTelemetry,
   type RecallCandidateStrategy,
-  type RecallLocalSemanticInput,
+  type RecallLocalSimilarityInput,
 } from './factRecallCandidateContract';
 import { buildSupplementalRecallCandidateLanes } from './factRecallCandidateLanes';
 import {
@@ -23,7 +23,7 @@ export interface RecallCandidateSet {
 const EMPTY_PROVENANCE: RecallCandidateProvenance = Object.freeze({
   reasons: Object.freeze([]),
   fusionScore: 0,
-  semanticSimilarity: null,
+  localSimilarityScore: null,
 });
 
 function exactQuotedMatch(
@@ -63,7 +63,9 @@ function lexicalCandidateSet(input: {
     }
     provenanceByFactId.set(
       fact.id,
-      reasons.length > 0 ? { reasons, fusionScore: 0, semanticSimilarity: null } : EMPTY_PROVENANCE,
+      reasons.length > 0
+        ? { reasons, fusionScore: 0, localSimilarityScore: null }
+        : EMPTY_PROVENANCE,
     );
   }
   return {
@@ -71,14 +73,14 @@ function lexicalCandidateSet(input: {
     provenanceByFactId,
     telemetry: {
       strategy: 'lexical',
-      localSemanticOutcome: 'not_requested',
+      localSimilarityOutcome: 'not_requested',
       eligibleScanCount: 0,
       pinnedCount,
       exactQuotedCount,
       lexicalCount,
       entityCount: 0,
       temporalCount: 0,
-      localSemanticCount: 0,
+      localSimilarityCount: 0,
       unionCount: input.candidates.length,
       diversifiedCount: input.candidates.length,
       unionMs: 0,
@@ -102,7 +104,7 @@ export function buildRecallCandidateSet(input: {
   candidateUnitHits: ReadonlyMap<string, ReadonlySet<string>>;
   eligibleFacts: ReadonlyArray<MemoryFact>;
   entities: ReadonlyArray<MemoryEntity>;
-  localSemantic?: RecallLocalSemanticInput;
+  localSimilarity?: RecallLocalSimilarityInput;
   limit: number;
 }): RecallCandidateSet {
   const lexical = lexicalCandidateSet({
@@ -114,9 +116,7 @@ export function buildRecallCandidateSet(input: {
 
   const startedAt = Date.now();
   const exactFacts = input.lexicalCandidates
-    .filter((fact) =>
-      exactQuotedMatch(input.candidateUnitHits.get(fact.id), input.anchorUnitSets),
-    )
+    .filter((fact) => exactQuotedMatch(input.candidateUnitHits.get(fact.id), input.anchorUnitSets))
     .slice(0, RECALL_CANDIDATE_LIMITS.exactQuotedLane);
   const lexicalFacts = input.lexicalCandidates.filter(
     (fact) => (input.candidateUnitHits.get(fact.id)?.size ?? 0) > 0,
@@ -129,7 +129,7 @@ export function buildRecallCandidateSet(input: {
     queryUnits: input.queryUnits,
     eligibleFacts: input.eligibleFacts,
     entities: input.entities,
-    ...(input.localSemantic ? { localSemantic: input.localSemantic } : {}),
+    ...(input.localSimilarity ? { localSimilarity: input.localSimilarity } : {}),
   });
   const fused = fuseRecallCandidateLanes(
     [
@@ -138,7 +138,7 @@ export function buildRecallCandidateSet(input: {
       lane('lexical', lexicalFacts),
       { reason: 'entity', entries: supplemental.entity },
       { reason: 'temporal', entries: supplemental.temporal },
-      { reason: 'local_semantic', entries: supplemental.localSemantic },
+      { reason: 'local_similarity', entries: supplemental.localSimilarity },
     ],
     input.limit,
   );
@@ -153,14 +153,14 @@ export function buildRecallCandidateSet(input: {
     provenanceByFactId,
     telemetry: {
       strategy: 'hybrid',
-      localSemanticOutcome: supplemental.localSemanticOutcome,
+      localSimilarityOutcome: supplemental.localSimilarityOutcome,
       eligibleScanCount: input.eligibleFacts.length,
       pinnedCount: pinnedFacts.length,
       exactQuotedCount: exactFacts.length,
       lexicalCount: lexicalFacts.length,
       entityCount: supplemental.entity.length,
       temporalCount: supplemental.temporal.length,
-      localSemanticCount: supplemental.localSemantic.length,
+      localSimilarityCount: supplemental.localSimilarity.length,
       unionCount: fused.unionCount,
       diversifiedCount: fused.diversifiedCount,
       unionMs: Math.max(0, Date.now() - startedAt),

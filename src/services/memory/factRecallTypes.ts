@@ -5,7 +5,7 @@ import type {
   RecallCandidateProvenance,
   RecallCandidateStageTelemetry,
   RecallCandidateStrategy,
-  RecallLocalSemanticInput,
+  RecallLocalSimilarityInput,
 } from './factRecallCandidateContract';
 
 export interface RecallFactsOptions {
@@ -45,7 +45,7 @@ export interface RecallFactsOptions {
   /** Candidate union strategy. Production uses hybrid; lexical is the same-path ablation. */
   candidateStrategy?: RecallCandidateStrategy;
   /** Optional compatible local query vector. Retrieval never creates or fetches one. */
-  localSemantic?: RecallLocalSemanticInput;
+  localSimilarity?: RecallLocalSimilarityInput;
   /** Maximum already-eligible facts inspected by supplemental local lanes. */
   eligibleScanLimit?: number;
   /** Optional recall-stage telemetry for product diagnostics. */

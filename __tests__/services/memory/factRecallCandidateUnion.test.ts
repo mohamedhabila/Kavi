@@ -30,8 +30,8 @@ describe('hybrid recall candidate fusion', () => {
         { reason: 'lexical', entries: [{ fact: second }, { fact: first }] },
         { reason: 'entity', entries: [{ fact: first }, { fact: second }] },
         {
-          reason: 'local_semantic',
-          entries: [{ fact: first, semanticSimilarity: 0.91 }],
+          reason: 'local_similarity',
+          entries: [{ fact: first, localSimilarityScore: 0.91 }],
         },
       ],
       8,
@@ -40,9 +40,9 @@ describe('hybrid recall candidate fusion', () => {
     expect(result.unionCount).toBe(2);
     expect(result.candidates.map((candidate) => candidate.fact.id)).toEqual(['fact-a', 'fact-b']);
     expect(result.candidates[0]?.provenance).toEqual({
-      reasons: ['lexical', 'entity', 'local_semantic'],
+      reasons: ['lexical', 'entity', 'local_similarity'],
       fusionScore: 1,
-      semanticSimilarity: 0.91,
+      localSimilarityScore: 0.91,
     });
   });
 

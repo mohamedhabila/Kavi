@@ -8,7 +8,7 @@ import {
 
 export interface RecallCandidateLaneEntry {
   fact: MemoryFact;
-  semanticSimilarity?: number;
+  localSimilarityScore?: number;
 }
 
 export interface RecallCandidateLane {
@@ -27,7 +27,7 @@ const LANE_WEIGHTS: Readonly<Record<RecallCandidateReasonCode, number>> = Object
   lexical: 1,
   entity: 1.1,
   temporal: 0.2,
-  local_semantic: 1.05,
+  local_similarity: 1.05,
 });
 
 function laneLimit(reason: RecallCandidateReasonCode): number {
@@ -35,7 +35,7 @@ function laneLimit(reason: RecallCandidateReasonCode): number {
   if (reason === 'exact_quoted') return RECALL_CANDIDATE_LIMITS.exactQuotedLane;
   if (reason === 'entity') return RECALL_CANDIDATE_LIMITS.entityLane;
   if (reason === 'temporal') return RECALL_CANDIDATE_LIMITS.temporalLane;
-  if (reason === 'local_semantic') return RECALL_CANDIDATE_LIMITS.localSemanticLane;
+  if (reason === 'local_similarity') return RECALL_CANDIDATE_LIMITS.localSimilarityLane;
   return RECALL_CANDIDATE_LIMITS.maximumUnion;
 }
 
@@ -81,7 +81,7 @@ export function fuseRecallCandidateLanes(
       fact: MemoryFact;
       rawScore: number;
       reasons: Set<RecallCandidateReasonCode>;
-      semanticSimilarity: number | null;
+      localSimilarityScore: number | null;
     }
   >();
   for (const lane of lanes) {
@@ -95,18 +95,18 @@ export function fuseRecallCandidateLanes(
         fact: entry.fact,
         rawScore: 0,
         reasons: new Set<RecallCandidateReasonCode>(),
-        semanticSimilarity: null,
+        localSimilarityScore: null,
       };
       current.rawScore +=
         LANE_WEIGHTS[lane.reason] / (RECALL_CANDIDATE_LIMITS.reciprocalRankConstant + rank + 1);
       current.reasons.add(lane.reason);
       if (
-        typeof entry.semanticSimilarity === 'number' &&
-        Number.isFinite(entry.semanticSimilarity)
+        typeof entry.localSimilarityScore === 'number' &&
+        Number.isFinite(entry.localSimilarityScore)
       ) {
-        current.semanticSimilarity = Math.max(
-          current.semanticSimilarity ?? -1,
-          entry.semanticSimilarity,
+        current.localSimilarityScore = Math.max(
+          current.localSimilarityScore ?? -1,
+          entry.localSimilarityScore,
         );
       }
       byId.set(entry.fact.id, current);
@@ -127,7 +127,7 @@ export function fuseRecallCandidateLanes(
       provenance: {
         reasons: orderedReasons(entry.reasons),
         fusionScore: maxRawScore > 0 ? entry.rawScore / maxRawScore : 0,
-        semanticSimilarity: entry.semanticSimilarity,
+        localSimilarityScore: entry.localSimilarityScore,
       },
     }));
 

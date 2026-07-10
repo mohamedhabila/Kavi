@@ -67,7 +67,7 @@ function validOptionalTimestamp(value: unknown): value is number | null {
 }
 
 /**
- * Content-independent access gate used before scoring, entity lanes, semantic
+ * Content-independent access gate used before scoring, entity lanes, similarity
  * selection, or any provider-visible candidate projection.
  */
 export function canFactEnterRecallCandidates(

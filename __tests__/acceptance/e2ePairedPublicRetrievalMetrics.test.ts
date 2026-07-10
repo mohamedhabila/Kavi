@@ -8,14 +8,14 @@ type RetrievalTurns = Parameters<typeof buildE2EPairedPublicRetrievalMetrics>[0]
 
 const NOT_REQUESTED_CANDIDATES = {
   strategy: 'not_requested' as const,
-  localSemanticOutcome: 'not_requested' as const,
+  localSimilarityOutcome: 'not_requested' as const,
   eligibleScanCount: 0,
   pinnedCount: 0,
   exactQuotedCount: 0,
   lexicalCount: 0,
   entityCount: 0,
   temporalCount: 0,
-  localSemanticCount: 0,
+  localSimilarityCount: 0,
   unionCount: 0,
   diversifiedCount: 0,
   unionMs: 0,
@@ -163,7 +163,7 @@ describe('paired public retrieval metrics', () => {
       selectorCounts: { applied: 1, deterministicFallback: 1, notRequested: 1 },
       candidateStages: {
         strategyCounts: { notRequested: 2, lexical: 0, hybrid: 1 },
-        localSemanticOutcomeCounts: { notRequested: 3, unavailable: 0, applied: 0 },
+        localSimilarityOutcomeCounts: { notRequested: 3, unavailable: 0, applied: 0 },
         totals: {
           eligibleScanCount: 2,
           pinnedCount: 0,
@@ -171,7 +171,7 @@ describe('paired public retrieval metrics', () => {
           lexicalCount: 2,
           entityCount: 0,
           temporalCount: 2,
-          localSemanticCount: 0,
+          localSimilarityCount: 0,
           unionCount: 2,
           diversifiedCount: 2,
           unionMs: 1,

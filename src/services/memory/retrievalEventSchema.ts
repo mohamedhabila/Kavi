@@ -3,9 +3,31 @@ import type { getMemoryDb } from './sqlite-store';
 type MemoryDb = ReturnType<typeof getMemoryDb>;
 
 export function ensureRetrievalEventSchema(db: MemoryDb): void {
-  const existingColumns = db
+  let existingColumns = db
     .getAllSync<{ name: string }>('PRAGMA table_info(memory_retrieval_events)')
     .map((column) => column.name);
+  const legacyOutcomeColumn = existingColumns.includes('local_semantic_outcome');
+  const legacyCountColumn = existingColumns.includes('candidate_local_semantic_count');
+  if (legacyOutcomeColumn !== legacyCountColumn) {
+    throw new Error('memory_retrieval_local_similarity_schema_incomplete');
+  }
+  if (legacyOutcomeColumn && legacyCountColumn) {
+    if (
+      existingColumns.includes('local_similarity_outcome') ||
+      existingColumns.includes('candidate_local_similarity_count')
+    ) {
+      throw new Error('memory_retrieval_local_similarity_schema_conflict');
+    }
+    db.execSync(`
+      ALTER TABLE memory_retrieval_events
+        RENAME COLUMN local_semantic_outcome TO local_similarity_outcome;
+      ALTER TABLE memory_retrieval_events
+        RENAME COLUMN candidate_local_semantic_count TO candidate_local_similarity_count;
+    `);
+    existingColumns = db
+      .getAllSync<{ name: string }>('PRAGMA table_info(memory_retrieval_events)')
+      .map((column) => column.name);
+  }
   if (existingColumns.length > 0) {
     const additions = [
       [
@@ -45,8 +67,8 @@ export function ensureRetrievalEventSchema(db: MemoryDb): void {
         "TEXT NOT NULL DEFAULT 'not_requested' CHECK(candidate_strategy IN ('not_requested', 'lexical', 'hybrid'))",
       ],
       [
-        'local_semantic_outcome',
-        "TEXT NOT NULL DEFAULT 'not_requested' CHECK(local_semantic_outcome IN ('not_requested', 'unavailable', 'applied'))",
+        'local_similarity_outcome',
+        "TEXT NOT NULL DEFAULT 'not_requested' CHECK(local_similarity_outcome IN ('not_requested', 'unavailable', 'applied'))",
       ],
       [
         'candidate_eligible_scan_count',
@@ -73,8 +95,8 @@ export function ensureRetrievalEventSchema(db: MemoryDb): void {
         'INTEGER NOT NULL DEFAULT 0 CHECK(candidate_temporal_count >= 0 AND candidate_temporal_count <= 24)',
       ],
       [
-        'candidate_local_semantic_count',
-        'INTEGER NOT NULL DEFAULT 0 CHECK(candidate_local_semantic_count >= 0 AND candidate_local_semantic_count <= 32)',
+        'candidate_local_similarity_count',
+        'INTEGER NOT NULL DEFAULT 0 CHECK(candidate_local_similarity_count >= 0 AND candidate_local_similarity_count <= 32)',
       ],
       [
         'candidate_union_count',
@@ -130,14 +152,14 @@ export function ensureRetrievalEventSchema(db: MemoryDb): void {
       evidence_expansion_ms INTEGER NOT NULL DEFAULT 0 CHECK(evidence_expansion_ms >= 0 AND evidence_expansion_ms <= 600000),
       total_ms INTEGER NOT NULL CHECK(total_ms >= 0 AND total_ms <= 600000),
       candidate_strategy TEXT NOT NULL DEFAULT 'not_requested' CHECK(candidate_strategy IN ('not_requested', 'lexical', 'hybrid')),
-      local_semantic_outcome TEXT NOT NULL DEFAULT 'not_requested' CHECK(local_semantic_outcome IN ('not_requested', 'unavailable', 'applied')),
+      local_similarity_outcome TEXT NOT NULL DEFAULT 'not_requested' CHECK(local_similarity_outcome IN ('not_requested', 'unavailable', 'applied')),
       candidate_eligible_scan_count INTEGER NOT NULL DEFAULT 0 CHECK(candidate_eligible_scan_count >= 0 AND candidate_eligible_scan_count <= 500),
       candidate_pinned_count INTEGER NOT NULL DEFAULT 0 CHECK(candidate_pinned_count >= 0 AND candidate_pinned_count <= 2000),
       candidate_exact_quoted_count INTEGER NOT NULL DEFAULT 0 CHECK(candidate_exact_quoted_count >= 0 AND candidate_exact_quoted_count <= 2000),
       candidate_lexical_count INTEGER NOT NULL DEFAULT 0 CHECK(candidate_lexical_count >= 0 AND candidate_lexical_count <= 2000),
       candidate_entity_count INTEGER NOT NULL DEFAULT 0 CHECK(candidate_entity_count >= 0 AND candidate_entity_count <= 32),
       candidate_temporal_count INTEGER NOT NULL DEFAULT 0 CHECK(candidate_temporal_count >= 0 AND candidate_temporal_count <= 24),
-      candidate_local_semantic_count INTEGER NOT NULL DEFAULT 0 CHECK(candidate_local_semantic_count >= 0 AND candidate_local_semantic_count <= 32),
+      candidate_local_similarity_count INTEGER NOT NULL DEFAULT 0 CHECK(candidate_local_similarity_count >= 0 AND candidate_local_similarity_count <= 32),
       candidate_union_count INTEGER NOT NULL DEFAULT 0 CHECK(candidate_union_count >= 0 AND candidate_union_count <= 2000),
       candidate_diversified_count INTEGER NOT NULL DEFAULT 0 CHECK(candidate_diversified_count >= 0 AND candidate_diversified_count <= 2000),
       candidate_union_ms INTEGER NOT NULL DEFAULT 0 CHECK(candidate_union_ms >= 0 AND candidate_union_ms <= 600000),
@@ -157,28 +179,28 @@ export function ensureRetrievalEventSchema(db: MemoryDb): void {
       CHECK(total_ms >= evidence_expansion_ms),
       CHECK(candidate_union_ms <= fact_recall_ms),
       CHECK(candidate_diversified_count <= candidate_union_count),
-      CHECK(local_semantic_outcome = 'applied' OR candidate_local_semantic_count = 0),
+      CHECK(local_similarity_outcome = 'applied' OR candidate_local_similarity_count = 0),
       CHECK(
         candidate_strategy != 'not_requested'
-        OR (local_semantic_outcome = 'not_requested'
+        OR (local_similarity_outcome = 'not_requested'
           AND candidate_eligible_scan_count = 0
           AND candidate_pinned_count = 0
           AND candidate_exact_quoted_count = 0
           AND candidate_lexical_count = 0
           AND candidate_entity_count = 0
           AND candidate_temporal_count = 0
-          AND candidate_local_semantic_count = 0
+          AND candidate_local_similarity_count = 0
           AND candidate_union_count = 0
           AND candidate_diversified_count = 0
           AND candidate_union_ms = 0)
       ),
       CHECK(
         candidate_strategy != 'lexical'
-        OR (local_semantic_outcome = 'not_requested'
+        OR (local_similarity_outcome = 'not_requested'
           AND candidate_eligible_scan_count = 0
           AND candidate_entity_count = 0
           AND candidate_temporal_count = 0
-          AND candidate_local_semantic_count = 0
+          AND candidate_local_similarity_count = 0
           AND candidate_union_count = candidate_fact_count
           AND candidate_diversified_count = candidate_fact_count
           AND candidate_union_ms = 0)
@@ -190,11 +212,11 @@ export function ensureRetrievalEventSchema(db: MemoryDb): void {
           AND candidate_exact_quoted_count <= 24
           AND candidate_entity_count <= candidate_eligible_scan_count
           AND candidate_temporal_count <= candidate_eligible_scan_count
-          AND candidate_local_semantic_count <= candidate_eligible_scan_count
+          AND candidate_local_similarity_count <= candidate_eligible_scan_count
           AND candidate_fact_count <= candidate_union_count
           AND candidate_union_count <= candidate_pinned_count + candidate_exact_quoted_count
             + candidate_lexical_count + candidate_entity_count + candidate_temporal_count
-            + candidate_local_semantic_count
+            + candidate_local_similarity_count
           AND candidate_diversified_count <= candidate_fact_count)
       ),
       CHECK(expansion_outcome != 'failed' OR outcome IN ('degraded', 'failed')),

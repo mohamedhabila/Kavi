@@ -19,6 +19,7 @@ import { buildLivingMemorySections } from '../../../src/services/memory/livingMe
 import { recordThreadLocalEpisode } from '../../../src/services/memory/episodes/mutations';
 import { readRecentMemoryRetrievalEvents } from '../../../src/services/memory/retrievalLog';
 import type { Message } from '../../../src/types/message';
+import { createCurrentLocalSimilarityVector } from '../../../src/services/memory/localSimilarity';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -462,6 +463,44 @@ describe('living memory recall', () => {
         mode: 'query',
         outcome: 'degraded',
       });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('forwards the gateway-owned local-similarity vector without recreating it', async () => {
+    const retrievalOrchestrator = require('../../../src/services/memory/retrievalOrchestrator');
+    const localSimilarity = {
+      queryVector: createCurrentLocalSimilarityVector('misspelled continuity query'),
+    };
+    const spy = jest
+      .spyOn(retrievalOrchestrator, 'orchestrateMemoryRetrieval')
+      .mockResolvedValueOnce({
+        facts: [],
+        resolutionFacts: [],
+        episodes: [],
+        episodeSelections: [],
+        querySignals: [],
+        scoredFacts: [],
+      });
+    try {
+      await buildLivingMemorySections({
+        messages: [userMessage('misspelled continuity query', 1_000)],
+        conversationId: 'memory-local-similarity',
+        sourceThreadId: 'thread-local-similarity',
+        personaId: 'default',
+        taskId: null,
+        candidateStrategy: 'hybrid',
+        localSimilarity,
+        now: 2_000,
+      });
+
+      expect(spy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          candidateStrategy: 'hybrid',
+          localSimilarity,
+        }),
+      );
     } finally {
       spy.mockRestore();
     }

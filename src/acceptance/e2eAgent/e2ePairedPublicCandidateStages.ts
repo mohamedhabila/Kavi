@@ -4,20 +4,20 @@ import {
   MEMORY_RETRIEVAL_LOCAL_SEMANTIC_OUTCOMES,
   type MemoryRetrievalCandidateStrategy,
   type MemoryRetrievalCandidates,
-  type MemoryRetrievalLocalSemanticOutcome,
+  type MemoryRetrievalLocalSimilarityOutcome,
 } from '../../services/memory/retrievalEventTypes';
 
 const MAX_TIMING_MS = 600_000;
 const CANDIDATE_STAGE_KEYS = new Set([
   'strategy',
-  'localSemanticOutcome',
+  'localSimilarityOutcome',
   'eligibleScanCount',
   'pinnedCount',
   'exactQuotedCount',
   'lexicalCount',
   'entityCount',
   'temporalCount',
-  'localSemanticCount',
+  'localSimilarityCount',
   'unionCount',
   'diversifiedCount',
   'unionMs',
@@ -29,7 +29,7 @@ export type E2EPairedPublicCandidateStages = Readonly<{
     lexical: number;
     hybrid: number;
   }>;
-  localSemanticOutcomeCounts: Readonly<{
+  localSimilarityOutcomeCounts: Readonly<{
     notRequested: number;
     unavailable: number;
     applied: number;
@@ -41,7 +41,7 @@ export type E2EPairedPublicCandidateStages = Readonly<{
     lexicalCount: number;
     entityCount: number;
     temporalCount: number;
-    localSemanticCount: number;
+    localSimilarityCount: number;
     unionCount: number;
     diversifiedCount: number;
     unionMs: number;
@@ -51,7 +51,7 @@ export type E2EPairedPublicCandidateStages = Readonly<{
 
 export interface E2EPairedCandidateStageAccumulator {
   strategyCounts: { notRequested: number; lexical: number; hybrid: number };
-  localSemanticOutcomeCounts: { notRequested: number; unavailable: number; applied: number };
+  localSimilarityOutcomeCounts: { notRequested: number; unavailable: number; applied: number };
   totals: {
     eligibleScanCount: number;
     pinnedCount: number;
@@ -59,7 +59,7 @@ export interface E2EPairedCandidateStageAccumulator {
     lexicalCount: number;
     entityCount: number;
     temporalCount: number;
-    localSemanticCount: number;
+    localSimilarityCount: number;
     unionCount: number;
     diversifiedCount: number;
     unionMs: number;
@@ -74,11 +74,7 @@ function boundedInteger(value: unknown, label: string, maximum: number): number 
   return value as number;
 }
 
-function closedEnum<T extends string>(
-  value: unknown,
-  allowed: ReadonlyArray<T>,
-  label: string,
-): T {
+function closedEnum<T extends string>(value: unknown, allowed: ReadonlyArray<T>, label: string): T {
   if (typeof value !== 'string' || !allowed.includes(value as T)) {
     throw new Error(`${label} is unsupported.`);
   }
@@ -94,7 +90,7 @@ function addBounded(left: number, right: number, label: string): number {
 export function createE2EPairedCandidateStageAccumulator(): E2EPairedCandidateStageAccumulator {
   return {
     strategyCounts: { notRequested: 0, lexical: 0, hybrid: 0 },
-    localSemanticOutcomeCounts: { notRequested: 0, unavailable: 0, applied: 0 },
+    localSimilarityOutcomeCounts: { notRequested: 0, unavailable: 0, applied: 0 },
     totals: {
       eligibleScanCount: 0,
       pinnedCount: 0,
@@ -102,7 +98,7 @@ export function createE2EPairedCandidateStageAccumulator(): E2EPairedCandidateSt
       lexicalCount: 0,
       entityCount: 0,
       temporalCount: 0,
-      localSemanticCount: 0,
+      localSimilarityCount: 0,
       unionCount: 0,
       diversifiedCount: 0,
       unionMs: 0,
@@ -129,10 +125,10 @@ function normalizeCandidateStages(input: unknown): MemoryRetrievalCandidates {
       MEMORY_RETRIEVAL_CANDIDATE_STRATEGIES,
       'retrieval.candidates.strategy',
     ),
-    localSemanticOutcome: closedEnum(
-      candidate.localSemanticOutcome,
+    localSimilarityOutcome: closedEnum(
+      candidate.localSimilarityOutcome,
       MEMORY_RETRIEVAL_LOCAL_SEMANTIC_OUTCOMES,
-      'retrieval.candidates.localSemanticOutcome',
+      'retrieval.candidates.localSimilarityOutcome',
     ),
     eligibleScanCount: boundedInteger(
       candidate.eligibleScanCount,
@@ -164,10 +160,10 @@ function normalizeCandidateStages(input: unknown): MemoryRetrievalCandidates {
       'retrieval.candidates.temporalCount',
       RECALL_CANDIDATE_LIMITS.temporalLane,
     ),
-    localSemanticCount: boundedInteger(
-      candidate.localSemanticCount,
-      'retrieval.candidates.localSemanticCount',
-      RECALL_CANDIDATE_LIMITS.localSemanticLane,
+    localSimilarityCount: boundedInteger(
+      candidate.localSimilarityCount,
+      'retrieval.candidates.localSimilarityCount',
+      RECALL_CANDIDATE_LIMITS.localSimilarityLane,
     ),
     unionCount: boundedInteger(
       candidate.unionCount,
@@ -195,27 +191,27 @@ function validateCandidateStages(
     candidates.lexicalCount,
     candidates.entityCount,
     candidates.temporalCount,
-    candidates.localSemanticCount,
+    candidates.localSimilarityCount,
     candidates.unionCount,
     candidates.diversifiedCount,
     candidates.unionMs,
   ];
   if (
     candidates.unionMs > factRecallMs ||
-    (candidates.localSemanticOutcome !== 'applied' && candidates.localSemanticCount !== 0) ||
+    (candidates.localSimilarityOutcome !== 'applied' && candidates.localSimilarityCount !== 0) ||
     (candidates.strategy === 'not_requested' &&
-      (candidates.localSemanticOutcome !== 'not_requested' ||
+      (candidates.localSimilarityOutcome !== 'not_requested' ||
         stageValues.some((value) => value !== 0)))
   ) {
     throw new Error('Paired retrieval candidate stage is inconsistent.');
   }
   if (
     candidates.strategy === 'lexical' &&
-    (candidates.localSemanticOutcome !== 'not_requested' ||
+    (candidates.localSimilarityOutcome !== 'not_requested' ||
       candidates.eligibleScanCount !== 0 ||
       candidates.entityCount !== 0 ||
       candidates.temporalCount !== 0 ||
-      candidates.localSemanticCount !== 0 ||
+      candidates.localSimilarityCount !== 0 ||
       candidates.unionCount !== candidateFactCount ||
       candidates.diversifiedCount !== candidateFactCount ||
       candidates.unionMs !== 0)
@@ -228,7 +224,7 @@ function validateCandidateStages(
     candidates.lexicalCount +
     candidates.entityCount +
     candidates.temporalCount +
-    candidates.localSemanticCount;
+    candidates.localSimilarityCount;
   if (
     candidates.strategy === 'hybrid' &&
     (candidateFactCount > RECALL_CANDIDATE_LIMITS.maximumUnion ||
@@ -236,7 +232,7 @@ function validateCandidateStages(
       candidates.exactQuotedCount > RECALL_CANDIDATE_LIMITS.exactQuotedLane ||
       candidates.entityCount > candidates.eligibleScanCount ||
       candidates.temporalCount > candidates.eligibleScanCount ||
-      candidates.localSemanticCount > candidates.eligibleScanCount ||
+      candidates.localSimilarityCount > candidates.eligibleScanCount ||
       candidates.unionCount < candidateFactCount ||
       candidates.unionCount > laneCount ||
       candidates.diversifiedCount > candidateFactCount)
@@ -251,9 +247,9 @@ function strategyKey(
   return strategy === 'not_requested' ? 'notRequested' : strategy;
 }
 
-function semanticOutcomeKey(
-  outcome: MemoryRetrievalLocalSemanticOutcome,
-): keyof E2EPairedCandidateStageAccumulator['localSemanticOutcomeCounts'] {
+function similarityOutcomeKey(
+  outcome: MemoryRetrievalLocalSimilarityOutcome,
+): keyof E2EPairedCandidateStageAccumulator['localSimilarityOutcomeCounts'] {
   return outcome === 'not_requested' ? 'notRequested' : outcome;
 }
 
@@ -271,11 +267,11 @@ export function validateAndAccumulateE2EPairedCandidateStages(input: {
     1,
     `candidateStages.strategyCounts.${strategy}`,
   );
-  const semanticOutcome = semanticOutcomeKey(candidates.localSemanticOutcome);
-  input.accumulator.localSemanticOutcomeCounts[semanticOutcome] = addBounded(
-    input.accumulator.localSemanticOutcomeCounts[semanticOutcome],
+  const similarityOutcome = similarityOutcomeKey(candidates.localSimilarityOutcome);
+  input.accumulator.localSimilarityOutcomeCounts[similarityOutcome] = addBounded(
+    input.accumulator.localSimilarityOutcomeCounts[similarityOutcome],
     1,
-    `candidateStages.localSemanticOutcomeCounts.${semanticOutcome}`,
+    `candidateStages.localSimilarityOutcomeCounts.${similarityOutcome}`,
   );
   for (const key of Object.keys(input.accumulator.totals) as Array<
     keyof E2EPairedCandidateStageAccumulator['totals']
@@ -295,7 +291,7 @@ export function projectE2EPairedCandidateStages(
 ): E2EPairedPublicCandidateStages {
   return {
     strategyCounts: { ...accumulator.strategyCounts },
-    localSemanticOutcomeCounts: { ...accumulator.localSemanticOutcomeCounts },
+    localSimilarityOutcomeCounts: { ...accumulator.localSimilarityOutcomeCounts },
     totals: { ...accumulator.totals },
     unionMsMax: accumulator.unionMsMax,
   };

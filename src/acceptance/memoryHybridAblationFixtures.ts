@@ -1,14 +1,14 @@
 import type { EntityType } from '../services/memory/entities';
 
-export const MEMORY_HYBRID_ABLATION_FIXTURE_VERSION = 'memory-hybrid-ablation-v1' as const;
+export const MEMORY_HYBRID_ABLATION_FIXTURE_VERSION = 'memory-hybrid-ablation-v2' as const;
 export const MEMORY_HYBRID_ABLATION_FIXTURE_SIGNATURE =
-  'sha256:f734c9f3b07f995256ebc6eefcb2ae6898b56c3bd25f9fe80e78d20dc99e0036' as const;
+  'sha256:7c68654d5db2b6185c0f52ada8d736ec314f939145db6eff98df6059df3cd6af' as const;
 
 export type MemoryHybridAblationFamily =
   | 'lexical_control'
   | 'entity'
   | 'temporal'
-  | 'local_semantic'
+  | 'local_similarity'
   | 'eligibility_negative';
 
 export type MemoryHybridAblationPath = 'foreground_prompt_visible' | 'component_only';
@@ -151,17 +151,17 @@ export const MEMORY_HYBRID_ABLATION_CASES: ReadonlyArray<MemoryHybridAblationCas
     ],
   },
   {
-    id: 'compatible-local-semantic',
-    family: 'local_semantic',
-    path: 'component_only',
+    id: 'compatible-local-similarity',
+    family: 'local_similarity',
+    path: 'foreground_prompt_visible',
     query: 'opaqueness signalling violett ciphered',
     now: 1_000,
     expectedFactKey: 'target',
-    entities: [{ key: 'semantic', name: 'Semantic Project', type: 'project' }],
+    entities: [{ key: 'similarity', name: 'Similarity Project', type: 'project' }],
     facts: [
       {
         key: 'target',
-        entityKey: 'semantic',
+        entityKey: 'similarity',
         predicate: 'opaque_signal',
         objectText: 'violet-cipher',
         now: 100,
@@ -169,7 +169,7 @@ export const MEMORY_HYBRID_ABLATION_CASES: ReadonlyArray<MemoryHybridAblationCas
       },
       {
         key: 'distractor',
-        entityKey: 'semantic',
+        entityKey: 'similarity',
         predicate: 'other_signal',
         objectText: 'orange-cipher',
         now: 101,

@@ -17,7 +17,7 @@ import { buildE2EScenarioTraceSummary } from './e2eTraceSummary';
 import { stableHash, stableStringify } from './e2eTraceRedaction';
 import type { E2EScenarioTurnTrace } from './types';
 
-export const E2E_PAIRED_PUBLIC_REPORT_SCHEMA_VERSION = 'e2e-paired-public-report-v1' as const;
+export const E2E_PAIRED_PUBLIC_REPORT_SCHEMA_VERSION = 'e2e-paired-public-report-v2' as const;
 
 type PublicConditionMetrics = Readonly<{
   executionCompleted: boolean;

@@ -110,8 +110,8 @@ describe('hybrid fact recall integration', () => {
     expect(hybrid[0].candidateProvenance.reasons).toContain('temporal');
   });
 
-  it('consumes only caller-supplied compatible local semantic vectors', async () => {
-    const project = upsertEntity({ name: 'Semantic Project', type: 'project' });
+  it('consumes only caller-supplied compatible local-similarity vectors', async () => {
+    const project = upsertEntity({ name: 'Similarity Project', type: 'project' });
     const target = recordFact({
       subjectId: project.id,
       predicate: 'opaque_signal',
@@ -134,7 +134,7 @@ describe('hybrid fact recall integration', () => {
     });
     const hybrid = await recallScoredFactsForQuery('conceptually related memory', {
       candidateStrategy: 'hybrid',
-      localSemantic: { queryVector, minimumSimilarity: 0.99 },
+      localSimilarity: { queryVector, minimumSimilarity: 0.99 },
       now: 1_003,
       onTiming: (value) => {
         timing = value;
@@ -144,12 +144,12 @@ describe('hybrid fact recall integration', () => {
     expect(lexical).toHaveLength(0);
     expect(hybrid.map((entry) => entry.fact.id)).toEqual([target.fact.id]);
     expect(hybrid[0].candidateProvenance.reasons).toEqual(
-      expect.arrayContaining(['local_semantic']),
+      expect.arrayContaining(['local_similarity']),
     );
-    expect(hybrid[0].candidateProvenance.semanticSimilarity).toBeCloseTo(1);
+    expect(hybrid[0].candidateProvenance.localSimilarityScore).toBeCloseTo(1);
     expect(timing?.candidateStages).toMatchObject({
-      localSemanticOutcome: 'applied',
-      localSemanticCount: 1,
+      localSimilarityOutcome: 'applied',
+      localSimilarityCount: 1,
     });
   });
 
@@ -177,7 +177,7 @@ describe('hybrid fact recall integration', () => {
     });
     const hybrid = await recallScoredFactsForQuery('ocean teal preference', {
       candidateStrategy: 'hybrid',
-      localSemantic: { queryVector: createCurrentLocalSimilarityVector('ocean teal preference') },
+      localSimilarity: { queryVector: createCurrentLocalSimilarityVector('ocean teal preference') },
       now: 101,
       onTiming: (value) => {
         timing = value;
@@ -187,10 +187,10 @@ describe('hybrid fact recall integration', () => {
     expect(lexical.map((entry) => entry.fact.id)).toEqual([target.fact.id]);
     expect(hybrid.map((entry) => entry.fact.id)).toEqual(lexical.map((entry) => entry.fact.id));
     expect(hybrid.map((entry) => entry.score)).toEqual(lexical.map((entry) => entry.score));
-    expect(timing?.candidateStages?.localSemanticOutcome).toBe('unavailable');
+    expect(timing?.candidateStages?.localSimilarityOutcome).toBe('unavailable');
   });
 
-  it('applies scope, validity, expiry, and deletion filters before semantic ranking', async () => {
+  it('applies scope, validity, expiry, and deletion filters before similarity ranking', async () => {
     const subject = upsertEntity({ name: 'Filter Subject', type: 'concept' });
     const allowed = recordFact({
       subjectId: subject.id,
@@ -243,7 +243,7 @@ describe('hybrid fact recall integration', () => {
       'unindexed conceptual query',
       {
         candidateStrategy: 'hybrid',
-        localSemantic: { queryVector: allowed.fact.localSimilarity!, minimumSimilarity: 0.99 },
+        localSimilarity: { queryVector: allowed.fact.localSimilarity!, minimumSimilarity: 0.99 },
         asOf: 2_000,
         now: 2_000,
       },

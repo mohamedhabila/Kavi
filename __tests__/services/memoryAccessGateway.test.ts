@@ -1,6 +1,14 @@
 import type { Message } from '../../src/types/message';
 import { buildUnifiedMemoryAccessContext } from '../../src/services/memory/memoryAccessGateway';
 
+jest.mock('../../src/services/memory/localSimilarity', () => {
+  const actual = jest.requireActual('../../src/services/memory/localSimilarity');
+  return {
+    ...actual,
+    createCurrentLocalSimilarityVector: jest.fn(actual.createCurrentLocalSimilarityVector),
+  };
+});
+
 jest.mock('../../src/services/memory/livingMemoryBridge', () => ({
   buildLivingMemorySections: jest.fn().mockResolvedValue({
     sections: [{ text: 'focus section', cacheable: false }],
@@ -24,6 +32,7 @@ import { canReadLongTermMemory } from '../../src/services/memory/policy';
 import { getIngestionJobForSourceTurn } from '../../src/services/memory/ingestionQueueStore';
 import type { IngestionJob } from '../../src/services/memory/ingestionQueueStore';
 import type { LlmProviderConfig } from '../../src/types/provider';
+import { createCurrentLocalSimilarityVector } from '../../src/services/memory/localSimilarity';
 
 const RETRIEVAL_PROVIDER: LlmProviderConfig = {
   id: 'retrieval-provider',
@@ -142,6 +151,13 @@ describe('memoryAccessGateway', () => {
       queryCount: 1,
     });
     expect(result.livingMemory?.consistencyBarrier).toEqual(result.consistencyBarrier);
+    expect(createCurrentLocalSimilarityVector).toHaveBeenCalledTimes(1);
+    expect(createCurrentLocalSimilarityVector).toHaveBeenCalledWith(
+      'Discuss travel itinerary options\nFix migration mismatch in release workflow',
+    );
+    expect(jest.mocked(buildLivingMemorySections).mock.calls[0][0].localSimilarity).toMatchObject({
+      queryVector: { model: 'unicode-char-ngram-v1', dimensions: 384 },
+    });
   });
 
   it('applies boundary selection in pilot mode before loading living memory', async () => {
@@ -201,6 +217,7 @@ describe('memoryAccessGateway', () => {
     expect(result.scopedMessages).toEqual(messages);
     const livingMemoryInput = jest.mocked(buildLivingMemorySections).mock.calls[0][0];
     expect(livingMemoryInput).not.toHaveProperty('retrievalLlm');
+    expect(livingMemoryInput).not.toHaveProperty('localSimilarity');
     expect(livingMemoryInput.candidateStrategy).toBe('lexical');
 
     await buildUnifiedMemoryAccessContext({
@@ -214,7 +231,11 @@ describe('memoryAccessGateway', () => {
     expect(jest.mocked(buildLivingMemorySections).mock.calls[1][0]).toMatchObject({
       retrievalLlm: { provider: RETRIEVAL_PROVIDER, model: RETRIEVAL_PROVIDER.model },
       candidateStrategy: 'hybrid',
+      localSimilarity: {
+        queryVector: { model: 'unicode-char-ngram-v1', dimensions: 384 },
+      },
     });
+    expect(createCurrentLocalSimilarityVector).toHaveBeenCalledTimes(1);
   });
 
   it('rejects unknown memory access policies instead of silently changing behavior', async () => {
@@ -247,6 +268,7 @@ describe('memoryAccessGateway', () => {
     expect(result.consistencyBarrier.outcome).toBe('opt_out');
     expect(mockedGetIngestionJobForSourceTurn).not.toHaveBeenCalled();
     expect(buildLivingMemorySections).not.toHaveBeenCalled();
+    expect(createCurrentLocalSimilarityVector).not.toHaveBeenCalled();
   });
 
   it('excludes trailing internal control user prompts before boundary and recall', async () => {

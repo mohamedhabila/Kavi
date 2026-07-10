@@ -8,7 +8,7 @@ const RELEVANCE_EPSILON = 1e-6;
 const QUOTED_ANCHOR_MATCH_BOOST = 0.18;
 const QUOTED_ANCHOR_FULL_MATCH_BOOST = 0.12;
 const EXPLICIT_TEMPORAL_RELEVANCE = 0.12;
-const SEMANTIC_CANDIDATE_WEIGHT = 0.5;
+const LOCAL_SIMILARITY_CANDIDATE_WEIGHT = 0.5;
 const FUSION_SCORE_WEIGHT = 0.025;
 
 export function buildQueryUnitWeightsFromHits(
@@ -54,7 +54,7 @@ export function buildScoredFact(params: {
     queryUnits,
     factUnitHits,
     anchorUnitSets,
-    candidateProvenance = { reasons: [], fusionScore: 0, semanticSimilarity: null },
+    candidateProvenance = { reasons: [], fusionScore: 0, localSimilarityScore: null },
     explicitTemporalSignal,
     alwaysIncludePinned,
     options,
@@ -62,14 +62,16 @@ export function buildScoredFact(params: {
   } = params;
   const lexicalScore = lexicalOverlapFromUnitHits(queryUnits, factUnitHits, params.unitWeights);
   const textScore = lexicalScore;
+  const localSimilarityRelevance =
+    candidateProvenance.reasons.includes('local_similarity') &&
+    candidateProvenance.localSimilarityScore !== null
+      ? Math.max(0, candidateProvenance.localSimilarityScore) * LOCAL_SIMILARITY_CANDIDATE_WEIGHT
+      : 0;
   const candidateRelevanceScore = Math.max(
     explicitTemporalSignal && candidateProvenance.reasons.includes('temporal')
       ? EXPLICIT_TEMPORAL_RELEVANCE
       : 0,
-    candidateProvenance.reasons.includes('local_semantic') &&
-      candidateProvenance.semanticSimilarity !== null
-      ? Math.max(0, candidateProvenance.semanticSimilarity) * SEMANTIC_CANDIDATE_WEIGHT
-      : 0,
+    localSimilarityRelevance,
   );
   const pinnedBoost = alwaysIncludePinned && fact.pinned ? PINNED_BOOST : 0;
   const decayMultiplier = scoreDecay(fact, now);
@@ -84,9 +86,10 @@ export function buildScoredFact(params: {
     retrievabilityScore;
   const anchorBoost = anchorMatchBoost(anchorUnitSets, factUnitHits);
   const hasRelevance = relevanceScore > RELEVANCE_EPSILON;
+  const localSimilarityAddsRelevance = localSimilarityRelevance > lexicalScore + RELEVANCE_EPSILON;
   const hasApplicableFusionSignal =
     candidateProvenance.reasons.includes('entity') ||
-    candidateProvenance.reasons.includes('local_semantic') ||
+    localSimilarityAddsRelevance ||
     (explicitTemporalSignal && candidateProvenance.reasons.includes('temporal'));
   const score =
     relevanceScore +

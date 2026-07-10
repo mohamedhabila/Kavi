@@ -146,8 +146,8 @@ function normalizeCandidates(
     MEMORY_RETRIEVAL_CANDIDATE_STRATEGIES,
     'invalid_candidates',
   );
-  const localSemanticOutcome = requireEnum(
-    input.localSemanticOutcome,
+  const localSimilarityOutcome = requireEnum(
+    input.localSimilarityOutcome,
     MEMORY_RETRIEVAL_LOCAL_SEMANTIC_OUTCOMES,
     'invalid_candidates',
   );
@@ -155,19 +155,16 @@ function normalizeCandidates(
     requireBoundedInteger(value, maximum, 'invalid_candidates');
   const candidates: MemoryRetrievalCandidates = {
     strategy,
-    localSemanticOutcome,
-    eligibleScanCount: count(
-      input.eligibleScanCount,
-      RECALL_CANDIDATE_LIMITS.maximumEligibleScan,
-    ),
+    localSimilarityOutcome,
+    eligibleScanCount: count(input.eligibleScanCount, RECALL_CANDIDATE_LIMITS.maximumEligibleScan),
     pinnedCount: count(input.pinnedCount, RECALL_CANDIDATE_LIMITS.maximumUnion),
     exactQuotedCount: count(input.exactQuotedCount, RECALL_CANDIDATE_LIMITS.maximumUnion),
     lexicalCount: count(input.lexicalCount, RECALL_CANDIDATE_LIMITS.maximumUnion),
     entityCount: count(input.entityCount, RECALL_CANDIDATE_LIMITS.entityLane),
     temporalCount: count(input.temporalCount, RECALL_CANDIDATE_LIMITS.temporalLane),
-    localSemanticCount: count(
-      input.localSemanticCount,
-      RECALL_CANDIDATE_LIMITS.localSemanticLane,
+    localSimilarityCount: count(
+      input.localSimilarityCount,
+      RECALL_CANDIDATE_LIMITS.localSimilarityLane,
     ),
     unionCount: count(input.unionCount, RECALL_CANDIDATE_LIMITS.maximumUnion),
     diversifiedCount: count(input.diversifiedCount, RECALL_CANDIDATE_LIMITS.maximumUnion),
@@ -180,26 +177,26 @@ function normalizeCandidates(
     candidates.lexicalCount,
     candidates.entityCount,
     candidates.temporalCount,
-    candidates.localSemanticCount,
+    candidates.localSimilarityCount,
     candidates.unionCount,
     candidates.diversifiedCount,
     candidates.unionMs,
   ];
   if (
     (strategy === 'not_requested' &&
-      (localSemanticOutcome !== 'not_requested' || stageCounts.some((value) => value !== 0))) ||
-    (localSemanticOutcome !== 'applied' && candidates.localSemanticCount !== 0) ||
+      (localSimilarityOutcome !== 'not_requested' || stageCounts.some((value) => value !== 0))) ||
+    (localSimilarityOutcome !== 'applied' && candidates.localSimilarityCount !== 0) ||
     candidates.unionMs > factRecallMs
   ) {
     throw new RetrievalEventValidationError('invalid_candidates');
   }
   if (
     strategy === 'lexical' &&
-    (localSemanticOutcome !== 'not_requested' ||
+    (localSimilarityOutcome !== 'not_requested' ||
       candidates.eligibleScanCount !== 0 ||
       candidates.entityCount !== 0 ||
       candidates.temporalCount !== 0 ||
-      candidates.localSemanticCount !== 0 ||
+      candidates.localSimilarityCount !== 0 ||
       candidates.unionCount !== candidateFactCount ||
       candidates.diversifiedCount !== candidateFactCount ||
       candidates.unionMs !== 0)
@@ -212,7 +209,7 @@ function normalizeCandidates(
     candidates.lexicalCount +
     candidates.entityCount +
     candidates.temporalCount +
-    candidates.localSemanticCount;
+    candidates.localSimilarityCount;
   if (
     strategy === 'hybrid' &&
     (candidateFactCount > RECALL_CANDIDATE_LIMITS.maximumUnion ||
@@ -220,7 +217,7 @@ function normalizeCandidates(
       candidates.exactQuotedCount > RECALL_CANDIDATE_LIMITS.exactQuotedLane ||
       candidates.entityCount > candidates.eligibleScanCount ||
       candidates.temporalCount > candidates.eligibleScanCount ||
-      candidates.localSemanticCount > candidates.eligibleScanCount ||
+      candidates.localSimilarityCount > candidates.eligibleScanCount ||
       candidates.unionCount < candidateFactCount ||
       candidates.unionCount > supplementalLaneCount ||
       candidates.diversifiedCount > candidateFactCount)
@@ -479,14 +476,14 @@ function rowToEvent(row: MemoryRetrievalEventRow): MemoryRetrievalEvent {
     },
     candidates: {
       strategy: row.candidate_strategy,
-      localSemanticOutcome: row.local_semantic_outcome,
+      localSimilarityOutcome: row.local_similarity_outcome,
       eligibleScanCount: row.candidate_eligible_scan_count,
       pinnedCount: row.candidate_pinned_count,
       exactQuotedCount: row.candidate_exact_quoted_count,
       lexicalCount: row.candidate_lexical_count,
       entityCount: row.candidate_entity_count,
       temporalCount: row.candidate_temporal_count,
-      localSemanticCount: row.candidate_local_semantic_count,
+      localSimilarityCount: row.candidate_local_similarity_count,
       unionCount: row.candidate_union_count,
       diversifiedCount: row.candidate_diversified_count,
       unionMs: row.candidate_union_ms,
@@ -540,9 +537,9 @@ export async function recordMemoryRetrievalEvent(
            candidate_episode_count, selected_episode_count, selected_episode_ids_json,
            plan_ms, fact_recall_ms, episode_recall_ms, candidate_fetch_ms, score_ms,
            selector_ms, evidence_expansion_ms, total_ms,
-           candidate_strategy, local_semantic_outcome, candidate_eligible_scan_count,
+           candidate_strategy, local_similarity_outcome, candidate_eligible_scan_count,
            candidate_pinned_count, candidate_exact_quoted_count, candidate_lexical_count,
-           candidate_entity_count, candidate_temporal_count, candidate_local_semantic_count,
+           candidate_entity_count, candidate_temporal_count, candidate_local_similarity_count,
            candidate_union_count, candidate_diversified_count, candidate_union_ms,
            expansion_outcome,
            expansion_requested_source_count, expansion_accepted_source_count,
@@ -582,14 +579,14 @@ export async function recordMemoryRetrievalEvent(
         event.timings.evidenceExpansionMs,
         event.timings.totalMs,
         event.candidates.strategy,
-        event.candidates.localSemanticOutcome,
+        event.candidates.localSimilarityOutcome,
         event.candidates.eligibleScanCount,
         event.candidates.pinnedCount,
         event.candidates.exactQuotedCount,
         event.candidates.lexicalCount,
         event.candidates.entityCount,
         event.candidates.temporalCount,
-        event.candidates.localSemanticCount,
+        event.candidates.localSimilarityCount,
         event.candidates.unionCount,
         event.candidates.diversifiedCount,
         event.candidates.unionMs,

@@ -55,6 +55,27 @@ function indexedColumns(index: string): string[] {
 }
 
 describe('ensureFactSchema', () => {
+  it('renames the retired retrieval similarity columns in place', () => {
+    ensureFactSchema();
+    const db = getMemoryDb();
+    db.execSync(`
+      ALTER TABLE memory_retrieval_events
+        RENAME COLUMN local_similarity_outcome TO local_semantic_outcome;
+      ALTER TABLE memory_retrieval_events
+        RENAME COLUMN candidate_local_similarity_count TO candidate_local_semantic_count;
+    `);
+
+    resetFactSchemaCacheForTests();
+    ensureFactSchema();
+
+    const columns = columnNames('memory_retrieval_events');
+    expect(columns).toEqual(
+      expect.arrayContaining(['local_similarity_outcome', 'candidate_local_similarity_count']),
+    );
+    expect(columns).not.toContain('local_semantic_outcome');
+    expect(columns).not.toContain('candidate_local_semantic_count');
+  });
+
   it('migrates legacy unique hashes without losing fact history rows', () => {
     ensureFactSchema();
     const freshIndexes = indexNames('memory_facts').sort();

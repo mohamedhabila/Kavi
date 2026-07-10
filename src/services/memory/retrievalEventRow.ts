@@ -2,7 +2,7 @@ import type {
   MemoryRetrievalBarrierOutcome,
   MemoryRetrievalCandidateStrategy,
   MemoryRetrievalExpansion,
-  MemoryRetrievalLocalSemanticOutcome,
+  MemoryRetrievalLocalSimilarityOutcome,
   MemoryRetrievalMode,
   MemoryRetrievalOperation,
   MemoryRetrievalOutcome,
@@ -36,14 +36,14 @@ export interface MemoryRetrievalEventRow {
   evidence_expansion_ms: number;
   total_ms: number;
   candidate_strategy: MemoryRetrievalCandidateStrategy;
-  local_semantic_outcome: MemoryRetrievalLocalSemanticOutcome;
+  local_similarity_outcome: MemoryRetrievalLocalSimilarityOutcome;
   candidate_eligible_scan_count: number;
   candidate_pinned_count: number;
   candidate_exact_quoted_count: number;
   candidate_lexical_count: number;
   candidate_entity_count: number;
   candidate_temporal_count: number;
-  candidate_local_semantic_count: number;
+  candidate_local_similarity_count: number;
   candidate_union_count: number;
   candidate_diversified_count: number;
   candidate_union_ms: number;

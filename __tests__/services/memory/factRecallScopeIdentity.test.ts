@@ -426,7 +426,7 @@ describe('fact recall SQL scope identity', () => {
     expect(candidates.map((fact) => fact.id).sort()).toEqual(expectedIds);
   });
 
-  it('keeps saturated private rows out of hybrid lanes and semantic selector input', async () => {
+  it('keeps saturated private rows out of local-similarity lanes and semantic selector input', async () => {
     const targetEntity = upsertEntity({
       name: 'Project Aurora',
       type: 'project',
@@ -476,11 +476,11 @@ describe('fact recall SQL scope identity', () => {
         entityTiming = timing;
       },
     });
-    const semanticRecall = await recallScoredFactsForQuery('conceptually related memory', {
+    const localSimilarityRecall = await recallScoredFactsForQuery('conceptually related memory', {
       candidateStrategy: 'hybrid',
       memoryScope: activeScope(),
       useIntent: 'automatic_prompt',
-      localSemantic: { queryVector: target.fact.localSimilarity!, minimumSimilarity: 0.99 },
+      localSimilarity: { queryVector: target.fact.localSimilarity!, minimumSimilarity: 0.99 },
       candidatePoolLimit: 128,
       eligibleScanLimit: 256,
       limit: 1,
@@ -494,8 +494,8 @@ describe('fact recall SQL scope identity', () => {
     });
     expect(selectorCandidateIds).toContain(target.fact.id);
     expect(selectorCandidateIds.some((id) => blockedIds.has(id))).toBe(false);
-    expect(semanticRecall.map((entry) => entry.fact.id)).toEqual([target.fact.id]);
-    expect(semanticRecall[0].candidateProvenance.reasons).toContain('local_semantic');
+    expect(localSimilarityRecall.map((entry) => entry.fact.id)).toEqual([target.fact.id]);
+    expect(localSimilarityRecall[0].candidateProvenance.reasons).toContain('local_similarity');
   });
 
   it('keeps task-null closed, permits explicit sensitive access, and honors past as-of', () => {

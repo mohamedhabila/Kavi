@@ -33,7 +33,7 @@ type CaseResult = Readonly<{
 }>;
 
 export type MemoryHybridAblationReport = Readonly<{
-  schemaVersion: 'memory-hybrid-ablation-report-v1';
+  schemaVersion: 'memory-hybrid-ablation-report-v2';
   fixtureVersion: typeof MEMORY_HYBRID_ABLATION_FIXTURE_VERSION;
   fixtureSignature: typeof MEMORY_HYBRID_ABLATION_FIXTURE_SIGNATURE;
   claimClass: 'diagnostic_only';
@@ -72,7 +72,7 @@ export type MemoryHybridAblationReport = Readonly<{
   }>;
   families: Readonly<
     Record<
-      'entity' | 'temporal' | 'local_semantic',
+      'entity' | 'temporal' | 'local_similarity',
       Readonly<{
         evidenceClass: 'foreground_prompt_visible' | 'component_only';
         caseCount: number;
@@ -215,7 +215,7 @@ async function runForegroundCase(
   return evaluateSelection(fixture, factKeysById, event.counts.selectedFactIds);
 }
 
-async function runLocalSemanticCase(
+async function runLocalSimilarityCase(
   fixture: MemoryHybridAblationCase,
   strategy: CandidateStrategy,
 ): Promise<CaseResult> {
@@ -233,7 +233,7 @@ async function runLocalSemanticCase(
     useIntent: 'explicit_user_request',
     limit: 1,
     now: fixture.now,
-    localSemantic: { queryVector: createCurrentLocalSimilarityVector(fixture.query) },
+    localSimilarity: { queryVector: createCurrentLocalSimilarityVector(fixture.query) },
   });
   return evaluateSelection(
     fixture,
@@ -248,7 +248,7 @@ async function runCase(
 ): Promise<CaseResult> {
   return fixture.path === 'foreground_prompt_visible'
     ? runForegroundCase(fixture, strategy)
-    : runLocalSemanticCase(fixture, strategy);
+    : runLocalSimilarityCase(fixture, strategy);
 }
 
 async function runAblationOnEmptyDatabase(): Promise<MemoryHybridAblationReport> {
@@ -263,10 +263,13 @@ async function runAblationOnEmptyDatabase(): Promise<MemoryHybridAblationReport>
     pairs.push({ fixture, lexical, hybrid });
   }
   const controls = pairs.filter(({ fixture }) => fixture.family === 'lexical_control');
-  const foregroundPositives = pairs.filter(({ fixture }) =>
-    ['entity', 'temporal'].includes(fixture.family),
+  const foregroundPositives = pairs.filter(
+    ({ fixture }) =>
+      fixture.path === 'foreground_prompt_visible' &&
+      fixture.family !== 'lexical_control' &&
+      fixture.family !== 'eligibility_negative',
   );
-  const componentOnly = pairs.filter(({ fixture }) => fixture.family === 'local_semantic');
+  const componentOnly = pairs.filter(({ fixture }) => fixture.path === 'component_only');
   const negatives = pairs.filter(({ fixture }) => fixture.family === 'eligibility_negative');
   const foregroundLexicalRecallAtOne = rate(
     foregroundPositives.filter(({ lexical }) => lexical.targetHit).length,
@@ -276,13 +279,14 @@ async function runAblationOnEmptyDatabase(): Promise<MemoryHybridAblationReport>
     foregroundPositives.filter(({ hybrid }) => hybrid.targetHit).length,
     foregroundPositives.length,
   );
-  const family = (name: 'entity' | 'temporal' | 'local_semantic') => {
+  const family = (name: 'entity' | 'temporal' | 'local_similarity') => {
     const entries = pairs.filter(({ fixture }) => fixture.family === name);
+    const evidenceClass = entries[0]?.fixture.path ?? 'component_only';
+    if (entries.some(({ fixture }) => fixture.path !== evidenceClass)) {
+      throw new Error(`Hybrid ablation family mixes evidence classes: ${name}`);
+    }
     return {
-      evidenceClass:
-        name === 'local_semantic'
-          ? ('component_only' as const)
-          : ('foreground_prompt_visible' as const),
+      evidenceClass,
       caseCount: entries.length,
       lexicalTargetHitCount: entries.filter(({ lexical }) => lexical.targetHit).length,
       hybridTargetHitCount: entries.filter(({ hybrid }) => hybrid.targetHit).length,
@@ -290,7 +294,7 @@ async function runAblationOnEmptyDatabase(): Promise<MemoryHybridAblationReport>
   };
   const hybridRecallGain = foregroundHybridRecallAtOne - foregroundLexicalRecallAtOne;
   return {
-    schemaVersion: 'memory-hybrid-ablation-report-v1',
+    schemaVersion: 'memory-hybrid-ablation-report-v2',
     fixtureVersion: MEMORY_HYBRID_ABLATION_FIXTURE_VERSION,
     fixtureSignature: MEMORY_HYBRID_ABLATION_FIXTURE_SIGNATURE,
     claimClass: 'diagnostic_only',
@@ -350,7 +354,7 @@ async function runAblationOnEmptyDatabase(): Promise<MemoryHybridAblationReport>
     families: {
       entity: family('entity'),
       temporal: family('temporal'),
-      local_semantic: family('local_semantic'),
+      local_similarity: family('local_similarity'),
     },
   };
 }

@@ -58,7 +58,7 @@ describe('supplemental hybrid recall lanes', () => {
 
     expect(lanes.entity.map((entry) => entry.fact.id)).toEqual(['target']);
     expect(lanes.temporal.map((entry) => entry.fact.id)).toEqual(['unrelated', 'target']);
-    expect(lanes.localSemanticOutcome).toBe('not_requested');
+    expect(lanes.localSimilarityOutcome).toBe('not_requested');
   });
 
   it('filters temporal candidates to explicit years and deterministic recency order', () => {
@@ -93,34 +93,36 @@ describe('supplemental hybrid recall lanes', () => {
       },
     });
     const base = {
-      query: 'semantic query',
-      queryUnits: tokenizeLexicalUnits('semantic query'),
+      query: 'similarity query',
+      queryUnits: tokenizeLexicalUnits('similarity query'),
       eligibleFacts: [weak, incompatible, matching],
       entities: [],
     };
 
-    expect(buildSupplementalRecallCandidateLanes(base).localSemanticOutcome).toBe('not_requested');
+    expect(buildSupplementalRecallCandidateLanes(base).localSimilarityOutcome).toBe(
+      'not_requested',
+    );
     expect(
       buildSupplementalRecallCandidateLanes({
         ...base,
-        localSemantic: { queryVector, minimumSimilarity: 0.99 },
+        localSimilarity: { queryVector, minimumSimilarity: 0.99 },
       }),
     ).toMatchObject({
-      localSemanticOutcome: 'applied',
-      localSemantic: [{ fact: { id: 'matching' }, semanticSimilarity: 1 }],
+      localSimilarityOutcome: 'applied',
+      localSimilarity: [{ fact: { id: 'matching' }, localSimilarityScore: 1 }],
     });
     expect(
       buildSupplementalRecallCandidateLanes({
         ...base,
-        localSemantic: { queryVector, minimumSimilarity: Number.NaN },
-      }).localSemantic.map((entry) => entry.fact.id),
+        localSimilarity: { queryVector, minimumSimilarity: Number.NaN },
+      }).localSimilarity.map((entry) => entry.fact.id),
     ).toEqual(['matching']);
     expect(
       buildSupplementalRecallCandidateLanes({
         ...base,
         eligibleFacts: [incompatible],
-        localSemantic: { queryVector },
-      }).localSemanticOutcome,
+        localSimilarity: { queryVector },
+      }).localSimilarityOutcome,
     ).toBe('unavailable');
   });
 });
