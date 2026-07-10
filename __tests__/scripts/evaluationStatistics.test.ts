@@ -18,6 +18,15 @@ const evaluationSchema = loadEvaluationSchema(projectRoot);
 const statisticsSchema = loadEvaluationStatisticsSchema(projectRoot);
 const contract = loadEvaluationContract(projectRoot);
 
+function removeEmptyDirectory(directory: string): void {
+  try {
+    fs.rmdirSync(directory);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT' && code !== 'ENOTEMPTY') throw error;
+  }
+}
+
 function buildInput() {
   const aggregation = {
     trialCount: 3,
@@ -554,6 +563,7 @@ describe('deterministic evaluation statistics', () => {
     } finally {
       fs.rmSync(directory, { recursive: true, force: true });
       fs.rmSync(outputPath, { force: true });
+      removeEmptyDirectory(path.dirname(outputPath));
     }
   });
 });

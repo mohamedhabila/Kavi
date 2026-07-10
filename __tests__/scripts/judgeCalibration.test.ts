@@ -14,6 +14,15 @@ const projectRoot = path.resolve(__dirname, '../..');
 const schema = loadJudgeCalibrationSchema(projectRoot);
 const digest = 'a'.repeat(64);
 
+function removeEmptyDirectory(directory: string): void {
+  try {
+    fs.rmdirSync(directory);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT' && code !== 'ENOTEMPTY') throw error;
+  }
+}
+
 type ProjectionInput = {
   custody: { humanLabelsSha256: string; judgePredictionsSha256: string };
   examples: Array<{ id: string; family: string; humanLabel: string; judgeLabel: string }>;
@@ -323,6 +332,7 @@ describe('judge calibration contract', () => {
     } finally {
       fs.rmSync(directory, { recursive: true, force: true });
       fs.rmSync(outputPath, { force: true });
+      removeEmptyDirectory(path.dirname(outputPath));
     }
   });
 });
