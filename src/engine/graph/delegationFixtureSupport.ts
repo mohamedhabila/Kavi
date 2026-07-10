@@ -57,6 +57,7 @@ function buildDelegationWorkerSnapshot(
     startedAt: 10,
     updatedAt: 20,
     status: 'completed',
+    completionState: 'verified_success',
     sandboxPolicy: 'inherit',
     launchState: 'terminal',
     output: 'E2E-WORKER-EVIDENCE-42',
@@ -68,7 +69,10 @@ function buildDelegationWorkerSnapshot(
   };
 }
 
-export function buildGoalsAfterDelegationWorkerTerminal(status: AgentGoal['status']): AgentGoal[] {
+export function buildGoalsAfterDelegationWorkerTerminal(
+  status: AgentGoal['status'],
+  workerOverrides: Partial<SubAgentSnapshot> = {},
+): AgentGoal[] {
   const baseGraph = reduceAgentControlGraph(
     createInitialAgentRunControlGraphState({ updatedAt: 100 }),
     [
@@ -116,7 +120,7 @@ export function buildGoalsAfterDelegationWorkerTerminal(status: AgentGoal['statu
 
   const nextGraph = applySubAgentTerminalControlGraphEffects({
     run,
-    agent: buildDelegationWorkerSnapshot(),
+    agent: buildDelegationWorkerSnapshot(workerOverrides),
     event: 'completed',
     timestamp: 200,
   });

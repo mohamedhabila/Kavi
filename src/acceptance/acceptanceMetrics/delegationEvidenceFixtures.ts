@@ -98,6 +98,15 @@ export const DELEGATION_EVIDENCE_FIXTURES: DelegationEvidenceFixture[] = [
     }),
   },
   {
+    id: 'hold-transport-completed-worker-without-verified-semantic-completion',
+    expectation: 'must_hold',
+    params: baseParams({
+      goals: buildGoalsAfterDelegationWorkerTerminal('active', {
+        completionState: 'incomplete',
+      }),
+    }),
+  },
+  {
     id: 'ready-worker-evidence-met-completed-goal',
     expectation: 'must_ready',
     params: baseParams({
