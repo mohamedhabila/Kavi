@@ -425,14 +425,6 @@ describe('Sub-Agent Service', () => {
       expect(result.status).toBe('completed');
     });
 
-    it('passes inheritMemory config', async () => {
-      const result = await spawnSubAgent(
-        { parentConversationId: 'p', prompt: 'mem', inheritMemory: true },
-        mockProvider,
-      );
-      expect(result.status).toBe('completed');
-    });
-
     it('stores the originating agent run id on the active worker snapshot', async () => {
       const result = await spawnSubAgent(
         { parentConversationId: 'p', prompt: 'tracked', agentRunId: 'run-42' },

@@ -46,6 +46,62 @@ export interface SubAgentSnapshot {
   artifacts?: Attachment[];
 }
 
+export type SubAgentMemoryFactKind =
+  | 'semantic_fact'
+  | 'episodic_event'
+  | 'goal'
+  | 'tool_result'
+  | 'source'
+  | 'decision'
+  | 'risk'
+  | 'artifact'
+  | 'summary'
+  | 'evidence_span'
+  | 'agent_run'
+  | 'gotcha';
+
+export interface SubAgentMemoryBundleFact {
+  factId: string;
+  subjectId: string;
+  predicate: string;
+  objectText: string;
+  memoryKind: SubAgentMemoryFactKind;
+  sourceAuthority: string;
+  sourceMessageId: string | null;
+  sourceRunId: string | null;
+  validAt: number;
+}
+
+export interface SubAgentMemoryBundleEpisode {
+  episodeId: string;
+  lane: 'current_thread' | 'cross_thread';
+  summary: string;
+  sourceEndMessageId: string;
+  endedAt: number;
+}
+
+export interface SubAgentMemorySelectionScope {
+  memoryConversationId: string;
+  sourceThreadId: string;
+  personaId: string;
+  taskId: string | null;
+}
+
+/** Immutable, task-selected evidence passed to a worker instead of parent-vault access. */
+export interface SubAgentMemoryBundle {
+  version: 1;
+  source: {
+    memoryOwnerId: string;
+    memoryConversationId: string;
+    sourceThreadId: string;
+    personaId: string;
+    taskId: string | null;
+  };
+  createdAt: number;
+  facts: SubAgentMemoryBundleFact[];
+  episodes: SubAgentMemoryBundleEpisode[];
+}
+
 export interface SubAgentConfig {
   parentConversationId: string;
   prompt: string;
@@ -56,7 +112,8 @@ export interface SubAgentConfig {
   providerId?: string;
   agentRunId?: string;
   workstreamId?: string;
-  inheritMemory?: boolean;
+  memorySelectionScope?: SubAgentMemorySelectionScope;
+  memoryBundle?: SubAgentMemoryBundle;
   inheritTools?: boolean;
   linkUnderstandingEnabled?: boolean;
   mediaUnderstandingEnabled?: boolean;

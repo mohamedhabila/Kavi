@@ -77,7 +77,9 @@ describe('executeTool — core tools routing', () => {
   });
 
   it('sessions_spawn passes resolved provider', async () => {
-    await executeTool('sessions_spawn', '{"prompt":"hello"}', CONV_ID);
+    await executeTool('sessions_spawn', '{"prompt":"hello"}', CONV_ID, {
+      memoryConversationId: 'memory-root',
+    });
     expect(sessionLaunchMod.executeSessionSpawn).toHaveBeenCalledWith(
       { prompt: 'hello' },
       CONV_ID,
@@ -87,6 +89,7 @@ describe('executeTool — core tools routing', () => {
       {
         controlGraphGoals: undefined,
         agentRunId: undefined,
+        memoryConversationId: 'memory-root',
       },
     );
   });
@@ -140,6 +143,7 @@ describe('executeTool — core tools routing', () => {
       {
         controlGraphGoals: undefined,
         agentRunId: undefined,
+        memoryConversationId: undefined,
       },
     );
   });

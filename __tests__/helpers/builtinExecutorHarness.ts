@@ -62,6 +62,7 @@ jest.mock('../../src/store/useChatStore', () => ({
 }));
 
 const mockSettingsState = {
+  disableLongTermMemory: false,
   linkUnderstandingEnabled: true,
   mediaUnderstandingEnabled: true,
 };
@@ -88,6 +89,15 @@ jest.mock('../../src/services/memory/store', () => ({
 // Mock embeddings
 jest.mock('../../src/services/memory/embeddings', () => ({
   hybridSearch: jest.fn().mockResolvedValue([]),
+}));
+
+const mockBuildLeastPrivilegeWorkerMemoryBundle = jest.fn().mockResolvedValue(undefined);
+
+jest.mock('../../src/services/agents/workerMemoryBundle', () => ({
+  buildLeastPrivilegeWorkerMemoryBundle: (...args: unknown[]) =>
+    mockBuildLeastPrivilegeWorkerMemoryBundle(...args),
+  sanitizeSubAgentMemorySelectionScope: (value: unknown) =>
+    value && typeof value === 'object' ? value : undefined,
 }));
 
 jest.mock('../../src/services/memory/sqlite-store', () => ({
@@ -163,6 +173,9 @@ beforeEach(() => {
   mockChatStoreState.conversations = [];
   mockSettingsState.linkUnderstandingEnabled = true;
   mockSettingsState.mediaUnderstandingEnabled = true;
+  mockSettingsState.disableLongTermMemory = false;
+  mockBuildLeastPrivilegeWorkerMemoryBundle.mockReset();
+  mockBuildLeastPrivilegeWorkerMemoryBundle.mockResolvedValue(undefined);
   mockHydrateProviderForRequest.mockReset();
   mockHydrateProviderForRequest.mockImplementation(async (provider) => provider);
 
@@ -191,4 +204,5 @@ export {
   mockChatStoreState,
   mockSettingsState,
   mockHydrateProviderForRequest,
+  mockBuildLeastPrivilegeWorkerMemoryBundle,
 };

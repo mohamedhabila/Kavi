@@ -36,6 +36,10 @@ import {
 } from './builtin-session-provider';
 import { normalizeRequiredSessionText } from './builtin-session-prompt';
 import { resolveOptionalExactDurableScopeId } from '../../utils/durableScopeIdentity';
+import {
+  buildLeastPrivilegeWorkerMemoryBundle,
+  sanitizeSubAgentMemorySelectionScope,
+} from '../../services/agents/workerMemoryBundle';
 
 export async function executeSessionSend(
   args: {
@@ -145,6 +149,21 @@ export async function executeSessionSend(
       inheritedModel,
     );
     const followUpDepth = resolveChildSessionDepth(agent, previousContext);
+    const workstreamId = previousContext?.config.workstreamId ?? agent.workstreamId;
+    const storedMemorySelectionScope = sanitizeSubAgentMemorySelectionScope(
+      previousContext?.config.memorySelectionScope,
+    );
+    const memorySelectionScope =
+      parentConversationId && storedMemorySelectionScope?.sourceThreadId === parentConversationId
+        ? { ...storedMemorySelectionScope, taskId: workstreamId ?? null }
+        : undefined;
+    const memoryBundle = memorySelectionScope
+      ? await buildLeastPrivilegeWorkerMemoryBundle({
+          enabled: !settings.disableLongTermMemory,
+          query: [previousContext?.config.prompt, message].filter(Boolean).join('\n'),
+          ...memorySelectionScope,
+        })
+      : undefined;
     const followUpConfig = buildFollowUpSubAgentConfig({
       parentConversationId,
       workspaceConversationId: workspaceTarget?.workspaceConversationId,
@@ -159,11 +178,12 @@ export async function executeSessionSend(
         previousContext?.config.agentRunId ??
         agent.agentRunId ??
         activeConversation?.activeAgentRunId,
-      workstreamId: previousContext?.config.workstreamId ?? agent.workstreamId,
+      workstreamId,
       name: previousContext?.config.name || agent.name,
       tools: previousContext?.config.tools,
       sandboxPolicy: previousContext?.config.sandboxPolicy || agent.sandboxPolicy,
-      inheritMemory: previousContext?.config.inheritMemory ?? true,
+      memorySelectionScope,
+      memoryBundle,
       linkUnderstandingEnabled:
         previousContext?.config.linkUnderstandingEnabled ?? settings.linkUnderstandingEnabled,
       mediaUnderstandingEnabled:

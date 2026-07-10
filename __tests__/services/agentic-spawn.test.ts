@@ -27,10 +27,7 @@ jest.mock('../../src/utils/id', () => ({
   generateId: jest.fn(() => `mock-id-${++mockIdCounter}`),
 }));
 
-import {
-  spawnSubAgent,
-  getSubAgent,
-} from '../../src/services/agents/subAgent';
+import { spawnSubAgent, getSubAgent } from '../../src/services/agents/subAgent';
 
 const mockProvider = {
   id: 'test',
@@ -74,7 +71,6 @@ describe('spawnSubAgent with custom systemPrompt', () => {
       {
         parentConversationId: 'conv-1',
         prompt: 'Do something',
-        inheritMemory: true,
       },
       mockProvider,
     );
@@ -83,17 +79,47 @@ describe('spawnSubAgent with custom systemPrompt', () => {
     expect(capturedOrchestratorOptions.systemPrompt).toContain('depth');
   });
 
-  it('uses non-memory fallback when inheritMemory is false and no systemPrompt', async () => {
+  it('injects only the sealed task-scoped memory bundle and isolates runtime memory', async () => {
     await spawnSubAgent(
       {
         parentConversationId: 'conv-1',
-        prompt: 'Do something',
-        inheritMemory: false,
+        workspaceConversationId: 'parent-files',
+        prompt: 'Use the relevant preference',
+        memoryBundle: {
+          version: 1,
+          source: {
+            memoryOwnerId: 'owner-1',
+            memoryConversationId: 'parent-memory',
+            sourceThreadId: 'conv-1',
+            personaId: 'super-agent',
+            taskId: null,
+          },
+          createdAt: 1,
+          facts: [
+            {
+              factId: 'fact-1',
+              subjectId: 'user',
+              predicate: 'seat_preference',
+              objectText: 'aisle',
+              memoryKind: 'semantic_fact',
+              sourceAuthority: 'grounded_user',
+              sourceMessageId: 'message-1',
+              sourceRunId: null,
+              validAt: 1,
+            },
+          ],
+          episodes: [],
+        },
       },
       mockProvider,
     );
 
-    expect(capturedOrchestratorOptions.systemPrompt).toContain('Complete the task');
+    expect(capturedOrchestratorOptions.systemPrompt).toContain(
+      'BEGIN_UNTRUSTED_WORKER_MEMORY_DATA',
+    );
+    expect(capturedOrchestratorOptions.systemPrompt).toContain('seat_preference');
+    expect(capturedOrchestratorOptions.memoryConversationId).toMatch(/^sub-/);
+    expect(capturedOrchestratorOptions.workspaceConversationId).toBe('parent-files');
   });
 });
 
@@ -128,6 +154,20 @@ describe('spawnSubAgent with name', () => {
 });
 
 describe('spawnSubAgent with tools whitelist', () => {
+  it('rejects direct memory tools because parent evidence must be preselected', async () => {
+    const result = await spawnSubAgent(
+      {
+        parentConversationId: 'conv-1',
+        prompt: 'Search all parent memory',
+        tools: ['memory_search'],
+      },
+      mockProvider,
+    );
+
+    expect(result.status).toBe('error');
+    expect(result.error).toContain('task-scoped evidence bundle');
+  });
+
   it('creates a toolFilter that allows only whitelisted tools', async () => {
     await spawnSubAgent(
       {
@@ -164,7 +204,7 @@ describe('spawnSubAgent with tools whitelist', () => {
     expect(filter('record_workflow_evidence')).toBe(false);
   });
 
-  it('has no toolFilter when tools is not provided', async () => {
+  it('keeps the default worker surface while denying direct parent-memory tools', async () => {
     await spawnSubAgent(
       {
         parentConversationId: 'conv-1',
@@ -173,7 +213,12 @@ describe('spawnSubAgent with tools whitelist', () => {
       mockProvider,
     );
 
-    expect(capturedOrchestratorOptions.toolFilter).toBeUndefined();
+    const filter = capturedOrchestratorOptions.toolFilter!;
+    expect(filter).toBeDefined();
+    expect(filter('web_search')).toBe(true);
+    expect(filter('read_file')).toBe(true);
+    expect(filter('memory_search')).toBe(false);
+    expect(filter('memory_forget')).toBe(false);
   });
 
   it('combines tools whitelist with safe-only sandbox', async () => {

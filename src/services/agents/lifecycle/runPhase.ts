@@ -23,6 +23,7 @@ import {
   requireExactDurableScopeId,
   resolveOptionalExactDurableScopeId,
 } from '../../../utils/durableScopeIdentity';
+import { isWorkerMemoryToolName } from '../workerMemoryBundle';
 
 export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot>(
   params: RunPreparedSubAgentSessionParams<TAgent>,
@@ -45,6 +46,12 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
     tools: params.config.tools,
     sandboxPolicy,
   });
+  const configuredMemoryTool = params.config.tools?.find(isWorkerMemoryToolName);
+  const workerToolFilter = (toolName: string): boolean =>
+    !isWorkerMemoryToolName(toolName) && (toolFilter ? toolFilter(toolName) : true);
+  const workerToolSelectionRejectedMessage = configuredMemoryTool
+    ? `Worker memory tool "${configuredMemoryTool}" is unavailable. Parent memory is provided only through a task-scoped evidence bundle.`
+    : explicitToolSelectionRejectedMessage;
   const workspaceConversationId =
     resolveOptionalExactDurableScopeId(
       params.config.workspaceConversationId,
@@ -196,10 +203,10 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
       messages,
       allProviders: params.allProviders,
       disableTooling: disableToolingForExplicitEmptyToolSurface,
-      toolFilter,
+      toolFilter: workerToolFilter,
       linkUnderstandingEnabled: params.config.linkUnderstandingEnabled,
       mediaUnderstandingEnabled: params.config.mediaUnderstandingEnabled,
-      explicitToolSelectionRejectedMessage,
+      explicitToolSelectionRejectedMessage: workerToolSelectionRejectedMessage,
       taskId: params.config.workstreamId,
       subAgent,
       config: params.config,

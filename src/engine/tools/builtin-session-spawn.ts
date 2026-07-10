@@ -37,6 +37,11 @@ import {
   requireExactDurableScopeId,
   resolveOptionalExactDurableScopeId,
 } from '../../utils/durableScopeIdentity';
+import {
+  resolveCodeOwnedMemoryConversationId,
+  resolveCodeOwnedMemoryPersonaId,
+} from '../../services/memory/memoryScopeIdentity';
+import { buildLeastPrivilegeWorkerMemoryBundle } from '../../services/agents/workerMemoryBundle';
 
 function selectExactSubAgentSession<T extends { sessionId?: string }>(
   session: T | undefined,
@@ -74,7 +79,10 @@ export async function executeSessionSpawn(
   provider: LlmProviderConfig,
   allProviders?: LlmProviderConfig[],
   inheritedModel?: string,
-  executionContext?: Pick<ToolExecutionContext, 'controlGraphGoals' | 'agentRunId'>,
+  executionContext?: Pick<
+    ToolExecutionContext,
+    'controlGraphGoals' | 'agentRunId' | 'memoryConversationId'
+  >,
 ): Promise<string> {
   try {
     const exactConversationId = requireExactDurableScopeId(
@@ -170,6 +178,21 @@ export async function executeSessionSpawn(
     });
     const workerPrompt = workerContract.prompt;
     const effectiveConfiguredWorkerTools = workerContract.configuredTools ?? sanitizedWorkerTools;
+    const memorySelectionScope = {
+      memoryConversationId: resolveCodeOwnedMemoryConversationId(
+        executionContext?.memoryConversationId,
+        parentConversationId,
+      ),
+      sourceThreadId: parentConversationId,
+      personaId: resolveCodeOwnedMemoryPersonaId(activeConversation?.personaId),
+      taskId: spawnGate.workstreamId ?? null,
+    };
+    const memoryBundle = await buildLeastPrivilegeWorkerMemoryBundle({
+      enabled: !settings.disableLongTermMemory,
+      query: prompt,
+      ...memorySelectionScope,
+      goals,
+    });
 
     const workerTools = effectiveConfiguredWorkerTools
       ? [...effectiveConfiguredWorkerTools]
@@ -193,6 +216,8 @@ export async function executeSessionSpawn(
       workstreamId: spawnGate.workstreamId,
       sanitizedName,
       workerTools,
+      memorySelectionScope,
+      memoryBundle,
       linkUnderstandingEnabled: settings.linkUnderstandingEnabled,
       mediaUnderstandingEnabled: settings.mediaUnderstandingEnabled,
     });

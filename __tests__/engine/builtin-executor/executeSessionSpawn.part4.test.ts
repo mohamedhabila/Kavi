@@ -2,10 +2,82 @@
 // Tests - Builtin Tool Executor: executeSessionSpawn part 4
 // ---------------------------------------------------------------------------
 
-import { executeSessionSpawn, mockChatStoreState } from '../../helpers/builtinExecutorHarness';
+import {
+  executeSessionSpawn,
+  mockBuildLeastPrivilegeWorkerMemoryBundle,
+  mockChatStoreState,
+} from '../../helpers/builtinExecutorHarness';
 
 describe('Builtin Tool Executor', () => {
   describe('executeSessionSpawn part 4', () => {
+    it('selects and seals a task-scoped memory bundle for the worker', async () => {
+      const { launchSubAgent } = require('../../../src/services/agents/subAgent');
+      const memoryBundle = {
+        version: 1,
+        source: {
+          memoryOwnerId: 'owner-1',
+          memoryConversationId: 'parent-conv-1',
+          sourceThreadId: 'parent-conv-1',
+          personaId: 'persona-1',
+          taskId: null,
+        },
+        createdAt: 1,
+        facts: [],
+        episodes: [
+          {
+            episodeId: 'episode-1',
+            lane: 'current_thread',
+            summary: 'Relevant verified outcome',
+            sourceEndMessageId: 'message-1',
+            endedAt: 1,
+          },
+        ],
+      };
+      mockChatStoreState.conversations = [
+        {
+          id: 'parent-conv-1',
+          personaId: 'persona-1',
+          messages: [],
+        },
+      ];
+      mockBuildLeastPrivilegeWorkerMemoryBundle.mockResolvedValueOnce(memoryBundle);
+
+      await executeSessionSpawn({ prompt: 'Use the prior verified outcome' }, 'parent-conv-1', {
+        id: 'test',
+        name: 'Test',
+        type: 'openai',
+        apiKey: 'k',
+        baseUrl: 'u',
+        model: 'gpt-5.4',
+        models: ['gpt-5.4'],
+        enabled: true,
+      });
+
+      expect(mockBuildLeastPrivilegeWorkerMemoryBundle).toHaveBeenCalledWith(
+        expect.objectContaining({
+          enabled: true,
+          query: 'Use the prior verified outcome',
+          memoryConversationId: 'parent-conv-1',
+          sourceThreadId: 'parent-conv-1',
+          personaId: 'persona-1',
+          taskId: null,
+        }),
+      );
+      expect(launchSubAgent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          memorySelectionScope: {
+            memoryConversationId: 'parent-conv-1',
+            sourceThreadId: 'parent-conv-1',
+            personaId: 'persona-1',
+            taskId: null,
+          },
+          memoryBundle,
+        }),
+        expect.anything(),
+        undefined,
+      );
+    });
+
     it('ignores maxIterations hints so delegated workers keep the roomy default budget', async () => {
       const { launchSubAgent } = require('../../../src/services/agents/subAgent');
 
@@ -205,6 +277,8 @@ describe('Builtin Tool Executor', () => {
           enabled: true,
         },
         undefined,
+        undefined,
+        { memoryConversationId: 'parent-conv-1' },
       );
 
       expect(launchSubAgent).toHaveBeenCalledWith(
@@ -213,6 +287,12 @@ describe('Builtin Tool Executor', () => {
           workspaceConversationId: 'parent-conv-1',
           workspaceReadFallbackConversationId: 'side-conv-1',
           agentRunId: 'run-side',
+          memorySelectionScope: {
+            memoryConversationId: 'parent-conv-1',
+            sourceThreadId: 'side-conv-1',
+            personaId: 'default',
+            taskId: null,
+          },
         }),
         expect.anything(),
         undefined,

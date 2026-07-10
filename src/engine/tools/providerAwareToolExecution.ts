@@ -38,6 +38,7 @@ export async function executeProviderAwareTool(params: {
         {
           controlGraphGoals: params.context?.controlGraphGoals,
           agentRunId: params.context?.agentRunId,
+          memoryConversationId: params.context?.memoryConversationId,
         },
       );
     case 'sessions_send':
