@@ -44,7 +44,7 @@ jest.mock('../../../src/services/memory/evidenceBridge', () => ({
   bridgeGraphGoalEvidence: (...args: any[]) => mockBridgeGraphGoalEvidence(...args),
 }));
 
-import { processCompletedTurn } from '../../../src/services/memory/turnProcessor';
+import { processIngestionTurn } from '../../../src/services/memory/turnProcessor';
 import type { Message } from '../../../src/types/message';
 
 function makeMsg(overrides: Partial<Message> = {}): Message {
@@ -90,7 +90,7 @@ describe('turnProcessor memory namespace contract', () => {
       assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
     });
 
-    await processCompletedTurn({
+    await processIngestionTurn({
       threadId: 'child-conv-1',
       memoryConversationId: 'parent-conv-1',
       messages: [makeMsg({ role: 'user', content: 'Remember this.' }), assistant],

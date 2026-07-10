@@ -48,7 +48,7 @@ jest.mock('../../../src/services/memory/facts/queries', () => ({
 import {
   findLastClosedTurn,
   normalizeTerminalClosedTurnMessages,
-  processCompletedTurn,
+  processIngestionTurn,
   syncWorkingMemoryFromTurn,
 } from '../../../src/services/memory/turnProcessor';
 import type { Message } from '../../../src/types/message';
@@ -189,7 +189,7 @@ describe('normalizeTerminalClosedTurnMessages', () => {
   });
 });
 
-describe('processCompletedTurn', () => {
+describe('processIngestionTurn', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockEnsureFactSchema.mockImplementation(() => undefined);
@@ -217,7 +217,7 @@ describe('processCompletedTurn', () => {
   });
 
   it('returns processed=false when there are no messages', async () => {
-    const result = await processCompletedTurn({ threadId: 'conv-1', messages: [] });
+    const result = await processIngestionTurn({ threadId: 'conv-1', messages: [] });
     expect(result.processed).toBe(false);
     expect(result.skipped).toBe('no_closed_turn');
   });
@@ -235,7 +235,7 @@ describe('processCompletedTurn', () => {
         },
       }),
     ];
-    const result = await processCompletedTurn({ threadId: 'conv-1', messages });
+    const result = await processIngestionTurn({ threadId: 'conv-1', messages });
     expect(result.processed).toBe(false);
     expect(result.skipped).toBe('no_closed_turn');
   });
@@ -259,7 +259,7 @@ describe('processCompletedTurn', () => {
         },
       }),
     ];
-    await processCompletedTurn({ threadId: 'conv-1', messages });
+    await processIngestionTurn({ threadId: 'conv-1', messages });
     expect(mockExtractStructuralMemory).toHaveBeenCalled();
   });
 
@@ -270,7 +270,7 @@ describe('processCompletedTurn', () => {
       content: 'Deployed.',
       assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
     });
-    await processCompletedTurn({
+    await processIngestionTurn({
       threadId: 'conv-1',
       messages: [user, assistant],
       sourceRunId: 'run-structural',
@@ -304,7 +304,7 @@ describe('processCompletedTurn', () => {
       episodeId: 'ep1',
     });
 
-    const result = await processCompletedTurn({
+    const result = await processIngestionTurn({
       threadId: 'conv-1',
       messages: [
         makeMsg({ role: 'user', content: 'Deploy' }),
@@ -361,7 +361,7 @@ describe('processCompletedTurn', () => {
     });
 
     const extractor = jest.fn();
-    const result = await processCompletedTurn({
+    const result = await processIngestionTurn({
       threadId: 'conv-1',
       messages: [
         makeMsg({ role: 'user', content: 'Hey' }),
@@ -396,7 +396,7 @@ describe('processCompletedTurn', () => {
     mockExtractProviderEnrichment.mockRejectedValue(new Error('Timeout'));
 
     await expect(
-      processCompletedTurn({
+      processIngestionTurn({
         threadId: 'conv-1',
         messages: [
           makeMsg({ role: 'user', content: 'Hey' }),
@@ -436,7 +436,7 @@ describe('processCompletedTurn', () => {
       notable: [],
     });
 
-    await processCompletedTurn({
+    await processIngestionTurn({
       threadId: 'conv-1',
       messages: [
         makeMsg({ role: 'user', content: 'Hey' }),
@@ -474,7 +474,7 @@ describe('processCompletedTurn', () => {
       notable: [],
     });
 
-    await processCompletedTurn({
+    await processIngestionTurn({
       threadId: 'conv-1',
       messages: [
         makeMsg({ role: 'user', content: 'Remember a structured preference.' }),
@@ -532,7 +532,7 @@ describe('processCompletedTurn', () => {
       notable: [],
     });
 
-    await processCompletedTurn({
+    await processIngestionTurn({
       threadId: 'conv-1',
       messages: [
         makeMsg({ role: 'user', content: 'Use the current preference to complete the task.' }),
@@ -563,7 +563,7 @@ describe('processCompletedTurn', () => {
       content: 'Done',
       assistantMetadata: { finishReason: 'stop', kind: 'final', completionStatus: 'complete' },
     });
-    await processCompletedTurn({
+    await processIngestionTurn({
       threadId: 'conv-1',
       messages: [makeMsg({ role: 'user', content: 'Hey' }), assistant],
     });
@@ -582,7 +582,7 @@ describe('processCompletedTurn', () => {
       throw new Error('Cursor write failed');
     });
 
-    const result = await processCompletedTurn({
+    const result = await processIngestionTurn({
       threadId: 'conv-1',
       messages: [
         makeMsg({ role: 'user', content: 'Hey' }),
@@ -598,7 +598,7 @@ describe('processCompletedTurn', () => {
   });
 
   it('passes threadTitle and personaSummary through to extraction', async () => {
-    await processCompletedTurn({
+    await processIngestionTurn({
       threadId: 'conv-1',
       messages: [
         makeMsg({ role: 'user', content: 'Hey' }),
@@ -622,7 +622,7 @@ describe('processCompletedTurn', () => {
 
   it('uses the custom now timestamp when provided', async () => {
     const now = 1_000_000;
-    await processCompletedTurn({
+    await processIngestionTurn({
       threadId: 'conv-1',
       messages: [
         makeMsg({ role: 'user', content: 'Hey' }),

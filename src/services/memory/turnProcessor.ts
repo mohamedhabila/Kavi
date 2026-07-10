@@ -497,7 +497,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
     sourceUserMessageId: user?.id,
     sourceAssistantMessageId: assistant?.id,
     messages: input.messages,
-    skipWorkingMemoryWrites: input.skipWorkingMemorySync,
+    skipWorkingMemoryWrites: true,
   });
 
   let agentRunMemoryFactIds: string[] = [];
@@ -570,10 +570,4 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
     bridgedEvidenceFactIds,
     agentRunMemoryFactIds,
   };
-}
-
-/** Backward-compatible entry: sync + full ingestion in one call. */
-export async function processCompletedTurn(input: ProcessTurnInput): Promise<ProcessTurnResult> {
-  syncWorkingMemoryFromTurn(input);
-  return processIngestionTurn({ ...input, skipWorkingMemorySync: true });
 }
