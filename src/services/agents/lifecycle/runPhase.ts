@@ -19,6 +19,10 @@ import { normalizePreviewText } from './runText';
 import { createSubAgentUsageRecorder } from './runUsage';
 import { resolveSubAgentToolAccess } from '../subAgentToolAccess';
 import { pushTask, completeTask } from '../../memory/taskStack';
+import {
+  requireExactDurableScopeId,
+  resolveOptionalExactDurableScopeId,
+} from '../../../utils/durableScopeIdentity';
 
 export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot>(
   params: RunPreparedSubAgentSessionParams<TAgent>,
@@ -42,9 +46,19 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
     sandboxPolicy,
   });
   const workspaceConversationId =
-    params.config.workspaceConversationId?.trim() || params.config.parentConversationId;
+    resolveOptionalExactDurableScopeId(
+      params.config.workspaceConversationId,
+      'sub_agent_workspace_id_invalid',
+    ) ??
+    requireExactDurableScopeId(
+      params.config.parentConversationId,
+      'sub_agent_parent_conversation_id_invalid',
+    );
   const workspaceReadFallbackConversationId =
-    params.config.workspaceReadFallbackConversationId?.trim() || sessionId;
+    resolveOptionalExactDurableScopeId(
+      params.config.workspaceReadFallbackConversationId,
+      'sub_agent_workspace_fallback_id_invalid',
+    ) ?? requireExactDurableScopeId(sessionId, 'sub_agent_session_id_invalid');
   const recordParentConversationUsage = createSubAgentUsageRecorder({
     config: params.config,
     provider: params.provider,

@@ -174,6 +174,33 @@ describe('Sub-Agent Service', () => {
       expect(capturedOptions.usageConversationId).toBe('side-thread-1');
     });
 
+    it.each([
+      ['parentConversationId', { parentConversationId: ' parent-conversation' }],
+      ['workspaceConversationId', { workspaceConversationId: ' parent-conversation' }],
+      ['workspaceReadFallbackConversationId', { workspaceReadFallbackConversationId: '' }],
+      ['agentRunId', { agentRunId: ' run-1' }],
+      ['workstreamId', { workstreamId: 'workstream 1' }],
+      ['parentSessionId', { parentSessionId: ' sub-parent' }],
+    ])('rejects malformed %s before creating a worker', async (field, override) => {
+      const { runOrchestrator } = require('../../src/engine/orchestrator');
+      const result = await spawnSubAgent(
+        {
+          parentConversationId: 'parent-conversation',
+          prompt: 'delegate work',
+          ...override,
+        },
+        mockProvider,
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          status: 'error',
+          error: expect.stringContaining(`${field} must be an exact durable identity`),
+        }),
+      );
+      expect(runOrchestrator).not.toHaveBeenCalled();
+    });
+
     it('records streamed worker usage on the parent conversation', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
       const parentConversationId = useChatStore.getState().createConversation('test', 'system');

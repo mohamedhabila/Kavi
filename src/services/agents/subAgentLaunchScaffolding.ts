@@ -1,4 +1,5 @@
 import type { SubAgentConfig, SubAgentResult, SubAgentSnapshot } from '../../types/subAgent';
+import { isExactDurableScopeId } from '../../utils/durableScopeIdentity';
 import { evaluateMobileSpawnPreflight } from './mobileSpawnPolicy';
 import type { ScheduledSubAgentLaunchControl } from './subAgentRuntimeSignals';
 
@@ -9,6 +10,23 @@ export interface PreparedSubAgentSession<TAgent extends { sessionId: string; sta
   timeoutMs?: number;
   sandboxPolicy: 'full' | 'safe-only' | 'inherit';
   subAgent: TAgent;
+}
+
+const OPTIONAL_SCOPE_FIELDS = [
+  'workspaceConversationId',
+  'workspaceReadFallbackConversationId',
+  'agentRunId',
+  'workstreamId',
+  'parentSessionId',
+] as const satisfies ReadonlyArray<keyof SubAgentConfig>;
+
+function invalidSubAgentScopeField(config: SubAgentConfig): string | null {
+  if (!isExactDurableScopeId(config.parentConversationId)) return 'parentConversationId';
+  for (const field of OPTIONAL_SCOPE_FIELDS) {
+    const value = config[field];
+    if (value !== undefined && !isExactDurableScopeId(value)) return field;
+  }
+  return null;
 }
 
 export async function prepareSubAgentSession<
@@ -35,6 +53,20 @@ export async function prepareSubAgentSession<
 }): Promise<PreparedSubAgentSession<TAgent> | SubAgentResult> {
   const depth = params.config.depth ?? 0;
   const normalizedPrompt = params.normalizePrompt(params.config.prompt);
+
+  const invalidScopeField = invalidSubAgentScopeField(params.config);
+  if (invalidScopeField) {
+    const error = `Sub-agent ${invalidScopeField} must be an exact durable identity.`;
+    return {
+      sessionId: '',
+      output: `Error: ${error}`,
+      toolsUsed: [],
+      iterations: 0,
+      status: 'error',
+      error,
+      depth,
+    };
+  }
 
   if (depth >= params.maxSpawnDepth) {
     return {
