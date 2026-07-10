@@ -62,6 +62,14 @@ export {
   listPendingIngestionJobs,
 } from './ingestionQueueStore';
 export { recoverStaleIngestionJobs } from './ingestionQueueRecovery';
+export {
+  getIngestionPersistenceReceipt,
+  listIngestionPersistenceReceipts,
+} from './ingestionReceiptStore';
+export type {
+  IngestionPersistenceReceipt,
+  IngestionReceiptProviderOutcomeCode,
+} from './ingestionReceiptStore';
 export type {
   EnqueueIngestionJobInput,
   IngestionJob,

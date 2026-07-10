@@ -4,6 +4,7 @@ type MemoryDb = ReturnType<typeof getMemoryDb>;
 
 const INGESTION_JOBS_TABLE = 'memory_ingestion_jobs';
 const DURABLE_INGESTION_JOBS_TABLE = 'memory_ingestion_jobs_durable';
+const INGESTION_RECEIPTS_TABLE = 'memory_ingestion_receipts';
 
 function createDurableIngestionJobsTable(
   db: MemoryDb,
@@ -82,6 +83,69 @@ function createDurableIngestionJobsTable(
         OR (status != 'processing' AND claim_token IS NULL AND lease_expires_at IS NULL)
       )
     );
+  `);
+}
+
+function ensureIngestionReceiptsTable(db: MemoryDb): void {
+  db.execSync(`
+    CREATE TABLE IF NOT EXISTS ${INGESTION_RECEIPTS_TABLE} (
+      job_id TEXT NOT NULL,
+      attempt_number INTEGER NOT NULL CHECK(attempt_number > 0),
+      episode_id TEXT,
+      deterministic_fact_ids_json TEXT NOT NULL,
+      provider_fact_ids_json TEXT NOT NULL,
+      invalidated_fact_ids_json TEXT NOT NULL,
+      bridged_evidence_fact_ids_json TEXT NOT NULL,
+      agent_run_memory_fact_ids_json TEXT NOT NULL,
+      active_focus_updated INTEGER NOT NULL CHECK(active_focus_updated IN (0, 1)),
+      open_threads_updated INTEGER NOT NULL CHECK(open_threads_updated IN (0, 1)),
+      provider_outcome TEXT NOT NULL
+        CHECK(provider_outcome IN (
+          'structural_only',
+          'valid',
+          'empty_valid',
+          'malformed',
+          'schema_invalid',
+          'provider_error'
+        )),
+      provider_outcome_code TEXT
+        CHECK(provider_outcome_code IS NULL OR provider_outcome_code IN (
+          'empty_response',
+          'invalid_json',
+          'non_object',
+          'missing_required_field',
+          'unexpected_field',
+          'invalid_field_type',
+          'invalid_field_value',
+          'limit_exceeded',
+          'provider_request_failed',
+          'unsupported_response_shape'
+        )),
+      persisted_at INTEGER NOT NULL CHECK(persisted_at >= 0),
+      PRIMARY KEY (job_id, attempt_number),
+      CHECK(episode_id IS NULL OR LENGTH(TRIM(episode_id)) > 0),
+      CHECK(
+        (provider_outcome IN ('structural_only', 'valid', 'empty_valid')
+          AND provider_outcome_code IS NULL)
+        OR (provider_outcome = 'malformed'
+          AND provider_outcome_code IN ('empty_response', 'invalid_json', 'non_object'))
+        OR (provider_outcome = 'schema_invalid'
+          AND provider_outcome_code IN (
+            'missing_required_field',
+            'unexpected_field',
+            'invalid_field_type',
+            'invalid_field_value',
+            'limit_exceeded'
+          ))
+        OR (provider_outcome = 'provider_error'
+          AND provider_outcome_code IN (
+            'provider_request_failed',
+            'unsupported_response_shape'
+          ))
+      )
+    );
+    CREATE INDEX IF NOT EXISTS idx_ingestion_receipts_persisted_at
+      ON ${INGESTION_RECEIPTS_TABLE}(persisted_at, job_id);
   `);
 }
 
@@ -299,12 +363,15 @@ function ensureSourceIdentity(db: MemoryDb): void {
       );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_ingestion_jobs_source_turn
       ON memory_ingestion_jobs(thread_id, source_end_message_id);
+    DELETE FROM memory_ingestion_receipts
+      WHERE job_id NOT IN (SELECT id FROM memory_ingestion_jobs);
   `);
 }
 
 export function ensureIngestionQueueSchema(db: MemoryDb): void {
   createDurableIngestionJobsTable(db, INGESTION_JOBS_TABLE, true);
   migrateLegacyIngestionQueue(db);
+  ensureIngestionReceiptsTable(db);
   ensureIndexes(db);
   ensureSourceIdentity(db);
 }

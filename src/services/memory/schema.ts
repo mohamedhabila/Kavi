@@ -570,6 +570,7 @@ export function clearStructuredMemory(): void {
     DELETE FROM memory_working_blocks;
     DELETE FROM memory_consolidation_state;
     DELETE FROM memory_migration_state;
+    DELETE FROM memory_ingestion_receipts;
     DELETE FROM memory_ingestion_jobs;
     DELETE FROM memory_tasks;
     DELETE FROM memory_reflections;

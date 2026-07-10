@@ -131,6 +131,26 @@ describe('ensureFactSchema', () => {
     expect(columnNames('memory_episodes')).toContain('summary');
     expect(columnNames('memory_fact_evidence')).toContain('fact_id');
     expect(columnNames('memory_ingestion_jobs')).toContain('provider_enrichment');
+    expect(columnNames('memory_ingestion_receipts')).toEqual(
+      expect.arrayContaining([
+        'job_id',
+        'attempt_number',
+        'episode_id',
+        'deterministic_fact_ids_json',
+        'provider_fact_ids_json',
+        'invalidated_fact_ids_json',
+        'bridged_evidence_fact_ids_json',
+        'agent_run_memory_fact_ids_json',
+        'active_focus_updated',
+        'open_threads_updated',
+        'provider_outcome',
+        'provider_outcome_code',
+        'persisted_at',
+      ]),
+    );
+    expect(indexNames('memory_ingestion_receipts')).toContain(
+      'idx_ingestion_receipts_persisted_at',
+    );
   });
 
   it('migrates ingestion jobs to bounded durable states without retaining raw errors', () => {

@@ -7,6 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import { INGESTION_BATCH_LIMIT, MAX_INGESTION_ATTEMPTS } from './onDeviceGuards';
+import { runMemoryTransaction } from './access/transaction';
 import { ensureFactSchema, newId } from './schema';
 import { getMemoryDb } from './sqlite-store';
 
@@ -268,21 +269,42 @@ export function getNextPendingIngestionAttemptAt(): number | null {
 
 export function discardPendingIngestionJobs(): number {
   ensureFactSchema();
-  const result = getMemoryDb().runSync(
-    `DELETE FROM memory_ingestion_jobs
-      WHERE status IN ('pending', 'processing', 'retrying')`,
-  );
-  return Math.max(0, result.changes ?? 0);
+  return runMemoryTransaction(() => {
+    const db = getMemoryDb();
+    db.runSync(
+      `DELETE FROM memory_ingestion_receipts
+        WHERE job_id IN (
+          SELECT id FROM memory_ingestion_jobs
+           WHERE status IN ('pending', 'processing', 'retrying')
+        )`,
+    );
+    const result = db.runSync(
+      `DELETE FROM memory_ingestion_jobs
+        WHERE status IN ('pending', 'processing', 'retrying')`,
+    );
+    return Math.max(0, result.changes ?? 0);
+  });
 }
 
 export function discardIngestionJob(jobId: string): boolean {
   ensureFactSchema();
-  const result = getMemoryDb().runSync(
-    `DELETE FROM memory_ingestion_jobs
-      WHERE id = ? AND status IN ('pending', 'processing', 'retrying')`,
-    jobId,
-  );
-  return (result.changes ?? 0) === 1;
+  return runMemoryTransaction(() => {
+    const db = getMemoryDb();
+    db.runSync(
+      `DELETE FROM memory_ingestion_receipts
+        WHERE job_id IN (
+          SELECT id FROM memory_ingestion_jobs
+           WHERE id = ? AND status IN ('pending', 'processing', 'retrying')
+        )`,
+      jobId,
+    );
+    const result = db.runSync(
+      `DELETE FROM memory_ingestion_jobs
+        WHERE id = ? AND status IN ('pending', 'processing', 'retrying')`,
+      jobId,
+    );
+    return (result.changes ?? 0) === 1;
+  });
 }
 
 export function countCompletedIngestionJobsForThread(threadId: string): number {
