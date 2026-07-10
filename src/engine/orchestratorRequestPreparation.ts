@@ -8,6 +8,12 @@ import { getSkillSystemPrompts } from '../services/skills/manager';
 import type { AgentRunControlGraphState } from '../types/agentRun';
 import type { LlmProviderConfig } from '../types/provider';
 import type { Message } from '../types/message';
+import {
+  resolveMemoryContextStrategy,
+  resolveMemoryRetrievalStrategy,
+  type MemoryContextStrategy,
+  type MemoryRetrievalStrategy,
+} from '../services/memory/memoryAccessPolicy';
 import { getActiveGoal } from './goals/types';
 import { buildScopedFallbackMemoryAccessContext } from './orchestratorContext';
 import { prepareAgentControlGraphRequestContext } from './graph/requestContext';
@@ -118,6 +124,8 @@ export async function prepareOrchestratorRequestBundle(params: {
   taskId?: string;
   workflowScopeUserMessageId?: string;
   graphSnapshot?: AgentRunControlGraphState;
+  memoryRetrievalStrategy?: MemoryRetrievalStrategy;
+  memoryContextStrategy?: MemoryContextStrategy;
 }): Promise<{
   latestUserMessageText: string;
   livingMemory: LivingMemoryBridgeOutput | null;
@@ -141,6 +149,10 @@ export async function prepareOrchestratorRequestBundle(params: {
     mediaUnderstandingEnabled: params.mediaUnderstandingEnabled,
     messages: params.messages,
   });
+  const memoryRetrievalStrategy = resolveMemoryRetrievalStrategy(
+    params.memoryRetrievalStrategy,
+  );
+  const memoryContextStrategy = resolveMemoryContextStrategy(params.memoryContextStrategy);
   let memoryAccessContext: Awaited<ReturnType<typeof buildUnifiedMemoryAccessContext>>;
   try {
     memoryAccessContext = await buildUnifiedMemoryAccessContext({
@@ -157,8 +169,16 @@ export async function prepareOrchestratorRequestBundle(params: {
         provider: params.activeProvider,
         model: params.activeModel,
       },
+      retrievalStrategy: memoryRetrievalStrategy,
+      contextStrategy: memoryContextStrategy,
     });
   } catch (memoryAccessError: unknown) {
+    if (
+      memoryRetrievalStrategy !== 'production' ||
+      memoryContextStrategy !== 'production'
+    ) {
+      throw memoryAccessError;
+    }
     params.logger.devWarn(
       'Unified memory access unavailable for this request:',
       memoryAccessError instanceof Error ? memoryAccessError.message : String(memoryAccessError),
