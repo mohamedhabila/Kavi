@@ -1,0 +1,479 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/judge-calibration.schema.json",
+  "title": "Kavi evaluator calibration artifacts",
+  "description": "Closed contracts for private human/judge calibration input and aggregate content-free calibration reports.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/calibrationInput"
+    },
+    {
+      "$ref": "#/$defs/calibrationReport"
+    }
+  ],
+  "$defs": {
+    "safeId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "label": {
+      "type": "string",
+      "enum": ["pass", "fail", "ambiguous"]
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "maintainerIds"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "maintainerIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/safeId"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    },
+    "custody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ownerId",
+        "reviewerId",
+        "candidateAccessDetected",
+        "humanLabelsExposedBeforeJudgeFreeze",
+        "judgePredictionsFrozenAt",
+        "humanLabelsReleasedAt",
+        "accessReviewedAt"
+      ],
+      "properties": {
+        "ownerId": {
+          "$ref": "#/$defs/safeId"
+        },
+        "reviewerId": {
+          "$ref": "#/$defs/safeId"
+        },
+        "candidateAccessDetected": {
+          "type": "boolean"
+        },
+        "humanLabelsExposedBeforeJudgeFreeze": {
+          "type": "boolean"
+        },
+        "judgePredictionsFrozenAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "humanLabelsReleasedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "accessReviewedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "llmJudge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "id",
+        "modelIdentity",
+        "judgeConfigSha256",
+        "modelConfigSha256",
+        "promptSha256",
+        "rubricSha256"
+      ],
+      "properties": {
+        "kind": {
+          "const": "llm_judge"
+        },
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "modelIdentity": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!.*https?://)(?!/)(?![A-Za-z]:[\\\\/]).+$"
+        },
+        "judgeConfigSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "modelConfigSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "promptSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "rubricSha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "deterministicEvaluator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "implementationSha256", "rubricSha256"],
+      "properties": {
+        "kind": {
+          "const": "deterministic_structural"
+        },
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "implementationSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "rubricSha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "calibrationExample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "family", "humanLabel", "judgeLabel"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^cal-[a-f0-9]{16}$"
+        },
+        "family": {
+          "$ref": "#/$defs/safeId"
+        },
+        "humanLabel": {
+          "$ref": "#/$defs/label"
+        },
+        "judgeLabel": {
+          "$ref": "#/$defs/label"
+        }
+      }
+    },
+    "calibrationInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "$schema",
+        "kind",
+        "schemaVersion",
+        "id",
+        "frozenAt",
+        "evaluator",
+        "requiredFamilies",
+        "examples"
+      ],
+      "properties": {
+        "$schema": {
+          "const": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/judge-calibration.schema.json"
+        },
+        "kind": {
+          "const": "judge_calibration_input"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "id": {
+          "$ref": "#/$defs/safeId"
+        },
+        "frozenAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "candidate": {
+          "$ref": "#/$defs/candidate"
+        },
+        "custody": {
+          "$ref": "#/$defs/custody"
+        },
+        "evaluator": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/llmJudge"
+            },
+            {
+              "$ref": "#/$defs/deterministicEvaluator"
+            }
+          ]
+        },
+        "requiredFamilies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/safeId"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "examples": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/calibrationExample"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "evaluator": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "llm_judge"
+                  }
+                },
+                "required": ["kind"]
+              }
+            },
+            "required": ["evaluator"]
+          },
+          "then": {
+            "required": ["candidate", "custody"],
+            "properties": {
+              "candidate": {
+                "$ref": "#/$defs/candidate"
+              },
+              "custody": {
+                "$ref": "#/$defs/custody"
+              },
+              "examples": {
+                "type": "array",
+                "minItems": 100
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "examples": {
+                "type": "array",
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "reportEvaluator": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "judgeConfigSha256",
+            "modelConfigSha256",
+            "promptSha256",
+            "rubricSha256"
+          ],
+          "properties": {
+            "kind": {
+              "const": "llm_judge"
+            },
+            "judgeConfigSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "modelConfigSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "promptSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "rubricSha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "implementationSha256", "rubricSha256"],
+          "properties": {
+            "kind": {
+              "const": "deterministic_structural"
+            },
+            "implementationSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "rubricSha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
+      ]
+    },
+    "familyCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["family", "resolvedHumanCount", "humanAmbiguousCount", "covered"],
+      "properties": {
+        "family": {
+          "$ref": "#/$defs/safeId"
+        },
+        "resolvedHumanCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "humanAmbiguousCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "covered": {
+          "type": "boolean"
+        }
+      }
+    },
+    "calibrationFailure": {
+      "type": "string",
+      "enum": [
+        "invalid_contract",
+        "invalid_configuration",
+        "invalid_custody",
+        "insufficient_resolved_examples",
+        "missing_human_class",
+        "class_imbalance",
+        "incomplete_family_coverage",
+        "judge_disagreement_threshold"
+      ]
+    },
+    "calibrationReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "$schema",
+        "kind",
+        "schemaVersion",
+        "generatedAt",
+        "inputSha256",
+        "evaluator",
+        "custodyValid",
+        "coverage",
+        "counts",
+        "disagreement",
+        "status",
+        "claimEligible",
+        "failures"
+      ],
+      "properties": {
+        "$schema": {
+          "const": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/judge-calibration.schema.json"
+        },
+        "kind": {
+          "const": "judge_calibration_report"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "generatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "inputSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "evaluator": {
+          "$ref": "#/$defs/reportEvaluator"
+        },
+        "custodyValid": {
+          "type": "boolean"
+        },
+        "coverage": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/familyCoverage"
+          },
+          "minItems": 1
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "total",
+            "resolvedHuman",
+            "humanAmbiguous",
+            "humanPass",
+            "humanFail",
+            "judgeBinaryAgreement",
+            "judgeBinaryMismatch",
+            "judgeAmbiguousOnResolved"
+          ],
+          "properties": {
+            "total": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "resolvedHuman": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "humanAmbiguous": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "humanPass": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "humanFail": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "judgeBinaryAgreement": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "judgeBinaryMismatch": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "judgeAmbiguousOnResolved": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "disagreement": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["count", "rate", "failureThreshold"],
+          "properties": {
+            "count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "rate": {
+              "type": ["number", "null"],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "failureThreshold": {
+              "const": 0.05
+            }
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": ["passed", "failed", "not_required"]
+        },
+        "claimEligible": {
+          "type": "boolean"
+        },
+        "failures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/calibrationFailure"
+          },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

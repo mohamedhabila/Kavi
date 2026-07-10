@@ -6,6 +6,7 @@ const {
   checkPublicKlaeGovernance,
   validatePrivateKlaeRelease,
 } = require('./lib/klaePrivateGovernance');
+const { checkPublicJudgeCalibrationContract } = require('./lib/judgeCalibration');
 
 const RELEASE_OPTIONS = Object.freeze({
   '--registry': 'registryPath',
@@ -59,6 +60,7 @@ const failures = [
   ...checkEvaluationContract(projectRoot),
   ...checkEvaluationCasePack(projectRoot),
   ...checkPublicKlaeGovernance(projectRoot),
+  ...checkPublicJudgeCalibrationContract(projectRoot),
   ...release.failures,
 ];
 if (release.enabled && release.failures.length === 0) {
@@ -80,7 +82,7 @@ if (failures.length > 0) {
 } else {
   const suffix = release.enabled
     ? ' The frozen 40/40/100+ private KLAE release packs and custody registry are valid.'
-    : ' The KLAE private-governance schema and metadata-only registry template are valid.';
+    : ' The KLAE private-governance schema and metadata-only registry template, plus judge-calibration contract, are valid.';
   console.log(
     `[check-evaluation-contract] Canonical evaluation schema, contract, and public case pack are valid.${suffix}`,
   );
