@@ -88,6 +88,8 @@ function rubricFailureCategories(entry, rubricKind, turnCompletionField = null) 
         return ['execution_failure'];
       }
       return ['unknown_structural_failure'];
+    case 'turn_final_response_token':
+      return ['final_response_failure'];
     case 'memory_fact':
     case 'memory_episode_count':
     case 'ingestion_job_checkpointed':

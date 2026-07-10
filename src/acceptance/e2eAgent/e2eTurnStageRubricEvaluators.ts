@@ -4,7 +4,12 @@ import type { E2ERubric, E2EScenarioResult, E2EScenarioTurnTrace } from './types
 type E2ETurnStageRubric = Extract<
   E2ERubric,
   {
-    kind: 'turn_route' | 'turn_completion' | 'turn_memory_receipt' | 'turn_lifecycle_boundary';
+    kind:
+      | 'turn_route'
+      | 'turn_completion'
+      | 'turn_memory_receipt'
+      | 'turn_lifecycle_boundary'
+      | 'turn_final_response_token';
   }
 >;
 
@@ -27,9 +32,13 @@ function missingTurnOutcome(fixtureId: string, turnIndex: number): AcceptanceFix
 }
 
 function fixtureIdForRubric(result: E2EScenarioResult, rubric: E2ETurnStageRubric): string {
-  return rubric.kind === 'turn_completion'
-    ? `${result.fixtureId}:${rubric.kind}:${rubric.field}`
-    : `${result.fixtureId}:${rubric.kind}`;
+  if (rubric.kind === 'turn_completion') {
+    return `${result.fixtureId}:${rubric.kind}:${rubric.field}`;
+  }
+  if (rubric.kind === 'turn_final_response_token') {
+    return `${result.fixtureId}:turn-${rubric.turnIndex}:${rubric.kind}`;
+  }
+  return `${result.fixtureId}:${rubric.kind}`;
 }
 
 function hasValidCompletionExpectation(rubric: E2ETurnCompletionRubric): boolean {
@@ -125,6 +134,24 @@ export function evaluateE2ETurnStageRubric(
           fixtureId,
           passed: false,
           detail: `turn ${rubric.turnIndex} app relaunch lifecycle boundary not observed`,
+        };
+      }
+      return { fixtureId, passed: true };
+    }
+
+    case 'turn_final_response_token': {
+      if (!rubric.token || rubric.token !== rubric.token.trim() || rubric.token.length > 256) {
+        return {
+          fixtureId,
+          passed: false,
+          detail: `turn ${rubric.turnIndex} final response token expectation is invalid`,
+        };
+      }
+      if (!turn.finalAssistant?.text.includes(rubric.token)) {
+        return {
+          fixtureId,
+          passed: false,
+          detail: `turn ${rubric.turnIndex} exact final response token missing`,
         };
       }
       return { fixtureId, passed: true };

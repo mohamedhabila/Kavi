@@ -215,6 +215,7 @@ export type E2ERubric =
       turnIndex: number;
       boundary: ForegroundScenarioLifecycleBoundary;
     }
+  | { kind: 'turn_final_response_token'; turnIndex: number; token: string }
   | { kind: 'goal_status'; goalId: string; status: AgentGoalStatus }
   | { kind: 'ingestion_job_checkpointed'; minCount?: number }
   | { kind: 'ingestion_job_completed'; minCount?: number }

@@ -138,6 +138,61 @@ function buildResult(turn: TurnTrace = buildTurn()): E2EScenarioResult {
 }
 
 describe('turn stage-attribution rubrics', () => {
+  it('checks an exact opaque token in the attributed final response', () => {
+    const result = buildResult(
+      buildTurn({
+        turnIndex: 2,
+        finalAssistant: {
+          messageId: 'assistant-2',
+          text: 'The completed outcome was OUTCOME-CONTINUITY-E2E-42.',
+          timestamp: 12,
+          completionStatus: 'complete',
+          finishReason: 'stop',
+          terminalReason: null,
+        },
+      }),
+    );
+
+    expect(
+      evaluateE2ERubric(result, {
+        kind: 'turn_final_response_token',
+        turnIndex: 2,
+        token: 'OUTCOME-CONTINUITY-E2E-42',
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        fixtureId: 'stage-attribution:turn-2:turn_final_response_token',
+        passed: true,
+      }),
+    );
+    expect(
+      evaluateE2ERubric(result, {
+        kind: 'turn_final_response_token',
+        turnIndex: 2,
+        token: 'WRONG-OUTCOME-E2E-42',
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        passed: false,
+        detail: 'turn 2 exact final response token missing',
+      }),
+    );
+  });
+
+  it('rejects invalid final response token expectations', () => {
+    expect(
+      evaluateE2ERubric(buildResult(), {
+        kind: 'turn_final_response_token',
+        turnIndex: 1,
+        token: ' padded-token ',
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        passed: false,
+        detail: 'turn 1 final response token expectation is invalid',
+      }),
+    );
+  });
   it('grades the actual route directive and resolved mode for the requested turn', () => {
     expect(
       evaluateE2ERubric(buildResult(), {

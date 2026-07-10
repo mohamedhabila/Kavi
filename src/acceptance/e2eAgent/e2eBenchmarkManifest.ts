@@ -48,7 +48,8 @@ export type E2EBenchmarkStructuralEvidenceKind =
   | 'cache_event'
   | 'execution_state'
   | 'memory_receipt'
-  | 'lifecycle_event';
+  | 'lifecycle_event'
+  | 'assistant_response';
 
 export type E2EBenchmarkEvaluatorKind = 'final_state' | 'trajectory' | 'resource_budget';
 
@@ -189,6 +190,7 @@ const TRAJECTORY_RUBRICS: ReadonlySet<E2ERubricKind> = new Set([
   'turn_completion',
   'turn_memory_receipt',
   'turn_lifecycle_boundary',
+  'turn_final_response_token',
 ]);
 
 const RESOURCE_BUDGET_RUBRICS: ReadonlySet<E2ERubricKind> = new Set(['token_budget']);
@@ -260,6 +262,8 @@ function structuralEvidenceKindForRubric(rubric: E2ERubric): E2EBenchmarkStructu
       return 'memory_receipt';
     case 'turn_lifecycle_boundary':
       return 'lifecycle_event';
+    case 'turn_final_response_token':
+      return 'assistant_response';
     case 'goals_bootstrapped':
     case 'goal_evidence_satisfied':
     case 'graph_status':

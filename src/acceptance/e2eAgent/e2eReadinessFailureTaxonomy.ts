@@ -37,6 +37,7 @@ const RUBRIC_KINDS: ReadonlySet<E2ERubricKind> = new Set([
   'turn_completion',
   'turn_memory_receipt',
   'turn_lifecycle_boundary',
+  'turn_final_response_token',
   'goal_status',
   'ingestion_job_checkpointed',
   'ingestion_job_completed',
@@ -164,6 +165,8 @@ function rubricFailureCategories(
         : turnCompletionField === 'execution' || turnCompletionField === 'agent_run'
           ? ['execution_failure']
           : ['unknown_structural_failure'];
+    case 'turn_final_response_token':
+      return ['final_response_failure'];
     case 'memory_fact':
     case 'memory_fact_absent':
     case 'memory_episode_count':
