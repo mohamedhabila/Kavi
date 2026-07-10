@@ -88,7 +88,7 @@ if (failures.length > 0) {
 } else {
   const suffix = release.enabled
     ? ' The frozen 40/40/100+ private KLAE release packs and custody registry are valid.'
-    : ' The KLAE governance, judge calibration, deterministic statistics, intent-frame contract, and enabled benchmark provenance are valid.';
+    : ' The KLAE private-governance schema and metadata-only registry template, judge calibration, deterministic statistics, intent-frame contract, and enabled benchmark provenance are valid.';
   console.log(
     `[check-evaluation-contract] Canonical evaluation schema, contract, and public case pack are valid.${suffix}`,
   );
