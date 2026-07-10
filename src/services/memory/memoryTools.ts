@@ -415,7 +415,6 @@ export interface MemoryRememberArgs {
   originConversationId?: string | null;
   originThreadId?: string | null;
   originTaskId?: string | null;
-  sourceMessageId?: string | null;
   sourceRunId?: string | null;
   sourceSummary?: string | null;
   importance?: number;
@@ -432,6 +431,7 @@ export function executeMemoryRemember(
   args: MemoryRememberArgs,
   context: MemoryRememberExecutionContext = {},
 ): MemoryRememberResult | MemoryToolError {
+  if (!canWriteLongTermMemory()) return err('memory_disabled', 'Long-term memory is disabled.');
   ensureFactSchema();
   const subject = trimNonEmpty(args.subject, 80);
   const predicate = trimNonEmpty(args.predicate, 80);

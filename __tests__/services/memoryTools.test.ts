@@ -11,6 +11,8 @@ import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { ensureDefaultBlocks } from '../../src/services/memory/blocks';
 import { findEntityByName } from '../../src/services/memory/entities';
+import { listFacts } from '../../src/services/memory/facts/queries';
+import { useSettingsStore } from '../../src/store/useSettingsStore';
 import {
   queryMemoryFactsForManagement,
   executeMemoryRemember,
@@ -30,11 +32,13 @@ beforeEach(() => {
   resetFactSchemaCacheForTests();
   ensureFactSchema();
   ensureDefaultBlocks();
+  useSettingsStore.setState({ disableLongTermMemory: false });
 });
 
 afterEach(() => {
   closeMemoryDb();
   expoSqlite.__resetExpoSqliteForTests();
+  useSettingsStore.setState({ disableLongTermMemory: false });
 });
 
 function groundedRequest(userMessageId: string, userMessageText: string) {
@@ -59,6 +63,21 @@ function rememberOk(
 }
 
 describe('executeMemoryRemember', () => {
+  it('fails before direct-service writes when long-term memory is disabled', () => {
+    useSettingsStore.setState({ disableLongTermMemory: true });
+
+    const result = executeMemoryRemember({
+      subject: 'disabled-subject',
+      predicate: 'private_value',
+      value: 'must-not-persist',
+      scope: 'global',
+    });
+
+    expect(result).toMatchObject({ ok: false, code: 'memory_disabled' });
+    expect(findEntityByName('disabled-subject')).toBeNull();
+    expect(listFacts()).toEqual([]);
+  });
+
   it('records a new fact and creates the entity', () => {
     const result = rememberOk({
       subject: 'user',
@@ -69,6 +88,9 @@ describe('executeMemoryRemember', () => {
     expect(result.status).toBe('created');
     expect(result.fact.value).toBe('Berlin');
     expect(result.superseded).toEqual([]);
+    expect(listFacts()).toEqual([
+      expect.objectContaining({ factClass: 'unknown', sourceAuthority: 'assistant_inferred' }),
+    ]);
   });
 
   it('reports duplicate on identical re-record', () => {

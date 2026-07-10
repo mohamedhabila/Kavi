@@ -40,7 +40,6 @@ const MEMORY_REMEMBER_KEYS = new Set([
   'originConversationId',
   'originThreadId',
   'originTaskId',
-  'sourceMessageId',
   'sourceRunId',
   'sourceSummary',
   'importance',
@@ -214,7 +213,6 @@ function canonicalOptionalOracleStrings(
       | 'originConversationId'
       | 'originThreadId'
       | 'originTaskId'
-      | 'sourceMessageId'
       | 'sourceRunId'
       | 'sourceSummary',
     maxLength: number,
@@ -231,7 +229,6 @@ function canonicalOptionalOracleStrings(
   assign('originConversationId', 512);
   assign('originThreadId', 512);
   assign('originTaskId', 512);
-  assign('sourceMessageId', 512);
   assign('sourceRunId', 512);
   assign('sourceSummary', 1_000);
 }

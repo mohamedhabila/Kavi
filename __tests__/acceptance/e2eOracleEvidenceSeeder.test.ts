@@ -79,7 +79,6 @@ describe('paired oracle evidence seeding', () => {
           originConversationId: 'DECLARED-ORIGIN',
           originThreadId: 'DECLARED-THREAD',
           originTaskId: 'DECLARED-TASK',
-          sourceMessageId: 'DECLARED-MESSAGE',
           sourceRunId: 'DECLARED-RUN',
           sourceSummary: 'DECLARED-SUMMARY',
         },
@@ -116,7 +115,6 @@ describe('paired oracle evidence seeding', () => {
       'DECLARED-ORIGIN',
       'DECLARED-THREAD',
       'DECLARED-TASK',
-      'DECLARED-MESSAGE',
       'DECLARED-RUN',
       'DECLARED-SUMMARY',
     ]) {

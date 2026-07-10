@@ -118,7 +118,6 @@ function withExecutionMemoryContext(
     scope,
     sourceSummary: source.sourceSummary,
     importance: source.importance,
-    sourceMessageId: null,
     sourceRunId,
   };
   if (scope === 'global') return { args: common, context: rememberContext };

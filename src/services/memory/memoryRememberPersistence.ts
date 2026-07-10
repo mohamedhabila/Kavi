@@ -166,22 +166,23 @@ export function persistMemoryRemember(
     if (evidence || resolution.currentFacts.length > 0) {
       return { status: 'grounding_required', reason: decision.reason };
     }
-    const subject = upsertEntity({ name: input.subject, type: input.subjectType });
-    const result = recordFactWithApplicability(
-      { ...buildRecordInput(input, subject.id), sourceMessageId: null, supersedePrior: false },
-      {
-        factClass: 'unknown',
-        sourceAuthority: 'assistant_inferred',
-        ...(input.scope === 'persona' ? { personaId: context.personaId } : {}),
-      },
-    );
+    const result = runMemoryTransaction(() => {
+      const subject = upsertEntity({ name: input.subject, type: input.subjectType });
+      return recordFactWithApplicability(
+        { ...buildRecordInput(input, subject.id), sourceMessageId: null, supersedePrior: false },
+        {
+          factClass: 'unknown',
+          sourceAuthority: 'assistant_inferred',
+          ...(input.scope === 'persona' ? { personaId: context.personaId } : {}),
+        },
+      );
+    });
     return { status: 'persisted', result, grounded: false };
   }
 
   if (!evidence || !evidenceOwnsWriteScope(input, evidence)) {
     return { status: 'grounding_required', reason: 'scope_mismatch' };
   }
-  const subject = upsertEntity({ name: input.subject, type: input.subjectType });
   return runMemoryTransaction((): MemoryRememberPersistenceResult => {
     assertMemoryPersistenceSourcesAreWritable(
       {
@@ -191,6 +192,7 @@ export function persistMemoryRemember(
       },
       [{ sourceKind: 'message', sourceId: evidence.userMessageId }],
     );
+    const subject = upsertEntity({ name: input.subject, type: input.subjectType });
     const recordInput = {
       ...buildRecordInput(input, subject.id),
       sourceMessageId: evidence.userMessageId,
