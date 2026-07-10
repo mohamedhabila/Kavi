@@ -137,8 +137,8 @@ describe('e2e provider matrix helpers', () => {
     expect(geminiSummary).toMatchObject({
       status: 'passed',
       reportRelativePath: 'gemini-provider-core.json',
-      passedCount: 2,
-      scenarioCount: 2,
+      passedCount: 3,
+      scenarioCount: 3,
       eligibleCacheReadRate: 0.5,
     });
     expect(openaiSummary).toMatchObject({
@@ -147,8 +147,8 @@ describe('e2e provider matrix helpers', () => {
     });
     expect(matrixReport.overall).toMatchObject({
       passing: false,
-      scenarioCount: 4,
-      passedCount: 3,
+      scenarioCount: 6,
+      passedCount: 5,
       failedCount: 1,
     });
     expect(matrixReport.providerSummaries).toEqual(
@@ -195,6 +195,32 @@ describe('e2e provider matrix helpers', () => {
     expect(matrixReport.providerSummaries[0].eligibleCacheReadRate).toBe(0.5);
     expect(matrixReport.overall.eligibleCacheReadRate).toBe(0.5);
   });
+
+  it('rejects current-version reports that do not cover the requested scenario set', () => {
+    const plan = buildMatrixRunPlan({
+      projectRoot: '/repo',
+      env: { E2E_PROVIDER_MATRIX_PROVIDERS: 'gemini' },
+      generatedAt: '2026-06-15T10:00:00.000Z',
+    });
+    const report = buildReport('gemini', true);
+    report.scenarios.pop();
+    report.totals.scenarioCount -= 1;
+    report.totals.passedCount -= 1;
+    report.reliability.scenarioCount -= 1;
+
+    const summary = buildProviderBatchSummary({
+      ...plan.runs[0],
+      exitStatus: 0,
+      report,
+    });
+
+    expect(summary).toMatchObject({
+      status: 'failed',
+      passing: false,
+      metricsPassing: false,
+      reason: 'report_scenario_set_mismatch',
+    });
+  });
 });
 
 function buildReport(provider: string, calendarPassed: boolean) {
@@ -227,6 +253,20 @@ function buildReport(provider: string, calendarPassed: boolean) {
         eligibleInputTokens: 0,
       },
     },
+    {
+      fixtureId: 'delegation-worker-evidence-chain',
+      passed: true,
+      attemptCount: 1,
+      usage: {
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        totalTokens: 0,
+      },
+      cache: {
+        eligibleInputTokens: 0,
+      },
+    },
   ];
 
   return {
@@ -239,8 +279,8 @@ function buildReport(provider: string, calendarPassed: boolean) {
       endpointSha256: 'a'.repeat(64),
     },
     totals: {
-      scenarioCount: 2,
-      passedCount: calendarPassed ? 2 : 1,
+      scenarioCount: 3,
+      passedCount: calendarPassed ? 3 : 2,
       failedCount: calendarPassed ? 0 : 1,
       inputTokens: 6000,
       outputTokens: 300,
@@ -255,10 +295,10 @@ function buildReport(provider: string, calendarPassed: boolean) {
       passing: true,
     },
     reliability: {
-      scenarioCount: 2,
-      pass1PassedCount: calendarPassed ? 2 : 1,
-      pass1Rate: calendarPassed ? 1 : 0.5,
-      passKRate: calendarPassed ? 1 : 0.5,
+      scenarioCount: 3,
+      pass1PassedCount: calendarPassed ? 3 : 2,
+      pass1Rate: calendarPassed ? 1 : 2 / 3,
+      passKRate: calendarPassed ? 1 : 2 / 3,
       retriedScenarioCount: calendarPassed ? 0 : 1,
     },
     assessment: {

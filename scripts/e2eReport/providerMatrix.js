@@ -69,6 +69,91 @@ function eligibleCacheReadTokens(cacheReadTokens, eligibleInputTokens) {
   return Math.min(Math.max(0, cacheReadTokens), Math.max(0, eligibleInputTokens));
 }
 
+function isRecord(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isNonNegativeNumber(value) {
+  return Number.isFinite(value) && value >= 0;
+}
+
+function isNonNegativeInteger(value) {
+  return Number.isInteger(value) && value >= 0;
+}
+
+function validateProviderBatchReport(report, expectedScenarioIds) {
+  if (!isRecord(report) || report.schemaVersion !== RUN_REPORT_SCHEMA_VERSION) {
+    return 'report_version_mismatch';
+  }
+  if (
+    !Array.isArray(report.scenarios) ||
+    !isRecord(report.totals) ||
+    !isRecord(report.cache) ||
+    !isRecord(report.reliability) ||
+    !isRecord(report.assessment) ||
+    !isRecord(report.runMetadata) ||
+    typeof report.metricsPassing !== 'boolean'
+  ) {
+    return 'report_contract_invalid';
+  }
+  const expectedIds = [...new Set(expectedScenarioIds)];
+  const actualIds = report.scenarios.map((scenario) => scenario?.fixtureId);
+  const sortedExpectedIds = [...expectedIds].sort();
+  const sortedActualIds = [...actualIds].sort();
+  if (
+    expectedIds.length === 0 ||
+    expectedIds.length !== expectedScenarioIds.length ||
+    actualIds.some((fixtureId) => typeof fixtureId !== 'string') ||
+    new Set(actualIds).size !== actualIds.length ||
+    actualIds.length !== expectedIds.length ||
+    sortedActualIds.some((fixtureId, index) => fixtureId !== sortedExpectedIds[index])
+  ) {
+    return 'report_scenario_set_mismatch';
+  }
+  const passedCount = report.scenarios.filter((scenario) => scenario.passed === true).length;
+  const failedCount = report.scenarios.filter((scenario) => scenario.passed === false).length;
+  if (
+    report.scenarios.some(
+      (scenario) =>
+        !isRecord(scenario) ||
+        typeof scenario.passed !== 'boolean' ||
+        !Number.isInteger(scenario.attemptCount) ||
+        scenario.attemptCount < 1 ||
+        !isRecord(scenario.usage) ||
+        !['inputTokens', 'outputTokens', 'cacheReadTokens', 'totalTokens'].every((key) =>
+          isNonNegativeNumber(scenario.usage[key]),
+        ) ||
+        !isRecord(scenario.cache) ||
+        !isNonNegativeNumber(scenario.cache.eligibleInputTokens),
+    ) ||
+    !isNonNegativeInteger(report.totals.scenarioCount) ||
+    !isNonNegativeInteger(report.totals.passedCount) ||
+    !isNonNegativeInteger(report.totals.failedCount) ||
+    report.totals.scenarioCount !== report.scenarios.length ||
+    report.totals.passedCount !== passedCount ||
+    report.totals.failedCount !== failedCount ||
+    passedCount + failedCount !== report.scenarios.length ||
+    !['inputTokens', 'outputTokens', 'cacheReadTokens', 'totalTokens'].every((key) =>
+      isNonNegativeNumber(report.totals[key]),
+    ) ||
+    typeof report.cache.passing !== 'boolean' ||
+    !isNonNegativeNumber(report.cache.eligibleInputTokens) ||
+    !isNonNegativeNumber(report.cache.cacheReadTokens) ||
+    !isNonNegativeNumber(report.cache.eligibleCacheReadRate) ||
+    report.cache.eligibleCacheReadRate > 1 ||
+    report.reliability.scenarioCount !== report.scenarios.length ||
+    !isNonNegativeNumber(report.reliability.pass1Rate) ||
+    report.reliability.pass1Rate > 1 ||
+    !isNonNegativeNumber(report.assessment.evidenceScore) ||
+    typeof report.runMetadata.provider !== 'string' ||
+    typeof report.runMetadata.model !== 'string' ||
+    !/^[a-f0-9]{64}$/u.test(report.runMetadata.endpointSha256)
+  ) {
+    return 'report_contract_invalid';
+  }
+  return null;
+}
+
 function resolveEligibleCacheReadTokensFromCache(
   cache,
   fallbackCacheReadTokens,
@@ -265,9 +350,10 @@ function buildProviderBatchSummary(params) {
       failedScenarioIds: [],
     };
   }
-  if (report.schemaVersion !== RUN_REPORT_SCHEMA_VERSION) {
+  const validationFailure = validateProviderBatchReport(report, params.scenarioIds);
+  if (validationFailure) {
     return {
-      ...buildSkippedProviderBatchSummary({ ...params, reason: 'report_version_mismatch' }),
+      ...buildSkippedProviderBatchSummary({ ...params, reason: validationFailure }),
       status: 'failed',
       exitStatus: params.exitStatus ?? 1,
     };
@@ -522,4 +608,5 @@ module.exports = {
   resolveProviderCredentialStatus,
   resolveProviderKeys,
   summarizeMatrixReport,
+  validateProviderBatchReport,
 };

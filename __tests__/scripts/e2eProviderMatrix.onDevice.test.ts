@@ -64,16 +64,19 @@ describe('e2e provider matrix on-device integration', () => {
       reportPath: '/repo/on-device.json',
       report: {
         version: ON_DEVICE_BENCHMARK_VERSION,
+        generatedAt: '2026-06-17T10:00:00.000Z',
         status: 'passed',
         model: { modelId: 'gemma-4-E2B-it' },
+        scenarios: [{ id: 'startup', status: 'passed' }],
         summary: {
-          scenarioCount: 10,
-          passedCount: 10,
+          scenarioCount: 1,
+          passedCount: 1,
           failedCount: 0,
           skippedCount: 0,
           passRate: 1,
           failedRequiredScenarioIds: [],
           missingRequiredScenarioIds: [],
+          passing: true,
         },
         assessment: {
           confidenceLevel: 'high',
@@ -86,8 +89,8 @@ describe('e2e provider matrix on-device integration', () => {
 
     expect(attached.overall).toMatchObject({
       passing: true,
-      scenarioCount: 10,
-      passedCount: 10,
+      scenarioCount: 1,
+      passedCount: 1,
       failedBatchRunCount: 0,
       onDeviceStatus: 'passed',
       onDeviceConfidenceLevel: 'high',
@@ -130,14 +133,20 @@ describe('e2e provider matrix on-device integration', () => {
       reportPath: '/repo/on-device.json',
       report: {
         version: ON_DEVICE_BENCHMARK_VERSION,
+        generatedAt: '2026-06-17T10:00:00.000Z',
         status: 'skipped',
         reason: 'device_unavailable',
+        model: { modelId: null },
+        scenarios: [],
         summary: {
           scenarioCount: 0,
           passedCount: 0,
           failedCount: 0,
           skippedCount: 0,
           passRate: 0,
+          failedRequiredScenarioIds: [],
+          missingRequiredScenarioIds: [],
+          passing: false,
         },
       },
     });
@@ -157,8 +166,10 @@ describe('e2e provider matrix on-device integration', () => {
       reportPath: '/repo/on-device.json',
       report: {
         version: ON_DEVICE_BENCHMARK_VERSION,
+        generatedAt: '2026-06-17T10:00:00.000Z',
         status: 'passed',
         model: { modelId: 'gemma-4-E2B-it' },
+        scenarios: [{ id: 'startup', status: 'passed' }],
         summary: {
           scenarioCount: 1,
           passedCount: 1,
@@ -167,6 +178,7 @@ describe('e2e provider matrix on-device integration', () => {
           passRate: 1,
           failedRequiredScenarioIds: [],
           missingRequiredScenarioIds: [],
+          passing: true,
         },
       },
     });
@@ -195,6 +207,24 @@ describe('e2e provider matrix on-device integration', () => {
       passing: false,
       metricsPassing: false,
       reason: 'report_version_mismatch',
+    });
+  });
+
+  it('rejects malformed reports that only claim the current version', () => {
+    const summary = buildOnDeviceMatrixSummary({
+      exitStatus: 0,
+      reportPath: '/repo/on-device.json',
+      report: {
+        version: ON_DEVICE_BENCHMARK_VERSION,
+        status: 'passed',
+      },
+    });
+
+    expect(summary).toMatchObject({
+      status: 'failed',
+      passing: false,
+      metricsPassing: false,
+      reason: 'report_contract_invalid',
     });
   });
 

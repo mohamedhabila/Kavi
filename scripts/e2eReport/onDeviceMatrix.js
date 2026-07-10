@@ -20,6 +20,65 @@ const ON_DEVICE_PROVIDER_ALIASES = new Set([
   'local-llm',
 ]);
 
+function isRecord(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isNonNegativeInteger(value) {
+  return Number.isInteger(value) && value >= 0;
+}
+
+function validateOnDeviceBenchmarkReport(report) {
+  if (!isRecord(report) || report.version !== ON_DEVICE_BENCHMARK_VERSION) {
+    return 'report_version_mismatch';
+  }
+  if (
+    typeof report.generatedAt !== 'string' ||
+    !['passed', 'failed', 'skipped'].includes(report.status) ||
+    !isRecord(report.model) ||
+    (report.model.modelId !== null && typeof report.model.modelId !== 'string') ||
+    !Array.isArray(report.scenarios) ||
+    !isRecord(report.summary)
+  ) {
+    return 'report_contract_invalid';
+  }
+  const summary = report.summary;
+  const scenarioIds = report.scenarios.map((scenario) => scenario?.id);
+  const passedCount = report.scenarios.filter((scenario) => scenario?.status === 'passed').length;
+  const failedCount = report.scenarios.filter((scenario) => scenario?.status === 'failed').length;
+  const skippedCount = report.scenarios.filter((scenario) => scenario?.status === 'skipped').length;
+  const expectedPassRate = report.scenarios.length > 0 ? passedCount / report.scenarios.length : 0;
+  if (
+    scenarioIds.some((id) => typeof id !== 'string' || id.length === 0) ||
+    new Set(scenarioIds).size !== scenarioIds.length ||
+    report.scenarios.some(
+      (scenario) =>
+        !isRecord(scenario) || !['passed', 'failed', 'skipped'].includes(scenario.status),
+    ) ||
+    !['scenarioCount', 'passedCount', 'failedCount', 'skippedCount'].every((key) =>
+      isNonNegativeInteger(summary[key]),
+    ) ||
+    summary.scenarioCount !== report.scenarios.length ||
+    summary.passedCount !== passedCount ||
+    summary.failedCount !== failedCount ||
+    summary.skippedCount !== skippedCount ||
+    !Number.isFinite(summary.passRate) ||
+    Math.abs(summary.passRate - expectedPassRate) > Number.EPSILON ||
+    typeof summary.passing !== 'boolean' ||
+    !Array.isArray(summary.failedRequiredScenarioIds) ||
+    !Array.isArray(summary.missingRequiredScenarioIds) ||
+    summary.failedRequiredScenarioIds.some((id) => typeof id !== 'string') ||
+    summary.missingRequiredScenarioIds.some((id) => typeof id !== 'string') ||
+    (report.status === 'passed' &&
+      (!summary.passing || report.scenarios.length === 0 || failedCount > 0 || skippedCount > 0)) ||
+    (report.status !== 'passed' && summary.passing) ||
+    (report.status === 'skipped' && report.scenarios.length !== 0)
+  ) {
+    return 'report_contract_invalid';
+  }
+  return null;
+}
+
 function splitProviderSelection(env) {
   const rawValue = env.E2E_PROVIDER_MATRIX_PROVIDERS || env.E2E_PROVIDER_MATRIX;
   const requested = parseCsvEnv(rawValue);
@@ -122,8 +181,9 @@ function runOnDeviceBenchmarkForMatrix(options) {
     } catch {
       return failedOnDeviceMatrixSummary(reportPath, 'report_invalid_json', exitStatus);
     }
-    if (report?.version !== ON_DEVICE_BENCHMARK_VERSION) {
-      return failedOnDeviceMatrixSummary(reportPath, 'report_version_mismatch', exitStatus);
+    const validationFailure = validateOnDeviceBenchmarkReport(report);
+    if (validationFailure) {
+      return failedOnDeviceMatrixSummary(reportPath, validationFailure, exitStatus);
     }
 
     fs.renameSync(invocationReportPath, reportPath);
@@ -142,12 +202,9 @@ function buildOnDeviceMatrixSummary(params) {
   if (!report) {
     return failedOnDeviceMatrixSummary(params.reportPath, 'report_missing', params.exitStatus);
   }
-  if (report.version !== ON_DEVICE_BENCHMARK_VERSION) {
-    return failedOnDeviceMatrixSummary(
-      params.reportPath,
-      'report_version_mismatch',
-      params.exitStatus,
-    );
+  const validationFailure = validateOnDeviceBenchmarkReport(report);
+  if (validationFailure) {
+    return failedOnDeviceMatrixSummary(params.reportPath, validationFailure, params.exitStatus);
   }
 
   const summary = report.summary || {};
@@ -271,4 +328,5 @@ module.exports = {
   buildOnDeviceMatrixSummary,
   runOnDeviceBenchmarkForMatrix,
   splitProviderSelection,
+  validateOnDeviceBenchmarkReport,
 };

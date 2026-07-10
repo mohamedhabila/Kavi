@@ -3,8 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const { RUN_REPORT_SCHEMA_VERSION } = require('./constants');
-const { buildProviderBatchSummary } = require('./providerMatrix');
+const { buildProviderBatchSummary, validateProviderBatchReport } = require('./providerMatrix');
 
 function failedSummary(run, exitStatus, reason) {
   return buildProviderBatchSummary({
@@ -59,8 +58,9 @@ function runProviderBatchForMatrix(options) {
     } catch {
       return failedSummary(run, exitStatus, 'report_invalid_json');
     }
-    if (report?.schemaVersion !== RUN_REPORT_SCHEMA_VERSION) {
-      return failedSummary(run, exitStatus, 'report_version_mismatch');
+    const validationFailure = validateProviderBatchReport(report, run.scenarioIds);
+    if (validationFailure) {
+      return failedSummary(run, exitStatus, validationFailure);
     }
     fs.renameSync(invocationReportPath, canonicalReportPath);
     return buildProviderBatchSummary({
