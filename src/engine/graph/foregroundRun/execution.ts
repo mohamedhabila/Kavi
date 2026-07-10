@@ -126,6 +126,7 @@ export async function executeForegroundConversationRun(
     ) && !abortController.signal.aborted;
   let executionLease: ForegroundModelExecutionLease | null = null;
   let projectionOwner: ForegroundModelProjectionOwner | null = null;
+  let projectionClaimed = false;
   let journalTerminal = false;
   let projectionReleased = false;
   const guardRunCallback = () =>
@@ -320,6 +321,7 @@ export async function executeForegroundConversationRun(
       projectionOwner = null;
       throw new Error(`foreground_model_projection_${claim}`);
     }
+    projectionClaimed = true;
     await context.durability.flushChatState();
     if (!context.durability.ownsModelProjection(conversationId, projectionOwner)) {
       throw new Error('foreground_model_projection_ownership_changed');
@@ -328,15 +330,24 @@ export async function executeForegroundConversationRun(
       lease: executionLease,
     });
   } catch (error: unknown) {
-    if (
+    const ownsClaim =
       projectionOwner &&
-      !context.durability.ownsModelProjection(conversationId, projectionOwner)
-    ) {
-      throw new Error('foreground_model_projection_ownership_changed');
+      context.durability.ownsModelProjection(conversationId, projectionOwner);
+    if (projectionOwner && !ownsClaim) {
+      projectionOwner = null;
+      projectionClaimed = false;
     }
-    runtime.terminalLifecycle.handleCatch(error);
+    const foreignOwner = context.helpers.getConversation(
+      conversationId,
+    )?.foregroundModelProjectionOwner;
+    if (projectionClaimed || (!executionLease && !foreignOwner)) {
+      runtime.terminalLifecycle.handleCatch(error);
+    } else {
+      clearForegroundRequestIfCurrent();
+      context.helpers.setChatError(error instanceof Error ? error.message : String(error));
+    }
     if (executionLease) {
-      await closeModelGeneration('failed');
+      await closeModelGeneration(projectionClaimed ? 'failed' : 'cancelled');
     } else {
       await context.durability.flushChatState();
     }
@@ -393,9 +404,14 @@ export async function executeForegroundConversationRun(
         projectionOwner &&
         !context.durability.ownsModelProjection(conversationId, projectionOwner)
       ) {
-        throw new Error('foreground_model_projection_ownership_changed');
+        projectionOwner = null;
+        projectionClaimed = false;
+        clearForegroundRequestIfCurrent();
+        context.helpers.setChatError('Foreground response ownership changed.');
+        terminalStatus = 'cancelled';
+      } else {
+        terminalStatus = runtime.terminalLifecycle.handleCatch(error);
       }
-      terminalStatus = runtime.terminalLifecycle.handleCatch(error);
     } finally {
       if (inferenceLease.release()) {
         requestScheduledIngestionDrain();

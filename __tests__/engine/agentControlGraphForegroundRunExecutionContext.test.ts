@@ -468,7 +468,7 @@ describe('foreground run target-conversation execution context', () => {
     expect(context.durability.completeModelExecution).toHaveBeenCalledWith(
       expect.objectContaining({
         lease: expect.objectContaining({ expectedStatus: 'queued' }),
-        status: 'failed',
+        status: 'cancelled',
       }),
     );
     expect(context.durability.releaseModelProjection).not.toHaveBeenCalled();
