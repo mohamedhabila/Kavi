@@ -27,6 +27,10 @@ import type {
   ToolExecutionLifecycleParams,
   ToolExecutionLifecycleResult,
 } from './toolCallLifecycleTypes';
+import {
+  buildUntrackedExternalToolResult,
+  observeExternalToolResultDurability,
+} from '../../services/executionJournal/externalToolDurabilityLifecycle';
 
 async function appendExecutionReceipt(params: {
   lifecycle: ToolExecutionLifecycleParams;
@@ -138,6 +142,27 @@ export async function executeToolCallLifecycle(
         agentRunId: params.agentRunId,
       },
     );
+    if (!isToolResultErrorLike(result)) {
+      const durability = await observeExternalToolResultDurability({
+        toolName: effectiveToolCall.name,
+        toolCallId: effectiveToolCall.id,
+        argumentsText: effectiveToolCall.arguments,
+        resultText: result,
+        conversationId: params.conversationId,
+        parentAgentRunId: params.agentRunId,
+        observedAt: Date.now(),
+      });
+      if (durability.kind === 'untracked_external' || durability.kind === 'persistence_failed') {
+        result = buildUntrackedExternalToolResult(durability);
+      } else if (
+        durability.kind === 'persisted' &&
+        (durability.scheduling.kind === 'blocked' || durability.scheduling.kind === 'deferred')
+      ) {
+        console.warn(
+          `[durability] External workflow ${durability.observation.runId} persisted but immediate scheduling ${durability.scheduling.kind}`,
+        );
+      }
+    }
     const spillConversationId = params.workspaceConversationId ?? params.conversationId;
     const spilled = await maybeSpillToolOutput({
       result,
