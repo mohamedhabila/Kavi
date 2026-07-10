@@ -7,6 +7,7 @@ import {
   createSubAgentOrchestratorCallbacks,
   type SubAgentExecutionRuntimeState,
 } from './subAgentOrchestratorCallbacks';
+import { SUPER_AGENT_PERSONA_ID } from './personas';
 
 type ProgressChanges<TAgent extends SubAgentSnapshot> = Partial<
   Pick<
@@ -118,6 +119,8 @@ export async function runSubAgentOrchestratorLoop<TAgent extends SubAgentSnapsho
         provider: params.provider,
         model: params.model,
         conversationId: params.sessionId,
+        personaId: SUPER_AGENT_PERSONA_ID,
+        taskId: params.taskId ?? null,
         usageConversationId: params.usageConversationId,
         workspaceConversationId: params.workspaceConversationId,
         workspaceReadFallbackConversationId:
@@ -133,7 +136,6 @@ export async function runSubAgentOrchestratorLoop<TAgent extends SubAgentSnapsho
         allProviders: params.allProviders,
         disableTooling: params.disableTooling,
         toolFilter: params.toolFilter,
-        ...(params.taskId ? { taskId: params.taskId } : {}),
       },
       callbacks,
     ).catch(reject);

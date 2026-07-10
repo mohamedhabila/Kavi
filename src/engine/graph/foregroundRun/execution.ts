@@ -190,6 +190,7 @@ export async function executeForegroundConversationRun(
         maxTokens: options?.maxTokens,
         signal: abortController,
         personaId: executionContext.personaId,
+        taskId: resumePreparation.initialAgentControlGraphState?.activeTaskId ?? null,
         allProviders: context.state.providers.map((candidate) => ({ ...candidate })),
         enableCompaction: options?.enableCompaction ?? true,
         enableFailover: true,

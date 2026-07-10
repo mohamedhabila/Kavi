@@ -11,6 +11,7 @@ import { runOrchestrator } from '../../engine/orchestrator';
 import { bindProviderToModel } from '../llm/support/providerSupport';
 import { generateId } from '../../utils/id';
 import { unrefTimerIfSupported } from '../../utils/timers';
+import { SUPER_AGENT_PERSONA_ID } from './personas';
 
 // ── Storage ──────────────────────────────────────────────────────────────
 
@@ -109,6 +110,8 @@ export async function runBootOnce(
           provider: bootProvider,
           model: bootModel,
           conversationId: sessionId,
+          personaId: SUPER_AGENT_PERSONA_ID,
+          taskId: null,
           systemPrompt:
             'You are executing startup instructions from BOOT.md. ' +
             'Complete the tasks silently. Do not ask for user input.',

@@ -57,7 +57,7 @@ export interface OrchestratorOptions {
   temperature?: number;
   signal?: AbortController;
   thinkingLevel?: ThinkingLevel;
-  personaId?: string;
+  personaId: string;
   allProviders?: LlmProviderConfig[];
   enableCompaction?: boolean;
   enableFailover?: boolean;
@@ -69,7 +69,7 @@ export interface OrchestratorOptions {
   initialPendingAsyncOperations?: AgentRunAsyncOperation[];
   initialAgentControlGraphState?: AgentRunControlGraphState;
   workflowScopeUserMessageId?: string;
-  taskId?: string;
+  taskId: string | null;
   agentRunId?: string;
   memoryRetrievalStrategy?: MemoryRetrievalStrategy;
   memoryContextStrategy?: MemoryContextStrategy;

@@ -120,8 +120,8 @@ export async function prepareOrchestratorRequestBundle(params: {
   maxLinks: number;
   mediaUnderstandingEnabled: boolean;
   messages: Message[];
-  personaId?: string;
-  taskId?: string;
+  personaId: string;
+  taskId: string | null;
   workflowScopeUserMessageId?: string;
   graphSnapshot?: AgentRunControlGraphState;
   memoryRetrievalStrategy?: MemoryRetrievalStrategy;
@@ -149,9 +149,7 @@ export async function prepareOrchestratorRequestBundle(params: {
     mediaUnderstandingEnabled: params.mediaUnderstandingEnabled,
     messages: params.messages,
   });
-  const memoryRetrievalStrategy = resolveMemoryRetrievalStrategy(
-    params.memoryRetrievalStrategy,
-  );
+  const memoryRetrievalStrategy = resolveMemoryRetrievalStrategy(params.memoryRetrievalStrategy);
   const memoryContextStrategy = resolveMemoryContextStrategy(params.memoryContextStrategy);
   let memoryAccessContext: Awaited<ReturnType<typeof buildUnifiedMemoryAccessContext>>;
   try {
@@ -160,9 +158,10 @@ export async function prepareOrchestratorRequestBundle(params: {
       memoryConversationId: params.memoryConversationId,
       sourceThreadId: params.conversationId,
       personaId: params.personaId,
+      taskId: graphActiveTaskId ?? null,
       mode: memoryAccessMode,
       internalUserMessageCount: params.internalUserMessageCount,
-      ...(graphActiveTaskId ? { taskId: graphActiveTaskId, activeTaskId: graphActiveTaskId } : {}),
+      ...(graphActiveTaskId ? { activeTaskId: graphActiveTaskId } : {}),
       ...(graphGoals?.length ? { goals: graphGoals } : {}),
       ...(params.graphSnapshot?.asyncWork ? { asyncWork: params.graphSnapshot.asyncWork } : {}),
       retrievalLlm: {
@@ -173,10 +172,7 @@ export async function prepareOrchestratorRequestBundle(params: {
       contextStrategy: memoryContextStrategy,
     });
   } catch (memoryAccessError: unknown) {
-    if (
-      memoryRetrievalStrategy !== 'production' ||
-      memoryContextStrategy !== 'production'
-    ) {
+    if (memoryRetrievalStrategy !== 'production' || memoryContextStrategy !== 'production') {
       throw memoryAccessError;
     }
     params.logger.devWarn(

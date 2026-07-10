@@ -6,14 +6,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  ArrowLeft,
-  Mic,
-  Volume2,
-  Loader,
-  AlertCircle,
-  PauseCircle,
-} from 'lucide-react-native';
+import { ArrowLeft, Mic, Volume2, Loader, AlertCircle, PauseCircle } from 'lucide-react-native';
 import { useAppTheme, AppPalette } from '../theme/useAppTheme';
 import { useTranslation } from '../i18n/useTranslation';
 import {
@@ -27,6 +20,7 @@ import { useSettingsStore } from '../store/useSettingsStore';
 import { generateId } from '../utils/id';
 import { emitVoiceEvent } from '../services/events/bus';
 import { useBackToChat } from '../navigation/useBackToChat';
+import { resolveConversationPersonaForMode } from '../engine/graph/conversation/modeTransitions';
 import {
   providerRequiresApiKey,
   resolveEnabledProvider,
@@ -124,6 +118,8 @@ export const VoiceScreen: React.FC = () => {
           provider: { ...provider, apiKey },
           model,
           conversationId: convId,
+          personaId: resolveConversationPersonaForMode({ nextMode: 'chitchat' }),
+          taskId: null,
           systemPrompt: voiceSystemPrompt,
           messages: [{ id: generateId(), role: 'user', content: input, timestamp: Date.now() }],
           linkUnderstandingEnabled: settings.linkUnderstandingEnabled,

@@ -10,6 +10,7 @@ import { buildRuntimeContextNote } from '../prompts/orchestratorPromptSections';
 import { yieldToUiFrame } from '../toolExecution/toolCallLifecycleRecording';
 import { prepareOrchestratorSessionBootstrap } from './bootstrap';
 import type { OrchestratorCallbacks, OrchestratorOptions } from './types';
+import { resolveCodeOwnedMemoryConversationId } from '../../services/memory/memoryScopeIdentity';
 
 const logger = createLogger('Orchestrator');
 
@@ -57,36 +58,34 @@ export async function runOrchestratorGraphSession(params: {
 
   const availableToolNames = new Set(allTools.map((tool) => tool.name));
   const compactionEngine = enableCompaction ? new DefaultContextEngine() : null;
-  const sharedConversationId = options.workspaceConversationId?.trim() || conversationId;
+  const sharedConversationId = resolveCodeOwnedMemoryConversationId(
+    options.workspaceConversationId,
+    conversationId,
+  );
   const runtimeContextNote = buildRuntimeContextNote();
 
-  const {
-    latestUserMessageText,
-    livingMemory,
-    requestAssessment,
-    skillPrompts,
-    workingMessages,
-  } = await prepareOrchestratorRequestBundle({
-    activeModel,
-    activeProvider,
-    callbacks,
-    conversationId,
-    graphOwnedRun: isSuperAgent,
-    internalUserMessageCount,
-    isSuperAgent,
-    linkUnderstandingEnabled,
-    logger,
-    maxLinks,
-    mediaUnderstandingEnabled,
-    memoryConversationId: sharedConversationId,
-    messages: options.messages,
-    personaId,
-    taskId: options.taskId,
-    workflowScopeUserMessageId: options.workflowScopeUserMessageId,
-    graphSnapshot: options.initialAgentControlGraphState,
-    memoryRetrievalStrategy: options.memoryRetrievalStrategy,
-    memoryContextStrategy: options.memoryContextStrategy,
-  });
+  const { latestUserMessageText, livingMemory, requestAssessment, skillPrompts, workingMessages } =
+    await prepareOrchestratorRequestBundle({
+      activeModel,
+      activeProvider,
+      callbacks,
+      conversationId,
+      graphOwnedRun: isSuperAgent,
+      internalUserMessageCount,
+      isSuperAgent,
+      linkUnderstandingEnabled,
+      logger,
+      maxLinks,
+      mediaUnderstandingEnabled,
+      memoryConversationId: sharedConversationId,
+      messages: options.messages,
+      personaId,
+      taskId: options.taskId,
+      workflowScopeUserMessageId: options.workflowScopeUserMessageId,
+      graphSnapshot: options.initialAgentControlGraphState,
+      memoryRetrievalStrategy: options.memoryRetrievalStrategy,
+      memoryContextStrategy: options.memoryContextStrategy,
+    });
 
   const graph = createOrchestratorGraphBindings({
     callbacks,
@@ -107,10 +106,7 @@ export async function runOrchestratorGraphSession(params: {
     workspaceReadFallbackConversationId: options.workspaceReadFallbackConversationId,
     emitPendingAsyncOperationsChange,
     warn: (message, error) => {
-      logger.devWarn(
-        `${message}:`,
-        error instanceof Error ? error.message : String(error),
-      );
+      logger.devWarn(`${message}:`, error instanceof Error ? error.message : String(error));
     },
   });
 
@@ -173,10 +169,7 @@ export async function runOrchestratorGraphSession(params: {
       trackedAsyncOperations,
       latestUserMessageText,
       warn: (message, error) => {
-        logger.devWarn(
-          `${message}:`,
-          error instanceof Error ? error.message : String(error),
-        );
+        logger.devWarn(`${message}:`, error instanceof Error ? error.message : String(error));
       },
       onFinalizationHeld: (details) => {
         if (isJestRuntime()) {
