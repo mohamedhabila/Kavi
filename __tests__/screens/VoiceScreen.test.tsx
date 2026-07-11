@@ -431,6 +431,22 @@ describe('VoiceScreen', () => {
     await expect(getLatestAgentHandler()('hello')).resolves.toBe('Error: callback boom');
   });
 
+  it('replaces partial streamed output with a concrete provider failure', async () => {
+    mockRunOrchestrator.mockImplementationOnce(async (_request: any, callbacks: any) => {
+      callbacks.onToken('This answer was cut');
+      callbacks.onAgentControlGraphStateChange?.({
+        status: 'failed',
+        terminalReason: 'provider_stream_failed',
+      });
+      callbacks.onError(new Error('provider stream failed'));
+      callbacks.onDone?.();
+    });
+
+    render(<VoiceScreen />);
+
+    await expect(getLatestAgentHandler()('hello')).resolves.toBe('Error: provider stream failed');
+  });
+
   it('returns a visible blocker response from a blocked voice run', async () => {
     mockRunOrchestrator.mockImplementationOnce(async (_request: any, callbacks: any) => {
       callbacks.onAssistantMessage('I could not complete that action safely.');

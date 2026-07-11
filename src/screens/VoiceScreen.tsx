@@ -21,7 +21,10 @@ import { generateId } from '../utils/id';
 import { emitVoiceEvent } from '../services/events/bus';
 import { useBackToChat } from '../navigation/useBackToChat';
 import { resolveConversationPersonaForMode } from '../engine/graph/conversation/modeTransitions';
-import { resolveAgentControlGraphTerminalFailure } from '../engine/graph/terminalOutcome';
+import {
+  isAgentControlGraphFailureResponseState,
+  resolveAgentControlGraphTerminalFailure,
+} from '../engine/graph/terminalOutcome';
 import type { AgentRunControlGraphState } from '../types/agentRun';
 import {
   providerRequiresApiKey,
@@ -139,11 +142,17 @@ export const VoiceScreen: React.FC = () => {
         state: latestControlGraphState,
         reportedError: reportedOrchestratorError,
       });
-      if (terminalFailure && !result.trim()) {
-        result = `Error: ${terminalFailure.message}`;
+      if (terminalFailure) {
+        const preserveGraphFailureResponse =
+          !reportedOrchestratorError &&
+          result.trim().length > 0 &&
+          isAgentControlGraphFailureResponseState(latestControlGraphState);
+        if (!preserveGraphFailureResponse) {
+          result = `Error: ${terminalFailure.message}`;
+        }
       }
     } catch (err: unknown) {
-      if (!result) result = `Error: ${err instanceof Error ? err.message : String(err)}`;
+      result = `Error: ${err instanceof Error ? err.message : String(err)}`;
     }
     return result;
   });
