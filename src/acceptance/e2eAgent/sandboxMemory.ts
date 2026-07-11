@@ -46,6 +46,7 @@ export const E2E_RESETTABLE_MEMORY_TABLES = [
   'memory_ingestion_jobs',
   'memory_ingestion_receipts',
   'memory_migration_state',
+  'memory_product_experience_observations',
   'memory_reflections',
   'memory_retrieval_events',
   'memory_retrieval_outcomes',
