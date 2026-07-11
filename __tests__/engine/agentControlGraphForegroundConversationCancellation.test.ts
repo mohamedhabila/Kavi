@@ -82,7 +82,7 @@ describe('foregroundConversationCancellation', () => {
     expect(clearPendingRunState).toHaveBeenCalledWith('conv1', 'run-1');
   });
 
-  it('builds and applies stop/supersede effects through shared completion actions', () => {
+  it('cancels durable generations before applying visible stop completion', async () => {
     const appendConversationLog = jest.fn();
     const clearForegroundRequestForConversation = jest.fn();
     const clearPendingRunState = jest.fn();
@@ -152,7 +152,12 @@ describe('foregroundConversationCancellation', () => {
       'run-1',
     );
 
-    stopForegroundConversationRuns({
+    completeAgentRun.mockClear();
+    const order: string[] = [];
+    completeAgentRun.mockImplementation(() => {
+      order.push('visible-terminal');
+    });
+    await stopForegroundConversationRuns({
       abortForegroundRequestForConversation,
       actions: {
         appendConversationLog,
@@ -163,6 +168,14 @@ describe('foregroundConversationCancellation', () => {
         getLatestConversation: () => conversation,
         updateAgentRunControlGraph,
       },
+      cancelOwnedRecoveries: jest.fn(async () => {
+        order.push('journal-and-native-cancelled');
+        return {
+          cancelledRunCount: 1,
+          settledRunCount: 0,
+          issues: [{ kind: 'deferred', reason: 'native_bridge_unavailable', count: 1 }],
+        };
+      }),
       conversation,
       conversationId: 'conv1',
     });
@@ -172,6 +185,13 @@ describe('foregroundConversationCancellation', () => {
       'Cancelled because the supervising turn was stopped by the user.',
     );
     expect(clearForegroundRequestForConversation).toHaveBeenCalledWith('conv1');
+    expect(order).toEqual(['journal-and-native-cancelled', 'visible-terminal']);
+    expect(appendConversationLog).toHaveBeenCalledWith('conv1', {
+      kind: 'error',
+      level: 'warning',
+      title: 'Durable cancellation needs attention',
+      detail: '1 deferred: native_bridge_unavailable',
+    });
     expect(appendConversationLog).toHaveBeenCalledWith(
       'conv1',
       expect.objectContaining({

@@ -40,6 +40,15 @@ jest.mock('../../src/services/executionJournal/foregroundModelExecutionProcessOw
   relinquishForegroundModelExecutionProcessOwnership: jest.fn(),
 }));
 
+export const mockCancelOwnedExternalRecoveries = jest.fn().mockResolvedValue({
+  cancelledRunCount: 0,
+  settledRunCount: 0,
+  issues: [],
+});
+jest.mock('../../src/services/executionJournal/foregroundExternalRecoveryCancellation', () => ({
+  cancelOwnedExternalRecoveries: (...args: any[]) => mockCancelOwnedExternalRecoveries(...args),
+}));
+
 jest.mock('../../src/store/foregroundModelProjectionOwnership', () => {
   const ownersEqual = (left: any, right: any) =>
     Boolean(left) &&

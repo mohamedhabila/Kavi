@@ -83,16 +83,18 @@ function pointer(record: DurablePlatformExecutionRecord): DurablePlatformExecuti
   };
 }
 
-function isExactGeneration(
+function isCancellableGeneration(
   record: DurablePlatformExecutionRecord,
   input: RequestPersistedExecutionRecoveryCancellationInput,
+  cancellationUpdatedAt: number,
 ): boolean {
   const identity = record.request.identity;
   return (
     identity.runId === input.runId &&
     identity.controlEpoch === input.expectedGeneration.controlEpoch &&
-    identity.snapshotUpdatedAtMillis === input.expectedGeneration.updatedAt &&
-    identity.snapshotDigest === input.expectedGeneration.snapshotDigest &&
+    identity.snapshotUpdatedAtMillis <= input.expectedGeneration.updatedAt &&
+    identity.snapshotUpdatedAtMillis < cancellationUpdatedAt &&
+    record.request.requestedAtMillis < cancellationUpdatedAt &&
     identity.commandKind === 'reconcile_external_handles'
   );
 }
@@ -116,6 +118,7 @@ function classifyAdapterResult(
 
 async function cancelAndroid(
   input: RequestPersistedExecutionRecoveryCancellationInput,
+  cancellationUpdatedAt: number,
   dependencies: DurableRecoveryCancellationDependencies,
 ): Promise<DurableRecoveryNativeCancellationOutcome> {
   let result: AndroidDurableReadResult;
@@ -131,15 +134,16 @@ async function cancelAndroid(
   if (result.status !== 'found' || result.record === null) {
     return { kind: 'deferred', runId: input.runId, reason: 'native_store_unavailable' };
   }
-  return cancelExactAndroidRecord(result.record, input, dependencies);
+  return cancelExactAndroidRecord(result.record, input, cancellationUpdatedAt, dependencies);
 }
 
 async function cancelExactAndroidRecord(
   record: AndroidDurableExecutionRecord,
   input: RequestPersistedExecutionRecoveryCancellationInput,
+  cancellationUpdatedAt: number,
   dependencies: DurableRecoveryCancellationDependencies,
 ): Promise<DurableRecoveryNativeCancellationOutcome> {
-  if (!isExactGeneration(record, input)) {
+  if (!isCancellableGeneration(record, input, cancellationUpdatedAt)) {
     return { kind: 'blocked', runId: input.runId, reason: 'native_generation_changed' };
   }
   const updatedAt = cancellationTimestamp(record.updatedAtMillis, input.occurredAt);
@@ -158,6 +162,7 @@ async function cancelExactAndroidRecord(
 
 async function cancelIOS(
   input: RequestPersistedExecutionRecoveryCancellationInput,
+  cancellationUpdatedAt: number,
   dependencies: DurableRecoveryCancellationDependencies,
 ): Promise<DurableRecoveryNativeCancellationOutcome> {
   const bridge = dependencies.getIOSBridge();
@@ -180,7 +185,7 @@ async function cancelIOS(
   if (!('taskIdentifier' in result.record)) {
     return { kind: 'blocked', runId: input.runId, reason: 'native_platform_conflict' };
   }
-  if (!isExactGeneration(result.record, input)) {
+  if (!isCancellableGeneration(result.record, input, cancellationUpdatedAt)) {
     return { kind: 'blocked', runId: input.runId, reason: 'native_generation_changed' };
   }
   const updatedAt = cancellationTimestamp(result.record.updatedAtMillis, input.occurredAt);
@@ -207,9 +212,9 @@ export async function requestDurableRecoveryCancellation(
 
   let native: DurableRecoveryNativeCancellationOutcome;
   if (dependencies.platform === 'android') {
-    native = await cancelAndroid(input, dependencies);
+    native = await cancelAndroid(input, journal.receipt.updatedAt, dependencies);
   } else if (dependencies.platform === 'ios') {
-    native = await cancelIOS(input, dependencies);
+    native = await cancelIOS(input, journal.receipt.updatedAt, dependencies);
   } else {
     native = { kind: 'not_supported', runId: input.runId, reason: 'unsupported_platform' };
   }

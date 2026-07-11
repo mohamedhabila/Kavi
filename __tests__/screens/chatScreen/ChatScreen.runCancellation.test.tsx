@@ -87,7 +87,7 @@ describe('ChatScreen run cancellation', () => {
     expect(screen.UNSAFE_getByType(memoizedChatInputType).props.isLoading).toBe(true);
   });
 
-  it('handles stop action', () => {
+  it('handles stop action', async () => {
     mockChatScreenState.loadingState = true;
     mockChatScreenState.conversations = [
       {
@@ -134,16 +134,18 @@ describe('ChatScreen run cancellation', () => {
     const stopIcon = getByTestId('icon-Square');
     fireEvent.press(stopIcon.parent || stopIcon);
 
-    expect(mockCompleteAgentRun).toHaveBeenCalledWith(
-      'conv1',
-      expect.objectContaining({
-        status: 'cancelled',
-        latestSummary: 'The current run was cancelled and 1 background worker was stopped.',
-        checkpointTitle: 'Turn cancelled',
-        checkpointDetail: 'The current run was cancelled and 1 background worker was stopped.',
-      }),
-      'run-1',
-    );
+    await waitFor(() => {
+      expect(mockCompleteAgentRun).toHaveBeenCalledWith(
+        'conv1',
+        expect.objectContaining({
+          status: 'cancelled',
+          latestSummary: 'The current run was cancelled and 1 background worker was stopped.',
+          checkpointTitle: 'Turn cancelled',
+          checkpointDetail: 'The current run was cancelled and 1 background worker was stopped.',
+        }),
+        'run-1',
+      );
+    });
     expect(mockCancelSubAgent).toHaveBeenCalledWith(
       'worker-1',
       'Cancelled because the supervising turn was stopped by the user.',
@@ -197,7 +199,7 @@ describe('ChatScreen run cancellation', () => {
     expect(mockSetLoading).toHaveBeenCalledWith(false);
   });
 
-  it('cancels a running pilot-stage workflow even when activeAgentRunId is missing', () => {
+  it('cancels a running pilot-stage workflow even when activeAgentRunId is missing', async () => {
     const cancelAgentRunOperationsSpy = jest.spyOn(
       require('../../../src/services/agents/agentRunCancellation'),
       'cancelAgentRunOperations',
@@ -224,27 +226,29 @@ describe('ChatScreen run cancellation', () => {
       const stopIcon = getByTestId('icon-Square');
       fireEvent.press(stopIcon.parent || stopIcon);
 
-      expect(cancelAgentRunOperationsSpy).toHaveBeenCalledWith(
-        'conv1',
-        'run-pilot-stop-1',
-        'Cancelled because the supervising turn was stopped by the user.',
-      );
-      expect(mockCompleteAgentRun).toHaveBeenCalledWith(
-        'conv1',
-        expect.objectContaining({
-          status: 'cancelled',
-          latestSummary: 'The current run was cancelled.',
-          checkpointTitle: 'Turn cancelled',
-          checkpointDetail: 'The current run was cancelled.',
-        }),
-        'run-pilot-stop-1',
-      );
+      await waitFor(() => {
+        expect(cancelAgentRunOperationsSpy).toHaveBeenCalledWith(
+          'conv1',
+          'run-pilot-stop-1',
+          'Cancelled because the supervising turn was stopped by the user.',
+        );
+        expect(mockCompleteAgentRun).toHaveBeenCalledWith(
+          'conv1',
+          expect.objectContaining({
+            status: 'cancelled',
+            latestSummary: 'The current run was cancelled.',
+            checkpointTitle: 'Turn cancelled',
+            checkpointDetail: 'The current run was cancelled.',
+          }),
+          'run-pilot-stop-1',
+        );
+      });
     } finally {
       cancelAgentRunOperationsSpy.mockRestore();
     }
   });
 
-  it('cancels fallback-matched workers when stopping the active run', () => {
+  it('cancels fallback-matched workers when stopping the active run', async () => {
     mockChatScreenState.loadingState = true;
     mockChatScreenState.conversations = [
       {
@@ -289,16 +293,18 @@ describe('ChatScreen run cancellation', () => {
     const stopIcon = getByTestId('icon-Square');
     fireEvent.press(stopIcon.parent || stopIcon);
 
-    expect(mockCompleteAgentRun).toHaveBeenCalledWith(
-      'conv1',
-      expect.objectContaining({
-        status: 'cancelled',
-        latestSummary: 'The current run was cancelled and 1 background worker was stopped.',
-        checkpointTitle: 'Turn cancelled',
-        checkpointDetail: 'The current run was cancelled and 1 background worker was stopped.',
-      }),
-      'run-1',
-    );
+    await waitFor(() => {
+      expect(mockCompleteAgentRun).toHaveBeenCalledWith(
+        'conv1',
+        expect.objectContaining({
+          status: 'cancelled',
+          latestSummary: 'The current run was cancelled and 1 background worker was stopped.',
+          checkpointTitle: 'Turn cancelled',
+          checkpointDetail: 'The current run was cancelled and 1 background worker was stopped.',
+        }),
+        'run-1',
+      );
+    });
     expect(mockCancelSubAgent).toHaveBeenCalledWith(
       'worker-fallback-1',
       'Cancelled because the supervising turn was stopped by the user.',

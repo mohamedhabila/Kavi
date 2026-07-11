@@ -229,6 +229,28 @@ describe('durable recovery cancellation', () => {
     expect(bridge.cancel).not.toHaveBeenCalled();
   });
 
+  it('exactly cancels an older native generation covered by the accepted journal epoch', async () => {
+    const older = iosRecord();
+    older.request.identity.snapshotUpdatedAtMillis = 99;
+    older.request.identity.snapshotDigest = 'c'.repeat(64);
+    older.request.requestedAtMillis = 99;
+    const bridge = iosBridge(older);
+    const deps = dependencies('ios', { getIOSBridge: () => bridge });
+
+    await expect(requestDurableRecoveryCancellation(input, deps)).resolves.toMatchObject({
+      kind: 'requested',
+      native: { kind: 'cancelled', runId: 'run-1' },
+    });
+    expect(bridge.cancel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-1',
+        snapshotUpdatedAtMillis: 99,
+        snapshotDigest: 'c'.repeat(64),
+      }),
+      151,
+    );
+  });
+
   it.each([
     [
       'missing',

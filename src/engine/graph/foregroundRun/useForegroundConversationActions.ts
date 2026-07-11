@@ -190,7 +190,7 @@ export function useForegroundConversationActions(params: UseForegroundConversati
   const handleStop = useCallback(() => {
     const conversationId = getLiveActiveConversationId();
     if (conversationId) {
-      stopForegroundConversationRuns({
+      void stopForegroundConversationRuns({
         abortForegroundRequestForConversation: (conversationId, reason) => {
           abortForegroundRequestForConversation(conversationId, reason);
           return true;
@@ -209,10 +209,10 @@ export function useForegroundConversationActions(params: UseForegroundConversati
         },
         conversation: getConversation(conversationId),
         conversationId,
+      }).finally(() => {
+        requestChatStorePersistenceCheckpoint();
       });
     }
-
-    requestChatStorePersistenceCheckpoint();
   }, [
     abortForegroundRequestForConversation,
     appendConversationLog,

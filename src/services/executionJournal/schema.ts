@@ -28,7 +28,7 @@ import {
   EXECUTION_RECOVERY_RECEIPT_REASONS,
 } from './recoveryCoordinatorTypes';
 
-export const EXECUTION_JOURNAL_SCHEMA_VERSION = 6;
+export const EXECUTION_JOURNAL_SCHEMA_VERSION = 7;
 export const EXECUTION_JOURNAL_APPLICATION_ID = 1_263_164_492;
 
 function sqlEnum(values: readonly string[]): string {
@@ -349,6 +349,11 @@ const SCHEMA_OBJECT_SQL = new Map<string, string>([
     'idx_execution_runs_status_updated',
     `CREATE INDEX idx_execution_runs_status_updated
        ON execution_runs(status, updated_at, id)`,
+  ],
+  [
+    'idx_execution_runs_owner_durability',
+    `CREATE INDEX idx_execution_runs_owner_durability
+       ON execution_runs(conversation_id, task_id, durability_class, id)`,
   ],
   [
     'idx_execution_checkpoints_run_sequence',

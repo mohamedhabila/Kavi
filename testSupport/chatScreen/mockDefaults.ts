@@ -50,6 +50,7 @@ import {
   mockBuildAgentRunVisibleDraftRecoveryText,
   mockBuildMissingFinalResponseFallback,
   mockCanRecoverAgentRunFinalResponse,
+  mockCancelOwnedExternalRecoveries,
   mockCancelSubAgent,
   mockCollectAgentRunFinalizationEvidence,
   mockEvaluateAgentRunWithPilot,
@@ -118,6 +119,7 @@ export function resetChatScreenTestEnvironment() {
     mockBuildAgentRunVisibleDraftRecoveryText,
     mockBuildMissingFinalResponseFallback,
     mockCanRecoverAgentRunFinalResponse,
+    mockCancelOwnedExternalRecoveries,
     mockHasCompletedExecutionRecoveryEvidence,
     mockHasVerifiedFinalizationEvidence,
     mockSynthesizeAgentRunFinalAnswer,
@@ -205,6 +207,11 @@ export function resetChatScreenTestEnvironment() {
     },
   );
   mockGetProviderApiKey.mockResolvedValue('sk-test');
+  mockCancelOwnedExternalRecoveries.mockResolvedValue({
+    cancelledRunCount: 0,
+    settledRunCount: 0,
+    issues: [],
+  });
   mockRunOrchestrator.mockResolvedValue(undefined);
   mockExportConversationAsMarkdown.mockReturnValue('# Exported');
   mockShareTextExport.mockResolvedValue({
