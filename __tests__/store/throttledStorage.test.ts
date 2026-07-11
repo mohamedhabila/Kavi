@@ -76,6 +76,42 @@ function simulateRestart(): void {
   _resetThrottledStorageStateForTests();
 }
 
+function deferred<T = void>(): {
+  promise: Promise<T>;
+  resolve: (value: T | PromiseLike<T>) => void;
+} {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((resolver) => {
+    resolve = resolver;
+  });
+  return { promise, resolve };
+}
+
+function pauseNextTempValidation(key: string): {
+  entered: Promise<void>;
+  release: () => void;
+  restore: () => void;
+} {
+  const entered = deferred<void>();
+  const released = deferred<void>();
+  const tempUri = _getStorageFileUris(key).temp;
+  const originalText = File.prototype.text;
+  let paused = false;
+  const spy = jest.spyOn(File.prototype, 'text').mockImplementation(async function (this: File) {
+    if (!paused && this.uri === tempUri) {
+      paused = true;
+      entered.resolve();
+      await released.promise;
+    }
+    return originalText.call(this);
+  });
+  return {
+    entered: entered.promise,
+    release: () => released.resolve(),
+    restore: () => spy.mockRestore(),
+  };
+}
+
 beforeEach(() => {
   _setPersistedGenerationBoundaryHookForTests(null);
   _resetThrottledStorageStateForTests();
@@ -271,6 +307,27 @@ describe('throttledAsyncStorage generations', () => {
     expect(readSlotPayload('k', 'primary')).toBe(second);
     expect(readSlotPayload('k', 'backup')).toBe(first);
     expect(readEnvelope(_getStorageFileUris('k').primary)?.generation).toBe(2);
+  });
+
+  it('waits for a timer-started commit before resolving an explicit flush barrier', async () => {
+    const value = JSON.stringify({ value: 'durable-before-journal-activation' });
+    const pause = pauseNextTempValidation('k');
+    await throttledAsyncStorage.setItem('k', value);
+
+    jest.advanceTimersByTime(1500);
+    await pause.entered;
+
+    let barrierResolved = false;
+    const barrier = flushPendingStorageWrites('k').then(() => {
+      barrierResolved = true;
+    });
+    await Promise.resolve();
+    expect(barrierResolved).toBe(false);
+
+    pause.release();
+    await barrier;
+    pause.restore();
+    expect(readSlotPayload('k', 'primary')).toBe(value);
   });
 
   it('retains the prior generation even when both payloads exceed 256 KiB', async () => {
@@ -471,6 +528,27 @@ describe('throttled storage control', () => {
     expect(readEnvelope(files.primary)?.kind).toBe('tombstone');
     expect(rawFile(files.backup)).toBeUndefined();
     expect(rawFile(files.temp)).toBeUndefined();
+    await expect(throttledAsyncStorage.getItem('k')).resolves.toBeNull();
+  });
+
+  it('orders a tombstone after a timer-started commit before removal resolves', async () => {
+    await persistImmediately('k', JSON.stringify({ value: 'old' }));
+    const pause = pauseNextTempValidation('k');
+    await throttledAsyncStorage.setItem('k', JSON.stringify({ value: 'in-flight' }));
+    jest.advanceTimersByTime(1500);
+    await pause.entered;
+
+    let removalResolved = false;
+    const removal = throttledAsyncStorage.removeItem('k').then(() => {
+      removalResolved = true;
+    });
+    await Promise.resolve();
+    expect(removalResolved).toBe(false);
+
+    pause.release();
+    await removal;
+    pause.restore();
+    expect(readEnvelope(_getStorageFileUris('k').primary)?.kind).toBe('tombstone');
     await expect(throttledAsyncStorage.getItem('k')).resolves.toBeNull();
   });
 

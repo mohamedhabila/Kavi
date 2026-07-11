@@ -25,12 +25,16 @@ type PendingSerializedValue = string | (() => string);
 
 interface PendingWrite {
   value: PendingSerializedValue;
-  timer: ReturnType<typeof setTimeout>;
+  timer: ReturnType<typeof setTimeout> | null;
+  revision: number;
+  flushingRevision: number | null;
 }
 
 const pendingWrites = new Map<string, PendingWrite>();
 const scheduledFlushes = new Map<string, ReturnType<typeof setTimeout>>();
+const inFlightMutations = new Map<string, Promise<void>>();
 let persistDirectory: Directory | null = null;
+let nextWriteRevision = 1;
 
 function getPersistDirectory(): Directory {
   if (!persistDirectory) {
@@ -65,23 +69,34 @@ function getGenerationFileUris(key: string): PersistedGenerationFileUris {
   };
 }
 
-function queueWrite(key: string, value: PendingSerializedValue): void {
-  const existing = pendingWrites.get(key);
-  if (existing) {
-    existing.value = value;
-    return;
-  }
-
-  const pending: PendingWrite = {
-    value,
-    timer: setTimeout(() => {
-      void flushWrite(key).catch((error: unknown) => {
-        console.warn('[storage] Failed to flush persisted state:', error);
-      });
-    }, WRITE_THROTTLE_MS),
-  };
+function scheduleWriteTimer(key: string, pending: PendingWrite): void {
+  if (pending.timer !== null) return;
+  pending.timer = setTimeout(() => {
+    if (pendingWrites.get(key) === pending) {
+      pending.timer = null;
+    }
+    void flushWrite(key).catch((error: unknown) => {
+      console.warn('[storage] Failed to flush persisted state:', error);
+    });
+  }, WRITE_THROTTLE_MS);
   unrefTimerIfSupported(pending.timer);
-  pendingWrites.set(key, pending);
+}
+
+function queueWrite(key: string, value: PendingSerializedValue): void {
+  let pending = pendingWrites.get(key);
+  if (pending) {
+    pending.value = value;
+    pending.revision = nextWriteRevision++;
+  } else {
+    pending = {
+      value,
+      timer: null,
+      revision: nextWriteRevision++,
+      flushingRevision: null,
+    };
+    pendingWrites.set(key, pending);
+  }
+  scheduleWriteTimer(key, pending);
 }
 
 function clearScheduledFlush(key: string): void {
@@ -118,23 +133,71 @@ export const throttledAsyncStorage: StateStorage = {
   async removeItem(key: string): Promise<void> {
     const existing = pendingWrites.get(key);
     if (existing) {
-      clearTimeout(existing.timer);
+      if (existing.timer !== null) clearTimeout(existing.timer);
       pendingWrites.delete(key);
     }
 
     clearScheduledFlush(key);
-    await commitPersistedTombstone(getGenerationFileUris(key));
+    await enqueueStorageMutation(key, async () => {
+      await commitPersistedTombstone(getGenerationFileUris(key));
+    });
   },
 };
 
+function enqueueStorageMutation(key: string, mutation: () => Promise<void>): Promise<void> {
+  const predecessor = inFlightMutations.get(key) ?? Promise.resolve();
+  const running = predecessor.catch(() => undefined).then(mutation);
+  inFlightMutations.set(key, running);
+  const release = () => {
+    if (inFlightMutations.get(key) === running) inFlightMutations.delete(key);
+  };
+  void running.then(release, release);
+  return running;
+}
+
 async function flushWrite(key: string): Promise<void> {
   const pending = pendingWrites.get(key);
-  if (!pending) return;
+  if (!pending) {
+    await inFlightMutations.get(key);
+    return;
+  }
+  if (pending.flushingRevision === pending.revision) {
+    await inFlightMutations.get(key);
+    return;
+  }
 
-  const serializedValue = resolvePendingValue(pending.value);
-  pendingWrites.delete(key);
+  if (pending.timer !== null) clearTimeout(pending.timer);
+  pending.timer = null;
+  const revision = pending.revision;
+  const value = pending.value;
+  pending.flushingRevision = revision;
+  try {
+    await enqueueStorageMutation(key, async () => {
+      const serializedValue = resolvePendingValue(value);
+      await commitPersistedGeneration(getGenerationFileUris(key), serializedValue);
+    });
+    if (pendingWrites.get(key) === pending && pending.revision === revision) {
+      pendingWrites.delete(key);
+    }
+  } catch (error) {
+    if (pendingWrites.get(key) === pending && pending.revision === revision) {
+      scheduleWriteTimer(key, pending);
+    }
+    throw error;
+  } finally {
+    if (pending.flushingRevision === revision) pending.flushingRevision = null;
+  }
+}
 
-  await commitPersistedGeneration(getGenerationFileUris(key), serializedValue);
+async function drainStorageKey(key: string): Promise<void> {
+  while (pendingWrites.has(key) || inFlightMutations.has(key)) {
+    const pending = pendingWrites.get(key);
+    if (pending?.timer !== null && pending?.timer !== undefined) {
+      clearTimeout(pending.timer);
+      pending.timer = null;
+    }
+    await flushWrite(key);
+  }
 }
 
 export function createThrottledJSONStorage<T>(): PersistStorage<T> {
@@ -185,11 +248,7 @@ export function schedulePendingStorageFlush(key: string, delayMs = 0): void {
 export async function flushPendingStorageWrites(key?: string): Promise<void> {
   if (key) {
     clearScheduledFlush(key);
-    const pending = pendingWrites.get(key);
-    if (pending) {
-      clearTimeout(pending.timer);
-      await flushWrite(key);
-    }
+    await drainStorageKey(key);
     return;
   }
 
@@ -197,14 +256,12 @@ export async function flushPendingStorageWrites(key?: string): Promise<void> {
     clearScheduledFlush(scheduledKey);
   }
 
-  const keys = Array.from(pendingWrites.keys());
-  for (const pendingKey of keys) {
-    const pending = pendingWrites.get(pendingKey);
-    if (pending) {
-      clearTimeout(pending.timer);
-    }
+  while (pendingWrites.size > 0 || inFlightMutations.size > 0) {
+    const keys = Array.from(
+      new Set([...pendingWrites.keys(), ...inFlightMutations.keys()]),
+    );
+    await Promise.all(keys.map((pendingKey) => drainStorageKey(pendingKey)));
   }
-  await Promise.all(keys.map((pendingKey) => flushWrite(pendingKey)));
 }
 
 /** Visible for testing only. */
@@ -215,7 +272,7 @@ export function _getPendingWriteCount(): number {
 /** Visible for testing only. */
 export function _resetThrottledStorageStateForTests(): void {
   for (const pending of pendingWrites.values()) {
-    clearTimeout(pending.timer);
+    if (pending.timer !== null) clearTimeout(pending.timer);
   }
   pendingWrites.clear();
 
@@ -223,6 +280,8 @@ export function _resetThrottledStorageStateForTests(): void {
     clearTimeout(timer);
   }
   scheduledFlushes.clear();
+  inFlightMutations.clear();
+  nextWriteRevision = 1;
 
   persistDirectory = null;
 }
