@@ -5,7 +5,11 @@
 
 import { InteractionManager } from 'react-native';
 import { evaluateJobsOnce, startScheduler, setSchedulerExecutor } from './scheduler/engine';
-import { executeScheduledJob, notifyScheduledJobFinalFailure } from './scheduler/jobExecutor';
+import {
+  executeScheduledJob,
+  notifyScheduledJobFinalFailure,
+  notifyScheduledJobSuccess,
+} from './scheduler/jobExecutor';
 import { registerBuiltInServiceSkills } from './integrations/registry';
 import { activateEnabledSkills } from './skills/manager';
 import { registerBackgroundFetch } from './scheduler/background';
@@ -225,11 +229,14 @@ export function initializeServices(): void {
   // Set up scheduler executor to run jobs through the main orchestrator.
   setSchedulerExecutor({
     execute: executeScheduledJob,
+    onSuccess: notifyScheduledJobSuccess,
     onFinalFailure: notifyScheduledJobFinalFailure,
   });
 
   // Start the foreground scheduler to evaluate cron jobs
-  startScheduler();
+  void startScheduler().catch((error) =>
+    console.warn('[startup] scheduler readiness failed:', error),
+  );
 
   // Sweep expired approval requests every 30 seconds
   const approvalSweepInterval = setInterval(() => {
@@ -246,6 +253,9 @@ export function initializeServices(): void {
  * v6→v7 archived-thread backlog drains across sessions.
  */
 export function handleAppForeground(): void {
+  void startScheduler().catch((error) =>
+    console.warn('[startup] scheduler restart failed:', error),
+  );
   void triggerForegroundPersistedAgentRecovery().catch((e) =>
     console.warn('[startup] foreground persisted-agent recovery failed:', e),
   );

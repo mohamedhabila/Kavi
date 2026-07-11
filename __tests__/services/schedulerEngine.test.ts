@@ -2,6 +2,16 @@
 // Tests — Scheduler Engine
 // ---------------------------------------------------------------------------
 
+const mockFlushSchedulerStorePersistenceNow = jest.fn().mockResolvedValue(undefined);
+jest.mock('../../src/services/scheduler/persistence', () => ({
+  ...jest.requireActual('../../src/services/scheduler/persistence'),
+  flushSchedulerStorePersistenceNow: (...args: any[]) =>
+    mockFlushSchedulerStorePersistenceNow(...args),
+}));
+jest.mock('../../src/services/scheduler/runtimeReadiness', () => ({
+  ensureSchedulerRuntimeReady: jest.fn().mockResolvedValue(undefined),
+}));
+
 import {
   evaluateJobsOnce,
   resetJobRetry,
@@ -36,6 +46,8 @@ describe('Scheduler Engine', () => {
     stopScheduler();
     resetStores();
     setSchedulerExecutor(null);
+    mockFlushSchedulerStorePersistenceNow.mockClear();
+    mockFlushSchedulerStorePersistenceNow.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -92,7 +104,8 @@ describe('Scheduler Engine', () => {
       const now = 1_700_000_100_000;
       mockNow(now);
       const executeFn = jest.fn().mockResolvedValue('done');
-      setSchedulerExecutor({ execute: executeFn });
+      const onSuccess = jest.fn().mockResolvedValue(undefined);
+      setSchedulerExecutor({ execute: executeFn, onSuccess });
 
       const jobId = useSchedulerStore.getState().addJob({
         name: 'Due Job',
@@ -116,6 +129,90 @@ describe('Scheduler Engine', () => {
         output: 'done',
         trigger: 'scheduled',
       });
+      expect(mockFlushSchedulerStorePersistenceNow).toHaveBeenCalledTimes(2);
+      expect(mockFlushSchedulerStorePersistenceNow.mock.invocationCallOrder[0]).toBeLessThan(
+        executeFn.mock.invocationCallOrder[0],
+      );
+      expect(mockFlushSchedulerStorePersistenceNow.mock.invocationCallOrder[1]).toBeLessThan(
+        onSuccess.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('allows only one concurrent evaluator to execute a due occurrence', async () => {
+      const now = 1_700_000_150_000;
+      mockNow(now);
+      let releaseExecution!: () => void;
+      const executeFn = jest.fn(
+        () =>
+          new Promise<string>((resolve) => {
+            releaseExecution = () => resolve('done');
+          }),
+      );
+      setSchedulerExecutor({ execute: executeFn });
+      const jobId = useSchedulerStore.getState().addJob({
+        name: 'Concurrent Job',
+        schedule: { kind: 'every', everyMs: 60_000 },
+        prompt: 'run once',
+      });
+      setJobRuntime(jobId, { nextRunAtMs: now - 1 });
+
+      const first = evaluateJobsOnce({ nowMs: now, trigger: 'scheduled' });
+      await Promise.resolve();
+      const second = evaluateJobsOnce({ nowMs: now, trigger: 'foreground-reconcile' });
+      await second;
+
+      expect(executeFn).toHaveBeenCalledTimes(1);
+      releaseExecution();
+      await first;
+    });
+
+    it('does not execute when the durable claim fence fails', async () => {
+      const now = 1_700_000_175_000;
+      mockNow(now);
+      mockFlushSchedulerStorePersistenceNow
+        .mockRejectedValueOnce(new Error('claim write failed'))
+        .mockResolvedValue(undefined);
+      const executeFn = jest.fn().mockResolvedValue('must not run');
+      setSchedulerExecutor({ execute: executeFn });
+      const jobId = useSchedulerStore.getState().addJob({
+        name: 'Claim Fence Job',
+        schedule: { kind: 'every', everyMs: 60_000 },
+        prompt: 'guard dispatch',
+      });
+      setJobRuntime(jobId, { nextRunAtMs: now - 1 });
+
+      await evaluateJobsOnce({ nowMs: now, trigger: 'scheduled' });
+
+      expect(executeFn).not.toHaveBeenCalled();
+      expect(useExecutionTraceStore.getState().traces[0]).toMatchObject({
+        status: 'error',
+        error: expect.stringContaining('claim write failed'),
+      });
+    });
+
+    it('retains an ambiguous claim when terminal persistence fails after execution', async () => {
+      const now = 1_700_000_190_000;
+      mockNow(now);
+      mockFlushSchedulerStorePersistenceNow
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('terminal write failed'))
+        .mockResolvedValue(undefined);
+      const executeFn = jest.fn().mockResolvedValue('effect completed');
+      const onSuccess = jest.fn().mockResolvedValue(undefined);
+      setSchedulerExecutor({ execute: executeFn, onSuccess });
+      const jobId = useSchedulerStore.getState().addJob({
+        name: 'Terminal Fence Job',
+        schedule: { kind: 'every', everyMs: 60_000 },
+        prompt: 'perform effect',
+      });
+      setJobRuntime(jobId, { nextRunAtMs: now - 1 });
+
+      await evaluateJobsOnce({ nowMs: now, trigger: 'scheduled' });
+      await evaluateJobsOnce({ nowMs: now + 60_000, trigger: 'scheduled' });
+
+      expect(executeFn).toHaveBeenCalledTimes(1);
+      expect(onSuccess).not.toHaveBeenCalled();
+      expect(useSchedulerStore.getState().getJob(jobId)?.runningAttemptId).toBeDefined();
     });
 
     it('persists retry cooldown and retries only after the cooldown expires', async () => {
@@ -253,7 +350,7 @@ describe('Scheduler Engine', () => {
       });
     });
 
-    it('skips active attempts but recovers stale running attempts', async () => {
+    it('never replays a claimed long-running attempt based on elapsed time', async () => {
       const now = 1_700_000_400_000;
       const nowSpy = mockNow(now);
       const executeFn = jest.fn().mockResolvedValue('ok');
@@ -275,7 +372,7 @@ describe('Scheduler Engine', () => {
 
       nowSpy.mockReturnValue(now + 11 * 60_000);
       await evaluateJobsOnce({ nowMs: now + 11 * 60_000, trigger: 'scheduled' });
-      expect(executeFn).toHaveBeenCalledTimes(1);
+      expect(executeFn).not.toHaveBeenCalled();
     });
   });
 

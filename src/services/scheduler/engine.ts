@@ -3,7 +3,6 @@
 // ---------------------------------------------------------------------------
 // Evaluates scheduled jobs with persisted next-run, retry, and attempt state.
 
-import { computeNextRunAtMs } from '../cron/schedule';
 import { useSchedulerStore } from './store';
 import { useExecutionTraceStore, type ExecutionTrace } from './traceStore';
 import { syncSchedulerWakeNotifications } from './wakeNotifications';
@@ -12,14 +11,18 @@ import { emitSchedulerEvent } from '../events/bus';
 import { generateId } from '../../utils/id';
 import { unrefTimerIfSupported } from '../../utils/timers';
 import { isNonRetryableSchedulerExecutionError } from './executionError';
+import { flushSchedulerStorePersistenceNow } from './persistence';
+import { ensureSchedulerRuntimeReady } from './runtimeReadiness';
 
 let schedulerInterval: ReturnType<typeof setInterval> | null = null;
+let schedulerStartPromise: Promise<void> | null = null;
+let schedulerStartRequested = false;
 const CHECK_INTERVAL_MS = 60_000;
-const ATTEMPT_LEASE_MS = 10 * 60_000;
 const DEFAULT_MAX_RETRIES = 2;
 
 export interface SchedulerExecutor {
   execute: (job: CronJob) => Promise<string>;
+  onSuccess?: (job: CronJob, result: string) => Promise<void>;
   onFinalFailure?: (job: CronJob, error: unknown) => Promise<void>;
 }
 
@@ -62,53 +65,11 @@ function coerceFiniteNumber(value: unknown): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function normalizePositiveTimestamp(value: unknown): number | undefined {
-  const parsed = coerceFiniteNumber(value);
-  if (parsed === undefined || parsed <= 0) return undefined;
-  return Math.floor(parsed);
-}
-
-function normalizeRetryAttempts(value: unknown): number {
-  const parsed = coerceFiniteNumber(value);
-  if (parsed === undefined) return 0;
-  return Math.max(0, Math.floor(parsed));
-}
-
 function maxRetriesForJob(job: CronJob): number {
   if (job.failureAlert?.enabled === false) return 0;
   const configured = coerceFiniteNumber(job.failureAlert?.maxRetries);
   if (configured === undefined) return DEFAULT_MAX_RETRIES;
   return Math.max(0, Math.floor(configured));
-}
-
-function resolveJobNextRunAtMs(job: CronJob, nowMs: number): number | undefined {
-  const persisted = normalizePositiveTimestamp(job.nextRunAtMs);
-  if (persisted !== undefined) return persisted;
-
-  try {
-    return normalizePositiveTimestamp(computeNextRunAtMs(job.schedule, nowMs - CHECK_INTERVAL_MS));
-  } catch {
-    return undefined;
-  }
-}
-
-function hasActiveAttempt(job: CronJob, nowMs: number): boolean {
-  if (!job.runningAttemptId) return false;
-  const startedAtMs = normalizePositiveTimestamp(job.runningStartedAtMs);
-  return startedAtMs !== undefined && nowMs - startedAtMs < ATTEMPT_LEASE_MS;
-}
-
-function shouldRunJob(job: CronJob, nowMs: number, force: boolean): boolean {
-  if (!force && !job.enabled) return false;
-  if (hasActiveAttempt(job, nowMs)) return false;
-
-  const nextRetryAtMs = normalizePositiveTimestamp(job.nextRetryAtMs);
-  if (nextRetryAtMs !== undefined) {
-    return force || nowMs >= nextRetryAtMs;
-  }
-
-  const nextRunAtMs = resolveJobNextRunAtMs(job, nowMs);
-  return force || (nextRunAtMs !== undefined && nextRunAtMs <= nowMs);
 }
 
 // ── Execution trace recording ───────────────────────────────────────────
@@ -147,33 +108,44 @@ async function executeJob(
   trigger: SchedulerTrigger,
   force: boolean,
 ): Promise<'skipped' | 'succeeded' | 'retrying' | 'failed'> {
+  await ensureSchedulerRuntimeReady();
+
   const store = useSchedulerStore.getState();
-  if (!shouldRunJob(job, nowMs, force)) {
+  const attemptId = `attempt-${generateId()}`;
+  const claim = store.tryClaimJobAttempt({
+    id: job.id,
+    attemptId,
+    timestamp: nowMs,
+    force,
+  });
+  if (!claim) {
     return 'skipped';
   }
+  const { job: claimedJob, attempt } = claim;
 
-  const attempt = normalizeRetryAttempts(job.retryAttempts) + 1;
-  const attemptId = `attempt-${generateId()}`;
-  store.markJobAttemptStarted(job.id, attemptId, nowMs);
-  emitSchedulerEvent('task_run', { taskId: job.id, taskName: job.name });
-
-  const jobExecutor = executor;
-  if (!jobExecutor) {
-    const error = 'No executor configured';
-    store.updateJobRuntimeState(job.id, {
-      lastAttemptAtMs: nowMs,
-      lastFailureAtMs: nowMs,
-      lastError: error,
-      runningAttemptId: undefined,
-      runningStartedAtMs: undefined,
+  try {
+    await flushSchedulerStorePersistenceNow();
+  } catch (claimPersistenceError) {
+    const error = `Unable to persist the scheduled attempt claim: ${
+      claimPersistenceError instanceof Error
+        ? claimPersistenceError.message
+        : String(claimPersistenceError)
+    }`;
+    const settlementRecorded = store.recordRunFailure(claimedJob.id, attemptId, {
+      timestamp: Date.now(),
+      error,
+      attempt,
+      final: true,
     });
-    emitSchedulerEvent('task_failed', { taskId: job.id, error });
+    if (!settlementRecorded) return 'failed';
+    await flushSchedulerStorePersistenceNow().catch(() => undefined);
+    emitSchedulerEvent('task_failed', { taskId: claimedJob.id, error });
     recordTrace({
-      jobId: job.id,
-      jobName: job.name,
+      jobId: claimedJob.id,
+      jobName: claimedJob.name,
       status: 'error',
       startedAt: nowMs,
-      completedAt: nowMs,
+      completedAt: Date.now(),
       error,
       attempt,
       trigger,
@@ -181,15 +153,92 @@ async function executeJob(
     return 'failed';
   }
 
+  if (store.getJob(claimedJob.id)?.runningAttemptId !== attemptId) {
+    return 'skipped';
+  }
+
+  emitSchedulerEvent('task_run', { taskId: claimedJob.id, taskName: claimedJob.name });
+  const jobExecutor = executor;
   const startMs = Date.now();
-  try {
-    const result = await jobExecutor.execute(job);
+
+  if (!jobExecutor) {
+    const error = 'No executor configured';
     const completedAt = Date.now();
-    store.recordRun(job.id, completedAt);
-    emitSchedulerEvent('task_complete', { taskId: job.id, taskName: job.name });
+    const settlementRecorded = store.recordRunFailure(claimedJob.id, attemptId, {
+      timestamp: completedAt,
+      error,
+      attempt,
+      final: true,
+    });
+    if (!settlementRecorded) return 'failed';
+    try {
+      await flushSchedulerStorePersistenceNow();
+    } catch (persistenceError) {
+      store.restoreJobAttemptClaim({
+        id: claimedJob.id,
+        attemptId,
+        startedAtMs: nowMs,
+      });
+      console.warn('[scheduler] Failed to persist missing-executor settlement:', persistenceError);
+    }
+    emitSchedulerEvent('task_failed', { taskId: claimedJob.id, error });
     recordTrace({
-      jobId: job.id,
-      jobName: job.name,
+      jobId: claimedJob.id,
+      jobName: claimedJob.name,
+      status: 'error',
+      startedAt: startMs,
+      completedAt,
+      error,
+      attempt,
+      trigger,
+    });
+    return 'failed';
+  }
+
+  try {
+    const result = await jobExecutor.execute(claimedJob);
+    const completedAt = Date.now();
+    if (!store.recordRun(claimedJob.id, attemptId, completedAt)) {
+      return 'failed';
+    }
+    try {
+      await flushSchedulerStorePersistenceNow();
+    } catch (persistenceError) {
+      const error = `Scheduled work completed, but terminal scheduler state could not be persisted: ${
+        persistenceError instanceof Error ? persistenceError.message : String(persistenceError)
+      }`;
+      store.restoreJobAttemptClaim({
+        id: claimedJob.id,
+        attemptId,
+        startedAtMs: nowMs,
+        error,
+      });
+      emitSchedulerEvent('task_failed', { taskId: claimedJob.id, error });
+      recordTrace({
+        jobId: claimedJob.id,
+        jobName: claimedJob.name,
+        status: 'error',
+        startedAt: startMs,
+        completedAt,
+        error,
+        attempt,
+        trigger,
+      });
+      return 'failed';
+    }
+
+    emitSchedulerEvent('task_complete', {
+      taskId: claimedJob.id,
+      taskName: claimedJob.name,
+    });
+    await jobExecutor
+      .onSuccess?.(claimedJob, result)
+      .catch((notificationError) =>
+        console.warn('[scheduler] Success notification failed:', notificationError),
+      );
+    recordTrace({
+      jobId: claimedJob.id,
+      jobName: claimedJob.name,
       status: 'success',
       startedAt: startMs,
       completedAt,
@@ -200,27 +249,39 @@ async function executeJob(
   } catch (err: unknown) {
     const completedAt = Date.now();
     const error = err instanceof Error ? err.message : String(err);
-    const maxRetries = maxRetriesForJob(job);
+    const maxRetries = force && !claimedJob.enabled ? 0 : maxRetriesForJob(claimedJob);
     const willRetry = !isNonRetryableSchedulerExecutionError(err) && attempt <= maxRetries;
 
     if (willRetry) {
       const nextRetryAtMs = completedAt + getRetryDelay(attempt);
-      store.recordRunFailure(job.id, {
+      const settlementRecorded = store.recordRunFailure(claimedJob.id, attemptId, {
         timestamp: completedAt,
         error,
         attempt,
         nextRetryAtMs,
         final: false,
       });
+      if (!settlementRecorded) return 'failed';
+      try {
+        await flushSchedulerStorePersistenceNow();
+      } catch (persistenceError) {
+        store.restoreJobAttemptClaim({
+          id: claimedJob.id,
+          attemptId,
+          startedAtMs: nowMs,
+        });
+        console.warn('[scheduler] Failed to persist retry settlement:', persistenceError);
+        return 'failed';
+      }
       emitSchedulerEvent('task_retrying', {
-        taskId: job.id,
+        taskId: claimedJob.id,
         error,
         attempt,
         maxRetries,
       });
       recordTrace({
-        jobId: job.id,
-        jobName: job.name,
+        jobId: claimedJob.id,
+        jobName: claimedJob.name,
         status: 'retrying',
         startedAt: startMs,
         completedAt,
@@ -231,21 +292,33 @@ async function executeJob(
       return 'retrying';
     }
 
-    store.recordRunFailure(job.id, {
+    const settlementRecorded = store.recordRunFailure(claimedJob.id, attemptId, {
       timestamp: completedAt,
       error,
       attempt,
       final: true,
     });
-    emitSchedulerEvent('task_failed', { taskId: job.id, error });
+    if (!settlementRecorded) return 'failed';
+    try {
+      await flushSchedulerStorePersistenceNow();
+    } catch (persistenceError) {
+      store.restoreJobAttemptClaim({
+        id: claimedJob.id,
+        attemptId,
+        startedAtMs: nowMs,
+      });
+      console.warn('[scheduler] Failed to persist final failure settlement:', persistenceError);
+      return 'failed';
+    }
+    emitSchedulerEvent('task_failed', { taskId: claimedJob.id, error });
     await jobExecutor
-      .onFinalFailure?.(job, err)
+      .onFinalFailure?.(claimedJob, err)
       .catch((notificationError) =>
         console.warn('[scheduler] Final failure notification failed:', notificationError),
       );
     recordTrace({
-      jobId: job.id,
-      jobName: job.name,
+      jobId: claimedJob.id,
+      jobName: claimedJob.name,
       status: 'error',
       startedAt: startMs,
       completedAt,
@@ -258,6 +331,7 @@ async function executeJob(
 }
 
 async function evaluateJobs(options: EvaluateJobsOptions = {}): Promise<void> {
+  await ensureSchedulerRuntimeReady();
   const startedAtMs = Date.now();
   const nowMs = options.nowMs ?? startedAtMs;
   const trigger = options.trigger ?? 'scheduled';
@@ -282,13 +356,24 @@ async function evaluateJobs(options: EvaluateJobsOptions = {}): Promise<void> {
   );
 }
 
-export function startScheduler(): void {
-  if (schedulerInterval) return;
-  schedulerInterval = setInterval(() => {
-    void evaluateJobs({ trigger: 'scheduled' }).catch(console.error);
-  }, CHECK_INTERVAL_MS);
-  unrefTimerIfSupported(schedulerInterval);
-  void evaluateJobs({ trigger: 'scheduled' }).catch(console.error);
+export function startScheduler(): Promise<void> {
+  schedulerStartRequested = true;
+  if (schedulerInterval) return Promise.resolve();
+  if (schedulerStartPromise) return schedulerStartPromise;
+
+  schedulerStartPromise = ensureSchedulerRuntimeReady()
+    .then(async () => {
+      if (!schedulerStartRequested || schedulerInterval) return;
+      schedulerInterval = setInterval(() => {
+        void evaluateJobs({ trigger: 'scheduled' }).catch(console.error);
+      }, CHECK_INTERVAL_MS);
+      unrefTimerIfSupported(schedulerInterval);
+      await evaluateJobs({ trigger: 'scheduled' });
+    })
+    .finally(() => {
+      schedulerStartPromise = null;
+    });
+  return schedulerStartPromise;
 }
 
 /** Run a single evaluation pass. Used by background tasks and lifecycle hooks. */
@@ -300,6 +385,7 @@ export async function runJobNow(
   jobId: string,
   options: Omit<EvaluateJobsOptions, 'targetJobId' | 'force'> = {},
 ): Promise<RunJobNowResult> {
+  await ensureSchedulerRuntimeReady();
   const job = useSchedulerStore.getState().getJob(jobId);
   if (!job) return { status: 'not_found', id: jobId };
 
@@ -312,6 +398,7 @@ export async function runJobNow(
 }
 
 export function stopScheduler(): void {
+  schedulerStartRequested = false;
   if (schedulerInterval) {
     clearInterval(schedulerInterval);
     schedulerInterval = null;

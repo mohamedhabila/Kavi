@@ -1,7 +1,7 @@
 const mockRegisterBuiltInServiceSkills = jest.fn();
 const mockActivateEnabledSkills = jest.fn();
 const mockSetSchedulerExecutor = jest.fn();
-const mockStartScheduler = jest.fn();
+const mockStartScheduler = jest.fn().mockResolvedValue(undefined);
 const mockEvaluateJobsOnce = jest.fn().mockResolvedValue(undefined);
 const mockRegisterBackgroundFetch = jest.fn().mockResolvedValue(undefined);
 const mockSyncSchedulerWakeNotifications = jest.fn().mockResolvedValue(undefined);
@@ -532,13 +532,12 @@ describe('initializeServices', () => {
     expect(typeof executor.onFinalFailure).toBe('function');
   });
   it('executor runs scheduled jobs through the orchestrator and returns the result', async () => {
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    mockSendLocalNotification.mockRejectedValueOnce(new Error('notifications unavailable'));
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
 
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    const result = await executor.execute(scheduledJob('Test Job', 'Summarize news'));
+    const job = scheduledJob('Test Job', 'Summarize news');
+    const result = await executor.execute(job);
     expect(mockRunOrchestrator).toHaveBeenCalledTimes(1);
     expect(mockChatStoreState.createConversation).toHaveBeenCalledWith(
       'openai',
@@ -550,21 +549,18 @@ describe('initializeServices', () => {
         mode: 'agentic',
       },
     );
+    expect(mockSendLocalNotification).not.toHaveBeenCalled();
+    await executor.onSuccess(job, result);
     expect(mockSendLocalNotification).toHaveBeenCalledWith({
       title: 'Test Job',
       body: 'Result for Summarize news',
       data: {
-        screen: 'Chat',
-        conversationId: 'conv-1',
+        screen: 'Scheduler',
+        jobId: 'job-test-job',
         source: 'scheduled_task',
       },
     });
     expect(result).toBe('Result for Summarize news');
-    expect(warnSpy).toHaveBeenCalledWith(
-      '[scheduler] Scheduled result notification failed:',
-      expect.objectContaining({ message: 'notifications unavailable' }),
-    );
-    warnSpy.mockRestore();
   });
   it('rejects and sends a failure notification for a blocked scheduled run', async () => {
     mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {

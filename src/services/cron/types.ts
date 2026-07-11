@@ -67,6 +67,8 @@ export type CronJobRuntimeState = {
   nextRetryAtMs?: number;
   runningAttemptId?: string;
   runningStartedAtMs?: number;
+  lastAmbiguousAttemptId?: string;
+  lastAmbiguousAtMs?: number;
   pendingWakeNotificationId?: string;
   pendingWakeNotificationRunAtMs?: number;
   lastWakeAtMs?: number;

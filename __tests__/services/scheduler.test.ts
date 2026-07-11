@@ -9,6 +9,15 @@ import {
   stopScheduler,
 } from '../../src/services/scheduler/engine';
 
+jest.mock('../../src/services/scheduler/runtimeReadiness', () => ({
+  ensureSchedulerRuntimeReady: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('../../src/services/scheduler/persistence', () => ({
+  SCHEDULER_STORE_KEY: 'kavi-scheduler',
+  schedulerStateStorage: require('@react-native-async-storage/async-storage').default,
+  flushSchedulerStorePersistenceNow: jest.fn().mockResolvedValue(undefined),
+}));
+
 // Mock events bus
 jest.mock('../../src/services/events/bus', () => ({
   emitSchedulerEvent: jest.fn().mockResolvedValue(undefined),
@@ -87,7 +96,7 @@ describe('useSchedulerStore', () => {
     });
     expect(useSchedulerStore.getState().jobs).toHaveLength(1);
 
-    useSchedulerStore.getState().removeJob(id);
+    expect(useSchedulerStore.getState().removeJob(id)).toBe(true);
     expect(useSchedulerStore.getState().jobs).toHaveLength(0);
   });
 
@@ -113,7 +122,14 @@ describe('useSchedulerStore', () => {
     });
     expect(useSchedulerStore.getState().jobs[0].enabled).toBe(true);
 
-    useSchedulerStore.getState().recordRun(id, Date.now());
+    const timestamp = Date.now();
+    useSchedulerStore.getState().tryClaimJobAttempt({
+      id,
+      attemptId: 'attempt-once',
+      timestamp,
+      force: true,
+    });
+    useSchedulerStore.getState().recordRun(id, 'attempt-once', timestamp);
     expect(useSchedulerStore.getState().jobs[0].enabled).toBe(false);
   });
 
@@ -124,7 +140,14 @@ describe('useSchedulerStore', () => {
       prompt: 'daily',
     });
 
-    useSchedulerStore.getState().recordRun(id, Date.now());
+    const timestamp = Date.now();
+    useSchedulerStore.getState().tryClaimJobAttempt({
+      id,
+      attemptId: 'attempt-recurring',
+      timestamp,
+      force: true,
+    });
+    useSchedulerStore.getState().recordRun(id, 'attempt-recurring', timestamp);
     // Cron jobs stay enabled
     const job = useSchedulerStore.getState().jobs[0];
     // The store only auto-disables 'at' or deleteAfterRun
@@ -141,7 +164,13 @@ describe('useSchedulerStore', () => {
     });
     const timestamp = Date.now();
 
-    useSchedulerStore.getState().recordRunFailure(id, {
+    useSchedulerStore.getState().tryClaimJobAttempt({
+      id,
+      attemptId: 'attempt-retry',
+      timestamp,
+      force: true,
+    });
+    useSchedulerStore.getState().recordRunFailure(id, 'attempt-retry', {
       timestamp,
       error: 'network down',
       attempt: 1,

@@ -464,18 +464,6 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
 
     const result = accumulatedContent || `Scheduled task "${job.name}" completed.`;
 
-    if (shouldDeliverScheduledJobNotification(job)) {
-      await sendLocalNotification({
-        title: job.name || 'Scheduled Task',
-        body: summarizeScheduledJobNotification(result),
-        data: {
-          screen: 'Chat',
-          conversationId,
-          source: 'scheduled_task',
-        },
-      }).catch((error) => console.warn('[scheduler] Scheduled result notification failed:', error));
-    }
-
     await flushChatStorePersistenceNow().catch((error) =>
       console.warn('[scheduler] Scheduled result persistence failed:', error),
     );
@@ -489,8 +477,29 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
   }
 }
 
-export async function notifyScheduledJobFinalFailure(job: CronJob, error: unknown): Promise<void> {
+export async function notifyScheduledJobSuccess(job: CronJob, result: string): Promise<void> {
   if (!shouldDeliverScheduledJobNotification(job)) return;
+  await sendLocalNotification({
+    title: job.name || 'Scheduled Task',
+    body: summarizeScheduledJobNotification(result),
+    data: job.delivery?.conversationId
+      ? {
+          screen: 'Chat',
+          conversationId: job.delivery.conversationId,
+          source: 'scheduled_task',
+        }
+      : job.id
+        ? {
+            screen: 'Scheduler',
+            jobId: job.id,
+            source: 'scheduled_task',
+          }
+        : undefined,
+  });
+}
+
+export async function notifyScheduledJobFinalFailure(job: CronJob, error: unknown): Promise<void> {
+  if (job.failureAlert?.enabled === false || !shouldDeliverScheduledJobNotification(job)) return;
   const errorMessage = error instanceof Error ? error.message : String(error);
   await sendLocalNotification({
     title: job.name || 'Scheduled Task Failed',

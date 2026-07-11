@@ -9,6 +9,12 @@ jest.mock('../../src/services/cron/schedule', () => ({
 jest.mock('../../src/services/events/bus', () => ({
   emitSchedulerEvent: jest.fn(),
 }));
+jest.mock('../../src/services/scheduler/persistence', () => ({
+  flushSchedulerStorePersistenceNow: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('../../src/services/scheduler/runtimeReadiness', () => ({
+  ensureSchedulerRuntimeReady: jest.fn().mockResolvedValue(undefined),
+}));
 
 jest.mock('../../src/services/scheduler/store', () => {
   const jobs: any[] = [];
@@ -18,9 +24,30 @@ jest.mock('../../src/services/scheduler/store', () => {
     },
     getEnabledJobs: () => jobs.filter((j: any) => j.enabled),
     getJob: (id: string) => jobs.find((j: any) => j.id === id),
-    markJobAttemptStarted: jest.fn(),
-    recordRun: jest.fn(),
-    recordRunFailure: jest.fn(),
+    tryClaimJobAttempt: jest.fn(({ id, attemptId, timestamp, force }: any) => {
+      const index = jobs.findIndex((job: any) => job.id === id);
+      const job = jobs[index];
+      const nextRunAtMs =
+        job?.nextRunAtMs ??
+        require('../../src/services/cron/schedule').computeNextRunAtMs(job?.schedule, timestamp);
+      if (
+        !job ||
+        job.runningAttemptId ||
+        (!force && (!job.enabled || nextRunAtMs === undefined || nextRunAtMs > timestamp))
+      ) {
+        return undefined;
+      }
+      const claimedJob = {
+        ...job,
+        runningAttemptId: attemptId,
+        runningStartedAtMs: timestamp,
+      };
+      jobs[index] = claimedJob;
+      return { job: claimedJob, attempt: (job.retryAttempts || 0) + 1 };
+    }),
+    recordRun: jest.fn().mockReturnValue(true),
+    recordRunFailure: jest.fn().mockReturnValue(true),
+    restoreJobAttemptClaim: jest.fn(),
     resetJobRetry: jest.fn(),
     updateJobRuntimeState: jest.fn(),
     recordEvaluation: jest.fn(),
@@ -32,7 +59,7 @@ jest.mock('../../src/services/scheduler/store', () => {
     __addJob: (job: any) => jobs.push(job),
     __clearJobs: () => {
       jobs.length = 0;
-      state.markJobAttemptStarted.mockClear();
+      state.tryClaimJobAttempt.mockClear();
       state.recordRun.mockClear();
       state.recordRunFailure.mockClear();
       state.resetJobRetry.mockClear();
@@ -68,22 +95,21 @@ describe('Scheduler Engine', () => {
     jest.useRealTimers();
   });
 
-  it('startScheduler / stopScheduler work without error', () => {
-    startScheduler();
+  it('startScheduler / stopScheduler work without error', async () => {
+    await startScheduler();
     stopScheduler();
   });
 
-  it('startScheduler is idempotent', () => {
-    startScheduler();
-    startScheduler(); // Second call should be no-op
+  it('startScheduler is idempotent', async () => {
+    await Promise.all([startScheduler(), startScheduler()]);
     stopScheduler();
   });
 
-  it('unrefs the scheduler interval when supported', () => {
+  it('unrefs the scheduler interval when supported', async () => {
     const unref = jest.fn();
     const setIntervalSpy = jest.spyOn(global, 'setInterval').mockReturnValue({ unref } as any);
 
-    startScheduler();
+    await startScheduler();
 
     expect(unref).toHaveBeenCalledTimes(1);
 
@@ -105,7 +131,7 @@ describe('Scheduler Engine', () => {
     // computeNext returns something indicating it should run (within check interval)
     mockComputeNext.mockReturnValue(Date.now() - 1000);
 
-    startScheduler();
+    await startScheduler();
     // The initial evaluateJobs() is called immediately
     await Promise.resolve(); // flush microtasks
 
@@ -130,7 +156,7 @@ describe('Scheduler Engine', () => {
     });
     mockComputeNext.mockReturnValue(Date.now() - 1000);
 
-    startScheduler();
+    await startScheduler();
     await Promise.resolve();
     jest.advanceTimersByTime(0);
     await Promise.resolve();
@@ -151,7 +177,7 @@ describe('Scheduler Engine', () => {
     });
     mockComputeNext.mockReturnValue(Date.now() - 1000);
 
-    startScheduler();
+    await startScheduler();
     await Promise.resolve();
     jest.advanceTimersByTime(0);
     await Promise.resolve();
@@ -176,7 +202,7 @@ describe('Scheduler Engine', () => {
     });
     mockComputeNext.mockReturnValue(undefined);
 
-    startScheduler();
+    await startScheduler();
     await Promise.resolve();
     jest.advanceTimersByTime(0);
     await Promise.resolve();
@@ -196,7 +222,7 @@ describe('Scheduler Engine', () => {
     });
     mockComputeNext.mockReturnValue(Date.now() + 999999);
 
-    startScheduler();
+    await startScheduler();
     await Promise.resolve();
     jest.advanceTimersByTime(0);
     await Promise.resolve();
