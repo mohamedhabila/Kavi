@@ -52,40 +52,71 @@ export async function waitForSubAgentResultPromise(
 export function createSubAgentLifecycleManager<TAgent extends SubAgentSnapshot>(
   params: SubAgentLifecycleManagerParams<TAgent>,
 ) {
-  async function waitForTerminalSubAgentSnapshot(
+  function waitForTerminalSubAgentSnapshot(
     sessionId: string,
     waitTimeoutMs?: number,
   ): Promise<SubAgentResult | null> {
-    const startedAt = Date.now();
+    return new Promise<SubAgentResult | null>((resolve, reject) => {
+      let settled = false;
+      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+      let unsubscribe: () => void = () => undefined;
 
-    while (true) {
-      const agent = params.activeSubAgents.get(sessionId);
-      if (!agent) {
-        throw new Error(`session not found: ${sessionId}`);
+      const dispose = (): void => {
+        unsubscribe();
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+          timeoutHandle = undefined;
+        }
+      };
+      const settle = (result: SubAgentResult | null): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        dispose();
+        resolve(result);
+      };
+      const fail = (error: Error): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        dispose();
+        reject(error);
+      };
+
+      const registeredUnsubscribe = params.onSubAgentTerminal((terminalAgent, event) => {
+        if (
+          terminalAgent.sessionId === sessionId &&
+          terminalAgent.status !== 'running' &&
+          terminalAgent.status === event
+        ) {
+          settle(buildResultFromSnapshot(terminalAgent));
+        }
+      });
+      if (settled) {
+        registeredUnsubscribe();
+      } else {
+        unsubscribe = registeredUnsubscribe;
       }
 
-      if (agent.status !== 'running') {
-        return buildResultFromSnapshot(agent);
+      // Subscribe before re-reading the registry so a terminal transition cannot
+      // land between the initial caller check and listener installation.
+      const latestAgent = params.activeSubAgents.get(sessionId);
+      if (!latestAgent) {
+        fail(new Error(`session not found: ${sessionId}`));
+        return;
+      }
+      if (latestAgent.status !== 'running') {
+        settle(buildResultFromSnapshot(latestAgent));
+        return;
       }
 
       if (waitTimeoutMs != null) {
-        const elapsedMs = Date.now() - startedAt;
-        if (elapsedMs >= waitTimeoutMs) {
-          return null;
-        }
-
-        await new Promise<void>((resolve) => {
-          const handle = setTimeout(resolve, Math.max(1, Math.min(250, waitTimeoutMs - elapsedMs)));
-          (handle as any)?.unref?.();
-        });
-        continue;
+        timeoutHandle = setTimeout(() => settle(null), Math.max(0, waitTimeoutMs));
+        (timeoutHandle as any)?.unref?.();
       }
-
-      await new Promise<void>((resolve) => {
-        const handle = setTimeout(resolve, 250);
-        (handle as any)?.unref?.();
-      });
-    }
+    });
   }
 
   function handleUnexpectedBackgroundSubAgentFailure(
@@ -133,9 +164,7 @@ export function createSubAgentLifecycleManager<TAgent extends SubAgentSnapshot>(
         );
       });
 
-    if (announceFailure) {
-      params.announce(agent, 'error');
-    }
+    params.signalTerminal(agent, 'error', { announce: announceFailure });
   }
 
   async function waitForSubAgentCompletion(
@@ -225,7 +254,7 @@ export function createSubAgentLifecycleManager<TAgent extends SubAgentSnapshot>(
       params.appendActivity(agent, 'status', normalizedReason);
       params.registryPersistenceManager.scheduleRegistryPersist();
       params.resolveScheduledLaunchWithSnapshot(sessionId);
-      params.announce(agent, 'cancelled');
+      params.signalTerminal(agent, 'cancelled');
     }
 
     return params.cloneAgent(agent);
@@ -259,6 +288,7 @@ export function createSubAgentLifecycleManager<TAgent extends SubAgentSnapshot>(
     let restoredTerminalCount = 0;
     const now = Date.now();
     const recoveredTerminalSnapshots = buildRecoveredTerminalSnapshotMap(conversations);
+    const recoveredTerminalAgents: TAgent[] = [];
 
     for (const [, agent] of params.activeSubAgents) {
       const recoveredSnapshot = recoveredTerminalSnapshots.get(agent.sessionId);
@@ -272,6 +302,7 @@ export function createSubAgentLifecycleManager<TAgent extends SubAgentSnapshot>(
 
         if (shouldAdoptRecoveredSnapshot) {
           applyRecoveredTerminalSnapshot(agent, recoveredSnapshot);
+          recoveredTerminalAgents.push(agent);
           restoredTerminalCount += 1;
         }
         continue;
@@ -279,12 +310,18 @@ export function createSubAgentLifecycleManager<TAgent extends SubAgentSnapshot>(
 
       if (agent.status === 'running') {
         interruptRecoveredRunningAgent(agent, now, params.appendActivity);
+        recoveredTerminalAgents.push(agent);
         orphanCount++;
       }
     }
 
     if (restoredTerminalCount > 0 || orphanCount > 0) {
       await params.registryPersistenceManager.persistRegistryNow();
+      for (const agent of recoveredTerminalAgents) {
+        if (agent.status !== 'running') {
+          params.signalTerminal(agent, agent.status, { announce: false });
+        }
+      }
     }
     return orphanCount;
   }

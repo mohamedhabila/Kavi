@@ -95,7 +95,11 @@ export async function finalizeCompletedSubAgentRun<TAgent extends SubAgentSnapsh
   outputTruncation: number;
   shouldAnnounce: boolean;
   refreshArtifacts: (agent: TAgent, transcriptMessages: Message[]) => void;
-  announce: (agent: TAgent, event: TerminalAnnouncement) => void;
+  signalTerminal: (
+    agent: TAgent,
+    event: TerminalAnnouncement,
+    options?: { announce?: boolean },
+  ) => void;
   scheduleSessionContextCheckpoint: (
     context: SessionContextStoreParams,
     options: { immediate: boolean },
@@ -148,9 +152,9 @@ export async function finalizeCompletedSubAgentRun<TAgent extends SubAgentSnapsh
     'Persisting completed worker outcome reconciliation failed',
   );
 
-  if (params.shouldAnnounce) {
-    params.announce(params.subAgent, 'completed');
-  }
+  params.signalTerminal(params.subAgent, 'completed', {
+    announce: params.shouldAnnounce,
+  });
 
   return buildTerminalResult(
     params.sessionId,
@@ -186,7 +190,11 @@ export async function finalizeFailedSubAgentRun<TAgent extends SubAgentSnapshot>
   refreshArtifacts: (agent: TAgent, transcriptMessages: Message[]) => void;
   appendActivity: (agent: TAgent, kind: 'status', text: string) => void;
   normalizePreviewText: (text: string, maxChars: number) => string | undefined;
-  announce: (agent: TAgent, event: TerminalAnnouncement) => void;
+  signalTerminal: (
+    agent: TAgent,
+    event: TerminalAnnouncement,
+    options?: { announce?: boolean },
+  ) => void;
   scheduleSessionContextCheckpoint: (
     context: SessionContextStoreParams,
     options: { immediate: boolean },
@@ -244,16 +252,15 @@ export async function finalizeFailedSubAgentRun<TAgent extends SubAgentSnapshot>
     'Persisting terminal worker outcome reconciliation failed',
   );
 
-  if (params.shouldAnnounce) {
-    params.announce(
-      params.subAgent,
-      params.status === 'cancelled'
-        ? 'cancelled'
-        : params.status === 'timeout'
-          ? 'timeout'
-          : 'error',
-    );
-  }
+  params.signalTerminal(
+    params.subAgent,
+    params.status === 'cancelled'
+      ? 'cancelled'
+      : params.status === 'timeout'
+        ? 'timeout'
+        : 'error',
+    { announce: params.shouldAnnounce },
+  );
 
   return buildTerminalResult(
     params.sessionId,

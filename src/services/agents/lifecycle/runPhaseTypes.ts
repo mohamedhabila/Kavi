@@ -28,7 +28,11 @@ export type RunPreparedSubAgentSessionParams<TAgent extends SubAgentSnapshot> = 
     text: string | undefined,
   ) => void;
   appendTranscriptMessage: (messages: Message[], message: Message) => void;
-  announce: (agent: TAgent, event: 'completed' | 'cancelled' | 'timeout' | 'error') => void;
+  signalTerminal: (
+    agent: TAgent,
+    event: 'completed' | 'cancelled' | 'timeout' | 'error',
+    options?: { announce?: boolean },
+  ) => void;
   clearPendingSessionContextCheckpoint: (sessionId: string) => void;
   clearSessionContextEviction: (sessionId: string) => void;
   finalizationMaxTranscriptMessages: number;

@@ -8,6 +8,15 @@ export type SubAgentAnnounceEvent =
   | 'cancelled'
   | 'progress';
 
+export type SubAgentTerminalEvent = Exclude<
+  SubAgentAnnounceEvent,
+  'started' | 'progress'
+>;
+type SubAgentNonTerminalEvent = Extract<
+  SubAgentAnnounceEvent,
+  'started' | 'progress'
+>;
+
 export type ScheduledSubAgentLaunchControl = {
   handle: ReturnType<typeof setTimeout>;
   resolve: (result: SubAgentResult) => void;
@@ -65,6 +74,7 @@ export function createSubAgentRuntimeSignalsManager<TAgent extends SubAgentSnaps
 ) {
   const queuedLaunchWatches = new Map<string, QueuedLaunchWatch>();
   const announceListeners = new Set<(agent: TAgent, event: SubAgentAnnounceEvent) => void>();
+  const terminalListeners = new Set<(agent: TAgent, event: SubAgentTerminalEvent) => void>();
   const scheduledProgressAnnouncements = new Map<string, ReturnType<typeof setTimeout>>();
 
   function clearQueuedLaunchWatch(sessionId: string): void {
@@ -93,8 +103,8 @@ export function createSubAgentRuntimeSignalsManager<TAgent extends SubAgentSnaps
     scheduledProgressAnnouncements.delete(sessionId);
   }
 
-  function announce(agent: TAgent, event: SubAgentAnnounceEvent): void {
-    if (event !== 'progress') {
+  function announce(agent: TAgent, event: SubAgentNonTerminalEvent): void {
+    if (event === 'started') {
       clearScheduledProgressAnnouncement(agent.sessionId);
     }
 
@@ -104,6 +114,33 @@ export function createSubAgentRuntimeSignalsManager<TAgent extends SubAgentSnaps
         listener(snapshot, event);
       } catch {
         /* swallow listener errors */
+      }
+    }
+  }
+
+  function signalTerminal(
+    agent: TAgent,
+    event: SubAgentTerminalEvent,
+    options?: { announce?: boolean },
+  ): void {
+    clearScheduledProgressAnnouncement(agent.sessionId);
+
+    const snapshot = params.cloneAgent(agent);
+    for (const listener of terminalListeners) {
+      try {
+        listener(snapshot, event);
+      } catch {
+        /* swallow listener errors */
+      }
+    }
+
+    if (options?.announce !== false) {
+      for (const listener of announceListeners) {
+        try {
+          listener(snapshot, event);
+        } catch {
+          /* swallow listener errors */
+        }
       }
     }
   }
@@ -160,9 +197,7 @@ export function createSubAgentRuntimeSignalsManager<TAgent extends SubAgentSnaps
     params.scheduleRegistryPersist();
     resolveScheduledLaunchWithSnapshot(sessionId);
 
-    if (announceFailure) {
-      announce(agent, 'error');
-    }
+    signalTerminal(agent, 'error', { announce: announceFailure });
   }
 
   function scheduleQueuedLaunchWatch(agent: TAgent, announceFailure: boolean): void {
@@ -217,6 +252,15 @@ export function createSubAgentRuntimeSignalsManager<TAgent extends SubAgentSnaps
     };
   }
 
+  function onSubAgentTerminal(
+    listener: (agent: TAgent, event: SubAgentTerminalEvent) => void,
+  ): () => void {
+    terminalListeners.add(listener);
+    return () => {
+      terminalListeners.delete(listener);
+    };
+  }
+
   function clearTransientState(): void {
     for (const sessionId of Array.from(scheduledProgressAnnouncements.keys())) {
       clearScheduledProgressAnnouncement(sessionId);
@@ -233,8 +277,10 @@ export function createSubAgentRuntimeSignalsManager<TAgent extends SubAgentSnaps
     clearScheduledProgressAnnouncement,
     clearTransientState,
     onSubAgentEvent,
+    onSubAgentTerminal,
     resolveScheduledLaunchWithSnapshot,
     scheduleProgressAnnouncement,
     scheduleQueuedLaunchWatch,
+    signalTerminal,
   };
 }

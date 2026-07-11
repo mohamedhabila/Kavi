@@ -155,7 +155,10 @@ function scheduleQueuedLaunchWatch(agent: ActiveSubAgent, announceFailure: boole
   subAgentRuntimeSignals.scheduleQueuedLaunchWatch(agent, announceFailure);
 }
 
-function announce(agent: ActiveSubAgent, event: SubAgentAnnounceEvent): void {
+function announce(
+  agent: ActiveSubAgent,
+  event: Extract<SubAgentAnnounceEvent, 'started' | 'progress'>,
+): void {
   subAgentRuntimeSignals.announce(agent, event);
 }
 
@@ -189,7 +192,9 @@ const subAgentLifecycleManager = createSubAgentLifecycleManager<ActiveSubAgent>(
   cloneAgent,
   updateAgentProgress,
   appendActivity,
-  announce,
+  onSubAgentTerminal: (listener) => subAgentRuntimeSignals.onSubAgentTerminal(listener),
+  signalTerminal: (agent, event, options) =>
+    subAgentRuntimeSignals.signalTerminal(agent, event, options),
   normalizePreviewText,
   maxToolResultPreviewChars: MAX_TOOL_RESULT_PREVIEW_CHARS,
   terminalSubAgentRetentionMs: TERMINAL_SUB_AGENT_RETENTION_MS,
@@ -264,7 +269,8 @@ async function runPreparedSubAgent(
     activeRunControls,
     appendActivity,
     appendTranscriptMessage,
-    announce,
+    signalTerminal: (agent, event, options) =>
+      subAgentRuntimeSignals.signalTerminal(agent, event, options),
     clearPendingSessionContextCheckpoint: (sessionId) =>
       sessionContextManager.clearPendingSessionContextCheckpoint(sessionId),
     clearSessionContextEviction: (sessionId) =>

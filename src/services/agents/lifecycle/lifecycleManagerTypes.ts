@@ -3,6 +3,7 @@ import type {
   SubAgentResult,
   SubAgentSnapshot,
 } from '../../../types/subAgent';
+import type { SubAgentTerminalEvent } from '../subAgentRuntimeSignals';
 import type { ActiveSubAgentRunControl, ProgressChanges, ProgressOptions } from './phases';
 
 type LifecyclePersistenceManager = {
@@ -26,11 +27,6 @@ type UpdateAgentProgressFn<TAgent extends SubAgentSnapshot> = (
   options?: ProgressOptions,
 ) => void;
 
-type AnnounceFn<TAgent extends SubAgentSnapshot> = (
-  agent: TAgent,
-  event: 'started' | 'completed' | 'timeout' | 'error' | 'cancelled' | 'progress',
-) => void;
-
 export type SubAgentLifecycleManagerParams<TAgent extends SubAgentSnapshot> = {
   activeSubAgents: Map<string, TAgent>;
   activeRunControls: Map<string, ActiveSubAgentRunControl>;
@@ -48,7 +44,14 @@ export type SubAgentLifecycleManagerParams<TAgent extends SubAgentSnapshot> = {
     kind: SubAgentActivityEntry['kind'],
     text: string | undefined,
   ) => void;
-  announce: AnnounceFn<TAgent>;
+  onSubAgentTerminal: (
+    listener: (agent: TAgent, event: SubAgentTerminalEvent) => void,
+  ) => () => void;
+  signalTerminal: (
+    agent: TAgent,
+    event: SubAgentTerminalEvent,
+    options?: { announce?: boolean },
+  ) => void;
   normalizePreviewText: (value: string | undefined, maxLength?: number) => string | undefined;
   maxToolResultPreviewChars: number;
   terminalSubAgentRetentionMs: number;

@@ -70,7 +70,7 @@ function commonParams(agent: SubAgentSnapshot, order: string[]) {
     normalizePreviewText: (text: string) => text,
     terminalMessage: 'Worker failed.',
     maxToolResultPreviewChars: 320,
-    announce: jest.fn(() => order.push('announce')),
+    signalTerminal: jest.fn(() => order.push('signal-terminal')),
     scheduleSessionContextCheckpoint: jest.fn(),
     persistRegistryBestEffort: jest.fn(async () => {
       order.push(`persist:${agent.outcomeReconciliation?.status ?? 'missing'}`);
@@ -98,7 +98,12 @@ describe('terminal worker outcome ordering', () => {
 
     await finalizeCompletedSubAgentRun(commonParams(agent, order));
 
-    expect(order).toEqual(['persist:pending', 'reconcile', 'persist:completed', 'announce']);
+    expect(order).toEqual([
+      'persist:pending',
+      'reconcile',
+      'persist:completed',
+      'signal-terminal',
+    ]);
     expect(mockReconcile).toHaveBeenCalledWith(
       expect.objectContaining({
         agent,
@@ -130,7 +135,12 @@ describe('terminal worker outcome ordering', () => {
       completionState: 'blocked',
     });
 
-    expect(order).toEqual(['persist:pending', 'reconcile', 'persist:completed', 'announce']);
+    expect(order).toEqual([
+      'persist:pending',
+      'reconcile',
+      'persist:completed',
+      'signal-terminal',
+    ]);
     expect(agent.status).toBe('error');
   });
 });
