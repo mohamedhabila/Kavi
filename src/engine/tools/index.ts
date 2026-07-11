@@ -19,6 +19,18 @@ import { isToolResultErrorLike } from '../../utils/toolResultErrors';
 
 // ── Central dispatcher ───────────────────────────────────────────────────
 
+function isolateExecutorContext(
+  context: ToolExecutionContext | undefined,
+): ToolExecutionContext | undefined {
+  if (!context) return undefined;
+  const isolated = { ...context };
+  delete isolated.toolCallId;
+  delete isolated.executionSignal;
+  delete isolated.captureEffectReceipt;
+  delete isolated.finalizeEffectReceiptCapture;
+  return isolated;
+}
+
 export async function executeTool(
   name: string,
   argsString: string,
@@ -59,6 +71,7 @@ export async function executeTool(
   }
 
   const startTime = Date.now();
+  const executorContext = isolateExecutorContext(context);
   const captureReceipt = context?.captureEffectReceipt;
   const finalizeReceiptCapture = (): void => {
     try {
@@ -92,7 +105,7 @@ export async function executeTool(
           useToolPermissionsStore.getState().isAllowed(normalizedName),
         controlGranted: () => context.executionSignal?.aborted !== true,
       },
-      execute: () => executeToolInner(normalizedName, argsString, conversationId, context),
+      execute: () => executeToolInner(normalizedName, argsString, conversationId, executorContext),
     });
     finalizeReceiptCapture();
     if (dispatched.kind === 'executed') {
@@ -120,7 +133,7 @@ export async function executeTool(
 
   let result: string;
   try {
-    result = await executeToolInner(normalizedName, argsString, conversationId, context);
+    result = await executeToolInner(normalizedName, argsString, conversationId, executorContext);
     logToolCall(normalizedName, argsString, 'success', Date.now() - startTime, conversationId);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

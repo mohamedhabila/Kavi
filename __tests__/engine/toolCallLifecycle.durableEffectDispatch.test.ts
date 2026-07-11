@@ -172,7 +172,11 @@ describe('production tool lifecycle durable effect wiring', () => {
       size: 4,
       sha256: 'a'.repeat(64),
     });
-    mockedExecuteToolInner.mockImplementation(async () => {
+    mockedExecuteToolInner.mockImplementation(async (_name, _args, _conversationId, context) => {
+      expect(context).not.toHaveProperty('captureEffectReceipt');
+      expect(context).not.toHaveProperty('finalizeEffectReceiptCapture');
+      expect(context).not.toHaveProperty('executionSignal');
+      expect(context).not.toHaveProperty('toolCallId');
       expect(
         getExecutionJournalDb().getFirstSync<{ status: string }>(
           'SELECT status FROM execution_effects LIMIT 1',
