@@ -1,7 +1,4 @@
-import type {
-  AgentRunControlGraphState,
-  AgentRunTerminalReason,
-} from '../../types/agentRun';
+import type { AgentRunControlGraphState, AgentRunTerminalReason } from '../../types/agentRun';
 
 type AgentControlGraphOutcomeState = Pick<
   AgentRunControlGraphState,
@@ -14,6 +11,31 @@ const SUCCESSFUL_GRAPH_STATUSES = new Set<AgentControlGraphOutcomeState['status'
 
 function resolveGraphOutcomeReason(state: AgentControlGraphOutcomeState): string {
   return state.terminalReason?.trim() || state.finalizationHoldReason?.trim() || state.status;
+}
+
+export function isAgentControlGraphUnsuccessfulTerminalState(
+  state: AgentControlGraphOutcomeState | undefined,
+  options?: { allowYieldedCheckpoint?: boolean },
+): boolean {
+  if (!state) return false;
+  return (
+    state.status === 'blocked' ||
+    state.status === 'cancelled' ||
+    state.status === 'failed' ||
+    (state.status === 'yielded' && options?.allowYieldedCheckpoint !== true) ||
+    (state.status === 'finalized' && state.terminalReason === 'max_iterations')
+  );
+}
+
+export function isAgentControlGraphFailureResponseState(
+  state: AgentControlGraphOutcomeState | undefined,
+): boolean {
+  return Boolean(
+    state &&
+    (state.status === 'blocked' ||
+      state.status === 'yielded' ||
+      (state.status === 'finalized' && state.terminalReason === 'max_iterations')),
+  );
 }
 
 export function resolveAgentControlGraphTerminalFailure(params: {
@@ -68,6 +90,14 @@ export function createAgentControlGraphTerminalOutcomeTracker(options?: {
       reportedError,
       allowYieldedCheckpoint: options?.allowYieldedCheckpoint,
     });
+  const hasControlGraphFailure = () =>
+    Boolean(
+      state &&
+      resolveAgentControlGraphTerminalFailure({
+        state,
+        allowYieldedCheckpoint: options?.allowYieldedCheckpoint,
+      }),
+    );
 
   return {
     recordControlGraphState: (nextState: AgentControlGraphOutcomeState) => {
@@ -76,6 +106,9 @@ export function createAgentControlGraphTerminalOutcomeTracker(options?: {
     recordError: (error: Error) => {
       reportedError = error;
     },
+    hasControlGraphFailure,
+    hasUnsuccessfulTerminalState: () =>
+      isAgentControlGraphUnsuccessfulTerminalState(state, options),
     resolveFailure,
     throwIfFailed: () => {
       const failure = resolveFailure();

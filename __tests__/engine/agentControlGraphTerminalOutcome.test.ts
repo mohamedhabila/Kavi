@@ -1,6 +1,7 @@
 import {
   classifyAgentControlGraphTerminalReason,
   createAgentControlGraphTerminalOutcomeTracker,
+  isAgentControlGraphFailureResponseState,
   resolveAgentControlGraphTerminalFailure,
 } from '../../src/engine/graph/terminalOutcome';
 import type { AgentRunControlGraphState } from '../../src/types/agentRun';
@@ -13,19 +14,21 @@ function state(
 }
 
 describe('agent control graph terminal outcomes', () => {
-  it.each([
-    state('awaiting_review'),
-    state('finalized', 'completed'),
-  ])('accepts successful graph completion at $status', (controlGraph) => {
-    expect(resolveAgentControlGraphTerminalFailure({ state: controlGraph })).toBeUndefined();
-  });
+  it.each([state('awaiting_review'), state('finalized', 'completed')])(
+    'accepts successful graph completion at $status',
+    (controlGraph) => {
+      expect(resolveAgentControlGraphTerminalFailure({ state: controlGraph })).toBeUndefined();
+    },
+  );
 
   it('rejects blocked completion without requiring an onError callback', () => {
     expect(
       resolveAgentControlGraphTerminalFailure({
         state: state('blocked', 'tool_batch_incomplete'),
       }),
-    ).toEqual(expect.objectContaining({ message: expect.stringContaining('tool_batch_incomplete') }));
+    ).toEqual(
+      expect.objectContaining({ message: expect.stringContaining('tool_batch_incomplete') }),
+    );
   });
 
   it('rejects max-iteration finalization even though the graph status is finalized', () => {
@@ -80,6 +83,8 @@ describe('agent control graph terminal outcomes', () => {
     expect(tracker.resolveFailure()).toEqual(
       expect.objectContaining({ message: expect.stringContaining('loop_detected') }),
     );
+    expect(tracker.hasControlGraphFailure()).toBe(true);
+    expect(tracker.hasUnsuccessfulTerminalState()).toBe(true);
     expect(() => tracker.throwIfFailed()).toThrow('loop_detected');
   });
 
@@ -91,6 +96,19 @@ describe('agent control graph terminal outcomes', () => {
 
     expect(tracker.resolveFailure()).toBe(error);
   });
+
+  it.each([
+    ['blocked', 'empty_final_text_after_recovery', true],
+    ['yielded', 'tool_yielded', true],
+    ['finalized', 'max_iterations', true],
+    ['failed', 'provider_error', false],
+    ['awaiting_review', undefined, false],
+  ] as const)(
+    'classifies whether %s owns a visible terminal response',
+    (status, terminalReason, expected) => {
+      expect(isAgentControlGraphFailureResponseState(state(status, terminalReason))).toBe(expected);
+    },
+  );
 
   it.each([
     ['loop_detected', 'blocked', 'loop_detected'],
