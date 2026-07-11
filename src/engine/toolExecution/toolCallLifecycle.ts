@@ -55,30 +55,39 @@ async function appendExecutionReceipt(params: {
       runId: params.lifecycle.agentRunId,
       recordedAt: params.recordedAt,
     });
-    params.toolCall.effectReceipts = appendToolEffectReceipt(
-      params.toolCall.effectReceipts,
-      receipt,
-      { toolCallId: params.toolCall.id, toolName: params.toolCall.name },
-    );
   } catch {
     // Receipt creation is fail-closed: absence remains unknown and never becomes success evidence.
     return undefined;
   }
+
+  attachExecutionReceipt({ lifecycle: params.lifecycle, toolCall: params.toolCall, receipt });
+  return receipt;
+}
+
+function attachExecutionReceipt(params: {
+  lifecycle: ToolExecutionLifecycleParams;
+  toolCall: ToolCall;
+  receipt: ToolEffectReceipt;
+}): void {
+  params.toolCall.effectReceipts = appendToolEffectReceipt(
+    params.toolCall.effectReceipts,
+    params.receipt,
+    { toolCallId: params.toolCall.id, toolName: params.toolCall.name },
+  );
 
   // Experience collection is ancillary. A hashing or storage failure must not
   // erase the authoritative receipt or alter the primary tool outcome.
   void recordVerifiedToolEffectExperience({
     memoryConversationId: params.lifecycle.memoryConversationId,
     sourceThreadId: params.lifecycle.conversationId,
-    sourceRunId: params.lifecycle.agentRunId,
+    sourceRunId: params.receipt.runId,
     toolCallId: params.toolCall.id,
     toolName: params.toolCall.name,
-    receipt,
+    receipt: params.receipt,
   }).catch(() => {
     // The producer is fail-closed internally; this guard preserves completion
     // if an unexpected implementation error escapes that boundary.
   });
-  return receipt;
 }
 
 export type {
@@ -140,6 +149,8 @@ export async function executeToolCallLifecycle(
     iteration: params.iteration,
   });
   const toolExecutionStartedAt = Date.now();
+  let authoritativeEffectReceipt: ToolEffectReceipt | undefined;
+  let authoritativeReceiptFinalized = false;
 
   try {
     let result = await executeTool(
@@ -156,9 +167,33 @@ export async function executeToolCallLifecycle(
         availableToolNames: Array.from(params.availableToolNames),
         controlGraphGoals: params.controlGraphGoals,
         agentRunId: params.agentRunId,
+        toolCallId: effectiveToolCall.id,
+        executionSignal: params.signal?.signal,
+        captureEffectReceipt: (receipt) => {
+          authoritativeEffectReceipt = receipt;
+        },
+        finalizeEffectReceiptCapture: () => {
+          authoritativeReceiptFinalized = true;
+        },
         currentUserMessage: params.currentUserMessage,
       },
     );
+    if (authoritativeEffectReceipt) {
+      attachExecutionReceipt({
+        lifecycle: params,
+        toolCall,
+        receipt: authoritativeEffectReceipt,
+      });
+    } else if (!authoritativeReceiptFinalized) {
+      authoritativeEffectReceipt = await appendExecutionReceipt({
+        lifecycle: params,
+        toolCall,
+        result,
+        transportState: 'returned',
+        resultIsError: isToolResultErrorLike(result),
+        recordedAt: Date.now(),
+      });
+    }
     if (!isToolResultErrorLike(result)) {
       const durability = await observeExternalToolResultDurability({
         toolName: effectiveToolCall.name,
@@ -212,14 +247,6 @@ export async function executeToolCallLifecycle(
       completedAt,
       toolResultIsError ? 'tool_error' : undefined,
     );
-    const effectReceipt = await appendExecutionReceipt({
-      lifecycle: params,
-      toolCall,
-      result,
-      transportState: 'returned',
-      resultIsError: toolResultIsError,
-      recordedAt: completedAt,
-    });
     params.callbacks.onToolCallComplete(toolCall);
     await emitAgentEvent('tool_end', {
       conversationId: params.conversationId,
@@ -252,21 +279,23 @@ export async function executeToolCallLifecycle(
         isError: toolResultIsError,
       }),
       result,
-      ...(effectReceipt ? { effectReceipt } : {}),
+      ...(authoritativeEffectReceipt ? { effectReceipt: authoritativeEffectReceipt } : {}),
     };
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     const completedAt = Date.now();
     failRunningToolCall(toolCall, errMsg, completedAt, 'runtime_error');
     const errorResult = `Error: ${errMsg}`;
-    const effectReceipt = await appendExecutionReceipt({
-      lifecycle: params,
-      toolCall,
-      result: errorResult,
-      transportState: 'threw',
-      resultIsError: true,
-      recordedAt: completedAt,
-    });
+    if (!authoritativeEffectReceipt && !authoritativeReceiptFinalized) {
+      authoritativeEffectReceipt = await appendExecutionReceipt({
+        lifecycle: params,
+        toolCall,
+        result: errorResult,
+        transportState: 'threw',
+        resultIsError: true,
+        recordedAt: completedAt,
+      });
+    }
     params.callbacks.onToolCallComplete(toolCall);
     recordLifecyclePerformanceMetrics({
       enabled: params.usePerformanceMetrics,
@@ -301,7 +330,7 @@ export async function executeToolCallLifecycle(
         isError: true,
       }),
       result: errorResult,
-      ...(effectReceipt ? { effectReceipt } : {}),
+      ...(authoritativeEffectReceipt ? { effectReceipt: authoritativeEffectReceipt } : {}),
     };
   }
 }
