@@ -113,6 +113,7 @@ describe('localLlm acceleration metadata', () => {
         visionBackend: 'gpu',
         audioBackend: 'cpu',
       }),
+      undefined,
     );
   });
 

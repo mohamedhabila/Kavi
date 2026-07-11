@@ -41,6 +41,7 @@ function buildParams(params: {
     trackedAsyncOperations: new Map(),
     consecutivePendingAsyncNoToolTurns: 0,
     turnAssistantContent: 'final answer',
+    modelTurnAssistantContent: 'final answer',
     reasoning: '',
     completion: {
       completionStatus: 'complete' as const,
@@ -65,6 +66,7 @@ function buildParams(params: {
     resetIncompleteFinalTextRecovery: jest.fn(),
     recordTurnDirectives: jest.fn(),
     finishWithGraphFinalCandidateEvent: jest.fn().mockResolvedValue(undefined),
+    finishWithGraphTerminalEvent: jest.fn().mockResolvedValue(undefined),
     onContinueThinking: jest.fn().mockResolvedValue(undefined),
   };
 }
