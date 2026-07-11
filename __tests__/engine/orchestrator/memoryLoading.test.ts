@@ -4,7 +4,6 @@
 
 import {
   runOrchestrator,
-  getConversationMemoryForSystemPrompt,
   buildLivingMemorySections,
   mockStreamMessage,
   makeProvider,
@@ -15,11 +14,7 @@ import {
 
 describe('Orchestrator', () => {
   describe('Memory loading', () => {
-    it('does not inject legacy file memory and delegates to the canonical memory bridge', async () => {
-      (getConversationMemoryForSystemPrompt as jest.Mock).mockResolvedValueOnce(
-        'User is named John',
-      );
-
+    it('delegates memory retrieval to the canonical memory bridge', async () => {
       mockStreamMessage.mockImplementationOnce(() => {
         return createStreamGenerator([
           { type: 'token', content: 'Hi John!' },
@@ -38,7 +33,6 @@ describe('Orchestrator', () => {
 
       await runOrchestrator(options, callbacks);
 
-      expect(getConversationMemoryForSystemPrompt).not.toHaveBeenCalled();
       expect(buildLivingMemorySections).toHaveBeenCalledWith(
         expect.objectContaining({
           conversationId: 'conv1',
@@ -54,9 +48,8 @@ describe('Orchestrator', () => {
       const apiMessages = mockStreamMessage.mock.calls[0]?.[0] as Array<{
         role: string;
         content: string;
-      }>;
+      }>; 
       expect(apiMessages[0]?.content).not.toContain('Conversation memory:');
-      expect(apiMessages[0]?.content).not.toContain('User is named John');
       expect(callbacks.onDone).toHaveBeenCalled();
     });
 
@@ -81,7 +74,6 @@ describe('Orchestrator', () => {
 
       await runOrchestrator(options, callbacks);
 
-      expect(getConversationMemoryForSystemPrompt).not.toHaveBeenCalled();
       expect(buildLivingMemorySections).toHaveBeenCalledWith(
         expect.objectContaining({
           conversationId: 'parent-memory-7',

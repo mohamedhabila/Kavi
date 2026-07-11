@@ -64,8 +64,6 @@ function createParams(
     maxToolIterations: 2,
     maxTokens: 8000,
     promptContextSupport: {
-      conversationMemory: '',
-      globalMemory: '',
       livingMemorySections: [],
       maxToolIterations: 2,
       resolvedPrompt: '',

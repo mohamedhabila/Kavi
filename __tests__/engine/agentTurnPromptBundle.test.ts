@@ -5,9 +5,7 @@ import { splitCacheableSystemPromptSections } from '../../src/services/llm/core/
 
 describe('buildAgentTurnPromptBundle', () => {
   const baseParams = {
-    conversationMemory: null,
     effectiveForceTextThisTurn: false,
-    globalMemory: null,
     groundedRequestScopedTools: [],
     iteration: 1,
     maxToolIterations: 25,

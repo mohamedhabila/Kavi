@@ -146,8 +146,6 @@ export function buildSafetyPromptSection(): string {
 export function buildSystemPromptSections(
   systemPrompt: string,
   runtimeContext: string | null,
-  conversationMemory: string | null,
-  globalMemory: string | null,
   skillsPrompt?: string,
   workflowRuntimePrompt?: string,
   toolingEnabled = true,
@@ -163,11 +161,6 @@ export function buildSystemPromptSections(
 
   const skillsSection = normalizedSkillsPrompt.trim();
 
-  const conversationMemorySection = conversationMemory
-    ? `Conversation memory:\n${conversationMemory}`
-    : '';
-
-  const globalMemorySection = globalMemory ? `Global memory:\n${globalMemory}` : '';
   const runtimeContextSection = formatRuntimeContextSection(runtimeContext);
 
   appendSystemPromptSection(sections, prompt, { cacheable: true });
@@ -180,7 +173,5 @@ export function buildSystemPromptSections(
   );
   appendSystemPromptSection(sections, workflowRuntimePrompt);
   appendSystemPromptSection(sections, toolingEnabled ? skillsSection : '', { cacheable: true });
-  appendSystemPromptSection(sections, conversationMemorySection);
-  appendSystemPromptSection(sections, globalMemorySection);
   return orderSystemPromptSectionsForCaching(sections);
 }

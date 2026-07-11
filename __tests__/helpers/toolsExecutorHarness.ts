@@ -288,7 +288,6 @@ export let executeTool: (
   conversationId: string,
   context?: Record<string, unknown>,
 ) => Promise<string>;
-export let loadMemory: (conversationId: string) => Promise<string | null>;
 export let executeNativeTool: jest.Mock;
 export let generateImage: jest.Mock;
 export let editImage: jest.Mock;
@@ -309,7 +308,7 @@ export const REMOTE_WORKSPACE_TARGET = {
 
 function loadTestModules() {
   ({ __resetStore, __getStore } = require('expo-file-system'));
-  ({ executeTool, loadMemory } = require('../../src/engine/tools/index'));
+  ({ executeTool } = require('../../src/engine/tools/index'));
   ({ executeNativeTool } = require('../../src/engine/tools/native/executor'));
   ({ generateImage, editImage } = require('../../src/services/media/imageGeneration'));
   ({ hybridSearch } = require('../../src/services/memory/embeddings'));

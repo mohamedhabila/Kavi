@@ -30,7 +30,6 @@ jest.mock('../../src/services/llm/LlmService', () => {
 
 jest.mock('../../src/engine/tools/index', () => ({
   executeTool: jest.fn().mockResolvedValue('tool result'),
-  loadMemory: jest.fn().mockResolvedValue(null),
   normalizeToolName: jest.fn((name: string) => name.trim()),
 }));
 
@@ -71,11 +70,6 @@ jest.mock('../../src/services/skills/manager', () => ({
   getSkillSystemPrompts: jest.fn().mockResolvedValue(''),
   filterToolsByInvocationPolicy: jest.fn().mockImplementation((tools: any[]) => tools),
 }));
-jest.mock('../../src/services/memory/store', () => ({
-  getConversationMemoryForSystemPrompt: jest.fn().mockReturnValue(null),
-  getMemoryForSystemPrompt: jest.fn().mockReturnValue(null),
-  appendGlobalMemory: jest.fn(),
-}));
 jest.mock('../../src/services/memory/livingMemoryBridge', () => ({
   buildLivingMemorySections: jest.fn().mockResolvedValue({
     sections: [],
@@ -115,7 +109,6 @@ jest.mock('../../src/services/storage/SecureStorage', () => ({
 import { LlmService } from '../../src/services/llm/LlmService';
 import { executeTool } from '../../src/engine/tools/index';
 import { getSkillSystemPrompts, getSkillToolDefinitions } from '../../src/services/skills/manager';
-import { getConversationMemoryForSystemPrompt } from '../../src/services/memory/store';
 import { buildLivingMemorySections } from '../../src/services/memory/livingMemoryBridge';
 import { getProviderApiKey } from '../../src/services/storage/SecureStorage';
 import { getPersona } from '../../src/services/agents/registry';
@@ -311,8 +304,6 @@ beforeEach(() => {
     streamMessage: mockStreamMessage,
     sendMessage: mockSendMessage,
   }));
-  (getConversationMemoryForSystemPrompt as jest.Mock).mockReset();
-  (getConversationMemoryForSystemPrompt as jest.Mock).mockResolvedValue(null);
   (buildLivingMemorySections as jest.Mock).mockReset();
   (buildLivingMemorySections as jest.Mock).mockResolvedValue({
     sections: [],
@@ -347,7 +338,6 @@ export {
   executeTool,
   getSkillSystemPrompts,
   getSkillToolDefinitions,
-  getConversationMemoryForSystemPrompt,
   buildLivingMemorySections,
   getProviderApiKey,
   getPersona,

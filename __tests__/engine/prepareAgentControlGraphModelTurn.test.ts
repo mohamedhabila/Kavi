@@ -133,8 +133,6 @@ function createBaseParams() {
     iteration: 3,
     maxTokens: 4096,
     promptContextSupport: {
-      conversationMemory: null,
-      globalMemory: null,
       maxToolIterations: 40,
       resolvedPrompt: 'You are a test agent.',
       skillPrompts: '',
@@ -265,7 +263,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
     },
   );
 
-  it('treats forced-text proceed turns as non-actionable for budgeting and prompt memory', async () => {
+  it('treats forced-text proceed turns as non-actionable for budgeting and living memory', async () => {
     mockedPlanIterationModel.mockReturnValue({
       model: 'gpt-5-mini',
       maxTokens: 1024,
@@ -278,7 +276,6 @@ describe('prepareAgentControlGraphModelTurn', () => {
       ...createBaseParams(),
       promptContextSupport: {
         ...createBaseParams().promptContextSupport,
-        conversationMemory: 'Prior conversation memory',
         livingMemorySections: [{ text: 'Living memory section' }],
         livingMemoryReadEpoch: 0,
       },
@@ -298,7 +295,6 @@ describe('prepareAgentControlGraphModelTurn', () => {
     expect(mockedPrepareAgentTurn).toHaveBeenCalledWith(
       expect.objectContaining({
         promptBundleContext: expect.objectContaining({
-          conversationMemory: null,
           livingMemorySections: undefined,
         }),
       }),
@@ -367,7 +363,6 @@ describe('prepareAgentControlGraphModelTurn', () => {
       }),
       promptContextSupport: {
         ...createBaseParams().promptContextSupport,
-        conversationMemory: 'Prior conversation memory',
         livingMemorySections: [{ text: 'Living memory section' }],
         livingMemoryReadEpoch: 0,
       },
@@ -376,7 +371,6 @@ describe('prepareAgentControlGraphModelTurn', () => {
     expect(mockedPrepareAgentTurn).toHaveBeenCalledWith(
       expect.objectContaining({
         promptBundleContext: expect.objectContaining({
-          conversationMemory: 'Prior conversation memory',
           livingMemorySections: [{ text: 'Living memory section' }],
         }),
       }),

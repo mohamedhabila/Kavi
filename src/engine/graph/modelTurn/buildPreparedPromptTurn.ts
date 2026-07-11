@@ -28,11 +28,7 @@ export function buildPreparedModelTurnPrompt(params: {
       groundedRequestScopedTools: params.groundedRequestScopedTools,
       pinnedToolNames: params.pinnedToolNames,
       promptBundleContext: {
-        conversationMemory: params.actionablePromptTurn
-          ? params.promptContextSupport.conversationMemory
-          : null,
         effectiveForceTextReasonThisTurn: params.effectiveForceTextReasonThisTurn,
-        globalMemory: params.promptContextSupport.globalMemory,
         graphGoals: params.actionablePromptTurn ? params.promptContextSupport.graphGoals : undefined,
         goalsPromptSection: params.actionablePromptTurn
           ? params.promptContextSupport.goalsPromptSection

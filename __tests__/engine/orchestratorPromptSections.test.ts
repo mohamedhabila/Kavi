@@ -17,13 +17,11 @@ describe('orchestratorPromptSections', () => {
     expect(stripRuntimeContextFromUserContent(undefined)).toBe('');
   });
 
-  it('builds full system prompts with cacheable policy before dynamic memory', () => {
+  it('builds full system prompts with cacheable policy before dynamic context', () => {
     const runtimeContext = buildRuntimeContextNote(new Date('2026-05-29T10:00:00.000Z'));
     const sections = buildSystemPromptSections(
       'Base prompt.',
       runtimeContext,
-      'Conversation fact.',
-      'Global fact.',
       '',
       '',
       true,
@@ -32,7 +30,6 @@ describe('orchestratorPromptSections', () => {
     const prompt = joinSystemPromptSections(sections);
 
     expect(sections[0]).toMatchObject({ text: 'Base prompt.', cacheable: true });
-    expect(prompt).toContain('Conversation memory:');
     expect(prompt).toContain('Runtime: mobile (React Native / Expo), channel mobile-app.');
     expect(prompt).toContain('Runtime context:');
     expect(prompt).toContain('When provider tools are supplied for the turn');
@@ -62,8 +59,6 @@ describe('orchestratorPromptSections', () => {
     const sections = buildSystemPromptSections(
       'Base prompt.',
       buildRuntimeContextNote(new Date('2026-05-29T10:00:00.000Z')),
-      null,
-      null,
       '',
       '',
       true,
@@ -81,8 +76,6 @@ describe('orchestratorPromptSections', () => {
     const sections = buildSystemPromptSections(
       'Base prompt.',
       buildRuntimeContextNote(new Date('2026-05-29T10:00:00.000Z')),
-      null,
-      null,
       'Available skills:\n- Weather: skills/managed/weather/SKILL.md',
       '',
       true,
@@ -104,8 +97,6 @@ describe('orchestratorPromptSections', () => {
     const toolCapable = buildSystemPromptSections(
       'Base prompt.',
       runtimeContext,
-      null,
-      null,
       '',
       '',
       true,
@@ -114,8 +105,6 @@ describe('orchestratorPromptSections', () => {
     const textOnly = buildSystemPromptSections(
       'Base prompt.',
       runtimeContext,
-      null,
-      null,
       '',
       '',
       true,
@@ -124,8 +113,6 @@ describe('orchestratorPromptSections', () => {
     const providerNoTools = buildSystemPromptSections(
       'Base prompt.',
       runtimeContext,
-      null,
-      null,
       '',
       '',
       false,

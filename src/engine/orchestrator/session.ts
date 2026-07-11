@@ -164,8 +164,6 @@ export async function runOrchestratorGraphSession(params: {
       onCompaction: callbacks.onCompaction,
       personaThinkingLevel: persona?.thinkingLevel,
       promptContextSupport: {
-        conversationMemory: null,
-        globalMemory: null,
         graphGoals: graph.getGraphSnapshot().goals ?? [],
         livingMemorySections: livingMemory?.sections,
         livingMemoryReadEpoch: livingMemory?.memoryReadEpoch,

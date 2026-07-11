@@ -54,8 +54,31 @@ jest.mock('../../src/services/skills/manager', () => ({
   },
 }));
 
-jest.mock('../../src/services/memory/store', () => ({
-  readGlobalMemory: jest.fn().mockResolvedValue('test query found here\nanother line'),
+jest.mock('../../src/services/memory/facts/managementSearch', () => ({
+  searchMemoryFactsForManagement: jest.fn(() => ({
+    query: 'test query',
+    totalCurrentFacts: 1,
+    totalMatches: 1,
+    facts: [
+      {
+        id: 'fact-1',
+        subjectId: 'entity-project',
+        predicate: 'notes',
+        objectText: 'test query found here',
+        sourceSummary: null,
+        pinned: false,
+        updatedAt: 1,
+      },
+    ],
+  })),
+}));
+
+jest.mock('../../src/services/memory/memoryFactSerialization', () => ({
+  serializeMemoryFact: (fact: any) => ({
+    ...fact,
+    subject: 'project',
+    value: fact.objectText,
+  }),
 }));
 
 import { getCommand, getAllCommands, registerCommand } from '../../src/services/commands/builtins';
@@ -135,6 +158,7 @@ describe('Built-in Commands', () => {
     const cmd = getCommand('memory');
     const result = await cmd!.handler({ conversationId: null, args: 'test query' });
     expect((result as any).response).toContain('test query');
+    expect((result as any).response).toContain('project · notes');
   });
 
   it('/memory without args should show usage', async () => {

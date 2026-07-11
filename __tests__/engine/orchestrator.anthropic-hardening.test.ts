@@ -16,7 +16,6 @@ jest.mock('../../src/services/llm/LlmService', () => ({
 
 jest.mock('../../src/engine/tools/index', () => ({
   executeTool: jest.fn().mockResolvedValue('tool result'),
-  loadMemory: jest.fn().mockResolvedValue(null),
   normalizeToolName: jest.fn((name: string) => name),
 }));
 
@@ -49,12 +48,6 @@ jest.mock('../../src/services/skills/manager', () => ({
   getSkillToolDefinitions: jest.fn().mockReturnValue([]),
   getSkillSystemPrompts: jest.fn().mockResolvedValue(''),
   filterToolsByInvocationPolicy: jest.fn().mockImplementation((tools: any[]) => tools),
-}));
-
-jest.mock('../../src/services/memory/store', () => ({
-  getConversationMemoryForSystemPrompt: jest.fn().mockReturnValue(null),
-  getMemoryForSystemPrompt: jest.fn().mockReturnValue(null),
-  appendGlobalMemory: jest.fn(),
 }));
 
 jest.mock('../../src/services/memory/livingMemoryBridge', () => ({

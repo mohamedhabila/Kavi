@@ -14,8 +14,6 @@ export type LivingMemorySection = {
 };
 
 export type PromptContextSupport = {
-  conversationMemory: string | null;
-  globalMemory: string | null;
   graphGoals?: ReadonlyArray<AgentGoal>;
   goalsPromptSection?: string | null;
   livingMemorySections?: ReadonlyArray<LivingMemorySection>;

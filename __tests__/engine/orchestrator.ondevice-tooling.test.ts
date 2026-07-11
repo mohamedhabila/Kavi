@@ -50,12 +50,6 @@ jest.mock('../../src/services/skills/manager', () => ({
   filterToolsByInvocationPolicy: jest.fn().mockImplementation((tools: any[]) => tools),
 }));
 
-jest.mock('../../src/services/memory/store', () => ({
-  getConversationMemoryForSystemPrompt: jest.fn().mockReturnValue(null),
-  getMemoryForSystemPrompt: jest.fn().mockReturnValue(null),
-  appendGlobalMemory: jest.fn(),
-}));
-
 jest.mock('../../src/services/commands/parser', () => ({
   isSlashCommand: jest.fn().mockReturnValue(false),
   parseCommand: jest.fn().mockReturnValue(null),

@@ -3,7 +3,6 @@
 // ---------------------------------------------------------------------------
 // Central dispatcher: routes tool calls to the correct executor.
 
-import { readConversationMemory } from '../../services/memory/store';
 import { logToolCall } from '../../services/security/audit';
 import { useToolPermissionsStore } from '../../services/security/permissions';
 import { needsApprovalWithContext, requestToolApproval } from '../../services/remote/approvalStore';
@@ -171,11 +170,3 @@ export async function executeTool(
 
 // ── Tool name normalization ───────────────────────────────────────────────
 export { normalizeToolName };
-
-export async function loadMemory(conversationId: string): Promise<string | null> {
-  try {
-    return await readConversationMemory(conversationId);
-  } catch {
-    return null;
-  }
-}

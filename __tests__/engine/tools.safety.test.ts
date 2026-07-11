@@ -1,4 +1,4 @@
-import { executeTool, loadMemory } from '../helpers/toolsExecutorHarness';
+import { executeTool } from '../helpers/toolsExecutorHarness';
 
 describe('executeTool', () => {
   const CONV_ID = 'test-conversation';
@@ -61,12 +61,5 @@ describe('executeTool', () => {
       );
       expect(result).toContain('Error');
     });
-  });
-});
-
-describe('loadMemory', () => {
-  it('should return null when no memory exists', async () => {
-    const result = await loadMemory('nonexistent');
-    expect(result).toBeNull();
   });
 });

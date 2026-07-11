@@ -15,11 +15,9 @@ type LivingMemorySection = {
 };
 
 export interface AgentTurnPromptBundleParams {
-  conversationMemory: string | null;
   effectiveForceTextThisTurn: boolean;
   effectiveForceTextReasonThisTurn?: AgentControlGraphForcedTextReason;
   goalsPromptSection?: string | null;
-  globalMemory: string | null;
   groundedRequestScopedTools: ReadonlyArray<ToolDefinition>;
   iteration: number;
   livingMemorySections?: ReadonlyArray<LivingMemorySection>;
@@ -50,8 +48,6 @@ export function buildAgentTurnPromptBundle(
   const baseSystemPromptSections = buildSystemPromptSections(
     params.resolvedPrompt,
     params.runtimeContext ?? null,
-    params.conversationMemory,
-    params.globalMemory,
     params.skillPrompts,
     '',
     params.toolingEnabledForProvider,

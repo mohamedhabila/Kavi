@@ -11,7 +11,6 @@ jest.mock('../../src/services/llm/LlmService', () => ({
 }));
 jest.mock('../../src/engine/tools/index', () => ({
   executeTool: jest.fn().mockResolvedValue('tool result'),
-  loadMemory: jest.fn().mockResolvedValue(null),
   normalizeToolName: jest.fn((name: string) => name.trim()),
 }));
 jest.mock('../../src/services/events/bus', () => ({
@@ -40,11 +39,6 @@ jest.mock('../../src/services/skills/manager', () => ({
   getSkillToolDefinitions: jest.fn().mockReturnValue([]),
   getSkillSystemPrompts: jest.fn().mockReturnValue([]),
   filterToolsByInvocationPolicy: jest.fn().mockImplementation((tools: any[]) => tools),
-}));
-jest.mock('../../src/services/memory/store', () => ({
-  getConversationMemoryForSystemPrompt: jest.fn().mockReturnValue(null),
-  getMemoryForSystemPrompt: jest.fn().mockReturnValue(null),
-  appendGlobalMemory: jest.fn(),
 }));
 jest.mock('../../src/services/commands/parser', () => ({
   isSlashCommand: jest.fn().mockReturnValue(false),

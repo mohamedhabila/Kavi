@@ -8,7 +8,8 @@ import { getLoadedHooks as getRegisteredHooks } from '../hooks/loader';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useSchedulerStore } from '../scheduler/store';
 import { useSkillsStore } from '../skills/manager';
-import { readGlobalMemory } from '../memory/store';
+import { searchMemoryFactsForManagement } from '../memory/facts/managementSearch';
+import { serializeMemoryFact } from '../memory/memoryFactSerialization';
 
 export type CommandContext = {
   conversationId: string | null;
@@ -93,22 +94,26 @@ registerCommand('export', 'Export current conversation', () => {
   return { action: 'export', response: 'Exporting conversation...' };
 });
 
-registerCommand('memory', 'Search or view memory', async (ctx) => {
-  if (!ctx.args) {
+registerCommand('memory', 'Search remembered facts', (ctx) => {
+  const query = ctx.args.trim().slice(0, 200);
+  if (!query) {
     return { response: 'Use `/memory <query>` to search memory.', shouldDisplay: true };
   }
-  const memory = await readGlobalMemory();
-  if (!memory) {
+
+  const result = searchMemoryFactsForManagement(query, 10);
+  if (result.totalCurrentFacts === 0) {
     return { response: 'Memory is empty.', shouldDisplay: true };
   }
-  const query = ctx.args.toLowerCase();
-  const lines = memory.split('\n').filter((l) => l.toLowerCase().includes(query));
-  if (lines.length === 0) {
-    return { response: `No memory entries matching "${ctx.args}".`, shouldDisplay: true };
+  if (result.totalMatches === 0) {
+    return { response: `No remembered facts matching "${query}".`, shouldDisplay: true };
   }
-  const preview = lines.slice(0, 10).join('\n');
+  const preview = result.facts.map((memoryFact) => {
+    const fact = serializeMemoryFact(memoryFact);
+    const value = fact.value.replace(/\s+/g, ' ').trim().slice(0, 300);
+    return `- **${fact.subject} · ${fact.predicate}**: ${value}`;
+  });
   return {
-    response: `**Memory Search: "${ctx.args}"** (${lines.length} matches)\n\n${preview}${lines.length > 10 ? '\n…' : ''}`,
+    response: `**Remembered facts: "${query}"** (${result.totalMatches} matches)\n\n${preview.join('\n')}${result.totalMatches > result.facts.length ? '\n…' : ''}`,
     shouldDisplay: true,
   };
 });
