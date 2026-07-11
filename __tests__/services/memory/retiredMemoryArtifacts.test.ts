@@ -56,4 +56,24 @@ describe('retired memory artifact cleanup', () => {
     expect(unrelated.exists).toBe(true);
     expect(unrelatedFile.exists).toBe(true);
   });
+
+  it('attempts every retired directory before reporting a deletion failure', () => {
+    const globalMemory = new Directory(Paths.document, 'global-memory');
+    const conversationMemory = new Directory(Paths.document, 'conversation-memory');
+    globalMemory.create();
+    conversationMemory.create();
+    const originalDelete = Directory.prototype.delete;
+    const deleteSpy = jest.spyOn(Directory.prototype, 'delete').mockImplementation(function () {
+      if (this.name === 'global-memory') {
+        throw new Error('directory busy');
+      }
+      return originalDelete.call(this);
+    });
+
+    expect(() => removeRetiredMemoryFileArtifacts()).toThrow('directory busy');
+
+    expect(globalMemory.exists).toBe(true);
+    expect(conversationMemory.exists).toBe(false);
+    deleteSpy.mockRestore();
+  });
 });

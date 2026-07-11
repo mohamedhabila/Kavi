@@ -7,8 +7,18 @@ let database: SQLite.SQLiteDatabase | null = null;
 
 export function getMemoryDb(): SQLite.SQLiteDatabase {
   if (!database) {
-    database = SQLite.openDatabaseSync(MEMORY_DATABASE_NAME);
-    removeRetiredMemoryDatabaseArtifacts(database);
+    const openedDatabase = SQLite.openDatabaseSync(MEMORY_DATABASE_NAME);
+    try {
+      removeRetiredMemoryDatabaseArtifacts(openedDatabase);
+      database = openedDatabase;
+    } catch (error) {
+      try {
+        openedDatabase.closeSync();
+      } catch {
+        // Preserve the cleanup failure that prevented canonical database use.
+      }
+      throw error;
+    }
   }
   return database;
 }

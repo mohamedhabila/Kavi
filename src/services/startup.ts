@@ -609,15 +609,22 @@ async function executeScheduledJob(job: CronJob): Promise<string> {
   }
 }
 
-export function initializeServices(): void {
-  if (initialized) return;
-  initialized = true;
+let retiredMemoryFileCleanupComplete = false;
 
+function removeRetiredMemoryFileArtifactsUntilComplete(): void {
+  if (retiredMemoryFileCleanupComplete) return;
   try {
     removeRetiredMemoryFileArtifacts();
+    retiredMemoryFileCleanupComplete = true;
   } catch (error) {
     console.warn('[startup] retired memory file cleanup failed:', error);
   }
+}
+
+export function initializeServices(): void {
+  removeRetiredMemoryFileArtifactsUntilComplete();
+  if (initialized) return;
+  initialized = true;
 
   initializeDurableRecoveryLifecycle();
 

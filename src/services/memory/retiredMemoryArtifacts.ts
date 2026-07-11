@@ -16,10 +16,19 @@ export function removeRetiredMemoryDatabaseArtifacts(database: SQLite.SQLiteData
  * Canonical memory is stored exclusively in the structured memory database.
  */
 export function removeRetiredMemoryFileArtifacts(): void {
+  const failures: unknown[] = [];
   for (const name of RETIRED_MEMORY_DIRECTORY_NAMES) {
-    const directory = new Directory(Paths.document, name);
-    if (directory.exists) {
-      directory.delete();
+    try {
+      const directory = new Directory(Paths.document, name);
+      if (directory.exists) {
+        directory.delete();
+      }
+    } catch (error) {
+      failures.push(error);
     }
+  }
+
+  if (failures.length > 0) {
+    throw failures[0];
   }
 }

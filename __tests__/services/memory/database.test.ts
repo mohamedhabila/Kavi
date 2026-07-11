@@ -42,4 +42,17 @@ describe('memory database lifecycle', () => {
     expect(mockOpenDatabaseSync).toHaveBeenCalledTimes(2);
     expect(mockExecSync).toHaveBeenCalledTimes(2);
   });
+
+  it('retries cleanup with a fresh database after cleanup fails', () => {
+    mockExecSync.mockImplementationOnce(() => {
+      throw new Error('database busy');
+    });
+
+    expect(() => getMemoryDb()).toThrow('database busy');
+    expect(mockCloseSync).toHaveBeenCalledTimes(1);
+
+    expect(getMemoryDb()).toBe(mockDatabase);
+    expect(mockOpenDatabaseSync).toHaveBeenCalledTimes(2);
+    expect(mockExecSync).toHaveBeenCalledTimes(2);
+  });
 });

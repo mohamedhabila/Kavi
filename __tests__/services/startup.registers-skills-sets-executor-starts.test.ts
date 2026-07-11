@@ -474,6 +474,26 @@ describe('initializeServices', () => {
     expect(mockActivateEnabledSkills).toHaveBeenCalledTimes(1);
     expect(mockStartScheduler).toHaveBeenCalledTimes(1);
   });
+  it('retries retired memory cleanup without reinitializing services', () => {
+    const cleanupError = new Error('directory busy');
+    mockRemoveRetiredMemoryFileArtifacts.mockImplementationOnce(() => {
+      throw cleanupError;
+    });
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { initializeServices } = require('../../src/services/startup');
+
+    initializeServices();
+    initializeServices();
+
+    expect(mockRemoveRetiredMemoryFileArtifacts).toHaveBeenCalledTimes(2);
+    expect(mockRegisterBuiltInServiceSkills).toHaveBeenCalledTimes(1);
+    expect(mockStartScheduler).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[startup] retired memory file cleanup failed:',
+      cleanupError,
+    );
+    warnSpy.mockRestore();
+  });
   it('passes an executor with execute function', () => {
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
