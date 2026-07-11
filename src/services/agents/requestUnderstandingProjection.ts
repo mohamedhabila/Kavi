@@ -1,4 +1,5 @@
 import type { RequestFrame, RequiredRequestInformation } from './requestFrame';
+import { requestDecisionIsPolicyReachable } from './requestDecisionPolicy';
 import type { AgentGoal } from '../../types/agentRun';
 import {
   REQUEST_UNDERSTANDING_PROJECTION_VERSION,
@@ -227,29 +228,8 @@ function projectRequiredInformation(
   };
 }
 
-function authorityStateConflicts(frame: RequestFrame | undefined): boolean {
-  if (!frame) return false;
-  if (
-    frame.decision.action === 'consent' &&
-    frame.decision.reason !== 'authorization_required' &&
-    frame.decision.reason !== 'permission_missing'
-  ) {
-    return true;
-  }
-  if (
-    frame.decision.action === 'decline' &&
-    frame.decision.reason !== 'prohibited' &&
-    frame.decision.reason !== 'policy_information_unavailable'
-  ) {
-    return true;
-  }
-  const unresolvedAuthorization = frame.requiredInformation.some(
-    (entry) =>
-      entry.authority === 'policy' &&
-      entry.requiredFor === 'authorization' &&
-      entry.resolution === 'unresolved',
-  );
-  return unresolvedAuthorization && frame.decision.action !== 'consent';
+function requestDecisionStateConflicts(frame: RequestFrame | undefined): boolean {
+  return frame !== undefined && !requestDecisionIsPolicyReachable(frame);
 }
 
 function projectEffectAuthorization(
@@ -302,9 +282,9 @@ export function projectRequestUnderstanding(params: {
 }): RequestUnderstandingProjection {
   const goalConflict = findGoalConflict(params.goals);
   const requiredInformation = projectRequiredInformation(params.requestFrame);
-  const authorityConflict = authorityStateConflicts(params.requestFrame);
+  const decisionConflict = requestDecisionStateConflicts(params.requestFrame);
   const hasConflict =
-    Boolean(goalConflict) || requiredInformation.status === 'conflict' || authorityConflict;
+    Boolean(goalConflict) || requiredInformation.status === 'conflict' || decisionConflict;
   return {
     version: REQUEST_UNDERSTANDING_PROJECTION_VERSION,
     integrity: hasConflict ? 'conflict' : 'valid',

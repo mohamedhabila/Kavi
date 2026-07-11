@@ -8,7 +8,10 @@ import {
 } from '../../src/services/agents/requestUnderstandingProjection';
 import { buildGraphEntryRequestFrame } from '../../src/engine/graph/requestEntrySignals';
 import { createGoal } from '../../src/engine/goals/types';
-import type { RequestFrame } from '../../src/services/agents/requestFrame';
+import type {
+  RequestFrame,
+  RequiredRequestInformation,
+} from '../../src/services/agents/requestFrame';
 import type { AgentGoal } from '../../src/types/agentRun';
 import {
   createInitialAgentControlGraphSnapshot,
@@ -22,6 +25,18 @@ function frame(): RequestFrame {
     mode: 'agentic',
     continuation: 'new',
   });
+}
+
+function unresolved(
+  authority: RequiredRequestInformation['authority'],
+  requiredFor: RequiredRequestInformation['requiredFor'] = 'execution',
+): RequiredRequestInformation {
+  return {
+    key: `${authority}.${requiredFor}`,
+    authority,
+    requiredFor,
+    resolution: 'unresolved',
+  };
 }
 
 function blockingGoal(overrides: Partial<AgentGoal> = {}): AgentGoal {
@@ -167,6 +182,74 @@ describe('request understanding projection', () => {
     expect(authorityMismatch.registeredRequiredInformation).toEqual({
       status: 'conflict',
       reason: 'authority_state_conflict',
+    });
+  });
+
+  it.each([
+    {
+      name: 'user clarification',
+      requiredInformation: [unresolved('user')],
+      decision: { action: 'clarify' as const, reason: 'required_information_missing' as const },
+    },
+    {
+      name: 'external-operation wait',
+      requiredInformation: [unresolved('tool')],
+      decision: { action: 'wait' as const, reason: 'waiting_for_async' as const },
+    },
+    {
+      name: 'unavailable policy decline',
+      requiredInformation: [unresolved('policy')],
+      decision: { action: 'decline' as const, reason: 'policy_information_unavailable' as const },
+    },
+    {
+      name: 'safe information lookup',
+      requiredInformation: [unresolved('tool')],
+      decision: { action: 'act' as const, reason: 'information_lookup_required' as const },
+    },
+  ])('accepts the canonical $name route', ({ requiredInformation, decision }) => {
+    expect(
+      projectRequestUnderstanding({
+        requestFrame: { ...frame(), requiredInformation, decision },
+        goals: [],
+      }),
+    ).toMatchObject({
+      integrity: 'valid',
+      routing: {
+        status: 'known',
+        value: { decisionAction: decision.action, decisionReason: decision.reason },
+      },
+    });
+  });
+
+  it.each([
+    {
+      name: 'acting without user information',
+      requiredInformation: [unresolved('user')],
+      decision: { action: 'act' as const, reason: 'requirements_resolved' as const },
+    },
+    {
+      name: 'acting without policy information',
+      requiredInformation: [unresolved('policy')],
+      decision: { action: 'act' as const, reason: 'information_lookup_required' as const },
+    },
+    {
+      name: 'waiting instead of clarifying',
+      requiredInformation: [unresolved('user')],
+      decision: { action: 'wait' as const, reason: 'waiting_for_async' as const },
+    },
+  ])('fails closed when $name contradicts policy', ({ requiredInformation, decision }) => {
+    expect(
+      projectRequestUnderstanding({
+        requestFrame: { ...frame(), requiredInformation, decision },
+        goals: [],
+      }),
+    ).toMatchObject({
+      integrity: 'conflict',
+      routing: {
+        status: 'known',
+        value: { decisionAction: decision.action, decisionReason: decision.reason },
+      },
+      effectAuthorization: { status: 'unknown', reason: 'state_conflict' },
     });
   });
 

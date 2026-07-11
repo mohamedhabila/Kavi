@@ -7,6 +7,17 @@ import type {
 export type RequestPolicyDisposition = 'allowed' | 'approval_required' | 'prohibited';
 export type RequestPermissionState = 'not_required' | 'granted' | 'missing';
 
+const REQUEST_POLICY_DISPOSITIONS: ReadonlyArray<RequestPolicyDisposition> = [
+  'allowed',
+  'approval_required',
+  'prohibited',
+];
+const REQUEST_PERMISSION_STATES: ReadonlyArray<RequestPermissionState> = [
+  'not_required',
+  'granted',
+  'missing',
+];
+
 export interface RequestDecisionPolicyInput {
   frame: RequestFrame;
   requiredInformation: ReadonlyArray<RequiredRequestInformation>;
@@ -108,4 +119,45 @@ export function resolveRequestDecision(input: RequestDecisionPolicyInput): Reque
     return withDecision(input.frame, requiredInformation, 'act', 'information_lookup_required');
   }
   return withDecision(input.frame, requiredInformation, 'act', 'requirements_resolved');
+}
+
+/**
+ * Returns whether the persisted decision is reachable through the canonical policy.
+ * Policy, permission, and external-operation signals are not stored in RequestFrame, so
+ * they remain unknown here; one valid external context is enough to preserve the decision.
+ */
+export function requestDecisionIsPolicyReachable(frame: RequestFrame): boolean {
+  if (frame.decision.reason === 'actionable_input') {
+    return (
+      frame.decision.action === 'act' &&
+      frame.input.kind !== 'empty' &&
+      frame.requiredInformation.length === 0
+    );
+  }
+
+  try {
+    for (const policyDisposition of REQUEST_POLICY_DISPOSITIONS) {
+      for (const permissionState of REQUEST_PERMISSION_STATES) {
+        for (const awaitingExternalOperation of [false, true]) {
+          const resolved = resolveRequestDecision({
+            frame,
+            requiredInformation: frame.requiredInformation,
+            policyDisposition,
+            permissionState,
+            awaitingExternalOperation,
+          });
+          if (
+            resolved.decision.action === frame.decision.action &&
+            resolved.decision.reason === frame.decision.reason
+          ) {
+            return true;
+          }
+        }
+      }
+    }
+  } catch {
+    return false;
+  }
+
+  return false;
 }

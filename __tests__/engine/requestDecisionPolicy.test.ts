@@ -1,5 +1,8 @@
 import { buildGraphEntryRequestFrame } from '../../src/engine/graph/requestEntrySignals';
-import { resolveRequestDecision } from '../../src/services/agents/requestDecisionPolicy';
+import {
+  requestDecisionIsPolicyReachable,
+  resolveRequestDecision,
+} from '../../src/services/agents/requestDecisionPolicy';
 import type { RequiredRequestInformation } from '../../src/services/agents/requestFrame';
 
 function baseFrame() {
@@ -90,6 +93,24 @@ describe('request decision policy', () => {
         ],
       }).decision,
     ).toEqual({ action: 'act', reason: 'requirements_resolved' });
+  });
+
+  it('checks persisted decisions against every possible unknown external policy context', () => {
+    const userInformation = required('user');
+    expect(
+      requestDecisionIsPolicyReachable({
+        ...baseFrame(),
+        requiredInformation: [userInformation],
+        decision: { action: 'clarify', reason: 'required_information_missing' },
+      }),
+    ).toBe(true);
+    expect(
+      requestDecisionIsPolicyReachable({
+        ...baseFrame(),
+        requiredInformation: [userInformation],
+        decision: { action: 'act', reason: 'requirements_resolved' },
+      }),
+    ).toBe(false);
   });
 
   it('preserves structural empty-input clarification ahead of policy context', () => {
