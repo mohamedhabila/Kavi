@@ -16,6 +16,7 @@ import {
   collectAgentRunFinalizationEvidence,
   synthesizeAgentRunFinalAnswer,
 } from './lifecycle/finalizePhase';
+import { AGENT_RUN_FINALIZATION_SYNTHESIS_TIMEOUT_MS } from './agentRunFinalizationSynthesis';
 import { getSubAgentsForAgentRun } from './lifecycle/stateMachine';
 import {
   buildAgentRunMessageScope,
@@ -26,6 +27,8 @@ import {
 
 const FINAL_RESPONSE_CHECKPOINT_TITLE = 'Final response delivered';
 const MAX_LOG_DETAIL_CHARS = 320;
+export const AGENT_RUN_REPAIR_SYNTHESIS_SWEEP_BUDGET_MS =
+  AGENT_RUN_FINALIZATION_SYNTHESIS_TIMEOUT_MS;
 
 type ResolvedFinalizationProviderContext = {
   provider: LlmProviderConfig;
@@ -100,7 +103,9 @@ async function synthesizeRecoveredAgentRunCompletion(params: {
   conversation: Conversation;
   run: AgentRun & { status: Exclude<AgentRun['status'], 'running'> };
   providerContext?: ResolvedFinalizationProviderContext;
+  providerContextResolutionAttempted: boolean;
   liveSubAgentSnapshots: ReadonlyArray<SubAgentSnapshot>;
+  synthesisDeadlineAt: number;
 }): Promise<{
   output?: string;
   providerReplay?: Message['providerReplay'];
@@ -140,9 +145,18 @@ async function synthesizeRecoveredAgentRunCompletion(params: {
     };
   }
 
-  const providerContext =
-    params.providerContext ?? (await resolveConversationFinalizationContext(params.conversation));
-  if (!providerContext) {
+  if (Date.now() >= params.synthesisDeadlineAt) {
+    return {
+      output: fallbackOutput,
+      source: fallbackOutput ? 'fallback' : 'none',
+    };
+  }
+
+  const providerContext = params.providerContextResolutionAttempted
+    ? params.providerContext
+    : await resolveConversationFinalizationContext(params.conversation);
+  const remainingSynthesisBudgetMs = params.synthesisDeadlineAt - Date.now();
+  if (!providerContext || remainingSynthesisBudgetMs <= 0) {
     return {
       output: fallbackOutput,
       source: fallbackOutput ? 'fallback' : 'none',
@@ -155,6 +169,7 @@ async function synthesizeRecoveredAgentRunCompletion(params: {
     model: providerContext.model,
     systemPrompt: providerContext.systemPromptText,
     evidence,
+    timeoutMs: remainingSynthesisBudgetMs,
   });
 
   const synthesizedOutput = synthesized.output?.trim();
@@ -174,10 +189,18 @@ async function synthesizeRecoveredAgentRunCompletion(params: {
 
 export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
   activeSubAgents?: ReadonlyArray<SubAgentSnapshot>;
+  synthesisSweepBudgetMs?: number;
 }): Promise<string[]> {
   const repairedRunIds: string[] = [];
   const activeSubAgents = params?.activeSubAgents ?? listActiveSubAgents();
   const providerContextCache = new Map<string, ResolvedFinalizationProviderContext | undefined>();
+  const configuredSynthesisSweepBudgetMs = params?.synthesisSweepBudgetMs;
+  const synthesisSweepBudgetMs =
+    typeof configuredSynthesisSweepBudgetMs === 'number' &&
+    Number.isFinite(configuredSynthesisSweepBudgetMs)
+      ? Math.max(0, Math.floor(configuredSynthesisSweepBudgetMs))
+      : AGENT_RUN_REPAIR_SYNTHESIS_SWEEP_BUDGET_MS;
+  const synthesisDeadlineAt = Date.now() + synthesisSweepBudgetMs;
 
   const initialConversations = useChatStore.getState().conversations;
   for (const initialConversation of initialConversations) {
@@ -203,7 +226,10 @@ export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
       }
 
       let providerContext = providerContextCache.get(conversation.id);
-      if (!providerContextCache.has(conversation.id)) {
+      if (
+        Date.now() < synthesisDeadlineAt &&
+        !providerContextCache.has(conversation.id)
+      ) {
         providerContext = await resolveConversationFinalizationContext(conversation);
         providerContextCache.set(conversation.id, providerContext);
       }
@@ -212,11 +238,13 @@ export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
         conversation,
         run: terminalRun,
         providerContext,
+        providerContextResolutionAttempted: providerContextCache.has(conversation.id),
         liveSubAgentSnapshots: getSubAgentsForAgentRun(
           conversation,
           terminalRun.id,
           activeSubAgents,
         ),
+        synthesisDeadlineAt,
       });
       const output = synthesized.output?.trim();
       if (!output) {

@@ -389,4 +389,60 @@ describe('repairTerminalAgentRunsMissingFinalResponses', () => {
     expect(mockAddMessage).not.toHaveBeenCalled();
     expect(mockAppendAgentRunCheckpoint).not.toHaveBeenCalled();
   });
+
+  it('uses deterministic fallbacks for every remaining run after the shared synthesis budget expires', async () => {
+    mockChatStoreState.conversations = ['1', '2'].map((suffix) => ({
+      id: `conv-${suffix}`,
+      title: `Recovery ${suffix}`,
+      providerId: 'openai',
+      systemPrompt: 'You are helpful.',
+      createdAt: 1,
+      updatedAt: 3,
+      messages: [
+        {
+          id: `user-${suffix}`,
+          role: 'user',
+          content: `Complete recovery ${suffix}.`,
+          timestamp: 1,
+        },
+        {
+          id: `assistant-${suffix}`,
+          role: 'assistant',
+          content: `Interrupted evidence ${suffix}`,
+          timestamp: 2,
+          assistantMetadata: {
+            kind: 'final',
+            completionStatus: 'incomplete',
+            finishReason: 'response_failed',
+          },
+        },
+      ],
+      agentRuns: [
+        createTerminalRun({
+          id: `run-${suffix}`,
+          userMessageId: `user-${suffix}`,
+        }),
+      ],
+    }));
+
+    const repairedRunIds = await repairTerminalAgentRunsMissingFinalResponses({
+      activeSubAgents: [],
+      synthesisSweepBudgetMs: 0,
+    });
+
+    expect(repairedRunIds).toEqual(['run-1', 'run-2']);
+    expect(mockGetProviderApiKey).not.toHaveBeenCalled();
+    expect(mockUpdateMessage).toHaveBeenNthCalledWith(
+      1,
+      'conv-1',
+      'assistant-1',
+      'The run completed, but no final response was generated.',
+    );
+    expect(mockUpdateMessage).toHaveBeenNthCalledWith(
+      2,
+      'conv-2',
+      'assistant-2',
+      'The run completed, but no final response was generated.',
+    );
+  });
 });
