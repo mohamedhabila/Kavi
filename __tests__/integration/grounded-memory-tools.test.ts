@@ -226,7 +226,7 @@ describe('grounded memory_remember product writes', () => {
       subject: 'مشروع-زيتا',
       predicate: 'قناة_التواصل',
       value: 'سيجنال',
-      message: 'تذكر أن مشروع-زيتا يستخدم سيجنال.',
+      message: 'مشروع-زيتا قناة_التواصل سيجنال.',
     },
   ])('makes a directly stated $label concept fact recallable', async (fixture) => {
     const messageId = `user-${fixture.label.replace(/\s+/g, '-')}`;
@@ -293,7 +293,11 @@ describe('grounded memory_remember product writes', () => {
     ]);
     expect(listFacts({ predicate: 'launch_code', includeInvalidated: true })).toHaveLength(2);
     expect(listFactEvidence(second.fact.id)).toEqual([
-      expect.objectContaining({ messageId: 'user-second', role: 'user', quote: 'QZ-905' }),
+      expect.objectContaining({
+        messageId: 'user-second',
+        role: 'user',
+        quote: 'ORBIT-9 launch_code is QZ-905',
+      }),
     ]);
   });
 
@@ -320,6 +324,55 @@ describe('grounded memory_remember product writes', () => {
       expect.objectContaining({ id: first.fact.id, objectText: 'Signal' }),
     ]);
     expect(listFactEvidence(first.fact.id)).toHaveLength(1);
+  });
+
+  it.each([
+    ['quoted assertion', 'The note says “Avery prefers Signal.”'],
+    ['quoted value', 'Avery prefers “Signal”.'],
+    ['negated assertion', 'Avery does not prefer Signal.'],
+    ['attributed assertion', 'Morgan says Avery prefers Signal.'],
+    ['hypothetical assertion', 'If Avery prefers Signal, use it.'],
+    ['modal assertion', 'Avery might prefer Signal.'],
+    ['unbound predicate', 'Avery received Signal.'],
+  ])('rejects a named-subject fact derived from a %s', async (label, messageText) => {
+    const result = await remember({
+      subject: 'Avery',
+      subjectType: 'person',
+      predicate: 'preferred_channel',
+      value: 'Signal',
+      messageId: `user-named-adversarial-${label.replace(/\s+/gu, '-')}`,
+      messageText,
+    });
+
+    expect(result).toMatchObject({ ok: false, code: 'grounding_required' });
+    expect(findEntityByName('Avery')).toBeNull();
+    expect(listFacts({ predicate: 'preferred_channel' })).toEqual([]);
+  });
+
+  it.each([
+    'Avery prefers Signal.',
+    'Remember that Avery currently prefers Signal.',
+  ])('accepts a direct positive named-subject assertion: %s', async (messageText) => {
+    const result = await remember({
+      subject: 'Avery',
+      subjectType: 'person',
+      predicate: 'preferred_channel',
+      value: 'Signal',
+      messageId: `user-named-positive-${messageText.length}`,
+      messageText,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      fact: { subject: 'avery', predicate: 'preferred_channel', value: 'Signal' },
+    });
+    expect(listFacts({ predicate: 'preferred_channel' })).toEqual([
+      expect.objectContaining({
+        objectText: 'Signal',
+        factClass: 'subjective_user',
+        sourceAuthority: 'grounded_user',
+      }),
+    ]);
   });
 
   it.each([
@@ -440,7 +493,7 @@ describe('grounded memory_remember product writes', () => {
     ]);
   });
 
-  it('stores a bounded exact value quote instead of duplicating a long user turn', async () => {
+  it('stores a bounded structurally bound quote instead of duplicating a long user turn', async () => {
     const longPrefix = 'context '.repeat(1_000);
     const written = await remember({
       subject: 'BOUND-7',
@@ -453,7 +506,7 @@ describe('grounded memory_remember product writes', () => {
     const evidence = listFactEvidence(fact.id)[0]!;
 
     expect(written.ok).toBe(true);
-    expect(evidence.quote).toBe('REL-777');
+    expect(evidence.quote).toBe('BOUND-7 release_code is REL-777');
     expect(JSON.stringify(fact.attributes)).not.toContain(longPrefix.trim());
     expect(JSON.stringify(fact.attributes).length).toBeLessThan(500);
   });

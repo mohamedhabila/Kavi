@@ -5,6 +5,13 @@ export interface ExactSelfClaimEvidence {
   evidenceQuote: string;
 }
 
+export interface ExactNamedSubjectClaimEvidence {
+  subject: string;
+  predicate: string;
+  value: string;
+  evidenceQuote: string;
+}
+
 interface TextToken {
   value: string;
   lower: string;
@@ -139,6 +146,34 @@ const NEGATION_MARKERS = new Set([
 ]);
 
 const RESET_MARKERS = new Set(['but', 'however', 'instead', 'maar', 'aber', 'pero', 'mas']);
+
+const HYPOTHETICAL_MARKERS = new Set([
+  'assuming',
+  'could',
+  'if',
+  'maybe',
+  'may',
+  'might',
+  'perhaps',
+  'possibly',
+  'suppose',
+  'supposing',
+  'would',
+]);
+
+const ALLOWED_NAMED_SUBJECT_RELATION_GAP = new Set([
+  'actually',
+  'also',
+  'always',
+  'currently',
+  'definitely',
+  'generally',
+  'now',
+  'really',
+  'still',
+  'typically',
+  'usually',
+]);
 
 const PREDICATE_STOP_UNITS = new Set([
   'a',
@@ -294,7 +329,10 @@ function relationForms(units: ReadonlySet<string>): Set<string> {
 
 function isRelationToken(token: TextToken, allowedForms: ReadonlySet<string>): boolean {
   if (token.quoted) return false;
-  return Array.from(morphologicalForms(token.lower)).some((form) => allowedForms.has(form));
+  return (
+    Array.from(morphologicalForms(token.lower)).some((form) => allowedForms.has(form)) ||
+    Array.from(predicateUnits(token.value)).some((form) => allowedForms.has(form))
+  );
 }
 
 function resetStart(tokens: readonly TextToken[], beforeIndex: number): number {
@@ -383,6 +421,45 @@ function hasBoundSelfRelation(
   return false;
 }
 
+function rangeIsUnquoted(mask: readonly boolean[], start: number, end: number): boolean {
+  return end > start && !mask.slice(start, end).some(Boolean);
+}
+
+function namedClaimHasUnsafeModifier(
+  tokens: readonly TextToken[],
+  valueStart: number,
+): boolean {
+  for (const token of tokens) {
+    if (token.quoted || token.start > valueStart) continue;
+    if (
+      ATTRIBUTION_MARKERS.has(token.lower) ||
+      NEGATION_MARKERS.has(token.lower) ||
+      HYPOTHETICAL_MARKERS.has(token.lower)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasBoundNamedSubjectRelation(input: {
+  tokens: readonly TextToken[];
+  subjectEnd: number;
+  relationIndex: number;
+  valueStart: number;
+}): boolean {
+  const relation = input.tokens[input.relationIndex]!;
+  if (relation.start < input.subjectEnd || relation.end > input.valueStart) return false;
+  const gap = input.tokens.filter(
+    (token) => token.start >= input.subjectEnd && token.end <= relation.start && !token.quoted,
+  );
+  return (
+    gap.length <= 3 &&
+    gap.every((token) => ALLOWED_NAMED_SUBJECT_RELATION_GAP.has(token.lower)) &&
+    !namedClaimHasUnsafeModifier(input.tokens, input.valueStart)
+  );
+}
+
 /**
  * Admit only a direct current-user claim whose exact clause structurally binds
  * canonical subject `user`, the proposed relation, and the exact value. This
@@ -415,6 +492,64 @@ export function deriveExactSelfClaimEvidence(input: {
         value,
         evidenceQuote: text.slice(range.start, range.end).trim(),
       };
+    }
+  }
+  return null;
+}
+
+/**
+ * Admit a named-subject claim only when one unquoted clause binds the exact
+ * subject, a predicate relation, and the exact value in assertion order.
+ * Ambiguous attribution, modality, quotation, and negation fail closed.
+ */
+export function deriveExactNamedSubjectClaimEvidence(input: {
+  userMessageText: string;
+  subject: string;
+  predicate: string;
+  value: string;
+}): ExactNamedSubjectClaimEvidence | null {
+  const text = normalizeText(input.userMessageText);
+  const subject = normalizeText(input.subject);
+  const predicate = normalizeText(input.predicate);
+  const value = normalizeText(input.value);
+  if (!text || !subject || !predicate || !value) return null;
+  const predicateForms = predicateUnits(predicate);
+  if (predicateForms.size === 0) return null;
+  const allowedRelationForms = relationForms(predicateForms);
+  const mask = quoteMask(text);
+
+  for (const valueStart of exactOccurrences(text, value)) {
+    if (!rangeIsUnquoted(mask, valueStart, valueStart + value.length)) continue;
+    const range = clauseRange(text, valueStart);
+    const tokens = tokensForClause(text, range.start, range.end, mask);
+    for (const subjectStart of exactOccurrences(text, subject)) {
+      const subjectEnd = subjectStart + subject.length;
+      if (
+        subjectStart < range.start ||
+        subjectEnd > valueStart ||
+        !rangeIsUnquoted(mask, subjectStart, subjectEnd)
+      ) {
+        continue;
+      }
+      for (let relationIndex = 0; relationIndex < tokens.length; relationIndex += 1) {
+        if (!isRelationToken(tokens[relationIndex]!, allowedRelationForms)) continue;
+        if (
+          !hasBoundNamedSubjectRelation({
+            tokens,
+            subjectEnd,
+            relationIndex,
+            valueStart,
+          })
+        ) {
+          continue;
+        }
+        return {
+          subject,
+          predicate,
+          value,
+          evidenceQuote: text.slice(subjectStart, valueStart + value.length).trim(),
+        };
+      }
     }
   }
   return null;

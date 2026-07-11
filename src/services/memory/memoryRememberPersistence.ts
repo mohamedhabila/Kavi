@@ -17,7 +17,10 @@ import {
   type GroundedReplacementRejection,
 } from './groundedFactReplacement';
 import { assertMemoryPersistenceSourcesAreWritable } from './withdrawalFence';
-import { deriveExactSelfClaimEvidence } from './exactSelfClaimEvidence';
+import {
+  deriveExactNamedSubjectClaimEvidence,
+  deriveExactSelfClaimEvidence,
+} from './exactSelfClaimEvidence';
 import { isCanonicalSelfMemorySubject } from './memorySubjectIdentity';
 
 export interface MemoryRememberPersistenceInput {
@@ -71,48 +74,6 @@ function evidenceOwnsWriteScope(
   return input.scope !== 'session' || input.originTaskId === evidence.taskId;
 }
 
-function normalizedGroundingText(value: string): string {
-  return value.normalize('NFKC').replace(/\s+/gu, ' ').trim();
-}
-
-function isIdentifierCodePoint(value: string | undefined): boolean {
-  return value !== undefined && /[\p{L}\p{M}\p{N}_]/u.test(value);
-}
-
-function containsExactSubjectLabel(message: string, subject: string): boolean {
-  let offset = 0;
-  while (offset <= message.length - subject.length) {
-    const index = message.indexOf(subject, offset);
-    if (index < 0) return false;
-    const before = Array.from(message.slice(0, index)).at(-1);
-    const after = Array.from(message.slice(index + subject.length))[0];
-    if (!isIdentifierCodePoint(before) && !isIdentifierCodePoint(after)) return true;
-    offset = index + Math.max(subject.length, 1);
-  }
-  return false;
-}
-
-function hasRequiredSubjectGrounding(
-  input: MemoryRememberPersistenceInput,
-  evidence: MemoryRememberRequestEvidence | undefined,
-): boolean {
-  if (!evidence) return true;
-  if (isCanonicalSelfMemorySubject(input.subject)) {
-    return Boolean(
-      deriveExactSelfClaimEvidence({
-        userMessageText: evidence.userMessageText,
-        predicate: input.predicate,
-        value: input.value,
-      }),
-    );
-  }
-  const subject = normalizedGroundingText(input.subject);
-  return (
-    Boolean(subject) &&
-    containsExactSubjectLabel(normalizedGroundingText(evidence.userMessageText), subject)
-  );
-}
-
 function buildRecordInput(
   input: MemoryRememberPersistenceInput,
   subjectId: string,
@@ -156,14 +117,20 @@ export function persistMemoryRemember(
   context: MemoryRememberPersistenceContext,
 ): MemoryRememberPersistenceResult {
   const evidence = context.requestEvidence;
-  const exactSelfClaim =
-    evidence && isCanonicalSelfMemorySubject(input.subject)
+  const exactClaim = evidence
+    ? isCanonicalSelfMemorySubject(input.subject)
       ? deriveExactSelfClaimEvidence({
           userMessageText: evidence.userMessageText,
           predicate: input.predicate,
           value: input.value,
         })
-      : null;
+      : deriveExactNamedSubjectClaimEvidence({
+          userMessageText: evidence.userMessageText,
+          subject: input.subject,
+          predicate: input.predicate,
+          value: input.value,
+        })
+    : null;
   const resolutionContext = {
     memoryConversationId: evidence?.memoryConversationId ?? input.originConversationId ?? '',
     sourceThreadId: evidence?.sourceThreadId ?? input.originThreadId ?? '',
@@ -182,9 +149,9 @@ export function persistMemoryRemember(
     operation: 'replace_current',
     assertionClass: 'current_direct',
     evidenceMessageIds: evidence ? [evidence.userMessageId] : [],
-    evidenceQuote: exactSelfClaim?.evidenceQuote ?? input.value,
+    evidenceQuote: exactClaim?.evidenceQuote ?? input.value,
   };
-  const decision = hasRequiredSubjectGrounding(input, evidence)
+  const decision = !evidence || exactClaim
     ? evaluateGroundedReplacement(proposal, {
         currentUserMessageId: evidence?.userMessageId,
         currentUserMessage: evidence?.userMessageText ?? '',
