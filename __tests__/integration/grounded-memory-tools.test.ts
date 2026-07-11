@@ -349,6 +349,18 @@ describe('grounded memory_remember product writes', () => {
       'hypothetical update bridge',
       'If needed, update subject `Avery` so preferred_channel is now `Signal`.',
     ],
+    [
+      'interrogative update bridge',
+      'Should I update subject `Avery` so preferred_channel is now `Signal`?',
+    ],
+    [
+      'question-terminated update bridge',
+      'Update subject `Avery` so preferred_channel is now `Signal`?',
+    ],
+    [
+      'suffix-conditional update bridge',
+      'Update subject `Avery` so preferred_channel is now `Signal` if Avery confirms.',
+    ],
     ['unbound predicate', 'Avery received Signal.'],
   ])('rejects a named-subject fact derived from a %s', async (label, messageText) => {
     const result = await remember({

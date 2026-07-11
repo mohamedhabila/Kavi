@@ -156,6 +156,7 @@ const HYPOTHETICAL_MARKERS = new Set([
   'might',
   'perhaps',
   'possibly',
+  'should',
   'suppose',
   'supposing',
   'would',
@@ -436,12 +437,9 @@ function rangeIsUnquoted(mask: readonly boolean[], start: number, end: number): 
   return end > start && !mask.slice(start, end).some(Boolean);
 }
 
-function namedClaimHasUnsafeModifier(
-  tokens: readonly TextToken[],
-  valueStart: number,
-): boolean {
+function namedClaimHasUnsafeModifier(tokens: readonly TextToken[]): boolean {
   for (const token of tokens) {
-    if (token.quoted || token.start > valueStart) continue;
+    if (token.quoted) continue;
     if (
       ATTRIBUTION_MARKERS.has(token.lower) ||
       NEGATION_MARKERS.has(token.lower) ||
@@ -458,7 +456,9 @@ function hasBoundNamedSubjectRelation(input: {
   subjectEnd: number;
   relationIndex: number;
   valueStart: number;
+  questionTerminated: boolean;
 }): boolean {
+  if (input.questionTerminated) return false;
   const relation = input.tokens[input.relationIndex]!;
   if (relation.start < input.subjectEnd || relation.end > input.valueStart) return false;
   const gap = input.tokens.filter(
@@ -467,7 +467,7 @@ function hasBoundNamedSubjectRelation(input: {
   return (
     gap.length <= 3 &&
     gap.every((token) => ALLOWED_NAMED_SUBJECT_RELATION_GAP.has(token.lower)) &&
-    !namedClaimHasUnsafeModifier(input.tokens, input.valueStart)
+    !namedClaimHasUnsafeModifier(input.tokens)
   );
 }
 
@@ -550,6 +550,7 @@ export function deriveExactNamedSubjectClaimEvidence(input: {
             subjectEnd,
             relationIndex,
             valueStart,
+            questionTerminated: text[range.end] === '?' || text[range.end - 1] === '?',
           })
         ) {
           continue;
