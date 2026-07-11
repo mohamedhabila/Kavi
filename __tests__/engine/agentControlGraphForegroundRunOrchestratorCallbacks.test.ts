@@ -36,6 +36,7 @@ function createHarness(overrides?: {
       handleCommandResult: jest.fn().mockResolvedValue(undefined),
     },
     terminalLifecycle: {
+      handleControlGraphState: jest.fn(),
       handleDone: jest.fn(),
       handleError: jest.fn(),
     },
@@ -121,6 +122,20 @@ describe('foreground run orchestrator callbacks', () => {
     ]);
     expect(
       detachedHarness.controllers.trackedRunStore.applyPendingAsyncSyncEffect,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('always passes graph state to terminal classification before tracked-run sync', () => {
+    const controlGraph = { status: 'blocked', terminalReason: 'loop_detected' } as any;
+    const detachedHarness = createHarness({ trackedAgentRunId: '' });
+
+    detachedHarness.callbacks.onAgentControlGraphStateChange?.(controlGraph);
+
+    expect(
+      detachedHarness.controllers.terminalLifecycle.handleControlGraphState,
+    ).toHaveBeenCalledWith(controlGraph);
+    expect(
+      detachedHarness.controllers.trackedRunStore.applyGraphStateSyncEffect,
     ).not.toHaveBeenCalled();
   });
 

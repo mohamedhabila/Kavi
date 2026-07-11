@@ -8,6 +8,7 @@ import { recordConversationUsageEvent } from '../../../services/usage/conversati
 import { editWorkingBlock } from '../../../services/memory/workingBlocks';
 import { generateId } from '../../../utils/id';
 import type { OrchestratorCallbacks } from '../../orchestrator';
+import type { AgentRunControlGraphState } from '../../../types/agentRun';
 import {
   applyOrchestratorCompactionEffect,
   buildOrchestratorCompactionEffect,
@@ -36,6 +37,7 @@ type ForegroundOrchestratorCallbacksControllers = {
     handleCommandResult: (result: { response?: string; action?: string }) => Promise<void>;
   };
   terminalLifecycle: {
+    handleControlGraphState: (state: AgentRunControlGraphState) => void;
     handleDone: () => void;
     handleError: (error: Error) => void;
   };
@@ -175,7 +177,11 @@ export function createForegroundRunOrchestratorCallbacks(params: {
       );
     },
     onAgentControlGraphStateChange: (controlGraph) => {
-      if (!params.guardRunCallback() || !params.trackedAgentRunId) {
+      if (!params.guardRunCallback()) {
+        return;
+      }
+      params.controllers.terminalLifecycle.handleControlGraphState(controlGraph);
+      if (!params.trackedAgentRunId) {
         return;
       }
       const graphStateSyncEffect = buildForegroundRunGraphStateSyncEffect({

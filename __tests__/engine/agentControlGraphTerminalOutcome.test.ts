@@ -1,0 +1,86 @@
+import {
+  classifyAgentControlGraphTerminalReason,
+  resolveAgentControlGraphTerminalFailure,
+} from '../../src/engine/graph/terminalOutcome';
+import type { AgentRunControlGraphState } from '../../src/types/agentRun';
+
+function state(
+  status: AgentRunControlGraphState['status'],
+  terminalReason?: string,
+): AgentRunControlGraphState {
+  return { status, terminalReason } as AgentRunControlGraphState;
+}
+
+describe('agent control graph terminal outcomes', () => {
+  it.each([
+    state('awaiting_review'),
+    state('finalized', 'completed'),
+  ])('accepts successful graph completion at $status', (controlGraph) => {
+    expect(resolveAgentControlGraphTerminalFailure({ state: controlGraph })).toBeUndefined();
+  });
+
+  it('rejects blocked completion without requiring an onError callback', () => {
+    expect(
+      resolveAgentControlGraphTerminalFailure({
+        state: state('blocked', 'tool_batch_incomplete'),
+      }),
+    ).toEqual(expect.objectContaining({ message: expect.stringContaining('tool_batch_incomplete') }));
+  });
+
+  it('rejects max-iteration finalization even though the graph status is finalized', () => {
+    expect(
+      resolveAgentControlGraphTerminalFailure({
+        state: state('finalized', 'max_iterations'),
+      }),
+    ).toEqual(expect.objectContaining({ message: expect.stringContaining('max_iterations') }));
+  });
+
+  it('rejects a yielded checkpoint because the delegated work remains incomplete', () => {
+    expect(
+      resolveAgentControlGraphTerminalFailure({
+        state: state('yielded', 'tool_yielded'),
+      }),
+    ).toEqual(expect.objectContaining({ message: expect.stringContaining('tool_yielded') }));
+  });
+
+  it('allows a yielded checkpoint only for a foreground run that retains async monitoring', () => {
+    expect(
+      resolveAgentControlGraphTerminalFailure({
+        state: state('yielded', 'tool_yielded'),
+        allowYieldedCheckpoint: true,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('preserves the reported terminal error for failed graph completion', () => {
+    const error = new Error('provider unavailable');
+    expect(
+      resolveAgentControlGraphTerminalFailure({
+        state: state('failed', 'provider unavailable'),
+        reportedError: error,
+      }),
+    ).toBe(error);
+  });
+
+  it('prefers a concrete reported error over a stale successful graph snapshot', () => {
+    const error = new Error('transport closed after the candidate was recorded');
+    expect(
+      resolveAgentControlGraphTerminalFailure({
+        state: state('awaiting_review'),
+        reportedError: error,
+      }),
+    ).toBe(error);
+  });
+
+  it.each([
+    ['loop_detected', 'blocked', 'loop_detected'],
+    ['tool_batch_incomplete', 'blocked', 'tool_failure'],
+    ['incomplete_batch', 'blocked', 'tool_failure'],
+    ['workflow_route_blocked', 'blocked', 'route_blocked'],
+    ['missing_required_side_effect', 'blocked', 'missing_required_side_effect'],
+    ['empty_final_text_after_recovery', 'blocked', 'terminal_blocked'],
+    ['max_iterations', 'finalized', 'terminal_blocked'],
+  ] as const)('maps raw reason %s to %s', (rawReason, status, expectedReason) => {
+    expect(classifyAgentControlGraphTerminalReason(state(status, rawReason))).toBe(expectedReason);
+  });
+});

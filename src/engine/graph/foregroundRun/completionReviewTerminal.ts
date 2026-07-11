@@ -1,6 +1,7 @@
 import type { AgentRun, AgentRunTerminalReason } from '../../../types/agentRun';
 import type { ConversationLogEntry } from '../../../types/conversation';
 import type { Message } from '../../../types/message';
+import { classifyAgentControlGraphTerminalReason } from '../terminalOutcome';
 
 type ReviewCandidateMessage = Pick<
   Message,
@@ -10,33 +11,43 @@ type ReviewCandidateMessage = Pick<
 export type AgentControlGraphTerminalReviewCompletion = {
   status: 'failed';
   latestSummary: string;
-  checkpointTitle: 'Run blocked';
+  checkpointTitle: 'Run blocked' | 'Run failed';
   checkpointDetail: string;
-  terminalReason: Extract<AgentRunTerminalReason, 'missing_required_side_effect'>;
+  terminalReason: AgentRunTerminalReason;
   logLevel: Extract<ConversationLogEntry['level'], 'error'>;
-  logTitle: 'Run blocked';
+  logTitle: 'Run blocked' | 'Run failed';
   logDetail: string;
 };
 
 export function buildAgentControlGraphTerminalReviewCompletion(
   controlGraph: AgentRun['controlGraph'],
 ): AgentControlGraphTerminalReviewCompletion | undefined {
-  if (controlGraph?.status !== 'blocked') {
+  if (
+    !controlGraph ||
+    !(
+      controlGraph.status === 'blocked' ||
+      controlGraph.status === 'failed' ||
+      controlGraph.status === 'cancelled' ||
+      (controlGraph.status === 'finalized' && controlGraph.terminalReason === 'max_iterations')
+    )
+  ) {
     return undefined;
   }
 
   const reason =
     controlGraph.terminalReason?.trim() || controlGraph.finalizationHoldReason?.trim() || 'blocked';
-  const detail = `The control graph reached a blocked terminal state before review: ${reason}.`;
+  const blocked = controlGraph.status === 'blocked' || controlGraph.terminalReason === 'max_iterations';
+  const title = blocked ? 'Run blocked' : 'Run failed';
+  const detail = `The control graph reached an unsuccessful ${controlGraph.status} state before review: ${reason}.`;
 
   return {
     status: 'failed',
     latestSummary: detail,
-    checkpointTitle: 'Run blocked',
+    checkpointTitle: title,
     checkpointDetail: detail,
-    terminalReason: 'missing_required_side_effect',
+    terminalReason: classifyAgentControlGraphTerminalReason(controlGraph),
     logLevel: 'error',
-    logTitle: 'Run blocked',
+    logTitle: title,
     logDetail: detail,
   };
 }

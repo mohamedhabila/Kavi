@@ -100,6 +100,41 @@ describe('foregroundRun terminal lifecycle controller', () => {
     expect(clearForegroundRequestIfCurrent).toHaveBeenCalledTimes(1);
   });
 
+  it('returns failed for a blocked graph after preserving its visible terminal response', async () => {
+    const markCurrentAssistantPendingReview = jest.fn();
+    const handleSuccessfulCompletion = jest.fn().mockResolvedValue(undefined);
+    const controller = createForegroundRunTerminalLifecycleController({
+      clearForegroundRequestIfCurrent: jest.fn(),
+      clearStreamingDraft: jest.fn(),
+      commitAssistantBuffers: jest.fn(),
+      completeOnce: async (task) => {
+        await task();
+      },
+      ensureAssistantTurn: jest.fn(),
+      finalizeCaughtAbort: jest.fn(),
+      finalizeCaughtFailure: jest.fn(),
+      flushPendingSurfacedOutputs: jest.fn(),
+      getCurrentAssistantMessageId: () => 'assistant-blocked',
+      getVisibleAssistantContent: () => 'I could not complete the required action.',
+      markCurrentAssistantPendingReview,
+      handleInterruptedError: jest.fn(),
+      handleSuccessfulCompletion,
+      isAbortErrorLike: () => false,
+      isAborted: () => false,
+      requestPersistenceCheckpoint: jest.fn(),
+    });
+    controller.handleControlGraphState({
+      status: 'blocked',
+      terminalReason: 'tool_batch_incomplete',
+    } as any);
+
+    controller.handleDone();
+
+    await expect(controller.awaitCompletion()).resolves.toBe('failed');
+    expect(handleSuccessfulCompletion).toHaveBeenCalledTimes(1);
+    expect(markCurrentAssistantPendingReview).not.toHaveBeenCalled();
+  });
+
   it('does not classify a late done callback as success after cancellation', async () => {
     const handleSuccessfulCompletion = jest.fn();
 

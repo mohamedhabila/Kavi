@@ -1,4 +1,6 @@
 import { buildAssistantMessageMetadata } from '../../../utils/assistantMessageMetadata';
+import type { AgentRunControlGraphState } from '../../../types/agentRun';
+import { resolveAgentControlGraphTerminalFailure } from '../terminalOutcome';
 
 type AssistantDraftFinishReason = 'response_failed' | 'terminal_review_pending';
 export type ForegroundRunTerminalStatus = 'succeeded' | 'failed' | 'cancelled';
@@ -61,6 +63,21 @@ export function createForegroundRunTerminalLifecycleController(params: {
   let didEncounterTerminalError = false;
   let completionPromise: Promise<void> | null = null;
   let terminalStatus: ForegroundRunTerminalStatus | null = null;
+  let latestControlGraphState: AgentRunControlGraphState | undefined;
+
+  const resolveCompletedStatus = (): ForegroundRunTerminalStatus => {
+    if (params.isAborted()) {
+      return 'cancelled';
+    }
+    // A yielded foreground turn is a successful model checkpoint because the
+    // foreground closeout keeps its pending workers under async monitoring.
+    return resolveAgentControlGraphTerminalFailure({
+      state: latestControlGraphState,
+      allowYieldedCheckpoint: true,
+    })
+      ? 'failed'
+      : 'succeeded';
+  };
 
   const handleError = (error: Error) => {
     didEncounterTerminalError = true;
@@ -90,19 +107,21 @@ export function createForegroundRunTerminalLifecycleController(params: {
       return;
     }
 
-    terminalStatus = params.isAborted() ? 'cancelled' : 'succeeded';
+    terminalStatus = resolveCompletedStatus();
     completionPromise = params.completeOnce(async () => {
       params.flushPendingSurfacedOutputs();
       params.ensureAssistantTurn();
-      params.markCurrentAssistantPendingReview({
-        currentAssistantMessageId: params.getCurrentAssistantMessageId(),
-        visibleContent: params.getVisibleAssistantContent(),
-      });
+      if (resolveCompletedStatus() === 'succeeded') {
+        params.markCurrentAssistantPendingReview({
+          currentAssistantMessageId: params.getCurrentAssistantMessageId(),
+          visibleContent: params.getVisibleAssistantContent(),
+        });
+      }
       params.commitAssistantBuffers();
       if (!params.isAborted()) {
         await params.handleSuccessfulCompletion();
       }
-      terminalStatus = params.isAborted() ? 'cancelled' : 'succeeded';
+      terminalStatus = resolveCompletedStatus();
       params.clearForegroundRequestIfCurrent();
     });
   };
@@ -141,6 +160,9 @@ export function createForegroundRunTerminalLifecycleController(params: {
   return {
     awaitCompletion,
     handleCatch,
+    handleControlGraphState: (state: AgentRunControlGraphState) => {
+      latestControlGraphState = state;
+    },
     handleDone,
     handleError,
   };
