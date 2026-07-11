@@ -12,7 +12,6 @@ import {
   transitionExecutionRun,
 } from '../../src/services/executionJournal/mutations';
 import {
-  maintainAllTerminalExecutionRetention,
   maintainTerminalExecutionRetention,
 } from '../../src/services/executionJournal/terminalExecutionRetention';
 import {
@@ -165,21 +164,39 @@ describe('generic terminal execution retention', () => {
     ).toEqual({ reason: 'recovery_blocked' });
   });
 
-  it('drains aged and overflow rows through bounded batches', () => {
+  it('converges across separately bounded retention passes', () => {
     seedExternalRun('external-1', 'succeeded', 10);
     seedExternalRun('external-2', 'failed', 20);
     seedExternalRun('external-3', 'cancelled', 30);
     seedExternalRun('external-4', 'succeeded', 40);
 
     expect(
-      maintainAllTerminalExecutionRetention({
+      maintainTerminalExecutionRetention({
         now: 100,
         durabilityClass: 'external_durable_operation',
         maxAgeMs: 1_000,
         maxRetained: 1,
         limit: 1,
       }),
-    ).toBe(3);
+    ).toBe(1);
+    expect(
+      maintainTerminalExecutionRetention({
+        now: 100,
+        durabilityClass: 'external_durable_operation',
+        maxAgeMs: 1_000,
+        maxRetained: 1,
+        limit: 1,
+      }),
+    ).toBe(1);
+    expect(
+      maintainTerminalExecutionRetention({
+        now: 100,
+        durabilityClass: 'external_durable_operation',
+        maxAgeMs: 1_000,
+        maxRetained: 1,
+        limit: 1,
+      }),
+    ).toBe(1);
     expect(
       getExecutionJournalDb().getAllSync<{ id: string }>(
         `SELECT id FROM execution_runs

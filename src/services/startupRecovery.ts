@@ -3,9 +3,9 @@ import { useChatStore } from '../store/useChatStore';
 import { repairTerminalAgentRunsMissingFinalResponses } from './agents/agentRunRepair';
 import { initSubAgentRegistry, listActiveSubAgents } from './agents/subAgent';
 import { recoverInterruptedForegroundModelExecutions } from './executionJournal/foregroundModelExecutionRecovery';
-import { maintainAllForegroundModelExecutionRetention } from './executionJournal/foregroundModelExecutionRetention';
+import { maintainForegroundModelExecutionRetention } from './executionJournal/foregroundModelExecutionRetention';
 import { releaseStaleForegroundModelProjectionOwners } from './executionJournal/foregroundModelProjectionCleanup';
-import { maintainAllTerminalExecutionRetention } from './executionJournal/terminalExecutionRetention';
+import { maintainTerminalExecutionRetention } from './executionJournal/terminalExecutionRetention';
 
 async function waitForChatHydration(): Promise<void> {
   await waitForStoreHydration(useChatStore as typeof useChatStore & PersistHydratableStore, null);
@@ -27,12 +27,12 @@ async function recoverForegroundJournalState(): Promise<void> {
     console.warn('[startup] foreground model projection cleanup failed:', error);
   }
   try {
-    maintainAllForegroundModelExecutionRetention({ now: Date.now() });
+    maintainForegroundModelExecutionRetention({ now: Date.now() });
   } catch (error) {
     console.warn('[startup] foreground model journal retention failed:', error);
   }
   try {
-    maintainAllTerminalExecutionRetention({
+    maintainTerminalExecutionRetention({
       now: Date.now(),
       durabilityClass: 'external_durable_operation',
     });

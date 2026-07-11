@@ -106,11 +106,11 @@ jest.mock('../../src/services/executionJournal/foregroundModelExecutionRecovery'
     mockRecoverInterruptedForegroundModelExecutions(...args),
 }));
 jest.mock('../../src/services/executionJournal/foregroundModelExecutionRetention', () => ({
-  maintainAllForegroundModelExecutionRetention: (...args: any[]) =>
+  maintainForegroundModelExecutionRetention: (...args: any[]) =>
     mockMaintainForegroundModelExecutionRetention(...args),
 }));
 jest.mock('../../src/services/executionJournal/terminalExecutionRetention', () => ({
-  maintainAllTerminalExecutionRetention: (...args: any[]) =>
+  maintainTerminalExecutionRetention: (...args: any[]) =>
     mockMaintainTerminalExecutionRetention(...args),
 }));
 jest.mock('../../src/services/mcp/manager', () => ({

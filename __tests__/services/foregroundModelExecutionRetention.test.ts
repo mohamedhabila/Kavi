@@ -9,7 +9,6 @@ import {
   createForegroundModelExecution,
 } from '../../src/services/executionJournal/foregroundModelExecutionJournal';
 import {
-  maintainAllForegroundModelExecutionRetention,
   maintainForegroundModelExecutionRetention,
 } from '../../src/services/executionJournal/foregroundModelExecutionRetention';
 import {
@@ -145,19 +144,27 @@ it('bounds each cleanup pass and rejects invalid policy inputs', async () => {
   ).toThrow('foreground_model_retention_invalid_max_retained');
 });
 
-it('drains overflow through bounded passes until the hard retained maximum is reached', async () => {
+it('converges across separately bounded foreground retention passes', async () => {
   await seedTerminal('one', 10);
   await seedTerminal('two', 20);
   await seedTerminal('three', 30);
 
   expect(
-    maintainAllForegroundModelExecutionRetention({
+    maintainForegroundModelExecutionRetention({
       now: 40,
       maxAgeMs: 1_000,
       maxRetained: 1,
       limit: 1,
     }),
-  ).toBe(2);
+  ).toBe(1);
+  expect(
+    maintainForegroundModelExecutionRetention({
+      now: 40,
+      maxAgeMs: 1_000,
+      maxRetained: 1,
+      limit: 1,
+    }),
+  ).toBe(1);
   expect(
     getExecutionJournalDb().getFirstSync<{ count: number }>(
       `SELECT COUNT(*) AS count FROM execution_runs

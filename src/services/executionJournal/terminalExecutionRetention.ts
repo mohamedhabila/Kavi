@@ -131,17 +131,3 @@ export function maintainTerminalExecutionRetention(input: TerminalExecutionReten
     return deleted;
   });
 }
-
-/** Drain through bounded transactions until the selected terminal policy is satisfied. */
-export function maintainAllTerminalExecutionRetention(
-  input: TerminalExecutionRetentionInput,
-): number {
-  const limit = input.limit ?? MAX_TERMINAL_EXECUTION_PRUNE_BATCH;
-  requireBoundedInteger(limit, 1, 1_000, 'limit');
-  let deleted = 0;
-  while (true) {
-    const passDeleted = maintainTerminalExecutionRetention({ ...input, limit });
-    deleted += passDeleted;
-    if (passDeleted < limit) return deleted;
-  }
-}
