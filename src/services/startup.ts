@@ -46,8 +46,7 @@ import {
 } from './llm/support/providerSupport';
 import { SUPER_AGENT_PERSONA_ID } from './agents/personas';
 import { resolveConversationPersonaForMode } from '../engine/graph/conversation/modeTransitions';
-import { resolveAgentControlGraphTerminalFailure } from '../engine/graph/terminalOutcome';
-import type { AgentRunControlGraphState } from '../types/agentRun';
+import { createAgentControlGraphTerminalOutcomeTracker } from '../engine/graph/terminalOutcome';
 import { initializeDurableRecoveryLifecycle } from './executionJournal/durableRecoveryLifecycle';
 import {
   triggerForegroundPersistedAgentRecovery,
@@ -156,8 +155,7 @@ async function runStartupHooksAndEmitLaunchEvent(): Promise<void> {
       if (!model) return;
       const apiKey = await resolveProviderApiKey(provider);
       if (providerRequiresApiKey(provider) && !apiKey) return;
-      let latestControlGraphState: AgentRunControlGraphState | undefined;
-      let reportedOrchestratorError: Error | undefined;
+      const terminalOutcome = createAgentControlGraphTerminalOutcomeTracker();
       await runOrchestrator(
         {
           provider: { ...provider, apiKey },
@@ -181,28 +179,18 @@ async function runStartupHooksAndEmitLaunchEvent(): Promise<void> {
           signal: new AbortController(),
         },
         {
-          onAgentControlGraphStateChange: (state) => {
-            latestControlGraphState = state;
-          },
+          onAgentControlGraphStateChange: terminalOutcome.recordControlGraphState,
           onStateChange: () => {},
           onToken: () => {},
           onToolCallStart: () => {},
           onToolCallComplete: () => {},
           onAssistantMessage: () => {},
           onToolMessage: () => {},
-          onError: (error) => {
-            reportedOrchestratorError = error;
-          },
+          onError: terminalOutcome.recordError,
           onDone: () => {},
         },
       );
-      const terminalFailure = resolveAgentControlGraphTerminalFailure({
-        state: latestControlGraphState,
-        reportedError: reportedOrchestratorError,
-      });
-      if (terminalFailure) {
-        throw terminalFailure;
-      }
+      terminalOutcome.throwIfFailed();
     });
   } catch (e) {
     console.warn('[startup] loadHooksFromDirectory failed:', e);
@@ -354,8 +342,7 @@ async function executeScheduledJob(job: CronJob): Promise<string> {
 
     let accumulatedContent = '';
     let accumulatedReasoning = '';
-    let latestControlGraphState: AgentRunControlGraphState | undefined;
-    let reportedOrchestratorError: Error | undefined;
+    const terminalOutcome = createAgentControlGraphTerminalOutcomeTracker();
     const pendingSurfacedSubAgentOutputs = new Map<
       string,
       NonNullable<ReturnType<typeof parseSurfacedSubAgentOutputResult>>
@@ -395,9 +382,7 @@ async function executeScheduledJob(job: CronJob): Promise<string> {
     };
 
     const callbacks: OrchestratorCallbacks = {
-      onAgentControlGraphStateChange: (state) => {
-        latestControlGraphState = state;
-      },
+      onAgentControlGraphStateChange: terminalOutcome.recordControlGraphState,
       onStateChange: () => {},
       onToken: (token) => {
         if (surfacedSubAgentOutputActive) {
@@ -515,9 +500,7 @@ async function executeScheduledJob(job: CronJob): Promise<string> {
         });
         flushSurfacedSubAgentOutput(toolCallId);
       },
-      onError: (error) => {
-        reportedOrchestratorError = error;
-      },
+      onError: terminalOutcome.recordError,
       onCompaction: (event) => {
         applyOrchestratorCompactionEffect({
           effect: buildOrchestratorCompactionEffect({
@@ -583,10 +566,7 @@ async function executeScheduledJob(job: CronJob): Promise<string> {
       callbacks,
     );
 
-    const terminalFailure = resolveAgentControlGraphTerminalFailure({
-      state: latestControlGraphState,
-      reportedError: reportedOrchestratorError,
-    });
+    const terminalFailure = terminalOutcome.resolveFailure();
     if (terminalFailure) {
       flushPendingSurfacedSubAgentOutputs();
       if (!surfacedSubAgentOutputActive || !accumulatedContent) {

@@ -57,6 +57,35 @@ export function resolveAgentControlGraphTerminalFailure(params: {
   );
 }
 
+export function createAgentControlGraphTerminalOutcomeTracker(options?: {
+  allowYieldedCheckpoint?: boolean;
+}) {
+  let state: AgentControlGraphOutcomeState | undefined;
+  let reportedError: Error | undefined;
+  const resolveFailure = () =>
+    resolveAgentControlGraphTerminalFailure({
+      state,
+      reportedError,
+      allowYieldedCheckpoint: options?.allowYieldedCheckpoint,
+    });
+
+  return {
+    recordControlGraphState: (nextState: AgentControlGraphOutcomeState) => {
+      state = nextState;
+    },
+    recordError: (error: Error) => {
+      reportedError = error;
+    },
+    resolveFailure,
+    throwIfFailed: () => {
+      const failure = resolveFailure();
+      if (failure) {
+        throw failure;
+      }
+    },
+  };
+}
+
 export function classifyAgentControlGraphTerminalReason(
   state: AgentControlGraphOutcomeState,
 ): AgentRunTerminalReason {

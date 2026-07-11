@@ -57,6 +57,17 @@ const mockProvider = {
   model: 'gpt-5.4',
   enabled: true,
 };
+
+function scheduledJob(name: string, prompt: string, mode?: 'both' | 'conversation') {
+  return {
+    name,
+    payload: { prompt },
+    sessionTarget: 'isolated',
+    wakeMode: 'new',
+    ...(mode ? { delivery: { mode } } : {}),
+  };
+}
+
 jest.mock('../../src/services/integrations/registry', () => ({
   registerBuiltInServiceSkills: mockRegisterBuiltInServiceSkills,
 }));
@@ -524,12 +535,7 @@ describe('initializeServices', () => {
     initializeServices();
 
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    const result = await executor.execute({
-      name: 'Test Job',
-      payload: { prompt: 'Summarize news' },
-      sessionTarget: 'isolated',
-      wakeMode: 'new',
-    });
+    const result = await executor.execute(scheduledJob('Test Job', 'Summarize news'));
     expect(mockRunOrchestrator).toHaveBeenCalledTimes(1);
     expect(mockChatStoreState.createConversation).toHaveBeenCalledWith(
       'openai',
@@ -564,17 +570,9 @@ describe('initializeServices', () => {
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-
     await expect(
-      executor.execute({
-        name: 'Blocked Job',
-        payload: { prompt: 'Perform the action' },
-        sessionTarget: 'isolated',
-        wakeMode: 'new',
-        delivery: { mode: 'both' },
-      }),
+      executor.execute(scheduledJob('Blocked Job', 'Perform the action', 'both')),
     ).rejects.toThrow('tool_batch_incomplete');
-
     expect(mockSendLocalNotification).toHaveBeenCalledWith({
       title: 'Blocked Job',
       body: 'Error: Agent control graph was blocked: tool_batch_incomplete.',
@@ -596,13 +594,7 @@ describe('initializeServices', () => {
     initializeServices();
 
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    await executor.execute({
-      name: 'Tool Job',
-      payload: { prompt: 'Run tool' },
-      sessionTarget: 'isolated',
-      wakeMode: 'new',
-      delivery: { mode: 'both' },
-    });
+    await executor.execute(scheduledJob('Tool Job', 'Run tool', 'both'));
 
     expect(mockChatStoreState.addMessage).toHaveBeenCalledWith(
       expect.any(String),
@@ -628,13 +620,9 @@ describe('initializeServices', () => {
     initializeServices();
 
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    await executor.execute({
-      name: 'Gemini Tool Job',
-      payload: { prompt: 'Continue tool loop' },
-      sessionTarget: 'isolated',
-      wakeMode: 'new',
-      delivery: { mode: 'conversation' },
-    });
+    await executor.execute(
+      scheduledJob('Gemini Tool Job', 'Continue tool loop', 'conversation'),
+    );
 
     expect(mockChatStoreState.updateMessageProviderReplay).toHaveBeenCalledWith(
       expect.any(String),
@@ -654,13 +642,9 @@ describe('initializeServices', () => {
     initializeServices();
 
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    await executor.execute({
-      name: 'Tool Error Job',
-      payload: { prompt: 'Run failing tool' },
-      sessionTarget: 'isolated',
-      wakeMode: 'new',
-      delivery: { mode: 'conversation' },
-    });
+    await executor.execute(
+      scheduledJob('Tool Error Job', 'Run failing tool', 'conversation'),
+    );
 
     expect(mockChatStoreState.addMessage).toHaveBeenCalledWith(
       expect.any(String),
@@ -686,13 +670,7 @@ describe('initializeServices', () => {
     initializeServices();
 
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    await executor.execute({
-      name: 'Link Job',
-      payload: { prompt: 'Prompt' },
-      sessionTarget: 'isolated',
-      wakeMode: 'new',
-      delivery: { mode: 'conversation' },
-    });
+    await executor.execute(scheduledJob('Link Job', 'Prompt', 'conversation'));
 
     expect(mockChatStoreState.updateMessageEnrichedContent).toHaveBeenCalledWith(
       expect.any(String),

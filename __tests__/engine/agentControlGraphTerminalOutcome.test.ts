@@ -1,5 +1,6 @@
 import {
   classifyAgentControlGraphTerminalReason,
+  createAgentControlGraphTerminalOutcomeTracker,
   resolveAgentControlGraphTerminalFailure,
 } from '../../src/engine/graph/terminalOutcome';
 import type { AgentRunControlGraphState } from '../../src/types/agentRun';
@@ -70,6 +71,25 @@ describe('agent control graph terminal outcomes', () => {
         reportedError: error,
       }),
     ).toBe(error);
+  });
+
+  it('tracks callback state and throws the resolved terminal failure', () => {
+    const tracker = createAgentControlGraphTerminalOutcomeTracker();
+    tracker.recordControlGraphState(state('blocked', 'loop_detected'));
+
+    expect(tracker.resolveFailure()).toEqual(
+      expect.objectContaining({ message: expect.stringContaining('loop_detected') }),
+    );
+    expect(() => tracker.throwIfFailed()).toThrow('loop_detected');
+  });
+
+  it('lets a later concrete callback error override prior graph state', () => {
+    const tracker = createAgentControlGraphTerminalOutcomeTracker();
+    const error = new Error('transport closed');
+    tracker.recordControlGraphState(state('awaiting_review'));
+    tracker.recordError(error);
+
+    expect(tracker.resolveFailure()).toBe(error);
   });
 
   it.each([
