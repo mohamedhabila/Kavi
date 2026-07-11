@@ -1,4 +1,5 @@
 import type { AcceptanceFixtureOutcome } from '../acceptanceMetrics/types';
+import { evaluateE2EMemoryProbeRubric } from './e2eMemoryProbeRubricEvaluators';
 import type { E2ERubric, E2EScenarioResult, E2EScenarioTurnTrace } from './types';
 
 type E2ETurnStageRubric = Extract<
@@ -9,7 +10,9 @@ type E2ETurnStageRubric = Extract<
       | 'turn_completion'
       | 'turn_memory_receipt'
       | 'turn_lifecycle_boundary'
-      | 'turn_final_response_token';
+      | 'turn_final_response_token'
+      | 'turn_memory_answer'
+      | 'turn_memory_selection';
   }
 >;
 
@@ -54,6 +57,9 @@ export function evaluateE2ETurnStageRubric(
   result: E2EScenarioResult,
   rubric: E2ETurnStageRubric,
 ): AcceptanceFixtureOutcome {
+  if (rubric.kind === 'turn_memory_answer' || rubric.kind === 'turn_memory_selection') {
+    return evaluateE2EMemoryProbeRubric(result, rubric);
+  }
   const fixtureId = fixtureIdForRubric(result, rubric);
   if (rubric.kind === 'turn_completion' && !hasValidCompletionExpectation(rubric)) {
     return {

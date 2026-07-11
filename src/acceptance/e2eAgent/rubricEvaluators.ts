@@ -17,7 +17,6 @@ import { estimateUsageCacheEligibleInputTokens } from './evaluateE2EAgentMetrics
 import { buildWorkingBlockScopeKey } from '../../services/memory/workingBlocks';
 import { readWorkspaceRelativeFile, workspaceFileExists } from './sandboxWorkspace';
 import { evaluateE2ETurnStageRubric } from './e2eTurnStageRubricEvaluators';
-import { evaluateE2EMemoryProbeRubric } from './e2eMemoryProbeRubricEvaluators';
 import { isE2EGraphExecutionComplete } from './e2eGraphCompletion';
 import type { E2ERubric, E2EScenarioResult, E2ETokenUsageSummary } from './types';
 import type { UsagePromptCacheTelemetry } from '../../types/usage';
@@ -466,17 +465,14 @@ export function evaluateE2ERubric(
       }
       return { fixtureId, passed: true };
     }
-
     case 'turn_route':
     case 'turn_completion':
     case 'turn_memory_receipt':
     case 'turn_lifecycle_boundary':
     case 'turn_final_response_token':
-      return evaluateE2ETurnStageRubric(result, rubric);
-
     case 'turn_memory_answer':
     case 'turn_memory_selection':
-      return evaluateE2EMemoryProbeRubric(result, rubric);
+      return evaluateE2ETurnStageRubric(result, rubric);
 
     case 'goal_status': {
       const goal = findGoalById(result, rubric.goalId);
