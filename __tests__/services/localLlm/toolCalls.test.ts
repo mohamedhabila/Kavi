@@ -134,6 +134,7 @@ describe('localLlm tool calls', () => {
         tools: [expect.objectContaining({ name: 'lookup_weather' })],
         enableConstrainedDecoding: true,
       }),
+      undefined,
     );
   });
 
@@ -226,6 +227,7 @@ describe('localLlm tool calls', () => {
         tools: [expect.objectContaining({ name: 'lookup_weather' })],
         enableConstrainedDecoding: true,
       }),
+      undefined,
     );
     expect(events).toEqual([
       { type: 'token', content: 'Tool reply' },

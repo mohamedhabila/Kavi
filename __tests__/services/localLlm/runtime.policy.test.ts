@@ -97,6 +97,7 @@ describe('localLlm runtime policy', () => {
         backend: 'cpu',
         maxTokens: 2048,
       }),
+      undefined,
     );
     expect(mockGenerateWithNativeLocalLlm.mock.calls[0][0].contextWindowTokens).toBeLessThanOrEqual(
       getExpectedAndroidLiteRtSafeContextCap({
@@ -131,6 +132,7 @@ describe('localLlm runtime policy', () => {
       expect.objectContaining({
         backend: 'gpu',
       }),
+      undefined,
     );
   });
 
@@ -158,6 +160,7 @@ describe('localLlm runtime policy', () => {
       expect.objectContaining({
         backend: 'gpu',
       }),
+      undefined,
     );
   });
 

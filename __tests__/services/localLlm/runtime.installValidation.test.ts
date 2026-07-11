@@ -171,6 +171,7 @@ describe('localLlm runtime install validation', () => {
         ...expectedSampling,
         minDeviceMemoryGb: catalogEntry?.minDeviceMemoryGb,
       }),
+      undefined,
     );
     const request = mockGenerateWithNativeLocalLlm.mock.calls[0][0];
     expect(request.modelPath).not.toContain('file://');

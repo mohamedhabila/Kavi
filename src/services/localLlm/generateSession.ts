@@ -41,25 +41,28 @@ export async function sendLocalLlmMessage(
       conversation.tools,
     );
     rememberLocalLlmRuntimeActivity(request.modelPath, 'running');
-    const result = await generateWithNativeLocalLlm({
-      requestId,
-      conversationKey: request.conversationKey,
-      modelPath: request.nativeModelPath,
-      runtime: request.runtime,
-      systemPrompt: conversation.systemPrompt,
-      history: conversation.history,
-      currentMessage: conversation.currentMessage,
-      tools: conversation.tools,
-      backend: request.backend,
-      ...(request.visionBackend ? { visionBackend: request.visionBackend } : {}),
-      ...(request.audioBackend ? { audioBackend: request.audioBackend } : {}),
-      maxTokens: request.executionPolicy.maxTokens,
-      contextWindowTokens,
-      ...buildNativeLocalLlmContextTelemetryFields(conversation.context),
-      ...samplingConfig,
-      ...(enableConstrainedDecoding ? { enableConstrainedDecoding: true } : {}),
-      minDeviceMemoryGb: request.executionPolicy.minDeviceMemoryGb ?? undefined,
-    }).finally(() => {
+    const result = await generateWithNativeLocalLlm(
+      {
+        requestId,
+        conversationKey: request.conversationKey,
+        modelPath: request.nativeModelPath,
+        runtime: request.runtime,
+        systemPrompt: conversation.systemPrompt,
+        history: conversation.history,
+        currentMessage: conversation.currentMessage,
+        tools: conversation.tools,
+        backend: request.backend,
+        ...(request.visionBackend ? { visionBackend: request.visionBackend } : {}),
+        ...(request.audioBackend ? { audioBackend: request.audioBackend } : {}),
+        maxTokens: request.executionPolicy.maxTokens,
+        contextWindowTokens,
+        ...buildNativeLocalLlmContextTelemetryFields(conversation.context),
+        ...samplingConfig,
+        ...(enableConstrainedDecoding ? { enableConstrainedDecoding: true } : {}),
+        minDeviceMemoryGb: request.executionPolicy.minDeviceMemoryGb ?? undefined,
+      },
+      options?.signal,
+    ).finally(() => {
       clearLocalLlmRuntimeActivity(request.modelPath, 'running');
     });
     rememberObservedLocalLlmBackend(request.modelPath, result.backend);
@@ -84,23 +87,26 @@ export async function sendLocalLlmMessage(
     prompt.estimatedInputTokens,
   );
   rememberLocalLlmRuntimeActivity(request.modelPath, 'running');
-  const result = await generateWithNativeLocalLlm({
-    requestId: generateId(),
-    conversationKey: request.conversationKey,
-    modelPath: request.nativeModelPath,
-    runtime: request.runtime,
-    prompt: prompt.prompt,
-    systemPrompt: prompt.systemPrompt,
-    history: prompt.history,
-    backend: request.backend,
-    ...(request.visionBackend ? { visionBackend: request.visionBackend } : {}),
-    ...(request.audioBackend ? { audioBackend: request.audioBackend } : {}),
-    maxTokens: request.executionPolicy.maxTokens,
-    contextWindowTokens,
-    ...buildNativeLocalLlmContextTelemetryFields(prompt.context),
-    ...samplingConfig,
-    minDeviceMemoryGb: request.executionPolicy.minDeviceMemoryGb ?? undefined,
-  }).finally(() => {
+  const result = await generateWithNativeLocalLlm(
+    {
+      requestId,
+      conversationKey: request.conversationKey,
+      modelPath: request.nativeModelPath,
+      runtime: request.runtime,
+      prompt: prompt.prompt,
+      systemPrompt: prompt.systemPrompt,
+      history: prompt.history,
+      backend: request.backend,
+      ...(request.visionBackend ? { visionBackend: request.visionBackend } : {}),
+      ...(request.audioBackend ? { audioBackend: request.audioBackend } : {}),
+      maxTokens: request.executionPolicy.maxTokens,
+      contextWindowTokens,
+      ...buildNativeLocalLlmContextTelemetryFields(prompt.context),
+      ...samplingConfig,
+      minDeviceMemoryGb: request.executionPolicy.minDeviceMemoryGb ?? undefined,
+    },
+    options?.signal,
+  ).finally(() => {
     clearLocalLlmRuntimeActivity(request.modelPath, 'running');
   });
   rememberObservedLocalLlmBackend(request.modelPath, result.backend);

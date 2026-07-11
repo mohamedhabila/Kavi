@@ -1,7 +1,9 @@
 import {
   getExpectedAndroidLiteRtSafeContextCap,
   installLocalLlmRuntimeTestHarness,
+  mockCancelNativeLocalLlmRequest,
   mockGenerateWithNativeLocalLlm,
+  mockGetNativeLocalLlmAvailability,
   mockStreamWithNativeLocalLlm,
   setPlatform,
 } from '../../fixtures/localLlm/runtimeTestHarness';
@@ -50,6 +52,7 @@ describe('localLlm runtime execution', () => {
         ...expectedSampling,
         minDeviceMemoryGb: catalogEntry?.minDeviceMemoryGb,
       }),
+      undefined,
     );
     const request = mockGenerateWithNativeLocalLlm.mock.calls[0][0];
     expect(request).toHaveProperty('inputBudgetTokens');
@@ -109,6 +112,7 @@ describe('localLlm runtime execution', () => {
         topP: catalogEntry?.defaultTopP || 0.95,
         temperature: 0.2,
       }),
+      undefined,
     );
     expect(mockGenerateWithNativeLocalLlm.mock.calls[0][0].contextWindowTokens).toBeLessThanOrEqual(
       (catalogEntry?.defaultMaxTokens || 1024) + 1024,
@@ -147,8 +151,67 @@ describe('localLlm runtime execution', () => {
         topP: catalogEntry?.defaultTopP || 0.95,
         temperature: 0.3,
       }),
+      undefined,
     );
     expect(events).toEqual([{ type: 'token', content: 'Hello' }, { type: 'done' }]);
+  });
+
+  it('aborts a stalled local availability check before native inference starts', async () => {
+    const provider = createDefaultLocalLlmProvider('local-provider');
+    const installedProvider = await installLocalLlmModel(provider, provider.model);
+    mockGetNativeLocalLlmAvailability.mockImplementationOnce(
+      () => new Promise(() => undefined),
+    );
+    const abortController = new AbortController();
+    const abortError = new Error('availability deadline');
+    abortError.name = 'AbortError';
+
+    const streaming = (async () => {
+      for await (const _event of streamLocalLlmMessage(
+        installedProvider,
+        [{ role: 'user', content: 'Say hello' }] as any,
+        undefined,
+        { signal: abortController.signal },
+      )) {
+        // The aborted preparation must not reach native inference.
+      }
+    })();
+    await Promise.resolve();
+    abortController.abort(abortError);
+
+    await expect(streaming).rejects.toBe(abortError);
+    expect(mockStreamWithNativeLocalLlm).not.toHaveBeenCalled();
+  });
+
+  it('does not let stalled native cancellation outlive an aborted stream', async () => {
+    const provider = createDefaultLocalLlmProvider('local-provider');
+    const installedProvider = await installLocalLlmModel(provider, provider.model);
+    mockStreamWithNativeLocalLlm.mockImplementationOnce(async function* () {
+      return;
+    });
+    mockCancelNativeLocalLlmRequest.mockImplementationOnce(
+      () => new Promise(() => undefined),
+    );
+    const abortController = new AbortController();
+    const abortError = new Error('cleanup deadline');
+    abortError.name = 'AbortError';
+
+    const streaming = (async () => {
+      for await (const _event of streamLocalLlmMessage(
+        installedProvider,
+        [{ role: 'user', content: 'Say hello' }] as any,
+        undefined,
+        { signal: abortController.signal },
+      )) {
+        // Native streaming returns, then cancellation cleanup stalls.
+      }
+    })();
+    while (mockCancelNativeLocalLlmRequest.mock.calls.length === 0) {
+      await Promise.resolve();
+    }
+    abortController.abort(abortError);
+
+    await expect(streaming).rejects.toBe(abortError);
   });
 
   it('updates runtime status from likely to observed after a native request completes', async () => {
@@ -179,6 +242,7 @@ describe('localLlm runtime execution', () => {
       expect.objectContaining({
         conversationKey: 'conv-runtime-status',
       }),
+      undefined,
     );
   });
 
@@ -253,12 +317,14 @@ describe('localLlm runtime execution', () => {
       expect.objectContaining({
         backend: 'gpu',
       }),
+      undefined,
     );
     expect(mockGenerateWithNativeLocalLlm).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
         backend: 'cpu',
       }),
+      undefined,
     );
 
     const updatedStatus = await getLocalLlmRuntimeStatus(installedProvider);

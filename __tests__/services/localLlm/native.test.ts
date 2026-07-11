@@ -113,6 +113,38 @@ describe('localLlm native bridge', () => {
     );
   });
 
+  it('cancels and rejects a stalled native generation when its signal aborts', async () => {
+    let resolveGeneration: ((value: { text: string }) => void) | undefined;
+    const nativeModule = {
+      generate: jest.fn(
+        () =>
+          new Promise<{ text: string }>((resolve) => {
+            resolveGeneration = resolve;
+          }),
+      ),
+      cancel: jest.fn().mockImplementation(async () => {
+        resolveGeneration?.({ text: '' });
+      }),
+    };
+    const { mod } = loadNativeModule({ nativeModule });
+    const abortController = new AbortController();
+    const abortError = new Error('generation deadline');
+    abortError.name = 'AbortError';
+
+    const generation = mod.generateWithNativeLocalLlm(
+      {
+        requestId: 'req-generation-abort',
+        modelPath: '/model.gguf',
+        prompt: 'Hello',
+      },
+      abortController.signal,
+    );
+    abortController.abort(abortError);
+
+    await expect(generation).rejects.toBe(abortError);
+    expect(nativeModule.cancel).toHaveBeenCalledWith('req-generation-abort');
+  });
+
   it('delegates warmup to the native module when linked', async () => {
     const nativeModule = {
       warmup: jest.fn().mockResolvedValue(undefined),
@@ -193,6 +225,77 @@ describe('localLlm native bridge', () => {
 
     expect(events).toEqual([{ requestId: 'req-android', type: 'token', content: 'hello' }]);
     expect(ctx.NativeEventEmitter).not.toHaveBeenCalled();
+    expect(ctx.subscription.remove).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects an abort during native stream startup and cancels again after late registration', async () => {
+    let resolveStart: (() => void) | undefined;
+    const nativeModule: Record<string, any> = {
+      startStreaming: jest.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveStart = resolve;
+          }),
+      ),
+      cancel: jest.fn().mockResolvedValue(undefined),
+    };
+    const ctx = loadNativeModule({ nativeModule });
+    const abortController = new AbortController();
+    const abortError = new Error('stream deadline');
+    abortError.name = 'AbortError';
+
+    const streaming = (async () => {
+      for await (const _event of ctx.mod.streamWithNativeLocalLlm(
+        {
+          requestId: 'req-stream-abort',
+          modelPath: '/model.gguf',
+          prompt: 'Hello',
+        },
+        abortController.signal,
+      )) {
+        // The aborted startup must never emit a model event.
+      }
+    })();
+    await Promise.resolve();
+    abortController.abort(abortError);
+
+    await expect(streaming).rejects.toBe(abortError);
+    expect(nativeModule.cancel).toHaveBeenCalledWith('req-stream-abort');
+    resolveStart?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(nativeModule.cancel).toHaveBeenCalledTimes(2);
+    expect(ctx.subscription.remove).toHaveBeenCalledTimes(1);
+  });
+
+  it('wakes and rejects an idle native stream when its signal aborts', async () => {
+    const nativeModule: Record<string, any> = {
+      startStreaming: jest.fn().mockResolvedValue(undefined),
+      cancel: jest.fn().mockResolvedValue(undefined),
+    };
+    const ctx = loadNativeModule({ nativeModule });
+    const abortController = new AbortController();
+    const abortError = new Error('idle stream deadline');
+    abortError.name = 'AbortError';
+
+    const streaming = (async () => {
+      for await (const _event of ctx.mod.streamWithNativeLocalLlm(
+        {
+          requestId: 'req-idle-stream-abort',
+          modelPath: '/model.gguf',
+          prompt: 'Hello',
+        },
+        abortController.signal,
+      )) {
+        // The idle stream must be interrupted before emitting an event.
+      }
+    })();
+    await Promise.resolve();
+    await Promise.resolve();
+    abortController.abort(abortError);
+
+    await expect(streaming).rejects.toBe(abortError);
+    expect(nativeModule.cancel).toHaveBeenCalledWith('req-idle-stream-abort');
     expect(ctx.subscription.remove).toHaveBeenCalledTimes(1);
   });
 

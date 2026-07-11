@@ -96,6 +96,7 @@ export interface LocalLlmRuntimeStatus {
 export interface LocalLlmRequestOptions {
   conversationId?: string;
   maxTokens?: number;
+  signal?: AbortSignal;
   temperature?: number;
 }
 

@@ -7,6 +7,7 @@ import {
 
 describe('LlmService local streamMessage', () => {
   it('forwards tools, request options, tokens, and native tool calls', async () => {
+    const abortController = new AbortController();
     const localTool = {
       name: 'read_file',
       description: 'Read a file',
@@ -36,6 +37,7 @@ describe('LlmService local streamMessage', () => {
     for await (const event of service.streamMessage([{ role: 'user', content: 'Stream locally' }], {
       conversationId: 'conv-local-stream',
       maxTokens: 384,
+      signal: abortController.signal,
       temperature: 0.3,
       tools: [localTool],
     })) {
@@ -49,6 +51,7 @@ describe('LlmService local streamMessage', () => {
       {
         conversationId: 'conv-local-stream',
         maxTokens: 384,
+        signal: abortController.signal,
         temperature: 0.3,
       },
     );

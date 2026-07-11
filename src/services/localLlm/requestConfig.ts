@@ -22,11 +22,45 @@ export type PreparedLocalLlmRequest = {
   audioBackend?: LocalLlmAccelerator;
 };
 
+function localLlmPreparationAbortError(signal: AbortSignal): Error {
+  if (signal.reason instanceof Error) return signal.reason;
+  const error = new Error('Request cancelled');
+  error.name = 'AbortError';
+  return error;
+}
+
+async function awaitLocalLlmPreparation<T>(
+  startOperation: () => Promise<T>,
+  signal: AbortSignal | undefined,
+): Promise<T> {
+  if (!signal) return startOperation();
+  if (signal.aborted) throw localLlmPreparationAbortError(signal);
+  const operation = startOperation();
+  let rejectAbort: ((error: Error) => void) | null = null;
+  const abort = () => rejectAbort?.(localLlmPreparationAbortError(signal));
+  signal.addEventListener('abort', abort, { once: true });
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_resolve, reject) => {
+        rejectAbort = reject;
+        if (signal.aborted) reject(localLlmPreparationAbortError(signal));
+      }),
+    ]);
+  } finally {
+    rejectAbort = null;
+    signal.removeEventListener('abort', abort);
+  }
+}
+
 export async function prepareLocalLlmRequest(
   provider: LlmProviderConfig,
   options?: LocalLlmRequestOptions,
 ): Promise<PreparedLocalLlmRequest> {
-  const availability = await ensureLocalLlmModelCanRun(provider.model);
+  const availability = await awaitLocalLlmPreparation(
+    () => ensureLocalLlmModelCanRun(provider.model),
+    options?.signal,
+  );
   const resolvedBackend = resolveLocalLlmAccelerator(
     provider,
     provider.model,

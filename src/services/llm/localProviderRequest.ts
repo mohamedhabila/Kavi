@@ -12,7 +12,7 @@ export function resolveLocalProviderForRequest(
 }
 
 export function buildLocalLlmRequestOptions(
-  options: Pick<MessageRequestOptions, 'conversationId' | 'maxTokens' | 'temperature'>,
+  options: Pick<MessageRequestOptions, 'conversationId' | 'maxTokens' | 'signal' | 'temperature'>,
 ): LocalLlmRequestOptions | undefined {
   const requestOptions: LocalLlmRequestOptions = {};
 
@@ -21,6 +21,9 @@ export function buildLocalLlmRequestOptions(
   }
   if (options.maxTokens !== undefined) {
     requestOptions.maxTokens = options.maxTokens;
+  }
+  if (options.signal !== undefined) {
+    requestOptions.signal = options.signal;
   }
   if (options.temperature !== undefined) {
     requestOptions.temperature = options.temperature;
