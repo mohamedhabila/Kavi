@@ -246,10 +246,10 @@ export async function recordVerifiedToolEffectExperience(
         environmentId: scope.environmentId,
         procedureId: scope.procedureId,
         // This runtime boundary does not yet expose exact permission/configuration
-        // preconditions. Empty therefore means "not observed", not "universally
-        // applicable". These rows stay collection-only until a future reader can
-        // require code-owned preconditions; exact platform, tool, and contract
-        // identities still prevent cross-tool or cross-platform aggregation.
+        // preconditions. Empty means "not observed", never "universally applicable";
+        // the consumer may surface it only as explicitly unknown advisory evidence.
+        // Exact platform, tool, and contract identities still prevent cross-tool or
+        // cross-platform aggregation.
         preconditionIds: scope.preconditionIds,
         outcome: recordable.outcome,
         authority: recordable.authority,
