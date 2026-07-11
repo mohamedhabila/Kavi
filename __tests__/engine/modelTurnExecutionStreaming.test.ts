@@ -61,6 +61,32 @@ async function* duplicateSyntheticToolIdStream() {
 }
 
 describe('executeAgentControlGraphModelTurnStreaming', () => {
+  it('fails before invoking a streaming provider when the dispatch guard closes', async () => {
+    const streamMessage = jest.fn();
+
+    await expect(
+      executeAgentControlGraphModelTurnStreaming({
+        allowQueuedToolCalls: true,
+        applyGraphEvents: jest.fn(),
+        budgetTools: [],
+        callbacks: { onStateChange: jest.fn(), onToken: jest.fn() },
+        iteration: 1,
+        llm: { streamMessage },
+        recordPerformanceMetrics: jest.fn(),
+        reportUsage: jest.fn(),
+        requestMessages: [{ role: 'user', content: 'Continue' }],
+        requestModel: 'gpt-5-mini',
+        signal: undefined,
+        streamOptions: {
+          requestDispatchGuard: () => {
+            throw new Error('dispatch fenced');
+          },
+        },
+      }),
+    ).rejects.toThrow('dispatch fenced');
+    expect(streamMessage).not.toHaveBeenCalled();
+  });
+
   it('queues unsigned Gemini tool calls when allowQueuedToolCalls is true', async () => {
     const onToolCallQueued = jest.fn();
 
@@ -130,6 +156,34 @@ describe('executeAgentControlGraphModelTurnStreaming', () => {
       'gemini-call-0',
       'gemini-call-0-1',
     ]);
+  });
+});
+
+describe('executeAgentControlGraphModelTurnViaSendMessage', () => {
+  it('fails before invoking a non-streaming provider when the dispatch guard closes', async () => {
+    const sendMessage = jest.fn();
+
+    await expect(
+      executeAgentControlGraphModelTurnViaSendMessage({
+        applyGraphEvents: jest.fn(),
+        budgetTools: [],
+        callbacks: { onStateChange: jest.fn(), onToken: jest.fn() },
+        geminiNative: true,
+        iteration: 1,
+        llm: { sendMessage },
+        recordPerformanceMetrics: jest.fn(),
+        reportUsage: jest.fn(),
+        requestMessages: [{ role: 'user', content: 'Continue' }],
+        requestModel: 'gemini-3-flash-preview',
+        signal: undefined,
+        streamOptions: {
+          requestDispatchGuard: () => {
+            throw new Error('dispatch fenced');
+          },
+        },
+      }),
+    ).rejects.toThrow('dispatch fenced');
+    expect(sendMessage).not.toHaveBeenCalled();
   });
 });
 

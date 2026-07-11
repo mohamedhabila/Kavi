@@ -29,9 +29,12 @@ export function sendLlmMessage(params: {
   );
   const options: MessageRequestOptions = { ...requestedOptions };
   delete options.systemPromptSections;
+  delete options.requestDispatchGuard;
   if (approvedSystemPromptSections) {
     options.systemPromptSections = approvedSystemPromptSections;
   }
+
+  requestedOptions.requestDispatchGuard?.();
 
   if (isOnDeviceLlmProvider(params.provider)) {
     return sendLocalLlmMessage(

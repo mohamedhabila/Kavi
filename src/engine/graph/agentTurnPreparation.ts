@@ -34,6 +34,15 @@ export interface PreparedAgentTurn {
   selectedToolTokenEstimate: number;
   selectedTools: ToolDefinition[];
   toolsForIteration: ToolDefinition[] | undefined;
+  memoryReadFence?: {
+    readEpoch: number;
+    memoryFreePrompt: {
+      enrichedSystemPrompt: string;
+      enrichedSystemPromptSections: ReturnType<
+        typeof buildAgentTurnPromptBundle
+      >['enrichedSystemPromptSections'];
+    };
+  };
 }
 
 export function prepareAgentTurn(params: PrepareAgentTurnParams): PreparedAgentTurn {

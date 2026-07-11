@@ -102,6 +102,7 @@ export async function executeAgentControlGraphModelTurnStreaming(
     ]);
     const modelStreamStartedAt = Date.now();
     let firstModelOutputAt: number | undefined;
+    params.streamOptions.requestDispatchGuard?.();
     const stream = params.llm.streamMessage(params.requestMessages, params.streamOptions);
 
     params.callbacks.onStateChange('responding');
@@ -244,6 +245,7 @@ export async function executeAgentControlGraphModelTurnViaSendMessage(
   ]);
 
   const modelTurnStartedAt = Date.now();
+  params.streamOptions.requestDispatchGuard?.();
   const response = await params.llm.sendMessage(params.requestMessages, {
     ...params.streamOptions,
     stream: false,

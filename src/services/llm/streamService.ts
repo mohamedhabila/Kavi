@@ -40,7 +40,10 @@ export async function* streamLlmMessage(params: {
   options?: Omit<MessageRequestOptions, 'stream'>;
   performFetch: LlmPerformFetch;
 }): AsyncGenerator<StreamEvent> {
-  const options = params.options || {};
+  const requestedOptions = params.options || {};
+  const options: Omit<MessageRequestOptions, 'stream'> = { ...requestedOptions };
+  delete options.requestDispatchGuard;
+  requestedOptions.requestDispatchGuard?.();
   const model = options.model || params.provider.model;
   const providerTransport = resolveProviderTransport(params.provider);
 

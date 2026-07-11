@@ -38,6 +38,13 @@ import type {
   ExecuteAgentControlGraphModelTurnParams,
   PendingAgentToolCall,
 } from './modelTurnExecutionTypes';
+import type { OrchestratorCompactionEvent } from '../orchestratorCompaction';
+import {
+  buildMemoryPromptDispatchGuard,
+  isMemoryPromptEpochExpiredError,
+  isPreparedMemoryReadCurrent,
+  removeLivingMemoryCompactionMessages,
+} from './modelTurn/memoryPromptDispatchFence';
 
 export type ExecuteAgentControlGraphModelTurnAttemptResult =
   | {
@@ -55,7 +62,20 @@ export type ExecuteAgentControlGraphModelTurnAttemptResult =
       kind: 'overflow_retry';
       nextRequestMaxTokens: number;
       workingMessages: Message[];
+    }
+  | {
+      kind: 'memory_opt_out_retry';
+      workingMessages: Message[];
     };
+
+function memoryOptOutRetry(
+  params: ExecuteAgentControlGraphModelTurnParams,
+): ExecuteAgentControlGraphModelTurnAttemptResult {
+  return {
+    kind: 'memory_opt_out_retry',
+    workingMessages: removeLivingMemoryCompactionMessages(params.workingMessages),
+  };
+}
 
 export async function executeAgentControlGraphModelTurnAttempt(
   params: ExecuteAgentControlGraphModelTurnParams & {
@@ -67,6 +87,14 @@ export async function executeAgentControlGraphModelTurnAttempt(
     resolveModelHostedFamily(params.requestModel) === 'gemini' &&
     /gemini[- ]?3/i.test(params.requestModel);
   const geminiNativeTransport = resolveProviderTransport(params.activeProvider) === 'gemini';
+  const stagedCompactionEvents: OrchestratorCompactionEvent[] = [];
+  const stageCompaction = params.preparedTurn.memoryReadFence
+    ? (event: OrchestratorCompactionEvent) => stagedCompactionEvents.push(event)
+    : params.onCompaction;
+  const releaseStagedCompactions = () => {
+    if (!isPreparedMemoryReadCurrent(params.preparedTurn)) return;
+    for (const event of stagedCompactionEvents.splice(0)) params.onCompaction?.(event);
+  };
 
   const preparedRequestBudget = await prepareAgentTurnRequestBudget({
     compactionEngine: params.compactionEngine,
@@ -75,7 +103,7 @@ export async function executeAgentControlGraphModelTurnAttempt(
     enrichedSystemPromptSections: params.preparedTurn.enrichedSystemPromptSections,
     iteration: params.iteration,
     livingMemory: params.livingMemory,
-    onCompaction: params.onCompaction,
+    onCompaction: stageCompaction,
     pinnedToolNames: params.preparedTurn.pinnedToolNames,
     sessionPinnedCount: params.toolSurfacePinTelemetry?.sessionPinnedCount ?? 0,
     turnPinnedCount: params.toolSurfacePinTelemetry?.turnPinnedCount ?? 0,
@@ -85,6 +113,9 @@ export async function executeAgentControlGraphModelTurnAttempt(
     warn: params.warn,
     workingMessages: params.workingMessages,
   });
+  if (!isPreparedMemoryReadCurrent(params.preparedTurn)) {
+    return memoryOptOutRetry(params);
+  }
   if (preparedRequestBudget.toolSurfaceTokenAudit) {
     params.applyGraphEvents([
       buildGraphObservabilityRecordedEvent({
@@ -150,6 +181,7 @@ export async function executeAgentControlGraphModelTurnAttempt(
     : isGemini3
       ? 1.0
       : params.temperature;
+  const requestDispatchGuard = buildMemoryPromptDispatchGuard(params.preparedTurn);
   const streamOptions: Record<string, any> = {
     model: params.requestModel,
     conversationId: params.conversationId,
@@ -164,6 +196,7 @@ export async function executeAgentControlGraphModelTurnAttempt(
       tokenBuckets: preparedRequestBudget.usageTokenBuckets,
       promptCache: promptCachingPlan.telemetry,
     },
+    ...(requestDispatchGuard ? { requestDispatchGuard } : {}),
     ...thinkingParams,
   };
 
@@ -292,6 +325,8 @@ export async function executeAgentControlGraphModelTurnAttempt(
       throw new Error('Model tool turn is missing required provider replay coverage after retries');
     }
 
+    const memoryReadCurrent = isPreparedMemoryReadCurrent(params.preparedTurn);
+    if (memoryReadCurrent) releaseStagedCompactions();
     return {
       kind: 'success',
       completion: streamResult.completion,
@@ -301,32 +336,48 @@ export async function executeAgentControlGraphModelTurnAttempt(
       providerReplay: streamResult.providerReplay,
       reasoning: streamResult.reasoning,
       requestMaxTokens: params.requestMaxTokens,
-      workingMessages,
+      workingMessages: memoryReadCurrent
+        ? workingMessages
+        : removeLivingMemoryCompactionMessages(workingMessages),
     };
   } catch (streamError: unknown) {
+    if (
+      isMemoryPromptEpochExpiredError(streamError) ||
+      !isPreparedMemoryReadCurrent(params.preparedTurn)
+    ) {
+      return memoryOptOutRetry(params);
+    }
     if (
       !params.signal?.signal.aborted &&
       params.compactionEngine &&
       params.allowOverflowRetry &&
       isContextOverflowProviderError(streamError)
     ) {
+      const overflowCompactionEvents: OrchestratorCompactionEvent[] = [];
       const overflowRecovery = await compactAgentTurnWorkingMessages({
         compactionEngine: params.compactionEngine,
         conversationId: params.conversationId,
         currentMessages: workingMessages,
         livingMemory: params.livingMemory,
-        onCompaction: params.onCompaction,
+        onCompaction: params.preparedTurn.memoryReadFence
+          ? (event) => overflowCompactionEvents.push(event)
+          : params.onCompaction,
         currentTokenCount: estimateWorkingMessageTokens(workingMessages),
         forceTier: 'aggressive',
         failureLabel: 'Provider overflow recovery compaction failed',
         warn: params.warn,
       });
+      if (!isPreparedMemoryReadCurrent(params.preparedTurn)) {
+        return memoryOptOutRetry(params);
+      }
       const nextMaxTokens = getProviderOverflowRetryMaxTokens(
         params.requestMaxTokens,
         params.requestModel,
       );
 
       if (overflowRecovery.compacted || nextMaxTokens < params.requestMaxTokens) {
+        releaseStagedCompactions();
+        for (const event of overflowCompactionEvents) params.onCompaction?.(event);
         return {
           kind: 'overflow_retry',
           nextRequestMaxTokens: nextMaxTokens,
@@ -335,6 +386,7 @@ export async function executeAgentControlGraphModelTurnAttempt(
       }
     }
 
+    releaseStagedCompactions();
     throw streamError instanceof Error ? streamError : new Error(String(streamError));
   }
 }

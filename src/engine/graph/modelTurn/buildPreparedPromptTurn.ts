@@ -16,36 +16,48 @@ export function buildPreparedModelTurnPrompt(params: {
   promptContextSupport: PromptContextSupport;
   toolingEnabledForProvider: boolean;
 }): PreparedAgentTurn {
+  const memoryReadEpoch = params.promptContextSupport.livingMemoryReadEpoch;
   const livingMemorySections =
-    params.promptContextSupport.livingMemoryReadEpoch !== undefined &&
-    isMemoryReadEpochCurrent(params.promptContextSupport.livingMemoryReadEpoch)
+    memoryReadEpoch !== undefined && isMemoryReadEpochCurrent(memoryReadEpoch)
       ? params.promptContextSupport.livingMemorySections
       : undefined;
-  return prepareAgentTurn({
-    allowSessionCoordinationTools: params.allowSessionCoordinationTools,
-    effectiveForceTextThisTurn: params.effectiveForceTextThisTurn,
-    groundedRequestScopedTools: params.groundedRequestScopedTools,
-    pinnedToolNames: params.pinnedToolNames,
-    promptBundleContext: {
-      conversationMemory: params.actionablePromptTurn
-        ? params.promptContextSupport.conversationMemory
-        : null,
-      effectiveForceTextReasonThisTurn: params.effectiveForceTextReasonThisTurn,
-      globalMemory: params.promptContextSupport.globalMemory,
-      graphGoals: params.actionablePromptTurn ? params.promptContextSupport.graphGoals : undefined,
-      goalsPromptSection: params.actionablePromptTurn
-        ? params.promptContextSupport.goalsPromptSection
-        : null,
+  const prepare = (sections: PromptContextSupport['livingMemorySections']) =>
+    prepareAgentTurn({
+      allowSessionCoordinationTools: params.allowSessionCoordinationTools,
+      effectiveForceTextThisTurn: params.effectiveForceTextThisTurn,
       groundedRequestScopedTools: params.groundedRequestScopedTools,
-      iteration: params.iteration,
-      livingMemorySections: params.actionablePromptTurn
-        ? livingMemorySections
-        : undefined,
-      maxToolIterations: params.promptContextSupport.maxToolIterations,
-      resolvedPrompt: params.promptContextSupport.resolvedPrompt,
-      runtimeContext: params.promptContextSupport.runtimeContext,
-      skillPrompts: params.promptContextSupport.skillPrompts,
+      pinnedToolNames: params.pinnedToolNames,
+      promptBundleContext: {
+        conversationMemory: params.actionablePromptTurn
+          ? params.promptContextSupport.conversationMemory
+          : null,
+        effectiveForceTextReasonThisTurn: params.effectiveForceTextReasonThisTurn,
+        globalMemory: params.promptContextSupport.globalMemory,
+        graphGoals: params.actionablePromptTurn ? params.promptContextSupport.graphGoals : undefined,
+        goalsPromptSection: params.actionablePromptTurn
+          ? params.promptContextSupport.goalsPromptSection
+          : null,
+        groundedRequestScopedTools: params.groundedRequestScopedTools,
+        iteration: params.iteration,
+        livingMemorySections: params.actionablePromptTurn ? sections : undefined,
+        maxToolIterations: params.promptContextSupport.maxToolIterations,
+        resolvedPrompt: params.promptContextSupport.resolvedPrompt,
+        runtimeContext: params.promptContextSupport.runtimeContext,
+        skillPrompts: params.promptContextSupport.skillPrompts,
+      },
+      toolingEnabledForProvider: params.toolingEnabledForProvider,
+    });
+  const preparedTurn = prepare(livingMemorySections);
+  if (memoryReadEpoch === undefined) return preparedTurn;
+  const memoryFreeTurn = prepare(undefined);
+  return {
+    ...preparedTurn,
+    memoryReadFence: {
+      readEpoch: memoryReadEpoch,
+      memoryFreePrompt: {
+        enrichedSystemPrompt: memoryFreeTurn.enrichedSystemPrompt,
+        enrichedSystemPromptSections: memoryFreeTurn.enrichedSystemPromptSections,
+      },
     },
-    toolingEnabledForProvider: params.toolingEnabledForProvider,
-  });
+  };
 }

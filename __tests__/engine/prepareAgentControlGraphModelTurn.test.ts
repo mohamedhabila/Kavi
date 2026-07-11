@@ -274,7 +274,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
     } as any);
     mockPreparedTurn();
 
-    await prepareAgentControlGraphModelTurn({
+    const result = await prepareAgentControlGraphModelTurn({
       ...createBaseParams(),
       promptContextSupport: {
         ...createBaseParams().promptContextSupport,
@@ -301,6 +301,12 @@ describe('prepareAgentControlGraphModelTurn', () => {
           conversationMemory: null,
           livingMemorySections: undefined,
         }),
+      }),
+    );
+    expect(result.preparedTurn.memoryReadFence).toMatchObject({ readEpoch: 0 });
+    expect(mockedPrepareAgentTurn.mock.calls[1]?.[0]).toEqual(
+      expect.objectContaining({
+        promptBundleContext: expect.objectContaining({ livingMemorySections: undefined }),
       }),
     );
   });
@@ -375,6 +381,46 @@ describe('prepareAgentControlGraphModelTurn', () => {
         }),
       }),
     );
+  });
+
+  it('carries an independently prepared memory-free prompt to the dispatch boundary', async () => {
+    mockedPlanIterationModel.mockReturnValue({
+      model: 'gpt-5-mini',
+      maxTokens: 1024,
+      thinkingLevel: 'minimal',
+      reason: 'test',
+    } as any);
+    mockedPrepareAgentTurn.mockImplementation((input) => {
+      const hasLivingMemory = Boolean(input.promptBundleContext.livingMemorySections?.length);
+      return {
+        enrichedSystemPrompt: hasLivingMemory ? 'System with private memory' : 'Memory-free system',
+        enrichedSystemPromptSections: [
+          { text: hasLivingMemory ? 'System with private memory' : 'Memory-free system' },
+        ],
+        pinnedToolNames: [],
+        selectedToolTokenEstimate: 0,
+        selectedTools: [writeTool],
+        toolsForIteration: [writeTool],
+      };
+    });
+
+    const result = await prepareAgentControlGraphModelTurn({
+      ...createBaseParams(),
+      promptContextSupport: {
+        ...createBaseParams().promptContextSupport,
+        livingMemorySections: [{ text: 'Private memory' }],
+        livingMemoryReadEpoch: 0,
+      },
+    });
+
+    expect(result.preparedTurn.enrichedSystemPrompt).toBe('System with private memory');
+    expect(result.preparedTurn.memoryReadFence).toEqual({
+      readEpoch: 0,
+      memoryFreePrompt: {
+        enrichedSystemPrompt: 'Memory-free system',
+        enrichedSystemPromptSections: [{ text: 'Memory-free system' }],
+      },
+    });
   });
 
   it('drops living-memory sections from the model prompt when their read epoch is stale', async () => {

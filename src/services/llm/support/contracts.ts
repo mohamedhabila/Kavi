@@ -64,6 +64,8 @@ export interface MessageRequestOptions extends PromptCachingOptions {
     tokenBuckets?: UsageTokenBuckets;
     promptCache?: UsagePromptCacheTelemetry;
   };
+  /** Code-owned idempotent synchronous guard invoked at provider dispatch boundaries. */
+  requestDispatchGuard?: () => void;
 }
 
 export type ChatCompletionMessage = {

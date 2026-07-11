@@ -3,6 +3,11 @@ import { executeAgentControlGraphModelTurn } from '../../src/engine/graph/modelT
 import { prepareAgentTurnRequestBudget } from '../../src/engine/graph/agentTurnRequestBudget';
 import type { Message } from '../../src/types/message';
 import type { ToolDefinition } from '../../src/types/tool';
+import {
+  captureMemoryReadEpoch,
+  initializeMemoryPolicyObservation,
+} from '../../src/services/memory/policy';
+import { useSettingsStore } from '../../src/store/useSettingsStore';
 
 jest.mock('../../src/engine/graph/agentTurnRequestBudget', () => {
   const actual = jest.requireActual('../../src/engine/graph/agentTurnRequestBudget');
@@ -104,6 +109,203 @@ function createCallbacks() {
 describe('agent control graph model turn execution', () => {
   beforeEach(() => {
     mockedPrepareAgentTurnRequestBudget.mockReset();
+    useSettingsStore.setState({ disableLongTermMemory: false });
+    initializeMemoryPolicyObservation();
+  });
+
+  afterEach(() => {
+    useSettingsStore.setState({ disableLongTermMemory: false });
+  });
+
+  it('reprepares a memory-free request when opt-out lands during async request budgeting', async () => {
+    const safeWorkingMessages = createWorkingMessages();
+    const workingMessages: Message[] = [
+      {
+        id: 'compact_prior-memory',
+        role: 'system',
+        content: 'Summary\n\n## Persistent Context\nPRIVATE LIVING MEMORY',
+        timestamp: 0,
+      },
+      ...safeWorkingMessages,
+    ];
+    const readEpoch = captureMemoryReadEpoch();
+    if (readEpoch === null) throw new Error('expected enabled memory epoch');
+    let resolveFirstBudget!: (value: ReturnType<typeof createBudgetResult>) => void;
+    const firstBudget = new Promise<ReturnType<typeof createBudgetResult>>((resolve) => {
+      resolveFirstBudget = resolve;
+    });
+    mockedPrepareAgentTurnRequestBudget
+      .mockImplementationOnce(() => firstBudget as never)
+      .mockImplementationOnce(async (params) => ({
+        ...createBudgetResult(params.workingMessages),
+        budgetResult: {
+          ...createBudgetResult(params.workingMessages).budgetResult,
+          systemPrompt: params.enrichedSystemPrompt,
+        },
+      }));
+    const llm = {
+      streamMessage: jest.fn((_messages: unknown) =>
+        createStream([
+          { type: 'token', content: 'Safe response.' },
+          { type: 'done', completion: { completionStatus: 'complete', finishReason: 'stop' } },
+        ]),
+      ),
+    };
+    const callbacks = createCallbacks();
+    const execution = executeAgentControlGraphModelTurn({
+      activeProvider: {
+        id: 'provider-1',
+        name: 'OpenAI',
+        apiKey: 'test-key',
+        baseUrl: 'https://api.openai.com/v1',
+        enabled: true,
+      } as any,
+      applyGraphEvents: jest.fn(),
+      callbacks,
+      compactionEngine: null,
+      conversationId: 'conv-memory-budget-race',
+      hasPendingAsyncOperations: false,
+      iteration: 1,
+      livingMemory: {
+        memoryReadEpoch: readEpoch,
+        sections: [{ text: 'PRIVATE LIVING MEMORY', cacheable: true }],
+      } as never,
+      llm,
+      preparedTurn: createPreparedTurn({
+        enrichedSystemPrompt: 'System\n\nPRIVATE LIVING MEMORY',
+        enrichedSystemPromptSections: [
+          { text: 'System', cacheable: true },
+          { text: 'PRIVATE LIVING MEMORY', cacheable: true },
+        ],
+        memoryReadFence: {
+          readEpoch,
+          memoryFreePrompt: {
+            enrichedSystemPrompt: 'Memory-free system',
+            enrichedSystemPromptSections: [{ text: 'Memory-free system', cacheable: true }],
+          },
+        },
+      }),
+      recordPerformanceMetrics: jest.fn(),
+      reportUsage: jest.fn(),
+      requestMaxTokens: 512,
+      requestModel: 'gpt-5-mini',
+      thinkingLevel: 'off',
+      warn: jest.fn(),
+      workingMessages,
+      yieldToUiFrame: jest.fn().mockResolvedValue(undefined),
+    });
+
+    expect(mockedPrepareAgentTurnRequestBudget).toHaveBeenCalledTimes(1);
+    useSettingsStore.setState({ disableLongTermMemory: true });
+    resolveFirstBudget({
+      ...createBudgetResult([
+        {
+          id: 'compact-private',
+          role: 'system',
+          content: 'Summary\n\n## Persistent Context\nPRIVATE LIVING MEMORY',
+          timestamp: 1,
+        },
+        ...workingMessages,
+      ]),
+      budgetResult: {
+        ...createBudgetResult(workingMessages).budgetResult,
+        systemPrompt: 'System\n\nPRIVATE LIVING MEMORY',
+      },
+    });
+
+    await expect(execution).resolves.toMatchObject({ fullContent: 'Safe response.' });
+    expect(mockedPrepareAgentTurnRequestBudget).toHaveBeenCalledTimes(2);
+    expect(mockedPrepareAgentTurnRequestBudget.mock.calls[1]?.[0]).toMatchObject({
+      enrichedSystemPrompt: 'Memory-free system',
+      livingMemory: null,
+      workingMessages: safeWorkingMessages,
+    });
+    expect(llm.streamMessage).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(llm.streamMessage.mock.calls[0]?.[0])).not.toContain(
+      'PRIVATE LIVING MEMORY',
+    );
+    expect(callbacks.onAssistantStreamReset).toHaveBeenCalledTimes(1);
+  });
+
+  it('fences replay dispatches after opt-out and resumes with a memory-free turn', async () => {
+    const workingMessages = createWorkingMessages();
+    const readEpoch = captureMemoryReadEpoch();
+    if (readEpoch === null) throw new Error('expected enabled memory epoch');
+    mockedPrepareAgentTurnRequestBudget.mockImplementation(async (params) => ({
+      ...createBudgetResult(params.workingMessages),
+      budgetResult: {
+        ...createBudgetResult(params.workingMessages).budgetResult,
+        systemPrompt: params.enrichedSystemPrompt,
+      },
+    }));
+    const llm = {
+      streamMessage: jest
+        .fn()
+        .mockImplementationOnce(() =>
+          createStream([
+            {
+              type: 'tool_call',
+              toolCall: { id: 'tc-private', name: 'write_file', arguments: '{}' },
+            },
+            { type: 'done', completion: { completionStatus: 'complete' } },
+          ]),
+        )
+        .mockImplementationOnce(() =>
+          createStream([
+            { type: 'token', content: 'Memory-free response.' },
+            { type: 'done', completion: { completionStatus: 'complete', finishReason: 'stop' } },
+          ]),
+        ),
+    };
+    let yieldCount = 0;
+
+    const result = await executeAgentControlGraphModelTurn({
+      activeProvider: {
+        id: 'provider-1',
+        name: 'OpenAI',
+        apiKey: 'test-key',
+        baseUrl: 'https://api.openai.com/v1',
+        enabled: true,
+      } as any,
+      applyGraphEvents: jest.fn(),
+      callbacks: createCallbacks(),
+      compactionEngine: null,
+      conversationId: 'conv-memory-replay-race',
+      hasPendingAsyncOperations: false,
+      iteration: 1,
+      livingMemory: { memoryReadEpoch: readEpoch, sections: [] } as never,
+      llm,
+      preparedTurn: createPreparedTurn({
+        enrichedSystemPrompt: 'System\n\nPRIVATE REPLAY MEMORY',
+        memoryReadFence: {
+          readEpoch,
+          memoryFreePrompt: {
+            enrichedSystemPrompt: 'Memory-free replay system',
+            enrichedSystemPromptSections: [{ text: 'Memory-free replay system' }],
+          },
+        },
+      }),
+      recordPerformanceMetrics: jest.fn(),
+      reportUsage: jest.fn(),
+      requestMaxTokens: 512,
+      requestModel: 'gemini-3-flash-preview',
+      thinkingLevel: 'off',
+      warn: jest.fn(),
+      workingMessages,
+      yieldToUiFrame: jest.fn(async () => {
+        yieldCount += 1;
+        if (yieldCount === 1) useSettingsStore.setState({ disableLongTermMemory: true });
+      }),
+    });
+
+    expect(result.fullContent).toBe('Memory-free response.');
+    expect(llm.streamMessage).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(llm.streamMessage.mock.calls[0]?.[0])).toContain(
+      'PRIVATE REPLAY MEMORY',
+    );
+    expect(JSON.stringify(llm.streamMessage.mock.calls[1]?.[0])).not.toContain(
+      'PRIVATE REPLAY MEMORY',
+    );
   });
 
   it('retries incomplete tool-call emission after MAX_TOKENS and preserves the final call', async () => {
