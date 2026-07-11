@@ -24,6 +24,7 @@ import { listBlocks } from '../../src/services/memory/blocks';
 import { editBlock } from '../../src/services/memory/blocks';
 import { listFacts } from '../../src/services/memory/facts/queries';
 import { executeMemoryRemember } from '../../src/services/memory/memoryTools';
+import { getMemoryDb } from '../../src/services/memory/database';
 import { useChatStore } from '../../src/store/useChatStore';
 
 describe('paired E2E state isolation', () => {
@@ -112,10 +113,42 @@ describe('paired E2E state isolation', () => {
         originThreadId: 'paired-isolation',
       }),
     ).toMatchObject({ ok: true });
+    getMemoryDb().runSync(
+      `INSERT INTO memory_product_experience_observations(
+        id, memory_owner_id, memory_conversation_id_hash, source_thread_id_hash,
+        source_run_id_hash, domain_id, environment_id, procedure_id,
+        precondition_ids_json, precondition_ids_hash, outcome, authority,
+        evidence_kind, evidence_id_hash, contract_version, observed_at, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 1)`,
+      `product_experience_${'a'.repeat(64)}`,
+      'vault_owner_test',
+      '1'.repeat(64),
+      '2'.repeat(64),
+      '3'.repeat(64),
+      'mobile-assistant.effect.test',
+      'kavi.test',
+      'registered-tool.test',
+      '[]',
+      '4'.repeat(64),
+      'success',
+      'verified',
+      'effect_receipt',
+      '5'.repeat(64),
+    );
+    expect(
+      getMemoryDb().getFirstSync<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM memory_product_experience_observations',
+      )?.count,
+    ).toBe(1);
 
     await resetAndVerifyE2EPairedConditionState();
 
     expect(useChatStore.getState().conversations).toEqual([]);
     expect(listFacts({ includeInvalidated: true })).toEqual([]);
+    expect(
+      getMemoryDb().getFirstSync<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM memory_product_experience_observations',
+      )?.count,
+    ).toBe(0);
   });
 });
