@@ -169,7 +169,9 @@ The release command runs `npm run prepare:ios-native` first. That installs the
 exact dependency graph in `ios/Podfile.lock` with CocoaPods deployment mode, so
 an `npm ci` cannot leave stale or dangling native headers behind. Use the
 non-deployment `pod install` command above only when intentionally updating the
-native dependency lock.
+native dependency lock. The simulator build is intentionally arm64-only to
+match the pinned LiteRT-LM binary; this command-scoped setting does not change
+iOS device archive architectures.
 
 ## Generated Assets
 

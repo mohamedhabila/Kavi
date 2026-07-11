@@ -71,9 +71,21 @@ describe('release maintainer checklist', () => {
     expect(packageJson.scripts['prebuild:ios:release-sim']).toContain(
       'npm run prepare:ios-native',
     );
+    expect(packageJson.scripts['build:ios:release-sim']).toContain(
+      "-destination 'generic/platform=iOS Simulator'",
+    );
+    expect(packageJson.scripts['build:ios:release-sim']).toContain('ARCHS=arm64');
+
+    const xcodeProject = readFileSync(
+      join(__dirname, '../../ios/Kavi.xcodeproj/project.pbxproj'),
+      'utf8',
+    );
+    expect(xcodeProject).not.toMatch(/\bARCHS(?:\[[^\]]+\])?\s*=\s*arm64/);
 
     const setupGuide = readFileSync(join(__dirname, '../../docs/setup/development.md'), 'utf8');
     expect(setupGuide).toContain('an `npm ci` cannot leave stale or dangling native headers');
+    expect(setupGuide).toContain('this command-scoped setting does not change');
+    expect(setupGuide).toContain('iOS device archive architectures');
   });
 
   it('documents tagging, GitHub release creation, and artifact handling', () => {

@@ -516,3 +516,7 @@ For iOS simulator release validation, run:
 ```bash
 npm run build:ios:release-sim
 ```
+
+This validation builds only the arm64 simulator architecture required by the
+pinned LiteRT-LM binary. The architecture override is scoped to this command
+and does not change iOS device archive architectures.
