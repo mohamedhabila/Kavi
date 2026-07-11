@@ -50,7 +50,44 @@ rtk uv run --project <kavi-repo>/.private/evals/upstream/STATE-Bench python \
 
 ## Official paired runs
 
-First run the no-learning baseline with the same agent model, reasoning level, worker count, and provider configuration. Then run Kavi learning. Never tune on the held-out outputs.
+Before either run, freeze one launch manifest per condition. The comparison
+validator accepts only `kavi-state-bench-launch-v1` manifests with this closed
+shape:
+
+```json
+{
+  "schemaVersion": "kavi-state-bench-launch-v1",
+  "condition": "baseline",
+  "configuration": {
+    "appCommit": "<clean-40-character-kavi-commit>",
+    "upstream": { "release": "v0.8.0", "commit": "e2c8d7af51ef48fbbea51bb2ce1fb859af36b423" },
+    "evaluationProtocolId": "state_bench_v0.8.0_gpt54",
+    "domains": ["travel", "customer_support", "shopping_assistant"],
+    "runs": 5,
+    "numWorkers": 4,
+    "provider": {
+      "family": "openai",
+      "configurationSha256": "<sha256-of-reviewed-secret-redacted-provider-config>"
+    },
+    "agentModel": { "model_name": "<agent-model>", "reasoning_level": "<level-or-null>" },
+    "agentName": "StateBenchAgent",
+    "retrieveLearningsTopK": 0
+  },
+  "configurationSha256": "<sha256-of-compact-key-sorted-configuration-json>"
+}
+```
+
+The candidate manifest differs only in `condition`, `agentName` =
+`KaviStateBenchAgent`, and `retrieveLearningsTopK` = `3`. The provider digest
+must cover the reviewed, credential-free provider launch configuration,
+including routing/account or project identity and endpoint selection where
+applicable; never put a key in either manifest. Compute and record each entire
+manifest's SHA-256 before launching. Store the directory as `0700` and both
+files as `0600`.
+
+First run the no-learning baseline with the exact frozen baseline manifest,
+then run Kavi learning with the exact frozen candidate manifest. Never tune on
+the held-out outputs.
 
 For each of `travel`, `customer_support`, and `shopping_assistant`:
 
@@ -103,8 +140,11 @@ increases errors, burden, or cost materially.
 Validate the product comparison separately from the learning-on submission
 candidate. The comparison gate revalidates every trajectory and metric in both
 conditions, requires the same model and reasoning level, verifies both archives,
-and emits exact per-domain and aggregate deltas. The declared worker count must
-be frozen before the runs and identical for both conditions:
+and emits exact per-domain and aggregate deltas. It verifies both immutable
+launch-manifest byte digests, recomputes each canonical configuration digest,
+and permits only the expected agent-class and learning-setting differences.
+Provider identity and worker count therefore come from frozen launch evidence,
+not post-run declarations:
 
 ```bash
 rtk sh -lc 'cd <state-bench-run-root> && zip -r outputs-baseline.zip outputs-baseline'
@@ -113,9 +153,12 @@ rtk sh -lc 'cd <state-bench-run-root> && zip -r outputs-learning.zip outputs-lea
 rtk python3 benchmarks/state_bench/compare_kavi_state_bench_learning.py \
   --baseline-outputs <state-bench-run-root>/outputs-baseline \
   --baseline-archive <state-bench-run-root>/outputs-baseline.zip \
+  --baseline-launch-manifest <private-run-root>/baseline.launch.json \
+  --baseline-launch-manifest-sha256 <frozen-baseline-manifest-sha256> \
   --candidate-outputs <state-bench-run-root>/outputs-learning \
   --candidate-archive <state-bench-run-root>/outputs-learning.zip \
-  --num-workers <approved-workers>
+  --candidate-launch-manifest <private-run-root>/candidate.launch.json \
+  --candidate-launch-manifest-sha256 <frozen-candidate-manifest-sha256>
 ```
 
 This comparison is local causal evidence, not an official submission artifact.
