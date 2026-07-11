@@ -7,7 +7,10 @@ import {
   getE2ENativeMobileFixtureStateSnapshot,
   getE2ENativeMobileInvocationSnapshots,
 } from '../../src/acceptance/e2eAgent/e2eNativeMobileFixtures';
-import { resetAndVerifyE2EScenarioSandboxes } from '../../src/acceptance/e2eAgent/e2ePairedStateIsolation';
+import {
+  resetAndVerifyE2EPairedConditionState,
+  resetAndVerifyE2EScenarioSandboxes,
+} from '../../src/acceptance/e2eAgent/e2ePairedStateIsolation';
 import {
   assertE2EMemorySandboxReset,
   E2E_RESETTABLE_MEMORY_TABLES,
@@ -21,6 +24,7 @@ import { listBlocks } from '../../src/services/memory/blocks';
 import { editBlock } from '../../src/services/memory/blocks';
 import { listFacts } from '../../src/services/memory/facts/queries';
 import { executeMemoryRemember } from '../../src/services/memory/memoryTools';
+import { useChatStore } from '../../src/store/useChatStore';
 
 describe('paired E2E state isolation', () => {
   it('keeps the reset verification list synchronized with mutable memory tables', () => {
@@ -80,5 +84,38 @@ describe('paired E2E state isolation', () => {
     expect(listFacts({ includeInvalidated: true })).toEqual([]);
     expect(getE2ENativeMobileInvocationSnapshots()).toEqual([]);
     expect(listBlocks().length).toBeGreaterThan(0);
+  });
+
+  it('clears memory as well as chat before every paired condition', async () => {
+    resetAndVerifyE2EScenarioSandboxes();
+    useChatStore.setState({
+      conversations: [
+        {
+          id: 'contaminated-chat',
+          title: 'Contaminated chat',
+          messages: [],
+          agentRuns: [],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      activeConversationId: 'contaminated-chat',
+      isLoading: false,
+    });
+    expect(
+      executeMemoryRemember({
+        subject: 'user',
+        predicate: 'oracle_leak',
+        value: 'MUST-NOT-CROSS-CONDITIONS',
+        scope: 'conversation',
+        originConversationId: 'paired-isolation',
+        originThreadId: 'paired-isolation',
+      }),
+    ).toMatchObject({ ok: true });
+
+    await resetAndVerifyE2EPairedConditionState();
+
+    expect(useChatStore.getState().conversations).toEqual([]);
+    expect(listFacts({ includeInvalidated: true })).toEqual([]);
   });
 });

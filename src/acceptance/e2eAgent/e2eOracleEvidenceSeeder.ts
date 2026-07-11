@@ -7,13 +7,19 @@ import {
   validateE2EOracleEvidenceDeclaration,
   type E2EOracleEvidenceDeclaration,
 } from './e2ePairedConditions';
-import { stableStringify } from './e2eTraceRedaction';
+import { stableHash, stableStringify } from './e2eTraceRedaction';
+
+type OracleUserEvidence = Readonly<{
+  messageId: string;
+  text: string;
+}>;
 
 type OracleMemoryToolExecutor = (params: {
   name: 'memory_remember';
   args: MemoryRememberArgs;
   conversationId: string;
   workspaceConversationId: string;
+  userEvidence: OracleUserEvidence;
 }) => Promise<string | null>;
 
 type OraclePersistedFactReader = (factId: string) => MemoryFact | null | undefined;
@@ -35,11 +41,37 @@ const executeProductMemoryTool: OracleMemoryToolExecutor = async (params) =>
   executeBuiltinMemoryTool({
     ...params,
     conversationFileContext: createConversationFileContext(params.workspaceConversationId),
+    context: {
+      memoryConversationId: params.workspaceConversationId,
+      currentUserMessage: {
+        id: params.userEvidence.messageId,
+        text: params.userEvidence.text,
+      },
+    },
   });
+
+function buildOracleUserEvidence(
+  fact: Readonly<MemoryRememberArgs>,
+  index: number,
+): OracleUserEvidence {
+  const canonical = stableStringify({
+    index,
+    subject: fact.subject,
+    predicate: fact.predicate,
+    value: fact.value,
+  });
+  return {
+    messageId: `e2e-oracle-evidence-${stableHash(canonical).slice('sha256:'.length)}`,
+    text:
+      `Evaluator-controlled oracle evidence: subject ${JSON.stringify(fact.subject)} ` +
+      `has ${JSON.stringify(fact.predicate)} value ${JSON.stringify(fact.value)}.`,
+  };
+}
 
 function validateSeedResult(
   rawResult: string | null,
   identity: { conversationId: string; workspaceConversationId: string },
+  userEvidence: OracleUserEvidence,
   index: number,
 ): string {
   if (rawResult === null) {
@@ -63,7 +95,7 @@ function validateSeedResult(
     fact.originConversationId !== identity.workspaceConversationId ||
     fact.originThreadId !== identity.conversationId ||
     fact.originTaskId !== null ||
-    fact.sourceMessageId !== null
+    fact.sourceMessageId !== userEvidence.messageId
   ) {
     throw new Error(`Oracle memory_remember fact ${index} escaped its isolated runtime scope.`);
   }
@@ -73,6 +105,7 @@ function validateSeedResult(
 function validatePersistedSeed(
   fact: MemoryFact | null | undefined,
   identity: { conversationId: string; workspaceConversationId: string },
+  userEvidence: OracleUserEvidence,
   index: number,
 ): void {
   if (
@@ -81,7 +114,7 @@ function validatePersistedSeed(
     fact.originConversationId !== identity.workspaceConversationId ||
     fact.originThreadId !== identity.conversationId ||
     fact.originTaskId !== null ||
-    fact.sourceMessageId !== null ||
+    fact.sourceMessageId !== userEvidence.messageId ||
     fact.sourceRunId !== null ||
     fact.sourceTurnId !== null ||
     fact.sourceSummary !== null
@@ -96,7 +129,7 @@ export async function seedE2EOracleEvidence(input: {
   workspaceConversationId: string;
   executeTool?: OracleMemoryToolExecutor;
   readPersistedFact?: OraclePersistedFactReader;
-}): Promise<{ seededFactCount: number }> {
+}): Promise<{ seededFactCount: number; seededFactIds: string[] }> {
   const canonicalDeclaration = validateE2EOracleEvidenceDeclaration(input.declaration);
   if (stableStringify(input.declaration) !== stableStringify(canonicalDeclaration)) {
     throw new Error('Oracle seeding requires a canonical memory_remember declaration.');
@@ -107,14 +140,18 @@ export async function seedE2EOracleEvidence(input: {
   };
   const executeTool = input.executeTool ?? executeProductMemoryTool;
   const readPersistedFact = input.readPersistedFact ?? getFactById;
+  const seededFactIds: string[] = [];
   for (const [index, fact] of input.declaration.facts.entries()) {
+    const userEvidence = buildOracleUserEvidence(fact, index);
     const rawResult = await executeTool({
       name: 'memory_remember',
       args: buildIsolatedOracleFact(fact),
+      userEvidence,
       ...identity,
     });
-    const factId = validateSeedResult(rawResult, identity, index);
-    validatePersistedSeed(readPersistedFact(factId), identity, index);
+    const factId = validateSeedResult(rawResult, identity, userEvidence, index);
+    validatePersistedSeed(readPersistedFact(factId), identity, userEvidence, index);
+    seededFactIds.push(factId);
   }
-  return { seededFactCount: input.declaration.facts.length };
+  return { seededFactCount: input.declaration.facts.length, seededFactIds };
 }

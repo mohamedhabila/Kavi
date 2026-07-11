@@ -53,6 +53,11 @@ export async function resetAndVerifyE2EPairedChatState(): Promise<void> {
   }
 }
 
+export async function resetAndVerifyE2EPairedConditionState(): Promise<void> {
+  await resetAndVerifyE2EPairedChatState();
+  resetAndVerifyE2EScenarioSandboxes();
+}
+
 export async function withE2EPairedStoreIsolation<T>(
   task: () => Promise<T>,
 ): Promise<T> {

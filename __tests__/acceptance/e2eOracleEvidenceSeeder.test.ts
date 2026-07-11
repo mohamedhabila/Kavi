@@ -49,19 +49,23 @@ function persistedFact(overrides: Partial<MemoryFact> = {}): MemoryFact {
 
 describe('paired oracle evidence seeding', () => {
   it('uses the product memory tool shape while forcing isolated runtime provenance', async () => {
-    const executeTool = jest.fn(async ({ conversationId, workspaceConversationId }) =>
-      JSON.stringify({
-        ok: true,
-        status: 'created',
-        fact: {
-          id: 'oracle-fact-id',
-          scope: 'conversation',
-          originConversationId: workspaceConversationId,
-          originThreadId: conversationId,
-          originTaskId: null,
-          sourceMessageId: null,
-        },
-      }),
+    let sourceMessageId = '';
+    const executeTool = jest.fn(
+      async ({ conversationId, workspaceConversationId, userEvidence }) => {
+        sourceMessageId = userEvidence.messageId;
+        return JSON.stringify({
+          ok: true,
+          status: 'created',
+          fact: {
+            id: 'oracle-fact-id',
+            scope: 'conversation',
+            originConversationId: workspaceConversationId,
+            originThreadId: conversationId,
+            originTaskId: null,
+            sourceMessageId,
+          },
+        });
+      },
     );
     const declaration: E2EOracleEvidenceDeclaration = {
       interface: 'memory_remember',
@@ -91,9 +95,9 @@ describe('paired oracle evidence seeding', () => {
         conversationId: 'isolated-thread',
         workspaceConversationId: 'isolated-workspace',
         executeTool,
-        readPersistedFact: () => persistedFact(),
+        readPersistedFact: () => persistedFact({ sourceMessageId }),
       }),
-    ).resolves.toEqual({ seededFactCount: 1 });
+    ).resolves.toEqual({ seededFactCount: 1, seededFactIds: ['oracle-fact-id'] });
 
     expect(executeTool).toHaveBeenCalledWith({
       name: 'memory_remember',
@@ -108,6 +112,10 @@ describe('paired oracle evidence seeding', () => {
         importance: 0.8,
         pinned: true,
         scope: 'conversation',
+      },
+      userEvidence: {
+        messageId: expect.stringMatching(/^e2e-oracle-evidence-[a-f0-9]{64}$/u),
+        text: 'Evaluator-controlled oracle evidence: subject "user" has "preference" value "tea".',
       },
     });
     const serializedArgs = JSON.stringify(executeTool.mock.calls[0][0].args);
@@ -138,13 +146,15 @@ describe('paired oracle evidence seeding', () => {
       }),
     ).rejects.toThrow('malformed JSON');
 
+    let untrustedSourceMessageId = '';
     await expect(
       seedE2EOracleEvidence({
         declaration,
         conversationId: 'isolated-thread',
         workspaceConversationId: 'isolated-workspace',
-        executeTool: async () =>
-          JSON.stringify({
+        executeTool: async ({ userEvidence }) => {
+          untrustedSourceMessageId = userEvidence.messageId;
+          return JSON.stringify({
             ok: true,
             fact: {
               id: 'oracle-fact-id',
@@ -152,10 +162,15 @@ describe('paired oracle evidence seeding', () => {
               originConversationId: 'isolated-workspace',
               originThreadId: 'isolated-thread',
               originTaskId: null,
-              sourceMessageId: null,
+              sourceMessageId: userEvidence.messageId,
             },
+          });
+        },
+        readPersistedFact: () =>
+          persistedFact({
+            sourceMessageId: untrustedSourceMessageId,
+            sourceRunId: 'untrusted-run',
           }),
-        readPersistedFact: () => persistedFact({ sourceRunId: 'untrusted-run' }),
       }),
     ).rejects.toThrow('persisted untrusted provenance');
   });

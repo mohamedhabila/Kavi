@@ -8,8 +8,7 @@ import {
 } from './e2ePairedConditions';
 import { buildE2EPairedInvariantConfig } from './e2ePairedInvariant';
 import {
-  resetAndVerifyE2EPairedChatState,
-  resetAndVerifyE2EScenarioSandboxes,
+  resetAndVerifyE2EPairedConditionState,
   withE2EPairedStoreIsolation,
 } from './e2ePairedStateIsolation';
 import { buildE2EProvider } from './providerConfig';
@@ -84,10 +83,9 @@ export type E2EPairedRuntimeDependencies = Readonly<{
 
 const DEFAULT_DEPENDENCIES: E2EPairedRuntimeDependencies = {
   buildProvider: buildE2EProvider,
-  resetConditionState: resetAndVerifyE2EPairedChatState,
+  resetConditionState: resetAndVerifyE2EPairedConditionState,
   cleanupConditionState: async () => {
-    await resetAndVerifyE2EPairedChatState();
-    resetAndVerifyE2EScenarioSandboxes();
+    await resetAndVerifyE2EPairedConditionState();
   },
   withStoreIsolation: withE2EPairedStoreIsolation,
   executeCondition: async ({ scenario, runOptions }) => {
