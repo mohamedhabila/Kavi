@@ -430,4 +430,37 @@ describe('VoiceScreen', () => {
 
     await expect(getLatestAgentHandler()('hello')).resolves.toBe('Error: callback boom');
   });
+
+  it('returns a visible blocker response from a blocked voice run', async () => {
+    mockRunOrchestrator.mockImplementationOnce(async (_request: any, callbacks: any) => {
+      callbacks.onAssistantMessage('I could not complete that action safely.');
+      callbacks.onAgentControlGraphStateChange?.({
+        status: 'blocked',
+        terminalReason: 'missing_required_side_effect',
+      });
+      callbacks.onDone?.();
+    });
+
+    render(<VoiceScreen />);
+
+    await expect(getLatestAgentHandler()('do the action')).resolves.toBe(
+      'I could not complete that action safely.',
+    );
+  });
+
+  it('returns a graph error when a blocked voice run has no visible response', async () => {
+    mockRunOrchestrator.mockImplementationOnce(async (_request: any, callbacks: any) => {
+      callbacks.onAgentControlGraphStateChange?.({
+        status: 'blocked',
+        terminalReason: 'empty_final_text_after_recovery',
+      });
+      callbacks.onDone?.();
+    });
+
+    render(<VoiceScreen />);
+
+    await expect(getLatestAgentHandler()('hello')).resolves.toBe(
+      'Error: Agent control graph was blocked: empty_final_text_after_recovery.',
+    );
+  });
 });

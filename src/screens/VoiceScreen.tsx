@@ -21,6 +21,8 @@ import { generateId } from '../utils/id';
 import { emitVoiceEvent } from '../services/events/bus';
 import { useBackToChat } from '../navigation/useBackToChat';
 import { resolveConversationPersonaForMode } from '../engine/graph/conversation/modeTransitions';
+import { resolveAgentControlGraphTerminalFailure } from '../engine/graph/terminalOutcome';
+import type { AgentRunControlGraphState } from '../types/agentRun';
 import {
   providerRequiresApiKey,
   resolveEnabledProvider,
@@ -90,8 +92,13 @@ export const VoiceScreen: React.FC = () => {
       : t('voice.defaultSystemPrompt');
 
     let result = '';
+    let latestControlGraphState: AgentRunControlGraphState | undefined;
+    let reportedOrchestratorError: Error | undefined;
     const convId = `voice_${generateId()}`;
     const callbacks: OrchestratorCallbacks = {
+      onAgentControlGraphStateChange: (state) => {
+        latestControlGraphState = state;
+      },
       onStateChange: () => {},
       onToken: (token: string) => {
         result += token;
@@ -107,7 +114,7 @@ export const VoiceScreen: React.FC = () => {
       },
       onToolMessage: () => {},
       onError: (error) => {
-        result = result || `Error: ${error.message}`;
+        reportedOrchestratorError = error;
       },
       onUsage: () => {},
       onDone: () => {},
@@ -128,6 +135,13 @@ export const VoiceScreen: React.FC = () => {
         },
         callbacks,
       );
+      const terminalFailure = resolveAgentControlGraphTerminalFailure({
+        state: latestControlGraphState,
+        reportedError: reportedOrchestratorError,
+      });
+      if (terminalFailure && !result.trim()) {
+        result = `Error: ${terminalFailure.message}`;
+      }
     } catch (err: unknown) {
       if (!result) result = `Error: ${err instanceof Error ? err.message : String(err)}`;
     }
