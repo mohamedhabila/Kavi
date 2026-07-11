@@ -32,15 +32,16 @@ class AndroidDurableWorkerRunnerTest {
   }
 
   @Test
-  fun `headless completion without a reported outcome fails closed`() = runBlocking {
-    val fixture = fixture()
-    val enqueued = fixture.enqueue()
-    val runner = fixture.runner { AndroidDurableHeadlessDispatchResult.FINISHED }
+  fun `handler failure persists blocked domain state and completes the cleanup chain`() =
+    runBlocking {
+      val fixture = fixture()
+      val enqueued = fixture.enqueue()
+      val runner = fixture.runner { AndroidDurableHeadlessDispatchResult.FINISHED }
 
-    assertEquals(AndroidDurableWorkerResult.FAILURE, runner.run(WORK_ID, input(enqueued)))
-    assertEquals(AndroidDurableExecutionState.BLOCKED, fixture.store.record?.state)
-    assertEquals(AndroidDurableFailureReason.HANDLER_FAILED, fixture.store.record?.failureReason)
-  }
+      assertEquals(AndroidDurableWorkerResult.SUCCESS, runner.run(WORK_ID, input(enqueued)))
+      assertEquals(AndroidDurableExecutionState.BLOCKED, fixture.store.record?.state)
+      assertEquals(AndroidDurableFailureReason.HANDLER_FAILED, fixture.store.record?.failureReason)
+    }
 
   @Test
   fun `superseded generation completes its platform chain for a fresh candidate scan`() =
@@ -100,25 +101,45 @@ class AndroidDurableWorkerRunnerTest {
   }
 
   @Test
-  fun `an interrupted final attempt becomes an explicit terminal failure`() = runBlocking {
-    val fixture = fixture(maxAttempts = 1, nowMillis = 300)
-    val enqueued = fixture.enqueue()
-    fixture.adapter.markRunning(
-      pointer = pointer(enqueued),
-      attempt = 1,
-      updatedAtMillis = 200,
-    )
-    var dispatches = 0
-    val runner = fixture.runner {
-      dispatches += 1
-      AndroidDurableHeadlessDispatchResult.FINISHED
+  fun `an interrupted final attempt persists retry exhaustion and completes cleanup`() =
+    runBlocking {
+      val fixture = fixture(maxAttempts = 1, nowMillis = 300)
+      val enqueued = fixture.enqueue()
+      fixture.adapter.markRunning(
+        pointer = pointer(enqueued),
+        attempt = 1,
+        updatedAtMillis = 200,
+      )
+      var dispatches = 0
+      val runner = fixture.runner {
+        dispatches += 1
+        AndroidDurableHeadlessDispatchResult.FINISHED
+      }
+
+      assertEquals(AndroidDurableWorkerResult.SUCCESS, runner.run(WORK_ID, input(enqueued)))
+      assertEquals(AndroidDurableExecutionState.BLOCKED, fixture.store.record?.state)
+      assertEquals(
+        AndroidDurableFailureReason.RETRY_EXHAUSTED,
+        fixture.store.record?.failureReason,
+      )
+      assertEquals(0, dispatches)
     }
 
-    assertEquals(AndroidDurableWorkerResult.FAILURE, runner.run(WORK_ID, input(enqueued)))
-    assertEquals(AndroidDurableExecutionState.BLOCKED, fixture.store.record?.state)
-    assertEquals(AndroidDurableFailureReason.RETRY_EXHAUSTED, fixture.store.record?.failureReason)
-    assertEquals(0, dispatches)
-  }
+  @Test
+  fun `transient failure on the final attempt persists exhaustion and completes cleanup`() =
+    runBlocking {
+      val fixture = fixture(maxAttempts = 1, nowMillis = 300)
+      val enqueued = fixture.enqueue()
+      val runner = fixture.runner { AndroidDurableHeadlessDispatchResult.UNAVAILABLE }
+
+      assertEquals(AndroidDurableWorkerResult.SUCCESS, runner.run(WORK_ID, input(enqueued)))
+      assertEquals(AndroidDurableExecutionState.BLOCKED, fixture.store.record?.state)
+      assertEquals(
+        AndroidDurableFailureReason.RETRY_EXHAUSTED,
+        fixture.store.record?.failureReason,
+      )
+      assertEquals(1, fixture.store.record?.attempt)
+    }
 
   @Test
   fun `durable cancellation is confirmed before any headless dispatch`() = runBlocking {

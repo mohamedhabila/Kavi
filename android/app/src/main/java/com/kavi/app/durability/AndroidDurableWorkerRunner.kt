@@ -89,7 +89,7 @@ internal class AndroidDurableWorkerRunner(
           updatedAtMillis = transitionTime(current),
         )
       ) {
-        is AndroidDurableAdapterResult.Accepted -> AndroidDurableWorkerResult.FAILURE
+        is AndroidDurableAdapterResult.Accepted -> AndroidDurableWorkerResult.SUCCESS
         is AndroidDurableAdapterResult.Deferred -> AndroidDurableWorkerResult.RETRY
         else -> AndroidDurableWorkerResult.FAILURE
       }
@@ -112,7 +112,7 @@ internal class AndroidDurableWorkerRunner(
         updatedAtMillis = transitionTime(current),
       )
     ) {
-      is AndroidDurableAdapterResult.Accepted -> AndroidDurableWorkerResult.FAILURE
+      is AndroidDurableAdapterResult.Accepted -> AndroidDurableWorkerResult.SUCCESS
       is AndroidDurableAdapterResult.Deferred -> AndroidDurableWorkerResult.RETRY
       else -> AndroidDurableWorkerResult.FAILURE
     }
@@ -140,12 +140,7 @@ internal class AndroidDurableWorkerRunner(
     AndroidDurableExecutionState.COMPLETED,
     AndroidDurableExecutionState.CANCELLED,
     -> AndroidDurableWorkerResult.SUCCESS
-    AndroidDurableExecutionState.BLOCKED ->
-      if (record.failureReason == AndroidDurableFailureReason.GENERATION_CHANGED) {
-        AndroidDurableWorkerResult.SUCCESS
-      } else {
-        AndroidDurableWorkerResult.FAILURE
-      }
+    AndroidDurableExecutionState.BLOCKED -> AndroidDurableWorkerResult.SUCCESS
     else -> null
   }
 
@@ -159,7 +154,7 @@ internal class AndroidDurableWorkerRunner(
       updatedAtMillis = transitionTime(record),
     )
   ) {
-    is AndroidDurableAdapterResult.Accepted -> AndroidDurableWorkerResult.FAILURE
+    is AndroidDurableAdapterResult.Accepted -> AndroidDurableWorkerResult.SUCCESS
     is AndroidDurableAdapterResult.Deferred -> AndroidDurableWorkerResult.RETRY
     else -> AndroidDurableWorkerResult.FAILURE
   }
