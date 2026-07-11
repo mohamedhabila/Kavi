@@ -36,6 +36,8 @@ type ResolvedFinalizationProviderContext = {
   systemPromptText: string;
 };
 
+type ProviderContextResolution = Promise<ResolvedFinalizationProviderContext | undefined>;
+
 function truncateLogDetail(value?: string, maxLength = MAX_LOG_DETAIL_CHARS): string | undefined {
   if (!value) {
     return undefined;
@@ -99,11 +101,41 @@ async function resolveConversationFinalizationContext(
   };
 }
 
+async function resolveConversationFinalizationContextBeforeDeadline(params: {
+  cache: Map<string, ProviderContextResolution>;
+  conversation: Conversation;
+  deadlineAt: number;
+}): Promise<ResolvedFinalizationProviderContext | undefined> {
+  const remainingMs = params.deadlineAt - Date.now();
+  if (remainingMs <= 0) {
+    return undefined;
+  }
+
+  let resolution = params.cache.get(params.conversation.id);
+  if (!resolution) {
+    resolution = resolveConversationFinalizationContext(params.conversation).catch(
+      () => undefined,
+    );
+    params.cache.set(params.conversation.id, resolution);
+  }
+
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<undefined>((resolve) => {
+    timeoutId = setTimeout(() => resolve(undefined), remainingMs);
+  });
+  try {
+    return await Promise.race([resolution, deadline]);
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
 async function synthesizeRecoveredAgentRunCompletion(params: {
   conversation: Conversation;
   run: AgentRun & { status: Exclude<AgentRun['status'], 'running'> };
-  providerContext?: ResolvedFinalizationProviderContext;
-  providerContextResolutionAttempted: boolean;
+  providerContextCache: Map<string, ProviderContextResolution>;
   liveSubAgentSnapshots: ReadonlyArray<SubAgentSnapshot>;
   synthesisDeadlineAt: number;
 }): Promise<{
@@ -152,9 +184,11 @@ async function synthesizeRecoveredAgentRunCompletion(params: {
     };
   }
 
-  const providerContext = params.providerContextResolutionAttempted
-    ? params.providerContext
-    : await resolveConversationFinalizationContext(params.conversation);
+  const providerContext = await resolveConversationFinalizationContextBeforeDeadline({
+    cache: params.providerContextCache,
+    conversation: params.conversation,
+    deadlineAt: params.synthesisDeadlineAt,
+  });
   const remainingSynthesisBudgetMs = params.synthesisDeadlineAt - Date.now();
   if (!providerContext || remainingSynthesisBudgetMs <= 0) {
     return {
@@ -193,7 +227,7 @@ export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
 }): Promise<string[]> {
   const repairedRunIds: string[] = [];
   const activeSubAgents = params?.activeSubAgents ?? listActiveSubAgents();
-  const providerContextCache = new Map<string, ResolvedFinalizationProviderContext | undefined>();
+  const providerContextCache = new Map<string, ProviderContextResolution>();
   const configuredSynthesisSweepBudgetMs = params?.synthesisSweepBudgetMs;
   const synthesisSweepBudgetMs =
     typeof configuredSynthesisSweepBudgetMs === 'number' &&
@@ -225,20 +259,10 @@ export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
         continue;
       }
 
-      let providerContext = providerContextCache.get(conversation.id);
-      if (
-        Date.now() < synthesisDeadlineAt &&
-        !providerContextCache.has(conversation.id)
-      ) {
-        providerContext = await resolveConversationFinalizationContext(conversation);
-        providerContextCache.set(conversation.id, providerContext);
-      }
-
       const synthesized = await synthesizeRecoveredAgentRunCompletion({
         conversation,
         run: terminalRun,
-        providerContext,
-        providerContextResolutionAttempted: providerContextCache.has(conversation.id),
+        providerContextCache,
         liveSubAgentSnapshots: getSubAgentsForAgentRun(
           conversation,
           terminalRun.id,

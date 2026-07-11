@@ -318,6 +318,7 @@ describe('repairTerminalAgentRunsMissingFinalResponses', () => {
         completionStatus: 'complete',
       }),
     );
+    expect(mockGetProviderApiKey).not.toHaveBeenCalled();
   });
 
   it('does not repair an older terminal run while a newer run in the same conversation is still active', async () => {
@@ -444,5 +445,64 @@ describe('repairTerminalAgentRunsMissingFinalResponses', () => {
       'assistant-2',
       'The run completed, but no final response was generated.',
     );
+  });
+
+  it('falls back after a positive shared deadline when provider hydration never resolves', async () => {
+    jest.useFakeTimers();
+    try {
+      mockGetProviderApiKey.mockImplementationOnce(() => new Promise(() => undefined));
+      mockChatStoreState.conversations = [
+        {
+          id: 'conv-stalled-provider',
+          title: 'Stalled provider recovery',
+          providerId: 'openai',
+          systemPrompt: 'You are helpful.',
+          createdAt: 1,
+          updatedAt: 3,
+          messages: [
+            {
+              id: 'user-stalled-provider',
+              role: 'user',
+              content: 'Complete the stalled recovery.',
+              timestamp: 1,
+            },
+            {
+              id: 'assistant-stalled-provider',
+              role: 'assistant',
+              content: 'Interrupted evidence',
+              timestamp: 2,
+              assistantMetadata: {
+                kind: 'final',
+                completionStatus: 'incomplete',
+                finishReason: 'response_failed',
+              },
+            },
+          ],
+          agentRuns: [
+            createTerminalRun({
+              id: 'run-stalled-provider',
+              userMessageId: 'user-stalled-provider',
+            }),
+          ],
+        },
+      ];
+
+      const repair = repairTerminalAgentRunsMissingFinalResponses({
+        activeSubAgents: [],
+        synthesisSweepBudgetMs: 25,
+      });
+      expect(mockGetProviderApiKey).toHaveBeenCalledTimes(1);
+
+      await jest.advanceTimersByTimeAsync(25);
+
+      await expect(repair).resolves.toEqual(['run-stalled-provider']);
+      expect(mockUpdateMessage).toHaveBeenCalledWith(
+        'conv-stalled-provider',
+        'assistant-stalled-provider',
+        'The run completed, but no final response was generated.',
+      );
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
