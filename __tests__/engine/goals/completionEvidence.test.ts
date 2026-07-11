@@ -73,6 +73,9 @@ describe('completionEvidence', () => {
     expect(isRecognizedSuccessCriterionForm('evidence.min:1')).toBe(true);
     expect(isRecognizedSuccessCriterionForm('evidence.prefix:worker')).toBe(true);
     expect(isRecognizedSuccessCriterionForm('evidence.json_field:status:ok')).toBe(true);
+    expect(isRecognizedSuccessCriterionForm('evidence.exit_code:1')).toBe(false);
+    expect(isRecognizedSuccessCriterionForm('evidence.file_hash:a.txt:md5')).toBe(false);
+    expect(isRecognizedSuccessCriterionForm('evidence.file_hash:a.txt:sha256:abcd')).toBe(false);
     expect(isRecognizedSuccessCriterionForm('meal-planning-scope')).toBe(false);
   });
 

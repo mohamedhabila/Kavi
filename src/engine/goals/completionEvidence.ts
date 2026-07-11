@@ -65,6 +65,8 @@ export function formatModelAuthoredSuccessCriteriaFormsDescription(): string {
 }
 
 export function isRecognizedSuccessCriterionForm(criterion: string): boolean {
+  const fileHashMatch = criterion.match(EVIDENCE_FILE_HASH_PATTERN);
+  const exitCodeMatch = criterion.match(EVIDENCE_EXIT_CODE_PATTERN);
   return (
     EVIDENCE_MIN_PATTERN.test(criterion) ||
     EVIDENCE_COUNT_PATTERN.test(criterion) ||
@@ -72,8 +74,10 @@ export function isRecognizedSuccessCriterionForm(criterion: string): boolean {
     EVIDENCE_TOOL_PATTERN.test(criterion) ||
     EVIDENCE_ARTIFACT_PATTERN.test(criterion) ||
     EVIDENCE_JSON_FIELD_PATTERN.test(criterion) ||
-    EVIDENCE_FILE_HASH_PATTERN.test(criterion) ||
-    EVIDENCE_EXIT_CODE_PATTERN.test(criterion) ||
+    (fileHashMatch !== null &&
+      fileHashMatch[2].toLowerCase() === 'sha256' &&
+      (fileHashMatch[3] === undefined || fileHashMatch[3].length === 64)) ||
+    (exitCodeMatch !== null && Number.parseInt(exitCodeMatch[1], 10) === 0) ||
     parseEffectCompletionCriterion(criterion) !== null
   );
 }
