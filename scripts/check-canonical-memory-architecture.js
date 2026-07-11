@@ -7,6 +7,14 @@ const { fail, findRipgrepLines, finishCheck } = require('./lib/ripgrepCheck');
 const label = 'check-canonical-memory-architecture';
 const defaultProjectRoot = path.resolve(__dirname, '..');
 const retiredArtifactCleanupPath = 'src/services/memory/retiredMemoryArtifacts.ts';
+const memoryServiceRoot = 'src/services/memory/';
+
+const productionSourceRoots = [
+  'src',
+  'android/app/src/main/java',
+  'ios/Kavi',
+  'ios/LocalPackages/KaviDurableExecutionCore',
+];
 
 const bannedFiles = [
   'src/services/memory/store.ts',
@@ -17,16 +25,29 @@ const bannedPatterns = [
   {
     label: 'retired chunk table',
     pattern: String.raw`\bmemory_chunks\b`,
-    allowedFiles: [retiredArtifactCleanupPath],
+    allowedMatch: ({ filePath, content }) =>
+      filePath === retiredArtifactCleanupPath &&
+      content === "database.execSync('DROP TABLE IF EXISTS memory_chunks');",
   },
   {
     label: 'retired Markdown memory directories',
     pattern: String.raw`['"](?:global-memory|conversation-memory)['"]`,
-    allowedFiles: [retiredArtifactCleanupPath],
+    allowedMatch: ({ filePath, content }) =>
+      filePath === retiredArtifactCleanupPath &&
+      content ===
+        "const RETIRED_MEMORY_DIRECTORY_NAMES = ['global-memory', 'conversation-memory'] as const;",
   },
   {
     label: 'retired Markdown memory file',
-    pattern: String.raw`MEMORY\.md`,
+    pattern: String.raw`(?i:memory\.md)`,
+  },
+  {
+    label: 'file-backed memory persistence dependency',
+    pattern: String.raw`['"](?:expo-file-system(?:/legacy)?|@react-native-async-storage/async-storage|react-native-fs|node:fs|fs)['"]`,
+    includeMatch: ({ filePath }) => filePath.startsWith(memoryServiceRoot),
+    allowedMatch: ({ filePath, content }) =>
+      filePath === retiredArtifactCleanupPath &&
+      content === "import { Directory, Paths } from 'expo-file-system';",
   },
   {
     label: 'retired file-store API',
@@ -55,8 +76,20 @@ function sourcePathFromMatch(match) {
   return normalizePath(separatorIndex === -1 ? match : match.slice(0, separatorIndex));
 }
 
+function parseSourceMatch(match) {
+  const filePath = sourcePathFromMatch(match);
+  const lineSeparatorIndex = match.indexOf(':', filePath.length + 1);
+  return {
+    filePath,
+    content: lineSeparatorIndex === -1 ? '' : match.slice(lineSeparatorIndex + 1).trim(),
+  };
+}
+
 function collectCanonicalMemoryArchitectureViolations(projectRoot = defaultProjectRoot) {
   const failures = [];
+  const scanRoots = productionSourceRoots.filter((sourceRoot) =>
+    fs.existsSync(path.join(projectRoot, sourceRoot)),
+  );
 
   for (const filePath of bannedFiles) {
     if (fs.existsSync(path.join(projectRoot, filePath))) {
@@ -65,13 +98,15 @@ function collectCanonicalMemoryArchitectureViolations(projectRoot = defaultProje
   }
 
   for (const target of bannedPatterns) {
-    const matches = findRipgrepLines(projectRoot, target.pattern, ['src'], {
+    const matches = findRipgrepLines(projectRoot, target.pattern, scanRoots, {
       errorMessage: `Unable to scan for ${target.label}. Install ripgrep (rg) and retry.`,
     });
-    const allowedFiles = new Set(target.allowedFiles ?? []);
     for (const match of matches) {
-      const filePath = sourcePathFromMatch(match);
-      if (!allowedFiles.has(filePath)) {
+      const parsedMatch = parseSourceMatch(match);
+      if (target.includeMatch && !target.includeMatch(parsedMatch)) {
+        continue;
+      }
+      if (!target.allowedMatch?.(parsedMatch)) {
         failures.push(`${match} uses ${target.label}`);
       }
     }

@@ -27,10 +27,68 @@ describe('canonical memory architecture guard', () => {
     writeProjectFile(
       projectRoot,
       'src/services/memory/retiredMemoryArtifacts.ts',
-      "const retired = ['global-memory', 'conversation-memory', 'memory_chunks'];\n",
+      [
+        "import { Directory, Paths } from 'expo-file-system';",
+        "const RETIRED_MEMORY_DIRECTORY_NAMES = ['global-memory', 'conversation-memory'] as const;",
+        "database.execSync('DROP TABLE IF EXISTS memory_chunks');",
+      ].join('\n'),
     );
 
     expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual([]);
+  });
+
+  it('rejects a retired table read hidden in the cleanup module', () => {
+    writeProjectFile(
+      projectRoot,
+      'src/services/memory/retiredMemoryArtifacts.ts',
+      "database.getAllSync('SELECT * FROM memory_chunks');\n",
+    );
+
+    expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual(
+      expect.arrayContaining([expect.stringContaining('uses retired chunk table')]),
+    );
+  });
+
+  it('rejects arbitrary retired directory use hidden in the cleanup module', () => {
+    writeProjectFile(
+      projectRoot,
+      'src/services/memory/retiredMemoryArtifacts.ts',
+      "const restoredDirectory = 'global-memory';\n",
+    );
+
+    expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('uses retired Markdown memory directories'),
+      ]),
+    );
+  });
+
+  it('rejects a renamed file-backed memory service', () => {
+    writeProjectFile(
+      projectRoot,
+      'src/services/memory/profileRepository.ts',
+      "import { File } from 'expo-file-system';\n",
+    );
+
+    expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('uses file-backed memory persistence dependency'),
+      ]),
+    );
+  });
+
+  it('rejects retired memory artifacts in native production source', () => {
+    writeProjectFile(
+      projectRoot,
+      'android/app/src/main/java/com/kavi/app/LegacyMemory.kt',
+      'const val MEMORY_FILE = "memory.md"\n',
+    );
+
+    expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('uses retired Markdown memory file'),
+      ]),
+    );
   });
 
   it('rejects retired source APIs and implementation files', () => {
