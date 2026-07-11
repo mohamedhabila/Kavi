@@ -79,8 +79,7 @@ function harness(initialConversation: Conversation, leases = [lease()]) {
             ? {
                 ...(plan.shouldInsertInterruptionText
                   ? {
-                      content:
-                        'Response interrupted because the app restarted before completion.',
+                      content: 'Response interrupted because the app restarted before completion.',
                     }
                   : {}),
                 assistantMetadata: plan.interruptedAssistantMetadata,
@@ -108,9 +107,7 @@ function harness(initialConversation: Conversation, leases = [lease()]) {
     return { kind: 'applied' as const, plan, conversation: currentConversation };
   });
   const releaseProjection = jest.fn((runLease: ForegroundModelExecutionLease) => {
-    if (
-      currentConversation.foregroundModelProjectionOwner?.runId !== runLease.runId
-    ) {
+    if (currentConversation.foregroundModelProjectionOwner?.runId !== runLease.runId) {
       return 'owner_changed' as const;
     }
     currentConversation = {
@@ -146,7 +143,9 @@ describe('foreground model restart recovery planning', () => {
     [
       'request_message_missing',
       lease(),
-      conversation({ messages: [{ id: 'assistant-1', role: 'assistant', content: '', timestamp: 2 }] }),
+      conversation({
+        messages: [{ id: 'assistant-1', role: 'assistant', content: '', timestamp: 2 }],
+      }),
     ],
     [
       'assistant_anchor_missing',
@@ -158,11 +157,7 @@ describe('foreground model restart recovery planning', () => {
         ],
       }),
     ],
-    [
-      'task_ownership_missing',
-      lease({ taskId: 'agent-run-1' }),
-      conversation({ agentRuns: [] }),
-    ],
+    ['task_ownership_missing', lease({ taskId: 'agent-run-1' }), conversation({ agentRuns: [] })],
     [
       'task_ownership_missing',
       lease({ taskId: 'agent-run-1' }),
@@ -214,7 +209,7 @@ describe('foreground model restart recovery planning', () => {
     });
   });
 
-  it('accepts a complete final projection only when no tool remains active', () => {
+  it('accepts a complete final projection only when no unresolved tool remains active', () => {
     const completeConversation = conversation({
       messages: [
         { id: 'request-1', role: 'user', content: 'Do the work.', timestamp: 1 },
@@ -235,19 +230,50 @@ describe('foreground model restart recovery planning', () => {
       }),
     );
 
-    completeConversation.messages[1] = {
-      ...completeConversation.messages[1],
-      toolCalls: [
-        {
-          id: 'tool-1',
-          name: 'send_email',
-          arguments: '{}',
-          status: 'running',
-        },
-      ],
-    };
+    completeConversation.messages = [
+      completeConversation.messages[0],
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '',
+        timestamp: 2,
+        assistantMetadata: { kind: 'intermediate', completionStatus: 'complete' },
+        toolCalls: [
+          {
+            id: 'tool-1',
+            name: 'send_email',
+            arguments: '{}',
+            status: 'running',
+          },
+        ],
+      },
+      {
+        id: 'assistant-2',
+        role: 'assistant',
+        content: 'Done.',
+        timestamp: 3,
+        assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+      },
+    ];
     expect(planForegroundModelRestartRecovery(lease(), completeConversation)).toEqual(
       expect.objectContaining({ status: 'failed' }),
+    );
+
+    expect(
+      planForegroundModelRestartRecovery(lease(), completeConversation, () => ({
+        kind: 'verified',
+        observedAt: 10,
+      })),
+    ).toEqual(
+      expect.objectContaining({
+        status: 'succeeded',
+        interruptedTools: [
+          expect.objectContaining({
+            toolCallId: 'tool-1',
+            disposition: { kind: 'verified', observedAt: 10 },
+          }),
+        ],
+      }),
     );
   });
 
@@ -399,9 +425,7 @@ describe('foreground model restart recovery execution', () => {
     ]);
     expect(test.mutateProjection).toHaveBeenCalledTimes(1);
     expect(test.flushChatState).toHaveBeenCalledTimes(2);
-    expect(test.complete).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'succeeded' }),
-    );
+    expect(test.complete).toHaveBeenCalledWith(expect.objectContaining({ status: 'succeeded' }));
     expect(test.releaseProjection).toHaveBeenCalledTimes(1);
   });
 
@@ -418,9 +442,7 @@ describe('foreground model restart recovery execution', () => {
 
   it('reports a stale generation without retrying model or tool execution', async () => {
     const test = harness(conversation());
-    test.complete.mockRejectedValueOnce(
-      new Error('foreground_model_journal_generation_changed'),
-    );
+    test.complete.mockRejectedValueOnce(new Error('foreground_model_journal_generation_changed'));
 
     await expect(recoverInterruptedForegroundModelExecutions(test.dependencies)).resolves.toEqual([
       { kind: 'blocked', runId: 'run-1', reason: 'generation_changed' },
@@ -441,17 +463,14 @@ describe('foreground model restart recovery execution', () => {
 
   it('cancels an unclaimed queued generation without mutating or flushing chat state', async () => {
     const queuedLease = lease({ expectedStatus: 'queued' });
-    const test = harness(
-      conversation({ foregroundModelProjectionOwner: undefined }),
-      [queuedLease],
-    );
+    const test = harness(conversation({ foregroundModelProjectionOwner: undefined }), [
+      queuedLease,
+    ]);
 
     await expect(recoverInterruptedForegroundModelExecutions(test.dependencies)).resolves.toEqual([
       { kind: 'recovered', runId: 'run-1', status: 'cancelled' },
     ]);
-    expect(test.complete).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'cancelled' }),
-    );
+    expect(test.complete).toHaveBeenCalledWith(expect.objectContaining({ status: 'cancelled' }));
     expect(test.flushChatState).not.toHaveBeenCalled();
     expect(test.releaseProjection).toHaveBeenCalledTimes(1);
   });

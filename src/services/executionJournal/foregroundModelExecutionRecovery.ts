@@ -24,6 +24,12 @@ import type {
   ForegroundModelExecutionLease,
   ForegroundModelTerminalStatus,
 } from './foregroundModelExecutionTypes';
+import {
+  readToolEffectRestartDisposition,
+  type ResolveToolEffectRestartDisposition,
+  type ToolEffectRestartDisposition,
+} from './toolEffectRestartDisposition';
+import { projectToolCallAfterRestart } from './toolEffectRestartProjection';
 
 const INTERRUPTED_RESPONSE_TEXT =
   'Response interrupted because the app restarted before completion.';
@@ -49,6 +55,7 @@ export type ForegroundModelRecoveryBlockReason =
 interface InterruptedToolProjection {
   assistantMessageId: string;
   toolCallId: string;
+  disposition: ToolEffectRestartDisposition;
 }
 
 export interface ForegroundModelRecoveryPlan {
@@ -100,8 +107,7 @@ const DEFAULT_DEPENDENCIES: ForegroundModelRecoveryDependencies = {
   mutateProjection: mutateForegroundModelProjectionForRecovery,
   flushChatState: flushChatStorePersistenceNow,
   complete: completeForegroundModelExecution,
-  isCurrentProcessRun: (lease) =>
-    isForegroundModelExecutionOwnedByCurrentProcess(lease.runId),
+  isCurrentProcessRun: (lease) => isForegroundModelExecutionOwnedByCurrentProcess(lease.runId),
   releaseProjection: (lease) =>
     releaseForegroundModelProjection({
       conversationId: lease.conversationId,
@@ -133,12 +139,29 @@ function assistantMessagesInRequestSlice(
   return requestSlice.filter((message) => message.role === 'assistant');
 }
 
-function activeToolCalls(messages: ReadonlyArray<Message>): InterruptedToolProjection[] {
+function activeToolCalls(
+  messages: ReadonlyArray<Message>,
+  input: {
+    conversationId: string;
+    taskId: string | null;
+    resolveToolEffect: ResolveToolEffectRestartDisposition;
+  },
+): InterruptedToolProjection[] {
   const interrupted: InterruptedToolProjection[] = [];
   for (const message of messages) {
     for (const toolCall of message.toolCalls ?? []) {
       if (toolCall.status === 'pending' || toolCall.status === 'running') {
-        interrupted.push({ assistantMessageId: message.id, toolCallId: toolCall.id });
+        interrupted.push({
+          assistantMessageId: message.id,
+          toolCallId: toolCall.id,
+          disposition: input.resolveToolEffect({
+            conversationId: input.conversationId,
+            taskId: input.taskId,
+            toolCallId: toolCall.id,
+            toolName: toolCall.name,
+            argumentsText: toolCall.arguments,
+          }),
+        });
       }
     }
   }
@@ -165,6 +188,7 @@ function blocked(
 export function planForegroundModelRestartRecovery(
   lease: ForegroundModelExecutionLease,
   conversation: Conversation | undefined,
+  resolveToolEffect: ResolveToolEffectRestartDisposition = () => ({ kind: 'not_dispatched' }),
 ): ForegroundModelRecoveryPlan | ForegroundModelRecoveryBlockedResult {
   if (!conversation) return blocked(lease, 'conversation_missing');
   if (conversation.id !== lease.conversationId) {
@@ -206,17 +230,24 @@ export function planForegroundModelRestartRecovery(
   }
 
   const ownedAssistantMessages = assistantMessages.slice(anchorIndex);
-  const interruptedTools = activeToolCalls(ownedAssistantMessages);
+  const interruptedTools = activeToolCalls(ownedAssistantMessages, {
+    conversationId: lease.conversationId,
+    taskId: lease.taskId,
+    resolveToolEffect,
+  });
   const projection =
     [...ownedAssistantMessages].reverse().find((message) => !message.subAgentEvent) ??
     ownedAssistantMessages.at(-1)!;
-  if (hasCompleteFinalAssistantMetadata(projection) && interruptedTools.length === 0) {
+  if (
+    hasCompleteFinalAssistantMetadata(projection) &&
+    interruptedTools.every((tool) => tool.disposition.kind === 'verified')
+  ) {
     return {
       lease,
       status: 'succeeded',
       projectionMessageId: projection.id,
       shouldInsertInterruptionText: false,
-      interruptedTools: [],
+      interruptedTools,
     };
   }
 
@@ -235,23 +266,33 @@ function applyRecoveryPlan(
   conversation: Conversation,
   timestamp: number,
 ): Conversation {
-  if (plan.status !== 'failed' || !plan.interruptedAssistantMetadata) return conversation;
-  const interruptedToolKeys = new Set(
-    plan.interruptedTools.map((tool) => `${tool.assistantMessageId}\u0000${tool.toolCallId}`),
+  if (
+    plan.status !== 'failed' &&
+    plan.interruptedTools.every((tool) => tool.disposition.kind !== 'verified')
+  ) {
+    return conversation;
+  }
+  const interruptedToolsByKey = new Map(
+    plan.interruptedTools.map((tool) => [
+      `${tool.assistantMessageId}\u0000${tool.toolCallId}`,
+      tool.disposition,
+    ]),
   );
   const messages = conversation.messages.map((message) => {
-    const toolCalls = message.toolCalls?.map((toolCall) =>
-      interruptedToolKeys.has(`${message.id}\u0000${toolCall.id}`)
-        ? {
-            ...toolCall,
-            status: 'failed' as const,
-            error: INTERRUPTED_TOOL_ERROR,
-            updatedAt: timestamp,
-            completedAt: timestamp,
-          }
-        : toolCall,
-    );
+    const toolCalls = message.toolCalls?.map((toolCall) => {
+      const disposition = interruptedToolsByKey.get(`${message.id}\u0000${toolCall.id}`);
+      if (!disposition) return toolCall;
+      return projectToolCallAfterRestart({
+        toolCall,
+        disposition,
+        timestamp,
+        interruptedErrorMessage: INTERRUPTED_TOOL_ERROR,
+      }).toolCall;
+    });
     if (message.id !== plan.projectionMessageId) {
+      return toolCalls === message.toolCalls ? message : { ...message, toolCalls };
+    }
+    if (plan.status !== 'failed' || !plan.interruptedAssistantMetadata) {
       return toolCalls === message.toolCalls ? message : { ...message, toolCalls };
     }
     return {
@@ -264,6 +305,9 @@ function applyRecoveryPlan(
       ),
     };
   });
+  if (plan.status !== 'failed') {
+    return { ...conversation, messages, updatedAt: Math.max(conversation.updatedAt, timestamp) };
+  }
   return {
     ...conversation,
     messages,
@@ -293,7 +337,11 @@ function mutateForegroundModelProjectionForRecovery(
     conversationId: lease.conversationId,
     owner: foregroundModelProjectionOwnerForLease(lease),
     mutate: (conversation) => {
-      const plan = planForegroundModelRestartRecovery(lease, conversation);
+      const plan = planForegroundModelRestartRecovery(
+        lease,
+        conversation,
+        readToolEffectRestartDisposition,
+      );
       if ('kind' in plan) return { kind: 'rejected', value: plan };
       const nextConversation = applyRecoveryPlan(plan, conversation, timestamp);
       return {
@@ -365,43 +413,43 @@ export async function recoverInterruptedForegroundModelExecutions(
     });
     if (leases.length === 0) break;
     for (const lease of leases) {
-    if (dependencies.isCurrentProcessRun(lease)) continue;
-    const mutation = dependencies.mutateProjection(lease, timestamp);
-    if (mutation.kind === 'blocked') {
-      if (PERMANENT_PROJECTION_BLOCK_REASONS.has(mutation.reason)) {
-        const terminalStatus = lease.expectedStatus === 'queued' ? 'cancelled' : 'failed';
-        try {
-          await dependencies.complete({
-            lease,
-            status: terminalStatus,
-            projectionMessageId: lease.assistantMessageId,
-            projectionState: {
-              recovery:
-                terminalStatus === 'cancelled'
-                  ? 'unclaimed_before_model'
-                  : 'unrecoverable_projection',
+      if (dependencies.isCurrentProcessRun(lease)) continue;
+      const mutation = dependencies.mutateProjection(lease, timestamp);
+      if (mutation.kind === 'blocked') {
+        if (PERMANENT_PROJECTION_BLOCK_REASONS.has(mutation.reason)) {
+          const terminalStatus = lease.expectedStatus === 'queued' ? 'cancelled' : 'failed';
+          try {
+            await dependencies.complete({
+              lease,
+              status: terminalStatus,
+              projectionMessageId: lease.assistantMessageId,
+              projectionState: {
+                recovery:
+                  terminalStatus === 'cancelled'
+                    ? 'unclaimed_before_model'
+                    : 'unrecoverable_projection',
+                runId: lease.runId,
+                reason: mutation.reason,
+              },
+            });
+            const release = dependencies.releaseProjection(lease);
+            if (release === 'released') {
+              await dependencies.flushChatState();
+            }
+            results.push({
+              kind: 'recovered',
               runId: lease.runId,
-              reason: mutation.reason,
-            },
-          });
-          const release = dependencies.releaseProjection(lease);
-          if (release === 'released') {
-            await dependencies.flushChatState();
+              status: terminalStatus,
+            });
+          } catch (error: unknown) {
+            results.push(blocked(lease, classifyCompletionError(error)));
           }
-          results.push({
-            kind: 'recovered',
-            runId: lease.runId,
-            status: terminalStatus,
-          });
-        } catch (error: unknown) {
-          results.push(blocked(lease, classifyCompletionError(error)));
+          continue;
         }
+        results.push(mutation);
         continue;
       }
-      results.push(mutation);
-      continue;
-    }
-    applied.push(mutation);
+      applied.push(mutation);
     }
     const last = leases.at(-1)!;
     after = { createdAt: last.createdAt, runId: last.runId };
@@ -411,10 +459,7 @@ export async function recoverInterruptedForegroundModelExecutions(
     try {
       await dependencies.flushChatState();
     } catch {
-      return [
-        ...results,
-        ...applied.map(({ plan }) => blocked(plan.lease, 'journal_unavailable')),
-      ];
+      return [...results, ...applied.map(({ plan }) => blocked(plan.lease, 'journal_unavailable'))];
     }
   }
 
@@ -448,9 +493,7 @@ export async function recoverInterruptedForegroundModelExecutions(
       await dependencies.flushChatState();
       results.push(...released.map(({ result }) => result));
     } catch {
-      results.push(
-        ...released.map(({ plan }) => blocked(plan.lease, 'journal_unavailable')),
-      );
+      results.push(...released.map(({ plan }) => blocked(plan.lease, 'journal_unavailable')));
     }
   }
   return results;

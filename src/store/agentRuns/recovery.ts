@@ -13,8 +13,9 @@ import {
 } from '../../services/agents/agentRunStateModel';
 import { updateAgentRunControlGraphAsyncWorkState } from '../../services/agents/agentControlGraphState';
 import { buildRecoveredAgentRunStateAfterAppRestart } from '../../engine/graph/interruptedRunRecovery';
+import type { ResolveToolEffectRestartDisposition } from '../../services/executionJournal/toolEffectRestartDisposition';
 import { appendAgentCheckpoint } from './shared';
-import { settleActiveToolCallsInAgentRunMessages } from './toolCalls';
+import { recoverActiveToolCallsAfterRestart } from './toolCalls';
 
 const INTERRUPTED_TOOL_CALL_ERROR =
   'Tool call was interrupted because the app restarted before completion.';
@@ -22,7 +23,10 @@ const INTERRUPTED_TOOL_CALL_ERROR =
 export function recoverInterruptedAgentRunsInConversation(
   conversation: Conversation,
   activeSubAgents: SubAgentSnapshot[],
-  params?: { timestamp?: number },
+  params?: {
+    timestamp?: number;
+    resolveToolEffect?: ResolveToolEffectRestartDisposition;
+  },
 ): Conversation {
   const timestamp = params?.timestamp ?? Date.now();
   let didUpdateConversation = false;
@@ -44,6 +48,7 @@ export function recoverInterruptedAgentRunsInConversation(
     }
 
     didUpdateConversation = true;
+    let recoveredCompletedToolCount = 0;
     let interruptedToolCount = 0;
 
     if (recoveredState.status === 'running') {
@@ -85,18 +90,34 @@ export function recoverInterruptedAgentRunsInConversation(
       );
     }
 
-    const interruptedToolUpdate = settleActiveToolCallsInAgentRunMessages({
+    const interruptedToolUpdate = recoverActiveToolCallsAfterRestart({
+      conversationId: conversation.id,
       messages: nextMessages,
       run,
       timestamp,
-      errorMessage: INTERRUPTED_TOOL_CALL_ERROR,
+      interruptedErrorMessage: INTERRUPTED_TOOL_CALL_ERROR,
+      resolveToolEffect: params?.resolveToolEffect ?? (() => ({ kind: 'not_dispatched' })),
     });
-    if (interruptedToolUpdate.settledCount > 0) {
+    if (interruptedToolUpdate.completedCount > 0 || interruptedToolUpdate.failedCount > 0) {
       nextMessages = interruptedToolUpdate.messages;
-      interruptedToolCount = interruptedToolUpdate.settledCount;
+      recoveredCompletedToolCount = interruptedToolUpdate.completedCount;
+      interruptedToolCount = interruptedToolUpdate.failedCount;
     }
 
-    const finalPhase = recoveredState.status === 'completed' ? 'deliver' : run.currentPhase;
+    const terminalRecoveredState =
+      recoveredState.status === 'completed' && interruptedToolCount > 0
+        ? {
+            ...recoveredState,
+            status: 'failed' as const,
+            latestSummary:
+              'A final response was preserved, but an active tool lacked a verified terminal effect after restart.',
+            checkpointTitle: 'Run effect requires recovery',
+            checkpointDetail:
+              'The run cannot remain completed until the interrupted tool effect is reconciled.',
+          }
+        : recoveredState;
+
+    const finalPhase = terminalRecoveredState.status === 'completed' ? 'deliver' : run.currentPhase;
     const nextControlGraph = updateAgentRunControlGraphAsyncWorkState(run.controlGraph, {
       awaitingBackgroundWorkers: false,
       pendingOperations: [],
@@ -104,13 +125,17 @@ export function recoverInterruptedAgentRunsInConversation(
     });
     let nextRun: AgentRun = {
       ...run,
-      status: recoveredState.status,
+      status: terminalRecoveredState.status,
       controlGraph: nextControlGraph,
       currentPhase: finalPhase,
       completedAt: timestamp,
       updatedAt: Math.max(run.updatedAt, timestamp),
-      latestSummary: recoveredState.latestSummary,
+      latestSummary: terminalRecoveredState.latestSummary,
       summary: mergeAgentRunSummary(run.summary, {
+        completedTools:
+          recoveredCompletedToolCount > 0
+            ? mergeAgentRunSummary(run.summary).completedTools + recoveredCompletedToolCount
+            : undefined,
         failedTools:
           interruptedToolCount > 0
             ? mergeAgentRunSummary(run.summary).failedTools + interruptedToolCount
@@ -120,17 +145,17 @@ export function recoverInterruptedAgentRunsInConversation(
       phases: transitionAgentRunPhases(
         run.phases,
         finalPhase,
-        recoveredState.status === 'completed'
+        terminalRecoveredState.status === 'completed'
           ? 'completed'
-          : recoveredState.status === 'failed'
+          : terminalRecoveredState.status === 'failed'
             ? 'failed'
             : 'skipped',
         timestamp,
-        recoveredState.latestSummary,
+        terminalRecoveredState.latestSummary,
       ),
     };
 
-    if (recoveredState.status !== 'completed') {
+    if (terminalRecoveredState.status !== 'completed') {
       nextRun = {
         ...nextRun,
         phases: skipRemainingAgentRunPhases(nextRun.phases, finalPhase, timestamp),
@@ -140,8 +165,8 @@ export function recoverInterruptedAgentRunsInConversation(
     return appendAgentCheckpoint(nextRun, {
       timestamp,
       kind: 'run',
-      title: recoveredState.checkpointTitle,
-      detail: recoveredState.checkpointDetail,
+      title: terminalRecoveredState.checkpointTitle,
+      detail: terminalRecoveredState.checkpointDetail,
     });
   });
 
