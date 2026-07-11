@@ -752,7 +752,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
     save: '保存',
     clearTitle: 'すべてのメモリーをクリア',
     clearConfirm:
-      'これにより、グローバル メモリーと日次ノートがすべて永久に削除されます。これは元に戻せません。',
+      '保存されたすべてのファクト、エピソード、タスク、メモリーブロックが完全に削除されます。この操作は元に戻せません。',
     clearAction: 'すべてクリア',
     emptyHint:
       'メモリーは空です。チャット中に AI がここにノートを追加します。直接編集することもできます。',

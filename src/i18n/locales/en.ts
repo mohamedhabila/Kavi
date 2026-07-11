@@ -767,7 +767,7 @@ export const en: TranslationMap = {
     save: 'Save',
     clearTitle: 'Clear All Memory',
     clearConfirm:
-      'This will permanently delete all global memory and daily notes. This cannot be undone.',
+      'This permanently deletes all remembered facts, episodes, tasks, and memory blocks. This cannot be undone.',
     clearAction: 'Clear All',
     emptyHint:
       'Memory is empty. The AI will add notes here as you chat. You can also edit directly.',

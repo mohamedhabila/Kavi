@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Kavi — Memory Viewer / Editor Screen
 // ---------------------------------------------------------------------------
-// Lets users view, edit and manage persistent memory (MEMORY.md + daily).
+// Lets users inspect and manage the canonical structured memory system.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from 'react-native';
@@ -13,13 +13,7 @@ import {
   getMemoryLastUpdatedAt,
   subscribeToMemoryChanges,
 } from '../services/memory/changeNotifications';
-import {
-  readGlobalMemory,
-  writeGlobalMemory,
-  listDailyMemoryFiles,
-  readDailyMemory,
-  clearAllMemory,
-} from '../services/memory/store';
+import { resetCanonicalMemoryForManagement } from '../services/memory/memoryReset';
 import {
   queryMemoryFactsForManagement,
   forgetMemoryFactForManagement,
@@ -45,8 +39,6 @@ import { useBackToChat } from '../navigation/useBackToChat';
 function resolveRouteTab(tabParam: unknown): Tab {
   if (tabParam === 'blocks') return 'blocks';
   if (tabParam === 'facts') return 'facts';
-  if (tabParam === 'global') return 'global';
-  if (tabParam === 'daily') return 'daily';
   return 'overview';
 }
 
@@ -64,15 +56,8 @@ export const MemoryScreen: React.FC = () => {
   const [diagnostics, setDiagnostics] = useState<MemoryDiagnostics | null>(null);
   const [overviewSearch, setOverviewSearch] = useState(routeQuery);
   const [overviewFacts, setOverviewFacts] = useState<FactRow[]>([]);
-  const [globalContent, setGlobalContent] = useState('');
-  const [originalContent, setOriginalContent] = useState('');
-  const [dailyFiles, setDailyFiles] = useState<string[]>([]);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [dailyContent, setDailyContent] = useState('');
-  const [dirty, setDirty] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(() => getMemoryLastUpdatedAt());
-  const [hasExternalGlobalUpdate, setHasExternalGlobalUpdate] = useState(false);
 
   // Facts tab state.
   const [facts, setFacts] = useState<FactRow[]>([]);
@@ -84,17 +69,7 @@ export const MemoryScreen: React.FC = () => {
   const [blocks, setBlocks] = useState<BlockRow[]>([]);
   const [blockDrafts, setBlockDrafts] = useState<Record<string, string>>({});
 
-  const dirtyRef = useRef(false);
-  const selectedDateRef = useRef<string | null>(null);
   const overviewRequestEpochRef = useRef(0);
-
-  useEffect(() => {
-    dirtyRef.current = dirty;
-  }, [dirty]);
-
-  useEffect(() => {
-    selectedDateRef.current = selectedDate;
-  }, [selectedDate]);
 
   useEffect(() => {
     if (!route.params?.tab && !routeQuery) return;
@@ -104,49 +79,6 @@ export const MemoryScreen: React.FC = () => {
       setFactsFilter(routeQuery);
     }
   }, [route.params?.tab, routeQuery]);
-
-  const loadGlobalMemory = useCallback(async (preserveDirty = false) => {
-    if (preserveDirty && dirtyRef.current) {
-      setHasExternalGlobalUpdate(true);
-      return;
-    }
-
-    const content = await readGlobalMemory();
-    const text = content || '';
-    setGlobalContent(text);
-    setOriginalContent(text);
-    setDirty(false);
-    setHasExternalGlobalUpdate(false);
-  }, []);
-
-  const loadDailyContent = useCallback(async (date: string) => {
-    setSelectedDate(date);
-    const content = await readDailyMemory(date);
-    setDailyContent(content || '(empty)');
-  }, []);
-
-  const loadDailyList = useCallback(
-    async (preferredDate?: string | null) => {
-      const files = listDailyMemoryFiles();
-      setDailyFiles(files);
-
-      const nextSelection =
-        preferredDate && files.includes(preferredDate)
-          ? preferredDate
-          : selectedDateRef.current && files.includes(selectedDateRef.current)
-            ? selectedDateRef.current
-            : files[0] || null;
-
-      if (!nextSelection) {
-        setSelectedDate(null);
-        setDailyContent('');
-        return;
-      }
-
-      await loadDailyContent(nextSelection);
-    },
-    [loadDailyContent],
-  );
 
   const loadFacts = useCallback(() => {
     const subject = factsFilter.trim();
@@ -228,10 +160,9 @@ export const MemoryScreen: React.FC = () => {
   }, []);
 
   const refreshMemory = useCallback(
-    async (preserveDirty = true) => {
+    async () => {
       setIsRefreshing(true);
       try {
-        await Promise.all([loadGlobalMemory(preserveDirty), loadDailyList()]);
         await loadOverviewSnapshot();
         loadFacts();
         loadBlocks();
@@ -241,7 +172,7 @@ export const MemoryScreen: React.FC = () => {
         setIsRefreshing(false);
       }
     },
-    [loadDailyList, loadGlobalMemory, loadOverviewSnapshot, loadFacts, loadBlocks, loadEpisodes],
+    [loadOverviewSnapshot, loadFacts, loadBlocks, loadEpisodes],
   );
 
   useEffect(() => {
@@ -251,46 +182,30 @@ export const MemoryScreen: React.FC = () => {
   }, [tab, overviewSearch, loadOverviewSnapshot, loadOverviewFacts]);
 
   useEffect(() => {
-    void refreshMemory(false);
+    void refreshMemory();
   }, [refreshMemory]);
 
   useFocusEffect(
     useCallback(() => {
-      void refreshMemory(true);
+      void refreshMemory();
       return undefined;
     }, [refreshMemory]),
   );
 
   useEffect(() => {
     const unsubscribe = subscribeToMemoryChanges((event) => {
-      if (event.scope === 'global' || event.scope === 'all') {
-        void loadGlobalMemory(true).then(() => {
-          setLastSyncedAt(event.updatedAt);
-        });
+      void loadOverviewSnapshot();
+      if (tab === 'overview') {
+        loadOverviewFacts(overviewSearch);
       }
-
-      if (event.scope === 'daily' || event.scope === 'all') {
-        void loadDailyList(selectedDateRef.current).then(() => {
-          setLastSyncedAt(event.updatedAt);
-        });
-      }
-
-      if (event.scope === 'structured' || event.scope === 'conversation' || event.scope === 'all') {
-        void loadOverviewSnapshot();
-        if (tab === 'overview') {
-          loadOverviewFacts(overviewSearch);
-        }
-        loadFacts();
-        loadBlocks();
-        loadEpisodes();
-        setLastSyncedAt(event.updatedAt);
-      }
+      loadFacts();
+      loadBlocks();
+      loadEpisodes();
+      setLastSyncedAt(event.updatedAt);
     });
 
     return unsubscribe;
   }, [
-    loadDailyList,
-    loadGlobalMemory,
     loadOverviewSnapshot,
     loadOverviewFacts,
     loadFacts,
@@ -300,15 +215,6 @@ export const MemoryScreen: React.FC = () => {
     overviewSearch,
   ]);
 
-  const handleSave = useCallback(() => {
-    writeGlobalMemory(globalContent);
-    setOriginalContent(globalContent);
-    setDirty(false);
-    setHasExternalGlobalUpdate(false);
-    setLastSyncedAt(Date.now());
-    Alert.alert(t('memory.saved'), t('memory.savedDesc'));
-  }, [globalContent, t]);
-
   const handleClearAll = useCallback(() => {
     Alert.alert(t('memory.clearTitle'), t('memory.clearConfirm'), [
       { text: t('common.cancel'), style: 'cancel' },
@@ -316,27 +222,13 @@ export const MemoryScreen: React.FC = () => {
         text: t('memory.clearAction'),
         style: 'destructive',
         onPress: () => {
-          clearAllMemory();
-          setGlobalContent('');
-          setOriginalContent('');
-          setDailyFiles([]);
-          setDailyContent('');
-          setSelectedDate(null);
-          setDirty(false);
-          setHasExternalGlobalUpdate(false);
+          resetCanonicalMemoryForManagement();
+          void refreshMemory();
           setLastSyncedAt(Date.now());
         },
       },
     ]);
-  }, [t]);
-
-  const handleGlobalChange = useCallback(
-    (text: string) => {
-      setGlobalContent(text);
-      setDirty(text !== originalContent);
-    },
-    [originalContent],
-  );
+  }, [refreshMemory, t]);
 
   // Re-query when facts filter / pinned toggle changes.
   useEffect(() => {
@@ -397,8 +289,6 @@ export const MemoryScreen: React.FC = () => {
     [blockDrafts, loadBlocks],
   );
 
-  const charCount = globalContent.length;
-  const lineCount = globalContent ? globalContent.split('\n').length : 0;
   const memoryStatus = isRefreshing
     ? t('memory.refreshing')
     : lastSyncedAt
@@ -409,39 +299,26 @@ export const MemoryScreen: React.FC = () => {
     <MemoryScreenView
       blockDrafts={blockDrafts}
       blocks={blocks}
-      charCount={charCount}
       colors={colors}
-      dailyContent={dailyContent}
-      dailyFiles={dailyFiles}
       diagnostics={diagnostics}
-      dirty={dirty}
       episodes={episodes}
       facts={facts}
       factsFilter={factsFilter}
       factsPinnedOnly={factsPinnedOnly}
-      globalContent={globalContent}
       handleBack={handleBack}
       handleBlockDraftChange={handleBlockDraftChange}
       handleBlockSave={handleBlockSave}
       handleClearAll={handleClearAll}
       handleFactForget={handleFactForget}
       handleFactToggleStar={handleFactToggleStar}
-      handleGlobalChange={handleGlobalChange}
-      handleSave={handleSave}
-      hasExternalGlobalUpdate={hasExternalGlobalUpdate}
-      lineCount={lineCount}
       loadBlocks={loadBlocks}
-      loadDailyContent={loadDailyContent}
-      loadDailyList={loadDailyList}
       loadFacts={loadFacts}
-      loadGlobalMemory={loadGlobalMemory}
       loadOverviewFacts={loadOverviewFacts}
       memoryStatus={memoryStatus}
       overview={overview}
       overviewFacts={overviewFacts}
       overviewSearch={overviewSearch}
       refreshMemory={refreshMemory}
-      selectedDate={selectedDate}
       setFactsFilter={setFactsFilter}
       setFactsPinnedOnly={setFactsPinnedOnly}
       setOverviewSearch={setOverviewSearch}

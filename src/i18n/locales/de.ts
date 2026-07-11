@@ -763,7 +763,7 @@ export const de: TranslationMap = mergeTranslations(en, {
     save: 'Speichern',
     clearTitle: 'Gesamten Speicher löschen',
     clearConfirm:
-      'Dies löscht dauerhaft alle globalen Speicher- und Tagesnotizen. Dies kann nicht rückgängig gemacht werden.',
+      'Dadurch werden alle gespeicherten Fakten, Episoden, Aufgaben und Speicherblöcke dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.',
     clearAction: 'Alle löschen',
     emptyHint:
       'Speicher ist leer. Die KI fügt während des Chats Notizen hinzu. Sie können auch direkt bearbeiten.',

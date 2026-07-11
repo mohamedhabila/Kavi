@@ -738,7 +738,7 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     savedDesc: '記憶已儲存。',
     save: '儲存',
     clearTitle: '清除所有記憶',
-    clearConfirm: '這會永久刪除所有全域記憶和每日筆記。無法復原。',
+    clearConfirm: '這會永久刪除所有已記住的事實、情節、任務和記憶區塊。此操作無法復原。',
     clearAction: '全部清除',
     emptyHint: '記憶為空。AI 在聊天時會在此新增筆記。你也可以直接編輯。',
     noDailyFiles: '還沒有每日筆記。這些會在對話期間自動建立。',

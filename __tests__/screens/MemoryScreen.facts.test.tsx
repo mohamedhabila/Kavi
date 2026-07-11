@@ -2,9 +2,8 @@
 // Tests — MemoryScreen Facts & Blocks tabs
 // ---------------------------------------------------------------------------
 //
-// These tests pin the structured-fact / block UI added to MemoryScreen on top
-// of the legacy global/daily file-backed editor. The memoryTools executors are
-// mocked so the UI contract is exercised without spinning up the SQLite shim.
+// The memoryTools executors are mocked so the structured UI contract is
+// exercised without spinning up the SQLite shim.
 // ---------------------------------------------------------------------------
 
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
@@ -64,17 +63,13 @@ jest.mock('../../src/theme/useAppTheme', () => ({
   AppPalette: {},
 }));
 
-jest.mock('../../src/services/memory/store', () => ({
-  readGlobalMemory: jest.fn().mockResolvedValue(''),
-  writeGlobalMemory: jest.fn(),
-  listDailyMemoryFiles: jest.fn().mockReturnValue([]),
-  readDailyMemory: jest.fn().mockResolvedValue(''),
-  clearAllMemory: jest.fn(),
-}));
-
 jest.mock('../../src/services/memory/changeNotifications', () => ({
   subscribeToMemoryChanges: (...args: any[]) => mockSubscribeToMemoryChanges(...args),
   getMemoryLastUpdatedAt: jest.fn().mockReturnValue(null),
+}));
+
+jest.mock('../../src/services/memory/memoryReset', () => ({
+  resetCanonicalMemoryForManagement: jest.fn(),
 }));
 
 const mockRecallRecentEpisodes = jest.fn();

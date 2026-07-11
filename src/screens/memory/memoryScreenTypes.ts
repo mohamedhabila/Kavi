@@ -8,7 +8,7 @@ import type { MemoryOverviewSnapshot } from '../../services/memory/memoryOvervie
 import type { AppPalette } from '../../theme/useAppTheme';
 import type { createMemoryScreenStyles } from './memoryScreenStyles';
 
-export type MemoryTab = 'overview' | 'global' | 'daily' | 'facts' | 'blocks';
+export type MemoryTab = 'overview' | 'facts' | 'blocks';
 export type MemoryFactRow = MemoryFactManagementQueryResult['facts'][number];
 export type MemoryBlockRow = MemoryBlockReadResult['blocks'][number];
 export type MemoryEpisodeRow = MemoryEpisode;

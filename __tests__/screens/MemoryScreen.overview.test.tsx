@@ -1,9 +1,11 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 import { MemoryScreen } from '../../src/screens/MemoryScreen';
 
 const mockLoadOverview = jest.fn();
 const mockLoadDiagnostics = jest.fn();
 const mockExecuteMemoryRecall = jest.fn();
+const mockResetCanonicalMemory = jest.fn();
 let mockActiveConversationId = 'conv-overview';
 let mockFocusEffectCallback: (() => void) | null = null;
 
@@ -44,17 +46,13 @@ jest.mock('../../src/theme/useAppTheme', () => ({
   }),
 }));
 
-jest.mock('../../src/services/memory/store', () => ({
-  readGlobalMemory: jest.fn(async () => ''),
-  writeGlobalMemory: jest.fn(),
-  listDailyMemoryFiles: jest.fn(() => []),
-  readDailyMemory: jest.fn(async () => ''),
-  clearAllMemory: jest.fn(),
-}));
-
 jest.mock('../../src/services/memory/changeNotifications', () => ({
   subscribeToMemoryChanges: jest.fn(() => jest.fn()),
   getMemoryLastUpdatedAt: jest.fn(() => null),
+}));
+
+jest.mock('../../src/services/memory/memoryReset', () => ({
+  resetCanonicalMemoryForManagement: () => mockResetCanonicalMemory(),
 }));
 
 jest.mock('../../src/services/memory/memoryOverview', () => ({
@@ -232,6 +230,23 @@ describe('MemoryScreen overview tab', () => {
         expect.objectContaining({ subject: 'metadata' }),
       );
     });
+  });
+
+  it('clears canonical memory only after destructive confirmation', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    const { getByLabelText } = render(<MemoryScreen />);
+
+    fireEvent.press(getByLabelText('Clear All'));
+    const destructiveAction = alertSpy.mock.calls[0]?.[2]?.find(
+      (action) => action.style === 'destructive',
+    );
+    expect(mockResetCanonicalMemory).not.toHaveBeenCalled();
+
+    await act(async () => {
+      destructiveAction?.onPress?.();
+    });
+
+    expect(mockResetCanonicalMemory).toHaveBeenCalledTimes(1);
   });
 
   it('does not commit an out-of-order diagnostics snapshot after the active thread changes', async () => {

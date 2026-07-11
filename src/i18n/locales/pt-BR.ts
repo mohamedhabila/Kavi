@@ -760,7 +760,7 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     save: 'Salvar',
     clearTitle: 'Limpar toda a memória',
     clearConfirm:
-      'Isto irá excluir permanentemente toda a memória global e notas diárias. Isso não pode ser desfeito.',
+      'Isso excluirá permanentemente todos os fatos, episódios, tarefas e blocos de memória salvos. Essa ação não pode ser desfeita.',
     clearAction: 'Limpar tudo',
     emptyHint:
       'Memória está vazia. A IA adicionará notas aqui durante o bate-papo. Você também pode editar diretamente.',

@@ -758,7 +758,7 @@ export const fr: TranslationMap = mergeTranslations(en, {
     save: 'Enregistrer',
     clearTitle: 'Effacer toute la mémoire',
     clearConfirm:
-      'Cela supprimera définitivement toute la mémoire globale et les notes quotidiennes. Cela ne peut pas être annulé.',
+      'Cela supprimera définitivement tous les faits, épisodes, tâches et blocs de mémoire enregistrés. Cette action est irréversible.',
     clearAction: 'Tout effacer',
     emptyHint:
       "La mémoire est vide. L'IA ajoutera des notes ici au fur et à mesure de votre conversation. Vous pouvez également éditer directement.",

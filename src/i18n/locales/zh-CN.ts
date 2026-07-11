@@ -739,7 +739,7 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     savedDesc: '记忆已保存。',
     save: '保存',
     clearTitle: '清除所有记忆',
-    clearConfirm: '这将永久删除所有全局记忆和日常笔记。此操作无法撤销。',
+    clearConfirm: '这将永久删除所有已记住的事实、情节、任务和记忆块。此操作无法撤销。',
     clearAction: '全部清除',
     emptyHint: '记忆为空。AI 在聊天时会在此添加笔记。你也可以直接编辑。',
     noDailyFiles: '还没有日常笔记。这些会在对话期间自动创建。',
