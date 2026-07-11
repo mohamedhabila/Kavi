@@ -7,7 +7,46 @@ import {
   isSuccessCriterionMet,
   resolveSuccessCriterionSurfaceHints,
 } from '../../../src/engine/goals/completionEvidence';
+import { buildToolEffectReceiptEvidence } from '../../../src/engine/goals/effectCompletionEvidence';
 import { createGoal } from '../../../src/engine/goals/types';
+import type { ToolEffectReceipt } from '../../../src/types/toolEffectReceipt';
+
+function verifiedArtifactEvidence(
+  path = 'artifacts/out.txt',
+  digest = `sha256:${'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'}` as const,
+): string {
+  return buildToolEffectReceiptEvidence({
+    version: 1,
+    receiptId: `ter_${'a'.repeat(32)}`,
+    toolCallId: 'call-write',
+    toolName: 'write_file',
+    transportState: 'returned',
+    effectKind: 'artifact.write',
+    effectState: 'applied',
+    verificationState: 'verified',
+    requestDigest: `sha256:${'1'.repeat(64)}`,
+    resultDigest: `sha256:${'2'.repeat(64)}`,
+    resource: { kind: 'workspace_file', id: path, digest },
+    recordedAt: 1,
+  } satisfies ToolEffectReceipt);
+}
+
+function completedExecutionEvidence(toolName: 'javascript' | 'python' = 'python'): string {
+  return buildToolEffectReceiptEvidence({
+    version: 1,
+    receiptId: `ter_${'b'.repeat(32)}`,
+    toolCallId: 'call-code',
+    toolName,
+    transportState: 'returned',
+    executionState: 'completed',
+    effectKind: 'compute.execute',
+    effectState: 'unknown',
+    verificationState: 'unverified',
+    requestDigest: `sha256:${'3'.repeat(64)}`,
+    resultDigest: `sha256:${'4'.repeat(64)}`,
+    recordedAt: 1,
+  } satisfies ToolEffectReceipt);
+}
 
 describe('completionEvidence', () => {
   it('documents supported structural criterion forms', () => {
@@ -168,7 +207,7 @@ describe('completionEvidence', () => {
       id: 'g1',
       title: 'Build',
       status: 'active',
-      evidence: ['write_file:Wrote to artifacts/out.txt'],
+      evidence: ['write_file:completed', verifiedArtifactEvidence()],
     });
 
     expect(isSuccessCriterionMet(goal, 'evidence.tool:write_file')).toBe(true);
@@ -223,9 +262,7 @@ describe('completionEvidence', () => {
       title: 'Verify',
       status: 'active',
       successCriteria: ['evidence.file_hash:artifacts/out.txt:sha256'],
-      evidence: [
-        'write_file:file_hash:artifacts/out.txt:sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-      ],
+      evidence: [verifiedArtifactEvidence()],
     });
     expect(isSuccessCriterionMet(met, 'evidence.file_hash:artifacts/out.txt:sha256')).toBe(true);
     expect(
@@ -248,7 +285,7 @@ describe('completionEvidence', () => {
       title: 'Run',
       status: 'active',
       successCriteria: ['evidence.exit_code:0'],
-      evidence: ['python:exit_code:1'],
+      evidence: ['read_file:{"exit_code":0}'],
     });
     expect(evaluateGoalEvidenceGaps([unmet])).toEqual([
       { goalId: 'g1', criterionId: 'evidence.exit_code:0' },
@@ -259,9 +296,15 @@ describe('completionEvidence', () => {
       title: 'Run',
       status: 'active',
       successCriteria: ['evidence.exit_code:0'],
-      evidence: ['python:exit_code:0'],
+      evidence: [completedExecutionEvidence()],
     });
     expect(isSuccessCriterionMet(met, 'evidence.exit_code:0')).toBe(true);
+    expect(
+      isSuccessCriterionMet(
+        { ...met, evidence: ['web_fetch:effect_receipt:{"executionState":"completed"}'] },
+        'evidence.exit_code:0',
+      ),
+    ).toBe(false);
   });
 
   it('ignores completed goals and satisfied criteria', () => {

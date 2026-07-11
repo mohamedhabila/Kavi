@@ -16,6 +16,7 @@ import {
 import type { AgentGoal, AgentGoalMutation, AgentGoalStatus } from './types';
 import { createGoal, isBlockingGoal } from './types';
 import { isRegisteredToolName } from '../tools/toolNameNormalization';
+import { EFFECT_RECEIPT_EVIDENCE_PREFIX } from './effectCompletionEvidence';
 
 const INTERNAL_DELIVERABLE_TOOL_NAMES = new Set([
   GOAL_BOOTSTRAP_TOOL_NAME,
@@ -23,6 +24,7 @@ const INTERNAL_DELIVERABLE_TOOL_NAMES = new Set([
   'tool_describe',
 ]);
 const REGISTERED_NON_TOOL_EVIDENCE_PREFIXES = new Set(['worker']);
+const CODE_OWNED_EVIDENCE_PREFIXES = [EFFECT_RECEIPT_EVIDENCE_PREFIX] as const;
 
 export type GoalValidationErrorCode =
   | 'missing_title'
@@ -30,6 +32,7 @@ export type GoalValidationErrorCode =
   | 'missing_success_criteria'
   | 'weak_success_criteria'
   | 'invalid_success_criteria'
+  | 'invalid_evidence'
   | 'goal_not_found'
   | 'duplicate_id'
   | 'dependency_missing'
@@ -164,6 +167,14 @@ function findUnknownEvidencePrefixCriteria(
           !isRegisteredToolName(prefixToken),
       );
     });
+}
+
+function findCodeOwnedEvidence(
+  patch: AgentGoalMutation['goals'][number],
+): ReadonlyArray<string> {
+  return (patch.evidence ?? []).filter((evidence) =>
+    CODE_OWNED_EVIDENCE_PREFIXES.some((prefix) => evidence.startsWith(prefix)),
+  );
 }
 
 function readEvidenceToolCriterionToken(criterion: string): string | null {
@@ -339,6 +350,14 @@ export function validateGoalMutation(
 
   for (let i = 0; i < mutation.goals.length; i++) {
     const g = mutation.goals[i];
+    const codeOwnedEvidence = findCodeOwnedEvidence(g);
+    if (codeOwnedEvidence.length > 0) {
+      errors.push({
+        goalId: g.id,
+        code: 'invalid_evidence',
+        message: 'Tool effect receipt evidence is code-owned and cannot be supplied by update_goals.',
+      });
+    }
 
     if (mutation.action === 'add') {
       if (!g.title?.trim()) {

@@ -59,7 +59,8 @@ export const UPDATE_GOALS_TOOL: ToolDefinition = {
       evidence: {
         type: 'array',
         items: { type: 'string' },
-        description: 'Optional evidence strings to append.',
+        description:
+          'Optional contextual evidence strings to append. Tool-effect receipts and artifact, hash, or execution completion evidence are code-owned and cannot be supplied here.',
       },
       requiredCapabilities: {
         type: 'array',

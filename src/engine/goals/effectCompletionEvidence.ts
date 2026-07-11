@@ -3,6 +3,7 @@ import {
   TOOL_EFFECT_STATES,
   TOOL_EFFECT_TRANSPORT_STATES,
   TOOL_EFFECT_VERIFICATION_STATES,
+  TOOL_EXECUTION_STATES,
   type ToolEffectDigest,
   type ToolEffectKind,
   type ToolEffectReceipt,
@@ -29,6 +30,7 @@ const RECEIPT_KEYS = new Set([
   'transportState',
   'effectKind',
   'effectState',
+  'executionState',
   'verificationState',
   'requestDigest',
   'resultDigest',
@@ -54,6 +56,7 @@ export interface EffectReceiptEvidence {
   transportState: ToolEffectReceipt['transportState'];
   effectKind: ToolEffectKind;
   effectState: ToolEffectReceipt['effectState'];
+  executionState?: ToolEffectReceipt['executionState'];
   verificationState: ToolEffectReceipt['verificationState'];
   requestDigest: ToolEffectDigest;
   resultDigest: ToolEffectDigest;
@@ -169,6 +172,7 @@ export function buildToolEffectReceiptEvidence(receipt: ToolEffectReceipt): stri
     transportState: receipt.transportState,
     effectKind: receipt.effectKind,
     effectState: receipt.effectState,
+    ...(receipt.executionState ? { executionState: receipt.executionState } : {}),
     verificationState: receipt.verificationState,
     requestDigest: receipt.requestDigest,
     resultDigest: receipt.resultDigest,
@@ -194,6 +198,8 @@ export function parseToolEffectReceiptEvidence(value: string): EffectReceiptEvid
     ) ||
     !isEffectKind(record.effectKind) ||
     !TOOL_EFFECT_STATES.includes(record.effectState as ToolEffectReceipt['effectState']) ||
+    (record.executionState !== undefined &&
+      !TOOL_EXECUTION_STATES.includes(record.executionState as never)) ||
     !TOOL_EFFECT_VERIFICATION_STATES.includes(
       record.verificationState as ToolEffectReceipt['verificationState'],
     ) ||
@@ -209,6 +215,9 @@ export function parseToolEffectReceiptEvidence(value: string): EffectReceiptEvid
     transportState: record.transportState as ToolEffectReceipt['transportState'],
     effectKind: record.effectKind,
     effectState: record.effectState as ToolEffectReceipt['effectState'],
+    ...(record.executionState
+      ? { executionState: record.executionState as ToolEffectReceipt['executionState'] }
+      : {}),
     verificationState: record.verificationState as ToolEffectReceipt['verificationState'],
     requestDigest: record.requestDigest,
     resultDigest: record.resultDigest,

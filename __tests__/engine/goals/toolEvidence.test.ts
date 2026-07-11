@@ -11,11 +11,7 @@ describe('toolEvidence', () => {
       }),
     });
 
-    expect(evidence).toEqual([
-      'python:execution:success',
-      'python:artifact:reports/analysis.json',
-      'python:artifact:reports/summary.md',
-    ]);
+    expect(evidence).toEqual(['python:execution:success']);
   });
 
   it('falls back to truncated generic evidence for non-json python output', () => {
@@ -27,13 +23,13 @@ describe('toolEvidence', () => {
     expect(evidence).toEqual(['python:plain output']);
   });
 
-  it('records python exit_code in structural evidence tokens', () => {
+  it('does not turn interpreter-controlled text into completion evidence tokens', () => {
     const evidence = buildToolGoalEvidenceStrings({
       toolName: 'python',
       content: JSON.stringify({ status: 'completed', exitCode: 0 }),
     });
 
-    expect(evidence).toContain('python:exit_code:0');
+    expect(evidence).toEqual(['python:execution:success']);
   });
 
   it('builds generic tool evidence for non-python tools', () => {
@@ -100,7 +96,7 @@ describe('toolEvidence', () => {
     expect(evidence).toContain('photos_latest:[{"id":"photo-1"}]');
   });
 
-  it('emits structural file hash evidence from workspace write results', () => {
+  it('keeps workspace result fields as untrusted structural output', () => {
     const evidence = buildToolGoalEvidenceStrings({
       toolName: 'write_file',
       content: JSON.stringify({
@@ -111,9 +107,7 @@ describe('toolEvidence', () => {
       }),
     });
 
-    expect(evidence).toContain(
-      'write_file:file_hash:artifacts/state-carry.txt:sha256:ded15d058dd8e304f816979f5e6b1ac6de4c6bcc183a231941ac1c2f59e77b62',
-    );
+    expect(evidence.some((entry) => entry.includes(':file_hash:'))).toBe(false);
     expect(evidence).toContain(
       'write_file:{"status":"written","path":"artifacts/state-carry.txt","size":17,"sha256":"ded15d058dd8e304f816979f5e6b1ac6de4c6bcc183a231941ac1c2f59e77b62"}',
     );

@@ -22,24 +22,6 @@ function buildPythonGoalEvidenceStrings(content: string): string[] {
     const status = record.status === 'completed' ? 'success' : 'result';
     strings.push(`python:execution:${status}`);
 
-    const exitCode = record.exitCode ?? record.exit_code;
-    if (typeof exitCode === 'number' && Number.isInteger(exitCode)) {
-      strings.push(`python:exit_code:${exitCode}`);
-    }
-
-    const files = record.files;
-    if (Array.isArray(files)) {
-      for (const file of files) {
-        if (!file || typeof file !== 'object') {
-          continue;
-        }
-        const path = (file as Record<string, unknown>).path;
-        if (typeof path === 'string' && path.trim().length > 0) {
-          strings.push(`python:artifact:${path.trim()}`);
-        }
-      }
-    }
-
     return strings.length > 0 ? strings : [`python:${truncateExcerpt(content)}`];
   } catch {
     return [`python:${truncateExcerpt(content)}`];
@@ -215,41 +197,6 @@ function buildScalarPathEvidenceStrings(toolName: string, content: string): stri
   }
 }
 
-function normalizeSha256Digest(value: unknown): string | null {
-  if (typeof value !== 'string') {
-    return null;
-  }
-  const normalized = value.trim().replace(/^sha256:/i, '').toLowerCase();
-  return /^[0-9a-f]{64}$/.test(normalized) ? normalized : null;
-}
-
-function buildFileHashEvidenceString(toolName: string, content: string): string | null {
-  try {
-    const parsed = JSON.parse(content) as unknown;
-    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
-      return null;
-    }
-
-    const record = parsed as Record<string, unknown>;
-    const path = typeof record.path === 'string' ? record.path.trim() : '';
-    if (!path) {
-      return null;
-    }
-
-    const digest =
-      normalizeSha256Digest(record.sha256) ||
-      normalizeSha256Digest(record.digest) ||
-      normalizeSha256Digest(record.hash);
-    if (!digest) {
-      return null;
-    }
-
-    return `${toolName}:file_hash:${path}:sha256:${digest}`;
-  } catch {
-    return null;
-  }
-}
-
 export function buildToolGoalEvidenceStrings(params: {
   toolName: string;
   content: string;
@@ -262,7 +209,6 @@ export function buildToolGoalEvidenceStrings(params: {
     new Set(
       [
         `${params.toolName}:${truncateExcerpt(params.content)}`,
-        buildFileHashEvidenceString(params.toolName, params.content),
         buildCompactJsonArrayEvidenceString(params.toolName, params.content),
         buildCompactJsonObjectEvidenceString(params.toolName, params.content),
         ...buildScalarPathEvidenceStrings(params.toolName, params.content),

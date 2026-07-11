@@ -148,7 +148,17 @@ function meetsEvidenceArtifactCriterion(goal: AgentGoal, pathToken: string): boo
   if (!normalized) {
     return false;
   }
-  return goal.evidence.some((entry) => entry.includes(normalized));
+  return goal.evidence.some((entry) => {
+    const receipt = parseToolEffectReceiptEvidence(entry);
+    return (
+      receipt?.transportState === 'returned' &&
+      receipt.effectKind === 'artifact.write' &&
+      receipt.effectState === 'applied' &&
+      receipt.verificationState === 'verified' &&
+      receipt.resource.kind === 'workspace_file' &&
+      receipt.resource.id === normalized
+    );
+  });
 }
 
 function meetsEvidenceJsonFieldCriterion(
@@ -185,17 +195,22 @@ function meetsEvidenceFileHashCriterion(
     return false;
   }
 
-  const prefix = `file_hash:${normalizedPath}:${normalizedAlgorithm}:`;
+  if (normalizedAlgorithm !== 'sha256') {
+    return false;
+  }
   return goal.evidence.some((entry) => {
-    const index = entry.indexOf(prefix);
-    if (index < 0) {
-      return false;
-    }
-    const digest = entry.slice(index + prefix.length).split(/[\s,;]/)[0] ?? '';
-    if (!/^[0-9a-f]+$/i.test(digest)) {
-      return false;
-    }
-    return !normalizedExpectedDigest || digest.toLowerCase() === normalizedExpectedDigest;
+    const receipt = parseToolEffectReceiptEvidence(entry);
+    const digest = receipt?.resource.digest?.slice('sha256:'.length) ?? '';
+    return (
+      receipt?.transportState === 'returned' &&
+      receipt.effectKind === 'artifact.write' &&
+      receipt.effectState === 'applied' &&
+      receipt.verificationState === 'verified' &&
+      receipt.resource.kind === 'workspace_file' &&
+      receipt.resource.id === normalizedPath &&
+      /^[0-9a-f]{64}$/u.test(digest) &&
+      (!normalizedExpectedDigest || digest === normalizedExpectedDigest)
+    );
   });
 }
 
@@ -203,8 +218,18 @@ function meetsEvidenceExitCodeCriterion(goal: AgentGoal, expectedExitCode: numbe
   if (!Number.isInteger(expectedExitCode)) {
     return false;
   }
-  const token = `exit_code:${expectedExitCode}`;
-  return goal.evidence.some((entry) => entry.includes(token));
+  if (expectedExitCode !== 0) {
+    return false;
+  }
+  return goal.evidence.some((entry) => {
+    const receipt = parseToolEffectReceiptEvidence(entry);
+    return (
+      receipt?.transportState === 'returned' &&
+      receipt.effectKind === 'compute.execute' &&
+      receipt.executionState === 'completed' &&
+      (receipt.toolName === 'python' || receipt.toolName === 'javascript')
+    );
+  });
 }
 
 export function isSuccessCriterionMet(goal: AgentGoal, criterion: string): boolean {
