@@ -76,7 +76,8 @@ tag candidate and run the release gate from a clean checkout.
 - Run the Android release environment check with
   `npm run check:android:release-env`.
 - Run iOS simulator release validation with `npm run build:ios:release-sim`
-  on a macOS machine with the required Xcode toolchain.
+  on a macOS machine with the required Xcode and CocoaPods toolchains. The
+  command prepares the locked pods in deployment mode before compiling.
 - Review [THIRD_PARTY_PROVENANCE.md](../THIRD_PARTY_PROVENANCE.md) when dependency patches, generated assets, or attribution-sensitive files change.
 - Confirm Android signing material is configured only in maintainer-local
   storage. Use local `android/keystore.properties` or the

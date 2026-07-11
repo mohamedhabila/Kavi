@@ -1,5 +1,6 @@
 const { readFileSync } = require('fs');
 const { join } = require('path');
+const packageJson = require('../../package.json');
 
 function readReleaseChecklist(): string {
   return readFileSync(join(__dirname, '../../docs/release.md'), 'utf8');
@@ -61,6 +62,18 @@ describe('release maintainer checklist', () => {
     expect(checklist).toContain('npm run build:android:aab');
     expect(checklist).toContain('release-artifacts/');
     expect(checklist).toContain('never commit signing material');
+  });
+
+  it('prepares the locked iOS pod graph before release compilation', () => {
+    expect(packageJson.scripts['prepare:ios-native']).toBe(
+      'cd ios && pod install --deployment',
+    );
+    expect(packageJson.scripts['prebuild:ios:release-sim']).toContain(
+      'npm run prepare:ios-native',
+    );
+
+    const setupGuide = readFileSync(join(__dirname, '../../docs/setup/development.md'), 'utf8');
+    expect(setupGuide).toContain('an `npm ci` cannot leave stale or dangling native headers');
   });
 
   it('documents tagging, GitHub release creation, and artifact handling', () => {

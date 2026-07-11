@@ -165,6 +165,12 @@ To build the iOS simulator release target used by local packaging checks:
 npm run build:ios:release-sim
 ```
 
+The release command runs `npm run prepare:ios-native` first. That installs the
+exact dependency graph in `ios/Podfile.lock` with CocoaPods deployment mode, so
+an `npm ci` cannot leave stale or dangling native headers behind. Use the
+non-deployment `pod install` command above only when intentionally updating the
+native dependency lock.
+
 ## Generated Assets
 
 Kavi commits generated editor assets because the native app depends on them at runtime.
