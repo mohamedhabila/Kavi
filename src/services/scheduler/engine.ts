@@ -20,6 +20,7 @@ const DEFAULT_MAX_RETRIES = 2;
 
 export interface SchedulerExecutor {
   execute: (job: CronJob) => Promise<string>;
+  onFinalFailure?: (job: CronJob, error: unknown) => Promise<void>;
 }
 
 export interface EvaluateJobsOptions {
@@ -153,7 +154,8 @@ async function executeJob(
   store.markJobAttemptStarted(job.id, attemptId, nowMs);
   emitSchedulerEvent('task_run', { taskId: job.id, taskName: job.name });
 
-  if (!executor) {
+  const jobExecutor = executor;
+  if (!jobExecutor) {
     const error = 'No executor configured';
     store.updateJobRuntimeState(job.id, {
       lastAttemptAtMs: nowMs,
@@ -178,7 +180,7 @@ async function executeJob(
 
   const startMs = Date.now();
   try {
-    const result = await executor.execute(job);
+    const result = await jobExecutor.execute(job);
     const completedAt = Date.now();
     store.recordRun(job.id, completedAt);
     emitSchedulerEvent('task_complete', { taskId: job.id, taskName: job.name });
@@ -231,6 +233,11 @@ async function executeJob(
       final: true,
     });
     emitSchedulerEvent('task_failed', { taskId: job.id, error });
+    await jobExecutor
+      .onFinalFailure?.(job, err)
+      .catch((notificationError) =>
+        console.warn('[scheduler] Final failure notification failed:', notificationError),
+      );
     recordTrace({
       jobId: job.id,
       jobName: job.name,

@@ -319,6 +319,8 @@ afterAll(() => {
 
 describe('initializeServices', () => {
   it('surfaces worker output directly during scheduled jobs without rewriting it onto the tool turn', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mockFlushChatStorePersistenceNow.mockRejectedValueOnce(new Error('disk unavailable'));
     mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
       callbacks.onToolCallStart?.({
         id: 'tc-surface',
@@ -352,13 +354,15 @@ describe('initializeServices', () => {
     initializeServices();
 
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    await executor.execute({
-      name: 'Surface Worker Job',
-      payload: { prompt: 'Use the worker answer' },
-      sessionTarget: 'isolated',
-      wakeMode: 'new',
-      delivery: { mode: 'conversation' },
-    });
+    await expect(
+      executor.execute({
+        name: 'Surface Worker Job',
+        payload: { prompt: 'Use the worker answer' },
+        sessionTarget: 'isolated',
+        wakeMode: 'new',
+        delivery: { mode: 'conversation' },
+      }),
+    ).resolves.toBe('Worker-authored final answer');
 
     expect(mockChatStoreState.addMessage).toHaveBeenCalledWith(
       expect.any(String),
@@ -386,6 +390,11 @@ describe('initializeServices', () => {
       expect.any(String),
       'Worker-authored final answer',
     );
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[scheduler] Scheduled result persistence failed:',
+      expect.objectContaining({ message: 'disk unavailable' }),
+    );
+    warnSpy.mockRestore();
   });
   it('preserves a graph blocker after surfacing a worker result', async () => {
     mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
@@ -451,34 +460,40 @@ describe('initializeServices', () => {
       'The required downstream action was not completed.',
     );
   });
-  it('sends failure notifications for scheduled jobs', async () => {
+  it('defers failure notifications until the scheduler marks the attempt final', async () => {
     mockRunOrchestrator.mockRejectedValueOnce(new Error('boom'));
 
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
 
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    await expect(
-      executor.execute({
-        name: 'Broken Job',
-        payload: { prompt: 'Fail' },
-        sessionTarget: 'isolated',
-        wakeMode: 'new',
-        delivery: { mode: 'both' },
-      }),
-    ).rejects.toThrow('boom');
+    const job = {
+      id: 'broken-job',
+      name: 'Broken Job',
+      payload: { prompt: 'Fail' },
+      sessionTarget: 'isolated',
+      wakeMode: 'new',
+      delivery: { mode: 'both' },
+    };
+    const error = await executor.execute(job).catch((executionError: unknown) => executionError);
+
+    expect(error).toMatchObject({ message: 'boom' });
+    expect(mockSendLocalNotification).not.toHaveBeenCalled();
+    await executor.onFinalFailure(job, error);
 
     expect(mockSendLocalNotification).toHaveBeenCalledWith({
       title: 'Broken Job',
       body: 'Error: boom',
       data: {
-        screen: 'Chat',
-        conversationId: 'conv-1',
+        screen: 'Scheduler',
+        jobId: 'broken-job',
         source: 'scheduled_task',
       },
     });
   });
   it('prevents replay when execution throws after tool activity', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mockFlushChatStorePersistenceNow.mockRejectedValueOnce(new Error('disk unavailable'));
     mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
       callbacks.onToolCallComplete?.({
         id: 'tc-effect',
@@ -521,6 +536,11 @@ describe('initializeServices', () => {
       completionStatus: 'incomplete',
       finishReason: 'response_failed',
     });
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[scheduler] Scheduled failure persistence failed:',
+      expect.objectContaining({ message: 'disk unavailable' }),
+    );
+    warnSpy.mockRestore();
   });
   it('executor reuses the active conversation for main/continue jobs', async () => {
     const { initializeServices } = require('../../src/services/startup');

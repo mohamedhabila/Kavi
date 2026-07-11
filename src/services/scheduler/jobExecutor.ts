@@ -51,8 +51,6 @@ function buildTerminalFailureMetadata(
 }
 
 export async function executeScheduledJob(job: CronJob): Promise<string> {
-  let notificationConversationId: string | undefined;
-
   try {
     const prompt = job.payload?.prompt?.trim();
     if (!prompt) {
@@ -124,8 +122,6 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
               mode: settings.defaultConversationMode,
             },
           );
-    notificationConversationId = conversationId;
-
     chatState.updateModelInConversation(conversationId, provider.id, model);
 
     chatState.addMessage(conversationId, {
@@ -477,29 +473,40 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
           conversationId,
           source: 'scheduled_task',
         },
-      });
+      }).catch((error) => console.warn('[scheduler] Scheduled result notification failed:', error));
     }
 
-    await flushChatStorePersistenceNow();
+    await flushChatStorePersistenceNow().catch((error) =>
+      console.warn('[scheduler] Scheduled result persistence failed:', error),
+    );
 
     return result;
   } catch (error: unknown) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    if (shouldDeliverScheduledJobNotification(job)) {
-      await sendLocalNotification({
-        title: job.name || 'Scheduled Task Failed',
-        body: summarizeScheduledJobNotification(`Error: ${errorMsg}`),
-        data: notificationConversationId
-          ? {
-              screen: 'Chat',
-              conversationId: notificationConversationId,
-              source: 'scheduled_task',
-            }
-          : undefined,
-      }).catch((e) => console.warn('[startup] Failed to send task failure notification:', e));
-    }
-
-    await flushChatStorePersistenceNow();
+    await flushChatStorePersistenceNow().catch((persistenceError) =>
+      console.warn('[scheduler] Scheduled failure persistence failed:', persistenceError),
+    );
     throw error;
   }
+}
+
+export async function notifyScheduledJobFinalFailure(job: CronJob, error: unknown): Promise<void> {
+  if (!shouldDeliverScheduledJobNotification(job)) return;
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  await sendLocalNotification({
+    title: job.name || 'Scheduled Task Failed',
+    body: summarizeScheduledJobNotification(`Error: ${errorMessage}`),
+    data: job.delivery?.conversationId
+      ? {
+          screen: 'Chat',
+          conversationId: job.delivery.conversationId,
+          source: 'scheduled_task',
+        }
+      : job.id
+        ? {
+            screen: 'Scheduler',
+            jobId: job.id,
+            source: 'scheduled_task',
+          }
+        : undefined,
+  });
 }

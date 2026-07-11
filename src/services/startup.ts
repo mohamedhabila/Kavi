@@ -5,7 +5,7 @@
 
 import { InteractionManager } from 'react-native';
 import { evaluateJobsOnce, startScheduler, setSchedulerExecutor } from './scheduler/engine';
-import { executeScheduledJob } from './scheduler/jobExecutor';
+import { executeScheduledJob, notifyScheduledJobFinalFailure } from './scheduler/jobExecutor';
 import { registerBuiltInServiceSkills } from './integrations/registry';
 import { activateEnabledSkills } from './skills/manager';
 import { registerBackgroundFetch } from './scheduler/background';
@@ -187,7 +187,6 @@ function initializeDeferredStartupServices(): void {
   });
 }
 
-
 let retiredMemoryFileCleanupComplete = false;
 
 function removeRetiredMemoryFileArtifactsUntilComplete(): void {
@@ -226,6 +225,7 @@ export function initializeServices(): void {
   // Set up scheduler executor to run jobs through the main orchestrator.
   setSchedulerExecutor({
     execute: executeScheduledJob,
+    onFinalFailure: notifyScheduledJobFinalFailure,
   });
 
   // Start the foreground scheduler to evaluate cron jobs

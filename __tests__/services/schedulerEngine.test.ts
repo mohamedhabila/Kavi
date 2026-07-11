@@ -125,7 +125,8 @@ describe('Scheduler Engine', () => {
         .fn()
         .mockRejectedValueOnce(new Error('temporary failure'))
         .mockResolvedValueOnce('recovered');
-      setSchedulerExecutor({ execute: executeFn });
+      const onFinalFailure = jest.fn().mockResolvedValue(undefined);
+      setSchedulerExecutor({ execute: executeFn, onFinalFailure });
 
       const jobId = useSchedulerStore.getState().addJob({
         name: 'Retry Job',
@@ -141,6 +142,7 @@ describe('Scheduler Engine', () => {
       expect(job?.retryAttempts).toBe(1);
       expect(job?.nextRetryAtMs).toBe(now + 30_000);
       expect(job?.lastError).toBe('temporary failure');
+      expect(onFinalFailure).not.toHaveBeenCalled();
 
       nowSpy.mockReturnValue(now + 10_000);
       await evaluateJobsOnce({ nowMs: now + 10_000, trigger: 'scheduled' });
@@ -158,6 +160,7 @@ describe('Scheduler Engine', () => {
         'success',
         'retrying',
       ]);
+      expect(onFinalFailure).not.toHaveBeenCalled();
     });
 
     it('does not replay an explicitly non-retryable execution failure', async () => {
@@ -168,7 +171,8 @@ describe('Scheduler Engine', () => {
         .mockRejectedValue(
           new NonRetryableSchedulerExecutionError(new Error('side effect state is uncertain')),
         );
-      setSchedulerExecutor({ execute: executeFn });
+      const onFinalFailure = jest.fn().mockResolvedValue(undefined);
+      setSchedulerExecutor({ execute: executeFn, onFinalFailure });
       const jobId = useSchedulerStore.getState().addJob({
         name: 'Effectful Job',
         schedule: { kind: 'every', everyMs: 60_000 },
@@ -187,6 +191,11 @@ describe('Scheduler Engine', () => {
         status: 'error',
         error: 'side effect state is uncertain',
       });
+      expect(onFinalFailure).toHaveBeenCalledTimes(1);
+      expect(onFinalFailure).toHaveBeenCalledWith(
+        expect.objectContaining({ id: jobId }),
+        expect.objectContaining({ message: 'side effect state is uncertain' }),
+      );
     });
 
     it('recovers a missed run from persisted nextRunAtMs after a cold start', async () => {

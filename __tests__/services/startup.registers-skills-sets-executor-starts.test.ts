@@ -60,6 +60,7 @@ const mockProvider = {
 
 function scheduledJob(name: string, prompt: string, mode?: 'both' | 'conversation') {
   return {
+    id: `job-${name.toLowerCase().replace(/\s+/g, '-')}`,
     name,
     payload: { prompt },
     sessionTarget: 'isolated',
@@ -528,8 +529,11 @@ describe('initializeServices', () => {
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
     expect(executor).toHaveProperty('execute');
     expect(typeof executor.execute).toBe('function');
+    expect(typeof executor.onFinalFailure).toBe('function');
   });
   it('executor runs scheduled jobs through the orchestrator and returns the result', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mockSendLocalNotification.mockRejectedValueOnce(new Error('notifications unavailable'));
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
 
@@ -556,6 +560,11 @@ describe('initializeServices', () => {
       },
     });
     expect(result).toBe('Result for Summarize news');
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[scheduler] Scheduled result notification failed:',
+      expect.objectContaining({ message: 'notifications unavailable' }),
+    );
+    warnSpy.mockRestore();
   });
   it('rejects and sends a failure notification for a blocked scheduled run', async () => {
     mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
@@ -569,18 +578,20 @@ describe('initializeServices', () => {
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    await expect(
-      executor.execute(scheduledJob('Blocked Job', 'Perform the action', 'both')),
-    ).rejects.toMatchObject({
+    const job = scheduledJob('Blocked Job', 'Perform the action', 'both');
+    const error = await executor.execute(job).catch((executionError: unknown) => executionError);
+    expect(error).toMatchObject({
       name: 'NonRetryableSchedulerExecutionError',
       message: expect.stringContaining('tool_batch_incomplete'),
     });
+    expect(mockSendLocalNotification).not.toHaveBeenCalled();
+    await executor.onFinalFailure(job, error);
     expect(mockSendLocalNotification).toHaveBeenCalledWith({
       title: 'Blocked Job',
       body: 'Error: Agent control graph was blocked: tool_batch_incomplete.',
       data: {
-        screen: 'Chat',
-        conversationId: 'conv-1',
+        screen: 'Scheduler',
+        jobId: 'job-blocked-job',
         source: 'scheduled_task',
       },
     });
