@@ -9,6 +9,7 @@ import type {
   AgentRunControlGraphToolResultRef,
   AgentRunControlGraphTurnDirectives,
 } from '../../types/agentRun';
+import type { RequestUnderstandingSnapshot } from '../../types/requestUnderstanding';
 
 export type AgentControlGraphStatus = AgentRunControlGraphStatus;
 export type AgentControlToolCallRef = AgentRunControlGraphToolCallRef;
@@ -79,6 +80,12 @@ export type AgentControlGraphEvent =
       type: 'GOALS_UPDATED';
       goals: AgentGoal[];
       reason?: string;
+      timestamp?: number;
+    }
+  | {
+      type: 'REQUEST_UNDERSTANDING_PROJECTED';
+      projection: RequestUnderstandingSnapshot;
+      iteration: number;
       timestamp?: number;
     }
   | {

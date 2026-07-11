@@ -20,6 +20,7 @@ import {
   normalizeAgentRunControlGraphAsyncWorkState,
   normalizeAgentRunAsyncOperations,
 } from './agentRunAsyncState';
+import { normalizeRequestUnderstandingSnapshot } from './requestUnderstandingProjection';
 
 export const AGENT_RUN_CONTROL_GRAPH_VERSION = 1;
 export const MAX_AGENT_RUN_CONTROL_GRAPH_AUDIT_EVENTS = 128;
@@ -349,6 +350,9 @@ export function createInitialAgentRunControlGraphState(
   const sessionActivatedToolNames = normalizeAgentRunControlGraphSessionActivatedToolNames(
     state.sessionActivatedToolNames,
   );
+  const requestUnderstanding = normalizeRequestUnderstandingSnapshot(
+    state.requestUnderstanding,
+  );
 
   return {
     version: AGENT_RUN_CONTROL_GRAPH_VERSION,
@@ -365,6 +369,7 @@ export function createInitialAgentRunControlGraphState(
     ...(terminalReason ? { terminalReason } : {}),
     ...(activeTaskId ? { activeTaskId } : {}),
     ...(goals.length > 0 ? { goals } : {}),
+    ...(requestUnderstanding ? { requestUnderstanding } : {}),
     asyncWork,
     performance,
     turnDirectives,

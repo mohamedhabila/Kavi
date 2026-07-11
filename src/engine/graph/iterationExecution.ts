@@ -1,4 +1,12 @@
 import { getPendingTrackedAsyncOperations } from '../pendingAsyncOperations';
+import {
+  appendRequestUnderstandingToRuntimeContext,
+  areRequestUnderstandingSnapshotsEqual,
+  projectRequestUnderstanding,
+  renderRequestUnderstandingPromptSection,
+  shouldRenderRequestUnderstandingPrompt,
+  summarizeRequestUnderstanding,
+} from '../../services/agents/requestUnderstandingProjection';
 import { prepareAgentControlGraphModelTurn } from './prepareAgentControlGraphModelTurn';
 import { executePreparedAgentControlGraphTurn } from './iterationReadyTurnExecution';
 import type {
@@ -20,19 +28,54 @@ export async function executeAgentControlGraphIteration(
     });
   }
 
+  const graphSnapshot = params.graph.getGraphSnapshot();
+  const currentGoals = graphSnapshot.goals ?? [];
+  const requestUnderstanding = projectRequestUnderstanding({
+    requestFrame: params.requestFrame,
+    goals: currentGoals,
+  });
+  const requestUnderstandingSnapshot = summarizeRequestUnderstanding(requestUnderstanding);
+  if (
+    !areRequestUnderstandingSnapshotsEqual(
+      graphSnapshot.requestUnderstanding,
+      requestUnderstandingSnapshot,
+    )
+  ) {
+    params.graph.applyAgentControlGraphEvents([
+      {
+        type: 'REQUEST_UNDERSTANDING_PROJECTED',
+        projection: requestUnderstandingSnapshot,
+        iteration: params.iteration,
+      },
+    ]);
+  }
+  const requestUnderstandingPrompt = shouldRenderRequestUnderstandingPrompt({
+    iteration: params.iteration,
+    projection: requestUnderstanding,
+  })
+    ? renderRequestUnderstandingPromptSection(requestUnderstanding)
+    : null;
+
   const modelTurnPreparation = await prepareAgentControlGraphModelTurn({
     activeModel: runtime.activeModel,
     activeProvider: runtime.activeProvider,
     allTools: params.allTools,
     disableTooling: params.disableTooling,
     completedWorkflowToolNames: params.graph.completedWorkflowToolNames,
-    goals: params.graph.getGraphSnapshot().goals ?? [],
+    goals: currentGoals,
     useExplicitFilteredToolSurface: params.toolRuntime.useExplicitFilteredToolSurface,
     isSuperAgent: params.isSuperAgent,
     iteration: params.iteration,
     maxTokens: params.maxTokens,
     personaThinkingLevel: params.personaThinkingLevel,
-    promptContextSupport: params.promptContextSupport,
+    promptContextSupport: {
+      ...params.promptContextSupport,
+      graphGoals: currentGoals,
+      runtimeContext: appendRequestUnderstandingToRuntimeContext(
+        params.promptContextSupport.runtimeContext,
+        requestUnderstandingPrompt,
+      ),
+    },
     requestFrame: params.requestFrame,
     thinkingLevel: params.thinkingLevel,
     trackedAsyncOperations: params.trackedAsyncOperations,

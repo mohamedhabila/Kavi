@@ -11,6 +11,8 @@ import {
   type E2ERedactedHashCount,
 } from './e2eTraceRedaction';
 import { buildRedactedToolName, buildRedactedToolNameList } from './e2eTraceToolNames';
+import type { RequestUnderstandingSnapshot } from '../../types/requestUnderstanding';
+import { normalizeRequestUnderstandingSnapshot } from '../../services/agents/requestUnderstandingProjection';
 
 export type E2ERedactedGoalTrace = {
   goalIdHash: E2ERedactedHash;
@@ -59,6 +61,7 @@ export type E2ERedactedGraphSnapshotTrace = {
     | 'lastActiveToolTokenEstimate'
     | 'maxActiveToolTokenEstimate'
   >;
+  requestUnderstanding?: RequestUnderstandingSnapshot;
 };
 
 const PUBLIC_GRAPH_AUDIT_TYPES = [
@@ -78,6 +81,7 @@ const PUBLIC_GRAPH_AUDIT_TYPES = [
   'MODEL_TURN_FAILED',
   'MODEL_TURN_STARTED',
   'PERFORMANCE_METRICS_RECORDED',
+  'REQUEST_UNDERSTANDING_PROJECTED',
   'SESSION_ACTIVATED_TOOLS_UPDATED',
   'TOOL_BATCH_INCOMPLETE',
   'TOOL_RESULTS_RECORDED',
@@ -205,6 +209,9 @@ export function buildGraphSnapshotTrace(
   const sessionActivatedToolNames = buildRedactedToolNameList(
     snapshot.sessionActivatedToolNames ?? [],
   );
+  const requestUnderstanding = normalizeRequestUnderstandingSnapshot(
+    snapshot.requestUnderstanding,
+  );
   return {
     status: snapshot.status,
     iteration: snapshot.iteration ?? 0,
@@ -245,5 +252,6 @@ export function buildGraphSnapshotTrace(
       lastActiveToolTokenEstimate: performance?.lastActiveToolTokenEstimate ?? 0,
       maxActiveToolTokenEstimate: performance?.maxActiveToolTokenEstimate ?? 0,
     },
+    ...(requestUnderstanding ? { requestUnderstanding } : {}),
   };
 }

@@ -21,6 +21,7 @@ import {
 import { createRecordAsyncWaitingAction } from './agentControlGraphAsyncActions';
 import { addGoalEvidence } from '../goals/graphState';
 import { getActiveGoal } from '../goals/types';
+import { normalizeRequestUnderstandingSnapshot } from '../../services/agents/requestUnderstandingProjection';
 
 export function createAgentControlGraphActions() {
   return {
@@ -148,6 +149,26 @@ export function createAgentControlGraphActions() {
         audit: appendAudit(context.audit, event, event.reason),
       };
     }),
+    recordRequestUnderstandingProjected: assignAgentControlGraph(
+      ({ context, event }: AgentControlGraphAssignArgs) => {
+        if (event.type !== 'REQUEST_UNDERSTANDING_PROJECTED') {
+          return {};
+        }
+        const requestUnderstanding = normalizeRequestUnderstandingSnapshot(event.projection);
+        if (!requestUnderstanding) {
+          return {};
+        }
+        return {
+          requestUnderstanding,
+          updatedAt: getTimestamp(event),
+          audit: appendAudit(
+            context.audit,
+            event,
+            `integrity:${requestUnderstanding.integrity}`,
+          ),
+        };
+      },
+    ),
     recordSessionActivatedToolsUpdated: assignAgentControlGraph(({ context, event }: AgentControlGraphAssignArgs) => {
       if (event.type !== 'SESSION_ACTIVATED_TOOLS_UPDATED') {
         return {};

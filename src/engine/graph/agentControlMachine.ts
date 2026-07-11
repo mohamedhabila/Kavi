@@ -73,6 +73,9 @@ export function createAgentControlMachine(snapshot?: Partial<AgentControlGraphSn
       GOALS_UPDATED: {
         actions: 'recordGoalsUpdated',
       },
+      REQUEST_UNDERSTANDING_PROJECTED: {
+        actions: 'recordRequestUnderstandingProjected',
+      },
       SESSION_ACTIVATED_TOOLS_UPDATED: {
         actions: 'recordSessionActivatedToolsUpdated',
       },

@@ -1,3 +1,5 @@
+import type { RequestUnderstandingSnapshot } from './requestUnderstanding';
+
 export type AgentRunTaskOwner = 'supervisor' | 'worker' | 'either';
 
 export interface AgentRunTaskDefinition {
@@ -243,6 +245,7 @@ export interface AgentRunControlGraphState {
   terminalReason?: string;
   activeTaskId?: string;
   goals?: AgentGoal[];
+  requestUnderstanding?: RequestUnderstandingSnapshot;
   asyncWork: AgentRunControlGraphAsyncWorkState;
   performance: AgentRunControlGraphPerformance;
   turnDirectives: AgentRunControlGraphTurnDirectives;
