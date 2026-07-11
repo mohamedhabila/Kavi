@@ -1,4 +1,5 @@
 import type { Message, ToolCall } from '../../types/message';
+import type { AgentRunControlGraphState } from '../../types/agentRun';
 import type { SubAgentActivityEntry, SubAgentConfig, SubAgentSnapshot } from '../../types/subAgent';
 import type { TokenUsage } from '../../types/usage';
 import type { SubAgentToolResultPreview } from './subAgentOutputContract';
@@ -11,6 +12,8 @@ export type SubAgentExecutionRuntimeState = {
   iterations: number;
   lastTokenHeartbeatAt: number;
   lastTaskLedgerSignature: string;
+  latestControlGraphState?: AgentRunControlGraphState;
+  reportedOrchestratorError?: Error;
   toolsUsed: string[];
   toolResultPreviews: SubAgentToolResultPreview[];
 };

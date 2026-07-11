@@ -24,6 +24,7 @@ export function createSubAgentOrchestratorProgressCallbacks<TAgent extends SubAg
 > {
   return {
     onAgentControlGraphStateChange: (state) => {
+      params.runtimeState.latestControlGraphState = state;
       const taskLedger = selectSubAgentTaskLedger(state);
       const taskLedgerSignature = buildSubAgentTaskLedgerSignature(taskLedger);
       if (taskLedgerSignature === params.runtimeState.lastTaskLedgerSignature) {

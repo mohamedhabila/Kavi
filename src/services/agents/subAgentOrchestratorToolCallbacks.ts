@@ -17,6 +17,7 @@ import type {
   ProgressChanges,
   SubAgentOrchestratorCallbackParams,
 } from './subAgentOrchestratorCallbackTypes';
+import { resolveAgentControlGraphTerminalFailure } from '../../engine/graph/terminalOutcome';
 
 export function createSubAgentOrchestratorToolCallbacks<TAgent extends SubAgentSnapshot>(
   params: SubAgentOrchestratorCallbackParams<TAgent>,
@@ -190,12 +191,20 @@ export function createSubAgentOrchestratorToolCallbacks<TAgent extends SubAgentS
       );
     },
     onError: (error) => {
-      params.reject(error);
+      params.runtimeState.reportedOrchestratorError = error;
     },
     onUsage: (usage) => {
       params.recordUsage(usage);
     },
     onDone: () => {
+      const terminalFailure = resolveAgentControlGraphTerminalFailure({
+        state: params.runtimeState.latestControlGraphState,
+        reportedError: params.runtimeState.reportedOrchestratorError,
+      });
+      if (terminalFailure) {
+        params.reject(terminalFailure);
+        return;
+      }
       params.resolve();
     },
   };

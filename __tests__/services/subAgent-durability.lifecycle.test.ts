@@ -98,6 +98,31 @@ describe('spawnSubAgent — depth guard', () => {
     expect(result.depth).toBe(1);
     expect(result.output).toBe('hello');
   });
+
+  it('does not report a blocked worker control graph as completed', async () => {
+    (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
+      callbacks.onAssistantMessage('Worker stopped at a verified blocker.');
+      callbacks.onAgentControlGraphStateChange({
+        status: 'blocked',
+        terminalReason: 'tool_batch_incomplete',
+      });
+      callbacks.onDone();
+      return Promise.resolve();
+    });
+
+    const result = await spawnSubAgent(
+      {
+        parentConversationId: 'conv-1',
+        prompt: 'Run the bounded worker task',
+        depth: 0,
+      },
+      mockProvider,
+    );
+
+    expect(result.status).toBe('error');
+    expect(result.error).toContain('tool_batch_incomplete');
+    expect(result.output).toContain('Worker stopped at a verified blocker.');
+  });
 });
 
 describe('spawnSubAgent — concurrent guard', () => {
