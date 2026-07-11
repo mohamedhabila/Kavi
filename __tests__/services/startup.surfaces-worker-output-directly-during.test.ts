@@ -23,6 +23,7 @@ const mockHydrateCanvasSurfaces = jest.fn().mockResolvedValue(undefined);
 const mockEmitAppEvent = jest.fn().mockResolvedValue(undefined);
 const mockRunMemoryMigrationTick = jest.fn().mockResolvedValue(undefined);
 const mockRunMemoryBackgroundFlush = jest.fn().mockResolvedValue(undefined);
+const mockFlushChatStorePersistenceNow = jest.fn().mockResolvedValue(undefined);
 const originalRequestIdleCallback = (global as any).requestIdleCallback;
 const { waitFor } = require('@testing-library/react-native');
 const mockChatStoreState = {
@@ -99,7 +100,12 @@ jest.mock('../../src/services/memory/lifecycle', () => ({
 }));
 jest.mock('../../src/services/executionJournal/durableRecoveryLifecycle', () => ({
   initializeDurableRecoveryLifecycle: jest.fn(),
-  reconcileDurableRecoveryLifecycle: jest.fn(),
+  reconcileDurableRecoveryLifecycle: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('../../src/store/chatStorePersistence', () => ({
+  flushChatStorePersistenceNow: (...args: any[]) =>
+    mockFlushChatStorePersistenceNow(...args),
+  requestChatStorePersistenceCheckpoint: jest.fn(),
 }));
 jest.mock('../../src/services/executionJournal/foregroundModelExecutionRecovery', () => ({
   recoverInterruptedForegroundModelExecutions: (...args: any[]) =>

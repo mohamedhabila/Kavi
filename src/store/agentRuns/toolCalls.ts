@@ -83,20 +83,61 @@ export function recoverActiveToolCallsAfterRestart(params: {
   messages: Message[];
   completedCount: number;
   failedCount: number;
+  reconciliationPendingCount: number;
 } {
   const runScope = buildAgentRunMessageScope(params.run);
   const runMessages = getAgentRunMessageSlice(params.messages, runScope);
   if (!runMessages.length) {
-    return { messages: params.messages, completedCount: 0, failedCount: 0 };
+    return {
+      messages: params.messages,
+      completedCount: 0,
+      failedCount: 0,
+      reconciliationPendingCount: 0,
+    };
   }
 
   const firstRunMessage = runMessages[0];
   const startIndex = params.messages.findIndex((message) => message.id === firstRunMessage.id);
   if (startIndex < 0) {
-    return { messages: params.messages, completedCount: 0, failedCount: 0 };
+    return {
+      messages: params.messages,
+      completedCount: 0,
+      failedCount: 0,
+      reconciliationPendingCount: 0,
+    };
   }
 
   const endIndex = startIndex + runMessages.length;
+  const activeDispositions = runMessages.flatMap((message) =>
+    message.role === 'assistant'
+      ? (message.toolCalls ?? [])
+          .filter((toolCall) => toolCall.status === 'pending' || toolCall.status === 'running')
+          .map((toolCall) => ({
+            key: `${message.id}\u0000${toolCall.id}`,
+            disposition: params.resolveToolEffect({
+              conversationId: params.conversationId,
+              taskId: params.run.id,
+              toolCallId: toolCall.id,
+              toolName: toolCall.name,
+              argumentsText: toolCall.arguments,
+            }),
+          }))
+      : [],
+  );
+  const reconciliationPendingCount = activeDispositions.filter(
+    ({ disposition }) => disposition.kind === 'reconciliation_required',
+  ).length;
+  if (reconciliationPendingCount > 0) {
+    return {
+      messages: params.messages,
+      completedCount: 0,
+      failedCount: 0,
+      reconciliationPendingCount,
+    };
+  }
+  const dispositionByTool = new Map(
+    activeDispositions.map(({ key, disposition }) => [key, disposition]),
+  );
   let completedCount = 0;
   let failedCount = 0;
   const nextMessages = params.messages.map((message, index) => {
@@ -111,15 +152,9 @@ export function recoverActiveToolCallsAfterRestart(params: {
 
     let didChange = false;
     const nextToolCalls = message.toolCalls.map((toolCall) => {
-      if (toolCall.status !== 'pending' && toolCall.status !== 'running') return toolCall;
+      const disposition = dispositionByTool.get(`${message.id}\u0000${toolCall.id}`);
+      if (!disposition) return toolCall;
       didChange = true;
-      const disposition = params.resolveToolEffect({
-        conversationId: params.conversationId,
-        taskId: params.run.id,
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        argumentsText: toolCall.arguments,
-      });
       const projection = projectToolCallAfterRestart({
         toolCall,
         disposition,
@@ -138,8 +173,18 @@ export function recoverActiveToolCallsAfterRestart(params: {
   });
 
   return completedCount > 0 || failedCount > 0
-    ? { messages: nextMessages, completedCount, failedCount }
-    : { messages: params.messages, completedCount: 0, failedCount: 0 };
+    ? {
+        messages: nextMessages,
+        completedCount,
+        failedCount,
+        reconciliationPendingCount: 0,
+      }
+    : {
+        messages: params.messages,
+        completedCount: 0,
+        failedCount: 0,
+        reconciliationPendingCount: 0,
+      };
 }
 
 export function listActiveToolEffectRestartInputs(params: {

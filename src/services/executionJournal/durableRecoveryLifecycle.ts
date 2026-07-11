@@ -16,9 +16,9 @@ export interface DurableRecoveryLifecycleDependencies {
   platform: string;
   scheduleAndroid(runId: string): Promise<DurableRecoveryScheduleOutcome>;
   scheduleIOS(runId: string): Promise<DurableRecoveryScheduleOutcome>;
-  repairAndroid(source: DurableRecoveryLifecycleSource): void;
+  repairAndroid(source: DurableRecoveryLifecycleSource): Promise<void>;
   initializeIOS(): void;
-  reconcileIOS(source: DurableRecoveryLifecycleSource): void;
+  reconcileIOS(source: DurableRecoveryLifecycleSource): Promise<void>;
 }
 
 const DEFAULT_DEPENDENCIES: DurableRecoveryLifecycleDependencies = {
@@ -40,25 +40,23 @@ export function scheduleDurableRecoveryRunImmediately(
   return Promise.resolve({ kind: 'not_supported', runId, reason: 'unsupported_platform' });
 }
 
-/** Install the platform wake owner and replay persisted recovery work during app startup. */
+/** Install the platform wake owner without racing hydrated chat recovery. */
 export function initializeDurableRecoveryLifecycle(
   dependencies: DurableRecoveryLifecycleDependencies = DEFAULT_DEPENDENCIES,
 ): void {
-  if (dependencies.platform === 'android') {
-    dependencies.repairAndroid('startup');
-  } else if (dependencies.platform === 'ios') {
+  if (dependencies.platform === 'ios') {
     dependencies.initializeIOS();
   }
 }
 
-/** Repair persisted recovery work after a platform lifecycle transition. */
+/** Await scheduling and pending-wake reconciliation for the current lifecycle sweep. */
 export function reconcileDurableRecoveryLifecycle(
   source: DurableRecoveryLifecycleSource,
   dependencies: DurableRecoveryLifecycleDependencies = DEFAULT_DEPENDENCIES,
-): void {
+): Promise<void> {
   if (dependencies.platform === 'android') {
-    dependencies.repairAndroid(source);
-  } else if (dependencies.platform === 'ios') {
-    dependencies.reconcileIOS(source);
+    return dependencies.repairAndroid(source);
   }
+  if (dependencies.platform === 'ios') return dependencies.reconcileIOS(source);
+  return Promise.resolve();
 }

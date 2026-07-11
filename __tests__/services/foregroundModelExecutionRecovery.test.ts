@@ -1,4 +1,5 @@
 import {
+  applyForegroundModelRecoveryPlan,
   planForegroundModelRestartRecovery,
   recoverInterruptedForegroundModelExecutions,
   type ForegroundModelRecoveryDependencies,
@@ -49,7 +50,13 @@ function conversation(overrides: Partial<Conversation> = {}): Conversation {
   };
 }
 
-function harness(initialConversation: Conversation, leases = [lease()]) {
+function harness(
+  initialConversation: Conversation,
+  leases = [lease()],
+  resolveToolEffect: Parameters<typeof planForegroundModelRestartRecovery>[2] = () => ({
+    kind: 'not_dispatched',
+  }),
+) {
   let currentConversation = structuredClone(initialConversation);
   const flushChatState = jest.fn().mockResolvedValue(undefined);
   const complete = jest.fn().mockResolvedValue(undefined);
@@ -68,45 +75,17 @@ function harness(initialConversation: Conversation, leases = [lease()]) {
     runLease: ForegroundModelExecutionLease,
     timestamp: number,
   ) => {
-    const plan = planForegroundModelRestartRecovery(runLease, currentConversation);
+    const plan = planForegroundModelRestartRecovery(
+      runLease,
+      currentConversation,
+      resolveToolEffect,
+    );
     if ('kind' in plan) return plan;
-    if (plan.status === 'failed') {
-      const interrupted = new Set(
-        plan.interruptedTools.map((tool) => `${tool.assistantMessageId}:${tool.toolCallId}`),
-      );
-      currentConversation = {
-        ...currentConversation,
-        messages: currentConversation.messages.map((message) => ({
-          ...message,
-          ...(message.id === plan.projectionMessageId
-            ? {
-                ...(plan.shouldInsertInterruptionText
-                  ? {
-                      content: 'Response interrupted because the app restarted before completion.',
-                    }
-                  : {}),
-                assistantMetadata: plan.interruptedAssistantMetadata,
-              }
-            : {}),
-          ...(message.toolCalls
-            ? {
-                toolCalls: message.toolCalls.map((toolCall) =>
-                  interrupted.has(`${message.id}:${toolCall.id}`)
-                    ? {
-                        ...toolCall,
-                        status: 'failed' as const,
-                        error:
-                          'Tool execution was interrupted by an app restart. Verify any external effect before retrying.',
-                        updatedAt: timestamp,
-                        completedAt: timestamp,
-                      }
-                    : toolCall,
-                ),
-              }
-            : {}),
-        })),
-      };
-    }
+    currentConversation = applyForegroundModelRecoveryPlan(
+      plan,
+      currentConversation,
+      timestamp,
+    );
     return { kind: 'applied' as const, plan, conversation: currentConversation };
   });
   const releaseProjection = jest.fn((runLease: ForegroundModelExecutionLease) => {
@@ -280,6 +259,36 @@ describe('foreground model restart recovery planning', () => {
     );
   });
 
+  it('keeps the exact projection open while a tool effect still requires reconciliation', () => {
+    const pendingConversation = conversation({
+      messages: [
+        { id: 'request-1', role: 'user', content: 'Do the work.', timestamp: 1 },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: 'Done.',
+          timestamp: 2,
+          assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+          toolCalls: [
+            { id: 'tool-1', name: 'send_email', arguments: '{}', status: 'running' },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      planForegroundModelRestartRecovery(lease(), pendingConversation, () => ({
+        kind: 'reconciliation_required',
+        observedAt: 10,
+        reason: 'ambiguous_effect',
+      })),
+    ).toEqual({
+      kind: 'blocked',
+      runId: 'run-1',
+      reason: 'effect_reconciliation_pending',
+    });
+  });
+
   it('does not trust an older final when a newer assistant projection is incomplete', () => {
     const recoveryPlan = planForegroundModelRestartRecovery(
       lease(),
@@ -352,6 +361,90 @@ describe('foreground model restart recovery planning', () => {
 });
 
 describe('foreground model restart recovery execution', () => {
+  it('retains an unresolved generation without mutating or closing its projection', async () => {
+    const test = harness(
+      conversation({
+        messages: [
+          { id: 'request-1', role: 'user', content: 'Do the work.', timestamp: 1 },
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: '',
+            timestamp: 2,
+            toolCalls: [
+              { id: 'tool-1', name: 'send_email', arguments: '{}', status: 'running' },
+            ],
+          },
+        ],
+      }),
+      [lease()],
+      () => ({
+        kind: 'reconciliation_required',
+        observedAt: 10,
+        reason: 'ambiguous_effect',
+      }),
+    );
+
+    await expect(recoverInterruptedForegroundModelExecutions(test.dependencies)).resolves.toEqual([
+      { kind: 'blocked', runId: 'run-1', reason: 'effect_reconciliation_pending' },
+    ]);
+    expect(test.getConversation().messages[1]?.toolCalls?.[0]?.status).toBe('running');
+    expect(test.complete).not.toHaveBeenCalled();
+    expect(test.releaseProjection).not.toHaveBeenCalled();
+    expect(test.flushChatState).not.toHaveBeenCalled();
+  });
+
+  it('leaves task-owned tool projection and counting to AgentRun recovery', async () => {
+    const taskLease = lease({ taskId: 'agent-run-1' });
+    const test = harness(
+      conversation({
+        agentRuns: [
+          {
+            id: 'agent-run-1',
+            userMessageId: 'request-1',
+            goal: 'Send the email.',
+            status: 'running',
+            createdAt: 1,
+            updatedAt: 2,
+            currentPhase: 'work',
+            phases: [],
+            checkpoints: [],
+            summary: {
+              assistantTurns: 1,
+              startedTools: 1,
+              completedTools: 0,
+              failedTools: 0,
+              spawnedSubAgents: 0,
+            },
+          },
+        ],
+        messages: [
+          { id: 'request-1', role: 'user', content: 'Do the work.', timestamp: 1 },
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: '',
+            timestamp: 2,
+            toolCalls: [
+              { id: 'tool-1', name: 'send_email', arguments: '{}', status: 'running' },
+            ],
+          },
+        ],
+      }),
+      [taskLease],
+      () => ({ kind: 'verified', observedAt: 10 }),
+    );
+
+    await expect(recoverInterruptedForegroundModelExecutions(test.dependencies)).resolves.toEqual([
+      { kind: 'recovered', runId: 'run-1', status: 'failed' },
+    ]);
+    expect(test.getConversation().messages[1]?.toolCalls?.[0]?.status).toBe('running');
+    expect(test.getConversation().agentRuns?.[0]?.summary).toMatchObject({
+      completedTools: 0,
+      failedTools: 0,
+    });
+  });
+
   it('persists an interrupted projection before atomically closing its generation', async () => {
     const test = harness(
       conversation({

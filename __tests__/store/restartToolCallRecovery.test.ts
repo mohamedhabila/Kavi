@@ -65,7 +65,7 @@ describe('agent-run tool recovery after restart', () => {
     expect(toolCall?.result).toContain('original tool response was not retained');
   });
 
-  it('blocks an ambiguous dispatched effect from being presented as safe to retry', () => {
+  it('keeps an ambiguous dispatched effect active for exact reconciliation', () => {
     const recovered = recover(() => ({
       kind: 'reconciliation_required',
       observedAt: 150,
@@ -73,13 +73,51 @@ describe('agent-run tool recovery after restart', () => {
     }));
     const toolCall = recovered.messages[1]?.toolCalls?.[0];
 
-    expect(recovered).toMatchObject({ completedCount: 0, failedCount: 1 });
-    expect(toolCall).toMatchObject({
-      status: 'failed',
-      failureKind: 'runtime_error',
-      completedAt: TIMESTAMP,
+    expect(recovered).toMatchObject({
+      completedCount: 0,
+      failedCount: 0,
+      reconciliationPendingCount: 1,
     });
-    expect(toolCall?.error).toContain('requires reconciliation before any retry');
+    expect(toolCall).toMatchObject({ status: 'running' });
+    expect(toolCall).not.toHaveProperty('completedAt');
+    expect(toolCall?.error).toBeUndefined();
+  });
+
+  it('does not partially project a tool batch while any effect is unresolved', () => {
+    const toolMessages = messages();
+    toolMessages[1]?.toolCalls?.push({
+      id: 'tool-call-2',
+      name: 'send_email',
+      arguments: '{}',
+      status: 'running',
+      startedAt: 20,
+    });
+
+    const recovered = recoverActiveToolCallsAfterRestart({
+      conversationId: 'conversation-1',
+      messages: toolMessages,
+      run: { id: 'run-1', userMessageId: 'user-1', createdAt: 1 },
+      timestamp: TIMESTAMP,
+      interruptedErrorMessage: 'Interrupted by restart.',
+      resolveToolEffect: ({ toolCallId }) =>
+        toolCallId === 'tool-call-1'
+          ? { kind: 'verified', observedAt: 150 }
+          : {
+              kind: 'reconciliation_required',
+              observedAt: 160,
+              reason: 'ambiguous_effect',
+            },
+    });
+
+    expect(recovered).toMatchObject({
+      completedCount: 0,
+      failedCount: 0,
+      reconciliationPendingCount: 1,
+    });
+    expect(recovered.messages[1]?.toolCalls).toEqual([
+      expect.objectContaining({ id: 'tool-call-1', status: 'running' }),
+      expect.objectContaining({ id: 'tool-call-2', status: 'running' }),
+    ]);
   });
 
   it('uses ordinary interruption semantics when durable dispatch never started', () => {

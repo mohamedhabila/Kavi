@@ -1,4 +1,7 @@
-import { createInitialAgentRunControlGraphState } from '../../src/services/agents/agentControlGraphState';
+import {
+  createInitialAgentRunControlGraphState,
+  updateAgentRunControlGraphAsyncWorkState,
+} from '../../src/services/agents/agentControlGraphState';
 import { recoverInterruptedAgentRunsInConversation } from '../../src/store/agentRuns/recovery';
 import type { AgentRun } from '../../src/types/agentRun';
 import type { Conversation } from '../../src/types/conversation';
@@ -88,7 +91,7 @@ describe('agent-run restart effect reconciliation', () => {
     expect(toolCall?.result).toContain('durably verified');
   });
 
-  it('counts an ambiguous effect as failed and requires reconciliation', () => {
+  it('keeps an ambiguous effect recoverable without terminalizing the run', () => {
     const recovered = recoverInterruptedAgentRunsInConversation(conversation(), [], {
       timestamp: 200,
       resolveToolEffect: () => ({
@@ -101,11 +104,12 @@ describe('agent-run restart effect reconciliation', () => {
     const toolCall = recovered.messages[1]?.toolCalls?.[0];
 
     expect(recoveredRun).toMatchObject({
-      status: 'failed',
-      summary: { startedTools: 1, completedTools: 0, failedTools: 1 },
+      status: 'running',
+      summary: { startedTools: 1, completedTools: 0, failedTools: 0 },
+      controlGraph: { status: 'recovering' },
     });
-    expect(toolCall).toMatchObject({ status: 'failed', failureKind: 'runtime_error' });
-    expect(toolCall?.error).toContain('requires reconciliation before any retry');
+    expect(toolCall).toMatchObject({ status: 'running' });
+    expect(toolCall?.error).toBeUndefined();
   });
 
   it('keeps a preserved final response completed only when its active effect is verified', () => {
@@ -125,7 +129,7 @@ describe('agent-run restart effect reconciliation', () => {
     });
   });
 
-  it('revokes a preserved completion when the linked effect is ambiguous', () => {
+  it('keeps a preserved completion pending until the linked effect is verified', () => {
     const recovered = recoverInterruptedAgentRunsInConversation(
       conversation({ completeFinal: true }),
       [],
@@ -140,10 +144,88 @@ describe('agent-run restart effect reconciliation', () => {
     );
 
     expect(recovered.agentRuns?.[0]).toMatchObject({
-      status: 'failed',
-      latestSummary:
-        'A final response was preserved, but an active tool lacked a verified terminal effect after restart.',
-      summary: { completedTools: 0, failedTools: 1 },
+      status: 'running',
+      latestSummary: expect.stringContaining('Waiting for durable tool-effect reconciliation'),
+      summary: { completedTools: 0, failedTools: 0 },
     });
+
+    const verified = recoverInterruptedAgentRunsInConversation(recovered, [], {
+      timestamp: 300,
+      resolveToolEffect: () => ({ kind: 'verified', observedAt: 250 }),
+    });
+    expect(verified.agentRuns?.[0]).toMatchObject({
+      status: 'completed',
+      latestSummary: 'Created.',
+      summary: { completedTools: 1, failedTools: 0 },
+    });
+    expect(verified.messages[1]?.toolCalls?.[0]).toMatchObject({
+      status: 'completed',
+      completedAt: 250,
+    });
+  });
+
+  it('accounts for a verified tool even while a recovered worker is still active', () => {
+    const recovered = recoverInterruptedAgentRunsInConversation(
+      conversation(),
+      [
+        {
+          sessionId: 'worker-1',
+          parentConversationId: 'conversation-1',
+          agentRunId: 'run-1',
+          depth: 0,
+          startedAt: 10,
+          updatedAt: 20,
+          status: 'running',
+          sandboxPolicy: 'inherit',
+        },
+      ],
+      {
+        timestamp: 200,
+        resolveToolEffect: () => ({ kind: 'verified', observedAt: 150 }),
+      },
+    );
+
+    expect(recovered.agentRuns?.[0]).toMatchObject({
+      status: 'running',
+      summary: { completedTools: 1, failedTools: 0 },
+    });
+    expect(recovered.messages[1]?.toolCalls?.[0]).toMatchObject({ status: 'completed' });
+  });
+
+  it('accounts for a verified tool before returning to background-worker review', () => {
+    const chat = conversation();
+    const agentRun = chat.agentRuns![0];
+    agentRun.controlGraph = updateAgentRunControlGraphAsyncWorkState(agentRun.controlGraph, {
+      awaitingBackgroundWorkers: true,
+      pendingOperations: [],
+      updatedAt: 3,
+    });
+    const recovered = recoverInterruptedAgentRunsInConversation(
+      chat,
+      [
+        {
+          sessionId: 'worker-1',
+          parentConversationId: 'conversation-1',
+          agentRunId: 'run-1',
+          depth: 0,
+          startedAt: 10,
+          updatedAt: 20,
+          status: 'error',
+          sandboxPolicy: 'inherit',
+          output: 'Provider failed while inspecting the remote state.',
+        },
+      ],
+      {
+        timestamp: 200,
+        resolveToolEffect: () => ({ kind: 'verified', observedAt: 150 }),
+      },
+    );
+
+    expect(recovered.agentRuns?.[0]).toMatchObject({
+      status: 'running',
+      currentPhase: 'review',
+      summary: { completedTools: 1, failedTools: 0 },
+    });
+    expect(recovered.messages[1]?.toolCalls?.[0]).toMatchObject({ status: 'completed' });
   });
 });

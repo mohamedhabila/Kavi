@@ -10,9 +10,9 @@ function dependencies(platform: string): DurableRecoveryLifecycleDependencies {
     platform,
     scheduleAndroid: jest.fn(async (runId) => ({ kind: 'scheduled', runId })),
     scheduleIOS: jest.fn(async (runId) => ({ kind: 'already_scheduled', runId })),
-    repairAndroid: jest.fn(),
+    repairAndroid: jest.fn().mockResolvedValue(undefined),
     initializeIOS: jest.fn(),
-    reconcileIOS: jest.fn(),
+    reconcileIOS: jest.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -63,7 +63,7 @@ describe('durable recovery lifecycle routing', () => {
     initializeDurableRecoveryLifecycle(ios);
     initializeDurableRecoveryLifecycle(unsupported);
 
-    expect(android.repairAndroid).toHaveBeenCalledWith('startup');
+    expect(android.repairAndroid).not.toHaveBeenCalled();
     expect(android.initializeIOS).not.toHaveBeenCalled();
     expect(ios.initializeIOS).toHaveBeenCalledTimes(1);
     expect(ios.repairAndroid).not.toHaveBeenCalled();
@@ -71,14 +71,16 @@ describe('durable recovery lifecycle routing', () => {
     expect(unsupported.initializeIOS).not.toHaveBeenCalled();
   });
 
-  it('routes foreground repair to one platform implementation', () => {
+  it('awaits foreground repair from one platform implementation', async () => {
     const android = dependencies('android');
     const ios = dependencies('ios');
     const unsupported = dependencies('web');
 
-    reconcileDurableRecoveryLifecycle('foreground', android);
-    reconcileDurableRecoveryLifecycle('foreground', ios);
-    reconcileDurableRecoveryLifecycle('foreground', unsupported);
+    await Promise.all([
+      reconcileDurableRecoveryLifecycle('foreground', android),
+      reconcileDurableRecoveryLifecycle('foreground', ios),
+      reconcileDurableRecoveryLifecycle('foreground', unsupported),
+    ]);
 
     expect(android.repairAndroid).toHaveBeenCalledWith('foreground');
     expect(android.reconcileIOS).not.toHaveBeenCalled();
@@ -86,5 +88,27 @@ describe('durable recovery lifecycle routing', () => {
     expect(ios.repairAndroid).not.toHaveBeenCalled();
     expect(unsupported.repairAndroid).not.toHaveBeenCalled();
     expect(unsupported.reconcileIOS).not.toHaveBeenCalled();
+  });
+
+  it('does not resolve before the selected platform barrier', async () => {
+    const deps = dependencies('android');
+    let release: (() => void) | undefined;
+    deps.repairAndroid = jest.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    let settled = false;
+
+    const recovery = reconcileDurableRecoveryLifecycle('startup', deps).then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    release?.();
+    await recovery;
+    expect(settled).toBe(true);
   });
 });

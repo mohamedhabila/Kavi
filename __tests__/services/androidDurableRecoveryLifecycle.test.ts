@@ -44,19 +44,18 @@ describe('Android durable recovery lifecycle', () => {
     const continueAfterYield = jest.fn();
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {
-      scheduleAndroidDurableRecoveryRepair('foreground', {
+      await scheduleAndroidDurableRecoveryRepair('foreground', {
         platform: 'ios',
         scheduleSlice,
         continueAfterYield,
       });
       expect(scheduleSlice).not.toHaveBeenCalled();
 
-      scheduleAndroidDurableRecoveryRepair('startup', {
+      await scheduleAndroidDurableRecoveryRepair('startup', {
         platform: 'android',
         scheduleSlice,
         continueAfterYield,
       });
-      await Promise.resolve();
       expect(scheduleSlice).toHaveBeenCalledWith({ limit: 25 });
       expect(continueAfterYield).not.toHaveBeenCalled();
       expect(warn).toHaveBeenCalledWith(
@@ -85,18 +84,26 @@ describe('Android durable recovery lifecycle', () => {
       continuations.push(continuation);
     });
 
-    scheduleAndroidDurableRecoveryRepair('startup', {
+    let settled = false;
+    const recovery = scheduleAndroidDurableRecoveryRepair('startup', {
       platform: 'android',
       scheduleSlice,
       continueAfterYield,
+    }).then(() => {
+      settled = true;
     });
     await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBe(false);
     for (let index = 0; index < 4; index += 1) {
       expect(continuations).toHaveLength(1);
       continuations.shift()!();
       await Promise.resolve();
+      await Promise.resolve();
     }
+    await recovery;
 
+    expect(settled).toBe(true);
     expect(scheduleSlice).toHaveBeenCalledTimes(5);
     expect(scheduleSlice).toHaveBeenNthCalledWith(1, { limit: 25 });
     expect(scheduleSlice).toHaveBeenNthCalledWith(5, { limit: 25, after: 'cursor-4' });
@@ -114,15 +121,14 @@ describe('Android durable recovery lifecycle', () => {
     });
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {
-      scheduleAndroidDurableRecoveryRepair('foreground', {
+      const recovery = scheduleAndroidDurableRecoveryRepair('foreground', {
         platform: 'android',
         scheduleSlice,
         continueAfterYield,
       });
       await Promise.resolve();
       continuations.shift()!();
-      await Promise.resolve();
-      await Promise.resolve();
+      await recovery;
 
       expect(scheduleSlice).toHaveBeenCalledTimes(2);
       expect(continueAfterYield).toHaveBeenCalledTimes(1);

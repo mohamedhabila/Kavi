@@ -1,4 +1,5 @@
 import { type PersistHydratableStore, waitForStoreHydration } from '../store/persistHydration';
+import { flushChatStorePersistenceNow } from '../store/chatStorePersistence';
 import { useChatStore } from '../store/useChatStore';
 import { repairTerminalAgentRunsMissingFinalResponses } from './agents/agentRunRepair';
 import { initSubAgentRegistry, listActiveSubAgents } from './agents/subAgent';
@@ -6,6 +7,10 @@ import { recoverInterruptedForegroundModelExecutions } from './executionJournal/
 import { maintainForegroundModelExecutionRetention } from './executionJournal/foregroundModelExecutionRetention';
 import { releaseStaleForegroundModelProjectionOwners } from './executionJournal/foregroundModelProjectionCleanup';
 import { maintainTerminalExecutionRetention } from './executionJournal/terminalExecutionRetention';
+import {
+  reconcileDurableRecoveryLifecycle,
+  type DurableRecoveryLifecycleSource,
+} from './executionJournal/durableRecoveryLifecycle';
 import { buildToolEffectRestartDispositionResolver } from './executionJournal/toolEffectRestartDisposition';
 import { listActiveToolEffectRestartInputs } from '../store/agentRuns/toolCalls';
 
@@ -17,7 +22,6 @@ let recoveryPromise: Promise<void> | null = null;
 let hasCompletedInitialRecovery = false;
 
 async function recoverForegroundJournalState(): Promise<void> {
-  await waitForChatHydration();
   try {
     await recoverInterruptedForegroundModelExecutions();
   } catch (error) {
@@ -46,14 +50,19 @@ function maintainExternalExecutionRetention(): void {
   }
 }
 
-export async function recoverPersistedAgentState(): Promise<void> {
+async function recoverPersistedAgentStateForSource(
+  source: DurableRecoveryLifecycleSource,
+  initializeSubAgents: boolean,
+): Promise<void> {
   await waitForChatHydration();
 
-  const chatState = useChatStore.getState();
-  await initSubAgentRegistry(chatState.conversations);
+  if (initializeSubAgents) {
+    await initSubAgentRegistry(useChatStore.getState().conversations);
+  }
   const activeSubAgents = listActiveSubAgents();
+  await reconcileDurableRecoveryLifecycle(source);
   // Reconcile journal-owned projections and exact effect receipts before the
-  // coarser AgentRun repair can terminalize active tools or final responses.
+  // AgentRun owner projects task tools or terminalizes final responses.
   await recoverForegroundJournalState();
   const recoveredChatState = useChatStore.getState();
   const resolveToolEffect = await buildToolEffectRestartDispositionResolver(
@@ -73,10 +82,15 @@ export async function recoverPersistedAgentState(): Promise<void> {
     timestamp: Date.now(),
     resolveToolEffect,
   });
-  maintainExternalExecutionRetention();
   await repairTerminalAgentRunsMissingFinalResponses({
     activeSubAgents,
   });
+  await flushChatStorePersistenceNow();
+  maintainExternalExecutionRetention();
+}
+
+export async function recoverPersistedAgentState(): Promise<void> {
+  await recoverPersistedAgentStateForSource('startup', true);
 }
 
 /** Single-flight recovery that retries on later foreground events after each completed sweep. */
@@ -98,14 +112,12 @@ export function waitForPersistedAgentRecoveryReadiness(): Promise<void> {
   return hasCompletedInitialRecovery ? Promise.resolve() : triggerPersistedAgentRecovery();
 }
 
-/** Retry only journal-owned projection cleanup on foreground; live AgentRuns remain untouched. */
-export function triggerForegroundJournalRecovery(): Promise<void> {
+/** Retry the complete reconciliation transaction after a foreground transition. */
+export function triggerForegroundPersistedAgentRecovery(): Promise<void> {
   if (recoveryPromise) return recoveryPromise;
   if (!hasCompletedInitialRecovery) return triggerPersistedAgentRecovery();
-  recoveryPromise = recoverForegroundJournalState()
-    .then(maintainExternalExecutionRetention)
-    .finally(() => {
-      recoveryPromise = null;
-    });
+  recoveryPromise = recoverPersistedAgentStateForSource('foreground', false).finally(() => {
+    recoveryPromise = null;
+  });
   return recoveryPromise;
 }

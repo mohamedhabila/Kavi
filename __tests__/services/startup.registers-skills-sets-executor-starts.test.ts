@@ -24,7 +24,8 @@ const mockEmitAppEvent = jest.fn().mockResolvedValue(undefined);
 const mockRunMemoryMigrationTick = jest.fn().mockResolvedValue(undefined);
 const mockRunMemoryBackgroundFlush = jest.fn().mockResolvedValue(undefined);
 const mockInitializeDurableRecoveryLifecycle = jest.fn();
-const mockReconcileDurableRecoveryLifecycle = jest.fn();
+const mockReconcileDurableRecoveryLifecycle = jest.fn().mockResolvedValue(undefined);
+const mockFlushChatStorePersistenceNow = jest.fn().mockResolvedValue(undefined);
 const mockRemoveRetiredMemoryFileArtifacts = jest.fn();
 let mockSettingsHydrated = true;
 let mockChatHydrated = true;
@@ -114,6 +115,11 @@ jest.mock('../../src/services/executionJournal/durableRecoveryLifecycle', () => 
   reconcileDurableRecoveryLifecycle: (...args: any[]) =>
     mockReconcileDurableRecoveryLifecycle(...args),
 }));
+jest.mock('../../src/store/chatStorePersistence', () => ({
+  flushChatStorePersistenceNow: (...args: any[]) =>
+    mockFlushChatStorePersistenceNow(...args),
+  requestChatStorePersistenceCheckpoint: jest.fn(),
+}));
 jest.mock('../../src/services/executionJournal/foregroundModelExecutionRecovery', () => ({
   recoverInterruptedForegroundModelExecutions: (...args: any[]) =>
     mockRecoverInterruptedForegroundModelExecutions(...args),
@@ -200,6 +206,8 @@ beforeEach(() => {
   mockListActiveSubAgents.mockReturnValue([]);
   mockRepairTerminalAgentRunsMissingFinalResponses.mockResolvedValue([]);
   mockRecoverInterruptedForegroundModelExecutions.mockResolvedValue([]);
+  mockReconcileDurableRecoveryLifecycle.mockResolvedValue(undefined);
+  mockFlushChatStorePersistenceNow.mockResolvedValue(undefined);
   mockEvaluateJobsOnce.mockResolvedValue(undefined);
   mockSyncSchedulerWakeNotifications.mockResolvedValue(undefined);
   mockRunMemoryMigrationTick.mockResolvedValue(undefined);
@@ -396,11 +404,13 @@ describe('initializeServices', () => {
 
     handleAppForeground();
 
-    expect(mockReconcileDurableRecoveryLifecycle).toHaveBeenCalledWith('foreground');
+    await waitFor(() =>
+      expect(mockReconcileDurableRecoveryLifecycle).toHaveBeenCalledWith('foreground'),
+    );
     await waitFor(() =>
       expect(mockRecoverInterruptedForegroundModelExecutions).toHaveBeenCalledTimes(1),
     );
-    expect(mockChatStoreState.recoverInterruptedAgentRuns).not.toHaveBeenCalled();
+    expect(mockChatStoreState.recoverInterruptedAgentRuns).toHaveBeenCalledTimes(1);
   });
   it('flushes durable memory work before waiting for migration', async () => {
     mockRunMemoryMigrationTick.mockImplementation(() => new Promise(() => undefined));
@@ -457,10 +467,17 @@ describe('initializeServices', () => {
       now: expect.any(Number),
       durabilityClass: 'external_durable_operation',
     });
+    expect(mockReconcileDurableRecoveryLifecycle).toHaveBeenCalledWith('startup');
     expect(
       mockRecoverInterruptedForegroundModelExecutions.mock.invocationCallOrder[0],
     ).toBeLessThan(mockChatStoreState.recoverInterruptedAgentRuns.mock.invocationCallOrder[0]);
     expect(mockChatStoreState.recoverInterruptedAgentRuns.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRepairTerminalAgentRunsMissingFinalResponses.mock.invocationCallOrder[0],
+    );
+    expect(mockRepairTerminalAgentRunsMissingFinalResponses.mock.invocationCallOrder[0]).toBeLessThan(
+      mockFlushChatStorePersistenceNow.mock.invocationCallOrder[0],
+    );
+    expect(mockFlushChatStorePersistenceNow.mock.invocationCallOrder[0]).toBeLessThan(
       mockMaintainTerminalExecutionRetention.mock.invocationCallOrder[0],
     );
   });

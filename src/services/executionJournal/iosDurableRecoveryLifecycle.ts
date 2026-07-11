@@ -191,15 +191,13 @@ function lifecycle(): IOSDurableRecoveryLifecycle {
 }
 
 export function initializeIOSDurableRecoveryLifecycle(): void {
-  const owner = lifecycle();
-  owner.start();
-  void owner.reconcile('startup');
+  lifecycle().start();
 }
 
 export function reconcileIOSDurableRecoveryLifecycle(
   source: IOSDurableRecoveryLifecycleSource,
-): void {
-  void lifecycle().reconcile(source);
+): Promise<void> {
+  return lifecycle().reconcile(source);
 }
 
 export function __resetIOSDurableRecoveryLifecycleForTests(): void {

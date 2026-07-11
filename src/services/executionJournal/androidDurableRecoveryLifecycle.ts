@@ -55,36 +55,33 @@ export function scheduleAndroidDurableRecoveryRunImmediately(
 export function scheduleAndroidDurableRecoveryRepair(
   source: AndroidDurableRecoveryRepairSource,
   dependencies: AndroidDurableRecoveryLifecycleDependencies = DEFAULT_DEPENDENCIES,
-): void {
-  if (dependencies.platform !== 'android') return;
-  scheduleRepairSlice(source, undefined, dependencies);
+): Promise<void> {
+  if (dependencies.platform !== 'android') return Promise.resolve();
+  return scheduleRepairSlices(source, dependencies).catch((error) => {
+    console.warn(`[startup] Android durable recovery ${source} scan failed:`, error);
+  });
 }
 
-function scheduleRepairSlice(
+async function scheduleRepairSlices(
   source: AndroidDurableRecoveryRepairSource,
-  after: string | undefined,
   dependencies: AndroidDurableRecoveryLifecycleDependencies,
-): void {
-  void dependencies
-    .scheduleSlice({
+): Promise<void> {
+  let after: string | undefined;
+  while (true) {
+    const slice = await dependencies.scheduleSlice({
       limit: REPAIR_SLICE_SIZE,
       ...(after === undefined ? {} : { after }),
-    })
-    .then((slice) => {
-      if (
-        slice.outcomes.some((outcome) => outcome.kind === 'deferred' || outcome.kind === 'blocked')
-      ) {
-        console.warn(`[startup] Android durable recovery ${source} scan needs attention`);
-      }
-      if (slice.nextAfter === null) return;
-      if (slice.nextAfter === after) {
-        throw new Error('android-durable-scan-cursor-stalled');
-      }
-      dependencies.continueAfterYield(() => {
-        scheduleRepairSlice(source, slice.nextAfter!, dependencies);
-      });
-    })
-    .catch((error) => {
-      console.warn(`[startup] Android durable recovery ${source} scan failed:`, error);
     });
+    if (
+      slice.outcomes.some((outcome) => outcome.kind === 'deferred' || outcome.kind === 'blocked')
+    ) {
+      console.warn(`[startup] Android durable recovery ${source} scan needs attention`);
+    }
+    if (slice.nextAfter === null) return;
+    if (slice.nextAfter === after) {
+      throw new Error('android-durable-scan-cursor-stalled');
+    }
+    after = slice.nextAfter;
+    await new Promise<void>((resolve) => dependencies.continueAfterYield(resolve));
+  }
 }

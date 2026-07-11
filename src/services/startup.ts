@@ -46,12 +46,9 @@ import {
 } from './llm/support/providerSupport';
 import { SUPER_AGENT_PERSONA_ID } from './agents/personas';
 import { resolveConversationPersonaForMode } from '../engine/graph/conversation/modeTransitions';
+import { initializeDurableRecoveryLifecycle } from './executionJournal/durableRecoveryLifecycle';
 import {
-  initializeDurableRecoveryLifecycle,
-  reconcileDurableRecoveryLifecycle,
-} from './executionJournal/durableRecoveryLifecycle';
-import {
-  triggerForegroundJournalRecovery,
+  triggerForegroundPersistedAgentRecovery,
   triggerPersistedAgentRecovery,
 } from './startupRecovery';
 
@@ -667,8 +664,7 @@ export function initializeServices(): void {
  * v6→v7 archived-thread backlog drains across sessions.
  */
 export function handleAppForeground(): void {
-  reconcileDurableRecoveryLifecycle('foreground');
-  void triggerForegroundJournalRecovery().catch((e) =>
+  void triggerForegroundPersistedAgentRecovery().catch((e) =>
     console.warn('[startup] foreground persisted-agent recovery failed:', e),
   );
   void evaluateJobsOnce({ trigger: 'foreground-reconcile' }).catch((e) =>

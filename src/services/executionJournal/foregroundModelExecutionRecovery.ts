@@ -47,6 +47,7 @@ export const FOREGROUND_MODEL_RECOVERY_BLOCK_REASONS = [
   'task_ownership_missing',
   'projection_owner_missing',
   'projection_owner_changed',
+  'effect_reconciliation_pending',
   'generation_changed',
   'journal_unavailable',
 ] as const;
@@ -260,6 +261,11 @@ export function planForegroundModelRestartRecovery(
     taskId: lease.taskId,
     resolveToolEffect,
   });
+  if (
+    interruptedTools.some((tool) => tool.disposition.kind === 'reconciliation_required')
+  ) {
+    return blocked(lease, 'effect_reconciliation_pending');
+  }
   const projection =
     [...ownedAssistantMessages].reverse().find((message) => !message.subAgentEvent) ??
     ownedAssistantMessages.at(-1)!;
@@ -286,7 +292,7 @@ export function planForegroundModelRestartRecovery(
   };
 }
 
-function applyRecoveryPlan(
+export function applyForegroundModelRecoveryPlan(
   plan: ForegroundModelRecoveryPlan,
   conversation: Conversation,
   timestamp: number,
@@ -304,16 +310,23 @@ function applyRecoveryPlan(
     ]),
   );
   const messages = conversation.messages.map((message) => {
-    const toolCalls = message.toolCalls?.map((toolCall) => {
-      const disposition = interruptedToolsByKey.get(`${message.id}\u0000${toolCall.id}`);
-      if (!disposition) return toolCall;
-      return projectToolCallAfterRestart({
-        toolCall,
-        disposition,
-        timestamp,
-        interruptedErrorMessage: INTERRUPTED_TOOL_ERROR,
-      }).toolCall;
-    });
+    // AgentRun recovery is the sole owner of task tool projection and counters.
+    // Plain chat has no AgentRun owner, so this journal projects those tools.
+    const toolCalls =
+      plan.lease.taskId === null
+        ? message.toolCalls?.map((toolCall) => {
+            const disposition = interruptedToolsByKey.get(
+              `${message.id}\u0000${toolCall.id}`,
+            );
+            if (!disposition) return toolCall;
+            return projectToolCallAfterRestart({
+              toolCall,
+              disposition,
+              timestamp,
+              interruptedErrorMessage: INTERRUPTED_TOOL_ERROR,
+            }).toolCall;
+          })
+        : message.toolCalls;
     if (message.id !== plan.projectionMessageId) {
       return toolCalls === message.toolCalls ? message : { ...message, toolCalls };
     }
@@ -374,7 +387,7 @@ async function mutateForegroundModelProjectionForRecovery(
         resolveToolEffect,
       );
       if ('kind' in plan) return { kind: 'rejected', value: plan };
-      const nextConversation = applyRecoveryPlan(plan, conversation, timestamp);
+      const nextConversation = applyForegroundModelRecoveryPlan(plan, conversation, timestamp);
       return {
         kind: 'applied',
         conversation: nextConversation,
