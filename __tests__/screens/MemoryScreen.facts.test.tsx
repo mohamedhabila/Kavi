@@ -17,12 +17,7 @@ const mockExecuteMemoryBlockRead = jest.fn();
 const mockExecuteMemoryBlockEdit = jest.fn();
 const mockSubscribeToMemoryChanges = jest.fn();
 let mockRouteParams: Record<string, unknown> = {};
-let memoryListener:
-  | ((event: {
-      scope: 'global' | 'conversation' | 'daily' | 'structured' | 'all';
-      updatedAt: number;
-    }) => void)
-  | null = null;
+let memoryListener: ((event: { updatedAt: number }) => void) | null = null;
 
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: ({ children, ...props }: any) => {
@@ -352,7 +347,7 @@ describe('MemoryScreen — Facts & Blocks tabs', () => {
     });
 
     await act(async () => {
-      memoryListener?.({ scope: 'structured', updatedAt: 100 });
+      memoryListener?.({ updatedAt: 100 });
     });
 
     await waitFor(() => {
@@ -456,7 +451,7 @@ describe('MemoryScreen — Facts & Blocks tabs', () => {
     });
 
     await act(async () => {
-      memoryListener?.({ scope: 'structured', updatedAt: 100 });
+      memoryListener?.({ updatedAt: 100 });
     });
 
     await waitFor(() => {

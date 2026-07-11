@@ -100,14 +100,8 @@ function useMemoryVersion(): number {
   const [version, setVersion] = useState(0);
   useEffect(
     () =>
-      subscribeToMemoryChanges((event) => {
-        if (
-          event.scope === 'structured' ||
-          event.scope === 'conversation' ||
-          event.scope === 'all'
-        ) {
-          setVersion((current) => current + 1);
-        }
+      subscribeToMemoryChanges(() => {
+        setVersion((current) => current + 1);
       }),
     [],
   );

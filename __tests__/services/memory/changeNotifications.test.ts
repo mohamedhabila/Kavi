@@ -17,7 +17,6 @@ describe('memory change notifications', () => {
     notifyStructuredMemoryChanged('conversation-1');
 
     expect(listener).toHaveBeenCalledWith({
-      scope: 'structured',
       updatedAt: 1_234,
       conversationId: 'conversation-1',
     });

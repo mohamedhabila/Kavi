@@ -62,9 +62,7 @@ jest.mock('../../src/services/memory/workingBlocks', () => ({
   },
 }));
 
-let memoryListener:
-  | ((event: { scope: 'global' | 'conversation' | 'daily' | 'structured' | 'all'; updatedAt: number }) => void)
-  | null = null;
+let memoryListener: ((event: { updatedAt: number }) => void) | null = null;
 
 jest.mock('../../src/services/memory/changeNotifications', () => ({
   __mockSubscribeToMemoryChanges: jest.fn(),
@@ -262,7 +260,7 @@ describe('TodaysFocusTile', () => {
       { content: 'Fresh focus from the completed turn.' },
     ]);
     act(() => {
-      memoryListener?.({ scope: 'structured', updatedAt: 100 });
+      memoryListener?.({ updatedAt: 100 });
     });
 
     expect(getByTestId('sidebar-todays-focus-body').props.children).toBe(
@@ -465,7 +463,7 @@ describe('MemoryStats', () => {
     expect(getByTestId('sidebar-memory-facts').props.children).toBe('1 facts');
 
     act(() => {
-      memoryListener?.({ scope: 'structured', updatedAt: 100 });
+      memoryListener?.({ updatedAt: 100 });
     });
 
     expect(getByTestId('sidebar-memory-facts').props.children).toBe('5 facts');

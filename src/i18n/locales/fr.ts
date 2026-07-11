@@ -749,29 +749,15 @@ export const fr: TranslationMap = mergeTranslations(en, {
     overviewSearchPlaceholder: 'Rechercher dans la mémoire…',
     overviewConsolidationTitle: 'Consolidation',
     overviewLoading: 'Chargement de l’aperçu mémoire…',
-    globalTab: 'Global',
-    dailyTab: 'Notes quotidiennes',
     factsTab: 'Faits',
     blocksTab: 'Blocs',
-    saved: 'Enregistré',
-    savedDesc: 'La mémoire a été enregistrée.',
-    save: 'Enregistrer',
     clearTitle: 'Effacer toute la mémoire',
     clearConfirm:
       'Cela supprimera définitivement tous les faits, épisodes, tâches et blocs de mémoire enregistrés. Cette action est irréversible.',
     clearAction: 'Tout effacer',
-    emptyHint:
-      "La mémoire est vide. L'IA ajoutera des notes ici au fur et à mesure de votre conversation. Vous pouvez également éditer directement.",
-    noDailyFiles:
-      'Aucune note quotidienne pour le moment. Elles sont créées automatiquement lors des conversations.',
-    selectDate: 'Sélectionnez une date ci-dessus pour voir les notes quotidiennes.',
-    statsLine: '{lines} lignes · {chars} caractères',
-    statsLineDirty: '{lines} lignes · {chars} caractères · modifications non enregistrées',
     refreshing: 'Actualisation de la mémoire…',
     lastSynced: 'Dernière synchronisation à {time}',
     notSyncedYet: "La mémoire n'a pas encore été synchronisée dans cette session.",
-    externalUpdate:
-      'La mémoire a changé ailleurs alors que vous aviez des modifications non enregistrées. Actualisez pour charger la dernière version enregistrée.',
     factsEmpty:
       "Aucun fait enregistré pour le moment. L'IA se souviendra des faits structurés ici.",
     factsSearchPlaceholder: 'Filtrer par sujet…',
