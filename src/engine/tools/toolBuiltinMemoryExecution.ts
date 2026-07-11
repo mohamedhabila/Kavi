@@ -204,20 +204,8 @@ export async function executeBuiltinMemoryTool(
     );
     return executeMemoryRemember(request.args, request.context);
   }
-  if (name === 'memory_pin') return executeMemoryPin(args);
-  if (name === 'memory_unpin') return executeMemoryUnpin(args);
   if (name === 'memory_block_read') return executeMemoryBlockRead(args);
   if (name === 'memory_block_edit') return executeMemoryBlockEdit(args);
-
-  if (name === 'memory_manage') {
-    const action = manageAction;
-    if (action === 'pin') return executeMemoryPin({ factId: args?.factId as string });
-    if (action === 'unpin') return executeMemoryUnpin({ factId: args?.factId as string });
-    if (action === 'invalidate') {
-      return executeMemoryInvalidate({ factId: args.factId as string });
-    }
-  }
-
   if (name === 'memory_block') {
     const action = args && typeof args.action === 'string' ? String(args.action).toLowerCase() : '';
     if (action === 'read') {
@@ -234,6 +222,29 @@ export async function executeBuiltinMemoryTool(
       ok: false,
       error: 'memory_block: action must be one of read, edit.',
     });
+  }
+  const executionMemoryContext = resolveExecutionMemoryContext(
+    conversationId,
+    memoryConversationId,
+    context,
+  );
+  if (name === 'memory_pin') return executeMemoryPin(args, executionMemoryContext);
+  if (name === 'memory_unpin') return executeMemoryUnpin(args, executionMemoryContext);
+
+  if (name === 'memory_manage') {
+    const action = manageAction;
+    if (action === 'pin') {
+      return executeMemoryPin({ factId: args?.factId as string }, executionMemoryContext);
+    }
+    if (action === 'unpin') {
+      return executeMemoryUnpin({ factId: args?.factId as string }, executionMemoryContext);
+    }
+    if (action === 'invalidate') {
+      return executeMemoryInvalidate(
+        { factId: args.factId as string },
+        executionMemoryContext,
+      );
+    }
   }
 
   return `Error: unknown memory_* tool "${name}"`;

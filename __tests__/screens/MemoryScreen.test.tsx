@@ -88,8 +88,7 @@ jest.mock('../../src/services/memory/memoryTools', () => ({
   executeMemoryRecall: () => ({ ok: true, subject: null, facts: [] }),
   queryMemoryFactsForManagement: () => ({ ok: true, subject: null, facts: [] }),
   executeMemoryRemember: () => ({ ok: true, fact: null, status: 'created', superseded: [] }),
-  executeMemoryPin: () => ({ ok: true, fact: null }),
-  executeMemoryUnpin: () => ({ ok: true, fact: null }),
+  setMemoryFactPinnedForManagement: () => ({ ok: true, fact: null }),
   executeMemoryForget: () => ({
     ok: true,
     action: 'withdrawal',

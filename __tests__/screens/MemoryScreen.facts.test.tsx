@@ -12,8 +12,7 @@ import { Alert } from 'react-native';
 import { MemoryScreen } from '../../src/screens/MemoryScreen';
 
 const mockExecuteMemoryRecall = jest.fn();
-const mockExecuteMemoryPin = jest.fn();
-const mockExecuteMemoryUnpin = jest.fn();
+const mockSetMemoryFactPinnedForManagement = jest.fn();
 const mockExecuteMemoryForget = jest.fn();
 const mockExecuteMemoryBlockRead = jest.fn();
 const mockExecuteMemoryBlockEdit = jest.fn();
@@ -123,8 +122,8 @@ jest.mock('../../src/services/memory/memoryTools', () => ({
   executeMemoryRecall: (...args: any[]) => mockExecuteMemoryRecall(...args),
   queryMemoryFactsForManagement: (...args: any[]) => mockExecuteMemoryRecall(...args),
   executeMemoryRemember: jest.fn(),
-  executeMemoryPin: (...args: any[]) => mockExecuteMemoryPin(...args),
-  executeMemoryUnpin: (...args: any[]) => mockExecuteMemoryUnpin(...args),
+  setMemoryFactPinnedForManagement: (...args: any[]) =>
+    mockSetMemoryFactPinnedForManagement(...args),
   executeMemoryForget: (...args: any[]) => mockExecuteMemoryForget(...args),
   executeMemoryBlockRead: (...args: any[]) => mockExecuteMemoryBlockRead(...args),
   executeMemoryBlockEdit: (...args: any[]) => mockExecuteMemoryBlockEdit(...args),
@@ -163,8 +162,10 @@ describe('MemoryScreen — Facts & Blocks tabs', () => {
     });
     mockExecuteMemoryRecall.mockReturnValue({ ok: true, subject: null, facts: [] });
     mockExecuteMemoryBlockRead.mockReturnValue({ ok: true, blocks: [] });
-    mockExecuteMemoryPin.mockReturnValue({ ok: true, fact: sampleFact({ pinned: true }) });
-    mockExecuteMemoryUnpin.mockReturnValue({ ok: true, fact: sampleFact({ pinned: false }) });
+    mockSetMemoryFactPinnedForManagement.mockImplementation((_args, pinned) => ({
+      ok: true,
+      fact: sampleFact({ pinned }),
+    }));
     mockExecuteMemoryForget.mockReturnValue({
       ok: true,
       action: 'withdrawal',
@@ -210,7 +211,7 @@ describe('MemoryScreen — Facts & Blocks tabs', () => {
     });
   });
 
-  it('Pin button calls executeMemoryPin and refreshes the list', async () => {
+  it('Pin button uses explicit whole-vault management and refreshes the list', async () => {
     mockExecuteMemoryRecall.mockReturnValue({
       ok: true,
       subject: null,
@@ -225,12 +226,15 @@ describe('MemoryScreen — Facts & Blocks tabs', () => {
     mockExecuteMemoryRecall.mockClear();
     fireEvent.press(getByTestId('memory-fact-pin-fact-1'));
 
-    expect(mockExecuteMemoryPin).toHaveBeenCalledWith({ factId: 'fact-1' });
+    expect(mockSetMemoryFactPinnedForManagement).toHaveBeenCalledWith(
+      { factId: 'fact-1' },
+      true,
+    );
     // Reload happens after a successful pin/unpin.
     expect(mockExecuteMemoryRecall).toHaveBeenCalled();
   });
 
-  it('Unpin button is used when the fact is already pinned', async () => {
+  it('passes pinned=false when the fact is already pinned', async () => {
     mockExecuteMemoryRecall.mockReturnValue({
       ok: true,
       subject: null,
@@ -243,8 +247,10 @@ describe('MemoryScreen — Facts & Blocks tabs', () => {
     await waitFor(() => expect(getByTestId('memory-fact-pin-fact-1')).toBeTruthy());
 
     fireEvent.press(getByTestId('memory-fact-pin-fact-1'));
-    expect(mockExecuteMemoryUnpin).toHaveBeenCalledWith({ factId: 'fact-1' });
-    expect(mockExecuteMemoryPin).not.toHaveBeenCalled();
+    expect(mockSetMemoryFactPinnedForManagement).toHaveBeenCalledWith(
+      { factId: 'fact-1' },
+      false,
+    );
   });
 
   it('Forget confirmation cancels safely and executes withdrawal exactly once on confirm', async () => {

@@ -12,6 +12,7 @@ import {
   type MemoryRememberArgs,
   type MemoryRememberExecutionContext,
   type MemoryPinArgs,
+  type MemoryFactActionExecutionContext,
   type MemoryForgetArgs,
   type MemoryInvalidateArgs,
   type MemoryBlockReadArgs,
@@ -272,20 +273,29 @@ export function executeMemoryRemember(
   return wrapMemoryToolResult(rememberFact(args, context));
 }
 
-export function executeMemoryPin(args: MemoryPinArgs): string {
-  return wrapMemoryToolResult(pinFact(args));
+export function executeMemoryPin(
+  args: MemoryPinArgs,
+  context: MemoryFactActionExecutionContext,
+): string {
+  return wrapMemoryToolResult(pinFact(args, context));
 }
 
-export function executeMemoryUnpin(args: MemoryPinArgs): string {
-  return wrapMemoryToolResult(unpinFact(args));
+export function executeMemoryUnpin(
+  args: MemoryPinArgs,
+  context: MemoryFactActionExecutionContext,
+): string {
+  return wrapMemoryToolResult(unpinFact(args, context));
 }
 
 export function executeMemoryForget(args: MemoryForgetArgs): string {
   return wrapMemoryToolResult(forgetFact(args));
 }
 
-export function executeMemoryInvalidate(args: MemoryInvalidateArgs): string {
-  return wrapMemoryToolResult(invalidateFact(args));
+export function executeMemoryInvalidate(
+  args: MemoryInvalidateArgs,
+  context: MemoryFactActionExecutionContext,
+): string {
+  return wrapMemoryToolResult(invalidateFact(args, context));
 }
 
 export function executeMemoryBlockRead(args: MemoryBlockReadArgs = {}): string {

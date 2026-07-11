@@ -246,11 +246,11 @@ describe('living-memory tool wiring', () => {
     );
     const factId = r.fact.id;
 
-    const pinned = JSON.parse(executeMemoryPin({ factId }));
+    const pinned = JSON.parse(executeMemoryPin({ factId }, MEMORY_EXECUTION_SCOPE));
     expect(pinned.ok).toBe(true);
     expect(pinned.fact.pinned).toBe(true);
 
-    const unpinned = JSON.parse(executeMemoryUnpin({ factId }));
+    const unpinned = JSON.parse(executeMemoryUnpin({ factId }, MEMORY_EXECUTION_SCOPE));
     expect(unpinned.ok).toBe(true);
     expect(unpinned.fact.pinned).toBe(false);
   });
@@ -281,7 +281,9 @@ describe('living-memory tool wiring', () => {
         scope: 'global',
       }),
     );
-    const invalidated = JSON.parse(executeMemoryInvalidate({ factId: r.fact.id }));
+    const invalidated = JSON.parse(
+      executeMemoryInvalidate({ factId: r.fact.id }, MEMORY_EXECUTION_SCOPE),
+    );
     expect(invalidated).toEqual(
       expect.objectContaining({ ok: true, action: 'invalidation', status: 'invalidated' }),
     );

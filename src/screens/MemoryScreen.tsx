@@ -21,8 +21,7 @@ import {
 import {
   queryMemoryFactsForManagement,
   executeMemoryForget,
-  executeMemoryPin,
-  executeMemoryUnpin,
+  setMemoryFactPinnedForManagement,
   executeMemoryBlockRead,
   executeMemoryBlockEdit,
 } from '../services/memory/memoryTools';
@@ -347,8 +346,8 @@ export const MemoryScreen: React.FC = () => {
   const handleFactToggleStar = useCallback(
     (fact: FactRow) => {
       const result = fact.pinned
-        ? executeMemoryUnpin({ factId: fact.id })
-        : executeMemoryPin({ factId: fact.id });
+        ? setMemoryFactPinnedForManagement({ factId: fact.id }, false)
+        : setMemoryFactPinnedForManagement({ factId: fact.id }, true);
       if ('ok' in result && result.ok) {
         loadFacts();
       }

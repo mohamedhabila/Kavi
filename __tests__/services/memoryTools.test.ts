@@ -20,11 +20,19 @@ import {
   executeMemoryUnpin,
   executeMemoryForget,
   executeMemoryInvalidate,
+  setMemoryFactPinnedForManagement,
   executeMemoryBlockRead,
   executeMemoryBlockEdit,
 } from '../../src/services/memory/memoryTools';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
+
+const MEMORY_ACTION_SCOPE = {
+  memoryConversationId: 'conversation-request',
+  sourceThreadId: 'thread-request',
+  personaId: 'default',
+  taskId: null,
+} as const;
 
 beforeEach(() => {
   closeMemoryDb();
@@ -339,19 +347,35 @@ describe('executeMemoryPin / executeMemoryUnpin', () => {
       value: 'Berlin',
       scope: 'global',
     });
-    const pinned = executeMemoryPin({ factId: created.fact.id });
+    const pinned = executeMemoryPin({ factId: created.fact.id }, MEMORY_ACTION_SCOPE);
     expect(pinned.ok).toBe(true);
     if (pinned.ok) expect(pinned.fact.pinned).toBe(true);
 
-    const unpinned = executeMemoryUnpin({ factId: created.fact.id });
+    const unpinned = executeMemoryUnpin({ factId: created.fact.id }, MEMORY_ACTION_SCOPE);
     expect(unpinned.ok).toBe(true);
     if (unpinned.ok) expect(unpinned.fact.pinned).toBe(false);
   });
 
   it('returns not_found for unknown id', () => {
-    const result = executeMemoryPin({ factId: 'nope' });
+    const result = executeMemoryPin({ factId: 'nope' }, MEMORY_ACTION_SCOPE);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.code).toBe('not_found');
+  });
+
+  it('keeps whole-vault UI pin management on an explicit non-agent path', () => {
+    const created = rememberOk({
+      subject: 'ui-project',
+      predicate: 'status',
+      value: 'ready',
+      scope: 'conversation',
+      originConversationId: 'other-root',
+      originThreadId: 'other-thread',
+    });
+
+    expect(setMemoryFactPinnedForManagement({ factId: created.fact.id }, true)).toMatchObject({
+      ok: true,
+      fact: { id: created.fact.id, pinned: true },
+    });
   });
 });
 
@@ -393,7 +417,7 @@ describe('executeMemoryForget', () => {
       value: 'Berlin',
       scope: 'global',
     });
-    const result = executeMemoryInvalidate({ factId: created.fact.id });
+    const result = executeMemoryInvalidate({ factId: created.fact.id }, MEMORY_ACTION_SCOPE);
     expect(result).toEqual(
       expect.objectContaining({
         ok: true,

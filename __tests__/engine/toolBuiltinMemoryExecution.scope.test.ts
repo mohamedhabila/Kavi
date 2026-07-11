@@ -1,5 +1,8 @@
 const mockExecuteMemoryRecall = jest.fn();
 const mockExecuteMemorySearch = jest.fn();
+const mockExecuteMemoryPin = jest.fn();
+const mockExecuteMemoryUnpin = jest.fn();
+const mockExecuteMemoryInvalidate = jest.fn();
 
 jest.mock('../../src/store/useSettingsStore', () => ({
   useSettingsStore: {
@@ -23,10 +26,10 @@ jest.mock('../../src/engine/tools/builtin-memory', () => ({
   executeMemoryRecall: (...args: unknown[]) => mockExecuteMemoryRecall(...args),
   executeMemorySearch: (...args: unknown[]) => mockExecuteMemorySearch(...args),
   executeMemoryRemember: jest.fn(),
-  executeMemoryPin: jest.fn(),
-  executeMemoryUnpin: jest.fn(),
+  executeMemoryPin: (...args: unknown[]) => mockExecuteMemoryPin(...args),
+  executeMemoryUnpin: (...args: unknown[]) => mockExecuteMemoryUnpin(...args),
   executeMemoryForget: jest.fn(),
-  executeMemoryInvalidate: jest.fn(),
+  executeMemoryInvalidate: (...args: unknown[]) => mockExecuteMemoryInvalidate(...args),
   executeMemoryBlockRead: jest.fn(),
   executeMemoryBlockEdit: jest.fn(),
 }));
@@ -59,6 +62,38 @@ describe('builtin memory execution scope', () => {
       personaId: 'coder',
       taskId: 'active-task',
     });
+  });
+
+  it.each([
+    ['memory_pin', mockExecuteMemoryPin, { factId: 'fact-pin' }],
+    ['memory_unpin', mockExecuteMemoryUnpin, { factId: 'fact-unpin' }],
+  ] as const)('passes exact code-owned scope to %s mutation', async (name, executor, args) => {
+    await executeBuiltinMemoryTool({ ...BASE_PARAMS, name, args });
+
+    expect(executor).toHaveBeenCalledWith(args, {
+      memoryConversationId: 'delegated-memory-scope',
+      sourceThreadId: 'child-thread',
+      personaId: 'coder',
+      taskId: 'active-task',
+    });
+  });
+
+  it('passes exact code-owned scope to memory_manage invalidation', async () => {
+    await executeBuiltinMemoryTool({
+      ...BASE_PARAMS,
+      name: 'memory_manage',
+      args: { action: 'invalidate', factId: 'fact-invalidate' },
+    });
+
+    expect(mockExecuteMemoryInvalidate).toHaveBeenCalledWith(
+      { factId: 'fact-invalidate' },
+      {
+        memoryConversationId: 'delegated-memory-scope',
+        sourceThreadId: 'child-thread',
+        personaId: 'coder',
+        taskId: 'active-task',
+      },
+    );
   });
 
   it('defaults memory to the executing conversation instead of the file workspace', async () => {
