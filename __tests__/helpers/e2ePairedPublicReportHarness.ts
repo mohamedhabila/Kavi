@@ -1,5 +1,7 @@
 import {
+  buildE2EPairedExecutionIdentityHash,
   E2E_PAIRED_RUNTIME_SCHEMA_VERSION,
+  resolveE2EPairedExecutionOrder,
   type E2EPairedConditionExecution,
   type E2EPairedRuntimeResult,
 } from '../../src/acceptance/e2eAgent/e2ePairedRuntime';
@@ -69,6 +71,7 @@ export function completedCondition(input: {
   return {
     condition: input.condition,
     conditionConfigHash: stableHash(`${input.condition}-config`),
+    executionIdentityHash: stableHash(`${input.condition}-execution-placeholder`),
     oracleEvidenceCount: input.condition === 'oracle_evidence' ? 1 : 0,
     status: 'completed',
     result: buildFixtureResult({
@@ -110,6 +113,7 @@ export function failedCondition(
   return {
     condition,
     conditionConfigHash: stableHash(`${condition}-config`),
+    executionIdentityHash: stableHash(`${condition}-execution-placeholder`),
     oracleEvidenceCount: 0,
     status: 'failed',
     category: 'condition_execution',
@@ -123,18 +127,31 @@ export function runtime(
   overrides: Partial<E2EPairedRuntimeResult> = {},
 ): E2EPairedRuntimeResult {
   const cleanup = overrides.cleanup ?? { status: 'completed' as const };
+  const pairIdHash = stableHash('PRIVATE-PAIR-ID');
+  const executionSeed = overrides.executionSeed ?? 2;
+  const comparison = {
+    referenceCondition: conditions[0]?.condition ?? 'production_auto',
+    candidateCondition: conditions[1]?.condition ?? conditions[0]?.condition ?? 'memory_off',
+  };
+  const conditionsWithIdentities = conditions.map((condition) => ({
+    ...condition,
+    executionIdentityHash: buildE2EPairedExecutionIdentityHash({
+      pairIdHash,
+      seed: executionSeed,
+      condition: condition.condition,
+    }),
+  }));
   const validForDeltaClaims =
     cleanup.status === 'completed' &&
-    conditions.every((condition) => condition.status === 'completed');
+    conditionsWithIdentities.every((condition) => condition.status === 'completed');
   return {
     schemaVersion: E2E_PAIRED_RUNTIME_SCHEMA_VERSION,
-    pairIdHash: stableHash('PRIVATE-PAIR-ID'),
+    pairIdHash,
     invariantConfigHash: stableHash('PRIVATE-INVARIANT-CONFIG'),
-    comparison: {
-      referenceCondition: conditions[0]?.condition ?? 'production_auto',
-      candidateCondition: conditions[1]?.condition ?? conditions[0]?.condition ?? 'memory_off',
-    },
-    conditions,
+    comparison,
+    executionSeed,
+    executionOrder: resolveE2EPairedExecutionOrder(comparison, executionSeed),
+    conditions: conditionsWithIdentities,
     cleanup,
     validForDeltaClaims,
     ...overrides,

@@ -40,7 +40,8 @@ describe('paired memory treatment observations', () => {
         completedCondition({ condition: 'production_auto', rubricPassed: 1, rubricTotal: 1 }),
       ]),
     );
-    expect(noSemanticApplication.pairedDelta?.rubricPassRateDelta).toBe(1);
+    expect(noSemanticApplication.validForDeltaClaims).toBe(false);
+    expect(noSemanticApplication.pairedDelta).toBeNull();
     expect(noSemanticApplication.memoryPairedObservation.status).toBe('invalid_instrumentation');
 
     const fallback = buildE2EPairedPublicReport(
@@ -54,12 +55,13 @@ describe('paired memory treatment observations', () => {
         }),
       ]),
     );
-    expect(fallback.pairedDelta?.rubricPassRateDelta).toBe(1);
+    expect(fallback.validForDeltaClaims).toBe(false);
+    expect(fallback.pairedDelta).toBeNull();
     expect(fallback.memoryPairedObservation.status).toBe('invalid_instrumentation');
   });
 
   it.each(['missing', 'overflow'] as const)(
-    'keeps the paired task delta but invalidates memory observations for %s retrieval evidence',
+    'withholds the paired task delta for %s retrieval evidence',
     (instrumentationStatus) => {
       const report = buildE2EPairedPublicReport(
         runtime([
@@ -79,8 +81,8 @@ describe('paired memory treatment observations', () => {
         ]),
       );
 
-      expect(report.validForDeltaClaims).toBe(true);
-      expect(report.pairedDelta?.rubricPassRateDelta).toBe(1);
+      expect(report.validForDeltaClaims).toBe(false);
+      expect(report.pairedDelta).toBeNull();
       expect(report.memoryPairedObservation).toEqual({
         status: 'invalid_instrumentation',
         controlCondition: 'memory_off',
@@ -127,7 +129,8 @@ describe('paired memory treatment observations', () => {
       ]),
     );
 
-    expect(report.pairedDelta?.rubricPassRateDelta).toBe(1);
+    expect(report.validForDeltaClaims).toBe(false);
+    expect(report.pairedDelta).toBeNull();
     expect(report.memoryPairedObservation).toMatchObject({
       status: 'invalid_instrumentation',
       pairedScoreDelta: null,
@@ -171,7 +174,8 @@ describe('paired memory treatment observations', () => {
       ]),
     );
 
-    expect(report.pairedDelta?.rubricPassRateDelta).toBe(1);
+    expect(report.validForDeltaClaims).toBe(false);
+    expect(report.pairedDelta).toBeNull();
     expect(report.memoryPairedObservation.status).toBe('invalid_instrumentation');
     expect(report.memoryPairedObservation.pairedScoreDelta).toBeNull();
   });

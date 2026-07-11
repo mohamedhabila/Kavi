@@ -9,7 +9,10 @@ import {
   type E2EPairedCondition,
 } from '../../src/acceptance/e2eAgent/e2ePairedConditions';
 import { buildE2EPairedInvariantConfig } from '../../src/acceptance/e2eAgent/e2ePairedInvariant';
-import { runE2EPairedConditions } from '../../src/acceptance/e2eAgent/e2ePairedRuntime';
+import {
+  runE2EPairedConditions,
+  type E2EPairedConditionExecutionInput,
+} from '../../src/acceptance/e2eAgent/e2ePairedRuntime';
 import { withE2EPairedStoreIsolation } from '../../src/acceptance/e2eAgent/e2ePairedStateIsolation';
 import { useChatStore } from '../../src/store/useChatStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
@@ -55,7 +58,7 @@ const SCENARIO: E2EScenario = {
   systemPrompt: 'Stable paired runtime system prompt.',
 };
 
-function buildPlan(left: E2EPairedCondition, right: E2EPairedCondition) {
+function buildPlan(left: E2EPairedCondition, right: E2EPairedCondition, seed = 7) {
   const invariant = buildE2EPairedInvariantConfig({
     provider: PROVIDER,
     scenario: SCENARIO,
@@ -65,7 +68,7 @@ function buildPlan(left: E2EPairedCondition, right: E2EPairedCondition) {
     scenarioTimeoutMs: 60_000,
     perTurnTimeoutMs: 30_000,
     memoryTimeoutMs: 10_000,
-    seed: 7,
+    seed,
   });
   return buildE2EPairedExecutionPlan({
     pairId: `${left}-vs-${right}`,
@@ -77,12 +80,18 @@ function buildPlan(left: E2EPairedCondition, right: E2EPairedCondition) {
   });
 }
 
-function successfulResult() {
+function successfulResult(conversationIdSuffix: string) {
   return buildFixtureResult({
     fixtureId: SCENARIO.id,
-    conversationId: SCENARIO.conversationId,
+    conversationId: `${SCENARIO.conversationId}-${conversationIdSuffix}`,
     contentClass: SCENARIO.contentClass,
   });
+}
+
+function successfulExecutionResult(input: E2EPairedConditionExecutionInput) {
+  const conversationIdSuffix = input.runOptions.conversationIdSuffix;
+  if (!conversationIdSuffix) throw new Error('missing paired conversation identity');
+  return successfulResult(conversationIdSuffix);
 }
 
 function passthroughIsolation<T>(task: () => Promise<T>): Promise<T> {
@@ -105,7 +114,7 @@ describe('paired E2E runtime coordinator', () => {
       expect(runOptions.perTurnTimeoutMs).toBe(30_000);
       expect(runOptions.memoryTimeoutMs).toBe(10_000);
       expect(runOptions.allowedToolNames).toEqual(['memory_recall', 'memory_search']);
-      return successfulResult();
+      return successfulExecutionResult({ conditionPlan, runOptions, scenario: SCENARIO });
     });
     const resetConditionState = jest.fn(async () => {
       events.push('reset');
@@ -128,33 +137,76 @@ describe('paired E2E runtime coordinator', () => {
 
     expect(events).toEqual([
       'reset',
-      'execute:production_auto',
-      'reset',
       'execute:memory_off',
+      'reset',
+      'execute:production_auto',
       'cleanup',
     ]);
     expect(executeCondition).toHaveBeenCalledTimes(2);
     expect(result.validForDeltaClaims).toBe(true);
     expect(result.cleanup).toEqual({ status: 'completed' });
+    expect(result.executionSeed).toBe(7);
+    expect(result.executionOrder).toEqual(['memory_off', 'production_auto']);
+    expect(result.conditions.map((condition) => condition.condition)).toEqual([
+      'production_auto',
+      'memory_off',
+    ]);
+    expect(
+      new Set(result.conditions.map((condition) => condition.executionIdentityHash)).size,
+    ).toBe(2);
     expect(result.conditions.map((condition) => condition.status)).toEqual([
       'completed',
       'completed',
     ]);
-    expect(executeCondition.mock.calls[0][0].runOptions.routeOverride).toBe('production_auto');
-    expect(executeCondition.mock.calls[0][0].runOptions.disableLongTermMemory).toBe(false);
-    expect(executeCondition.mock.calls[1][0].runOptions.routeOverride).toBeUndefined();
-    expect(executeCondition.mock.calls[1][0].runOptions.disableLongTermMemory).toBe(true);
+    expect(executeCondition.mock.calls[0][0].runOptions.routeOverride).toBeUndefined();
+    expect(executeCondition.mock.calls[0][0].runOptions.disableLongTermMemory).toBe(true);
+    expect(executeCondition.mock.calls[1][0].runOptions.routeOverride).toBe('production_auto');
+    expect(executeCondition.mock.calls[1][0].runOptions.disableLongTermMemory).toBe(false);
+    expect(executeCondition.mock.calls[0][0].runOptions.conversationIdSuffix).not.toBe(
+      executeCondition.mock.calls[1][0].runOptions.conversationIdSuffix,
+    );
+  });
+
+  it('uses the low seed bit to counterbalance order without changing comparison roles', async () => {
+    const executeCondition = jest.fn(async (executionInput) =>
+      successfulExecutionResult(executionInput),
+    );
+    const result = await runE2EPairedConditions({
+      plan: buildPlan('production_auto', 'memory_off', 8),
+      scenario: SCENARIO,
+      provider: PROVIDER,
+      dependencies: {
+        executeCondition,
+        resetConditionState: async () => undefined,
+        cleanupConditionState: async () => undefined,
+        withStoreIsolation: passthroughIsolation,
+      },
+    });
+
+    expect(result.executionOrder).toEqual(['production_auto', 'memory_off']);
+    expect(
+      executeCondition.mock.calls.map(([execution]) => execution.conditionPlan.condition),
+    ).toEqual(['production_auto', 'memory_off']);
+    expect(result.comparison).toEqual({
+      referenceCondition: 'production_auto',
+      candidateCondition: 'memory_off',
+    });
+    expect(result.conditions.map((condition) => condition.condition)).toEqual([
+      'production_auto',
+      'memory_off',
+    ]);
   });
 
   it('does not skip the second condition or discard either outcome after a failure', async () => {
     const firstError = new Error('PRIVATE-FIRST-INFRASTRUCTURE-FAILURE');
     const executeCondition = jest
-      .fn()
-      .mockRejectedValueOnce(firstError)
-      .mockResolvedValueOnce(successfulResult());
+      .fn(async (executionInput: E2EPairedConditionExecutionInput) =>
+        successfulExecutionResult(executionInput),
+      )
+      .mockRejectedValueOnce(firstError);
 
     const result = await runE2EPairedConditions({
-      plan: buildPlan('production_auto', 'memory_off'),
+      plan: buildPlan('production_auto', 'memory_off', 8),
       scenario: SCENARIO,
       provider: PROVIDER,
       dependencies: {
@@ -182,11 +234,11 @@ describe('paired E2E runtime coordinator', () => {
 
   it('records setup, final cleanup, and store restoration failures as invalid evidence', async () => {
     const setupFailure = await runE2EPairedConditions({
-      plan: buildPlan('production_auto', 'memory_off'),
+      plan: buildPlan('production_auto', 'memory_off', 8),
       scenario: SCENARIO,
       provider: PROVIDER,
       dependencies: {
-        executeCondition: async () => successfulResult(),
+        executeCondition: async (executionInput) => successfulExecutionResult(executionInput),
         resetConditionState: jest
           .fn()
           .mockRejectedValueOnce(new Error('reset failed'))
@@ -204,11 +256,11 @@ describe('paired E2E runtime coordinator', () => {
     expect(setupFailure.validForDeltaClaims).toBe(false);
 
     const restorationFailure = await runE2EPairedConditions({
-      plan: buildPlan('production_auto', 'memory_off'),
+      plan: buildPlan('production_auto', 'memory_off', 8),
       scenario: SCENARIO,
       provider: PROVIDER,
       dependencies: {
-        executeCondition: async () => successfulResult(),
+        executeCondition: async (executionInput) => successfulExecutionResult(executionInput),
         resetConditionState: async () => undefined,
         cleanupConditionState: async () => undefined,
         withStoreIsolation: async (task) => {
@@ -227,9 +279,11 @@ describe('paired E2E runtime coordinator', () => {
 
   it('wires lexical retrieval and full-context diagnostics through product run options', async () => {
     const resetConditionState = jest.fn(async () => undefined);
-    const executeCondition = jest.fn(async () => successfulResult());
+    const executeCondition = jest.fn(async (executionInput) =>
+      successfulExecutionResult(executionInput),
+    );
     const result = await runE2EPairedConditions({
-      plan: buildPlan('lexical_baseline', 'diagnostic_full_context'),
+      plan: buildPlan('lexical_baseline', 'diagnostic_full_context', 8),
       scenario: SCENARIO,
       provider: PROVIDER,
       dependencies: {
@@ -273,14 +327,15 @@ describe('paired E2E runtime coordinator', () => {
     useSettingsStore.setState({ systemPrompt: 'Original user prompt' });
     try {
       const result = await runE2EPairedConditions({
-        plan: buildPlan('production_auto', 'memory_off'),
+        plan: buildPlan('production_auto', 'memory_off', 8),
         scenario: SCENARIO,
         provider: PROVIDER,
         dependencies: {
           executeCondition: jest
-            .fn()
-            .mockRejectedValueOnce(new Error('first failed'))
-            .mockResolvedValueOnce(successfulResult()),
+            .fn(async (executionInput: E2EPairedConditionExecutionInput) =>
+              successfulExecutionResult(executionInput),
+            )
+            .mockRejectedValueOnce(new Error('first failed')),
           resetConditionState: async () => {
             useChatStore.setState({
               conversations: [],

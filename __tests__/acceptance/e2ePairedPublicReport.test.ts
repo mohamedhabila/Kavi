@@ -53,6 +53,8 @@ describe('paired public report projection', () => {
       productCondition: 'production_auto',
       pairedScoreDelta: 1,
     });
+    expect(report.executionSeed).toBe(2);
+    expect(report.executionOrder).toEqual(['memory_off', 'production_auto']);
     expect(report.pairConfigHash).toMatch(/^sha256:[a-f0-9]{64}$/u);
     expect(report.conditions[0]).toMatchObject({
       condition: 'memory_off',
@@ -178,6 +180,29 @@ describe('paired public report projection', () => {
         runtime([failedCondition('memory_off'), first], { validForDeltaClaims: true }),
       ),
     ).toThrow('delta eligibility is inconsistent');
+
+    const seeded = runtime([
+      completedCondition({ condition: 'memory_off', rubricPassed: 0, rubricTotal: 1 }),
+      completedCondition({ condition: 'production_auto', rubricPassed: 1, rubricTotal: 1 }),
+    ]);
+    expect(() =>
+      buildE2EPairedPublicReport({
+        ...seeded,
+        executionOrder: [...seeded.executionOrder].reverse(),
+      }),
+    ).toThrow('execution order does not match its seed');
+    expect(() =>
+      buildE2EPairedPublicReport({
+        ...seeded,
+        conditions: [
+          seeded.conditions[0],
+          {
+            ...seeded.conditions[1],
+            executionIdentityHash: seeded.conditions[0].executionIdentityHash,
+          },
+        ],
+      }),
+    ).toThrow('executionIdentityHash is inconsistent');
 
     const inconsistent = {
       ...first,
@@ -355,7 +380,8 @@ describe('paired public report projection', () => {
       ]),
     );
 
-    expect(report.pairedDelta?.rubricPassRateDelta).toBe(1);
+    expect(report.validForDeltaClaims).toBe(false);
+    expect(report.pairedDelta).toBeNull();
     expect(report.memoryPairedObservation.status).toBe('invalid_instrumentation');
     expect(report.conditions[0]).toMatchObject({
       metrics: {
@@ -382,7 +408,8 @@ describe('paired public report projection', () => {
       ]),
     );
 
-    expect(report.pairedDelta?.rubricPassRateDelta).toBe(1);
+    expect(report.validForDeltaClaims).toBe(false);
+    expect(report.pairedDelta).toBeNull();
     expect(report.memoryPairedObservation.status).toBe('invalid_instrumentation');
   });
 
@@ -406,7 +433,8 @@ describe('paired public report projection', () => {
       ]),
     );
 
-    expect(report.pairedDelta?.rubricPassRateDelta).toBe(1);
+    expect(report.validForDeltaClaims).toBe(false);
+    expect(report.pairedDelta).toBeNull();
     expect(report.memoryPairedObservation.status).toBe('invalid_instrumentation');
   });
 
@@ -414,7 +442,7 @@ describe('paired public report projection', () => {
     ['duplicate', 0],
     ['out-of-range', 2],
   ] as const)(
-    'keeps task deltas but invalidates memory observations for %s turn indexes',
+    'withholds task deltas and invalidates memory observations for %s turn indexes',
     (_label, secondProductTurnIndex) => {
       const firstEvent = buildPairedRetrievalEvent();
       const report = buildE2EPairedPublicReport(
@@ -458,8 +486,8 @@ describe('paired public report projection', () => {
         ]),
       );
 
-      expect(report.validForDeltaClaims).toBe(true);
-      expect(report.pairedDelta?.rubricPassRateDelta).toBe(1);
+      expect(report.validForDeltaClaims).toBe(false);
+      expect(report.pairedDelta).toBeNull();
       expect(report.conditions[1]).toMatchObject({
         metrics: { turnTraceIndexCoverage: 'incomplete' },
       });
@@ -486,7 +514,8 @@ describe('paired public report projection', () => {
       ]),
     );
 
-    expect(report.pairedDelta?.rubricPassRateDelta).toBe(1);
+    expect(report.validForDeltaClaims).toBe(false);
+    expect(report.pairedDelta).toBeNull();
     expect(report.memoryPairedObservation.status).toBe('invalid_instrumentation');
   });
 
@@ -558,7 +587,8 @@ describe('paired public report projection', () => {
       ]),
     );
 
-    expect(report.pairedDelta?.rubricPassRateDelta).toBe(1);
+    expect(report.validForDeltaClaims).toBe(false);
+    expect(report.pairedDelta).toBeNull();
     expect(report.memoryPairedObservation.status).toBe('invalid_instrumentation');
   });
 
@@ -594,7 +624,8 @@ describe('paired public report projection', () => {
       ]),
     );
 
-    expect(report.pairedDelta?.rubricPassRateDelta).toBe(1);
+    expect(report.validForDeltaClaims).toBe(false);
+    expect(report.pairedDelta).toBeNull();
     expect(report.memoryPairedObservation.status).toBe('invalid_instrumentation');
   });
 
@@ -617,7 +648,8 @@ describe('paired public report projection', () => {
       ]),
     );
 
-    expect(report.pairedDelta?.rubricPassRateDelta).toBe(1);
+    expect(report.validForDeltaClaims).toBe(false);
+    expect(report.pairedDelta).toBeNull();
     expect(report.memoryPairedObservation.status).toBe('invalid_instrumentation');
   });
 });

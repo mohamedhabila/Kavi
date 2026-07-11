@@ -452,7 +452,9 @@ describe('runE2EScenario product foreground integration', () => {
 
       mockedRunOrchestrator.mockImplementation(async (options, callbacks) => {
         expect(getE2ENativeMobileFixtureStateSnapshot().calendar.createdEventCount).toBe(0);
-        expect(options.conversationId).toBe('scenario-conversation-cache-debug-run');
+        expect(options.conversationId).toBe(
+          'scenario-conversation-cache-debug-run-paired-condition-a',
+        );
         expect(options.workspaceConversationId).toBe(options.conversationId);
         callbacks.onAssistantMessage(
           'Isolated.',
@@ -464,8 +466,12 @@ describe('runE2EScenario product foreground integration', () => {
         callbacks.onDone();
       });
 
-      const result = await runE2EScenario(scenario());
-      expect(result.conversationId).toBe('scenario-conversation-cache-debug-run');
+      const result = await runE2EScenario(scenario(), {
+        conversationIdSuffix: 'paired-condition-a',
+      });
+      expect(result.conversationId).toBe(
+        'scenario-conversation-cache-debug-run-paired-condition-a',
+      );
     } finally {
       if (previousRuntimeFlag === undefined) delete process.env.RUN_E2E_AGENT_EVAL;
       else process.env.RUN_E2E_AGENT_EVAL = previousRuntimeFlag;

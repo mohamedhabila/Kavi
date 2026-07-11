@@ -5,7 +5,9 @@ import {
   type E2EPairedCondition,
 } from './e2ePairedConditions';
 import {
+  buildE2EPairedExecutionIdentityHash,
   E2E_PAIRED_RUNTIME_SCHEMA_VERSION,
+  resolveE2EPairedExecutionOrder,
   type E2EPairedConditionExecution,
   type E2EPairedRuntimeResult,
 } from './e2ePairedRuntime';
@@ -17,7 +19,7 @@ import { buildE2EScenarioTraceSummary } from './e2eTraceSummary';
 import { stableHash, stableStringify } from './e2eTraceRedaction';
 import type { E2EScenarioTurnTrace } from './types';
 
-export const E2E_PAIRED_PUBLIC_REPORT_SCHEMA_VERSION = 'e2e-paired-public-report-v2' as const;
+export const E2E_PAIRED_PUBLIC_REPORT_SCHEMA_VERSION = 'e2e-paired-public-report-v3' as const;
 
 type PublicConditionMetrics = Readonly<{
   executionCompleted: boolean;
@@ -50,6 +52,7 @@ export type E2EPairedPublicCondition =
   | Readonly<{
       condition: E2EPairedCondition;
       conditionConfigHash: string;
+      executionIdentityHash: string;
       oracleEvidenceCount: number;
       status: 'completed';
       metrics: PublicConditionMetrics;
@@ -57,6 +60,7 @@ export type E2EPairedPublicCondition =
   | Readonly<{
       condition: E2EPairedCondition;
       conditionConfigHash: string;
+      executionIdentityHash: string;
       oracleEvidenceCount: number;
       status: 'failed';
       category: 'state_reset' | 'condition_execution' | 'evidence_validation';
@@ -72,6 +76,8 @@ export type E2EPairedPublicReport = Readonly<{
     referenceCondition: E2EPairedCondition;
     candidateCondition: E2EPairedCondition;
   }>;
+  executionSeed: number;
+  executionOrder: ReadonlyArray<E2EPairedCondition>;
   conditions: ReadonlyArray<E2EPairedPublicCondition>;
   cleanup:
     | Readonly<{ status: 'completed' }>
@@ -191,11 +197,36 @@ function validateRuntimeForProjection(runtime: E2EPairedRuntimeResult): void {
   ) {
     throw new Error('Public paired evidence does not match its declared comparison roles.');
   }
+  if (
+    !Number.isSafeInteger(runtime.executionSeed) ||
+    runtime.executionSeed < 0 ||
+    runtime.executionSeed > 0xffffffff
+  ) {
+    throw new Error('Public paired evidence requires an unsigned 32-bit execution seed.');
+  }
+  const expectedExecutionOrder = resolveE2EPairedExecutionOrder(
+    runtime.comparison,
+    runtime.executionSeed,
+  );
+  if (stableStringify(runtime.executionOrder) !== stableStringify(expectedExecutionOrder)) {
+    throw new Error('Public paired execution order does not match its seed.');
+  }
+  const executionIdentityHashes = new Set<string>();
   for (const condition of runtime.conditions) {
     if (!E2E_PAIRED_CONDITIONS.includes(condition.condition)) {
       throw new Error('Public paired evidence contains an unsupported condition.');
     }
     requireHash(condition.conditionConfigHash, `${condition.condition}.conditionConfigHash`);
+    requireHash(condition.executionIdentityHash, `${condition.condition}.executionIdentityHash`);
+    const expectedExecutionIdentityHash = buildE2EPairedExecutionIdentityHash({
+      pairIdHash: runtime.pairIdHash,
+      seed: runtime.executionSeed,
+      condition: condition.condition,
+    });
+    if (condition.executionIdentityHash !== expectedExecutionIdentityHash) {
+      throw new Error(`${condition.condition}.executionIdentityHash is inconsistent.`);
+    }
+    executionIdentityHashes.add(condition.executionIdentityHash);
     const oracleEvidenceCountValid =
       Number.isSafeInteger(condition.oracleEvidenceCount) &&
       (condition.condition === 'oracle_evidence'
@@ -216,6 +247,9 @@ function validateRuntimeForProjection(runtime: E2EPairedRuntimeResult): void {
     } else {
       throw new Error(`${condition.condition}.status is unsupported.`);
     }
+  }
+  if (executionIdentityHashes.size !== runtime.conditions.length) {
+    throw new Error('Public paired evidence must use distinct execution identities.');
   }
   if (runtime.cleanup.status === 'failed') {
     if (!['state_cleanup', 'store_restoration'].includes(runtime.cleanup.category)) {
@@ -301,6 +335,7 @@ function projectCondition(condition: E2EPairedConditionExecution): E2EPairedPubl
   const base = {
     condition: condition.condition,
     conditionConfigHash: condition.conditionConfigHash,
+    executionIdentityHash: condition.executionIdentityHash,
     oracleEvidenceCount: condition.oracleEvidenceCount,
   };
   if (condition.status === 'failed') {
@@ -551,14 +586,23 @@ export function buildE2EPairedPublicReport(runtime: E2EPairedRuntimeResult): E2E
   if (!runtime.validForDeltaClaims && infrastructureFailures.length === 0) {
     throw new Error('Invalid paired evidence must name at least one infrastructure failure.');
   }
+  const memoryPairedObservation = buildMemoryPairedObservation(
+    conditions,
+    runtime.validForDeltaClaims,
+  );
+  const validForDeltaClaims =
+    runtime.validForDeltaClaims && memoryPairedObservation.status !== 'invalid_instrumentation';
   const pairConfigHash = stableHash(
     stableStringify({
       pairIdHash: runtime.pairIdHash,
       invariantConfigHash: runtime.invariantConfigHash,
       comparison: runtime.comparison,
+      executionSeed: runtime.executionSeed,
+      executionOrder: runtime.executionOrder,
       conditions: conditions.map((condition) => ({
         condition: condition.condition,
         conditionConfigHash: condition.conditionConfigHash,
+        executionIdentityHash: condition.executionIdentityHash,
       })),
     }),
   );
@@ -568,15 +612,17 @@ export function buildE2EPairedPublicReport(runtime: E2EPairedRuntimeResult): E2E
     pairConfigHash,
     invariantConfigHash: runtime.invariantConfigHash,
     comparison: runtime.comparison,
+    executionSeed: runtime.executionSeed,
+    executionOrder: runtime.executionOrder,
     conditions,
     cleanup,
     infrastructureFailures,
-    validForDeltaClaims: runtime.validForDeltaClaims,
-    pairedDelta: runtime.validForDeltaClaims ? buildDelta(conditions) : null,
-    memoryPairedObservation: buildMemoryPairedObservation(conditions, runtime.validForDeltaClaims),
+    validForDeltaClaims,
+    pairedDelta: validForDeltaClaims ? buildDelta(conditions) : null,
+    memoryPairedObservation,
     accidentalSuccessDiagnostics: buildAccidentalSuccessDiagnostics(
       conditions,
-      runtime.validForDeltaClaims,
+      validForDeltaClaims,
     ),
   };
 }

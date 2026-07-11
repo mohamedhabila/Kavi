@@ -2,11 +2,13 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
-  E2EPairedInfrastructureFailure,
+  E2EPairedClaimFailure,
   writeE2EPairedPublicReportArtifact,
 } from '../../src/acceptance/e2eAgent/e2ePairedReportArtifact';
 import {
+  buildE2EPairedExecutionIdentityHash,
   E2E_PAIRED_RUNTIME_SCHEMA_VERSION,
+  resolveE2EPairedExecutionOrder,
   type E2EPairedRuntimeResult,
 } from '../../src/acceptance/e2eAgent/e2ePairedRuntime';
 import { stableHash } from '../../src/acceptance/e2eAgent/e2eTraceRedaction';
@@ -21,6 +23,8 @@ import { buildFixtureResult } from '../helpers/e2eRunReportHarness';
 function validRuntime(input?: {
   productTurnTraces?: ReadonlyArray<E2EScenarioTurnTrace>;
 }): E2EPairedRuntimeResult {
+  const pairIdHash = stableHash('pair-id');
+  const executionSeed = 2;
   const condition = (label: 'memory_off' | 'production_auto') => {
     const turnTraces =
       label === 'memory_off'
@@ -41,6 +45,11 @@ function validRuntime(input?: {
     return {
       condition: label,
       conditionConfigHash: stableHash(`${label}-config`),
+      executionIdentityHash: buildE2EPairedExecutionIdentityHash({
+        pairIdHash,
+        seed: executionSeed,
+        condition: label,
+      }),
       oracleEvidenceCount: 0,
       status: 'completed' as const,
       result: buildFixtureResult({
@@ -58,12 +67,17 @@ function validRuntime(input?: {
   };
   return {
     schemaVersion: E2E_PAIRED_RUNTIME_SCHEMA_VERSION,
-    pairIdHash: stableHash('pair-id'),
+    pairIdHash,
     invariantConfigHash: stableHash('invariant'),
     comparison: {
       referenceCondition: 'memory_off',
       candidateCondition: 'production_auto',
     },
+    executionSeed,
+    executionOrder: resolveE2EPairedExecutionOrder(
+      { referenceCondition: 'memory_off', candidateCondition: 'production_auto' },
+      executionSeed,
+    ),
     conditions: [condition('memory_off'), condition('production_auto')],
     cleanup: { status: 'completed' },
     validForDeltaClaims: true,
@@ -91,26 +105,29 @@ describe('paired public report artifact', () => {
     expect(JSON.parse(readFileSync(reportPath, 'utf8'))).toEqual(report);
   });
 
-  it('persists zero-event overflow evidence while withholding the memory observation', () => {
+  it('persists zero-event overflow evidence and fails closed without a paired delta', () => {
     const reportPath = join(directory, 'run-overflow', 'paired-report.json');
-    const report = writeE2EPairedPublicReportArtifact({
-      runtime: validRuntime({
-        productTurnTraces: [
-          buildPairedTurnTrace({
-            sourceThreadIdHash: PAIRED_TEST_SOURCE_THREAD_HASH,
-            instrumentationStatus: 'overflow',
-            events: [],
-          }),
-        ],
+    expect(() =>
+      writeE2EPairedPublicReportArtifact({
+        runtime: validRuntime({
+          productTurnTraces: [
+            buildPairedTurnTrace({
+              sourceThreadIdHash: PAIRED_TEST_SOURCE_THREAD_HASH,
+              instrumentationStatus: 'overflow',
+              events: [],
+            }),
+          ],
+        }),
+        retentionRoot: directory,
+        runId: 'run-overflow',
       }),
-      retentionRoot: directory,
-      runId: 'run-overflow',
-    });
+    ).toThrow(E2EPairedClaimFailure);
 
-    expect(report.validForDeltaClaims).toBe(true);
-    expect(report.pairedDelta).not.toBeNull();
-    expect(report.memoryPairedObservation.status).toBe('invalid_instrumentation');
-    expect(JSON.parse(readFileSync(reportPath, 'utf8'))).toEqual(report);
+    expect(JSON.parse(readFileSync(reportPath, 'utf8'))).toMatchObject({
+      validForDeltaClaims: false,
+      pairedDelta: null,
+      memoryPairedObservation: { status: 'invalid_instrumentation' },
+    });
   });
 
   it('writes redacted failure evidence before failing the caller', () => {
@@ -122,6 +139,7 @@ describe('paired public report artifact', () => {
         {
           condition: 'memory_off',
           conditionConfigHash: stableHash('memory_off-config'),
+          executionIdentityHash: runtime.conditions[0].executionIdentityHash,
           oracleEvidenceCount: 0,
           status: 'failed',
           category: 'condition_execution',
@@ -139,7 +157,7 @@ describe('paired public report artifact', () => {
         retentionRoot: directory,
         runId: 'run-failed',
       }),
-    ).toThrow(E2EPairedInfrastructureFailure);
+    ).toThrow(E2EPairedClaimFailure);
     const persisted = readFileSync(reportPath, 'utf8');
     expect(persisted).not.toContain('PRIVATE-INFRASTRUCTURE-PROSE');
     expect(persisted).not.toContain('privateError');
@@ -219,6 +237,7 @@ describe('paired public report artifact', () => {
         {
           condition: 'memory_off',
           conditionConfigHash: stableHash('memory_off-config'),
+          executionIdentityHash: failed.conditions[0].executionIdentityHash,
           oracleEvidenceCount: 0,
           status: 'failed',
           category: 'state_reset',
@@ -239,7 +258,7 @@ describe('paired public report artifact', () => {
     } catch (error) {
       caught = error;
     }
-    expect(caught).toBeInstanceOf(E2EPairedInfrastructureFailure);
+    expect(caught).toBeInstanceOf(E2EPairedClaimFailure);
     expect(JSON.stringify(caught)).not.toContain(directory);
     expect(caught).toMatchObject({
       runId: 'run-error',

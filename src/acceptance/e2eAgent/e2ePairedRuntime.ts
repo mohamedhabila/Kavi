@@ -20,7 +20,7 @@ import {
 import { stableHash, stableStringify } from './e2eTraceRedaction';
 import type { E2EScenario, E2EScenarioResult } from './types';
 
-export const E2E_PAIRED_RUNTIME_SCHEMA_VERSION = 'e2e-paired-runtime-v1' as const;
+export const E2E_PAIRED_RUNTIME_SCHEMA_VERSION = 'e2e-paired-runtime-v2' as const;
 
 export type E2EPairedConditionExecutionInput = Readonly<{
   conditionPlan: E2EPairedConditionPlan;
@@ -33,6 +33,8 @@ export type E2EPairedRuntimeResult = Readonly<{
   pairIdHash: string;
   invariantConfigHash: string;
   comparison: E2EPairedExecutionPlan['comparison'];
+  executionSeed: number;
+  executionOrder: ReadonlyArray<E2EPairedConditionPlan['condition']>;
   conditions: ReadonlyArray<E2EPairedConditionExecution>;
   cleanup: E2EPairedCleanupResult;
   validForDeltaClaims: boolean;
@@ -41,6 +43,7 @@ export type E2EPairedRuntimeResult = Readonly<{
 type E2EPairedConditionExecutionBase = Readonly<{
   condition: E2EPairedConditionPlan['condition'];
   conditionConfigHash: string;
+  executionIdentityHash: string;
   oracleEvidenceCount: number;
 }>;
 
@@ -97,6 +100,7 @@ function buildConditionRunOptions(
   plan: E2EPairedExecutionPlan,
   conditionPlan: E2EPairedConditionPlan,
   provider: LlmProviderConfig,
+  conversationIdSuffix: string,
 ): E2EScenarioRunOptions {
   const invariant = conditionPlan.invariantConfig;
   const oracleEvidence = conditionPlan.oracleEvidence;
@@ -113,6 +117,7 @@ function buildConditionRunOptions(
     memoryRetrievalStrategy: conditionPlan.conditionConfig.retrievalMode,
     memoryContextStrategy: conditionPlan.conditionConfig.contextMode,
     enableCompaction: conditionPlan.conditionConfig.contextMode !== 'full_context',
+    conversationIdSuffix,
     allowedToolNames: invariant.toolSurface,
     ...(oracleEvidence
       ? {
@@ -138,12 +143,14 @@ function privateFailure(error: unknown): { privateError: string; errorHash: stri
 
 function failedCondition(
   plan: E2EPairedConditionPlan,
+  executionIdentityHash: string,
   category: Extract<E2EPairedConditionExecution, { status: 'failed' }>['category'],
   error: unknown,
 ): E2EPairedConditionExecution {
   return {
     condition: plan.condition,
     conditionConfigHash: plan.conditionConfigHash,
+    executionIdentityHash,
     oracleEvidenceCount: plan.conditionConfig.oracleEvidenceCount,
     status: 'failed',
     category,
@@ -184,10 +191,42 @@ function validateConditionResult(
   result: E2EScenarioResult,
   scenario: E2EScenario,
   condition: E2EPairedConditionPlan['condition'],
+  conversationIdSuffix: string,
 ): void {
   if (result.fixtureId !== scenario.id || result.contentClass !== scenario.contentClass) {
     throw new Error(`Condition ${condition} returned evidence for a different scenario.`);
   }
+  if (!result.conversationId.endsWith(`-${conversationIdSuffix}`)) {
+    throw new Error(`Condition ${condition} returned evidence from an unisolated conversation.`);
+  }
+}
+
+export function resolveE2EPairedExecutionOrder(
+  comparison: E2EPairedExecutionPlan['comparison'],
+  seed: number,
+): ReadonlyArray<E2EPairedConditionPlan['condition']> {
+  return seed % 2 === 0
+    ? [comparison.referenceCondition, comparison.candidateCondition]
+    : [comparison.candidateCondition, comparison.referenceCondition];
+}
+
+export function buildE2EPairedExecutionIdentityHash(input: {
+  pairIdHash: string;
+  seed: number;
+  condition: E2EPairedConditionPlan['condition'];
+}): string {
+  return stableHash(
+    stableStringify({
+      namespace: 'e2e-paired-condition-v1',
+      pairIdHash: input.pairIdHash,
+      seed: input.seed,
+      condition: input.condition,
+    }),
+  );
+}
+
+function conversationIdSuffix(executionIdentityHash: string): string {
+  return `paired-${executionIdentityHash.slice('sha256:'.length, 'sha256:'.length + 32)}`;
 }
 
 export async function runE2EPairedConditions(input: {
@@ -200,18 +239,49 @@ export async function runE2EPairedConditions(input: {
   const dependencies = { ...DEFAULT_DEPENDENCIES, ...input.dependencies };
   const provider = input.provider ?? dependencies.buildProvider();
   validateRuntimeInvariant({ plan: input.plan, provider, scenario: input.scenario });
+  const pairIdHash = stableHash(input.plan.pairId);
+  const executionSeed = input.plan.conditions[0].invariantConfig.seed;
+  const executionOrder = resolveE2EPairedExecutionOrder(input.plan.comparison, executionSeed);
+  const conditionPlans = new Map(
+    input.plan.conditions.map((conditionPlan) => [conditionPlan.condition, conditionPlan]),
+  );
+  const executionIdentities = new Map(
+    input.plan.conditions.map((conditionPlan) => [
+      conditionPlan.condition,
+      buildE2EPairedExecutionIdentityHash({
+        pairIdHash,
+        seed: executionSeed,
+        condition: conditionPlan.condition,
+      }),
+    ]),
+  );
+  if (new Set(executionIdentities.values()).size !== input.plan.conditions.length) {
+    throw new Error('Paired conditions must use distinct execution identities.');
+  }
 
   let capturedResult: E2EPairedRuntimeResult | undefined;
   try {
     return await dependencies.withStoreIsolation(async () => {
-      const conditions: E2EPairedConditionExecution[] = [];
+      const conditionResults = new Map<
+        E2EPairedConditionPlan['condition'],
+        E2EPairedConditionExecution
+      >();
       let cleanup: E2EPairedCleanupResult = { status: 'completed' };
       try {
-        for (const conditionPlan of input.plan.conditions) {
+        for (const condition of executionOrder) {
+          const conditionPlan = conditionPlans.get(condition);
+          const executionIdentityHash = executionIdentities.get(condition);
+          if (!conditionPlan || !executionIdentityHash) {
+            throw new Error('Paired execution order references an unknown condition.');
+          }
+          const identitySuffix = conversationIdSuffix(executionIdentityHash);
           try {
             await dependencies.resetConditionState();
           } catch (error) {
-            conditions.push(failedCondition(conditionPlan, 'state_reset', error));
+            conditionResults.set(
+              condition,
+              failedCondition(conditionPlan, executionIdentityHash, 'state_reset', error),
+            );
             continue;
           }
           let result: E2EScenarioResult;
@@ -219,19 +289,33 @@ export async function runE2EPairedConditions(input: {
             result = await dependencies.executeCondition({
               conditionPlan,
               scenario: input.scenario,
-              runOptions: buildConditionRunOptions(input.plan, conditionPlan, provider),
+              runOptions: buildConditionRunOptions(
+                input.plan,
+                conditionPlan,
+                provider,
+                identitySuffix,
+              ),
             });
           } catch (error) {
-            conditions.push(failedCondition(conditionPlan, 'condition_execution', error));
+            conditionResults.set(
+              condition,
+              failedCondition(conditionPlan, executionIdentityHash, 'condition_execution', error),
+            );
             continue;
           }
           try {
-            validateConditionResult(result, input.scenario, conditionPlan.condition);
+            validateConditionResult(
+              result,
+              input.scenario,
+              conditionPlan.condition,
+              identitySuffix,
+            );
             const rubricOutcomes = evaluateE2EScenarioRubrics(result, input.scenario.rubrics);
             const rubricPassed = rubricOutcomes.filter((outcome) => outcome.passed).length;
-            conditions.push({
+            conditionResults.set(condition, {
               condition: conditionPlan.condition,
               conditionConfigHash: conditionPlan.conditionConfigHash,
+              executionIdentityHash,
               oracleEvidenceCount: conditionPlan.conditionConfig.oracleEvidenceCount,
               status: 'completed',
               result,
@@ -243,7 +327,10 @@ export async function runE2EPairedConditions(input: {
               },
             });
           } catch (error) {
-            conditions.push(failedCondition(conditionPlan, 'evidence_validation', error));
+            conditionResults.set(
+              condition,
+              failedCondition(conditionPlan, executionIdentityHash, 'evidence_validation', error),
+            );
           }
         }
       } finally {
@@ -253,11 +340,17 @@ export async function runE2EPairedConditions(input: {
           cleanup = failedCleanup('state_cleanup', error);
         }
       }
+      const conditions = input.plan.conditions.flatMap((conditionPlan) => {
+        const result = conditionResults.get(conditionPlan.condition);
+        return result ? [result] : [];
+      });
       capturedResult = {
         schemaVersion: E2E_PAIRED_RUNTIME_SCHEMA_VERSION,
-        pairIdHash: stableHash(input.plan.pairId),
+        pairIdHash,
         invariantConfigHash: input.plan.conditions[0].invariantConfigHash,
         comparison: input.plan.comparison,
+        executionSeed,
+        executionOrder,
         conditions,
         cleanup,
         validForDeltaClaims:

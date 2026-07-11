@@ -100,9 +100,16 @@ the calculation without exposing account-specific pricing material.
 Run the same frozen scenario through a control and product condition with the
 real foreground chat lifecycle. The default comparison is `memory_off` versus
 `production_auto`; both conditions share the exact provider, prompt, tool
-surface, budgets, scenario inputs, and seed. The runner resets all condition
-state, retains only the content-free public projection, and fails after writing
-evidence if either condition or cleanup is invalid.
+surface, budgets, and scenario inputs. The declared seed is operational: even
+seeds execute the reference condition first and odd seeds execute the candidate
+condition first, so consecutive seeds counterbalance order while the reported
+reference/candidate orientation remains unchanged. Each condition receives a
+distinct evaluator-owned conversation namespace, which also isolates OpenAI
+prompt-cache keys and OpenRouter session IDs. The public report records only the
+seed, condition labels, execution order, and identity hashes. The runner resets
+all condition state, retains only the content-free public projection, and fails
+after writing evidence if either condition, cleanup, or required memory
+instrumentation is invalid; invalid instrumentation never emits a paired delta.
 
 ```bash
 export RUN_E2E_AGENT_EVAL=1

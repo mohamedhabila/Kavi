@@ -12,16 +12,16 @@ import type { E2EPairedRuntimeResult } from './e2ePairedRuntime';
 const PAIRED_REPORT_FILE = 'paired-report.json';
 const SAFE_RUN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 
-export class E2EPairedInfrastructureFailure extends Error {
+export class E2EPairedClaimFailure extends Error {
   constructor(
     readonly runId: string,
     readonly reportRelativePath: string,
     readonly failureCount: number,
   ) {
     super(
-      `Paired evaluation recorded ${failureCount} infrastructure failure(s); public evidence was written before failing.`,
+      `Paired evaluation recorded ${failureCount} claim-blocking evidence failure(s); public evidence was written before failing.`,
     );
-    this.name = 'E2EPairedInfrastructureFailure';
+    this.name = 'E2EPairedClaimFailure';
   }
 }
 
@@ -102,11 +102,10 @@ export function writeE2EPairedPublicReportArtifact(input: {
   });
 
   if (!report.validForDeltaClaims) {
-    throw new E2EPairedInfrastructureFailure(
-      runId,
-      reportRelativePath,
-      report.infrastructureFailures.length,
-    );
+    const failureCount =
+      report.infrastructureFailures.length +
+      Number(report.memoryPairedObservation.status === 'invalid_instrumentation');
+    throw new E2EPairedClaimFailure(runId, reportRelativePath, failureCount);
   }
   return report;
 }

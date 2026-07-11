@@ -39,6 +39,8 @@ export type E2EScenarioRunOptions = Readonly<{
   memoryRetrievalStrategy?: MemoryRetrievalStrategy;
   memoryContextStrategy?: MemoryContextStrategy;
   enableCompaction?: boolean;
+  /** Public-safe, evaluator-owned namespace that isolates paired condition sessions and cache keys. */
+  conversationIdSuffix?: string;
 }>;
 
 export function resolveE2EScenarioSystemPrompt(scenario: E2EScenario): string {
@@ -59,16 +61,26 @@ function sanitizeConversationIdPart(value: string): string {
     .slice(0, 48);
 }
 
-function resolveScenarioConversationId(baseConversationId: string): string {
-  if (!isE2EAgentEvalEnabled()) {
-    return baseConversationId;
+function resolveScenarioConversationId(
+  baseConversationId: string,
+  conversationIdSuffix?: string,
+): string {
+  let conversationId = baseConversationId;
+  if (isE2EAgentEvalEnabled()) {
+    const explicitRunId = sanitizeConversationIdPart(process.env.E2E_SCENARIO_RUN_ID?.trim() ?? '');
+    const generatedRunId = sanitizeConversationIdPart(
+      `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
+    );
+    conversationId = `${conversationId}-${explicitRunId || generatedRunId}`;
   }
-
-  const explicitRunId = sanitizeConversationIdPart(process.env.E2E_SCENARIO_RUN_ID?.trim() ?? '');
-  const generatedRunId = sanitizeConversationIdPart(
-    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
-  );
-  return `${baseConversationId}-${explicitRunId || generatedRunId}`;
+  if (conversationIdSuffix !== undefined) {
+    const canonicalSuffix = sanitizeConversationIdPart(conversationIdSuffix);
+    if (!canonicalSuffix || canonicalSuffix !== conversationIdSuffix) {
+      throw new Error('conversationIdSuffix must be a non-empty canonical identifier.');
+    }
+    conversationId = `${conversationId}-${canonicalSuffix}`;
+  }
+  return conversationId;
 }
 
 function requireScenarioContentClass(value: unknown): E2EScenarioContentClass {
@@ -82,7 +94,10 @@ export async function runE2EScenario(
 ): Promise<E2EScenarioResult> {
   const startedAt = Date.now();
   const contentClass = requireScenarioContentClass(scenario.contentClass);
-  const conversationId = resolveScenarioConversationId(scenario.conversationId);
+  const conversationId = resolveScenarioConversationId(
+    scenario.conversationId,
+    options.conversationIdSuffix,
+  );
   resetAndVerifyE2EScenarioSandboxes();
   seedE2EWorkspaceSandbox(conversationId, scenario.initialWorkspaceFiles ?? []);
 
