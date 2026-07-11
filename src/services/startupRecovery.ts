@@ -5,12 +5,10 @@ import { initSubAgentRegistry, listActiveSubAgents } from './agents/subAgent';
 import { recoverInterruptedForegroundModelExecutions } from './executionJournal/foregroundModelExecutionRecovery';
 import { maintainAllForegroundModelExecutionRetention } from './executionJournal/foregroundModelExecutionRetention';
 import { releaseStaleForegroundModelProjectionOwners } from './executionJournal/foregroundModelProjectionCleanup';
+import { maintainAllTerminalExecutionRetention } from './executionJournal/terminalExecutionRetention';
 
 async function waitForChatHydration(): Promise<void> {
-  await waitForStoreHydration(
-    useChatStore as typeof useChatStore & PersistHydratableStore,
-    null,
-  );
+  await waitForStoreHydration(useChatStore as typeof useChatStore & PersistHydratableStore, null);
 }
 
 let recoveryPromise: Promise<void> | null = null;
@@ -32,6 +30,14 @@ async function recoverForegroundJournalState(): Promise<void> {
     maintainAllForegroundModelExecutionRetention({ now: Date.now() });
   } catch (error) {
     console.warn('[startup] foreground model journal retention failed:', error);
+  }
+  try {
+    maintainAllTerminalExecutionRetention({
+      now: Date.now(),
+      durabilityClass: 'external_durable_operation',
+    });
+  } catch (error) {
+    console.warn('[startup] external durable journal retention failed:', error);
   }
 }
 

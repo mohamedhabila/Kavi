@@ -18,6 +18,7 @@ const mockListActiveSubAgents = jest.fn().mockReturnValue([]);
 const mockRepairTerminalAgentRunsMissingFinalResponses = jest.fn().mockResolvedValue([]);
 const mockRecoverInterruptedForegroundModelExecutions = jest.fn().mockResolvedValue([]);
 const mockMaintainForegroundModelExecutionRetention = jest.fn();
+const mockMaintainTerminalExecutionRetention = jest.fn();
 const mockHydrateCanvasSurfaces = jest.fn().mockResolvedValue(undefined);
 const mockEmitAppEvent = jest.fn().mockResolvedValue(undefined);
 const mockRunMemoryMigrationTick = jest.fn().mockResolvedValue(undefined);
@@ -115,6 +116,10 @@ jest.mock('../../src/services/executionJournal/foregroundModelExecutionRecovery'
 jest.mock('../../src/services/executionJournal/foregroundModelExecutionRetention', () => ({
   maintainAllForegroundModelExecutionRetention: (...args: any[]) =>
     mockMaintainForegroundModelExecutionRetention(...args),
+}));
+jest.mock('../../src/services/executionJournal/terminalExecutionRetention', () => ({
+  maintainAllTerminalExecutionRetention: (...args: any[]) =>
+    mockMaintainTerminalExecutionRetention(...args),
 }));
 jest.mock('../../src/services/mcp/manager', () => ({
   mcpManager: {
@@ -375,9 +380,10 @@ describe('initializeServices', () => {
     await waitFor(() =>
       expect(mockRecoverInterruptedForegroundModelExecutions).toHaveBeenCalledTimes(1),
     );
-    await waitFor(() =>
-      expect(mockMaintainForegroundModelExecutionRetention).toHaveBeenCalledTimes(1),
-    );
+    await waitFor(() => {
+      expect(mockMaintainForegroundModelExecutionRetention).toHaveBeenCalledTimes(1);
+      expect(mockMaintainTerminalExecutionRetention).toHaveBeenCalledTimes(1);
+    });
     await Promise.resolve();
     mockRecoverInterruptedForegroundModelExecutions.mockClear();
     mockChatStoreState.recoverInterruptedAgentRuns.mockClear();
@@ -440,6 +446,10 @@ describe('initializeServices', () => {
     expect(mockRecoverInterruptedForegroundModelExecutions).toHaveBeenCalledTimes(1);
     expect(mockMaintainForegroundModelExecutionRetention).toHaveBeenCalledWith({
       now: expect.any(Number),
+    });
+    expect(mockMaintainTerminalExecutionRetention).toHaveBeenCalledWith({
+      now: expect.any(Number),
+      durabilityClass: 'external_durable_operation',
     });
   });
   it('only initializes once (idempotent)', () => {
