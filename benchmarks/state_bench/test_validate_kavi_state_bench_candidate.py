@@ -157,6 +157,7 @@ class CandidateValidatorTests(unittest.TestCase):
             "task_id": self.task_id,
             "task_completion_pass": 1,
             "ux_score": 1.0,
+            "cost_usd": 0.1,
             "evaluation_protocol_id": VALIDATOR.EXPECTED_PROTOCOL_ID,
             "scoring_protocol_id": VALIDATOR.EXPECTED_PROTOCOL_ID,
             "agent_name": "KaviStateBenchAgent",
@@ -186,6 +187,7 @@ class CandidateValidatorTests(unittest.TestCase):
                 "agent_pricing": None,
                 "metrics": {
                     "task_completion_pass@1": 1.0,
+                    "task_completion_pass@1_std_dev": 0.0,
                     "task_completion_pass^1": 1.0,
                     "mean_ux_score": 1.0,
                     "mean_cost_usd": 0.1,
@@ -259,6 +261,29 @@ class CandidateValidatorTests(unittest.TestCase):
         (self.outputs / "travel/run1" / f"{self.task_id}.json").unlink()
 
         with self.assertRaisesRegex(RuntimeError, "held-out coverage is incomplete"):
+            VALIDATOR.validate_candidate(self._args())
+        self.assertFalse(self._args().out_manifest.exists())
+
+    def test_reported_metrics_must_match_the_scored_trajectories(self) -> None:
+        metrics_path = self.outputs / "travel/metrics.json"
+        metrics = json.loads(metrics_path.read_text())
+        metrics["metrics"]["task_completion_pass@1"] = 0.0
+        self._write_json(metrics_path, metrics)
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "task_completion_pass@1 does not match scored trajectories",
+        ):
+            VALIDATOR.validate_candidate(self._args())
+        self.assertFalse(self._args().out_manifest.exists())
+
+    def test_reported_metrics_must_use_the_exact_official_public_schema(self) -> None:
+        metrics_path = self.outputs / "travel/metrics.json"
+        metrics = json.loads(metrics_path.read_text())
+        metrics["metrics"]["unreviewed_score"] = 1.0
+        self._write_json(metrics_path, metrics)
+
+        with self.assertRaisesRegex(RuntimeError, "official public schema"):
             VALIDATOR.validate_candidate(self._args())
         self.assertFalse(self._args().out_manifest.exists())
 

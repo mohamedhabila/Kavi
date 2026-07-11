@@ -190,12 +190,20 @@ def finite_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
+def trajectory_cost_usd(trajectory: dict[str, Any], path: Path) -> float | None:
+    token_usage = trajectory.get("token_usage", {})
+    require(isinstance(token_usage, dict), f"Trajectory token_usage is invalid: {path}")
+    raw_cost = trajectory.get("cost_usd") or token_usage.get("total_cost_usd")
+    require(raw_cost is None or finite_number(raw_cost), f"Trajectory cost is invalid: {path}")
+    return float(raw_cost) if raw_cost is not None else None
+
+
 def verify_trajectory(
     path: Path,
     task_id: str,
     domain: str,
     protocol: dict[str, Any],
-) -> dict[str, str | None]:
+) -> tuple[dict[str, str | None], dict[str, Any]]:
     trajectory = load_json(path, f"{domain} scored trajectory")
     require(trajectory.get("task_id") == task_id, f"Trajectory task_id mismatch: {path}")
     require(not trajectory.get("error"), f"Trajectory contains an execution error: {path}")
@@ -235,11 +243,82 @@ def verify_trajectory(
         trajectory.get("judge_prompt_hashes") == expected_judge_hashes,
         f"Wrong judge prompt hashes: {path}",
     )
-    return canonical_agent_model(trajectory.get("agent_model"), str(path))
+    return canonical_agent_model(trajectory.get("agent_model"), str(path)), {
+        "task_id": task_id,
+        "task_completion_pass": trajectory["task_completion_pass"],
+        "ux_score": float(trajectory["ux_score"]),
+        "cost_usd": trajectory_cost_usd(trajectory, path),
+    }
 
 
-def verify_metrics(path: Path, expected_model: dict[str, str | None]) -> None:
+def average(values: list[float]) -> float:
+    return sum(values) / len(values) if values else 0.0
+
+
+def population_stddev(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    mean = average(values)
+    return math.sqrt(sum((value - mean) ** 2 for value in values) / len(values))
+
+
+def compute_official_public_metrics(
+    runs: list[dict[str, dict[str, Any]]],
+) -> dict[str, float]:
+    require(len(runs) == EXPECTED_RUNS, "Metric inputs do not contain every official run")
+    task_ids = set(runs[0]) if runs else set()
+    require(bool(task_ids), "Metric inputs contain no scored tasks")
+    require(
+        all(set(run) == task_ids for run in runs),
+        "Metric inputs do not contain identical task coverage across runs",
+    )
+    per_run_completion_rates = [
+        sum(record["task_completion_pass"] == 1 for record in run.values()) / len(run)
+        for run in runs
+    ]
+    all_runs_pass_rate = sum(
+        all(run[task_id]["task_completion_pass"] == 1 for run in runs)
+        for task_id in task_ids
+    ) / len(task_ids)
+    ux_scores = [record["ux_score"] for run in runs for record in run.values()]
+    costs = [
+        record["cost_usd"]
+        for run in runs
+        for record in run.values()
+        if record["cost_usd"] is not None
+    ]
+
+    # Match STATE-Bench v0.8.0 compute_summary followed by build_standard_metrics.
+    return {
+        "task_completion_pass@1": round(round(average(per_run_completion_rates), 4), 2),
+        "task_completion_pass@1_std_dev": round(
+            round(population_stddev(per_run_completion_rates), 4), 2
+        ),
+        f"task_completion_pass^{EXPECTED_RUNS}": round(round(all_runs_pass_rate, 4), 2),
+        "mean_ux_score": round(round(average(ux_scores), 2), 2),
+        "mean_cost_usd": round(round(average(costs), 6), 4),
+    }
+
+
+def verify_metrics(
+    path: Path,
+    expected_model: dict[str, str | None],
+    expected_public_metrics: dict[str, float],
+) -> None:
     metrics = load_json(path, "STATE-Bench metrics")
+    require_exact_keys(
+        metrics,
+        {
+            "benchmark_version",
+            "timestamp",
+            "evaluation_protocol_id",
+            "num_runs",
+            "agent_model",
+            "agent_pricing",
+            "metrics",
+        },
+        "STATE-Bench metrics",
+    )
     require(metrics.get("benchmark_version") == "0.8.0", f"Metrics version mismatch: {path}")
     require(
         isinstance(metrics.get("timestamp"), str) and bool(metrics["timestamp"].strip()),
@@ -250,13 +329,16 @@ def verify_metrics(path: Path, expected_model: dict[str, str | None]) -> None:
     require(canonical_agent_model(metrics.get("agent_model"), str(path)) == expected_model, f"Metrics model mismatch: {path}")
     public_metrics = metrics.get("metrics")
     require(isinstance(public_metrics, dict), f"Metrics payload is missing: {path}")
-    for key in (
-        "task_completion_pass@1",
-        f"task_completion_pass^{EXPECTED_RUNS}",
-        "mean_ux_score",
-        "mean_cost_usd",
-    ):
+    require(
+        set(public_metrics) == set(expected_public_metrics),
+        f"Metrics payload does not match the official public schema: {path}",
+    )
+    for key, expected_value in expected_public_metrics.items():
         require(finite_number(public_metrics.get(key)), f"Metrics field {key} is missing: {path}")
+        require(
+            public_metrics[key] == expected_value,
+            f"Metrics field {key} does not match scored trajectories: {path}",
+        )
 
 
 def _walk_regular_files(root: Path) -> dict[str, Path]:
@@ -292,23 +374,33 @@ def verify_outputs(
         require(domain_root.is_dir() and not domain_root.is_symlink(), f"Missing output domain: {domain}")
         task_ids = load_expected_task_ids(upstream, domain)
         task_counts[domain] = len(task_ids)
+        scored_runs: list[dict[str, dict[str, Any]]] = []
         for run_index in range(1, EXPECTED_RUNS + 1):
             run_root = domain_root / f"run{run_index}"
             require(run_root.is_dir() and not run_root.is_symlink(), f"Missing {domain}/run{run_index}")
             actual = {path.name for path in run_root.iterdir()}
             expected = {f"{task_id}.json" for task_id in task_ids}
             require(actual == expected, f"{domain}/run{run_index} held-out coverage is incomplete")
+            scored_run: dict[str, dict[str, Any]] = {}
             for task_id in task_ids:
                 relative = f"{domain}/run{run_index}/{task_id}.json"
-                model = verify_trajectory(all_files[relative], task_id, domain, protocol)
+                model, scored_trajectory = verify_trajectory(
+                    all_files[relative], task_id, domain, protocol
+                )
                 if canonical_model is None:
                     canonical_model = model
                 require(model == canonical_model, "Agent model metadata changed within the candidate run")
+                scored_run[task_id] = scored_trajectory
                 allowed_files.add(relative)
+            scored_runs.append(scored_run)
         metrics_relative = f"{domain}/metrics.json"
         require(metrics_relative in all_files, f"Missing {domain}/metrics.json")
         require(canonical_model is not None, "No scored trajectories were found")
-        verify_metrics(all_files[metrics_relative], canonical_model)
+        verify_metrics(
+            all_files[metrics_relative],
+            canonical_model,
+            compute_official_public_metrics(scored_runs),
+        )
         allowed_files.add(metrics_relative)
         per_task_root = domain_root / "per_task_metrics"
         if per_task_root.exists():
