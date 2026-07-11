@@ -204,6 +204,9 @@
       "<rootDir>/__tests__/engine/helpers/",
       "<rootDir>/__tests__/screens/.*\\.testSupport\\.tsx$"
     ],
+    "modulePathIgnorePatterns": [
+      "<rootDir>/.private/"
+    ],
     "moduleFileExtensions": [
       "ts",
       "tsx",
