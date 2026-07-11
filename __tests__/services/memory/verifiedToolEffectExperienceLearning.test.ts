@@ -271,6 +271,9 @@ describe('verified tool effect experience learning reader', () => {
       'source_run_id_hash, domain_id, environment_id, procedure_id',
     );
     expect(observationRead?.[0]).not.toMatch(/arguments|result_text|user|assistant|summary/iu);
+    expect(observationRead?.[0]).not.toMatch(
+      /evidence_id_hash|memory_conversation_id_hash|source_thread_id_hash|created_at/iu,
+    );
     expect(observationRead?.at(-1)).toBe(PRODUCT_EXPERIENCE_READ_ROW_LIMIT);
     expect(serializedRead).not.toContain('private-memory-conversation');
     expect(serializedRead).not.toContain('private-source-thread');

@@ -26,7 +26,6 @@ type ProductExperienceLearningRow = Readonly<{
   precondition_ids_json: string;
   outcome: string;
   authority: string;
-  contract_version: number;
   observed_at: number;
 }>;
 
@@ -88,7 +87,6 @@ function observationFromRow(
     !preconditionIds ||
     (row.outcome !== 'success' && row.outcome !== 'failure') ||
     (row.authority !== 'tool_observed' && row.authority !== 'verified') ||
-    row.contract_version !== 1 ||
     !Number.isSafeInteger(row.observed_at) ||
     row.observed_at < 0
   ) {
@@ -184,7 +182,7 @@ export async function readVerifiedToolEffectExperienceLearnings(
     if (!isMemoryReadEpochCurrent(readEpoch)) return EMPTY_READ;
     const rows = db.getAllSync<ProductExperienceLearningRow>(
       `SELECT source_run_id_hash, domain_id, environment_id, procedure_id,
-              precondition_ids_json, outcome, authority, contract_version, observed_at
+              precondition_ids_json, outcome, authority, observed_at
          FROM memory_product_experience_observations
         WHERE memory_owner_id = ?
           AND (${scopeSql.clause})
