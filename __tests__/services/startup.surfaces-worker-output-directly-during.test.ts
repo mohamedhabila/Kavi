@@ -400,12 +400,12 @@ describe('initializeServices', () => {
           output: 'Worker completed its bounded research.',
         }),
       });
-      callbacks.onToolMessage?.('tc-surface-blocked', 'tool result');
       callbacks.onAgentControlGraphStateChange?.({
         status: 'blocked',
         terminalReason: 'missing_required_side_effect',
       });
       callbacks.onAssistantMessage?.('The required downstream action was not completed.');
+      callbacks.onToolMessage?.('tc-surface-blocked', 'tool result');
       callbacks.onDone?.();
     });
     const { initializeServices } = require('../../src/services/startup');
@@ -425,18 +425,30 @@ describe('initializeServices', () => {
       message: expect.stringContaining('missing_required_side_effect'),
     });
 
-    expect(mockChatStoreState.updateMessage).toHaveBeenCalledWith(
+    const visibleAssistantSegments = mockChatStoreState.conversations[0].messages.filter(
+      (message: any) => message.role === 'assistant' && message.content.trim(),
+    );
+    expect(visibleAssistantSegments).toEqual([
+      expect.objectContaining({
+        content: 'Worker completed its bounded research.',
+        assistantMetadata: expect.objectContaining({
+          finishReason: 'surfaced_worker_output_pending',
+        }),
+      }),
+      expect.objectContaining({
+        content: 'The required downstream action was not completed.',
+        isError: true,
+        assistantMetadata: expect.objectContaining({
+          kind: 'final',
+          completionStatus: 'incomplete',
+          finishReason: 'response_failed',
+        }),
+      }),
+    ]);
+    expect(mockChatStoreState.updateMessage).not.toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
       'The required downstream action was not completed.',
-    );
-    expect(mockChatStoreState.conversations[0].messages).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          role: 'assistant',
-          content: 'Worker completed its bounded research.',
-        }),
-      ]),
     );
   });
   it('sends failure notifications for scheduled jobs', async () => {
@@ -468,12 +480,18 @@ describe('initializeServices', () => {
   });
   it('prevents replay when execution throws after tool activity', async () => {
     mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
-      callbacks.onToolCallStart?.({
+      callbacks.onToolCallComplete?.({
         id: 'tc-effect',
-        name: 'calendar_create_event',
+        name: 'sessions_surface_output',
         arguments: '{}',
-        status: 'running',
+        status: 'completed',
+        result: JSON.stringify({
+          status: 'surfaced',
+          sessionId: 'worker-1',
+          output: 'Worker output before disconnect.',
+        }),
       });
+      callbacks.onToolMessage?.('tc-effect', 'tool result');
       throw new Error('provider disconnected after tool dispatch');
     });
     const { initializeServices } = require('../../src/services/startup');
@@ -491,6 +509,17 @@ describe('initializeServices', () => {
     ).rejects.toMatchObject({
       name: 'NonRetryableSchedulerExecutionError',
       message: 'provider disconnected after tool dispatch',
+    });
+    const visibleAssistantSegments = mockChatStoreState.conversations[0].messages.filter(
+      (message: any) => message.role === 'assistant' && message.content.trim(),
+    );
+    expect(visibleAssistantSegments.map((message: any) => message.content)).toEqual([
+      'Worker output before disconnect.',
+      'Error: provider disconnected after tool dispatch',
+    ]);
+    expect(visibleAssistantSegments.at(-1)?.assistantMetadata).toMatchObject({
+      completionStatus: 'incomplete',
+      finishReason: 'response_failed',
     });
   });
   it('executor reuses the active conversation for main/continue jobs', async () => {

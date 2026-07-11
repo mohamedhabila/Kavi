@@ -31,6 +31,24 @@ import {
 import { SUPER_AGENT_PERSONA_ID } from '../agents/personas';
 import { resolveConversationPersonaForMode } from '../../engine/graph/conversation/modeTransitions';
 import { createAgentControlGraphTerminalOutcomeTracker } from '../../engine/graph/terminalOutcome';
+import type { AssistantMessageMetadata, MessageProviderReplay } from '../../types/message';
+
+interface PendingTerminalFailureResponse {
+  content: string;
+  providerReplay?: MessageProviderReplay;
+  assistantMetadata?: AssistantMessageMetadata;
+}
+
+function buildTerminalFailureMetadata(
+  assistantMetadata?: AssistantMessageMetadata,
+): AssistantMessageMetadata {
+  return {
+    ...assistantMetadata,
+    kind: 'final',
+    completionStatus: 'incomplete',
+    finishReason: 'response_failed',
+  };
+}
 
 export async function executeScheduledJob(job: CronJob): Promise<string> {
   let notificationConversationId: string | undefined;
@@ -133,6 +151,9 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
       NonNullable<ReturnType<typeof parseSurfacedSubAgentOutputResult>>
     >();
     let surfacedSubAgentOutputActive = false;
+    let surfacedAssistantMessageAppended = false;
+    let pendingTerminalFailureResponse: PendingTerminalFailureResponse | undefined;
+    let terminalFailureResponseCommitted = false;
 
     const clearSurfacedSubAgentOutputLock = () => {
       surfacedSubAgentOutputActive = false;
@@ -146,6 +167,7 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
 
       pendingSurfacedSubAgentOutputs.delete(toolCallId);
       surfacedSubAgentOutputActive = true;
+      surfacedAssistantMessageAppended = true;
       accumulatedContent = surfacedOutput.output;
 
       chatState.addMessage(conversationId, {
@@ -164,6 +186,46 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
       for (const toolCallId of Array.from(pendingSurfacedSubAgentOutputs.keys())) {
         flushSurfacedSubAgentOutput(toolCallId);
       }
+    };
+
+    const commitTerminalFailureResponse = (fallback?: PendingTerminalFailureResponse): boolean => {
+      if (terminalFailureResponseCommitted) return true;
+      const response = pendingTerminalFailureResponse ?? fallback;
+      if (!response?.content.trim()) return false;
+
+      const assistantMetadata = buildTerminalFailureMetadata(response.assistantMetadata);
+      accumulatedContent = response.content;
+      graphFailureResponseApplied = true;
+      terminalFailureResponseCommitted = true;
+      pendingTerminalFailureResponse = undefined;
+      clearSurfacedSubAgentOutputLock();
+
+      if (surfacedAssistantMessageAppended) {
+        chatState.addMessage(conversationId, {
+          id: generateId(),
+          role: 'assistant',
+          content: response.content,
+          providerReplay: response.providerReplay,
+          assistantMetadata,
+          isError: true,
+        });
+        return true;
+      }
+
+      chatState.updateMessage(conversationId, assistantMessageId, response.content);
+      if (response.providerReplay) {
+        chatState.updateMessageProviderReplay(
+          conversationId,
+          assistantMessageId,
+          response.providerReplay,
+        );
+      }
+      chatState.updateMessageAssistantMetadata(
+        conversationId,
+        assistantMessageId,
+        assistantMetadata,
+      );
+      return true;
     };
 
     const callbacks: OrchestratorCallbacks = {
@@ -242,7 +304,18 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
           toolCalls?.filter((toolCall) => toolCall.id?.trim() && toolCall.name?.trim()) ?? [];
         const replacesSurfacedOutputWithTerminalFailure =
           content.trim().length > 0 && terminalOutcome.hasUnsuccessfulTerminalState();
-        graphFailureResponseApplied ||= replacesSurfacedOutputWithTerminalFailure;
+        if (replacesSurfacedOutputWithTerminalFailure) {
+          pendingTerminalFailureResponse = {
+            content,
+            providerReplay,
+            assistantMetadata,
+          };
+          graphFailureResponseApplied = true;
+          if (!surfacedAssistantMessageAppended && pendingSurfacedSubAgentOutputs.size === 0) {
+            commitTerminalFailureResponse();
+          }
+          return;
+        }
         if (
           surfacedSubAgentOutputActive &&
           incomingToolCalls.length === 0 &&
@@ -324,6 +397,7 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
       onUsage: () => {},
       onDone: () => {
         flushPendingSurfacedSubAgentOutputs();
+        commitTerminalFailureResponse();
       },
     };
 
@@ -365,9 +439,15 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
         },
         callbacks,
       );
+      flushPendingSurfacedSubAgentOutputs();
+      commitTerminalFailureResponse();
     } catch (error: unknown) {
+      const sourceError = error instanceof Error ? error : new Error(String(error));
+      flushPendingSurfacedSubAgentOutputs();
+      commitTerminalFailureResponse({
+        content: `Error: ${sourceError.message}`,
+      });
       if (observedToolActivity) {
-        const sourceError = error instanceof Error ? error : new Error(String(error));
         throw new NonRetryableSchedulerExecutionError(sourceError);
       }
       throw error;
@@ -380,8 +460,7 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
         graphFailureResponseApplied && accumulatedContent.trim()
           ? accumulatedContent
           : `Error: ${terminalFailure.message}`;
-      accumulatedContent = failureContent;
-      useChatStore.getState().updateMessage(conversationId, assistantMessageId, failureContent);
+      commitTerminalFailureResponse({ content: failureContent });
       throw terminalOutcome.hasControlGraphFailure() || observedToolActivity
         ? new NonRetryableSchedulerExecutionError(terminalFailure)
         : terminalFailure;
@@ -424,4 +503,3 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
     throw error;
   }
 }
-
