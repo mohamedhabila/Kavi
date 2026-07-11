@@ -24,6 +24,7 @@ function makeAgent(sessionId = 'worker-1'): SubAgentSnapshot {
 function createHarness(options?: { terminalizeDuringSubscription?: boolean }) {
   const agent = makeAgent();
   const activeSubAgents = new Map([[agent.sessionId, agent]]);
+  const activeResultPromises = new Map<string, Promise<SubAgentResult>>();
   const terminalListeners = new Set<
     (snapshot: SubAgentSnapshot, event: SubAgentTerminalEvent) => void
   >();
@@ -40,7 +41,7 @@ function createHarness(options?: { terminalizeDuringSubscription?: boolean }) {
   const manager = createSubAgentLifecycleManager({
     activeSubAgents,
     activeRunControls: new Map(),
-    activeResultPromises: new Map<string, Promise<SubAgentResult>>(),
+    activeResultPromises,
     logger: { devWarn: jest.fn() },
     registryPersistenceManager: {
       loadRegistry: jest.fn(async () => undefined),
@@ -75,6 +76,7 @@ function createHarness(options?: { terminalizeDuringSubscription?: boolean }) {
 
   return {
     activeSubAgents,
+    activeResultPromises,
     agent,
     emitTerminal,
     manager,
@@ -164,6 +166,43 @@ describe('event-driven sub-agent completion waits', () => {
       output: 'completed during listener registration',
     });
     expect(harness.terminalListeners.size).toBe(0);
+  });
+
+  it('waits for an active run promise even after its snapshot first appears terminal', async () => {
+    const harness = createHarness();
+    harness.agent.status = 'completed';
+    harness.agent.output = 'snapshot before durable finalization';
+    let resolveResult: ((result: SubAgentResult) => void) | undefined;
+    const resultPromise = new Promise<SubAgentResult>((resolve) => {
+      resolveResult = resolve;
+    });
+    harness.activeResultPromises.set(harness.agent.sessionId, resultPromise);
+    let didSettle = false;
+
+    const waiting = harness.manager
+      .waitForSubAgentCompletion(harness.agent.sessionId)
+      .then((result) => {
+        didSettle = true;
+        return result;
+      });
+    await Promise.resolve();
+
+    expect(didSettle).toBe(false);
+    expect(harness.terminalListeners.size).toBe(0);
+
+    resolveResult?.({
+      sessionId: harness.agent.sessionId,
+      output: 'durably finalized output',
+      toolsUsed: ['write_file'],
+      iterations: 2,
+      status: 'completed',
+      depth: 1,
+    });
+
+    await expect(waiting).resolves.toMatchObject({
+      output: 'durably finalized output',
+      status: 'completed',
+    });
   });
 });
 

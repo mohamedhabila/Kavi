@@ -176,10 +176,6 @@ export function createSubAgentLifecycleManager<TAgent extends SubAgentSnapshot>(
       throw new Error(`session not found: ${sessionId}`);
     }
 
-    if (agent.status !== 'running') {
-      return buildResultFromSnapshot(agent);
-    }
-
     const resultPromise = params.activeResultPromises.get(sessionId);
     if (resultPromise) {
       try {
@@ -192,6 +188,10 @@ export function createSubAgentLifecycleManager<TAgent extends SubAgentSnapshot>(
         }
         throw error;
       }
+    }
+
+    if (agent.status !== 'running') {
+      return buildResultFromSnapshot(agent);
     }
 
     return waitForTerminalSubAgentSnapshot(sessionId, waitTimeoutMs);
