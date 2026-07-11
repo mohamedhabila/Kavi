@@ -13,6 +13,7 @@ _RUNTIME_ENV = "KAVI_STATE_BENCH_RUNTIME"
 _ARTIFACT_ENV = "KAVI_STATE_BENCH_ARTIFACT"
 _NODE_ENV = "KAVI_STATE_BENCH_NODE"
 _DOMAINS = {"travel", "customer_support", "shopping_assistant"}
+_OFFICIAL_TOP_K = 3
 
 
 def _required_file(env_name: str) -> Path:
@@ -72,6 +73,11 @@ class KaviStateBenchAgent(StateBenchAgent):
     """Built-in tool-calling agent with Kavi's read-only learned-experience retrieval."""
 
     def __init__(self, *args, runtime_context=None, **kwargs):
+        configured_top_k = kwargs.get("retrieve_learnings_top_k", _OFFICIAL_TOP_K)
+        if configured_top_k != _OFFICIAL_TOP_K:
+            raise RuntimeError(
+                "KaviStateBenchAgent requires the official retrieve_learnings_top_k=3"
+            )
         self._kavi_runtime = _required_file(_RUNTIME_ENV)
         self._kavi_artifact = _required_file(_ARTIFACT_ENV)
         self._kavi_node = os.environ.get(_NODE_ENV, "node").strip() or "node"
@@ -83,8 +89,8 @@ class KaviStateBenchAgent(StateBenchAgent):
         normalized_query = query.strip()
         if len(normalized_query) > 2000:
             raise ValueError("retrieve_learnings query exceeds the safety bound")
-        if not isinstance(top_k, int) or isinstance(top_k, bool) or not 1 <= top_k <= 3:
-            raise ValueError("retrieve_learnings top_k must be between 1 and 3")
+        if top_k != _OFFICIAL_TOP_K:
+            raise ValueError("retrieve_learnings top_k must equal the official value 3")
         domain = getattr(self.runtime_context, "domain", None)
         if domain not in _DOMAINS:
             raise RuntimeError("STATE-Bench runtime context has an invalid domain")

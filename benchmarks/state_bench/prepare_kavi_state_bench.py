@@ -4,13 +4,20 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import shutil
 import subprocess
+import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 
 RELEASE = "v0.8.0"
 COMMIT = "e2c8d7af51ef48fbbea51bb2ce1fb859af36b423"
+PREPARATION_SCHEMA_VERSION = "kavi-state-bench-preparation-v1"
+EXPECTED_PROTOCOL_ID = "state_bench_v0.8.0_gpt54"
+EXPECTED_DOMAINS = ["travel", "customer_support", "shopping_assistant"]
 
 
 def run(
@@ -38,7 +45,72 @@ def parse_args() -> argparse.Namespace:
         default=repo_root
         / ".private/evals/data/state_bench/kavi_learning_artifact.json",
     )
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=repo_root
+        / ".private/evals/data/state_bench/kavi_preparation_manifest.json",
+    )
     return parser.parse_args()
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        while chunk := source.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_clean_app(repo_root: Path) -> str:
+    commit = run(["git", "rev-parse", "HEAD"], cwd=repo_root).stdout.strip()
+    status = run(
+        ["git", "status", "--porcelain=v1", "--untracked-files=all"], cwd=repo_root
+    ).stdout.strip()
+    if status:
+        raise RuntimeError("Kavi worktree must be clean before STATE-Bench preparation")
+    return commit
+
+
+def build_preparation_record(
+    *, app_commit: str, runtime: Path, artifact: Path, adapter: Path
+) -> dict[str, object]:
+    return {
+        "schemaVersion": PREPARATION_SCHEMA_VERSION,
+        "claim": "prepared_adapter",
+        "readiness": "full_upstream_ready",
+        "createdAt": datetime.now(UTC).isoformat(),
+        "app": {"commit": app_commit},
+        "upstream": {"release": RELEASE, "commit": COMMIT},
+        "protocol": {
+            "evaluationProtocolId": EXPECTED_PROTOCOL_ID,
+            "domains": EXPECTED_DOMAINS,
+            "split": "test",
+            "runs": 5,
+            "retrieveLearningsTopK": 3,
+        },
+        "artifacts": {
+            "runtimeSha256": sha256_file(runtime),
+            "artifactSha256": sha256_file(artifact),
+            "adapterSha256": sha256_file(adapter),
+        },
+    }
+
+
+def write_private_json(path: Path, value: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w") as output:
+            json.dump(value, output, indent=2, sort_keys=True)
+            output.write("\n")
+            output.flush()
+            os.fsync(output.fileno())
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def verify_upstream(upstream: Path, adapter_source: Path) -> None:
@@ -69,8 +141,10 @@ def main() -> None:
     upstream = args.upstream.expanduser().resolve()
     runtime = args.runtime.expanduser().resolve()
     artifact = args.artifact.expanduser().resolve()
+    manifest_path = args.manifest.expanduser().resolve()
     adapter_source = Path(__file__).with_name("kavi_state_bench_agent.py")
     verify_upstream(upstream, adapter_source)
+    app_commit = verify_clean_app(repo_root)
 
     node = shutil.which("node")
     if not node:
@@ -104,16 +178,24 @@ def main() -> None:
         [node, str(runtime), "inspect", "--artifact", str(artifact)],
         cwd=repo_root,
     )
+    preparation = build_preparation_record(
+        app_commit=app_commit,
+        runtime=runtime,
+        artifact=artifact,
+        adapter=adapter_source,
+    )
+    write_private_json(manifest_path, preparation)
     print(
         json.dumps(
             {
-                "claim": "official_candidate",
+                **preparation,
                 "release": RELEASE,
                 "commit": COMMIT,
                 "agent_class": "KaviStateBenchAgent",
                 "runtime": str(runtime),
                 "artifact": str(artifact),
                 "adapter": str(adapter_target),
+                "preparation_manifest": str(manifest_path),
                 "build": json.loads(build_result.stdout),
                 "inspect": json.loads(inspect_result.stdout),
                 "environment": {

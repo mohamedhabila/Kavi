@@ -134,7 +134,7 @@
         "integrationKind": "upstream_agent_learning_hook",
         "roots": ["benchmarks/state_bench"],
         "sourceDigestAlgorithm": "sha256_versionable_path_nul_bytes_nul_v2",
-        "sourceSha256": "c0c3197abe45cd9c9e4c5f4dbd29c7b006991c5ed8d3bd60152f4b5f268f2387",
+        "sourceSha256": "15532e83a3f4c1ee8c47857000bdcdef11a7d97e563dd43e7b521486f2e28f09",
         "modifiesUpstream": true
       },
       "upstream": {

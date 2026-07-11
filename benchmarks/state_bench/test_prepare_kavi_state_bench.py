@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import subprocess
 import tempfile
 import unittest
@@ -71,6 +72,25 @@ class VerifyUpstreamTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "unrelated changes"):
             PREPARE.verify_upstream(self.upstream, self.adapter_source)
+
+    def test_preparation_record_is_explicitly_not_a_candidate(self) -> None:
+        runtime = self.upstream / "runtime.cjs"
+        artifact = self.upstream / "artifact.json"
+        runtime.write_text("runtime\n")
+        artifact.write_text("{}\n")
+
+        record = PREPARE.build_preparation_record(
+            app_commit="a" * 40,
+            runtime=runtime,
+            artifact=artifact,
+            adapter=self.adapter_source,
+        )
+
+        self.assertEqual(record["claim"], "prepared_adapter")
+        self.assertEqual(record["readiness"], "full_upstream_ready")
+        self.assertNotIn("official_candidate", json.dumps(record))
+        self.assertEqual(record["protocol"]["runs"], 5)
+        self.assertEqual(record["protocol"]["retrieveLearningsTopK"], 3)
 
 
 if __name__ == "__main__":

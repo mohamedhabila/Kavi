@@ -95,6 +95,13 @@ class KaviStateBenchAgentContractTest(unittest.TestCase):
                 agent.retrieve_learnings("cancel flight", 4)
             query.assert_not_called()
 
+    def test_non_official_top_k_configuration_fails_before_a_run(self):
+        with self.assertRaisesRegex(RuntimeError, "official retrieve_learnings_top_k=3"):
+            self.module.KaviStateBenchAgent(
+                runtime_context=SimpleNamespace(domain="travel"),
+                retrieve_learnings_top_k=2,
+            )
+
     def test_query_uses_stdin_instead_of_exposing_task_text_in_process_arguments(self):
         completed = subprocess.CompletedProcess([], 0, '{"learnings":["safe"]}\n', "")
         with patch.object(self.module.subprocess, "run", return_value=completed) as run:

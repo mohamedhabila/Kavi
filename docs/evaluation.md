@@ -70,6 +70,10 @@ LongMemEval-V2 candidates must be built through Kavi's private preparation gate,
 which rejects subset runs, verifies score-bearing dataset files, sanitizes a
 copy without mutating raw evidence, and records package content hashes. Passing
 that gate means only that the archive is ready for maintainer review.
+STATE-Bench preparation likewise emits only `prepared_adapter`; only the
+post-run validator may emit `official_candidate`, after validating the frozen
+revisions and preparation hashes, exact 3-domain by 5-run by 50-task held-out
+coverage, locked trajectory/metrics provenance, and an exact output archive.
 
 ### Explicit pricing snapshots
 

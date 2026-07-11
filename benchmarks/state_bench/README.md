@@ -28,6 +28,11 @@ rtk sh -lc 'cd .private/evals/upstream/STATE-Bench && uv sync && cp .env.example
 
 Configure the protocol-locked GPT-5.4 simulator/judge client and the built-in agent client exactly as documented by upstream. Then export the two paths printed by the preparation command:
 
+Preparation emits `claim=prepared_adapter` and
+`readiness=full_upstream_ready`. It does not create an official candidate. The
+private preparation manifest freezes the clean Kavi revision plus the runtime,
+learning-artifact, adapter, upstream, and protocol hashes used by the run.
+
 ```bash
 export KAVI_STATE_BENCH_RUNTIME="<absolute runtime path>"
 export KAVI_STATE_BENCH_ARTIFACT="<absolute artifact path>"
@@ -66,11 +71,41 @@ rtk uv run python -m state_bench.scripts.compute_metrics \
   --output-dir outputs/<domain>/
 ```
 
-The official candidate is valid only if all expected held-out tasks are present and scored, the checkout's locked files remain unmodified, and `metrics.json` records the expected evaluation protocol. Report pass@1, pass^5, UX, and cost for both learning-on and learning-off; a learning method is not a product win if it increases errors, burden, or cost materially.
+Keep a separately named no-learning baseline with the same model, reasoning
+level, workers, and provider configuration for the product comparison. The
+submission candidate directory above contains the learning-on run only, in the
+exact upstream `outputs/<domain>` layout. Never tune on held-out outputs.
+
+## Candidate validation
+
+Package the completed output tree, then run the post-run validator from the
+same clean Kavi revision used by preparation:
+
+```bash
+rtk sh -lc 'cd <state-bench-run-root> && zip -r outputs.zip outputs'
+
+rtk python3 benchmarks/state_bench/validate_kavi_state_bench_candidate.py \
+  --outputs <state-bench-run-root>/outputs \
+  --archive <state-bench-run-root>/outputs.zip
+```
+
+This is the only Kavi command that emits `claim=official_candidate`. It fails
+closed unless all three official domains contain exactly five runs of all 50
+held-out tasks, every trajectory is scored by the locked GPT-5.4 protocol,
+model metadata is stable, the app and upstream revisions are clean and frozen,
+preparation hashes still match, and the archive is a byte-for-byte package of
+the validated tree. The emitted status remains `unsubmitted`.
+
+Report pass@1, pass^5, UX, and cost for both learning-on and the separately
+retained learning-off baseline; a learning method is not a product win if it
+increases errors, burden, or cost materially.
 
 ## Submission
 
-Create `outputs.zip` with all three domains, five run directories per domain, and each domain's `metrics.json`. Open an issue in the official repository, attach the archive or a stable download link, describe the method, and link this implementation. Call the result official only after maintainer verification and leaderboard acceptance.
+Open an issue in the official repository, attach the validated archive or a
+stable download link, describe the method, and link this implementation. A
+validated candidate is not an official result: call it official only after
+maintainer verification and leaderboard acceptance.
 
 Official references:
 
