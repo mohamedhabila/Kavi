@@ -8,6 +8,7 @@ from typing import Any
 from urllib.parse import urlsplit
 import ipaddress
 import re
+import math
 
 
 METHOD = "kavi_memory_isolated"
@@ -47,6 +48,90 @@ REQUIRED_RUNTIME_FILES = (
     "memory_config.json",
 )
 ENV_NAME_RE = re.compile(r"[A-Z][A-Z0-9_]*")
+SHA256_RE = re.compile(r"[a-f0-9]{64}")
+COMMIT_SHA_RE = re.compile(r"[a-f0-9]{40}")
+CATEGORY_MAP = {
+    "static-environment": "static",
+    "static-environment-abs": "static-abs",
+    "dynamic-environment": "dynamic",
+    "dynamic-environment-abs": "dynamic-abs",
+    "procedure": "procedure",
+    "procedure-abs": "procedure-abs",
+    "errors-gotchas": "gotchas",
+}
+NON_ABSTENTION_CATEGORIES = ("static", "dynamic", "procedure", "gotchas")
+ABSTENTION_CATEGORIES = ("static-abs", "dynamic-abs", "procedure-abs")
+COMBINED_ABSTENTION_CATEGORY_PAIRS = {
+    "static": ("static", "static-abs"),
+    "dynamic": ("dynamic", "dynamic-abs"),
+    "procedure": ("procedure", "procedure-abs"),
+}
+PER_QUESTION_KEYS = {
+    "index",
+    "stream_index",
+    "question_id",
+    "question_type",
+    "category",
+    "is_abstention_problem",
+    "eval_function",
+    "question_text",
+    "question_image",
+    "haystack_ids",
+    "memory_context",
+    "memory_query_duration_seconds",
+    "memory_post_query_duration_seconds",
+    "memory_post_query_metadata",
+    "memory_context_original_token_count",
+    "memory_context_token_count",
+    "memory_context_was_truncated",
+    "prompt_messages",
+    "answer_gold",
+    "response_raw",
+    "response_parsed_boxed",
+    "is_unknown",
+    "score",
+    "score_bool",
+    "usage",
+    "timestamp_utc",
+}
+AGGREGATED_METRIC_KEYS = {
+    "overall",
+    "non_abstention_by_category",
+    "abstention_by_category",
+    "combined_abstention_by_category",
+    "abstention_overall",
+    "tokens",
+    "memory_context",
+    "memory_query",
+    "memory_post_query",
+    "completed_at_utc",
+    "shared_haystack",
+}
+MEMORY_PARAM_KEYS = {
+    "repo_root",
+    "workspace_root",
+    "runtime_bundle_path",
+    "node_binary",
+    "app_commit_sha",
+    "adapter_source_sha256",
+    "runtime_bundle_sha256",
+    "node_version",
+    "max_items",
+    "max_item_chars",
+    "chunk_chars",
+    "chunk_overlap_chars",
+    "min_score",
+    "query_image_understanding",
+    "query_image_model",
+    "query_image_base_url",
+    "query_image_api_key_env",
+    "retrieval_llm_enabled",
+    "retrieval_llm_model",
+    "retrieval_llm_base_url",
+    "retrieval_llm_api_key_env",
+    "retrieval_llm_provider_family",
+    "retrieval_llm_protocol",
+}
 
 
 class SubmissionReadinessError(RuntimeError):
@@ -161,7 +246,13 @@ def require_public_https_url(value: object, field: str, *, optional: bool = Fals
         return
     require(isinstance(value, str) and value, f"run_args.{field} must be a URL")
     parsed = urlsplit(value)
-    require(parsed.scheme == "https" and parsed.hostname, f"run_args.{field} must use HTTPS")
+    require(
+        parsed.scheme == "https"
+        and parsed.hostname
+        and parsed.username is None
+        and parsed.password is None,
+        f"run_args.{field} must use credential-free HTTPS",
+    )
     hostname = str(parsed.hostname).lower()
     require(
         hostname != "localhost" and not hostname.endswith((".local", ".internal")),
@@ -208,9 +299,124 @@ def validate_protocol(run_args: dict[str, Any], domain: str) -> dict[str, object
 
 def validate_memory_config(payload: Any) -> dict[str, object]:
     require(isinstance(payload, dict), "memory_config.json must contain an object")
+    require(
+        set(payload) == {"memory_type", "memory_params"},
+        "memory_config.json has an unsupported schema",
+    )
     require(payload.get("memory_type") == METHOD, f"memory_type must be {METHOD}")
     params = payload.get("memory_params")
     require(isinstance(params, dict), "memory_config.memory_params must be an object")
+    require(set(params) == MEMORY_PARAM_KEYS, "memory_config.memory_params has an unsupported schema")
+
+    for field in ("repo_root", "workspace_root", "runtime_bundle_path", "node_binary"):
+        require(isinstance(params.get(field), str) and params[field].strip(), f"{field} is invalid")
+    require(
+        isinstance(params.get("app_commit_sha"), str)
+        and COMMIT_SHA_RE.fullmatch(params["app_commit_sha"]) is not None,
+        "app_commit_sha is invalid",
+    )
+    for field in ("adapter_source_sha256", "runtime_bundle_sha256"):
+        require(
+            isinstance(params.get(field), str) and SHA256_RE.fullmatch(params[field]) is not None,
+            f"{field} is invalid",
+        )
+    require(
+        isinstance(params.get("node_version"), str)
+        and re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", params["node_version"]) is not None,
+        "node_version is invalid",
+    )
+    max_items = params.get("max_items")
+    max_item_chars = params.get("max_item_chars")
+    chunk_chars = params.get("chunk_chars")
+    chunk_overlap_chars = params.get("chunk_overlap_chars")
+    min_score = params.get("min_score")
+    require(
+        isinstance(max_items, int) and not isinstance(max_items, bool) and 1 <= max_items <= 50,
+        "max_items is invalid",
+    )
+    require(
+        isinstance(max_item_chars, int)
+        and not isinstance(max_item_chars, bool)
+        and 200 <= max_item_chars <= 20_000,
+        "max_item_chars is invalid",
+    )
+    require(
+        isinstance(chunk_chars, int)
+        and not isinstance(chunk_chars, bool)
+        and 800 <= chunk_chars <= 20_000,
+        "chunk_chars is invalid",
+    )
+    require(
+        isinstance(chunk_overlap_chars, int)
+        and not isinstance(chunk_overlap_chars, bool)
+        and 0 <= chunk_overlap_chars < chunk_chars,
+        "chunk_overlap_chars is invalid",
+    )
+    require(
+        isinstance(min_score, (int, float))
+        and not isinstance(min_score, bool)
+        and math.isfinite(float(min_score))
+        and 0 <= float(min_score) <= 1,
+        "min_score is invalid",
+    )
+
+    query_enabled = params.get("query_image_understanding")
+    query_model = params.get("query_image_model")
+    require(isinstance(query_enabled, bool), "query_image_understanding is invalid")
+    require(
+        isinstance(query_model, str)
+        and (bool(query_model.strip()) if query_enabled else not query_model.strip()),
+        "query_image_model is invalid",
+    )
+    require_public_https_url(params.get("query_image_base_url"), "query_image_base_url")
+    require(
+        isinstance(params.get("query_image_api_key_env"), str)
+        and ENV_NAME_RE.fullmatch(params["query_image_api_key_env"]) is not None,
+        "query_image_api_key_env is invalid",
+    )
+
+    retrieval_enabled = params.get("retrieval_llm_enabled")
+    retrieval_model = params.get("retrieval_llm_model")
+    require(isinstance(retrieval_enabled, bool), "retrieval_llm_enabled is invalid")
+    require(
+        isinstance(retrieval_model, str)
+        and (bool(retrieval_model.strip()) if retrieval_enabled else not retrieval_model.strip()),
+        "retrieval_llm_model is invalid",
+    )
+    require_public_https_url(params.get("retrieval_llm_base_url"), "retrieval_llm_base_url")
+    require(
+        isinstance(params.get("retrieval_llm_api_key_env"), str)
+        and ENV_NAME_RE.fullmatch(params["retrieval_llm_api_key_env"]) is not None,
+        "retrieval_llm_api_key_env is invalid",
+    )
+    require(
+        params.get("retrieval_llm_provider_family")
+        in {
+            "openai",
+            "openrouter",
+            "deepseek",
+            "qwen",
+            "kimi",
+            "mistral",
+            "voyage",
+            "anthropic",
+            "gemini",
+            "ollama",
+            "custom",
+        },
+        "retrieval_llm_provider_family is invalid",
+    )
+    require(
+        params.get("retrieval_llm_protocol")
+        in {
+            "auto",
+            "openai-responses",
+            "openai-chat",
+            "anthropic-messages",
+            "gemini-native",
+        },
+        "retrieval_llm_protocol is invalid",
+    )
     identity = {
         key: value
         for key, value in params.items()
@@ -218,6 +424,265 @@ def validate_memory_config(payload: Any) -> dict[str, object]:
     }
     require(identity, "memory_config must contain explicit method parameters")
     return identity
+
+
+def finite_number(value: object) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+    )
+
+
+def runtime_question_components(question: dict[str, Any]) -> tuple[str, str | None]:
+    value = question.get("question")
+    if isinstance(value, str):
+        require(bool(value), f"Question text is empty for {question_id(question, 'runtime questions')}")
+        return value, None
+    require(isinstance(value, dict), "Runtime question content must be text or text plus image")
+    text = value.get("text")
+    image = value.get("image")
+    require(isinstance(text, str) and bool(text), "Runtime question text is invalid")
+    require(isinstance(image, str) and bool(image), "Runtime question image is invalid")
+    return text, image
+
+
+def validate_per_question_record(
+    record: dict[str, Any],
+    question: dict[str, Any],
+    haystack_ids: list[str],
+    index: int,
+) -> None:
+    identifier = question_id(question, "runtime questions")
+    require(set(record) == PER_QUESTION_KEYS, f"Per-question record schema is invalid for {identifier}")
+    question_type = question.get("question_type")
+    require(
+        isinstance(question_type, str) and question_type in CATEGORY_MAP,
+        f"Runtime question type is invalid for {identifier}",
+    )
+    question_text, question_image = runtime_question_components(question)
+    eval_function = question.get("eval_function")
+    answer = question.get("answer")
+    require(isinstance(eval_function, str) and bool(eval_function), f"Eval function is invalid for {identifier}")
+    require(isinstance(answer, str), f"Gold answer is invalid for {identifier}")
+    is_abstention = eval_function.split("|", 1)[0] == "llm_abstention_checker"
+    expected_metadata = {
+        "index": index,
+        "stream_index": index,
+        "question_id": identifier,
+        "question_type": question_type,
+        "category": CATEGORY_MAP[question_type],
+        "is_abstention_problem": is_abstention,
+        "eval_function": eval_function,
+        "question_text": question_text,
+        "question_image": question_image,
+        "haystack_ids": haystack_ids,
+        "answer_gold": answer,
+    }
+    for field, expected in expected_metadata.items():
+        require(record.get(field) == expected, f"Per-question {field} mismatch for {identifier}")
+
+    score_bool = record.get("score_bool")
+    score = record.get("score")
+    require(isinstance(score_bool, bool), f"score_bool is invalid for {identifier}")
+    require(
+        finite_number(score) and float(score) in {0.0, 1.0},
+        f"score is invalid for {identifier}",
+    )
+    require(float(score) == float(score_bool), f"score and score_bool disagree for {identifier}")
+    require(isinstance(record.get("is_unknown"), bool), f"is_unknown is invalid for {identifier}")
+    require(isinstance(record.get("response_raw"), str), f"response_raw is invalid for {identifier}")
+    require(
+        record.get("response_parsed_boxed") is None
+        or isinstance(record.get("response_parsed_boxed"), str),
+        f"response_parsed_boxed is invalid for {identifier}",
+    )
+    require(
+        isinstance(record.get("timestamp_utc"), str) and bool(record["timestamp_utc"].strip()),
+        f"timestamp_utc is invalid for {identifier}",
+    )
+    require(isinstance(record.get("prompt_messages"), list), f"prompt_messages is invalid for {identifier}")
+    memory_context = record.get("memory_context")
+    require(isinstance(memory_context, list), f"memory_context is invalid for {identifier}")
+    require(
+        all(
+            isinstance(item, dict)
+            and set(item) == {"type", "value"}
+            and item.get("type") == "text"
+            and isinstance(item.get("value"), str)
+            for item in memory_context
+        ),
+        f"memory_context item schema is invalid for {identifier}",
+    )
+    require(
+        record.get("memory_post_query_metadata") is None
+        or isinstance(record.get("memory_post_query_metadata"), dict),
+        f"memory_post_query_metadata is invalid for {identifier}",
+    )
+    for field in ("memory_query_duration_seconds", "memory_post_query_duration_seconds"):
+        require(
+            finite_number(record.get(field)) and float(record[field]) >= 0,
+            f"{field} is invalid for {identifier}",
+        )
+    original_tokens = record.get("memory_context_original_token_count")
+    final_tokens = record.get("memory_context_token_count")
+    require(
+        isinstance(original_tokens, int)
+        and not isinstance(original_tokens, bool)
+        and original_tokens >= 0,
+        f"memory_context_original_token_count is invalid for {identifier}",
+    )
+    require(
+        isinstance(final_tokens, int)
+        and not isinstance(final_tokens, bool)
+        and 0 <= final_tokens <= original_tokens,
+        f"memory_context_token_count is invalid for {identifier}",
+    )
+    require(
+        record.get("memory_context_was_truncated") is (original_tokens > final_tokens),
+        f"memory_context_was_truncated is invalid for {identifier}",
+    )
+    usage = record.get("usage")
+    require(
+        isinstance(usage, dict)
+        and set(usage) == {"prompt_tokens", "completion_tokens", "total_tokens"},
+        f"usage schema is invalid for {identifier}",
+    )
+    for field in ("prompt_tokens", "completion_tokens", "total_tokens"):
+        require(
+            isinstance(usage.get(field), int)
+            and not isinstance(usage[field], bool)
+            and usage[field] >= 0,
+            f"usage.{field} is invalid for {identifier}",
+        )
+    require(
+        usage["total_tokens"] == usage["prompt_tokens"] + usage["completion_tokens"],
+        f"usage totals disagree for {identifier}",
+    )
+
+
+def average(values: list[float]) -> float | None:
+    return sum(values) / len(values) if values else None
+
+
+def metric_breakdown(records: list[dict[str, Any]]) -> dict[str, Any]:
+    count = len(records)
+    if count == 0:
+        return {
+            "count": 0,
+            "pct_correct": None,
+            "pct_answered_wrong": None,
+            "pct_unknown": None,
+        }
+    unknown_count = sum(1 for record in records if record["is_unknown"])
+    correct_count = sum(
+        1 for record in records if record["score_bool"] and not record["is_unknown"]
+    )
+    wrong_count = count - correct_count - unknown_count
+    return {
+        "count": count,
+        "pct_correct": correct_count / count,
+        "pct_answered_wrong": wrong_count / count,
+        "pct_unknown": unknown_count / count,
+    }
+
+
+def recompute_aggregated_metrics(records: list[dict[str, Any]]) -> dict[str, Any]:
+    require(bool(records), "Cannot aggregate an empty per-question log")
+    non_abstention = [record for record in records if not record["is_abstention_problem"]]
+    abstention = [record for record in records if record["is_abstention_problem"]]
+    overall = {
+        "overall_full_set": average([float(record["score"]) for record in records]),
+        "overall_non_abstention_only": average(
+            [float(record["score"]) for record in non_abstention]
+        ),
+        "overall_abstention_only": average([float(record["score"]) for record in abstention]),
+        "count_all_questions": len(records),
+        "count_non_abstention": len(non_abstention),
+        "count_abstention": len(abstention),
+    }
+    non_abstention_by_category = {
+        category: metric_breakdown(
+            [record for record in non_abstention if record["category"] == category]
+        )
+        for category in NON_ABSTENTION_CATEGORIES
+    }
+    abstention_by_category = {
+        category: metric_breakdown(
+            [record for record in abstention if record["category"] == category]
+        )
+        for category in ABSTENTION_CATEGORIES
+    }
+    combined_abstention_by_category = {
+        category: metric_breakdown(
+            [record for record in records if record["category"] in pair]
+        )
+        for category, pair in COMBINED_ABSTENTION_CATEGORY_PAIRS.items()
+    }
+
+    prompt_tokens = sum(record["usage"]["prompt_tokens"] for record in records)
+    completion_tokens = sum(record["usage"]["completion_tokens"] for record in records)
+    original_memory_tokens = sum(
+        record["memory_context_original_token_count"] for record in records
+    )
+    final_memory_tokens = sum(record["memory_context_token_count"] for record in records)
+    query_durations = [float(record["memory_query_duration_seconds"]) for record in records]
+    post_query_durations = [
+        float(record["memory_post_query_duration_seconds"]) for record in records
+    ]
+
+    def duration_metrics(values: list[float]) -> dict[str, float]:
+        ordered = sorted(values)
+        total = sum(values)
+        return {
+            "avg_seconds": total / len(values),
+            "p50_seconds": ordered[len(ordered) // 2],
+            "p95_seconds": ordered[min(len(ordered) - 1, int(0.95 * len(ordered)))],
+            "max_seconds": ordered[-1],
+            "total_seconds": total,
+        }
+
+    return {
+        "overall": overall,
+        "non_abstention_by_category": non_abstention_by_category,
+        "abstention_by_category": abstention_by_category,
+        "combined_abstention_by_category": combined_abstention_by_category,
+        "abstention_overall": metric_breakdown(abstention),
+        "tokens": {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+            "avg_prompt_tokens": prompt_tokens / len(records),
+            "avg_completion_tokens": completion_tokens / len(records),
+            "avg_total_tokens": (prompt_tokens + completion_tokens) / len(records),
+        },
+        "memory_context": {
+            "avg_original_tokens": original_memory_tokens / len(records),
+            "avg_final_tokens": final_memory_tokens / len(records),
+            "num_truncated_sequences": sum(
+                int(record["memory_context_was_truncated"]) for record in records
+            ),
+        },
+        "memory_query": duration_metrics(query_durations),
+        "memory_post_query": duration_metrics(post_query_durations),
+    }
+
+
+def validate_aggregated_metrics(metrics: Any, records: list[dict[str, Any]], domain: str) -> None:
+    require(isinstance(metrics, dict), "aggregated_metrics.json must contain an object")
+    require(set(metrics) == AGGREGATED_METRIC_KEYS, "aggregated_metrics.json has an unsupported schema")
+    require(
+        isinstance(metrics.get("completed_at_utc"), str)
+        and bool(metrics["completed_at_utc"].strip()),
+        "aggregated_metrics.completed_at_utc is invalid",
+    )
+    require(metrics.get("shared_haystack") is False, "Kavi runs must use isolated per-question memory")
+    recomputed = recompute_aggregated_metrics(records)
+    for field, expected in recomputed.items():
+        require(
+            metrics.get(field) == expected,
+            f"{domain} aggregate field {field} does not match per-question evidence",
+        )
 
 
 def validate_domain_run(
@@ -286,13 +751,19 @@ def validate_domain_run(
         Counter(record_ids) == Counter(question_ids),
         f"{domain} per-question output does not cover the complete released set",
     )
-    metrics = read_json(run_dir / "aggregated_metrics.json")
-    require(isinstance(metrics, dict), "aggregated_metrics.json must contain an object")
-    overall = metrics.get("overall")
-    require(isinstance(overall, dict), "aggregated_metrics.overall must be an object")
     require(
-        overall.get("count_all_questions") == EXPECTED_DOMAIN_COUNTS[domain],
-        f"{domain} aggregate count does not cover the complete released set",
+        record_ids == question_ids,
+        f"{domain} per-question output order does not match the unshuffled official stream",
+    )
+    for index, (record, question) in enumerate(zip(records, expected_questions, strict=True)):
+        validate_per_question_record(
+            record,
+            question,
+            expected_haystack[question_ids[index]],
+            index,
+        )
+    validate_aggregated_metrics(
+        read_json(run_dir / "aggregated_metrics.json"), records, domain
     )
     return DomainRunValidation(
         domain=domain,
@@ -315,3 +786,24 @@ def validate_run_pair(web: DomainRunValidation, enterprise: DomainRunValidation)
         web.memory_identity == enterprise.memory_identity,
         "Web and enterprise runs use different Kavi memory parameters",
     )
+
+
+def validate_frozen_runtime_identity(
+    run: DomainRunValidation,
+    *,
+    app_commit_sha: str,
+    adapter_source_sha256: str,
+    runtime_bundle_sha256: str,
+    node_version: str,
+) -> None:
+    expected = {
+        "app_commit_sha": app_commit_sha,
+        "adapter_source_sha256": adapter_source_sha256,
+        "runtime_bundle_sha256": runtime_bundle_sha256,
+        "node_version": node_version,
+    }
+    for field, value in expected.items():
+        require(
+            run.memory_identity.get(field) == value,
+            f"{run.domain} run {field} does not match the frozen candidate runtime",
+        )

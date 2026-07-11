@@ -15,6 +15,10 @@ from run_kavi_isolated import (
     DATA_REVISION,
     METHOD,
     UPSTREAM_COMMIT,
+    build_runtime,
+    load_longmemeval_provenance,
+    node_version,
+    require_clean_app,
     verify_data_snapshot,
     verify_upstream,
 )
@@ -22,6 +26,7 @@ from submission_readiness import (
     SubmissionReadinessError,
     require,
     validate_domain_run,
+    validate_frozen_runtime_identity,
     validate_run_pair,
 )
 from submission_staging import (
@@ -61,23 +66,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def git(repo_root: Path, *args: str) -> str:
-    result = subprocess.run(
-        ["git", *args],
-        cwd=repo_root,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip()
-
-
-def require_clean_app(repo_root: Path) -> str:
-    status = git(repo_root, "status", "--porcelain=v1", "--untracked-files=all")
-    require(not status, "Official candidate preparation requires a clean app worktree")
-    return git(repo_root, "rev-parse", "HEAD")
-
-
 def require_safe_name(value: str, field: str) -> None:
     require(
         bool(SAFE_NAME_RE.fullmatch(value)),
@@ -110,17 +98,6 @@ def write_manifest(path: Path, payload: dict[str, Any]) -> None:
     path.chmod(0o600)
 
 
-def load_longmemeval_provenance(repo_root: Path) -> dict[str, Any]:
-    path = repo_root / "evaluation" / "benchmark-provenance.json"
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    adapter = next(
-        item
-        for item in payload["adapters"]
-        if item.get("id") == "longmemeval-v2"
-    )
-    return adapter
-
-
 def apply_private_permissions(root: Path) -> None:
     for path in root.rglob("*"):
         path.chmod(0o700 if path.is_dir() else 0o600)
@@ -150,6 +127,7 @@ def _build_candidate(args: argparse.Namespace) -> dict[str, Any]:
         ["npm", "run", "check:evaluation-contract"], cwd=repo_root, check=True
     )
     app_commit = require_clean_app(repo_root)
+    provenance = load_longmemeval_provenance(repo_root)
     upstream = args.upstream.expanduser().resolve()
     data_root = args.data_root.expanduser().resolve()
     web_run = args.web_run.expanduser().resolve()
@@ -163,6 +141,23 @@ def _build_candidate(args: argparse.Namespace) -> dict[str, Any]:
         enterprise_run, data_root, "enterprise", args.tier
     )
     validate_run_pair(web_validation, enterprise_validation)
+    node_binary = web_validation.memory_identity.get("node_binary")
+    require(isinstance(node_binary, str) and bool(node_binary), "Frozen node_binary is invalid")
+    rebuilt_runtime = build_runtime(repo_root, node_binary)
+    rebuilt_runtime_sha256 = sha256_file(rebuilt_runtime)
+    rebuilt_node_version = node_version(node_binary)
+    for validation in (web_validation, enterprise_validation):
+        validate_frozen_runtime_identity(
+            validation,
+            app_commit_sha=app_commit,
+            adapter_source_sha256=provenance["adapter"]["sourceSha256"],
+            runtime_bundle_sha256=rebuilt_runtime_sha256,
+            node_version=rebuilt_node_version,
+        )
+    require(
+        require_clean_app(repo_root) == app_commit,
+        "Kavi app revision changed during candidate runtime verification",
+    )
     raw_hashes_before = {
         "web": run_artifact_sha256(web_run),
         "enterprise": run_artifact_sha256(enterprise_run),
@@ -256,7 +251,6 @@ def _build_candidate(args: argparse.Namespace) -> dict[str, Any]:
         "Pinned upstream checkout changed during candidate preparation",
     )
     require_not_submitted(provenance_path)
-    provenance = load_longmemeval_provenance(repo_root)
     manifest = {
         "schemaVersion": 1,
         "kind": "kavi_longmemeval_v2_submission_candidate",
@@ -265,6 +259,8 @@ def _build_candidate(args: argparse.Namespace) -> dict[str, Any]:
         "app": {
             "commitSha": app_commit,
             "adapterSourceSha256": provenance["adapter"]["sourceSha256"],
+            "runtimeBundleSha256": rebuilt_runtime_sha256,
+            "nodeVersion": rebuilt_node_version,
         },
         "upstream": {
             "commitSha": UPSTREAM_COMMIT,

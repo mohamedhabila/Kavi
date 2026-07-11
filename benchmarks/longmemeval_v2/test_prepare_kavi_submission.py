@@ -70,7 +70,7 @@ class PrepareKaviSubmissionTest(unittest.TestCase):
 
         self.assertEqual(len(commit), 40)
         with self.assertRaisesRegex(
-            prepare.SubmissionReadinessError, "clean app worktree"
+            RuntimeError, "clean app worktree"
         ):
             prepare.require_clean_app(self.root)
 

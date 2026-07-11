@@ -26,14 +26,18 @@ class SubmissionReadinessTest(unittest.TestCase):
                 "id": "web-1",
                 "domain": "web",
                 "question": "First?",
-                "question_type": "static",
+                "question_type": "static-environment",
+                "answer": "First",
+                "eval_function": "norm_phrase_set_match|lower=true",
                 "image": None,
             },
             {
                 "id": "web-2",
                 "domain": "web",
                 "question": "Second?",
-                "question_type": "dynamic",
+                "question_type": "dynamic-environment",
+                "answer": "Second",
+                "eval_function": "norm_phrase_set_match|lower=true",
                 "image": None,
             },
             {
@@ -41,6 +45,8 @@ class SubmissionReadinessTest(unittest.TestCase):
                 "domain": "enterprise",
                 "question": "Third?",
                 "question_type": "procedure",
+                "answer": "Third",
+                "eval_function": "norm_phrase_set_match|lower=true",
                 "image": None,
             },
         ]
@@ -79,7 +85,25 @@ class SubmissionReadinessTest(unittest.TestCase):
                     "workspace_root": str(run_dir / "workspaces"),
                     "runtime_bundle_path": str(self.root / "runtime.cjs"),
                     "node_binary": "node",
+                    "app_commit_sha": "a" * 40,
+                    "adapter_source_sha256": "b" * 64,
+                    "runtime_bundle_sha256": "c" * 64,
+                    "node_version": "v22.0.0",
                     "max_items": 12,
+                    "max_item_chars": 5000,
+                    "chunk_chars": 3600,
+                    "chunk_overlap_chars": 320,
+                    "min_score": 0.01,
+                    "query_image_understanding": False,
+                    "query_image_model": "",
+                    "query_image_base_url": "https://api.openai.com/v1",
+                    "query_image_api_key_env": "OPENAI_API_KEY",
+                    "retrieval_llm_enabled": False,
+                    "retrieval_llm_model": "",
+                    "retrieval_llm_base_url": "https://api.openai.com/v1",
+                    "retrieval_llm_api_key_env": "OPENAI_API_KEY",
+                    "retrieval_llm_provider_family": "openai",
+                    "retrieval_llm_protocol": "openai-responses",
                 },
             },
         )
@@ -101,15 +125,53 @@ class SubmissionReadinessTest(unittest.TestCase):
             **readiness.EXPECTED_PROTOCOL_FIELDS,
         }
         write_json(run_dir / "run_args.json", run_args)
+        records = [
+            self.valid_record(row, index, haystack[row["id"]])
+            for index, row in enumerate(questions)
+        ]
         (run_dir / "per_question.jsonl").write_text(
-            "".join(json.dumps({"question_id": row["id"]}) + "\n" for row in questions),
-            encoding="utf-8",
+            "".join(json.dumps(row) + "\n" for row in records), encoding="utf-8"
         )
+        metrics = readiness.recompute_aggregated_metrics(records)
+        metrics.update({"completed_at_utc": "2026-07-11T00:00:00Z", "shared_haystack": False})
         write_json(
             run_dir / "aggregated_metrics.json",
-            {"overall": {"count_all_questions": len(questions)}},
+            metrics,
         )
         return run_dir
+
+    def valid_record(
+        self, question: dict[str, object], index: int, haystack_ids: list[str]
+    ) -> dict[str, object]:
+        question_type = str(question["question_type"])
+        return {
+            "index": index,
+            "stream_index": index,
+            "question_id": question["id"],
+            "question_type": question_type,
+            "category": readiness.CATEGORY_MAP[question_type],
+            "is_abstention_problem": False,
+            "eval_function": question["eval_function"],
+            "question_text": question["question"],
+            "question_image": None,
+            "haystack_ids": haystack_ids,
+            "memory_context": [{"type": "text", "value": "fixture memory"}],
+            "memory_query_duration_seconds": float(index + 1),
+            "memory_post_query_duration_seconds": 0.25,
+            "memory_post_query_metadata": {},
+            "memory_context_original_token_count": 5,
+            "memory_context_token_count": 5,
+            "memory_context_was_truncated": False,
+            "prompt_messages": [],
+            "answer_gold": question["answer"],
+            "response_raw": "\\boxed{fixture}",
+            "response_parsed_boxed": "fixture",
+            "is_unknown": False,
+            "score": 1.0,
+            "score_bool": True,
+            "usage": {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12},
+            "timestamp_utc": "2026-07-11T00:00:00Z",
+        }
 
     def test_accepts_complete_pinned_pair_with_one_protocol(self) -> None:
         web = readiness.validate_domain_run(
@@ -165,6 +227,45 @@ class SubmissionReadinessTest(unittest.TestCase):
 
         with self.assertRaisesRegex(
             readiness.SubmissionReadinessError, "private network"
+        ):
+            readiness.validate_domain_run(run_dir, self.data_root, "web", "small")
+
+    def test_rejects_per_question_score_schema_drift(self) -> None:
+        run_dir = self.create_run("web")
+        records = [
+            json.loads(line)
+            for line in (run_dir / "per_question.jsonl").read_text().splitlines()
+        ]
+        records[0].pop("score_bool")
+        (run_dir / "per_question.jsonl").write_text(
+            "".join(json.dumps(row) + "\n" for row in records), encoding="utf-8"
+        )
+
+        with self.assertRaisesRegex(
+            readiness.SubmissionReadinessError, "record schema"
+        ):
+            readiness.validate_domain_run(run_dir, self.data_root, "web", "small")
+
+    def test_rejects_aggregate_score_that_does_not_match_rows(self) -> None:
+        run_dir = self.create_run("web")
+        metrics = read_json(run_dir / "aggregated_metrics.json")
+        metrics["overall"]["overall_full_set"] = 0.0
+        write_json(run_dir / "aggregated_metrics.json", metrics)
+
+        with self.assertRaisesRegex(
+            readiness.SubmissionReadinessError, "does not match per-question evidence"
+        ):
+            readiness.validate_domain_run(run_dir, self.data_root, "web", "small")
+
+    def test_rejects_hidden_auxiliary_model_when_its_switch_is_disabled(self) -> None:
+        run_dir = self.create_run("web")
+        config_path = run_dir / "runtime_inputs/memory_config.json"
+        config = read_json(config_path)
+        config["memory_params"]["retrieval_llm_model"] = "hidden-model"
+        write_json(config_path, config)
+
+        with self.assertRaisesRegex(
+            readiness.SubmissionReadinessError, "retrieval_llm_model is invalid"
         ):
             readiness.validate_domain_run(run_dir, self.data_root, "web", "small")
 

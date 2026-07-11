@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import atexit
+import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import threading
@@ -13,29 +15,47 @@ from uuid import uuid4
 from .memory import Memory, MemoryConfig, MemoryContextItem, register_memory, require
 
 
-DEFAULT_MAX_ITEMS = 12
-DEFAULT_MAX_ITEM_CHARS = 5000
-DEFAULT_CHUNK_CHARS = 3600
-DEFAULT_CHUNK_OVERLAP_CHARS = 320
+SHA256_RE = re.compile(r"[a-f0-9]{64}")
+COMMIT_SHA_RE = re.compile(r"[a-f0-9]{40}")
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+def _required_string(
+    memory_params: dict[str, object], key: str, *, allow_empty: bool = False
+) -> str:
+    value = memory_params.get(key)
+    require(isinstance(value, str), f"{key} must be a string")
+    normalized = value.strip()
+    require(allow_empty or bool(normalized), f"{key} must be non-empty")
+    return normalized
 
 
-def _as_bool(value: object, default: bool) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in {"1", "true", "yes", "on"}:
-            return True
-        if normalized in {"0", "false", "no", "off"}:
-            return False
-    return default
+def _required_bool(memory_params: dict[str, object], key: str) -> bool:
+    value = memory_params.get(key)
+    require(isinstance(value, bool), f"{key} must be a boolean")
+    return value
+
+
+def _required_int(memory_params: dict[str, object], key: str) -> int:
+    value = memory_params.get(key)
+    require(isinstance(value, int) and not isinstance(value, bool), f"{key} must be an integer")
+    return value
+
+
+def _required_number(memory_params: dict[str, object], key: str) -> float:
+    value = memory_params.get(key)
+    require(
+        isinstance(value, (int, float)) and not isinstance(value, bool),
+        f"{key} must be numeric",
+    )
+    return float(value)
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _safe_name(value: str) -> str:
@@ -57,12 +77,14 @@ class KaviMemoryRuntimeClient:
         runtime_bundle_path: Path,
         db_dir: Path,
         node_binary: str,
+        runtime_bundle_sha256: str,
         config: dict[str, object],
     ) -> None:
         self.repo_root = repo_root
         self.runtime_bundle_path = runtime_bundle_path
         self.db_dir = db_dir
         self.node_binary = node_binary
+        self.runtime_bundle_sha256 = runtime_bundle_sha256
         self.config = dict(config)
         self.request_counter = 0
         self.lock = threading.Lock()
@@ -90,15 +112,13 @@ class KaviMemoryRuntimeClient:
         self.call({"op": "reset", "config": self.config})
 
     def _ensure_runtime_bundle(self) -> None:
-        if self.runtime_bundle_path.exists():
-            return
-        build_script = self.repo_root / "benchmarks" / "longmemeval_v2" / "build_kavi_memory_runtime.js"
-        require(build_script.exists(), f"Missing runtime build script: {build_script}")
-        self.runtime_bundle_path.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(
-            [self.node_binary, str(build_script), "--out", str(self.runtime_bundle_path)],
-            cwd=str(self.repo_root),
-            check=True,
+        require(
+            self.runtime_bundle_path.is_file() and not self.runtime_bundle_path.is_symlink(),
+            f"Missing regular runtime bundle: {self.runtime_bundle_path}",
+        )
+        require(
+            _sha256_file(self.runtime_bundle_path) == self.runtime_bundle_sha256,
+            "Runtime bundle does not match the frozen SHA-256",
         )
 
     def _read_stderr(self) -> None:
@@ -161,17 +181,23 @@ class KaviIsolatedMemory(Memory):
 
     def __init__(self, memory_params: dict[str, object]) -> None:
         super().__init__(memory_params)
-        repo_root_value = memory_params.get("repo_root")
-        workspace_root_value = memory_params.get("workspace_root")
-        node_binary = str(memory_params.get("node_binary", "node")).strip()
-        runtime_bundle_value = memory_params.get("runtime_bundle_path")
-
-        require(isinstance(repo_root_value, str) and repo_root_value.strip(), "repo_root is required")
+        repo_root_value = _required_string(memory_params, "repo_root")
+        workspace_root_value = _required_string(memory_params, "workspace_root")
+        node_binary = _required_string(memory_params, "node_binary")
+        runtime_bundle_value = _required_string(memory_params, "runtime_bundle_path")
+        self.app_commit_sha = _required_string(memory_params, "app_commit_sha")
+        self.adapter_source_sha256 = _required_string(memory_params, "adapter_source_sha256")
+        self.runtime_bundle_sha256 = _required_string(memory_params, "runtime_bundle_sha256")
+        self.node_version = _required_string(memory_params, "node_version")
+        require(COMMIT_SHA_RE.fullmatch(self.app_commit_sha) is not None, "app_commit_sha is invalid")
         require(
-            isinstance(workspace_root_value, str) and workspace_root_value.strip(),
-            "workspace_root is required",
+            SHA256_RE.fullmatch(self.adapter_source_sha256) is not None,
+            "adapter_source_sha256 is invalid",
         )
-        require(node_binary, "node_binary must be non-empty")
+        require(
+            SHA256_RE.fullmatch(self.runtime_bundle_sha256) is not None,
+            "runtime_bundle_sha256 is invalid",
+        )
 
         self.repo_root = Path(repo_root_value).resolve()
         self.workspace_root = Path(workspace_root_value).resolve()
@@ -181,57 +207,94 @@ class KaviIsolatedMemory(Memory):
         self.trace_dir: Path | None = None
         self.last_query_metadata: dict[str, object] | None = None
 
-        if isinstance(runtime_bundle_value, str) and runtime_bundle_value.strip():
-            runtime_bundle_path = Path(runtime_bundle_value).resolve()
-        else:
-            runtime_bundle_path = (
-                self.repo_root / ".private" / "evals" / "runtime" / "kavi_memory_runtime.cjs"
-            )
+        runtime_bundle_path = Path(runtime_bundle_value).resolve()
+
+        query_image_understanding = _required_bool(memory_params, "query_image_understanding")
+        query_image_model = _required_string(
+            memory_params, "query_image_model", allow_empty=not query_image_understanding
+        )
+        require(
+            query_image_understanding or not query_image_model,
+            "query_image_model must be empty when image understanding is disabled",
+        )
+        retrieval_llm_enabled = _required_bool(memory_params, "retrieval_llm_enabled")
+        retrieval_llm_model = _required_string(
+            memory_params, "retrieval_llm_model", allow_empty=not retrieval_llm_enabled
+        )
+        require(
+            retrieval_llm_enabled or not retrieval_llm_model,
+            "retrieval_llm_model must be empty when retrieval LLM is disabled",
+        )
 
         self.config = {
-            "maxItems": int(memory_params.get("max_items", DEFAULT_MAX_ITEMS)),
-            "maxItemChars": int(memory_params.get("max_item_chars", DEFAULT_MAX_ITEM_CHARS)),
-            "chunkChars": int(memory_params.get("chunk_chars", DEFAULT_CHUNK_CHARS)),
-            "chunkOverlapChars": int(
-                memory_params.get("chunk_overlap_chars", DEFAULT_CHUNK_OVERLAP_CHARS)
-            ),
+            "maxItems": _required_int(memory_params, "max_items"),
+            "maxItemChars": _required_int(memory_params, "max_item_chars"),
+            "chunkChars": _required_int(memory_params, "chunk_chars"),
+            "chunkOverlapChars": _required_int(memory_params, "chunk_overlap_chars"),
+            "minScore": _required_number(memory_params, "min_score"),
             "conversationId": f"longmemeval-{self.instance_id}",
-            "queryImageUnderstanding": _as_bool(
-                memory_params.get(
-                    "query_image_understanding",
-                    _env_bool("KAVI_LME_QUERY_IMAGE_UNDERSTANDING", True),
-                ),
-                True,
+            "queryImageUnderstanding": query_image_understanding,
+            "queryImageModel": query_image_model,
+            "queryImageBaseUrl": _required_string(memory_params, "query_image_base_url"),
+            "queryImageApiKeyEnv": _required_string(memory_params, "query_image_api_key_env"),
+            "retrievalLlmEnabled": retrieval_llm_enabled,
+            "retrievalLlmModel": retrieval_llm_model,
+            "retrievalLlmBaseUrl": _required_string(memory_params, "retrieval_llm_base_url"),
+            "retrievalLlmApiKeyEnv": _required_string(memory_params, "retrieval_llm_api_key_env"),
+            "retrievalLlmProviderFamily": _required_string(
+                memory_params, "retrieval_llm_provider_family"
             ),
-            "queryImageModel": str(
-                memory_params.get(
-                    "query_image_model",
-                    os.getenv("KAVI_LME_QUERY_IMAGE_MODEL")
-                    or os.getenv("E2E_OPENAI_MODEL")
-                    or "",
-                )
-            ),
-            "queryImageBaseUrl": str(
-                memory_params.get(
-                    "query_image_base_url",
-                    os.getenv("KAVI_LME_QUERY_IMAGE_BASE_URL")
-                    or os.getenv("OPENAI_BASE_URL")
-                    or "https://api.openai.com/v1",
-                )
-            ),
-            "queryImageApiKeyEnv": str(
-                memory_params.get(
-                    "query_image_api_key_env",
-                    os.getenv("KAVI_LME_QUERY_IMAGE_API_KEY_ENV") or "OPENAI_API_KEY",
-                )
-            ),
+            "retrievalLlmProtocol": _required_string(memory_params, "retrieval_llm_protocol"),
         }
+        require(1 <= self.config["maxItems"] <= 50, "max_items is outside the runtime range")
+        require(
+            200 <= self.config["maxItemChars"] <= 20_000,
+            "max_item_chars is outside the runtime range",
+        )
+        require(
+            800 <= self.config["chunkChars"] <= 20_000,
+            "chunk_chars is outside the runtime range",
+        )
+        require(
+            0 <= self.config["chunkOverlapChars"] < self.config["chunkChars"],
+            "chunk_overlap_chars is outside the runtime range",
+        )
+        require(0 <= self.config["minScore"] <= 1, "min_score is outside the runtime range")
+        require(
+            self.config["retrievalLlmProviderFamily"]
+            in {
+                "openai",
+                "openrouter",
+                "deepseek",
+                "qwen",
+                "kimi",
+                "mistral",
+                "voyage",
+                "anthropic",
+                "gemini",
+                "ollama",
+                "custom",
+            },
+            "retrieval_llm_provider_family is unsupported",
+        )
+        require(
+            self.config["retrievalLlmProtocol"]
+            in {
+                "auto",
+                "openai-responses",
+                "openai-chat",
+                "anthropic-messages",
+                "gemini-native",
+            },
+            "retrieval_llm_protocol is unsupported",
+        )
 
         self.client = KaviMemoryRuntimeClient(
             repo_root=self.repo_root,
             runtime_bundle_path=runtime_bundle_path,
             db_dir=self.db_dir,
             node_binary=node_binary,
+            runtime_bundle_sha256=self.runtime_bundle_sha256,
             config=self.config,
         )
 
@@ -242,14 +305,25 @@ class KaviIsolatedMemory(Memory):
             "memory_params": {
                 "repo_root": str(self.repo_root),
                 "workspace_root": str(self.workspace_root),
+                "app_commit_sha": self.app_commit_sha,
+                "adapter_source_sha256": self.adapter_source_sha256,
+                "runtime_bundle_sha256": self.runtime_bundle_sha256,
+                "node_version": self.node_version,
                 "max_items": self.config["maxItems"],
                 "max_item_chars": self.config["maxItemChars"],
                 "chunk_chars": self.config["chunkChars"],
                 "chunk_overlap_chars": self.config["chunkOverlapChars"],
+                "min_score": self.config["minScore"],
                 "query_image_understanding": self.config["queryImageUnderstanding"],
                 "query_image_model": self.config["queryImageModel"],
                 "query_image_base_url": self.config["queryImageBaseUrl"],
                 "query_image_api_key_env": self.config["queryImageApiKeyEnv"],
+                "retrieval_llm_enabled": self.config["retrievalLlmEnabled"],
+                "retrieval_llm_model": self.config["retrievalLlmModel"],
+                "retrieval_llm_base_url": self.config["retrievalLlmBaseUrl"],
+                "retrieval_llm_api_key_env": self.config["retrievalLlmApiKeyEnv"],
+                "retrieval_llm_provider_family": self.config["retrievalLlmProviderFamily"],
+                "retrieval_llm_protocol": self.config["retrievalLlmProtocol"],
             },
         }
 

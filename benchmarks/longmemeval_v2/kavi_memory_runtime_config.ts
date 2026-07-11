@@ -1,5 +1,3 @@
-import process from 'node:process';
-
 import type {
   LlmProviderConfig,
   LlmProviderFamily,
@@ -27,22 +25,6 @@ export interface RuntimeConfig {
 
 export const DEFAULT_QUERY_IMAGE_BASE_URL = 'https://api.openai.com/v1';
 
-function envBoolean(name: string): boolean | null {
-  const value = process.env[name];
-  if (value === undefined) return null;
-  return asBoolean(value);
-}
-
-function configuredRetrievalModel(): string {
-  return process.env.KAVI_LME_RETRIEVAL_LLM_MODEL || process.env.E2E_OPENAI_MODEL || '';
-}
-
-function retrievalLlmEnabledByDefault(): boolean {
-  const configured = envBoolean('KAVI_LME_RETRIEVAL_LLM_ENABLED');
-  if (configured !== null) return configured;
-  return configuredRetrievalModel().trim().length > 0;
-}
-
 export const DEFAULT_CONFIG: RuntimeConfig = {
   chunkChars: 3600,
   chunkOverlapChars: 320,
@@ -50,23 +32,17 @@ export const DEFAULT_CONFIG: RuntimeConfig = {
   maxItemChars: 5000,
   minScore: 0.01,
   conversationId: 'longmemeval-v2',
-  queryImageUnderstanding: true,
-  queryImageModel: process.env.KAVI_LME_QUERY_IMAGE_MODEL || process.env.E2E_OPENAI_MODEL || '',
-  queryImageBaseUrl:
-    process.env.KAVI_LME_QUERY_IMAGE_BASE_URL ||
-    process.env.OPENAI_BASE_URL ||
-    DEFAULT_QUERY_IMAGE_BASE_URL,
-  queryImageApiKeyEnv: process.env.KAVI_LME_QUERY_IMAGE_API_KEY_ENV || 'OPENAI_API_KEY',
-  retrievalLlmEnabled: retrievalLlmEnabledByDefault(),
-  retrievalLlmModel: configuredRetrievalModel(),
-  retrievalLlmBaseUrl:
-    process.env.KAVI_LME_RETRIEVAL_LLM_BASE_URL ||
-    process.env.OPENAI_BASE_URL ||
-    DEFAULT_QUERY_IMAGE_BASE_URL,
-  retrievalLlmApiKeyEnv:
-    process.env.KAVI_LME_RETRIEVAL_LLM_API_KEY_ENV ||
-    process.env.EVALUATOR_API_KEY_ENV ||
-    'OPENAI_API_KEY',
+  // Official runs pass every effective auxiliary-model setting through the
+  // persisted memory config. Process environment must never alter a scored run
+  // behind that artifact's back.
+  queryImageUnderstanding: false,
+  queryImageModel: '',
+  queryImageBaseUrl: DEFAULT_QUERY_IMAGE_BASE_URL,
+  queryImageApiKeyEnv: 'OPENAI_API_KEY',
+  retrievalLlmEnabled: false,
+  retrievalLlmModel: '',
+  retrievalLlmBaseUrl: DEFAULT_QUERY_IMAGE_BASE_URL,
+  retrievalLlmApiKeyEnv: 'OPENAI_API_KEY',
   retrievalLlmProviderFamily: 'openai',
   retrievalLlmProtocol: 'openai-responses',
 };

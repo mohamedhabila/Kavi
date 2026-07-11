@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import argparse
 import hashlib
+import os
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import run_kavi_isolated as runner
 
@@ -114,6 +117,57 @@ class RunKaviIsolatedProvenanceTest(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "file checksum mismatch"):
             runner.verify_data_snapshot(data_root)
+
+    def memory_args(self, **overrides: object) -> argparse.Namespace:
+        values: dict[str, object] = {
+            "memory_max_items": 12,
+            "memory_max_item_chars": 5000,
+            "memory_chunk_chars": 3600,
+            "memory_chunk_overlap_chars": 320,
+            "memory_min_score": 0.01,
+            "query_image_understanding": False,
+            "query_image_model": "",
+            "query_image_base_url": "https://api.openai.com/v1",
+            "query_image_api_key_env": "OPENAI_API_KEY",
+            "retrieval_llm_enabled": False,
+            "retrieval_llm_model": "",
+            "retrieval_llm_base_url": "https://api.openai.com/v1",
+            "retrieval_llm_api_key_env": "OPENAI_API_KEY",
+            "retrieval_llm_provider_family": "openai",
+            "retrieval_llm_protocol": "openai-responses",
+        }
+        values.update(overrides)
+        return argparse.Namespace(**values)
+
+    def test_freezes_secret_free_effective_memory_configuration(self) -> None:
+        with patch.dict(os.environ, {"E2E_OPENAI_MODEL": "must-not-leak"}, clear=False):
+            params = runner.resolve_effective_memory_params(
+                self.memory_args(),
+                app_commit_sha="a" * 40,
+                adapter_source_sha256="b" * 64,
+                runtime_bundle_sha256="c" * 64,
+                resolved_node_version="v22.0.0",
+            )
+
+        self.assertEqual(params["query_image_model"], "")
+        self.assertEqual(params["retrieval_llm_model"], "")
+        self.assertEqual(params["query_image_api_key_env"], "OPENAI_API_KEY")
+        self.assertNotIn("must-not-leak", str(params))
+
+    def test_enabled_auxiliary_model_requires_named_key_without_persisting_it(self) -> None:
+        args = self.memory_args(
+            retrieval_llm_enabled=True,
+            retrieval_llm_model="gpt-5-mini",
+        )
+        with patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False):
+            with self.assertRaisesRegex(RuntimeError, "Missing retrieval LLM API key"):
+                runner.resolve_effective_memory_params(
+                    args,
+                    app_commit_sha="a" * 40,
+                    adapter_source_sha256="b" * 64,
+                    runtime_bundle_sha256="c" * 64,
+                    resolved_node_version="v22.0.0",
+                )
 
 
 if __name__ == "__main__":

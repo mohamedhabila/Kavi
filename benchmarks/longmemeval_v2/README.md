@@ -12,8 +12,8 @@ inside a Node worker that calls Kavi's TypeScript memory store.
 - `kavi_memory_runtime.ts` is the persistent Node worker used by the adapter.
 - `nodeExpoSqlite.ts` adapts Kavi's `expo-sqlite` sync API to `better-sqlite3`
   for local benchmark execution.
-- `build_kavi_memory_runtime.js` bundles the runtime and aliases only the
-  SQLite host adapter.
+- `build_kavi_memory_runtime.js` bundles the reviewed runtime with Node host
+  shims for the mobile SQLite, storage, fetch, crypto, and policy boundaries.
 - `smoke_kavi_memory_runtime.py` runs a no-model smoke test against official
   LongMemEval data.
 
@@ -83,6 +83,15 @@ Reader defaults mirror the official LongMemEval-V2 runner:
 - `--memory-context-max-tokens 200000`;
 - reader thinking enabled by default.
 
+Auxiliary memory models are off by default and never inherit the app's generic
+`E2E_OPENAI_MODEL` or `OPENAI_BASE_URL`. To evaluate an explicitly reviewed
+operating point with query-image understanding or LLM-assisted fact selection,
+set its dedicated `KAVI_LME_QUERY_IMAGE_*` or `KAVI_LME_RETRIEVAL_LLM_*`
+variables and enable the corresponding boolean. The runner stores only public
+model/endpoint identifiers and API-key environment-variable names, never key
+values. It also freezes the clean app commit, complete adapter digest, built
+runtime digest, and Node version into both domain runs.
+
 Prepare immutable upstream inputs before setting provider credentials:
 
 ```bash
@@ -150,6 +159,10 @@ look packageable. Kavi's fail-closed preparation command additionally requires:
 - exact pinned question, haystack, trajectory, and score-bearing file hashes;
 - the same official reader, evaluator, decoding, and Kavi memory configuration
   in both domains;
+- an exact per-question schema whose scores, token totals, memory timings, and
+  aggregate metrics recompute from the retained rows;
+- the same run-time app commit, adapter digest, runtime bundle digest, and Node
+  version, reproduced from the clean candidate checkout;
 - a clean Kavi worktree and the exact permitted upstream patch;
 - a private sanitized copy with no credentials, signed URLs, unmapped local
   paths, or private provider endpoints.

@@ -3,14 +3,17 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import ipaddress
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
 from typing import Any
 import urllib.request
+from urllib.parse import urlsplit
 
 
 METHOD = "kavi_memory_isolated"
@@ -21,6 +24,30 @@ DATA_CHECKSUM_MANIFEST_SHA256 = (
 )
 EXPECTED_READER = "qwen3.5-9b"
 EXPECTED_EVALUATOR = "gpt-5.2"
+DEFAULT_AUXILIARY_BASE_URL = "https://api.openai.com/v1"
+ENV_NAME_RE = re.compile(r"[A-Z][A-Z0-9_]*")
+SHA256_RE = re.compile(r"[a-f0-9]{64}")
+COMMIT_SHA_RE = re.compile(r"[a-f0-9]{40}")
+RETRIEVAL_PROVIDER_FAMILIES = {
+    "openai",
+    "openrouter",
+    "deepseek",
+    "qwen",
+    "kimi",
+    "mistral",
+    "voyage",
+    "anthropic",
+    "gemini",
+    "ollama",
+    "custom",
+}
+RETRIEVAL_PROTOCOLS = {
+    "auto",
+    "openai-responses",
+    "openai-chat",
+    "anthropic-messages",
+    "gemini-native",
+}
 REQUIRED_SCORE_DATA_FILES = {
     "questions.jsonl",
     "trajectories.jsonl",
@@ -61,6 +88,18 @@ def parse_question_ids(raw_values: list[str] | None) -> list[str] | None:
     for raw in raw_values:
         out.extend(item.strip() for item in raw.split(",") if item.strip())
     return out or None
+
+
+def env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise RuntimeError(f"{name} must be an explicit boolean")
 
 
 def parse_args() -> argparse.Namespace:
@@ -105,6 +144,69 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--evaluator-reasoning-effort", choices=["low", "medium", "high"], default="medium")
     parser.add_argument("--evaluator-max-completion-tokens", type=int, default=4096)
     parser.add_argument("--node-binary", default=os.getenv("KAVI_LME_NODE_BINARY", "node"))
+    parser.add_argument(
+        "--memory-max-items", type=int, default=int(os.getenv("KAVI_LME_MAX_ITEMS", "12"))
+    )
+    parser.add_argument(
+        "--memory-max-item-chars",
+        type=int,
+        default=int(os.getenv("KAVI_LME_MAX_ITEM_CHARS", "5000")),
+    )
+    parser.add_argument(
+        "--memory-chunk-chars",
+        type=int,
+        default=int(os.getenv("KAVI_LME_CHUNK_CHARS", "3600")),
+    )
+    parser.add_argument(
+        "--memory-chunk-overlap-chars",
+        type=int,
+        default=int(os.getenv("KAVI_LME_CHUNK_OVERLAP_CHARS", "320")),
+    )
+    parser.add_argument(
+        "--memory-min-score",
+        type=float,
+        default=float(os.getenv("KAVI_LME_MIN_SCORE", "0.01")),
+    )
+    parser.add_argument(
+        "--query-image-understanding",
+        action=argparse.BooleanOptionalAction,
+        default=env_bool("KAVI_LME_QUERY_IMAGE_UNDERSTANDING", False),
+    )
+    parser.add_argument("--query-image-model", default=os.getenv("KAVI_LME_QUERY_IMAGE_MODEL", ""))
+    parser.add_argument(
+        "--query-image-base-url",
+        default=os.getenv("KAVI_LME_QUERY_IMAGE_BASE_URL", DEFAULT_AUXILIARY_BASE_URL),
+    )
+    parser.add_argument(
+        "--query-image-api-key-env",
+        default=os.getenv("KAVI_LME_QUERY_IMAGE_API_KEY_ENV", "OPENAI_API_KEY"),
+    )
+    parser.add_argument(
+        "--retrieval-llm-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=env_bool("KAVI_LME_RETRIEVAL_LLM_ENABLED", False),
+    )
+    parser.add_argument(
+        "--retrieval-llm-model", default=os.getenv("KAVI_LME_RETRIEVAL_LLM_MODEL", "")
+    )
+    parser.add_argument(
+        "--retrieval-llm-base-url",
+        default=os.getenv("KAVI_LME_RETRIEVAL_LLM_BASE_URL", DEFAULT_AUXILIARY_BASE_URL),
+    )
+    parser.add_argument(
+        "--retrieval-llm-api-key-env",
+        default=os.getenv("KAVI_LME_RETRIEVAL_LLM_API_KEY_ENV", "OPENAI_API_KEY"),
+    )
+    parser.add_argument(
+        "--retrieval-llm-provider-family",
+        choices=sorted(RETRIEVAL_PROVIDER_FAMILIES),
+        default=os.getenv("KAVI_LME_RETRIEVAL_LLM_PROVIDER_FAMILY", "openai"),
+    )
+    parser.add_argument(
+        "--retrieval-llm-protocol",
+        choices=sorted(RETRIEVAL_PROTOCOLS),
+        default=os.getenv("KAVI_LME_RETRIEVAL_LLM_PROTOCOL", "openai-responses"),
+    )
     parser.add_argument("--preflight-only", action="store_true")
     parser.add_argument("--force", action="store_true")
     return parser.parse_args()
@@ -127,6 +229,46 @@ def run_git(upstream: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
         check=True,
         capture_output=True,
     )
+
+
+def git_text(repo_root: Path, *args: str) -> str:
+    return run_git(repo_root, *args).stdout.decode("utf-8").strip()
+
+
+def require_clean_app(repo_root: Path) -> str:
+    commit = git_text(repo_root, "rev-parse", "HEAD")
+    require(COMMIT_SHA_RE.fullmatch(commit) is not None, "Kavi app commit is invalid")
+    status = git_text(repo_root, "status", "--porcelain=v1", "--untracked-files=all")
+    require(not status, "Official LongMemEval-V2 work requires a clean app worktree")
+    return commit
+
+
+def load_longmemeval_provenance(repo_root: Path) -> dict[str, Any]:
+    payload = json.loads(
+        (repo_root / "evaluation" / "benchmark-provenance.json").read_text(encoding="utf-8")
+    )
+    adapters = payload.get("adapters") if isinstance(payload, dict) else None
+    require(isinstance(adapters, list), "Benchmark provenance adapters are missing")
+    matches = [
+        item
+        for item in adapters
+        if isinstance(item, dict) and item.get("id") == "longmemeval-v2"
+    ]
+    require(len(matches) == 1, "LongMemEval-V2 provenance must contain exactly one adapter")
+    adapter = matches[0]
+    adapter_source = adapter.get("adapter")
+    require(isinstance(adapter_source, dict), "LongMemEval-V2 adapter provenance is missing")
+    require(
+        adapter_source.get("sourceDigestAlgorithm")
+        == "sha256_versionable_path_nul_bytes_nul_v2",
+        "LongMemEval-V2 adapter digest algorithm is unsupported",
+    )
+    source_sha256 = adapter_source.get("sourceSha256")
+    require(
+        isinstance(source_sha256, str) and SHA256_RE.fullmatch(source_sha256) is not None,
+        "LongMemEval-V2 adapter source digest is invalid",
+    )
+    return adapter
 
 
 def upstream_file(upstream: Path, relative_path: str) -> str:
@@ -236,6 +378,152 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def require_public_https_url(value: object, field: str) -> str:
+    require(isinstance(value, str) and value.strip(), f"{field} must be a URL")
+    normalized = value.strip().rstrip("/")
+    parsed = urlsplit(normalized)
+    require(
+        parsed.scheme == "https"
+        and parsed.hostname is not None
+        and parsed.username is None
+        and parsed.password is None,
+        f"{field} must use credential-free HTTPS",
+    )
+    hostname = str(parsed.hostname).lower()
+    require(
+        hostname != "localhost" and not hostname.endswith((".local", ".internal")),
+        f"{field} must not use a private hostname",
+    )
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        return normalized
+    require(address.is_global, f"{field} must not use a private network address")
+    return normalized
+
+
+def require_env_name(value: object, field: str) -> str:
+    require(
+        isinstance(value, str) and ENV_NAME_RE.fullmatch(value.strip()) is not None,
+        f"{field} must name an environment variable",
+    )
+    return value.strip()
+
+
+def node_version(node_binary: str) -> str:
+    result = subprocess.run(
+        [node_binary, "--version"], check=True, capture_output=True, text=True
+    )
+    version = result.stdout.strip()
+    require(bool(re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", version)), "Node version is invalid")
+    return version
+
+
+def resolve_effective_memory_params(
+    args: argparse.Namespace,
+    *,
+    app_commit_sha: str,
+    adapter_source_sha256: str,
+    runtime_bundle_sha256: str,
+    resolved_node_version: str,
+) -> dict[str, object]:
+    require(1 <= args.memory_max_items <= 50, "memory_max_items must be between 1 and 50")
+    require(
+        200 <= args.memory_max_item_chars <= 20_000,
+        "memory_max_item_chars must be between 200 and 20000",
+    )
+    require(
+        800 <= args.memory_chunk_chars <= 20_000,
+        "memory_chunk_chars must be between 800 and 20000",
+    )
+    require(
+        0 <= args.memory_chunk_overlap_chars < args.memory_chunk_chars,
+        "memory_chunk_overlap_chars must be non-negative and smaller than memory_chunk_chars",
+    )
+    require(0 <= args.memory_min_score <= 1, "memory_min_score must be between 0 and 1")
+    require(COMMIT_SHA_RE.fullmatch(app_commit_sha) is not None, "app_commit_sha is invalid")
+    require(
+        SHA256_RE.fullmatch(adapter_source_sha256) is not None,
+        "adapter_source_sha256 is invalid",
+    )
+    require(
+        SHA256_RE.fullmatch(runtime_bundle_sha256) is not None,
+        "runtime_bundle_sha256 is invalid",
+    )
+
+    query_image_enabled = bool(args.query_image_understanding)
+    query_image_model = str(args.query_image_model or "").strip()
+    if query_image_enabled:
+        require(bool(query_image_model), "query_image_model is required when image understanding is enabled")
+    else:
+        require(
+            not query_image_model,
+            "query_image_model must be empty when image understanding is disabled",
+        )
+    query_image_base_url = require_public_https_url(
+        args.query_image_base_url, "query_image_base_url"
+    )
+    query_image_api_key_env = require_env_name(
+        args.query_image_api_key_env, "query_image_api_key_env"
+    )
+    if query_image_enabled:
+        require(
+            bool(os.getenv(query_image_api_key_env)),
+            f"Missing query-image API key in {query_image_api_key_env}",
+        )
+
+    retrieval_enabled = bool(args.retrieval_llm_enabled)
+    retrieval_model = str(args.retrieval_llm_model or "").strip()
+    if retrieval_enabled:
+        require(bool(retrieval_model), "retrieval_llm_model is required when retrieval LLM is enabled")
+    else:
+        require(
+            not retrieval_model,
+            "retrieval_llm_model must be empty when retrieval LLM is disabled",
+        )
+    retrieval_base_url = require_public_https_url(
+        args.retrieval_llm_base_url, "retrieval_llm_base_url"
+    )
+    retrieval_api_key_env = require_env_name(
+        args.retrieval_llm_api_key_env, "retrieval_llm_api_key_env"
+    )
+    require(
+        args.retrieval_llm_provider_family in RETRIEVAL_PROVIDER_FAMILIES,
+        "retrieval_llm_provider_family is unsupported",
+    )
+    require(
+        args.retrieval_llm_protocol in RETRIEVAL_PROTOCOLS,
+        "retrieval_llm_protocol is unsupported",
+    )
+    if retrieval_enabled:
+        require(
+            bool(os.getenv(retrieval_api_key_env)),
+            f"Missing retrieval LLM API key in {retrieval_api_key_env}",
+        )
+
+    return {
+        "app_commit_sha": app_commit_sha,
+        "adapter_source_sha256": adapter_source_sha256,
+        "runtime_bundle_sha256": runtime_bundle_sha256,
+        "node_version": resolved_node_version,
+        "max_items": args.memory_max_items,
+        "max_item_chars": args.memory_max_item_chars,
+        "chunk_chars": args.memory_chunk_chars,
+        "chunk_overlap_chars": args.memory_chunk_overlap_chars,
+        "min_score": args.memory_min_score,
+        "query_image_understanding": query_image_enabled,
+        "query_image_model": query_image_model,
+        "query_image_base_url": query_image_base_url,
+        "query_image_api_key_env": query_image_api_key_env,
+        "retrieval_llm_enabled": retrieval_enabled,
+        "retrieval_llm_model": retrieval_model,
+        "retrieval_llm_base_url": retrieval_base_url,
+        "retrieval_llm_api_key_env": retrieval_api_key_env,
+        "retrieval_llm_provider_family": args.retrieval_llm_provider_family,
+        "retrieval_llm_protocol": args.retrieval_llm_protocol,
+    }
 
 
 def verify_data_snapshot(data_root: Path) -> dict[str, Any]:
@@ -353,11 +641,28 @@ def build_runtime(repo_root: Path, node_binary: str) -> Path:
 def preflight(args: argparse.Namespace, upstream: Path, repo_root: Path) -> dict[str, Any]:
     adapter_source = repo_root / "benchmarks" / "longmemeval_v2" / "kavi_isolated_memory.py"
     require(adapter_source.is_file(), f"Missing adapter source: {adapter_source}")
+    app_commit_sha = require_clean_app(repo_root)
+    subprocess.run(["npm", "run", "check:evaluation-contract"], cwd=repo_root, check=True)
+    provenance = load_longmemeval_provenance(repo_root)
+    adapter_provenance = provenance["adapter"]
     upstream_state = verify_upstream(upstream, adapter_source)
     validate_model_contract(args)
     reader = validate_reader_endpoint(args)
     require(os.getenv(args.evaluator_api_key_env), f"Missing evaluator API key in {args.evaluator_api_key_env}")
     runtime_bundle = build_runtime(repo_root, args.node_binary)
+    runtime_bundle_sha256 = sha256_file(runtime_bundle)
+    resolved_node_version = node_version(args.node_binary)
+    memory_params = resolve_effective_memory_params(
+        args,
+        app_commit_sha=app_commit_sha,
+        adapter_source_sha256=adapter_provenance["sourceSha256"],
+        runtime_bundle_sha256=runtime_bundle_sha256,
+        resolved_node_version=resolved_node_version,
+    )
+    require(
+        require_clean_app(repo_root) == app_commit_sha,
+        "Kavi app revision changed during LongMemEval-V2 preflight",
+    )
     data_snapshot = None
     if args.data_root is not None:
         data_root = args.data_root.expanduser().resolve()
@@ -371,6 +676,7 @@ def preflight(args: argparse.Namespace, upstream: Path, repo_root: Path) -> dict
         "reader": reader,
         "evaluator_model": args.evaluator_model,
         "runtime_bundle": str(runtime_bundle),
+        "memory_params": memory_params,
         "data_root": str(args.data_root) if args.data_root else None,
         "data_snapshot": data_snapshot,
     }
@@ -391,6 +697,7 @@ def main() -> None:
     data_root = args.data_root.expanduser().resolve()
     require(data_root.is_dir(), f"Missing LongMemEval-V2 data root: {data_root}")
     runtime_bundle = Path(preflight_result["runtime_bundle"]).resolve()
+    frozen_memory_params = dict(preflight_result["memory_params"])
     install_adapter(upstream, adapter_source)
 
     if str(upstream) not in sys.path:
@@ -427,10 +734,7 @@ def main() -> None:
                 "workspace_root": str((output_dir / "kavi_memory_workspaces").resolve()),
                 "runtime_bundle_path": str(runtime_bundle),
                 "node_binary": args.node_binary,
-                "max_items": int(os.getenv("KAVI_LME_MAX_ITEMS", "12")),
-                "max_item_chars": int(os.getenv("KAVI_LME_MAX_ITEM_CHARS", "5000")),
-                "chunk_chars": int(os.getenv("KAVI_LME_CHUNK_CHARS", "3600")),
-                "chunk_overlap_chars": int(os.getenv("KAVI_LME_CHUNK_OVERLAP_CHARS", "320")),
+                **frozen_memory_params,
             },
         },
     )
