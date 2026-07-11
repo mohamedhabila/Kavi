@@ -26,7 +26,7 @@ import {
   getBlock,
   upsertBlock,
 } from '../../../src/services/memory/blocks';
-import { executeMemoryForget } from '../../../src/services/memory/memoryTools';
+import { forgetMemoryFactForManagement } from '../../../src/services/memory/memoryTools';
 import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
 import { EMPTY_MEMORY_WITHDRAWAL_COUNTS } from '../../../src/services/memory/withdrawalTypes';
 import { probeMemoryWithdrawalResiduals } from '../../../src/services/memory/withdrawalResidualProbe';
@@ -142,7 +142,7 @@ describe('memory withdrawal guards', () => {
       END;
     `);
 
-    const result = executeMemoryForget({ factId: fact.id });
+    const result = forgetMemoryFactForManagement({ factId: fact.id });
 
     expect(result).toEqual({
       ok: false,

@@ -21,6 +21,7 @@ import {
   executeMemoryForget,
   executeMemoryInvalidate,
   setMemoryFactPinnedForManagement,
+  forgetMemoryFactForManagement,
   executeMemoryBlockRead,
   executeMemoryBlockEdit,
 } from '../../src/services/memory/memoryTools';
@@ -387,7 +388,7 @@ describe('executeMemoryForget', () => {
       value: 'Berlin',
       scope: 'global',
     });
-    const forgotten = executeMemoryForget({ factId: created.fact.id });
+    const forgotten = executeMemoryForget({ factId: created.fact.id }, MEMORY_ACTION_SCOPE);
     expect(forgotten.ok).toBe(true);
     if (forgotten.ok) {
       expect(forgotten.action).toBe('withdrawal');
@@ -406,7 +407,10 @@ describe('executeMemoryForget', () => {
       value: 'Berlin',
       scope: 'global',
     });
-    const result = executeMemoryForget({ factId: created.fact.id, mode } as never);
+    const result = executeMemoryForget(
+      { factId: created.fact.id, mode } as never,
+      MEMORY_ACTION_SCOPE,
+    );
     expect(result).toEqual(expect.objectContaining({ ok: false, code: 'invalid_args' }));
   });
 
@@ -433,6 +437,23 @@ describe('executeMemoryForget', () => {
         expect.objectContaining({ value: 'Berlin', invalidAt: expect.any(Number) }),
       ]);
     }
+  });
+
+  it('keeps whole-vault UI withdrawal on an explicit non-agent path', () => {
+    const created = rememberOk({
+      subject: 'ui-private-project',
+      predicate: 'secret',
+      value: 'remove-me',
+      scope: 'conversation',
+      originConversationId: 'other-root',
+      originThreadId: 'other-thread',
+    });
+
+    expect(forgetMemoryFactForManagement({ factId: created.fact.id })).toMatchObject({
+      ok: true,
+      action: 'withdrawal',
+      factId: created.fact.id,
+    });
   });
 });
 

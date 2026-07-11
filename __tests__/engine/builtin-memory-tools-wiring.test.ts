@@ -266,7 +266,7 @@ describe('living-memory tool wiring', () => {
     );
     const factId = r.fact.id;
 
-    const withdrawn = JSON.parse(executeMemoryForget({ factId }));
+    const withdrawn = JSON.parse(executeMemoryForget({ factId }, MEMORY_EXECUTION_SCOPE));
     expect(withdrawn.ok).toBe(true);
     expect(withdrawn.action).toBe('withdrawal');
     expect(JSON.stringify(withdrawn)).not.toContain('Alice');

@@ -127,7 +127,7 @@ jest.mock('../../src/services/memory/memoryTools', () => ({
   executeMemoryRemember: jest.fn(),
   setMemoryFactPinnedForManagement: (...args: any[]) =>
     mockSetMemoryFactPinnedForManagement(...args),
-  executeMemoryForget: (...args: any[]) => mockExecuteMemoryForget(...args),
+  forgetMemoryFactForManagement: (...args: any[]) => mockExecuteMemoryForget(...args),
   executeMemoryBlockRead: (...args: any[]) => mockExecuteMemoryBlockRead(...args),
   executeMemoryBlockEdit: (...args: any[]) => mockExecuteMemoryBlockEdit(...args),
 }));

@@ -22,7 +22,7 @@ import {
 } from '../services/memory/store';
 import {
   queryMemoryFactsForManagement,
-  executeMemoryForget,
+  forgetMemoryFactForManagement,
   setMemoryFactPinnedForManagement,
   executeMemoryBlockRead,
   executeMemoryBlockEdit,
@@ -366,7 +366,7 @@ export const MemoryScreen: React.FC = () => {
           style: 'destructive',
           onPress: () => {
             try {
-              const result = executeMemoryForget({ factId: fact.id });
+              const result = forgetMemoryFactForManagement({ factId: fact.id });
               if ('ok' in result && result.ok) {
                 loadFacts();
                 return;

@@ -85,6 +85,36 @@ async function manage(input: {
   ) as Record<string, unknown>;
 }
 
+async function forget(input: {
+  factId: string;
+  rootId?: string;
+  threadId?: string;
+  personaId?: string;
+  taskId?: string;
+}) {
+  const threadId = input.threadId ?? 'thread-a';
+  useChatStore.setState({
+    conversations: [{ id: threadId, personaId: input.personaId ?? 'default' }],
+  } as never);
+  return JSON.parse(
+    await executeTool(
+      'memory_forget',
+      JSON.stringify({ factId: input.factId }),
+      threadId,
+      {
+        memoryConversationId: input.rootId ?? 'root-a',
+        ...(input.taskId
+          ? {
+              controlGraphGoals: [
+                createGoal({ id: input.taskId, title: 'Scoped task', status: 'active', now: 1 }),
+              ],
+            }
+          : {}),
+      },
+    ),
+  ) as Record<string, unknown>;
+}
+
 beforeEach(() => {
   closeMemoryDb();
   expoSqlite.__resetExpoSqliteForTests();
@@ -219,5 +249,61 @@ describe('agent memory fact action authorization', () => {
 
     expect(result).toMatchObject({ ok: false, code: 'permission_denied' });
     expect(getFactById(fact.id)?.pinned).toBe(false);
+  });
+
+  it.each([
+    {
+      label: 'matching conversation scope',
+      fact: { scope: 'conversation' as const, rootId: 'root-a', threadId: 'thread-a' },
+      execution: { rootId: 'root-a', threadId: 'thread-a' },
+      allowed: true,
+    },
+    {
+      label: 'different conversation root',
+      fact: { scope: 'conversation' as const, rootId: 'root-a', threadId: 'thread-a' },
+      execution: { rootId: 'root-b', threadId: 'thread-a' },
+      allowed: false,
+    },
+    {
+      label: 'different persona',
+      fact: { scope: 'persona' as const, personaId: 'persona-a' },
+      execution: { personaId: 'persona-b' },
+      allowed: false,
+    },
+    {
+      label: 'different task',
+      fact: {
+        scope: 'session' as const,
+        rootId: 'root-a',
+        threadId: 'thread-a',
+        taskId: 'task-a',
+      },
+      execution: { rootId: 'root-a', threadId: 'thread-a', taskId: 'task-b' },
+      allowed: false,
+    },
+  ])('authorizes memory_forget against the $label', async ({ fact, execution, allowed }) => {
+    const seeded = seedFact(fact);
+    const result = await forget({ factId: seeded.id, ...execution });
+
+    if (allowed) {
+      expect(result).toMatchObject({ ok: true, action: 'withdrawal', factId: seeded.id });
+      expect(getFactById(seeded.id)).toBeNull();
+    } else {
+      expect(result).toMatchObject({ ok: false, code: 'permission_denied' });
+      expect(getFactById(seeded.id)).not.toBeNull();
+    }
+  });
+
+  it('denies memory_forget when the durable vault owner does not match', async () => {
+    const seeded = seedFact({ scope: 'global' });
+    getMemoryDb().runSync(
+      `UPDATE memory_facts SET memory_owner_id = 'other-vault-owner' WHERE id = ?`,
+      seeded.id,
+    );
+
+    const result = await forget({ factId: seeded.id });
+
+    expect(result).toMatchObject({ ok: false, code: 'permission_denied' });
+    expect(getFactById(seeded.id)).not.toBeNull();
   });
 });

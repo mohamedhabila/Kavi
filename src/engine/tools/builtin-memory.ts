@@ -309,8 +309,11 @@ export function executeMemoryUnpin(
   return wrapMemoryToolResult(unpinFact(args, context));
 }
 
-export function executeMemoryForget(args: MemoryForgetArgs): string {
-  return wrapMemoryToolResult(forgetFact(args));
+export function executeMemoryForget(
+  args: MemoryForgetArgs,
+  context: MemoryFactActionExecutionContext,
+): string {
+  return wrapMemoryToolResult(forgetFact(args, context));
 }
 
 export function executeMemoryInvalidate(

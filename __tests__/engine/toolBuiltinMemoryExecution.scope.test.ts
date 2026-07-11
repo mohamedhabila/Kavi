@@ -3,6 +3,7 @@ const mockExecuteMemorySearch = jest.fn();
 const mockExecuteMemoryPin = jest.fn();
 const mockExecuteMemoryUnpin = jest.fn();
 const mockExecuteMemoryInvalidate = jest.fn();
+const mockExecuteMemoryForget = jest.fn();
 
 jest.mock('../../src/store/useSettingsStore', () => ({
   useSettingsStore: {
@@ -28,7 +29,7 @@ jest.mock('../../src/engine/tools/builtin-memory', () => ({
   executeMemoryRemember: jest.fn(),
   executeMemoryPin: (...args: unknown[]) => mockExecuteMemoryPin(...args),
   executeMemoryUnpin: (...args: unknown[]) => mockExecuteMemoryUnpin(...args),
-  executeMemoryForget: jest.fn(),
+  executeMemoryForget: (...args: unknown[]) => mockExecuteMemoryForget(...args),
   executeMemoryInvalidate: (...args: unknown[]) => mockExecuteMemoryInvalidate(...args),
   executeMemoryBlockRead: jest.fn(),
   executeMemoryBlockEdit: jest.fn(),
@@ -87,6 +88,24 @@ describe('builtin memory execution scope', () => {
 
     expect(mockExecuteMemoryInvalidate).toHaveBeenCalledWith(
       { factId: 'fact-invalidate' },
+      {
+        memoryConversationId: 'delegated-memory-scope',
+        sourceThreadId: 'child-thread',
+        personaId: 'coder',
+        taskId: 'active-task',
+      },
+    );
+  });
+
+  it('passes exact code-owned scope to memory_forget', async () => {
+    await executeBuiltinMemoryTool({
+      ...BASE_PARAMS,
+      name: 'memory_forget',
+      args: { factId: 'fact-forget' },
+    });
+
+    expect(mockExecuteMemoryForget).toHaveBeenCalledWith(
+      { factId: 'fact-forget' },
       {
         memoryConversationId: 'delegated-memory-scope',
         sourceThreadId: 'child-thread',

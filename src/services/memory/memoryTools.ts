@@ -35,11 +35,9 @@ import {
   captureMemoryReadEpoch,
   isMemoryReadEpochCurrent,
 } from './policy';
-import { withdrawMemoryFact } from './withdrawal';
 import type {
   MemoryBlockEditResult,
   MemoryBlockReadResult,
-  MemoryForgetResult,
   MemoryRememberResult,
   SerializedMemoryFact,
 } from './memoryToolResultTypes';
@@ -72,13 +70,16 @@ import {
   isCanonicalSelfMemorySubject,
 } from './memorySubjectIdentity';
 export {
+  executeMemoryForget,
   executeMemoryInvalidate,
   executeMemoryPin,
   executeMemoryUnpin,
+  forgetMemoryFactForManagement,
   setMemoryFactPinnedForManagement,
 } from './memoryFactActions';
 export type {
   MemoryFactActionExecutionContext,
+  MemoryForgetArgs,
   MemoryInvalidateArgs,
   MemoryPinArgs,
 } from './memoryFactActions';
@@ -508,33 +509,6 @@ export function executeMemoryRemember(
     };
   } catch (e) {
     return err('internal', e instanceof Error ? e.message : 'memory_remember failed');
-  }
-}
-
-// ── memory_forget ────────────────────────────────────────────────────────
-
-export interface MemoryForgetArgs {
-  factId: string;
-}
-
-export function executeMemoryForget(args: MemoryForgetArgs): MemoryForgetResult | MemoryToolError {
-  if (!args || typeof args !== 'object' || Object.keys(args).some((key) => key !== 'factId')) {
-    return err('invalid_args', 'memory_forget accepts only factId.');
-  }
-  const id = trimNonEmpty(args.factId, 64);
-  if (!id) return err('invalid_args', 'factId is required');
-  try {
-    const result = withdrawMemoryFact(id);
-    if (result.status === 'not_found') return err('not_found', `fact ${id} not found`);
-    return {
-      ok: true,
-      action: 'withdrawal',
-      status: result.status,
-      factId: id,
-      receipt: result.receipt,
-    };
-  } catch {
-    return err('internal', 'Memory withdrawal failed.');
   }
 }
 

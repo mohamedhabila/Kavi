@@ -164,7 +164,12 @@ export async function executeBuiltinMemoryTool(
     return null;
   }
 
-  if (name === 'memory_forget') return executeMemoryForget(args);
+  if (name === 'memory_forget') {
+    return executeMemoryForget(
+      args,
+      resolveExecutionMemoryContext(conversationId, memoryConversationId, context),
+    );
+  }
 
   const manageAction = name === 'memory_manage' ? memoryManageAction(args) : '';
   if (name === 'memory_manage') {
