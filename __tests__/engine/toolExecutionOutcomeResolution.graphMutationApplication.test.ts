@@ -1,5 +1,10 @@
 import { resolveAgentControlGraphToolExecutionOutcomes } from '../../src/engine/graph/toolExecutionOutcomeResolution';
+import {
+  buildEffectCompletionCriterion,
+  buildToolEffectReceiptEvidence,
+} from '../../src/engine/goals/effectCompletionEvidence';
 import type { AgentGoal } from '../../src/engine/goals/types';
+import type { ToolEffectReceipt } from '../../src/types/toolEffectReceipt';
 import {
   applyGoalGraphEvents,
   buildBaseParams,
@@ -167,6 +172,28 @@ describe('tool execution outcome resolution', () => {
 
   it('routes and completes same-batch evidence after an applied goal mutation', async () => {
     const params = buildBaseParams();
+    const requestDigest = `sha256:${'4'.repeat(64)}` as const;
+    const receipt: ToolEffectReceipt = {
+      version: 1,
+      receiptId: `ter_${'c'.repeat(32)}`,
+      toolCallId: 'tc-memory',
+      toolName: 'memory_remember',
+      transportState: 'returned',
+      effectKind: 'memory.write',
+      effectState: 'applied',
+      verificationState: 'verified',
+      requestDigest,
+      resultDigest: `sha256:${'5'.repeat(64)}`,
+      resource: { kind: 'memory_fact', id: 'fact-avery' },
+      recordedAt: 1,
+    };
+    const effectCriterion = buildEffectCompletionCriterion({
+      effectKind: 'memory.write',
+      requestDigest,
+      resource: { kind: 'memory_fact', id: 'fact-avery' },
+      verificationState: 'verified',
+    });
+    const receiptEvidence = buildToolEffectReceiptEvidence(receipt);
     let graph = { goals: [] as AgentGoal[] };
     params.getGraphSnapshot = jest.fn(() => graph);
     params.applyGraphEvents = jest.fn((events) => {
@@ -190,7 +217,7 @@ describe('tool execution outcome resolution', () => {
           name: 'preferred-contact-memory',
           status: 'active',
           completionPolicy: 'blocking',
-          successCriteria: ['evidence.json_field:fact.value:Avery'],
+          successCriteria: [effectCriterion],
         }),
       },
       {
@@ -217,6 +244,7 @@ describe('tool execution outcome resolution', () => {
           content:
             '{"ok":true,"fact":{"subject":"user","predicate":"preferred_contact","value":"Avery"}}',
         }),
+        effectReceipt: receipt,
       },
     ];
 
@@ -226,9 +254,7 @@ describe('tool execution outcome resolution', () => {
     expect(memoryGoal).toEqual(
       expect.objectContaining({
         status: 'completed',
-        evidence: expect.arrayContaining([
-          'memory_remember:{"ok":true,"fact":{"subject":"user","predicate":"preferred_contact","value":"Avery"}}',
-        ]),
+        evidence: expect.arrayContaining([receiptEvidence]),
       }),
     );
     expect(params.workingMessages).toHaveLength(2);
@@ -237,8 +263,7 @@ describe('tool execution outcome resolution', () => {
       expect.arrayContaining([
         expect.objectContaining({
           goalId: 'preferred-contact-memory',
-          evidence:
-            'memory_remember:{"ok":true,"fact":{"subject":"user","predicate":"preferred_contact","value":"Avery"}}',
+          evidence: receiptEvidence,
         }),
       ]),
     );
