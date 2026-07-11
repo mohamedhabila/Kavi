@@ -292,9 +292,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
     const structuralGoalEvidenceStrings =
       !canonicalOutcome.toolMessage.isError &&
       toolName !== 'update_goals' &&
-      (!canonicalOutcome.effectReceipt ||
-        canonicalOutcome.effectReceipt.effectState === 'none' ||
-        isCodeOwnedEffectFreeTool)
+      (canonicalOutcome.effectReceipt?.effectState === 'none' || isCodeOwnedEffectFreeTool)
         ? buildToolGoalEvidenceStrings({
             toolName,
             content: canonicalOutcome.toolMessage.content,

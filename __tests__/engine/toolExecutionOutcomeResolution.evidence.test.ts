@@ -51,7 +51,7 @@ function buildReceipt(patch: Partial<ToolEffectReceipt> = {}): ToolEffectReceipt
 }
 
 describe('tool execution outcome resolution', () => {
-  it('auto-links interpreter execution without trusting reported artifact paths', async () => {
+  it('does not trust interpreter execution or reported artifact paths without a receipt', async () => {
     const params = buildBaseParams();
     params.getGraphSnapshot = jest.fn().mockReturnValue({
       goals: [
@@ -83,15 +83,7 @@ describe('tool execution outcome resolution', () => {
 
     await resolveAgentControlGraphToolExecutionOutcomes(params);
 
-    expect(params.applyGraphEvents).toHaveBeenCalledWith([
-      {
-        type: 'GOAL_EVIDENCE_ADDED',
-        goalId: 'goal-1',
-        evidence: 'python:execution:success',
-        timestamp: expect.any(Number),
-      },
-    ]);
-    expect(extractGoalEvidenceEvents(params)).toHaveLength(1);
+    expect(extractGoalEvidenceEvents(params)).toHaveLength(0);
   });
 
   it('routes memory evidence to memory goals without satisfying device goals', async () => {
@@ -132,20 +124,28 @@ describe('tool execution outcome resolution', () => {
           name: 'memory_remember',
           content: '{"status":"remembered","factId":"fact-1"}',
         }),
+        effectReceipt: buildReceipt({
+          receiptId: `ter_${'b'.repeat(32)}`,
+          toolCallId: 'tc-memory',
+          toolName: 'memory_remember',
+          effectKind: 'memory.write',
+          resource: { kind: 'memory_fact', id: 'fact-1' },
+        }),
       },
     ];
 
     await resolveAgentControlGraphToolExecutionOutcomes(params);
 
     const evidenceEvents = extractGoalEvidenceEvents(params);
-    expect(evidenceEvents).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          goalId: 'memory-state',
-          evidence: 'memory_remember:{"status":"remembered","factId":"fact-1"}',
-        }),
-      ]),
-    );
+    expect(evidenceEvents).toHaveLength(1);
+    expect(evidenceEvents[0]?.goalId).toBe('memory-state');
+    expect(parseToolEffectReceiptEvidence(evidenceEvents[0]?.evidence ?? '')).toMatchObject({
+      toolName: 'memory_remember',
+      effectKind: 'memory.write',
+      effectState: 'applied',
+      verificationState: 'verified',
+      resource: { kind: 'memory_fact', id: 'fact-1' },
+    });
     expect(new Set(evidenceEvents.map((event) => event.goalId))).toEqual(new Set(['memory-state']));
   });
 
@@ -259,7 +259,7 @@ describe('tool execution outcome resolution', () => {
     );
   });
 
-  it('routes workspace write evidence only to conversation workspace goals', async () => {
+  it('does not route raw workspace mutation output when its effect receipt is missing', async () => {
     const params = buildBaseParams();
     params.groundedRequestScopedTools = [
       tool({
@@ -305,17 +305,12 @@ describe('tool execution outcome resolution', () => {
     await resolveAgentControlGraphToolExecutionOutcomes(params);
 
     const evidenceEvents = extractGoalEvidenceEvents(params);
-    expect(evidenceEvents).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          goalId: 'workspace-artifact',
-          evidence: 'write_file:{"status":"ok","path":"artifacts/out.txt"}',
-        }),
-      ]),
-    );
-    expect(new Set(evidenceEvents.map((event) => event.goalId))).toEqual(
-      new Set(['workspace-artifact']),
-    );
+    expect(evidenceEvents).toHaveLength(0);
+    expect(
+      params.applyGraphEvents.mock.calls
+        .flatMap(([events]) => events)
+        .find((event) => event.type === 'TOOL_RESULT_RECORDED')?.result.evidence,
+    ).toBeUndefined();
   });
 
   it.each([
