@@ -1,3 +1,4 @@
+const childProcess = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const Ajv2020 = require('ajv/dist/2020');
@@ -229,6 +230,31 @@ function validateExpectedReleaseIdentity(expected) {
   return failures;
 }
 
+function validateReleaseCheckout(projectRoot, expectedAppCommitSha) {
+  try {
+    const head = childProcess
+      .execFileSync('git', ['rev-parse', '--verify', 'HEAD'], {
+        cwd: projectRoot,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+      .trim();
+    if (head !== expectedAppCommitSha) {
+      return ['release.appCommitSha: must equal the current Kavi Git HEAD'];
+    }
+    const status = childProcess
+      .execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=all'], {
+        cwd: projectRoot,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+      .trim();
+    return status.length === 0 ? [] : ['release.checkout: Kavi worktree must be clean'];
+  } catch {
+    return ['release.checkout: unable to verify the Kavi Git checkout'];
+  }
+}
+
 function validateFrozenIdentity(registry, expected, failures) {
   const comparisons = [
     ['candidate.id', registry?.candidate?.id, expected.candidateId],
@@ -398,6 +424,7 @@ function validatePrivateKlaeRelease(options) {
   const failures = validateExpectedReleaseIdentity(options?.expected);
   if (failures.length > 0) return failures;
   const { projectRoot } = options;
+  failures.push(...validateReleaseCheckout(projectRoot, options.expected.appCommitSha));
   let evaluationSchema;
   let governanceSchema;
   let contract;
@@ -470,5 +497,6 @@ module.exports = {
   validatePrivateKlaeRelease,
   validatePrivateRegistry,
   validatePrivateRegistryReleasePolicy,
+  validateReleaseCheckout,
   validatePublicRegistryTemplate,
 };

@@ -2,6 +2,8 @@ import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
+const childProcess = require('child_process');
+
 const { validatePrivateKlaeRelease } = require('../../scripts/lib/klaePrivateGovernance');
 const { MAX_PRIVATE_EVALUATION_FILE_BYTES } = require('../../scripts/lib/privateEvaluationFiles');
 const {
@@ -14,12 +16,21 @@ const projectRoot = path.resolve(__dirname, '../..');
 
 describe('private KLAE artifact containment', () => {
   let fixture: ReturnType<typeof createPrivateReleaseFixture>;
+  let gitSpy: jest.SpyInstance;
 
   beforeEach(() => {
     fixture = createPrivateReleaseFixture(projectRoot);
+    gitSpy = jest.spyOn(childProcess, 'execFileSync').mockImplementation(
+      (_command: string, args: string[]) => {
+        if (args[0] === 'rev-parse') return `${fixture.expected.appCommitSha}\n`;
+        if (args[0] === 'status') return '';
+        throw new Error(`Unexpected Git command: ${args.join(' ')}`);
+      },
+    );
   });
 
   afterEach(() => {
+    gitSpy.mockRestore();
     removePrivateReleaseFixture(fixture);
   });
 

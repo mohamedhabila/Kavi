@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
+const childProcess = require('child_process');
+
 const { validatePrivateKlaeRelease } = require('../../scripts/lib/klaePrivateGovernance');
 const {
   createPrivateReleaseFixture,
@@ -12,12 +14,24 @@ const projectRoot = path.resolve(__dirname, '../..');
 
 describe('private KLAE release governance', () => {
   let fixture: ReturnType<typeof createPrivateReleaseFixture>;
+  let gitSpy: jest.SpyInstance;
+
+  function mockCheckout(head = fixture.expected.appCommitSha, status = '') {
+    gitSpy.mockImplementation((_command: string, args: string[]) => {
+      if (args[0] === 'rev-parse') return `${head}\n`;
+      if (args[0] === 'status') return status;
+      throw new Error(`Unexpected Git command: ${args.join(' ')}`);
+    });
+  }
 
   beforeEach(() => {
     fixture = createPrivateReleaseFixture(projectRoot);
+    gitSpy = jest.spyOn(childProcess, 'execFileSync');
+    mockCheckout();
   });
 
   afterEach(() => {
+    gitSpy.mockRestore();
     removePrivateReleaseFixture(fixture);
   });
 
@@ -34,6 +48,14 @@ describe('private KLAE release governance', () => {
     expect(fixture.packs.development.cases).toHaveLength(40);
     expect(fixture.packs.locked_validation.cases).toHaveLength(40);
     expect(fixture.packs.sealed_held_out.cases).toHaveLength(100);
+  });
+
+  it('binds the release claim to the current clean Kavi checkout', () => {
+    mockCheckout('f'.repeat(40));
+    expect(validate()).toContain('release.appCommitSha: must equal the current Kavi Git HEAD');
+
+    mockCheckout(fixture.expected.appCommitSha, ' M src/example.ts\n');
+    expect(validate()).toContain('release.checkout: Kavi worktree must be clean');
   });
 
   it('rejects incorrect split counts and non-canonical case ids', () => {

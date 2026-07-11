@@ -235,8 +235,10 @@ Create a release without editing the public template in place:
 1. Copy `evaluation/klae-private-registry.template.json` to the owner-only
    release directory as `registry.json`.
 2. Freeze a clean app commit, the complete evaluation configuration snapshot,
-   and the complete production prompt snapshot. Give the baseline a new opaque
-   ID and set `registryState` to `frozen`.
+   and the complete production prompt snapshot. Run the release gate from that
+   exact app checkout: `--app-sha` is verified against its current Git `HEAD`,
+   and any tracked or untracked worktree change invalidates the release claim.
+   Give the baseline a new opaque ID and set `registryState` to `frozen`.
 3. Replace every template identity and timestamp. Keep `goldExposure` equal to
    `evaluator_only`; the app process receives only chronological case inputs.
 4. Validate the case counts and coverage locally. Put the raw SHA-256 of each
@@ -267,7 +269,8 @@ npm run check:evaluation-release -- \
 
 All flags are required. Release mode fails on missing packs, a template or zero
 digest, count/coverage drift, checksum changes, baseline mismatch, unsafe file
-resolution, invalid custody, candidate access to a restricted pack, or any
+resolution, a supplied app SHA that differs from the current Git `HEAD`, a
+dirty checkout, invalid custody, candidate access to a restricted pack, or any
 contamination status other than `clean`. It is still a governance check, not a
 scenario runner and not evidence of a score.
 
