@@ -212,9 +212,11 @@ never copy real custodian identities or local locators into public reports.
 
 The validator accepts only regular JSON files under `.private/evals`, rejects
 `..` traversal and every symlink component, and reads no file larger than
-32 MiB. The three `packPath` values are relative to `registry.json`. Keep the
-directory mode `0700` and files mode `0600`; do not mount it into the app,
-commit it, or upload it as CI evidence.
+32 MiB. The three `packPath` values are relative to `registry.json`. On POSIX
+systems it enforces mode `0700` on `.private/evals` and every containing private
+directory, mode `0600` on every registry/pack file, and current-user ownership
+for both. Do not mount the directory into the app, commit it, or upload it as CI
+evidence.
 
 Ownership is part of validity, not an administrative note:
 

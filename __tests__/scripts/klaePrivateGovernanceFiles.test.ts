@@ -64,6 +64,20 @@ describe('private KLAE artifact containment', () => {
     );
   });
 
+  it('requires owner-only modes for private directories and files', () => {
+    if (process.platform === 'win32') return;
+    fs.chmodSync(fixture.directory, 0o750);
+    expect(validate()).toEqual(
+      expect.arrayContaining(['release.registry: private directory mode must be 0700']),
+    );
+
+    fs.chmodSync(fixture.directory, 0o700);
+    fs.chmodSync(fixture.registryPath, 0o640);
+    expect(validate()).toEqual(
+      expect.arrayContaining(['release.registry: private file mode must be 0600']),
+    );
+  });
+
   it('checks immutable registry and pack byte digests', () => {
     fs.appendFileSync(path.join(fixture.directory, 'development.pack.json'), ' \n');
     const wrongRegistryDigest = fixture.expected.registrySha256;
