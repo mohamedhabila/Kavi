@@ -11,7 +11,7 @@ import type {
   MemoryExternalEvidenceSignal,
 } from '../memoryApplicabilityTypes';
 import { newId } from '../schema';
-import { notifyStructuredMemoryChanged } from '../store';
+import { notifyStructuredMemoryChanged } from '../changeNotifications';
 import { assertMemoryPersistenceSourcesAreWritable } from '../withdrawalFence';
 import {
   closedMemoryFactClass,

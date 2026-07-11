@@ -11,12 +11,14 @@ import { loadMemoryOverviewSnapshot } from '../services/memory/memoryOverview';
 import { useChatStore } from '../store/useChatStore';
 import {
   getMemoryLastUpdatedAt,
+  subscribeToMemoryChanges,
+} from '../services/memory/changeNotifications';
+import {
   readGlobalMemory,
   writeGlobalMemory,
   listDailyMemoryFiles,
   readDailyMemory,
   clearAllMemory,
-  subscribeToMemoryChanges,
 } from '../services/memory/store';
 import {
   queryMemoryFactsForManagement,

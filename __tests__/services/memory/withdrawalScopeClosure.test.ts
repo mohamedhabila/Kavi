@@ -18,7 +18,7 @@ import { editWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import { upsertMemoryTask } from '../../../src/services/memory/tasks';
 import { enqueueIngestionJob } from '../../../src/services/memory/ingestionQueueStore';
 import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
-import * as memoryStore from '../../../src/services/memory/store';
+import * as memoryChangeNotifications from '../../../src/services/memory/changeNotifications';
 import {
   cloneMemoryFactForWithdrawal,
   insertMemoryIngestionReceiptForWithdrawal,
@@ -281,7 +281,10 @@ it('closes exact fact and receipt lineage without deleting a different task scop
     sourceEndMessageId: 'turn-a',
     sourceRunId: 'run-a',
   });
-  const notificationSpy = jest.spyOn(memoryStore, 'notifyStructuredMemoryChanged');
+  const notificationSpy = jest.spyOn(
+    memoryChangeNotifications,
+    'notifyStructuredMemoryChanged',
+  );
   notificationSpy.mockClear();
 
   const result = withdrawMemoryFact(target.id, 3_000);

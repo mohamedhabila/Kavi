@@ -25,7 +25,7 @@ import { enqueueIngestionJob } from '../../../src/services/memory/ingestionQueue
 import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
 import { EMPTY_MEMORY_WITHDRAWAL_COUNTS } from '../../../src/services/memory/withdrawalTypes';
 import { probeMemoryWithdrawalResiduals } from '../../../src/services/memory/withdrawalResidualProbe';
-import * as memoryStore from '../../../src/services/memory/store';
+import * as memoryChangeNotifications from '../../../src/services/memory/changeNotifications';
 import {
   cloneMemoryFactForWithdrawal,
   insertMemoryIngestionReceiptForWithdrawal,
@@ -372,7 +372,10 @@ afterEach(() => {
 describe('atomic memory withdrawal', () => {
   it('purges only authoritative lineage and leaves a content-free scoped tombstone', () => {
     const seeded = seedAuthoritativeLineage();
-    const notificationSpy = jest.spyOn(memoryStore, 'notifyStructuredMemoryChanged');
+    const notificationSpy = jest.spyOn(
+      memoryChangeNotifications,
+      'notifyStructuredMemoryChanged',
+    );
     notificationSpy.mockClear();
 
     const result = withdrawMemoryFact(seeded.targetFactId, 5_000);

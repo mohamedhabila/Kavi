@@ -11,7 +11,7 @@ import {
   serializeCurrentLocalSimilarityVector,
 } from './localSimilarity';
 import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
-import { notifyStructuredMemoryChanged } from './store';
+import { notifyStructuredMemoryChanged } from './changeNotifications';
 
 const logger = createLogger('memory.localSimilarityBackfill');
 const DEFAULT_BACKFILL_LIMIT = 16;

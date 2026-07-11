@@ -8,7 +8,7 @@
 
 import { getMany, getOne, runMemoryStatement } from './access/crud';
 import { getSchemaReadyMemoryDb } from './access/schemaGuard';
-import { notifyStructuredMemoryChanged } from './store';
+import { notifyStructuredMemoryChanged } from './changeNotifications';
 import { isExactMemoryScopeId } from './memoryScopeIdentity';
 
 export type WorkingBlockLabel =

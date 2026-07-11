@@ -1,7 +1,7 @@
 import { getSchemaReadyMemoryDb } from '../access/schemaGuard';
 import { runMemoryStatement } from '../access/crud';
 import { newId, safeParseObject } from '../schema';
-import { notifyStructuredMemoryChanged } from '../store';
+import { notifyStructuredMemoryChanged } from '../changeNotifications';
 import { runAfterMemoryTransactionCommit, runMemoryTransaction } from '../access/transaction';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import { isExactMemoryScopeId } from '../memoryScopeIdentity';

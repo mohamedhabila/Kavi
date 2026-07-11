@@ -3,7 +3,7 @@ import { runAfterMemoryTransactionCommit, runMemoryTransaction } from '../access
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import { isExactMemoryScopeId } from '../memoryScopeIdentity';
 import { safeParseObject } from '../schema';
-import { notifyStructuredMemoryChanged } from '../store';
+import { notifyStructuredMemoryChanged } from '../changeNotifications';
 import {
   closedMemoryFactClass,
   closedMemorySourceAuthority,

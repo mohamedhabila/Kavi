@@ -50,6 +50,9 @@ jest.mock('../../src/services/memory/store', () => ({
   listDailyMemoryFiles: jest.fn(() => []),
   readDailyMemory: jest.fn(async () => ''),
   clearAllMemory: jest.fn(),
+}));
+
+jest.mock('../../src/services/memory/changeNotifications', () => ({
   subscribeToMemoryChanges: jest.fn(() => jest.fn()),
   getMemoryLastUpdatedAt: jest.fn(() => null),
 }));

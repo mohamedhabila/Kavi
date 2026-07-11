@@ -6,6 +6,8 @@
 
 import { Paths, File, Directory } from 'expo-file-system';
 
+import { notifyMemoryChanged } from './changeNotifications';
+
 const MEMORY_DIR_NAME = 'global-memory';
 const CONVERSATION_MEMORY_DIR_NAME = 'conversation-memory';
 const MAIN_MEMORY_FILE = 'MEMORY.md';
@@ -14,13 +16,6 @@ const DAILY_DIR = 'daily';
 export type MemoryScope = 'global' | 'conversation';
 export type MemoryReadScope = MemoryScope | 'all';
 export type MemorySearchScope = MemoryReadScope;
-export type MemoryChangeScope = MemoryScope | 'daily' | 'structured' | 'all';
-
-export interface MemoryChangeEvent {
-  scope: MemoryChangeScope;
-  updatedAt: number;
-  conversationId?: string;
-}
 
 export interface MemorySearchEntry {
   scope: 'global' | 'conversation' | 'daily';
@@ -28,9 +23,6 @@ export interface MemorySearchEntry {
   snippet: string;
   score: number;
 }
-
-const memorySubscribers = new Set<(event: MemoryChangeEvent) => void>();
-let lastMemoryUpdatedAt: number | null = null;
 
 function getMemoryDir(): Directory {
   return new Directory(Paths.document, MEMORY_DIR_NAME);
@@ -85,31 +77,6 @@ function todayDateString(): string {
   return `${year}-${month}-${day}`;
 }
 
-function notifyMemorySubscribers(scope: MemoryChangeScope, conversationId?: string): void {
-  const event: MemoryChangeEvent = {
-    scope,
-    updatedAt: Date.now(),
-    ...(conversationId ? { conversationId } : {}),
-  };
-  lastMemoryUpdatedAt = event.updatedAt;
-  memorySubscribers.forEach((listener) => listener(event));
-}
-
-export function notifyStructuredMemoryChanged(conversationId?: string | null): void {
-  notifyMemorySubscribers('structured', conversationId ?? undefined);
-}
-
-export function subscribeToMemoryChanges(listener: (event: MemoryChangeEvent) => void): () => void {
-  memorySubscribers.add(listener);
-  return () => {
-    memorySubscribers.delete(listener);
-  };
-}
-
-export function getMemoryLastUpdatedAt(): number | null {
-  return lastMemoryUpdatedAt;
-}
-
 // ── Global MEMORY.md ─────────────────────────────────────────────────────
 
 export async function readGlobalMemory(): Promise<string | null> {
@@ -125,7 +92,7 @@ export function writeGlobalMemory(content: string): void {
   ensureDir(dir);
   const file = new File(dir, MAIN_MEMORY_FILE);
   file.write(content);
-  notifyMemorySubscribers('global');
+  notifyMemoryChanged('global');
 }
 
 export async function appendGlobalMemory(content: string): Promise<void> {
@@ -144,7 +111,7 @@ export async function readConversationMemory(conversationId: string): Promise<st
 export function writeConversationMemory(conversationId: string, content: string): void {
   const file = new File(ensureConversationMemoryDir(conversationId), MAIN_MEMORY_FILE);
   file.write(content);
-  notifyMemorySubscribers('conversation', conversationId);
+  notifyMemoryChanged('conversation', conversationId);
 }
 
 export async function appendConversationMemory(
@@ -160,7 +127,7 @@ export function clearConversationMemory(conversationId: string): void {
   if (dir.exists) {
     dir.delete();
   }
-  notifyMemorySubscribers('conversation', conversationId);
+  notifyMemoryChanged('conversation', conversationId);
 }
 
 // ── Daily memory files ───────────────────────────────────────────────────
@@ -178,7 +145,7 @@ export async function appendDailyMemory(content: string, date?: string): Promise
   const existing = file.exists ? await file.text() : '';
   const separator = existing ? '\n\n---\n\n' : '';
   file.write(`${existing}${separator}${content}`);
-  notifyMemorySubscribers('daily');
+  notifyMemoryChanged('daily');
 }
 
 export function listDailyMemoryFiles(): string[] {
@@ -328,5 +295,5 @@ export function clearAllMemory(): void {
       dir.delete();
     }
   }
-  notifyMemorySubscribers('all');
+  notifyMemoryChanged('all');
 }

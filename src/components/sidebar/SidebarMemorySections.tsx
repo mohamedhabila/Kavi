@@ -19,7 +19,7 @@ import { useTranslation } from '../../i18n/useTranslation';
 import type { Conversation } from '../../types/conversation';
 import type { MemoryBlock } from '../../services/memory/blocks';
 import type { MemoryFact } from '../../services/memory/facts/types';
-import { subscribeToMemoryChanges } from '../../services/memory/store';
+import { subscribeToMemoryChanges } from '../../services/memory/changeNotifications';
 
 // ── Memory readers (guarded) ────────────────────────────────────────────────
 

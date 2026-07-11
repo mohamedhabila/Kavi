@@ -13,7 +13,7 @@ import { isMainInferenceActive, shouldAbortIngestionDueToMemoryPressure } from '
 import { getOne } from './access/crud';
 import { getSchemaReadyMemoryDb } from './access/schemaGuard';
 import { newId, safeParseArray } from './schema';
-import { notifyStructuredMemoryChanged } from './store';
+import { notifyStructuredMemoryChanged } from './changeNotifications';
 import {
   canFactEnterRecallCandidates,
   requireFactRecallAccessContext,

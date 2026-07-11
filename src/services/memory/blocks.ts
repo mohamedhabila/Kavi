@@ -8,7 +8,7 @@
 
 import { getMemoryDb } from './sqlite-store';
 import { ensureFactSchema } from './schema';
-import { notifyStructuredMemoryChanged } from './store';
+import { notifyStructuredMemoryChanged } from './changeNotifications';
 
 export interface MemoryBlock {
   label: string;

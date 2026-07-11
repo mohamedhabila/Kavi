@@ -10,7 +10,7 @@ import type { AgentGoal, AgentGoalMutation } from '../../engine/goals/types';
 import { getActiveGoal, getGoalById } from '../../engine/goals/types';
 import { getMany, getOne, runMemoryStatement } from './access/crud';
 import { getSchemaReadyMemoryDb } from './access/schemaGuard';
-import { notifyStructuredMemoryChanged } from './store';
+import { notifyStructuredMemoryChanged } from './changeNotifications';
 import { upsertGoalTaskEntry } from './taskStack';
 import { editPromptEligibleWorkingBlock } from './workingBlocks';
 

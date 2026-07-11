@@ -5,7 +5,7 @@ import {
 } from './access/transaction';
 import { clearEmbeddingCache, getEmbeddingCacheEntryCount } from './embeddings';
 import type { FactRow } from './facts/types';
-import { notifyStructuredMemoryChanged } from './store';
+import { notifyStructuredMemoryChanged } from './changeNotifications';
 import { executeMemoryWithdrawalCascade } from './withdrawalCascade';
 import { collectMemoryWithdrawalLineage, normalizeWithdrawalOpaqueId } from './withdrawalLineage';
 import { assertMemoryWithdrawalHasNoResiduals } from './withdrawalResidualProbe';

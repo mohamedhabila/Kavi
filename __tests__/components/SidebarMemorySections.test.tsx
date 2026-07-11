@@ -66,10 +66,11 @@ let memoryListener:
   | ((event: { scope: 'global' | 'conversation' | 'daily' | 'structured' | 'all'; updatedAt: number }) => void)
   | null = null;
 
-jest.mock('../../src/services/memory/store', () => ({
+jest.mock('../../src/services/memory/changeNotifications', () => ({
   __mockSubscribeToMemoryChanges: jest.fn(),
   subscribeToMemoryChanges: (listener: typeof memoryListener) => {
-    const fn = require('../../src/services/memory/store').__mockSubscribeToMemoryChanges;
+    const fn = require('../../src/services/memory/changeNotifications')
+      .__mockSubscribeToMemoryChanges;
     return fn(listener);
   },
 }));
@@ -79,7 +80,7 @@ const factsMock = require('../../src/services/memory/facts/queries');
 const episodesMock = require('../../src/services/memory/episodes/queries');
 const taskStackMock = require('../../src/services/memory/taskStack');
 const workingBlocksMock = require('../../src/services/memory/workingBlocks');
-const memoryStoreMock = require('../../src/services/memory/store');
+const memoryChangeNotificationsMock = require('../../src/services/memory/changeNotifications');
 
 jest.mock('../../src/i18n/useTranslation', () => ({
   useTranslation: () => ({
@@ -139,11 +140,13 @@ beforeEach(() => {
   workingBlocksMock.__mockListRecentWorkingBlocks.mockReturnValue([]);
   workingBlocksMock.__mockGetWorkingBlock.mockReset();
   workingBlocksMock.__mockGetWorkingBlock.mockReturnValue(null);
-  memoryStoreMock.__mockSubscribeToMemoryChanges.mockReset();
-  memoryStoreMock.__mockSubscribeToMemoryChanges.mockImplementation((listener: typeof memoryListener) => {
-    memoryListener = listener;
-    return jest.fn();
-  });
+  memoryChangeNotificationsMock.__mockSubscribeToMemoryChanges.mockReset();
+  memoryChangeNotificationsMock.__mockSubscribeToMemoryChanges.mockImplementation(
+    (listener: typeof memoryListener) => {
+      memoryListener = listener;
+      return jest.fn();
+    },
+  );
 });
 
 // ── parseOpenThreads ────────────────────────────────────────────────────────

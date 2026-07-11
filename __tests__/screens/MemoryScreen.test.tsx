@@ -76,6 +76,9 @@ jest.mock('../../src/services/memory/store', () => ({
   listDailyMemoryFiles: (...args: any[]) => mockListDailyMemoryFiles(...args),
   readDailyMemory: (...args: any[]) => mockReadDailyMemory(...args),
   clearAllMemory: (...args: any[]) => mockClearAllMemory(...args),
+}));
+
+jest.mock('../../src/services/memory/changeNotifications', () => ({
   subscribeToMemoryChanges: (...args: any[]) => mockSubscribeToMemoryChanges(...args),
   getMemoryLastUpdatedAt: (...args: any[]) => mockGetMemoryLastUpdatedAt(...args),
 }));
