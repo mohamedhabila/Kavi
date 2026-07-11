@@ -140,13 +140,24 @@ export function stopForegroundConversationRuns(params: {
   params.abortForegroundRequestForConversation(params.conversationId, USER_STOP_REASON);
   params.actions.clearForegroundRequestForConversation?.(params.conversationId);
 
-  return runsToCancel
-    .reduce<Promise<number>>(async (countPromise, run) => {
+  const fencedRuns = runsToCancel.map((run) => {
+    const runWorkers = params.conversation
+      ? getRunningLiveSubAgentsForRun(params.conversation, run.id)
+      : [];
+    const cancellationEffect = buildForegroundRunUserStopCompletionEffect(runWorkers.length);
+
+    cancelAgentRunOperations(params.conversationId, run.id, cancellationEffect.operationReason);
+    if (params.conversation) {
+      cancelRunningSubAgentsForRun(params.conversation, run.id, cancellationEffect.workerReason);
+    }
+
+    return { cancellationEffect, run, runWorkers };
+  });
+
+  return fencedRuns
+    .reduce<Promise<number>>(async (countPromise, fencedRun) => {
       const count = await countPromise;
-      const runWorkers = params.conversation
-        ? getRunningLiveSubAgentsForRun(params.conversation, run.id)
-        : [];
-      const cancellationEffect = buildForegroundRunUserStopCompletionEffect(runWorkers.length);
+      const { cancellationEffect, run, runWorkers } = fencedRun;
 
       let durableCancellation: CancelOwnedExternalRecoveriesResult;
       try {
@@ -174,7 +185,6 @@ export function stopForegroundConversationRuns(params: {
         });
       }
 
-      cancelAgentRunOperations(params.conversationId, run.id, cancellationEffect.operationReason);
       params.actions.clearPendingRunState(params.conversationId, run.id);
       applyConversationRunCompletionEffect({
         actions: params.actions,
@@ -208,11 +218,6 @@ export function stopForegroundConversationRuns(params: {
             detail,
           });
         });
-
-      if (params.conversation) {
-        cancelRunningSubAgentsForRun(params.conversation, run.id, cancellationEffect.workerReason);
-      }
-
       return count + runWorkers.length;
     }, Promise.resolve(0))
     .then((cancelledWorkerCount) => {

@@ -4,9 +4,17 @@ import {
   stopForegroundConversationRuns,
   supersedeForegroundConversationRun,
 } from '../../src/engine/graph/foregroundConversationCancellation';
+import {
+  __resetAgentRunCancellationRegistryForTests,
+  createAgentRunOperationController,
+} from '../../src/services/agents/agentRunCancellation';
 import type { Conversation } from '../../src/types/conversation';
 
 describe('foregroundConversationCancellation', () => {
+  afterEach(() => {
+    __resetAgentRunCancellationRegistryForTests();
+  });
+
   it('selects the active running run as superseded when no reuse run is active', () => {
     const conversation: Conversation = {
       id: 'conv1',
@@ -82,7 +90,7 @@ describe('foregroundConversationCancellation', () => {
     expect(clearPendingRunState).toHaveBeenCalledWith('conv1', 'run-1');
   });
 
-  it('cancels durable generations before applying visible stop completion', async () => {
+  it('fences owned operations before awaiting durable cancellation or applying completion', async () => {
     const appendConversationLog = jest.fn();
     const clearForegroundRequestForConversation = jest.fn();
     const clearPendingRunState = jest.fn();
@@ -154,10 +162,19 @@ describe('foregroundConversationCancellation', () => {
 
     completeAgentRun.mockClear();
     const order: string[] = [];
+    const ownedOperation = createAgentRunOperationController({
+      conversationId: 'conv1',
+      runId: 'run-1',
+      operationId: 'operation-1',
+    });
+    let releaseDurableCancellation: (() => void) | undefined;
+    const durableCancellationGate = new Promise<void>((resolve) => {
+      releaseDurableCancellation = resolve;
+    });
     completeAgentRun.mockImplementation(() => {
       order.push('visible-terminal');
     });
-    await stopForegroundConversationRuns({
+    const stopPromise = stopForegroundConversationRuns({
       abortForegroundRequestForConversation,
       actions: {
         appendConversationLog,
@@ -169,6 +186,8 @@ describe('foregroundConversationCancellation', () => {
         updateAgentRunControlGraph,
       },
       cancelOwnedRecoveries: jest.fn(async () => {
+        order.push('journal-cancellation-started');
+        await durableCancellationGate;
         order.push('journal-and-native-cancelled');
         return {
           cancelledRunCount: 1,
@@ -180,12 +199,27 @@ describe('foregroundConversationCancellation', () => {
       conversationId: 'conv1',
     });
 
+    expect(ownedOperation.signal.aborted).toBe(true);
+    expect(order).toEqual([]);
+
+    await Promise.resolve();
+    expect(order).toEqual(['journal-cancellation-started']);
+    expect(completeAgentRun).not.toHaveBeenCalled();
+
+    releaseDurableCancellation?.();
+    await stopPromise;
+    ownedOperation.dispose();
+
     expect(abortForegroundRequestForConversation).toHaveBeenCalledWith(
       'conv1',
       'Cancelled because the supervising turn was stopped by the user.',
     );
     expect(clearForegroundRequestForConversation).toHaveBeenCalledWith('conv1');
-    expect(order).toEqual(['journal-and-native-cancelled', 'visible-terminal']);
+    expect(order).toEqual([
+      'journal-cancellation-started',
+      'journal-and-native-cancelled',
+      'visible-terminal',
+    ]);
     expect(appendConversationLog).toHaveBeenCalledWith('conv1', {
       kind: 'error',
       level: 'warning',
