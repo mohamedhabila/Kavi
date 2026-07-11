@@ -19,7 +19,7 @@ from typing import Any
 RELEASE = "v0.8.0"
 COMMIT = "e2c8d7af51ef48fbbea51bb2ce1fb859af36b423"
 PREPARATION_SCHEMA_VERSION = "kavi-state-bench-preparation-v1"
-CANDIDATE_SCHEMA_VERSION = "kavi-state-bench-candidate-v1"
+CANDIDATE_SCHEMA_VERSION = "kavi-state-bench-candidate-v2"
 EXPECTED_PROTOCOL_ID = "state_bench_v0.8.0_gpt54"
 EXPECTED_DOMAINS = ("travel", "customer_support", "shopping_assistant")
 EXPECTED_RUNS = 5
@@ -207,6 +207,7 @@ def verify_trajectory(
     task_id: str,
     domain: str,
     protocol: dict[str, Any],
+    expected_agent_name: str = "KaviStateBenchAgent",
 ) -> tuple[dict[str, str | None], dict[str, Any]]:
     trajectory = load_json(path, f"{domain} scored trajectory")
     require(trajectory.get("task_id") == task_id, f"Trajectory task_id mismatch: {path}")
@@ -224,7 +225,7 @@ def verify_trajectory(
         trajectory.get("scoring_protocol_id") == EXPECTED_PROTOCOL_ID,
         f"Trajectory scoring protocol mismatch: {path}",
     )
-    require(trajectory.get("agent_name") == "KaviStateBenchAgent", f"Wrong agent class: {path}")
+    require(trajectory.get("agent_name") == expected_agent_name, f"Wrong agent class: {path}")
     simulator = protocol["simulator"]
     judge = protocol["judge"]
     require(trajectory.get("simulator_model") == simulator["model"], f"Wrong simulator: {path}")
@@ -367,11 +368,18 @@ def verify_outputs(
     outputs: Path,
     upstream: Path,
     protocol: dict[str, Any],
-) -> tuple[dict[str, Path], dict[str, str | None], dict[str, int]]:
+    expected_agent_name: str = "KaviStateBenchAgent",
+) -> tuple[
+    dict[str, Path],
+    dict[str, str | None],
+    dict[str, int],
+    dict[str, dict[str, float]],
+]:
     all_files = _walk_regular_files(outputs)
     allowed_files: set[str] = set()
     canonical_model: dict[str, str | None] | None = None
     task_counts: dict[str, int] = {}
+    metrics_by_domain: dict[str, dict[str, float]] = {}
     require(set(path.name for path in outputs.iterdir()) == set(EXPECTED_DOMAINS), "Outputs must contain exactly the three official domains")
     for domain in EXPECTED_DOMAINS:
         domain_root = outputs / domain
@@ -389,7 +397,11 @@ def verify_outputs(
             for task_id in task_ids:
                 relative = f"{domain}/run{run_index}/{task_id}.json"
                 model, scored_trajectory = verify_trajectory(
-                    all_files[relative], task_id, domain, protocol
+                    all_files[relative],
+                    task_id,
+                    domain,
+                    protocol,
+                    expected_agent_name,
                 )
                 if canonical_model is None:
                     canonical_model = model
@@ -400,10 +412,11 @@ def verify_outputs(
         metrics_relative = f"{domain}/metrics.json"
         require(metrics_relative in all_files, f"Missing {domain}/metrics.json")
         require(canonical_model is not None, "No scored trajectories were found")
+        metrics_by_domain[domain] = compute_official_public_metrics(scored_runs)
         verify_metrics(
             all_files[metrics_relative],
             canonical_model,
-            compute_official_public_metrics(scored_runs),
+            metrics_by_domain[domain],
         )
         allowed_files.add(metrics_relative)
         per_task_root = domain_root / "per_task_metrics"
@@ -417,13 +430,22 @@ def verify_outputs(
             allowed_files.update(f"{domain}/per_task_metrics/{name}" for name in expected_per_task)
     require(set(all_files) == allowed_files, "Outputs contain unsupported files")
     require(canonical_model is not None, "Candidate has no agent model metadata")
-    return all_files, canonical_model, task_counts
+    return all_files, canonical_model, task_counts, metrics_by_domain
 
 
-def verify_archive(archive: Path, files: dict[str, Path]) -> str:
+def verify_archive(
+    archive: Path, files: dict[str, Path], archive_root: str = "outputs"
+) -> str:
     regular_file(archive, "STATE-Bench output archive")
     require(archive.stat().st_size <= MAX_ARCHIVE_BYTES, "Archive exceeds the size bound")
-    expected = {f"outputs/{relative}": path for relative, path in files.items()}
+    require(
+        bool(archive_root)
+        and archive_root not in {".", ".."}
+        and "/" not in archive_root
+        and "\\" not in archive_root,
+        "Archive root must be one canonical directory name",
+    )
+    expected = {f"{archive_root}/{relative}": path for relative, path in files.items()}
     with zipfile.ZipFile(archive, "r") as package:
         infos = package.infolist()
         names = [info.filename for info in infos]
@@ -435,7 +457,7 @@ def verify_archive(archive: Path, files: dict[str, Path]) -> str:
                 not member.is_absolute()
                 and ".." not in member.parts
                 and member.parts
-                and member.parts[0] == "outputs",
+                and member.parts[0] == archive_root,
                 f"Archive member path is unsafe: {info.filename}",
             )
             unix_mode = info.external_attr >> 16
@@ -554,7 +576,9 @@ def validate_candidate(args: argparse.Namespace) -> dict[str, Any]:
         preparation_path, repo_root, upstream, runtime, artifact, adapter_source
     )
     protocol = verify_protocol(upstream)
-    files, agent_model, task_counts = verify_outputs(outputs, upstream, protocol)
+    files, agent_model, task_counts, metrics_by_domain = verify_outputs(
+        outputs, upstream, protocol
+    )
     archive_sha256 = verify_archive(archive, files)
     output_hashes = {
         relative: sha256_file(path) for relative, path in sorted(files.items())
@@ -575,6 +599,7 @@ def validate_candidate(args: argparse.Namespace) -> dict[str, Any]:
             "retrieveLearningsTopK": EXPECTED_TOP_K,
         },
         "agentModel": agent_model,
+        "metricsByDomain": metrics_by_domain,
         "provenance": {
             "preparationManifestSha256": sha256_file(preparation_path),
             "runtimeSha256": sha256_file(runtime),

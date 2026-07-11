@@ -69,6 +69,7 @@
     "prepare:longmemeval-submission": "cross-env PYTHONDONTWRITEBYTECODE=1 python3 benchmarks/longmemeval_v2/prepare_kavi_submission.py",
     "eval:state-bench:prepare": "python3 benchmarks/state_bench/prepare_kavi_state_bench.py",
     "eval:state-bench:validate-candidate": "python3 benchmarks/state_bench/validate_kavi_state_bench_candidate.py",
+    "eval:state-bench:compare": "python3 benchmarks/state_bench/compare_kavi_state_bench_learning.py",
     "test:state-bench-adapter": "python3 -m unittest discover -s benchmarks/state_bench -p 'test_*.py'",
     "eval:agent": "node ./scripts/agent-eval-harness.js",
     "eval:recovery": "jest --runInBand __tests__/acceptance/recoveryBenchmark.test.ts",

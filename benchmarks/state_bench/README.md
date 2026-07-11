@@ -100,6 +100,29 @@ Report pass@1, pass^5, UX, and cost for both learning-on and the separately
 retained learning-off baseline; a learning method is not a product win if it
 increases errors, burden, or cost materially.
 
+Validate the product comparison separately from the learning-on submission
+candidate. The comparison gate revalidates every trajectory and metric in both
+conditions, requires the same model and reasoning level, verifies both archives,
+and emits exact per-domain and aggregate deltas. The declared worker count must
+be frozen before the runs and identical for both conditions:
+
+```bash
+rtk sh -lc 'cd <state-bench-run-root> && zip -r outputs-baseline.zip outputs-baseline'
+rtk sh -lc 'cd <state-bench-run-root> && zip -r outputs-learning.zip outputs-learning'
+
+rtk python3 benchmarks/state_bench/compare_kavi_state_bench_learning.py \
+  --baseline-outputs <state-bench-run-root>/outputs-baseline \
+  --baseline-archive <state-bench-run-root>/outputs-baseline.zip \
+  --candidate-outputs <state-bench-run-root>/outputs-learning \
+  --candidate-archive <state-bench-run-root>/outputs-learning.zip \
+  --num-workers <approved-workers>
+```
+
+This comparison is local causal evidence, not an official submission artifact.
+It marks the target met only when pass@1 and UX improve, pass^5 does not regress,
+and mean cost rises by no more than 25%. The learning-on candidate remains the
+only archive submitted to STATE-Bench.
+
 ## Submission
 
 Open an issue in the official repository, attach the validated archive or a
