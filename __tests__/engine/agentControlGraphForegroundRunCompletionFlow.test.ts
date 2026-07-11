@@ -167,6 +167,45 @@ describe('foregroundRun completion flow', () => {
     expect(recordConversationTurnMemory).not.toHaveBeenCalled();
   });
 
+  it('forces terminal review for a failed graph even while async work remains', async () => {
+    const enterAsyncMonitoringPhase = jest.fn();
+    const recordConversationTurnMemory = jest.fn();
+    const reviewCompletion = jest.fn().mockResolvedValue({
+      handled: true as const,
+      terminalized: true,
+    });
+
+    await handleForegroundRunCompletionFlow({
+      appendConversationLog: jest.fn(),
+      currentAssistantMessage: undefined,
+      currentAssistantMessageId: 'assistant-failed',
+      enterAsyncMonitoringPhase,
+      forceTerminalReview: true,
+      finalizeCompletion: jest.fn(),
+      recordConversationTurnMemory,
+      reviewCompletion,
+      trackedRunState: createTrackingState({
+        pendingAsyncOperations: [
+          {
+            key: 'async-failed',
+            kind: 'expo-workflow',
+            resourceId: 'workflow-failed',
+            displayName: 'Failed deploy run',
+            status: 'running',
+            lastUpdatedByTool: 'workflow_status',
+            updatedAt: Date.now(),
+            monitorToolNames: ['workflow_status'],
+          },
+        ],
+      }),
+      turnSummary: 'Graph failed',
+    });
+
+    expect(reviewCompletion).toHaveBeenCalledTimes(1);
+    expect(enterAsyncMonitoringPhase).not.toHaveBeenCalled();
+    expect(recordConversationTurnMemory).toHaveBeenCalledTimes(1);
+  });
+
   it('records memory when review terminalizes a failed run', async () => {
     const recordConversationTurnMemory = jest.fn();
 

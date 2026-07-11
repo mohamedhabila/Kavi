@@ -190,7 +190,7 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
         visibleContent,
       });
     },
-    handleSuccessfulCompletion: async () => {
+    handleSuccessfulCompletion: async ({ forceTerminalReview }) => {
       const turnSummary = buildForegroundRunTurnSummary({
         durationMs: Date.now() - runStartedAt,
         assistantTurns: mutableState.assistantTurnCount,
@@ -212,6 +212,7 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
         ),
         currentAssistantMessageId: getCurrentAssistantMessageId(),
         enterAsyncMonitoringPhase: trackedRunStore.enterWorkPhase,
+        forceTerminalReview,
         finalizeCompletion: (completionReview) => {
           trackedRunStore.finalizeRun(
             completionReview.completionStatus,
@@ -237,10 +238,7 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
             conversationId,
             finalizeTrackedRun: trackedRunStore.finalizeRun,
             recoverAgentRunFinalPreview,
-            resumeAgentRun: wrapResumeAgentRun(
-              shared.helpers.getResumeAgentRun(),
-              'succeeded',
-            ),
+            resumeAgentRun: wrapResumeAgentRun(shared.helpers.getResumeAgentRun(), 'succeeded'),
             runId,
             signal: abort.signal,
             turnSummary,

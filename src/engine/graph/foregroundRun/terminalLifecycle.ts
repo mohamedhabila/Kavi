@@ -17,7 +17,10 @@ export function buildForegroundAssistantIncompleteMetadata(
 export function applyForegroundAssistantDraftIncomplete(params: {
   finishReason: AssistantDraftFinishReason;
   messageId: string;
-  updateMetadata: (messageId: string, metadata: ReturnType<typeof buildForegroundAssistantIncompleteMetadata>) => void;
+  updateMetadata: (
+    messageId: string,
+    metadata: ReturnType<typeof buildForegroundAssistantIncompleteMetadata>,
+  ) => void;
   visibleContent: string;
 }): boolean {
   if (!params.visibleContent.trim()) {
@@ -55,7 +58,7 @@ export function createForegroundRunTerminalLifecycleController(params: {
     error: Error;
     visibleContent: string;
   }) => Promise<void>;
-  handleSuccessfulCompletion: () => Promise<void>;
+  handleSuccessfulCompletion: (options: { forceTerminalReview: boolean }) => Promise<void>;
   isAbortErrorLike: (error: unknown) => boolean;
   isAborted: () => boolean;
   requestPersistenceCheckpoint: () => void;
@@ -119,7 +122,9 @@ export function createForegroundRunTerminalLifecycleController(params: {
       }
       params.commitAssistantBuffers();
       if (!params.isAborted()) {
-        await params.handleSuccessfulCompletion();
+        await params.handleSuccessfulCompletion({
+          forceTerminalReview: resolveCompletedStatus() === 'failed',
+        });
       }
       terminalStatus = resolveCompletedStatus();
       params.clearForegroundRequestIfCurrent();

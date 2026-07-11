@@ -27,25 +27,28 @@ export async function handleForegroundRunCompletionFlow(params: {
   ) => void;
   recordConversationTurnMemory: () => void;
   reviewCompletion: () => Promise<ForegroundRunCompletionReviewResult>;
+  forceTerminalReview?: boolean;
   trackedRunState: ForegroundRunTrackingState;
   turnSummary: string;
 }) {
-  const openWorkCloseoutEffect = buildAgentControlGraphOpenWorkCloseoutEffect({
-    currentAssistantMessage: params.currentAssistantMessage,
-    decision: buildAgentControlGraphOpenWorkCloseoutDecision({
-      backgroundWorkers: params.trackedRunState.backgroundWorkers,
-      pendingOperations: params.trackedRunState.pendingAsyncOperations,
-    }),
-    turnSummary: params.turnSummary,
-  });
+  if (!params.forceTerminalReview) {
+    const openWorkCloseoutEffect = buildAgentControlGraphOpenWorkCloseoutEffect({
+      currentAssistantMessage: params.currentAssistantMessage,
+      decision: buildAgentControlGraphOpenWorkCloseoutDecision({
+        backgroundWorkers: params.trackedRunState.backgroundWorkers,
+        pendingOperations: params.trackedRunState.pendingAsyncOperations,
+      }),
+      turnSummary: params.turnSummary,
+    });
 
-  if (openWorkCloseoutEffect.type === 'async-operations') {
-    params.enterAsyncMonitoringPhase(
-      openWorkCloseoutEffect.phasePresentation.detail,
-      openWorkCloseoutEffect.phasePresentation.checkpointTitle,
-    );
-    params.appendConversationLog(openWorkCloseoutEffect.logEntry);
-    return;
+    if (openWorkCloseoutEffect.type === 'async-operations') {
+      params.enterAsyncMonitoringPhase(
+        openWorkCloseoutEffect.phasePresentation.detail,
+        openWorkCloseoutEffect.phasePresentation.checkpointTitle,
+      );
+      params.appendConversationLog(openWorkCloseoutEffect.logEntry);
+      return;
+    }
   }
 
   const completionReview = await params.reviewCompletion();

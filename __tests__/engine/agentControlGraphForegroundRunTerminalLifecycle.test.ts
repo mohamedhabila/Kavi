@@ -96,7 +96,7 @@ describe('foregroundRun terminal lifecycle controller', () => {
       visibleContent: 'Final answer',
     });
     expect(commitAssistantBuffers).toHaveBeenCalledTimes(1);
-    expect(handleSuccessfulCompletion).toHaveBeenCalledTimes(1);
+    expect(handleSuccessfulCompletion).toHaveBeenCalledWith({ forceTerminalReview: false });
     expect(clearForegroundRequestIfCurrent).toHaveBeenCalledTimes(1);
   });
 
@@ -131,7 +131,7 @@ describe('foregroundRun terminal lifecycle controller', () => {
     controller.handleDone();
 
     await expect(controller.awaitCompletion()).resolves.toBe('failed');
-    expect(handleSuccessfulCompletion).toHaveBeenCalledTimes(1);
+    expect(handleSuccessfulCompletion).toHaveBeenCalledWith({ forceTerminalReview: true });
     expect(markCurrentAssistantPendingReview).not.toHaveBeenCalled();
   });
 
