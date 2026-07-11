@@ -9,6 +9,7 @@ import {
   isEffectDispatchIdentity,
 } from './effectDispatchPolicy';
 import type { ExecutionEffectClass, ExecutionEffectStatus } from './types';
+import { EXECUTION_EFFECT_CLASSES, EXECUTION_EFFECT_STATUSES } from './types';
 
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u;
 
@@ -432,6 +433,27 @@ export async function dispatchEffectExactlyOnce(
   }
   if (!state) {
     return { kind: 'blocked', reason: 'state_unavailable' };
+  }
+
+  // Once a durable claim exists, later terminal/after-effect checkpoints are
+  // expected and must never reopen dispatch. Classify the immutable claim
+  // before applying the pre-dispatch "authority checkpoint is latest" rule.
+  const observedEffectStatus = state.snapshot?.effect?.status;
+  if (
+    typeof observedEffectStatus === 'string' &&
+    EXECUTION_EFFECT_STATUSES.includes(observedEffectStatus as ExecutionEffectStatus) &&
+    observedEffectStatus !== 'planned'
+  ) {
+    const effectClass = state.snapshot?.effect?.effectClass;
+    if (
+      typeof effectClass !== 'string' ||
+      !EXECUTION_EFFECT_CLASSES.includes(effectClass as ExecutionEffectClass)
+    ) {
+      return { kind: 'blocked', reason: 'state_unavailable' };
+    }
+    return state.existingClaim
+      ? classifyExistingClaim(identity, effectClass as ExecutionEffectClass, state.existingClaim, ports, evaluatedAt)
+      : { kind: 'reconciliation_required', reason: 'effect_already_started' };
   }
 
   let decision: ReturnType<typeof planEffectDispatch>;

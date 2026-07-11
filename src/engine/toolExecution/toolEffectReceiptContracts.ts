@@ -344,10 +344,14 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
       { resource: selector('calendar_event', 'result', ['eventId']) },
     ),
     clipboard_write: effectful('clipboard.write', { written: APPLIED }),
-    clipboard: effectful('clipboard.write', {
-      read: outcome('none', 'not_applicable', 'observation.read'),
-      written: APPLIED,
-    }),
+    clipboard: effectful(
+      'clipboard.write',
+      {
+        read: outcome('none', 'not_applicable', 'observation.read'),
+        written: APPLIED,
+      },
+      { completion: { effectFreeWhen: { argumentPath: ['action'], values: ['read'] } } },
+    ),
     email_compose: effectful(
       'communication.send',
       nativeOutcomes({
@@ -373,7 +377,10 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
         contacts_edit_opened: outcome('handed_off', 'unverified', 'contact.update'),
         contacts_create_opened: outcome('handed_off', 'unverified', 'contact.create'),
       },
-      { statusPath: ['code'] },
+      {
+        statusPath: ['code'],
+        completion: { effectFreeWhen: { argumentPath: ['action'], values: ['view'] } },
+      },
     ),
     contacts_share: effectful('share.handoff', nativeOutcomes({ handed_off: HANDED_OFF })),
     share_contact: effectful('share.handoff', nativeOutcomes({ handed_off: HANDED_OFF })),
