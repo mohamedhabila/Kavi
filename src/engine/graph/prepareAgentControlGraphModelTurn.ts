@@ -1,4 +1,5 @@
 import { buildPreparedModelTurnPrompt } from './modelTurn/buildPreparedPromptTurn';
+import { appendCodeOwnedExperienceLearningPrompt } from './modelTurn/experienceLearningPrompt';
 import { resolveModelTurnGroundedToolSurface } from './modelTurn/resolveGroundedToolSurface';
 import { resolveModelTurnIterationRequest } from './modelTurn/resolveIterationRequest';
 import type {
@@ -39,7 +40,7 @@ export async function prepareAgentControlGraphModelTurn(
     workingMessages: params.workingMessages,
   });
 
-  const preparedTurn = buildPreparedModelTurnPrompt({
+  const basePreparedTurn = buildPreparedModelTurnPrompt({
     actionablePromptTurn: !iterationRequest.effectiveForceTextThisTurn,
     allowSessionCoordinationTools: toolSurface.allowSessionCoordinationTools,
     effectiveForceTextReasonThisTurn: iterationRequest.effectiveForceTextReasonThisTurn,
@@ -50,6 +51,7 @@ export async function prepareAgentControlGraphModelTurn(
     promptContextSupport: params.promptContextSupport,
     toolingEnabledForProvider: iterationRequest.toolingEnabledForProvider,
   });
+  const preparedTurn = await appendCodeOwnedExperienceLearningPrompt(basePreparedTurn);
 
   return {
     effectiveForceTextThisTurn: iterationRequest.effectiveForceTextThisTurn,
