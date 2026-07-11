@@ -19,7 +19,6 @@ import {
   updateAgentRunPlanInConversation,
 } from './graph';
 import { recoverInterruptedAgentRunsInConversation } from './recovery';
-import { readToolEffectRestartDisposition } from '../../services/executionJournal/toolEffectRestartDisposition';
 
 type ChatStoreSet = StoreApi<ChatState>['setState'];
 
@@ -176,10 +175,7 @@ export function createAgentRunStoreActions(
           const nextConversation = recoverInterruptedAgentRunsInConversation(
             conversation,
             activeSubAgents,
-            {
-              ...params,
-              resolveToolEffect: readToolEffectRestartDisposition,
-            },
+            params,
           );
           if (nextConversation !== conversation) {
             didUpdateState = true;

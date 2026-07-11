@@ -6,6 +6,8 @@ import { recoverInterruptedForegroundModelExecutions } from './executionJournal/
 import { maintainForegroundModelExecutionRetention } from './executionJournal/foregroundModelExecutionRetention';
 import { releaseStaleForegroundModelProjectionOwners } from './executionJournal/foregroundModelProjectionCleanup';
 import { maintainTerminalExecutionRetention } from './executionJournal/terminalExecutionRetention';
+import { buildToolEffectRestartDispositionResolver } from './executionJournal/toolEffectRestartDisposition';
+import { listActiveToolEffectRestartInputs } from '../store/agentRuns/toolCalls';
 
 async function waitForChatHydration(): Promise<void> {
   await waitForStoreHydration(useChatStore as typeof useChatStore & PersistHydratableStore, null);
@@ -53,8 +55,23 @@ export async function recoverPersistedAgentState(): Promise<void> {
   // Reconcile journal-owned projections and exact effect receipts before the
   // coarser AgentRun repair can terminalize active tools or final responses.
   await recoverForegroundJournalState();
-  useChatStore.getState().recoverInterruptedAgentRuns(activeSubAgents, {
+  const recoveredChatState = useChatStore.getState();
+  const resolveToolEffect = await buildToolEffectRestartDispositionResolver(
+    recoveredChatState.conversations.flatMap((conversation) =>
+      (conversation.agentRuns ?? [])
+        .filter((run) => run.status === 'running')
+        .flatMap((run) =>
+          listActiveToolEffectRestartInputs({
+            conversationId: conversation.id,
+            messages: conversation.messages,
+            run,
+          }),
+        ),
+    ),
+  );
+  recoveredChatState.recoverInterruptedAgentRuns(activeSubAgents, {
     timestamp: Date.now(),
+    resolveToolEffect,
   });
   maintainExternalExecutionRetention();
   await repairTerminalAgentRunsMissingFinalResponses({

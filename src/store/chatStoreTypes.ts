@@ -26,6 +26,7 @@ import type { ConversationUsageSource, TokenUsage } from '../types/usage';
 import type { SubAgentSnapshot } from '../types/subAgent';
 import type { ToolEffectReceipt } from '../types/toolEffectReceipt';
 import type { AgentRunEvidenceDraft } from '../services/agents/lifecycle/evidenceTypes';
+import type { ResolveToolEffectRestartDisposition } from '../services/executionJournal/toolEffectRestartDisposition';
 
 export interface ChatState {
   conversations: Conversation[];
@@ -213,6 +214,9 @@ export interface ChatState {
   ) => void;
   recoverInterruptedAgentRuns: (
     activeSubAgents: SubAgentSnapshot[],
-    params?: { timestamp?: number },
+    params?: {
+      timestamp?: number;
+      resolveToolEffect?: ResolveToolEffectRestartDisposition;
+    },
   ) => void;
 }

@@ -128,6 +128,29 @@ export function getLatestFinalAssistantResponsePreview(
   return undefined;
 }
 
+/**
+ * Return a delivered final only when the latest assistant projection is final.
+ * Sub-agent event messages are observational and do not supersede the owning
+ * assistant projection.
+ */
+export function getLatestAssistantProjectionFinalResponsePreview(
+  messages: Message[],
+  scope: string | AgentRunMessageScope,
+): string | undefined {
+  const assistantMessages = getAgentRunMessageSlice(messages, scope).filter(
+    (message) => message.role === 'assistant',
+  );
+  const projection =
+    [...assistantMessages].reverse().find((message) => !message.subAgentEvent) ??
+    assistantMessages.at(-1);
+  return projection &&
+    hasCompleteFinalAssistantMetadata(projection) &&
+    !isAssistantFinalResponsePlaceholder(projection) &&
+    hasVisibleFinalAssistantText(projection)
+    ? projection.content.trim()
+    : undefined;
+}
+
 export function summarizeBackgroundWorkerRunOutcome(
   workers: Array<Pick<SubAgentSnapshot, 'status' | 'output' | 'completionState'>>,
 ): { status: Exclude<AgentRunStatus, 'running'>; summary: string } {

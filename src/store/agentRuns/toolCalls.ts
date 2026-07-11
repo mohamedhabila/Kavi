@@ -1,6 +1,9 @@
 import type { AgentRun } from '../../types/agentRun';
 import type { Message } from '../../types/message';
-import type { ResolveToolEffectRestartDisposition } from '../../services/executionJournal/toolEffectRestartDisposition';
+import type {
+  ResolveToolEffectRestartDisposition,
+  ToolEffectRestartLookupInput,
+} from '../../services/executionJournal/toolEffectRestartDisposition';
 import { projectToolCallAfterRestart } from '../../services/executionJournal/toolEffectRestartProjection';
 import {
   buildAgentRunMessageScope,
@@ -137,4 +140,25 @@ export function recoverActiveToolCallsAfterRestart(params: {
   return completedCount > 0 || failedCount > 0
     ? { messages: nextMessages, completedCount, failedCount }
     : { messages: params.messages, completedCount: 0, failedCount: 0 };
+}
+
+export function listActiveToolEffectRestartInputs(params: {
+  conversationId: string;
+  messages: Message[];
+  run: Pick<AgentRun, 'id' | 'userMessageId' | 'createdAt'>;
+}): ToolEffectRestartLookupInput[] {
+  return getAgentRunMessageSlice(params.messages, buildAgentRunMessageScope(params.run)).flatMap(
+    (message) =>
+      message.role === 'assistant'
+        ? (message.toolCalls ?? [])
+            .filter((toolCall) => toolCall.status === 'pending' || toolCall.status === 'running')
+            .map((toolCall) => ({
+              conversationId: params.conversationId,
+              taskId: params.run.id,
+              toolCallId: toolCall.id,
+              toolName: toolCall.name,
+              argumentsText: toolCall.arguments,
+            }))
+        : [],
+  );
 }

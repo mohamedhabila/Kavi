@@ -9,7 +9,10 @@ import {
 } from '../../src/services/executionJournal/database';
 import { dispatchAuthorizedToolEffect } from '../../src/services/executionJournal/toolEffectDispatchLifecycle';
 import type { AuthorizedToolEffectDispatchInput } from '../../src/services/executionJournal/toolEffectDispatchLifecycle';
-import { readToolEffectRestartDisposition } from '../../src/services/executionJournal/toolEffectRestartDisposition';
+import {
+  buildToolEffectRestartDispositionResolver,
+  readToolEffectRestartDisposition,
+} from '../../src/services/executionJournal/toolEffectRestartDisposition';
 
 const sqliteMock = jest.requireMock('expo-sqlite') as {
   __resetExpoSqliteForTests(): void;
@@ -69,10 +72,10 @@ afterEach(() => {
 });
 
 describe('durable tool effect restart disposition', () => {
-  it('returns not dispatched when no exact effect generation exists', () => {
+  it('returns not dispatched when no exact effect generation exists', async () => {
     getExecutionJournalDb();
 
-    expect(read()).toEqual({ kind: 'not_dispatched' });
+    await expect(read()).resolves.toEqual({ kind: 'not_dispatched' });
   });
 
   it('recognizes an exact verified terminal effect without retaining its payload', async () => {
@@ -83,7 +86,7 @@ describe('durable tool effect restart disposition', () => {
       },
     );
 
-    expect(read()).toEqual({ kind: 'verified', observedAt: 100 });
+    await expect(read()).resolves.toEqual({ kind: 'verified', observedAt: 100 });
   });
 
   it('requires reconciliation when dispatch started but its effect stayed ambiguous', async () => {
@@ -94,7 +97,7 @@ describe('durable tool effect restart disposition', () => {
       { now: () => 100 },
     );
 
-    expect(read()).toEqual({
+    await expect(read()).resolves.toEqual({
       kind: 'reconciliation_required',
       observedAt: 100,
       reason: 'ambiguous_effect',
@@ -115,7 +118,7 @@ describe('durable tool effect restart disposition', () => {
       { now: () => 101 },
     );
 
-    expect(read()).toEqual({
+    await expect(read()).resolves.toEqual({
       kind: 'reconciliation_required',
       observedAt: null,
       reason: 'journal_conflict',
@@ -130,7 +133,7 @@ describe('durable tool effect restart disposition', () => {
       },
     );
 
-    expect(
+    await expect(
       readToolEffectRestartDisposition({
         conversationId: 'conversation-1',
         taskId: 'agent-run-other',
@@ -138,11 +141,79 @@ describe('durable tool effect restart disposition', () => {
         toolName: 'write_file',
         argumentsText: JSON.stringify({ path: 'private/plan.md', content: 'done' }),
       }),
-    ).toEqual({ kind: 'not_dispatched' });
+    ).resolves.toEqual({ kind: 'not_dispatched' });
   });
 
-  it('reports an unavailable journal instead of assuming no effect', () => {
-    expect(
+  it.each([
+    {
+      name: 'tool name',
+      toolName: 'web_fetch',
+      argumentsText: JSON.stringify({ url: 'https://example.invalid' }),
+    },
+    {
+      name: 'canonical request',
+      toolName: 'write_file',
+      argumentsText: JSON.stringify({ path: 'private/other.md', content: 'done' }),
+    },
+  ])('rejects one verified row when its $name digest differs', async (mismatch) => {
+    await dispatchAuthorizedToolEffect(input(async () => verifiedWriteResult()), {
+      now: () => 100,
+    });
+
+    await expect(
+      readToolEffectRestartDisposition({
+        conversationId: 'conversation-1',
+        taskId: 'agent-run-1',
+        toolCallId: 'tool-call-1',
+        toolName: mismatch.toolName,
+        argumentsText: mismatch.argumentsText,
+      }),
+    ).resolves.toEqual({
+      kind: 'reconciliation_required',
+      observedAt: null,
+      reason: 'journal_conflict',
+    });
+  });
+
+  it('matches canonically equivalent JSON arguments', async () => {
+    await dispatchAuthorizedToolEffect(input(async () => verifiedWriteResult()), {
+      now: () => 100,
+    });
+
+    await expect(
+      readToolEffectRestartDisposition({
+        conversationId: 'conversation-1',
+        taskId: 'agent-run-1',
+        toolCallId: 'tool-call-1',
+        toolName: 'write_file',
+        argumentsText: JSON.stringify({ content: 'done', path: 'private/plan.md' }),
+      }),
+    ).resolves.toEqual({ kind: 'verified', observedAt: 100 });
+  });
+
+  it('prebuilds a bounded synchronous resolver and fails closed outside its input set', async () => {
+    const exactInput = {
+      conversationId: 'conversation-1',
+      taskId: 'agent-run-1',
+      toolCallId: 'tool-call-1',
+      toolName: 'write_file',
+      argumentsText: JSON.stringify({ path: 'private/plan.md', content: 'done' }),
+    };
+    const resolve = await buildToolEffectRestartDispositionResolver(
+      [exactInput],
+      async () => ({ kind: 'verified', observedAt: 100 }),
+    );
+
+    expect(resolve(exactInput)).toEqual({ kind: 'verified', observedAt: 100 });
+    expect(resolve({ ...exactInput, argumentsText: '{}' })).toEqual({
+      kind: 'reconciliation_required',
+      observedAt: null,
+      reason: 'journal_conflict',
+    });
+  });
+
+  it('reports an unavailable journal instead of assuming no effect', async () => {
+    await expect(
       readToolEffectRestartDisposition(
         {
           conversationId: 'conversation-1',
@@ -157,30 +228,24 @@ describe('durable tool effect restart disposition', () => {
           },
         },
       ),
-    ).toEqual({
+    ).resolves.toEqual({
       kind: 'reconciliation_required',
       observedAt: null,
       reason: 'journal_unavailable',
     });
   });
 
-  it('does not consult the effect journal for a code-owned effect-free invocation', () => {
-    const getDatabase = jest.fn(() => {
-      throw new Error('must not be called');
-    });
+  it('reports no dispatch for an effect-free invocation with no journal identity', async () => {
+    getExecutionJournalDb();
 
-    expect(
-      readToolEffectRestartDisposition(
-        {
-          conversationId: 'conversation-1',
-          taskId: 'agent-run-1',
-          toolCallId: 'tool-call-read-1',
-          toolName: 'web_fetch',
-          argumentsText: JSON.stringify({ url: 'https://example.invalid' }),
-        },
-        { getDatabase },
-      ),
-    ).toEqual({ kind: 'not_dispatched' });
-    expect(getDatabase).not.toHaveBeenCalled();
+    await expect(
+      readToolEffectRestartDisposition({
+        conversationId: 'conversation-1',
+        taskId: 'agent-run-1',
+        toolCallId: 'tool-call-read-1',
+        toolName: 'web_fetch',
+        argumentsText: JSON.stringify({ url: 'https://example.invalid' }),
+      }),
+    ).resolves.toEqual({ kind: 'not_dispatched' });
   });
 });

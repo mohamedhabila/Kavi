@@ -3,8 +3,7 @@ import type { Message } from '../../types/message';
 import type { SubAgentSnapshot } from '../../types/subAgent';
 import {
   buildAgentRunMessageScope,
-  getLatestFinalAssistantResponsePreview,
-  hasDeliveredFinalAssistantResponse,
+  getLatestAssistantProjectionFinalResponsePreview,
   summarizeBackgroundWorkerRunOutcome,
 } from '../../services/agents/lifecycle/agentRunStateMachine';
 import {
@@ -46,19 +45,17 @@ export function buildRecoveredAgentRunStateAfterAppRestart(params: {
   }
 
   const runMessageScope = buildAgentRunMessageScope(params.run);
-  if (hasDeliveredFinalAssistantResponse(params.messages, runMessageScope)) {
-    const preservedFinalResponse = getLatestFinalAssistantResponsePreview(
-      params.messages,
-      runMessageScope,
-    );
-    if (preservedFinalResponse) {
-      return {
-        status: 'completed',
-        latestSummary: preservedFinalResponse,
-        checkpointTitle: 'Recovered delivered response',
-        checkpointDetail: 'The final response was durably persisted before the app restarted.',
-      };
-    }
+  const preservedFinalResponse = getLatestAssistantProjectionFinalResponsePreview(
+    params.messages,
+    runMessageScope,
+  );
+  if (preservedFinalResponse) {
+    return {
+      status: 'completed',
+      latestSummary: preservedFinalResponse,
+      checkpointTitle: 'Recovered delivered response',
+      checkpointDetail: 'The final response was durably persisted before the app restarted.',
+    };
   }
 
   if (isAgentRunAwaitingBackgroundWorkers(params.run)) {

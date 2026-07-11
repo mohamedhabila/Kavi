@@ -7,6 +7,7 @@ import {
 } from '../../utils/assistantMessageMetadata';
 import { generateId } from '../../utils/id';
 import { flushChatStorePersistenceNow } from '../../store/chatStorePersistence';
+import { useChatStore } from '../../store/useChatStore';
 import {
   mutateOwnedForegroundModelProjection,
   releaseForegroundModelProjection,
@@ -25,9 +26,10 @@ import type {
   ForegroundModelTerminalStatus,
 } from './foregroundModelExecutionTypes';
 import {
-  readToolEffectRestartDisposition,
+  buildToolEffectRestartDispositionResolver,
   type ResolveToolEffectRestartDisposition,
   type ToolEffectRestartDisposition,
+  type ToolEffectRestartLookupInput,
 } from './toolEffectRestartDisposition';
 import { projectToolCallAfterRestart } from './toolEffectRestartProjection';
 
@@ -84,7 +86,7 @@ export interface ForegroundModelRecoveryDependencies {
   mutateProjection(
     lease: ForegroundModelExecutionLease,
     timestamp: number,
-  ): ForegroundModelProjectionMutationResult;
+  ): Promise<ForegroundModelProjectionMutationResult>;
   flushChatState(): Promise<void>;
   complete(input: CompleteForegroundModelExecutionInput): Promise<unknown>;
   releaseProjection(
@@ -147,25 +149,48 @@ function activeToolCalls(
     resolveToolEffect: ResolveToolEffectRestartDisposition;
   },
 ): InterruptedToolProjection[] {
-  const interrupted: InterruptedToolProjection[] = [];
-  for (const message of messages) {
-    for (const toolCall of message.toolCalls ?? []) {
-      if (toolCall.status === 'pending' || toolCall.status === 'running') {
-        interrupted.push({
-          assistantMessageId: message.id,
+  return messages.flatMap((message) =>
+    (message.toolCalls ?? [])
+      .filter((toolCall) => toolCall.status === 'pending' || toolCall.status === 'running')
+      .map((toolCall) => ({
+        assistantMessageId: message.id,
+        toolCallId: toolCall.id,
+        disposition: input.resolveToolEffect({
+          conversationId: input.conversationId,
+          taskId: input.taskId,
           toolCallId: toolCall.id,
-          disposition: input.resolveToolEffect({
-            conversationId: input.conversationId,
-            taskId: input.taskId,
-            toolCallId: toolCall.id,
-            toolName: toolCall.name,
-            argumentsText: toolCall.arguments,
-          }),
-        });
-      }
-    }
-  }
-  return interrupted;
+          toolName: toolCall.name,
+          argumentsText: toolCall.arguments,
+        }),
+      })),
+  );
+}
+
+function foregroundToolEffectRestartInputs(
+  lease: ForegroundModelExecutionLease,
+  conversation: Conversation | undefined,
+): ToolEffectRestartLookupInput[] {
+  if (!conversation || conversation.id !== lease.conversationId) return [];
+  const requestIndex = conversation.messages.findIndex(
+    (message) => message.id === lease.requestMessageId && message.role === 'user',
+  );
+  if (requestIndex < 0) return [];
+  const assistantMessages = assistantMessagesInRequestSlice(conversation, requestIndex);
+  const anchorIndex = assistantMessages.findIndex(
+    (message) => message.id === lease.assistantMessageId,
+  );
+  if (anchorIndex < 0) return [];
+  return assistantMessages.slice(anchorIndex).flatMap((message) =>
+    (message.toolCalls ?? [])
+      .filter((toolCall) => toolCall.status === 'pending' || toolCall.status === 'running')
+      .map((toolCall) => ({
+        conversationId: lease.conversationId,
+        taskId: lease.taskId,
+        toolCallId: toolCall.id,
+        toolName: toolCall.name,
+        argumentsText: toolCall.arguments,
+      })),
+  );
 }
 
 function incompleteMetadata(message: Message): AssistantMessageMetadata {
@@ -326,10 +351,16 @@ function applyRecoveryPlan(
   };
 }
 
-function mutateForegroundModelProjectionForRecovery(
+async function mutateForegroundModelProjectionForRecovery(
   lease: ForegroundModelExecutionLease,
   timestamp: number,
-): ForegroundModelProjectionMutationResult {
+): Promise<ForegroundModelProjectionMutationResult> {
+  const conversationSnapshot = useChatStore
+    .getState()
+    .conversations.find((conversation) => conversation.id === lease.conversationId);
+  const resolveToolEffect = await buildToolEffectRestartDispositionResolver(
+    foregroundToolEffectRestartInputs(lease, conversationSnapshot),
+  );
   const mutation = mutateOwnedForegroundModelProjection<
     | { plan: ForegroundModelRecoveryPlan; conversation: Conversation }
     | ForegroundModelRecoveryBlockedResult
@@ -340,7 +371,7 @@ function mutateForegroundModelProjectionForRecovery(
       const plan = planForegroundModelRestartRecovery(
         lease,
         conversation,
-        readToolEffectRestartDisposition,
+        resolveToolEffect,
       );
       if ('kind' in plan) return { kind: 'rejected', value: plan };
       const nextConversation = applyRecoveryPlan(plan, conversation, timestamp);
@@ -414,7 +445,7 @@ export async function recoverInterruptedForegroundModelExecutions(
     if (leases.length === 0) break;
     for (const lease of leases) {
       if (dependencies.isCurrentProcessRun(lease)) continue;
-      const mutation = dependencies.mutateProjection(lease, timestamp);
+      const mutation = await dependencies.mutateProjection(lease, timestamp);
       if (mutation.kind === 'blocked') {
         if (PERMANENT_PROJECTION_BLOCK_REASONS.has(mutation.reason)) {
           const terminalStatus = lease.expectedStatus === 'queued' ? 'cancelled' : 'failed';

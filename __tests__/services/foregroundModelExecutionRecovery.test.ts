@@ -64,7 +64,10 @@ function harness(initialConversation: Conversation, leases = [lease()]) {
       return leases.slice(Math.max(0, start), Math.max(0, start) + limit);
     },
   );
-  const mutateProjection = jest.fn((runLease: ForegroundModelExecutionLease, timestamp: number) => {
+  const mutateProjection = jest.fn(async (
+    runLease: ForegroundModelExecutionLease,
+    timestamp: number,
+  ) => {
     const plan = planForegroundModelRestartRecovery(runLease, currentConversation);
     if ('kind' in plan) return plan;
     if (plan.status === 'failed') {
@@ -489,7 +492,7 @@ describe('foreground model restart recovery execution', () => {
       },
     });
     const test = harness(ownedConversation, leases);
-    test.dependencies.mutateProjection = (candidate) => {
+    test.dependencies.mutateProjection = async (candidate) => {
       if (candidate.runId !== last.runId) {
         return { kind: 'blocked', runId: candidate.runId, reason: 'projection_owner_changed' };
       }

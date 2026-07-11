@@ -195,6 +195,37 @@ describe('agent control graph interrupted run recovery', () => {
     });
   });
 
+  it('does not recover an older final past a newer incomplete assistant projection', () => {
+    expect(
+      buildRecoveredAgentRunStateAfterAppRestart({
+        messages: [
+          createMessage({ id: 'user-1', role: 'user', content: 'Run it', timestamp: 1 }),
+          createMessage({
+            id: 'assistant-final',
+            role: 'assistant',
+            content: 'Older finished result.',
+            timestamp: 2,
+            assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+          }),
+          createMessage({
+            id: 'assistant-retry',
+            role: 'assistant',
+            content: 'Newer partial result',
+            timestamp: 3,
+            assistantMetadata: { kind: 'final', completionStatus: 'incomplete' },
+          }),
+        ],
+        run: createRun(),
+        subAgents: [],
+      }),
+    ).toEqual({
+      status: 'failed',
+      latestSummary: 'The run was interrupted because the app restarted before completion.',
+      checkpointTitle: 'Run interrupted on app restart',
+      checkpointDetail: 'The run was interrupted because the app restarted before completion.',
+    });
+  });
+
   it('does nothing while a recovered worker is still actively running', () => {
     expect(
       buildRecoveredAgentRunStateAfterAppRestart({
