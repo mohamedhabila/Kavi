@@ -67,6 +67,10 @@ import {
   type MemoryRememberRequestEvidence,
 } from './memoryRememberPersistence';
 import { serializeMemoryFact } from './memoryFactSerialization';
+import {
+  canonicalizeMemorySubject,
+  isCanonicalSelfMemorySubject,
+} from './memorySubjectIdentity';
 export {
   executeMemoryInvalidate,
   executeMemoryPin,
@@ -430,10 +434,11 @@ export function executeMemoryRemember(
 ): MemoryRememberResult | MemoryToolError {
   if (!canWriteLongTermMemory()) return err('memory_disabled', 'Long-term memory is disabled.');
   ensureFactSchema();
-  const subject = trimNonEmpty(args.subject, 80);
+  const rawSubject = trimNonEmpty(args.subject, 80);
   const predicate = trimNonEmpty(args.predicate, 80);
   const value = trimNonEmpty(args.value, 200);
-  if (!subject) return err('invalid_args', 'subject is required');
+  if (!rawSubject) return err('invalid_args', 'subject is required');
+  const subject = canonicalizeMemorySubject(rawSubject);
   if (!predicate) return err('invalid_args', 'predicate is required');
   if (!value) return err('invalid_args', 'value is required');
   if (typeof args.subject === 'string' && args.subject.trim().length > 80) {
@@ -446,7 +451,7 @@ export function executeMemoryRemember(
     return err('invalid_args', 'value must be at most 200 characters');
   }
 
-  const canonicalSelfSubject = subject.normalize('NFKC').trim() === 'user';
+  const canonicalSelfSubject = isCanonicalSelfMemorySubject(subject);
   const subjectType: EntityType = canonicalSelfSubject
     ? 'self'
     : args.subjectType === 'self'

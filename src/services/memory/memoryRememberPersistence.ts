@@ -18,6 +18,7 @@ import {
 } from './groundedFactReplacement';
 import { assertMemoryPersistenceSourcesAreWritable } from './withdrawalFence';
 import { deriveExactSelfClaimEvidence } from './exactSelfClaimEvidence';
+import { isCanonicalSelfMemorySubject } from './memorySubjectIdentity';
 
 export interface MemoryRememberPersistenceInput {
   subject: string;
@@ -74,10 +75,6 @@ function normalizedGroundingText(value: string): string {
   return value.normalize('NFKC').replace(/\s+/gu, ' ').trim();
 }
 
-function isCanonicalSelfSubject(subject: string): boolean {
-  return normalizedGroundingText(subject) === 'user';
-}
-
 function isIdentifierCodePoint(value: string | undefined): boolean {
   return value !== undefined && /[\p{L}\p{M}\p{N}_]/u.test(value);
 }
@@ -100,7 +97,7 @@ function hasRequiredSubjectGrounding(
   evidence: MemoryRememberRequestEvidence | undefined,
 ): boolean {
   if (!evidence) return true;
-  if (isCanonicalSelfSubject(input.subject)) {
+  if (isCanonicalSelfMemorySubject(input.subject)) {
     return Boolean(
       deriveExactSelfClaimEvidence({
         userMessageText: evidence.userMessageText,
@@ -160,7 +157,7 @@ export function persistMemoryRemember(
 ): MemoryRememberPersistenceResult {
   const evidence = context.requestEvidence;
   const exactSelfClaim =
-    evidence && isCanonicalSelfSubject(input.subject)
+    evidence && isCanonicalSelfMemorySubject(input.subject)
       ? deriveExactSelfClaimEvidence({
           userMessageText: evidence.userMessageText,
           predicate: input.predicate,

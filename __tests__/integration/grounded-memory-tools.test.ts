@@ -136,6 +136,44 @@ describe('grounded memory_remember product writes', () => {
     expect(listFacts({ predicate: 'preferred_channel' })).toEqual([]);
   });
 
+  it.each(['User', 'USER', '\uff35\uff53\uff45\uff52'])(
+    'canonicalizes the self-label variant %s before applying exact-self grounding',
+    async (subject) => {
+      const written = await remember({
+        subject,
+        subjectType: 'person',
+        predicate: 'preferred_channel',
+        value: 'Signal',
+        messageId: `user-self-variant-${subject}`,
+        messageText: 'Morgan prefers Signal.',
+        scope: 'global',
+      });
+
+      expect(written).toMatchObject({ ok: false, code: 'grounding_required' });
+      expect(findEntityByName('user')).toBeNull();
+      expect(findEntityByName(subject)).toBeNull();
+      expect(listFacts({ predicate: 'preferred_channel' })).toEqual([]);
+    },
+  );
+
+  it('persists a grounded normalized self-label under the one canonical identity', async () => {
+    const written = await remember({
+      subject: '\uff35\uff53\uff45\uff52',
+      subjectType: 'person',
+      predicate: 'preferred_channel',
+      value: 'Signal',
+      messageId: 'user-self-normalized-positive',
+      messageText: 'I prefer Signal.',
+      scope: 'global',
+    });
+
+    expect(written).toMatchObject({
+      ok: true,
+      fact: { subject: 'user', predicate: 'preferred_channel', value: 'Signal' },
+    });
+    expect(findEntityByName('user')).toMatchObject({ canonicalName: 'user', type: 'self' });
+  });
+
   it('accepts the asserted side of a correction while excluding its negated prior value', async () => {
     const first = await remember({
       subject: 'user',
