@@ -43,13 +43,16 @@ import {
 } from '../../../testSupport/chatScreen/runtime';
 import {
   cleanupChatScreenTestEnvironment,
-  resetChatScreenTestEnvironment,
+  resetInFlightChatScreenTestEnvironment,
 } from '../../../testSupport/chatScreen/mockDefaults';
 import { mockRunOrchestrator } from '../../../testSupport/chatScreen/serviceMocks';
 
 const cloneRenderCounts = () => new Map(mockRowRenderCounts);
 
-const expectCountsUnchanged = (beforeCounts: Map<string, number>, ignoredIds = new Set<string>()) => {
+const expectCountsUnchanged = (
+  beforeCounts: Map<string, number>,
+  ignoredIds = new Set<string>(),
+) => {
   for (const [itemId, count] of beforeCounts) {
     if (!ignoredIds.has(itemId)) {
       const nextCount = mockRowRenderCounts.get(itemId);
@@ -70,7 +73,7 @@ describe('ChatScreen row render stability', () => {
     mockRowContentById.clear();
     mockRowPreviousProps.clear();
     mockRowPropDiffs.clear();
-    resetChatScreenTestEnvironment();
+    resetInFlightChatScreenTestEnvironment();
   });
   afterEach(cleanupChatScreenTestEnvironment);
 

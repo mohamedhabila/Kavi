@@ -16,7 +16,11 @@ import {
   createAgentRunAsyncWorkControlGraph,
 } from '../../../testSupport/chatScreen/fixtures';
 import { mockAddMessage, mockEditMessage } from '../../../testSupport/chatScreen/storeMocks';
-import { mockEvaluateAgentRunWithPilot, mockCancelSubAgent } from '../../../testSupport/chatScreen/serviceMocks';
+import {
+  mockEvaluateAgentRunWithPilot,
+  mockCancelSubAgent,
+  mockRunOrchestrator,
+} from '../../../testSupport/chatScreen/serviceMocks';
 import { mockCompleteAgentRun } from '../../../testSupport/chatScreen/storeMocks';
 
 describe('ChatScreen editing and drafts', () => {
@@ -48,9 +52,13 @@ describe('ChatScreen editing and drafts', () => {
     fireEvent.press(retryIcons[0].parent || retryIcons[0]);
 
     await waitFor(() => {
-      // retry triggers handleSend with the previous user message content
-      expect(mockAddMessage).toHaveBeenCalled();
+      expect(mockEditMessage).toHaveBeenCalledWith('conv1', 'msg1', 'Hello');
+      expect(mockRunOrchestrator).toHaveBeenCalledWith(
+        expect.objectContaining({ conversationId: 'conv1' }),
+        expect.any(Object),
+      );
     });
+    expect(mockAddMessage).not.toHaveBeenCalled();
   });
 
   it('cancels the active run before retry rewinds the conversation', async () => {

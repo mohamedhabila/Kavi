@@ -7,7 +7,7 @@ import {
 } from '../../../testSupport/chatScreen/runtime';
 import {
   cleanupChatScreenTestEnvironment,
-  resetChatScreenTestEnvironment,
+  resetInFlightChatScreenTestEnvironment,
 } from '../../../testSupport/chatScreen/mockDefaults';
 import { createAgentRunControlGraphState } from '../../../testSupport/chatScreen/fixtures';
 import {
@@ -19,7 +19,7 @@ import {
 import { mockRunOrchestrator } from '../../../testSupport/chatScreen/serviceMocks';
 
 describe('ChatScreen streaming presentation', () => {
-  beforeEach(resetChatScreenTestEnvironment);
+  beforeEach(resetInFlightChatScreenTestEnvironment);
   afterEach(cleanupChatScreenTestEnvironment);
 
   it('throttles streamed token updates instead of writing every token', async () => {

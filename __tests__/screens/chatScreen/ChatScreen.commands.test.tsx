@@ -7,7 +7,7 @@ import {
 } from '../../../testSupport/chatScreen/runtime';
 import {
   cleanupChatScreenTestEnvironment,
-  resetChatScreenTestEnvironment,
+  resetInFlightChatScreenTestEnvironment,
 } from '../../../testSupport/chatScreen/mockDefaults';
 import { mockChatScreenState } from '../../../testSupport/chatScreen/state';
 import { createDefaultConversations } from '../../../testSupport/chatScreen/fixtures';
@@ -20,7 +20,7 @@ import {
 } from '../../../testSupport/chatScreen/serviceMocks';
 
 describe('ChatScreen command results and sharing', () => {
-  beforeEach(resetChatScreenTestEnvironment);
+  beforeEach(resetInFlightChatScreenTestEnvironment);
   afterEach(cleanupChatScreenTestEnvironment);
 
   it('preserves separate drafts for each conversation', () => {

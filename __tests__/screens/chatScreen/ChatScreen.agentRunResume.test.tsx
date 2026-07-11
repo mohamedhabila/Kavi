@@ -7,7 +7,7 @@ import {
 } from '../../../testSupport/chatScreen/runtime';
 import {
   cleanupChatScreenTestEnvironment,
-  resetChatScreenTestEnvironment,
+  resetInFlightChatScreenTestEnvironment,
 } from '../../../testSupport/chatScreen/mockDefaults';
 import { mockChatScreenState, updateMockConversation } from '../../../testSupport/chatScreen/state';
 import {
@@ -29,7 +29,7 @@ import {
 } from '../../../testSupport/chatScreen/serviceMocks';
 
 describe('ChatScreen agent run resume', () => {
-  beforeEach(resetChatScreenTestEnvironment);
+  beforeEach(resetInFlightChatScreenTestEnvironment);
 
   afterEach(cleanupChatScreenTestEnvironment);
 

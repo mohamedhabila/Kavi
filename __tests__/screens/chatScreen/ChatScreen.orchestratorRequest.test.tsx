@@ -7,7 +7,7 @@ import {
 } from '../../../testSupport/chatScreen/runtime';
 import {
   cleanupChatScreenTestEnvironment,
-  resetChatScreenTestEnvironment,
+  resetInFlightChatScreenTestEnvironment,
 } from '../../../testSupport/chatScreen/mockDefaults';
 import { mockChatScreenState } from '../../../testSupport/chatScreen/state';
 import { createDefaultConversations } from '../../../testSupport/chatScreen/fixtures';
@@ -19,7 +19,7 @@ import {
 import { mockRunOrchestrator } from '../../../testSupport/chatScreen/serviceMocks';
 
 describe('ChatScreen orchestrator requests', () => {
-  beforeEach(resetChatScreenTestEnvironment);
+  beforeEach(resetInFlightChatScreenTestEnvironment);
   afterEach(cleanupChatScreenTestEnvironment);
 
   it('calls orchestrator with correct callbacks', async () => {

@@ -6,6 +6,7 @@ import {
   nextMockTimestamp,
 } from './fixtures';
 import {
+  mockChatScreenState,
   resetMockChatScreenState,
   updateMockAgentRun,
   updateMockConversation,
@@ -57,6 +58,7 @@ import {
   mockGetProviderApiKey,
   mockHasCompletedExecutionRecoveryEvidence,
   mockHasVerifiedFinalizationEvidence,
+  holdMockOrchestratorUntilAbort,
   mockImportConversationWorkspaceAttachment,
   mockIsAvailableAsync,
   mockRunOrchestrator,
@@ -142,7 +144,66 @@ export function resetChatScreenTestEnvironment() {
   __resetAgentRunCancellationRegistryForTests();
   resetMockChatScreenState();
   mockCreateConversation.mockReturnValue('new-conv');
-  mockGetOrCreateCanonicalThread.mockReturnValue('new-conv');
+  mockGetOrCreateCanonicalThread.mockImplementation(
+    (
+      providerId: string,
+      systemPrompt: string,
+      modelOverride?: string,
+      options?: { activate?: boolean; personaId?: string; mode?: string },
+    ) => {
+      const groupKey = options?.personaId || '__default__';
+      const existing = mockChatScreenState.conversations.find(
+        (conversation) =>
+          conversation.isCanonical === true &&
+          (conversation.personaId || '__default__') === groupKey,
+      );
+      let conversationId = existing?.id ?? 'new-conv';
+      let suffix = 2;
+      while (
+        !existing &&
+        mockChatScreenState.conversations.some((conversation) => conversation.id === conversationId)
+      ) {
+        conversationId = `new-conv-${suffix}`;
+        suffix += 1;
+      }
+
+      if (!existing) {
+        const timestamp = nextMockTimestamp();
+        mockChatScreenState.conversations = [
+          {
+            id: conversationId,
+            title: 'New Chat',
+            messages: [],
+            providerId,
+            modelOverride,
+            systemPrompt,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            personaId: options?.personaId,
+            mode: options?.mode,
+            isCanonical: true,
+            usage: {
+              entries: [],
+              totalInput: 0,
+              totalOutput: 0,
+              totalCacheRead: 0,
+              totalCacheWrite: 0,
+              totalTokens: 0,
+              totalCost: 0,
+              totalCalls: 0,
+            },
+            logs: [],
+            agentRuns: [],
+          },
+          ...mockChatScreenState.conversations,
+        ];
+      }
+      if (options?.activate !== false) {
+        mockChatScreenState.activeConversationId = conversationId;
+      }
+      return conversationId;
+    },
+  );
   mockGetProviderApiKey.mockResolvedValue('sk-test');
   mockRunOrchestrator.mockResolvedValue(undefined);
   mockExportConversationAsMarkdown.mockReturnValue('# Exported');
@@ -563,4 +624,9 @@ export function resetChatScreenTestEnvironment() {
             ],
           }),
   }));
+}
+
+export function resetInFlightChatScreenTestEnvironment() {
+  resetChatScreenTestEnvironment();
+  mockRunOrchestrator.mockImplementation(holdMockOrchestratorUntilAbort);
 }

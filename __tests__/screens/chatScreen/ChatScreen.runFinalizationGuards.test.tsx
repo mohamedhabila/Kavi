@@ -7,7 +7,7 @@ import {
 } from '../../../testSupport/chatScreen/runtime';
 import {
   cleanupChatScreenTestEnvironment,
-  resetChatScreenTestEnvironment,
+  resetInFlightChatScreenTestEnvironment,
 } from '../../../testSupport/chatScreen/mockDefaults';
 import { mockChatScreenState, updateMockConversation } from '../../../testSupport/chatScreen/state';
 import { createRunningAgentRun } from '../../../testSupport/chatScreen/fixtures';
@@ -24,7 +24,7 @@ import {
 } from '../../../testSupport/chatScreen/serviceMocks';
 
 describe('ChatScreen run finalization guards', () => {
-  beforeEach(resetChatScreenTestEnvironment);
+  beforeEach(resetInFlightChatScreenTestEnvironment);
 
   afterEach(cleanupChatScreenTestEnvironment);
 

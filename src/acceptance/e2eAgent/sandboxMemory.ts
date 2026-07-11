@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { closeMemoryDb, getMemoryDb } from '../../services/memory/sqlite-store';
+import { closeExecutionJournalDb } from '../../services/executionJournal/database';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../services/memory/schema';
 import {
   DEFAULT_MEMORY_BLOCKS,
@@ -27,6 +28,7 @@ function getExpoSqliteMock(): ExpoSqliteMock {
 
 export function resetE2EMemorySandbox(): void {
   closeMemoryDb();
+  closeExecutionJournalDb();
   getExpoSqliteMock().__resetExpoSqliteForTests?.();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
@@ -87,6 +89,7 @@ export function assertE2EMemorySandboxReset(): void {
 
 export function teardownE2EMemorySandbox(): void {
   closeMemoryDb();
+  closeExecutionJournalDb();
   getExpoSqliteMock().__resetExpoSqliteForTests?.();
 }
 
