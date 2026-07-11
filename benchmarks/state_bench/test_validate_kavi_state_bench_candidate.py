@@ -255,6 +255,10 @@ class CandidateValidatorTests(unittest.TestCase):
         self.assertEqual(result["claim"], "official_candidate")
         self.assertEqual(result["officialStatus"], "unsubmitted")
         self.assertEqual(result["protocol"]["heldOutTasksPerDomain"], {"travel": 1})
+        self.assertEqual(
+            result["metricsByDomain"]["travel"]["task_completion_pass@1"],
+            1.0,
+        )
         self.assertTrue(self._args().out_manifest.is_file())
 
     def test_missing_held_out_output_fails_without_emitting_a_manifest(self) -> None:
