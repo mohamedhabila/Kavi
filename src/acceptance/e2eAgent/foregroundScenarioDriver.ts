@@ -40,6 +40,7 @@ import {
   type ForegroundScenarioMemoryRecord,
   type ForegroundScenarioTurnSnapshot,
 } from './foregroundScenarioDriverTypes';
+import { E2E_DEFAULT_MEMORY_TIMEOUT_MS } from './thresholds';
 
 export type {
   ForegroundScenarioCompletionSnapshot,
@@ -61,7 +62,6 @@ export type {
 const DEFAULT_TURN_TIMEOUT_MS = 120_000;
 // Provider enrichment owns a 30-second request deadline; keep settlement
 // independently bounded while allowing persistence and polling to finish.
-const DEFAULT_MEMORY_TIMEOUT_MS = 45_000;
 const FOREGROUND_PRODUCT_TOOL_NAMES = new Set(TOOL_DEFINITIONS.map((tool) => tool.name));
 
 let scenarioRunTail: Promise<void> = Promise.resolve();
@@ -229,7 +229,7 @@ async function runScenarioIsolated(
       await flushChatStorePersistenceNow();
       const memory = await settleForegroundScenarioMemory(
         memoryRecords.slice(memoryRecordStart),
-        input.memoryTimeoutMs ?? DEFAULT_MEMORY_TIMEOUT_MS,
+        input.memoryTimeoutMs ?? E2E_DEFAULT_MEMORY_TIMEOUT_MS,
       );
       const memoryStateAfter = captureCompleteMemoryEvidenceForIsolatedEvaluation(memoryScope);
       const conversation = useChatStore

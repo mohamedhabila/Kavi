@@ -95,6 +95,33 @@ Rates are USD per million tokens. The report stores the declared rates, date,
 and source digest alongside the estimate so another maintainer can reproduce
 the calculation without exposing account-specific pricing material.
 
+### Product-real paired assessment
+
+Run the same frozen scenario through a control and product condition with the
+real foreground chat lifecycle. The default comparison is `memory_off` versus
+`production_auto`; both conditions share the exact provider, prompt, tool
+surface, budgets, scenario inputs, and seed. The runner resets all condition
+state, retains only the content-free public projection, and fails after writing
+evidence if either condition or cleanup is invalid.
+
+```bash
+export RUN_E2E_AGENT_EVAL=1
+export E2E_PROVIDER=openrouter
+export E2E_PAIRED_SCENARIO_ID=profile-correction-chitchat
+export E2E_PAIRED_RUN_ID=release-candidate-01-profile-correction
+export E2E_PAIRED_SEED=42001
+npm run eval:e2e:paired
+```
+
+Set `E2E_PAIRED_REFERENCE_CONDITION` and
+`E2E_PAIRED_CANDIDATE_CONDITION` to compare another supported product
+treatment, such as `lexical_baseline` versus `production_auto`. Oracle evidence
+is intentionally excluded from this maintainer command because it is a
+diagnostic, not a product treatment. Reports are immutable under
+`.private/evals/runs/e2e-paired` by default; choose a new run ID for every
+attempt. A valid paired delta is local product evidence, not an official
+benchmark result or a capability pass bar.
+
 ## Evaluation lanes
 
 Every run selects one lane, one protocol-conformance value, one split kind,
