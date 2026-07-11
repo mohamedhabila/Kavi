@@ -150,7 +150,12 @@ describe('e2eReadinessDashboard', () => {
     expect(report.readinessDashboard.runMetadata).toMatchObject({
       provider: 'gemini',
       hostedFamily: 'gemini',
+      modelIdentitySource: 'provider-model-id',
+      modelLocatorSha256: report.runMetadata.modelLocatorSha256,
       endpointSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      scenarioManifestVersion: '2026-07-10.longitudinal-v2',
+      promptCacheMode: 'provider-default',
+      nativeToolFixtureVersion: 'native-tools-2026-07-10',
     });
     expect(JSON.stringify(report.readinessDashboard.runMetadata)).not.toContain(
       'aiplatform.googleapis.com',

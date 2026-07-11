@@ -107,17 +107,7 @@ export type E2EReadinessDashboard = {
   generatedAt: string;
   sourceRefreshDate: string;
   benchmarkManifestVersion: string;
-  runMetadata: Pick<
-    E2ERunReportRunMetadata,
-    | 'gitSha'
-    | 'provider'
-    | 'providerId'
-    | 'hostedFamily'
-    | 'model'
-    | 'modelVersion'
-    | 'endpointSha256'
-    | 'collectMode'
-  >;
+  runMetadata: E2ERunReportRunMetadata;
   overall: {
     passing: boolean;
     failedCriteria: string[];
@@ -349,8 +339,17 @@ export function buildE2EReadinessDashboard(
       ...(params.runMetadata.providerId ? { providerId: params.runMetadata.providerId } : {}),
       hostedFamily: params.runMetadata.hostedFamily,
       model: params.runMetadata.model,
+      modelIdentitySource: params.runMetadata.modelIdentitySource,
+      modelLocatorSha256: params.runMetadata.modelLocatorSha256,
       ...(params.runMetadata.modelVersion ? { modelVersion: params.runMetadata.modelVersion } : {}),
       endpointSha256: params.runMetadata.endpointSha256,
+      ...(params.runMetadata.temperature !== undefined
+        ? { temperature: params.runMetadata.temperature }
+        : {}),
+      ...(params.runMetadata.seed !== undefined ? { seed: params.runMetadata.seed } : {}),
+      scenarioManifestVersion: params.runMetadata.scenarioManifestVersion,
+      promptCacheMode: params.runMetadata.promptCacheMode,
+      nativeToolFixtureVersion: params.runMetadata.nativeToolFixtureVersion,
       collectMode: params.runMetadata.collectMode,
     },
     overall: {

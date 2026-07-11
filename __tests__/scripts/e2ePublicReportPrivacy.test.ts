@@ -39,6 +39,25 @@ function buildRawReport() {
 }
 
 describe('public E2E report privacy boundaries', () => {
+  it('preserves complete hashed dashboard provenance without exposing a private locator', () => {
+    const rawReport = buildRawReport() as any;
+    expect(rawReport.readinessDashboard.runMetadata).toEqual(rawReport.runMetadata);
+
+    rawReport.readinessDashboard.runMetadata.modelLocator =
+      'PRIVATE_MODEL_LOCATOR_SENTINEL';
+    const publicReport = projectPublicRunReport(rawReport) as any;
+
+    expect(publicReport.readinessDashboard.runMetadata).toEqual(publicReport.runMetadata);
+    expect(publicReport.readinessDashboard.runMetadata).toMatchObject({
+      modelIdentitySource: 'provider-model-id',
+      modelLocatorSha256: 'a'.repeat(64),
+      scenarioManifestVersion: '2026-07-10.longitudinal-v2',
+      promptCacheMode: 'provider-default',
+      nativeToolFixtureVersion: 'native-tools-2026-07-10',
+    });
+    expect(JSON.stringify(publicReport)).not.toContain('PRIVATE_MODEL_LOCATOR_SENTINEL');
+  });
+
   it('retains only complete reproducible pricing evidence', () => {
     const rawReport = buildE2eRunReport([buildScenarioEntry()], {
       generatedAt: '2026-07-10T00:00:00.000Z',
