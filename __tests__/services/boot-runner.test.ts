@@ -185,6 +185,30 @@ describe('Boot Runner', () => {
       expect(result.reason).toContain('LLM failed');
     });
 
+    it('fails when the orchestrator completes with a blocked control graph', async () => {
+      const { runOrchestrator } = require('../../src/engine/orchestrator');
+      runOrchestrator.mockImplementationOnce(async (_opts: any, callbacks: any) => {
+        callbacks.onAssistantMessage?.('Boot task reached a blocker.');
+        callbacks.onAgentControlGraphStateChange?.({
+          status: 'blocked',
+          terminalReason: 'tool_batch_incomplete',
+        });
+        callbacks.onDone?.();
+      });
+      mockBootFileExists = true;
+      mockBootFileContent = '# Boot\nRun setup tasks';
+
+      const result = await runBootOnce(mockProvider);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          status: 'failed',
+          output: 'Boot task reached a blocker.',
+          reason: expect.stringContaining('tool_batch_incomplete'),
+        }),
+      );
+    });
+
     it('clears the boot timeout when the orchestrator errors early', async () => {
       jest.useFakeTimers();
       const { runOrchestrator } = require('../../src/engine/orchestrator');

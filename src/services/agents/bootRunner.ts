@@ -12,6 +12,8 @@ import { bindProviderToModel } from '../llm/support/providerSupport';
 import { generateId } from '../../utils/id';
 import { unrefTimerIfSupported } from '../../utils/timers';
 import { SUPER_AGENT_PERSONA_ID } from './personas';
+import type { AgentRunControlGraphState } from '../../types/agentRun';
+import { resolveAgentControlGraphTerminalFailure } from '../../engine/graph/terminalOutcome';
 
 // ── Storage ──────────────────────────────────────────────────────────────
 
@@ -99,13 +101,14 @@ export async function runBootOnce(
   const bootProvider = bindProviderToModel(provider, bootModel);
 
   try {
-    await new Promise<void>((resolve, reject) => {
-      const abortController = new AbortController();
-      const timeout = setTimeout(() => abortController.abort(), 30000);
-      unrefTimerIfSupported(timeout);
-      const clearTimeoutGuard = () => clearTimeout(timeout);
+    const abortController = new AbortController();
+    const timeout = setTimeout(() => abortController.abort(), 30000);
+    unrefTimerIfSupported(timeout);
+    let latestControlGraphState: AgentRunControlGraphState | undefined;
+    let reportedOrchestratorError: Error | undefined;
 
-      runOrchestrator(
+    try {
+      await runOrchestrator(
         {
           provider: bootProvider,
           model: bootModel,
@@ -130,6 +133,9 @@ export async function runBootOnce(
           allProviders,
         },
         {
+          onAgentControlGraphStateChange: (state) => {
+            latestControlGraphState = state;
+          },
           onStateChange: () => {},
           onToken: (token) => {
             outputText += token;
@@ -145,19 +151,22 @@ export async function runBootOnce(
           },
           onToolMessage: () => {},
           onError: (err) => {
-            clearTimeoutGuard();
-            reject(err);
+            reportedOrchestratorError = err;
           },
-          onDone: () => {
-            clearTimeoutGuard();
-            resolve();
-          },
+          onDone: () => {},
         },
-      ).catch((error) => {
-        clearTimeoutGuard();
-        reject(error);
+      );
+
+      const terminalFailure = resolveAgentControlGraphTerminalFailure({
+        state: latestControlGraphState,
+        reportedError: reportedOrchestratorError,
       });
-    });
+      if (terminalFailure) {
+        throw terminalFailure;
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
 
     bootConfig.lastRunAt = now;
     bootConfig.lastStatus = 'ran';
