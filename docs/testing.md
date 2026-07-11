@@ -63,6 +63,7 @@ That command currently runs:
 - `npm run check:evaluation-contract`
 - `npm run check:app-metadata`
 - `npm run check:i18n`
+- `npm run check:canonical-memory-architecture`
 - `npm run check:no-legacy-planning-imports`
 - `npm run check:thin-e2e-harness`
 - `npm run check:graph-owned-mutations`

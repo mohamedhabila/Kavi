@@ -72,6 +72,7 @@ from `.github/workflows/ci.yml`. The gate currently runs, in order:
 - `npm run check:evaluation-contract`
 - `npm run check:app-metadata`
 - `npm run check:i18n`
+- `npm run check:canonical-memory-architecture`
 - `npm run check:no-legacy-planning-imports`
 - `npm run check:thin-e2e-harness`
 - `npm run check:graph-owned-mutations`
@@ -97,6 +98,7 @@ npm run check:licenses
 npm run check:evaluation-contract
 npm run check:app-metadata
 npm run check:i18n
+npm run check:canonical-memory-architecture
 npm run check:no-legacy-planning-imports
 npm run check:thin-e2e-harness
 npm run check:graph-owned-mutations
