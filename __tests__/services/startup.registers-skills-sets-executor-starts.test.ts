@@ -25,6 +25,7 @@ const mockRunMemoryMigrationTick = jest.fn().mockResolvedValue(undefined);
 const mockRunMemoryBackgroundFlush = jest.fn().mockResolvedValue(undefined);
 const mockInitializeDurableRecoveryLifecycle = jest.fn();
 const mockReconcileDurableRecoveryLifecycle = jest.fn();
+const mockRemoveRetiredMemoryFileArtifacts = jest.fn();
 let mockSettingsHydrated = true;
 let mockChatHydrated = true;
 const mockSettingsHydrationListeners = new Set<() => void>();
@@ -102,6 +103,10 @@ jest.mock('../../src/services/events/bus', () => ({
 jest.mock('../../src/services/memory/lifecycle', () => ({
   runMemoryMigrationTick: (...args: any[]) => mockRunMemoryMigrationTick(...args),
   runMemoryBackgroundFlush: (...args: any[]) => mockRunMemoryBackgroundFlush(...args),
+}));
+jest.mock('../../src/services/memory/retiredMemoryArtifacts', () => ({
+  removeRetiredMemoryFileArtifacts: (...args: any[]) =>
+    mockRemoveRetiredMemoryFileArtifacts(...args),
 }));
 jest.mock('../../src/services/executionJournal/durableRecoveryLifecycle', () => ({
   initializeDurableRecoveryLifecycle: (...args: any[]) =>
@@ -339,6 +344,7 @@ describe('initializeServices', () => {
 
     expect(mockRegisterBuiltInServiceSkills).toHaveBeenCalledTimes(1);
     expect(mockActivateEnabledSkills).toHaveBeenCalledTimes(1);
+    expect(mockRemoveRetiredMemoryFileArtifacts).toHaveBeenCalledTimes(1);
     expect(mockInitializeNotifications).toHaveBeenCalledTimes(1);
     await waitFor(() =>
       expect(mockConnectAll).toHaveBeenCalledWith([

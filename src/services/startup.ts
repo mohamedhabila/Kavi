@@ -28,6 +28,7 @@ import { buildAssistantMessageMetadata } from '../utils/assistantMessageMetadata
 import { unrefTimerIfSupported } from '../utils/timers';
 import { runMemoryMigrationTick, runMemoryBackgroundFlush } from './memory/lifecycle';
 import { initializeMemoryPolicyObservation } from './memory/policy';
+import { removeRetiredMemoryFileArtifacts } from './memory/retiredMemoryArtifacts';
 import { editWorkingBlock } from './memory/workingBlocks';
 import {
   buildSurfacedSubAgentOutputToolResultSummary,
@@ -611,6 +612,12 @@ async function executeScheduledJob(job: CronJob): Promise<string> {
 export function initializeServices(): void {
   if (initialized) return;
   initialized = true;
+
+  try {
+    removeRetiredMemoryFileArtifacts();
+  } catch (error) {
+    console.warn('[startup] retired memory file cleanup failed:', error);
+  }
 
   initializeDurableRecoveryLifecycle();
 
