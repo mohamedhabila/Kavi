@@ -87,6 +87,94 @@ async function recall(input: {
 }
 
 describe('grounded memory_remember product writes', () => {
+  it('grounds a direct canonical self claim as one exact subject-predicate-value assertion', async () => {
+    const written = await remember({
+      subject: 'user',
+      subjectType: 'self',
+      predicate: 'preferred_channel',
+      value: 'Signal',
+      messageId: 'user-self-direct',
+      messageText: 'I currently prefer Signal.',
+      scope: 'global',
+    });
+
+    expect(written).toMatchObject({
+      ok: true,
+      fact: {
+        subject: 'user',
+        predicate: 'preferred_channel',
+        value: 'Signal',
+        sourceMessageId: 'user-self-direct',
+      },
+    });
+    expect(listFactEvidence(written.fact.id)).toEqual([
+      expect.objectContaining({
+        messageId: 'user-self-direct',
+        quote: 'I currently prefer Signal',
+      }),
+    ]);
+  });
+
+  it.each([
+    ['third-party claim', 'Morgan prefers Signal.'],
+    ['third-party claim under first-person cognition', 'I think Morgan prefers Signal.'],
+    ['negated claim', 'I do not prefer Signal.'],
+    ['quoted claim', 'The note says “I prefer Signal.”'],
+  ])('rejects a canonical self fact derived from a %s', async (_label, messageText) => {
+    const written = await remember({
+      subject: 'user',
+      subjectType: 'self',
+      predicate: 'preferred_channel',
+      value: 'Signal',
+      messageId: `user-adversarial-${_label.replace(/\s+/g, '-')}`,
+      messageText,
+      scope: 'global',
+    });
+
+    expect(written).toMatchObject({ ok: false, code: 'grounding_required' });
+    expect(findEntityByName('user')).toBeNull();
+    expect(listFacts({ predicate: 'preferred_channel' })).toEqual([]);
+  });
+
+  it('accepts the asserted side of a correction while excluding its negated prior value', async () => {
+    const first = await remember({
+      subject: 'user',
+      subjectType: 'self',
+      predicate: 'preferred_channel',
+      value: 'Morgan',
+      messageId: 'user-self-old',
+      messageText: 'I prefer Morgan.',
+      scope: 'global',
+    });
+    const correctionText = 'Correction: I prefer Avery now, not Morgan.';
+    const rejectedOldValue = await remember({
+      subject: 'user',
+      subjectType: 'self',
+      predicate: 'preferred_channel',
+      value: 'Morgan',
+      messageId: 'user-self-correction-old',
+      messageText: correctionText,
+      scope: 'global',
+    });
+    const corrected = await remember({
+      subject: 'user',
+      subjectType: 'self',
+      predicate: 'preferred_channel',
+      value: 'Avery',
+      messageId: 'user-self-correction-new',
+      messageText: correctionText,
+      scope: 'global',
+    });
+
+    expect(first.ok).toBe(true);
+    expect(rejectedOldValue).toMatchObject({ ok: false, code: 'grounding_required' });
+    expect(corrected).toMatchObject({
+      ok: true,
+      fact: { value: 'Avery' },
+      superseded: [expect.objectContaining({ id: first.fact.id, value: 'Morgan' })],
+    });
+  });
+
   it.each([
     {
       label: 'opaque identifier',

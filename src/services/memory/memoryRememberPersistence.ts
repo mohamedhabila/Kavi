@@ -17,6 +17,7 @@ import {
   type GroundedReplacementRejection,
 } from './groundedFactReplacement';
 import { assertMemoryPersistenceSourcesAreWritable } from './withdrawalFence';
+import { deriveExactSelfClaimEvidence } from './exactSelfClaimEvidence';
 
 export interface MemoryRememberPersistenceInput {
   subject: string;
@@ -98,7 +99,16 @@ function hasRequiredSubjectGrounding(
   input: MemoryRememberPersistenceInput,
   evidence: MemoryRememberRequestEvidence | undefined,
 ): boolean {
-  if (!evidence || isCanonicalSelfSubject(input.subject)) return true;
+  if (!evidence) return true;
+  if (isCanonicalSelfSubject(input.subject)) {
+    return Boolean(
+      deriveExactSelfClaimEvidence({
+        userMessageText: evidence.userMessageText,
+        predicate: input.predicate,
+        value: input.value,
+      }),
+    );
+  }
   const subject = normalizedGroundingText(input.subject);
   return (
     Boolean(subject) &&
@@ -149,6 +159,14 @@ export function persistMemoryRemember(
   context: MemoryRememberPersistenceContext,
 ): MemoryRememberPersistenceResult {
   const evidence = context.requestEvidence;
+  const exactSelfClaim =
+    evidence && isCanonicalSelfSubject(input.subject)
+      ? deriveExactSelfClaimEvidence({
+          userMessageText: evidence.userMessageText,
+          predicate: input.predicate,
+          value: input.value,
+        })
+      : null;
   const resolutionContext = {
     memoryConversationId: evidence?.memoryConversationId ?? input.originConversationId ?? '',
     sourceThreadId: evidence?.sourceThreadId ?? input.originThreadId ?? '',
@@ -167,7 +185,7 @@ export function persistMemoryRemember(
     operation: 'replace_current',
     assertionClass: 'current_direct',
     evidenceMessageIds: evidence ? [evidence.userMessageId] : [],
-    evidenceQuote: input.value,
+    evidenceQuote: exactSelfClaim?.evidenceQuote ?? input.value,
   };
   const decision = hasRequiredSubjectGrounding(input, evidence)
     ? evaluateGroundedReplacement(proposal, {
