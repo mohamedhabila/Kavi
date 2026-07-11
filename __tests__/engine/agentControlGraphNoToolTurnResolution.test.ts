@@ -306,6 +306,34 @@ describe('agent control graph no-tool turn resolution', () => {
     expect(params.onContinueThinking).toHaveBeenCalledWith('empty_response_retry');
   });
 
+  it('escalates the token budget for an empty forced-text exhaustion recovery', async () => {
+    const params = buildBaseParams();
+    params.turnAssistantContent = '';
+    params.modelTurnAssistantContent = '';
+    params.effectiveForceTextThisTurn = true;
+    params.nextFinalizationMaxTokens = 8192;
+    params.completion = {
+      completionStatus: 'incomplete',
+      finishReason: 'MAX_TOKENS',
+    };
+
+    const result = await resolveAgentControlGraphNoToolTurn(params);
+
+    expect(result).toEqual({
+      status: 'continued',
+      nextConsecutivePendingAsyncNoToolTurns: 0,
+    });
+    expect(params.recordTurnDirectives).toHaveBeenCalledWith(
+      {
+        forceFinalText: true,
+        forcedTextReason: 'empty_delivery_recovery',
+        maxTokensOverride: 8192,
+        incompleteFinalTextRecoveryCount: 1,
+      },
+      'empty_response_retry',
+    );
+  });
+
   it('retries one ordinary empty stop with selected tools still available', async () => {
     const params = buildBaseParams();
     params.turnAssistantContent = '   ';

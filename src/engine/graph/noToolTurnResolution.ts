@@ -285,6 +285,7 @@ export async function resolveAgentControlGraphNoToolTurn(params: {
   if (emptyResponseRetryReason) {
     const toolsMayBeUsed =
       !params.effectiveForceTextThisTurn && params.selectedToolCount > 0;
+    const tokenBudgetExhausted = isTokenBudgetExhaustedCompletion(params.completion);
     params.applyGraphEvents([
       {
         type: 'FINALIZATION_HELD',
@@ -304,7 +305,7 @@ export async function resolveAgentControlGraphNoToolTurn(params: {
               forcedTextReason: 'empty_delivery_recovery' as const,
             }
           : {}),
-        ...(emptyResponseRetryReason === 'empty_tool_call_retry'
+        ...(tokenBudgetExhausted
           ? { maxTokensOverride: params.nextFinalizationMaxTokens }
           : {}),
         incompleteFinalTextRecoveryCount:
