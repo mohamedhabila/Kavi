@@ -26,6 +26,7 @@ import {
 } from './prompts/orchestratorPromptSections';
 import { repairModelVisibleToolResultTranscript } from './orchestratorToolTranscript';
 import type { CodeOwnedCurrentUserMessage } from './tools/toolExecutionContext';
+import { isMemoryReadEpochCurrent } from '../services/memory/policy';
 
 type LoggerLike = {
   devLog: (message: string, payload?: unknown) => void;
@@ -246,6 +247,14 @@ export async function prepareOrchestratorRequestBundle(params: {
   }
 
   const skillPrompts = await getSkillSystemPrompts(params.conversationId);
+  const livingMemoryEpoch = memoryAccessContext.livingMemory?.memoryReadEpoch;
+  const memoryReadStillCurrent =
+    memoryAccessContext.livingMemory === null ||
+    (livingMemoryEpoch !== undefined && isMemoryReadEpochCurrent(livingMemoryEpoch));
+  const livingMemory = memoryReadStillCurrent ? memoryAccessContext.livingMemory : null;
+  const memoryConsistencyBarrier = memoryReadStillCurrent
+    ? memoryAccessContext.consistencyBarrier
+    : { ...memoryAccessContext.consistencyBarrier, outcome: 'opt_out' as const };
 
   let workingMessages = repairModelVisibleToolResultTranscript(
     requestContext.graphOwnedModelContextMessages.map((message) => {
@@ -288,8 +297,8 @@ export async function prepareOrchestratorRequestBundle(params: {
         }
       : {}),
     latestUserMessageText: requestContext.lastUserMessageText,
-    livingMemory: memoryAccessContext.livingMemory,
-    memoryConsistencyBarrier: memoryAccessContext.consistencyBarrier,
+    livingMemory,
+    memoryConsistencyBarrier,
     requestFrame: requestContext.requestFrame,
     skillPrompts,
     workingMessages,

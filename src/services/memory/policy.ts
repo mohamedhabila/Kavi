@@ -98,6 +98,17 @@ export function getMemoryPolicyEpoch(): number {
   return memoryPolicyEpoch;
 }
 
+/** Capture one enabled read generation for a complete prompt-retrieval request. */
+export function captureMemoryReadEpoch(): number | null {
+  const epoch = memoryPolicyEpoch;
+  return canReadLongTermMemory() ? epoch : null;
+}
+
+/** A read remains admissible only while its original enabled generation is current. */
+export function isMemoryReadEpochCurrent(epoch: number): boolean {
+  return Number.isSafeInteger(epoch) && epoch >= 0 && epoch === memoryPolicyEpoch && canReadLongTermMemory();
+}
+
 export function isMemoryPolicyEpochCurrent(epoch: number): boolean {
   return epoch === memoryPolicyEpoch && canWriteLongTermMemory();
 }

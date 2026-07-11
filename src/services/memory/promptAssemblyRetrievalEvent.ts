@@ -13,6 +13,7 @@ import type {
   MemoryRetrievalExpansion,
   MemoryRetrievalSelector,
 } from './retrievalEventTypes';
+import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from './policy';
 
 const MAX_EVENT_TIMING_MS = 600_000;
 const MAX_EVENT_COUNT = 1_000_000;
@@ -31,6 +32,7 @@ export type PromptAssemblyRetrievalEventInput = Readonly<{
   expansion: MemoryRetrievalExpansion;
   consistencyBarrier?: NextTurnMemoryConsistencyResult;
   createdAt?: number;
+  memoryReadEpoch?: number;
 }>;
 
 export type PromptAssemblyRetrievalEventResult =
@@ -114,7 +116,12 @@ function barrierFromConsistency(
 export async function recordPromptAssemblyRetrievalEvent(
   input: PromptAssemblyRetrievalEventInput,
 ): Promise<PromptAssemblyRetrievalEventResult> {
-  if (input.consistencyBarrier?.outcome === 'opt_out') {
+  const memoryReadEpoch = input.memoryReadEpoch ?? captureMemoryReadEpoch();
+  if (
+    input.consistencyBarrier?.outcome === 'opt_out' ||
+    memoryReadEpoch === null ||
+    !isMemoryReadEpochCurrent(memoryReadEpoch)
+  ) {
     return { status: 'skipped', code: 'opt_out' };
   }
 
@@ -124,6 +131,9 @@ export async function recordPromptAssemblyRetrievalEvent(
       buildMemoryRetrievalScopeHash('memory_conversation', input.memoryConversationId),
       buildMemoryRetrievalScopeHash('source_thread', input.sourceThreadId),
     ]);
+    if (!isMemoryReadEpochCurrent(memoryReadEpoch)) {
+      return { status: 'skipped', code: 'opt_out' };
+    }
     const disabled = input.state === 'disabled';
     const factIds = disabled ? [] : selectedIds(input.selectedFactIds);
     const episodeIds = disabled ? [] : selectedIds(input.selectedEpisodeIds);
@@ -138,6 +148,9 @@ export async function recordPromptAssemblyRetrievalEvent(
     const evidenceExpansionMs = disabled ? 0 : boundedInteger(input.expansion.durationMs);
     const retrievalTotalMs = disabled ? 0 : boundedInteger(input.retrievalTimings?.totalMs);
 
+    if (!isMemoryReadEpochCurrent(memoryReadEpoch)) {
+      return { status: 'skipped', code: 'opt_out' };
+    }
     const result = await recordMemoryRetrievalEvent({
       operation: 'prompt_assembly',
       mode: disabled ? 'disabled' : input.query.trim() ? 'query' : 'recent',
@@ -184,8 +197,14 @@ export async function recordPromptAssemblyRetrievalEvent(
       barrier: disabled ? null : barrierFromConsistency(input.consistencyBarrier),
       ...(typeof input.createdAt === 'number' ? { createdAt: input.createdAt } : {}),
     });
+    if (!isMemoryReadEpochCurrent(memoryReadEpoch)) {
+      return { status: 'skipped', code: 'opt_out' };
+    }
     return result.status === 'recorded' ? { ...result, code: 'recorded' } : result;
   } catch {
+    if (!isMemoryReadEpochCurrent(memoryReadEpoch)) {
+      return { status: 'skipped', code: 'opt_out' };
+    }
     return { status: 'failed', code: 'derivation_error' };
   }
 }

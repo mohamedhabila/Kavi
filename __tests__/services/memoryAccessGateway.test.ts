@@ -30,6 +30,8 @@ jest.mock('../../src/services/memory/livingMemoryBridge', () => ({
 
 jest.mock('../../src/services/memory/policy', () => ({
   canReadLongTermMemory: jest.fn().mockReturnValue(true),
+  captureMemoryReadEpoch: jest.fn().mockReturnValue(7),
+  isMemoryReadEpochCurrent: jest.fn().mockReturnValue(true),
 }));
 
 jest.mock('../../src/services/memory/ingestionQueueStore', () => ({
@@ -37,7 +39,10 @@ jest.mock('../../src/services/memory/ingestionQueueStore', () => ({
 }));
 
 import { buildLivingMemorySections } from '../../src/services/memory/livingMemoryBridge';
-import { canReadLongTermMemory } from '../../src/services/memory/policy';
+import {
+  canReadLongTermMemory,
+  isMemoryReadEpochCurrent,
+} from '../../src/services/memory/policy';
 import { getIngestionJobForSourceTurn } from '../../src/services/memory/ingestionQueueStore';
 import type { IngestionJob } from '../../src/services/memory/ingestionQueueStore';
 import type { LlmProviderConfig } from '../../src/types/provider';
@@ -103,6 +108,7 @@ describe('memoryAccessGateway', () => {
     jest.useRealTimers();
     jest.clearAllMocks();
     (canReadLongTermMemory as jest.Mock).mockReturnValue(true);
+    (isMemoryReadEpochCurrent as jest.Mock).mockReturnValue(true);
     mockedGetIngestionJobForSourceTurn.mockReturnValue(null);
   });
 
@@ -265,6 +271,7 @@ describe('memoryAccessGateway', () => {
 
   it('returns no living memory when long-term memory is disabled', async () => {
     (canReadLongTermMemory as jest.Mock).mockReturnValue(false);
+    (isMemoryReadEpochCurrent as jest.Mock).mockReturnValue(false);
 
     const messages: Message[] = [
       makeMessage({ id: 'u1', role: 'user', content: 'Fix migration mismatch', timestamp: 1_000 }),

@@ -35,6 +35,7 @@ import {
   type RequiredMemoryAccessScopeIdentity,
 } from './memoryScopeIdentity';
 import type { MemoryApplicabilityUseIntent } from './memoryApplicabilityTypes';
+import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from './policy';
 
 export interface RetrievalOrchestratorInput {
   userMessage: string;
@@ -49,6 +50,7 @@ export interface RetrievalOrchestratorInput {
   factSelector?: MemoryFactSelector;
   candidateStrategy?: RecallCandidateStrategy;
   localSimilarity?: RecallLocalSimilarityInput;
+  memoryReadEpoch?: number;
 }
 
 export interface RetrievalOrchestratorResult {
@@ -149,6 +151,18 @@ function recallOptions(
     memoryScope,
     useIntent: input.memoryUseIntent ?? 'automatic_prompt',
     now,
+    memoryReadEpoch: input.memoryReadEpoch,
+  };
+}
+
+function emptyRetrievalResult(): RetrievalOrchestratorResult {
+  return {
+    facts: [],
+    resolutionFacts: [],
+    episodes: [],
+    episodeSelections: [],
+    querySignals: [],
+    scoredFacts: [],
   };
 }
 
@@ -185,12 +199,17 @@ function resolveRetrievalScope(input: RetrievalOrchestratorInput): {
 export async function orchestrateMemoryRetrieval(
   input: RetrievalOrchestratorInput,
 ): Promise<RetrievalOrchestratorResult> {
-  const scope = resolveRetrievalScope(input);
-  const now = normalizeRetrievalNow(input.now);
-  const limit = normalizeRetrievalLimit(input.limit);
+  const memoryReadEpoch = input.memoryReadEpoch ?? captureMemoryReadEpoch();
+  if (memoryReadEpoch === null || !isMemoryReadEpochCurrent(memoryReadEpoch)) {
+    return emptyRetrievalResult();
+  }
+  const readInput = { ...input, memoryReadEpoch };
+  const scope = resolveRetrievalScope(readInput);
+  const now = normalizeRetrievalNow(readInput.now);
+  const limit = normalizeRetrievalLimit(readInput.limit);
   const totalStarted = Date.now();
   const planStarted = Date.now();
-  const querySignals = buildQuerySignals(input, scope.taskId);
+  const querySignals = buildQuerySignals(readInput, scope.taskId);
   const query = querySignals.join('\n');
   const planMs = Date.now() - planStarted;
   const recallTimings: RecallFactsTiming[] = [];
@@ -199,9 +218,16 @@ export async function orchestrateMemoryRetrieval(
   const selection = query
     ? await recallFactSelectionForQuery(
         query,
-        recallOptions(input, scope.memoryScope, limit, now, (timing) => recallTimings.push(timing)),
+        recallOptions(
+          readInput,
+          scope.memoryScope,
+          limit,
+          now,
+          (timing) => recallTimings.push(timing),
+        ),
       )
     : { facts: [], resolutionFacts: [], scoredFacts: [] };
+  if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return emptyRetrievalResult();
   const recallMs = Date.now() - recallStarted;
   const { facts, resolutionFacts, scoredFacts } = selection;
 

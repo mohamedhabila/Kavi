@@ -3,6 +3,7 @@ import { prepareAgentTurn } from '../agentTurnPreparation';
 import type { PreparedAgentTurn } from '../agentTurnPreparation';
 import type { PromptContextSupport } from '../prepareAgentControlGraphModelTurnTypes';
 import type { ToolDefinition } from '../../../types/tool';
+import { isMemoryReadEpochCurrent } from '../../../services/memory/policy';
 
 export function buildPreparedModelTurnPrompt(params: {
   actionablePromptTurn: boolean;
@@ -15,6 +16,11 @@ export function buildPreparedModelTurnPrompt(params: {
   promptContextSupport: PromptContextSupport;
   toolingEnabledForProvider: boolean;
 }): PreparedAgentTurn {
+  const livingMemorySections =
+    params.promptContextSupport.livingMemoryReadEpoch !== undefined &&
+    isMemoryReadEpochCurrent(params.promptContextSupport.livingMemoryReadEpoch)
+      ? params.promptContextSupport.livingMemorySections
+      : undefined;
   return prepareAgentTurn({
     allowSessionCoordinationTools: params.allowSessionCoordinationTools,
     effectiveForceTextThisTurn: params.effectiveForceTextThisTurn,
@@ -33,7 +39,7 @@ export function buildPreparedModelTurnPrompt(params: {
       groundedRequestScopedTools: params.groundedRequestScopedTools,
       iteration: params.iteration,
       livingMemorySections: params.actionablePromptTurn
-        ? params.promptContextSupport.livingMemorySections
+        ? livingMemorySections
         : undefined,
       maxToolIterations: params.promptContextSupport.maxToolIterations,
       resolvedPrompt: params.promptContextSupport.resolvedPrompt,

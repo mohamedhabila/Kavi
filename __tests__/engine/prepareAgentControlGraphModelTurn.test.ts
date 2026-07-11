@@ -280,6 +280,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
         ...createBaseParams().promptContextSupport,
         conversationMemory: 'Prior conversation memory',
         livingMemorySections: [{ text: 'Living memory section' }],
+        livingMemoryReadEpoch: 0,
       },
       turnDirectives: {
         forceFinalText: true,
@@ -362,6 +363,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
         ...createBaseParams().promptContextSupport,
         conversationMemory: 'Prior conversation memory',
         livingMemorySections: [{ text: 'Living memory section' }],
+        livingMemoryReadEpoch: 0,
       },
     });
 
@@ -371,6 +373,31 @@ describe('prepareAgentControlGraphModelTurn', () => {
           conversationMemory: 'Prior conversation memory',
           livingMemorySections: [{ text: 'Living memory section' }],
         }),
+      }),
+    );
+  });
+
+  it('drops living-memory sections from the model prompt when their read epoch is stale', async () => {
+    mockedPlanIterationModel.mockReturnValue({
+      model: 'gpt-5-mini',
+      maxTokens: 1024,
+      thinkingLevel: 'minimal',
+      reason: 'test',
+    } as any);
+    mockPreparedTurn();
+
+    await prepareAgentControlGraphModelTurn({
+      ...createBaseParams(),
+      promptContextSupport: {
+        ...createBaseParams().promptContextSupport,
+        livingMemorySections: [{ text: 'Private stale memory section' }],
+        livingMemoryReadEpoch: -1,
+      },
+    });
+
+    expect(mockedPrepareAgentTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        promptBundleContext: expect.objectContaining({ livingMemorySections: undefined }),
       }),
     );
   });

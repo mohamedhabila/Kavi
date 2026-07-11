@@ -1,6 +1,6 @@
 import { getIngestionJobForSourceTurn } from './ingestionQueueStore';
 import type { IngestionJob, IngestionJobStatus } from './ingestionQueueStore';
-import { canReadLongTermMemory } from './policy';
+import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from './policy';
 
 export const NEXT_TURN_MEMORY_CONSISTENCY_BUDGET_MS = 120;
 export const NEXT_TURN_MEMORY_CONSISTENCY_INITIAL_BACKOFF_MS = 8;
@@ -34,6 +34,8 @@ export type NextTurnMemoryConsistencyInput = Readonly<{
   sourceThreadId: string;
   sourceEndMessageId: string | null;
   clock?: NextTurnMemoryConsistencyClock;
+  /** Request-scoped read generation captured before this async barrier. */
+  memoryReadEpoch?: number;
 }>;
 
 const DEFAULT_CLOCK: NextTurnMemoryConsistencyClock = {
@@ -68,6 +70,7 @@ export async function waitForNextTurnMemoryConsistency(
   let waitedMs = 0;
   let queryCount = 0;
   let queueAgeMs: number | null = null;
+  const memoryReadEpoch = input.memoryReadEpoch ?? captureMemoryReadEpoch();
 
   const result = (
     outcome: NextTurnMemoryConsistencyOutcome,
@@ -85,7 +88,7 @@ export async function waitForNextTurnMemoryConsistency(
     finalJobStatus,
   });
 
-  if (!canReadLongTermMemory()) {
+  if (memoryReadEpoch === null || !isMemoryReadEpochCurrent(memoryReadEpoch)) {
     return result('opt_out', null, null, 0);
   }
 
@@ -132,6 +135,9 @@ export async function waitForNextTurnMemoryConsistency(
     const delayMs = Math.min(nextBackoffMs, NEXT_TURN_MEMORY_CONSISTENCY_BUDGET_MS - waitedMs);
     waitedMs += delayMs;
     await clock.wait(delayMs);
+    if (!isMemoryReadEpochCurrent(memoryReadEpoch)) {
+      return result('opt_out', initialJobStatus, job.status, 1);
+    }
     nextBackoffMs = Math.min(NEXT_TURN_MEMORY_CONSISTENCY_MAX_BACKOFF_MS, nextBackoffMs * 2);
     read = readJob();
     if (read.failed) {

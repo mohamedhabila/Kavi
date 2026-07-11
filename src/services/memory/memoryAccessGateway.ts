@@ -23,6 +23,7 @@ import {
 import { createCurrentLocalSimilarityVector } from './localSimilarity';
 import { buildRecentUserRetrievalQuery } from './retrievalQueryText';
 import { maintainCurrentFactLocalSimilarity } from './localSimilarityBackfill';
+import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from './policy';
 
 type MemoryAccessMode = 'chat' | 'agentic' | 'pilot';
 
@@ -77,19 +78,26 @@ export async function buildUnifiedMemoryAccessContext(
   const scopedMessages =
     boundary.startIndex > 0 ? normalizedMessages.slice(boundary.startIndex) : normalizedMessages;
   const precedingClosedTurn = findLastClosedTurn(normalizedMessages);
+  const memoryReadEpoch = captureMemoryReadEpoch();
   const consistencyBarrier = await waitForNextTurnMemoryConsistency({
     memoryConversationId: request.memoryConversationId,
     sourceThreadId: request.sourceThreadId,
     sourceEndMessageId: precedingClosedTurn.assistant?.id ?? null,
+    ...(memoryReadEpoch !== null ? { memoryReadEpoch } : {}),
   });
 
-  if (consistencyBarrier.outcome === 'opt_out') {
-    return {
-      boundary,
-      scopedMessages,
-      livingMemory: null,
-      consistencyBarrier,
-    };
+  const optOutResult = (): UnifiedMemoryAccessResult => ({
+    boundary,
+    scopedMessages,
+    livingMemory: null,
+    consistencyBarrier: { ...consistencyBarrier, outcome: 'opt_out' },
+  });
+  if (
+    memoryReadEpoch === null ||
+    consistencyBarrier.outcome === 'opt_out' ||
+    !isMemoryReadEpochCurrent(memoryReadEpoch)
+  ) {
+    return optOutResult();
   }
 
   if (retrievalStrategy === 'production') {
@@ -121,9 +129,12 @@ export async function buildUnifiedMemoryAccessContext(
     ...(retrievalStrategy === 'production' && request.retrievalLlm
       ? { retrievalLlm: request.retrievalLlm }
       : {}),
+    memoryReadEpoch,
   });
+  if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return optOutResult();
   const livingMemory: LivingMemoryBridgeOutput = {
     ...livingMemoryResult,
+    memoryReadEpoch,
     consistencyBarrier,
   };
 

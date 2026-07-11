@@ -32,6 +32,10 @@ import type {
   MemoryApplicabilitySummary,
 } from '../../services/memory/memoryApplicabilityTypes';
 import { projectAgentRunExperienceViews } from '../../services/memory/experienceRecords';
+import {
+  captureMemoryReadEpoch,
+  isMemoryReadEpochCurrent,
+} from '../../services/memory/policy';
 
 type MemorySearchScope = 'all' | 'conversation' | 'global';
 
@@ -146,10 +150,23 @@ export async function executeMemorySearch(
   args: { query: string; maxResults?: number; scope?: 'all' | 'conversation' | 'global' },
   options: MemorySearchOptions,
 ): Promise<string> {
+  const memoryReadEpoch = captureMemoryReadEpoch();
   const query = typeof args.query === 'string' ? args.query.trim() : '';
   const maxResults = clampMemorySearchLimit(args.maxResults);
   const requestedScope = normalizeMemorySearchScope(args.scope);
   const conversationId = options.memoryConversationId;
+  const optOutResult = () =>
+    JSON.stringify({
+      results: [],
+      method: 'living_memory',
+      index: 'memory_facts',
+      totalFound: 0,
+      scope: requestedScope,
+      outcome: 'opt_out',
+    });
+  if (memoryReadEpoch === null || !isMemoryReadEpochCurrent(memoryReadEpoch)) {
+    return optOutResult();
+  }
   try {
     if (!query) {
       return JSON.stringify({
@@ -184,7 +201,9 @@ export async function executeMemorySearch(
       useIntent: 'explicit_user_request',
       now,
       ...(scopeFilter ? { scopeFilter } : {}),
+      memoryReadEpoch,
     });
+    if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return optOutResult();
     const candidateFacts = [...selection.facts, ...selection.resolutionFacts];
     let conflictObservationReadState: 'available' | 'failed' = 'available';
     let persistedConflicts: ReturnType<typeof loadActiveMemoryFactConflictSignals> = [];
@@ -219,10 +238,12 @@ export async function executeMemorySearch(
       promptVisibleFactCount: selected.length,
       promptBudgetDroppedFactCount: applicability.summary.promptVisibleFactCount - selected.length,
     };
+    if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return optOutResult();
     markFactsRecalled(
       selected.map((entry) => entry.fact.id),
       now,
     );
+    if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return optOutResult();
     return JSON.stringify({
       results: selected.map(formatSearchResult),
       method: 'living_memory',
@@ -234,6 +255,7 @@ export async function executeMemorySearch(
       ...(applicabilitySummary.state === 'degraded' ? { degraded: true } : {}),
     });
   } catch (error) {
+    if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return optOutResult();
     return JSON.stringify({
       results: [],
       method: 'living_memory',

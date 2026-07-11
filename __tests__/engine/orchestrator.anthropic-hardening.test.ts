@@ -69,6 +69,8 @@ jest.mock('../../src/services/memory/livingMemoryBridge', () => ({
 
 jest.mock('../../src/services/memory/policy', () => ({
   canReadLongTermMemory: jest.fn().mockReturnValue(true),
+  captureMemoryReadEpoch: jest.fn().mockReturnValue(0),
+  isMemoryReadEpochCurrent: jest.fn().mockReturnValue(true),
 }));
 
 jest.mock('../../src/services/commands/parser', () => ({

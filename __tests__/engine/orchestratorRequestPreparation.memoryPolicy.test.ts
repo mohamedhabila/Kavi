@@ -9,6 +9,12 @@ jest.mock('../../src/services/skills/manager', () => ({
 import { prepareOrchestratorRequestBundle } from '../../src/engine/orchestratorRequestPreparation';
 import { buildUnifiedMemoryAccessContext } from '../../src/services/memory/memoryAccessGateway';
 import type { LlmProviderConfig } from '../../src/types/provider';
+import { getSkillSystemPrompts } from '../../src/services/skills/manager';
+import {
+  captureMemoryReadEpoch,
+  initializeMemoryPolicyObservation,
+} from '../../src/services/memory/policy';
+import { useSettingsStore } from '../../src/store/useSettingsStore';
 
 const mockedBuildUnifiedMemoryAccessContext = jest.mocked(buildUnifiedMemoryAccessContext);
 const provider = {
@@ -65,6 +71,12 @@ function gatewayResult() {
 describe('orchestrator request memory policy', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    useSettingsStore.setState({ disableLongTermMemory: false } as never);
+    initializeMemoryPolicyObservation();
+  });
+
+  afterEach(() => {
+    useSettingsStore.setState({ disableLongTermMemory: false } as never);
   });
 
   it('forwards explicit retrieval and context strategies to the unified gateway', async () => {
@@ -136,6 +148,55 @@ describe('orchestrator request memory policy', () => {
     expect(result.requestFrame).toMatchObject({
       mode: 'agentic',
       continuation: 'resume_waiting_async',
+    });
+  });
+
+  it('drops retrieved prompt sections when opt-out lands during later async preparation', async () => {
+    const memoryReadEpoch = captureMemoryReadEpoch()!;
+    mockedBuildUnifiedMemoryAccessContext.mockResolvedValue({
+      ...gatewayResult(),
+      livingMemory: {
+        memoryReadEpoch,
+        sections: [{ text: 'private memory prompt section' }],
+        cacheableSignature: 'private-signature',
+        focusBlockText: '',
+        openThreadLabels: [],
+        recalledFactCount: 1,
+        recalledEpisodeCount: 0,
+        applicabilityPolicy: {
+          state: 'applied',
+          useCount: 1,
+          askCount: 0,
+          abstainCount: 0,
+          silentCount: 0,
+          promptVisibleFactCount: 1,
+          promptBudgetDroppedFactCount: 0,
+          reasonCounts: {},
+        },
+      },
+    });
+    let releaseSkills!: () => void;
+    const skillGate = new Promise<void>((resolve) => {
+      releaseSkills = resolve;
+    });
+    let skillsStarted!: () => void;
+    const skillsEntered = new Promise<void>((resolve) => {
+      skillsStarted = resolve;
+    });
+    jest.mocked(getSkillSystemPrompts).mockImplementation(async () => {
+      skillsStarted();
+      await skillGate;
+      return [];
+    });
+
+    const pending = prepareOrchestratorRequestBundle(baseParams());
+    await skillsEntered;
+    useSettingsStore.setState({ disableLongTermMemory: true } as never);
+    releaseSkills();
+
+    await expect(pending).resolves.toMatchObject({
+      livingMemory: null,
+      memoryConsistencyBarrier: { outcome: 'opt_out' },
     });
   });
 });

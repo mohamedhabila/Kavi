@@ -53,11 +53,15 @@ describe('memory policy observation', () => {
     expect(harness.policy.initializeMemoryPolicyObservation()).toBe(true);
     expect(harness.policy.initializeMemoryPolicyObservation()).toBe(true);
     expect(harness.subscribe).toHaveBeenCalledTimes(1);
+    const readEpoch = harness.policy.captureMemoryReadEpoch();
+    expect(readEpoch).toBe(initialEpoch);
+    expect(harness.policy.isMemoryReadEpochCurrent(readEpoch!)).toBe(true);
 
     harness.setDisabled(true);
     expect(handler).toHaveBeenCalledTimes(1);
     expect(harness.policy.getMemoryPolicyEpoch()).toBe(initialEpoch + 1);
     expect(harness.policy.canReadLongTermMemory()).toBe(false);
+    expect(harness.policy.isMemoryReadEpochCurrent(readEpoch!)).toBe(false);
 
     harness.setDisabled(true);
     expect(handler).toHaveBeenCalledTimes(1);

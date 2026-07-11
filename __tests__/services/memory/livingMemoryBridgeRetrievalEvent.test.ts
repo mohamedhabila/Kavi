@@ -6,6 +6,7 @@ jest.mock('expo-sqlite', () => {
 import { ensureDefaultBlocks } from '../../../src/services/memory/blocks';
 import { upsertEntity } from '../../../src/services/memory/entities';
 import { recordFactWithApplicability } from '../../../src/services/memory/facts/mutations';
+import { getFactById } from '../../../src/services/memory/facts/queries';
 import { buildLivingMemorySections } from '../../../src/services/memory/livingMemoryBridge';
 import * as llmFactSelector from '../../../src/services/memory/llmFactSelector';
 import { readRecentMemoryRetrievalEvents } from '../../../src/services/memory/retrievalLog';
@@ -16,6 +17,8 @@ import {
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
 import * as sqliteStore from '../../../src/services/memory/sqlite-store';
 import type { Message } from '../../../src/types/message';
+import { useSettingsStore } from '../../../src/store/useSettingsStore';
+import { initializeMemoryPolicyObservation } from '../../../src/services/memory/policy';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -29,9 +32,12 @@ beforeEach(() => {
   resetFactSchemaCacheForTests();
   ensureFactSchema();
   ensureDefaultBlocks();
+  useSettingsStore.setState({ disableLongTermMemory: false } as never);
+  initializeMemoryPolicyObservation();
 });
 
 afterEach(() => {
+  useSettingsStore.setState({ disableLongTermMemory: false } as never);
   closeMemoryDb();
   jest.restoreAllMocks();
 });
@@ -168,5 +174,55 @@ describe('living memory structured retrieval evidence', () => {
     );
     expect(out.retrievalEvent).toBeUndefined();
     expect(databaseSpy).not.toHaveBeenCalled();
+  });
+
+  it('discards a deferred selector result when memory is disabled before it settles', async () => {
+    const project = upsertEntity({ name: 'deferred selector privacy', type: 'project' });
+    const fact = recordFactWithApplicability(
+      {
+        subjectId: project.id,
+        predicate: 'decision',
+        objectText: 'deferred selector privacy evidence',
+        scope: 'global',
+        importance: 0.9,
+        now: 500,
+      },
+      { factClass: 'workflow', sourceAuthority: 'tool_observed' },
+    ).fact;
+    let releaseSelector!: (result: { factIds: string[] }) => void;
+    const selectorResult = new Promise<{ factIds: string[] }>((resolve) => {
+      releaseSelector = resolve;
+    });
+    let selectorStarted!: () => void;
+    const selectorEntered = new Promise<void>((resolve) => {
+      selectorStarted = resolve;
+    });
+    jest.spyOn(llmFactSelector, 'createLlmMemoryFactSelector').mockReturnValue(async () => {
+      selectorStarted();
+      return selectorResult;
+    });
+
+    const pending = buildLivingMemorySections({
+      messages: [userMessage('deferred selector privacy evidence', 1_000)],
+      conversationId: 'memory-selector-opt-out',
+      sourceThreadId: 'thread-selector-opt-out',
+      personaId: 'default',
+      taskId: null,
+      now: 2_000,
+      retrievalLlm: { provider: {} as never },
+    });
+    await selectorEntered;
+    useSettingsStore.setState({ disableLongTermMemory: true } as never);
+    releaseSelector({ factIds: [fact.id] });
+
+    await expect(pending).resolves.toEqual(
+      expect.objectContaining({
+        sections: [],
+        recalledFactCount: 0,
+        recalledEpisodeCount: 0,
+      }),
+    );
+    expect(getFactById(fact.id)?.accessCount).toBe(0);
+    expect(readRecentMemoryRetrievalEvents()).toEqual([]);
   });
 });

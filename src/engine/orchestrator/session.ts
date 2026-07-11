@@ -168,6 +168,7 @@ export async function runOrchestratorGraphSession(params: {
         globalMemory: null,
         graphGoals: graph.getGraphSnapshot().goals ?? [],
         livingMemorySections: livingMemory?.sections,
+        livingMemoryReadEpoch: livingMemory?.memoryReadEpoch,
         maxToolIterations,
         resolvedPrompt,
         runtimeContext: runtimeContextNote,

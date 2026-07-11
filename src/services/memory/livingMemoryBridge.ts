@@ -59,6 +59,7 @@ import type { RequiredMemoryAccessScopeIdentity } from './memoryScopeIdentity';
 import { resolveLocalMemoryAccessScope } from './memoryScopeStore';
 import { markFactsRecalled } from './facts/mutations';
 import { buildRecentUserRetrievalQuery } from './retrievalQueryText';
+import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from './policy';
 
 const logger = createLogger('memory.livingMemoryBridge');
 
@@ -125,9 +126,13 @@ export interface BuildLivingMemorySectionsOptions {
   candidateStrategy?: RecallCandidateStrategy;
   /** One deterministic query vector created by the memory-access gateway. */
   localSimilarity?: RecallLocalSimilarityInput;
+  /** One enabled read generation spanning barrier, selector, prompt, and telemetry. */
+  memoryReadEpoch?: number;
 }
 
 export interface LivingMemoryBridgeOutput {
+  /** Enabled policy generation that authorizes these prompt sections. */
+  memoryReadEpoch?: number;
   /** Sections to append to the existing system-prompt sections array. */
   sections: SystemPromptSection[];
   /** Stable hash of the provider-cacheable prefix. Memory sections are dynamic until epoch admission. */
@@ -324,7 +329,10 @@ export async function buildLivingMemorySections(
     externalMemoryEvidence,
     candidateStrategy,
     localSimilarity,
+    memoryReadEpoch: requestedMemoryReadEpoch,
   } = options;
+
+  const memoryReadEpoch = requestedMemoryReadEpoch ?? captureMemoryReadEpoch();
 
   if (!Array.isArray(messages) || messages.length === 0) {
     return EMPTY_OUTPUT;
@@ -332,7 +340,12 @@ export async function buildLivingMemorySections(
 
   // When the user has opted out of long-term memory, we bail BEFORE any block read or recall query
   // so the SQLite path is not touched and the prompt stays stateless.
-  if (disableLongTermMemory || consistencyBarrier?.outcome === 'opt_out') {
+  if (
+    disableLongTermMemory ||
+    consistencyBarrier?.outcome === 'opt_out' ||
+    memoryReadEpoch === null ||
+    !isMemoryReadEpochCurrent(memoryReadEpoch)
+  ) {
     return EMPTY_OUTPUT;
   }
 
@@ -411,7 +424,11 @@ export async function buildLivingMemorySections(
   >['episodeSelections'] = [];
   let retrievalTimings: RetrievalOrchestratorTimings | undefined;
   let retrievalState: PromptAssemblyRetrievalState = disableRecall ? 'disabled' : 'completed';
-  const factSelector = !disableRecall ? createLlmMemoryFactSelector(retrievalLlm) : null;
+  const factSelector = !disableRecall
+    ? createLlmMemoryFactSelector(
+        retrievalLlm ? { ...retrievalLlm, memoryReadEpoch } : undefined,
+      )
+    : null;
   if (!disableRecall) {
     const retrievalStarted = Date.now();
     try {
@@ -428,13 +445,16 @@ export async function buildLivingMemorySections(
         now,
         ...(candidateStrategy ? { candidateStrategy } : {}),
         ...(localSimilarity ? { localSimilarity } : {}),
+        memoryReadEpoch,
       });
+      if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return EMPTY_OUTPUT;
       recalledFacts = retrieval.facts;
       resolutionFacts = retrieval.resolutionFacts;
       recalledEpisodes = retrieval.episodes;
       recalledEpisodeSelections = retrieval.episodeSelections;
       retrievalTimings = retrieval.timings;
     } catch (error) {
+      if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return EMPTY_OUTPUT;
       logger.devWarn(
         'livingMemoryBridge.orchestrateMemoryRetrieval failed:',
         error instanceof Error ? error.message : String(error),
@@ -567,12 +587,14 @@ export async function buildLivingMemorySections(
   const idleSinceLastTurnMs =
     typeof idleAnchor === 'number' ? Math.max(now - idleAnchor, 0) : undefined;
 
+  if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return EMPTY_OUTPUT;
   markFactsRecalled(
     assemblyVisibleFacts.map((fact) => fact.id),
     now,
   );
 
   const eventStarted = Date.now();
+  if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return EMPTY_OUTPUT;
   const retrievalEvent = await recordPromptAssemblyRetrievalEvent({
     query,
     ...(conversationId ? { memoryConversationId: conversationId } : {}),
@@ -585,12 +607,16 @@ export async function buildLivingMemorySections(
     ...(retrievalTimings ? { retrievalTimings } : {}),
     ...(consistencyBarrier ? { consistencyBarrier } : {}),
     createdAt: now,
+    memoryReadEpoch,
   });
+  if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return EMPTY_OUTPUT;
   timings.recordRetrievalEventMs += Date.now() - eventStarted;
   timings.totalMs = Date.now() - totalStarted;
   if (retrievalTimings) timings.retrieval = retrievalTimings;
 
+  if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return EMPTY_OUTPUT;
   return {
+    memoryReadEpoch,
     sections,
     cacheableSignature: assembled.cacheableSignature,
     focusBlockText,

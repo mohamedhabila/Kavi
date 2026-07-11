@@ -29,6 +29,7 @@ import {
   requireFactRecallAccessContext,
   type FactRecallAccessContext,
 } from './factRecallAccessPolicy';
+import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from './policy';
 
 export type {
   MemoryFactSelector,
@@ -134,6 +135,8 @@ async function selectFactsWithSemanticSelector(params: {
 }): Promise<ScoredFact[]> {
   const selector = params.options.selector;
   if (!selector) return [...params.deterministicSelected];
+  const memoryReadEpoch = params.options.memoryReadEpoch;
+  if (memoryReadEpoch === undefined || !isMemoryReadEpochCurrent(memoryReadEpoch)) return [];
 
   const requestedSelectorCandidateLimit = normalizePositiveIntegerLimit(
     params.options.selectorCandidateLimit,
@@ -178,11 +181,13 @@ async function selectFactsWithSemanticSelector(params: {
   const semanticSelectedEntries: ScoredFact[] = [];
   const selectorStarted = Date.now();
   try {
+    if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return [];
     const result = await selector({
       query: params.query,
       limit: params.limit,
       candidates,
     });
+    if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return [];
     for (const factId of result.factIds) {
       const entry = byId.get(factId);
       if (!entry) continue;
@@ -196,6 +201,7 @@ async function selectFactsWithSemanticSelector(params: {
       if (appendSelected(entry)) semanticAdmittedCount += 1;
     }
   } catch {
+    if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return [];
     params.timing.selectorSelectedCount = 0;
     params.timing.selectorApplied = false;
     return [...params.deterministicSelected];
@@ -269,6 +275,11 @@ async function buildRecallSelection(
   query: string,
   options: RecallFactsOptions,
 ): Promise<RecallFactSelection> {
+  const memoryReadEpoch = options.memoryReadEpoch ?? captureMemoryReadEpoch();
+  if (memoryReadEpoch === null || !isMemoryReadEpochCurrent(memoryReadEpoch)) {
+    return { facts: [], resolutionFacts: [], scoredFacts: [] };
+  }
+  const readOptions: RecallFactsOptions = { ...options, memoryReadEpoch };
   const totalStarted = Date.now();
   const timing: RecallFactsTiming = {
     queryChars: query.length,
@@ -284,31 +295,35 @@ async function buildRecallSelection(
     selectMs: 0,
     totalMs: 0,
   };
-  const limit = normalizePositiveIntegerLimit(options.limit, DEFAULT_LIMIT, 50);
+  const limit = normalizePositiveIntegerLimit(readOptions.limit, DEFAULT_LIMIT, 50);
   const requestedCandidatePool = normalizePositiveIntegerLimit(
-    options.candidatePoolLimit,
+    readOptions.candidatePoolLimit,
     CANDIDATE_POOL_LIMIT,
     CANDIDATE_POOL_MAX,
   );
   const candidatePool = Math.max(limit, requestedCandidatePool);
   const resolutionCandidateLimit = normalizePositiveIntegerLimit(
-    options.resolutionCandidateLimit,
+    readOptions.resolutionCandidateLimit,
     DEFAULT_RESOLUTION_CANDIDATE_LIMIT,
     MAX_RESOLUTION_CANDIDATE_LIMIT,
   );
-  const alwaysIncludePinned = options.alwaysIncludePinned !== false;
+  const alwaysIncludePinned = readOptions.alwaysIncludePinned !== false;
   const trimmedQuery = query.trim();
-  if (options.now !== undefined && options.asOf !== undefined && options.now !== options.asOf) {
+  if (
+    readOptions.now !== undefined &&
+    readOptions.asOf !== undefined &&
+    readOptions.now !== readOptions.asOf
+  ) {
     throw new Error('memory_recall_access_timestamp_mismatch');
   }
-  const now = options.asOf ?? options.now ?? Date.now();
+  const now = readOptions.asOf ?? readOptions.now ?? Date.now();
   const accessContext = requireFactRecallAccessContext({
-    memoryScope: options.memoryScope,
-    useIntent: options.useIntent,
+    memoryScope: readOptions.memoryScope,
+    useIntent: readOptions.useIntent,
     asOf: now,
   });
-  const candidateScopes = getCandidateScopes(options);
-  const candidateStrategy = options.candidateStrategy ?? 'hybrid';
+  const candidateScopes = getCandidateScopes(readOptions);
+  const candidateStrategy = readOptions.candidateStrategy ?? 'hybrid';
   const directRecallScopeIdentity = {
     ...accessContext.scope,
     useIntent: accessContext.useIntent,
@@ -320,7 +335,7 @@ async function buildRecallSelection(
     candidateLane: 'resolution' as const,
   };
   const eligibleScanLimit = normalizePositiveIntegerLimit(
-    options.eligibleScanLimit,
+    readOptions.eligibleScanLimit,
     RECALL_CANDIDATE_LIMITS.defaultEligibleScan,
     RECALL_CANDIDATE_LIMITS.maximumEligibleScan,
   );
@@ -336,7 +351,7 @@ async function buildRecallSelection(
   const recallLexicalUnits = buildRecallLexicalUnits(
     queryUnitCounts,
     anchorLexicalUnits,
-    options.lexicalUnitLimit,
+    readOptions.lexicalUnitLimit,
   );
   timing.tokenizeQueryMs = Date.now() - tokenizeStarted;
   timing.queryUnitCount = queryUnits.size;
@@ -354,7 +369,7 @@ async function buildRecallSelection(
       scopedRecentConversationId: accessContext.scope.memoryConversationId,
       ...(accessContext.scope.taskId ? { scopedRecentTaskId: accessContext.scope.taskId } : {}),
       ...(candidateScopes ? { scope: candidateScopes } : {}),
-      ...(options.memoryKind ? { memoryKind: options.memoryKind } : {}),
+      ...(readOptions.memoryKind ? { memoryKind: readOptions.memoryKind } : {}),
       asOf: now,
       anchorLexicalUnitSets: anchorUnitSets.map((anchorUnits) => Array.from(anchorUnits)),
     }),
@@ -365,7 +380,7 @@ async function buildRecallSelection(
           limit: eligibleScanLimit,
           recallScopeIdentity: directRecallScopeIdentity,
           ...(candidateScopes ? { scope: candidateScopes } : {}),
-          ...(options.memoryKind ? { memoryKind: options.memoryKind } : {}),
+          ...(readOptions.memoryKind ? { memoryKind: readOptions.memoryKind } : {}),
           asOf: now,
         }).filter((fact) => isFactEligibleForRecall(fact, accessContext, 'direct_use'))
       : [];
@@ -380,7 +395,7 @@ async function buildRecallSelection(
             includePinnedCandidates: false,
             includeUnanchoredCandidates: false,
             ...(candidateScopes ? { scope: candidateScopes } : {}),
-            ...(options.memoryKind ? { memoryKind: options.memoryKind } : {}),
+            ...(readOptions.memoryKind ? { memoryKind: readOptions.memoryKind } : {}),
             asOf: now,
             anchorLexicalUnitSets: anchorUnitSets.map((units) => Array.from(units)),
           }),
@@ -412,7 +427,7 @@ async function buildRecallSelection(
     candidateUnitHits: allCandidateUnitHits,
     eligibleFacts,
     entities,
-    ...(options.localSimilarity ? { localSimilarity: options.localSimilarity } : {}),
+    ...(readOptions.localSimilarity ? { localSimilarity: readOptions.localSimilarity } : {}),
     limit: candidatePool,
   });
   const candidates = candidateSet.candidates;
@@ -450,7 +465,7 @@ async function buildRecallSelection(
       candidateProvenance: candidateSet.provenanceByFactId.get(fact.id),
       explicitTemporalSignal,
       alwaysIncludePinned,
-      options,
+      options: readOptions,
       now,
     }),
   );
@@ -464,7 +479,7 @@ async function buildRecallSelection(
   timing.sortMs = Date.now() - sortStarted;
 
   const selectStarted = Date.now();
-  const deterministicSelected = selectTopFacts(scored, options, limit);
+  const deterministicSelected = selectTopFacts(scored, readOptions, limit);
   const selected = await selectFactsWithSemanticSelector({
     query: trimmedQuery,
     scored,
@@ -472,13 +487,16 @@ async function buildRecallSelection(
     candidateUnitHits,
     unitWeights,
     scoringUnits: scoringQueryUnits,
-    options,
+    options: readOptions,
     limit,
     timing,
   });
+  if (!isMemoryReadEpochCurrent(memoryReadEpoch)) {
+    return { facts: [], resolutionFacts: [], scoredFacts: [] };
+  }
   timing.selectMs = Date.now() - selectStarted;
   timing.totalMs = Date.now() - totalStarted;
-  options.onTiming?.(timing);
+  readOptions.onTiming?.(timing);
 
   return {
     facts: selected.map((entry) => entry.fact),

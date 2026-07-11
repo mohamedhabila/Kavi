@@ -20,28 +20,26 @@
 // structured living-memory fact store.
 // ---------------------------------------------------------------------------
 
-import { findEntityByName, getEntityById, type EntityType } from './entities';
-import {
-  invalidateFact,
-  markFactsRecalled,
-  setFactPinned,
-} from './facts/mutations';
+import { findEntityByName, type EntityType } from './entities';
+import { markFactsRecalled } from './facts/mutations';
 import { requireFactScopeIdentity } from './facts/scopeIdentity';
-import { getFactById, listFacts, listFactsForRecallEligibleScan } from './facts/queries';
-import { requireMemoryFactScope, type MemoryFact, type MemoryFactScope } from './facts/types';
+import { listFacts, listFactsForRecallEligibleScan } from './facts/queries';
+import { requireMemoryFactScope, type MemoryFactScope } from './facts/types';
 import { isExactMemoryScopeId } from './memoryScopeIdentity';
 import { resolveLocalMemoryAccessScope } from './memoryScopeStore';
-import { canManageMemoryFactFromScope } from './memoryFactActionAuthorization';
 import { editBlock, ensureDefaultBlocks, getBlock, listBlocks, BlockOverflowError } from './blocks';
 import { ensureFactSchema } from './schema';
-import { canReadLongTermMemory, canWriteLongTermMemory } from './policy';
+import {
+  canReadLongTermMemory,
+  canWriteLongTermMemory,
+  captureMemoryReadEpoch,
+  isMemoryReadEpochCurrent,
+} from './policy';
 import { withdrawMemoryFact } from './withdrawal';
 import type {
   MemoryBlockEditResult,
   MemoryBlockReadResult,
   MemoryForgetResult,
-  MemoryInvalidateResult,
-  MemoryPinResult,
   MemoryRememberResult,
   SerializedMemoryFact,
 } from './memoryToolResultTypes';
@@ -68,6 +66,18 @@ import {
   persistMemoryRemember,
   type MemoryRememberRequestEvidence,
 } from './memoryRememberPersistence';
+import { serializeMemoryFact } from './memoryFactSerialization';
+export {
+  executeMemoryInvalidate,
+  executeMemoryPin,
+  executeMemoryUnpin,
+  setMemoryFactPinnedForManagement,
+} from './memoryFactActions';
+export type {
+  MemoryFactActionExecutionContext,
+  MemoryInvalidateArgs,
+  MemoryPinArgs,
+} from './memoryFactActions';
 
 // ── Common types ─────────────────────────────────────────────────────────
 
@@ -97,37 +107,6 @@ function trimNonEmpty(value: unknown, max = 200): string | null {
   return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
 }
 
-function serializeFact(fact: MemoryFact): SerializedMemoryFact {
-  const subject = getEntityById(fact.subjectId)?.canonicalName ?? fact.subjectId;
-  return {
-    id: fact.id,
-    subject,
-    subjectId: fact.subjectId,
-    predicate: fact.predicate,
-    value: fact.objectText,
-    confidence: fact.confidence,
-    pinned: fact.pinned,
-    validAt: fact.validAt,
-    invalidAt: fact.invalidAt,
-    createdAt: fact.createdAt,
-    updatedAt: fact.updatedAt,
-    deletedAt: fact.deletedAt,
-    scope: fact.scope,
-    personaId: fact.personaId,
-    originConversationId: fact.originConversationId,
-    originThreadId: fact.originThreadId,
-    originTaskId: fact.originTaskId,
-    sourceMessageId: fact.sourceMessageId,
-    sourceTurnId: fact.sourceTurnId,
-    sourceSummary: fact.sourceSummary,
-    importance: fact.importance,
-    accessCount: fact.accessCount,
-    lastRecalledAt: fact.lastRecalledAt,
-    lastAccessedAt: fact.lastAccessedAt,
-    decayPolicy: fact.decayPolicy,
-  };
-}
-
 // ── memory_recall ────────────────────────────────────────────────────────
 
 export interface MemoryFactManagementQueryArgs {
@@ -146,7 +125,7 @@ export interface MemoryFactManagementQueryArgs {
 export interface MemoryFactManagementQueryResult {
   ok: true;
   subject: string | null;
-  facts: ReturnType<typeof serializeFact>[];
+  facts: ReturnType<typeof serializeMemoryFact>[];
 }
 
 export function queryMemoryFactsForManagement(
@@ -193,7 +172,7 @@ export function queryMemoryFactsForManagement(
   return {
     ok: true,
     subject,
-    facts: facts.map(serializeFact),
+    facts: facts.map(serializeMemoryFact),
   };
 }
 
@@ -251,7 +230,14 @@ export function executeMemoryRecall(
   args: MemoryRecallArgs,
   execution: MemoryRecallExecutionContext,
 ): MemoryRecallResult | MemoryToolError {
-  if (!canReadLongTermMemory()) return err('memory_disabled', 'Long-term memory is disabled.');
+  const memoryReadEpoch = captureMemoryReadEpoch();
+  if (
+    memoryReadEpoch === null ||
+    !canReadLongTermMemory() ||
+    !isMemoryReadEpochCurrent(memoryReadEpoch)
+  ) {
+    return err('memory_disabled', 'Long-term memory is disabled.');
+  }
   if (
     !args ||
     typeof args !== 'object' ||
@@ -292,6 +278,9 @@ export function executeMemoryRecall(
     if (subject) {
       const entity = findEntityByName(subject);
       if (!entity) {
+        if (!isMemoryReadEpochCurrent(memoryReadEpoch)) {
+          return err('memory_disabled', 'Long-term memory is disabled.');
+        }
         return {
           ok: true,
           subject,
@@ -377,7 +366,7 @@ export function executeMemoryRecall(
     ].slice(0, limit);
     const facts = selected.map(
       (entry): SerializedApplicableMemoryFact => ({
-        ...serializeFact(entry.fact),
+        ...serializeMemoryFact(entry.fact),
         policy: entry.applicability,
       }),
     );
@@ -386,10 +375,16 @@ export function executeMemoryRecall(
       promptVisibleFactCount: facts.length,
       promptBudgetDroppedFactCount: applicability.summary.promptVisibleFactCount - facts.length,
     };
+    if (!isMemoryReadEpochCurrent(memoryReadEpoch)) {
+      return err('memory_disabled', 'Long-term memory is disabled.');
+    }
     markFactsRecalled(
       selected.map((entry) => entry.id),
       now,
     );
+    if (!isMemoryReadEpochCurrent(memoryReadEpoch)) {
+      return err('memory_disabled', 'Long-term memory is disabled.');
+    }
     return {
       ok: true,
       subject,
@@ -502,107 +497,12 @@ export function executeMemoryRemember(
     const result = persisted.result;
     return {
       ok: true,
-      fact: serializeFact(result.fact),
+      fact: serializeMemoryFact(result.fact),
       status: result.status,
-      superseded: result.superseded.map(serializeFact),
+      superseded: result.superseded.map(serializeMemoryFact),
     };
   } catch (e) {
     return err('internal', e instanceof Error ? e.message : 'memory_remember failed');
-  }
-}
-
-// ── memory_pin / memory_unpin ────────────────────────────────────────────
-
-export interface MemoryPinArgs {
-  factId: string;
-}
-
-export type MemoryFactActionExecutionContext = MemoryRecallExecutionContext;
-
-function resolveAuthorizedFactForAction(
-  factId: string,
-  execution: MemoryFactActionExecutionContext,
-): MemoryFact | MemoryToolError {
-  if (
-    !execution ||
-    !isExactMemoryScopeId(execution.memoryConversationId) ||
-    !isExactMemoryScopeId(execution.sourceThreadId) ||
-    !isExactMemoryScopeId(execution.personaId) ||
-    (execution.taskId !== null && !isExactMemoryScopeId(execution.taskId))
-  ) {
-    return err('invalid_args', 'memory fact action execution scope is invalid.');
-  }
-  const fact = getFactById(factId);
-  if (!fact || fact.deletedAt !== null) return err('not_found', `fact ${factId} not found`);
-  const currentScope = resolveLocalMemoryAccessScope({
-    memoryConversationId: execution.memoryConversationId,
-    sourceThreadId: execution.sourceThreadId,
-    personaId: execution.personaId,
-    taskId: execution.taskId,
-  });
-  return canManageMemoryFactFromScope(fact, currentScope)
-    ? fact
-    : err('permission_denied', 'Fact is outside the current memory scope.');
-}
-
-function setPin(
-  args: MemoryPinArgs,
-  pinned: boolean,
-  execution: MemoryFactActionExecutionContext,
-): MemoryPinResult | MemoryToolError {
-  if (!canWriteLongTermMemory()) return err('memory_disabled', 'Long-term memory is disabled.');
-  if (!args || typeof args !== 'object' || Object.keys(args).some((key) => key !== 'factId')) {
-    return err('invalid_args', `${pinned ? 'memory_pin' : 'memory_unpin'} accepts only factId.`);
-  }
-  ensureFactSchema();
-  const id = trimNonEmpty(args.factId, 64);
-  if (!id) return err('invalid_args', 'factId is required');
-  try {
-    const authorized = resolveAuthorizedFactForAction(id, execution);
-    if ('ok' in authorized) return authorized;
-    const updated = setFactPinned(id, pinned);
-    if (!updated) return err('not_found', `fact ${id} not found or deleted`);
-    const fact = getFactById(id);
-    if (!fact) return err('not_found', `fact ${id} not found after update`);
-    return { ok: true, status: pinned ? 'pinned' : 'unpinned', fact: serializeFact(fact) };
-  } catch (e) {
-    return err('internal', e instanceof Error ? e.message : 'pin update failed');
-  }
-}
-
-export function executeMemoryPin(
-  args: MemoryPinArgs,
-  execution: MemoryFactActionExecutionContext,
-): MemoryPinResult | MemoryToolError {
-  return setPin(args, true, execution);
-}
-
-export function executeMemoryUnpin(
-  args: MemoryPinArgs,
-  execution: MemoryFactActionExecutionContext,
-): MemoryPinResult | MemoryToolError {
-  return setPin(args, false, execution);
-}
-
-/** Explicit whole-vault UI management; never use this from provider tool execution. */
-export function setMemoryFactPinnedForManagement(
-  args: MemoryPinArgs,
-  pinned: boolean,
-): MemoryPinResult | MemoryToolError {
-  if (!canWriteLongTermMemory()) return err('memory_disabled', 'Long-term memory is disabled.');
-  if (!args || typeof args !== 'object' || Object.keys(args).some((key) => key !== 'factId')) {
-    return err('invalid_args', 'Memory management accepts only factId.');
-  }
-  ensureFactSchema();
-  const id = trimNonEmpty(args.factId, 64);
-  if (!id) return err('invalid_args', 'factId is required');
-  try {
-    if (!setFactPinned(id, pinned)) return err('not_found', `fact ${id} not found or deleted`);
-    const fact = getFactById(id);
-    if (!fact) return err('not_found', `fact ${id} not found after update`);
-    return { ok: true, status: pinned ? 'pinned' : 'unpinned', fact: serializeFact(fact) };
-  } catch (error) {
-    return err('internal', error instanceof Error ? error.message : 'pin update failed');
   }
 }
 
@@ -630,34 +530,6 @@ export function executeMemoryForget(args: MemoryForgetArgs): MemoryForgetResult 
     };
   } catch {
     return err('internal', 'Memory withdrawal failed.');
-  }
-}
-
-export interface MemoryInvalidateArgs {
-  factId: string;
-}
-
-export function executeMemoryInvalidate(
-  args: MemoryInvalidateArgs,
-  execution: MemoryFactActionExecutionContext,
-): MemoryInvalidateResult | MemoryToolError {
-  if (!args || typeof args !== 'object' || Object.keys(args).some((key) => key !== 'factId')) {
-    return err('invalid_args', 'memory_manage action=invalidate accepts only factId.');
-  }
-  if (!canWriteLongTermMemory()) return err('memory_disabled', 'Long-term memory is disabled.');
-  ensureFactSchema();
-  const id = trimNonEmpty(args.factId, 64);
-  if (!id) return err('invalid_args', 'factId is required');
-  try {
-    const authorized = resolveAuthorizedFactForAction(id, execution);
-    if ('ok' in authorized) return authorized;
-    const invalidatedAt = Date.now();
-    if (!invalidateFact(id, invalidatedAt)) {
-      return err('not_found', `fact ${id} not found or already invalidated`);
-    }
-    return { ok: true, action: 'invalidation', factId: id, invalidatedAt, status: 'invalidated' };
-  } catch {
-    return err('internal', 'Memory invalidation failed.');
   }
 }
 

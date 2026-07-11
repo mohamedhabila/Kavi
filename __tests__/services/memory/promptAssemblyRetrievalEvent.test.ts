@@ -5,12 +5,17 @@ jest.mock('expo-sqlite', () => {
 
 import { recordPromptAssemblyRetrievalEvent } from '../../../src/services/memory/promptAssemblyRetrievalEvent';
 import { readRecentMemoryRetrievalEvents } from '../../../src/services/memory/retrievalLog';
+import * as retrievalLog from '../../../src/services/memory/retrievalLog';
 import type { RetrievalOrchestratorTimings } from '../../../src/services/memory/retrievalOrchestrator';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { useSettingsStore } from '../../../src/store/useSettingsStore';
+import {
+  initializeMemoryPolicyObservation,
+} from '../../../src/services/memory/policy';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -68,10 +73,14 @@ beforeEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
+  useSettingsStore.setState({ disableLongTermMemory: false } as never);
+  initializeMemoryPolicyObservation();
 });
 
 afterEach(() => {
+  useSettingsStore.setState({ disableLongTermMemory: false } as never);
   closeMemoryDb();
+  jest.restoreAllMocks();
 });
 
 describe('prompt assembly retrieval candidate telemetry', () => {
@@ -119,6 +128,42 @@ describe('prompt assembly retrieval candidate telemetry', () => {
         createdAt: 1,
       }),
     ).resolves.toEqual({ status: 'rejected', code: 'invalid_candidates' });
+    expect(readRecentMemoryRetrievalEvents()).toEqual([]);
+  });
+
+  it('skips telemetry when opt-out lands during asynchronous fingerprint derivation', async () => {
+    const originalFingerprint = retrievalLog.buildMemoryRetrievalQueryFingerprint;
+    let releaseFingerprint!: () => void;
+    const fingerprintGate = new Promise<void>((resolve) => {
+      releaseFingerprint = resolve;
+    });
+    let fingerprintStarted!: () => void;
+    const fingerprintEntered = new Promise<void>((resolve) => {
+      fingerprintStarted = resolve;
+    });
+    jest
+      .spyOn(retrievalLog, 'buildMemoryRetrievalQueryFingerprint')
+      .mockImplementation(async (query) => {
+        fingerprintStarted();
+        await fingerprintGate;
+        return originalFingerprint(query);
+      });
+
+    const pending = recordPromptAssemblyRetrievalEvent({
+      query: 'private telemetry race query',
+      sourceThreadId: 'thread-race',
+      taskScopePresent: false,
+      state: 'completed',
+      selectedFactIds: ['private-fact-id'],
+      selectedEpisodeIds: [],
+      expansion: NO_EXPANSION,
+      createdAt: 1,
+    });
+    await fingerprintEntered;
+    useSettingsStore.setState({ disableLongTermMemory: true } as never);
+    releaseFingerprint();
+
+    await expect(pending).resolves.toEqual({ status: 'skipped', code: 'opt_out' });
     expect(readRecentMemoryRetrievalEvents()).toEqual([]);
   });
 });

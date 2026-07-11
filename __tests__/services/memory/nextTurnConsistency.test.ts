@@ -19,6 +19,7 @@ import {
 } from '../../../src/services/memory/schema';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
+import { initializeMemoryPolicyObservation } from '../../../src/services/memory/policy';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -116,6 +117,7 @@ beforeEach(() => {
   resetFactSchemaCacheForTests();
   ensureFactSchema();
   useSettingsStore.setState({ disableLongTermMemory: false } as never);
+  initializeMemoryPolicyObservation();
 });
 
 afterEach(() => {
@@ -396,6 +398,32 @@ describe('next-turn memory consistency', () => {
       matchedJobCount: 0,
     });
     expect(query).not.toHaveBeenCalled();
+  });
+
+  it('returns opt_out without another durable read when the user disables memory during a wait', async () => {
+    const job = enqueueSourceTurn('thread-racing-opt-out', 'assistant-racing-opt-out');
+    setJobState(job!.id, 'processing', { leaseExpiresAt: 1_000 });
+    const durableRead = jest.spyOn(ingestionQueueStore, 'getIngestionJobForSourceTurn');
+    const clock = deterministicClock(100, () => {
+      useSettingsStore.setState({ disableLongTermMemory: true } as never);
+    });
+
+    const result = await waitForNextTurnMemoryConsistency({
+      memoryConversationId: 'shared-memory',
+      sourceThreadId: 'thread-racing-opt-out',
+      sourceEndMessageId: 'assistant-racing-opt-out',
+      clock,
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'opt_out',
+      waitedMs: 8,
+      queryCount: 1,
+      matchedJobCount: 1,
+      initialJobStatus: 'processing',
+      finalJobStatus: 'processing',
+    });
+    expect(durableRead).toHaveBeenCalledTimes(1);
   });
 
   it('degrades without throwing when the exact durable query is unavailable', async () => {

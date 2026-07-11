@@ -13,6 +13,7 @@ import {
   selectOrderedEvidenceIndexes,
 } from './controlSequenceCompaction';
 import { quotedSpanUnitSets } from './ranking/quotedSpans';
+import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from './policy';
 
 const logger = createLogger('memory.llmFactSelector');
 
@@ -34,6 +35,7 @@ export interface LlmMemorySelectorConfig {
   model?: string;
   timeoutMs?: number;
   maxTokens?: number;
+  memoryReadEpoch?: number;
 }
 
 const SELECTION_SCHEMA: StructuredOutputOptions = {
@@ -412,8 +414,11 @@ export function createLlmMemoryFactSelector(
   if (!provider || provider.enabled === false) return undefined;
   const model = (config.model || provider.model || '').trim();
   if (!model) return undefined;
+  const memoryReadEpoch = config.memoryReadEpoch ?? captureMemoryReadEpoch();
+  if (memoryReadEpoch === null || !isMemoryReadEpochCurrent(memoryReadEpoch)) return undefined;
 
   return async ({ query, limit, candidates }) => {
+    if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return { factIds: [] };
     if (candidates.length === 0) return { factIds: [] };
     const queryUnits = tokenizeLexicalUnits(query);
     const anchorUnitSets = quotedSpanUnitSets(query, SELECTOR_QUOTED_ANCHOR_LIMIT);
@@ -436,6 +441,7 @@ export function createLlmMemoryFactSelector(
     ];
 
     try {
+      if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return { factIds: [] };
       const response = await sendLlmMessage({
         provider,
         messages,
@@ -449,8 +455,10 @@ export function createLlmMemoryFactSelector(
           structuredOutput: SELECTION_SCHEMA,
         },
       });
+      if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return { factIds: [] };
       return { factIds: parsedFactIds(response).slice(0, limit) };
     } catch (error) {
+      if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return { factIds: [] };
       logger.devWarn(
         'Memory fact selector failed:',
         error instanceof Error ? error.message : String(error),

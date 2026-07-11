@@ -19,6 +19,7 @@ export type PromptContextSupport = {
   graphGoals?: ReadonlyArray<AgentGoal>;
   goalsPromptSection?: string | null;
   livingMemorySections?: ReadonlyArray<LivingMemorySection>;
+  livingMemoryReadEpoch?: number;
   maxToolIterations: number;
   resolvedPrompt: string;
   runtimeContext?: string | null;

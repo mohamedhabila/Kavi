@@ -58,6 +58,8 @@ export interface RecallFactsOptions {
   selector?: MemoryFactSelector;
   /** Maximum locally-ranked candidates shown to the semantic selector. */
   selectorCandidateLimit?: number;
+  /** Request-scoped memory read generation; recapture only at a top-level direct read. */
+  memoryReadEpoch?: number;
 }
 
 export interface RecallFactsTiming {
