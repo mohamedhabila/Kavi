@@ -42,10 +42,10 @@ export type ProductExperienceEvidenceKind =
   | 'runtime_verifier';
 
 /**
- * Collection-only contract for a code-owned execution boundary. It deliberately
- * contains no user text, tool arguments, result text, or assistant summaries.
- * No prompt or planner may consume these observations until a real producer
- * supplies stable procedure and environment identities.
+ * Content-free storage contract for a code-owned execution boundary. It
+ * deliberately contains no user text, tool arguments, result text, or
+ * assistant summaries. The only product consumer is the exact-scope,
+ * corroboration-gated derived-experience reader.
  */
 export type ProductExperienceObservationInput = Readonly<{
   contractVersion: 1;
@@ -113,7 +113,7 @@ function hasExactKeys(value: object): boolean {
   );
 }
 
-function isCodeOwnedId(value: unknown): value is string {
+export function isCodeOwnedProductExperienceId(value: unknown): value is string {
   return isExactDurableScopeId(value) && CODE_OWNED_ID_PATTERN.test(value);
 }
 
@@ -144,12 +144,12 @@ function validInput(value: unknown, recordedAt: number): value is ProductExperie
     isExactMemoryScopeId(input.memoryConversationId) &&
     isExactMemoryScopeId(input.sourceThreadId) &&
     isExactMemoryProvenanceId(input.sourceRunId) &&
-    isCodeOwnedId(input.domainId) &&
-    isCodeOwnedId(input.environmentId) &&
-    isCodeOwnedId(input.procedureId) &&
+    isCodeOwnedProductExperienceId(input.domainId) &&
+    isCodeOwnedProductExperienceId(input.environmentId) &&
+    isCodeOwnedProductExperienceId(input.procedureId) &&
     Array.isArray(input.preconditionIds) &&
     input.preconditionIds.length <= MAX_PRECONDITION_COUNT &&
-    input.preconditionIds.every(isCodeOwnedId) &&
+    input.preconditionIds.every(isCodeOwnedProductExperienceId) &&
     isSortedUnique(input.preconditionIds) &&
     (input.outcome === 'success' || input.outcome === 'failure') &&
     hasValidEvidencePair(input.authority, input.evidenceKind) &&

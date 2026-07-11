@@ -17,6 +17,15 @@ import {
 
 const PROCEDURE_CONTRACT_VERSION = 1;
 
+export type VerifiedToolEffectExperienceScope = Readonly<{
+  toolName: string;
+  platform: 'android' | 'ios';
+  domainId: string;
+  environmentId: string;
+  procedureId: string;
+  preconditionIds: ReadonlyArray<string>;
+}>;
+
 export type VerifiedToolEffectExperienceSkipReason =
   | 'invalid_identity'
   | 'invalid_receipt'
@@ -99,6 +108,13 @@ function resolveRecordableOutcome(
   return null;
 }
 
+function isRecordableDeclaredOutcome(outcome: ToolEffectResultOutcome): boolean {
+  return (
+    (outcome.effectState === 'applied' && outcome.verificationState === 'verified') ||
+    (outcome.effectState === 'failed' && outcome.verificationState === 'unverified')
+  );
+}
+
 function resolveMobilePlatform(): 'android' | 'ios' | null {
   return Platform.OS === 'android' || Platform.OS === 'ios' ? Platform.OS : null;
 }
@@ -122,10 +138,50 @@ async function buildProcedureId(
 }
 
 /**
+ * Resolves the exact, code-owned outcome scopes shared by experience producers
+ * and consumers. A caller cannot supply its own labels or contract, so a
+ * model, skill, or third-party tool cannot widen the learning boundary.
+ */
+export async function resolveVerifiedToolEffectExperienceScopes(
+  toolName: string,
+): Promise<ReadonlyArray<VerifiedToolEffectExperienceScope>> {
+  const platform = resolveMobilePlatform();
+  if (!platform) return [];
+  const contract = getCodeOwnedToolEffectContract(toolName);
+  if (
+    !contract ||
+    contract.effectMode !== 'effectful' ||
+    contract.completionMode === 'operational' ||
+    !contract.result
+  ) {
+    return [];
+  }
+  const procedureId = await buildProcedureId(toolName, contract);
+  const effectKinds = Array.from(
+    new Set(
+      Object.values(contract.result.outcomes)
+        .filter(isRecordableDeclaredOutcome)
+        .map((outcome) => outcome.effectKind ?? contract.effectKind),
+    ),
+  ).sort();
+  return effectKinds.map((effectKind) => ({
+    toolName,
+    platform,
+    domainId: `mobile-assistant.effect.${effectKind}`,
+    environmentId: `kavi.react-native.${platform}.registered-tool.${toolName}.v1`,
+    procedureId,
+    // The receipt boundary currently exposes no code-owned precondition IDs.
+    // Keep that fact exact; consumers must never reinterpret [] as universal
+    // applicability or invent missing preconditions.
+    preconditionIds: [],
+  }));
+}
+
+/**
  * Records only code-owned, directly observed terminal effect outcomes. The
  * input deliberately excludes arguments, result content, transcript text, and
- * model-authored labels. Storage is collection-only and has no planner or
- * prompt consumer.
+ * model-authored labels. Product reuse remains exact-scope and requires the
+ * independent-run corroboration policy before anything reaches a prompt.
  */
 export async function recordVerifiedToolEffectExperience(
   input: VerifiedToolEffectExperienceInput,
@@ -166,11 +222,17 @@ export async function recordVerifiedToolEffectExperience(
     return { status: 'skipped', reason: 'invalid_receipt' };
   }
 
-  let procedureId: string;
+  let scopes: ReadonlyArray<VerifiedToolEffectExperienceScope>;
   try {
-    procedureId = await buildProcedureId(input.toolName, contract);
+    scopes = await resolveVerifiedToolEffectExperienceScopes(input.toolName);
   } catch {
     return { status: 'failed', code: 'procedure_identity_error' };
+  }
+  const scope = scopes.find(
+    (candidate) => candidate.domainId === `mobile-assistant.effect.${receipt.effectKind}`,
+  );
+  if (!scope) {
+    return { status: 'skipped', reason: 'unsupported_contract' };
   }
 
   try {
@@ -180,15 +242,15 @@ export async function recordVerifiedToolEffectExperience(
         memoryConversationId: input.memoryConversationId,
         sourceThreadId: input.sourceThreadId,
         sourceRunId: input.sourceRunId,
-        domainId: `mobile-assistant.effect.${receipt.effectKind}`,
-        environmentId: `kavi.react-native.${platform}.registered-tool.${input.toolName}.v1`,
-        procedureId,
+        domainId: scope.domainId,
+        environmentId: scope.environmentId,
+        procedureId: scope.procedureId,
         // This runtime boundary does not yet expose exact permission/configuration
         // preconditions. Empty therefore means "not observed", not "universally
         // applicable". These rows stay collection-only until a future reader can
         // require code-owned preconditions; exact platform, tool, and contract
         // identities still prevent cross-tool or cross-platform aggregation.
-        preconditionIds: [],
+        preconditionIds: scope.preconditionIds,
         outcome: recordable.outcome,
         authority: recordable.authority,
         evidenceKind: 'effect_receipt',
