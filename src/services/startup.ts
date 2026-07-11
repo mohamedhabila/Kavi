@@ -5,11 +5,17 @@
 
 import { InteractionManager } from 'react-native';
 import { evaluateJobsOnce, startScheduler, setSchedulerExecutor } from './scheduler/engine';
+import { NonRetryableSchedulerExecutionError } from './scheduler/executionError';
+import {
+  extractScheduledJobMessageEffect,
+  shouldDeliverScheduledJobNotification,
+  summarizeScheduledJobNotification,
+} from './scheduler/executionPresentation';
 import { registerBuiltInServiceSkills } from './integrations/registry';
 import { activateEnabledSkills } from './skills/manager';
 import { registerBackgroundFetch } from './scheduler/background';
 import { syncSchedulerWakeNotifications } from './scheduler/wakeNotifications';
-import { runBootOnce, hasBootMd } from './agents/bootRunner';
+import { runBootOnLaunchIfPresent } from './agents/bootLaunch';
 import { loadHooksFromDirectory } from './hooks/loader';
 import { flushChatStorePersistenceNow } from '../store/chatStorePersistence';
 import { useSettingsStore } from '../store/useSettingsStore';
@@ -52,34 +58,6 @@ import {
   triggerForegroundPersistedAgentRecovery,
   triggerPersistedAgentRecovery,
 } from './startupRecovery';
-
-function shouldDeliverNotification(job: CronJob): boolean {
-  const mode = job.delivery?.mode || 'both';
-  return mode === 'notification' || mode === 'both';
-}
-
-function summarizeNotificationBody(text: string): string {
-  const compact = text.replace(/\s+/g, ' ').trim();
-  if (!compact) return 'Task completed.';
-  return compact.length > 180 ? `${compact.slice(0, 177)}...` : compact;
-}
-
-function extractMessageEffect(result?: string): 'confetti' | 'balloons' | 'spotlight' | undefined {
-  if (!result) return undefined;
-  try {
-    const parsed = JSON.parse(result);
-    if (
-      parsed?.effectId === 'confetti' ||
-      parsed?.effectId === 'balloons' ||
-      parsed?.effectId === 'spotlight'
-    ) {
-      return parsed.effectId;
-    }
-  } catch {
-    // Ignore malformed tool result payloads.
-  }
-  return undefined;
-}
 
 let initialized = false;
 
@@ -203,26 +181,6 @@ async function runStartupHooksAndEmitLaunchEvent(): Promise<void> {
   }
 }
 
-async function runBootOnLaunchIfPresent(): Promise<void> {
-  try {
-    const hasBoot = await hasBootMd();
-    if (!hasBoot) return;
-    const settings = useSettingsStore.getState();
-    const provider = resolveEnabledProvider(settings.providers, settings.activeProviderId);
-    if (!provider) return;
-    const model = resolveConversationModel(provider, {
-      activeProviderId: settings.activeProviderId,
-      activeModel: settings.activeModel,
-    });
-    if (!model) return;
-    const apiKey = await resolveProviderApiKey(provider);
-    if (providerRequiresApiKey(provider) && !apiKey) return;
-    await runBootOnce({ ...provider, apiKey }, settings.providers, model);
-  } catch {
-    // Boot execution is non-critical
-  }
-}
-
 async function initializeNotificationsAndWakeSync(): Promise<void> {
   await initializeNotifications();
   await syncSchedulerWakeNotifications({ force: true });
@@ -342,6 +300,8 @@ async function executeScheduledJob(job: CronJob): Promise<string> {
 
     let accumulatedContent = '';
     let accumulatedReasoning = '';
+    let observedToolActivity = false;
+    let graphFailureResponseApplied = false;
     const terminalOutcome = createAgentControlGraphTerminalOutcomeTracker();
     const pendingSurfacedSubAgentOutputs = new Map<
       string,
@@ -414,10 +374,12 @@ async function executeScheduledJob(job: CronJob): Promise<string> {
           .updateMessageEnrichedContent(conversationId, messageId, enrichedContent);
       },
       onToolCallStart: (toolCall) => {
+        observedToolActivity = true;
         clearSurfacedSubAgentOutputLock();
         useChatStore.getState().addToolCall(conversationId, assistantMessageId, toolCall);
       },
       onToolCallComplete: (toolCall) => {
+        observedToolActivity = true;
         const surfacedOutput =
           toolCall.name === 'sessions_surface_output' && toolCall.status === 'completed'
             ? parseSurfacedSubAgentOutputResult(toolCall.result)
@@ -432,7 +394,7 @@ async function executeScheduledJob(job: CronJob): Promise<string> {
             error: toolCall.error,
           });
         if (toolCall.name === 'message_effect') {
-          const effectId = extractMessageEffect(toolCall.result);
+          const effectId = extractScheduledJobMessageEffect(toolCall.result);
           if (effectId) {
             useChatStore
               .getState()
@@ -453,7 +415,14 @@ async function executeScheduledJob(job: CronJob): Promise<string> {
       onAssistantMessage: (content, toolCalls, providerReplay, assistantMetadata) => {
         const incomingToolCalls =
           toolCalls?.filter((toolCall) => toolCall.id?.trim() && toolCall.name?.trim()) ?? [];
-        if (surfacedSubAgentOutputActive && incomingToolCalls.length === 0) {
+        const replacesSurfacedOutputWithTerminalFailure =
+          content.trim().length > 0 && terminalOutcome.hasUnsuccessfulTerminalState();
+        graphFailureResponseApplied ||= replacesSurfacedOutputWithTerminalFailure;
+        if (
+          surfacedSubAgentOutputActive &&
+          incomingToolCalls.length === 0 &&
+          !replacesSurfacedOutputWithTerminalFailure
+        ) {
           if (providerReplay) {
             useChatStore
               .getState()
@@ -470,7 +439,10 @@ async function executeScheduledJob(job: CronJob): Promise<string> {
           }
           return;
         }
-        if (surfacedSubAgentOutputActive && incomingToolCalls.length > 0) {
+        if (
+          surfacedSubAgentOutputActive &&
+          (incomingToolCalls.length > 0 || replacesSurfacedOutputWithTerminalFailure)
+        ) {
           clearSurfacedSubAgentOutputLock();
         }
         if (providerReplay) {
@@ -488,6 +460,7 @@ async function executeScheduledJob(job: CronJob): Promise<string> {
         useChatStore.getState().updateMessage(conversationId, assistantMessageId, content);
       },
       onToolMessage: (toolCallId, result) => {
+        observedToolActivity = true;
         const surfacedOutput = pendingSurfacedSubAgentOutputs.get(toolCallId);
         useChatStore.getState().addMessage(conversationId, {
           id: `${assistantMessageId}_tool_${toolCallId}`,
@@ -535,54 +508,66 @@ async function executeScheduledJob(job: CronJob): Promise<string> {
         .conversations.find((conversation) => conversation.id === conversationId)
         ?.messages.filter((message) => message.id !== assistantMessageId) || [];
 
-    await runOrchestrator(
-      {
-        provider: { ...provider, apiKey },
-        model,
-        conversationId,
-        personaId: resolveConversationPersonaForMode({
-          conversationPersonaId: useChatStore
-            .getState()
-            .conversations.find((conversation) => conversation.id === conversationId)?.personaId,
-          nextMode:
-            useChatStore
+    try {
+      await runOrchestrator(
+        {
+          provider: { ...provider, apiKey },
+          model,
+          conversationId,
+          personaId: resolveConversationPersonaForMode({
+            conversationPersonaId: useChatStore
               .getState()
-              .conversations.find((conversation) => conversation.id === conversationId)?.mode ??
-            settings.defaultConversationMode,
-        }),
-        taskId: null,
-        systemPrompt:
-          settings.systemPrompt || 'You are a helpful personal AI assistant with access to tools.',
-        messages,
-        signal: new AbortController(),
-        thinkingLevel: settings.thinkingLevel,
-        allProviders: settings.providers.map((candidate) => ({ ...candidate })),
-        enableCompaction: true,
-        enableFailover: true,
-        linkUnderstandingEnabled: settings.linkUnderstandingEnabled,
-        mediaUnderstandingEnabled: settings.mediaUnderstandingEnabled,
-        maxLinks: settings.maxLinks,
-      },
-      callbacks,
-    );
+              .conversations.find((conversation) => conversation.id === conversationId)?.personaId,
+            nextMode:
+              useChatStore
+                .getState()
+                .conversations.find((conversation) => conversation.id === conversationId)?.mode ??
+              settings.defaultConversationMode,
+          }),
+          taskId: null,
+          systemPrompt:
+            settings.systemPrompt ||
+            'You are a helpful personal AI assistant with access to tools.',
+          messages,
+          signal: new AbortController(),
+          thinkingLevel: settings.thinkingLevel,
+          allProviders: settings.providers.map((candidate) => ({ ...candidate })),
+          enableCompaction: true,
+          enableFailover: true,
+          linkUnderstandingEnabled: settings.linkUnderstandingEnabled,
+          mediaUnderstandingEnabled: settings.mediaUnderstandingEnabled,
+          maxLinks: settings.maxLinks,
+        },
+        callbacks,
+      );
+    } catch (error: unknown) {
+      if (observedToolActivity) {
+        const sourceError = error instanceof Error ? error : new Error(String(error));
+        throw new NonRetryableSchedulerExecutionError(sourceError);
+      }
+      throw error;
+    }
 
     const terminalFailure = terminalOutcome.resolveFailure();
     if (terminalFailure) {
       flushPendingSurfacedSubAgentOutputs();
-      if (!surfacedSubAgentOutputActive || !accumulatedContent) {
-        const fallback = accumulatedContent || `Error: ${terminalFailure.message}`;
-        accumulatedContent = fallback;
-        useChatStore.getState().updateMessage(conversationId, assistantMessageId, fallback);
-      }
-      throw terminalFailure;
+      const failureContent =
+        graphFailureResponseApplied && accumulatedContent.trim()
+          ? accumulatedContent
+          : `Error: ${terminalFailure.message}`;
+      accumulatedContent = failureContent;
+      useChatStore.getState().updateMessage(conversationId, assistantMessageId, failureContent);
+      throw terminalOutcome.hasControlGraphFailure() || observedToolActivity
+        ? new NonRetryableSchedulerExecutionError(terminalFailure)
+        : terminalFailure;
     }
 
     const result = accumulatedContent || `Scheduled task "${job.name}" completed.`;
 
-    if (shouldDeliverNotification(job)) {
+    if (shouldDeliverScheduledJobNotification(job)) {
       await sendLocalNotification({
         title: job.name || 'Scheduled Task',
-        body: summarizeNotificationBody(result),
+        body: summarizeScheduledJobNotification(result),
         data: {
           screen: 'Chat',
           conversationId,
@@ -596,10 +581,10 @@ async function executeScheduledJob(job: CronJob): Promise<string> {
     return result;
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    if (shouldDeliverNotification(job)) {
+    if (shouldDeliverScheduledJobNotification(job)) {
       await sendLocalNotification({
         title: job.name || 'Scheduled Task Failed',
-        body: summarizeNotificationBody(`Error: ${errorMsg}`),
+        body: summarizeScheduledJobNotification(`Error: ${errorMsg}`),
         data: notificationConversationId
           ? {
               screen: 'Chat',

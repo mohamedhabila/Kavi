@@ -5,7 +5,7 @@ const mockStartScheduler = jest.fn();
 const mockEvaluateJobsOnce = jest.fn().mockResolvedValue(undefined);
 const mockRegisterBackgroundFetch = jest.fn().mockResolvedValue(undefined);
 const mockSyncSchedulerWakeNotifications = jest.fn().mockResolvedValue(undefined);
-const mockRunBootOnce = jest.fn().mockResolvedValue(undefined);
+const mockRunBootOnce = jest.fn().mockResolvedValue({ status: 'ran' });
 const mockHasBootMd = jest.fn().mockResolvedValue(false);
 const mockLoadHooksFromDirectory = jest.fn().mockResolvedValue(undefined);
 const mockRunOrchestrator = jest.fn().mockResolvedValue(undefined);
@@ -127,8 +127,7 @@ jest.mock('../../src/services/executionJournal/durableRecoveryLifecycle', () => 
     mockReconcileDurableRecoveryLifecycle(...args),
 }));
 jest.mock('../../src/store/chatStorePersistence', () => ({
-  flushChatStorePersistenceNow: (...args: any[]) =>
-    mockFlushChatStorePersistenceNow(...args),
+  flushChatStorePersistenceNow: (...args: any[]) => mockFlushChatStorePersistenceNow(...args),
   requestChatStorePersistenceCheckpoint: jest.fn(),
 }));
 jest.mock('../../src/services/executionJournal/foregroundModelExecutionRecovery', () => ({
@@ -485,9 +484,9 @@ describe('initializeServices', () => {
     expect(mockChatStoreState.recoverInterruptedAgentRuns.mock.invocationCallOrder[0]).toBeLessThan(
       mockRepairTerminalAgentRunsMissingFinalResponses.mock.invocationCallOrder[0],
     );
-    expect(mockRepairTerminalAgentRunsMissingFinalResponses.mock.invocationCallOrder[0]).toBeLessThan(
-      mockFlushChatStorePersistenceNow.mock.invocationCallOrder[0],
-    );
+    expect(
+      mockRepairTerminalAgentRunsMissingFinalResponses.mock.invocationCallOrder[0],
+    ).toBeLessThan(mockFlushChatStorePersistenceNow.mock.invocationCallOrder[0]);
     expect(mockFlushChatStorePersistenceNow.mock.invocationCallOrder[0]).toBeLessThan(
       mockMaintainTerminalExecutionRetention.mock.invocationCallOrder[0],
     );
@@ -572,7 +571,10 @@ describe('initializeServices', () => {
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
     await expect(
       executor.execute(scheduledJob('Blocked Job', 'Perform the action', 'both')),
-    ).rejects.toThrow('tool_batch_incomplete');
+    ).rejects.toMatchObject({
+      name: 'NonRetryableSchedulerExecutionError',
+      message: expect.stringContaining('tool_batch_incomplete'),
+    });
     expect(mockSendLocalNotification).toHaveBeenCalledWith({
       title: 'Blocked Job',
       body: 'Error: Agent control graph was blocked: tool_batch_incomplete.',
@@ -620,9 +622,7 @@ describe('initializeServices', () => {
     initializeServices();
 
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    await executor.execute(
-      scheduledJob('Gemini Tool Job', 'Continue tool loop', 'conversation'),
-    );
+    await executor.execute(scheduledJob('Gemini Tool Job', 'Continue tool loop', 'conversation'));
 
     expect(mockChatStoreState.updateMessageProviderReplay).toHaveBeenCalledWith(
       expect.any(String),
@@ -642,9 +642,7 @@ describe('initializeServices', () => {
     initializeServices();
 
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    await executor.execute(
-      scheduledJob('Tool Error Job', 'Run failing tool', 'conversation'),
-    );
+    await executor.execute(scheduledJob('Tool Error Job', 'Run failing tool', 'conversation'));
 
     expect(mockChatStoreState.addMessage).toHaveBeenCalledWith(
       expect.any(String),

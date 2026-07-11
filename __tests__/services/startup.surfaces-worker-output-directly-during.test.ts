@@ -5,7 +5,7 @@ const mockStartScheduler = jest.fn();
 const mockEvaluateJobsOnce = jest.fn().mockResolvedValue(undefined);
 const mockRegisterBackgroundFetch = jest.fn().mockResolvedValue(undefined);
 const mockSyncSchedulerWakeNotifications = jest.fn().mockResolvedValue(undefined);
-const mockRunBootOnce = jest.fn().mockResolvedValue(undefined);
+const mockRunBootOnce = jest.fn().mockResolvedValue({ status: 'ran' });
 const mockHasBootMd = jest.fn().mockResolvedValue(false);
 const mockLoadHooksFromDirectory = jest.fn().mockResolvedValue(undefined);
 const mockRunOrchestrator = jest.fn().mockResolvedValue(undefined);
@@ -103,8 +103,7 @@ jest.mock('../../src/services/executionJournal/durableRecoveryLifecycle', () => 
   reconcileDurableRecoveryLifecycle: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('../../src/store/chatStorePersistence', () => ({
-  flushChatStorePersistenceNow: (...args: any[]) =>
-    mockFlushChatStorePersistenceNow(...args),
+  flushChatStorePersistenceNow: (...args: any[]) => mockFlushChatStorePersistenceNow(...args),
   requestChatStorePersistenceCheckpoint: jest.fn(),
 }));
 jest.mock('../../src/services/executionJournal/foregroundModelExecutionRecovery', () => ({
@@ -388,6 +387,58 @@ describe('initializeServices', () => {
       'Worker-authored final answer',
     );
   });
+  it('preserves a graph blocker after surfacing a worker result', async () => {
+    mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
+      callbacks.onToolCallComplete?.({
+        id: 'tc-surface-blocked',
+        name: 'sessions_surface_output',
+        arguments: '{"sessionId":"worker-1"}',
+        status: 'completed',
+        result: JSON.stringify({
+          status: 'surfaced',
+          sessionId: 'worker-1',
+          output: 'Worker completed its bounded research.',
+        }),
+      });
+      callbacks.onToolMessage?.('tc-surface-blocked', 'tool result');
+      callbacks.onAgentControlGraphStateChange?.({
+        status: 'blocked',
+        terminalReason: 'missing_required_side_effect',
+      });
+      callbacks.onAssistantMessage?.('The required downstream action was not completed.');
+      callbacks.onDone?.();
+    });
+    const { initializeServices } = require('../../src/services/startup');
+    initializeServices();
+    const executor = mockSetSchedulerExecutor.mock.calls[0][0];
+
+    await expect(
+      executor.execute({
+        name: 'Blocked Surface Job',
+        payload: { prompt: 'Research and act' },
+        sessionTarget: 'isolated',
+        wakeMode: 'new',
+        delivery: { mode: 'conversation' },
+      }),
+    ).rejects.toMatchObject({
+      name: 'NonRetryableSchedulerExecutionError',
+      message: expect.stringContaining('missing_required_side_effect'),
+    });
+
+    expect(mockChatStoreState.updateMessage).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      'The required downstream action was not completed.',
+    );
+    expect(mockChatStoreState.conversations[0].messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'assistant',
+          content: 'Worker completed its bounded research.',
+        }),
+      ]),
+    );
+  });
   it('sends failure notifications for scheduled jobs', async () => {
     mockRunOrchestrator.mockRejectedValueOnce(new Error('boom'));
 
@@ -413,6 +464,33 @@ describe('initializeServices', () => {
         conversationId: 'conv-1',
         source: 'scheduled_task',
       },
+    });
+  });
+  it('prevents replay when execution throws after tool activity', async () => {
+    mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
+      callbacks.onToolCallStart?.({
+        id: 'tc-effect',
+        name: 'calendar_create_event',
+        arguments: '{}',
+        status: 'running',
+      });
+      throw new Error('provider disconnected after tool dispatch');
+    });
+    const { initializeServices } = require('../../src/services/startup');
+    initializeServices();
+    const executor = mockSetSchedulerExecutor.mock.calls[0][0];
+
+    await expect(
+      executor.execute({
+        name: 'Effectful Failure',
+        payload: { prompt: 'Create the event' },
+        sessionTarget: 'isolated',
+        wakeMode: 'new',
+        delivery: { mode: 'conversation' },
+      }),
+    ).rejects.toMatchObject({
+      name: 'NonRetryableSchedulerExecutionError',
+      message: 'provider disconnected after tool dispatch',
     });
   });
   it('executor reuses the active conversation for main/continue jobs', async () => {

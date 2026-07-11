@@ -5,7 +5,7 @@ const mockStartScheduler = jest.fn();
 const mockEvaluateJobsOnce = jest.fn().mockResolvedValue(undefined);
 const mockRegisterBackgroundFetch = jest.fn().mockResolvedValue(undefined);
 const mockSyncSchedulerWakeNotifications = jest.fn().mockResolvedValue(undefined);
-const mockRunBootOnce = jest.fn().mockResolvedValue(undefined);
+const mockRunBootOnce = jest.fn().mockResolvedValue({ status: 'ran' });
 const mockHasBootMd = jest.fn().mockResolvedValue(false);
 const mockLoadHooksFromDirectory = jest.fn().mockResolvedValue(undefined);
 const mockRunOrchestrator = jest.fn().mockResolvedValue(undefined);
@@ -102,8 +102,7 @@ jest.mock('../../src/services/executionJournal/durableRecoveryLifecycle', () => 
   reconcileDurableRecoveryLifecycle: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('../../src/store/chatStorePersistence', () => ({
-  flushChatStorePersistenceNow: (...args: any[]) =>
-    mockFlushChatStorePersistenceNow(...args),
+  flushChatStorePersistenceNow: (...args: any[]) => mockFlushChatStorePersistenceNow(...args),
   requestChatStorePersistenceCheckpoint: jest.fn(),
 }));
 jest.mock('../../src/services/executionJournal/foregroundModelExecutionRecovery', () => ({
@@ -445,6 +444,27 @@ describe('initializeServices', () => {
       'gpt-4o-mini',
     );
   });
+  it('notifies the user when BOOT.md reaches a failed terminal outcome', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mockHasBootMd.mockResolvedValueOnce(true);
+    mockRunBootOnce.mockResolvedValueOnce({
+      status: 'failed',
+      reason: 'Agent control graph was blocked: tool_batch_incomplete.',
+    });
+    const { initializeServices } = require('../../src/services/startup');
+    initializeServices();
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(mockSendLocalNotification).toHaveBeenCalledWith({
+      title: 'Startup task failed',
+      body: 'Kavi could not complete BOOT.md. Open the app to review your startup instructions.',
+    });
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[startup] BOOT.md execution failed:',
+      'Agent control graph was blocked: tool_batch_incomplete.',
+    );
+    warnSpy.mockRestore();
+  });
   it('skips boot when BOOT.md does not exist', async () => {
     mockHasBootMd.mockResolvedValueOnce(false);
     jest.doMock('../../src/store/useSettingsStore', () => ({
@@ -462,12 +482,14 @@ describe('initializeServices', () => {
     expect(mockHasBootMd).toHaveBeenCalled();
     expect(mockRunBootOnce).not.toHaveBeenCalled();
   });
-  it('boot runner handles errors silently', async () => {
+  it('contains and logs boot launch errors', async () => {
     mockHasBootMd.mockRejectedValueOnce(new Error('fail'));
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
     await new Promise((r) => setTimeout(r, 50));
-    // Should not throw
     expect(mockRunBootOnce).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith('[startup] BOOT.md launch failed:', expect.any(Error));
+    warnSpy.mockRestore();
   });
 });
