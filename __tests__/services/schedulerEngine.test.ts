@@ -12,6 +12,7 @@ import {
 } from '../../src/services/scheduler/engine';
 import { useSchedulerStore } from '../../src/services/scheduler/store';
 import { useExecutionTraceStore } from '../../src/services/scheduler/traceStore';
+import { NonRetryableSchedulerExecutionError } from '../../src/services/scheduler/executionError';
 
 function resetStores() {
   useSchedulerStore.setState({ jobs: [], lastEvaluationAtMs: undefined });
@@ -157,6 +158,35 @@ describe('Scheduler Engine', () => {
         'success',
         'retrying',
       ]);
+    });
+
+    it('does not replay an explicitly non-retryable execution failure', async () => {
+      const now = 1_700_000_250_000;
+      mockNow(now);
+      const executeFn = jest
+        .fn()
+        .mockRejectedValue(
+          new NonRetryableSchedulerExecutionError(new Error('side effect state is uncertain')),
+        );
+      setSchedulerExecutor({ execute: executeFn });
+      const jobId = useSchedulerStore.getState().addJob({
+        name: 'Effectful Job',
+        schedule: { kind: 'every', everyMs: 60_000 },
+        prompt: 'perform effect',
+      });
+      setJobRuntime(jobId, { nextRunAtMs: now - 1 });
+
+      await evaluateJobsOnce({ nowMs: now, trigger: 'scheduled' });
+      await evaluateJobsOnce({ nowMs: now + 30_000, trigger: 'scheduled' });
+
+      const job = useSchedulerStore.getState().getJob(jobId);
+      expect(executeFn).toHaveBeenCalledTimes(1);
+      expect(job?.retryAttempts).toBe(0);
+      expect(job?.nextRetryAtMs).toBeUndefined();
+      expect(useExecutionTraceStore.getState().traces[0]).toMatchObject({
+        status: 'error',
+        error: 'side effect state is uncertain',
+      });
     });
 
     it('recovers a missed run from persisted nextRunAtMs after a cold start', async () => {

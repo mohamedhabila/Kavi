@@ -11,6 +11,7 @@ import type { CronJob, SchedulerTrigger } from '../cron/types';
 import { emitSchedulerEvent } from '../events/bus';
 import { generateId } from '../../utils/id';
 import { unrefTimerIfSupported } from '../../utils/timers';
+import { isNonRetryableSchedulerExecutionError } from './executionError';
 
 let schedulerInterval: ReturnType<typeof setInterval> | null = null;
 const CHECK_INTERVAL_MS = 60_000;
@@ -195,7 +196,7 @@ async function executeJob(
     const completedAt = Date.now();
     const error = err instanceof Error ? err.message : String(err);
     const maxRetries = maxRetriesForJob(job);
-    const willRetry = attempt < maxRetries;
+    const willRetry = !isNonRetryableSchedulerExecutionError(err) && attempt < maxRetries;
 
     if (willRetry) {
       const nextRetryAtMs = completedAt + getRetryDelay(attempt);
