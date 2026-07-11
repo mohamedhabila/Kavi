@@ -6,6 +6,7 @@ jest.mock('expo-sqlite', () => {
 import { seedE2EOracleEvidence } from '../../src/acceptance/e2eAgent/e2eOracleEvidenceSeeder';
 import { resetE2EMemorySandbox } from '../../src/acceptance/e2eAgent/sandboxMemory';
 import { getFactById, listFacts } from '../../src/services/memory/facts/queries';
+import { findEntityByName } from '../../src/services/memory/entities';
 import { buildLivingMemorySections } from '../../src/services/memory/livingMemoryBridge';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 
@@ -13,14 +14,16 @@ const CONVERSATION_ID = 'oracle-integration-thread';
 const WORKSPACE_ID = 'oracle-integration-workspace';
 const ORACLE_VALUE = 'ORACLE-PROMPT-VISIBLE-42';
 
-async function retrieveOracleValue() {
+async function retrieveOracleValue(
+  query = 'What is the oracle_preference for oracle-integration-user?',
+) {
   const now = Date.now() + 1_000;
   return buildLivingMemorySections({
     messages: [
       {
         id: 'oracle-probe-user',
         role: 'user',
-        content: 'What is the oracle_preference for oracle-integration-user?',
+        content: query,
         timestamp: now - 1,
       },
     ],
@@ -85,5 +88,39 @@ describe('oracle evidence production retrieval integration', () => {
     const cleaned = await retrieveOracleValue();
     expect(cleaned.recalledFactCount).toBe(0);
     expect(cleaned.sections.map((section) => section.text).join('\n')).not.toContain(ORACLE_VALUE);
+  });
+
+  it('seeds canonical-user oracle evidence through exact first-person product grounding', async () => {
+    const seeded = await seedE2EOracleEvidence({
+      declaration: {
+        interface: 'memory_remember',
+        allowSeeding: true,
+        facts: [
+          {
+            subject: 'user',
+            subjectType: 'self',
+            predicate: 'preferred_channel',
+            value: 'Signal',
+            scope: 'global',
+          },
+        ],
+      },
+      conversationId: CONVERSATION_ID,
+      workspaceConversationId: WORKSPACE_ID,
+    });
+
+    const persisted = getFactById(seeded.seededFactIds[0]);
+    expect(persisted).toMatchObject({
+      predicate: 'preferred_channel',
+      objectText: 'Signal',
+      factClass: 'subjective_user',
+      sourceAuthority: 'grounded_user',
+      sourceMessageId: expect.stringMatching(/^e2e-oracle-evidence-[a-f0-9]{64}$/u),
+    });
+    expect(findEntityByName('user')).toMatchObject({ canonicalName: 'user', type: 'self' });
+
+    const visible = await retrieveOracleValue('What is my preferred_channel?');
+    expect(visible.recalledFactCount).toBe(1);
+    expect(visible.sections.map((section) => section.text).join('\n')).toContain('Signal');
   });
 });

@@ -3,6 +3,7 @@ import { createConversationFileContext } from '../../engine/tools/toolWorkspaceF
 import { getFactById } from '../../services/memory/facts/queries';
 import type { MemoryFact } from '../../services/memory/facts/types';
 import type { MemoryRememberArgs } from '../../services/memory/memoryTools';
+import { isCanonicalSelfMemorySubject } from '../../services/memory/memorySubjectIdentity';
 import {
   validateE2EOracleEvidenceDeclaration,
   type E2EOracleEvidenceDeclaration,
@@ -62,9 +63,9 @@ function buildOracleUserEvidence(
   });
   return {
     messageId: `e2e-oracle-evidence-${stableHash(canonical).slice('sha256:'.length)}`,
-    text:
-      `Evaluator-controlled oracle evidence: subject ${JSON.stringify(fact.subject)} ` +
-      `has ${JSON.stringify(fact.predicate)} value ${JSON.stringify(fact.value)}.`,
+    text: isCanonicalSelfMemorySubject(fact.subject)
+      ? `I ${fact.predicate} ${fact.value}.`
+      : `${fact.subject} ${fact.predicate} ${fact.value}.`,
   };
 }
 
@@ -104,6 +105,7 @@ function validateSeedResult(
 
 function validatePersistedSeed(
   fact: MemoryFact | null | undefined,
+  expected: Readonly<MemoryRememberArgs>,
   identity: { conversationId: string; workspaceConversationId: string },
   userEvidence: OracleUserEvidence,
   index: number,
@@ -117,7 +119,11 @@ function validatePersistedSeed(
     fact.sourceMessageId !== userEvidence.messageId ||
     fact.sourceRunId !== null ||
     fact.sourceTurnId !== null ||
-    fact.sourceSummary !== null
+    fact.sourceSummary !== null ||
+    fact.predicate !== expected.predicate ||
+    fact.objectText !== expected.value ||
+    fact.factClass !== 'subjective_user' ||
+    fact.sourceAuthority !== 'grounded_user'
   ) {
     throw new Error(`Oracle memory_remember fact ${index} persisted untrusted provenance.`);
   }
@@ -150,7 +156,7 @@ export async function seedE2EOracleEvidence(input: {
       ...identity,
     });
     const factId = validateSeedResult(rawResult, identity, userEvidence, index);
-    validatePersistedSeed(readPersistedFact(factId), identity, userEvidence, index);
+    validatePersistedSeed(readPersistedFact(factId), fact, identity, userEvidence, index);
     seededFactIds.push(factId);
   }
   return { seededFactCount: input.declaration.facts.length, seededFactIds };

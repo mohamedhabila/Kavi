@@ -262,10 +262,13 @@ function quoteMask(text: string): boolean[] {
   return mask;
 }
 
-function clauseRange(text: string, valueStart: number): { start: number; end: number } {
+function clauseRange(text: string, valueStart: number, valueEnd: number): { start: number; end: number } {
   let start = valueStart;
   while (start > 0 && !CLAUSE_BOUNDARY_PATTERN.test(text[start - 1]!)) start -= 1;
-  let end = valueStart;
+  let end = valueEnd;
+  if (end > valueStart && CLAUSE_BOUNDARY_PATTERN.test(text[end - 1]!)) {
+    return { start, end };
+  }
   while (end < text.length && !CLAUSE_BOUNDARY_PATTERN.test(text[end]!)) end += 1;
   return { start, end };
 }
@@ -481,7 +484,7 @@ export function deriveExactSelfClaimEvidence(input: {
   const mask = quoteMask(text);
 
   for (const valueStart of exactOccurrences(text, value)) {
-    const range = clauseRange(text, valueStart);
+    const range = clauseRange(text, valueStart, valueStart + value.length);
     const tokens = tokensForClause(text, range.start, range.end, mask);
     for (let relationIndex = 0; relationIndex < tokens.length; relationIndex += 1) {
       if (!isRelationToken(tokens[relationIndex]!, allowedRelationForms)) continue;
@@ -520,7 +523,7 @@ export function deriveExactNamedSubjectClaimEvidence(input: {
 
   for (const valueStart of exactOccurrences(text, value)) {
     if (!rangeIsUnquoted(mask, valueStart, valueStart + value.length)) continue;
-    const range = clauseRange(text, valueStart);
+    const range = clauseRange(text, valueStart, valueStart + value.length);
     const tokens = tokensForClause(text, range.start, range.end, mask);
     for (const subjectStart of exactOccurrences(text, subject)) {
       const subjectEnd = subjectStart + subject.length;

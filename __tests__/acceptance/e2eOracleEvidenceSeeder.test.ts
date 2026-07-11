@@ -20,6 +20,8 @@ function persistedFact(overrides: Partial<MemoryFact> = {}): MemoryFact {
     sourceRunId: null,
     sourceTurnId: null,
     sourceSummary: null,
+    factClass: 'subjective_user',
+    sourceAuthority: 'grounded_user',
     scope: 'conversation',
     originConversationId: 'isolated-workspace',
     originThreadId: 'isolated-thread',
@@ -115,7 +117,7 @@ describe('paired oracle evidence seeding', () => {
       },
       userEvidence: {
         messageId: expect.stringMatching(/^e2e-oracle-evidence-[a-f0-9]{64}$/u),
-        text: 'Evaluator-controlled oracle evidence: subject "user" has "preference" value "tea".',
+        text: 'I preference tea.',
       },
     });
     const serializedArgs = JSON.stringify(executeTool.mock.calls[0][0].args);
