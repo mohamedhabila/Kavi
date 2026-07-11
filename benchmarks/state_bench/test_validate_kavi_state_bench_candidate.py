@@ -287,6 +287,16 @@ class CandidateValidatorTests(unittest.TestCase):
             VALIDATOR.validate_candidate(self._args())
         self.assertFalse(self._args().out_manifest.exists())
 
+    def test_missing_cost_measurement_cannot_be_reported_as_zero(self) -> None:
+        trajectory_path = self.outputs / "travel/run1" / f"{self.task_id}.json"
+        trajectory = json.loads(trajectory_path.read_text())
+        del trajectory["cost_usd"]
+        self._write_json(trajectory_path, trajectory)
+
+        with self.assertRaisesRegex(RuntimeError, "cost measurement is missing"):
+            VALIDATOR.validate_candidate(self._args())
+        self.assertFalse(self._args().out_manifest.exists())
+
     def test_archive_tampering_fails_without_emitting_a_manifest(self) -> None:
         with zipfile.ZipFile(self.archive, "w", zipfile.ZIP_DEFLATED) as package:
             package.writestr(

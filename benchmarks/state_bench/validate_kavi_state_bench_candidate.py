@@ -190,12 +190,16 @@ def finite_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
-def trajectory_cost_usd(trajectory: dict[str, Any], path: Path) -> float | None:
+def trajectory_cost_usd(trajectory: dict[str, Any], path: Path) -> float:
     token_usage = trajectory.get("token_usage", {})
     require(isinstance(token_usage, dict), f"Trajectory token_usage is invalid: {path}")
     raw_cost = trajectory.get("cost_usd") or token_usage.get("total_cost_usd")
-    require(raw_cost is None or finite_number(raw_cost), f"Trajectory cost is invalid: {path}")
-    return float(raw_cost) if raw_cost is not None else None
+    require(raw_cost is not None, f"Trajectory cost measurement is missing: {path}")
+    require(
+        finite_number(raw_cost) and raw_cost >= 0,
+        f"Trajectory cost is invalid: {path}",
+    )
+    return float(raw_cost)
 
 
 def verify_trajectory(
