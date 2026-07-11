@@ -457,6 +457,12 @@ describe('initializeServices', () => {
       now: expect.any(Number),
       durabilityClass: 'external_durable_operation',
     });
+    expect(
+      mockRecoverInterruptedForegroundModelExecutions.mock.invocationCallOrder[0],
+    ).toBeLessThan(mockChatStoreState.recoverInterruptedAgentRuns.mock.invocationCallOrder[0]);
+    expect(mockChatStoreState.recoverInterruptedAgentRuns.mock.invocationCallOrder[0]).toBeLessThan(
+      mockMaintainTerminalExecutionRetention.mock.invocationCallOrder[0],
+    );
   });
   it('only initializes once (idempotent)', () => {
     const { initializeServices } = require('../../src/services/startup');

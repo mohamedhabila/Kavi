@@ -45,6 +45,22 @@ export function buildRecoveredAgentRunStateAfterAppRestart(params: {
     return undefined;
   }
 
+  const runMessageScope = buildAgentRunMessageScope(params.run);
+  if (hasDeliveredFinalAssistantResponse(params.messages, runMessageScope)) {
+    const preservedFinalResponse = getLatestFinalAssistantResponsePreview(
+      params.messages,
+      runMessageScope,
+    );
+    if (preservedFinalResponse) {
+      return {
+        status: 'completed',
+        latestSummary: preservedFinalResponse,
+        checkpointTitle: 'Recovered delivered response',
+        checkpointDetail: 'The final response was durably persisted before the app restarted.',
+      };
+    }
+  }
+
   if (isAgentRunAwaitingBackgroundWorkers(params.run)) {
     if (params.subAgents.length === 0) {
       const latestSummary =
@@ -70,24 +86,6 @@ export function buildRecoveredAgentRunStateAfterAppRestart(params: {
 
     const backgroundOutcome = summarizeBackgroundWorkerRunOutcome(params.subAgents);
     if (backgroundOutcome.status === 'completed') {
-      const runMessageScope = buildAgentRunMessageScope(params.run);
-      const preservedFinalResponse = hasDeliveredFinalAssistantResponse(
-        params.messages,
-        runMessageScope,
-      )
-        ? getLatestFinalAssistantResponsePreview(params.messages, runMessageScope)
-        : undefined;
-
-      if (preservedFinalResponse) {
-        return {
-          status: 'completed',
-          latestSummary: preservedFinalResponse,
-          checkpointTitle: 'Recovered background completion',
-          checkpointDetail:
-            'Background workers finished before the app restarted and the final response was preserved.',
-        };
-      }
-
       const latestSummary =
         'Background workers finished before the app restarted. Recovering the final response from verified results.';
       return {

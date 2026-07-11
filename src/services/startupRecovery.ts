@@ -31,6 +31,9 @@ async function recoverForegroundJournalState(): Promise<void> {
   } catch (error) {
     console.warn('[startup] foreground model journal retention failed:', error);
   }
+}
+
+function maintainExternalExecutionRetention(): void {
   try {
     maintainTerminalExecutionRetention({
       now: Date.now(),
@@ -47,10 +50,13 @@ export async function recoverPersistedAgentState(): Promise<void> {
   const chatState = useChatStore.getState();
   await initSubAgentRegistry(chatState.conversations);
   const activeSubAgents = listActiveSubAgents();
-  chatState.recoverInterruptedAgentRuns(activeSubAgents, {
+  // Reconcile journal-owned projections and exact effect receipts before the
+  // coarser AgentRun repair can terminalize active tools or final responses.
+  await recoverForegroundJournalState();
+  useChatStore.getState().recoverInterruptedAgentRuns(activeSubAgents, {
     timestamp: Date.now(),
   });
-  await recoverForegroundJournalState();
+  maintainExternalExecutionRetention();
   await repairTerminalAgentRunsMissingFinalResponses({
     activeSubAgents,
   });
@@ -79,8 +85,10 @@ export function waitForPersistedAgentRecoveryReadiness(): Promise<void> {
 export function triggerForegroundJournalRecovery(): Promise<void> {
   if (recoveryPromise) return recoveryPromise;
   if (!hasCompletedInitialRecovery) return triggerPersistedAgentRecovery();
-  recoveryPromise = recoverForegroundJournalState().finally(() => {
-    recoveryPromise = null;
-  });
+  recoveryPromise = recoverForegroundJournalState()
+    .then(maintainExternalExecutionRetention)
+    .finally(() => {
+      recoveryPromise = null;
+    });
   return recoveryPromise;
 }

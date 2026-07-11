@@ -166,9 +166,32 @@ describe('agent control graph interrupted run recovery', () => {
     ).toEqual({
       status: 'completed',
       latestSummary: 'Finished result.',
-      checkpointTitle: 'Recovered background completion',
-      checkpointDetail:
-        'Background workers finished before the app restarted and the final response was preserved.',
+      checkpointTitle: 'Recovered delivered response',
+      checkpointDetail: 'The final response was durably persisted before the app restarted.',
+    });
+  });
+
+  it('preserves a completed ordinary final response instead of failing its run', () => {
+    expect(
+      buildRecoveredAgentRunStateAfterAppRestart({
+        messages: [
+          createMessage({ id: 'user-1', role: 'user', content: 'Run it', timestamp: 1 }),
+          createMessage({
+            id: 'assistant-final',
+            role: 'assistant',
+            content: 'Finished result.',
+            timestamp: 2,
+            assistantMetadata: { kind: 'final', completionStatus: 'complete' },
+          }),
+        ],
+        run: createRun(),
+        subAgents: [],
+      }),
+    ).toEqual({
+      status: 'completed',
+      latestSummary: 'Finished result.',
+      checkpointTitle: 'Recovered delivered response',
+      checkpointDetail: 'The final response was durably persisted before the app restarted.',
     });
   });
 
