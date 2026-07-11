@@ -58,6 +58,7 @@ export async function resolvePreparedAgentControlGraphModelTurnResult(params: {
       trackedAsyncOperations: params.iterationParams.trackedAsyncOperations,
       consecutivePendingAsyncNoToolTurns: params.runtime.consecutivePendingAsyncNoToolTurns,
       turnAssistantContent,
+      modelTurnAssistantContent: params.fullContent,
       reasoning: params.reasoning,
       providerReplay: params.providerReplay,
       completion: params.completion,

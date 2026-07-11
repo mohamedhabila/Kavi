@@ -216,6 +216,7 @@ export async function resolveAgentControlGraphNoToolTurn(params: {
   trackedAsyncOperations: ReadonlyMap<string, TrackedAsyncOperation>;
   consecutivePendingAsyncNoToolTurns: number;
   turnAssistantContent: string;
+  modelTurnAssistantContent: string;
   reasoning: string;
   providerReplay?: MessageProviderReplay;
   completion?: AssistantCompletionMetadata;
@@ -278,7 +279,7 @@ export async function resolveAgentControlGraphNoToolTurn(params: {
           effectiveForceTextThisTurn: params.effectiveForceTextThisTurn,
           recoveryCount: params.recoveryDirectives.incompleteFinalTextRecoveryCount,
           selectedToolCount: params.selectedToolCount,
-          turnAssistantContent: params.turnAssistantContent,
+          turnAssistantContent: params.modelTurnAssistantContent,
         })
       : undefined;
   if (emptyResponseRetryReason) {
@@ -329,7 +330,7 @@ export async function resolveAgentControlGraphNoToolTurn(params: {
 
   if (
     pendingAsyncOperations.length === 0 &&
-    params.turnAssistantContent.trim().length === 0
+    params.modelTurnAssistantContent.trim().length === 0
   ) {
     await params.finishWithGraphTerminalEvent({
       graphEvent: {

@@ -56,6 +56,7 @@ function buildBaseParams() {
     trackedAsyncOperations: new Map<string, TrackedAsyncOperation>(),
     consecutivePendingAsyncNoToolTurns: 0,
     turnAssistantContent: 'final answer',
+    modelTurnAssistantContent: 'final answer',
     reasoning: '',
     providerReplay: undefined,
     completion: {
@@ -89,6 +90,7 @@ describe('agent control graph no-tool turn resolution', () => {
     params.trackedAsyncOperations = new Map([[pendingOperation.key, pendingOperation]]);
     params.consecutivePendingAsyncNoToolTurns = 1;
     params.turnAssistantContent = 'draft answer';
+    params.modelTurnAssistantContent = 'draft answer';
 
     const result = await resolveAgentControlGraphNoToolTurn(params);
 
@@ -122,6 +124,7 @@ describe('agent control graph no-tool turn resolution', () => {
     const params = buildBaseParams();
     params.trackedAsyncOperations = new Map([[pendingOperation.key, pendingOperation]]);
     params.turnAssistantContent = 'STARTED_BGSTATE0607';
+    params.modelTurnAssistantContent = 'STARTED_BGSTATE0607';
 
     const result = await resolveAgentControlGraphNoToolTurn(params);
 
@@ -141,6 +144,7 @@ describe('agent control graph no-tool turn resolution', () => {
     const params = buildBaseParams();
     params.trackedAsyncOperations = new Map([[pendingOperation.key, pendingOperation]]);
     params.turnAssistantContent = '';
+    params.modelTurnAssistantContent = '';
     params.recoveryDirectives = {
       ...baseTurnDirectives,
       incompleteFinalTextRecoveryCount: 1,
@@ -194,6 +198,7 @@ describe('agent control graph no-tool turn resolution', () => {
   it('retries provider malformed function-call completions when tools are selected', async () => {
     const params = buildBaseParams();
     params.turnAssistantContent = '';
+    params.modelTurnAssistantContent = '';
     params.selectedToolNames = new Set(['update_goals']);
     params.selectedToolCount = 1;
     params.completion = {
@@ -231,6 +236,7 @@ describe('agent control graph no-tool turn resolution', () => {
   it('retries empty selected-tool turns after token-budget exhaustion', async () => {
     const params = buildBaseParams();
     params.turnAssistantContent = '';
+    params.modelTurnAssistantContent = '';
     params.selectedToolNames = new Set(['update_goals']);
     params.selectedToolCount = 1;
     params.nextFinalizationMaxTokens = 8192;
@@ -266,6 +272,7 @@ describe('agent control graph no-tool turn resolution', () => {
   it('retries an empty passive turn with tools kept disabled', async () => {
     const params = buildBaseParams();
     params.turnAssistantContent = '';
+    params.modelTurnAssistantContent = '';
     params.selectedToolNames = new Set<string>();
     params.selectedToolCount = 0;
     params.completion = {
@@ -302,6 +309,7 @@ describe('agent control graph no-tool turn resolution', () => {
   it('retries one ordinary empty stop with selected tools still available', async () => {
     const params = buildBaseParams();
     params.turnAssistantContent = '   ';
+    params.modelTurnAssistantContent = '   ';
     params.selectedToolNames = new Set(['contacts_search']);
     params.selectedToolCount = 1;
 
@@ -324,6 +332,7 @@ describe('agent control graph no-tool turn resolution', () => {
   it('blocks visibly after one empty-response recovery instead of finalizing empty', async () => {
     const params = buildBaseParams();
     params.turnAssistantContent = '';
+    params.modelTurnAssistantContent = '';
     params.recoveryDirectives = {
       ...baseTurnDirectives,
       incompleteFinalTextRecoveryCount: 1,
@@ -350,11 +359,38 @@ describe('agent control graph no-tool turn resolution', () => {
     expect(params.onContinueThinking).not.toHaveBeenCalled();
   });
 
+  it('does not let a prior continuation prefix mask an empty recovery response', async () => {
+    const params = buildBaseParams();
+    params.turnAssistantContent = 'partial final answer';
+    params.modelTurnAssistantContent = '';
+    params.recoveryDirectives = {
+      ...baseTurnDirectives,
+      forceFinalText: true,
+      forcedTextReason: 'incomplete_delivery_continuation',
+      incompleteFinalTextRecoveryCount: 1,
+      incompleteFinalTextContinuationPrefix: 'partial final answer',
+    };
+
+    const result = await resolveAgentControlGraphNoToolTurn(params);
+
+    expect(result).toEqual({ status: 'finalized' });
+    expect(params.finishWithGraphFinalCandidateEvent).not.toHaveBeenCalled();
+    expect(params.finishWithGraphTerminalEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        graphEvent: {
+          type: 'BLOCKED',
+          reason: 'empty_final_text_after_recovery',
+        },
+      }),
+    );
+  });
+
   it('finalizes passive no-goal turns even when goal mutation is available', async () => {
     const params = buildBaseParams();
     params.selectedToolNames = new Set(['write_file', GOAL_BOOTSTRAP_TOOL_NAME]);
     params.selectedToolCount = params.selectedToolNames.size;
     params.turnAssistantContent = 'No problem.';
+    params.modelTurnAssistantContent = 'No problem.';
 
     const result = await resolveAgentControlGraphNoToolTurn(params);
 
@@ -575,6 +611,7 @@ describe('agent control graph no-tool turn resolution', () => {
   it('continues incomplete final text in the graph layer', async () => {
     const params = buildBaseParams();
     params.turnAssistantContent = 'partial final answer';
+    params.modelTurnAssistantContent = 'partial final answer';
     params.completion = {
       completionStatus: 'incomplete',
       finishReason: 'length',
