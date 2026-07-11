@@ -75,10 +75,6 @@ export async function executePreparedAgentControlGraphTurn(params: {
     });
   }
 
-  if (consumeOneShotTurnDirectives) {
-    iterationParams.graph.consumeOneShotTurnDirectives('model_turn_started');
-  }
-
   let fullContent = '';
   let reasoning = '';
   let providerReplay: MessageProviderReplay | undefined;
@@ -166,6 +162,10 @@ export async function executePreparedAgentControlGraphTurn(params: {
       }
     }
     throw streamError instanceof Error ? streamError : new Error(String(streamError));
+  }
+
+  if (consumeOneShotTurnDirectives) {
+    iterationParams.graph.consumeOneShotTurnDirectives('model_turn_completed');
   }
 
   return buildResult(

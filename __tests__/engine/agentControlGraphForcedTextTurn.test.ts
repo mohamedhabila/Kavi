@@ -28,6 +28,11 @@ describe('agent control graph forced text turns', () => {
       'Continue the interrupted final answer from where it stopped.',
     ],
     [
+      'empty_delivery_recovery',
+      '[SYSTEM EMPTY RESPONSE RECOVERY]',
+      'State the verified outcome or the concrete blocker',
+    ],
+    [
       'request_clarification',
       '[SYSTEM CLARIFICATION REQUIRED]',
       'Ask one concise clarification question for the missing required information.',
