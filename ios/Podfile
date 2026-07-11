@@ -63,6 +63,19 @@ target 'Kavi' do
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
 
+    expo_sqlite_target = installer.pods_project.targets.find do |target|
+      target.name == 'ExpoSQLite'
+    end
+    unless expo_sqlite_target
+      raise Pod::Informative, 'Expected the ExpoSQLite pod target to be installed'
+    end
+
+    expo_sqlite_target.build_configurations.each do |build_config|
+      # Xcode 26 enables Swift explicit modules by default. ExpoSQLite's vendored
+      # sqlite3 header graph cannot currently be precompiled in that mode.
+      build_config.build_settings['SWIFT_ENABLE_EXPLICIT_MODULES'] = 'NO'
+    end
+
     installer.pods_project.build_configurations.each do |build_config|
       build_config.build_settings.delete('EXCLUDED_ARCHS[sdk=iphonesimulator*]')
     end
