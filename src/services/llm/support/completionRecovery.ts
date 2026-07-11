@@ -1,6 +1,7 @@
 import type { AssistantCompletionMetadata } from '../../../types/message';
 
 export const MAX_RESUMABLE_INCOMPLETE_TEXT_RECOVERIES = 2;
+export const MAX_EMPTY_FINAL_TEXT_RECOVERIES = 1;
 
 const TOKEN_BUDGET_EXHAUSTION_REASONS = new Set([
   'length',

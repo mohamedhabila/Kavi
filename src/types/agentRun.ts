@@ -206,6 +206,7 @@ export interface AgentRunControlGraphPerformance {
 
 export type AgentRunControlGraphForcedTextReason =
   | 'async_terminal_completion'
+  | 'empty_delivery_recovery'
   | 'execution_loop_recovery'
   | 'incomplete_delivery_continuation'
   | 'loop_recovery'

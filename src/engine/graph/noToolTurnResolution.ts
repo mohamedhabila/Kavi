@@ -5,6 +5,7 @@ import type {
 } from '../../types/message';
 import {
   isTokenBudgetExhaustedCompletion,
+  MAX_EMPTY_FINAL_TEXT_RECOVERIES,
   normalizeCompletionFinishReason,
 } from '../../services/llm/support/completionRecovery';
 import { buildAssistantMessageMetadata } from '../../utils/assistantMessageMetadata';
@@ -72,45 +73,62 @@ function isMalformedToolCallCompletion(
   );
 }
 
-function buildEmptyToolCallRetryPrompt(params: {
+function buildEmptyResponseRetryPrompt(params: {
   selectedToolNames: ReadonlySet<string>;
   finishReason: string;
+  toolsMayBeUsed: boolean;
 }): string {
   const toolNames = Array.from(params.selectedToolNames).filter(Boolean).sort();
   const reason = params.finishReason || 'empty_tool_response';
+  if (!params.toolsMayBeUsed) {
+    return [
+      '[SYSTEM EMPTY RESPONSE RETRY]',
+      `The provider ended the previous response without visible text (${reason}).`,
+      'Return one concise, visible user-facing answer now.',
+      'State the verified outcome or the concrete blocker. Do not return an empty response.',
+      'Tools are unavailable for this recovery turn.',
+    ].join('\n');
+  }
+
   return [
     '[SYSTEM TOOL CALL RETRY]',
-    `The provider ended the previous response without a usable tool call (${reason}).`,
+    `The provider ended the previous response without visible text or a usable tool call (${reason}).`,
     `Available structural tools: ${toolNames.join(', ') || 'none'}.`,
-    'Retry the turn with a valid JSON tool call when tool execution is required.',
-    'Do not finalize with empty text while a selected tool is still required for this turn.',
+    'Continue the current request with a valid JSON tool call when work remains.',
+    'Otherwise return a concise visible answer that states the verified outcome or concrete blocker.',
+    'Do not return an empty response.',
   ].join('\n');
 }
 
-function resolveEmptyToolCallRetryReason(params: {
+function resolveEmptyResponseRetryReason(params: {
   completion: AssistantCompletionMetadata | undefined;
   effectiveForceTextThisTurn: boolean;
+  recoveryCount: number;
   selectedToolCount: number;
   turnAssistantContent: string;
 }): CompletionGateHoldReason | undefined {
   if (
-    params.effectiveForceTextThisTurn ||
-    params.selectedToolCount <= 0 ||
-    params.turnAssistantContent.trim().length > 0
+    params.turnAssistantContent.trim().length > 0 ||
+    params.recoveryCount >= MAX_EMPTY_FINAL_TEXT_RECOVERIES
   ) {
     return undefined;
   }
 
-  if (isMalformedToolCallCompletion(params.completion)) {
+  const toolsMayBeUsed = !params.effectiveForceTextThisTurn && params.selectedToolCount > 0;
+  if (toolsMayBeUsed && isMalformedToolCallCompletion(params.completion)) {
     return 'malformed_tool_call_retry';
   }
 
-  if (isTokenBudgetExhaustedCompletion(params.completion)) {
+  if (toolsMayBeUsed && isTokenBudgetExhaustedCompletion(params.completion)) {
     return 'empty_tool_call_retry';
   }
 
-  return undefined;
+  return 'empty_response_retry';
 }
+
+const EMPTY_FINAL_TEXT_FAILURE_REASON = 'empty_final_text_after_recovery';
+const EMPTY_FINAL_TEXT_FAILURE_MESSAGE =
+  "I couldn't complete this request because the model returned no usable response after one recovery attempt. Please retry or choose another model.";
 
 function resolvePendingWorkflowContinuationToolNames(params: {
   allTools: ReadonlyArray<ToolDefinition>;
@@ -222,6 +240,13 @@ export async function resolveAgentControlGraphNoToolTurn(params: {
     assistantMetadata: ReturnType<typeof buildAssistantMessageMetadata>;
     sessionEndReason?: string;
   }) => Promise<void>;
+  finishWithGraphTerminalEvent: (params: {
+    graphEvent: Extract<AgentControlGraphEvent, { type: 'BLOCKED' }>;
+    content: string;
+    providerReplay?: MessageProviderReplay;
+    assistantMetadata: ReturnType<typeof buildAssistantMessageMetadata>;
+    sessionEndReason?: string;
+  }) => Promise<void>;
   onContinueThinking: (reason: CompletionGateHoldReason) => Promise<void>;
   onFinalizationHeld?: (params: {
     iteration: number;
@@ -245,46 +270,83 @@ export async function resolveAgentControlGraphNoToolTurn(params: {
     });
   }
 
-  const emptyToolCallRetryReason = resolveEmptyToolCallRetryReason({
-    completion: params.completion,
-    effectiveForceTextThisTurn: params.effectiveForceTextThisTurn,
-    selectedToolCount: params.selectedToolCount,
-    turnAssistantContent: params.turnAssistantContent,
-  });
-  if (emptyToolCallRetryReason) {
+  const pendingAsyncOperations = getPendingTrackedAsyncOperations(params.trackedAsyncOperations);
+  const emptyResponseRetryReason =
+    pendingAsyncOperations.length === 0
+      ? resolveEmptyResponseRetryReason({
+          completion: params.completion,
+          effectiveForceTextThisTurn: params.effectiveForceTextThisTurn,
+          recoveryCount: params.recoveryDirectives.incompleteFinalTextRecoveryCount,
+          selectedToolCount: params.selectedToolCount,
+          turnAssistantContent: params.turnAssistantContent,
+        })
+      : undefined;
+  if (emptyResponseRetryReason) {
+    const toolsMayBeUsed =
+      !params.effectiveForceTextThisTurn && params.selectedToolCount > 0;
     params.applyGraphEvents([
       {
         type: 'FINALIZATION_HELD',
-        reason: emptyToolCallRetryReason,
+        reason: emptyResponseRetryReason,
       },
     ]);
     params.onFinalizationHeld?.({
       iteration: params.iteration,
-      holdReason: emptyToolCallRetryReason,
+      holdReason: emptyResponseRetryReason,
       missingRequiredEvidenceLabels: [],
     });
-    if (emptyToolCallRetryReason === 'empty_tool_call_retry') {
-      params.recordTurnDirectives(
-        { maxTokensOverride: params.nextFinalizationMaxTokens },
-        emptyToolCallRetryReason,
-      );
-    }
+    params.recordTurnDirectives(
+      {
+        ...(!toolsMayBeUsed
+          ? {
+              forceFinalText: true,
+              forcedTextReason: 'empty_delivery_recovery' as const,
+            }
+          : {}),
+        ...(emptyResponseRetryReason === 'empty_tool_call_retry'
+          ? { maxTokensOverride: params.nextFinalizationMaxTokens }
+          : {}),
+        incompleteFinalTextRecoveryCount:
+          params.recoveryDirectives.incompleteFinalTextRecoveryCount + 1,
+      },
+      emptyResponseRetryReason,
+    );
     appendTrailingSystemMessage(
       params.workingMessages,
-      buildEmptyToolCallRetryPrompt({
+      buildEmptyResponseRetryPrompt({
         selectedToolNames: params.selectedToolNames,
         finishReason: normalizeCompletionFinishReason(params.completion?.finishReason),
+        toolsMayBeUsed,
       }),
-      `msg_${Date.now()}_${emptyToolCallRetryReason}_${params.iteration}`,
+      `msg_${Date.now()}_${emptyResponseRetryReason}_${params.iteration}`,
     );
     return continueNoToolTurn({
-      commandReason: emptyToolCallRetryReason,
+      commandReason: emptyResponseRetryReason,
       nextConsecutivePendingAsyncNoToolTurns: params.consecutivePendingAsyncNoToolTurns,
       onContinueThinking: params.onContinueThinking,
     });
   }
 
-  const pendingAsyncOperations = getPendingTrackedAsyncOperations(params.trackedAsyncOperations);
+  if (
+    pendingAsyncOperations.length === 0 &&
+    params.turnAssistantContent.trim().length === 0
+  ) {
+    await params.finishWithGraphTerminalEvent({
+      graphEvent: {
+        type: 'BLOCKED',
+        reason: EMPTY_FINAL_TEXT_FAILURE_REASON,
+      },
+      content: EMPTY_FINAL_TEXT_FAILURE_MESSAGE,
+      providerReplay: params.providerReplay,
+      assistantMetadata: buildAssistantMessageMetadata('final', {
+        completionStatus: 'incomplete',
+        finishReason: EMPTY_FINAL_TEXT_FAILURE_REASON,
+      }),
+      sessionEndReason: EMPTY_FINAL_TEXT_FAILURE_REASON,
+    });
+    return { status: 'finalized' };
+  }
+
   const evaluateGate = (goals: typeof params.controlGraph.goals) =>
     evaluateCompletionGate({
       trackedOperations: params.trackedAsyncOperations,

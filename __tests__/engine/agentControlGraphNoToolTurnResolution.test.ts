@@ -76,6 +76,7 @@ function buildBaseParams() {
     resetIncompleteFinalTextRecovery: jest.fn(),
     recordTurnDirectives: jest.fn(),
     finishWithGraphFinalCandidateEvent: jest.fn().mockResolvedValue(undefined),
+    finishWithGraphTerminalEvent: jest.fn().mockResolvedValue(undefined),
     onContinueThinking: jest.fn().mockResolvedValue(undefined),
     onFinalizationHeld: jest.fn(),
   };
@@ -133,6 +134,26 @@ describe('agent control graph no-tool turn resolution', () => {
     expect(
       params.workingMessages.some((message) => message.content.includes('[SYSTEM ASYNC HOLD]')),
     ).toBe(true);
+  });
+
+  it('does not block an empty recovery turn while tracked async work is still pending', async () => {
+    const pendingOperation = createPendingOperation({ displayName: 'Background lookup' });
+    const params = buildBaseParams();
+    params.trackedAsyncOperations = new Map([[pendingOperation.key, pendingOperation]]);
+    params.turnAssistantContent = '';
+    params.recoveryDirectives = {
+      ...baseTurnDirectives,
+      incompleteFinalTextRecoveryCount: 1,
+    };
+
+    const result = await resolveAgentControlGraphNoToolTurn(params);
+
+    expect(result).toEqual({
+      status: 'continued',
+      nextConsecutivePendingAsyncNoToolTurns: 1,
+    });
+    expect(params.finishWithGraphTerminalEvent).not.toHaveBeenCalled();
+    expect(params.onContinueThinking).toHaveBeenCalledWith('async_waiting_finalization_hold');
   });
 
   it('continues without finalizing when tool results are still unsettled', async () => {
@@ -201,7 +222,10 @@ describe('agent control graph no-tool turn resolution', () => {
     expect(params.onContinueThinking).toHaveBeenCalledWith('malformed_tool_call_retry');
     expect(params.workingMessages.at(-1)?.content).toContain('[SYSTEM TOOL CALL RETRY]');
     expect(params.workingMessages.at(-1)?.content).toContain('update_goals');
-    expect(params.recordTurnDirectives).not.toHaveBeenCalled();
+    expect(params.recordTurnDirectives).toHaveBeenCalledWith(
+      { incompleteFinalTextRecoveryCount: 1 },
+      'malformed_tool_call_retry',
+    );
   });
 
   it('retries empty selected-tool turns after token-budget exhaustion', async () => {
@@ -228,7 +252,10 @@ describe('agent control graph no-tool turn resolution', () => {
       },
     ]);
     expect(params.recordTurnDirectives).toHaveBeenCalledWith(
-      { maxTokensOverride: 8192 },
+      {
+        maxTokensOverride: 8192,
+        incompleteFinalTextRecoveryCount: 1,
+      },
       'empty_tool_call_retry',
     );
     expect(params.finishWithGraphFinalCandidateEvent).not.toHaveBeenCalled();
@@ -236,7 +263,7 @@ describe('agent control graph no-tool turn resolution', () => {
     expect(params.workingMessages.at(-1)?.content).toContain('max_tokens');
   });
 
-  it('does not retry malformed function-call completions on passive no-tool turns', async () => {
+  it('retries an empty passive turn with tools kept disabled', async () => {
     const params = buildBaseParams();
     params.turnAssistantContent = '';
     params.selectedToolNames = new Set<string>();
@@ -248,13 +275,76 @@ describe('agent control graph no-tool turn resolution', () => {
 
     const result = await resolveAgentControlGraphNoToolTurn(params);
 
+    expect(result).toEqual({
+      status: 'continued',
+      nextConsecutivePendingAsyncNoToolTurns: 0,
+    });
+    expect(params.applyGraphEvents).toHaveBeenCalledWith([
+      {
+        type: 'FINALIZATION_HELD',
+        reason: 'empty_response_retry',
+      },
+    ]);
+    expect(params.recordTurnDirectives).toHaveBeenCalledWith(
+      {
+        forceFinalText: true,
+        forcedTextReason: 'empty_delivery_recovery',
+        incompleteFinalTextRecoveryCount: 1,
+      },
+      'empty_response_retry',
+    );
+    expect(params.finishWithGraphFinalCandidateEvent).not.toHaveBeenCalled();
+    expect(params.workingMessages.at(-1)?.content).toContain('[SYSTEM EMPTY RESPONSE RETRY]');
+    expect(params.workingMessages.at(-1)?.content).toContain('Tools are unavailable');
+    expect(params.onContinueThinking).toHaveBeenCalledWith('empty_response_retry');
+  });
+
+  it('retries one ordinary empty stop with selected tools still available', async () => {
+    const params = buildBaseParams();
+    params.turnAssistantContent = '   ';
+    params.selectedToolNames = new Set(['contacts_search']);
+    params.selectedToolCount = 1;
+
+    const result = await resolveAgentControlGraphNoToolTurn(params);
+
+    expect(result).toEqual({
+      status: 'continued',
+      nextConsecutivePendingAsyncNoToolTurns: 0,
+    });
+    expect(params.recordTurnDirectives).toHaveBeenCalledWith(
+      { incompleteFinalTextRecoveryCount: 1 },
+      'empty_response_retry',
+    );
+    expect(params.workingMessages.at(-1)?.content).toContain('contacts_search');
+    expect(params.workingMessages.at(-1)?.content).toContain('Continue the current request');
+    expect(params.finishWithGraphFinalCandidateEvent).not.toHaveBeenCalled();
+    expect(params.finishWithGraphTerminalEvent).not.toHaveBeenCalled();
+  });
+
+  it('blocks visibly after one empty-response recovery instead of finalizing empty', async () => {
+    const params = buildBaseParams();
+    params.turnAssistantContent = '';
+    params.recoveryDirectives = {
+      ...baseTurnDirectives,
+      incompleteFinalTextRecoveryCount: 1,
+    };
+
+    const result = await resolveAgentControlGraphNoToolTurn(params);
+
     expect(result).toEqual({ status: 'finalized' });
-    expect(params.finishWithGraphFinalCandidateEvent).toHaveBeenCalledWith(
+    expect(params.finishWithGraphFinalCandidateEvent).not.toHaveBeenCalled();
+    expect(params.finishWithGraphTerminalEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         graphEvent: {
-          type: 'FINAL_CANDIDATE_READY',
-          reason: 'MALFORMED_FUNCTION_CALL',
+          type: 'BLOCKED',
+          reason: 'empty_final_text_after_recovery',
         },
+        content: expect.stringContaining('no usable response'),
+        assistantMetadata: expect.objectContaining({
+          completionStatus: 'incomplete',
+          finishReason: 'empty_final_text_after_recovery',
+        }),
+        sessionEndReason: 'empty_final_text_after_recovery',
       }),
     );
     expect(params.onContinueThinking).not.toHaveBeenCalled();

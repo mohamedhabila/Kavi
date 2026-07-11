@@ -85,6 +85,7 @@ export async function resolvePreparedAgentControlGraphModelTurnResult(params: {
       recordTurnDirectives: params.iterationParams.graph.recordTurnDirectives,
       finishWithGraphFinalCandidateEvent:
         params.iterationParams.graph.finishWithGraphFinalCandidateEvent,
+      finishWithGraphTerminalEvent: params.iterationParams.graph.finishWithGraphTerminalEvent,
       onContinueThinking: async () => {
         params.iterationParams.callbacks.onStateChange('thinking');
         await params.iterationParams.yieldToUiFrame();
