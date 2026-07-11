@@ -168,6 +168,38 @@ describe('agentRunFinalization synthesis', () => {
     expect(result).toEqual({});
   });
 
+  it('does not let an earlier partial prefix mask an empty completed continuation', async () => {
+    mockStreamMessage.mockImplementationOnce(() =>
+      createStreamGenerator([
+        { type: 'token', content: 'Partial summary' },
+        {
+          type: 'done',
+          content: 'Partial summary',
+          completion: { completionStatus: 'incomplete', finishReason: 'length' },
+        },
+      ]),
+    );
+    mockStreamMessage.mockImplementationOnce(() =>
+      createStreamGenerator([
+        {
+          type: 'done',
+          content: '',
+          completion: { completionStatus: 'complete', finishReason: 'stop' },
+        },
+      ]),
+    );
+
+    const result = await synthesizeAgentRunFinalAnswer({
+      provider: makeProvider(),
+      model: 'gpt-5.4',
+      systemPrompt: 'You are helpful.',
+      evidence: makeEvidence(),
+    });
+
+    expect(mockStreamMessage).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({});
+  });
+
   it('aborts stalled provider synthesis at its local deadline', async () => {
     let observedSignal: AbortSignal | undefined;
     mockStreamMessage.mockImplementation((_messages, options) => {
@@ -196,5 +228,26 @@ describe('agentRunFinalization synthesis', () => {
     expect(result).toEqual({});
     expect(mockStreamMessage).toHaveBeenCalledTimes(1);
     expect(observedSignal?.aborted).toBe(true);
+  });
+
+  it('rejects partial synthesis when abort closes the stream normally', async () => {
+    mockStreamMessage.mockImplementation((_messages, options) => ({
+      async *[Symbol.asyncIterator]() {
+        yield { type: 'token', content: 'Unverified partial' };
+        await new Promise<void>((resolve) => {
+          options.signal.addEventListener('abort', () => resolve(), { once: true });
+        });
+      },
+    }));
+
+    const result = await synthesizeAgentRunFinalAnswer({
+      provider: makeProvider(),
+      model: 'gpt-5.4',
+      systemPrompt: 'You are helpful.',
+      evidence: makeEvidence(),
+      timeoutMs: 10,
+    });
+
+    expect(result).toEqual({});
   });
 });

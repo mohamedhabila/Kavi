@@ -259,6 +259,18 @@ export async function synthesizeAgentRunFinalAnswer(params: {
         }
       }
 
+      if (deadline.signal.aborted) {
+        return {};
+      }
+
+      const normalizedAttemptOutput = normalizeFinalizationOutputText(
+        attemptOutput,
+        FINALIZATION_OUTPUT_TRUNCATION,
+      );
+      if (!normalizedAttemptOutput) {
+        return {};
+      }
+
       const mergedOutput =
         continuationPrefix.length > 0
           ? mergeFinalizationContinuationText(continuationPrefix, attemptOutput)
