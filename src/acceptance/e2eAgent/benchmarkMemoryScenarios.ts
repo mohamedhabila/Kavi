@@ -155,6 +155,16 @@ export const BENCH_LONGMEM_DELAYED_RECALL: E2EScenario = {
   rubrics: [
     { kind: 'min_user_turns', min: 3 },
     { kind: 'memory_fact', predicate: 'access_code', value: 'LONGMEM-E2E-42' },
+    {
+      kind: 'turn_memory_answer',
+      turnIndex: 2,
+      answer: { kind: 'fact_values', requiredValues: ['LONGMEM-E2E-42'] },
+    },
+    {
+      kind: 'turn_memory_selection',
+      turnIndex: 2,
+      requiredFacts: [{ predicate: 'access_code', value: 'LONGMEM-E2E-42' }],
+    },
     { kind: 'ingestion_job_completed', minCount: 1 },
     {
       kind: 'working_block_token',
@@ -191,6 +201,22 @@ export const BENCH_LONGMEM_DUAL_FACT_RECALL: E2EScenario = {
     { kind: 'min_user_turns', min: 3 },
     { kind: 'memory_fact', predicate: 'access_code', value: 'LONGMEM-DUAL-A' },
     { kind: 'memory_fact', predicate: 'backup_code', value: 'LONGMEM-DUAL-B' },
+    {
+      kind: 'turn_memory_answer',
+      turnIndex: 2,
+      answer: {
+        kind: 'fact_values',
+        requiredValues: ['LONGMEM-DUAL-A', 'LONGMEM-DUAL-B'],
+      },
+    },
+    {
+      kind: 'turn_memory_selection',
+      turnIndex: 2,
+      requiredFacts: [
+        { predicate: 'access_code', value: 'LONGMEM-DUAL-A' },
+        { predicate: 'backup_code', value: 'LONGMEM-DUAL-B' },
+      ],
+    },
     { kind: 'memory_episode_count', min: 1 },
     { kind: 'graph_terminal_success' },
     {
@@ -225,6 +251,21 @@ export const BENCH_LONGMEM_KNOWLEDGE_UPDATE_RECALL: E2EScenario = {
     { kind: 'min_user_turns', min: 3 },
     { kind: 'memory_fact', predicate: 'preferred_station', value: 'STATION-NEW-E2E' },
     { kind: 'memory_fact_absent', predicate: 'preferred_station', value: 'STATION-OLD-E2E' },
+    {
+      kind: 'turn_memory_answer',
+      turnIndex: 2,
+      answer: {
+        kind: 'fact_values',
+        requiredValues: ['STATION-NEW-E2E'],
+        forbiddenValues: ['STATION-OLD-E2E'],
+      },
+    },
+    {
+      kind: 'turn_memory_selection',
+      turnIndex: 2,
+      requiredFacts: [{ predicate: 'preferred_station', value: 'STATION-NEW-E2E' }],
+      forbiddenFacts: [{ predicate: 'preferred_station', value: 'STATION-OLD-E2E' }],
+    },
     { kind: 'graph_terminal_success' },
     {
       kind: 'token_budget',
@@ -246,12 +287,25 @@ export const BENCH_LONGMEM_ABSTENTION_EMPTY_RECALL: E2EScenario = {
       content: 'Remember that subject `longmem-known-user` has known_code `KNOWN-CODE-E2E`.',
     },
     {
-      content: 'Check whether subject `longmem-unknown-user` has any stored facts.',
+      content:
+        'Check whether subject `longmem-unknown-user` has any stored facts. If none are stored, answer exactly `UNKNOWN`.',
     },
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 2 },
     { kind: 'memory_fact', predicate: 'known_code', value: 'KNOWN-CODE-E2E' },
+    {
+      kind: 'turn_memory_answer',
+      turnIndex: 1,
+      answer: { kind: 'abstention', exactText: 'UNKNOWN' },
+    },
+    {
+      kind: 'turn_memory_selection',
+      turnIndex: 1,
+      requiredFacts: [],
+      forbiddenFacts: [{ predicate: 'known_code', value: 'KNOWN-CODE-E2E' }],
+      maxSelectedFacts: 0,
+    },
     { kind: 'graph_terminal_success' },
     {
       kind: 'token_budget',

@@ -23,7 +23,7 @@ import type { E2EAssessmentDimension } from './e2eAssessmentDimensions';
 import type { E2ERubric, E2EScenario, E2EUserTurn } from './types';
 import { assertE2EScenarioArtifactTargetsObservable } from './e2eScenarioArtifactContract';
 
-export const E2E_BENCHMARK_MANIFEST_VERSION = '2026-07-10.stage-attribution-v3';
+export const E2E_BENCHMARK_MANIFEST_VERSION = '2026-07-11.memory-probe-v4';
 export const E2E_BENCHMARK_SOURCE_REFRESH_DATE = '2026-06-14';
 
 type E2ERubricKind = E2ERubric['kind'];
@@ -50,6 +50,7 @@ export type E2EBenchmarkStructuralEvidenceKind =
   | 'execution_state'
   | 'memory_receipt'
   | 'lifecycle_event'
+  | 'memory_retrieval'
   | 'assistant_response';
 
 export type E2EBenchmarkEvaluatorKind = 'final_state' | 'trajectory' | 'resource_budget';
@@ -192,6 +193,8 @@ const TRAJECTORY_RUBRICS: ReadonlySet<E2ERubricKind> = new Set([
   'turn_memory_receipt',
   'turn_lifecycle_boundary',
   'turn_final_response_token',
+  'turn_memory_answer',
+  'turn_memory_selection',
 ]);
 
 const RESOURCE_BUDGET_RUBRICS: ReadonlySet<E2ERubricKind> = new Set(['token_budget']);
@@ -264,7 +267,10 @@ function structuralEvidenceKindForRubric(rubric: E2ERubric): E2EBenchmarkStructu
     case 'turn_lifecycle_boundary':
       return 'lifecycle_event';
     case 'turn_final_response_token':
+    case 'turn_memory_answer':
       return 'assistant_response';
+    case 'turn_memory_selection':
+      return 'memory_retrieval';
     case 'goals_bootstrapped':
     case 'goal_evidence_satisfied':
     case 'graph_status':

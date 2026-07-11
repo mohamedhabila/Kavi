@@ -38,6 +38,8 @@ const RUBRIC_KINDS: ReadonlySet<E2ERubricKind> = new Set([
   'turn_memory_receipt',
   'turn_lifecycle_boundary',
   'turn_final_response_token',
+  'turn_memory_answer',
+  'turn_memory_selection',
   'goal_status',
   'ingestion_job_checkpointed',
   'ingestion_job_completed',
@@ -166,7 +168,10 @@ function rubricFailureCategories(
           ? ['execution_failure']
           : ['unknown_structural_failure'];
     case 'turn_final_response_token':
+    case 'turn_memory_answer':
       return ['final_response_failure'];
+    case 'turn_memory_selection':
+      return ['memory_retrieval_miss'];
     case 'memory_fact':
     case 'memory_fact_absent':
     case 'memory_episode_count':

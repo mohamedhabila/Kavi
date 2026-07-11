@@ -161,6 +161,22 @@ export type E2EWorkspaceSeedFile = {
   content: string;
 };
 
+export type E2EMemoryFactExpectation = Readonly<{
+  predicate: string;
+  value: string;
+}>;
+
+export type E2EMemoryProbeAnswerExpectation =
+  | Readonly<{
+      kind: 'fact_values';
+      requiredValues: ReadonlyArray<string>;
+      forbiddenValues?: ReadonlyArray<string>;
+    }>
+  | Readonly<{
+      kind: 'abstention';
+      exactText: string;
+    }>;
+
 export type E2ERubric =
   | { kind: 'workspace_file'; path: string; contains?: string }
   | { kind: 'workspace_file_absent'; path: string }
@@ -216,6 +232,18 @@ export type E2ERubric =
       boundary: ForegroundScenarioLifecycleBoundary;
     }
   | { kind: 'turn_final_response_token'; turnIndex: number; token: string }
+  | {
+      kind: 'turn_memory_answer';
+      turnIndex: number;
+      answer: E2EMemoryProbeAnswerExpectation;
+    }
+  | {
+      kind: 'turn_memory_selection';
+      turnIndex: number;
+      requiredFacts: ReadonlyArray<E2EMemoryFactExpectation>;
+      forbiddenFacts?: ReadonlyArray<E2EMemoryFactExpectation>;
+      maxSelectedFacts?: number;
+    }
   | { kind: 'goal_status'; goalId: string; status: AgentGoalStatus }
   | { kind: 'ingestion_job_checkpointed'; minCount?: number }
   | { kind: 'ingestion_job_completed'; minCount?: number }

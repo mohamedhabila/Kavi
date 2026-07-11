@@ -486,6 +486,22 @@ describe('E2E structural mobile assistant scenarios', () => {
     expectNoInternalGraphSeeds(scenario!);
   });
 
+  it('longmem probes grade answers and prompt-selected memory instead of only final DB state', () => {
+    for (const id of [
+      'bench-longmem-delayed-recall',
+      'bench-longmem-dual-fact-recall',
+      'bench-longmem-knowledge-update-recall',
+      'bench-longmem-abstention-empty-recall',
+    ]) {
+      const scenario = E2E_BENCHMARK_SCENARIOS.find((entry) => entry.id === id);
+      expect(scenario).toBeDefined();
+      expect(scenario!.rubrics.some((rubric) => rubric.kind === 'turn_memory_answer')).toBe(true);
+      expect(scenario!.rubrics.some((rubric) => rubric.kind === 'turn_memory_selection')).toBe(
+        true,
+      );
+    }
+  });
+
   it('scoped goal-switch scenario satisfies task-scoped focus rubrics', async () => {
     const scenario = E2E_BENCHMARK_SCENARIOS.find(
       (entry) => entry.id === 'bench-scoped-recall-goal-switch',

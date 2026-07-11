@@ -7,7 +7,7 @@ const PROMPT_CACHE_MIN_ELIGIBLE_READ_RATE = 0.25;
 const SCENARIO_MANIFEST_VERSION = '2026-07-10.longitudinal-v2';
 const NATIVE_TOOL_FIXTURE_VERSION = 'native-tools-2026-07-10';
 const READINESS_DASHBOARD_VERSION = '2026-07-10.phase12-pricing-v1';
-const BENCHMARK_MANIFEST_VERSION = '2026-07-10.stage-attribution-v3';
+const BENCHMARK_MANIFEST_VERSION = '2026-07-11.memory-probe-v4';
 const BENCHMARK_SOURCE_REFRESH_DATE = '2026-06-14';
 const READINESS_ARTIFACT_RETENTION_RUNS = 90;
 const RUN_REPORT_SCHEMA_VERSION = 'e2e-run-report-v2';
@@ -47,6 +47,8 @@ const RUBRIC_KINDS = new Set([
   'turn_memory_receipt',
   'turn_lifecycle_boundary',
   'turn_final_response_token',
+  'turn_memory_answer',
+  'turn_memory_selection',
   'goal_status',
   'ingestion_job_checkpointed',
   'ingestion_job_completed',
