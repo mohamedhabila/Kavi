@@ -2,7 +2,7 @@ import {
   clearStructuredMemoryDatabase,
   ensureFactSchema,
 } from '../services/memory/schema';
-import { getMemoryDb } from '../services/memory/sqlite-store';
+import { getMemoryDb } from '../services/memory/database';
 import {
   CLEARED_STRUCTURED_MEMORY_TABLES,
   PRESERVED_STRUCTURED_MEMORY_TABLES,

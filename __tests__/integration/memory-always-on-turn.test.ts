@@ -4,7 +4,7 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
-import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
+import { closeMemoryDb } from '../../src/services/memory/database';
 import { recordCompletedTurnForMemory } from '../../src/services/memory/lifecycle';
 import { __resetIngestionQueueForTests } from '../../src/services/memory/ingestionQueue';
 import { getWorkingBlock } from '../../src/services/memory/workingBlocks';

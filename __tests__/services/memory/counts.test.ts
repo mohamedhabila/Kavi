@@ -17,7 +17,7 @@ import { recordFact } from '../../../src/services/memory/facts/mutations';
 import { countFacts } from '../../../src/services/memory/facts/queries';
 import { recordThreadLocalEpisode } from '../../../src/services/memory/episodes/mutations';
 import { countEpisodes } from '../../../src/services/memory/episodes/queries';
-import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { closeMemoryDb } from '../../../src/services/memory/database';
 import { withdrawMemoryFact } from '../../../src/services/memory/withdrawal';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };

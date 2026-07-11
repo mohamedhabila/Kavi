@@ -16,7 +16,7 @@ import { findEntityByName } from '../../src/services/memory/entities';
 import { listFactEvidence } from '../../src/services/memory/episodes/queries';
 import { listFacts } from '../../src/services/memory/facts/queries';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
-import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
+import { closeMemoryDb } from '../../src/services/memory/database';
 import { useChatStore } from '../../src/store/useChatStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 

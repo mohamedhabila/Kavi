@@ -14,7 +14,8 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../src/services/memory/schema';
-import { closeMemoryDb, getChunkCount } from '../../src/services/memory/sqlite-store';
+import { closeMemoryDb } from '../../src/services/memory/database';
+import { getChunkCount } from '../../src/services/memory/sqlite-store';
 import type { Message } from '../../src/types/message';
 import {
   buildRetrievalLlmConfig,

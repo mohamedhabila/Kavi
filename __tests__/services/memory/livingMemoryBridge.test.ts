@@ -7,8 +7,8 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
-import * as sqliteStore from '../../../src/services/memory/sqlite-store';
+import { closeMemoryDb } from '../../../src/services/memory/database';
+import * as memoryDatabase from '../../../src/services/memory/database';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
@@ -239,7 +239,7 @@ describe('buildLivingMemorySections', () => {
     });
     setFactPinned(fact.fact.id, true);
 
-    const databaseSpy = jest.spyOn(sqliteStore, 'getMemoryDb');
+    const databaseSpy = jest.spyOn(memoryDatabase, 'getMemoryDb');
     const out = await buildLivingMemorySections({
       ...memoryScope('conv-opt-out'),
       messages: [userMessage('hello sam Berlin', 1_000)],

@@ -8,7 +8,7 @@ import { recordCompletedTurnForMemory } from '../../src/services/memory/lifecycl
 import { orchestrateMemoryRetrieval } from '../../src/services/memory/retrievalOrchestrator';
 import { resolveLocalMemoryAccessScope } from '../../src/services/memory/memoryScopeStore';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
-import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
+import { closeMemoryDb } from '../../src/services/memory/database';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import type { Message } from '../../src/types/message';
 

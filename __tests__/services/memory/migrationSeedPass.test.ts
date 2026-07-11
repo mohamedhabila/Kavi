@@ -26,7 +26,7 @@ import {
   listMigrationStates,
   MIGRATION_CLAIM_LEASE_MS,
 } from '../../../src/services/memory/migrationStateStore';
-import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { getWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import type { Conversation } from '../../../src/types/conversation';
 import type { Message } from '../../../src/types/message';

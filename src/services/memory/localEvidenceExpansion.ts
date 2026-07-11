@@ -6,7 +6,7 @@ import {
   type RequiredMemoryAccessScopeIdentity,
 } from './memoryScopeIdentity';
 import { ensureFactSchema } from './schema';
-import { getMemoryDb } from './sqlite-store';
+import { getMemoryDb } from './database';
 import {
   listLocalEpisodeNeighborhood,
   listLocalFactNeighborhood,

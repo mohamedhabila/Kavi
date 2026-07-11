@@ -5,7 +5,7 @@ import {
   type IngestionProviderOutcome,
 } from './ingestionQueueStore';
 import { ensureFactSchema } from './schema';
-import { getMemoryDb } from './sqlite-store';
+import { getMemoryDb } from './database';
 
 export type IngestionReceiptProviderOutcomeCode =
   | 'empty_response'

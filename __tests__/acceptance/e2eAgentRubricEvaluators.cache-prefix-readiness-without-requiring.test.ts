@@ -243,7 +243,7 @@ describe('evaluateE2ERubric', () => {
       providerEnrichment: true,
       now: 100,
     });
-    const db = require('../../src/services/memory/sqlite-store').getMemoryDb();
+    const db = require('../../src/services/memory/database').getMemoryDb();
     db.runSync(
       `UPDATE memory_ingestion_jobs
           SET status = 'completed_structural',
@@ -283,7 +283,7 @@ describe('evaluateE2ERubric', () => {
       providerEnrichment: true,
       now: 100,
     });
-    const db = require('../../src/services/memory/sqlite-store').getMemoryDb();
+    const db = require('../../src/services/memory/database').getMemoryDb();
     db.runSync(
       `UPDATE memory_ingestion_jobs
           SET status = 'retrying',
@@ -622,7 +622,7 @@ describe('evaluateE2ERubric', () => {
       originConversationId: conversationId,
       originThreadId: conversationId,
     });
-    const { getMemoryDb } = require('../../src/services/memory/sqlite-store');
+    const { getMemoryDb } = require('../../src/services/memory/database');
     getMemoryDb().runSync(
       `UPDATE memory_facts SET expires_at = ? WHERE origin_conversation_id = ?`,
       1,

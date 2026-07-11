@@ -17,8 +17,8 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
-import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
-import * as sqliteStore from '../../../src/services/memory/sqlite-store';
+import { closeMemoryDb } from '../../../src/services/memory/database';
+import * as memoryDatabase from '../../../src/services/memory/database';
 import * as factObservations from '../../../src/services/memory/facts/observations';
 import type { Message } from '../../../src/types/message';
 
@@ -225,7 +225,7 @@ describe('living memory applicability integration', () => {
 
   it('preserves memory-off parity with zero policy counts and no durable access', async () => {
     seedFact({ predicate: 'private_state', value: 'must-not-be-read' });
-    const databaseSpy = jest.spyOn(sqliteStore, 'getMemoryDb');
+    const databaseSpy = jest.spyOn(memoryDatabase, 'getMemoryDb');
 
     const output = await buildLivingMemorySections({
       messages: [userMessage()],

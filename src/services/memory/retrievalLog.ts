@@ -26,7 +26,7 @@ import type {
 } from './retrievalEventTypes';
 import type { MemoryRetrievalEventRow } from './retrievalEventRow';
 import { ensureFactSchema, newId } from './schema';
-import { getMemoryDb } from './sqlite-store';
+import { getMemoryDb } from './database';
 
 const MEMORY_RETRIEVAL_READ_LIMIT = MEMORY_RETRIEVAL_EVENT_RETENTION_LIMIT;
 const MAX_QUERY_LENGTH = 20_000;

@@ -1,6 +1,6 @@
 import { isExactMemoryScopeId } from './memoryScopeIdentity';
 import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
-import { getMemoryDb } from './sqlite-store';
+import { getMemoryDb } from './database';
 
 type MemoryDb = ReturnType<typeof getMemoryDb>;
 

@@ -8,7 +8,7 @@ import { relaunchForegroundScenarioApp } from '../../src/acceptance/e2eAgent/for
 import { captureScopedMemoryEvidence } from '../../src/services/memory/evidenceSnapshot';
 import { recordFact } from '../../src/services/memory/facts/mutations';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
-import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
+import { closeMemoryDb } from '../../src/services/memory/database';
 import { flushChatStorePersistenceNow } from '../../src/store/chatStorePersistence';
 import {
   _getStorageFileUris,

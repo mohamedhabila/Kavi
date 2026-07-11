@@ -1,6 +1,6 @@
 import { ensureDefaultBlocks } from '../../../src/services/memory/blocks';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../../src/services/memory/schema';
-import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { closeMemoryDb } from '../../../src/services/memory/database';
 import { __resetMemoryLifecycleForTests } from '../../../src/services/memory/lifecycle';
 import { getWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import { useChatStore } from '../../../src/store/useChatStore';

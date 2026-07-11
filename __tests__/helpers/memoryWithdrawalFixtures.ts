@@ -1,7 +1,7 @@
 import { rowToFact, type FactRow } from '../../src/services/memory/facts/types';
 import { replaceFactRetrievalTerms } from '../../src/services/memory/facts/retrievalIndex';
 import { enqueueIngestionJob } from '../../src/services/memory/ingestionQueueStore';
-import { getMemoryDb } from '../../src/services/memory/sqlite-store';
+import { getMemoryDb } from '../../src/services/memory/database';
 
 export function cloneMemoryFactForWithdrawal(
   sourceFactId: string,

@@ -38,6 +38,8 @@ jest.mock('../../src/services/memory/store', () => ({
 import {
   getMemoryDb,
   closeMemoryDb,
+} from '../../src/services/memory/database';
+import {
   insertChunk,
   updateChunkEmbedding,
   getChunksWithoutEmbeddings,

@@ -5,7 +5,7 @@
 // Backed by `memory_entities` (see ./schema.ts).
 // ---------------------------------------------------------------------------
 
-import { getMemoryDb } from './sqlite-store';
+import { getMemoryDb } from './database';
 import {
   ensureFactSchema,
   jsonLikeEscape,

@@ -1,5 +1,5 @@
 import { ensureFactSchema } from './schema';
-import { getMemoryDb } from './sqlite-store';
+import { getMemoryDb } from './database';
 import type { IngestionJobStatus, IngestionProviderOutcome } from './ingestionQueueStore';
 
 const ALL_INGESTION_STATUSES: ReadonlyArray<IngestionJobStatus> = [

@@ -1,5 +1,5 @@
 import { ensureFactSchema } from '../schema';
-import { getMemoryDb } from '../sqlite-store';
+import { getMemoryDb } from '../database';
 
 export type MemoryDatabase = ReturnType<typeof getMemoryDb>;
 

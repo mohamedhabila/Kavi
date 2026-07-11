@@ -12,7 +12,7 @@ import { ensureFactSchema, newId } from './schema';
 import { isMemoryIngestionSourceWithdrawn } from './withdrawalFence';
 import { isExactMemoryScopeId } from './memoryScopeIdentity';
 import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
-import { getMemoryDb } from './sqlite-store';
+import { getMemoryDb } from './database';
 import {
   hasSealedIngestionJobIdentity,
   ingestionIdentityFailureCode,

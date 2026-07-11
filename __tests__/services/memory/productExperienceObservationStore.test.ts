@@ -13,9 +13,9 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
-import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import * as memorySchema from '../../../src/services/memory/schema';
-import * as sqliteStore from '../../../src/services/memory/sqlite-store';
+import * as memoryDatabase from '../../../src/services/memory/database';
 import * as Crypto from 'expo-crypto';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 
@@ -67,7 +67,7 @@ describe('product experience observation collection boundary', () => {
     const hashMock = jest.mocked(Crypto.digestStringAsync);
     hashMock.mockClear();
     const schemaSpy = jest.spyOn(memorySchema, 'ensureFactSchema');
-    const databaseSpy = jest.spyOn(sqliteStore, 'getMemoryDb');
+    const databaseSpy = jest.spyOn(memoryDatabase, 'getMemoryDb');
 
     await expect(recordProductExperienceObservation(observation(), RECORDED_AT)).resolves.toEqual({
       status: 'rejected',

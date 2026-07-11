@@ -2,7 +2,7 @@
 // Kavi — E2E memory sandbox (Jest expo-sqlite mock)
 // ---------------------------------------------------------------------------
 
-import { closeMemoryDb, getMemoryDb } from '../../services/memory/sqlite-store';
+import { closeMemoryDb, getMemoryDb } from '../../services/memory/database';
 import { closeExecutionJournalDb } from '../../services/executionJournal/database';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../services/memory/schema';
 import {

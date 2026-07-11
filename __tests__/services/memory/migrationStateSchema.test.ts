@@ -11,7 +11,7 @@ import {
   MIGRATION_ERROR_CODES,
   MIGRATION_STATUSES,
 } from '../../../src/services/memory/migrationStateSchema';
-import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 

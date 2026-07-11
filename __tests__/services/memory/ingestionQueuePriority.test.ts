@@ -29,7 +29,7 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
-import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { closeMemoryDb } from '../../../src/services/memory/database';
 import { processIngestionTurn } from '../../../src/services/memory/turnProcessor';
 import { initializeMemoryPolicyObservation } from '../../../src/services/memory/policy';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';

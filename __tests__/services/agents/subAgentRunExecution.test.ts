@@ -37,7 +37,7 @@ jest.mock('../../../src/services/usage/conversationUsage', () => ({
   recordConversationUsageEvent: jest.fn(),
 }));
 
-import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { closeMemoryDb } from '../../../src/services/memory/database';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,

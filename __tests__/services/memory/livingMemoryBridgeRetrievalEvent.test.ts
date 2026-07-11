@@ -14,8 +14,8 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
-import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
-import * as sqliteStore from '../../../src/services/memory/sqlite-store';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
+import * as memoryDatabase from '../../../src/services/memory/database';
 import type { Message } from '../../../src/types/message';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import { initializeMemoryPolicyObservation } from '../../../src/services/memory/policy';
@@ -149,7 +149,7 @@ describe('living memory structured retrieval evidence', () => {
   });
 
   it('does not access durable memory or record an event for an opt-out barrier', async () => {
-    const databaseSpy = jest.spyOn(sqliteStore, 'getMemoryDb');
+    const databaseSpy = jest.spyOn(memoryDatabase, 'getMemoryDb');
     const out = await buildLivingMemorySections({
       messages: [userMessage('private opt-out query', 1_000)],
       conversationId: 'memory-opt-out-barrier',

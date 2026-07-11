@@ -18,8 +18,8 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
-import * as sqliteStore from '../../../src/services/memory/sqlite-store';
-import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
+import * as memoryDatabase from '../../../src/services/memory/database';
+import { closeMemoryDb } from '../../../src/services/memory/database';
 
 jest.mock('expo-sqlite', () => {
   const { makeExpoSqliteMock } = require('../../helpers/expoSqliteShim');
@@ -181,7 +181,7 @@ describe('memoryDiagnostics', () => {
     const policySpy = jest.spyOn(memoryPolicy, 'canReadLongTermMemory').mockReturnValue(false);
     const hashSpy = jest.spyOn(retrievalLog, 'buildMemoryRetrievalScopeHash');
     const readSpy = jest.spyOn(retrievalLog, 'readRecentMemoryRetrievalEvents');
-    const databaseSpy = jest.spyOn(sqliteStore, 'getMemoryDb');
+    const databaseSpy = jest.spyOn(memoryDatabase, 'getMemoryDb');
     try {
       const snapshot = await loadMemoryDiagnosticsSnapshot({ threadId: 'private-thread' });
 

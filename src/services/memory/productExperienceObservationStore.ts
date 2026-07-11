@@ -10,7 +10,7 @@ import {
   isMemoryPolicyEpochCurrent,
 } from './policy';
 import { ensureFactSchema } from './schema';
-import { getMemoryDb } from './sqlite-store';
+import { getMemoryDb } from './database';
 
 const PRODUCT_EXPERIENCE_CONTRACT_KEYS = [
   'authority',

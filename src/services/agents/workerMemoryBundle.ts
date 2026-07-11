@@ -21,7 +21,7 @@ import { resolveLocalMemoryAccessScope } from '../memory/memoryScopeStore';
 import { isExactMemoryProvenanceId } from '../memory/memoryProvenanceIdentity';
 import { orchestrateMemoryRetrieval } from '../memory/retrievalOrchestrator';
 import { tokenizeLexicalUnits } from '../memory/ranking/lexical';
-import { getMemoryDb } from '../memory/sqlite-store';
+import { getMemoryDb } from '../memory/database';
 
 const logger = createLogger('agents.workerMemoryBundle');
 

@@ -26,7 +26,7 @@ import {
   type RecallEpisodesTiming,
 } from '../../../src/services/memory/episodeRecall';
 import { DEFAULT_MEMORY_PERSONA_ID } from '../../../src/services/memory/memoryScopeIdentity';
-import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -174,7 +174,7 @@ describe('recallRecentEpisodes', () => {
     const deleted = makeEpisode({ summary: 'Deleted', endedAt: now, startedAt: now });
 
     // Soft-delete the second episode
-    const { getMemoryDb } = require('../../../src/services/memory/sqlite-store');
+    const { getMemoryDb } = require('../../../src/services/memory/database');
     getMemoryDb().runSync(
       'UPDATE memory_episodes SET deleted_at = ? WHERE id = ?',
       now,
@@ -446,7 +446,7 @@ describe('recallEpisodesForQuery', () => {
       endedAt: now - 1,
       startedAt: now - 1,
     });
-    const { getMemoryDb } = require('../../../src/services/memory/sqlite-store');
+    const { getMemoryDb } = require('../../../src/services/memory/database');
     getMemoryDb().runSync(
       'UPDATE memory_episodes SET deleted_at = ? WHERE id = ?',
       now,

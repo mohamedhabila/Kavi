@@ -2,7 +2,7 @@ import {
   failUnsealedActiveJobs,
   quarantineConflictingSourceDuplicates,
 } from './ingestionQueueConflictQuarantine';
-import { getMemoryDb } from './sqlite-store';
+import { getMemoryDb } from './database';
 
 type MemoryDb = ReturnType<typeof getMemoryDb>;
 

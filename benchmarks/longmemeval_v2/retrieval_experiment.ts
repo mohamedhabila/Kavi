@@ -158,7 +158,7 @@ async function main(): Promise<void> {
 
   const { ensureFactSchema, resetFactSchemaCacheForTests } =
     await import('../../src/services/memory/schema');
-  const { closeMemoryDb } = await import('../../src/services/memory/sqlite-store');
+  const { closeMemoryDb } = await import('../../src/services/memory/database');
   const { recallScoredFactsForQuery } = await import('../../src/services/memory/factRecall');
   const { buildUnifiedMemoryAccessContext } =
     await import('../../src/services/memory/memoryAccessGateway');

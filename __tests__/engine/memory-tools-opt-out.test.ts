@@ -19,7 +19,7 @@ jest.mock('../../src/services/remote/approvalStore', () => {
   };
 });
 
-import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
+import { closeMemoryDb } from '../../src/services/memory/database';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { ensureDefaultBlocks } from '../../src/services/memory/blocks';
 import { listFacts } from '../../src/services/memory/facts/queries';

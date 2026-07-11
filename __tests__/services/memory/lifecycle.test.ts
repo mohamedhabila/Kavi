@@ -49,7 +49,7 @@ import {
   runMemoryBackgroundFlush,
 } from '../../../src/services/memory/lifecycle';
 import { __resetOnDeviceGuardsForTests } from '../../../src/services/memory/onDeviceGuards';
-import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { getWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import { buildLivingMemorySections } from '../../../src/services/memory/livingMemoryBridge';
 import { useChatStore } from '../../../src/store/useChatStore';

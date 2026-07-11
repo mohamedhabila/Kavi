@@ -14,7 +14,7 @@ import {
 } from '../../src/services/memory/consolidator';
 import { findEntityByName } from '../../src/services/memory/entities';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
-import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
+import { closeMemoryDb } from '../../src/services/memory/database';
 import { getWorkingBlock } from '../../src/services/memory/workingBlocks';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };

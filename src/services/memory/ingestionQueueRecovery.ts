@@ -1,6 +1,6 @@
 import { MAX_INGESTION_ATTEMPTS } from './onDeviceGuards';
 import { ensureFactSchema } from './schema';
-import { getMemoryDb } from './sqlite-store';
+import { getMemoryDb } from './database';
 import {
   computeNextIngestionAttemptAt,
   retryOrCompleteIngestionJob,

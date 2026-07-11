@@ -10,7 +10,7 @@
 // kavi-memory.db so older persisted memories remain readable during migration.
 // ---------------------------------------------------------------------------
 
-import { getMemoryDb } from './sqlite-store';
+import { getMemoryDb } from './database';
 import { runMemoryDatabaseSavepoint } from './access/databaseSavepoint';
 import { buildFactContentHash } from './facts/contentIdentity';
 import { ensureIngestionQueueSchema } from './ingestionQueueSchema';

@@ -7,7 +7,7 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
-import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { closeMemoryDb } from '../../../src/services/memory/database';
 import { editWorkingBlock } from '../../../src/services/memory/workingBlocks';
 import { upsertMemoryTask } from '../../../src/services/memory/tasks';
 import { enqueueIngestionJob } from '../../../src/services/memory/ingestionQueue';

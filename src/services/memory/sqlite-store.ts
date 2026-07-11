@@ -5,8 +5,8 @@
 // in-memory memoryIndex from embeddings.ts with durable storage. Provides
 // batch embedding, content-hash deduplication, and efficient retrieval.
 
-import * as SQLite from 'expo-sqlite';
 import type { EmbeddingConfig, MemorySearchResult } from '../../types/memory';
+import { getMemoryDb } from './database';
 import { getEmbeddingCached } from './embeddings';
 import { createArrayChunkIndex, searchChunkIndex } from './ranking/chunkIndex';
 import {
@@ -18,7 +18,6 @@ import {
 
 // ── Constants ────────────────────────────────────────────────────────────
 
-const DB_NAME = 'kavi-memory.db';
 const BATCH_SIZE = 5;
 const BATCH_CONCURRENCY = 3;
 
@@ -46,75 +45,6 @@ export interface InsertChunkOptions {
   sourceKey?: string;
   sourceKind?: string;
   version?: number;
-}
-
-// ── Database initialization ──────────────────────────────────────────────
-
-let db: SQLite.SQLiteDatabase | null = null;
-
-function ensureMemoryChunkColumn(
-  database: SQLite.SQLiteDatabase,
-  column: string,
-  definition: string,
-): void {
-  try {
-    database.execSync(`ALTER TABLE memory_chunks ADD COLUMN ${column} ${definition}`);
-  } catch {
-    // Column already exists on upgraded databases.
-  }
-}
-
-function ensureMemoryChunkSchema(database: SQLite.SQLiteDatabase): void {
-  database.execSync(`
-      CREATE TABLE IF NOT EXISTS memory_chunks (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        source TEXT NOT NULL,
-        content TEXT NOT NULL,
-        content_hash TEXT NOT NULL,
-        embedding TEXT,
-        timestamp INTEGER NOT NULL,
-        indexed_at INTEGER NOT NULL,
-        scope TEXT NOT NULL DEFAULT 'global',
-        conversation_id TEXT,
-        task_id TEXT,
-        project_id TEXT,
-        source_key TEXT,
-        source_kind TEXT NOT NULL DEFAULT 'memory_file',
-        version INTEGER NOT NULL DEFAULT 1,
-        deleted_at INTEGER,
-        UNIQUE(content_hash)
-      );
-      CREATE INDEX IF NOT EXISTS idx_chunks_source ON memory_chunks(source);
-      CREATE INDEX IF NOT EXISTS idx_chunks_hash ON memory_chunks(content_hash);
-      CREATE INDEX IF NOT EXISTS idx_chunks_timestamp ON memory_chunks(timestamp);
-      CREATE INDEX IF NOT EXISTS idx_chunks_scope_source
-        ON memory_chunks(scope, conversation_id, task_id, project_id, deleted_at);
-      CREATE INDEX IF NOT EXISTS idx_chunks_source_key
-        ON memory_chunks(source_key, deleted_at);
-    `);
-  ensureMemoryChunkColumn(database, 'scope', "TEXT NOT NULL DEFAULT 'global'");
-  ensureMemoryChunkColumn(database, 'conversation_id', 'TEXT');
-  ensureMemoryChunkColumn(database, 'task_id', 'TEXT');
-  ensureMemoryChunkColumn(database, 'project_id', 'TEXT');
-  ensureMemoryChunkColumn(database, 'source_key', 'TEXT');
-  ensureMemoryChunkColumn(database, 'source_kind', "TEXT NOT NULL DEFAULT 'memory_file'");
-  ensureMemoryChunkColumn(database, 'version', 'INTEGER NOT NULL DEFAULT 1');
-  ensureMemoryChunkColumn(database, 'deleted_at', 'INTEGER');
-}
-
-export function getMemoryDb(): SQLite.SQLiteDatabase {
-  if (!db) {
-    db = SQLite.openDatabaseSync(DB_NAME);
-    ensureMemoryChunkSchema(db);
-  }
-  return db;
-}
-
-export function closeMemoryDb(): void {
-  if (db) {
-    db.closeSync();
-    db = null;
-  }
 }
 
 // ── Content hashing (FNV-1a for speed) ───────────────────────────────────

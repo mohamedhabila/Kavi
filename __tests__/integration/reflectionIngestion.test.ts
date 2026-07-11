@@ -3,7 +3,7 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
+import { closeMemoryDb } from '../../src/services/memory/database';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { __resetIngestionQueueForTests } from '../../src/services/memory/ingestionQueue';
 import { recordCompletedTurnForMemory } from '../../src/services/memory/lifecycle';

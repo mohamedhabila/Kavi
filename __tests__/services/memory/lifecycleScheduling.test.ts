@@ -31,7 +31,7 @@ import {
   runMemoryMigrationTick,
 } from '../../../src/services/memory/lifecycle';
 import { __resetOnDeviceGuardsForTests } from '../../../src/services/memory/onDeviceGuards';
-import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { closeMemoryDb } from '../../../src/services/memory/database';
 import { useChatStore } from '../../../src/store/useChatStore';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 

@@ -1,4 +1,4 @@
-import type { getMemoryDb } from './sqlite-store';
+import type { getMemoryDb } from './database';
 
 type MemoryDb = ReturnType<typeof getMemoryDb>;
 

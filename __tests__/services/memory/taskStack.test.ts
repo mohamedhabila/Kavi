@@ -19,7 +19,7 @@ import {
   pauseTask,
   upsertGoalTaskEntry,
 } from '../../../src/services/memory/taskStack';
-import { closeMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { closeMemoryDb } from '../../../src/services/memory/database';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 

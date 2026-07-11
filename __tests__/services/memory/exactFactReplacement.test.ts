@@ -22,7 +22,7 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
-import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { subscribeToMemoryChanges } from '../../../src/services/memory/changeNotifications';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };

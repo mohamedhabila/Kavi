@@ -7,7 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import { ensureFactSchema } from './schema';
-import { getMemoryDb } from './sqlite-store';
+import { getMemoryDb } from './database';
 import {
   CROSS_THREAD_EPISODE_INDEXED_CANDIDATE_LIMIT,
   loadAuthorizedCrossThreadEpisodeCandidates,

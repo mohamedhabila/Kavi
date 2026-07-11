@@ -9,7 +9,7 @@ import { listFactEvidence } from '../../src/services/memory/episodes/queries';
 import { recordFact } from '../../src/services/memory/facts/mutations';
 import { listFacts } from '../../src/services/memory/facts/queries';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
-import { closeMemoryDb } from '../../src/services/memory/sqlite-store';
+import { closeMemoryDb } from '../../src/services/memory/database';
 import { processIngestionTurn } from '../../src/services/memory/turnProcessor';
 import type { Message } from '../../src/types/message';
 

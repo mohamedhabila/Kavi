@@ -3,7 +3,7 @@ import {
   captureCompleteMemoryEvidenceForIsolatedEvaluation,
   type ScopedMemoryEvidenceSnapshot,
 } from '../../services/memory/evidenceSnapshot';
-import { closeMemoryDb } from '../../services/memory/sqlite-store';
+import { closeMemoryDb } from '../../services/memory/database';
 import { flushChatStorePersistenceNow } from '../../store/chatStorePersistence';
 import { useChatStore } from '../../store/useChatStore';
 import type {

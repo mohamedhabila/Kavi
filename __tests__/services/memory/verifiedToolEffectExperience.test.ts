@@ -14,8 +14,8 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
-import * as sqliteStore from '../../../src/services/memory/sqlite-store';
-import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/sqlite-store';
+import * as memoryDatabase from '../../../src/services/memory/database';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { ToolEffectReceipt } from '../../../src/types/toolEffectReceipt';
 
@@ -311,7 +311,7 @@ describe('verified tool effect experience producer', () => {
     useSettingsStore.setState({ disableLongTermMemory: true } as never);
     const hashMock = jest.mocked(Crypto.digestStringAsync);
     hashMock.mockClear();
-    const databaseSpy = jest.spyOn(sqliteStore, 'getMemoryDb');
+    const databaseSpy = jest.spyOn(memoryDatabase, 'getMemoryDb');
 
     await expect(recordVerifiedToolEffectExperience(input(effectReceipt))).resolves.toEqual({
       status: 'skipped',

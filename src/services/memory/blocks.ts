@@ -6,7 +6,7 @@
 // total size matters: limits are kept tight on purpose.
 // ---------------------------------------------------------------------------
 
-import { getMemoryDb } from './sqlite-store';
+import { getMemoryDb } from './database';
 import { ensureFactSchema } from './schema';
 import { notifyStructuredMemoryChanged } from './changeNotifications';
 

@@ -4,7 +4,7 @@ import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
 import { isExactMemoryScopeId } from './memoryScopeIdentity';
 import { buildMemoryRetrievalScopeHash } from './retrievalLog';
 import { ensureFactSchema } from './schema';
-import { getMemoryDb } from './sqlite-store';
+import { getMemoryDb } from './database';
 import { isMemoryRetrievalEventId } from '../../utils/assistantMessageMetadata';
 
 export const MEMORY_RETRIEVAL_FEEDBACK_CHOICES = ['helpful', 'wrong', 'irrelevant'] as const;

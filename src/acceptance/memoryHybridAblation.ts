@@ -6,7 +6,7 @@ import {
   buildMemoryRetrievalScopeHash,
   readRecentMemoryRetrievalEvents,
 } from '../services/memory/retrievalLog';
-import { getMemoryDb } from '../services/memory/sqlite-store';
+import { getMemoryDb } from '../services/memory/database';
 import { stableHash, stableStringify } from './e2eAgent/e2eTraceRedaction';
 import { runInIsolatedStructuredMemoryEvaluation } from './structuredMemoryEvaluation';
 import {
