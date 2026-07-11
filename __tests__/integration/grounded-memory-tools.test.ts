@@ -333,6 +333,10 @@ describe('grounded memory_remember product writes', () => {
     ['attributed assertion', 'Morgan says Avery prefers Signal.'],
     ['hypothetical assertion', 'If Avery prefers Signal, use it.'],
     ['modal assertion', 'Avery might prefer Signal.'],
+    ['negated possession bridge', 'Avery does not have preferred_channel Signal.'],
+    ['attributed possession bridge', 'Morgan says Avery has preferred_channel Signal.'],
+    ['hypothetical copular bridge', 'If Avery is preferred_channel Signal, use it.'],
+    ['modal possession bridge', 'Avery might have preferred_channel Signal.'],
     ['unbound predicate', 'Avery received Signal.'],
   ])('rejects a named-subject fact derived from a %s', async (label, messageText) => {
     const result = await remember({
@@ -352,6 +356,10 @@ describe('grounded memory_remember product writes', () => {
   it.each([
     'Avery prefers Signal.',
     'Remember that Avery currently prefers Signal.',
+    'Avery has preferred_channel Signal.',
+    'Avery has the preferred_channel Signal.',
+    'Avery is preferred_channel Signal.',
+    'Remember that subject `Avery` has preferred_channel `Signal`.',
   ])('accepts a direct positive named-subject assertion: %s', async (messageText) => {
     const result = await remember({
       subject: 'Avery',

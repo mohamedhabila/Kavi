@@ -162,15 +162,22 @@ const HYPOTHETICAL_MARKERS = new Set([
 ]);
 
 const ALLOWED_NAMED_SUBJECT_RELATION_GAP = new Set([
+  'a',
   'actually',
   'also',
   'always',
+  'an',
+  'are',
   'currently',
   'definitely',
   'generally',
+  'has',
+  'have',
+  'is',
   'now',
   'really',
   'still',
+  'the',
   'typically',
   'usually',
 ]);
