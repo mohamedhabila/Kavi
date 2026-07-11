@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/mohamedhabila/Kavi/main/evaluation/benchmark-provenance.schema.json",
   "kind": "benchmark_provenance_registry",
   "schemaVersion": "1.0.0",
-  "reviewedAt": "2026-07-10",
+  "reviewedAt": "2026-07-11",
   "claimPolicy": {
     "localExecutionIsOfficial": false,
     "maintainerAcceptanceRequired": true,
@@ -19,7 +19,7 @@
         "integrationKind": "upstream_memory_backend_patch",
         "roots": ["benchmarks/longmemeval_v2"],
         "sourceDigestAlgorithm": "sha256_versionable_path_nul_bytes_nul_v2",
-        "sourceSha256": "12c514247a34604a2c814421cb71a89ae03abdfa834f58115b78ceb2ae7c69bb",
+        "sourceSha256": "d8a36931671f49eee886fdfb78ce70926f35b3f1071ac654ce97a2607819106d",
         "modifiesUpstream": true
       },
       "upstream": {
@@ -134,7 +134,7 @@
         "integrationKind": "upstream_agent_learning_hook",
         "roots": ["benchmarks/state_bench"],
         "sourceDigestAlgorithm": "sha256_versionable_path_nul_bytes_nul_v2",
-        "sourceSha256": "15532e83a3f4c1ee8c47857000bdcdef11a7d97e563dd43e7b521486f2e28f09",
+        "sourceSha256": "c4f45994d08cf0671355b576f709437e1545582af6ce2a9717013b0d1f3c11bf",
         "modifiesUpstream": true
       },
       "upstream": {
