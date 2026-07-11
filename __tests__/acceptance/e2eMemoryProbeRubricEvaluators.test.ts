@@ -167,6 +167,49 @@ describe('turn-scoped memory probe rubrics', () => {
     });
   });
 
+  it('rejects exact values that appear only inside denial or uncertainty', () => {
+    for (const answer of [
+      'I could not verify ACCESS-CURRENT.',
+      'The value might be ACCESS-CURRENT.',
+      'Unverified: ACCESS-CURRENT',
+      'There is no evidence for ACCESS-CURRENT.',
+    ]) {
+      const evidence = result({
+        answer,
+        facts: [fact('current', 'access_code', 'ACCESS-CURRENT')],
+        selectedFactIds: ['current'],
+      });
+
+      expect(
+        evaluateE2ERubric(evidence, {
+          kind: 'turn_memory_answer',
+          turnIndex: 2,
+          answer: { kind: 'fact_values', requiredValues: ['ACCESS-CURRENT'] },
+        }),
+      ).toMatchObject({
+        passed: false,
+        detail: 'turn 2 final response omitted required memory value',
+      });
+    }
+  });
+
+  it('accepts a direct assertion after a separate uncertainty sentence', () => {
+    const evidence = result({
+      answer:
+        'I could not verify it against an external source. The remembered access code is ACCESS-CURRENT.',
+      facts: [fact('current', 'access_code', 'ACCESS-CURRENT')],
+      selectedFactIds: ['current'],
+    });
+
+    expect(
+      evaluateE2ERubric(evidence, {
+        kind: 'turn_memory_answer',
+        turnIndex: 2,
+        answer: { kind: 'fact_values', requiredValues: ['ACCESS-CURRENT'] },
+      }),
+    ).toMatchObject({ passed: true });
+  });
+
   it('does not let a correct answer mask a prompt-retrieval miss', () => {
     const evidence = result({
       answer: 'ACCESS-CURRENT',

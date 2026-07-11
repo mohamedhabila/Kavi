@@ -13,6 +13,16 @@ type E2EMemoryProbeRubric = Extract<
 
 const MAX_EXPECTED_VALUE_CHARS = 256;
 const MAX_EXPECTED_FACTS = 32;
+const NON_ASSERTIVE_VALUE_CONTEXT_PATTERNS = [
+  /\bnot\b/iu,
+  /\b(?:cannot|unable\s+to|failed\s+to)\b/iu,
+  /\b[a-z]+n['’]t\b/iu,
+  /\b(?:unknown|uncertain|unsure|unverified|unconfirmed|undetermined)\b/iu,
+  /\b(?:no|without)\s+(?:evidence|record|confirmation|verification)\b/iu,
+  /\b(?:may|might|maybe|perhaps|possibly|potentially|probably|likely)\b/iu,
+  /\b(?:could|would)\s+(?:be|have\s+been)\b/iu,
+  /\bi\s+(?:think|guess|suspect|am\s+not\s+sure|do\s+not\s+know)\b/iu,
+] as const;
 
 function fixtureIdForRubric(
   result: E2EScenarioResult,
@@ -49,6 +59,19 @@ function hasUniqueCanonicalValues(values: unknown): values is ReadonlyArray<stri
     values.every(isCanonicalValue) &&
     new Set(values).size === values.length
   );
+}
+
+function sentenceAssertsExactValue(sentence: string, value: string): boolean {
+  return (
+    sentence.includes(value) &&
+    NON_ASSERTIVE_VALUE_CONTEXT_PATTERNS.every((pattern) => !pattern.test(sentence))
+  );
+}
+
+function answerAssertsExactValue(text: string, value: string): boolean {
+  return text
+    .split(/[.!?;\n]+/u)
+    .some((sentence) => sentenceAssertsExactValue(sentence, value));
 }
 
 function canonicalFactKey(fact: E2EMemoryFactExpectation): string {
@@ -118,7 +141,7 @@ function evaluateAnswer(
   ) {
     return invalidOutcome(fixtureId, `turn ${rubric.turnIndex} memory answer expectation is invalid`);
   }
-  const missing = answer.requiredValues.filter((value) => !text.includes(value));
+  const missing = answer.requiredValues.filter((value) => !answerAssertsExactValue(text, value));
   if (missing.length > 0) {
     return invalidOutcome(
       fixtureId,
