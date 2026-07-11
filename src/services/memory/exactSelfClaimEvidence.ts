@@ -176,6 +176,7 @@ const ALLOWED_NAMED_SUBJECT_RELATION_GAP = new Set([
   'is',
   'now',
   'really',
+  'so',
   'still',
   'the',
   'typically',
