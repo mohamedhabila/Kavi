@@ -142,7 +142,7 @@ Before a full benchmark run:
 3. DB-level retrieval tests with more than 500 facts proving an older relevant
    fact can be surfaced.
 4. Benchmark runtime smoke showing per-question isolation still holds.
-5. Official LongMemEval mini-run with the same 8 questions:
+5. Upstream-protocol LongMemEval mini-run with the same 8 questions:
    - score must improve from 0/8;
    - memory contexts must remain non-truncated;
    - top recalled source trajectories must vary by question;
@@ -150,7 +150,7 @@ Before a full benchmark run:
 
 ## Reader Configuration Follow-up
 
-The official LongMemEval-V2 runner uses Qwen3.5-9B as the fixed reader with
+The upstream LongMemEval-V2 runner uses Qwen3.5-9B as the fixed reader with
 `temperature=0.6`, `top_p=0.95`, `top_k=20`, `max_completion_tokens=20000`, and
 reader thinking enabled. Keep these defaults for official runs.
 

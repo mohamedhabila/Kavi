@@ -4,7 +4,7 @@ Kavi is a mobile-first general assistant with a structured long-term memory
 system. This LongMemEval-V2 submission evaluates that memory system in
 isolation, not the Kavi assistant graph.
 
-The submitted memory backend uses the official LongMemEval `Memory` interface:
+The submitted memory backend uses the upstream LongMemEval `Memory` interface:
 
 - `insert()` forwards each official trajectory to a persistent local Kavi
   memory runtime.
@@ -27,7 +27,7 @@ environment-variable name are recorded; key values are never stored. Web and
 enterprise runs must use the exact same frozen identity.
 
 The Python adapter does not implement retrieval, ranking, summarization, or
-question answering. It maintains the official benchmark boundary, verifies the
+question answering. It maintains the upstream protocol boundary, verifies the
 frozen Node bundle before execution, and owns a persistent worker process. The
 worker calls Kavi's TypeScript memory modules; a local `better-sqlite3` adapter
 provides the same synchronous `expo-sqlite` API shape required by those modules

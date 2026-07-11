@@ -1,14 +1,15 @@
 # Kavi LongMemEval-V2 Isolated Memory
 
-This folder contains the official LongMemEval-V2 integration for Kavi's memory
-system in isolation. It does not run Kavi as a general assistant and does not
-ask the assistant graph to inspect files. The Python layer only implements the
-official `memory_modules.memory.Memory` interface; ingestion and retrieval run
-inside a Node worker that calls Kavi's TypeScript memory store.
+This folder contains Kavi's upstream-protocol adapter for evaluating its memory
+system in isolation with LongMemEval-V2. It does not run Kavi as a general
+assistant and does not ask the assistant graph to inspect files. The Python
+layer only implements the upstream `memory_modules.memory.Memory` interface;
+ingestion and retrieval run inside a Node worker that calls Kavi's TypeScript
+memory store.
 
 ## Architecture
 
-- `kavi_isolated_memory.py` is the LongMemEval `Memory` adapter.
+- `kavi_isolated_memory.py` is the LongMemEval upstream-protocol adapter.
 - `kavi_memory_runtime.ts` is the persistent Node worker used by the adapter.
 - `nodeExpoSqlite.ts` adapts Kavi's `expo-sqlite` sync API to `better-sqlite3`
   for local benchmark execution.
@@ -59,7 +60,7 @@ Inspect `query_result.selected` to confirm the returned sources are
 per-question isolation. Inspect `question_runs[].runtime_stats.fact_counts_by_kind`
 to confirm each trajectory is represented by compact agent-run memory records.
 
-## Official Run
+## Leaderboard-candidate run
 
 Requirements:
 

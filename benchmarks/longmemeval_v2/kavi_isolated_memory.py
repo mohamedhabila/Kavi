@@ -170,7 +170,7 @@ class KaviMemoryRuntimeClient:
 
 @register_memory
 class KaviIsolatedMemory(Memory):
-    """Official LongMemEval-V2 adapter for Kavi's isolated memory system.
+    """LongMemEval-V2 upstream-protocol adapter for Kavi's isolated memory system.
 
     The Python layer only implements the benchmark's Memory boundary and keeps a
     persistent local runtime process. Ingestion and retrieval are performed by

@@ -239,7 +239,7 @@ def require_clean_app(repo_root: Path) -> str:
     commit = git_text(repo_root, "rev-parse", "HEAD")
     require(COMMIT_SHA_RE.fullmatch(commit) is not None, "Kavi app commit is invalid")
     status = git_text(repo_root, "status", "--porcelain=v1", "--untracked-files=all")
-    require(not status, "Official LongMemEval-V2 work requires a clean app worktree")
+    require(not status, "LongMemEval-V2 upstream-protocol work requires a clean app worktree")
     return commit
 
 
@@ -257,16 +257,19 @@ def load_longmemeval_provenance(repo_root: Path) -> dict[str, Any]:
     require(len(matches) == 1, "LongMemEval-V2 provenance must contain exactly one adapter")
     adapter = matches[0]
     adapter_source = adapter.get("adapter")
-    require(isinstance(adapter_source, dict), "LongMemEval-V2 adapter provenance is missing")
+    require(
+        isinstance(adapter_source, dict),
+        "LongMemEval-V2 upstream-protocol adapter provenance is missing",
+    )
     require(
         adapter_source.get("sourceDigestAlgorithm")
         == "sha256_versionable_path_nul_bytes_nul_v2",
-        "LongMemEval-V2 adapter digest algorithm is unsupported",
+        "LongMemEval-V2 upstream-protocol adapter digest algorithm is unsupported",
     )
     source_sha256 = adapter_source.get("sourceSha256")
     require(
         isinstance(source_sha256, str) and SHA256_RE.fullmatch(source_sha256) is not None,
-        "LongMemEval-V2 adapter source digest is invalid",
+        "LongMemEval-V2 upstream-protocol adapter source digest is invalid",
     )
     return adapter
 
@@ -360,7 +363,8 @@ def verify_upstream(upstream: Path, adapter_source: Path) -> str:
         installed = upstream / relative_path
         require(
             installed.is_file() and installed.read_bytes() == expected_bytes,
-            f"Installed LongMemEval-V2 adapter differs from the pinned patch: {relative_path}",
+            "Installed LongMemEval-V2 upstream-protocol adapter differs from the pinned "
+            f"patch: {relative_path}",
         )
     return "exact_adapter_patch"
 
