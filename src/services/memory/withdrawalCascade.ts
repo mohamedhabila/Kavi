@@ -277,12 +277,6 @@ export function executeMemoryWithdrawalCascade(
     ),
     factObservations: deleteIds(db, 'memory_fact_observations', 'id', observationIds),
     retrievalTerms: retrievalTermRows.length,
-    chunks: deleteIds(
-      db,
-      'memory_chunks',
-      'id',
-      lineage.chunks.map((row) => row.id),
-    ),
     reflections: deleteIds(
       db,
       'memory_reflections',
@@ -329,7 +323,6 @@ export function executeMemoryWithdrawalCascade(
     evidenceIds: lineage.evidence.map((row) => row.id),
     observationIds,
     episodeIds: lineage.episodeIds,
-    chunkIds: lineage.chunks.map((row) => row.id),
     reflectionIds: lineage.reflections.map((row) => row.id),
     workingBlocks: lineage.workingBlocks.map((row) => ({
       label: row.label,

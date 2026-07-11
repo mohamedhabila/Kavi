@@ -222,7 +222,7 @@ describe('memory withdrawal guards', () => {
     expect(result.status).toBe('withdrawn');
     if (result.status !== 'withdrawn') throw new Error('expected withdrawal');
     expect(result.receipt.counts).toEqual(
-      expect.objectContaining({ facts: 1, factEvidence: 1, episodes: 1, chunks: 1 }),
+      expect.objectContaining({ facts: 1, factEvidence: 1, episodes: 1 }),
     );
     for (const block of DEFAULT_MEMORY_BLOCKS) {
       expect(getBlock(block.label)?.content).toBe(`independent block ${block.label}`);
@@ -290,7 +290,6 @@ describe('memory withdrawal guards', () => {
       evidenceIds: [],
       observationIds: [],
       episodeIds: [],
-      chunkIds: [],
       reflectionIds: [],
       workingBlocks: [],
       entityIds: [],
@@ -327,7 +326,6 @@ describe('memory withdrawal guards', () => {
       evidenceIds: [],
       observationIds: [],
       episodeIds: [],
-      chunkIds: [],
       reflectionIds: [],
       workingBlocks: [],
       entityIds: [],

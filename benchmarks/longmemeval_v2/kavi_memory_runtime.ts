@@ -15,7 +15,6 @@ import {
   resetFactSchemaCacheForTests,
 } from '../../src/services/memory/schema';
 import { closeMemoryDb } from '../../src/services/memory/database';
-import { getChunkCount } from '../../src/services/memory/sqlite-store';
 import type { Message } from '../../src/types/message';
 import {
   buildRetrievalLlmConfig,
@@ -378,7 +377,7 @@ async function insertTrajectory(
     deterministic_fact_ids: ingestionResult.deterministicFactIds,
     bridged_evidence_fact_ids: ingestionResult.bridgedEvidenceFactIds,
     agent_run_memory_fact_ids: ingestionResult.agentRunMemoryFactIds,
-    total_chunks: getChunkCount(),
+    total_memory_items: countFacts() + countEpisodes(),
     inserted_trajectories: insertedTrajectoryIds.size,
   };
 }
@@ -519,7 +518,7 @@ function stats(options: { includeSamples?: boolean } = {}): JsonObject {
     memory_type: 'kavi_memory_isolated',
     inserted_trajectories: insertedTrajectoryIds.size,
     insert_calls: insertCalls,
-    chunk_count: getChunkCount(),
+    memory_item_count: countFacts() + countEpisodes(),
     ...(includeSamples
       ? {
           fact_count: countFacts(),

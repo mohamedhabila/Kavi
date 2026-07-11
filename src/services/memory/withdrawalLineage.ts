@@ -34,12 +34,6 @@ export interface WithdrawalReflectionRow {
   source_fact_ids_json: string;
 }
 
-export interface WithdrawalChunkRow {
-  id: number;
-  source: string;
-  source_key: string | null;
-}
-
 export interface WithdrawalWorkingBlockRow {
   label: string;
   scope_key: string;
@@ -76,7 +70,6 @@ export interface MemoryWithdrawalLineage {
   evidence: EvidenceRow[];
   episodes: EpisodeRow[];
   episodeIds: string[];
-  chunks: WithdrawalChunkRow[];
   reflections: WithdrawalReflectionRow[];
   workingBlocks: WithdrawalWorkingBlockRow[];
   receipts: WithdrawalIngestionReceiptRow[];
@@ -467,38 +460,6 @@ function ingestionJobMatchesSources(
   );
 }
 
-function selectChunks(
-  db: MemoryDatabase,
-  episodes: ReadonlyArray<EpisodeRow>,
-): WithdrawalChunkRow[] {
-  const sources = new Set<string>();
-  const sourceKeys = new Set<string>();
-  for (const episode of episodes) {
-    sources.add(`episode/${episode.id}`);
-    sourceKeys.add(`global:episode:${episode.id}`);
-    if (episode.conversation_id) {
-      sources.add(`conversation/${episode.conversation_id}/episode/${episode.id}`);
-      sourceKeys.add(`conversation:${episode.conversation_id}:episode:${episode.id}`);
-    }
-  }
-  const rows = new Map<number, WithdrawalChunkRow>();
-  const load = (column: 'source' | 'source_key', values: ReadonlyArray<string>) => {
-    for (let offset = 0; offset < values.length; offset += SELECT_BATCH_SIZE) {
-      const batch = values.slice(offset, offset + SELECT_BATCH_SIZE);
-      for (const row of db.getAllSync<WithdrawalChunkRow>(
-        `SELECT id, source, source_key FROM memory_chunks
-          WHERE ${column} IN (${batch.map(() => '?').join(', ')})`,
-        ...batch,
-      )) {
-        rows.set(row.id, row);
-      }
-    }
-  };
-  load('source', Array.from(sources));
-  load('source_key', Array.from(sourceKeys));
-  return Array.from(rows.values());
-}
-
 export function collectMemoryWithdrawalLineage(
   db: MemoryDatabase,
   target: FactRow,
@@ -590,7 +551,6 @@ export function collectMemoryWithdrawalLineage(
         lineageFieldReferences(row.source_fact_ids_json, factIds) ||
         lineageFieldReferences(row.source_episode_ids_json, episodeIds),
     );
-  const chunks = selectChunks(db, episodes);
   const receipts = db
     .getAllSync<WithdrawalIngestionReceiptRow>('SELECT * FROM memory_ingestion_receipts')
     .filter((row) => receiptReferencesLineage(row, factIds, episodeIds));
@@ -638,7 +598,6 @@ export function collectMemoryWithdrawalLineage(
     evidence,
     episodes,
     episodeIds: Array.from(episodeIds),
-    chunks,
     reflections,
     workingBlocks,
     receipts,

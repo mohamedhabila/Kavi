@@ -29,7 +29,6 @@ import { useChatStore } from '../../src/store/useChatStore';
 describe('paired E2E state isolation', () => {
   it('keeps the reset verification list synchronized with mutable memory tables', () => {
     expect(E2E_RESETTABLE_MEMORY_TABLES).toEqual([
-      'memory_chunks',
       'memory_consolidation_state',
       'memory_entities',
       'memory_episodes',

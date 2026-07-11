@@ -36,7 +36,6 @@ export function resetE2EMemorySandbox(): void {
 }
 
 export const E2E_RESETTABLE_MEMORY_TABLES = [
-  'memory_chunks',
   'memory_consolidation_state',
   'memory_entities',
   'memory_episodes',

@@ -9,7 +9,6 @@ export type MemoryWithdrawalCounts = Readonly<{
   factObservations: number;
   episodeAccessPolicies: number;
   episodes: number;
-  chunks: number;
   reflections: number;
   workingBlocks: number;
   orphanEntities: number;
@@ -40,7 +39,6 @@ export const EMPTY_MEMORY_WITHDRAWAL_COUNTS: MemoryWithdrawalCounts = {
   factObservations: 0,
   episodeAccessPolicies: 0,
   episodes: 0,
-  chunks: 0,
   reflections: 0,
   workingBlocks: 0,
   orphanEntities: 0,

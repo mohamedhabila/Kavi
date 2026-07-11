@@ -13,7 +13,6 @@ export const MEMORY_WITHDRAWAL_RESIDUAL_SURFACES = [
   'factObservations',
   'episodeAccessPolicies',
   'episodes',
-  'chunks',
   'reflections',
   'workingBlocks',
   'entities',
@@ -51,7 +50,6 @@ export interface MemoryWithdrawalResidualPlan {
   evidenceIds: ReadonlyArray<string>;
   observationIds: ReadonlyArray<string>;
   episodeIds: ReadonlyArray<string>;
-  chunkIds: ReadonlyArray<number>;
   reflectionIds: ReadonlyArray<string>;
   workingBlocks: ReadonlyArray<{ label: string; scopeKey: string }>;
   entityIds: ReadonlyArray<string>;
@@ -306,7 +304,6 @@ export function probeMemoryWithdrawalResiduals(
       plan.episodeIds,
     ),
     episodes: countIds(db, 'memory_episodes', 'id', plan.episodeIds),
-    chunks: countIds(db, 'memory_chunks', 'id', plan.chunkIds),
     reflections: countIds(db, 'memory_reflections', 'id', plan.reflectionIds),
     workingBlocks: plan.workingBlocks.reduce(
       (count, block) =>

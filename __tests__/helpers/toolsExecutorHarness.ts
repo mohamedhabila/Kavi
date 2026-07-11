@@ -239,11 +239,6 @@ jest.mock('../../src/services/memory/embeddings', () => ({
   hybridSearch: jest.fn().mockResolvedValue([]),
 }));
 
-jest.mock('../../src/services/memory/sqlite-store', () => ({
-  indexMemoryToSqlite: jest.fn().mockResolvedValue(0),
-  sqliteHybridSearch: jest.fn().mockResolvedValue([]),
-}));
-
 jest.mock('../../src/engine/tools/native/executor', () => ({
   executeNativeTool: jest.fn().mockImplementation((name: string) => {
     if (name === 'notification_send') {
@@ -298,8 +293,6 @@ export let executeNativeTool: jest.Mock;
 export let generateImage: jest.Mock;
 export let editImage: jest.Mock;
 export let hybridSearch: jest.Mock;
-export let indexMemoryToSqlite: jest.Mock;
-export let sqliteHybridSearch: jest.Mock;
 export let registerSkill: (skill: Skill) => void;
 export let unregisterSkill: (id: string) => void;
 export let clearAllSurfaces: () => void;
@@ -320,7 +313,6 @@ function loadTestModules() {
   ({ executeNativeTool } = require('../../src/engine/tools/native/executor'));
   ({ generateImage, editImage } = require('../../src/services/media/imageGeneration'));
   ({ hybridSearch } = require('../../src/services/memory/embeddings'));
-  ({ indexMemoryToSqlite, sqliteHybridSearch } = require('../../src/services/memory/sqlite-store'));
   ({ registerSkill, unregisterSkill } = require('../../src/services/skills/manager'));
   ({ clearAllSurfaces, getSurface } = require('../../src/services/canvas/renderer'));
   ({ executePython } = require('../../src/services/python/pyodideBridge'));
@@ -339,10 +331,6 @@ beforeEach(() => {
   executePython.mockResolvedValue({ success: true, output: '42' });
   hybridSearch.mockReset();
   hybridSearch.mockResolvedValue([]);
-  indexMemoryToSqlite.mockReset();
-  indexMemoryToSqlite.mockResolvedValue(0);
-  sqliteHybridSearch.mockReset();
-  sqliteHybridSearch.mockResolvedValue([]);
   mockPermissionOverrides.clear();
   clearAllSurfaces();
   const { useSchedulerStore } = require('../../src/services/scheduler/store');

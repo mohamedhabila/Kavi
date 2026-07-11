@@ -1,7 +1,6 @@
 import { getSchemaReadyMemoryDb } from '../access/schemaGuard';
 import { runMemoryTransaction } from '../access/transaction';
 import { newId } from '../schema';
-import { replaceChunksForSource } from '../sqlite-store';
 import { ensureEpisodeAccessPolicySchema } from './accessPolicySchema';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import { bindEpisodeAccessPolicy } from './accessPolicyStore';
@@ -56,35 +55,6 @@ export function recordEpisode(input: RecordScopedEpisodeInput): MemoryEpisode | 
     );
     return episode;
   });
-}
-
-function episodeSource(episode: MemoryEpisode): string {
-  return episode.conversationId
-    ? `conversation/${episode.conversationId}/episode/${episode.id}`
-    : `episode/${episode.id}`;
-}
-
-function replaceEpisodeChunk(episode: MemoryEpisode): void {
-  const source = episodeSource(episode);
-  replaceChunksForSource(
-    source,
-    [
-      {
-        content: episode.summary,
-        timestamp: episode.endedAt,
-        embedding: episode.embedding ?? undefined,
-      },
-    ],
-    {
-      scope: episode.conversationId ? 'conversation' : 'global',
-      conversationId: episode.conversationId,
-      taskId: episode.taskId,
-      sourceKey: episode.conversationId
-        ? `conversation:${episode.conversationId}:episode:${episode.id}`
-        : `global:episode:${episode.id}`,
-      sourceKind: 'episode',
-    },
-  );
 }
 
 function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | null {
@@ -159,12 +129,6 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
       );
       if (
         episode.summary !== current.summary ||
-        JSON.stringify(episode.embedding) !== JSON.stringify(current.embedding)
-      ) {
-        replaceEpisodeChunk(episode);
-      }
-      if (
-        episode.summary !== current.summary ||
         JSON.stringify(episode.entities) !== JSON.stringify(current.entities) ||
         JSON.stringify(episode.toolNames) !== JSON.stringify(current.toolNames)
       ) {
@@ -215,7 +179,6 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
     episode.sourceEndMessageId,
   );
   replaceEpisodeRetrievalTerms(db, episode);
-  replaceEpisodeChunk(episode);
   return episode;
 }
 

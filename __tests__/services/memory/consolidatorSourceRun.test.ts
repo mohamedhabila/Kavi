@@ -100,7 +100,6 @@ describe('memory consolidator source-run provenance', () => {
       'memory_episodes',
       'memory_facts',
       'memory_fact_evidence',
-      'memory_chunks',
     ]) {
       expect(
         getMemoryDb().getFirstSync<{ count: number }>(`SELECT COUNT(*) AS count FROM ${table}`)

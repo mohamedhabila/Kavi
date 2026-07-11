@@ -61,7 +61,6 @@ interface SeededLineage {
   otherThreadJobId: string;
   otherKindJobId: string;
   evidenceIds: string[];
-  targetChunkIds: number[];
   targetWorkingBlockScopeKey: string;
 }
 
@@ -317,13 +316,6 @@ function seedAuthoritativeLineage(): SeededLineage {
     sourceEndMessageId: 'turn-kind-job',
     sourceRunId: MESSAGE_ID,
   });
-  const targetChunkIds = getMemoryDb()
-    .getAllSync<{ id: number }>(
-      'SELECT id FROM memory_chunks WHERE source LIKE ?',
-      `%${targetEpisode.id}`,
-    )
-    .map((row) => row.id);
-
   return {
     targetFactId: target.id,
     historyFactId,
@@ -342,7 +334,6 @@ function seedAuthoritativeLineage(): SeededLineage {
     otherThreadJobId: otherThreadJob.id,
     otherKindJobId: otherKindJob.id,
     evidenceIds: [targetEvidence.id, episodeEvidence.id],
-    targetChunkIds,
     targetWorkingBlockScopeKey: buildWorkingBlockScopeKey({
       conversationId: CONVERSATION_ID,
       threadId: THREAD_ID,
@@ -389,7 +380,6 @@ describe('atomic memory withdrawal', () => {
         factEvidence: 2,
         episodeAccessPolicies: 1,
         episodes: 1,
-        chunks: 1,
         reflections: 2,
         orphanEntities: 1,
         ingestionJobs: 2,
@@ -534,7 +524,6 @@ describe('atomic memory withdrawal', () => {
       evidenceIds: seeded.evidenceIds,
       observationIds: [],
       episodeIds: [seeded.targetEpisodeId],
-      chunkIds: seeded.targetChunkIds,
       reflectionIds: [seeded.targetReflectionId, seeded.linkedMalformedReflectionId],
       workingBlocks: [{ label: 'active_focus', scopeKey: seeded.targetWorkingBlockScopeKey }],
       entityIds: [seeded.orphanEntityId],

@@ -64,11 +64,6 @@ jest.mock('../../src/services/memory/embeddings', () => ({
   hybridSearch: jest.fn().mockResolvedValue([]),
 }));
 
-jest.mock('../../src/services/memory/sqlite-store', () => ({
-  indexMemoryToSqlite: jest.fn().mockResolvedValue(0),
-  sqliteHybridSearch: jest.fn().mockResolvedValue([]),
-}));
-
 jest.mock('../../src/services/memory/store', () => ({
   searchMemory: jest.fn().mockReturnValue([]),
 }));
@@ -333,11 +328,6 @@ export function installBuiltinExecutorRuntimeReset(): void {
     getSkillToolDefinitions.mockReturnValue([]);
 
     jest.clearAllMocks();
-    const sqliteStore = require('../../src/services/memory/sqlite-store');
-    sqliteStore.indexMemoryToSqlite.mockReset();
-    sqliteStore.indexMemoryToSqlite.mockResolvedValue(0);
-    sqliteStore.sqliteHybridSearch.mockReset();
-    sqliteStore.sqliteHybridSearch.mockResolvedValue([]);
   });
 }
 

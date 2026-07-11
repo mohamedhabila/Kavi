@@ -295,7 +295,6 @@ it('closes exact fact and receipt lineage without deleting a different task scop
     expect.objectContaining({
       facts: 1,
       episodes: 2,
-      chunks: 2,
       workingBlocks: 6,
       ingestionJobs: 5,
     }),

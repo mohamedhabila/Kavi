@@ -6,8 +6,7 @@
 //   • memory_facts     — bi-temporal facts (Graphiti-style supersession)
 //   • memory_blocks    — Letta-style char-capped, agent-editable blocks
 //
-// These tables sit alongside the legacy `memory_chunks` table in the same
-// kavi-memory.db so older persisted memories remain readable during migration.
+// These are the canonical memory tables in kavi-memory.db.
 // ---------------------------------------------------------------------------
 
 import { getMemoryDb } from './database';

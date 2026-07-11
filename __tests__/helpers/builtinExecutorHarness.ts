@@ -100,11 +100,6 @@ jest.mock('../../src/services/agents/workerMemoryBundle', () => ({
     value && typeof value === 'object' ? value : undefined,
 }));
 
-jest.mock('../../src/services/memory/sqlite-store', () => ({
-  indexMemoryToSqlite: jest.fn().mockResolvedValue(0),
-  sqliteHybridSearch: jest.fn().mockResolvedValue([]),
-}));
-
 // Mock expo-image-picker
 jest.mock('expo-image-picker', () => ({
   launchCameraAsync: jest.fn().mockResolvedValue({
@@ -180,11 +175,6 @@ beforeEach(() => {
   mockHydrateProviderForRequest.mockImplementation(async (provider) => provider);
 
   jest.clearAllMocks();
-  const sqliteStore = require('../../src/services/memory/sqlite-store');
-  sqliteStore.indexMemoryToSqlite.mockReset();
-  sqliteStore.indexMemoryToSqlite.mockResolvedValue(0);
-  sqliteStore.sqliteHybridSearch.mockReset();
-  sqliteStore.sqliteHybridSearch.mockResolvedValue([]);
 });
 
 export {

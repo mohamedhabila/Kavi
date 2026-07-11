@@ -288,21 +288,6 @@ function quarantineConflictingSourceArtifacts(
       ...batch,
     );
   });
-  for (const episode of artifacts.episodes) {
-    const source = episode.conversation_id
-      ? `conversation/${episode.conversation_id}/episode/${episode.id}`
-      : `episode/${episode.id}`;
-    const sourceKey = episode.conversation_id
-      ? `conversation:${episode.conversation_id}:episode:${episode.id}`
-      : `global:episode:${episode.id}`;
-    db.runSync(
-      `DELETE FROM memory_chunks
-        WHERE source_kind = 'episode' AND (source = ? OR source_key = ?)`,
-      source,
-      sourceKey,
-    );
-  }
-
   eachArtifactBatch(artifacts.factIds, (batch) => {
     const placeholders = batch.map(() => '?').join(', ');
     db.runSync(`DELETE FROM memory_fact_evidence WHERE fact_id IN (${placeholders})`, ...batch);
