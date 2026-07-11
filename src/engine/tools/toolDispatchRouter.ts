@@ -278,7 +278,7 @@ export async function executeToolInner(
           const result = await runJobNow(args.id, { trigger: 'manual' });
           if (result.status === 'not_found') return `Error: job not found: ${args.id}`;
           return JSON.stringify({
-            status: result.status === 'completed' ? 'triggered' : result.status,
+            status: result.status,
             id: args.id,
             name: result.name,
           });

@@ -139,7 +139,7 @@ describe('Scheduler Engine', () => {
     expect(mockEmit).toHaveBeenCalledWith('task_failed', expect.objectContaining({ taskId: 'j3' }));
   });
 
-  it('evaluateJobs handles executor errors', async () => {
+  it('evaluateJobs marks retryable executor errors as retrying', async () => {
     const executor = { execute: jest.fn().mockRejectedValue(new Error('boom')) };
     setSchedulerExecutor(executor);
 
@@ -159,7 +159,7 @@ describe('Scheduler Engine', () => {
     await Promise.resolve();
 
     expect(mockEmit).toHaveBeenCalledWith(
-      'task_failed',
+      'task_retrying',
       expect.objectContaining({ error: expect.stringContaining('boom') }),
     );
   });

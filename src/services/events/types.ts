@@ -63,11 +63,19 @@ export type MemoryEvent = InternalHookEvent & {
 
 export type SchedulerEvent = InternalHookEvent & {
   type: 'scheduler';
-  action: 'task_run' | 'task_complete' | 'task_failed' | 'task_created' | 'task_removed';
+  action:
+    | 'task_run'
+    | 'task_retrying'
+    | 'task_complete'
+    | 'task_failed'
+    | 'task_created'
+    | 'task_removed';
   context: {
     taskId?: string;
     taskName?: string;
     error?: string;
+    attempt?: number;
+    maxRetries?: number;
   };
 };
 

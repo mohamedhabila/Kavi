@@ -121,8 +121,18 @@ describe('executeTool — core tools routing', () => {
   it('routes cron run', async () => {
     const result = await executeTool('cron', '{"action":"run","id":"job-1"}', CONV_ID);
     const parsed = JSON.parse(result);
-    expect(parsed.status).toBe('triggered');
+    expect(parsed.status).toBe('succeeded');
     expect(mockRunJobNow).toHaveBeenCalledWith('job-1', { trigger: 'manual' });
+  });
+
+  it('preserves a terminal cron run failure instead of reporting it as triggered', async () => {
+    mockRunJobNow.mockResolvedValueOnce({
+      status: 'failed',
+      id: 'job-1',
+      name: 'test job',
+    });
+    const result = await executeTool('cron', '{"action":"run","id":"job-1"}', CONV_ID);
+    expect(JSON.parse(result)).toMatchObject({ status: 'failed', id: 'job-1' });
   });
 
   it('handles cron unknown action', async () => {

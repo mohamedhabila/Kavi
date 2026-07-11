@@ -163,6 +163,35 @@ describe('Scheduler Engine', () => {
       expect(onFinalFailure).not.toHaveBeenCalled();
     });
 
+    it('honors maxRetries as the number of retries after the first attempt', async () => {
+      const now = 1_700_000_225_000;
+      const nowSpy = mockNow(now);
+      const executeFn = jest.fn().mockRejectedValue(new Error('still unavailable'));
+      const onFinalFailure = jest.fn().mockResolvedValue(undefined);
+      setSchedulerExecutor({ execute: executeFn, onFinalFailure });
+      const jobId = useSchedulerStore.getState().addJob({
+        name: 'Bounded Retry Job',
+        schedule: { kind: 'every', everyMs: 60_000 },
+        prompt: 'retry safely',
+        failureAlert: { enabled: true, maxRetries: 2 },
+      });
+      setJobRuntime(jobId, { nextRunAtMs: now - 1 });
+
+      await evaluateJobsOnce({ nowMs: now, trigger: 'scheduled' });
+      nowSpy.mockReturnValue(now + 30_000);
+      await evaluateJobsOnce({ nowMs: now + 30_000, trigger: 'scheduled' });
+      nowSpy.mockReturnValue(now + 90_000);
+      await evaluateJobsOnce({ nowMs: now + 90_000, trigger: 'scheduled' });
+
+      expect(executeFn).toHaveBeenCalledTimes(3);
+      expect(onFinalFailure).toHaveBeenCalledTimes(1);
+      expect(useExecutionTraceStore.getState().traces.map((trace) => trace.status)).toEqual([
+        'error',
+        'retrying',
+        'retrying',
+      ]);
+    });
+
     it('does not replay an explicitly non-retryable execution failure', async () => {
       const now = 1_700_000_250_000;
       mockNow(now);
@@ -265,7 +294,7 @@ describe('Scheduler Engine', () => {
       useSchedulerStore.getState().disableJob(jobId);
 
       await expect(runJobNow(jobId, { nowMs: now })).resolves.toEqual({
-        status: 'completed',
+        status: 'succeeded',
         id: jobId,
         name: 'Manual Job',
       });
@@ -273,6 +302,25 @@ describe('Scheduler Engine', () => {
       expect(useExecutionTraceStore.getState().traces[0]).toMatchObject({
         trigger: 'manual',
         status: 'success',
+      });
+    });
+
+    it.each([
+      ['retrying', new Error('temporary manual failure')],
+      ['failed', new NonRetryableSchedulerExecutionError(new Error('unsafe to replay manually'))],
+    ])('reports a %s manual execution truthfully', async (status, error) => {
+      const now = 1_700_000_525_000;
+      mockNow(now);
+      setSchedulerExecutor({ execute: jest.fn().mockRejectedValue(error) });
+      const jobId = useSchedulerStore.getState().addJob({
+        name: 'Manual Failure Job',
+        schedule: { kind: 'every', everyMs: 60_000 },
+        prompt: 'manual failure',
+      });
+
+      await expect(runJobNow(jobId, { nowMs: now })).resolves.toMatchObject({
+        status,
+        id: jobId,
       });
     });
   });

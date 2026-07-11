@@ -396,7 +396,7 @@ const mockRemoveJob = jest.fn();
 const mockEnableJob = jest.fn();
 const mockDisableJob = jest.fn();
 const mockRunJobNow = jest.fn().mockResolvedValue({
-  status: 'completed',
+  status: 'succeeded',
   id: 'job-1',
   name: 'test job',
 });
@@ -529,7 +529,7 @@ export function setupToolDispatcherHarness(): ToolDispatcherHarness {
   );
   mockGetSubAgent.mockReturnValue(undefined);
   mockRunJobNow.mockResolvedValue({
-    status: 'completed',
+    status: 'succeeded',
     id: 'job-1',
     name: 'test job',
   });

@@ -207,5 +207,22 @@ describe('Event Bus', () => {
         }),
       );
     });
+
+    it('emits retrying as a distinct non-terminal scheduler event', async () => {
+      const handler = jest.fn();
+      registerInternalHook('scheduler', handler);
+      await emitSchedulerEvent('task_retrying', {
+        taskId: 't1',
+        error: 'temporary',
+        attempt: 1,
+        maxRetries: 2,
+      });
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'task_retrying',
+          context: expect.objectContaining({ attempt: 1, maxRetries: 2 }),
+        }),
+      );
+    });
   });
 });

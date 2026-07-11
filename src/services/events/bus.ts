@@ -136,8 +136,20 @@ export function emitMemoryEvent(
 }
 
 export function emitSchedulerEvent(
-  action: 'task_run' | 'task_complete' | 'task_failed' | 'task_created' | 'task_removed',
-  context: { taskId?: string; taskName?: string; error?: string } = {},
+  action:
+    | 'task_run'
+    | 'task_retrying'
+    | 'task_complete'
+    | 'task_failed'
+    | 'task_created'
+    | 'task_removed',
+  context: {
+    taskId?: string;
+    taskName?: string;
+    error?: string;
+    attempt?: number;
+    maxRetries?: number;
+  } = {},
 ): Promise<void> {
   return triggerInternalHook(createInternalHookEvent('scheduler', action, 'system', context));
 }

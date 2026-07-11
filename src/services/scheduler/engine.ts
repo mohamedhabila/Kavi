@@ -33,8 +33,11 @@ export interface EvaluateJobsOptions {
 
 export type RunJobNowResult =
   | { status: 'not_found'; id: string }
-  | { status: 'skipped'; id: string; name: string }
-  | { status: 'completed'; id: string; name: string };
+  | {
+      status: 'skipped' | 'succeeded' | 'retrying' | 'failed';
+      id: string;
+      name: string;
+    };
 
 let executor: SchedulerExecutor | null = null;
 
@@ -143,7 +146,7 @@ async function executeJob(
   nowMs: number,
   trigger: SchedulerTrigger,
   force: boolean,
-): Promise<'completed' | 'skipped'> {
+): Promise<'skipped' | 'succeeded' | 'retrying' | 'failed'> {
   const store = useSchedulerStore.getState();
   if (!shouldRunJob(job, nowMs, force)) {
     return 'skipped';
@@ -175,7 +178,7 @@ async function executeJob(
       attempt,
       trigger,
     });
-    return 'completed';
+    return 'failed';
   }
 
   const startMs = Date.now();
@@ -193,12 +196,12 @@ async function executeJob(
       output: result,
       trigger,
     });
-    return 'completed';
+    return 'succeeded';
   } catch (err: unknown) {
     const completedAt = Date.now();
     const error = err instanceof Error ? err.message : String(err);
     const maxRetries = maxRetriesForJob(job);
-    const willRetry = !isNonRetryableSchedulerExecutionError(err) && attempt < maxRetries;
+    const willRetry = !isNonRetryableSchedulerExecutionError(err) && attempt <= maxRetries;
 
     if (willRetry) {
       const nextRetryAtMs = completedAt + getRetryDelay(attempt);
@@ -209,9 +212,11 @@ async function executeJob(
         nextRetryAtMs,
         final: false,
       });
-      emitSchedulerEvent('task_failed', {
+      emitSchedulerEvent('task_retrying', {
         taskId: job.id,
-        error: `${error} (retry ${attempt}/${maxRetries})`,
+        error,
+        attempt,
+        maxRetries,
       });
       recordTrace({
         jobId: job.id,
@@ -223,7 +228,7 @@ async function executeJob(
         attempt,
         trigger,
       });
-      return 'completed';
+      return 'retrying';
     }
 
     store.recordRunFailure(job.id, {
@@ -248,7 +253,7 @@ async function executeJob(
       attempt,
       trigger,
     });
-    return 'completed';
+    return 'failed';
   }
 }
 
@@ -303,9 +308,7 @@ export async function runJobNow(
   await syncSchedulerWakeNotifications({ nowMs, force: false }).catch((error) =>
     console.warn('[scheduler] Wake notification maintenance failed:', error),
   );
-  return result === 'skipped'
-    ? { status: 'skipped', id: job.id, name: job.name }
-    : { status: 'completed', id: job.id, name: job.name };
+  return { status: result, id: job.id, name: job.name };
 }
 
 export function stopScheduler(): void {
