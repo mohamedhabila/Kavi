@@ -87,14 +87,6 @@ jest.mock('../../src/services/voice/voice', () => ({
   speakText: jest.fn().mockResolvedValue(undefined),
 }));
 
-jest.mock('../../src/services/memory/store', () => ({
-  searchMemory: jest.fn().mockResolvedValue([]),
-}));
-
-jest.mock('../../src/services/memory/embeddings', () => ({
-  hybridSearch: jest.fn().mockResolvedValue([]),
-}));
-
 jest.mock('../../src/services/agents/personas', () => ({
   BUILT_IN_PERSONAS: [],
 }));

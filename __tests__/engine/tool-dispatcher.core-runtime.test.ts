@@ -7,7 +7,6 @@ import {
 let executeTool: ToolDispatcherHarness['executeTool'];
 let builtinMod: ToolDispatcherHarness['builtinMod'];
 let executeNativeTool: ToolDispatcherHarness['executeNativeTool'];
-let memoryStore: ToolDispatcherHarness['memoryStore'];
 let mockRunJobNow: ToolDispatcherHarness['mockRunJobNow'];
 let mockExecutePython: ToolDispatcherHarness['mockExecutePython'];
 let mockRecordAgentRunEvidence: ToolDispatcherHarness['mockRecordAgentRunEvidence'];
@@ -27,7 +26,6 @@ beforeEach(() => {
   executeTool = harness.executeTool;
   builtinMod = harness.builtinMod;
   executeNativeTool = harness.executeNativeTool;
-  memoryStore = harness.memoryStore;
   mockRunJobNow = harness.mockRunJobNow;
   mockExecutePython = harness.mockExecutePython;
   mockRecordAgentRunEvidence = harness.mockRecordAgentRunEvidence;
@@ -47,10 +45,6 @@ describe('executeTool — core tools routing', () => {
         taskId: null,
       },
     );
-    expect(memoryStore.searchMemory).not.toHaveBeenCalledWith('state', {
-      scope: 'all',
-      conversationId: CONV_ID,
-    });
   });
 
   it('normalizes python file output without store evidence writes', async () => {

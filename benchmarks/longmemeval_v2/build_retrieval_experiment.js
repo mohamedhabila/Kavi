@@ -24,7 +24,6 @@ async function main() {
     args.out || path.join(repoRoot, '.private', 'evals', 'runtime', 'retrieval_experiment.cjs');
   const expoSqliteShim = path.join(__dirname, 'nodeExpoSqlite.ts');
   const embeddingsStub = path.join(__dirname, 'runtimeSimpleEmbeddingsStub.ts');
-  const memoryStoreStub = path.join(__dirname, 'runtimeMemoryStoreStub.ts');
   const memoryPolicyStub = path.join(__dirname, 'runtimeMemoryPolicyStub.ts');
   const secureStorageStub = path.join(__dirname, 'runtimeSecureStorageStub.ts');
   const reactNativeStub = path.join(__dirname, 'runtimeReactNativeStub.ts');
@@ -64,18 +63,6 @@ async function main() {
             }
             return null;
           });
-          build.onResolve(
-            { filter: /(^\.\/store(\.ts)?$|src\/services\/memory\/store(\.ts)?$)/ },
-            (args) => {
-              if (
-                args.importer.includes(path.join('src', 'services', 'memory')) ||
-                args.path.includes(path.join('src', 'services', 'memory', 'store'))
-              ) {
-                return { path: memoryStoreStub };
-              }
-              return null;
-            },
-          );
           build.onResolve({ filter: /SecureStorage$/ }, () => ({
             path: secureStorageStub,
           }));

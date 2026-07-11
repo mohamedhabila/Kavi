@@ -235,10 +235,6 @@ jest.mock('../../src/services/media/imageGeneration', () => ({
   }),
 }));
 
-jest.mock('../../src/services/memory/embeddings', () => ({
-  hybridSearch: jest.fn().mockResolvedValue([]),
-}));
-
 jest.mock('../../src/engine/tools/native/executor', () => ({
   executeNativeTool: jest.fn().mockImplementation((name: string) => {
     if (name === 'notification_send') {
@@ -291,7 +287,6 @@ export let executeTool: (
 export let executeNativeTool: jest.Mock;
 export let generateImage: jest.Mock;
 export let editImage: jest.Mock;
-export let hybridSearch: jest.Mock;
 export let registerSkill: (skill: Skill) => void;
 export let unregisterSkill: (id: string) => void;
 export let clearAllSurfaces: () => void;
@@ -311,7 +306,6 @@ function loadTestModules() {
   ({ executeTool } = require('../../src/engine/tools/index'));
   ({ executeNativeTool } = require('../../src/engine/tools/native/executor'));
   ({ generateImage, editImage } = require('../../src/services/media/imageGeneration'));
-  ({ hybridSearch } = require('../../src/services/memory/embeddings'));
   ({ registerSkill, unregisterSkill } = require('../../src/services/skills/manager'));
   ({ clearAllSurfaces, getSurface } = require('../../src/services/canvas/renderer'));
   ({ executePython } = require('../../src/services/python/pyodideBridge'));
@@ -328,8 +322,6 @@ beforeEach(() => {
   mockWriteWorkspaceFile.mockReset();
   mockListWorkspaceDirectory.mockReset();
   executePython.mockResolvedValue({ success: true, output: '42' });
-  hybridSearch.mockReset();
-  hybridSearch.mockResolvedValue([]);
   mockPermissionOverrides.clear();
   clearAllSurfaces();
   const { useSchedulerStore } = require('../../src/services/scheduler/store');

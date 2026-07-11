@@ -81,16 +81,6 @@ jest.mock('../../src/services/voice/voice', () => ({
   transcribeAudio: jest.fn().mockResolvedValue({ text: 'hello', language: 'en', duration: 2 }),
 }));
 
-// Mock memory store
-jest.mock('../../src/services/memory/store', () => ({
-  searchMemory: jest.fn().mockReturnValue([]),
-}));
-
-// Mock embeddings
-jest.mock('../../src/services/memory/embeddings', () => ({
-  hybridSearch: jest.fn().mockResolvedValue([]),
-}));
-
 const mockBuildLeastPrivilegeWorkerMemoryBundle = jest.fn().mockResolvedValue(undefined);
 
 jest.mock('../../src/services/agents/workerMemoryBundle', () => ({

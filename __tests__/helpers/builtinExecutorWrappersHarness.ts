@@ -84,14 +84,6 @@ jest.mock('../../src/services/voice/voice', () => ({
   speakText: (...args: any[]) => mockSpeakText(...args),
 }));
 
-jest.mock('../../src/services/memory/store', () => ({
-  searchMemory: jest.fn(),
-}));
-
-jest.mock('../../src/services/memory/embeddings', () => ({
-  hybridSearch: jest.fn(),
-}));
-
 jest.mock('../../src/services/agents/personas', () => ({
   BUILT_IN_PERSONAS: [{ id: 'default' }],
 }));

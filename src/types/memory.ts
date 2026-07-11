@@ -8,14 +8,6 @@ export interface EmbeddingConfig {
   dimensions?: number;
 }
 
-export interface MemorySearchResult {
-  source: string;
-  snippet: string;
-  score: number;
-  scope?: 'global' | 'conversation' | 'daily';
-  embedding?: number[];
-}
-
 export interface EmbeddingResult {
   embedding: number[];
   model: string;

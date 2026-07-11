@@ -363,9 +363,11 @@ jest.mock('../../src/services/media/imageGeneration', () => ({
 
 // Mock web tools
 jest.mock('../../src/engine/tools/web-search', () => ({
+  ...jest.requireActual('../../src/engine/tools/web-search'),
   executeWebSearch: jest.fn().mockResolvedValue(JSON.stringify({ results: [] })),
 }));
 jest.mock('../../src/engine/tools/web-fetch', () => ({
+  ...jest.requireActual('../../src/engine/tools/web-fetch'),
   executeWebFetch: jest.fn().mockResolvedValue('fetched'),
 }));
 
@@ -388,16 +390,6 @@ jest.mock('../../src/services/skills/manager', () => ({
   parseSkillToolName: jest.fn().mockReturnValue(null),
   executeSkillTool: jest.fn(),
 }));
-jest.mock('../../src/services/memory/store', () => ({
-  appendConversationMemory: jest.fn(),
-  appendGlobalMemory: jest.fn(),
-  readConversationMemory: jest.fn().mockResolvedValue(null),
-  readGlobalMemory: jest.fn().mockResolvedValue(null),
-  searchMemory: jest.fn().mockResolvedValue([]),
-  writeConversationMemory: jest.fn(),
-  writeGlobalMemory: jest.fn(),
-}));
-
 const mockAddJob = jest.fn().mockReturnValue('job-1');
 const mockGetJob = jest.fn();
 const mockRemoveJob = jest.fn();
@@ -453,16 +445,6 @@ type ExecuteToolFn = typeof import('../../src/engine/tools/index').executeTool;
 type BuiltinToolModule = typeof mockBuiltinToolFns;
 type SessionLaunchModule = typeof mockSessionLaunchFns;
 type SessionInspectionModule = typeof mockSessionInspectionFns;
-type MemoryStoreModule = {
-  appendConversationMemory: jest.Mock;
-  appendGlobalMemory: jest.Mock;
-  readConversationMemory: jest.Mock;
-  readGlobalMemory: jest.Mock;
-  searchMemory: jest.Mock;
-  writeConversationMemory: jest.Mock;
-  writeGlobalMemory: jest.Mock;
-};
-
 export const CONV_ID = 'test-conv-123';
 
 export type ToolDispatcherHarness = {
@@ -473,7 +455,6 @@ export type ToolDispatcherHarness = {
   executeNativeTool: jest.Mock;
   generateImage: jest.Mock;
   editImage: jest.Mock;
-  memoryStore: MemoryStoreModule;
   mockGetJob: typeof mockGetJob;
   mockRunJobNow: typeof mockRunJobNow;
   mockExecutePython: typeof mockExecutePython;
@@ -501,7 +482,6 @@ function loadTestModules(): LoadedToolDispatcherHarness {
     generateImage: jest.Mock;
     editImage: jest.Mock;
   };
-  const memoryStore = require('../../src/services/memory/store') as MemoryStoreModule;
   const { __resetStore: resetExpoFileStore } = require('expo-file-system') as {
     __resetStore: () => void;
   };
@@ -514,7 +494,6 @@ function loadTestModules(): LoadedToolDispatcherHarness {
     executeNativeTool,
     generateImage,
     editImage,
-    memoryStore,
     mockGetJob,
     mockRunJobNow,
     mockExecutePython,

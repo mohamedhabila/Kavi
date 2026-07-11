@@ -1,26 +1,17 @@
 // ---------------------------------------------------------------------------
 // Kavi — Embedding Memory Service
 // ---------------------------------------------------------------------------
-// Provides embedding-based semantic memory search.
+// Provides embedding generation and a bounded in-memory result cache.
 // Supports: local Unicode n-gram hashing, OpenAI, Gemini, Voyage, Mistral, Ollama.
-// Scoring: vectorWeight * cosine + textWeight * bm25 + temporal_decay + mmr
 
-import type { EmbeddingConfig, EmbeddingResult, MemorySearchResult } from '../../types/memory';
+import type { EmbeddingConfig, EmbeddingResult } from '../../types/memory';
 import {
   DEFAULT_GEMINI_AI_STUDIO_BASE_URL,
   isVertexNativeGeminiBaseUrl,
   normalizeGeminiBaseUrl,
 } from '../../constants/api';
 import { getSecure } from '../storage/SecureStorage';
-import {
-  searchMemory,
-  readConversationMemory,
-  readGlobalMemory,
-  listDailyMemoryFiles,
-  readDailyMemory,
-} from './store';
 import { createTimeoutSignal } from '../../utils/runtime';
-import { createArrayChunkIndex, searchChunkIndex } from './ranking/chunkIndex';
 import {
   createCharacterNgramVector,
   LOCAL_SIMILARITY_DIMENSIONS,
@@ -36,9 +27,6 @@ export const DEFAULT_LOCAL_EMBEDDING_CONFIG: EmbeddingConfig = {
   model: LOCAL_SIMILARITY_MODEL,
   dimensions: LOCAL_SIMILARITY_DIMENSIONS,
 };
-
-export { cosineSimilarity } from './ranking/similarity';
-export { temporalDecay } from './ranking/scoring';
 
 /** Create an AbortSignal that fires after `ms` milliseconds. */
 function timeoutSignal(ms: number = EMBEDDING_TIMEOUT_MS): AbortSignal {
@@ -335,192 +323,4 @@ export function getEmbeddingCacheEntryCount(): number {
 
 export function isLocalEmbeddingConfig(config: EmbeddingConfig | undefined): boolean {
   return config?.provider === 'local';
-}
-
-// ── Hybrid memory search (text + embedding) ──────────────────────────────
-
-export interface HybridSearchConfig {
-  embedding: EmbeddingConfig;
-  vectorWeight?: number;
-  textWeight?: number;
-  temporalWeight?: number;
-  maxResults?: number;
-}
-
-export interface MemoryIndexOptions {
-  scope?: 'global' | 'conversation' | 'all';
-  conversationId?: string;
-  maxDailyFiles?: number;
-}
-
-export interface IndexedMemoryEntry {
-  scope: 'global' | 'conversation' | 'daily';
-  source: string;
-  content: string;
-  timestamp: number;
-  embedding?: number[];
-}
-
-// In-memory index of embedded entries
-const memoryIndex: IndexedMemoryEntry[] = [];
-
-function includesGlobalLikeMemory(scope: MemoryIndexOptions['scope'] | undefined): boolean {
-  return !scope || scope === 'global' || scope === 'all';
-}
-
-function includesConversationMemory(scope: MemoryIndexOptions['scope'] | undefined): boolean {
-  return scope === 'conversation' || scope === 'all';
-}
-
-/**
- * Index all memory entries with embeddings for semantic search
- */
-export async function indexMemory(
-  config: EmbeddingConfig,
-  options?: MemoryIndexOptions,
-): Promise<number> {
-  memoryIndex.length = 0;
-  const scope = options?.scope;
-  const maxDailyFiles = options?.maxDailyFiles || 30;
-
-  if (includesGlobalLikeMemory(scope)) {
-    const global = await readGlobalMemory();
-    if (global) {
-      const sections = global.split(/\n(?=#{1,3}\s)/);
-      for (const section of sections) {
-        if (!section.trim()) continue;
-        try {
-          const embedding = await getEmbeddingCached(section.trim(), config);
-          memoryIndex.push({
-            scope: 'global',
-            source: 'MEMORY.md',
-            content: section.trim(),
-            timestamp: Date.now(),
-            embedding,
-          });
-        } catch {
-          memoryIndex.push({
-            scope: 'global',
-            source: 'MEMORY.md',
-            content: section.trim(),
-            timestamp: Date.now(),
-          });
-        }
-      }
-    }
-  }
-
-  if (includesConversationMemory(scope) && options?.conversationId) {
-    const conversationMemory = await readConversationMemory(options.conversationId);
-    if (conversationMemory) {
-      const sections = conversationMemory.split(/\n(?=#{1,3}\s)/);
-      for (const section of sections) {
-        if (!section.trim()) continue;
-        try {
-          const embedding = await getEmbeddingCached(section.trim(), config);
-          memoryIndex.push({
-            scope: 'conversation',
-            source: 'conversation/MEMORY.md',
-            content: section.trim(),
-            timestamp: Date.now(),
-            embedding,
-          });
-        } catch {
-          memoryIndex.push({
-            scope: 'conversation',
-            source: 'conversation/MEMORY.md',
-            content: section.trim(),
-            timestamp: Date.now(),
-          });
-        }
-      }
-    }
-  }
-
-  if (includesGlobalLikeMemory(scope)) {
-    const dailyFiles = listDailyMemoryFiles();
-    for (const dateStr of dailyFiles.slice(0, maxDailyFiles)) {
-      const content = await readDailyMemory(dateStr);
-      if (!content) continue;
-
-      const dateMs = new Date(dateStr).getTime() || Date.now();
-      const sections = content.split(/\n---\n/);
-      for (const section of sections) {
-        if (!section.trim()) continue;
-        try {
-          const embedding = await getEmbeddingCached(section.trim(), config);
-          memoryIndex.push({
-            scope: 'daily',
-            source: `daily/${dateStr}.md`,
-            content: section.trim(),
-            timestamp: dateMs,
-            embedding,
-          });
-        } catch {
-          memoryIndex.push({
-            scope: 'daily',
-            source: `daily/${dateStr}.md`,
-            content: section.trim(),
-            timestamp: dateMs,
-          });
-        }
-      }
-    }
-  }
-
-  return memoryIndex.length;
-}
-
-/**
- * Hybrid search combining vector similarity, text matching, and temporal decay
- */
-export async function hybridSearch(
-  query: string,
-  config: HybridSearchConfig,
-  options?: MemoryIndexOptions,
-): Promise<MemorySearchResult[]> {
-  const { vectorWeight = 0.6, textWeight = 0.3, temporalWeight = 0.1, maxResults = 10 } = config;
-
-  // Get query embedding
-  let queryEmbedding: number[] | null = null;
-  try {
-    queryEmbedding = await getEmbeddingCached(query, config.embedding);
-  } catch {
-    // Fall back to text-only search
-  }
-
-  // Get text search results
-  const textResults = await searchMemory(query, {
-    scope: options?.scope || 'global',
-    conversationId: options?.conversationId,
-    maxDailyFiles: options?.maxDailyFiles,
-  });
-  const textScoreMap = new Map<string, number>();
-  for (const r of textResults) {
-    textScoreMap.set(r.snippet.slice(0, 200), r.score);
-  }
-
-  // If no indexed entries, fall back to pure text search
-  if (memoryIndex.length === 0) {
-    return textResults.slice(0, maxResults);
-  }
-
-  return searchChunkIndex({
-    index: createArrayChunkIndex(memoryIndex),
-    queryEmbedding,
-    options: options?.scope ? { scope: options.scope } : undefined,
-    vectorWeight,
-    textWeight,
-    temporalWeight,
-    maxResults,
-    textScore: (entry) => textScoreMap.get(entry.content.slice(0, 200)) || 0,
-    includeEmbeddingInResult: true,
-  });
-}
-
-/**
- * Get the number of indexed entries
- */
-export function getIndexSize(): number {
-  return memoryIndex.length;
 }

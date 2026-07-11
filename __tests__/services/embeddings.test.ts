@@ -5,15 +5,6 @@
 const mockFetch = jest.fn();
 (global as any).fetch = mockFetch;
 
-// Mock memory store (used by indexMemory / hybridSearch internally)
-jest.mock('../../src/services/memory/store', () => ({
-  readConversationMemory: jest.fn().mockReturnValue(null),
-  readGlobalMemory: jest.fn().mockReturnValue(null),
-  listDailyMemoryFiles: jest.fn().mockReturnValue([]),
-  readDailyMemory: jest.fn().mockReturnValue(null),
-  searchMemory: jest.fn().mockReturnValue([]),
-}));
-
 // Mock SecureStorage (used for API key fallback)
 jest.mock('../../src/services/storage/SecureStorage', () => ({
   getSecure: jest.fn().mockResolvedValue(null),
@@ -22,77 +13,19 @@ jest.mock('../../src/services/storage/SecureStorage', () => ({
 }));
 
 import {
-  cosineSimilarity,
-  temporalDecay,
   getEmbedding,
   getEmbeddingCached,
-  indexMemory,
-  hybridSearch,
   clearEmbeddingCache,
-  getIndexSize,
   CACHE_CONFIG,
   DEFAULT_LOCAL_EMBEDDING_CONFIG,
   isLocalEmbeddingConfig,
 } from '../../src/services/memory/embeddings';
 import { createCharacterNgramVector } from '../../src/services/memory/localSimilarity';
 
-const {
-  readConversationMemory,
-  readGlobalMemory,
-  listDailyMemoryFiles,
-  readDailyMemory,
-  searchMemory,
-} = require('../../src/services/memory/store');
-
 describe('Embeddings Service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     clearEmbeddingCache();
-    readConversationMemory.mockReturnValue(null);
-    readGlobalMemory.mockReturnValue(null);
-    listDailyMemoryFiles.mockReturnValue([]);
-    readDailyMemory.mockReturnValue(null);
-    searchMemory.mockReturnValue([]);
-  });
-
-  describe('cosineSimilarity', () => {
-    it('returns 1 for identical vectors', () => {
-      const v = [1, 0, 0];
-      expect(cosineSimilarity(v, v)).toBeCloseTo(1);
-    });
-
-    it('returns 0 for orthogonal vectors', () => {
-      expect(cosineSimilarity([1, 0], [0, 1])).toBeCloseTo(0);
-    });
-
-    it('returns -1 for opposite vectors', () => {
-      expect(cosineSimilarity([1, 0], [-1, 0])).toBeCloseTo(-1);
-    });
-
-    it('handles zero vectors gracefully', () => {
-      expect(cosineSimilarity([0, 0], [0, 0])).toBe(0);
-    });
-
-    it('works with arbitrary vectors', () => {
-      const result = cosineSimilarity([1, 2, 3], [4, 5, 6]);
-      expect(result).toBeGreaterThan(0.9);
-    });
-  });
-
-  describe('temporalDecay', () => {
-    it('returns 1.0 for current timestamp', () => {
-      expect(temporalDecay(Date.now())).toBeCloseTo(1.0, 1);
-    });
-
-    it('returns < 1.0 for old timestamps', () => {
-      const oneDay = Date.now() - 86400000;
-      expect(temporalDecay(oneDay)).toBeLessThan(1.0);
-    });
-
-    it('returns > 0 for very old timestamps', () => {
-      const oldTs = Date.now() - 365 * 86400000;
-      expect(temporalDecay(oldTs)).toBeGreaterThan(0);
-    });
   });
 
   describe('getEmbedding', () => {
@@ -329,179 +262,6 @@ describe('Embeddings Service', () => {
       expect(mockFetch).toHaveBeenCalledTimes(4);
 
       CACHE_CONFIG.maxSize = origMax;
-    });
-  });
-
-  describe('indexMemory', () => {
-    it('indexes global memory sections and returns count', async () => {
-      readGlobalMemory.mockReturnValue('## Section A\nContent A\n## Section B\nContent B');
-      listDailyMemoryFiles.mockReturnValue([]);
-
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          data: [{ embedding: [0.1, 0.2] }],
-          model: 'text-embedding-3-small',
-        }),
-      });
-
-      const count = await indexMemory({ provider: 'openai', apiKey: 'k' });
-      expect(typeof count).toBe('number');
-      expect(count).toBeGreaterThan(0);
-    });
-
-    it('returns 0 when no memory exists', async () => {
-      readGlobalMemory.mockReturnValue(null);
-      listDailyMemoryFiles.mockReturnValue([]);
-
-      const count = await indexMemory({ provider: 'openai', apiKey: 'k' });
-      expect(count).toBe(0);
-    });
-
-    it('indexes daily memory files', async () => {
-      readGlobalMemory.mockReturnValue(null);
-      listDailyMemoryFiles.mockReturnValue(['2024-01-15']);
-      readDailyMemory.mockReturnValue('---\nEntry 1\n---\nEntry 2');
-
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          data: [{ embedding: [0.5, 0.6] }],
-          model: 'text-embedding-3-small',
-        }),
-      });
-
-      const count = await indexMemory({ provider: 'openai', apiKey: 'k' });
-      expect(count).toBeGreaterThan(0);
-    });
-
-    it('handles embedding error gracefully during indexing', async () => {
-      readGlobalMemory.mockReturnValue('## Section\nSome content');
-      listDailyMemoryFiles.mockReturnValue([]);
-
-      mockFetch.mockRejectedValue(new Error('Network error'));
-
-      const count = await indexMemory({ provider: 'openai', apiKey: 'k' });
-      // Should still index with no embedding
-      expect(count).toBeGreaterThan(0);
-    });
-
-    it('indexes conversation memory when requested', async () => {
-      readConversationMemory.mockReturnValue('## Conversation\nShared worker note');
-      readGlobalMemory.mockReturnValue(null);
-      listDailyMemoryFiles.mockReturnValue([]);
-
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          data: [{ embedding: [0.3, 0.4] }],
-          model: 'text-embedding-3-small',
-        }),
-      });
-
-      const count = await indexMemory(
-        { provider: 'openai', apiKey: 'k' },
-        { scope: 'conversation', conversationId: 'conv-1' },
-      );
-
-      expect(count).toBeGreaterThan(0);
-    });
-  });
-
-  describe('hybridSearch', () => {
-    it('falls back to text search when no indexed entries', async () => {
-      searchMemory.mockReturnValue([
-        { source: 'MEMORY.md', snippet: 'The dog runs fast', score: 0.8 },
-      ]);
-
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          data: [{ embedding: [0.1, 0.2, 0.3] }],
-          model: 'text-embedding-3-small',
-        }),
-      });
-
-      const results = await hybridSearch('dog running', {
-        embedding: { provider: 'openai', apiKey: 'k' },
-        maxResults: 5,
-      });
-      expect(results.length).toBeGreaterThanOrEqual(0);
-    });
-
-    it('returns results with scores', async () => {
-      // First index some memory
-      readGlobalMemory.mockReturnValue('## Dogs\nThe dog runs fast');
-      listDailyMemoryFiles.mockReturnValue([]);
-
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          data: [{ embedding: [0.1, 0.2, 0.3] }],
-          model: 'text-embedding-3-small',
-        }),
-      });
-
-      await indexMemory({ provider: 'openai', apiKey: 'k' });
-
-      const results = await hybridSearch('dog running', {
-        embedding: { provider: 'openai', apiKey: 'k' },
-        maxResults: 5,
-      });
-
-      for (const r of results) {
-        expect(r).toHaveProperty('score');
-        expect(r).toHaveProperty('source');
-        expect(r).toHaveProperty('snippet');
-      }
-    });
-
-    it('filters hybrid search results to conversation memory when requested', async () => {
-      readConversationMemory.mockReturnValue('## Conversation\nWorker-specific deployment note');
-      readGlobalMemory.mockReturnValue('## Global\nDurable preference');
-      listDailyMemoryFiles.mockReturnValue([]);
-      searchMemory.mockReturnValue([
-        {
-          source: 'conversation/MEMORY.md',
-          scope: 'conversation',
-          snippet: 'Worker-specific deployment note',
-          score: 1,
-        },
-      ]);
-
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          data: [{ embedding: [0.1, 0.2, 0.3] }],
-          model: 'text-embedding-3-small',
-        }),
-      });
-
-      await indexMemory(
-        { provider: 'openai', apiKey: 'k' },
-        { scope: 'all', conversationId: 'conv-1' },
-      );
-
-      const results = await hybridSearch(
-        'deployment note',
-        {
-          embedding: { provider: 'openai', apiKey: 'k' },
-          maxResults: 5,
-        },
-        {
-          scope: 'conversation',
-          conversationId: 'conv-1',
-        },
-      );
-
-      expect(results.length).toBeGreaterThan(0);
-      expect(results.every((result) => result.scope === 'conversation')).toBe(true);
-    });
-  });
-
-  describe('getIndexSize', () => {
-    it('returns current index size', () => {
-      expect(typeof getIndexSize()).toBe('number');
     });
   });
 });

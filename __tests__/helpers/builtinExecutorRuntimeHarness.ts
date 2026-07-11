@@ -60,14 +60,6 @@ jest.mock('../../src/services/voice/voice', () => ({
   }),
 }));
 
-jest.mock('../../src/services/memory/embeddings', () => ({
-  hybridSearch: jest.fn().mockResolvedValue([]),
-}));
-
-jest.mock('../../src/services/memory/store', () => ({
-  searchMemory: jest.fn().mockReturnValue([]),
-}));
-
 jest.mock('../../src/services/agents/personas', () => ({
   BUILT_IN_PERSONAS: [
     { id: 'default', name: 'Assistant', description: 'General AI', icon: 'assistant' },

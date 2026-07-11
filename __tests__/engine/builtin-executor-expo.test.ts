@@ -96,10 +96,6 @@ jest.mock('../../src/services/agents/subAgent', () => ({
   getSubAgentsByParent: jest.fn().mockReturnValue([]),
 }));
 
-jest.mock('../../src/services/memory/embeddings', () => ({
-  hybridSearch: jest.fn().mockResolvedValue([]),
-}));
-
 jest.mock('../../src/services/agents/commandPollBackoff', () => ({
   recordCommandPoll: jest.fn(),
   resetCommandPollCount: jest.fn(),
@@ -111,10 +107,6 @@ jest.mock('../../src/services/voice/voice', () => ({
   stopRecording: jest.fn(),
   transcribeAudio: jest.fn(),
   speakText: jest.fn(),
-}));
-
-jest.mock('../../src/services/memory/store', () => ({
-  searchMemory: jest.fn().mockReturnValue([]),
 }));
 
 jest.mock('../../src/services/agents/personas', () => ({
