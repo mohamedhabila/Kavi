@@ -351,6 +351,20 @@ describe('initializeServices', () => {
     const [opts] = mockRunOrchestrator.mock.calls[0];
     expect(opts.model).toBe('gpt-4o-mini');
   });
+  it('rejects a hook execution that reaches a blocked control graph', async () => {
+    mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
+      callbacks.onAgentControlGraphStateChange?.({
+        status: 'blocked',
+        terminalReason: 'loop_detected',
+      });
+      callbacks.onDone();
+    });
+    const { initializeServices } = require('../../src/services/startup');
+    initializeServices();
+    const hookCallback = mockLoadHooksFromDirectory.mock.calls[0][0];
+
+    await expect(hookCallback('blocked hook prompt', {})).rejects.toThrow('loop_detected');
+  });
   it('hooks callback does nothing without active provider', async () => {
     jest.doMock('../../src/store/useSettingsStore', () => ({
       useSettingsStore: {

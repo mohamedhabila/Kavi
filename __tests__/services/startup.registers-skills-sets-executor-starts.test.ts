@@ -552,6 +552,39 @@ describe('initializeServices', () => {
     });
     expect(result).toBe('Result for Summarize news');
   });
+  it('rejects and sends a failure notification for a blocked scheduled run', async () => {
+    mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
+      callbacks.onAssistantMessage('Scheduled task reached a blocker.');
+      callbacks.onAgentControlGraphStateChange?.({
+        status: 'blocked',
+        terminalReason: 'tool_batch_incomplete',
+      });
+      callbacks.onDone();
+    });
+    const { initializeServices } = require('../../src/services/startup');
+    initializeServices();
+    const executor = mockSetSchedulerExecutor.mock.calls[0][0];
+
+    await expect(
+      executor.execute({
+        name: 'Blocked Job',
+        payload: { prompt: 'Perform the action' },
+        sessionTarget: 'isolated',
+        wakeMode: 'new',
+        delivery: { mode: 'both' },
+      }),
+    ).rejects.toThrow('tool_batch_incomplete');
+
+    expect(mockSendLocalNotification).toHaveBeenCalledWith({
+      title: 'Blocked Job',
+      body: 'Error: Agent control graph was blocked: tool_batch_incomplete.',
+      data: {
+        screen: 'Chat',
+        conversationId: 'conv-1',
+        source: 'scheduled_task',
+      },
+    });
+  });
   it('persists tool messages generated during scheduled jobs', async () => {
     mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
       callbacks.onToolMessage('tc-1', 'tool result');
