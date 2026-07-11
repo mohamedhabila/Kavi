@@ -218,6 +218,33 @@ describe('authorized durable tool effect dispatch', () => {
     ).toEqual({ status: 'ambiguous' });
   });
 
+  it('surfaces settlement loss after dispatch and durably marks reconciliation', async () => {
+    const database = getExecutionJournalDb();
+    let databaseRequest = 0;
+    const execute = jest.fn(async () => verifiedWriteResult());
+
+    const result = await dispatchAuthorizedToolEffect(writeInput(execute), {
+      now: () => 100,
+      getDatabase: () => {
+        databaseRequest += 1;
+        if (databaseRequest === 4) {
+          throw new Error('settlement connection lost');
+        }
+        return database;
+      },
+    });
+
+    expect(result).toMatchObject({ kind: 'reconciliation_required' });
+    expect(result.result).toContain('settlement_unavailable');
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(
+      database.getFirstSync<{ run_status: string; effect_status: string }>(
+        `SELECT r.status AS run_status, e.status AS effect_status
+         FROM execution_runs r JOIN execution_effects e ON e.run_id = r.id`,
+      ),
+    ).toEqual({ run_status: 'ambiguous', effect_status: 'ambiguous' });
+  });
+
   it('fails closed before dispatch when the journal is unavailable', async () => {
     const execute = jest.fn(async () => verifiedWriteResult());
 
