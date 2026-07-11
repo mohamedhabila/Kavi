@@ -22,6 +22,46 @@ const MAX_TRANSCRIPT_MESSAGES = 18;
 const MAX_MESSAGE_CHARS = 1_800;
 const MAX_TOOL_CONTENT_CHARS = 2_600;
 const MAX_TERMINAL_DELIVERABLE_LINES = 8;
+// Recovery synthesis is secondary work and must leave time for the deterministic
+// fallback/resume path within a foreground request deadline.
+export const AGENT_RUN_FINALIZATION_SYNTHESIS_TIMEOUT_MS = 30_000;
+
+function createFinalizationSynthesisDeadline(params: {
+  parentSignal?: AbortSignal;
+  timeoutMs: number;
+}): { signal: AbortSignal; dispose: () => void } {
+  const controller = new AbortController();
+  const abort = (reason: unknown) => {
+    if (!controller.signal.aborted) {
+      controller.abort(reason);
+    }
+  };
+  const parentSignal = params.parentSignal;
+  let removeParentListener: (() => void) | undefined;
+  if (parentSignal) {
+    if (parentSignal.aborted) {
+      abort(parentSignal.reason);
+    } else {
+      const onParentAbort = () => abort(parentSignal.reason);
+      parentSignal.addEventListener('abort', onParentAbort, { once: true });
+      removeParentListener = () => parentSignal.removeEventListener('abort', onParentAbort);
+    }
+  }
+
+  const timeoutId = setTimeout(() => {
+    const timeoutError = new Error('Agent run finalization synthesis timed out.');
+    timeoutError.name = 'AbortError';
+    abort(timeoutError);
+  }, params.timeoutMs);
+
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      clearTimeout(timeoutId);
+      removeParentListener?.();
+    },
+  };
+}
 
 export function buildAgentRunFinalizationPrompt(evidence: AgentRunFinalizationEvidence): string {
   const transcript = evidence.transcriptMessages
@@ -150,9 +190,18 @@ export async function synthesizeAgentRunFinalAnswer(params: {
   systemPrompt: string;
   evidence: AgentRunFinalizationEvidence;
   signal?: AbortSignal;
+  timeoutMs?: number;
 }): Promise<{ output?: string; providerReplay?: MessageProviderReplay }> {
   let continuationPrefix = '';
   let maxTokens = resolveFinalizationMaxTokens(params.model);
+  const timeoutMs =
+    typeof params.timeoutMs === 'number' && Number.isFinite(params.timeoutMs)
+      ? Math.max(1, Math.floor(params.timeoutMs))
+      : AGENT_RUN_FINALIZATION_SYNTHESIS_TIMEOUT_MS;
+  const deadline = createFinalizationSynthesisDeadline({
+    parentSignal: params.signal,
+    timeoutMs,
+  });
 
   try {
     for (
@@ -194,7 +243,7 @@ export async function synthesizeAgentRunFinalAnswer(params: {
         {
           model: params.model,
           maxTokens,
-          signal: params.signal,
+          signal: deadline.signal,
         },
       );
 
@@ -238,6 +287,8 @@ export async function synthesizeAgentRunFinalAnswer(params: {
     }
   } catch {
     return {};
+  } finally {
+    deadline.dispose();
   }
 
   return {};

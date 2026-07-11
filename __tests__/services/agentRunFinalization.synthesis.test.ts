@@ -167,4 +167,34 @@ describe('agentRunFinalization synthesis', () => {
     expect(mockStreamMessage).toHaveBeenCalledTimes(3);
     expect(result).toEqual({});
   });
+
+  it('aborts stalled provider synthesis at its local deadline', async () => {
+    let observedSignal: AbortSignal | undefined;
+    mockStreamMessage.mockImplementation((_messages, options) => {
+      observedSignal = options.signal;
+      return {
+        async *[Symbol.asyncIterator]() {
+          await new Promise<void>((_resolve, reject) => {
+            options.signal.addEventListener(
+              'abort',
+              () => reject(options.signal.reason ?? new Error('aborted')),
+              { once: true },
+            );
+          });
+        },
+      };
+    });
+
+    const result = await synthesizeAgentRunFinalAnswer({
+      provider: makeProvider(),
+      model: 'gpt-5.4',
+      systemPrompt: 'You are helpful.',
+      evidence: makeEvidence(),
+      timeoutMs: 10,
+    });
+
+    expect(result).toEqual({});
+    expect(mockStreamMessage).toHaveBeenCalledTimes(1);
+    expect(observedSignal?.aborted).toBe(true);
+  });
 });
