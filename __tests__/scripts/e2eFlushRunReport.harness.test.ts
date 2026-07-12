@@ -5,6 +5,7 @@ import { tmpdir } from 'os';
 import path from 'path';
 
 import { buildE2ERunReportScenarioEntry } from '../../src/acceptance/e2eAgent/e2eRunReport';
+import { E2E_SCENARIO_MANIFEST_VERSION } from '../../src/acceptance/e2eAgent/thresholds';
 import { buildFixtureResult } from '../helpers/e2eRunReportHarness';
 
 const projectRoot = path.resolve(__dirname, '../..');
@@ -428,7 +429,7 @@ describe('e2e-flush-run-report harness', () => {
       );
       expect(report.runMetadata.promptCacheMode).toBe('disabled');
       expect(report.runMetadata.seed).toBe(42);
-      expect(report.runMetadata.scenarioManifestVersion).toBe('2026-07-10.longitudinal-v2');
+      expect(report.runMetadata.scenarioManifestVersion).toBe(E2E_SCENARIO_MANIFEST_VERSION);
       expect(report.reliability).toMatchObject({
         k: 2,
         pass1PassedCount: 1,

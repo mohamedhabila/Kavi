@@ -1,9 +1,9 @@
 import {
   countPendingIngestionJobs,
   drainIngestionQueue,
-} from '../../../src/services/memory/ingestionQueue';
-import { loadIngestionJobRuntimeContext } from '../../../src/services/memory/lifecycle';
-import type { Message } from '../../../src/types/message';
+} from '../../src/services/memory/ingestionQueue';
+import { loadIngestionJobRuntimeContext } from '../../src/services/memory/lifecycle';
+import type { Message } from '../../src/types/message';
 
 export const messages: Message[] = [
   {

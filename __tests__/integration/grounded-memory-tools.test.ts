@@ -18,7 +18,7 @@ import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/servic
 import { closeMemoryDb } from '../../src/services/memory/database';
 import { useChatStore } from '../../src/store/useChatStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
-import { recall, remember } from './grounded-memory-tools.helpers';
+import { recall, remember } from '../helpers/groundedMemoryTools';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 

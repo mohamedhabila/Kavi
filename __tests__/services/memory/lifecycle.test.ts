@@ -51,7 +51,7 @@ import { buildLivingMemorySections } from '../../../src/services/memory/livingMe
 import { useChatStore } from '../../../src/store/useChatStore';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import type { Message } from '../../../src/types/message';
-import { drainRecordedTurn, messages } from './lifecycleTestSupport';
+import { drainRecordedTurn, messages } from '../../helpers/memoryLifecycle';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
