@@ -12,6 +12,11 @@ function run(): AgentRun {
   return {
     id: 'run-1',
     userMessageId: 'user-1',
+    workflowTaskAnchor: {
+      sourceMessageId: 'user-1',
+      content: 'Create it.',
+      attachments: [],
+    },
     goal: 'Create the event.',
     status: 'running',
     createdAt: 1,

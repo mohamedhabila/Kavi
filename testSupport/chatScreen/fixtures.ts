@@ -26,26 +26,35 @@ export const createDefaultConversations = (): any[] => [
   },
 ];
 
-export const createRunningAgentRun = (overrides: Partial<any> = {}): any => ({
-  id: 'run-1',
-  userMessageId: 'msg-user-tool',
-  goal: 'Complete the current task.',
-  status: 'running',
-  controlGraph: createAgentRunControlGraphState(),
-  createdAt: 1_700_000_000_000,
-  updatedAt: 1_700_000_000_500,
-  currentPhase: 'work',
-  phases: [] as any[],
-  checkpoints: [] as any[],
-  summary: {
-    assistantTurns: 1,
-    startedTools: 1,
-    completedTools: 1,
-    failedTools: 0,
-    spawnedSubAgents: 0,
-  },
-  ...overrides,
-});
+export const createRunningAgentRun = (overrides: Partial<any> = {}): any => {
+  const userMessageId = overrides.userMessageId ?? 'msg-user-tool';
+  const goal = overrides.goal ?? 'Complete the current task.';
+  return {
+    id: 'run-1',
+    userMessageId,
+    workflowTaskAnchor: overrides.workflowTaskAnchor ?? {
+      sourceMessageId: userMessageId,
+      content: goal,
+      attachments: [],
+    },
+    goal,
+    status: 'running',
+    controlGraph: createAgentRunControlGraphState(),
+    createdAt: 1_700_000_000_000,
+    updatedAt: 1_700_000_000_500,
+    currentPhase: 'work',
+    phases: [] as any[],
+    checkpoints: [] as any[],
+    summary: {
+      assistantTurns: 1,
+      startedTools: 1,
+      completedTools: 1,
+      failedTools: 0,
+      spawnedSubAgents: 0,
+    },
+    ...overrides,
+  };
+};
 
 export function createAgentRunControlGraphState(overrides: Partial<any> = {}): any {
   const asyncWorkOverrides = overrides.asyncWork ?? {};

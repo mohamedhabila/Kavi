@@ -3,7 +3,9 @@ import { prepareAgentTurn } from '../agentTurnPreparation';
 import type { PreparedAgentTurn } from '../agentTurnPreparation';
 import type { PromptContextSupport } from '../prepareAgentControlGraphModelTurnTypes';
 import type { ToolDefinition } from '../../../types/tool';
+import type { Message } from '../../../types/message';
 import { isMemoryReadEpochCurrent } from '../../../services/memory/policy';
+import { messageMatchesWorkflowTaskAnchor } from '../workflowTaskAnchor';
 
 export function buildPreparedModelTurnPrompt(params: {
   actionablePromptTurn: boolean;
@@ -15,6 +17,7 @@ export function buildPreparedModelTurnPrompt(params: {
   pinnedToolNames: ReadonlyArray<string>;
   promptContextSupport: PromptContextSupport;
   toolingEnabledForProvider: boolean;
+  workingMessages: ReadonlyArray<Message>;
 }): PreparedAgentTurn {
   const memoryReadEpoch = params.promptContextSupport.livingMemoryReadEpoch;
   const livingMemorySections =
@@ -34,6 +37,12 @@ export function buildPreparedModelTurnPrompt(params: {
     : forcedConstraintGoals.length > 0
       ? forcedConstraintGoals
       : undefined;
+  const workflowTaskAnchor = params.promptContextSupport.workflowTaskAnchor;
+  const transcriptCarriesSoleFirstTurnAnchor =
+    params.iteration === 1 &&
+    params.workingMessages.length === 1 &&
+    workflowTaskAnchor !== undefined &&
+    messageMatchesWorkflowTaskAnchor(params.workingMessages[0], workflowTaskAnchor);
   const prepare = (sections: PromptContextSupport['livingMemorySections']) =>
     prepareAgentTurn({
       allowSessionCoordinationTools: params.allowSessionCoordinationTools,
@@ -53,7 +62,9 @@ export function buildPreparedModelTurnPrompt(params: {
         resolvedPrompt: params.promptContextSupport.resolvedPrompt,
         runtimeContext: params.promptContextSupport.runtimeContext,
         skillPrompts: params.promptContextSupport.skillPrompts,
-        workflowTaskAnchor: params.promptContextSupport.workflowTaskAnchor,
+        workflowTaskAnchor: transcriptCarriesSoleFirstTurnAnchor
+          ? undefined
+          : workflowTaskAnchor,
       },
       toolingEnabledForProvider: params.toolingEnabledForProvider,
     });

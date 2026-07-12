@@ -50,6 +50,7 @@ export async function prepareAgentControlGraphModelTurn(
     pinnedToolNames: toolSurface.pinnedToolNames,
     promptContextSupport: params.promptContextSupport,
     toolingEnabledForProvider: iterationRequest.toolingEnabledForProvider,
+    workingMessages: params.workingMessages,
   });
   const preparedTurn = await appendVerifiedProcedureAdvisoryPrompt(
     basePreparedTurn,

@@ -4,6 +4,7 @@ import { formatMessagesForApi } from '../../src/engine/orchestratorMessageFormat
 import {
   createWorkflowTaskAnchor,
   isWorkflowTaskAnchor,
+  messageMatchesWorkflowTaskAnchor,
   renderWorkflowTaskAnchorPromptSection,
 } from '../../src/engine/graph/workflowTaskAnchor';
 import type { Message } from '../../src/types/message';
@@ -66,6 +67,10 @@ describe('workflow task anchor', () => {
     });
     expect(JSON.stringify(anchor)).not.toContain('file:///private/device/path');
     expect(JSON.stringify(anchor)).not.toContain('private-payload');
+    expect(messageMatchesWorkflowTaskAnchor(message, anchor)).toBe(true);
+    expect(messageMatchesWorkflowTaskAnchor({ ...message, content: 'changed' }, anchor)).toBe(
+      false,
+    );
   });
 
   it('escapes closing markers and markup while preserving reversible exact JSON', () => {

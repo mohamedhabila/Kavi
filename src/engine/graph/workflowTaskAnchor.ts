@@ -100,6 +100,29 @@ export function createWorkflowTaskAnchor(
   };
 }
 
+export function messageMatchesWorkflowTaskAnchor(
+  message: Pick<Message, 'id' | 'role' | 'content' | 'attachments'>,
+  anchor: WorkflowTaskAnchor,
+): boolean {
+  if (message.role !== 'user' || message.id !== anchor.sourceMessageId) return false;
+  const projected = createWorkflowTaskAnchor(message);
+  return (
+    projected.content === anchor.content &&
+    projected.attachments.length === anchor.attachments.length &&
+    projected.attachments.every((attachment, index) => {
+      const expected = anchor.attachments[index];
+      return (
+        attachment.id === expected.id &&
+        attachment.type === expected.type &&
+        attachment.name === expected.name &&
+        attachment.mimeType === expected.mimeType &&
+        attachment.size === expected.size &&
+        attachment.workspacePath === expected.workspacePath
+      );
+    })
+  );
+}
+
 export function resolveWorkflowTaskAnchor(params: {
   messages: ReadonlyArray<Message>;
   sourceMessageId?: string;
