@@ -23,6 +23,7 @@ import {
 import { createCurrentLocalSimilarityVector } from './localSimilarity';
 import { buildRecentUserRetrievalQuery } from './retrievalQueryText';
 import { maintainCurrentFactLocalSimilarity } from './localSimilarityBackfill';
+import { maintainFactSensitivityPolicy } from './factSensitivityBackfill';
 import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from './policy';
 
 type MemoryAccessMode = 'chat' | 'agentic' | 'pilot';
@@ -101,6 +102,7 @@ export async function buildUnifiedMemoryAccessContext(
   }
 
   if (retrievalStrategy === 'production') {
+    maintainFactSensitivityPolicy();
     maintainCurrentFactLocalSimilarity({
       ...(typeof request.now === 'number' ? { now: request.now } : {}),
     });

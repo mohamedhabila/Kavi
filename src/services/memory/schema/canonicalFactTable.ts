@@ -77,6 +77,7 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
     'last_conflicted_at',
     'review_state',
     'sensitivity',
+    'sensitivity_policy_version',
     'memory_kind',
   ]);
   if (
@@ -189,6 +190,7 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
         last_conflicted_at INTEGER,
         review_state TEXT NOT NULL DEFAULT 'auto',
         sensitivity TEXT NOT NULL DEFAULT 'normal',
+        sensitivity_policy_version INTEGER NOT NULL DEFAULT 0,
         memory_kind TEXT NOT NULL DEFAULT 'semantic_fact'
       );
       INSERT INTO memory_facts_without_hash_constraint (
@@ -202,7 +204,7 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
         last_recalled_at, last_reinforced_at, last_accessed_at, decay_policy,
         expires_at, source_actor_id, retrievability, stability,
         decay_rate, last_presented_at, last_confirmed_at, last_conflicted_at,
-        review_state, sensitivity, memory_kind
+        review_state, sensitivity, sensitivity_policy_version, memory_kind
       )
       SELECT
         id, subject_id, predicate, object_text, object_entity_id, attributes,
@@ -215,7 +217,7 @@ export function ensureCanonicalFactTable(db: MemoryDatabase): void {
         last_recalled_at, last_reinforced_at, last_accessed_at, decay_policy,
         expires_at, source_actor_id, retrievability, stability,
         decay_rate, last_presented_at, last_confirmed_at, last_conflicted_at,
-        review_state, sensitivity, memory_kind
+        review_state, sensitivity, sensitivity_policy_version, memory_kind
       FROM memory_facts;
       DROP TABLE memory_facts;
       ALTER TABLE memory_facts_without_hash_constraint RENAME TO memory_facts;

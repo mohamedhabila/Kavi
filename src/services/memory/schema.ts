@@ -22,6 +22,7 @@ import { ensureWithdrawalSchema } from './withdrawalSchema';
 import { ensureEpisodeAccessPolicySchema } from './episodes/accessPolicySchema';
 import { ensureEpisodeRetrievalIndexSchema } from './episodes/retrievalIndex';
 import { ensureCanonicalFactTable } from './schema/canonicalFactTable';
+import { ensureFactSensitivityPolicyColumn } from './schema/factSensitivityPolicyColumn';
 import { ensureMemoryVaultIdentitySchema, getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
 
 let schemaReady = false;
@@ -75,7 +76,8 @@ export function ensureFactSchema(): void {
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
       deleted_at INTEGER,
-      pinned INTEGER NOT NULL DEFAULT 0
+      pinned INTEGER NOT NULL DEFAULT 0,
+      sensitivity_policy_version INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_facts_subject
       ON memory_facts(subject_id);
@@ -487,6 +489,7 @@ function ensureFactColumns(db: ReturnType<typeof getMemoryDb>): void {
   ensureColumn(db, 'memory_facts', 'last_conflicted_at', 'last_conflicted_at INTEGER');
   ensureColumn(db, 'memory_facts', 'review_state', "review_state TEXT NOT NULL DEFAULT 'auto'");
   ensureColumn(db, 'memory_facts', 'sensitivity', "sensitivity TEXT NOT NULL DEFAULT 'normal'");
+  ensureFactSensitivityPolicyColumn(db);
   ensureColumn(
     db,
     'memory_facts',

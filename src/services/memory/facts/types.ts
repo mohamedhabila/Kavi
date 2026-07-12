@@ -5,6 +5,7 @@ import {
   type MemoryFactSensitivity,
 } from './applicabilityProvenance';
 import { parseCurrentLocalSimilarityVector, type LocalSimilarityVector } from '../localSimilarity';
+import { MEMORY_FACT_SENSITIVITY_POLICY_VERSION } from '../memorySensitivityPolicy';
 
 export type MemoryFactScope = 'global' | 'project' | 'conversation' | 'session' | 'persona';
 
@@ -120,6 +121,7 @@ export interface FactRow {
   last_conflicted_at?: number | null;
   review_state?: string;
   sensitivity?: string;
+  sensitivity_policy_version?: number;
   memory_kind?: MemoryFactKind;
 }
 
@@ -214,7 +216,10 @@ export function rowToFact(row: FactRow): MemoryFact {
     lastConfirmedAt: row.last_confirmed_at ?? null,
     lastConflictedAt: row.last_conflicted_at ?? null,
     reviewState: row.review_state ?? 'auto',
-    sensitivity: closedMemoryFactSensitivity(row.sensitivity) ?? 'restricted',
+    sensitivity:
+      row.sensitivity_policy_version === MEMORY_FACT_SENSITIVITY_POLICY_VERSION
+        ? (closedMemoryFactSensitivity(row.sensitivity) ?? 'restricted')
+        : 'restricted',
     memoryKind: normalizeFactKind(row.memory_kind),
   };
 }

@@ -7,6 +7,7 @@ import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import { isExactMemoryScopeId } from '../memoryScopeIdentity';
 import {
   classifyMemoryFactSensitivity,
+  MEMORY_FACT_SENSITIVITY_POLICY_VERSION,
   maxMemoryFactSensitivity,
 } from '../memorySensitivityPolicy';
 import { replaceFactRetrievalTerms } from './retrievalIndex';
@@ -270,7 +271,19 @@ function recordFactInTransaction(
     const existingSourceAuthority =
       closedMemorySourceAuthority(existing.source_authority) ?? 'unknown';
     const nextReviewState = mergeDuplicateReviewState(existingReviewState, reviewState);
-    const nextSensitivity = mergeDuplicateSensitivity(existingSensitivity, sensitivity);
+    const merged = { ...safeParseObject(existing.attributes), ...(input.attributes ?? {}) };
+    const duplicateSensitivity = classifyMemoryFactSensitivity({
+      subject: subject?.canonical_name,
+      subjectType: subject?.type,
+      predicate: existing.predicate,
+      objectText: existing.object_text,
+      attributes: merged,
+      sourceSummary: [existing.source_summary, input.sourceSummary]
+        .filter((value): value is string => typeof value === 'string' && value.length > 0)
+        .join('\n'),
+      memoryKind,
+    });
+    const nextSensitivity = mergeDuplicateSensitivity(existingSensitivity, duplicateSensitivity);
     const nextProvenance = mergeDuplicateProvenance({
       existingFactClass,
       existingSourceAuthority,
@@ -289,7 +302,6 @@ function recordFactInTransaction(
         superseded: [],
       };
     }
-    const merged = { ...safeParseObject(existing.attributes), ...(input.attributes ?? {}) };
     const reinforcementIncrement = isSourceReplay ? 0 : 1;
     const lastReinforcedAt = isSourceReplay ? existing.last_reinforced_at : now;
     const lastAccessedAt = isSourceReplay ? existing.last_accessed_at : now;
@@ -477,9 +489,9 @@ function recordFactInTransaction(
         local_similarity_dimensions, local_similarity_vector, local_similarity_updated_at, valid_at,
         invalid_at, created_at, updated_at, deleted_at, pinned, source_actor_id,
         retrievability, stability, decay_rate, last_presented_at, last_confirmed_at,
-        last_conflicted_at, review_state, sensitivity, memory_kind)
+        last_conflicted_at, review_state, sensitivity, sensitivity_policy_version, memory_kind)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, NULL, NULL, NULL,
-        ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?)`,
+        ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?)`,
     fact.id,
     fact.subjectId,
     fact.predicate,
@@ -517,6 +529,7 @@ function recordFactInTransaction(
     fact.decayRate,
     fact.reviewState,
     fact.sensitivity,
+    MEMORY_FACT_SENSITIVITY_POLICY_VERSION,
     fact.memoryKind,
   );
   replaceFactRetrievalTerms(fact);

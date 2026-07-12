@@ -18,6 +18,15 @@ jest.mock('../../src/services/memory/localSimilarityBackfill', () => ({
   }),
 }));
 
+jest.mock('../../src/services/memory/factSensitivityBackfill', () => ({
+  maintainFactSensitivityPolicy: jest.fn().mockReturnValue({
+    processedCount: 0,
+    pendingCount: 0,
+    hasMore: false,
+    policyVersion: 1,
+  }),
+}));
+
 jest.mock('../../src/services/memory/livingMemoryBridge', () => ({
   buildLivingMemorySections: jest.fn().mockResolvedValue({
     sections: [{ text: 'focus section', cacheable: false }],
@@ -39,15 +48,13 @@ jest.mock('../../src/services/memory/ingestionQueueStore', () => ({
 }));
 
 import { buildLivingMemorySections } from '../../src/services/memory/livingMemoryBridge';
-import {
-  canReadLongTermMemory,
-  isMemoryReadEpochCurrent,
-} from '../../src/services/memory/policy';
+import { canReadLongTermMemory, isMemoryReadEpochCurrent } from '../../src/services/memory/policy';
 import { getIngestionJobForSourceTurn } from '../../src/services/memory/ingestionQueueStore';
 import type { IngestionJob } from '../../src/services/memory/ingestionQueueStore';
 import type { LlmProviderConfig } from '../../src/types/provider';
 import { createCurrentLocalSimilarityVector } from '../../src/services/memory/localSimilarity';
 import { maintainCurrentFactLocalSimilarity } from '../../src/services/memory/localSimilarityBackfill';
+import { maintainFactSensitivityPolicy } from '../../src/services/memory/factSensitivityBackfill';
 
 const RETRIEVAL_PROVIDER: LlmProviderConfig = {
   id: 'retrieval-provider',
@@ -175,6 +182,7 @@ describe('memoryAccessGateway', () => {
       queryVector: { model: 'unicode-char-ngram-v1', dimensions: 384 },
     });
     expect(maintainCurrentFactLocalSimilarity).toHaveBeenCalledTimes(1);
+    expect(maintainFactSensitivityPolicy).toHaveBeenCalledTimes(1);
   });
 
   it('applies boundary selection in pilot mode before loading living memory', async () => {
@@ -236,6 +244,7 @@ describe('memoryAccessGateway', () => {
     expect(livingMemoryInput).not.toHaveProperty('retrievalLlm');
     expect(livingMemoryInput).not.toHaveProperty('localSimilarity');
     expect(maintainCurrentFactLocalSimilarity).not.toHaveBeenCalled();
+    expect(maintainFactSensitivityPolicy).not.toHaveBeenCalled();
     expect(livingMemoryInput.candidateStrategy).toBe('lexical');
 
     await buildUnifiedMemoryAccessContext({
@@ -255,6 +264,7 @@ describe('memoryAccessGateway', () => {
     });
     expect(createCurrentLocalSimilarityVector).toHaveBeenCalledTimes(1);
     expect(maintainCurrentFactLocalSimilarity).toHaveBeenCalledTimes(1);
+    expect(maintainFactSensitivityPolicy).toHaveBeenCalledTimes(1);
   });
 
   it('rejects unknown memory access policies instead of silently changing behavior', async () => {
@@ -290,6 +300,7 @@ describe('memoryAccessGateway', () => {
     expect(buildLivingMemorySections).not.toHaveBeenCalled();
     expect(createCurrentLocalSimilarityVector).not.toHaveBeenCalled();
     expect(maintainCurrentFactLocalSimilarity).not.toHaveBeenCalled();
+    expect(maintainFactSensitivityPolicy).not.toHaveBeenCalled();
   });
 
   it('excludes trailing internal control user prompts before boundary and recall', async () => {

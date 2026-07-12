@@ -1,6 +1,13 @@
 import type { MemoryFactKind } from './facts/types';
 import type { MemoryFactSensitivity } from './facts/applicabilityProvenance';
 
+/**
+ * Version of the deterministic fact-sensitivity policy persisted with each
+ * classified row. Database defaults intentionally remain at zero so direct
+ * and legacy writes stay fail-closed until product code classifies them.
+ */
+export const MEMORY_FACT_SENSITIVITY_POLICY_VERSION = 1;
+
 export interface MemorySensitivityInput {
   subject?: string | null;
   subjectType?: string | null;
