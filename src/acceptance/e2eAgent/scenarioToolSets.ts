@@ -3,8 +3,8 @@
 // ---------------------------------------------------------------------------
 
 export const E2E_CALENDAR_MUTATION_SUCCESS_CRITERIA = [
-  'evidence.json_field:status:created',
-  'evidence.json_field:status:updated',
+  'evidence.json_field:status:created_verified',
+  'evidence.json_field:status:updated_verified',
 ];
 
 export const E2E_CALENDAR_VERIFY_MUTATION_SUCCESS_CRITERIA = [

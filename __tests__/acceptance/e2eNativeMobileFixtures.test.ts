@@ -155,7 +155,7 @@ describe('E2E native mobile fixtures', () => {
     const created = JSON.parse(createRaw);
     expect(created).toEqual(
       expect.objectContaining({
-        status: 'created',
+        status: 'created_verified',
         eventId: 'e2e-event-1',
       }),
     );
@@ -166,7 +166,7 @@ describe('E2E native mobile fixtures', () => {
       'conv-mobile-calendar-e2e',
     );
     expect(JSON.parse(updateRaw)).toEqual({
-      status: 'updated',
+      status: 'updated_verified',
       eventId: 'e2e-event-1',
       event: expect.objectContaining({
         id: 'e2e-event-1',
@@ -180,7 +180,7 @@ describe('E2E native mobile fixtures', () => {
       'conv-mobile-calendar-e2e',
     );
     expect(JSON.parse(duplicateUpdateRaw)).toEqual({
-      status: 'unchanged',
+      status: 'updated_verified',
       eventId: 'e2e-event-1',
       idempotent: true,
       event: expect.objectContaining({
@@ -223,7 +223,7 @@ describe('E2E native mobile fixtures', () => {
     const created = JSON.parse(createRaw);
     expect(created).toEqual(
       expect.objectContaining({
-        status: 'created',
+        status: 'created_verified',
         eventId: 'e2e-event-1',
         event: expect.objectContaining({
           title: 'AndroidWorld Direct Review',
@@ -243,7 +243,7 @@ describe('E2E native mobile fixtures', () => {
     );
     expect(JSON.parse(updateRaw)).toEqual(
       expect.objectContaining({
-        status: 'updated',
+        status: 'updated_verified',
         eventId: 'e2e-event-1',
         event: expect.objectContaining({
           title: 'AndroidWorld Direct Review Updated',

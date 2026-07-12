@@ -410,7 +410,7 @@ async function executeE2ENativeMobileTool(
       e2eLastCreatedCalendarEventId = event.id;
       recordLastCreatedCalendarTiming(event);
       return JSON.stringify({
-        status: 'created',
+        status: 'created_verified',
         eventId: event.id,
         calendarId: event.calendarId,
         event: serializeE2ECalendarEvent(event),
@@ -449,7 +449,7 @@ async function executeE2ENativeMobileTool(
       };
       if (e2eCalendarEventsEqual(existing, updated)) {
         return JSON.stringify({
-          status: 'unchanged',
+          status: 'updated_verified',
           eventId,
           event: serializeE2ECalendarEvent(existing),
           idempotent: true,
@@ -461,7 +461,7 @@ async function executeE2ENativeMobileTool(
         recordLastCreatedCalendarTiming(updated);
       }
       return JSON.stringify({
-        status: 'updated',
+        status: 'updated_verified',
         eventId,
         event: serializeE2ECalendarEvent(updated),
       });

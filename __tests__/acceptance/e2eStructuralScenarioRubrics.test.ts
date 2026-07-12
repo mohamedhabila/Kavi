@@ -384,8 +384,8 @@ describe('E2E benchmark structural completion criteria', () => {
     expect(
       areGoalSuccessCriteriaSatisfied(
         goal(E2E_CALENDAR_MUTATION_SUCCESS_CRITERIA, [
-          'calendar_create_event:{"status":"created"}',
-          'calendar_update_event:{"status":"updated"}',
+          'calendar_create_event:{"status":"created_verified"}',
+          'calendar_update_event:{"status":"updated_verified"}',
         ]),
       ),
     ).toBe(true);
@@ -393,8 +393,8 @@ describe('E2E benchmark structural completion criteria', () => {
       areGoalSuccessCriteriaSatisfied(
         goal(E2E_CALENDAR_VERIFY_MUTATION_SUCCESS_CRITERIA, [
           'calendar_list:[{"allowsModifications":true}]',
-          'calendar_create_event:{"status":"created"}',
-          'calendar_update_event:{"status":"updated"}',
+          'calendar_create_event:{"status":"created_verified"}',
+          'calendar_update_event:{"status":"updated_verified"}',
         ]),
       ),
     ).toBe(true);
