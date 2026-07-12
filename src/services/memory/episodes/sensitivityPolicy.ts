@@ -1,11 +1,13 @@
 import type { MemoryFactSensitivity } from '../facts/applicabilityProvenance';
 import {
   classifyMemoryFactSensitivity,
+  classifyMemoryTextSensitivity,
   maxMemoryFactSensitivity,
   type MemorySensitivityInput,
 } from '../memorySensitivityPolicy';
 import { closedEpisodeSensitivity, type EpisodeSensitivity } from './accessPolicyTypes';
 import type { EpisodeSensitivityEvidence } from './types';
+import { isExactMemoryProvenanceId } from '../memoryProvenanceIdentity';
 
 const EPISODE_SENSITIVITY_RANK: Readonly<Record<EpisodeSensitivity, number>> = {
   normal: 0,
@@ -29,15 +31,6 @@ function episodeSensitivityForFact(level: MemoryFactSensitivity): EpisodeSensiti
   return 'normal';
 }
 
-function classifyEpisodeText(text: string): MemoryFactSensitivity {
-  return classifyMemoryFactSensitivity({
-    predicate: text,
-    objectText: text,
-    sourceSummary: text,
-    memoryKind: 'summary',
-  });
-}
-
 function hasCompleteClosedTurn(input: {
   messageIds: ReadonlyArray<string>;
   sourceStartMessageId: string | null;
@@ -45,32 +38,34 @@ function hasCompleteClosedTurn(input: {
   evidence: EpisodeSensitivityEvidence;
 }): boolean {
   const { evidence, sourceStartMessageId, sourceEndMessageId } = input;
-  if (!sourceStartMessageId || !sourceEndMessageId) return false;
-  const knownMessageIds = new Set(input.messageIds);
-  const evidenceIds = new Set<string>();
-  let hasSourceUser = false;
-  let hasSourceAssistant = false;
-  for (const message of evidence.sourceMessages) {
+  if (
+    !Array.isArray(input.messageIds) ||
+    input.messageIds.length === 0 ||
+    input.messageIds.length > 128 ||
+    !input.messageIds.every(isExactMemoryProvenanceId) ||
+    new Set(input.messageIds).size !== input.messageIds.length ||
+    sourceStartMessageId !== input.messageIds[0] ||
+    sourceEndMessageId !== input.messageIds[input.messageIds.length - 1] ||
+    evidence.sourceMessages.length !== input.messageIds.length
+  ) {
+    return false;
+  }
+  const allowedRoles = new Set(['system', 'user', 'assistant', 'tool']);
+  for (const [index, message] of evidence.sourceMessages.entries()) {
     if (
-      !message.id ||
-      evidenceIds.has(message.id) ||
-      !knownMessageIds.has(message.id) ||
+      !message ||
+      typeof message !== 'object' ||
+      message.id !== input.messageIds[index] ||
+      !allowedRoles.has(message.role) ||
       typeof message.content !== 'string' ||
       (message.truncated !== undefined && typeof message.truncated !== 'boolean')
     ) {
       return false;
     }
-    evidenceIds.add(message.id);
-    if (message.id === sourceStartMessageId && message.role === 'user') hasSourceUser = true;
-    if (message.id === sourceEndMessageId && message.role === 'assistant') {
-      hasSourceAssistant = true;
-    }
   }
   return (
-    hasSourceUser &&
-    hasSourceAssistant &&
-    evidenceIds.size === knownMessageIds.size &&
-    input.messageIds.every((messageId) => evidenceIds.has(messageId))
+    evidence.sourceMessages[0].role === 'user' &&
+    evidence.sourceMessages[evidence.sourceMessages.length - 1].role === 'assistant'
   );
 }
 
@@ -92,7 +87,12 @@ export function deriveEpisodeSensitivity(input: {
       ? 'normal'
       : (closedEpisodeSensitivity(input.priorSensitivity) ?? 'sensitive');
   const evidence = input.evidence;
-  if (!evidence || !hasCompleteClosedTurn({ ...input, evidence })) {
+  if (
+    !evidence ||
+    !Array.isArray(evidence.sourceMessages) ||
+    !Array.isArray(evidence.facts) ||
+    !hasCompleteClosedTurn({ ...input, evidence })
+  ) {
     return maxEpisodeSensitivity(prior, 'sensitive');
   }
   if (evidence.sourceMessages.some((message) => message.truncated === true)) {
@@ -100,15 +100,19 @@ export function deriveEpisodeSensitivity(input: {
   }
 
   let factSensitivity: MemoryFactSensitivity = 'normal';
-  for (const fact of evidence.facts) {
-    factSensitivity = maxMemoryFactSensitivity(
-      factSensitivity,
-      classifyMemoryFactSensitivity(fact as MemorySensitivityInput),
-    );
+  try {
+    for (const fact of evidence.facts) {
+      factSensitivity = maxMemoryFactSensitivity(
+        factSensitivity,
+        classifyMemoryFactSensitivity(fact as MemorySensitivityInput),
+      );
+    }
+  } catch {
+    return maxEpisodeSensitivity(prior, 'sensitive');
   }
   const textSensitivity = maxMemoryFactSensitivity(
-    classifyEpisodeText(input.summary),
-    ...evidence.sourceMessages.map((message) => classifyEpisodeText(message.content)),
+    classifyMemoryTextSensitivity(input.summary),
+    ...evidence.sourceMessages.map((message) => classifyMemoryTextSensitivity(message.content)),
   );
   return maxEpisodeSensitivity(
     prior,

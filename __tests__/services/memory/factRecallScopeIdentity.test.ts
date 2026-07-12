@@ -519,7 +519,7 @@ describe('fact recall SQL scope identity', () => {
     const sensitive = recordFactWithApplicability(
       {
         subjectId: subject.id,
-        predicate: 'medical_control',
+        predicate: 'access_medical_status',
         objectText: 'sensitive control value',
         scope: 'global',
         now: 100,
@@ -602,7 +602,7 @@ describe('fact recall SQL scope identity', () => {
     const sensitive = recordFactWithApplicability(
       {
         subjectId: hidden.id,
-        predicate: 'medical_invariant15',
+        predicate: 'invariant15_medical_status',
         objectText: query,
         scope: 'global',
         now: 400,

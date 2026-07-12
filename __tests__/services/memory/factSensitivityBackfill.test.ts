@@ -96,6 +96,32 @@ describe('fact sensitivity policy migration', () => {
     expect(getFactById(fact.id)?.sensitivity).toBe('restricted');
   });
 
+  it('quarantines a v1 normal row until v2 reclassifies it', () => {
+    const fact = createFact({
+      predicate: 'medical_history',
+      objectText: 'follow-up required',
+      now: 10,
+    });
+    getMemoryDb().runSync(
+      `UPDATE memory_facts
+          SET sensitivity = 'normal', sensitivity_policy_version = 1
+        WHERE id = ?`,
+      fact.id,
+    );
+
+    expect(getFactById(fact.id)?.sensitivity).toBe('restricted');
+    expect(backfillFactSensitivityPolicy()).toMatchObject({
+      processedCount: 1,
+      pendingCount: 0,
+      policyVersion: 2,
+    });
+    expect(rawPolicy(fact.id)).toEqual({
+      sensitivity: 'sensitive',
+      sensitivity_policy_version: 2,
+      updated_at: 10,
+    });
+  });
+
   it('classifies all persisted inputs without changing semantic updated_at', () => {
     const fromSummary = createFact({
       predicate: 'care_context',

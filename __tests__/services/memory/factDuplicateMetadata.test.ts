@@ -113,7 +113,7 @@ describe('duplicate fact metadata transitions', () => {
     const first = recordFactWithApplicability(
       {
         subjectId: 'entity-user',
-        predicate: 'medical_preference',
+        predicate: 'user_medical_status',
         objectText: 'Concise answers',
         scope: 'global',
         reviewState: 'verified',
@@ -126,7 +126,7 @@ describe('duplicate fact metadata transitions', () => {
     const duplicate = recordFactWithApplicability(
       {
         subjectId: 'entity-user',
-        predicate: 'medical_preference',
+        predicate: 'user_medical_status',
         objectText: 'Concise answers',
         scope: 'global',
         reviewState: 'auto',

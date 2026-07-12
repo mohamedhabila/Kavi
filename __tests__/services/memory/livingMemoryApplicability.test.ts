@@ -108,7 +108,7 @@ describe('living memory applicability integration', () => {
       reviewState: 'stale',
     });
     const sensitiveId = seedFact({
-      predicate: 'medical_state',
+      predicate: 'user_medical_status',
       value: 'sensitive-memory-value',
       evidence: 'sensitive-local-evidence',
     });
