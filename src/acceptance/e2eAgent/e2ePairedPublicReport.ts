@@ -1,13 +1,8 @@
 import { projectPublicRedactedTrace } from '../../../scripts/e2eReport/publicTraceSchema';
 import {
-  E2E_MAX_ORACLE_FACTS,
-  E2E_PAIRED_CONDITIONS,
   type E2EPairedCondition,
 } from './e2ePairedConditions';
 import {
-  buildE2EPairedExecutionIdentityHash,
-  E2E_PAIRED_RUNTIME_SCHEMA_VERSION,
-  resolveE2EPairedExecutionOrder,
   type E2EPairedConditionExecution,
   type E2EPairedRuntimeResult,
 } from './e2ePairedRuntime';
@@ -17,14 +12,14 @@ import {
 } from './e2ePairedPublicRetrievalMetrics';
 import {
   buildE2EPairedEstimatedCost,
-  validateE2EEstimatedCostSummary,
   type E2EPairedEstimatedCostSummary,
 } from './e2ePairedEstimatedCost';
+import { validateE2EPairedRuntimeForPublicProjection } from './e2ePairedPublicReportValidation';
 import { buildE2EScenarioTraceSummary } from './e2eTraceSummary';
 import { stableHash, stableStringify } from './e2eTraceRedaction';
 import type { E2EEstimatedCostSummary, E2EScenarioTurnTrace } from './types';
 
-export const E2E_PAIRED_PUBLIC_REPORT_SCHEMA_VERSION = 'e2e-paired-public-report-v4' as const;
+export const E2E_PAIRED_PUBLIC_REPORT_SCHEMA_VERSION = 'e2e-paired-public-report-v5' as const;
 
 type PublicConditionMetrics = Readonly<{
   executionCompleted: boolean;
@@ -69,12 +64,19 @@ export type E2EPairedPublicCondition =
       executionIdentityHash: string;
       oracleEvidenceCount: number;
       status: 'failed';
-      category: 'state_reset' | 'condition_execution' | 'evidence_validation';
+      category:
+        | 'source_provenance'
+        | 'state_reset'
+        | 'condition_execution'
+        | 'evidence_validation';
       errorHash: string;
     }>;
 
 export type E2EPairedPublicReport = Readonly<{
   schemaVersion: typeof E2E_PAIRED_PUBLIC_REPORT_SCHEMA_VERSION;
+  source: E2EPairedRuntimeResult['source'];
+  model: E2EPairedRuntimeResult['model'];
+  scenarioInputHash: string;
   pairIdHash: string;
   pairConfigHash: string;
   invariantConfigHash: string;
@@ -94,8 +96,11 @@ export type E2EPairedPublicReport = Readonly<{
       }>;
   infrastructureFailures: ReadonlyArray<
     Readonly<{
-      scope: E2EPairedCondition | 'pair_cleanup';
+      scope: E2EPairedCondition | 'pair_cleanup' | 'pair_source';
       category:
+        | 'source_dirty'
+        | 'source_mismatch'
+        | 'source_provenance'
         | 'state_reset'
         | 'condition_execution'
         | 'evidence_validation'
@@ -146,141 +151,12 @@ const DIAGNOSTIC_CONDITIONS = new Set<E2EPairedCondition>([
   'oracle_evidence',
 ]);
 
-function requireHash(value: unknown, label: string): string {
-  if (typeof value !== 'string' || !/^sha256:[a-f0-9]{64}$/u.test(value)) {
-    throw new Error(`${label} must be a SHA-256 hash.`);
-  }
-  return value;
-}
-
 function safeRate(numerator: number, denominator: number): number {
   return denominator > 0 ? numerator / denominator : 0;
 }
 
 function booleanDelta(candidate: boolean, reference: boolean): -1 | 0 | 1 {
   return (Number(candidate) - Number(reference)) as -1 | 0 | 1;
-}
-
-function validateCompletedCondition(
-  condition: Extract<E2EPairedConditionExecution, { status: 'completed' }>,
-): void {
-  const { assessment } = condition;
-  validateE2EEstimatedCostSummary(
-    condition.result.estimatedCost,
-    `${condition.condition}.estimatedCost`,
-  );
-  if (
-    !Number.isSafeInteger(assessment.rubricPassed) ||
-    !Number.isSafeInteger(assessment.rubricTotal) ||
-    assessment.rubricPassed < 0 ||
-    assessment.rubricTotal <= 0 ||
-    assessment.rubricPassed > assessment.rubricTotal ||
-    assessment.executionCompleted !== condition.result.completed ||
-    assessment.passed !==
-      (assessment.executionCompleted && assessment.rubricPassed === assessment.rubricTotal)
-  ) {
-    throw new Error(`Condition ${condition.condition} has an invalid paired assessment.`);
-  }
-}
-
-function validateRuntimeForProjection(runtime: E2EPairedRuntimeResult): void {
-  if (runtime.schemaVersion !== E2E_PAIRED_RUNTIME_SCHEMA_VERSION) {
-    throw new Error('Paired runtime evidence uses an unsupported schema version.');
-  }
-  requireHash(runtime.pairIdHash, 'pairIdHash');
-  requireHash(runtime.invariantConfigHash, 'invariantConfigHash');
-  if (!Array.isArray(runtime.conditions) || runtime.conditions.length !== 2) {
-    throw new Error('Public paired evidence requires exactly two condition outcomes.');
-  }
-  if (new Set(runtime.conditions.map((condition) => condition.condition)).size !== 2) {
-    throw new Error('Public paired evidence must not duplicate a condition.');
-  }
-  if (
-    !runtime.comparison ||
-    typeof runtime.comparison !== 'object' ||
-    Array.isArray(runtime.comparison)
-  ) {
-    throw new Error('Public paired evidence requires declared comparison roles.');
-  }
-  if (
-    runtime.comparison.referenceCondition !== runtime.conditions[0].condition ||
-    runtime.comparison.candidateCondition !== runtime.conditions[1].condition
-  ) {
-    throw new Error('Public paired evidence does not match its declared comparison roles.');
-  }
-  if (
-    !Number.isSafeInteger(runtime.executionSeed) ||
-    runtime.executionSeed < 0 ||
-    runtime.executionSeed > 0xffffffff
-  ) {
-    throw new Error('Public paired evidence requires an unsigned 32-bit execution seed.');
-  }
-  const expectedExecutionOrder = resolveE2EPairedExecutionOrder(
-    runtime.comparison,
-    runtime.executionSeed,
-  );
-  if (stableStringify(runtime.executionOrder) !== stableStringify(expectedExecutionOrder)) {
-    throw new Error('Public paired execution order does not match its seed.');
-  }
-  const executionIdentityHashes = new Set<string>();
-  for (const condition of runtime.conditions) {
-    if (!E2E_PAIRED_CONDITIONS.includes(condition.condition)) {
-      throw new Error('Public paired evidence contains an unsupported condition.');
-    }
-    requireHash(condition.conditionConfigHash, `${condition.condition}.conditionConfigHash`);
-    requireHash(condition.executionIdentityHash, `${condition.condition}.executionIdentityHash`);
-    const expectedExecutionIdentityHash = buildE2EPairedExecutionIdentityHash({
-      pairIdHash: runtime.pairIdHash,
-      seed: runtime.executionSeed,
-      condition: condition.condition,
-    });
-    if (condition.executionIdentityHash !== expectedExecutionIdentityHash) {
-      throw new Error(`${condition.condition}.executionIdentityHash is inconsistent.`);
-    }
-    executionIdentityHashes.add(condition.executionIdentityHash);
-    const oracleEvidenceCountValid =
-      Number.isSafeInteger(condition.oracleEvidenceCount) &&
-      (condition.condition === 'oracle_evidence'
-        ? condition.oracleEvidenceCount >= 1 &&
-          condition.oracleEvidenceCount <= E2E_MAX_ORACLE_FACTS
-        : condition.oracleEvidenceCount === 0);
-    if (!oracleEvidenceCountValid) {
-      throw new Error(`${condition.condition}.oracleEvidenceCount is inconsistent.`);
-    }
-    if (condition.status === 'completed') validateCompletedCondition(condition);
-    else if (condition.status === 'failed') {
-      if (
-        !['state_reset', 'condition_execution', 'evidence_validation'].includes(condition.category)
-      ) {
-        throw new Error(`${condition.condition}.category is unsupported.`);
-      }
-      requireHash(condition.errorHash, `${condition.condition}.errorHash`);
-    } else {
-      throw new Error(`${condition.condition}.status is unsupported.`);
-    }
-  }
-  if (executionIdentityHashes.size !== runtime.conditions.length) {
-    throw new Error('Public paired evidence must use distinct execution identities.');
-  }
-  if (runtime.cleanup.status === 'failed') {
-    if (!['state_cleanup', 'store_restoration'].includes(runtime.cleanup.category)) {
-      throw new Error('cleanup.category is unsupported.');
-    }
-    requireHash(runtime.cleanup.errorHash, 'cleanup.errorHash');
-  } else if (runtime.cleanup.status !== 'completed') {
-    throw new Error('cleanup.status is unsupported.');
-  }
-  if (typeof runtime.validForDeltaClaims !== 'boolean') {
-    throw new Error('validForDeltaClaims must be a boolean.');
-  }
-  const structurallyValid =
-    runtime.cleanup.status === 'completed' &&
-    runtime.conditions.every((condition) => condition.status === 'completed');
-  if (runtime.validForDeltaClaims !== structurallyValid) {
-    throw new Error(
-      'Paired runtime delta eligibility is inconsistent with infrastructure evidence.',
-    );
-  }
 }
 
 function buildTurnAuditMetrics(
@@ -568,7 +444,7 @@ function buildAccidentalSuccessDiagnostics(
 }
 
 export function buildE2EPairedPublicReport(runtime: E2EPairedRuntimeResult): E2EPairedPublicReport {
-  validateRuntimeForProjection(runtime);
+  validateE2EPairedRuntimeForPublicProjection(runtime);
   const conditions = runtime.conditions.map(projectCondition);
   const cleanup =
     runtime.cleanup.status === 'completed'
@@ -593,6 +469,13 @@ export function buildE2EPairedPublicReport(runtime: E2EPairedRuntimeResult): E2E
       scope: 'pair_cleanup',
       category: cleanup.category,
       errorHash: cleanup.errorHash,
+    });
+  }
+  if (runtime.source.status !== 'clean_match') {
+    infrastructureFailures.push({
+      scope: 'pair_source',
+      category: runtime.source.status === 'dirty' ? 'source_dirty' : 'source_mismatch',
+      errorHash: stableHash(`paired-source-${runtime.source.status}`),
     });
   }
   if (!runtime.validForDeltaClaims && infrastructureFailures.length === 0) {
@@ -620,6 +503,13 @@ export function buildE2EPairedPublicReport(runtime: E2EPairedRuntimeResult): E2E
   );
   return {
     schemaVersion: E2E_PAIRED_PUBLIC_REPORT_SCHEMA_VERSION,
+    source: {
+      app: { ...runtime.source.app },
+      completionApp: { ...runtime.source.completionApp },
+      status: runtime.source.status,
+    },
+    model: { ...runtime.model },
+    scenarioInputHash: runtime.scenarioInputHash,
     pairIdHash: runtime.pairIdHash,
     pairConfigHash,
     invariantConfigHash: runtime.invariantConfigHash,

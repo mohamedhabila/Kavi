@@ -47,6 +47,8 @@ const PROVIDER: LlmProviderConfig = {
   baseUrl: 'https://example.com/v1',
 };
 
+const CLEAN_APP_SOURCE = { commitSha: 'a'.repeat(40), dirty: false } as const;
+
 const SCENARIO: E2EScenario = {
   id: 'paired-runtime-scenario',
   conversationId: 'paired-runtime-conversation',
@@ -128,6 +130,7 @@ describe('paired E2E runtime coordinator', () => {
       scenario: SCENARIO,
       provider: PROVIDER,
       dependencies: {
+        captureAppSource: () => CLEAN_APP_SOURCE,
         executeCondition,
         resetConditionState,
         cleanupConditionState,
@@ -167,6 +170,69 @@ describe('paired E2E runtime coordinator', () => {
     );
   });
 
+  it('rejects a dirty source before building or invoking a provider', async () => {
+    const buildProvider = jest.fn(() => PROVIDER);
+    const executeCondition = jest.fn(async (executionInput) =>
+      successfulExecutionResult(executionInput),
+    );
+
+    const result = await runE2EPairedConditions({
+      plan: buildPlan('memory_off', 'production_auto', 2),
+      scenario: SCENARIO,
+      dependencies: {
+        captureAppSource: () => ({ ...CLEAN_APP_SOURCE, dirty: true }),
+        buildProvider,
+        executeCondition,
+      },
+    });
+
+    expect(buildProvider).not.toHaveBeenCalled();
+    expect(executeCondition).not.toHaveBeenCalled();
+    expect(result.source.status).toBe('dirty');
+    expect(result.validForDeltaClaims).toBe(false);
+    expect(result.conditions).toHaveLength(2);
+    expect(result.conditions.every((condition) => condition.status === 'failed')).toBe(true);
+    expect(result.conditions[0]).toMatchObject({ category: 'source_provenance' });
+  });
+
+  it('fails the affected condition when the source SHA changes mid-run', async () => {
+    const changedSource = { commitSha: 'b'.repeat(40), dirty: false } as const;
+    const captureAppSource = jest
+      .fn(() => CLEAN_APP_SOURCE)
+      .mockReturnValueOnce(CLEAN_APP_SOURCE)
+      .mockReturnValueOnce(CLEAN_APP_SOURCE)
+      .mockReturnValueOnce(CLEAN_APP_SOURCE)
+      .mockReturnValue(changedSource);
+    const executeCondition = jest.fn(async (executionInput) =>
+      successfulExecutionResult(executionInput),
+    );
+
+    const result = await runE2EPairedConditions({
+      plan: buildPlan('memory_off', 'production_auto', 2),
+      scenario: SCENARIO,
+      provider: PROVIDER,
+      dependencies: {
+        captureAppSource,
+        executeCondition,
+        resetConditionState: async () => undefined,
+        cleanupConditionState: async () => undefined,
+        withStoreIsolation: passthroughIsolation,
+      },
+    });
+
+    expect(executeCondition).toHaveBeenCalledTimes(1);
+    expect(result.source).toMatchObject({
+      app: CLEAN_APP_SOURCE,
+      completionApp: changedSource,
+      status: 'mismatch',
+    });
+    expect(result.conditions[1]).toMatchObject({
+      status: 'failed',
+      category: 'source_provenance',
+    });
+    expect(result.validForDeltaClaims).toBe(false);
+  });
+
   it('uses the low seed bit to counterbalance order without changing comparison roles', async () => {
     const executeCondition = jest.fn(async (executionInput) =>
       successfulExecutionResult(executionInput),
@@ -176,6 +242,7 @@ describe('paired E2E runtime coordinator', () => {
       scenario: SCENARIO,
       provider: PROVIDER,
       dependencies: {
+        captureAppSource: () => CLEAN_APP_SOURCE,
         executeCondition,
         resetConditionState: async () => undefined,
         cleanupConditionState: async () => undefined,
@@ -210,6 +277,7 @@ describe('paired E2E runtime coordinator', () => {
       scenario: SCENARIO,
       provider: PROVIDER,
       dependencies: {
+        captureAppSource: () => CLEAN_APP_SOURCE,
         executeCondition,
         resetConditionState: async () => undefined,
         cleanupConditionState: async () => undefined,
@@ -238,6 +306,7 @@ describe('paired E2E runtime coordinator', () => {
       scenario: SCENARIO,
       provider: PROVIDER,
       dependencies: {
+        captureAppSource: () => CLEAN_APP_SOURCE,
         executeCondition: async (executionInput) => successfulExecutionResult(executionInput),
         resetConditionState: jest
           .fn()
@@ -260,6 +329,7 @@ describe('paired E2E runtime coordinator', () => {
       scenario: SCENARIO,
       provider: PROVIDER,
       dependencies: {
+        captureAppSource: () => CLEAN_APP_SOURCE,
         executeCondition: async (executionInput) => successfulExecutionResult(executionInput),
         resetConditionState: async () => undefined,
         cleanupConditionState: async () => undefined,
@@ -287,6 +357,7 @@ describe('paired E2E runtime coordinator', () => {
       scenario: SCENARIO,
       provider: PROVIDER,
       dependencies: {
+        captureAppSource: () => CLEAN_APP_SOURCE,
         executeCondition,
         resetConditionState,
         cleanupConditionState: async () => undefined,
@@ -331,6 +402,7 @@ describe('paired E2E runtime coordinator', () => {
         scenario: SCENARIO,
         provider: PROVIDER,
         dependencies: {
+          captureAppSource: () => CLEAN_APP_SOURCE,
           executeCondition: jest
             .fn(async (executionInput: E2EPairedConditionExecutionInput) =>
               successfulExecutionResult(executionInput),

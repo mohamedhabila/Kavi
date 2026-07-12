@@ -1,4 +1,5 @@
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -39,6 +40,13 @@ const SCENARIO: E2EScenario = {
     },
   ],
 };
+
+const PRIVATE_APP_SOURCE = { commitSha: 'a'.repeat(40), dirty: false } as const;
+const PRIVATE_PROVENANCE = { app: PRIVATE_APP_SOURCE, pairedExecution: null } as const;
+const PRIVATE_WRITE_PROVENANCE = {
+  provenance: PRIVATE_PROVENANCE,
+  captureAppSource: () => PRIVATE_APP_SOURCE,
+} as const;
 
 function buildPrivateResult(): E2EScenarioResult {
   resetE2ENativeMobileFixtures();
@@ -156,12 +164,14 @@ describe('private E2E scenario evidence', () => {
     const evidence = buildE2EPrivateScenarioEvidence({
       scenario: SCENARIO,
       result: buildPrivateResult(),
+      provenance: PRIVATE_PROVENANCE,
       evidenceId: 'evidence-1',
       now: new Date('2026-07-10T00:00:00.000Z'),
     });
     const serialized = JSON.stringify(evidence);
 
     expect(evidence.schemaVersion).toBe(E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION);
+    expect(evidence.provenance).toEqual(PRIVATE_PROVENANCE);
     expect(evidence.scenario.requestedTurns).toEqual([
       {
         text: 'PRIVATE-REQUEST-SENTINEL',
@@ -210,6 +220,7 @@ describe('private E2E scenario evidence', () => {
         ...result,
         turnTraces: [{ ...result.turnTraces[0]!, lifecycleBefore }],
       },
+      provenance: PRIVATE_PROVENANCE,
     });
 
     expect(evidence.scenario.requestedTurns[0]).toMatchObject({
@@ -224,6 +235,7 @@ describe('private E2E scenario evidence', () => {
     const env = { [E2E_PRIVATE_EVIDENCE_DIR_ENV]: configuredDir };
     const result = buildPrivateResult();
     const firstPath = writeE2EPrivateScenarioEvidence({
+      ...PRIVATE_WRITE_PROVENANCE,
       scenario: SCENARIO,
       result,
       env,
@@ -231,6 +243,7 @@ describe('private E2E scenario evidence', () => {
       evidenceId: 'attempt-1',
     });
     const secondPath = writeE2EPrivateScenarioEvidence({
+      ...PRIVATE_WRITE_PROVENANCE,
       scenario: SCENARIO,
       result,
       env,
@@ -249,6 +262,7 @@ describe('private E2E scenario evidence', () => {
     });
     expect(() =>
       writeE2EPrivateScenarioEvidence({
+        ...PRIVATE_WRITE_PROVENANCE,
         scenario: SCENARIO,
         result,
         env,
@@ -261,10 +275,17 @@ describe('private E2E scenario evidence', () => {
   it('does not write when unconfigured and rejects paths outside .private/evals', () => {
     const result = buildPrivateResult();
     expect(
-      writeE2EPrivateScenarioEvidence({ scenario: SCENARIO, result, env: {}, cwd }),
+      writeE2EPrivateScenarioEvidence({
+        ...PRIVATE_WRITE_PROVENANCE,
+        scenario: SCENARIO,
+        result,
+        env: {},
+        cwd,
+      }),
     ).toBeNull();
     expect(() =>
       writeE2EPrivateScenarioEvidence({
+        ...PRIVATE_WRITE_PROVENANCE,
         scenario: SCENARIO,
         result,
         env: { [E2E_PRIVATE_EVIDENCE_DIR_ENV]: join(cwd, 'outside') },
@@ -284,6 +305,7 @@ describe('private E2E scenario evidence', () => {
 
     expect(() =>
       writeE2EPrivateScenarioEvidence({
+        ...PRIVATE_WRITE_PROVENANCE,
         scenario: SCENARIO,
         result,
         env: { [E2E_PRIVATE_EVIDENCE_DIR_ENV]: linked },
@@ -300,6 +322,7 @@ describe('private E2E scenario evidence', () => {
 
     expect(() =>
       writeE2EPrivateScenarioEvidence({
+        ...PRIVATE_WRITE_PROVENANCE,
         scenario: SCENARIO,
         result,
         env: { [E2E_PRIVATE_EVIDENCE_DIR_ENV]: join(cwd, '.private', 'evals') },
@@ -314,13 +337,30 @@ describe('private E2E scenario evidence', () => {
       buildE2EPrivateScenarioEvidence({
         scenario: { ...SCENARIO, id: 'different' },
         result,
+        provenance: PRIVATE_PROVENANCE,
       }),
     ).toThrow('Private evidence scenario id does not match');
     expect(() =>
       buildE2EPrivateScenarioEvidence({
         scenario: { ...SCENARIO, contentClass: 'synthetic_public' },
         result,
+        provenance: PRIVATE_PROVENANCE,
       }),
     ).toThrow('Private evidence content classification does not match');
+  });
+
+  it('rejects private evidence when the observed source differs from its bound source', () => {
+    const configuredDir = join(cwd, '.private', 'evals', 'run-source-mismatch');
+    expect(() =>
+      writeE2EPrivateScenarioEvidence({
+        scenario: SCENARIO,
+        result: buildPrivateResult(),
+        provenance: PRIVATE_PROVENANCE,
+        env: { [E2E_PRIVATE_EVIDENCE_DIR_ENV]: configuredDir },
+        cwd,
+        captureAppSource: () => ({ commitSha: 'b'.repeat(40), dirty: false }),
+      }),
+    ).toThrow('does not match the bound execution source');
+    expect(existsSync(configuredDir)).toBe(false);
   });
 });

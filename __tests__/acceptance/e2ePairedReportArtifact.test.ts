@@ -12,6 +12,11 @@ import {
   type E2EPairedRuntimeResult,
 } from '../../src/acceptance/e2eAgent/e2ePairedRuntime';
 import { stableHash } from '../../src/acceptance/e2eAgent/e2eTraceRedaction';
+import {
+  E2E_PAIRED_EVALUATION_RUN_FILE,
+  sha256EvaluationArtifact,
+  validateE2EPairedEvaluationRunManifestBinding,
+} from '../../src/acceptance/e2eAgent/e2ePairedEvaluationRunManifest';
 import type { E2EScenarioTurnTrace } from '../../src/acceptance/e2eAgent/types';
 import {
   buildPairedRetrievalEvent,
@@ -67,6 +72,20 @@ function validRuntime(input?: {
   };
   return {
     schemaVersion: E2E_PAIRED_RUNTIME_SCHEMA_VERSION,
+    source: {
+      app: { commitSha: 'a'.repeat(40), dirty: false },
+      completionApp: { commitSha: 'a'.repeat(40), dirty: false },
+      status: 'clean_match',
+    },
+    model: {
+      role: 'assistant',
+      capabilityClass: 'hosted_tool_capable',
+      provider: 'custom',
+      model: `sha256-${'b'.repeat(64)}`,
+      revision: null,
+      endpointSha256: 'c'.repeat(64),
+    },
+    scenarioInputHash: stableHash('paired-artifact-scenario'),
     pairIdHash,
     invariantConfigHash: stableHash('invariant'),
     comparison: {
@@ -97,12 +116,75 @@ describe('paired public report artifact', () => {
 
   it('atomically writes a valid public report', () => {
     const reportPath = join(directory, 'run-valid', 'paired-report.json');
+    const manifestPath = join(directory, 'run-valid', E2E_PAIRED_EVALUATION_RUN_FILE);
     const report = writeE2EPairedPublicReportArtifact({
       runtime: validRuntime(),
       retentionRoot: directory,
       runId: 'run-valid',
+      generatedAt: new Date('2026-07-13T10:00:00.000Z'),
+      host: { os: 'test-os', arch: 'test-arch', nodeVersion: 'v22.0.0' },
     });
-    expect(JSON.parse(readFileSync(reportPath, 'utf8'))).toEqual(report);
+    const reportJson = readFileSync(reportPath, 'utf8');
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    expect(JSON.parse(reportJson)).toEqual(report);
+    expect(manifest).toMatchObject({
+      kind: 'evaluation_run',
+      schemaVersion: '1.0.0',
+      runId: 'run-valid',
+      evaluation: {
+        lane: 'product_native',
+        protocolConformance: 'product_native',
+        verificationLabel: 'local_only',
+        splitKind: 'development',
+      },
+      source: { app: { commitSha: 'a'.repeat(40), dirty: false } },
+      pricing: { status: 'missing', estimatedCostUsd: null },
+      metrics: { cost: null },
+      artifacts: [
+        {
+          role: 'paired-report',
+          path: 'paired-report.json',
+          sha256: sha256EvaluationArtifact(reportJson),
+        },
+      ],
+    });
+    expect(validateE2EPairedEvaluationRunManifestBinding(report, reportJson, manifest)).toEqual([]);
+    const serialized = JSON.stringify(manifest);
+    expect(serialized).not.toContain(directory);
+    expect(serialized).not.toContain('.private/');
+    expect(serialized).not.toContain('sk-proj-');
+  });
+
+  it('detects report tampering, artifact hash drift, and source metadata mismatch', () => {
+    const reportPath = join(directory, 'run-binding', 'paired-report.json');
+    const manifestPath = join(directory, 'run-binding', E2E_PAIRED_EVALUATION_RUN_FILE);
+    const report = writeE2EPairedPublicReportArtifact({
+      runtime: validRuntime(),
+      retentionRoot: directory,
+      runId: 'run-binding',
+    });
+    const reportJson = readFileSync(reportPath, 'utf8');
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+
+    expect(
+      validateE2EPairedEvaluationRunManifestBinding(
+        report,
+        `${reportJson}\n`,
+        manifest,
+      ),
+    ).toEqual(expect.arrayContaining([expect.stringContaining('must match the paired report bytes')]));
+
+    const hashDrift = JSON.parse(JSON.stringify(manifest));
+    hashDrift.artifacts[0].sha256 = 'd'.repeat(64);
+    expect(validateE2EPairedEvaluationRunManifestBinding(report, reportJson, hashDrift)).toEqual(
+      expect.arrayContaining([expect.stringContaining('must match the paired report bytes')]),
+    );
+
+    const sourceDrift = JSON.parse(JSON.stringify(manifest));
+    sourceDrift.source.app.commitSha = 'b'.repeat(40);
+    expect(validateE2EPairedEvaluationRunManifestBinding(report, reportJson, sourceDrift)).toEqual(
+      expect.arrayContaining([expect.stringContaining('must match the paired report source')]),
+    );
   });
 
   it('persists zero-event overflow evidence and fails closed without a paired delta', () => {

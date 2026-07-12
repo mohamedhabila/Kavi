@@ -2,7 +2,12 @@
 // Kavi — E2E agent scenario runner (live product foreground path)
 // ---------------------------------------------------------------------------
 
-import { writeE2EPrivateScenarioEvidence } from './e2ePrivateScenarioEvidence';
+import { captureE2EAppSourceRevision } from './e2eAppSourceProvenance';
+import type { E2EAppSourceRevision } from './e2eAppSourceProvenance';
+import {
+  writeE2EPrivateScenarioEvidence,
+  type E2EPrivateEvidenceProvenance,
+} from './e2ePrivateScenarioEvidence';
 import { installE2EScenarioEnvironment } from './e2eScenarioEnvironment';
 import { runForegroundScenario } from './foregroundScenarioDriver';
 import type { ForegroundScenarioRouteDirective } from './foregroundScenarioDriverTypes';
@@ -41,6 +46,9 @@ export type E2EScenarioRunOptions = Readonly<{
   enableCompaction?: boolean;
   /** Public-safe, evaluator-owned namespace that isolates paired condition sessions and cache keys. */
   conversationIdSuffix?: string;
+  /** Exact source and paired identity bound into opt-in private evidence. */
+  evidenceProvenance?: E2EPrivateEvidenceProvenance;
+  captureAppSource?: () => E2EAppSourceRevision;
 }>;
 
 export function resolveE2EScenarioSystemPrompt(scenario: E2EScenario): string {
@@ -93,6 +101,10 @@ export async function runE2EScenario(
   options: E2EScenarioRunOptions = {},
 ): Promise<E2EScenarioResult> {
   const startedAt = Date.now();
+  const captureAppSource = options.captureAppSource ?? captureE2EAppSourceRevision;
+  const evidenceProvenance =
+    options.evidenceProvenance ??
+    ({ app: captureAppSource(), pairedExecution: null } as const);
   const contentClass = requireScenarioContentClass(scenario.contentClass);
   const conversationId = resolveScenarioConversationId(
     scenario.conversationId,
@@ -146,7 +158,12 @@ export async function runE2EScenario(
       fixtureId: scenario.id,
       requestedUserTurnCount: userTurns.length,
     });
-    writeE2EPrivateScenarioEvidence({ scenario, result });
+    writeE2EPrivateScenarioEvidence({
+      scenario,
+      result,
+      provenance: evidenceProvenance,
+      captureAppSource,
+    });
     return result;
   } finally {
     uninstallScenarioEnvironment();

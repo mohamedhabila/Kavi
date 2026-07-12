@@ -14,6 +14,26 @@ import {
 } from './e2ePairedRunHarness';
 import { buildFixtureResult } from './e2eRunReportHarness';
 
+export const PAIRED_TEST_APP_SOURCE = {
+  commitSha: 'a'.repeat(40),
+  dirty: false,
+} as const;
+
+export const PAIRED_TEST_SOURCE_BINDING = {
+  app: PAIRED_TEST_APP_SOURCE,
+  completionApp: PAIRED_TEST_APP_SOURCE,
+  status: 'clean_match',
+} as const;
+
+export const PAIRED_TEST_MODEL = {
+  role: 'assistant',
+  capabilityClass: 'hosted_tool_capable',
+  provider: 'custom',
+  model: `sha256-${'b'.repeat(64)}`,
+  revision: null,
+  endpointSha256: 'c'.repeat(64),
+} as const;
+
 function defaultRetrievalEvent(
   condition: Extract<E2EPairedConditionExecution, { status: 'completed' }>['condition'],
 ) {
@@ -132,6 +152,7 @@ export function runtime(
   overrides: Partial<E2EPairedRuntimeResult> = {},
 ): E2EPairedRuntimeResult {
   const cleanup = overrides.cleanup ?? { status: 'completed' as const };
+  const source = overrides.source ?? PAIRED_TEST_SOURCE_BINDING;
   const pairIdHash = stableHash('PRIVATE-PAIR-ID');
   const executionSeed = overrides.executionSeed ?? 2;
   const comparison = {
@@ -147,10 +168,14 @@ export function runtime(
     }),
   }));
   const validForDeltaClaims =
+    source.status === 'clean_match' &&
     cleanup.status === 'completed' &&
     conditionsWithIdentities.every((condition) => condition.status === 'completed');
   return {
     schemaVersion: E2E_PAIRED_RUNTIME_SCHEMA_VERSION,
+    source,
+    model: overrides.model ?? PAIRED_TEST_MODEL,
+    scenarioInputHash: overrides.scenarioInputHash ?? stableHash('PRIVATE-SCENARIO-INPUT'),
     pairIdHash,
     invariantConfigHash: stableHash('PRIVATE-INVARIANT-CONFIG'),
     comparison,

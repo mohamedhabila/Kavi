@@ -8,9 +8,13 @@ import {
 } from '../../../scripts/e2eReport/fileTransaction';
 import { buildE2EPairedPublicReport, type E2EPairedPublicReport } from './e2ePairedPublicReport';
 import type { E2EPairedRuntimeResult } from './e2ePairedRuntime';
+import {
+  buildE2EPairedEvaluationRunManifest,
+  E2E_PAIRED_EVALUATION_RUN_FILE,
+} from './e2ePairedEvaluationRunManifest';
 
 const PAIRED_REPORT_FILE = 'paired-report.json';
-const SAFE_RUN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
+const SAFE_RUN_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,127}$/u;
 
 export class E2EPairedClaimFailure extends Error {
   constructor(
@@ -72,12 +76,22 @@ export function writeE2EPairedPublicReportArtifact(input: {
   runtime: E2EPairedRuntimeResult;
   retentionRoot: string;
   runId: string;
+  generatedAt?: Date;
+  host?: { os: string; arch: string; nodeVersion: string };
 }): E2EPairedPublicReport {
   const runId = requireRunId(input.runId);
   const retentionRoot = resolveCanonicalRetentionRoot(input.retentionRoot);
   const runDir = assertManagedRunPath(retentionRoot, runId);
   const reportRelativePath = `${runId}/${PAIRED_REPORT_FILE}`;
   const report = buildE2EPairedPublicReport(input.runtime);
+  const reportJson = JSON.stringify(report, null, 2);
+  const manifest = buildE2EPairedEvaluationRunManifest({
+    report,
+    reportJson,
+    runId,
+    generatedAt: input.generatedAt,
+    host: input.host,
+  });
 
   const lockPath = join(retentionRoot, '.paired-report.lock');
   assertLockPathIsNotSymlink(lockPath);
@@ -91,7 +105,12 @@ export function writeE2EPairedPublicReportArtifact(input: {
     try {
       atomicWriteFileSync(
         join(stagingDir, PAIRED_REPORT_FILE),
-        JSON.stringify(report, null, 2),
+        reportJson,
+        'utf8',
+      );
+      atomicWriteFileSync(
+        join(stagingDir, E2E_PAIRED_EVALUATION_RUN_FILE),
+        JSON.stringify(manifest, null, 2),
         'utf8',
       );
       assertManagedRunPath(retentionRoot, runId);

@@ -1,4 +1,10 @@
 import type { LlmProviderConfig } from '../../types/provider';
+import {
+  captureE2EAppSourceRevision,
+  sameE2EAppSourceRevision,
+  validateE2EAppSourceRevision,
+  type E2EAppSourceRevision,
+} from './e2eAppSourceProvenance';
 import { seedE2EOracleEvidence } from './e2eOracleEvidenceSeeder';
 import { evaluateE2EScenarioRubrics } from './rubricEvaluators';
 import {
@@ -20,7 +26,22 @@ import {
 import { stableHash, stableStringify } from './e2eTraceRedaction';
 import type { E2EScenario, E2EScenarioResult } from './types';
 
-export const E2E_PAIRED_RUNTIME_SCHEMA_VERSION = 'e2e-paired-runtime-v3' as const;
+export const E2E_PAIRED_RUNTIME_SCHEMA_VERSION = 'e2e-paired-runtime-v4' as const;
+
+export type E2EPairedSourceBinding = Readonly<{
+  app: E2EAppSourceRevision;
+  completionApp: E2EAppSourceRevision;
+  status: 'clean_match' | 'dirty' | 'mismatch';
+}>;
+
+export type E2EPairedModelProvenance = Readonly<{
+  role: 'assistant';
+  capabilityClass: 'hosted_tool_capable' | 'on_device';
+  provider: string;
+  model: string;
+  revision: null;
+  endpointSha256: string | null;
+}>;
 
 export type E2EPairedConditionExecutionInput = Readonly<{
   conditionPlan: E2EPairedConditionPlan;
@@ -30,6 +51,9 @@ export type E2EPairedConditionExecutionInput = Readonly<{
 
 export type E2EPairedRuntimeResult = Readonly<{
   schemaVersion: typeof E2E_PAIRED_RUNTIME_SCHEMA_VERSION;
+  source: E2EPairedSourceBinding;
+  model: E2EPairedModelProvenance;
+  scenarioInputHash: string;
   pairIdHash: string;
   invariantConfigHash: string;
   comparison: E2EPairedExecutionPlan['comparison'];
@@ -62,7 +86,11 @@ export type E2EPairedConditionExecution =
   | (E2EPairedConditionExecutionBase &
       Readonly<{
         status: 'failed';
-        category: 'state_reset' | 'condition_execution' | 'evidence_validation';
+        category:
+          | 'source_provenance'
+          | 'state_reset'
+          | 'condition_execution'
+          | 'evidence_validation';
         errorHash: string;
         privateError: string;
       }>);
@@ -82,6 +110,7 @@ export type E2EPairedRuntimeDependencies = Readonly<{
   cleanupConditionState: () => Promise<void>;
   withStoreIsolation: <T>(task: () => Promise<T>) => Promise<T>;
   executeCondition: (input: E2EPairedConditionExecutionInput) => Promise<E2EScenarioResult>;
+  captureAppSource: () => E2EAppSourceRevision;
 }>;
 
 const DEFAULT_DEPENDENCIES: E2EPairedRuntimeDependencies = {
@@ -94,13 +123,49 @@ const DEFAULT_DEPENDENCIES: E2EPairedRuntimeDependencies = {
   executeCondition: async ({ scenario, runOptions }) => {
     return runE2EScenario(scenario, runOptions);
   },
+  captureAppSource: captureE2EAppSourceRevision,
 };
+
+function sourceBinding(
+  app: E2EAppSourceRevision,
+  completionApp: E2EAppSourceRevision,
+): E2EPairedSourceBinding {
+  validateE2EAppSourceRevision(app, 'Paired starting app source');
+  validateE2EAppSourceRevision(completionApp, 'Paired completion app source');
+  return {
+    app: { ...app },
+    completionApp: { ...completionApp },
+    status: !sameE2EAppSourceRevision(app, completionApp)
+      ? 'mismatch'
+      : app.dirty
+        ? 'dirty'
+        : 'clean_match',
+  };
+}
+
+function pairedModelProvenance(plan: E2EPairedExecutionPlan): E2EPairedModelProvenance {
+  const provider = plan.conditions[0].invariantConfig.provider;
+  const hosted = provider.kind !== 'on-device';
+  return {
+    role: 'assistant',
+    capabilityClass: hosted ? 'hosted_tool_capable' : 'on_device',
+    provider: provider.providerFamily ?? provider.kind ?? 'unclassified',
+    model: provider.modelLocatorHash.replace(/^sha256:/u, 'sha256-'),
+    revision: null,
+    endpointSha256: hosted ? provider.endpointHash.replace(/^sha256:/u, '') : null,
+  };
+}
 
 function buildConditionRunOptions(
   plan: E2EPairedExecutionPlan,
   conditionPlan: E2EPairedConditionPlan,
   provider: LlmProviderConfig,
   conversationIdSuffix: string,
+  source: E2EAppSourceRevision,
+  pairIdHash: string,
+  executionIdentityHash: string,
+  scenarioInputHash: string,
+  captureAppSource: () => E2EAppSourceRevision,
 ): E2EScenarioRunOptions {
   const invariant = conditionPlan.invariantConfig;
   const oracleEvidence = conditionPlan.oracleEvidence;
@@ -119,6 +184,16 @@ function buildConditionRunOptions(
     enableCompaction: conditionPlan.conditionConfig.contextMode !== 'full_context',
     conversationIdSuffix,
     allowedToolNames: invariant.toolSurface,
+    evidenceProvenance: {
+      app: source,
+      pairedExecution: {
+        pairIdHash,
+        condition: conditionPlan.condition,
+        executionIdentityHash,
+        scenarioInputHash,
+      },
+    },
+    captureAppSource,
     ...(oracleEvidence
       ? {
           beforeTurns: async (identity: {
@@ -229,6 +304,15 @@ function conversationIdSuffix(executionIdentityHash: string): string {
   return `paired-${executionIdentityHash.slice('sha256:'.length, 'sha256:'.length + 32)}`;
 }
 
+function assertBoundAppSource(
+  expected: E2EAppSourceRevision,
+  observed: E2EAppSourceRevision,
+): void {
+  if (!sameE2EAppSourceRevision(expected, observed) || observed.dirty) {
+    throw new Error('Paired evaluation app source changed during execution.');
+  }
+}
+
 export async function runE2EPairedConditions(input: {
   plan: E2EPairedExecutionPlan;
   scenario: E2EScenario;
@@ -237,10 +321,14 @@ export async function runE2EPairedConditions(input: {
 }): Promise<E2EPairedRuntimeResult> {
   validateE2EPairedExecutionPlan(input.plan);
   const dependencies = { ...DEFAULT_DEPENDENCIES, ...input.dependencies };
-  const provider = input.provider ?? dependencies.buildProvider();
-  validateRuntimeInvariant({ plan: input.plan, provider, scenario: input.scenario });
+  const appSource = dependencies.captureAppSource();
+  validateE2EAppSourceRevision(appSource, 'Paired starting app source');
   const pairIdHash = stableHash(input.plan.pairId);
   const executionSeed = input.plan.conditions[0].invariantConfig.seed;
+  const scenarioInputHash = stableHash(
+    stableStringify(input.plan.conditions[0].invariantConfig.scenarioInput),
+  );
+  const model = pairedModelProvenance(input.plan);
   const executionOrder = resolveE2EPairedExecutionOrder(input.plan.comparison, executionSeed);
   const conditionPlans = new Map(
     input.plan.conditions.map((conditionPlan) => [conditionPlan.condition, conditionPlan]),
@@ -259,9 +347,42 @@ export async function runE2EPairedConditions(input: {
     throw new Error('Paired conditions must use distinct execution identities.');
   }
 
+  const base = {
+    schemaVersion: E2E_PAIRED_RUNTIME_SCHEMA_VERSION,
+    model,
+    scenarioInputHash,
+    pairIdHash,
+    invariantConfigHash: input.plan.conditions[0].invariantConfigHash,
+    comparison: input.plan.comparison,
+    executionSeed,
+    executionOrder,
+  } as const;
+
+  if (appSource.dirty) {
+    const error = new Error('Paired evaluation requires a clean app working tree.');
+    return {
+      ...base,
+      source: sourceBinding(appSource, appSource),
+      conditions: input.plan.conditions.map((conditionPlan) =>
+        failedCondition(
+          conditionPlan,
+          executionIdentities.get(conditionPlan.condition)!,
+          'source_provenance',
+          error,
+        ),
+      ),
+      cleanup: { status: 'completed' },
+      validForDeltaClaims: false,
+    };
+  }
+
+  const provider = input.provider ?? dependencies.buildProvider();
+  validateRuntimeInvariant({ plan: input.plan, provider, scenario: input.scenario });
+
   let capturedResult: E2EPairedRuntimeResult | undefined;
+  let executionResult: E2EPairedRuntimeResult;
   try {
-    return await dependencies.withStoreIsolation(async () => {
+    executionResult = await dependencies.withStoreIsolation(async () => {
       const conditionResults = new Map<
         E2EPairedConditionPlan['condition'],
         E2EPairedConditionExecution
@@ -275,6 +396,15 @@ export async function runE2EPairedConditions(input: {
             throw new Error('Paired execution order references an unknown condition.');
           }
           const identitySuffix = conversationIdSuffix(executionIdentityHash);
+          try {
+            assertBoundAppSource(appSource, dependencies.captureAppSource());
+          } catch (error) {
+            conditionResults.set(
+              condition,
+              failedCondition(conditionPlan, executionIdentityHash, 'source_provenance', error),
+            );
+            continue;
+          }
           try {
             await dependencies.resetConditionState();
           } catch (error) {
@@ -294,12 +424,26 @@ export async function runE2EPairedConditions(input: {
                 conditionPlan,
                 provider,
                 identitySuffix,
+                appSource,
+                pairIdHash,
+                executionIdentityHash,
+                scenarioInputHash,
+                dependencies.captureAppSource,
               ),
             });
           } catch (error) {
             conditionResults.set(
               condition,
               failedCondition(conditionPlan, executionIdentityHash, 'condition_execution', error),
+            );
+            continue;
+          }
+          try {
+            assertBoundAppSource(appSource, dependencies.captureAppSource());
+          } catch (error) {
+            conditionResults.set(
+              condition,
+              failedCondition(conditionPlan, executionIdentityHash, 'source_provenance', error),
             );
             continue;
           }
@@ -345,12 +489,8 @@ export async function runE2EPairedConditions(input: {
         return result ? [result] : [];
       });
       capturedResult = {
-        schemaVersion: E2E_PAIRED_RUNTIME_SCHEMA_VERSION,
-        pairIdHash,
-        invariantConfigHash: input.plan.conditions[0].invariantConfigHash,
-        comparison: input.plan.comparison,
-        executionSeed,
-        executionOrder,
+        ...base,
+        source: sourceBinding(appSource, appSource),
         conditions,
         cleanup,
         validForDeltaClaims:
@@ -362,10 +502,17 @@ export async function runE2EPairedConditions(input: {
     });
   } catch (error) {
     if (!capturedResult) throw error;
-    return {
+    executionResult = {
       ...capturedResult,
       cleanup: failedCleanup('store_restoration', error),
       validForDeltaClaims: false,
     };
   }
+  const completionAppSource = dependencies.captureAppSource();
+  const source = sourceBinding(appSource, completionAppSource);
+  return {
+    ...executionResult,
+    source,
+    validForDeltaClaims: executionResult.validForDeltaClaims && source.status === 'clean_match',
+  };
 }
