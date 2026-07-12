@@ -142,6 +142,8 @@ PODS:
   - hermes-engine (0.14.1):
     - hermes-engine/Pre-built (= 0.14.1)
   - hermes-engine/Pre-built (0.14.1)
+  - KaviSsh (0.1.0):
+    - ExpoModulesCore
   - libssh2-iosx (1.11.0.1)
   - NMSSH (2.3.1):
     - libssh2-iosx (= 1.11.0.1)
@@ -3135,6 +3137,7 @@ DEPENDENCIES:
   - fmt (from `../node_modules/react-native/third-party-podspecs/fmt.podspec`)
   - glog (from `../node_modules/react-native/third-party-podspecs/glog.podspec`)
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
+  - KaviSsh (from `../modules/kavi-ssh/ios`)
   - libssh2-iosx (from `LocalPodspecs/libssh2-iosx.podspec`)
   - NMSSH (from `LocalPodspecs/NMSSH.podspec`)
   - RCT-Folly (from `../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec`)
@@ -3312,6 +3315,8 @@ EXTERNAL SOURCES:
   hermes-engine:
     :podspec: "../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec"
     :tag: hermes-v0.14.1
+  KaviSsh:
+    :path: "../modules/kavi-ssh/ios"
   libssh2-iosx:
     :podspec: LocalPodspecs/libssh2-iosx.podspec
   NMSSH:
@@ -3524,6 +3529,7 @@ SPEC CHECKSUMS:
   fmt: 530618a01105dae0fa3a2f27c81ae11fa8f67eac
   glog: 5683914934d5b6e4240e497e0f4a3b42d1854183
   hermes-engine: 94a333fb97b8135eae5e4fb8fab6a67d61274dd1
+  KaviSsh: 280126833c0d2128c191024543f3b4100532d138
   libssh2-iosx: a096366b4de77f3de01bb1265e26beb2ad5b0784
   NMSSH: 39d19ff70231635ff73b75052d0f32522a2b009e
   RCT-Folly: b29feb752b08042c62badaef7d453f3bb5e6ae23

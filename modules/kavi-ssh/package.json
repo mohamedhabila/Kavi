@@ -1,0 +1,19 @@
+{
+  "name": "@kavi/kavi-ssh",
+  "version": "0.1.0",
+  "description": "Fail-closed verified SSH transport for Kavi",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mohamedhabila/Kavi.git",
+    "directory": "modules/kavi-ssh"
+  },
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  }
+}

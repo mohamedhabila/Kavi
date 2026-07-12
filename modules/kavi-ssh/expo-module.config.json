@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["KaviSshModule"]
+  },
+  "android": {
+    "modules": ["com.kavi.modules.ssh.KaviSshModule"]
+  }
+}
