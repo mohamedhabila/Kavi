@@ -558,6 +558,64 @@ describe('fact recall SQL scope identity', () => {
     expect(explicit.map((fact) => fact.id)).not.toContain(session.fact.id);
   });
 
+  it('keeps long-query selection invariant under inaccessible corpus mutations', async () => {
+    const queryUnits = Array.from({ length: 30 }, (_, index) => `invariant${index}`);
+    const query = queryUnits.join(' ');
+    const visible = upsertEntity({ name: 'visible invariant facts', type: 'concept' });
+    for (const index of [0, 15, 29]) {
+      recordFact({
+        subjectId: visible.id,
+        predicate: `invariant${index}`,
+        objectText: `authorized invariant${index}`,
+        scope: 'conversation',
+        originConversationId: ACTIVE_ROOT,
+        originThreadId: ACTIVE_THREAD,
+        now: 100 + index,
+      });
+    }
+    const recall = () =>
+      recallScoredFactsForQuery(query, {
+        candidateStrategy: 'lexical',
+        memoryScope: activeScope(),
+        useIntent: 'automatic_prompt',
+        candidatePoolLimit: 64,
+        eligibleScanLimit: 64,
+        limit: 12,
+        now: 1_000,
+      });
+    const before = await recall();
+
+    const hidden = upsertEntity({ name: 'hidden invariant facts', type: 'concept' });
+    const hiddenIds: string[] = [];
+    for (let index = 0; index < 60; index += 1) {
+      const recorded = recordFact({
+        subjectId: hidden.id,
+        predicate: `invariant${index % queryUnits.length}`,
+        objectText: `${queryUnits.join(' ')} hidden ${index}`,
+        scope: 'conversation',
+        originConversationId: 'root-inaccessible',
+        originThreadId: ACTIVE_THREAD,
+        now: 200 + index,
+      });
+      hiddenIds.push(recorded.fact.id);
+    }
+    const sensitive = recordFactWithApplicability(
+      {
+        subjectId: hidden.id,
+        predicate: 'medical_invariant15',
+        objectText: query,
+        scope: 'global',
+        now: 400,
+      },
+      { factClass: 'subjective_user', sourceAuthority: 'grounded_user' },
+    );
+    hiddenIds.push(sensitive.fact.id);
+
+    const after = await recall();
+    expect(after.map((entry) => entry.fact.id)).toEqual(before.map((entry) => entry.fact.id));
+    expect(after.some((entry) => hiddenIds.includes(entry.fact.id))).toBe(false);
+  });
+
   it('rejects malformed direct query scope and timestamp inputs', () => {
     expect(() =>
       listFactsForRecallEligibleScan({

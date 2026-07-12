@@ -307,39 +307,6 @@ export function listFactTermUnitHitsForFacts(
   return hits;
 }
 
-export interface FactTermUnitStat {
-  unit: string;
-  factCount: number;
-  totalWeight: number;
-}
-
-export function listFactTermStatsForUnits(
-  units: ReadonlyArray<string>,
-): Map<string, FactTermUnitStat> {
-  const uniqueUnits = Array.from(
-    new Set(units.map((unit) => unit.trim()).filter((unit) => unit.length > 0)),
-  );
-  const stats = new Map<string, FactTermUnitStat>();
-  if (uniqueUnits.length === 0) return stats;
-  const rows = getMany<{ unit: string; fact_count: number; total_weight: number }>(
-    `SELECT unit,
-            SUM(fact_count) AS fact_count,
-            SUM(total_weight) AS total_weight
-       FROM memory_fact_term_stats
-      WHERE unit IN (${uniqueUnits.map(() => '?').join(', ')})
-      GROUP BY unit`,
-    ...uniqueUnits,
-  );
-  for (const row of rows) {
-    stats.set(row.unit, {
-      unit: row.unit,
-      factCount: row.fact_count,
-      totalWeight: row.total_weight,
-    });
-  }
-  return stats;
-}
-
 export function listFactsForSourceRuns(
   sourceRunIds: ReadonlyArray<string>,
   options: Pick<
