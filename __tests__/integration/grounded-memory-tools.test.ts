@@ -115,6 +115,43 @@ describe('raw memory tool executor grounded memory_remember writes', () => {
     ]);
   });
 
+  it('grounds a naturally phrased usual preference without requiring an internal predicate label', async () => {
+    const written = await remember({
+      subject: 'user',
+      subjectType: 'person',
+      predicate: 'planning meeting duration preference',
+      value: '25 minutes',
+      messageId: 'user-usual-meeting-duration',
+      messageText:
+        'Please remember that I usually keep weekly planning meetings to 25 minutes.',
+      scope: 'global',
+    });
+
+    expect(written).toMatchObject({
+      ok: true,
+      fact: {
+        subject: 'user',
+        predicate: 'planning meeting duration preference',
+        value: '25 minutes',
+        sourceMessageId: 'user-usual-meeting-duration',
+      },
+    });
+  });
+
+  it('does not turn a negated usual preference into current self memory', async () => {
+    const written = await remember({
+      subject: 'user',
+      predicate: 'customer call duration preference',
+      value: '20 minutes',
+      messageId: 'user-negated-usual-meeting-duration',
+      messageText: 'I do not usually keep customer calls to 20 minutes.',
+      scope: 'global',
+    });
+
+    expect(written).toMatchObject({ status: 'rejected', ok: false, code: 'grounding_required' });
+    expect(listFacts({ predicate: 'customer call duration preference' })).toEqual([]);
+  });
+
   it.each([
     ['third-party claim', 'Morgan prefers Signal.'],
     ['third-party claim under first-person cognition', 'I think Morgan prefers Signal.'],

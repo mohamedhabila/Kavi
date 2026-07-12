@@ -202,7 +202,21 @@ const PREDICATE_STOP_UNITS = new Set([
 const RELATION_ALIASES: ReadonlyArray<ReadonlySet<string>> = [
   new Set(['address', 'city', 'home', 'live', 'location', 'move', 'residence', 'reside']),
   new Set(['call', 'called', 'name', 'named']),
-  new Set(['channel', 'contact', 'favorite', 'favourite', 'prefer', 'preference']),
+  new Set([
+    'channel',
+    'contact',
+    'default',
+    'favorite',
+    'favourite',
+    'generally',
+    'normally',
+    'prefer',
+    'preference',
+    'typical',
+    'typically',
+    'usual',
+    'usually',
+  ]),
   new Set(['job', 'occupation', 'profession', 'role', 'work']),
   new Set(['timezone', 'tz']),
 ];
