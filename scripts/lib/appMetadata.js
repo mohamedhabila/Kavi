@@ -9,6 +9,18 @@ const EXPECTED_APP_METADATA = {
   androidApplicationId: 'com.kavi.mobile',
 };
 
+const REQUIRED_IOS_USAGE_DESCRIPTION_KEYS = [
+  'NSCalendarsFullAccessUsageDescription',
+  'NSCalendarsUsageDescription',
+  'NSCameraUsageDescription',
+  'NSContactsUsageDescription',
+  'NSLocationWhenInUseUsageDescription',
+  'NSMicrophoneUsageDescription',
+  'NSPhotoLibraryUsageDescription',
+  'NSRemindersFullAccessUsageDescription',
+  'NSRemindersUsageDescription',
+];
+
 function readText(projectRoot, relativePath) {
   return fs.readFileSync(path.join(projectRoot, relativePath), 'utf8');
 }
@@ -102,6 +114,12 @@ function collectAppMetadata(projectRoot = path.resolve(__dirname, '../..')) {
       iosBuildNumber: appJson.expo?.ios?.buildNumber ?? null,
       androidPackage: appJson.expo?.android?.package ?? null,
       androidVersionCode: appJson.expo?.android?.versionCode ?? null,
+      iosUsageDescriptions: Object.fromEntries(
+        REQUIRED_IOS_USAGE_DESCRIPTION_KEYS.map((key) => [
+          key,
+          appJson.expo?.ios?.infoPlist?.[key] ?? null,
+        ]),
+      ),
     },
     android: androidGradle,
     ios: {
@@ -112,6 +130,12 @@ function collectAppMetadata(projectRoot = path.resolve(__dirname, '../..')) {
       backgroundTaskIdentifiers: plistStringArrayValue(
         iosInfoPlist,
         'BGTaskSchedulerPermittedIdentifiers',
+      ),
+      usageDescriptions: Object.fromEntries(
+        REQUIRED_IOS_USAGE_DESCRIPTION_KEYS.map((key) => [
+          key,
+          plistStringValue(iosInfoPlist, key),
+        ]),
       ),
       xcodeProject,
     },
@@ -244,6 +268,22 @@ function findAppMetadataFailures(metadata, expected = EXPECTED_APP_METADATA) {
   if (!expoPlugins.has('expo-background-task')) {
     failures.push('Expo plugins must include "expo-background-task" for scheduled background work');
   }
+  if (!expoPlugins.has('expo-calendar')) {
+    failures.push('Expo plugins must include "expo-calendar" for EventKit permission metadata');
+  }
+  for (const key of REQUIRED_IOS_USAGE_DESCRIPTION_KEYS) {
+    const expoDescription = metadata.expo.iosUsageDescriptions[key];
+    if (typeof expoDescription !== 'string' || expoDescription.trim().length === 0) {
+      failures.push(`Expo iOS infoPlist must include a non-empty ${key}`);
+      continue;
+    }
+    addMismatch(
+      failures,
+      `native iOS ${key}`,
+      metadata.ios.usageDescriptions[key],
+      expoDescription,
+    );
+  }
   if (!metadata.ios.backgroundModes.includes('processing')) {
     failures.push('iOS UIBackgroundModes must include "processing" for scheduled background work');
   }
@@ -277,6 +317,7 @@ function runAppMetadataCli(projectRoot = path.resolve(__dirname, '../..')) {
 
 module.exports = {
   EXPECTED_APP_METADATA,
+  REQUIRED_IOS_USAGE_DESCRIPTION_KEYS,
   collectAppMetadata,
   findAppMetadataFailures,
   parseAndroidGradle,

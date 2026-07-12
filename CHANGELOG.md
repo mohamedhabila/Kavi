@@ -34,6 +34,8 @@ versioning where practical for tagged releases.
   not depend on runtime bundling.
 - App, package, native, and MCP client metadata are aligned at version `1.0.0`
   while retaining the current iOS and Android application identifiers.
+- iOS EventKit permission metadata now covers both calendar and reminder
+  requesters so release builds can initialize the calendar module safely.
 
 ### Security
 
@@ -53,5 +55,7 @@ versioning where practical for tagged releases.
 - Added durable coverage for repository hygiene checks, dependency license
   inventory, GitHub workflow hardening, contributor documentation, and release
   checklist expectations.
+- App metadata checks now reject missing or divergent native iOS usage
+  descriptions before a release artifact is built.
 - Retained strict maintainer gates for memory, agent, and live E2E validation
   without requiring provider credentials for ordinary pull requests.

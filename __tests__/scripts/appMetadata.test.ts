@@ -8,6 +8,7 @@ const {
   parseAndroidGradle,
   plistStringArrayValue,
   parseXcodeProject,
+  REQUIRED_IOS_USAGE_DESCRIPTION_KEYS,
 } = require('../../scripts/lib/appMetadata');
 
 function writeFixture(projectRoot: string, relativePath: string, content: string): void {
@@ -22,6 +23,9 @@ function createMetadataFixture(overrides: Record<string, string> = {}): string {
   const expoVersion = overrides.expoVersion || version;
   const iosBundleIdentifier = overrides.iosBundleIdentifier || 'com.kavi.app';
   const androidApplicationId = overrides.androidApplicationId || 'com.kavi.mobile';
+  const usageDescriptions = Object.fromEntries(
+    REQUIRED_IOS_USAGE_DESCRIPTION_KEYS.map((key: string) => [key, `Kavi usage for ${key}`]),
+  );
 
   writeFixture(projectRoot, 'package.json', JSON.stringify({ name: 'kavi', version }, null, 2));
   writeFixture(
@@ -38,8 +42,12 @@ function createMetadataFixture(overrides: Record<string, string> = {}): string {
           name: 'Kavi',
           slug: 'kavi',
           version: expoVersion,
-          plugins: ['expo-background-task'],
-          ios: { bundleIdentifier: iosBundleIdentifier, buildNumber: '1' },
+          plugins: ['expo-background-task', 'expo-calendar'],
+          ios: {
+            bundleIdentifier: iosBundleIdentifier,
+            buildNumber: '1',
+            infoPlist: usageDescriptions,
+          },
           android: { package: androidApplicationId, versionCode: 1 },
         },
       },
@@ -82,6 +90,10 @@ function createMetadataFixture(overrides: Record<string, string> = {}): string {
       '<array>',
       '<string>com.expo.modules.backgroundtask.processing</string>',
       '</array>',
+      ...Object.entries(usageDescriptions).flatMap(([key, value]) => [
+        `<key>${key}</key>`,
+        `<string>${value}</string>`,
+      ]),
       '</dict></plist>',
     ].join('\n'),
   );
@@ -200,6 +212,23 @@ describe('app metadata checks', () => {
         'Expo plugins must include "expo-background-task" for scheduled background work',
         'iOS UIBackgroundModes must include "processing" for scheduled background work',
         'iOS BGTaskSchedulerPermittedIdentifiers must include "com.expo.modules.backgroundtask.processing"',
+      ]),
+    );
+  });
+
+  it('detects missing or divergent EventKit permission metadata before native launch', () => {
+    const metadata = collectAppMetadata(createMetadataFixture());
+    metadata.expo.plugins = metadata.expo.plugins.filter(
+      (plugin: string) => plugin !== 'expo-calendar',
+    );
+    metadata.expo.iosUsageDescriptions.NSRemindersFullAccessUsageDescription = null;
+    metadata.ios.usageDescriptions.NSRemindersUsageDescription = 'Divergent native copy';
+
+    expect(findAppMetadataFailures(metadata)).toEqual(
+      expect.arrayContaining([
+        'Expo plugins must include "expo-calendar" for EventKit permission metadata',
+        'Expo iOS infoPlist must include a non-empty NSRemindersFullAccessUsageDescription',
+        'native iOS NSRemindersUsageDescription is "Divergent native copy", expected "Kavi usage for NSRemindersUsageDescription"',
       ]),
     );
   });

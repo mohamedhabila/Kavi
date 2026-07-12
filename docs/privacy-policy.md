@@ -81,7 +81,8 @@ Kavi requests sensitive permissions only when the related feature is used.
    conversations and workflows.
 4. Contacts: for user-requested contact lookup, selection, creation, editing,
    viewing, or sharing actions.
-5. Calendar: for user-requested event lookup, creation, update, or deletion.
+5. Calendar and reminders: for user-requested event or reminder lookup,
+   creation, update, or deletion.
 6. Location: for user-requested map and location-aware actions.
 7. Notifications: for reminders, scheduled tasks, and other user-visible alerts.
 

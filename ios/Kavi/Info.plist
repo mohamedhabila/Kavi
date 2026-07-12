@@ -47,6 +47,10 @@
 	<string>Kavi accesses your calendars only when you ask it to read events or create, update, or delete a calendar entry on your behalf.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>Kavi accesses your calendar only when you ask the assistant to view events or create a calendar entry.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Kavi accesses your reminders only when you ask it to read, create, update, or delete a reminder on your behalf.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>Kavi accesses your reminders only when you ask it to read, create, update, or delete a reminder on your behalf.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Kavi uses the camera only when you capture an image or short video clip for a conversation or tool action.</string>
 	<key>NSContactsUsageDescription</key>
