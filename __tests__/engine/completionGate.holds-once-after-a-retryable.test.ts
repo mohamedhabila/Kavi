@@ -16,6 +16,7 @@ import {
 const EFFECT_REQUEST_DIGEST = `sha256:${'1'.repeat(64)}` as const;
 const EFFECT_RESULT_DIGEST = `sha256:${'2'.repeat(64)}` as const;
 const EFFECT_RESOURCE_DIGEST = `sha256:${'3'.repeat(64)}` as const;
+const CONTRACT_DIGEST = `sha256:${'4'.repeat(64)}` as const;
 const EFFECT_CRITERION = buildEffectCompletionCriterion({
   effectKind: 'artifact.write',
   requestDigest: EFFECT_REQUEST_DIGEST,
@@ -31,10 +32,21 @@ function buildEffectReceipt(
   verificationState: ToolEffectReceipt['verificationState'],
 ): ToolEffectReceipt {
   return {
-    version: 1,
+    version: 2,
     receiptId: `ter_${'a'.repeat(32)}`,
     toolCallId: 'tc-write',
     toolName: 'write_file',
+    executionRunId: 'execution-run-1',
+    contractIdentity: {
+      kind: 'code_owned',
+      version: 1,
+      toolName: 'write_file',
+      schemaDigest: CONTRACT_DIGEST,
+      capabilityContractDigest: CONTRACT_DIGEST,
+      workflowContractDigest: CONTRACT_DIGEST,
+      effectContractDigest: CONTRACT_DIGEST,
+      executionPolicyDigest: CONTRACT_DIGEST,
+    },
     transportState: 'returned',
     effectKind: 'artifact.write',
     effectState: 'applied',
@@ -193,9 +205,7 @@ describe('completionGate', () => {
       }),
     );
     const prompt = decision.type === 'hold' ? decision.systemPrompts.join('\n') : '';
-    expect(prompt).toContain(
-      'memory_remember: completion_contract_required via update_goals',
-    );
+    expect(prompt).toContain('memory_remember: completion_contract_required via update_goals');
     expect(prompt).toContain('commit that graph mutation first');
     expect(prompt).toContain('retry the original effect on the following iteration');
   });

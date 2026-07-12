@@ -7,6 +7,7 @@ jest.mock('../../src/utils/timers', () => ({
 import {
   isStoreHydrated,
   subscribeToStoreHydration,
+  waitForRequiredStoreHydration,
   waitForStoreHydration,
 } from '../../src/store/persistHydration';
 
@@ -133,5 +134,51 @@ describe('persistHydration', () => {
     hydrationListener?.();
     await hydrationPromise;
     expect(resolved).toBe(true);
+  });
+
+  it('retries hydration explicitly before allowing required persisted state', async () => {
+    jest.useFakeTimers();
+    let hydrated = false;
+    const rehydrate = jest.fn(async () => {
+      hydrated = true;
+    });
+    const hydrationPromise = waitForRequiredStoreHydration(
+      {
+        persist: {
+          hasHydrated: () => hydrated,
+          onFinishHydration: () => jest.fn(),
+          rehydrate,
+        },
+      },
+      { name: 'test store', timeoutMs: 50 },
+    );
+
+    await jest.advanceTimersByTimeAsync(50);
+
+    await expect(hydrationPromise).resolves.toBeUndefined();
+    expect(rehydrate).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails boundedly when required rehydration never settles', async () => {
+    jest.useFakeTimers();
+    const hydrationPromise = waitForRequiredStoreHydration(
+      {
+        persist: {
+          hasHydrated: () => false,
+          onFinishHydration: () => jest.fn(),
+          rehydrate: () => new Promise<void>(() => undefined),
+        },
+      },
+      { name: 'stuck store', timeoutMs: 50 },
+    );
+    const rejection = expect(hydrationPromise).rejects.toThrow(
+      'Failed to hydrate stuck store: rehydration timed out after 50ms',
+    );
+
+    await jest.advanceTimersByTimeAsync(50);
+    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(50);
+
+    await rejection;
   });
 });

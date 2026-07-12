@@ -817,7 +817,8 @@ export const ar: TranslationMap = mergeTranslations(en, {
   scheduler: {
     title: 'المُجدوِل',
     noJobs: 'لا توجد مهام مجدولة',
-    noJobsHint: 'جدول مهام الذكاء الاصطناعي للتشغيل تلقائياً.',
+    noJobsHint:
+      'جدول مهام الذكاء الاصطناعي. عندما يكون التطبيق غير نشط، اسمح بالإشعارات واضغط على إشعار التنبيه لتشغيلها.',
     addTask: 'إضافة مهمة',
     taskName: 'اسم المهمة',
     taskNamePlaceholder: 'ملخص يومي، تذكير، إلخ.',
@@ -844,6 +845,11 @@ export const ar: TranslationMap = mergeTranslations(en, {
     never: 'أبداً',
     deleteJob: 'حذف المهمة',
     deleteJobConfirm: 'حذف "{name}"؟',
+    deliveryWarning: 'تحذير التسليم: {error}',
+    wakeWarning: 'تحذير التنبيه: {error}',
+    warningTitle: 'تحذير',
+    jobRunning: 'المهمة المجدولة قيد التشغيل حاليًا.',
+    jobMissing: 'هذه المهمة المجدولة لم تعد موجودة.',
     untitledJob: 'مهمة بدون عنوان',
     cronFormat: 'Cron: {expr}',
     everyFormat: 'كل {value} {unit}',

@@ -8,6 +8,7 @@ import type {
   ToolEffectVerificationState,
   ToolExecutionState,
 } from '../../types/toolEffectReceipt';
+import { CODE_OWNED_EFFECT_FREE_SERVICE_TOOL_NAMES } from '../../services/integrations/codeOwnedServiceTools';
 
 export interface CodeOwnedToolEffectContract {
   readonly effectMode: 'none' | 'effectful';
@@ -106,14 +107,10 @@ function effectful(
     ...(options.completion
       ? {
           completion: Object.freeze({
-            ...(options.completion.resource
-              ? { resource: options.completion.resource }
-              : {}),
+            ...(options.completion.resource ? { resource: options.completion.resource } : {}),
             ...(options.completion.sha256ArgumentPath
               ? {
-                  sha256ArgumentPath: Object.freeze([
-                    ...options.completion.sha256ArgumentPath,
-                  ]),
+                  sha256ArgumentPath: Object.freeze([...options.completion.sha256ArgumentPath]),
                 }
               : {}),
             ...(options.completion.effectFreeWhen
@@ -175,6 +172,7 @@ const READ_ONLY_NATIVE_TOOLS = [
   'device_query',
   'location_current',
   'photos_latest',
+  ...CODE_OWNED_EFFECT_FREE_SERVICE_TOOL_NAMES,
 ] as const;
 
 const READ_ONLY_CONTRACTS = Object.fromEntries(
@@ -187,23 +185,17 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
   Object.freeze({
     // A successful interpreter exit proves execution, not the completeness or
     // verification of arbitrary side effects produced by user-authored code.
-    javascript: operationalExecution(
-      'compute.execute',
-      {
-        completed: executionOutcome('completed'),
-        effect_failed: executionOutcome('completed'),
-        failed: executionOutcome('failed'),
-      },
-    ),
-    python: operationalExecution(
-      'compute.execute',
-      {
-        completed: executionOutcome('completed'),
-        effect_failed: executionOutcome('completed'),
-        failed: executionOutcome('failed'),
-        timed_out: executionOutcome('timed_out'),
-      },
-    ),
+    javascript: operationalExecution('compute.execute', {
+      completed: executionOutcome('completed'),
+      effect_failed: executionOutcome('completed'),
+      failed: executionOutcome('failed'),
+    }),
+    python: operationalExecution('compute.execute', {
+      completed: executionOutcome('completed'),
+      effect_failed: executionOutcome('completed'),
+      failed: executionOutcome('failed'),
+      timed_out: executionOutcome('timed_out'),
+    }),
     // Workspace writes read the exact resource back after mutation. A result
     // is verified only when that readback matches the requested content.
     write_file: effectful(
@@ -303,6 +295,10 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
     sessions_send: operational('workflow.mutate'),
     sessions_cancel: operational('workflow.mutate'),
     workspace_delegate_task: operational('workflow.start'),
+    skill__github__create_branch: operational('remote.mutate'),
+    skill__github__commit_files: operational('remote.mutate'),
+    skill__github__create_issue: operational('remote.mutate'),
+    skill__github__create_pull_request: operational('remote.mutate'),
     cron: operational('workflow.mutate'),
     canvas_eval: operational('compute.execute'),
     ssh_exec: operational('remote.mutate'),

@@ -125,6 +125,7 @@ export function recoveryEffect(
     checkpointId: 'checkpoint-1',
     toolCallId: 'tool-call-1',
     toolNameDigest: RECOVERY_DIGEST_A,
+    toolContractIdentityDigest: null,
     effectClass: 'external_run',
     idempotencyClass: 'declared_idempotent',
     idempotencyKeyDigest: RECOVERY_DIGEST_D,

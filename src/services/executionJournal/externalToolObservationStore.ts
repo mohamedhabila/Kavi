@@ -253,6 +253,7 @@ function buildInitialRecords(
       checkpointId: identity.beforeEffectCheckpointId,
       toolCallId: input.toolCallId,
       toolNameDigest: identity.toolNameDigest,
+      toolContractIdentityDigest: null,
       effectClass: 'external_run',
       idempotencyClass: 'declared_idempotent',
       idempotencyKeyDigest: identity.locatorDigest,
@@ -287,10 +288,11 @@ function buildInitialRecords(
 function insertEffect(database: SQLite.SQLiteDatabase, effect: ExecutionEffectRecord): void {
   database.runSync(
     `INSERT INTO execution_effects (
-       id, run_id, checkpoint_id, tool_call_id, tool_name_digest, effect_class,
+       id, run_id, checkpoint_id, tool_call_id, tool_name_digest,
+       tool_contract_identity_digest, effect_class,
        idempotency_class, idempotency_key_digest, request_digest, outcome_digest,
        status, retry_policy, attempt, created_at, started_at, completed_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ...Object.values(effectRow(effect)),
   );
 }

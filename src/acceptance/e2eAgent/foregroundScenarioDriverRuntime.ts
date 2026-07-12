@@ -16,11 +16,12 @@ import {
 } from '../../services/executionJournal/foregroundModelExecutionJournal';
 import { relinquishForegroundModelExecutionProcessOwnership } from '../../services/executionJournal/foregroundModelExecutionProcessOwnership';
 import {
-  claimForegroundModelProjection,
-  ownsForegroundModelProjection,
-  releaseForegroundModelProjection,
-  waitForForegroundModelProjectionAvailability,
-} from '../../store/foregroundModelProjectionOwnership';
+  claimModelProjection,
+  mutateOwnedModelProjection,
+  ownsModelProjection,
+  releaseModelProjection,
+  waitForModelProjectionAvailability,
+} from '../../store/modelProjectionOwnership';
 import { resolveConversationProviderContext } from '../../services/llm/support/providerSupport';
 import {
   drainIngestionQueueWithWakeup,
@@ -288,9 +289,8 @@ async function awaitMemoryJob(jobId: string, deadline: number): Promise<Ingestio
       requestedDrain = true;
       await drainIngestionQueueWithWakeup({
         loadMessagesForThread: (threadId) =>
-          useChatStore
-            .getState()
-            .conversations.find((candidate) => candidate.id === threadId)?.messages ?? [],
+          useChatStore.getState().conversations.find((candidate) => candidate.id === threadId)
+            ?.messages ?? [],
         loadRuntimeContextForJob: loadIngestionJobRuntimeContext,
         maxJobs: 1,
       });
@@ -386,26 +386,23 @@ export function createForegroundScenarioRuntime(
   let activeTurnMaxTokens = input.maxTokens;
   let context: ExecuteForegroundConversationRunParams['context'];
 
-  const recordConversationTurnMemory: ExecuteForegroundConversationRunParams['context']['helpers']['recordConversationTurnMemory'] = (
-    conversationId,
-    activeChatProvider,
-    options = {},
-  ) => {
-    const conversation = useChatStore
-      .getState()
-      .conversations.find((candidate) => candidate.id === conversationId);
-    if (!conversation) return;
-    memoryRecords.push({
-      promise: recordCompletedTurnForMemory({
-        threadId: conversationId,
-        memoryConversationId: options.memoryConversationId,
-        messages: conversation.messages,
-        threadTitle: conversation.title,
-        activeChatProvider,
-        sourceRunId: options.sourceRunId,
-      }),
-    });
-  };
+  const recordConversationTurnMemory: ExecuteForegroundConversationRunParams['context']['helpers']['recordConversationTurnMemory'] =
+    (conversationId, activeChatProvider, options = {}) => {
+      const conversation = useChatStore
+        .getState()
+        .conversations.find((candidate) => candidate.id === conversationId);
+      if (!conversation) return;
+      memoryRecords.push({
+        promise: recordCompletedTurnForMemory({
+          threadId: conversationId,
+          memoryConversationId: options.memoryConversationId,
+          messages: conversation.messages,
+          threadTitle: conversation.title,
+          activeChatProvider,
+          sourceRunId: options.sourceRunId,
+        }),
+      });
+    };
 
   const ensureAgentRunFinalResponse = createAgentRunFinalResponse({
     appendAgentRunCheckpoint: (...args) =>
@@ -467,16 +464,16 @@ export function createForegroundScenarioRuntime(
   context = {
     durability: {
       activateModelExecution: activateForegroundModelExecution,
-      claimModelProjection: claimForegroundModelProjection,
+      claimModelProjection,
       completeModelExecution: completeForegroundModelExecution,
       createModelExecution: createForegroundModelExecution,
       flushChatState: flushChatStorePersistenceNow,
-      ownsModelProjection: ownsForegroundModelProjection,
-      releaseModelProjection: releaseForegroundModelProjection,
-      relinquishModelExecutionProcessOwnership:
-        relinquishForegroundModelExecutionProcessOwnership,
+      mutateModelProjection: mutateOwnedModelProjection,
+      ownsModelProjection,
+      releaseModelProjection,
+      relinquishModelExecutionProcessOwnership: relinquishForegroundModelExecutionProcessOwnership,
       waitForRecoveryReadiness: waitForPersistedAgentRecoveryReadiness,
-      waitForProjectionAvailability: waitForForegroundModelProjectionAvailability,
+      waitForProjectionAvailability: waitForModelProjectionAvailability,
     },
     helpers: {
       appendConversationLog: (conversationId, entry) =>
@@ -501,21 +498,21 @@ export function createForegroundScenarioRuntime(
           return null;
         }
         const provider = currentSettings.providers.find((candidate) => candidate.id === providerId);
-        return useChatStore.getState().getOrCreateCanonicalThread(
-          providerId,
-          currentSettings.systemPrompt,
-          options.model ?? provider?.model,
-          {
-            activate: options.activate,
-            personaId: options.personaId,
-            mode: options.mode,
-          },
-        );
+        return useChatStore
+          .getState()
+          .getOrCreateCanonicalThread(
+            providerId,
+            currentSettings.systemPrompt,
+            options.model ?? provider?.model,
+            {
+              activate: options.activate,
+              personaId: options.personaId,
+              mode: options.mode,
+            },
+          );
       },
       getConversation: (conversationId) =>
-        useChatStore
-          .getState()
-          .conversations.find((candidate) => candidate.id === conversationId),
+        useChatStore.getState().conversations.find((candidate) => candidate.id === conversationId),
       getConversations: () => useChatStore.getState().conversations,
       getResumeAgentRun: () => resumeAgentRun,
       recordConversationTurnMemory,

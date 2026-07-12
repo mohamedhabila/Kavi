@@ -30,6 +30,7 @@ function normalizeMcpInputSchema(schema: unknown): ToolDefinition['input_schema'
 
 export interface McpToolExecutionOptions {
   isToolAllowed?: (serverId: string, toolName: string) => boolean;
+  signal?: AbortSignal;
 }
 
 /**
@@ -142,7 +143,7 @@ export async function executeMcpTool(
   });
 
   try {
-    const result = await client.callTool(parsed.toolName, args);
+    const result = await client.callTool(parsed.toolName, args, options?.signal);
     const formatted = formatMcpResult(result);
     updateRemoteJob(jobId, {
       status: result.isError ? 'failed' : 'completed',

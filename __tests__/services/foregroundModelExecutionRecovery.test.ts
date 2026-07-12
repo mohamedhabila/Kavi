@@ -40,7 +40,8 @@ function conversation(overrides: Partial<Conversation> = {}): Conversation {
       { id: 'request-1', role: 'user', content: 'Do the work.', timestamp: 1 },
       { id: 'assistant-1', role: 'assistant', content: '', timestamp: 2 },
     ],
-    foregroundModelProjectionOwner: {
+    modelProjectionOwner: {
+      surface: 'foreground',
       runId: 'run-1',
       requestMessageId: 'request-1',
       assistantMessageId: 'assistant-1',
@@ -71,30 +72,25 @@ function harness(
       return leases.slice(Math.max(0, start), Math.max(0, start) + limit);
     },
   );
-  const mutateProjection = jest.fn(async (
-    runLease: ForegroundModelExecutionLease,
-    timestamp: number,
-  ) => {
-    const plan = planForegroundModelRestartRecovery(
-      runLease,
-      currentConversation,
-      resolveToolEffect,
-    );
-    if ('kind' in plan) return plan;
-    currentConversation = applyForegroundModelRecoveryPlan(
-      plan,
-      currentConversation,
-      timestamp,
-    );
-    return { kind: 'applied' as const, plan, conversation: currentConversation };
-  });
+  const mutateProjection = jest.fn(
+    async (runLease: ForegroundModelExecutionLease, timestamp: number) => {
+      const plan = planForegroundModelRestartRecovery(
+        runLease,
+        currentConversation,
+        resolveToolEffect,
+      );
+      if ('kind' in plan) return plan;
+      currentConversation = applyForegroundModelRecoveryPlan(plan, currentConversation, timestamp);
+      return { kind: 'applied' as const, plan, conversation: currentConversation };
+    },
+  );
   const releaseProjection = jest.fn((runLease: ForegroundModelExecutionLease) => {
-    if (currentConversation.foregroundModelProjectionOwner?.runId !== runLease.runId) {
+    if (currentConversation.modelProjectionOwner?.runId !== runLease.runId) {
       return 'owner_changed' as const;
     }
     currentConversation = {
       ...currentConversation,
-      foregroundModelProjectionOwner: undefined,
+      modelProjectionOwner: undefined,
     };
     return 'released' as const;
   });
@@ -119,6 +115,78 @@ function harness(
 }
 
 describe('foreground model restart recovery planning', () => {
+  it('looks up a chitchat tool effect by the exact foreground execution run', () => {
+    const resolveToolEffect = jest.fn(() => ({ kind: 'verified' as const, observedAt: 10 }));
+    const ownedConversation = conversation({
+      messages: [
+        { id: 'request-1', role: 'user', content: 'Do the work.', timestamp: 1 },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: '',
+          timestamp: 2,
+          toolCalls: [{ id: 'tool-1', name: 'send_email', arguments: '{}', status: 'running' }],
+        },
+      ],
+    });
+
+    planForegroundModelRestartRecovery(lease(), ownedConversation, resolveToolEffect);
+
+    expect(resolveToolEffect).toHaveBeenCalledWith({
+      conversationId: 'conversation-1',
+      executionRunId: 'run-1',
+      toolCallId: 'tool-1',
+      toolName: 'send_email',
+      argumentsText: '{}',
+    });
+  });
+
+  it('looks up a tracked-agent tool effect by the foreground run, not the agent run', () => {
+    const resolveToolEffect = jest.fn(() => ({ kind: 'verified' as const, observedAt: 10 }));
+    const trackedLease = lease({ taskId: 'agent-run-1' });
+    const ownedConversation = conversation({
+      agentRuns: [
+        {
+          id: 'agent-run-1',
+          userMessageId: 'request-1',
+          goal: 'Do the work.',
+          status: 'running',
+          createdAt: 1,
+          updatedAt: 2,
+          currentPhase: 'work',
+          phases: [],
+          checkpoints: [],
+          summary: {
+            assistantTurns: 1,
+            startedTools: 1,
+            completedTools: 0,
+            failedTools: 0,
+            spawnedSubAgents: 0,
+          },
+        },
+      ],
+      messages: [
+        { id: 'request-1', role: 'user', content: 'Do the work.', timestamp: 1 },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: '',
+          timestamp: 2,
+          toolCalls: [{ id: 'tool-1', name: 'send_email', arguments: '{}', status: 'running' }],
+        },
+      ],
+    });
+
+    planForegroundModelRestartRecovery(trackedLease, ownedConversation, resolveToolEffect);
+
+    expect(resolveToolEffect).toHaveBeenCalledWith(
+      expect.objectContaining({ executionRunId: 'run-1' }),
+    );
+    expect(resolveToolEffect).not.toHaveBeenCalledWith(
+      expect.objectContaining({ executionRunId: 'agent-run-1' }),
+    );
+  });
+
   it.each([
     ['conversation_missing', lease(), undefined],
     ['conversation_ownership_mismatch', lease(), conversation({ id: 'conversation-2' })],
@@ -166,16 +234,13 @@ describe('foreground model restart recovery planning', () => {
         ],
       }),
     ],
-    [
-      'projection_owner_missing',
-      lease(),
-      conversation({ foregroundModelProjectionOwner: undefined }),
-    ],
+    ['projection_owner_missing', lease(), conversation({ modelProjectionOwner: undefined })],
     [
       'projection_owner_changed',
       lease(),
       conversation({
-        foregroundModelProjectionOwner: {
+        modelProjectionOwner: {
+          surface: 'foreground',
           runId: 'newer-run',
           requestMessageId: 'request-1',
           assistantMessageId: 'assistant-1',
@@ -269,9 +334,7 @@ describe('foreground model restart recovery planning', () => {
           content: 'Done.',
           timestamp: 2,
           assistantMetadata: { kind: 'final', completionStatus: 'complete' },
-          toolCalls: [
-            { id: 'tool-1', name: 'send_email', arguments: '{}', status: 'running' },
-          ],
+          toolCalls: [{ id: 'tool-1', name: 'send_email', arguments: '{}', status: 'running' }],
         },
       ],
     });
@@ -323,7 +386,8 @@ describe('foreground model restart recovery planning', () => {
     const recoveryPlan = planForegroundModelRestartRecovery(
       anchoredLease,
       conversation({
-        foregroundModelProjectionOwner: {
+        modelProjectionOwner: {
+          surface: 'foreground',
           runId: anchoredLease.runId,
           requestMessageId: anchoredLease.requestMessageId,
           assistantMessageId: anchoredLease.assistantMessageId,
@@ -371,9 +435,7 @@ describe('foreground model restart recovery execution', () => {
             role: 'assistant',
             content: '',
             timestamp: 2,
-            toolCalls: [
-              { id: 'tool-1', name: 'send_email', arguments: '{}', status: 'running' },
-            ],
+            toolCalls: [{ id: 'tool-1', name: 'send_email', arguments: '{}', status: 'running' }],
           },
         ],
       }),
@@ -425,9 +487,7 @@ describe('foreground model restart recovery execution', () => {
             role: 'assistant',
             content: '',
             timestamp: 2,
-            toolCalls: [
-              { id: 'tool-1', name: 'send_email', arguments: '{}', status: 'running' },
-            ],
+            toolCalls: [{ id: 'tool-1', name: 'send_email', arguments: '{}', status: 'running' }],
           },
         ],
       }),
@@ -559,9 +619,7 @@ describe('foreground model restart recovery execution', () => {
 
   it('cancels an unclaimed queued generation without mutating or flushing chat state', async () => {
     const queuedLease = lease({ expectedStatus: 'queued' });
-    const test = harness(conversation({ foregroundModelProjectionOwner: undefined }), [
-      queuedLease,
-    ]);
+    const test = harness(conversation({ modelProjectionOwner: undefined }), [queuedLease]);
 
     await expect(recoverInterruptedForegroundModelExecutions(test.dependencies)).resolves.toEqual([
       { kind: 'recovered', runId: 'run-1', status: 'cancelled' },
@@ -577,7 +635,8 @@ describe('foreground model restart recovery execution', () => {
     );
     const last = leases.at(-1)!;
     const ownedConversation = conversation({
-      foregroundModelProjectionOwner: {
+      modelProjectionOwner: {
+        surface: 'foreground',
         runId: last.runId,
         requestMessageId: last.requestMessageId,
         assistantMessageId: last.assistantMessageId,

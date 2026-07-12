@@ -4,12 +4,17 @@
 // Called once on app launch to wire up background services.
 
 import { InteractionManager } from 'react-native';
-import { evaluateJobsOnce, startScheduler, setSchedulerExecutor } from './scheduler/engine';
 import {
-  executeScheduledJob,
+  evaluateJobsOnce,
+  startScheduler,
+  stopScheduler,
+  setSchedulerExecutor,
+} from './scheduler/engine';
+import { executeScheduledJob } from './scheduler/jobExecutor';
+import {
   notifyScheduledJobFinalFailure,
   notifyScheduledJobSuccess,
-} from './scheduler/jobExecutor';
+} from './scheduler/jobNotifications';
 import { registerBuiltInServiceSkills } from './integrations/registry';
 import { activateEnabledSkills } from './skills/manager';
 import { registerBackgroundFetch } from './scheduler/background';
@@ -28,7 +33,7 @@ import { emitAppEvent } from './events/bus';
 import { unrefTimerIfSupported } from '../utils/timers';
 import { runMemoryMigrationTick, runMemoryBackgroundFlush } from './memory/lifecycle';
 import { initializeMemoryPolicyObservation } from './memory/policy';
-import { removeRetiredMemoryFileArtifacts } from './memory/retiredMemoryArtifacts';
+import { removeRetiredMemoryArtifacts } from './memory/retiredMemoryCleanup';
 import {
   providerRequiresApiKey,
   resolveConversationModel,
@@ -42,8 +47,17 @@ import {
   triggerForegroundPersistedAgentRecovery,
   triggerPersistedAgentRecovery,
 } from './startupRecovery';
+import { withSchedulerRecoveryBarrier } from './scheduler/operationLock';
+import {
+  ensureSchedulerMaintenanceReady,
+  setSchedulerExecutionReadinessBarrier,
+} from './scheduler/runtimeReadiness';
+import { abortAllScheduledJobExecutions } from './scheduler/executionLifecycle';
+import { abortAllHookExecutions, registerHookExecution } from './hooks/executionLifecycle';
+import { generateId } from '../utils/id';
 
 let initialized = false;
+let hookRegistrationPromise: Promise<void> | null = null;
 
 async function waitForSettingsHydration(timeoutMs = 3000): Promise<void> {
   await waitForStoreHydration(
@@ -104,9 +118,15 @@ function scheduleNonCriticalStartupWork(task: () => void): void {
   setTimeout(task, 0);
 }
 
-async function runStartupHooksAndEmitLaunchEvent(): Promise<void> {
-  try {
-    await loadHooksFromDirectory(async (prompt, _context) => {
+async function registerStartupHooks(): Promise<void> {
+  await loadHooksFromDirectory(async (prompt, context) => {
+    const agentRunId = typeof context.agentRunId === 'string' ? context.agentRunId : undefined;
+    const hookExecutionRunId = `hook-${generateId()}`;
+    const parentExecution =
+      context.executionSignal instanceof AbortController ? context.executionSignal : undefined;
+    const hookExecution = registerHookExecution(parentExecution);
+    try {
+      if (hookExecution.controller.signal.aborted) return;
       const settings = useSettingsStore.getState();
       const provider = resolveEnabledProvider(settings.providers, settings.activeProviderId);
       if (!provider) return;
@@ -116,7 +136,12 @@ async function runStartupHooksAndEmitLaunchEvent(): Promise<void> {
       });
       if (!model) return;
       const apiKey = await resolveProviderApiKey(provider);
-      if (providerRequiresApiKey(provider) && !apiKey) return;
+      if (
+        hookExecution.controller.signal.aborted ||
+        (providerRequiresApiKey(provider) && !apiKey)
+      ) {
+        return;
+      }
       const terminalOutcome = createAgentControlGraphTerminalOutcomeTracker();
       await runOrchestrator(
         {
@@ -126,7 +151,9 @@ async function runStartupHooksAndEmitLaunchEvent(): Promise<void> {
           personaId: resolveConversationPersonaForMode({
             nextMode: settings.defaultConversationMode,
           }),
-          taskId: null,
+          taskId: agentRunId ?? null,
+          executionRunId: hookExecutionRunId,
+          agentRunId,
           systemPrompt:
             settings.systemPrompt ||
             'You are a helpful personal AI assistant with access to tools.',
@@ -138,7 +165,7 @@ async function runStartupHooksAndEmitLaunchEvent(): Promise<void> {
               timestamp: Date.now(),
             },
           ],
-          signal: new AbortController(),
+          signal: hookExecution.controller,
         },
         {
           onAgentControlGraphStateChange: terminalOutcome.recordControlGraphState,
@@ -153,10 +180,24 @@ async function runStartupHooksAndEmitLaunchEvent(): Promise<void> {
         },
       );
       terminalOutcome.throwIfFailed();
-    });
-  } catch (e) {
-    console.warn('[startup] loadHooksFromDirectory failed:', e);
-  }
+    } finally {
+      hookExecution.unregister();
+    }
+  });
+}
+
+function ensureStartupHooksRegistered(): Promise<void> {
+  hookRegistrationPromise ??= registerStartupHooks().catch((error) => {
+    hookRegistrationPromise = null;
+    throw error;
+  });
+  return hookRegistrationPromise;
+}
+
+setSchedulerExecutionReadinessBarrier(ensureStartupHooksRegistered);
+
+async function runStartupHooksAndEmitLaunchEvent(): Promise<void> {
+  await ensureStartupHooksRegistered();
 
   try {
     await emitAppEvent('launch');
@@ -167,7 +208,11 @@ async function runStartupHooksAndEmitLaunchEvent(): Promise<void> {
 
 async function initializeNotificationsAndWakeSync(): Promise<void> {
   await initializeNotifications();
-  await syncSchedulerWakeNotifications({ force: true });
+  await ensureSchedulerMaintenanceReady();
+  const wakeResult = await syncSchedulerWakeNotifications({ force: true });
+  if (wakeResult.warnings.length > 0) {
+    console.warn('[startup] Initial wake notification warnings:', wakeResult.warnings);
+  }
 }
 
 function initializeDeferredStartupServices(): void {
@@ -183,7 +228,9 @@ function initializeDeferredStartupServices(): void {
     void registerBackgroundFetch().catch((e) =>
       console.warn('[startup] registerBackgroundFetch failed:', e),
     );
-    void runStartupHooksAndEmitLaunchEvent();
+    void runStartupHooksAndEmitLaunchEvent().catch((e) =>
+      console.warn('[startup] startup hooks failed:', e),
+    );
     void runBootOnLaunchIfPresent();
     void runHydratedMemoryMaintenance(true).catch((e) =>
       console.warn('[startup] hydrated memory maintenance failed:', e),
@@ -191,20 +238,20 @@ function initializeDeferredStartupServices(): void {
   });
 }
 
-let retiredMemoryFileCleanupComplete = false;
+let retiredMemoryCleanupComplete = false;
 
-function removeRetiredMemoryFileArtifactsUntilComplete(): void {
-  if (retiredMemoryFileCleanupComplete) return;
+function removeRetiredMemoryArtifactsUntilComplete(): void {
+  if (retiredMemoryCleanupComplete) return;
   try {
-    removeRetiredMemoryFileArtifacts();
-    retiredMemoryFileCleanupComplete = true;
+    removeRetiredMemoryArtifacts();
+    retiredMemoryCleanupComplete = true;
   } catch (error) {
-    console.warn('[startup] retired memory file cleanup failed:', error);
+    console.warn('[startup] retired memory cleanup failed:', error);
   }
 }
 
 export function initializeServices(): void {
-  removeRetiredMemoryFileArtifactsUntilComplete();
+  removeRetiredMemoryArtifactsUntilComplete();
   if (initialized) return;
   initialized = true;
 
@@ -233,10 +280,11 @@ export function initializeServices(): void {
     onFinalFailure: notifyScheduledJobFinalFailure,
   });
 
-  // Start the foreground scheduler to evaluate cron jobs
-  void startScheduler().catch((error) =>
-    console.warn('[startup] scheduler readiness failed:', error),
-  );
+  // Hook registration is part of scheduler readiness: a scheduled attempt must
+  // never start before its configured replay-risk surface is known.
+  void ensureStartupHooksRegistered()
+    .then(() => startScheduler())
+    .catch((error) => console.warn('[startup] scheduler readiness failed:', error));
 
   // Sweep expired approval requests every 30 seconds
   const approvalSweepInterval = setInterval(() => {
@@ -253,18 +301,16 @@ export function initializeServices(): void {
  * v6→v7 archived-thread backlog drains across sessions.
  */
 export function handleAppForeground(): void {
-  void startScheduler().catch((error) =>
-    console.warn('[startup] scheduler restart failed:', error),
-  );
-  void triggerForegroundPersistedAgentRecovery().catch((e) =>
-    console.warn('[startup] foreground persisted-agent recovery failed:', e),
-  );
-  void evaluateJobsOnce({ trigger: 'foreground-reconcile' }).catch((e) =>
-    console.warn('[startup] foreground scheduler reconciliation failed:', e),
-  );
-  void syncSchedulerWakeNotifications({ force: true }).catch((e) =>
-    console.warn('[startup] foreground wake notification sync failed:', e),
-  );
+  void (async () => {
+    await withSchedulerRecoveryBarrier(() => triggerForegroundPersistedAgentRecovery());
+    await ensureStartupHooksRegistered();
+    await startScheduler();
+    await evaluateJobsOnce({ trigger: 'foreground-reconcile' });
+    const wakeResult = await syncSchedulerWakeNotifications({ force: true });
+    if (wakeResult.warnings.length > 0) {
+      console.warn('[startup] Foreground wake notification warnings:', wakeResult.warnings);
+    }
+  })().catch((error) => console.warn('[startup] foreground scheduler recovery failed:', error));
   void runHydratedMemoryMaintenance(true).catch((e) =>
     console.warn('[startup] foreground hydrated memory maintenance failed:', e),
   );
@@ -275,6 +321,9 @@ export function handleAppForeground(): void {
  * consolidator threads via the configured `consolidationProvider`.
  */
 export function handleAppBackground(): void {
+  stopScheduler();
+  abortAllScheduledJobExecutions();
+  abortAllHookExecutions();
   void runHydratedMemoryMaintenance(false).catch((e) =>
     console.warn('[startup] background hydrated memory flush failed:', e),
   );

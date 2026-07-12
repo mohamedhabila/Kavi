@@ -4,7 +4,7 @@ import {
   type ToolDispatcherHarness,
 } from '../helpers/toolDispatcherHarness';
 
-let executeTool: ToolDispatcherHarness['executeTool'];
+let executeTool: ToolDispatcherHarness['executeToolInner'];
 let mockGetWorkspaceTargetControlStatus: ToolDispatcherHarness['mockGetWorkspaceTargetControlStatus'];
 let mockLaunchWorkspaceBrowserSession: ToolDispatcherHarness['mockLaunchWorkspaceBrowserSession'];
 let mockDelegateWorkspaceTask: ToolDispatcherHarness['mockDelegateWorkspaceTask'];
@@ -14,7 +14,7 @@ let mockBrowserNetworkRequests: ToolDispatcherHarness['mockBrowserNetworkRequest
 
 beforeEach(() => {
   const harness = setupToolDispatcherHarness();
-  executeTool = harness.executeTool;
+  executeTool = harness.executeToolInner;
   mockGetWorkspaceTargetControlStatus = harness.mockGetWorkspaceTargetControlStatus;
   mockLaunchWorkspaceBrowserSession = harness.mockLaunchWorkspaceBrowserSession;
   mockDelegateWorkspaceTask = harness.mockDelegateWorkspaceTask;
@@ -23,7 +23,7 @@ beforeEach(() => {
   mockBrowserNetworkRequests = harness.mockBrowserNetworkRequests;
 });
 
-describe('executeTool — core tools routing', () => {
+describe('executeToolInner — raw workspace and browser routing', () => {
   it('routes workspace_status and summarizes configured targets', async () => {
     const result = await executeTool('workspace_status', '{}', CONV_ID);
 

@@ -29,6 +29,7 @@ import type { AgentTurnCompactionEngine } from './agentTurnRequestBudget';
 import type { AgentControlGraphWorkflowToolResultProgress } from './workflowToolResultProgress';
 import type { ThinkingLevel } from '../thinking';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
+import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
 
 export type IterationCallbacks = {
   onAssistantMessage: (
@@ -141,6 +142,9 @@ export interface ExecuteAgentControlGraphIterationParams {
   allProviders?: LlmProviderConfig[];
   allTools: ReadonlyArray<ToolDefinition>;
   agentRunId?: string;
+  executionRunId: string;
+  beforeEffectDispatch?: (toolName: string) => Promise<void>;
+  verifiedProcedureSession?: VerifiedProcedureExecutionSession;
   callbacks: IterationCallbacks;
   compactionEngine: AgentTurnCompactionEngine;
   conversationId: string;

@@ -36,6 +36,8 @@ export function createAgentControlGraphRuntime(params: {
   conversationId: string;
   initialMessages: ReadonlyArray<Message>;
   initialSnapshot?: AgentRunControlGraphState;
+  agentRunId?: string;
+  signal?: AbortController;
   warn?: (message: string, error: unknown) => void;
   workflowScopeUserMessageId?: string;
 }) {
@@ -67,6 +69,8 @@ export function createAgentControlGraphRuntime(params: {
     callbacks: params.callbacks,
     conversationId: params.conversationId,
     applyEvents,
+    agentRunId: params.agentRunId,
+    signal: params.signal,
     warn: params.warn,
   });
 

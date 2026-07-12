@@ -29,6 +29,7 @@ export interface ForegroundModelExecutionLease {
 }
 
 export interface BeginForegroundModelExecutionInput {
+  runId: string;
   conversationId: string;
   requestMessageId: string;
   assistantMessageId: string;

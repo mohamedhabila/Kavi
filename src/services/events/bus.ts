@@ -110,7 +110,12 @@ export function emitMcpEvent(
 
 export function emitSessionEvent(
   action: 'start' | 'end' | 'compacted' | 'idle' | 'reset',
-  context: { conversationId?: string; reason?: string } = {},
+  context: {
+    conversationId?: string;
+    reason?: string;
+    agentRunId?: string;
+    executionSignal?: AbortController;
+  } = {},
 ): Promise<void> {
   return triggerInternalHook(
     createInternalHookEvent('session', action, context.conversationId ?? 'system', context),
@@ -119,7 +124,14 @@ export function emitSessionEvent(
 
 export function emitAgentEvent(
   action: 'tool_start' | 'tool_end' | 'thinking' | 'responding' | 'done' | 'error',
-  context: { conversationId?: string; toolName?: string; error?: string; iteration?: number } = {},
+  context: {
+    conversationId?: string;
+    toolName?: string;
+    error?: string;
+    iteration?: number;
+    agentRunId?: string;
+    executionSignal?: AbortController;
+  } = {},
 ): Promise<void> {
   return triggerInternalHook(
     createInternalHookEvent('agent', action, context.conversationId ?? 'system', context),
@@ -149,6 +161,8 @@ export function emitSchedulerEvent(
     error?: string;
     attempt?: number;
     maxRetries?: number;
+    agentRunId?: string;
+    executionSignal?: AbortController;
   } = {},
 ): Promise<void> {
   return triggerInternalHook(createInternalHookEvent('scheduler', action, 'system', context));

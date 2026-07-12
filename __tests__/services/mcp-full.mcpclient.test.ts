@@ -315,6 +315,142 @@ describe('McpConnectionManager', () => {
     expect(srv?.tools).toHaveLength(1);
   });
 
+  it('captures a secret-free exact client generation and invalidates it on disconnect', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ jsonrpc: '2.0', id: 0, result: { capabilities: {} } }),
+      headers: new Map([['content-type', 'application/json']]),
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ jsonrpc: '2.0' }),
+      headers: jsonHeaders,
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        jsonrpc: '2.0',
+        id: 3,
+        result: {
+          tools: [
+            {
+              name: 'echo',
+              description: 'Echo',
+              inputSchema: { type: 'object', properties: {} },
+            },
+          ],
+        },
+      }),
+      headers: jsonHeaders,
+    });
+
+    await mcpManager.connectServer({
+      id: 'secret-target',
+      name: 'Secret target',
+      url: 'https://user:password@mcp.example.com/private?token=query-secret#fragment',
+      token: 'config-secret',
+      headers: { Authorization: 'Bearer header-secret' },
+      enabled: true,
+    });
+
+    const binding = mcpManager.captureRuntimeToolBinding('secret-target', 'echo');
+    expect(binding).toBeDefined();
+    expect(binding?.provenance).toEqual(
+      expect.objectContaining({
+        source: 'mcp',
+        namespace: 'secret-target',
+        connectionGeneration: expect.any(Number),
+        toolRegistryGeneration: expect.any(Number),
+        targetIdentity: 'https://mcp.example.com',
+      }),
+    );
+    const serialized = JSON.stringify(binding?.provenance);
+    expect(serialized).not.toContain('user');
+    expect(serialized).not.toContain('password');
+    expect(serialized).not.toContain('query-secret');
+    expect(serialized).not.toContain('private');
+    expect(serialized).not.toContain('config-secret');
+    expect(serialized).not.toContain('header-secret');
+    expect(binding?.isCurrent()).toBe(true);
+
+    mcpManager.disconnectServer('secret-target');
+    expect(binding?.isCurrent()).toBe(false);
+  });
+
+  it('invalidates a captured tool binding when a same-name registry refresh changes it', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ jsonrpc: '2.0', id: 0, result: { capabilities: {} } }),
+      headers: new Map([['content-type', 'application/json']]),
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ jsonrpc: '2.0' }),
+      headers: jsonHeaders,
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        jsonrpc: '2.0',
+        id: 3,
+        result: {
+          tools: [
+            {
+              name: 'mutate',
+              description: 'Original mutation',
+              inputSchema: { type: 'object', properties: {} },
+            },
+          ],
+        },
+      }),
+      headers: jsonHeaders,
+    });
+
+    await mcpManager.connectServer({
+      id: 'mutable-registry',
+      name: 'Mutable registry',
+      url: 'https://mcp.example.com',
+      enabled: true,
+    });
+    const captured = mcpManager.captureRuntimeToolBinding('mutable-registry', 'mutate');
+    expect(captured?.isCurrent()).toBe(true);
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        jsonrpc: '2.0',
+        id: 4,
+        result: {
+          tools: [
+            {
+              name: 'mutate',
+              description: 'Replacement mutation',
+              inputSchema: {
+                type: 'object',
+                properties: { force: { type: 'boolean' } },
+              },
+            },
+          ],
+        },
+      }),
+      headers: jsonHeaders,
+    });
+    const connectedClient = captured?.client as unknown as {
+      onToolsChanged?: () => Promise<void> | void;
+    };
+    await connectedClient.onToolsChanged?.();
+
+    expect(captured?.isCurrent()).toBe(false);
+    expect(
+      mcpManager.captureRuntimeToolBinding('mutable-registry', 'mutate')?.declaration,
+    ).toMatchObject({
+      description: 'Replacement mutation',
+      input_schema: expect.objectContaining({
+        properties: { force: { type: 'boolean' } },
+      }),
+    });
+  });
+
   it('should handle connection errors', async () => {
     const originalEventSource = (global as any).EventSource;
     delete (global as any).EventSource;

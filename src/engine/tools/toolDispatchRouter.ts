@@ -10,9 +10,15 @@ import { tryExecuteNativeToolInEnvironment } from './native/executionEnvironment
 import { parseMcpToolName, executeMcpTool } from '../../services/mcp/bridge';
 import { mcpManager } from '../../services/mcp/manager';
 import { parseSkillToolName, executeSkillTool } from '../../services/skills/manager';
-import { useSchedulerStore } from '../../services/scheduler/store';
 import { runJobNow } from '../../services/scheduler/engine';
-import { syncSchedulerWakeNotifications } from '../../services/scheduler/wakeNotifications';
+import {
+  createScheduledJob,
+  deleteScheduledJob,
+  getScheduledJob,
+  listScheduledJobs,
+  setScheduledJobEnabled,
+  updateScheduledJob,
+} from '../../services/scheduler/commands';
 import { executeBrowserTool } from './browserToolExecutor';
 import { executeImageEdit, executeImageGenerate } from './toolImageExecution';
 import { executeJavascript } from './toolJavaScriptExecution';
@@ -107,23 +113,53 @@ export const WORKSPACE_TOOL_NAMES = new Set([
 ]);
 
 export async function executeCreateTask(args: {
-  schedule: string;
-  prompt: string;
+  schedule?: unknown;
+  prompt?: unknown;
+  name?: unknown;
+  timezone?: unknown;
+  mode?: unknown;
 }): Promise<string> {
-  const id = useSchedulerStore.getState().addJob({
-    name: args.prompt.slice(0, 60),
-    schedule: { kind: 'cron', expr: args.schedule },
-    prompt: args.prompt,
-  });
-  await syncSchedulerWakeNotifications({ force: true }).catch((error) =>
-    console.warn('[tools] Failed to schedule wake notification for cron task:', error),
-  );
-  return JSON.stringify({
-    status: 'task_created',
-    id,
-    schedule: args.schedule,
-    prompt: args.prompt,
-  });
+  const schedule = typeof args.schedule === 'string' ? args.schedule.trim() : '';
+  const prompt = typeof args.prompt === 'string' ? args.prompt.trim() : '';
+  const name = typeof args.name === 'string' ? args.name.trim() : '';
+  const timezone = typeof args.timezone === 'string' ? args.timezone.trim() : '';
+  if (args.mode !== undefined && args.mode !== 'agentic' && args.mode !== 'chitchat') {
+    return JSON.stringify({
+      status: 'error',
+      code: 'invalid_scheduled_job',
+      error: 'mode must be agentic or chitchat.',
+    });
+  }
+  const mode = args.mode === 'chitchat' ? 'chitchat' : 'agentic';
+  if (!schedule || !prompt) {
+    return JSON.stringify({
+      status: 'error',
+      code: 'invalid_scheduled_job',
+      error: 'Both schedule and prompt are required to create a scheduled job.',
+    });
+  }
+  try {
+    const created = await createScheduledJob({
+      name: name || prompt.slice(0, 60),
+      schedule: { kind: 'cron', expr: schedule, ...(timezone ? { tz: timezone } : {}) },
+      prompt,
+      mode,
+    });
+    return JSON.stringify({
+      status: 'task_created',
+      id: created.id,
+      schedule,
+      prompt,
+      ...(timezone ? { timezone } : {}),
+      ...(created.warning ? { warning: created.warning } : {}),
+    });
+  } catch (error) {
+    return JSON.stringify({
+      status: 'error',
+      code: 'scheduled_job_create_failed',
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 // ── Inner dispatcher ─────────────────────────────────────────────────────
@@ -159,12 +195,16 @@ export async function executeToolInner(
           .isToolAllowed === 'function'
           ? (serverId, toolName) => mcpManager.isToolAllowed(serverId, toolName)
           : undefined,
+      signal: context?.executionSignal,
     });
   }
 
   // ── Skill tools (skill__skillId__toolName) ─────────────────────────
   if (parseSkillToolName(name)) {
-    return executeSkillTool(name, argsString, conversationFileContext);
+    return executeSkillTool(name, argsString, {
+      ...conversationFileContext,
+      executionSignal: context?.executionSignal,
+    });
   }
 
   // ── Native device tools ────────────────────────────────────────────
@@ -178,7 +218,7 @@ export async function executeToolInner(
     if (environmentResult !== null) {
       return environmentResult;
     }
-    return executeNativeTool(name, argsString);
+    return executeNativeTool(name, argsString, context?.executionSignal);
   }
 
   const providerAwareResult = await executeProviderAwareTool({
@@ -231,7 +271,7 @@ export async function executeToolInner(
 
     // Extended tools
     case 'web_fetch':
-      return executeWebFetch(args);
+      return executeWebFetch(args, context?.executionSignal);
     case 'file_edit':
       return executeFileEdit(args, workspaceConversationId, workspaceReadFallbackConversationId);
     case 'glob_search':
@@ -242,15 +282,17 @@ export async function executeToolInner(
     // Cron tool — full CRUD for scheduled jobs
     case 'cron': {
       const action = args.action || 'create';
-      const store = useSchedulerStore.getState();
       switch (action) {
         case 'create':
           return executeCreateTask({
             schedule: args.schedule,
             prompt: args.prompt || args.command,
+            name: args.name,
+            timezone: args.timezone,
+            mode: args.mode,
           });
         case 'list': {
-          const jobs = store.jobs;
+          const jobs = await listScheduledJobs();
           if (jobs.length === 0) return JSON.stringify({ jobs: [] });
           return JSON.stringify({
             jobs: jobs.map((j: any) => ({
@@ -258,29 +300,167 @@ export async function executeToolInner(
               name: j.name,
               enabled: j.enabled,
               schedule: j.schedule,
+              mode: j.payload.mode,
+              state: j.runningAttemptId
+                ? 'running'
+                : j.nextRetryAtMs
+                  ? 'retry_scheduled'
+                  : j.enabled
+                    ? 'scheduled'
+                    : 'disabled',
+              nextRunAtMs: j.nextRetryAtMs ?? j.nextRunAtMs,
+              lastError: j.lastError,
+              deliveryWarning: j.lastDeliveryError,
+              wakeWarning: j.lastWakeError,
             })),
           });
         }
-        case 'delete':
+        case 'update': {
+          if (!args.id) return 'Error: id is required for update action';
+          const existingJob = await getScheduledJob(args.id);
+          if (!existingJob) return `Error: job not found: ${args.id}`;
+          const updates: Parameters<typeof updateScheduledJob>[1] = {};
+          const requestedTimezone =
+            typeof args.timezone === 'string' && args.timezone.trim()
+              ? args.timezone.trim()
+              : undefined;
+          const requestedMode =
+            args.mode === undefined
+              ? undefined
+              : args.mode === 'agentic' || args.mode === 'chitchat'
+                ? args.mode
+                : null;
+          if (requestedMode === null) return 'Error: mode must be agentic or chitchat';
+          if (typeof args.name === 'string' && args.name.trim()) updates.name = args.name.trim();
+          if (typeof args.schedule === 'string' && args.schedule.trim()) {
+            const timezone =
+              requestedTimezone ??
+              (existingJob.schedule.kind === 'cron' ? existingJob.schedule.tz : undefined);
+            updates.schedule = {
+              kind: 'cron',
+              expr: args.schedule.trim(),
+              ...(timezone ? { tz: timezone } : {}),
+            };
+          } else if (requestedTimezone) {
+            if (existingJob.schedule.kind !== 'cron') {
+              return 'Error: timezone can only update a cron schedule';
+            }
+            updates.schedule = { ...existingJob.schedule, tz: requestedTimezone };
+          }
+          if ((typeof args.prompt === 'string' && args.prompt.trim()) || requestedMode) {
+            updates.payload = {
+              ...existingJob.payload,
+              ...(typeof args.prompt === 'string' && args.prompt.trim()
+                ? { prompt: args.prompt.trim() }
+                : {}),
+              ...(requestedMode ? { mode: requestedMode } : {}),
+            };
+          }
+          if (Object.keys(updates).length === 0) {
+            return 'Error: update requires at least one of name, schedule, prompt, timezone, or mode';
+          }
+          try {
+            const result = await updateScheduledJob(args.id, updates);
+            if (result.status === 'not_found') return `Error: job not found: ${args.id}`;
+            return JSON.stringify({
+              status: 'updated',
+              id: args.id,
+              ...(result.warning ? { warning: result.warning } : {}),
+            });
+          } catch (error) {
+            return JSON.stringify({
+              status: 'error',
+              code: 'scheduled_job_update_failed',
+              error: error instanceof Error ? error.message : String(error),
+              id: args.id,
+            });
+          }
+        }
+        case 'delete': {
           if (!args.id) return 'Error: id is required for delete action';
-          store.removeJob(args.id);
-          return JSON.stringify({ status: 'deleted', id: args.id });
-        case 'enable':
+          try {
+            const result = await deleteScheduledJob(args.id);
+            if (result === 'not_found') return `Error: job not found: ${args.id}`;
+            if (result === 'busy') return `Error: scheduled job is currently running: ${args.id}`;
+            return JSON.stringify({ status: 'deleted', id: args.id });
+          } catch (error) {
+            return JSON.stringify({
+              status: 'error',
+              code: 'scheduled_job_delete_failed',
+              error: error instanceof Error ? error.message : String(error),
+              id: args.id,
+            });
+          }
+        }
+        case 'enable': {
           if (!args.id) return 'Error: id is required for enable action';
-          store.enableJob(args.id);
-          return JSON.stringify({ status: 'enabled', id: args.id });
-        case 'disable':
+          try {
+            const result = await setScheduledJobEnabled(args.id, true);
+            if (result.status === 'not_found') return `Error: job not found: ${args.id}`;
+            return JSON.stringify({
+              status: 'enabled',
+              id: args.id,
+              ...(result.warning ? { warning: result.warning } : {}),
+            });
+          } catch (error) {
+            return JSON.stringify({
+              status: 'error',
+              code: 'scheduled_job_enable_failed',
+              error: error instanceof Error ? error.message : String(error),
+              id: args.id,
+            });
+          }
+        }
+        case 'disable': {
           if (!args.id) return 'Error: id is required for disable action';
-          store.disableJob(args.id);
-          return JSON.stringify({ status: 'disabled', id: args.id });
+          try {
+            const result = await setScheduledJobEnabled(args.id, false);
+            if (result.status === 'not_found') return `Error: job not found: ${args.id}`;
+            return JSON.stringify({
+              status: 'disabled',
+              id: args.id,
+              ...(result.warning ? { warning: result.warning } : {}),
+            });
+          } catch (error) {
+            return JSON.stringify({
+              status: 'error',
+              code: 'scheduled_job_disable_failed',
+              error: error instanceof Error ? error.message : String(error),
+              id: args.id,
+            });
+          }
+        }
         case 'run': {
           if (!args.id) return 'Error: id is required for run action';
           const result = await runJobNow(args.id, { trigger: 'manual' });
           if (result.status === 'not_found') return `Error: job not found: ${args.id}`;
+          if (
+            result.status === 'retrying' ||
+            result.status === 'failed' ||
+            result.status === 'busy' ||
+            result.status === 'skipped'
+          ) {
+            return JSON.stringify({
+              status: 'error',
+              code:
+                result.status === 'retrying'
+                  ? 'scheduled_job_retrying'
+                  : result.status === 'busy'
+                    ? 'scheduled_job_busy'
+                    : result.status === 'skipped'
+                      ? 'scheduled_job_not_due'
+                      : 'scheduled_job_failed',
+              error: result.error,
+              retryScheduled: result.status === 'retrying',
+              id: args.id,
+              name: result.name,
+            });
+          }
           return JSON.stringify({
             status: result.status,
             id: args.id,
             name: result.name,
+            ...(result.status === 'succeeded' && result.warning ? { warning: result.warning } : {}),
           });
         }
         default:

@@ -11,15 +11,31 @@ import { buildToolEffectReceiptEvidence } from '../../../src/engine/goals/effect
 import { createGoal } from '../../../src/engine/goals/types';
 import type { ToolEffectReceipt } from '../../../src/types/toolEffectReceipt';
 
+function contractIdentity(toolName: string): ToolEffectReceipt['contractIdentity'] {
+  const digest = `sha256:${'5'.repeat(64)}` as const;
+  return {
+    kind: 'code_owned',
+    version: 1,
+    toolName,
+    schemaDigest: digest,
+    capabilityContractDigest: digest,
+    workflowContractDigest: digest,
+    effectContractDigest: digest,
+    executionPolicyDigest: digest,
+  };
+}
+
 function verifiedArtifactEvidence(
   path = 'artifacts/out.txt',
   digest = `sha256:${'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'}` as const,
 ): string {
   return buildToolEffectReceiptEvidence({
-    version: 1,
+    version: 2,
     receiptId: `ter_${'a'.repeat(32)}`,
     toolCallId: 'call-write',
     toolName: 'write_file',
+    executionRunId: 'execution-run-1',
+    contractIdentity: contractIdentity('write_file'),
     transportState: 'returned',
     effectKind: 'artifact.write',
     effectState: 'applied',
@@ -33,10 +49,12 @@ function verifiedArtifactEvidence(
 
 function completedExecutionEvidence(toolName: 'javascript' | 'python' = 'python'): string {
   return buildToolEffectReceiptEvidence({
-    version: 1,
+    version: 2,
     receiptId: `ter_${'b'.repeat(32)}`,
     toolCallId: 'call-code',
     toolName,
+    executionRunId: 'execution-run-1',
+    contractIdentity: contractIdentity(toolName),
     transportState: 'returned',
     executionState: 'completed',
     effectKind: 'compute.execute',
@@ -64,9 +82,7 @@ describe('completionEvidence', () => {
   });
 
   it('reserves request-bound effect criteria for code-owned repair contracts', () => {
-    expect(formatModelAuthoredSuccessCriteriaFormsDescription()).not.toContain(
-      'evidence.effect:',
-    );
+    expect(formatModelAuthoredSuccessCriteriaFormsDescription()).not.toContain('evidence.effect:');
   });
 
   it('recognizes only formal structural success criterion forms', () => {
@@ -339,5 +355,4 @@ describe('completionEvidence', () => {
 
     expect(labels).toEqual(['g1:evidence.min:2', 'g2:evidence.prefix:worker']);
   });
-
 });

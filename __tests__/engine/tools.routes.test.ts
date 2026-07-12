@@ -2,11 +2,12 @@ import {
   __getStore,
   editImage,
   executeNativeTool,
-  executeTool,
+  executeTool as executeToolWithCanonicalContext,
+  executeToolInner as executeTool,
   generateImage,
 } from '../helpers/toolsExecutorHarness';
 
-describe('executeTool additional routes', () => {
+describe('executeToolInner raw additional routes', () => {
   const CONV_ID = 'test-routes';
 
   describe('write_file with subdirectories', () => {
@@ -75,6 +76,7 @@ describe('executeTool additional routes', () => {
       expect(executeNativeTool).toHaveBeenCalledWith(
         'notification_send',
         JSON.stringify({ title: 'Test', body: 'Hello' }),
+        undefined,
       );
     });
   });
@@ -258,6 +260,7 @@ describe('executeTool additional routes', () => {
       );
       const parsed = JSON.parse(result);
       expect(parsed.status).toBe('task_created');
+      expect(parsed.id).toBe('job-1');
       expect(parsed.schedule).toBe('0 8 * * *');
     });
 
@@ -269,6 +272,7 @@ describe('executeTool additional routes', () => {
       );
       const parsed = JSON.parse(result);
       expect(parsed.status).toBe('task_created');
+      expect(parsed.id).toBe('job-1');
     });
   });
 
@@ -285,7 +289,7 @@ describe('executeTool additional routes', () => {
       const { setPermission } = useToolPermissionsStore.getState();
       setPermission('write_file', false);
 
-      const result = await executeTool(
+      const result = await executeToolWithCanonicalContext(
         'write_file',
         JSON.stringify({ path: 'test.txt', content: 'no' }),
         CONV_ID,

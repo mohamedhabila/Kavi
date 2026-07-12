@@ -14,21 +14,21 @@ import {
   MAX_TOOL_ITERATIONS_SUPERAGENT,
 } from './orchestrator/constants';
 import { runOrchestratorGraphSession } from './orchestrator/session';
-import type { OrchestratorCallbacks, OrchestratorOptions } from './orchestrator/types';
+import type {
+  OrchestratorCallbacks,
+  OrchestratorOptions,
+  OrchestratorRunResult,
+} from './orchestrator/types';
 
-export {
-  MAX_IDENTICAL_TOOL_CALLS,
-  MAX_TOOL_ITERATIONS,
-  MAX_TOOL_ITERATIONS_SUPERAGENT,
-};
-export type { OrchestratorCallbacks, OrchestratorOptions };
+export { MAX_IDENTICAL_TOOL_CALLS, MAX_TOOL_ITERATIONS, MAX_TOOL_ITERATIONS_SUPERAGENT };
+export type { OrchestratorCallbacks, OrchestratorOptions, OrchestratorRunResult };
 
 const logger = createLogger('Orchestrator');
 
 export async function runOrchestrator(
   options: OrchestratorOptions,
   callbacks: OrchestratorCallbacks,
-): Promise<void> {
+): Promise<OrchestratorRunResult> {
   const {
     conversationId,
     messages,
@@ -47,9 +47,11 @@ export async function runOrchestrator(
       conversationId,
       internalUserMessageCount,
       messages,
+      agentRunId: options.agentRunId,
+      signal: options.signal,
     })
   ) {
-    return;
+    return { terminalDisposition: 'command' };
   }
 
   const sessionBootstrap = await prepareOrchestratorSessionBootstrap({
@@ -68,7 +70,7 @@ export async function runOrchestrator(
     toolFilter: options.toolFilter,
   });
 
-  await runOrchestratorGraphSession({
+  return runOrchestratorGraphSession({
     options,
     callbacks,
     sessionBootstrap,

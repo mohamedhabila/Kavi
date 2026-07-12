@@ -10,11 +10,17 @@ import {
   dispatchAuthorizedToolEffect,
   isCodeOwnedEffectFreeInvocation,
 } from '../../services/executionJournal/toolEffectDispatchLifecycle';
-import { normalizeToolName, resolveRegisteredToolName } from './toolNameNormalization';
+import {
+  isRegisteredToolName,
+  normalizeToolName,
+  resolveRegisteredToolName,
+} from './toolNameNormalization';
 import { executeToolInner } from './toolDispatchRouter';
 import type { ToolExecutionContext } from './toolExecutionContext';
 import { buildToolEffectReceipt } from '../toolExecution/toolEffectReceipt';
 import { isToolResultErrorLike } from '../../utils/toolResultErrors';
+import { resolveRuntimeExternalToolBinding } from '../toolExecution/runtimeExternalToolBinding';
+import { isCodeOwnedExecutionRunId } from '../../services/executionJournal/executionRunEffectBarrier';
 
 // ── Central dispatcher ───────────────────────────────────────────────────
 
@@ -24,10 +30,39 @@ function isolateExecutorContext(
   if (!context) return undefined;
   const isolated = { ...context };
   delete isolated.toolCallId;
-  delete isolated.executionSignal;
+  delete isolated.executionRunId;
+  delete isolated.runtimeToolDeclaration;
   delete isolated.captureEffectReceipt;
   delete isolated.finalizeEffectReceiptCapture;
+  delete isolated.captureEffectReconciliationRequired;
   return isolated;
+}
+
+function buildEffectReconciliationRequiredResult(untrustedResult: string): string {
+  return JSON.stringify({
+    status: 'error',
+    code: 'tool_effect_reconciliation_required',
+    error:
+      'The tool may have changed external state, but the app could not verify the outcome. Do not retry automatically.',
+    retryAllowed: false,
+    untrustedToolResult: untrustedResult,
+  });
+}
+
+function finalizeEffectReceiptCapture(context: ToolExecutionContext | undefined): void {
+  try {
+    context?.finalizeEffectReceiptCapture?.();
+  } catch {
+    // Receipt consumers are ancillary and cannot alter the authoritative execution outcome.
+  }
+}
+
+function markEffectReconciliationRequired(context: ToolExecutionContext | undefined): void {
+  try {
+    context?.captureEffectReconciliationRequired?.();
+  } catch {
+    // Graph notification is ancillary to the durable journal barrier.
+  }
 }
 
 export async function executeTool(
@@ -45,11 +80,65 @@ export async function executeTool(
     return `Error: tool "${normalizedName}" is not allowed by your permission settings`;
   }
 
+  const isRuntimeExternalNamespace =
+    normalizedName.startsWith('mcp__') || normalizedName.startsWith('skill__');
+  if (!isRuntimeExternalNamespace && !isRegisteredToolName(normalizedName)) {
+    const result = `Error: unknown tool "${normalizedName}".`;
+    finalizeEffectReceiptCapture(context);
+    logToolCall(normalizedName, argsString, 'error', 0, conversationId, 'unknown_tool');
+    return result;
+  }
+
   let parsedArgs: any;
   try {
     parsedArgs = argsString ? JSON.parse(argsString) : {};
   } catch {
     parsedArgs = {};
+  }
+
+  const effectFreeInvocation = isCodeOwnedEffectFreeInvocation(normalizedName, argsString);
+  const executionRunId = context?.executionRunId;
+  if (!effectFreeInvocation && !isCodeOwnedExecutionRunId(executionRunId)) {
+    const result =
+      'Error: Tool effect was not executed because a code-owned execution-run identity is required.';
+    finalizeEffectReceiptCapture(context);
+    logToolCall(
+      normalizedName,
+      argsString,
+      'error',
+      0,
+      conversationId,
+      'execution_run_identity_required',
+    );
+    return result;
+  }
+  if (context?.toolCallId && !isCodeOwnedExecutionRunId(executionRunId)) {
+    const result =
+      'Error: Tool receipt was not created because a code-owned execution-run identity is required.';
+    finalizeEffectReceiptCapture(context);
+    logToolCall(
+      normalizedName,
+      argsString,
+      'error',
+      0,
+      conversationId,
+      'execution_run_identity_required',
+    );
+    return result;
+  }
+  if (!effectFreeInvocation && !context?.toolCallId) {
+    const result =
+      'Error: Tool effect was not executed because a code-owned tool-call identity is required.';
+    finalizeEffectReceiptCapture(context);
+    logToolCall(
+      normalizedName,
+      argsString,
+      'error',
+      0,
+      conversationId,
+      'tool_call_identity_required',
+    );
+    return result;
   }
 
   // Approval gate — blocks destructive/sensitive tools until human approves.
@@ -71,14 +160,12 @@ export async function executeTool(
 
   const startTime = Date.now();
   const executorContext = isolateExecutorContext(context);
+  const runtimeExternalBinding = resolveRuntimeExternalToolBinding(
+    normalizedName,
+    context?.runtimeToolDeclaration,
+  );
+  const runtimeExternalEvidence = runtimeExternalBinding?.evidence;
   const captureReceipt = context?.captureEffectReceipt;
-  const finalizeReceiptCapture = (): void => {
-    try {
-      context?.finalizeEffectReceiptCapture?.();
-    } catch {
-      // Receipt consumers are ancillary and cannot alter the authoritative execution outcome.
-    }
-  };
   const publishReceipt = (receipt: Parameters<NonNullable<typeof captureReceipt>>[0]): void => {
     try {
       captureReceipt?.(receipt);
@@ -87,37 +174,86 @@ export async function executeTool(
     }
   };
 
-  if (
-    context?.toolCallId &&
-    !isCodeOwnedEffectFreeInvocation(normalizedName, argsString)
-  ) {
+  if (isRuntimeExternalNamespace && !runtimeExternalBinding) {
+    const result =
+      'Error: Dynamic tool was not executed because its exact runtime binding is unavailable or stale.';
+    finalizeEffectReceiptCapture(context);
+    logToolCall(
+      normalizedName,
+      argsString,
+      'error',
+      Date.now() - startTime,
+      conversationId,
+      result,
+    );
+    return result;
+  }
+
+  if (runtimeExternalBinding && !context?.toolCallId) {
+    const result =
+      'Error: Dynamic tool was not executed because a code-owned tool-call identity is required.';
+    finalizeEffectReceiptCapture(context);
+    logToolCall(
+      normalizedName,
+      argsString,
+      'error',
+      Date.now() - startTime,
+      conversationId,
+      'runtime_external_tool_call_identity_required',
+    );
+    return result;
+  }
+
+  if (context?.toolCallId && !effectFreeInvocation) {
+    if (!isCodeOwnedExecutionRunId(executionRunId)) {
+      throw new Error('execution_run_identity_invariant_violated');
+    }
     const dispatched = await dispatchAuthorizedToolEffect({
       conversationId,
       toolCallId: context.toolCallId,
       toolName: normalizedName,
       argumentsText: argsString,
-      context,
+      context: { ...context, executionRunId },
       approvalState: approvalRequired ? 'granted' : 'not_required',
       authority: {
         approvalGranted: () => true,
         permissionGranted: () =>
-          useToolPermissionsStore.getState().isAllowed(normalizedName),
+          useToolPermissionsStore.getState().isAllowed(normalizedName) &&
+          runtimeExternalBinding?.isCurrent() !== false,
         controlGranted: () => context.executionSignal?.aborted !== true,
       },
-      execute: () => executeToolInner(normalizedName, argsString, conversationId, executorContext),
+      runtimeExternalEvidence,
+      execute: () =>
+        runtimeExternalBinding
+          ? runtimeExternalBinding.execute(argsString, conversationId, executorContext)
+          : executeToolInner(normalizedName, argsString, conversationId, executorContext),
     });
-    finalizeReceiptCapture();
+    finalizeEffectReceiptCapture(context);
     if (dispatched.kind === 'executed') {
       publishReceipt(dispatched.receipt);
+      const visibleResult = dispatched.requiresReconciliation
+        ? buildEffectReconciliationRequiredResult(dispatched.result)
+        : dispatched.result;
+      if (dispatched.requiresReconciliation) {
+        markEffectReconciliationRequired(context);
+      }
       logToolCall(
         normalizedName,
         argsString,
-        dispatched.executorThrew ? 'error' : 'success',
+        dispatched.executorThrew || dispatched.requiresReconciliation ? 'error' : 'success',
         Date.now() - startTime,
         conversationId,
-        dispatched.executorThrew ? dispatched.result : undefined,
+        dispatched.requiresReconciliation
+          ? 'tool_effect_reconciliation_required'
+          : dispatched.executorThrew
+            ? dispatched.result
+            : undefined,
       );
+      return visibleResult;
     } else {
+      if (dispatched.kind === 'reconciliation_required') {
+        markEffectReconciliationRequired(context);
+      }
       logToolCall(
         normalizedName,
         argsString,
@@ -132,7 +268,9 @@ export async function executeTool(
 
   let result: string;
   try {
-    result = await executeToolInner(normalizedName, argsString, conversationId, executorContext);
+    result = runtimeExternalBinding
+      ? await runtimeExternalBinding.execute(argsString, conversationId, executorContext)
+      : await executeToolInner(normalizedName, argsString, conversationId, executorContext);
     logToolCall(normalizedName, argsString, 'success', Date.now() - startTime, conversationId);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -147,6 +285,9 @@ export async function executeTool(
     return `Error: ${message}`;
   }
   if (context?.toolCallId) {
+    if (!isCodeOwnedExecutionRunId(context.executionRunId)) {
+      throw new Error('execution_run_identity_invariant_violated');
+    }
     try {
       publishReceipt(
         await buildToolEffectReceipt({
@@ -156,14 +297,15 @@ export async function executeTool(
           resultText: result,
           transportState: 'returned',
           resultIsError: isToolResultErrorLike(result),
-          runId: context.agentRunId,
+          executionRunId: context.executionRunId,
           recordedAt: Date.now(),
+          runtimeExternalEvidence,
         }),
       );
     } catch {
       // Effect-free tools do not need a durable claim; receipt absence stays fail-closed.
     }
-    finalizeReceiptCapture();
+    finalizeEffectReceiptCapture(context);
   }
   return result;
 }

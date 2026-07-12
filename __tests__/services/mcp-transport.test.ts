@@ -253,6 +253,43 @@ describe('McpTransport focused lifecycle coverage', () => {
     sseTransport.disconnect();
   });
 
+  it('aborts an in-flight tool request from the caller lifecycle signal', async () => {
+    const transport = new McpTransport({
+      url: 'https://example.com/mcp',
+      transportPreference: 'streamable-http',
+    });
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ jsonrpc: '2.0', id: 0, result: { capabilities: {} } }),
+    );
+    await transport.connect();
+
+    mockFetch.mockImplementationOnce(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          if (init.signal?.aborted) {
+            reject(init.signal.reason ?? new Error('aborted'));
+            return;
+          }
+          init.signal?.addEventListener(
+            'abort',
+            () => reject(init.signal?.reason ?? new Error('aborted')),
+            { once: true },
+          );
+        }),
+    );
+    const controller = new AbortController();
+    const request = transport.send(
+      { jsonrpc: '2.0', id: 1, method: 'tools/call', params: {} },
+      30_000,
+      controller.signal,
+    );
+
+    controller.abort(new Error('scheduler backgrounded'));
+
+    await expect(request).rejects.toThrow('scheduler backgrounded');
+    transport.disconnect();
+  });
+
   it('uses dynamic auth headers, session headers, and streamable standalone events', async () => {
     const onMessage = jest.fn();
     const transport = new McpTransport({
@@ -275,7 +312,9 @@ describe('McpTransport focused lifecycle coverage', () => {
     mockExpoFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      body: streamFromText('data: {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}\n\n'),
+      body: streamFromText(
+        'data: {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}\n\n',
+      ),
       headers: responseHeaders({ 'mcp-session-id': 'session-2' }),
     });
 

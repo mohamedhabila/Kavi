@@ -30,6 +30,7 @@ export function dispatchFixture(): {
   const run = executionRunRecord({
     status: 'running',
     updatedAt: 14,
+    modelConfigDigest: DIGEST_C,
     resumeStrategy: 'reconcile_first',
     nextRetryPolicy: 'reconcile_before_retry',
   });
@@ -48,6 +49,7 @@ export function dispatchFixture(): {
     checkpointId: planningCheckpoint.id,
     toolCallId: 'tool-call-1',
     toolNameDigest: DIGEST_A,
+    toolContractIdentityDigest: 'ef1177a4f9ec34ec69b33a9e20b7c310d6e732b6e986810e07916c660fdf88ca',
     effectClass: 'remote_mutation',
     idempotencyClass: 'declared_idempotent',
     idempotencyKeyDigest: DIGEST_D,
@@ -74,9 +76,12 @@ export function dispatchFixture(): {
     identity: {
       runId: run.id,
       effectId: effect.id,
+      executionRunId: run.taskId ?? 'task-1',
       toolCallId: effect.toolCallId,
       toolName: 'calendar_update',
       toolNameDigest: effect.toolNameDigest,
+      toolContractIdentityDigest:
+        'ef1177a4f9ec34ec69b33a9e20b7c310d6e732b6e986810e07916c660fdf88ca',
       requestDigest: effect.requestDigest,
       idempotencyKeyDigest: effect.idempotencyKeyDigest,
       dispatchTargetDigest: DIGEST_C,
@@ -99,11 +104,22 @@ export function dispatchFixture(): {
 
 export function effectReceipt(overrides: Partial<ToolEffectReceipt> = {}): ToolEffectReceipt {
   const receipt = decodeToolEffectReceipt({
-    version: 1,
+    version: 2,
     receiptId: 'ter_0123456789abcdef0123456789abcdef',
     toolCallId: 'tool-call-1',
     toolName: 'calendar_update',
-    runId: 'run-1',
+    contractIdentity: {
+      kind: 'code_owned',
+      version: 1,
+      toolName: 'calendar_update',
+      schemaDigest: `sha256:${DIGEST_A}`,
+      capabilityContractDigest: `sha256:${DIGEST_A}`,
+      workflowContractDigest: `sha256:${DIGEST_A}`,
+      effectContractDigest: `sha256:${DIGEST_A}`,
+      executionPolicyDigest: `sha256:${DIGEST_A}`,
+    },
+    executionRunId: 'task-1',
+    dispatchRunId: 'run-1',
     transportState: 'returned',
     effectKind: 'calendar.update',
     effectState: 'applied',

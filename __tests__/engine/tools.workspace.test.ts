@@ -1,7 +1,7 @@
 import type { Skill } from '../../src/services/skills/types';
 import {
   __getStore,
-  executeTool,
+  executeToolInner as executeTool,
   getSurface,
   mockChatStoreState,
   mockListWorkspaceDirectory,
@@ -13,7 +13,7 @@ import {
   unregisterSkill,
 } from '../helpers/toolsExecutorHarness';
 
-describe('executeTool', () => {
+describe('executeToolInner raw workspace routing', () => {
   const CONV_ID = 'test-conversation';
 
   it('routes memory search through the structured living-memory store', async () => {

@@ -130,6 +130,7 @@ export const VoiceScreen: React.FC = () => {
           conversationId: convId,
           personaId: resolveConversationPersonaForMode({ nextMode: 'chitchat' }),
           taskId: null,
+          executionRunId: convId,
           systemPrompt: voiceSystemPrompt,
           messages: [{ id: generateId(), role: 'user', content: input, timestamp: Date.now() }],
           linkUnderstandingEnabled: settings.linkUnderstandingEnabled,

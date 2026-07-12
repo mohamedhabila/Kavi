@@ -16,7 +16,7 @@ describe('Sub-Agent Service', () => {
         capturedOptions = opts;
         callbacks.onToken?.('sandbox output');
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       await spawnSubAgent(
@@ -39,7 +39,7 @@ describe('Sub-Agent Service', () => {
         capturedOptions = opts;
         callbacks.onToken?.('full output');
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       await spawnSubAgent(
@@ -65,7 +65,7 @@ describe('Sub-Agent Service', () => {
         capturedOptions = opts;
         callbacks.onToken?.('inherit output');
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       await spawnSubAgent(
@@ -91,7 +91,7 @@ describe('Sub-Agent Service', () => {
         capturedOptions = opts;
         callbacks.onToken?.('direct output');
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       const result = await spawnSubAgent(
@@ -118,7 +118,7 @@ describe('Sub-Agent Service', () => {
         capturedOptions = opts;
         callbacks.onToken?.('worker output');
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       await spawnSubAgent(
@@ -163,7 +163,7 @@ describe('Sub-Agent Service', () => {
         );
         callbacks.onToken?.('worker output');
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       const result = await spawnSubAgent(
@@ -213,7 +213,7 @@ describe('Sub-Agent Service', () => {
       runOrchestrator.mockImplementationOnce((opts: any, callbacks: any) => {
         capturedFilter = opts.toolFilter;
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       await spawnSubAgent(
@@ -245,7 +245,7 @@ describe('Sub-Agent Service', () => {
       runOrchestrator.mockImplementationOnce((opts: any, callbacks: any) => {
         capturedOptions = opts;
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       await spawnSubAgent(

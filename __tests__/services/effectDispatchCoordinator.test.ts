@@ -208,9 +208,58 @@ describe('exactly-once effect dispatch coordinator', () => {
     const failover = await dispatchEffectExactlyOnce(failoverIdentity, test.ports);
 
     expect(first.kind).toBe('settled');
-    expect(failover).toEqual({ kind: 'blocked', reason: 'claim_identity_conflict' });
+    expect(failover).toEqual({ kind: 'blocked', reason: 'identity_mismatch' });
     expect(test.calls.dispatches).toHaveLength(1);
   });
+
+  it('rejects a receipt whose runtime contract identity differs from the durable claim', async () => {
+    const test = harness();
+    const receipt = effectReceipt({
+      contractIdentity: {
+        ...effectReceipt().contractIdentity,
+        schemaDigest: `sha256:${'f'.repeat(64)}`,
+      },
+    });
+
+    await expect(
+      settleEffectDispatchCallback(
+        {
+          claim: claimFor(test.identity),
+          effectClass: 'remote_mutation',
+          receipt,
+          observedAt: 17,
+        },
+        test.ports,
+      ),
+    ).resolves.toEqual({ kind: 'reconciliation_required', reason: 'receipt_invalid' });
+    expect(test.calls.settlements).toHaveLength(0);
+    expect(test.calls.ambiguities).toEqual([
+      expect.objectContaining({ reason: 'receipt_invalid' }),
+    ]);
+  });
+
+  it.each([
+    ['execution run', { executionRunId: 'task-other' }],
+    ['dispatch run', { dispatchRunId: 'run-other' }],
+  ] as const)(
+    'rejects a receipt whose %s differs from the durable claim',
+    async (_label, patch) => {
+      const test = harness();
+
+      await expect(
+        settleEffectDispatchCallback(
+          {
+            claim: claimFor(test.identity),
+            effectClass: 'remote_mutation',
+            receipt: effectReceipt(patch),
+            observedAt: 17,
+          },
+          test.ports,
+        ),
+      ).resolves.toEqual({ kind: 'reconciliation_required', reason: 'receipt_invalid' });
+      expect(test.calls.settlements).toHaveLength(0);
+    },
+  );
 
   it('does not claim after a user steering or cancellation epoch change', async () => {
     const fixture = dispatchFixture();

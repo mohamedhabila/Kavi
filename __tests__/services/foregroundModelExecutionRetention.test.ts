@@ -8,9 +8,7 @@ import {
   completeForegroundModelExecution,
   createForegroundModelExecution,
 } from '../../src/services/executionJournal/foregroundModelExecutionJournal';
-import {
-  maintainForegroundModelExecutionRetention,
-} from '../../src/services/executionJournal/foregroundModelExecutionRetention';
+import { maintainForegroundModelExecutionRetention } from '../../src/services/executionJournal/foregroundModelExecutionRetention';
 import {
   closeExecutionJournalDb,
   getExecutionJournalDb,
@@ -32,6 +30,7 @@ async function seedTerminal(prefix: string, createdAt: number) {
   const journalOptions = options(prefix, createdAt);
   const created = await createForegroundModelExecution(
     {
+      runId: `run-${prefix}`,
       conversationId: `conversation-${prefix}`,
       requestMessageId: `request-${prefix}`,
       assistantMessageId: `assistant-${prefix}`,
@@ -40,10 +39,7 @@ async function seedTerminal(prefix: string, createdAt: number) {
     },
     journalOptions,
   );
-  const execution = await activateForegroundModelExecution(
-    { lease: created },
-    journalOptions,
-  );
+  const execution = await activateForegroundModelExecution({ lease: created }, journalOptions);
   await completeForegroundModelExecution(
     {
       lease: execution,
@@ -74,6 +70,7 @@ it('removes aged terminal foreground rows without touching active work', async (
   const recentRunId = await seedTerminal('recent', 900);
   const active = await createForegroundModelExecution(
     {
+      runId: 'run-active',
       conversationId: 'conversation-active',
       requestMessageId: 'request-active',
       assistantMessageId: 'assistant-active',
@@ -136,12 +133,12 @@ it('bounds each cleanup pass and rejects invalid policy inputs', async () => {
       limit: 2,
     }),
   ).toBe(2);
-  expect(() =>
-    maintainForegroundModelExecutionRetention({ now: -1 }),
-  ).toThrow('foreground_model_retention_invalid_clock');
-  expect(() =>
-    maintainForegroundModelExecutionRetention({ now: 1_000, maxRetained: 0 }),
-  ).toThrow('foreground_model_retention_invalid_max_retained');
+  expect(() => maintainForegroundModelExecutionRetention({ now: -1 })).toThrow(
+    'foreground_model_retention_invalid_clock',
+  );
+  expect(() => maintainForegroundModelExecutionRetention({ now: 1_000, maxRetained: 0 })).toThrow(
+    'foreground_model_retention_invalid_max_retained',
+  );
 });
 
 it('converges across separately bounded foreground retention passes', async () => {

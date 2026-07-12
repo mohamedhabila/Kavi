@@ -9,7 +9,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   }),
 }));
 jest.mock('../../src/engine/orchestrator', () => ({
-  runOrchestrator: jest.fn().mockResolvedValue(undefined),
+  runOrchestrator: jest.fn().mockResolvedValue({ terminalDisposition: 'final_candidate' }),
 }));
 let mockIdCounter = 0;
 jest.mock('../../src/utils/id', () => ({
@@ -366,7 +366,7 @@ describe('Bug 2: Claude subagent output', () => {
       });
       callbacks.onAssistantMessage('', [{ id: 'tc1', name: 'read_file' }]);
       callbacks.onDone();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' as const });
     });
 
     const result = await spawnSubAgent(
@@ -392,7 +392,7 @@ describe('Bug 2: Claude subagent output', () => {
       // Final turn with text only (no tools) → this is the "final" content
       callbacks.onAssistantMessage('Here are the results: everything passed.', undefined);
       callbacks.onDone();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' as const });
     });
 
     const result = await spawnSubAgent(
@@ -419,7 +419,7 @@ describe('Bug 2: Claude subagent output', () => {
       }
       callbacks.onAssistantMessage('', []);
       callbacks.onDone();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' as const });
     });
 
     const result = await spawnSubAgent(
@@ -448,7 +448,7 @@ describe('Bug 2: Claude subagent output', () => {
       });
       callbacks.onAssistantMessage('', [{ id: 'tc1', name: 'read_file' }]);
       callbacks.onDone();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' as const });
     });
 
     const result = await spawnSubAgent(
@@ -466,7 +466,7 @@ describe('Bug 3: Subagent context persistence', () => {
     (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
       callbacks.onToken('search results here');
       callbacks.onDone();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' as const });
     });
 
     const result = await spawnSubAgent(
@@ -525,7 +525,7 @@ describe('Bug 3: Subagent context persistence', () => {
     (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
       callbacks.onAssistantMessage('Stored result');
       callbacks.onDone();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' as const });
     });
 
     const result = await spawnSubAgent(
@@ -575,7 +575,7 @@ describe('Bug 3: Subagent context persistence', () => {
       );
       callbacks.onToolMessage('tc1', 'file content');
       callbacks.onDone();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' as const });
     });
 
     const result = await spawnSubAgent(
@@ -608,7 +608,7 @@ describe('Bug 3: Subagent context persistence', () => {
         callbacks.onAssistantMessage(`Step ${index}: ${'detail '.repeat(120)}`);
       }
       callbacks.onDone();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' as const });
     });
 
     const result = await spawnSubAgent(

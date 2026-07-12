@@ -9,7 +9,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   }),
 }));
 jest.mock('../../src/engine/orchestrator', () => ({
-  runOrchestrator: jest.fn().mockResolvedValue(undefined),
+  runOrchestrator: jest.fn().mockResolvedValue({ terminalDisposition: 'final_candidate' }),
 }));
 let mockIdCounter = 0;
 jest.mock('../../src/utils/id', () => ({
@@ -44,7 +44,7 @@ describe('Bug 5: Sub-agent abort handling', () => {
       // Sub-agent should still work after first state change
       callbacks.onToken('hello');
       callbacks.onDone();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' as const });
     });
 
     const result = await spawnSubAgent(
@@ -76,7 +76,7 @@ describe('Bug 5: Sub-agent abort handling', () => {
       });
       callbacks.onAssistantMessage('Done', undefined);
       callbacks.onDone();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' as const });
     });
 
     const result = await spawnSubAgent(

@@ -1,49 +1,46 @@
-import { buildToolEffectReceipt } from '../../src/engine/toolExecution/toolEffectReceipt';
+import { buildToolEffectReceipt as buildReceiptWithExecutionIdentity } from '../../src/engine/toolExecution/toolEffectReceipt';
 import { getCodeOwnedToolEffectContract } from '../../src/engine/toolExecution/toolEffectReceiptContracts';
 import {
   appendToolEffectReceipt,
   decodeToolEffectReceipt,
 } from '../../src/utils/toolEffectReceipt';
 
+const EXECUTION_RUN_ID = 'execution-run-1';
+
+function buildToolEffectReceipt(
+  params: Omit<Parameters<typeof buildReceiptWithExecutionIdentity>[0], 'executionRunId'>,
+) {
+  return buildReceiptWithExecutionIdentity({ executionRunId: EXECUTION_RUN_ID, ...params });
+}
+
 describe('ToolEffectReceipt code execution truth', () => {
-  it('covers JavaScript and Python while keeping unowned runtimes non-evidentiary', () => {
+  it('covers code-owned execution while keeping unowned runtimes non-evidentiary', () => {
     expect(getCodeOwnedToolEffectContract('javascript')).toBeDefined();
     expect(getCodeOwnedToolEffectContract('python')).toBeDefined();
     expect(getCodeOwnedToolEffectContract('ssh_exec')?.completionMode).toBe('operational');
-    expect(getCodeOwnedToolEffectContract('expo_eas_build')?.completionMode).toBe(
-      'operational',
-    );
+    expect(getCodeOwnedToolEffectContract('expo_eas_build')?.completionMode).toBe('operational');
+    expect(getCodeOwnedToolEffectContract('skill__github__commit_files')).toEqual({
+      completionMode: 'operational',
+      effectKind: 'remote.mutate',
+      effectMode: 'effectful',
+    });
 
-    for (const deferredName of [
-      'shell',
-      'skill__github__commit_files',
-      'mcp__filesystem__write_file',
-    ]) {
+    for (const deferredName of ['shell', 'mcp__filesystem__write_file']) {
       expect(getCodeOwnedToolEffectContract(deferredName)).toBeUndefined();
     }
   });
 
-  it('keeps an unregistered shell-shaped result fail-closed', async () => {
-    const receipt = await buildToolEffectReceipt({
-      toolCallId: 'tc-shell-unregistered',
-      toolName: 'shell',
-      argumentsText: '{"command":"echo ok"}',
-      resultText: JSON.stringify({ status: 'completed', exitCode: 0, output: 'ok' }),
-      transportState: 'returned',
-      recordedAt: 9,
-    });
-
-    expect(receipt).toEqual(
-      expect.objectContaining({
+  it('does not mint durable identity for an unregistered shell-shaped result', async () => {
+    await expect(
+      buildToolEffectReceipt({
+        toolCallId: 'tc-shell-unregistered',
+        toolName: 'shell',
+        argumentsText: '{"command":"echo ok"}',
+        resultText: JSON.stringify({ status: 'completed', exitCode: 0, output: 'ok' }),
         transportState: 'returned',
-        effectKind: 'unknown',
-        effectState: 'unknown',
-        verificationState: 'unverified',
+        recordedAt: 9,
       }),
-    );
-    expect(receipt.executionState).toBeUndefined();
-    expect(receipt.resource).toBeUndefined();
-    expect(receipt.operationHandle).toBeUndefined();
+    ).rejects.toThrow(/code-owned identity or live runtime-external evidence/u);
   });
 
   it('rejects invalid execution states and transport combinations during durable decode', async () => {
@@ -244,7 +241,7 @@ describe('ToolEffectReceipt code execution truth', () => {
     );
   });
 
-  it('deduplicates code execution replay and rejects execution-state conflict', async () => {
+  it('deduplicates an exact code execution replay and rejects execution-state conflict', async () => {
     const build = (recordedAt: number) =>
       buildToolEffectReceipt({
         toolCallId: 'tc-javascript-replay',
@@ -256,7 +253,7 @@ describe('ToolEffectReceipt code execution truth', () => {
       });
     const parent = { toolCallId: 'tc-javascript-replay', toolName: 'javascript' };
     const first = await build(15);
-    const replay = await build(16);
+    const replay = await build(15);
     const receipts = appendToolEffectReceipt(undefined, first, parent);
 
     expect(replay.receiptId).toBe(first.receiptId);

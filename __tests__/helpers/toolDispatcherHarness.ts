@@ -1,4 +1,10 @@
 import './toolDispatcherFileSystemMock';
+import { withCanonicalToolExecution } from './canonicalToolExecution';
+
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('./expoSqliteShim');
+  return makeExpoSqliteMock();
+});
 
 const mockReadWorkspaceFile = jest.fn();
 const mockWriteWorkspaceFile = jest.fn();
@@ -392,9 +398,14 @@ jest.mock('../../src/services/skills/manager', () => ({
 }));
 const mockAddJob = jest.fn().mockReturnValue('job-1');
 const mockGetJob = jest.fn();
-const mockRemoveJob = jest.fn();
+const mockRemoveJob = jest.fn().mockReturnValue(true);
 const mockEnableJob = jest.fn();
 const mockDisableJob = jest.fn();
+const mockCreateScheduledJob = jest.fn().mockResolvedValue({ id: 'job-1' });
+const mockDeleteScheduledJob = jest.fn().mockResolvedValue('deleted');
+const mockSetScheduledJobEnabled = jest.fn().mockResolvedValue({ status: 'updated' });
+const mockUpdateScheduledJob = jest.fn().mockResolvedValue({ status: 'updated' });
+const mockListScheduledJobs = jest.fn().mockResolvedValue([]);
 const mockRunJobNow = jest.fn().mockResolvedValue({
   status: 'succeeded',
   id: 'job-1',
@@ -414,6 +425,14 @@ jest.mock('../../src/services/scheduler/store', () => ({
 }));
 jest.mock('../../src/services/scheduler/engine', () => ({
   runJobNow: (...args: any[]) => mockRunJobNow(...args),
+}));
+jest.mock('../../src/services/scheduler/commands', () => ({
+  createScheduledJob: (...args: any[]) => mockCreateScheduledJob(...args),
+  deleteScheduledJob: (...args: any[]) => mockDeleteScheduledJob(...args),
+  getScheduledJob: (...args: any[]) => mockGetJob(...args),
+  listScheduledJobs: (...args: any[]) => mockListScheduledJobs(...args),
+  setScheduledJobEnabled: (...args: any[]) => mockSetScheduledJobEnabled(...args),
+  updateScheduledJob: (...args: any[]) => mockUpdateScheduledJob(...args),
 }));
 jest.mock('../../src/services/security/audit', () => ({
   logToolCall: jest.fn(),
@@ -442,6 +461,8 @@ jest.mock('../../src/utils/id', () => ({
 }));
 
 type ExecuteToolFn = typeof import('../../src/engine/tools/index').executeTool;
+type ExecuteToolInnerFn =
+  typeof import('../../src/engine/tools/toolDispatchRouter').executeToolInner;
 type BuiltinToolModule = typeof mockBuiltinToolFns;
 type SessionLaunchModule = typeof mockSessionLaunchFns;
 type SessionInspectionModule = typeof mockSessionInspectionFns;
@@ -449,6 +470,7 @@ export const CONV_ID = 'test-conv-123';
 
 export type ToolDispatcherHarness = {
   executeTool: ExecuteToolFn;
+  executeToolInner: ExecuteToolInnerFn;
   builtinMod: BuiltinToolModule;
   sessionLaunchMod: SessionLaunchModule;
   sessionInspectionMod: SessionInspectionModule;
@@ -456,6 +478,12 @@ export type ToolDispatcherHarness = {
   generateImage: jest.Mock;
   editImage: jest.Mock;
   mockGetJob: typeof mockGetJob;
+  mockRemoveJob: typeof mockRemoveJob;
+  mockDeleteScheduledJob: typeof mockDeleteScheduledJob;
+  mockCreateScheduledJob: typeof mockCreateScheduledJob;
+  mockListScheduledJobs: typeof mockListScheduledJobs;
+  mockSetScheduledJobEnabled: typeof mockSetScheduledJobEnabled;
+  mockUpdateScheduledJob: typeof mockUpdateScheduledJob;
   mockRunJobNow: typeof mockRunJobNow;
   mockExecutePython: typeof mockExecutePython;
   mockRecordAgentRunEvidence: typeof mockRecordAgentRunEvidence;
@@ -472,8 +500,12 @@ type LoadedToolDispatcherHarness = ToolDispatcherHarness & {
 };
 
 function loadTestModules(): LoadedToolDispatcherHarness {
-  const { executeTool } = require('../../src/engine/tools/index') as {
+  const { executeTool: rawExecuteTool } = require('../../src/engine/tools/index') as {
     executeTool: ExecuteToolFn;
+  };
+  const executeTool = withCanonicalToolExecution(rawExecuteTool);
+  const { executeToolInner } = require('../../src/engine/tools/toolDispatchRouter') as {
+    executeToolInner: ExecuteToolInnerFn;
   };
   const { executeNativeTool } = require('../../src/engine/tools/native/executor') as {
     executeNativeTool: jest.Mock;
@@ -488,6 +520,7 @@ function loadTestModules(): LoadedToolDispatcherHarness {
 
   return {
     executeTool,
+    executeToolInner,
     builtinMod: mockBuiltinToolFns,
     sessionLaunchMod: mockSessionLaunchFns,
     sessionInspectionMod: mockSessionInspectionFns,
@@ -495,6 +528,12 @@ function loadTestModules(): LoadedToolDispatcherHarness {
     generateImage,
     editImage,
     mockGetJob,
+    mockRemoveJob,
+    mockDeleteScheduledJob,
+    mockCreateScheduledJob,
+    mockListScheduledJobs,
+    mockSetScheduledJobEnabled,
+    mockUpdateScheduledJob,
     mockRunJobNow,
     mockExecutePython,
     mockRecordAgentRunEvidence,
@@ -533,6 +572,12 @@ export function setupToolDispatcherHarness(): ToolDispatcherHarness {
     id: 'job-1',
     name: 'test job',
   });
+  mockRemoveJob.mockReturnValue(true);
+  mockCreateScheduledJob.mockResolvedValue({ id: 'job-1' });
+  mockDeleteScheduledJob.mockResolvedValue('deleted');
+  mockSetScheduledJobEnabled.mockResolvedValue({ status: 'updated' });
+  mockUpdateScheduledJob.mockResolvedValue({ status: 'updated' });
+  mockListScheduledJobs.mockResolvedValue([]);
   mockExecutePython.mockResolvedValue({ success: true, output: '42' });
   mockReadWorkspaceFile.mockResolvedValue({
     path: '/workspace/project/README.md',

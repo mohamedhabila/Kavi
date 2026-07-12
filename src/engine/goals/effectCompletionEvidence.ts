@@ -1,41 +1,23 @@
 import {
   TOOL_EFFECT_KINDS,
-  TOOL_EFFECT_STATES,
-  TOOL_EFFECT_TRANSPORT_STATES,
-  TOOL_EFFECT_VERIFICATION_STATES,
-  TOOL_EXECUTION_STATES,
   type ToolEffectDigest,
   type ToolEffectKind,
   type ToolEffectReceipt,
+  type ToolContractIdentity,
 } from '../../types/toolEffectReceipt';
+import { decodeToolEffectReceipt } from '../../utils/toolEffectReceipt';
 
 export const EFFECT_COMPLETION_CRITERION_PREFIX = 'evidence.effect:';
-export const EFFECT_RECEIPT_EVIDENCE_PREFIX = 'effect_receipt:';
+export const EFFECT_RECEIPT_EVIDENCE_PREFIX = 'effect_receipt_v2:';
 
 const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 const RESOURCE_ID_MAX_LENGTH = 1_024;
 const RESOURCE_KIND_PATTERN = /^[a-z][a-z0-9_.-]{0,127}$/u;
 const RECEIPT_ID_PATTERN = /^ter_[a-f0-9]{32}$/u;
 const TOOL_NAME_MAX_LENGTH = 256;
-const CRITERION_KEYS = new Set([
-  'effectKind',
-  'requestDigest',
-  'resource',
-  'verificationState',
-]);
+const CRITERION_KEYS = new Set(['effectKind', 'requestDigest', 'resource', 'verificationState']);
 const RESOURCE_KEYS = new Set(['kind', 'id', 'digest']);
-const RECEIPT_KEYS = new Set([
-  'receiptId',
-  'toolName',
-  'transportState',
-  'effectKind',
-  'effectState',
-  'executionState',
-  'verificationState',
-  'requestDigest',
-  'resultDigest',
-  'resource',
-]);
+const RECEIPT_EVIDENCE_KEYS = new Set(['evidenceVersion', 'receipt', 'resource']);
 
 export interface EffectCompletionResource {
   kind: string;
@@ -51,8 +33,13 @@ export interface EffectCompletionCriterion {
 }
 
 export interface EffectReceiptEvidence {
+  evidenceVersion: 2;
+  receiptVersion: 2;
   receiptId: string;
   toolName: string;
+  contractIdentity: ToolContractIdentity;
+  executionRunId: string;
+  dispatchRunId?: string;
   transportState: ToolEffectReceipt['transportState'];
   effectKind: ToolEffectKind;
   effectState: ToolEffectReceipt['effectState'];
@@ -119,9 +106,7 @@ function parsePrefixedJson(value: string, prefix: string): Record<string, unknow
   }
 }
 
-export function parseEffectCompletionCriterion(
-  value: string,
-): EffectCompletionCriterion | null {
+export function parseEffectCompletionCriterion(value: string): EffectCompletionCriterion | null {
   const record = parsePrefixedJson(value, EFFECT_COMPLETION_CRITERION_PREFIX);
   if (!record || !hasOnlyKeys(record, CRITERION_KEYS)) {
     return null;
@@ -143,9 +128,7 @@ export function parseEffectCompletionCriterion(
   };
 }
 
-export function buildEffectCompletionCriterion(
-  criterion: EffectCompletionCriterion,
-): string {
+export function buildEffectCompletionCriterion(criterion: EffectCompletionCriterion): string {
   const normalized = parseEffectCompletionCriterion(
     `${EFFECT_COMPLETION_CRITERION_PREFIX}${JSON.stringify(criterion)}`,
   );
@@ -166,9 +149,44 @@ export function buildToolEffectReceiptEvidence(receipt: ToolEffectReceipt): stri
         kind: 'effect_request',
         id: receipt.requestDigest,
       };
-  const evidence: EffectReceiptEvidence = {
+  const evidence = {
+    evidenceVersion: 2,
+    receipt,
+    resource,
+  } as const;
+  return `${EFFECT_RECEIPT_EVIDENCE_PREFIX}${JSON.stringify(evidence)}`;
+}
+
+export function parseToolEffectReceiptEvidence(value: string): EffectReceiptEvidence | null {
+  const record = parsePrefixedJson(value, EFFECT_RECEIPT_EVIDENCE_PREFIX);
+  if (!record || !hasOnlyKeys(record, RECEIPT_EVIDENCE_KEYS) || record.evidenceVersion !== 2) {
+    return null;
+  }
+  const receipt = decodeToolEffectReceipt(record.receipt);
+  const resource = normalizeResource(record.resource);
+  if (
+    !receipt ||
+    !RECEIPT_ID_PATTERN.test(receipt.receiptId) ||
+    !receipt.toolName ||
+    receipt.toolName.length > TOOL_NAME_MAX_LENGTH ||
+    !resource ||
+    (receipt.resource !== undefined &&
+      (resource.kind !== receipt.resource.kind ||
+        resource.id !== receipt.resource.id ||
+        resource.digest !== receipt.resource.digest)) ||
+    (receipt.resource === undefined &&
+      (resource.kind !== 'effect_request' || resource.id !== receipt.requestDigest))
+  ) {
+    return null;
+  }
+  return {
+    evidenceVersion: 2,
+    receiptVersion: receipt.version,
     receiptId: receipt.receiptId,
     toolName: receipt.toolName,
+    contractIdentity: receipt.contractIdentity,
+    executionRunId: receipt.executionRunId,
+    ...(receipt.dispatchRunId ? { dispatchRunId: receipt.dispatchRunId } : {}),
     transportState: receipt.transportState,
     effectKind: receipt.effectKind,
     effectState: receipt.effectState,
@@ -176,51 +194,6 @@ export function buildToolEffectReceiptEvidence(receipt: ToolEffectReceipt): stri
     verificationState: receipt.verificationState,
     requestDigest: receipt.requestDigest,
     resultDigest: receipt.resultDigest,
-    resource,
-  };
-  return `${EFFECT_RECEIPT_EVIDENCE_PREFIX}${JSON.stringify(evidence)}`;
-}
-
-export function parseToolEffectReceiptEvidence(value: string): EffectReceiptEvidence | null {
-  const record = parsePrefixedJson(value, EFFECT_RECEIPT_EVIDENCE_PREFIX);
-  if (!record || !hasOnlyKeys(record, RECEIPT_KEYS)) {
-    return null;
-  }
-  const resource = normalizeResource(record.resource);
-  if (
-    typeof record.receiptId !== 'string' ||
-    !RECEIPT_ID_PATTERN.test(record.receiptId) ||
-    typeof record.toolName !== 'string' ||
-    !record.toolName ||
-    record.toolName.length > TOOL_NAME_MAX_LENGTH ||
-    !TOOL_EFFECT_TRANSPORT_STATES.includes(
-      record.transportState as ToolEffectReceipt['transportState'],
-    ) ||
-    !isEffectKind(record.effectKind) ||
-    !TOOL_EFFECT_STATES.includes(record.effectState as ToolEffectReceipt['effectState']) ||
-    (record.executionState !== undefined &&
-      !TOOL_EXECUTION_STATES.includes(record.executionState as never)) ||
-    !TOOL_EFFECT_VERIFICATION_STATES.includes(
-      record.verificationState as ToolEffectReceipt['verificationState'],
-    ) ||
-    !isDigest(record.requestDigest) ||
-    !isDigest(record.resultDigest) ||
-    !resource
-  ) {
-    return null;
-  }
-  return {
-    receiptId: record.receiptId,
-    toolName: record.toolName,
-    transportState: record.transportState as ToolEffectReceipt['transportState'],
-    effectKind: record.effectKind,
-    effectState: record.effectState as ToolEffectReceipt['effectState'],
-    ...(record.executionState
-      ? { executionState: record.executionState as ToolEffectReceipt['executionState'] }
-      : {}),
-    verificationState: record.verificationState as ToolEffectReceipt['verificationState'],
-    requestDigest: record.requestDigest,
-    resultDigest: record.resultDigest,
     resource,
   };
 }

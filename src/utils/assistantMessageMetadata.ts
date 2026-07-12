@@ -14,6 +14,19 @@ const ATTRIBUTION_PRESERVING_FINISH_REASONS = new Set([
   'graph_expected_output',
   'fallback_from_evidence',
 ]);
+const SETTLED_INCOMPLETE_FINISH_REASONS = new Set([
+  'app_restarted',
+  'app_restarted_before_start',
+  'empty_final_text_after_recovery',
+  'interrupted_before_start',
+  'response_failed',
+]);
+const UNSETTLED_FINAL_FINISH_REASONS = new Set([
+  'post_surface_response_pending',
+  'surfaced_worker_output_pending',
+  'terminal_review_pending',
+  'yielded',
+]);
 
 export function isMemoryRetrievalEventId(value: unknown): value is string {
   return typeof value === 'string' && MEMORY_RETRIEVAL_EVENT_ID_PATTERN.test(value);
@@ -183,6 +196,19 @@ export function hasCompleteFinalAssistantMetadata(message: Message): boolean {
   return (
     message.assistantMetadata?.kind === 'final' &&
     message.assistantMetadata.completionStatus === 'complete'
+  );
+}
+
+/** True only when a visible final response has explicit, non-pending terminal metadata. */
+export function hasSettledFinalAssistantMetadata(message: Message): boolean {
+  if (!isFinalAssistantMessage(message)) return false;
+  const finishReason = message.assistantMetadata?.finishReason ?? '';
+  if (UNSETTLED_FINAL_FINISH_REASONS.has(finishReason)) return false;
+  return (
+    message.assistantMetadata?.kind === 'final' &&
+    (message.assistantMetadata.completionStatus === 'complete' ||
+      (message.assistantMetadata.completionStatus === 'incomplete' &&
+        SETTLED_INCOMPLETE_FINISH_REASONS.has(finishReason)))
   );
 }
 

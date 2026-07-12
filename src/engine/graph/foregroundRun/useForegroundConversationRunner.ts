@@ -19,11 +19,12 @@ import { relinquishForegroundModelExecutionProcessOwnership } from '../../../ser
 import { flushChatStorePersistenceNow } from '../../../store/chatStorePersistence';
 import { waitForPersistedAgentRecoveryReadiness } from '../../../services/startupRecovery';
 import {
-  claimForegroundModelProjection,
-  ownsForegroundModelProjection,
-  releaseForegroundModelProjection,
-  waitForForegroundModelProjectionAvailability,
-} from '../../../store/foregroundModelProjectionOwnership';
+  claimModelProjection,
+  mutateOwnedModelProjection,
+  ownsModelProjection,
+  releaseModelProjection,
+  waitForModelProjectionAvailability,
+} from '../../../store/modelProjectionOwnership';
 
 type UseForegroundConversationRunnerParams = {
   appendConversationLog: ForegroundConversationRunHelpers['appendConversationLog'];
@@ -60,16 +61,17 @@ export function useForegroundConversationRunner(
     () => ({
       durability: {
         activateModelExecution: activateForegroundModelExecution,
-        claimModelProjection: claimForegroundModelProjection,
+        claimModelProjection,
         completeModelExecution: completeForegroundModelExecution,
         createModelExecution: createForegroundModelExecution,
         flushChatState: flushChatStorePersistenceNow,
-        ownsModelProjection: ownsForegroundModelProjection,
-        releaseModelProjection: releaseForegroundModelProjection,
+        mutateModelProjection: mutateOwnedModelProjection,
+        ownsModelProjection,
+        releaseModelProjection,
         relinquishModelExecutionProcessOwnership:
           relinquishForegroundModelExecutionProcessOwnership,
         waitForRecoveryReadiness: waitForPersistedAgentRecoveryReadiness,
-        waitForProjectionAvailability: waitForForegroundModelProjectionAvailability,
+        waitForProjectionAvailability: waitForModelProjectionAvailability,
       },
       helpers: {
         appendConversationLog: params.appendConversationLog,
@@ -131,16 +133,13 @@ export function useForegroundConversationRunner(
   const contextRef = useRef(context);
   contextRef.current = context;
 
-  const runChat = useCallback(
-    async (conversationId: string, options?: RunChatOptions) => {
-      await executeForegroundConversationRun({
-        conversationId,
-        options,
-        context: contextRef.current,
-      });
-    },
-    [],
-  );
+  const runChat = useCallback(async (conversationId: string, options?: RunChatOptions) => {
+    await executeForegroundConversationRun({
+      conversationId,
+      options,
+      context: contextRef.current,
+    });
+  }, []);
 
   const resumeAgentRun = useCallback(
     async (resumeParams: {

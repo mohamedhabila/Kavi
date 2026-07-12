@@ -37,6 +37,7 @@ async function executeSingleWebFetch(args: {
   url: string;
   extractMode?: string;
   maxChars?: number;
+  signal?: AbortSignal;
 }): Promise<WebFetchEntry> {
   const urlString = args.url?.trim();
   if (!urlString) {
@@ -73,7 +74,7 @@ async function executeSingleWebFetch(args: {
   }
 
   const timeoutMs = resolveTimeoutSeconds(DEFAULT_TIMEOUT_SECONDS, DEFAULT_TIMEOUT_SECONDS) * 1000;
-  const directTimeout = withTimeout(undefined, timeoutMs);
+  const directTimeout = withTimeout(args.signal, timeoutMs);
 
   try {
     // Try direct fetch first
@@ -103,7 +104,7 @@ async function executeSingleWebFetch(args: {
     // Try Firecrawl fallback with a fresh signal (direct's signal may be aborted)
     const firecrawlKey = await getSecure('FIRECRAWL_API_KEY');
     if (firecrawlKey) {
-      const firecrawlTimeout = withTimeout(undefined, timeoutMs);
+      const firecrawlTimeout = withTimeout(args.signal, timeoutMs);
       try {
         const result = await firecrawlFetch({
           url: resolvedInputUrl,
@@ -151,11 +152,14 @@ async function executeSingleWebFetch(args: {
   }
 }
 
-export async function executeWebFetch(args: {
-  urls: string[];
-  extractMode?: string;
-  maxChars?: number;
-}): Promise<string> {
+export async function executeWebFetch(
+  args: {
+    urls: string[];
+    extractMode?: string;
+    maxChars?: number;
+  },
+  signal?: AbortSignal,
+): Promise<string> {
   const urls = Array.isArray(args.urls)
     ? args.urls.map((value) => (typeof value === 'string' ? value.trim() : '')).filter(Boolean)
     : [];
@@ -169,6 +173,7 @@ export async function executeWebFetch(args: {
         url,
         extractMode: args.extractMode,
         maxChars: args.maxChars,
+        signal,
       }),
     ),
   );

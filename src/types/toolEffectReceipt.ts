@@ -65,6 +65,38 @@ export type ToolEffectKind = (typeof TOOL_EFFECT_KINDS)[number];
 
 export type ToolEffectDigest = `sha256:${string}`;
 
+export interface CodeOwnedToolContractIdentity {
+  readonly kind: 'code_owned';
+  readonly version: 1;
+  readonly toolName: string;
+  readonly schemaDigest: ToolEffectDigest;
+  readonly capabilityContractDigest: ToolEffectDigest;
+  readonly workflowContractDigest: ToolEffectDigest;
+  readonly effectContractDigest: ToolEffectDigest;
+  readonly executionPolicyDigest: ToolEffectDigest;
+}
+
+export type RuntimeExternalToolSource = 'mcp' | 'skill';
+
+/**
+ * Content-free evidence for the exact dynamic declaration and runtime target
+ * selected by product code. It records observation identity only; unlike a
+ * code-owned identity, it cannot certify effect semantics or procedure reuse.
+ */
+export interface RuntimeExternalToolContractIdentity {
+  readonly kind: 'runtime_external';
+  readonly version: 1;
+  readonly toolName: string;
+  readonly source: RuntimeExternalToolSource;
+  readonly namespace: string;
+  readonly declarationDigest: ToolEffectDigest;
+  readonly executionBindingDigest: ToolEffectDigest;
+}
+
+export type ToolContractIdentity =
+  | CodeOwnedToolContractIdentity
+  | RuntimeExternalToolContractIdentity;
+
 export interface ToolEffectResourceRef {
   readonly kind: string;
   readonly id: string;
@@ -77,11 +109,13 @@ export interface ToolEffectOperationHandle {
 }
 
 export interface ToolEffectReceipt {
-  readonly version: 1;
+  readonly version: 2;
   readonly receiptId: string;
   readonly toolCallId: string;
   readonly toolName: string;
-  readonly runId?: string;
+  readonly contractIdentity: ToolContractIdentity;
+  readonly executionRunId: string;
+  readonly dispatchRunId?: string;
   readonly transportState: ToolEffectTransportState;
   readonly executionState?: ToolExecutionState;
   readonly effectKind: ToolEffectKind;

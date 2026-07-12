@@ -60,6 +60,7 @@ jest.mock('../../src/store/chatStorePersistence', () => ({
 }));
 
 const mockedRunOrchestrator = jest.mocked(runOrchestrator);
+const completedOrchestratorRun = { terminalDisposition: 'final_candidate' as const };
 const mockedRecordCompletedTurnForMemory = jest.mocked(recordCompletedTurnForMemory);
 const mockedGetIngestionJob = jest.mocked(getIngestionJob);
 const mockedDrainIngestionQueueWithWakeup = jest.mocked(drainIngestionQueueWithWakeup);
@@ -203,6 +204,7 @@ describe('runForegroundScenario', () => {
         model: options.model,
       });
       callbacks.onDone();
+      return completedOrchestratorRun;
     });
   });
 
@@ -488,6 +490,7 @@ describe('runForegroundScenario', () => {
         }),
       );
       callbacks.onDone();
+      return completedOrchestratorRun;
     });
 
     const result = await runForegroundScenario({
@@ -674,5 +677,4 @@ describe('runForegroundScenario', () => {
     ]);
     expect(mockedListIngestionPersistenceReceipts).toHaveBeenCalledWith(pendingJob.id);
   });
-
 });

@@ -1,14 +1,24 @@
+import { claimedSchedulerJob } from '../helpers/schedulerClaimedJobFixture';
+import { restoreRequestIdleCallback } from '../helpers/idleCallbackFixture';
+import {
+  completeFinalMetadata,
+  completedOrchestratorRun,
+  mockStartupScheduledExecutionCheckpoint,
+  startupTestProvider as mockProvider,
+} from '../helpers/startupSchedulerRuntimeFixtures';
+
 const mockRegisterBuiltInServiceSkills = jest.fn();
 const mockActivateEnabledSkills = jest.fn();
 const mockSetSchedulerExecutor = jest.fn();
 const mockStartScheduler = jest.fn().mockResolvedValue(undefined);
+const mockStopScheduler = jest.fn();
 const mockEvaluateJobsOnce = jest.fn().mockResolvedValue(undefined);
 const mockRegisterBackgroundFetch = jest.fn().mockResolvedValue(undefined);
-const mockSyncSchedulerWakeNotifications = jest.fn().mockResolvedValue(undefined);
+const mockSyncSchedulerWakeNotifications = jest.fn().mockResolvedValue({ warnings: [] });
 const mockRunBootOnce = jest.fn().mockResolvedValue({ status: 'ran' });
 const mockHasBootMd = jest.fn().mockResolvedValue(false);
 const mockLoadHooksFromDirectory = jest.fn().mockResolvedValue(undefined);
-const mockRunOrchestrator = jest.fn().mockResolvedValue(undefined);
+const mockRunOrchestrator = jest.fn().mockResolvedValue(completedOrchestratorRun);
 const mockGetProviderApiKey = jest.fn().mockResolvedValue('sk-test');
 const mockInitializeNotifications = jest.fn().mockResolvedValue(undefined);
 const mockSendLocalNotification = jest.fn().mockResolvedValue({ id: 'notif-1', scheduled: false });
@@ -26,7 +36,7 @@ const mockRunMemoryBackgroundFlush = jest.fn().mockResolvedValue(undefined);
 const mockInitializeDurableRecoveryLifecycle = jest.fn();
 const mockReconcileDurableRecoveryLifecycle = jest.fn().mockResolvedValue(undefined);
 const mockFlushChatStorePersistenceNow = jest.fn().mockResolvedValue(undefined);
-const mockRemoveRetiredMemoryFileArtifacts = jest.fn();
+const mockRemoveRetiredMemoryArtifacts = jest.fn();
 let mockSettingsHydrated = true;
 let mockChatHydrated = true;
 const mockSettingsHydrationListeners = new Set<() => void>();
@@ -38,6 +48,8 @@ const mockChatStoreState = {
   activeConversationId: 'active-conversation',
   createConversation: jest.fn(),
   getOrCreateCanonicalThread: jest.fn(),
+  updateModeInConversation: jest.fn(),
+  updatePersonaInConversation: jest.fn(),
   updateModelInConversation: jest.fn(),
   addMessage: jest.fn(),
   updateMessage: jest.fn(),
@@ -49,26 +61,6 @@ const mockChatStoreState = {
   updateToolCallStatus: jest.fn(),
   recoverInterruptedAgentRuns: jest.fn(),
 };
-const mockProvider = {
-  id: 'openai',
-  name: 'OpenAI',
-  baseUrl: 'https://api.openai.com/v1',
-  apiKey: 'sk-test',
-  model: 'gpt-5.4',
-  enabled: true,
-};
-
-function scheduledJob(name: string, prompt: string, mode?: 'both' | 'conversation') {
-  return {
-    id: `job-${name.toLowerCase().replace(/\s+/g, '-')}`,
-    name,
-    payload: { prompt },
-    sessionTarget: 'isolated',
-    wakeMode: 'new',
-    ...(mode ? { delivery: { mode } } : {}),
-  };
-}
-
 jest.mock('../../src/services/integrations/registry', () => ({
   registerBuiltInServiceSkills: mockRegisterBuiltInServiceSkills,
 }));
@@ -78,6 +70,7 @@ jest.mock('../../src/services/skills/manager', () => ({
 jest.mock('../../src/services/scheduler/engine', () => ({
   setSchedulerExecutor: mockSetSchedulerExecutor,
   startScheduler: mockStartScheduler,
+  stopScheduler: mockStopScheduler,
   evaluateJobsOnce: (...args: any[]) => mockEvaluateJobsOnce(...args),
 }));
 jest.mock('../../src/engine/tools/index', () => ({
@@ -89,6 +82,21 @@ jest.mock('../../src/services/scheduler/background', () => ({
 }));
 jest.mock('../../src/services/scheduler/wakeNotifications', () => ({
   syncSchedulerWakeNotifications: (...args: any[]) => mockSyncSchedulerWakeNotifications(...args),
+}));
+jest.mock('../../src/services/scheduler/runtimeReadiness', () => ({
+  ensureSchedulerMaintenanceReady: jest.fn().mockResolvedValue(undefined),
+  setSchedulerExecutionReadinessBarrier: jest.fn(),
+}));
+jest.mock('../../src/services/scheduler/jobExecutorPersistence', () => ({
+  ...jest.requireActual('../../src/services/scheduler/jobExecutorPersistence'),
+  checkpointScheduledAttemptConversation: jest.fn().mockResolvedValue(undefined),
+  checkpointScheduledAttemptHooks: jest.fn().mockResolvedValue(undefined),
+  checkpointScheduledAttemptCompletion: jest.fn().mockResolvedValue(undefined),
+  checkpointScheduledExecutionResult: mockStartupScheduledExecutionCheckpoint,
+  markScheduledAttemptEffectUnsafe: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('../../src/services/scheduler/scheduledProjectionRecovery', () => ({
+  releaseStaleScheduledProjectionOwners: jest.fn().mockResolvedValue(0),
 }));
 jest.mock('../../src/services/agents/bootRunner', () => ({
   runBootOnce: (...args: any[]) => mockRunBootOnce(...args),
@@ -117,9 +125,8 @@ jest.mock('../../src/services/memory/lifecycle', () => ({
   runMemoryMigrationTick: (...args: any[]) => mockRunMemoryMigrationTick(...args),
   runMemoryBackgroundFlush: (...args: any[]) => mockRunMemoryBackgroundFlush(...args),
 }));
-jest.mock('../../src/services/memory/retiredMemoryArtifacts', () => ({
-  removeRetiredMemoryFileArtifacts: (...args: any[]) =>
-    mockRemoveRetiredMemoryFileArtifacts(...args),
+jest.mock('../../src/services/memory/retiredMemoryCleanup', () => ({
+  removeRetiredMemoryArtifacts: (...args: any[]) => mockRemoveRetiredMemoryArtifacts(...args),
 }));
 jest.mock('../../src/services/executionJournal/durableRecoveryLifecycle', () => ({
   initializeDurableRecoveryLifecycle: (...args: any[]) =>
@@ -190,6 +197,10 @@ jest.mock('../../src/store/useSettingsStore', () => ({
 jest.mock('../../src/store/useChatStore', () => ({
   useChatStore: {
     getState: () => mockChatStoreState,
+    setState: (update: any) => {
+      const next = typeof update === 'function' ? update(mockChatStoreState) : update;
+      Object.assign(mockChatStoreState, next);
+    },
     persist: {
       hasHydrated: () => mockChatHydrated,
       onFinishHydration: (listener: () => void) => {
@@ -220,7 +231,7 @@ beforeEach(() => {
   mockReconcileDurableRecoveryLifecycle.mockResolvedValue(undefined);
   mockFlushChatStorePersistenceNow.mockResolvedValue(undefined);
   mockEvaluateJobsOnce.mockResolvedValue(undefined);
-  mockSyncSchedulerWakeNotifications.mockResolvedValue(undefined);
+  mockSyncSchedulerWakeNotifications.mockResolvedValue({ warnings: [] });
   mockRunMemoryMigrationTick.mockResolvedValue(undefined);
   mockRunMemoryBackgroundFlush.mockResolvedValue(undefined);
   mockSettingsHydrated = true;
@@ -254,7 +265,6 @@ beforeEach(() => {
       if (existing) {
         return existing.id;
       }
-
       const id = `canonical-${mockChatStoreState.conversations.length + 1}`;
       mockChatStoreState.conversations.unshift({
         id,
@@ -341,29 +351,26 @@ beforeEach(() => {
   );
   // Reset module to clear `initialized` flag
   jest.resetModules();
-  mockRunOrchestrator.mockImplementation(async (options, callbacks) => {
+  mockRunOrchestrator.mockReset().mockImplementation(async (options, callbacks) => {
     const lastMessage = options.messages[options.messages.length - 1];
-    callbacks.onAssistantMessage(`Result for ${lastMessage.content}`);
+    callbacks.onAssistantMessage(
+      `Result for ${lastMessage.content}`,
+      [],
+      undefined,
+      completeFinalMetadata,
+    );
     callbacks.onDone();
+    return completedOrchestratorRun;
   });
 });
-afterAll(() => {
-  if (typeof originalRequestIdleCallback === 'function') {
-    (global as any).requestIdleCallback = originalRequestIdleCallback;
-    return;
-  }
-
-  delete (global as any).requestIdleCallback;
-});
-
+afterAll(() => restoreRequestIdleCallback(originalRequestIdleCallback));
 describe('initializeServices', () => {
   it('registers skills, sets executor, and starts scheduler', async () => {
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
-
     expect(mockRegisterBuiltInServiceSkills).toHaveBeenCalledTimes(1);
     expect(mockActivateEnabledSkills).toHaveBeenCalledTimes(1);
-    expect(mockRemoveRetiredMemoryFileArtifacts).toHaveBeenCalledTimes(1);
+    expect(mockRemoveRetiredMemoryArtifacts).toHaveBeenCalledTimes(1);
     expect(mockInitializeNotifications).toHaveBeenCalledTimes(1);
     await waitFor(() =>
       expect(mockConnectAll).toHaveBeenCalledWith([
@@ -382,25 +389,24 @@ describe('initializeServices', () => {
     );
   });
   it('reconciles scheduled jobs when the app returns to foreground', async () => {
-    const { handleAppForeground } = require('../../src/services/startup');
-
+    const { handleAppBackground, handleAppForeground } = require('../../src/services/startup');
     handleAppForeground();
-
-    expect(mockEvaluateJobsOnce).toHaveBeenCalledWith({ trigger: 'foreground-reconcile' });
+    await waitFor(() =>
+      expect(mockEvaluateJobsOnce).toHaveBeenCalledWith({ trigger: 'foreground-reconcile' }),
+    );
     expect(mockSyncSchedulerWakeNotifications).toHaveBeenCalledWith({ force: true });
+    handleAppBackground();
+    expect(mockStopScheduler).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(mockRunMemoryMigrationTick).toHaveBeenCalledTimes(1));
-    expect(mockRunMemoryBackgroundFlush).toHaveBeenCalledTimes(1);
+    expect(mockRunMemoryBackgroundFlush).toHaveBeenCalledTimes(2);
   });
   it('initializes durable recovery ownership synchronously on startup', () => {
     const { initializeServices } = require('../../src/services/startup');
-
     initializeServices();
-
     expect(mockInitializeDurableRecoveryLifecycle).toHaveBeenCalledTimes(1);
   });
   it('repairs durable recovery candidates on foreground', async () => {
     const { handleAppForeground, initializeServices } = require('../../src/services/startup');
-
     initializeServices();
     await waitFor(() =>
       expect(mockRecoverInterruptedForegroundModelExecutions).toHaveBeenCalledTimes(1),
@@ -412,9 +418,7 @@ describe('initializeServices', () => {
     await Promise.resolve();
     mockRecoverInterruptedForegroundModelExecutions.mockClear();
     mockChatStoreState.recoverInterruptedAgentRuns.mockClear();
-
     handleAppForeground();
-
     await waitFor(() =>
       expect(mockReconcileDurableRecoveryLifecycle).toHaveBeenCalledWith('foreground'),
     );
@@ -426,9 +430,7 @@ describe('initializeServices', () => {
   it('flushes durable memory work before waiting for migration', async () => {
     mockRunMemoryMigrationTick.mockImplementation(() => new Promise(() => undefined));
     const { handleAppForeground } = require('../../src/services/startup');
-
     handleAppForeground();
-
     await waitFor(() => expect(mockRunMemoryBackgroundFlush).toHaveBeenCalledTimes(1));
     expect(mockRunMemoryMigrationTick).toHaveBeenCalledTimes(1);
     expect(mockRunMemoryBackgroundFlush.mock.invocationCallOrder[0]).toBeLessThan(
@@ -439,18 +441,15 @@ describe('initializeServices', () => {
     mockSettingsHydrated = false;
     mockChatHydrated = false;
     const { handleAppForeground } = require('../../src/services/startup');
-
     handleAppForeground();
     await Promise.resolve();
     expect(mockRunMemoryMigrationTick).not.toHaveBeenCalled();
     expect(mockRunMemoryBackgroundFlush).not.toHaveBeenCalled();
-
     mockSettingsHydrated = true;
     for (const listener of [...mockSettingsHydrationListeners]) listener();
     await Promise.resolve();
     expect(mockRunMemoryMigrationTick).not.toHaveBeenCalled();
     expect(mockRunMemoryBackgroundFlush).not.toHaveBeenCalled();
-
     mockChatHydrated = true;
     for (const listener of [...mockChatHydrationListeners]) listener();
     await waitFor(() => expect(mockRunMemoryMigrationTick).toHaveBeenCalledTimes(1));
@@ -459,7 +458,6 @@ describe('initializeServices', () => {
   it('recovers persisted worker and workflow state on startup', async () => {
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
-
     await waitFor(() => {
       expect(mockInitSubAgentRegistry).toHaveBeenCalledWith(mockChatStoreState.conversations);
     });
@@ -492,40 +490,33 @@ describe('initializeServices', () => {
       mockMaintainTerminalExecutionRetention.mock.invocationCallOrder[0],
     );
   });
-  it('only initializes once (idempotent)', () => {
+  it('only initializes once (idempotent)', async () => {
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
     initializeServices();
     initializeServices();
-
     expect(mockRegisterBuiltInServiceSkills).toHaveBeenCalledTimes(1);
     expect(mockActivateEnabledSkills).toHaveBeenCalledTimes(1);
-    expect(mockStartScheduler).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mockStartScheduler).toHaveBeenCalledTimes(1));
   });
-  it('retries retired memory cleanup without reinitializing services', () => {
+  it('retries retired memory cleanup without reinitializing services', async () => {
     const cleanupError = new Error('directory busy');
-    mockRemoveRetiredMemoryFileArtifacts.mockImplementationOnce(() => {
+    mockRemoveRetiredMemoryArtifacts.mockImplementationOnce(() => {
       throw cleanupError;
     });
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { initializeServices } = require('../../src/services/startup');
-
     initializeServices();
     initializeServices();
-
-    expect(mockRemoveRetiredMemoryFileArtifacts).toHaveBeenCalledTimes(2);
+    expect(mockRemoveRetiredMemoryArtifacts).toHaveBeenCalledTimes(2);
     expect(mockRegisterBuiltInServiceSkills).toHaveBeenCalledTimes(1);
-    expect(mockStartScheduler).toHaveBeenCalledTimes(1);
-    expect(warnSpy).toHaveBeenCalledWith(
-      '[startup] retired memory file cleanup failed:',
-      cleanupError,
-    );
+    await waitFor(() => expect(mockStartScheduler).toHaveBeenCalledTimes(1));
+    expect(warnSpy).toHaveBeenCalledWith('[startup] retired memory cleanup failed:', cleanupError);
     warnSpy.mockRestore();
   });
   it('passes an executor with execute function', () => {
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
-
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
     expect(executor).toHaveProperty('execute');
     expect(typeof executor.execute).toBe('function');
@@ -534,9 +525,8 @@ describe('initializeServices', () => {
   it('executor runs scheduled jobs through the orchestrator and returns the result', async () => {
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
-
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    const job = scheduledJob('Test Job', 'Summarize news');
+    const job = claimedSchedulerJob('Test Job', 'Summarize news');
     const result = await executor.execute(job);
     expect(mockRunOrchestrator).toHaveBeenCalledTimes(1);
     expect(mockChatStoreState.createConversation).toHaveBeenCalledWith(
@@ -555,12 +545,15 @@ describe('initializeServices', () => {
       title: 'Test Job',
       body: 'Result for Summarize news',
       data: {
-        screen: 'Scheduler',
-        jobId: 'job-test-job',
+        screen: 'Chat',
+        conversationId: 'conv-1',
         source: 'scheduled_task',
       },
     });
-    expect(result).toBe('Result for Summarize news');
+    expect(result).toEqual({
+      output: 'Result for Summarize news',
+      conversationId: 'conv-1',
+    });
   });
   it('rejects and sends a failure notification for a blocked scheduled run', async () => {
     mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
@@ -570,11 +563,14 @@ describe('initializeServices', () => {
         terminalReason: 'tool_batch_incomplete',
       });
       callbacks.onDone();
+      return { terminalDisposition: 'blocked' as const };
     });
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    const job = scheduledJob('Blocked Job', 'Perform the action', 'both');
+    const job = claimedSchedulerJob('Blocked Job', 'Perform the action', {
+      deliveryMode: 'both',
+    });
     const error = await executor.execute(job).catch((executionError: unknown) => executionError);
     expect(error).toMatchObject({
       name: 'NonRetryableSchedulerExecutionError',
@@ -586,25 +582,29 @@ describe('initializeServices', () => {
       title: 'Blocked Job',
       body: 'Error: Agent control graph was blocked: tool_batch_incomplete.',
       data: {
-        screen: 'Scheduler',
-        jobId: 'job-blocked-job',
+        screen: 'Chat',
+        conversationId: 'conv-1',
         source: 'scheduled_task',
       },
     });
+    mockSendLocalNotification.mockClear();
+    await executor.onFinalFailure({ ...job, failureAlert: { enabled: false } }, error);
+    expect(mockSendLocalNotification).not.toHaveBeenCalled();
   });
   it('persists tool messages generated during scheduled jobs', async () => {
     mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
+      callbacks.onAssistantMessage('Using a tool.', [
+        { id: 'tc-1', name: 'read_file', arguments: '{}', status: 'pending' },
+      ]);
       callbacks.onToolMessage('tc-1', 'tool result');
-      callbacks.onAssistantMessage('done');
+      callbacks.onAssistantMessage('done', [], undefined, completeFinalMetadata);
       callbacks.onDone();
+      return completedOrchestratorRun;
     });
-
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
-
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    await executor.execute(scheduledJob('Tool Job', 'Run tool', 'both'));
-
+    await executor.execute(claimedSchedulerJob('Tool Job', 'Run tool', { deliveryMode: 'both' }));
     expect(mockChatStoreState.addMessage).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({ role: 'tool', toolCallId: 'tc-1', content: 'tool result' }),
@@ -619,18 +619,20 @@ describe('initializeServices', () => {
         },
       ],
     };
-
     mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
       callbacks.onAssistantMessage('', [], providerReplay as any);
+      callbacks.onAssistantMessage('done', [], undefined, completeFinalMetadata);
       callbacks.onDone();
+      return completedOrchestratorRun;
     });
-
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
-
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    await executor.execute(scheduledJob('Gemini Tool Job', 'Continue tool loop', 'conversation'));
-
+    await executor.execute(
+      claimedSchedulerJob('Gemini Tool Job', 'Continue tool loop', {
+        deliveryMode: 'conversation',
+      }),
+    );
     expect(mockChatStoreState.updateMessageProviderReplay).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
@@ -640,17 +642,22 @@ describe('initializeServices', () => {
   it('marks JSON error tool messages as errors during scheduled jobs', async () => {
     const payload = JSON.stringify({ status: 'error', error: 'Missing surface' });
     mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
+      callbacks.onAssistantMessage('Using a tool.', [
+        { id: 'tc-2', name: 'read_file', arguments: '{}', status: 'pending' },
+      ]);
       callbacks.onToolMessage('tc-2', payload);
-      callbacks.onAssistantMessage('done');
+      callbacks.onAssistantMessage('done', [], undefined, completeFinalMetadata);
       callbacks.onDone();
+      return completedOrchestratorRun;
     });
-
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
-
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    await executor.execute(scheduledJob('Tool Error Job', 'Run failing tool', 'conversation'));
-
+    await executor.execute(
+      claimedSchedulerJob('Tool Error Job', 'Run failing tool', {
+        deliveryMode: 'conversation',
+      }),
+    );
     expect(mockChatStoreState.addMessage).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
@@ -667,16 +674,16 @@ describe('initializeServices', () => {
         'generated-user-message',
         'Prompt\n\n<link_context>Rich page content</link_context>',
       );
-      callbacks.onAssistantMessage('done');
+      callbacks.onAssistantMessage('done', [], undefined, completeFinalMetadata);
       callbacks.onDone();
+      return completedOrchestratorRun;
     });
-
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
-
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    await executor.execute(scheduledJob('Link Job', 'Prompt', 'conversation'));
-
+    await executor.execute(
+      claimedSchedulerJob('Link Job', 'Prompt', { deliveryMode: 'conversation' }),
+    );
     expect(mockChatStoreState.updateMessageEnrichedContent).toHaveBeenCalledWith(
       expect.any(String),
       'generated-user-message',

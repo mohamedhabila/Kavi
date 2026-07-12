@@ -74,11 +74,17 @@ function conversation(options: { completeFinal?: boolean } = {}): Conversation {
   };
 }
 
+const executionRunOwners = new Map([
+  ['conversation-1', new Map([['run-1', 'foreground-execution-1']])],
+]);
+
 describe('agent-run restart effect reconciliation', () => {
   it('counts a durably verified effect as completed while leaving the interrupted run failed', () => {
+    const resolveToolEffect = jest.fn(() => ({ kind: 'verified' as const, observedAt: 150 }));
     const recovered = recoverInterruptedAgentRunsInConversation(conversation(), [], {
       timestamp: 200,
-      resolveToolEffect: () => ({ kind: 'verified', observedAt: 150 }),
+      executionRunIdByConversationAndAgentRun: executionRunOwners,
+      resolveToolEffect,
     });
     const recoveredRun = recovered.agentRuns?.[0];
     const toolCall = recovered.messages[1]?.toolCalls?.[0];
@@ -89,11 +95,35 @@ describe('agent-run restart effect reconciliation', () => {
     });
     expect(toolCall).toMatchObject({ status: 'completed', completedAt: 150 });
     expect(toolCall?.result).toContain('durably verified');
+    expect(resolveToolEffect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conversation-1',
+        executionRunId: 'foreground-execution-1',
+        toolCallId: 'tool-call-1',
+      }),
+    );
+  });
+
+  it('fails closed when a running agent has no exact foreground execution owner', () => {
+    const resolveToolEffect = jest.fn(() => ({ kind: 'not_dispatched' as const }));
+
+    const recovered = recoverInterruptedAgentRunsInConversation(conversation(), [], {
+      timestamp: 200,
+      resolveToolEffect,
+    });
+
+    expect(recovered.agentRuns?.[0]).toMatchObject({
+      status: 'running',
+      controlGraph: { status: 'recovering' },
+    });
+    expect(recovered.messages[1]?.toolCalls?.[0]).toMatchObject({ status: 'running' });
+    expect(resolveToolEffect).not.toHaveBeenCalled();
   });
 
   it('keeps an ambiguous effect recoverable without terminalizing the run', () => {
     const recovered = recoverInterruptedAgentRunsInConversation(conversation(), [], {
       timestamp: 200,
+      executionRunIdByConversationAndAgentRun: executionRunOwners,
       resolveToolEffect: () => ({
         kind: 'reconciliation_required',
         observedAt: 150,
@@ -118,6 +148,7 @@ describe('agent-run restart effect reconciliation', () => {
       [],
       {
         timestamp: 200,
+        executionRunIdByConversationAndAgentRun: executionRunOwners,
         resolveToolEffect: () => ({ kind: 'verified', observedAt: 150 }),
       },
     );
@@ -135,6 +166,7 @@ describe('agent-run restart effect reconciliation', () => {
       [],
       {
         timestamp: 200,
+        executionRunIdByConversationAndAgentRun: executionRunOwners,
         resolveToolEffect: () => ({
           kind: 'reconciliation_required',
           observedAt: 150,
@@ -151,6 +183,7 @@ describe('agent-run restart effect reconciliation', () => {
 
     const verified = recoverInterruptedAgentRunsInConversation(recovered, [], {
       timestamp: 300,
+      executionRunIdByConversationAndAgentRun: executionRunOwners,
       resolveToolEffect: () => ({ kind: 'verified', observedAt: 250 }),
     });
     expect(verified.agentRuns?.[0]).toMatchObject({
@@ -181,6 +214,7 @@ describe('agent-run restart effect reconciliation', () => {
       ],
       {
         timestamp: 200,
+        executionRunIdByConversationAndAgentRun: executionRunOwners,
         resolveToolEffect: () => ({ kind: 'verified', observedAt: 150 }),
       },
     );
@@ -217,6 +251,7 @@ describe('agent-run restart effect reconciliation', () => {
       ],
       {
         timestamp: 200,
+        executionRunIdByConversationAndAgentRun: executionRunOwners,
         resolveToolEffect: () => ({ kind: 'verified', observedAt: 150 }),
       },
     );

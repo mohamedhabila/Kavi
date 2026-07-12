@@ -54,6 +54,8 @@ export async function tryHandleOrchestratorSlashCommand(params: {
   conversationId: string;
   internalUserMessageCount: number;
   messages: Message[];
+  agentRunId?: string;
+  signal?: AbortController;
 }): Promise<boolean> {
   const slashCommandMessages = excludeTrailingInternalUserMessages(
     params.messages,
@@ -85,6 +87,8 @@ export async function tryHandleOrchestratorSlashCommand(params: {
   const result = await command.handler({
     conversationId: params.conversationId,
     args: parsed.args,
+    agentRunId: params.agentRunId,
+    executionSignal: params.signal,
   });
   params.callbacks.onCommandResult?.({
     response: result.response,

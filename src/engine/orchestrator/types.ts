@@ -16,6 +16,21 @@ import type {
   MemoryContextStrategy,
   MemoryRetrievalStrategy,
 } from '../../services/memory/memoryAccessPolicy';
+import type { PendingVerifiedProcedureObservation } from '../../services/memory/verifiedProcedure/executionSession';
+
+export type OrchestratorTerminalDisposition =
+  | 'final_candidate'
+  | 'yielded'
+  | 'blocked'
+  | 'failed'
+  | 'cancelled'
+  | 'command';
+
+export type OrchestratorRunResult = Readonly<{
+  terminalDisposition: OrchestratorTerminalDisposition;
+  graphSnapshot?: AgentRunControlGraphState;
+  pendingVerifiedProcedureObservation?: PendingVerifiedProcedureObservation;
+}>;
 
 export interface OrchestratorCallbacks {
   onStateChange: (state: OrchestratorState) => void;
@@ -72,7 +87,10 @@ export interface OrchestratorOptions {
   initialAgentControlGraphState?: AgentRunControlGraphState;
   workflowScopeUserMessageId?: string;
   taskId: string | null;
+  /** Code-owned identity for this exact execution attempt. */
+  executionRunId: string;
   agentRunId?: string;
+  beforeEffectDispatch?: (toolName: string) => Promise<void>;
   memoryRetrievalStrategy?: MemoryRetrievalStrategy;
   memoryContextStrategy?: MemoryContextStrategy;
 }

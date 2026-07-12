@@ -4,7 +4,8 @@ const mockInitSubAgentRegistry = jest.fn().mockResolvedValue(undefined);
 const mockListActiveSubAgents = jest.fn().mockReturnValue([]);
 const mockReconcileDurableRecoveryLifecycle = jest.fn().mockResolvedValue(undefined);
 const mockRecoverInterruptedForegroundModelExecutions = jest.fn().mockResolvedValue([]);
-const mockReleaseStaleForegroundModelProjectionOwners = jest.fn().mockResolvedValue(0);
+const mockReleaseStaleModelProjectionOwners = jest.fn().mockResolvedValue(0);
+const mockReleaseStaleScheduledProjectionOwners = jest.fn().mockResolvedValue(0);
 const mockMaintainForegroundModelExecutionRetention = jest.fn();
 const mockMaintainTerminalExecutionRetention = jest.fn();
 const mockRepairTerminalAgentRunsMissingFinalResponses = jest.fn().mockResolvedValue([]);
@@ -16,14 +17,20 @@ const mockChatState = {
 };
 
 jest.mock('../../src/store/persistHydration', () => ({
-  waitForStoreHydration: (...args: any[]) => mockWaitForStoreHydration(...args),
+  waitForRequiredStoreHydration: (...args: any[]) => mockWaitForStoreHydration(...args),
 }));
 jest.mock('../../src/store/chatStorePersistence', () => ({
-  flushChatStorePersistenceNow: (...args: any[]) =>
-    mockFlushChatStorePersistenceNow(...args),
+  flushChatStorePersistenceNow: (...args: any[]) => mockFlushChatStorePersistenceNow(...args),
 }));
 jest.mock('../../src/store/useChatStore', () => ({
   useChatStore: { getState: () => mockChatState },
+}));
+jest.mock('../../src/services/scheduler/store', () => ({
+  useSchedulerStore: {},
+}));
+jest.mock('../../src/services/scheduler/scheduledProjectionRecovery', () => ({
+  releaseStaleScheduledProjectionOwners: (...args: any[]) =>
+    mockReleaseStaleScheduledProjectionOwners(...args),
 }));
 jest.mock('../../src/services/agents/subAgent', () => ({
   initSubAgentRegistry: (...args: any[]) => mockInitSubAgentRegistry(...args),
@@ -37,9 +44,9 @@ jest.mock('../../src/services/executionJournal/foregroundModelExecutionRecovery'
   recoverInterruptedForegroundModelExecutions: (...args: any[]) =>
     mockRecoverInterruptedForegroundModelExecutions(...args),
 }));
-jest.mock('../../src/services/executionJournal/foregroundModelProjectionCleanup', () => ({
-  releaseStaleForegroundModelProjectionOwners: (...args: any[]) =>
-    mockReleaseStaleForegroundModelProjectionOwners(...args),
+jest.mock('../../src/services/executionJournal/foregroundExecutionProjectionCleanup', () => ({
+  releaseStaleForegroundExecutionProjectionOwners: (...args: any[]) =>
+    mockReleaseStaleModelProjectionOwners(...args),
 }));
 jest.mock('../../src/services/executionJournal/foregroundModelExecutionRetention', () => ({
   maintainForegroundModelExecutionRetention: (...args: any[]) =>
@@ -75,7 +82,8 @@ beforeEach(() => {
   mockListActiveSubAgents.mockReturnValue([]);
   mockReconcileDurableRecoveryLifecycle.mockResolvedValue(undefined);
   mockRecoverInterruptedForegroundModelExecutions.mockResolvedValue([]);
-  mockReleaseStaleForegroundModelProjectionOwners.mockResolvedValue(0);
+  mockReleaseStaleModelProjectionOwners.mockResolvedValue(0);
+  mockReleaseStaleScheduledProjectionOwners.mockResolvedValue(0);
   mockRepairTerminalAgentRunsMissingFinalResponses.mockResolvedValue([]);
   mockBuildToolEffectRestartDispositionResolver.mockResolvedValue(jest.fn());
   mockListActiveToolEffectRestartInputs.mockReturnValue([]);
@@ -95,6 +103,7 @@ describe('startup recovery transaction', () => {
 
     const recovery = recoverPersistedAgentState();
     await flushMicrotasks();
+    expect(mockReleaseStaleScheduledProjectionOwners).toHaveBeenCalledTimes(1);
     expect(mockReconcileDurableRecoveryLifecycle).toHaveBeenCalledWith('startup');
     expect(mockRecoverInterruptedForegroundModelExecutions).not.toHaveBeenCalled();
     expect(mockChatState.recoverInterruptedAgentRuns).not.toHaveBeenCalled();
@@ -102,9 +111,9 @@ describe('startup recovery transaction', () => {
 
     releaseNativeRecovery?.();
     await recovery;
-    expect(mockRepairTerminalAgentRunsMissingFinalResponses.mock.invocationCallOrder[0]).toBeLessThan(
-      mockFlushChatStorePersistenceNow.mock.invocationCallOrder[0],
-    );
+    expect(
+      mockRepairTerminalAgentRunsMissingFinalResponses.mock.invocationCallOrder[0],
+    ).toBeLessThan(mockFlushChatStorePersistenceNow.mock.invocationCallOrder[0]);
     expect(mockFlushChatStorePersistenceNow.mock.invocationCallOrder[0]).toBeLessThan(
       mockMaintainTerminalExecutionRetention.mock.invocationCallOrder[0],
     );
@@ -118,6 +127,21 @@ describe('startup recovery transaction', () => {
     expect(mockMaintainTerminalExecutionRetention).not.toHaveBeenCalled();
   });
 
+  it('fails closed before any other recovery mutation when scheduler projection cleanup fails', async () => {
+    mockReleaseStaleScheduledProjectionOwners.mockRejectedValueOnce(
+      new Error('scheduler projection cleanup failed'),
+    );
+    const { recoverPersistedAgentState } = require('../../src/services/startupRecovery');
+
+    await expect(recoverPersistedAgentState()).rejects.toThrow(
+      'scheduler projection cleanup failed',
+    );
+    expect(mockInitSubAgentRegistry).not.toHaveBeenCalled();
+    expect(mockReconcileDurableRecoveryLifecycle).not.toHaveBeenCalled();
+    expect(mockRecoverInterruptedForegroundModelExecutions).not.toHaveBeenCalled();
+    expect(mockChatState.recoverInterruptedAgentRuns).not.toHaveBeenCalled();
+  });
+
   it('repeats the complete transaction on foreground without reinitializing subagents', async () => {
     const {
       triggerForegroundPersistedAgentRecovery,
@@ -129,6 +153,7 @@ describe('startup recovery transaction', () => {
     await triggerForegroundPersistedAgentRecovery();
 
     expect(mockReconcileDurableRecoveryLifecycle).toHaveBeenCalledWith('foreground');
+    expect(mockReleaseStaleScheduledProjectionOwners).toHaveBeenCalledTimes(1);
     expect(mockRecoverInterruptedForegroundModelExecutions).toHaveBeenCalledTimes(1);
     expect(mockChatState.recoverInterruptedAgentRuns).toHaveBeenCalledTimes(1);
     expect(mockFlushChatStorePersistenceNow).toHaveBeenCalledTimes(1);

@@ -49,6 +49,8 @@ export type SessionEvent = InternalHookEvent & {
   context: {
     conversationId?: string;
     reason?: string;
+    agentRunId?: string;
+    executionSignal?: AbortController;
   };
 };
 
@@ -76,6 +78,8 @@ export type SchedulerEvent = InternalHookEvent & {
     error?: string;
     attempt?: number;
     maxRetries?: number;
+    agentRunId?: string;
+    executionSignal?: AbortController;
   };
 };
 
@@ -86,6 +90,8 @@ export type CommandEvent = InternalHookEvent & {
     commandName: string;
     args?: string;
     conversationId?: string;
+    agentRunId?: string;
+    executionSignal?: AbortController;
   };
 };
 
@@ -97,6 +103,8 @@ export type AgentEvent = InternalHookEvent & {
     toolName?: string;
     error?: string;
     iteration?: number;
+    agentRunId?: string;
+    executionSignal?: AbortController;
   };
 };
 

@@ -5,7 +5,11 @@ jest.mock('expo-sqlite', () => {
 
 import { Directory, File, Paths } from 'expo-file-system';
 import * as SQLite from 'expo-sqlite';
-import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
+import {
+  closeMemoryDb,
+  getMemoryDb,
+  removeRetiredMemoryDatabaseArtifactsAtStartup,
+} from '../../../src/services/memory/database';
 import { removeRetiredMemoryFileArtifacts } from '../../../src/services/memory/retiredMemoryArtifacts';
 
 const expoFileSystem = jest.requireMock('expo-file-system') as {
@@ -29,6 +33,7 @@ describe('retired memory artifact cleanup', () => {
   it('drops the retired chunk table before returning the canonical database', () => {
     const database = SQLite.openDatabaseSync('kavi-memory.db');
     database.execSync('CREATE TABLE memory_chunks (id TEXT PRIMARY KEY)');
+    database.execSync('CREATE TABLE memory_product_experience_observations (id TEXT PRIMARY KEY)');
 
     const canonicalDatabase = getMemoryDb();
 
@@ -37,6 +42,33 @@ describe('retired memory artifact cleanup', () => {
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memory_chunks'",
       ),
     ).toBeNull();
+    expect(
+      canonicalDatabase.getFirstSync<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memory_product_experience_observations'",
+      ),
+    ).toBeNull();
+  });
+
+  it('removes retired tables at startup without initializing canonical memory', () => {
+    const database = SQLite.openDatabaseSync('kavi-memory.db');
+    database.execSync('CREATE TABLE memory_chunks (id TEXT PRIMARY KEY)');
+    database.execSync('CREATE TABLE memory_product_experience_observations (id TEXT PRIMARY KEY)');
+    database.closeSync();
+
+    removeRetiredMemoryDatabaseArtifactsAtStartup();
+
+    const inspected = SQLite.openDatabaseSync('kavi-memory.db');
+    expect(
+      inspected.getFirstSync<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('memory_chunks', 'memory_product_experience_observations')",
+      ),
+    ).toBeNull();
+    expect(
+      inspected.getFirstSync<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memory_facts'",
+      ),
+    ).toBeNull();
+    inspected.closeSync();
   });
 
   it('deletes only the retired Markdown memory directories', () => {

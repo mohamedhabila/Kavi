@@ -3,7 +3,7 @@ import {
   createKnowledgeSkill,
   mockFetch,
   registerBuiltInServiceSkills,
-  registerSkill,
+  registerCodeOwnedSkill,
 } from '../helpers/serviceIntegrationsHarness';
 
 describe('Service Integrations', () => {
@@ -12,7 +12,7 @@ describe('Service Integrations', () => {
   describe('registerBuiltInServiceSkills', () => {
     it('should register 7 skills', () => {
       registerBuiltInServiceSkills();
-      expect(registerSkill).toHaveBeenCalledTimes(7);
+      expect(registerCodeOwnedSkill).toHaveBeenCalledTimes(7);
     });
   });
 

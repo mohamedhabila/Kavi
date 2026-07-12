@@ -29,6 +29,7 @@ function recover(
 ) {
   return recoverActiveToolCallsAfterRestart({
     conversationId: 'conversation-1',
+    executionRunId: 'execution-run-1',
     messages: messages(),
     run: { id: 'run-1', userMessageId: 'user-1', createdAt: 1 },
     timestamp: TIMESTAMP,
@@ -49,7 +50,7 @@ describe('agent-run tool recovery after restart', () => {
 
     expect(resolveToolEffect).toHaveBeenCalledWith({
       conversationId: 'conversation-1',
-      taskId: 'run-1',
+      executionRunId: 'execution-run-1',
       toolCallId: 'tool-call-1',
       toolName: 'calendar_create_event',
       argumentsText: '{}',
@@ -95,6 +96,7 @@ describe('agent-run tool recovery after restart', () => {
 
     const recovered = recoverActiveToolCallsAfterRestart({
       conversationId: 'conversation-1',
+      executionRunId: 'execution-run-1',
       messages: toolMessages,
       run: { id: 'run-1', userMessageId: 'user-1', createdAt: 1 },
       timestamp: TIMESTAMP,

@@ -1,16 +1,31 @@
 const mockCreatePending = jest.fn();
 const mockReconcile = jest.fn();
+const mockCommitPendingVerifiedProcedureObservation = jest.fn();
 
 jest.mock('../../../src/services/agents/subAgentOutcomeReconciliation', () => ({
   createPendingSubAgentOutcomeReconciliation: (...args: unknown[]) => mockCreatePending(...args),
   reconcileSubAgentOutcomeMemory: (...args: unknown[]) => mockReconcile(...args),
 }));
 
+jest.mock('../../../src/services/memory/verifiedProcedure/executionSession', () => ({
+  commitPendingVerifiedProcedureObservation: (...args: unknown[]) =>
+    mockCommitPendingVerifiedProcedureObservation(...args),
+}));
+
 import type { SubAgentConfig, SubAgentSnapshot } from '../../../src/types/subAgent';
+import type { PendingVerifiedProcedureObservation } from '../../../src/services/memory/verifiedProcedure/executionSession';
+import type { PersistRegistryBestEffortOutcome } from '../../../src/services/agents/lifecycle/sessionContext';
 import {
   finalizeCompletedSubAgentRun,
   finalizeFailedSubAgentRun,
 } from '../../../src/services/agents/lifecycle/terminalizePhase';
+
+const MEMORY_LINEAGE = {
+  sourceMessageId: 'worker-request-1',
+  sourceRunId: 'worker-1',
+  sourceTurnId: 'worker-response-1',
+  taskId: 'task-1',
+} as const;
 
 function makeAgent(): SubAgentSnapshot {
   return {
@@ -48,6 +63,11 @@ beforeEach(() => {
     completedAt: 10,
     factIds: ['fact-1'],
   });
+  mockCommitPendingVerifiedProcedureObservation.mockResolvedValue({
+    status: 'recorded',
+    observationId: 'procedure-1',
+    prunedCount: 0,
+  });
 });
 
 function commonParams(agent: SubAgentSnapshot, order: string[]) {
@@ -72,7 +92,7 @@ function commonParams(agent: SubAgentSnapshot, order: string[]) {
     maxToolResultPreviewChars: 320,
     signalTerminal: jest.fn(() => order.push('signal-terminal')),
     scheduleSessionContextCheckpoint: jest.fn(),
-    persistRegistryBestEffort: jest.fn(async () => {
+    persistRegistryBestEffort: jest.fn(async (): Promise<PersistRegistryBestEffortOutcome> => {
       order.push(`persist:${agent.outcomeReconciliation?.status ?? 'missing'}`);
       return { status: 'persisted' as const };
     }),
@@ -98,12 +118,7 @@ describe('terminal worker outcome ordering', () => {
 
     await finalizeCompletedSubAgentRun(commonParams(agent, order));
 
-    expect(order).toEqual([
-      'persist:pending',
-      'reconcile',
-      'persist:completed',
-      'signal-terminal',
-    ]);
+    expect(order).toEqual(['persist:pending', 'reconcile', 'persist:completed', 'signal-terminal']);
     expect(mockReconcile).toHaveBeenCalledWith(
       expect.objectContaining({
         agent,
@@ -135,12 +150,136 @@ describe('terminal worker outcome ordering', () => {
       completionState: 'blocked',
     });
 
+    expect(order).toEqual(['persist:pending', 'reconcile', 'persist:completed', 'signal-terminal']);
+    expect(agent.status).toBe('error');
+  });
+
+  it('commits verified procedure evidence only after the reconciled terminal state is durable', async () => {
+    const order: string[] = [];
+    const agent = makeAgent();
+    const pending = {} as PendingVerifiedProcedureObservation;
+    mockReconcile.mockImplementation(async () => {
+      order.push('reconcile');
+      return {
+        status: 'completed',
+        code: 'recorded_verified',
+        attemptCount: 1,
+        updatedAt: 10,
+        completedAt: 10,
+        factIds: ['fact-1'],
+      };
+    });
+    mockCommitPendingVerifiedProcedureObservation.mockImplementation(async () => {
+      order.push('procedure-commit');
+      return { status: 'recorded', observationId: 'procedure-1', prunedCount: 0 };
+    });
+
+    await finalizeCompletedSubAgentRun({
+      ...commonParams(agent, order),
+      pendingVerifiedProcedureCommit: {
+        memoryLineage: MEMORY_LINEAGE,
+        observation: pending,
+      },
+    });
+
     expect(order).toEqual([
       'persist:pending',
       'reconcile',
       'persist:completed',
+      'procedure-commit',
       'signal-terminal',
     ]);
-    expect(agent.status).toBe('error');
+    expect(mockCommitPendingVerifiedProcedureObservation).toHaveBeenCalledWith({
+      memoryLineage: MEMORY_LINEAGE,
+      pending,
+      surface: 'subagent',
+      terminalObservedAt: expect.any(Number),
+    });
+  });
+
+  it.each(['blocked', 'incomplete'] as const)(
+    'does not commit a %s completed worker as verified procedure evidence',
+    async (completionState) => {
+      const order: string[] = [];
+      const agent = makeAgent();
+
+      await finalizeCompletedSubAgentRun({
+        ...commonParams(agent, order),
+        completionState,
+        pendingVerifiedProcedureCommit: {
+          memoryLineage: MEMORY_LINEAGE,
+          observation: {} as PendingVerifiedProcedureObservation,
+        },
+      });
+
+      expect(mockCommitPendingVerifiedProcedureObservation).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects procedure settlement when reconciled terminal persistence fails', async () => {
+    const order: string[] = [];
+    const agent = makeAgent();
+    const params = commonParams(agent, order);
+    params.persistRegistryBestEffort
+      .mockResolvedValueOnce({ status: 'persisted' })
+      .mockResolvedValueOnce({ status: 'failed' });
+
+    await finalizeCompletedSubAgentRun({
+      ...params,
+      pendingVerifiedProcedureCommit: {
+        memoryLineage: MEMORY_LINEAGE,
+        observation: {} as PendingVerifiedProcedureObservation,
+      },
+    });
+
+    expect(mockCommitPendingVerifiedProcedureObservation).not.toHaveBeenCalled();
+  });
+
+  it('waits for timed-out terminal persistence to become durable before committing', async () => {
+    const order: string[] = [];
+    const agent = makeAgent();
+    let resolvePersistence!: (persisted: boolean) => void;
+    const completion = new Promise<boolean>((resolve) => {
+      resolvePersistence = resolve;
+    });
+    const params = commonParams(agent, order);
+    params.persistRegistryBestEffort
+      .mockResolvedValueOnce({ status: 'persisted' })
+      .mockResolvedValueOnce({ status: 'timed-out', completion });
+
+    await finalizeCompletedSubAgentRun({
+      ...params,
+      pendingVerifiedProcedureCommit: {
+        memoryLineage: MEMORY_LINEAGE,
+        observation: {} as PendingVerifiedProcedureObservation,
+      },
+    });
+    expect(mockCommitPendingVerifiedProcedureObservation).not.toHaveBeenCalled();
+
+    resolvePersistence(true);
+    await completion;
+    await Promise.resolve();
+
+    expect(mockCommitPendingVerifiedProcedureObservation).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not commit when timed-out terminal persistence eventually fails', async () => {
+    const order: string[] = [];
+    const agent = makeAgent();
+    const params = commonParams(agent, order);
+    params.persistRegistryBestEffort
+      .mockResolvedValueOnce({ status: 'persisted' })
+      .mockResolvedValueOnce({ status: 'timed-out', completion: Promise.resolve(false) });
+
+    await finalizeCompletedSubAgentRun({
+      ...params,
+      pendingVerifiedProcedureCommit: {
+        memoryLineage: MEMORY_LINEAGE,
+        observation: {} as PendingVerifiedProcedureObservation,
+      },
+    });
+    await Promise.resolve();
+
+    expect(mockCommitPendingVerifiedProcedureObservation).not.toHaveBeenCalled();
   });
 });

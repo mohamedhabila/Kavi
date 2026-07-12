@@ -824,7 +824,8 @@ export const ja: TranslationMap = mergeTranslations(en, {
   scheduler: {
     title: 'スケジューラー',
     noJobs: 'スケジュールされたタスクがありません',
-    noJobsHint: 'AIタスクを自動実行するようスケジュールします。',
+    noJobsHint:
+      'AIタスクを予約できます。アプリが非アクティブなときは、通知を許可し、起動通知をタップして実行します。',
     addTask: 'タスクを追加',
     taskName: 'タスク名',
     taskNamePlaceholder: '毎日の要約、リマインダーなど',
@@ -851,6 +852,11 @@ export const ja: TranslationMap = mergeTranslations(en, {
     never: 'なし',
     deleteJob: 'タスクを削除',
     deleteJobConfirm: '「{name}」を削除しますか？',
+    deliveryWarning: '配信の警告: {error}',
+    wakeWarning: '起動の警告: {error}',
+    warningTitle: '警告',
+    jobRunning: 'このスケジュール済みタスクは現在実行中です。',
+    jobMissing: 'このスケジュール済みタスクは存在しません。',
     untitledJob: '無題のジョブ',
     cronFormat: 'Cron: {expr}',
     everyFormat: '{value} {unit}ごと',

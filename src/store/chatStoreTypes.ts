@@ -217,6 +217,7 @@ export interface ChatState {
     params?: {
       timestamp?: number;
       resolveToolEffect?: ResolveToolEffectRestartDisposition;
+      executionRunIdByConversationAndAgentRun?: ReadonlyMap<string, ReadonlyMap<string, string>>;
     },
   ) => void;
 }

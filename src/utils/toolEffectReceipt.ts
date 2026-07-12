@@ -4,6 +4,9 @@ import {
   TOOL_EFFECT_TRANSPORT_STATES,
   TOOL_EFFECT_VERIFICATION_STATES,
   TOOL_EXECUTION_STATES,
+  type CodeOwnedToolContractIdentity,
+  type RuntimeExternalToolContractIdentity,
+  type ToolContractIdentity,
   type ToolEffectOperationHandle,
   type ToolEffectReceipt,
   type ToolEffectResourceRef,
@@ -21,7 +24,9 @@ const RECEIPT_KEYS = new Set([
   'receiptId',
   'toolCallId',
   'toolName',
-  'runId',
+  'contractIdentity',
+  'executionRunId',
+  'dispatchRunId',
   'transportState',
   'executionState',
   'effectKind',
@@ -35,6 +40,25 @@ const RECEIPT_KEYS = new Set([
 ]);
 const RESOURCE_REFERENCE_KEYS = new Set(['kind', 'id', 'digest']);
 const OPERATION_HANDLE_KEYS = new Set(['kind', 'id']);
+const CONTRACT_IDENTITY_KEYS = new Set([
+  'kind',
+  'version',
+  'toolName',
+  'schemaDigest',
+  'capabilityContractDigest',
+  'workflowContractDigest',
+  'effectContractDigest',
+  'executionPolicyDigest',
+]);
+const RUNTIME_EXTERNAL_IDENTITY_KEYS = new Set([
+  'kind',
+  'version',
+  'toolName',
+  'source',
+  'namespace',
+  'declarationDigest',
+  'executionBindingDigest',
+]);
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -91,6 +115,115 @@ function decodeOperationHandle(value: unknown): ToolEffectOperationHandle | unde
   return kind && id ? Object.freeze({ kind, id }) : undefined;
 }
 
+function runtimeExternalNameMatches(
+  toolName: string,
+  source: RuntimeExternalToolContractIdentity['source'],
+  namespace: string,
+): boolean {
+  if (source === 'mcp') {
+    const match = toolName.match(/^mcp__([^_]+(?:_[^_]+)*)__(.+)$/u);
+    return Boolean(match && match[1] === namespace);
+  }
+  const parts = toolName.split('__');
+  return parts.length === 3 && parts[0] === 'skill' && parts[1] === namespace;
+}
+
+function decodeCodeOwnedContractIdentity(
+  value: Record<string, unknown>,
+): CodeOwnedToolContractIdentity | undefined {
+  if (
+    !hasOnlyKeys(value, CONTRACT_IDENTITY_KEYS) ||
+    value.kind !== 'code_owned' ||
+    value.version !== 1
+  ) {
+    return undefined;
+  }
+  const toolName = boundedString(value.toolName, 256);
+  const schemaDigest = boundedString(value.schemaDigest, 71);
+  const capabilityContractDigest = boundedString(value.capabilityContractDigest, 71);
+  const workflowContractDigest = boundedString(value.workflowContractDigest, 71);
+  const effectContractDigest = boundedString(value.effectContractDigest, 71);
+  const executionPolicyDigest = boundedString(value.executionPolicyDigest, 71);
+  if (
+    !toolName ||
+    !schemaDigest ||
+    !SHA256_PATTERN.test(schemaDigest) ||
+    !capabilityContractDigest ||
+    !SHA256_PATTERN.test(capabilityContractDigest) ||
+    !workflowContractDigest ||
+    !SHA256_PATTERN.test(workflowContractDigest) ||
+    !effectContractDigest ||
+    !SHA256_PATTERN.test(effectContractDigest) ||
+    !executionPolicyDigest ||
+    !SHA256_PATTERN.test(executionPolicyDigest)
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    kind: 'code_owned' as const,
+    version: 1,
+    toolName,
+    schemaDigest: schemaDigest as CodeOwnedToolContractIdentity['schemaDigest'],
+    capabilityContractDigest:
+      capabilityContractDigest as CodeOwnedToolContractIdentity['capabilityContractDigest'],
+    workflowContractDigest:
+      workflowContractDigest as CodeOwnedToolContractIdentity['workflowContractDigest'],
+    effectContractDigest:
+      effectContractDigest as CodeOwnedToolContractIdentity['effectContractDigest'],
+    executionPolicyDigest:
+      executionPolicyDigest as CodeOwnedToolContractIdentity['executionPolicyDigest'],
+  });
+}
+
+function decodeRuntimeExternalContractIdentity(
+  value: Record<string, unknown>,
+): RuntimeExternalToolContractIdentity | undefined {
+  if (
+    !hasOnlyKeys(value, RUNTIME_EXTERNAL_IDENTITY_KEYS) ||
+    value.kind !== 'runtime_external' ||
+    value.version !== 1
+  ) {
+    return undefined;
+  }
+  const toolName = boundedString(value.toolName, 256);
+  const source = value.source === 'mcp' || value.source === 'skill' ? value.source : undefined;
+  const namespace = boundedString(value.namespace, 256);
+  const declarationDigest = boundedString(value.declarationDigest, 71);
+  const executionBindingDigest = boundedString(value.executionBindingDigest, 71);
+  if (
+    !toolName ||
+    !source ||
+    !namespace ||
+    !runtimeExternalNameMatches(toolName, source, namespace) ||
+    !declarationDigest ||
+    !SHA256_PATTERN.test(declarationDigest) ||
+    !executionBindingDigest ||
+    !SHA256_PATTERN.test(executionBindingDigest)
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    kind: 'runtime_external' as const,
+    version: 1,
+    toolName,
+    source,
+    namespace,
+    declarationDigest:
+      declarationDigest as RuntimeExternalToolContractIdentity['declarationDigest'],
+    executionBindingDigest:
+      executionBindingDigest as RuntimeExternalToolContractIdentity['executionBindingDigest'],
+  });
+}
+
+function decodeContractIdentity(value: unknown): ToolContractIdentity | undefined {
+  if (!isPlainRecord(value)) return undefined;
+  return value.kind === 'code_owned'
+    ? decodeCodeOwnedContractIdentity(value)
+    : value.kind === 'runtime_external'
+      ? decodeRuntimeExternalContractIdentity(value)
+      : undefined;
+}
+
 export function isToolEffectStateCombinationValid(params: {
   transportState: ToolEffectTransportState;
   effectState: ToolEffectState;
@@ -141,14 +274,17 @@ function isToolExecutionStateCombinationValid(params: {
 }
 
 export function decodeToolEffectReceipt(value: unknown): ToolEffectReceipt | undefined {
-  if (!isPlainRecord(value) || !hasOnlyKeys(value, RECEIPT_KEYS) || value.version !== 1) {
+  if (!isPlainRecord(value) || !hasOnlyKeys(value, RECEIPT_KEYS) || value.version !== 2) {
     return undefined;
   }
 
   const receiptId = boundedString(value.receiptId, 36);
   const toolCallId = boundedString(value.toolCallId, 256);
   const toolName = boundedString(value.toolName, 256);
-  const runId = value.runId === undefined ? undefined : boundedString(value.runId, 256);
+  const contractIdentity = decodeContractIdentity(value.contractIdentity);
+  const executionRunId = boundedString(value.executionRunId, 256);
+  const dispatchRunId =
+    value.dispatchRunId === undefined ? undefined : boundedString(value.dispatchRunId, 256);
   const transportState = enumValue(value.transportState, TOOL_EFFECT_TRANSPORT_STATES);
   const executionState =
     value.executionState === undefined
@@ -166,7 +302,10 @@ export function decodeToolEffectReceipt(value: unknown): ToolEffectReceipt | und
     !RECEIPT_ID_PATTERN.test(receiptId) ||
     !toolCallId ||
     !toolName ||
-    (value.runId !== undefined && !runId) ||
+    !contractIdentity ||
+    contractIdentity.toolName !== toolName ||
+    !executionRunId ||
+    (value.dispatchRunId !== undefined && !dispatchRunId) ||
     !transportState ||
     (value.executionState !== undefined && !executionState) ||
     !effectKind ||
@@ -199,13 +338,28 @@ export function decodeToolEffectReceipt(value: unknown): ToolEffectReceipt | und
   ) {
     return undefined;
   }
+  if (
+    contractIdentity.kind === 'runtime_external' &&
+    (effectKind !== 'unknown' ||
+      verificationState !== 'unverified' ||
+      (transportState === 'rejected'
+        ? effectState !== 'failed' && effectState !== 'cancelled'
+        : effectState !== 'unknown') ||
+      executionState !== undefined ||
+      resource !== undefined ||
+      operationHandle !== undefined)
+  ) {
+    return undefined;
+  }
 
   return Object.freeze({
-    version: 1,
+    version: 2,
     receiptId,
     toolCallId,
     toolName,
-    ...(runId ? { runId } : {}),
+    contractIdentity,
+    executionRunId,
+    ...(dispatchRunId ? { dispatchRunId } : {}),
     transportState,
     ...(executionState ? { executionState } : {}),
     effectKind,
@@ -220,12 +374,36 @@ export function decodeToolEffectReceipt(value: unknown): ToolEffectReceipt | und
 }
 
 function receiptsMatchReplay(left: ToolEffectReceipt, right: ToolEffectReceipt): boolean {
+  const identitiesMatch =
+    left.contractIdentity.kind === right.contractIdentity.kind &&
+    (left.contractIdentity.kind === 'code_owned' && right.contractIdentity.kind === 'code_owned'
+      ? left.contractIdentity.version === right.contractIdentity.version &&
+        left.contractIdentity.toolName === right.contractIdentity.toolName &&
+        left.contractIdentity.schemaDigest === right.contractIdentity.schemaDigest &&
+        left.contractIdentity.capabilityContractDigest ===
+          right.contractIdentity.capabilityContractDigest &&
+        left.contractIdentity.workflowContractDigest ===
+          right.contractIdentity.workflowContractDigest &&
+        left.contractIdentity.effectContractDigest ===
+          right.contractIdentity.effectContractDigest &&
+        left.contractIdentity.executionPolicyDigest === right.contractIdentity.executionPolicyDigest
+      : left.contractIdentity.kind === 'runtime_external' &&
+        right.contractIdentity.kind === 'runtime_external' &&
+        left.contractIdentity.version === right.contractIdentity.version &&
+        left.contractIdentity.toolName === right.contractIdentity.toolName &&
+        left.contractIdentity.source === right.contractIdentity.source &&
+        left.contractIdentity.namespace === right.contractIdentity.namespace &&
+        left.contractIdentity.declarationDigest === right.contractIdentity.declarationDigest &&
+        left.contractIdentity.executionBindingDigest ===
+          right.contractIdentity.executionBindingDigest);
   return (
     left.version === right.version &&
     left.receiptId === right.receiptId &&
     left.toolCallId === right.toolCallId &&
     left.toolName === right.toolName &&
-    left.runId === right.runId &&
+    identitiesMatch &&
+    left.executionRunId === right.executionRunId &&
+    left.dispatchRunId === right.dispatchRunId &&
     left.transportState === right.transportState &&
     left.executionState === right.executionState &&
     left.effectKind === right.effectKind &&
@@ -237,7 +415,8 @@ function receiptsMatchReplay(left: ToolEffectReceipt, right: ToolEffectReceipt):
     left.resource?.id === right.resource?.id &&
     left.resource?.digest === right.resource?.digest &&
     left.operationHandle?.kind === right.operationHandle?.kind &&
-    left.operationHandle?.id === right.operationHandle?.id
+    left.operationHandle?.id === right.operationHandle?.id &&
+    left.recordedAt === right.recordedAt
   );
 }
 

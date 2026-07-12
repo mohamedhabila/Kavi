@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { useSchedulerStore } from '../../src/services/scheduler/store';
+import type { SchedulerTerminalReport } from '../../src/services/cron/types';
 import {
   setSchedulerExecutor,
   startScheduler,
@@ -11,6 +12,10 @@ import {
 
 jest.mock('../../src/services/scheduler/runtimeReadiness', () => ({
   ensureSchedulerRuntimeReady: jest.fn().mockResolvedValue(undefined),
+  setSchedulerRecoveryFailureNotifier: jest.fn(),
+}));
+jest.mock('../../src/services/startupRecovery', () => ({
+  waitForPersistedAgentRecoveryReadiness: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('../../src/services/scheduler/persistence', () => ({
   SCHEDULER_STORE_KEY: 'kavi-scheduler',
@@ -22,6 +27,20 @@ jest.mock('../../src/services/scheduler/persistence', () => ({
 jest.mock('../../src/services/events/bus', () => ({
   emitSchedulerEvent: jest.fn().mockResolvedValue(undefined),
 }));
+
+function report(jobId: string, attemptId: string): SchedulerTerminalReport {
+  return {
+    id: attemptId,
+    jobId,
+    jobName: 'Test job',
+    status: 'success',
+    notification: 'none',
+    startedAtMs: 1,
+    completedAtMs: 2,
+    attempt: 1,
+    trigger: 'scheduled',
+  };
+}
 
 // Mock cron schedule
 jest.mock('../../src/services/cron/schedule', () => ({
@@ -35,7 +54,7 @@ jest.mock('../../src/services/cron/schedule', () => ({
 
 beforeEach(() => {
   // Reset store
-  useSchedulerStore.setState({ jobs: [] });
+  useSchedulerStore.setState({ jobs: [], terminalReports: [] });
   stopScheduler();
 });
 
@@ -64,7 +83,7 @@ describe('useSchedulerStore', () => {
     expect(jobs[0].delivery?.mode).toBe('both');
     expect(typeof jobs[0].nextRunAtMs).toBe('number');
     expect(jobs[0].retryAttempts).toBe(0);
-    expect(jobs[0].wakePolicy).toBe('try_background_then_notify');
+    expect(jobs[0].wakePolicy).toBe('notify_only');
   });
 
   it('addJob uses provided optional params', () => {
@@ -106,12 +125,21 @@ describe('useSchedulerStore', () => {
       schedule: { kind: 'cron', expr: '* * * * *' },
       prompt: 'test',
     });
+    const initialRevision = useSchedulerStore.getState().jobs[0].definitionRevision;
 
     useSchedulerStore.getState().disableJob(id);
     expect(useSchedulerStore.getState().jobs[0].enabled).toBe(false);
+    expect(useSchedulerStore.getState().jobs[0].definitionRevision).toBe(initialRevision + 1);
+
+    useSchedulerStore.getState().disableJob(id);
+    expect(useSchedulerStore.getState().jobs[0].definitionRevision).toBe(initialRevision + 1);
 
     useSchedulerStore.getState().enableJob(id);
     expect(useSchedulerStore.getState().jobs[0].enabled).toBe(true);
+    expect(useSchedulerStore.getState().jobs[0].definitionRevision).toBe(initialRevision + 2);
+
+    useSchedulerStore.getState().enableJob(id);
+    expect(useSchedulerStore.getState().jobs[0].definitionRevision).toBe(initialRevision + 2);
   });
 
   it('recordRun auto-disables "at" schedule', () => {
@@ -129,7 +157,15 @@ describe('useSchedulerStore', () => {
       timestamp,
       force: true,
     });
-    useSchedulerStore.getState().recordRun(id, 'attempt-once', timestamp);
+    useSchedulerStore
+      .getState()
+      .recordRun(
+        id,
+        'attempt-once',
+        useSchedulerStore.getState().jobs[0].definitionRevision,
+        timestamp,
+        report(id, 'attempt-once'),
+      );
     expect(useSchedulerStore.getState().jobs[0].enabled).toBe(false);
   });
 
@@ -147,7 +183,15 @@ describe('useSchedulerStore', () => {
       timestamp,
       force: true,
     });
-    useSchedulerStore.getState().recordRun(id, 'attempt-recurring', timestamp);
+    useSchedulerStore
+      .getState()
+      .recordRun(
+        id,
+        'attempt-recurring',
+        useSchedulerStore.getState().jobs[0].definitionRevision,
+        timestamp,
+        report(id, 'attempt-recurring'),
+      );
     // Cron jobs stay enabled
     const job = useSchedulerStore.getState().jobs[0];
     // The store only auto-disables 'at' or deleteAfterRun
@@ -170,13 +214,19 @@ describe('useSchedulerStore', () => {
       timestamp,
       force: true,
     });
-    useSchedulerStore.getState().recordRunFailure(id, 'attempt-retry', {
-      timestamp,
-      error: 'network down',
-      attempt: 1,
-      nextRetryAtMs: timestamp + 30_000,
-      final: false,
-    });
+    useSchedulerStore.getState().recordRunFailure(
+      id,
+      'attempt-retry',
+      useSchedulerStore.getState().jobs[0].definitionRevision,
+      {
+        timestamp,
+        error: 'network down',
+        attempt: 1,
+        nextRetryAtMs: timestamp + 30_000,
+        final: false,
+      },
+      report(id, 'attempt-retry'),
+    );
 
     const job = useSchedulerStore.getState().jobs[0];
     expect(job.enabled).toBe(true);
@@ -235,13 +285,13 @@ describe('useSchedulerStore', () => {
 
 describe('Scheduler Engine', () => {
   it('startScheduler / stopScheduler work without error', () => {
-    setSchedulerExecutor({ execute: jest.fn().mockResolvedValue('ok') });
+    setSchedulerExecutor({ execute: jest.fn().mockResolvedValue({ output: 'ok' }) });
     startScheduler();
     stopScheduler();
   });
 
   it('startScheduler is idempotent', () => {
-    setSchedulerExecutor({ execute: jest.fn().mockResolvedValue('ok') });
+    setSchedulerExecutor({ execute: jest.fn().mockResolvedValue({ output: 'ok' }) });
     startScheduler();
     startScheduler(); // noop
     stopScheduler();

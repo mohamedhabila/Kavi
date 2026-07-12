@@ -1,4 +1,9 @@
-import { runOrchestrator, MAX_TOOL_ITERATIONS, OrchestratorCallbacks, OrchestratorOptions } from '../../src/engine/orchestrator';
+import {
+  runOrchestrator,
+  MAX_TOOL_ITERATIONS,
+  OrchestratorCallbacks,
+  OrchestratorOptions,
+} from '../../src/engine/orchestrator';
 import { DefaultContextEngine } from '../../src/services/context/compaction';
 import * as budgetManager from '../../src/services/context/budgetManager';
 import type { Message } from '../../src/types/message';
@@ -120,14 +125,22 @@ describe('runOrchestrator — slash commands', () => {
 
     isSlashCommand.mockReturnValue(true);
     parseCommand.mockReturnValue({ name: 'clear', args: '' });
+    const handler = jest.fn().mockResolvedValue({
+      response: 'Conversation cleared',
+      action: 'clear',
+    });
     getCommand.mockReturnValue({
       name: 'clear',
       description: 'Clear conversation',
-      handler: jest.fn().mockResolvedValue({ response: 'Conversation cleared', action: 'clear' }),
+      handler,
     });
 
     const callbacks = makeCallbacks();
-    const options = makeOptions([makeMsg('user', '/clear')]);
+    const signal = new AbortController();
+    const options = makeOptions([makeMsg('user', '/clear')], {
+      agentRunId: 'scheduled-attempt-1',
+      signal,
+    });
 
     await runOrchestrator(options, callbacks);
 
@@ -135,6 +148,12 @@ describe('runOrchestrator — slash commands', () => {
       expect.objectContaining({ response: 'Conversation cleared', action: 'clear' }),
     );
     expect(callbacks.onDone).toHaveBeenCalled();
+    expect(handler).toHaveBeenCalledWith({
+      conversationId: 'conv-1',
+      args: '',
+      agentRunId: 'scheduled-attempt-1',
+      executionSignal: signal,
+    });
     // Should not call LLM
     expect(mockStreamMessage).not.toHaveBeenCalled();
   });

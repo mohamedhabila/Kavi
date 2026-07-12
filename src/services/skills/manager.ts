@@ -8,6 +8,11 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Skill, SkillEntry, SkillMetadata, SkillToolExecutionContext } from './types';
 import type { ToolDefinition } from '../../types/tool';
+import { getRuntimeExternalToolProcessEpoch } from '../runtimeExternalToolProcessEpoch';
+import {
+  isCodeOwnedServiceSkillId,
+  isIssuedCodeOwnedServiceSkill,
+} from '../integrations/codeOwnedServiceTools';
 import { generateId } from '../../utils/id';
 import { parseFrontmatterBlock } from '../markdown/frontmatter';
 import { buildSkillMetadataFromFrontmatter, getSkillCompatibility } from './manifest';
@@ -192,13 +197,46 @@ export function parseSkillManifest(content: string): SkillMetadata | null {
 // ── Skill Registry (runtime) ─────────────────────────────────────────────
 
 const loadedSkills = new Map<string, Skill>();
+const skillRegistrationGenerations = new Map<string, number>();
+let nextSkillRegistrationGeneration = 1;
+
+export interface CapturedSkillRuntimeToolBinding {
+  readonly declaration: ToolDefinition;
+  readonly provenance: Readonly<{
+    source: 'skill';
+    namespace: string;
+    registrationGeneration: number;
+    runtimeProcessEpoch: string;
+    name: string;
+    version: string;
+    author?: string;
+  }>;
+  isCurrent(): boolean;
+  execute(argsString: string, context?: SkillToolExecutionContext): Promise<string>;
+}
 
 export function registerSkill(skill: Skill): void {
+  if (isCodeOwnedServiceSkillId(skill.id)) {
+    return;
+  }
+  registerSkillGeneration(skill);
+}
+
+function registerSkillGeneration(skill: Skill): void {
   loadedSkills.set(skill.id, skill);
+  skillRegistrationGenerations.set(skill.id, nextSkillRegistrationGeneration++);
+}
+
+export function registerCodeOwnedSkill(skill: Skill): void {
+  if (!isCodeOwnedServiceSkillId(skill.id) || !isIssuedCodeOwnedServiceSkill(skill)) {
+    throw new Error(`Code-owned skill id is not registered: ${skill.id}`);
+  }
+  registerSkillGeneration(skill);
 }
 
 export function unregisterSkill(id: string): void {
   loadedSkills.delete(id);
+  skillRegistrationGenerations.delete(id);
 }
 
 export function getLoadedSkill(id: string): Skill | undefined {
@@ -213,13 +251,7 @@ export function getSkillToolDefinitions(): ToolDefinition[] {
   const defs: ToolDefinition[] = [];
   for (const skill of loadedSkills.values()) {
     for (const tool of skill.tools) {
-      defs.push({
-        name: `skill__${skill.id}__${tool.name}`,
-        description: `[${skill.name}] ${tool.description}`,
-        input_schema: tool.input_schema,
-        strict: tool.strict,
-        contract: tool.contract,
-      });
+      defs.push(skillToolDefinition(skill, tool));
     }
   }
   return defs;
@@ -229,6 +261,77 @@ export function parseSkillToolName(toolName: string): { skillId: string; toolNam
   const parts = toolName.split('__');
   if (parts.length !== 3 || parts[0] !== 'skill') return null;
   return { skillId: parts[1], toolName: parts[2] };
+}
+
+function skillToolDefinition(skill: Skill, tool: Skill['tools'][number]): ToolDefinition {
+  return {
+    name: `skill__${skill.id}__${tool.name}`,
+    description: `[${skill.name}] ${tool.description}`,
+    input_schema: tool.input_schema,
+    strict: tool.strict,
+    contract: tool.contract,
+  };
+}
+
+async function executeCapturedSkillTool(
+  skillId: string,
+  toolName: string,
+  handler: NonNullable<Skill['tools'][number]['handler']>,
+  argsString: string,
+  context: SkillToolExecutionContext = {},
+): Promise<string> {
+  let args: any;
+  try {
+    args = JSON.parse(argsString);
+  } catch {
+    return 'Error: invalid tool arguments JSON';
+  }
+
+  if (context.executionSignal?.aborted) {
+    return 'Error: Request cancelled';
+  }
+
+  try {
+    return await handler(args, context);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return `Error executing ${skillId}/${toolName}: ${message}`;
+  }
+}
+
+export function captureSkillRuntimeToolBinding(
+  fullToolName: string,
+): CapturedSkillRuntimeToolBinding | undefined {
+  const parsed = parseSkillToolName(fullToolName);
+  if (!parsed) return undefined;
+  const skill = loadedSkills.get(parsed.skillId);
+  const registrationGeneration = skillRegistrationGenerations.get(parsed.skillId);
+  const tool = skill?.tools.find((candidate) => candidate.name === parsed.toolName);
+  const handler = tool?.handler;
+  if (!skill || !tool || !handler || !registrationGeneration) return undefined;
+  const declaration = JSON.parse(
+    JSON.stringify(skillToolDefinition(skill, tool)),
+  ) as ToolDefinition;
+  return {
+    declaration,
+    provenance: {
+      source: 'skill',
+      namespace: skill.id,
+      registrationGeneration,
+      runtimeProcessEpoch: getRuntimeExternalToolProcessEpoch(),
+      name: skill.name,
+      version: skill.version,
+      ...(skill.author ? { author: skill.author } : {}),
+    },
+    isCurrent: () =>
+      loadedSkills.get(skill.id) === skill &&
+      skillRegistrationGenerations.get(skill.id) === registrationGeneration &&
+      skill.tools.find((candidate) => candidate.name === tool.name) === tool &&
+      tool.handler === handler &&
+      JSON.stringify(skillToolDefinition(skill, tool)) === JSON.stringify(declaration),
+    execute: (argsString, context = {}) =>
+      executeCapturedSkillTool(skill.id, tool.name, handler, argsString, context),
+  };
 }
 
 export async function executeSkillTool(
@@ -246,19 +349,13 @@ export async function executeSkillTool(
   if (!tool) return `Error: tool "${parsed.toolName}" not found in skill "${skill.name}"`;
   if (!tool.handler) return `Error: tool "${parsed.toolName}" has no handler`;
 
-  let args: any;
-  try {
-    args = JSON.parse(argsString);
-  } catch {
-    return 'Error: invalid tool arguments JSON';
-  }
-
-  try {
-    return await tool.handler(args, context);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return `Error executing ${parsed.skillId}/${parsed.toolName}: ${message}`;
-  }
+  return executeCapturedSkillTool(
+    parsed.skillId,
+    parsed.toolName,
+    tool.handler,
+    argsString,
+    context,
+  );
 }
 
 // ── Skill Activation / Deactivation ──────────────────────────────────────

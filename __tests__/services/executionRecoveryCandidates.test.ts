@@ -94,6 +94,7 @@ function seedCandidate(suffix: string, createdAt: number): void {
     expectedControlEpoch: 0,
     toolCallId: `tool-call-${suffix}`,
     toolNameDigest: DIGEST_A,
+    toolContractIdentityDigest: null,
     effectClass: 'external_run',
     idempotencyClass: 'declared_idempotent',
     idempotencyKeyDigest: DIGEST_D,

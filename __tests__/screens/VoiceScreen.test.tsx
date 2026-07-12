@@ -376,6 +376,7 @@ describe('VoiceScreen', () => {
         provider: expect.objectContaining({ id: 'provider-1', apiKey: 'secure-key' }),
         model: 'active-model',
         conversationId: 'voice_voice-id',
+        executionRunId: 'voice_voice-id',
         systemPrompt: 'Be precise\nKeep responses concise and conversational.',
         linkUnderstandingEnabled: true,
         mediaUnderstandingEnabled: false,

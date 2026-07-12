@@ -24,6 +24,7 @@ type OrchestratorGraphBindingsParams = {
   runtimeToolAvailability: RuntimeToolAvailabilityContext;
   toolCallHistory: ToolCallRecord[];
   signal?: AbortController;
+  agentRunId?: string;
   toolFilter?: (toolName: string) => boolean;
   workspaceConversationId?: string;
   workspaceReadFallbackConversationId?: string;
@@ -39,6 +40,8 @@ export function createOrchestratorGraphBindings(
     conversationId: params.conversationId,
     initialMessages: params.initialMessages,
     initialSnapshot: params.initialSnapshot,
+    agentRunId: params.agentRunId,
+    signal: params.signal,
     warn: params.warn,
     workflowScopeUserMessageId: params.workflowScopeUserMessageId,
   });

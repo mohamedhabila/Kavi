@@ -31,7 +31,13 @@ import {
   buildUntrackedExternalToolResult,
   observeExternalToolResultDurability,
 } from '../../services/executionJournal/externalToolDurabilityLifecycle';
-import { recordVerifiedToolEffectExperience } from '../../services/memory/verifiedToolEffectExperience';
+import { isCodeOwnedEffectFreeInvocation } from '../../services/executionJournal/toolEffectDispatchLifecycle';
+
+function runtimeToolDeclaration(lifecycle: ToolExecutionLifecycleParams, toolName: string) {
+  return lifecycle.groundedRequestScopedTools?.find(
+    (tool) => resolveRegisteredToolName(tool.name) === toolName,
+  );
+}
 
 async function appendExecutionReceipt(params: {
   lifecycle: ToolExecutionLifecycleParams;
@@ -52,7 +58,7 @@ async function appendExecutionReceipt(params: {
       transportState: params.transportState,
       resultIsError: params.resultIsError,
       terminalEffectState: params.terminalEffectState,
-      runId: params.lifecycle.agentRunId,
+      executionRunId: params.lifecycle.executionRunId,
       recordedAt: params.recordedAt,
     });
   } catch {
@@ -74,20 +80,29 @@ function attachExecutionReceipt(params: {
     params.receipt,
     { toolCallId: params.toolCall.id, toolName: params.toolCall.name },
   );
+}
 
-  // Experience collection is ancillary. A hashing or storage failure must not
-  // erase the authoritative receipt or alter the primary tool outcome.
-  void recordVerifiedToolEffectExperience({
-    memoryConversationId: params.lifecycle.memoryConversationId,
-    sourceThreadId: params.lifecycle.conversationId,
-    sourceRunId: params.receipt.runId,
-    toolCallId: params.toolCall.id,
-    toolName: params.toolCall.name,
-    receipt: params.receipt,
-  }).catch(() => {
-    // The producer is fail-closed internally; this guard preserves completion
-    // if an unexpected implementation error escapes that boundary.
-  });
+async function observeVerifiedProcedureRawOutcome(params: {
+  lifecycle: ToolExecutionLifecycleParams;
+  toolCall: ToolCall;
+  resultText: string;
+  receipt?: ToolEffectReceipt;
+  reconciliationRequired?: boolean;
+}): Promise<void> {
+  try {
+    await params.lifecycle.verifiedProcedureSession?.observeRawOutcome({
+      iteration: params.lifecycle.iteration,
+      batchIndex: params.lifecycle.batchIndex,
+      toolCallId: params.toolCall.id,
+      toolName: params.toolCall.name,
+      argumentsText: params.toolCall.arguments,
+      resultText: params.resultText,
+      receipt: params.receipt,
+      reconciliationRequired: params.reconciliationRequired,
+    });
+  } catch {
+    params.lifecycle.verifiedProcedureSession?.markReconciliationRequired();
+  }
 }
 
 export type {
@@ -114,7 +129,7 @@ export async function executeToolCallLifecycle(
   params.callbacks.onToolCallStart(toolCall);
   await yieldToUiFrame();
 
-  if (params.signal?.signal.aborted) {
+  const completeCancellation = async (): Promise<ToolExecutionLifecycleResult> => {
     const cancellationMessage = 'Error: Request cancelled';
     const completedAt = Date.now();
     failRunningToolCall(toolCall, 'Request cancelled', completedAt);
@@ -126,6 +141,12 @@ export async function executeToolCallLifecycle(
       resultIsError: true,
       terminalEffectState: 'cancelled',
       recordedAt: completedAt,
+    });
+    await observeVerifiedProcedureRawOutcome({
+      lifecycle: params,
+      toolCall,
+      resultText: cancellationMessage,
+      receipt: effectReceipt,
     });
     params.callbacks.onToolCallComplete(toolCall);
     return {
@@ -141,16 +162,31 @@ export async function executeToolCallLifecycle(
       result: cancellationMessage,
       ...(effectReceipt ? { effectReceipt } : {}),
     };
+  };
+
+  if (params.signal?.signal.aborted) {
+    return completeCancellation();
+  }
+
+  if (
+    params.beforeEffectDispatch &&
+    !isCodeOwnedEffectFreeInvocation(effectiveToolCall.name, effectiveToolCall.arguments)
+  ) {
+    await params.beforeEffectDispatch(effectiveToolCall.name);
+    if (params.signal?.signal.aborted) return completeCancellation();
   }
 
   await emitAgentEvent('tool_start', {
     conversationId: params.conversationId,
     toolName: effectiveToolCall.name,
     iteration: params.iteration,
+    agentRunId: params.agentRunId,
+    executionSignal: params.signal,
   });
   const toolExecutionStartedAt = Date.now();
   let authoritativeEffectReceipt: ToolEffectReceipt | undefined;
   let authoritativeReceiptFinalized = false;
+  let effectReconciliationRequired = false;
 
   try {
     let result = await executeTool(
@@ -167,13 +203,18 @@ export async function executeToolCallLifecycle(
         availableToolNames: Array.from(params.availableToolNames),
         controlGraphGoals: params.controlGraphGoals,
         agentRunId: params.agentRunId,
+        executionRunId: params.executionRunId,
         toolCallId: effectiveToolCall.id,
         executionSignal: params.signal?.signal,
+        runtimeToolDeclaration: runtimeToolDeclaration(params, effectiveToolCall.name),
         captureEffectReceipt: (receipt) => {
           authoritativeEffectReceipt = receipt;
         },
         finalizeEffectReceiptCapture: () => {
           authoritativeReceiptFinalized = true;
+        },
+        captureEffectReconciliationRequired: () => {
+          effectReconciliationRequired = true;
         },
         currentUserMessage: params.currentUserMessage,
       },
@@ -194,6 +235,13 @@ export async function executeToolCallLifecycle(
         recordedAt: Date.now(),
       });
     }
+    await observeVerifiedProcedureRawOutcome({
+      lifecycle: params,
+      toolCall,
+      resultText: result,
+      receipt: authoritativeEffectReceipt,
+      reconciliationRequired: effectReconciliationRequired,
+    });
     if (!isToolResultErrorLike(result)) {
       const durability = await observeExternalToolResultDurability({
         toolName: effectiveToolCall.name,
@@ -252,6 +300,8 @@ export async function executeToolCallLifecycle(
       conversationId: params.conversationId,
       toolName: effectiveToolCall.name,
       iteration: params.iteration,
+      agentRunId: params.agentRunId,
+      executionSignal: params.signal,
     });
     recordLifecyclePerformanceMetrics({
       enabled: params.usePerformanceMetrics,
@@ -280,6 +330,7 @@ export async function executeToolCallLifecycle(
       }),
       result,
       ...(authoritativeEffectReceipt ? { effectReceipt: authoritativeEffectReceipt } : {}),
+      ...(effectReconciliationRequired ? { effectReconciliationRequired: true } : {}),
     };
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
@@ -296,6 +347,13 @@ export async function executeToolCallLifecycle(
         recordedAt: completedAt,
       });
     }
+    await observeVerifiedProcedureRawOutcome({
+      lifecycle: params,
+      toolCall,
+      resultText: errorResult,
+      receipt: authoritativeEffectReceipt,
+      reconciliationRequired: effectReconciliationRequired,
+    });
     params.callbacks.onToolCallComplete(toolCall);
     recordLifecyclePerformanceMetrics({
       enabled: params.usePerformanceMetrics,
@@ -331,6 +389,7 @@ export async function executeToolCallLifecycle(
       }),
       result: errorResult,
       ...(authoritativeEffectReceipt ? { effectReceipt: authoritativeEffectReceipt } : {}),
+      ...(effectReconciliationRequired ? { effectReconciliationRequired: true } : {}),
     };
   }
 }

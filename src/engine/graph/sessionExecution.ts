@@ -10,8 +10,10 @@ import type {
   ExecuteAgentControlGraphIterationParams,
 } from './iterationExecutionTypes';
 
-export interface ExecuteAgentControlGraphSessionParams
-  extends Omit<ExecuteAgentControlGraphIterationParams, 'iteration' | 'runtime'> {
+export interface ExecuteAgentControlGraphSessionParams extends Omit<
+  ExecuteAgentControlGraphIterationParams,
+  'iteration' | 'runtime'
+> {
   initialRuntime: AgentControlGraphIterationRuntimeState;
 }
 
@@ -35,7 +37,11 @@ export async function executeAgentControlGraphSession(
     workingMessages: [...params.initialRuntime.workingMessages],
   };
 
-  await emitSessionEvent('start', { conversationId: params.conversationId });
+  await emitSessionEvent('start', {
+    conversationId: params.conversationId,
+    agentRunId: params.agentRunId,
+    executionSignal: params.signal,
+  });
 
   try {
     while (iteration < params.maxToolIterations) {

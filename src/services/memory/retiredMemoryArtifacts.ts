@@ -9,6 +9,7 @@ const RETIRED_MEMORY_DIRECTORY_NAMES = ['global-memory', 'conversation-memory'] 
  */
 export function removeRetiredMemoryDatabaseArtifacts(database: SQLite.SQLiteDatabase): void {
   database.execSync('DROP TABLE IF EXISTS memory_chunks');
+  database.execSync('DROP TABLE IF EXISTS memory_product_experience_observations;');
 }
 
 /**

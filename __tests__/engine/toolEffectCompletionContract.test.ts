@@ -219,6 +219,7 @@ describe('tool effect completion contracts', () => {
     expect(retry.serializedCriterion).toBe(first.serializedCriterion);
     const contentDigest = await digestToolEffectText('EXPECTED');
     const receipt = await buildToolEffectReceipt({
+      executionRunId: 'execution-run-1',
       toolCallId: 'tc-write-retry',
       toolName: 'write_file',
       argumentsText: '{  "content" : "EXPECTED", "path" : "artifacts/out.txt" }',

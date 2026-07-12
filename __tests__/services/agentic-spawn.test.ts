@@ -19,6 +19,7 @@ jest.mock('../../src/engine/orchestrator', () => ({
   runOrchestrator: jest.fn(async (options: any, callbacks: any) => {
     capturedOrchestratorOptions = options;
     callbacks.onDone();
+    return { terminalDisposition: 'final_candidate' as const };
   }),
 }));
 

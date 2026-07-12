@@ -7,10 +7,7 @@ jest.mock('expo-sqlite', () => ({
   openDatabaseSync: (...args: unknown[]) => mockOpenDatabaseSync(...args),
 }));
 
-import {
-  closeMemoryDb,
-  getMemoryDb,
-} from '../../../src/services/memory/database';
+import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 
 describe('memory database lifecycle', () => {
   beforeEach(() => {
@@ -29,8 +26,11 @@ describe('memory database lifecycle', () => {
     expect(getMemoryDb()).toBe(mockDatabase);
     expect(mockOpenDatabaseSync).toHaveBeenCalledTimes(1);
     expect(mockOpenDatabaseSync).toHaveBeenCalledWith('kavi-memory.db');
-    expect(mockExecSync).toHaveBeenCalledTimes(1);
-    expect(mockExecSync).toHaveBeenCalledWith('DROP TABLE IF EXISTS memory_chunks');
+    expect(mockExecSync).toHaveBeenNthCalledWith(1, 'DROP TABLE IF EXISTS memory_chunks');
+    expect(mockExecSync).toHaveBeenNthCalledWith(
+      2,
+      'DROP TABLE IF EXISTS memory_product_experience_observations;',
+    );
   });
 
   it('closes the active database and permits a clean reopen', () => {
@@ -40,7 +40,7 @@ describe('memory database lifecycle', () => {
 
     getMemoryDb();
     expect(mockOpenDatabaseSync).toHaveBeenCalledTimes(2);
-    expect(mockExecSync).toHaveBeenCalledTimes(2);
+    expect(mockExecSync).toHaveBeenCalledTimes(4);
   });
 
   it('retries cleanup with a fresh database after cleanup fails', () => {
@@ -53,6 +53,6 @@ describe('memory database lifecycle', () => {
 
     expect(getMemoryDb()).toBe(mockDatabase);
     expect(mockOpenDatabaseSync).toHaveBeenCalledTimes(2);
-    expect(mockExecSync).toHaveBeenCalledTimes(2);
+    expect(mockExecSync).toHaveBeenCalledTimes(3);
   });
 });

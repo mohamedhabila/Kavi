@@ -17,10 +17,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Clock, Plus, Trash2, X } from 'lucide-react-native';
 import { useSchedulerStore } from '../services/scheduler/store';
-import { syncSchedulerWakeNotifications } from '../services/scheduler/wakeNotifications';
+import {
+  createScheduledJob,
+  deleteScheduledJob,
+  setScheduledJobEnabled,
+} from '../services/scheduler/commands';
 import { useAppTheme, AppPalette } from '../theme/useAppTheme';
 import { useTranslation } from '../i18n/useTranslation';
-import type { CronJob } from '../services/cron/types';
+import type { CronJob, CronSchedule } from '../services/cron/types';
 import { useBackToChat } from '../navigation/useBackToChat';
 
 export const SchedulerScreen: React.FC = () => {
@@ -30,12 +34,9 @@ export const SchedulerScreen: React.FC = () => {
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const jobs = useSchedulerStore((s) => s.jobs);
-  const enableJob = useSchedulerStore((s) => s.enableJob);
-  const disableJob = useSchedulerStore((s) => s.disableJob);
-  const removeJob = useSchedulerStore((s) => s.removeJob);
-  const addJob = useSchedulerStore((s) => s.addJob);
-
   const [showAddModal, setShowAddModal] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [pendingJobIds, setPendingJobIds] = useState<string[]>([]);
   const [newName, setNewName] = useState('');
   const [newPrompt, setNewPrompt] = useState('');
   const [scheduleType, setScheduleType] = useState<'every' | 'cron'>('every');
@@ -56,7 +57,8 @@ export const SchedulerScreen: React.FC = () => {
     }
   }, [intervalUnit, intervalValue]);
 
-  const handleAddTask = useCallback(() => {
+  const handleAddTask = useCallback(async () => {
+    if (isCreating) return;
     const name = newName.trim();
     if (!name) {
       Alert.alert(t('common.error'), t('scheduler.nameRequired'));
@@ -68,31 +70,53 @@ export const SchedulerScreen: React.FC = () => {
       return;
     }
 
+    let schedule: CronSchedule;
     if (scheduleType === 'every') {
       const ms = getIntervalMs();
       if (!ms) {
         Alert.alert(t('common.error'), t('scheduler.scheduleRequired'));
         return;
       }
-      addJob({ name, prompt, schedule: { kind: 'every', everyMs: ms } });
+      schedule = { kind: 'every', everyMs: ms };
     } else {
       const expr = cronExpr.trim();
       if (!expr) {
         Alert.alert(t('common.error'), t('scheduler.scheduleRequired'));
         return;
       }
-      addJob({ name, prompt, schedule: { kind: 'cron', expr } });
+      schedule = { kind: 'cron', expr };
     }
-    void syncSchedulerWakeNotifications({ force: true }).catch((error) =>
-      console.warn('[scheduler] Failed to schedule wake notification:', error),
-    );
+    setIsCreating(true);
+    try {
+      const created = await createScheduledJob({ name, prompt, schedule });
+      if (created.warning) Alert.alert(t('scheduler.warningTitle'), created.warning);
+    } catch (error) {
+      Alert.alert(t('common.error'), error instanceof Error ? error.message : String(error));
+      return;
+    } finally {
+      setIsCreating(false);
+    }
     setNewName('');
     setNewPrompt('');
     setIntervalValue('1');
     setIntervalUnit('hours');
     setCronExpr('');
     setShowAddModal(false);
-  }, [addJob, cronExpr, getIntervalMs, newName, newPrompt, scheduleType, t]);
+  }, [cronExpr, getIntervalMs, isCreating, newName, newPrompt, scheduleType, t]);
+
+  const runJobMutation = useCallback(
+    async (jobId: string, operation: () => Promise<void>) => {
+      setPendingJobIds((ids) => (ids.includes(jobId) ? ids : [...ids, jobId]));
+      try {
+        await operation();
+      } catch (error) {
+        Alert.alert(t('common.error'), error instanceof Error ? error.message : String(error));
+      } finally {
+        setPendingJobIds((ids) => ids.filter((id) => id !== jobId));
+      }
+    },
+    [t],
+  );
 
   const handleDelete = (job: CronJob) => {
     Alert.alert(
@@ -100,7 +124,16 @@ export const SchedulerScreen: React.FC = () => {
       t('scheduler.deleteJobConfirm', { name: job.name || t('scheduler.untitledJob') }),
       [
         { text: t('common.cancel'), style: 'cancel' },
-        { text: t('common.delete'), style: 'destructive', onPress: () => removeJob(job.id) },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: () =>
+            void runJobMutation(job.id, async () => {
+              const result = await deleteScheduledJob(job.id);
+              if (result === 'busy') throw new Error(t('scheduler.jobRunning'));
+              if (result === 'not_found') throw new Error(t('scheduler.jobMissing'));
+            }),
+        },
       ],
     );
   };
@@ -149,7 +182,14 @@ export const SchedulerScreen: React.FC = () => {
           </View>
           <Switch
             value={job.enabled}
-            onValueChange={(v) => (v ? enableJob(job.id) : disableJob(job.id))}
+            disabled={pendingJobIds.includes(job.id)}
+            onValueChange={(enabled) =>
+              void runJobMutation(job.id, async () => {
+                const result = await setScheduledJobEnabled(job.id, enabled);
+                if (result.status === 'not_found') throw new Error(t('scheduler.jobMissing'));
+                if (result.warning) Alert.alert(t('scheduler.warningTitle'), result.warning);
+              })
+            }
             trackColor={{ true: colors.primary }}
           />
         </View>
@@ -177,12 +217,25 @@ export const SchedulerScreen: React.FC = () => {
           </Text>
         ) : null}
 
+        {job.lastDeliveryError ? (
+          <Text style={styles.errorText} numberOfLines={2}>
+            {t('scheduler.deliveryWarning', { error: job.lastDeliveryError })}
+          </Text>
+        ) : null}
+
+        {job.lastWakeError ? (
+          <Text style={styles.errorText} numberOfLines={2}>
+            {t('scheduler.wakeWarning', { error: job.lastWakeError })}
+          </Text>
+        ) : null}
+
         <View style={styles.cardFooter}>
           <Text style={styles.lastRun}>
             {t('scheduler.lastUpdate', { date: formatTimestamp(job.updatedAtMs) })}
           </Text>
           <TouchableOpacity
             onPress={() => handleDelete(job)}
+            disabled={pendingJobIds.includes(job.id)}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel={`Delete task ${job.name || job.id}`}
@@ -318,7 +371,11 @@ export const SchedulerScreen: React.FC = () => {
                 placeholderTextColor={colors.placeholder}
               />
             )}
-            <TouchableOpacity style={styles.modalButton} onPress={handleAddTask}>
+            <TouchableOpacity
+              style={[styles.modalButton, isCreating && styles.modalButtonDisabled]}
+              onPress={handleAddTask}
+              disabled={isCreating}
+            >
               <Text style={styles.modalButtonText}>{t('scheduler.create')}</Text>
             </TouchableOpacity>
           </View>
@@ -503,6 +560,9 @@ const createStyles = (colors: AppPalette) =>
       paddingVertical: 14,
       alignItems: 'center',
       marginTop: 4,
+    },
+    modalButtonDisabled: {
+      opacity: 0.5,
     },
     modalButtonText: {
       color: '#fff',

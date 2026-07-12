@@ -13,16 +13,18 @@ export function createAgentControlGraphRuntimeTerminal(params: {
   callbacks: RuntimeCallbacks;
   conversationId: string;
   applyEvents: ApplyEvents;
+  agentRunId?: string;
+  signal?: AbortController;
   warn?: (message: string, error: unknown) => void;
 }) {
   const emitTerminalSessionEnd = async (reason?: string): Promise<void> => {
     try {
-      await emitSessionEvent(
-        'end',
-        reason
-          ? { conversationId: params.conversationId, reason }
-          : { conversationId: params.conversationId },
-      );
+      await emitSessionEvent('end', {
+        conversationId: params.conversationId,
+        ...(reason ? { reason } : {}),
+        agentRunId: params.agentRunId,
+        executionSignal: params.signal,
+      });
     } catch (error: unknown) {
       params.warn?.('Agent control graph terminal session end event failed', error);
     }

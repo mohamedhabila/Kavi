@@ -363,10 +363,7 @@ afterEach(() => {
 describe('atomic memory withdrawal', () => {
   it('purges only authoritative lineage and leaves a content-free scoped tombstone', () => {
     const seeded = seedAuthoritativeLineage();
-    const notificationSpy = jest.spyOn(
-      memoryChangeNotifications,
-      'notifyStructuredMemoryChanged',
-    );
+    const notificationSpy = jest.spyOn(memoryChangeNotifications, 'notifyStructuredMemoryChanged');
     notificationSpy.mockClear();
 
     const result = withdrawMemoryFact(seeded.targetFactId, 5_000);
@@ -523,6 +520,7 @@ describe('atomic memory withdrawal', () => {
       retrievalTermStats: [],
       evidenceIds: seeded.evidenceIds,
       observationIds: [],
+      verifiedProcedureObservationIds: [],
       episodeIds: [seeded.targetEpisodeId],
       reflectionIds: [seeded.targetReflectionId, seeded.linkedMalformedReflectionId],
       workingBlocks: [{ label: 'active_focus', scopeKey: seeded.targetWorkingBlockScopeKey }],

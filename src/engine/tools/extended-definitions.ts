@@ -114,7 +114,7 @@ export const CRON_TOOL: ToolDefinition = {
   name: 'cron',
   description:
     'Manage scheduled tasks (cron jobs). Create, list, update, delete, or run tasks. ' +
-    'Tasks run on a schedule using cron expressions.',
+    'When the app is not active, tasks use a tap-to-wake notification and run after foreground activation.',
   input_schema: {
     type: 'object',
     properties: {
@@ -126,6 +126,11 @@ export const CRON_TOOL: ToolDefinition = {
       name: { type: 'string', description: 'Task name (for create)' },
       schedule: { type: 'string', description: 'Cron expression (for create/update)' },
       prompt: { type: 'string', description: 'Task prompt/instruction (for create/update)' },
+      mode: {
+        type: 'string',
+        enum: ['agentic', 'chitchat'],
+        description: 'Durable conversation mode for execution (default: agentic)',
+      },
       timezone: { type: 'string', description: 'Timezone (default: device timezone)' },
     },
     required: ['action'],

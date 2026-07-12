@@ -1,6 +1,6 @@
 import * as Crypto from 'expo-crypto';
 import type * as SQLite from 'expo-sqlite';
-import type { ForegroundModelProjectionOwner } from '../../types/conversation';
+import type { ModelProjectionOwner } from '../../types/conversation';
 import { generateId } from '../../utils/id';
 import { getExecutionJournalDb } from './database';
 import { decodeExecutionCheckpointRow, decodeExecutionRunRow } from './decoders';
@@ -14,10 +14,7 @@ import {
   withImmediateTransaction,
 } from './mutationStore';
 import { canTransitionExecutionRun } from './transitions';
-import type {
-  ExecutionCheckpointRecord,
-  ExecutionRunRecord,
-} from './types';
+import type { ExecutionCheckpointRecord, ExecutionRunRecord } from './types';
 import {
   FOREGROUND_MODEL_ACTIVE_RUN_STATUSES,
   type ActivateForegroundModelExecutionInput,
@@ -32,13 +29,14 @@ import {
 } from './foregroundModelExecutionProcessOwnership';
 
 const FOREGROUND_MODEL_JOURNAL_FORMAT = 'kavi.foreground-model-execution.v1';
-export function foregroundModelProjectionOwnerForLease(
+export function modelProjectionOwnerForForegroundLease(
   lease: ForegroundModelExecutionLease,
-): ForegroundModelProjectionOwner {
+): ModelProjectionOwner {
   if (!validLease(lease)) {
     throw new Error('foreground_model_journal_invalid_lease');
   }
   return {
+    surface: 'foreground',
     runId: lease.runId,
     requestMessageId: lease.requestMessageId,
     assistantMessageId: lease.assistantMessageId,
@@ -103,6 +101,7 @@ function generatedId(prefix: string, createId: () => string): string {
 function validateBeginInput(input: BeginForegroundModelExecutionInput): void {
   if (
     !input ||
+    !validId(input.runId) ||
     !validId(input.conversationId) ||
     !validId(input.requestMessageId) ||
     !validId(input.assistantMessageId) ||
@@ -168,15 +167,15 @@ export async function createForegroundModelExecution(
     ((value: string) =>
       Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, value) as Promise<string>);
   const [inputDigest, modelConfigDigest, createdStateDigest] = await Promise.all([
-      digestValue('request', input.requestState, digest),
-      digestValue('model', input.modelState, digest),
-      digestValue(
-        'run_created',
-        [input.conversationId, input.requestMessageId, input.assistantMessageId],
-        digest,
-      ),
-    ]);
-  const runId = generatedId('foreground-model', createId);
+    digestValue('request', input.requestState, digest),
+    digestValue('model', input.modelState, digest),
+    digestValue(
+      'run_created',
+      [input.conversationId, input.requestMessageId, input.assistantMessageId],
+      digest,
+    ),
+  ]);
+  const runId = input.runId;
   const initialCheckpointId = generatedId('foreground-created', createId);
   const run: ExecutionRunRecord = {
     id: runId,
@@ -338,11 +337,7 @@ function assertEmptyEffectState(database: SQLite.SQLiteDatabase, runId: string):
     runId,
     runId,
   );
-  if (
-    counts?.effect_count !== 0 ||
-    counts.handle_count !== 0 ||
-    counts.monitor_count !== 0
-  ) {
+  if (counts?.effect_count !== 0 || counts.handle_count !== 0 || counts.monitor_count !== 0) {
     throw new Error('foreground_model_journal_effect_state_present');
   }
 }
@@ -394,7 +389,11 @@ export async function completeForegroundModelExecution(
     options.digest ??
     ((value: string) =>
       Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, value) as Promise<string>);
-  const terminalStateDigest = await digestValue('terminal_projection', input.projectionState, digest);
+  const terminalStateDigest = await digestValue(
+    'terminal_projection',
+    input.projectionState,
+    digest,
+  );
   const database = (options.getDatabase ?? getExecutionJournalDb)();
 
   const completed = withImmediateTransaction(database, () => {

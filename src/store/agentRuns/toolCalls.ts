@@ -74,6 +74,7 @@ export function settleActiveToolCallsInAgentRunMessages(params: {
 
 export function recoverActiveToolCallsAfterRestart(params: {
   conversationId: string;
+  executionRunId?: string;
   messages: Message[];
   run: Pick<AgentRun, 'id' | 'userMessageId' | 'createdAt'>;
   timestamp: number;
@@ -114,13 +115,19 @@ export function recoverActiveToolCallsAfterRestart(params: {
           .filter((toolCall) => toolCall.status === 'pending' || toolCall.status === 'running')
           .map((toolCall) => ({
             key: `${message.id}\u0000${toolCall.id}`,
-            disposition: params.resolveToolEffect({
-              conversationId: params.conversationId,
-              taskId: params.run.id,
-              toolCallId: toolCall.id,
-              toolName: toolCall.name,
-              argumentsText: toolCall.arguments,
-            }),
+            disposition: params.executionRunId
+              ? params.resolveToolEffect({
+                  conversationId: params.conversationId,
+                  executionRunId: params.executionRunId,
+                  toolCallId: toolCall.id,
+                  toolName: toolCall.name,
+                  argumentsText: toolCall.arguments,
+                })
+              : {
+                  kind: 'reconciliation_required' as const,
+                  observedAt: null,
+                  reason: 'journal_conflict' as const,
+                },
           }))
       : [],
   );
@@ -189,6 +196,7 @@ export function recoverActiveToolCallsAfterRestart(params: {
 
 export function listActiveToolEffectRestartInputs(params: {
   conversationId: string;
+  executionRunId: string;
   messages: Message[];
   run: Pick<AgentRun, 'id' | 'userMessageId' | 'createdAt'>;
 }): ToolEffectRestartLookupInput[] {
@@ -199,7 +207,7 @@ export function listActiveToolEffectRestartInputs(params: {
             .filter((toolCall) => toolCall.status === 'pending' || toolCall.status === 'running')
             .map((toolCall) => ({
               conversationId: params.conversationId,
-              taskId: params.run.id,
+              executionRunId: params.executionRunId,
               toolCallId: toolCall.id,
               toolName: toolCall.name,
               argumentsText: toolCall.arguments,

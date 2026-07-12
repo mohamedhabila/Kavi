@@ -17,6 +17,12 @@ import {
 } from '../../services/memory/memoryScopeIdentity';
 import { buildRuntimeRequestDecisionToolAuthority } from './requestDecisionAuthority';
 import { createMemoryAttributedOrchestratorCallbacks } from './memoryRetrievalAttribution';
+import {
+  createVerifiedProcedureExecutionSession,
+  type PendingVerifiedProcedureObservation,
+} from '../../services/memory/verifiedProcedure/executionSession';
+import type { OrchestratorRunResult, OrchestratorTerminalDisposition } from './types';
+import type { AssistantMessageMetadata } from '../../types/message';
 
 const logger = createLogger('Orchestrator');
 
@@ -24,7 +30,7 @@ export async function runOrchestratorGraphSession(params: {
   options: OrchestratorOptions;
   callbacks: OrchestratorCallbacks;
   sessionBootstrap: Awaited<ReturnType<typeof prepareOrchestratorSessionBootstrap>>;
-}): Promise<void> {
+}): Promise<OrchestratorRunResult> {
   const { options, callbacks, sessionBootstrap } = params;
   const {
     activeModel,
@@ -70,6 +76,11 @@ export async function runOrchestratorGraphSession(params: {
     conversationId,
   );
   const runtimeContextNote = buildRuntimeContextNote();
+  const verifiedProcedureSession = await createVerifiedProcedureExecutionSession({
+    executionRunId: options.executionRunId,
+    memoryConversationId: sharedConversationId,
+    sourceThreadId: conversationId,
+  });
 
   const {
     currentUserMessage,
@@ -107,10 +118,32 @@ export async function runOrchestratorGraphSession(params: {
       personaId,
     }),
   });
-  const graphCallbacks = createMemoryAttributedOrchestratorCallbacks({
+  const memoryAttributedCallbacks = createMemoryAttributedOrchestratorCallbacks({
     callbacks,
     livingMemory,
   });
+  let finalAssistant:
+    | Readonly<{ content: string; metadata?: AssistantMessageMetadata }>
+    | undefined;
+  const graphCallbacks = {
+    ...memoryAttributedCallbacks,
+    onAssistantMessage: (
+      content: string,
+      toolCalls?: Parameters<typeof memoryAttributedCallbacks.onAssistantMessage>[1],
+      providerReplay?: Parameters<typeof memoryAttributedCallbacks.onAssistantMessage>[2],
+      assistantMetadata?: AssistantMessageMetadata,
+    ) => {
+      if (assistantMetadata?.kind === 'final' && content.trim()) {
+        finalAssistant = { content, metadata: assistantMetadata };
+      }
+      memoryAttributedCallbacks.onAssistantMessage(
+        content,
+        toolCalls,
+        providerReplay,
+        assistantMetadata,
+      );
+    },
+  };
 
   const graph = createOrchestratorGraphBindings({
     callbacks: graphCallbacks,
@@ -126,6 +159,7 @@ export async function runOrchestratorGraphSession(params: {
     runtimeToolAvailability,
     toolCallHistory,
     signal,
+    agentRunId: options.agentRunId,
     toolFilter: options.toolFilter,
     workspaceConversationId: options.workspaceConversationId,
     workspaceReadFallbackConversationId: options.workspaceReadFallbackConversationId,
@@ -141,6 +175,9 @@ export async function runOrchestratorGraphSession(params: {
       allProviders,
       allTools,
       agentRunId: options.agentRunId,
+      executionRunId: options.executionRunId,
+      beforeEffectDispatch: options.beforeEffectDispatch,
+      verifiedProcedureSession: verifiedProcedureSession ?? undefined,
       callbacks: graphCallbacks,
       compactionEngine,
       conversationId,
@@ -211,6 +248,30 @@ export async function runOrchestratorGraphSession(params: {
       yieldToUiFrame,
     });
   } catch {
-    return;
+    verifiedProcedureSession?.markReconciliationRequired();
   }
+
+  const graphSnapshot = graph.getGraphSnapshot();
+  let pendingVerifiedProcedureObservation: PendingVerifiedProcedureObservation | null = null;
+  if (verifiedProcedureSession) {
+    pendingVerifiedProcedureObservation = await verifiedProcedureSession.sealGraphCandidate({
+      graphSnapshot,
+      finalAssistant,
+    });
+  }
+  const terminalDisposition: OrchestratorTerminalDisposition =
+    graphSnapshot.status === 'awaiting_review'
+      ? 'final_candidate'
+      : graphSnapshot.status === 'yielded'
+        ? 'yielded'
+        : graphSnapshot.status === 'blocked'
+          ? 'blocked'
+          : graphSnapshot.status === 'cancelled'
+            ? 'cancelled'
+            : 'failed';
+  return {
+    terminalDisposition,
+    graphSnapshot,
+    ...(pendingVerifiedProcedureObservation ? { pendingVerifiedProcedureObservation } : {}),
+  };
 }

@@ -45,7 +45,14 @@ import {
   executeShareUrl,
 } from './share/executor';
 
-export async function executeNativeTool(name: string, argsString: string): Promise<string> {
+export async function executeNativeTool(
+  name: string,
+  argsString: string,
+  executionSignal?: AbortSignal,
+): Promise<string> {
+  if (executionSignal?.aborted) {
+    return 'Error: Request cancelled';
+  }
   let args: any;
   try {
     args = JSON.parse(argsString);

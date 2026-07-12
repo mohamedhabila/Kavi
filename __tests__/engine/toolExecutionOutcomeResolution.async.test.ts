@@ -8,6 +8,41 @@ import {
 } from '../helpers/toolExecutionOutcomeHarness';
 
 describe('tool execution outcome resolution', () => {
+  it('terminally blocks the graph when an effect requires reconciliation', async () => {
+    const params = buildBaseParams();
+    params.executableToolCalls = [
+      { name: 'write_file', arguments: '{"path":"reports/final.md","content":"done"}' },
+    ];
+    params.toolExecutionOutcomes = [
+      {
+        index: 0,
+        toolCallId: 'tc-reconcile',
+        toolMessage: createToolMessage({
+          id: 'tc-reconcile',
+          name: 'write_file',
+          content: 'Error: tool effect outcome requires reconciliation',
+          isError: true,
+        }),
+        effectReconciliationRequired: true,
+      },
+    ];
+
+    const result = await resolveAgentControlGraphToolExecutionOutcomes(params);
+
+    expect(result.status).toBe('finalized');
+    expect(params.finishWithGraphTerminalEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        graphEvent: {
+          type: 'BLOCKED',
+          reason: 'tool_effect_reconciliation_required',
+        },
+        sessionEndReason: 'tool_effect_reconciliation_required',
+      }),
+    );
+    expect(params.onStateChange).not.toHaveBeenCalledWith('thinking');
+    expect(params.recordPostToolFinalTextDirective).not.toHaveBeenCalled();
+  });
+
   it('records tool results and continues thinking', async () => {
     const params = buildBaseParams();
     params.toolExecutionOutcomes = [

@@ -204,6 +204,7 @@ export interface ExecutionEffectRecord {
   checkpointId: string | null;
   toolCallId: string;
   toolNameDigest: string;
+  toolContractIdentityDigest: string | null;
   effectClass: ExecutionEffectClass;
   idempotencyClass: ExecutionIdempotencyClass;
   idempotencyKeyDigest: string | null;

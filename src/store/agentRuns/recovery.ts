@@ -29,6 +29,7 @@ export function recoverInterruptedAgentRunsInConversation(
   params?: {
     timestamp?: number;
     resolveToolEffect?: ResolveToolEffectRestartDisposition;
+    executionRunIdByConversationAndAgentRun?: ReadonlyMap<string, ReadonlyMap<string, string>>;
   },
 ): Conversation {
   const timestamp = params?.timestamp ?? Date.now();
@@ -43,6 +44,9 @@ export function recoverInterruptedAgentRunsInConversation(
     const recoveredWorkers = getSubAgentsForAgentRun(conversation, run.id, activeSubAgents);
     const interruptedToolUpdate = recoverActiveToolCallsAfterRestart({
       conversationId: conversation.id,
+      executionRunId: params?.executionRunIdByConversationAndAgentRun
+        ?.get(conversation.id)
+        ?.get(run.id),
       messages: nextMessages,
       run,
       timestamp,

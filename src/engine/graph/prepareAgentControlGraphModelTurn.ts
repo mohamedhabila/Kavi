@@ -1,5 +1,5 @@
 import { buildPreparedModelTurnPrompt } from './modelTurn/buildPreparedPromptTurn';
-import { appendCodeOwnedExperienceLearningPrompt } from './modelTurn/experienceLearningPrompt';
+import { appendVerifiedProcedureAdvisoryPrompt } from './modelTurn/verifiedProcedureAdvisoryPrompt';
 import { resolveModelTurnGroundedToolSurface } from './modelTurn/resolveGroundedToolSurface';
 import { resolveModelTurnIterationRequest } from './modelTurn/resolveIterationRequest';
 import type {
@@ -51,7 +51,10 @@ export async function prepareAgentControlGraphModelTurn(
     promptContextSupport: params.promptContextSupport,
     toolingEnabledForProvider: iterationRequest.toolingEnabledForProvider,
   });
-  const preparedTurn = await appendCodeOwnedExperienceLearningPrompt(basePreparedTurn);
+  const preparedTurn = await appendVerifiedProcedureAdvisoryPrompt(
+    basePreparedTurn,
+    params.verifiedProcedureSession,
+  );
 
   return {
     effectiveForceTextThisTurn: iterationRequest.effectiveForceTextThisTurn,

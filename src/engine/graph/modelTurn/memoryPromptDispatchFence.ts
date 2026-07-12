@@ -1,4 +1,5 @@
 import { isMemoryReadEpochCurrent } from '../../../services/memory/policy';
+import { isVerifiedProcedureObservationRevisionCurrent } from '../../../services/memory/verifiedProcedure/observationRevision';
 import type { Message } from '../../../types/message';
 import type { PreparedAgentTurn } from '../agentTurnPreparation';
 
@@ -20,7 +21,12 @@ export function isMemoryPromptEpochExpiredError(error: unknown): boolean {
 
 export function isPreparedMemoryReadCurrent(preparedTurn: PreparedAgentTurn): boolean {
   const fence = preparedTurn.memoryReadFence;
-  return !fence || isMemoryReadEpochCurrent(fence.readEpoch);
+  return (
+    !fence ||
+    (isMemoryReadEpochCurrent(fence.readEpoch) &&
+      (!fence.verifiedProcedureObservationRevision ||
+        isVerifiedProcedureObservationRevisionCurrent(fence.verifiedProcedureObservationRevision)))
+  );
 }
 
 export function buildMemoryPromptDispatchGuard(
@@ -29,7 +35,11 @@ export function buildMemoryPromptDispatchGuard(
   const fence = preparedTurn.memoryReadFence;
   if (!fence) return undefined;
   return () => {
-    if (!isMemoryReadEpochCurrent(fence.readEpoch)) {
+    if (
+      !isMemoryReadEpochCurrent(fence.readEpoch) ||
+      (fence.verifiedProcedureObservationRevision !== undefined &&
+        !isVerifiedProcedureObservationRevisionCurrent(fence.verifiedProcedureObservationRevision))
+    ) {
       throw new MemoryPromptEpochExpiredError();
     }
   };
@@ -53,9 +63,7 @@ export function removeLivingMemoryFromPreparedTurn(
  * reinjected profile sections. On opt-out, discard those synthetic system
  * messages and retain only the original conversation tail.
  */
-export function removeLivingMemoryCompactionMessages(
-  messages: ReadonlyArray<Message>,
-): Message[] {
+export function removeLivingMemoryCompactionMessages(messages: ReadonlyArray<Message>): Message[] {
   return messages.filter(
     (message) => !(message.role === 'system' && message.id.startsWith('compact_')),
   );

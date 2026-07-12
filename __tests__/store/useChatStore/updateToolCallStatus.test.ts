@@ -162,10 +162,11 @@ describe('useChatStore', () => {
 
     it('rejects provider-authored receipts and appends code-owned receipts idempotently', async () => {
       const receipt = await buildToolEffectReceipt({
+        executionRunId: 'execution-run-1',
         toolCallId: 'tc-receipt',
-        toolName: 'mcp__remote__mutate',
+        toolName: 'calendar_create_event',
         argumentsText: '{}',
-        resultText: '{"status":"completed"}',
+        resultText: '{"status":"created_verified","eventId":"event-1"}',
         transportState: 'returned',
         recordedAt: 500,
       });
@@ -177,7 +178,7 @@ describe('useChatStore', () => {
         toolCalls: [
           {
             id: 'tc-receipt',
-            name: 'mcp__remote__mutate',
+            name: 'calendar_create_event',
             arguments: '{}',
             status: 'running',
             effectReceipts: [receipt],
@@ -187,8 +188,8 @@ describe('useChatStore', () => {
 
       let storedToolCall = useChatStore
         .getState()
-        .conversations.find((conversation) => conversation.id === convId)!
-        .messages[0].toolCalls![0];
+        .conversations.find((conversation) => conversation.id === convId)!.messages[0]
+        .toolCalls![0];
       expect(storedToolCall.effectReceipts).toBeUndefined();
 
       expect(() =>
@@ -202,7 +203,7 @@ describe('useChatStore', () => {
         useChatStore
           .getState()
           .updateToolCallStatus(convId, 'msg-receipt', 'tc-receipt', 'completed', {
-            effectReceipt: { ...receipt, toolName: 'mcp__other__mutate' },
+            effectReceipt: { ...receipt, toolName: 'calendar_update_event' },
           }),
       ).toThrow(/Invalid tool effect receipt/u);
 
@@ -221,8 +222,8 @@ describe('useChatStore', () => {
 
       storedToolCall = useChatStore
         .getState()
-        .conversations.find((conversation) => conversation.id === convId)!
-        .messages[0].toolCalls![0];
+        .conversations.find((conversation) => conversation.id === convId)!.messages[0]
+        .toolCalls![0];
       expect(storedToolCall.effectReceipts).toEqual([receipt]);
       expect(storedToolCall.effectReceipts).toHaveLength(1);
     });

@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { Alert } from 'react-native';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { SchedulerScreen } from '../../src/screens/SchedulerScreen';
 
 // Mock safe area
@@ -52,31 +52,29 @@ jest.mock('../../src/theme/useAppTheme', () => ({
 
 // Mock scheduler store
 const mockJobs: any[] = [];
-const mockEnableJob = jest.fn();
-const mockDisableJob = jest.fn();
-const mockRemoveJob = jest.fn();
-const mockAddJob = jest.fn();
-const mockSyncSchedulerWakeNotifications = jest.fn().mockResolvedValue(undefined);
+const mockCreateScheduledJob = jest.fn().mockResolvedValue({ id: 'job-created' });
+const mockDeleteScheduledJob = jest.fn().mockResolvedValue('deleted');
+const mockSetScheduledJobEnabled = jest.fn().mockResolvedValue({ status: 'updated' });
 
 jest.mock('../../src/services/scheduler/store', () => ({
   useSchedulerStore: (selector: any) =>
     selector({
       jobs: mockJobs,
-      enableJob: mockEnableJob,
-      disableJob: mockDisableJob,
-      removeJob: mockRemoveJob,
-      addJob: mockAddJob,
     }),
 }));
 
-jest.mock('../../src/services/scheduler/wakeNotifications', () => ({
-  syncSchedulerWakeNotifications: (...args: any[]) => mockSyncSchedulerWakeNotifications(...args),
+jest.mock('../../src/services/scheduler/commands', () => ({
+  createScheduledJob: (...args: any[]) => mockCreateScheduledJob(...args),
+  deleteScheduledJob: (...args: any[]) => mockDeleteScheduledJob(...args),
+  setScheduledJobEnabled: (...args: any[]) => mockSetScheduledJobEnabled(...args),
 }));
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockJobs.length = 0;
-  mockSyncSchedulerWakeNotifications.mockResolvedValue(undefined);
+  mockCreateScheduledJob.mockResolvedValue({ id: 'job-created' });
+  mockDeleteScheduledJob.mockResolvedValue('deleted');
+  mockSetScheduledJobEnabled.mockResolvedValue({ status: 'updated' });
 });
 
 describe('SchedulerScreen', () => {
@@ -88,7 +86,7 @@ describe('SchedulerScreen', () => {
   it('shows empty state when no jobs', () => {
     const { getByText } = render(<SchedulerScreen />);
     expect(getByText('No scheduled tasks')).toBeTruthy();
-    expect(getByText(/Schedule AI tasks to run automatically/)).toBeTruthy();
+    expect(getByText(/allow notifications and tap the wake alert/)).toBeTruthy();
   });
 
   it('renders cron job card with schedule and content', () => {
@@ -125,6 +123,20 @@ describe('SchedulerScreen', () => {
 
     const { getByText } = render(<SchedulerScreen />);
     expect(getByText('Error: Network unavailable')).toBeTruthy();
+  });
+
+  it('renders durable delivery degradation separately from execution failure', () => {
+    mockJobs.push({
+      id: 'job-delivery-warning',
+      name: 'Delivered poorly',
+      enabled: true,
+      schedule: { kind: 'every', everyMs: 300000 },
+      payload: {},
+      lastDeliveryError: 'Success notification failed: permission denied',
+    });
+
+    const { getByText } = render(<SchedulerScreen />);
+    expect(getByText(/Delivery warning: Success notification failed/)).toBeTruthy();
   });
 
   it('renders every-type schedule', () => {
@@ -199,7 +211,7 @@ describe('SchedulerScreen', () => {
     expect(getByText('Untitled Job')).toBeTruthy();
   });
 
-  it('toggle switch calls enableJob/disableJob', () => {
+  it('toggle switch uses the durable enable boundary', async () => {
     mockJobs.push({
       id: 'job7',
       name: 'Toggle Job',
@@ -208,10 +220,10 @@ describe('SchedulerScreen', () => {
       payload: {},
     });
 
-    const { getAllByRole } = render(<SchedulerScreen />);
-    // The Switch component should be present - can't easily test via fireEvent
-    // but verify it renders
-    expect(getAllByRole).toBeDefined();
+    const { getByRole } = render(<SchedulerScreen />);
+    fireEvent(getByRole('switch'), 'valueChange', false);
+
+    await waitFor(() => expect(mockSetScheduledJobEnabled).toHaveBeenCalledWith('job7', false));
   });
 
   it('opens and closes the add task modal', () => {
@@ -234,7 +246,7 @@ describe('SchedulerScreen', () => {
     fireEvent.press(getByText('Create'));
 
     expect(Alert.alert).toHaveBeenCalledWith('Error', 'Task name is required.');
-    expect(mockAddJob).not.toHaveBeenCalled();
+    expect(mockCreateScheduledJob).not.toHaveBeenCalled();
   });
 
   it('requires a prompt before creating a job', () => {
@@ -246,7 +258,7 @@ describe('SchedulerScreen', () => {
     fireEvent.press(getByText('Create'));
 
     expect(Alert.alert).toHaveBeenCalledWith('Error', 'Prompt is required.');
-    expect(mockAddJob).not.toHaveBeenCalled();
+    expect(mockCreateScheduledJob).not.toHaveBeenCalled();
   });
 
   it('requires a valid interval when creating an every schedule', () => {
@@ -262,10 +274,10 @@ describe('SchedulerScreen', () => {
     fireEvent.press(getByText('Create'));
 
     expect(Alert.alert).toHaveBeenCalledWith('Error', 'Schedule is required.');
-    expect(mockAddJob).not.toHaveBeenCalled();
+    expect(mockCreateScheduledJob).not.toHaveBeenCalled();
   });
 
-  it('creates an every-schedule job', () => {
+  it('creates an every-schedule job through the durable command', async () => {
     const { getByLabelText, getAllByPlaceholderText, getByPlaceholderText, getByText } = render(
       <SchedulerScreen />,
     );
@@ -277,15 +289,16 @@ describe('SchedulerScreen', () => {
     fireEvent.press(getByText('min'));
     fireEvent.press(getByText('Create'));
 
-    expect(mockAddJob).toHaveBeenCalledWith({
-      name: 'Morning report',
-      prompt: 'Summarize the inbox',
-      schedule: { kind: 'every', everyMs: 300000 },
-    });
-    expect(mockSyncSchedulerWakeNotifications).toHaveBeenCalledWith({ force: true });
+    await waitFor(() =>
+      expect(mockCreateScheduledJob).toHaveBeenCalledWith({
+        name: 'Morning report',
+        prompt: 'Summarize the inbox',
+        schedule: { kind: 'every', everyMs: 300000 },
+      }),
+    );
   });
 
-  it('creates a cron-schedule job', () => {
+  it('creates a cron-schedule job through the durable command', async () => {
     const { getByLabelText, getByPlaceholderText, getByText } = render(<SchedulerScreen />);
 
     fireEvent.press(getByLabelText('Add Task'));
@@ -295,15 +308,40 @@ describe('SchedulerScreen', () => {
     fireEvent.changeText(getByPlaceholderText('0 9 * * * (daily at 9am)'), '0 9 * * *');
     fireEvent.press(getByText('Create'));
 
-    expect(mockAddJob).toHaveBeenCalledWith({
-      name: 'Morning report',
-      prompt: 'Summarize the inbox',
-      schedule: { kind: 'cron', expr: '0 9 * * *' },
-    });
-    expect(mockSyncSchedulerWakeNotifications).toHaveBeenCalledWith({ force: true });
+    await waitFor(() =>
+      expect(mockCreateScheduledJob).toHaveBeenCalledWith({
+        name: 'Morning report',
+        prompt: 'Summarize the inbox',
+        schedule: { kind: 'cron', expr: '0 9 * * *' },
+      }),
+    );
   });
 
-  it('executes delete confirmation for a job', () => {
+  it('prevents duplicate creation while the durable command is pending', async () => {
+    let releaseCreate!: () => void;
+    mockCreateScheduledJob.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          releaseCreate = () => resolve({ id: 'job-created' });
+        }),
+    );
+    const { getByLabelText, getAllByPlaceholderText, getByPlaceholderText, getByText } = render(
+      <SchedulerScreen />,
+    );
+    fireEvent.press(getByLabelText('Add Task'));
+    fireEvent.changeText(getByPlaceholderText('Daily summary, reminder, etc.'), 'Morning report');
+    fireEvent.changeText(getByPlaceholderText('What should the AI do?'), 'Summarize the inbox');
+    fireEvent.changeText(getAllByPlaceholderText('1')[0], '5');
+
+    fireEvent.press(getByText('Create'));
+    fireEvent.press(getByText('Create'));
+
+    expect(mockCreateScheduledJob).toHaveBeenCalledTimes(1);
+    releaseCreate();
+    await waitFor(() => expect(getByText('No scheduled tasks')).toBeTruthy());
+  });
+
+  it('executes durable delete confirmation for a job', async () => {
     jest.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons: any) => {
       const destructive = buttons?.find((button: any) => button.style === 'destructive');
       destructive?.onPress?.();
@@ -319,6 +357,6 @@ describe('SchedulerScreen', () => {
     const { getByLabelText } = render(<SchedulerScreen />);
     fireEvent.press(getByLabelText('Delete task Delete me'));
 
-    expect(mockRemoveJob).toHaveBeenCalledWith('job-delete');
+    await waitFor(() => expect(mockDeleteScheduledJob).toHaveBeenCalledWith('job-delete'));
   });
 });

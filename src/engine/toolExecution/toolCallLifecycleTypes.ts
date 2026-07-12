@@ -8,6 +8,7 @@ import type { RuntimeToolAvailabilityContext } from '../tools/runtimeAvailabilit
 import type { RuntimeToolCallInput } from './toolExecutionMessages';
 import type { ToolEffectReceipt } from '../../types/toolEffectReceipt';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
+import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
 
 export type ToolExecutionLifecycleIdPrefixes = {
   blocked: string;
@@ -31,6 +32,7 @@ export type ToolExecutionLifecycleMetricsRecorder = (
 export type ToolExecutionLifecycleParams = {
   tc: RuntimeToolCallInput;
   iteration: number;
+  batchIndex: number;
   conversationId: string;
   provider: LlmProviderConfig;
   allProviders?: LlmProviderConfig[];
@@ -57,6 +59,9 @@ export type ToolExecutionLifecycleParams = {
   onBlockedBeforeExecution?: (detail: string, toolName: string) => void;
   controlGraphGoals?: ReadonlyArray<AgentGoal>;
   agentRunId?: string;
+  executionRunId: string;
+  beforeEffectDispatch?: (toolName: string) => Promise<void>;
+  verifiedProcedureSession?: VerifiedProcedureExecutionSession;
 };
 
 export type ToolExecutionLifecycleResult = {
@@ -65,4 +70,5 @@ export type ToolExecutionLifecycleResult = {
   effectiveToolName: string;
   result?: string;
   effectReceipt?: ToolEffectReceipt;
+  effectReconciliationRequired?: boolean;
 };

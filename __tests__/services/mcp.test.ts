@@ -259,7 +259,7 @@ describe('executeMcpTool', () => {
       JSON.stringify({ key: 'value' }),
     );
     expect(result).toBe('Tool result');
-    expect(mockClient.callTool).toHaveBeenCalledWith('my_tool', { key: 'value' });
+    expect(mockClient.callTool).toHaveBeenCalledWith('my_tool', { key: 'value' }, undefined);
     expect(Object.values(useRemoteStore.getState().jobs)).toHaveLength(1);
     expect(Object.values(useRemoteStore.getState().sessions)).toHaveLength(1);
   });
@@ -273,5 +273,23 @@ describe('executeMcpTool', () => {
     const result = await executeMcpTool(clients, 'mcp__server1__tool', '{}');
     expect(result).toContain('Connection lost');
     expect(Object.values(useRemoteStore.getState().jobs)[0]?.status).toBe('failed');
+  });
+
+  it('propagates the lifecycle cancellation signal to the MCP client', async () => {
+    const controller = new AbortController();
+    const mockClient = {
+      isConnected: () => true,
+      callTool: jest.fn().mockResolvedValue({
+        content: [{ type: 'text', text: 'Tool result' }],
+        isError: false,
+      }),
+    };
+    const clients = new Map([['server1', mockClient as any]]);
+
+    await executeMcpTool(clients, 'mcp__server1__tool', '{}', {
+      signal: controller.signal,
+    });
+
+    expect(mockClient.callTool).toHaveBeenCalledWith('tool', {}, controller.signal);
   });
 });

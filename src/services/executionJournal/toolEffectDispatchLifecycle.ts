@@ -1,4 +1,7 @@
-import { resolveToolEffectPolicy, type ToolEffectPolicy } from '../../engine/durability/toolEffectPolicy';
+import {
+  resolveToolEffectPolicy,
+  type ToolEffectPolicy,
+} from '../../engine/durability/toolEffectPolicy';
 import {
   buildToolEffectReceipt,
   digestToolEffectRequest,
@@ -6,7 +9,16 @@ import {
 } from '../../engine/toolExecution/toolEffectReceipt';
 import { getCodeOwnedToolEffectContract } from '../../engine/toolExecution/toolEffectReceiptContracts';
 import type { ToolExecutionContext } from '../../engine/tools/toolExecutionContext';
-import type { ToolEffectResourceRef, ToolEffectReceipt } from '../../types/toolEffectReceipt';
+import type {
+  ToolContractIdentity,
+  ToolEffectResourceRef,
+  ToolEffectReceipt,
+} from '../../types/toolEffectReceipt';
+import {
+  buildToolContractIdentity,
+  digestToolContractIdentity,
+  type RuntimeExternalToolEvidence,
+} from '../../engine/toolExecution/toolContractIdentity';
 import { isToolResultErrorLike } from '../../utils/toolResultErrors';
 import { dispatchEffectExactlyOnce } from './effectDispatchCoordinator';
 import type { EffectDispatchIdentity } from './effectDispatchPolicy';
@@ -22,6 +34,12 @@ import type {
   ExecutionRetryPolicy,
   ExecutionSurface,
 } from './types';
+import {
+  inspectExecutionRunEffectBarrier,
+  isCodeOwnedExecutionRunId,
+  serializeExecutionRunEffectDispatch,
+} from './executionRunEffectBarrier';
+import { invalidateVerifiedProcedureObservationsForExecutionRun } from '../memory/verifiedProcedure/invalidation';
 
 const SHA256_PREFIX = 'sha256:';
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u;
@@ -45,9 +63,10 @@ export interface AuthorizedToolEffectDispatchInput {
   toolCallId: string;
   toolName: string;
   argumentsText: string;
-  context?: ToolExecutionContext;
+  context: ToolExecutionContext & { executionRunId: string };
   approvalState: 'granted' | 'not_required';
   authority: ToolEffectDispatchAuthority;
+  runtimeExternalEvidence?: RuntimeExternalToolEvidence;
   execute(): Promise<string>;
 }
 
@@ -87,8 +106,8 @@ function requestedCapabilityFor(effectClass: ExecutionEffectClass): ExecutionCap
 
 function executionSurfaceFor(policy: ToolEffectPolicy): ExecutionSurface {
   if (policy.source === 'builtin') return 'builtin_tool';
-  if (policy.source === 'github_skill') return 'delegated_worker';
   if (policy.toolName.startsWith('mcp__')) return 'mcp';
+  if (policy.toolName.startsWith('skill__')) return 'delegated_worker';
   return 'external_api';
 }
 
@@ -148,8 +167,9 @@ async function buildDispatchIdentity(input: {
   toolCallId: string;
   toolName: string;
   argumentsText: string;
-  context?: ToolExecutionContext;
+  context: ToolExecutionContext & { executionRunId: string };
   policy: ToolEffectPolicy;
+  contractIdentity: ToolContractIdentity;
 }): Promise<{
   identity: EffectDispatchIdentity;
   inputDigest: string;
@@ -160,18 +180,21 @@ async function buildDispatchIdentity(input: {
 }> {
   const requestDigestWithPrefix = await digestToolEffectRequest(input.argumentsText);
   const requestDigest = withoutSha256Prefix(requestDigestWithPrefix);
-  const [toolNameDigestValue, dispatchTargetDigestValue] = await Promise.all([
+  const [toolNameDigestValue, toolContractIdentityDigestValue] = await Promise.all([
     digestToolEffectText(input.toolName),
-    digestToolEffectText(
-      [
-        'tool-effect-dispatch-target-v1',
-        input.policy.source,
-        input.context?.provider?.id ?? '',
-        input.context?.model ?? input.context?.provider?.model ?? '',
-      ].join('\u0000'),
-    ),
+    digestToolContractIdentity(input.contractIdentity),
   ]);
   const toolNameDigest = withoutSha256Prefix(toolNameDigestValue);
+  const toolContractIdentityDigest = withoutSha256Prefix(toolContractIdentityDigestValue);
+  const dispatchTargetDigestValue = await digestToolEffectText(
+    [
+      'tool-effect-dispatch-target-v2',
+      input.policy.source,
+      input.context?.provider?.id ?? '',
+      input.context?.model ?? input.context?.provider?.model ?? '',
+      toolContractIdentityDigest,
+    ].join('\u0000'),
+  );
   const dispatchTargetDigest = withoutSha256Prefix(dispatchTargetDigestValue);
   const idempotencyKeyDigest =
     input.policy.idempotency === 'declared_idempotent'
@@ -192,7 +215,7 @@ async function buildDispatchIdentity(input: {
       [
         'tool-effect-dispatch-identity-v1',
         input.conversationId,
-        input.context?.agentRunId ?? '',
+        input.context.executionRunId,
         input.toolCallId,
         input.toolName,
         requestDigest,
@@ -203,9 +226,11 @@ async function buildDispatchIdentity(input: {
   const identity: EffectDispatchIdentity = {
     runId: `effect-run-${suffix}`,
     effectId: `effect-${suffix}`,
+    executionRunId: input.context.executionRunId,
     toolCallId: input.toolCallId,
     toolName: input.toolName,
     toolNameDigest,
+    toolContractIdentityDigest,
     requestDigest,
     idempotencyKeyDigest,
     dispatchTargetDigest,
@@ -220,6 +245,7 @@ async function buildDispatchIdentity(input: {
     : '';
   const durableContractIdentity = [
     identity.toolNameDigest,
+    identity.toolContractIdentityDigest,
     identity.requestDigest,
     identity.dispatchTargetDigest,
     identity.expectedEffectKind,
@@ -232,12 +258,9 @@ async function buildDispatchIdentity(input: {
     ['created', 'planned', 'authority'].map(async (boundary) =>
       withoutSha256Prefix(
         await digestToolEffectText(
-          [
-            'tool-effect-dispatch-state-v1',
-            identity.runId,
-            boundary,
-            durableContractIdentity,
-          ].join('\u0000'),
+          ['tool-effect-dispatch-state-v1', identity.runId, boundary, durableContractIdentity].join(
+            '\u0000',
+          ),
         ),
       ),
     ),
@@ -252,10 +275,7 @@ async function buildDispatchIdentity(input: {
   };
 }
 
-export function isCodeOwnedEffectFreeInvocation(
-  toolName: string,
-  argumentsText: string,
-): boolean {
+export function isCodeOwnedEffectFreeInvocation(toolName: string, argumentsText: string): boolean {
   const policy = resolveToolEffectPolicy(toolName);
   if (policy.source === 'unknown') return false;
   if (effectClassFor(policy) === 'none') return true;
@@ -271,7 +291,7 @@ export function isCodeOwnedEffectFreeInvocation(
   return typeof value === 'string' && condition.values.includes(value);
 }
 
-export async function dispatchAuthorizedToolEffect(
+async function dispatchAuthorizedToolEffectWithinBarrier(
   input: AuthorizedToolEffectDispatchInput,
   options: AuthorizedToolEffectDispatchOptions = {},
 ): Promise<AuthorizedToolEffectDispatchResult> {
@@ -281,13 +301,31 @@ export async function dispatchAuthorizedToolEffect(
     throw new Error('effect_dispatch_effect_free_tool');
   }
 
+  const receiptContractIdentity = await buildToolContractIdentity(
+    input.toolName,
+    input.runtimeExternalEvidence,
+  ).catch(() => undefined);
+  if (!receiptContractIdentity) {
+    return {
+      kind: 'blocked',
+      result:
+        'Error: Tool effect was not executed because no trustworthy receipt identity was available.',
+      executorThrew: false,
+    };
+  }
+
   let preparedIdentity: Awaited<ReturnType<typeof buildDispatchIdentity>>;
   try {
-    preparedIdentity = await buildDispatchIdentity({ ...input, policy });
+    preparedIdentity = await buildDispatchIdentity({
+      ...input,
+      policy,
+      contractIdentity: receiptContractIdentity,
+    });
   } catch {
     return {
       kind: 'blocked',
-      result: 'Error: Tool effect was not executed because its durable identity could not be prepared.',
+      result:
+        'Error: Tool effect was not executed because its durable identity could not be prepared.',
       executorThrew: false,
     };
   }
@@ -305,7 +343,8 @@ export async function dispatchAuthorizedToolEffect(
   } catch {
     return {
       kind: 'blocked',
-      result: 'Error: Tool effect was not executed because the durable execution clock is unavailable.',
+      result:
+        'Error: Tool effect was not executed because the durable execution clock is unavailable.',
       executorThrew: false,
     };
   }
@@ -315,7 +354,6 @@ export async function dispatchAuthorizedToolEffect(
       {
         identity: preparedIdentity.identity,
         conversationId: input.conversationId,
-        taskId: input.context?.agentRunId ?? null,
         inputDigest: preparedIdentity.inputDigest,
         dispatchTargetDigest: preparedIdentity.dispatchTargetDigest,
         effectClass,
@@ -347,8 +385,10 @@ export async function dispatchAuthorizedToolEffect(
           resultText: rawResult,
           transportState,
           resultIsError: transportState === 'returned' && isToolResultErrorLike(rawResult),
-          runId: claim.identity.runId,
+          executionRunId: claim.identity.executionRunId,
+          dispatchRunId: claim.identity.runId,
           recordedAt: Math.max(claim.claimedAt, (options.now ?? Date.now)()),
+          preparedContractIdentity: receiptContractIdentity,
         });
         return exactReceipt;
       },
@@ -357,7 +397,8 @@ export async function dispatchAuthorizedToolEffect(
   } catch {
     return {
       kind: 'blocked',
-      result: 'Error: Tool effect was not executed because the durable execution journal is unavailable.',
+      result:
+        'Error: Tool effect was not executed because the durable execution journal is unavailable.',
       executorThrew: false,
     };
   }
@@ -385,12 +426,65 @@ export async function dispatchAuthorizedToolEffect(
     };
   }
   const reconciliationReason =
-    dispatchResult.kind === 'reconciliation_required'
-      ? dispatchResult.reason
-      : dispatchResult.kind;
+    dispatchResult.kind === 'reconciliation_required' ? dispatchResult.reason : dispatchResult.kind;
   return {
     kind: 'reconciliation_required',
     result: `Error: Tool effect outcome is ambiguous and requires reconciliation; do not retry automatically (${reconciliationReason}).`,
     executorThrew: false,
   };
+}
+
+export async function dispatchAuthorizedToolEffect(
+  input: AuthorizedToolEffectDispatchInput,
+  options: AuthorizedToolEffectDispatchOptions = {},
+): Promise<AuthorizedToolEffectDispatchResult> {
+  const policy = resolveToolEffectPolicy(input.toolName);
+  if (effectClassFor(policy) === 'none') {
+    throw new Error('effect_dispatch_effect_free_tool');
+  }
+  const executionRunId = input.context.executionRunId;
+  if (!isCodeOwnedExecutionRunId(executionRunId)) {
+    return {
+      kind: 'blocked',
+      result:
+        'Error: Tool effect was not executed because a code-owned execution-run identity is required.',
+      executorThrew: false,
+    };
+  }
+
+  const result = await serializeExecutionRunEffectDispatch(
+    input.conversationId,
+    executionRunId,
+    async () => {
+      const barrier = inspectExecutionRunEffectBarrier(
+        input.conversationId,
+        executionRunId,
+        options,
+      );
+      if (barrier.kind === 'reconciliation_required') {
+        return {
+          kind: 'reconciliation_required' as const,
+          result:
+            'Error: A prior tool effect in this execution requires reconciliation; do not retry automatically ' +
+            `(${barrier.blockingStatus}).`,
+          executorThrew: false as const,
+        };
+      }
+      if (barrier.kind !== 'clear') {
+        return {
+          kind: 'blocked' as const,
+          result:
+            barrier.kind === 'identity_conflict'
+              ? 'Error: Tool effect was not executed because the execution-run identity conflicts with durable journal state.'
+              : 'Error: Tool effect was not executed because the durable execution journal is unavailable.',
+          executorThrew: false as const,
+        };
+      }
+      return dispatchAuthorizedToolEffectWithinBarrier(input, options);
+    },
+  );
+  if (result.kind === 'reconciliation_required') {
+    invalidateVerifiedProcedureObservationsForExecutionRun(executionRunId);
+  }
+  return result;
 }

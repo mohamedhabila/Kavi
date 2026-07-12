@@ -45,6 +45,9 @@ jest.mock('../../src/services/scheduler/store', () => ({
     }),
   },
 }));
+jest.mock('../../src/services/scheduler/commands', () => ({
+  listScheduledJobs: jest.fn().mockResolvedValue([]),
+}));
 
 jest.mock('../../src/services/skills/manager', () => ({
   useSkillsStore: {
@@ -82,6 +85,7 @@ jest.mock('../../src/services/memory/memoryFactSerialization', () => ({
 }));
 
 import { getCommand, getAllCommands, registerCommand } from '../../src/services/commands/builtins';
+import { createInternalHookEvent } from '../../src/services/events/bus';
 
 describe('Built-in Commands', () => {
   it('should have core commands registered', () => {
@@ -107,6 +111,22 @@ describe('Built-in Commands', () => {
     expect(cmd).toBeDefined();
     const result = await cmd!.handler({ conversationId: 'conv1', args: '' });
     expect(result.action).toBe('new_conversation');
+  });
+
+  it('/new propagates scheduled execution identity into its hook event', async () => {
+    const signal = new AbortController();
+    await getCommand('new')!.handler({
+      conversationId: 'conv1',
+      args: '',
+      agentRunId: 'attempt-1',
+      executionSignal: signal,
+    });
+
+    expect(createInternalHookEvent).toHaveBeenCalledWith('command', 'new', 'conv1', {
+      commandName: 'new',
+      agentRunId: 'attempt-1',
+      executionSignal: signal,
+    });
   });
 
   it('/reset should return clear_context action', async () => {
@@ -205,10 +225,11 @@ describe('Built-in Commands', () => {
     expect((result as any).shouldDisplay).toBe(true);
   });
 
-  it('/cron should respond', () => {
+  it('/cron should respond after durable scheduler readiness', async () => {
     const cmd = getCommand('cron');
-    const result = cmd!.handler({ conversationId: null, args: '' });
-    expect((result as any).shouldDisplay).toBe(true);
+    const result = await cmd!.handler({ conversationId: null, args: '' });
+    expect(result.shouldDisplay).toBe(true);
+    expect(result.response).toContain('`cron` tool');
   });
 
   it('getCommand is case-insensitive', () => {

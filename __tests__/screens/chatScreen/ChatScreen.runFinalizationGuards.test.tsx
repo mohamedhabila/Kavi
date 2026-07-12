@@ -53,6 +53,7 @@ describe('ChatScreen run finalization guards', () => {
       });
       callbacks.onDone();
       callbacks.onDone();
+      return { terminalDisposition: 'final_candidate' };
     });
 
     const { getByPlaceholderText, getByTestId } = render(<ChatScreen />);
@@ -106,6 +107,7 @@ describe('ChatScreen run finalization guards', () => {
     mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
       callbacks.onError(new Error('Streaming interruption'));
       callbacks.onError(new Error('Streaming interruption'));
+      return { terminalDisposition: 'failed' };
     });
 
     const { getByPlaceholderText, getByTestId } = render(<ChatScreen />);

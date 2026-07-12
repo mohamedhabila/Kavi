@@ -359,6 +359,7 @@ export function planExecutionEffect(input: PlanExecutionEffectInput): ExecutionE
         checkpointId: checkpoint.id,
         toolCallId: input.toolCallId,
         toolNameDigest: input.toolNameDigest,
+        toolContractIdentityDigest: null,
         effectClass: input.effectClass,
         idempotencyClass: input.idempotencyClass,
         idempotencyKeyDigest: input.idempotencyKeyDigest,
@@ -377,10 +378,11 @@ export function planExecutionEffect(input: PlanExecutionEffectInput): ExecutionE
     assertMonotonicTime(effect.createdAt, Math.max(run.updatedAt, checkpoint.createdAt));
     database.runSync(
       `INSERT INTO execution_effects (
-         id, run_id, checkpoint_id, tool_call_id, tool_name_digest, effect_class,
+         id, run_id, checkpoint_id, tool_call_id, tool_name_digest,
+         tool_contract_identity_digest, effect_class,
          idempotency_class, idempotency_key_digest, request_digest, outcome_digest,
          status, retry_policy, attempt, created_at, started_at, completed_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ...Object.values(effectRow(effect)),
     );
     touchRun(database, run, effect.createdAt);

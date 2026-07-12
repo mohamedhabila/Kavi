@@ -1,14 +1,28 @@
+import { claimedSchedulerJob } from '../helpers/schedulerClaimedJobFixture';
+import { restoreRequestIdleCallback } from '../helpers/idleCallbackFixture';
+import {
+  completeFinalMetadata,
+  completedOrchestratorRun,
+  mockStartupScheduledExecutionCheckpoint,
+  startupTestProvider as mockProvider,
+} from '../helpers/startupSchedulerRuntimeFixtures';
+
+jest.mock('../../src/services/memory/retiredMemoryCleanup', () => ({
+  removeRetiredMemoryArtifacts: jest.fn(),
+}));
+
 const mockRegisterBuiltInServiceSkills = jest.fn();
 const mockActivateEnabledSkills = jest.fn();
 const mockSetSchedulerExecutor = jest.fn();
+
 const mockStartScheduler = jest.fn().mockResolvedValue(undefined);
 const mockEvaluateJobsOnce = jest.fn().mockResolvedValue(undefined);
 const mockRegisterBackgroundFetch = jest.fn().mockResolvedValue(undefined);
-const mockSyncSchedulerWakeNotifications = jest.fn().mockResolvedValue(undefined);
+const mockSyncSchedulerWakeNotifications = jest.fn().mockResolvedValue({ warnings: [] });
 const mockRunBootOnce = jest.fn().mockResolvedValue({ status: 'ran' });
 const mockHasBootMd = jest.fn().mockResolvedValue(false);
 const mockLoadHooksFromDirectory = jest.fn().mockResolvedValue(undefined);
-const mockRunOrchestrator = jest.fn().mockResolvedValue(undefined);
+const mockRunOrchestrator = jest.fn().mockResolvedValue(completedOrchestratorRun);
 const mockGetProviderApiKey = jest.fn().mockResolvedValue('sk-test');
 const mockInitializeNotifications = jest.fn().mockResolvedValue(undefined);
 const mockSendLocalNotification = jest.fn().mockResolvedValue({ id: 'notif-1', scheduled: false });
@@ -31,6 +45,8 @@ const mockChatStoreState = {
   activeConversationId: 'active-conversation',
   createConversation: jest.fn(),
   getOrCreateCanonicalThread: jest.fn(),
+  updateModeInConversation: jest.fn(),
+  updatePersonaInConversation: jest.fn(),
   updateModelInConversation: jest.fn(),
   addMessage: jest.fn(),
   updateMessage: jest.fn(),
@@ -41,14 +57,6 @@ const mockChatStoreState = {
   addToolCall: jest.fn(),
   updateToolCallStatus: jest.fn(),
   recoverInterruptedAgentRuns: jest.fn(),
-};
-const mockProvider = {
-  id: 'openai',
-  name: 'OpenAI',
-  baseUrl: 'https://api.openai.com/v1',
-  apiKey: 'sk-test',
-  model: 'gpt-5.4',
-  enabled: true,
 };
 jest.mock('../../src/services/integrations/registry', () => ({
   registerBuiltInServiceSkills: mockRegisterBuiltInServiceSkills,
@@ -70,6 +78,21 @@ jest.mock('../../src/services/scheduler/background', () => ({
 }));
 jest.mock('../../src/services/scheduler/wakeNotifications', () => ({
   syncSchedulerWakeNotifications: (...args: any[]) => mockSyncSchedulerWakeNotifications(...args),
+}));
+jest.mock('../../src/services/scheduler/runtimeReadiness', () => ({
+  ensureSchedulerMaintenanceReady: jest.fn().mockResolvedValue(undefined),
+  setSchedulerExecutionReadinessBarrier: jest.fn(),
+}));
+jest.mock('../../src/services/scheduler/jobExecutorPersistence', () => ({
+  ...jest.requireActual('../../src/services/scheduler/jobExecutorPersistence'),
+  checkpointScheduledAttemptConversation: jest.fn().mockResolvedValue(undefined),
+  checkpointScheduledAttemptHooks: jest.fn().mockResolvedValue(undefined),
+  checkpointScheduledAttemptCompletion: jest.fn().mockResolvedValue(undefined),
+  checkpointScheduledExecutionResult: mockStartupScheduledExecutionCheckpoint,
+  markScheduledAttemptEffectUnsafe: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('../../src/services/scheduler/scheduledProjectionRecovery', () => ({
+  releaseStaleScheduledProjectionOwners: jest.fn().mockResolvedValue(0),
 }));
 jest.mock('../../src/services/agents/bootRunner', () => ({
   runBootOnce: (...args: any[]) => mockRunBootOnce(...args),
@@ -162,19 +185,20 @@ jest.mock('../../src/store/useSettingsStore', () => ({
 jest.mock('../../src/store/useChatStore', () => ({
   useChatStore: {
     getState: () => mockChatStoreState,
+    setState: (update: any) => {
+      const next = typeof update === 'function' ? update(mockChatStoreState) : update;
+      Object.assign(mockChatStoreState, next);
+    },
     persist: {
       hasHydrated: () => true,
       onFinishHydration: () => () => {},
     },
   },
 }));
-jest.mock('../../src/utils/id', () => ({
-  generateId: jest
-    .fn()
-    .mockReturnValueOnce('generated-user-message')
-    .mockReturnValueOnce('generated-assistant-message')
-    .mockReturnValue('generated-id'),
-}));
+jest.mock('../../src/utils/id', () => {
+  let nextId = 1;
+  return { generateId: jest.fn(() => `generated-id-${nextId++}`) };
+});
 beforeEach(() => {
   jest.clearAllMocks();
   (global as any).requestIdleCallback = jest.fn((callback: () => void) => {
@@ -187,7 +211,7 @@ beforeEach(() => {
   mockRepairTerminalAgentRunsMissingFinalResponses.mockResolvedValue([]);
   mockRecoverInterruptedForegroundModelExecutions.mockResolvedValue([]);
   mockEvaluateJobsOnce.mockResolvedValue(undefined);
-  mockSyncSchedulerWakeNotifications.mockResolvedValue(undefined);
+  mockSyncSchedulerWakeNotifications.mockResolvedValue({ warnings: [] });
   mockChatStoreState.createConversation.mockImplementation(
     (providerId, systemPrompt, modelOverride, options) => {
       const id = `conv-${mockChatStoreState.conversations.length + 1}`;
@@ -215,7 +239,6 @@ beforeEach(() => {
       if (existing) {
         return existing.id;
       }
-
       const id = `canonical-${mockChatStoreState.conversations.length + 1}`;
       mockChatStoreState.conversations.unshift({
         id,
@@ -300,27 +323,26 @@ beforeEach(() => {
       );
     },
   );
-  // Reset module to clear `initialized` flag
   jest.resetModules();
-  mockRunOrchestrator.mockImplementation(async (options, callbacks) => {
+  mockRunOrchestrator.mockReset().mockImplementation(async (options, callbacks) => {
     const lastMessage = options.messages[options.messages.length - 1];
-    callbacks.onAssistantMessage(`Result for ${lastMessage.content}`);
+    callbacks.onAssistantMessage(
+      `Result for ${lastMessage.content}`,
+      [],
+      undefined,
+      completeFinalMetadata,
+    );
     callbacks.onDone();
+    return completedOrchestratorRun;
   });
 });
-afterAll(() => {
-  if (typeof originalRequestIdleCallback === 'function') {
-    (global as any).requestIdleCallback = originalRequestIdleCallback;
-    return;
-  }
-
-  delete (global as any).requestIdleCallback;
-});
-
+afterAll(() => restoreRequestIdleCallback(originalRequestIdleCallback));
 describe('initializeServices', () => {
-  it('surfaces worker output directly during scheduled jobs without rewriting it onto the tool turn', async () => {
+  it('orders a successful post-worker confirmation after the surfaced output', async () => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    mockFlushChatStorePersistenceNow.mockRejectedValueOnce(new Error('disk unavailable'));
+    mockFlushChatStorePersistenceNow
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('disk unavailable'));
     mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
       callbacks.onToolCallStart?.({
         id: 'tc-surface',
@@ -337,58 +359,57 @@ describe('initializeServices', () => {
           status: 'surfaced',
           sessionId: 'worker-1',
           output: 'Worker-authored final answer',
-          outputLength: 26,
-          sourceOutputLength: 26,
-          selectionApplied: false,
-          usedFullOutput: true,
-          guidance:
-            'This output is intended to be surfaced directly to the user by the runtime. Do not restate the same content in assistant text unless you are adding materially new information.',
         }),
       });
       callbacks.onToolMessage?.('tc-surface', 'tool result');
-      callbacks.onAssistantMessage?.('Worker-authored final answer');
+      callbacks.onAssistantMessage?.('Continuing with another action.', [
+        { id: 'tc-follow-up', name: 'web_fetch', arguments: '{}', status: 'running' },
+      ]);
+      callbacks.onAssistantMessage?.('Final action completed.');
       callbacks.onDone?.();
+      return completedOrchestratorRun;
     });
-
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
-
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
     await expect(
-      executor.execute({
-        name: 'Surface Worker Job',
-        payload: { prompt: 'Use the worker answer' },
-        sessionTarget: 'isolated',
-        wakeMode: 'new',
-        delivery: { mode: 'conversation' },
-      }),
-    ).resolves.toBe('Worker-authored final answer');
-
-    expect(mockChatStoreState.addMessage).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        role: 'tool',
-        content:
-          'Full worker output from worker-1 was surfaced to the user in the assistant response.',
-        toolCallId: 'tc-surface',
-      }),
+      executor.execute(
+        claimedSchedulerJob('Surface Worker Job', 'Use the worker answer', {
+          deliveryMode: 'conversation',
+        }),
+      ),
+    ).resolves.toEqual({
+      output: 'Final action completed.',
+      conversationId: 'conv-1',
+      conversationDurable: false,
+      warnings: ['Conversation persistence failed: disk unavailable'],
+    });
+    const visibleAssistantSegments = mockChatStoreState.conversations[0].messages.filter(
+      (message: any) => message.role === 'assistant' && message.content.trim(),
     );
-    expect(mockChatStoreState.addMessage).toHaveBeenCalledWith(
-      expect.any(String),
+    expect(visibleAssistantSegments).toEqual([
       expect.objectContaining({
-        role: 'assistant',
         content: 'Worker-authored final answer',
         assistantMetadata: expect.objectContaining({
           kind: 'final',
           completionStatus: 'incomplete',
-          finishReason: 'surfaced_worker_output_pending',
         }),
       }),
-    );
+      expect.objectContaining({
+        content: 'Continuing with another action.',
+      }),
+      expect.objectContaining({
+        content: 'Final action completed.',
+        assistantMetadata: expect.objectContaining({
+          kind: 'final',
+          completionStatus: 'complete',
+        }),
+      }),
+    ]);
     expect(mockChatStoreState.updateMessage).not.toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
-      'Worker-authored final answer',
+      'Final action completed.',
     );
     expect(warnSpy).toHaveBeenCalledWith(
       '[scheduler] Scheduled result persistence failed:',
@@ -416,24 +437,21 @@ describe('initializeServices', () => {
       callbacks.onAssistantMessage?.('The required downstream action was not completed.');
       callbacks.onToolMessage?.('tc-surface-blocked', 'tool result');
       callbacks.onDone?.();
+      return { terminalDisposition: 'blocked' as const };
     });
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-
     await expect(
-      executor.execute({
-        name: 'Blocked Surface Job',
-        payload: { prompt: 'Research and act' },
-        sessionTarget: 'isolated',
-        wakeMode: 'new',
-        delivery: { mode: 'conversation' },
-      }),
+      executor.execute(
+        claimedSchedulerJob('Blocked Surface Job', 'Research and act', {
+          deliveryMode: 'conversation',
+        }),
+      ),
     ).rejects.toMatchObject({
       name: 'NonRetryableSchedulerExecutionError',
       message: expect.stringContaining('missing_required_side_effect'),
     });
-
     const visibleAssistantSegments = mockChatStoreState.conversations[0].messages.filter(
       (message: any) => message.role === 'assistant' && message.content.trim(),
     );
@@ -462,38 +480,29 @@ describe('initializeServices', () => {
   });
   it('defers failure notifications until the scheduler marks the attempt final', async () => {
     mockRunOrchestrator.mockRejectedValueOnce(new Error('boom'));
-
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
-
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    const job = {
-      id: 'broken-job',
-      name: 'Broken Job',
-      payload: { prompt: 'Fail' },
-      sessionTarget: 'isolated',
-      wakeMode: 'new',
-      delivery: { mode: 'both' },
-    };
+    const job = claimedSchedulerJob('Broken Job', 'Fail', { deliveryMode: 'both' });
     const error = await executor.execute(job).catch((executionError: unknown) => executionError);
-
     expect(error).toMatchObject({ message: 'boom' });
     expect(mockSendLocalNotification).not.toHaveBeenCalled();
     await executor.onFinalFailure(job, error);
-
     expect(mockSendLocalNotification).toHaveBeenCalledWith({
       title: 'Broken Job',
       body: 'Error: boom',
       data: {
-        screen: 'Scheduler',
-        jobId: 'broken-job',
+        screen: 'Chat',
+        conversationId: 'conv-1',
         source: 'scheduled_task',
       },
     });
   });
-  it('prevents replay when execution throws after tool activity', async () => {
+  it('keeps replay-safe tool activity retryable after a provider disconnect', async () => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    mockFlushChatStorePersistenceNow.mockRejectedValueOnce(new Error('disk unavailable'));
+    mockFlushChatStorePersistenceNow
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('disk unavailable'));
     mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
       callbacks.onToolCallComplete?.({
         id: 'tc-effect',
@@ -512,17 +521,14 @@ describe('initializeServices', () => {
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-
     await expect(
-      executor.execute({
-        name: 'Effectful Failure',
-        payload: { prompt: 'Create the event' },
-        sessionTarget: 'isolated',
-        wakeMode: 'new',
-        delivery: { mode: 'conversation' },
-      }),
+      executor.execute(
+        claimedSchedulerJob('Effectful Failure', 'Create the event', {
+          deliveryMode: 'conversation',
+        }),
+      ),
     ).rejects.toMatchObject({
-      name: 'NonRetryableSchedulerExecutionError',
+      name: 'SchedulerExecutionError',
       message: 'provider disconnected after tool dispatch',
     });
     const visibleAssistantSegments = mockChatStoreState.conversations[0].messages.filter(
@@ -542,10 +548,9 @@ describe('initializeServices', () => {
     );
     warnSpy.mockRestore();
   });
-  it('executor reuses the active conversation for main/continue jobs', async () => {
+  it('executor reuses the active conversation and pins the scheduled mode', async () => {
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
-
     mockChatStoreState.conversations = [
       {
         id: 'active-conversation',
@@ -555,16 +560,19 @@ describe('initializeServices', () => {
         messages: [],
       },
     ];
-
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    await executor.execute({
-      name: 'Continue Job',
-      payload: { prompt: 'Continue existing thread' },
-      sessionTarget: 'main',
-      wakeMode: 'continue',
-    });
-
+    await executor.execute(
+      claimedSchedulerJob('Continue Job', 'Continue existing thread', {
+        mode: 'chitchat',
+        sessionTarget: 'main',
+        wakeMode: 'continue',
+      }),
+    );
     expect(mockChatStoreState.createConversation).not.toHaveBeenCalled();
+    expect(mockChatStoreState.updateModeInConversation).toHaveBeenCalledWith(
+      'active-conversation',
+      'chitchat',
+    );
     expect(mockChatStoreState.updateModelInConversation).toHaveBeenCalledWith(
       'active-conversation',
       'openai',
@@ -574,15 +582,12 @@ describe('initializeServices', () => {
   it('executor materializes the canonical conversation for main/new jobs', async () => {
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
-
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    await executor.execute({
-      name: 'Main Job',
-      payload: { prompt: 'Use the main thread' },
-      sessionTarget: 'main',
-      wakeMode: 'new',
-    });
-
+    await executor.execute(
+      claimedSchedulerJob('Main Job', 'Use the main thread', {
+        sessionTarget: 'main',
+      }),
+    );
     expect(mockChatStoreState.getOrCreateCanonicalThread).toHaveBeenCalledWith(
       'openai',
       'You are helpful.',
@@ -603,41 +608,32 @@ describe('initializeServices', () => {
   it('executor rejects jobs with missing prompt', async () => {
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
-
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    await expect(executor.execute({ name: 'Empty', payload: {} })).rejects.toThrow(
-      'missing a prompt',
-    );
+    await expect(executor.execute({ name: 'Empty', payload: {} })).rejects.toMatchObject({
+      name: 'NonRetryableSchedulerExecutionError',
+      message: expect.stringContaining('missing a prompt'),
+    });
   });
-  it('calls registerBackgroundFetch', () => {
-    const { initializeServices } = require('../../src/services/startup');
-    initializeServices();
-    expect(mockRegisterBackgroundFetch).toHaveBeenCalledTimes(1);
-  });
-  it('defers non-critical startup work until idle time', () => {
+  it('defers non-critical startup work until idle time', async () => {
     const scheduledCallbacks: Array<() => void> = [];
     (global as any).requestIdleCallback = jest.fn((callback: () => void) => {
       scheduledCallbacks.push(callback);
       return 1;
     });
-
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
-
     expect(mockRegisterBuiltInServiceSkills).toHaveBeenCalledTimes(1);
     expect(mockActivateEnabledSkills).toHaveBeenCalledTimes(1);
     expect(mockSetSchedulerExecutor).toHaveBeenCalledTimes(1);
-    expect(mockStartScheduler).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mockStartScheduler).toHaveBeenCalledTimes(1));
     expect(mockHydrateCanvasSurfaces).not.toHaveBeenCalled();
     expect(mockInitializeNotifications).not.toHaveBeenCalled();
     expect(mockRegisterBackgroundFetch).not.toHaveBeenCalled();
-    expect(mockLoadHooksFromDirectory).not.toHaveBeenCalled();
+    expect(mockLoadHooksFromDirectory).toHaveBeenCalledTimes(1);
     expect(mockEmitAppEvent).not.toHaveBeenCalled();
     expect(mockHasBootMd).not.toHaveBeenCalled();
-
     expect(scheduledCallbacks).toHaveLength(1);
     scheduledCallbacks[0]();
-
     expect(mockHydrateCanvasSurfaces).toHaveBeenCalledTimes(1);
     expect(mockInitializeNotifications).toHaveBeenCalledTimes(1);
     expect(mockRegisterBackgroundFetch).toHaveBeenCalledTimes(1);
@@ -647,13 +643,10 @@ describe('initializeServices', () => {
   it('unrefs the approval sweep interval when supported', () => {
     const unref = jest.fn();
     const setIntervalSpy = jest.spyOn(global, 'setInterval').mockReturnValue({ unref } as any);
-
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
-
     expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 30_000);
     expect(unref).toHaveBeenCalledTimes(1);
-
     setIntervalSpy.mockRestore();
   });
   it('calls loadHooksFromDirectory with a callback', () => {
@@ -662,30 +655,19 @@ describe('initializeServices', () => {
     expect(mockLoadHooksFromDirectory).toHaveBeenCalledTimes(1);
     expect(typeof mockLoadHooksFromDirectory.mock.calls[0][0]).toBe('function');
   });
-  it('emits launch only after startup hooks finish loading', async () => {
-    let resolveHooks: (() => void) | undefined;
-    mockLoadHooksFromDirectory.mockImplementationOnce(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveHooks = resolve;
-        }),
-    );
-
-    const scheduledCallbacks: Array<() => void> = [];
-    (global as any).requestIdleCallback = jest.fn((callback: () => void) => {
-      scheduledCallbacks.push(callback);
-      return 1;
-    });
-
-    const { initializeServices } = require('../../src/services/startup');
+  it('keeps hook readiness failed closed and retries registration', async () => {
+    const loadError = new Error('hook directory unavailable');
+    mockLoadHooksFromDirectory.mockRejectedValueOnce(loadError).mockResolvedValueOnce(undefined);
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { handleAppForeground, initializeServices } = require('../../src/services/startup');
     initializeServices();
-
-    scheduledCallbacks[0]();
-    expect(mockLoadHooksFromDirectory).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mockLoadHooksFromDirectory).toHaveBeenCalledTimes(1));
+    expect(mockStartScheduler).not.toHaveBeenCalled();
+    handleAppForeground();
+    await waitFor(() => expect(mockStartScheduler).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockLoadHooksFromDirectory).toHaveBeenCalledTimes(2));
     expect(mockEmitAppEvent).not.toHaveBeenCalled();
-
-    resolveHooks?.();
-    await waitFor(() => expect(mockEmitAppEvent).toHaveBeenCalledWith('launch'));
+    warnSpy.mockRestore();
   });
   it('hooks callback runs orchestrator with provider', async () => {
     const { initializeServices } = require('../../src/services/startup');
@@ -696,5 +678,18 @@ describe('initializeServices', () => {
     expect(mockRunOrchestrator).toHaveBeenCalledTimes(1);
     const [opts] = mockRunOrchestrator.mock.calls[0];
     expect(opts.provider.apiKey).toBe('sk-test');
+  });
+  it('runs hook work under a child of the scheduled execution signal', async () => {
+    const { initializeServices } = require('../../src/services/startup');
+    initializeServices();
+    const hookCallback = mockLoadHooksFromDirectory.mock.calls[0][0];
+    const executionSignal = new AbortController();
+    mockRunOrchestrator.mockImplementationOnce(async (options) => {
+      expect(options).toMatchObject({ taskId: 'attempt-1', agentRunId: 'attempt-1' });
+      executionSignal.abort(new Error('background'));
+      expect(options.signal.signal.aborted).toBe(true);
+      return { terminalDisposition: 'cancelled' as const };
+    });
+    await hookCallback('test prompt', { agentRunId: 'attempt-1', executionSignal });
   });
 });

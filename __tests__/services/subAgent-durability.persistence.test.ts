@@ -19,7 +19,7 @@ describe('persistence', () => {
   it('persists the registry to file-backed storage on spawn', async () => {
     (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
       callbacks.onDone();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' });
     });
 
     await spawnSubAgent({ parentConversationId: 'conv-1', prompt: 'test' }, mockProvider);
@@ -32,7 +32,7 @@ describe('persistence', () => {
     (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
       callbacks.onAssistantMessage?.('Repository inspection completed.');
       callbacks.onDone?.();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' });
     });
 
     const result = await spawnSubAgent(
@@ -86,7 +86,7 @@ describe('persistence', () => {
     (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
       callbacks.onAssistantMessage?.('The screenshot shows a dependency install failure.');
       callbacks.onDone?.();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' });
     });
 
     const result = await spawnSubAgent(
@@ -223,7 +223,7 @@ describe('persistence', () => {
 
     (runOrchestrator as jest.Mock).mockImplementationOnce((_cfg: any, callbacks: any) => {
       callbacks.onDone?.();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' });
     });
 
     let startedSettled = false;

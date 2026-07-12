@@ -18,6 +18,7 @@ export interface Skill {
 export interface SkillToolExecutionContext {
   conversationId?: string;
   readConversationFile?: (path: string) => Promise<string>;
+  executionSignal?: AbortSignal;
 }
 
 export interface SkillToolDefinition {

@@ -20,6 +20,15 @@ export interface HookBinding {
   handler: InternalHookHandler;
 }
 
+export class HookDirectoryLoadError extends Error {
+  constructor(readonly failures: readonly Error[]) {
+    super(
+      `Failed to load ${failures.length} configured hook file${failures.length === 1 ? '' : 's'}.`,
+    );
+    this.name = 'HookDirectoryLoadError';
+  }
+}
+
 // ── Storage ──────────────────────────────────────────────────────────────
 
 const loadedHooks = new Map<string, HookBinding>();
@@ -119,6 +128,7 @@ export async function loadHooksFromDirectory(
   ensureDir(dir);
 
   const loaded: HookDefinition[] = [];
+  const failures: Error[] = [];
   const entries = dir.list();
 
   for (const entry of entries) {
@@ -128,14 +138,19 @@ export async function loadHooksFromDirectory(
     try {
       const content = await (entry as File).text();
       const definition = parseHookFile(content);
-      if (definition) {
-        definition.source = 'workspace';
-        registerHook(definition, executePrompt);
-        loaded.push(definition);
-      }
+      if (!definition) throw new Error('Hook file is missing valid name and event metadata.');
+      definition.source = 'workspace';
+      registerHook(definition, executePrompt);
+      loaded.push(definition);
     } catch (err) {
-      console.warn(`[Hooks] Error loading hook file "${entry.name}":`, err);
+      const cause = err instanceof Error ? err : new Error(String(err));
+      failures.push(new Error(`Hook file "${entry.name}" failed: ${cause.message}`));
     }
+  }
+
+  if (failures.length > 0) {
+    for (const definition of loaded) unregisterHook(definition.id);
+    throw new HookDirectoryLoadError(failures);
   }
 
   return loaded;

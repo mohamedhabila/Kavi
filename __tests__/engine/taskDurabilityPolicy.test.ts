@@ -307,7 +307,7 @@ describe('code-owned tool effect policy', () => {
     );
   });
 
-  it('fails closed for unknown dynamic contracts but trusts the bundled GitHub skill', () => {
+  it('fails closed for runtime-dynamic tools while honoring code-owned service contracts', () => {
     expect(resolveToolEffectPolicy('mcp__third_party__read')).toEqual({
       toolName: 'mcp__third_party__read',
       source: 'unknown',
@@ -315,13 +315,13 @@ describe('code-owned tool effect policy', () => {
       idempotency: 'unknown',
       retryPolicy: 'never_retry_automatically',
     });
-    expect(resolveToolEffectPolicy('skill__github__workflow_runs')).toEqual(
-      expect.objectContaining({
-        source: 'github_skill',
-        effects: ['none'],
-        retryPolicy: 'replay_safe',
-      }),
-    );
+    expect(resolveToolEffectPolicy('skill__github__workflow_runs')).toEqual({
+      toolName: 'skill__github__workflow_runs',
+      source: 'builtin',
+      effects: ['none'],
+      idempotency: 'effect_free',
+      retryPolicy: 'replay_safe',
+    });
     expect(resolveToolEffectPolicy('mcp__github__workflow_runs').source).toBe('unknown');
   });
 

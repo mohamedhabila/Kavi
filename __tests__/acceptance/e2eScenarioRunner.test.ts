@@ -74,6 +74,7 @@ const mockedRunOrchestrator = jest.mocked(runOrchestrator);
 const mockedRecordCompletedTurnForMemory = jest.mocked(recordCompletedTurnForMemory);
 const mockedGetIngestionJob = jest.mocked(getIngestionJob);
 const mockedCancelScheduledIngestionDrain = jest.mocked(cancelScheduledIngestionDrain);
+const completedOrchestratorRun = { terminalDisposition: 'final_candidate' as const };
 
 function buildFinalizedGraphSnapshot(
   overrides: Partial<AgentRunControlGraphState> = {},
@@ -187,6 +188,7 @@ describe('runE2EScenario product foreground integration', () => {
         model: options.model,
       });
       callbacks.onDone();
+      return completedOrchestratorRun;
     });
   });
 
@@ -202,6 +204,7 @@ describe('runE2EScenario product foreground integration', () => {
       );
       callbacks.onAgentControlGraphStateChange(buildFinalizedGraphSnapshot());
       callbacks.onDone();
+      return completedOrchestratorRun;
     });
 
     const result = await runE2EScenario(
@@ -292,6 +295,7 @@ describe('runE2EScenario product foreground integration', () => {
       );
       callbacks.onAgentControlGraphStateChange(buildFinalizedGraphSnapshot());
       callbacks.onDone();
+      return completedOrchestratorRun;
     });
 
     const result = await runE2EScenario(
@@ -328,6 +332,7 @@ describe('runE2EScenario product foreground integration', () => {
       );
       callbacks.onAgentControlGraphStateChange(buildFinalizedGraphSnapshot());
       callbacks.onDone();
+      return completedOrchestratorRun;
     });
 
     const result = await runE2EScenario(scenario());
@@ -373,6 +378,7 @@ describe('runE2EScenario product foreground integration', () => {
         }),
       );
       callbacks.onDone();
+      return completedOrchestratorRun;
     });
 
     const result = await runE2EScenario(scenario());
@@ -412,6 +418,7 @@ describe('runE2EScenario product foreground integration', () => {
         buildFinalizedGraphSnapshot({ status: 'yielded', terminalReason: 'pending_async_work' }),
       );
       callbacks.onDone();
+      return { terminalDisposition: 'yielded' as const };
     });
 
     const result = await runE2EScenario(scenario());
@@ -464,6 +471,7 @@ describe('runE2EScenario product foreground integration', () => {
         );
         callbacks.onAgentControlGraphStateChange(buildFinalizedGraphSnapshot());
         callbacks.onDone();
+        return completedOrchestratorRun;
       });
 
       const result = await runE2EScenario(scenario(), {
@@ -521,6 +529,7 @@ describe('runE2EScenario product foreground integration', () => {
       );
       callbacks.onAgentControlGraphStateChange(buildFinalizedGraphSnapshot());
       callbacks.onDone();
+      return completedOrchestratorRun;
     });
 
     const result = await runE2EScenario(scenario({ contentClass: 'private' }));

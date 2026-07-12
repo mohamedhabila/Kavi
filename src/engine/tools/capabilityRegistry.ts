@@ -2,7 +2,6 @@ import type { ToolDefinition } from '../../types/tool';
 import { normalizeToolName } from './toolNameNormalization';
 import { TOOL_DEFINITIONS } from './definitions';
 import { ALL_NATIVE_TOOL_DEFINITIONS } from './native/definitions';
-import { getGitHubToolContract } from '../../services/integrations/github/toolContracts';
 import {
   hasExplicitToolContract,
   normalizeExplicitToolContractList,
@@ -43,6 +42,7 @@ export type ToolResourceKind =
 
 export type ToolSideEffect =
   | 'none'
+  | 'unknown'
   | 'local_artifact'
   | 'remote_mutation'
   | 'external_run'
@@ -148,6 +148,7 @@ const TOOL_RESOURCE_KIND_VALUES = new Set<ToolResourceKind>([
 ]);
 const TOOL_SIDE_EFFECT_VALUES = new Set<ToolSideEffect>([
   'none',
+  'unknown',
   'local_artifact',
   'remote_mutation',
   'external_run',
@@ -310,40 +311,11 @@ function canonicalBuiltInContractTool(
   return CANONICAL_BUILT_IN_TOOL_DEFINITIONS_WITH_CONTRACT.get(normalizedName);
 }
 
-function canonicalKnownDynamicContractTool(
-  tool: Pick<ToolDefinition, 'name' | 'description' | 'contract'>,
-): Pick<ToolDefinition, 'name' | 'description' | 'contract'> | undefined {
-  const normalizedName = normalizeToolName(tool.name);
-  const parts = normalizedName.split('__');
-  if (parts.length !== 3) {
-    return undefined;
-  }
-
-  const [source, namespace, leafName] = parts;
-  if ((source !== 'skill' && source !== 'mcp') || namespace !== 'github') {
-    return undefined;
-  }
-
-  const contract = getGitHubToolContract(leafName);
-  if (!contract) {
-    return undefined;
-  }
-
-  return {
-    name: normalizedName,
-    description: tool.description,
-    contract,
-  };
-}
-
 export function inferToolCapabilityDescriptor(
   tool: Pick<ToolDefinition, 'name' | 'description' | 'contract'>,
 ): ToolCapabilityDescriptor {
   const explicit =
-    explicitDescriptor(tool) ??
-    explicitDescriptor(
-      canonicalBuiltInContractTool(tool) ?? canonicalKnownDynamicContractTool(tool) ?? tool,
-    );
+    explicitDescriptor(tool) ?? explicitDescriptor(canonicalBuiltInContractTool(tool) ?? tool);
   if (explicit) {
     return explicit;
   }
@@ -359,7 +331,7 @@ export function inferToolCapabilityDescriptor(
           : 'other',
     capabilities: ['discover'],
     resourceKinds: ['unknown'],
-    sideEffects: ['none'],
+    sideEffects: resolveSource(normalizedName) === 'built-in' ? ['none'] : ['unknown'],
   });
 }
 

@@ -7,6 +7,7 @@ import type { ThinkingLevel } from '../thinking';
 import type { TrackedAsyncOperation } from '../pendingAsyncOperations';
 import type { AgentControlTurnDirectives } from './agentControlGraph';
 import type { PreparedAgentTurn } from './agentTurnPreparation';
+import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
 
 export type LivingMemorySection = {
   text: string;
@@ -58,4 +59,5 @@ export interface PrepareAgentControlGraphModelTurnParams {
   turnDirectives: AgentControlTurnDirectives;
   sessionActivatedToolNames?: ReadonlyArray<string>;
   workingMessages: ReadonlyArray<Message>;
+  verifiedProcedureSession?: VerifiedProcedureExecutionSession;
 }

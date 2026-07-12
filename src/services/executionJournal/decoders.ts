@@ -241,6 +241,7 @@ const EFFECT_COLUMNS = [
   'checkpoint_id',
   'tool_call_id',
   'tool_name_digest',
+  'tool_contract_identity_digest',
   'effect_class',
   'idempotency_class',
   'idempotency_key_digest',
@@ -284,6 +285,10 @@ export function decodeExecutionEffectRow(value: unknown): ExecutionEffectRecord 
     checkpointId: nullableId(row.checkpoint_id, 'effect.checkpoint_id'),
     toolCallId: requireId(row.tool_call_id, 'effect.tool_call_id'),
     toolNameDigest: requireDigest(row.tool_name_digest, 'effect.tool_name_digest'),
+    toolContractIdentityDigest: nullableDigest(
+      row.tool_contract_identity_digest,
+      'effect.tool_contract_identity_digest',
+    ),
     effectClass: requireEnum(row.effect_class, EXECUTION_EFFECT_CLASSES, 'effect.effect_class'),
     idempotencyClass: requireEnum(
       row.idempotency_class,

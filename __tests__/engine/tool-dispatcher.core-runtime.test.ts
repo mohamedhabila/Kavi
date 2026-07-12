@@ -3,11 +3,18 @@ import {
   setupToolDispatcherHarness,
   type ToolDispatcherHarness,
 } from '../helpers/toolDispatcherHarness';
+import { isToolResultErrorLike } from '../../src/utils/toolResultErrors';
 
-let executeTool: ToolDispatcherHarness['executeTool'];
+let executeTool: ToolDispatcherHarness['executeToolInner'];
 let builtinMod: ToolDispatcherHarness['builtinMod'];
 let executeNativeTool: ToolDispatcherHarness['executeNativeTool'];
 let mockRunJobNow: ToolDispatcherHarness['mockRunJobNow'];
+let mockDeleteScheduledJob: ToolDispatcherHarness['mockDeleteScheduledJob'];
+let mockCreateScheduledJob: ToolDispatcherHarness['mockCreateScheduledJob'];
+let mockListScheduledJobs: ToolDispatcherHarness['mockListScheduledJobs'];
+let mockSetScheduledJobEnabled: ToolDispatcherHarness['mockSetScheduledJobEnabled'];
+let mockUpdateScheduledJob: ToolDispatcherHarness['mockUpdateScheduledJob'];
+let mockGetJob: ToolDispatcherHarness['mockGetJob'];
 let mockExecutePython: ToolDispatcherHarness['mockExecutePython'];
 let mockRecordAgentRunEvidence: ToolDispatcherHarness['mockRecordAgentRunEvidence'];
 
@@ -23,15 +30,21 @@ function expectCompletedExecution(result: string, output: string): void {
 
 beforeEach(() => {
   const harness = setupToolDispatcherHarness();
-  executeTool = harness.executeTool;
+  executeTool = harness.executeToolInner;
   builtinMod = harness.builtinMod;
   executeNativeTool = harness.executeNativeTool;
   mockRunJobNow = harness.mockRunJobNow;
+  mockDeleteScheduledJob = harness.mockDeleteScheduledJob;
+  mockCreateScheduledJob = harness.mockCreateScheduledJob;
+  mockListScheduledJobs = harness.mockListScheduledJobs;
+  mockSetScheduledJobEnabled = harness.mockSetScheduledJobEnabled;
+  mockUpdateScheduledJob = harness.mockUpdateScheduledJob;
+  mockGetJob = harness.mockGetJob;
   mockExecutePython = harness.mockExecutePython;
   mockRecordAgentRunEvidence = harness.mockRecordAgentRunEvidence;
 });
 
-describe('executeTool — core tools routing', () => {
+describe('executeToolInner — raw core tools routing', () => {
   it('routes memory_search with the shared conversation scope', async () => {
     const result = await executeTool('memory_search', '{"query":"state"}', CONV_ID);
 
@@ -92,18 +105,100 @@ describe('executeTool — core tools routing', () => {
     );
     const parsed = JSON.parse(result);
     expect(parsed.status).toBe('task_created');
+    expect(parsed.id).toBe('job-1');
+  });
+
+  it('validates cron create arguments and preserves name and timezone', async () => {
+    const invalid = await executeTool('cron', '{"action":"create"}', CONV_ID);
+    expect(JSON.parse(invalid)).toMatchObject({
+      status: 'error',
+      code: 'invalid_scheduled_job',
+    });
+    expect(isToolResultErrorLike(invalid)).toBe(true);
+
+    await executeTool(
+      'cron',
+      JSON.stringify({
+        action: 'create',
+        name: 'Amsterdam morning',
+        schedule: '0 9 * * *',
+        prompt: 'Prepare my briefing',
+        timezone: 'Europe/Amsterdam',
+      }),
+      CONV_ID,
+    );
+    expect(mockCreateScheduledJob).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        name: 'Amsterdam morning',
+        schedule: { kind: 'cron', expr: '0 9 * * *', tz: 'Europe/Amsterdam' },
+        prompt: 'Prepare my briefing',
+        mode: 'agentic',
+      }),
+    );
+  });
+
+  it('routes cron update through the durable command boundary', async () => {
+    mockGetJob.mockReturnValueOnce({
+      id: 'job-1',
+      schedule: { kind: 'cron', expr: '0 8 * * *', tz: 'UTC' },
+      payload: { prompt: 'Old prompt', mode: 'agentic', model: 'model-1' },
+    });
+
+    const result = await executeTool(
+      'cron',
+      JSON.stringify({
+        action: 'update',
+        id: 'job-1',
+        name: 'Updated briefing',
+        schedule: '0 9 * * *',
+        prompt: 'New prompt',
+      }),
+      CONV_ID,
+    );
+
+    expect(JSON.parse(result)).toMatchObject({ status: 'updated', id: 'job-1' });
+    expect(mockUpdateScheduledJob).toHaveBeenCalledWith('job-1', {
+      name: 'Updated briefing',
+      schedule: { kind: 'cron', expr: '0 9 * * *', tz: 'UTC' },
+      payload: { prompt: 'New prompt', mode: 'agentic', model: 'model-1' },
+    });
   });
 
   it('routes cron list', async () => {
+    mockListScheduledJobs.mockResolvedValueOnce([
+      {
+        id: 'job-1',
+        name: 'Briefing',
+        enabled: true,
+        schedule: { kind: 'cron', expr: '0 9 * * *' },
+        payload: { prompt: 'Prepare it', mode: 'agentic' },
+        nextRetryAtMs: 200,
+        lastError: 'provider unavailable',
+        lastWakeError: 'notifications denied',
+      },
+    ] as any);
     const result = await executeTool('cron', '{"action":"list"}', CONV_ID);
     const parsed = JSON.parse(result);
-    expect(parsed.jobs).toEqual([]);
+    expect(parsed.jobs[0]).toMatchObject({
+      id: 'job-1',
+      mode: 'agentic',
+      state: 'retry_scheduled',
+      nextRunAtMs: 200,
+      lastError: 'provider unavailable',
+      wakeWarning: 'notifications denied',
+    });
   });
 
   it('routes cron delete', async () => {
     const result = await executeTool('cron', '{"action":"delete","id":"job-1"}', CONV_ID);
     const parsed = JSON.parse(result);
     expect(parsed.status).toBe('deleted');
+  });
+
+  it('refuses to delete a running scheduled job claim', async () => {
+    mockDeleteScheduledJob.mockResolvedValueOnce('busy');
+    const result = await executeTool('cron', '{"action":"delete","id":"job-1"}', CONV_ID);
+    expect(result).toBe('Error: scheduled job is currently running: job-1');
   });
 
   it('routes cron enable', async () => {
@@ -118,6 +213,12 @@ describe('executeTool — core tools routing', () => {
     expect(parsed.status).toBe('disabled');
   });
 
+  it('does not report success for an unknown cron enable target', async () => {
+    mockSetScheduledJobEnabled.mockResolvedValueOnce({ status: 'not_found' });
+    const result = await executeTool('cron', '{"action":"enable","id":"missing"}', CONV_ID);
+    expect(result).toBe('Error: job not found: missing');
+  });
+
   it('routes cron run', async () => {
     const result = await executeTool('cron', '{"action":"run","id":"job-1"}', CONV_ID);
     const parsed = JSON.parse(result);
@@ -130,9 +231,47 @@ describe('executeTool — core tools routing', () => {
       status: 'failed',
       id: 'job-1',
       name: 'test job',
+      error: 'provider unavailable',
     });
     const result = await executeTool('cron', '{"action":"run","id":"job-1"}', CONV_ID);
-    expect(JSON.parse(result)).toMatchObject({ status: 'failed', id: 'job-1' });
+    expect(JSON.parse(result)).toMatchObject({
+      status: 'error',
+      code: 'scheduled_job_failed',
+      error: 'provider unavailable',
+      id: 'job-1',
+    });
+    expect(isToolResultErrorLike(result)).toBe(true);
+  });
+
+  it('marks a scheduled cron retry as incomplete error-like evidence', async () => {
+    mockRunJobNow.mockResolvedValueOnce({
+      status: 'retrying',
+      id: 'job-1',
+      name: 'test job',
+      error: 'temporary provider failure',
+    });
+    const result = await executeTool('cron', '{"action":"run","id":"job-1"}', CONV_ID);
+    expect(JSON.parse(result)).toMatchObject({
+      status: 'error',
+      code: 'scheduled_job_retrying',
+      retryScheduled: true,
+    });
+    expect(isToolResultErrorLike(result)).toBe(true);
+  });
+
+  it('marks an already-running manual cron request as incomplete evidence', async () => {
+    mockRunJobNow.mockResolvedValueOnce({
+      status: 'busy',
+      id: 'job-1',
+      name: 'test job',
+      error: 'The scheduled job already has an active execution.',
+    });
+    const result = await executeTool('cron', '{"action":"run","id":"job-1"}', CONV_ID);
+    expect(JSON.parse(result)).toMatchObject({
+      status: 'error',
+      code: 'scheduled_job_busy',
+    });
+    expect(isToolResultErrorLike(result)).toBe(true);
   });
 
   it('handles cron unknown action', async () => {
@@ -147,6 +286,7 @@ describe('executeTool — core tools routing', () => {
     expect(executeNativeTool).toHaveBeenCalledWith(
       'notification_send',
       '{"title":"hi","body":"there"}',
+      undefined,
     );
   });
 

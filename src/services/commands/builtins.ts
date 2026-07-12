@@ -6,7 +6,7 @@ import { triggerInternalHook, createInternalHookEvent } from '../events/bus';
 import { formatUsageReport } from '../usage/tracker';
 import { getLoadedHooks as getRegisteredHooks } from '../hooks/loader';
 import { useSettingsStore } from '../../store/useSettingsStore';
-import { useSchedulerStore } from '../scheduler/store';
+import { listScheduledJobs } from '../scheduler/commands';
 import { useSkillsStore } from '../skills/manager';
 import { searchMemoryFactsForManagement } from '../memory/facts/managementSearch';
 import { serializeMemoryFact } from '../memory/memoryFactSerialization';
@@ -14,6 +14,8 @@ import { serializeMemoryFact } from '../memory/memoryFactSerialization';
 export type CommandContext = {
   conversationId: string | null;
   args: string;
+  agentRunId?: string;
+  executionSignal?: AbortController;
 };
 
 export type CommandResult = {
@@ -47,6 +49,8 @@ registerCommand('new', 'Start a new conversation', async (ctx) => {
   await triggerInternalHook(
     createInternalHookEvent('command', 'new', ctx.conversationId ?? 'system', {
       commandName: 'new',
+      agentRunId: ctx.agentRunId,
+      executionSignal: ctx.executionSignal,
     }),
   );
   return { action: 'new_conversation', response: 'Starting new conversation...' };
@@ -56,6 +60,8 @@ registerCommand('reset', 'Reset the current conversation context', async (ctx) =
   await triggerInternalHook(
     createInternalHookEvent('command', 'reset', ctx.conversationId ?? 'system', {
       commandName: 'reset',
+      agentRunId: ctx.agentRunId,
+      executionSignal: ctx.executionSignal,
     }),
   );
   return { action: 'clear_context', response: 'Context cleared.' };
@@ -85,6 +91,8 @@ registerCommand('compact', 'Trigger context compaction', async (ctx) => {
   await triggerInternalHook(
     createInternalHookEvent('command', 'compact', ctx.conversationId ?? 'system', {
       commandName: 'compact',
+      agentRunId: ctx.agentRunId,
+      executionSignal: ctx.executionSignal,
     }),
   );
   return { response: 'Compaction triggered.', shouldDisplay: true };
@@ -171,11 +179,11 @@ registerCommand('skills', 'List installed skills', () => {
   };
 });
 
-registerCommand('cron', 'List scheduled tasks', () => {
-  const jobs = useSchedulerStore.getState().jobs;
+registerCommand('cron', 'List scheduled tasks', async () => {
+  const jobs = await listScheduledJobs();
   if (jobs.length === 0) {
     return {
-      response: 'No scheduled tasks. Use the `create_task` tool to schedule tasks.',
+      response: 'No scheduled tasks. Ask me to schedule one with the `cron` tool.',
       shouldDisplay: true,
     };
   }
@@ -183,7 +191,19 @@ registerCommand('cron', 'List scheduled tasks', () => {
     const sched = j.schedule;
     const schedStr =
       sched.kind === 'cron' ? sched.expr : sched.kind === 'every' ? `${sched.everyMs}ms` : 'once';
-    return `- **${j.name}** (${j.enabled ? 'enabled' : 'disabled'}) — ${sched.kind}: \`${schedStr}\``;
+    const state = j.runningAttemptId
+      ? 'running'
+      : j.nextRetryAtMs
+        ? 'retry scheduled'
+        : j.enabled
+          ? 'enabled'
+          : 'disabled';
+    const warnings = [
+      j.lastError ? `last error: ${j.lastError}` : undefined,
+      j.lastDeliveryError ? `delivery warning: ${j.lastDeliveryError}` : undefined,
+      j.lastWakeError ? `wake warning: ${j.lastWakeError}` : undefined,
+    ].filter(Boolean);
+    return `- **${j.name}** (${state}) — ${sched.kind}: \`${schedStr}\`${warnings.length > 0 ? ` — ${warnings.join('; ')}` : ''}`;
   });
   return {
     response: `**Scheduled Tasks (${jobs.length})**\n\n${lines.join('\n')}`,

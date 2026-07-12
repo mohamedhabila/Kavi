@@ -44,6 +44,7 @@ import {
 } from '../../../src/services/memory/schema';
 import { readTaskStack, getActiveTaskId } from '../../../src/services/memory/taskStack';
 import { runPreparedSubAgentSession } from '../../../src/services/agents/lifecycle/runPhase';
+import type { PendingVerifiedProcedureObservation } from '../../../src/services/memory/verifiedProcedure/executionSession';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -73,6 +74,41 @@ function makeConfig(overrides: Partial<any> = {}) {
     prompt: 'Do the thing',
     name: 'Test Worker',
     ...overrides,
+  };
+}
+
+function makeRunParams(subAgent = makeSubAgent(), config = makeConfig()): any {
+  return {
+    prepared: {
+      sessionId: 'session-1',
+      depth: 1,
+      maxIterations: 10,
+      sandboxPolicy: 'inherit',
+      subAgent,
+    },
+    config,
+    provider: { id: 'test', name: 'Test', enabled: true },
+    activeRunControls: new Map(),
+    appendActivity: jest.fn(),
+    appendTranscriptMessage: jest.fn(),
+    announce: jest.fn(),
+    clearPendingSessionContextCheckpoint: jest.fn(),
+    clearSessionContextEviction: jest.fn(),
+    finalizationMaxTranscriptMessages: 100,
+    finalizationMessageCharLimit: 1_000,
+    finalizationMinRemainingMs: 1_000,
+    finalizationTimeoutCapMs: 30_000,
+    finalizationToolContentCharLimit: 1_000,
+    markModelResponseObserved: jest.fn(),
+    maxToolResultPreviewChars: 100,
+    persistRegistryBestEffort: jest.fn().mockResolvedValue({ status: 'persisted' }),
+    refreshSubAgentArtifacts: jest.fn(),
+    sanitizeTranscriptMessage: (message: any) => message,
+    scheduleRegistryPersist: jest.fn(),
+    scheduleSessionContextCheckpoint: jest.fn(),
+    scheduleSessionContextEvictionWhenDurable: jest.fn(),
+    storeSessionContext: jest.fn(),
+    updateAgentProgress: jest.fn(),
   };
 }
 
@@ -109,14 +145,140 @@ beforeEach(() => {
     error: 'Failed',
   });
 
-  mockRunSubAgentOrchestratorLoop.mockResolvedValue(undefined);
+  mockRunSubAgentOrchestratorLoop.mockResolvedValue({
+    terminalDisposition: 'final_candidate',
+  });
 });
 
 describe('runPreparedSubAgentSession — task stack', () => {
+  it('forwards a final-candidate procedure token only after verified worker completion', async () => {
+    const pending = {} as PendingVerifiedProcedureObservation;
+    mockRunSubAgentOrchestratorLoop.mockImplementation(async (params: any) => {
+      params.transcriptMessages.push({
+        id: 'worker-response-1',
+        role: 'assistant',
+        content: 'Done',
+        timestamp: 2,
+      });
+      return {
+        terminalDisposition: 'final_candidate',
+        pendingVerifiedProcedureObservation: pending,
+      };
+    });
+    mockResolveSubAgentRunOutput.mockResolvedValue({
+      output: 'Done',
+      completionState: 'verified_success',
+    });
+
+    await runPreparedSubAgentSession(
+      makeRunParams(
+        makeSubAgent(),
+        makeConfig({
+          initialMessages: [
+            { id: 'worker-request-1', role: 'user', content: 'Do the thing', timestamp: 1 },
+          ],
+        }),
+      ),
+    );
+
+    expect(mockFinalizeCompletedSubAgentRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pendingVerifiedProcedureCommit: {
+          memoryLineage: {
+            sourceMessageId: 'worker-request-1',
+            sourceRunId: 'session-1',
+            sourceTurnId: 'worker-response-1',
+            taskId: null,
+          },
+          observation: pending,
+        },
+      }),
+    );
+  });
+
+  it.each(['yielded', 'blocked', 'failed', 'cancelled', 'command'] as const)(
+    'does not forward procedure evidence from a %s orchestrator result',
+    async (terminalDisposition) => {
+      mockRunSubAgentOrchestratorLoop.mockResolvedValue({
+        terminalDisposition,
+        pendingVerifiedProcedureObservation: {} as PendingVerifiedProcedureObservation,
+      });
+      mockResolveSubAgentRunOutput.mockResolvedValue({
+        output: 'Done',
+        completionState: 'verified_success',
+      });
+
+      await runPreparedSubAgentSession(makeRunParams());
+
+      expect(mockFinalizeCompletedSubAgentRun.mock.calls[0][0]).toHaveProperty(
+        'pendingVerifiedProcedureCommit',
+        undefined,
+      );
+    },
+  );
+
+  it.each(['blocked', 'incomplete'] as const)(
+    'does not forward final-candidate procedure evidence for %s worker completion',
+    async (completionState) => {
+      mockRunSubAgentOrchestratorLoop.mockResolvedValue({
+        terminalDisposition: 'final_candidate',
+        pendingVerifiedProcedureObservation: {} as PendingVerifiedProcedureObservation,
+      });
+      mockResolveSubAgentRunOutput.mockResolvedValue({ output: 'Done', completionState });
+
+      await runPreparedSubAgentSession(makeRunParams());
+
+      expect(mockFinalizeCompletedSubAgentRun.mock.calls[0][0]).toHaveProperty(
+        'pendingVerifiedProcedureCommit',
+        undefined,
+      );
+    },
+  );
+
+  it('does not forward procedure evidence after the worker is aborted', async () => {
+    mockRunSubAgentOrchestratorLoop.mockImplementation(async (params: any) => {
+      params.abortController.abort();
+      return {
+        terminalDisposition: 'final_candidate',
+        pendingVerifiedProcedureObservation: {} as PendingVerifiedProcedureObservation,
+      };
+    });
+    mockResolveSubAgentRunOutput.mockResolvedValue({
+      output: 'Done',
+      completionState: 'verified_success',
+    });
+
+    await runPreparedSubAgentSession(makeRunParams());
+
+    expect(mockFinalizeCompletedSubAgentRun.mock.calls[0][0]).toHaveProperty(
+      'pendingVerifiedProcedureCommit',
+      undefined,
+    );
+  });
+
+  it('does not forward verified procedure evidence without an exact assistant turn lineage', async () => {
+    mockRunSubAgentOrchestratorLoop.mockResolvedValue({
+      terminalDisposition: 'final_candidate',
+      pendingVerifiedProcedureObservation: {} as PendingVerifiedProcedureObservation,
+    });
+    mockResolveSubAgentRunOutput.mockResolvedValue({
+      output: 'Done',
+      completionState: 'verified_success',
+    });
+
+    await runPreparedSubAgentSession(makeRunParams());
+
+    expect(mockFinalizeCompletedSubAgentRun.mock.calls[0][0]).toHaveProperty(
+      'pendingVerifiedProcedureCommit',
+      undefined,
+    );
+  });
+
   it('pushes a task onto the stack and marks it active during execution', async () => {
     let stackDuringExecution: ReturnType<typeof readTaskStack> = [];
     mockRunSubAgentOrchestratorLoop.mockImplementation(async () => {
       stackDuringExecution = readTaskStack('conv-1');
+      return { terminalDisposition: 'final_candidate' };
     });
 
     const subAgent = makeSubAgent();

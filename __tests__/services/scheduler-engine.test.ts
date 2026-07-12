@@ -8,12 +8,21 @@ jest.mock('../../src/services/cron/schedule', () => ({
 
 jest.mock('../../src/services/events/bus', () => ({
   emitSchedulerEvent: jest.fn(),
+  getRegisteredEventKeys: jest.fn().mockReturnValue([]),
 }));
 jest.mock('../../src/services/scheduler/persistence', () => ({
   flushSchedulerStorePersistenceNow: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('../../src/services/scheduler/runtimeReadiness', () => ({
   ensureSchedulerRuntimeReady: jest.fn().mockResolvedValue(undefined),
+  setSchedulerRecoveryFailureNotifier: jest.fn(),
+}));
+jest.mock('../../src/services/scheduler/terminalReportProcessor', () => ({
+  drainSchedulerTerminalReports: jest.fn().mockResolvedValue(undefined),
+  setSchedulerTerminalReportNotifiers: jest.fn(),
+}));
+jest.mock('../../src/services/startupRecovery', () => ({
+  waitForPersistedAgentRecoveryReadiness: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../../src/services/scheduler/store', () => {
@@ -22,6 +31,7 @@ jest.mock('../../src/services/scheduler/store', () => {
     get jobs() {
       return jobs;
     },
+    terminalReports: [],
     getEnabledJobs: () => jobs.filter((j: any) => j.enabled),
     getJob: (id: string) => jobs.find((j: any) => j.id === id),
     tryClaimJobAttempt: jest.fn(({ id, attemptId, timestamp, force }: any) => {
@@ -50,7 +60,6 @@ jest.mock('../../src/services/scheduler/store', () => {
     restoreJobAttemptClaim: jest.fn(),
     resetJobRetry: jest.fn(),
     updateJobRuntimeState: jest.fn(),
-    recordEvaluation: jest.fn(),
   };
   return {
     useSchedulerStore: {
@@ -64,13 +73,14 @@ jest.mock('../../src/services/scheduler/store', () => {
       state.recordRunFailure.mockClear();
       state.resetJobRetry.mockClear();
       state.updateJobRuntimeState.mockClear();
-      state.recordEvaluation.mockClear();
     },
   };
 });
 
 import { computeNextRunAtMs } from '../../src/services/cron/schedule';
 import { emitSchedulerEvent } from '../../src/services/events/bus';
+import { AppState } from 'react-native';
+import { resetSchedulerOperationLockForTests } from '../../src/services/scheduler/operationLock';
 import {
   startScheduler,
   stopScheduler,
@@ -83,9 +93,11 @@ const storeMock = require('../../src/services/scheduler/store');
 
 describe('Scheduler Engine', () => {
   beforeEach(() => {
+    (AppState as any).currentState = 'active';
     jest.clearAllMocks();
     jest.useFakeTimers();
     storeMock.__clearJobs();
+    resetSchedulerOperationLockForTests();
     setSchedulerExecutor(null);
     stopScheduler();
   });
@@ -118,7 +130,7 @@ describe('Scheduler Engine', () => {
   });
 
   it('setSchedulerExecutor configures executor', async () => {
-    const executor = { execute: jest.fn().mockResolvedValue('done') };
+    const executor = { execute: jest.fn().mockResolvedValue({ output: 'done' }) };
     setSchedulerExecutor(executor);
 
     storeMock.__addJob({
@@ -191,7 +203,7 @@ describe('Scheduler Engine', () => {
   });
 
   it('evaluateJobs skips jobs with no next run', async () => {
-    const executor = { execute: jest.fn().mockResolvedValue('done') };
+    const executor = { execute: jest.fn().mockResolvedValue({ output: 'done' }) };
     setSchedulerExecutor(executor);
 
     storeMock.__addJob({
@@ -211,7 +223,7 @@ describe('Scheduler Engine', () => {
   });
 
   it('evaluateJobs skips future jobs', async () => {
-    const executor = { execute: jest.fn().mockResolvedValue('done') };
+    const executor = { execute: jest.fn().mockResolvedValue({ output: 'done' }) };
     setSchedulerExecutor(executor);
 
     storeMock.__addJob({

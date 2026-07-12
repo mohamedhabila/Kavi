@@ -19,7 +19,7 @@ describe('Sub-Agent Service', () => {
       jest.useFakeTimers();
       runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       const launched = await launchSubAgent(
@@ -42,7 +42,7 @@ describe('Sub-Agent Service', () => {
       runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
         callbacks.onToken?.('deferred output');
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       const started = await startSubAgent(

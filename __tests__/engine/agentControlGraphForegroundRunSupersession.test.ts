@@ -23,9 +23,7 @@ const mockedResolveForegroundRunPreflight = resolveForegroundRunPreflight as jes
   typeof resolveForegroundRunPreflight
 >;
 
-function useRealRequestRegistry(
-  context: ReturnType<typeof createExecutionContext>,
-): void {
+function useRealRequestRegistry(context: ReturnType<typeof createExecutionContext>): void {
   const registry = createForegroundRequestRegistry();
   context.requests = {
     abortForegroundRequestForConversation: (conversationId, reason) =>
@@ -78,7 +76,7 @@ describe('foreground run supersession', () => {
     context.helpers.setChatError = setChatError;
     context.requests.isCurrentForegroundRequest.mockReturnValue(false);
     context.durability.waitForProjectionAvailability.mockRejectedValueOnce(
-      new Error('foreground_model_projection_wait_cancelled'),
+      new Error('model_projection_wait_cancelled'),
     );
     configureReadyPreflight(conversation, provider);
 
@@ -90,7 +88,7 @@ describe('foreground run supersession', () => {
     expect(mockedRunOrchestrator).not.toHaveBeenCalled();
   });
 
-  it('lets the newest turn win when supersession happens before the old projection claim', async () => {
+  it('lets the newest turn win while the old claimed projection is creating its journal', async () => {
     const conversation = createConversation({ mode: 'agentic' });
     const provider = createProvider('target-provider', 'target-model');
     const context = createExecutionContext({
@@ -101,9 +99,7 @@ describe('foreground run supersession', () => {
     });
     useRealRequestRegistry(context);
     configureReadyPreflight(conversation, provider);
-    context.store.startAgentRun
-      .mockReturnValueOnce('run-first')
-      .mockReturnValueOnce('run-second');
+    context.store.startAgentRun.mockReturnValueOnce('run-first').mockReturnValueOnce('run-second');
     context.store.completeAgentRun = jest.fn();
     const defaultCreateModelExecution =
       context.durability.createModelExecution.getMockImplementation()!;
@@ -117,6 +113,7 @@ describe('foreground run supersession', () => {
     });
     mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
       callbacks.onDone();
+      return { terminalDisposition: 'final_candidate' };
     });
 
     const first = executeForegroundConversationRun({
@@ -131,9 +128,8 @@ describe('foreground run supersession', () => {
       conversationId: conversation.id,
     });
 
-    await second;
     releaseFirstCreate();
-    await first;
+    await Promise.all([first, second]);
 
     expect(mockedRunOrchestrator).toHaveBeenCalledTimes(1);
     expect(context.durability.completeModelExecution).toHaveBeenCalledWith(

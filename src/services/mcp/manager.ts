@@ -15,6 +15,7 @@ import {
 } from './oauth';
 import type { McpServerConfig } from '../../types/remote';
 import type { ToolDefinition } from '../../types/tool';
+import { getRuntimeExternalToolProcessEpoch } from '../runtimeExternalToolProcessEpoch';
 
 export type McpServerState = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -29,10 +30,46 @@ export interface McpServerStatus {
   authState?: 'authenticated' | 'unauthenticated' | 'pending';
 }
 
+export interface CapturedMcpRuntimeToolBinding {
+  readonly client: McpClient;
+  readonly declaration: ToolDefinition;
+  readonly provenance: Readonly<{
+    source: 'mcp';
+    namespace: string;
+    connectionGeneration: number;
+    toolRegistryGeneration: number;
+    runtimeProcessEpoch: string;
+    targetIdentity: string;
+    sseTargetIdentity?: string;
+    transport: 'auto' | 'streamable-http' | 'sse';
+    trustSource?: 'manual' | 'official-registry';
+    registryName?: string;
+  }>;
+  isCurrent(): boolean;
+}
+
+function sanitizeEndpointIdentity(rawUrl: string): string | undefined {
+  try {
+    const url = new URL(rawUrl);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined;
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    url.hash = '';
+    return url.origin;
+  } catch {
+    return undefined;
+  }
+}
+
 class McpConnectionManager {
   private clients = new Map<string, McpClient>();
   private statuses = new Map<string, McpServerStatus>();
   private serverConfigs = new Map<string, McpServerConfig>();
+  private connectionGenerations = new Map<string, number>();
+  private toolRegistryGenerations = new Map<string, number>();
+  private nextConnectionGeneration = 1;
+  private nextToolRegistryGeneration = 1;
   private listeners = new Set<() => void>();
 
   private cloneServerConfig(config: McpServerConfig): McpServerConfig {
@@ -63,6 +100,12 @@ class McpConnectionManager {
     return tools.filter((tool) => allowed.has(tool.name));
   }
 
+  private advanceToolRegistryGeneration(serverId: string): number {
+    const generation = this.nextToolRegistryGeneration++;
+    this.toolRegistryGenerations.set(serverId, generation);
+    return generation;
+  }
+
   /**
    * Connect to all enabled MCP servers
    */
@@ -78,6 +121,8 @@ class McpConnectionManager {
     // Disconnect existing connection if any
     this.disconnectServer(config.id);
     this.serverConfigs.set(config.id, this.cloneServerConfig(config));
+    const connectionGeneration = this.nextConnectionGeneration++;
+    this.connectionGenerations.set(config.id, connectionGeneration);
 
     this.updateStatus(config.id, {
       id: config.id,
@@ -112,8 +157,23 @@ class McpConnectionManager {
 
     // Listen for tool changes
     client.setOnToolsChanged(async () => {
+      if (
+        this.clients.get(config.id) !== client ||
+        this.connectionGenerations.get(config.id) !== connectionGeneration
+      ) {
+        return;
+      }
       try {
         const tools = await client.listTools();
+        const hasOAuth = await hasStoredMcpOAuth(config.id);
+        if (
+          this.clients.get(config.id) !== client ||
+          this.connectionGenerations.get(config.id) !== connectionGeneration ||
+          !client.isConnected()
+        ) {
+          return;
+        }
+        this.advanceToolRegistryGeneration(config.id);
         this.updateStatus(config.id, {
           id: config.id,
           name: config.name,
@@ -121,7 +181,7 @@ class McpConnectionManager {
           tools,
           lastConnected: Date.now(),
           authRequired: false,
-          authState: (await hasStoredMcpOAuth(config.id)) ? 'authenticated' : undefined,
+          authState: hasOAuth ? 'authenticated' : undefined,
         });
         this.notifyListeners();
         await emitMcpEvent('tool_added', {
@@ -136,8 +196,18 @@ class McpConnectionManager {
     try {
       await client.connect();
       const tools = await client.listTools();
+      const hasOAuth = await hasStoredMcpOAuth(config.id);
+
+      if (
+        this.connectionGenerations.get(config.id) !== connectionGeneration ||
+        !client.isConnected()
+      ) {
+        client.disconnect();
+        return;
+      }
 
       this.clients.set(config.id, client);
+      this.advanceToolRegistryGeneration(config.id);
       this.updateStatus(config.id, {
         id: config.id,
         name: config.name,
@@ -145,7 +215,7 @@ class McpConnectionManager {
         tools,
         lastConnected: Date.now(),
         authRequired: false,
-        authState: (await hasStoredMcpOAuth(config.id)) ? 'authenticated' : undefined,
+        authState: hasOAuth ? 'authenticated' : undefined,
       });
 
       await emitMcpEvent('connected', {
@@ -153,6 +223,10 @@ class McpConnectionManager {
         serverName: config.name,
       });
     } catch (err: unknown) {
+      if (this.connectionGenerations.get(config.id) !== connectionGeneration) {
+        client.disconnect();
+        return;
+      }
       const errObj = err != null && typeof err === 'object' ? (err as Record<string, unknown>) : {};
       const errMsg = err instanceof Error ? err.message : String(err);
       const hasStaticAuth = Boolean(
@@ -162,6 +236,10 @@ class McpConnectionManager {
         ),
       );
       const hasOAuth = await hasStoredMcpOAuth(config.id);
+      if (this.connectionGenerations.get(config.id) !== connectionGeneration) {
+        client.disconnect();
+        return;
+      }
       const requiresAuthentication = Boolean(
         errObj.requiresAuthentication || errObj.statusCode === 401 || errObj.statusCode === 403,
       );
@@ -202,6 +280,8 @@ class McpConnectionManager {
       client.disconnect();
       this.clients.delete(serverId);
     }
+    this.connectionGenerations.delete(serverId);
+    this.toolRegistryGenerations.delete(serverId);
     const status = this.statuses.get(serverId);
     if (status) {
       this.updateStatus(serverId, { ...status, state: 'disconnected', tools: [] });
@@ -283,6 +363,65 @@ class McpConnectionManager {
   isToolAllowed(serverId: string, toolName: string): boolean {
     const allowed = this.getAllowedToolSet(serverId);
     return !allowed || allowed.has(toolName);
+  }
+
+  /** Captures one exact connected client generation and its non-secret target identity. */
+  captureRuntimeToolBinding(
+    serverId: string,
+    toolName: string,
+  ): CapturedMcpRuntimeToolBinding | undefined {
+    const config = this.serverConfigs.get(serverId);
+    const status = this.statuses.get(serverId);
+    const client = this.clients.get(serverId);
+    const connectionGeneration = this.connectionGenerations.get(serverId);
+    const toolRegistryGeneration = this.toolRegistryGenerations.get(serverId);
+    const tool = status?.tools.find((candidate) => candidate.name === toolName);
+    const targetIdentity = config ? sanitizeEndpointIdentity(config.url) : undefined;
+    const sseTargetIdentity = config?.sseUrl ? sanitizeEndpointIdentity(config.sseUrl) : undefined;
+    if (
+      !config ||
+      status?.state !== 'connected' ||
+      !client ||
+      !client.isConnected() ||
+      !connectionGeneration ||
+      !toolRegistryGeneration ||
+      !tool ||
+      !this.isToolAllowed(serverId, toolName) ||
+      !targetIdentity ||
+      (config.sseUrl && !sseTargetIdentity)
+    ) {
+      return undefined;
+    }
+    const declaration = mcpToolToDefinition({
+      serverId,
+      serverName: status.name,
+      tool,
+    });
+    const isCurrent = (): boolean =>
+      this.clients.get(serverId) === client &&
+      this.connectionGenerations.get(serverId) === connectionGeneration &&
+      this.toolRegistryGenerations.get(serverId) === toolRegistryGeneration &&
+      this.statuses.get(serverId)?.state === 'connected' &&
+      client.isConnected() &&
+      this.isToolAllowed(serverId, toolName) &&
+      this.statuses.get(serverId)?.tools.some((candidate) => candidate.name === toolName) === true;
+    return {
+      client,
+      declaration,
+      provenance: {
+        source: 'mcp',
+        namespace: serverId,
+        connectionGeneration,
+        toolRegistryGeneration,
+        runtimeProcessEpoch: getRuntimeExternalToolProcessEpoch(),
+        targetIdentity,
+        ...(sseTargetIdentity ? { sseTargetIdentity } : {}),
+        transport: config.transport ?? 'auto',
+        ...(config.trust?.source ? { trustSource: config.trust.source } : {}),
+        ...(config.trust?.registryName ? { registryName: config.trust.registryName } : {}),
+      },
+      isCurrent,
+    };
   }
 
   /**

@@ -1,14 +1,20 @@
+jest.mock('../../src/services/memory/retiredMemoryCleanup', () => ({
+  removeRetiredMemoryArtifacts: jest.fn(),
+}));
+
 const mockRegisterBuiltInServiceSkills = jest.fn();
 const mockActivateEnabledSkills = jest.fn();
 const mockSetSchedulerExecutor = jest.fn();
 const mockStartScheduler = jest.fn().mockResolvedValue(undefined);
 const mockEvaluateJobsOnce = jest.fn().mockResolvedValue(undefined);
 const mockRegisterBackgroundFetch = jest.fn().mockResolvedValue(undefined);
-const mockSyncSchedulerWakeNotifications = jest.fn().mockResolvedValue(undefined);
+const mockSyncSchedulerWakeNotifications = jest.fn().mockResolvedValue({ warnings: [] });
 const mockRunBootOnce = jest.fn().mockResolvedValue({ status: 'ran' });
 const mockHasBootMd = jest.fn().mockResolvedValue(false);
 const mockLoadHooksFromDirectory = jest.fn().mockResolvedValue(undefined);
-const mockRunOrchestrator = jest.fn().mockResolvedValue(undefined);
+const mockRunOrchestrator = jest
+  .fn()
+  .mockResolvedValue({ terminalDisposition: 'final_candidate' as const });
 const mockGetProviderApiKey = jest.fn().mockResolvedValue('sk-test');
 const mockInitializeNotifications = jest.fn().mockResolvedValue(undefined);
 const mockSendLocalNotification = jest.fn().mockResolvedValue({ id: 'notif-1', scheduled: false });
@@ -186,7 +192,7 @@ beforeEach(() => {
   mockRepairTerminalAgentRunsMissingFinalResponses.mockResolvedValue([]);
   mockRecoverInterruptedForegroundModelExecutions.mockResolvedValue([]);
   mockEvaluateJobsOnce.mockResolvedValue(undefined);
-  mockSyncSchedulerWakeNotifications.mockResolvedValue(undefined);
+  mockSyncSchedulerWakeNotifications.mockResolvedValue({ warnings: [] });
   mockChatStoreState.createConversation.mockImplementation(
     (providerId, systemPrompt, modelOverride, options) => {
       const id = `conv-${mockChatStoreState.conversations.length + 1}`;
@@ -305,6 +311,7 @@ beforeEach(() => {
     const lastMessage = options.messages[options.messages.length - 1];
     callbacks.onAssistantMessage(`Result for ${lastMessage.content}`);
     callbacks.onDone();
+    return { terminalDisposition: 'final_candidate' as const };
   });
 });
 afterAll(() => {
@@ -349,6 +356,7 @@ describe('initializeServices', () => {
     expect(mockRunOrchestrator).toHaveBeenCalledTimes(1);
     const [opts] = mockRunOrchestrator.mock.calls[0];
     expect(opts.model).toBe('gpt-4o-mini');
+    expect(opts.executionRunId).toEqual(expect.stringMatching(/^hook-/));
   });
   it('rejects a hook execution that reaches a blocked control graph', async () => {
     mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
@@ -357,6 +365,7 @@ describe('initializeServices', () => {
         terminalReason: 'loop_detected',
       });
       callbacks.onDone();
+      return { terminalDisposition: 'blocked' as const };
     });
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();

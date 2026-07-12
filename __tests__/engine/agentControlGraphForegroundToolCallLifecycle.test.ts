@@ -245,19 +245,20 @@ describe('foreground tool call lifecycle controller', () => {
 
   it('persists receipts on the canonical assistant tool call without duplicating them into tool messages', async () => {
     const receipt = await buildToolEffectReceipt({
+      executionRunId: 'foreground-execution-run-1',
       toolCallId: 'tc-receipt',
-      toolName: 'mcp__remote__mutate',
+      toolName: 'calendar_create_event',
       argumentsText: '{}',
-      resultText: '{"status":"completed"}',
+      resultText: '{"status":"created_verified","eventId":"event-1"}',
       transportState: 'returned',
       recordedAt: 1_700_000_000_400,
     });
     const toolCall: ToolCall = {
       id: 'tc-receipt',
-      name: 'mcp__remote__mutate',
+      name: 'calendar_create_event',
       arguments: '{}',
       status: 'completed',
-      result: '{"status":"completed"}',
+      result: '{"status":"created_verified","eventId":"event-1"}',
       completedAt: 1_700_000_000_400,
       effectReceipts: [receipt],
     };

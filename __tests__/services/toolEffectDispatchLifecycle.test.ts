@@ -3,12 +3,20 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
+const mockInvalidateVerifiedProcedureObservationsForExecutionRun = jest.fn();
+jest.mock('../../src/services/memory/verifiedProcedure/invalidation', () => ({
+  invalidateVerifiedProcedureObservationsForExecutionRun: (...args: unknown[]) =>
+    mockInvalidateVerifiedProcedureObservationsForExecutionRun(...args),
+}));
+
 import {
   closeExecutionJournalDb,
   getExecutionJournalDb,
 } from '../../src/services/executionJournal/database';
 import { dispatchAuthorizedToolEffect } from '../../src/services/executionJournal/toolEffectDispatchLifecycle';
 import type { AuthorizedToolEffectDispatchInput } from '../../src/services/executionJournal/toolEffectDispatchLifecycle';
+import { readToolEffectRestartDisposition } from '../../src/services/executionJournal/toolEffectRestartDisposition';
+import type { RuntimeExternalToolEvidence } from '../../src/engine/toolExecution/toolContractIdentity';
 
 const sqliteMock = jest.requireMock('expo-sqlite') as {
   __resetExpoSqliteForTests(): void;
@@ -47,6 +55,7 @@ function writeInput(
     }),
     context: {
       agentRunId: 'agent-run-1',
+      executionRunId: 'execution-run-1',
       model: 'model-1',
       provider: {
         id: 'provider-1',
@@ -65,6 +74,62 @@ function writeInput(
   };
 }
 
+const MCP_EVIDENCE: RuntimeExternalToolEvidence = {
+  declaration: {
+    name: 'mcp__calendar__create_event',
+    description: '[Calendar] Create event',
+    input_schema: { type: 'object', properties: { title: { type: 'string' } } },
+  },
+  provenance: {
+    source: 'mcp',
+    namespace: 'calendar',
+    connectionGeneration: 4,
+    toolRegistryGeneration: 6,
+    runtimeProcessEpoch: 'process-epoch-a',
+    targetIdentity: 'https://calendar.example/mcp',
+    transport: 'streamable-http',
+  },
+};
+
+const SKILL_EVIDENCE: RuntimeExternalToolEvidence = {
+  declaration: {
+    name: 'skill__acme__deploy',
+    description: '[Acme] Deploy',
+    input_schema: { type: 'object', properties: { target: { type: 'string' } } },
+  },
+  provenance: {
+    source: 'skill',
+    namespace: 'acme',
+    registrationGeneration: 9,
+    runtimeProcessEpoch: 'process-epoch-a',
+    name: 'Acme',
+    version: '1.0.0',
+  },
+};
+
+function dynamicInput(
+  evidence: RuntimeExternalToolEvidence,
+  execute: () => Promise<string>,
+  overrides: Partial<AuthorizedToolEffectDispatchInput> = {},
+): AuthorizedToolEffectDispatchInput {
+  const suffix = evidence.provenance.source;
+  return {
+    conversationId: `conversation-${suffix}`,
+    toolCallId: `tool-call-${suffix}`,
+    toolName: evidence.declaration.name,
+    argumentsText: JSON.stringify({ target: 'private-target', title: 'Private event' }),
+    context: {
+      agentRunId: `agent-run-${suffix}`,
+      executionRunId: `execution-run-${suffix}`,
+    },
+    approvalState: 'not_required',
+    authority: authority(),
+    runtimeExternalEvidence: evidence,
+    execute,
+    ...overrides,
+  };
+}
+
 function count(table: string): number {
   return (
     getExecutionJournalDb().getFirstSync<{ count: number }>(
@@ -78,6 +143,10 @@ beforeEach(() => {
     closeExecutionJournalDb();
   } catch {}
   sqliteMock.__resetExpoSqliteForTests();
+  mockInvalidateVerifiedProcedureObservationsForExecutionRun.mockReturnValue({
+    status: 'invalidated',
+    deletedCount: 0,
+  });
 });
 
 afterEach(() => {
@@ -87,6 +156,125 @@ afterEach(() => {
 });
 
 describe('authorized durable tool effect dispatch', () => {
+  it.each([
+    ['MCP', MCP_EVIDENCE],
+    ['skill', SKILL_EVIDENCE],
+  ] as const)(
+    'returns a successful %s result while durably preserving unknown external semantics',
+    async (_label, evidence) => {
+      const rawResult = JSON.stringify({
+        status: 'completed',
+        effectState: 'applied',
+        verificationState: 'verified',
+      });
+      const execute = jest.fn(async () => rawResult);
+      const input = dynamicInput(evidence, execute);
+
+      const first = await dispatchAuthorizedToolEffect(input, { now: () => 100 });
+
+      expect(first).toMatchObject({
+        kind: 'executed',
+        result: rawResult,
+        requiresReconciliation: true,
+        executorThrew: false,
+        receipt: {
+          executionRunId: input.context.executionRunId,
+          dispatchRunId: expect.stringMatching(/^effect-run-/u),
+          effectKind: 'unknown',
+          effectState: 'unknown',
+          verificationState: 'unverified',
+          contractIdentity: {
+            kind: 'runtime_external',
+            source: evidence.provenance.source,
+          },
+        },
+      });
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect(
+        getExecutionJournalDb().getFirstSync<{ run_status: string; effect_status: string }>(
+          `SELECT r.status AS run_status, e.status AS effect_status
+             FROM execution_runs r JOIN execution_effects e ON e.run_id = r.id`,
+        ),
+      ).toEqual({ run_status: 'ambiguous', effect_status: 'ambiguous' });
+
+      await expect(
+        readToolEffectRestartDisposition({
+          conversationId: input.conversationId,
+          executionRunId: input.context!.executionRunId!,
+          toolCallId: input.toolCallId,
+          toolName: input.toolName,
+          argumentsText: input.argumentsText,
+        }),
+      ).resolves.toEqual({
+        kind: 'reconciliation_required',
+        observedAt: 100,
+        reason: 'ambiguous_effect',
+      });
+
+      const replayExecutor = jest.fn(async () => rawResult);
+      await expect(
+        dispatchAuthorizedToolEffect(
+          dynamicInput(evidence, replayExecutor, {
+            conversationId: input.conversationId,
+            toolCallId: input.toolCallId,
+            argumentsText: input.argumentsText,
+            context: input.context,
+          }),
+          { now: () => 101 },
+        ),
+      ).resolves.toMatchObject({ kind: 'reconciliation_required' });
+      expect(replayExecutor).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['missing', undefined],
+    [
+      'mismatched',
+      {
+        ...MCP_EVIDENCE,
+        declaration: { ...MCP_EVIDENCE.declaration, name: 'mcp__calendar__delete_event' },
+      },
+    ],
+  ] as const)('blocks %s dynamic evidence before execution', async (_label, evidence) => {
+    const execute = jest.fn(async () => 'must not run');
+    const result = await dispatchAuthorizedToolEffect(
+      dynamicInput(MCP_EVIDENCE, execute, { runtimeExternalEvidence: evidence }),
+      { now: () => 100 },
+    );
+
+    expect(result).toMatchObject({ kind: 'blocked' });
+    expect(execute).not.toHaveBeenCalled();
+    expect(count('execution_runs')).toBe(0);
+  });
+
+  it('blocks a changed runtime generation from borrowing an existing durable claim', async () => {
+    const firstExecutor = jest.fn(async () => '{"status":"completed"}');
+    const firstInput = dynamicInput(MCP_EVIDENCE, firstExecutor);
+    await expect(
+      dispatchAuthorizedToolEffect(firstInput, { now: () => 100 }),
+    ).resolves.toMatchObject({ kind: 'executed' });
+    const changedEvidence: RuntimeExternalToolEvidence = {
+      ...MCP_EVIDENCE,
+      provenance: { ...MCP_EVIDENCE.provenance, connectionGeneration: 5 },
+    };
+    const changedExecutor = jest.fn(async () => '{"status":"completed"}');
+
+    await expect(
+      dispatchAuthorizedToolEffect(
+        dynamicInput(changedEvidence, changedExecutor, {
+          conversationId: firstInput.conversationId,
+          toolCallId: firstInput.toolCallId,
+          argumentsText: firstInput.argumentsText,
+          context: firstInput.context,
+        }),
+        { now: () => 101 },
+      ),
+    ).resolves.toMatchObject({ kind: 'reconciliation_required' });
+    expect(firstExecutor).toHaveBeenCalledTimes(1);
+    expect(changedExecutor).not.toHaveBeenCalled();
+  });
+
   it('persists and claims the exact effect before invoking the executor', async () => {
     const execute = jest.fn(async () => {
       expect(
@@ -104,6 +292,8 @@ describe('authorized durable tool effect dispatch', () => {
       requiresReconciliation: false,
       executorThrew: false,
       receipt: {
+        executionRunId: 'execution-run-1',
+        dispatchRunId: expect.stringMatching(/^effect-run-/u),
         effectKind: 'artifact.write',
         effectState: 'applied',
         verificationState: 'verified',
@@ -112,7 +302,7 @@ describe('authorized durable tool effect dispatch', () => {
     expect(execute).toHaveBeenCalledTimes(1);
     expect(
       getExecutionJournalDb().getFirstSync(
-        `SELECT r.status AS run_status, r.durability_class,
+        `SELECT r.status AS run_status, r.durability_class, r.task_id,
                 e.status AS effect_status, e.outcome_digest
          FROM execution_runs r
          JOIN execution_effects e ON e.run_id = r.id`,
@@ -120,6 +310,7 @@ describe('authorized durable tool effect dispatch', () => {
     ).toEqual({
       run_status: 'succeeded',
       durability_class: 'external_durable_operation',
+      task_id: 'execution-run-1',
       effect_status: 'verified',
       outcome_digest: expect.stringMatching(/^[a-f0-9]{64}$/),
     });
@@ -149,15 +340,18 @@ describe('authorized durable tool effect dispatch', () => {
 
     const first = dispatchAuthorizedToolEffect(writeInput(firstExecutor), { now: () => 100 });
     await firstDidStart;
-    const replay = await dispatchAuthorizedToolEffect(writeInput(replayExecutor), {
+    const replay = dispatchAuthorizedToolEffect(writeInput(replayExecutor), {
       now: () => 101,
     });
     releaseFirst();
 
     await expect(first).resolves.toMatchObject({ kind: 'executed' });
-    expect(replay).toMatchObject({ kind: 'reconciliation_required' });
+    await expect(replay).resolves.toMatchObject({ kind: 'reconciliation_required' });
     expect(firstExecutor).toHaveBeenCalledTimes(1);
     expect(replayExecutor).not.toHaveBeenCalled();
+    expect(mockInvalidateVerifiedProcedureObservationsForExecutionRun).toHaveBeenCalledWith(
+      'execution-run-1',
+    );
   });
 
   it('suppresses an exact replay after verified settlement', async () => {
@@ -227,7 +421,7 @@ describe('authorized durable tool effect dispatch', () => {
       now: () => 100,
       getDatabase: () => {
         databaseRequest += 1;
-        if (databaseRequest === 4) {
+        if (databaseRequest === 5) {
           throw new Error('settlement connection lost');
         }
         return database;
@@ -300,9 +494,12 @@ describe('authorized durable tool effect dispatch', () => {
   it.each([0, 1, 2])(
     'fails a replay closed when checkpoint %i contract identity is altered',
     async (sequence) => {
-      await dispatchAuthorizedToolEffect(writeInput(async () => verifiedWriteResult()), {
-        now: () => 100,
-      });
+      await dispatchAuthorizedToolEffect(
+        writeInput(async () => verifiedWriteResult()),
+        {
+          now: () => 100,
+        },
+      );
       getExecutionJournalDb().runSync(
         `UPDATE execution_checkpoints SET state_digest = ? WHERE sequence = ?`,
         'b'.repeat(64),

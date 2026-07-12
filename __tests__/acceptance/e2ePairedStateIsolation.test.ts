@@ -40,11 +40,11 @@ describe('paired E2E state isolation', () => {
       'memory_ingestion_jobs',
       'memory_ingestion_receipts',
       'memory_migration_state',
-      'memory_product_experience_observations',
       'memory_reflections',
       'memory_retrieval_events',
       'memory_retrieval_outcomes',
       'memory_tasks',
+      'memory_verified_procedure_observations',
       'memory_working_blocks',
     ]);
   });
@@ -52,9 +52,7 @@ describe('paired E2E state isolation', () => {
   it('rejects contaminated default prompt blocks as an incomplete reset', () => {
     resetAndVerifyE2EScenarioSandboxes();
     editBlock('profile', 'PRIVATE-CONTAMINATED-PROFILE', { replace: true });
-    expect(() => assertE2EMemorySandboxReset()).toThrow(
-      'non-canonical profile block state',
-    );
+    expect(() => assertE2EMemorySandboxReset()).toThrow('non-canonical profile block state');
     resetAndVerifyE2EScenarioSandboxes();
   });
 
@@ -114,30 +112,29 @@ describe('paired E2E state isolation', () => {
       }),
     ).toMatchObject({ ok: true });
     getMemoryDb().runSync(
-      `INSERT INTO memory_product_experience_observations(
+      `INSERT INTO memory_verified_procedure_observations(
         id, memory_owner_id, memory_conversation_id_hash, source_thread_id_hash,
-        source_run_id_hash, domain_id, environment_id, procedure_id,
-        precondition_ids_json, precondition_ids_hash, outcome, authority,
-        evidence_kind, evidence_id_hash, contract_version, observed_at, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 1)`,
-      `product_experience_${'a'.repeat(64)}`,
+        source_run_id_hash, procedure_id, procedure_contract_digest, platform,
+        precondition_ids_json, precondition_ids_hash, evidence_manifest_json,
+        evidence_manifest_digest, evidence_id_digest, linkage_digest,
+        terminal_proof_digest, contract_version, observed_at, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'ios', '["platform.ios"]', ?, '{}', ?, ?, ?, ?, 1, 1, 1)`,
+      `verified_procedure_${'a'.repeat(64)}`,
       'vault_owner_test',
       '1'.repeat(64),
       '2'.repeat(64),
       '3'.repeat(64),
-      'mobile-assistant.effect.test',
-      'kavi.test',
-      'registered-tool.test',
-      '[]',
+      'verified-procedure.test',
       '4'.repeat(64),
-      'success',
-      'verified',
-      'effect_receipt',
       '5'.repeat(64),
+      '6'.repeat(64),
+      '7'.repeat(64),
+      '8'.repeat(64),
+      '9'.repeat(64),
     );
     expect(
       getMemoryDb().getFirstSync<{ count: number }>(
-        'SELECT COUNT(*) AS count FROM memory_product_experience_observations',
+        'SELECT COUNT(*) AS count FROM memory_verified_procedure_observations',
       )?.count,
     ).toBe(1);
 
@@ -147,7 +144,7 @@ describe('paired E2E state isolation', () => {
     expect(listFacts({ includeInvalidated: true })).toEqual([]);
     expect(
       getMemoryDb().getFirstSync<{ count: number }>(
-        'SELECT COUNT(*) AS count FROM memory_product_experience_observations',
+        'SELECT COUNT(*) AS count FROM memory_verified_procedure_observations',
       )?.count,
     ).toBe(0);
   });

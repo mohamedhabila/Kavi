@@ -841,7 +841,8 @@ export const en: TranslationMap = {
   scheduler: {
     title: 'Scheduled Tasks',
     noJobs: 'No scheduled tasks',
-    noJobsHint: 'Schedule AI tasks to run automatically.',
+    noJobsHint:
+      'Schedule AI tasks. When the app is inactive, allow notifications and tap the wake alert to run them.',
     addTask: 'Add Task',
     taskName: 'Task Name',
     taskNamePlaceholder: 'Daily summary, reminder, etc.',
@@ -868,6 +869,11 @@ export const en: TranslationMap = {
     never: 'Never',
     deleteJob: 'Delete Job',
     deleteJobConfirm: 'Delete "{name}"?',
+    deliveryWarning: 'Delivery warning: {error}',
+    wakeWarning: 'Wake warning: {error}',
+    warningTitle: 'Warning',
+    jobRunning: 'This scheduled job is currently running.',
+    jobMissing: 'This scheduled job no longer exists.',
     untitledJob: 'Untitled Job',
     cronFormat: 'Cron: {expr}',
     everyFormat: 'Every {value} {unit}',

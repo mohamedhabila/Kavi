@@ -4,13 +4,14 @@ jest.mock('../../src/services/storage/SecureStorage', () => ({
 
 jest.mock('../../src/services/skills/manager', () => ({
   registerSkill: jest.fn(),
+  registerCodeOwnedSkill: jest.fn(),
 }));
 
 export const mockFetch = jest.fn();
 (global as any).fetch = mockFetch;
 
 import { getSecure } from '../../src/services/storage/SecureStorage';
-import { registerSkill } from '../../src/services/skills/manager';
+import { registerCodeOwnedSkill, registerSkill } from '../../src/services/skills/manager';
 import { createFinanceSkill } from '../../src/services/integrations/finance/skill';
 import { createGitHubSkill } from '../../src/services/integrations/github/skill';
 import { createKnowledgeSkill } from '../../src/services/integrations/knowledge/skill';
@@ -38,5 +39,6 @@ export {
   File,
   Paths,
   registerBuiltInServiceSkills,
+  registerCodeOwnedSkill,
   registerSkill,
 };

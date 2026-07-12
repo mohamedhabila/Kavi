@@ -40,6 +40,7 @@ import {
 import { materializeToolEffectCompletionGoals } from './toolEffectGoalMaterialization';
 import type { AgentControlGraphWorkflowToolResultProgress } from './workflowToolResultProgress';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
+import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
 
 type TerminalGraphEvent = Extract<
   AgentControlGraphEvent,
@@ -133,6 +134,9 @@ export interface ExecuteAgentControlGraphToolTurnParams {
   recordPerformanceMetrics: (metrics: Partial<AgentControlPerformance>, bucket: string) => void;
   emitPendingAsyncOperationsChange?: () => void;
   agentRunId?: string;
+  executionRunId: string;
+  beforeEffectDispatch?: (toolName: string) => Promise<void>;
+  verifiedProcedureSession?: VerifiedProcedureExecutionSession;
   warningInjectedThisRound: boolean;
   turnAssistantContent: string;
   reasoning: string;
@@ -253,6 +257,9 @@ export async function executeAgentControlGraphToolTurn(
     recordPerformanceMetrics: params.recordPerformanceMetrics,
     controlGraphGoals: params.getGraphSnapshot?.().goals,
     agentRunId: params.agentRunId,
+    executionRunId: params.executionRunId,
+    beforeEffectDispatch: params.beforeEffectDispatch,
+    verifiedProcedureSession: params.verifiedProcedureSession,
   });
 
   const batchYieldedEarly = toolExecutionOutcomes.some((outcome) =>

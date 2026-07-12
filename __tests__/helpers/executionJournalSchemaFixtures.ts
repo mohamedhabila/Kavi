@@ -90,6 +90,7 @@ export function insertSchemaEffect(
     checkpoint_id: 'checkpoint-1',
     tool_call_id: 'tool-call-1',
     tool_name_digest: DIGEST_A,
+    tool_contract_identity_digest: null,
     effect_class: 'none',
     idempotency_class: 'effect_free',
     idempotency_key_digest: null,
@@ -106,10 +107,11 @@ export function insertSchemaEffect(
   };
   database.runSync(
     `INSERT INTO execution_effects (
-       id, run_id, checkpoint_id, tool_call_id, tool_name_digest, effect_class,
+       id, run_id, checkpoint_id, tool_call_id, tool_name_digest,
+       tool_contract_identity_digest, effect_class,
        idempotency_class, idempotency_key_digest, request_digest, outcome_digest,
        status, retry_policy, attempt, created_at, started_at, completed_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ...Object.values(row),
   );
   return row;

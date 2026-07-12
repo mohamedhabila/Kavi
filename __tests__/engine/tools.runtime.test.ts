@@ -1,4 +1,8 @@
-import { __getStore, executePython, executeTool } from '../helpers/toolsExecutorHarness';
+import {
+  __getStore,
+  executePython,
+  executeToolInner as executeTool,
+} from '../helpers/toolsExecutorHarness';
 
 function expectCompletedExecution(result: string, output: string): void {
   expect(JSON.parse(result)).toEqual(
@@ -21,7 +25,7 @@ function expectFailedExecution(result: string, errorFragment: string): void {
   );
 }
 
-describe('executeTool', () => {
+describe('executeToolInner raw runtime routing', () => {
   const CONV_ID = 'test-conversation';
 
   describe('javascript', () => {

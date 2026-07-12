@@ -44,6 +44,7 @@ export interface ToolExecutionOutcome {
   yieldCompletionNoteMessage?: string;
   skipWorkflowProgress?: boolean;
   effectReceipt?: ToolEffectReceipt;
+  effectReconciliationRequired?: boolean;
 }
 
 function updateToolCallHistoryResult(params: {
@@ -106,9 +107,7 @@ function buildDeferredAfterGraphMutationOutcome(
   };
 }
 
-function collectCompletedBlockingGoalIds(
-  goals: ReadonlyArray<AgentGoal> | undefined,
-): Set<string> {
+function collectCompletedBlockingGoalIds(goals: ReadonlyArray<AgentGoal> | undefined): Set<string> {
   return new Set(
     (goals ?? [])
       .filter((goal) => isBlockingGoal(goal) && goal.status === 'completed')
@@ -121,10 +120,7 @@ function hasNewlyCompletedBlockingGoal(params: {
   after: ReadonlyArray<AgentGoal> | undefined;
 }): boolean {
   return (params.after ?? []).some(
-    (goal) =>
-      isBlockingGoal(goal) &&
-      goal.status === 'completed' &&
-      !params.before.has(goal.id),
+    (goal) => isBlockingGoal(goal) && goal.status === 'completed' && !params.before.has(goal.id),
   );
 }
 
@@ -135,11 +131,7 @@ function buildAppliedUnverifiedEffectGoalBlockEvent(params: {
   const receipt = params.receiptEvidence
     ? parseToolEffectReceiptEvidence(params.receiptEvidence)
     : null;
-  if (
-    !receipt ||
-    receipt.effectState !== 'applied' ||
-    receipt.verificationState === 'verified'
-  ) {
+  if (!receipt || receipt.effectState !== 'applied' || receipt.verificationState === 'verified') {
     return null;
   }
 
@@ -219,7 +211,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   }) => boolean;
   getModelTurnBlocker: () => string | undefined;
   finishWithGraphTerminalEvent: (params: {
-    graphEvent: Extract<AgentControlGraphEvent, { type: 'YIELDED' }>;
+    graphEvent: Extract<AgentControlGraphEvent, { type: 'BLOCKED' } | { type: 'YIELDED' }>;
     content: string;
     assistantMetadata: ReturnType<typeof buildAssistantMessageMetadata>;
     sessionEndReason?: string;
@@ -428,6 +420,28 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
 
   await params.yieldToUiFrame();
 
+  if (canonicalToolExecutionOutcomes.some((outcome) => outcome.effectReconciliationRequired)) {
+    await params.finishWithGraphTerminalEvent({
+      graphEvent: {
+        type: 'BLOCKED',
+        reason: 'tool_effect_reconciliation_required',
+      },
+      content:
+        'A tool may have changed external state, but its outcome could not be verified. ' +
+        'This execution is stopped to prevent a duplicate mutation. Reconcile the external state or make a new explicit request before continuing.',
+      assistantMetadata: buildAssistantMessageMetadata('final', {
+        completionStatus: 'incomplete',
+        finishReason: 'tool_effect_reconciliation_required',
+      }),
+      sessionEndReason: 'tool_effect_reconciliation_required',
+    });
+    return {
+      status: 'finalized',
+      lastPendingAsyncSignature: params.lastPendingAsyncSignature,
+      workingMessages,
+    };
+  }
+
   const postToolGraphBlocker = params.getModelTurnBlocker();
   if (postToolGraphBlocker) {
     throw new Error(
@@ -444,8 +458,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
     after: latestGoals,
   });
   const hasIncompleteBlockingGoal = latestGoals.some(
-    (goal) =>
-      isBlockingGoal(goal) && (goal.status === 'active' || goal.status === 'pending'),
+    (goal) => isBlockingGoal(goal) && (goal.status === 'active' || goal.status === 'pending'),
   );
 
   return finalizeAgentControlGraphToolExecutionOutcomes({

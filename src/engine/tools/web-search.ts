@@ -104,6 +104,7 @@ async function executeSingleWebSearch(params: {
     attempts: SEARCH_TRANSPORT_ATTEMPTS,
     timeoutSeconds: SEARCH_TOOL_TIMEOUT_SECONDS || DEFAULT_TIMEOUT_SECONDS,
     shouldRetry: isAbortLikeTransportError,
+    signal: params.context?.executionSignal,
     operation: (signal) =>
       searchRemoteWebProvider({
         provider: params.provider,

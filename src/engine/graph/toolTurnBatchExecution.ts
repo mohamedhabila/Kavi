@@ -11,7 +11,7 @@ import {
 } from '../toolExecution/toolCallLifecycle';
 import { executeToolExecutionBatch } from '../toolExecution/toolExecutionBatch';
 import type { RuntimeToolAvailabilityContext } from '../tools/runtimeAvailability';
-import { normalizeToolName } from '../tools/toolNameNormalization';
+import { normalizeToolName, resolveRegisteredToolName } from '../tools/toolNameNormalization';
 import { GOAL_BOOTSTRAP_TOOL_NAME } from '../goals/bootstrap';
 import {
   buildEffectCompletionContractBlock,
@@ -25,6 +25,7 @@ import { parseAgentControlGraphSessionsYieldResult } from './sessionsYield';
 import { shouldExecuteToolBatchInParallel } from './toolBatchExecutionPolicy';
 import type { ToolExecutionOutcome } from './toolExecutionOutcomeResolution';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
+import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
 
 export async function executeAgentControlGraphToolBatch(params: {
   executableToolCalls: ReadonlyArray<PendingAgentToolCall>;
@@ -54,6 +55,9 @@ export async function executeAgentControlGraphToolBatch(params: {
   recordPerformanceMetrics: (metrics: Partial<AgentControlPerformance>, bucket: string) => void;
   controlGraphGoals?: ReadonlyArray<AgentGoal>;
   agentRunId?: string;
+  executionRunId: string;
+  beforeEffectDispatch?: (toolName: string) => Promise<void>;
+  verifiedProcedureSession?: VerifiedProcedureExecutionSession;
 }): Promise<ToolExecutionOutcome[]> {
   const groundedToolNames = new Set(
     params.groundedRequestScopedTools.map((tool) => normalizeToolName(tool.name)).filter(Boolean),
@@ -99,10 +103,7 @@ export async function executeAgentControlGraphToolBatch(params: {
     ) {
       continue;
     }
-    workflowBlockerByCallId.set(
-      toolCall.id,
-      buildEffectCompletionContractBlock(requirement),
-    );
+    workflowBlockerByCallId.set(toolCall.id, buildEffectCompletionContractBlock(requirement));
   }
 
   const executePendingToolCall = async (
@@ -113,6 +114,7 @@ export async function executeAgentControlGraphToolBatch(params: {
     const outcome = await executeToolCallLifecycle({
       tc: toolCall,
       iteration: params.iteration,
+      batchIndex: _index,
       conversationId: params.conversationId,
       provider: params.activeProvider,
       allProviders: params.allProviders,
@@ -140,6 +142,9 @@ export async function executeAgentControlGraphToolBatch(params: {
         params.recordPerformanceMetrics as ToolExecutionLifecycleMetricsRecorder,
       controlGraphGoals: params.controlGraphGoals,
       agentRunId: params.agentRunId,
+      executionRunId: params.executionRunId,
+      beforeEffectDispatch: params.beforeEffectDispatch,
+      verifiedProcedureSession: params.verifiedProcedureSession,
       idPrefixes: {
         blocked: 'tool_blocked',
         filtered: 'tool_filtered',
@@ -157,6 +162,7 @@ export async function executeAgentControlGraphToolBatch(params: {
       toolCallId: toolCall.id,
       toolMessage: outcome.toolMessage,
       effectReceipt: outcome.effectReceipt,
+      effectReconciliationRequired: outcome.effectReconciliationRequired,
       yieldedMessage: yieldResult.yielded
         ? yieldResult.message || 'Waiting for background agent results.'
         : undefined,
@@ -165,13 +171,24 @@ export async function executeAgentControlGraphToolBatch(params: {
     };
   };
 
+  const executeBatchInParallel = shouldExecuteToolBatchInParallel(
+    params.executableToolCalls,
+    params.controlGraphGoals,
+    params.groundedRequestScopedTools,
+  );
+  await params.verifiedProcedureSession?.observePlannedBatch({
+    iteration: params.iteration,
+    executeInParallel: executeBatchInParallel,
+    toolCalls: params.executableToolCalls.map((toolCall, batchIndex) => ({
+      batchIndex,
+      toolCallId: toolCall.id,
+      toolName: resolveRegisteredToolName(toolCall.name),
+    })),
+  });
+
   return executeToolExecutionBatch({
     executableToolCalls: params.executableToolCalls,
-    executeBatchInParallel: shouldExecuteToolBatchInParallel(
-      params.executableToolCalls,
-      params.controlGraphGoals,
-      params.groundedRequestScopedTools,
-    ),
+    executeBatchInParallel,
     executePendingToolCall: (toolCall, index, context) =>
       executePendingToolCall(toolCall, index, context),
     getCompletedToolName: (outcome) =>

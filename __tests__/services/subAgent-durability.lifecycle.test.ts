@@ -82,7 +82,7 @@ describe('spawnSubAgent — depth guard', () => {
     (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
       callbacks.onToken('hello');
       callbacks.onDone();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' });
     });
 
     const result = await spawnSubAgent(
@@ -107,7 +107,7 @@ describe('spawnSubAgent — depth guard', () => {
         terminalReason: 'tool_batch_incomplete',
       });
       callbacks.onDone();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' });
     });
 
     const result = await spawnSubAgent(
@@ -170,7 +170,7 @@ describe('announce system', () => {
   it('notifies listeners on spawn start and complete', async () => {
     (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
       callbacks.onDone();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' });
     });
 
     const events: Array<{ event: string; status: string }> = [];
@@ -221,7 +221,7 @@ describe('announce system', () => {
   it('unsubscribes correctly', async () => {
     (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
       callbacks.onDone();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' });
     });
 
     const listener = jest.fn();
@@ -354,7 +354,7 @@ describe('output truncation', () => {
     (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
       callbacks.onToken(longOutput);
       callbacks.onDone();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' });
     });
 
     const result = await spawnSubAgent(
@@ -371,7 +371,7 @@ describe('sub-agent toolFilter pass-through', () => {
   it('uses config.tools to build the worker tool surface passed to runOrchestrator', async () => {
     (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
       callbacks.onDone();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' });
     });
 
     await spawnSubAgent(
@@ -400,7 +400,7 @@ describe('sub-agent toolFilter pass-through', () => {
   it('treats an explicit empty config.tools list as a no-tools whitelist', async () => {
     (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
       callbacks.onDone();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' });
     });
 
     await spawnSubAgent(
@@ -427,7 +427,7 @@ describe('sub-agent toolFilter pass-through', () => {
   it('always blocks parent-memory tools when config.tools is not provided', async () => {
     (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
       callbacks.onDone();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' });
     });
 
     await spawnSubAgent(

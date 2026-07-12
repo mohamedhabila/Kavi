@@ -9,13 +9,13 @@ import { generateId } from '../../utils/id';
 import { flushChatStorePersistenceNow } from '../../store/chatStorePersistence';
 import { useChatStore } from '../../store/useChatStore';
 import {
-  mutateOwnedForegroundModelProjection,
-  releaseForegroundModelProjection,
-} from '../../store/foregroundModelProjectionOwnership';
-import { foregroundModelProjectionOwnersEqual } from '../../utils/foregroundModelProjectionOwner';
+  mutateOwnedModelProjection,
+  releaseModelProjection,
+} from '../../store/modelProjectionOwnership';
+import { modelProjectionOwnersEqual } from '../../utils/modelProjectionOwner';
 import {
   completeForegroundModelExecution,
-  foregroundModelProjectionOwnerForLease,
+  modelProjectionOwnerForForegroundLease,
 } from './foregroundModelExecutionJournal';
 import { isForegroundModelExecutionOwnedByCurrentProcess } from './foregroundModelExecutionProcessOwnership';
 import { listPendingForegroundModelExecutions } from './foregroundModelExecutionQueries';
@@ -87,7 +87,7 @@ export interface ForegroundModelRecoveryDependencies {
   mutateProjection(
     lease: ForegroundModelExecutionLease,
     timestamp: number,
-  ): Promise<ForegroundModelProjectionMutationResult>;
+  ): Promise<ForegroundModelRecoveryProjectionMutationResult>;
   flushChatState(): Promise<void>;
   complete(input: CompleteForegroundModelExecutionInput): Promise<unknown>;
   releaseProjection(
@@ -97,7 +97,7 @@ export interface ForegroundModelRecoveryDependencies {
   clock(): number;
 }
 
-export type ForegroundModelProjectionMutationResult =
+export type ForegroundModelRecoveryProjectionMutationResult =
   | {
       kind: 'applied';
       plan: ForegroundModelRecoveryPlan;
@@ -107,14 +107,14 @@ export type ForegroundModelProjectionMutationResult =
 
 const DEFAULT_DEPENDENCIES: ForegroundModelRecoveryDependencies = {
   listPending: listPendingForegroundModelExecutions,
-  mutateProjection: mutateForegroundModelProjectionForRecovery,
+  mutateProjection: mutateModelProjectionForForegroundRecovery,
   flushChatState: flushChatStorePersistenceNow,
   complete: completeForegroundModelExecution,
   isCurrentProcessRun: (lease) => isForegroundModelExecutionOwnedByCurrentProcess(lease.runId),
   releaseProjection: (lease) =>
-    releaseForegroundModelProjection({
+    releaseModelProjection({
       conversationId: lease.conversationId,
-      owner: foregroundModelProjectionOwnerForLease(lease),
+      owner: modelProjectionOwnerForForegroundLease(lease),
     }),
   clock: Date.now,
 };
@@ -146,7 +146,7 @@ function activeToolCalls(
   messages: ReadonlyArray<Message>,
   input: {
     conversationId: string;
-    taskId: string | null;
+    executionRunId: string;
     resolveToolEffect: ResolveToolEffectRestartDisposition;
   },
 ): InterruptedToolProjection[] {
@@ -158,7 +158,7 @@ function activeToolCalls(
         toolCallId: toolCall.id,
         disposition: input.resolveToolEffect({
           conversationId: input.conversationId,
-          taskId: input.taskId,
+          executionRunId: input.executionRunId,
           toolCallId: toolCall.id,
           toolName: toolCall.name,
           argumentsText: toolCall.arguments,
@@ -186,7 +186,7 @@ function foregroundToolEffectRestartInputs(
       .filter((toolCall) => toolCall.status === 'pending' || toolCall.status === 'running')
       .map((toolCall) => ({
         conversationId: lease.conversationId,
-        taskId: lease.taskId,
+        executionRunId: lease.runId,
         toolCallId: toolCall.id,
         toolName: toolCall.name,
         argumentsText: toolCall.arguments,
@@ -220,16 +220,11 @@ export function planForegroundModelRestartRecovery(
   if (conversation.id !== lease.conversationId) {
     return blocked(lease, 'conversation_ownership_mismatch');
   }
-  const expectedOwner = foregroundModelProjectionOwnerForLease(lease);
-  if (!conversation.foregroundModelProjectionOwner) {
+  const expectedOwner = modelProjectionOwnerForForegroundLease(lease);
+  if (!conversation.modelProjectionOwner) {
     return blocked(lease, 'projection_owner_missing');
   }
-  if (
-    !foregroundModelProjectionOwnersEqual(
-      conversation.foregroundModelProjectionOwner,
-      expectedOwner,
-    )
-  ) {
+  if (!modelProjectionOwnersEqual(conversation.modelProjectionOwner, expectedOwner)) {
     return blocked(lease, 'projection_owner_changed');
   }
   const requestIndex = conversation.messages.findIndex(
@@ -258,12 +253,10 @@ export function planForegroundModelRestartRecovery(
   const ownedAssistantMessages = assistantMessages.slice(anchorIndex);
   const interruptedTools = activeToolCalls(ownedAssistantMessages, {
     conversationId: lease.conversationId,
-    taskId: lease.taskId,
+    executionRunId: lease.runId,
     resolveToolEffect,
   });
-  if (
-    interruptedTools.some((tool) => tool.disposition.kind === 'reconciliation_required')
-  ) {
+  if (interruptedTools.some((tool) => tool.disposition.kind === 'reconciliation_required')) {
     return blocked(lease, 'effect_reconciliation_pending');
   }
   const projection =
@@ -315,9 +308,7 @@ export function applyForegroundModelRecoveryPlan(
     const toolCalls =
       plan.lease.taskId === null
         ? message.toolCalls?.map((toolCall) => {
-            const disposition = interruptedToolsByKey.get(
-              `${message.id}\u0000${toolCall.id}`,
-            );
+            const disposition = interruptedToolsByKey.get(`${message.id}\u0000${toolCall.id}`);
             if (!disposition) return toolCall;
             return projectToolCallAfterRestart({
               toolCall,
@@ -364,28 +355,24 @@ export function applyForegroundModelRecoveryPlan(
   };
 }
 
-async function mutateForegroundModelProjectionForRecovery(
+async function mutateModelProjectionForForegroundRecovery(
   lease: ForegroundModelExecutionLease,
   timestamp: number,
-): Promise<ForegroundModelProjectionMutationResult> {
+): Promise<ForegroundModelRecoveryProjectionMutationResult> {
   const conversationSnapshot = useChatStore
     .getState()
     .conversations.find((conversation) => conversation.id === lease.conversationId);
   const resolveToolEffect = await buildToolEffectRestartDispositionResolver(
     foregroundToolEffectRestartInputs(lease, conversationSnapshot),
   );
-  const mutation = mutateOwnedForegroundModelProjection<
+  const mutation = mutateOwnedModelProjection<
     | { plan: ForegroundModelRecoveryPlan; conversation: Conversation }
     | ForegroundModelRecoveryBlockedResult
   >({
     conversationId: lease.conversationId,
-    owner: foregroundModelProjectionOwnerForLease(lease),
+    owner: modelProjectionOwnerForForegroundLease(lease),
     mutate: (conversation) => {
-      const plan = planForegroundModelRestartRecovery(
-        lease,
-        conversation,
-        resolveToolEffect,
-      );
+      const plan = planForegroundModelRestartRecovery(lease, conversation, resolveToolEffect);
       if ('kind' in plan) return { kind: 'rejected', value: plan };
       const nextConversation = applyForegroundModelRecoveryPlan(plan, conversation, timestamp);
       return {

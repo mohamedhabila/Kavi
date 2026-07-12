@@ -174,10 +174,21 @@ describe('tool execution outcome resolution', () => {
     const params = buildBaseParams();
     const requestDigest = `sha256:${'4'.repeat(64)}` as const;
     const receipt: ToolEffectReceipt = {
-      version: 1,
+      version: 2,
       receiptId: `ter_${'c'.repeat(32)}`,
       toolCallId: 'tc-memory',
       toolName: 'memory_remember',
+      executionRunId: 'execution-run-1',
+      contractIdentity: {
+        kind: 'code_owned',
+        version: 1,
+        toolName: 'memory_remember',
+        schemaDigest: `sha256:${'6'.repeat(64)}`,
+        capabilityContractDigest: `sha256:${'6'.repeat(64)}`,
+        workflowContractDigest: `sha256:${'6'.repeat(64)}`,
+        effectContractDigest: `sha256:${'6'.repeat(64)}`,
+        executionPolicyDigest: `sha256:${'6'.repeat(64)}`,
+      },
       transportState: 'returned',
       effectKind: 'memory.write',
       effectState: 'applied',
@@ -342,7 +353,9 @@ describe('tool execution outcome resolution', () => {
     expect(graph.goals.find((goal) => goal.id === 'scope-a')?.status).toBe('pending');
     expect(graph.goals.find((goal) => goal.id === 'scope-b')?.status).toBe('active');
     expect(params.workingMessages[1].isError).toBe(true);
-    expect(params.workingMessages[1].content).toBe('Error: stale batch should not drive graph progress');
+    expect(params.workingMessages[1].content).toBe(
+      'Error: stale batch should not drive graph progress',
+    );
   });
 
   it('defers repeated goal mutations after one graph mutation in a batch', async () => {
@@ -405,8 +418,8 @@ describe('tool execution outcome resolution', () => {
       reason: 'graph_mutation_boundary',
       tool: 'update_goals',
     });
-    const goalsUpdatedCalls = params.applyGraphEvents.mock.calls.filter(
-      ([events]) => events.some((event) => event.type === 'GOALS_UPDATED'),
+    const goalsUpdatedCalls = params.applyGraphEvents.mock.calls.filter(([events]) =>
+      events.some((event) => event.type === 'GOALS_UPDATED'),
     );
     expect(goalsUpdatedCalls).toHaveLength(1);
   });

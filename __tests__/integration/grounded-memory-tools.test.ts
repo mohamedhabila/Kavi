@@ -11,7 +11,7 @@ jest.mock('../../src/services/remote/approvalStore', () => {
   };
 });
 
-import { executeTool } from '../../src/engine/tools';
+import { executeToolInner as executeTool } from '../../src/engine/tools/toolDispatchRouter';
 import { findEntityByName } from '../../src/services/memory/entities';
 import { listFactEvidence } from '../../src/services/memory/episodes/queries';
 import { listFacts } from '../../src/services/memory/facts/queries';
@@ -86,7 +86,7 @@ async function recall(input: {
   ) as Record<string, any>;
 }
 
-describe('grounded memory_remember product writes', () => {
+describe('raw memory tool executor grounded memory_remember writes', () => {
   it('grounds a direct canonical self claim as one exact subject-predicate-value assertion', async () => {
     const written = await remember({
       subject: 'user',
@@ -249,7 +249,10 @@ describe('grounded memory_remember product writes', () => {
     ]);
     const recalled = await recall({ subject: fixture.subject, predicate: fixture.predicate });
     expect(recalled.facts).toEqual([
-      expect.objectContaining({ value: fixture.value, policy: { action: 'use', reason: 'eligible' } }),
+      expect.objectContaining({
+        value: fixture.value,
+        policy: { action: 'use', reason: 'eligible' },
+      }),
     ]);
   });
 
@@ -263,9 +266,9 @@ describe('grounded memory_remember product writes', () => {
     });
 
     expect(written).toMatchObject({ ok: true, fact: { value: 'Café 42' } });
-    expect((await recall({ subject: 'Project-Café', predicate: 'release_label' })).facts).toHaveLength(
-      1,
-    );
+    expect(
+      (await recall({ subject: 'Project-Café', predicate: 'release_label' })).facts,
+    ).toHaveLength(1);
   });
 
   it('versions one exact current fact and preserves its historical row', async () => {
@@ -456,7 +459,9 @@ describe('grounded memory_remember product writes', () => {
 
     expect(result).toMatchObject({ ok: false, code: 'grounding_required' });
     expect(listFacts({ predicate: 'preferred_channel' })).toEqual([]);
-    expect(await recall({ subject: fixture.subject, predicate: 'preferred_channel' })).toMatchObject({
+    expect(
+      await recall({ subject: fixture.subject, predicate: 'preferred_channel' }),
+    ).toMatchObject({
       ok: true,
       facts: [],
     });

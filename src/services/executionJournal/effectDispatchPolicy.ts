@@ -10,12 +10,14 @@ const IDENTITY_KEYS = [
   'controlEpoch',
   'dispatchTargetDigest',
   'effectId',
+  'executionRunId',
   'expectedEffectKind',
   'expectedResource',
   'idempotencyKeyDigest',
   'requestDigest',
   'runId',
   'toolCallId',
+  'toolContractIdentityDigest',
   'toolName',
   'toolNameDigest',
 ] as const;
@@ -44,9 +46,11 @@ export interface EffectDispatchExpectedResource {
 export interface EffectDispatchIdentity {
   runId: string;
   effectId: string;
+  executionRunId: string;
   toolCallId: string;
   toolName: string;
   toolNameDigest: string;
+  toolContractIdentityDigest: string;
   requestDigest: string;
   idempotencyKeyDigest: string | null;
   dispatchTargetDigest: string;
@@ -130,9 +134,11 @@ export function isEffectDispatchIdentity(value: unknown): value is EffectDispatc
   return (
     isExactId(identity.runId) &&
     isExactId(identity.effectId) &&
+    isExactId(identity.executionRunId, 256) &&
     isExactId(identity.toolCallId) &&
     isExactId(identity.toolName, 256) &&
     isDigest(identity.toolNameDigest) &&
+    isDigest(identity.toolContractIdentityDigest) &&
     isDigest(identity.requestDigest) &&
     (identity.idempotencyKeyDigest === null || isDigest(identity.idempotencyKeyDigest)) &&
     isDigest(identity.dispatchTargetDigest) &&
@@ -176,8 +182,11 @@ function identityMatchesSnapshot(
   const { run, effect } = snapshot;
   return (
     identity.runId === run.id &&
+    identity.executionRunId === run.taskId &&
     identity.effectId === effect.id &&
     identity.toolCallId === effect.toolCallId &&
+    identity.toolContractIdentityDigest === effect.toolContractIdentityDigest &&
+    identity.dispatchTargetDigest === run.modelConfigDigest &&
     identity.toolNameDigest === effect.toolNameDigest &&
     identity.requestDigest === effect.requestDigest &&
     identity.idempotencyKeyDigest === effect.idempotencyKeyDigest &&

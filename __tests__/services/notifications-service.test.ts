@@ -3,6 +3,7 @@ import {
   cancelLocalNotification,
   getPendingNotificationRoute,
   initializeNotifications,
+  listScheduledLocalNotifications,
   sendLocalNotification,
   subscribeToNotificationRoutes,
 } from '../../src/services/notifications/service';
@@ -21,6 +22,7 @@ describe('notifications service', () => {
       status: 'granted',
     });
     (Notifications.scheduleNotificationAsync as jest.Mock).mockResolvedValue('notification-id');
+    (Notifications.getAllScheduledNotificationsAsync as jest.Mock).mockResolvedValue([]);
     (Notifications.cancelScheduledNotificationAsync as jest.Mock).mockResolvedValue(undefined);
     (Notifications.addNotificationResponseReceivedListener as jest.Mock).mockReturnValue({
       remove: mockSubscriptionRemove,
@@ -41,6 +43,20 @@ describe('notifications service', () => {
     expect(result).toEqual({ id: 'notification-id', scheduled: false });
     expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledWith({
       content: expect.objectContaining({ title: 'Hello', body: 'World', sound: true }),
+      trigger: null,
+    });
+  });
+
+  it('uses a caller-provided identifier for idempotent retries', async () => {
+    await sendLocalNotification({
+      identifier: 'scheduler-terminal-attempt-1',
+      title: 'Completed',
+      body: 'Done',
+    });
+
+    expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledWith({
+      identifier: 'scheduler-terminal-attempt-1',
+      content: expect.objectContaining({ title: 'Completed', body: 'Done' }),
       trigger: null,
     });
   });
@@ -104,6 +120,26 @@ describe('notifications service', () => {
     expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith('notification-id');
   });
 
+  it('lists scheduled notification identifiers and route metadata for reconciliation', async () => {
+    (Notifications.getAllScheduledNotificationsAsync as jest.Mock).mockResolvedValueOnce([
+      {
+        identifier: 'wake-1',
+        content: {
+          data: { screen: 'Scheduler', jobId: 'job-1', source: 'scheduled_task_wake' },
+        },
+      },
+      { identifier: 'plain-1', content: { data: null } },
+    ]);
+
+    await expect(listScheduledLocalNotifications()).resolves.toEqual([
+      {
+        id: 'wake-1',
+        data: { screen: 'Scheduler', jobId: 'job-1', source: 'scheduled_task_wake' },
+      },
+      { id: 'plain-1', data: {} },
+    ]);
+  });
+
   it('requests permissions when not already granted', async () => {
     (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValueOnce({
       granted: false,
@@ -149,6 +185,7 @@ describe('notifications service', () => {
     });
 
     expect(listener).toHaveBeenCalledWith({
+      notificationId: 'notif-1',
       screen: 'Chat',
       conversationId: 'conv-42',
       source: 'scheduled_task',
@@ -174,6 +211,7 @@ describe('notifications service', () => {
     });
 
     expect(listener).toHaveBeenCalledWith({
+      notificationId: 'notif-wake-1',
       screen: 'Scheduler',
       jobId: 'job-42',
       source: 'scheduled_task_wake',
@@ -194,6 +232,7 @@ describe('notifications service', () => {
     });
 
     await expect(getPendingNotificationRoute()).resolves.toEqual({
+      notificationId: 'notif-2',
       screen: 'Chat',
       conversationId: 'conv-77',
       source: 'scheduled_task',
@@ -215,6 +254,7 @@ describe('notifications service', () => {
     });
 
     await expect(getPendingNotificationRoute()).resolves.toEqual({
+      notificationId: 'notif-wake-2',
       screen: 'Scheduler',
       jobId: 'job-77',
       source: 'scheduled_task_wake',

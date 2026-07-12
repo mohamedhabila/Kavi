@@ -31,6 +31,7 @@ describe('canonical memory architecture guard', () => {
         "import { Directory, Paths } from 'expo-file-system';",
         "const RETIRED_MEMORY_DIRECTORY_NAMES = ['global-memory', 'conversation-memory'] as const;",
         "database.execSync('DROP TABLE IF EXISTS memory_chunks');",
+        "database.execSync('DROP TABLE IF EXISTS memory_product_experience_observations;');",
       ].join('\n'),
     );
 
@@ -57,9 +58,7 @@ describe('canonical memory architecture guard', () => {
     );
 
     expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining('uses retired Markdown memory directories'),
-      ]),
+      expect.arrayContaining([expect.stringContaining('uses retired Markdown memory directories')]),
     );
   });
 
@@ -85,9 +84,7 @@ describe('canonical memory architecture guard', () => {
     );
 
     expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining('uses retired Markdown memory file'),
-      ]),
+      expect.arrayContaining([expect.stringContaining('uses retired Markdown memory file')]),
     );
   });
 
@@ -104,6 +101,27 @@ describe('canonical memory architecture guard', () => {
         expect.stringContaining('readGlobalMemory'),
         expect.stringContaining('memory/store'),
         expect.stringContaining('restores a retired memory implementation'),
+      ]),
+    );
+  });
+
+  it('allows only the one-way product-experience table drop and rejects restoration', () => {
+    writeProjectFile(
+      projectRoot,
+      'src/services/memory/retiredMemoryArtifacts.ts',
+      "database.execSync('DROP TABLE IF EXISTS memory_product_experience_observations;');\n",
+    );
+    expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual([]);
+
+    writeProjectFile(
+      projectRoot,
+      'src/services/memory/productExperienceObservationStore.ts',
+      "db.getAllSync('SELECT * FROM memory_product_experience_observations');\n",
+    );
+    expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('restores a retired memory implementation'),
+        expect.stringContaining('uses retired product-experience table'),
       ]),
     );
   });

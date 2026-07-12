@@ -115,6 +115,7 @@ export async function runBootOnce(
           conversationId: sessionId,
           personaId: SUPER_AGENT_PERSONA_ID,
           taskId: null,
+          executionRunId: sessionId,
           systemPrompt:
             'You are executing startup instructions from BOOT.md. ' +
             'Complete the tasks silently. Do not ask for user input.',

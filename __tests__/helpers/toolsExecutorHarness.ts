@@ -1,4 +1,10 @@
 import type { Skill } from '../../src/services/skills/types';
+import { withCanonicalToolExecution } from './canonicalToolExecution';
+
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('./expoSqliteShim');
+  return makeExpoSqliteMock();
+});
 
 jest.mock('../../src/services/python/pyodideBridge', () => ({
   executePython: jest.fn().mockResolvedValue({ success: true, output: '42' }),
@@ -213,6 +219,18 @@ jest.mock('../../src/store/useChatStore', () => ({
   },
 }));
 
+jest.mock('../../src/services/scheduler/commands', () => ({
+  createScheduledJob: jest.fn().mockResolvedValue({ id: 'job-1' }),
+  deleteScheduledJob: jest.fn().mockResolvedValue('not_found'),
+  getScheduledJob: jest.fn().mockResolvedValue(undefined),
+  listScheduledJobs: jest.fn().mockResolvedValue([]),
+  setScheduledJobEnabled: jest.fn().mockResolvedValue({ status: 'not_found' }),
+  updateScheduledJob: jest.fn().mockResolvedValue({ status: 'not_found' }),
+}));
+jest.mock('../../src/services/scheduler/engine', () => ({
+  runJobNow: jest.fn().mockResolvedValue({ status: 'not_found', id: 'nope' }),
+}));
+
 jest.mock('../../src/services/storage/SecureStorage', () => ({
   getProviderApiKey: jest.fn().mockResolvedValue('sk-image'),
 }));
@@ -284,6 +302,7 @@ export let executeTool: (
   conversationId: string,
   context?: Record<string, unknown>,
 ) => Promise<string>;
+export let executeToolInner: typeof import('../../src/engine/tools/toolDispatchRouter').executeToolInner;
 export let executeNativeTool: jest.Mock;
 export let generateImage: jest.Mock;
 export let editImage: jest.Mock;
@@ -303,7 +322,9 @@ export const REMOTE_WORKSPACE_TARGET = {
 
 function loadTestModules() {
   ({ __resetStore, __getStore } = require('expo-file-system'));
-  ({ executeTool } = require('../../src/engine/tools/index'));
+  const { executeTool: rawExecuteTool } = require('../../src/engine/tools/index');
+  executeTool = withCanonicalToolExecution(rawExecuteTool);
+  ({ executeToolInner } = require('../../src/engine/tools/toolDispatchRouter'));
   ({ executeNativeTool } = require('../../src/engine/tools/native/executor'));
   ({ generateImage, editImage } = require('../../src/services/media/imageGeneration'));
   ({ registerSkill, unregisterSkill } = require('../../src/services/skills/manager'));
@@ -325,5 +346,5 @@ beforeEach(() => {
   mockPermissionOverrides.clear();
   clearAllSurfaces();
   const { useSchedulerStore } = require('../../src/services/scheduler/store');
-  useSchedulerStore.setState({ jobs: [] });
+  useSchedulerStore.setState({ jobs: [], terminalReports: [] });
 });

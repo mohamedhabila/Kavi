@@ -2,6 +2,7 @@ import type { Message, ToolCall } from '../../types/message';
 import type { SubAgentActivityEntry, SubAgentConfig, SubAgentSnapshot } from '../../types/subAgent';
 import type { TokenUsage } from '../../types/usage';
 import type { LlmProviderConfig } from '../../types/provider';
+import type { OrchestratorRunResult } from '../../engine/orchestrator';
 import { resolveSubAgentMaxTokens } from '../context/tokenOptimization';
 import {
   createSubAgentOrchestratorCallbacks,
@@ -78,7 +79,7 @@ export async function runSubAgentOrchestratorLoop<TAgent extends SubAgentSnapsho
     options?: ProgressOptions,
   ) => void;
   recordUsage: (usage: TokenUsage) => void;
-}): Promise<void> {
+}): Promise<OrchestratorRunResult> {
   if (params.explicitToolSelectionRejectedMessage) {
     throw new Error(params.explicitToolSelectionRejectedMessage);
   }
@@ -86,59 +87,66 @@ export async function runSubAgentOrchestratorLoop<TAgent extends SubAgentSnapsho
   const { runOrchestrator } =
     require('../../engine/orchestrator') as typeof import('../../engine/orchestrator');
 
-  await new Promise<void>((resolve, reject) => {
-    const callbacks = createSubAgentOrchestratorCallbacks({
-      abortController: params.abortController,
-      config: params.config,
-      providerId: params.provider.id,
-      sessionId: params.sessionId,
-      parentSessionId: params.config.parentSessionId,
-      agentRunId: params.config.agentRunId,
-      subAgent: params.subAgent,
-      runtimeState: params.runtimeState,
-      maxIterations: params.maxIterations,
-      maxToolResultPreviewChars: params.maxToolResultPreviewChars,
-      runControl: params.runControl,
-      transcriptMessages: params.transcriptMessages,
-      transcriptToolCalls: params.transcriptToolCalls,
-      trackToolCall: params.trackToolCall,
-      persistSessionContextNow: params.persistSessionContextNow,
-      checkpointSessionContext: params.checkpointSessionContext,
-      markModelResponseObserved: params.markModelResponseObserved,
-      refreshSubAgentArtifacts: params.refreshSubAgentArtifacts,
-      appendTranscriptMessage: params.appendTranscriptMessage,
-      appendActivity: params.appendActivity,
-      updateAgentProgress: params.updateAgentProgress,
-      recordUsage: params.recordUsage,
-      reject,
-      resolve,
-    });
-
-    runOrchestrator(
-      {
-        provider: params.provider,
-        model: params.model,
-        conversationId: params.sessionId,
-        memoryConversationId: params.sessionId,
-        personaId: SUPER_AGENT_PERSONA_ID,
-        taskId: params.taskId ?? null,
-        usageConversationId: params.usageConversationId,
-        workspaceConversationId: params.workspaceConversationId,
-        workspaceReadFallbackConversationId:
-          params.workspaceReadFallbackConversationId ?? params.sessionId,
-        systemPrompt: params.systemPrompt,
-        messages: params.messages,
-        maxTokens: resolveSubAgentMaxTokens(params.model),
-        signal: params.abortController,
-        enableCompaction: true,
-        enableFailover: true,
-        linkUnderstandingEnabled: params.linkUnderstandingEnabled,
-        mediaUnderstandingEnabled: params.mediaUnderstandingEnabled,
-        allProviders: params.allProviders,
-        disableTooling: params.disableTooling,
-        toolFilter: params.toolFilter,
-      },
-      callbacks,
-    ).catch(reject);
+  let resolveCallbacks!: () => void;
+  let rejectCallbacks!: (reason?: unknown) => void;
+  const callbacksCompletion = new Promise<void>((resolve, reject) => {
+    resolveCallbacks = resolve;
+    rejectCallbacks = reject;
   });
+  const callbacks = createSubAgentOrchestratorCallbacks({
+    abortController: params.abortController,
+    config: params.config,
+    providerId: params.provider.id,
+    sessionId: params.sessionId,
+    parentSessionId: params.config.parentSessionId,
+    agentRunId: params.config.agentRunId,
+    subAgent: params.subAgent,
+    runtimeState: params.runtimeState,
+    maxIterations: params.maxIterations,
+    maxToolResultPreviewChars: params.maxToolResultPreviewChars,
+    runControl: params.runControl,
+    transcriptMessages: params.transcriptMessages,
+    transcriptToolCalls: params.transcriptToolCalls,
+    trackToolCall: params.trackToolCall,
+    persistSessionContextNow: params.persistSessionContextNow,
+    checkpointSessionContext: params.checkpointSessionContext,
+    markModelResponseObserved: params.markModelResponseObserved,
+    refreshSubAgentArtifacts: params.refreshSubAgentArtifacts,
+    appendTranscriptMessage: params.appendTranscriptMessage,
+    appendActivity: params.appendActivity,
+    updateAgentProgress: params.updateAgentProgress,
+    recordUsage: params.recordUsage,
+    reject: rejectCallbacks,
+    resolve: resolveCallbacks,
+  });
+
+  const orchestratorResult = runOrchestrator(
+    {
+      provider: params.provider,
+      model: params.model,
+      conversationId: params.sessionId,
+      memoryConversationId: params.sessionId,
+      personaId: SUPER_AGENT_PERSONA_ID,
+      taskId: params.taskId ?? null,
+      executionRunId: params.sessionId,
+      usageConversationId: params.usageConversationId,
+      workspaceConversationId: params.workspaceConversationId,
+      workspaceReadFallbackConversationId:
+        params.workspaceReadFallbackConversationId ?? params.sessionId,
+      systemPrompt: params.systemPrompt,
+      messages: params.messages,
+      maxTokens: resolveSubAgentMaxTokens(params.model),
+      signal: params.abortController,
+      enableCompaction: true,
+      enableFailover: true,
+      linkUnderstandingEnabled: params.linkUnderstandingEnabled,
+      mediaUnderstandingEnabled: params.mediaUnderstandingEnabled,
+      allProviders: params.allProviders,
+      disableTooling: params.disableTooling,
+      toolFilter: params.toolFilter,
+    },
+    callbacks,
+  );
+  const [result] = await Promise.all([orchestratorResult, callbacksCompletion]);
+  return result;
 }

@@ -90,6 +90,7 @@ describe('ChatScreen run interruption recovery', () => {
     mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
       callbacks.onError(new Error('OpenAI streaming error'));
       callbacks.onDone();
+      return { terminalDisposition: 'failed' };
     });
 
     const { getByPlaceholderText, getByTestId } = render(<ChatScreen />);
@@ -163,6 +164,7 @@ describe('ChatScreen run interruption recovery', () => {
         },
       );
       callbacks.onDone();
+      return { terminalDisposition: 'final_candidate' };
     });
 
     const { getByPlaceholderText, getByTestId } = render(<ChatScreen />);

@@ -1,4 +1,5 @@
 import { mockChatScreenState } from './state';
+import type { OrchestratorRunResult } from '../../src/engine/orchestrator';
 
 jest.mock('../../src/services/startupRecovery', () => ({
   recoverPersistedAgentState: jest.fn().mockResolvedValue(undefined),
@@ -16,7 +17,7 @@ jest.mock('../../src/services/executionJournal/foregroundModelExecutionJournal',
   })),
   completeForegroundModelExecution: jest.fn().mockResolvedValue(undefined),
   createForegroundModelExecution: jest.fn(async (input: any) => ({
-    runId: `foreground-model-${input.assistantMessageId}`,
+    runId: input.runId,
     conversationId: input.conversationId,
     requestMessageId: input.requestMessageId,
     assistantMessageId: input.assistantMessageId,
@@ -28,7 +29,8 @@ jest.mock('../../src/services/executionJournal/foregroundModelExecutionJournal',
     checkpointId: `created-${input.assistantMessageId}`,
     checkpointStateDigest: 'a'.repeat(64),
   })),
-  foregroundModelProjectionOwnerForLease: (lease: any) => ({
+  modelProjectionOwnerForForegroundLease: (lease: any) => ({
+    surface: 'foreground',
     runId: lease.runId,
     requestMessageId: lease.requestMessageId,
     assistantMessageId: lease.assistantMessageId,
@@ -49,23 +51,24 @@ jest.mock('../../src/services/executionJournal/foregroundExternalRecoveryCancell
   cancelOwnedExternalRecoveries: (...args: any[]) => mockCancelOwnedExternalRecoveries(...args),
 }));
 
-jest.mock('../../src/store/foregroundModelProjectionOwnership', () => {
+jest.mock('../../src/store/modelProjectionOwnership', () => {
   const ownersEqual = (left: any, right: any) =>
     Boolean(left) &&
+    left.surface === right.surface &&
     left.runId === right.runId &&
     left.requestMessageId === right.requestMessageId &&
     left.assistantMessageId === right.assistantMessageId &&
     left.controlEpoch === right.controlEpoch;
 
   return {
-    claimForegroundModelProjection: jest.fn((input: any) => {
+    claimModelProjection: jest.fn((input: any) => {
       const conversation = mockChatScreenState.conversations.find(
         (candidate) => candidate.id === input.conversationId,
       );
       if (!conversation) return 'conversation_missing';
       if (
-        conversation.foregroundModelProjectionOwner &&
-        !ownersEqual(conversation.foregroundModelProjectionOwner, input.owner)
+        conversation.modelProjectionOwner &&
+        !ownersEqual(conversation.modelProjectionOwner, input.owner)
       ) {
         return 'owner_conflict';
       }
@@ -86,7 +89,7 @@ jest.mock('../../src/store/foregroundModelProjectionOwnership', () => {
           ? candidate
           : {
               ...candidate,
-              foregroundModelProjectionOwner: input.owner,
+              modelProjectionOwner: input.owner,
               messages: assistant
                 ? candidate.messages
                 : [...candidate.messages, input.assistantMessage],
@@ -94,29 +97,44 @@ jest.mock('../../src/store/foregroundModelProjectionOwnership', () => {
       );
       return 'claimed';
     }),
-    ownsForegroundModelProjection: jest.fn((conversationId: string, owner: any) =>
+    ownsModelProjection: jest.fn((conversationId: string, owner: any) =>
       mockChatScreenState.conversations.some(
         (conversation) =>
           conversation.id === conversationId &&
-          ownersEqual(conversation.foregroundModelProjectionOwner, owner),
+          ownersEqual(conversation.modelProjectionOwner, owner),
       ),
     ),
-    releaseForegroundModelProjection: jest.fn((input: any) => {
+    mutateOwnedModelProjection: jest.fn((input: any) => {
+      const conversation = mockChatScreenState.conversations.find(
+        (candidate) => candidate.id === input.conversationId,
+      );
+      if (!conversation) return { kind: 'conversation_missing' };
+      if (!ownersEqual(conversation.modelProjectionOwner, input.owner)) {
+        return { kind: 'owner_changed' };
+      }
+      const mutation = input.mutate(conversation);
+      if (mutation.kind === 'rejected') return mutation;
+      mockChatScreenState.conversations = mockChatScreenState.conversations.map((candidate) =>
+        candidate.id === input.conversationId ? mutation.conversation : candidate,
+      );
+      return { kind: 'applied', value: mutation.value };
+    }),
+    releaseModelProjection: jest.fn((input: any) => {
       const conversation = mockChatScreenState.conversations.find(
         (candidate) => candidate.id === input.conversationId,
       );
       if (!conversation) return 'conversation_missing';
-      if (!ownersEqual(conversation.foregroundModelProjectionOwner, input.owner)) {
+      if (!ownersEqual(conversation.modelProjectionOwner, input.owner)) {
         return 'owner_changed';
       }
       mockChatScreenState.conversations = mockChatScreenState.conversations.map((candidate) =>
         candidate.id === input.conversationId
-          ? { ...candidate, foregroundModelProjectionOwner: undefined }
+          ? { ...candidate, modelProjectionOwner: undefined }
           : candidate,
       );
       return 'released';
     }),
-    waitForForegroundModelProjectionAvailability: jest.fn().mockResolvedValue(undefined),
+    waitForModelProjectionAvailability: jest.fn().mockResolvedValue(undefined),
   };
 });
 
@@ -175,21 +193,25 @@ jest.mock('../../src/services/agents/subAgent', () => ({
 
 export function holdMockOrchestratorUntilAbort(options: {
   signal?: AbortController;
-}): Promise<void> {
+}): Promise<OrchestratorRunResult> {
   const signal = options.signal?.signal;
   if (!signal) {
     throw new Error('In-flight orchestrator tests require an AbortController.');
   }
   return new Promise((resolve) => {
     if (signal.aborted) {
-      resolve();
+      resolve({ terminalDisposition: 'cancelled' });
       return;
     }
-    signal.addEventListener('abort', () => resolve(), { once: true });
+    signal.addEventListener('abort', () => resolve({ terminalDisposition: 'cancelled' }), {
+      once: true,
+    });
   });
 }
 
-export const mockRunOrchestrator = jest.fn().mockResolvedValue(undefined);
+export const mockRunOrchestrator = jest
+  .fn()
+  .mockResolvedValue({ terminalDisposition: 'final_candidate' } satisfies OrchestratorRunResult);
 jest.mock('../../src/engine/orchestrator', () => ({
   runOrchestrator: (...args: any[]) => mockRunOrchestrator(...args),
 }));

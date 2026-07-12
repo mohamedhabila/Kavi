@@ -36,6 +36,7 @@ async function begin() {
   const journalOptions = options();
   const created = await createForegroundModelExecution(
     {
+      runId: 'run-1',
       conversationId: 'conversation-1',
       requestMessageId: 'request-1',
       assistantMessageId: 'assistant-1',
@@ -66,6 +67,7 @@ describe('foreground model execution journal', () => {
     const journalOptions = options();
     const created = await createForegroundModelExecution(
       {
+        runId: 'run-1',
         conversationId: 'conversation-1',
         requestMessageId: 'request-1',
         assistantMessageId: 'assistant-1',
@@ -80,7 +82,7 @@ describe('foreground model execution journal', () => {
     expect(created).toEqual(
       expect.objectContaining({
         expectedStatus: 'queued',
-        checkpointId: 'foreground-created-id-2',
+        checkpointId: 'foreground-created-id-1',
         createdAt: 10,
       }),
     );
@@ -95,7 +97,7 @@ describe('foreground model execution journal', () => {
     const lease = await activateForegroundModelExecution({ lease: created }, journalOptions);
 
     expect(lease).toEqual({
-      runId: 'foreground-model-id-1',
+      runId: 'run-1',
       conversationId: 'conversation-1',
       requestMessageId: 'request-1',
       assistantMessageId: 'assistant-1',
@@ -104,7 +106,7 @@ describe('foreground model execution journal', () => {
       expectedStatus: 'running',
       controlEpoch: 0,
       updatedAt: 10,
-      checkpointId: 'foreground-before-model-id-3',
+      checkpointId: 'foreground-before-model-id-2',
       checkpointStateDigest: DIGEST,
     });
     expect(
@@ -388,7 +390,10 @@ describe('foreground model execution journal', () => {
       )?.count,
     ).toBe(2_000);
     expect(
-      database.getFirstSync<{ id: string }>('SELECT id FROM execution_runs WHERE id = ?', lease.runId),
+      database.getFirstSync<{ id: string }>(
+        'SELECT id FROM execution_runs WHERE id = ?',
+        lease.runId,
+      ),
     ).toEqual({ id: lease.runId });
   });
 
@@ -403,6 +408,7 @@ describe('foreground model execution journal', () => {
     };
     const secondCreated = await createForegroundModelExecution(
       {
+        runId: 'run-2',
         conversationId: 'conversation-2',
         requestMessageId: 'request-2',
         assistantMessageId: 'assistant-2',
@@ -411,10 +417,7 @@ describe('foreground model execution journal', () => {
       },
       secondOptions,
     );
-    const second = await activateForegroundModelExecution(
-      { lease: secondCreated },
-      secondOptions,
-    );
+    const second = await activateForegroundModelExecution({ lease: secondCreated }, secondOptions);
     expect(listPendingForegroundModelExecutions({ limit: 1 })).toEqual([first]);
     expect(listPendingForegroundModelExecutions({ limit: 2 })).toEqual([first, second]);
     expect(

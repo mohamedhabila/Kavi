@@ -2,7 +2,7 @@ jest.mock('../../src/engine/orchestrator', () => ({
   runOrchestrator: jest.fn().mockImplementation((_opts: any, callbacks: any) => {
     callbacks.onToken?.('mock output');
     callbacks.onDone?.();
-    return Promise.resolve();
+    return Promise.resolve({ terminalDisposition: 'final_candidate' });
   }),
   MAX_TOOL_ITERATIONS: 25,
 }));
@@ -89,7 +89,6 @@ export function makeStructuredFinalizerResponse(
   };
 }
 
-
 export {
   cancelSubAgent,
   cleanupSubAgents,
@@ -120,7 +119,7 @@ export function installSubAgentTestHarness() {
     runOrchestrator.mockImplementation((_opts: any, callbacks: any) => {
       callbacks.onToken?.('mock output');
       callbacks.onDone?.();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' });
     });
     streamMessageSpy = jest
       .spyOn(LlmService.prototype, 'streamMessage')

@@ -34,7 +34,7 @@ type ChatScreenConversationPaneProps = {
   handleComposerAttachmentsChange: (attachments: Attachment[]) => void;
   handleComposerTextChange: (text: string) => void;
   handleEdit: (messageId: string, content: string) => void;
-  handleEditSend: (text: string, attachments?: Attachment[]) => void;
+  handleEditSend: (text: string, attachments?: Attachment[]) => Promise<void>;
   handleOpenSubAgentDetails: (snapshot: NonNullable<Message['subAgentEvent']>['snapshot']) => void;
   handleLoadMemoryFeedback: (
     messageId: string,
@@ -45,7 +45,7 @@ type ChatScreenConversationPaneProps = {
     eventId: string,
     outcome: MemoryRetrievalFeedbackChoice,
   ) => Promise<MemoryRetrievalFeedbackChoice>;
-  handleRetry: (messageId: string) => void;
+  handleRetry: (messageId: string) => Promise<void>;
   handleSend: (text: string, attachments?: Attachment[]) => Promise<void>;
   handleShareWorkspaceFile: (attachment: Attachment) => Promise<void>;
   handleShowEarlierMessages: () => void;

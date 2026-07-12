@@ -11,15 +11,25 @@ import {
   makeTestMessage as makeMessage,
 } from '../helpers/factories';
 
-function makePersistedEffectReceipt(
-  overrides: Partial<ToolEffectReceipt> = {},
-): ToolEffectReceipt {
+function makePersistedEffectReceipt(overrides: Partial<ToolEffectReceipt> = {}): ToolEffectReceipt {
+  const toolName = overrides.toolName ?? 'calendar_create_event';
   const receipt = decodeToolEffectReceipt({
-    version: 1,
+    version: 2,
     receiptId: `ter_${'a'.repeat(32)}`,
     toolCallId: 'tool-receipt-1',
-    toolName: 'calendar_create_event',
-    runId: 'run-restart-1',
+    toolName,
+    contractIdentity: overrides.contractIdentity ?? {
+      kind: 'code_owned',
+      version: 1,
+      toolName,
+      schemaDigest: `sha256:${'1'.repeat(64)}`,
+      capabilityContractDigest: `sha256:${'2'.repeat(64)}`,
+      workflowContractDigest: `sha256:${'3'.repeat(64)}`,
+      effectContractDigest: `sha256:${'4'.repeat(64)}`,
+      executionPolicyDigest: `sha256:${'5'.repeat(64)}`,
+    },
+    executionRunId: 'execution-run-restart-1',
+    dispatchRunId: 'effect-run-restart-1',
     transportState: 'returned',
     effectKind: 'calendar.create',
     effectState: 'applied',
@@ -457,115 +467,169 @@ describe('chatPersistence', () => {
     const restarted = normalizePersistedChatState(
       JSON.parse(JSON.stringify(persisted)) as typeof persisted,
     );
-    const restartedReceipts =
-      restarted.conversations[0].messages[0].toolCalls?.[0]?.effectReceipts;
+    const restartedReceipts = restarted.conversations[0].messages[0].toolCalls?.[0]?.effectReceipts;
     expect(restartedReceipts).toEqual([receipt]);
     expect(Object.isFrozen(restartedReceipts)).toBe(true);
     expect(Object.isFrozen(restartedReceipts?.[0])).toBe(true);
   });
 
+  it('round-trips only content-free runtime-external receipt evidence', () => {
+    const toolName = 'mcp__calendar__create_event';
+    const receipt = makePersistedEffectReceipt({
+      toolName,
+      contractIdentity: {
+        kind: 'runtime_external',
+        version: 1,
+        toolName,
+        source: 'mcp',
+        namespace: 'calendar',
+        declarationDigest: `sha256:${'6'.repeat(64)}`,
+        executionBindingDigest: `sha256:${'7'.repeat(64)}`,
+      },
+      effectKind: 'unknown',
+      effectState: 'unknown',
+      verificationState: 'unverified',
+      resource: undefined,
+    });
+    const persisted = partializeChatPersistState({
+      conversations: [
+        makeConversation({
+          messages: [
+            makeMessage(1, {
+              role: 'assistant',
+              toolCalls: [
+                {
+                  id: receipt.toolCallId,
+                  name: toolName,
+                  arguments: '{"token":"private-argument"}',
+                  status: 'completed',
+                  result: '{"secret":"private-result"}',
+                  effectReceipts: [receipt],
+                },
+              ],
+            }),
+          ],
+        }),
+      ],
+      activeConversationId: 'conv-1',
+      isLoading: false,
+    });
+
+    const restarted = normalizePersistedChatState(
+      JSON.parse(JSON.stringify(persisted)) as typeof persisted,
+    );
+    expect(restarted.conversations[0].messages[0].toolCalls?.[0]?.effectReceipts).toEqual([
+      receipt,
+    ]);
+    const serializedReceipt = JSON.stringify(receipt);
+    expect(serializedReceipt).not.toContain('calendar.example');
+    expect(serializedReceipt).not.toContain('private-argument');
+    expect(serializedReceipt).not.toContain('private-result');
+    expect(serializedReceipt).not.toContain('token');
+  });
+
   it('invalidates corrupt, conflicting, out-of-order, and cross-parent receipt histories on restart', () => {
     const malformedParent = {
       toolCallId: 'tool-malformed-history',
-      toolName: 'mcp__remote__mutate',
+      toolName: 'calendar_create_event',
     };
     const validAfterMalformed = makePersistedEffectReceipt({
       receiptId: `ter_${'d'.repeat(32)}`,
       ...malformedParent,
-      effectKind: 'remote.mutate',
+      effectKind: 'calendar.create',
     });
     const conflicting = makePersistedEffectReceipt({
       receiptId: `ter_${'e'.repeat(32)}`,
       toolCallId: 'tool-conflict-history',
-      toolName: 'mcp__remote__mutate',
-      effectKind: 'remote.mutate',
+      toolName: 'calendar_create_event',
+      effectKind: 'calendar.create',
       recordedAt: 500,
     });
     const newestFirst = makePersistedEffectReceipt({
       receiptId: `ter_${'f'.repeat(32)}`,
       toolCallId: 'tool-order-history',
-      toolName: 'mcp__remote__mutate',
-      effectKind: 'remote.mutate',
+      toolName: 'calendar_create_event',
+      effectKind: 'calendar.create',
       recordedAt: 700,
     });
     const olderSecond = makePersistedEffectReceipt({
       receiptId: `ter_${'1'.repeat(32)}`,
       toolCallId: 'tool-order-history',
-      toolName: 'mcp__remote__mutate',
-      effectKind: 'remote.mutate',
+      toolName: 'calendar_create_event',
+      effectKind: 'calendar.create',
       recordedAt: 600,
     });
     const rawPersistedState = {
       conversations: [
         makeConversation({
-        messages: [
-          makeMessage(1, {
-            role: 'assistant',
-            toolCalls: [
-              {
-                id: malformedParent.toolCallId,
-                name: 'mcp__remote__mutate',
-                arguments: '{}',
-                status: 'completed',
-                effectReceipts: [
-                  { ...validAfterMalformed, resultDigest: 'sha256:invalid' } as any,
-                  validAfterMalformed,
-                ],
-              },
-              {
-                id: 'tool-conflict-history',
-                name: 'mcp__remote__mutate',
-                arguments: '{}',
-                status: 'completed',
-                effectReceipts: [
-                  conflicting,
-                  { ...conflicting, verificationState: 'verified', recordedAt: 600 },
-                ],
-              },
-              {
-                id: 'tool-order-history',
-                name: 'mcp__remote__mutate',
-                arguments: '{}',
-                status: 'completed',
-                effectReceipts: [newestFirst, olderSecond],
-              },
-              {
-                id: 'tool-cross-call',
-                name: 'mcp__remote__mutate',
-                arguments: '{}',
-                status: 'completed',
-                effectReceipts: [
-                  makePersistedEffectReceipt({
-                    receiptId: `ter_${'2'.repeat(32)}`,
-                    toolCallId: 'different-tool-call',
-                    toolName: 'mcp__remote__mutate',
-                    effectKind: 'remote.mutate',
-                  }),
-                ],
-              },
-              {
-                id: 'tool-cross-name',
-                name: 'mcp__remote__mutate',
-                arguments: '{}',
-                status: 'completed',
-                effectReceipts: [
-                  makePersistedEffectReceipt({
-                    receiptId: `ter_${'3'.repeat(32)}`,
-                    toolCallId: 'tool-cross-name',
-                    toolName: 'mcp__other__mutate',
-                    effectKind: 'remote.mutate',
-                  }),
-                ],
-              },
-              {
-                id: 'tool-missing-receipt',
-                name: 'mcp__remote__mutate',
-                arguments: '{}',
-                status: 'completed',
-              },
-            ],
-          }),
-        ],
+          messages: [
+            makeMessage(1, {
+              role: 'assistant',
+              toolCalls: [
+                {
+                  id: malformedParent.toolCallId,
+                  name: 'mcp__remote__mutate',
+                  arguments: '{}',
+                  status: 'completed',
+                  effectReceipts: [
+                    { ...validAfterMalformed, resultDigest: 'sha256:invalid' } as any,
+                    validAfterMalformed,
+                  ],
+                },
+                {
+                  id: 'tool-conflict-history',
+                  name: 'mcp__remote__mutate',
+                  arguments: '{}',
+                  status: 'completed',
+                  effectReceipts: [
+                    conflicting,
+                    { ...conflicting, verificationState: 'verified', recordedAt: 600 },
+                  ],
+                },
+                {
+                  id: 'tool-order-history',
+                  name: 'mcp__remote__mutate',
+                  arguments: '{}',
+                  status: 'completed',
+                  effectReceipts: [newestFirst, olderSecond],
+                },
+                {
+                  id: 'tool-cross-call',
+                  name: 'mcp__remote__mutate',
+                  arguments: '{}',
+                  status: 'completed',
+                  effectReceipts: [
+                    makePersistedEffectReceipt({
+                      receiptId: `ter_${'2'.repeat(32)}`,
+                      toolCallId: 'different-tool-call',
+                      toolName: 'mcp__remote__mutate',
+                      effectKind: 'remote.mutate',
+                    }),
+                  ],
+                },
+                {
+                  id: 'tool-cross-name',
+                  name: 'mcp__remote__mutate',
+                  arguments: '{}',
+                  status: 'completed',
+                  effectReceipts: [
+                    makePersistedEffectReceipt({
+                      receiptId: `ter_${'3'.repeat(32)}`,
+                      toolCallId: 'tool-cross-name',
+                      toolName: 'mcp__other__mutate',
+                      effectKind: 'remote.mutate',
+                    }),
+                  ],
+                },
+                {
+                  id: 'tool-missing-receipt',
+                  name: 'mcp__remote__mutate',
+                  arguments: '{}',
+                  status: 'completed',
+                },
+              ],
+            }),
+          ],
         }),
       ],
       activeConversationId: 'conv-1',

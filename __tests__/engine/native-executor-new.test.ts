@@ -200,4 +200,13 @@ describe('Native Tool Dispatcher — New Tools', () => {
     const result = await executeNativeTool('nonexistent', '{}');
     expect(result).toContain('unknown native tool');
   });
+
+  it('does not enter a native executor after lifecycle cancellation', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('backgrounded'));
+
+    await expect(
+      executeNativeTool('haptic_feedback', '{"type":"light"}', controller.signal),
+    ).resolves.toBe('Error: Request cancelled');
+  });
 });

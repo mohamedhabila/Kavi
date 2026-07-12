@@ -126,7 +126,7 @@ describe('useChatStore', () => {
       );
     });
 
-    it('should mark in-flight tool calls as failed when a foreground run is interrupted on app restart', () => {
+    it('should hold in-flight tool calls for reconciliation when exact execution ownership is unavailable', () => {
       const convId = useChatStore.getState().createConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg-user-11',
@@ -164,12 +164,20 @@ describe('useChatStore', () => {
       const toolCall = assistantMessage.toolCalls?.[0];
       const run = conv.agentRuns?.find((candidate) => candidate.id === runId)!;
 
-      expect(run.status).toBe('failed');
+      expect(conv.activeAgentRunId).toBe(runId);
+      expect(run.status).toBe('running');
+      expect(run.controlGraph?.status).toBe('recovering');
+      expect(run.latestSummary).toBe(
+        'Waiting for durable tool-effect reconciliation after app restart. No tool or model execution will be replayed.',
+      );
       expect(toolCall).toEqual(
         expect.objectContaining({
-          status: 'failed',
-          error: 'Tool call was interrupted because the app restarted before completion.',
+          status: 'running',
         }),
+      );
+      expect(toolCall).not.toHaveProperty('error');
+      expect(run.checkpoints[run.checkpoints.length - 1]).toEqual(
+        expect.objectContaining({ title: 'Tool effect reconciliation pending' }),
       );
     });
   });

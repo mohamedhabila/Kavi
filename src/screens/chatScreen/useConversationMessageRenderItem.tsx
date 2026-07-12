@@ -22,7 +22,7 @@ type RenderMessageContext = {
     eventId: string,
     outcome: MemoryRetrievalFeedbackChoice,
   ) => Promise<MemoryRetrievalFeedbackChoice>;
-  handleRetry: (messageId: string) => void;
+  handleRetry: (messageId: string) => Promise<void>;
   handleShareWorkspaceFile: (attachment: Attachment) => Promise<void>;
   handleViewFiles: (path?: string) => void;
   personaSwitchMarkersByMessageId: Map<string, PersonaSwitchMarker>;

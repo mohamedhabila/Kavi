@@ -11,7 +11,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 jest.mock('../../src/engine/orchestrator', () => ({
-  runOrchestrator: jest.fn().mockResolvedValue(undefined),
+  runOrchestrator: jest.fn().mockResolvedValue({ terminalDisposition: 'final_candidate' }),
 }));
 
 export const mockFinalizationStreamMessage = jest.fn();
@@ -125,7 +125,7 @@ export function installSubAgentDurabilityHarness() {
     (runOrchestrator as jest.Mock).mockReset();
     (runOrchestrator as jest.Mock).mockImplementation((_cfg: any, callbacks: any) => {
       callbacks.onDone?.();
-      return Promise.resolve();
+      return Promise.resolve({ terminalDisposition: 'final_candidate' });
     });
   });
 

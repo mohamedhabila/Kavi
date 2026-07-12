@@ -1,17 +1,13 @@
-import { NonRetryableSchedulerExecutionError } from './executionError';
 import {
-  extractScheduledJobMessageEffect,
-  shouldDeliverScheduledJobNotification,
-  summarizeScheduledJobNotification,
-} from './executionPresentation';
-import { flushChatStorePersistenceNow } from '../../store/chatStorePersistence';
-import { useSettingsStore } from '../../store/useSettingsStore';
+  NonRetryableSchedulerExecutionError,
+  SchedulerAppBackgroundAbortError,
+  SchedulerExecutionError,
+} from './executionError';
+import { extractScheduledJobMessageEffect } from './executionPresentation';
 import { useChatStore } from '../../store/useChatStore';
 import { runOrchestrator, type OrchestratorCallbacks } from '../../engine/orchestrator';
 import type { CronJob } from '../cron/types';
 import { generateId } from '../../utils/id';
-import { sendLocalNotification } from '../notifications/service';
-import { isToolResultErrorLike } from '../../utils/toolResultErrors';
 import { buildAssistantMessageMetadata } from '../../utils/assistantMessageMetadata';
 import { editWorkingBlock } from '../memory/workingBlocks';
 import {
@@ -22,124 +18,108 @@ import {
   applyOrchestratorCompactionEffect,
   buildOrchestratorCompactionEffect,
 } from '../../engine/orchestratorCompactionEffect';
-import {
-  providerRequiresApiKey,
-  resolveConversationModel,
-  resolveEnabledProvider,
-  resolveProviderApiKey,
-} from '../llm/support/providerSupport';
-import { SUPER_AGENT_PERSONA_ID } from '../agents/personas';
-import { resolveConversationPersonaForMode } from '../../engine/graph/conversation/modeTransitions';
 import { createAgentControlGraphTerminalOutcomeTracker } from '../../engine/graph/terminalOutcome';
 import type { AssistantMessageMetadata, MessageProviderReplay } from '../../types/message';
+import {
+  appendAssistantResponseAfterTool,
+  appendOrUpdateAssistantToolTurn,
+  buildTerminalFailureMetadata,
+  ScheduledToolTurnLedger,
+  type PendingAssistantResponse,
+} from './jobExecutorConversationTurns';
+import type { SchedulerExecutionResult } from './executionResult';
+import type { PendingVerifiedProcedureObservation } from '../memory/verifiedProcedure/executionSession';
+import {
+  registerScheduledJobExecution,
+  getScheduledExecutionLifecycleEpoch,
+  ScheduledAppBackgroundAbortReason,
+  type ScheduledExecutionContext,
+} from './executionLifecycle';
+import {
+  checkpointScheduledAttemptConversation,
+  checkpointScheduledAttemptHooks,
+  checkpointScheduledExecutionResult,
+  markScheduledAttemptEffectUnsafe,
+  flushScheduledConversationPersistence,
+} from './jobExecutorPersistence';
+import { createScheduledJobRetryPolicy } from './jobExecutorRetryPolicy';
+import {
+  configureScheduledExecutionConversation,
+  resolveScheduledExecutionConversation,
+  resolveScheduledOccurrenceCompletedOutput,
+  resolveScheduledExecutionProvider,
+} from './jobExecutorSetup';
+import {
+  checkpointScheduledProjectionClaim,
+  claimScheduledProjection,
+  pendingScheduledProcedureCommit,
+  releaseScheduledProjectionAfterExecution,
+  type ScheduledProjectionLease,
+} from './jobExecutorProjection';
+import { throwNormalizedScheduledJobExecutionError } from './jobExecutorErrorNormalization';
 
-interface PendingTerminalFailureResponse {
-  content: string;
-  providerReplay?: MessageProviderReplay;
-  assistantMetadata?: AssistantMessageMetadata;
-}
-
-function buildTerminalFailureMetadata(
-  assistantMetadata?: AssistantMessageMetadata,
-): AssistantMessageMetadata {
-  return {
-    ...assistantMetadata,
-    kind: 'final',
-    completionStatus: 'incomplete',
-    finishReason: 'response_failed',
-  };
-}
-
-export async function executeScheduledJob(job: CronJob): Promise<string> {
+export async function executeScheduledJob(
+  job: CronJob,
+  context: ScheduledExecutionContext = {
+    lifecycleEpoch: getScheduledExecutionLifecycleEpoch(),
+  },
+): Promise<SchedulerExecutionResult> {
+  const executionLifecycle = registerScheduledJobExecution(job.id, context.lifecycleEpoch);
+  let executionConversationId: string | undefined;
+  let projectionLease: ScheduledProjectionLease | undefined;
   try {
+    executionLifecycle.throwIfBackgrounded();
     const prompt = job.payload?.prompt?.trim();
     if (!prompt) {
-      throw new Error(`Scheduled task "${job.name}" is missing a prompt`);
+      throw new NonRetryableSchedulerExecutionError(
+        new Error(`Scheduled task "${job.name}" is missing a prompt`),
+      );
     }
+    const { settings, provider, model, apiKey, systemPrompt } =
+      await resolveScheduledExecutionProvider(job);
+    executionLifecycle.throwIfBackgrounded();
 
-    const settings = useSettingsStore.getState();
-    const provider = resolveEnabledProvider(
-      settings.providers,
-      job.payload?.providerId || settings.activeProviderId,
-    );
-
-    if (!provider) {
-      throw new Error('No enabled provider configured for scheduled task execution');
-    }
-
-    const model =
-      job.payload?.model ||
-      resolveConversationModel(provider, {
-        activeProviderId: settings.activeProviderId,
-        activeModel: settings.activeModel,
-      }) ||
-      provider.model;
-    if (!model) {
-      throw new Error(`Scheduled task "${job.name}" has no model configured`);
-    }
-
-    const apiKey = await resolveProviderApiKey(provider);
-    if (providerRequiresApiKey(provider) && !apiKey) {
-      throw new Error(`Missing API key for provider "${provider.name}"`);
-    }
-
-    const chatState = useChatStore.getState();
-    const existingConversationId =
-      (job.delivery?.conversationId &&
-      chatState.conversations.some(
-        (conversation) => conversation.id === job.delivery?.conversationId,
-      )
-        ? job.delivery.conversationId
-        : undefined) ||
-      (job.sessionTarget === 'main' && job.wakeMode === 'continue'
-        ? chatState.activeConversationId || undefined
-        : undefined);
-
-    const conversationId = existingConversationId
-      ? existingConversationId
-      : job.sessionTarget === 'main'
-        ? chatState.getOrCreateCanonicalThread(
-            provider.id,
-            settings.systemPrompt ||
-              'You are a helpful personal AI assistant with access to tools.',
-            model,
-            {
-              activate: false,
-              personaId:
-                settings.defaultConversationMode === 'agentic' ? SUPER_AGENT_PERSONA_ID : undefined,
-              mode: settings.defaultConversationMode,
-            },
-          )
-        : chatState.createConversation(
-            provider.id,
-            settings.systemPrompt ||
-              'You are a helpful personal AI assistant with access to tools.',
-            model,
-            {
-              activate: false,
-              personaId:
-                settings.defaultConversationMode === 'agentic' ? SUPER_AGENT_PERSONA_ID : undefined,
-              mode: settings.defaultConversationMode,
-            },
-          );
-    chatState.updateModelInConversation(conversationId, provider.id, model);
-
-    chatState.addMessage(conversationId, {
-      id: generateId(),
-      role: 'user',
-      content: prompt,
+    const { chatState, conversationId } = resolveScheduledExecutionConversation({
+      job,
+      provider,
+      model,
+      systemPrompt,
     });
-
-    const assistantMessageId = generateId();
-    chatState.addMessage(conversationId, {
-      id: assistantMessageId,
-      role: 'assistant',
-      content: '',
+    executionConversationId = conversationId;
+    projectionLease = claimScheduledProjection({
+      job,
+      conversationId,
+      prompt,
     });
+    await checkpointScheduledProjectionClaim(conversationId);
+    executionLifecycle.throwIfBackgrounded();
+    const executionPersonaId = configureScheduledExecutionConversation({
+      job,
+      provider,
+      model,
+      conversationId,
+    });
+    const completedOutput = resolveScheduledOccurrenceCompletedOutput({
+      job,
+      chatState: useChatStore.getState(),
+      conversationId,
+    });
+    const assistantMessageId = projectionLease.owner.assistantMessageId;
+    await checkpointScheduledAttemptConversation(job, conversationId);
+    if (completedOutput) {
+      return checkpointScheduledExecutionResult({
+        job,
+        output: completedOutput,
+        conversationId,
+      });
+    }
+
+    await checkpointScheduledAttemptHooks(job);
+    executionLifecycle.throwIfBackgrounded();
 
     let accumulatedContent = '';
     let accumulatedReasoning = '';
-    let observedToolActivity = false;
+    const retryPolicy = createScheduledJobRetryPolicy(executionLifecycle.controller.signal);
     let graphFailureResponseApplied = false;
     const terminalOutcome = createAgentControlGraphTerminalOutcomeTracker();
     const pendingSurfacedSubAgentOutputs = new Map<
@@ -148,8 +128,18 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
     >();
     let surfacedSubAgentOutputActive = false;
     let surfacedAssistantMessageAppended = false;
-    let pendingTerminalFailureResponse: PendingTerminalFailureResponse | undefined;
+    let lastSurfacedAssistantMessageId: string | undefined;
+    let lastPostSurfaceSuccessMessageId: string | undefined;
+    let lastSurfacedOutput = '';
+    let pendingPostSurfaceSuccessResponse: PendingAssistantResponse | undefined;
+    let pendingTerminalFailureResponse: PendingAssistantResponse | undefined;
     let terminalFailureResponseCommitted = false;
+    let activeAssistantMessageId = assistantMessageId;
+    let activeToolCallIds = new Set<string>();
+    let toolMessageAppendedSinceAssistantTurn = false;
+    let hasAppendedToolMessage = false;
+    const toolTurns = new ScheduledToolTurnLedger(chatState, conversationId);
+    const transcriptMutationAllowed = () => !executionLifecycle.controller.signal.aborted;
 
     const clearSurfacedSubAgentOutputLock = () => {
       surfacedSubAgentOutputActive = false;
@@ -164,10 +154,16 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
       pendingSurfacedSubAgentOutputs.delete(toolCallId);
       surfacedSubAgentOutputActive = true;
       surfacedAssistantMessageAppended = true;
+      lastSurfacedOutput = surfacedOutput.output;
       accumulatedContent = surfacedOutput.output;
 
+      const surfacedAssistantMessageId = generateId();
+      lastSurfacedAssistantMessageId = surfacedAssistantMessageId;
+      activeAssistantMessageId = surfacedAssistantMessageId;
+      toolMessageAppendedSinceAssistantTurn = false;
+      accumulatedReasoning = '';
       chatState.addMessage(conversationId, {
-        id: generateId(),
+        id: surfacedAssistantMessageId,
         role: 'assistant',
         content: surfacedOutput.output,
         assistantMetadata: buildAssistantMessageMetadata('final', {
@@ -178,28 +174,122 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
       return true;
     };
 
-    const flushPendingSurfacedSubAgentOutputs = () => {
+    const flushReadySurfacedSubAgentOutputs = () => {
       for (const toolCallId of Array.from(pendingSurfacedSubAgentOutputs.keys())) {
-        flushSurfacedSubAgentOutput(toolCallId);
+        if (toolTurns.isBatchSettled(toolCallId)) flushSurfacedSubAgentOutput(toolCallId);
       }
     };
 
-    const commitTerminalFailureResponse = (fallback?: PendingTerminalFailureResponse): boolean => {
+    const startAssistantToolTurn = (
+      content: string,
+      toolCallIds: string[],
+      providerReplay?: MessageProviderReplay,
+      assistantMetadata?: AssistantMessageMetadata,
+    ) => {
+      accumulatedContent = content;
+      accumulatedReasoning = '';
+      const nextTurn = appendOrUpdateAssistantToolTurn({
+        chatState,
+        conversationId,
+        activeAssistantMessageId,
+        activeToolCallIds,
+        content,
+        toolCallIds,
+        providerReplay,
+        assistantMetadata,
+      });
+      activeAssistantMessageId = nextTurn.assistantMessageId;
+      activeToolCallIds = nextTurn.toolCallIds;
+      toolMessageAppendedSinceAssistantTurn = false;
+    };
+
+    const ensureAssistantResponseAfterTool = () => {
+      if (!toolMessageAppendedSinceAssistantTurn || surfacedAssistantMessageAppended) return;
+      accumulatedContent = '';
+      accumulatedReasoning = '';
+      activeAssistantMessageId = appendAssistantResponseAfterTool({
+        chatState: useChatStore.getState(),
+        conversationId,
+        content: '',
+      });
+      activeToolCallIds = new Set();
+      toolMessageAppendedSinceAssistantTurn = false;
+    };
+
+    const commitPostSurfaceSuccessResponse = (): boolean => {
+      const response = pendingPostSurfaceSuccessResponse;
+      const surfacedMessageId = lastSurfacedAssistantMessageId;
+      if (!response?.content.trim() || !surfacedMessageId) return false;
+
+      const assistantMetadata: AssistantMessageMetadata = {
+        ...response.assistantMetadata,
+        kind: 'final',
+        completionStatus: 'incomplete',
+        finishReason: 'post_surface_response_pending',
+      };
+      pendingPostSurfaceSuccessResponse = undefined;
+      accumulatedContent = response.content;
+      clearSurfacedSubAgentOutputLock();
+
+      if (response.content.trim() === lastSurfacedOutput.trim()) {
+        lastPostSurfaceSuccessMessageId = surfacedMessageId;
+        if (response.providerReplay) {
+          chatState.updateMessageProviderReplay(
+            conversationId,
+            surfacedMessageId,
+            response.providerReplay,
+          );
+        }
+        chatState.updateMessageAssistantMetadata(
+          conversationId,
+          surfacedMessageId,
+          assistantMetadata,
+        );
+        return true;
+      }
+
+      const postSurfaceMessageId = generateId();
+      lastPostSurfaceSuccessMessageId = postSurfaceMessageId;
+      chatState.addMessage(conversationId, {
+        id: postSurfaceMessageId,
+        role: 'assistant',
+        content: response.content,
+        providerReplay: response.providerReplay,
+        assistantMetadata,
+      });
+      return true;
+    };
+
+    const finalizeSurfacedOutputSuccess = () => {
+      const finalMessageId = lastPostSurfaceSuccessMessageId ?? lastSurfacedAssistantMessageId;
+      if (!finalMessageId || terminalFailureResponseCommitted) return;
+      chatState.updateMessageAssistantMetadata(
+        conversationId,
+        finalMessageId,
+        buildAssistantMessageMetadata('final', {
+          completionStatus: 'complete',
+          finishReason: 'graph_finalized',
+        }),
+      );
+    };
+
+    const commitTerminalFailureResponse = (fallback?: PendingAssistantResponse): boolean => {
       if (terminalFailureResponseCommitted) return true;
       const response = pendingTerminalFailureResponse ?? fallback;
       if (!response?.content.trim()) return false;
 
       const assistantMetadata = buildTerminalFailureMetadata(response.assistantMetadata);
       accumulatedContent = response.content;
+      accumulatedReasoning = '';
       graphFailureResponseApplied = true;
       terminalFailureResponseCommitted = true;
       pendingTerminalFailureResponse = undefined;
       clearSurfacedSubAgentOutputLock();
 
-      if (surfacedAssistantMessageAppended) {
-        chatState.addMessage(conversationId, {
-          id: generateId(),
-          role: 'assistant',
+      if (surfacedAssistantMessageAppended || hasAppendedToolMessage) {
+        activeAssistantMessageId = appendAssistantResponseAfterTool({
+          chatState: useChatStore.getState(),
+          conversationId,
           content: response.content,
           providerReplay: response.providerReplay,
           assistantMetadata,
@@ -225,44 +315,71 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
     };
 
     const callbacks: OrchestratorCallbacks = {
-      onAgentControlGraphStateChange: terminalOutcome.recordControlGraphState,
+      onAgentControlGraphStateChange: (state) => {
+        retryPolicy.recordControlGraphStatus(state.status);
+        terminalOutcome.recordControlGraphState(state);
+      },
       onStateChange: () => {},
       onToken: (token) => {
-        if (surfacedSubAgentOutputActive) {
+        if (!transcriptMutationAllowed()) return;
+        if (surfacedAssistantMessageAppended) {
           return;
         }
+        ensureAssistantResponseAfterTool();
         accumulatedContent += token;
         useChatStore
           .getState()
-          .updateMessage(conversationId, assistantMessageId, accumulatedContent);
+          .updateMessage(conversationId, activeAssistantMessageId, accumulatedContent);
       },
       onReasoning: (token) => {
-        if (surfacedSubAgentOutputActive) {
+        if (!transcriptMutationAllowed()) return;
+        if (surfacedAssistantMessageAppended) {
           return;
         }
+        ensureAssistantResponseAfterTool();
         accumulatedReasoning += token;
         useChatStore
           .getState()
-          .updateMessageReasoning(conversationId, assistantMessageId, accumulatedReasoning);
+          .updateMessageReasoning(conversationId, activeAssistantMessageId, accumulatedReasoning);
       },
       onAssistantStreamReset: () => {
+        if (!transcriptMutationAllowed()) return;
         accumulatedContent = '';
         accumulatedReasoning = '';
-        useChatStore.getState().updateMessage(conversationId, assistantMessageId, '');
-        useChatStore.getState().updateMessageReasoning(conversationId, assistantMessageId, '');
+        if (surfacedAssistantMessageAppended) return;
+        ensureAssistantResponseAfterTool();
+        useChatStore.getState().updateMessage(conversationId, activeAssistantMessageId, '');
+        useChatStore
+          .getState()
+          .updateMessageReasoning(conversationId, activeAssistantMessageId, '');
       },
       onUserMessageEnriched: (messageId, enrichedContent) => {
+        if (!transcriptMutationAllowed()) return;
         useChatStore
           .getState()
           .updateMessageEnrichedContent(conversationId, messageId, enrichedContent);
       },
       onToolCallStart: (toolCall) => {
-        observedToolActivity = true;
+        if (!transcriptMutationAllowed()) return;
+        retryPolicy.recordToolActivity(toolCall.name);
         clearSurfacedSubAgentOutputLock();
-        useChatStore.getState().addToolCall(conversationId, assistantMessageId, toolCall);
+        if (
+          (surfacedAssistantMessageAppended || toolMessageAppendedSinceAssistantTurn) &&
+          !activeToolCallIds.has(toolCall.id)
+        ) {
+          startAssistantToolTurn('', [toolCall.id]);
+        }
+        toolTurns.persist(toolCall, activeAssistantMessageId, activeToolCallIds);
       },
       onToolCallComplete: (toolCall) => {
-        observedToolActivity = true;
+        if (!transcriptMutationAllowed()) return;
+        retryPolicy.recordToolActivity(toolCall.name);
+        const toolTurnMessageId = toolTurns.persist(
+          toolCall,
+          activeAssistantMessageId,
+          activeToolCallIds,
+        );
+        toolTurns.markCompleted(toolCall.id);
         const surfacedOutput =
           toolCall.name === 'sessions_surface_output' && toolCall.status === 'completed'
             ? parseSurfacedSubAgentOutputResult(toolCall.result)
@@ -270,7 +387,7 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
 
         useChatStore
           .getState()
-          .updateToolCallStatus(conversationId, assistantMessageId, toolCall.id, toolCall.status, {
+          .updateToolCallStatus(conversationId, toolTurnMessageId, toolCall.id, toolCall.status, {
             result: surfacedOutput
               ? buildSurfacedSubAgentOutputToolResultSummary(surfacedOutput)
               : toolCall.result,
@@ -281,7 +398,7 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
           if (effectId) {
             useChatStore
               .getState()
-              .updateMessageEffect(conversationId, assistantMessageId, effectId);
+              .updateMessageEffect(conversationId, toolTurnMessageId, effectId);
           }
         } else if (toolCall.name === 'sessions_surface_output') {
           if (toolCall.status === 'completed') {
@@ -296,11 +413,13 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
         }
       },
       onAssistantMessage: (content, toolCalls, providerReplay, assistantMetadata) => {
+        if (!transcriptMutationAllowed()) return;
         const incomingToolCalls =
           toolCalls?.filter((toolCall) => toolCall.id?.trim() && toolCall.name?.trim()) ?? [];
         const replacesSurfacedOutputWithTerminalFailure =
           content.trim().length > 0 && terminalOutcome.hasUnsuccessfulTerminalState();
         if (replacesSurfacedOutputWithTerminalFailure) {
+          pendingPostSurfaceSuccessResponse = undefined;
           pendingTerminalFailureResponse = {
             content,
             providerReplay,
@@ -313,6 +432,64 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
           return;
         }
         if (
+          toolMessageAppendedSinceAssistantTurn &&
+          !surfacedAssistantMessageAppended &&
+          incomingToolCalls.length > 0
+        ) {
+          activeToolCallIds = new Set();
+          startAssistantToolTurn(
+            content,
+            incomingToolCalls.map((toolCall) => toolCall.id),
+            providerReplay,
+            assistantMetadata,
+          );
+          toolTurns.persistAll(incomingToolCalls, activeAssistantMessageId, activeToolCallIds);
+          return;
+        }
+        if (
+          toolMessageAppendedSinceAssistantTurn &&
+          !surfacedAssistantMessageAppended &&
+          incomingToolCalls.length === 0 &&
+          content.trim().length > 0
+        ) {
+          accumulatedContent = content;
+          accumulatedReasoning = '';
+          activeAssistantMessageId = appendAssistantResponseAfterTool({
+            chatState: useChatStore.getState(),
+            conversationId,
+            content,
+            providerReplay,
+            assistantMetadata,
+          });
+          activeToolCallIds = new Set();
+          toolMessageAppendedSinceAssistantTurn = false;
+          return;
+        }
+        if (surfacedAssistantMessageAppended && incomingToolCalls.length > 0) {
+          clearSurfacedSubAgentOutputLock();
+          startAssistantToolTurn(
+            content,
+            incomingToolCalls.map((toolCall) => toolCall.id),
+            providerReplay,
+            assistantMetadata,
+          );
+          toolTurns.persistAll(incomingToolCalls, activeAssistantMessageId, activeToolCallIds);
+          return;
+        }
+        if (
+          (surfacedAssistantMessageAppended || pendingSurfacedSubAgentOutputs.size > 0) &&
+          incomingToolCalls.length === 0 &&
+          content.trim().length > 0
+        ) {
+          pendingPostSurfaceSuccessResponse = {
+            content,
+            providerReplay,
+            assistantMetadata,
+          };
+          if (surfacedAssistantMessageAppended) commitPostSurfaceSuccessResponse();
+          return;
+        }
+        if (
           surfacedSubAgentOutputActive &&
           incomingToolCalls.length === 0 &&
           !replacesSurfacedOutputWithTerminalFailure
@@ -320,14 +497,18 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
           if (providerReplay) {
             useChatStore
               .getState()
-              .updateMessageProviderReplay(conversationId, assistantMessageId, providerReplay);
+              .updateMessageProviderReplay(
+                conversationId,
+                activeAssistantMessageId,
+                providerReplay,
+              );
           }
           if (assistantMetadata) {
             useChatStore
               .getState()
               .updateMessageAssistantMetadata(
                 conversationId,
-                assistantMessageId,
+                activeAssistantMessageId,
                 assistantMetadata,
               );
           }
@@ -339,36 +520,41 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
         ) {
           clearSurfacedSubAgentOutputLock();
         }
+        toolTurns.persistAll(incomingToolCalls, activeAssistantMessageId, activeToolCallIds);
         if (providerReplay) {
           useChatStore
             .getState()
-            .updateMessageProviderReplay(conversationId, assistantMessageId, providerReplay);
+            .updateMessageProviderReplay(conversationId, activeAssistantMessageId, providerReplay);
         }
         if (assistantMetadata) {
           useChatStore
             .getState()
-            .updateMessageAssistantMetadata(conversationId, assistantMessageId, assistantMetadata);
+            .updateMessageAssistantMetadata(
+              conversationId,
+              activeAssistantMessageId,
+              assistantMetadata,
+            );
         }
         if (!content) return;
         accumulatedContent = content;
-        useChatStore.getState().updateMessage(conversationId, assistantMessageId, content);
+        useChatStore.getState().updateMessage(conversationId, activeAssistantMessageId, content);
       },
       onToolMessage: (toolCallId, result) => {
-        observedToolActivity = true;
+        if (!transcriptMutationAllowed()) return;
         const surfacedOutput = pendingSurfacedSubAgentOutputs.get(toolCallId);
-        useChatStore.getState().addMessage(conversationId, {
-          id: `${assistantMessageId}_tool_${toolCallId}`,
-          role: 'tool',
-          content: surfacedOutput
-            ? buildSurfacedSubAgentOutputToolResultSummary(surfacedOutput)
-            : result,
+        const appended = toolTurns.appendTerminalResult(
           toolCallId,
-          isError: isToolResultErrorLike(result),
-        });
-        flushSurfacedSubAgentOutput(toolCallId);
+          result,
+          surfacedOutput ? buildSurfacedSubAgentOutputToolResultSummary(surfacedOutput) : result,
+        );
+        if (!appended) return;
+        toolMessageAppendedSinceAssistantTurn = true;
+        hasAppendedToolMessage = true;
+        flushReadySurfacedSubAgentOutputs();
       },
       onError: terminalOutcome.recordError,
       onCompaction: (event) => {
+        if (!transcriptMutationAllowed()) return;
         applyOrchestratorCompactionEffect({
           effect: buildOrchestratorCompactionEffect({
             event,
@@ -392,7 +578,9 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
       },
       onUsage: () => {},
       onDone: () => {
-        flushPendingSurfacedSubAgentOutputs();
+        if (!transcriptMutationAllowed()) return;
+        flushReadySurfacedSubAgentOutputs();
+        commitPostSurfaceSuccessResponse();
         commitTerminalFailureResponse();
       },
     };
@@ -402,29 +590,24 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
         .getState()
         .conversations.find((conversation) => conversation.id === conversationId)
         ?.messages.filter((message) => message.id !== assistantMessageId) || [];
+    let pendingVerifiedProcedureObservation: PendingVerifiedProcedureObservation | undefined;
 
     try {
-      await runOrchestrator(
+      const orchestratorResult = await runOrchestrator(
         {
           provider: { ...provider, apiKey },
           model,
           conversationId,
-          personaId: resolveConversationPersonaForMode({
-            conversationPersonaId: useChatStore
-              .getState()
-              .conversations.find((conversation) => conversation.id === conversationId)?.personaId,
-            nextMode:
-              useChatStore
-                .getState()
-                .conversations.find((conversation) => conversation.id === conversationId)?.mode ??
-              settings.defaultConversationMode,
-          }),
-          taskId: null,
+          personaId: executionPersonaId,
+          taskId: job.runningAttemptId ?? null,
+          executionRunId: projectionLease.owner.runId,
+          agentRunId: job.runningAttemptId,
+          beforeEffectDispatch: () => markScheduledAttemptEffectUnsafe(job),
           systemPrompt:
             settings.systemPrompt ||
             'You are a helpful personal AI assistant with access to tools.',
           messages,
-          signal: new AbortController(),
+          signal: executionLifecycle.controller,
           thinkingLevel: settings.thinkingLevel,
           allProviders: settings.providers.map((candidate) => ({ ...candidate })),
           enableCompaction: true,
@@ -435,87 +618,81 @@ export async function executeScheduledJob(job: CronJob): Promise<string> {
         },
         callbacks,
       );
-      flushPendingSurfacedSubAgentOutputs();
+      pendingVerifiedProcedureObservation = orchestratorResult.pendingVerifiedProcedureObservation;
+      flushReadySurfacedSubAgentOutputs();
+      commitPostSurfaceSuccessResponse();
       commitTerminalFailureResponse();
     } catch (error: unknown) {
       const sourceError = error instanceof Error ? error : new Error(String(error));
-      flushPendingSurfacedSubAgentOutputs();
+      if (
+        executionLifecycle.controller.signal.reason instanceof ScheduledAppBackgroundAbortReason
+      ) {
+        throw new SchedulerAppBackgroundAbortError(sourceError, conversationId);
+      }
+      flushReadySurfacedSubAgentOutputs();
       commitTerminalFailureResponse({
         content: `Error: ${sourceError.message}`,
       });
-      if (observedToolActivity) {
-        throw new NonRetryableSchedulerExecutionError(sourceError);
+      if (retryPolicy.isProviderFailureNonRetryable(sourceError)) {
+        throw new NonRetryableSchedulerExecutionError(sourceError, conversationId);
       }
-      throw error;
+      throw new SchedulerExecutionError(sourceError, conversationId);
     }
+
+    executionLifecycle.throwIfBackgrounded();
 
     const terminalFailure = terminalOutcome.resolveFailure();
     if (terminalFailure) {
-      flushPendingSurfacedSubAgentOutputs();
+      flushReadySurfacedSubAgentOutputs();
       const failureContent =
         graphFailureResponseApplied && accumulatedContent.trim()
           ? accumulatedContent
           : `Error: ${terminalFailure.message}`;
       commitTerminalFailureResponse({ content: failureContent });
-      throw terminalOutcome.hasControlGraphFailure() || observedToolActivity
-        ? new NonRetryableSchedulerExecutionError(terminalFailure)
-        : terminalFailure;
+      throw retryPolicy.isTerminalFailureNonRetryable(terminalOutcome.hasControlGraphFailure())
+        ? new NonRetryableSchedulerExecutionError(terminalFailure, conversationId)
+        : new SchedulerExecutionError(terminalFailure, conversationId);
     }
 
-    const result = accumulatedContent || `Scheduled task "${job.name}" completed.`;
+    finalizeSurfacedOutputSuccess();
 
-    await flushChatStorePersistenceNow().catch((error) =>
-      console.warn('[scheduler] Scheduled result persistence failed:', error),
-    );
+    const result = resolveScheduledOccurrenceCompletedOutput({
+      job,
+      chatState: useChatStore.getState(),
+      conversationId,
+    });
+    if (!result) {
+      throw new SchedulerExecutionError(
+        new Error('Scheduled task did not produce a complete final assistant response.'),
+        conversationId,
+      );
+    }
 
-    return result;
+    const warnings = await flushScheduledConversationPersistence('result');
+
+    return checkpointScheduledExecutionResult({
+      job,
+      output: result,
+      conversationId,
+      warnings,
+      ...(pendingVerifiedProcedureObservation
+        ? {
+            pendingVerifiedProcedureCommit: pendingScheduledProcedureCommit(
+              pendingVerifiedProcedureObservation,
+              job,
+              projectionLease,
+              activeAssistantMessageId,
+            ),
+          }
+        : {}),
+    });
   } catch (error: unknown) {
-    await flushChatStorePersistenceNow().catch((persistenceError) =>
-      console.warn('[scheduler] Scheduled failure persistence failed:', persistenceError),
-    );
-    throw error;
+    return await throwNormalizedScheduledJobExecutionError(error, executionConversationId);
+  } finally {
+    try {
+      await releaseScheduledProjectionAfterExecution(job, projectionLease);
+    } finally {
+      executionLifecycle.unregister();
+    }
   }
-}
-
-export async function notifyScheduledJobSuccess(job: CronJob, result: string): Promise<void> {
-  if (!shouldDeliverScheduledJobNotification(job)) return;
-  await sendLocalNotification({
-    title: job.name || 'Scheduled Task',
-    body: summarizeScheduledJobNotification(result),
-    data: job.delivery?.conversationId
-      ? {
-          screen: 'Chat',
-          conversationId: job.delivery.conversationId,
-          source: 'scheduled_task',
-        }
-      : job.id
-        ? {
-            screen: 'Scheduler',
-            jobId: job.id,
-            source: 'scheduled_task',
-          }
-        : undefined,
-  });
-}
-
-export async function notifyScheduledJobFinalFailure(job: CronJob, error: unknown): Promise<void> {
-  if (job.failureAlert?.enabled === false || !shouldDeliverScheduledJobNotification(job)) return;
-  const errorMessage = error instanceof Error ? error.message : String(error);
-  await sendLocalNotification({
-    title: job.name || 'Scheduled Task Failed',
-    body: summarizeScheduledJobNotification(`Error: ${errorMessage}`),
-    data: job.delivery?.conversationId
-      ? {
-          screen: 'Chat',
-          conversationId: job.delivery.conversationId,
-          source: 'scheduled_task',
-        }
-      : job.id
-        ? {
-            screen: 'Scheduler',
-            jobId: job.id,
-            source: 'scheduled_task',
-          }
-        : undefined,
-  });
 }

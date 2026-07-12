@@ -1,9 +1,11 @@
 import * as Notifications from 'expo-notifications';
+import { NotificationPermissionDeniedError } from './errors';
 
 let notificationHandlerConfigured = false;
 const DEFAULT_CHANNEL_ID = 'kavi-default';
 
 export interface NotificationRouteData extends Record<string, unknown> {
+  notificationId?: string;
   screen?: 'Chat' | 'Scheduler';
   conversationId?: string;
   jobId?: string;
@@ -38,7 +40,7 @@ async function ensurePermissions(): Promise<void> {
   });
 
   if (!requested.granted) {
-    throw new Error('Notification permission denied');
+    throw new NotificationPermissionDeniedError();
   }
 }
 
@@ -81,6 +83,7 @@ function extractNotificationRouteData(
   }
 
   return {
+    notificationId: response.notification.request.identifier,
     screen: route.screen || (route.jobId ? 'Scheduler' : 'Chat'),
     conversationId: route.conversationId,
     jobId: route.jobId,
@@ -131,6 +134,7 @@ export async function getPendingNotificationRoute(): Promise<NotificationRouteDa
 }
 
 export async function sendLocalNotification(args: {
+  identifier?: string;
   title: string;
   body: string;
   delaySeconds?: number;
@@ -142,6 +146,7 @@ export async function sendLocalNotification(args: {
 
   const seconds = Math.max(0, Math.floor(args.delaySeconds || 0));
   const id = await Notifications.scheduleNotificationAsync({
+    ...(args.identifier ? { identifier: args.identifier } : {}),
     content: {
       title: args.title,
       body: args.body,
@@ -170,4 +175,17 @@ export async function cancelLocalNotification(
 ): Promise<{ id: string; cancelled: true }> {
   await Notifications.cancelScheduledNotificationAsync(id);
   return { id, cancelled: true };
+}
+
+export async function listScheduledLocalNotifications(): Promise<
+  Array<{ id: string; data: NotificationRouteData }>
+> {
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  return scheduled.map((request) => ({
+    id: request.identifier,
+    data:
+      request.content.data && typeof request.content.data === 'object'
+        ? (request.content.data as NotificationRouteData)
+        : {},
+  }));
 }

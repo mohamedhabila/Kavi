@@ -12,6 +12,7 @@ export interface ToolProviderContextInput {
   provider?: LlmProviderConfig;
   allProviders?: LlmProviderConfig[];
   model?: string;
+  executionSignal?: AbortSignal;
 }
 
 export interface ResolvedToolProviderContext {

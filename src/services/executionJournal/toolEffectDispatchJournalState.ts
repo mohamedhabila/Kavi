@@ -1,9 +1,6 @@
 import type * as SQLite from 'expo-sqlite';
 import { decodeExecutionCheckpointRow, decodeExecutionRunRow } from './decoders';
-import type {
-  EffectDispatchIdentity,
-  EffectDispatchSnapshot,
-} from './effectDispatchPolicy';
+import type { EffectDispatchIdentity, EffectDispatchSnapshot } from './effectDispatchPolicy';
 import {
   effectRow,
   insertCheckpoint,
@@ -31,7 +28,6 @@ type GrantedAuthorityState = Extract<ExecutionApprovalState, 'granted' | 'not_re
 export interface ToolEffectDispatchJournalPlan {
   identity: EffectDispatchIdentity;
   conversationId: string;
-  taskId: string | null;
   inputDigest: string;
   dispatchTargetDigest: string;
   effectClass: ExecutionEffectClass;
@@ -68,11 +64,7 @@ export function readToolEffectDispatchSnapshot(
 ): EffectDispatchSnapshot {
   const run = readRun(database, identity.runId);
   const effect = readEffect(database, identity.runId, identity.effectId);
-  const planningCheckpoint = readCheckpoint(
-    database,
-    identity.runId,
-    effect.checkpointId ?? '',
-  );
+  const planningCheckpoint = readCheckpoint(database, identity.runId, effect.checkpointId ?? '');
   const authorityCheckpoint = readCheckpoint(
     database,
     identity.runId,
@@ -81,9 +73,11 @@ export function readToolEffectDispatchSnapshot(
   const latest = latestCheckpoint(database, identity.runId);
   if (
     run.inputDigest !== identity.requestDigest ||
+    run.taskId !== identity.executionRunId ||
     run.modelConfigDigest !== identity.dispatchTargetDigest ||
     effect.toolCallId !== identity.toolCallId ||
     effect.toolNameDigest !== identity.toolNameDigest ||
+    effect.toolContractIdentityDigest !== identity.toolContractIdentityDigest ||
     effect.requestDigest !== identity.requestDigest ||
     effect.idempotencyKeyDigest !== identity.idempotencyKeyDigest ||
     effect.attempt !== identity.attempt ||
@@ -119,7 +113,7 @@ function assertPlanMatchesExisting(
   if (
     run.conversationId !== plan.conversationId ||
     run.threadId !== plan.conversationId ||
-    run.taskId !== plan.taskId ||
+    run.taskId !== plan.identity.executionRunId ||
     run.requestMessageId !== plan.identity.toolCallId ||
     run.durabilityClass !== 'external_durable_operation' ||
     run.requestedCapability !== plan.requestedCapability ||
@@ -161,7 +155,7 @@ function insertPlannedJournal(
     id: identity.runId,
     conversationId: plan.conversationId,
     threadId: plan.conversationId,
-    taskId: plan.taskId,
+    taskId: identity.executionRunId,
     goalId: null,
     requestMessageId: identity.toolCallId,
     durabilityClass: 'external_durable_operation',
@@ -184,7 +178,7 @@ function insertPlannedJournal(
     id: initialCheckpointId,
     runId: identity.runId,
     sequence: 0,
-    taskId: plan.taskId,
+    taskId: identity.executionRunId,
     goalId: null,
     phase: 'system',
     boundary: 'run_created',
@@ -218,6 +212,7 @@ function insertPlannedJournal(
     checkpointId: planningCheckpoint.id,
     toolCallId: identity.toolCallId,
     toolNameDigest: identity.toolNameDigest,
+    toolContractIdentityDigest: identity.toolContractIdentityDigest,
     effectClass: plan.effectClass,
     idempotencyClass: plan.idempotencyClass,
     idempotencyKeyDigest: identity.idempotencyKeyDigest,
@@ -243,10 +238,11 @@ function insertPlannedJournal(
   insertCheckpoint(database, planningCheckpoint);
   database.runSync(
     `INSERT INTO execution_effects (
-       id, run_id, checkpoint_id, tool_call_id, tool_name_digest, effect_class,
+       id, run_id, checkpoint_id, tool_call_id, tool_name_digest,
+       tool_contract_identity_digest, effect_class,
        idempotency_class, idempotency_key_digest, request_digest, outcome_digest,
        status, retry_policy, attempt, created_at, started_at, completed_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ...Object.values(effectRow(effect)),
   );
   insertCheckpoint(database, authorityCheckpoint);

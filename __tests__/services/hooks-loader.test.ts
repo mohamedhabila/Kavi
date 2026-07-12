@@ -75,6 +75,8 @@ import {
   clearAllHooks,
   saveHookFile,
   deleteHookFile,
+  HookDirectoryLoadError,
+  loadHooksFromDirectory,
 } from '../../src/services/hooks/loader';
 import type { HookDefinition } from '../../src/types/hooks';
 
@@ -319,6 +321,25 @@ Handle session start`,
       mockDirList.mockReturnValue([{ name: 'notes.txt', text: () => 'not a hook' }]);
       const loaded = await loadHooksFromDirectory(mockExecutePrompt);
       expect(loaded).toHaveLength(0);
+    });
+
+    it('fails readiness and rolls back partial registration for invalid configured hooks', async () => {
+      mockDirList.mockReturnValue([
+        {
+          name: 'valid.md',
+          text: () => `---
+name: Valid Hook
+event: session
+---
+Run valid hook`,
+        },
+        { name: 'invalid.md', text: () => 'missing hook metadata' },
+      ]);
+
+      await expect(loadHooksFromDirectory(mockExecutePrompt)).rejects.toBeInstanceOf(
+        HookDirectoryLoadError,
+      );
+      expect(getLoadedHooks()).toHaveLength(0);
     });
   });
 });

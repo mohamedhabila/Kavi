@@ -1,10 +1,9 @@
 import type { ToolDefinition } from '../../types/tool';
-import { getGitHubToolContract } from '../../services/integrations/github/toolContracts';
 import { TOOL_DEFINITIONS } from '../tools/definitions';
 import { normalizeToolName } from '../tools/toolNameNormalization';
 import type { ToolSideEffect } from '../tools/capabilityRegistry';
 
-export type ToolEffectPolicySource = 'builtin' | 'github_skill' | 'unknown';
+export type ToolEffectPolicySource = 'builtin' | 'unknown';
 
 export type ToolIdempotencyContract =
   | 'effect_free'
@@ -46,13 +45,7 @@ function resolveCodeOwnedContract(toolName: string): {
     return { source: 'builtin', contract: builtin.contract };
   }
 
-  const [source, namespace, leafName, ...remainder] = toolName.split('__');
-  if (source !== 'skill' || namespace !== 'github' || !leafName || remainder.length > 0) {
-    return null;
-  }
-
-  const contract = getGitHubToolContract(leafName);
-  return contract ? { source: 'github_skill', contract } : null;
+  return null;
 }
 
 function hasMutation(effects: ReadonlyArray<ToolSideEffect>): boolean {

@@ -32,7 +32,7 @@ export type ToolEffectRestartDisposition =
 
 export type ToolEffectRestartLookupInput = Readonly<{
   conversationId: string;
-  taskId: string | null;
+  executionRunId: string;
   toolCallId: string;
   toolName: string;
   argumentsText: string;
@@ -144,7 +144,7 @@ export async function readToolEffectRestartDisposition(
     !validId(input.toolCallId) ||
     !validId(input.toolName) ||
     typeof input.argumentsText !== 'string' ||
-    (input.taskId !== null && !validId(input.taskId))
+    !validId(input.executionRunId)
   ) {
     return {
       kind: 'reconciliation_required',
@@ -164,15 +164,14 @@ export async function readToolEffectRestartDisposition(
          FROM execution_runs r
          JOIN execution_effects e ON e.run_id = r.id
         WHERE r.conversation_id = ?
-          AND ((? IS NULL AND r.task_id IS NULL) OR r.task_id = ?)
+          AND r.task_id = ?
           AND r.durability_class = 'external_durable_operation'
           AND r.resume_strategy = 'reconcile_first'
           AND e.tool_call_id = ?
         ORDER BY r.created_at DESC, r.id ASC
         LIMIT 2`,
       input.conversationId,
-      input.taskId,
-      input.taskId,
+      input.executionRunId,
       input.toolCallId,
     );
     if (rows.length === 0) return { kind: 'not_dispatched' };
@@ -208,7 +207,7 @@ export async function readToolEffectRestartDisposition(
 function lookupKey(input: ToolEffectRestartLookupInput): string {
   return JSON.stringify([
     input.conversationId,
-    input.taskId,
+    input.executionRunId,
     input.toolCallId,
     input.toolName,
     input.argumentsText,

@@ -8,6 +8,7 @@ import {
   type AgentTurnPromptBundleParams,
 } from './agentTurnPromptBundle';
 import { isSessionCoordinationToolName } from '../tools/sessionToolKinds';
+import type { VerifiedProcedureObservationRevision } from '../../services/memory/verifiedProcedure/observationRevision';
 
 type PromptBundleContext = Omit<
   AgentTurnPromptBundleParams,
@@ -36,6 +37,7 @@ export interface PreparedAgentTurn {
   toolsForIteration: ToolDefinition[] | undefined;
   memoryReadFence?: {
     readEpoch: number;
+    verifiedProcedureObservationRevision?: VerifiedProcedureObservationRevision;
     memoryFreePrompt: {
       enrichedSystemPrompt: string;
       enrichedSystemPromptSections: ReturnType<

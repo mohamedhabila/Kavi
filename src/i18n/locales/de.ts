@@ -836,7 +836,8 @@ export const de: TranslationMap = mergeTranslations(en, {
   scheduler: {
     title: 'Planer',
     noJobs: 'Keine geplanten Aufgaben',
-    noJobsHint: 'Planen Sie KI-Aufgaben zur automatischen Ausführung.',
+    noJobsHint:
+      'Plane KI-Aufgaben. Ist die App inaktiv, erlaube Mitteilungen und tippe auf den Weckhinweis, um sie auszuführen.',
     addTask: 'Aufgabe hinzufügen',
     taskName: 'Aufgabenname',
     taskNamePlaceholder: 'Tägliche Zusammenfassung, Erinnerung, etc.',
@@ -863,6 +864,11 @@ export const de: TranslationMap = mergeTranslations(en, {
     never: 'Nie',
     deleteJob: 'Aufgabe löschen',
     deleteJobConfirm: '"{name}" löschen?',
+    deliveryWarning: 'Zustellungswarnung: {error}',
+    wakeWarning: 'Aktivierungswarnung: {error}',
+    warningTitle: 'Warnung',
+    jobRunning: 'Diese geplante Aufgabe wird gerade ausgeführt.',
+    jobMissing: 'Diese geplante Aufgabe existiert nicht mehr.',
     untitledJob: 'Unbenannte Aufgabe',
     cronFormat: 'Cron: {expr}',
     everyFormat: 'Alle {value} {unit}',

@@ -125,8 +125,12 @@ export class McpClient {
     return allTools;
   }
 
-  async callTool(name: string, args: Record<string, unknown>): Promise<McpToolCallResult> {
-    const result = await this.request('tools/call', { name, arguments: args }, 30000);
+  async callTool(
+    name: string,
+    args: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<McpToolCallResult> {
+    const result = await this.request('tools/call', { name, arguments: args }, 30000, signal);
     return result as McpToolCallResult;
   }
 
@@ -191,6 +195,7 @@ export class McpClient {
     method: string,
     params: Record<string, unknown>,
     timeout: number,
+    signal?: AbortSignal,
   ): Promise<unknown> {
     const id = this.nextId++;
     const request: JsonRpcRequest = {
@@ -200,7 +205,7 @@ export class McpClient {
       params,
     };
 
-    const response = await this.transport.send(request, timeout);
+    const response = await this.transport.send(request, timeout, signal);
     if (response.error) {
       throw new Error(`MCP error ${response.error.code}: ${response.error.message}`);
     }

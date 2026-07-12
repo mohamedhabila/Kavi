@@ -217,7 +217,7 @@ describe('builtin executor tool catalog', () => {
       ]);
     });
 
-    it('classifies GitHub skill tools from explicit contracts instead of registry inference', async () => {
+    it('does not trust runtime skill declarations to self-promote into GitHub capabilities', async () => {
       const { getSkillToolDefinitions } = require('../../src/services/skills/manager');
 
       getSkillToolDefinitions.mockReturnValue([
@@ -249,13 +249,17 @@ describe('builtin executor tool catalog', () => {
       const parsed = JSON.parse(result);
 
       expect(parsed.category).toBe('github');
-      expect(parsed.tools).toEqual(
+      expect(parsed.tools).toEqual([]);
+
+      const skillsResult = await executeToolCatalog({ category: 'skills' });
+      const skills = JSON.parse(skillsResult);
+      expect(skills.tools).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ name: 'skill__github__repos' }),
           expect.objectContaining({ name: 'skill__github__commit_files' }),
         ]),
       );
-      const listedNames = parsed.tools.map((tool: any) => tool.name);
+      const listedNames = skills.tools.map((tool: any) => tool.name);
       expect(listedNames.indexOf('skill__github__repos')).toBeLessThan(
         listedNames.indexOf('skill__github__commit_files'),
       );

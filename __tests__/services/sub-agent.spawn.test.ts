@@ -64,7 +64,7 @@ describe('Sub-Agent Service', () => {
         capturedOptions = opts;
         callbacks.onToken?.('worker output');
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       await spawnSubAgent(
@@ -98,7 +98,7 @@ describe('Sub-Agent Service', () => {
       runOrchestrator.mockImplementationOnce((opts: any, callbacks: any) => {
         capturedOptions = opts;
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       await spawnSubAgent(
@@ -136,7 +136,7 @@ describe('Sub-Agent Service', () => {
       runOrchestrator.mockImplementationOnce((opts: any, callbacks: any) => {
         capturedOptions = opts;
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       const result = await spawnSubAgent(
@@ -156,7 +156,7 @@ describe('Sub-Agent Service', () => {
       runOrchestrator.mockImplementationOnce((opts: any, callbacks: any) => {
         capturedOptions = opts;
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       await spawnSubAgent(
@@ -215,7 +215,7 @@ describe('Sub-Agent Service', () => {
           totalTokens: 190,
         });
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       const result = await spawnSubAgent(
@@ -279,7 +279,7 @@ describe('Sub-Agent Service', () => {
           'Verified implementation details from src/app.ts and related files.',
         );
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       await spawnSubAgent({ parentConversationId, prompt: 'delegate work' }, mockProvider);
@@ -355,7 +355,7 @@ describe('Sub-Agent Service', () => {
         callbacks.onToolMessage?.('tool-image', generatedImageResult);
         callbacks.onAssistantMessage?.('The image has been generated.');
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       const result = await spawnSubAgent(
@@ -441,7 +441,7 @@ describe('Sub-Agent Service', () => {
       runOrchestrator.mockImplementationOnce((opts: any, callbacks: any) => {
         capturedOptions = opts;
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       await spawnSubAgent(
@@ -471,7 +471,7 @@ describe('Sub-Agent Service', () => {
           });
         }
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       const result = await spawnSubAgent(
@@ -499,7 +499,7 @@ describe('Sub-Agent Service', () => {
         callbacks.onToolCallComplete?.();
         callbacks.onToken?.('result');
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
       const result = await spawnSubAgent(
         { parentConversationId: 'p', prompt: 'tools' },

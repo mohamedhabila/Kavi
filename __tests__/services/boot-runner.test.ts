@@ -155,6 +155,7 @@ describe('Boot Runner', () => {
             model: 'gpt-4o-mini',
           },
           model: 'gpt-4o-mini',
+          executionRunId: expect.stringMatching(/^boot-/),
         }),
         expect.any(Object),
       );

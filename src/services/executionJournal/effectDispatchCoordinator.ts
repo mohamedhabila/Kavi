@@ -1,5 +1,6 @@
 import { decodeToolEffectReceipt } from '../../utils/toolEffectReceipt';
 import type { ToolEffectReceipt } from '../../types/toolEffectReceipt';
+import { digestToolContractIdentity } from '../../engine/toolExecution/toolContractIdentity';
 import {
   planEffectDispatch,
   type AtomicEffectDispatchClaimCandidate,
@@ -175,9 +176,11 @@ function identitiesMatch(left: EffectDispatchIdentity, right: EffectDispatchIden
   return (
     left.runId === right.runId &&
     left.effectId === right.effectId &&
+    left.executionRunId === right.executionRunId &&
     left.toolCallId === right.toolCallId &&
     left.toolName === right.toolName &&
     left.toolNameDigest === right.toolNameDigest &&
+    left.toolContractIdentityDigest === right.toolContractIdentityDigest &&
     left.requestDigest === right.requestDigest &&
     left.idempotencyKeyDigest === right.idempotencyKeyDigest &&
     left.dispatchTargetDigest === right.dispatchTargetDigest &&
@@ -204,25 +207,32 @@ function claimMatchesCandidate(
   );
 }
 
-function receiptMatchesClaim(
+async function receiptMatchesClaim(
   claim: EffectDispatchClaimEvidence,
   receipt: ToolEffectReceipt,
-): boolean {
+): Promise<boolean> {
   const expectedResource = claim.identity.expectedResource;
   const resourceMatches =
     !expectedResource ||
     (!receipt.resource && receipt.effectState !== 'applied') ||
     (receipt.resource?.kind === expectedResource.kind &&
       receipt.resource.id === expectedResource.id);
-  return (
-    receipt.runId === claim.identity.runId &&
+  const structuralMatch =
+    receipt.executionRunId === claim.identity.executionRunId &&
+    receipt.dispatchRunId === claim.identity.runId &&
     receipt.toolCallId === claim.identity.toolCallId &&
     receipt.toolName === claim.identity.toolName &&
     receipt.effectKind === claim.identity.expectedEffectKind &&
     receipt.requestDigest === `sha256:${claim.identity.requestDigest}` &&
     receipt.recordedAt >= claim.claimedAt &&
-    resourceMatches
-  );
+    resourceMatches;
+  if (!structuralMatch) return false;
+  try {
+    const identityDigest = await digestToolContractIdentity(receipt.contractIdentity);
+    return identityDigest === `sha256:${claim.identity.toolContractIdentityDigest}`;
+  } catch {
+    return false;
+  }
 }
 
 function isClaimEvidence(value: unknown): value is EffectDispatchClaimEvidence {
@@ -330,7 +340,7 @@ export async function settleEffectDispatchCallback(
     !receipt ||
     !isTimestamp(input.observedAt) ||
     input.observedAt < input.claim.claimedAt ||
-    !receiptMatchesClaim(input.claim, receipt)
+    !(await receiptMatchesClaim(input.claim, receipt))
   ) {
     await markAmbiguousSafely(ports, {
       claim: input.claim,
@@ -452,7 +462,13 @@ export async function dispatchEffectExactlyOnce(
       return { kind: 'blocked', reason: 'state_unavailable' };
     }
     return state.existingClaim
-      ? classifyExistingClaim(identity, effectClass as ExecutionEffectClass, state.existingClaim, ports, evaluatedAt)
+      ? classifyExistingClaim(
+          identity,
+          effectClass as ExecutionEffectClass,
+          state.existingClaim,
+          ports,
+          evaluatedAt,
+        )
       : { kind: 'reconciliation_required', reason: 'effect_already_started' };
   }
 

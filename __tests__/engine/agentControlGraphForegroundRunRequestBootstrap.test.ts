@@ -1,5 +1,6 @@
 import {
   completeForegroundRunRequestBootstrap,
+  prepareForegroundRunRequestBootstrap,
   prepareForegroundRunRequestClaim,
 } from '../../src/engine/graph/foregroundRun/requestBootstrap';
 import type { AgentRun } from '../../src/types/agentRun';
@@ -88,18 +89,20 @@ describe('foreground run request bootstrap', () => {
       expect.any(AbortController),
     );
 
-    const result = completeForegroundRunRequestBootstrap({
+    const prepared = prepareForegroundRunRequestBootstrap({
       claim,
       conversation,
       createAssistantMessageId: () => 'assistant-new',
       defaultConversationMode: 'agentic',
+    });
+    expect(prepared.kind).toBe('ready');
+    if (prepared.kind !== 'ready') throw new Error('Expected a ready bootstrap');
+    const bootstrapResult = completeForegroundRunRequestBootstrap({
+      prepared: prepared.prepared,
+      conversation,
       startTrackedRun,
       supersedeExistingRun,
     });
-
-    expect(result.kind).toBe('ready');
-    if (result.kind !== 'ready') throw new Error('Expected a ready bootstrap');
-    const bootstrapResult = result.result;
 
     expect(supersedeExistingRun).toHaveBeenCalledWith('run-1', 0);
     expect(startTrackedRun).toHaveBeenCalledWith(
@@ -143,12 +146,18 @@ describe('foreground run request bootstrap', () => {
       registerForegroundRequest: jest.fn(),
       shouldAutoAbortPreviousForegroundRequest,
     });
-    const result = completeForegroundRunRequestBootstrap({
+    const prepared = prepareForegroundRunRequestBootstrap({
       claim,
       conversation,
       createAssistantMessageId: () => 'assistant-new',
       defaultConversationMode: 'agentic',
       options: { reuseAgentRunId: 'run-1', reuseAssistantDraft: true },
+    });
+    expect(prepared.kind).toBe('ready');
+    if (prepared.kind !== 'ready') throw new Error('Expected a ready bootstrap');
+    const result = completeForegroundRunRequestBootstrap({
+      prepared: prepared.prepared,
+      conversation,
       startTrackedRun: jest.fn(() => 'run-1'),
       supersedeExistingRun: jest.fn(),
     });
@@ -156,11 +165,8 @@ describe('foreground run request bootstrap', () => {
     expect(shouldAutoAbortPreviousForegroundRequest).not.toHaveBeenCalled();
     expect(result).toEqual(
       expect.objectContaining({
-        kind: 'ready',
-        result: expect.objectContaining({
-          bootstrap: expect.objectContaining({
-            existingRun: expect.objectContaining({ id: 'run-1' }),
-          }),
+        bootstrap: expect.objectContaining({
+          existingRun: expect.objectContaining({ id: 'run-1' }),
         }),
       }),
     );
@@ -171,8 +177,6 @@ describe('foreground run request bootstrap', () => {
       activeAgentRunId: undefined,
       agentRuns: [createRunningAgentRun({ status: 'completed' })],
     });
-    const startTrackedRun = jest.fn();
-    const supersedeExistingRun = jest.fn();
     const claim = prepareForegroundRunRequestClaim({
       createForegroundRequestId: () => 'request-3',
       options: { reuseAgentRunId: 'run-1' },
@@ -181,17 +185,13 @@ describe('foreground run request bootstrap', () => {
     });
 
     expect(
-      completeForegroundRunRequestBootstrap({
+      prepareForegroundRunRequestBootstrap({
         claim,
         conversation: terminalConversation,
         createAssistantMessageId: () => 'assistant-new',
         defaultConversationMode: 'agentic',
         options: { reuseAgentRunId: 'run-1' },
-        startTrackedRun,
-        supersedeExistingRun,
       }),
     ).toEqual({ kind: 'reuse_unavailable', runId: 'run-1' });
-    expect(startTrackedRun).not.toHaveBeenCalled();
-    expect(supersedeExistingRun).not.toHaveBeenCalled();
   });
 });

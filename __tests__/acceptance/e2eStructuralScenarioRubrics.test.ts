@@ -36,6 +36,7 @@ import { syncActiveGoalFocusFromGraphTransition } from '../../src/services/memor
 import { buildAssistantMessageMetadata } from '../../src/utils/assistantMessageMetadata';
 
 const mockRunOrchestrator = jest.fn();
+const completedOrchestratorRun = { terminalDisposition: 'final_candidate' as const };
 
 jest.mock('../../src/engine/orchestrator', () => ({
   runOrchestrator: (...args: unknown[]) => mockRunOrchestrator(...args),
@@ -222,6 +223,7 @@ describe('E2E thin runner fixtures', () => {
       );
       callbacks.onAgentControlGraphStateChange(firstGraph);
       callbacks.onDone();
+      return completedOrchestratorRun;
     });
 
     await runE2EScenario(scenario!);
@@ -460,6 +462,7 @@ describe('E2E structural mobile assistant scenarios', () => {
       );
       callbacks.onAgentControlGraphStateChange(buildFinalizedGraphSnapshot());
       callbacks.onDone();
+      return completedOrchestratorRun;
     });
   });
 
@@ -546,6 +549,7 @@ describe('E2E structural mobile assistant scenarios', () => {
       );
 
       callbacks.onDone();
+      return completedOrchestratorRun;
     });
 
     const result = await runE2EScenario(scenario!);

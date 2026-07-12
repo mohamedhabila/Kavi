@@ -139,6 +139,80 @@ describe('toolTurnBatchExecution', () => {
     );
   });
 
+  it('awaits the complete planned batch before any lifecycle dispatch', async () => {
+    const ordering: string[] = [];
+    let releasePlan!: () => void;
+    let markPlanStarted!: () => void;
+    const planStarted = new Promise<void>((resolve) => {
+      markPlanStarted = resolve;
+    });
+    const verifiedProcedureSession = {
+      observePlannedBatch: jest.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            ordering.push('planned');
+            releasePlan = resolve;
+            markPlanStarted();
+          }),
+      ),
+    };
+    mockedExecuteToolCallLifecycle.mockImplementation(async (params: any) => {
+      ordering.push('executed');
+      expect(ordering).toEqual(['planned', 'executed']);
+      expect(params.batchIndex).toBe(0);
+      expect(params.verifiedProcedureSession).toBe(verifiedProcedureSession);
+      return {
+        toolCallId: params.tc.id,
+        effectiveToolName: params.tc.name,
+        result: '{}',
+        toolMessage: buildToolResultMessage({
+          idPrefix: 'tool',
+          toolCallId: params.tc.id,
+          content: '{}',
+          toolCall: { ...params.tc, status: 'completed' },
+        }),
+      };
+    });
+
+    const execution = executeAgentControlGraphToolBatch(createParams({ verifiedProcedureSession }));
+    await planStarted;
+    expect(ordering).toEqual(['planned']);
+    expect(mockedExecuteToolCallLifecycle).not.toHaveBeenCalled();
+    releasePlan();
+    await execution;
+
+    expect(verifiedProcedureSession.observePlannedBatch).toHaveBeenCalledWith({
+      iteration: 2,
+      executeInParallel: false,
+      toolCalls: [{ batchIndex: 0, toolCallId: 'tc-search', toolName: 'web_search' }],
+    });
+  });
+
+  it('propagates a lifecycle reconciliation barrier to graph outcome handling', async () => {
+    mockedExecuteToolCallLifecycle.mockImplementation(async (params: any) => ({
+      toolCallId: params.tc.id,
+      effectiveToolName: params.tc.name,
+      result: 'Error: reconciliation required',
+      effectReconciliationRequired: true,
+      toolMessage: buildToolResultMessage({
+        idPrefix: 'tool_error',
+        toolCallId: params.tc.id,
+        content: 'Error: reconciliation required',
+        toolCall: {
+          id: params.tc.id,
+          name: params.tc.name,
+          arguments: params.tc.arguments,
+          status: 'failed',
+        },
+        isError: true,
+      }),
+    }));
+
+    const outcomes = await executeAgentControlGraphToolBatch(createParams());
+
+    expect(outcomes[0]).toEqual(expect.objectContaining({ effectReconciliationRequired: true }));
+  });
+
   it('passes a grounded-surface execution filter into tool lifecycle preflight', async () => {
     mockedExecuteToolCallLifecycle.mockImplementation(async (params: any) => {
       expect(params.groundedRequestScopedTools).toEqual(tools.slice(0, 1));
@@ -298,9 +372,7 @@ describe('toolTurnBatchExecution', () => {
 
     const outcomes = await executeAgentControlGraphToolBatch(
       createParams({
-        executableToolCalls: [
-          { id: 'tc-write', name: 'write_file', arguments: argumentsText },
-        ],
+        executableToolCalls: [{ id: 'tc-write', name: 'write_file', arguments: argumentsText }],
         groundedRequestScopedTools: [writeFileTool],
         availableToolNames: new Set(['write_file']),
         controlGraphGoals: [
@@ -356,9 +428,7 @@ describe('toolTurnBatchExecution', () => {
 
     await executeAgentControlGraphToolBatch(
       createParams({
-        executableToolCalls: [
-          { id: 'tc-write', name: 'write_file', arguments: argumentsText },
-        ],
+        executableToolCalls: [{ id: 'tc-write', name: 'write_file', arguments: argumentsText }],
         groundedRequestScopedTools: [writeFileTool],
         availableToolNames: new Set(['write_file']),
         controlGraphGoals: [

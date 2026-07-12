@@ -22,11 +22,12 @@ import type {
   CompleteForegroundModelExecutionInput,
   ForegroundModelExecutionLease,
 } from '../../../services/executionJournal/foregroundModelExecutionTypes';
-import type { ForegroundModelProjectionOwner } from '../../../types/conversation';
+import type { ModelProjectionOwner } from '../../../types/conversation';
 import type {
-  ForegroundModelProjectionClaimResult,
-  ForegroundModelProjectionReleaseResult,
-} from '../../../store/foregroundModelProjectionOwnership';
+  ModelProjectionClaimResult,
+  ModelProjectionReleaseResult,
+  OwnedModelProjectionMutationResult,
+} from '../../../store/modelProjectionOwnership';
 
 export type EnsureCanonicalConversationOptions = {
   providerId?: string;
@@ -168,19 +169,25 @@ export interface ExecuteForegroundConversationRunParams {
       ) => Promise<ForegroundModelExecutionLease>;
       claimModelProjection: (input: {
         conversationId: string;
-        owner: ForegroundModelProjectionOwner;
+        owner: ModelProjectionOwner;
         assistantMessage?: Message;
-      }) => ForegroundModelProjectionClaimResult;
+      }) => ModelProjectionClaimResult;
       completeModelExecution: (input: CompleteForegroundModelExecutionInput) => Promise<unknown>;
       flushChatState: () => Promise<void>;
-      ownsModelProjection: (
-        conversationId: string,
-        owner: ForegroundModelProjectionOwner,
-      ) => boolean;
+      ownsModelProjection: (conversationId: string, owner: ModelProjectionOwner) => boolean;
+      mutateModelProjection: <T>(input: {
+        conversationId: string;
+        owner: ModelProjectionOwner;
+        mutate: (
+          conversation: Conversation,
+        ) =>
+          | { kind: 'applied'; conversation: Conversation; value: T }
+          | { kind: 'rejected'; value: T };
+      }) => OwnedModelProjectionMutationResult<T>;
       releaseModelProjection: (input: {
         conversationId: string;
-        owner: ForegroundModelProjectionOwner;
-      }) => ForegroundModelProjectionReleaseResult;
+        owner: ModelProjectionOwner;
+      }) => ModelProjectionReleaseResult;
       relinquishModelExecutionProcessOwnership: (runId: string) => void;
       waitForRecoveryReadiness: () => Promise<void>;
       waitForProjectionAvailability: (input: {

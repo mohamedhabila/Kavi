@@ -6,8 +6,8 @@
 
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { SchedulerTrigger } from '../cron/types';
+import { EXECUTION_TRACE_STORE_KEY, executionTraceStateStorage } from './tracePersistence';
 
 export interface ExecutionTrace {
   id: string;
@@ -19,6 +19,7 @@ export interface ExecutionTrace {
   status: 'success' | 'error' | 'retrying' | 'skipped';
   output?: string;
   error?: string;
+  warnings?: string[];
   attempt?: number;
   trigger: SchedulerTrigger;
 }
@@ -46,7 +47,10 @@ export const useExecutionTraceStore = create<ExecutionTraceState>()(
 
       addTrace: (trace) =>
         set((state) => ({
-          traces: [trace, ...state.traces].slice(0, MAX_TRACES),
+          traces: [trace, ...state.traces.filter((candidate) => candidate.id !== trace.id)].slice(
+            0,
+            MAX_TRACES,
+          ),
         })),
 
       clearTraces: () => set({ traces: [] }),
@@ -84,8 +88,8 @@ export const useExecutionTraceStore = create<ExecutionTraceState>()(
       },
     }),
     {
-      name: 'kavi-execution-traces',
-      storage: createJSONStorage(() => AsyncStorage),
+      name: EXECUTION_TRACE_STORE_KEY,
+      storage: createJSONStorage(() => executionTraceStateStorage),
       version: 1,
     },
   ),

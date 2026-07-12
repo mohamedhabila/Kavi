@@ -19,9 +19,25 @@ const productionSourceRoots = [
 const bannedFiles = [
   'src/services/memory/store.ts',
   'src/services/memory/ranking/chunkIndex.ts',
+  'src/services/memory/productExperienceObservationSchema.ts',
+  'src/services/memory/productExperienceObservationStore.ts',
+  'src/services/memory/verifiedToolEffectExperience.ts',
+  'src/services/memory/verifiedToolEffectExperienceLearning.ts',
 ];
 
 const bannedPatterns = [
+  {
+    label: 'retired product-experience table',
+    pattern: String.raw`\bmemory_product_experience_observations\b`,
+    allowedMatch: ({ filePath, content }) =>
+      filePath === retiredArtifactCleanupPath &&
+      content ===
+        "database.execSync('DROP TABLE IF EXISTS memory_product_experience_observations;');",
+  },
+  {
+    label: 'retired single-effect experience API',
+    pattern: String.raw`\b(?:recordVerifiedToolEffectExperience|readVerifiedToolEffectExperienceLearnings|recordProductExperienceObservation)\b`,
+  },
   {
     label: 'retired chunk table',
     pattern: String.raw`\bmemory_chunks\b`,

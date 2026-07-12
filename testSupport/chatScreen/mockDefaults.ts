@@ -212,7 +212,7 @@ export function resetChatScreenTestEnvironment() {
     settledRunCount: 0,
     issues: [],
   });
-  mockRunOrchestrator.mockResolvedValue(undefined);
+  mockRunOrchestrator.mockResolvedValue({ terminalDisposition: 'final_candidate' });
   mockExportConversationAsMarkdown.mockReturnValue('# Exported');
   mockShareTextExport.mockResolvedValue({
     fileName: 'Test_Chat.md',

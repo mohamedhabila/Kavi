@@ -1,6 +1,12 @@
-import { buildToolEffectReceipt } from '../../src/engine/toolExecution/toolEffectReceipt';
+import { buildToolEffectReceipt as buildReceiptWithExecutionIdentity } from '../../src/engine/toolExecution/toolEffectReceipt';
 import { getCodeOwnedToolEffectContract } from '../../src/engine/toolExecution/toolEffectReceiptContracts';
 import { TOOL_DEFINITIONS } from '../../src/engine/tools/definitions';
+
+function buildToolEffectReceipt(
+  params: Omit<Parameters<typeof buildReceiptWithExecutionIdentity>[0], 'executionRunId'>,
+) {
+  return buildReceiptWithExecutionIdentity({ executionRunId: 'execution-run-1', ...params });
+}
 
 describe('tool effect completion receipts', () => {
   it('classifies every mutating builtin with a closed code-owned effect contract', () => {
@@ -101,21 +107,19 @@ describe('tool effect completion receipts', () => {
         resource: { kind: 'memory_block', id: 'scratchpad' },
       },
     ],
-  ])('maps %s memory results to verified code-owned state', async (
-    toolName,
-    argumentsText,
-    result,
-    expected,
-  ) => {
-    const receipt = await buildToolEffectReceipt({
-      toolCallId: `tc-${toolName}`,
-      toolName,
-      argumentsText,
-      resultText: JSON.stringify(result),
-      transportState: 'returned',
-      recordedAt: 228,
-    });
+  ])(
+    'maps %s memory results to verified code-owned state',
+    async (toolName, argumentsText, result, expected) => {
+      const receipt = await buildToolEffectReceipt({
+        toolCallId: `tc-${toolName}`,
+        toolName,
+        argumentsText,
+        resultText: JSON.stringify(result),
+        transportState: 'returned',
+        recordedAt: 228,
+      });
 
-    expect(receipt).toEqual(expect.objectContaining(expected));
-  });
+      expect(receipt).toEqual(expect.objectContaining(expected));
+    },
+  );
 });

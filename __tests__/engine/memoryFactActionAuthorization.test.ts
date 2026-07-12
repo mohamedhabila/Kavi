@@ -12,7 +12,7 @@ jest.mock('../../src/services/remote/approvalStore', () => {
 });
 
 import { createGoal } from '../../src/engine/goals/types';
-import { executeTool } from '../../src/engine/tools';
+import { executeToolInner as executeTool } from '../../src/engine/tools/toolDispatchRouter';
 import { upsertEntity } from '../../src/services/memory/entities';
 import { recordFactWithApplicability } from '../../src/services/memory/facts/mutations';
 import { getFactById } from '../../src/services/memory/facts/queries';
@@ -97,21 +97,16 @@ async function forget(input: {
     conversations: [{ id: threadId, personaId: input.personaId ?? 'default' }],
   } as never);
   return JSON.parse(
-    await executeTool(
-      'memory_forget',
-      JSON.stringify({ factId: input.factId }),
-      threadId,
-      {
-        memoryConversationId: input.rootId ?? 'root-a',
-        ...(input.taskId
-          ? {
-              controlGraphGoals: [
-                createGoal({ id: input.taskId, title: 'Scoped task', status: 'active', now: 1 }),
-              ],
-            }
-          : {}),
-      },
-    ),
+    await executeTool('memory_forget', JSON.stringify({ factId: input.factId }), threadId, {
+      memoryConversationId: input.rootId ?? 'root-a',
+      ...(input.taskId
+        ? {
+            controlGraphGoals: [
+              createGoal({ id: input.taskId, title: 'Scoped task', status: 'active', now: 1 }),
+            ],
+          }
+        : {}),
+    }),
   ) as Record<string, unknown>;
 }
 
@@ -130,7 +125,7 @@ afterEach(() => {
   useChatStore.setState({ conversations: [] } as never);
 });
 
-describe('agent memory fact action authorization', () => {
+describe('raw memory tool executor fact action authorization', () => {
   it.each([
     {
       label: 'global fact',
@@ -162,13 +157,16 @@ describe('agent memory fact action authorization', () => {
       },
       execution: { rootId: 'root-a', threadId: 'thread-a', taskId: 'task-a' },
     },
-  ])('allows pinning a $label only from its exact code-owned scope', async ({ fact, execution }) => {
-    const seeded = seedFact(fact);
-    const result = await manage({ action: 'pin', factId: seeded.id, ...execution });
+  ])(
+    'allows pinning a $label only from its exact code-owned scope',
+    async ({ fact, execution }) => {
+      const seeded = seedFact(fact);
+      const result = await manage({ action: 'pin', factId: seeded.id, ...execution });
 
-    expect(result).toMatchObject({ ok: true, status: 'pinned' });
-    expect(getFactById(seeded.id)?.pinned).toBe(true);
-  });
+      expect(result).toMatchObject({ ok: true, status: 'pinned' });
+      expect(getFactById(seeded.id)?.pinned).toBe(true);
+    },
+  );
 
   it.each([
     {

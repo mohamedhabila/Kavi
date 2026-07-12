@@ -129,6 +129,7 @@ function createParams(
     finishWithGraphTerminalEvent: jest.fn().mockResolvedValue(undefined),
     recordPerformanceMetrics: jest.fn(),
     emitPendingAsyncOperationsChange: jest.fn(),
+    executionRunId: 'execution-run-1',
     warningInjectedThisRound: false,
     turnAssistantContent: 'Working on it',
     reasoning: 'reasoning',

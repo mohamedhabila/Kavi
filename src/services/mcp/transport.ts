@@ -199,12 +199,13 @@ export class McpTransport {
   async send(
     request: JsonRpcRequest,
     timeout = this.config.timeout ?? 30000,
+    parentSignal?: AbortSignal,
   ): Promise<JsonRpcResponse> {
     if (!this.messageEndpoint) {
       throw new Error('Transport not connected');
     }
 
-    const timeoutRequest = this.createTimeoutRequest(timeout);
+    const timeoutRequest = this.createTimeoutRequest(timeout, parentSignal);
     const headers = await this.resolveHeaders('application/json, text/event-stream', true);
     const response = await fetch(this.messageEndpoint, {
       method: 'POST',
@@ -485,7 +486,10 @@ export class McpTransport {
     }
   }
 
-  private createTimeoutRequest(timeoutMs: number): {
+  private createTimeoutRequest(
+    timeoutMs: number,
+    parentSignal?: AbortSignal,
+  ): {
     signal?: AbortSignal;
     cleanup: () => void;
   } {
@@ -494,6 +498,12 @@ export class McpTransport {
     }
 
     const controller = new AbortController();
+    const abortFromParent = () => controller.abort(parentSignal?.reason);
+    if (parentSignal?.aborted) {
+      abortFromParent();
+    } else {
+      parentSignal?.addEventListener('abort', abortFromParent, { once: true });
+    }
     const timer = setTimeout(() => {
       controller.abort(new Error(`Request timed out after ${timeoutMs}ms`));
     }, timeoutMs);
@@ -501,7 +511,10 @@ export class McpTransport {
 
     return {
       signal: controller.signal,
-      cleanup: () => clearTimeout(timer),
+      cleanup: () => {
+        clearTimeout(timer);
+        parentSignal?.removeEventListener('abort', abortFromParent);
+      },
     };
   }
 }

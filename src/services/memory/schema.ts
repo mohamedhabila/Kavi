@@ -16,7 +16,7 @@ import { ensureIngestionQueueSchema } from './ingestionQueueSchema';
 import { ensureMigrationStateSchema } from './migrationStateSchema';
 import { ensureRetrievalEventSchema } from './retrievalEventSchema';
 import { ensureRetrievalOutcomeSchema } from './retrievalOutcomeSchema';
-import { ensureProductExperienceObservationSchema } from './productExperienceObservationSchema';
+import { ensureVerifiedProcedureObservationSchema } from './verifiedProcedure/observationSchema';
 import { CLEARED_STRUCTURED_MEMORY_TABLES } from './structuredMemoryTableRegistry';
 import { ensureWithdrawalSchema } from './withdrawalSchema';
 import { ensureEpisodeAccessPolicySchema } from './episodes/accessPolicySchema';
@@ -291,7 +291,7 @@ export function ensureFactSchema(): void {
   ensureMigrationStateSchema(db);
   ensureMemoryVaultIdentitySchema(db);
   ensureRetrievalOutcomeSchema(db);
-  ensureProductExperienceObservationSchema(db);
+  ensureVerifiedProcedureObservationSchema(db);
   ensureEpisodeAccessPolicySchema(db);
   ensureEpisodeRetrievalIndexSchema(db);
   ensureFactColumns(db);

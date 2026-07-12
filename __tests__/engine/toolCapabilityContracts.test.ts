@@ -1,9 +1,9 @@
 import { inferToolCapabilityDescriptor } from '../../src/engine/tools/capabilityRegistry';
 import { BROWSER_WAIT_TOOL } from '../../src/engine/tools/browser-definitions';
-import { createGitHubSkill } from '../../src/services/integrations/github/skill';
+import { createCodeOwnedServiceSkills } from '../../src/services/integrations/codeOwnedServiceTools';
 import {
   getSkillToolDefinitions,
-  registerSkill,
+  registerCodeOwnedSkill,
   unregisterSkill,
 } from '../../src/services/skills/manager';
 import { CALENDAR_LIST_TOOL } from '../../src/engine/tools/native/calendar/definitions';
@@ -96,7 +96,9 @@ describe('tool capability contracts', () => {
     expect(PDF_READ_TOOL.contract).toBeDefined();
     expect(TOOL_CATALOG_TOOL.contract).toBeDefined();
     expect(
-      createGitHubSkill().tools.find((tool) => tool.name === 'commit_files')?.contract,
+      createCodeOwnedServiceSkills()
+        .find((skill) => skill.id === 'github')
+        ?.tools.find((tool) => tool.name === 'commit_files')?.contract,
     ).toBeDefined();
   });
 
@@ -465,7 +467,9 @@ describe('tool capability contracts', () => {
   });
 
   it('propagates explicit contracts through skill tool definitions', () => {
-    registerSkill(createGitHubSkill());
+    const githubSkill = createCodeOwnedServiceSkills().find((skill) => skill.id === 'github');
+    if (!githubSkill) throw new Error('code-owned GitHub skill missing');
+    registerCodeOwnedSkill(githubSkill);
 
     try {
       const commitTool = getSkillToolDefinitions().find(
@@ -484,7 +488,7 @@ describe('tool capability contracts', () => {
     }
   });
 
-  it('resolves skill GitHub names through canonical explicit contracts', () => {
+  it('does not infer trusted GitHub semantics from a dynamic namespace alone', () => {
     const descriptor = inferToolCapabilityDescriptor({
       name: 'skill__github__commit_files',
       description: '[GitHub] Create a commit',
@@ -492,10 +496,13 @@ describe('tool capability contracts', () => {
 
     expect(descriptor).toEqual(
       expect.objectContaining({
-        category: 'github',
-        capabilities: ['write', 'commit', 'push'],
-        sideEffects: ['remote_mutation'],
-        workflowStages: ['persist_artifact', 'mutate_remote_state', 'verify_evidence'],
+        source: 'skill',
+        namespace: 'github',
+        category: 'skills',
+        capabilities: ['discover'],
+        resourceKinds: ['unknown'],
+        sideEffects: ['unknown'],
+        workflowStages: [],
       }),
     );
   });

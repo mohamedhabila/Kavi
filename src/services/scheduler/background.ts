@@ -1,11 +1,10 @@
 // ---------------------------------------------------------------------------
-// Kavi — Background Task Scheduler for Cron Jobs
+// Kavi — Background Scheduler Maintenance
 // ---------------------------------------------------------------------------
-// Uses expo-task-manager + expo-background-task to run scheduled tasks
-// when the app is in the background. iOS gives ~30s per wake; Android varies.
+// Expo background windows reconcile durable state and wake notifications only.
+// Arbitrary agent and tool execution remains owned by the foreground runtime.
 
 const BACKGROUND_TASK_NAME = 'KAVI_CRON_BACKGROUND_FETCH';
-const BACKGROUND_EVALUATION_BUDGET_MS = 25_000;
 
 let registered = false;
 let taskDefined = false;
@@ -20,11 +19,9 @@ function defineBackgroundTaskIfAvailable(): BackgroundTaskModule | null {
     if (!taskDefined) {
       TaskManager.defineTask(BACKGROUND_TASK_NAME, async () => {
         try {
-          const { evaluateJobsOnce } = require('./engine') as typeof import('./engine');
-          await evaluateJobsOnce({
-            trigger: 'background-fetch',
-            timeBudgetMs: BACKGROUND_EVALUATION_BUDGET_MS,
-          });
+          const { maintainSchedulerRuntimeOnce } =
+            require('./maintenance') as typeof import('./maintenance');
+          await maintainSchedulerRuntimeOnce();
           return BackgroundTask.BackgroundTaskResult.Success;
         } catch {
           return BackgroundTask.BackgroundTaskResult.Failed;

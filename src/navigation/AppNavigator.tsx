@@ -39,6 +39,7 @@ import {
   subscribeToNotificationRoutes,
 } from '../services/notifications/service';
 import { runJobNow } from '../services/scheduler/engine';
+import { consumeSchedulerJobWake } from '../services/scheduler/wakeNotifications';
 
 const Drawer = createDrawerNavigator();
 const ONBOARDING_KEY = 'kavi_onboarding_complete';
@@ -76,10 +77,15 @@ export const AppNavigator: React.FC = () => {
   useEffect(() => {
     const activateRoute = (route?: NotificationRouteData | null) => {
       if (!route) return;
-      if (route.source === 'scheduled_task_wake' && route.jobId) {
-        void runJobNow(route.jobId, { trigger: 'notification-tap' }).catch((e) =>
-          console.warn('[AppNavigator] Failed to run wake notification task:', e),
-        );
+      if (route.source === 'scheduled_task_wake' && route.jobId && route.notificationId) {
+        const jobId = route.jobId;
+        const notificationId = route.notificationId;
+        void (async () => {
+          await consumeSchedulerJobWake(jobId, notificationId).catch((e) =>
+            console.warn('[AppNavigator] Failed to consume wake notification:', e),
+          );
+          await runJobNow(jobId, { trigger: 'notification-tap', force: false });
+        })().catch((e) => console.warn('[AppNavigator] Failed to run wake notification task:', e));
         setPendingSchedulerOpen(true);
       }
       if (route.screen === 'Scheduler') {

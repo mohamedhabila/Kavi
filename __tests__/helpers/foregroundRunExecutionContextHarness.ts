@@ -1,5 +1,6 @@
-import type { Conversation } from '../../src/types/conversation';
+import type { Conversation, ModelProjectionOwner } from '../../src/types/conversation';
 import type { LlmProviderConfig } from '../../src/types/provider';
+import type { ForegroundRunPreflightResult } from '../../src/engine/graph/foregroundRun/preflight';
 
 export function createConversation(overrides: Partial<Conversation> = {}): Conversation {
   return {
@@ -33,6 +34,29 @@ export function createProvider(id: string, model: string): LlmProviderConfig {
   };
 }
 
+export function createReadyPreflightResult(params: {
+  conversation: Conversation;
+  provider: LlmProviderConfig;
+  providerWithApiKey?: LlmProviderConfig;
+  model?: string;
+}): Extract<ForegroundRunPreflightResult, { kind: 'ready' }> {
+  const model = params.model ?? params.provider.model;
+  const providerWithApiKey = params.providerWithApiKey ?? params.provider;
+
+  return {
+    kind: 'ready',
+    provider: params.provider,
+    providerWithApiKey,
+    model,
+    finalizationProviderContext: {
+      provider: providerWithApiKey,
+      model,
+      systemPromptText: params.conversation.systemPrompt,
+      conversationId: params.conversation.id,
+    },
+  };
+}
+
 export function createExecutionContext(params: {
   conversation: Conversation;
   providers: LlmProviderConfig[];
@@ -40,12 +64,13 @@ export function createExecutionContext(params: {
   ensureCanonicalConversation: jest.Mock;
 }) {
   let idSequence = 0;
-  const projectionOwners = new Map<string, { runId: string }>();
+  let currentConversation = params.conversation;
+  const projectionOwners = new Map<string, ModelProjectionOwner>();
   const projectionWaiters = new Map<string, Set<() => void>>();
   const noOp = jest.fn();
   const flushChatState = jest.fn().mockResolvedValue(undefined);
   const createModelExecution = jest.fn(async (input) => ({
-    runId: `journal-${input.assistantMessageId}`,
+    runId: input.runId,
     conversationId: input.conversationId,
     requestMessageId: input.requestMessageId,
     assistantMessageId: input.assistantMessageId,
@@ -68,24 +93,55 @@ export function createExecutionContext(params: {
   return {
     durability: {
       activateModelExecution,
-      claimModelProjection: jest.fn(({ conversationId, owner }) => {
+      claimModelProjection: jest.fn(({ conversationId, owner, assistantMessage }) => {
         const current = projectionOwners.get(conversationId);
         if (current && current.runId !== owner.runId) return 'owner_conflict' as const;
         projectionOwners.set(conversationId, owner);
+        if (conversationId === currentConversation.id) {
+          const shouldAppendAssistant =
+            assistantMessage &&
+            !currentConversation.messages.some((message) => message.id === assistantMessage.id);
+          currentConversation = {
+            ...currentConversation,
+            messages: shouldAppendAssistant
+              ? [...currentConversation.messages, assistantMessage]
+              : currentConversation.messages,
+            modelProjectionOwner: owner,
+          };
+        }
         return 'claimed' as const;
       }),
       completeModelExecution,
       createModelExecution,
       flushChatState,
-      ownsModelProjection: jest.fn((conversationId, owner) =>
-        projectionOwners.get(conversationId)?.runId === owner.runId
+      ownsModelProjection: jest.fn(
+        (conversationId, owner) => projectionOwners.get(conversationId)?.runId === owner.runId,
       ),
+      mutateModelProjection: jest.fn(({ conversationId, owner, mutate }) => {
+        if (
+          conversationId !== currentConversation.id ||
+          projectionOwners.get(conversationId)?.runId !== owner.runId
+        ) {
+          return { kind: 'owner_changed' as const };
+        }
+        const result = mutate(currentConversation);
+        if (result.kind === 'applied') {
+          currentConversation = result.conversation;
+          return { kind: 'applied' as const, value: result.value };
+        }
+        return result;
+      }),
       relinquishModelExecutionProcessOwnership: jest.fn(),
       releaseModelProjection: jest.fn(({ conversationId, owner }) => {
         if (projectionOwners.get(conversationId)?.runId !== owner.runId) {
           return 'owner_changed' as const;
         }
         projectionOwners.delete(conversationId);
+        if (conversationId === currentConversation.id) {
+          const { modelProjectionOwner: _modelProjectionOwner, ...releasedConversation } =
+            currentConversation;
+          currentConversation = releasedConversation;
+        }
         for (const resolve of projectionWaiters.get(conversationId) ?? []) resolve();
         projectionWaiters.delete(conversationId);
         return 'released' as const;
@@ -99,7 +155,7 @@ export function createExecutionContext(params: {
           projectionWaiters.set(conversationId, waiters);
           signal.addEventListener(
             'abort',
-            () => reject(new Error('foreground_model_projection_wait_cancelled')),
+            () => reject(new Error('model_projection_wait_cancelled')),
             { once: true },
           );
         });
@@ -113,8 +169,8 @@ export function createExecutionContext(params: {
       ensureAgentRunFinalResponse: jest.fn(),
       ensureCanonicalConversation: params.ensureCanonicalConversation,
       getConversation: (conversationId: string) =>
-        conversationId === params.conversation.id ? params.conversation : undefined,
-      getConversations: () => [params.conversation],
+        conversationId === currentConversation.id ? currentConversation : undefined,
+      getConversations: () => [currentConversation],
       getResumeAgentRun: () => null,
       recordConversationTurnMemory: params.recordConversationTurnMemory,
       requestPersistenceCheckpoint: noOp,
@@ -178,5 +234,6 @@ export function createExecutionContext(params: {
       mergeStreamingDraft: noOp,
       updateStreamingDraft: noOp,
     },
+    getCurrentConversation: () => currentConversation,
   };
 }

@@ -832,7 +832,8 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
   scheduler: {
     title: 'Agendador',
     noJobs: 'Nenhuma tarefa agendada',
-    noJobsHint: 'Agende tarefas de IA para executar automaticamente.',
+    noJobsHint:
+      'Agende tarefas de IA. Se o app estiver inativo, permita notificações e toque no alerta para executá-las.',
     addTask: 'Adicionar Tarefa',
     taskName: 'Nome da Tarefa',
     taskNamePlaceholder: 'Resumo diário, lembrete, etc.',
@@ -859,6 +860,11 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     never: 'Nunca',
     deleteJob: 'Excluir tarefa',
     deleteJobConfirm: 'Excluir "{name}"?',
+    deliveryWarning: 'Aviso de entrega: {error}',
+    wakeWarning: 'Aviso de ativação: {error}',
+    warningTitle: 'Aviso',
+    jobRunning: 'Esta tarefa agendada está em execução.',
+    jobMissing: 'Esta tarefa agendada não existe mais.',
     untitledJob: 'Tarefa sem título',
     cronFormat: 'Cron: {expr}',
     everyFormat: 'A cada {value} {unit}',

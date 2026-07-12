@@ -72,6 +72,7 @@ export function effectRow(record: ExecutionEffectRecord): Record<string, SQLite.
     checkpoint_id: record.checkpointId,
     tool_call_id: record.toolCallId,
     tool_name_digest: record.toolNameDigest,
+    tool_contract_identity_digest: record.toolContractIdentityDigest,
     effect_class: record.effectClass,
     idempotency_class: record.idempotencyClass,
     idempotency_key_digest: record.idempotencyKeyDigest,

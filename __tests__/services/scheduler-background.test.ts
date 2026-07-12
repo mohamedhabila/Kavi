@@ -2,7 +2,7 @@
 // Tests for Background Fetch scheduler module
 // ---------------------------------------------------------------------------
 
-const mockEvaluateJobsOnce = jest.fn();
+const mockMaintainSchedulerRuntimeOnce = jest.fn();
 let definedTaskHandler: (() => Promise<number>) | undefined;
 const mockDefineTask = jest.fn((_: string, handler: () => Promise<number>) => {
   definedTaskHandler = handler;
@@ -10,8 +10,8 @@ const mockDefineTask = jest.fn((_: string, handler: () => Promise<number>) => {
 const mockRegisterTaskAsync = jest.fn().mockResolvedValue(undefined);
 const mockUnregisterTaskAsync = jest.fn().mockResolvedValue(undefined);
 
-jest.mock('../../src/services/scheduler/engine', () => ({
-  evaluateJobsOnce: mockEvaluateJobsOnce,
+jest.mock('../../src/services/scheduler/maintenance', () => ({
+  maintainSchedulerRuntimeOnce: mockMaintainSchedulerRuntimeOnce,
 }));
 
 jest.mock('expo-task-manager', () => ({
@@ -42,8 +42,8 @@ beforeEach(async () => {
   mockRegisterTaskAsync.mockResolvedValue(undefined);
   mockUnregisterTaskAsync.mockReset();
   mockUnregisterTaskAsync.mockResolvedValue(undefined);
-  mockEvaluateJobsOnce.mockReset();
-  mockEvaluateJobsOnce.mockResolvedValue(undefined);
+  mockMaintainSchedulerRuntimeOnce.mockReset();
+  mockMaintainSchedulerRuntimeOnce.mockResolvedValue(undefined);
 });
 
 describe('Background Fetch', () => {
@@ -61,19 +61,16 @@ describe('Background Fetch', () => {
     expect(isBackgroundFetchRegistered()).toBe(true);
   });
 
-  it('registered task evaluates due jobs and reports success', async () => {
+  it('registered task performs scheduler maintenance and reports success', async () => {
     await registerBackgroundFetch();
 
     expect(definedTaskHandler).toBeDefined();
     await expect(definedTaskHandler?.()).resolves.toBe(1);
-    expect(mockEvaluateJobsOnce).toHaveBeenCalledWith({
-      trigger: 'background-fetch',
-      timeBudgetMs: 25_000,
-    });
+    expect(mockMaintainSchedulerRuntimeOnce).toHaveBeenCalledTimes(1);
   });
 
-  it('registered task reports failure when job evaluation throws', async () => {
-    mockEvaluateJobsOnce.mockRejectedValueOnce(new Error('scheduler down'));
+  it('registered task reports failure when scheduler maintenance throws', async () => {
+    mockMaintainSchedulerRuntimeOnce.mockRejectedValueOnce(new Error('scheduler down'));
     await registerBackgroundFetch();
 
     expect(definedTaskHandler).toBeDefined();

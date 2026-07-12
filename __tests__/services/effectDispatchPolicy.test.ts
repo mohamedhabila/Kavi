@@ -23,6 +23,7 @@ function fixture(): {
   const run = executionRunRecord({
     status: 'running',
     updatedAt: 14,
+    modelConfigDigest: DIGEST_C,
     resumeStrategy: 'reconcile_first',
     nextRetryPolicy: 'reconcile_before_retry',
   });
@@ -41,6 +42,7 @@ function fixture(): {
     checkpointId: planningCheckpoint.id,
     toolCallId: 'tool-call-1',
     toolNameDigest: DIGEST_A,
+    toolContractIdentityDigest: DIGEST_A,
     effectClass: 'remote_mutation',
     idempotencyClass: 'declared_idempotent',
     idempotencyKeyDigest: DIGEST_D,
@@ -67,9 +69,11 @@ function fixture(): {
     identity: {
       runId: run.id,
       effectId: effect.id,
+      executionRunId: run.taskId ?? 'task-1',
       toolCallId: effect.toolCallId,
       toolName: TOOL_NAME,
       toolNameDigest: effect.toolNameDigest,
+      toolContractIdentityDigest: DIGEST_A,
       requestDigest: effect.requestDigest,
       idempotencyKeyDigest: effect.idempotencyKeyDigest,
       dispatchTargetDigest: DIGEST_C,
@@ -118,8 +122,11 @@ describe('effect dispatch policy', () => {
   it.each([
     ['run', { runId: 'run-other' }],
     ['effect', { effectId: 'effect-other' }],
+    ['execution run', { executionRunId: 'task-other' }],
     ['tool call', { toolCallId: 'tool-call-other' }],
     ['tool digest', { toolNameDigest: DIGEST_C }],
+    ['tool contract identity', { toolContractIdentityDigest: DIGEST_C }],
+    ['dispatch target', { dispatchTargetDigest: DIGEST_D }],
     ['request', { requestDigest: DIGEST_C }],
     ['idempotency key', { idempotencyKeyDigest: DIGEST_C }],
     ['attempt', { attempt: 2 }],
@@ -133,6 +140,14 @@ describe('effect dispatch policy', () => {
   it('rejects malformed exact identities instead of normalizing them', () => {
     const input = fixture();
     input.identity = { ...input.identity, toolCallId: ' tool-call-1' };
+
+    expect(planEffectDispatch(input)).toEqual({ kind: 'blocked', reason: 'invalid_request' });
+  });
+
+  it('rejects identities that omit the execution run binding', () => {
+    const input = fixture();
+    const { executionRunId: _executionRunId, ...withoutExecutionRunId } = input.identity;
+    input.identity = withoutExecutionRunId as EffectDispatchIdentity;
 
     expect(planEffectDispatch(input)).toEqual({ kind: 'blocked', reason: 'invalid_request' });
   });

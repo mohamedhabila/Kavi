@@ -4,20 +4,20 @@ import {
   type ToolDispatcherHarness,
 } from '../helpers/toolDispatcherHarness';
 
-let executeTool: ToolDispatcherHarness['executeTool'];
+let executeTool: ToolDispatcherHarness['executeToolInner'];
 let sessionLaunchMod: ToolDispatcherHarness['sessionLaunchMod'];
 let generateImage: ToolDispatcherHarness['generateImage'];
 let editImage: ToolDispatcherHarness['editImage'];
 
 beforeEach(() => {
   const harness = setupToolDispatcherHarness();
-  executeTool = harness.executeTool;
+  executeTool = harness.executeToolInner;
   sessionLaunchMod = harness.sessionLaunchMod;
   generateImage = harness.generateImage;
   editImage = harness.editImage;
 });
 
-describe('executeTool — core tools routing', () => {
+describe('executeToolInner — raw media and session routing', () => {
   it('routes image_generate', async () => {
     const result = await executeTool('image_generate', '{"prompt":"cat"}', CONV_ID);
     const parsed = JSON.parse(result);

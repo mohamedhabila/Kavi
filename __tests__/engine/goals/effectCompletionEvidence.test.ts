@@ -2,6 +2,7 @@ import {
   buildEffectCompletionCriterion,
   buildToolEffectReceiptEvidence,
   parseEffectCompletionCriterion,
+  parseToolEffectReceiptEvidence,
 } from '../../../src/engine/goals/effectCompletionEvidence';
 import { isSuccessCriterionMet } from '../../../src/engine/goals/completionEvidence';
 import { routeToolEvidenceToActiveGoals } from '../../../src/engine/goals/evidenceRouting';
@@ -11,15 +12,25 @@ import type { ToolEffectReceipt } from '../../../src/types/toolEffectReceipt';
 const REQUEST_DIGEST = `sha256:${'1'.repeat(64)}` as const;
 const RESULT_DIGEST = `sha256:${'2'.repeat(64)}` as const;
 const RESOURCE_DIGEST = `sha256:${'3'.repeat(64)}` as const;
+const CONTRACT_DIGEST = `sha256:${'4'.repeat(64)}` as const;
 
-function buildReceipt(
-  patch: Partial<ToolEffectReceipt> = {},
-): ToolEffectReceipt {
+function buildReceipt(patch: Partial<ToolEffectReceipt> = {}): ToolEffectReceipt {
   return {
-    version: 1,
+    version: 2,
     receiptId: `ter_${'a'.repeat(32)}`,
     toolCallId: 'call-1',
     toolName: 'write_file',
+    executionRunId: 'execution-run-1',
+    contractIdentity: {
+      kind: 'code_owned',
+      version: 1,
+      toolName: 'write_file',
+      schemaDigest: CONTRACT_DIGEST,
+      capabilityContractDigest: CONTRACT_DIGEST,
+      workflowContractDigest: CONTRACT_DIGEST,
+      effectContractDigest: CONTRACT_DIGEST,
+      executionPolicyDigest: CONTRACT_DIGEST,
+    },
     transportState: 'returned',
     effectKind: 'artifact.write',
     effectState: 'applied',
@@ -58,6 +69,49 @@ function goalWithReceipt(receipt: ToolEffectReceipt) {
 }
 
 describe('effect completion evidence', () => {
+  it('round-trips exact execution and optional dispatch identity', () => {
+    const evidence = buildToolEffectReceiptEvidence(
+      buildReceipt({ dispatchRunId: 'effect-run-1' }),
+    );
+
+    expect(parseToolEffectReceiptEvidence(evidence)).toEqual(
+      expect.objectContaining({
+        receiptVersion: 2,
+        executionRunId: 'execution-run-1',
+        dispatchRunId: 'effect-run-1',
+      }),
+    );
+  });
+
+  it('rejects the retired pre-v2 flattened receipt evidence format', () => {
+    const receipt = buildReceipt();
+    const legacyEvidence = `effect_receipt:${JSON.stringify({
+      receiptId: receipt.receiptId,
+      toolName: receipt.toolName,
+      transportState: receipt.transportState,
+      effectKind: receipt.effectKind,
+      effectState: receipt.effectState,
+      verificationState: receipt.verificationState,
+      requestDigest: receipt.requestDigest,
+      resultDigest: receipt.resultDigest,
+      resource: receipt.resource,
+    })}`;
+
+    expect(parseToolEffectReceiptEvidence(legacyEvidence)).toBeNull();
+    expect(
+      isSuccessCriterionMet(
+        createGoal({
+          id: 'legacy-evidence',
+          title: 'Legacy evidence',
+          status: 'active',
+          successCriteria: [criterion],
+          evidence: [legacyEvidence],
+        }),
+        criterion,
+      ),
+    ).toBe(false);
+  });
+
   it('accepts only the closed resource-specific criterion schema', () => {
     expect(parseEffectCompletionCriterion(criterion)).toEqual({
       effectKind: 'artifact.write',
@@ -70,9 +124,7 @@ describe('effect completion evidence', () => {
       verificationState: 'verified',
     });
     expect(
-      parseEffectCompletionCriterion(
-        `${criterion.slice(0, -1)},"unexpected":true}`,
-      ),
+      parseEffectCompletionCriterion(`${criterion.slice(0, -1)},"unexpected":true}`),
     ).toBeNull();
   });
 

@@ -5,155 +5,34 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { generateId } from '../../utils/id';
-import { computeNextRunAtMs } from '../cron/schedule';
 import { SCHEDULER_STORE_KEY, schedulerStateStorage } from './persistence';
 import { normalizeSchedulerRetryAttempts, shouldRunScheduledJob } from './eligibility';
-import type {
-  CronJob,
-  CronJobRuntimeState,
-  CronSchedule,
-  SessionTarget,
-  SchedulerTrigger,
-  CronFailureAlert,
-  WakeMode,
-} from '../cron/types';
-
-type RuntimeStateUpdate = Partial<
-  Omit<CronJobRuntimeState, 'runningAttemptId' | 'runningStartedAtMs'>
->;
-
-type RunFailureUpdate = {
-  timestamp: number;
-  error: string;
-  attempt: number;
-  nextRetryAtMs?: number;
-  final: boolean;
-};
-
-interface SchedulerState {
-  jobs: CronJob[];
-  lastEvaluationAtMs?: number;
-
-  addJob: (params: {
-    name: string;
-    schedule: CronSchedule;
-    prompt: string;
-    model?: string;
-    providerId?: string;
-    sessionTarget?: SessionTarget;
-    wakeMode?: WakeMode;
-    deliveryMode?: 'conversation' | 'notification' | 'both';
-    failureAlert?: CronFailureAlert;
-  }) => string;
-  updateJob: (
-    id: string,
-    updates: Partial<
-      Pick<CronJob, 'name' | 'schedule' | 'payload' | 'enabled' | 'delivery' | 'failureAlert'>
-    >,
-  ) => void;
-  removeJob: (id: string) => boolean;
-  enableJob: (id: string) => void;
-  disableJob: (id: string) => void;
-  tryClaimJobAttempt: (params: {
-    id: string;
-    attemptId: string;
-    timestamp: number;
-    force: boolean;
-  }) => { job: CronJob; attempt: number } | undefined;
-  reconcileStrandedAttempts: (timestamp: number) => CronJob[];
-  recordRun: (id: string, attemptId: string, timestamp: number) => boolean;
-  recordRunFailure: (id: string, attemptId: string, update: RunFailureUpdate) => boolean;
-  restoreJobAttemptClaim: (params: {
-    id: string;
-    attemptId: string;
-    startedAtMs: number;
-    error?: string;
-  }) => void;
-  resetJobRetry: (id: string) => void;
-  updateJobRuntimeState: (id: string, updates: RuntimeStateUpdate) => void;
-  recordEvaluation: (timestamp: number, trigger?: SchedulerTrigger) => void;
-  getJob: (id: string) => CronJob | undefined;
-  getEnabledJobs: () => CronJob[];
-}
-
-function coerceFiniteNumber(value: unknown): number | undefined {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
-  if (typeof value !== 'string') return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function finiteTimestamp(value: unknown): number | undefined {
-  const parsed = coerceFiniteNumber(value);
-  if (parsed === undefined) return undefined;
-  return parsed > 0 ? Math.floor(parsed) : undefined;
-}
-
-function withStableEveryAnchor(schedule: CronSchedule, nowMs: number): CronSchedule {
-  if (schedule.kind !== 'every') return schedule;
-  const anchorMs = finiteTimestamp(schedule.anchorMs);
-  return anchorMs === undefined ? { ...schedule, anchorMs: nowMs } : schedule;
-}
-
-function safeComputeNextRunAtMs(schedule: CronSchedule, nowMs: number): number | undefined {
-  try {
-    return finiteTimestamp(computeNextRunAtMs(schedule, nowMs));
-  } catch {
-    return undefined;
-  }
-}
-
-function prepareScheduleRuntime(schedule: CronSchedule, nowMs: number) {
-  const stableSchedule = withStableEveryAnchor(schedule, nowMs);
-  return {
-    schedule: stableSchedule,
-    nextRunAtMs: safeComputeNextRunAtMs(stableSchedule, nowMs),
-  };
-}
-
-function shouldDisableAfterRun(job: CronJob): boolean {
-  return job.schedule.kind === 'at' || job.deleteAfterRun === true;
-}
-
-function normalizePersistedJob(job: CronJob, nowMs: number): CronJob {
-  const scheduleRuntime = prepareScheduleRuntime(job.schedule, job.createdAtMs || nowMs);
-  return {
-    ...job,
-    schedule: scheduleRuntime.schedule,
-    nextRunAtMs: finiteTimestamp(job.nextRunAtMs) ?? scheduleRuntime.nextRunAtMs,
-    lastRunAtMs: finiteTimestamp(job.lastRunAtMs),
-    lastAttemptAtMs: finiteTimestamp(job.lastAttemptAtMs),
-    lastSuccessAtMs: finiteTimestamp(job.lastSuccessAtMs),
-    lastFailureAtMs: finiteTimestamp(job.lastFailureAtMs),
-    retryAttempts: normalizeSchedulerRetryAttempts(job.retryAttempts),
-    nextRetryAtMs: finiteTimestamp(job.nextRetryAtMs),
-    runningAttemptId: job.runningAttemptId?.trim() || undefined,
-    runningStartedAtMs: finiteTimestamp(job.runningStartedAtMs),
-    lastAmbiguousAttemptId: job.lastAmbiguousAttemptId?.trim() || undefined,
-    lastAmbiguousAtMs: finiteTimestamp(job.lastAmbiguousAtMs),
-    pendingWakeNotificationId: job.pendingWakeNotificationId,
-    pendingWakeNotificationRunAtMs: finiteTimestamp(job.pendingWakeNotificationRunAtMs),
-    lastWakeAtMs: finiteTimestamp(job.lastWakeAtMs),
-    lastWakeSource: job.lastWakeSource,
-    wakePolicy: job.wakePolicy || 'try_background_then_notify',
-  };
-}
-
-function clearRetryState(job: CronJob): CronJob {
-  return {
-    ...job,
-    retryAttempts: 0,
-    nextRetryAtMs: undefined,
-  };
-}
+import {
+  appendTerminalReport,
+  canRetrySafelyInterruptedAttempt,
+  clearRetryState,
+  deferSafelyInterruptedAttempt,
+  haveSameFlatFields,
+  normalizePersistedJob,
+  normalizeRunningCompletion,
+  normalizeTerminalReports,
+  prepareScheduleRuntime,
+} from './storeModel';
+import type { CronJob } from '../cron/types';
+import {
+  buildReconciledAttemptTerminalReport,
+  sanitizeSchedulerReportText,
+  sanitizeSchedulerTerminalReport,
+} from './terminalReport';
+import { reconcileScheduledAttempt } from './storeAttemptRecovery';
+import { settleScheduledRunFailure, settleScheduledRunSuccess } from './storeAttemptSettlement';
+import type { SchedulerState } from './storeTypes';
 
 export const useSchedulerStore = create<SchedulerState>()(
   persist(
     (set, get) => ({
       jobs: [],
-      lastEvaluationAtMs: undefined,
+      terminalReports: [],
 
       addJob: (params) => {
         const id = generateId();
@@ -161,6 +40,7 @@ export const useSchedulerStore = create<SchedulerState>()(
         const scheduleRuntime = prepareScheduleRuntime(params.schedule, now);
         const job: CronJob = {
           id,
+          definitionRevision: 1,
           name: params.name,
           enabled: true,
           createdAtMs: now,
@@ -170,6 +50,7 @@ export const useSchedulerStore = create<SchedulerState>()(
           wakeMode: params.wakeMode || 'new',
           payload: {
             prompt: params.prompt,
+            mode: params.mode ?? 'agentic',
             model: params.model,
             providerId: params.providerId,
           },
@@ -179,7 +60,7 @@ export const useSchedulerStore = create<SchedulerState>()(
           failureAlert: params.failureAlert,
           nextRunAtMs: scheduleRuntime.nextRunAtMs,
           retryAttempts: 0,
-          wakePolicy: 'try_background_then_notify',
+          wakePolicy: 'notify_only',
         };
         set((state) => ({ jobs: [...state.jobs, job] }));
         return id;
@@ -187,25 +68,42 @@ export const useSchedulerStore = create<SchedulerState>()(
 
       updateJob: (id, updates) =>
         set((state) => ({
-          jobs: state.jobs.map((j) => {
-            if (j.id !== id) return j;
+          jobs: state.jobs.map((job) => {
+            if (job.id !== id) return job;
             const now = Date.now();
-            const scheduleRuntime = updates.schedule
-              ? prepareScheduleRuntime(updates.schedule, now)
-              : undefined;
+            const scheduleChanged =
+              updates.schedule !== undefined && !haveSameFlatFields(job.schedule, updates.schedule);
+            const payloadChanged =
+              updates.payload !== undefined && !haveSameFlatFields(job.payload, updates.payload);
+            const enabledChanged = updates.enabled !== undefined && updates.enabled !== job.enabled;
+            const executionDefinitionChanged = scheduleChanged || payloadChanged || enabledChanged;
+            const nameChanged = updates.name !== undefined && updates.name !== job.name;
+            const scheduleRuntime =
+              scheduleChanged || (enabledChanged && updates.enabled === true)
+                ? prepareScheduleRuntime(updates.schedule ?? job.schedule, now)
+                : undefined;
             const updated: CronJob = {
-              ...j,
+              ...job,
               ...updates,
               ...(scheduleRuntime
                 ? {
                     schedule: scheduleRuntime.schedule,
                     nextRunAtMs: scheduleRuntime.nextRunAtMs,
-                    lastError: undefined,
                   }
                 : {}),
+              ...(nameChanged ? { pendingWakeNotificationRunAtMs: undefined } : {}),
               updatedAtMs: now,
+              definitionRevision: executionDefinitionChanged
+                ? job.definitionRevision + 1
+                : job.definitionRevision,
             };
-            return scheduleRuntime ? clearRetryState(updated) : updated;
+            if (!executionDefinitionChanged) return updated;
+            return clearRetryState({
+              ...updated,
+              lastError: undefined,
+              lastDeliveryError: undefined,
+              lastDeliveryFailureAtMs: undefined,
+            });
           }),
         })),
 
@@ -215,34 +113,53 @@ export const useSchedulerStore = create<SchedulerState>()(
           const job = state.jobs.find((candidate) => candidate.id === id);
           if (!job || job.runningAttemptId) return state;
           removed = true;
-          return { jobs: state.jobs.filter((candidate) => candidate.id !== id) };
+          return {
+            jobs: state.jobs.filter((candidate) => candidate.id !== id),
+            terminalReports: state.terminalReports.filter((report) => report.jobId !== id),
+          };
         });
         return removed;
       },
 
-      enableJob: (id) =>
+      enableJob: (id) => {
+        const currentJob = get().jobs.find((job) => job.id === id);
+        if (!currentJob || currentJob.enabled) return;
         set((state) => ({
-          jobs: state.jobs.map((j) => {
-            if (j.id !== id) return j;
+          jobs: state.jobs.map((job) => {
+            if (job.id !== id || job.enabled) return job;
             const now = Date.now();
-            const scheduleRuntime = prepareScheduleRuntime(j.schedule, now);
+            const scheduleRuntime = prepareScheduleRuntime(job.schedule, now);
             return clearRetryState({
-              ...j,
+              ...job,
               enabled: true,
               updatedAtMs: now,
+              definitionRevision: job.definitionRevision + 1,
               schedule: scheduleRuntime.schedule,
               nextRunAtMs: scheduleRuntime.nextRunAtMs,
               lastError: undefined,
+              lastDeliveryError: undefined,
+              lastDeliveryFailureAtMs: undefined,
             });
           }),
-        })),
+        }));
+      },
 
-      disableJob: (id) =>
+      disableJob: (id) => {
+        const currentJob = get().jobs.find((job) => job.id === id);
+        if (!currentJob || !currentJob.enabled) return;
         set((state) => ({
-          jobs: state.jobs.map((j) =>
-            j.id === id ? clearRetryState({ ...j, enabled: false, updatedAtMs: Date.now() }) : j,
+          jobs: state.jobs.map((job) =>
+            job.id === id && job.enabled
+              ? clearRetryState({
+                  ...job,
+                  enabled: false,
+                  updatedAtMs: Date.now(),
+                  definitionRevision: job.definitionRevision + 1,
+                })
+              : job,
           ),
-        })),
+        }));
+      },
 
       tryClaimJobAttempt: ({ id, attemptId, timestamp, force }) => {
         let claimed: { job: CronJob; attempt: number } | undefined;
@@ -257,6 +174,12 @@ export const useSchedulerStore = create<SchedulerState>()(
             lastAttemptAtMs: timestamp,
             runningAttemptId: attemptId,
             runningStartedAtMs: timestamp,
+            runningDefinitionRevision: currentJob.definitionRevision,
+            runningAttemptNumber: attempt,
+            runningConversationId: undefined,
+            runningEffectRisk: currentJob.payload.prompt.trim().startsWith('/') ? 'unsafe' : 'safe',
+            runningOccurrenceId: currentJob.retryOccurrenceId ?? attemptId,
+            runningCompletion: undefined,
             updatedAtMs: Date.now(),
           };
           const jobs = [...state.jobs];
@@ -267,106 +190,312 @@ export const useSchedulerStore = create<SchedulerState>()(
         return claimed;
       },
 
-      reconcileStrandedAttempts: (timestamp) => {
-        const reconciled: CronJob[] = [];
+      recordRunningAttemptConversation: ({ id, attemptId, conversationId }) => {
+        let recorded = false;
         set((state) => ({
           jobs: state.jobs.map((job) => {
-            if (!job.runningAttemptId) return job;
-            const disable = shouldDisableAfterRun(job);
-            const nextJob: CronJob = {
+            if (job.id !== id || job.runningAttemptId !== attemptId) return job;
+            recorded = true;
+            return {
               ...job,
-              enabled: disable ? false : job.enabled,
+              runningConversationId: conversationId,
               updatedAtMs: Date.now(),
-              lastRunAtMs: timestamp,
-              lastFailureAtMs: timestamp,
-              lastError:
-                'A previous scheduled attempt ended without a durable terminal record; replay was suppressed.',
-              retryAttempts: 0,
-              nextRetryAtMs: undefined,
-              lastAmbiguousAttemptId: job.runningAttemptId,
-              lastAmbiguousAtMs: timestamp,
-              runningAttemptId: undefined,
-              runningStartedAtMs: undefined,
-              nextRunAtMs: disable ? undefined : safeComputeNextRunAtMs(job.schedule, timestamp),
             };
-            reconciled.push(nextJob);
-            return nextJob;
           }),
         }));
+        return recorded;
+      },
+
+      markRunningAttemptEffectUnsafe: (id, attemptId) => {
+        let marked = false;
+        set((state) => ({
+          jobs: state.jobs.map((job) => {
+            if (job.id !== id || job.runningAttemptId !== attemptId) return job;
+            if (job.runningEffectRisk === 'unsafe') {
+              marked = true;
+              return job;
+            }
+            marked = true;
+            return { ...job, runningEffectRisk: 'unsafe', updatedAtMs: Date.now() };
+          }),
+        }));
+        return marked;
+      },
+
+      restoreRunningAttemptEffectRisk: (id, attemptId, effectRisk) => {
+        let restored = false;
+        set((state) => ({
+          jobs: state.jobs.map((job) => {
+            if (job.id !== id || job.runningAttemptId !== attemptId) return job;
+            restored = true;
+            return { ...job, runningEffectRisk: effectRisk, updatedAtMs: Date.now() };
+          }),
+        }));
+        return restored;
+      },
+
+      recordRunningAttemptCompletion: ({ id, attemptId, completion }) => {
+        const normalized = normalizeRunningCompletion(completion);
+        if (!normalized) return false;
+        let recorded = false;
+        set((state) => ({
+          jobs: state.jobs.map((job) => {
+            if (job.id !== id || job.runningAttemptId !== attemptId) return job;
+            recorded = true;
+            return { ...job, runningCompletion: normalized, updatedAtMs: Date.now() };
+          }),
+        }));
+        return recorded;
+      },
+
+      reconcileStrandedAttempts: (timestamp) => {
+        const reconciled: CronJob[] = [];
+        set((state) => {
+          let terminalReports = state.terminalReports;
+          const jobs = state.jobs.map((job) => {
+            if (!job.runningAttemptId) return job;
+            const { job: nextJob, report } = reconcileScheduledAttempt(job, timestamp);
+            reconciled.push(nextJob);
+            if (report) terminalReports = appendTerminalReport(terminalReports, report);
+            return nextJob;
+          });
+          return { jobs, terminalReports };
+        });
         return reconciled;
       },
 
-      recordRun: (id, attemptId, timestamp) => {
-        let recorded = false;
-        set((state) => ({
-          jobs: state.jobs.map((j) => {
-            if (j.id !== id || j.runningAttemptId !== attemptId) return j;
-            recorded = true;
-            const disable = shouldDisableAfterRun(j);
-            const nextRunAtMs = disable ? undefined : safeComputeNextRunAtMs(j.schedule, timestamp);
+      reconcileStrandedAttempt: (id, attemptId, timestamp) => {
+        let reconciled: CronJob | undefined;
+        set((state) => {
+          let terminalReports = state.terminalReports;
+          const jobs = state.jobs.map((job) => {
+            if (job.id !== id || job.runningAttemptId !== attemptId) return job;
+            const outcome = reconcileScheduledAttempt(job, timestamp);
+            reconciled = outcome.job;
+            const { report } = outcome;
+            if (report) terminalReports = appendTerminalReport(terminalReports, report);
+            return reconciled;
+          });
+          return { jobs, terminalReports };
+        });
+        return reconciled;
+      },
+
+      requestPersistence: () => set((state) => ({ jobs: [...state.jobs] })),
+
+      releaseJobAttemptClaim: ({ id, attemptId, timestamp, error, report }) => {
+        let released = false;
+        set((state) => {
+          const jobs = state.jobs.map((job) => {
+            if (job.id !== id || job.runningAttemptId !== attemptId) return job;
+            released = true;
             return {
-              ...j,
-              enabled: disable ? false : j.enabled,
+              ...job,
               updatedAtMs: Date.now(),
-              lastRunAtMs: timestamp,
               lastAttemptAtMs: timestamp,
-              lastSuccessAtMs: timestamp,
-              lastError: undefined,
-              retryAttempts: 0,
-              nextRetryAtMs: undefined,
+              lastFailureAtMs: timestamp,
+              lastError: error,
               runningAttemptId: undefined,
               runningStartedAtMs: undefined,
-              nextRunAtMs,
+              runningDefinitionRevision: undefined,
+              runningAttemptNumber: undefined,
+              runningConversationId: undefined,
+              runningEffectRisk: undefined,
+              runningOccurrenceId: undefined,
+              runningCompletion: undefined,
             };
-          }),
-        }));
-        return recorded;
+          });
+          return released
+            ? { jobs, terminalReports: appendTerminalReport(state.terminalReports, report) }
+            : state;
+        });
+        return released;
       },
 
-      recordRunFailure: (id, attemptId, update) => {
+      recordRun: (id, attemptId, definitionRevision, timestamp, report) => {
         let recorded = false;
-        set((state) => ({
-          jobs: state.jobs.map((j) => {
+        set((state) => {
+          const jobs = state.jobs.map((j) => {
             if (j.id !== id || j.runningAttemptId !== attemptId) return j;
             recorded = true;
-            const disable = update.final && shouldDisableAfterRun(j);
-            return {
-              ...j,
-              enabled: disable ? false : j.enabled,
-              updatedAtMs: Date.now(),
-              lastRunAtMs: update.final ? update.timestamp : j.lastRunAtMs,
-              lastAttemptAtMs: update.timestamp,
-              lastFailureAtMs: update.timestamp,
-              lastError: update.error,
-              retryAttempts: update.final ? 0 : update.attempt,
-              nextRetryAtMs: update.final ? undefined : update.nextRetryAtMs,
-              runningAttemptId: undefined,
-              runningStartedAtMs: undefined,
-              nextRunAtMs: update.final
-                ? disable
-                  ? undefined
-                  : safeComputeNextRunAtMs(j.schedule, update.timestamp)
-                : j.nextRunAtMs,
-            };
-          }),
-        }));
+            return settleScheduledRunSuccess(j, attemptId, definitionRevision, timestamp);
+          });
+          return recorded
+            ? { jobs, terminalReports: appendTerminalReport(state.terminalReports, report) }
+            : state;
+        });
         return recorded;
       },
 
-      restoreJobAttemptClaim: ({ id, attemptId, startedAtMs, error }) =>
+      recordRunFailure: (id, attemptId, definitionRevision, update, report) => {
+        let recorded = false;
+        set((state) => {
+          const jobs = state.jobs.map((j) => {
+            if (j.id !== id || j.runningAttemptId !== attemptId) return j;
+            recorded = true;
+            return settleScheduledRunFailure(j, attemptId, definitionRevision, update, report);
+          });
+          return recorded
+            ? { jobs, terminalReports: appendTerminalReport(state.terminalReports, report) }
+            : state;
+        });
+        return recorded;
+      },
+
+      recordRunDeferral: (id, attemptId, definitionRevision, timestamp, error, report) => {
+        let recorded = false;
+        let stageReport = false;
+        set((state) => {
+          const jobs = state.jobs.map((job) => {
+            if (
+              job.id !== id ||
+              job.runningAttemptId !== attemptId ||
+              job.runningDefinitionRevision !== definitionRevision
+            ) {
+              return job;
+            }
+            recorded = true;
+            stageReport = canRetrySafelyInterruptedAttempt(job);
+            const deferred = deferSafelyInterruptedAttempt(job, timestamp);
+            return stageReport
+              ? { ...deferred, lastError: sanitizeSchedulerReportText(error) }
+              : deferred;
+          });
+          return recorded
+            ? {
+                jobs,
+                terminalReports: stageReport
+                  ? appendTerminalReport(state.terminalReports, report)
+                  : state.terminalReports,
+              }
+            : state;
+        });
+        return recorded;
+      },
+
+      acknowledgeTerminalReport: ({ reportId, clearDeliveryFailure }) => {
+        let acknowledged = false;
+        set((state) => {
+          if (!state.terminalReports.some((report) => report.id === reportId)) return state;
+          acknowledged = true;
+          return {
+            jobs: clearDeliveryFailure
+              ? state.jobs.map((job) =>
+                  job.lastSettledAttemptId === reportId
+                    ? {
+                        ...job,
+                        lastDeliveryError: undefined,
+                        lastDeliveryFailureAtMs: undefined,
+                        updatedAtMs: Date.now(),
+                      }
+                    : job,
+                )
+              : state.jobs,
+            terminalReports: state.terminalReports.filter((report) => report.id !== reportId),
+          };
+        });
+        return acknowledged;
+      },
+
+      restoreTerminalReport: (report) =>
         set((state) => ({
-          jobs: state.jobs.map((job) =>
-            job.id === id && !job.runningAttemptId
-              ? {
-                  ...job,
-                  runningAttemptId: attemptId,
-                  runningStartedAtMs: startedAtMs,
-                  ...(error ? { lastError: error } : {}),
-                  updatedAtMs: Date.now(),
-                }
-              : job,
-          ),
+          terminalReports: appendTerminalReport(state.terminalReports, report),
         })),
+
+      recordTerminalReportDeliveryFailure: ({ id, attemptId, timestamp, error }) => {
+        let jobRecorded = false;
+        let reportRecorded = false;
+        set((state) => {
+          const sanitizedError = sanitizeSchedulerReportText(error);
+          const jobs = state.jobs.map((job) => {
+            if (job.id !== id || job.lastSettledAttemptId !== attemptId) return job;
+            jobRecorded = true;
+            return {
+              ...job,
+              updatedAtMs: Date.now(),
+              lastDeliveryError: sanitizedError,
+              lastDeliveryFailureAtMs: timestamp,
+            };
+          });
+          const terminalReports = state.terminalReports.map((report) => {
+            if (report.id !== attemptId || report.jobId !== id) return report;
+            reportRecorded = true;
+            return sanitizeSchedulerTerminalReport({
+              ...report,
+              deliveryWarnings: Array.from(
+                new Set([...(report.deliveryWarnings ?? []), sanitizedError]),
+              ),
+            });
+          });
+          return {
+            jobs,
+            terminalReports,
+          };
+        });
+        return { jobRecorded, reportRecorded };
+      },
+
+      restoreJobAttemptClaim: ({
+        id,
+        attemptId,
+        startedAtMs,
+        definitionRevision,
+        attempt,
+        error,
+        conversationId,
+        effectRisk,
+        occurrenceId,
+        completion,
+        claimSnapshot,
+      }) =>
+        set((state) => {
+          const report = state.terminalReports.find((candidate) => candidate.id === attemptId);
+          return {
+            jobs: state.jobs.map((job) =>
+              job.id === id && !job.runningAttemptId
+                ? claimSnapshot
+                  ? {
+                      ...claimSnapshot,
+                      runningCompletion:
+                        normalizeRunningCompletion(completion) ??
+                        normalizeRunningCompletion(claimSnapshot.runningCompletion),
+                      ...(error ? { lastError: error } : {}),
+                      updatedAtMs: Date.now(),
+                    }
+                  : {
+                      ...job,
+                      runningAttemptId: attemptId,
+                      runningStartedAtMs: startedAtMs,
+                      runningDefinitionRevision: definitionRevision,
+                      runningAttemptNumber: attempt,
+                      runningConversationId:
+                        conversationId ??
+                        (report?.conversationDurable !== false
+                          ? report?.conversationId
+                          : undefined),
+                      runningEffectRisk: effectRisk ?? 'unsafe',
+                      runningOccurrenceId: occurrenceId ?? job.retryOccurrenceId ?? attemptId,
+                      runningCompletion:
+                        normalizeRunningCompletion(completion) ??
+                        (report?.status === 'success'
+                          ? normalizeRunningCompletion({
+                              completedAtMs: report.completedAtMs,
+                              output: report.output ?? '',
+                              conversationId: report.conversationId,
+                              conversationDurable: report.conversationDurable,
+                              warnings: report.warnings,
+                            })
+                          : undefined),
+                      ...(error ? { lastError: error } : {}),
+                      updatedAtMs: Date.now(),
+                    }
+                : job,
+            ),
+            terminalReports: state.terminalReports.filter(
+              (candidate) => candidate.id !== attemptId,
+            ),
+          };
+        }),
 
       resetJobRetry: (id) =>
         set((state) => ({
@@ -377,6 +506,8 @@ export const useSchedulerStore = create<SchedulerState>()(
                   updatedAtMs: Date.now(),
                   retryAttempts: 0,
                   nextRetryAtMs: undefined,
+                  retryConversationId: undefined,
+                  retryOccurrenceId: undefined,
                   lastError: undefined,
                 }
               : j,
@@ -390,59 +521,58 @@ export const useSchedulerStore = create<SchedulerState>()(
           ),
         })),
 
-      recordEvaluation: (timestamp) =>
-        set(() => ({
-          lastEvaluationAtMs: timestamp,
-        })),
-
       getJob: (id) => get().jobs.find((j) => j.id === id),
       getEnabledJobs: () => get().jobs.filter((j) => j.enabled),
     }),
     {
       name: SCHEDULER_STORE_KEY,
       storage: createJSONStorage(() => schedulerStateStorage),
-      version: 4,
+      version: 7,
       migrate: (persistedState: any, version) => {
         if (!persistedState) return persistedState;
-        let nextState = persistedState;
+        let jobs = Array.isArray(persistedState.jobs) ? persistedState.jobs : [];
         if (version < 2) {
-          nextState = {
-            ...persistedState,
-            jobs: Array.isArray(persistedState.jobs)
-              ? persistedState.jobs.map((job: CronJob) => ({
-                  ...job,
-                  delivery: {
-                    ...job.delivery,
-                    mode:
-                      job.delivery?.mode === 'notification' || job.delivery?.mode === 'both'
-                        ? job.delivery.mode
-                        : 'both',
-                  },
-                }))
-              : [],
-          };
+          jobs = jobs.map((job: CronJob) => ({
+            ...job,
+            delivery: {
+              ...job.delivery,
+              mode:
+                job.delivery?.mode === 'notification' || job.delivery?.mode === 'both'
+                  ? job.delivery.mode
+                  : 'both',
+            },
+          }));
         }
-        if (version < 3) {
-          const now = Date.now();
-          return {
-            ...nextState,
-            lastEvaluationAtMs: finiteTimestamp(nextState.lastEvaluationAtMs),
-            jobs: Array.isArray(nextState.jobs)
-              ? nextState.jobs.map((job: CronJob) => normalizePersistedJob(job, now))
-              : [],
-          };
+        const migratedState = { ...persistedState };
+        delete migratedState.lastEvaluationAtMs;
+        const now = Date.now();
+        const normalizedJobs = jobs.map((job: CronJob) => normalizePersistedJob(job, now));
+        let terminalReports =
+          version < 6 ? [] : normalizeTerminalReports(persistedState.terminalReports);
+        if (version === 6) {
+          for (let index = 0; index < normalizedJobs.length; index += 1) {
+            const originalJob = jobs[index] as CronJob & {
+              lastAmbiguousReportedAttemptId?: string;
+            };
+            const normalizedJob = normalizedJobs[index];
+            if (
+              !normalizedJob.lastAmbiguousAttemptId ||
+              originalJob.lastAmbiguousReportedAttemptId === normalizedJob.lastAmbiguousAttemptId
+            ) {
+              continue;
+            }
+            const report = buildReconciledAttemptTerminalReport(
+              normalizedJob,
+              normalizedJob.lastAmbiguousAtMs ?? now,
+            );
+            if (report) terminalReports = appendTerminalReport(terminalReports, report);
+          }
         }
-        if (version < 4) {
-          const now = Date.now();
-          return {
-            ...nextState,
-            lastEvaluationAtMs: finiteTimestamp(nextState.lastEvaluationAtMs),
-            jobs: Array.isArray(nextState.jobs)
-              ? nextState.jobs.map((job: CronJob) => normalizePersistedJob(job, now))
-              : [],
-          };
-        }
-        return nextState;
+        return {
+          ...migratedState,
+          terminalReports,
+          jobs: normalizedJobs,
+        };
       },
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Partial<SchedulerState> | undefined;
@@ -450,6 +580,7 @@ export const useSchedulerStore = create<SchedulerState>()(
         return {
           ...currentState,
           ...persisted,
+          terminalReports: normalizeTerminalReports(persisted?.terminalReports),
           jobs: Array.isArray(persisted?.jobs)
             ? persisted.jobs.map((job) => normalizePersistedJob(job, now))
             : [],

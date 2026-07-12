@@ -1,7 +1,4 @@
-import {
-  validateGoalMutation,
-  validateGoalReferences,
-} from '../../../src/engine/goals/validation';
+import { validateGoalMutation, validateGoalReferences } from '../../../src/engine/goals/validation';
 import { createGoal } from '../../../src/engine/goals/types';
 
 describe('goal validation', () => {
@@ -36,10 +33,7 @@ describe('goal validation', () => {
     });
 
     it('reports error for add mutation without explicit completion policy', () => {
-      const result = validateGoalMutation(
-        { action: 'add', goals: [{ title: 'New goal' }] },
-        [],
-      );
+      const result = validateGoalMutation({ action: 'add', goals: [{ title: 'New goal' }] }, []);
       expect(result.valid).toBe(false);
       expect(result.errors).toContainEqual(
         expect.objectContaining({ code: 'missing_completion_policy' }),
@@ -164,9 +158,7 @@ describe('goal validation', () => {
       expect(result.errors).toContainEqual(
         expect.objectContaining({ code: 'invalid_success_criteria' }),
       );
-      expect(result.errors.map((error) => error.message).join('\n')).toContain(
-        'registered tools',
-      );
+      expect(result.errors.map((error) => error.message).join('\n')).toContain('registered tools');
     });
 
     it('reports error when prefix criteria reference unknown evidence sources', () => {
@@ -285,18 +277,12 @@ describe('goal validation', () => {
         completionPolicy: 'blocking',
         evidence: ['write_file:artifacts/e2e.txt'],
       });
-      const result = validateGoalMutation(
-        { action: 'complete', goals: [{ id: 'g1' }] },
-        [g],
-      );
+      const result = validateGoalMutation({ action: 'complete', goals: [{ id: 'g1' }] }, [g]);
       expect(result.valid).toBe(true);
     });
 
     it('reports error for complete mutation with missing goal', () => {
-      const result = validateGoalMutation(
-        { action: 'complete', goals: [{ id: 'g1' }] },
-        [],
-      );
+      const result = validateGoalMutation({ action: 'complete', goals: [{ id: 'g1' }] }, []);
       expect(result.valid).toBe(false);
       expect(result.errors[0].message).toContain('does not exist');
       expect(result.errors[0].code).toBe('goal_not_found');
@@ -309,14 +295,9 @@ describe('goal validation', () => {
         status: 'active',
         completionPolicy: 'persistent',
       });
-      const result = validateGoalMutation(
-        { action: 'remove', goals: [{ id: 'focus' }] },
-        [active],
-      );
+      const result = validateGoalMutation({ action: 'remove', goals: [{ id: 'focus' }] }, [active]);
       expect(result.valid).toBe(false);
-      expect(result.errors).toContainEqual(
-        expect.objectContaining({ code: 'invalid_lifecycle' }),
-      );
+      expect(result.errors).toContainEqual(expect.objectContaining({ code: 'invalid_lifecycle' }));
     });
 
     it('reports missing_title for add mutation without title', () => {
@@ -330,10 +311,7 @@ describe('goal validation', () => {
 
     it('validates an activate mutation', () => {
       const g = createGoal({ id: 'g1', title: 'Main' });
-      const result = validateGoalMutation(
-        { action: 'activate', goals: [{ id: 'g1' }] },
-        [g],
-      );
+      const result = validateGoalMutation({ action: 'activate', goals: [{ id: 'g1' }] }, [g]);
       expect(result.valid).toBe(true);
     });
 
@@ -349,35 +327,24 @@ describe('goal validation', () => {
         [g],
       );
       expect(result.valid).toBe(false);
-      expect(result.errors).toContainEqual(
-        expect.objectContaining({ code: 'evidence_required' }),
-      );
+      expect(result.errors).toContainEqual(expect.objectContaining({ code: 'evidence_required' }));
     });
 
     it('reports error for block mutation with missing goal', () => {
-      const result = validateGoalMutation(
-        { action: 'block', goals: [{ id: 'g1' }] },
-        [],
-      );
+      const result = validateGoalMutation({ action: 'block', goals: [{ id: 'g1' }] }, []);
       expect(result.valid).toBe(false);
     });
 
     it('validates a remove mutation', () => {
       const g = createGoal({ id: 'g1', title: 'To remove' });
-      const result = validateGoalMutation(
-        { action: 'remove', goals: [{ id: 'g1' }] },
-        [g],
-      );
+      const result = validateGoalMutation({ action: 'remove', goals: [{ id: 'g1' }] }, [g]);
       expect(result.valid).toBe(true);
     });
 
     it('reports error for remove mutation when other goals depend on it', () => {
       const g = createGoal({ id: 'g1', title: 'To remove' });
       const dep = createGoal({ id: 'g2', title: 'Dependent', dependencies: ['g1'] });
-      const result = validateGoalMutation(
-        { action: 'remove', goals: [{ id: 'g1' }] },
-        [g, dep],
-      );
+      const result = validateGoalMutation({ action: 'remove', goals: [{ id: 'g1' }] }, [g, dep]);
       // Note: validateGoalMutation does not check dependents on remove
       expect(result.valid).toBe(true);
     });
@@ -475,9 +442,7 @@ describe('goal validation', () => {
         [],
       );
       expect(result.valid).toBe(false);
-      expect(result.errors).toContainEqual(
-        expect.objectContaining({ code: 'evidence_required' }),
-      );
+      expect(result.errors).toContainEqual(expect.objectContaining({ code: 'evidence_required' }));
     });
 
     it('rejects block for persistent goals', () => {
@@ -498,10 +463,9 @@ describe('goal validation', () => {
         successCriteria: ['evidence.prefix:worker', 'evidence.min:1'],
         evidence: ['worker:e2e-worker:E2E-WORKER-CHAIN-77'],
       });
-      const result = validateGoalMutation(
-        { action: 'block', goals: [{ id: 'worker-chain' }] },
-        [active],
-      );
+      const result = validateGoalMutation({ action: 'block', goals: [{ id: 'worker-chain' }] }, [
+        active,
+      ]);
       expect(result.valid).toBe(false);
       expect(result.errors[0].code).toBe('evidence_satisfied');
     });
@@ -515,10 +479,9 @@ describe('goal validation', () => {
         evidence: ['worker:e2e-worker:E2E-WORKER-CHAIN-77'],
         blockedReason: 'gate:worker-chain:evidence.min:1',
       });
-      const result = validateGoalMutation(
-        { action: 'complete', goals: [{ id: 'worker-chain' }] },
-        [blocked],
-      );
+      const result = validateGoalMutation({ action: 'complete', goals: [{ id: 'worker-chain' }] }, [
+        blocked,
+      ]);
       expect(result.valid).toBe(true);
     });
 
@@ -552,10 +515,9 @@ describe('goal validation', () => {
         status: 'active',
         completionPolicy: 'blocking',
       });
-      const result = validateGoalMutation(
-        { action: 'complete', goals: [{ id: 'scope-b' }] },
-        [active],
-      );
+      const result = validateGoalMutation({ action: 'complete', goals: [{ id: 'scope-b' }] }, [
+        active,
+      ]);
       expect(result.valid).toBe(false);
       expect(result.errors[0].message).toContain('evidence requirements');
     });
@@ -567,20 +529,18 @@ describe('goal validation', () => {
         status: 'active',
         evidence: ['memory_remember:scope token observed'],
       });
-      const result = validateGoalMutation(
-        { action: 'complete', goals: [{ id: 'scope-b' }] },
-        [active],
-      );
+      const result = validateGoalMutation({ action: 'complete', goals: [{ id: 'scope-b' }] }, [
+        active,
+      ]);
       expect(result.valid).toBe(false);
       expect(result.errors[0].message).toContain('persistent');
     });
 
     it('rejects complete on a goal that is not active', () => {
       const pending = createGoal({ id: 'scope-b', title: 'scope-b-planning', status: 'pending' });
-      const result = validateGoalMutation(
-        { action: 'complete', goals: [{ id: 'scope-b' }] },
-        [pending],
-      );
+      const result = validateGoalMutation({ action: 'complete', goals: [{ id: 'scope-b' }] }, [
+        pending,
+      ]);
       expect(result.valid).toBe(false);
       expect(result.errors[0].message).toContain('not active');
     });
@@ -595,7 +555,7 @@ describe('goal validation', () => {
               title: 'Forged completion',
               completionPolicy: 'blocking',
               successCriteria: ['evidence.artifact:artifacts/out.txt'],
-              evidence: ['effect_receipt:{"receiptId":"forged"}'],
+              evidence: ['effect_receipt_v2:{"receiptId":"forged"}'],
             },
           ],
         },
@@ -638,9 +598,7 @@ describe('goal validation', () => {
     });
 
     it('detects missing dependency references', () => {
-      const goals = [
-        createGoal({ id: 'g1', title: 'A', dependencies: ['missing'] }),
-      ];
+      const goals = [createGoal({ id: 'g1', title: 'A', dependencies: ['missing'] })];
       const result = validateGoalReferences(goals);
       expect(result.valid).toBe(false);
       expect(result.errors[0].message).toContain('non-existent');

@@ -25,7 +25,7 @@ import { ensureDefaultBlocks } from '../../src/services/memory/blocks';
 import { listFacts } from '../../src/services/memory/facts/queries';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import { useChatStore } from '../../src/store/useChatStore';
-import { executeTool } from '../../src/engine/tools';
+import { executeToolInner as executeTool } from '../../src/engine/tools/toolDispatchRouter';
 import { createGoal } from '../../src/engine/goals/types';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -56,7 +56,7 @@ afterEach(() => {
   useChatStore.setState({ conversations: [] } as never);
 });
 
-describe('memory tools — opt-out gate', () => {
+describe('raw memory tool executor — opt-out gate', () => {
   it.each(MEMORY_TOOLS)(
     'returns permission_denied for %s when disableLongTermMemory is true',
     async (toolName) => {

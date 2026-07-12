@@ -4,18 +4,18 @@ import {
   type ToolDispatcherHarness,
 } from '../helpers/toolDispatcherHarness';
 
-let executeTool: ToolDispatcherHarness['executeTool'];
+let executeTool: ToolDispatcherHarness['executeToolInner'];
 let builtinMod: ToolDispatcherHarness['builtinMod'];
 let sessionInspectionMod: ToolDispatcherHarness['sessionInspectionMod'];
 
 beforeEach(() => {
   const harness = setupToolDispatcherHarness();
-  executeTool = harness.executeTool;
+  executeTool = harness.executeToolInner;
   builtinMod = harness.builtinMod;
   sessionInspectionMod = harness.sessionInspectionMod;
 });
 
-describe('executeTool — builtin routing', () => {
+describe('executeToolInner — raw builtin routing', () => {
   const builtinTools: Array<
     [
       string,

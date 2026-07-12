@@ -5,10 +5,8 @@
 export type CronJobBase<TSchedule, TSessionTarget, TWakeMode, TPayload, TDelivery, TFailureAlert> =
   {
     id: string;
-    agentId?: string;
-    sessionKey?: string;
+    definitionRevision: number;
     name: string;
-    description?: string;
     enabled: boolean;
     deleteAfterRun?: boolean;
     createdAtMs: number;
@@ -29,21 +27,37 @@ export type CronSchedule =
 export type SessionTarget = 'main' | 'isolated';
 export type WakeMode = 'continue' | 'new';
 export type DeliveryMode = 'conversation' | 'notification' | 'both';
-export type SchedulerWakePolicy = 'try_background_then_notify' | 'notify_only' | 'active_only';
+export type SchedulerWakePolicy = 'notify_only' | 'active_only';
 export type SchedulerTrigger =
   | 'scheduled'
   | 'manual'
   | 'missed-recovery'
-  | 'background-fetch'
   | 'foreground-reconcile'
   | 'notification-tap';
 
+export type SchedulerTerminalReport = {
+  id: string;
+  jobId: string;
+  jobName: string;
+  status: 'success' | 'error' | 'retrying';
+  notification: 'success' | 'failure' | 'none';
+  startedAtMs: number;
+  completedAtMs: number;
+  attempt: number;
+  trigger: SchedulerTrigger;
+  output?: string;
+  error?: string;
+  warnings?: string[];
+  deliveryWarnings?: string[];
+  conversationId?: string;
+  conversationDurable?: boolean;
+};
+
 export type CronPayload = {
   prompt: string;
+  mode: ConversationMode;
   model?: string;
   providerId?: string;
-  maxTokens?: number;
-  timeout?: number;
 };
 
 export type CronDelivery = {
@@ -56,6 +70,14 @@ export type CronFailureAlert = {
   maxRetries?: number;
 };
 
+export type SchedulerRunningCompletion = {
+  completedAtMs: number;
+  output: string;
+  conversationId?: string;
+  conversationDurable?: boolean;
+  warnings?: string[];
+};
+
 export type CronJobRuntimeState = {
   nextRunAtMs?: number;
   lastRunAtMs?: number;
@@ -65,14 +87,30 @@ export type CronJobRuntimeState = {
   lastError?: string;
   retryAttempts?: number;
   nextRetryAtMs?: number;
+  retryConversationId?: string;
+  retryOccurrenceId?: string;
   runningAttemptId?: string;
   runningStartedAtMs?: number;
+  runningDefinitionRevision?: number;
+  runningAttemptNumber?: number;
+  runningConversationId?: string;
+  runningEffectRisk?: 'safe' | 'unsafe';
+  runningOccurrenceId?: string;
+  runningCompletion?: SchedulerRunningCompletion;
   lastAmbiguousAttemptId?: string;
   lastAmbiguousAtMs?: number;
+  lastAmbiguousStartedAtMs?: number;
+  lastAmbiguousAttemptNumber?: number;
+  lastDeliveryError?: string;
+  lastDeliveryFailureAtMs?: number;
+  lastSettledAttemptId?: string;
   pendingWakeNotificationId?: string;
   pendingWakeNotificationRunAtMs?: number;
+  pendingWakeNotificationTitle?: string;
   lastWakeAtMs?: number;
   lastWakeSource?: SchedulerTrigger;
+  lastWakeError?: string;
+  lastWakeFailureAtMs?: number;
   wakePolicy?: SchedulerWakePolicy;
 };
 
@@ -85,3 +123,4 @@ export type CronJob = CronJobBase<
   CronFailureAlert
 > &
   CronJobRuntimeState;
+import type { ConversationMode } from '../../types/conversation';

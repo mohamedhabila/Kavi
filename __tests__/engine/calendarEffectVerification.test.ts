@@ -83,6 +83,7 @@ describe('calendar effect verification', () => {
     });
     await expect(
       buildToolEffectReceipt({
+        executionRunId: 'execution-run-1',
         toolCallId: 'tc-calendar',
         toolName: 'calendar_create_event',
         argumentsText,
@@ -102,10 +103,7 @@ describe('calendar effect verification', () => {
     mockGetEventAsync.mockResolvedValue({ id: 'event-1', title: 'Updated planning' });
 
     const result = JSON.parse(
-      await executeCalendarUpdate(
-        { id: 'event-1', title: 'Updated planning' },
-        calendarRuntime,
-      ),
+      await executeCalendarUpdate({ id: 'event-1', title: 'Updated planning' }, calendarRuntime),
     );
 
     expect(result).toMatchObject({ status: 'updated_verified', eventId: 'event-1' });

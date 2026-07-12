@@ -1,5 +1,7 @@
 export const CLEARED_STRUCTURED_MEMORY_TABLES = [
-  'memory_product_experience_observations',
+  'memory_verified_procedure_run_invalidations',
+  'memory_verified_procedure_observations',
+  'memory_verified_procedure_state',
   'memory_retrieval_outcomes',
   'memory_fact_observations',
   'memory_fact_evidence',

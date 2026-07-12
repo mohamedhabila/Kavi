@@ -30,7 +30,7 @@ describe('Sub-Agent Service', () => {
         callbacks.onToolCallComplete?.();
         // onDone without final text
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       const result = await spawnSubAgent(
@@ -54,7 +54,7 @@ describe('Sub-Agent Service', () => {
         callbacks.onToolCallStart?.({ name: 'write_file' });
         callbacks.onToolCallComplete?.();
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       const result = await spawnSubAgent(
@@ -83,7 +83,7 @@ describe('Sub-Agent Service', () => {
         callbacks.onToolCallStart?.({ name: 'text_search' });
         callbacks.onToolCallComplete?.();
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       const result = await spawnSubAgent(
@@ -131,7 +131,7 @@ describe('Sub-Agent Service', () => {
         callbacks.onToken?.('Final answer: all checks passed.');
         callbacks.onAssistantMessage?.('Final answer: all checks passed.', []);
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       const result = await spawnSubAgent(
@@ -158,7 +158,7 @@ describe('Sub-Agent Service', () => {
         });
         callbacks.onAssistantMessage?.('Final answer: artifact updated.', []);
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       const result = await spawnSubAgent(
@@ -188,7 +188,7 @@ describe('Sub-Agent Service', () => {
         callbacks.onToolCallStart?.({ name: 'read_file' });
         callbacks.onToolCallComplete?.();
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       const result = await spawnSubAgent(
@@ -227,7 +227,7 @@ describe('Sub-Agent Service', () => {
           result: 'No files matched "*" under .',
         });
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       const result = await spawnSubAgent(
@@ -261,7 +261,7 @@ describe('Sub-Agent Service', () => {
           result: 'workflow run 101 completed with success',
         });
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       const result = await spawnSubAgent(
@@ -295,7 +295,7 @@ describe('Sub-Agent Service', () => {
           result: 'Updated src/App.tsx and saved changes.',
         });
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       const result = await spawnSubAgent(
@@ -325,7 +325,7 @@ describe('Sub-Agent Service', () => {
           result: 'Updated src/App.tsx and saved changes.',
         });
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       const result = await spawnSubAgent(
@@ -401,7 +401,7 @@ describe('Sub-Agent Service', () => {
           result: 'Release deployment completed successfully.',
         });
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       const result = await spawnSubAgent(
@@ -432,7 +432,7 @@ describe('Sub-Agent Service', () => {
           result: 'workflow run 101 failed with environment constraints',
         });
         callbacks.onDone?.();
-        return Promise.resolve();
+        return Promise.resolve({ terminalDisposition: 'final_candidate' });
       });
 
       const result = await spawnSubAgent(
