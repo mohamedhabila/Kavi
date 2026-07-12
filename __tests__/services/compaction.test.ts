@@ -6,10 +6,12 @@ import {
   DefaultContextEngine,
   clearOldToolResults,
   determineCompactionTier,
-  buildStructuredSummary,
   TOOL_CLEARED_PLACEHOLDER,
-  COMPACTION_SUMMARY_MARKER,
 } from '../../src/services/context/compaction';
+import {
+  buildStructuredSummary,
+  COMPACTION_SUMMARY_MARKER,
+} from '../../src/services/context/compactionSummary';
 import type { Message } from '../../src/types/message';
 
 // Mock events bus

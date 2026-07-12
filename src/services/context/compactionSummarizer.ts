@@ -13,7 +13,7 @@ import {
   COMPACTION_SUMMARY_MARKER,
   getMessageContentForContext,
   type StructuredSummaryMemoryHints,
-} from './compaction';
+} from './compactionSummary';
 import type { CompactionSummarizerConfig } from './compactionModelResolver';
 
 const COMPACTION_LLM_TIMEOUT_MS = 45_000;

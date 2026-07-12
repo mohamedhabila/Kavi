@@ -4,9 +4,9 @@
 
 import {
   DefaultContextEngine,
-  buildStructuredSummary,
   COMPACTION_IDLE_GUARD_MS,
 } from '../../../src/services/context/compaction';
+import { buildStructuredSummary } from '../../../src/services/context/compactionSummary';
 import type { Message } from '../../../src/types/message';
 
 jest.mock('../../../src/services/events/bus', () => ({
