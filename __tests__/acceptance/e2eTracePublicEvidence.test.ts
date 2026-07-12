@@ -350,6 +350,8 @@ describe('public immutable E2E evidence projection', () => {
 
   it('rebuilds a closed public DTO and rejects the old turn contract', () => {
     const trace = buildE2EScenarioTraceSummary({ result: buildPrivateEvidenceResult() });
+    expect(SAFE_NATIVE_FIXTURE_PATHS.has('calendar.lastCreatedEventId')).toBe(true);
+    expect(SAFE_NATIVE_FIXTURE_PATHS.has('calendar.lastCreatedTitle')).toBe(true);
     const sourceTurn = trace.turns[0];
     expect(projectUserEvidence(sourceTurn?.user)).not.toBeNull();
     expect(projectRouteEvidence(sourceTurn?.route)).not.toBeNull();

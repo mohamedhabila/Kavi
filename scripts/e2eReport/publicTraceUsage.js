@@ -55,6 +55,8 @@ const SAFE_NATIVE_FIXTURE_PATHS = new Set([
   'calendar.allowsModifications',
   'calendar.createdEventCount',
   'calendar.updatedEventCount',
+  'calendar.lastCreatedEventId',
+  'calendar.lastCreatedTitle',
   'calendar.lastCreatedStartDate',
   'calendar.lastCreatedEndDate',
   'calendar.lastCreatedDurationMinutes',
