@@ -73,6 +73,26 @@ tag candidate and run the release gate from a clean checkout.
 - Run `npm run check:licenses` after dependency changes and commit regenerated `THIRD_PARTY_NOTICES.md` when it changes.
 - Run `npm run check:links`.
 - Confirm app metadata and native identifiers with `npm run check:app-metadata`.
+- Confirm the SDK dependency matrix with `npm run check:expo-dependencies`.
+  `react-native-gesture-handler` is intentionally excluded from Expo's
+  best-effort version catalog: the catalog's 2.30.1 release does not compile
+  against SDK 55's React Native 0.83.6 and Kotlin 2.3 toolchain, while 2.31.2
+  contains the upstream compiler fix and subsequent Android accessibility
+  fixes. The repository check binds this exception to the exact native-build-
+  validated Expo, React Native, and Gesture Handler versions. Remove the
+  exception before any SDK tuple change, run Expo's unfiltered check, and add a
+  new exception only when the upstream incompatibility and both native build
+  results are documented.
+- The SDK 55 build graph currently retains one moderate advisory,
+  [GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq),
+  through Expo's build-time
+  `@expo/config-plugins -> xcode@3.0.1 -> uuid@7.0.3` chain. npm expands that
+  one chain into multiple findings. Kavi does not execute this package in the
+  app runtime, and the `xcode` package calls `uuid.v4()` without the
+  caller-provided buffer implicated by the advisory's affected APIs. This
+  disposition must be reviewed whenever Expo, `xcode`, or `uuid` changes; it
+  stops being acceptable if the call sites or reachability change, severity
+  increases, or an SDK-compatible upstream fix becomes available.
 - Run the Android release environment check with
   `npm run check:android:release-env`.
 - Run iOS simulator release validation with `npm run build:ios:release-sim`

@@ -14,11 +14,9 @@ describe('notifications service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValue({
-      granted: true,
       status: 'granted',
     });
     (Notifications.requestPermissionsAsync as jest.Mock).mockResolvedValue({
-      granted: true,
       status: 'granted',
     });
     (Notifications.scheduleNotificationAsync as jest.Mock).mockResolvedValue('notification-id');
@@ -142,7 +140,6 @@ describe('notifications service', () => {
 
   it('requests permissions when not already granted', async () => {
     (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValueOnce({
-      granted: false,
       status: 'denied',
     });
 
@@ -153,17 +150,31 @@ describe('notifications service', () => {
 
   it('throws when notification permission is denied', async () => {
     (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValueOnce({
-      granted: false,
       status: 'denied',
     });
     (Notifications.requestPermissionsAsync as jest.Mock).mockResolvedValueOnce({
-      granted: false,
       status: 'denied',
     });
 
     await expect(sendLocalNotification({ title: 'Denied', body: 'Nope' })).rejects.toThrow(
       'Notification permission denied',
     );
+  });
+
+  it.each([
+    Notifications.IosAuthorizationStatus.AUTHORIZED,
+    Notifications.IosAuthorizationStatus.PROVISIONAL,
+    Notifications.IosAuthorizationStatus.EPHEMERAL,
+  ])('accepts iOS notification authorization status %s without prompting again', async (status) => {
+    (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValueOnce({
+      status: 'undetermined',
+      ios: { status },
+    });
+
+    await sendLocalNotification({ title: 'Authorized', body: 'Allowed' });
+
+    expect(Notifications.requestPermissionsAsync).not.toHaveBeenCalled();
+    expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(1);
   });
 
   it('subscribes to notification tap routes and filters by default action', () => {

@@ -29,7 +29,7 @@ function ensureNotificationHandlerConfigured(): void {
 
 async function ensurePermissions(): Promise<void> {
   const existing = await Notifications.getPermissionsAsync();
-  if (existing.granted) return;
+  if (allowsNotifications(existing)) return;
 
   const requested = await Notifications.requestPermissionsAsync({
     ios: {
@@ -39,9 +39,22 @@ async function ensurePermissions(): Promise<void> {
     },
   });
 
-  if (!requested.granted) {
+  if (!allowsNotifications(requested)) {
     throw new NotificationPermissionDeniedError();
   }
+}
+
+function allowsNotifications(permission: Notifications.NotificationPermissionsStatus): boolean {
+  if (permission.status === Notifications.PermissionStatus.GRANTED) {
+    return true;
+  }
+
+  const iosStatus = permission.ios?.status;
+  return (
+    iosStatus === Notifications.IosAuthorizationStatus.AUTHORIZED ||
+    iosStatus === Notifications.IosAuthorizationStatus.PROVISIONAL ||
+    iosStatus === Notifications.IosAuthorizationStatus.EPHEMERAL
+  );
 }
 
 async function ensureChannelConfigured(): Promise<void> {
