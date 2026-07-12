@@ -86,6 +86,7 @@ export interface ExecuteAgentControlGraphToolTurnParams {
   workspaceConversationId?: string;
   workspaceReadFallbackConversationId?: string;
   availableToolNames: ReadonlySet<string>;
+  catalogVisibleToolNames?: ReadonlySet<string>;
   runtimeToolAvailability: RuntimeToolAvailabilityContext;
   toolCallHistory: ToolCallRecord[];
   stagnationSignatures: IterationProgressSignature[];
@@ -241,6 +242,7 @@ export async function executeAgentControlGraphToolTurn(
     workspaceConversationId: params.workspaceConversationId,
     workspaceReadFallbackConversationId: params.workspaceReadFallbackConversationId,
     availableToolNames: params.availableToolNames,
+    catalogVisibleToolNames: params.catalogVisibleToolNames,
     runtimeToolAvailability: params.runtimeToolAvailability,
     toolCallHistory: params.toolCallHistory,
     trackedAsyncOperations: params.trackedAsyncOperations,

@@ -111,4 +111,5 @@ export type ExecuteToolCatalogArgs = {
 
 export type ExecuteToolCatalogOptions = {
   availableToolNames?: ReadonlySet<string>;
+  visibleToolNames?: ReadonlySet<string>;
 };

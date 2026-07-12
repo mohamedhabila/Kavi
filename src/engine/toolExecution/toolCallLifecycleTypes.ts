@@ -42,6 +42,7 @@ export type ToolExecutionLifecycleParams = {
   workspaceConversationId?: string;
   workspaceReadFallbackConversationId?: string;
   availableToolNames: ReadonlySet<string>;
+  catalogVisibleToolNames?: ReadonlySet<string>;
   runtimeToolAvailability: RuntimeToolAvailabilityContext;
   toolCallHistory: ToolCallRecord[];
   groundedRequestScopedTools?: ReadonlyArray<ToolDefinition>;

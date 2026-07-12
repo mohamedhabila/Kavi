@@ -133,14 +133,20 @@ export function buildToolCatalogOverviewResponse(params: ToolCatalogOverviewPara
     sampleTools: string[];
     skills?: string[];
   }> = Object.entries(TOOL_CATALOG_CATEGORIES)
-    .map(([category, config]) => ({
-      category,
-      count: category === 'github' ? params.githubCapabilityTools.length : config.tools.length,
-      sampleTools:
-        category === 'github'
-          ? sampleTools(params.githubCapabilityTools.map((tool) => tool.name))
-          : sampleTools(config.tools),
-    }))
+    .map(([category, config]) => {
+      const visibleStaticToolNames = config.tools.filter((name) => params.staticToolMap.has(name));
+      return {
+        category,
+        count:
+          category === 'github'
+            ? params.githubCapabilityTools.length
+            : visibleStaticToolNames.length,
+        sampleTools:
+          category === 'github'
+            ? sampleTools(params.githubCapabilityTools.map((tool) => tool.name))
+            : sampleTools(visibleStaticToolNames),
+      };
+    })
     .filter((entry) => entry.count > 0);
   if (params.mcpCatalog.servers.length > 0 || params.mcpCatalog.pendingServers.length > 0) {
     catalog.push({

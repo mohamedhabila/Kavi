@@ -221,4 +221,21 @@ describe('builtin-tool-catalogSearch', () => {
       reason: 'callable_now',
     });
   });
+
+  it('does not reveal tools outside the code-owned catalog visibility boundary', async () => {
+    const visibleToolNames = new Set(['tool_catalog', 'tool_describe', 'memory_recall', 'wait']);
+    const search = JSON.parse(
+      await executeToolCatalog({ query: 'sessions_spawn delegated worker' }, { visibleToolNames }),
+    );
+    const sessionsCategory = JSON.parse(
+      await executeToolCatalog({ category: 'sessions' }, { visibleToolNames }),
+    );
+    const overview = JSON.parse(await executeToolCatalog({}, { visibleToolNames }));
+
+    expect(search.tools.map((entry: { name: string }) => entry.name)).not.toContain(
+      'sessions_spawn',
+    );
+    expect(sessionsCategory.tools.map((entry: { name: string }) => entry.name)).toEqual(['wait']);
+    expect(JSON.stringify(overview)).not.toContain('sessions_spawn');
+  });
 });

@@ -39,6 +39,7 @@ export async function executeAgentControlGraphToolBatch(params: {
   workspaceConversationId?: string;
   workspaceReadFallbackConversationId?: string;
   availableToolNames: ReadonlySet<string>;
+  catalogVisibleToolNames?: ReadonlySet<string>;
   runtimeToolAvailability: RuntimeToolAvailabilityContext;
   toolCallHistory: ToolCallRecord[];
   trackedAsyncOperations: Map<string, TrackedAsyncOperation>;
@@ -124,6 +125,7 @@ export async function executeAgentControlGraphToolBatch(params: {
       workspaceConversationId: params.workspaceConversationId,
       workspaceReadFallbackConversationId: params.workspaceReadFallbackConversationId,
       availableToolNames: params.availableToolNames,
+      catalogVisibleToolNames: params.catalogVisibleToolNames,
       runtimeToolAvailability: params.runtimeToolAvailability,
       toolCallHistory: params.toolCallHistory,
       groundedRequestScopedTools: params.groundedRequestScopedTools,

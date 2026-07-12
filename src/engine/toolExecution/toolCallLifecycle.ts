@@ -201,6 +201,9 @@ export async function executeToolCallLifecycle(
         workspaceConversationId: params.workspaceConversationId,
         workspaceReadFallbackConversationId: params.workspaceReadFallbackConversationId,
         availableToolNames: Array.from(params.availableToolNames),
+        catalogVisibleToolNames: params.catalogVisibleToolNames
+          ? Array.from(params.catalogVisibleToolNames)
+          : undefined,
         controlGraphGoals: params.controlGraphGoals,
         agentRunId: params.agentRunId,
         executionRunId: params.executionRunId,

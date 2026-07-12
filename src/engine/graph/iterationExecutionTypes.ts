@@ -127,6 +127,7 @@ export type GraphIterationBindings = {
 
 export type ToolRuntimeBindings = {
   availableToolNames: ReadonlySet<string>;
+  catalogVisibleToolNames: ReadonlySet<string>;
   currentUserMessage?: CodeOwnedCurrentUserMessage;
   memoryConversationId: string;
   runtimeToolAvailability: RuntimeToolAvailabilityContext;

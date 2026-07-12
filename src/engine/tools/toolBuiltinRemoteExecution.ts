@@ -1,6 +1,30 @@
-import { executeExpoEasBuild, executeExpoEasCreateProject, executeExpoEasDeployWeb, executeExpoEasListProjects, executeExpoEasProbe, executeExpoEasStatus, executeExpoEasSubmit, executeExpoEasUpdate } from './builtin-expoProjectExecution';
-import { executeExpoEasGraphql, executeExpoEasWorkflowRuns, executeExpoEasWorkflowStatus, executeExpoEasWorkflowWait } from './builtin-expoWorkflowExecution';
-import { executeSshBackgroundJobStatus, executeSshBackgroundJobWait, executeSshDeletePath, executeSshExec, executeSshListDirectory, executeSshMakeDirectory, executeSshReadFile, executeSshRenamePath, executeSshWriteFile } from './builtin-ssh';
+import {
+  executeExpoEasBuild,
+  executeExpoEasCreateProject,
+  executeExpoEasDeployWeb,
+  executeExpoEasListProjects,
+  executeExpoEasProbe,
+  executeExpoEasStatus,
+  executeExpoEasSubmit,
+  executeExpoEasUpdate,
+} from './builtin-expoProjectExecution';
+import {
+  executeExpoEasGraphql,
+  executeExpoEasWorkflowRuns,
+  executeExpoEasWorkflowStatus,
+  executeExpoEasWorkflowWait,
+} from './builtin-expoWorkflowExecution';
+import {
+  executeSshBackgroundJobStatus,
+  executeSshBackgroundJobWait,
+  executeSshDeletePath,
+  executeSshExec,
+  executeSshListDirectory,
+  executeSshMakeDirectory,
+  executeSshReadFile,
+  executeSshRenamePath,
+  executeSshWriteFile,
+} from './builtin-ssh';
 import { executeToolCatalog } from './builtin-tool-catalog';
 import { executeToolDescribe } from './builtin-tool-describe';
 import type { BuiltinToolExecutionParams } from './toolBuiltinExecutionTypes';
@@ -45,7 +69,8 @@ export async function executeBuiltinRemoteTool(
     case 'ssh_background_job_wait':
       return executeSshBackgroundJobWait(args);
     case 'ssh_fs': {
-      const action = args && typeof args.action === 'string' ? String(args.action).toLowerCase() : '';
+      const action =
+        args && typeof args.action === 'string' ? String(args.action).toLowerCase() : '';
       switch (action) {
         case 'list':
         case 'ls':
@@ -109,11 +134,17 @@ export async function executeBuiltinRemoteTool(
         availableToolNames: context?.availableToolNames
           ? new Set(context.availableToolNames)
           : undefined,
+        visibleToolNames: context?.catalogVisibleToolNames
+          ? new Set(context.catalogVisibleToolNames)
+          : undefined,
       });
     case 'tool_describe':
       return executeToolDescribe(args, {
         availableToolNames: context?.availableToolNames
           ? new Set(context.availableToolNames)
+          : undefined,
+        visibleToolNames: context?.catalogVisibleToolNames
+          ? new Set(context.catalogVisibleToolNames)
           : undefined,
       });
     default:

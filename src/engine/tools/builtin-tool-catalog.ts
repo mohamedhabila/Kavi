@@ -19,6 +19,8 @@ import {
 import type {
   ExecuteToolCatalogArgs,
   ExecuteToolCatalogOptions,
+  ToolCatalogMcpCatalog,
+  ToolCatalogSkillCatalog,
 } from './builtin-tool-catalogTypes';
 import { TOOL_DEFINITIONS } from './definitions';
 import { ALL_NATIVE_TOOL_DEFINITIONS } from './native/definitions';
@@ -33,12 +35,41 @@ function hasCatalogSearchArgs(args: ExecuteToolCatalogArgs): boolean {
   return query.length > 0 || capabilities.length > 0;
 }
 
+function filterMcpCatalog(
+  catalog: ToolCatalogMcpCatalog,
+  visibleToolNames: ReadonlySet<string> | undefined,
+): ToolCatalogMcpCatalog {
+  if (!visibleToolNames) return catalog;
+  const servers = catalog.servers.map((server) => {
+    const tools = server.tools.filter((tool) => visibleToolNames.has(tool.name));
+    return { ...server, toolCount: tools.length, tools };
+  });
+  return {
+    ...catalog,
+    servers,
+    tools: catalog.tools.filter((tool) => visibleToolNames.has(tool.name)),
+  };
+}
+
+function filterSkillCatalog(
+  catalog: ToolCatalogSkillCatalog,
+  visibleToolNames: ReadonlySet<string> | undefined,
+): ToolCatalogSkillCatalog {
+  if (!visibleToolNames) return catalog;
+  return {
+    ...catalog,
+    tools: catalog.tools.filter((tool) => visibleToolNames.has(tool.name)),
+  };
+}
+
 function getGithubCapabilityTools(options: {
   mcpCatalog: ReturnType<typeof getDynamicMcpCatalog>;
   skillCatalog: ReturnType<typeof getDynamicSkillCatalog>;
   availableToolNames?: ReadonlySet<string>;
+  visibleToolNames?: ReadonlySet<string>;
 }) {
   const githubMcpTools = options.mcpCatalog.tools
+    .filter((tool) => options.visibleToolNames?.has(tool.name) ?? true)
     .filter((tool) => inferToolCapabilityDescriptor(tool).category === 'github')
     .map((tool) => ({
       name: tool.name,
@@ -55,6 +86,7 @@ function getGithubCapabilityTools(options: {
     }));
 
   const githubSkillTools = options.skillCatalog.tools
+    .filter((tool) => options.visibleToolNames?.has(tool.name) ?? true)
     .filter((tool) => inferToolCapabilityDescriptor(tool).category === 'github')
     .map((tool) => ({
       name: tool.name,
@@ -77,17 +109,22 @@ export async function executeToolCatalog(
   options?: ExecuteToolCatalogOptions,
 ): Promise<string> {
   const availableToolNames = options?.availableToolNames;
-  const staticVisibleTools = [...TOOL_DEFINITIONS, ...ALL_NATIVE_TOOL_DEFINITIONS];
-  const mcpCatalog = getDynamicMcpCatalog();
-  const skillCatalog = getDynamicSkillCatalog();
+  const visibleToolNames = options?.visibleToolNames;
+  const staticVisibleTools = [...TOOL_DEFINITIONS, ...ALL_NATIVE_TOOL_DEFINITIONS].filter(
+    (tool) => visibleToolNames?.has(tool.name) ?? true,
+  );
+  const mcpCatalog = filterMcpCatalog(getDynamicMcpCatalog(), visibleToolNames);
+  const skillCatalog = filterSkillCatalog(getDynamicSkillCatalog(), visibleToolNames);
   const rawRequestedCategory =
     typeof args.category === 'string' ? args.category.trim().toLowerCase() : undefined;
-  const requestedCategory = resolveToolCatalogCategoryName(rawRequestedCategory) ?? rawRequestedCategory;
+  const requestedCategory =
+    resolveToolCatalogCategoryName(rawRequestedCategory) ?? rawRequestedCategory;
   const staticToolMap = new Map(staticVisibleTools.map((tool) => [tool.name, tool]));
   const githubCapabilityTools = getGithubCapabilityTools({
     mcpCatalog,
     skillCatalog,
     availableToolNames,
+    visibleToolNames,
   });
 
   if (hasCatalogSearchArgs(args)) {
@@ -95,7 +132,7 @@ export async function executeToolCatalog(
       query: args.query,
       capabilities: args.capabilities,
       category: requestedCategory,
-      options: { availableToolNames },
+      options: { availableToolNames, visibleToolNames },
     });
   }
 

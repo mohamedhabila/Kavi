@@ -2,6 +2,7 @@ import { buildCapabilitySummary } from './builtin-tool-catalogCapabilitySummary'
 import type { ExecuteToolCatalogOptions } from './builtin-tool-catalogTypes';
 import {
   buildToolCatalogActivation,
+  isToolCatalogVisible,
   searchToolCatalogEntries,
   TOOL_CATALOG_ENTRY_SCHEMA_VERSION,
 } from './builtin-tool-catalogSearch';
@@ -21,6 +22,12 @@ export async function executeToolDescribe(
   if (!requestedName) {
     return JSON.stringify({
       error: 'tool_describe requires a non-empty name',
+    });
+  }
+
+  if (!isToolCatalogVisible(requestedName, options)) {
+    return JSON.stringify({
+      error: `Unknown tool: ${requestedName}`,
     });
   }
 

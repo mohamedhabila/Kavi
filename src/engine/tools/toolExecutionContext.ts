@@ -17,6 +17,8 @@ export interface ToolExecutionContext {
   workspaceConversationId?: string;
   workspaceReadFallbackConversationId?: string;
   availableToolNames?: string[];
+  /** Code-owned catalog visibility after persona and explicit tool authorization. */
+  catalogVisibleToolNames?: string[];
   controlGraphGoals?: ReadonlyArray<AgentGoal>;
   agentRunId?: string;
   /** Required code-owned identity for one orchestrated execution boundary. */

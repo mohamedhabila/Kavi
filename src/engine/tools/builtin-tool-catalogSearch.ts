@@ -21,6 +21,7 @@ import { tokenizeStructuralIdentifiers } from './builtin-tool-catalogSearchToken
 export {
   buildToolCatalogActivation,
   buildToolCatalogSearchIndex,
+  isToolCatalogVisible,
   TOOL_CATALOG_ENTRY_SCHEMA_VERSION,
 } from './builtin-tool-catalogSearchIndex';
 export { resolveToolCatalogCategoryName } from './builtin-tool-catalogSearchMatching';
@@ -296,7 +297,8 @@ function sortByQueryScore(
   right: CatalogSearchableEntry,
   queryTokens: ReadonlyArray<string>,
 ): number {
-  const scoreDelta = scoreEntryQueryMatch(right, queryTokens) - scoreEntryQueryMatch(left, queryTokens);
+  const scoreDelta =
+    scoreEntryQueryMatch(right, queryTokens) - scoreEntryQueryMatch(left, queryTokens);
   if (scoreDelta !== 0) {
     return scoreDelta;
   }

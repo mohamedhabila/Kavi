@@ -41,4 +41,13 @@ describe('executeToolDescribe', () => {
       callableNow: false,
     });
   });
+
+  it('does not describe a tool outside the code-owned catalog visibility boundary', async () => {
+    const result = await executeToolDescribe(
+      { name: 'sessions_spawn' },
+      { visibleToolNames: new Set(['tool_catalog', 'tool_describe', 'wait']) },
+    );
+
+    expect(JSON.parse(result)).toEqual({ error: 'Unknown tool: sessions_spawn' });
+  });
 });

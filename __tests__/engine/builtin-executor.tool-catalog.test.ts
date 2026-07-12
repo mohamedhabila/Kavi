@@ -7,7 +7,7 @@ describe('builtin executor tool catalog', () => {
   installBuiltinExecutorRuntimeReset();
 
   describe('executeToolCatalog', () => {
-    it('returns all categories when no filter', async () => {
+    it('returns only categories backed by visible registered tools', async () => {
       const result = await executeToolCatalog({});
       const parsed = JSON.parse(result);
       expect(parsed.categories).toBeDefined();
@@ -19,15 +19,15 @@ describe('builtin executor tool catalog', () => {
       const categoryNames = parsed.categories.map((c: any) => c.category);
       expect(categoryNames).toContain('files');
       expect(categoryNames).toContain('browser');
-      expect(categoryNames).toContain('workspace');
       expect(categoryNames).toContain('canvas');
-      expect(categoryNames).toContain('sessions');
-      expect(categoryNames).toContain('agents');
       expect(categoryNames).toContain('native');
       expect(categoryNames).toContain('media');
-      expect(categoryNames).toContain('memory');
       expect(categoryNames).toContain('web');
       expect(categoryNames).toContain('code');
+      expect(categoryNames).not.toContain('workspace');
+      expect(categoryNames).not.toContain('sessions');
+      expect(categoryNames).not.toContain('agents');
+      expect(categoryNames).not.toContain('memory');
       expect(parsed.categories.every((entry: any) => entry.sampleTools.length <= 3)).toBe(true);
     });
 
@@ -457,6 +457,32 @@ describe('builtin executor tool catalog', () => {
           },
         }),
       ]);
+    });
+
+    it('removes unauthorized dynamic tools from catalog payloads', async () => {
+      const { mcpManager } = require('../../src/services/mcp/manager');
+
+      mcpManager.getAllStatuses.mockReturnValue([
+        {
+          id: 'srv-1',
+          name: 'Docs MCP',
+          state: 'connected',
+          tools: [{ name: 'search_docs', description: 'Search docs', inputSchema: {} }],
+        },
+      ]);
+
+      const result = JSON.parse(
+        await executeToolCatalog(
+          { category: 'mcp' },
+          { visibleToolNames: new Set(['tool_catalog']) },
+        ),
+      );
+
+      expect(result.tools).toEqual([]);
+      expect(result.servers).toEqual([
+        expect.objectContaining({ id: 'srv-1', toolCount: 0, tools: [] }),
+      ]);
+      expect(JSON.stringify(result)).not.toContain('mcp__srv-1__search_docs');
     });
   });
 });

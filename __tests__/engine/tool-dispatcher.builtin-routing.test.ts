@@ -90,12 +90,14 @@ describe('executeToolInner — raw builtin routing', () => {
   it('passes the current callable tool inventory into tool_catalog', async () => {
     await executeTool('tool_catalog', '{}', CONV_ID, {
       availableToolNames: ['tool_catalog', 'read_file', 'mcp__docs__search_docs'],
+      catalogVisibleToolNames: ['tool_catalog', 'read_file', 'mcp__docs__search_docs', 'wait'],
     });
 
     expect(builtinMod.executeToolCatalog).toHaveBeenCalledWith(
       {},
       expect.objectContaining({
         availableToolNames: new Set(['tool_catalog', 'read_file', 'mcp__docs__search_docs']),
+        visibleToolNames: new Set(['tool_catalog', 'read_file', 'mcp__docs__search_docs', 'wait']),
       }),
     );
   });

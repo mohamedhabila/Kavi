@@ -21,6 +21,13 @@ export type CatalogSearchableEntry = ToolCatalogSearchToolEntry & {
 
 export const TOOL_CATALOG_ENTRY_SCHEMA_VERSION = 'tool-catalog-entry-v1';
 
+export function isToolCatalogVisible(
+  toolName: string,
+  options?: ExecuteToolCatalogOptions,
+): boolean {
+  return options?.visibleToolNames ? options.visibleToolNames.has(toolName) : true;
+}
+
 export function buildToolCatalogActivation(
   toolName: string,
   options?: ExecuteToolCatalogOptions,
@@ -47,7 +54,7 @@ function buildStaticCatalogSearchEntries(
 
     for (const toolName of config.tools) {
       const tool = staticToolMap.get(toolName);
-      if (!tool) {
+      if (!tool || !isToolCatalogVisible(tool.name, options)) {
         continue;
       }
       const descriptor = inferToolCapabilityDescriptor(tool);
@@ -160,7 +167,7 @@ function buildDynamicCatalogSearchEntries(
         ),
       };
     }),
-  ];
+  ].filter((entry) => isToolCatalogVisible(entry.name, options));
 }
 
 export function buildToolCatalogSearchIndex(

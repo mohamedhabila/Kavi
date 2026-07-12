@@ -164,6 +164,7 @@ export async function prepareOrchestratorSessionBootstrap(params: {
   activeModel: string;
   activeProvider: LlmProviderConfig;
   allTools: ToolDefinition[];
+  catalogVisibleToolNames: ReadonlySet<string>;
   consecutivePendingAsyncNoToolTurns: number;
   emitPendingAsyncOperationsChange: () => void;
   failoverState: FailoverState | null;
@@ -235,17 +236,16 @@ export async function prepareOrchestratorSessionBootstrap(params: {
 
   const mcpTools = mcpManager.getAllToolDefinitions();
   const skillTools = getSkillToolDefinitions();
-  const runtimeToolAvailability = getRuntimeToolAvailabilityContext();
-  const allToolsUnfiltered = filterToolsForConversationMode(
-    filterToolsByRuntimeAvailability(
-      filterToolsByInvocationPolicy(buildToolDefinitions(mcpTools, skillTools)),
-      runtimeToolAvailability,
-    ),
+  const modeAuthorizedTools = filterToolsForConversationMode(
+    filterToolsByInvocationPolicy(buildToolDefinitions(mcpTools, skillTools)),
     isSuperAgent ? 'agentic' : 'chitchat',
   );
-  const allTools = params.toolFilter
-    ? allToolsUnfiltered.filter((tool) => params.toolFilter?.(tool.name) !== false)
-    : allToolsUnfiltered;
+  const catalogVisibleTools = params.toolFilter
+    ? modeAuthorizedTools.filter((tool) => params.toolFilter?.(tool.name) !== false)
+    : modeAuthorizedTools;
+  const catalogVisibleToolNames = new Set(catalogVisibleTools.map((tool) => tool.name));
+  const runtimeToolAvailability = getRuntimeToolAvailabilityContext();
+  const allTools = filterToolsByRuntimeAvailability(catalogVisibleTools, runtimeToolAvailability);
 
   const llm = new LlmService(activeProvider);
   const toolCallHistory: ToolCallRecord[] = [];
@@ -278,6 +278,7 @@ export async function prepareOrchestratorSessionBootstrap(params: {
     activeModel,
     activeProvider,
     allTools,
+    catalogVisibleToolNames,
     consecutivePendingAsyncNoToolTurns: 0,
     emitPendingAsyncOperationsChange,
     failoverState,

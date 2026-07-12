@@ -37,6 +37,7 @@ export async function runOrchestratorGraphSession(params: {
     activeModel,
     activeProvider,
     allTools,
+    catalogVisibleToolNames,
     consecutivePendingAsyncNoToolTurns,
     emitPendingAsyncOperationsChange,
     failoverState,
@@ -242,6 +243,7 @@ export async function runOrchestratorGraphSession(params: {
       thinkingLevel,
       toolRuntime: {
         availableToolNames,
+        catalogVisibleToolNames,
         ...(currentUserMessage ? { currentUserMessage } : {}),
         memoryConversationId: sharedConversationId,
         runtimeToolAvailability,
