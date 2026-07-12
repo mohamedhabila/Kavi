@@ -91,6 +91,7 @@ describe('e2eBenchmarkManifest', () => {
         turnLifecycleBoundaries: scenario.userTurns?.map(
           (turn) => turn.lifecycleBefore ?? null,
         ) ?? [null],
+        turnSelectedModes: scenario.userTurns?.map((turn) => turn.selectedMode ?? null) ?? [null],
       });
     }
 

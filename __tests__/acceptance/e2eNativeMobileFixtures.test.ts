@@ -190,6 +190,8 @@ describe('E2E native mobile fixtures', () => {
     });
     expect(getE2ENativeMobileFixtureStateSnapshot().calendar.updatedEventCount).toBe(1);
     expect(getE2ENativeMobileFixtureStateSnapshot().calendar).toMatchObject({
+      lastCreatedEventId: 'e2e-event-1',
+      lastCreatedTitle: 'Updated Review',
       lastCreatedStartDate: '2026-06-12T10:00:00.000Z',
       lastCreatedEndDate: '2026-06-12T10:45:00.000Z',
       lastCreatedDurationMinutes: 45,

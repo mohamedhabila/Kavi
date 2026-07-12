@@ -16,6 +16,7 @@ import {
   E2E_DEFAULT_MAX_TOKENS,
   E2E_PROMPT_CACHE_ELIGIBLE_INPUT_TOKENS,
   E2E_PROMPT_CACHE_MIN_ELIGIBLE_READ_RATE,
+  E2E_PROVISIONAL_SCENARIO_TOKEN_BUDGET_IDS,
   E2E_SCENARIO_MANIFEST_VERSION,
   E2E_SCENARIO_TOKEN_BUDGETS,
 } from './thresholds';
@@ -23,7 +24,7 @@ import type { E2EAssessmentDimension } from './e2eAssessmentDimensions';
 import type { E2ERubric, E2EScenario, E2EUserTurn } from './types';
 import { assertE2EScenarioArtifactTargetsObservable } from './e2eScenarioArtifactContract';
 
-export const E2E_BENCHMARK_MANIFEST_VERSION = '2026-07-11.memory-probe-v4';
+export const E2E_BENCHMARK_MANIFEST_VERSION = '2026-07-12.organic-flow-v6';
 export const E2E_BENCHMARK_SOURCE_REFRESH_DATE = '2026-06-14';
 
 type E2ERubricKind = E2ERubric['kind'];
@@ -94,6 +95,7 @@ export type E2EBenchmarkManifest = {
       route: E2EScenario['execution']['route'];
       turnRoutes: ReadonlyArray<E2EScenario['execution']['route']>;
       turnLifecycleBoundaries: ReadonlyArray<E2EUserTurn['lifecycleBefore'] | null>;
+      turnSelectedModes: ReadonlyArray<E2EUserTurn['selectedMode'] | null>;
     };
   };
   hiddenGroundTruth: {
@@ -105,6 +107,7 @@ export type E2EBenchmarkManifest = {
   trajectoryEvaluators: ReadonlyArray<E2EBenchmarkRubricEvaluator>;
   resourceBudgetEvaluators: ReadonlyArray<E2EBenchmarkRubricEvaluator>;
   tokenBudget: {
+    evidenceStatus: 'established' | 'provisional';
     maxTotalTokens: number;
     cacheEligibleInputThreshold: number;
     targetEligibleCacheReadRate: number;
@@ -193,6 +196,8 @@ const TRAJECTORY_RUBRICS: ReadonlySet<E2ERubricKind> = new Set([
   'turn_memory_receipt',
   'turn_lifecycle_boundary',
   'turn_final_response_token',
+  'turn_clarification',
+  'turn_native_invocation_count',
   'turn_memory_answer',
   'turn_memory_selection',
 ]);
@@ -267,8 +272,11 @@ function structuralEvidenceKindForRubric(rubric: E2ERubric): E2EBenchmarkStructu
     case 'turn_lifecycle_boundary':
       return 'lifecycle_event';
     case 'turn_final_response_token':
+    case 'turn_clarification':
     case 'turn_memory_answer':
       return 'assistant_response';
+    case 'turn_native_invocation_count':
+      return 'native_fixture_state';
     case 'turn_memory_selection':
       return 'memory_retrieval';
     case 'goals_bootstrapped':
@@ -464,6 +472,7 @@ export function buildE2EBenchmarkManifest(scenario: E2EScenario): E2EBenchmarkMa
         turnLifecycleBoundaries: scenario.userTurns?.map(
           (turn) => turn.lifecycleBefore ?? null,
         ) ?? [null],
+        turnSelectedModes: scenario.userTurns?.map((turn) => turn.selectedMode ?? null) ?? [null],
       },
     },
     hiddenGroundTruth: {
@@ -478,6 +487,9 @@ export function buildE2EBenchmarkManifest(scenario: E2EScenario): E2EBenchmarkMa
     trajectoryEvaluators,
     resourceBudgetEvaluators,
     tokenBudget: {
+      evidenceStatus: E2E_PROVISIONAL_SCENARIO_TOKEN_BUDGET_IDS.has(scenario.id)
+        ? 'provisional'
+        : 'established',
       maxTotalTokens: resolveTokenBudget(scenario),
       cacheEligibleInputThreshold: E2E_PROMPT_CACHE_ELIGIBLE_INPUT_TOKENS,
       targetEligibleCacheReadRate: E2E_PROMPT_CACHE_MIN_ELIGIBLE_READ_RATE,

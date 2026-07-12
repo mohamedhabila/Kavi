@@ -193,6 +193,63 @@ describe('turn stage-attribution rubrics', () => {
       }),
     );
   });
+
+  it('grades canonical missing-field clarification semantics and rejects negation', () => {
+    const rubric = {
+      kind: 'turn_clarification',
+      turnIndex: 1,
+      requiredMissingFields: ['new_start_time'],
+    } as const;
+    const withResponse = (text: string) =>
+      buildResult(buildTurn({ finalAssistant: { ...buildTurn().finalAssistant!, text } }));
+
+    expect(
+      evaluateE2ERubric(
+        withResponse('Please tell me when you would like the event moved.'),
+        rubric,
+      ),
+    ).toMatchObject({
+      fixtureId: 'stage-attribution:turn-1:turn_clarification',
+      passed: true,
+      detail: 'turn 1 clarification requested fields: new_start_time',
+    });
+    expect(evaluateE2ERubric(withResponse('The time is currently 14:00.'), rubric)).toMatchObject({
+      passed: false,
+    });
+    expect(
+      evaluateE2ERubric(
+        withResponse('Nothing is missing; no need to provide a new start time.'),
+        rubric,
+      ),
+    ).toMatchObject({
+      passed: false,
+      detail: 'turn 1 did not produce an affirmative clarification request',
+    });
+  });
+
+  it('proves exact per-turn native invocation absence and detects an attempted update', () => {
+    const rubric = {
+      kind: 'turn_native_invocation_count',
+      turnIndex: 1,
+      toolName: 'calendar_update_event',
+      expectedCount: 0,
+    } as const;
+    expect(evaluateE2ERubric(buildResult(), rubric)).toMatchObject({
+      fixtureId: 'stage-attribution:turn-1:calendar_update_event:turn_native_invocation_count',
+      passed: true,
+    });
+    const attempted = buildTurn({
+      native: {
+        ...buildTurn().native,
+        invocations: [{ toolName: 'calendar_update_event' }] as TurnTrace['native']['invocations'],
+      },
+    });
+    expect(evaluateE2ERubric(buildResult(attempted), rubric)).toMatchObject({
+      passed: false,
+      detail: 'turn 1 native invocation count 1 (expected 0)',
+    });
+  });
+
   it('grades the actual route directive and resolved mode for the requested turn', () => {
     expect(
       evaluateE2ERubric(buildResult(), {
@@ -235,15 +292,15 @@ describe('turn stage-attribution rubrics', () => {
       }),
     ]).toEqual([
       expect.objectContaining({
-        fixtureId: 'stage-attribution:turn_completion:execution',
+        fixtureId: 'stage-attribution:turn-1:turn_completion:execution',
         passed: true,
       }),
       expect.objectContaining({
-        fixtureId: 'stage-attribution:turn_completion:final_response',
+        fixtureId: 'stage-attribution:turn-1:turn_completion:final_response',
         passed: true,
       }),
       expect.objectContaining({
-        fixtureId: 'stage-attribution:turn_completion:agent_run',
+        fixtureId: 'stage-attribution:turn-1:turn_completion:agent_run',
         passed: true,
       }),
     ]);
@@ -264,7 +321,7 @@ describe('turn stage-attribution rubrics', () => {
         expected: true,
       }),
     ).toMatchObject({
-      fixtureId: 'stage-attribution:turn_completion:agent_run',
+      fixtureId: 'stage-attribution:turn-1:turn_completion:agent_run',
       passed: true,
     });
     expect(
@@ -275,7 +332,7 @@ describe('turn stage-attribution rubrics', () => {
         expected: false,
       }),
     ).toMatchObject({
-      fixtureId: 'stage-attribution:turn_completion:final_response',
+      fixtureId: 'stage-attribution:turn-1:turn_completion:final_response',
       passed: false,
     });
   });
@@ -289,7 +346,7 @@ describe('turn stage-attribution rubrics', () => {
     } as unknown as E2ERubric;
 
     expect(evaluateE2ERubric(buildResult(), invalidRubric)).toMatchObject({
-      fixtureId: 'stage-attribution:turn_completion:execution',
+      fixtureId: 'stage-attribution:turn-1:turn_completion:execution',
       passed: false,
       detail: 'turn completion field execution has an invalid expected value',
     });

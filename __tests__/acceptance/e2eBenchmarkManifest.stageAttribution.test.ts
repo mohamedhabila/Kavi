@@ -48,12 +48,23 @@ describe('E2E benchmark manifest stage attribution', () => {
         turnIndex: 1,
         token: 'OPAQUE-OUTCOME-42',
       },
+      {
+        kind: 'turn_clarification',
+        turnIndex: 1,
+        requiredMissingFields: ['new_start_time'],
+      },
+      {
+        kind: 'turn_native_invocation_count',
+        turnIndex: 1,
+        toolName: 'calendar_update_event',
+        expectedCount: 0,
+      },
       { kind: 'ingestion_job_checkpointed', minCount: 1 },
     ];
     const scenario: E2EScenario = {
       ...sourceScenario,
       userTurns: [
-        { content: 'First turn.' },
+        { content: 'First turn.', selectedMode: 'agentic' },
         { content: 'Continue after relaunch.', lifecycleBefore: 'app_relaunch' },
       ],
       rubrics,
@@ -64,6 +75,7 @@ describe('E2E benchmark manifest stage attribution', () => {
     expect(manifest.finalStateEvaluators).toEqual([]);
     expect(manifest.resourceBudgetEvaluators).toEqual([]);
     expect(manifest.initialState.execution.turnLifecycleBoundaries).toEqual([null, 'app_relaunch']);
+    expect(manifest.initialState.execution.turnSelectedModes).toEqual(['agentic', null]);
     expect(
       manifest.trajectoryEvaluators.map(({ rubricKind, evaluatorKind, evidenceKind }) => ({
         rubricKind,
@@ -105,6 +117,16 @@ describe('E2E benchmark manifest stage attribution', () => {
         rubricKind: 'turn_final_response_token',
         evaluatorKind: 'trajectory',
         evidenceKind: 'assistant_response',
+      },
+      {
+        rubricKind: 'turn_clarification',
+        evaluatorKind: 'trajectory',
+        evidenceKind: 'assistant_response',
+      },
+      {
+        rubricKind: 'turn_native_invocation_count',
+        evaluatorKind: 'trajectory',
+        evidenceKind: 'native_fixture_state',
       },
       {
         rubricKind: 'ingestion_job_checkpointed',

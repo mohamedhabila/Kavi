@@ -91,6 +91,10 @@ function rubricFailureCategories(entry, rubricKind, turnCompletionField = null) 
     case 'turn_final_response_token':
     case 'turn_memory_answer':
       return ['final_response_failure'];
+    case 'turn_clarification':
+      return ['missing_clarification'];
+    case 'turn_native_invocation_count':
+      return ['native_side_effect_failure'];
     case 'turn_memory_selection':
       return ['memory_retrieval_miss'];
     case 'memory_fact':

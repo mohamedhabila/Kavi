@@ -31,12 +31,22 @@ function buildFailedEntry(failureId: string): Record<string, unknown> {
 
 describe('E2E report stage-attribution taxonomy', () => {
   it.each([
-    ['fixture:turn_route', 'turn_route', 'execution_route_failure'],
-    ['fixture:turn_completion:execution', 'turn_completion', 'execution_failure'],
-    ['fixture:turn_completion:agent_run', 'turn_completion', 'execution_failure'],
-    ['fixture:turn_completion:final_response', 'turn_completion', 'final_response_failure'],
-    ['fixture:turn_memory_receipt', 'turn_memory_receipt', 'memory_write_failure'],
-    ['fixture:turn_lifecycle_boundary', 'turn_lifecycle_boundary', 'lifecycle_recovery_failure'],
+    ['fixture:turn-0:turn_route', 'turn_route', 'execution_route_failure'],
+    ['fixture:turn-0:turn_completion:execution', 'turn_completion', 'execution_failure'],
+    ['fixture:turn-0:turn_completion:agent_run', 'turn_completion', 'execution_failure'],
+    ['fixture:turn-0:turn_completion:final_response', 'turn_completion', 'final_response_failure'],
+    ['fixture:turn-0:turn_memory_receipt', 'turn_memory_receipt', 'memory_write_failure'],
+    [
+      'fixture:turn-0:turn_lifecycle_boundary',
+      'turn_lifecycle_boundary',
+      'lifecycle_recovery_failure',
+    ],
+    ['fixture:turn-0:turn_clarification', 'turn_clarification', 'missing_clarification'],
+    [
+      'fixture:turn-0:calendar_update_event:turn_native_invocation_count',
+      'turn_native_invocation_count',
+      'native_side_effect_failure',
+    ],
   ])('classifies %s from its current structural outcome id', (failureId, kind, category) => {
     expect(taxonomy.parseRubricKind(failureId)).toBe(kind);
     expect(taxonomy.inferFailureCategories(buildFailedEntry(failureId), 0.25)).toEqual([category]);
@@ -60,6 +70,8 @@ describe('E2E report stage-attribution taxonomy', () => {
       'turn_completion',
       'turn_memory_receipt',
       'turn_lifecycle_boundary',
+      'turn_clarification',
+      'turn_native_invocation_count',
     ]) {
       expect(publicPolicy.RUBRIC_KINDS.has(rubricKind)).toBe(true);
     }
@@ -86,7 +98,7 @@ describe('E2E report stage-attribution taxonomy', () => {
         ...entry,
         failedRubrics: [
           {
-            fixtureId: 'file-write-read:turn_completion:final_response',
+            fixtureId: 'file-write-read:turn-0:turn_completion:final_response',
             detail: 'private failure detail',
           },
         ],

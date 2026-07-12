@@ -77,6 +77,8 @@ export type E2ENativeMobileFixtureStateSnapshot = {
     allowsModifications: boolean;
     createdEventCount: number;
     updatedEventCount: number;
+    lastCreatedEventId: string;
+    lastCreatedTitle: string;
     lastCreatedStartDate: string;
     lastCreatedEndDate: string;
     lastCreatedDurationMinutes: number;
@@ -131,6 +133,8 @@ function createEmptyNativeFixtureState(): E2ENativeMobileFixtureStateSnapshot {
       allowsModifications: false,
       createdEventCount: 0,
       updatedEventCount: 0,
+      lastCreatedEventId: '',
+      lastCreatedTitle: '',
       lastCreatedStartDate: '',
       lastCreatedEndDate: '',
       lastCreatedDurationMinutes: 0,
@@ -334,6 +338,8 @@ function e2eCalendarEventsEqual(left: E2ECalendarEvent, right: E2ECalendarEvent)
 
 function recordLastCreatedCalendarTiming(event: E2ECalendarEvent): void {
   const durationMinutes = (Date.parse(event.endDate) - Date.parse(event.startDate)) / 60_000;
+  e2eNativeFixtureState.calendar.lastCreatedEventId = event.id;
+  e2eNativeFixtureState.calendar.lastCreatedTitle = event.title;
   e2eNativeFixtureState.calendar.lastCreatedStartDate = event.startDate;
   e2eNativeFixtureState.calendar.lastCreatedEndDate = event.endDate;
   e2eNativeFixtureState.calendar.lastCreatedDurationMinutes = Math.max(
