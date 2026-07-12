@@ -1,7 +1,6 @@
 import type { ConversationMode } from '../../types/conversation';
 import type { ToolDefinition } from '../../types/tool';
 import { GOAL_BOOTSTRAP_TOOL_NAME } from '../goals/bootstrap';
-import { isSessionToolName } from './sessionToolKinds';
 import { normalizeToolName } from './toolNameNormalization';
 
 /**
@@ -19,7 +18,7 @@ export function isToolAllowedForConversationMode(
   const toolName = normalizeToolName(tool.name);
   return (
     toolName !== GOAL_BOOTSTRAP_TOOL_NAME &&
-    !isSessionToolName(toolName) &&
+    !toolName.startsWith('sessions_') &&
     tool.contract?.category !== 'sessions'
   );
 }

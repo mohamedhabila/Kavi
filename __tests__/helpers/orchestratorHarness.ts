@@ -134,6 +134,19 @@ const allowTools =
   (toolName: string): boolean =>
     toolNames.includes(toolName);
 
+function useSuperAgentPersona(): void {
+  (getPersona as jest.Mock).mockImplementation((personaId: string) =>
+    personaId === 'super-agent'
+      ? {
+          id: 'super-agent',
+          name: 'SuperAgent',
+          description: 'Test graph orchestrator',
+          systemPrompt: 'Use the agent control graph.',
+        }
+      : undefined,
+  );
+}
+
 const makeCallbacks = (): OrchestratorCallbacks & {
   calls: Record<string, any[]>;
   getVisibleTokenText: () => string;
@@ -347,6 +360,7 @@ export {
   mockSendMessage,
   makeProvider,
   allowTools,
+  useSuperAgentPersona,
   makeCallbacks,
   expectTerminalGraphBeforeDone,
   expectFinalCandidateGraphBeforeDone,

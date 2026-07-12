@@ -9,6 +9,7 @@ import {
   mockStreamMessage,
   makeProvider,
   allowTools,
+  useSuperAgentPersona,
   makeCallbacks,
   createStreamGenerator,
   type OrchestratorOptions,
@@ -17,6 +18,7 @@ import {
 describe('Orchestrator', () => {
   describe('Tool call handling part 5', () => {
     it('does not force a special closeout after an explicit non-blocking sessions_spawn launch', async () => {
+      useSuperAgentPersona();
       (executeTool as jest.Mock).mockResolvedValueOnce(
         JSON.stringify({
           status: 'running',
@@ -61,6 +63,7 @@ describe('Orchestrator', () => {
         provider: makeProvider(),
         model: 'gpt-5.4',
         conversationId: 'conv1',
+        personaId: 'super-agent',
         systemPrompt: 'You are helpful',
         messages: [
           {

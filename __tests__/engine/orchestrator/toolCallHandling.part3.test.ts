@@ -10,6 +10,7 @@ import {
   mockStreamMessage,
   makeProvider,
   allowTools,
+  useSuperAgentPersona,
   makeCallbacks,
   expectFinalCandidateGraphBeforeDone,
   createStreamGenerator,
@@ -221,6 +222,7 @@ describe('Orchestrator', () => {
     });
 
     it('drops tool calls that appear after sessions_yield in the same assistant turn', async () => {
+      useSuperAgentPersona();
       (executeTool as jest.Mock).mockImplementationOnce(async (toolName: string) => {
         expect(toolName).toBe('sessions_yield');
         return JSON.stringify({
@@ -265,6 +267,7 @@ describe('Orchestrator', () => {
         provider: makeProvider(),
         model: 'gpt-5.4',
         conversationId: 'conv-yield',
+        personaId: 'super-agent',
         systemPrompt: 'You are helpful',
         messages: [
           { id: 'msg1', role: 'user', content: 'Monitor the workers', timestamp: Date.now() },

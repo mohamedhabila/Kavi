@@ -45,8 +45,11 @@ describe('conversation-mode tool authority', () => {
     expect(filterToolsForConversationMode(tools, 'agentic')).toEqual(tools);
   });
 
-  it('uses the canonical session-name boundary even when metadata is absent', () => {
+  it('uses the sessions namespace boundary even when metadata is absent', () => {
     expect(isToolAllowedForConversationMode(tool('sessions_wait'), 'chitchat')).toBe(false);
-    expect(isToolAllowedForConversationMode(tool('wait'), 'chitchat')).toBe(false);
+  });
+
+  it('keeps generic asynchronous waiting available in chitchat', () => {
+    expect(isToolAllowedForConversationMode(tool('wait', 'async_wait'), 'chitchat')).toBe(true);
   });
 });
