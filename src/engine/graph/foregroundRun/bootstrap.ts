@@ -5,6 +5,7 @@ import { selectForegroundSupersededRun } from '../foregroundConversationCancella
 import { shouldTrackForegroundAgentRun } from '../runTracking';
 import { findLatestIncompleteAgentRunAssistantMessage } from './assistantMessages';
 import { buildAgentRunMessageScope } from '../../../services/agents/lifecycle/agentRunStateMachine';
+import type { WorkflowTaskAnchor } from '../../../types/workflowTaskAnchor';
 
 function normalizeId(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
@@ -53,6 +54,7 @@ type StartAgentRunParams = {
     assistantTurns: number;
   };
   userMessageId: string;
+  workflowTaskAnchor: WorkflowTaskAnchor;
 };
 
 export function buildForegroundRunBootstrapSelection(params: {
@@ -104,6 +106,7 @@ export function startOrReuseForegroundTrackedRun(params: {
   conversationId: string;
   createUserMessageId: () => string;
   startAgentRun: (conversationId: string, params: StartAgentRunParams) => string;
+  workflowTaskAnchor: WorkflowTaskAnchor;
 }): string | undefined {
   if (!params.bootstrap.shouldTrackAgentRun) {
     return undefined;
@@ -114,6 +117,7 @@ export function startOrReuseForegroundTrackedRun(params: {
     params.startAgentRun(params.conversationId, {
       userMessageId: params.bootstrap.latestUserMessage?.id ?? params.createUserMessageId(),
       goal: params.bootstrap.latestUserMessage?.content?.trim() || 'Continue the current task.',
+      workflowTaskAnchor: params.workflowTaskAnchor,
       summary: {
         assistantTurns: 1,
       },

@@ -7,6 +7,8 @@ import {
 } from '../../src/store/throttledStorage';
 import { CHAT_STORE_CHECKPOINT_DELAY_MS } from '../../src/store/chatStorePersistence';
 import { useChatStore } from '../../src/store/useChatStore';
+import { normalizePersistedAgentRun } from '../../src/store/agentRuns/shared';
+import { prepareAgentRunResumeForOrchestrator } from '../../src/engine/graph/runResumePreparation';
 
 const expoFileSystemMock = jest.requireMock('expo-file-system') as {
   __resetStore: () => void;
@@ -184,5 +186,61 @@ describe('useChatStore persistence checkpoints', () => {
     expect(evidence).toHaveLength(64);
     expect(evidence[0]).toEqual(expect.objectContaining({ title: 'Entry 6' }));
     expect(evidence[evidence.length - 1]).toEqual(expect.objectContaining({ title: 'Entry 69' }));
+  });
+
+  it('reloads the exact task anchor after compaction removes its source message', async () => {
+    const id = useChatStore.getState().createConversation('provider1', 'System prompt');
+    await advancePastCheckpoint();
+    const workflowTaskAnchor = {
+      sourceMessageId: 'msg-original-task',
+      content: 'Create the report exactly as requested.\nKeep this spacing.',
+      attachments: [
+        {
+          id: 'attachment-1',
+          type: 'file' as const,
+          name: 'requirements.md',
+          mimeType: 'text/markdown',
+          size: 42,
+          workspacePath: 'requirements.md',
+        },
+      ],
+    };
+    useChatStore.getState().addMessage(id, {
+      id: workflowTaskAnchor.sourceMessageId,
+      role: 'user',
+      content: workflowTaskAnchor.content,
+    });
+    useChatStore.getState().startAgentRun(id, {
+      userMessageId: workflowTaskAnchor.sourceMessageId,
+      goal: workflowTaskAnchor.content,
+      workflowTaskAnchor,
+      timestamp: 1_700_000_200_000,
+    });
+    useChatStore.getState().applyConversationCompaction(id, [
+      {
+        id: 'compact-1',
+        role: 'system',
+        content: 'Compacted task history.',
+        timestamp: 1_700_000_200_100,
+      },
+    ]);
+    await advancePastCheckpoint();
+
+    const persistedConversation = readPersistedChatState().state.conversations[0];
+    expect(persistedConversation.messages).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: workflowTaskAnchor.sourceMessageId })]),
+    );
+    const reloadedRun = normalizePersistedAgentRun(persistedConversation.agentRuns[0]);
+    const resumed = prepareAgentRunResumeForOrchestrator({
+      existingRun: reloadedRun,
+      messages: persistedConversation.messages,
+      updatedAt: 1_700_000_200_200,
+    });
+
+    expect(resumed).toMatchObject({
+      kind: 'ready',
+      workflowScopeUserMessageId: workflowTaskAnchor.sourceMessageId,
+      workflowTaskAnchor,
+    });
   });
 });

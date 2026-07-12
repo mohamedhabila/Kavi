@@ -162,6 +162,11 @@ describe('foregroundRun bootstrap', () => {
   it('starts a new tracked run or reuses the existing one through graph-owned bootstrap helpers', () => {
     const clearTrackedRunCancellation = jest.fn();
     const startAgentRun = jest.fn(() => 'run-2');
+    const workflowTaskAnchor = {
+      sourceMessageId: 'user-1',
+      content: 'Finish the task  ',
+      attachments: [],
+    } as const;
 
     const startedRunId = startOrReuseForegroundTrackedRun({
       bootstrap: {
@@ -177,12 +182,14 @@ describe('foregroundRun bootstrap', () => {
       conversationId: 'conv1',
       createUserMessageId: () => 'generated-user-id',
       startAgentRun,
+      workflowTaskAnchor,
     });
 
     expect(startedRunId).toBe('run-2');
     expect(startAgentRun).toHaveBeenCalledWith('conv1', {
       userMessageId: 'user-1',
       goal: 'Finish the task',
+      workflowTaskAnchor,
       summary: {
         assistantTurns: 1,
       },
@@ -201,6 +208,7 @@ describe('foregroundRun bootstrap', () => {
       conversationId: 'conv1',
       createUserMessageId: () => 'generated-user-id',
       startAgentRun,
+      workflowTaskAnchor,
     });
 
     expect(reusedRunId).toBe('run-existing');

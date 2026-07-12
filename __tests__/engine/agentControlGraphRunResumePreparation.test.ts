@@ -1,4 +1,7 @@
-import { prepareAgentRunResumeForOrchestrator } from '../../src/engine/graph/runResumePreparation';
+import {
+  prepareAgentRunResumeForOrchestrator,
+  prepareE2EOrchestratorTurnResume,
+} from '../../src/engine/graph/runResumePreparation';
 import { createInitialAgentRunControlGraphState } from '../../src/services/agents/agentControlGraphState';
 import type { AgentRun } from '../../src/types/agentRun';
 import type { Message } from '../../src/types/message';
@@ -15,6 +18,11 @@ function userMessage(id: string): Message {
 function resumableRun(): Pick<AgentRun, 'controlGraph' | 'userMessageId'> {
   return {
     userMessageId: 'user-original',
+    workflowTaskAnchor: {
+      sourceMessageId: 'user-original',
+      content: 'user-original',
+      attachments: [],
+    },
     controlGraph: createInitialAgentRunControlGraphState({
       status: 'finalized',
       iteration: 3,
@@ -32,11 +40,17 @@ describe('agent control graph run resume preparation', () => {
       updatedAt: 100,
     });
 
+    expect(result.kind).toBe('ready');
     expect(result.workflowScopeUserMessageId).toBe('user-1');
     expect(result.initialAgentControlGraphState).toBeUndefined();
+    expect(result.workflowTaskAnchor).toEqual({
+      sourceMessageId: 'user-1',
+      content: 'user-1',
+      attachments: [],
+    });
   });
 
-  it('falls back to the latest scoped user message when the run owner is absent', () => {
+  it('resumes from the persisted anchor when the source message is absent', () => {
     const result = prepareAgentRunResumeForOrchestrator({
       existingRun: resumableRun(),
       fallbackUserMessageId: 'missing-user',
@@ -44,13 +58,74 @@ describe('agent control graph run resume preparation', () => {
       updatedAt: 100,
     });
 
-    expect(result.workflowScopeUserMessageId).toBe('user-visible-2');
+    expect(result).toMatchObject({
+      kind: 'ready',
+      workflowScopeUserMessageId: 'user-original',
+      workflowTaskAnchor: {
+        sourceMessageId: 'user-original',
+        content: 'user-original',
+      },
+    });
+  });
+
+  it('rejects an existing run without a valid stored anchor', () => {
+    const existingRun = resumableRun();
+    delete existingRun.workflowTaskAnchor;
+
+    expect(
+      prepareAgentRunResumeForOrchestrator({
+        existingRun,
+        messages: [userMessage('user-original'), userMessage('user-visible-2')],
+      }),
+    ).toEqual({
+      kind: 'unavailable',
+      reason: 'missing_existing_owner',
+      requestedSourceMessageId: 'user-original',
+    });
+  });
+
+  it('rejects a malformed or mismatched stored anchor', () => {
+    expect(
+      prepareAgentRunResumeForOrchestrator({
+        existingRun: {
+          ...resumableRun(),
+          workflowTaskAnchor: {
+            sourceMessageId: 'different-owner',
+            content: 'wrong task',
+            attachments: [],
+          },
+        },
+        messages: [],
+      }),
+    ).toMatchObject({ kind: 'unavailable', reason: 'missing_existing_owner' });
+  });
+
+  it('keeps the original owner when a later user correction is present', () => {
+    const result = prepareAgentRunResumeForOrchestrator({
+      existingRun: resumableRun(),
+      messages: [userMessage('user-original'), userMessage('user-correction')],
+      updatedAt: 100,
+    });
+
+    expect(result).toMatchObject({
+      kind: 'ready',
+      workflowScopeUserMessageId: 'user-original',
+      workflowTaskAnchor: {
+        sourceMessageId: 'user-original',
+        content: 'user-original',
+      },
+    });
   });
 
   it('preserves interrupted graph-owned state for waiting_async resume', () => {
     const result = prepareAgentRunResumeForOrchestrator({
       existingRun: {
         userMessageId: 'user-original',
+        workflowTaskAnchor: {
+          sourceMessageId: 'user-original',
+          content: 'user-original',
+          attachments: [],
+        },
         controlGraph: createInitialAgentRunControlGraphState({
           status: 'waiting_async',
           iteration: 4,
@@ -137,5 +212,31 @@ describe('agent control graph run resume preparation', () => {
     expect(result.initialAgentControlGraphState?.audit.map((event) => event.type)).toEqual(
       expect.arrayContaining(['RUN_RESUMED_FROM_TERMINAL_GRAPH']),
     );
+  });
+
+  it('requires the explicit stored anchor when an E2E graph turn resumes', () => {
+    const graphState = createInitialAgentRunControlGraphState({
+      status: 'waiting_async',
+      updatedAt: 50,
+    });
+    const workflowTaskAnchor = {
+      sourceMessageId: 'user-original',
+      content: 'Original task',
+      attachments: [],
+    } as const;
+
+    const result = prepareE2EOrchestratorTurnResume({
+      graphState,
+      userMessageId: 'user-original',
+      workflowTaskAnchor,
+      messages: [],
+      updatedAt: 100,
+    });
+
+    expect(result).toMatchObject({
+      kind: 'ready',
+      workflowScopeUserMessageId: 'user-original',
+      workflowTaskAnchor,
+    });
   });
 });

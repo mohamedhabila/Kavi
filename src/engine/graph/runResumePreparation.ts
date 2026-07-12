@@ -1,14 +1,11 @@
 import type { AgentRun, AgentRunControlGraphState } from '../../types/agentRun';
 import type { Message } from '../../types/message';
 import { prepareAgentRunControlGraphForResume } from '../../services/agents/agentControlGraphState';
-
-function latestUserMessageId(messages: ReadonlyArray<Message>): string | undefined {
-  return [...messages].reverse().find((message) => message.role === 'user')?.id;
-}
-
-function messageContainsUserId(messages: ReadonlyArray<Message>, id: string | undefined): boolean {
-  return Boolean(id && messages.some((message) => message.role === 'user' && message.id === id));
-}
+import {
+  isWorkflowTaskAnchor,
+  resolveWorkflowTaskAnchor,
+  type WorkflowTaskAnchor,
+} from './workflowTaskAnchor';
 
 function normalizeId(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
@@ -16,16 +13,32 @@ function normalizeId(value: string | undefined): string | undefined {
 }
 
 export type AgentRunResumePreparation = {
+  kind: 'ready';
   initialAgentControlGraphState?: AgentRunControlGraphState;
-  workflowScopeUserMessageId?: string;
+  workflowScopeUserMessageId: string;
+  workflowTaskAnchor: WorkflowTaskAnchor;
+} | {
+  kind: 'unavailable';
+  reason: 'missing_request' | 'missing_existing_owner';
+  requestedSourceMessageId?: string;
 };
 
-export function prepareE2EOrchestratorTurnResume(params: {
-  graphState?: AgentRunControlGraphState;
-  userMessageId: string;
-  messages: ReadonlyArray<Message>;
-  updatedAt?: number;
-}): AgentRunResumePreparation {
+export function prepareE2EOrchestratorTurnResume(
+  params:
+    | {
+        graphState?: undefined;
+        userMessageId: string;
+        messages: ReadonlyArray<Message>;
+        updatedAt?: number;
+      }
+    | {
+        graphState: AgentRunControlGraphState;
+        userMessageId: string;
+        workflowTaskAnchor: WorkflowTaskAnchor;
+        messages: ReadonlyArray<Message>;
+        updatedAt?: number;
+      },
+): AgentRunResumePreparation {
   if (!params.graphState) {
     return prepareAgentRunResumeForOrchestrator({
       fallbackUserMessageId: params.userMessageId,
@@ -38,6 +51,7 @@ export function prepareE2EOrchestratorTurnResume(params: {
     existingRun: {
       controlGraph: params.graphState,
       userMessageId: params.userMessageId,
+      workflowTaskAnchor: params.workflowTaskAnchor,
     },
     fallbackUserMessageId: params.userMessageId,
     messages: params.messages,
@@ -46,39 +60,56 @@ export function prepareE2EOrchestratorTurnResume(params: {
 }
 
 export function prepareAgentRunResumeForOrchestrator(params: {
-  existingRun?: Pick<AgentRun, 'controlGraph' | 'userMessageId'>;
+  existingRun?: Pick<AgentRun, 'controlGraph' | 'userMessageId' | 'workflowTaskAnchor'>;
   fallbackUserMessageId?: string;
   messages: ReadonlyArray<Message>;
   updatedAt?: number;
 }): AgentRunResumePreparation {
-  const latestMessageId = latestUserMessageId(params.messages);
-  const requestedScopeUserMessageId =
-    normalizeId(params.existingRun?.userMessageId) ??
-    normalizeId(params.fallbackUserMessageId) ??
-    latestMessageId;
-  const workflowScopeUserMessageId = messageContainsUserId(
-    params.messages,
-    requestedScopeUserMessageId,
-  )
-    ? requestedScopeUserMessageId
-    : latestMessageId;
+  if (params.existingRun) {
+    const requestedSourceMessageId = normalizeId(params.existingRun.userMessageId);
+    const storedAnchor = params.existingRun.workflowTaskAnchor;
+    if (
+      !requestedSourceMessageId ||
+      !isWorkflowTaskAnchor(storedAnchor) ||
+      storedAnchor.sourceMessageId !== requestedSourceMessageId
+    ) {
+      return {
+        kind: 'unavailable',
+        reason: 'missing_existing_owner',
+        ...(requestedSourceMessageId ? { requestedSourceMessageId } : {}),
+      };
+    }
 
-  if (!params.existingRun) {
+    const timestamp = params.updatedAt ?? Date.now();
     return {
-      ...(workflowScopeUserMessageId ? { workflowScopeUserMessageId } : {}),
+      kind: 'ready',
+      initialAgentControlGraphState: prepareAgentRunControlGraphForResume(
+        params.existingRun.controlGraph,
+        {
+          reason: 'resuming a running agent run',
+          updatedAt: timestamp,
+        },
+      ),
+      workflowScopeUserMessageId: requestedSourceMessageId,
+      workflowTaskAnchor: storedAnchor,
     };
   }
 
-  const timestamp = params.updatedAt ?? Date.now();
+  const requestedScopeUserMessageId =
+    normalizeId(params.fallbackUserMessageId);
+  const anchorResolution = resolveWorkflowTaskAnchor({
+    messages: params.messages,
+    sourceMessageId: requestedScopeUserMessageId,
+    existingOwner: false,
+  });
+  if (anchorResolution.kind === 'unavailable') {
+    return anchorResolution;
+  }
+  const workflowScopeUserMessageId = anchorResolution.anchor.sourceMessageId;
 
   return {
-    initialAgentControlGraphState: prepareAgentRunControlGraphForResume(
-      params.existingRun.controlGraph,
-      {
-        reason: 'resuming a running agent run',
-        updatedAt: timestamp,
-      },
-    ),
-    ...(workflowScopeUserMessageId ? { workflowScopeUserMessageId } : {}),
+    kind: 'ready',
+    workflowScopeUserMessageId,
+    workflowTaskAnchor: anchorResolution.anchor,
   };
 }

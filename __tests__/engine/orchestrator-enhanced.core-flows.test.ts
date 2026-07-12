@@ -8,6 +8,7 @@ import { DefaultContextEngine } from '../../src/services/context/compaction';
 import * as budgetManager from '../../src/services/context/budgetManager';
 import type { Message } from '../../src/types/message';
 import type { LlmProviderConfig } from '../../src/types/provider';
+import { createWorkflowTaskAnchor } from '../../src/engine/graph/workflowTaskAnchor';
 const mockStreamMessage = jest.fn();
 jest.mock('../../src/services/llm/LlmService', () => ({
   LlmService: jest.fn().mockImplementation(() => ({
@@ -482,11 +483,12 @@ describe('runOrchestrator — compaction resilience', () => {
     });
 
     const compactSpy = jest.spyOn(DefaultContextEngine.prototype, 'compact');
+    const anchorMessage = makeMsg('user', 'Continue the task after compaction.');
     const seededMessages = [
       ...Array.from({ length: 10 }, (_, index) =>
         makeMsg(index % 2 === 0 ? 'user' : 'assistant', `History ${index} ${'x'.repeat(1200)}`),
       ),
-      makeMsg('user', 'Continue the task after compaction.'),
+      anchorMessage,
     ];
 
     const callbacks = makeCallbacks();
@@ -494,11 +496,13 @@ describe('runOrchestrator — compaction resilience', () => {
       makeOptions(seededMessages, {
         model: 'phi4',
         maxTokens: 14000,
+        workflowTaskAnchor: createWorkflowTaskAnchor(anchorMessage),
       }),
       callbacks,
     );
 
     expect(mockStreamMessage).toHaveBeenCalledTimes(2);
+    expect(mockStreamMessage.mock.calls.every((call) => String(call[0][0]?.content).includes(JSON.stringify(createWorkflowTaskAnchor(anchorMessage))))).toBe(true);
     expect(compactSpy.mock.calls.some(([params]) => params.forceTier === 'aggressive')).toBe(true);
     if ((callbacks.onCompaction as jest.Mock).mock.calls.length > 0) {
       expect(callbacks.onCompaction).toHaveBeenCalledWith(

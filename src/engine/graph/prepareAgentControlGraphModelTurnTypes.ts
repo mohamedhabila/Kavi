@@ -8,6 +8,7 @@ import type { TrackedAsyncOperation } from '../pendingAsyncOperations';
 import type { AgentControlTurnDirectives } from './agentControlGraph';
 import type { PreparedAgentTurn } from './agentTurnPreparation';
 import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
+import type { WorkflowTaskAnchor } from './workflowTaskAnchor';
 
 export type LivingMemorySection = {
   text: string;
@@ -23,6 +24,7 @@ export type PromptContextSupport = {
   resolvedPrompt: string;
   runtimeContext?: string | null;
   skillPrompts: string;
+  workflowTaskAnchor?: WorkflowTaskAnchor;
 };
 
 export type PreparedAgentControlGraphModelTurnReady = {

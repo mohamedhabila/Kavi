@@ -121,16 +121,21 @@ async function executeReservedForegroundConversationRun(
     return;
   }
   const { bootstrap } = preparedBootstrap.prepared;
-  const reservationRequest = prepareAgentRunResumeForOrchestrator({
+  const resumePreparation = prepareAgentRunResumeForOrchestrator({
     existingRun: bootstrap.existingRun,
     fallbackUserMessageId: bootstrap.latestUserMessage?.id,
     messages: buildModelReadyMessages(runConversation?.messages ?? []),
-  }).workflowScopeUserMessageId;
-  if (!reservationRequest) {
+  });
+  if (resumePreparation.kind === 'unavailable') {
     clearForegroundRequestIfCurrent();
-    context.helpers.setChatError('Foreground request message is missing.');
+    context.helpers.setChatError(
+      resumePreparation.reason === 'missing_existing_owner'
+        ? 'The original request for this agent run is unavailable. Restore it before resuming.'
+        : 'Foreground request message is missing.',
+    );
     return;
   }
+  const reservationRequest = resumePreparation.workflowScopeUserMessageId;
   let projectionOwner: ModelProjectionOwner | null = buildForegroundProjectionReservation({
     runId: foregroundRequestId,
     requestMessageId: reservationRequest,
@@ -234,6 +239,7 @@ async function executeReservedForegroundConversationRun(
           conversationId,
           createUserMessageId: context.helpers.createId,
           startAgentRun: context.store.startAgentRun,
+          workflowTaskAnchor: resumePreparation.workflowTaskAnchor,
         }),
       supersedeExistingRun: (runId, runningWorkerCount) => {
         if (!runConversation) {
@@ -339,25 +345,12 @@ async function executeReservedForegroundConversationRun(
         },
       ]
     : modelReadyMessages;
-  const resumePreparation = prepareAgentRunResumeForOrchestrator({
-    existingRun: bootstrap.existingRun,
-    fallbackUserMessageId: bootstrap.latestUserMessage?.id,
-    messages: orchestratorMessages,
-  });
   const resolvedSystemPrompt = options?.additionalSystemPrompt
     ? [runConversation?.systemPrompt || context.state.systemPrompt, options.additionalSystemPrompt]
         .filter(Boolean)
         .join('\n\n')
     : runConversation?.systemPrompt || context.state.systemPrompt;
   const requestMessageId = resumePreparation.workflowScopeUserMessageId;
-  if (!requestMessageId || requestMessageId !== reservationRequest) {
-    runtime.terminalLifecycle.handleCatch(
-      new Error('foreground_model_journal_request_message_changed'),
-    );
-    await closeReservationFailure('The request message changed before journal creation.');
-    clearForegroundRequestIfCurrent();
-    return;
-  }
   const closeModelGenerationUnchecked = async (
     status: 'succeeded' | 'failed' | 'cancelled',
   ): Promise<void> => {
@@ -467,6 +460,7 @@ async function executeReservedForegroundConversationRun(
       requestState: {
         messages: orchestratorMessages,
         workflowScopeUserMessageId: requestMessageId,
+        workflowTaskAnchor: resumePreparation.workflowTaskAnchor,
         initialAgentControlGraphState: resumePreparation.initialAgentControlGraphState,
         initialPendingAsyncOperations: options?.initialPendingAsyncOperations,
         memoryConversationId: workspaceTarget.workspaceConversationId,
@@ -573,6 +567,7 @@ async function executeReservedForegroundConversationRun(
           initialPendingAsyncOperations: options?.initialPendingAsyncOperations,
           initialAgentControlGraphState: resumePreparation.initialAgentControlGraphState,
           workflowScopeUserMessageId: resumePreparation.workflowScopeUserMessageId,
+          workflowTaskAnchor: resumePreparation.workflowTaskAnchor,
           agentRunId: bootstrapResult.trackedAgentRunId,
           memoryRetrievalStrategy: options?.memoryRetrievalStrategy,
           memoryContextStrategy: options?.memoryContextStrategy,

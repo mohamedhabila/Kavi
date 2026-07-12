@@ -69,6 +69,12 @@ function extractGoalsPromptSection(
   return goalsSection?.text ?? null;
 }
 
+function extractWorkflowTaskAnchorPromptSection(
+  sections: ReadonlyArray<{ text: string }> | undefined,
+): string | undefined {
+  return sections?.find((section) => section.text.startsWith('## Workflow Task Anchor\n'))?.text;
+}
+
 function buildLivingMemoryCompactionHints(
   livingMemory: LivingMemoryBridgeOutput | null | undefined,
 ): {
@@ -221,6 +227,9 @@ export async function prepareAgentTurnRequestBudget(
   let workingMessages = repairModelVisibleToolResultTranscript(params.workingMessages);
   const toolsForIteration = [...(params.toolsForIteration ?? [])];
   const currentGoalsPromptSection = extractGoalsPromptSection(params.enrichedSystemPromptSections);
+  const workflowTaskAnchorPromptSection = extractWorkflowTaskAnchorPromptSection(
+    params.enrichedSystemPromptSections,
+  );
   let compactionApplied = false;
 
   let modelVisibleMessages = sanitizeModelVisibleWorkingMessages(workingMessages);
@@ -305,7 +314,10 @@ export async function prepareAgentTurnRequestBudget(
     toolsForIteration,
     budgetPreview.nonSystemApiMessages,
     params.requestMaxTokens,
-    { pinnedToolNames },
+    {
+      pinnedToolNames,
+      protectedSystemPromptSection: workflowTaskAnchorPromptSection,
+    },
   );
   const toolSurfaceTokenAudit =
     toolsForIteration.length > 0

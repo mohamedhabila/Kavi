@@ -378,4 +378,30 @@ describe('enforceContextBudget', () => {
     expect(result.messages.some((message) => message.role === 'tool')).toBe(false);
     expect(result.result.adjustments).toContain('removed 1 orphaned tool results');
   });
+
+  it('preserves a protected task anchor exactly while truncating other system context', () => {
+    const protectedSection = `## Workflow Task Anchor\n${'exact-anchor '.repeat(80)}`;
+    const prompt = `${'baseline '.repeat(2_000)}\n\n${protectedSection}\n\n${'goals '.repeat(500)}`;
+
+    const result = enforceContextBudget('phi4', prompt, [], [makeMessage('user', 'Continue')], 4096, {
+      protectedSystemPromptSection: protectedSection,
+    });
+
+    expect(result.systemPrompt.endsWith(protectedSection)).toBe(true);
+    expect(result.systemPrompt.match(/## Workflow Task Anchor/g)).toHaveLength(1);
+    expect(result.result.systemPromptTokens).toBeLessThanOrEqual(
+      result.result.budget.systemPromptBudget,
+    );
+  });
+
+  it('fails explicitly instead of truncating an anchor that cannot fit its prompt budget', () => {
+    const protectedSection = `## Workflow Task Anchor\n${'exact-anchor '.repeat(2_000)}`;
+    const prompt = `System instructions.\n\n${protectedSection}`;
+
+    expect(() =>
+      enforceContextBudget('phi4', prompt, [], [makeMessage('user', 'Continue')], 4096, {
+        protectedSystemPromptSection: protectedSection,
+      }),
+    ).toThrow('protected_system_prompt_section_exceeds_budget');
+  });
 });

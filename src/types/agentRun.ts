@@ -1,5 +1,6 @@
 import type { RequestUnderstandingSnapshot } from './requestUnderstanding';
 import type { AgentGoal } from '../engine/goals/types';
+import type { WorkflowTaskAnchor } from './workflowTaskAnchor';
 
 export type {
   AgentGoal,
@@ -247,6 +248,7 @@ export interface AgentRun {
   id: string;
   userMessageId: string;
   goal: string;
+  workflowTaskAnchor?: WorkflowTaskAnchor;
   status: AgentRunStatus;
   createdAt: number;
   updatedAt: number;

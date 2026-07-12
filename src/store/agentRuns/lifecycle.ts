@@ -8,6 +8,7 @@ import type {
   AgentRunTerminalReason,
 } from '../../types/agentRun';
 import type { Conversation } from '../../types/conversation';
+import type { WorkflowTaskAnchor } from '../../types/workflowTaskAnchor';
 import { generateId } from '../../utils/id';
 import {
   areAgentRunPhasesEqual,
@@ -48,6 +49,7 @@ type StartAgentRunParams = {
   summary?: Partial<AgentRunSummary>;
   timestamp: number;
   userMessageId: string;
+  workflowTaskAnchor: WorkflowTaskAnchor;
 };
 
 export function startAgentRunInConversation(
@@ -107,6 +109,7 @@ export function startAgentRunInConversation(
     id: params.runId,
     userMessageId: params.userMessageId,
     goal: params.goal,
+    workflowTaskAnchor: params.workflowTaskAnchor,
     status: 'running',
     controlGraph: createInitialAgentRunControlGraphState({ updatedAt: params.timestamp }),
     createdAt: params.timestamp,

@@ -17,6 +17,7 @@ import type {
   MemoryRetrievalStrategy,
 } from '../../services/memory/memoryAccessPolicy';
 import type { PendingVerifiedProcedureObservation } from '../../services/memory/verifiedProcedure/executionSession';
+import type { WorkflowTaskAnchor } from '../graph/workflowTaskAnchor';
 
 export type OrchestratorTerminalDisposition =
   | 'final_candidate'
@@ -86,6 +87,7 @@ export interface OrchestratorOptions {
   initialPendingAsyncOperations?: AgentRunAsyncOperation[];
   initialAgentControlGraphState?: AgentRunControlGraphState;
   workflowScopeUserMessageId?: string;
+  workflowTaskAnchor?: WorkflowTaskAnchor;
   taskId: string | null;
   /** Code-owned identity for this exact execution attempt. */
   executionRunId: string;

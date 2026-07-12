@@ -10,6 +10,7 @@ import type {
   AgentRunSummary,
   AgentRunTerminalReason,
 } from '../types/agentRun';
+import type { WorkflowTaskAnchor } from '../types/workflowTaskAnchor';
 import type {
   AssistantMessageMetadata,
   Message,
@@ -136,6 +137,7 @@ export interface ChatState {
     params: {
       userMessageId: string;
       goal: string;
+      workflowTaskAnchor: WorkflowTaskAnchor;
       timestamp?: number;
       summary?: Partial<AgentRunSummary>;
     },

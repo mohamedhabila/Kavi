@@ -8,6 +8,10 @@ import {
 } from '../prompts/orchestratorPromptSections';
 import type { AgentControlGraphForcedTextReason } from './forcedTextTurn';
 import { buildAgentControlGraphForcedTextOnlyTurnPrompt } from './forcedTextTurn';
+import {
+  renderWorkflowTaskAnchorPromptSection,
+  type WorkflowTaskAnchor,
+} from './workflowTaskAnchor';
 
 type LivingMemorySection = {
   text: string;
@@ -27,6 +31,7 @@ export interface AgentTurnPromptBundleParams {
   selectedTools: ToolDefinition[];
   skillPrompts: string;
   toolingEnabledForProvider: boolean;
+  workflowTaskAnchor?: WorkflowTaskAnchor;
 }
 
 export interface AgentTurnPromptBundle {
@@ -58,6 +63,12 @@ export function buildAgentTurnPromptBundle(
       cacheable: section.cacheable === true,
     });
   }
+  appendSystemPromptSection(
+    baseSystemPromptSections,
+    params.workflowTaskAnchor
+      ? renderWorkflowTaskAnchorPromptSection(params.workflowTaskAnchor)
+      : null,
+  );
   appendSystemPromptSection(baseSystemPromptSections, params.goalsPromptSection);
   const orderedBaseSystemPromptSections =
     orderSystemPromptSectionsForCaching(baseSystemPromptSections);

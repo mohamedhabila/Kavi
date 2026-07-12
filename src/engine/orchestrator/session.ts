@@ -23,6 +23,7 @@ import {
 } from '../../services/memory/verifiedProcedure/executionSession';
 import type { OrchestratorRunResult, OrchestratorTerminalDisposition } from './types';
 import type { AssistantMessageMetadata } from '../../types/message';
+import { resolveWorkflowTaskAnchor } from '../graph/workflowTaskAnchor';
 
 const logger = createLogger('Orchestrator');
 
@@ -81,6 +82,27 @@ export async function runOrchestratorGraphSession(params: {
     memoryConversationId: sharedConversationId,
     sourceThreadId: conversationId,
   });
+  const workflowTaskAnchor = (() => {
+    if (options.workflowTaskAnchor) {
+      if (
+        options.workflowScopeUserMessageId &&
+        options.workflowTaskAnchor.sourceMessageId !== options.workflowScopeUserMessageId
+      ) {
+        throw new Error('workflow_task_anchor_owner_mismatch');
+      }
+      return options.workflowTaskAnchor;
+    }
+    if (!isSuperAgent) return undefined;
+    const resolution = resolveWorkflowTaskAnchor({
+      messages: options.messages,
+      sourceMessageId: options.workflowScopeUserMessageId,
+      existingOwner: Boolean(options.workflowScopeUserMessageId),
+    });
+    if (resolution.kind === 'unavailable') {
+      throw new Error(`workflow_task_anchor_${resolution.reason}`);
+    }
+    return resolution.anchor;
+  })();
 
   const {
     currentUserMessage,
@@ -208,6 +230,7 @@ export async function runOrchestratorGraphSession(params: {
         resolvedPrompt,
         runtimeContext: runtimeContextNote,
         skillPrompts,
+        workflowTaskAnchor,
       },
       reportUsage: (usage) => {
         callbacks.onUsage?.(usage);

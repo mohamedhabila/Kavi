@@ -15,7 +15,13 @@
 //   Output reserve:   reserve maxTokens for completion output
 
 import { resolveModelOutputTokenBudget } from './outputTokenBudget';
-import { estimateTokens, estimateMessageTokens, getWorkingContextWindow } from './tokenCounter';
+import {
+  CHARS_PER_TOKEN,
+  SAFETY_MARGIN,
+  estimateTokens,
+  estimateMessageTokens,
+  getWorkingContextWindow,
+} from './tokenCounter';
 import {
   compressToolDefinitions,
   enforceToolTokenBudget,
@@ -150,6 +156,7 @@ export interface AdjustedPayload {
 
 export interface ContextBudgetEnforcementOptions {
   pinnedToolNames?: Iterable<string>;
+  protectedSystemPromptSection?: string;
 }
 
 function estimateBudgetMessageTokens(
@@ -238,6 +245,10 @@ export function truncateSystemPrompt(prompt: string, budgetTokens: number): stri
 
   // Convert token budget to approximate chars (Kavi: 4 chars/token)
   const budgetChars = Math.floor(budgetTokens * 4);
+  return truncateSystemPromptToChars(prompt, budgetChars);
+}
+
+function truncateSystemPromptToChars(prompt: string, budgetChars: number): string {
   if (prompt.length <= budgetChars) return prompt;
 
   // Head+tail: 60% from beginning (base prompt), 40% from end (guidelines)
@@ -247,6 +258,36 @@ export function truncateSystemPrompt(prompt: string, budgetTokens: number): stri
   const tailSize = available - headSize;
 
   return prompt.slice(0, headSize) + notice + prompt.slice(prompt.length - tailSize);
+}
+
+function truncateSystemPromptPreservingSection(
+  prompt: string,
+  budgetTokens: number,
+  protectedSection: string,
+): string {
+  const firstIndex = prompt.indexOf(protectedSection);
+  if (firstIndex < 0 || prompt.indexOf(protectedSection, firstIndex + 1) >= 0) {
+    throw new Error('protected_system_prompt_section_missing_or_duplicated');
+  }
+  if (estimateTokens(protectedSection) > budgetTokens) {
+    throw new Error('protected_system_prompt_section_exceeds_budget');
+  }
+
+  const separator = '\n\n';
+  const maxChars = Math.floor((budgetTokens * CHARS_PER_TOKEN) / SAFETY_MARGIN);
+  const remainingMaxChars = maxChars - protectedSection.length - separator.length;
+  if (remainingMaxChars <= 0) {
+    throw new Error('protected_system_prompt_section_exceeds_budget');
+  }
+  const remainingPrompt = `${prompt.slice(0, firstIndex)}${prompt.slice(
+    firstIndex + protectedSection.length,
+  )}`.trim();
+  const truncatedRemaining = truncateSystemPromptToChars(remainingPrompt, remainingMaxChars);
+  const adjusted = `${truncatedRemaining}${separator}${protectedSection}`;
+  if (estimateTokens(adjusted) > budgetTokens || !adjusted.endsWith(protectedSection)) {
+    throw new Error('protected_system_prompt_section_exceeds_budget');
+  }
+  return adjusted;
 }
 
 // ── Message windowing ────────────────────────────────────────────────────
@@ -430,9 +471,26 @@ export function enforceContextBudget(
 
   // 3. Truncate system prompt if it exceeds budget
   if (promptTokens > budget.systemPromptBudget) {
-    adjustedPrompt = truncateSystemPrompt(adjustedPrompt, budget.systemPromptBudget);
+    adjustedPrompt = options?.protectedSystemPromptSection
+      ? truncateSystemPromptPreservingSection(
+          adjustedPrompt,
+          budget.systemPromptBudget,
+          options.protectedSystemPromptSection,
+        )
+      : truncateSystemPrompt(adjustedPrompt, budget.systemPromptBudget);
     promptTokens = estimateTokens(adjustedPrompt);
     adjustments.push(`truncated system prompt to ${promptTokens} tokens`);
+  }
+
+  if (
+    options?.protectedSystemPromptSection &&
+    (adjustedPrompt.indexOf(options.protectedSystemPromptSection) < 0 ||
+      adjustedPrompt.indexOf(
+        options.protectedSystemPromptSection,
+        adjustedPrompt.indexOf(options.protectedSystemPromptSection) + 1,
+      ) >= 0)
+  ) {
+    throw new Error('protected_system_prompt_section_was_truncated_or_duplicated');
   }
 
   // 4. Window messages if they exceed their budget

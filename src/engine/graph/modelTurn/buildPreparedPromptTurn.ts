@@ -53,6 +53,7 @@ export function buildPreparedModelTurnPrompt(params: {
         resolvedPrompt: params.promptContextSupport.resolvedPrompt,
         runtimeContext: params.promptContextSupport.runtimeContext,
         skillPrompts: params.promptContextSupport.skillPrompts,
+        workflowTaskAnchor: params.promptContextSupport.workflowTaskAnchor,
       },
       toolingEnabledForProvider: params.toolingEnabledForProvider,
     });
