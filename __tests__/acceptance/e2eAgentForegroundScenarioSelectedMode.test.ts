@@ -146,6 +146,55 @@ describe('foreground scenario selected mode and outer deadline', () => {
     expect(mockedRunOrchestrator).not.toHaveBeenCalled();
   });
 
+  it('starts a product-created conversation with no prior raw chat and shared durable memory', async () => {
+    const userMessageCounts: number[] = [];
+    mockedRunOrchestrator.mockImplementation(async (options, callbacks) => {
+      userMessageCounts.push(options.messages.filter((message) => message.role === 'user').length);
+      callbacks.onAssistantMessage(
+        'Completed.',
+        undefined,
+        undefined,
+        buildAssistantMessageMetadata('final'),
+      );
+      callbacks.onDone();
+      return { terminalDisposition: 'final_candidate' };
+    });
+
+    const result = await runForegroundScenario({
+      provider: makeProvider(),
+      conversationId: 'scenario-conversation',
+      conversationTitle: 'Scenario title',
+      systemPrompt: 'Scenario prompt',
+      defaultMode: 'chitchat',
+      scenarioTimeoutMs: 60_000,
+      turns: [
+        { content: 'Remember this preference.', route: 'production_auto' },
+        {
+          content: 'What do you remember?',
+          route: 'production_auto',
+          lifecycleBefore: 'new_conversation',
+        },
+      ],
+    });
+
+    expect(userMessageCounts).toEqual([1, 1]);
+    expect(result.turns[1]?.lifecycleBefore).toEqual({
+      boundary: 'new_conversation',
+      chatStore: 'fresh_conversation',
+      memoryStore: 'shared_global',
+      previousConversationMessageCount: 2,
+      newConversationInitialMessageCount: 0,
+    });
+    expect(
+      result.finalConversation.messages.some((message) =>
+        message.content.includes('Remember this preference.'),
+      ),
+    ).toBe(false);
+    expect(result.finalConversation.messages).toEqual(
+      expect.arrayContaining([expect.objectContaining({ content: 'What do you remember?' })]),
+    );
+  });
+
   it('enforces the outer deadline while durable memory closeout is pending', async () => {
     jest.useFakeTimers();
     mockedRecordCompletedTurnForMemory.mockImplementationOnce(() => new Promise(() => undefined));

@@ -26,13 +26,19 @@ describe('paired public report projection', () => {
   it('publishes only labels, hashes, counts, metrics, and paired deltas', () => {
     const report = buildE2EPairedPublicReport(
       runtime([
-        completedCondition({ condition: 'memory_off', rubricPassed: 0, rubricTotal: 2 }),
+        completedCondition({
+          condition: 'memory_off',
+          rubricPassed: 0,
+          rubricTotal: 2,
+          estimatedCostUsd: 0.125,
+        }),
         completedCondition({
           condition: 'production_auto',
           rubricPassed: 2,
           rubricTotal: 2,
           durationMs: 125,
           totalTokens: 120,
+          estimatedCostUsd: 0.25,
         }),
       ]),
     );
@@ -55,6 +61,13 @@ describe('paired public report projection', () => {
     });
     expect(report.executionSeed).toBe(2);
     expect(report.executionOrder).toEqual(['memory_off', 'production_auto']);
+    expect(report.estimatedCost).toEqual({
+      status: 'available',
+      referenceUsd: 0.125,
+      candidateUsd: 0.25,
+      pairUsd: 0.375,
+      deltaUsd: 0.125,
+    });
     expect(report.pairConfigHash).toMatch(/^sha256:[a-f0-9]{64}$/u);
     expect(report.conditions[0]).toMatchObject({
       condition: 'memory_off',
@@ -63,6 +76,7 @@ describe('paired public report projection', () => {
         rubricPassed: 0,
         rubricTotal: 2,
         rubricPassRate: 0,
+        estimatedCost: { status: 'available', usd: 0.125 },
         publicTraceHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u),
       },
     });
@@ -146,6 +160,13 @@ describe('paired public report projection', () => {
     expect(report.memoryPairedObservation).toMatchObject({
       status: 'invalid_infrastructure',
       pairedScoreDelta: null,
+    });
+    expect(report.estimatedCost).toEqual({
+      status: 'unavailable',
+      referenceUsd: null,
+      candidateUsd: null,
+      pairUsd: null,
+      deltaUsd: null,
     });
     expect(report.infrastructureFailures).toEqual([
       expect.objectContaining({ scope: 'memory_off', category: 'condition_execution' }),

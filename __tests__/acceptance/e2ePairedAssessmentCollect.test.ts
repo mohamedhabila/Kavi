@@ -4,6 +4,7 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { buildE2EPairedAssessmentPlan } from '../../src/acceptance/e2eAgent/e2ePairedAssessmentPlan';
+import { evaluateE2EPairedCausalMemoryAssessment } from '../../src/acceptance/e2eAgent/e2ePairedCausalMemoryAssessment';
 import { writeE2EPairedPublicReportArtifact } from '../../src/acceptance/e2eAgent/e2ePairedReportArtifact';
 import { runE2EPairedConditions } from '../../src/acceptance/e2eAgent/e2ePairedRuntime';
 import {
@@ -13,6 +14,7 @@ import {
 import {
   DELEGATION_E2E_SCENARIOS,
   E2E_AGENT_SCENARIOS,
+  E2E_PAIRED_ONLY_SCENARIOS,
 } from '../../src/acceptance/e2eAgent/scenarios';
 
 const enabled = process.env.RUN_E2E_PAIRED_EVAL === '1' && shouldRunE2EAgentEval();
@@ -29,7 +31,11 @@ describePaired('paired E2E assessment collector', () => {
 
   it('executes both frozen conditions and retains a content-free public report', async () => {
     const scenarioId = requiredEnv('E2E_PAIRED_SCENARIO_ID');
-    const scenarios = [...E2E_AGENT_SCENARIOS, ...DELEGATION_E2E_SCENARIOS];
+    const scenarios = [
+      ...E2E_AGENT_SCENARIOS,
+      ...DELEGATION_E2E_SCENARIOS,
+      ...E2E_PAIRED_ONLY_SCENARIOS,
+    ];
     const scenario = scenarios.find((candidate) => candidate.id === scenarioId);
     if (!scenario) throw new Error(`Unknown paired scenario: ${scenarioId}`);
     const seed = Number(requiredEnv('E2E_PAIRED_SEED'));
@@ -49,6 +55,15 @@ describePaired('paired E2E assessment collector', () => {
       retentionRoot: requiredEnv('E2E_PAIRED_RETENTION_ROOT'),
       runId: requiredEnv('E2E_PAIRED_RUN_ID'),
     });
+    const causalMemoryAssessment = evaluateE2EPairedCausalMemoryAssessment({
+      runtime,
+      scenario,
+    });
+    if (scenario.pairedEvaluation && !causalMemoryAssessment?.claimEligible) {
+      throw new Error(
+        `Paired causal-memory contract failed: ${causalMemoryAssessment?.status ?? 'missing'}.`,
+      );
+    }
 
     expect(report.validForDeltaClaims).toBe(true);
     expect(report.conditions).toHaveLength(2);

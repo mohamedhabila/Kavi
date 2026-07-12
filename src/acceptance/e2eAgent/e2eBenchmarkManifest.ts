@@ -480,6 +480,7 @@ export function buildE2EBenchmarkManifest(scenario: E2EScenario): E2EBenchmarkMa
       fingerprintAlgorithm: 'stable-fnv1a-256',
       fingerprint: hashJson({
         rubrics: scenario.rubrics,
+        ...(scenario.pairedEvaluation ? { pairedEvaluation: scenario.pairedEvaluation } : {}),
         initialWorkspaceFiles: scenario.initialWorkspaceFiles ?? [],
       }),
     },

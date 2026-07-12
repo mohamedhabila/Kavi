@@ -218,6 +218,7 @@ describe('runE2EScenario product foreground integration', () => {
     expect(mockedRunOrchestrator).toHaveBeenCalledTimes(2);
     expect(mockedRecordCompletedTurnForMemory).toHaveBeenCalledTimes(2);
     expect(result).toMatchObject({ completed: true, userTurnCount: 2 });
+    expect(result.estimatedCost).toEqual({ status: 'unavailable', usd: null });
     expect(result.memoryFinalState.scope).toEqual({
       memoryConversationId: 'scenario-conversation',
       sourceThreadId: 'scenario-conversation',
@@ -586,6 +587,8 @@ describe('runE2EScenario product foreground integration', () => {
       totalTokens: 15,
       eventCount: 1,
     });
+    expect(result.estimatedCost.status).toBe('available');
+    expect(result.estimatedCost.usd).toBeCloseTo(0.000025, 12);
     expect(mockedCancelScheduledIngestionDrain).toHaveBeenCalledTimes(1);
   });
 

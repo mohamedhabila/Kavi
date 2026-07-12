@@ -38,19 +38,41 @@ function projectUserEvidence(value) {
 function projectLifecycleBoundaryEvidence(value) {
   if (value === null) return null;
   const source = asRecord(value);
+  if (!source) return undefined;
   if (
-    !source ||
-    source.boundary !== 'app_relaunch' ||
-    source.chatStore !== 'rehydrated' ||
-    source.memoryStore !== 'reopened'
+    source.boundary === 'app_relaunch' &&
+    source.chatStore === 'rehydrated' &&
+    source.memoryStore === 'reopened'
   ) {
-    return undefined;
+    return {
+      boundary: 'app_relaunch',
+      chatStore: 'rehydrated',
+      memoryStore: 'reopened',
+    };
   }
-  return {
-    boundary: 'app_relaunch',
-    chatStore: 'rehydrated',
-    memoryStore: 'reopened',
-  };
+  const previousConversationMessageCount = nonNegativeInteger(
+    source.previousConversationMessageCount,
+  );
+  const newConversationInitialMessageCount = nonNegativeInteger(
+    source.newConversationInitialMessageCount,
+  );
+  if (
+    source.boundary === 'new_conversation' &&
+    source.chatStore === 'fresh_conversation' &&
+    source.memoryStore === 'shared_global' &&
+    previousConversationMessageCount !== null &&
+    previousConversationMessageCount > 0 &&
+    newConversationInitialMessageCount === 0
+  ) {
+    return {
+      boundary: 'new_conversation',
+      chatStore: 'fresh_conversation',
+      memoryStore: 'shared_global',
+      previousConversationMessageCount,
+      newConversationInitialMessageCount,
+    };
+  }
+  return undefined;
 }
 
 function projectRouteEvidence(value) {
@@ -132,9 +154,7 @@ function projectFinalAssistantEvidence(value) {
 
 function projectCompletionEvidence(value) {
   const source = asRecord(value);
-  const assistantStatus = source
-    ? safeEnum(source.assistantStatus, ASSISTANT_STATUSES)
-    : undefined;
+  const assistantStatus = source ? safeEnum(source.assistantStatus, ASSISTANT_STATUSES) : undefined;
   const assistantStatusHash = source ? projectHash(source.assistantStatusHash) : null;
   const runStatus = source ? safeEnum(source.runStatus, RUN_STATUSES) : undefined;
   const runStatusHash = source ? projectHash(source.runStatusHash) : null;

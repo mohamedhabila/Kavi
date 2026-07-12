@@ -255,9 +255,10 @@ mode selections, two persisted relaunches, a preference correction, one
 calendar action with attributed memory-retrieval participation, an intentionally
 ambiguous agentic no-op, and recovery of partial workspace state. This flow is
 continuity/retrieval evidence, not standalone causal-memory evidence: the raw
-persisted chat remains available across these relaunches. Causal memory remains
-unclaimed until a separate paired new-conversation or verified-compaction
-boundary removes the preference-bearing raw turn while retaining global memory.
+persisted chat remains available across these relaunches. Causal memory is
+evaluated separately by `paired-causal-global-preference`, whose product-created
+new conversation begins with zero raw messages while retaining owner-global
+memory.
 Its 240K token ceiling is provisional until clean first-attempt live trials are
 available. Recalibrate to `ceil(max observed × 1.25)` after at least three
 retries-disabled runs. The nine-turn 810-second scenario deadline is a hard
@@ -317,8 +318,8 @@ directory.
 
 For exact local diagnosis, set
 `E2E_PRIVATE_EVIDENCE_DIR=.private/evals/<run-name>`. The runner then writes an
-atomic, owner-only `e2e-private-scenario-evidence-v3` file per attempt with raw
-turn, selected-mode, result, memory-receipt, native, graph, and lifecycle
+atomic, owner-only `e2e-private-scenario-evidence-v5` file per attempt with raw
+turn, selected-mode, result, estimated-cost, memory, native, graph, and lifecycle
 evidence. The setting is intentionally opt-in; the directory is gitignored,
 cannot escape the private root through `..` or symlinks, is never referenced by
 the public report, and must not be included in uploaded CI artifacts.

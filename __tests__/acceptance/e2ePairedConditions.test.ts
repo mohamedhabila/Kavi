@@ -282,7 +282,7 @@ describe('paired E2E condition contract', () => {
       conditionConfigHash: 'sha256:stale',
     } as E2EPairedConditionPlan;
     const plan = {
-      schemaVersion: 'e2e-paired-plan-v2',
+      schemaVersion: 'e2e-paired-plan-v3',
       pairId: 'tampered',
       comparison: {
         referenceCondition: 'production_auto',

@@ -55,6 +55,7 @@ export const E2E_SCENARIO_TOKEN_BUDGETS: Readonly<Record<string, number>> = {
   'failure-gotcha-reuse': 260_000,
   'relaunch-profile-continuity': 200_000,
   'organic-mobile-assistant-continuity': 240_000,
+  'paired-causal-global-preference': 240_000,
   'bench-gaia-file-hop-chain': 180_000,
   'bench-session-tool-cache': 200_000,
   'bench-prompt-cache-long-horizon': 500_000,
@@ -99,6 +100,7 @@ export const E2E_SCENARIO_TOKEN_BUDGETS: Readonly<Record<string, number>> = {
 /** Conservative ceilings pending clean first-attempt live measurements and recalibration. */
 export const E2E_PROVISIONAL_SCENARIO_TOKEN_BUDGET_IDS: ReadonlySet<string> = new Set([
   'organic-mobile-assistant-continuity',
+  'paired-causal-global-preference',
 ]);
 
 /** Program-level regression guard across all scenarios in one harness run. */

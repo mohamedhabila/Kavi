@@ -6,7 +6,7 @@ import { atomicWriteFileSync } from '../../../scripts/e2eReport/fileTransaction'
 import type { E2EScenario, E2EScenarioResult, E2EScenarioTurnTrace } from './types';
 
 export const E2E_PRIVATE_EVIDENCE_DIR_ENV = 'E2E_PRIVATE_EVIDENCE_DIR';
-export const E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION = 'e2e-private-scenario-evidence-v3';
+export const E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION = 'e2e-private-scenario-evidence-v5';
 
 export type E2EPrivateScenarioEvidence = {
   schemaVersion: typeof E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION;
@@ -19,10 +19,13 @@ export type E2EPrivateScenarioEvidence = {
     requestedTurns: ReadonlyArray<{
       text: string;
       route: E2EScenario['execution']['route'];
-      lifecycleBefore: 'app_relaunch' | null;
+      lifecycleBefore: NonNullable<
+        NonNullable<E2EScenario['userTurns']>[number]['lifecycleBefore']
+      > | null;
       selectedMode: E2EScenario['execution']['initialMode'] | null;
     }>;
     rubrics: E2EScenario['rubrics'];
+    pairedEvaluation: E2EScenario['pairedEvaluation'] | null;
   };
   result: {
     fixtureId: string;
@@ -33,6 +36,7 @@ export type E2EPrivateScenarioEvidence = {
     userTurnCount: number;
     errors: E2EScenarioResult['errors'];
     usage: E2EScenarioResult['usage'];
+    estimatedCost: E2EScenarioResult['estimatedCost'];
     memoryFinalState: E2EScenarioResult['memoryFinalState'];
     turns: ReadonlyArray<{
       turnIndex: number;
@@ -119,6 +123,9 @@ export function buildE2EPrivateScenarioEvidence(params: {
       execution: { ...params.scenario.execution },
       requestedTurns: requestedTurns(params.scenario),
       rubrics: JSON.parse(JSON.stringify(params.scenario.rubrics)) as E2EScenario['rubrics'],
+      pairedEvaluation: params.scenario.pairedEvaluation
+        ? JSON.parse(JSON.stringify(params.scenario.pairedEvaluation))
+        : null,
     },
     result: {
       fixtureId: params.result.fixtureId,
@@ -129,6 +136,7 @@ export function buildE2EPrivateScenarioEvidence(params: {
       userTurnCount: params.result.userTurnCount,
       errors: [...params.result.errors],
       usage: params.result.usage,
+      estimatedCost: params.result.estimatedCost,
       memoryFinalState: params.result.memoryFinalState,
       turns: params.result.turnTraces.map(projectTurn),
     },

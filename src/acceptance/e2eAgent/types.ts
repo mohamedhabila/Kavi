@@ -52,6 +52,10 @@ export type E2ETokenUsageSummary = {
   promptCache?: E2EPromptCacheSummary;
 };
 
+export type E2EEstimatedCostSummary =
+  | Readonly<{ status: 'available'; usd: number }>
+  | Readonly<{ status: 'unavailable'; usd: null }>;
+
 export type E2EPromptCacheReasonCount = {
   reason: string;
   count: number;
@@ -137,6 +141,7 @@ export type E2EScenarioResult = {
   /** Per-orchestrator-invocation traces for turn-scoped rubrics. */
   turnTraces: ReadonlyArray<E2EScenarioTurnTrace>;
   usage: E2ETokenUsageSummary;
+  estimatedCost: E2EEstimatedCostSummary;
   errors: ReadonlyArray<string>;
   completed: boolean;
   durationMs: number;
@@ -158,6 +163,14 @@ export type E2EScenarioExecution = {
   initialMode: ConversationMode;
   route: ForegroundScenarioRouteDirective;
 };
+
+export type E2EPairedCausalMemoryContract = Readonly<{
+  kind: 'causal_memory';
+  referenceCondition: 'memory_off';
+  candidateCondition: 'production_auto';
+  neutralRubricIndexes: ReadonlyArray<number>;
+  causalRubricIndexes: ReadonlyArray<number>;
+}>;
 
 export type E2EWorkspaceSeedFile = {
   path: string;
@@ -316,4 +329,6 @@ export type E2EScenario = {
   systemPrompt?: string;
   initialMessages?: ReadonlyArray<Message>;
   initialWorkspaceFiles?: ReadonlyArray<E2EWorkspaceSeedFile>;
+  /** Frozen condition-aware scoring contract used only by paired evaluation. */
+  pairedEvaluation?: E2EPairedCausalMemoryContract;
 };

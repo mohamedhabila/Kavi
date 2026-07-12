@@ -9,6 +9,7 @@ import type {
 } from './foregroundScenarioDriver';
 import { cloneAndFreeze } from './foregroundScenarioDriverTypes';
 import { aggregateE2ETokenUsage } from './tokenUsage';
+import { aggregateE2EEstimatedCost } from './e2eEstimatedCost';
 import type {
   E2EScenarioContentClass,
   E2EScenarioResult,
@@ -138,6 +139,7 @@ export function mapForegroundScenarioResult(params: {
 }): E2EScenarioResult {
   const turnTraces = params.driverResult.turns.map(buildTurnTrace);
   const usageEvents = params.driverResult.turns.flatMap(buildUsageEvents);
+  const usageEntries = params.driverResult.turns.flatMap((turn) => turn.usage?.entries ?? []);
   const errors = params.driverResult.turns.flatMap((turn) => (turn.error ? [turn.error] : []));
 
   return cloneAndFreeze({
@@ -150,6 +152,7 @@ export function mapForegroundScenarioResult(params: {
     memoryFinalState: cloneJson(params.driverResult.memoryFinalState),
     turnTraces,
     usage: aggregateE2ETokenUsage(usageEvents),
+    estimatedCost: aggregateE2EEstimatedCost(usageEntries),
     errors,
     completed:
       turnTraces.length === params.requestedUserTurnCount &&

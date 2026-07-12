@@ -48,6 +48,7 @@ function buildPrivateResult(): E2EScenarioResult {
     contentClass: 'private',
     fixtureId: SCENARIO.id,
     conversationId: SCENARIO.conversationId,
+    estimatedCost: { status: 'available', usd: 0.125 },
     memoryFinalState: {
       capturedAt: 10,
       scope: {
@@ -170,6 +171,7 @@ describe('private E2E scenario evidence', () => {
       },
     ]);
     expect(evidence.result.turns[0]?.lifecycleBefore).toBeNull();
+    expect(evidence.result.estimatedCost).toEqual({ status: 'available', usd: 0.125 });
     for (const sentinel of [
       'PRIVATE-REQUEST-SENTINEL',
       'PRIVATE-USER-SENTINEL',

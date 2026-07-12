@@ -17,7 +17,10 @@ import {
   getE2ENativeMobileFixtureStateSnapshot,
   getE2ENativeMobileInvocationSnapshots,
 } from './e2eNativeMobileFixtures';
-import { relaunchForegroundScenarioApp } from './foregroundScenarioLifecycle';
+import {
+  relaunchForegroundScenarioApp,
+  startNewForegroundScenarioConversation,
+} from './foregroundScenarioLifecycle';
 import {
   beginForegroundScenarioRetrievalCapture,
   completeForegroundScenarioRetrievalCapture,
@@ -37,6 +40,7 @@ import {
   cloneAndFreeze,
   type ForegroundScenarioDriverInput,
   type ForegroundScenarioDriverResult,
+  type ForegroundScenarioLifecycleSnapshot,
   type ForegroundScenarioMemoryRecord,
   type ForegroundScenarioTurnSnapshot,
 } from './foregroundScenarioDriverTypes';
@@ -149,8 +153,11 @@ function validateInput(input: ForegroundScenarioDriverInput): void {
   }
   for (const [index, turn] of input.turns.entries()) {
     requireTrimmed(turn.content, `turns[${index}].content`);
-    if (turn.lifecycleBefore !== undefined && turn.lifecycleBefore !== 'app_relaunch') {
-      throw new Error(`turns[${index}].lifecycleBefore must be app_relaunch.`);
+    if (
+      turn.lifecycleBefore !== undefined &&
+      !['app_relaunch', 'new_conversation'].includes(turn.lifecycleBefore)
+    ) {
+      throw new Error(`turns[${index}].lifecycleBefore must be app_relaunch or new_conversation.`);
     }
     validatePositiveNumber(turn.maxTokens, `turns[${index}].maxTokens`);
     validatePositiveNumber(turn.timeoutMs, `turns[${index}].timeoutMs`);
@@ -190,7 +197,8 @@ async function runScenarioIsolated(
     requestChatStorePersistenceCheckpoint(0);
     await awaitBeforeScenarioDeadline(flushChatStorePersistenceNow(), scenarioDeadline);
 
-    const memoryScope = {
+    let currentConversationId = input.conversationId;
+    let memoryScope = {
       memoryConversationId: resolveConversationWorkspaceTarget({
         conversationId: input.conversationId,
         conversations: useChatStore.getState().conversations,
@@ -216,20 +224,34 @@ async function runScenarioIsolated(
       if (remainingScenarioTimeMs(scenarioDeadline) <= 0) {
         throw new Error(SCENARIO_WALL_CLOCK_TIMEOUT_ERROR);
       }
-      const lifecycleBefore = turn.lifecycleBefore
-        ? await awaitBeforeScenarioDeadline(
-            relaunchForegroundScenarioApp({
-              conversationId: input.conversationId,
-              memoryScope,
-              memoryStateBefore: previousMemoryState,
-            }),
-            scenarioDeadline,
-          )
-        : null;
+      let lifecycleBefore: ForegroundScenarioLifecycleSnapshot | null = null;
+      if (turn.lifecycleBefore === 'app_relaunch') {
+        lifecycleBefore = await awaitBeforeScenarioDeadline(
+          relaunchForegroundScenarioApp({
+            conversationId: currentConversationId,
+            memoryScope,
+            memoryStateBefore: previousMemoryState,
+          }),
+          scenarioDeadline,
+        );
+      } else if (turn.lifecycleBefore === 'new_conversation') {
+        const transition = startNewForegroundScenarioConversation({
+          currentConversationId,
+          providerId: input.provider.id,
+          model: input.provider.model,
+          systemPrompt: input.systemPrompt,
+          mode: turn.selectedMode ?? input.defaultMode,
+          memoryStateBefore: previousMemoryState,
+        });
+        currentConversationId = transition.conversationId;
+        memoryScope = transition.memoryScope;
+        previousMemoryState = transition.memoryState;
+        lifecycleBefore = transition.lifecycle;
+      }
       if (lifecycleBefore) runtime = createForegroundScenarioRuntime(input, memoryRecords);
       const retrievalCapture = await awaitBeforeScenarioDeadline(
         beginForegroundScenarioRetrievalCapture({
-          sourceThreadId: input.conversationId,
+          sourceThreadId: currentConversationId,
           memoryOptOut: input.disableLongTermMemory === true,
         }),
         scenarioDeadline,
@@ -237,21 +259,21 @@ async function runScenarioIsolated(
       const nativeStateBefore = getE2ENativeMobileFixtureStateSnapshot();
       const nativeInvocationStart = getE2ENativeMobileInvocationSnapshots().length;
       const route = applyForegroundScenarioRoute(
-        input.conversationId,
+        currentConversationId,
         turn.route,
         input.defaultMode,
         turn.selectedMode,
       );
       const before = useChatStore
         .getState()
-        .conversations.find((candidate) => candidate.id === input.conversationId);
-      if (!before) throw new Error(`Conversation ${input.conversationId} is unavailable.`);
+        .conversations.find((candidate) => candidate.id === currentConversationId);
+      if (!before) throw new Error(`Conversation ${currentConversationId} is unavailable.`);
       const priorRunIds = new Set((before.agentRuns ?? []).map((run) => run.id));
       const messageStartIndex = before.messages.length;
       const usageBefore = before.usage;
       const memoryRecordStart = memoryRecords.length;
       const userMessageId = generateId();
-      useChatStore.getState().addMessage(input.conversationId, {
+      useChatStore.getState().addMessage(currentConversationId, {
         id: userMessageId,
         role: 'user',
         content: turn.content.trim(),
@@ -274,7 +296,7 @@ async function runScenarioIsolated(
       try {
         await Promise.race([
           executeForegroundConversationRun({
-            conversationId: input.conversationId,
+            conversationId: currentConversationId,
             context: runtime.context,
             options: {
               maxTokens: turn.maxTokens ?? input.maxTokens,
@@ -289,7 +311,7 @@ async function runScenarioIsolated(
               timedOut = true;
               scenarioDeadlineExceeded = scenarioDeadlineLimitsExecution;
               runtime.requests.abortCurrentOrNextForegroundRequest(
-                input.conversationId,
+                currentConversationId,
                 executionTimeoutMessage,
               );
               reject(new Error(executionTimeoutMessage));
@@ -308,7 +330,7 @@ async function runScenarioIsolated(
           scenarioDeadlineExceeded = true;
           timedOut = true;
           runtime.requests.abortCurrentOrNextForegroundRequest(
-            input.conversationId,
+            currentConversationId,
             SCENARIO_WALL_CLOCK_TIMEOUT_ERROR,
           );
         });
@@ -344,8 +366,8 @@ async function runScenarioIsolated(
       const memoryStateAfter = captureCompleteMemoryEvidenceForIsolatedEvaluation(memoryScope);
       const conversation = useChatStore
         .getState()
-        .conversations.find((candidate) => candidate.id === input.conversationId);
-      if (!conversation) throw new Error(`Conversation ${input.conversationId} is unavailable.`);
+        .conversations.find((candidate) => candidate.id === currentConversationId);
+      if (!conversation) throw new Error(`Conversation ${currentConversationId} is unavailable.`);
       const run = resolveForegroundScenarioTurnRun(conversation, userMessageId, priorRunIds);
       const turnMessages = conversation.messages.slice(messageStartIndex);
       const persistedUserMessage = turnMessages.find(
@@ -413,8 +435,9 @@ async function runScenarioIsolated(
 
     const finalConversation = useChatStore
       .getState()
-      .conversations.find((candidate) => candidate.id === input.conversationId);
-    if (!finalConversation) throw new Error(`Conversation ${input.conversationId} is unavailable.`);
+      .conversations.find((candidate) => candidate.id === currentConversationId);
+    if (!finalConversation)
+      throw new Error(`Conversation ${currentConversationId} is unavailable.`);
     return cloneAndFreeze({
       conversationId: input.conversationId,
       finalConversation,

@@ -25,13 +25,21 @@ export type ForegroundScenarioRouteDirective =
   | 'forced_chitchat'
   | 'forced_agentic';
 
-export type ForegroundScenarioLifecycleBoundary = 'app_relaunch';
+export type ForegroundScenarioLifecycleBoundary = 'app_relaunch' | 'new_conversation';
 
-export type ForegroundScenarioLifecycleSnapshot = Readonly<{
-  boundary: ForegroundScenarioLifecycleBoundary;
-  chatStore: 'rehydrated';
-  memoryStore: 'reopened';
-}>;
+export type ForegroundScenarioLifecycleSnapshot =
+  | Readonly<{
+      boundary: 'app_relaunch';
+      chatStore: 'rehydrated';
+      memoryStore: 'reopened';
+    }>
+  | Readonly<{
+      boundary: 'new_conversation';
+      chatStore: 'fresh_conversation';
+      memoryStore: 'shared_global';
+      previousConversationMessageCount: number;
+      newConversationInitialMessageCount: 0;
+    }>;
 
 export type ForegroundScenarioTurnInput = {
   content: string;

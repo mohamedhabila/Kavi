@@ -45,6 +45,7 @@ export function completedCondition(input: {
   completed?: boolean;
   durationMs?: number;
   totalTokens?: number;
+  estimatedCostUsd?: number | null;
   turnTraces?: ReadonlyArray<E2EScenarioTurnTrace>;
   userTurnCount?: number;
 }): Extract<E2EPairedConditionExecution, { status: 'completed' }> {
@@ -95,6 +96,10 @@ export function completedCondition(input: {
         totalTokens: input.totalTokens ?? 100,
         eventCount: 1,
       },
+      estimatedCost:
+        input.estimatedCostUsd === null
+          ? { status: 'unavailable', usd: null }
+          : { status: 'available', usd: input.estimatedCostUsd ?? 0.01 },
       turnTraces,
       userTurnCount: input.userTurnCount ?? turnTraces.length,
     }),

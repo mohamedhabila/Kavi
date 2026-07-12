@@ -143,10 +143,7 @@ function buildRunSummary(summary: AgentRunSummary): E2ERedactedAgentRunSummary {
       summary.completedTools,
       'agentRun.summary.completedTools',
     ),
-    failedTools: requireNonNegativeSafeInteger(
-      summary.failedTools,
-      'agentRun.summary.failedTools',
-    ),
+    failedTools: requireNonNegativeSafeInteger(summary.failedTools, 'agentRun.summary.failedTools'),
     spawnedSubAgents: requireNonNegativeSafeInteger(
       summary.spawnedSubAgents,
       'agentRun.summary.spawnedSubAgents',
@@ -167,18 +164,33 @@ export function buildLifecycleBoundaryEvidence(
 ): E2ERedactedLifecycleBoundaryEvidence | null {
   if (value === null) return null;
   if (!value) throw new Error('Missing E2E lifecycle boundary evidence.');
-  if (
-    value.boundary !== 'app_relaunch' ||
-    value.chatStore !== 'rehydrated' ||
-    value.memoryStore !== 'reopened'
-  ) {
-    throw new Error('Unsupported E2E lifecycle boundary evidence.');
+  if (value.boundary === 'app_relaunch') {
+    if (value.chatStore !== 'rehydrated' || value.memoryStore !== 'reopened') {
+      throw new Error('Unsupported E2E lifecycle boundary evidence.');
+    }
+    return {
+      boundary: 'app_relaunch',
+      chatStore: 'rehydrated',
+      memoryStore: 'reopened',
+    };
   }
-  return {
-    boundary: 'app_relaunch',
-    chatStore: 'rehydrated',
-    memoryStore: 'reopened',
-  };
+  if (
+    value.boundary === 'new_conversation' &&
+    value.chatStore === 'fresh_conversation' &&
+    value.memoryStore === 'shared_global' &&
+    Number.isSafeInteger(value.previousConversationMessageCount) &&
+    value.previousConversationMessageCount > 0 &&
+    value.newConversationInitialMessageCount === 0
+  ) {
+    return {
+      boundary: 'new_conversation',
+      chatStore: 'fresh_conversation',
+      memoryStore: 'shared_global',
+      previousConversationMessageCount: value.previousConversationMessageCount,
+      newConversationInitialMessageCount: 0,
+    };
+  }
+  throw new Error('Unsupported E2E lifecycle boundary evidence.');
 }
 
 export function buildRouteEvidence(turn: E2EScenarioTurnTrace): E2ERedactedRouteEvidence {
@@ -256,19 +268,13 @@ export function buildCompletionEvidence(
     assistantStatusHash: hashString(completion.assistantStatus),
     executionCompleted: completion.executionCompleted,
     finalResponseCompleted: completion.finalResponseCompleted,
-    runStatus: requirePublicEnum(
-      completion.runStatus,
-      RUN_STATUSES,
-      'completion.runStatus',
-    ),
+    runStatus: requirePublicEnum(completion.runStatus, RUN_STATUSES, 'completion.runStatus'),
     runStatusHash: hashString(completion.runStatus),
     runCompleted: completion.runCompleted,
     graphStatus:
       completion.graphStatus === null
         ? null
-        : requirePublicEnum<
-            NonNullable<ForegroundScenarioCompletionSnapshot['graphStatus']>
-          >(
+        : requirePublicEnum<NonNullable<ForegroundScenarioCompletionSnapshot['graphStatus']>>(
             completion.graphStatus,
             GRAPH_STATUSES,
             'completion.graphStatus',
@@ -279,9 +285,7 @@ export function buildCompletionEvidence(
     ...(runTerminal.value ? { runTerminalReason: runTerminal.value } : {}),
     ...(runTerminal.valueHash ? { runTerminalReasonHash: runTerminal.valueHash } : {}),
     ...(graphTerminal.value ? { graphTerminalReason: graphTerminal.value } : {}),
-    ...(graphTerminal.valueHash
-      ? { graphTerminalReasonHash: graphTerminal.valueHash }
-      : {}),
+    ...(graphTerminal.valueHash ? { graphTerminalReasonHash: graphTerminal.valueHash } : {}),
   };
 }
 

@@ -20,7 +20,7 @@ import {
 import { stableHash, stableStringify } from './e2eTraceRedaction';
 import type { E2EScenario, E2EScenarioResult } from './types';
 
-export const E2E_PAIRED_RUNTIME_SCHEMA_VERSION = 'e2e-paired-runtime-v2' as const;
+export const E2E_PAIRED_RUNTIME_SCHEMA_VERSION = 'e2e-paired-runtime-v3' as const;
 
 export type E2EPairedConditionExecutionInput = Readonly<{
   conditionPlan: E2EPairedConditionPlan;
@@ -217,7 +217,7 @@ export function buildE2EPairedExecutionIdentityHash(input: {
 }): string {
   return stableHash(
     stableStringify({
-      namespace: 'e2e-paired-condition-v2',
+      namespace: 'e2e-paired-condition-v3',
       pairIdHash: input.pairIdHash,
       seed: input.seed,
       condition: input.condition,

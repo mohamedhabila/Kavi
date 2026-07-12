@@ -348,6 +348,30 @@ describe('public immutable E2E evidence projection', () => {
     });
   });
 
+  it('projects only a product-created zero-message new-conversation boundary', () => {
+    const result = buildPrivateEvidenceResult();
+    const turn = result.turnTraces[0] as unknown as {
+      lifecycleBefore: E2EScenarioResult['turnTraces'][number]['lifecycleBefore'];
+    };
+    turn.lifecycleBefore = {
+      boundary: 'new_conversation',
+      chatStore: 'fresh_conversation',
+      memoryStore: 'shared_global',
+      previousConversationMessageCount: 2,
+      newConversationInitialMessageCount: 0,
+    };
+
+    const trace = buildE2EScenarioTraceSummary({ result });
+    expect(trace.turns[0]?.lifecycleBefore).toEqual(turn.lifecycleBefore);
+    expect(projectPublicRedactedTrace(trace)?.turns[0]?.lifecycleBefore).toEqual(
+      turn.lifecycleBefore,
+    );
+
+    const polluted = JSON.parse(JSON.stringify(trace));
+    polluted.turns[0].lifecycleBefore.newConversationInitialMessageCount = 1;
+    expect(projectPublicRedactedTrace(polluted)).toBeNull();
+  });
+
   it('rebuilds a closed public DTO and rejects the old turn contract', () => {
     const trace = buildE2EScenarioTraceSummary({ result: buildPrivateEvidenceResult() });
     expect(SAFE_NATIVE_FIXTURE_PATHS.has('calendar.lastCreatedEventId')).toBe(true);

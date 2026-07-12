@@ -165,16 +165,21 @@ export function evaluateE2ETurnStageRubric(
 
     case 'turn_lifecycle_boundary': {
       const lifecycle = turn.lifecycleBefore;
-      if (
-        !lifecycle ||
-        lifecycle.boundary !== rubric.boundary ||
-        lifecycle.chatStore !== 'rehydrated' ||
-        lifecycle.memoryStore !== 'reopened'
-      ) {
+      const observed =
+        lifecycle?.boundary === 'app_relaunch'
+          ? lifecycle.chatStore === 'rehydrated' && lifecycle.memoryStore === 'reopened'
+          : lifecycle?.boundary === 'new_conversation'
+            ? lifecycle.chatStore === 'fresh_conversation' &&
+              lifecycle.memoryStore === 'shared_global' &&
+              Number.isSafeInteger(lifecycle.previousConversationMessageCount) &&
+              lifecycle.previousConversationMessageCount > 0 &&
+              lifecycle.newConversationInitialMessageCount === 0
+            : false;
+      if (!lifecycle || lifecycle.boundary !== rubric.boundary || !observed) {
         return {
           fixtureId,
           passed: false,
-          detail: `turn ${rubric.turnIndex} app relaunch lifecycle boundary not observed`,
+          detail: `turn ${rubric.turnIndex} ${rubric.boundary} lifecycle boundary not observed`,
         };
       }
       return { fixtureId, passed: true };

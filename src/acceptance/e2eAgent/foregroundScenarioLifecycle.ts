@@ -6,6 +6,9 @@ import {
 import { closeMemoryDb } from '../../services/memory/database';
 import { flushChatStorePersistenceNow } from '../../store/chatStorePersistence';
 import { useChatStore } from '../../store/useChatStore';
+import { resolveConversationPersonaForMode } from '../../engine/graph/conversation/modeTransitions';
+import { resolveConversationWorkspaceTarget } from '../../services/conversationWorkspace/ownership';
+import type { ConversationMode } from '../../types/conversation';
 import type {
   ForegroundScenarioLifecycleSnapshot,
   ForegroundScenarioMemoryFinalState,
@@ -26,7 +29,9 @@ function requirePersistedConversation(conversationId: string, lastMessageId: str
     throw new Error(`Conversation ${conversationId} was not restored after app relaunch.`);
   }
   if (lastMessageId && !conversation.messages.some((message) => message.id === lastMessageId)) {
-    throw new Error(`Conversation ${conversationId} lost its latest persisted message on relaunch.`);
+    throw new Error(
+      `Conversation ${conversationId} lost its latest persisted message on relaunch.`,
+    );
   }
 }
 
@@ -83,5 +88,85 @@ export async function relaunchForegroundScenarioApp(params: {
     boundary: 'app_relaunch',
     chatStore: 'rehydrated',
     memoryStore: 'reopened',
+  };
+}
+
+export function startNewForegroundScenarioConversation(params: {
+  currentConversationId: string;
+  providerId: string;
+  model: string;
+  systemPrompt: string;
+  mode: ConversationMode;
+  memoryStateBefore: ForegroundScenarioMemoryFinalState;
+}): Readonly<{
+  conversationId: string;
+  lifecycle: ForegroundScenarioLifecycleSnapshot;
+  memoryScope: MemoryScope;
+  memoryState: ScopedMemoryEvidenceSnapshot;
+}> {
+  const store = useChatStore.getState();
+  const previousConversation = store.conversations.find(
+    (candidate) => candidate.id === params.currentConversationId,
+  );
+  if (!previousConversation) {
+    throw new Error(`Conversation ${params.currentConversationId} is unavailable.`);
+  }
+  const previousConversationIdentity = JSON.stringify(previousConversation);
+  const previousConversationMessageCount = previousConversation.messages.length;
+  const conversationId = store.createConversation(
+    params.providerId,
+    params.systemPrompt,
+    params.model,
+    {
+      mode: params.mode,
+      personaId: resolveConversationPersonaForMode({ nextMode: params.mode }),
+    },
+  );
+  if (conversationId === params.currentConversationId) {
+    throw new Error('New-conversation boundary reused the previous conversation identity.');
+  }
+  const createdConversation = useChatStore
+    .getState()
+    .conversations.find((candidate) => candidate.id === conversationId);
+  if (!createdConversation || createdConversation.messages.length !== 0) {
+    throw new Error('New-conversation boundary did not create an empty product conversation.');
+  }
+  const preservedPreviousConversation = useChatStore
+    .getState()
+    .conversations.find((candidate) => candidate.id === params.currentConversationId);
+  if (
+    !preservedPreviousConversation ||
+    JSON.stringify(preservedPreviousConversation) !== previousConversationIdentity
+  ) {
+    throw new Error('New-conversation boundary changed the previous product conversation.');
+  }
+  const memoryScope = {
+    memoryConversationId: resolveConversationWorkspaceTarget({
+      conversationId,
+      conversations: useChatStore.getState().conversations,
+    }).workspaceConversationId,
+    sourceThreadId: conversationId,
+  };
+  const previousScopeMemoryState = captureCompleteMemoryEvidenceForIsolatedEvaluation(
+    params.memoryStateBefore.scope,
+  );
+  if (
+    durableMemoryIdentity(previousScopeMemoryState) !==
+    durableMemoryIdentity(params.memoryStateBefore)
+  ) {
+    throw new Error('Durable memory state changed while creating a fresh conversation.');
+  }
+  const memoryState = captureCompleteMemoryEvidenceForIsolatedEvaluation(memoryScope);
+  return {
+    conversationId,
+    memoryScope,
+    memoryState,
+    lifecycle: {
+      boundary: 'new_conversation',
+      chatStore: 'fresh_conversation',
+      memoryStore: 'shared_global',
+      previousConversationMessageCount,
+      newConversationInitialMessageCount: 0,
+    },
   };
 }

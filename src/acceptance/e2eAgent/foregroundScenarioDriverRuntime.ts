@@ -296,18 +296,16 @@ function sleep(delayMs: number): Promise<void> {
 async function awaitMemorySettlementBeforeDeadline<T>(
   promise: Promise<T>,
   deadline: number,
+  timeoutMessage = 'Timed out settling foreground scenario memory.',
 ): Promise<T> {
   const remainingMs = deadline - Date.now();
-  if (remainingMs <= 0) throw new Error('Timed out settling foreground scenario memory.');
+  if (remainingMs <= 0) throw new Error(timeoutMessage);
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       promise,
       new Promise<T>((_resolve, reject) => {
-        timeout = setTimeout(
-          () => reject(new Error('Timed out settling foreground scenario memory.')),
-          remainingMs,
-        );
+        timeout = setTimeout(() => reject(new Error(timeoutMessage)), remainingMs);
       }),
     ]);
   } finally {
@@ -360,6 +358,7 @@ export async function settleForegroundScenarioMemory(
     Promise.all(records.map((record) => record.promise)),
     deadline,
   );
+  const jobIds = results.flatMap((result) => (result.jobId ? [result.jobId] : []));
   const snapshots = await awaitMemorySettlementBeforeDeadline(
     Promise.all(
       results.map(async (result) => {
@@ -372,6 +371,9 @@ export async function settleForegroundScenarioMemory(
       }),
     ),
     deadline,
+    jobIds.length === 1
+      ? `Timed out waiting for memory ingestion job ${jobIds[0]}.`
+      : 'Timed out settling foreground scenario memory.',
   );
   return cloneAndFreeze(snapshots);
 }

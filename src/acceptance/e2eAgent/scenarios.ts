@@ -25,3 +25,8 @@ export {
   DELEGATION_E2E_SCENARIO,
   DELEGATION_E2E_SCENARIOS,
 } from './scenariosDelegation';
+
+export {
+  E2E_PAIRED_ONLY_SCENARIOS,
+  PAIRED_CAUSAL_GLOBAL_PREFERENCE_SCENARIO,
+} from './scenariosCausalMemory';

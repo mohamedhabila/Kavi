@@ -2,10 +2,7 @@ import {
   getE2ENativeMobileFixtureStateSnapshot,
   resetE2ENativeMobileFixtures,
 } from '../../src/acceptance/e2eAgent/e2eNativeMobileFixtures';
-import type {
-  E2EScenarioResult,
-  E2EScenarioTurnTrace,
-} from '../../src/acceptance/e2eAgent/types';
+import type { E2EScenarioResult, E2EScenarioTurnTrace } from '../../src/acceptance/e2eAgent/types';
 import type { UsageTokenBuckets } from '../../src/types/usage';
 
 export const TOKEN_BUCKETS: UsageTokenBuckets = {
@@ -107,6 +104,7 @@ export function buildFixtureResult(overrides?: Partial<E2EScenarioResult>): E2ES
       totalTokens: 125,
       eventCount: 1,
     },
+    estimatedCost: { status: 'unavailable', usd: null },
     errors: [],
     completed: true,
     durationMs: 1200,

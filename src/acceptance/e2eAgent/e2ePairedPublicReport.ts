@@ -15,11 +15,16 @@ import {
   buildE2EPairedPublicRetrievalMetrics,
   type E2EPairedPublicRetrievalMetrics,
 } from './e2ePairedPublicRetrievalMetrics';
+import {
+  buildE2EPairedEstimatedCost,
+  validateE2EEstimatedCostSummary,
+  type E2EPairedEstimatedCostSummary,
+} from './e2ePairedEstimatedCost';
 import { buildE2EScenarioTraceSummary } from './e2eTraceSummary';
 import { stableHash, stableStringify } from './e2eTraceRedaction';
-import type { E2EScenarioTurnTrace } from './types';
+import type { E2EEstimatedCostSummary, E2EScenarioTurnTrace } from './types';
 
-export const E2E_PAIRED_PUBLIC_REPORT_SCHEMA_VERSION = 'e2e-paired-public-report-v3' as const;
+export const E2E_PAIRED_PUBLIC_REPORT_SCHEMA_VERSION = 'e2e-paired-public-report-v4' as const;
 
 type PublicConditionMetrics = Readonly<{
   executionCompleted: boolean;
@@ -44,6 +49,7 @@ type PublicConditionMetrics = Readonly<{
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  estimatedCost: E2EEstimatedCostSummary;
   publicTraceHash: string;
   retrieval: E2EPairedPublicRetrievalMetrics;
 }>;
@@ -108,6 +114,7 @@ export type E2EPairedPublicReport = Readonly<{
     totalTokensDelta: number;
     durationMsDelta: number;
   }>;
+  estimatedCost: E2EPairedEstimatedCostSummary;
   memoryPairedObservation: Readonly<{
     status:
       | 'not_applicable'
@@ -158,6 +165,10 @@ function validateCompletedCondition(
   condition: Extract<E2EPairedConditionExecution, { status: 'completed' }>,
 ): void {
   const { assessment } = condition;
+  validateE2EEstimatedCostSummary(
+    condition.result.estimatedCost,
+    `${condition.condition}.estimatedCost`,
+  );
   if (
     !Number.isSafeInteger(assessment.rubricPassed) ||
     !Number.isSafeInteger(assessment.rubricTotal) ||
@@ -372,6 +383,7 @@ function projectCondition(condition: E2EPairedConditionExecution): E2EPairedPubl
       inputTokens: condition.result.usage.inputTokens,
       outputTokens: condition.result.usage.outputTokens,
       totalTokens: condition.result.usage.totalTokens,
+      estimatedCost: { ...condition.result.estimatedCost },
       publicTraceHash: stableHash(stableStringify(trace)),
       retrieval: buildE2EPairedPublicRetrievalMetrics(condition.result.turnTraces),
     },
@@ -619,6 +631,12 @@ export function buildE2EPairedPublicReport(runtime: E2EPairedRuntimeResult): E2E
     infrastructureFailures,
     validForDeltaClaims,
     pairedDelta: validForDeltaClaims ? buildDelta(conditions) : null,
+    estimatedCost: buildE2EPairedEstimatedCost({
+      reference:
+        conditions[0]?.status === 'completed' ? conditions[0].metrics.estimatedCost : undefined,
+      candidate:
+        conditions[1]?.status === 'completed' ? conditions[1].metrics.estimatedCost : undefined,
+    }),
     memoryPairedObservation,
     accidentalSuccessDiagnostics: buildAccidentalSuccessDiagnostics(
       conditions,

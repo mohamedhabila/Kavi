@@ -307,6 +307,16 @@ export const E2E_SCENARIO_BENCHMARK_REGISTRY: Readonly<
       'outcome_validators',
     ],
   },
+  'paired-causal-global-preference': {
+    benchmarkFamilies: ['kavi-core'],
+    assessmentDimensions: [
+      'memory',
+      'task_understanding',
+      'task_completion',
+      'mobile_native',
+      'outcome_validators',
+    ],
+  },
   'multi-turn-gate-followup': {
     benchmarkFamilies: ['kavi-core'],
     assessmentDimensions: ['control_graph', 'outcome_validators', 'task_completion'],

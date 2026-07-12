@@ -105,9 +105,9 @@ seeds execute the reference condition first and odd seeds execute the candidate
 condition first, so consecutive seeds counterbalance order while the reported
 reference/candidate orientation remains unchanged. Each condition receives a
 distinct evaluator-owned conversation namespace, which also isolates OpenAI
-prompt-cache keys and OpenRouter session IDs. The public report records only the
-seed, condition labels, execution order, and identity hashes. The runner resets
-all condition state, retains only the content-free public projection, and fails
+prompt-cache keys and OpenRouter session IDs. The public report records only
+labels, hashes, counts, and per-condition/pair estimated cost; missing cost is
+explicitly unavailable. The runner resets all condition state and fails
 after writing evidence if either condition, cleanup, or required memory
 instrumentation is invalid; invalid instrumentation never emits a paired delta.
 
@@ -128,6 +128,13 @@ diagnostic, not a product treatment. Reports are immutable under
 `.private/evals/runs/e2e-paired` by default; choose a new run ID for every
 attempt. A valid paired delta is local product evidence, not an official
 benchmark result or a capability pass bar.
+
+For the causal gate, reuse the base environment with
+`E2E_PAIRED_SCENARIO_ID=paired-causal-global-preference E2E_PAIRED_RUN_ID=release-candidate-01-causal-global-preference E2E_PAIRED_REFERENCE_CONDITION=memory_off E2E_PAIRED_CANDIDATE_CONDITION=production_auto npm run eval:e2e:paired`.
+`production_auto` is the production-memory treatment; the frozen pair uses real
+`createConversation`, zero raw messages, and no seeding/deletion. Both sides must
+pass neutral guards, only the product may pass every causal rubric, and the
+result remains local `kavi-core` evidence rather than an official benchmark.
 
 ## Evaluation lanes
 
@@ -650,7 +657,7 @@ permission to publish private input.
 
 Raw scenario evidence is local and opt-in. Set `E2E_PRIVATE_EVIDENCE_DIR` to a
 directory that resolves inside `.private/evals/` to write one unique
-`e2e-private-scenario-evidence-v3` file per attempt. The private file retains
+`e2e-private-scenario-evidence-v5` file per attempt. The private file retains
 requested turns and user-selected modes, final responses, exact memory and
 receipt evidence, tool and native results, graph state, and verified relaunch
 boundaries for diagnosis.

@@ -6,8 +6,8 @@ import {
 } from './e2ePairedInvariant';
 import { stableHash, stableStringify } from './e2eTraceRedaction';
 
-export const E2E_PAIRED_CONDITION_SCHEMA_VERSION = 'e2e-paired-condition-v2' as const;
-export const E2E_PAIRED_PLAN_SCHEMA_VERSION = 'e2e-paired-plan-v2' as const;
+export const E2E_PAIRED_CONDITION_SCHEMA_VERSION = 'e2e-paired-condition-v3' as const;
+export const E2E_PAIRED_PLAN_SCHEMA_VERSION = 'e2e-paired-plan-v3' as const;
 
 export const E2E_PAIRED_CONDITIONS = [
   ...E2E_PAIRED_ROUTE_CONDITIONS,

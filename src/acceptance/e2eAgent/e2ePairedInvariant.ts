@@ -7,6 +7,10 @@ import {
 } from './e2ePairedProviderInvariant';
 import { stableHash, stableStringify } from './e2eTraceRedaction';
 import type { E2EScenario } from './types';
+import {
+  validateE2EPairedCausalMemoryContract,
+  validateE2EPairedCausalMemoryDefinition,
+} from './e2ePairedCausalMemoryContract';
 
 export const E2E_PAIRED_ROUTE_CONDITIONS = [
   'production_auto',
@@ -35,6 +39,7 @@ export type E2EPairedInvariantConfig = Readonly<{
       }>
     >;
     rubrics: E2EScenario['rubrics'];
+    pairedEvaluation: NonNullable<E2EScenario['pairedEvaluation']> | null;
     initialMessages: NonNullable<E2EScenario['initialMessages']>;
     initialWorkspaceFiles: NonNullable<E2EScenario['initialWorkspaceFiles']>;
   }>;
@@ -117,6 +122,7 @@ function toolSurfaceDefinitionHash(toolSurface: ReadonlyArray<string>): string {
 }
 
 function canonicalScenarioInput(scenario: E2EScenario): E2EPairedInvariantConfig['scenarioInput'] {
+  const pairedEvaluation = validateE2EPairedCausalMemoryContract(scenario);
   const turns =
     scenario.userTurns && scenario.userTurns.length > 0
       ? scenario.userTurns
@@ -138,6 +144,7 @@ function canonicalScenarioInput(scenario: E2EScenario): E2EPairedInvariantConfig
       selectedMode: turn.selectedMode ?? null,
     })),
     rubrics: cloneJson(scenario.rubrics),
+    pairedEvaluation: pairedEvaluation ? cloneJson(pairedEvaluation) : null,
     initialMessages: cloneJson(scenario.initialMessages ?? []),
     initialWorkspaceFiles: cloneJson(scenario.initialWorkspaceFiles ?? []),
   };
@@ -230,6 +237,7 @@ function validateScenarioInvariant(config: E2EPairedInvariantConfig['scenarioInp
       'prompt',
       'userTurns',
       'rubrics',
+      'pairedEvaluation',
       'initialMessages',
       'initialWorkspaceFiles',
     ],
@@ -262,6 +270,9 @@ function validateScenarioInvariant(config: E2EPairedInvariantConfig['scenarioInp
   ) {
     throw new Error('invariantConfig.scenarioInput collections must be arrays.');
   }
+  if (config.pairedEvaluation !== null) {
+    validateE2EPairedCausalMemoryDefinition(config.pairedEvaluation, config.rubrics);
+  }
   if (!Array.isArray(config.userTurns) || config.userTurns.length === 0) {
     throw new Error('invariantConfig.scenarioInput.userTurns must not be empty.');
   }
@@ -279,7 +290,10 @@ function validateScenarioInvariant(config: E2EPairedInvariantConfig['scenarioInp
     if (turn.route !== null && !E2E_PAIRED_ROUTE_CONDITIONS.includes(turn.route)) {
       throw new Error(`invariantConfig.scenarioInput.userTurns[${index}].route is unsupported.`);
     }
-    if (turn.lifecycleBefore !== null && turn.lifecycleBefore !== 'app_relaunch') {
+    if (
+      turn.lifecycleBefore !== null &&
+      !['app_relaunch', 'new_conversation'].includes(turn.lifecycleBefore)
+    ) {
       throw new Error(
         `invariantConfig.scenarioInput.userTurns[${index}].lifecycleBefore is unsupported.`,
       );

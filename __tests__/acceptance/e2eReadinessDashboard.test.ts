@@ -7,6 +7,7 @@ import {
   type E2ERunReportScenarioEntry,
 } from '../../src/acceptance/e2eAgent/e2eRunReport';
 import type { E2EScenarioResult } from '../../src/acceptance/e2eAgent/types';
+import { E2E_SCENARIO_MANIFEST_VERSION } from '../../src/acceptance/e2eAgent/thresholds';
 
 function buildFixtureResult(overrides?: Partial<E2EScenarioResult>): E2EScenarioResult {
   return {
@@ -153,7 +154,7 @@ describe('e2eReadinessDashboard', () => {
       modelIdentitySource: 'provider-model-id',
       modelLocatorSha256: report.runMetadata.modelLocatorSha256,
       endpointSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
-      scenarioManifestVersion: '2026-07-10.longitudinal-v2',
+      scenarioManifestVersion: E2E_SCENARIO_MANIFEST_VERSION,
       promptCacheMode: 'provider-default',
       nativeToolFixtureVersion: 'native-tools-2026-07-10',
     });
